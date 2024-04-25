@@ -474,25 +474,6 @@ target_include_directories(f1ap PRIVATE ${F1AP_DIR}/lib)
 add_list1_option(NB_ANTENNAS_RX "4" "Number of antennas in reception" "1" "2" "4")
 add_list1_option(NB_ANTENNAS_TX "4" "Number of antennas in transmission" "1" "2" "4")
 
-set (CONFIG_ROOTDIR ${OPENAIR_DIR}/common/config)
-add_library(config_internals OBJECT
-  ${CONFIG_ROOTDIR}/config_common.c
-)
-
-add_library(CONFIG_LIB
-  ${CONFIG_ROOTDIR}/config_load_configmodule.c
-  ${CONFIG_ROOTDIR}/config_userapi.c
-  ${CONFIG_ROOTDIR}/config_cmdline.c
-)
-target_link_libraries(CONFIG_LIB PRIVATE config_internals dl UTIL)
-
-# CONFIG_LIB is a wrapper around a particular config implementation, default is
-# libconfig in params_libconfig below
-pkg_check_modules(libconfig REQUIRED libconfig)
-add_library(params_libconfig MODULE ${CONFIG_ROOTDIR}/libconfig/config_libconfig.c)
-target_include_directories(params_libconfig PRIVATE ${libconfig_INCLUDE_DIRS})
-target_link_libraries(params_libconfig PRIVATE config_internals ${libconfig_LIBRARIES})
-
 # shared library loader
 add_library(shlib_loader OBJECT common/utils/load_module_shlib.c)
 target_link_libraries(shlib_loader PRIVATE CONFIG_LIB)
@@ -1688,7 +1669,7 @@ target_link_libraries(oai_iqplayer PRIVATE log_headers)
 add_library(minimal_lib
   ${OPENAIR_DIR}/common/utils/minimal_stub.c
   )
-target_link_libraries(minimal_lib PUBLIC pthread dl ${T_LIB} LOG)
+target_link_libraries(minimal_lib PUBLIC pthread dl ${T_LIB} LOG utils)
 
 add_executable(measurement_display
   ${OPENAIR_DIR}/common/utils/threadPool/measurement_display.c)
@@ -1939,7 +1920,7 @@ add_executable(smallblocktest
 
 target_link_libraries(smallblocktest PRIVATE
   -Wl,--start-group UTIL SIMU PHY_NR PHY_COMMON PHY_NR_COMMON -Wl,--end-group
-  m pthread dl shlib_loader ${T_LIB}
+  m pthread dl shlib_loader ${T_LIB} CONFIG_LIB
 )
 
 
@@ -1949,7 +1930,7 @@ add_executable(ldpctest
 )
 target_link_libraries(ldpctest PRIVATE
   -Wl,--start-group UTIL SIMU PHY_COMMON PHY_NR_COMMON -Wl,--end-group
-  m pthread dl shlib_loader ${T_LIB}
+  m pthread dl shlib_loader ${T_LIB} CONFIG_LIB
   # link 'check_crc' to make it resolved in the LDPC coding libraries
   # 'check_crc' is not used in ldpctest so it is not linked in the executable by default
   # --whole-archive links 'check_crc' in the executable even though it is note used, see 'man ld'
@@ -2090,7 +2071,6 @@ if (${T_TRACER})
         nr_ulschsim ldpctest polartest smallblocktest
         #all "add_library" definitions
         ITTI lte_rrc nr_rrc s1ap x2ap m2ap m3ap f1ap
-        params_libconfig
         oai_eth_transpro HASHTABLE UTIL
         SECURITY SCHED_LIB SCHED_NR_LIB SCHED_RU_LIB SCHED_UE_LIB SCHED_NR_UE_LIB
         NFAPI_LIB NFAPI_PNF_LIB NFAPI_VNF_LIB NFAPI_USER_LIB
@@ -2098,7 +2078,7 @@ if (${T_TRACER})
         PHY_COMMON PHY PHY_UE PHY_NR PHY_NR_COMMON PHY_NR_UE PHY_RU
         L2 L2_LTE L2_NR L2_LTE_NR L2_UE NR_L2_UE MAC_NR_COMMON MAC_UE_NR ngap
         GTPV1U SCTP_CLIENT MME_APP LIB_NAS_UE SIMU
-        dfts config_internals nr_common crc_byte)
+        dfts nr_common crc_byte)
     if (TARGET ${i})
       add_dependencies(${i} generate_T)
     endif()
