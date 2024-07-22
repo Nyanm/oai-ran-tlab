@@ -43,7 +43,8 @@ extended_kpi_ue* getKPIUE(void) {
   return &kpiStructure;
 }
 
-void nr_ue_dlsch_init(NR_UE_DLSCH_t *dlsch_list, int num_dlsch, uint8_t max_ldpc_iterations) {
+void nr_ue_dlsch_init(NR_UE_DLSCH_t dlsch_list[NR_MAX_NB_LAYERS > 4 ? 2 : 1], int num_dlsch, uint8_t max_ldpc_iterations)
+{
   for (int i=0; i < num_dlsch; i++) {
     NR_UE_DLSCH_t *dlsch = dlsch_list + i;
     memset(dlsch, 0, sizeof(NR_UE_DLSCH_t));

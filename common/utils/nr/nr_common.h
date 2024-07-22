@@ -344,6 +344,7 @@ frequency_range_t get_freq_range_from_band(uint16_t band);
  */
 float get_beta_dmrs(int num_cdm_groups_no_data, bool is_type2);
 
+#define SYMBOL_HAS_LONGER_CP(a, b) (!(a % (0x7 << b)))
 #define CEILIDIV(a,b) ((a+b-1)/b)
 #define ROUNDIDIV(a,b) (((a<<1)+b)/(b<<1))
 

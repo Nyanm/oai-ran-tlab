@@ -606,6 +606,33 @@ typedef struct nr_rxtx_thread_data_s {
   uint64_t absolute_deadline_us;
 } nr_rxtx_thread_data_t;
 
+typedef struct nr_ue_symb_data_s {
+  PHY_VARS_NR_UE *UE;
+  UE_nr_rxtx_proc_t *proc;
+  UE_nr_rxtx_proc_t valProc;
+  int symbol;
+  int G;
+  int symbVecSz;
+  c16_t *rxdataF_ext;
+  NR_UE_DLSCH_t dlsch[2];
+  NR_UE_DLSCH_t *p_dlsch;
+  int *dl_valid_re;
+  freq_alloc_bitmap_t *freq_alloc;
+  c16_t *ptrs_phase_per_slot;
+  int32_t *ptrs_re_per_slot;
+  c16_t *rxdataF_comp;
+  c16_t *pdsch_dl_ch_estimates;
+  c16_t *pdsch_dl_ch_est_ext;
+  c16_t *dl_ch_mag;
+  c16_t *dl_ch_magb;
+  c16_t *dl_ch_magr;
+  int llrSize;
+  int16_t *layer_llr;
+  time_stats_t pdsch_pre_proc;
+  time_stats_t pdsch_post_proc;
+  task_ans_t *ans;
+} nr_ue_symb_data_t;
+
 typedef struct LDPCDecode_ue_s {
   PHY_VARS_NR_UE *phy_vars_ue;
   NR_DL_UE_HARQ_t *harq_process;

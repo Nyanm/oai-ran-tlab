@@ -421,8 +421,7 @@ int main(int argc, char **argv)
 	UE = calloc(1, sizeof(*UE));
 	memcpy(&UE->frame_parms, frame_parms, sizeof(NR_DL_FRAME_PARMS));
 
-	//phy_init_nr_top(frame_parms);
-	if (init_nr_ue_signal(UE, 1) != 0) {
+  if (init_nr_ue_signal(UE, 1) != 0) {
 		printf("Error at UE NR initialisation\n");
 		exit(-1);
 	}

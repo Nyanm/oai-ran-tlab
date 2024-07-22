@@ -80,13 +80,10 @@ void nr_pdsch_channel_estimation(PHY_VARS_NR_UE *ue,
                                  const UE_nr_rxtx_proc_t *proc,
                                  const fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch,
                                  const freq_alloc_bitmap_t *freq_alloc,
-                                 int nl,
                                  unsigned short p,
                                  unsigned char symbol,
-                                 uint32_t pdsch_est_size,
-                                 int32_t dl_ch_estimates[][pdsch_est_size],
-                                 int rxdataFsize,
-                                 c16_t rxdataF[][rxdataFsize],
+                                 c16_t dl_ch_estimates[ue->frame_parms.ofdm_symbol_size],
+                                 const c16_t rxdataF[ue->frame_parms.ofdm_symbol_size],
                                  uint32_t *nvar);
 
 int nr_adjust_synch_ue(const NR_DL_FRAME_PARMS *frame_parms,
@@ -120,20 +117,22 @@ void phy_adjust_gain_nr(PHY_VARS_NR_UE *ue,
                         uint32_t rx_power_fil_dB,
                         uint8_t gNB_id);
 
-void nr_pdsch_ptrs_processing(PHY_VARS_NR_UE *ue,
-                              int nbRx,
-                              c16_t ptrs_phase_per_slot[][14],
-                              int32_t ptrs_re_per_slot[][14],
-                              uint32_t rx_size_symbol,
-                              int32_t rxdataF_comp[][nbRx][rx_size_symbol * NR_SYMBOLS_PER_SLOT],
-                              NR_DL_FRAME_PARMS *frame_parms,
-                              NR_DL_UE_HARQ_t *dlsch0_harq,
-                              NR_DL_UE_HARQ_t *dlsch1_harq,
-                              uint8_t gNB_id,
-                              uint8_t nr_slot_rx,
-                              unsigned char symbol,
-                              uint16_t rnti,
-                              NR_UE_DLSCH_t dlsch[2]);
+int nr_pdsch_ptrs_tdinterpol(const NR_UE_DLSCH_t *dlsch, c16_t phase_per_symbol[NR_SYMBOLS_PER_SLOT]);
+
+void nr_pdsch_ptrs_compensate(const c16_t phase_per_symbol,
+                              const int symbol,
+                              const NR_UE_DLSCH_t *dlsch,
+                              c16_t rxdataF_comp[dlsch->dlsch_config.number_rbs * NR_NB_SC_PER_RB]);
+
+void nr_pdsch_ptrs_processing_core(const PHY_VARS_NR_UE *ue,
+                                   const int gNB_id,
+                                   const int nr_slot_rx,
+                                   const int symbol,
+                                   const int rnti,
+                                   const NR_UE_DLSCH_t *dlsch,
+                                   c16_t rxdataF_comp[dlsch->dlsch_config.number_rbs * NR_NB_SC_PER_RB],
+                                   c16_t *phase_per_symbol,
+                                   int32_t *ptrs_re_symbol);
 
 int nr_sl_psbch_rsrp_measurements(sl_nr_ue_phy_params_t *sl_phy_params,
                                   const NR_DL_FRAME_PARMS *fp,
