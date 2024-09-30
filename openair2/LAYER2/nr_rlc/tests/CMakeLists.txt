@@ -18,7 +18,7 @@ add_dependencies(tests test_nr_rlc_am_entity)
 add_test(NAME test_nr_rlc_am_entity COMMAND ./test_nr_rlc_am_entity)
 
 add_executable(benchmark_nr_rlc_am_entity benchmark_nr_rlc_am_entity.cpp)
-target_link_libraries(benchmark_nr_rlc_am_entity PRIVATE benchmark::benchmark nr_rlc_core UTIL ${T_LIB} minimal_lib)
+target_link_libraries(benchmark_nr_rlc_am_entity PRIVATE benchmark::benchmark nr_rlc_core UTIL LOG minimal_lib)
 add_dependencies(tests benchmark_nr_rlc_am_entity)
 add_test(NAME benchmark_nr_rlc_am_entity
   COMMAND ./benchmark_nr_rlc_am_entity)

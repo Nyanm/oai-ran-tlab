@@ -11,7 +11,9 @@ else()
 endif()
 add_library(LOG ${log_sources})
 target_link_libraries(LOG PRIVATE CONFIG_LIB)
-target_link_libraries(LOG PUBLIC log_headers)
+
+# set the T_LIB name to T if the target exists, otherwise leave empty
+target_link_libraries(LOG PUBLIC $<TARGET_NAME_IF_EXISTS:T> log_headers)
 if (ENABLE_LTTNG)
   target_link_libraries(LOG PUBLIC lttng-ust)
 endif()

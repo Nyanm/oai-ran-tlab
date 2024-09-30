@@ -5,7 +5,6 @@ add_library(CONFIG_LIB
             config_cmdline.c
 )
 target_link_libraries(CONFIG_LIB PRIVATE dl)
-target_link_libraries(CONFIG_LIB PUBLIC ${T_LIB}) # TODO: remove: was provided through UTILS
 target_link_libraries(CONFIG_LIB PUBLIC log_headers)
 
 # CONFIG_LIB is a wrapper around a particular config implementation, default is
