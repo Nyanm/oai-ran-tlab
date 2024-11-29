@@ -145,7 +145,7 @@ void process_msg_rcc_to_mac(nr_mac_rrc_message_t *msg, int instance_id)
                                   msg->payload.config_other_sib.can_start_ra);
     } break;
     case NR_MAC_RRC_SCHED_SIB:
-      nr_rrc_mac_sched_sib(instance_id, msg->payload.sched_sib.get_sib);
+      nr_rrc_mac_sched_sib(instance_id, 0, msg->payload.sched_sib.get_sib, msg->payload.sched_sib.ssb_arfcn);
       break;
     case NR_MAC_RRC_RESUME_RB:
       nr_rrc_mac_resume_rb(instance_id, msg->payload.resume_rb.is_srb, msg->payload.resume_rb.rb_id);

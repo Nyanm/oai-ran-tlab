@@ -458,6 +458,7 @@ typedef struct {
 } nr_mac_rrc_config_other_sib_t;
 typedef struct {
   int get_sib;
+  int ssb_arfcn;
 } nr_mac_rrc_sched_sib_t;
 
 

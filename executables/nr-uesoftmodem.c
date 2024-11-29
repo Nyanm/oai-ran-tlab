@@ -380,6 +380,7 @@ int main(int argc, char **argv)
       mac->nr_band = cell.band;
       mac->ssb_start_subcarrier = cell.ssb_start;
       mac->dl_frequency = cell.rf_frequency;
+      mac->N_RB_DL = cell.N_RB_DL;
 
       UE_CC->sl_mode = get_softmodem_params()->sl_mode;
       init_actor(&UE_CC->sync_actor, "SYNC_", -1);

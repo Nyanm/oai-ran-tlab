@@ -1922,6 +1922,7 @@ static void nr_rrc_ue_decode_NR_BCCH_BCH_Message(NR_UE_RRC_INST_t *rrc,
       nr_mac_rrc_message_t sib_msg = {0};
       sib_msg.payload_type = NR_MAC_RRC_SCHED_SIB;
       sib_msg.payload.sched_sib.get_sib = get_sib;
+      sib_msg.payload.sched_sib.ssb_arfcn = ssb_arfcn;
       nr_rrc_send_msg_to_mac(rrc, &sib_msg);
     }
   } else {

@@ -63,7 +63,7 @@ void nr_rrc_mac_config_req_cg(module_id_t module_id,
                               NR_UE_NR_Capability_t *ue_Capability);
 
 void nr_rrc_mac_config_req_mib(module_id_t module_id, int cc_idP, NR_MIB_t *mibP, bool barred);
-void nr_rrc_mac_sched_sib(module_id_t module_id, int sched_sib);
+void nr_rrc_mac_sched_sib(module_id_t module_id, int cc_idP, int sched_sib, long ssb_arfcn);
 void nr_rrc_mac_config_req_sib1(module_id_t module_id, int cc_idP, NR_SIB1_t *sib1, bool can_start_ra);
 
 struct position; /* forward declaration */
