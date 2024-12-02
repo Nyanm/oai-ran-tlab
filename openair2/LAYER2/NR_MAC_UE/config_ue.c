@@ -102,7 +102,33 @@ static void set_tdd_config_nr_ue(fapi_nr_tdd_table_t *tdd_table, const frame_str
   }
 }
 
-static void config_common_ue_sa(NR_UE_MAC_INST_t *mac, NR_ServingCellConfigCommonSIB_t *scc, int cc_idP)
+static uint32_t get_pointA_frequency(const int arfcn_ssb,
+                                     const int k_ssb,
+                                     const int offsetToPointA,
+                                     const int system_mu,
+                                     const int scc_common,
+                                     const int nr_band,
+                                     const frequency_range_t fr)
+{
+  const uint32_t ssb_center = from_nrarfcn(nr_band, system_mu, arfcn_ssb) / 1000;
+  const uint32_t ssb_prbs = 20;
+  const uint32_t scs_khz = MU_SCS(system_mu);
+  const uint32_t ssb_start = ssb_center - (ssb_prbs / 2 * NR_NB_SC_PER_RB * scs_khz);
+  uint32_t pointA;
+  if (fr == FR1) {
+    const uint32_t ssb_crb_start = ssb_start - ((k_ssb >> system_mu) * scs_khz);
+    pointA = ssb_crb_start - (((offsetToPointA * NR_NB_SC_PER_RB) >> system_mu) * scs_khz);
+  } else {
+    AssertFatal(system_mu >= 2, "Invalid numerology %d for FR2\n", system_mu);
+    /* for FR2, mu of k_ssb is subCarrierSpacingCommon as specified in 38.211 7.4.3.1 */
+    const uint32_t ssb_crb_start = ssb_start - ((k_ssb >> (system_mu - scc_common)) * scs_khz);
+    /* FR2, offsetToPointA represented as 60kHz SCS */
+    pointA = ssb_crb_start - (((offsetToPointA * NR_NB_SC_PER_RB) >> (system_mu - 2)) * scs_khz);
+  }
+  return pointA;
+}
+
+static void config_common_ue_sa(NR_UE_MAC_INST_t *mac, NR_ServingCellConfigCommonSIB_t *scc, int cc_idP, const int arfcn_ssb)
 {
   fapi_nr_config_request_t *cfg = &mac->phy_config.config_req;
   mac->phy_config.Mod_id = mac->ue_id;
@@ -126,12 +152,24 @@ static void config_common_ue_sa(NR_UE_MAC_INST_t *mac, NR_ServingCellConfigCommo
   * MAC maintains its own frequency state, don't overwrite it with command-line parameter which
   * is related to the initial cell selection. */
   if (cfg->carrier_config.dl_frequency == 0) {
-    // Initial cell selection: derive from command-line parameter
-    uint64_t dl_bw_khz = (12 * frequencyInfoDL->scs_SpecificCarrierList.list.array[0]->carrierBandwidth) *
-                         (15 << frequencyInfoDL->scs_SpecificCarrierList.list.array[0]->subcarrierSpacing);
-    cfg->carrier_config.dl_frequency = mac->dl_frequency / 1000 - (dl_bw_khz >> 1);
+    // Initial cell selection: derive from SIB1 parameter
+    const frequency_range_t fr = mac->frequency_range;
+    const int sccCommon = (fr == FR2) ? (2 + mac->mib->subCarrierSpacingCommon) : mac->mib->subCarrierSpacingCommon;
+    const uint32_t pointA = get_pointA_frequency(arfcn_ssb,
+                                                 mac->ssb_subcarrier_offset,
+                                                 frequencyInfoDL->offsetToPointA,
+                                                 mac->numerology,
+                                                 sccCommon,
+                                                 mac->nr_band,
+                                                 fr);
+    cfg->carrier_config.dl_frequency = pointA;
+    // Update cset0 start RB
+    NR_Type0_PDCCH_CSS_config_t *cset0 = &mac->type0_PDCCH_CSS_config;
+    // FR2, offsetToPointA represented as 60kHz SCS
+    const int offsetToPointA_mu = (fr == FR2) ? mac->numerology - 2 : mac->numerology;
+    cset0->cset_start_rb = (frequencyInfoDL->offsetToPointA >> offsetToPointA_mu) - cset0->rb_offset;
     LOG_I(NR_MAC,
-          "[UE %d] Initial cell selection: dl_frequency=%u kHz (from command-line, band=%d, scs=%ld)\n",
+          "[UE %d] Initial cell selection: dl_frequency=%u kHz (from SIB1, band=%d, scs=%ld)\n",
           mac->ue_id,
           cfg->carrier_config.dl_frequency,
           mac->nr_band,
@@ -1149,7 +1187,7 @@ void configure_ue_phy_for_sib1_reception(NR_UE_MAC_INST_t *mac, const int cc_id,
   /* send sync request so PHY can sync again with new carrier freq */
   mac->synch_request.Mod_id = mac->ue_id;
   mac->synch_request.CC_id = cc_id;
-  fapi_nr_synch_request_t s = {.target_Nid_cell = mac->physCellId, .ssb_bw_scan = true};
+  fapi_nr_synch_request_t s = {.target_Nid_cell = mac->physCellId, .ssb_bw_scan = false, .ssb_arfcn = ssb_arfcn};
   mac->synch_request.synch_req = s;
   mac->if_module->synch_request(&mac->synch_request);
   mac->if_module->phy_config_request(&mac->phy_config);
@@ -2048,7 +2086,7 @@ static void configure_si_schedulingInfo(NR_UE_MAC_INST_t *mac,
   }
 }
 
-void nr_rrc_mac_config_req_sib1(module_id_t module_id, int cc_idP, NR_SIB1_t *sib1, bool can_start_ra)
+void nr_rrc_mac_config_req_sib1(module_id_t module_id, int cc_idP, NR_SIB1_t *sib1, bool can_start_ra, int ssb_arfcn)
 {
   NR_UE_MAC_INST_t *mac = get_mac_inst(module_id);
   int ret = pthread_mutex_lock(&mac->if_mutex);
@@ -2064,7 +2102,7 @@ void nr_rrc_mac_config_req_sib1(module_id_t module_id, int cc_idP, NR_SIB1_t *si
   UPDATE_IE(mac->tdd_UL_DL_ConfigurationCommon, scc->tdd_UL_DL_ConfigurationCommon, NR_TDD_UL_DL_ConfigCommon_t);
   configure_si_schedulingInfo(mac, si_SchedulingInfo, si_SchedulingInfo_v1700);
 
-  config_common_ue_sa(mac, scc, cc_idP);
+  config_common_ue_sa(mac, scc, cc_idP, ssb_arfcn);
 
   // Build the list of all the valid/transmitted SSBs according to the config
   LOG_D(NR_MAC, "Build SSB list\n");
@@ -2088,6 +2126,17 @@ void nr_rrc_mac_config_req_sib1(module_id_t module_id, int cc_idP, NR_SIB1_t *si
   if (mac->state == UE_RECEIVING_SIB && can_start_ra)
     mac->state = UE_PERFORMING_RA;
 
+  const int new_ssb_start_sc = get_ssb_first_sc(mac->phy_config.config_req.carrier_config.dl_frequency,
+                                                from_nrarfcn(mac->nr_band, mac->numerology, ssb_arfcn) / 1000,
+                                                mac->numerology);
+  /* send sync request only if center frequency changes */
+  if (new_ssb_start_sc != mac->ssb_start_subcarrier) {
+    mac->synch_request.Mod_id = mac->ue_id;
+    mac->synch_request.CC_id = cc_idP;
+    fapi_nr_synch_request_t s = {.target_Nid_cell = mac->physCellId, .ssb_bw_scan = false, .ssb_arfcn = ssb_arfcn};
+    mac->synch_request.synch_req = s;
+    mac->if_module->synch_request(&mac->synch_request);
+  }
   mac->if_module->phy_config_request(&mac->phy_config);
   mac->phy_config.config_req.ntn_config.params_changed = false;
   ret = pthread_mutex_unlock(&mac->if_mutex);

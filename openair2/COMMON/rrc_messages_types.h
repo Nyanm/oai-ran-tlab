@@ -449,6 +449,7 @@ typedef struct {
 typedef struct {
   NR_SIB1_t *sib1;
   bool can_start_ra;
+  int ssb_arfcn;
 } nr_mac_rrc_config_sib1_t;
 typedef struct {
   NR_SIB19_r17_t *sib19;

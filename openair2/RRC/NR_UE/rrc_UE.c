@@ -521,6 +521,7 @@ static void nr_rrc_process_sib1(NR_UE_RRC_INST_t *rrc, NR_UE_RRC_SI_INFO *SI_inf
   nr_mac_rrc_config_sib1_t *config_sib1 = &rrc_msg.payload.config_sib1;
   config_sib1->sib1 = sib1;
   config_sib1->can_start_ra = !rrc->is_NTN_UE;
+  config_sib1->ssb_arfcn = rrc->arfcn_ssb;
   nr_rrc_send_msg_to_mac(rrc, &rrc_msg);
 }
 
