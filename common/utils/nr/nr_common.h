@@ -108,6 +108,14 @@ typedef struct {
   nr_sib_type_t SIB_type;
 } nr_SIBs_t;
 
+typedef enum {
+  PHY_CONFIG_BIT_MASK_CARRIER = 0,
+  PHY_CONFIG_BIT_MASK_CELL,
+  PHY_CONFIG_BIT_MASK_SSB,
+  PHY_CONFIG_BIT_MASK_TDD,
+  PHY_CONFIG_BIT_MASK_PRACH
+} nr_phy_config_mask_t;
+
 typedef struct nr_bandentry_s {
   int16_t band;
   uint64_t ul_min;
@@ -357,6 +365,12 @@ void nr_deconstruct_5g_s_tmsi(const uint64_t fiveg_s_tmsi, uint16_t *amf_set_id,
 #define CIRCULAR_INC(val, inc, size) (((val) + (inc) >= (size)) ? ((val) + (inc) - (size)) : ((val) + (inc)))
 
 static const char *const duplex_mode_txt[] = {"FDD", "TDD"};
+
+#define SETBIT(a, b) ((a) |= (1 << (b)))
+#define GETBIT(a, b) (((a) >> (b)) & 1)
+
+// Align up to a multiple of 16
+#define ALIGN_UP_16(a) ((a + 15) & ~15)
 
 #ifdef __cplusplus
 #ifdef min
