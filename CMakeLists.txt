@@ -2050,17 +2050,6 @@ endforeach(myExe)
 #    )
 #endforeach(myExe)
 
-#ensure that the T header files are generated before targets depending on them
-if (${T_TRACER})
-  foreach(i
-        #all "add_library" definitions
-        )
-    if (TARGET ${i})
-      add_dependencies(${i} generate_T)
-    endif()
-  endforeach(i)
-endif (${T_TRACER})
-
 set(ENABLE_TESTS OFF CACHE STRING "Activate build of tests")
 set_property(CACHE ENABLE_TESTS PROPERTY TYPE BOOL)
 set(ENABLE_PHYSIM_TESTS OFF CACHE STRING "Activate build of physim tests")
