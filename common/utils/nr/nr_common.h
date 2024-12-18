@@ -323,6 +323,8 @@ unsigned int get_prach_K(int prach_sequence_length, int prach_fmt_id, int pusch_
 
 int get_slot_idx_in_period(const int slot, const frame_structure_t *fs);
 int get_ssb_first_sc(const double pointA, const double ssbCenter, const int mu);
+int get_gscn_from_nrarfcn(const int band, const int scs, const uint32_t arfcn);
+double get_ssref_from_gscn(const int gscn);
 
 frequency_range_t get_freq_range_from_freq(uint64_t freq);
 frequency_range_t get_freq_range_from_arfcn(uint32_t arfcn);

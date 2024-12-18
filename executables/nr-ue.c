@@ -453,7 +453,7 @@ static uint64_t get_carrier_frequency(const int N_RB, const int mu, const uint32
   return carrier_freq;
 }
 
-static int handle_sync_req_from_mac(PHY_VARS_NR_UE *UE)
+static int handle_sync_req_from_mac(PHY_VARS_NR_UE *UE, uint32_t *ssb_arfcn)
 {
   NR_DL_FRAME_PARMS *fp = &UE->frame_parms;
   const fapi_nr_config_request_t *config = &UE->nrUE_config;
@@ -468,8 +468,9 @@ static int handle_sync_req_from_mac(PHY_VARS_NR_UE *UE)
     else {
       UE->UE_scan_carrier = false;
       fp->ssb_start_subcarrier = get_ssb_first_sc(cfg->dl_frequency * 1000,
-                                                  from_nrarfcn(fp->nr_band, fp->numerology_index, s->ssb_arfcn),
+                                                  from_nrarfcn(nrue_get_band(UE), fp->numerology_index, s->ssb_arfcn),
                                                   fp->numerology_index);
+      *ssb_arfcn = s->ssb_arfcn;
     }
     UE->target_Nid_cell = UE->synch_request.synch_req.target_Nid_cell;
 
@@ -765,6 +766,7 @@ void *UE_thread(void *arg)
   int intialSyncOffset = 0;
   openair0_timestamp_t sync_timestamp;
   bool stats_printed = false;
+  uint32_t sync_ssb_arfcn = 0;
 
   if (get_softmodem_params()->sync_ref && UE->sl_mode == 2) {
     UE->is_synchronized = 1;
@@ -833,14 +835,22 @@ void *UE_thread(void *arg)
       notifiedFIFO_elt_t *Msg = newNotifiedFIFO_elt(sizeof(syncData_t), 0, &nf, UE_synch);
       syncData_t *syncMsg = (syncData_t *)NotifiedFifoData(Msg);
       *syncMsg = (syncData_t){0};
+      const uint32_t nr_band = nrue_get_band(UE);
       if (UE->UE_scan_carrier) {
         // Get list of GSCN in this band for UE's bandwidth and center frequency.
         LOG_W(PHY, "UE set to scan all GSCN in current bandwidth\n");
         syncMsg->numGscn =
-            get_scan_ssb_first_sc(fp->dl_CarrierFreq, fp->N_RB_DL, nrue_get_band(UE), fp->numerology_index, syncMsg->gscnInfo);
+            get_scan_ssb_first_sc(fp->dl_CarrierFreq, fp->N_RB_DL, nr_band, fp->numerology_index, syncMsg->gscnInfo);
       } else {
         LOG_W(PHY, "SSB position provided\n");
-        syncMsg->gscnInfo[0] = (nr_gscn_info_t){.ssbFirstSC = fp->ssb_start_subcarrier};
+        nr_gscn_info_t *g = syncMsg->gscnInfo;
+        g->ssbFirstSC = fp->ssb_start_subcarrier;
+        if (sync_ssb_arfcn) {
+          g->gscn = get_gscn_from_nrarfcn(nr_band, fp->numerology_index, sync_ssb_arfcn);
+          g->ssRef = get_ssref_from_gscn(g->gscn);
+        } else {
+          g->gscn = g->ssRef = 0;
+        }
         syncMsg->numGscn = 1;
       }
       syncMsg->UE = UE;
@@ -906,7 +916,7 @@ void *UE_thread(void *arg)
     }
 
     /* check if MAC has sent sync request */
-    if (handle_sync_req_from_mac(UE) == 0)
+    if (handle_sync_req_from_mac(UE, &sync_ssb_arfcn) == 0)
       continue;
 
     // start of normal case, the UE is in sync
