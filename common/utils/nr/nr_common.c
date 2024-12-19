@@ -1161,18 +1161,23 @@ int get_ssb_first_sc(const uint32_t pointA_kHz, const uint32_t ssbCenter_kHz, co
   return ((ssbCenter_kHz - pointA_kHz) / scs - (ssbRBs * NR_NB_SC_PER_RB / 2));
 }
 
+static int get_neigh_gscn_offset(const int gscn, const int gscn2, const int scs_khz)
+{
+  const uint32_t firstSSRef = get_ssref_from_gscn(gscn);
+  const uint32_t nextSSRef = get_ssref_from_gscn(gscn2);
+  return ((nextSSRef - firstSSRef) % scs_khz);
+}
+
 /* Returns array of first SCS offset in the scanning window */
-int get_scan_ssb_first_sc(const uint32_t fc_khz,
+int get_scan_ssb_first_sc(uint32_t *fc_khz_p,
                           const int nbRB,
                           const int nrBand,
                           const int mu,
+                          const int numScans,
+                          const int firstScannedGscn,
+                          const int lastScannedGscn,
                           nr_gscn_info_t ssbInfo[MAX_GSCN_BAND])
 {
-  const uint32_t startFreq = get_start_freq(fc_khz, nbRB, mu);
-  const uint32_t stopFreq = get_stop_freq(fc_khz, nbRB, mu);
-
-  int scanGscnStart = 0;
-  int scanGscnStop = 0;
   const sync_raster_t *tmpRaster = sync_raster;
   const sync_raster_t *end = sync_raster + sizeofArray(sync_raster);
   while (tmpRaster < end && (tmpRaster->band != nrBand || tmpRaster->scs_index != mu))
@@ -1182,16 +1187,67 @@ int get_scan_ssb_first_sc(const uint32_t fc_khz,
     return 0;
   }
 
+  // for sub 3GHz SSRef = N * 1200kHz + M * 50kHz. So one value of M for each scan
+  /*
+  GSCN     First scan    Second scan     Third scan
+  0        x
+  1                        x
+  2                                        x
+  3        x
+  ...                      x
+  ...                                      x
+  ...
+  N-3      x
+  N-2                      x
+  N-1                                      x
+
+  */
+  bool sub3 = (tmpRaster->last_gscn < 7499 && tmpRaster->step_gscn == 1); // GSCN granularity not consistent with SCS
+  const uint32_t scs = MU_SCS(mu);
+  uint32_t fc_khz = *fc_khz_p;
+  uint32_t startFreq;
+  if (fc_khz != 0) {
+    // center freq provided, return list of GSCN in current bandwidth
+    startFreq = get_start_freq(fc_khz, nbRB, mu);
+  } else {
+    // center freq not provided
+    // compute startFreq from first GSCN to be scanned in this run
+    int first_gscn;
+    if (sub3 && (numScans % 3))
+      first_gscn = firstScannedGscn + 1;
+    else
+      first_gscn = (lastScannedGscn == -1) ? tmpRaster->first_gscn : lastScannedGscn + tmpRaster->step_gscn;
+    if (first_gscn > tmpRaster->last_gscn) {
+      // Repeat search
+      first_gscn = tmpRaster->first_gscn;
+    }
+    const uint32_t firstSSRef = get_ssref_from_gscn(first_gscn);
+    const int ssbRBs = 20;
+    startFreq = firstSSRef - (ssbRBs * NR_NB_SC_PER_RB / 2 * scs);
+    fc_khz = startFreq + (nbRB * NR_NB_SC_PER_RB / 2 * scs);
+    // return new center frequency
+    *fc_khz_p = fc_khz;
+  }
+  const uint32_t stopFreq = get_stop_freq(fc_khz, nbRB, mu);
+  int scanGscnStart = 0;
+  int scanGscnStop = 0;
   find_gscn_to_scan(startFreq, stopFreq, *tmpRaster, &scanGscnStart, &scanGscnStop);
 
-  const uint32_t scs = MU_SCS(mu);
   const uint32_t pointA = fc_khz - (nbRB * NR_NB_SC_PER_RB / 2 * scs);
   int numGscn = 0;
-  for (int g = scanGscnStart; (g <= scanGscnStop) && (numGscn < MAX_GSCN_BAND); g += tmpRaster->step_gscn) {
+  const int step_gscn = sub3 ? 3 : tmpRaster->step_gscn;
+  for (int g = scanGscnStart; (g <= scanGscnStop) && (numGscn < MAX_GSCN_BAND); g += step_gscn) {
     ssbInfo[numGscn].ssRef = get_ssref_from_gscn(g);
     ssbInfo[numGscn].ssbFirstSC = get_ssb_first_sc(pointA, ssbInfo[numGscn].ssRef, mu);
     ssbInfo[numGscn].gscn = g;
     numGscn++;
+  }
+
+  if (numGscn > 2) {
+    // Check if GSCNs to be scanned are aligned with current freq and SCS
+    const int sync_raster_granu = get_neigh_gscn_offset(ssbInfo[0].gscn, ssbInfo[1].gscn, scs);
+    if (sync_raster_granu)
+      LOG_E(NR_PHY, "Sync raster granularity %d unaligned with SCS %d\n", sync_raster_granu, scs);
   }
 
   return numGscn;

@@ -1172,6 +1172,7 @@ void configure_ue_phy_for_sib1_reception(NR_UE_MAC_INST_t *mac, const int cc_id,
   if (pointA_adj == 0) // no need to change carrier freq
     return;
 
+  LOG_I(NR_MAC, "Current SSB ARFCN %ld\n", ssb_arfcn);
   LOG_I(NR_MAC, "Adjusting center frequency by %d sub carriers\n", pointA_adj);
   const uint32_t ssb_abs_freq = from_nrarfcn(mac->nr_band, ssb_scs, ssb_arfcn) / 1000; // in khz
   const uint32_t ssb_rbs = 20;

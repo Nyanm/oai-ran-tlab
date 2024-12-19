@@ -267,6 +267,12 @@ typedef struct {
   int used_by_ue;
 } nrUE_cell_params_t;
 
+typedef enum {
+  NO_SCAN = 0,
+  SCAN_BW,
+  SCAN_BAND,
+} nr_ue_scan_enum_t;
+
 /// Top-level PHY Data Structure for UE
 typedef struct PHY_VARS_NR_UE_s {
   /// \brief Module ID indicator for this instance
@@ -278,7 +284,7 @@ typedef struct PHY_VARS_NR_UE_s {
   /// \brief Indicator that UE should perform band scanning
   int UE_scan;
   /// \brief Indicator that UE should perform coarse scanning around carrier
-  int UE_scan_carrier;
+  nr_ue_scan_enum_t UE_scan_carrier;
   /// \brief Indicator that UE should enable estimation and compensation of frequency offset
   int UE_fo_compensation;
   /// IF frequency for RF
