@@ -139,7 +139,7 @@ typedef struct {
 
 typedef struct {
   int gscn;
-  double ssRef;
+  uint32_t ssRef;
   int ssbFirstSC;
 } nr_gscn_info_t;
 
@@ -307,11 +307,7 @@ uint32_t get_ssb_offset_to_pointA(uint32_t absoluteFrequencySSB,
 int get_ssb_subcarrier_offset(uint32_t absoluteFrequencySSB, uint32_t absoluteFrequencyPointA, int scs);
 int get_delay_idx(int delay, int max_delay_comp);
 
-int get_scan_ssb_first_sc(const double fc,
-                          const int nbRB,
-                          const int nrBand,
-                          const int mu,
-                          nr_gscn_info_t ssbStartSC[MAX_GSCN_BAND]);
+int get_scan_ssb_first_sc(const uint32_t fc, const int nbRB, const int nrBand, const int mu, nr_gscn_info_t ssbInfo[MAX_GSCN_BAND]);
 
 void check_ssb_raster(uint64_t freq, int band, int scs);
 int get_smallest_supported_bandwidth_index(int scs, frequency_range_t frequency_range, int n_rbs);
@@ -322,9 +318,9 @@ uint8_t get_PRACH_k_bar(unsigned int delta_f_RA_PRACH, unsigned int delta_f_PUSC
 unsigned int get_prach_K(int prach_sequence_length, int prach_fmt_id, int pusch_mu, int prach_mu);
 
 int get_slot_idx_in_period(const int slot, const frame_structure_t *fs);
-int get_ssb_first_sc(const double pointA, const double ssbCenter, const int mu);
+int get_ssb_first_sc(const uint32_t pointA, const uint32_t ssbCenter, const int mu);
 int get_gscn_from_nrarfcn(const int band, const int scs, const uint32_t arfcn);
-double get_ssref_from_gscn(const int gscn);
+uint32_t get_ssref_from_gscn(const int gscn);
 
 frequency_range_t get_freq_range_from_freq(uint64_t freq);
 frequency_range_t get_freq_range_from_arfcn(uint32_t arfcn);

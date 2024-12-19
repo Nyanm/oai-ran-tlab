@@ -467,8 +467,8 @@ static int handle_sync_req_from_mac(PHY_VARS_NR_UE *UE, uint32_t *ssb_arfcn)
       UE->UE_scan_carrier = get_nrUE_params()->UE_scan_carrier;
     else {
       UE->UE_scan_carrier = false;
-      fp->ssb_start_subcarrier = get_ssb_first_sc(cfg->dl_frequency * 1000,
-                                                  from_nrarfcn(nrue_get_band(UE), fp->numerology_index, s->ssb_arfcn),
+      fp->ssb_start_subcarrier = get_ssb_first_sc(cfg->dl_frequency,
+                                                  from_nrarfcn(nrue_get_band(UE), fp->numerology_index, s->ssb_arfcn) / 1000,
                                                   fp->numerology_index);
       *ssb_arfcn = s->ssb_arfcn;
     }
