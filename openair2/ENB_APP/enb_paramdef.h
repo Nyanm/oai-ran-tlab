@@ -113,6 +113,19 @@ typedef enum {
 #define CONFIG_STRING_RU_HALF_SLOT_PARALLELIZATION "half_slot_parallelization"
 #define CONFIG_STRING_RU_RU_THREAD_CORE            "ru_thread_core"
 #define CONFIG_STRING_RU_GPIO_CONTROL "gpio_controller"
+#define CONFIG_STRING_RU_TX_BW_LIST               "tx_bw"
+#define CONFIG_STRING_RU_RX_BW_LIST               "rx_bw"
+#define CONFIG_STRING_RU_CARRIER_TX_LIST          "carrier_tx"
+#define CONFIG_STRING_RU_CARRIER_RX_LIST          "carrier_rx"
+#define CONFIG_STRING_RU_FRAME_TYPE               "frame_type"
+#define CONFIG_STRING_RU_PRACH_CONFIGID           "prach_config_index"
+#define CONFIG_STRING_RU_PRACH_MSG1FREQ           "prach_msg1_start"
+#define CONFIG_STRING_RU_NUMEROLOGY               "mu"
+#define CONFIG_STRING_RU_TDD_PERIOD               "tdd_period"
+#define CONFIG_STRING_RU_NUM_DL_SLOTS             "num_dl_slots"
+#define CONFIG_STRING_RU_NUM_UL_SLOTS             "num_ul_slots"
+#define CONFIG_STRING_RU_NUM_DL_SYMBOLS           "num_dl_symbols"
+#define CONFIG_STRING_RU_NUM_UL_SYMBOLS           "num_ul_symbols"
 
 #define HLP_RU_SF_AHEAD "LTE TX processing advance"
 #define HLP_RU_SL_AHEAD "NR TX processing advance"
@@ -126,6 +139,20 @@ typedef enum {
 #define HLP_RU_HALF_SLOT_PARALLELIZATION "run half slots in parallel in RU FEP"
 #define HLP_RU_RU_THREAD_CORE "id of core to pin ru_thread, -1 is default"
 #define HLP_RU_GPIO_CONTROL "set the GPIO control type for the RU"
+#define HLP_RU_TX_BW "set the TX bandwidth list per component carrier"
+#define HLP_RU_RX_BW "set the RX bandwidth list per component carrier"
+#define HLP_RU_CARRIER_TX "set the TX carrier frequencies per component carrier"
+#define HLP_RU_CARRIER_RX "set the RX carrier frequencies per component carrier"
+#define HLP_RU_FRAMETYPE "set the Frame type TDD/FDD of all component carriers"
+#define HLP_RU_PRACH_CONFIGID "set the PRACH configuration id of all component carriers"
+#define HLP_RU_PRACH_MSG1FREQ "set the PRACH MSG1 frequency of all component carriers"
+#define HLP_RU_NUMEROLOGY     "set the numerology of the RU"
+#define HLP_RU_TDD_PERIOD     "set the 3GPP TDD periodificty 0-9"
+#define HLP_RU_NUM_DL_SLOTS   "set the number of DL Slots in TDD"
+#define HLP_RU_NUM_UL_SLOTS   "set the number of UL Slots in TDD"
+#define HLP_RU_NUM_DL_SYMBOLS "set the number of DL symbols in the mixed slot"
+#define HLP_RU_NUM_UL_SYMBOLS "set the number of UL symbols in the mixed slot"
+
 
 #define RU_LOCAL_IF_NAME_IDX          0
 #define RU_LOCAL_ADDRESS_IDX          1
@@ -170,6 +197,19 @@ typedef enum {
 #define RU_HALF_SLOT_PARALLELIZATION  40
 #define RU_RU_THREAD_CORE             41
 #define RU_GPIO_CONTROL               42
+#define RU_TX_BW_LIST_IDX             43
+#define RU_RX_BW_LIST_IDX             44
+#define RU_TX_CARRIER_LIST_IDX        45
+#define RU_RX_CARRIER_LIST_IDX        46
+#define RU_FRAME_TYPE_IDX             47
+#define RU_PRACH_CONFIGID_IDX         48
+#define RU_PRACH_MSG1FREQ_IDX         49
+#define RU_NUMEROLOGY_IDX             50
+#define RU_TDD_PERIOD_IDX             51
+#define RU_NUM_DL_SLOTS_IDX           52
+#define RU_NUM_UL_SLOTS_IDX           53
+#define RU_NUM_DL_SYMBOLS_IDX         54
+#define RU_NUM_UL_SYMBOLS_IDX         55
 /*-----------------------------------------------------------------------------------------------------------------------------------------*/
 /*                                            RU configuration parameters                                                                  */
 /*   optname                                   helpstr   paramflags    XXXptr          defXXXval                   type      numelt        */
@@ -219,6 +259,19 @@ typedef enum {
   {CONFIG_STRING_RU_HALF_SLOT_PARALLELIZATION, HLP_RU_HALF_SLOT_PARALLELIZATION,  0,       .uptr=NULL,       .defintval=1,                 TYPE_UINT,        0}, \
   {CONFIG_STRING_RU_RU_THREAD_CORE,            HLP_RU_RU_THREAD_CORE,             0,       .uptr=NULL,       .defintval=-1,                TYPE_UINT,         0}, \
   {CONFIG_STRING_RU_GPIO_CONTROL,              HLP_RU_GPIO_CONTROL,               0,       .strptr=NULL,     .defstrval="generic",         TYPE_STRING,      0}, \
+  {CONFIG_STRING_RU_TX_BW_LIST,                HLP_RU_TX_BW,                      0,       .iptr=NULL,       .defintarrayval=DEFBW,        TYPE_INTARRAY,    0}, \
+  {CONFIG_STRING_RU_RX_BW_LIST,                HLP_RU_RX_BW,                      0,       .iptr=NULL,       .defintarrayval=DEFBW,        TYPE_INTARRAY,    0}, \
+  {CONFIG_STRING_RU_CARRIER_TX_LIST,           HLP_RU_CARRIER_TX,                 0,       .iptr=NULL,       .defintarrayval=DEFCARRIER,   TYPE_INTARRAY,    0}, \
+  {CONFIG_STRING_RU_CARRIER_RX_LIST,           HLP_RU_CARRIER_RX,                 0,       .iptr=NULL,       .defintarrayval=DEFCARRIER,   TYPE_INTARRAY,    0}, \
+  {CONFIG_STRING_RU_FRAME_TYPE,                HLP_RU_FRAMETYPE,                  0,       .uptr=NULL,       .defintval=1,                 TYPE_UINT,         0}, \
+  {CONFIG_STRING_RU_PRACH_CONFIGID,            HLP_RU_PRACH_CONFIGID,             0,       .uptr=NULL,       .defintval=152,               TYPE_UINT,         0}, \
+  {CONFIG_STRING_RU_PRACH_MSG1FREQ,            HLP_RU_PRACH_MSG1FREQ,             0,       .uptr=NULL,       .defintval=0,                 TYPE_UINT,         0}, \
+  {CONFIG_STRING_RU_NUMEROLOGY,                HLP_RU_NUMEROLOGY,                 0,       .uptr=NULL,       .defintval=1,                 TYPE_UINT,         0}, \
+  {CONFIG_STRING_RU_TDD_PERIOD,                HLP_RU_TDD_PERIOD,                 0,       .uptr=NULL,       .defintval=5,                 TYPE_UINT,         0}, \
+  {CONFIG_STRING_RU_NUM_DL_SLOTS,              HLP_RU_NUM_DL_SLOTS,               0,       .uptr=NULL,       .defintval=3,                 TYPE_UINT,         0}, \
+  {CONFIG_STRING_RU_NUM_UL_SLOTS,              HLP_RU_NUM_UL_SLOTS,               0,       .uptr=NULL,       .defintval=1,                 TYPE_UINT,         0}, \
+  {CONFIG_STRING_RU_NUM_DL_SYMBOLS,            HLP_RU_NUM_DL_SYMBOLS,             0,       .uptr=NULL,       .defintval=7,                 TYPE_UINT,         0}, \
+  {CONFIG_STRING_RU_NUM_UL_SYMBOLS,            HLP_RU_NUM_UL_SYMBOLS,             0,       .uptr=NULL,       .defintval=3,                 TYPE_UINT,         0}, \
 }
 // clang-format on
 
