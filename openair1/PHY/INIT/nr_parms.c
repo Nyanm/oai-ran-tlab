@@ -286,6 +286,93 @@ uint32_t get_samples_slot_timestamp(int slot, const NR_DL_FRAME_PARMS *fp, unsig
   return samp_count;
 }
 
+void nr_ru_init_frame_parms(RU_t *ru)
+{
+  NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+
+  fp->frame_type = ru->frame_type;
+  ru->config.cell_config.frame_duplex_type.value = ru->frame_type;
+  ru->config.cell_config.frame_duplex_type.tl.tag = 0x100D;
+  fp->N_RB_DL = ru->bw_tx[0];
+  ru->config.ssb_config.scs_common.value = ru->numerology;
+  ru->config.carrier_config.dl_grid_size[ru->config.ssb_config.scs_common.value].value = ru->bw_tx[0];
+  fp->N_RB_UL = ru->bw_rx[0];
+  ru->config.carrier_config.ul_grid_size[ru->config.ssb_config.scs_common.value].value = ru->bw_rx[0];
+  fp->numerology_index = ru->numerology;
+  fp->nr_band = ru->band[0];
+  LOG_I(NR_PHY,
+        "Set RU frame type to %s, N_RB_DL %d, N_RB_UL %d, mu %d\n",
+        ru->frame_type == TDD ? "TDD" : "FDD",
+        ru->bw_tx[0],
+        ru->bw_rx[0],
+        ru->numerology);
+  set_scs_parameters(fp, fp->numerology_index, ru->bw_tx[0]);
+  fp->slots_per_frame = 10 * fp->slots_per_subframe;
+  fp->nb_antennas_rx = ru->nb_rx;
+  fp->nb_antennas_tx = ru->nb_tx;
+  fp->symbols_per_slot = 14;
+  fp->samples_per_subframe_wCP = fp->ofdm_symbol_size * fp->symbols_per_slot * fp->slots_per_subframe;
+  fp->samples_per_frame_wCP = 10 * fp->samples_per_subframe_wCP;
+  fp->samples_per_slot_wCP = fp->symbols_per_slot * fp->ofdm_symbol_size;
+  fp->samples_per_slotN0 = (fp->nb_prefix_samples + fp->ofdm_symbol_size) * fp->symbols_per_slot;
+  fp->samples_per_slot0 =
+      fp->nb_prefix_samples0 + ((fp->symbols_per_slot - 1) * fp->nb_prefix_samples) + (fp->symbols_per_slot * fp->ofdm_symbol_size);
+  fp->samples_per_subframe = (fp->nb_prefix_samples0 + fp->ofdm_symbol_size) * 2
+                             + (fp->nb_prefix_samples + fp->ofdm_symbol_size) * (fp->symbols_per_slot * fp->slots_per_subframe - 2);
+  fp->get_samples_per_slot = &get_samples_per_slot;
+  fp->get_samples_slot_timestamp = &get_samples_slot_timestamp;
+  fp->get_slot_from_timestamp = &get_slot_from_timestamp;
+  fp->samples_per_frame = 10 * fp->samples_per_subframe;
+  fp->freq_range = (ru->carrier_freq_tx[0] < 6e6) ? FR1 : FR2;
+
+  fp->dl_CarrierFreq = (double)ru->carrier_freq_tx[0] * 1000;
+  fp->ul_CarrierFreq = (double)ru->carrier_freq_rx[0] * 1000;
+  fp->Ncp = NORMAL;
+
+  // Split 7.2 parameters
+  ru->config.prach_config.num_prach_fd_occasions.value = 1;
+  ru->config.prach_config.prach_ConfigurationIndex.value = ru->prach_config_index;
+  ru->config.prach_config.prach_ConfigurationIndex.tl.tag = 0x1029;
+  ru->config.prach_config.num_prach_fd_occasions_list = malloc(sizeof(*ru->config.prach_config.num_prach_fd_occasions_list));
+  ru->config.prach_config.num_prach_fd_occasions_list[0].k1.value = ru->prach_msg1_freq;
+  if (ru->config.cell_config.frame_duplex_type.value == 1 /* TDD */) {
+    ru->config.tdd_table.tdd_period.value = ru->tdd_period;
+    ru->config.tdd_table.tdd_period.tl.tag = 0x1026;
+    int numb_slots_frame = (1 << ru->numerology) * NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
+    int numb_period_frame = get_nb_periods_per_frame(ru->tdd_period);
+    int numb_slots_period = numb_slots_frame / numb_period_frame;
+    ru->config.tdd_table.max_tdd_periodicity_list =
+        malloc(sizeof(*ru->config.tdd_table.max_tdd_periodicity_list) * (numb_slots_frame));
+    for (int n = 0; n < numb_slots_frame; n++) {
+      int s = 0;
+      int p = n % numb_slots_period;
+      if (p < ru->num_DL_slots) {
+        ru->config.tdd_table.max_tdd_periodicity_list[n].max_num_of_symbol_per_slot_list =
+            malloc(sizeof(*ru->config.tdd_table.max_tdd_periodicity_list[n].max_num_of_symbol_per_slot_list)
+                   * NR_NUMBER_OF_SYMBOLS_PER_SLOT);
+        for (s = 0; s < 14; s++)
+          ru->config.tdd_table.max_tdd_periodicity_list[n].max_num_of_symbol_per_slot_list[s].slot_config.value = 0;
+      } else if (p == ru->num_DL_slots) {
+        ru->config.tdd_table.max_tdd_periodicity_list[n].max_num_of_symbol_per_slot_list =
+            malloc(sizeof(*ru->config.tdd_table.max_tdd_periodicity_list[n].max_num_of_symbol_per_slot_list)
+                   * NR_NUMBER_OF_SYMBOLS_PER_SLOT);
+        for (s = 0; s < ru->num_DL_symbols; s++)
+          ru->config.tdd_table.max_tdd_periodicity_list[n].max_num_of_symbol_per_slot_list[s].slot_config.value = 0;
+        for (; s < NR_NUMBER_OF_SYMBOLS_PER_SLOT - ru->num_UL_symbols; s++)
+          ru->config.tdd_table.max_tdd_periodicity_list[n].max_num_of_symbol_per_slot_list[s].slot_config.value = 2;
+        for (; s < NR_NUMBER_OF_SYMBOLS_PER_SLOT; s++)
+          ru->config.tdd_table.max_tdd_periodicity_list[n].max_num_of_symbol_per_slot_list[s].slot_config.value = 1;
+      } else {
+        ru->config.tdd_table.max_tdd_periodicity_list[n].max_num_of_symbol_per_slot_list =
+            malloc(sizeof(*ru->config.tdd_table.max_tdd_periodicity_list[n].max_num_of_symbol_per_slot_list)
+                   * NR_NUMBER_OF_SYMBOLS_PER_SLOT);
+        for (s = 0; s < NR_NUMBER_OF_SYMBOLS_PER_SLOT; s++)
+          ru->config.tdd_table.max_tdd_periodicity_list[n].max_num_of_symbol_per_slot_list[s].slot_config.value = 1;
+      }
+    }
+  }
+}
+
 void nr_init_frame_parms(nfapi_nr_config_request_scf_t* cfg, NR_DL_FRAME_PARMS *fp)
 {
 

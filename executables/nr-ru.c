@@ -56,6 +56,8 @@ static int DEFBANDS[] = {7};
 static int DEFENBS[] = {0};
 static int DEFBFW[] = {0x00007fff};
 static int DEFRUTPCORES[] = {-1,-1,-1,-1};
+static int DEFBW[] = {273};
+static int DEFCARRIER[] = {3430560};
 
 #include "ENB_APP/enb_paramdef.h"
 #include "GNB_APP/gnb_paramdef.h"
@@ -1487,6 +1489,7 @@ void set_function_spec_param(RU_t *ru)
         reset_meas(&ru->tx_fhaul);
         reset_meas(&ru->compression);
         reset_meas(&ru->transport);
+        LOG_I(NR_PHY,"Setting IF4p5 (7.2 split)\n");
       } else if (ru->function == gNodeB_3GPP) {
         ru->do_prach             = 0;                       // no prach processing in RU
         ru->feprx                = nr_fep_tp;     // this is frequency-shift + DFTs
@@ -1578,8 +1581,13 @@ void init_NR_RU(configmodule_interface_t *cfg, char *rf_config_file)
       }
     }
 
-    PHY_VARS_gNB *gNB_RC = RC.gNB[0];
-    PHY_VARS_gNB *gNB0 = ru->gNB_list[0];
+
+    PHY_VARS_gNB *gNB_RC = NULL;
+    PHY_VARS_gNB *gNB0 = NULL;
+    if (RC.nb_nr_L1_inst > 0) {
+      gNB_RC = RC.gNB[0];
+      gNB0 = ru->gNB_list[0];
+    }
     LOG_D(PHY, "RU FUnction:%d ru->if_south:%d\n", ru->function, ru->if_south);
 
     if (gNB0) {
@@ -1594,6 +1602,9 @@ void init_NR_RU(configmodule_interface_t *cfg, char *rf_config_file)
           gNB0->RU_list[gNB0->num_RU++] = ru;
         }
       }
+    }
+    else {
+       nr_ru_init_frame_parms(ru);
     }
     set_function_spec_param(ru);
     init_RU_proc(ru);
@@ -1621,9 +1632,8 @@ void init_NR_RU(configmodule_interface_t *cfg, char *rf_config_file)
   LOG_D(HW,"[nr-softmodem.c] RU threads created\n");
 }
 
-void start_NR_RU()
+void start_NR_RU(RU_t *ru)
 {
-  RU_t *ru = RC.ru[0];
   start_RU_proc(ru);
 }
 
@@ -1814,8 +1824,23 @@ static void NRRCconfig_RU(configmodule_interface_t *cfg)
     ru->if_freq_offset = *param[RU_IF_FREQ_OFFSET].iptr;
     ru->sl_ahead = *param[RU_SL_AHEAD].iptr;
     ru->num_bands = param[RU_BAND_LIST_IDX].numelt;
-    for (int i = 0; i < ru->num_bands; i++)
+    for (int i = 0; i < ru->num_bands; i++) {
       ru->band[i] = param[RU_BAND_LIST_IDX].iptr[i];
+      ru->bw_tx[i] = param[RU_TX_BW_LIST_IDX].iptr[i];
+      ru->bw_rx[i] = param[RU_RX_BW_LIST_IDX].iptr[i];
+      ru->carrier_freq_tx[i] = param[RU_TX_CARRIER_LIST_IDX].iptr[i];
+      ru->carrier_freq_rx[i] = param[RU_RX_CARRIER_LIST_IDX].iptr[i];
+    }
+    ru->frame_type = *param[RU_FRAME_TYPE_IDX].iptr;
+    ru->prach_config_index = *param[RU_PRACH_MSG1FREQ_IDX].iptr;
+    ru->prach_msg1_freq = *param[RU_PRACH_MSG1FREQ_IDX].iptr;
+    ru->numerology = *param[RU_NUMEROLOGY_IDX].iptr;
+    ru->tdd_period = *param[RU_TDD_PERIOD_IDX].iptr;
+    ru->num_DL_slots = *param[RU_NUM_DL_SLOTS_IDX].iptr;
+    ru->num_UL_slots = *param[RU_NUM_UL_SLOTS_IDX].iptr;
+    ru->num_DL_symbols = *param[RU_NUM_DL_SYMBOLS_IDX].iptr;
+    ru->num_UL_symbols = *param[RU_NUM_UL_SYMBOLS_IDX].iptr;
+
     ru->openair0_cfg.nr_flag = *param[RU_NR_FLAG].iptr;
     ru->openair0_cfg.nr_band = ru->band[0];
     ru->openair0_cfg.nr_scs_for_raster = *param[RU_NR_SCS_FOR_RASTER].iptr;
