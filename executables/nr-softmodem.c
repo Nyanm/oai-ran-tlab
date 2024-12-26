@@ -444,7 +444,7 @@ int start_L1L2(module_id_t gnb_id)
 
   init_NR_RU(config_get_if(), NULL);
 
-  start_NR_RU();
+  start_NR_RU(RC.ru[0]);
   wait_RUs();
   init_eNB_afterRU();
   LOG_I(GNB_APP, "Sending sync to all threads\n");
@@ -662,7 +662,7 @@ int main( int argc, char **argv ) {
     wait_f1_setup_response();
 
   if (RC.nb_RU > 0)
-    start_NR_RU();
+    start_NR_RU(RC.ru[0]);
 
 #ifdef ENABLE_AERIAL
   gNB_MAC_INST *nrmac = RC.nrmac[0];

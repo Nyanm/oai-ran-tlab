@@ -474,6 +474,30 @@ typedef struct RU_t_s {
   int num_bands;
   /// band list
   int band[MAX_BANDS_PER_RRU];
+  /// tx carrier
+  uint64_t carrier_freq_tx[MAX_BANDS_PER_RRU];
+  /// rx carrier
+  uint64_t carrier_freq_rx[MAX_BANDS_PER_RRU];
+  /// tx BW in PRBs
+  int bw_tx[MAX_BANDS_PER_RRU];
+  /// rx BW in PRBs
+  int bw_rx[MAX_BANDS_PER_RRU];
+  /// 3GPP FRAME Type FDD/TDD
+  int frame_type;
+  /// 3GPP PRACH configuration index
+  int prach_config_index;
+  /// 3GPP MSG1 Start frequency
+  int prach_msg1_freq;
+  /// 3GPP TDD periodicity (0.5 ms, 1 0.625ms, 2 1ms, 3 1.25ms, 4 2ms,5 2.5ms, 6 5ms, 7 10ms, 8 3ms, 9 4ms
+  int tdd_period;
+  /// number of DL slots
+  int num_DL_slots;
+  /// number of UL slots
+  int num_UL_slots;
+  /// number of DL symbols
+  int num_DL_symbols;
+  /// number of UL symbols
+  int num_UL_symbols;
   /// number of RX paths on device
   int nb_rx;
   /// number of TX paths on device
