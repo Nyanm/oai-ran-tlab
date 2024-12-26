@@ -1555,8 +1555,13 @@ void init_NR_RU(configmodule_interface_t *cfg, char *rf_config_file)
       }
     }
 
-    PHY_VARS_gNB *gNB_RC = RC.gNB[0];
-    PHY_VARS_gNB *gNB0 = ru->gNB_list[0];
+
+    PHY_VARS_gNB *gNB_RC = NULL;
+    PHY_VARS_gNB *gNB0 = NULL;
+    if (RC.nb_nr_L1_inst > 0) {
+      gNB_RC = RC.gNB[0];
+      gNB0 = ru->gNB_list[0];
+    }
     LOG_D(PHY, "RU FUnction:%d ru->if_south:%d\n", ru->function, ru->if_south);
 
     if (gNB0) {
@@ -1793,6 +1798,7 @@ static void NRRCconfig_RU(configmodule_interface_t *cfg)
     ru->num_bands = param[RU_BAND_LIST_IDX].numelt;
     for (int i = 0; i < ru->num_bands; i++)
       ru->band[i] = param[RU_BAND_LIST_IDX].iptr[i];
+
     ru->openair0_cfg.nr_flag = *param[RU_NR_FLAG].iptr;
     ru->openair0_cfg.nr_band = ru->band[0];
     ru->openair0_cfg.nr_scs_for_raster = *param[RU_NR_SCS_FOR_RASTER].iptr;
