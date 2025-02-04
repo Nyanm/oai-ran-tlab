@@ -926,6 +926,18 @@ void nr_pdcp_release_drb(ue_id_t ue_id, int drb_id)
   nr_pdcp_manager_unlock(nr_pdcp_ue_manager);
 }
 
+void nr_pdcp_release_from_pdusession(ue_id_t ue_id, long pdusession_id)
+{
+  nr_pdcp_manager_lock(nr_pdcp_ue_manager);
+  nr_pdcp_ue_t *ue = nr_pdcp_manager_get_ue(nr_pdcp_ue_manager, ue_id);
+  for (int i = 0; i < MAX_DRBS_PER_UE; i++) {
+    const nr_pdcp_entity_t *drb = ue->drb[i];
+    if (drb && drb->pdusession_id == pdusession_id)
+      nr_pdcp_release_drb(ue_id, i + 1);
+  }
+  nr_pdcp_manager_unlock(nr_pdcp_ue_manager);
+}
+
 void nr_pdcp_reestablishment(ue_id_t ue_id,
                              int rb_id,
                              bool srb_flag,

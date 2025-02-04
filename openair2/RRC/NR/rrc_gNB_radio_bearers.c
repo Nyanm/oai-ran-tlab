@@ -43,17 +43,23 @@ void cp_pdusession(pdusession_t *dst, const pdusession_t *src)
 
 rrc_pdu_session_param_t *find_pduSession(gNB_RRC_UE_t *ue, int id, bool create)
 {
-  int j;
-  for (j = 0; j < ue->nb_of_pdusessions; j++)
-    if (id == ue->pduSession[j].param.pdusession_id)
-      break;
-  if (j == ue->nb_of_pdusessions) {
-    if (create)
-      ue->nb_of_pdusessions++;
-    else
-      return NULL;
+  for (int j = 0; j < NGAP_MAX_PDU_SESSION; j++) {
+    if (ue->pduSession[j].param.pdusession_id == id)
+      return &ue->pduSession[j];
   }
-  return ue->pduSession + j;
+
+  if (create && ue->nb_of_pdusessions < NGAP_MAX_PDU_SESSION) {
+    ue->nb_of_pdusessions++;
+    AssertFatal(ue->nb_of_pdusessions <= NGAP_MAX_PDU_SESSION,
+                "nb_of_pdusessions %i exceeds NGAP_MAX_PDU_SESSION %i\n",
+                ue->nb_of_pdusessions,
+                NGAP_MAX_PDU_SESSION);
+    for (int j = 0; j < NGAP_MAX_PDU_SESSION; j++) {
+      if (ue->pduSession[j].param.pdusession_id == 0)
+        return &ue->pduSession[j];
+    }
+  }
+  return NULL;
 }
 
 rrc_pdu_session_param_t *find_pduSession_from_drbId(gNB_RRC_UE_t *ue, int drb_id)

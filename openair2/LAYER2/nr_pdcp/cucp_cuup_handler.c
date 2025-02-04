@@ -247,7 +247,7 @@ void e1_bearer_context_setup(const e1ap_bearer_setup_req_t *req)
  */
 void e1_bearer_context_modif(const e1ap_bearer_mod_req_t *req)
 {
-  AssertFatal(req->numPDUSessionsMod > 0, "need at least one PDU session to modify\n");
+  AssertFatal(req->numPDUSessionsMod > 0 || req->numPDUSessionsRem > 0, "need at least one PDU session to modify\n");
 
   e1ap_bearer_modif_resp_t modif = {
       .gNB_cu_cp_ue_id = req->gNB_cu_cp_ue_id,
@@ -328,6 +328,16 @@ void e1_bearer_context_modif(const e1ap_bearer_mod_req_t *req)
       }
 
     }
+  }
+
+  /* PDU Session Resource To Remove List (see 9.3.3.12 of TS 38.463) */
+  for (int i = 0; i < req->numPDUSessionsRem; i++) {
+    instance_t f1inst = get_f1_gtp_instance();
+    instance_t n3inst = get_n3_gtp_instance();
+    instance_t inst = f1inst >= 0 ? f1inst : n3inst; // is there F1-U?
+    newGtpuDeleteOneTunnel(inst, req->gNB_cu_up_ue_id, req->pduSessionRem[i].sessionId);
+    nr_pdcp_release_from_pdusession(req->gNB_cu_up_ue_id, req->pduSessionRem[i].sessionId);
+    nr_sdap_delete_entity(req->gNB_cu_up_ue_id, req->pduSessionRem[i].sessionId);
   }
 
   get_e1_if()->bearer_modif_response(&modif);

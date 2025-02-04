@@ -611,7 +611,8 @@ bool nr_sdap_delete_entity(ue_id_t ue_id, int pdusession_id)
       ret = true;
     }
   }
-  LOG_E(SDAP, "Entity does not exist or it was not found.\n");
+  if (!ret)
+    LOG_E(SDAP, "Entity does not exist or it was not found.\n");
   return ret;
 }
 

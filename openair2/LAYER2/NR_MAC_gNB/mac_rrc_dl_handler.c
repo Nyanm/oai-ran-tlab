@@ -380,7 +380,6 @@ static int handle_ue_context_drbs_release(NR_UE_info_t *UE,
                                           NR_CellGroupConfig_t *cellGroupConfig)
 {
   DevAssert(req_drbs != NULL && cellGroupConfig != NULL);
-  instance_t f1inst = get_f1_gtp_instance();
 
   cellGroupConfig->rlc_BearerToReleaseList = calloc(1, sizeof(*cellGroupConfig->rlc_BearerToReleaseList));
   AssertFatal(cellGroupConfig->rlc_BearerToReleaseList != NULL, "out of memory\n");
@@ -401,8 +400,6 @@ static int handle_ue_context_drbs_release(NR_UE_info_t *UE,
     if (idx < cellGroupConfig->rlc_BearerToAddModList->list.count) {
       nr_mac_remove_lcid(&UE->UE_sched_ctrl, lcid);
       nr_rlc_release_entity(UE->rnti, lcid);
-      if (f1inst >= 0)
-        newGtpuDeleteOneTunnel(f1inst, UE->rnti, drb->id);
       asn_sequence_del(&cellGroupConfig->rlc_BearerToAddModList->list, idx, 1);
       long *plcid = malloc(sizeof(*plcid));
       AssertFatal(plcid, "out of memory\n");

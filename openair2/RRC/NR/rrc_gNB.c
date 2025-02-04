@@ -689,7 +689,7 @@ static void rrc_gNB_generate_dedicatedRRCReconfiguration(gNB_RRC_INST *rrc, gNB_
 {
   /* do not re-establish PDCP for any bearer */
   nr_rrc_reconfig_param_t params = get_RRCReconfiguration_params(rrc, ue_p, 0, false);
-  ue_p->xids[params.transaction_id] = RRC_PDUSESSION_ESTABLISH;
+  ue_p->xids[params.transaction_id] = RRC_DEDICATED_RECONF;
   byte_array_t msg = rrc_gNB_encode_RRCReconfiguration(rrc, ue_p, params);
   if (msg.len <= 0) {
     LOG_E(NR_RRC, "UE %d: Failed to generate RRCReconfiguration\n", ue_p->rrc_ue_id);
@@ -697,10 +697,11 @@ static void rrc_gNB_generate_dedicatedRRCReconfiguration(gNB_RRC_INST *rrc, gNB_
   }
 
   for (int i = 0; i < ue_p->nb_of_pdusessions; i++) {
-    if (ue_p->pduSession[i].param.nas_pdu.buf != NULL) {
+    if (params.num_nas_msg > 0) {
       ue_p->pduSession[i].xid = params.transaction_id;
+      ue_p->xids[params.transaction_id] = RRC_PDUSESSION_ESTABLISH;
     }
-    if (ue_p->pduSession[i].status < PDU_SESSION_STATUS_ESTABLISHED) {
+    if (ue_p->pduSession[i].status == PDU_SESSION_STATUS_NEW || ue_p->pduSession[i].status == PDU_SESSION_STATUS_RELEASED) {
       ue_p->pduSession[i].status = PDU_SESSION_STATUS_DONE;
     }
   }
@@ -792,24 +793,46 @@ void rrc_gNB_modify_dedicatedRRCReconfiguration(gNB_RRC_INST *rrc, gNB_RRC_UE_t 
   free_byte_array(msg);
 }
 
-//-----------------------------------------------------------------------------
+typedef struct deliver_ue_ctxt_modification_data_t {
+  gNB_RRC_INST *rrc;
+  f1ap_ue_context_mod_req_t *modification_req;
+  sctp_assoc_t assoc_id;
+} deliver_ue_ctxt_modification_data_t;
+
+static void rrc_deliver_ue_ctxt_modif_req(void *deliver_pdu_data, ue_id_t ue_id, int srb_id, char *buf, int size, int sdu_id)
+{
+  DevAssert(deliver_pdu_data != NULL);
+  deliver_ue_ctxt_modification_data_t *data = deliver_pdu_data;
+  byte_array_t rrc_cont = {.buf = (uint8_t *)buf, .len = size};
+  data->modification_req->rrc_container = &rrc_cont;
+  data->rrc->mac_rrc.ue_context_modification_request(data->assoc_id, data->modification_req);
+}
 void rrc_gNB_generate_dedicatedRRCReconfiguration_release(gNB_RRC_INST *rrc,
                                                           gNB_RRC_UE_t *ue_p,
                                                           uint8_t xid,
                                                           uint32_t nas_length,
                                                           uint8_t *nas_buffer)
-//-----------------------------------------------------------------------------
 {
-  NR_DRB_ToReleaseList_t *DRB_Release_configList2 = CALLOC(sizeof(*DRB_Release_configList2), 1);
+  f1ap_drb_to_release_t rel_drbs[32];
+  int n_rel_drbs = 0;
+
+  NR_DRB_ToReleaseList_t *drb_release_list = calloc_or_fail(1, sizeof(*drb_release_list));
+  if (!ue_p->DRB_ReleaseList)
+    ue_p->DRB_ReleaseList = calloc_or_fail(1, sizeof(*ue_p->DRB_ReleaseList));
 
   for (int i = 0; i < NB_RB_MAX; i++) {
     if ((ue_p->pduSession[i].status == PDU_SESSION_STATUS_TORELEASE) && ue_p->pduSession[i].xid == xid) {
-      asn1cSequenceAdd(DRB_Release_configList2->list, NR_DRB_Identity_t, DRB_release);
+      asn1cSequenceAdd(drb_release_list->list, NR_DRB_Identity_t, DRB_release);
+      asn1cSequenceAdd(ue_p->DRB_ReleaseList->list, NR_DRB_Identity_t, DRB_release2);
       *DRB_release = i + 1;
+      *DRB_release2 = i + 1;
+      rel_drbs[n_rel_drbs].id = *DRB_release;
+      n_rel_drbs++;
+      memset(&ue_p->established_drbs[i], 0, sizeof(drb_t));
     }
   }
 
-  nr_rrc_reconfig_param_t params = {.drb_release_list = DRB_Release_configList2, .transaction_id = xid};
+  nr_rrc_reconfig_param_t params = {.drb_release_list = drb_release_list, .transaction_id = xid};
   if (nas_length > 0) {
     params.dedicated_NAS_msg_list[params.num_nas_msg].buf = nas_buffer;
     params.dedicated_NAS_msg_list[params.num_nas_msg++].len = nas_length;
@@ -821,8 +844,30 @@ void rrc_gNB_generate_dedicatedRRCReconfiguration_release(gNB_RRC_INST *rrc,
   }
   LOG_DUMPMSG(NR_RRC, DEBUG_RRC, msg.buf, msg.len, "[MSG] RRC Reconfiguration\n");
   LOG_I(NR_RRC, "UE %d: Generate NR_RRCReconfiguration (bytes %ld)\n", ue_p->rrc_ue_id, msg.len);
-  const uint32_t msg_id = NR_DL_DCCH_MessageType__c1_PR_rrcReconfiguration;
-  nr_rrc_transfer_protected_rrc_message(rrc, ue_p, DL_SCH_LCID_DCCH, msg_id, msg.buf, msg.len);
+
+  f1_ue_data_t ue_data = cu_get_f1_ue_data(ue_p->rrc_ue_id);
+  plmn_id_t plmn = rrc->configuration.plmn[0];
+  uint64_t nr_cellid = rrc->nr_cellid;
+  f1ap_ue_context_mod_req_t ue_context_modif_req = {
+    .gNB_CU_ue_id = ue_p->rrc_ue_id,
+    .gNB_DU_ue_id = ue_data.secondary_ue,
+    .plmn = &plmn,
+    .nr_cellid = &nr_cellid,
+    .servCellIndex = 0,
+    .drbs_rel_len = n_rel_drbs,
+    .drbs_rel = (f1ap_drb_to_release_t *)rel_drbs,
+  };
+  deliver_ue_ctxt_modification_data_t data = {.rrc = rrc,
+                                              .modification_req = &ue_context_modif_req,
+                                              .assoc_id = ue_data.du_assoc_id};
+  nr_pdcp_data_req_srb(ue_p->rrc_ue_id,
+                       DL_SCH_LCID_DCCH,
+                       rrc_gNB_mui++,
+                       msg.len,
+                       (unsigned char *const)msg.buf,
+                       rrc_deliver_ue_ctxt_modif_req,
+                       &data);
+
   free_RRCReconfiguration_params(params);
   free_byte_array(msg);
 }
@@ -1771,8 +1816,6 @@ static void handle_rrcReconfigurationComplete(gNB_RRC_INST *rrc, gNB_RRC_UE_t *U
 
   switch (UE->xids[xid]) {
     case RRC_PDUSESSION_RELEASE: {
-      gtpv1u_gnb_delete_tunnel_req_t req = {0};
-      gtpv1u_delete_ngu_tunnel(rrc->module_id, &req);
       // NGAP_PDUSESSION_RELEASE_RESPONSE
       rrc_gNB_send_NGAP_PDUSESSION_RELEASE_RESPONSE(rrc, UE, xid);
     } break;

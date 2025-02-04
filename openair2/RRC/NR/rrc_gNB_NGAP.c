@@ -1436,14 +1436,15 @@ void rrc_gNB_send_NGAP_PDUSESSION_RELEASE_RESPONSE(gNB_RRC_INST *rrc, gNB_RRC_UE
   memset(resp, 0, sizeof(*resp));
   resp->gNB_ue_ngap_id = UE->rrc_ue_id;
 
-  for (int i = 0; i < UE->nb_of_pdusessions; i++) {
-    if (xid == UE->pduSession[i].xid) {
+  for (int i = 0; i < NGAP_MAX_PDU_SESSION; i++) {
+    if (UE->pduSession[i].status == PDU_SESSION_STATUS_TORELEASE && xid == UE->pduSession[i].xid) {
       resp->pdusession_release[pdu_sessions_released].pdusession_id = UE->pduSession[i].param.pdusession_id;
       pdu_sessions_released++;
       //clear
       memset(&UE->pduSession[i], 0, sizeof(*UE->pduSession));
       UE->pduSession[i].status = PDU_SESSION_STATUS_RELEASED;
-      LOG_W(NR_RRC, "Released pdu session, but code to finish to free memory\n");
+      UE->nb_of_pdusessions--;
+      LOG_W(NR_RRC, "Released pdu session, current nb_of_pdusessions %d for UE %x\n", UE->nb_of_pdusessions, UE->rnti);
     }
   }
 
@@ -1472,7 +1473,7 @@ int rrc_gNB_process_NGAP_PDUSESSION_RELEASE_COMMAND(MessageDef *msg_p, instance_
   gNB_RRC_UE_t *UE = &ue_context_p->ue_context;
   LOG_I(
       NR_RRC, "PDU Session Release Command: AMF_UE_NGAP_ID %lu  rrc_ue_id %u release_pdusessions %d \n", cmd->amf_ue_ngap_id, gNB_ue_ngap_id, cmd->nb_pdusessions_torelease);
-  bool found = false;
+  e1ap_bearer_mod_req_t req = {0};
   uint8_t xid = rrc_gNB_get_next_transaction_identifier(rrc->module_id);
   UE->xids[xid] = RRC_PDUSESSION_RELEASE;
   for (int pdusession = 0; pdusession < cmd->nb_pdusessions_torelease; pdusession++) {
@@ -1491,14 +1492,23 @@ int rrc_gNB_process_NGAP_PDUSESSION_RELEASE_COMMAND(MessageDef *msg_p, instance_
       continue;
     }
     if (pduSession->status == PDU_SESSION_STATUS_ESTABLISHED) {
-      found = true;
       LOG_I(NR_RRC, "RELEASE pdusession %d \n", pduSession->param.pdusession_id);
+      req.pduSessionRem[req.numPDUSessionsRem].sessionId = pduSession->param.pdusession_id;
+      req.pduSessionRem[req.numPDUSessionsRem].cause.type = E1AP_CAUSE_RADIO_NETWORK;
+      req.pduSessionRem[req.numPDUSessionsRem].cause.value = E1AP_RADIO_CAUSE_NORMAL_RELEASE;
+      req.numPDUSessionsRem++;
       pduSession->status = PDU_SESSION_STATUS_TORELEASE;
       pduSession->xid = xid;
     }
   }
 
-  if (found) {
+  if (req.numPDUSessionsRem > 0) {
+    if (ue_associated_to_cuup(rrc, UE)) {
+      req.gNB_cu_cp_ue_id = UE->rrc_ue_id;
+      req.gNB_cu_up_ue_id = UE->rrc_ue_id;
+      sctp_assoc_t assoc_id = get_existing_cuup_for_ue(rrc, UE);
+      rrc->cucp_cuup.bearer_context_mod(assoc_id, &req);
+    }
     // TODO RRCReconfiguration To UE
     LOG_I(NR_RRC, "Send RRCReconfiguration To UE \n");
     rrc_gNB_generate_dedicatedRRCReconfiguration_release(rrc, UE, xid, cmd->nas_pdu.len, cmd->nas_pdu.buf);
