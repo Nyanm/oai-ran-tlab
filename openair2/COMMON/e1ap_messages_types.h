@@ -476,6 +476,16 @@ typedef struct pdu_session_to_mod_s {
 } pdu_session_to_mod_t;
 
 /**
+ * PDU Session Resource To Remove List (clause 9.3.3.12)
+ */
+typedef struct pdu_session_to_rem_s {
+  // PDU Session ID (M)
+  long sessionId;
+  // Cause (O)
+  e1ap_cause_t cause;
+} pdu_session_to_rem_t;
+
+/**
  * Bearer Context Setup Request message, clause 9.2.2.1 of 3GPP TS 38.463
  */
 typedef struct e1ap_bearer_setup_req_s {
@@ -534,6 +544,9 @@ typedef struct e1ap_bearer_mod_req_s {
   // NG-RAN PDU Session Resource To Modify List (O)
   int numPDUSessionsMod;
   pdu_session_to_mod_t pduSessionMod[E1AP_MAX_NUM_PDU_SESSIONS];
+  // NG-RAN PDU Session Resource To Remove List (O)
+  int numPDUSessionsRem;
+  pdu_session_to_rem_t pduSessionRem[E1AP_MAX_NUM_PDU_SESSIONS];
 } e1ap_bearer_mod_req_t;
 
 typedef struct e1ap_bearer_release_cmd_s {
