@@ -89,6 +89,38 @@ static seq_ev_trg_style_t fill_ev_tr_format_1(const char *ev_style_name)
   // RIC Event Trigger Style Name
   // Mandatory
   // 9.3.4
+  // 6.2.2.3
+  //PrintableString(SIZE(1..150,...))
+  const char ev_style_name[] = "UE Information Change";
+  ev_trig_style.name = cp_str_to_ba(ev_style_name);
+
+  // RIC Event Trigger Format Type
+  // Mandatory
+  // 9.3.5
+  // 6.2.2.4.
+  // INTEGER
+  ev_trig_style.format = FORMAT_4_E2SM_RC_EV_TRIGGER_FORMAT;
+
+  return ev_trig_style;
+}
+
+static seq_ev_trg_style_t fill_ev_tr_format_1(void)
+{
+  seq_ev_trg_style_t ev_trig_style = {0};
+
+  // RIC Event Trigger Style Type
+  // Mandatory
+  // 9.3.3
+  // 6.2.2.2.
+  // INTEGER
+  ev_trig_style.style = 1;
+
+  // RIC Event Trigger Style Name
+  // Mandatory
+  // 9.3.4
+  // 6.2.2.3
+  //PrintableString(SIZE(1..150,...))
+  const char ev_style_name[] = "Message Event";
   ev_trig_style.name = cp_str_to_ba(ev_style_name);
 
   // RIC Event Trigger Format Type
@@ -204,6 +236,83 @@ static seq_report_sty_t fill_report_style_1(const char *report_name)
   // RIC Report Style Name
   // Mandatory
   // 9.3.4
+  // 6.2.2.3.
+  // PrintableString(SIZE(1..150,...)) 
+  const char report_name[] = "UE Information";
+  report_style.name = cp_str_to_ba(report_name);
+
+  // Supported RIC Event Trigger Style Type 
+  // Mandatory
+  // 9.3.3
+  // 6.2.2.2.
+  // INTEGER
+  report_style.ev_trig_type = FORMAT_4_E2SM_RC_EV_TRIGGER_FORMAT;
+
+  // RIC Report Action Format Type
+  // Mandatory
+  // 9.3.5
+  // 6.2.2.4.
+  // INTEGER
+  report_style.act_frmt_type = FORMAT_1_E2SM_RC_ACT_DEF;
+
+  // RIC Indication Header Format Type
+  // Mandatory
+  // 9.3.5
+  // 6.2.2.4.
+  // INTEGER
+  report_style.ind_hdr_type = FORMAT_1_E2SM_RC_IND_HDR;
+
+  // RIC Indication Message Format Type
+  // Mandatory
+  // 9.3.5
+  // 6.2.2.4.
+  // INTEGER
+  report_style.ind_msg_type = FORMAT_2_E2SM_RC_IND_MSG;
+
+  // Sequence of RAN Parameters Supported
+  // [0 - 65535]
+  report_style.sz_seq_ran_param = 1;
+  report_style.ran_param = calloc(report_style.sz_seq_ran_param, sizeof(seq_ran_param_3_t));
+  assert(report_style.ran_param != NULL && "Memory exhausted");
+
+  // RAN Parameter ID
+  // Mandatory
+  // 9.3.8
+  // [1- 4294967295]
+  report_style.ran_param[0].id = E2SM_RC_RS4_RRC_STATE_CHANGED_TO;
+
+  // RAN Parameter Name
+  // Mandatory
+  // 9.3.9
+  // [1-150] 
+  const char ran_param_name[] = "RRC State Changed To";
+  report_style.ran_param[0].name = cp_str_to_ba(ran_param_name);
+
+  // RAN Parameter Definition
+  // Optional
+  // 9.3.51
+  report_style.ran_param[0].def = NULL;
+
+  return report_style;
+}
+
+static seq_report_sty_t fill_report_style_1(void)
+{
+  seq_report_sty_t report_style = {0};
+
+  // RIC Report Style Type
+  // Mandatory
+  // 9.3.3
+  // 6.2.2.2.
+  // INTEGER
+  report_style.report_type = 1;
+
+  // RIC Report Style Name
+  // Mandatory
+  // 9.3.4
+  // 6.2.2.3.
+  // PrintableString(SIZE(1..150,...)) 
+  const char report_name[] = "Message Copy";
   report_style.name = cp_str_to_ba(report_name);
 
   // Supported RIC Event Trigger Style Type 
