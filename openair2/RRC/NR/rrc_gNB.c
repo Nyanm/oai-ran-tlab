@@ -2062,14 +2062,6 @@ static int rrc_gNB_decode_dcch(gNB_RRC_INST *rrc, const f1ap_ul_rrc_message_t *m
     xer_fprint(stdout, &asn_DEF_NR_UL_DCCH_Message, (void *)ul_dcch_msg);
   }
 
-#ifdef E2_AGENT
-  // 38.331 Sec 6.2.1: message index of UL-DCCH-Message
-  const uint32_t rrc_msg_id = ul_dcch_msg->message.present;
-  byte_array_t buffer_ba = {.len = msg->rrc_container_length};
-  buffer_ba.buf = msg->rrc_container;
-  signal_rrc_msg(UL_DCCH_NR_RRC_CLASS, rrc_msg_id, buffer_ba);
-#endif
-
   if (ul_dcch_msg->message.present == NR_UL_DCCH_MessageType_PR_c1) {
 #ifdef E2_AGENT
     // 38.331 Sec 6.2.1: message index of UL-DCCH-Message
