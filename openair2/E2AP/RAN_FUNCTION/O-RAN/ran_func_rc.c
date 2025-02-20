@@ -897,6 +897,7 @@ static void check_rrc_msg_copy(const nr_rrc_class_e nr_channel, const uint32_t r
       continue;
     if (frmt_1->msg_ev_trg[i].rrc_msg.nr == nr_channel && frmt_1->msg_ev_trg[i].rrc_msg.rrc_msg_id == rrc_msg_id) {
       rc_ind_data_t* rc_ind_data = fill_rrc_msg_copy(rrc_ba, frmt_1->msg_ev_trg[i].ev_trigger_cond_id);
+      rc_ind_data_t* rc_ind_data = fill_rrc_msg_copy(rrc_ba, frmt_1->msg_ev_trg[i].ev_trigger_cond_id);
       send_aper_ric_ind(ric_req_id, rc_ind_data);
     }
   }
