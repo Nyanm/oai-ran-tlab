@@ -2091,6 +2091,14 @@ static int rrc_gNB_decode_dcch(gNB_RRC_INST *rrc, const f1ap_ul_rrc_message_t *m
         } else {
           LOG_E(NR_RRC, "UE %d: No measurementReport CHOICE is given\n", ue_context_p->ue_context.rrc_ue_id);
         }
+
+#ifdef E2_AGENT
+        // 38.331 Sec 6.2.1: Measurement Report is index 1 of UL-DCCH-Message
+        const uint32_t rrc_msg_id = 1;
+        byte_array_t buffer_ba = {.len = msg->rrc_container_length};
+        buffer_ba.buf = msg->rrc_container;
+        signal_rrc_msg(UL_DCCH_NR_RRC_CLASS, rrc_msg_id, buffer_ba);
+#endif
         break;
 
       case NR_UL_DCCH_MessageType__c1_PR_ulInformationTransfer:
