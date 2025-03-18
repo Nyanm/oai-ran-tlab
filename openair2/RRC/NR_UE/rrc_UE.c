@@ -21,6 +21,7 @@
 #include "NR_UL-DCCH-Message.h"
 #include "uper_encoder.h"
 #include "uper_decoder.h"
+#include "NR_PLMN-Identity.h"
 
 #include "rrc_defs.h"
 #include "rrc_proto.h"
@@ -364,7 +365,7 @@ static void nr_decode_SI(NR_UE_RRC_SI_INFO *SI_info, NR_SystemInformation_t *si,
 
 static void nr_rrc_ue_prepare_RRCSetupRequest(NR_UE_RRC_INST_t *rrc)
 {
-  LOG_D(NR_RRC, "Generation of RRCSetupRequest\n");
+  LOG_A(NR_RRC, "Generation of RRCSetupRequest\n");
   uint8_t rv[6];
   // Get RRCConnectionRequest, fill random for now
   // Generate random byte stream for contention resolution
@@ -463,6 +464,46 @@ static void nr_rrc_process_sib1(NR_UE_RRC_INST_t *rrc, NR_UE_RRC_SI_INFO *SI_inf
   if(g_log->log_component[NR_RRC].level >= OAILOG_DEBUG)
     xer_fprint(stdout, &asn_DEF_NR_SIB1, (const void *) sib1);
   LOG_A(NR_RRC, "SIB1 decoded\n");
+
+  // Print all PLMN in SIB1.
+  const int n = sib1->cellAccessRelatedInfo.plmn_IdentityInfoList.list.count;
+  for (int i = 0; i < n; ++i) {
+    struct NR_PLMN_IdentityInfo__plmn_IdentityList *PLMN_identityInfoList =
+        &sib1->cellAccessRelatedInfo.plmn_IdentityInfoList.list.array[i]->plmn_IdentityList;
+    for (int i2 = 0; i2 < PLMN_identityInfoList->list.count; i2++) {
+      NR_PLMN_Identity_t *PLMN_id = PLMN_identityInfoList->list.array[i2];
+      int mccdigits = PLMN_id->mcc->list.count;
+      int mncdigits = PLMN_id->mnc.list.count;
+
+      int mcc;
+      if (mccdigits == 2) {
+        mcc = *PLMN_id->mcc->list.array[0] * 10 + *PLMN_id->mcc->list.array[1];
+      } else {
+        mcc = *PLMN_id->mcc->list.array[0] * 100 + *PLMN_id->mcc->list.array[1] * 10 + *PLMN_id->mcc->list.array[2];
+      }
+
+      int mnc;
+      if (mncdigits == 2) {
+        mnc = *PLMN_id->mnc.list.array[0] * 10 + *PLMN_id->mnc.list.array[1];
+      } else {
+        mnc = *PLMN_id->mnc.list.array[0] * 100 + *PLMN_id->mnc.list.array[1] * 10 + *PLMN_id->mnc.list.array[2];
+      }
+
+      LOG_A(NR_RRC, "PLMN %d.%d MCC %0*d, MNC %0*d\n", i + 1, i2 + 1, mccdigits, mcc, mncdigits, mnc);
+      // search internal table for provider name
+      const size_t num_plmn_data = sizeof(plmn_data) / sizeof(plmn_data[0]);
+      for (size_t plmn_ind = 0;; ++plmn_ind) {
+        if (plmn_ind == num_plmn_data) {
+          LOG_W(NR_RRC, "Did not find operator name from internal table for MCC %0*d, MNC %0*d\n", mccdigits, mcc, mncdigits, mnc);
+          break;
+        }
+        if ((plmn_data[plmn_ind].mcc == mcc) && (plmn_data[plmn_ind].mnc == mnc)) {
+          LOG_A(NR_RRC, "Found %s (name from internal table)\n", plmn_data[plmn_ind].oper_short);
+          break;
+        }
+      }
+    }
+  }
 
   plmn_id_t *plmn_id = malloc_or_fail(sizeof(plmn_id_t));
 
