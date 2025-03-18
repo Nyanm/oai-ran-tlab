@@ -41,7 +41,7 @@
 #define  SSS_START_IDX                (3)      /* [0:PSBCH 1:PSS0 2:PSS1 3:SSS0 4:SSS1] */
 #define  NUM_SSS_SYMBOLS              (2)
 
-#define SSS_METRIC_FLOOR_NR   (30000)
+#define SSS_METRIC_FLOOR_NR   (20000)
 
 void init_context_sss_nr(int amp);
 void free_context_sss_nr(void);
