@@ -9,10 +9,8 @@ if (ENABLE_LDPC_ARMRAL)
 
   find_package(armral REQUIRED)
   add_library(ldpc_armral MODULE
-    ../nrLDPC_coding_segment/nr_rate_matching.c
+    nrLDPC_coding_armral_encoder.c
     nrLDPC_coding_armral_decoder.c
-    ../nrLDPC_coding_segment/nrLDPC_coding_segment_encoder.c
-    ../../nrLDPC_encoder/ldpc_encoder_optim8segmulti.c
   )
   set_target_properties(ldpc_armral PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
   target_link_libraries(ldpc_armral PRIVATE ldpc_gen_HEADERS)
