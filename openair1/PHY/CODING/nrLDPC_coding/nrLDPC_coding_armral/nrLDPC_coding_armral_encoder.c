@@ -110,7 +110,7 @@ static void ldpc8blocks(void *p)
     armral_status status_encoding = armral_ldpc_encode_block(nrLDPC_TB_encoding_parameters->segments[r].c, armral_bg, Z, F, d);
     if (status_encoding == ARMRAL_ARGUMENT_ERROR) {
       LOG_E(PHY, "argument error in armral encoding\n");
-    } else if (status_encoding == ARMRAL_RESULT_FAIL) {
+    } else if (status_encoding == ARMRAL_FAIL) {
       LOG_E(PHY, "failure in armral encoding\n");
     }
 
@@ -154,7 +154,7 @@ static void ldpc8blocks(void *p)
         armral_ldpc_rate_matching(armral_bg, Z, E, Nref, F, K, nrLDPC_TB_encoding_parameters->rv_index, armral_mod, d, f);
     if (status_rate_matching == ARMRAL_ARGUMENT_ERROR) {
       LOG_E(PHY, "argument error in armral rate matching\n");
-    } else if (status_rate_matching == ARMRAL_RESULT_FAIL) {
+    } else if (status_rate_matching == ARMRAL_FAIL) {
       LOG_E(PHY, "failure in armral rate matching\n");
     }
 
