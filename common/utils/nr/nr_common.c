@@ -146,6 +146,20 @@ void reverse_bits_u8(uint8_t const* in, size_t sz, uint8_t* out)
   for (; i < sz; ++i) {
     out[i] = bit_reverse_table_256[in[i]];
   }
+#elif defined(__aarch64__)
+  int simde_sz = 16;
+  int i = 0;
+  int simde_bound = sz - simde_sz;
+  if((((uintptr_t)in & 63) == 0) && (((uintptr_t)out & 63)== 0)) {
+    for (; i <= simde_bound; i += simde_sz) {
+      uint8x16_t input = vld1q_u8(&in[i]);
+      *((uint8x16_t *)&in[i]) = vrbitq_u8(input);
+    }
+  }
+
+  for (; i < sz; ++i) {
+    out[i] = bit_reverse_table_256[in[i]];
+  }
 #else
   for(size_t i = 0; i < sz; ++i)
     out[i] = bit_reverse_table_256[in[i]];
