@@ -490,8 +490,6 @@ void init_nr_transport(PHY_VARS_gNB *gNB)
     gNB->ulsch[i] = new_gNB_ulsch(gNB->max_ldpc_iterations, fp->N_RB_UL);
   }
 
-  gNB->rx_total_gain_dB=130;
-
   //fp->pucch_config_common.deltaPUCCH_Shift = 1;
 }
 
