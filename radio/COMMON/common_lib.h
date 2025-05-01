@@ -242,9 +242,6 @@ typedef struct openair0_config {
   //! index: [0..rx_num_channels[ !!! see lte-ue.c:427 FIXME iterates over rx_num_channels
   double tx_freq[8];
   double tune_offset;
-  //! \brief memory
-  //! \brief Pointer to Calibration table for RX gains
-  rx_gain_calib_table_t *rx_gain_calib_table;
   //! mode for rxgain (ExpressMIMO2)
   rx_gain_t rxg_mode[8];
   //! \brief Gain for RX in dB.

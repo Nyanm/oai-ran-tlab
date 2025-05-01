@@ -892,120 +892,6 @@ int trx_usrp_stop(openair0_device *device) {
   return(0);
 }
 
-/*! \brief USRPB210 RX calibration table */
-rx_gain_calib_table_t calib_table_b210[] = {
-  {3500000000.0,44.0},
-  {2660000000.0,49.0},
-  {2300000000.0,50.0},
-  {1880000000.0,53.0},
-  {816000000.0,58.0},
-  {-1,0}
-};
-
-/*! \brief USRPB210 RX calibration table */
-rx_gain_calib_table_t calib_table_b210_38[] = {
-  {3500000000.0,44.0},
-  {2660000000.0,49.8},
-  {2300000000.0,51.0},
-  {1880000000.0,53.0},
-  {816000000.0,57.0},
-  {-1,0}
-};
-
-/*! \brief USRPx310 RX calibration table */
-rx_gain_calib_table_t calib_table_x310[] = {
-  {3500000000.0,77.0},
-  {2660000000.0,81.0},
-  {2300000000.0,81.0},
-  {1880000000.0,82.0},
-  {816000000.0,85.0},
-  {-1,0}
-};
-
-/*! \brief USRPn3xf RX calibration table */
-rx_gain_calib_table_t calib_table_n310[] = {
-  {3500000000.0,0.0}, // fill this
-  {2660000000.0,0.0},
-  {2300000000.0,0.0},
-  {1880000000.0,0.0},
-  {816000000.0, 0.0},
-  {-1,0}
-};
-
-/*! \brief Empty RX calibration table */
-rx_gain_calib_table_t calib_table_none[] = {
-  {3500000000.0,0.0},
-  {2660000000.0,0.0},
-  {2300000000.0,0.0},
-  {1880000000.0,0.0},
-  {816000000.0, 0.0},
-  {-1,0}
-};
-
-
-/*! \brief Set RX gain offset
- * \param openair0_cfg RF frontend parameters set by application
- * \param chain_index RF chain to apply settings to
- * \returns 0 in success
- */
-void set_rx_gain_offset(openair0_config_t *openair0_cfg, int chain_index,int bw_gain_adjust) {
-  int i=0;
-  // loop through calibration table to find best adjustment factor for RX frequency
-  double min_diff = 6e9,diff,gain_adj=0.0;
-
-  if (bw_gain_adjust==1) {
-    switch ((int)openair0_cfg[0].sample_rate) {
-      // check this: needs to match the signal processing in the USRP
-      // to be measured
-      case 46080000:
-        break;
-
-      case 30720000:
-        break;
-
-      case 23040000:
-        gain_adj=1.25;
-        break;
-
-      case 15360000:
-        gain_adj=3.0;
-        break;
-
-      case 7680000:
-        gain_adj=6.0;
-        break;
-
-      case 3840000:
-        gain_adj=9.0;
-        break;
-
-      case 1920000:
-        gain_adj=12.0;
-        break;
-
-      default:
-        LOG_E(HW,"unknown sampling rate %d\n",(int)openair0_cfg[0].sample_rate);
-        //exit(-1);
-        break;
-    }
-  }
-
-  while (openair0_cfg->rx_gain_calib_table[i].freq>0) {
-    diff = fabs(openair0_cfg->rx_freq[chain_index] - openair0_cfg->rx_gain_calib_table[i].freq);
-    LOG_I(HW,"cal %d: freq %f, offset %f, diff %f\n",
-          i,
-          openair0_cfg->rx_gain_calib_table[i].freq,
-          openair0_cfg->rx_gain_calib_table[i].offset,diff);
-
-    if (min_diff > diff) {
-      min_diff = diff;
-      openair0_cfg->rx_gain_offset[chain_index] = openair0_cfg->rx_gain_calib_table[i].offset+gain_adj;
-    }
-
-    i++;
-  }
-}
-
 /*! \brief print the USRP statistics
 * \param device the hardware to use
 * \returns  0 on success
@@ -1075,7 +961,6 @@ extern "C" {
     //uhd::set_thread_priority_safe(1.0);
     // Initialize USRP device
     int vers=0,subvers=0,subsubvers=0;
-    int bw_gain_adjust=0;
 
     if (device->openair0_cfg->recplay_mode == RECPLAY_RECORDMODE) {
       std::cerr << "USRP device initialized in subframes record mode" << std::endl;
@@ -1236,22 +1121,6 @@ extern "C" {
     }
   }
 
-  if (device->type==USRP_X300_DEV) {
-    openair0_cfg[0].rx_gain_calib_table = calib_table_x310;
-    std::cerr << "-- Using calibration table: calib_table_x310" << std::endl;
-  }
-
-  if (device->type==USRP_N300_DEV) {
-    openair0_cfg[0].rx_gain_calib_table = calib_table_n310;
-    std::cerr << "-- Using calibration table: calib_table_n310" << std::endl;
-  }
-
-  if (device->type == USRP_X400_DEV) {
-    openair0_cfg[0].rx_gain_calib_table = calib_table_none;
-    std::cerr << "-- Using calibration table: calib_table_none" << std::endl;
-  }
-
-
   if (device->type==USRP_N300_DEV || device->type==USRP_X300_DEV || device->type==USRP_X400_DEV) {
     LOG_I(HW,"%s() sample_rate:%u\n", __FUNCTION__, (int)openair0_cfg[0].sample_rate);
 
@@ -1347,16 +1216,6 @@ extern "C" {
   }
 
   if (device->type == USRP_B200_DEV) {
-    if ((vers == 3) && (subvers == 9) && (subsubvers>=2)) {
-      openair0_cfg[0].rx_gain_calib_table = calib_table_b210;
-      bw_gain_adjust=0;
-      std::cerr << "-- Using calibration table: calib_table_b210" << std::endl; // Bell Labs info
-    } else {
-      openair0_cfg[0].rx_gain_calib_table = calib_table_b210_38;
-      bw_gain_adjust=1;
-      std::cerr << "-- Using calibration table: calib_table_b210_38" << std::endl; // Bell Labs info
-    }
-
     switch ((int)openair0_cfg[0].sample_rate) {
       case 46080000:
         s->usrp->set_master_clock_rate(46.08e6);
@@ -1437,7 +1296,6 @@ extern "C" {
       s->usrp->set_rx_rate(cfg->sample_rate, i + choffset);
       uhd::tune_request_t rx_tune_req(cfg->rx_freq[i], cfg->tune_offset);
       s->usrp->set_rx_freq(rx_tune_req, i+choffset);
-      set_rx_gain_offset(cfg, i, bw_gain_adjust);
       ::uhd::gain_range_t gain_range = s->usrp->get_rx_gain_range(i+choffset);
       // limit to maximum gain
       double gain = cfg->rx_gain[i] - cfg->rx_gain_offset[i];
