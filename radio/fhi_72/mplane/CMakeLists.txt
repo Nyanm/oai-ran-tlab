@@ -10,6 +10,8 @@ if(xran_VERSION VERSION_EQUAL E_VERSION)
   target_compile_definitions(oran_fhlib_5g_mplane PRIVATE E_RELEASE)
 elseif(xran_VERSION VERSION_EQUAL F_VERSION)
   target_compile_definitions(oran_fhlib_5g_mplane PRIVATE F_RELEASE)
+elseif(xran_VERSION VERSION_EQUAL K_VERSION)
+  target_compile_definitions(oran_fhlib_5g_mplane PRIVATE K_RELEASE)
 endif()
 
 # Ignore xran-specific warning: we don't care/can't change the following warning, so suppress

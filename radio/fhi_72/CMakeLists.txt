@@ -18,14 +18,17 @@ add_library(oran_fhlib_5g MODULE
 
 set(E_VERSION 5.1.6)
 set(F_VERSION 6.1.5)
+set(K_VERSION 11.1.1)
 
 find_package(xran REQUIRED)
 if(xran_VERSION VERSION_EQUAL E_VERSION)
   target_compile_definitions(oran_fhlib_5g PRIVATE E_RELEASE)
 elseif(xran_VERSION VERSION_EQUAL F_VERSION)
   target_compile_definitions(oran_fhlib_5g PRIVATE F_RELEASE)
+elseif(xran_VERSION VERSION_EQUAL K_VERSION)
+  target_compile_definitions(oran_fhlib_5g PRIVATE K_RELEASE)
 else()
-  message(FATAL_ERROR "Found xran version ${xran_VERSION} but needed ${E_VERSION} (E release) or ${F_VERSION} (F release)")
+  message(FATAL_ERROR "Found xran version ${xran_VERSION} but needed ${E_VERSION} (E release), ${F_VERSION} (F release) or ${K_VERSION} (K release)")
 endif()
 
 # Ignore xran-specific warning: we don't care/can't change the following warning, so suppress
