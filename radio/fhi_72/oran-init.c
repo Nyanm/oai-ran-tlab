@@ -98,7 +98,11 @@ static struct xran_prb_map get_xran_prb_map(const struct xran_fh_config *f, cons
   e->nStartSymb = start_sym;
   e->numSymb = num_sym;
   e->nRBStart = 0;
+#ifdef K_RELEASE
+  e->nRBSize = (dir == XRAN_DIR_DL) ? f->perMu[0].nDLRBs : f->perMu[0].nULRBs;
+#elif defined(E_RELEASE) || defined(F_RELEASE)
   e->nRBSize = (dir == XRAN_DIR_DL) ? f->nDLRBs : f->nULRBs;
+#endif
   e->nBeamIndex = 0;
   e->compMethod = f->ru_conf.compMeth;
   e->iqWidth = f->ru_conf.iqWidth;
@@ -199,10 +203,10 @@ static void oran_allocate_cplane_buffers(void *instHandle,
                                          struct xran_flat_buffer buf[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN],
                                          uint32_t ant,
                                          uint32_t sect,
-                                       #ifdef F_RELEASE
+#if defined(F_RELEASE) || defined(K_RELEASE)
                                          uint32_t mtu,
                                          const struct xran_fh_config *fh_config,
-                                       #endif
+#endif
                                          uint32_t size_of_prb_map,
                                          oran_cplane_prb_config *prb_conf)
 {
@@ -274,9 +278,13 @@ static void oran_allocate_cplane_buffers(void *instHandle,
           }
         }
       }
-#elif defined F_RELEASE
+#elif defined(F_RELEASE) || defined(K_RELEASE)
       if (fh_config->RunSlotPrbMapBySymbolEnable) {
+#ifdef K_RELEASE
+        xran_init_PrbMap_by_symbol_from_cfg(src, ptr, mtu, fh_config->perMu[0].nDLRBs);
+#elif defined(F_RELEASE)
         xran_init_PrbMap_by_symbol_from_cfg(src, ptr, mtu, fh_config->nDLRBs);
+#endif
       } else {
         xran_init_PrbMap_from_cfg(src, ptr, mtu);
       }
@@ -290,7 +298,11 @@ static void oran_allocate_cplane_buffers(void *instHandle,
 }
 
 /* callback not actively used */
-static void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status)
+static void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status
+#ifdef K_RELEASE
+                                                                                  , uint8_t mu
+#endif
+                                                                                              )
 {
   rte_pause();
 }
@@ -299,9 +311,9 @@ static void oran_allocate_buffers(void *handle,
                                   int xran_inst,
                                   int num_sectors,
                                   oran_port_instance_t *portInstances,
-                                #ifdef F_RELEASE
+#if defined(F_RELEASE) || defined(K_RELEASE)
                                   uint32_t mtu,
-                                #endif
+#endif
                                   const struct xran_fh_config *fh_config)
 {
   AssertFatal(num_sectors == 1, "only support one sector at the moment\n");
@@ -356,38 +368,46 @@ static void oran_allocate_buffers(void *handle,
 
 #ifdef E_RELEASE
   uint32_t size_of_prb_map = sizeof(struct xran_prb_map) + sizeof(struct xran_prb_elm) * (xran_max_sections_per_slot - 1);
-#elif defined F_RELEASE
+#elif defined(F_RELEASE) || defined(K_RELEASE)
   uint32_t numPrbElm = xran_get_num_prb_elm(&dlPm, mtu);
   uint32_t size_of_prb_map  = sizeof(struct xran_prb_map) + sizeof(struct xran_prb_elm) * (numPrbElm);
 #endif
 
   // PDSCH
+#ifdef K_RELEASE
+  const uint32_t txBufSize = get_nSW_ToFpga_FTH_TxBufferLen(fh_config->nNumerology[0], fh_config->max_sections_per_slot);
+#elif defined(E_RELEASE) || defined(F_RELEASE)
   const uint32_t txBufSize = get_nSW_ToFpga_FTH_TxBufferLen(fh_config->frame_conf.nNumerology, fh_config->max_sections_per_slot);
+#endif
   oran_allocate_uplane_buffers(pi->instanceHandle, bl->src, bl->bufs.tx, xran_max_antenna_nr, txBufSize);
   oran_allocate_cplane_buffers(pi->instanceHandle,
                                bl->srccp,
                                bl->bufs.tx_prbmap,
                                xran_max_antenna_nr,
                                xran_max_sections_per_slot,
-                             #ifdef F_RELEASE
+#if defined(F_RELEASE) || defined(K_RELEASE)
                                mtu,
                                fh_config,
-                             #endif
+#endif
                                size_of_prb_map,
                                &dlConf);
 
   // PUSCH
+#ifdef K_RELEASE
+  const uint32_t rxBufSize = get_nFpgaToSW_FTH_RxBufferLen(fh_config->nNumerology[0]);
+#elif defined(E_RELEASE) || defined(F_RELEASE)
   const uint32_t rxBufSize = get_nFpgaToSW_FTH_RxBufferLen(fh_config->frame_conf.nNumerology);
+#endif
   oran_allocate_uplane_buffers(pi->instanceHandle, bl->dst, bl->bufs.rx, xran_max_antenna_nr, rxBufSize);
   oran_allocate_cplane_buffers(pi->instanceHandle,
                                bl->dstcp,
                                bl->bufs.rx_prbmap,
                                xran_max_antenna_nr,
                                xran_max_sections_per_slot,
-                             #ifdef F_RELEASE
+#if defined(F_RELEASE) || defined(K_RELEASE)
                                mtu,
                                fh_config,
-                             #endif
+#endif
                                size_of_prb_map,
                                &ulConf);
 
@@ -423,8 +443,13 @@ static void oran_allocate_buffers(void *handle,
     }
   }
 
+#ifdef K_RELEASE
+  xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, oai_xran_fh_rx_callback, &portInstances->pusch_tag, fh_config->nNumerology[0]);
+  xran_5g_prach_req(pi->instanceHandle, prach, prachdecomp, oai_xran_fh_rx_prach_callback, &portInstances->prach_tag, fh_config->nNumerology[0]);
+#elif defined(E_RELEASE) || defined(F_RELEASE)
   xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, oai_xran_fh_rx_callback, &portInstances->pusch_tag);
   xran_5g_prach_req(pi->instanceHandle, prach, prachdecomp, oai_xran_fh_rx_prach_callback, &portInstances->prach_tag);
+#endif
 }
 
 int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_config *xran_fh_config)
@@ -456,20 +481,36 @@ int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_confi
 #ifdef E_RELEASE
     LOG_W(HW, "Please be aware that E release support will be removed in the future. Consider switching to F release.\n");
     oran_allocate_buffers(gxran_handle, o_xu_id, 1, pi, &xran_fh_config[o_xu_id]);
-#elif defined F_RELEASE
+#elif defined(F_RELEASE) || defined(K_RELEASE)
     oran_allocate_buffers(gxran_handle, o_xu_id, 1, pi, xran_fh_init->mtu, &xran_fh_config[o_xu_id]);
 #endif
 
+#ifdef K_RELEASE
+    if ((xret = xran_timingsource_reg_tticb(gxran_handle, oai_physide_dl_tti_call_back, NULL, 10, XRAN_CB_TTI)) != XRAN_STATUS_SUCCESS) {
+      printf("xran_timingsource_reg_tticb failed %d\n", xret);
+      exit(-1);
+    }
+#elif defined(E_RELEASE) || defined(F_RELEASE)
     if ((xret = xran_reg_physide_cb(gxran_handle, oai_physide_dl_tti_call_back, NULL, 10, XRAN_CB_TTI)) != XRAN_STATUS_SUCCESS) {
       printf("xran_reg_physide_cb failed %d\n", xret);
       exit(-1);
     }
+#endif
 
     // retrieve and store prach duration
+#ifdef K_RELEASE
+    uint8_t mu = xran_fh_config[o_xu_id].nNumerology[0];
+    uint8_t idx = xran_fh_config[o_xu_id].perMu[mu].prach_conf.nPrachConfIdx;
+#elif defined(E_RELEASE) || defined(F_RELEASE)
     uint8_t idx = xran_fh_config[o_xu_id].prach_conf.nPrachConfIdx;
+#endif
     const struct xran_frame_config *fc = &xran_fh_config[o_xu_id].frame_conf;
     g_prach_info[o_xu_id] = get_nr_prach_occasion_info_from_index(idx,
+#ifdef K_RELEASE
+                                                                  mu > 2 ? FR2 : FR1,
+#elif defined(E_RELEASE) || defined(F_RELEASE)
                                                                   fc->nNumerology > 2 ? FR2 : FR1,
+#endif
                                                                   fc->nFrameDuplexType == XRAN_FDD ? duplex_mode_FDD : duplex_mode_TDD);
   }
 
