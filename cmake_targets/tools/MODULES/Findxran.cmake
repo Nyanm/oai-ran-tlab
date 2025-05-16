@@ -23,9 +23,9 @@
 # -------
 # 
 # Finds the xran library. Note that the library number is as follows:
-# - oran_bronze_release_v1.1 -> 2.1.1 (B = second letter)
-# - oran_e_maintenance_release_v1.0 -> 5.1.0
-# the version is currently hardcoded to 5.1.0
+# - oran_e_maintenance_release_v1.5 -> 5.1.6
+# - oran_f_release_v1.3 -> 6.1.4
+# - oran_k_release_v1.1 -> 11.1.1
 #
 # Required options
 # ^^^^^^^^^^^^^^^^
@@ -107,6 +107,8 @@ if (xran_VERSION_STRING MATCHES "^oran_e_maintenance_release_v")
   string(REGEX REPLACE "oran_e_maintenance_release_v([0-9]+).([0-9]+)" "5.\\1.\\2" xran_VERSION ${xran_VERSION_STRING})
 elseif(xran_VERSION_STRING MATCHES "^oran_f_release_v")
   string(REGEX REPLACE "oran_f_release_v([0-9]+).([0-9]+)" "6.\\1.\\2" xran_VERSION ${xran_VERSION_STRING})
+elseif(xran_VERSION_STRING MATCHES "^oran_k_release_v")
+  string(REGEX REPLACE "oran_k_release_v([0-9]+).([0-9]+)" "11.\\1.\\2" xran_VERSION ${xran_VERSION_STRING})
 elseif(xran_VERSION_STRING MATCHES "^oran_bronze_release_v")
   string(REGEX REPLACE "oran_bronze_release_v([0-9]+).([0-9]+)" "2.\\1.\\2" xran_VERSION ${xran_VERSION_STRING})
 else()
