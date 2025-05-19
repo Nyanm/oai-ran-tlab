@@ -885,7 +885,7 @@ void *UE_thread(void *arg)
         last_scanned_gscn = syncMsg->gscnInfo[syncMsg->numGscn - 1].gscn;
         // set dl freqeuncy for current scan
         fp->dl_CarrierFreq = dlFreq * 1000;
-        nrue_ru_set_freq(UE, 0, fp->dl_CarrierFreq, 0); // no need to set UL freq for cell search
+        nrue_ru_set_freq(UE, fp->dl_CarrierFreq, fp->dl_CarrierFreq, 0);
         init_symbol_rotation(fp);
       } else {
         LOG_W(PHY, "SSB position provided\n");
