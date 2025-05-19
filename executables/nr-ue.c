@@ -453,6 +453,73 @@ static uint64_t get_carrier_frequency(const int N_RB, const int mu, const uint32
   return carrier_freq;
 }
 
+static void dummyWrite(PHY_VARS_NR_UE *UE, openair0_timestamp_t timestamp, int writeBlockSize)
+{
+  const NR_DL_FRAME_PARMS *fp = &UE->frame_parms;
+  if (UE->sl_mode == 2)
+    fp = &UE->SL_UE_PHY_PARAMS.sl_frame_params;
+
+  c16_t *dummy_tx[fp->nb_antennas_tx];
+  c16_t dummy_tx_data[writeBlockSize];
+  memset(dummy_tx_data, 0, sizeof(dummy_tx_data));
+  for (int i = 0; i < fp->nb_antennas_tx; i++)
+    dummy_tx[i] = dummy_tx_data;
+
+  int tmp = nrue_ru_write(UE, timestamp, (void **)dummy_tx, writeBlockSize, fp->nb_antennas_tx, 4);
+  AssertFatal(writeBlockSize == tmp, "");
+}
+
+static int readFrame(PHY_VARS_NR_UE *UE, openair0_timestamp_t *timestamp, int duration_rx_to_tx, bool toTrash)
+{
+  const NR_DL_FRAME_PARMS *fp = &UE->frame_parms;
+  // two frames for initial sync
+  int num_frames = 2;
+  // In Sidelink worst case SL-SSB can be sent once in 16 frames
+  if (UE->sl_mode == 2) {
+    fp = &UE->SL_UE_PHY_PARAMS.sl_frame_params;
+    num_frames = SL_NR_PSBCH_REPETITION_IN_FRAMES;
+  }
+
+  c16_t *rxp[fp->nb_antennas_rx];
+  if (toTrash) {
+    rxp[0] = malloc16(get_samples_per_slot(0, fp) * sizeof(c16_t));
+    for (int i = 1; i < fp->nb_antennas_rx; i++)
+      rxp[i] = rxp[0];
+  }
+
+  for (int x = 0; x < num_frames * NR_NUMBER_OF_SUBFRAMES_PER_FRAME; x++) { // two frames for initial sync
+    for (int slot_rx = 0; slot_rx < fp->slots_per_subframe; slot_rx++) {
+      if (!toTrash)
+        for (int i = 0; i < fp->nb_antennas_rx; i++)
+          rxp[i] = &UE->common_vars.rxdata[i][x * fp->samples_per_subframe + get_samples_slot_timestamp(fp, slot_rx)];
+
+      int readBlockSize = get_samples_per_slot(slot_rx, fp);
+      int tmp = nrue_ru_read(UE, timestamp, (void **)rxp, readBlockSize, fp->nb_antennas_rx);
+      UEscopeCopy(UE, ueTimeDomainSamplesBeforeSync, rxp[0], sizeof(c16_t), 1, readBlockSize, 0);
+      if (readBlockSize != tmp) {
+        if (toTrash)
+          free(rxp[0]);
+
+        return 1;
+      }
+
+      if (IS_SOFTMODEM_RFSIM) {
+        int slot_tx = (slot_rx + duration_rx_to_tx) % fp->slots_per_frame;
+        int writeBlockSize = get_samples_per_slot(slot_tx, fp);
+        int ta = UE->timing_advance + UE->timing_advance_ntn;
+        const openair0_timestamp_t writeTimestamp =
+            *timestamp + get_samples_slot_duration(fp, slot_rx, duration_rx_to_tx) - UE->N_TA_offset - ta;
+        dummyWrite(UE, writeTimestamp, writeBlockSize);
+      }
+    }
+  }
+
+  if (toTrash)
+    free(rxp[0]);
+
+  return 0;
+}
+
 static int handle_sync_req_from_mac(PHY_VARS_NR_UE *UE, uint32_t *ssb_arfcn)
 {
   NR_DL_FRAME_PARMS *fp = &UE->frame_parms;
@@ -630,66 +697,6 @@ void UE_dl_processing(void *arg) {
     pdsch_processing(UE, proc, phy_data);
 
   TracyCZoneEnd(ctx);
-}
-
-void dummyWrite(PHY_VARS_NR_UE *UE, openair0_timestamp_t timestamp, int writeBlockSize)
-{
-  const NR_DL_FRAME_PARMS *fp = &UE->frame_parms;
-  if (UE->sl_mode == 2)
-    fp = &UE->SL_UE_PHY_PARAMS.sl_frame_params;
-
-  c16_t *dummy_tx[fp->nb_antennas_tx];
-  c16_t dummy_tx_data[writeBlockSize];
-  memset(dummy_tx_data, 0, sizeof(dummy_tx_data));
-  for (int i = 0; i < fp->nb_antennas_tx; i++)
-    dummy_tx[i] = dummy_tx_data;
-
-  int tmp = nrue_ru_write(UE, timestamp, (void **)dummy_tx, writeBlockSize, fp->nb_antennas_tx, 4);
-  AssertFatal(writeBlockSize == tmp, "");
-}
-
-void readFrame(PHY_VARS_NR_UE *UE, openair0_timestamp_t *timestamp, int duration_rx_to_tx, bool toTrash)
-{
-  const NR_DL_FRAME_PARMS *fp = &UE->frame_parms;
-  // two frames for initial sync
-  int num_frames = 2;
-  // In Sidelink worst case SL-SSB can be sent once in 16 frames
-  if (UE->sl_mode == 2) {
-    fp = &UE->SL_UE_PHY_PARAMS.sl_frame_params;
-    num_frames = SL_NR_PSBCH_REPETITION_IN_FRAMES;
-  }
-
-  c16_t *rxp[fp->nb_antennas_rx];
-  if (toTrash) {
-    rxp[0] = malloc16(get_samples_per_slot(0, fp) * sizeof(c16_t));
-    for (int i = 1; i < fp->nb_antennas_rx; i++)
-      rxp[i] = rxp[0];
-  }
-
-  for (int x = 0; x < num_frames * NR_NUMBER_OF_SUBFRAMES_PER_FRAME; x++) { // two frames for initial sync
-    for (int slot_rx = 0; slot_rx < fp->slots_per_subframe; slot_rx++) {
-      if (!toTrash)
-        for (int i = 0; i < fp->nb_antennas_rx; i++)
-          rxp[i] = &UE->common_vars.rxdata[i][x * fp->samples_per_subframe + get_samples_slot_timestamp(fp, slot_rx)];
-
-      int readBlockSize = get_samples_per_slot(slot_rx, fp);
-      int tmp = nrue_ru_read(UE, timestamp, (void **)rxp, readBlockSize, fp->nb_antennas_rx);
-      UEscopeCopy(UE, ueTimeDomainSamplesBeforeSync, rxp[0], sizeof(c16_t), 1, readBlockSize, 0);
-      AssertFatal(readBlockSize == tmp, "");
-
-      if (IS_SOFTMODEM_RFSIM) {
-        int slot_tx = (slot_rx + duration_rx_to_tx) % fp->slots_per_frame;
-        int writeBlockSize = get_samples_per_slot(slot_tx, fp);
-        int ta = UE->timing_advance + UE->timing_advance_ntn;
-        const openair0_timestamp_t writeTimestamp =
-            *timestamp + get_samples_slot_duration(fp, slot_rx, duration_rx_to_tx) - UE->N_TA_offset - ta;
-        dummyWrite(UE, writeTimestamp, writeBlockSize);
-      }
-    }
-  }
-
-  if (toTrash)
-    free(rxp[0]);
 }
 
 static void syncInFrame(PHY_VARS_NR_UE *UE, openair0_timestamp_t *timestamp, int duration_rx_to_tx, openair0_timestamp_t rx_offset)
@@ -905,7 +912,10 @@ void *UE_thread(void *arg)
         readFrame(UE, &tmp, duration_rx_to_tx, true);
 
       // read 2 frames to do initial sync
-      readFrame(UE, &sync_timestamp, duration_rx_to_tx, false);
+      while (true) {
+        if (readFrame(UE, &sync_timestamp, duration_rx_to_tx, false) == 0)
+          break;
+      }
       syncMsg->UE = UE;
       memset(&syncMsg->proc, 0, sizeof(syncMsg->proc));
       pushNotifiedFIFO(&UE->sync_actor.fifo, Msg);
