@@ -412,6 +412,10 @@ int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_confi
 {
   int32_t xret = 0;
 
+#if defined K_RELEASE
+  xran_mem_mgr_leak_detector_init();
+#endif
+
   print_fh_init(xran_fh_init);
   xret = xran_init(0, NULL, xran_fh_init, NULL, &gxran_handle);
   if (xret != XRAN_STATUS_SUCCESS) {

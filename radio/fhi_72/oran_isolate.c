@@ -50,6 +50,7 @@ typedef struct {
   int capabilities_sent;
   void *oran_priv;
   void *mplane_priv;
+  uint32_t nCC;
 } oran_eth_state_t;
 
 notifiedFIFO_t oran_sync_fifo;
@@ -61,12 +62,42 @@ int trx_oran_start(openair0_device_t *device)
   oran_eth_state_t *s = device->priv;
 
   // Start ORAN
+#if defined K_RELEASE
+  if (xran_timingsource_start() != 0) {
+    printf("%s:%d:%s: Start timing source failed ... Exit\n", __FILE__, __LINE__, __FUNCTION__);
+    exit(1);
+  } else {
+    printf("Start timing source. Done\n");
+  }
+
+  if (xran_start_worker_threads() != 0) {
+    printf("%s:%d:%s: Start worker thread failed ... Exit\n", __FILE__, __LINE__, __FUNCTION__);
+    exit(1);
+  } else {
+    printf("Start worker thread. Done\n");
+  }
+
+  xran_mem_mgr_leak_detector_display(0);
+#endif
+
   if (xran_start(s->oran_priv) != 0) {
     printf("%s:%d:%s: Start ORAN failed ... Exit\n", __FILE__, __LINE__, __FUNCTION__);
     exit(1);
   } else {
     printf("Start ORAN. Done\n");
   }
+
+#if defined K_RELEASE
+  for (int32_t cc_id = 0; cc_id < s->nCC; cc_id++) {
+    if (xran_activate_cc(s->oran_priv, cc_id) != 0) {
+      printf("%s:%d:%s: Activate CC failed ... Exit\n", __FILE__, __LINE__, __FUNCTION__);
+      exit(1);
+    } else {
+      printf("Activate CC. Done\n");
+    }
+  }
+#endif
+
   return 0;
 }
 
@@ -74,14 +105,32 @@ void trx_oran_end(openair0_device_t *device)
 {
   printf("ORAN: %s\n", __FUNCTION__);
   oran_eth_state_t *s = device->priv;
+#if defined K_RELEASE
+  xran_shutdown(s->oran_priv);
+#endif
   xran_close(s->oran_priv);
+#if defined K_RELEASE
+  xran_cleanup();
+  xran_mem_mgr_leak_detector_destroy();
+#endif
 }
 
 int trx_oran_stop(openair0_device_t *device)
 {
   printf("ORAN: %s\n", __FUNCTION__);
   oran_eth_state_t *s = device->priv;
+
+#if defined K_RELEASE
+  for (int32_t cc_id = 0; cc_id < s->nCC; cc_id++) {
+    xran_deactivate_cc(s->oran_priv, cc_id);
+    xran_stop(s->oran_priv);
+  }
+
+  xran_timingsource_stop();
+#elif defined F_RELEASE
   xran_stop(s->oran_priv);
+#endif
+
 #ifdef OAI_MPLANE
   printf("[MPLANE] Stopping M-plane.\n");
   disconnect_mplane(s->mplane_priv);
@@ -385,6 +434,7 @@ __attribute__((__visibility__("default"))) int transport_init(openair0_device_t 
   eth->e.compression = NO_COMPRESS;
   eth->e.if_name = eth_params->local_if_name;
   eth->last_msg = (rru_config_msg_type_t)-1;
+  eth->nCC = fh_config->nCC;
 
   device->transp_type = ETHERNET_TP;
   device->trx_start_func = trx_oran_start;
