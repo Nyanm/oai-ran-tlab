@@ -1654,6 +1654,15 @@ include_directories(${CONFIG_INCLUDE_DIRS})
 pkg_search_module(CRYPTO libcrypto REQUIRED)
 include_directories(${CRYPTO_INCLUDE_DIRS})
 
+pkg_check_modules(blas REQUIRED blas)
+pkg_check_modules(lapacke REQUIRED lapacke)
+
+# RHEL needs also cblas, but Ubuntu does not have it. So `cblas_LIBRARIES` will
+# be empty for Ubuntu, a no-op
+pkg_check_modules(cblas cblas)
+target_link_libraries(PHY PRIVATE ${blas_LIBRARIES} ${cblas_LIBRARIES} ${lapacke_LIBRARIES})
+target_include_directories(PHY PRIVATE ${blas_INCLUDE_DIRS} ${lapacke_INCLUDE_DIRS})
+
 #use native cmake method as this package is not in pkg-config
 if (${RF_BOARD} STREQUAL "OAI_USRP")
   find_package(Boost REQUIRED)
@@ -1697,27 +1706,26 @@ endif()
 
 # Atlas is required by some packages, but not found in pkg-config
 # So, here are some hacks here. Hope this gets fixed in future!
-if(EXISTS "/usr/include/atlas/cblas.h" OR EXISTS "/usr/include/cblas.h")
-  include_directories("/usr/include/atlas")
-  LINK_DIRECTORIES("/usr/lib64")
-  LINK_DIRECTORIES("/usr/lib64/atlas") #Added because atlas libraries in CentOS 7 are here!
-  
-  if(EXISTS "/usr/lib64/libblas.so" OR EXISTS "/usr/lib/libblas.so") #Case for CentOS7
-     list(APPEND ATLAS_LIBRARIES blas)
-  else() # Case for Ubuntu
-     list(APPEND ATLAS_LIBRARIES cblas)
-  endif()
+#if(EXISTS "/usr/include/x86_64-linux-gnu/cblas.h" OR EXISTS "/usr/include/x86_64-linux-gnu/openblas-pthread/cblas.h")
+  #include_directories("/usr/include/atlas")
+  #LINK_DIRECTORIES("/usr/lib64")
+  #LINK_DIRECTORIES("/usr/lib64/atlas") #Added because atlas libraries in CentOS 7 are here!
+  #if(EXISTS "/usr/lib64/libblas.so" OR EXISTS "/usr/lib/libblas.so") #Case for CentOS7
+   #  list(APPEND ATLAS_LIBRARIES blas)
+  #else() # Case for Ubuntu
+   #  list(APPEND ATLAS_LIBRARIES cblas)
+  #endif()
 
-  if(EXISTS "/usr/lib/atlas/libtatlas.so" OR EXISTS "/usr/lib64/atlas/libtatlas.so") #Case for CentOS7
-     list(APPEND ATLAS_LIBRARIES tatlas)
-  else()
-     list(APPEND ATLAS_LIBRARIES atlas) #Case for Ubuntu
-  endif()
+  #if(EXISTS "/usr/lib/atlas/libtatlas.so" OR EXISTS "/usr/lib64/atlas/libtatlas.so") #Case for CentOS7
+   #  list(APPEND ATLAS_LIBRARIES tatlas)
+  #else()
+    # list(APPEND ATLAS_LIBRARIES atlas) #Case for Ubuntu
+ # endif()
 
-  list(APPEND ATLAS_LIBRARIES lapack)
-else()
-  message("No Blas/Atlas libs found, some targets will fail")
-endif()
+  #list(APPEND ATLAS_LIBRARIES lapack)
+#else()
+  #message("No Blas/Atlas libs found, some targets will fail")
+#endif()
 
 if (${XFORMS})
   include_directories ("/usr/include/X11")
@@ -1796,15 +1804,16 @@ add_executable(lte-softmodem
   ${T_SOURCE}
   )
 
-target_link_libraries (lte-softmodem -ldl
+target_link_libraries (lte-softmodem PRIVATE
   -Wl,--start-group
   RRC_LIB S1AP_LIB S1AP_ENB GTPV1U SECU_CN SECU_OSA UTIL HASHTABLE SCTP_CLIENT UDP SCHED_LIB PHY LFDS L2 ${MSC_LIB} ${RAL_LIB} ${NAS_UE_LIB} ${ITTI_LIB} ${MIH_LIB} ${FLPT_MSG_LIB} ${ASYNC_IF_LIB} ${FLEXRAN_AGENT_LIB} LFDS7
-  -Wl,--end-group )
+  -Wl,--end-group z dl)
 
-target_link_libraries (lte-softmodem ${LIBXML2_LIBRARIES})
-target_link_libraries (lte-softmodem pthread m ${CONFIG_LIBRARIES} rt crypt ${CRYPTO_LIBRARIES} ${OPENSSL_LIBRARIES} ${NETTLE_LIBRARIES} sctp  ${XFORMS_LIBRARIES} ${PROTOBUF_LIB}  ${CMAKE_DL_LIBS} ${LIBYAML_LIBRARIES})
-target_link_libraries (lte-softmodem ${LIB_LMS_LIBRARIES})
-target_link_libraries (lte-softmodem ${T_LIB})
+target_link_libraries (lte-softmodem PRIVATE ${LIBXML2_LIBRARIES})
+target_link_libraries (lte-softmodem PRIVATE pthread m ${CONFIG_LIBRARIES} rt crypt ${CRYPTO_LIBRARIES} ${OPENSSL_LIBRARIES} ${NETTLE_LIBRARIES} sctp  ${XFORMS_LIBRARIES} ${PROTOBUF_LIB}  ${CMAKE_DL_LIBS} ${LIBYAML_LIBRARIES})
+target_link_libraries (lte-softmodem PRIVATE ${LIB_LMS_LIBRARIES})
+target_link_libraries (lte-softmodem PRIVATE ${T_LIB})
+target_link_libraries(lte-softmodem PRIVATE ${blas_LIBRARIES} ${cblas_LIBRARIES} ${lapacke_LIBRARIES} ${lapack_LIBRARIES})
 
 # lte-softmodem-nos1 is both eNB and UE implementation
 ###################################################
@@ -1838,6 +1847,7 @@ target_link_libraries (lte-softmodem-nos1 ${LIBXML2_LIBRARIES})
 target_link_libraries (lte-softmodem-nos1 pthread m ${CONFIG_LIBRARIES} rt crypt ${CRYPTO_LIBRARIES} ${OPENSSL_LIBRARIES} ${NETTLE_LIBRARIES}   ${XFORMS_LIBRARIES} ${PROTOBUF_LIB} ${CMAKE_DL_LIBS} ${LIBYAML_LIBRARIES})
 target_link_libraries (lte-softmodem-nos1  ${LIB_LMS_LIBRARIES})
 target_link_libraries (lte-softmodem-nos1 ${T_LIB})
+
 
 # rrh
 ################################

@@ -25,11 +25,11 @@ def printFail(string):
     sys.stderr.write(FAIL + string + ENDC + "\n")
 
 def printWarning(string):
-    print WARN + string + ENDC
+    print(WARN + string + ENDC)
 
 def printDebug(string):
     if verbosity > 0:
-        print string
+        print(string)
 
 def outputHeaderToFile(f, filename):
     now = datetime.datetime.now()
@@ -77,7 +77,7 @@ def lowerFirstCamelWord(word):
         return lowered
 
     for c in swapped:
-        if c in string.lowercase:
+        if c in string.ascii_lowercase:
             newstr += c
             idx    += 1
         else:
@@ -90,13 +90,13 @@ def lowerFirstCamelWord(word):
     return newstr
 
 def usage():
-    print "Python parser for asn1 v%s" % (version)
-    print "Usage: python asn1tostruct.py [options]"
-    print "Available options:"
-    print "-d        Enable script debug"
-    print "-f [file] Input file to parse"
-    print "-o [dir]  Output files to given directory"
-    print "-h        Print this help and return"
+    print("Python parser for asn1 v%s" % (version))
+    print("Usage: python asn1tostruct.py [options]")
+    print("Available options:")
+    print("-d        Enable script debug")
+    print("-f [file] Input file to parse")
+    print("-o [dir]  Output files to given directory")
+    print("-h        Print this help and return")
 
 try:
     opts, args = getopt.getopt(sys.argv[1:], "df:ho:", ["debug", "file", "help", "outdir"])
@@ -222,7 +222,7 @@ f.write("    %s_Criticality_t   criticality;\n" % (fileprefix_first_upper))
 f.write("    uint8_t            direction;\n")
 f.write("    union {\n")
 
-messageList = iesDefs.keys()
+messageList = list(iesDefs.keys())
 messageList.sort()
 for message in messageList:
     if message in ieofielist.values():
