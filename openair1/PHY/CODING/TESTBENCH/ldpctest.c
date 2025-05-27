@@ -104,7 +104,8 @@ one_measurement_t test_ldpc(short max_iterations,
                             unsigned char qbits,
                             short Kprime,
                             unsigned int ntrials,
-                            int n_segments)
+                            int n_segments,
+	                    int gen_code)
 {
   one_measurement_t ret = {0};
   reset_meas(&ret.time_optim);
@@ -282,7 +283,7 @@ one_measurement_t test_ldpc(short max_iterations,
   }
 
   encoder_implemparams_t impp = {.Zc = Zc, .Kb = Kb, .BG = BG, .K = K};
-  impp.gen_code = 1;
+  impp.gen_code = gen_code;
 
   if (ntrials == 0)
     ldpc_orig.LDPCencoder(test_input, channel_input[0], &impp);
@@ -440,7 +441,7 @@ int main(int argc, char *argv[])
 
   int n_trials = 1;
   double SNR_step = 0.1;
-
+  int gen_code = 1;
   randominit(0);
   int test_uncoded = 0;
   n_iter_stats_t dec_iter[400] = {0};
@@ -452,7 +453,7 @@ int main(int argc, char *argv[])
   }
   logInit();
 
-  while ((c = getopt(argc, argv, "--:O:q:r:s:S:l:G:n:d:i:t:u:hv:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:q:r:s:S:l:G:n:d:i:t:u:hv:g:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -506,6 +507,11 @@ int main(int argc, char *argv[])
       case 'v':
         ldpc_version = strdup(optarg);
         break;
+      case 'g':
+	gen_code = atoi(optarg);
+	AssertFatal(gen_code <= 3, "gen_code %d is not allowed\n",gen_code);
+        n_trials=0;	
+	break;
       case 'h':
       default:
         printf("CURRENTLY SUPPORTED CODE RATES: \n");
@@ -562,7 +568,8 @@ int main(int argc, char *argv[])
                                       qbits,
                                       Kprime, // block length bytes
                                       n_trials,
-                                      n_segments);
+                                      n_segments,
+				      gen_code);
 
     decoded_errors[i] = res.errors;
     dec_iter[i] = res.dec_iter;

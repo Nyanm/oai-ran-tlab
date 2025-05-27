@@ -58,7 +58,6 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
   int no_punctured_columns, removed_bit;
   int nind=0;
   int indlist[1000];
-  int indlist2[1000];
 
   const short *Gen_shift_values = choose_generator_matrix(BG, Zc);
   if (Gen_shift_values==NULL) {
@@ -93,15 +92,13 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
 
   // parity check part
 
-  if (gen_code>=1)
+  if (gen_code==1 || gen_code==2)
   {
     char fname[100];
     sprintf(fname,"ldpc_BG%d_Zc%d_byte.c",BG,Zc);
     FILE *fd=fopen(fname,"w");
     AssertFatal(fd!=NULL,"cannot open %s\n",fname);
-    sprintf(fname,"ldpc_BG%d_Zc%d_16bit.c",BG,Zc);
-    FILE *fd2=fopen(fname,"w");
-    AssertFatal(fd2!=NULL,"cannot open %s\n",fname);
+
 
     int shift;
     char data_type[100];
@@ -112,7 +109,7 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
 
 
     fprintf(fd,"#include \"PHY/sse_intrin.h\"\n");
-    fprintf(fd2,"#include \"PHY/sse_intrin.h\"\n");
+
 
     if (gen_code == 1 && (Zc&63)==0) {
       shift=6;
@@ -145,21 +142,15 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
       strcpy(data_type,"uint8_t");
       strcpy(xor_command,"scalar_xor");
       fprintf(fd,"#define scalar_xor(a,b) ((a)^(b))\n");
-      fprintf(fd2,"#define scalar_xor(a,b) ((a)^(b))\n");
+
     }
     fprintf(fd,"// generated code for Zc=%d, byte encoding\n",Zc);
-    fprintf(fd2,"// generated code for Zc=%d, 16bit encoding\n",Zc);
     fprintf(fd,"static inline void ldpc_BG%d_Zc%d_byte(uint8_t *c,uint8_t *d) {\n",BG,Zc);
-    fprintf(fd2,"static inline void ldpc_BG%d_Zc%d_16bit(uint16_t *c,uint16_t *d) {\n",BG,Zc);
     fprintf(fd,"  %s *csimd=(%s *)c,*dsimd=(%s *)d;\n\n",data_type,data_type,data_type);
-    fprintf(fd2,"  %s *csimd=(%s *)c,*dsimd=(%s *)d;\n\n",data_type,data_type,data_type);
     fprintf(fd,"  %s *c2,*d2;\n\n",data_type);
-    fprintf(fd2,"  %s *c2,*d2;\n\n",data_type);
     fprintf(fd,"  int i2;\n");
-    fprintf(fd2,"  int i2;\n");
     fprintf(fd,"  for (i2=0; i2<%d; i2++) {\n",Zc>>shift);
-    if (shift > 0)
-      fprintf(fd2,"  for (i2=0; i2<%d; i2++) {\n",Zc>>(shift-1));
+
     for (i2=0; i2 < 1; i2++)
     {
       //t=Kb*Zc+i2;
@@ -169,53 +160,82 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
 
       fprintf(fd,"     c2=&csimd[i2];\n");
       fprintf(fd,"     d2=&dsimd[i2];\n");
-      fprintf(fd2,"     c2=&csimd[i2];\n");
-      fprintf(fd2,"     d2=&dsimd[i2];\n");
 
       for (i1 = 0; i1 < nrows; i1++)
-
       {
         fprintf(fd,"\n//row: %d\n",i1);
-        fprintf(fd2,"\n//row: %d\n",i1);
         AssertFatal(shift > 0 , "The result of the right shift is undefined because the right operand is negative\n");
 	fprintf(fd,"     d2[%d]=",(Zc*i1)>>shift);
-	fprintf(fd2,"     d2[%d]=",(Zc*i1)>>(shift-1));
 
         nind=0;
 
         for (i3=0; i3 < ncols; i3++)
         {
           temp_prime=i1 * ncols + i3;
-
-
 	  for (i4=0; i4 < no_shift_values[temp_prime]; i4++)
-	    {
-	          
+  	  {
 	      var=(int)((i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc)/Zc);
 	      int index =var*2*Zc + (i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc) % Zc;
 	      printf("var %d, i3 %d, i4 %d, index %d, shift %d, Zc %d, pointer_shift_values[%d] %d gen_shift_value %d\n",var,i3,i4,index,shift,Zc,temp_prime,pointer_shift_values[temp_prime],Gen_shift_values[pointer_shift_values[temp_prime]]);
-	      indlist[nind] = ((index&mask)*((2*Zc*ncols)>>shift)/* *Kb */)+(index>>shift);
-	      printf("indlist[%d] %d, index&mask %d, index>>shift %d\n",nind,indlist[nind],index&mask,index>>shift);
-	      indlist2[nind++] = ((index&(mask>>1))*((2*Zc*ncols)>>(shift-1))*Kb)+(index>>(shift-1));
-	    }
-	  
-
-        }
+	      indlist[nind++] = ((index&mask)*((2*Zc*ncols)>>shift)/* *Kb */)+(index>>shift);
+   	      printf("indlist[%d] %d, index&mask %d, index>>shift %d\n",nind,indlist[nind],index&mask,index>>shift);
+	  }//i4
+        }//i3
 	for (i4=0;i4<nind-1;i4++) {
-	  fprintf(fd,"%s(c2[%d],",xor_command,indlist[i4]);
-	  fprintf(fd2,"%s(c2[%d],",xor_command,indlist2[i4]);
-	}
+  	   fprintf(fd,"%s(c2[%d],",xor_command,indlist[i4]);
+	} //i4
 	fprintf(fd,"c2[%d]",indlist[i4]);
-	fprintf(fd2,"c2[%d]",indlist2[i4]);
-	for (i4=0;i4<nind-1;i4++) { fprintf(fd,")"); fprintf(fd2,")"); }
-	fprintf(fd,";\n");
-  fprintf(fd2, ";\n");
-      }
-      fprintf(fd,"  }\n}\n");
-      fprintf(fd2,"  }\n}\n");
-    }
+	for (i4=0;i4<nind-1;i4++) fprintf(fd,")"); 
+  	fprintf(fd,";\n");
+	fprintf(fd,"  }\n}\n");
+       } // i1 
+    } // i2
     fclose(fd);
-    fclose(fd2);
+  }
+  else if (gen_code == 3) { // CUDA
+    char fname[100];
+    sprintf(fname,"ldpc_BG%d_Zc%d_64bit.cu",BG,Zc);
+    FILE *fd=fopen(fname,"w");
+    AssertFatal(fd!=NULL,"cannot open %s\n",fname);
+
+    fprintf(fd,"// generated code for Zc=%d, byte encoding\n",Zc);
+    for (int i1=0;i1<nrows;i1++) {
+      fprintf(fd,"__global__ void ldpc_BG%d_Zc%d_worker%d(uint8_t *c,uint8_t *d) {\n",BG,Zc,i1);
+      fprintf(fd,"  (uint64_t*) c64=(uint64_t *)c,*d64=(uint64_t *)d;\n\n");
+      fprintf(fd,"  int i2=threadIdx.x;\n");
+      fprintf(fd,"  if (i2 < %d) {\n",Zc);
+      fprintf(fd,"    c64+=threadIdx.x;\n");
+      fprintf(fd,"    d64+=threadIdx.x;\n");
+      nind = 0;
+      fprintf(fd,"    d64[%d]=",(Zc*i1));
+      for (i3=0; i3 < ncols; i3++)
+      {
+          temp_prime=i1 * ncols + i3;
+	  for (i4=0; i4 < no_shift_values[temp_prime]; i4++)
+  	  {
+	          
+	     var=(int)((i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc)/Zc);
+  	     int index =var*2*Zc + (i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc) % Zc;
+	     printf("var %d, i3 %d, i4 %d, index %d, Zc %d, pointer_shift_values[%d] %d gen_shift_value %d\n",var,i3,i4,index,Zc,temp_prime,pointer_shift_values[temp_prime],Gen_shift_values[pointer_shift_values[temp_prime]]);
+   	     indlist[nind] = index;
+	     printf("indlist[%d] %d, index %d\n",nind,indlist[nind],index);
+	     nind++;
+   	  } //i4
+      }
+      for (i4=0;i4<nind-1;i4++) {
+         fprintf(fd,"c64[%d]^",indlist[i4]);
+      } //i4
+      fprintf(fd,"c64[%d];\n   }\n",indlist[i4]);
+      fprintf(fd,"}\n");
+    }// i1
+
+    fprintf(fd,"static void int ldpc_BG%d_Zc%d_cuda64(uint8_t *c,uint8_t *d) { \n",BG,Zc);
+
+    for (int i1=0;i1<nrows;i1++) {
+       fprintf(fd,"ldpc_BG%d_Zc%d_worker%d<<1,%d>>(c,d);\n",BG,Zc,i1,Zc);
+    }
+    fprintf(fd,"}\n");
+    fclose(fd);
   }
   else if(gen_code==0)
   {
