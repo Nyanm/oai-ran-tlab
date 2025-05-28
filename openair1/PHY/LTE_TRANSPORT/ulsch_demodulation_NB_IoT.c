@@ -1190,7 +1190,7 @@ void rotate_bpsk_NB_IoT(PHY_VARS_eNB *eNB,
 
 
 #if defined(__x86_64__) || defined(__i386__)
-__m128i avg128U;
+extern __m128i avg128U;
 #elif defined(__arm__)
 int32x4_t avg128U;
 #endif

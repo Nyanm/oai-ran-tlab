@@ -33,7 +33,7 @@
 #include <linux/types.h>
 // global var to enable openair performance profiler
 extern int opp_enabled;
-double cpu_freq_GHz;
+extern double cpu_freq_GHz;
 #if defined(__x86_64__) || defined(__i386__)
 
 typedef struct {

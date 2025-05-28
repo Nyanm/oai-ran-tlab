@@ -618,11 +618,11 @@ typedef  struct {
 
 // global variables
 
-nprach_parameters_NB_IoT_t nprach_list[3];
+extern nprach_parameters_NB_IoT_t nprach_list[3];
 
-nfapi_config_request_t config;
+extern nfapi_config_request_t config;
 
 //DLSF Table
-DLSF_INFO_t DLSF_information;
+extern DLSF_INFO_t DLSF_information;
 
 #endif /*__LAYER2_MAC_DEFS_NB_IoT_H__ */

@@ -76,7 +76,7 @@ extern const uint32_t mapped_mcs[3][8];
 //TBS table for NPUSCH transmission TS 36.213 v14.2 table Table 16.5.1.2-2:
 extern const int UL_TBS_Table[14][8];
 
-const int UL_TBS_Table_msg3[8];
+extern const int UL_TBS_Table_msg3[8];
 
 extern const int ULrep[8];
 extern const int rachperiod[8];

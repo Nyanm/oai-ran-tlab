@@ -48,9 +48,9 @@ int16_t *primary_synch2_time;
 
 //PHY_VARS *PHY_vars;
 #ifndef OCP_FRAMEWORK
-PHY_VARS_UE_NB_IoT ***PHY_vars_UE_NB_IoT_g;
-PHY_VARS_eNB_NB_IoT ***PHY_vars_eNB_NB_IoT_g;
-PHY_VARS_RN_NB_IoT **PHY_vars_RN_NB_IoT_g;
+extern PHY_VARS_UE_NB_IoT ***PHY_vars_UE_NB_IoT_g;
+extern PHY_VARS_eNB_NB_IoT ***PHY_vars_eNB_NB_IoT_g;
+extern PHY_VARS_RN_NB_IoT **PHY_vars_RN_NB_IoT_g;
 //NB_IoT_DL_FRAME_PARMS *lte_frame_parms_g;
 #else
 PHY_VARS_UE_NB_IoT * PHY_vars_UE_NB_IoT_g[MAX_UE][MAX_NUM_CCs]={NULL};
@@ -149,7 +149,7 @@ char eNB_timing[2][20]={"synch_to_ext_device","synch_to_other"};
 #endif
 */
 /// lookup table for unscrambling in RX
-int16_t unscrambling_lut_NB_IoT[65536*16] __attribute__((aligned(32)));
+extern int16_t unscrambling_lut_NB_IoT[65536*16] __attribute__((aligned(32)));
 
 /*
 /// lookup table for scrambling in TX
