@@ -53,13 +53,10 @@ add_library(e2_ran_func_cuup STATIC
             ../flexric/test/rnd/fill_rnd_data_tc.c
             CUSTOMIZED/ran_func_srs.c     # just a first step 
             CUSTOMIZED/ran_func_srs_subs.c
-            ../flexric/test/rnd/fill_rnd_data_srs.c
             ../flexric/src/sm/srs_sm/ie/srs_data_ie.c
-            ../../../nfapi/open-nFAPI/common/src/nfapi.c
-            ../../../nfapi/open-nFAPI/common/src/debug.c
             )
 
-target_link_libraries(e2_ran_func_cuup PUBLIC asn1_nr_rrc nr_rrc asn1_nr_rrc_hdrs e2_time_obj kpm_ric_info_common_obj 3gpp_derived_ie_obj e2sm_rc_ir_obj sm_common_ie_obj ds alg sm_common_enc_asn_obj_rc 3gpp_derived_ie_enc_asn_obj_rc)
+target_link_libraries(e2_ran_func_cuup PUBLIC asn1_nr_rrc nr_rrc asn1_nr_rrc_hdrs e2_time_obj kpm_ric_info_common_obj 3gpp_derived_ie_obj e2sm_rc_ir_obj sm_common_ie_obj ds alg sm_common_enc_asn_obj_rc 3gpp_derived_ie_enc_asn_obj_rc nfapi_common nr_fapi_p7)
 target_compile_definitions(e2_ran_func_cuup PUBLIC ${E2AP_VERSION}  ${KPM_VERSION}  NGRAN_GNB_CUUP)
 
 
@@ -83,13 +80,10 @@ add_library(e2_ran_func_du_cucp_cuup STATIC
             ../flexric/test/rnd/fill_rnd_data_tc.c
             CUSTOMIZED/ran_func_srs.c     # just a first step 
             CUSTOMIZED/ran_func_srs_subs.c
-            ../flexric/test/rnd/fill_rnd_data_srs.c
             ../flexric/src/sm/srs_sm/ie/srs_data_ie.c
-            ../../../nfapi/open-nFAPI/common/src/nfapi.c
-            ../../../nfapi/open-nFAPI/common/src/debug.c
             )
 
-target_link_libraries(e2_ran_func_du_cucp_cuup PUBLIC asn1_nr_rrc nr_rrc asn1_nr_rrc_hdrs e2_time_obj kpm_ric_info_common_obj 3gpp_derived_ie_obj e2sm_rc_ir_obj sm_common_ie_obj ds sm_common_enc_asn_obj_rc 3gpp_derived_ie_enc_asn_obj_rc)
+target_link_libraries(e2_ran_func_du_cucp_cuup PUBLIC asn1_nr_rrc nr_rrc asn1_nr_rrc_hdrs e2_time_obj kpm_ric_info_common_obj 3gpp_derived_ie_obj e2sm_rc_ir_obj sm_common_ie_obj ds sm_common_enc_asn_obj_rc 3gpp_derived_ie_enc_asn_obj_rc nfapi_common nr_fapi_p7)
 target_compile_definitions(e2_ran_func_du_cucp_cuup PUBLIC ${E2AP_VERSION}  ${KPM_VERSION} NGRAN_GNB_DU NGRAN_GNB_CUCP NGRAN_GNB_CUUP)
 
 # Current implementation:

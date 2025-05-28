@@ -25,7 +25,6 @@
 #include <stdio.h>
 #include <assert.h>
 #include "openair2/E2AP/flexric/src/util/time_now_us.h"
-#include "openair2/E2AP/flexric/test/rnd/fill_rnd_data_srs.h"
 
 #include "../../flexric/src/agent/e2_agent_api.h"
 #include <unistd.h>
@@ -35,6 +34,10 @@
 
 // for the packing functions
 #include "nfapi/open-nFAPI/common/public_inc/nfapi.h"
+#include "nfapi/open-nFAPI/fapi/inc/nr_fapi_p7.h"
+#include "nfapi/open-nFAPI/fapi/inc/nr_fapi.h"
+#include "nfapi/open-nFAPI/fapi/inc/nr_fapi_p7_utils.h"
+
 static seq_arr_t srs_subs_data = {0};
 
 bool read_srs_sm(void* data)
@@ -65,71 +68,7 @@ static srs_ind_hdr_t fill_srs_ind_hdr(void)
   return hdr;
 }
 
-// from nfapi/open-nFAPI/fapi/srs/nr_fapi_p7.c
-// report tlv is the what contains the srs ul channel estimates
-// ppWritePackedMsg is the destination buffer (byte_array our case) 
-uint8_t pack_nr_srs_report_tlv(const nfapi_srs_report_tlv_t *report_tlv, uint8_t **ppWritePackedMsg, uint8_t *end) {
-
-  if(!(push16(report_tlv->tag, ppWritePackedMsg, end) &&
-        push32(report_tlv->length, ppWritePackedMsg, end))) {
-    return 0;
-  }
-
-  for (int i = 0; i < (report_tlv->length + 3) / 4; i++) {
-    if (!push32(report_tlv->value[i], ppWritePackedMsg, end)) {
-      return 0;
-    }
-  }
-
-  return 1;
-}
-
-uint8_t pack_nr_srs_indication_body(const nfapi_nr_srs_indication_pdu_t *value, uint8_t **ppWritePackedMsg, uint8_t *end) {
-
-  if(!(push32(value->handle, ppWritePackedMsg, end) &&
-        push16(value->rnti, ppWritePackedMsg, end) &&
-        push16(value->timing_advance_offset, ppWritePackedMsg, end) &&
-        pushs16(value->timing_advance_offset_nsec, ppWritePackedMsg, end) &&
-        push8(value->srs_usage, ppWritePackedMsg, end) &&
-        push8(value->report_type, ppWritePackedMsg, end))) {
-    return 0;
-  }
-
-  if (!pack_nr_srs_report_tlv(&value->report_tlv, ppWritePackedMsg, end)) {
-    return 0;
-  }
-
-  return 1;
-}
-/*
-static uint8_t unpack_nr_srs_report_tlv(nfapi_srs_report_tlv_t *report_tlv, uint8_t **ppReadPackedMsg, uint8_t *end) {
-
-  if(!(pull16(ppReadPackedMsg, &report_tlv->tag, end) &&
-        pull32(ppReadPackedMsg, &report_tlv->length, end))) {
-    return 0;
-  }
-  return 1;
-}
-
-static uint8_t unpack_nr_srs_indication_body(nfapi_nr_srs_indication_pdu_t *value, uint8_t **ppReadPackedMsg, uint8_t *end) {
-
-  if(!(pull32(ppReadPackedMsg, &value->handle, end) &&
-        pull16(ppReadPackedMsg, &value->rnti, end) &&
-        pull16(ppReadPackedMsg, &value->timing_advance_offset, end) &&
-        pulls16(ppReadPackedMsg, &value->timing_advance_offset_nsec, end) &&
-        pull8(ppReadPackedMsg, &value->srs_usage, end) &&
-        pull8(ppReadPackedMsg, &value->report_type, end))) {
-    return 0;
-  }
-
-  if (!unpack_nr_srs_report_tlv(&value->report_tlv, ppReadPackedMsg, end)) {
-    return 0;
-  }
-
-  return 1;
-}
-*/
-static srs_ind_msg_t fill_srs_ind_msg(nfapi_nr_srs_indication_pdu_t *nfapi_srs_ind)
+static srs_ind_msg_t fill_srs_ind_msg(nfapi_nr_srs_indication_t *nfapi_srs_ind)
 {
   srs_ind_msg_t msg = {0};
   msg.len = 1; // only for now
@@ -143,27 +82,28 @@ static srs_ind_msg_t fill_srs_ind_msg(nfapi_nr_srs_indication_pdu_t *nfapi_srs_i
   for(uint32_t i = 0; i < msg.len; ++i){
     srs_indication_stats_impl_t* indication_stats = &msg.indication_stats[i];
   
-    indication_stats->rnti=nfapi_srs_ind->rnti;
+    indication_stats->rnti= nfapi_srs_ind->pdu_list[0].rnti;
     printf("SRS.indication RNTI: %u\n", indication_stats->rnti);
-    byte_array_t ba = {.len = sizeof(nfapi_nr_srs_indication_pdu_t)}; //copy_byte_array(srs_ba);
+    size_t ba_len = get_srs_indication_size(nfapi_srs_ind);
+    byte_array_t ba = {.len = ba_len};
     ba.buf = malloc(ba.len);
     uint8_t *pPackedBuf = ba.buf;
     uint8_t *pWritePackedMessage    = pPackedBuf;
     uint8_t *pPackMessageEnd =  pPackedBuf + ba.len;
-    uint8_t result1 = pack_nr_srs_indication_body(nfapi_srs_ind, &pWritePackedMessage, pPackMessageEnd);
 
+    printf("[RIC DEBUG INFO] pointer = %p\n",(void*)nfapi_srs_ind);
+    printf("[RIC DEBUG INFO] ba initialized len: %zu bytes\n", ba.len);
+    printf("[RIC DEBUG INFO] Sending SFN: %u\n", nfapi_srs_ind->sfn);
+    printf("[RIC DEBUG INFO] Sending Slot: %u\n", nfapi_srs_ind->slot);
+    printf("[RIC DEBUG INFO] Sending num srs: %d\n", nfapi_srs_ind->number_of_pdus);
+
+    const uint8_t result = pack_nr_srs_indication(nfapi_srs_ind, &pWritePackedMessage, pPackMessageEnd, 0);
+    assert(result != 0 && "Error in packing SRS Indication message"); 
     size_t packedBufLen = pWritePackedMessage - pPackedBuf;// this should be eq to the ba.len
+
     ba.len = packedBufLen;
-    indication_stats->srs_unpacked_pdu = copy_byte_array(ba); //.len = packedBufLen;
-    //indication_stats->srs_unpacked_pdu.buf = pWritePackedMessage;
-
-    // uint8_t *pReadPackedMessage = pPackedBuf;
-    // uint8_t *pUnpackMessageEnd = pPackedBuf + packedBufLen;
-    // nfapi_nr_srs_indication_pdu_t srs_ind_pdu = {0};
-
-    // uint8_t result2 = unpack_nr_srs_indication_body(&srs_ind_pdu, &pReadPackedMessage, pUnpackMessageEnd);
-    // printf("Unpacked RNTI:%u\n", srs_ind_pdu.rnti);
-    // printf("unpacking result: %u\n",result2);
+    printf("[RIC DEBUG INFO] ba updated len: %zu bytes\n", ba.len);
+    indication_stats->srs_unpacked_pdu = copy_byte_array(ba);
 
     // Clean up
     free_byte_array(ba);
@@ -185,7 +125,7 @@ static void free_aperiodic_subscription(uint32_t ric_req_id)
 }
 
 
-static srs_ind_data_t* fill_fapi_srs_indication(nfapi_nr_srs_indication_pdu_t *nfapi_srs_ind)
+static srs_ind_data_t* fill_fapi_srs_indication(nfapi_nr_srs_indication_t *nfapi_srs_ind)
 {
   srs_ind_data_t* srs_ind = calloc(1,sizeof(srs_ind_data_t));
   assert(srs_ind != NULL && "Memory exhausted");
@@ -196,7 +136,7 @@ static srs_ind_data_t* fill_fapi_srs_indication(nfapi_nr_srs_indication_pdu_t *n
   return srs_ind;
 }
 
-void signal_nfapi_srs_indication(nfapi_nr_srs_indication_pdu_t *nfapi_srs_ind)
+void signal_nfapi_srs_indication(nfapi_nr_srs_indication_t *nfapi_srs_ind)
 {
   // Check number of subscriptions:
   const size_t num_subs = seq_arr_size(&srs_subs_data);
@@ -204,8 +144,6 @@ void signal_nfapi_srs_indication(nfapi_nr_srs_indication_pdu_t *nfapi_srs_ind)
     const ran_param_data_t data = *(const ran_param_data_t *)seq_arr_at(&srs_subs_data, sub_idx);
     srs_ind_data_t* srs_ind_data = fill_fapi_srs_indication(nfapi_srs_ind);
     //Send RIC indication
-    // printf("Sending buf: %p \t len: %lu\n", (void*) &srs_ind_data->msg.indication_stats->srs_unpacked_pdu.buf, &srs_ind_data->msg.indication_stats->srs_unpacked_pdu.len);
-
     send_ric_indication(data.ric_req_id, srs_ind_data);
   }
 }
