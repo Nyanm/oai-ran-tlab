@@ -80,6 +80,7 @@
 #include "MeasResults.h"
 //#endif
 
+
 #ifdef USER_MODE
 #   include "RRC/NAS/nas_config.h"
 #   include "RRC/NAS/rb_config.h"
@@ -3784,6 +3785,7 @@ rrc_eNB_generate_RRCConnectionReconfiguration_handover(
 */
 
 //-----------------------------------------------------------------------------
+OAI_Emulation oai_emulation;
 void
 rrc_eNB_process_RRCConnectionReconfigurationComplete(
   const protocol_ctxt_t* const ctxt_pP,

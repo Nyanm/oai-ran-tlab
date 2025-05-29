@@ -45,7 +45,7 @@
 //extern uint16_t prach_root_sequence_map0_3[838];
 //extern uint16_t prach_root_sequence_map4[138];
 //uint8_t dmrs1_tab[8] = {0,2,3,4,6,8,9,10};
-
+PHY_VARS_eNB_NB_IoT ***PHY_vars_eNB_NB_IoT_g;
 
 void phy_config_mib_eNB_NB_IoT(int  			Mod_id,
 							   int              CC_id,

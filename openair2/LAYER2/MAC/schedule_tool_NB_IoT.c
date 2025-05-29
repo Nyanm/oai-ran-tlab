@@ -12,6 +12,9 @@
 #include "proto_NB_IoT.h"
 #include "extern_NB_IoT.h"
 
+DLSF_INFO_t DLSF_information;
+nprach_parameters_NB_IoT_t nprach_list[3];
+
 void print_available_UL_resource(void){
 
     int sixtone_num=0;

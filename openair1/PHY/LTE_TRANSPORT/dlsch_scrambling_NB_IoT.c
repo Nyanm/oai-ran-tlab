@@ -82,7 +82,9 @@ void dlsch_scrambling_Gen_NB_IoT(LTE_DL_FRAME_PARMS         *frame_parms,
 
 }
 
+// In the develop branch: defined as int16_t unscrambling_lut[65536*16] __attribute__((aligned(32))); in dlsch_scrambling.c
 
+int16_t unscrambling_lut_NB_IoT[65536*16];
 
 void init_unscrambling_lut_NB_IoT() {
 

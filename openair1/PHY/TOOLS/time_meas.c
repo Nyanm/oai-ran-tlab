@@ -26,7 +26,8 @@
 
 // global var for openair performance profiler
 int opp_enabled = 0;
-
+// In the develop branch: defined as double cpu_freq_GHz  __attribute__ ((aligned(32))); in time_meas.c
+double cpu_freq_GHz;
 
 double get_cpu_freq_GHz(void) {
 
