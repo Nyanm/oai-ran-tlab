@@ -55,11 +55,13 @@ if (ENABLE_LDPC_CUDA)
   if (NOT CUDA_FOUND)
     message(FATAL_ERROR "no CUDA found")
   endif()
-  SET(CUDA_NVCC_FLAG "${CUDA_NVCC_FLAGS};-arch=sm_60;")
+  SET(CUDA_NVCC_FLAG "${CUDA_NVCC_FLAGS};-arch=compute_87;")
   SET(CUDA_VERBOSE_BUILD ON)
   cuda_add_library(ldpc_cuda MODULE
-                   nrLDPC_decoder_LYC/nrLDPC_decoder_LYC.cu
-                   nrLDPC_encoder/ldpc_encoder_optim8segmulti.c
+	  #                   nrLDPC_decoder_LYC/nrLDPC_decoder_LYC.cu
+                   nrLDPC_decoder/nrLDPC_decoder.c
+		   nrLDPC_encoder/ldpc_encoder_cuda32.c
+		   nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
                    # The slot coding layer cannot be linked with
                    # target_link_libraries like above
                    # because of cuda_add_library
@@ -67,6 +69,7 @@ if (ENABLE_LDPC_CUDA)
                    nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c
                    nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder.c
                    nrLDPC_coding/nrLDPC_coding_segment/nr_rate_matching.c
+		   ldpc_generators 
   )
   set_target_properties(ldpc_cuda PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
   set_target_properties(ldpc_cuda PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})

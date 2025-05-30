@@ -40,7 +40,7 @@
 #include "PHY/sse_intrin.h"
 #include "openair1/PHY/CODING/nrLDPC_extern.h"
 
-#include "ldpc_encode_parity_check.c"
+#include "ldpc_encode_parity_check_cuda.c"
 #include "ldpc_generate_coefficient.c"
 
 int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)

@@ -197,11 +197,13 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
     sprintf(fname,"ldpc_BG%d_Zc%d_32bit.cu",BG,Zc);
     FILE *fd=fopen(fname,"w");
     AssertFatal(fd!=NULL,"cannot open %s\n",fname);
+    printf("Writing to %s\n",fname);
+    fprintf(fd,"#include <stdio.h>\n#include <stdint.h>\n#include <cuda_runtime.h>\n");
 
     fprintf(fd,"// generated code for Zc=%d, byte encoding\n",Zc);
     for (int i1=0;i1<nrows;i1++) {
       fprintf(fd,"__global__ void ldpc_BG%d_Zc%d_worker%d(uint8_t *c,uint8_t *d) {\n",BG,Zc,i1);
-      fprintf(fd,"  (uint32_t*) c32=(uint32_t *)c,*d32=(uint32_t *)d;\n\n");
+      fprintf(fd,"  uint32_t *c32=(uint32_t *)c;\n  uint32_t *d32=(uint32_t *)d;\n\n");
       fprintf(fd,"  int i2=threadIdx.x + (blockIdx.x<<5);\n");
       fprintf(fd,"  if (i2 < %d) {\n",Zc);
       fprintf(fd,"    c32+=i2;\n");
@@ -229,10 +231,10 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
       fprintf(fd,"}\n");
     }// i1
 
-    fprintf(fd,"static void int ldpc_BG%d_Zc%d_cuda64(uint8_t *c,uint8_t *d) { \n",BG,Zc);
+    fprintf(fd,"int ldpc_BG%d_Zc%d_cuda64(uint8_t *c,uint8_t *d) { \n",BG,Zc);
 
     for (int i1=0;i1<nrows;i1++) {
-       fprintf(fd,"ldpc_BG%d_Zc%d_worker%d<<%d,%d>>(c,d);\n",BG,Zc,i1,Zc/32,32);
+       fprintf(fd,"ldpc_BG%d_Zc%d_worker%d<<<%d,%d>>>(c,d);\n",BG,Zc,i1,Zc/32,32);
     }
     fprintf(fd,"}\n");
     fclose(fd);
