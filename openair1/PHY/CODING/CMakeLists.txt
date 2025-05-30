@@ -69,7 +69,6 @@ if (ENABLE_LDPC_CUDA)
                    nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c
                    nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder.c
                    nrLDPC_coding/nrLDPC_coding_segment/nr_rate_matching.c
-		   ldpc_generators 
   )
   set_target_properties(ldpc_cuda PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
   set_target_properties(ldpc_cuda PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
