@@ -35,14 +35,18 @@
 #include <string.h>
 #include "assertions.h"
 #include "common/utils/LOG/log.h"
-
+#include <cuda_runtime.h>
 
 static void encode_parity_check_part_cuda(uint32_t *cc, uint32_t *d, short BG,short Zc,short Kb, int ncols)
 {
-  uint32_t c[2 * 22 * Zc] __attribute__((aligned(64))); //double size matrix of c
+  uint32_t *c=NULL;
+
+  cudaError_t err;
+  err = cudaMalloc((void**)&c,2 * 22 * Zc * sizeof(uint32_t));
+  if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
   for (int i1 = 0; i1 < ncols; i1++)   {
-    memcpy(&c[2 * i1 * Zc], &cc[i1 * Zc], Zc * sizeof(uint32_t));
-    memcpy(&c[(2 * i1 + 1) * Zc], &cc[i1 * Zc], Zc * sizeof(uint32_t));
+    cudaMemcpy(&c[2 * i1 * Zc], &cc[i1 * Zc], Zc * sizeof(uint32_t),1);
+    cudaMemcpy(&c[(2 * i1 + 1) * Zc], &cc[i1 * Zc], Zc * sizeof(uint32_t),1);
   }
   if (BG == 1) {
     switch (Zc) {
@@ -58,7 +62,7 @@ static void encode_parity_check_part_cuda(uint32_t *cc, uint32_t *d, short BG,sh
 	AssertFatal(1==0,"BG %d Zc %d not supported yet for CUDA\n",BG, Zc);
         break;
       case 384:
-	ldpc384_BG1_Zc384_cuda32(c, d);
+	ldpc_BG1_Zc384_cuda32(c, d);
         break;
       default:
         AssertFatal(false, "BG %d Zc %d is not supported yet\n", BG, Zc);
@@ -90,6 +94,7 @@ static void encode_parity_check_part_cuda(uint32_t *cc, uint32_t *d, short BG,sh
     }
   } else
     AssertFatal(false, "BG %d is not supported\n", BG);
+  cudaFree(c);
 }
 
 

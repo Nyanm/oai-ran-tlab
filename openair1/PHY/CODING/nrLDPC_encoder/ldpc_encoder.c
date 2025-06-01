@@ -92,7 +92,7 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
 
   // parity check part
 
-  if (gen_code==1 || gen_code==2)
+  if (gen_code==1 || gen_code==2 || gen_code==3)
   {
     char fname[100];
     sprintf(fname,"ldpc_BG%d_Zc%d_byte.c",BG,Zc);
@@ -123,14 +123,14 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
       strcpy(data_type,"simde__m256i");
       strcpy(xor_command,"simde_mm256_xor_si256");
     }
-    else if ((Zc&15)==0) {
+    else if ((gen_code <=2) && (Zc&15)==0) {
       shift=4; // SSE4 - 128-bit SIMD
       mask=15;
       strcpy(data_type,"simde__m128i");
       strcpy(xor_command,"simde_mm_xor_si128");
 
     }
-    else if ((Zc&7)==0) {
+    else if ((gen_code <=2) && (Zc&7)==0) {
       shift=3; // MMX  - 64-bit SIMD
       mask=7;
       strcpy(data_type,"simde__m64");
@@ -164,7 +164,7 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
       for (i1 = 0; i1 < nrows; i1++)
       {
         fprintf(fd,"\n//row: %d\n",i1);
-        AssertFatal(shift > 0 , "The result of the right shift is undefined because the right operand is negative\n");
+        AssertFatal(shift >= 0 , "The result of the right shift is undefined because the right operand is negative\n");
 	fprintf(fd,"     d2[%d]=",(Zc*i1)>>shift);
 
         nind=0;
@@ -187,12 +187,12 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
 	fprintf(fd,"c2[%d]",indlist[i4]);
 	for (i4=0;i4<nind-1;i4++) fprintf(fd,")"); 
   	fprintf(fd,";\n");
-	fprintf(fd,"  }\n}\n");
        } // i1 
+       fprintf(fd,"  }\n}\n");
     } // i2
     fclose(fd);
   }
-  else if (gen_code == 3) { // CUDA
+  else if (gen_code == 4) { // CUDA
     char fname[100];
     sprintf(fname,"ldpc_BG%d_Zc%d_32bit.cu",BG,Zc);
     FILE *fd=fopen(fname,"w");
@@ -215,7 +215,6 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
           temp_prime=i1 * ncols + i3;
 	  for (i4=0; i4 < no_shift_values[temp_prime]; i4++)
   	  {
-	          
 	     var=(int)((i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc)/Zc);
   	     int index =var*2*Zc + (i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc) % Zc;
 	     printf("var %d, i3 %d, i4 %d, index %d, Zc %d, pointer_shift_values[%d] %d gen_shift_value %d\n",var,i3,i4,index,Zc,temp_prime,pointer_shift_values[temp_prime],Gen_shift_values[pointer_shift_values[temp_prime]]);
@@ -231,11 +230,13 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
       fprintf(fd,"}\n");
     }// i1
 
-    fprintf(fd,"int ldpc_BG%d_Zc%d_cuda64(uint8_t *c,uint8_t *d) { \n",BG,Zc);
+    fprintf(fd,"extern \"C\" int ldpc_BG%d_Zc%d_cuda32(uint8_t *c,uint8_t *d) { \n",BG,Zc);
 
     for (int i1=0;i1<nrows;i1++) {
        fprintf(fd,"ldpc_BG%d_Zc%d_worker%d<<<%d,%d>>>(c,d);\n",BG,Zc,i1,Zc/32,32);
     }
+    fprintf(fd," cudaDeviceSynchronize();\n");
+    fprintf(fd,"  return(0);\n");
     fprintf(fd,"}\n");
     fclose(fd);
   }
@@ -263,10 +264,12 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
 
           for (i4 = 0; i4 < no_shift_values[temp_prime]; i4++) {
             channel_temp = channel_temp ^ c[i3 * Zc + Gen_shift_values[pointer_shift_values[temp_prime] + i4]];
+	    //if (i1==0) printf("index %d\n",i3 * Zc + Gen_shift_values[pointer_shift_values[temp_prime] + i4]);
           }
         }
 
         d[i2+i1*Zc]=channel_temp;
+	//if (i1==0) printf("reference: d[%d] %d c[%d] %d\n",i2,d[i2],i2,c[i2]);
         // output[t+i1*Zc]=channel_temp;
       }
     }

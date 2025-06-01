@@ -51,16 +51,17 @@ int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
   int Kb = impp->Kb;
   short block_length = impp->K;
   short BG = impp->BG;
-  uint32_t **in32=(uint32_t**)input,*out32=(uint32_t*)output;
+  uint32_t *out32=(uint32_t*)output;
   int nrows=0,ncols=0;
   int rate=3;
   int no_punctured_columns,removed_bit;
   //Table of possible lifting sizes
-  char temp;
+  uint8_t temp;
   int simd_size;
   unsigned int macro_segment, macro_segment_end;
 
-  
+//  printf("input %p output %p\n",input[0],output);
+
   macro_segment = impp->first_seg;
   macro_segment_end = (impp->n_segments > impp->first_seg + 32) ? impp->first_seg + 32 : impp->n_segments;
   ///printf("macro_segment: %d\n", macro_segment);
@@ -86,9 +87,12 @@ int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
 #endif
 
   AssertFatal(Zc > 0, "no valid Zc found for block length %d\n", block_length);
-  uint32_t  cc[22*Zc] __attribute__((aligned(64))); //padded input, unpacked, max size
-  uint32_t  dd[46*Zc] __attribute__((aligned(64))); //coded parity part output, unpacked, max size
 
+  uint32_t  cc[22*Zc]; //padded input, unpacked, max size
+  uint32_t *dd;
+
+  cudaError_t err=cudaMalloc((void**)&dd,46*Zc*sizeof(uint32_t));
+  if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
   // calculate number of punctured bits
   no_punctured_columns=(int)((nrows-2)*Zc+block_length-block_length*rate)/Zc;
   removed_bit=(nrows-no_punctured_columns-2) * Zc+block_length-(int)(block_length*rate);
@@ -96,8 +100,8 @@ int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
   //printf("%d\n",removed_bit);
   // unpack input
   memset(cc,0,sizeof(cc));
-  memset(dd,0,sizeof(dd));
-
+  err = cudaMemset(dd,0,46*Zc*sizeof(uint32_t));
+  if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
   if(impp->tinput != NULL) start_meas(impp->tinput);
 
   //interleave up to 32 transport-block segements at a time
@@ -183,7 +187,7 @@ int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
     unsigned int i = i_dword;
     for (int j = macro_segment; j < macro_segment_end; j++) {
 
-      temp = (in32[j][i/32]&((1<<31)>>(i&31)))>>(31-(i&31));
+      temp = ((input[j][i/8]&((1<<7))>>(i&7)))>>(7-(i&7));
       cc[i] |= (temp << (j-macro_segment));
     }
   }
@@ -195,6 +199,8 @@ int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
     if(impp->tprep != NULL) start_meas(impp->tprep);
     if(impp->tprep != NULL) stop_meas(impp->tprep);
     //parity check part
+
+//    printf("calling encode_parity_check_part_cuda cc %p dd %p\n",cc,dd);
     if(impp->tparity != NULL) start_meas(impp->tparity);
     encode_parity_check_part_cuda(cc, dd, BG, Zc, Kb, ncols);
     if(impp->tparity != NULL) stop_meas(impp->tparity);
@@ -202,8 +208,15 @@ int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
   else {
 	  AssertFatal(1==0,"Only BG1 Zc=384 for now\n");
   }
-  memcpy(out32,&cc[2*Zc],4*(block_length-(2*Zc)));
-  memcpy(out32+block_length-(2*Zc),dd,4*((nrows-no_punctured_columns) * Zc-removed_bit));
+
+  memcpy(out32,&cc[2*Zc],sizeof(uint32_t)*(block_length-(2*Zc)));
+//  printf("cudaMemcpy: dst %p, src %p, length %d, block_length %d, nrows %d, no_punctured_columns\n",
+//         &out32[block_length-(2*Zc)],dd,sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),block_length,nrows,no_punctured_columns);
+ // uint32_t dummy[((nrows-no_punctured_columns) * Zc-removed_bit)];
+  err = cudaMemcpy(&out32[block_length-(2*Zc)],dd,sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),2);
+
+  if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
+  cudaFree(dd);
   return 0;
 }
 
