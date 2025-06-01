@@ -37,17 +37,26 @@
 #include "common/utils/LOG/log.h"
 #include <cuda_runtime.h>
 
+#define USE_UMEM 1 
+
 static void encode_parity_check_part_cuda(uint32_t *cc, uint32_t *d, short BG,short Zc,short Kb, int ncols)
 {
-  uint32_t *c=NULL;
-
+#ifdef USE_UMEM
+  uint32_t c[2 * 22 * Zc] ; //double size matrix of c
+  for (int i1 = 0; i1 < ncols; i1++)   {
+    memcpy(&c[2 * i1 * Zc], &cc[i1 * Zc], Zc * sizeof(uint32_t));
+    memcpy(&c[(2 * i1 + 1) * Zc], &cc[i1 * Zc], Zc * sizeof(uint32_t));
+  }
+#else
   cudaError_t err;
+  uint32_t *c=NULL;
   err = cudaMalloc((void**)&c,2 * 22 * Zc * sizeof(uint32_t));
   if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
   for (int i1 = 0; i1 < ncols; i1++)   {
     cudaMemcpy(&c[2 * i1 * Zc], &cc[i1 * Zc], Zc * sizeof(uint32_t),1);
     cudaMemcpy(&c[(2 * i1 + 1) * Zc], &cc[i1 * Zc], Zc * sizeof(uint32_t),1);
   }
+#endif
   if (BG == 1) {
     switch (Zc) {
       case 176:

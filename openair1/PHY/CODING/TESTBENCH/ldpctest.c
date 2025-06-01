@@ -285,7 +285,9 @@ one_measurement_t test_ldpc(short max_iterations,
 
   encoder_implemparams_t impp = {.Zc = Zc, .Kb = Kb, .BG = BG, .K = K};
   impp.gen_code = gen_code;
-
+  impp.tparity = &tparity;
+  impp.tinput = &tinput;
+  impp.toutput = &toutput;
   if (ntrials == 0)
     ldpc_orig.LDPCencoder(test_input, channel_input[0], &impp);
   impp.gen_code = 0;

@@ -42,6 +42,8 @@
 
 #include "ldpc_encode_parity_check_cuda.c"
 #include "ldpc_generate_coefficient.c"
+#define USE_UMEM 1
+
 
 int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
 {
@@ -89,10 +91,15 @@ int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
   AssertFatal(Zc > 0, "no valid Zc found for block length %d\n", block_length);
 
   uint32_t  cc[22*Zc]; //padded input, unpacked, max size
+		       //
+#ifndef USE_UMEM 
   uint32_t *dd;
 
   cudaError_t err=cudaMalloc((void**)&dd,46*Zc*sizeof(uint32_t));
   if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
+#else
+ uint32_t dd[46*Zc];
+#endif
   // calculate number of punctured bits
   no_punctured_columns=(int)((nrows-2)*Zc+block_length-block_length*rate)/Zc;
   removed_bit=(nrows-no_punctured_columns-2) * Zc+block_length-(int)(block_length*rate);
@@ -100,8 +107,12 @@ int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
   //printf("%d\n",removed_bit);
   // unpack input
   memset(cc,0,sizeof(cc));
+#ifndef USE_UMEM 
   err = cudaMemset(dd,0,46*Zc*sizeof(uint32_t));
   if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
+#else
+  memset(dd,0,sizeof(dd));
+#endif
   if(impp->tinput != NULL) start_meas(impp->tinput);
 
   //interleave up to 32 transport-block segements at a time
@@ -209,14 +220,22 @@ int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
 	  AssertFatal(1==0,"Only BG1 Zc=384 for now\n");
   }
 
+if(impp->toutput != NULL) start_meas(impp->toutput);
   memcpy(out32,&cc[2*Zc],sizeof(uint32_t)*(block_length-(2*Zc)));
 //  printf("cudaMemcpy: dst %p, src %p, length %d, block_length %d, nrows %d, no_punctured_columns\n",
 //         &out32[block_length-(2*Zc)],dd,sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),block_length,nrows,no_punctured_columns);
  // uint32_t dummy[((nrows-no_punctured_columns) * Zc-removed_bit)];
+#ifdef USE_UMEM
+  memcpy(&out32[block_length-(2*Zc)],dd,sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit));
+#else
   err = cudaMemcpy(&out32[block_length-(2*Zc)],dd,sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),2);
-
   if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
+#endif
+#ifdef USE_UMEM
+#else
   cudaFree(dd);
+#endif
+  if(impp->toutput != NULL) stop_meas(impp->toutput);
   return 0;
 }
 

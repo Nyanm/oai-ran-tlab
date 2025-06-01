@@ -233,7 +233,7 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
     fprintf(fd,"extern \"C\" int ldpc_BG%d_Zc%d_cuda32(uint8_t *c,uint8_t *d) { \n",BG,Zc);
 
     for (int i1=0;i1<nrows;i1++) {
-       fprintf(fd,"ldpc_BG%d_Zc%d_worker%d<<<%d,%d>>>(c,d);\n",BG,Zc,i1,Zc/32,32);
+       fprintf(fd,"ldpc_BG%d_Zc%d_worker%d<<<%d,%d>>>(c,d);\n",BG,Zc,i1,1,Zc);
     }
     fprintf(fd," cudaDeviceSynchronize();\n");
     fprintf(fd,"  return(0);\n");
