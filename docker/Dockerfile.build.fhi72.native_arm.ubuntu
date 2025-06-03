@@ -50,7 +50,7 @@ COPY . .
 RUN wget --no-verbose http://fast.dpdk.org/rel/dpdk-22.11.7.tar.xz && \
     tar -xf dpdk-22.11.7.tar.xz && \
     cd dpdk-stable-22.11.7 && \
-    meson build && \
+    meson build -Dplatform=generic && \
     ninja -C build && \
     ninja install -C build
 
