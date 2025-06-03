@@ -33,8 +33,8 @@ WORKDIR /oai-ran
 COPY . .
 
 ## Download and build DPDK
-RUN wget http://fast.dpdk.org/rel/dpdk-22.11.7.tar.xz && \
-    tar -xvf dpdk-22.11.7.tar.xz && \
+RUN wget --no-verbose http://fast.dpdk.org/rel/dpdk-22.11.7.tar.xz && \
+    tar -xf dpdk-22.11.7.tar.xz && \
     cd dpdk-stable-22.11.7 && \
     meson build && \
     ninja -C build && \
