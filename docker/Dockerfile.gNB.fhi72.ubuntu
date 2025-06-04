@@ -59,6 +59,7 @@ RUN apt-get update && \
         python3 \
         python3-six \
         python3-requests \
+        libatomic1 \
         libyaml-cpp-dev && \
 # if the --sanitize option was used to build, additional packages are required
     /bin/bash -c 'if [[ "$BUILD_OPTION" = "--sanitize" ]]; then DEBIAN_FRONTEND=noninteractive apt-get install --yes \
