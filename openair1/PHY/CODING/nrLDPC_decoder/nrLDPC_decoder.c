@@ -753,7 +753,11 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                 #else
                 nrLDPC_bnProc_BG1_R13_128(bnProcBuf, bnProcBufRes,llrRes, Z);
                 #endif
-                break;
+                printf("\nThere's a cat in BG1 R13:\n");
+		printf(" /\\_/\\\n");
+                printf("( o.o )\n");
+                printf(" > ^ <\n");
+		break;
             }
             case 23:
             {
