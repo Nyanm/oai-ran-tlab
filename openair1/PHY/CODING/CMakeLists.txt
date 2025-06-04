@@ -60,6 +60,7 @@ if (ENABLE_LDPC_CUDA)
   cuda_add_library(ldpc_cuda MODULE
 	  #                   nrLDPC_decoder_LYC/nrLDPC_decoder_LYC.cu
                    nrLDPC_decoder/nrLDPC_decoder.c
+		   nrLDPC_decoder/nrLDPC_cnProc_BG1_cuda.cu
 		   nrLDPC_encoder/ldpc_encoder_cuda32.c
 		   nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
                    # The slot coding layer cannot be linked with
@@ -74,6 +75,7 @@ if (ENABLE_LDPC_CUDA)
   set_target_properties(ldpc_cuda PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
   set_target_properties(ldpc_cuda PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
+  target_compile_definitions(ldpc_cuda PRIVATE USE_CUDA)
   add_dependencies(ldpctest ldpc_cuda)
   add_dependencies(nr-softmodem ldpc_cuda)
   add_dependencies(nr-uesoftmodem ldpc_cuda)

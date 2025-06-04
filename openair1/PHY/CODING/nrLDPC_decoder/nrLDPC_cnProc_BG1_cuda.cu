@@ -13,10 +13,6 @@ __constant__ static uint8_t d_lut_numBnInCnGroups_BG1_R13[9];
 __constant__ static int d_lut_numThreadsEachCnGroupsNeed_BG1_R13[9];
 __constant__ static uint8_t d_lut_numCnInCnGroups_BG1_R13[9];
 
-extern "C" void LDPCinit(void) {
-// empty
-}
-
 
 __device__ __forceinline__ uint32_t __vxor4(const uint32_t *b, uint32_t *a)
 {
@@ -55,10 +51,8 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
     const uint32_t p_ones = 0x01010101;
     const uint32_t maxLLR = 0x7F7F7F7F;
     uint32_t ymm0, sgn, min;
-    if(tid ==1){
-    printf("/n**************We are using cuda in decoder now*******************/n")
-
-}
+    //if(tid ==1){
+    //printf("\n**************We are using cuda in decoder now*******************\n");}
     ymm0 = *((const uint32_t *)(d_in + lane * 4 + c_lut_idxG3[row][0] * 4));
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
@@ -193,9 +187,9 @@ __global__ void cnProcKernel_int8_G6(const int8_t *__restrict__ d_cnBufAll,
     const uint32_t p_ones = 0x01010101;
     const uint32_t maxLLR = 0x7F7F7F7F;
     uint32_t ymm0, sgn, min;
-    if(tid == 1){
-    printf("decoder is using cuda now!");
-}
+    //if(tid == 1){
+    //printf("decoder is using cuda now!");
+//}
     ymm0 = *((const uint32_t *)(d_in + lane * 4 + c_lut_idxG6[row][0] * 4));
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
@@ -573,7 +567,8 @@ __global__ void cnProcKernel_int8_G19(const int8_t *__restrict__ d_cnBufAll,
 }
 
 // CUDA wrapper function: external interface identical to the original C version
-void nrLDPC_cnProc_BG1(const t_nrLDPC_lut *p_lut,
+extern "C"
+void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
                        int8_t *cnProcBuf,
                        int8_t *cnProcBufRes,
                        uint16_t Z)
