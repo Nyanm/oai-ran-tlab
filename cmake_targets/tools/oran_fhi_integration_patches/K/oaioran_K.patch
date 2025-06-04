@@ -293,7 +293,7 @@ index 28dfb89..c267278 100644
  int32_t xran_extract_iq_samples_dataheader(struct rte_mbuf *mbuf,
      void **iq_data_start,
 diff --git a/fhi_lib/lib/ethernet/xran_ethdi.c b/fhi_lib/lib/ethernet/xran_ethdi.c
-index a4f4f0d..70e5dc6 100644
+index a4f4f0d..04028d2 100644
 --- a/fhi_lib/lib/ethernet/xran_ethdi.c
 +++ b/fhi_lib/lib/ethernet/xran_ethdi.c
 @@ -37,7 +37,10 @@
@@ -318,7 +318,19 @@ index a4f4f0d..70e5dc6 100644
      uint32_t cpu = 0;
      uint32_t node = 0;
  
-@@ -567,11 +570,13 @@ int32_t xran_ethdi_init_dpdk_ports(struct xran_io_cfg *io_cfg,
+@@ -488,8 +491,11 @@ int32_t xran_ethdi_init_dpdk(char *name, char *vfio_name, struct xran_io_cfg *io
+     }
+     printf("\n");
+ 
++#if defined(__arm__) || defined(__aarch64__)
++#else
+     if(rte_vect_set_max_simd_bitwidth(RTE_VECT_SIMD_512) < 0)
+         rte_panic("Cannot init RTE_VECT_SIMD_512: %s\n", rte_strerror(rte_errno));
++#endif
+ 
+     /* This will return on system_core, which is not necessarily the
+      * one we're on right now. */
+@@ -567,11 +573,13 @@ int32_t xran_ethdi_init_dpdk_ports(struct xran_io_cfg *io_cfg,
                  ctx->tx_ring[i] = rte_ring_create(ring_name, NUM_MBUFS_RING_TRX,
                      rte_lcore_to_socket_id(*lcore_id), RING_F_SC_DEQ);
                  PANIC_ON(ctx->tx_ring[i] == NULL, "failed to allocate rx ring");
@@ -332,7 +344,7 @@ index a4f4f0d..70e5dc6 100644
                  }
              }
          } else {
-@@ -640,7 +645,7 @@ int32_t xran_ethdi_init_dpdk_ports(struct xran_io_cfg *io_cfg,
+@@ -640,7 +648,7 @@ int32_t xran_ethdi_init_dpdk_ports(struct xran_io_cfg *io_cfg,
          snprintf(ring_name, RTE_DIM(ring_name), "%s_%d_%d", "dl_gen_ring_up", i,io_cfg->nDpdkProcessID);
          ctx->up_dl_pkt_gen_ring[i] = rte_ring_create(ring_name, NUM_MBUFS_RING, rte_lcore_to_socket_id(*lcore_id), /*RING_F_SC_DEQ*/0);
          PANIC_ON(ctx->up_dl_pkt_gen_ring[i] == NULL, "failed to allocate dl gen ring");
@@ -389,6 +401,21 @@ index 7b70bf2..f412868 100644
 -}
 \ No newline at end of file
 +}
+diff --git a/fhi_lib/lib/src/xran_cb_proc.c b/fhi_lib/lib/src/xran_cb_proc.c
+index 56db2bf..35010d5 100644
+--- a/fhi_lib/lib/src/xran_cb_proc.c
++++ b/fhi_lib/lib/src/xran_cb_proc.c
+@@ -25,7 +25,10 @@
+ 
+ #include <unistd.h>
+ #include <stdio.h>
++#if defined(__arm__) || defined(__aarch64__)
++#else
+ #include <immintrin.h>
++#endif
+ #include <rte_common.h>
+ #include <rte_eal.h>
+ #include <rte_errno.h>
 diff --git a/fhi_lib/lib/src/xran_common.c b/fhi_lib/lib/src/xran_common.c
 index 5613646..f1d0f87 100644
 --- a/fhi_lib/lib/src/xran_common.c
@@ -583,6 +610,21 @@ index 52c9e72..d1e7dad 100644
              timeOffset += 16;
      }
      else
+diff --git a/fhi_lib/lib/src/xran_delay_measurement.c b/fhi_lib/lib/src/xran_delay_measurement.c
+index d8ffe60..b7b4c41 100644
+--- a/fhi_lib/lib/src/xran_delay_measurement.c
++++ b/fhi_lib/lib/src/xran_delay_measurement.c
+@@ -23,7 +23,10 @@
+  * @author Intel Corporation
+  **/
+ #define _GNU_SOURCE
++#if defined(__arm__) || defined(__aarch64__)
++#else
+ #include <immintrin.h>
++#endif
+ #include <assert.h>
+ #include <err.h>
+ #include <arpa/inet.h>
 diff --git a/fhi_lib/lib/src/xran_dev.c b/fhi_lib/lib/src/xran_dev.c
 index 5956ca4..675328d 100644
 --- a/fhi_lib/lib/src/xran_dev.c
