@@ -104,7 +104,9 @@ one_measurement_t test_ldpc(short max_iterations,
                             unsigned char qbits,
                             short Kprime,
                             unsigned int ntrials,
-                            int n_segments)
+                            int n_segments,
+	                    int gen_code,
+			    int use32bit)
 {
   one_measurement_t ret = {0};
   reset_meas(&ret.time_optim);
@@ -266,8 +268,8 @@ one_measurement_t test_ldpc(short max_iterations,
     channel_input[j] = malloc16(68 * 384);
     memset(channel_input[j], 0, 68 * 384);
   }
-  channel_input_optim = malloc16(68 * 384);
-  memset(channel_input_optim, 0, 68 * 384);
+  channel_input_optim = malloc16(68 * 384 * sizeof(uint32_t));
+  memset(channel_input_optim, 0, 68 * 384 * sizeof(uint32_t));
 
   // Fill input segments with random values
   for (int j = 0; j < MAX_NUM_DLSCH_SEGMENTS; j++) {
@@ -282,8 +284,10 @@ one_measurement_t test_ldpc(short max_iterations,
   }
 
   encoder_implemparams_t impp = {.Zc = Zc, .Kb = Kb, .BG = BG, .K = K};
-  impp.gen_code = 1;
-
+  impp.gen_code = gen_code;
+  impp.tparity = &tparity;
+  impp.tinput = &tinput;
+  impp.toutput = &toutput;
   if (ntrials == 0)
     ldpc_orig.LDPCencoder(test_input, channel_input[0], &impp);
   impp.gen_code = 0;
@@ -307,20 +311,20 @@ one_measurement_t test_ldpc(short max_iterations,
     if (ntrials == 1)
       for (int j = 0; j < n_segments; j++)
         for (int i = 0; i < K + (nrows - no_punctured_columns) * Zc - removed_bit; i++) {
-          if (channel_input[j][i] != ((channel_input_optim[i] >> j) & 0x1)) {
-            printf("differ in seg %d pos %d (%u,%u)\n", j, i, channel_input[j][i], (channel_input_optim[i] >> j) & 0x1);
-            return ret;
-          }
+          if (((use32bit == 0) && (channel_input[j][i] != ((channel_input_optim[i] >> j) & 0x1))) ||                 ((use32bit == 1) && (channel_input[j][i] != ((((uint32_t*)channel_input_optim)[i] >> j) & 0x1)))) {
+               printf("differ in seg %d pos %d (%u,%u)\n", j, i, channel_input[j][i], (((uint32_t*)channel_input_optim)[i] >> j) & 0x1);
+               return ret;
+            }
         }
-
+    int bit;
     for (int j = 0; j < n_segments; j++) {
       for (int i = 2 * Zc; i < (Kb + nrows - no_punctured_columns) * Zc - removed_bit; i++) {
 #ifdef DEBUG_CODER
         if ((i & 0xf) == 0)
           printf("\ne %d..%d:    ", i, i + 15);
 #endif
-
-        if (((channel_input_optim[i - 2 * Zc] >> j) & 0x1) == 0)
+        bit = (use32bit==0) ? ((channel_input_optim[i - 2 * Zc] >> j) & 0x1) : ((((uint32_t*)channel_input_optim)[i - 2 * Zc] >> j) & 0x1);
+        if (bit == 0)
           modulated_input[j][i] = 1.0; /// sqrt(2);  //QPSK
         else
           modulated_input[j][i] = -1.0; /// sqrt(2);
@@ -440,19 +444,20 @@ int main(int argc, char *argv[])
 
   int n_trials = 1;
   double SNR_step = 0.1;
-
+  int gen_code = 1;
   randominit(0);
   int test_uncoded = 0;
   n_iter_stats_t dec_iter[400] = {0};
 
   short BG = 0, Zc;
+  int use32bit=0;
 
   if ((uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY)) == 0) {
     exit_fun("[LDPCTEST] Error, configuration module init failed\n");
   }
   logInit();
 
-  while ((c = getopt(argc, argv, "--:O:q:r:s:S:l:G:n:d:i:t:u:hv:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:q:r:s:S:l:Gn:d:i:t:u:hv:g:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -478,6 +483,7 @@ int main(int argc, char *argv[])
 
       case 'G':
         ldpc_version = "_cuda";
+	use32bit=1;
         break;
 
       case 'n':
@@ -506,6 +512,11 @@ int main(int argc, char *argv[])
       case 'v':
         ldpc_version = strdup(optarg);
         break;
+      case 'g':
+	gen_code = atoi(optarg);
+	AssertFatal(gen_code <= 4, "gen_code %d is not allowed\n",gen_code);
+        n_trials=0;	
+	break;
       case 'h':
       default:
         printf("CURRENTLY SUPPORTED CODE RATES: \n");
@@ -562,7 +573,9 @@ int main(int argc, char *argv[])
                                       qbits,
                                       Kprime, // block length bytes
                                       n_trials,
-                                      n_segments);
+                                      n_segments,
+				      gen_code,
+				      use32bit);
 
     decoded_errors[i] = res.errors;
     dec_iter[i] = res.dec_iter;

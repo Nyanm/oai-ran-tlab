@@ -151,6 +151,13 @@
    \param p_profiler LDPC profiler statistics
 */
 
+//--------------------------CUDA Area---------------------------
+extern void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
+                                   int8_t *cnProcBuf,
+                                   int8_t *cnProcBufRes,
+                                   uint16_t Z);
+//--------------------------------------------------------------
+
 static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            int8_t* p_out,
                                            uint32_t numLLR,
@@ -255,10 +262,18 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     // CN processing
     NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->cnProc));
     if (BG==1) {
-#ifndef UNROLL_CN_PROC
-      nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
-#else        
-        switch (R)
+//printf("\ncheck point 1\n");
+#ifdef USE_CUDA
+//      printf("\nHere we use CUDA\n");
+      nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, Z);
+#else
+
+      #ifndef UNROLL_CN_PROC
+//printf("\nCheck point 2\n");      
+nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
+      #else  
+  //printf("\nCheckpoint 3\n ");
+      switch (R)
         {
             case 13:
             {
@@ -297,6 +312,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
             }
 
         }
+#endif
 #endif        
     } else {
 #ifndef UNROLL_CN_PROC
@@ -561,6 +577,11 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
         start_meas(&p_profiler->cnProc);
 #endif
         if (BG==1) {
+#ifdef USE_LDPC
+	nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, Z);
+#else
+
+
 #ifndef UNROLL_CN_PROC
            nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
 #else        
@@ -599,6 +620,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                 break;
             }
            }
+#endif
 #endif        
         } else {
 #ifndef UNROLL_CN_PROC
@@ -753,7 +775,11 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                 #else
                 nrLDPC_bnProc_BG1_R13_128(bnProcBuf, bnProcBufRes,llrRes, Z);
                 #endif
-                break;
+//                printf("\nThere's a cat in BG1 R13:\n");
+//		printf(" /\\_/\\\n");
+  //              printf("( o.o )\n");
+    //            printf(" > ^ <\n");
+		break;
             }
             case 23:
             {
@@ -877,6 +903,11 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
         nrLDPC_llr2bit(p_out, p_llrOut, numLLR);
       NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2bit));
     }
+//    #ifdef USE_CUDA
+  //  printf("Using CUDA decoder\n");
+    //#else
+    //printf("Using CPU decoder\n");
+    //#endif
     return numIter;
 }
 
