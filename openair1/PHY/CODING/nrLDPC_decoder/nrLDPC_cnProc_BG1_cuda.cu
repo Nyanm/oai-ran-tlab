@@ -585,7 +585,7 @@ void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
 
     int8_t *p_cnProcBuf;
     int8_t *p_cnProcBufRes;
-
+/*
     // Create CUDA streams for concurrent kernel execution
     for (int i = 0; i < numGroups; ++i)
     {
@@ -637,4 +637,48 @@ void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
         cudaStreamSynchronize(streams[i]);
         cudaStreamDestroy(streams[i]); // Release stream resources
     }
+
+*/
+
+
+//No cuda stream using
+for (int i = 0; i < numGroups; ++i)
+{
+    p_cnProcBuf = &cnProcBuf[lut_startAddrCnGroups[i]];
+    p_cnProcBufRes = &cnProcBufRes[lut_startAddrCnGroups[i]];
+
+    switch (i)
+    {
+    case 0:
+        cnProcKernel_int8_G3<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
+        break;
+    case 1:
+        cnProcKernel_int8_G4<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
+        break;
+    case 2:
+        cnProcKernel_int8_G5<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
+        break;
+    case 3:
+        cnProcKernel_int8_G6<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
+        break;
+    case 4:
+        cnProcKernel_int8_G7<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
+        break;
+    case 5:
+        cnProcKernel_int8_G8<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
+        break;
+    case 6:
+        cnProcKernel_int8_G9<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
+        break;
+    case 7:
+        cnProcKernel_int8_G10<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
+        break;
+    case 8:
+        // Group 19: split into 2x blocks, half threads
+        cnProcKernel_int8_G19<<<h_lut_numCnInCnGroups_BG1_R13[i] * 2, h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i] / 2>>>(p_cnProcBuf, p_cnProcBufRes, Z);
+        break;
+    }
+}
+
+
 }
