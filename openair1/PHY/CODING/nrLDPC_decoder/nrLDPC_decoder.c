@@ -158,6 +158,25 @@ extern void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
                                    uint16_t Z);
 //--------------------------------------------------------------
 
+
+
+//-------------------------Debug Function-----------------------
+void dump_cnProcBufRes_to_file(const int8_t *cnProcBufRes, const char *filename) {
+    FILE *fp = fopen(filename, "w");
+    if (fp == NULL) {
+        perror("Failed to open dump file");
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < NR_LDPC_SIZE_CN_PROC_BUF; i++) {
+        fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
+        if ((i + 1) % 16 == 0)
+            fprintf(fp, "\n");
+    }
+
+    fclose(fp);
+}
+//--------------------------------------------------------------
 static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            int8_t* p_out,
                                            uint32_t numLLR,
@@ -266,24 +285,30 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #ifdef USE_CUDA
 //      printf("\nHere we use CUDA\n");
       nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, Z);
+      dump_cnProcBufRes_to_file(cnProcBuf, "cnProcBuf_dump_cuda.txt");
+      dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_cuda.txt");
 #else
 
       #ifndef UNROLL_CN_PROC
-//printf("\nCheck point 2\n");      
+printf("\nCheck point 2\n");      
 nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
       #else  
-  //printf("\nCheckpoint 3\n ");
+  printf("\nCheckpoint 3\n ");
       switch (R)
         {
             case 13:
             {
                 #if defined(__AVX512BW__)
+		printf("\nCheckpoint 4\n ");
                 nrLDPC_cnProc_BG1_R13_AVX512(cnProcBuf, cnProcBufRes, Z);
                 #elif defined(__AVX2__)
+		printf("\nCheckpoint 5\n ");
                 nrLDPC_cnProc_BG1_R13_AVX2(cnProcBuf, cnProcBufRes, Z);
                 #else
+		printf("\nCheckpoint 6\n ");
                 nrLDPC_cnProc_BG1_R13_128(cnProcBuf, cnProcBufRes, Z);
-                #endif
+	        dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_128.txt");
+#endif
                 break;
             }
 
@@ -577,7 +602,7 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
         start_meas(&p_profiler->cnProc);
 #endif
         if (BG==1) {
-#ifdef USE_LDPC
+#ifdef USE_CUDA
 	nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, Z);
 #else
 
