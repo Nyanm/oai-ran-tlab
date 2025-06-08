@@ -62,14 +62,14 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
     const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll + blockIdx.x * Zc; // output pointer each block tackle with
     if (threadIdx.x == 1)
     {
-        printf("In G3, d_cnBufAll = %p, d_cnOutAll = %p", (void *)d_cnBufAll, (void *)d_cnOutAll);
+        //printf("In G3, d_cnBufAll = %p, d_cnOutAll = %p", (void *)d_cnBufAll, (void *)d_cnOutAll);
     }
     int tid = threadIdx.x;
     if (tid >= NUM * Zc / 4) // NUM * Zc / 4 is the number of threads assigned to each block
         return;
     if (threadIdx.x == 1)
     {
-        printf("The inner pointer in thread %d, p_cnProcBuf = %p, p_cnProcBufRes = %p\n", tid, (void *)p_cnProcBuf, (void *)p_cnProcBufRes);
+        //printf("The inner pointer in thread %d, p_cnProcBuf = %p, p_cnProcBufRes = %p\n", tid, (void *)p_cnProcBuf, (void *)p_cnProcBufRes);
     }
     const uint row = tid / 96;  // row = 0,1,2  -> 3 BNs
     const uint lane = tid % 96; // lane = 0,1,...,95 -> one thread in one of 96 process units
@@ -95,49 +95,51 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
     p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
     if (threadIdx.x == 1)
     {
-        printf("The inner pointer in thread %d, output_address = %p\n", tid, (void *)p_cnProcBufResBit);
+        //printf("The inner pointer in thread %d, output_address = %p\n", tid, (void *)p_cnProcBufResBit);
     }
     // if(tid ==1){
     // printf("\n**************We are using cuda in decoder now*******************\n");}
 
     ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][0] * 4);
+    printf("\n thread%d:  ymm0 = %x  ", tid, ymm0);
     if (threadIdx.x == 1)
     {
-        printf("thread%d:  ymm0 = %x  \n", tid, ymm0);
+        //printf("thread%d:  ymm0 = %x  \n", tid, ymm0);
     }
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
     if (threadIdx.x == 1)
     {
-        printf("thread%d:  sgn = %x  \n", tid, sgn);
+        // printf("thread%d:  sgn = %x  \n", tid, sgn);
     }
     // loop starts here
     ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][1] * 4);
+    printf("ymm1 = %x  \n", ymm0);
     if (threadIdx.x == 1)
     {
-        printf("thread%d:  ymm1 = %x  \n", tid, ymm0);
+        //printf("thread%d:  ymm1 = %x  \n", tid, ymm0);
     }
     // printf("thread%d:  ymm1_address = %p  ", tid, (void*)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][0] * 4));
     min = __vminu4(min, __vabs4(ymm0));
     if (threadIdx.x == 1)
     {
-        printf("thread%d:  min = %x  \n", tid, min);
+        //printf("thread%d:  min = %x  \n", tid, min);
     }
     sgn = __vxor4(&sgn, &ymm0);
     if (threadIdx.x == 1)
     {
-        printf("thread%d:  sgn1 = %x  \n", tid, sgn);
+        //printf("thread%d:  sgn1 = %x  \n", tid, sgn);
     }
     min = __vminu4(min, maxLLR);
     if (threadIdx.x == 1)
     {
-        printf("thread%d:  min1 = %x  \n", tid, min);
+        //printf("thread%d:  min1 = %x  \n", tid, min);
     }
     uint32_t result = __vsign4(&min, &sgn);
     *p_cnProcBufResBit = result;
     if (threadIdx.x == 1)
     {
-        printf("\\thread%d:  output = %x  \\", tid, *p_cnProcBufResBit);
+        //printf("\\thread%d:  output = %x  \\", tid, *p_cnProcBufResBit);
     }
 }
 
