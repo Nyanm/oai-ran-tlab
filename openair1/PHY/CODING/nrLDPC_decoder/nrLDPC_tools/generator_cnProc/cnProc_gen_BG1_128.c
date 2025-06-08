@@ -172,7 +172,7 @@ fprintf(fd, "                printf(\"\\n\");\n");
 	  //fprintf(fd, "                for (int d=0; d<16; d++) printf(\"%%d \", debug_ptr[d]);\n");
 	  //fprintf(fd, "                printf(\"\\n\");\n");
 
-	  //fprintf(fd,"            }\n");
+	  fprintf(fd,"            }\n");
         }
     }
   // =====================================================================
