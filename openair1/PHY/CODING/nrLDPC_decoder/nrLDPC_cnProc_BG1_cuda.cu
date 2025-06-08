@@ -62,23 +62,24 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
     const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll + blockIdx.x * Zc; // output pointer each block tackle with
     if (threadIdx.x == 1)
     {
-        //printf("In G3, d_cnBufAll = %p, d_cnOutAll = %p", (void *)d_cnBufAll, (void *)d_cnOutAll);
+        // printf("In G3, d_cnBufAll = %p, d_cnOutAll = %p", (void *)d_cnBufAll, (void *)d_cnOutAll);
     }
     int tid = threadIdx.x;
     if (tid >= NUM * Zc / 4) // NUM * Zc / 4 is the number of threads assigned to each block
         return;
     if (threadIdx.x == 1)
     {
-        //printf("The inner pointer in thread %d, p_cnProcBuf = %p, p_cnProcBufRes = %p\n", tid, (void *)p_cnProcBuf, (void *)p_cnProcBufRes);
+        // printf("The inner pointer in thread %d, p_cnProcBuf = %p, p_cnProcBufRes = %p\n", tid, (void *)p_cnProcBuf, (void *)p_cnProcBufRes);
     }
     const uint row = tid / 96;  // row = 0,1,2  -> 3 BNs
     const uint lane = tid % 96; // lane = 0,1,...,95 -> one thread in one of 96 process units
                                 // and produce 1/96 of the Msg to one BN
     // 1*384/4 = 96
     const uint16_t c_lut_idxG3[3][2] = {
-        {0, 96},
         {96, 192},
-        {0, 192}};
+
+        {0, 192},
+        {0, 96}};
 
     const uint baseShift = Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -95,7 +96,7 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
     p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
     if (threadIdx.x == 1)
     {
-        //printf("The inner pointer in thread %d, output_address = %p\n", tid, (void *)p_cnProcBufResBit);
+        // printf("The inner pointer in thread %d, output_address = %p\n", tid, (void *)p_cnProcBufResBit);
     }
     // if(tid ==1){
     // printf("\n**************We are using cuda in decoder now*******************\n");}
@@ -104,7 +105,7 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
     printf("\n thread%d:  ymm0 = %x  ", tid, ymm0);
     if (threadIdx.x == 1)
     {
-        //printf("thread%d:  ymm0 = %x  \n", tid, ymm0);
+        // printf("thread%d:  ymm0 = %x  \n", tid, ymm0);
     }
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
@@ -117,29 +118,29 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
     printf("ymm1 = %x  \n", ymm0);
     if (threadIdx.x == 1)
     {
-        //printf("thread%d:  ymm1 = %x  \n", tid, ymm0);
+        // printf("thread%d:  ymm1 = %x  \n", tid, ymm0);
     }
     // printf("thread%d:  ymm1_address = %p  ", tid, (void*)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][0] * 4));
     min = __vminu4(min, __vabs4(ymm0));
     if (threadIdx.x == 1)
     {
-        //printf("thread%d:  min = %x  \n", tid, min);
+        // printf("thread%d:  min = %x  \n", tid, min);
     }
     sgn = __vxor4(&sgn, &ymm0);
     if (threadIdx.x == 1)
     {
-        //printf("thread%d:  sgn1 = %x  \n", tid, sgn);
+        // printf("thread%d:  sgn1 = %x  \n", tid, sgn);
     }
     min = __vminu4(min, maxLLR);
     if (threadIdx.x == 1)
     {
-        //printf("thread%d:  min1 = %x  \n", tid, min);
+        // printf("thread%d:  min1 = %x  \n", tid, min);
     }
     uint32_t result = __vsign4(&min, &sgn);
     *p_cnProcBufResBit = result;
     if (threadIdx.x == 1)
     {
-        //printf("\\thread%d:  output = %x  \\", tid, *p_cnProcBufResBit);
+        // printf("\\thread%d:  output = %x  \\", tid, *p_cnProcBufResBit);
     }
 }
 
@@ -159,10 +160,11 @@ __global__ void cnProcKernel_int8_G4(const int8_t *__restrict__ d_cnBufAll,
     const uint lane = tid % 96;
     // 5*384/4 = 480
     const uint16_t c_lut_idxG4[4][3] = {
-        {0, 480, 960},
+
         {480, 960, 1440},
         {0, 480, 1440},
-        {0, 960, 1440}};
+        {0, 960, 1440},
+        {0, 480, 960}};
 
     const uint baseShift = Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -208,11 +210,12 @@ __global__ void cnProcKernel_int8_G5(const int8_t *__restrict__ d_cnBufAll,
     const uint lane = tid % 96;
     // 18 * 384 / 4 = 1728
     const uint16_t c_lut_idxG5[5][4] = {
-        {0, 1728, 3456, 5184},
+
         {1728, 3456, 5184, 6912},
         {0, 3456, 5184, 6912},
         {0, 1728, 5184, 6912},
-        {0, 1728, 3456, 6912}};
+        {0, 1728, 3456, 6912},
+        {0, 1728, 3456, 5184}};
 
     const uint baseShift = Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -259,12 +262,13 @@ __global__ void cnProcKernel_int8_G6(const int8_t *__restrict__ d_cnBufAll,
     const uint lane = tid % 96;
     // 8 * 384 / 4 = 768
     const uint16_t c_lut_idxG6[6][5] = {
-        {0, 768, 1536, 2304, 3072},
+
         {768, 1536, 2304, 3072, 3840},
         {0, 1536, 2304, 3072, 3840},
         {0, 768, 2304, 3072, 3840},
         {0, 768, 1536, 3072, 3840},
-        {0, 768, 1536, 2304, 3840}};
+        {0, 768, 1536, 2304, 3840},
+        {0, 768, 1536, 2304, 3072}};
 
     const uint baseShift = Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -313,13 +317,14 @@ __global__ void cnProcKernel_int8_G7(const int8_t *__restrict__ d_cnBufAll,
     const uint lane = tid % 96;
     // 5 * 384 / 4 = 480
     const uint16_t c_lut_idxG7[7][6] = {
-        {0, 480, 960, 1440, 1920, 2400},
+
         {480, 960, 1440, 1920, 2400, 2880},
         {0, 960, 1440, 1920, 2400, 2880},
         {0, 480, 1440, 1920, 2400, 2880},
         {0, 480, 960, 1920, 2400, 2880},
         {0, 480, 960, 1440, 2400, 2880},
-        {0, 480, 960, 1440, 1920, 2880}};
+        {0, 480, 960, 1440, 1920, 2880},
+        {0, 480, 960, 1440, 1920, 2400}};
 
     const uint baseShift = Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -371,14 +376,15 @@ __global__ void cnProcKernel_int8_G8(const int8_t *__restrict__ d_cnBufAll,
     const uint lane = tid % 96;
     // 2 * 384 / 4 = 192
     const uint16_t c_lut_idxG8[8][7] = {
-        {0, 192, 384, 576, 768, 960, 1152},
+
         {192, 384, 576, 768, 960, 1152, 1344},
         {0, 384, 576, 768, 960, 1152, 1344},
         {0, 192, 576, 768, 960, 1152, 1344},
         {0, 192, 384, 768, 960, 1152, 1344},
         {0, 192, 384, 576, 960, 1152, 1344},
         {0, 192, 384, 576, 768, 1152, 1344},
-        {0, 192, 384, 576, 768, 960, 1344}};
+        {0, 192, 384, 576, 768, 960, 1344},
+        {0, 192, 384, 576, 768, 960, 1152}};
     const uint baseShift = Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
     const uint srcByte = tid * 4;
@@ -432,7 +438,7 @@ __global__ void cnProcKernel_int8_G9(const int8_t *__restrict__ d_cnBufAll,
     const uint lane = tid % 96;
     // 2 * 384 / 4 = 192
     const uint16_t c_lut_idxG9[9][8] = {
-        {0, 192, 384, 576, 768, 960, 1152, 1344},
+
         {192, 384, 576, 768, 960, 1152, 1344, 1536},
         {0, 384, 576, 768, 960, 1152, 1344, 1536},
         {0, 192, 576, 768, 960, 1152, 1344, 1536},
@@ -440,7 +446,8 @@ __global__ void cnProcKernel_int8_G9(const int8_t *__restrict__ d_cnBufAll,
         {0, 192, 384, 576, 960, 1152, 1344, 1536},
         {0, 192, 384, 576, 768, 1152, 1344, 1536},
         {0, 192, 384, 576, 768, 960, 1344, 1536},
-        {0, 192, 384, 576, 768, 960, 1152, 1536}};
+        {0, 192, 384, 576, 768, 960, 1152, 1536},
+        {0, 192, 384, 576, 768, 960, 1152, 1344}};
 
     const uint baseShift = Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -498,7 +505,7 @@ __global__ void cnProcKernel_int8_G10(const int8_t *__restrict__ d_cnBufAll,
     const uint lane = tid % 96;
     // 1 * 384 / 4 = 96
     const uint16_t c_lut_idxG10[10][9] = {
-        {0, 96, 192, 288, 384, 480, 576, 672, 768},
+
         {96, 192, 288, 384, 480, 576, 672, 768, 864},
         {0, 192, 288, 384, 480, 576, 672, 768, 864},
         {0, 96, 288, 384, 480, 576, 672, 768, 864},
@@ -507,7 +514,8 @@ __global__ void cnProcKernel_int8_G10(const int8_t *__restrict__ d_cnBufAll,
         {0, 96, 192, 288, 384, 576, 672, 768, 864},
         {0, 96, 192, 288, 384, 480, 672, 768, 864},
         {0, 96, 192, 288, 384, 480, 576, 768, 864},
-        {0, 96, 192, 288, 384, 480, 576, 672, 864}};
+        {0, 96, 192, 288, 384, 480, 576, 672, 864},
+        {0, 96, 192, 288, 384, 480, 576, 672, 768}};
 
     const uint baseShift = Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -568,27 +576,27 @@ __global__ void cnProcKernel_int8_G19(const int8_t *__restrict__ d_cnBufAll,
     const uint row = tid / 96;
     const uint lane = tid % 96;
     // 4 * 384 / 4 = 384
-const uint16_t c_lut_idxG19[19][18] = {
-  {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528},
-  {384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-  {0, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-  {0, 384, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-  {0, 384, 768, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-  {0, 384, 768, 1152, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-  {0, 384, 768, 1152, 1536, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-  {0, 384, 768, 1152, 1536, 1920, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-  {0, 384, 768, 1152, 1536, 1920, 2304, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-  {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-  {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-  {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-  {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-  {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4992, 5376, 5760, 6144, 6528, 6912},
-  {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 5376, 5760, 6144, 6528, 6912},
-  {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5760, 6144, 6528, 6912},
-  {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 6144, 6528, 6912},
-  {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6528, 6912},
-  {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6912}
-};
+    const uint16_t c_lut_idxG19[19][18] = {
+
+        {384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+        {0, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+        {0, 384, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+        {0, 384, 768, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+        {0, 384, 768, 1152, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+        {0, 384, 768, 1152, 1536, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+        {0, 384, 768, 1152, 1536, 1920, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+        {0, 384, 768, 1152, 1536, 1920, 2304, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+        {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+        {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+        {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+        {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+        {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4992, 5376, 5760, 6144, 6528, 6912},
+        {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 5376, 5760, 6144, 6528, 6912},
+        {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5760, 6144, 6528, 6912},
+        {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 6144, 6528, 6912},
+        {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6528, 6912},
+        {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6912},
+        {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528}};
 
     const uint baseShift = Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
