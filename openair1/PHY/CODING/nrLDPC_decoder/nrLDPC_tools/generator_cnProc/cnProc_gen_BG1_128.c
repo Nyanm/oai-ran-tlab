@@ -128,8 +128,8 @@ void nrLDPC_cnProc_BG1_generator_128(const char* dir, int R)
 	  // Abs and sign of 16 CNs (first BN)
 	  //                ymm0 = p_cnProcBuf[lut_idxCnProcG3[j][0] + i];
 	  // 第一个 ymm0
-/*fprintf(fd, "                ymm0 = ((simde__m128i*)cnProcBuf)[%d+i];\n", (lut_startAddrCnGroups[0]>>4)+lut_idxCnProcG3[j][0]*2);
-fprintf(fd, "                int8_t* dbg_ptr0 = (int8_t*)&ymm0;\n");
+fprintf(fd, "                ymm0 = ((simde__m128i*)cnProcBuf)[%d+i];\n", (lut_startAddrCnGroups[0]>>4)+lut_idxCnProcG3[j][0]*2);
+/*fprintf(fd, "                int8_t* dbg_ptr0 = (int8_t*)&ymm0;\n");
 fprintf(fd, "                printf(\"G3 ymm0[0] @ index %%d: \", %d+i);\n", (lut_startAddrCnGroups[0]>>4)+lut_idxCnProcG3[j][0]*2);
 fprintf(fd, "                for (int d=0; d<16; d++) printf(\"%%d \", dbg_ptr0[d]);\n");
 fprintf(fd, "                printf(\"\\n\");\n");*/
@@ -144,10 +144,10 @@ fprintf(fd, "                min  = simde_mm_abs_epi8(ymm0);\n");
 
 // 第二个 ymm0
 fprintf(fd, "                ymm0 = ((simde__m128i*)cnProcBuf)[%d+i];\n", (lut_startAddrCnGroups[0]>>4)+lut_idxCnProcG3[j][1]*2);
-fprintf(fd, "                int8_t* dbg_ptr1 = (int8_t*)&ymm0;\n");
+/*fprintf(fd, "                int8_t* dbg_ptr1 = (int8_t*)&ymm0;\n");
 fprintf(fd, "                printf(\"G3 ymm0[1] @ index %%d: \", %d+i);\n", (lut_startAddrCnGroups[0]>>4)+lut_idxCnProcG3[j][1]*2);
 fprintf(fd, "                for (int d=0; d<16; d++) printf(\"%%d \", dbg_ptr1[d]);\n");
-fprintf(fd, "                printf(\"\\n\");\n");
+fprintf(fd, "                printf(\"\\n\");\n");*/
 
 	  //                min  = simde_mm_min_epu8(min, simde_mm_abs_epi8(ymm0));
 	  fprintf(fd,"                min  = simde_mm_min_epu8(min, simde_mm_abs_epi8(ymm0));\n");
