@@ -167,12 +167,12 @@ fprintf(fd, "                printf(\"\\n\");\n");
 	  //                p_cnProcBufResBit++;
 	  fprintf(fd,"                ((simde__m128i*)cnProcBufRes)[%d+i] = simde_mm_sign_epi8(min, sgn);\n",(lut_startAddrCnGroups[0]>>4)+(j*bitOffsetInGroup));
 	  //Here is for debug
-	  fprintf(fd, "                int8_t* debug_ptr = (int8_t*)&((simde__m128i*)cnProcBufRes)[%d+i];\n", (lut_startAddrCnGroups[0]>>4)+(j*bitOffsetInGroup));
-	  fprintf(fd, "                printf(\"cn_Proc_output[%d+i]: \");\n", (lut_startAddrCnGroups[0]>>4)+(j*bitOffsetInGroup));
-	  fprintf(fd, "                for (int d=0; d<16; d++) printf(\"%%d \", debug_ptr[d]);\n");
-	  fprintf(fd, "                printf(\"\\n\");\n");
+	  //fprintf(fd, "                int8_t* debug_ptr = (int8_t*)&((simde__m128i*)cnProcBufRes)[%d+i];\n", (lut_startAddrCnGroups[0]>>4)+(j*bitOffsetInGroup));
+	  //fprintf(fd, "                printf(\"cn_Proc_output[%d+i]: \");\n", (lut_startAddrCnGroups[0]>>4)+(j*bitOffsetInGroup));
+	  //fprintf(fd, "                for (int d=0; d<16; d++) printf(\"%%d \", debug_ptr[d]);\n");
+	  //fprintf(fd, "                printf(\"\\n\");\n");
 
-	  fprintf(fd,"            }\n");
+	  //fprintf(fd,"            }\n");
         }
     }
   // =====================================================================
