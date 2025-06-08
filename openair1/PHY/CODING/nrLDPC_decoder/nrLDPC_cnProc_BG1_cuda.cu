@@ -176,15 +176,15 @@ __global__ void cnProcKernel_int8_G4(const int8_t *__restrict__ d_cnBufAll,
 
     p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
 
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][0] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][0] );
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
 
     //-------------------------loop starts here-------------------------------
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][1] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][1] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][2] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][2] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
     //-------------------------------------------------------------------------
@@ -226,18 +226,18 @@ __global__ void cnProcKernel_int8_G5(const int8_t *__restrict__ d_cnBufAll,
     uint32_t *p_cnProcBufResBit;
     p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
 
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][0] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][0] );
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
 
     //-------------------------loop starts here-------------------------------
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][1] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][1] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][2] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][2] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][3] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][3] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
     //-------------------------------------------------------------------------
@@ -278,21 +278,21 @@ __global__ void cnProcKernel_int8_G6(const int8_t *__restrict__ d_cnBufAll,
     uint32_t ymm0, sgn, min;
     uint32_t *p_cnProcBufResBit;
     p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][0] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][0] );
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
 
     //-------------------------loop starts here-------------------------------
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][1] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][1] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][2] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][2] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][3] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][3] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][4] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][4] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
     //-------------------------------------------------------------------------
@@ -334,24 +334,24 @@ __global__ void cnProcKernel_int8_G7(const int8_t *__restrict__ d_cnBufAll,
     uint32_t ymm0, sgn, min;
     uint32_t *p_cnProcBufResBit;
     p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][0] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][0] );
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
 
     //-------------------------loop starts here-------------------------------
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][1] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][1] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][2] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][2] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][3] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][3] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][4] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][4] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][5] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][5] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
     //-------------------------------------------------------------------------
@@ -393,27 +393,27 @@ __global__ void cnProcKernel_int8_G8(const int8_t *__restrict__ d_cnBufAll,
     uint32_t ymm0, sgn, min;
     uint32_t *p_cnProcBufResBit;
     p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][0] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][0] );
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
 
     //-------------------------loop starts here-------------------------------
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][1] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][1] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][2] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][2] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][3] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][3] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][4] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][4] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][5] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][5] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][6] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][6] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
     //-------------------------------------------------------------------------
@@ -457,30 +457,30 @@ __global__ void cnProcKernel_int8_G9(const int8_t *__restrict__ d_cnBufAll,
     uint32_t ymm0, sgn, min;
     uint32_t *p_cnProcBufResBit;
     p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][0] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][0] );
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
 
     //-------------------------loop starts here-------------------------------
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][1] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][1] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][2] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][2] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][3] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][3] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][4] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][4] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][5] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][5] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][6] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][6] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][7] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][7] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
     //-------------------------------------------------------------------------
@@ -525,33 +525,33 @@ __global__ void cnProcKernel_int8_G10(const int8_t *__restrict__ d_cnBufAll,
     uint32_t ymm0, sgn, min;
     uint32_t *p_cnProcBufResBit;
     p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][0] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][0]);
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
 
     //-------------------------loop starts here-------------------------------
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][1] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][1] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][2] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][2] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][3] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][3] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][4] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][4] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][5] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][5] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][6] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][6] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][7] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][7] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][8] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][8] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
     //-------------------------------------------------------------------------
@@ -606,60 +606,60 @@ __global__ void cnProcKernel_int8_G19(const int8_t *__restrict__ d_cnBufAll,
     uint32_t ymm0, sgn, min;
     uint32_t *p_cnProcBufResBit;
     p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][0] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][0] );
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
 
     //-------------------------loop starts here-------------------------------
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][1] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][1] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][2] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][2] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][3] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][3] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][4] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][4] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][5] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][5] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][6] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][6] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][7] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][7] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][8] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][8] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][9] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][9] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][10] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][10] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][11] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][11] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][12] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][12] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][13] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][13] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][14] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][14] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][15] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][15] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][16] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][16] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][17] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][17] );
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
     //-------------------------------------------------------------------------
