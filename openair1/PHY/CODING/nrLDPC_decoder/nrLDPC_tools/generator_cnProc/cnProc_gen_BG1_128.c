@@ -39,6 +39,7 @@ void nrLDPC_cnProc_BG1_generator_128(const char* dir, int R)
 
   char fname[FILENAME_MAX+1];
   snprintf(fname, sizeof(fname), "%s/cnProc128/nrLDPC_cnProc_BG1_R%s_128.h", dir, ratestr[R]);
+  printf("%s/cnProc128/nrLDPC_cnProc_BG1_R%s_128.h\n", dir, ratestr[R]);
   FILE *fd=fopen(fname,"w");
   if (fd == NULL) {
     printf("Cannot create file %s\n", fname);
@@ -159,7 +160,7 @@ void nrLDPC_cnProc_BG1_generator_128(const char* dir, int R)
 	  fprintf(fd,"                ((simde__m128i*)cnProcBufRes)[%d+i] = simde_mm_sign_epi8(min, sgn);\n",(lut_startAddrCnGroups[0]>>4)+(j*bitOffsetInGroup));
 	  //Here is for debug
 	  fprintf(fd, "                int8_t* debug_ptr = (int8_t*)&((simde__m128i*)cnProcBuf)[%d+i];\n", (lut_startAddrCnGroups[0]>>4)+(j*bitOffsetInGroup));
-	  fprintf(fd, "                printf(\"cn_Proc_input[%d+i]: \");\n", (lut_startAddrCnGroups[0]>>4)+(j*bitOffsetInGroup));
+	  fprintf(fd, "                printf(\"cn_Proc_output[%d+i]: \");\n", (lut_startAddrCnGroups[0]>>4)+(j*bitOffsetInGroup));
 	  fprintf(fd, "                for (int d=0; d<16; d++) printf(\"%%d \", debug_ptr[d]);\n");
 	  fprintf(fd, "                printf(\"\\n\");\n");
 
