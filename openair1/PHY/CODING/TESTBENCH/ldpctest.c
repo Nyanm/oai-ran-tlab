@@ -275,7 +275,7 @@ one_measurement_t test_ldpc(short max_iterations,
   for (int j = 0; j < MAX_NUM_DLSCH_SEGMENTS; j++) {
     int i = 0;
     for (i = 0; i < ((Kprime + 7) & ~7) / 8; i++)
-      test_input[j][i] = (uint8_t)rand(1); //for debug, fix the random seed
+      test_input[j][i] = (uint8_t)rand(); 
     // Mask the last byte in order to keep filler bits to 0
     if (Kprime % 8 != 0) {
       uint8_t last_byte_mask = (1 << (Kprime % 8)) - 1;
