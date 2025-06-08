@@ -122,7 +122,7 @@ if(threadIdx.x == 1){
 if(threadIdx.x == 1){
    printf("thread%d:  min1 = %x  \n", tid, min);                               }
 uint32_t result = __vsign4(&min, &sgn);
-    *p_cnProcBufResBit = result;
+    *p_cnProcBufResBit = 0x13333334;//result;
 if(threadIdx.x == 1){
 printf("\\thread%d:  output = %x  \\", tid, *p_cnProcBufResBit);
 }
@@ -176,7 +176,7 @@ __global__ void cnProcKernel_int8_G4(const int8_t *__restrict__ d_cnBufAll,
 
     min = __vminu4(min, maxLLR);
     uint32_t result = __vsign4(&min, &sgn);
-    *p_cnProcBufResBit = result;
+    *p_cnProcBufResBit = 4;//result;
 }
 
 __global__ void cnProcKernel_int8_G5(const int8_t *__restrict__ d_cnBufAll,
@@ -228,7 +228,7 @@ const uint16_t c_lut_idxG5[5][4] = {
     //-------------------------------------------------------------------------
     min = __vminu4(min, maxLLR);
     uint32_t result = __vsign4(&min, &sgn);
-    *p_cnProcBufResBit = result;
+    *p_cnProcBufResBit = 5;//result;
 }
 
 __global__ void cnProcKernel_int8_G6(const int8_t *__restrict__ d_cnBufAll,
@@ -283,7 +283,7 @@ __global__ void cnProcKernel_int8_G6(const int8_t *__restrict__ d_cnBufAll,
     //-------------------------------------------------------------------------
     min = __vminu4(min, maxLLR);
     uint32_t result = __vsign4(&min, &sgn);
-    *p_cnProcBufResBit = result;
+    *p_cnProcBufResBit = 6;//result;
 }
 
 __global__ void cnProcKernel_int8_G7(const int8_t *__restrict__ d_cnBufAll,
@@ -342,7 +342,7 @@ __global__ void cnProcKernel_int8_G7(const int8_t *__restrict__ d_cnBufAll,
     //-------------------------------------------------------------------------
     min = __vminu4(min, maxLLR);
     uint32_t result = __vsign4(&min, &sgn);
-    *p_cnProcBufResBit = result;
+    *p_cnProcBufResBit = 7;//result;
 }
 
 __global__ void cnProcKernel_int8_G8(const int8_t *__restrict__ d_cnBufAll,
@@ -405,7 +405,7 @@ __global__ void cnProcKernel_int8_G8(const int8_t *__restrict__ d_cnBufAll,
     //-------------------------------------------------------------------------
     min = __vminu4(min, maxLLR);
     uint32_t result = __vsign4(&min, &sgn);
-    *p_cnProcBufResBit = result;
+    *p_cnProcBufResBit = 8;//result;
 }
 
 __global__ void cnProcKernel_int8_G9(const int8_t *__restrict__ d_cnBufAll,
@@ -472,7 +472,7 @@ __global__ void cnProcKernel_int8_G9(const int8_t *__restrict__ d_cnBufAll,
     //-------------------------------------------------------------------------
     min = __vminu4(min, maxLLR);
     uint32_t result = __vsign4(&min, &sgn);
-    *p_cnProcBufResBit = result;
+    *p_cnProcBufResBit = 9;//result;
 }
 
 __global__ void cnProcKernel_int8_G10(const int8_t *__restrict__ d_cnBufAll,
@@ -543,7 +543,7 @@ __global__ void cnProcKernel_int8_G10(const int8_t *__restrict__ d_cnBufAll,
     //-------------------------------------------------------------------------
     min = __vminu4(min, maxLLR);
     uint32_t result = __vsign4(&min, &sgn);
-    *p_cnProcBufResBit = result;
+    *p_cnProcBufResBit = 10;//result;
 }
 
 __global__ void cnProcKernel_int8_G19(const int8_t *__restrict__ d_cnBufAll,
@@ -651,7 +651,7 @@ const uint16_t c_lut_idxG19[19][18] = {
     //-------------------------------------------------------------------------
     min = __vminu4(min, maxLLR);
     uint32_t result = __vsign4(&min, &sgn);
-    *p_cnProcBufResBit = result;
+    *p_cnProcBufResBit = 19;//result;
 }
 
 void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
