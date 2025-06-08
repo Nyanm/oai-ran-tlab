@@ -101,7 +101,7 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
     // if(tid ==1){
     // printf("\n**************We are using cuda in decoder now*******************\n");}
 
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][0] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][0]);
     printf("\n thread%d:  ymm0 = %x  ", tid, ymm0);
     if (threadIdx.x == 1)
     {
@@ -114,7 +114,7 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
         // printf("thread%d:  sgn = %x  \n", tid, sgn);
     }
     // loop starts here
-    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][1] * 4);
+    ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][1]);
     printf("ymm1 = %x  \n", ymm0);
     if (threadIdx.x == 1)
     {
