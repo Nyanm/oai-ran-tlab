@@ -42,7 +42,7 @@ inline cudaError_t ErrorCheck(cudaError_t error_code, const char *filename, int 
 
 __device__ __forceinline__ uint32_t __vxor4(const uint32_t *a, uint32_t *b)
 {
-    return (*a) ^ (*b) | 0x01010101;
+    return (*a) ^ (*b) ;//| 0x01010101;
 }
 
 __device__ __forceinline__ uint32_t __vsign4(const uint32_t *a, uint32_t *b)
