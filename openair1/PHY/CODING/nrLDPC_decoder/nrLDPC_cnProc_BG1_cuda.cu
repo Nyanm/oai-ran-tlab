@@ -389,7 +389,7 @@ __global__ void cnProcKernel_int8_G9(const int8_t *__restrict__ d_cnBufAll,
 
         if(tid == 0 && blockIdx.x == 0){
             printf("BG7 CN: p_cnProcBuf first all elements: ");
-            for (int idx = 0; idx < 384; idx++)
+            for (int idx = 0; idx < 768; idx++)
             {
                 printf("%x ", *(&p_cnProcBuf[idx]-384));
             }
