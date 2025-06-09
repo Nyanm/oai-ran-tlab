@@ -386,7 +386,7 @@ __global__ void cnProcKernel_int8_G9(const int8_t *__restrict__ d_cnBufAll,
     int tid = threadIdx.x;
     if (tid >= NUM * Zc / 4)
         return;
-
+/*
         if(tid == 0 && blockIdx.x == 0){
             printf("BG7 CN: p_cnProcBuf first all elements: ");
             for (int idx = 0; idx < 768; idx++)
@@ -395,9 +395,9 @@ __global__ void cnProcKernel_int8_G9(const int8_t *__restrict__ d_cnBufAll,
             }
             printf("\n");
             __syncthreads();
-        }
+        }*/
     
-            const uint row = tid / 96;
+    const uint row = tid / 96;
     const uint lane = tid % 96;
     // 2 * 384 / 4 = 192
     const uint16_t c_lut_idxG9[9][8] = {
