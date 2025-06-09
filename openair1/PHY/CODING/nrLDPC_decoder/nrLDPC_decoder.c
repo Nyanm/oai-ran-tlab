@@ -621,7 +621,7 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
                 nrLDPC_cnProc_BG1_R13_AVX2(cnProcBuf, cnProcBufRes, Z);
                 #else
                 nrLDPC_cnProc_BG1_R13_128(cnProcBuf, cnProcBufRes, Z);
-                dump_cnProcBufRes_to_file(cnProcBuf, "cnProcBuf_dump_128.txt");
+                dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_128.txt");
                 #endif
                 break;
             }
