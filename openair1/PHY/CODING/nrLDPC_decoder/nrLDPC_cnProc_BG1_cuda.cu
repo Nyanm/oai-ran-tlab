@@ -453,7 +453,14 @@ __global__ void cnProcKernel_int8_G10(const int8_t *__restrict__ d_cnBufAll,
     int tid = threadIdx.x;
     if (tid >= NUM * Zc / 4)
         return;
-
+    if(tid == 0 & blockIdx.x == 0)
+    {printf("CN: p_cnProcBuf first all elements: ");
+            for (int idx = 0; idx < 384; idx++)
+            {
+                printf("%x ", p_cnProcBuf[idx]);
+            }
+            printf("\n");
+            CHECK(cudaStreamSynchronize())};
     const uint row = tid / 96;
     const uint lane = tid % 96;
     // 1 * 384 / 4 = 96
@@ -655,11 +662,11 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
                    h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
 
             // 假设你想打印p_cnProcBuf和p_cnProcBufRes指针所指向的前10个int8_t元素
-            printf("p_cnProcBuf first 10 elements: ");
-            for (int idx = 0; idx < 10; idx++)
+            /*printf("BG3: p_cnProcBuf first all elements: ");
+            for (int idx = 0; idx < 1152; idx++)
             {
-                printf("%d ", p_cnProcBuf[idx]);
-            }
+                printf("%x ", p_cnProcBuf[idx]);
+            }*/
             printf("\n");
 
             cnProcKernel_int8_G3<<<
@@ -668,13 +675,13 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
 
             CHECK(cudaGetLastError());
             cudaDeviceSynchronize();
-
+/*
             printf("p_cnProcBufRes first 10 elements: ");
             for (int idx = 0; idx < 1152; idx++)
             {
                 printf("%d ", p_cnProcBufRes[idx]);
             }
-            printf("\n");
+            printf("\n");*/
 
             break;
         case 1:
@@ -730,6 +737,12 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
                    h_lut_numCnInCnGroups_BG1_R13[i],
                    h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G10<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
+                        /*printf("BG3: p_cnProcBuf first all elements: ");
+            for (int idx = 0; idx < 1152; idx++)
+            {
+                printf("%x ", p_cnProcBuf[idx]);
+            }
+            printf("\n");*/
             CHECK(cudaGetLastError());
             cudaDeviceSynchronize();
             break;

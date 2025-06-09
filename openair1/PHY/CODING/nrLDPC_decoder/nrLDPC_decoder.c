@@ -308,7 +308,7 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
                 #else
 		printf("\nCheckpoint 6\n ");
                 nrLDPC_cnProc_BG1_R13_128(cnProcBuf, cnProcBufRes, Z);
-	        dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_128.txt");
+	        dump_cnProcBufRes_to_file(cnProcBuf, "cnProcBuf_dump_128.txt");
 #endif
                 break;
             }
