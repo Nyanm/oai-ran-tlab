@@ -897,6 +897,8 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
           NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->cnProcPc));
           if (BG == 1)
             pcRes = nrLDPC_cnProcPc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
+            dump_cnProcBufRes_to_file(cnProcBuf, "cnProcBuf_inpccheck_dump.txt");
+            dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_inpcCheck_dump.txt");
           else
             pcRes = nrLDPC_cnProcPc_BG2(p_lut, cnProcBuf, cnProcBufRes, Z);
           NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->cnProcPc));
