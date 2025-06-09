@@ -922,7 +922,6 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
         }
       // Increase iteration counter
       numIter++;
-      break;//for debug
     }
     if (!p_decParams->check_crc) {
       int8_t llrOut[NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
