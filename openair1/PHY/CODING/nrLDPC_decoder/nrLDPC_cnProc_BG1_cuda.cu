@@ -151,7 +151,9 @@ __global__ void cnProcKernel_int8_G4(const int8_t *__restrict__ d_cnBufAll,
     const uint8_t NUM = 4;                                                       // Gn = 3
     const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll + blockIdx.x * Zc;    // input pointer each block tackle with
     const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll + blockIdx.x * Zc; // output pointer each block tackle with
-
+    if(tid == 1){
+        printf("\nThis is block %d in G4", blockIdx.x);
+    }
     int tid = threadIdx.x;
     if (tid >= NUM * Zc / 4)
         return;
@@ -166,7 +168,7 @@ __global__ void cnProcKernel_int8_G4(const int8_t *__restrict__ d_cnBufAll,
         {0, 960, 1440},
         {0, 480, 960}};
 
-    const uint baseShift = Zc * row;            // offset pointed at different BN
+    const uint baseShift = 5* Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
     const uint srcByte = tid * 4;
     const uint32_t p_ones = 0x01010101;
@@ -217,7 +219,7 @@ __global__ void cnProcKernel_int8_G5(const int8_t *__restrict__ d_cnBufAll,
         {0, 1728, 3456, 6912},
         {0, 1728, 3456, 5184}};
 
-    const uint baseShift = Zc * row;            // offset pointed at different BN
+    const uint baseShift = 18 * Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
     const uint srcByte = tid * 4;
     const uint32_t p_ones = 0x01010101;
@@ -270,7 +272,7 @@ __global__ void cnProcKernel_int8_G6(const int8_t *__restrict__ d_cnBufAll,
         {0, 768, 1536, 2304, 3840},
         {0, 768, 1536, 2304, 3072}};
 
-    const uint baseShift = Zc * row;            // offset pointed at different BN
+    const uint baseShift = 8 * Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
     const uint srcByte = tid * 4;
     const uint32_t p_ones = 0x01010101;
@@ -326,7 +328,7 @@ __global__ void cnProcKernel_int8_G7(const int8_t *__restrict__ d_cnBufAll,
         {0, 480, 960, 1440, 1920, 2880},
         {0, 480, 960, 1440, 1920, 2400}};
 
-    const uint baseShift = Zc * row;            // offset pointed at different BN
+    const uint baseShift =5 * Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
     const uint srcByte = tid * 4;
     const uint32_t p_ones = 0x01010101;
@@ -385,7 +387,7 @@ __global__ void cnProcKernel_int8_G8(const int8_t *__restrict__ d_cnBufAll,
         {0, 192, 384, 576, 768, 1152, 1344},
         {0, 192, 384, 576, 768, 960, 1344},
         {0, 192, 384, 576, 768, 960, 1152}};
-    const uint baseShift = Zc * row;            // offset pointed at different BN
+    const uint baseShift = 2 * Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
     const uint srcByte = tid * 4;
     const uint32_t p_ones = 0x01010101;
@@ -449,7 +451,7 @@ __global__ void cnProcKernel_int8_G9(const int8_t *__restrict__ d_cnBufAll,
         {0, 192, 384, 576, 768, 960, 1152, 1536},
         {0, 192, 384, 576, 768, 960, 1152, 1344}};
 
-    const uint baseShift = Zc * row;            // offset pointed at different BN
+    const uint baseShift = 2 * Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
     const uint srcByte = tid * 4;
     const uint32_t p_ones = 0x01010101;
@@ -517,7 +519,7 @@ __global__ void cnProcKernel_int8_G10(const int8_t *__restrict__ d_cnBufAll,
         {0, 96, 192, 288, 384, 480, 576, 672, 864},
         {0, 96, 192, 288, 384, 480, 576, 672, 768}};
 
-    const uint baseShift = Zc * row;            // offset pointed at different BN
+    const uint baseShift = 1 * Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
     const uint srcByte = tid * 4;
     const uint32_t p_ones = 0x01010101;
@@ -573,7 +575,7 @@ __global__ void cnProcKernel_int8_G19(const int8_t *__restrict__ d_cnBufAll,
     if (tid >= NUM * Zc / 4)
         return;
 
-    const uint row = tid / 96;
+    const uint row = 4 * tid / 96;
     const uint lane = tid % 96;
     // 4 * 384 / 4 = 384
     const uint16_t c_lut_idxG19[19][18] = {
