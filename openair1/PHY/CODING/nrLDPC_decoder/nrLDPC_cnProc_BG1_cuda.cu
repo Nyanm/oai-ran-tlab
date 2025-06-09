@@ -570,7 +570,7 @@ __global__ void cnProcKernel_int8_G19(const int8_t *__restrict__ d_cnBufAll,
     const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll + (int)(blockIdx.x / 2) * Zc;    // input pointer each block tackle with
     const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll + (int)(blockIdx.x / 2) * Zc; // output pointer each block tackle with
 
-    int tid = threadIdx.x + 48 * blockIdx.x % 2; // same reason, now the following no need to change
+    int tid = threadIdx.x + 912 * blockIdx.x % 2; // same reason, now the following no need to change
     if (tid >= NUM * Zc / 4)
         return;
 
