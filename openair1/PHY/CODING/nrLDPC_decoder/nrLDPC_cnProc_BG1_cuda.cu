@@ -460,7 +460,7 @@ __global__ void cnProcKernel_int8_G10(const int8_t *__restrict__ d_cnBufAll,
                 printf("%x ", p_cnProcBuf[idx]);
             }
             printf("\n");
-            CHECK(cudaStreamSynchronize())};
+            CHECK(cudaStreamSynchronize());}
     const uint row = tid / 96;
     const uint lane = tid % 96;
     // 1 * 384 / 4 = 96
