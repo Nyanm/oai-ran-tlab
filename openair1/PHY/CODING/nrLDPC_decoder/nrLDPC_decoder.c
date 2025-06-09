@@ -609,6 +609,7 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
   dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_cuda.txt");
   dump_cnProcBufRes_to_file(cnProcBuf, "cnProcBuf_last_dump.txt");
   
+  
 #else
 
 
@@ -625,6 +626,7 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
                 #else
                 nrLDPC_cnProc_BG1_R13_128(cnProcBuf, cnProcBufRes, Z);
                 dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_128.txt");
+                
                 #endif
                 break;
             }
@@ -920,6 +922,7 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
         }
       // Increase iteration counter
       numIter++;
+      break;//for debug
     }
     if (!p_decParams->check_crc) {
       int8_t llrOut[NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
