@@ -163,8 +163,8 @@ __global__ void cnProcKernel_int8_G4(const int8_t *__restrict__ d_cnBufAll,
     const uint16_t c_lut_idxG4[4][3] = {
 
         {480, 960, 1440},
-        {0, 480, 1440},
         {0, 960, 1440},
+        {0, 480, 1440},
         {0, 480, 960}};
 
     const uint baseShift = 5* Zc * row;            // offset pointed at different BN
