@@ -574,7 +574,7 @@ __global__ void cnProcKernel_int8_G19(const int8_t *__restrict__ d_cnBufAll,
     if (tid >= NUM * Zc / 4)
         return;
 
-    const uint row = 4 * tid / 96;
+    const uint row =  tid / 96;
     const uint lane = tid % 96;
     // 4 * 384 / 4 = 384
     const uint16_t c_lut_idxG19[19][18] = {
@@ -599,7 +599,7 @@ __global__ void cnProcKernel_int8_G19(const int8_t *__restrict__ d_cnBufAll,
         {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6912},
         {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528}};
 
-    const uint baseShift = Zc * row;            // offset pointed at different BN
+    const uint baseShift = 4* Zc * row;            // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
     const uint srcByte = tid * 4;
     const uint32_t p_ones = 0x01010101;
