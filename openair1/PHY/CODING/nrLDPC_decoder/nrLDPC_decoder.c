@@ -607,10 +607,10 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
 #endif
         if (BG==1) {
 #ifdef USE_CUDA
-  //dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_last_dump.txt");
+  dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_last_dump.txt");
 	nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, Z);
   //dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_cuda.txt");
-  //dump_cnProcBufRes_to_file(cnProcBuf, "cnProcBuf_last_dump.txt");
+  dump_cnProcBufRes_to_file(cnProcBuf, "cnProcBuf_last_dump.txt");
   
   
 #else
