@@ -691,7 +691,7 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
                 h_lut_numCnInCnGroups_BG1_R13[i],
                 h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
 
-            //CHECK(cudaGetLastError());
+            CHECK(cudaGetLastError());
             //cudaDeviceSynchronize();
 /*
             printf("p_cnProcBufRes first 10 elements: ");
@@ -707,7 +707,7 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
             //       h_lut_numCnInCnGroups_BG1_R13[i],
 //h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G4<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            //CHECK(cudaGetLastError());
+            CHECK(cudaGetLastError());
             //cudaDeviceSynchronize();
             break;
         case 2:
@@ -715,7 +715,7 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
             //       h_lut_numCnInCnGroups_BG1_R13[i],
             //       h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G5<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            //CHECK(cudaGetLastError());
+            CHECK(cudaGetLastError());
             //cudaDeviceSynchronize();
             break;
         case 3:
@@ -723,7 +723,7 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
             //      h_lut_numCnInCnGroups_BG1_R13[i],
              //      h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G6<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            //(cudaGetLastError());
+            CHECK(cudaGetLastError());
             //cudaDeviceSynchronize();
             break;
         case 4:
@@ -731,7 +731,7 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
             //       h_lut_numCnInCnGroups_BG1_R13[i],
             //       h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G7<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            //CHECK(cudaGetLastError());
+            CHECK(cudaGetLastError());
             //cudaDeviceSynchronize();
             break;
         case 5:
@@ -739,7 +739,7 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
             //       h_lut_numCnInCnGroups_BG1_R13[i],
             //       h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G8<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            //CHECK(cudaGetLastError());
+            CHECK(cudaGetLastError());
             //cudaDeviceSynchronize();
             break;
         case 6:
@@ -747,7 +747,7 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
             //       h_lut_numCnInCnGroups_BG1_R13[i],
             //       h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G9<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            //CHECK(cudaGetLastError());
+            CHECK(cudaGetLastError());
             //cudaDeviceSynchronize();
             break;
         case 7:
@@ -761,7 +761,7 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
                 printf("%x ", p_cnProcBuf[idx]);
             }
             printf("\n");*/
-            //CHECK(cudaGetLastError());
+            CHECK(cudaGetLastError());
             //cudaDeviceSynchronize();
             break;
         case 8:
@@ -770,7 +770,7 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
             //       h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             // Group 19: split into 2x blocks, half threads
             cnProcKernel_int8_G19<<<h_lut_numCnInCnGroups_BG1_R13[i] * 2, h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i] / 2>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            //CHECK(cudaGetLastError());
+            CHECK(cudaGetLastError());
             //cudaDeviceSynchronize();
             break;
         }
@@ -850,7 +850,7 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
     int8_t *d_cnProcBufRes = nullptr;
 
     cudaError_t err;
-/*
+
     // 申请统一内存（CPU和GPU共享，方便调试，避免cudaMemcpy）
     err = cudaMallocManaged(&d_cnProcBuf, cnProcBuf_size);
     if (err != cudaSuccess)
@@ -874,10 +874,10 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
     {
         printf("cudaMallocManaged d_cnProcBufRes success, d_cnProcBufRes = %p\n", (void *)d_cnProcBufRes);
     }
-*/
+
     // 如果你有CPU端的cnProcBuf和cnProcBufRes数据，拷贝到UM内存（非必须，UM内存可以直接写）
-//    memcpy(d_cnProcBuf, cnProcBuf, cnProcBuf_size);
-//    memset(d_cnProcBufRes, 0, cnProcBufRes_size);
+    memcpy(d_cnProcBuf, cnProcBuf, cnProcBuf_size);
+    memset(d_cnProcBufRes, 0, cnProcBufRes_size);
 
     // 启动你的核函数（调用你给的内核启动代码）
     // 这里的调用是示例：
@@ -891,9 +891,9 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
     cudaDeviceSynchronize();
 
     // 如果需要把结果拷贝回CPU端的cnProcBufRes
-    //memcpy(cnProcBufRes, d_cnProcBufRes, cnProcBufRes_size);
+    memcpy(cnProcBufRes, d_cnProcBufRes, cnProcBufRes_size);
 
     // 释放UM内存
-    //cudaFree(d_cnProcBuf);
-    //cudaFree(d_cnProcBufRes);
+    cudaFree(d_cnProcBuf);
+    cudaFree(d_cnProcBufRes);
 }
