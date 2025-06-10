@@ -96,7 +96,7 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
     sgn = __vxor4(&sgn, &ymm0);
     min = __vminu4(min, maxLLR);
     uint32_t result = __vsign4(&min, &sgn);
-    *p_cnProcBufResBit = result+10;
+    *p_cnProcBufResBit = result;
 
 }
 
