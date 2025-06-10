@@ -652,8 +652,8 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
     // No cuda stream using
     for (int i = 0; i < numGroups; ++i)
     {
-        p_cnProcBuf = (int8_t *)&cnProcBuf[lut_startAddrCnGroups[i]];
-        p_cnProcBufRes = (int8_t *)&cnProcBufRes[lut_startAddrCnGroups[i]];
+        p_cnProcBuf = (int8_t *)(cnProcBuf + lut_startAddrCnGroups[i]);
+        p_cnProcBufRes = (int8_t *)(cnProcBufRes + lut_startAddrCnGroups[i]);
         printf("\nlut_startAddrCnGroups[%d]: %d\n", i, (int)lut_startAddrCnGroups[i]);
 
         printf("In i = %d, p_cnProcBuf = %p, p_cnProcBufRes = %p", i, (void *)p_cnProcBuf, (void *)p_cnProcBufRes);
