@@ -680,7 +680,7 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
             {
                 printf("%x ", p_cnProcBuf[idx]);
             }*/
-            printf("\n");
+            //printf("\n");
 
             //cudaPointerAttributes attr;
 //cudaPointerGetAttributes(&attr, p_cnProcBuf);
@@ -831,7 +831,7 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
 
     */
 
-    CHECK(cudaGetLastError());
+    //CHECK(cudaGetLastError());
     CHECK(cudaDeviceSynchronize());
 }
 
