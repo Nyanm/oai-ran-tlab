@@ -134,7 +134,7 @@ __global__ void cnProcKernel_int8_G4(const int8_t *__restrict__ d_cnBufAll,
 
     ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][0] );
         if(row == 0 && blockIdx.x == 0){
-        printf("In thread %d, in address: %p, ymm0 = %02x\n", tid, lane * 4 + c_lut_idxG4[row][1], ymm0);
+        printf("In thread %d, in address: %d, ymm0 = %02x\n", tid, lane * 4 + c_lut_idxG4[row][1], ymm0);
     }
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
