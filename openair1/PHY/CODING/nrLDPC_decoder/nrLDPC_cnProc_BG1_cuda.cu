@@ -673,6 +673,11 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
             }*/
             printf("\n");
 
+            cudaPointerAttributes attr;
+cudaPointerGetAttributes(&attr, p_cnProcBuf);
+printf("p_cnProcBuf is on %s memory\n", attr.type == cudaMemoryTypeDevice ? "device" : "host");
+
+
             cnProcKernel_int8_G3<<<
                 h_lut_numCnInCnGroups_BG1_R13[i],
                 h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
