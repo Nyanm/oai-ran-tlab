@@ -285,7 +285,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 //printf("\ncheck point 1\n");
 #ifdef USE_CUDA
 //      printf("\nHere we use CUDA\n");
-      dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBuf_dump_cuda.txt");
+      dump_cnProcBufRes_to_file(cnProcBuf, "First_cnProcBuf_dump_cuda.txt");
       nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, Z);
       dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBufRes_dump_cuda.txt");
       
