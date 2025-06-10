@@ -852,7 +852,7 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
     cudaError_t err;
 
     // 申请统一内存（CPU和GPU共享，方便调试，避免cudaMemcpy）
-    err = cudaMallocManaged(&d_cnProcBuf, cnProcBuf_size);
+    /* err = cudaMallocManaged(&d_cnProcBuf, cnProcBuf_size);
     if (err != cudaSuccess)
     {
         printf("cudaMallocManaged d_cnProcBuf failed: %s\n", cudaGetErrorString(err));
@@ -878,22 +878,22 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
     // 如果你有CPU端的cnProcBuf和cnProcBufRes数据，拷贝到UM内存（非必须，UM内存可以直接写）
     memcpy(d_cnProcBuf, cnProcBuf, cnProcBuf_size);
     memset(d_cnProcBufRes, 0, cnProcBufRes_size);
-
+*/
     // 启动你的核函数（调用你给的内核启动代码）
     // 这里的调用是示例：
               //  cudaPointerAttributes attr;
 //cudaPointerGetAttributes(&attr, d_cnProcBuf);
 //printf("d_cnProcBuf is on %s memory\n", attr.type == cudaMemoryTypeDevice ? "device" : "host");
 
-    nrLDPC_cnProc_BG1_cuda_core(p_lut, d_cnProcBuf, d_cnProcBufRes, (int)Z);
+    nrLDPC_cnProc_BG1_cuda_core(p_lut, cnProcBuf, cnProcBufRes, (int)Z);
 
     // 需要同步保证kernel执行完成
     cudaDeviceSynchronize();
 
     // 如果需要把结果拷贝回CPU端的cnProcBufRes
-    memcpy(cnProcBufRes, d_cnProcBufRes, cnProcBufRes_size);
+    //memcpy(cnProcBufRes, d_cnProcBufRes, cnProcBufRes_size);
 
     // 释放UM内存
-    cudaFree(d_cnProcBuf);
-    cudaFree(d_cnProcBufRes);
+    //cudaFree(d_cnProcBuf);
+    //cudaFree(d_cnProcBufRes);
 }
