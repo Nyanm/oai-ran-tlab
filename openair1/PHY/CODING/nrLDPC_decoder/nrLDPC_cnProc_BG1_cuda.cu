@@ -860,7 +860,7 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
     }
     else
     {
-        printf("cudaMallocManaged d_cnProcBuf success, d_cnProcBuf = %p\n", (void *)d_cnProcBuf);
+        //printf("cudaMallocManaged d_cnProcBuf success, d_cnProcBuf = %p\n", (void *)d_cnProcBuf);
     }
 
     err = cudaMallocManaged(&d_cnProcBufRes, cnProcBufRes_size);
@@ -872,7 +872,7 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
     }
     else
     {
-        printf("cudaMallocManaged d_cnProcBufRes success, d_cnProcBufRes = %p\n", (void *)d_cnProcBufRes);
+        //printf("cudaMallocManaged d_cnProcBufRes success, d_cnProcBufRes = %p\n", (void *)d_cnProcBufRes);
     }
 
     // 如果你有CPU端的cnProcBuf和cnProcBufRes数据，拷贝到UM内存（非必须，UM内存可以直接写）
