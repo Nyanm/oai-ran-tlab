@@ -89,18 +89,13 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
  
     // loop starts here
     ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][1]);
-    if(row == 0){
-        printf("In thread %d, in address: %p, ymm0 = %02x\n", tid, p_cnProcBuf + lane * 4 + c_lut_idxG3[row][1], ymm0);
-    }
 
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
     min = __vminu4(min, maxLLR);
     uint32_t result = __vsign4(&min, &sgn);
     *p_cnProcBufResBit = result;
-    if(row == 0){
-        printf("In thread %d, result = %02x\n", tid, result);
-    }
+
 }
 
 __global__ void cnProcKernel_int8_G4(const int8_t *__restrict__ d_cnBufAll,
@@ -138,6 +133,9 @@ __global__ void cnProcKernel_int8_G4(const int8_t *__restrict__ d_cnBufAll,
     p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
 
     ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][0] );
+        if(row == 0){
+        printf("In thread %d, in address: %p, ymm0 = %02x\n", tid, p_cnProcBuf + lane * 4 + c_lut_idxG3[row][1], ymm0);
+    }
     sgn = __vxor4(&p_ones, &ymm0);
     min = __vabs4(ymm0);
 
@@ -153,6 +151,9 @@ __global__ void cnProcKernel_int8_G4(const int8_t *__restrict__ d_cnBufAll,
     min = __vminu4(min, maxLLR);
     uint32_t result = __vsign4(&min, &sgn);
     *p_cnProcBufResBit = result;
+        if(row == 0){
+        printf("In thread %d, result = %02x\n", tid, result);
+    }
 }
 
 __global__ void cnProcKernel_int8_G5(const int8_t *__restrict__ d_cnBufAll,
