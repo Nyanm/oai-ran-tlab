@@ -97,8 +97,8 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
     min = __vminu4(min, maxLLR);
     uint32_t result = __vsign4(&min, &sgn);
     *p_cnProcBufResBit = result;
-        if(row == 0){
-        printf("In thread %d, ymm0 = %02x\n", tid, result);
+    if(row == 0){
+        printf("In thread %d, result = %02x\n", tid, result);
     }
 }
 
