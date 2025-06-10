@@ -872,6 +872,9 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
 
     // 启动你的核函数（调用你给的内核启动代码）
     // 这里的调用是示例：
+                cudaPointerAttributes attr;
+cudaPointerGetAttributes(&attr, d_cnProcBuf);
+printf("d_cnProcBuf is on %s memory\n", attr.type == cudaMemoryTypeDevice ? "device" : "host");
 
     nrLDPC_cnProc_BG1_cuda_core(p_lut, d_cnProcBuf, d_cnProcBufRes, (int)Z);
 
