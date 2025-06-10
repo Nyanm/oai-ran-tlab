@@ -710,7 +710,7 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
 #ifdef NR_LDPC_PROFILER_DETAIL
         start_meas(&p_profiler->cn2bnProcBuf);
 #endif
-        if (BG == 1) {nrLDPC_cn2bnProcBuf_BG1(p_lut, cnProcBufRes, bnProcBuf, Z);
+        if (BG == 1) nrLDPC_cn2bnProcBuf_BG1(p_lut, cnProcBufRes, bnProcBuf, Z);
                      // dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_inBn.txt");
                     //dump_cnProcBufRes_to_file(bnProcBuf, "have_a_look_Bn_buffer.txt");}// for debug
         else         nrLDPC_cn2bnProcBuf_BG2(p_lut, cnProcBufRes, bnProcBuf, Z);
