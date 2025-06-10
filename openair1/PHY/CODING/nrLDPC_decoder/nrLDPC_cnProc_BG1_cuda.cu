@@ -61,6 +61,7 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
     const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll + blockIdx.x * Zc;    // input pointer each block tackle with
     const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll + blockIdx.x * Zc; // output pointer each block tackle with
     int tid = threadIdx.x;
+
     if (tid >= NUM * Zc / 4) // NUM * Zc / 4 is the number of threads assigned to each block
         return;
     const uint row = tid / 96;  // row = 0,1,2  -> 3 BNs
@@ -89,7 +90,7 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
     // loop starts here
     ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][1]);
     if(row == 0){
-        printf("In thread %d, ymm0 = %02x\n", tid, ymm0);
+        printf("In thread %d, in address: %p, ymm0 = %02x\n", tid, p_cnProcBuf + lane * 4 + c_lut_idxG3[row][1], ymm0);
     }
 
     min = __vminu4(min, __vabs4(ymm0));
