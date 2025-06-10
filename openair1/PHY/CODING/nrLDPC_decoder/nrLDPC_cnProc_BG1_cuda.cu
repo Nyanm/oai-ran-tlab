@@ -703,12 +703,12 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
 
             break;
         case 1:
-            //printf("launching kernel[%d]: grid=%d, block=%d\n", i,
-            //       h_lut_numCnInCnGroups_BG1_R13[i],
-//h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
+            printf("launching kernel[%d]: grid=%d, block=%d\n", i,
+                   h_lut_numCnInCnGroups_BG1_R13[i],
+h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G4<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            //CHECK(cudaGetLastError());
-            //cudaDeviceSynchronize();
+            CHECK(cudaGetLastError());
+            cudaDeviceSynchronize();
             break;
         case 2:
             //printf("launching kernel[%d]: grid=%d, block=%d\n", i,
@@ -891,9 +891,9 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
     cudaDeviceSynchronize();
 
     // 如果需要把结果拷贝回CPU端的cnProcBufRes
-    memcpy(cnProcBufRes, d_cnProcBufRes, cnProcBufRes_size);
+    //memcpy(cnProcBufRes, d_cnProcBufRes, cnProcBufRes_size);
 
     // 释放UM内存
-    cudaFree(d_cnProcBuf);
-    cudaFree(d_cnProcBufRes);
+    //cudaFree(d_cnProcBuf);
+    //cudaFree(d_cnProcBufRes);
 }
