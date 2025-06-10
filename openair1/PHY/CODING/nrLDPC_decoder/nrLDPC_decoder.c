@@ -283,6 +283,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->cnProc));
     if (BG==1) {
 //printf("\ncheck point 1\n");
+
 #ifdef USE_CUDA
 //      printf("\nHere we use CUDA\n");
       dump_cnProcBufRes_to_file(cnProcBuf, "First_cnProcBuf_dump_cuda.txt");
