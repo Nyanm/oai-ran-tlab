@@ -285,6 +285,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 //printf("\ncheck point 1\n");
 #ifdef USE_CUDA
 //      printf("\nHere we use CUDA\n");
+      dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBuf_dump_cuda.txt");
       nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, Z);
       dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBufRes_dump_cuda.txt");
       
@@ -307,6 +308,7 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
                 nrLDPC_cnProc_BG1_R13_AVX2(cnProcBuf, cnProcBufRes, Z);
                 #else
 		printf("\nCheckpoint 6\n ");
+    dump_cnProcBufRes_to_file(cnProcBuf, "First_cnProcBuf_dump_128.txt");
                 nrLDPC_cnProc_BG1_R13_128(cnProcBuf, cnProcBufRes, Z);
 	        dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBufRes_dump_128.txt");
 #endif
@@ -604,10 +606,10 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
 #endif
         if (BG==1) {
 #ifdef USE_CUDA
-  dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_last_dump.txt");
+  //dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_last_dump.txt");
 	nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, Z);
-  dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_cuda.txt");
-  dump_cnProcBufRes_to_file(cnProcBuf, "cnProcBuf_last_dump.txt");
+  //dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_cuda.txt");
+  //dump_cnProcBufRes_to_file(cnProcBuf, "cnProcBuf_last_dump.txt");
   
   
 #else
@@ -625,7 +627,7 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
                 nrLDPC_cnProc_BG1_R13_AVX2(cnProcBuf, cnProcBufRes, Z);
                 #else
                 nrLDPC_cnProc_BG1_R13_128(cnProcBuf, cnProcBufRes, Z);
-                dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_128.txt");
+                //dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_128.txt");
                 
                 #endif
                 break;
@@ -709,8 +711,8 @@ nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
         start_meas(&p_profiler->cn2bnProcBuf);
 #endif
         if (BG == 1) {nrLDPC_cn2bnProcBuf_BG1(p_lut, cnProcBufRes, bnProcBuf, Z);
-                      dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_inBn.txt");
-                    dump_cnProcBufRes_to_file(bnProcBuf, "have_a_look_Bn_buffer.txt");}// for debug
+                     // dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_inBn.txt");
+                    //dump_cnProcBufRes_to_file(bnProcBuf, "have_a_look_Bn_buffer.txt");}// for debug
         else         nrLDPC_cn2bnProcBuf_BG2(p_lut, cnProcBufRes, bnProcBuf, Z);
 #ifdef NR_LDPC_PROFILER_DETAIL
         stop_meas(&p_profiler->cn2bnProcBuf);
