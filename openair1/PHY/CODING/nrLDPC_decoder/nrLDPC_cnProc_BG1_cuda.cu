@@ -89,9 +89,9 @@ __global__ void cnProcKernel_int8_G3(const int8_t *__restrict__ d_cnBufAll,
  
     // loop starts here
     ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][1]*4);
-    if(row == 0 && blockIdx.x == 0){
+    /*if(row == 0 && blockIdx.x == 0){
         printf("In thread %d, in address offset: %d, ymm0 = %02x\n", tid, lane * 4 + c_lut_idxG3[row][0], ymm0);
-    }
+    }*/
     min = __vminu4(min, __vabs4(ymm0));
     sgn = __vxor4(&sgn, &ymm0);
     min = __vminu4(min, maxLLR);
@@ -151,9 +151,9 @@ __global__ void cnProcKernel_int8_G4(const int8_t *__restrict__ d_cnBufAll,
     min = __vminu4(min, maxLLR);
     uint32_t result = __vsign4(&min, &sgn);
     *p_cnProcBufResBit = result;
-        if(row == 0 && blockIdx.x == 0){
-        printf("In thread %d, result = %02x\n", tid, result);
-    }
+       // if(row == 0 && blockIdx.x == 0){
+       // printf("In thread %d, result = %02x\n", tid, result);
+    //}
 }
 
 __global__ void cnProcKernel_int8_G5(const int8_t *__restrict__ d_cnBufAll,
@@ -663,16 +663,16 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
     {
         p_cnProcBuf = cnProcBuf + lut_startAddrCnGroups[i];
         p_cnProcBufRes = cnProcBufRes + lut_startAddrCnGroups[i];
-        printf("\nlut_startAddrCnGroups[%d]: %d\n", i, (int)lut_startAddrCnGroups[i]);
+        //printf("\nlut_startAddrCnGroups[%d]: %d\n", i, (int)lut_startAddrCnGroups[i]);
 
-        printf("In i = %d, p_cnProcBuf = %p, p_cnProcBufRes = %p", i, (void *)p_cnProcBuf, (void *)p_cnProcBufRes);
+        //printf("In i = %d, p_cnProcBuf = %p, p_cnProcBufRes = %p", i, (void *)p_cnProcBuf, (void *)p_cnProcBufRes);
 
         switch (i)
         {
         case 0:
-            printf("launching kernel[%d]: grid=%d, block=%d\n", i,
-                   h_lut_numCnInCnGroups_BG1_R13[i],
-                   h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
+            //printf("launching kernel[%d]: grid=%d, block=%d\n", i,
+            //       h_lut_numCnInCnGroups_BG1_R13[i],
+            //       h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
 
             // 假设你想打印p_cnProcBuf和p_cnProcBufRes指针所指向的前10个int8_t元素
             /*printf("BG3: p_cnProcBuf first all elements: ");
@@ -682,17 +682,17 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
             }*/
             printf("\n");
 
-            cudaPointerAttributes attr;
-cudaPointerGetAttributes(&attr, p_cnProcBuf);
-printf("p_cnProcBuf is on %s memory\n", attr.type == cudaMemoryTypeDevice ? "device" : "host");
+            //cudaPointerAttributes attr;
+//cudaPointerGetAttributes(&attr, p_cnProcBuf);
+//printf("p_cnProcBuf is on %s memory\n", attr.type == cudaMemoryTypeDevice ? "device" : "host");
 
 
             cnProcKernel_int8_G3<<<
                 h_lut_numCnInCnGroups_BG1_R13[i],
                 h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
 
-            CHECK(cudaGetLastError());
-            cudaDeviceSynchronize();
+            //CHECK(cudaGetLastError());
+            //cudaDeviceSynchronize();
 /*
             printf("p_cnProcBufRes first 10 elements: ");
             for (int idx = 0; idx < 1152; idx++)
@@ -703,57 +703,57 @@ printf("p_cnProcBuf is on %s memory\n", attr.type == cudaMemoryTypeDevice ? "dev
 
             break;
         case 1:
-            printf("launching kernel[%d]: grid=%d, block=%d\n", i,
-                   h_lut_numCnInCnGroups_BG1_R13[i],
-                   h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
+            //printf("launching kernel[%d]: grid=%d, block=%d\n", i,
+            //       h_lut_numCnInCnGroups_BG1_R13[i],
+//h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G4<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            CHECK(cudaGetLastError());
-            cudaDeviceSynchronize();
+            //CHECK(cudaGetLastError());
+            //cudaDeviceSynchronize();
             break;
         case 2:
-            printf("launching kernel[%d]: grid=%d, block=%d\n", i,
-                   h_lut_numCnInCnGroups_BG1_R13[i],
-                   h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
+            //printf("launching kernel[%d]: grid=%d, block=%d\n", i,
+            //       h_lut_numCnInCnGroups_BG1_R13[i],
+            //       h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G5<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            CHECK(cudaGetLastError());
-            cudaDeviceSynchronize();
+            //CHECK(cudaGetLastError());
+            //cudaDeviceSynchronize();
             break;
         case 3:
-            printf("launching kernel[%d]: grid=%d, block=%d\n", i,
-                   h_lut_numCnInCnGroups_BG1_R13[i],
-                   h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
+            //("launching kernel[%d]: grid=%d, block=%d\n", i,
+            //      h_lut_numCnInCnGroups_BG1_R13[i],
+             //      h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G6<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            CHECK(cudaGetLastError());
-            cudaDeviceSynchronize();
+            //(cudaGetLastError());
+            //cudaDeviceSynchronize();
             break;
         case 4:
-            printf("launching kernel[%d]: grid=%d, block=%d\n", i,
-                   h_lut_numCnInCnGroups_BG1_R13[i],
-                   h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
+            //printf("launching kernel[%d]: grid=%d, block=%d\n", i,
+            //       h_lut_numCnInCnGroups_BG1_R13[i],
+            //       h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G7<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            CHECK(cudaGetLastError());
-            cudaDeviceSynchronize();
+            //CHECK(cudaGetLastError());
+            //cudaDeviceSynchronize();
             break;
         case 5:
-            printf("launching kernel[%d]: grid=%d, block=%d\n", i,
-                   h_lut_numCnInCnGroups_BG1_R13[i],
-                   h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
+            //printf("launching kernel[%d]: grid=%d, block=%d\n", i,
+            //       h_lut_numCnInCnGroups_BG1_R13[i],
+            //       h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G8<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            CHECK(cudaGetLastError());
-            cudaDeviceSynchronize();
+            //CHECK(cudaGetLastError());
+            //cudaDeviceSynchronize();
             break;
         case 6:
-            printf("launching kernel[%d]: grid=%d, block=%d\n", i,
-                   h_lut_numCnInCnGroups_BG1_R13[i],
-                   h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
+            //printf("launching kernel[%d]: grid=%d, block=%d\n", i,
+            //       h_lut_numCnInCnGroups_BG1_R13[i],
+            //       h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G9<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            CHECK(cudaGetLastError());
-            cudaDeviceSynchronize();
+            //CHECK(cudaGetLastError());
+            //cudaDeviceSynchronize();
             break;
         case 7:
-            printf("launching kernel[%d]: grid=%d, block=%d\n", i,
-                   h_lut_numCnInCnGroups_BG1_R13[i],
-                   h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
+            //printf("launching kernel[%d]: grid=%d, block=%d\n", i,
+            //       h_lut_numCnInCnGroups_BG1_R13[i],
+            //       h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             cnProcKernel_int8_G10<<<h_lut_numCnInCnGroups_BG1_R13[i], h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]>>>(p_cnProcBuf, p_cnProcBufRes, Z);
                         /*printf("BG3: p_cnProcBuf first all elements: ");
             for (int idx = 0; idx < 1152; idx++)
@@ -761,17 +761,17 @@ printf("p_cnProcBuf is on %s memory\n", attr.type == cudaMemoryTypeDevice ? "dev
                 printf("%x ", p_cnProcBuf[idx]);
             }
             printf("\n");*/
-            CHECK(cudaGetLastError());
-            cudaDeviceSynchronize();
+            //CHECK(cudaGetLastError());
+            //cudaDeviceSynchronize();
             break;
         case 8:
-            printf("launching kernel[%d]: grid=%d, block=%d\n", i,
-                   h_lut_numCnInCnGroups_BG1_R13[i],
-                   h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
+            //printf("launching kernel[%d]: grid=%d, block=%d\n", i,
+            //       h_lut_numCnInCnGroups_BG1_R13[i],
+            //       h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i]);
             // Group 19: split into 2x blocks, half threads
             cnProcKernel_int8_G19<<<h_lut_numCnInCnGroups_BG1_R13[i] * 2, h_lut_numThreadsEachCnGroupsNeed_BG1_R13[i] / 2>>>(p_cnProcBuf, p_cnProcBufRes, Z);
-            CHECK(cudaGetLastError());
-            cudaDeviceSynchronize();
+            //CHECK(cudaGetLastError());
+            //cudaDeviceSynchronize();
             break;
         }
     }
@@ -881,9 +881,9 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
 
     // 启动你的核函数（调用你给的内核启动代码）
     // 这里的调用是示例：
-                cudaPointerAttributes attr;
-cudaPointerGetAttributes(&attr, d_cnProcBuf);
-printf("d_cnProcBuf is on %s memory\n", attr.type == cudaMemoryTypeDevice ? "device" : "host");
+              //  cudaPointerAttributes attr;
+//cudaPointerGetAttributes(&attr, d_cnProcBuf);
+//printf("d_cnProcBuf is on %s memory\n", attr.type == cudaMemoryTypeDevice ? "device" : "host");
 
     nrLDPC_cnProc_BG1_cuda_core(p_lut, d_cnProcBuf, d_cnProcBufRes, (int)Z);
 
