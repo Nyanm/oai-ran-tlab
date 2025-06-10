@@ -885,7 +885,7 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
 //cudaPointerGetAttributes(&attr, d_cnProcBuf);
 //printf("d_cnProcBuf is on %s memory\n", attr.type == cudaMemoryTypeDevice ? "device" : "host");
 
-    nrLDPC_cnProc_BG1_cuda_core(p_lut, cnProcBuf, cnProcBufRes, (int)Z);
+    nrLDPC_cnProc_BG1_cuda_core(p_lut, d_cnProcBuf, d_cnProcBufRes, (int)Z);
 
     // 需要同步保证kernel执行完成
     cudaDeviceSynchronize();
