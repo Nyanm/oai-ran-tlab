@@ -850,7 +850,7 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
     int8_t *d_cnProcBufRes = nullptr;
 
     cudaError_t err;
-
+/*
     // 申请统一内存（CPU和GPU共享，方便调试，避免cudaMemcpy）
      err = cudaMallocManaged(&d_cnProcBuf, cnProcBuf_size);
     if (err != cudaSuccess)
@@ -874,7 +874,7 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
     {
         //printf("cudaMallocManaged d_cnProcBufRes success, d_cnProcBufRes = %p\n", (void *)d_cnProcBufRes);
     }
-
+*/
     // 如果你有CPU端的cnProcBuf和cnProcBufRes数据，拷贝到UM内存（非必须，UM内存可以直接写）
    // memcpy(d_cnProcBuf, cnProcBuf, cnProcBuf_size);
    // memset(d_cnProcBufRes, 0, cnProcBufRes_size);
@@ -885,7 +885,7 @@ extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut,
 //cudaPointerGetAttributes(&attr, d_cnProcBuf);
 //printf("d_cnProcBuf is on %s memory\n", attr.type == cudaMemoryTypeDevice ? "device" : "host");
 
-    nrLDPC_cnProc_BG1_cuda_core(p_lut, d_cnProcBuf, d_cnProcBufRes, (int)Z);
+    nrLDPC_cnProc_BG1_cuda_core(p_lut, cnProcBuf, cnProcBufRes, (int)Z);
 
     // 需要同步保证kernel执行完成
     cudaDeviceSynchronize();
