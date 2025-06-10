@@ -108,9 +108,9 @@ __global__ void cnProcKernel_int8_G4(const int8_t *__restrict__ d_cnBufAll,
     const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll + blockIdx.x * Zc;    // input pointer each block tackle with
     const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll + blockIdx.x * Zc; // output pointer each block tackle with
     int tid = threadIdx.x;
-        if(tid == 1){
-        printf("\nThis is block %d in G4", blockIdx.x);
-    }
+        //if(tid == 1){
+        //printf("\nThis is block %d in G4", blockIdx.x);
+    //}
     if (tid >= NUM * Zc / 4)
         return;
 
