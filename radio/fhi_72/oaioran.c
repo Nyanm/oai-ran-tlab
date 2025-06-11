@@ -392,8 +392,8 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
 
   const struct xran_fh_init *fh_init = get_xran_fh_init();
 #ifdef K_RELEASE
-  int nPRBs = fh_cfg->perMu[0].nULRBs;
-  int fftsize = 1 << fh_cfg->ru_conf.fftSize[0];
+  int nPRBs = fh_cfg->perMu[mu].nULRBs;
+  int fftsize = 1 << fh_cfg->ru_conf.fftSize[mu];
 #elif defined(E_RELEASE) || defined(F_RELEASE)
   int nPRBs = fh_cfg->nULRBs;
   int fftsize = 1 << fh_cfg->ru_conf.fftSize;
@@ -557,8 +557,9 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
   const struct xran_fh_init *fh_init = get_xran_fh_init();
   const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
 #ifdef K_RELEASE
-  int nPRBs = fh_cfg->perMu[0].nDLRBs;
-  int fftsize = 1 << fh_cfg->ru_conf.fftSize[0];
+  uint8_t mu_number = fh_cfg->mu_number[0];
+  int nPRBs = fh_cfg->perMu[mu_number].nDLRBs;
+  int fftsize = 1 << fh_cfg->ru_conf.fftSize[mu_number];
 #elif defined(E_RELEASE) || defined(F_RELEASE)
   int nPRBs = fh_cfg->nDLRBs;
   int fftsize = 1 << fh_cfg->ru_conf.fftSize;

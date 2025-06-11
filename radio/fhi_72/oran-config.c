@@ -306,7 +306,11 @@ static void print_frame_config(const struct xran_frame_config *frame_conf)
   }
 }
 
-static void print_ru_config(const struct xran_ru_config *ru_conf)
+static void print_ru_config(
+#ifdef K_RELEASE
+                            uint8_t mu_number,
+#endif
+                                               const struct xran_ru_config *ru_conf)
 {
   printf("\
   ru_config:\n\
@@ -318,7 +322,7 @@ static void print_ru_config(const struct xran_ru_config *ru_conf)
     iqWidth_PRACH %d\n\
     compMeth_PRACH %d\n"
 #ifdef K_RELEASE
-"    fftSize[0] %d\n"
+"    fftSize[mu_number] %d\n"
 #elif defined(E_RELEASE) || defined(F_RELEASE)
 "    fftSize %d\n"
 #endif
@@ -333,7 +337,7 @@ static void print_ru_config(const struct xran_ru_config *ru_conf)
       ru_conf->iqWidth_PRACH,
       ru_conf->compMeth_PRACH,
 #ifdef K_RELEASE
-      ru_conf->fftSize[0],
+      ru_conf->fftSize[mu_number],
 #elif defined(E_RELEASE) || defined(F_RELEASE)
       ru_conf->fftSize,
 #endif
@@ -347,7 +351,8 @@ void print_fh_config(const struct xran_fh_config *fh_config)
   printf("xran_fh_config:\n");
 
 #ifdef K_RELEASE
-  const struct xran_fh_per_mu_cfg *perMu = &fh_config->perMu[0];
+  uint8_t mu_number = fh_config->mu_number[0];
+  const struct xran_fh_per_mu_cfg *perMu = &fh_config->perMu[mu_number];
 #elif defined(E_RELEASE) || defined(F_RELEASE)
   const struct xran_fh_config *perMu = fh_config;
 #endif
@@ -450,13 +455,17 @@ void print_fh_config(const struct xran_fh_config *fh_config)
 #endif
 
 #ifdef K_RELEASE
-  print_prach_config(&fh_config->perMu[0].prach_conf);
+  print_prach_config(&fh_config->perMu[mu_number].prach_conf);
 #elif defined(E_RELEASE) || defined(F_RELEASE)
   print_prach_config(&fh_config->prach_conf);
 #endif
   print_srs_config(&fh_config->srs_conf);
   print_frame_config(&fh_config->frame_conf);
-  print_ru_config(&fh_config->ru_conf);
+  print_ru_config(
+#ifdef K_RELEASE
+                  mu_number,
+#endif
+                             &fh_config->ru_conf);
 
   printf("\
   bbdev_enc %p\n\
@@ -492,8 +501,10 @@ void print_fh_config(const struct xran_fh_config *fh_config)
 #ifdef K_RELEASE
   printf("\
   numMUs %d\n\
+  mu_number[0] %d\n\
   nNumerology[0] %d\n",
       fh_config->numMUs,
+      fh_config->mu_number[0],
       fh_config->nNumerology[0]);
 #endif
 }
@@ -910,7 +921,11 @@ static bool set_fh_frame_config(const openair0_config_t *oai0, struct xran_frame
   return true;
 }
 
-static bool set_fh_ru_config(void *mplane_api, const paramdef_t *rup, uint16_t fftSize, int nru, enum xran_category xran_cat, struct xran_ru_config *ru_config)
+static bool set_fh_ru_config(void *mplane_api, const paramdef_t *rup, uint16_t fftSize, int nru, enum xran_category xran_cat
+#ifdef K_RELEASE
+                                                                                                                            , uint8_t mu_number
+#endif
+                                                                                                                                               , struct xran_ru_config *ru_config)
 {
   ru_config->xranTech = XRAN_RAN_5GNR; // 5GNR or LTE
   ru_config->xranCat = xran_cat; // mode: Catergory A or Category B
@@ -930,7 +945,7 @@ static bool set_fh_ru_config(void *mplane_api, const paramdef_t *rup, uint16_t f
 
   AssertFatal(fftSize > 0, "FFT size cannot be 0\n");
 #ifdef K_RELEASE
-  ru_config->fftSize[0] = fftSize; // FFT Size
+  ru_config->fftSize[mu_number] = fftSize; // FFT Size
 #elif defined(E_RELEASE) || defined(F_RELEASE)
   ru_config->fftSize = fftSize; // FFT Size
 #endif
@@ -1016,7 +1031,8 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
   memset(fh_config, 0, sizeof(*fh_config));
 
 #ifdef K_RELEASE
-  struct xran_fh_per_mu_cfg *perMu = &fh_config->perMu[0];
+  uint8_t mu_number = oai0->nr_scs_for_raster;
+  struct xran_fh_per_mu_cfg *perMu = &fh_config->perMu[mu_number];
 #elif defined(E_RELEASE) || defined(F_RELEASE)
   struct xran_fh_config *perMu = fh_config;
 #endif
@@ -1074,10 +1090,10 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
   fh_config->GPS_Beta = 0; // beta value as defined in section 9.7.2 of ORAN spec. range -32767 ~ +32767; offset_sec = pConf->GPS_Beta / 100
 #ifdef K_RELEASE
   fh_config->numMUs = 1;
-  fh_config->mu_number[0] = oai0->nr_scs_for_raster; /* 0 -> 15kHz,  1 -> 30kHz,  2 -> 60kHz, 3 -> 120kHz, 4 -> 240kHz */
-  fh_config->nNumerology[0] = oai0->nr_scs_for_raster; /* 0 -> 15kHz,  1 -> 30kHz,  2 -> 60kHz, 3 -> 120kHz, 4 -> 240kHz */
+  fh_config->mu_number[0] = mu_number; /* 0 -> 15kHz,  1 -> 30kHz,  2 -> 60kHz, 3 -> 120kHz, 4 -> 240kHz */
+  fh_config->nNumerology[0] = mu_number; /* 0 -> 15kHz,  1 -> 30kHz,  2 -> 60kHz, 3 -> 120kHz, 4 -> 240kHz */
 
-  if (!set_fh_prach_config(mplane_api, oai0, fh_config->neAxc, prachp, nprach, &fh_config->perMu[0].prach_conf))
+  if (!set_fh_prach_config(mplane_api, oai0, fh_config->neAxc, prachp, nprach, &fh_config->perMu[mu_number].prach_conf))
     return false;
 #elif defined(E_RELEASE) || defined(F_RELEASE)
 
@@ -1089,7 +1105,11 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
   // fh_config->srs_conf = {0};
   if (!set_fh_frame_config(oai0, &fh_config->frame_conf))
     return false;
-  if (!set_fh_ru_config(mplane_api, rup, oai0->split7.fftSize, nru, xran_cat, &fh_config->ru_conf))
+  if (!set_fh_ru_config(mplane_api, rup, oai0->split7.fftSize, nru, xran_cat
+#ifdef K_RELEASE
+                                                                            , mu_number
+#endif
+                                                                                       , &fh_config->ru_conf))
     return false;
 
   fh_config->bbdev_enc = NULL; // call back to poll BBDev encoder
@@ -1121,7 +1141,7 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
   // fh_config->technology[XRAN_MAX_DSS_PERIODICITY] // technology array represents slot is LTE(0)/NR(1); used only if DSS enabled
 #endif
 #ifdef K_RELEASE
-  if (!set_activeMUs(&activeMUs, oai0->nr_scs_for_raster))
+  if (!set_activeMUs(&activeMUs, mu_number))
     return false;
   fh_config->activeMUs = &activeMUs;
 #endif

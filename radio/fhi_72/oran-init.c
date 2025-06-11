@@ -99,7 +99,8 @@ static struct xran_prb_map get_xran_prb_map(const struct xran_fh_config *f, cons
   e->numSymb = num_sym;
   e->nRBStart = 0;
 #ifdef K_RELEASE
-  e->nRBSize = (dir == XRAN_DIR_DL) ? f->perMu[0].nDLRBs : f->perMu[0].nULRBs;
+  uint8_t mu_number = f->mu_number[0];
+  e->nRBSize = (dir == XRAN_DIR_DL) ? f->perMu[mu_number].nDLRBs : f->perMu[mu_number].nULRBs;
 #elif defined(E_RELEASE) || defined(F_RELEASE)
   e->nRBSize = (dir == XRAN_DIR_DL) ? f->nDLRBs : f->nULRBs;
 #endif
@@ -281,7 +282,8 @@ static void oran_allocate_cplane_buffers(void *instHandle,
 #elif defined(F_RELEASE) || defined(K_RELEASE)
       if (fh_config->RunSlotPrbMapBySymbolEnable) {
 #ifdef K_RELEASE
-        xran_init_PrbMap_by_symbol_from_cfg(src, ptr, mtu, fh_config->perMu[0].nDLRBs);
+        uint8_t mu_number = fh_config->mu_number[0];
+        xran_init_PrbMap_by_symbol_from_cfg(src, ptr, mtu, fh_config->perMu[mu_number].nDLRBs);
 #elif defined(F_RELEASE)
         xran_init_PrbMap_by_symbol_from_cfg(src, ptr, mtu, fh_config->nDLRBs);
 #endif
