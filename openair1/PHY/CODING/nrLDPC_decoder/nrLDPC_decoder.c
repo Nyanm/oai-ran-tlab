@@ -167,7 +167,7 @@ void dump_cnProcBufRes_to_file(const int8_t *cnProcBufRes, const char *filename)
         perror("Failed to open dump file");
         exit(EXIT_FAILURE);
     }
-    printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
+    //printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
 
     for (int i = 0; i < NR_LDPC_SIZE_CN_PROC_BUF; i++) {
         fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
