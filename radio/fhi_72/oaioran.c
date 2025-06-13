@@ -561,6 +561,18 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
               x_counters[o_xu_id].rx_pusch_packets[rxant],
               rxant,
               x_counters[o_xu_id].rx_prach_packets[rxant]);
+#if defined K_RELEASE
+      LOG_I(HW,
+            "[%s%d][drop errors %7d ecpri errors %7d cp errors %7d up errors %7d pusch errors %7d prach errors %7d]\n",
+	    "o_du",
+            o_xu_id,
+            x_counters[o_xu_id].rx_err_drop,
+            x_counters[o_xu_id].rx_err_ecpri,
+            x_counters[o_xu_id].rx_err_cp,
+            x_counters[o_xu_id].rx_err_up,
+            x_counters[o_xu_id].rx_err_pusch,
+            x_counters[o_xu_id].rx_err_prach);
+#endif
       if (x_counters[o_xu_id].rx_counter > old_rx_counter[o_xu_id])
         old_rx_counter[o_xu_id] = x_counters[o_xu_id].rx_counter;
       if (x_counters[o_xu_id].tx_counter > old_tx_counter[o_xu_id])
