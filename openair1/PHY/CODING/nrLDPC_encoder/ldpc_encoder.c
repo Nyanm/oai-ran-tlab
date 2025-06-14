@@ -201,15 +201,19 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
     fprintf(fd,"#include <stdio.h>\n#include <stdint.h>\n#include <cuda_runtime.h>\n");
 
     fprintf(fd,"// generated code for Zc=%d, byte encoding\n",Zc);
+    fprintf(fd,"__global__ void ldpc_BG%d_Zc%d_worker(uint8_t *c,uint8_t *d) {\n",BG,Zc);
+    fprintf(fd,"  uint32_t *c32=(uint32_t *)c;\n  uint32_t *d32=(uint32_t *)d;\n\n");
+    fprintf(fd,"  int i2 = threadIdx.x;\n");
+    fprintf(fd,"  int i1 = blockIdx.x;\n");
+    fprintf(fd,"  if (i2 < %d) {\n",Zc);
+    fprintf(fd,"    c32+=i2;\n");
+    fprintf(fd,"    d32+=i2;\n");
+    fprintf(fd,"    switch(i1) {\n");
+       
     for (int i1=0;i1<nrows;i1++) {
-      fprintf(fd,"__global__ void ldpc_BG%d_Zc%d_worker%d(uint8_t *c,uint8_t *d) {\n",BG,Zc,i1);
-      fprintf(fd,"  uint32_t *c32=(uint32_t *)c;\n  uint32_t *d32=(uint32_t *)d;\n\n");
-      fprintf(fd,"  int i2=threadIdx.x + (blockIdx.x<<5);\n");
-      fprintf(fd,"  if (i2 < %d) {\n",Zc);
-      fprintf(fd,"    c32+=i2;\n");
-      fprintf(fd,"    d32+=i2;\n");
       nind = 0;
-      fprintf(fd,"    d32[%d]=",(Zc*i1));
+      fprintf(fd,"    case %d:\n",i1);
+      fprintf(fd,"      d32[%d]=",(Zc*i1));
       for (i3=0; i3 < ncols; i3++)
       {
           temp_prime=i1 * ncols + i3;
@@ -217,24 +221,23 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
   	  {
 	     var=(int)((i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc)/Zc);
   	     int index =var*2*Zc + (i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc) % Zc;
-	     printf("var %d, i3 %d, i4 %d, index %d, Zc %d, pointer_shift_values[%d] %d gen_shift_value %d\n",var,i3,i4,index,Zc,temp_prime,pointer_shift_values[temp_prime],Gen_shift_values[pointer_shift_values[temp_prime]]);
+//	     printf("var %d, i3 %d, i4 %d, index %d, Zc %d, pointer_shift_values[%d] %d gen_shift_value %d\n",var,i3,i4,index,Zc,temp_prime,pointer_shift_values[temp_prime],Gen_shift_values[pointer_shift_values[temp_prime]]);
    	     indlist[nind] = index;
-	     printf("indlist[%d] %d, index %d\n",nind,indlist[nind],index);
+//	     printf("indlist[%d] %d, index %d\n",nind,indlist[nind],index);
 	     nind++;
    	  } //i4
-      }
+      } // i3
       for (i4=0;i4<nind-1;i4++) {
          fprintf(fd,"c32[%d]^",indlist[i4]);
       } //i4
-      fprintf(fd,"c32[%d];\n   }\n",indlist[i4]);
-      fprintf(fd,"}\n");
+      fprintf(fd,"c32[%d];\n\n",indlist[i4]);
+      fprintf(fd,"       break;\n");
     }// i1
+    fprintf(fd,"}\n");
 
     fprintf(fd,"extern \"C\" int ldpc_BG%d_Zc%d_cuda32(uint8_t *c,uint8_t *d) { \n",BG,Zc);
 
-    for (int i1=0;i1<nrows;i1++) {
-       fprintf(fd,"ldpc_BG%d_Zc%d_worker%d<<<%d,%d>>>(c,d);\n",BG,Zc,i1,1,Zc);
-    }
+    fprintf(fd,"ldpc_BG%d_Zc%d_worker%d<<<%d,%d>>>(c,d);\n",BG,Zc,i1,nrows,Zc);
     fprintf(fd," cudaDeviceSynchronize();\n");
     fprintf(fd,"  return(0);\n");
     fprintf(fd,"}\n");
