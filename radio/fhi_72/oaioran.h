@@ -31,6 +31,7 @@ typedef struct {
   uint32_t f;
 #ifdef K_RELEASE
   uint8_t mu;
+  int32_t nRxPkt[XRAN_MAX_SECTOR_NR][XRAN_MAX_ANTENNA_NR][XRAN_NUM_OF_SYMBOL_PER_SLOT];
 #endif
 } oran_sync_info_t;
 
@@ -40,6 +41,12 @@ void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status
                                                                      , uint8_t mu
 #endif
                                                                                  );
+/** @brief xran callback for fronthaul PRACH RX, see xran_5g_prach_req(). */
+void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status
+#ifdef K_RELEASE
+                                                                                  , uint8_t mu
+#endif
+                                                                                              );
 /** @brief xran callback for time alignment, see xran_reg_physide_cb(). */
 int oai_physide_dl_tti_call_back(void *param
 #ifdef K_RELEASE
