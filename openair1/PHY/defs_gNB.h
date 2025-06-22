@@ -497,6 +497,7 @@ typedef struct PHY_VARS_gNB_s {
   notifiedFIFO_t L1_rx_out;
   tpool_t threadPool;
   int num_pusch_symbols_per_thread;
+  int num_pdsch_symbols_per_thread;
   int dmrs_num_antennas_per_thread;
   pthread_t L1_rx_thread;
   int L1_rx_thread_core;
