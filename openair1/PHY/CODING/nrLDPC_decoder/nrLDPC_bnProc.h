@@ -111,7 +111,7 @@ static inline void nrLDPC_bnProcPc(t_nrLDPC_lut* p_lut, int8_t* bnProcBuf, int8_
 
     for (uint32_t cnidx=1;cnidx<NR_LDPC_NUM_BN_GROUPS_BG1_R13;cnidx++) {
     // =====================================================================
-    // Process group with 2 CNs
+    // Process group with more than 1 CN
 
       if (lut_numBnInBnGroups[cnidx] > 0)
       {

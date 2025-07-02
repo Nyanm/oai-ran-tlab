@@ -288,30 +288,30 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 //      printf("\nHere we use CUDA\n");
       //dump_cnProcBufRes_to_file(cnProcBuf, "First_cnProcBuf_dump_cuda.txt");
       nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, Z);
-      dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBufRes_dump_cuda.txt");
+      //dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBufRes_dump_cuda.txt");
       
 #else
 
       #ifndef UNROLL_CN_PROC
-printf("\nCheck point 2\n");      
+//printf("\nCheck point 2\n");      
 nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
       #else  
-  printf("\nCheckpoint 3\n ");
+  //printf("\nCheckpoint 3\n ");
       switch (R)
         {
             case 13:
             {
                 #if defined(__AVX512BW__)
-		printf("\nCheckpoint 4\n ");
+		//printf("\nCheckpoint 4\n ");
                 nrLDPC_cnProc_BG1_R13_AVX512(cnProcBuf, cnProcBufRes, Z);
                 #elif defined(__AVX2__)
-		printf("\nCheckpoint 5\n ");
+		//printf("\nCheckpoint 5\n ");
                 nrLDPC_cnProc_BG1_R13_AVX2(cnProcBuf, cnProcBufRes, Z);
                 #else
-		printf("\nCheckpoint 6\n ");
+		//printf("\nCheckpoint 6\n ");
     //dump_cnProcBufRes_to_file(cnProcBuf, "First_cnProcBuf_dump_128.txt");
                 nrLDPC_cnProc_BG1_R13_128(cnProcBuf, cnProcBufRes, Z);
-	        dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBufRes_dump_128.txt");
+	        //dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBufRes_dump_128.txt");
 #endif
                 break;
             }
