@@ -136,7 +136,7 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut, int8_t *cnProcBuf, i
 
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
 
-  int maxBlockSize = 960; // G10最大是960
+  int maxBlockSize = 960; // Maximun threads are 960
   dim3 gridDim(50);
   dim3 blockDim(maxBlockSize);
 
@@ -567,6 +567,95 @@ __global__ void bnProcKernel_int8_BIG(const int8_t *__restrict__ d_bnProcBuf,
   // t1:
 }
 
+__global__ void bnProcKernel_int8_BIG_United(const int8_t *__restrict__ d_bnProcBuf,
+                                      int8_t *__restrict__ d_bnProcBufRes,
+                                      int8_t *__restrict__ d_llrProcBuf,
+                                      int8_t *__restrict__ d_llrRes,
+                                      const uint8_t *lut_numBnInBnGroups,
+                                      const uint32_t *lut_startAddrBnBuf,
+                                      const uint16_t *lut_startAddrBnLlr,
+                                      int Zc)
+{
+  // cg::grid_group grid = cg::this_grid();
+
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (tid >= 30336) {
+    return;
+  }
+  static const uint8_t lut_GrpIdx[316] = {
+      1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+      1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  4,  4,  4,  4,  5,  5,  5,  5,  5,  6,  6,  6,  6,  6,  6,  6,
+      6,  6,  6,  6,  6,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,
+      7,  7,  7,  7,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  9,
+      9,  9,  9,  9,  9,  9,  9,  9,  10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+      10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11,
+      11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 28, 28, 28,
+      28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 30, 30, 30, 30,
+      30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+  };
+
+  static const uint8_t lut_MsgIdx[316] = {
+      1,  1,  1, 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+      1,  1,  1, 1,  1,  1,  1,  1,  1,  1,  1,  2,  3,  4,  1,  2,  3,  4,  5,  1,  2,  3,  4,  5,  6,  1,  2,  3,  4,  5,  6,  1,
+      2,  3,  4, 5,  6,  7,  1,  2,  3,  4,  5,  6,  7,  1,  2,  3,  4,  5,  6,  7,  1,  2,  3,  4,  5,  6,  7,  1,  2,  3,  4,  5,
+      6,  7,  8, 1,  2,  3,  4,  5,  6,  7,  8,  1,  2,  3,  4,  5,  6,  7,  8,  1,  2,  3,  4,  5,  6,  7,  8,  9,  1,  2,  3,  4,
+      5,  6,  7, 8,  9,  10, 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 1,  2,  3,  4,  5,  6,
+      7,  8,  9, 10, 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 1,  2,  3,  4,  5,  6,
+      7,  8,  9, 10, 11, 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 1,  2,  3,
+      4,  5,  6, 7,  8,  9,  10, 11, 12, 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
+      12, 13, 1, 2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 1,  2,
+      3,  4,  5, 6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+  };
+
+  static const uint8_t lut_BnIdx[316] = {
+      1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+      30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  2,
+      2,  2,  2,  2,  2,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,  3,  3,  3,  3,  3,  3,  3,  4,  4,  4,
+      4,  4,  4,  4,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,  2,  3,  3,  3,  3,  3,  3,  3,  3,  1,
+      1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  3,
+      3,  3,  3,  3,  3,  3,  3,  3,  3,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+      1,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  1,  1,  1,  1,  1,  1,
+      1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,
+      3,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+      1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+      1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+  };
+  //                                          1, 2, 3, 4, 5, 6, 7, 8, 9,10,11, 12, 13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,
+  //                                          28,29, 30
+  static const uint8_t lut_BnToAddrIdx[30] = {1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0,
+                                              0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  12, 0, 13};
+  int row = tid / 96; // to decide the inner block
+  int lane = tid % 96; // to decide the inner lane
+
+  uint8_t GrpIdx = lut_GrpIdx[row];
+  uint8_t MsgIdx = lut_MsgIdx[row];
+  uint8_t BnIdx = lut_BnIdx[row];
+  uint8_t BnToAddrIdx = lut_BnToAddrIdx[GrpIdx - 1];
+  uint8_t GrpNum = lut_numBnInBnGroups[GrpIdx - 1];
+
+  const int8_t *p_bnProcBuf_Grp = (const int8_t *)(d_bnProcBuf + lut_startAddrBnBuf[BnToAddrIdx - 1]);
+  const int8_t *p_bnProcBufRes_Grp = (const int8_t *)(d_bnProcBufRes + lut_startAddrBnBuf[BnToAddrIdx - 1]);
+  const int8_t *p_llrProcBuf_Grp = (const int8_t *)(d_llrProcBuf + lut_startAddrBnLlr[BnToAddrIdx - 1]);
+  const int8_t *p_llrRes_Grp = (const int8_t *)(d_llrRes + lut_startAddrBnLlr[BnToAddrIdx - 1]);
+
+  bnProcKernel_int8_Gn_United(p_bnProcBuf_Grp,
+                       p_bnProcBufRes_Grp,
+                       p_llrProcBuf_Grp,
+                       p_llrRes_Grp,
+                       lane,
+                       GrpIdx,
+                       MsgIdx,
+                       BnIdx,
+                       GrpNum,
+                       Zc);
+  // grid);
+
+  // t1:
+}
+
 void nrLDPC_bnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
                                  int8_t *bnProcBuf,
                                  int8_t *bnProcBufRes,
@@ -596,22 +685,32 @@ void nrLDPC_bnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
   printf("Total blocks required = %d\n", totalBlocks);
 */
 #if BIG_KERNEL
-  int maxBlockSize = 1024; // Z; 
-  int totalBlocks = 30;
+  int maxBlockSize = 960; // Z; 
+  int totalBlocks = 32;
 
   dim3 gridDim(totalBlocks);
   dim3 blockDim(maxBlockSize);
 
-  bnProcPcKernel_int8_BIG<<<gridDim, blockDim>>>(p_bnProcBuf,
-                                                 p_bnProcBufRes,
-                                                 p_llrProcBuf,
-                                                 p_llrRes,
-                                                 lut_numBnInBnGroups,
-                                                 lut_startAddrBnGroups,
-                                                 lut_startAddrBnGroupsLlr,
-                                                 Z);
+/*
+  bnProcKernel_int8_BIG_United<<<gridDim, blockDim>>>(p_bnProcBuf,
+                                               p_bnProcBufRes,
+                                               p_llrProcBuf,
+                                               p_llrRes,
+                                               lut_numBnInBnGroups,
+                                               lut_startAddrBnGroups,
+                                               lut_startAddrBnGroupsLlr,
+                                               Z);
+*/
+ bnProcPcKernel_int8_BIG<<<gridDim, blockDim>>>(p_bnProcBuf,
+                                               p_bnProcBufRes,
+                                               p_llrProcBuf,
+                                               p_llrRes,
+                                               lut_numBnInBnGroups,
+                                               lut_startAddrBnGroups,
+                                               lut_startAddrBnGroupsLlr,
+                                               Z);
 
-  bnProcKernel_int8_BIG<<<gridDim, blockDim>>>(p_bnProcBuf,
+   bnProcKernel_int8_BIG<<<gridDim, blockDim>>>(p_bnProcBuf,
                                                p_bnProcBufRes,
                                                p_llrProcBuf,
                                                p_llrRes,

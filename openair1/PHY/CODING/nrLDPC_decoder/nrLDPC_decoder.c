@@ -497,7 +497,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
         nrLDPC_bnProc_BG1_R13_AVX2(bnProcBuf, bnProcBufRes, llrRes, Z);
 #else
         nrLDPC_bnProc_BG1_R13_128(bnProcBuf, bnProcBufRes, llrRes, Z);
-        // dump_cnProcBufRes_to_file(bnProcBufRes, "First_bnProcBufRes_dump_128.txt");
+         //dump_cnProcBufRes_to_file(bnProcBufRes, "First_bnProcBufRes_dump_128.txt");
         // dump_cnProcBufRes_to_file(llrRes, "First_llrRes_dump_128.txt");
 #endif
         break;
