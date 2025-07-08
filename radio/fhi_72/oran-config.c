@@ -467,7 +467,7 @@ char bbdev_dev[32] = "";
 char bbdev_vfio_vf_token[64] = "";
 #endif
 
-static bool set_fh_io_cfg(struct xran_io_cfg *io_cfg, const paramdef_t *fhip, int nump, const int num_rus, const int is_du)
+static bool set_fh_io_cfg(struct xran_io_cfg *io_cfg, const paramdef_t *fhip, int nump, const int num_peer, const int is_du)
 {
   DevAssert(fhip != NULL);
   int num_dev = gpd(fhip, nump, ORAN_CONFIG_DPDK_DEVICES)->numelt;
@@ -536,7 +536,7 @@ static bool set_fh_io_cfg(struct xran_io_cfg *io_cfg, const paramdef_t *fhip, in
   io_cfg->io_sleep = 0; // enable sleep on PMD cores; 0 -> no sleep
   io_cfg->nEthLinePerPort = *gpd(fhip, nump, ORAN_CONFIG_NETHPERPORT)->uptr; // 1, 2, 3 total number of links per O-RU (Fronthaul Ethernet link)
   io_cfg->nEthLineSpeed = *gpd(fhip, nump, ORAN_CONFIG_NETHSPEED)->uptr; // 10G,25G,40G,100G speed of Physical connection on O-RU
-  io_cfg->one_vf_cu_plane = (io_cfg->num_vfs == num_rus); // C-plane and U-plane use one VF
+  io_cfg->one_vf_cu_plane = (io_cfg->num_vfs == num_peer); // C-plane and U-plane use one VF
 
   /* eCPRI One-Way Delay Measurements common settings for O-DU and O-RU;
     use owdm to calculate T12 and T34 -> CUS specification, section 2.3.3.3;
@@ -685,15 +685,15 @@ static bool set_fh_init(void *mplane_api, struct xran_fh_init *fh_init, enum xra
   const int nfh = sizeofArray(FHconfigs);
   config_getlist(config_get_if(), &FH_ConfigList, FHconfigs, nfh, aprefix);
 
-  int num_rus = FH_ConfigList.numelt; // based on the number of fh_config sections -> number of RUs
-  int is_du = 0;
+  int num_peer = FH_ConfigList.numelt; // based on the number of fh_config sections -> number of RUs
+  int is_du=0;
 
   int num_ru_addr = gpd(fhip, nump, ORAN_CONFIG_RU_ADDR)->numelt;
   int num_du_addr = gpd(fhip, nump, ORAN_CONFIG_DU_ADDR)->numelt;
   if (num_ru_addr > 0 && num_du_addr == 0) is_du = 1;
   else if (num_du_addr > 0 && num_ru_addr == 0) is_du = 0;
   else AssertFatal(1==0,"Illegal node configuration, num_du_addr %d, num_ru_addr %d\n",num_du_addr,num_ru_addr);
-  fh_init->xran_ports = is_du == 1 ? num_rus : num_du_addr;
+  fh_init->xran_ports = num_peer;
 
 #ifdef OAI_MPLANE
   ru_session_list_t *ru_session_list = (ru_session_list_t *)mplane_api;
@@ -722,7 +722,7 @@ static bool set_fh_init(void *mplane_api, struct xran_fh_init *fh_init, enum xra
   }
 #else
 
-  if (!set_fh_io_cfg(&fh_init->io_cfg, fhip, nump, num_rus, is_du))
+  if (!set_fh_io_cfg(&fh_init->io_cfg, fhip, nump, num_peer, is_du))
     return false;
   if (!set_fh_eaxcid_conf(&fh_init->eAxCId_conf, xran_cat))
     return false;
