@@ -445,7 +445,7 @@ int main(int argc, char *argv[])
   int n_trials = 1;
   double SNR_step = 0.1;
   int gen_code = 1;
-  randominit(0);//if 1 it selects fixed seed for debugging
+  randominit(1);//if 1 it selects fixed seed for debugging
   int test_uncoded = 0;
   n_iter_stats_t dec_iter[400] = {0};
 
@@ -559,7 +559,7 @@ int main(int argc, char *argv[])
           "SNR BLER BER UNCODED_BER ENCODER_MEAN ENCODER_STD ENCODER_MAX DECODER_TIME_MEAN DECODER_TIME_STD DECODER_TIME_MAX "
           "DECODER_ITER_MEAN DECODER_ITER_STD DECODER_ITER_MAX\n");
 
-  for (double SNR = SNR0; SNR < SNR0 + 20.0; SNR += SNR_step) {
+  for (double SNR = SNR0; SNR < SNR0 + 20.0/*20.0*/; SNR += SNR_step) {
     double SNR_lin;
     if (test_uncoded == 1)
       SNR_lin = pow(10, SNR / 10.0);
