@@ -2,8 +2,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "nrLDPC_types.h"
-//#include <cooperative_groups.h>
-//amespace cg = cooperative_groups;
+// #include <cooperative_groups.h>
+// amespace cg = cooperative_groups;
 
 #include "nrLDPC_CnProcKernel_BG1_cuda.h"
 #include "nrLDPC_BnProcKernel_BG1_cuda.h"
@@ -47,9 +47,12 @@ inline cudaError_t ErrorCheck(cudaError_t error_code, const char *filename, int 
   return error_code;
 }
 
-__global__ void cnProcKernel_int8_BIG(const int8_t *__restrict__ d_cnBufAll,
+__global__ void cnProcKernel_int8_BIG(const t_nrLDPC_lut *p_lut,
+                                      const int8_t *__restrict__ d_cnBufAll,
                                       int8_t *__restrict__ d_cnOutAll,
+                                      int8_t *__restrict__ d_bnBufAll,
                                       const uint8_t *__restrict__ block_group_ids,
+                                      const uint8_t *__restrict__ block_CN_idx,
                                       const uint16_t *__restrict__ block_thread_counts,
                                       const uint32_t *__restrict__ block_input_offsets,
                                       const uint32_t *__restrict__ block_output_offsets,
@@ -59,6 +62,7 @@ __global__ void cnProcKernel_int8_BIG(const int8_t *__restrict__ d_cnBufAll,
   int tid = threadIdx.x;
 
   uint8_t groupId = block_group_ids[blk];
+  uint8_t CnIdx = block_CN_idx[blk];
   uint16_t blockSize = block_thread_counts[blk];
   uint32_t inOffset = block_input_offsets[blk];
   uint32_t outOffset = block_output_offsets[blk];
@@ -68,47 +72,58 @@ __global__ void cnProcKernel_int8_BIG(const int8_t *__restrict__ d_cnBufAll,
 
   const int8_t *p_cnProcBuf = (const int8_t *)(d_cnBufAll + inOffset);
   int8_t *p_cnProcBufRes = (int8_t *)(d_cnOutAll + outOffset);
+  int8_t *p_bnProcBuf = (int8_t *)d_bnBufAll;
   // if(blk == 45 && tid == 64){
   // printf("d_cnBufAll = %p, d_cnOutAll = %p, p_cnProcBuf = %p, p_cnProcBufRes = %p, inOffset = %d, outOffset = %d \n", d_cnBufAll,
   // d_cnOutAll, p_cnProcBuf, p_cnProcBufRes, inOffset, outOffset);
   //}
+  /*
+if(tid == 65 && blk == 24){
+    printf("=== cnProcKernel_int8_G3 INPUTS ===\n");
+    printf("p_lut = %p\n", p_lut);
+    printf("d_cnBufAll = %p\n", d_cnBufAll);
+    printf("d_cnOutAll = %p\n", d_cnOutAll);
+    printf("d_bnBufAll = %p\n", d_bnBufAll);
+    printf("tid = %d\n", tid);
+    printf("Zc = %d\n", Zc);
+}*/
 
   switch (groupId) {
     case 0:
-      cnProcKernel_int8_G3(p_cnProcBuf, p_cnProcBufRes, tid, Zc);
+      cnProcKernel_int8_G3(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
       break;
     case 1:
-      cnProcKernel_int8_G4(p_cnProcBuf, p_cnProcBufRes, tid, Zc);
+      cnProcKernel_int8_G4(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
       break;
     case 2:
-      cnProcKernel_int8_G5(p_cnProcBuf, p_cnProcBufRes, tid, Zc);
+      cnProcKernel_int8_G5(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
       break;
     case 3:
-      cnProcKernel_int8_G6(p_cnProcBuf, p_cnProcBufRes, tid, Zc);
+      cnProcKernel_int8_G6(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
       break;
     case 4:
-      cnProcKernel_int8_G7(p_cnProcBuf, p_cnProcBufRes, tid, Zc);
+      cnProcKernel_int8_G7(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
       break;
     case 5:
-      cnProcKernel_int8_G8(p_cnProcBuf, p_cnProcBufRes, tid, Zc);
+      cnProcKernel_int8_G8(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
       break;
     case 6:
-      cnProcKernel_int8_G9(p_cnProcBuf, p_cnProcBufRes, tid, Zc);
+      cnProcKernel_int8_G9(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
       break;
     case 7:
-      cnProcKernel_int8_G10(p_cnProcBuf, p_cnProcBufRes, tid, Zc);
+      cnProcKernel_int8_G10(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
       break;
     case 8:
-      cnProcKernel_int8_G19(p_cnProcBuf, p_cnProcBufRes, tid, Zc);
+      cnProcKernel_int8_G19(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
       break;
   }
 }
 
-void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut, int8_t *cnProcBuf, int8_t *cnProcBufRes, int Z)
+void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut, int8_t *cnProcBuf, int8_t *cnProcBufRes, int8_t *bnProcBuf, int Z)
 {
-  const uint8_t h_lut_numBnInCnGroups_BG1_R13[] = {3, 4, 5, 6, 7, 8, 9, 10, 19};
-  const int h_lut_numThreadsEachCnGroupsNeed_BG1_R13[] = {288, 384, 480, 576, 672, 768, 864, 960, 1824};
-  const uint8_t h_lut_numCnInCnGroups_BG1_R13[] = {1, 5, 18, 8, 5, 2, 2, 1, 4};
+  //const uint8_t h_lut_numBnInCnGroups_BG1_R13[] = {3, 4, 5, 6, 7, 8, 9, 10, 19};
+  //const int h_lut_numThreadsEachCnGroupsNeed_BG1_R13[] = {288, 384, 480, 576, 672, 768, 864, 960, 1824};
+  //const uint8_t h_lut_numCnInCnGroups_BG1_R13[] = {1, 5, 18, 8, 5, 2, 2, 1, 4};
 
   // const uint8_t *lut_numCnInCnGroups = (const uint8_t *)p_lut->numCnInCnGroups;
   const uint32_t *lut_startAddrCnGroups = lut_startAddrCnGroups_BG1;
@@ -120,7 +135,10 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut, int8_t *cnProcBuf, i
   static const uint8_t h_block_group_ids[50] = {0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3,
                                                 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 6, 6, 7, 8, 8, 8, 8, 8, 8, 8, 8};
 
-  static const uint16_t h_block_thread_counts[50] = {
+  static const uint8_t h_block_CN_idx[50] =    {0, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15,16,17, 0,
+                                                1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 0, 1, 0, 1, 0, 0, 0, 1, 1, 2, 2, 3, 3};
+  
+                                                static const uint16_t h_block_thread_counts[50] = {
       288, 384, 384, 384, 384, 384, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 576,
       576, 576, 576, 576, 576, 576, 576, 672, 672, 672, 672, 672, 768, 768, 864, 864, 960, 912, 912, 912, 912, 912, 912, 912, 912};
 
@@ -139,15 +157,18 @@ void nrLDPC_cnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut, int8_t *cnProcBuf, i
   int maxBlockSize = 960; // Maximun threads are 960
   dim3 gridDim(50);
   dim3 blockDim(maxBlockSize);
-
-  cnProcKernel_int8_BIG<<<gridDim, blockDim>>>(cnProcBuf,
+  //printf("bnProcBuf =  %p\n", bnProcBuf);
+  cnProcKernel_int8_BIG<<<gridDim, blockDim>>>(p_lut,
+                                               cnProcBuf,
                                                cnProcBufRes,
+                                               bnProcBuf,
                                                h_block_group_ids,
+                                               h_block_CN_idx,
                                                h_block_thread_counts,
                                                h_block_input_offsets,
                                                h_block_output_offsets,
                                                Z);
-  // CHECK(cudaGetLastError());
+   //CHECK(cudaGetLastError());
 
 #else
 #if !CUDA_STREAM
@@ -365,12 +386,12 @@ printf("\n");*/
 }
 
 // CUDA wrapper function: external interface identical to the original C version
-extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut, int8_t *cnProcBuf, int8_t *cnProcBufRes, uint16_t Z)
+extern "C" void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut *p_lut, int8_t *cnProcBuf, int8_t *cnProcBufRes, int8_t *bnProcBuf, uint16_t Z)
 {
   // printf("CPU_ADDRESSING: %d\n", CPU_ADDRESSING);
 #if CPU_ADDRESSING
   // printf("\nVery very first cnProcBuf = %p, cnProcBufRes = %p \n", cnProcBuf, cnProcBufRes);
-  nrLDPC_cnProc_BG1_cuda_core(p_lut, cnProcBuf, cnProcBufRes, (int)Z);
+  nrLDPC_cnProc_BG1_cuda_core(p_lut, cnProcBuf, cnProcBufRes, bnProcBuf, (int)Z);
 
 #else
   // printf("Here CPU_ADDRESSING: %d\n", CPU_ADDRESSING);
@@ -454,7 +475,7 @@ __global__ void bnProcPcKernel_int8_BIG(const int8_t *__restrict__ d_bnProcBuf,
   int lane = tid % 96; // to decide the inner lane
 
   uint8_t GrpIdx = lut_GrpIdx[row];
-  //uint8_t MsgIdx = lut_MsgIdx[row];
+  // uint8_t MsgIdx = lut_MsgIdx[row];
   uint8_t BnIdx = lut_BnIdx[row];
   uint8_t BnToAddrIdx = lut_BnToAddrIdx[GrpIdx - 1];
   uint8_t GrpNum = lut_numBnInBnGroups[GrpIdx - 1];
@@ -464,15 +485,7 @@ __global__ void bnProcPcKernel_int8_BIG(const int8_t *__restrict__ d_bnProcBuf,
   const int8_t *p_llrProcBuf_Grp = (const int8_t *)(d_llrProcBuf + lut_startAddrBnLlr[BnToAddrIdx - 1]);
   const int8_t *p_llrRes_Grp = (const int8_t *)(d_llrRes + lut_startAddrBnLlr[BnToAddrIdx - 1]);
 
-  bnProcPcKernel_int8_Gn(p_bnProcBuf_Grp,
-                         p_bnProcBufRes_Grp,
-                         p_llrProcBuf_Grp,
-                         p_llrRes_Grp,
-                         lane,
-                         GrpIdx,
-                         BnIdx,
-                         GrpNum,
-                         Zc);
+  bnProcPcKernel_int8_Gn(p_bnProcBuf_Grp, p_bnProcBufRes_Grp, p_llrProcBuf_Grp, p_llrRes_Grp, lane, GrpIdx, BnIdx, GrpNum, Zc);
   // grid);
 
   // t1:
@@ -568,13 +581,13 @@ __global__ void bnProcKernel_int8_BIG(const int8_t *__restrict__ d_bnProcBuf,
 }
 
 __global__ void bnProcKernel_int8_BIG_United(const int8_t *__restrict__ d_bnProcBuf,
-                                      int8_t *__restrict__ d_bnProcBufRes,
-                                      int8_t *__restrict__ d_llrProcBuf,
-                                      int8_t *__restrict__ d_llrRes,
-                                      const uint8_t *lut_numBnInBnGroups,
-                                      const uint32_t *lut_startAddrBnBuf,
-                                      const uint16_t *lut_startAddrBnLlr,
-                                      int Zc)
+                                             int8_t *__restrict__ d_bnProcBufRes,
+                                             int8_t *__restrict__ d_llrProcBuf,
+                                             int8_t *__restrict__ d_llrRes,
+                                             const uint8_t *lut_numBnInBnGroups,
+                                             const uint32_t *lut_startAddrBnBuf,
+                                             const uint16_t *lut_startAddrBnLlr,
+                                             int Zc)
 {
   // cg::grid_group grid = cg::this_grid();
 
@@ -642,15 +655,15 @@ __global__ void bnProcKernel_int8_BIG_United(const int8_t *__restrict__ d_bnProc
   const int8_t *p_llrRes_Grp = (const int8_t *)(d_llrRes + lut_startAddrBnLlr[BnToAddrIdx - 1]);
 
   bnProcKernel_int8_Gn_United(p_bnProcBuf_Grp,
-                       p_bnProcBufRes_Grp,
-                       p_llrProcBuf_Grp,
-                       p_llrRes_Grp,
-                       lane,
-                       GrpIdx,
-                       MsgIdx,
-                       BnIdx,
-                       GrpNum,
-                       Zc);
+                              p_bnProcBufRes_Grp,
+                              p_llrProcBuf_Grp,
+                              p_llrRes_Grp,
+                              lane,
+                              GrpIdx,
+                              MsgIdx,
+                              BnIdx,
+                              GrpNum,
+                              Zc);
   // grid);
 
   // t1:
@@ -685,32 +698,32 @@ void nrLDPC_bnProc_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
   printf("Total blocks required = %d\n", totalBlocks);
 */
 #if BIG_KERNEL
-  int maxBlockSize = 960; // Z; 
-  int totalBlocks = 32;
+  int maxBlockSize = 1024; // Z;
+  int totalBlocks = 30;
 
   dim3 gridDim(totalBlocks);
   dim3 blockDim(maxBlockSize);
 
-/*
-  bnProcKernel_int8_BIG_United<<<gridDim, blockDim>>>(p_bnProcBuf,
-                                               p_bnProcBufRes,
-                                               p_llrProcBuf,
-                                               p_llrRes,
-                                               lut_numBnInBnGroups,
-                                               lut_startAddrBnGroups,
-                                               lut_startAddrBnGroupsLlr,
-                                               Z);
-*/
- bnProcPcKernel_int8_BIG<<<gridDim, blockDim>>>(p_bnProcBuf,
-                                               p_bnProcBufRes,
-                                               p_llrProcBuf,
-                                               p_llrRes,
-                                               lut_numBnInBnGroups,
-                                               lut_startAddrBnGroups,
-                                               lut_startAddrBnGroupsLlr,
-                                               Z);
+  /*
+    bnProcKernel_int8_BIG_United<<<gridDim, blockDim>>>(p_bnProcBuf,
+                                                 p_bnProcBufRes,
+                                                 p_llrProcBuf,
+                                                 p_llrRes,
+                                                 lut_numBnInBnGroups,
+                                                 lut_startAddrBnGroups,
+                                                 lut_startAddrBnGroupsLlr,
+                                                 Z);
+  */
+  bnProcPcKernel_int8_BIG<<<gridDim, blockDim>>>(p_bnProcBuf,
+                                                 p_bnProcBufRes,
+                                                 p_llrProcBuf,
+                                                 p_llrRes,
+                                                 lut_numBnInBnGroups,
+                                                 lut_startAddrBnGroups,
+                                                 lut_startAddrBnGroupsLlr,
+                                                 Z);
 
-   bnProcKernel_int8_BIG<<<gridDim, blockDim>>>(p_bnProcBuf,
+  bnProcKernel_int8_BIG<<<gridDim, blockDim>>>(p_bnProcBuf,
                                                p_bnProcBufRes,
                                                p_llrProcBuf,
                                                p_llrRes,

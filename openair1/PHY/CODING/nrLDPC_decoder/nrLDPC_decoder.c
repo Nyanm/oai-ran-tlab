@@ -152,7 +152,7 @@
 */
 
 //--------------------------CUDA Area---------------------------
-extern void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut* p_lut, int8_t* cnProcBuf, int8_t* cnProcBufRes, uint16_t Z);
+extern void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut* p_lut, int8_t* cnProcBuf, int8_t* cnProcBufRes, int8_t* bnProcBuf, uint16_t Z);
 
 extern void nrLDPC_bnProc_BG1_cuda(const t_nrLDPC_lut* p_lut,
                                    int8_t* bnProcBuf,
@@ -284,16 +284,21 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 
   // CN processing
   NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->cnProc));
-  if (BG == 1) {
-    // printf("\ncheck point 1\n");
-
-#ifdef USE_CUDA
+ #ifdef USE_CUDA
     //      printf("\nHere we use CUDA\n");
     // dump_cnProcBufRes_to_file(cnProcBuf, "First_cnProcBuf_dump_cuda.txt");
-    nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, Z);
+    nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, bnProcBuf, Z);
+    //dump_cnProcBufRes_to_file(bnProcBuf, "First_bnProcBuf_dump_cuda.txt");
+
+    NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->cnProc));
+    NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->cn2bnProcBuf));
+    NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->cn2bnProcBuf));
     // dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBufRes_dump_cuda.txt");
 
 #else
+ if (BG == 1) {
+    // printf("\ncheck point 1\n");
+
 
 #ifndef UNROLL_CN_PROC
     // printf("\nCheck point 2\n");
@@ -340,7 +345,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
       }
     }
 #endif
-#endif
+
   } else {
 #ifndef UNROLL_CN_PROC
     nrLDPC_cnProc_BG2(p_lut, cnProcBuf, cnProcBufRes, Z);
@@ -387,8 +392,10 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #endif
 
   NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->cn2bnProcBuf));
-  if (BG == 1)
+  if (BG == 1){
     nrLDPC_cn2bnProcBuf_BG1(p_lut, cnProcBufRes, bnProcBuf, Z);
+    //dump_cnProcBufRes_to_file(bnProcBuf, "First_bnProcBuf_dump_128.txt");
+  }
   else
     nrLDPC_cn2bnProcBuf_BG2(p_lut, cnProcBufRes, bnProcBuf, Z);
   NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->cn2bnProcBuf));
@@ -397,7 +404,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   nrLDPC_debug_initBuffer2File(nrLDPC_buffers_BN_PROC);
   nrLDPC_debug_writeBuffer2File(nrLDPC_buffers_BN_PROC, bnProcBuf);
 #endif
-
+#endif
   // BN processing
 #ifdef USE_CUDA
 
@@ -607,14 +614,22 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #ifdef NR_LDPC_PROFILER_DETAIL
     start_meas(&p_profiler->cnProc);
 #endif
-    if (BG == 1) {
 #ifdef USE_CUDA
       // dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_last_dump.txt");
-      nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, Z);
+    nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, bnProcBuf, Z);
+    //dump_cnProcBufRes_to_file(bnProcBuf, "First_bnProcBuf_dump_cuda.txt");
+#ifdef NR_LDPC_PROFILER_DETAIL
+    stop_meas(&p_profiler->cnProc);
+    start_meas(&p_profiler->cn2bnProcBuf);
+    stop_meas(&p_profiler->cn2bnProcBuf);
+#endif
       // dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_cuda.txt");
       // dump_cnProcBufRes_to_file(cnProcBuf, "cnProcBuf_last_dump.txt");
 
-#else
+#else   
+
+if (BG == 1) {
+
 
 #ifndef UNROLL_CN_PROC
       nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
@@ -654,7 +669,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
         }
       }
 #endif
-#endif
+
     } else {
 #ifndef UNROLL_CN_PROC
       nrLDPC_cnProc_BG2(p_lut, cnProcBuf, cnProcBufRes, Z);
@@ -718,7 +733,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #ifdef NR_LDPC_DEBUG_MODE
     nrLDPC_debug_writeBuffer2File(nrLDPC_buffers_BN_PROC, bnProcBuf);
 #endif
-
+//cuda end
+#endif
     // BN Processing
 
 #ifdef USE_CUDA
