@@ -451,29 +451,15 @@ static void oran_allocate_buffers(void *handle,
   const uint32_t prachBufSize = PRACH_PLAYBACK_BUFFER_BYTES;
   oran_allocate_uplane_buffers(pi->instanceHandle, bl->prachdst, bl->bufs.prach, xran_max_antenna_nr, prachBufSize);
 #ifdef K_RELEASE
-  // TODO uncomment the function below and solve the segmentation fault
-  // oran_allocate_cplane_buffers(pi->instanceHandle,
-  //                              bl->prachdstdecomp,
-  //                              bl->bufs.prachdecomp,
-  //                              xran_max_antenna_nr,
-  //                              xran_max_sections_per_slot,
-  //                              mtu,
-  //                              fh_config,
-  //                              size_of_prb_map_prach,
-  //                              &prachConf);
-  // TODO remove from here till the elif directive and solve the segmentation fault
-  // PRACH decomp buffer does not have separate DPDK-allocated memory pool
-  // bufs, it points to the same pool as the prach buffer. Unclear to me why
-  for (uint32_t a = 0; a < xran_max_antenna_nr; ++a) {
-    for (uint32_t j = 0; j < XRAN_N_FE_BUF_LEN; ++j) {
-      bl->prachdstdecomp[a][j].pBuffers = &bl->bufs.prachdecomp[a][j];
-      for (uint32_t k = 0; k < XRAN_NUM_OF_SYMBOL_PER_SLOT; ++k) {
-        struct xran_flat_buffer *fb = &bl->prachdstdecomp[a][j].pBuffers[k];
-        fb->pData = bl->prachdst[a][j].pBuffers[k].pData;
-        memset(fb->pData, 0, sizeof(struct xran_prb_map));
-      }
-    }
-  }
+  oran_allocate_cplane_buffers(pi->instanceHandle,
+                               bl->prachdstdecomp,
+                               bl->bufs.prachdecomp,
+                               xran_max_antenna_nr,
+                               xran_max_sections_per_slot,
+                               mtu,
+                               fh_config,
+                               size_of_prb_map_prach,
+                               &prachConf);
 #elif defined(E_RELEASE) || defined(F_RELEASE)
   // PRACH decomp buffer does not have separate DPDK-allocated memory pool
   // bufs, it points to the same pool as the prach buffer. Unclear to me why
