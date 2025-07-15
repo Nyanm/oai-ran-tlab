@@ -54,6 +54,9 @@ typedef struct {
 } oran_eth_state_t;
 
 notifiedFIFO_t oran_sync_fifo;
+#if defined K_RELEASE
+notifiedFIFO_t oran_sync_fifo_prach;
+#endif
 
 int trx_oran_start(openair0_device_t *device)
 {
@@ -429,6 +432,9 @@ __attribute__((__visibility__("default"))) int transport_init(openair0_device_t 
   // create message queues for ORAN sync
 
   initNotifiedFIFO(&oran_sync_fifo);
+#if defined K_RELEASE
+  initNotifiedFIFO(&oran_sync_fifo_prach);
+#endif
 
   eth->e.flags = ETH_RAW_IF4p5_MODE;
   eth->e.compression = NO_COMPRESS;
