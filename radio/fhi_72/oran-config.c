@@ -950,7 +950,7 @@ static bool set_fh_prach_config(void *mplane_api,
   prach_config->nPrachRootSeqIdx = 0; // PRACH Root Sequence Index; should be saved from config file; 1 = 839, 2 = 139; not used in xran
   prach_config->nPrachFreqStart = s7cfg->prach_freq_start; // PRACH frequency start (MSG1)
   prach_config->nPrachFreqOffset = (s7cfg->prach_freq_start * 12 - oai0->num_rb_dl * 6) * 2; // PRACH frequency offset
-  prach_config->nPrachFilterIdx = 0; /* PRACH filter index; not used in xran;
+  prach_config->nPrachFilterIdx = XRAN_FILTERINDEX_PRACH_ABC; /* PRACH filter index; not used in xran;
                                         in E release hardcoded to XRAN_FILTERINDEX_PRACH_ABC (preamble format A1~3, B1~4, C0, C2)
                                         in F release properly calculated */
 
