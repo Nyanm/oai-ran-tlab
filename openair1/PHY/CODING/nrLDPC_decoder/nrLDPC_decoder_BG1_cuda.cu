@@ -858,7 +858,8 @@ __global__ void BnToCnPC_Kernel_int8_BIG(const t_nrLDPC_lut *p_lut,
                                          const uint16_t *__restrict__ block_thread_counts,
                                          const uint32_t *__restrict__ block_input_offsets,
                                          const uint32_t *__restrict__ block_output_offsets,
-                                         int Zc)
+                                         int Zc,
+                                        int *PC_Flag)
 {
   int blk = blockIdx.x;
   int tid = threadIdx.x;
@@ -879,31 +880,31 @@ __global__ void BnToCnPC_Kernel_int8_BIG(const t_nrLDPC_lut *p_lut,
 
   switch (groupId) {
     case 0:
-      CnToBnPC_Kernel_int8_G3(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      CnToBnPC_Kernel_int8_G3(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc,PC_Flag);
       break;
     case 1:
-      CnToBnPC_Kernel_int8_G4(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      CnToBnPC_Kernel_int8_G4(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc,PC_Flag);
       break;
     case 2:
-      CnToBnPC_Kernel_int8_G5(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      CnToBnPC_Kernel_int8_G5(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc, PC_Flag);
       break;
     case 3:
-      CnToBnPC_Kernel_int8_G6(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      CnToBnPC_Kernel_int8_G6(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc, PC_Flag);
       break;
     case 4:
-      CnToBnPC_Kernel_int8_G7(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      CnToBnPC_Kernel_int8_G7(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc, PC_Flag);
       break;
     case 5:
-      CnToBnPC_Kernel_int8_G8(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      CnToBnPC_Kernel_int8_G8(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc, PC_Flag);
       break;
     case 6:
-      CnToBnPC_Kernel_int8_G9(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      CnToBnPC_Kernel_int8_G9(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc, PC_Flag);
       break;
     case 7:
-      CnToBnPC_Kernel_int8_G10(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      CnToBnPC_Kernel_int8_G10(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc, PC_Flag);
       break;
     case 8:
-      CnToBnPC_Kernel_int8_G19(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      CnToBnPC_Kernel_int8_G19(p_lut, p_bnProcBufRes, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc, PC_Flag);
       break;
   }
 }
@@ -912,7 +913,8 @@ void nrLDPC_BnToCnPC_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
                                    int8_t *cnProcBuf,
                                    int8_t *cnProcBufRes,
                                    int8_t *bnProcBuf,
-                                   int Z)
+                                   int Z,
+                                  int *PC_Flag)
 {
   // const uint8_t h_lut_numBnInCnGroups_BG1_R13[] = {3, 4, 5, 6, 7, 8, 9, 10, 19};
   // const int h_lut_numThreadsEachCnGroupsNeed_BG1_R13[] = {288, 384, 480, 576, 672, 768, 864, 960, 1824};
@@ -925,30 +927,30 @@ void nrLDPC_BnToCnPC_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
 
 #if BIG_KERNEL
 
-  static const uint8_t h_block_group_ids[50] = {0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3,
-                                                3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 6, 6, 7, 8, 8, 8, 8, 8, 8, 8, 8};
+  static const uint8_t h_block_group_ids[46] = {0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3,
+                                                3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 6, 6, 7, 8, 8, 8, 8};
 
-  static const uint8_t h_block_CN_idx[50] = {0, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 0,
-                                             1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 0, 1, 0, 1, 0,  0,  0,  1,  1,  2,  2,  3,  3};
+  static const uint8_t h_block_CN_idx[46] = {0, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 0,
+                                             1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 0, 1, 0, 1, 0,  0,  1,  2,  3};
 
-  static const uint16_t h_block_thread_counts[50] = {
+  static const uint16_t h_block_thread_counts[46] = {
       288, 384, 384, 384, 384, 384, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 576,
-      576, 576, 576, 576, 576, 576, 576, 672, 672, 672, 672, 672, 768, 768, 864, 864, 960, 912, 912, 912, 912, 912, 912, 912, 912};
+      576, 576, 576, 576, 576, 576, 576, 672, 672, 672, 672, 672, 768, 768, 864, 864, 960, 912, 912, 912, 912};
 
-  static const uint32_t h_block_input_offsets[50] = {
+  static const uint32_t h_block_input_offsets[46] = {
       0,     1152,  1536,  1920,  2304,  2688,  8832,  9216,  9600,  9984,  10368, 10752, 11136, 11520, 11904, 12288, 12672,
       13056, 13440, 13824, 14208, 14592, 14976, 15360, 43392, 43776, 44160, 44544, 44928, 45312, 45696, 46080, 61824, 62208,
-      62592, 62976, 63360, 75264, 75648, 81408, 81792, 88320, 92160, 92160, 92544, 92544, 92928, 92928, 93312, 93312};
+      62592, 62976, 63360, 75264, 75648, 81408, 81792, 88320, 92160, 92544, 92928, 93312};
 
-  static const uint32_t h_block_output_offsets[50] = {
+  static const uint32_t h_block_output_offsets[46] = {
       0,     1152,  1536,  1920,  2304,  2688,  8832,  9216,  9600,  9984,  10368, 10752, 11136, 11520, 11904, 12288, 12672,
       13056, 13440, 13824, 14208, 14592, 14976, 15360, 43392, 43776, 44160, 44544, 44928, 45312, 45696, 46080, 61824, 62208,
-      62592, 62976, 63360, 75264, 75648, 81408, 81792, 88320, 92160, 92160, 92544, 92544, 92928, 92928, 93312, 93312};
+      62592, 62976, 63360, 75264, 75648, 81408, 81792, 88320, 92160, 92544, 92928, 93312};
 
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
 
   int maxBlockSize = 960; // Maximun threads are 960
-  dim3 gridDim(50);
+  dim3 gridDim(46);
   dim3 blockDim(maxBlockSize);
   // printf("bnProcBuf =  %p\n", bnProcBuf);
   BnToCnPC_Kernel_int8_BIG<<<gridDim, blockDim>>>(p_lut,
@@ -961,7 +963,8 @@ void nrLDPC_BnToCnPC_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
                                                   h_block_thread_counts,
                                                   h_block_input_offsets,
                                                   h_block_output_offsets,
-                                                  Z);
+                                                  Z,
+                                                PC_Flag);
   //printf("Check point 1001: ");
 
   //CHECK(cudaGetLastError());
@@ -975,15 +978,17 @@ extern "C" void nrLDPC_BnToCnPC_BG1_cuda(const t_nrLDPC_lut *p_lut,
                                          int8_t *cnProcBuf,
                                          int8_t *cnProcBufRes,
                                          int8_t *bnProcBuf,
-                                         uint16_t Z)
+                                         uint16_t Z,
+                                        int *PC_Flag)
 {
   // printf("CPU_ADDRESSING: %d\n", CPU_ADDRESSING);
 #if CPU_ADDRESSING
   // printf("\nVery very first cnProcBuf = %p, cnProcBufRes = %p \n", cnProcBuf, cnProcBufRes);
-  nrLDPC_BnToCnPC_BG1_cuda_core(p_lut, bnProcBufRes, cnProcBuf, cnProcBufRes, bnProcBuf, (int)Z);
+  nrLDPC_BnToCnPC_BG1_cuda_core(p_lut, bnProcBufRes, cnProcBuf, cnProcBufRes, bnProcBuf, (int)Z, PC_Flag);
 
 #else
   printf("To be continued ^ ^\n");
 
 #endif
+cudaDeviceSynchronize();
 }

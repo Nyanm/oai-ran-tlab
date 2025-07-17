@@ -170,7 +170,8 @@ extern void nrLDPC_BnToCnPC_BG1_cuda(const t_nrLDPC_lut *p_lut,
                                            int8_t *cnProcBuf,
                                            int8_t *cnProcBufRes,
                                            int8_t *bnProcBuf,
-                                           uint16_t Z);
+                                           uint16_t Z,
+                                           int * PC_Flag);
  
 //--------------------------------------------------------------
 
@@ -422,7 +423,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->bnProcPc));
 
   NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->bnProc));
-
+//printf("I'm here:1\n");
   nrLDPC_bnProc_BG1_cuda(p_lut, bnProcBuf, bnProcBufRes, llrProcBuf, llrRes, Z);
   // dump_cnProcBufRes_to_file(bnProcBufRes, "First_bnProcBufRes_dump_cuda.txt");
   // dump_cnProcBufRes_to_file(llrRes, "First_llrRes_dump_cuda.txt");
@@ -432,8 +433,10 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #ifdef NR_LDPC_PROFILER_DETAIL
   start_meas(&p_profiler->bn2cnProcBuf);
 #endif
-
-  nrLDPC_BnToCnPC_BG1_cuda(p_lut, bnProcBufRes, cnProcBuf, cnProcBufRes, bnProcBuf, Z);
+//printf("I'm here:2\n");
+  int Temp = 0;
+  int* Not_use_Flag = &Temp;
+  nrLDPC_BnToCnPC_BG1_cuda(p_lut, bnProcBufRes, cnProcBuf, cnProcBufRes, bnProcBuf, Z, Not_use_Flag);
   //dump_cnProcBufRes_to_file(cnProcBuf, "First_Packed_cnProcBuf_dump_cuda.txt");
 
 #ifdef NR_LDPC_PROFILER_DETAIL
@@ -771,8 +774,32 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #ifdef NR_LDPC_PROFILER_DETAIL
     start_meas(&p_profiler->bn2cnProcBuf);
 #endif
-
-    nrLDPC_BnToCnPC_BG1_cuda(p_lut, bnProcBufRes, cnProcBuf, cnProcBufRes, bnProcBuf, Z);
+    int Flag_Value = 0;
+    int* PC_Flag = &Flag_Value;
+    nrLDPC_BnToCnPC_BG1_cuda(p_lut, bnProcBufRes, cnProcBuf, cnProcBufRes, bnProcBuf, Z, PC_Flag);
+    // Parity Check
+    if (!p_decParams->check_crc) {
+      NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->cnProcPc));
+      if (BG == 1)
+        pcRes &= *(int32_t *)PC_Flag;
+      else
+        pcRes = nrLDPC_cnProcPc_BG2(p_lut, cnProcBuf, cnProcBufRes, Z);
+      NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->cnProcPc));
+    } else {
+      if (numIter > 0) {
+        int8_t llrOut[NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+        int8_t* p_llrOut = outMode == nrLDPC_outMode_LLRINT8 ? p_out : llrOut;
+        nrLDPC_llrRes2llrOut(p_lut, p_llrOut, llrRes, Z, BG);
+        if (outMode == nrLDPC_outMode_BIT)
+          nrLDPC_llr2bitPacked(p_out, p_llrOut, numLLR);
+        else // if (outMode == nrLDPC_outMode_BITINT8)
+          nrLDPC_llr2bit(p_out, p_llrOut, numLLR);
+        if (p_decParams->check_crc((uint8_t*)p_out, p_decParams->Kprime, p_decParams->crc_type)) {
+          LOG_D(PHY, "Segment CRC OK, exiting LDPC decoder\n");
+          break;
+        }
+      }
+    }
     //dump_cnProcBufRes_to_file(cnProcBuf, "First_Packed_cnProcBuf_dump_cuda.txt");
 
 #ifdef NR_LDPC_PROFILER_DETAIL
@@ -944,8 +971,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #ifdef NR_LDPC_DEBUG_MODE
     nrLDPC_debug_writeBuffer2File(nrLDPC_buffers_CN_PROC, cnProcBuf);
 #endif
-//CUDA ends here
-#endif
+
     // Parity Check
     if (!p_decParams->check_crc) {
       NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->cnProcPc));
@@ -969,9 +995,15 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
         }
       }
     }
+//CUDA ends here
+#endif
+
     // Increase iteration counter
     numIter++;
   }
+
+
+  
   if (!p_decParams->check_crc) {
     int8_t llrOut[NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
     int8_t* p_llrOut = outMode == nrLDPC_outMode_LLRINT8 ? p_out : llrOut;
