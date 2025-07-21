@@ -22,7 +22,8 @@
 # Author: laurent THOMAS, Lionel GAUTHIER
 
 cmake_minimum_required (VERSION 3.16)
-project (OpenAirInterface LANGUAGES C CXX)
+project (OpenAirInterface LANGUAGES C CXX CUDA)
+set(CMAKE_CUDA_ARCHITECTURES 90)
 set(CMAKE_CXX_STANDARD 17)
 
 #########################################################
@@ -1699,6 +1700,8 @@ set (SIMUSRC
   ${OPENAIR1_DIR}/SIMULATION/TOOLS/random_channel.c
   ${OPENAIR1_DIR}/SIMULATION/TOOLS/rangen_double.c
   ${OPENAIR1_DIR}/SIMULATION/TOOLS/phase_noise.c
+  ${OPENAIR1_DIR}/SIMULATION/TOOLS/multipath_channel.cu
+  ${OPENAIR1_DIR}/SIMULATION/TOOLS/noise_cuda.cu
   ${OPENAIR1_DIR}/SIMULATION/RF/rf.c
   ${OPENAIR1_DIR}/SIMULATION/RF/dac.c
   ${OPENAIR1_DIR}/SIMULATION/RF/adc.c

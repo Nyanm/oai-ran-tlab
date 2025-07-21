@@ -36,7 +36,7 @@ uint8_t multipath_channel_nosigconv(channel_desc_t *desc)
 #ifdef CHANNEL_SSE
 void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *desc,
                        double tx_sig_re[NB_ANTENNAS_TX][30720*2],
-                       double tx_sig_im[NB_ANTENANS_TX][30720*2],
+                       double tx_sig_im[NB_ANTENNAS_TX][30720*2],
                        double rx_sig_re[NB_ANTENNAS_RX][30720*2],
                        double rx_sig_im[NB_ANTENNAS_RX][30720*2],
                        uint32_t length,
@@ -229,3 +229,68 @@ void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *des
 #endif
 
 
+void multipath_channel_float(channel_desc_t *desc,
+                             float **tx_sig_re,
+                             float **tx_sig_im,
+                             float **rx_sig_re,
+                             float **rx_sig_im,
+                             uint32_t length,
+                             uint8_t keep_channel,
+                             int log_channel)
+{
+    // --- Initialization ---
+    float path_loss = (float)pow(10, desc->path_loss_dB / 20.0);
+    uint64_t dd = desc->channel_offset;
+
+    // --- Handle keep_channel flag ---
+    if (keep_channel) {
+        // do nothing - keep the existing channel
+    } else {
+        random_channel(desc, 0);
+    }
+
+    // --- Doppler Effect Preparation ---
+    struct complexd cexp_doppler[length];
+    if (desc->max_Doppler != 0.0) {
+        get_cexp_doppler(cexp_doppler, desc, length);
+    }
+
+    // --- Core Convolution Loop ---
+    for (int i = 0; i < ((int)length - dd); i++) {
+        for (int ii = 0; ii < desc->nb_rx; ii++) {
+            struct complexf rx_tmp = {0.0f, 0.0f};
+
+            for (int j = 0; j < desc->nb_tx; j++) {
+                struct complexd *chan = desc->ch[ii + (j * desc->nb_rx)];
+
+                for (int l = 0; l < (int)desc->channel_length; l++) {
+                    if ((i - l) >= 0) {
+                        // 1. Get the past transmitted signal (float)
+                        struct complexf tx;
+                        tx.r = tx_sig_re[j][i - l];
+                        tx.i = tx_sig_im[j][i - l];
+
+                        // 2. Perform complex multiplication with mixed precision.
+                        rx_tmp.r += (tx.r * (float)chan[l].r) - (tx.i * (float)chan[l].i);
+                        rx_tmp.i += (tx.i * (float)chan[l].r) + (tx.r * (float)chan[l].i);
+                    }
+                } // l (channel_length)
+            } // j (nb_tx)
+
+            #if 0
+            if (desc->max_Doppler != 0.0) {
+                // Perform complex multiplication: rx_tmp = rx_tmp * cexp_doppler[i]
+                struct complexf doppler_factor = {(float)cexp_doppler[i].r, (float)cexp_doppler[i].i};
+                struct complexf temp = rx_tmp; // Store original rx_tmp
+                rx_tmp.r = (temp.r * doppler_factor.r) - (temp.i * doppler_factor.i);
+                rx_tmp.i = (temp.i * doppler_factor.r) + (temp.r * doppler_factor.i);
+            }
+            #endif
+
+            // --- Finalization and Storage ---
+            rx_sig_re[ii][i + dd] = rx_tmp.r * path_loss;
+            rx_sig_im[ii][i + dd] = rx_tmp.i * path_loss;
+
+        } // ii (nb_rx)
+    } // i (length)
+}

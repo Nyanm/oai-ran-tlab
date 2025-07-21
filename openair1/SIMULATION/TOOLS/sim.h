@@ -419,6 +419,29 @@ void multipath_channel(channel_desc_t *desc,
                        uint32_t length,
                        uint8_t keep_channel,
 		       int log_channel);
+
+
+void multipath_channel_float(channel_desc_t *desc,
+                             float **tx_sig_re,
+                             float **tx_sig_im,
+                             float **rx_sig_re,
+                             float **rx_sig_im,
+                             uint32_t length,
+                             uint8_t keep_channel,
+                             int log_channel);
+
+void add_noise_float(c16_t **rxdata,
+                     const float **r_re,
+                     const float **r_im,
+                     const float sigma2,
+                     const int length,
+                     const int slot_offset,
+                     const double ts,
+                     const int delay,
+                     const uint16_t pdu_bit_map,
+                     const uint16_t ptrs_bit_map,
+                     const uint8_t nb_antennas_rx);
+
 /*
 \fn double compute_pbch_sinr(channel_desc_t *desc,
                              channel_desc_t *desc_i1,
