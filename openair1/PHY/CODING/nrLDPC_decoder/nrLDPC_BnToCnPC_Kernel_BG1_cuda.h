@@ -103,7 +103,7 @@ __device__ void CnToBnPC_Kernel_int8_G3(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G3, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G3, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -171,7 +171,7 @@ __device__ void CnToBnPC_Kernel_int8_G4(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G4, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G4, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -239,7 +239,7 @@ __device__ void CnToBnPC_Kernel_int8_G5(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G5, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G5, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -306,7 +306,7 @@ __device__ void CnToBnPC_Kernel_int8_G6(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G6, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G6, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -373,7 +373,7 @@ __device__ void CnToBnPC_Kernel_int8_G7(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G7, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G7, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -440,7 +440,7 @@ __device__ void CnToBnPC_Kernel_int8_G8(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G8, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G8, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -507,7 +507,7 @@ __device__ void CnToBnPC_Kernel_int8_G9(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G9, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G9, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -574,7 +574,7 @@ __device__ void CnToBnPC_Kernel_int8_G10(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G10, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G10, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -672,7 +672,7 @@ __device__ void CnToBnPC_Kernel_int8_G19(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (Tid % warpSize == 0) {
-        printf("It's wrong here G19, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G19, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -730,7 +730,7 @@ __device__ void CnToBnPC_Kernel_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G3, pcRes = %d\n", pcRes);
+        ////printf("It's wrong here G3, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -798,7 +798,7 @@ uint32_t pcRes = 0;
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G4, pcRes = %d\n", pcRes);
+        ////printf("It's wrong here G4, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -866,7 +866,7 @@ __device__ void CnToBnPC_Kernel_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G5, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G5, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -933,7 +933,7 @@ __device__ void CnToBnPC_Kernel_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G6, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G6, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -1000,7 +1000,7 @@ __device__ void CnToBnPC_Kernel_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G7, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G7, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -1067,7 +1067,7 @@ __device__ void CnToBnPC_Kernel_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G8, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G8, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -1134,7 +1134,7 @@ __device__ void CnToBnPC_Kernel_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G9, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G9, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -1201,7 +1201,7 @@ __device__ void CnToBnPC_Kernel_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
-        printf("It's wrong here G10, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G10, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -1299,7 +1299,7 @@ __device__ void CnToBnPC_Kernel_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (Tid % warpSize == 0) {
-        printf("It's wrong here G19, pcRes = %d\n", pcRes);
+        //printf("It's wrong here G19, pcRes = %d\n", pcRes);
         *PC_Flag = 1; // atomicOr(PC_Flag, 1);
       }
     }
@@ -1323,22 +1323,23 @@ __device__ void llrRes2llrOut_Kernel_int8_BG1(const t_nrLDPC_lut *p_lut, int8_t 
   const uint8_t* lut_llr2llrProcBufBnPos = p_lut->llr2llrProcBufBnPos;
 
   int8_t* p_llrOut = &llrOut[0];
+ if(colIdx < startColParity){
+    const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
+    int32_t* dst_ptr2 = (int32_t*)(p_llrOut + colIdx * Zc + tid * 4);
+    int32_t* src_ptr2 = (int32_t*)(&llrRes[idxBn] + tid * 4);
+    *dst_ptr2 = *src_ptr2;//0x01010101*colIdx;//
+  }
 
+//  __syncthreads();
   if (numBn2CnG1 > 0) {
     if(colIdx<numBn2CnG1){
-      int32_t* dst_ptr = (int32_t*)(&llrOut[colG1] + colIdx * Zc + tid * 4);
-      int32_t* src_ptr = (int32_t*)(llrRes + colIdx * Zc + tid * 4);
-      *dst_ptr = *src_ptr;//0x10101010*colIdx;//
+      int32_t* dst_ptr1 = (int32_t*)(&llrOut[colG1] + colIdx * Zc + tid * 4);
+      int32_t* src_ptr1 = (int32_t*)(llrRes + colIdx * Zc + tid * 4);
+      *dst_ptr1 = *src_ptr1;//0x10101010*colIdx;//
     }
   }
 
-  if(colIdx < startColParity){
-    const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
-    int32_t* dst_ptr = (int32_t*)(p_llrOut + colIdx * Zc + tid * 4);
-    int32_t* src_ptr = (int32_t*)(&llrRes[idxBn] + tid * 4);
-    *dst_ptr = *src_ptr;//0x01010101*colIdx;//
-  }
-
+ 
 }
 
 __device__ void llr2bitPacked_Kernel_int8_BG1(uint8_t* out, int8_t* llrOut, uint32_t numLLR) {
