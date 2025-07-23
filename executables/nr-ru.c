@@ -561,7 +561,7 @@ void fh_if4p5_north_out(RU_t *ru) {
   stop_meas(&ru->tx_fhaul);
 }
 
-static void rx_rf(RU_t *ru, int *frame, int *slot)
+void rx_rf(RU_t *ru, int *frame, int *slot)
 {
   RU_proc_t *proc = &ru->proc;
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;

@@ -47,3 +47,8 @@ add_boolean_option(OAI_RF_EMULATOR ON "Activate OAI's RF emulator" OFF)
 if(OAI_RF_EMULATOR)
   add_subdirectory(emulator)
 endif()
+
+add_boolean_option(OAI_FD_RFSIM ON "Activate OAI's FD RFsim adapter driver" OFF)
+if(OAI_FD_RFSIM)
+  add_subdirectory(fd_rfsim)
+endif()
