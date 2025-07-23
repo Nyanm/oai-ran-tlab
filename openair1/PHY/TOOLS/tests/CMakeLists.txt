@@ -42,7 +42,9 @@ add_test(NAME test_sse_intrinsics
 
 # ==============================================================================
 add_executable(test_multipath test_multipath.c)
-target_link_libraries(test_multipath PRIVATE UTIL SIMU shlib_loader m)
+
+target_link_libraries(test_multipath PRIVATE UTIL SIMU LOG T CONFIG_LIB shlib_loader m)
 set_target_properties(test_multipath PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
+
