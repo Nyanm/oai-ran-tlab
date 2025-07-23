@@ -211,6 +211,136 @@ void dump_cnProcBufRes_to_file(const int8_t* cnProcBufRes, const char* filename)
   fclose(fp);
 }
 //--------------------------------------------------------------
+#ifdef PARALLEL_STREAM
+static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
+                                           int8_t* p_out,
+                                           uint32_t numLLR,
+                                           t_nrLDPC_lut* p_lut,
+                                           t_nrLDPC_dec_params* p_decParams,
+                                           t_nrLDPC_time_stats* p_profiler,
+                                           decode_abort_t* ab);
+
+int32_t LDPCinit()
+{
+  return 0;
+}
+
+int32_t LDPCshutdown()
+{
+  return 0;
+}
+
+int32_t LDPCdecoder(t_nrLDPC_dec_params* p_decParams,
+                    uint8_t harq_pid,
+                    uint8_t ulsch_id,
+                    uint8_t C,
+                    int8_t* p_llr,
+                    int8_t* p_out,
+                    t_nrLDPC_time_stats* p_profiler,
+                    decode_abort_t* ab)
+{
+  uint32_t numLLR;
+  t_nrLDPC_lut lut;
+  t_nrLDPC_lut* p_lut = &lut;
+
+  // Initialize decoder core(s) with correct LUTs
+  numLLR = nrLDPC_init(p_decParams, p_lut);
+
+  // Launch LDPC decoder core for one segment
+  int numIter = nrLDPC_decoder_core(p_llr, p_out, numLLR, p_lut, p_decParams, p_profiler, ab);
+  if (numIter >= p_decParams->numMaxIter) {
+    LOG_D(PHY, "set abort: %d, %d\n", numIter, p_decParams->numMaxIter);
+    set_abort(ab, true);
+  }
+  return numIter;
+}
+
+/**
+   \brief PerformsnrLDPC decoding of one code block
+   \param p_llr Input LLRs
+   \param p_out Output vector
+   \param numLLR Number of LLRs
+   \param p_lut Pointer to decoder LUTs
+   \param p_decParamsnrLDPC decoder parameters
+   \param p_profilernrLDPC profiler statistics
+*/
+
+static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
+                                           int8_t* p_out,
+                                           uint32_t numLLR,
+                                           t_nrLDPC_lut* p_lut,
+                                           t_nrLDPC_dec_params* p_decParams,
+                                           t_nrLDPC_time_stats* p_profiler,
+                                           decode_abort_t* ab)
+{
+  uint16_t Z = p_decParams->Z;
+  uint8_t BG = p_decParams->BG;
+  uint8_t R = p_decParams->R; // Decoding rate: Format 15,13,... for code rates 1/5, 1/3,... */
+  uint8_t numMaxIter = p_decParams->numMaxIter;
+  e_nrLDPC_outMode outMode = p_decParams->outMode;
+  // int8_t* cnProcBuf=  cnProcBuf;
+  // int8_t* cnProcBufRes= cnProcBufRes;
+
+  int8_t cnProcBuf[NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
+  int8_t cnProcBufRes[NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
+  int8_t bnProcBuf[NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
+  int8_t bnProcBufRes[NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
+  int8_t llrRes[NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+  int8_t llrProcBuf[NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+  // Minimum number of iterations is 1
+  // 0 iterations means hard-decision on input LLRs
+  // Initialize with parity check fail != 0
+
+  // Initialization
+  NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2llrProcBuf));
+  nrLDPC_llr2llrProcBuf(p_lut, p_llr, llrProcBuf, Z, BG);
+  NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2llrProcBuf));
+#ifdef NR_LDPC_DEBUG_MODE
+  nrLDPC_debug_initBuffer2File(nrLDPC_buffers_LLR_PROC);
+  nrLDPC_debug_writeBuffer2File(nrLDPC_buffers_LLR_PROC, llrProcBuf);
+#endif
+
+  NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2CnProcBuf));
+  if (BG == 1)
+    nrLDPC_llr2CnProcBuf_BG1(p_lut, p_llr, cnProcBuf, Z);
+  else
+    nrLDPC_llr2CnProcBuf_BG2(p_lut, p_llr, cnProcBuf, Z);
+  NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2CnProcBuf));
+
+#ifdef NR_LDPC_DEBUG_MODE
+  nrLDPC_debug_initBuffer2File(nrLDPC_buffers_CN_PROC);
+  nrLDPC_debug_writeBuffer2File(nrLDPC_buffers_CN_PROC, cnProcBuf);
+#endif
+
+
+  //printf("CUDA stream enabled ^ ^ (but nothing here yet)\n");
+  uint8_t CudaStreamIdx = 0;
+  int8_t llrOut[NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+  int8_t *p_llrOut = outMode == nrLDPC_outMode_LLRINT8 ? p_out : llrOut;
+  nrLDPC_decoder_scheduler_BG1_cuda_core(p_lut,
+                                         p_out,
+                                         numLLR,
+                                         cnProcBuf,
+                                         cnProcBufRes,
+                                         bnProcBuf,
+                                         bnProcBufRes,
+                                         llrRes,
+                                         llrProcBuf,
+                                         llrOut,
+                                         p_llrOut,
+                                         Z,
+                                         BG,
+                                         R,
+                                         numMaxIter,
+                                         outMode,
+                                         CudaStreamIdx);
+  //dump_cnProcBufRes_to_file(p_out, "First_out_dump_Stream.txt");
+  //dump_cnProcBufRes_to_file(llrOut, "First_llrout_dump_Stream.txt");
+  return numMaxIter;
+}
+
+
+#else
 static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            int8_t* p_out,
                                            uint32_t numLLR,
@@ -309,34 +439,6 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   nrLDPC_debug_initBuffer2File(nrLDPC_buffers_CN_PROC);
   nrLDPC_debug_writeBuffer2File(nrLDPC_buffers_CN_PROC, cnProcBuf);
 #endif
-
-#ifdef PARALLEL_STREAM
-  //printf("CUDA stream enabled ^ ^ (but nothing here yet)\n");
-  uint8_t CudaStreamIdx = 0;
-  int8_t llrOut[NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
-  int8_t *p_llrOut = outMode == nrLDPC_outMode_LLRINT8 ? p_out : llrOut;
-  nrLDPC_decoder_scheduler_BG1_cuda_core(p_lut,
-                                         p_out,
-                                         numLLR,
-                                         cnProcBuf,
-                                         cnProcBufRes,
-                                         bnProcBuf,
-                                         bnProcBufRes,
-                                         llrRes,
-                                         llrProcBuf,
-                                         llrOut,
-                                         p_llrOut,
-                                         Z,
-                                         BG,
-                                         R,
-                                         numMaxIter,
-                                         outMode,
-                                         CudaStreamIdx);
-  //dump_cnProcBufRes_to_file(p_out, "First_out_dump_Stream.txt");
-  //dump_cnProcBufRes_to_file(llrOut, "First_llrout_dump_Stream.txt");
-  return numMaxIter;
-#else
-
   // First iteration
   // CN processing
   NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->cnProc));
@@ -1080,5 +1182,6 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   // printf("Using CPU decoder\n");
   // #endif
   return numIter;
-#endif
+
 }
+#endif
