@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cuda_runtime.h>
 #include "common/utils/assertions.h"
 #include "common/utils/nr/nr_common.h"
 #include "common/utils/var_array.h"
@@ -66,6 +67,7 @@
 #include "SCHED_NR/sched_nr.h"
 #include "SCHED_NR_UE/defs.h"
 #include "SCHED_NR_UE/fapi_nr_ue_l1.h"
+#include "SIMULATION/TOOLS/oai_cuda.h"
 #include "T.h"
 #include "asn_internal.h"
 #include "assertions.h"
@@ -298,6 +300,9 @@ void validate_input_pmi(nfapi_nr_config_request_scf_t *gNB_config,
 
 
 configmodule_interface_t *uniqCfg = NULL;
+
+  // int use_cuda = 0; // Flag for CUDA
+
 int main(int argc, char **argv)
 {
   stop = false;
@@ -316,7 +321,11 @@ int main(int argc, char **argv)
   float eff_tp_check = 0.7;
   uint32_t TBS = 0;
   c16_t **txdata;
-  double **s_re,**s_im,**r_re,**r_im;
+  // double **s_re,**s_im,**r_re,**r_im;
+// CHANGING DOUBLE TO FLOAT
+  float **s_re,**s_im,**r_re,**r_im;
+
+
   //double iqim = 0.0;
   //unsigned char pbch_pdu[6];
   //  int sync_pos, sync_pos_slot;
@@ -393,8 +402,15 @@ int main(int argc, char **argv)
 
   FILE *scg_fd=NULL;
 
-  while ((c = getopt(argc, argv, "--:O:f:hA:p:f:g:i:n:s:S:t:v:x:y:z:o:H:M:N:F:GR:d:PI:L:a:b:e:m:w:T:U:q:X:Y:Z:")) != -1) {
-
+  int use_cuda = 0;
+  void *d_tx_sig = NULL, *d_channel = NULL, *d_rx_sig = NULL;
+  static struct option long_options[] = {
+      {"cuda", no_argument, 0, 0},
+      {0, 0, 0, 0}
+  };
+  int option_index = 0;
+ 
+  while ((c = getopt_long(argc, argv, "O:f:hA:p:g:i:n:s:S:t:v:x:y:z:o:H:M:N:F:GR:d:PI:L:a:b:e:m:w:T:U:q:X:Y:Z:", long_options, &option_index)) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -402,6 +418,13 @@ int main(int argc, char **argv)
 
     printf("handling optarg %c\n",c);
     switch (c) {
+
+    case 0:
+        if (strcmp(long_options[option_index].name, "cuda") == 0) {
+            use_cuda = 1;
+        }
+        break;
+
     case 'f':
       scg_fd = fopen(optarg,"r");
 
@@ -878,24 +901,52 @@ printf("%d\n", slot);
   int slot_offset = frame_parms->get_samples_slot_timestamp(slot,frame_parms,0);
   int slot_length = slot_offset - frame_parms->get_samples_slot_timestamp(slot-1,frame_parms,0);
 
-  s_re = malloc(n_tx*sizeof(double*));
-  s_im = malloc(n_tx*sizeof(double*));
-  r_re = malloc(n_rx*sizeof(double*));
-  r_im = malloc(n_rx*sizeof(double*));
+  // s_re = malloc(n_tx*sizeof(double*));
+  // s_im = malloc(n_tx*sizeof(double*));
+  // r_re = malloc(n_rx*sizeof(double*));
+  // r_im = malloc(n_rx*sizeof(double*));
+
+//  CHANGING DOUBLE TO FLOAT
+
+  s_re = malloc(n_tx*sizeof(float*));
+  s_im = malloc(n_tx*sizeof(float*));
+  r_re = malloc(n_rx*sizeof(float*));
+  r_im = malloc(n_rx*sizeof(float*));
   txdata = malloc(n_tx*sizeof(int*));
 
   for (i = 0; i < n_tx; i++) {
-    s_re[i] = calloc(1, slot_length * sizeof(double));
-    s_im[i] = calloc(1, slot_length * sizeof(double));
+    // CHANGING DOUBLE TO FLOAT
+    s_re[i] = calloc(1, slot_length * sizeof(float));
+    s_im[i] = calloc(1, slot_length * sizeof(float));
+
+    // s_re[i] = calloc(1, slot_length * sizeof(double));
+    // s_im[i] = calloc(1, slot_length * sizeof(double));
 
     printf("Allocating %d samples for txdata\n", frame_length_complex_samples);
     txdata[i] = calloc(1, frame_length_complex_samples * sizeof(int));
   }
 
   for (i = 0; i < n_rx; i++) {
-    r_re[i] = calloc(1, slot_length * sizeof(double));
-    r_im[i] = calloc(1, slot_length * sizeof(double));
+    // CHANGING DOUBLE TO FLOAT
+    r_re[i] = calloc(1, slot_length * sizeof(float));
+    r_im[i] = calloc(1, slot_length * sizeof(float));
+
+    //    r_re[i] = calloc(1, slot_length * sizeof(double));
+    // r_im[i] = calloc(1, slot_length * sizeof(double));
   }
+
+
+  if (use_cuda) {
+      printf("Pre-allocating GPU memory for simulation...\n");
+      int num_samples = slot_length - (int)gNB2UE->channel_offset;
+      // Note: The size calculation must match the one inside multipath_channel.cu
+      // The CUDA kernel expects float2 arrays, so we multiply size by 2.
+      cudaMalloc(&d_tx_sig, n_tx * num_samples * sizeof(float) * 2);
+      cudaMalloc(&d_channel, n_tx * n_rx * gNB2UE->channel_length * sizeof(float) * 2);
+      cudaMalloc(&d_rx_sig, n_rx * num_samples * sizeof(float) * 2);
+      printf("GPU memory allocated.\n");
+  }
+
 
   if (pbch_file_fd!=NULL) {
     load_pbch_desc(pbch_file_fd);
@@ -1023,6 +1074,8 @@ printf("%d\n", slot);
     LOG_E(PHY, "out of memory\n");
     exit(1);
   }
+  time_stats_t channel_stats = {0};
+  time_stats_t noise_stats = {0};
 
   for (SNR = snr0; SNR < snr1 && !stop; SNR += .2) {
 
@@ -1188,8 +1241,12 @@ printf("%d\n", slot);
 
         for (i = 0; i < slot_length; i++) {
           for (aa=0; aa<frame_parms->nb_antennas_tx; aa++) {
-            s_re[aa][i] = ((double)(((short *)&txdata[aa][slot_offset]))[(i << 1)]);
-            s_im[aa][i] = ((double)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1]);
+            // s_re[aa][i] = ((double)(((short *)&txdata[aa][slot_offset]))[(i << 1)]);
+            // s_im[aa][i] = ((double)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1]);
+
+            // CHANGING DOUBLE TO FLOAT
+            s_re[aa][i] = ((float)(((short *)&txdata[aa][slot_offset]))[(i << 1)]);
+            s_im[aa][i] = ((float)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1]);
           }
         }
 
@@ -1200,16 +1257,28 @@ printf("%d\n", slot);
         if (n_trials==1) printf("sigma2 %f (%f dB), txlev_sum %f (factor %f)\n",sigma2,sigma2_dB,10*log10((double)txlev_sum),(double)(double)UE->frame_parms.ofdm_symbol_size/(12*rel15->rbSize));
 
         for (aa = 0; aa < n_rx; aa++) {
-          bzero(r_re[aa], slot_length * sizeof(double));
-          bzero(r_im[aa], slot_length * sizeof(double));
+          // bzero(r_re[aa], slot_length * sizeof(double));
+          // bzero(r_im[aa], slot_length * sizeof(double));
+          // CHANGING DOUBLE TO FLOAT
+          bzero(r_re[aa], slot_length * sizeof(float));
+          bzero(r_im[aa], slot_length * sizeof(float));
         }
 
-        // Apply MIMO Channel
-        multipath_channel(gNB2UE, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
-        add_noise(UE->common_vars.rxdata,
-                  (const double **)r_re,
-                  (const double **)r_im,
-                  sigma2,
+        start_meas(&channel_stats);
+        if (use_cuda) {
+            multipath_channel_cuda_fast(gNB2UE, s_re, s_im, r_re, r_im, slot_length, d_tx_sig, d_channel, d_rx_sig);
+        } else {
+            multipath_channel_float(gNB2UE, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
+        }
+        stop_meas(&channel_stats);
+        start_meas(&noise_stats);
+        // changing double to float
+        // (const double **)r_re,
+        // (const double **)r_im,
+        add_noise_float(UE->common_vars.rxdata,
+                  (const float **)r_re, 
+                  (const float **)r_im,
+                  (float)sigma2,
                   slot_length,
                   slot_offset,
                   ts,
@@ -1217,6 +1286,7 @@ printf("%d\n", slot);
                   pdu_bit_map,
                   0x1,
                   UE->frame_parms.nb_antennas_rx);
+        stop_meas(&noise_stats);
         dl_config.sfn = frame;
         dl_config.slot = slot;
         ue_dci_configuration(UE_mac, &dl_config, frame, slot);
@@ -1349,6 +1419,9 @@ printf("%d\n", slot);
       if (gNB->phase_comp)
         printStatIndent2(&gNB->phase_comp_stats, "Phase Compensation");
 
+      printStatIndent(&channel_stats, "Multipath Channel");
+      printStatIndent(&noise_stats, "Add Noise");
+
       printf("\nUE function statistics (per %d us slot)\n", 1000 >> *scc->ssbSubcarrierSpacing);
       for (int i = RX_PDSCH_STATS; i <= DLSCH_PROCEDURES_STATS; i++) {
         printStatIndent(&UE->phy_cpu_stats.cpu_time_stats[i], UE->phy_cpu_stats.cpu_time_stats[i].meas_name);
@@ -1426,6 +1499,12 @@ printf("%d\n", slot);
   for (i = 0; i < n_rx; i++) {
     free(r_re[i]);
     free(r_im[i]);
+  }
+
+  if (use_cuda) {
+    cudaFree(d_tx_sig);
+    cudaFree(d_channel);
+    cudaFree(d_rx_sig);
   }
 
   free(s_re);
