@@ -1,20 +1,18 @@
+/**
+ * @file multipath_channel.cu
+ * @brief CUDA implementation of the multipath_channel function.
+ * @author Nika Ghaderi & Gemini
+ * @date July 24, 2025
+ */
+
 #include <stdio.h>
 #include <cuda_runtime.h>
-
-#include "PHY/TOOLS/tools_defs.h"
-
-extern "C" {
-  #include "SIMULATION/TOOLS/sim.h"
-}
-
-#include "SIMULATION/TOOLS/oai_cuda.h"
+#include "oai_cuda.h" 
 
 // ====================================================================================
 // Constant Memory for Channel Coefficients
 // ====================================================================================
-// Using constant memory for the channel taps is ideal because it's cached
-// and optimized for when all threads in a warp read the same address.
-#define MAX_CHANNEL_ELEMENTS (1024) // Safe upper bound for 4x4 MIMO with 64 taps
+#define MAX_CHANNEL_ELEMENTS (1024)
 __constant__ float2 d_channel_const[MAX_CHANNEL_ELEMENTS];
 
 
@@ -39,7 +37,7 @@ __device__ __forceinline__ float2 complex_add(float2 a, float2 b) {
 }
 
 // ====================================================================================
-// OPTIMIZED KERNEL with Shared and Constant Memory
+// FINAL OPTIMIZED KERNEL with Correct Shared Memory Halo Handling
 // ====================================================================================
 __global__ void multipath_channel_kernel_optimized(
     const float2* __restrict__ tx_sig,
@@ -49,120 +47,119 @@ __global__ void multipath_channel_kernel_optimized(
     int nb_tx,
     int nb_rx)
 {
-    // Statically allocated shared memory. Size must be known at compile time.
-    // We size it for a block of 256 threads and a max channel length of 64.
-    // This is much faster than dynamic shared memory.
-    __shared__ float2 tx_shared[256 + 64 - 1];
+    // Dynamically allocated shared memory. The size is passed during kernel launch.
+    extern __shared__ float2 tx_shared[];
 
-    const int i = blockIdx.x * blockDim.x + threadIdx.x;
-    const int ii = blockIdx.y;
+    const int i = blockIdx.x * blockDim.x + threadIdx.x; // Global time sample index
+    const int ii = blockIdx.y;                          // Receiver antenna index
 
     if (i >= num_samples) return;
 
     float2 rx_tmp = make_float2(0.0f, 0.0f);
 
     for (int j = 0; j < nb_tx; j++) {
-        // --- Cooperative loading into Shared Memory ---
+        // --- Step 1: Cooperative Loading into Shared Memory with Halo ---
         const int tid = threadIdx.x;
         const int block_start_idx = blockIdx.x * blockDim.x;
-        
-        // Each thread loads a piece of the input signal into our shared tile
-        int load_idx = block_start_idx + tid;
-        if (load_idx < num_samples) {
-            tx_shared[tid] = tx_sig[j * num_samples + load_idx];
-        }
+        const int shared_mem_size = blockDim.x + channel_length - 1;
 
-        // The last (channel_length - 1) threads of the block load the "halo"
-        // for the *next* block to use. This is a common optimization pattern.
-        if (tid < channel_length - 1) {
-            int halo_load_idx = block_start_idx + blockDim.x + tid;
-            if (halo_load_idx < num_samples) {
-                 tx_shared[blockDim.x + tid] = tx_sig[j * num_samples + halo_load_idx];
+        for (int k = tid; k < shared_mem_size; k += blockDim.x) {
+            int load_idx = block_start_idx + k - (channel_length - 1);
+            
+            if (load_idx >= 0 && load_idx < num_samples) {
+                tx_shared[k] = tx_sig[j * num_samples + load_idx];
+            } else {
+                tx_shared[k] = make_float2(0.0f, 0.0f); // Zero-pad for samples before t=0
             }
         }
-        __syncthreads();
+        __syncthreads(); // Wait for all threads to finish loading
 
-        // --- Convolution using fast Shared and Constant memory ---
+        // --- Step 2: Convolution using Shared and Constant Memory ---
         for (int l = 0; l < channel_length; l++) {
-            int tx_index = i - l;
-            if (tx_index >= 0) {
-                float2 tx_sample = tx_shared[tid - l];
-                int chan_link_idx = ii + (j * nb_rx);
-                float2 chan_weight = d_channel_const[chan_link_idx * channel_length + l];
-                rx_tmp = complex_add(rx_tmp, complex_mul(tx_sample, chan_weight));
-            }
+            float2 tx_sample = tx_shared[tid + (channel_length - 1) - l];
+            int chan_link_idx = ii + (j * nb_rx);
+            float2 chan_weight = d_channel_const[chan_link_idx * channel_length + l];
+            rx_tmp = complex_add(rx_tmp, complex_mul(tx_sample, chan_weight));
         }
-        __syncthreads();
+        __syncthreads(); // Wait before the next 'j' loop iteration
     }
     
+    // Write the final result to global memory
     rx_sig[ii * num_samples + i] = rx_tmp;
 }
 
 
 // ====================================================================================
-// Host Wrapper
+// Host Wrapper - Updated to the new decoupled signature
 // ====================================================================================
 extern "C" {
-    void multipath_channel_cuda_fast(channel_desc_t *desc,
-                                     float **tx_sig_re,
-                                     float **tx_sig_im,
-                                     float **rx_sig_re,
-                                     float **rx_sig_im,
-                                     uint32_t length,
-                                     void *d_tx_sig_void,
-                                     void *d_channel_void, // Unused
-                                     void *d_rx_sig_void)
-    {
-        random_channel(desc, 0);
+void multipath_channel_cuda_fast(
+    // Input Signal Buffers
+    float **tx_sig_re,
+    float **tx_sig_im,
+    // Output Signal Buffers
+    float **rx_sig_re,
+    float **rx_sig_im,
+    // Simulation & Channel Parameters
+    int nb_tx,
+    int nb_rx,
+    int channel_length,
+    uint32_t length,
+    uint64_t channel_offset,
+    float path_loss,
+    // Host pointer to the flattened channel coefficients
+    float *h_channel_coeffs,
+    // Pre-allocated GPU memory
+    void *d_tx_sig_void,
+    void *d_rx_sig_void)
+{
+    // Cast void pointers to their actual types
+    float2 *d_tx_sig = (float2*)d_tx_sig_void;
+    float2 *d_rx_sig = (float2*)d_rx_sig_void;
 
-        int nb_tx = desc->nb_tx;
-        int nb_rx = desc->nb_rx;
-        int channel_length = desc->channel_length;
-        uint64_t dd = desc->channel_offset;
-        int num_samples = length - (int)dd;
-        float path_loss = (float)pow(10, desc->path_loss_dB / 20.0);
+    int num_samples = length - (int)channel_offset;
 
-        float2 *d_tx_sig = (float2*)d_tx_sig_void;
-        float2 *d_rx_sig = (float2*)d_rx_sig_void;
+    // Allocate temporary host memory for interleaving the signal
+    float2* h_tx_sig_interleaved = (float2*)malloc(nb_tx * num_samples * sizeof(float2));
+    if (!h_tx_sig_interleaved) { /* handle error */ return; }
 
-        float2* h_tx_sig = (float2*)malloc(nb_tx * num_samples * sizeof(float2));
-        float2* h_channel = (float2*)malloc(nb_tx * nb_rx * channel_length * sizeof(float2));
-        float2* h_rx_sig = (float2*)malloc(nb_rx * num_samples * sizeof(float2));
-
-        for (int j = 0; j < nb_tx; j++) {
-            for (int i = 0; i < num_samples; i++) {
-                h_tx_sig[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
-            }
+    // Interleave the real and imaginary parts of the TX signal for the GPU
+    for (int j = 0; j < nb_tx; j++) {
+        for (int i = 0; i < num_samples; i++) {
+            h_tx_sig_interleaved[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
         }
-
-        for (int link = 0; link < nb_tx * nb_rx; link++) {
-            for (int l = 0; l < channel_length; l++) {
-                h_channel[link * channel_length + l] = make_float2((float)desc->ch[link][l].r, (float)desc->ch[link][l].i);
-            }
-        }
-
-        CHECK_CUDA(cudaMemcpy(d_tx_sig, h_tx_sig, nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice));
-        CHECK_CUDA(cudaMemcpyToSymbol(d_channel_const, h_channel, nb_tx * nb_rx * channel_length * sizeof(float2)));
-
-        dim3 threadsPerBlock(256, 1);
-        dim3 numBlocks((num_samples + threadsPerBlock.x - 1) / threadsPerBlock.x, nb_rx);
-
-        // Call the optimized kernel. No dynamic shared memory needed.
-        multipath_channel_kernel_optimized<<<numBlocks, threadsPerBlock>>>(
-            d_tx_sig, d_rx_sig, num_samples, channel_length, nb_tx, nb_rx);
-        
-        CHECK_CUDA(cudaMemcpy(h_rx_sig, d_rx_sig, nb_rx * num_samples * sizeof(float2), cudaMemcpyDeviceToHost));
-        
-        for (int ii = 0; ii < nb_rx; ii++) {
-            for (int i = 0; i < num_samples; i++) {
-                float2 result = h_rx_sig[ii * num_samples + i];
-                rx_sig_re[ii][i + dd] = result.x * path_loss;
-                rx_sig_im[ii][i + dd] = result.y * path_loss;
-            }
-        }
-
-        free(h_tx_sig);
-        free(h_channel);
-        free(h_rx_sig);
     }
+
+    // --- GPU Operations ---
+    CHECK_CUDA(cudaMemcpy(d_tx_sig, h_tx_sig_interleaved, nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpyToSymbol(d_channel_const, h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2)));
+
+    dim3 threadsPerBlock(256, 1);
+    dim3 numBlocks((num_samples + threadsPerBlock.x - 1) / threadsPerBlock.x, nb_rx);
+    size_t sharedMemSize = (threadsPerBlock.x + channel_length - 1) * sizeof(float2);
+
+    // Launch Kernel
+    multipath_channel_kernel_optimized<<<numBlocks, threadsPerBlock, sharedMemSize>>>(
+        d_tx_sig, d_rx_sig, num_samples, channel_length, nb_tx, nb_rx);
+    
+    // Allocate host memory for the result and copy it back
+    float2* h_rx_sig = (float2*)malloc(nb_rx * num_samples * sizeof(float2));
+    if (!h_rx_sig) { /* handle error */ free(h_tx_sig_interleaved); return; }
+
+    CHECK_CUDA(cudaMemcpy(h_rx_sig, d_rx_sig, nb_rx * num_samples * sizeof(float2), cudaMemcpyDeviceToHost));
+    
+    // De-interleave the result and apply path loss
+    for (int ii = 0; ii < nb_rx; ii++) {
+        for (int i = 0; i < num_samples; i++) {
+            float2 result = h_rx_sig[ii * num_samples + i];
+            rx_sig_re[ii][i + channel_offset] = result.x * path_loss;
+            rx_sig_im[ii][i + channel_offset] = result.y * path_loss;
+        }
+    }
+
+    // Free temporary host memory
+    free(h_tx_sig_interleaved);
+    free(h_rx_sig);
+}
+
 } // extern "C"

@@ -1266,7 +1266,41 @@ printf("%d\n", slot);
 
         start_meas(&channel_stats);
         if (use_cuda) {
-            multipath_channel_cuda_fast(gNB2UE, s_re, s_im, r_re, r_im, slot_length, d_tx_sig, d_channel, d_rx_sig);
+            // This is the new calling convention
+            
+            // 1. Call random_channel() to populate the coefficients in the descriptor
+            random_channel(gNB2UE, 0);
+
+            // 2. Prepare the parameters needed by the CUDA function
+            float path_loss = (float)pow(10, gNB2UE->path_loss_dB / 20.0);
+            int num_links = gNB2UE->nb_tx * gNB2UE->nb_rx;
+            int channel_size = num_links * gNB2UE->channel_length;
+
+            // 3. Allocate a temporary buffer for the flattened channel coefficients
+            float* h_channel_coeffs = (float*)malloc(channel_size * sizeof(float2)); // float2 is 2 floats
+
+            // 4. Flatten the channel coefficients from the OAI struct into the simple array
+            for (int link = 0; link < num_links; link++) {
+                for (int l = 0; l < gNB2UE->channel_length; l++) {
+                    int idx = link * gNB2UE->channel_length + l;
+                    ((float2*)h_channel_coeffs)[idx] = make_float2((float)gNB2UE->ch[link][l].r, (float)gNB2UE->ch[link][l].i);
+                }
+            }
+
+            // 5. Call the new, decoupled CUDA function
+            multipath_channel_cuda_fast(s_re, s_im, r_re, r_im,
+                                        gNB2UE->nb_tx,
+                                        gNB2UE->nb_rx,
+                                        gNB2UE->channel_length,
+                                        slot_length,
+                                        gNB2UE->channel_offset,
+                                        path_loss,
+                                        h_channel_coeffs,
+                                        d_tx_sig,      // pre-allocated device pointer
+                                        d_rx_sig);     // pre-allocated device pointer
+
+            // 6. Free the temporary host buffer
+            free(h_channel_coeffs);
         } else {
             multipath_channel_float(gNB2UE, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
         }
