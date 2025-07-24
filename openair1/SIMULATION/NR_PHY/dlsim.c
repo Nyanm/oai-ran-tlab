@@ -301,8 +301,6 @@ void validate_input_pmi(nfapi_nr_config_request_scf_t *gNB_config,
 
 configmodule_interface_t *uniqCfg = NULL;
 
-  // int use_cuda = 0; // Flag for CUDA
-
 int main(int argc, char **argv)
 {
   stop = false;
@@ -1297,9 +1295,8 @@ printf("%d\n", slot);
                                         path_loss,
                                         h_channel_coeffs,
                                         d_tx_sig,      // pre-allocated device pointer
-                                        d_rx_sig,       // pre-allocated device pointer
-                                        256);    // block size
-
+                                        d_rx_sig);       // pre-allocated device pointer
+                                        
             // 6. Free the temporary host buffer
             free(h_channel_coeffs);
         } else {

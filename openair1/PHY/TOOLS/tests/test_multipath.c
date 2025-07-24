@@ -1,8 +1,7 @@
 /**
  * @file test_multipath.c
  * @brief Standalone benchmark for comparing CPU and CUDA multipath channel implementations.
- * Updated to use standard Linux timers to be fully independent of the OAI
- * configuration and timing libraries.
+ * Now calls the CUDA implementation with the interleaved memory optimization.
  * @author Nika Ghaderi & Gemini
  * @date July 24, 2025
  */
@@ -13,29 +12,24 @@
 #include <string.h>
 #include <time.h>
 
-// OAI Includes (only what is absolutely necessary)
+// OAI Includes
 #include "PHY/TOOLS/tools_defs.h"
 #include "SIMULATION/TOOLS/sim.h"
 #include "SIMULATION/TOOLS/oai_cuda.h"
 #include "common/utils/LOG/log.h"
-#include "common/utils/utils.h" // For randominit
+#include "common/utils/utils.h"
 
 // CUDA Runtime API
 #include <cuda_runtime.h>
 
-// The OAI config system is not used, so this can be NULL.
 configmodule_interface_t *uniqCfg = NULL;
 
-// Provide a definition for the exit_function that some OAI libraries might still require on link.
 void exit_function(const char *file, const char *function, const int line, const char *s, const int assert_not_exit) {
     fprintf(stderr, "Exit function called from %s:%d in %s(). Message: %s\n", file, line, function, s);
     exit(1);
 }
 
-// ====================================================================================
-// Helper Functions
-// ====================================================================================
-
+// --- Helper Functions (Unchanged) ---
 void generate_random_signal(float **sig_re, float **sig_im, int nb_ant, int num_samples) {
     for (int i = 0; i < nb_ant; i++) {
         for (int j = 0; j < num_samples; j++) {
@@ -45,17 +39,13 @@ void generate_random_signal(float **sig_re, float **sig_im, int nb_ant, int num_
     }
 }
 
-// Manually create a channel descriptor to avoid OAI config dependencies
 channel_desc_t* create_manual_channel_desc(int nb_tx, int nb_rx, int channel_length) {
     channel_desc_t* desc = (channel_desc_t*)calloc(1, sizeof(channel_desc_t));
-    if (!desc) return NULL;
-
     desc->nb_tx = nb_tx;
     desc->nb_rx = nb_rx;
     desc->channel_length = channel_length;
     desc->path_loss_dB = 10.0;
     desc->channel_offset = 0;
-
     int num_links = nb_tx * nb_rx;
     desc->ch = (struct complexd**)malloc(num_links * sizeof(struct complexd*));
     for (int i = 0; i < num_links; i++) {
@@ -71,13 +61,10 @@ channel_desc_t* create_manual_channel_desc(int nb_tx, int nb_rx, int channel_len
 void free_manual_channel_desc(channel_desc_t* desc) {
     if (!desc) return;
     int num_links = desc->nb_tx * desc->nb_rx;
-    for (int i = 0; i < num_links; i++) {
-        free(desc->ch[i]);
-    }
+    for (int i = 0; i < num_links; i++) free(desc->ch[i]);
     free(desc->ch);
     free(desc);
 }
-
 
 int verify_results(float **re_cpu, float **im_cpu, float **re_gpu, float **im_gpu, int nb_rx, int num_samples) {
     double total_error = 0.0;
@@ -92,11 +79,9 @@ int verify_results(float **re_cpu, float **im_cpu, float **re_gpu, float **im_gp
     return (mse < 1e-9) ? 0 : 1;
 }
 
-
 // ====================================================================================
 // Main Benchmark Function
 // ====================================================================================
-
 int main(int argc, char **argv) {
     
     logInit();
@@ -108,25 +93,22 @@ int main(int argc, char **argv) {
     int num_samples_configs[] = {30720, 61440, 122880};
     int channel_length_configs[] = {16, 32};
     char* channel_type_names[] = {"Short Channel", "Long Channel"};
-    int block_size_configs[] = {256, 512, 1024};
     int num_trials = 100;
 
-    printf("Starting Multipath Channel Benchmark (CPU vs. CUDA)\n");
+    printf("Starting Multipath Channel Benchmark (CPU vs. Interleaved CUDA)\n");
     printf("Averaging each test case over %d trials.\n", num_trials);
     printf("------------------------------------------------------------------------------------------------------------------------------------------\n");
-    printf("%-15s | %-15s | %-15s | %-12s | %-15s | %-15s | %-15s | %-10s\n", "Channel Type", "MIMO Config", "Signal Length", "Block Size", "CPU Time (us)", "CUDA Time (us)", "Speedup", "Verification");
+    printf("%-15s | %-15s | %-15s | %-15s | %-15s | %-15s | %-10s\n", "Channel Type", "MIMO Config", "Signal Length", "CPU Time (us)", "CUDA Time (us)", "Speedup", "Verification");
     printf("------------------------------------------------------------------------------------------------------------------------------------------\n");
 
     for (int c = 0; c < sizeof(channel_length_configs)/sizeof(int); c++) {
     for (int s = 0; s < sizeof(num_samples_configs)/sizeof(int); s++) {
     for (int m = 0; m < sizeof(nb_tx_configs)/sizeof(int); m++) {
-    for (int b = 0; b < sizeof(block_size_configs)/sizeof(int); b++) {
                 
         int nb_tx = nb_tx_configs[m];
         int nb_rx = nb_rx_configs[m];
         int num_samples = num_samples_configs[s];
         int channel_length = channel_length_configs[c];
-        int block_size = block_size_configs[b];
 
         char mimo_str[16];
         sprintf(mimo_str, "%dx%d", nb_tx, nb_rx);
@@ -164,10 +146,8 @@ int main(int argc, char **argv) {
         struct timespec start, end;
         generate_random_signal(s_re, s_im, nb_tx, num_samples);
 
-        // Run CPU once for verification
+        // Run CPU once for verification and timing baseline
         multipath_channel_float(chan_desc, s_re, s_im, r_re_cpu, r_im_cpu, num_samples, 1, 0);
-
-        // Time CPU run
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int t = 0; t < num_trials; t++) {
             multipath_channel_float(chan_desc, s_re, s_im, r_re_cpu, r_im_cpu, num_samples, 1, 0);
@@ -178,7 +158,7 @@ int main(int argc, char **argv) {
         // Time GPU run
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int t = 0; t < num_trials; t++) {
-            multipath_channel_cuda_fast(s_re, s_im, r_re_gpu, r_im_gpu, nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset, path_loss, h_channel_coeffs, d_tx_sig, d_rx_sig, block_size);
+            multipath_channel_cuda_fast(s_re, s_im, r_re_gpu, r_im_gpu, nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset, path_loss, h_channel_coeffs, d_tx_sig, d_rx_sig);
         }
         cudaDeviceSynchronize();
         clock_gettime(CLOCK_MONOTONIC, &end);
@@ -189,8 +169,8 @@ int main(int argc, char **argv) {
         double avg_gpu_us = (total_gpu_ns / num_trials) / 1000.0;
         double speedup = (avg_gpu_us > 0) ? (avg_cpu_us / avg_gpu_us) : 0;
         
-        printf("%-15s | %-15s | %-15d | %-12d | %-15.2f | %-15.2f | %-15.2fx | %-10s\n", 
-               channel_type_names[c], mimo_str, num_samples, block_size, avg_cpu_us, avg_gpu_us, speedup, 
+        printf("%-15s | %-15s | %-15d | %-15.2f | %-15.2f | %-15.2fx | %-10s\n", 
+               channel_type_names[c], mimo_str, num_samples, avg_cpu_us, avg_gpu_us, speedup, 
                (verification_passed ? "PASSED" : "FAILED"));
 
         free(h_channel_coeffs);
@@ -199,7 +179,6 @@ int main(int argc, char **argv) {
         free(s_re); free(s_im); free(r_re_cpu); free(r_im_cpu); free(r_re_gpu); free(r_im_gpu);
         cudaFree(d_tx_sig); cudaFree(d_rx_sig);
         free_manual_channel_desc(chan_desc);
-    }
     }
     }
     }

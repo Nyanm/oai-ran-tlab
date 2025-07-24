@@ -26,9 +26,7 @@ void multipath_channel_cuda_fast(
     float *h_channel_coeffs,
     // Pre-allocated GPU memory (Device Pointers)
     void *d_tx_sig,
-    void *d_rx_sig,
-    // --- NEW: Kernel Launch Parameter ---
-    int blockSize
+    void *d_rx_sig
 );
 
 
