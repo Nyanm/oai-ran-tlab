@@ -1297,7 +1297,8 @@ printf("%d\n", slot);
                                         path_loss,
                                         h_channel_coeffs,
                                         d_tx_sig,      // pre-allocated device pointer
-                                        d_rx_sig);     // pre-allocated device pointer
+                                        d_rx_sig,       // pre-allocated device pointer
+                                        256);    // block size
 
             // 6. Free the temporary host buffer
             free(h_channel_coeffs);

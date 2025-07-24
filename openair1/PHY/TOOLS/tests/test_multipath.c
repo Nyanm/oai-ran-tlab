@@ -108,98 +108,103 @@ int main(int argc, char **argv) {
     int num_samples_configs[] = {30720, 61440, 122880};
     int channel_length_configs[] = {16, 32};
     char* channel_type_names[] = {"Short Channel", "Long Channel"};
+    int block_size_configs[] = {256, 512, 1024};
     int num_trials = 100;
 
     printf("Starting Multipath Channel Benchmark (CPU vs. CUDA)\n");
     printf("Averaging each test case over %d trials.\n", num_trials);
-    printf("----------------------------------------------------------------------------------------------------------------------\n");
-    printf("%-15s | %-15s | %-15s | %-15s | %-15s | %-15s | %-10s\n", "Channel Type", "MIMO Config", "Signal Length", "CPU Time (us)", "CUDA Time (us)", "Speedup", "Verification");
-    printf("----------------------------------------------------------------------------------------------------------------------\n");
+    printf("------------------------------------------------------------------------------------------------------------------------------------------\n");
+    printf("%-15s | %-15s | %-15s | %-12s | %-15s | %-15s | %-15s | %-10s\n", "Channel Type", "MIMO Config", "Signal Length", "Block Size", "CPU Time (us)", "CUDA Time (us)", "Speedup", "Verification");
+    printf("------------------------------------------------------------------------------------------------------------------------------------------\n");
 
     for (int c = 0; c < sizeof(channel_length_configs)/sizeof(int); c++) {
-        for (int s = 0; s < sizeof(num_samples_configs)/sizeof(int); s++) {
-            for (int m = 0; m < sizeof(nb_tx_configs)/sizeof(int); m++) {
+    for (int s = 0; s < sizeof(num_samples_configs)/sizeof(int); s++) {
+    for (int m = 0; m < sizeof(nb_tx_configs)/sizeof(int); m++) {
+    for (int b = 0; b < sizeof(block_size_configs)/sizeof(int); b++) {
                 
-                int nb_tx = nb_tx_configs[m];
-                int nb_rx = nb_rx_configs[m];
-                int num_samples = num_samples_configs[s];
-                int channel_length = channel_length_configs[c];
+        int nb_tx = nb_tx_configs[m];
+        int nb_rx = nb_rx_configs[m];
+        int num_samples = num_samples_configs[s];
+        int channel_length = channel_length_configs[c];
+        int block_size = block_size_configs[b];
 
-                char mimo_str[16];
-                sprintf(mimo_str, "%dx%d", nb_tx, nb_rx);
+        char mimo_str[16];
+        sprintf(mimo_str, "%dx%d", nb_tx, nb_rx);
 
-                channel_desc_t *chan_desc = create_manual_channel_desc(nb_tx, nb_rx, channel_length);
+        channel_desc_t *chan_desc = create_manual_channel_desc(nb_tx, nb_rx, channel_length);
 
-                float **s_re = malloc(nb_tx * sizeof(float *));
-                float **s_im = malloc(nb_tx * sizeof(float *));
-                float **r_re_cpu = malloc(nb_rx * sizeof(float *));
-                float **r_im_cpu = malloc(nb_rx * sizeof(float *));
-                float **r_re_gpu = malloc(nb_rx * sizeof(float *));
-                float **r_im_gpu = malloc(nb_rx * sizeof(float *));
+        float **s_re = malloc(nb_tx * sizeof(float *));
+        float **s_im = malloc(nb_tx * sizeof(float *));
+        float **r_re_cpu = malloc(nb_rx * sizeof(float *));
+        float **r_im_cpu = malloc(nb_rx * sizeof(float *));
+        float **r_re_gpu = malloc(nb_rx * sizeof(float *));
+        float **r_im_gpu = malloc(nb_rx * sizeof(float *));
 
-                for (int i=0; i<nb_tx; i++) { s_re[i] = malloc(num_samples * sizeof(float)); s_im[i] = malloc(num_samples * sizeof(float)); }
-                for (int i=0; i<nb_rx; i++) { r_re_cpu[i] = malloc(num_samples * sizeof(float)); r_im_cpu[i] = malloc(num_samples * sizeof(float)); r_re_gpu[i] = malloc(num_samples * sizeof(float)); r_im_gpu[i] = malloc(num_samples * sizeof(float)); }
+        for (int i=0; i<nb_tx; i++) { s_re[i] = malloc(num_samples * sizeof(float)); s_im[i] = malloc(num_samples * sizeof(float)); }
+        for (int i=0; i<nb_rx; i++) { r_re_cpu[i] = malloc(num_samples * sizeof(float)); r_im_cpu[i] = malloc(num_samples * sizeof(float)); r_re_gpu[i] = malloc(num_samples * sizeof(float)); r_im_gpu[i] = malloc(num_samples * sizeof(float)); }
 
-                void *d_tx_sig, *d_rx_sig;
-                int num_conv_samples = num_samples - chan_desc->channel_offset;
-                cudaMalloc(&d_tx_sig,   nb_tx * num_conv_samples * sizeof(float2));
-                cudaMalloc(&d_rx_sig,   nb_rx * num_conv_samples * sizeof(float2));
+        void *d_tx_sig, *d_rx_sig;
+        cudaMalloc(&d_tx_sig,   nb_tx * (num_samples - chan_desc->channel_offset) * sizeof(float2));
+        cudaMalloc(&d_rx_sig,   nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float2));
 
-                double total_cpu_ns = 0;
-                double total_gpu_ns = 0;
-                int verification_passed = 1;
+        double total_cpu_ns = 0;
+        double total_gpu_ns = 0;
 
-                float path_loss = (float)pow(10, chan_desc->path_loss_dB / 20.0);
-                int num_links = chan_desc->nb_tx * chan_desc->nb_rx;
-                int channel_size_bytes = num_links * chan_desc->channel_length * sizeof(float2);
-                float* h_channel_coeffs = (float*)malloc(channel_size_bytes);
-                for (int link = 0; link < num_links; link++) {
-                    for (int l = 0; l < chan_desc->channel_length; l++) {
-                        int idx = link * chan_desc->channel_length + l;
-                        ((float2*)h_channel_coeffs)[idx].x = (float)chan_desc->ch[link][l].r;
-                        ((float2*)h_channel_coeffs)[idx].y = (float)chan_desc->ch[link][l].i;
-                    }
-                }
-
-                for (int t = 0; t < num_trials; t++) {
-                    struct timespec start, end;
-                    generate_random_signal(s_re, s_im, nb_tx, num_samples);
-                    
-                    clock_gettime(CLOCK_MONOTONIC, &start);
-                    multipath_channel_float(chan_desc, s_re, s_im, r_re_cpu, r_im_cpu, num_samples, 1, 0);
-                    clock_gettime(CLOCK_MONOTONIC, &end);
-                    total_cpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
-                    
-                    clock_gettime(CLOCK_MONOTONIC, &start);
-                    multipath_channel_cuda_fast(s_re, s_im, r_re_gpu, r_im_gpu, nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset, path_loss, h_channel_coeffs, d_tx_sig, d_rx_sig);
-                    cudaDeviceSynchronize();
-                    clock_gettime(CLOCK_MONOTONIC, &end);
-                    total_gpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
-                }
-
-                if (verify_results(r_re_cpu, r_im_cpu, r_re_gpu, r_im_gpu, nb_rx, num_samples) != 0) {
-                    verification_passed = 0;
-                }
-
-                double avg_cpu_us = (total_cpu_ns / num_trials) / 1000.0;
-                double avg_gpu_us = (total_gpu_ns / num_trials) / 1000.0;
-                double speedup = (avg_gpu_us > 0) ? (avg_cpu_us / avg_gpu_us) : 0;
-                
-                printf("%-15s | %-15s | %-15d | %-15.2f | %-15.2f | %-15.2fx | %-10s\n", 
-                       channel_type_names[c], mimo_str, num_samples, avg_cpu_us, avg_gpu_us, speedup, 
-                       (verification_passed ? "PASSED" : "FAILED"));
-
-                free(h_channel_coeffs);
-                for (int i=0; i<nb_tx; i++) { free(s_re[i]); free(s_im[i]); }
-                for (int i=0; i<nb_rx; i++) { free(r_re_cpu[i]); free(r_im_cpu[i]); free(r_re_gpu[i]); free(r_im_gpu[i]); }
-                free(s_re); free(s_im); free(r_re_cpu); free(r_im_cpu); free(r_re_gpu); free(r_im_gpu);
-                cudaFree(d_tx_sig); cudaFree(d_rx_sig);
-                free_manual_channel_desc(chan_desc);
+        float path_loss = (float)pow(10, chan_desc->path_loss_dB / 20.0);
+        int num_links = chan_desc->nb_tx * chan_desc->nb_rx;
+        float* h_channel_coeffs = (float*)malloc(num_links * channel_length * sizeof(float2));
+        for (int link = 0; link < num_links; link++) {
+            for (int l = 0; l < channel_length; l++) {
+                int idx = link * channel_length + l;
+                ((float2*)h_channel_coeffs)[idx].x = (float)chan_desc->ch[link][l].r;
+                ((float2*)h_channel_coeffs)[idx].y = (float)chan_desc->ch[link][l].i;
             }
         }
+
+        struct timespec start, end;
+        generate_random_signal(s_re, s_im, nb_tx, num_samples);
+
+        // Run CPU once for verification
+        multipath_channel_float(chan_desc, s_re, s_im, r_re_cpu, r_im_cpu, num_samples, 1, 0);
+
+        // Time CPU run
+        clock_gettime(CLOCK_MONOTONIC, &start);
+        for (int t = 0; t < num_trials; t++) {
+            multipath_channel_float(chan_desc, s_re, s_im, r_re_cpu, r_im_cpu, num_samples, 1, 0);
+        }
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        total_cpu_ns = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+
+        // Time GPU run
+        clock_gettime(CLOCK_MONOTONIC, &start);
+        for (int t = 0; t < num_trials; t++) {
+            multipath_channel_cuda_fast(s_re, s_im, r_re_gpu, r_im_gpu, nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset, path_loss, h_channel_coeffs, d_tx_sig, d_rx_sig, block_size);
+        }
+        cudaDeviceSynchronize();
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        total_gpu_ns = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+        
+        int verification_passed = (verify_results(r_re_cpu, r_im_cpu, r_re_gpu, r_im_gpu, nb_rx, num_samples) == 0);
+        double avg_cpu_us = (total_cpu_ns / num_trials) / 1000.0;
+        double avg_gpu_us = (total_gpu_ns / num_trials) / 1000.0;
+        double speedup = (avg_gpu_us > 0) ? (avg_cpu_us / avg_gpu_us) : 0;
+        
+        printf("%-15s | %-15s | %-15d | %-12d | %-15.2f | %-15.2f | %-15.2fx | %-10s\n", 
+               channel_type_names[c], mimo_str, num_samples, block_size, avg_cpu_us, avg_gpu_us, speedup, 
+               (verification_passed ? "PASSED" : "FAILED"));
+
+        free(h_channel_coeffs);
+        for (int i=0; i<nb_tx; i++) { free(s_re[i]); free(s_im[i]); }
+        for (int i=0; i<nb_rx; i++) { free(r_re_cpu[i]); free(r_im_cpu[i]); free(r_re_gpu[i]); free(r_im_gpu[i]); }
+        free(s_re); free(s_im); free(r_re_cpu); free(r_im_cpu); free(r_re_gpu); free(r_im_gpu);
+        cudaFree(d_tx_sig); cudaFree(d_rx_sig);
+        free_manual_channel_desc(chan_desc);
+    }
+    }
+    }
     }
 
-    printf("----------------------------------------------------------------------------------------------------------------------\n");
+    printf("------------------------------------------------------------------------------------------------------------------------------------------\n");
     printf("Benchmark finished.\n");
 
     return 0;

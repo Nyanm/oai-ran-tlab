@@ -48,3 +48,4 @@ set_target_properties(test_multipath PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
+# target_link_libraries(test_multipath PRIVATE UTIL SIMU LOG m)
