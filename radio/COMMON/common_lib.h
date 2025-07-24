@@ -750,7 +750,7 @@ const char *get_devname(int devtype);
 int openair0_device_load(openair0_device *device, openair0_config_t *openair0_cfg);
 /*! \brief Initialize transport protocol . It returns 0 if OK */
 int openair0_transport_load(openair0_device *device, openair0_config_t *openair0_cfg, eth_params_t *eth_params);
-
+int openair0_load(openair0_device *device, char *name, openair0_config_t *openair0_cfg, eth_params_t *eth_params);
 
 /*! \brief Get current timestamp of USRP
  * \param device the hardware to use
