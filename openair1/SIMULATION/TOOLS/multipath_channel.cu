@@ -1,15 +1,24 @@
 /**
  * @file multipath_channel.cu
  * @brief CUDA implementation of the multipath_channel function.
+ * This version correctly implements a grid-stride loop to increase
+ * arithmetic intensity and leverage the H100's compute power.
+ * @author Nika Ghaderi & Gemini
+ * @date July 24, 2025
  */
 
 #include <stdio.h>
 #include <cuda_runtime.h>
 #include "oai_cuda.h"
 
-// --- CUDA Helper Functions & Kernel (Unchanged) ---
-// ... (checkCuda, complex_mul, complex_add) ...
-// ... (multipath_channel_kernel_optimized) ...
+// --- CUDA Helper Functions ---
+#define CHECK_CUDA(val) checkCuda((val), __FILE__, __LINE__)
+static void checkCuda(cudaError_t result, const char *file, int line) {
+    if (result != cudaSuccess) {
+        fprintf(stderr, "CUDA Error at %s:%d: %s\n", file, line, cudaGetErrorString(result));
+        exit(1);
+    }
+}
 
 __device__ __forceinline__ float2 complex_mul(float2 a, float2 b) {
     return make_float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
@@ -19,11 +28,17 @@ __device__ __forceinline__ float2 complex_add(float2 a, float2 b) {
     return make_float2(a.x + b.x, a.y + b.y);
 }
 
-#define MAX_CHANNEL_ELEMENTS (4096) // Increased for safety
+// --- Constant Memory ---
+#define MAX_CHANNEL_ELEMENTS (4096)
 __constant__ float2 d_channel_const[MAX_CHANNEL_ELEMENTS];
 
 
-__global__ void multipath_channel_kernel_optimized(
+// ====================================================================================
+// NEW KERNEL with a Correctly Implemented Grid-Stride Loop
+// This version forgoes shared memory to achieve higher arithmetic intensity,
+// relying on the H100's L1/L2 cache.
+// ====================================================================================
+__global__ void multipath_channel_kernel_gridstride(
     const float2* __restrict__ tx_sig,
     float2* __restrict__ rx_sig,
     int num_samples,
@@ -31,44 +46,46 @@ __global__ void multipath_channel_kernel_optimized(
     int nb_tx,
     int nb_rx)
 {
-    extern __shared__ float2 tx_shared[];
-    const int i = blockIdx.x * blockDim.x + threadIdx.x;
-    const int ii = blockIdx.y;
+    // Calculate the total number of threads in the grid
+    const int grid_stride = gridDim.x * blockDim.x;
 
-    if (i >= num_samples) return;
+    // Grid-stride loop: each thread processes multiple output samples
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+         i < num_samples;
+         i += grid_stride)
+    {
+        const int ii = blockIdx.y; // Current receiver antenna
+        float2 rx_tmp = make_float2(0.0f, 0.0f);
 
-    float2 rx_tmp = make_float2(0.0f, 0.0f);
+        // Loop over each transmit antenna
+        for (int j = 0; j < nb_tx; j++) {
+            
+            // This thread is responsible for its own convolution.
+            // It reads directly from global memory, relying on the L1/L2 cache.
+            for (int l = 0; l < channel_length; l++) {
+                int load_idx = i - l;
 
-    for (int j = 0; j < nb_tx; j++) {
-        const int tid = threadIdx.x;
-        const int block_start_idx = blockIdx.x * blockDim.x;
-        const int shared_mem_size = blockDim.x + channel_length - 1;
+                if (load_idx >= 0) {
+                    // Direct global memory access for the TX signal
+                    float2 tx_sample = tx_sig[j * num_samples + load_idx];
 
-        for (int k = tid; k < shared_mem_size; k += blockDim.x) {
-            int load_idx = block_start_idx + k - (channel_length - 1);
-            if (load_idx >= 0 && load_idx < num_samples) {
-                tx_shared[k] = tx_sig[j * num_samples + load_idx];
-            } else {
-                tx_shared[k] = make_float2(0.0f, 0.0f);
+                    // Constant memory access for the channel coefficients
+                    int chan_link_idx = ii + (j * nb_rx);
+                    float2 chan_weight = d_channel_const[chan_link_idx * channel_length + l];
+                    
+                    // Accumulate the result
+                    rx_tmp = complex_add(rx_tmp, complex_mul(tx_sample, chan_weight));
+                }
             }
         }
-        __syncthreads();
-
-        for (int l = 0; l < channel_length; l++) {
-            float2 tx_sample = tx_shared[tid + (channel_length - 1) - l];
-            int chan_link_idx = ii + (j * nb_rx);
-            float2 chan_weight = d_channel_const[chan_link_idx * channel_length + l];
-            rx_tmp = complex_add(rx_tmp, complex_mul(tx_sample, chan_weight));
-        }
-        __syncthreads();
+        // Write the final result for this sample to global memory
+        rx_sig[ii * num_samples + i] = rx_tmp;
     }
-    
-    rx_sig[ii * num_samples + i] = rx_tmp;
 }
 
 
 // ====================================================================================
-// Host Wrapper - Updated to use the new decoupled signature
+// Host Wrapper - Launches the new grid-stride kernel
 // ====================================================================================
 extern "C" {
 void multipath_channel_cuda_fast(
@@ -83,34 +100,41 @@ void multipath_channel_cuda_fast(
 {
     float2 *d_tx_sig = (float2*)d_tx_sig_void;
     float2 *d_rx_sig = (float2*)d_rx_sig_void;
-
     int num_samples = length - (int)channel_offset;
 
-    float2* h_tx_sig_interleaved = (float2*)malloc(nb_tx * num_samples * sizeof(float2));
-    if (!h_tx_sig_interleaved) return;
+    // Prepare host data in a simple [antenna][sample] layout
+    float2* h_tx_sig = (float2*)malloc(nb_tx * num_samples * sizeof(float2));
+    if (!h_tx_sig) return;
 
     for (int j = 0; j < nb_tx; j++) {
         for (int i = 0; i < num_samples; i++) {
-            h_tx_sig_interleaved[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
+            h_tx_sig[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
         }
     }
 
-    cudaMemcpy(d_tx_sig, h_tx_sig_interleaved, nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_channel_const, h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2));
+    CHECK_CUDA(cudaMemcpy(d_tx_sig, h_tx_sig, nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpyToSymbol(d_channel_const, h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2)));
 
-    // Use the dynamic block size for the launch configuration
+    // Use the fixed, optimal block size of 512
     dim3 threadsPerBlock(512, 1);
-    dim3 numBlocks((num_samples + threadsPerBlock.x - 1) / threadsPerBlock.x, nb_rx);
-    size_t sharedMemSize = (threadsPerBlock.x + channel_length - 1) * sizeof(float2);
+    
+    // For a grid-stride loop, we don't need a block for every tile.
+    // We launch a smaller grid, ensuring enough blocks to keep the GPU busy.
+    // A good heuristic is to launch 2-4x the number of SMs.
+    int num_sms = 0;
+    cudaDeviceGetAttribute(&num_sms, cudaDevAttrMultiProcessorCount, 0);
+    dim3 numBlocks(num_sms * 4, nb_rx);
 
-    multipath_channel_kernel_optimized<<<numBlocks, threadsPerBlock, sharedMemSize>>>(
+    // Call the new grid-stride kernel. Note that it does not use shared memory.
+    multipath_channel_kernel_gridstride<<<numBlocks, threadsPerBlock, 0>>>(
         d_tx_sig, d_rx_sig, num_samples, channel_length, nb_tx, nb_rx);
     
     float2* h_rx_sig = (float2*)malloc(nb_rx * num_samples * sizeof(float2));
-    if (!h_rx_sig) { free(h_tx_sig_interleaved); return; }
+    if (!h_rx_sig) { free(h_tx_sig); return; }
 
-    cudaMemcpy(h_rx_sig, d_rx_sig, nb_rx * num_samples * sizeof(float2), cudaMemcpyDeviceToHost);
+    CHECK_CUDA(cudaMemcpy(h_rx_sig, d_rx_sig, nb_rx * num_samples * sizeof(float2), cudaMemcpyDeviceToHost));
     
+    // De-interleave results and apply path loss
     for (int ii = 0; ii < nb_rx; ii++) {
         for (int i = 0; i < num_samples; i++) {
             float2 result = h_rx_sig[ii * num_samples + i];
@@ -119,7 +143,7 @@ void multipath_channel_cuda_fast(
         }
     }
 
-    free(h_tx_sig_interleaved);
+    free(h_tx_sig);
     free(h_rx_sig);
 }
 
