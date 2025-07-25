@@ -402,6 +402,7 @@ int main(int argc, char **argv)
 
   int use_cuda = 0;
   void *d_tx_sig = NULL, *d_channel = NULL, *d_rx_sig = NULL;
+  void *d_r_sig_noise = NULL, *d_output_noise = NULL, *d_curand_states = NULL;
   static struct option long_options[] = {
       {"cuda", no_argument, 0, 0},
       {0, 0, 0, 0}
@@ -935,7 +936,7 @@ printf("%d\n", slot);
 
 
   if (use_cuda) {
-      printf("Pre-allocating GPU memory for simulation...\n");
+      printf("Pre-allocating GPU memory for channel simulation...\n");
       int num_samples = slot_length - (int)gNB2UE->channel_offset;
       // Note: The size calculation must match the one inside multipath_channel.cu
       // The CUDA kernel expects float2 arrays, so we multiply size by 2.
@@ -943,6 +944,38 @@ printf("%d\n", slot);
       cudaMalloc(&d_channel, n_tx * n_rx * gNB2UE->channel_length * sizeof(float) * 2);
       cudaMalloc(&d_rx_sig, n_rx * num_samples * sizeof(float) * 2);
       printf("GPU memory allocated.\n");
+
+
+// // --- NEW: Allocate memory for noise simulation ---
+//       printf("Pre-allocating GPU memory for noise simulation...\n");
+//       int max_samples_per_slot = frame_parms->samples_per_slot_wCP;
+//       cudaMalloc(&d_r_sig_noise, n_rx * slot_length * sizeof(float2));
+//       cudaMalloc(&d_output_noise, n_rx * max_samples_per_slot * sizeof(short2));
+//       cudaMalloc(&d_r_sig_noise, n_rx * max_samples_per_slot * sizeof(float2));
+//       cudaMalloc(&d_output_noise, n_rx * max_samples_per_slot * sizeof(short2));
+      
+//       // --- NEW: Initialize cuRAND states using the helper function ---
+//       int num_rand_elements = n_rx * max_samples_per_slot;
+//       d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
+      
+//       printf("GPU noise memory allocated and cuRAND states initialized.\n");
+
+        printf("Pre-allocating GPU memory for noise simulation...\n");
+        cudaMalloc(&d_r_sig_noise, n_rx * slot_length * sizeof(float2));
+        cudaMalloc(&d_output_noise, n_rx * slot_length * sizeof(short2));
+        if (d_r_sig_noise == NULL || d_output_noise == NULL) {
+            fprintf(stderr, "Failed to allocate device memory for noise simulation\n");
+            exit(1);
+        }
+        int num_rand_elements = n_rx * slot_length;
+        d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
+        if (d_curand_states == NULL) {
+            fprintf(stderr, "Failed to initialize cuRAND states\n");
+            exit(1);
+        }
+        printf("GPU noise memory allocated and cuRAND states initialized.\n");
+
+
   }
 
 
@@ -1303,22 +1336,44 @@ printf("%d\n", slot);
             multipath_channel_float(gNB2UE, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
         }
         stop_meas(&channel_stats);
+        
         start_meas(&noise_stats);
-        // changing double to float
-        // (const double **)r_re,
-        // (const double **)r_im,
-        add_noise_float(UE->common_vars.rxdata,
-                  (const float **)r_re, 
-                  (const float **)r_im,
-                  (float)sigma2,
-                  slot_length,
-                  slot_offset,
-                  ts,
-                  delay,
-                  pdu_bit_map,
-                  0x1,
-                  UE->frame_parms.nb_antennas_rx);
+
+        if (use_cuda) {
+            add_noise_cuda_fast(
+                (const float **)r_re,
+                (const float **)r_im,
+                UE->common_vars.rxdata,
+                slot_length,
+                UE->frame_parms.nb_antennas_rx,
+                (float)sigma2,
+                ts,
+                slot_offset,
+                delay,
+                pdu_bit_map,
+                0x1, // This was the hardcoded ptrs_bit_map
+                d_r_sig_noise,
+                d_output_noise,
+                d_curand_states
+            );
+        } else {
+            add_noise_float(
+                UE->common_vars.rxdata,
+                (const float **)r_re, 
+                (const float **)r_im,
+                (float)sigma2,
+                slot_length,
+                slot_offset,
+                ts,
+                delay,
+                pdu_bit_map,
+                0x1,
+                UE->frame_parms.nb_antennas_rx
+            );
+        }
         stop_meas(&noise_stats);
+
+
         dl_config.sfn = frame;
         dl_config.slot = slot;
         ue_dci_configuration(UE_mac, &dl_config, frame, slot);
@@ -1537,6 +1592,9 @@ printf("%d\n", slot);
     cudaFree(d_tx_sig);
     cudaFree(d_channel);
     cudaFree(d_rx_sig);
+    cudaFree(d_r_sig_noise);
+    cudaFree(d_output_noise);
+    destroy_curand_states_cuda(d_curand_states);
   }
 
   free(s_re);
