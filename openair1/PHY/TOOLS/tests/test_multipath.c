@@ -1,11 +1,3 @@
-/**
- * @file test_multipath.c
- * @brief Standalone benchmark for comparing CPU and CUDA multipath channel implementations.
- * Now calls the CUDA implementation with the interleaved memory optimization.
- * @author Nika Ghaderi & Gemini
- * @date July 24, 2025
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
