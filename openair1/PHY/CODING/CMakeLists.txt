@@ -92,6 +92,7 @@ if (ENABLE_LDPC_CUDA)
     set_target_properties(ldpc_cuda_stream PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
     target_compile_definitions(ldpc_cuda_stream PRIVATE USE_CUDA PARALLEL_STREAM)
     target_link_libraries(ldpc_cuda_stream ldpc_gen_HEADERS ${T_LIB})
+    target_compile_definitions(ldpctest PRIVATE PARALLEL_STREAM)
   
     add_dependencies(ldpctest ldpc_cuda_stream)
   endif()

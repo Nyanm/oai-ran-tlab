@@ -45,6 +45,26 @@
 #define NR_LDPC_ENABLE_PARITY_CHECK
 ldpc_interface_t ldpc_orig, ldpc_toCompare;
 
+void dumpASS(int8_t* cnProcBufRes, const char* filename)
+{
+  FILE* fp = fopen(filename, "w");
+  if (fp == NULL) {
+    perror("Failed to open dump file");
+    exit(EXIT_FAILURE);
+  }
+  // printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
+
+  for (int i = 0; i < MAX_NUM_DLSCH_SEGMENTS*68*384; i++) {
+    fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
+    if ((i + 1) % 16 == 0)
+      fprintf(fp, "\n");
+  }
+
+  fclose(fp);
+}
+
+int PARALLEL_PATH = 0;//control decoder path
+
 // 4-bit quantizer
 int8_t quantize4bit(double D, double x)
 {
@@ -355,8 +375,52 @@ one_measurement_t test_ldpc(short max_iterations,
       decParams[j].numMaxIter = max_iterations;
       decParams[j].outMode = nrLDPC_outMode_BIT;
       decParams[j].Kprime = Kprime;
+      decParams[j].n_segments = n_segments;
+
       ldpc_toCompare.LDPCinit();
     }
+if(PARALLEL_PATH == 1){
+    start_meas(&ret.time_decoder);
+    set_abort(&dec_abort, false);
+    //printf("Are you here?\n");
+    // printf("n_segments = %d in test\n",n_segments);
+    n_iter = ldpc_toCompare.LDPCdecoder(&decParams,
+                                        0,
+                                        0,
+                                        0,
+                                        (int8_t *)channel_output_fixed,
+                                        (int8_t *)estimated_output,
+                                        &decoder_profiler,
+                                        &dec_abort);
+    stop_meas(&ret.time_decoder);
+    // printf("7:It works here\n");
+    dumpASS(estimated_output, "ldpctest_estimateOutput_stream.txt");
+    //dumpASS(test_input, "ldpctest_TestInput_stream.txt");
+    for (int j = 0; j < n_segments; j++) {
+      //printf("estimated_output[%d] = %p\n", j, &estimated_output[j]);
+      if (memcmp(estimated_output[j], test_input[j], ((Kprime + 7) & ~7) / 8) != 0) {
+        segment_bler++;
+      }
+      for (int i = 0; i < Kprime; i++) {
+        unsigned char estoutputbit = (estimated_output[j][i / 8] & (1 << (i & 7))) >> (i & 7);
+        unsigned char inputbit = (test_input[j][i / 8] & (1 << (i & 7))) >> (i & 7); // Further correct for multiple segments
+        if (estoutputbit != inputbit)
+          ret.errors_bit++;
+      }
+
+      n_iter_mean += n_iter;
+      n_iter_std += pow(n_iter - 1, 2);
+
+      if (n_iter > n_iter_max)
+        n_iter_max = n_iter;
+
+    } // end segments
+
+    if (segment_bler != 0)
+      ret.errors++;
+  }
+  
+else{
     for (int j = 0; j < n_segments; j++) {
       start_meas(&ret.time_decoder);
       set_abort(&dec_abort, false);
@@ -389,10 +453,12 @@ one_measurement_t test_ldpc(short max_iterations,
         n_iter_max = n_iter;
 
     } // end segments
-
+        dumpASS(estimated_output, "ldpctest_estimateOutput_cuda128.txt");
+    //dumpASS(test_input, "ldpctest_TestInput_cuda128.txt");
     if (segment_bler != 0)
       ret.errors++;
   }
+}
 
   ret.dec_iter.n_iter_mean = n_iter_mean / (double)ntrials / (double)n_segments - 1;
   ret.dec_iter.n_iter_std =
@@ -433,6 +499,7 @@ one_measurement_t test_ldpc(short max_iterations,
 configmodule_interface_t *uniqCfg = NULL;
 int main(int argc, char *argv[])
 {
+   
   short Kprime = 8448;
   // default to check output inside ldpc, the NR version checks the outer CRC defined by 3GPP
   char *ldpc_version = "";
@@ -492,8 +559,9 @@ int main(int argc, char *argv[])
         use32bit = 1;
         break;
 
-      case 'P'://stands for "Parallel"
+      case 'P': // stands for "Parallel"
         ldpc_version = "_cuda_stream";
+        PARALLEL_PATH = 1;
         use32bit = 1;
         break;
 
@@ -571,7 +639,7 @@ int main(int argc, char *argv[])
           "SNR BLER BER UNCODED_BER ENCODER_MEAN ENCODER_STD ENCODER_MAX DECODER_TIME_MEAN DECODER_TIME_STD DECODER_TIME_MAX "
           "DECODER_ITER_MEAN DECODER_ITER_STD DECODER_ITER_MAX\n");
 
-  for (double SNR = SNR0; SNR < SNR0 + 20.0 /*20.0*/; SNR += SNR_step) {
+  for (double SNR = SNR0; SNR < SNR0 + 2.0 /*20.0*/; SNR += SNR_step) {
     double SNR_lin;
     if (test_uncoded == 1)
       SNR_lin = pow(10, SNR / 10.0);
@@ -608,6 +676,7 @@ int main(int argc, char *argv[])
 
     double cpu_freq = get_cpu_freq_GHz();
     time_stats_t *t_optim = &res.time_optim;
+   
     printf("Encoding time mean: %15.3f us\n", (double)t_optim->diff / t_optim->trials / 1000.0 / cpu_freq);
     printf("Encoding time std: %15.3f us\n",
            sqrt((double)t_optim->diff_square / t_optim->trials / pow(1000, 2) / pow(cpu_freq, 2)
@@ -616,12 +685,19 @@ int main(int argc, char *argv[])
     printf("\n");
 
     time_stats_t *t_decoder = &res.time_decoder;
+     if(PARALLEL_PATH == 1){
+      printf("Decoding time mean: %15.3f us (per segment)\n", (double)t_decoder->diff / n_segments /t_decoder->trials / 1000.0 / cpu_freq);
+    printf("Decoding time std: %15.3f us (per segment)\n",
+           sqrt((double)t_decoder->diff_square / t_decoder->trials / pow(n_segments, 2) / pow(1000, 2) / pow(cpu_freq, 2)
+                - pow((double)t_decoder->diff / t_decoder->trials/ n_segments / 1000.0 / cpu_freq, 2)));
+    printf("Decoding time max: %15.3f us (all segments)\n", (double)t_decoder->max / 1000.0 / cpu_freq);
+    }else{
     printf("Decoding time mean: %15.3f us\n", (double)t_decoder->diff / t_decoder->trials / 1000.0 / cpu_freq);
     printf("Decoding time std: %15.3f us\n",
            sqrt((double)t_decoder->diff_square / t_decoder->trials / pow(1000, 2) / pow(cpu_freq, 2)
                 - pow((double)t_decoder->diff / t_decoder->trials / 1000.0 / cpu_freq, 2)));
     printf("Decoding time max: %15.3f us\n", (double)t_decoder->max / 1000.0 / cpu_freq);
-
+    }
     fprintf(fd,
             "%f %f %f %f %f %f %f %f %f %f %f %f %d \n",
             SNR,
