@@ -3,15 +3,11 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
-
-// OAI Includes
 #include "PHY/TOOLS/tools_defs.h"
 #include "SIMULATION/TOOLS/sim.h"
 #include "SIMULATION/TOOLS/oai_cuda.h"
 #include "common/utils/LOG/log.h"
 #include "common/utils/utils.h"
-
-// CUDA Runtime API
 #include <cuda_runtime.h>
 
 configmodule_interface_t *uniqCfg = NULL;
@@ -21,7 +17,6 @@ void exit_function(const char *file, const char *function, const int line, const
     exit(1);
 }
 
-// --- Helper Functions (Unchanged) ---
 void generate_random_signal(float **sig_re, float **sig_im, int nb_ant, int num_samples) {
     for (int i = 0; i < nb_ant; i++) {
         for (int j = 0; j < num_samples; j++) {
@@ -71,15 +66,11 @@ int verify_results(float **re_cpu, float **im_cpu, float **re_gpu, float **im_gp
     return (mse < 1e-9) ? 0 : 1;
 }
 
-// ====================================================================================
-// Main Benchmark Function
-// ====================================================================================
 int main(int argc, char **argv) {
     
     logInit();
     randominit(0);
     
-    // --- Test Parameters ---
     int nb_tx_configs[] = {1, 2, 4, 8};
     int nb_rx_configs[] = {1, 2, 4, 8};
     int num_samples_configs[] = {30720, 61440, 122880};
@@ -138,7 +129,6 @@ int main(int argc, char **argv) {
         struct timespec start, end;
         generate_random_signal(s_re, s_im, nb_tx, num_samples);
 
-        // Run CPU once for verification and timing baseline
         multipath_channel_float(chan_desc, s_re, s_im, r_re_cpu, r_im_cpu, num_samples, 1, 0);
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int t = 0; t < num_trials; t++) {
@@ -150,7 +140,7 @@ int main(int argc, char **argv) {
         // Time GPU run
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int t = 0; t < num_trials; t++) {
-            multipath_channel_cuda_fast(s_re, s_im, r_re_gpu, r_im_gpu, nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset, path_loss, h_channel_coeffs, d_tx_sig, d_rx_sig);
+            multipath_channel_cuda(s_re, s_im, r_re_gpu, r_im_gpu, nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset, path_loss, h_channel_coeffs, d_tx_sig, d_rx_sig);
         }
         cudaDeviceSynchronize();
         clock_gettime(CLOCK_MONOTONIC, &end);

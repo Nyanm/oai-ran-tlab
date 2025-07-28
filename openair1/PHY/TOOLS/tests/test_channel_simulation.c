@@ -2,7 +2,7 @@
  * Benchmark for the complete channel simulation pipeline (Multipath + Noise).
  *
  * This test measures the end-to-end performance of running the multipath channel
- * simulation followed immediately by the noise generation, mimicking the sequence in nr-dlsim.
+ * simulation followed immediately by the noise generation, mimicking the sequence in nr-dlsim/nr-ulsim.
  * It compares the total execution time of the original CPU functions against the
  * complete CUDA-accelerated pipeline.
  */
@@ -13,14 +13,11 @@
 #include <string.h>
 #include <time.h>
 
-// OAI Includes
 #include "PHY/TOOLS/tools_defs.h"
 #include "SIMULATION/TOOLS/sim.h"
 #include "SIMULATION/TOOLS/oai_cuda.h"
 #include "common/utils/LOG/log.h"
 #include "common/utils/utils.h"
-
-// CUDA Runtime API
 #include <cuda_runtime.h>
 
 configmodule_interface_t *uniqCfg = NULL;
@@ -30,7 +27,6 @@ void exit_function(const char *file, const char *function, const int line, const
     exit(1);
 }
 
-// --- Helper Functions ---
 void generate_random_signal(float **sig_re, float **sig_im, int nb_ant, int num_samples) {
     for (int i = 0; i < nb_ant; i++) {
         for (int j = 0; j < num_samples; j++) {
@@ -45,7 +41,7 @@ channel_desc_t* create_manual_channel_desc(int nb_tx, int nb_rx, int channel_len
     desc->nb_tx = nb_tx;
     desc->nb_rx = nb_rx;
     desc->channel_length = channel_length;
-    desc->path_loss_dB = 0.0; // Set to 0dB for simplicity
+    desc->path_loss_dB = 0.0;
     desc->channel_offset = 0;
     int num_links = nb_tx * nb_rx;
     desc->ch = (struct complexd**)malloc(num_links * sizeof(struct complexd*));
@@ -68,15 +64,11 @@ void free_manual_channel_desc(channel_desc_t* desc) {
 }
 
 
-// ====================================================================================
-// Main Benchmark Function
-// ====================================================================================
 int main(int argc, char **argv) {
     
     logInit();
     randominit(0);
     
-    // --- Test Parameters ---
     int nb_tx_configs[] = {1, 2, 4, 8};
     int nb_rx_configs[] = {1, 2, 4, 8};
     int num_samples_configs[] = {30720, 61440, 122880};
@@ -103,7 +95,6 @@ int main(int argc, char **argv) {
         char mimo_str[16];
         sprintf(mimo_str, "%dx%d", nb_tx, nb_rx);
 
-        // --- Create Channel Descriptor ---
         channel_desc_t *chan_desc = create_manual_channel_desc(nb_tx, nb_rx, channel_length);
 
         // --- Allocate ALL Memory Buffers ---
@@ -141,16 +132,17 @@ int main(int argc, char **argv) {
         cudaMalloc(&d_tx_sig,   nb_tx * num_samples * sizeof(float2));
         cudaMalloc(&d_rx_sig,   nb_rx * num_samples * sizeof(float2));
         
-        // For add_noise_cuda_fast
+        // For add_noise_cuda
         void *d_r_sig_noise, *d_output_noise, *d_curand_states;
         void *h_r_sig_pinned, *h_output_sig_pinned;
         cudaMalloc(&d_r_sig_noise,   nb_rx * num_samples * sizeof(float2));
         cudaMalloc(&d_output_noise,  nb_rx * num_samples * sizeof(short2));
         cudaMallocHost(&h_r_sig_pinned, nb_rx * num_samples * sizeof(float2));
+        void* h_tx_sig_pinned;
+        cudaMallocHost(&h_tx_sig_pinned, nb_tx * num_samples * sizeof(float2));
         cudaMallocHost(&h_output_sig_pinned, nb_rx * num_samples * sizeof(short2));
         d_curand_states = create_and_init_curand_states_cuda(nb_rx * num_samples, time(NULL));
 
-        // --- Simulation Parameters ---
         double ts = 1.0 / 30.72e6;
         float sigma2 = 1.0f / powf(10.0f, snr_db / 10.0f);
         float path_loss = (float)pow(10, chan_desc->path_loss_dB / 20.0);
@@ -164,7 +156,6 @@ int main(int argc, char **argv) {
             }
         }
         
-        // --- Timing variables ---
         double total_cpu_ns = 0;
         double total_gpu_ns = 0;
 
@@ -172,17 +163,27 @@ int main(int argc, char **argv) {
             generate_random_signal(tx_sig_re, tx_sig_im, nb_tx, num_samples);
             struct timespec start, end;
 
-            // --- Time CPU Pipeline ---
             clock_gettime(CLOCK_MONOTONIC, &start);
             multipath_channel_float(chan_desc, tx_sig_re, tx_sig_im, rx_multipath_re_cpu, rx_multipath_im_cpu, num_samples, 1, 0);
             add_noise_float(output_cpu, (const float **)rx_multipath_re_cpu, (const float **)rx_multipath_im_cpu, sigma2, num_samples, 0, ts, 0, 0, 0, nb_rx);
             clock_gettime(CLOCK_MONOTONIC, &end);
             total_cpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
 
-            // --- Time GPU Pipeline ---
             clock_gettime(CLOCK_MONOTONIC, &start);
-            multipath_channel_cuda_fast(tx_sig_re, tx_sig_im, rx_multipath_re_gpu, rx_multipath_im_gpu, nb_tx, nb_rx, channel_length, num_samples, 0, path_loss, h_channel_coeffs, d_tx_sig, d_rx_sig);
-            add_noise_cuda_fast((const float **)rx_multipath_re_gpu, (const float **)rx_multipath_im_gpu, output_gpu, num_samples, nb_rx, sigma2, ts, 0, 0, 0, 0, d_r_sig_noise, d_output_noise, d_curand_states, h_r_sig_pinned, h_output_sig_pinned);
+            run_channel_pipeline_cuda(
+                tx_sig_re, tx_sig_im, output_gpu,
+                nb_tx, nb_rx, channel_length, num_samples,
+                path_loss, h_channel_coeffs,
+                sigma2, ts,
+                0, 0, // pdu_bit_map, ptrs_bit_map (default for test)
+                0, 0, // slot_offset, delay (default for test)
+                d_tx_sig,           
+                d_rx_sig,           
+                d_output_noise,     
+                d_curand_states,
+                h_tx_sig_pinned,    
+                h_output_sig_pinned 
+            );
             cudaDeviceSynchronize();
             clock_gettime(CLOCK_MONOTONIC, &end);
             total_gpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
@@ -195,7 +196,6 @@ int main(int argc, char **argv) {
         printf("%-15s | %-15s | %-15d | %-20.2f | %-20.2f | %-15.2fx\n", 
                channel_type_names[c], mimo_str, num_samples, avg_cpu_us, avg_gpu_us, speedup);
 
-        // --- Cleanup ---
         free(h_channel_coeffs);
         for (int i=0; i<nb_tx; i++) { free(tx_sig_re[i]); free(tx_sig_im[i]); }
         for (int i=0; i<nb_rx; i++) { free(rx_multipath_re_cpu[i]); free(rx_multipath_im_cpu[i]); free(rx_multipath_re_gpu[i]); free(rx_multipath_im_gpu[i]); }
@@ -206,6 +206,7 @@ int main(int argc, char **argv) {
         free(output_cpu); free(output_gpu);
 
         cudaFree(d_tx_sig); cudaFree(d_rx_sig);
+        cudaFreeHost(h_tx_sig_pinned);
         cudaFree(d_r_sig_noise); cudaFree(d_output_noise);
         cudaFreeHost(h_r_sig_pinned); cudaFreeHost(h_output_sig_pinned);
         destroy_curand_states_cuda(d_curand_states);

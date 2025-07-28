@@ -30,6 +30,7 @@
 #include <bits/getopt_core.h>
 #include "common/utils/nr/nr_common.h"
 #include "common/utils/var_array.h"
+#include <cuda_runtime.h>
 #define inMicroS(a) (((double)(a))/(get_cpu_freq_GHz()*1000.0))
 #include "SIMULATION/LTE_PHY/common_sim.h"
 #include "common/utils/assertions.h"
@@ -64,6 +65,7 @@
 #include "SCHED_NR/sched_nr.h"
 #include "SCHED_NR_UE/defs.h"
 #include "SCHED_NR_UE/fapi_nr_ue_l1.h"
+#include "SIMULATION/TOOLS/oai_cuda.h"
 #include "asn_internal.h"
 #include "assertions.h"
 #include "common/config/config_load_configmodule.h"
@@ -177,7 +179,7 @@ int main(int argc, char *argv[])
   int slot = 8, frame = 1;
   int do_SRS = 0;
   FILE *output_fd = NULL;
-  double **s_re,**s_im,**r_re,**r_im;
+  float **s_re,**s_im,**r_re,**r_im;
   //uint8_t write_output_file = 0;
   int trial, n_trials = 1, n_false_positive = 0, delay = 0;
   double maxDoppler = 0.0;
@@ -252,7 +254,21 @@ int main(int argc, char *argv[])
   int c;
   bool setAffinity=false;
   char gNBthreads[128]="n";
-  while ((c = getopt(argc, argv, "--:O:a:b:c:d:ef:g:h:i:jk:m:n:p:q:r:s:t:u:v:w:y:z:A:C:F:G:H:I:M:N:PR:S:T:U:L:ZW:E:X:Y:")) != -1) {
+
+  static struct option long_options[] = {
+        {"cuda", no_argument, 0, 0},
+        {0, 0, 0, 0}
+    };
+  int option_index = 0;
+  int use_cuda = 0;
+
+  // CUDA-related buffer pointers
+  void *d_tx_sig = NULL, *d_intermediate_sig = NULL, *d_final_output = NULL;
+  void *d_curand_states = NULL;
+  void *h_tx_sig_pinned = NULL, *h_final_output_pinned = NULL;
+  float* h_channel_coeffs = NULL;
+  
+  while ((c = getopt_long(argc, argv, "--:O:a:b:c:d:ef:g:h:i:jk:m:n:p:q:r:s:t:u:v:w:y:z:A:C:F:G:H:I:M:N:PR:S:T:U:L:ZW:E:X:Y:", long_options, &option_index)) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -260,6 +276,13 @@ int main(int argc, char *argv[])
 
     printf("handling optarg %c\n",c);
     switch (c) {
+
+    case 0:
+      if (strcmp(long_options[option_index].name, "cuda") == 0) {
+          use_cuda = 1;
+          printf("CUDA acceleration enabled.\n");
+        }
+      break;
 
     case 'a':
       start_symbol = atoi(optarg);
@@ -632,10 +655,10 @@ int main(int argc, char *argv[])
   AssertFatal((gNB->if_inst = NR_IF_Module_init(0)) != NULL, "Cannot register interface");
   gNB->if_inst->NR_PHY_config_req = nr_phy_config_request;
 
-  s_re = malloc(n_tx*sizeof(double*));
-  s_im = malloc(n_tx*sizeof(double*));
-  r_re = malloc(n_rx*sizeof(double*));
-  r_im = malloc(n_rx*sizeof(double*));
+  s_re = malloc(n_tx*sizeof(float*));
+  s_im = malloc(n_tx*sizeof(float*));
+  r_re = malloc(n_rx*sizeof(float*));
+  r_im = malloc(n_rx*sizeof(float*));
 
   NR_ServingCellConfigCommon_t *scc = calloc(1,sizeof(*scc));;
   prepare_scc(scc);
@@ -762,6 +785,24 @@ int main(int argc, char *argv[])
     exit(-1);
   }
 
+  if (use_cuda) {
+      printf("Pre-allocating GPU & Pinned memory for the channel pipeline...\n");
+      int num_samples_alloc = gNB->frame_parms.samples_per_subframe * NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
+
+      cudaMalloc(&d_tx_sig, n_tx * num_samples_alloc * sizeof(float2));
+      cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float2));
+      cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short2));
+        
+      cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples_alloc * sizeof(float2));
+      cudaMallocHost(&h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short2));
+
+      int num_rand_elements = n_rx * num_samples_alloc;
+      d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
+        
+      int num_links = n_tx * n_rx;
+      h_channel_coeffs = (float*)malloc(num_links * UE2gNB->channel_length * sizeof(float2));
+  }
+
   // Configure UE
   UE = calloc(1, sizeof(PHY_VARS_NR_UE));
   PHY_vars_UE_g = malloc(sizeof(PHY_VARS_NR_UE**));
@@ -804,6 +845,10 @@ int main(int argc, char *argv[])
   memset((void*)Sched_INFO,0,sizeof(*Sched_INFO));
   nfapi_nr_ul_tti_request_t *UL_tti_req = &Sched_INFO->UL_tti_req;
   Sched_INFO->sched_response_id = -1;
+
+  time_stats_t channel_stats = {0};
+  time_stats_t noise_stats = {0};
+  time_stats_t pipeline_stats = {0};
 
   nr_phy_data_tx_t phy_data = {0};
 
@@ -931,13 +976,13 @@ int main(int argc, char *argv[])
 
   int frame_length_complex_samples = gNB->frame_parms.samples_per_subframe * NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
   for (int aatx=0; aatx<n_tx; aatx++) {
-    s_re[aatx] = calloc(1,frame_length_complex_samples*sizeof(double));
-    s_im[aatx] = calloc(1,frame_length_complex_samples*sizeof(double));
+    s_re[aatx] = calloc(1,frame_length_complex_samples*sizeof(float));
+    s_im[aatx] = calloc(1,frame_length_complex_samples*sizeof(float));
   }
 
   for (int aarx=0; aarx<n_rx; aarx++) {
-    r_re[aarx] = calloc(1,frame_length_complex_samples*sizeof(double));
-    r_im[aarx] = calloc(1,frame_length_complex_samples*sizeof(double));
+    r_re[aarx] = calloc(1,frame_length_complex_samples*sizeof(float));
+    r_im[aarx] = calloc(1,frame_length_complex_samples*sizeof(float));
   }
 
   //for (int i=0;i<16;i++) printf("%f\n",gaussdouble(0.0,1.0));
@@ -1302,25 +1347,58 @@ int main(int argc, char *argv[])
 
           for (i = 0; i < slot_length; i++) {
             for (int aa = 0; aa < UE->frame_parms.nb_antennas_tx; aa++) {
-              s_re[aa][i] = (double)UE->common_vars.txData[aa][slot_offset + i].r;
-              s_im[aa][i] = (double)UE->common_vars.txData[aa][slot_offset + i].i;
+              s_re[aa][i] = (float)UE->common_vars.txData[aa][slot_offset + i].r;
+              s_im[aa][i] = (float)UE->common_vars.txData[aa][slot_offset + i].i;
             }
           }
 
-          multipath_channel(UE2gNB, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
-          add_noise(rxdata,
-                    (const double **)r_re,
-                    (const double **)r_im,
-                    sigma,
+        if (use_cuda) {
+          start_meas(&pipeline_stats);
+          // Generate a new channel for this round and flatten the coefficients
+          random_channel(UE2gNB, 0);
+          float path_loss = (float)pow(10, UE2gNB->path_loss_dB / 20.0);
+          int num_links = UE2gNB->nb_tx * UE2gNB->nb_rx;
+          for (int link = 0; link < num_links; link++) {
+              for (int l = 0; l < UE2gNB->channel_length; l++) {
+                  int idx = link * UE2gNB->channel_length + l;
+                  ((float2*)h_channel_coeffs)[idx].x = (float)UE2gNB->ch[link][l].r;
+                  ((float2*)h_channel_coeffs)[idx].y = (float)UE2gNB->ch[link][l].i;
+              }
+          }
+          
+          // Run the entire pipeline on the GPU with a single call
+          run_channel_pipeline_cuda(
+              s_re, s_im, rxdata,
+              n_tx, n_rx, UE2gNB->channel_length, slot_length,
+              path_loss, h_channel_coeffs,
+              (float)(sigma*sigma), ts,
+              pdu_bit_map, PUSCH_PDU_BITMAP_PUSCH_PTRS,
+              slot_offset, delay,
+              d_tx_sig, d_intermediate_sig, d_final_output,
+              d_curand_states, h_tx_sig_pinned, h_final_output_pinned
+          );
+          cudaDeviceSynchronize();
+          stop_meas(&pipeline_stats);
+        } else {
+          start_meas(&channel_stats);
+          multipath_channel_float(UE2gNB, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
+          stop_meas(&channel_stats);
+          
+          start_meas(&noise_stats);
+          add_noise_float(rxdata,
+                    (const float **)r_re,
+                    (const float **)r_im,
+                    (float)sigma,
                     slot_length,
                     slot_offset,
                     ts,
                     delay,
-                    pdu_bit_map,
+                    pdu_bit_map, 
                     PUSCH_PDU_BITMAP_PUSCH_PTRS,
                     gNB->frame_parms.nb_antennas_rx);
-
-        } /*End input_fd */
+          stop_meas(&noise_stats);
+      }
+        /*End input_fd */
 
         //----------------------------------------------------------
         //------------------- gNB phy procedures -------------------
@@ -1607,6 +1685,14 @@ int main(int argc, char *argv[])
       printStatIndent2(&gNB->srs_report_tlv_stats,"SRS report TLV build time");
       printStatIndent3(&gNB->srs_beam_report_stats,"SRS beam report build time");
       printStatIndent3(&gNB->srs_iq_matrix_stats,"SRS IQ matrix build time");
+
+      if (use_cuda) {
+          printStatIndent(&pipeline_stats, "GPU Channel Pipeline");
+      } else {
+          printStatIndent(&channel_stats, "Multipath Channel (CPU)");
+          printStatIndent(&noise_stats, "Add Noise (CPU)");
+      }
+
       printf("\n");
     }
 
@@ -1658,5 +1744,17 @@ int main(int argc, char *argv[])
     free(filename_csv);
   }
 
+if (use_cuda) {
+    printf("Freeing GPU and Pinned memory...\n");
+    cudaFree(d_tx_sig);
+    cudaFree(d_intermediate_sig);
+    cudaFree(d_final_output);
+    destroy_curand_states_cuda(d_curand_states);
+    cudaFreeHost(h_tx_sig_pinned);
+    cudaFreeHost(h_final_output_pinned);
+    free(h_channel_coeffs);
+}
+
   return ret;
+}
 }
