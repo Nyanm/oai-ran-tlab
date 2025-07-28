@@ -152,8 +152,23 @@
 */
 
 //--------------------------CUDA Area---------------------------
-
 #include <cuda_runtime.h>
+
+#ifdef PARALLEL_STREAM
+static cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS];
+static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS];
+static bool streamsCreated = false;
+static int currentStreamCount = 0;
+static int8_t iter_ptr_array[MAX_NUM_DLSCH_SEGMENTS];
+static  int PC_Flag_array[MAX_NUM_DLSCH_SEGMENTS];
+static  int8_t cnProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
+static  int8_t cnProcBufRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
+static  int8_t bnProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
+static  int8_t bnProcBufRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
+static  int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+static  int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+#endif
+
 
 extern void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut* p_lut,
                                    int8_t* cnProcBuf,
@@ -175,7 +190,7 @@ extern void nrLDPC_BnToCnPC_BG1_cuda(const t_nrLDPC_lut* p_lut,
                                      int8_t* bnProcBuf,
                                      uint16_t Z,
                                      int* PC_Flag);
-
+#ifdef PARALLEL_STREAM
 extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    int8_t* p_out,
                                                    uint32_t numLLR,
@@ -194,8 +209,10 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    e_nrLDPC_outMode outMode,
                                                    cudaStream_t* streams,
                                                    uint8_t CudaStreamIdx,
+                                                   cudaEvent_t* doneEvent,
                                                    int8_t* iter_ptr,
                                                    int* PC_Flag);
+#endif
 
 //--------------------------------------------------------------
 
@@ -310,37 +327,36 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   uint8_t numMaxIter = p_decParams->numMaxIter;
   e_nrLDPC_outMode outMode = p_decParams->outMode;
   int Kprime = p_decParams->Kprime;
+  int LastTrial = p_decParams->LastTrial;
   // printf("Kprime = %d\n", Kprime);
   //  int8_t* cnProcBuf=  cnProcBuf;
   //  int8_t* cnProcBufRes= cnProcBufRes;
   // printf("1: It works here\n");
 
-  int8_t cnProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
-  int8_t cnProcBufRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
-  int8_t bnProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
-  int8_t bnProcBufRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
-  int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
-  int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+
   // printf("2: It works here\n");
   //  Minimum number of iterations is 1
   //  0 iterations means hard-decision on input LLRs
   //  Initialize with parity check fail != 0
   // printf("3: It works here\n");
   //  Initialization
-  cudaStream_t streams[MAX_NUM_DLSCH_SEGMENTS];
-  cudaEvent_t done[MAX_NUM_DLSCH_SEGMENTS]; // MAX_NUM_SEGMENTS = stream数量
-  int8_t iter_ptr_array[MAX_NUM_DLSCH_SEGMENTS];
-  int PC_Flag_array[MAX_NUM_DLSCH_SEGMENTS];
+  //cudaStream_t streams[MAX_NUM_DLSCH_SEGMENTS];
+  //cudaEvent_t done[MAX_NUM_DLSCH_SEGMENTS]; // MAX_NUM_SEGMENTS = stream数量
+
   for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS; s++) {
     iter_ptr_array[s] = 0;
     PC_Flag_array[s] = 1;
   }
   // printf("3.1: It works here\n");
+  if (!streamsCreated) {
   for (int s = 0; s < n_segments; ++s) {
-    cudaStreamCreateWithFlags(&streams[s], cudaStreamNonBlocking);
-     cudaEventCreate(&done[s]);
-    // printf("stream: It works here\n");
+    cudaStreamCreateWithFlags(&decoderStreams[s], cudaStreamNonBlocking);
+    cudaEventCreate(&decoderDoneEvents[s]);
   }
+  streamsCreated = true;
+  currentStreamCount = n_segments;
+}
+
   // printf("3.2: It works here\n");
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
     int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384;
@@ -369,6 +385,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     // printf("5: It works here\n");
     //  Launch decoder on stream s
     
+    //cudaEventCreate(&decoderDoneEvents[CudaStreamIdx]);
+    //printf("Launching segment %d \n",CudaStreamIdx);
     nrLDPC_decoder_scheduler_BG1_cuda_core(p_lut,
                                            pp_out,
                                            numLLR,
@@ -385,8 +403,9 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            R,
                                            numMaxIter,
                                            outMode,
-                                           streams,
+                                           decoderStreams,
                                            CudaStreamIdx,
+                                           decoderDoneEvents,
                                            &iter_ptr_array[CudaStreamIdx],
                                            &PC_Flag_array[CudaStreamIdx]); // stream index passed in
   
@@ -395,17 +414,25 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            //cudaEventRecord(done[CudaStreamIdx], streams[CudaStreamIdx]);
     // printf("5: It works here\n");
   }
-
+for (int s = 0; s < n_segments; ++s) {
+ // printf("Synchronizing segment %d \n",s);
+    cudaEventSynchronize(decoderDoneEvents[s]);  // 阻塞直到该 segment 解码完成
+}
+cudaDeviceSynchronize();
   // Wait for all streams
  // for (int s = 0; s < n_segments; s++) {
  //   cudaEventSynchronize(done[s]); // 等待stream[i]完成
  //   // 可安全访问对应的解码输出结果 p_llrOut[i]
 //}
-
+if(LastTrial == 1){
+  //printf("Now is the last trial\n");
   for (int s = 0; s < n_segments; s++) {
-    cudaStreamSynchronize(streams[s]);
-    cudaStreamDestroy(streams[s]);
+    cudaEventDestroy(decoderDoneEvents[s]);
+    cudaStreamSynchronize(decoderStreams[s]);
+    cudaStreamDestroy(decoderStreams[s]);
+    streamsCreated = false;
   }
+}
 //cudaDeviceSynchronize();
   // dumpASS(p_out, "Dump_Output_Stream.txt");
   // printf("6: It works here\n");

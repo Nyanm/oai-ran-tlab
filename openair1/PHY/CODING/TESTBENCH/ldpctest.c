@@ -143,6 +143,7 @@ one_measurement_t test_ldpc(short max_iterations,
   cpu_meas_enabled = 1;
   uint8_t *test_input[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * NR_MAX_NB_LAYERS];
   uint8_t estimated_output[MAX_NUM_DLSCH_SEGMENTS][Kprime];
+  printf("Output Address: %p\n", estimated_output);
   memset(estimated_output, 0, sizeof(estimated_output));
   uint8_t *channel_input[MAX_NUM_DLSCH_SEGMENTS];
   uint8_t *channel_input_optim;
@@ -313,6 +314,7 @@ one_measurement_t test_ldpc(short max_iterations,
   impp.gen_code = 0;
   decode_abort_t dec_abort;
   init_abort(&dec_abort);
+  
   for (int trial = 0; trial < ntrials; trial++) {
     unsigned int segment_bler = 0;
     //// encoder
@@ -376,9 +378,13 @@ one_measurement_t test_ldpc(short max_iterations,
       decParams[j].outMode = nrLDPC_outMode_BIT;
       decParams[j].Kprime = Kprime;
       decParams[j].n_segments = n_segments;
+      decParams[j].LastTrial = (trial == ntrials - 1) ? 1 : 0;
+
 
       ldpc_toCompare.LDPCinit();
     }
+
+    //Decoder
 if(PARALLEL_PATH == 1){
     start_meas(&ret.time_decoder);
     set_abort(&dec_abort, false);
@@ -685,7 +691,7 @@ int main(int argc, char *argv[])
     printf("\n");
 
     time_stats_t *t_decoder = &res.time_decoder;
-     if(PARALLEL_PATH == 1){
+     if(PARALLEL_PATH){
       printf("Decoding time mean: %15.3f us (per segment)\n", (double)t_decoder->diff / n_segments /t_decoder->trials / 1000.0 / cpu_freq);
     printf("Decoding time std: %15.3f us (per segment)\n",
            sqrt((double)t_decoder->diff_square / t_decoder->trials / pow(n_segments, 2) / pow(1000, 2) / pow(cpu_freq, 2)

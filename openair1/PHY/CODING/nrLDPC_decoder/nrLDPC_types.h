@@ -91,6 +91,7 @@ typedef struct nrLDPC_dec_params {
     int crc_type; /**< Size and type of the parity check bits (16, 24A or 24B) */
     int (*check_crc)(uint8_t* decoded_bytes, uint32_t n, uint8_t crc_type); /**< Parity check function */
     int n_segments;/**Infomation for cuda streaming*/
+    int LastTrial;/**Infomation for cuda streaming to create and destroy*/
 } t_nrLDPC_dec_params;
 
 /**

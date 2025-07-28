@@ -22,6 +22,10 @@ static cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS] = {nullptr};
 static cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS] = {nullptr};
 static bool graphCreated[MAX_NUM_DLSCH_SEGMENTS] = {false};
 
+
+
+
+
 __constant__ static uint8_t d_lut_numBnInCnGroups_BG1_R13[9];
 __constant__ static int d_lut_numThreadsEachCnGroupsNeed_BG1_R13[9];
 //__constant__ static uint8_t d_lut_numCnInCnGroups_BG1_R13[9];
@@ -1719,6 +1723,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                        e_nrLDPC_outMode outMode,
                                                        cudaStream_t *streams,
                                                        uint8_t CudaStreamIdx,
+                                                       cudaEvent_t *doneEvent,
                                                        int8_t* iter_ptr,
                                                        int* PC_Flag)
 { 
@@ -1781,7 +1786,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
     //cudaDeviceSynchronize();
     //printf("In stream %d 3: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
      
-     //CHECK(cudaGetLastError());
+    
      }
 
     // 结束并实例化
@@ -1791,13 +1796,16 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
 
     // 立即执行一次（确保第一次完成）
     cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
-    cudaStreamSynchronize(stream);
+    cudaEventRecord(doneEvent[CudaStreamIdx], stream);
+    //cudaStreamSynchronize(stream);
   } else {
     //printf("Are you here???\n");
     // 后续复用 graph
     cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
+    cudaEventRecord(doneEvent[CudaStreamIdx], stream);
     // 可选同步视使用需求而定
   }
+  //CHECK(cudaGetLastError());
 #else
   printf("To be continued ^ ^\n");
 #endif
