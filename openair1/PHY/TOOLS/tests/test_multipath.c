@@ -80,8 +80,8 @@ int main(int argc, char **argv) {
     randominit(0);
     
     // --- Test Parameters ---
-    int nb_tx_configs[] = {1, 2, 4};
-    int nb_rx_configs[] = {1, 2, 4};
+    int nb_tx_configs[] = {1, 2, 4, 8};
+    int nb_rx_configs[] = {1, 2, 4, 8};
     int num_samples_configs[] = {30720, 61440, 122880};
     int channel_length_configs[] = {16, 32};
     char* channel_type_names[] = {"Short Channel", "Long Channel"};

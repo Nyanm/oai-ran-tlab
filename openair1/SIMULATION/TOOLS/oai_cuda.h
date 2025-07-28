@@ -49,9 +49,10 @@ void add_noise_cuda_fast(
     uint16_t ptrs_bit_map,
     void *d_r_sig,
     void *d_output_sig,
-    void *d_curand_states
+    void *d_curand_states,
+    void *h_r_sig_pinned,
+    void *h_output_sig_pinned
 );
-
 // --- Helper functions to manage cuRAND states from C code ---
 void* create_and_init_curand_states_cuda(int num_elements, unsigned long long seed);
 void destroy_curand_states_cuda(void* d_curand_states);

@@ -408,6 +408,9 @@ int main(int argc, char **argv)
       {0, 0, 0, 0}
   };
   int option_index = 0;
+  
+  // Local pointers for pinned host memory, avoiding changes to defs_gNB.h
+  void *h_r_sig_pinned = NULL, *h_output_sig_pinned = NULL;
  
   while ((c = getopt_long(argc, argv, "O:f:hA:p:g:i:n:s:S:t:v:x:y:z:o:H:M:N:F:GR:d:PI:L:a:b:e:m:w:T:U:q:X:Y:Z:", long_options, &option_index)) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
@@ -946,20 +949,6 @@ printf("%d\n", slot);
       printf("GPU memory allocated.\n");
 
 
-// // --- NEW: Allocate memory for noise simulation ---
-//       printf("Pre-allocating GPU memory for noise simulation...\n");
-//       int max_samples_per_slot = frame_parms->samples_per_slot_wCP;
-//       cudaMalloc(&d_r_sig_noise, n_rx * slot_length * sizeof(float2));
-//       cudaMalloc(&d_output_noise, n_rx * max_samples_per_slot * sizeof(short2));
-//       cudaMalloc(&d_r_sig_noise, n_rx * max_samples_per_slot * sizeof(float2));
-//       cudaMalloc(&d_output_noise, n_rx * max_samples_per_slot * sizeof(short2));
-      
-//       // --- NEW: Initialize cuRAND states using the helper function ---
-//       int num_rand_elements = n_rx * max_samples_per_slot;
-//       d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
-      
-//       printf("GPU noise memory allocated and cuRAND states initialized.\n");
-
         printf("Pre-allocating GPU memory for noise simulation...\n");
         cudaMalloc(&d_r_sig_noise, n_rx * slot_length * sizeof(float2));
         cudaMalloc(&d_output_noise, n_rx * slot_length * sizeof(short2));
@@ -973,6 +962,16 @@ printf("%d\n", slot);
             fprintf(stderr, "Failed to initialize cuRAND states\n");
             exit(1);
         }
+
+
+        printf("Pre-allocating pinned host memory for noise simulation...\n");
+        cudaMallocHost(&h_r_sig_pinned, n_rx * slot_length * sizeof(float2));
+        cudaMallocHost(&h_output_sig_pinned, n_rx * slot_length * sizeof(short2));
+        if (h_r_sig_pinned == NULL || h_output_sig_pinned == NULL) {
+            fprintf(stderr, "Failed to allocate pinned host memory for noise simulation\n");
+            exit(1);
+        }
+        
         printf("GPU noise memory allocated and cuRAND states initialized.\n");
 
 
@@ -1338,7 +1337,6 @@ printf("%d\n", slot);
         stop_meas(&channel_stats);
         
         start_meas(&noise_stats);
-
         if (use_cuda) {
             add_noise_cuda_fast(
                 (const float **)r_re,
@@ -1354,7 +1352,9 @@ printf("%d\n", slot);
                 0x1, // This was the hardcoded ptrs_bit_map
                 d_r_sig_noise,
                 d_output_noise,
-                d_curand_states
+                d_curand_states,
+                h_r_sig_pinned,     
+                h_output_sig_pinned 
             );
         } else {
             add_noise_float(
@@ -1595,6 +1595,8 @@ printf("%d\n", slot);
     cudaFree(d_r_sig_noise);
     cudaFree(d_output_noise);
     destroy_curand_states_cuda(d_curand_states);
+    cudaFreeHost(h_r_sig_pinned);
+    cudaFreeHost(h_output_sig_pinned);
   }
 
   free(s_re);

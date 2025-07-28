@@ -74,16 +74,16 @@ void add_noise_cuda_fast(
     float sigma2, double ts,
     int slot_offset, int delay,
     uint16_t pdu_bit_map, uint16_t ptrs_bit_map,
-    void *d_r_sig_void, void *d_output_sig_void, void *d_curand_states_void
+    void *d_r_sig_void, void *d_output_sig_void, void *d_curand_states_void,
+    void *h_r_sig_void, void *h_output_temp_void
 )
 {
     float2 *d_r_sig = (float2*)d_r_sig_void;
     short2 *d_output_sig = (short2*)d_output_sig_void;
     curandState_t *d_curand_states = (curandState_t*)d_curand_states_void;
     
-    // Use cudaMallocHost to allocate pinned memory for staging buffers
-    float2* h_r_sig;
-    CHECK_CUDA(cudaMallocHost((void**)&h_r_sig, nb_rx * num_samples * sizeof(float2)));
+    float2* h_r_sig = (float2*)h_r_sig_void;
+    short2* h_output_temp = (short2*)h_output_temp_void;
 
     for (int ii = 0; ii < nb_rx; ii++) {
         for (int i = 0; i < num_samples; i++) {
@@ -92,8 +92,8 @@ void add_noise_cuda_fast(
     }
 
     CHECK_CUDA(cudaMemcpy(d_r_sig, h_r_sig, nb_rx * num_samples * sizeof(float2), cudaMemcpyHostToDevice));
-    
-    dim3 threadsPerBlock(256, 1);
+
+    dim3 threadsPerBlock(512, 1);
     dim3 numBlocks((num_samples + threadsPerBlock.x - 1) / threadsPerBlock.x, nb_rx);
     float pn_variance = 1e-5f * 2.0f * 3.1415926535f * 300.0f * (float)ts;
     
@@ -101,21 +101,22 @@ void add_noise_cuda_fast(
         d_r_sig, d_output_sig, d_curand_states, num_samples,
         sqrtf(sigma2 / 2.0f), sqrtf(pn_variance), pdu_bit_map, ptrs_bit_map
     );
-    
-    CHECK_CUDA(cudaDeviceSynchronize());
-    
-    // --- ROBUST MEMORY COPY STRATEGY ---
-    // 1. Allocate a temporary, pinned buffer on the host.
-    short2* h_output_temp;
-    CHECK_CUDA(cudaMallocHost((void**)&h_output_temp, nb_rx * num_samples * sizeof(short2)));
 
-    // 2. Perform one large, simple D->H copy into the temporary buffer.
+    // Copy results from device to the pinned output buffer
     CHECK_CUDA(cudaMemcpy(
         h_output_temp,
         d_output_sig,
         nb_rx * num_samples * sizeof(short2),
         cudaMemcpyDeviceToHost
     ));
+    
+    CHECK_CUDA(cudaDeviceSynchronize());
+    
+    // --- ROBUST MEMORY COPY STRATEGY ---
+    // 1. Allocate a temporary, pinned buffer on the host.
+
+
+    // 2. Perform one large, simple D->H copy into the temporary buffer.
 
     // 3. Use CPU-side memcpy to distribute the data into the final OAI buffers.
     for (int ii = 0; ii < nb_rx; ii++) {
@@ -127,8 +128,6 @@ void add_noise_cuda_fast(
     }
     
     // 4. Free temporary pinned host buffers.
-    CHECK_CUDA(cudaFreeHost(h_output_temp));
-    CHECK_CUDA(cudaFreeHost(h_r_sig));
 }
 
 // --- Helper Functions for cuRAND State Management ---
