@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+#define MAX_CHANNEL_ELEMENTS (4096)
+
+
 // The __NVCC__ macro is defined ONLY when the CUDA compiler (nvcc) is running.
 // It is NOT defined for standard C/C++ compilers like gcc/g++.
 #ifdef __NVCC__
@@ -18,10 +21,48 @@
     #include "PHY/TOOLS/tools_defs.h"
 #endif
 
+// The __NVCC__ macro is defined ONLY when the CUDA compiler (nvcc) is running.
+#ifdef __NVCC__
+    // By placing these declarations here, any .cu file that includes this header
+    // will know about the kernels and helpers, allowing them to be called across files.
+    #include <curand_kernel.h> // Needed for curandState_t in kernel prototype
+
+    // Forward-declare device helpers and kernels for inter-file linkage
+    __device__ float2 complex_mul(float2 a, float2 b);
+
+    __global__ void multipath_channel_kernel_optimized(
+        const float2* __restrict__ tx_sig,
+        float2* __restrict__ rx_sig,
+        int num_samples,
+        int channel_length,
+        int nb_tx,
+        int nb_rx);
+
+    __global__ void add_noise_and_phase_noise_kernel(
+        const float2* __restrict__ r_sig,
+        short2* __restrict__ output_sig,
+        curandState_t* states,
+        int num_samples,
+        float sigma,
+        float pn_std_dev,
+        uint16_t pdu_bit_map,
+        uint16_t ptrs_bit_map);
+#endif // __NVCC__
+
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+void run_channel_pipeline_cuda(
+    float **tx_sig_re, float **tx_sig_im,
+    c16_t **output_signal,
+    int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
+    float path_loss, float *h_channel_coeffs,
+    float sigma2, double ts,
+    void *d_tx_sig, void *d_intermediate_sig, void* d_final_output,
+    void *d_curand_states, void* h_tx_sig_pinned, void* h_final_output_pinned
+);
 
 // --- Multipath Channel Function ---
 void multipath_channel_cuda_fast(

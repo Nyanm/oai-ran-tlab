@@ -14,7 +14,6 @@ __device__ __forceinline__ float2 complex_add(float2 a, float2 b) {
     return make_float2(a.x + b.x, a.y + b.y);
 }
 
-#define MAX_CHANNEL_ELEMENTS (4096) // Increased for safety
 __constant__ float2 d_channel_const[MAX_CHANNEL_ELEMENTS];
 
 

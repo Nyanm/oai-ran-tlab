@@ -147,6 +147,8 @@ int main(int argc, char **argv) {
         cudaMalloc(&d_r_sig_noise,   nb_rx * num_samples * sizeof(float2));
         cudaMalloc(&d_output_noise,  nb_rx * num_samples * sizeof(short2));
         cudaMallocHost(&h_r_sig_pinned, nb_rx * num_samples * sizeof(float2));
+        void* h_tx_sig_pinned;
+        cudaMallocHost(&h_tx_sig_pinned, nb_tx * num_samples * sizeof(float2));
         cudaMallocHost(&h_output_sig_pinned, nb_rx * num_samples * sizeof(short2));
         d_curand_states = create_and_init_curand_states_cuda(nb_rx * num_samples, time(NULL));
 
@@ -181,8 +183,18 @@ int main(int argc, char **argv) {
 
             // --- Time GPU Pipeline ---
             clock_gettime(CLOCK_MONOTONIC, &start);
-            multipath_channel_cuda_fast(tx_sig_re, tx_sig_im, rx_multipath_re_gpu, rx_multipath_im_gpu, nb_tx, nb_rx, channel_length, num_samples, 0, path_loss, h_channel_coeffs, d_tx_sig, d_rx_sig);
-            add_noise_cuda_fast((const float **)rx_multipath_re_gpu, (const float **)rx_multipath_im_gpu, output_gpu, num_samples, nb_rx, sigma2, ts, 0, 0, 0, 0, d_r_sig_noise, d_output_noise, d_curand_states, h_r_sig_pinned, h_output_sig_pinned);
+            run_channel_pipeline_cuda(
+                tx_sig_re, tx_sig_im, output_gpu,
+                nb_tx, nb_rx, channel_length, num_samples,
+                path_loss, h_channel_coeffs,
+                sigma2, ts,
+                d_tx_sig,           // Device buffer for transmit signal
+                d_rx_sig,           // Device buffer for intermediate (multipath) signal
+                d_output_noise,     // Device buffer for final noisy output
+                d_curand_states,
+                h_tx_sig_pinned,    // Pinned buffer for staging transmit signal
+                h_output_sig_pinned // Pinned buffer for staging final output
+            );
             cudaDeviceSynchronize();
             clock_gettime(CLOCK_MONOTONIC, &end);
             total_gpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
@@ -206,6 +218,7 @@ int main(int argc, char **argv) {
         free(output_cpu); free(output_gpu);
 
         cudaFree(d_tx_sig); cudaFree(d_rx_sig);
+        cudaFreeHost(h_tx_sig_pinned);
         cudaFree(d_r_sig_noise); cudaFree(d_output_noise);
         cudaFreeHost(h_r_sig_pinned); cudaFreeHost(h_output_sig_pinned);
         destroy_curand_states_cuda(d_curand_states);
