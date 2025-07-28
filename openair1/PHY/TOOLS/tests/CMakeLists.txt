@@ -53,4 +53,9 @@ target_link_libraries(test_noise PRIVATE UTIL SIMU PHY_COMMON LOG T CONFIG_LIB s
 set_target_properties(test_noise PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
-# target_link_libraries(test_multipath PRIVATE UTIL SIMU LOG m)
+
+add_executable(test_channel_simulation test_channel_simulation.c)
+target_link_libraries(test_channel_simulation PRIVATE UTIL SIMU PHY_COMMON LOG T CONFIG_LIB shlib_loader m)
+set_target_properties(test_channel_simulation PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+)
