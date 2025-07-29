@@ -40,13 +40,11 @@ add_dependencies(tests test_sse_intrinsics)
 add_test(NAME test_sse_intrinsics
   COMMAND ./test_sse_intrinsics)
 
-# ==============================================================================
 add_executable(test_multipath test_multipath.c)
 target_link_libraries(test_multipath PRIVATE UTIL SIMU LOG T CONFIG_LIB shlib_loader m)
 set_target_properties(test_multipath PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
-# target_link_libraries(test_multipath PRIVATE UTIL SIMU LOG m)
 
 add_executable(test_noise test_noise.c)
 target_link_libraries(test_noise PRIVATE UTIL SIMU PHY_COMMON LOG T CONFIG_LIB shlib_loader m)

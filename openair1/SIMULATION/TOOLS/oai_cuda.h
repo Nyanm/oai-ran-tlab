@@ -6,37 +6,29 @@
 #define MAX_CHANNEL_ELEMENTS (4096)
 
 
-// The __NVCC__ macro is defined ONLY when the CUDA compiler (nvcc) is running.
-// It is NOT defined for standard C/C++ compilers like gcc/g++.
 #ifdef __NVCC__
-    // If we are compiling a .cu file, provide the minimal c16_t definition.
-    // This is needed for the host-side wrapper functions within the .cu file.
     typedef struct complex16 {
       int16_t r;
       int16_t i;
     } c16_t;
 #else
-    // If we are compiling a .c file (like dlsim.c), just include the official
-    // OAI header that provides the c16_t type. This avoids redefinition.
     #include "PHY/TOOLS/tools_defs.h"
 #endif
 
-// The __NVCC__ macro is defined ONLY when the CUDA compiler (nvcc) is running.
-#ifdef __NVCC__
-    // By placing these declarations here, any .cu file that includes this header
-    // will know about the kernels and helpers, allowing them to be called across files.
-    #include <curand_kernel.h> // Needed for curandState_t in kernel prototype
 
-    // Forward-declare device helpers and kernels for inter-file linkage
+#ifdef __NVCC__
+    #include <curand_kernel.h>
+
     __device__ float2 complex_mul(float2 a, float2 b);
 
-    __global__ void multipath_channel_kernel_optimized(
+    __global__ void multipath_channel_kernel(
         const float2* __restrict__ tx_sig,
         float2* __restrict__ rx_sig,
         int num_samples,
         int channel_length,
         int nb_tx,
-        int nb_rx);
+        int nb_rx,
+        float path_loss);
 
     __global__ void add_noise_and_phase_noise_kernel(
         const float2* __restrict__ r_sig,
@@ -46,8 +38,7 @@
         float sigma,
         float pn_std_dev,
         uint16_t pdu_bit_map,
-        uint16_t ptrs_bit_map,
-        float path_loss
+        uint16_t ptrs_bit_map
     );
 #endif // __NVCC__
 
@@ -70,8 +61,7 @@ void run_channel_pipeline_cuda(
 
 void update_channel_coeffs_symbol(float *h_channel_coeffs, size_t size);
 
-// --- Multipath Channel Function ---
-void multipath_channel_cuda_fast(
+void multipath_channel_cuda(
     float **tx_sig_re, float **tx_sig_im,
     float **rx_sig_re, float **rx_sig_im,
     int nb_tx, int nb_rx, int channel_length,
@@ -81,8 +71,7 @@ void multipath_channel_cuda_fast(
     void *d_tx_sig, void *d_rx_sig
 );
 
-// --- AWGN and Phase Noise Function ---
-void add_noise_cuda_fast(
+void add_noise_cuda(
     const float **r_re,
     const float **r_im,
     c16_t **output_signal,
@@ -100,7 +89,7 @@ void add_noise_cuda_fast(
     void *h_r_sig_pinned,
     void *h_output_sig_pinned
 );
-// --- Helper functions to manage cuRAND states from C code ---
+
 void* create_and_init_curand_states_cuda(int num_elements, unsigned long long seed);
 void destroy_curand_states_cuda(void* d_curand_states);
 
