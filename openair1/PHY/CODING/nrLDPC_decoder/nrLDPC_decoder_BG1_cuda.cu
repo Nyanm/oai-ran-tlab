@@ -1729,10 +1729,14 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
 { 
 #if CPU_ADDRESSING
   cudaStream_t stream = streams[CudaStreamIdx];
+  //cudaEvent_t captureDoneEvent[MAX_NUM_DLSCH_SEGMENTS];
 
   if (!graphCreated[CudaStreamIdx]) {
     printf("Creating the graph for stream %d\n", CudaStreamIdx);
-    // 第一次录制 graph
+    if(CudaStreamIdx != 0){
+      cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]);
+    }
+    // Start graph recording
     cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
 
   for (int i = 0; i <= numMaxIter; i++) {
@@ -1789,21 +1793,24 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
     
      }
 
-    // 结束并实例化
+    // stop recording
     cudaStreamEndCapture(stream, &decoderGraphs[CudaStreamIdx]);
     cudaGraphInstantiate(&decoderGraphExec[CudaStreamIdx], decoderGraphs[CudaStreamIdx], NULL, NULL, 0);
     graphCreated[CudaStreamIdx] = true;
 
-    // 立即执行一次（确保第一次完成）
+    // Execute （make sure the first trial finish）
     cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);
     //cudaStreamSynchronize(stream);
   } else {
     //printf("Are you here???\n");
-    // 后续复用 graph
+    // reuse the graph after
+    if(CudaStreamIdx != 0){
+      //cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]); //uncomment it if you want streams works in sequence
+    }
     cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);
-    // 可选同步视使用需求而定
+    //
   }
   //CHECK(cudaGetLastError());
 #else

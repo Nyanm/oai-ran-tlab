@@ -45,6 +45,8 @@
 #define NR_LDPC_ENABLE_PARITY_CHECK
 ldpc_interface_t ldpc_orig, ldpc_toCompare;
 
+static int8_t Failure_Mask[200][MAX_NUM_DLSCH_SEGMENTS] = {0};
+
 void dumpASS(int8_t* cnProcBufRes, const char* filename)
 {
   FILE* fp = fopen(filename, "w");
@@ -406,7 +408,11 @@ if(PARALLEL_PATH == 1){
       //printf("estimated_output[%d] = %p\n", j, &estimated_output[j]);
       if (memcmp(estimated_output[j], test_input[j], ((Kprime + 7) & ~7) / 8) != 0) {
         segment_bler++;
+        if(trial < 200){      
+        Failure_Mask[trial][j] = 1;
+        }
       }
+      
       for (int i = 0; i < Kprime; i++) {
         unsigned char estoutputbit = (estimated_output[j][i / 8] & (1 << (i & 7))) >> (i & 7);
         unsigned char inputbit = (test_input[j][i / 8] & (1 << (i & 7))) >> (i & 7); // Further correct for multiple segments
@@ -444,6 +450,9 @@ else{
       // count errors
       if (memcmp(estimated_output[j], test_input[j], ((Kprime + 7) & ~7) / 8) != 0) {
         segment_bler++;
+        if(trial < 200){      
+        Failure_Mask[trial][j] = 1;
+        }
       }
       for (int i = 0; i < Kprime; i++) {
         unsigned char estoutputbit = (estimated_output[j][i / 8] & (1 << (i & 7))) >> (i & 7);
@@ -668,6 +677,23 @@ int main(int argc, char *argv[])
     dec_iter[i].snr = SNR;
     dec_iter[i].ber = (float)res.errors_bit / (float)n_trials / (float)Kprime / (double)n_segments;
     dec_iter[i].bler = (float)decoded_errors[i] / (float)n_trials;
+    printf("Failure Mask = ");
+    for(int i=0; i<n_trials;i++){
+      int flag = 0;
+      for(int j = 0; j < n_segments; j++){
+          if(Failure_Mask[i][j] == 1){
+            if(flag == 0){
+              printf(" %d: ", i);
+              flag = 1;
+            }
+            printf(" %d ", j);
+            Failure_Mask[i][j] = 0;
+      }
+      }
+      if(flag == 1) printf(",");
+    }
+    printf("\n");
+
     printf("SNR %f, BLER %f (%u/%d)\n", SNR, dec_iter[i].bler, decoded_errors[i], n_trials);
     printf("SNR %f, BER %f (%u/%d)\n", SNR, dec_iter[i].ber, decoded_errors[i], n_trials);
     printf("SNR %f, Uncoded BER %f (%u/%d)\n",

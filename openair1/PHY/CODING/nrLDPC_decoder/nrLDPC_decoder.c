@@ -167,6 +167,7 @@ static  int8_t bnProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_BN_PROC_BUF] __at
 static  int8_t bnProcBufRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
 static  int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static  int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+static  int8_t pp_llrOut[NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 #endif
 
 
@@ -370,17 +371,16 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     int8_t* pp_llrProcBuf = llrProcBuf + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
     // printf("4: It works here\n");
     //  LLR preprocessing
-    NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2llrProcBuf));
+    //NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2llrProcBuf));
     nrLDPC_llr2llrProcBuf(p_lut, pp_llr, pp_llrProcBuf, Z, BG);
-    NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2llrProcBuf));
-    NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2CnProcBuf));
+    //NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2llrProcBuf));
+    //NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2CnProcBuf));
     if (BG == 1)
       nrLDPC_llr2CnProcBuf_BG1(p_lut, pp_llr, pp_cnProcBuf, Z);
     else
       nrLDPC_llr2CnProcBuf_BG2(p_lut, pp_llr, pp_cnProcBuf, Z);
-    NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2CnProcBuf));
+    //NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2CnProcBuf));
     // Call scheduler for this segment and stream
-    int8_t pp_llrOut[NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
     int8_t* pp_p_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? pp_out : pp_llrOut;
     // printf("5: It works here\n");
     //  Launch decoder on stream s
@@ -419,6 +419,7 @@ for (int s = 0; s < n_segments; ++s) {
     cudaEventSynchronize(decoderDoneEvents[s]);  // 阻塞直到该 segment 解码完成
 }
 cudaDeviceSynchronize();
+//cudaDeviceSynchronize();
   // Wait for all streams
  // for (int s = 0; s < n_segments; s++) {
  //   cudaEventSynchronize(done[s]); // 等待stream[i]完成

@@ -1308,9 +1308,9 @@ __device__ void CnToBnPC_Kernel_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
 
 __device__ void llrRes2llrOut_Kernel_int8_BG1(const t_nrLDPC_lut *p_lut, int8_t *llrOut, int8_t *llrRes, int Zc)
 {
-  int colIdx = blockIdx.x; // 每个 block 对应一个逻辑列
-  int tid = threadIdx.x; // 每个线程负责 Z 内的一部分 (0 ~ 23)
-    // 限制线程数量
+  int colIdx = blockIdx.x; //
+  int tid = threadIdx.x; // 
+
   if (tid >= (Zc / 4))
     return;
     
@@ -1344,7 +1344,7 @@ __device__ void llrRes2llrOut_Kernel_int8_BG1(const t_nrLDPC_lut *p_lut, int8_t 
 
 __device__ void llr2bitPacked_Kernel_int8_BG1(uint8_t* out, int8_t* llrOut, uint32_t numLLR) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    int totalGroups = numLLR >> 3;  // 每 8 个 LLR 为一组
+    int totalGroups = numLLR >> 3;  // every 8  LLR as a group
 
     if (tid >= totalGroups)
         return;
@@ -1352,7 +1352,7 @@ __device__ void llr2bitPacked_Kernel_int8_BG1(uint8_t* out, int8_t* llrOut, uint
     int8_t* p_llr = llrOut + tid * 8;
     uint8_t result = 0;
 
-    // 按照原始 shuffle 逆序：从 index 7 到 0 判断符号位
+    //  shuffling
     for (int i = 0; i < 8; i++) {
         result |= (p_llr[7 - i] < 0) << i;
     }
@@ -1362,7 +1362,7 @@ __device__ void llr2bitPacked_Kernel_int8_BG1(uint8_t* out, int8_t* llrOut, uint
 
 __device__ void llr2bit_Kernel_int8_BG1(uint8_t* out, int8_t* llrOut, uint32_t numLLR) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    int totalGroups = numLLR >> 3;  // 每 8 个 LLR 为一组
+    int totalGroups = numLLR >> 3;  // every 8 LLR as a group
 
     if (tid >= totalGroups)
         return;
