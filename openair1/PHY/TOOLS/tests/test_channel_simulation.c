@@ -188,12 +188,14 @@ int main(int argc, char **argv) {
                 nb_tx, nb_rx, channel_length, num_samples,
                 path_loss, h_channel_coeffs,
                 sigma2, ts,
-                d_tx_sig,           // Device buffer for transmit signal
-                d_rx_sig,           // Device buffer for intermediate (multipath) signal
-                d_output_noise,     // Device buffer for final noisy output
+                0, 0, // pdu_bit_map, ptrs_bit_map (default for test)
+                0, 0, // slot_offset, delay (default for test)
+                d_tx_sig,           
+                d_rx_sig,           
+                d_output_noise,     
                 d_curand_states,
-                h_tx_sig_pinned,    // Pinned buffer for staging transmit signal
-                h_output_sig_pinned // Pinned buffer for staging final output
+                h_tx_sig_pinned,    
+                h_output_sig_pinned 
             );
             cudaDeviceSynchronize();
             clock_gettime(CLOCK_MONOTONIC, &end);

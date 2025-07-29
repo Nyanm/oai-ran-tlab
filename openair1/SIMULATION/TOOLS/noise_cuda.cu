@@ -35,7 +35,8 @@ __global__ void add_noise_and_phase_noise_kernel(
     float sigma,
     float pn_std_dev,
     uint16_t pdu_bit_map,
-    uint16_t ptrs_bit_map
+    uint16_t ptrs_bit_map,
+    float path_loss
 )
 {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -46,7 +47,10 @@ __global__ void add_noise_and_phase_noise_kernel(
     // Each thread handles one sample and its corresponding cuRAND state
     curandState_t local_state = states[ii * num_samples + i];
 
+    // Apply path loss scaling to the input signal FIRST
     float2 noisy_signal = r_sig[ii * num_samples + i];
+    noisy_signal.x *= path_loss; // <-- APPLY SCALING
+    noisy_signal.y *= path_loss; // <-- APPLY SCALING
 
     // Generate AWGN
     float2 awgn = curand_normal2(&local_state);
@@ -115,7 +119,8 @@ void add_noise_cuda_fast(
     // Launch the kernel
     add_noise_and_phase_noise_kernel<<<numBlocks, threadsPerBlock>>>(
         d_r_sig, d_output_sig, d_curand_states, num_samples,
-        sqrtf(sigma2 / 2.0f), sqrtf(pn_variance), pdu_bit_map, ptrs_bit_map
+        sqrtf(sigma2 / 2.0f), sqrtf(pn_variance), pdu_bit_map, ptrs_bit_map,
+        1.0f
     );
     
     // Copy results from device to the pinned output buffer

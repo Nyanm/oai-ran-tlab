@@ -2,6 +2,25 @@
 #include <cuda_runtime.h>
 #include "oai_cuda.h"
 
+
+
+
+
+#define CHECK_CUDA(val) checkCuda((val), #val, __FILE__, __LINE__)
+static void checkCuda(cudaError_t result, const char* const func, const char *const file, const int line) {
+    if (result != cudaSuccess) {
+        fprintf(stderr, "CUDA Error at %s:%d code=%d(%s) \"%s\" \n",
+                file, line, static_cast<unsigned int>(result), cudaGetErrorString(result), func);
+        cudaDeviceReset();
+        exit(EXIT_FAILURE);
+    }
+}
+
+
+
+
+
+
 // --- CUDA Helper Functions & Kernel (Unchanged) ---
 // ... (checkCuda, complex_mul, complex_add) ...
 // ... (multipath_channel_kernel_optimized) ...
@@ -64,7 +83,14 @@ __global__ void multipath_channel_kernel_optimized(
 // ====================================================================================
 // Host Wrapper - Updated to use the new decoupled signature
 // ====================================================================================
+// In multipath_channel.cu
+
 extern "C" {
+
+void update_channel_coeffs_symbol(float *h_channel_coeffs, size_t size) {
+    CHECK_CUDA( cudaMemcpyToSymbol(d_channel_const, h_channel_coeffs, size) );
+}
+
 void multipath_channel_cuda_fast(
     float **tx_sig_re, float **tx_sig_im,
     float **rx_sig_re, float **rx_sig_im,
@@ -89,21 +115,24 @@ void multipath_channel_cuda_fast(
         }
     }
 
-    cudaMemcpy(d_tx_sig, h_tx_sig_interleaved, nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_channel_const, h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2));
+    // Wrap these CUDA calls
+    CHECK_CUDA( cudaMemcpy(d_tx_sig, h_tx_sig_interleaved, nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice) );
+    CHECK_CUDA( cudaMemcpyToSymbol(d_channel_const, h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2)) );
 
-    // Use the dynamic block size for the launch configuration
     dim3 threadsPerBlock(512, 1);
     dim3 numBlocks((num_samples + threadsPerBlock.x - 1) / threadsPerBlock.x, nb_rx);
     size_t sharedMemSize = (threadsPerBlock.x + channel_length - 1) * sizeof(float2);
 
+    // Wrap the kernel launch
     multipath_channel_kernel_optimized<<<numBlocks, threadsPerBlock, sharedMemSize>>>(
         d_tx_sig, d_rx_sig, num_samples, channel_length, nb_tx, nb_rx);
+    CHECK_CUDA( cudaGetLastError() ); // Check for errors from the kernel launch
     
     float2* h_rx_sig = (float2*)malloc(nb_rx * num_samples * sizeof(float2));
     if (!h_rx_sig) { free(h_tx_sig_interleaved); return; }
 
-    cudaMemcpy(h_rx_sig, d_rx_sig, nb_rx * num_samples * sizeof(float2), cudaMemcpyDeviceToHost);
+    // Wrap this CUDA call
+    CHECK_CUDA( cudaMemcpy(h_rx_sig, d_rx_sig, nb_rx * num_samples * sizeof(float2), cudaMemcpyDeviceToHost) );
     
     for (int ii = 0; ii < nb_rx; ii++) {
         for (int i = 0; i < num_samples; i++) {
@@ -116,5 +145,4 @@ void multipath_channel_cuda_fast(
     free(h_tx_sig_interleaved);
     free(h_rx_sig);
 }
-
 } // extern "C"

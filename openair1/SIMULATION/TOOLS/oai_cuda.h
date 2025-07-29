@@ -46,7 +46,9 @@
         float sigma,
         float pn_std_dev,
         uint16_t pdu_bit_map,
-        uint16_t ptrs_bit_map);
+        uint16_t ptrs_bit_map,
+        float path_loss
+    );
 #endif // __NVCC__
 
 
@@ -60,9 +62,13 @@ void run_channel_pipeline_cuda(
     int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
     float path_loss, float *h_channel_coeffs,
     float sigma2, double ts,
+    uint16_t pdu_bit_map, uint16_t ptrs_bit_map, 
+    int slot_offset, int delay,                 
     void *d_tx_sig, void *d_intermediate_sig, void* d_final_output,
     void *d_curand_states, void* h_tx_sig_pinned, void* h_final_output_pinned
 );
+
+void update_channel_coeffs_symbol(float *h_channel_coeffs, size_t size);
 
 // --- Multipath Channel Function ---
 void multipath_channel_cuda_fast(

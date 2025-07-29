@@ -1,29 +1,23 @@
-/**
- * @file channel_pipeline.cu
- * @brief Implements the high-performance, zero-copy channel simulation pipeline for CUDA.
- * This function orchestrates the sequential execution of the multipath and noise kernels
- * entirely on the GPU, avoiding unnecessary data transfers to the host.
- */
-
 #include <stdio.h>
 #include <cuda_runtime.h>
-#include "oai_cuda.h" // Includes the kernel prototypes we just added
-
-extern __constant__ float2 d_channel_const[MAX_CHANNEL_ELEMENTS];
+#include "oai_cuda.h"
 
 extern "C" {
 
+// Updated function signature to match oai_cuda.h
 void run_channel_pipeline_cuda(
     float **tx_sig_re, float **tx_sig_im,
     c16_t **output_signal,
     int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
     float path_loss, float *h_channel_coeffs,
     float sigma2, double ts,
+    uint16_t pdu_bit_map, uint16_t ptrs_bit_map,
+    int slot_offset, int delay,
     void *d_tx_sig_void, void *d_intermediate_sig_void, void* d_final_output_void,
     void *d_curand_states_void, void* h_tx_sig_pinned_void, void* h_final_output_pinned_void
 )
 {
-    // --- Cast void pointers to their actual types ---
+    // --- Cast void pointers ---
     float2 *d_tx_sig = (float2*)d_tx_sig_void;
     float2 *d_intermediate_sig = (float2*)d_intermediate_sig_void;
     short2 *d_final_output = (short2*)d_final_output_void;
@@ -31,7 +25,7 @@ void run_channel_pipeline_cuda(
     float2* h_tx_sig_pinned = (float2*)h_tx_sig_pinned_void;
     short2* h_final_output_pinned = (short2*)h_final_output_pinned_void;
 
-    // --- STAGE 1: Copy Transmit Signal from Host to Device ---
+    // --- STAGE 1: Copy Transmit Signal (Host to Device) ---
     for (int j = 0; j < nb_tx; j++) {
         for (int i = 0; i < num_samples; i++) {
             h_tx_sig_pinned[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
@@ -40,7 +34,8 @@ void run_channel_pipeline_cuda(
     cudaMemcpy(d_tx_sig, h_tx_sig_pinned, nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice);
 
     // --- STAGE 2: Run Multipath Channel Kernel ---
-    cudaMemcpyToSymbol(d_channel_const, h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2));
+    update_channel_coeffs_symbol(h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2));
+ 
     
     dim3 threads_multipath(512, 1);
     dim3 blocks_multipath((num_samples + threads_multipath.x - 1) / threads_multipath.x, nb_rx);
@@ -56,10 +51,12 @@ void run_channel_pipeline_cuda(
     
     add_noise_and_phase_noise_kernel<<<blocks_noise, threads_noise>>>(
         d_intermediate_sig, d_final_output, d_curand_states, num_samples,
-        sqrtf(sigma2 / 2.0f), sqrtf(pn_variance), 0, 0
+        sqrtf(sigma2 / 2.0f), sqrtf(pn_variance), 
+        pdu_bit_map, ptrs_bit_map,
+        path_loss
     );
 
-    // --- STAGE 4: Copy Final Result from Device back to Host ---
+    // --- STAGE 4: Copy Final Result (Device to Host) ---
     cudaMemcpy(
         h_final_output_pinned,
         d_final_output,
@@ -67,9 +64,11 @@ void run_channel_pipeline_cuda(
         cudaMemcpyDeviceToHost
     );
     
+    // --- STAGE 5: Distribute to Final OAI Buffers with Offset ---
     for (int ii = 0; ii < nb_rx; ii++) {
         memcpy(
-            output_signal[ii],
+            // Apply the slot_offset and delay to place data correctly
+            output_signal[ii] + slot_offset + delay, 
             h_final_output_pinned + ii * num_samples,
             num_samples * sizeof(short2)
         );

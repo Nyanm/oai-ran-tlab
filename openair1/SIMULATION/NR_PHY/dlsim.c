@@ -87,6 +87,7 @@
 #include "oai_asn1.h"
 #include "openair1/SIMULATION/NR_PHY/nr_unitary_defs.h"
 #include "openair1/SIMULATION/TOOLS/sim.h"
+#include "SIMULATION/TOOLS/oai_cuda.h" 
 #include "thread-pool.h"
 #include "time_meas.h"
 #include "utils.h"
@@ -401,16 +402,15 @@ int main(int argc, char **argv)
   FILE *scg_fd=NULL;
 
   int use_cuda = 0;
-  void *d_tx_sig = NULL, *d_channel = NULL, *d_rx_sig = NULL;
-  void *d_r_sig_noise = NULL, *d_output_noise = NULL, *d_curand_states = NULL;
+  void *d_tx_sig = NULL, *d_intermediate_sig = NULL, *d_final_output = NULL;
+  void *d_curand_states = NULL;
+  void *h_tx_sig_pinned = NULL, *h_final_output_pinned = NULL;
+
   static struct option long_options[] = {
       {"cuda", no_argument, 0, 0},
       {0, 0, 0, 0}
   };
   int option_index = 0;
-  
-  // Local pointers for pinned host memory, avoiding changes to defs_gNB.h
-  void *h_r_sig_pinned = NULL, *h_output_sig_pinned = NULL;
  
   while ((c = getopt_long(argc, argv, "O:f:hA:p:g:i:n:s:S:t:v:x:y:z:o:H:M:N:F:GR:d:PI:L:a:b:e:m:w:T:U:q:X:Y:Z:", long_options, &option_index)) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
@@ -938,44 +938,35 @@ printf("%d\n", slot);
   }
 
 
-  if (use_cuda) {
-      printf("Pre-allocating GPU memory for channel simulation...\n");
-      int num_samples = slot_length - (int)gNB2UE->channel_offset;
-      // Note: The size calculation must match the one inside multipath_channel.cu
-      // The CUDA kernel expects float2 arrays, so we multiply size by 2.
-      cudaMalloc(&d_tx_sig, n_tx * num_samples * sizeof(float) * 2);
-      cudaMalloc(&d_channel, n_tx * n_rx * gNB2UE->channel_length * sizeof(float) * 2);
-      cudaMalloc(&d_rx_sig, n_rx * num_samples * sizeof(float) * 2);
-      printf("GPU memory allocated.\n");
+   if (use_cuda) {
+      printf("Pre-allocating GPU & Pinned memory for the entire channel pipeline...\n");
+      int num_samples = slot_length; // Use slot_length for allocation size
+      
+      // Allocate device memory for the entire pipeline
+      cudaMalloc(&d_tx_sig, n_tx * num_samples * sizeof(float2));
+      cudaMalloc(&d_intermediate_sig, n_rx * num_samples * sizeof(float2));
+      cudaMalloc(&d_final_output, n_rx * num_samples * sizeof(short2));
+      
+      // Allocate pinned host memory for asynchronous transfers
+      cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples * sizeof(float2));
+      cudaMallocHost(&h_final_output_pinned, n_rx * num_samples * sizeof(short2));
 
+      // Check for allocation errors
+      if (!d_tx_sig || !d_intermediate_sig || !d_final_output || !h_tx_sig_pinned || !h_final_output_pinned) {
+          fprintf(stderr, "Failed to allocate memory for CUDA pipeline\n");
+          exit(1);
+      }
 
-        printf("Pre-allocating GPU memory for noise simulation...\n");
-        cudaMalloc(&d_r_sig_noise, n_rx * slot_length * sizeof(float2));
-        cudaMalloc(&d_output_noise, n_rx * slot_length * sizeof(short2));
-        if (d_r_sig_noise == NULL || d_output_noise == NULL) {
-            fprintf(stderr, "Failed to allocate device memory for noise simulation\n");
-            exit(1);
-        }
-        int num_rand_elements = n_rx * slot_length;
-        d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
-        if (d_curand_states == NULL) {
-            fprintf(stderr, "Failed to initialize cuRAND states\n");
-            exit(1);
-        }
-
-
-        printf("Pre-allocating pinned host memory for noise simulation...\n");
-        cudaMallocHost(&h_r_sig_pinned, n_rx * slot_length * sizeof(float2));
-        cudaMallocHost(&h_output_sig_pinned, n_rx * slot_length * sizeof(short2));
-        if (h_r_sig_pinned == NULL || h_output_sig_pinned == NULL) {
-            fprintf(stderr, "Failed to allocate pinned host memory for noise simulation\n");
-            exit(1);
-        }
-        
-        printf("GPU noise memory allocated and cuRAND states initialized.\n");
-
-
+      // Initialize cuRAND states on the GPU
+      int num_rand_elements = n_rx * num_samples;
+      d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
+      if (d_curand_states == NULL) {
+          fprintf(stderr, "Failed to initialize cuRAND states\n");
+          exit(1);
+      }
+      printf("GPU/Pinned memory allocated and cuRAND states initialized.\n");
   }
+
 
 
   if (pbch_file_fd!=NULL) {
@@ -1106,6 +1097,20 @@ printf("%d\n", slot);
   }
   time_stats_t channel_stats = {0};
   time_stats_t noise_stats = {0};
+  time_stats_t pipeline_stats = {0};
+
+
+  float* h_channel_coeffs = NULL;
+  if (use_cuda) {
+      printf("Allocating buffer for flattened channel coefficients...\n");
+      int num_links = n_tx * n_rx;
+      h_channel_coeffs = (float*)malloc(num_links * gNB2UE->channel_length * sizeof(float2));
+      if (h_channel_coeffs == NULL) {
+          fprintf(stderr, "Failed to allocate memory for h_channel_coeffs\n");
+          exit(1);
+      }
+  }
+
 
   for (SNR = snr0; SNR < snr1 && !stop; SNR += .2) {
 
@@ -1294,85 +1299,56 @@ printf("%d\n", slot);
           bzero(r_im[aa], slot_length * sizeof(float));
         }
 
-        start_meas(&channel_stats);
         if (use_cuda) {
-            // This is the new calling convention
-            
-            // 1. Call random_channel() to populate the coefficients in the descriptor
+            start_meas(&pipeline_stats);
+
+            // Generate a new channel for this specific HARQ round, mimicking the CPU path.
             random_channel(gNB2UE, 0);
 
-            // 2. Prepare the parameters needed by the CUDA function
+            // Flatten the new coefficients for the CUDA pipeline.
             float path_loss = (float)pow(10, gNB2UE->path_loss_dB / 20.0);
             int num_links = gNB2UE->nb_tx * gNB2UE->nb_rx;
-            int channel_size = num_links * gNB2UE->channel_length;
-
-            // 3. Allocate a temporary buffer for the flattened channel coefficients
-            float* h_channel_coeffs = (float*)malloc(channel_size * sizeof(float2)); // float2 is 2 floats
-
-            // 4. Flatten the channel coefficients from the OAI struct into the simple array
             for (int link = 0; link < num_links; link++) {
                 for (int l = 0; l < gNB2UE->channel_length; l++) {
                     int idx = link * gNB2UE->channel_length + l;
-                    ((float2*)h_channel_coeffs)[idx] = make_float2((float)gNB2UE->ch[link][l].r, (float)gNB2UE->ch[link][l].i);
+                    ((float2*)h_channel_coeffs)[idx].x = (float)gNB2UE->ch[link][l].r;
+                    ((float2*)h_channel_coeffs)[idx].y = (float)gNB2UE->ch[link][l].i;
                 }
             }
+          
+            // Run the entire pipeline on the GPU with a single call
+            run_channel_pipeline_cuda(
+                s_re, s_im, UE->common_vars.rxdata,
+                n_tx, n_rx, gNB2UE->channel_length, slot_length,
+                path_loss, // Pass the path_loss variable
+                h_channel_coeffs,
+                (float)sigma2, ts,
+                pdu_bit_map, 0x1,
+                slot_offset, delay,
+                d_tx_sig, d_intermediate_sig, d_final_output,
+                d_curand_states, h_tx_sig_pinned, h_final_output_pinned
+            );
+            
+            cudaDeviceSynchronize();
+            stop_meas(&pipeline_stats);
 
-            // 5. Call the new, decoupled CUDA function
-            multipath_channel_cuda_fast(s_re, s_im, r_re, r_im,
-                                        gNB2UE->nb_tx,
-                                        gNB2UE->nb_rx,
-                                        gNB2UE->channel_length,
-                                        slot_length,
-                                        gNB2UE->channel_offset,
-                                        path_loss,
-                                        h_channel_coeffs,
-                                        d_tx_sig,      // pre-allocated device pointer
-                                        d_rx_sig);       // pre-allocated device pointer
-                                        
-            // 6. Free the temporary host buffer
-            free(h_channel_coeffs);
         } else {
+            // Original CPU path
+            for (aa = 0; aa < n_rx; aa++) {
+              bzero(r_re[aa], slot_length * sizeof(float));
+              bzero(r_im[aa], slot_length * sizeof(float));
+            }
+            start_meas(&channel_stats);
             multipath_channel_float(gNB2UE, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
-        }
-        stop_meas(&channel_stats);
+            stop_meas(&channel_stats);
         
-        start_meas(&noise_stats);
-        if (use_cuda) {
-            add_noise_cuda_fast(
-                (const float **)r_re,
-                (const float **)r_im,
-                UE->common_vars.rxdata,
-                slot_length,
-                UE->frame_parms.nb_antennas_rx,
-                (float)sigma2,
-                ts,
-                slot_offset,
-                delay,
-                pdu_bit_map,
-                0x1, // This was the hardcoded ptrs_bit_map
-                d_r_sig_noise,
-                d_output_noise,
-                d_curand_states,
-                h_r_sig_pinned,     
-                h_output_sig_pinned 
-            );
-        } else {
+            start_meas(&noise_stats);
             add_noise_float(
-                UE->common_vars.rxdata,
-                (const float **)r_re, 
-                (const float **)r_im,
-                (float)sigma2,
-                slot_length,
-                slot_offset,
-                ts,
-                delay,
-                pdu_bit_map,
-                0x1,
-                UE->frame_parms.nb_antennas_rx
-            );
+                UE->common_vars.rxdata, (const float **)r_re, (const float **)r_im,
+                (float)sigma2, slot_length, slot_offset, ts, delay,
+                pdu_bit_map, 0x1, UE->frame_parms.nb_antennas_rx);
+            stop_meas(&noise_stats);
         }
-        stop_meas(&noise_stats);
-
 
         dl_config.sfn = frame;
         dl_config.slot = slot;
@@ -1506,8 +1482,12 @@ printf("%d\n", slot);
       if (gNB->phase_comp)
         printStatIndent2(&gNB->phase_comp_stats, "Phase Compensation");
 
-      printStatIndent(&channel_stats, "Multipath Channel");
-      printStatIndent(&noise_stats, "Add Noise");
+      if (use_cuda) {
+          printStatIndent(&pipeline_stats, "GPU Channel Pipeline");
+      } else {
+          printStatIndent(&channel_stats, "Multipath Channel (CPU)");
+          printStatIndent(&noise_stats, "Add Noise (CPU)");
+      }
 
       printf("\nUE function statistics (per %d us slot)\n", 1000 >> *scc->ssbSubcarrierSpacing);
       for (int i = RX_PDSCH_STATS; i <= DLSCH_PROCEDURES_STATS; i++) {
@@ -1590,13 +1570,12 @@ printf("%d\n", slot);
 
   if (use_cuda) {
     cudaFree(d_tx_sig);
-    cudaFree(d_channel);
-    cudaFree(d_rx_sig);
-    cudaFree(d_r_sig_noise);
-    cudaFree(d_output_noise);
+    cudaFree(d_intermediate_sig);
+    cudaFree(d_final_output);
     destroy_curand_states_cuda(d_curand_states);
-    cudaFreeHost(h_r_sig_pinned);
-    cudaFreeHost(h_output_sig_pinned);
+    cudaFreeHost(h_tx_sig_pinned);
+    cudaFreeHost(h_final_output_pinned);
+    free(h_channel_coeffs);
   }
 
   free(s_re);
