@@ -1729,9 +1729,13 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
 { 
 #if CPU_ADDRESSING
   cudaStream_t stream = streams[CudaStreamIdx];
+  //cudaEvent_t captureDoneEvent[MAX_NUM_DLSCH_SEGMENTS];
 
   if (!graphCreated[CudaStreamIdx]) {
     printf("Creating the graph for stream %d\n", CudaStreamIdx);
+    if(CudaStreamIdx != 0){
+      cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]);
+    }
     // 第一次录制 graph
     cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
 
@@ -1801,6 +1805,9 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
   } else {
     //printf("Are you here???\n");
     // 后续复用 graph
+    if(CudaStreamIdx != 0){
+      //cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]); //if you want streams works in sequence
+    }
     cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);
     // 可选同步视使用需求而定
