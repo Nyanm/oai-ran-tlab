@@ -87,7 +87,6 @@
 #include "oai_asn1.h"
 #include "openair1/SIMULATION/NR_PHY/nr_unitary_defs.h"
 #include "openair1/SIMULATION/TOOLS/sim.h"
-#include "SIMULATION/TOOLS/oai_cuda.h" 
 #include "thread-pool.h"
 #include "time_meas.h"
 #include "utils.h"
