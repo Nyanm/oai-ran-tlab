@@ -2,6 +2,17 @@
 #include <cuda_runtime.h>
 #include "oai_cuda.h"
 
+
+#define CHECK_CUDA(val) checkCuda((val), #val, __FILE__, __LINE__)
+static void checkCuda(cudaError_t result, const char* const func, const char *const file, const int line) {
+    if (result != cudaSuccess) {
+        fprintf(stderr, "CUDA Error at %s:%d code=%d(%s) \"%s\" \n",
+                file, line, static_cast<unsigned int>(result), cudaGetErrorString(result), func);
+        cudaDeviceReset();
+        exit(EXIT_FAILURE);
+    }
+}
+
 extern "C" {
 
 void run_channel_pipeline_cuda(
@@ -23,13 +34,17 @@ void run_channel_pipeline_cuda(
     float2* h_tx_sig_pinned = (float2*)h_tx_sig_pinned_void;
     short2* h_final_output_pinned = (short2*)h_final_output_pinned_void;
 
-    // --- STAGE 1: Copy Transmit Signal (Host to Device) ---
-    for (int j = 0; j < nb_tx; j++) {
-        for (int i = 0; i < num_samples; i++) {
-            h_tx_sig_pinned[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
+
+    #ifndef USE_UNIFIED_MEMORY
+        // STAGES 1, 4, AND 5 ARE ONLY NEEDED FOR EXPLICIT COPIES
+        // --- STAGE 1: Copy Transmit Signal (Host to Device) ---
+        for (int j = 0; j < nb_tx; j++) {
+            for (int i = 0; i < num_samples; i++) {
+                h_tx_sig_pinned[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
+            }
         }
-    }
-    cudaMemcpy(d_tx_sig, h_tx_sig_pinned, nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice);
+        CHECK_CUDA( cudaMemcpy(d_tx_sig, h_tx_sig_pinned, nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice) );
+    #endif
 
     // --- STAGE 2: Run Multipath Channel Kernel ---
     update_channel_coeffs_symbol(h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2));
@@ -53,22 +68,32 @@ void run_channel_pipeline_cuda(
         pdu_bit_map, ptrs_bit_map
     );
 
-    // --- STAGE 4: Copy Final Result (Device to Host) ---
-    cudaMemcpy(
-        h_final_output_pinned,
-        d_final_output,
-        nb_rx * num_samples * sizeof(short2),
-        cudaMemcpyDeviceToHost
-    );
-    
-    // --- STAGE 5: Distribute to Final OAI Buffers with Offset ---
-    for (int ii = 0; ii < nb_rx; ii++) {
-        memcpy(
-            // Apply the slot_offset and delay to place data correctly
-            output_signal[ii] + slot_offset + delay, 
-            h_final_output_pinned + ii * num_samples,
-            num_samples * sizeof(short2)
-        );
-    }
+    cudaDeviceSynchronize();
+
+    // Hint to the driver to start moving the final result back to the CPU's memory
+    // before the memcpy loop below needs to access it.
+    #if defined(USE_UNIFIED_MEMORY)
+        cudaMemPrefetchAsync(d_final_output, nb_rx * num_samples * sizeof(short) * 2, cudaCpuDeviceId, 0);
+    #endif
+
+    #ifndef USE_UNIFIED_MEMORY
+        // --- STAGE 4: Copy Final Result (Device to Host) ---
+        CHECK_CUDA( cudaMemcpy(
+            h_final_output_pinned,
+            d_final_output,
+            nb_rx * num_samples * sizeof(short2),
+            cudaMemcpyDeviceToHost
+        ));
+
+    #endif
+  
+            // --- STAGE 5: Distribute to Final OAI Buffers with Offset ---
+        for (int ii = 0; ii < nb_rx; ii++) {
+            memcpy(
+                output_signal[ii] + slot_offset + delay, 
+                h_final_output_pinned + ii * num_samples,
+                num_samples * sizeof(short2)
+            );
+        }
 }
 } // extern "C"

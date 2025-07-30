@@ -69,13 +69,27 @@ int main(int argc, char **argv) {
         void *d_r_sig, *d_output_sig, *d_curand_states;
         void *h_r_sig_pinned, *h_output_sig_pinned;
 
-        cudaMalloc(&d_r_sig,   nb_rx * num_samples * sizeof(float2));
-        cudaMalloc(&d_output_sig,   nb_rx * num_samples * sizeof(short2));
-        cudaMallocHost(&h_r_sig_pinned, nb_rx * num_samples * sizeof(float2));
-        cudaMallocHost(&h_output_sig_pinned, nb_rx * num_samples * sizeof(short2));
+        #if defined(USE_UNIFIED_MEMORY)
+            cudaMallocManaged(&d_r_sig,   nb_rx * num_samples * sizeof(float) * 2, cudaMemAttachGlobal);
+            cudaMallocManaged(&d_output_sig,   nb_rx * num_samples * sizeof(short) * 2, cudaMemAttachGlobal);
 
-        int num_rand_elements = nb_rx * num_samples;
-        d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
+                // Add memory hints
+                int deviceId;
+                cudaGetDevice(&deviceId);
+                cudaMemAdvise(d_r_sig, nb_rx * num_samples * sizeof(float) * 2, cudaMemAdviseSetReadMostly, deviceId);
+                cudaMemAdvise(d_output_sig, nb_rx * num_samples * sizeof(short) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
+                cudaMemAdvise(d_output_sig, nb_rx * num_samples * sizeof(short) * 2, cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
+
+            // Pinned memory is not used in the UM path for this wrapper
+            h_r_sig_pinned = NULL;
+            h_output_sig_pinned = NULL;
+        #else
+            cudaMalloc(&d_r_sig,   nb_rx * num_samples * sizeof(float) * 2);
+            cudaMalloc(&d_output_sig,   nb_rx * num_samples * sizeof(short) * 2);
+            cudaMallocHost(&h_r_sig_pinned, nb_rx * num_samples * sizeof(float) * 2);
+            cudaMallocHost(&h_output_sig_pinned, nb_rx * num_samples * sizeof(short) * 2);
+        #endif
+        d_curand_states = create_and_init_curand_states_cuda(nb_rx * num_samples, time(NULL));
 
         double total_cpu_ns = 0;
         double total_gpu_ns = 0;
@@ -124,10 +138,15 @@ int main(int argc, char **argv) {
         free(output_cpu); 
         free(output_gpu);
         
-        cudaFree(d_r_sig); 
-        cudaFree(d_output_sig);
-        cudaFreeHost(h_r_sig_pinned);
-        cudaFreeHost(h_output_sig_pinned);
+        #if defined(USE_UNIFIED_MEMORY)
+            cudaFree(d_r_sig); 
+            cudaFree(d_output_sig);
+        #else
+            cudaFree(d_r_sig); 
+            cudaFree(d_output_sig);
+            cudaFreeHost(h_r_sig_pinned);
+            cudaFreeHost(h_output_sig_pinned);
+        #endif
         destroy_curand_states_cuda(d_curand_states);
     }
     }

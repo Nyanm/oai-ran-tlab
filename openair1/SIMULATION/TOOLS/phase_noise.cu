@@ -84,35 +84,55 @@ extern "C" {
         short2 *d_output_sig = (short2*)d_output_sig_void;
         curandState_t *d_curand_states = (curandState_t*)d_curand_states_void;
 
+    #if defined(USE_UNIFIED_MEMORY)
+        // --- UNIFIED MEMORY PATH ---
+        // 1. CPU writes directly to the managed d_r_sig buffer.
+        for (int ii = 0; ii < nb_rx; ii++) {
+            for (int i = 0; i < num_samples; i++) {
+                d_r_sig[ii * num_samples + i] = make_float2(r_re[ii][i], r_im[ii][i]);
+            }
+        }
+    #else
+        // --- EXPLICIT COPY PATH ---
+        // 1. Use the pre-allocated pinned buffer as a staging area.
         float2* h_r_sig = (float2*)h_r_sig_void;
-        short2* h_output_temp = (short2*)h_output_temp_void;
-
         for (int ii = 0; ii < nb_rx; ii++) {
             for (int i = 0; i < num_samples; i++) {
                 h_r_sig[ii * num_samples + i] = make_float2(r_re[ii][i], r_im[ii][i]);
             }
         }
-
+        // 2. Explicitly copy from pinned host memory to device.
         CHECK_CUDA(cudaMemcpy(d_r_sig, h_r_sig, nb_rx * num_samples * sizeof(float2), cudaMemcpyHostToDevice));
-        
+    #endif
+
+        // --- COMMON KERNEL LAUNCH ---
         dim3 threadsPerBlock(256, 1);
         dim3 numBlocks((num_samples + threadsPerBlock.x - 1) / threadsPerBlock.x, nb_rx);
         float pn_variance = 1e-5f * 2.0f * 3.1415926535f * 300.0f * (float)ts;
-        
         add_noise_and_phase_noise_kernel<<<numBlocks, threadsPerBlock>>>(
             d_r_sig, d_output_sig, d_curand_states, num_samples,
             sqrtf(sigma2 / 2.0f), sqrtf(pn_variance), pdu_bit_map, ptrs_bit_map
         );
-        
-        CHECK_CUDA(cudaMemcpy(
-            h_output_temp,
-            d_output_sig,
-            nb_rx * num_samples * sizeof(short2),
-            cudaMemcpyDeviceToHost
-        ));
-        
+
+    #if defined(USE_UNIFIED_MEMORY)
+        // --- UNIFIED MEMORY PATH ---
+        // 3. Synchronize to ensure GPU is finished.
+        CHECK_CUDA( cudaDeviceSynchronize() );
+        // 4. CPU reads directly from the managed d_output_sig buffer.
+        for (int ii = 0; ii < nb_rx; ii++) {
+            for (int i = 0; i < num_samples; i++) {
+                short2 result = d_output_sig[ii * num_samples + i];
+                output_signal[ii][i + slot_offset + delay].r = result.x;
+                output_signal[ii][i + slot_offset + delay].i = result.y;
+            }
+        }
+    #else
+        // --- EXPLICIT COPY PATH ---
+        // 3. Copy from device to pinned host memory.
+        short2* h_output_temp = (short2*)h_output_temp_void;
+        CHECK_CUDA(cudaMemcpy(h_output_temp, d_output_sig, nb_rx * num_samples * sizeof(short2), cudaMemcpyDeviceToHost));
         CHECK_CUDA(cudaDeviceSynchronize());
-        
+        // 4. Distribute data from the pinned buffer to the final OAI buffers.
         for (int ii = 0; ii < nb_rx; ii++) {
             memcpy(
                 output_signal[ii] + slot_offset + delay,
@@ -120,6 +140,7 @@ extern "C" {
                 num_samples * sizeof(short2)
             );
         }
+    #endif
     }
 
     // --- Helper functions to manage cuRAND states from C code ---
