@@ -936,8 +936,29 @@ printf("%d\n", slot);
     // r_im[i] = calloc(1, slot_length * sizeof(double));
   }
 
+  float* h_channel_coeffs = NULL;
 
    if (use_cuda) {
+    #if defined(USE_UNIFIED_MEMORY)
+      printf("Allocating CUDA Unified Memory...\n");
+      // With Unified Memory, we only need one allocation for each buffer.
+      // The CPU and GPU will both use the same pointer.
+      cudaMallocManaged(&d_tx_sig, n_tx * num_samples_alloc * sizeof(float2));
+      cudaMallocManaged(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float2));
+      cudaMallocManaged(&d_final_output, n_rx * num_samples_alloc * sizeof(short2));
+      
+      // Pinned buffers are not needed, but we point them to the managed buffers
+      // so the function signature doesn't need to change.
+      h_tx_sig_pinned = d_tx_sig;
+      h_final_output_pinned = d_final_output;
+
+      int num_rand_elements = n_rx * num_samples_alloc;
+      d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
+      
+      int num_links = n_tx * n_rx;
+      h_channel_coeffs = (float*)malloc(num_links * UE2gNB->channel_length * sizeof(float2));
+    
+    #else
       printf("Pre-allocating GPU & Pinned memory for the entire channel pipeline...\n");
       int num_samples = slot_length; // Use slot_length for allocation size
       
@@ -964,6 +985,15 @@ printf("%d\n", slot);
           exit(1);
       }
       printf("GPU/Pinned memory allocated and cuRAND states initialized.\n");
+
+      printf("Allocating buffer for flattened channel coefficients...\n");
+      int num_links = n_tx * n_rx;
+      h_channel_coeffs = (float*)malloc(num_links * gNB2UE->channel_length * sizeof(float2));
+      if (h_channel_coeffs == NULL) {
+          fprintf(stderr, "Failed to allocate memory for h_channel_coeffs\n");
+          exit(1);
+      }
+    #endif
   }
 
 
@@ -1097,19 +1127,6 @@ printf("%d\n", slot);
   time_stats_t channel_stats = {0};
   time_stats_t noise_stats = {0};
   time_stats_t pipeline_stats = {0};
-
-
-  float* h_channel_coeffs = NULL;
-  if (use_cuda) {
-      printf("Allocating buffer for flattened channel coefficients...\n");
-      int num_links = n_tx * n_rx;
-      h_channel_coeffs = (float*)malloc(num_links * gNB2UE->channel_length * sizeof(float2));
-      if (h_channel_coeffs == NULL) {
-          fprintf(stderr, "Failed to allocate memory for h_channel_coeffs\n");
-          exit(1);
-      }
-  }
-
 
   for (SNR = snr0; SNR < snr1 && !stop; SNR += .2) {
 
@@ -1568,13 +1585,20 @@ printf("%d\n", slot);
   }
 
   if (use_cuda) {
-    cudaFree(d_tx_sig);
-    cudaFree(d_intermediate_sig);
-    cudaFree(d_final_output);
-    destroy_curand_states_cuda(d_curand_states);
-    cudaFreeHost(h_tx_sig_pinned);
-    cudaFreeHost(h_final_output_pinned);
-    free(h_channel_coeffs);
+      printf("Freeing GPU and Pinned memory...\n");
+  #if defined(USE_UNIFIED_MEMORY)
+      cudaFree(d_tx_sig);
+      cudaFree(d_intermediate_sig);
+      cudaFree(d_final_output);
+  #else
+      cudaFree(d_tx_sig);
+      cudaFree(d_intermediate_sig);
+      cudaFree(d_final_output);
+      cudaFreeHost(h_tx_sig_pinned);
+      cudaFreeHost(h_final_output_pinned);
+  #endif
+      destroy_curand_states_cuda(d_curand_states);
+      free(h_channel_coeffs);
   }
 
   free(s_re);

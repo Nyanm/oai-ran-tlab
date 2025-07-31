@@ -59,7 +59,7 @@ set_target_properties(test_channel_simulation PROPERTIES
 )
 
 add_executable(test_SSE test_SSE.c)
-target_compile_definitions(test_SSE PRIVATE CHANNEL_SSE)
+target_compile_definitions(test_SSE PRIVATE CHANNEL_SSE CHANNEL_DEBUG_CH)
 target_link_libraries(test_SSE PRIVATE UTIL SIMU PHY_COMMON LOG T CONFIG_LIB shlib_loader m)
 set_target_properties(test_SSE PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
