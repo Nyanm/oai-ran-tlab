@@ -1730,6 +1730,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
 #if CPU_ADDRESSING
   cudaStream_t stream = streams[CudaStreamIdx];
   //cudaEvent_t captureDoneEvent[MAX_NUM_DLSCH_SEGMENTS];
+  //cudaEvent_t captureDoneEvent[MAX_NUM_DLSCH_SEGMENTS];
 
   if (!graphCreated[CudaStreamIdx]) {
     printf("Creating the graph for stream %d\n", CudaStreamIdx);
