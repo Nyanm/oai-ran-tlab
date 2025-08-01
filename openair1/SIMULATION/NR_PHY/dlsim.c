@@ -27,7 +27,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <cuda_runtime.h>
 #include "common/utils/assertions.h"
 #include "common/utils/nr/nr_common.h"
 #include "common/utils/var_array.h"
@@ -67,7 +66,6 @@
 #include "SCHED_NR/sched_nr.h"
 #include "SCHED_NR_UE/defs.h"
 #include "SCHED_NR_UE/fapi_nr_ue_l1.h"
-#include "SIMULATION/TOOLS/oai_cuda.h"
 #include "T.h"
 #include "asn_internal.h"
 #include "assertions.h"
@@ -92,6 +90,13 @@
 #include "utils.h"
 #define inMicroS(a) (((double)(a))/(get_cpu_freq_GHz()*1000.0))
 #include "SIMULATION/LTE_PHY/common_sim.h"
+
+
+#ifdef ENABLE_CUDA
+#include <cuda_runtime.h>
+#include "SIMULATION/TOOLS/oai_cuda.h"
+#endif
+
 
 const char *__asan_default_options()
 {
@@ -401,9 +406,12 @@ int main(int argc, char **argv)
   FILE *scg_fd=NULL;
 
   int use_cuda = 0;
-  void *d_tx_sig = NULL, *d_intermediate_sig = NULL, *d_final_output = NULL;
-  void *d_curand_states = NULL;
-  void *h_tx_sig_pinned = NULL, *h_final_output_pinned = NULL;
+ 
+  #ifdef ENABLE_CUDA
+    void *d_tx_sig = NULL, *d_intermediate_sig = NULL, *d_final_output = NULL;
+    void *d_curand_states = NULL;
+    void *h_tx_sig_pinned = NULL, *h_final_output_pinned = NULL;
+  #endif
 
   static struct option long_options[] = {
       {"cuda", no_argument, 0, 0},
@@ -420,10 +428,12 @@ int main(int argc, char **argv)
     printf("handling optarg %c\n",c);
     switch (c) {
 
+    #ifdef ENABLE_CUDA
     case 0:
         if (strcmp(long_options[option_index].name, "cuda") == 0) {
             use_cuda = 1;
         }
+    #endif
         break;
 
     case 'f':
@@ -677,65 +687,66 @@ printf("%d\n", slot);
   /* initialize the sin table */
   InitSinLUT();
 
-if (use_cuda) {
-      // Define a size for pre-allocation. 30720 is a safe, typical slot length.
-      int num_samples_alloc = 30720; 
+#ifdef ENABLE_CUDA
+  if (use_cuda) {
+        // Define a size for pre-allocation. 30720 is a safe, typical slot length.
+        int num_samples_alloc = 30720; 
 
-  #if defined(USE_UNIFIED_MEMORY)
-      printf("Allocating CUDA Unified Memory...\n");
-      cudaMallocManaged(&d_tx_sig, n_tx * num_samples_alloc * sizeof(float) * 2, cudaMemAttachGlobal);
-      cudaMallocManaged(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2, cudaMemAttachGlobal);
-      cudaMallocManaged(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAttachGlobal);
+    #if defined(USE_UNIFIED_MEMORY)
+        printf("Allocating CUDA Unified Memory...\n");
+        cudaMallocManaged(&d_tx_sig, n_tx * num_samples_alloc * sizeof(float) * 2, cudaMemAttachGlobal);
+        cudaMallocManaged(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2, cudaMemAttachGlobal);
+        cudaMallocManaged(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAttachGlobal);
+        
+        int deviceId;
+        cudaGetDevice(&deviceId);
       
-      int deviceId;
-      cudaGetDevice(&deviceId);
-    
-      // Hint 1: The input signal will be read frequently by the GPU.
-      cudaMemAdvise(d_tx_sig, n_tx * num_samples_alloc * sizeof(float) * 2, cudaMemAdviseSetReadMostly, deviceId);
-    
-      // Hint 2: These buffers should live on the GPU for best performance.
-      cudaMemAdvise(d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
-      cudaMemAdvise(d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
-    
-      // Hint 3: The final output will be accessed by the CPU after the GPU is done.
-      cudaMemAdvise(d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
-
-      // Pinned buffers are not needed, but we point them to the managed buffers
-      // so the pipeline function signature doesn't need to change.
-      h_tx_sig_pinned = d_tx_sig;
-      h_final_output_pinned = d_final_output;
-
-  #elif defined(USE_ATS_MEMORY)
-      printf("Allocating memory for ATS Hybrid path...\n");
-      // For ATS, device can access host memory, so we malloc a host buffer for the input.
-      // The pointer h_tx_sig_pinned will be repurposed to point to this buffer.
-      h_tx_sig_pinned = malloc(n_tx * num_samples_alloc * sizeof(float) * 2);
-
-      // Device-only buffers are allocated with cudaMalloc.
-      cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2);
-      cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2);
-
-      // We still need a temporary host buffer for the explicit copy back from the GPU.
-      h_final_output_pinned = malloc(n_rx * num_samples_alloc * sizeof(short) * 2);
-
-      // d_tx_sig is not a device buffer in this model, so we set it to NULL.
-      // The pipeline will receive the host pointer via h_tx_sig_pinned.
-      d_tx_sig = NULL;
+        // Hint 1: The input signal will be read frequently by the GPU.
+        cudaMemAdvise(d_tx_sig, n_tx * num_samples_alloc * sizeof(float) * 2, cudaMemAdviseSetReadMostly, deviceId);
       
-  #else // Original explicit copy method
-      printf("Pre-allocating GPU & Pinned memory for the channel pipeline...\n");
-      cudaMalloc(&d_tx_sig, n_tx * num_samples_alloc * sizeof(float) * 2);
-      cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2);
-      cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2);
+        // Hint 2: These buffers should live on the GPU for best performance.
+        cudaMemAdvise(d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
+        cudaMemAdvise(d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
       
-      cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples_alloc * sizeof(float) * 2);
-      cudaMallocHost(&h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short) * 2);
-  #endif
+        // Hint 3: The final output will be accessed by the CPU after the GPU is done.
+        cudaMemAdvise(d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
 
-    int num_rand_elements = n_rx * num_samples_alloc;
-    d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
-  }
+        // Pinned buffers are not needed, but we point them to the managed buffers
+        // so the pipeline function signature doesn't need to change.
+        h_tx_sig_pinned = d_tx_sig;
+        h_final_output_pinned = d_final_output;
 
+    #elif defined(USE_ATS_MEMORY)
+        printf("Allocating memory for ATS Hybrid path...\n");
+        // For ATS, device can access host memory, so we malloc a host buffer for the input.
+        // The pointer h_tx_sig_pinned will be repurposed to point to this buffer.
+        h_tx_sig_pinned = malloc(n_tx * num_samples_alloc * sizeof(float) * 2);
+
+        // Device-only buffers are allocated with cudaMalloc.
+        cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2);
+        cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2);
+
+        // We still need a temporary host buffer for the explicit copy back from the GPU.
+        h_final_output_pinned = malloc(n_rx * num_samples_alloc * sizeof(short) * 2);
+
+        // d_tx_sig is not a device buffer in this model, so we set it to NULL.
+        // The pipeline will receive the host pointer via h_tx_sig_pinned.
+        d_tx_sig = NULL;
+        
+    #else // Original explicit copy method
+        printf("Pre-allocating GPU & Pinned memory for the channel pipeline...\n");
+        cudaMalloc(&d_tx_sig, n_tx * num_samples_alloc * sizeof(float) * 2);
+        cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2);
+        cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2);
+        
+        cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples_alloc * sizeof(float) * 2);
+        cudaMallocHost(&h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short) * 2);
+    #endif
+
+      int num_rand_elements = n_rx * num_samples_alloc;
+      d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
+    }
+#endif
 
 
   get_softmodem_params()->phy_test = 1;
@@ -1353,6 +1364,7 @@ if (use_cuda) {
         }
 
         if (use_cuda) {
+          #ifdef ENABLE_CUDA
             start_meas(&pipeline_stats);
 
             // Generate a new channel for this specific HARQ round, mimicking the CPU path.
@@ -1384,6 +1396,7 @@ if (use_cuda) {
             cudaDeviceSynchronize();
             stop_meas(&pipeline_stats);
 
+            #endif
         } else {
             for (aa = 0; aa < n_rx; aa++) {
               bzero(r_re[aa], slot_length * sizeof(float));
@@ -1619,6 +1632,7 @@ if (use_cuda) {
     free(r_im[i]);
   }
 
+#ifdef ENABLE_CUDA
   if (use_cuda) {
       printf("Freeing GPU...\n");
   #if defined(USE_UNIFIED_MEMORY)
@@ -1635,6 +1649,7 @@ if (use_cuda) {
       destroy_curand_states_cuda(d_curand_states);
       free(h_channel_coeffs);
   }
+#endif
 
   free(s_re);
   free(s_im);

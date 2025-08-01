@@ -1716,13 +1716,19 @@ set (SIMUSRC
   ${OPENAIR1_DIR}/SIMULATION/TOOLS/random_channel.c
   ${OPENAIR1_DIR}/SIMULATION/TOOLS/rangen_double.c
   ${OPENAIR1_DIR}/SIMULATION/TOOLS/phase_noise.c
-  ${OPENAIR1_DIR}/SIMULATION/TOOLS/multipath_channel.cu
-  ${OPENAIR1_DIR}/SIMULATION/TOOLS/phase_noise.cu
-  ${OPENAIR1_DIR}/SIMULATION/TOOLS/channel_pipeline.cu
   ${OPENAIR1_DIR}/SIMULATION/RF/rf.c
   ${OPENAIR1_DIR}/SIMULATION/RF/dac.c
   ${OPENAIR1_DIR}/SIMULATION/RF/adc.c
 )
+
+if(CUDA_FOUND)
+set (SIMUSRC
+  ${OPENAIR1_DIR}/SIMULATION/TOOLS/multipath_channel.cu
+  ${OPENAIR1_DIR}/SIMULATION/TOOLS/phase_noise.cu
+  ${OPENAIR1_DIR}/SIMULATION/TOOLS/channel_pipeline.cu
+)
+endif()
+
 add_library(SIMU STATIC ${SIMUSRC} )
 target_include_directories(SIMU PUBLIC ${OPENAIR1_DIR}/SIMULATION/TOOLS ${OPENAIR1_DIR}/SIMULATION/RF)
 
