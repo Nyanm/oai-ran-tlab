@@ -58,23 +58,25 @@ set_target_properties(test_channel_simulation PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
-
-# --- New target for testing CPU versions of multipath_channel ---
-# This block creates TWO executables from the SAME source file,
-# but with different compile flags.
-
-# 1. Add the executable for the standard C version
 add_executable(test_cpu_std test_SSE.c channel_io.c)
 target_link_libraries(test_cpu_std PRIVATE UTIL SIMU PHY_COMMON LOG T CONFIG_LIB shlib_loader m)
 set_target_properties(test_cpu_std PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
-# 2. Add the executable for the SSE version
 add_executable(test_cpu_sse test_SSE.c channel_io.c)
-# This is the key: we add the compile definition ONLY for this target
 target_compile_definitions(test_cpu_sse PRIVATE CHANNEL_SSE)
 target_link_libraries(test_cpu_sse PRIVATE UTIL SIMU PHY_COMMON LOG T CONFIG_LIB shlib_loader m)
 set_target_properties(test_cpu_sse PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
+
+if (TARGET oai_cuda_lib)
+    target_link_libraries(test_multipath PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
+    target_link_libraries(test_noise PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
+    target_link_libraries(test_channel_simulation PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
+
+    target_compile_definitions(test_multipath PRIVATE ENABLE_CUDA)
+    target_compile_definitions(test_noise PRIVATE ENABLE_CUDA)
+    target_compile_definitions(test_channel_simulation PRIVATE ENABLE_CUDA)
+endif()
