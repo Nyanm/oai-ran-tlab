@@ -1,21 +1,13 @@
-// In test_SSE.c
+#include "channel_io.h" 
 
-#include "channel_io.h" // Include your new header
-
-// ====================================================================================
-// BOILERPLATE: Provide stubs for common OAI framework functions and variables
-// ====================================================================================
-
-// Provide a definition for the global config module pointer
 configmodule_interface_t *uniqCfg = NULL;
 
-// Provide a definition for the exit_function
+
 void exit_function(const char *file, const char *function, const int line, const char *s, const int assert_not_exit) {
     fprintf(stderr, "Exit function called from %s:%d in %s(). Message: %s\n", file, line, function, s);
     exit(1);
 }
 
-// Helper function to generate random signal data
 void generate_random_signal_double(double **sig_re, double **sig_im, int nb_ant, int num_samples) {
     for (int i = 0; i < nb_ant; i++) {
         for (int j = 0; j < num_samples; j++) {
@@ -25,7 +17,6 @@ void generate_random_signal_double(double **sig_re, double **sig_im, int nb_ant,
     }
 }
 
-// Helper function to calculate a checksum for verification
 double calculate_checksum(double **sig_re, double **sig_im, int nb_rx, int num_samples) {
     double checksum = 0.0;
     for (int i = 0; i < nb_rx; i++) {
@@ -42,18 +33,14 @@ int main(int argc, char **argv) {
     logInit();
     randominit(1); 
     
-    // --- Test Parameters ---
     int nb_tx = 2;
     int nb_rx = 2;
     int num_samples = 30720;
     int num_trials = 100;
     SCM_t channel_model = TDL_A;
     const char* channel_filename = "test_channel.bin";
-
-    // Create a base channel descriptor. Its taps will be set or overwritten.
     channel_desc_t *chan_desc = new_channel_desc_scm(nb_tx, nb_rx, channel_model, 30.72, 0, 0, 0.03, 0, 0, 0, 0, 0, 0);
 
-    // --- Generate or Load Channel Taps ---
     if (argc > 1 && strcmp(argv[1], "--use-channel") == 0) {
         printf("Mode: Loading channel taps from %s\n", channel_filename);
         if (load_channel_taps(chan_desc, channel_filename) != 0) {
@@ -62,7 +49,7 @@ int main(int argc, char **argv) {
         }
     } else {
         printf("Mode: Generating new channel taps and saving to %s\n", channel_filename);
-        random_channel(chan_desc, 0); // Generate the random taps
+        random_channel(chan_desc, 0); 
         if (save_channel_taps(chan_desc, channel_filename) != 0) {
             fprintf(stderr, "Error: Could not save channel file.\n");
             exit(1);
@@ -89,7 +76,7 @@ int main(int argc, char **argv) {
     clock_gettime(CLOCK_MONOTONIC, &start);
 
     for (int t = 0; t < num_trials; t++) {
-        // Always call with keep_channel=1 to use our prepared channel
+        
         multipath_channel(chan_desc, s_re, s_im, r_re, r_im, num_samples, 1, 0);
     }
     
@@ -110,7 +97,7 @@ int main(int argc, char **argv) {
     printf("--------------------------------------------------\n");
     printf("Test finished.\n");
 
-    // --- Cleanup ---
+    
     for (int i=0; i<nb_tx; i++) { free(s_re[i]); free(s_im[i]); }
     for (int i=0; i<nb_rx; i++) { free(r_re[i]); free(r_im[i]); }
     free(s_re); free(s_im); free(r_re); free(r_im);
