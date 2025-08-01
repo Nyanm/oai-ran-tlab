@@ -22,9 +22,19 @@
 # Author: laurent THOMAS, Lionel GAUTHIER
 
 cmake_minimum_required (VERSION 3.16)
-project (OpenAirInterface LANGUAGES C CXX CUDA)
+project (OpenAirInterface LANGUAGES C CXX)
+find_package(CUDA REQUIRED)
 set(CMAKE_CUDA_ARCHITECTURES 90)
 set(CMAKE_CXX_STANDARD 17)
+
+
+# This will now work correctly because the project() command has found CUDA.
+if (CUDA_FOUND)
+  message(STATUS "CUDA found, enabling CUDA support")
+else()
+  message(STATUS "CUDA not found, disabling CUDA support")
+endif()
+
 
 #########################################################
 # Base directories, compatible with legacy OAI building #
@@ -1721,7 +1731,7 @@ set (SIMUSRC
 )
 
 if(CUDA_FOUND)
-set (SIMUSRC
+list(APPEND SIMUSRC
   ${OPENAIR1_DIR}/SIMULATION/TOOLS/multipath_channel.cu
   ${OPENAIR1_DIR}/SIMULATION/TOOLS/phase_noise.cu
   ${OPENAIR1_DIR}/SIMULATION/TOOLS/channel_pipeline.cu
@@ -1730,6 +1740,11 @@ endif()
 
 add_library(SIMU STATIC ${SIMUSRC} )
 target_include_directories(SIMU PUBLIC ${OPENAIR1_DIR}/SIMULATION/TOOLS ${OPENAIR1_DIR}/SIMULATION/RF)
+
+if(CUDA_FOUND)
+  set_property(TARGET SIMU PROPERTY CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
+  set_property(TARGET SIMU PROPERTY LINKER_LANGUAGE CXX)
+endif()
 
 include_directories("${NFAPI_DIR}/nfapi/public_inc")
 include_directories("${NFAPI_DIR}/common/public_inc")
