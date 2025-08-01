@@ -125,22 +125,24 @@ int main(int argc, char **argv) {
             output_cpu[i] = output_cpu[0] + i * num_samples;
             output_gpu[i] = output_gpu[0] + i * num_samples;
         }
-
+ 
         // --- GPU Memory Allocation ---
-        // For multipath_channel_cuda_fast
-        void *d_tx_sig, *d_rx_sig;
-        cudaMalloc(&d_tx_sig,   nb_tx * num_samples * sizeof(float2));
-        cudaMalloc(&d_rx_sig,   nb_rx * num_samples * sizeof(float2));
-        
-        // For add_noise_cuda
-        void *d_r_sig_noise, *d_output_noise, *d_curand_states;
-        void *h_r_sig_pinned, *h_output_sig_pinned;
-        cudaMalloc(&d_r_sig_noise,   nb_rx * num_samples * sizeof(float2));
-        cudaMalloc(&d_output_noise,  nb_rx * num_samples * sizeof(short2));
-        cudaMallocHost(&h_r_sig_pinned, nb_rx * num_samples * sizeof(float2));
-        void* h_tx_sig_pinned;
-        cudaMallocHost(&h_tx_sig_pinned, nb_tx * num_samples * sizeof(float2));
-        cudaMallocHost(&h_output_sig_pinned, nb_rx * num_samples * sizeof(short2));
+        void *d_tx_sig, *d_rx_sig, *d_output_noise, *d_curand_states, *h_tx_sig_pinned, *h_output_sig_pinned;
+
+        #if defined(USE_UNIFIED_MEMORY)
+            cudaMallocManaged(&d_tx_sig, nb_tx * num_samples * sizeof(float) * 2, cudaMemAttachGlobal);
+            cudaMallocManaged(&d_rx_sig, nb_rx * num_samples * sizeof(float) * 2, cudaMemAttachGlobal); // Intermediate buffer
+            cudaMallocManaged(&d_output_noise, nb_rx * num_samples * sizeof(short) * 2, cudaMemAttachGlobal);
+            // Point host pointers to the managed buffers to satisfy the function signature
+            h_tx_sig_pinned = d_tx_sig;
+            h_output_sig_pinned = d_output_noise;
+        #else // Explicit copy path
+            cudaMalloc(&d_tx_sig, nb_tx * num_samples * sizeof(float) * 2);
+            cudaMalloc(&d_rx_sig, nb_rx * num_samples * sizeof(float) * 2);
+            cudaMalloc(&d_output_noise, nb_rx * num_samples * sizeof(short) * 2);
+            cudaMallocHost(&h_tx_sig_pinned, nb_tx * num_samples * sizeof(float) * 2);
+            cudaMallocHost(&h_output_sig_pinned, nb_rx * num_samples * sizeof(short) * 2);
+        #endif
         d_curand_states = create_and_init_curand_states_cuda(nb_rx * num_samples, time(NULL));
 
         double ts = 1.0 / 30.72e6;
@@ -160,7 +162,20 @@ int main(int argc, char **argv) {
         double total_gpu_ns = 0;
 
         for (int t = 0; t < num_trials; t++) {
-            generate_random_signal(tx_sig_re, tx_sig_im, nb_tx, num_samples);
+
+            #if defined(USE_UNIFIED_MEMORY)
+                // For UM, write random data directly into the managed buffer
+                float2* managed_tx_sig = (float2*)d_tx_sig;
+                for (int i = 0; i < nb_tx; i++) {
+                    for (int j = 0; j < num_samples; j++) {
+                        managed_tx_sig[i * num_samples + j].x = (float)((rand() % 2000) - 1000);
+                        managed_tx_sig[i * num_samples + j].y = (float)((rand() % 2000) - 1000);
+                    }
+                }
+            #else
+                // For explicit copy, use the original host buffers
+                generate_random_signal(tx_sig_re, tx_sig_im, nb_tx, num_samples);
+            #endif
             struct timespec start, end;
 
             clock_gettime(CLOCK_MONOTONIC, &start);
@@ -205,10 +220,17 @@ int main(int argc, char **argv) {
         free(output_cpu[0]); free(output_gpu[0]);
         free(output_cpu); free(output_gpu);
 
-        cudaFree(d_tx_sig); cudaFree(d_rx_sig);
-        cudaFreeHost(h_tx_sig_pinned);
-        cudaFree(d_r_sig_noise); cudaFree(d_output_noise);
-        cudaFreeHost(h_r_sig_pinned); cudaFreeHost(h_output_sig_pinned);
+        #if defined(USE_UNIFIED_MEMORY)
+            cudaFree(d_tx_sig);
+            cudaFree(d_rx_sig);
+            cudaFree(d_output_noise);
+        #else
+            cudaFree(d_tx_sig);
+            cudaFree(d_rx_sig);
+            cudaFreeHost(h_tx_sig_pinned);
+            cudaFree(d_output_noise);
+            cudaFreeHost(h_output_sig_pinned);
+        #endif
         destroy_curand_states_cuda(d_curand_states);
         
         free_manual_channel_desc(chan_desc);

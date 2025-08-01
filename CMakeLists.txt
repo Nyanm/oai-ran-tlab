@@ -273,6 +273,14 @@ if(GIT_FOUND)
   )
 endif()
 
+option(USE_UNIFIED_MEMORY "Enable CUDA Unified Memory path instead of explicit copies" OFF)
+
+if(USE_UNIFIED_MEMORY)
+  add_compile_definitions(USE_UNIFIED_MEMORY)
+  message(STATUS "CUDA Unified Memory path enabled.")
+endif()
+
+
 # Debug related options
 #########################################
 # asn1c skeletons have hardcoded this flag to make customized debug logs

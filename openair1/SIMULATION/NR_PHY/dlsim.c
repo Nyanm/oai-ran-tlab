@@ -677,6 +677,38 @@ printf("%d\n", slot);
   /* initialize the sin table */
   InitSinLUT();
 
+if (use_cuda) {
+      // Define a size for pre-allocation. 30720 is a safe, typical slot length.
+      int num_samples_alloc = 30720; 
+
+  #if defined(USE_UNIFIED_MEMORY)
+      printf("Allocating CUDA Unified Memory...\n");
+      cudaMallocManaged(&d_tx_sig, n_tx * num_samples_alloc * sizeof(float) * 2, cudaMemAttachGlobal);
+      cudaMallocManaged(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2, cudaMemAttachGlobal);
+      cudaMallocManaged(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAttachGlobal);
+      
+      // Pinned buffers are not needed, but we point them to the managed buffers
+      // so the pipeline function signature doesn't need to change.
+      h_tx_sig_pinned = d_tx_sig;
+      h_final_output_pinned = d_final_output;
+
+  #else // Original explicit copy method
+      printf("Pre-allocating GPU & Pinned memory for the channel pipeline...\n");
+      cudaMalloc(&d_tx_sig, n_tx * num_samples_alloc * sizeof(float) * 2);
+      cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2);
+      cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2);
+      
+      cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples_alloc * sizeof(float) * 2);
+      cudaMallocHost(&h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short) * 2);
+  #endif
+
+      // This is common to both memory models
+      int num_rand_elements = n_rx * num_samples_alloc;
+      d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
+  }
+
+
+
   get_softmodem_params()->phy_test = 1;
   get_softmodem_params()->do_ra = 0;
   IS_SOFTMODEM_DLSIM = true;
@@ -891,6 +923,11 @@ printf("%d\n", slot);
                                 delay,
                                 0,
                                 0);
+  float* h_channel_coeffs = NULL;      
+  if (use_cuda) {
+      int num_links = n_tx * n_rx;
+      h_channel_coeffs = (float*)malloc(num_links * gNB2UE->channel_length * sizeof(float) * 2);
+    }
 
   if (gNB2UE==NULL) {
     printf("Problem generating channel model. Exiting.\n");
@@ -936,66 +973,7 @@ printf("%d\n", slot);
     // r_im[i] = calloc(1, slot_length * sizeof(double));
   }
 
-  float* h_channel_coeffs = NULL;
-
-   if (use_cuda) {
-    #if defined(USE_UNIFIED_MEMORY)
-      printf("Allocating CUDA Unified Memory...\n");
-      // With Unified Memory, we only need one allocation for each buffer.
-      // The CPU and GPU will both use the same pointer.
-      cudaMallocManaged(&d_tx_sig, n_tx * num_samples_alloc * sizeof(float2));
-      cudaMallocManaged(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float2));
-      cudaMallocManaged(&d_final_output, n_rx * num_samples_alloc * sizeof(short2));
-      
-      // Pinned buffers are not needed, but we point them to the managed buffers
-      // so the function signature doesn't need to change.
-      h_tx_sig_pinned = d_tx_sig;
-      h_final_output_pinned = d_final_output;
-
-      int num_rand_elements = n_rx * num_samples_alloc;
-      d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
-      
-      int num_links = n_tx * n_rx;
-      h_channel_coeffs = (float*)malloc(num_links * UE2gNB->channel_length * sizeof(float2));
-    
-    #else
-      printf("Pre-allocating GPU & Pinned memory for the entire channel pipeline...\n");
-      int num_samples = slot_length; // Use slot_length for allocation size
-      
-      // Allocate device memory for the entire pipeline
-      cudaMalloc(&d_tx_sig, n_tx * num_samples * sizeof(float2));
-      cudaMalloc(&d_intermediate_sig, n_rx * num_samples * sizeof(float2));
-      cudaMalloc(&d_final_output, n_rx * num_samples * sizeof(short2));
-      
-      // Allocate pinned host memory for asynchronous transfers
-      cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples * sizeof(float2));
-      cudaMallocHost(&h_final_output_pinned, n_rx * num_samples * sizeof(short2));
-
-      // Check for allocation errors
-      if (!d_tx_sig || !d_intermediate_sig || !d_final_output || !h_tx_sig_pinned || !h_final_output_pinned) {
-          fprintf(stderr, "Failed to allocate memory for CUDA pipeline\n");
-          exit(1);
-      }
-
-      // Initialize cuRAND states on the GPU
-      int num_rand_elements = n_rx * num_samples;
-      d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
-      if (d_curand_states == NULL) {
-          fprintf(stderr, "Failed to initialize cuRAND states\n");
-          exit(1);
-      }
-      printf("GPU/Pinned memory allocated and cuRAND states initialized.\n");
-
-      printf("Allocating buffer for flattened channel coefficients...\n");
-      int num_links = n_tx * n_rx;
-      h_channel_coeffs = (float*)malloc(num_links * gNB2UE->channel_length * sizeof(float2));
-      if (h_channel_coeffs == NULL) {
-          fprintf(stderr, "Failed to allocate memory for h_channel_coeffs\n");
-          exit(1);
-      }
-    #endif
-  }
-
+  
 
 
   if (pbch_file_fd!=NULL) {
@@ -1290,16 +1268,29 @@ printf("%d\n", slot);
           if (n_trials==1) printf("txlev[%d] = %d (%f dB) txlev_sum %d\n",aa,txlev[aa],10*log10((double)txlev[aa]),txlev_sum);
         }
 
-        for (i = 0; i < slot_length; i++) {
-          for (aa=0; aa<frame_parms->nb_antennas_tx; aa++) {
-            // s_re[aa][i] = ((double)(((short *)&txdata[aa][slot_offset]))[(i << 1)]);
-            // s_im[aa][i] = ((double)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1]);
+        #if defined(USE_UNIFIED_MEMORY)
+            // For Unified Memory, the CPU writes directly into the managed buffer (d_tx_sig),
+            // interleaving the data into the float2 format.
+            float2* managed_tx_sig = (float2*)d_tx_sig;
+            for (int i = 0; i < slot_length; i++) {
+                for (int aa = 0; aa < frame_parms->nb_antennas_tx; aa++) {
+                    managed_tx_sig[aa * slot_length + i].x = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1)];
+                    managed_tx_sig[aa * slot_length + i].y = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1];
+                }
+            }
+            int deviceId;
+            cudaGetDevice(&deviceId);
+            cudaMemPrefetchAsync(d_tx_sig, n_tx * slot_length * sizeof(float) * 2, deviceId, 0);
 
-            // CHANGING DOUBLE TO FLOAT
-            s_re[aa][i] = ((float)(((short *)&txdata[aa][slot_offset]))[(i << 1)]);
-            s_im[aa][i] = ((float)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1]);
-          }
-        }
+        #else
+            // For explicit copy, the CPU populates the separate s_re/s_im host buffers.
+            for (int i = 0; i < slot_length; i++) {
+                for (int aa = 0; aa < frame_parms->nb_antennas_tx; aa++) {
+                    s_re[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1)];
+                    s_im[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1];
+                }
+            }
+        #endif
 
         double ts = 1.0/(frame_parms->subcarrier_spacing * frame_parms->ofdm_symbol_size); 
         //Compute AWGN variance
@@ -1332,11 +1323,10 @@ printf("%d\n", slot);
                 }
             }
           
-            // Run the entire pipeline on the GPU with a single call
             run_channel_pipeline_cuda(
                 s_re, s_im, UE->common_vars.rxdata,
                 n_tx, n_rx, gNB2UE->channel_length, slot_length,
-                path_loss, // Pass the path_loss variable
+                path_loss,
                 h_channel_coeffs,
                 (float)sigma2, ts,
                 pdu_bit_map, 0x1,
@@ -1349,7 +1339,6 @@ printf("%d\n", slot);
             stop_meas(&pipeline_stats);
 
         } else {
-            // Original CPU path
             for (aa = 0; aa < n_rx; aa++) {
               bzero(r_re[aa], slot_length * sizeof(float));
               bzero(r_im[aa], slot_length * sizeof(float));
@@ -1585,7 +1574,7 @@ printf("%d\n", slot);
   }
 
   if (use_cuda) {
-      printf("Freeing GPU and Pinned memory...\n");
+      printf("Freeing GPU...\n");
   #if defined(USE_UNIFIED_MEMORY)
       cudaFree(d_tx_sig);
       cudaFree(d_intermediate_sig);

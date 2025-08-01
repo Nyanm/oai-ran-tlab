@@ -75,46 +75,70 @@ extern "C" {
         CHECK_CUDA(cudaMemcpyToSymbol(d_channel_const, h_channel_coeffs, size));
     }
 
-    void multipath_channel_cuda(
-        float **tx_sig_re, float **tx_sig_im,
-        float **rx_sig_re, float **rx_sig_im,
-        int nb_tx, int nb_rx, int channel_length,
-        uint32_t length, uint64_t channel_offset,
-        float path_loss,
-        float *h_channel_coeffs,
-        void *d_tx_sig_void, void *d_rx_sig_void
-    )
-    {
-        float2 *d_tx_sig = (float2*)d_tx_sig_void;
-        float2 *d_rx_sig = (float2*)d_rx_sig_void;
+// In multipath_channel.cu
 
-        int num_samples = length - (int)channel_offset;
+void multipath_channel_cuda(
+    float **tx_sig_re, float **tx_sig_im,
+    float **rx_sig_re, float **rx_sig_im,
+    int nb_tx, int nb_rx, int channel_length,
+    uint32_t length, uint64_t channel_offset,
+    float path_loss,
+    float *h_channel_coeffs,
+    void *d_tx_sig_void, void *d_rx_sig_void
+)
+{
+    float2 *d_tx_sig = (float2*)d_tx_sig_void;
+    float2 *d_rx_sig = (float2*)d_rx_sig_void;
+    int num_samples = length - (int)channel_offset;
 
+    #if defined(USE_UNIFIED_MEMORY)
+        // --- UNIFIED MEMORY PATH ---
+        // 1. CPU writes directly to the managed d_tx_sig buffer, interleaving the data.
+        for (int j = 0; j < nb_tx; j++) {
+            for (int i = 0; i < num_samples; i++) {
+                d_tx_sig[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
+            }
+        }
+    #else
+        // --- EXPLICIT COPY PATH ---
+        // 1. Interleave data into a temporary host buffer.
         float2* h_tx_sig_interleaved = (float2*)malloc(nb_tx * num_samples * sizeof(float2));
-        if (!h_tx_sig_interleaved) return;
-
         for (int j = 0; j < nb_tx; j++) {
             for (int i = 0; i < num_samples; i++) {
                 h_tx_sig_interleaved[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
             }
         }
-
+        // 2. Explicitly copy from host to device.
         CHECK_CUDA( cudaMemcpy(d_tx_sig, h_tx_sig_interleaved, nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice) );
-        CHECK_CUDA( cudaMemcpyToSymbol(d_channel_const, h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2)) );
+        free(h_tx_sig_interleaved);
+    #endif
 
+        // --- COMMON KERNEL LAUNCH ---
+        update_channel_coeffs_symbol(h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2));
         dim3 threadsPerBlock(512, 1);
         dim3 numBlocks((num_samples + threadsPerBlock.x - 1) / threadsPerBlock.x, nb_rx);
         size_t sharedMemSize = (threadsPerBlock.x + channel_length - 1) * sizeof(float2);
-
         multipath_channel_kernel<<<numBlocks, threadsPerBlock, sharedMemSize>>>(
             d_tx_sig, d_rx_sig, num_samples, channel_length, nb_tx, nb_rx, path_loss);
-        CHECK_CUDA( cudaGetLastError() );
         
+    #if defined(USE_UNIFIED_MEMORY)
+        // --- UNIFIED MEMORY PATH ---
+        // 3. Synchronize to ensure the GPU is finished before the CPU reads the result.
+        CHECK_CUDA( cudaDeviceSynchronize() );
+        // 4. CPU reads directly from the managed d_rx_sig buffer, de-interleaving the data.
+        for (int ii = 0; ii < nb_rx; ii++) {
+            for (int i = 0; i < num_samples; i++) {
+                float2 result = d_rx_sig[ii * num_samples + i];
+                rx_sig_re[ii][i + channel_offset] = result.x;
+                rx_sig_im[ii][i + channel_offset] = result.y;
+            }
+        }
+    #else
+        // --- EXPLICIT COPY PATH ---
+        // 3. Copy result from device back to a temporary host buffer.
         float2* h_rx_sig = (float2*)malloc(nb_rx * num_samples * sizeof(float2));
-        if (!h_rx_sig) { free(h_tx_sig_interleaved); return; }
-
         CHECK_CUDA( cudaMemcpy(h_rx_sig, d_rx_sig, nb_rx * num_samples * sizeof(float2), cudaMemcpyDeviceToHost) );
-        
+        // 4. De-interleave data into the final output buffers.
         for (int ii = 0; ii < nb_rx; ii++) {
             for (int i = 0; i < num_samples; i++) {
                 float2 result = h_rx_sig[ii * num_samples + i];
@@ -122,8 +146,7 @@ extern "C" {
                 rx_sig_im[ii][i + channel_offset] = result.y;
             }
         }
-
-        free(h_tx_sig_interleaved);
         free(h_rx_sig);
+    #endif
     }
 } // extern "C"

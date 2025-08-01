@@ -107,10 +107,16 @@ int main(int argc, char **argv) {
 
         for (int i=0; i<nb_tx; i++) { s_re[i] = malloc(num_samples * sizeof(float)); s_im[i] = malloc(num_samples * sizeof(float)); }
         for (int i=0; i<nb_rx; i++) { r_re_cpu[i] = malloc(num_samples * sizeof(float)); r_im_cpu[i] = malloc(num_samples * sizeof(float)); r_re_gpu[i] = malloc(num_samples * sizeof(float)); r_im_gpu[i] = malloc(num_samples * sizeof(float)); }
+       
 
         void *d_tx_sig, *d_rx_sig;
-        cudaMalloc(&d_tx_sig,   nb_tx * (num_samples - chan_desc->channel_offset) * sizeof(float2));
-        cudaMalloc(&d_rx_sig,   nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float2));
+        #if defined(USE_UNIFIED_MEMORY)
+            cudaMallocManaged(&d_tx_sig, nb_tx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAttachGlobal);
+            cudaMallocManaged(&d_rx_sig, nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAttachGlobal);
+        #else
+            cudaMalloc(&d_tx_sig, nb_tx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2);
+            cudaMalloc(&d_rx_sig, nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2);
+        #endif
 
         double total_cpu_ns = 0;
         double total_gpu_ns = 0;
@@ -159,7 +165,8 @@ int main(int argc, char **argv) {
         for (int i=0; i<nb_tx; i++) { free(s_re[i]); free(s_im[i]); }
         for (int i=0; i<nb_rx; i++) { free(r_re_cpu[i]); free(r_im_cpu[i]); free(r_re_gpu[i]); free(r_im_gpu[i]); }
         free(s_re); free(s_im); free(r_re_cpu); free(r_im_cpu); free(r_re_gpu); free(r_im_gpu);
-        cudaFree(d_tx_sig); cudaFree(d_rx_sig);
+        cudaFree(d_tx_sig); 
+        cudaFree(d_rx_sig);
         free_manual_channel_desc(chan_desc);
     }
     }

@@ -68,6 +68,13 @@ void run_channel_pipeline_cuda(
         pdu_bit_map, ptrs_bit_map
     );
 
+    cudaDeviceSynchronize();
+
+    // Hint to the driver to start moving the final result back to the CPU's memory
+    // before the memcpy loop below needs to access it.
+    #if defined(USE_UNIFIED_MEMORY)
+        cudaMemPrefetchAsync(d_final_output, nb_rx * num_samples * sizeof(short) * 2, cudaCpuDeviceId, 0);
+    #endif
 
     #ifndef USE_UNIFIED_MEMORY
         // --- STAGE 4: Copy Final Result (Device to Host) ---
@@ -77,8 +84,10 @@ void run_channel_pipeline_cuda(
             nb_rx * num_samples * sizeof(short2),
             cudaMemcpyDeviceToHost
         ));
-        
-        // --- STAGE 5: Distribute to Final OAI Buffers with Offset ---
+
+    #endif
+  
+            // --- STAGE 5: Distribute to Final OAI Buffers with Offset ---
         for (int ii = 0; ii < nb_rx; ii++) {
             memcpy(
                 output_signal[ii] + slot_offset + delay, 
@@ -86,6 +95,5 @@ void run_channel_pipeline_cuda(
                 num_samples * sizeof(short2)
             );
         }
-    #endif
 }
 } // extern "C"
