@@ -33,113 +33,87 @@ uint8_t multipath_channel_nosigconv(channel_desc_t *desc)
 }
 
 //#define CHANNEL_SSE
+
 #ifdef CHANNEL_SSE
 void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *desc,
-                       double tx_sig_re[NB_ANTENNAS_TX][30720*2],
-                       double tx_sig_im[NB_ANTENNAS_TX][30720*2],
-                       double rx_sig_re[NB_ANTENNAS_RX][30720*2],
-                       double rx_sig_im[NB_ANTENNAS_RX][30720*2],
+                       double **tx_sig_re,
+                       double **tx_sig_im,
+                       double **rx_sig_re,
+                       double **rx_sig_im,
                        uint32_t length,
                        uint8_t keep_channel,
              		       int log_channel)
 {
-
   int i,ii,j,l;
-  int length1, length2, tail;
-  simde__m128d rx_tmp128_re_f, rx_tmp128_im_f, rx_tmp128_re, rx_tmp128_im, rx_tmp128_1, rx_tmp128_2, rx_tmp128_3, rx_tmp128_4,
-      tx128_re, tx128_im, ch128_x, ch128_y, pathloss128;
+  int simd_length, tail_start;
+  simde__m128d rx_tmp128_re, rx_tmp128_im, tx128_re, tx128_im, ch128_r, ch128_i, pathloss128;
 
   double path_loss = pow(10,desc->path_loss_dB/20);
   uint64_t dd = desc->channel_offset;
 
   pathloss128 = simde_mm_set1_pd(path_loss);
 
-#ifdef DEBUG_CH
-  printf("[CHANNEL] keep = %d : path_loss = %g (%f), nb_rx %d, nb_tx %d, dd %lu, len %d \n",keep_channel,path_loss,desc->path_loss_dB,desc->nb_rx,desc->nb_tx,dd,desc->channel_length);
-#endif
-
-  if (keep_channel) {
-    // do nothing - keep channel
-  } else {
+  if (keep_channel == 0) {
     random_channel(desc,0);
   }
 
-  start_meas(&desc->convolution);
+  simd_length = (length - dd) / 2;
+  tail_start = simd_length * 2;
 
-#ifdef DEBUG_CH
+  for (i = 0; i < (int)(length - dd); i+=2) {
+    for (ii = 0; ii < desc->nb_rx; ii++) {
+      rx_tmp128_re = simde_mm_setzero_pd();
+      rx_tmp128_im = simde_mm_setzero_pd();
 
-  for (l = 0; l<(int)desc->channel_length; l++) {
-    printf("%p (%f,%f) ",desc->ch[0],desc->ch[0][l].x,desc->ch[0][l].y);
-  }
-
-  printf("\n");
-#endif
-
-  tail = ((int)length-dd)%2;
-
-  if(tail)
-    length1 = ((int)length-dd)-1;
-  else
-    length1 = ((int)length-dd);
-
-  length2 = length1/2;
-
-  for (i=0; i<length2; i++) { //
-    for (ii=0; ii<desc->nb_rx; ii++) {
-      // rx_tmp.x = 0;
-      // rx_tmp.y = 0;
-      rx_tmp128_re_f = simde_mm_setzero_pd();
-      rx_tmp128_im_f = simde_mm_setzero_pd();
-
-      for (j=0; j<desc->nb_tx; j++) {
-        for (l = 0; l<(int)desc->channel_length; l++) {
-          if ((i>=0) && (i-l)>=0) { //SIMD correct only if length1 > 2*channel_length...which is almost always satisfied
-            // tx.x = tx_sig_re[j][i-l];
-            // tx.y = tx_sig_im[j][i-l];
-            tx128_re = simde_mm_loadu_pd(&tx_sig_re[j][2 * i - l]); // tx_sig_re[j][i-l+1], tx_sig_re[j][i-l]
-            tx128_im = simde_mm_loadu_pd(&tx_sig_im[j][2 * i - l]);
-          } else {
-            //tx.x =0;
-            //tx.y =0;
-            tx128_re = simde_mm_setzero_pd();
-            tx128_im = simde_mm_setzero_pd();
+  for (i = 0; i < (int)(length - dd); i += 2) {
+      for (ii = 0; ii < desc->nb_rx; ii++) {
+          rx_tmp128_re = simde_mm_setzero_pd();
+          rx_tmp128_im = simde_mm_setzero_pd();
+          for (j = 0; j < desc->nb_tx; j++) {
+              for (l = 0; l < (int)desc->channel_length; l++) {
+                  double tx_re[2] = {0.0, 0.0}, tx_im[2] = {0.0, 0.0};
+                  if ((i - l) >= 0) tx_re[0] = tx_sig_re[j][i - l];
+                  if ((i + 1 - l) >= 0) tx_re[1] = tx_sig_re[j][i + 1 - l];
+                  if ((i - l) >= 0) tx_im[0] = tx_sig_im[j][i - l];
+                  if ((i + 1 - l) >= 0) tx_im[1] = tx_sig_im[j][i + 1 - l];
+                  tx128_re = simde_mm_loadu_pd(tx_re);
+                  tx128_im = simde_mm_loadu_pd(tx_im);
+                  ch128_r = simde_mm_set1_pd(desc->ch[ii + (j * desc->nb_rx)][l].r);
+                  ch128_i = simde_mm_set1_pd(desc->ch[ii + (j * desc->nb_rx)][l].i);
+                  rx_tmp128_re = simde_mm_add_pd(rx_tmp128_re, simde_mm_sub_pd(simde_mm_mul_pd(tx128_re, ch128_r), simde_mm_mul_pd(tx128_im, ch128_i)));
+                  rx_tmp128_im = simde_mm_add_pd(rx_tmp128_im, simde_mm_add_pd(simde_mm_mul_pd(tx128_re, ch128_i), simde_mm_mul_pd(tx128_im, ch128_r)));
+              }
           }
-
-          ch128_x = simde_mm_set1_pd(desc->ch[ii + (j * desc->nb_rx)][l].x);
-          ch128_y = simde_mm_set1_pd(desc->ch[ii + (j * desc->nb_rx)][l].y);
-          //  rx_tmp.x += (tx.x * desc->ch[ii+(j*desc->nb_rx)][l].x) - (tx.y * desc->ch[ii+(j*desc->nb_rx)][l].y);
-          //  rx_tmp.y += (tx.y * desc->ch[ii+(j*desc->nb_rx)][l].x) + (tx.x * desc->ch[ii+(j*desc->nb_rx)][l].y);
-          rx_tmp128_1 = simde_mm_mul_pd(tx128_re, ch128_x);
-          rx_tmp128_2 = simde_mm_mul_pd(tx128_re, ch128_y);
-          rx_tmp128_3 = simde_mm_mul_pd(tx128_im, ch128_x);
-          rx_tmp128_4 = simde_mm_mul_pd(tx128_im, ch128_y);
-          rx_tmp128_re = simde_mm_sub_pd(rx_tmp128_1, rx_tmp128_4);
-          rx_tmp128_im = simde_mm_add_pd(rx_tmp128_2, rx_tmp128_3);
-          rx_tmp128_re_f = simde_mm_add_pd(rx_tmp128_re_f, rx_tmp128_re);
-          rx_tmp128_im_f = simde_mm_add_pd(rx_tmp128_im_f, rx_tmp128_im);
-        } //l
-      }  // j
-
-      //rx_sig_re[ii][i+dd] = rx_tmp.x*path_loss;
-      //rx_sig_im[ii][i+dd] = rx_tmp.y*path_loss;
-      rx_tmp128_re_f = simde_mm_mul_pd(rx_tmp128_re_f, pathloss128);
-      rx_tmp128_im_f = simde_mm_mul_pd(rx_tmp128_im_f, pathloss128);
-      simde_mm_storeu_pd(&rx_sig_re[ii][2 * i + dd], rx_tmp128_re_f); // max index: length-dd -1 + dd = length -1
-      simde_mm_storeu_pd(&rx_sig_im[ii][2 * i + dd], rx_tmp128_im_f);
-      /*
-      if ((ii==0)&&((i%32)==0)) {
-      printf("%p %p %f,%f => %e,%e\n",rx_sig_re[ii],rx_sig_im[ii],rx_tmp.x,rx_tmp.y,rx_sig_re[ii][i-dd],rx_sig_im[ii][i-dd]);
+          simde_mm_storeu_pd(&rx_sig_re[ii][i + dd], simde_mm_mul_pd(rx_tmp128_re, pathloss128));
+          simde_mm_storeu_pd(&rx_sig_im[ii][i + dd], simde_mm_mul_pd(rx_tmp128_im, pathloss128));
       }
-      */
-      //rx_sig_re[ii][i] = sqrt(.5)*(tx_sig_re[0][i] + tx_sig_re[1][i]);
-      //rx_sig_im[ii][i] = sqrt(.5)*(tx_sig_im[0][i] + tx_sig_im[1][i]);
-
+  }
     } // ii
   } // i
 
-  stop_meas(&desc->convolution);
-
+  // Handle the final sample if the length is odd
+  if ((length - dd) % 2) {
+    int i_tail = length - dd - 1;
+    for (ii = 0; ii < desc->nb_rx; ii++) {
+      struct complexd rx_tmp = {0};
+      for (j = 0; j < desc->nb_tx; j++) {
+        struct complexd *chan = desc->ch[ii + (j * desc->nb_rx)];
+        for (l = 0; l < (int)desc->channel_length; l++) {
+          if ((i_tail - l) >= 0) {
+            struct complexd tx;
+            tx.r = tx_sig_re[j][i_tail - l];
+            tx.i = tx_sig_im[j][i_tail - l];
+            rx_tmp.r += (tx.r * chan[l].r) - (tx.i * chan[l].i);
+            rx_tmp.i += (tx.i * chan[l].r) + (tx.r * chan[l].i);
+          }
+        }
+      }
+      rx_sig_re[ii][i_tail + dd] = rx_tmp.r * path_loss;
+      rx_sig_im[ii][i_tail + dd] = rx_tmp.i * path_loss;
+    }
+  }
 }
+
 
 #else
 
