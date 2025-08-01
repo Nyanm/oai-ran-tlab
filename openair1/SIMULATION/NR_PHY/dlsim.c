@@ -687,6 +687,19 @@ if (use_cuda) {
       cudaMallocManaged(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2, cudaMemAttachGlobal);
       cudaMallocManaged(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAttachGlobal);
       
+      int deviceId;
+      cudaGetDevice(&deviceId);
+    
+      // Hint 1: The input signal will be read frequently by the GPU.
+      cudaMemAdvise(d_tx_sig, n_tx * num_samples_alloc * sizeof(float) * 2, cudaMemAdviseSetReadMostly, deviceId);
+    
+      // Hint 2: These buffers should live on the GPU for best performance.
+      cudaMemAdvise(d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
+      cudaMemAdvise(d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
+    
+      // Hint 3: The final output will be accessed by the CPU after the GPU is done.
+      cudaMemAdvise(d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
+
       // Pinned buffers are not needed, but we point them to the managed buffers
       // so the pipeline function signature doesn't need to change.
       h_tx_sig_pinned = d_tx_sig;

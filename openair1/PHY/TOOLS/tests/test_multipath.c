@@ -113,6 +113,14 @@ int main(int argc, char **argv) {
         #if defined(USE_UNIFIED_MEMORY)
             cudaMallocManaged(&d_tx_sig, nb_tx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAttachGlobal);
             cudaMallocManaged(&d_rx_sig, nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAttachGlobal);
+        
+            // Add memory hints
+            int deviceId;
+            cudaGetDevice(&deviceId);
+            cudaMemAdvise(d_tx_sig, nb_tx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAdviseSetReadMostly, deviceId);
+            cudaMemAdvise(d_rx_sig, nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
+            cudaMemAdvise(d_rx_sig, nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
+
         #else
             cudaMalloc(&d_tx_sig, nb_tx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2);
             cudaMalloc(&d_rx_sig, nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2);

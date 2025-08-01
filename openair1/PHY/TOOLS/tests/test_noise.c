@@ -72,6 +72,14 @@ int main(int argc, char **argv) {
         #if defined(USE_UNIFIED_MEMORY)
             cudaMallocManaged(&d_r_sig,   nb_rx * num_samples * sizeof(float) * 2, cudaMemAttachGlobal);
             cudaMallocManaged(&d_output_sig,   nb_rx * num_samples * sizeof(short) * 2, cudaMemAttachGlobal);
+
+                // Add memory hints
+                int deviceId;
+                cudaGetDevice(&deviceId);
+                cudaMemAdvise(d_r_sig, nb_rx * num_samples * sizeof(float) * 2, cudaMemAdviseSetReadMostly, deviceId);
+                cudaMemAdvise(d_output_sig, nb_rx * num_samples * sizeof(short) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
+                cudaMemAdvise(d_output_sig, nb_rx * num_samples * sizeof(short) * 2, cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
+
             // Pinned memory is not used in the UM path for this wrapper
             h_r_sig_pinned = NULL;
             h_output_sig_pinned = NULL;

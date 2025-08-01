@@ -133,6 +133,15 @@ int main(int argc, char **argv) {
             cudaMallocManaged(&d_tx_sig, nb_tx * num_samples * sizeof(float) * 2, cudaMemAttachGlobal);
             cudaMallocManaged(&d_rx_sig, nb_rx * num_samples * sizeof(float) * 2, cudaMemAttachGlobal); // Intermediate buffer
             cudaMallocManaged(&d_output_noise, nb_rx * num_samples * sizeof(short) * 2, cudaMemAttachGlobal);
+
+            // Add memory hints
+            int deviceId;
+            cudaGetDevice(&deviceId);
+            cudaMemAdvise(d_tx_sig, nb_tx * num_samples * sizeof(float) * 2, cudaMemAdviseSetReadMostly, deviceId);
+            cudaMemAdvise(d_rx_sig, nb_rx * num_samples * sizeof(float) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
+            cudaMemAdvise(d_output_noise, nb_rx * num_samples * sizeof(short) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
+            cudaMemAdvise(d_output_noise, nb_rx * num_samples * sizeof(short) * 2, cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
+
             // Point host pointers to the managed buffers to satisfy the function signature
             h_tx_sig_pinned = d_tx_sig;
             h_output_sig_pinned = d_output_noise;
