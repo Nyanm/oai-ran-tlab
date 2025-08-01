@@ -705,6 +705,23 @@ if (use_cuda) {
       h_tx_sig_pinned = d_tx_sig;
       h_final_output_pinned = d_final_output;
 
+  #elif defined(USE_ATS_MEMORY)
+      printf("Allocating memory for ATS Hybrid path...\n");
+      // For ATS, device can access host memory, so we malloc a host buffer for the input.
+      // The pointer h_tx_sig_pinned will be repurposed to point to this buffer.
+      h_tx_sig_pinned = malloc(n_tx * num_samples_alloc * sizeof(float) * 2);
+
+      // Device-only buffers are allocated with cudaMalloc.
+      cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2);
+      cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2);
+
+      // We still need a temporary host buffer for the explicit copy back from the GPU.
+      h_final_output_pinned = malloc(n_rx * num_samples_alloc * sizeof(short) * 2);
+
+      // d_tx_sig is not a device buffer in this model, so we set it to NULL.
+      // The pipeline will receive the host pointer via h_tx_sig_pinned.
+      d_tx_sig = NULL;
+      
   #else // Original explicit copy method
       printf("Pre-allocating GPU & Pinned memory for the channel pipeline...\n");
       cudaMalloc(&d_tx_sig, n_tx * num_samples_alloc * sizeof(float) * 2);
@@ -715,9 +732,8 @@ if (use_cuda) {
       cudaMallocHost(&h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short) * 2);
   #endif
 
-      // This is common to both memory models
-      int num_rand_elements = n_rx * num_samples_alloc;
-      d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
+    int num_rand_elements = n_rx * num_samples_alloc;
+    d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
   }
 
 
@@ -936,6 +952,7 @@ if (use_cuda) {
                                 delay,
                                 0,
                                 0);
+
   float* h_channel_coeffs = NULL;      
   if (use_cuda) {
       int num_links = n_tx * n_rx;
@@ -1294,6 +1311,22 @@ if (use_cuda) {
             int deviceId;
             cudaGetDevice(&deviceId);
             cudaMemPrefetchAsync(d_tx_sig, n_tx * slot_length * sizeof(float) * 2, deviceId, 0);
+            
+        #elif defined(USE_ATS_MEMORY)
+            // For ATS, the CPU writes to the standard s_re/s_im arrays first...
+            for (int i = 0; i < slot_length; i++) {
+                for (int aa = 0; aa < frame_parms->nb_antennas_tx; aa++) {
+                    s_re[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1)];
+                    s_im[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1];
+                }
+            }
+            // ...and then interleaves that data into the host buffer the GPU will access via ATS.
+            float2* ats_input_buffer = (float2*)h_tx_sig_pinned;
+            for (int aa = 0; aa < n_tx; aa++) {
+                for (int i = 0; i < slot_length; i++) {
+                    ats_input_buffer[aa * slot_length + i] = make_float2(s_re[aa][i], s_im[aa][i]);
+                }
+            }
 
         #else
             // For explicit copy, the CPU populates the separate s_re/s_im host buffers.
