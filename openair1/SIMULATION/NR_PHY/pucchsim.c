@@ -153,6 +153,7 @@ int main(int argc, char **argv)
   logInit();
 
   int c;
+  int nrofSymbols_set = 0;
   while ((c = getopt(argc, argv, "--:O:f:hA:f:g:i:I:P:B:b:t:T:m:n:r:o:s:S:x:y:z:N:F:GR:IL:q:cd:C")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
@@ -318,6 +319,7 @@ int main(int argc, char **argv)
       break;
     case 'i':
       nrofSymbols=(uint8_t)atoi(optarg);
+      nrofSymbols_set = 1;
       break;
     case 'I':
       startingSymbolIndex=(uint8_t)atoi(optarg);
@@ -330,6 +332,7 @@ int main(int argc, char **argv)
       break;
     case 'P':
       format=atoi(optarg);
+      if ((format==1 || format==3) && nrofSymbols_set == 0) nrofSymbols=14;
       break;
     case 'm':
       m0=atoi(optarg);
@@ -507,6 +510,20 @@ int main(int argc, char **argv)
 
   fapi_nr_ul_config_pucch_pdu pucch_tx_pdu;
   if (format==0) {
+    pucch_tx_pdu.format_type = 0;
+    pucch_tx_pdu.nr_of_symbols = nrofSymbols;
+    pucch_tx_pdu.start_symbol_index = startingSymbolIndex;
+    pucch_tx_pdu.bwp_start = 0;
+    pucch_tx_pdu.prb_start = startingPRB;
+    pucch_tx_pdu.hopping_id = hopping_id;
+    pucch_tx_pdu.group_hop_flag = 0;
+    pucch_tx_pdu.sequence_hop_flag = 0;
+    pucch_tx_pdu.freq_hop_flag = 0;
+    pucch_tx_pdu.mcs = mcs;
+    pucch_tx_pdu.initial_cyclic_shift = 0;
+    pucch_tx_pdu.second_hop_prb = startingPRB_intraSlotHopping;
+  }
+  if (format==1) {
     pucch_tx_pdu.format_type = 0;
     pucch_tx_pdu.nr_of_symbols = nrofSymbols;
     pucch_tx_pdu.start_symbol_index = startingSymbolIndex;
