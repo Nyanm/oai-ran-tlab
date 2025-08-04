@@ -82,6 +82,9 @@ typedef struct {
   int pucch01_DTX;
   int pucch02_trials;
   int pucch02_DTX;
+  int pucch1_sr_trials;
+  int pucch1_positive_SR;
+  int pucch11_trials;
   int pucch2_trials;
   int pucch2_DTX;
 } NR_gNB_UCI_STATS_t;

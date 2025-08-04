@@ -192,7 +192,7 @@ void nr_generate_pucch1(const PHY_VARS_NR_UE *ue,
     d = qpskSymbols[tmp];
   }
 #ifdef DEBUG_NR_PUCCH_TX
-  printf("\t [nr_generate_pucch1] sequence modulation: payload=%lx \tde_re=%d \tde_im=%d\n", payload, d.r, d.i);
+  printf("\t [nr_generate_pucch1] sequence modulation (amp %d/%d): payload=%lx \tde_re=%d \tde_im=%d\n", amp, baseVal,payload, d.r, d.i);
 #endif
   /*
    * Defining cyclic shift hopping TS 38.211 Subclause 6.3.2.2.2
@@ -275,13 +275,14 @@ void nr_generate_pucch1(const PHY_VARS_NR_UE *ue,
 #ifdef DEBUG_NR_PUCCH_TX
       printf(
           "\t [nr_generate_pucch1] sequence generation \tu=%d \tv=%d \talpha=%lf \tr_u_v_alpha_delta[n=%d]=(%d,%d) "
-          "\ty_n[n=%d]=(%d,%d)\n",
+          "\td=(%d,%d)\ty_n[n=%d]=(%d,%d)\n",
           u,
           v,
           alpha,
           n,
           r_u_v_alpha_delta[n].r,
           r_u_v_alpha_delta[n].i,
+	  d.r,d.i,
           n,
           y_n[n].r,
           y_n[n].i);
