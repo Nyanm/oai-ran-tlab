@@ -114,7 +114,6 @@ void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *des
   }
 }
 
-
 #else
 
 void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *desc,
@@ -203,6 +202,99 @@ void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *des
 #endif
 
 
+
+
+#ifdef CHANNEL_SSE
+void __attribute__ ((no_sanitize_address)) multipath_channel_float(
+    channel_desc_t *desc,
+    float **tx_sig_re,
+    float **tx_sig_im,
+    float **rx_sig_re,
+    float **rx_sig_im,
+    uint32_t length,
+    uint8_t keep_channel)
+{
+    int i, ii, j, l;
+    // Use __m128 for single-precision (float) operations
+    simde__m128 rx_tmp128_re, rx_tmp128_im, tx128_re, tx128_im, ch128_r, ch128_i, pathloss128;
+
+    float path_loss = (float)pow(10, desc->path_loss_dB / 20.0);
+    uint64_t dd = desc->channel_offset;
+
+    // Use _ps (packed single) intrinsics
+    pathloss128 = simde_mm_set1_ps(path_loss);
+
+    if (keep_channel == 0) {
+        random_channel(desc, 0);
+    }
+
+    // Process 4 floats at a time
+    for (i = 0; i <= (int)(length - dd) - 4; i += 4) {
+        for (ii = 0; ii < desc->nb_rx; ii++) {
+            rx_tmp128_re = simde_mm_setzero_ps();
+            rx_tmp128_im = simde_mm_setzero_ps();
+
+            for (j = 0; j < desc->nb_tx; j++) {
+                for (l = 0; l < (int)desc->channel_length; l++) {
+                    
+                    // Safely load 4 floats, zeroing out-of-bounds values
+                    float tx_re[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+                    float tx_im[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+                    if ((i - l) >= 0)     tx_re[0] = tx_sig_re[j][i - l];
+                    if ((i + 1 - l) >= 0) tx_re[1] = tx_sig_re[j][i + 1 - l];
+                    if ((i + 2 - l) >= 0) tx_re[2] = tx_sig_re[j][i + 2 - l];
+                    if ((i + 3 - l) >= 0) tx_re[3] = tx_sig_re[j][i + 3 - l];
+
+                    if ((i - l) >= 0)     tx_im[0] = tx_sig_im[j][i - l];
+                    if ((i + 1 - l) >= 0) tx_im[1] = tx_sig_im[j][i + 1 - l];
+                    if ((i + 2 - l) >= 0) tx_im[2] = tx_sig_im[j][i + 2 - l];
+                    if ((i + 3 - l) >= 0) tx_im[3] = tx_sig_im[j][i + 3 - l];
+
+                    tx128_re = simde_mm_loadu_ps(tx_re);
+                    tx128_im = simde_mm_loadu_ps(tx_im);
+
+                    // Broadcast channel coefficients to all 4 lanes
+                    ch128_r = simde_mm_set1_ps((float)desc->ch[ii + (j * desc->nb_rx)][l].r);
+                    ch128_i = simde_mm_set1_ps((float)desc->ch[ii + (j * desc->nb_rx)][l].i);
+
+                    // Perform complex multiplication: (a+bi)*(c+di) = (ac-bd) + (ad+bc)i
+                    // re = (tx_re * ch_r) - (tx_im * ch_i)
+                    rx_tmp128_re = simde_mm_add_ps(rx_tmp128_re, simde_mm_sub_ps(simde_mm_mul_ps(tx128_re, ch128_r), simde_mm_mul_ps(tx128_im, ch128_i)));
+                    // im = (tx_re * ch_i) + (tx_im * ch_r)
+                    rx_tmp128_im = simde_mm_add_ps(rx_tmp128_im, simde_mm_add_ps(simde_mm_mul_ps(tx128_re, ch128_i), simde_mm_mul_ps(tx128_im, ch128_r)));
+                }
+            }
+            // Store results after applying path loss
+            simde_mm_storeu_ps(&rx_sig_re[ii][i + dd], simde_mm_mul_ps(rx_tmp128_re, pathloss128));
+            simde_mm_storeu_ps(&rx_sig_im[ii][i + dd], simde_mm_mul_ps(rx_tmp128_im, pathloss128));
+        }
+    }
+
+    // Handle remaining samples (tail loop) that are not a multiple of 4
+    for (; i < (int)(length - dd); i++) {
+        for (ii = 0; ii < desc->nb_rx; ii++) {
+            struct complexf rx_tmp = {0.0f, 0.0f};
+            for (j = 0; j < desc->nb_tx; j++) {
+                struct complexd *chan = desc->ch[ii + (j * desc->nb_rx)];
+                for (l = 0; l < (int)desc->channel_length; l++) {
+                    if ((i - l) >= 0) {
+                        struct complexf tx;
+                        tx.r = tx_sig_re[j][i - l];
+                        tx.i = tx_sig_im[j][i - l];
+                        rx_tmp.r += (tx.r * (float)chan[l].r) - (tx.i * (float)chan[l].i);
+                        rx_tmp.i += (tx.i * (float)chan[l].r) + (tx.r * (float)chan[l].i);
+                    }
+                }
+            }
+            rx_sig_re[ii][i + dd] = rx_tmp.r * path_loss;
+            rx_sig_im[ii][i + dd] = rx_tmp.i * path_loss;
+        }
+    }
+}
+
+#else
+
 void multipath_channel_float(channel_desc_t *desc,
                              float **tx_sig_re,
                              float **tx_sig_im,
@@ -268,3 +360,5 @@ void multipath_channel_float(channel_desc_t *desc,
         } // ii (nb_rx)
     } // i (length)
 }
+
+#endif

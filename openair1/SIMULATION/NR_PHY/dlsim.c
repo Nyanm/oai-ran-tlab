@@ -1309,68 +1309,45 @@ printf("%d\n", slot);
           if (n_trials==1) printf("txlev[%d] = %d (%f dB) txlev_sum %d\n",aa,txlev[aa],10*log10((double)txlev[aa]),txlev_sum);
         }
 
-        #if defined(USE_UNIFIED_MEMORY)
-            // For Unified Memory, the CPU writes directly into the managed buffer (d_tx_sig),
-            // interleaving the data into the float2 format.
-            float2* managed_tx_sig = (float2*)d_tx_sig;
-            for (int i = 0; i < slot_length; i++) {
-                for (int aa = 0; aa < frame_parms->nb_antennas_tx; aa++) {
-                    managed_tx_sig[aa * slot_length + i].x = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1)];
-                    managed_tx_sig[aa * slot_length + i].y = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1];
-                }
+        for (int i = 0; i < slot_length; i++) {
+            for (int aa = 0; aa < frame_parms->nb_antennas_tx; aa++) {
+                s_re[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1)];
+                s_im[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1];
             }
-            int deviceId;
-            cudaGetDevice(&deviceId);
-            cudaMemPrefetchAsync(d_tx_sig, n_tx * slot_length * sizeof(float) * 2, deviceId, 0);
-            
-        #elif defined(USE_ATS_MEMORY)
-            // For ATS, the CPU writes to the standard s_re/s_im arrays first...
-            for (int i = 0; i < slot_length; i++) {
-                for (int aa = 0; aa < frame_parms->nb_antennas_tx; aa++) {
-                    s_re[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1)];
-                    s_im[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1];
-                }
-            }
-            // ...and then interleaves that data into the host buffer the GPU will access via ATS.
-            float2* ats_input_buffer = (float2*)h_tx_sig_pinned;
-            for (int aa = 0; aa < n_tx; aa++) {
-                for (int i = 0; i < slot_length; i++) {
-                    ats_input_buffer[aa * slot_length + i] = make_float2(s_re[aa][i], s_im[aa][i]);
-                }
-            }
+        }
 
-        #else
-            // For explicit copy, the CPU populates the separate s_re/s_im host buffers.
-            for (int i = 0; i < slot_length; i++) {
-                for (int aa = 0; aa < frame_parms->nb_antennas_tx; aa++) {
-                    s_re[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1)];
-                    s_im[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1];
-                }
-            }
-        #endif
-
-        double ts = 1.0/(frame_parms->subcarrier_spacing * frame_parms->ofdm_symbol_size); 
+        double ts = 1.0/(frame_parms->subcarrier_spacing * frame_parms->ofdm_symbol_size);
         //Compute AWGN variance
         sigma2_dB = 10 * log10((double)txlev_sum * ((double)UE->frame_parms.ofdm_symbol_size/(12*rel15->rbSize))) - SNR;
         sigma2    = pow(10, sigma2_dB/10);
         if (n_trials==1) printf("sigma2 %f (%f dB), txlev_sum %f (factor %f)\n",sigma2,sigma2_dB,10*log10((double)txlev_sum),(double)(double)UE->frame_parms.ofdm_symbol_size/(12*rel15->rbSize));
 
-        for (aa = 0; aa < n_rx; aa++) {
-          // bzero(r_re[aa], slot_length * sizeof(double));
-          // bzero(r_im[aa], slot_length * sizeof(double));
-          // CHANGING DOUBLE TO FLOAT
-          bzero(r_re[aa], slot_length * sizeof(float));
-          bzero(r_im[aa], slot_length * sizeof(float));
-        }
-
+#ifdef ENABLE_CUDA
         if (use_cuda) {
-          #ifdef ENABLE_CUDA
+            // MOVED: Specialized GPU data prep is now safely inside the runtime check.
+            #if defined(USE_UNIFIED_MEMORY)
+                // For UM, data was already prepared into s_re/s_im. Now, interleave it into the managed buffer.
+                float2* managed_tx_sig = (float2*)d_tx_sig;
+                for (int aa = 0; aa < n_tx; aa++) {
+                    for (int i = 0; i < slot_length; i++) {
+                        managed_tx_sig[aa * slot_length + i] = make_float2(s_re[aa][i], s_im[aa][i]);
+                    }
+                }
+                int deviceId;
+                cudaGetDevice(&deviceId);
+                cudaMemPrefetchAsync(d_tx_sig, n_tx * slot_length * sizeof(float) * 2, deviceId, 0);
+            #elif defined(USE_ATS_MEMORY)
+                // For ATS, interleave s_re/s_im into the host buffer the GPU will access.
+                float2* ats_input_buffer = (float2*)h_tx_sig_pinned;
+                for (int aa = 0; aa < n_tx; aa++) {
+                    for (int i = 0; i < slot_length; i++) {
+                        ats_input_buffer[aa * slot_length + i] = make_float2(s_re[aa][i], s_im[aa][i]);
+                    }
+                }
+            #endif
+
             start_meas(&pipeline_stats);
-
-            // Generate a new channel for this specific HARQ round, mimicking the CPU path.
             random_channel(gNB2UE, 0);
-
-            // Flatten the new coefficients for the CUDA pipeline.
             float path_loss = (float)pow(10, gNB2UE->path_loss_dB / 20.0);
             int num_links = gNB2UE->nb_tx * gNB2UE->nb_rx;
             for (int link = 0; link < num_links; link++) {
@@ -1380,24 +1357,19 @@ printf("%d\n", slot);
                     ((float2*)h_channel_coeffs)[idx].y = (float)gNB2UE->ch[link][l].i;
                 }
             }
-          
             run_channel_pipeline_cuda(
                 s_re, s_im, UE->common_vars.rxdata,
-                n_tx, n_rx, gNB2UE->channel_length, slot_length,
-                path_loss,
-                h_channel_coeffs,
-                (float)sigma2, ts,
-                pdu_bit_map, 0x1,
-                slot_offset, delay,
+                n_tx, n_rx, gNB2UE->channel_length, slot_length, path_loss, h_channel_coeffs,
+                (float)sigma2, ts, pdu_bit_map, 0x1, slot_offset, delay,
                 d_tx_sig, d_intermediate_sig, d_final_output,
                 d_curand_states, h_tx_sig_pinned, h_final_output_pinned
             );
-            
             cudaDeviceSynchronize();
             stop_meas(&pipeline_stats);
 
-            #endif
-        } else {
+        } else
+#endif
+        { // This is the original CPU Path
             for (aa = 0; aa < n_rx; aa++) {
               bzero(r_re[aa], slot_length * sizeof(float));
               bzero(r_im[aa], slot_length * sizeof(float));
@@ -1405,7 +1377,7 @@ printf("%d\n", slot);
             start_meas(&channel_stats);
             multipath_channel_float(gNB2UE, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
             stop_meas(&channel_stats);
-        
+
             start_meas(&noise_stats);
             add_noise_float(
                 UE->common_vars.rxdata, (const float **)r_re, (const float **)r_im,
@@ -1414,6 +1386,7 @@ printf("%d\n", slot);
             stop_meas(&noise_stats);
         }
 
+        
         dl_config.sfn = frame;
         dl_config.slot = slot;
         ue_dci_configuration(UE_mac, &dl_config, frame, slot);
