@@ -23,17 +23,37 @@
 
 cmake_minimum_required (VERSION 3.16)
 project (OpenAirInterface LANGUAGES C CXX)
-enable_language(CUDA)
-find_package(CUDA REQUIRED)
-find_package(CUDAToolkit REQUIRED)
-set(CMAKE_CUDA_ARCHITECTURES 90)
-set(CMAKE_CXX_STANDARD 17)
+option(CUDA_ENABLE "Enable CUDA accelerated channel simulation" OFF)
 
-# if (CUDA_FOUND)
-#   message(STATUS "CUDA found, enabling CUDA support")
-# else()
-#   message(STATUS "CUDA not found, disabling CUDA support")
-# endif()
+find_package(CUDA)
+if(CUDA_ENABLE)
+    find_package(CUDAToolkit REQUIRED)
+    message(STATUS "CUDA explicitly enabled, building with GPU acceleration support.")
+    
+    enable_language(CUDA)
+
+    # Conditionally set the GPU architecture
+    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+        set(CMAKE_CUDA_ARCHITECTURES 90)
+    endif()
+
+    # Add the compile definition to the main project.
+    # This makes the ENABLE_CUDA flag available everywhere.
+    add_compile_definitions(ENABLE_CUDA)
+
+    # Define the library containing all .cu files
+    add_library(oai_cuda_lib STATIC
+        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/multipath_channel.cu
+        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/phase_noise.cu
+        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/channel_pipeline.cu
+    )
+    
+    target_include_directories(oai_cuda_lib PUBLIC
+        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS
+    )
+endif()
+
+set(CMAKE_CXX_STANDARD 17)
 
 #########################################################
 # Base directories, compatible with legacy OAI building #
@@ -1730,20 +1750,6 @@ set (SIMUSRC
   ${OPENAIR1_DIR}/SIMULATION/RF/adc.c
 )
 
-if (CMAKE_CUDA_COMPILER)
-    message(STATUS "CUDA compiler found at ${CMAKE_CUDA_COMPILER}, enabling CUDA support.")
-
-    add_library(oai_cuda_lib STATIC
-        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/multipath_channel.cu
-        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/phase_noise.cu
-        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/channel_pipeline.cu
-    )
-
-    target_include_directories(oai_cuda_lib PUBLIC
-        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS
-    )
-endif()
-
 add_library(SIMU STATIC ${SIMUSRC} )
 target_include_directories(SIMU PUBLIC ${OPENAIR1_DIR}/SIMULATION/TOOLS ${OPENAIR1_DIR}/SIMULATION/RF)
 
@@ -2241,3 +2247,16 @@ add_subdirectory(openair2)
 add_subdirectory(openair3)
 add_subdirectory(radio)
 add_subdirectory(tests)
+
+if(TARGET oai_cuda_lib)
+    message(STATUS "CUDA library 'oai_cuda_lib' found, linking to targets...")
+    
+    # --- Main Simulators
+    target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
+    target_link_libraries(nr_ulsim PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
+
+    # --- Test executables
+    target_link_libraries(test_multipath PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
+    target_link_libraries(test_noise PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
+    target_link_libraries(test_channel_simulation PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
+endif()
