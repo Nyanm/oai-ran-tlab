@@ -23,18 +23,17 @@
 
 cmake_minimum_required (VERSION 3.16)
 project (OpenAirInterface LANGUAGES C CXX)
+enable_language(CUDA)
 find_package(CUDA REQUIRED)
+find_package(CUDAToolkit REQUIRED)
 set(CMAKE_CUDA_ARCHITECTURES 90)
 set(CMAKE_CXX_STANDARD 17)
 
-
-# This will now work correctly because the project() command has found CUDA.
-if (CUDA_FOUND)
-  message(STATUS "CUDA found, enabling CUDA support")
-else()
-  message(STATUS "CUDA not found, disabling CUDA support")
-endif()
-
+# if (CUDA_FOUND)
+#   message(STATUS "CUDA found, enabling CUDA support")
+# else()
+#   message(STATUS "CUDA not found, disabling CUDA support")
+# endif()
 
 #########################################################
 # Base directories, compatible with legacy OAI building #
@@ -103,7 +102,7 @@ set (OPENAIR3_DIR    ${OPENAIR_DIR}/openair3)
 set (OPENAIR3_DIR    ${OPENAIR_DIR}/openair3)
 set (OPENAIR_CMAKE   ${OPENAIR_DIR}/cmake_targets)
 
-project (OpenAirInterface)
+# project (OpenAirInterface)
 
 ####################################################
 # compilation flags
@@ -1730,12 +1729,18 @@ set (SIMUSRC
   ${OPENAIR1_DIR}/SIMULATION/RF/adc.c
 )
 
-if(CUDA_FOUND)
-list(APPEND SIMUSRC
-  ${OPENAIR1_DIR}/SIMULATION/TOOLS/multipath_channel.cu
-  ${OPENAIR1_DIR}/SIMULATION/TOOLS/phase_noise.cu
-  ${OPENAIR1_DIR}/SIMULATION/TOOLS/channel_pipeline.cu
-)
+if (CMAKE_CUDA_COMPILER)
+    message(STATUS "CUDA compiler found at ${CMAKE_CUDA_COMPILER}, enabling CUDA support.")
+
+    add_library(oai_cuda_lib STATIC
+        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/multipath_channel.cu
+        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/phase_noise.cu
+        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/channel_pipeline.cu
+    )
+
+    target_include_directories(oai_cuda_lib PUBLIC
+        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS
+    )
 endif()
 
 add_library(SIMU STATIC ${SIMUSRC} )
@@ -2115,6 +2120,14 @@ target_link_libraries(nr_ulsim PRIVATE
   m pthread ${T_LIB} ITTI dl shlib_loader nr_ue_phy_meas physim_common
   )
 target_link_libraries(nr_ulsim PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
+
+if (TARGET oai_cuda_lib)
+    target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
+    target_link_libraries(nr_ulsim PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
+
+    target_compile_definitions(nr_dlsim PRIVATE ENABLE_CUDA)
+    target_compile_definitions(nr_ulsim PRIVATE ENABLE_CUDA)
+endif()
 
 foreach(myExe dlsim dlsim_tm7 ulsim pbchsim scansim mbmssim pdcchsim pucchsim prachsim syncsim)
 
