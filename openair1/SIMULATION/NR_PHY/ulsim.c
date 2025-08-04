@@ -1378,18 +1378,36 @@ int main(int argc, char *argv[])
                    10 * log10((double)txlev_sum),
                    (double)(double)gNB->frame_parms.ofdm_symbol_size / (12 * nb_rb));
 
-          for (i = 0; i < slot_length; i++) {
+        
+        for (i = 0; i < slot_length; i++) {
             for (int aa = 0; aa < UE->frame_parms.nb_antennas_tx; aa++) {
               s_re[aa][i] = (float)UE->common_vars.txData[aa][slot_offset + i].r;
               s_im[aa][i] = (float)UE->common_vars.txData[aa][slot_offset + i].i;
             }
-          }
+        }
 
- 
-          #ifdef ENABLE_CUDA
-          if (use_cuda) {
+#ifdef ENABLE_CUDA
+        if (use_cuda) {
+            #if defined(USE_UNIFIED_MEMORY)
+                float2* managed_tx_sig = (float2*)h_tx_sig_pinned;
+                for (int aa = 0; aa < n_tx; aa++) {
+                    for (int i = 0; i < slot_length; i++) {
+                        managed_tx_sig[aa * slot_length + i] = make_float2(s_re[aa][i], s_im[aa][i]);
+                    }
+                }
+                int deviceId;
+                cudaGetDevice(&deviceId);
+                cudaMemPrefetchAsync(h_tx_sig_pinned, n_tx * slot_length * sizeof(float2), deviceId, 0);
+            #elif defined(USE_ATS_MEMORY)
+                float2* ats_input_buffer = (float2*)h_tx_sig_pinned;
+                for (int aa = 0; aa < n_tx; aa++) {
+                    for (int i = 0; i < slot_length; i++) {
+                        ats_input_buffer[aa * slot_length + i] = make_float2(s_re[aa][i], s_im[aa][i]);
+                    }
+                }
+            #endif
+            
             start_meas(&pipeline_stats);
-            // Generate a new channel for this round and flatten the coefficients
             random_channel(UE2gNB, 0);
             float path_loss = (float)pow(10, UE2gNB->path_loss_dB / 20.0);
             int num_links = UE2gNB->nb_tx * UE2gNB->nb_rx;
@@ -1400,8 +1418,7 @@ int main(int argc, char *argv[])
                     ((float2*)h_channel_coeffs)[idx].y = (float)UE2gNB->ch[link][l].i;
                 }
             }
-            
-            // Run the entire pipeline on the GPU with a single call
+          
             run_channel_pipeline_cuda(
                 s_re, s_im, rxdata,
                 n_tx, n_rx, UE2gNB->channel_length, slot_length,
@@ -1414,27 +1431,27 @@ int main(int argc, char *argv[])
             );
             cudaDeviceSynchronize();
             stop_meas(&pipeline_stats);
-          } else
-          #endif
-          { // Original CPU Path
+        } else
+#endif
+        { // Original CPU Path
             start_meas(&channel_stats);
             multipath_channel_float(UE2gNB, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
             stop_meas(&channel_stats);
-            
+          
             start_meas(&noise_stats);
             add_noise_float(rxdata,
-                      (const float **)r_re,
-                      (const float **)r_im,
-                      (float)sigma,
-                      slot_length,
-                      slot_offset,
-                      ts,
-                      delay,
-                      pdu_bit_map, 
-                      PUSCH_PDU_BITMAP_PUSCH_PTRS,
-                      gNB->frame_parms.nb_antennas_rx);
+                    (const float **)r_re,
+                    (const float **)r_im,
+                    (float)sigma,
+                    slot_length,
+                    slot_offset,
+                    ts,
+                    delay,
+                    pdu_bit_map, 
+                    PUSCH_PDU_BITMAP_PUSCH_PTRS,
+                    gNB->frame_parms.nb_antennas_rx);
             stop_meas(&noise_stats);
-          }
+        }
         /*End input_fd */
 
         //----------------------------------------------------------

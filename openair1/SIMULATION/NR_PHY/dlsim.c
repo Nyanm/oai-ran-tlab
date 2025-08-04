@@ -1324,7 +1324,6 @@ printf("%d\n", slot);
 
 #ifdef ENABLE_CUDA
         if (use_cuda) {
-            // MOVED: Specialized GPU data prep is now safely inside the runtime check.
             #if defined(USE_UNIFIED_MEMORY)
                 // For UM, data was already prepared into s_re/s_im. Now, interleave it into the managed buffer.
                 float2* managed_tx_sig = (float2*)d_tx_sig;
@@ -1386,7 +1385,7 @@ printf("%d\n", slot);
             stop_meas(&noise_stats);
         }
 
-        
+
         dl_config.sfn = frame;
         dl_config.slot = slot;
         ue_dci_configuration(UE_mac, &dl_config, frame, slot);
