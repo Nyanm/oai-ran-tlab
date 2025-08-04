@@ -23,8 +23,10 @@
 
 cmake_minimum_required (VERSION 3.16)
 project (OpenAirInterface LANGUAGES C CXX)
-option(CUDA_ENABLE "Enable CUDA accelerated channel simulation" OFF)
 
+
+
+option(CUDA_ENABLE "Enable CUDA accelerated channel simulation" OFF)
 find_package(CUDA)
 if(CUDA_ENABLE)
     find_package(CUDAToolkit REQUIRED)
@@ -32,16 +34,12 @@ if(CUDA_ENABLE)
     
     enable_language(CUDA)
 
-    # Conditionally set the GPU architecture
     if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
         set(CMAKE_CUDA_ARCHITECTURES 90)
     endif()
 
-    # Add the compile definition to the main project.
-    # This makes the ENABLE_CUDA flag available everywhere.
     add_compile_definitions(ENABLE_CUDA)
 
-    # Define the library containing all .cu files
     add_library(oai_cuda_lib STATIC
         ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/multipath_channel.cu
         ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/phase_noise.cu
@@ -1751,6 +1749,12 @@ set (SIMUSRC
 
 add_library(SIMU STATIC ${SIMUSRC} )
 target_include_directories(SIMU PUBLIC ${OPENAIR1_DIR}/SIMULATION/TOOLS ${OPENAIR1_DIR}/SIMULATION/RF)
+
+option(CHANNEL_SSE "Enable SSE optimizations for channel simulation" OFF)
+if(CHANNEL_SSE)
+    message(STATUS "SSE-optimized channel simulation enabled.")
+    target_compile_definitions(SIMU PRIVATE CHANNEL_SSE)
+endif()
 
 if(CUDA_FOUND)
   set_property(TARGET SIMU PROPERTY CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
