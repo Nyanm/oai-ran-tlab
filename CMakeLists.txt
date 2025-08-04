@@ -38,6 +38,23 @@ if(CUDA_ENABLE)
         set(CMAKE_CUDA_ARCHITECTURES 90)
     endif()
 
+    option(USE_UNIFIED_MEMORY "Enable CUDA Unified Memory path" OFF)
+    option(USE_ATS_MEMORY "Enable ATS Hybrid Memory path" ON)
+
+    if(USE_UNIFIED_MEMORY AND USE_ATS_MEMORY)
+        message(FATAL_ERROR "Cannot enable both USE_UNIFIED_MEMORY and USE_ATS_MEMORY at the same time.")
+    endif()
+
+    if(USE_UNIFIED_MEMORY)
+        add_compile_definitions(USE_UNIFIED_MEMORY)
+        message(STATUS "CUDA Unified Memory path enabled.")
+    elseif(USE_ATS_MEMORY)
+        add_compile_definitions(USE_ATS_MEMORY)
+        message(STATUS "CUDA ATS Hybrid Memory path enabled.")
+    else()
+        message(STATUS "CUDA Explicit Copy path enabled (default ATS was overridden).")
+    endif()
+
     add_compile_definitions(ENABLE_CUDA)
 
     add_library(oai_cuda_lib STATIC
@@ -2254,11 +2271,9 @@ add_subdirectory(tests)
 if(TARGET oai_cuda_lib)
     message(STATUS "CUDA library 'oai_cuda_lib' found, linking to targets...")
     
-    # --- Main Simulators
     target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
     target_link_libraries(nr_ulsim PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
 
-    # --- Test executables
     target_link_libraries(test_multipath PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
     target_link_libraries(test_noise PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
     target_link_libraries(test_channel_simulation PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
