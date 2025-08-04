@@ -23,8 +23,10 @@
 
 cmake_minimum_required (VERSION 3.16)
 project (OpenAirInterface LANGUAGES C CXX)
-option(CUDA_ENABLE "Enable CUDA accelerated channel simulation" OFF)
 
+
+
+option(CUDA_ENABLE "Enable CUDA accelerated channel simulation" OFF)
 find_package(CUDA)
 if(CUDA_ENABLE)
     find_package(CUDAToolkit REQUIRED)
@@ -32,16 +34,29 @@ if(CUDA_ENABLE)
     
     enable_language(CUDA)
 
-    # Conditionally set the GPU architecture
     if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
         set(CMAKE_CUDA_ARCHITECTURES 90)
     endif()
 
-    # Add the compile definition to the main project.
-    # This makes the ENABLE_CUDA flag available everywhere.
+    option(USE_UNIFIED_MEMORY "Enable CUDA Unified Memory path" OFF)
+    option(USE_ATS_MEMORY "Enable ATS Hybrid Memory path" ON)
+
+    if(USE_UNIFIED_MEMORY AND USE_ATS_MEMORY)
+        message(FATAL_ERROR "Cannot enable both USE_UNIFIED_MEMORY and USE_ATS_MEMORY at the same time.")
+    endif()
+
+    if(USE_UNIFIED_MEMORY)
+        add_compile_definitions(USE_UNIFIED_MEMORY)
+        message(STATUS "CUDA Unified Memory path enabled.")
+    elseif(USE_ATS_MEMORY)
+        add_compile_definitions(USE_ATS_MEMORY)
+        message(STATUS "CUDA ATS Hybrid Memory path enabled.")
+    else()
+        message(STATUS "CUDA Explicit Copy path enabled (default ATS was overridden).")
+    endif()
+
     add_compile_definitions(ENABLE_CUDA)
 
-    # Define the library containing all .cu files
     add_library(oai_cuda_lib STATIC
         ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/multipath_channel.cu
         ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/phase_noise.cu
@@ -1753,6 +1768,12 @@ set (SIMUSRC
 add_library(SIMU STATIC ${SIMUSRC} )
 target_include_directories(SIMU PUBLIC ${OPENAIR1_DIR}/SIMULATION/TOOLS ${OPENAIR1_DIR}/SIMULATION/RF)
 
+option(CHANNEL_SSE "Enable SSE optimizations for channel simulation" OFF)
+if(CHANNEL_SSE)
+    message(STATUS "SSE-optimized channel simulation enabled.")
+    target_compile_definitions(SIMU PRIVATE CHANNEL_SSE)
+endif()
+
 if(CUDA_FOUND)
   set_property(TARGET SIMU PROPERTY CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES})
   set_property(TARGET SIMU PROPERTY LINKER_LANGUAGE CXX)
@@ -2251,11 +2272,9 @@ add_subdirectory(tests)
 if(TARGET oai_cuda_lib)
     message(STATUS "CUDA library 'oai_cuda_lib' found, linking to targets...")
     
-    # --- Main Simulators
     target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
     target_link_libraries(nr_ulsim PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
 
-    # --- Test executables
     target_link_libraries(test_multipath PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
     target_link_libraries(test_noise PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
     target_link_libraries(test_channel_simulation PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})

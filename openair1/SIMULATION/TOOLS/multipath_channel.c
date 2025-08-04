@@ -36,16 +36,17 @@ uint8_t multipath_channel_nosigconv(channel_desc_t *desc)
 
 #ifdef CHANNEL_SSE
 void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *desc,
-                       double **tx_sig_re,
-                       double **tx_sig_im,
-                       double **rx_sig_re,
-                       double **rx_sig_im,
+                       double *tx_sig_re[NB_ANTENNAS_TX],
+                       double *tx_sig_im[NB_ANTENNAS_TX],
+                       double *rx_sig_re[NB_ANTENNAS_RX],
+                       double *rx_sig_im[NB_ANTENNAS_RX],
                        uint32_t length,
                        uint8_t keep_channel,
              		       int log_channel)
 {
   int i,ii,j,l;
-  int simd_length, tail_start;
+  // int simd_length;
+  // int simd_length, tail_start;
   simde__m128d rx_tmp128_re, rx_tmp128_im, tx128_re, tx128_im, ch128_r, ch128_i, pathloss128;
 
   double path_loss = pow(10,desc->path_loss_dB/20);
@@ -57,8 +58,8 @@ void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *des
     random_channel(desc,0);
   }
 
-  simd_length = (length - dd) / 2;
-  tail_start = simd_length * 2;
+  // simd_length = (length - dd) / 2;
+  // tail_start = simd_length * 2;
 
   for (i = 0; i < (int)(length - dd); i+=2) {
     for (ii = 0; ii < desc->nb_rx; ii++) {
@@ -206,13 +207,14 @@ void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *des
 
 #ifdef CHANNEL_SSE
 void __attribute__ ((no_sanitize_address)) multipath_channel_float(
-    channel_desc_t *desc,
-    float **tx_sig_re,
-    float **tx_sig_im,
-    float **rx_sig_re,
-    float **rx_sig_im,
-    uint32_t length,
-    uint8_t keep_channel)
+                             channel_desc_t *desc,
+                             float **tx_sig_re,
+                             float **tx_sig_im,
+                             float **rx_sig_re,
+                             float **rx_sig_im,
+                             uint32_t length,
+                             uint8_t keep_channel,
+                             int log_channel)
 {
     int i, ii, j, l;
     // Use __m128 for single-precision (float) operations
