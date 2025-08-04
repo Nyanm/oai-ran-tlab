@@ -1385,12 +1385,13 @@ int main(int argc, char *argv[])
             }
           }
 
-        #ifdef ENABLE_CUDA
+ 
+          #ifdef ENABLE_CUDA
           if (use_cuda) {
             start_meas(&pipeline_stats);
             // Generate a new channel for this round and flatten the coefficients
             random_channel(UE2gNB, 0);
-            float path_loss = (float)pow(10, UE2GNB->path_loss_dB / 20.0);
+            float path_loss = (float)pow(10, UE2gNB->path_loss_dB / 20.0);
             int num_links = UE2gNB->nb_tx * UE2gNB->nb_rx;
             for (int link = 0; link < num_links; link++) {
                 for (int l = 0; l < UE2gNB->channel_length; l++) {
@@ -1399,13 +1400,13 @@ int main(int argc, char *argv[])
                     ((float2*)h_channel_coeffs)[idx].y = (float)UE2gNB->ch[link][l].i;
                 }
             }
-
+            
             // Run the entire pipeline on the GPU with a single call
             run_channel_pipeline_cuda(
                 s_re, s_im, rxdata,
                 n_tx, n_rx, UE2gNB->channel_length, slot_length,
                 path_loss, h_channel_coeffs,
-                (float)sigma, ts, // Note: ulsim uses sigma, dlsim uses sigma2. Pass sigma here.
+                (float)sigma, ts,
                 pdu_bit_map, PUSCH_PDU_BITMAP_PUSCH_PTRS,
                 slot_offset, delay,
                 d_tx_sig, d_intermediate_sig, d_final_output,
@@ -1419,7 +1420,7 @@ int main(int argc, char *argv[])
             start_meas(&channel_stats);
             multipath_channel_float(UE2gNB, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
             stop_meas(&channel_stats);
-
+            
             start_meas(&noise_stats);
             add_noise_float(rxdata,
                       (const float **)r_re,
