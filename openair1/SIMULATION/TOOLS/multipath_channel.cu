@@ -21,10 +21,11 @@ __device__ __forceinline__ float2 complex_add(float2 a, float2 b) {
     return make_float2(a.x + b.x, a.y + b.y);
 }
 
-__constant__ float2 d_channel_const[MAX_CHANNEL_ELEMENTS];
+// __constant__ float2 d_channel_const[MAX_CHANNEL_ELEMENTS];
 
 
 __global__ void multipath_channel_kernel(
+    const float2* __restrict__ d_channel_coeffs,
     const float2* __restrict__ tx_sig,
     float2* __restrict__ rx_sig,
     int num_samples,
@@ -59,7 +60,7 @@ __global__ void multipath_channel_kernel(
         for (int l = 0; l < channel_length; l++) {
             float2 tx_sample = tx_shared[tid + (channel_length - 1) - l];
             int chan_link_idx = ii + (j * nb_rx);
-            float2 chan_weight = d_channel_const[chan_link_idx * channel_length + l];
+            float2 chan_weight = d_channel_coeffs[chan_link_idx * channel_length + l];
             rx_tmp = complex_add(rx_tmp, complex_mul(tx_sample, chan_weight));
         }
         __syncthreads();
@@ -71,12 +72,6 @@ __global__ void multipath_channel_kernel(
 
 extern "C" {
 
-    void update_channel_coeffs_symbol(float *h_channel_coeffs, size_t size) {
-        CHECK_CUDA(cudaMemcpyToSymbol(d_channel_const, h_channel_coeffs, size));
-    }
-
-// In multipath_channel.cu
-
 void multipath_channel_cuda(
     float **tx_sig_re, float **tx_sig_im,
     float **rx_sig_re, float **rx_sig_im,
@@ -84,11 +79,13 @@ void multipath_channel_cuda(
     uint32_t length, uint64_t channel_offset,
     float path_loss,
     float *h_channel_coeffs,
-    void *d_tx_sig_void, void *d_rx_sig_void
+    void *d_tx_sig_void, void *d_rx_sig_void,
+    void *d_channel_coeffs_void
 )
 {
     float2 *d_tx_sig = (float2*)d_tx_sig_void;
     float2 *d_rx_sig = (float2*)d_rx_sig_void;
+    float2 *d_channel_coeffs = (float2*)d_channel_coeffs_void;
     int num_samples = length - (int)channel_offset;
 
     #if defined(USE_UNIFIED_MEMORY)
@@ -113,14 +110,20 @@ void multipath_channel_cuda(
         free(h_tx_sig_interleaved);
     #endif
 
+
+    // 1. Copy the channel coefficients to the GPU global memory buffer
+    size_t channel_size_bytes = nb_tx * nb_rx * channel_length * sizeof(float2);
+    CHECK_CUDA( cudaMemcpy(d_channel_coeffs, h_channel_coeffs, channel_size_bytes, cudaMemcpyHostToDevice) );
+
+    
         // --- COMMON KERNEL LAUNCH ---
-        update_channel_coeffs_symbol(h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2));
+        // update_channel_coeffs_symbol(h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2));
         dim3 threadsPerBlock(512, 1);
         dim3 numBlocks((num_samples + threadsPerBlock.x - 1) / threadsPerBlock.x, nb_rx);
         size_t sharedMemSize = (threadsPerBlock.x + channel_length - 1) * sizeof(float2);
         multipath_channel_kernel<<<numBlocks, threadsPerBlock, sharedMemSize>>>(
-            d_tx_sig, d_rx_sig, num_samples, channel_length, nb_tx, nb_rx, path_loss);
-        
+            d_channel_coeffs, d_tx_sig, d_rx_sig, num_samples, channel_length, nb_tx, nb_rx, path_loss);
+         
     #if defined(USE_UNIFIED_MEMORY)
         // --- UNIFIED MEMORY PATH ---
         // 3. Synchronize to ensure the GPU is finished before the CPU reads the result.

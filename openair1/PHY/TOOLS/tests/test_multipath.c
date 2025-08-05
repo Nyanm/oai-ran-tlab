@@ -108,22 +108,17 @@ int main(int argc, char **argv) {
         for (int i=0; i<nb_tx; i++) { s_re[i] = malloc(num_samples * sizeof(float)); s_im[i] = malloc(num_samples * sizeof(float)); }
         for (int i=0; i<nb_rx; i++) { r_re_cpu[i] = malloc(num_samples * sizeof(float)); r_im_cpu[i] = malloc(num_samples * sizeof(float)); r_re_gpu[i] = malloc(num_samples * sizeof(float)); r_im_gpu[i] = malloc(num_samples * sizeof(float)); }
        
+        void *d_tx_sig, *d_rx_sig, *d_channel_coeffs_gpu; // <-- ADDED d_channel_coeffs_gpu
+        size_t channel_buffer_size = nb_tx * nb_rx * channel_length * sizeof(float) * 2;
 
-        void *d_tx_sig, *d_rx_sig;
         #if defined(USE_UNIFIED_MEMORY)
             cudaMallocManaged(&d_tx_sig, nb_tx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAttachGlobal);
             cudaMallocManaged(&d_rx_sig, nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAttachGlobal);
-        
-            // Add memory hints
-            int deviceId;
-            cudaGetDevice(&deviceId);
-            cudaMemAdvise(d_tx_sig, nb_tx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAdviseSetReadMostly, deviceId);
-            cudaMemAdvise(d_rx_sig, nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
-            cudaMemAdvise(d_rx_sig, nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
-
+            cudaMallocManaged(&d_channel_coeffs_gpu, channel_buffer_size, cudaMemAttachGlobal); // <-- ALLOCATE
         #else
             cudaMalloc(&d_tx_sig, nb_tx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2);
             cudaMalloc(&d_rx_sig, nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2);
+            cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size); // <-- ALLOCATE
         #endif
 
         double total_cpu_ns = 0;
@@ -151,10 +146,10 @@ int main(int argc, char **argv) {
         clock_gettime(CLOCK_MONOTONIC, &end);
         total_cpu_ns = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
 
-        // Time GPU run
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int t = 0; t < num_trials; t++) {
-            multipath_channel_cuda(s_re, s_im, r_re_gpu, r_im_gpu, nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset, path_loss, h_channel_coeffs, d_tx_sig, d_rx_sig);
+            // UPDATE FUNCTION CALL with the new pointer
+            multipath_channel_cuda(s_re, s_im, r_re_gpu, r_im_gpu, nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset, path_loss, h_channel_coeffs, d_tx_sig, d_rx_sig, d_channel_coeffs_gpu);
         }
         cudaDeviceSynchronize();
         clock_gettime(CLOCK_MONOTONIC, &end);
@@ -175,6 +170,7 @@ int main(int argc, char **argv) {
         free(s_re); free(s_im); free(r_re_cpu); free(r_im_cpu); free(r_re_gpu); free(r_im_gpu);
         cudaFree(d_tx_sig); 
         cudaFree(d_rx_sig);
+        cudaFree(d_channel_coeffs_gpu); // <-- FREE
         free_manual_channel_desc(chan_desc);
     }
     }

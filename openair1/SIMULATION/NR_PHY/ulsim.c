@@ -272,6 +272,7 @@ int main(int argc, char *argv[])
   void *d_curand_states = NULL;
   void *h_tx_sig_pinned = NULL, *h_final_output_pinned = NULL;
   float* h_channel_coeffs = NULL;
+  void *d_channel_coeffs_gpu = NULL;
   #endif
   
   while ((c = getopt_long(argc, argv, "--:O:a:b:c:d:ef:g:h:i:jk:m:n:p:q:r:s:t:u:v:w:y:z:A:C:F:G:H:I:M:N:PR:S:T:U:L:ZW:E:X:Y:", long_options, &option_index)) != -1) {
@@ -831,6 +832,10 @@ int main(int argc, char *argv[])
             cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples_alloc * sizeof(float2));
             cudaMallocHost(&h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short2));
         #endif
+
+        const int max_taps_alloc = 256; // Safe upper bound for channel length
+        size_t channel_buffer_size = n_tx * n_rx * max_taps_alloc * sizeof(float) * 2;
+        cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size);
 
         int num_rand_elements = n_rx * num_samples_alloc;
         d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
@@ -1431,7 +1436,8 @@ int main(int argc, char *argv[])
                 pdu_bit_map, PUSCH_PDU_BITMAP_PUSCH_PTRS,
                 slot_offset, delay,
                 d_tx_sig, d_intermediate_sig, d_final_output,
-                d_curand_states, h_tx_sig_pinned, h_final_output_pinned
+                d_curand_states, h_tx_sig_pinned, h_final_output_pinned,
+                d_channel_coeffs_gpu
             );
             cudaDeviceSynchronize();
             stop_meas(&pipeline_stats);
@@ -1821,6 +1827,7 @@ int main(int argc, char *argv[])
           cudaFreeHost(h_tx_sig_pinned);
           cudaFreeHost(h_final_output_pinned);
       #endif
+      cudaFree(d_channel_coeffs_gpu);
       destroy_curand_states_cuda(d_curand_states);
       free(h_channel_coeffs);
   }

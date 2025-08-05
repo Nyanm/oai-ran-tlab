@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define MAX_CHANNEL_ELEMENTS (4096)
+// #define MAX_CHANNEL_ELEMENTS (4096)
 
 
 #ifdef __NVCC__
@@ -22,6 +22,7 @@
     __device__ float2 complex_mul(float2 a, float2 b);
 
     __global__ void multipath_channel_kernel(
+        const float2* __restrict__ d_channel_coeffs,
         const float2* __restrict__ tx_sig,
         float2* __restrict__ rx_sig,
         int num_samples,
@@ -56,10 +57,9 @@ void run_channel_pipeline_cuda(
     uint16_t pdu_bit_map, uint16_t ptrs_bit_map, 
     int slot_offset, int delay,                 
     void *d_tx_sig, void *d_intermediate_sig, void* d_final_output,
-    void *d_curand_states, void* h_tx_sig_pinned, void* h_final_output_pinned
+    void *d_curand_states, void* h_tx_sig_pinned, void* h_final_output_pinned,
+    void *d_channel_coeffs
 );
-
-void update_channel_coeffs_symbol(float *h_channel_coeffs, size_t size);
 
 void multipath_channel_cuda(
     float **tx_sig_re, float **tx_sig_im,
@@ -68,7 +68,8 @@ void multipath_channel_cuda(
     uint32_t length, uint64_t channel_offset,
     float path_loss,
     float *h_channel_coeffs,
-    void *d_tx_sig, void *d_rx_sig
+    void *d_tx_sig, void *d_rx_sig,
+    void *d_channel_coeffs
 );
 
 void add_noise_cuda(
@@ -88,6 +89,14 @@ void add_noise_cuda(
     void *d_curand_states,
     void *h_r_sig_pinned,
     void *h_output_sig_pinned
+);
+
+void sum_channel_outputs_cuda(
+    void **d_individual_outputs,
+    void *d_final_output,
+    int num_channels,
+    int nb_rx,
+    int num_samples
 );
 
 void* create_and_init_curand_states_cuda(int num_elements, unsigned long long seed);
