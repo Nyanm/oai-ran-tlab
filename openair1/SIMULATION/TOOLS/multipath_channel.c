@@ -230,6 +230,11 @@ void __attribute__ ((no_sanitize_address)) multipath_channel_float(
         random_channel(desc, 0);
     }
 
+    struct complexd cexp_doppler[length];
+    if (desc->max_Doppler != 0.0) {
+        get_cexp_doppler(cexp_doppler, desc, length);
+    }
+
     // Process 4 floats at a time
     for (i = 0; i <= (int)(length - dd) - 4; i += 4) {
         for (ii = 0; ii < desc->nb_rx; ii++) {
@@ -267,6 +272,23 @@ void __attribute__ ((no_sanitize_address)) multipath_channel_float(
                     rx_tmp128_im = simde_mm_add_ps(rx_tmp128_im, simde_mm_add_ps(simde_mm_mul_ps(tx128_re, ch128_i), simde_mm_mul_ps(tx128_im, ch128_r)));
                 }
             }
+
+            #if 0
+            if (desc->max_Doppler != 0.0) {
+                float doppler_re[4] = {(float)cexp_doppler[i].r, (float)cexp_doppler[i+1].r, (float)cexp_doppler[i+2].r, (float)cexp_doppler[i+3].r};
+                float doppler_im[4] = {(float)cexp_doppler[i].i, (float)cexp_doppler[i+1].i, (float)cexp_doppler[i+2].i, (float)cexp_doppler[i+3].i};
+                
+                simde__m128 doppler128_r = simde_mm_loadu_ps(doppler_re);
+                simde__m128 doppler128_i = simde_mm_loadu_ps(doppler_im);
+
+                simde__m128 temp_re = rx_tmp128_re;
+                simde__m128 temp_im = rx_tmp128_im;
+
+                rx_tmp128_re = simde_mm_sub_ps(simde_mm_mul_ps(temp_re, doppler128_r), simde_mm_mul_ps(temp_im, doppler128_i));
+                rx_tmp128_im = simde_mm_add_ps(simde_mm_mul_ps(temp_im, doppler128_r), simde_mm_mul_ps(temp_re, doppler128_i));
+            }
+            #endif
+
             // Store results after applying path loss
             simde_mm_storeu_ps(&rx_sig_re[ii][i + dd], simde_mm_mul_ps(rx_tmp128_re, pathloss128));
             simde_mm_storeu_ps(&rx_sig_im[ii][i + dd], simde_mm_mul_ps(rx_tmp128_im, pathloss128));
@@ -349,7 +371,7 @@ void multipath_channel_float(channel_desc_t *desc,
             if (desc->max_Doppler != 0.0) {
                 // Perform complex multiplication: rx_tmp = rx_tmp * cexp_doppler[i]
                 struct complexf doppler_factor = {(float)cexp_doppler[i].r, (float)cexp_doppler[i].i};
-                struct complexf temp = rx_tmp; // Store original rx_tmp
+                struct complexf temp = rx_tmp;
                 rx_tmp.r = (temp.r * doppler_factor.r) - (temp.i * doppler_factor.i);
                 rx_tmp.i = (temp.i * doppler_factor.r) + (temp.r * doppler_factor.i);
             }
