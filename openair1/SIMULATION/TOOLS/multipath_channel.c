@@ -311,6 +311,14 @@ void __attribute__ ((no_sanitize_address)) multipath_channel_float(
                     }
                 }
             }
+            #if 0
+            if (desc->max_Doppler != 0.0) {
+                struct complexf doppler_factor = {(float)cexp_doppler[i].r, (float)cexp_doppler[i].i};
+                struct complexf temp = rx_tmp;
+                rx_tmp.r = (temp.r * doppler_factor.r) - (temp.i * doppler_factor.i);
+                rx_tmp.i = (temp.i * doppler_factor.r) + (temp.r * doppler_factor.i);
+            }
+            #endif
             rx_sig_re[ii][i + dd] = rx_tmp.r * path_loss;
             rx_sig_im[ii][i + dd] = rx_tmp.i * path_loss;
         }
