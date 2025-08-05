@@ -3,7 +3,7 @@
 
 configmodule_interface_t *uniqCfg = NULL;
 
-// Enum to define which test mode to run
+
 typedef enum {
     MODE_STD_DOUBLE,
     MODE_SSE_DOUBLE,
@@ -16,7 +16,7 @@ void exit_function(const char *file, const char *function, const int line, const
     exit(1);
 }
 
-// --- Double Precision Helpers ---
+
 void generate_random_signal_double(double **sig_re, double **sig_im, int nb_ant, int num_samples) {
     for (int i = 0; i < nb_ant; i++) {
         for (int j = 0; j < num_samples; j++) {
@@ -37,7 +37,7 @@ double calculate_checksum_double(double **sig_re, double **sig_im, int nb_rx, in
     return checksum;
 }
 
-// --- Float Precision Helpers ---
+
 void generate_random_signal_float(float **sig_re, float **sig_im, int nb_ant, int num_samples) {
     for (int i = 0; i < nb_ant; i++) {
         for (int j = 0; j < num_samples; j++) {
@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
     test_mode_t mode = MODE_STD_DOUBLE;
     int use_channel_file = 0;
 
-    // --- Argument Parsing ---
+    
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--use-channel") == 0) {
             use_channel_file = 1;
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
     double checksum = 0;
     const char* mode_str = "";
 
-    // --- Main Test Logic ---
+    
     if (mode == MODE_STD_DOUBLE || mode == MODE_SSE_DOUBLE) {
         #ifndef CHANNEL_SSE
             if (mode == MODE_SSE_DOUBLE) {
@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
         for (int i=0; i<nb_rx; i++) { free(r_re[i]); free(r_im[i]); }
         free(s_re); free(s_im); free(r_re); free(r_im);
 
-    } else { // Float modes
+    } else { 
         #ifndef CHANNEL_SSE
             if (mode == MODE_SSE_FLOAT) {
                 fprintf(stderr, "Error: SSE float mode requested but not compiled with CHANNEL_SSE flag.\n"); exit(1);
