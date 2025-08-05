@@ -36,10 +36,10 @@ uint8_t multipath_channel_nosigconv(channel_desc_t *desc)
 
 #ifdef CHANNEL_SSE
 void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *desc,
-                       double *tx_sig_re[NB_ANTENNAS_TX],
-                       double *tx_sig_im[NB_ANTENNAS_TX],
-                       double *rx_sig_re[NB_ANTENNAS_RX],
-                       double *rx_sig_im[NB_ANTENNAS_RX],
+                       double **tx_sig_re,
+                       double **tx_sig_im,
+                       double **rx_sig_re,
+                       double **rx_sig_im,
                        uint32_t length,
                        uint8_t keep_channel,
              		       int log_channel)
@@ -118,10 +118,10 @@ void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *des
 #else
 
 void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *desc,
-                       double *tx_sig_re[NB_ANTENNAS_TX],
-                       double *tx_sig_im[NB_ANTENNAS_TX],
-                       double *rx_sig_re[NB_ANTENNAS_RX],
-                       double *rx_sig_im[NB_ANTENNAS_RX],
+                       double **tx_sig_re,
+                       double **tx_sig_im,
+                       double **rx_sig_re,
+                       double **rx_sig_im,
                        uint32_t length,
                        uint8_t keep_channel,
 		                   int log_channel)

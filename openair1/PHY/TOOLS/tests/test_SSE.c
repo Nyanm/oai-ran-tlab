@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
         
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int t = 0; t < num_trials; t++) {
-            multipath_channel(chan_desc, (double *(*)[NB_ANTENNAS_TX])s_re, (double *(*)[NB_ANTENNAS_TX])s_im, (double *(*)[NB_ANTENNAS_RX])r_re, (double *(*)[NB_ANTENNAS_RX])r_im, num_samples, 1, 0);
+            multipath_channel(chan_desc, s_re, s_im, r_re, r_im, num_samples, 1, 0);
         }
         clock_gettime(CLOCK_MONOTONIC, &end);
         
