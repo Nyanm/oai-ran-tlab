@@ -1,12 +1,3 @@
-/**
- * Benchmark for the complete channel simulation pipeline (Multipath + Noise).
- *
- * This test measures the end-to-end performance of running the multipath channel
- * simulation followed immediately by the noise generation, mimicking the sequence in nr-dlsim/nr-ulsim.
- * It compares the total execution time of the original CPU functions against the
- * complete CUDA-accelerated pipeline.
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -97,18 +88,10 @@ int main(int argc, char **argv) {
 
         channel_desc_t *chan_desc = create_manual_channel_desc(nb_tx, nb_rx, channel_length);
 
-        // --- Allocate ALL Memory Buffers ---
-        // Transmit Signal (input to pipeline)
         float **tx_sig_re = malloc(nb_tx * sizeof(float *));
         float **tx_sig_im = malloc(nb_tx * sizeof(float *));
-
-        // Intermediate Buffers (output of multipath, input to noise)
         float **rx_multipath_re_cpu = malloc(nb_rx * sizeof(float *));
         float **rx_multipath_im_cpu = malloc(nb_rx * sizeof(float *));
-        float **rx_multipath_re_gpu = malloc(nb_rx * sizeof(float *));
-        float **rx_multipath_im_gpu = malloc(nb_rx * sizeof(float *));
-
-        // Final Output Buffers
         c16_t **output_cpu = malloc(nb_rx * sizeof(c16_t *));
         c16_t **output_gpu = malloc(nb_rx * sizeof(c16_t *));
 
@@ -116,8 +99,6 @@ int main(int argc, char **argv) {
         for (int i=0; i<nb_rx; i++) {
             rx_multipath_re_cpu[i] = malloc(num_samples * sizeof(float));
             rx_multipath_im_cpu[i] = malloc(num_samples * sizeof(float));
-            rx_multipath_re_gpu[i] = malloc(num_samples * sizeof(float));
-            rx_multipath_im_gpu[i] = malloc(num_samples * sizeof(float));
         }
         output_cpu[0] = malloc(nb_rx * num_samples * sizeof(c16_t));
         output_gpu[0] = malloc(nb_rx * num_samples * sizeof(c16_t));
@@ -126,31 +107,23 @@ int main(int argc, char **argv) {
             output_gpu[i] = output_gpu[0] + i * num_samples;
         }
  
-        // --- GPU Memory Allocation ---
-        void *d_tx_sig, *d_rx_sig, *d_output_noise, *d_curand_states, *h_tx_sig_pinned, *h_output_sig_pinned;
+        void *d_tx_sig, *d_rx_sig, *d_output_noise, *d_curand_states, *h_tx_sig_pinned, *h_output_sig_pinned, *d_channel_coeffs_gpu; // <-- ADDED
+        size_t channel_buffer_size = nb_tx * nb_rx * channel_length * sizeof(float) * 2;
 
         #if defined(USE_UNIFIED_MEMORY)
             cudaMallocManaged(&d_tx_sig, nb_tx * num_samples * sizeof(float) * 2, cudaMemAttachGlobal);
-            cudaMallocManaged(&d_rx_sig, nb_rx * num_samples * sizeof(float) * 2, cudaMemAttachGlobal); // Intermediate buffer
+            cudaMallocManaged(&d_rx_sig, nb_rx * num_samples * sizeof(float) * 2, cudaMemAttachGlobal);
             cudaMallocManaged(&d_output_noise, nb_rx * num_samples * sizeof(short) * 2, cudaMemAttachGlobal);
-
-            // Add memory hints
-            int deviceId;
-            cudaGetDevice(&deviceId);
-            cudaMemAdvise(d_tx_sig, nb_tx * num_samples * sizeof(float) * 2, cudaMemAdviseSetReadMostly, deviceId);
-            cudaMemAdvise(d_rx_sig, nb_rx * num_samples * sizeof(float) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
-            cudaMemAdvise(d_output_noise, nb_rx * num_samples * sizeof(short) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
-            cudaMemAdvise(d_output_noise, nb_rx * num_samples * sizeof(short) * 2, cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
-
-            // Point host pointers to the managed buffers to satisfy the function signature
+            cudaMallocManaged(&d_channel_coeffs_gpu, channel_buffer_size, cudaMemAttachGlobal); // <-- ALLOCATE
             h_tx_sig_pinned = d_tx_sig;
             h_output_sig_pinned = d_output_noise;
-        #else // Explicit copy path
+        #else 
             cudaMalloc(&d_tx_sig, nb_tx * num_samples * sizeof(float) * 2);
             cudaMalloc(&d_rx_sig, nb_rx * num_samples * sizeof(float) * 2);
             cudaMalloc(&d_output_noise, nb_rx * num_samples * sizeof(short) * 2);
             cudaMallocHost(&h_tx_sig_pinned, nb_tx * num_samples * sizeof(float) * 2);
             cudaMallocHost(&h_output_sig_pinned, nb_rx * num_samples * sizeof(short) * 2);
+            cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size); // <-- ALLOCATE
         #endif
         d_curand_states = create_and_init_curand_states_cuda(nb_rx * num_samples, time(NULL));
 
@@ -171,20 +144,7 @@ int main(int argc, char **argv) {
         double total_gpu_ns = 0;
 
         for (int t = 0; t < num_trials; t++) {
-
-            #if defined(USE_UNIFIED_MEMORY)
-                // For UM, write random data directly into the managed buffer
-                float2* managed_tx_sig = (float2*)d_tx_sig;
-                for (int i = 0; i < nb_tx; i++) {
-                    for (int j = 0; j < num_samples; j++) {
-                        managed_tx_sig[i * num_samples + j].x = (float)((rand() % 2000) - 1000);
-                        managed_tx_sig[i * num_samples + j].y = (float)((rand() % 2000) - 1000);
-                    }
-                }
-            #else
-                // For explicit copy, use the original host buffers
-                generate_random_signal(tx_sig_re, tx_sig_im, nb_tx, num_samples);
-            #endif
+            generate_random_signal(tx_sig_re, tx_sig_im, nb_tx, num_samples);
             struct timespec start, end;
 
             clock_gettime(CLOCK_MONOTONIC, &start);
@@ -199,14 +159,9 @@ int main(int argc, char **argv) {
                 nb_tx, nb_rx, channel_length, num_samples,
                 path_loss, h_channel_coeffs,
                 sigma2, ts,
-                0, 0, // pdu_bit_map, ptrs_bit_map (default for test)
-                0, 0, // slot_offset, delay (default for test)
-                d_tx_sig,           
-                d_rx_sig,           
-                d_output_noise,     
-                d_curand_states,
-                h_tx_sig_pinned,    
-                h_output_sig_pinned 
+                0, 0, 0, 0, 
+                d_tx_sig, d_rx_sig, d_output_noise, d_curand_states,
+                h_tx_sig_pinned, h_output_sig_pinned, d_channel_coeffs_gpu
             );
             cudaDeviceSynchronize();
             clock_gettime(CLOCK_MONOTONIC, &end);
@@ -222,10 +177,9 @@ int main(int argc, char **argv) {
 
         free(h_channel_coeffs);
         for (int i=0; i<nb_tx; i++) { free(tx_sig_re[i]); free(tx_sig_im[i]); }
-        for (int i=0; i<nb_rx; i++) { free(rx_multipath_re_cpu[i]); free(rx_multipath_im_cpu[i]); free(rx_multipath_re_gpu[i]); free(rx_multipath_im_gpu[i]); }
+        for (int i=0; i<nb_rx; i++) { free(rx_multipath_re_cpu[i]); free(rx_multipath_im_cpu[i]); }
         free(tx_sig_re); free(tx_sig_im);
         free(rx_multipath_re_cpu); free(rx_multipath_im_cpu);
-        free(rx_multipath_re_gpu); free(rx_multipath_im_gpu);
         free(output_cpu[0]); free(output_gpu[0]);
         free(output_cpu); free(output_gpu);
 
@@ -240,6 +194,7 @@ int main(int argc, char **argv) {
             cudaFree(d_output_noise);
             cudaFreeHost(h_output_sig_pinned);
         #endif
+        cudaFree(d_channel_coeffs_gpu); // <-- FREE
         destroy_curand_states_cuda(d_curand_states);
         
         free_manual_channel_desc(chan_desc);

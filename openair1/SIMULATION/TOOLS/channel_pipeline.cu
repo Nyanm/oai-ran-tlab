@@ -24,13 +24,15 @@ void run_channel_pipeline_cuda(
     uint16_t pdu_bit_map, uint16_t ptrs_bit_map,
     int slot_offset, int delay,
     void *d_tx_sig_void, void *d_intermediate_sig_void, void* d_final_output_void,
-    void *d_curand_states_void, void* h_tx_sig_pinned_void, void* h_final_output_pinned_void
+    void *d_curand_states_void, void* h_tx_sig_pinned_void, void* h_final_output_pinned_void,
+    void *d_channel_coeffs_void
 )
 {
     // --- Cast void pointers ---
     float2 *d_intermediate_sig = (float2*)d_intermediate_sig_void;
     short2 *d_final_output = (short2*)d_final_output_void;
     curandState_t *d_curand_states = (curandState_t*)d_curand_states_void;
+    float2 *d_channel_coeffs = (float2*)d_channel_coeffs_void;
 
     // --- Determine the correct input pointer ---
     float2* kernel_input_ptr;
@@ -51,12 +53,17 @@ void run_channel_pipeline_cuda(
     kernel_input_ptr = d_tx_sig;
 #endif
 
+    size_t channel_size_bytes = nb_tx * nb_rx * channel_length * sizeof(float2);
+    CHECK_CUDA( cudaMemcpy(d_channel_coeffs, h_channel_coeffs, channel_size_bytes, cudaMemcpyHostToDevice) );
+
+
     // --- STAGE 2: Run Multipath Channel Kernel ---
-    update_channel_coeffs_symbol(h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2));
+    // update_channel_coeffs_symbol(h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2));
     dim3 threads_multipath(512, 1);
     dim3 blocks_multipath((num_samples + threads_multipath.x - 1) / threads_multipath.x, nb_rx);
     size_t sharedMemSize = (threads_multipath.x + channel_length - 1) * sizeof(float2);
     multipath_channel_kernel<<<blocks_multipath, threads_multipath, sharedMemSize>>>(
+        d_channel_coeffs,
         kernel_input_ptr, d_intermediate_sig, num_samples, channel_length, nb_tx, nb_rx, path_loss);
 
     // --- STAGE 3: Run Noise Kernel ---

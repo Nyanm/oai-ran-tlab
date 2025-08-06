@@ -124,29 +124,43 @@ int main(int argc, char **argv) {
             }
         }
         
-        // CORRECTED: Allocate a safe, larger buffer for channel coefficients
         const int max_taps = 256;
         float *h_channel_coeffs = malloc(n_tx * n_rx * max_taps * sizeof(float) * 2);
+        void *d_channel_coeffs_gpu;
+        cudaMalloc(&d_channel_coeffs_gpu, n_tx * n_rx * max_taps * sizeof(float2));
+
 
         void *d_tx_sig, *d_intermediate_sig, *d_final_output, *d_curand_states, *h_tx_sig_pinned, *h_final_output_pinned;
-        #if defined(USE_UNIFIED_MEMORY)
-            cudaMallocManaged(&h_tx_sig_pinned, n_tx * num_samples * sizeof(float2), cudaMemAttachGlobal);
-            cudaMallocManaged(&d_intermediate_sig, n_rx * num_samples * sizeof(float2), cudaMemAttachGlobal);
-            cudaMallocManaged(&h_final_output_pinned, n_rx * num_samples * sizeof(short2), cudaMemAttachGlobal);
-            d_tx_sig = h_tx_sig_pinned; d_final_output = h_final_output_pinned;
-        #elif defined(USE_ATS_MEMORY)
-            h_tx_sig_pinned = malloc(n_tx * num_samples * sizeof(float2));
-            cudaMalloc(&d_intermediate_sig, n_rx * num_samples * sizeof(float2));
-            cudaMalloc(&d_final_output, n_rx * num_samples * sizeof(short2));
-            h_final_output_pinned = malloc(n_rx * num_samples * sizeof(short2));
-            d_tx_sig = NULL;
-        #else // Default explicit copy method
+        // #if defined(USE_UNIFIED_MEMORY)
+        //     cudaMallocManaged(&h_tx_sig_pinned, n_tx * num_samples * sizeof(float2), cudaMemAttachGlobal);
+        //     cudaMallocManaged(&d_intermediate_sig, n_rx * num_samples * sizeof(float2), cudaMemAttachGlobal);
+        //     cudaMallocManaged(&h_final_output_pinned, n_rx * num_samples * sizeof(short2), cudaMemAttachGlobal);
+        //     d_tx_sig = h_tx_sig_pinned; d_final_output = h_final_output_pinned;
+        // #elif defined(USE_ATS_MEMORY)
+        //     h_tx_sig_pinned = malloc(n_tx * num_samples * sizeof(float2));
+        //     cudaMalloc(&d_intermediate_sig, n_rx * num_samples * sizeof(float2));
+        //     cudaMalloc(&d_final_output, n_rx * num_samples * sizeof(short2));
+        //     h_final_output_pinned = malloc(n_rx * num_samples * sizeof(short2));
+        //     d_tx_sig = NULL;
+        // #else // Default explicit copy method
+        //     cudaMalloc(&d_tx_sig, n_tx * num_samples * sizeof(float2));
+        //     cudaMalloc(&d_intermediate_sig, n_rx * num_samples * sizeof(float2));
+        //     cudaMalloc(&d_final_output, n_rx * num_samples * sizeof(short2));
+        //     cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples * sizeof(float2));
+        //     cudaMallocHost(&h_final_output_pinned, n_rx * num_samples * sizeof(short2));
+        // #endif
+
+
+
             cudaMalloc(&d_tx_sig, n_tx * num_samples * sizeof(float2));
             cudaMalloc(&d_intermediate_sig, n_rx * num_samples * sizeof(float2));
             cudaMalloc(&d_final_output, n_rx * num_samples * sizeof(short2));
             cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples * sizeof(float2));
             cudaMallocHost(&h_final_output_pinned, n_rx * num_samples * sizeof(short2));
-        #endif
+
+
+
+
         d_curand_states = create_and_init_curand_states_cuda(n_rx * num_samples, time(NULL));
 
         clock_gettime(CLOCK_MONOTONIC, &start);
@@ -160,30 +174,39 @@ int main(int argc, char **argv) {
                     ((float2*)h_channel_coeffs)[idx].y = (float)channels[c]->ch[link][l].i;
                 }
             }
-            run_channel_pipeline_cuda(s_re, s_im, gpu_output_signals[c], n_tx, n_rx, channels[c]->channel_length, num_samples, path_loss, h_channel_coeffs, 1.0f, 1.0/fs, 0, 0, 0, 0, d_tx_sig, d_intermediate_sig, d_final_output, d_curand_states, h_tx_sig_pinned, h_final_output_pinned);
+            run_channel_pipeline_cuda(s_re, s_im, gpu_output_signals[c], n_tx, n_rx, channels[c]->channel_length, num_samples, path_loss, h_channel_coeffs, 1.0f, 1.0/fs, 0, 0, 0, 0, d_tx_sig, d_intermediate_sig, d_final_output, d_curand_states, h_tx_sig_pinned, h_final_output_pinned, d_channel_coeffs_gpu);
         }
         cudaDeviceSynchronize();
         clock_gettime(CLOCK_MONOTONIC, &end);
         
         gpu_total_us = ((end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec)) / 1000.0;
-        
-        // CORRECTED: Symmetrical deallocation
+
         for(int c = 0; c < num_channels; ++c) {
             for (int i = 0; i < n_rx; i++) {
                 free(gpu_output_signals[c][i]);
             }
             free(gpu_output_signals[c]);
         }
+        cudaFree(d_channel_coeffs_gpu);
         free(gpu_output_signals); 
         free(h_channel_coeffs);
         
-        #if defined(USE_UNIFIED_MEMORY)
-            cudaFree(h_tx_sig_pinned); cudaFree(d_intermediate_sig); cudaFree(h_final_output_pinned);
-        #elif defined(USE_ATS_MEMORY)
-            free(h_tx_sig_pinned); cudaFree(d_intermediate_sig); cudaFree(d_final_output); free(h_final_output_pinned);
-        #else
-            cudaFree(d_tx_sig); cudaFree(d_intermediate_sig); cudaFree(d_final_output); cudaFreeHost(h_tx_sig_pinned); cudaFreeHost(h_final_output_pinned);
-        #endif
+        // #if defined(USE_UNIFIED_MEMORY)
+        //     cudaFree(h_tx_sig_pinned); cudaFree(d_intermediate_sig); cudaFree(h_final_output_pinned);
+        // #elif defined(USE_ATS_MEMORY)
+        //     free(h_tx_sig_pinned); cudaFree(d_intermediate_sig); cudaFree(d_final_output); free(h_final_output_pinned);
+        // #else
+        //     cudaFree(d_tx_sig); cudaFree(d_intermediate_sig); cudaFree(d_final_output); cudaFreeHost(h_tx_sig_pinned); cudaFreeHost(h_final_output_pinned);
+        // #endif
+
+
+
+
+cudaFree(d_tx_sig); cudaFree(d_intermediate_sig); cudaFree(d_final_output); cudaFreeHost(h_tx_sig_pinned); cudaFreeHost(h_final_output_pinned);
+    
+
+
+
         destroy_curand_states_cuda(d_curand_states);
     }
 #endif
@@ -199,7 +222,7 @@ int main(int argc, char **argv) {
             for (int i = 0; i < n_rx; i++) {
                 cpu_output_signals[c][i] = malloc(num_samples * sizeof(c16_t));
             }
-        }
+        }        
 
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int c = 0; c < num_channels; c++) {
@@ -211,7 +234,6 @@ int main(int argc, char **argv) {
         cpu_total_us = ((end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec)) / 1000.0;
 
         for(int i=0; i < n_rx; ++i) { free(r_re[i]); free(r_im[i]); }
-        // CORRECTED: Symmetrical deallocation
         for(int c = 0; c < num_channels; ++c) {
             for (int i = 0; i < n_rx; i++) {
                 free(cpu_output_signals[c][i]);
@@ -221,7 +243,6 @@ int main(int argc, char **argv) {
         free(r_re); free(r_im); free(cpu_output_signals);
     }
 
-    // --- Final Report ---
     printf("\n--- Results ---\n");
     if (cpu_total_us > 0) {
         printf("Total CPU Time for %d channels: %.2f us\n", num_channels, cpu_total_us);
@@ -229,7 +250,6 @@ int main(int argc, char **argv) {
 #ifdef ENABLE_CUDA
     if (gpu_total_us > 0) {
         printf("Total GPU Time for %d channels: %.2f us\n", num_channels, gpu_total_us);
-        printf("Real-time Target:               < 500.00 us\n");
         printf("GPU Status:                     %s\n", (gpu_total_us < 500.0) ? "PASS" : "FAIL");
     }
     if (cpu_total_us > 0 && gpu_total_us > 0) {
