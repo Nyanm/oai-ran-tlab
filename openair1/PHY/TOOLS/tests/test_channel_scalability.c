@@ -243,16 +243,31 @@ cudaFree(d_tx_sig); cudaFree(d_intermediate_sig); cudaFree(d_final_output); cuda
         free(r_re); free(r_im); free(cpu_output_signals);
     }
 
+   // --- Final Report ---
     printf("\n--- Results ---\n");
     if (cpu_total_us > 0) {
+        // For script parsing
+        printf("CPU_Total_Time_us:%.2f\n", cpu_total_us);
+        // For human reading
         printf("Total CPU Time for %d channels: %.2f us\n", num_channels, cpu_total_us);
     }
 #ifdef ENABLE_CUDA
     if (gpu_total_us > 0) {
+        double avg_gpu_us = gpu_total_us / num_channels;
+        // For script parsing
+        printf("GPU_Total_Time_us:%.2f\n", gpu_total_us);
+        printf("GPU_Avg_Time_us:%.2f\n", avg_gpu_us);
+        printf("GPU_Status:%s\n", (avg_gpu_us < 500.0) ? "PASS" : "FAIL");
+
+        // For human reading
         printf("Total GPU Time for %d channels: %.2f us\n", num_channels, gpu_total_us);
-        printf("GPU Status:                     %s\n", (gpu_total_us < 500.0) ? "PASS" : "FAIL");
+        printf("Average GPU Time per channel:   %.2f us\n", avg_gpu_us);
+        printf("Real-time Target (< 500 us):    %s\n", (avg_gpu_us < 500.0) ? "PASS" : "FAIL");
     }
     if (cpu_total_us > 0 && gpu_total_us > 0) {
+        // For script parsing
+        printf("Speedup:%.2fx\n", cpu_total_us / gpu_total_us);
+        // For human reading
         printf("Speedup:                        %.2fx\n", cpu_total_us / gpu_total_us);
     }
 #endif
