@@ -255,9 +255,8 @@ static void UE_synch(void *arg) {
         ((ret.rx_offset << 1) / fp->samples_per_subframe * fp->slots_per_subframe)
         + round((float)((ret.rx_offset << 1) % fp->samples_per_subframe) / fp->samples_per_slot0);
 
-    if (get_nrUE_params()->cont_fo_comp) {
-      UE->freq_offset = freq_offset - UE->dl_Doppler_shift;
-    } else {
+    UE->freq_offset = freq_offset - UE->dl_Doppler_shift;
+    if (!get_nrUE_params()->cont_fo_comp) {
       // rerun with new cell parameters and frequency-offset
       nr_rf_card_config_freq(cfg0, ul_carrier, dl_carrier, freq_offset);
       UE->rfdevice.trx_set_freq_func(&UE->rfdevice, cfg0);
@@ -733,6 +732,38 @@ static inline int get_readBlockSize(uint16_t slot, NR_DL_FRAME_PARMS *fp) {
   return rem_samples + next_slot_first_symbol;
 }
 
+void trs_freq_correction(PHY_VARS_NR_UE *ue)
+{
+  if (ue->trs_cfo[NUM_TRS_SLOT - 1].valid) { // last slot in a TRS burst
+    const int avg_trs_cfo = (ue->trs_cfo[0].cfo + ue->trs_cfo[1].cfo) / 2;
+    if (abs(avg_trs_cfo) > TRS_CFO_THRESH) {
+      LOG_A(PHY, "CFO estimated (%d) from TRS exceeded threshold (%d). Adjusting radio CF\n", avg_trs_cfo, TRS_CFO_THRESH);
+      ue->freq_offset += avg_trs_cfo;
+      uint64_t dl_carrier;
+      uint64_t ul_carrier;
+      nr_get_carrier_frequencies(ue, &dl_carrier, &ul_carrier);
+      openair0_config_t *cfg0 = &ue->openair0_cfg[ue->rf_map.card];
+      nr_rf_card_config_freq(cfg0, ul_carrier, dl_carrier, ue->freq_offset);
+      ue->rfdevice.trx_set_freq_func(&ue->rfdevice, cfg0);
+    }
+    ue->trs_cfo[0].valid = ue->trs_cfo[1].valid = false;
+  }
+}
+
+static bool get_is_last_trs_slot(const int current_slot, const int last_slot)
+{
+  // TRS can be 2 consequtive slots or 1 slot in a frame
+  return (current_slot == (last_slot + 1) || current_slot == last_slot);
+}
+
+static void update_trs_info(nr_phy_data_t *d, int *last_slot, const int current_slot)
+{
+  if (d->csirs_vars[0].active && d->csirs_vars[0].csirs_config_pdu.csi_type == 0) {
+    d->is_last_trs_slot = get_is_last_trs_slot(current_slot, *last_slot);
+    *last_slot = current_slot;
+  }
+}
+
 void *UE_thread(void *arg)
 {
   //this thread should be over the processing thread to keep in real time
@@ -791,6 +822,7 @@ void *UE_thread(void *arg)
   int intialSyncOffset = 0;
   openair0_timestamp sync_timestamp;
   bool stats_printed = false;
+  int last_trs_slot = 0;
 
   if (get_softmodem_params()->sync_ref && UE->sl_mode == 2) {
     UE->is_synchronized = 1;
@@ -1049,6 +1081,7 @@ void *UE_thread(void *arg)
     nr_rxtx_thread_data_t *curMsgRx = (nr_rxtx_thread_data_t *)NotifiedFifoData(newRx);
     *curMsgRx = (nr_rxtx_thread_data_t){.proc = curMsg.proc, .UE = UE};
     int ret = UE_dl_preprocessing(UE, &curMsgRx->proc, tx_wait_for_dlsch, &curMsgRx->phy_data, &stats_printed);
+    update_trs_info(&curMsgRx->phy_data, &last_trs_slot, curMsgRx->proc.nr_slot_rx);
     if (ret != INT_MAX)
       shiftForNextFrame = ret;
     if (get_nrUE_params()->num_dl_actors > 0) {

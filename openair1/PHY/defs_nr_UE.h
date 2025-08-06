@@ -32,13 +32,6 @@
 #ifndef __PHY_DEFS_NR_UE__H__
 #define __PHY_DEFS_NR_UE__H__
 
-#ifdef __cplusplus
-#include <atomic>
-#ifndef _Atomic
-#define _Atomic(X) std::atomic< X >
-#endif
-#endif
-
 #include "defs_nr_common.h"
 #include "CODING/nrPolar_tools/nr_polar_pbch_defs.h"
 #include "PHY/defs_nr_sl_UE.h"
@@ -49,6 +42,7 @@
 #include <malloc.h>
 #include <string.h>
 #include <math.h>
+#include <stdatomic.h>
 #include "common_lib.h"
 #include "fapi_nr_ue_interface.h"
 #include "assertions.h"
@@ -90,6 +84,13 @@
 //       (19 + 1023 * 20) % 512 = 511
 //       (0  + 0 * 20) % 512 = 0
 #define NUM_PROCESS_SLOT_TX_BARRIERS 512
+
+// CSI for tracking can have up to 2 resources per slot
+#define MAX_CSI_RES_SLOT 2
+// Number of consequtive slots carrying TRS
+#define NUM_TRS_SLOT 2
+// Threshold to change radio frequency
+#define TRS_CFO_THRESH 500
 
 #include "impl_defs_top.h"
 #include "impl_defs_nr.h"
@@ -329,6 +330,11 @@ typedef struct UE_NR_SCAN_INFO_s {
   int32_t freq_offset_Hz[3][10];
 } UE_NR_SCAN_INFO_t;
 
+typedef struct {
+  _Atomic bool valid;
+  int cfo;
+} trs_cfo_t;
+
 /// Top-level PHY Data Structure for UE
 typedef struct PHY_VARS_NR_UE_s {
   openair0_config_t openair0_cfg[MAX_CARDS];
@@ -462,6 +468,9 @@ typedef struct PHY_VARS_NR_UE_s {
   double dl_Doppler_shift; /// calculated DL Doppler shift
   double ul_Doppler_shift; /// calculated UL Doppler shift
 
+  /// Frequency offset estimated from TRS
+  trs_cfo_t trs_cfo[NUM_TRS_SLOT];
+
   /// Timing Advance updates variables
   /// Timing advance update computed from the TA command signalled from gNB
   int timing_advance; /// corresponds to N_TA
@@ -589,7 +598,9 @@ typedef struct nr_phy_data_s {
 
   // Sidelink Rx action decided by MAC
   sl_nr_rx_config_type_enum_t sl_rx_action;
-  NR_UE_CSI_RS csirs_vars;
+  int num_csirs;
+  NR_UE_CSI_RS csirs_vars[MAX_CSI_RES_SLOT];
+  bool is_last_trs_slot;
   NR_UE_CSI_IM csiim_vars;
 } nr_phy_data_t;
 

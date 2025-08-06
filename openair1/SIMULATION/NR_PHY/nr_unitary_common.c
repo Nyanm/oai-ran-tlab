@@ -188,3 +188,7 @@ void nr_mac_rrc_meas_ind_ue(module_id_t module_id,
                             int rsrp_dBm)
 {
 }
+
+void trs_freq_correction(PHY_VARS_NR_UE *ue)
+{
+}
