@@ -91,6 +91,13 @@
 //       (0  + 0 * 20) % 512 = 0
 #define NUM_PROCESS_SLOT_TX_BARRIERS 512
 
+// CSI for tracking can have up to 2 resources per slot
+#define MAX_CSI_RES_SLOT 2
+// Number of consequtive slots carrying TRS
+#define NUM_TRS_SLOT 2
+// Threshold to change radio frequency
+#define TRS_CFO_THRESH 500
+
 #include "impl_defs_top.h"
 #include "impl_defs_nr.h"
 #include "time_meas.h"
@@ -334,6 +341,11 @@ typedef struct {
   fapi_nr_dl_ntn_config_command_pdu ntn_config_params;
 } ntn_config_message_t;
 
+typedef struct {
+  _Atomic bool valid;
+  int cfo;
+} trs_cfo_t;
+
 /// Top-level PHY Data Structure for UE
 typedef struct PHY_VARS_NR_UE_s {
   openair0_config_t openair0_cfg[MAX_CARDS];
@@ -465,6 +477,9 @@ typedef struct PHY_VARS_NR_UE_s {
   double freq_offset; /// currently compensated frequency offset
   double freq_off_acc; /// accumulated frequency error (for PI controller)
 
+  /// Frequency offset estimated from TRS
+  trs_cfo_t trs_cfo[NUM_TRS_SLOT];
+
   /// Timing Advance updates variables
   /// Timing advance update computed from the TA command signalled from gNB
   int timing_advance;
@@ -589,7 +604,9 @@ typedef struct nr_phy_data_s {
 
   // Sidelink Rx action decided by MAC
   sl_nr_rx_config_type_enum_t sl_rx_action;
-  NR_UE_CSI_RS csirs_vars;
+  int num_csirs;
+  NR_UE_CSI_RS csirs_vars[MAX_CSI_RES_SLOT];
+  bool is_last_trs_slot;
   NR_UE_CSI_IM csiim_vars;
 } nr_phy_data_t;
 
