@@ -1,33 +1,25 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <math.h>
+#include <string.h>
 #include <time.h>
-#include <getopt.h>
 
+#include <getopt.h>
+#include "PHY/TOOLS/tools_defs.h"
+#include "SIMULATION/TOOLS/sim.h"
+#include "SIMULATION/TOOLS/oai_cuda.h"
 #include "common/utils/LOG/log.h"
 #include "common/utils/utils.h"
-#include "SIMULATION/TOOLS/sim.h"
-
-#ifdef ENABLE_CUDA
-#include "SIMULATION/TOOLS/oai_cuda.h"
 #include <cuda_runtime.h>
-#endif
 
 configmodule_interface_t *uniqCfg = NULL;
-
-typedef enum {
-    MODE_GPU_ONLY,
-    MODE_CPU_ONLY,
-    MODE_ALL
-} run_mode_t;
 
 void exit_function(const char *file, const char *function, const int line, const char *s, const int assert_not_exit) {
     fprintf(stderr, "Exit function called from %s:%d in %s(). Message: %s\n", file, line, function, s);
     exit(1);
 }
 
-void generate_random_float_signal(float **sig_re, float **sig_im, int nb_ant, int num_samples) {
+void generate_random_signal(float **sig_re, float **sig_im, int nb_ant, int num_samples) {
     for (int i = 0; i < nb_ant; i++) {
         for (int j = 0; j < num_samples; j++) {
             sig_re[i][j] = (float)((rand() % 2000) - 1000);
@@ -36,247 +28,219 @@ void generate_random_float_signal(float **sig_re, float **sig_im, int nb_ant, in
     }
 }
 
-int main(int argc, char **argv) {
-    int num_channels = 1;
-    int n_tx = 4;
-    int n_rx = 4;
-    double fs = 122.88e6;
-    int mu = 1;
-    run_mode_t mode = MODE_ALL;
-    int num_trials = 50;
+channel_desc_t* create_manual_channel_desc(int nb_tx, int nb_rx, int channel_length) {
+    channel_desc_t* desc = (channel_desc_t*)calloc(1, sizeof(channel_desc_t));
+    desc->nb_tx = nb_tx;
+    desc->nb_rx = nb_rx;
+    desc->channel_length = channel_length;
+    desc->path_loss_dB = 0.0;
+    desc->channel_offset = 0;
+    int num_links = nb_tx * nb_rx;
+    desc->ch = (struct complexd**)malloc(num_links * sizeof(struct complexd*));
+    for (int i = 0; i < num_links; i++) {
+        desc->ch[i] = (struct complexd*)malloc(channel_length * sizeof(struct complexd));
+        for (int l = 0; l < channel_length; l++) {
+            desc->ch[i][l].r = (double)rand() / (double)RAND_MAX * 0.1;
+            desc->ch[i][l].i = (double)rand() / (double)RAND_MAX * 0.1;
+        }
+    }
+    return desc;
+}
 
+void free_manual_channel_desc(channel_desc_t* desc) {
+    if (!desc) return;
+    int num_links = desc->nb_tx * desc->nb_rx;
+    for (int i = 0; i < num_links; i++) free(desc->ch[i]);
+    free(desc->ch);
+    free(desc);
+}
+
+
+int main(int argc, char **argv) {
+    
+    logInit();
+    randominit(0);
+    
+    // Default values for our new command-line parameters
+    int nb_tx = 4;
+    int nb_rx = 4;
+    int num_samples = 30720;
+    int channel_length = 16;
+    int num_trials = 50;
+    float snr_db = 15.0f;
+
+
+
+    // int nb_tx_configs[] = {1, 2, 4, 8};
+    // int nb_rx_configs[] = {1, 2, 4, 8};
+    // int num_samples_configs[] = {30720, 61440, 122880};
+    // int channel_length_configs[] = {16, 32};
+    // char* channel_type_names[] = {"Short Channel", "Long Channel"};
+    // int num_trials = 50;
+    // float snr_db = 15.0f;
+
+    // --- Argument Parsing ---
     struct option long_options[] = {
-        {"num-channels", required_argument, 0, 'c'},
-        {"n-tx",         required_argument, 0, 't'},
-        {"n-rx",         required_argument, 0, 'r'},
-        {"fs",           required_argument, 0, 'f'},
-        {"mu",           required_argument, 0, 'm'},
-        {"mode",         required_argument, 0, 'd'},
-        {"trials",       required_argument, 0, 'n'},
-        {"help",         no_argument,       0, 'h'},
+        {"nb-tx",     required_argument, 0, 't'},
+        {"nb-rx",     required_argument, 0, 'r'},
+        {"num-samples", required_argument, 0, 's'},
+        {"ch-len",    required_argument, 0, 'l'},
+        {"trials",    required_argument, 0, 'n'},
+        {"snr",       required_argument, 0, 'S'},
+        {"help",      no_argument,       0, 'h'},
         {0, 0, 0, 0}
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "c:t:r:f:m:d:n:h", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "t:r:s:l:n:S:h", long_options, NULL)) != -1) {
         switch (opt) {
-            case 'c': num_channels = atoi(optarg); break;
-            case 't': n_tx = atoi(optarg); break;
-            case 'r': n_rx = atoi(optarg); break;
-            case 'f': fs = atof(optarg); break;
-            case 'm': mu = atoi(optarg); break;
-            case 'd':
-                if (strcmp(optarg, "cpu") == 0) mode = MODE_CPU_ONLY;
-                else if (strcmp(optarg, "gpu") == 0) mode = MODE_GPU_ONLY;
-                else if (strcmp(optarg, "all") == 0) mode = MODE_ALL;
-                break;
+            case 't': nb_tx = atoi(optarg); break;
+            case 'r': nb_rx = atoi(optarg); break;
+            case 's': num_samples = atoi(optarg); break;
+            case 'l': channel_length = atoi(optarg); break;
             case 'n': num_trials = atoi(optarg); break;
+            case 'S': snr_db = atof(optarg); break;
             case 'h':
                 printf("Usage: %s [options]\n", argv[0]);
-                printf("  -c, --num-channels <N>   Number of parallel channels to simulate (Default: 1)\n");
-                printf("  -t, --n-tx <N>           Number of transmit antennas per channel (Default: 4)\n");
-                printf("  -r, --n-rx <N>           Number of receive antennas per channel (Default: 4)\n");
-                printf("  -f, --fs <Hz>            Sampling frequency in Hz (Default: 122.88e6)\n");
-                printf("  -m, --mu <N>             5G NR Numerology (Default: 1)\n");
-                printf("  -d, --mode <cpu|gpu|all> Benchmark mode (Default: all)\n");
+                printf("Options:\n");
+                printf("  -t, --nb-tx <N>          Number of transmit antennas (Default: 4)\n");
+                printf("  -r, --nb-rx <N>          Number of receive antennas (Default: 4)\n");
+                printf("  -s, --num-samples <N>    Number of samples (Default: 30720)\n");
+                printf("  -l, --ch-len <N>         Channel length (Default: 16)\n");
                 printf("  -n, --trials <N>         Number of trials for averaging (Default: 50)\n");
+                printf("  -S, --snr <dB>           Signal to Noise Ratio in dB (Default: 15.0)\n");
                 printf("  -h, --help               Show this help message\n");
                 return 0;
             default: exit(1);
         }
     }
 
-    logInit();
-    randominit(0);
-    int num_samples = (int)(pow(2.0, -mu) * fs * 0.001);
+    printf("Starting Full Channel Pipeline Benchmark (Multipath + Noise)\n");
+    printf("Averaging each test case over %d trials.\n", num_trials);
+    printf("----------------------------------------------------------------------------------------------------------------------\n");
+    printf("%-15s | %-15s | %-15s | %-20s | %-20s | %-15s\n", "Channel Type", "MIMO Config", "Signal Length", "CPU Pipeline (us)", "GPU Pipeline (us)", "Overall Speedup");
+    printf("----------------------------------------------------------------------------------------------------------------------\n");
 
-    printf("--- Channel Scalability Benchmark ---\n");
-    printf("Averaging over %d trials.\n", num_trials);
-    printf("Configuration per trial:\n");
-    printf("  Run Mode          : %s\n", (mode == MODE_CPU_ONLY) ? "CPU Only" : (mode == MODE_GPU_ONLY) ? "GPU Only" : "CPU vs GPU");
-    printf("  Parallel Channels : %d\n", num_channels);
-    printf("  MIMO Configuration: %dx%d\n", n_tx, n_rx);
-    printf("  Samples per Slot  : %d\n", num_samples);
-    printf("---------------------------------------\n");
 
-    // --- Common Memory Allocation & Setup ---
-    float **s_re = malloc(n_tx * sizeof(float *));
-    float **s_im = malloc(n_tx * sizeof(float *));
-    for (int i = 0; i < n_tx; i++) {
-        s_re[i] = malloc(num_samples * sizeof(float));
-        s_im[i] = malloc(num_samples * sizeof(float));
-    }
-    
-    channel_desc_t **channels = malloc(num_channels * sizeof(channel_desc_t*));
-    for (int c = 0; c < num_channels; c++) {
-        channels[c] = new_channel_desc_scm(n_tx, n_rx, TDL_A, fs/1e6, 0, 0, 0.03, 0, 0, 0, 0, 0, 0);
-    }
+        char mimo_str[16];
+        sprintf(mimo_str, "%dx%d", nb_tx, nb_rx);
 
-    double total_cpu_ns = 0;
-    double total_gpu_ns = 0;
-    struct timespec start, end;
+        channel_desc_t *chan_desc = create_manual_channel_desc(nb_tx, nb_rx, channel_length);
 
-#ifdef ENABLE_CUDA
-    // Declare all GPU pointers and initialize to NULL
-    void *d_tx_sig = NULL, *d_intermediate_sig = NULL, *d_final_output = NULL, 
-         *d_curand_states = NULL, *h_tx_sig_pinned = NULL, *h_final_output_pinned = NULL,
-         *d_channel_coeffs_gpu = NULL;
-    float *h_channel_coeffs = NULL;
-    c16_t ***output_gpu = NULL;
+        float **tx_sig_re = malloc(nb_tx * sizeof(float *));
+        float **tx_sig_im = malloc(nb_tx * sizeof(float *));
+        float **rx_multipath_re_cpu = malloc(nb_rx * sizeof(float *));
+        float **rx_multipath_im_cpu = malloc(nb_rx * sizeof(float *));
+        c16_t **output_cpu = malloc(nb_rx * sizeof(c16_t *));
+        c16_t **output_gpu = malloc(nb_rx * sizeof(c16_t *));
 
-    if (mode == MODE_GPU_ONLY || mode == MODE_ALL) {
-        // --- GPU ONE-TIME SETUP ---
-        output_gpu = malloc(num_channels * sizeof(c16_t**));
-        for(int c = 0; c < num_channels; ++c) {
-            output_gpu[c] = malloc(n_rx * sizeof(c16_t*));
-            for (int i = 0; i < n_rx; i++) {
-                output_gpu[c][i] = malloc(num_samples * sizeof(c16_t));
-            }
+        for (int i=0; i<nb_tx; i++) { tx_sig_re[i] = malloc(num_samples * sizeof(float)); tx_sig_im[i] = malloc(num_samples * sizeof(float)); }
+        for (int i=0; i<nb_rx; i++) {
+            rx_multipath_re_cpu[i] = malloc(num_samples * sizeof(float));
+            rx_multipath_im_cpu[i] = malloc(num_samples * sizeof(float));
         }
-        
-        const int max_taps = 256;
-        h_channel_coeffs = malloc(n_tx * n_rx * max_taps * sizeof(float) * 2);
-        
+        output_cpu[0] = malloc(nb_rx * num_samples * sizeof(c16_t));
+        output_gpu[0] = malloc(nb_rx * num_samples * sizeof(c16_t));
+        for (int i=1; i<nb_rx; i++) {
+            output_cpu[i] = output_cpu[0] + i * num_samples;
+            output_gpu[i] = output_gpu[0] + i * num_samples;
+        }
+ 
+        void *d_tx_sig, *d_rx_sig, *d_output_noise, *d_curand_states, *h_tx_sig_pinned, *h_output_sig_pinned, *d_channel_coeffs_gpu; // <-- ADDED
+        size_t channel_buffer_size = nb_tx * nb_rx * channel_length * sizeof(float) * 2;
+
         #if defined(USE_UNIFIED_MEMORY)
-            cudaMallocManaged(&h_tx_sig_pinned, n_tx * num_samples * sizeof(float2), cudaMemAttachGlobal);
-            cudaMallocManaged(&d_intermediate_sig, n_rx * num_samples * sizeof(float2), cudaMemAttachGlobal);
-            cudaMallocManaged(&h_final_output_pinned, n_rx * num_samples * sizeof(short2), cudaMemAttachGlobal);
-            d_tx_sig = h_tx_sig_pinned; d_final_output = h_final_output_pinned;
-        #elif defined(USE_ATS_MEMORY)
-            h_tx_sig_pinned = malloc(n_tx * num_samples * sizeof(float2));
-            cudaMalloc(&d_intermediate_sig, n_rx * num_samples * sizeof(float2));
-            cudaMalloc(&d_final_output, n_rx * num_samples * sizeof(short2));
-            h_final_output_pinned = malloc(n_rx * num_samples * sizeof(short2));
-            d_tx_sig = NULL;
-        #else // Default explicit copy method
-            cudaMalloc(&d_tx_sig, n_tx * num_samples * sizeof(float2));
-            cudaMalloc(&d_intermediate_sig, n_rx * num_samples * sizeof(float2));
-            cudaMalloc(&d_final_output, n_rx * num_samples * sizeof(short2));
-            cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples * sizeof(float2));
-            cudaMallocHost(&h_final_output_pinned, n_rx * num_samples * sizeof(short2));
+            cudaMallocManaged(&d_tx_sig, nb_tx * num_samples * sizeof(float) * 2, cudaMemAttachGlobal);
+            cudaMallocManaged(&d_rx_sig, nb_rx * num_samples * sizeof(float) * 2, cudaMemAttachGlobal);
+            cudaMallocManaged(&d_output_noise, nb_rx * num_samples * sizeof(short) * 2, cudaMemAttachGlobal);
+            cudaMallocManaged(&d_channel_coeffs_gpu, channel_buffer_size, cudaMemAttachGlobal); // <-- ALLOCATE
+            h_tx_sig_pinned = d_tx_sig;
+            h_output_sig_pinned = d_output_noise;
+        #else 
+            cudaMalloc(&d_tx_sig, nb_tx * num_samples * sizeof(float) * 2);
+            cudaMalloc(&d_rx_sig, nb_rx * num_samples * sizeof(float) * 2);
+            cudaMalloc(&d_output_noise, nb_rx * num_samples * sizeof(short) * 2);
+            cudaMallocHost(&h_tx_sig_pinned, nb_tx * num_samples * sizeof(float) * 2);
+            cudaMallocHost(&h_output_sig_pinned, nb_rx * num_samples * sizeof(short) * 2);
+            cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size); // <-- ALLOCATE
         #endif
-        cudaMalloc(&d_channel_coeffs_gpu, n_tx * n_rx * max_taps * sizeof(float2));
-        d_curand_states = create_and_init_curand_states_cuda(n_rx * num_samples, time(NULL));
-    }
-#endif
+        d_curand_states = create_and_init_curand_states_cuda(nb_rx * num_samples, time(NULL));
 
-    // --- MAIN TIMING LOOP ---
-    for (int t = 0; t < num_trials; t++) {
-        generate_random_float_signal(s_re, s_im, n_tx, num_samples);
-        for (int c = 0; c < num_channels; c++) {
-            random_channel(channels[c], 0);
+        double ts = 1.0 / 30.72e6;
+        float sigma2 = 1.0f / powf(10.0f, snr_db / 10.0f);
+        float path_loss = (float)pow(10, chan_desc->path_loss_dB / 20.0);
+        int num_links = nb_tx * nb_rx;
+        float* h_channel_coeffs = (float*)malloc(num_links * channel_length * sizeof(float2));
+        for (int link = 0; link < num_links; link++) {
+            for (int l = 0; l < channel_length; l++) {
+                int idx = link * channel_length + l;
+                ((float2*)h_channel_coeffs)[idx].x = (float)chan_desc->ch[link][l].r;
+                ((float2*)h_channel_coeffs)[idx].y = (float)chan_desc->ch[link][l].i;
+            }
         }
+        
+        double total_cpu_ns = 0;
+        double total_gpu_ns = 0;
 
-        if (mode == MODE_CPU_ONLY || mode == MODE_ALL) {
-            float **r_re_cpu = malloc(n_rx * sizeof(float *));
-            float **r_im_cpu = malloc(n_rx * sizeof(float *));
-            c16_t ***output_cpu = malloc(num_channels * sizeof(c16_t**));
-            for(int i=0; i < n_rx; ++i) { r_re_cpu[i] = malloc(num_samples * sizeof(float)); r_im_cpu[i] = malloc(num_samples * sizeof(float)); }
-            for(int c=0; c < num_channels; ++c) {
-                output_cpu[c] = malloc(n_rx * sizeof(c16_t*));
-                for (int i = 0; i < n_rx; i++) {
-                    output_cpu[c][i] = malloc(num_samples * sizeof(c16_t));
-                }
-            }
-            
+        for (int t = 0; t < num_trials; t++) {
+            generate_random_signal(tx_sig_re, tx_sig_im, nb_tx, num_samples);
+            struct timespec start, end;
+
             clock_gettime(CLOCK_MONOTONIC, &start);
-            for (int c = 0; c < num_channels; c++) {
-                multipath_channel_float(channels[c], s_re, s_im, r_re_cpu, r_im_cpu, num_samples, 1, 0);
-                add_noise_float(output_cpu[c], (const float **)r_re_cpu, (const float **)r_im_cpu, 1.0f, num_samples, 0, 1.0/fs, 0, 0, 0, n_rx);
-            }
+            multipath_channel_float(chan_desc, tx_sig_re, tx_sig_im, rx_multipath_re_cpu, rx_multipath_im_cpu, num_samples, 1, 0);
+            add_noise_float(output_cpu, (const float **)rx_multipath_re_cpu, (const float **)rx_multipath_im_cpu, sigma2, num_samples, 0, ts, 0, 0, 0, nb_rx);
             clock_gettime(CLOCK_MONOTONIC, &end);
-            total_cpu_ns += ((end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec));
-
-            for(int i=0; i < n_rx; ++i) { free(r_re_cpu[i]); free(r_im_cpu[i]); }
-            for(int c=0; c < num_channels; ++c) { for (int i=0; i<n_rx; i++) free(output_cpu[c][i]); free(output_cpu[c]); }
-            free(r_re_cpu); free(r_im_cpu); free(output_cpu);
-        }
-
-#ifdef ENABLE_CUDA
-        if (mode == MODE_GPU_ONLY || mode == MODE_ALL) {
-            #if defined(USE_UNIFIED_MEMORY)
-                float2* managed_tx_sig = (float2*)h_tx_sig_pinned;
-                for (int aa = 0; aa < n_tx; aa++) {
-                    for (int i = 0; i < num_samples; i++) {
-                        managed_tx_sig[aa * num_samples + i] = make_float2(s_re[aa][i], s_im[aa][i]);
-                    }
-                }
-            #elif defined(USE_ATS_MEMORY)
-                float2* ats_input_buffer = (float2*)h_tx_sig_pinned;
-                for (int aa = 0; aa < n_tx; aa++) {
-                    for (int i = 0; i < num_samples; i++) {
-                        ats_input_buffer[aa * num_samples + i] = make_float2(s_re[aa][i], s_im[aa][i]);
-                    }
-                }
-            #endif
+            total_cpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
 
             clock_gettime(CLOCK_MONOTONIC, &start);
-            for (int c = 0; c < num_channels; c++) {
-                float path_loss = (float)pow(10, channels[c]->path_loss_dB / 20.0);
-                for (int link = 0; link < n_tx * n_rx; link++) {
-                    for (int l = 0; l < channels[c]->channel_length; l++) {
-                        int idx = link * channels[c]->channel_length + l;
-                        ((float2*)h_channel_coeffs)[idx].x = (float)channels[c]->ch[link][l].r;
-                        ((float2*)h_channel_coeffs)[idx].y = (float)channels[c]->ch[link][l].i;
-                    }
-                }
-                run_channel_pipeline_cuda(s_re, s_im, output_gpu[c], n_tx, n_rx, channels[c]->channel_length, num_samples, path_loss, h_channel_coeffs, 1.0f, 1.0/fs, 0, 0, 0, 0, d_tx_sig, d_intermediate_sig, d_final_output, d_curand_states, h_tx_sig_pinned, h_final_output_pinned, d_channel_coeffs_gpu);
-            }
+            run_channel_pipeline_cuda(
+                tx_sig_re, tx_sig_im, output_gpu,
+                nb_tx, nb_rx, channel_length, num_samples,
+                path_loss, h_channel_coeffs,
+                sigma2, ts,
+                0, 0, 0, 0, 
+                d_tx_sig, d_rx_sig, d_output_noise, d_curand_states,
+                h_tx_sig_pinned, h_output_sig_pinned, d_channel_coeffs_gpu
+            );
             cudaDeviceSynchronize();
             clock_gettime(CLOCK_MONOTONIC, &end);
-            total_gpu_ns += ((end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec));
+            total_gpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
         }
-#endif
-    }
-    
-    // --- FINAL REPORT ---
-    double avg_cpu_us = (total_cpu_ns / num_trials) / 1000.0;
-    double avg_gpu_us = (total_gpu_ns / num_trials) / 1000.0;
-    
-    printf("\n--- Results ---\n");
-    if (mode == MODE_CPU_ONLY || mode == MODE_ALL) {
-        printf("Avg Total CPU Time for %d channels: %.2f us\n", num_channels, avg_cpu_us);
-    }
-#ifdef ENABLE_CUDA
-    if (mode == MODE_GPU_ONLY || mode == MODE_ALL) {
-        double avg_gpu_per_chan_us = avg_gpu_us / num_channels;
-        printf("Avg Total GPU Time for %d channels: %.2f us\n", num_channels, avg_gpu_us);
-        printf("Avg GPU Time per Channel:         %.2f us\n", avg_gpu_per_chan_us);
-        printf("Real-time Target (< 500 us):      %s\n", (avg_gpu_per_chan_us < 500.0) ? "PASS" : "FAIL");
-    }
-    if (mode == MODE_ALL) {
-        printf("Speedup (Total CPU/Total GPU):    %.2fx\n", avg_cpu_us / avg_gpu_us);
-    }
-#endif
-    printf("---------------------------------------\n");
+        
+        double avg_cpu_us = (total_cpu_ns / num_trials) / 1000.0;
+        double avg_gpu_us = (total_gpu_ns / num_trials) / 1000.0;
+        double speedup = (avg_gpu_us > 0) ? (avg_cpu_us / avg_gpu_us) : 0;
+        
+        printf("%-15s | %-15d | %-20.2f | %-20.2f | %-15.2fx\n", 
+               mimo_str, num_samples, avg_cpu_us, avg_gpu_us, speedup);
 
-    // --- FINAL CLEANUP ---
-#ifdef ENABLE_CUDA
-    if (mode == MODE_GPU_ONLY || mode == MODE_ALL) {
+        free(h_channel_coeffs);
+        for (int i=0; i<nb_tx; i++) { free(tx_sig_re[i]); free(tx_sig_im[i]); }
+        for (int i=0; i<nb_rx; i++) { free(rx_multipath_re_cpu[i]); free(rx_multipath_im_cpu[i]); }
+        free(tx_sig_re); free(tx_sig_im);
+        free(rx_multipath_re_cpu); free(rx_multipath_im_cpu);
+        free(output_cpu[0]); free(output_gpu[0]);
+        free(output_cpu); free(output_gpu);
+
         #if defined(USE_UNIFIED_MEMORY)
-            cudaFree(h_tx_sig_pinned); cudaFree(d_intermediate_sig); cudaFree(h_final_output_pinned);
-        #elif defined(USE_ATS_MEMORY)
-            free(h_tx_sig_pinned); cudaFree(d_intermediate_sig); cudaFree(d_final_output); free(h_final_output_pinned);
+            cudaFree(d_tx_sig);
+            cudaFree(d_rx_sig);
+            cudaFree(d_output_noise);
         #else
-            cudaFree(d_tx_sig); cudaFree(d_intermediate_sig); cudaFree(d_final_output); cudaFreeHost(h_tx_sig_pinned); cudaFreeHost(h_final_output_pinned);
+            cudaFree(d_tx_sig);
+            cudaFree(d_rx_sig);
+            cudaFreeHost(h_tx_sig_pinned);
+            cudaFree(d_output_noise);
+            cudaFreeHost(h_output_sig_pinned);
         #endif
-        cudaFree(d_channel_coeffs_gpu);
+        cudaFree(d_channel_coeffs_gpu); // <-- FREE
         destroy_curand_states_cuda(d_curand_states);
         
-        for(int c = 0; c < num_channels; ++c) {
-            for (int i = 0; i < n_rx; i++) {
-                free(output_gpu[c][i]);
-            }
-            free(output_gpu[c]);
-        }
-        free(output_gpu);
-        free(h_channel_coeffs);
-    }
-#endif
-    for (int i = 0; i < n_tx; i++) { free(s_re[i]); free(s_im[i]); }
-    free(s_re); free(s_im);
-    for(int i=0; i < num_channels; ++i) free_channel_desc_scm(channels[i]);
-    free(channels);
-    
+        free_manual_channel_desc(chan_desc);
+
+
+    printf("----------------------------------------------------------------------------------------------------------------------\n");
+    printf("Pipeline benchmark finished.\n");
+
     return 0;
 }
