@@ -110,7 +110,9 @@ int main(int argc, char **argv) {
         random_channel(channels[c], 0);
     }
 
-    double gpu_total_us = -1.0;
+    double gpu_parallel_total_us = -1.0;
+
+    double gpu_sequential_total_us = -1.0;
     double cpu_total_us = -1.0;
     struct timespec start, end;
 
@@ -179,7 +181,36 @@ int main(int argc, char **argv) {
         cudaDeviceSynchronize();
         clock_gettime(CLOCK_MONOTONIC, &end);
         
-        gpu_total_us = ((end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec)) / 1000.0;
+        gpu_parallel_total_us = ((end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec)) / 1000.0;
+
+
+
+
+
+
+// --- 2. Sequential GPU Benchmark ---
+        double total_sequential_ns = 0;
+        for (int c = 0; c < num_channels; c++) {
+            float path_loss = (float)pow(10, channels[c]->path_loss_dB / 20.0);
+            clock_gettime(CLOCK_MONOTONIC, &start);
+            run_channel_pipeline_cuda(s_re, s_im, gpu_output_signals[c], n_tx, n_rx, channels[c]->channel_length, num_samples, path_loss, h_channel_coeffs, 1.0f, 1.0/fs, 0, 0, 0, 0, d_tx_sig, d_intermediate_sig, d_final_output, d_curand_states, h_tx_sig_pinned, h_final_output_pinned, d_channel_coeffs_gpu);
+            cudaDeviceSynchronize(); // Synchronize after EACH launch
+            clock_gettime(CLOCK_MONOTONIC, &end);
+            total_sequential_ns += ((end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec));
+        }
+        gpu_sequential_total_us = total_sequential_ns / 1000.0;
+
+
+
+
+
+
+
+
+
+
+
+
 
         for(int c = 0; c < num_channels; ++c) {
             for (int i = 0; i < n_rx; i++) {
@@ -243,36 +274,29 @@ cudaFree(d_tx_sig); cudaFree(d_intermediate_sig); cudaFree(d_final_output); cuda
         free(r_re); free(r_im); free(cpu_output_signals);
     }
 
-   // --- Final Report ---
+// --- Final Report ---
     printf("\n--- Results ---\n");
     if (cpu_total_us > 0) {
-        // For script parsing
-        printf("CPU_Total_Time_us:%.2f\n", cpu_total_us);
-        // For human reading
-        printf("Total CPU Time for %d channels: %.2f us\n", num_channels, cpu_total_us);
+        printf("Total CPU Time for %d channels:     %.2f us\n", num_channels, cpu_total_us);
     }
 #ifdef ENABLE_CUDA
-    if (gpu_total_us > 0) {
-        double avg_gpu_us = gpu_total_us / num_channels;
-        // For script parsing
-        printf("GPU_Total_Time_us:%.2f\n", gpu_total_us);
-        printf("GPU_Avg_Time_us:%.2f\n", avg_gpu_us);
-        printf("GPU_Status:%s\n", (avg_gpu_us < 500.0) ? "PASS" : "FAIL");
-
-        // For human reading
-        printf("Total GPU Time for %d channels: %.2f us\n", num_channels, gpu_total_us);
-        printf("Average GPU Time per channel:   %.2f us\n", avg_gpu_us);
-        printf("Real-time Target (< 500 us):    %s\n", (avg_gpu_us < 500.0) ? "PASS" : "FAIL");
+    if (gpu_parallel_total_us > 0) {
+        double avg_concurrent_us = gpu_parallel_total_us / num_channels;
+        printf("Total GPU Concurrent Time for %d channels: %.2f us\n", num_channels, gpu_parallel_total_us);
+        printf("Avg GPU Concurrent Time per chan:   %.2f us\n", avg_concurrent_us);
+        printf("Real-time Target (< 500 us):      %s\n", (avg_concurrent_us < 500.0) ? "PASS" : "FAIL");
     }
-    if (cpu_total_us > 0 && gpu_total_us > 0) {
-        // For script parsing
-        printf("Speedup:%.2fx\n", cpu_total_us / gpu_total_us);
-        // For human reading
-        printf("Speedup:                        %.2fx\n", cpu_total_us / gpu_total_us);
+    if (gpu_sequential_total_us > 0) {
+        double avg_sequential_us = gpu_sequential_total_us / num_channels;
+        printf("Avg GPU Sequential Time per chan:   %.2f us\n", avg_sequential_us);
+    }
+    if (cpu_total_us > 0 && gpu_parallel_total_us > 0) {
+        printf("Speedup (vs Concurrent GPU):        %.2fx\n", cpu_total_us / gpu_parallel_total_us);
     }
 #endif
     printf("---------------------------------------\n");
 
+    // --- Final Cleanup ---
     for (int i = 0; i < n_tx; i++) { free(s_re[i]); free(s_im[i]); }
     free(s_re); free(s_im);
     for(int i=0; i < num_channels; ++i) free_channel_desc_scm(channels[i]);
