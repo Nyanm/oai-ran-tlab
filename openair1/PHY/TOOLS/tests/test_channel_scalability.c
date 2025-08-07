@@ -198,7 +198,7 @@ int main(int argc, char **argv) {
         }
     }
     
-    d_curand_states = create_and_init_curand_states_cuda(num_channels * nb_rx * num_samples, time(NULL));
+    d_curand_states = create_and_init_curand_states_cuda(nb_rx * num_samples, time(NULL));
     
     double total_cpu_ns = 0;
     double total_gpu_ns = 0;
