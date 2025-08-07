@@ -13,6 +13,7 @@ target_link_libraries(coding PRIVATE log_headers)
 add_library(ldpc_orig MODULE
             nrLDPC_decoder/nrLDPC_decoder.c
             nrLDPC_encoder/ldpc_encoder.c
+            nrLDPC_encoder/ldpc_encoder32.c
 )
 set_target_properties(ldpc_orig PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 target_link_libraries(ldpc_orig PRIVATE ldpc_segment ldpc_gen_HEADERS)
@@ -20,6 +21,7 @@ target_link_libraries(ldpc_orig PRIVATE ldpc_segment ldpc_gen_HEADERS)
 add_library(ldpc MODULE
             nrLDPC_decoder/nrLDPC_decoder.c
             nrLDPC_encoder/ldpc_encoder_optim8segmulti.c
+            nrLDPC_encoder/ldpc_encoder32.c
 )
 set_target_properties(ldpc PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 target_link_libraries(ldpc PRIVATE ldpc_segment ldpc_gen_HEADERS)
@@ -60,6 +62,7 @@ if (ENABLE_LDPC_CUDA)
   cuda_add_library(ldpc_cuda MODULE
 	  #                   nrLDPC_decoder_LYC/nrLDPC_decoder_LYC.cu
                    nrLDPC_decoder/nrLDPC_decoder.c
+		   nrLDPC_encoder/ldpc_encoder_optim8segmulti.c
 		   nrLDPC_encoder/ldpc_encoder_cuda32.c
 		   nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
                    # The slot coding layer cannot be linked with
@@ -67,7 +70,7 @@ if (ENABLE_LDPC_CUDA)
                    # because of cuda_add_library
                    # which already uses target_link_libraries
                    nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c
-                   nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder.c
+                   nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder_cuda.c
                    nrLDPC_coding/nrLDPC_coding_segment/nr_rate_matching.c
   )
   target_link_libraries(ldpc_cuda ldpc_gen_HEADERS ${T_LIB})

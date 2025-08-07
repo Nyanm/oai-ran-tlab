@@ -282,6 +282,7 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
 
 int32_t nrLDPC_coding_init(void)
 {
+  init_input32_luts(); 	
   return 0;
 }
 

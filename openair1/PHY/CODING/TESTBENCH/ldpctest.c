@@ -126,6 +126,8 @@ one_measurement_t test_ldpc(short max_iterations,
   memset(estimated_output, 0, sizeof(estimated_output));
   uint8_t *channel_input[MAX_NUM_DLSCH_SEGMENTS];
   uint8_t *channel_input_optim;
+  uint32_t channel_input_optim32[4][68*384];
+
   // double channel_output[68 * 384];
   double modulated_input[MAX_NUM_DLSCH_SEGMENTS][68 * 384] = {0};
   int8_t channel_output_fixed[MAX_NUM_DLSCH_SEGMENTS][68 * 384] = {0};
@@ -269,7 +271,8 @@ one_measurement_t test_ldpc(short max_iterations,
     memset(channel_input[j], 0, 68 * 384);
   }
   channel_input_optim = malloc16(68 * 384 * sizeof(uint32_t));
-  memset(channel_input_optim, 0, 68 * 384 * sizeof(uint32_t));
+  if (use32bit ==0) memset(channel_input_optim, 0, 68 * 384 * sizeof(uint32_t));
+  else memset(channel_input_optim32[0],0,68*384*sizeof(uint32_t));
 
   // Fill input segments with random values
   for (int j = 0; j < MAX_NUM_DLSCH_SEGMENTS; j++) {
@@ -305,13 +308,14 @@ one_measurement_t test_ldpc(short max_iterations,
     impp.n_segments = n_segments;
     start_meas(&ret.time_optim);
     impp.first_seg = 0;
-    ldpc_toCompare.LDPCencoder(test_input, channel_input_optim, &impp);
+    if (use32bit==0) ldpc_toCompare.LDPCencoder(test_input, channel_input_optim, &impp);
+    else ldpc_toCompare.LDPCencoder32(test_input, channel_input_optim32, &impp);
     stop_meas(&ret.time_optim);
 
     if (ntrials == 1)
       for (int j = 0; j < n_segments; j++)
         for (int i = 0; i < K + (nrows - no_punctured_columns) * Zc - removed_bit; i++) {
-          if (((use32bit == 0) && (channel_input[j][i] != ((channel_input_optim[i] >> j) & 0x1))) ||                 ((use32bit == 1) && (channel_input[j][i] != ((((uint32_t*)channel_input_optim)[i] >> j) & 0x1)))) {
+          if (((use32bit == 0) && (channel_input[j][i] != ((channel_input_optim[i] >> j) & 0x1))) ||                 ((use32bit == 1) && (channel_input[j][i] != (((channel_input_optim32[0][i] >> j) & 0x1))))) {
                printf("differ in seg %d pos %d (%u,%u)\n", j, i, channel_input[j][i], (((uint32_t*)channel_input_optim)[i] >> j) & 0x1);
                return ret;
             }
@@ -323,7 +327,7 @@ one_measurement_t test_ldpc(short max_iterations,
         if ((i & 0xf) == 0)
           printf("\ne %d..%d:    ", i, i + 15);
 #endif
-        bit = (use32bit==0) ? ((channel_input_optim[i - 2 * Zc] >> j) & 0x1) : ((((uint32_t*)channel_input_optim)[i - 2 * Zc] >> j) & 0x1);
+        bit = (use32bit==0) ? ((channel_input_optim[i - 2 * Zc] >> j) & 0x1) : ((channel_input_optim32[0][i - 2 * Zc] >> j) & 0x1);
         if (bit == 0)
           modulated_input[j][i] = 1.0; /// sqrt(2);  //QPSK
         else

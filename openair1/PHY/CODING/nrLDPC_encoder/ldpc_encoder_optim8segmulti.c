@@ -43,6 +43,10 @@
 #include "ldpc_encode_parity_check.c"
 #include "ldpc_generate_coefficient.c"
 
+void ini_input32_luts() {
+	return;
+}
+
 int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
 {
   //set_log(PHY, 4);

@@ -2,12 +2,12 @@
 #include <stdint.h>
 #include <cuda_runtime.h>
 // generated code for Zc=384, byte encoding
-__global__ void ldpc_BG1_Zc384_worker(uint8_t *c,uint8_t *d) {
-  uint32_t *c32=(uint32_t *)c;
-  uint32_t *d32=(uint32_t *)d;
+__global__ void ldpc_BG1_Zc384_worker(uint32_t *c[4],uint32_t *d[4]) {
+  uint32_t *c32=c[blockIdx.x];
+  uint32_t *d32=d[blockIdx.x];
 
   int i2 = threadIdx.x;
-  int i1 = blockIdx.x;
+  int i1 = blockIdx.y;
   if (i2 < 384) {
     c32+=i2;
     d32+=i2;
@@ -200,8 +200,10 @@ __global__ void ldpc_BG1_Zc384_worker(uint8_t *c,uint8_t *d) {
     }
   }
 }
-extern "C" int ldpc_BG1_Zc384_cuda32(uint8_t *c,uint8_t *d) { 
-ldpc_BG1_Zc384_worker<<<46,384>>>(c,d);
+extern "C" int ldpc_BG1_Zc384_cuda32(uint32_t *c[4],uint32_t *d[4],int n_inputs) { 
+
+dim3 numblocks(n_inputs,46);
+ldpc_BG1_Zc384_worker<<<numblocks,384>>>(c,d);
  cudaDeviceSynchronize();
   return(0);
 }

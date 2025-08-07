@@ -39,24 +39,37 @@
 
 #define USE_UMEM 1 
 
-static void encode_parity_check_part_cuda(uint32_t *cc, uint32_t *d, short BG,short Zc,short Kb, int ncols)
+int ldpc_BG1_Zc384_cuda32(uint32_t **c,uint32_t **d,int n_inputs);
+
+
+void encode_parity_check_part_cuda(uint32_t **cc, uint32_t **d, short BG,short Zc,short Kb, int ncols, int n_inputs)
 {
 #ifdef USE_UMEM
-  uint32_t c[2 * 22 * Zc] ; //double size matrix of c
-  for (int i1 = 0; i1 < ncols; i1++)   {
-    memcpy(&c[2 * i1 * Zc], &cc[i1 * Zc], Zc * sizeof(uint32_t));
-    memcpy(&c[(2 * i1 + 1) * Zc], &cc[i1 * Zc], Zc * sizeof(uint32_t));
-  }
+  uint32_t c[n_inputs][2 * 22 * Zc] ; //double size matrix of c
+				      
+  for (int s=0;s<n_inputs;s++)				      
+    for (int i1 = 0; i1 < ncols; i1++)   {
+      memcpy(&c[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
+      memcpy(&c[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
+    }
+    
 #else
   cudaError_t err;
-  uint32_t *c=NULL;
-  err = cudaMalloc((void**)&c,2 * 22 * Zc * sizeof(uint32_t));
-  if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
-  for (int i1 = 0; i1 < ncols; i1++)   {
-    cudaMemcpy(&c[2 * i1 * Zc], &cc[i1 * Zc], Zc * sizeof(uint32_t),1);
-    cudaMemcpy(&c[(2 * i1 + 1) * Zc], &cc[i1 * Zc], Zc * sizeof(uint32_t),1);
+  uint32_t *c[n_inputs]={NULL};
+  for (int s=0;s<n_inputs;s++)
+  {
+    err = cudaMalloc((void**)&c,2 * 22 * Zc * sizeof(uint32_t));
+    if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
+    for (int i1 = 0; i1 < ncols; i1++)   {
+      cudaMemcpy(&c[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t),1);
+      cudaMemcpy(&c[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t),1);
+    }
   }
 #endif
+  uint32_t *cp[n_inputs];
+  for (int s=0; s<n_inputs;s++)
+    cp[s]=c[s];
+
   if (BG == 1) {
     switch (Zc) {
       case 176:
@@ -71,7 +84,7 @@ static void encode_parity_check_part_cuda(uint32_t *cc, uint32_t *d, short BG,sh
 	AssertFatal(1==0,"BG %d Zc %d not supported yet for CUDA\n",BG, Zc);
         break;
       case 384:
-	ldpc_BG1_Zc384_cuda32(c, d);
+	ldpc_BG1_Zc384_cuda32(cp, d, n_inputs);
         break;
       default:
         AssertFatal(false, "BG %d Zc %d is not supported yet\n", BG, Zc);
@@ -103,7 +116,10 @@ static void encode_parity_check_part_cuda(uint32_t *cc, uint32_t *d, short BG,sh
     }
   } else
     AssertFatal(false, "BG %d is not supported\n", BG);
-  cudaFree(c);
+#ifndef USE_UMEM
+  for (int s=0;s<n_inputs;s++)
+    cudaFree(c[s]);
+#endif
 }
 
 
