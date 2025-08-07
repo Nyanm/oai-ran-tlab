@@ -61,6 +61,17 @@ void run_channel_pipeline_cuda(
     void *d_channel_coeffs
 );
 
+
+void run_channel_pipeline_cuda_batched(
+    int num_channels,
+    int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
+    void *d_path_loss_batch, void *d_channel_coeffs_batch,
+    float sigma2, double ts,
+    uint16_t pdu_bit_map, uint16_t ptrs_bit_map,
+    void *d_tx_sig_batch, void *d_intermediate_sig_batch, void *d_final_output_batch,
+    void *d_curand_states
+);
+
 void run_channel_pipeline_cuda_streamed(
     float **tx_sig_re, float **tx_sig_im,
     int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
