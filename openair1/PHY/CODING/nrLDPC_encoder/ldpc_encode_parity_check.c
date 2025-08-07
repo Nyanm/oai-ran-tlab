@@ -88,7 +88,6 @@
 #include "ldpc_BG2_Zc88_byte.c"
 #include "ldpc_BG2_Zc80_byte.c"
 #include "ldpc_BG2_Zc72_byte.c"
-//#include "ldpc_BG1_Zc384_byte.c"
 
 static void encode_parity_check_part_optim(uint8_t *cc, uint8_t *d, short BG,short Zc,short Kb, int simd_size, int ncols)
 {

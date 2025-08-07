@@ -42,7 +42,7 @@
 
 #include "ldpc_encode_parity_check_cuda.c"
 #include "ldpc_generate_coefficient.c"
-#define USE_UMEM 1
+#define USE_UMEM 0
 
 
 int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)

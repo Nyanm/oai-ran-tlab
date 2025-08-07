@@ -1813,7 +1813,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);
     //
   }
-  //CHECK(cudaGetLastError());
+  CHECK(cudaGetLastError());
 #else
   printf("To be continued ^ ^\n");
 #endif
