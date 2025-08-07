@@ -260,14 +260,42 @@ int main(int argc, char **argv) {
     // --- FINAL REPORT ---
     double avg_cpu_us = (total_cpu_ns / num_trials) / 1000.0;
     double avg_gpu_us = (total_gpu_ns / num_trials) / 1000.0;
-    double speedup = (avg_gpu_us > 0) ? (avg_cpu_us / avg_gpu_us) : 0;
+    double speedup = (avg_cpu_us > 0 && avg_gpu_us > 0) ? (avg_cpu_us / avg_gpu_us) : 0;
     
-    printf("\n--- Final Benchmark Results ---\n");
-    printf("%-25s | %-25s | %-25s | %-15s\n", "Avg CPU Time (us)", "Avg GPU Time (us)", "Avg GPU Time per Channel (us)", "Overall Speedup");
-    printf("------------------------------------------------------------------------------------------------------------------\n");
-    printf("%-25.2f | %-25.2f | %-25.2f | %-15.2fx\n", avg_cpu_us, avg_gpu_us, avg_gpu_us / num_channels, speedup);
-    
-        // --- Cleanup ---
+    // --- New Metrics ---
+    double avg_cpu_per_channel_us = avg_cpu_us / num_channels;
+    double avg_gpu_per_channel_us = avg_gpu_us / num_channels;
+    double total_samples_processed = (double)num_channels * nb_rx * num_samples;
+    double gpu_throughput_gsps = total_samples_processed / (avg_gpu_us * 1000.0);
+
+    char val_str[30];
+
+    printf("\n--- Final Benchmark Results ---\n\n");
+    printf("+----------------------------------+--------------------------+\n");
+    printf("| %-32s | %-24s |\n", "Configuration", "Value");
+    printf("+----------------------------------+--------------------------+\n");
+    printf("| %-32s | %-24d |\n", "Parallel Channels", num_channels);
+
+    snprintf(val_str, sizeof(val_str), "%d x %d", nb_tx, nb_rx);
+    printf("| %-32s | %-24s |\n", "MIMO Configuration (Tx x Rx)", val_str);
+
+    printf("| %-32s | %-24d |\n", "Signal Length (Samples)", num_samples);
+    printf("| %-32s | %-24d |\n", "Trials per configuration", num_trials);
+    printf("+----------------------------------+--------------------------+\n");
+    printf("| %-32s | %-24s |\n", "Performance Metric", "Value");
+    printf("+----------------------------------+--------------------------+\n");
+    printf("| %-32s | %-24.2f |\n", "Total CPU Time (us)", avg_cpu_us);
+    printf("| %-32s | %-24.2f |\n", "Total GPU Time (us)", avg_gpu_us);
+    printf("| %-32s | %-24.2f |\n", "Avg Time per Channel - CPU (us)", avg_cpu_per_channel_us);
+    printf("| %-32s | %-24.2f |\n", "Avg Time per Channel - GPU (us)", avg_gpu_per_channel_us);
+
+    snprintf(val_str, sizeof(val_str), "%.2fx", speedup);
+    printf("| %-32s | %-24s |\n", "Speedup (CPU/GPU)", val_str);
+
+    printf("| %-32s | %-24.3f |\n", "GPU Throughput (GSPS)", gpu_throughput_gsps);
+  
+    printf("+----------------------------------+--------------------------+\n");
+            // --- Cleanup ---
         free(h_channel_coeffs);
         for(int i=0; i<num_tx_signals; i++){
             for(int j=0; j<nb_tx; j++){
