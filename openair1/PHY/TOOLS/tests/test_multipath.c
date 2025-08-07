@@ -108,17 +108,26 @@ int main(int argc, char **argv) {
         for (int i=0; i<nb_tx; i++) { s_re[i] = malloc(num_samples * sizeof(float)); s_im[i] = malloc(num_samples * sizeof(float)); }
         for (int i=0; i<nb_rx; i++) { r_re_cpu[i] = malloc(num_samples * sizeof(float)); r_im_cpu[i] = malloc(num_samples * sizeof(float)); r_re_gpu[i] = malloc(num_samples * sizeof(float)); r_im_gpu[i] = malloc(num_samples * sizeof(float)); }
        
-        void *d_tx_sig, *d_rx_sig, *d_channel_coeffs_gpu; // <-- ADDED d_channel_coeffs_gpu
-        size_t channel_buffer_size = nb_tx * nb_rx * channel_length * sizeof(float) * 2;
+        void *d_tx_sig = NULL, *d_rx_sig = NULL, *d_channel_coeffs_gpu = NULL, *h_tx_sig_pinned = NULL;
+                size_t channel_buffer_size = nb_tx * nb_rx * channel_length * sizeof(float) * 2;
+                size_t tx_buffer_bytes = nb_tx * (num_samples - chan_desc->channel_offset) * sizeof(float2);
+                size_t rx_buffer_bytes = nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float2);
 
         #if defined(USE_UNIFIED_MEMORY)
-            cudaMallocManaged(&d_tx_sig, nb_tx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAttachGlobal);
-            cudaMallocManaged(&d_rx_sig, nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2, cudaMemAttachGlobal);
-            cudaMallocManaged(&d_channel_coeffs_gpu, channel_buffer_size, cudaMemAttachGlobal); // <-- ALLOCATE
-        #else
-            cudaMalloc(&d_tx_sig, nb_tx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2);
-            cudaMalloc(&d_rx_sig, nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float) * 2);
-            cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size); // <-- ALLOCATE
+                cudaMallocManaged(&d_tx_sig, tx_buffer_bytes, cudaMemAttachGlobal);
+                cudaMallocManaged(&d_rx_sig, rx_buffer_bytes, cudaMemAttachGlobal);
+                cudaMallocManaged(&d_channel_coeffs_gpu, channel_buffer_size, cudaMemAttachGlobal);
+                h_tx_sig_pinned = d_tx_sig;
+        #elif defined(USE_ATS_MEMORY)
+                h_tx_sig_pinned = malloc(tx_buffer_bytes);
+                d_tx_sig = NULL;
+                cudaMalloc(&d_rx_sig, rx_buffer_bytes);
+                cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size);
+        #else // EXPLICIT COPY
+                cudaMalloc(&d_tx_sig, tx_buffer_bytes);
+                cudaMalloc(&d_rx_sig, rx_buffer_bytes);
+                cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size);
+                cudaMallocHost(&h_tx_sig_pinned, tx_buffer_bytes);
         #endif
 
         double total_cpu_ns = 0;
@@ -148,8 +157,7 @@ int main(int argc, char **argv) {
 
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int t = 0; t < num_trials; t++) {
-            // UPDATE FUNCTION CALL with the new pointer
-            multipath_channel_cuda(s_re, s_im, r_re_gpu, r_im_gpu, nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset, path_loss, h_channel_coeffs, d_tx_sig, d_rx_sig, d_channel_coeffs_gpu);
+           multipath_channel_cuda(s_re, s_im, r_re_gpu, r_im_gpu, nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset, path_loss, h_channel_coeffs, d_tx_sig, d_rx_sig, d_channel_coeffs_gpu, h_tx_sig_pinned);
         }
         cudaDeviceSynchronize();
         clock_gettime(CLOCK_MONOTONIC, &end);
@@ -168,9 +176,16 @@ int main(int argc, char **argv) {
         for (int i=0; i<nb_tx; i++) { free(s_re[i]); free(s_im[i]); }
         for (int i=0; i<nb_rx; i++) { free(r_re_cpu[i]); free(r_im_cpu[i]); free(r_re_gpu[i]); free(r_im_gpu[i]); }
         free(s_re); free(s_im); free(r_re_cpu); free(r_im_cpu); free(r_re_gpu); free(r_im_gpu);
-        cudaFree(d_tx_sig); 
+        #if defined(USE_UNIFIED_MEMORY)
+                cudaFree(d_tx_sig); 
+        #elif defined(USE_ATS_MEMORY)
+                free(h_tx_sig_pinned); 
+        #else // EXPLICIT COPY
+                cudaFree(d_tx_sig);
+                cudaFreeHost(h_tx_sig_pinned);
+        #endif
         cudaFree(d_rx_sig);
-        cudaFree(d_channel_coeffs_gpu); // <-- FREE
+        cudaFree(d_channel_coeffs_gpu);
         free_manual_channel_desc(chan_desc);
     }
     }

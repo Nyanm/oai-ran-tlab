@@ -60,23 +60,14 @@ int main(int argc, char **argv) {
     logInit();
     randominit(0);
     
-    int nb_tx_configs[] = {2, 4, 8};
-    int nb_rx_configs[] = {2, 4, 8};
-    int num_samples_configs[] = {30720};
+
+    int nb_tx_configs[] = {1, 2, 4, 8};
+    int nb_rx_configs[] = {1, 2, 4, 8};
+    int num_samples_configs[] = {30720, 61440, 122880};
     int channel_length_configs[] = {16, 32};
     char* channel_type_names[] = {"Short Channel", "Long Channel"};
     int num_trials = 50;
     float snr_db = 15.0f;
-
-
-
-    // int nb_tx_configs[] = {1, 2, 4, 8};
-    // int nb_rx_configs[] = {1, 2, 4, 8};
-    // int num_samples_configs[] = {30720, 61440, 122880};
-    // int channel_length_configs[] = {16, 32};
-    // char* channel_type_names[] = {"Short Channel", "Long Channel"};
-    // int num_trials = 50;
-    // float snr_db = 15.0f;
 
     printf("Starting Full Channel Pipeline Benchmark (Multipath + Noise)\n");
     printf("Averaging each test case over %d trials.\n", num_trials);

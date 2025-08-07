@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-// #define MAX_CHANNEL_ELEMENTS (4096)
-
 
 #ifdef __NVCC__
     typedef struct complex16 {
@@ -41,6 +39,7 @@
         uint16_t pdu_bit_map,
         uint16_t ptrs_bit_map
     );
+
 #endif // __NVCC__
 
 
@@ -92,7 +91,8 @@ void multipath_channel_cuda(
     float path_loss,
     float *h_channel_coeffs,
     void *d_tx_sig, void *d_rx_sig,
-    void *d_channel_coeffs
+    void *d_channel_coeffs,
+    void *h_tx_sig_pinned
 );
 
 void add_noise_cuda(

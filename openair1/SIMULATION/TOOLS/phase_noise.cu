@@ -67,6 +67,56 @@ __global__ void add_noise_and_phase_noise_kernel(
 }
 
 
+
+    __global__ void add_noise_and_phase_noise_kernel_batched(
+    const float2* __restrict__ r_sig,
+    short2* __restrict__ output_sig,
+    curandState_t* states,
+    int num_samples,
+    int nb_rx,
+    float sigma,
+    float pn_std_dev,
+    uint16_t pdu_bit_map,
+    uint16_t ptrs_bit_map)
+{
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;  // Sample index
+    const int ii = blockIdx.y;                            // RX antenna index
+    const int c = blockIdx.z;                             // Channel index
+
+    if (i >= num_samples) return;
+
+    const int flat_output_idx = (c * nb_rx * num_samples) + (ii * num_samples) + i;
+    // Index for the smaller, reused pool of cuRAND states (does NOT include channel)
+    const int state_pool_idx = (ii * num_samples) + i;
+
+    curandState_t local_state = states[state_pool_idx];
+
+    float2 noisy_signal = r_sig[flat_output_idx];
+
+    float2 awgn = curand_normal2(&local_state);
+    noisy_signal.x += awgn.x * sigma;
+    noisy_signal.y += awgn.y * sigma;
+
+    float2 final_signal = noisy_signal;
+
+    if (pdu_bit_map & ptrs_bit_map) {
+        float phase_error = curand_normal(&local_state) * pn_std_dev;
+        float cos_phi, sin_phi;
+        __sincosf(phase_error, &sin_phi, &cos_phi);
+        float2 phase_rot = make_float2(cos_phi, sin_phi);
+        final_signal = complex_mul(noisy_signal, phase_rot);
+    }
+
+    states[state_pool_idx] = local_state; 
+    
+    output_sig[flat_output_idx] = make_short2(
+        (short)fmaxf(-32768.0f, fminf(32767.0f, final_signal.x)),
+        (short)fmaxf(-32768.0f, fminf(32767.0f, final_signal.y))
+    );
+}
+
+
+
 extern "C" {
 
     void add_noise_cuda(
@@ -84,63 +134,64 @@ extern "C" {
         short2 *d_output_sig = (short2*)d_output_sig_void;
         curandState_t *d_curand_states = (curandState_t*)d_curand_states_void;
 
-    #if defined(USE_UNIFIED_MEMORY)
-        // --- UNIFIED MEMORY PATH ---
-        // 1. CPU writes directly to the managed d_r_sig buffer.
-        for (int ii = 0; ii < nb_rx; ii++) {
-            for (int i = 0; i < num_samples; i++) {
-                d_r_sig[ii * num_samples + i] = make_float2(r_re[ii][i], r_im[ii][i]);
-            }
-        }
-    #else
-        // --- EXPLICIT COPY PATH ---
-        // 1. Use the pre-allocated pinned buffer as a staging area.
-        float2* h_r_sig = (float2*)h_r_sig_void;
-        for (int ii = 0; ii < nb_rx; ii++) {
-            for (int i = 0; i < num_samples; i++) {
-                h_r_sig[ii * num_samples + i] = make_float2(r_re[ii][i], r_im[ii][i]);
-            }
-        }
-        // 2. Explicitly copy from pinned host memory to device.
-        CHECK_CUDA(cudaMemcpy(d_r_sig, h_r_sig, nb_rx * num_samples * sizeof(float2), cudaMemcpyHostToDevice));
-    #endif
+        float2* kernel_input_ptr;
 
-        // --- COMMON KERNEL LAUNCH ---
+        #if defined(USE_UNIFIED_MEMORY)
+                for (int ii = 0; ii < nb_rx; ii++) {
+                    for (int i = 0; i < num_samples; i++) {
+                        d_r_sig[ii * num_samples + i] = make_float2(r_re[ii][i], r_im[ii][i]);
+                    }
+                }
+                kernel_input_ptr = d_r_sig;
+        #elif defined(USE_ATS_MEMORY)
+                float2* h_r_sig = (float2*)h_r_sig_void;
+                for (int ii = 0; ii < nb_rx; ii++) {
+                    for (int i = 0; i < num_samples; i++) {
+                        h_r_sig[ii * num_samples + i] = make_float2(r_re[ii][i], r_im[ii][i]);
+                    }
+                }
+                kernel_input_ptr = h_r_sig;
+        #else // EXPLICIT COPY
+                float2 *d_r_sig = (float2*)d_r_sig_void;
+                float2* h_r_sig = (float2*)h_r_sig_void;
+                for (int ii = 0; ii < nb_rx; ii++) {
+                    for (int i = 0; i < num_samples; i++) {
+                        h_r_sig[ii * num_samples + i] = make_float2(r_re[ii][i], r_im[ii][i]);
+                    }
+                }
+                CHECK_CUDA(cudaMemcpy(d_r_sig, h_r_sig, nb_rx * num_samples * sizeof(float2), cudaMemcpyHostToDevice));
+                kernel_input_ptr = d_r_sig;
+        #endif
+
         dim3 threadsPerBlock(256, 1);
         dim3 numBlocks((num_samples + threadsPerBlock.x - 1) / threadsPerBlock.x, nb_rx);
         float pn_variance = 1e-5f * 2.0f * 3.1415926535f * 300.0f * (float)ts;
         add_noise_and_phase_noise_kernel<<<numBlocks, threadsPerBlock>>>(
-            d_r_sig, d_output_sig, d_curand_states, num_samples,
+            kernel_input_ptr, d_output_sig, d_curand_states, num_samples,
             sqrtf(sigma2 / 2.0f), sqrtf(pn_variance), pdu_bit_map, ptrs_bit_map
         );
 
-    #if defined(USE_UNIFIED_MEMORY)
-        // --- UNIFIED MEMORY PATH ---
-        // 3. Synchronize to ensure GPU is finished.
-        CHECK_CUDA( cudaDeviceSynchronize() );
-        // 4. CPU reads directly from the managed d_output_sig buffer.
-        for (int ii = 0; ii < nb_rx; ii++) {
-            for (int i = 0; i < num_samples; i++) {
-                short2 result = d_output_sig[ii * num_samples + i];
-                output_signal[ii][i + slot_offset + delay].r = result.x;
-                output_signal[ii][i + slot_offset + delay].i = result.y;
-            }
-        }
-    #else
-        // --- EXPLICIT COPY PATH ---
-        // 3. Copy from device to pinned host memory.
-        short2* h_output_temp = (short2*)h_output_temp_void;
-        CHECK_CUDA(cudaMemcpy(h_output_temp, d_output_sig, nb_rx * num_samples * sizeof(short2), cudaMemcpyDeviceToHost));
-        CHECK_CUDA(cudaDeviceSynchronize());
-        // 4. Distribute data from the pinned buffer to the final OAI buffers.
-        for (int ii = 0; ii < nb_rx; ii++) {
-            memcpy(
-                output_signal[ii] + slot_offset + delay,
-                h_output_temp + ii * num_samples,
-                num_samples * sizeof(short2)
-            );
-        }
-    #endif
+        #if defined(USE_UNIFIED_MEMORY)
+                CHECK_CUDA( cudaDeviceSynchronize() );
+                for (int ii = 0; ii < nb_rx; ii++) {
+                    for (int i = 0; i < num_samples; i++) {
+                        short2 result = d_output_sig[ii * num_samples + i];
+                        output_signal[ii][i + slot_offset + delay].r = result.x;
+                        output_signal[ii][i + slot_offset + delay].i = result.y;
+                    }
+                }
+        #else
+                short2* h_output_temp = (short2*)h_output_temp_void;
+                CHECK_CUDA(cudaMemcpy(h_output_temp, d_output_sig, nb_rx * num_samples * sizeof(short2), cudaMemcpyDeviceToHost));
+                CHECK_CUDA(cudaDeviceSynchronize());
+                for (int ii = 0; ii < nb_rx; ii++) {
+                    memcpy(
+                        output_signal[ii] + slot_offset + delay,
+                        h_output_temp + ii * num_samples,
+                        num_samples * sizeof(short2)
+                    );
+                }
+        #endif
     }
 
     // --- Helper functions to manage cuRAND states from C code ---
@@ -161,53 +212,4 @@ extern "C" {
             CHECK_CUDA(cudaFree(d_curand_states));
         }
     }
-
-
-__global__ void add_noise_and_phase_noise_kernel_batched(
-    const float2* __restrict__ r_sig,
-    short2* __restrict__ output_sig,
-    curandState_t* states,
-    int num_samples,
-    int nb_rx, // Add nb_rx for indexing
-    float sigma,
-    float pn_std_dev,
-    uint16_t pdu_bit_map,
-    uint16_t ptrs_bit_map)
-{
-    // Decompose the 3D grid into sample, antenna, and channel indices
-    const int i = blockIdx.x * blockDim.x + threadIdx.x; // Sample index
-    const int ii = blockIdx.y;                          // RX antenna index
-    const int c = blockIdx.z;                           // Channel index
-
-    if (i >= num_samples) return;
-
-    // Calculate the unique flat index for this thread across all channels
-    const int flat_idx = (c * nb_rx * num_samples) + (ii * num_samples) + i;
-
-    curandState_t local_state = states[flat_idx];
-
-    float2 noisy_signal = r_sig[flat_idx];
-
-    float2 awgn = curand_normal2(&local_state);
-    noisy_signal.x += awgn.x * sigma;
-    noisy_signal.y += awgn.y * sigma;
-
-    float2 final_signal = noisy_signal;
-
-    if (pdu_bit_map & ptrs_bit_map) {
-        float phase_error = curand_normal(&local_state) * pn_std_dev;
-        float cos_phi, sin_phi;
-        __sincosf(phase_error, &sin_phi, &cos_phi);
-        float2 phase_rot = make_float2(cos_phi, sin_phi);
-        final_signal = complex_mul(noisy_signal, phase_rot);
-    }
-
-    states[flat_idx] = local_state; 
-    output_sig[flat_idx] = make_short2(
-        (short)fmaxf(-32768.0f, fminf(32767.0f, final_signal.x)),
-        (short)fmaxf(-32768.0f, fminf(32767.0f, final_signal.y))
-    );
-}
-
-
 } // extern "C"

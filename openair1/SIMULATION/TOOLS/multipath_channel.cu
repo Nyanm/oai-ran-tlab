@@ -21,7 +21,6 @@ __device__ __forceinline__ float2 complex_add(float2 a, float2 b) {
     return make_float2(a.x + b.x, a.y + b.y);
 }
 
-// __constant__ float2 d_channel_const[MAX_CHANNEL_ELEMENTS];
 
 
 __global__ void multipath_channel_kernel(
@@ -70,90 +69,6 @@ __global__ void multipath_channel_kernel(
     rx_sig[ii * num_samples + i].y = rx_tmp.y * path_loss;
 }
 
-extern "C" {
-
-void multipath_channel_cuda(
-    float **tx_sig_re, float **tx_sig_im,
-    float **rx_sig_re, float **rx_sig_im,
-    int nb_tx, int nb_rx, int channel_length,
-    uint32_t length, uint64_t channel_offset,
-    float path_loss,
-    float *h_channel_coeffs,
-    void *d_tx_sig_void, void *d_rx_sig_void,
-    void *d_channel_coeffs_void
-)
-{
-    float2 *d_tx_sig = (float2*)d_tx_sig_void;
-    float2 *d_rx_sig = (float2*)d_rx_sig_void;
-    float2 *d_channel_coeffs = (float2*)d_channel_coeffs_void;
-    int num_samples = length - (int)channel_offset;
-
-    #if defined(USE_UNIFIED_MEMORY)
-        // --- UNIFIED MEMORY PATH ---
-        // 1. CPU writes directly to the managed d_tx_sig buffer, interleaving the data.
-        for (int j = 0; j < nb_tx; j++) {
-            for (int i = 0; i < num_samples; i++) {
-                d_tx_sig[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
-            }
-        }
-    #else
-        // --- EXPLICIT COPY PATH ---
-        // 1. Interleave data into a temporary host buffer.
-        float2* h_tx_sig_interleaved = (float2*)malloc(nb_tx * num_samples * sizeof(float2));
-        for (int j = 0; j < nb_tx; j++) {
-            for (int i = 0; i < num_samples; i++) {
-                h_tx_sig_interleaved[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
-            }
-        }
-        // 2. Explicitly copy from host to device.
-        CHECK_CUDA( cudaMemcpy(d_tx_sig, h_tx_sig_interleaved, nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice) );
-        free(h_tx_sig_interleaved);
-    #endif
-
-
-    // 1. Copy the channel coefficients to the GPU global memory buffer
-    size_t channel_size_bytes = nb_tx * nb_rx * channel_length * sizeof(float2);
-    CHECK_CUDA( cudaMemcpy(d_channel_coeffs, h_channel_coeffs, channel_size_bytes, cudaMemcpyHostToDevice) );
-
-    
-        // --- COMMON KERNEL LAUNCH ---
-        // update_channel_coeffs_symbol(h_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2));
-        dim3 threadsPerBlock(512, 1);
-        dim3 numBlocks((num_samples + threadsPerBlock.x - 1) / threadsPerBlock.x, nb_rx);
-        size_t sharedMemSize = (threadsPerBlock.x + channel_length - 1) * sizeof(float2);
-        multipath_channel_kernel<<<numBlocks, threadsPerBlock, sharedMemSize>>>(
-            d_channel_coeffs, d_tx_sig, d_rx_sig, num_samples, channel_length, nb_tx, nb_rx, path_loss);
-         
-    #if defined(USE_UNIFIED_MEMORY)
-        // --- UNIFIED MEMORY PATH ---
-        // 3. Synchronize to ensure the GPU is finished before the CPU reads the result.
-        CHECK_CUDA( cudaDeviceSynchronize() );
-        // 4. CPU reads directly from the managed d_rx_sig buffer, de-interleaving the data.
-        for (int ii = 0; ii < nb_rx; ii++) {
-            for (int i = 0; i < num_samples; i++) {
-                float2 result = d_rx_sig[ii * num_samples + i];
-                rx_sig_re[ii][i + channel_offset] = result.x;
-                rx_sig_im[ii][i + channel_offset] = result.y;
-            }
-        }
-    #else
-        // --- EXPLICIT COPY PATH ---
-        // 3. Copy result from device back to a temporary host buffer.
-        float2* h_rx_sig = (float2*)malloc(nb_rx * num_samples * sizeof(float2));
-        CHECK_CUDA( cudaMemcpy(h_rx_sig, d_rx_sig, nb_rx * num_samples * sizeof(float2), cudaMemcpyDeviceToHost) );
-        // 4. De-interleave data into the final output buffers.
-        for (int ii = 0; ii < nb_rx; ii++) {
-            for (int i = 0; i < num_samples; i++) {
-                float2 result = h_rx_sig[ii * num_samples + i];
-                rx_sig_re[ii][i + channel_offset] = result.x;
-                rx_sig_im[ii][i + channel_offset] = result.y;
-            }
-        }
-        free(h_rx_sig);
-    #endif
-    }
-
-
 
 __global__ void multipath_channel_kernel_batched(
     const float2* __restrict__ d_channel_coeffs,
@@ -167,17 +82,16 @@ __global__ void multipath_channel_kernel_batched(
 {
     extern __shared__ float2 tx_shared[];
     
-    // Decompose the 3D grid into sample, antenna, and channel indices
-    const int i = blockIdx.x * blockDim.x + threadIdx.x; // Sample index
-    const int ii = blockIdx.y;                          // RX antenna index
-    const int c = blockIdx.z;                           // Channel index
+
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    const int ii = blockIdx.y;                         
+    const int c = blockIdx.z;                         
 
     if (i >= num_samples) return;
 
     float2 rx_tmp = make_float2(0.0f, 0.0f);
-    const float path_loss = path_loss_batch[c]; // Get path loss for the current channel
+    const float path_loss = path_loss_batch[c]; 
 
-    // Calculate the base offset for this channel's signals
     const int channel_tx_offset = c * nb_tx * num_samples;
     const int channel_rx_offset = c * nb_rx * num_samples;
 
@@ -186,7 +100,6 @@ __global__ void multipath_channel_kernel_batched(
         const int block_start_idx = blockIdx.x * blockDim.x;
         const int shared_mem_size = blockDim.x + channel_length - 1;
 
-        // Load this channel's data into shared memory
         for (int k = tid; k < shared_mem_size; k += blockDim.x) {
             int load_idx = block_start_idx + k - (channel_length - 1);
             if (load_idx >= 0 && load_idx < num_samples) {
@@ -199,7 +112,6 @@ __global__ void multipath_channel_kernel_batched(
 
         for (int l = 0; l < channel_length; l++) {
             float2 tx_sample = tx_shared[tid + (channel_length - 1) - l];
-            // Calculate index for this channel's coefficients
             int chan_link_idx = (c * nb_tx * nb_rx) + (ii + j * nb_rx);
             float2 chan_weight = d_channel_coeffs[chan_link_idx * channel_length + l];
             rx_tmp = complex_add(rx_tmp, complex_mul(tx_sample, chan_weight));
@@ -211,5 +123,86 @@ __global__ void multipath_channel_kernel_batched(
     rx_sig[channel_rx_offset + ii * num_samples + i].y = rx_tmp.y * path_loss;
 }
 
+
+
+extern "C" {
+
+void multipath_channel_cuda(
+    float **tx_sig_re, float **tx_sig_im,
+    float **rx_sig_re, float **rx_sig_im,
+    int nb_tx, int nb_rx, int channel_length,
+    uint32_t length, uint64_t channel_offset,
+    float path_loss,
+    float *h_channel_coeffs,
+    void *d_tx_sig_void, void *d_rx_sig_void,
+    void *d_channel_coeffs_void,
+    void *h_tx_sig_pinned_void 
+)
+{
+    float2 *d_tx_sig = (float2*)d_tx_sig_void;
+    float2 *d_rx_sig = (float2*)d_rx_sig_void;
+    float2 *d_channel_coeffs = (float2*)d_channel_coeffs_void;
+    int num_samples = length - (int)channel_offset;
+    float2* kernel_input_ptr;
+
+    #if defined(USE_UNIFIED_MEMORY)
+            for (int j = 0; j < nb_tx; j++) {
+                for (int i = 0; i < num_samples; i++) {
+                    d_tx_sig[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
+                }
+            }
+            kernel_input_ptr = d_tx_sig;
+    #elif defined(USE_ATS_MEMORY)
+            float2* h_tx_sig_pinned = (float2*)h_tx_sig_pinned_void;
+            for (int j = 0; j < nb_tx; j++) {
+                for (int i = 0; i < num_samples; i++) {
+                    h_tx_sig_pinned[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
+                }
+            }
+            kernel_input_ptr = h_tx_sig_pinned; 
+    #else // EXPLICIT COPY
+            float2 *d_tx_sig = (float2*)d_tx_sig_void;
+            float2* h_tx_sig_pinned = (float2*)h_tx_sig_pinned_void;
+            for (int j = 0; j < nb_tx; j++) {
+                for (int i = 0; i < num_samples; i++) {
+                    h_tx_sig_pinned[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
+                }
+            }
+            CHECK_CUDA( cudaMemcpy(d_tx_sig, h_tx_sig_pinned, nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice) );
+            kernel_input_ptr = d_tx_sig;
+    #endif
+
+    size_t channel_size_bytes = nb_tx * nb_rx * channel_length * sizeof(float2);
+    CHECK_CUDA( cudaMemcpy(d_channel_coeffs, h_channel_coeffs, channel_size_bytes, cudaMemcpyHostToDevice) );
+
+    dim3 threadsPerBlock(512, 1);
+    dim3 numBlocks((num_samples + threadsPerBlock.x - 1) / threadsPerBlock.x, nb_rx);
+    size_t sharedMemSize = (threadsPerBlock.x + channel_length - 1) * sizeof(float2);
+    multipath_channel_kernel<<<numBlocks, threadsPerBlock, sharedMemSize>>>(
+        d_channel_coeffs, kernel_input_ptr, d_rx_sig, num_samples, channel_length, nb_tx, nb_rx, path_loss);
+         
+    #if defined(USE_UNIFIED_MEMORY)
+            CHECK_CUDA( cudaDeviceSynchronize() );
+            for (int ii = 0; ii < nb_rx; ii++) {
+                for (int i = 0; i < num_samples; i++) {
+                    float2 result = d_rx_sig[ii * num_samples + i];
+                    rx_sig_re[ii][i + channel_offset] = result.x;
+                    rx_sig_im[ii][i + channel_offset] = result.y;
+                }
+            }
+    #else
+            CHECK_CUDA( cudaDeviceSynchronize() ); 
+            float2* h_rx_sig = (float2*)malloc(nb_rx * num_samples * sizeof(float2));
+            CHECK_CUDA( cudaMemcpy(h_rx_sig, d_rx_sig, nb_rx * num_samples * sizeof(float2), cudaMemcpyDeviceToHost) );
+            for (int ii = 0; ii < nb_rx; ii++) {
+                for (int i = 0; i < num_samples; i++) {
+                    float2 result = h_rx_sig[ii * num_samples + i];
+                    rx_sig_re[ii][i + channel_offset] = result.x;
+                    rx_sig_im[ii][i + channel_offset] = result.y;
+                }
+            }
+            free(h_rx_sig);
+    #endif
+}
 
 } // extern "C"
