@@ -91,6 +91,14 @@ void add_noise_cuda(
     void *h_output_sig_pinned
 );
 
+void sum_channel_outputs_cuda(
+    void **d_individual_outputs,
+    void *d_final_output,
+    int num_channels,
+    int nb_rx,
+    int num_samples
+);
+
 void* create_and_init_curand_states_cuda(int num_elements, unsigned long long seed);
 void destroy_curand_states_cuda(void* d_curand_states);
 

@@ -411,6 +411,7 @@ int main(int argc, char **argv)
     void *d_tx_sig = NULL, *d_intermediate_sig = NULL, *d_final_output = NULL;
     void *d_curand_states = NULL;
     void *h_tx_sig_pinned = NULL, *h_final_output_pinned = NULL;
+    void *d_channel_coeffs_gpu = NULL;
   #endif
 
   static struct option long_options[] = {
@@ -743,6 +744,11 @@ printf("%d\n", slot);
         cudaMallocHost(&h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short) * 2);
     #endif
 
+        const int max_taps_alloc = 256; // Safe upper bound for channel length
+        size_t channel_buffer_size = n_tx * n_rx * max_taps_alloc * sizeof(float) * 2;
+        cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size);
+
+
       int num_rand_elements = n_rx * num_samples_alloc;
       d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
     }
@@ -964,7 +970,7 @@ printf("%d\n", slot);
                                 0,
                                 0);
 
-  float* h_channel_coeffs = NULL;      
+  float* h_channel_coeffs = NULL;   
   if (use_cuda) {
       int num_links = n_tx * n_rx;
       h_channel_coeffs = (float*)malloc(num_links * gNB2UE->channel_length * sizeof(float) * 2);
@@ -1361,7 +1367,8 @@ printf("%d\n", slot);
                 n_tx, n_rx, gNB2UE->channel_length, slot_length, path_loss, h_channel_coeffs,
                 (float)sigma2, ts, pdu_bit_map, 0x1, slot_offset, delay,
                 d_tx_sig, d_intermediate_sig, d_final_output,
-                d_curand_states, h_tx_sig_pinned, h_final_output_pinned
+                d_curand_states, h_tx_sig_pinned, h_final_output_pinned,
+                d_channel_coeffs_gpu
             );
             cudaDeviceSynchronize();
             stop_meas(&pipeline_stats);
@@ -1618,6 +1625,7 @@ printf("%d\n", slot);
       cudaFreeHost(h_tx_sig_pinned);
       cudaFreeHost(h_final_output_pinned);
   #endif
+      cudaFree(d_channel_coeffs_gpu);
       destroy_curand_states_cuda(d_curand_states);
       free(h_channel_coeffs);
   }
