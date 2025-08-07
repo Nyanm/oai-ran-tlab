@@ -1005,6 +1005,7 @@ void nr_ue_csi_rs_procedures(PHY_VARS_NR_UE *ue,
   int trs_cfo = 0;
   const bool do_trs_est = (csirs_config_pdu->csi_type == 0) && (res_idx == 1);
   if (do_trs_est) {
+    start_meas_nr_ue_phy(ue, TRS_PROCESSING);
     nr_ue_trs_processing(ue,
                          trs_estimates,
                          csi_rs_ls_estimated_channel,
@@ -1015,6 +1016,7 @@ void nr_ue_csi_rs_procedures(PHY_VARS_NR_UE *ue,
                          csirs_config_pdu->symb_l0,
                          &trs_cfo,
                          NULL); // Time offset not estimated because it is corrected using PBCH DMRS
+    stop_meas_nr_ue_phy(ue, TRS_PROCESSING);
   }
 
   switch (csirs_config_pdu->measurement_bitmap) {
