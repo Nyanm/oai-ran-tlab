@@ -33,14 +33,14 @@ int main(int argc, char **argv) {
     logInit();
     randominit(0);
     
-    // --- Configuration with Defaults ---
     int num_channels = 1;
     int nb_tx = 4;
     int nb_rx = 4;
     int num_samples = 30720;
     int channel_length = 32;
     int num_trials = 50;
-    int sum_outputs = 0;
+    int sum_outputs = 1; // Enable sum_outputs by default for this example
+    int use_streams = 1; // Enable streams by default
 
     // --- Argument Parsing ---
     struct option long_options[] = {
@@ -118,22 +118,16 @@ int main(int argc, char **argv) {
     }
 
     c16_t ***output_cpu = malloc(num_channels * sizeof(c16_t**));
-    c16_t ***output_gpu = malloc(num_channels * sizeof(c16_t**));
     for(int c=0; c<num_channels; c++){
         output_cpu[c] = malloc(nb_rx * sizeof(c16_t*));
-        output_gpu[c] = malloc(nb_rx * sizeof(c16_t*));
-        // Allocate one contiguous block for all antennas
         output_cpu[c][0] = malloc(nb_rx * num_samples * sizeof(c16_t));
-        output_gpu[c][0] = malloc(nb_rx * num_samples * sizeof(c16_t));
-        // Set pointers for other antennas
         for(int i=1; i<nb_rx; i++) {
             output_cpu[c][i] = output_cpu[c][0] + i * num_samples;
-            output_gpu[c][i] = output_gpu[c][0] + i * num_samples;
         }
     }
     
     void *d_tx_sig=NULL, *d_rx_sig=NULL, *d_output_noise=NULL, *d_curand_states=NULL, 
-         *h_tx_sig_pinned=NULL, *h_output_sig_pinned=NULL, *d_channel_coeffs_gpu=NULL,
+         *h_tx_sig_pinned=NULL, *d_channel_coeffs_gpu=NULL,
          **d_individual_gpu_outputs = NULL, *d_summed_gpu_output = NULL;
     float* h_channel_coeffs = NULL;
 
@@ -141,19 +135,10 @@ int main(int argc, char **argv) {
     cudaMalloc(&d_channel_coeffs_gpu, nb_tx * nb_rx * max_taps * sizeof(float2));
     h_channel_coeffs = malloc(nb_tx * nb_rx * max_taps * sizeof(float2));
 
-    #if defined(USE_UNIFIED_MEMORY)
-        cudaMallocManaged(&d_tx_sig, nb_tx * num_samples * sizeof(float2), cudaMemAttachGlobal);
-        cudaMallocManaged(&d_rx_sig, nb_rx * num_samples * sizeof(float2), cudaMemAttachGlobal);
-        cudaMallocManaged(&d_output_noise, nb_rx * num_samples * sizeof(short2), cudaMemAttachGlobal);
-        h_tx_sig_pinned = d_tx_sig;
-        h_output_sig_pinned = d_output_noise;
-    #else 
-        cudaMalloc(&d_tx_sig, nb_tx * num_samples * sizeof(float2));
-        cudaMalloc(&d_rx_sig, nb_rx * num_samples * sizeof(float2));
-        cudaMalloc(&d_output_noise, nb_rx * num_samples * sizeof(short2));
-        cudaMallocHost(&h_tx_sig_pinned, nb_tx * num_samples * sizeof(float2));
-        cudaMallocHost(&h_output_sig_pinned, nb_rx * num_samples * sizeof(short2));
-    #endif
+    cudaMalloc(&d_tx_sig, nb_tx * num_samples * sizeof(float2));
+    cudaMalloc(&d_rx_sig, nb_rx * num_samples * sizeof(float2));
+    cudaMalloc(&d_output_noise, nb_rx * num_samples * sizeof(short2)); // Used for non-streamed path
+    cudaMallocHost(&h_tx_sig_pinned, nb_tx * num_samples * sizeof(float2));
 
     if (sum_outputs) {
         d_individual_gpu_outputs = malloc(num_channels * sizeof(void*));
@@ -163,9 +148,7 @@ int main(int argc, char **argv) {
         cudaMalloc(&d_summed_gpu_output, nb_rx * num_samples * sizeof(short2));
     }
     d_curand_states = create_and_init_curand_states_cuda(nb_rx * num_samples, time(NULL));
-
-
-
+    
     // // --- WARM-UP RUN ---
     // printf("Performing GPU warm-up run...\n");
     // // A warm-up just needs to execute the kernels; input data content is not critical.
@@ -184,9 +167,7 @@ int main(int argc, char **argv) {
     double total_cpu_ns = 0;
     double total_gpu_ns = 0;
 
-    // --- MAIN TIMING LOOP ---
     for (int t = 0; t < num_trials; t++) {
-        // Generate unique signals if summing, otherwise one shared signal
         for(int i=0; i<num_tx_signals; i++) {
             generate_random_signal(tx_sig_re[i], tx_sig_im[i], nb_tx, num_samples);
         }
@@ -221,24 +202,14 @@ int main(int argc, char **argv) {
 
         // --- GPU RUN ---
         clock_gettime(CLOCK_MONOTONIC, &start);
-        if (sum_outputs) {
-            for(int c=0; c<num_channels; c++){
-                float path_loss = (float)pow(10, channels[c]->path_loss_dB / 20.0);
-                 for (int link = 0; link < nb_tx * nb_rx; link++) {
-                    for (int l = 0; l < channels[c]->channel_length; l++) {
-                        int idx = link * channels[c]->channel_length + l;
-                        ((float2*)h_channel_coeffs)[idx].x = (float)channels[c]->ch[link][l].r;
-                        ((float2*)h_channel_coeffs)[idx].y = (float)channels[c]->ch[link][l].i;
-                    }
-                }
-                // Call pipeline with NULL for host output pointer to prevent D->H copy
-                // and provide the per-channel device output buffer instead.
-                run_channel_pipeline_cuda(tx_sig_re[c], tx_sig_im[c], NULL, nb_tx, nb_rx, channels[c]->channel_length, num_samples, path_loss, h_channel_coeffs, 0.1, 0, 0, 0, 0, 0, d_tx_sig, d_rx_sig, d_individual_gpu_outputs[c], d_curand_states, h_tx_sig_pinned, h_output_sig_pinned, d_channel_coeffs_gpu);
+
+        if (use_streams) {
+            printf("Running with CUDA streams...\n");
+            cudaStream_t streams[num_channels];
+            for(int c=0; c<num_channels; c++) {
+                cudaStreamCreateWithFlags(&streams[c], cudaStreamNonBlocking);
             }
-            // All channels processed, now sum their outputs on the GPU
-            sum_channel_outputs_cuda(d_individual_gpu_outputs, d_summed_gpu_output, num_channels, nb_rx, num_samples);
-        } else {
-            // Original benchmark logic
+
             for(int c=0; c<num_channels; c++){
                 float path_loss = (float)pow(10, channels[c]->path_loss_dB / 20.0);
                 for (int link = 0; link < nb_tx * nb_rx; link++) {
@@ -248,11 +219,48 @@ int main(int argc, char **argv) {
                         ((float2*)h_channel_coeffs)[idx].y = (float)channels[c]->ch[link][l].i;
                     }
                 }
-                // Correctly pass the first signal (float**) from the (float***) array
-                run_channel_pipeline_cuda(tx_sig_re[0], tx_sig_im[0], output_gpu[c], nb_tx, nb_rx, channels[c]->channel_length, num_samples, path_loss, h_channel_coeffs, 0.1, 0, 0, 0, 0, 0, d_tx_sig, d_rx_sig, d_output_noise, d_curand_states, h_tx_sig_pinned, h_output_sig_pinned, d_channel_coeffs_gpu);
+                
+                run_channel_pipeline_cuda_streamed(
+                    sum_outputs ? tx_sig_re[c] : tx_sig_re[0],
+                    sum_outputs ? tx_sig_im[c] : tx_sig_im[0],
+                    nb_tx, nb_rx, channels[c]->channel_length, num_samples,
+                    path_loss, h_channel_coeffs, 0.1, 0, 0xFFFF, 0xFFFF,
+                    d_tx_sig, d_rx_sig, d_individual_gpu_outputs[c], d_curand_states,
+                    h_tx_sig_pinned, d_channel_coeffs_gpu,
+                    streams[c]
+                );
+            }
+
+            if (sum_outputs) {
+                // The sum can be in its own stream or the default (NULL) stream
+                sum_channel_outputs_cuda(d_individual_gpu_outputs, d_summed_gpu_output, num_channels, nb_rx, num_samples);
+            }
+
+            cudaDeviceSynchronize();
+
+            for(int c=0; c<num_channels; c++) {
+                cudaStreamDestroy(streams[c]);
+            }
+
+        } else { // Original, non-streamed path for comparison
+            for(int c=0; c<num_channels; c++){
+                float path_loss = (float)pow(10, channels[c]->path_loss_dB / 20.0);
+                for (int link = 0; link < nb_tx * nb_rx; link++) {
+                    for (int l = 0; l < channels[c]->channel_length; l++) {
+                        int idx = link * channels[c]->channel_length + l;
+                        ((float2*)h_channel_coeffs)[idx].x = (float)channels[c]->ch[link][l].r;
+                        ((float2*)h_channel_coeffs)[idx].y = (float)channels[c]->ch[link][l].i;
+                    }
+                }
+                run_channel_pipeline_cuda(
+                    tx_sig_re[0], tx_sig_im[0], output_cpu[c], // A placeholder CPU output
+                    nb_tx, nb_rx, channels[c]->channel_length, num_samples, path_loss, h_channel_coeffs, 0.1, 0, 
+                    0xFFFF, 0xFFFF, 0, 0, 
+                    d_tx_sig, d_rx_sig, d_output_noise, d_curand_states,
+                    h_tx_sig_pinned, NULL, d_channel_coeffs_gpu
+                );
             }
         }
-        cudaDeviceSynchronize();
         clock_gettime(CLOCK_MONOTONIC, &end);
         total_gpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
     }
@@ -312,11 +320,12 @@ int main(int argc, char **argv) {
 
         for (int c=0; c<num_channels; c++) {
             free(output_cpu[c][0]);
-            free(output_gpu[c][0]);
+            // free(output_gpu[c][0]);
             free(output_cpu[c]);
-            free(output_gpu[c]);
+            // free(output_gpu[c]);
         }
-        free(output_cpu); free(output_gpu);
+        free(output_cpu); 
+        // free(output_gpu);
 
         #if defined(USE_UNIFIED_MEMORY)
             cudaFree(d_tx_sig);
@@ -327,7 +336,7 @@ int main(int argc, char **argv) {
             cudaFree(d_rx_sig);
             cudaFreeHost(h_tx_sig_pinned);
             cudaFree(d_output_noise);
-            cudaFreeHost(h_output_sig_pinned);
+            // cudaFreeHost(h_output_sig_pinned);
         #endif
         cudaFree(d_channel_coeffs_gpu);
 
