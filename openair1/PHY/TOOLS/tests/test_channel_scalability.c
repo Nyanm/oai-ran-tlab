@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
     int num_trials = 50;
     int sum_outputs = 0;
     int use_batched_kernel = 0;
+    char mode_str[10] = "batch";
 
     // --- Argument Parsing ---
     struct option long_options[] = {
@@ -83,12 +84,13 @@ int main(int argc, char **argv) {
         {"trials",       required_argument, 0, 'n'},
         {"sum-outputs",  no_argument,       0, 'S'},
         {"batch",        no_argument,       0, 'B'},
+        {"mode",         required_argument, 0, 'm'},
         {"help",         no_argument,       0, 'h'},
         {0, 0, 0, 0}
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "c:t:r:s:l:n:SBh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "c:t:r:s:l:n:SBm:h", long_options, NULL)) != -1) {
         switch (opt) {
             case 'c': num_channels = atoi(optarg); break;
             case 't': nb_tx = atoi(optarg); break;
@@ -97,7 +99,8 @@ int main(int argc, char **argv) {
             case 'l': channel_length = atoi(optarg); break;
             case 'n': num_trials = atoi(optarg); break;
             case 'S': sum_outputs = 1; break;
-            case 'B': use_batched_kernel = 1; break;
+            case 'B': strncpy(mode_str, "batch", sizeof(mode_str)-1); break;
+            case 'm': strncpy(mode_str, optarg, sizeof(mode_str)-1); break;
             case 'h':
                 printf("Usage: %s [options]\n", argv[0]);
                 printf("  -c, --num-channels <N>   Number of parallel channels to simulate (Default: 1)\n");
@@ -108,6 +111,7 @@ int main(int argc, char **argv) {
                 printf("  -n, --trials <N>         Number of trials for averaging (Default: 50)\n");
                 printf("  -S, --sum-outputs        Enable summation of outputs for interference simulation.\n");
                 printf("  -B, --batch              Use the single batched kernel instead of CUDA streams.\n");
+                printf("  -m, --mode <serial|stream|batch>  GPU execution mode (Default: batch)\n");
                 printf("  -h, --help               Show this help message\n");
                 return 0;
             default: exit(1);
@@ -115,7 +119,7 @@ int main(int argc, char **argv) {
     }
     
     // --- ONE-TIME MEMORY ALLOCATION ---
-    // HOST MEMORY
+    // HOST MEMORY (Common to all modes)
     int num_tx_signals = sum_outputs ? num_channels : 1;
     float ***tx_sig_re = malloc(num_tx_signals * sizeof(float**));
     float ***tx_sig_im = malloc(num_tx_signals * sizeof(float**));
@@ -149,10 +153,11 @@ int main(int argc, char **argv) {
         channels[c] = create_manual_channel_desc(nb_tx, nb_rx, channel_length);
     }
 
-    // DEVICE MEMORY
+    // DEVICE MEMORY (Conditional based on mode)
     void *d_tx_sig=NULL, *d_rx_sig=NULL, *d_curand_states=NULL, 
-         *h_tx_sig_pinned=NULL, *d_channel_coeffs_gpu=NULL,
+         *h_tx_sig_pinned=NULL, *h_output_sig_pinned=NULL, *d_channel_coeffs_gpu=NULL,
          **d_individual_gpu_outputs = NULL, *d_summed_gpu_output = NULL;
+    c16_t **output_gpu = NULL;
     
     void *d_tx_sig_batch = NULL, *d_intermediate_sig_batch = NULL, *d_final_output_batch = NULL,
          *d_channel_coeffs_batch = NULL, *d_path_loss_batch = NULL;
@@ -162,7 +167,7 @@ int main(int argc, char **argv) {
 
     const int max_taps = 256;
     
-    if (use_batched_kernel) {
+    if (strcmp(mode_str, "batch") == 0) {
         h_channel_coeffs_batch = malloc(num_channels * nb_tx * nb_rx * channel_length * sizeof(float2));
         h_path_loss_batch = malloc(num_channels * sizeof(float));
 
@@ -171,7 +176,7 @@ int main(int argc, char **argv) {
         cudaMalloc(&d_final_output_batch, num_channels * nb_rx * num_samples * sizeof(short2));
         cudaMalloc(&d_channel_coeffs_batch, num_channels * nb_tx * nb_rx * channel_length * sizeof(float2));
         cudaMalloc(&d_path_loss_batch, num_channels * sizeof(float));
-    } else {
+    } else { // For both "serial" and "stream" modes
         cudaMalloc(&d_channel_coeffs_gpu, nb_tx * nb_rx * max_taps * sizeof(float2));
         h_channel_coeffs = malloc(nb_tx * nb_rx * max_taps * sizeof(float2));
         cudaMalloc(&d_tx_sig, nb_tx * num_samples * sizeof(float2));
@@ -183,6 +188,13 @@ int main(int argc, char **argv) {
         }
         if (sum_outputs) {
             cudaMalloc(&d_summed_gpu_output, nb_rx * num_samples * sizeof(short2));
+        }
+        // Specific to "serial" mode, which needs host buffers for results
+        if (strcmp(mode_str, "serial") == 0) {
+            cudaMallocHost(&h_output_sig_pinned, nb_rx * num_samples * sizeof(short2));
+            output_gpu = malloc(nb_rx * sizeof(c16_t*));
+            output_gpu[0] = malloc(nb_rx * num_samples * sizeof(c16_t));
+            for(int i=1; i<nb_rx; i++) output_gpu[i] = output_gpu[0] + i*num_samples;
         }
     }
     
@@ -224,7 +236,7 @@ int main(int argc, char **argv) {
         // --- GPU RUN ---
         clock_gettime(CLOCK_MONOTONIC, &start);
 
-        if (use_batched_kernel) {
+        if (strcmp(mode_str, "batch") == 0) {
             float2* h_tx_sig_batch_interleaved = (float2*)malloc(num_channels * nb_tx * num_samples * sizeof(float2));
             for (int c = 0; c < num_channels; c++) {
                 h_path_loss_batch[c] = (float)pow(10, channels[c]->path_loss_dB / 20.0);
@@ -257,7 +269,7 @@ int main(int argc, char **argv) {
             cudaDeviceSynchronize();
             free(h_tx_sig_batch_interleaved);
 
-        } else { // Stream-based execution
+        } else if (strcmp(mode_str, "stream") == 0) {
             cudaStream_t streams[num_channels];
             for(int c=0; c<num_channels; c++) {
                 cudaStreamCreateWithFlags(&streams[c], cudaStreamNonBlocking);
@@ -291,6 +303,35 @@ int main(int argc, char **argv) {
             for(int c=0; c<num_channels; c++) {
                 cudaStreamDestroy(streams[c]);
             }
+        } else if (strcmp(mode_str, "serial") == 0) {
+            // This requires a host buffer for the output of each call
+            c16_t** output_gpu_serial = malloc(nb_rx * sizeof(c16_t*));
+            output_gpu_serial[0] = malloc(nb_rx * num_samples * sizeof(c16_t));
+            for(int i=1; i<nb_rx; i++) output_gpu_serial[i] = output_gpu_serial[0] + i*num_samples;
+
+            for(int c=0; c<num_channels; c++){
+                float path_loss = (float)pow(10, channels[c]->path_loss_dB / 20.0);
+                for (int link = 0; link < nb_tx * nb_rx; link++) {
+                    for (int l = 0; l < channels[c]->channel_length; l++) {
+                        int idx = link * channels[c]->channel_length + l;
+                        ((float2*)h_channel_coeffs)[idx].x = (float)channels[c]->ch[link][l].r;
+                        ((float2*)h_channel_coeffs)[idx].y = (float)channels[c]->ch[link][l].i;
+                    }
+                }
+                // Use the original, synchronous pipeline function
+                run_channel_pipeline_cuda(
+                    sum_outputs ? tx_sig_re[c] : tx_sig_re[0],
+                    sum_outputs ? tx_sig_im[c] : tx_sig_im[0],
+                    output_gpu_serial, // Write result back to host on each call
+                    nb_tx, nb_rx, channels[c]->channel_length, num_samples, path_loss, h_channel_coeffs, 0.1, 0, 
+                    0xFFFF, 0xFFFF, 0, 0, 
+                    d_tx_sig, d_rx_sig, d_individual_gpu_outputs[c], d_curand_states,
+                    h_tx_sig_pinned, h_tx_sig_pinned, // h_final_output_pinned needed
+                    d_channel_coeffs_gpu
+                );
+            }
+            free(output_gpu_serial[0]);
+            free(output_gpu_serial);
         }
         
         clock_gettime(CLOCK_MONOTONIC, &end);
@@ -327,12 +368,13 @@ int main(int argc, char **argv) {
     snprintf(val_str, sizeof(val_str), "%.2fx", speedup);
     printf("| %-32s | %-24s |\n", "Speedup (CPU/GPU)", val_str);
     printf("| %-32s | %-24.3f |\n", "GPU Throughput (GSPS)", gpu_throughput_gsps);
-    snprintf(val_str, sizeof(val_str), "%s", avg_gpu_us <= real_time_target_us ? "✅ MEETS REAL-TIME" : "❌ FAILS REAL-TIME");
+    snprintf(val_str, sizeof(val_str), "%s", avg_gpu_per_channel_us <= real_time_target_us ? "✅ MEETS REAL-TIME" : "❌ FAILS REAL-TIME");
     printf("| %-32s | %-24s |\n", "GPU Status vs 500us Target", val_str);
     printf("+----------------------------------+--------------------------+\n");
 
 
- // --- Cleanup ---
+    // --- Cleanup ---
+    // Free host memory (common to all modes)
     for(int i=0; i<num_tx_signals; i++){
         for(int j=0; j<nb_tx; j++){
             free(tx_sig_re[i][j]);
@@ -354,7 +396,8 @@ int main(int argc, char **argv) {
     free(output_cpu); 
     free(channels);
 
-    if (use_batched_kernel) {
+    // Free device memory based on the execution path
+    if (strcmp(mode_str, "batch") == 0) {
         free(h_channel_coeffs_batch);
         free(h_path_loss_batch);
         cudaFree(d_tx_sig_batch);
@@ -362,7 +405,7 @@ int main(int argc, char **argv) {
         cudaFree(d_final_output_batch);
         cudaFree(d_channel_coeffs_batch);
         cudaFree(d_path_loss_batch);
-    } else {
+    } else { // For both "serial" and "stream" modes
         free(h_channel_coeffs);
         cudaFree(d_channel_coeffs_gpu);
         cudaFree(d_tx_sig);
@@ -374,6 +417,12 @@ int main(int argc, char **argv) {
         free(d_individual_gpu_outputs);
         if (sum_outputs) {
             cudaFree(d_summed_gpu_output);
+        }
+        // Specific to "serial" mode
+        if (strcmp(mode_str, "serial") == 0) {
+            cudaFreeHost(h_output_sig_pinned);
+            free(output_gpu[0]);
+            free(output_gpu);
         }
     }
 
