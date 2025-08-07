@@ -29,8 +29,6 @@ echo "--- Starting Automated Scalability Analysis ---"
 echo "Configuration: $PASSTHROUGH_ARGS"
 
 # --- Step 1: Start GPU Monitoring in the Background ---
-# The format is CSV with no headers and no units for easy parsing. Logging every 100ms.
-# NEW: Added memory.used, temperature.gpu, and clock speeds.
 echo "Starting GPU monitor..."
 nvidia-smi --query-gpu=utilization.gpu,power.draw,memory.used,temperature.gpu,clocks.gr,clocks.mem --format=csv,noheader,nounits -lms 100 -f $GPU_LOG &
 NVSMI_PID=$!
@@ -39,63 +37,37 @@ NVSMI_PID=$!
 sleep 1
 
 # --- Step 2: Run the Benchmark Executable in the Foreground ---
-# All arguments passed to this script are forwarded to the C program.
 echo "Running benchmark executable..."
 $BENCHMARK_EXE $PASSTHROUGH_ARGS > $BENCHMARK_LOG
 
 # --- Step 3: Stop GPU Monitoring ---
 echo "Benchmark finished. Stopping GPU monitor."
 kill $NVSMI_PID
-# wait is used to prevent the "Terminated" message from cluttering the output
 wait $NVSMI_PID 2>/dev/null
 
-# --- Step 4: Parse Results and Generate Report ---
+# --- Step 4: Parse GPU Statistics ---
 echo "Generating analysis report..."
-
-# Parse the main benchmark output from the C program
-# Note: This uses the table format we designed previously.
-cpu_time=$(grep "Total CPU Time (us)" $BENCHMARK_LOG | awk -F'|' '{print $3}' | xargs)
-gpu_time=$(grep "Total GPU Time (us)" $BENCHMARK_LOG | awk -F'|' '{print $3}' | xargs)
-speedup=$(grep "Speedup (CPU/GPU)" $BENCHMARK_LOG | awk -F'|' '{print $3}' | xargs)
-
-# Check if the GPU log has data before trying to parse it
 if [ -s "$GPU_LOG" ]; then
-    # Use awk to calculate peak and average from the nvidia-smi log
-    # Original metrics
     peak_gpu_util=$(awk -F, 'BEGIN{max=0} {if ($1>max) max=$1} END{print max}' $GPU_LOG)
     avg_gpu_util=$(awk -F, '{sum+=$1} END{if (NR>0) print sum/NR; else print 0}' $GPU_LOG)
     peak_power=$(awk -F, 'BEGIN{max=0} {if ($2>max) max=$2} END{print max}' $GPU_LOG)
     avg_power=$(awk -F, '{sum+=$2} END{if (NR>0) print sum/NR; else print 0}' $GPU_LOG)
-    # NEW: Calculate stats for the new metrics
     peak_mem_used=$(awk -F, 'BEGIN{max=0} {if ($3>max) max=$3} END{print max}' $GPU_LOG)
     peak_temp=$(awk -F, 'BEGIN{max=0} {if ($4>max) max=$4} END{print max}' $GPU_LOG)
     avg_core_clock=$(awk -F, '{sum+=$5} END{if (NR>0) print sum/NR; else print 0}' $GPU_LOG)
     avg_mem_clock=$(awk -F, '{sum+=$6} END{if (NR>0) print sum/NR; else print 0}' $GPU_LOG)
 else
-    # Set to N/A if no GPU stats were collected
     peak_gpu_util="N/A"; avg_gpu_util="N/A"; peak_power="N/A"; avg_power="N/A"
     peak_mem_used="N/A"; peak_temp="N/A"; avg_core_clock="N/A"; avg_mem_clock="N/A"
 fi
 
 # --- Step 5: Display and Save the Consolidated Report ---
-# The `tee` command prints to the console AND appends to the report file.
+# The `{...} | tee` command group prints all output to the console AND saves it to the report file.
 {
-    # Copy the configuration from the benchmark output directly into the report
-    grep -A 7 "+--Configuration" $BENCHMARK_LOG
-    # Print the performance table
-    printf "+----------------------------------+--------------------------+\n"
-    printf "| %-32s | %-24s |\n" "Performance Metric" "Value"
-    printf "+----------------------------------+--------------------------+\n"
-    if [ ! -z "$cpu_time" ]; then
-        printf "| %-32s | %-24s |\n" "Total CPU Time (us)" "$cpu_time"
-    fi
-    if [ ! -z "$gpu_time" ]; then
-        printf "| %-32s | %-24s |\n" "Total GPU Time (us)" "$gpu_time"
-    fi
-    if [ ! -z "$speedup" ]; then
-        printf "| %-32s | %-24s |\n" "Speedup (CPU/GPU)" "$speedup"
-    fi
-    # Print GPU resource usage
+    # First, print the entire pre-formatted report from the C benchmark.
+    cat $BENCHMARK_LOG
+
+    # Second, append the detailed GPU resource usage table.
     if [ "$peak_gpu_util" != "N/A" ]; then
         printf "+----------------------------------+--------------------------+\n"
         printf "| %-32s | %-24s |\n" "GPU Resource Usage" "Value"
@@ -108,12 +80,12 @@ fi
         printf "| %-32s | %-24s |\n" "Peak Temperature (C)" "$peak_temp"
         printf "| %-32s | %-24.0f |\n" "Average Core Clock (MHz)" "$avg_core_clock"
         printf "| %-32s | %-24.0f |\n" "Average Memory Clock (MHz)" "$avg_mem_clock"
+        printf "+----------------------------------+--------------------------+\n"
     fi
-    printf "+----------------------------------+--------------------------+\n"
 
-} | tee -a $REPORT_FILE
+} | tee $REPORT_FILE
 
-echo -e "\nReport saved to $REPORT_FILE"
+echo -e "\nAnalysis complete. Full report saved to $REPORT_FILE"
 
 # --- Final Cleanup ---
 rm -f $GPU_LOG $BENCHMARK_LOG
