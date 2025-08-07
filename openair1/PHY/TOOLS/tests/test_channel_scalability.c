@@ -33,30 +33,30 @@ int main(int argc, char **argv) {
     logInit();
     randominit(0);
     
+    // Default configuration
     int num_channels = 1;
     int nb_tx = 4;
     int nb_rx = 4;
     int num_samples = 30720;
     int channel_length = 32;
     int num_trials = 50;
-    int sum_outputs = 1; // Enable sum_outputs by default for this example
-    int use_streams = 1; // Enable streams by default
+    int sum_outputs = 0;
 
     // --- Argument Parsing ---
     struct option long_options[] = {
         {"num-channels", required_argument, 0, 'c'},
-        {"nb-tx",     required_argument, 0, 't'},
-        {"nb-rx",     required_argument, 0, 'r'},
-        {"num-samples", required_argument, 0, 's'},
-        {"ch-len",    required_argument, 0, 'l'},
-        {"trials",    required_argument, 0, 'n'},
+        {"nb-tx",        required_argument, 0, 't'},
+        {"nb-rx",        required_argument, 0, 'r'},
+        {"num-samples",  required_argument, 0, 's'},
+        {"ch-len",       required_argument, 0, 'l'},
+        {"trials",       required_argument, 0, 'n'},
         {"sum-outputs",  no_argument,       0, 'S'},
         {"help",         no_argument,       0, 'h'},
         {0, 0, 0, 0}
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "c:t:r:s:l:n:S:h", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "c:t:r:s:l:n:Sh", long_options, NULL)) != -1) {
         switch (opt) {
             case 'c': num_channels = atoi(optarg); break;
             case 't': nb_tx = atoi(optarg); break;
@@ -73,25 +73,15 @@ int main(int argc, char **argv) {
                 printf("  -s, --num-samples <N>    Number of samples (Default: 30720)\n");
                 printf("  -l, --ch-len <N>         Channel length (Default: 32)\n");
                 printf("  -n, --trials <N>         Number of trials for averaging (Default: 50)\n");
-                printf("  -S, --sum-outputs        Enable summation of outputs for interference simulation (Default: Disabled)\n");
+                printf("  -S, --sum-outputs        Enable summation of outputs for interference simulation.\n");
                 printf("  -h, --help               Show this help message\n");
                 return 0;
             default: exit(1);
         }
     }
-
-    printf("--- Scalable Channel Pipeline Benchmark ---\n");
-    printf("Averaging over %d trials.\n", num_trials);
-    printf("Configuration per trial:\n");
-    printf("  Parallel Channels : %d\n", num_channels);
-    printf("  MIMO Configuration: %dx%d\n", nb_tx, nb_rx);
-    printf("  Signal Length     : %d\n", num_samples);
-    printf("  Channel Length    : %d\n", channel_length);
-    if (sum_outputs) printf("  Mode              : Interference Simulation (Summing Outputs)\n");
-    printf("-----------------------------------------------------------\n");
-
+    
     // --- ONE-TIME MEMORY ALLOCATION ---
-    // If sum_outputs is enabled, we need a unique input signal per channel
+    // HOST MEMORY
     int num_tx_signals = sum_outputs ? num_channels : 1;
     float ***tx_sig_re = malloc(num_tx_signals * sizeof(float**));
     float ***tx_sig_im = malloc(num_tx_signals * sizeof(float**));
@@ -111,12 +101,6 @@ int main(int argc, char **argv) {
         rx_multipath_im_cpu[i] = malloc(num_samples * sizeof(float));
     }
     
-    channel_desc_t **channels = malloc(num_channels * sizeof(channel_desc_t*));
-    for (int c=0; c<num_channels; c++) {
-        channels[c] = new_channel_desc_scm(nb_tx, nb_rx, TDL_A, 30.72, 0,0,0.03,0,0,0,0,0,0);
-        channels[c]->channel_length = channel_length;
-    }
-
     c16_t ***output_cpu = malloc(num_channels * sizeof(c16_t**));
     for(int c=0; c<num_channels; c++){
         output_cpu[c] = malloc(nb_rx * sizeof(c16_t*));
@@ -126,7 +110,14 @@ int main(int argc, char **argv) {
         }
     }
     
-    void *d_tx_sig=NULL, *d_rx_sig=NULL, *d_output_noise=NULL, *d_curand_states=NULL, 
+    channel_desc_t **channels = malloc(num_channels * sizeof(channel_desc_t*));
+    for (int c=0; c<num_channels; c++) {
+        channels[c] = new_channel_desc_scm(nb_tx, nb_rx, TDL_A, 30.72, 0,0,0.03,0,0,0,0,0,0);
+        channels[c]->channel_length = channel_length;
+    }
+
+    // DEVICE MEMORY
+    void *d_tx_sig=NULL, *d_rx_sig=NULL, *d_curand_states=NULL, 
          *h_tx_sig_pinned=NULL, *d_channel_coeffs_gpu=NULL,
          **d_individual_gpu_outputs = NULL, *d_summed_gpu_output = NULL;
     float* h_channel_coeffs = NULL;
@@ -137,36 +128,22 @@ int main(int argc, char **argv) {
 
     cudaMalloc(&d_tx_sig, nb_tx * num_samples * sizeof(float2));
     cudaMalloc(&d_rx_sig, nb_rx * num_samples * sizeof(float2));
-    cudaMalloc(&d_output_noise, nb_rx * num_samples * sizeof(short2)); // Used for non-streamed path
     cudaMallocHost(&h_tx_sig_pinned, nb_tx * num_samples * sizeof(float2));
 
+    d_individual_gpu_outputs = malloc(num_channels * sizeof(void*));
+    for (int c=0; c<num_channels; c++) {
+        cudaMalloc(&d_individual_gpu_outputs[c], nb_rx * num_samples * sizeof(short2));
+    }
     if (sum_outputs) {
-        d_individual_gpu_outputs = malloc(num_channels * sizeof(void*));
-        for (int c=0; c<num_channels; c++) {
-            cudaMalloc(&d_individual_gpu_outputs[c], nb_rx * num_samples * sizeof(short2));
-        }
         cudaMalloc(&d_summed_gpu_output, nb_rx * num_samples * sizeof(short2));
     }
+    
     d_curand_states = create_and_init_curand_states_cuda(nb_rx * num_samples, time(NULL));
     
-    // // --- WARM-UP RUN ---
-    // printf("Performing GPU warm-up run...\n");
-    // // A warm-up just needs to execute the kernels; input data content is not critical.
-    // // We pass tx_sig_re[0] and tx_sig_im[0] to match the expected float** type.
-    // run_channel_pipeline_cuda(
-    //     tx_sig_re[0], tx_sig_im[0], output_gpu[0],
-    //     nb_tx, nb_rx, channel_length, num_samples,
-    //     0, h_channel_coeffs, 0.1, 0, 0, 0, 0, 0,
-    //     d_tx_sig, d_rx_sig, d_output_noise, d_curand_states,
-    //     h_tx_sig_pinned, h_output_sig_pinned, d_channel_coeffs_gpu
-    // );
-    // cudaDeviceSynchronize();
-    // printf("Warm-up complete. Starting benchmark...\n\n");
-
-
     double total_cpu_ns = 0;
     double total_gpu_ns = 0;
 
+    // --- MAIN TIMING LOOP ---
     for (int t = 0; t < num_trials; t++) {
         for(int i=0; i<num_tx_signals; i++) {
             generate_random_signal(tx_sig_re[i], tx_sig_im[i], nb_tx, num_samples);
@@ -178,24 +155,20 @@ int main(int argc, char **argv) {
         // --- CPU RUN ---
         clock_gettime(CLOCK_MONOTONIC, &start);
         for(int c=0; c<num_channels; c++){
-            // Use the correct input signal for the current channel
             float** current_tx_re = sum_outputs ? tx_sig_re[c] : tx_sig_re[0];
             float** current_tx_im = sum_outputs ? tx_sig_im[c] : tx_sig_im[0];
             multipath_channel_float(channels[c], current_tx_re, current_tx_im, rx_multipath_re_cpu, rx_multipath_im_cpu, num_samples, 1, 0);
             add_noise_float(output_cpu[c], (const float **)rx_multipath_re_cpu, (const float **)rx_multipath_im_cpu, 0.1, num_samples, 0, 0, 0, 0, 0, nb_rx);
         }
         if (sum_outputs) {
-            // Allocate a temporary buffer for the sum, similar to the GPU side
             c16_t* final_sum_cpu = calloc(nb_rx * num_samples, sizeof(c16_t));
             for (int c = 0; c < num_channels; c++) {
-                // The output_cpu array is structured as [channel][rx_antenna][sample]
-                // For a contiguous block, we access it via output_cpu[c][0]
                 for (int i = 0; i < nb_rx * num_samples; i++) {
                     final_sum_cpu[i].r += output_cpu[c][0][i].r;
                     final_sum_cpu[i].i += output_cpu[c][0][i].i;
                 }
             }
-            free(final_sum_cpu); // We just perform the sum for timing, no need to store
+            free(final_sum_cpu);
         }
         clock_gettime(CLOCK_MONOTONIC, &end);
         total_cpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
@@ -203,64 +176,42 @@ int main(int argc, char **argv) {
         // --- GPU RUN ---
         clock_gettime(CLOCK_MONOTONIC, &start);
 
-        if (use_streams) {
-            printf("Running with CUDA streams...\n");
-            cudaStream_t streams[num_channels];
-            for(int c=0; c<num_channels; c++) {
-                cudaStreamCreateWithFlags(&streams[c], cudaStreamNonBlocking);
-            }
-
-            for(int c=0; c<num_channels; c++){
-                float path_loss = (float)pow(10, channels[c]->path_loss_dB / 20.0);
-                for (int link = 0; link < nb_tx * nb_rx; link++) {
-                    for (int l = 0; l < channels[c]->channel_length; l++) {
-                        int idx = link * channels[c]->channel_length + l;
-                        ((float2*)h_channel_coeffs)[idx].x = (float)channels[c]->ch[link][l].r;
-                        ((float2*)h_channel_coeffs)[idx].y = (float)channels[c]->ch[link][l].i;
-                    }
-                }
-                
-                run_channel_pipeline_cuda_streamed(
-                    sum_outputs ? tx_sig_re[c] : tx_sig_re[0],
-                    sum_outputs ? tx_sig_im[c] : tx_sig_im[0],
-                    nb_tx, nb_rx, channels[c]->channel_length, num_samples,
-                    path_loss, h_channel_coeffs, 0.1, 0, 0xFFFF, 0xFFFF,
-                    d_tx_sig, d_rx_sig, d_individual_gpu_outputs[c], d_curand_states,
-                    h_tx_sig_pinned, d_channel_coeffs_gpu,
-                    streams[c]
-                );
-            }
-
-            if (sum_outputs) {
-                // The sum can be in its own stream or the default (NULL) stream
-                sum_channel_outputs_cuda(d_individual_gpu_outputs, d_summed_gpu_output, num_channels, nb_rx, num_samples);
-            }
-
-            cudaDeviceSynchronize();
-
-            for(int c=0; c<num_channels; c++) {
-                cudaStreamDestroy(streams[c]);
-            }
-
-        } else { // Original, non-streamed path for comparison
-            for(int c=0; c<num_channels; c++){
-                float path_loss = (float)pow(10, channels[c]->path_loss_dB / 20.0);
-                for (int link = 0; link < nb_tx * nb_rx; link++) {
-                    for (int l = 0; l < channels[c]->channel_length; l++) {
-                        int idx = link * channels[c]->channel_length + l;
-                        ((float2*)h_channel_coeffs)[idx].x = (float)channels[c]->ch[link][l].r;
-                        ((float2*)h_channel_coeffs)[idx].y = (float)channels[c]->ch[link][l].i;
-                    }
-                }
-                run_channel_pipeline_cuda(
-                    tx_sig_re[0], tx_sig_im[0], output_cpu[c], // A placeholder CPU output
-                    nb_tx, nb_rx, channels[c]->channel_length, num_samples, path_loss, h_channel_coeffs, 0.1, 0, 
-                    0xFFFF, 0xFFFF, 0, 0, 
-                    d_tx_sig, d_rx_sig, d_output_noise, d_curand_states,
-                    h_tx_sig_pinned, NULL, d_channel_coeffs_gpu
-                );
-            }
+        cudaStream_t streams[num_channels];
+        for(int c=0; c<num_channels; c++) {
+            cudaStreamCreateWithFlags(&streams[c], cudaStreamNonBlocking);
         }
+
+        for(int c=0; c<num_channels; c++){
+            float path_loss = (float)pow(10, channels[c]->path_loss_dB / 20.0);
+            for (int link = 0; link < nb_tx * nb_rx; link++) {
+                for (int l = 0; l < channels[c]->channel_length; l++) {
+                    int idx = link * channels[c]->channel_length + l;
+                    ((float2*)h_channel_coeffs)[idx].x = (float)channels[c]->ch[link][l].r;
+                    ((float2*)h_channel_coeffs)[idx].y = (float)channels[c]->ch[link][l].i;
+                }
+            }
+            
+            run_channel_pipeline_cuda_streamed(
+                sum_outputs ? tx_sig_re[c] : tx_sig_re[0],
+                sum_outputs ? tx_sig_im[c] : tx_sig_im[0],
+                nb_tx, nb_rx, channels[c]->channel_length, num_samples,
+                path_loss, h_channel_coeffs, 0.1, 0, 0xFFFF, 0xFFFF,
+                d_tx_sig, d_rx_sig, d_individual_gpu_outputs[c], d_curand_states,
+                h_tx_sig_pinned, d_channel_coeffs_gpu,
+                (void*)streams[c]
+            );
+        }
+
+        if (sum_outputs) {
+            sum_channel_outputs_cuda(d_individual_gpu_outputs, d_summed_gpu_output, num_channels, nb_rx, num_samples);
+        }
+
+        cudaDeviceSynchronize();
+
+        for(int c=0; c<num_channels; c++) {
+            cudaStreamDestroy(streams[c]);
+        }
+        
         clock_gettime(CLOCK_MONOTONIC, &end);
         total_gpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
     }
@@ -269,13 +220,11 @@ int main(int argc, char **argv) {
     double avg_cpu_us = (total_cpu_ns / num_trials) / 1000.0;
     double avg_gpu_us = (total_gpu_ns / num_trials) / 1000.0;
     double speedup = (avg_cpu_us > 0 && avg_gpu_us > 0) ? (avg_cpu_us / avg_gpu_us) : 0;
-    
-    // --- New Metrics ---
     double avg_cpu_per_channel_us = avg_cpu_us / num_channels;
     double avg_gpu_per_channel_us = avg_gpu_us / num_channels;
     double total_samples_processed = (double)num_channels * nb_rx * num_samples;
     double gpu_throughput_gsps = total_samples_processed / (avg_gpu_us * 1000.0);
-
+    const double real_time_target_us = 500.0;
     char val_str[30];
 
     printf("\n--- Final Benchmark Results ---\n\n");
@@ -283,10 +232,8 @@ int main(int argc, char **argv) {
     printf("| %-32s | %-24s |\n", "Configuration", "Value");
     printf("+----------------------------------+--------------------------+\n");
     printf("| %-32s | %-24d |\n", "Parallel Channels", num_channels);
-
     snprintf(val_str, sizeof(val_str), "%d x %d", nb_tx, nb_rx);
     printf("| %-32s | %-24s |\n", "MIMO Configuration (Tx x Rx)", val_str);
-
     printf("| %-32s | %-24d |\n", "Signal Length (Samples)", num_samples);
     printf("| %-32s | %-24d |\n", "Trials per configuration", num_trials);
     printf("+----------------------------------+--------------------------+\n");
@@ -296,62 +243,51 @@ int main(int argc, char **argv) {
     printf("| %-32s | %-24.2f |\n", "Total GPU Time (us)", avg_gpu_us);
     printf("| %-32s | %-24.2f |\n", "Avg Time per Channel - CPU (us)", avg_cpu_per_channel_us);
     printf("| %-32s | %-24.2f |\n", "Avg Time per Channel - GPU (us)", avg_gpu_per_channel_us);
-
     snprintf(val_str, sizeof(val_str), "%.2fx", speedup);
     printf("| %-32s | %-24s |\n", "Speedup (CPU/GPU)", val_str);
-
     printf("| %-32s | %-24.3f |\n", "GPU Throughput (GSPS)", gpu_throughput_gsps);
-  
+    snprintf(val_str, sizeof(val_str), "%s", avg_gpu_us <= real_time_target_us ? "✅ MEETS REAL-TIME" : "❌ FAILS REAL-TIME");
+    printf("| %-32s | %-24s |\n", "GPU Status vs 500us Target", val_str);
     printf("+----------------------------------+--------------------------+\n");
-            // --- Cleanup ---
-        free(h_channel_coeffs);
-        for(int i=0; i<num_tx_signals; i++){
-            for(int j=0; j<nb_tx; j++){
-                free(tx_sig_re[i][j]);
-                free(tx_sig_im[i][j]);
-            }
-            free(tx_sig_re[i]);
-            free(tx_sig_im[i]);
+
+    // --- Cleanup ---
+    free(h_channel_coeffs);
+    for(int i=0; i<num_tx_signals; i++){
+        for(int j=0; j<nb_tx; j++){
+            free(tx_sig_re[i][j]);
+            free(tx_sig_im[i][j]);
         }
-        free(tx_sig_re); free(tx_sig_im);
+        free(tx_sig_re[i]);
+        free(tx_sig_im[i]);
+    }
+    free(tx_sig_re); free(tx_sig_im);
 
-        for (int i=0; i<nb_rx; i++) { free(rx_multipath_re_cpu[i]); free(rx_multipath_im_cpu[i]); }
-        free(rx_multipath_re_cpu); free(rx_multipath_im_cpu);
+    for (int i=0; i<nb_rx; i++) { free(rx_multipath_re_cpu[i]); free(rx_multipath_im_cpu[i]); }
+    free(rx_multipath_re_cpu); free(rx_multipath_im_cpu);
 
+    for (int c=0; c<num_channels; c++) {
+        free(output_cpu[c][0]);
+        free(output_cpu[c]);
+        free(channels[c]);
+    }
+    free(output_cpu); 
+    free(channels);
+
+    cudaFree(d_tx_sig);
+    cudaFree(d_rx_sig);
+    cudaFreeHost(h_tx_sig_pinned);
+    cudaFree(d_channel_coeffs_gpu);
+
+    if (sum_outputs) {
         for (int c=0; c<num_channels; c++) {
-            free(output_cpu[c][0]);
-            // free(output_gpu[c][0]);
-            free(output_cpu[c]);
-            // free(output_gpu[c]);
+            cudaFree(d_individual_gpu_outputs[c]);
         }
-        free(output_cpu); 
-        // free(output_gpu);
+        free(d_individual_gpu_outputs);
+        cudaFree(d_summed_gpu_output);
+    }
 
-        #if defined(USE_UNIFIED_MEMORY)
-            cudaFree(d_tx_sig);
-            cudaFree(d_rx_sig);
-            cudaFree(d_output_noise);
-        #else
-            cudaFree(d_tx_sig);
-            cudaFree(d_rx_sig);
-            cudaFreeHost(h_tx_sig_pinned);
-            cudaFree(d_output_noise);
-            // cudaFreeHost(h_output_sig_pinned);
-        #endif
-        cudaFree(d_channel_coeffs_gpu);
-
-        if (sum_outputs) {
-            for (int c=0; c<num_channels; c++) {
-                cudaFree(d_individual_gpu_outputs[c]);
-            }
-            free(d_individual_gpu_outputs);
-            cudaFree(d_summed_gpu_output);
-        }
-
-        destroy_curand_states_cuda(d_curand_states);
+    destroy_curand_states_cuda(d_curand_states);
         
-    printf("----------------------------------------------------------------------------------------------------------------------\n");
-    printf("Pipeline benchmark finished.\n");
-
+    printf("Benchmark finished.\n");
     return 0;
 }
