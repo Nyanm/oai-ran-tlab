@@ -69,6 +69,62 @@ __global__ void multipath_channel_kernel(
     rx_sig[ii * num_samples + i].y = rx_tmp.y * path_loss;
 }
 
+
+__global__ void multipath_channel_kernel_batched(
+    const float2* __restrict__ d_channel_coeffs,
+    const float2* __restrict__ tx_sig,
+    float2* __restrict__ rx_sig,
+    int num_samples,
+    int channel_length,
+    int nb_tx,
+    int nb_rx,
+    const float* __restrict__ path_loss_batch)
+{
+    extern __shared__ float2 tx_shared[];
+    
+
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    const int ii = blockIdx.y;                         
+    const int c = blockIdx.z;                         
+
+    if (i >= num_samples) return;
+
+    float2 rx_tmp = make_float2(0.0f, 0.0f);
+    const float path_loss = path_loss_batch[c]; 
+
+    const int channel_tx_offset = c * nb_tx * num_samples;
+    const int channel_rx_offset = c * nb_rx * num_samples;
+
+    for (int j = 0; j < nb_tx; j++) {
+        const int tid = threadIdx.x;
+        const int block_start_idx = blockIdx.x * blockDim.x;
+        const int shared_mem_size = blockDim.x + channel_length - 1;
+
+        for (int k = tid; k < shared_mem_size; k += blockDim.x) {
+            int load_idx = block_start_idx + k - (channel_length - 1);
+            if (load_idx >= 0 && load_idx < num_samples) {
+                tx_shared[k] = tx_sig[channel_tx_offset + j * num_samples + load_idx];
+            } else {
+                tx_shared[k] = make_float2(0.0f, 0.0f);
+            }
+        }
+        __syncthreads();
+
+        for (int l = 0; l < channel_length; l++) {
+            float2 tx_sample = tx_shared[tid + (channel_length - 1) - l];
+            int chan_link_idx = (c * nb_tx * nb_rx) + (ii + j * nb_rx);
+            float2 chan_weight = d_channel_coeffs[chan_link_idx * channel_length + l];
+            rx_tmp = complex_add(rx_tmp, complex_mul(tx_sample, chan_weight));
+        }
+        __syncthreads();
+    }
+    
+    rx_sig[channel_rx_offset + ii * num_samples + i].x = rx_tmp.x * path_loss;
+    rx_sig[channel_rx_offset + ii * num_samples + i].y = rx_tmp.y * path_loss;
+}
+
+
+
 extern "C" {
 
 void multipath_channel_cuda(
@@ -87,6 +143,7 @@ void multipath_channel_cuda(
     float2 *d_rx_sig = (float2*)d_rx_sig_void;
     float2 *d_channel_coeffs = (float2*)d_channel_coeffs_void;
     int num_samples = length - (int)channel_offset;
+    float2* kernel_input_ptr;
 
     #if defined(USE_UNIFIED_MEMORY)
             float2 *d_tx_sig = (float2*)d_tx_sig_void;
@@ -147,58 +204,6 @@ void multipath_channel_cuda(
             }
             free(h_rx_sig);
     #endif
-}
-    
-
-__global__ void multipath_channel_kernel_batched(
-    const float2* __restrict__ d_channel_coeffs,
-    const float2* __restrict__ tx_sig,
-    float2* __restrict__ rx_sig,
-    int num_samples,
-    int channel_length,
-    int nb_tx,
-    int nb_rx,
-    const float* __restrict__ path_loss_batch)
-{
-    extern __shared__ float2 tx_shared[];
-    
-    const int i = blockIdx.x * blockDim.x + threadIdx.x; // Sample index
-    const int ii = blockIdx.y;                           // RX antenna index
-    const int c = blockIdx.z;                            // Channel index
-
-    if (i >= num_samples) return;
-
-    float2 rx_tmp = make_float2(0.0f, 0.0f);
-    const float path_loss = path_loss_batch[c];
-    const int channel_tx_offset = c * nb_tx * num_samples;
-    const int channel_rx_offset = c * nb_rx * num_samples;
-
-    for (int j = 0; j < nb_tx; j++) {
-        const int tid = threadIdx.x;
-        const int block_start_idx = blockIdx.x * blockDim.x;
-        const int shared_mem_size = blockDim.x + channel_length - 1;
-
-        for (int k = tid; k < shared_mem_size; k += blockDim.x) {
-            int load_idx = block_start_idx + k - (channel_length - 1);
-            if (load_idx >= 0 && load_idx < num_samples) {
-                tx_shared[k] = tx_sig[channel_tx_offset + j * num_samples + load_idx];
-            } else {
-                tx_shared[k] = make_float2(0.0f, 0.0f);
-            }
-        }
-        __syncthreads();
-
-        for (int l = 0; l < channel_length; l++) {
-            float2 tx_sample = tx_shared[tid + (channel_length - 1) - l];
-            int chan_link_idx = (c * nb_tx * nb_rx) + (ii + j * nb_rx);
-            float2 chan_weight = d_channel_coeffs[chan_link_idx * channel_length + l];
-            rx_tmp = complex_add(rx_tmp, complex_mul(tx_sample, chan_weight));
-        }
-        __syncthreads();
-    }
-    
-    rx_sig[channel_rx_offset + ii * num_samples + i].x = rx_tmp.x * path_loss;
-    rx_sig[channel_rx_offset + ii * num_samples + i].y = rx_tmp.y * path_loss;
 }
 
 } // extern "C"

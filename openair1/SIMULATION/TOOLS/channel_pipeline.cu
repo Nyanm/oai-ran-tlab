@@ -3,6 +3,16 @@
 #include "oai_cuda.h"
 
 
+__global__ void multipath_channel_kernel_batched(
+    const float2* __restrict__ d_channel_coeffs, const float2* __restrict__ tx_sig,
+    float2* __restrict__ rx_sig, int num_samples, int channel_length,
+    int nb_tx, int nb_rx, const float* __restrict__ path_loss_batch);
+
+__global__ void add_noise_and_phase_noise_kernel_batched(
+    const float2* __restrict__ r_sig, short2* __restrict__ output_sig,
+    curandState_t* states, int num_samples, int nb_rx, float sigma,
+    float pn_std_dev, uint16_t pdu_bit_map, uint16_t ptrs_bit_map);
+
 #define CHECK_CUDA(val) checkCuda((val), #val, __FILE__, __LINE__)
 static void checkCuda(cudaError_t result, const char* const func, const char *const file, const int line) {
     if (result != cudaSuccess) {
