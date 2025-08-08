@@ -39,6 +39,10 @@
 
 #define USE_UMEM 1 
 
+#ifndef USE_UMEM
+uint32_t *cc0[4];
+#endif
+
 int ldpc_BG1_Zc384_cuda32(uint32_t **c,uint32_t **d,int n_inputs);
 
 
@@ -54,21 +58,22 @@ void encode_parity_check_part_cuda(uint32_t **cc, uint32_t **d, short BG,short Z
     }
     
 #else
-  cudaError_t err;
-  uint32_t *c[n_inputs]={NULL};
   for (int s=0;s<n_inputs;s++)
   {
-    err = cudaMalloc((void**)&c,2 * 22 * Zc * sizeof(uint32_t));
-    if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
     for (int i1 = 0; i1 < ncols; i1++)   {
-      cudaMemcpy(&c[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t),1);
-      cudaMemcpy(&c[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t),1);
+      cudaMemcpy(&cc0[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t),1);
+      cudaMemcpy(&cc0[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t),1);
     }
   }
 #endif
   uint32_t *cp[n_inputs];
-  for (int s=0; s<n_inputs;s++)
+  for (int s=0; s<n_inputs;s++) {
+#ifdef USE_UMEM
     cp[s]=c[s];
+#else
+    cp[s]=cc0[s];
+#endif
+  }
 
   if (BG == 1) {
     switch (Zc) {
