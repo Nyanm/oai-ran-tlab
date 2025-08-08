@@ -46,8 +46,14 @@
 
 simde__m128i input32_luta[32][256];
 simde__m128i input32_lutb[32][256];
+uint32_t *dd0[4];
 
 void init_input32_luts() {
+
+  for (int i=0;i<4;i++) {
+    cudaError_t err=cudaMalloc((void**)&dd0[i],46*384*sizeof(uint32_t));
+    AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+  }
 
   for (int i=0;i<256;i++) {
     input32_luta[0][i] = simde_mm_insert_epi32(input32_luta[0][i],(i&128)>>7,0);
@@ -83,6 +89,7 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
 //  printf("input %p output %p\n",input[0],output);
 
 
+  if(impp->tinput != NULL) start_meas(impp->tinput);
   //determine number of bits in codeword
   if (BG==1)
     {
@@ -107,14 +114,17 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
   int n_inputs = (impp->n_segments/32)+(impp->n_segments&31) > 0 ? 1: 0;
   uint32_t  cc[4][22*Zc]; //padded input, unpacked, max size
 
-#ifndef USE_UMEM 
-  uint32_t *dd;
+//#ifndef USE_UMEM 
+  uint32_t *dd[n_inputs];
 
-  cudaError_t err=cudaMalloc((void**)&dd,46*Zc*sizeof(uint32_t));
-  if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
-#else
- uint32_t dd[4][46*Zc];
-#endif
+  for (int i=0;i<n_inputs;i++) {
+    //cudaError_t err=cudaMalloc((void**)&dd[i],46*Zc*sizeof(uint32_t));
+    //AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+    dd[i]=dd0[i];
+  }
+//#else
+// uint32_t dd[4][46*Zc];
+//#endif
   // calculate number of punctured bits
   no_punctured_columns=(int)((nrows-2)*Zc+block_length-block_length*rate)/Zc;
   removed_bit=(nrows-no_punctured_columns-2) * Zc+block_length-(int)(block_length*rate);
@@ -123,18 +133,21 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
   // unpack input
   for (int i=0;i<n_inputs;i++) {
     memset(cc[i],0,sizeof(cc[i]));
-#ifndef USE_UMEM 
-    err = cudaMemset(dd[i],0,46*Zc*sizeof(uint32_t));
-    if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
-#else
-    memset(dd[i],0,sizeof(dd));
-#endif
+//#ifndef USE_UMEM 
+/*
+    cudaError_t err = cudaMemset(dd[i],0,46*Zc*sizeof(uint32_t));
+    AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+*/    
+//#else
+//    memset(dd[i],0,sizeof(dd));
+//#endif
   }
-  if(impp->tinput != NULL) start_meas(impp->tinput);
 
   //interleave up to 32 transport-block segements at a time
 
+#if 0
   unsigned int i_dword = 0;
+#endif
 
 #if 0 //defined(__AVX512F__) && defined(__AVX512BW__) && defined(__AVX512VBMI__)
   const __m512i masks5[8] = { _mm512_set1_epi8(0x1), _mm512_set1_epi8(0x2),
@@ -244,19 +257,16 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
   if(impp->tinput != NULL) stop_meas(impp->tinput);
 
   if (BG==1 && Zc==384)  {
-    // extend matrix
-    if(impp->tprep != NULL) start_meas(impp->tprep);
-    if(impp->tprep != NULL) stop_meas(impp->tprep);
     //parity check part
 
 //    printf("calling encode_parity_check_part_cuda cc %p dd %p\n",cc,dd);
     if(impp->tparity != NULL) start_meas(impp->tparity);
-    uint32_t *ccp[n_inputs],*ddp[n_inputs];
+    uint32_t *ccp[n_inputs];/*,*ddp[n_inputs];*/
     for (int s=0;s<n_inputs;s++) {
       ccp[s]=cc[s];
-      ddp[s]=dd[s];
+//      ddp[s]=dd[s];
     }
-    encode_parity_check_part_cuda(ccp, ddp, BG, Zc, Kb, ncols,n_inputs);
+    encode_parity_check_part_cuda(ccp, dd0, BG, Zc, Kb, ncols,n_inputs);
     if(impp->tparity != NULL) stop_meas(impp->tparity);
   }
   else {
@@ -269,16 +279,16 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
 //  printf("cudaMemcpy: dst %p, src %p, length %d, block_length %d, nrows %d, no_punctured_columns\n",
 //         &out32[block_length-(2*Zc)],dd,sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),block_length,nrows,no_punctured_columns);
  // uint32_t dummy[((nrows-no_punctured_columns) * Zc-removed_bit)];
-#ifdef USE_UMEM
-    memcpy(&output[s][block_length-(2*Zc)],dd[s],sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit));
-#else
-    err = cudaMemcpy(&output[s][block_length-(2*Zc)],dd[s],sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),2);
-    if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
-#endif
-#ifdef USE_UMEM
-#else
-    cudaFree(dd[i]);
-#endif
+//#ifdef USE_UMEM
+//    memcpy(&output[s][block_length-(2*Zc)],dd[s],sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit));
+//#else
+    cudaError_t err = cudaMemcpy(&output[s][block_length-(2*Zc)],dd0[s],sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),2);
+    AssertFatal(err == cudaSuccess, "dd0[%d] %p CUDA Error: %s\n", s, dd0[s],cudaGetErrorString(err)); 							
+//#endif
+//#ifdef USE_UMEM
+//#else
+//    cudaFree(dd[s]);
+//#endif
   }
   if(impp->toutput != NULL) stop_meas(impp->toutput);
   return 0;
