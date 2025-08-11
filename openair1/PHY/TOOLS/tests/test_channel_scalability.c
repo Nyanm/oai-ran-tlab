@@ -193,6 +193,9 @@ int main(int argc, char **argv) {
             cudaMalloc(&d_path_loss_batch, num_channels * sizeof(float));
     #endif
 
+    if (sum_outputs) {
+        cudaMalloc(&d_summed_gpu_output, final_batch_bytes);
+    }
 
     } else { 
         // --- SERIAL & STREAM MODE MEMORY ALLOCATION ---
@@ -283,22 +286,22 @@ int main(int argc, char **argv) {
 
         // --- CPU RUN ---
         clock_gettime(CLOCK_MONOTONIC, &start);
-        for(int c=0; c<num_channels; c++){
-            float** current_tx_re = sum_outputs ? tx_sig_re[c] : tx_sig_re[0];
-            float** current_tx_im = sum_outputs ? tx_sig_im[c] : tx_sig_im[0];
-            multipath_channel_float(channels[c], current_tx_re, current_tx_im, rx_multipath_re_cpu, rx_multipath_im_cpu, num_samples, 1, 0);
-            add_noise_float(output_cpu[c], (const float **)rx_multipath_re_cpu, (const float **)rx_multipath_im_cpu, 0.1, num_samples, 0, 0, 0, 0, 0, nb_rx);
-        }
-        if (sum_outputs) {
-            c16_t* final_sum_cpu = calloc(nb_rx * num_samples, sizeof(c16_t));
-            for (int c = 0; c < num_channels; c++) {
-                for (int i = 0; i < nb_rx * num_samples; i++) {
-                    final_sum_cpu[i].r += output_cpu[c][0][i].r;
-                    final_sum_cpu[i].i += output_cpu[c][0][i].i;
-                }
-            }
-            free(final_sum_cpu);
-        }
+        // for(int c=0; c<num_channels; c++){
+        //     float** current_tx_re = sum_outputs ? tx_sig_re[c] : tx_sig_re[0];
+        //     float** current_tx_im = sum_outputs ? tx_sig_im[c] : tx_sig_im[0];
+        //     multipath_channel_float(channels[c], current_tx_re, current_tx_im, rx_multipath_re_cpu, rx_multipath_im_cpu, num_samples, 1, 0);
+        //     add_noise_float(output_cpu[c], (const float **)rx_multipath_re_cpu, (const float **)rx_multipath_im_cpu, 0.1, num_samples, 0, 0, 0, 0, 0, nb_rx);
+        // }
+        // if (sum_outputs) {
+        //     c16_t* final_sum_cpu = calloc(nb_rx * num_samples, sizeof(c16_t));
+        //     for (int c = 0; c < num_channels; c++) {
+        //         for (int i = 0; i < nb_rx * num_samples; i++) {
+        //             final_sum_cpu[i].r += output_cpu[c][0][i].r;
+        //             final_sum_cpu[i].i += output_cpu[c][0][i].i;
+        //         }
+        //     }
+        //     free(final_sum_cpu);
+        // }
         clock_gettime(CLOCK_MONOTONIC, &end);
         total_cpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
 
