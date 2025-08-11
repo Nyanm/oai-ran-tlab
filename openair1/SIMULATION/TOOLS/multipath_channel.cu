@@ -146,7 +146,6 @@ void multipath_channel_cuda(
     float2* kernel_input_ptr;
 
     #if defined(USE_UNIFIED_MEMORY)
-            float2 *d_tx_sig = (float2*)d_tx_sig_void;
             for (int j = 0; j < nb_tx; j++) {
                 for (int i = 0; i < num_samples; i++) {
                     d_tx_sig[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
