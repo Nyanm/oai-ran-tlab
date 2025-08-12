@@ -152,7 +152,6 @@ extern "C" {
                 }
                 kernel_input_ptr = h_r_sig;
         #else // EXPLICIT COPY
-                float2 *d_r_sig = (float2*)d_r_sig_void;
                 float2* h_r_sig = (float2*)h_r_sig_void;
                 for (int ii = 0; ii < nb_rx; ii++) {
                     for (int i = 0; i < num_samples; i++) {
