@@ -306,8 +306,6 @@ int main(int argc, char **argv) {
         total_cpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
 
         // --- GPU RUN ---
-        clock_gettime(CLOCK_MONOTONIC, &start);
-
         if (strcmp(mode_str, "batch") == 0) {
             for (int c = 0; c < num_channels; c++) {
                 h_path_loss_batch[c] = (float)pow(10, channels[c]->path_loss_dB / 20.0);
@@ -319,6 +317,11 @@ int main(int argc, char **argv) {
                     }
                 }
             }
+        }
+
+        clock_gettime(CLOCK_MONOTONIC, &start);
+
+        if (strcmp(mode_str, "batch") == 0) {
 
             #if defined(USE_UNIFIED_MEMORY)
                     float2* tx_batch_ptr = (float2*)d_tx_sig_batch;
@@ -350,7 +353,7 @@ int main(int argc, char **argv) {
                     }
                 cudaMemcpy(d_channel_coeffs_batch, h_channel_coeffs_batch, num_channels * nb_tx * nb_rx * channel_length * sizeof(float2), cudaMemcpyHostToDevice);
                 cudaMemcpy(d_path_loss_batch, h_path_loss_batch, num_channels * sizeof(float), cudaMemcpyHostToDevice);
-            #else // EXPLICIT COPY
+            // #else // EXPLICIT COPY
                     float2* h_tx_sig_batch_interleaved = (float2*)malloc(num_channels * nb_tx * num_samples * sizeof(float2));
                     for (int c = 0; c < num_channels; c++) {
                         float** current_tx_re = sum_outputs ? tx_sig_re[c] : tx_sig_re[0];
@@ -532,7 +535,7 @@ int main(int argc, char **argv) {
                 cudaFree(d_tx_sig);
                 cudaFree(d_rx_sig);
                 if (strcmp(mode_str, "serial") == 0) {
-                    free(h_output_sig_pinned);
+                    cudaFreeHost(h_output_sig_pinned);
                     free(output_gpu[0]);
                     free(output_gpu);
                 }

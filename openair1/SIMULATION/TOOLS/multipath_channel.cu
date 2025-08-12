@@ -161,7 +161,6 @@ void multipath_channel_cuda(
             }
             kernel_input_ptr = h_tx_sig_pinned; 
     #else // EXPLICIT COPY
-            float2 *d_tx_sig = (float2*)d_tx_sig_void;
             float2* h_tx_sig_pinned = (float2*)h_tx_sig_pinned_void;
             for (int j = 0; j < nb_tx; j++) {
                 for (int i = 0; i < num_samples; i++) {
