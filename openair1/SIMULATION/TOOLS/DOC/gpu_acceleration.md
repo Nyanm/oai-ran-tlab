@@ -437,7 +437,7 @@ According to the current results, the optimal configuration is highly dependent 
 
 -----
 
-### **7. Direct CPU vs. GPU Speedup**
+### **7\. Direct CPU vs. GPU Speedup**
 
 Finally, To provide a clear, baseline performance comparison, the `test_channel_simulation` benchmark was run. This tool directly compares the execution time of the sequential, `float`-based CPU pipeline against the baseline synchronous GPU pipeline (`run_channel_pipeline_cuda`). The following tests were executed on a GH200 server using the ATS memory model. The results demonstrate the performance gains achieved by offloading the channel simulation to the GPU.
 
