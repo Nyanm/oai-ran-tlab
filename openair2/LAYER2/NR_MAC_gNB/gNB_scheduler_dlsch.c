@@ -640,7 +640,7 @@ static void pf_dl(gNB_MAC_INST *mac,
     int harq_pid = sched_ctrl->retrans_dl_harq.head;
 
     /* Calculate Throughput */
-    const float a = 0.01f;
+    const float a = 0.05f;
     const uint32_t b = stats->current_bytes;
     UE->dl_thr_ue = (1 - a) * UE->dl_thr_ue + a * b;
 

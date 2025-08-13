@@ -1915,7 +1915,7 @@ static int  pf_ul(gNB_MAC_INST *nrmac,
     NR_mac_dir_stats_t *stats = &UE->mac_stats.ul;
 
     /* Calculate throughput */
-    const float a = 0.01f;
+    const float a = 0.05f;
     const uint32_t b = stats->current_bytes;
     UE->ul_thr_ue = (1 - a) * UE->ul_thr_ue + a * b;
 
