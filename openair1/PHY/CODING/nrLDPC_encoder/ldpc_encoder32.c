@@ -42,7 +42,7 @@
 #include "ldpc_generate_coefficient.c"
 
 
-void init_input32_luts() {
+void cuda_support_init() {
    return;
 }
 int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implemparams_t *impp)

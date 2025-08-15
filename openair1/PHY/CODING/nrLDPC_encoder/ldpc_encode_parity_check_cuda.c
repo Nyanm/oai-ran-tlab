@@ -37,42 +37,35 @@
 #include "common/utils/LOG/log.h"
 #include <cuda_runtime.h>
 
-#define USE_UMEM 1 
 
-#ifndef USE_UMEM
 uint32_t *cc0[4];
-#endif
 
 int ldpc_BG1_Zc384_cuda32(uint32_t **c,uint32_t **d,int n_inputs);
 
+extern int managed;
 
 void encode_parity_check_part_cuda(uint32_t **cc, uint32_t **d, short BG,short Zc,short Kb, int ncols, int n_inputs)
 {
-#ifdef USE_UMEM
+  
   uint32_t c[n_inputs][2 * 22 * Zc] ; //double size matrix of c
 				      
   for (int s=0;s<n_inputs;s++)				      
     for (int i1 = 0; i1 < ncols; i1++)   {
-      memcpy(&c[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
-      memcpy(&c[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
+      if (managed) {	    
+        memcpy(&c[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
+        memcpy(&c[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
+      }
+      else {
+        cudaMemcpy(&cc0[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t),1);
+        cudaMemcpy(&cc0[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t),1);
+      }
     }
-    
-#else
-  for (int s=0;s<n_inputs;s++)
-  {
-    for (int i1 = 0; i1 < ncols; i1++)   {
-      cudaMemcpy(&cc0[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t),1);
-      cudaMemcpy(&cc0[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t),1);
-    }
-  }
-#endif
   uint32_t *cp[n_inputs];
   for (int s=0; s<n_inputs;s++) {
-#ifdef USE_UMEM
-    cp[s]=c[s];
-#else
-    cp[s]=cc0[s];
-#endif
+    if (managed)	  
+      cp[s]=c[s];
+    else
+      cp[s]=cc0[s];
   }
 
   if (BG == 1) {
@@ -121,10 +114,6 @@ void encode_parity_check_part_cuda(uint32_t **cc, uint32_t **d, short BG,short Z
     }
   } else
     AssertFatal(false, "BG %d is not supported\n", BG);
-#ifndef USE_UMEM
-  for (int s=0;s<n_inputs;s++)
-    cudaFree(c[s]);
-#endif
 }
 
 

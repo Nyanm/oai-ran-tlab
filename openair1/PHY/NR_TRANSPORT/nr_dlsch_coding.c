@@ -116,6 +116,7 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
                       time_stats_t *tprep,
                       time_stats_t *tparity,
                       time_stats_t *toutput,
+		      time_stats_t *tconcat,
                       time_stats_t *dlsch_rate_matching_stats,
                       time_stats_t *dlsch_interleaving_stats,
                       time_stats_t *dlsch_segmentation_stats)
@@ -132,6 +133,7 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
                                                        .tprep = tprep,
                                                        .tparity = tparity,
                                                        .toutput = toutput,
+						       .tconcat = tconcat,
                                                        .TBs = TBs};
 
   int num_segments = 0;

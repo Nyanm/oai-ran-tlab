@@ -370,6 +370,7 @@ static int nrLDPC_launch_TB_encoding(nrLDPC_slot_encoding_parameters_t *nrLDPC_s
     .tprep = nrLDPC_slot_encoding_parameters->tprep,
     .tparity = nrLDPC_slot_encoding_parameters->tparity,
     .toutput = nrLDPC_slot_encoding_parameters->toutput,
+    .tconcat = nrLDPC_slot_encoding_parameters->tconcat,
     .Kb = nrLDPC_TB_encoding_parameters->Kb,
     .Zc = nrLDPC_TB_encoding_parameters->Z,
     .BG = nrLDPC_TB_encoding_parameters->BG,
@@ -452,13 +453,14 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
   join_task_ans(&ans);
 
   // Write output
+  time_stats_t *tconcat = nrLDPC_slot_encoding_parameters->tconcat;
+  if(tconcat != NULL) start_meas(tconcat);
   nbTasks = 0;
   for (int dlsch_id = 0; dlsch_id < nrLDPC_slot_encoding_parameters->nb_TBs; dlsch_id++) {
     nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_parameters = &nrLDPC_slot_encoding_parameters->TBs[dlsch_id];
     uint32_t C = nrLDPC_TB_encoding_parameters->C;
     size_t n_seg = (C / 8 + ((C & 7) == 0 ? 0 : 1));
 
-    time_stats_t *toutput = nrLDPC_slot_encoding_parameters->toutput;
 
     for (int j = 0; j < n_seg; j++) {
       unsigned int macro_segment = j * 8;
@@ -478,7 +480,6 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
         }
       }
 
-      if(toutput != NULL) start_meas(toutput);
  
       uint32_t Eoffset=0;
       for (int s=0; s<macro_segment; s++)
@@ -494,10 +495,10 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
                         nrLDPC_TB_encoding_parameters->output,
                         Eoffset);
 
-      if(toutput != NULL) stop_meas(toutput);
     }
     nbTasks += n_seg;
   }
+  if(tconcat != NULL) stop_meas(tconcat);
 
   return 0;
 }

@@ -194,65 +194,232 @@ static void unpack_output(uint32_t *f,
                          uint32_t E,
                          uint32_t *f2,
                          uint32_t E2,
-                         bool Eshift,
+			 uint32_t E2_first_segment32,
                          uint32_t E2_first_segment,
                          uint32_t nb_segments,
                          uint8_t *output) {
 
 
-  int s,s0;
+  int s;
+ // int s0;
   uint32_t *fp;
   int foffset;
   uint32_t *output_p = (uint32_t *)output;
-//  printf("E %d, E2 %d, E2_first_segment %d, nb_segments %d\n",E,E2,E2_first_segment,nb_segments);
+//  printf("E %d, E2 %d, E2_first_segment %d, E2_first_segment32 %d, nb_segments %d\n",E,E2,E2_first_segment,E2_first_segment32,nb_segments);
   uint32_t bit_index = 0;
 #if 1
-  const int32_t ucShift[32][4] = { {0,1,2,3}, {-1,0,1,2},{-2,-1,0,1}, {-3,-2,-1,0}, {-4,-3,-2,-1}, {-5,-4,-3,-2}, {-6,-5,-4,-3}, {-7,-6,-5,-4}, {-8,-7,-6,-5}, {-9,-8,-7,-6}, {-10,-9,-8,-7}, {-11,-10,-9,-8}, {-12,-11,-10,-9}, {-13,-12,-11,-10}, {-14,-13,-12,-11}, {-15,-14,-13,-12}, {-16,-15,-14,-13}, {-17,-16,-15,-14}, {-18,-17,-16,-15}, {-19,-18,-17,-16}, {-20,-19,-18,-17}, {-21,-20,-19,-18}, {-22,-21,-20,-19}, {-23,-22,-21,-20}, {-24,-23,-22,-21}, {-25,-24,-23,-22}, {-26,-25,-24,-23}, {-27,-26,-25,-24}, {-28,-27,-26,-25}, {-29,-28,-27,-26}, {-30,-29,-28,-27}, {-31,-30,-29,-28}}; 
+  const int32_t ucShift0[32][4] = { {0,1,2,3}, {-1,0,1,2},{-2,-1,0,1}, {-3,-2,-1,0}, {-4,-3,-2,-1}, {-5,-4,-3,-2}, {-6,-5,-4,-3}, {-7,-6,-5,-4}, {-8,-7,-6,-5}, {-9,-8,-7,-6}, {-10,-9,-8,-7}, {-11,-10,-9,-8}, {-12,-11,-10,-9}, {-13,-12,-11,-10}, {-14,-13,-12,-11}, {-15,-14,-13,-12}, {-16,-15,-14,-13}, {-17,-16,-15,-14}, {-18,-17,-16,-15}, {-19,-18,-17,-16}, {-20,-19,-18,-17}, {-21,-20,-19,-18}, {-22,-21,-20,-19}, {-23,-22,-21,-20}, {-24,-23,-22,-21}, {-25,-24,-23,-22}, {-26,-25,-24,-23}, {-27,-26,-25,-24}, {-28,-27,-26,-25}, {-29,-28,-27,-26}, {-30,-29,-28,-27}, {-31,-30,-29,-28}}; 
 
-  const uint32_t __attribute__ ((aligned (16))) masks[4] = {0x1,0x2,0x4,0x8};
-  int32x4_t vshift[32];
-  for (int n=0;n<32;n++) vshift[n] = vld1q_s32(ucShift[n]);
-  uint32x4_t vmask  = vld1q_u32(masks);
+  const int32_t ucShift1[32][4] = { {4,5,6,7}, {3,4,5,6}, {2,3,4,5}, {1,2,3,4}, {0,1,2,3}, {-1,0,1,2},{-2,-1,0,1}, {-3,-2,-1,0}, {-4,-3,-2,-1}, {-5,-4,-3,-2}, {-6,-5,-4,-3}, {-7,-6,-5,-4}, {-8,-7,-6,-5}, {-9,-8,-7,-6}, {-10,-9,-8,-7}, {-11,-10,-9,-8}, {-12,-11,-10,-9}, {-13,-12,-11,-10}, {-14,-13,-12,-11}, {-15,-14,-13,-12}, {-16,-15,-14,-13}, {-17,-16,-15,-14}, {-18,-17,-16,-15}, {-19,-18,-17,-16}, {-20,-19,-18,-17}, {-21,-20,-19,-18}, {-22,-21,-20,-19}, {-23,-22,-21,-20}, {-24,-23,-22,-21}, {-25,-24,-23,-22}, {-26,-25,-24,-23}, {-27,-26,-25,-24}}; 
+
+  const int32_t ucShift2[32][4] = { {8,9,10,11},{7,8,9,10}, {6,7,8,9}, {5,6,7,8}, {4,5,6,7}, {3,4,5,6}, {2,3,4,5}, {1,2,3,4}, {0,1,2,3}, {-1,0,1,2},{-2,-1,0,1}, {-3,-2,-1,0}, {-4,-3,-2,-1}, {-5,-4,-3,-2}, {-6,-5,-4,-3}, {-7,-6,-5,-4}, {-8,-7,-6,-5}, {-9,-8,-7,-6}, {-10,-9,-8,-7}, {-11,-10,-9,-8}, {-12,-11,-10,-9}, {-13,-12,-11,-10}, {-14,-13,-12,-11}, {-15,-14,-13,-12}, {-16,-15,-14,-13}, {-17,-16,-15,-14}, {-18,-17,-16,-15}, {-19,-18,-17,-16}, {-20,-19,-18,-17}, {-21,-20,-19,-18}, {-22,-21,-20,-19},{-23,-22,-21,-20}}; 
+
+  const int32_t ucShift3[32][4] = { {12,13,14,15}, {11,12,13,14}, {10,11,12,13}, {9,10,11,12}, {8,9,10,11},{7,8,9,10}, {6,7,8,9}, {5,6,7,8}, {4,5,6,7}, {3,4,5,6}, {2,3,4,5}, {1,2,3,4}, {0,1,2,3}, {-1,0,1,2},{-2,-1,0,1}, {-3,-2,-1,0}, {-4,-3,-2,-1}, {-5,-4,-3,-2}, {-6,-5,-4,-3}, {-7,-6,-5,-4}, {-8,-7,-6,-5}, {-9,-8,-7,-6}, {-10,-9,-8,-7}, {-11,-10,-9,-8}, {-12,-11,-10,-9}, {-13,-12,-11,-10}, {-14,-13,-12,-11}, {-15,-14,-13,-12}, {-16,-15,-14,-13}, {-17,-16,-15,-14}, {-18,-17,-16,-15}, {-19,-18,-17,-16}}; 
+
+  const int32_t ucShift4[32][4] = { {16,17,18,19}, {15,16,17,18}, {14,15,16,17}, {13,14,15,16}, {12,13,14,15}, {11,12,13,14}, {10,11,12,13}, {9,10,11,12}, {8,9,10,11},{7,8,9,10}, {6,7,8,9}, {5,6,7,8}, {4,5,6,7}, {3,4,5,6}, {2,3,4,5}, {1,2,3,4}, {0,1,2,3}, {-1,0,1,2},{-2,-1,0,1}, {-3,-2,-1,0}, {-4,-3,-2,-1}, {-5,-4,-3,-2}, {-6,-5,-4,-3}, {-7,-6,-5,-4}, {-8,-7,-6,-5}, {-9,-8,-7,-6}, {-10,-9,-8,-7}, {-11,-10,-9,-8}, {-12,-11,-10,-9}, {-13,-12,-11,-10}, {-14,-13,-12,-11}, {-15,-14,-13,-12}}; 
+
+  const int32_t ucShift5[32][4] = { {20,21,22,23}, {19,20,21,22}, {18,19,20,21}, {17,18,19,20}, {16,17,18,19}, {15,16,17,18}, {14,15,16,17}, {13,14,15,16}, {12,13,14,15}, {11,12,13,14}, {10,11,12,13}, {9,10,11,12}, {8,9,10,11},{7,8,9,10}, {6,7,8,9}, {5,6,7,8}, {4,5,6,7}, {3,4,5,6}, {2,3,4,5}, {1,2,3,4}, {0,1,2,3}, {-1,0,1,2},{-2,-1,0,1}, {-3,-2,-1,0}, {-4,-3,-2,-1}, {-5,-4,-3,-2}, {-6,-5,-4,-3}, {-7,-6,-5,-4}, {-8,-7,-6,-5}, {-9,-8,-7,-6}, {-10,-9,-8,-7}, {-11,-10,-9,-8}}; 
+
+  const int32_t ucShift6[32][4] = { {24,25,26,27}, {23,24,25,26}, {22,23,24,25}, {21,22,23,24}, {20,21,22,23}, {19,20,21,22}, {18,19,20,21}, {17,18,19,20}, {16,17,18,19}, {15,16,17,18}, {14,15,16,17}, {13,14,15,16}, {12,13,14,15}, {11,12,13,14}, {10,11,12,13}, {9,10,11,12}, {8,9,10,11},{7,8,9,10}, {6,7,8,9}, {5,6,7,8}, {4,5,6,7}, {3,4,5,6}, {2,3,4,5}, {1,2,3,4}, {0,1,2,3}, {-1,0,1,2},{-2,-1,0,1}, {-3,-2,-1,0}, {-4,-3,-2,-1}, {-5,-4,-3,-2}, {-6,-5,-4,-3}, {-7,-6,-5,-4}}; 
+
+  const int32_t ucShift7[32][4] = { {28,29,30,31}, {27,28,29,30}, {26,27,28,29}, {25,26,27,28}, {24,25,26,27}, {23,24,25,26}, {22,23,24,25}, {21,22,23,24}, {20,21,22,23}, {19,20,21,22}, {18,19,20,21}, {17,18,19,20}, {16,17,18,19}, {15,16,17,18}, {14,15,16,17}, {13,14,15,16}, {12,13,14,15}, {11,12,13,14}, {10,11,12,13}, {9,10,11,12}, {8,9,10,11},{7,8,9,10}, {6,7,8,9}, {5,6,7,8}, {4,5,6,7}, {3,4,5,6}, {2,3,4,5}, {1,2,3,4}, {0,1,2,3}, {-1,0,1,2},{-2,-1,0,1}, {-3,-2,-1,0}}; 
+  const uint32_t __attribute__ ((aligned (16))) masks0[4] = {0x1,0x2,0x4,0x8};
+  const uint32_t __attribute__ ((aligned (16))) masks1[4] = {0x10,0x20,0x40,0x80};
+  const uint32_t __attribute__ ((aligned (16))) masks2[4] = {0x100,0x200,0x400,0x800};
+  const uint32_t __attribute__ ((aligned (16))) masks3[4] = {0x1000,0x2000,0x4000,0x8000};
+  const uint32_t __attribute__ ((aligned (16))) masks4[4] = {0x10000,0x20000,0x40000,0x80000};
+  const uint32_t __attribute__ ((aligned (16))) masks5[4] = {0x100000,0x200000,0x400000,0x800000};
+  const uint32_t __attribute__ ((aligned (16))) masks6[4] = {0x1000000,0x2000000,0x4000000,0x8000000};
+  const uint32_t __attribute__ ((aligned (16))) masks7[4] = {0x10000000,0x20000000,0x40000000,0x80000000};
+  int32x4_t vshift0[32],vshift1[32],vshift2[32],vshift3[32],vshift4[32],vshift5[32],vshift6[32],vshift7[32];
+  for (int n=0;n<32;n++) {
+	  vshift0[n] = vld1q_s32(ucShift0[n]);
+	  vshift1[n] = vld1q_s32(ucShift1[n]);
+	  vshift2[n] = vld1q_s32(ucShift2[n]);
+	  vshift3[n] = vld1q_s32(ucShift3[n]);
+	  vshift4[n] = vld1q_s32(ucShift4[n]);
+	  vshift5[n] = vld1q_s32(ucShift5[n]);
+	  vshift6[n] = vld1q_s32(ucShift6[n]);
+	  vshift7[n] = vld1q_s32(ucShift7[n]);
+  }
+  uint32x4_t vmask0  = vld1q_u32(masks0);
+  uint32x4_t vmask1  = vld1q_u32(masks1);
+  uint32x4_t vmask2  = vld1q_u32(masks2);
+  uint32x4_t vmask3  = vld1q_u32(masks3);
+  uint32x4_t vmask4  = vld1q_u32(masks4);
+  uint32x4_t vmask5  = vld1q_u32(masks5);
+  uint32x4_t vmask6  = vld1q_u32(masks6);
+  uint32x4_t vmask7  = vld1q_u32(masks7);
   uint32_t output_tmp=0;
+  int s2=0;
   //AssertFatal((E&3)==0,"E is not a multiple of 4\n");
   //AssertFatal((E2&3)==0,"E2 is not a multiple of 4\n");
   for (s = 0; s < E2_first_segment ; s++) {
+    s2 = s&31;	  
     foffset = (s>>5)*E;
     fp = f+foffset;
+#if 0
     if ((bit_index&3) == 0) {
-      for (int i = 0; i < E; i+=4) {
-        uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift[s]),vmask);
+      int i;	    
+      for (i = 0; i < ((E>>2)<<2); i+=4) {
+        uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift0[s2]),vmask0);
         uint32_t tmp = vaddvq_u32(cshift);
         *(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
         bit_index+=4;
       }
+      uint32_t Emod4=E&3;
+      if (Emod4 != 0) {
+        uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift0[s2]),vmask0);
+        uint32_t tmp = vaddvq_u32(cshift);
+	tmp&=((1<<(Emod4&3))-1);
+        *(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
+        bit_index+=(Emod4&3);
+      }
+
     }
     else {
-      for (int i = 0; i < E; i+=4) {
-  	uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift[s]),vmask);
+      int i=0;
+      for (i = 0; i < (E>>2)<<2; i+=4) {
+  	uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift0[s2]),vmask0);
         uint32_t tmp = vaddvq_u32(cshift);
 	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
 	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
         bit_index+=4;
       }
+      uint32_t Emod4=E&3;
+      if (Emod4 != 0) {
+        uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift0[s2]),vmask0);
+        uint32_t tmp = vaddvq_u32(cshift);
+	tmp&=((1<<(Emod4&3))-1);
+        *(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
+	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
+        bit_index+=(Emod4&3);
+      }
     }
-    if ((E&3) != 0) bit_index=bit_index - 4 + (E&3);
+#else    
+    int i;
+    if ((bit_index&31) == 0 ) {
+      for (i = 0; i < (E>>5)<<5; i+=32) {
+	uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
+  	uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+        uint32_t tmp = vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
+        tmp |= vaddvq_u32(cshift);
+	*(output_p + (bit_index>>5))     = tmp;
+	bit_index+=32;
+      }
+      uint32_t Emod32=E&31;
+      if (Emod32 != 0) {
+        uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
+        uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+        uint32_t tmp = vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
+        tmp |= vaddvq_u32(cshift);
+        tmp&=((1<<Emod32)-1);
+        *(output_p + (bit_index>>5))     = tmp;
+        bit_index+=Emod32;
+      }
+    }
+    else {
+      for (i = 0; i < (E>>5)<<5; i+=32) {
+	uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
+  	uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+        uint32_t tmp = vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
+        tmp |= vaddvq_u32(cshift);
+	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
+	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
+	bit_index+=32;
+      }
+      uint32_t Emod32=E&31;
+      if (Emod32 != 0) {
+        uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
+        uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+        uint32_t tmp = vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
+        tmp |= vaddvq_u32(cshift);
+        tmp&=((1<<Emod32)-1);
+        *(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
+	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
+        bit_index+=Emod32;
+      }
+    }
+#endif
   }
-  s0 = s;
+//  s0 = s;
   for ( ; s < nb_segments ; s++){
-    foffset = ((s-s0)>>5)*E2;
+    s2 = s&31;	  
+    foffset = ((s>>5)-E2_first_segment32)*E2;
     fp = f2+foffset;
+#if 0
     if ((bit_index&3) == 0) {
       for (int i = 0; i < E2; i+=4) {
-  	uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift[s]),vmask);
+  	uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift[s2]),vmask);
         uint32_t tmp = vaddvq_u32(cshift);
 	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
+/*	
+	if (((i<16) || (i>=(E2-16))) && (s==nb_segments-1)) {
+		printf("bit_index %d tmp %x\n",bit_index,tmp);
+		printf("s %d E2_first_segment32 %d foffset %d i %d: f2 %x\n",s,E2_first_segment32, foffset,i,fp[i]);
+		printf("s %d E2_first_segment32 %d foffset %d i %d: f2 %x\n",s,E2_first_segment32, foffset,i+1,fp[i+1]);
+		printf("s %d E2_first_segment32 %d foffset %d i %d: f2 %x\n",s,E2_first_segment32, foffset,i+2,fp[i+2]);
+		printf("s %d E2_first_segment32 %d foffset %d i %d: f2 %x\n",s,E2_first_segment32, foffset,i+3,fp[i+3]);
+	}
+	*/
 	bit_index+=4;
       }
     }
     else {
       for (int i = 0; i < E2; i+=4) {
-  	uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift[s]),vmask);
+  	uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift[s2]),vmask);
         uint32_t tmp = vaddvq_u32(cshift);
 	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
 	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
@@ -260,6 +427,103 @@ static void unpack_output(uint32_t *f,
       }
     }
     if ((E2&3) != 0) bit_index=bit_index - 4 + (E2&3);
+#else
+    int i;
+    if ((bit_index&31) == 0 ) {
+      for (i = 0; i < (E2>>5)<<5; i+=32) {
+	uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
+  	uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+        uint32_t tmp = vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
+        tmp |= vaddvq_u32(cshift);
+	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
+	bit_index+=32;
+      }
+      uint32_t E2mod32=E2&31;
+      if (E2mod32 != 0) {
+        uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
+        uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+        uint32_t tmp = vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
+        tmp |= vaddvq_u32(cshift);
+        tmp&=((1<<E2mod32)-1);
+        *(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
+        bit_index+=E2mod32;
+      }
+    }
+    else {
+      for (i = 0; i < (E2>>5)<<5; i+=32) {
+	uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
+  	uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+        uint32_t tmp = vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
+        tmp |= vaddvq_u32(cshift);
+  	cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
+        tmp |= vaddvq_u32(cshift);
+	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
+	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
+	bit_index+=32;
+      }
+      uint32_t E2mod32=E2&31;
+      if (E2mod32 != 0) {
+        uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
+        uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+        uint32_t tmp = vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
+        tmp |= vaddvq_u32(cshift);
+        cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
+        tmp |= vaddvq_u32(cshift);
+        tmp&=((1<<E2mod32)-1);
+        *(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
+	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
+        bit_index+=E2mod32;
+      }
+    }
+#endif
   }
 #else
   int segpos;	
@@ -329,15 +593,16 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
   int n_seg2  = n_seg;
   if ((nrLDPC_TB_encoding_parameters->C & 31) > 0) n_seg2++;
   int r_shift = n_seg2; 
-  int r_shift2 = 32;
+  int r_shift2 = nrLDPC_TB_encoding_parameters->C;
   for (int s=0;s<nrLDPC_TB_encoding_parameters->C;s++) {
-      LOG_I(NR_PHY,"segment %d E %d\n",s,nrLDPC_TB_encoding_parameters->segments[s].E);	  
+      //printf("segment %d E %d\n",s,nrLDPC_TB_encoding_parameters->segments[s].E);	  
       if (nrLDPC_TB_encoding_parameters->segments[s].E != E) {
 	 E2=nrLDPC_TB_encoding_parameters->segments[s].E;
          if(E2 > Emax)
            Emax = E2;
 	 r_shift = s>>5;
 	 r_shift2 = s;
+	// printf("r_shift %d, r_shift2 %d\n",r_shift,r_shift2);
          break;
       }	 
   }    
@@ -357,9 +622,12 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
         nb_rb,
         nrLDPC_TB_encoding_parameters->nb_layers);
 /*
-  printf("Rate Matching, Code segment 0..%d (coded bits (G) %u, E %d, E2 %d Filler bits %d, Filler offset %d mod_order %d, nb_rb "
+  printf("Rate Matching, Code segment 0..%d r_shift %d r_shift2 %d n_seg2 %d (coded bits (G) %u, E %d, E2 %d Filler bits %d, Filler offset %d mod_order %d, nb_rb "
           "%d,nrOfLayer %d)...\n",
-        impp.n_segments,
+        impp.n_segments-1,
+	r_shift,
+	r_shift2,
+	n_seg2,
         G,
         E,E2,
         impp.F,
@@ -368,6 +636,7 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
         nb_rb,
         nrLDPC_TB_encoding_parameters->nb_layers);
 */
+
   uint32_t Tbslbrm = nrLDPC_TB_encoding_parameters->tbslbrm;
 
   uint32_t e[E*(r_shift+1)];
@@ -381,7 +650,7 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
   start_meas(&nrLDPC_TB_encoding_parameters->segments[0].ts_rate_match);
   memset(e,0,sizeof(e));
   memset(f,0,sizeof(f));
-  if (r_shift < n_seg2) { 
+  if (1/*r_shift < n_seg2*/) { 
     memset(e2,0,sizeof(e2));
     memset(f2,0,sizeof(f2));
   }
@@ -409,6 +678,11 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
                               impp.K - impp.F - 2 * impp.Zc,
                               nrLDPC_TB_encoding_parameters->rv_index,
                               E2);
+   /* 
+    if (r==(n_seg2-1)) {
+	    for (int i=0;i<16;i++) printf("rm: %x %x\n",d[n_seg2-1][i],e2[((n_seg2-1)*E2)+i]);
+    }
+    */
   }
   stop_meas(&nrLDPC_TB_encoding_parameters->segments[0].ts_rate_match);
   if (impp.K - impp.F - 2 * impp.Zc > E) {
@@ -432,6 +706,8 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
           mod_order,
           nb_rb);
   }
+  
+  //printf("interleaving r_shift %d, n_seg2 %d\n",r_shift,n_seg2);
   start_meas(&nrLDPC_TB_encoding_parameters->segments[0].ts_interleave);
   
   for (int r=0;r<=r_shift;r++)
@@ -445,10 +721,16 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
                            mod_order,
                            e2+E2*(r-r_shift),
                            f2+E2*(r-r_shift));
-
-  unpack_output(f,E,f2,E2,(r_shift<n_seg2)?false:true,r_shift2,nrLDPC_TB_encoding_parameters->C,output);
-
+/*
+  for (int i=0;i<16;i++) printf("intl (f offset %d): %x %x\n",(n_seg2-1)*E2,e2[((n_seg2-1)*E2)+i],f2[((n_seg2-1)*E2)+i]);
+  printf("-------------------\n");
+  for (int i=E2-16;i<E2;i++) printf("intl (f offset %d): %x %x\n",(n_seg2-1)*E2,e2[((n_seg2-1)*E2)+i],f2[((n_seg2-1)*E2)+i]);
+  */
   stop_meas(&nrLDPC_TB_encoding_parameters->segments[0].ts_interleave);
+
+  start_meas(impp.tconcat);
+  unpack_output(f,E,f2,E2,r_shift,r_shift2,nrLDPC_TB_encoding_parameters->C,output);
+  stop_meas(impp.tconcat);
 
 }
 
@@ -464,6 +746,7 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
       .tprep = nrLDPC_slot_encoding_parameters->tprep,
       .tparity = nrLDPC_slot_encoding_parameters->tparity,
       .toutput = nrLDPC_slot_encoding_parameters->toutput,
+      .tconcat = nrLDPC_slot_encoding_parameters->tconcat,
       .Kb = nrLDPC_TB_encoding_parameters->Kb,
       .Zc = nrLDPC_TB_encoding_parameters->Z,
       .BG = nrLDPC_TB_encoding_parameters->BG,
