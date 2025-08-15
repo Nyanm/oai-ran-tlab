@@ -595,9 +595,9 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
   */
   stop_meas(&nrLDPC_TB_encoding_parameters->segments[0].ts_interleave);
 
-  start_meas(impp.tconcat);
+  if (impp.tconcat) start_meas(impp.tconcat);
   unpack_output(f,E,f2,E2,r_shift,r_shift2,nrLDPC_TB_encoding_parameters->C,output);
-  stop_meas(impp.tconcat);
+  if (impp.tconcat) stop_meas(impp.tconcat);
 
 }
 
