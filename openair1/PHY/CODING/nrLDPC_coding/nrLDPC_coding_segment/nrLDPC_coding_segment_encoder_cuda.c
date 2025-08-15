@@ -252,95 +252,39 @@ static void unpack_output(uint32_t *f,
   uint32x4_t vmask7  = vld1q_u32(masks7);
   uint32_t output_tmp=0;
   int s2=0;
-  //AssertFatal((E&3)==0,"E is not a multiple of 4\n");
-  //AssertFatal((E2&3)==0,"E2 is not a multiple of 4\n");
   for (s = 0; s < E2_first_segment ; s++) {
     s2 = s&31;	  
     foffset = (s>>5)*E;
     fp = f+foffset;
-#if 0
-    if ((bit_index&3) == 0) {
-      int i;	    
-      for (i = 0; i < ((E>>2)<<2); i+=4) {
-        uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift0[s2]),vmask0);
-        uint32_t tmp = vaddvq_u32(cshift);
-        *(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
-        bit_index+=4;
-      }
-      uint32_t Emod4=E&3;
-      if (Emod4 != 0) {
-        uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift0[s2]),vmask0);
-        uint32_t tmp = vaddvq_u32(cshift);
-	tmp&=((1<<(Emod4&3))-1);
-        *(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
-        bit_index+=(Emod4&3);
-      }
-
-    }
-    else {
-      int i=0;
-      for (i = 0; i < (E>>2)<<2; i+=4) {
-  	uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift0[s2]),vmask0);
-        uint32_t tmp = vaddvq_u32(cshift);
-	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
-	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
-        bit_index+=4;
-      }
-      uint32_t Emod4=E&3;
-      if (Emod4 != 0) {
-        uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift0[s2]),vmask0);
-        uint32_t tmp = vaddvq_u32(cshift);
-	tmp&=((1<<(Emod4&3))-1);
-        *(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
-	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
-        bit_index+=(Emod4&3);
-      }
-    }
-#else    
     int i;
     if ((bit_index&31) == 0 ) {
       for (i = 0; i < (E>>5)<<5; i+=32) {
 	uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
   	uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
-        uint32_t tmp = vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
-        tmp |= vaddvq_u32(cshift);
-	*(output_p + (bit_index>>5))     = tmp;
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7));
+
+	*(output_p + (bit_index>>5))     = vaddvq_u32(cshift);
 	bit_index+=32;
       }
       uint32_t Emod32=E&31;
       if (Emod32 != 0) {
         uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
-        uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
-        uint32_t tmp = vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
-        tmp |= vaddvq_u32(cshift);
-        tmp&=((1<<Emod32)-1);
-        *(output_p + (bit_index>>5))     = tmp;
+  	uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7));
+
+	*(output_p + (bit_index>>5))     = vaddvq_u32(cshift)&((1<<Emod32)-1);
         bit_index+=Emod32;
       }
     }
@@ -348,21 +292,14 @@ static void unpack_output(uint32_t *f,
       for (i = 0; i < (E>>5)<<5; i+=32) {
 	uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
   	uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7));
         uint32_t tmp = vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
-        tmp |= vaddvq_u32(cshift);
 	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
 	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
 	bit_index+=32;
@@ -370,130 +307,69 @@ static void unpack_output(uint32_t *f,
       uint32_t Emod32=E&31;
       if (Emod32 != 0) {
         uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
-        uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+  	uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7));
         uint32_t tmp = vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
-        tmp |= vaddvq_u32(cshift);
         tmp&=((1<<Emod32)-1);
         *(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
 	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
         bit_index+=Emod32;
       }
     }
-#endif
   }
 //  s0 = s;
   for ( ; s < nb_segments ; s++){
     s2 = s&31;	  
     foffset = ((s>>5)-E2_first_segment32)*E2;
     fp = f2+foffset;
-#if 0
-    if ((bit_index&3) == 0) {
-      for (int i = 0; i < E2; i+=4) {
-  	uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift[s2]),vmask);
-        uint32_t tmp = vaddvq_u32(cshift);
-	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
-/*	
-	if (((i<16) || (i>=(E2-16))) && (s==nb_segments-1)) {
-		printf("bit_index %d tmp %x\n",bit_index,tmp);
-		printf("s %d E2_first_segment32 %d foffset %d i %d: f2 %x\n",s,E2_first_segment32, foffset,i,fp[i]);
-		printf("s %d E2_first_segment32 %d foffset %d i %d: f2 %x\n",s,E2_first_segment32, foffset,i+1,fp[i+1]);
-		printf("s %d E2_first_segment32 %d foffset %d i %d: f2 %x\n",s,E2_first_segment32, foffset,i+2,fp[i+2]);
-		printf("s %d E2_first_segment32 %d foffset %d i %d: f2 %x\n",s,E2_first_segment32, foffset,i+3,fp[i+3]);
-	}
-	*/
-	bit_index+=4;
-      }
-    }
-    else {
-      for (int i = 0; i < E2; i+=4) {
-  	uint32x4_t cshift = vandq_u32(vshlq_u32(*(uint32x4_t*)&fp[i],vshift[s2]),vmask);
-        uint32_t tmp = vaddvq_u32(cshift);
-	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
-	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
-	bit_index+=4;
-      }
-    }
-    if ((E2&3) != 0) bit_index=bit_index - 4 + (E2&3);
-#else
     int i;
     if ((bit_index&31) == 0 ) {
       for (i = 0; i < (E2>>5)<<5; i+=32) {
 	uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
   	uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
-        uint32_t tmp = vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
-        tmp |= vaddvq_u32(cshift);
-	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7));
+	*(output_p + (bit_index>>5))     = vaddvq_u32(cshift);
 	bit_index+=32;
       }
       uint32_t E2mod32=E2&31;
       if (E2mod32 != 0) {
         uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
         uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
-        uint32_t tmp = vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
-        tmp |= vaddvq_u32(cshift);
-        tmp&=((1<<E2mod32)-1);
-        *(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7));
+        *(output_p + (bit_index>>5))     = vaddvq_u32(cshift)&((1<<E2mod32)-1);
         bit_index+=E2mod32;
       }
     }
     else {
       for (i = 0; i < (E2>>5)<<5; i+=32) {
 	uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
-  	uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+        uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7));
         uint32_t tmp = vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
-        tmp |= vaddvq_u32(cshift);
-  	cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
-        tmp |= vaddvq_u32(cshift);
 	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
 	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
 	bit_index+=32;
@@ -502,30 +378,21 @@ static void unpack_output(uint32_t *f,
       if (E2mod32 != 0) {
         uint32x4_t *fp128 = (uint32x4_t*)&fp[i];    
         uint32x4_t cshift = vandq_u32(vshlq_u32(fp128[0],vshift0[s2]),vmask0);
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5));
+  	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6));
         uint32_t tmp = vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[1],vshift1[s2]),vmask1);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[2],vshift2[s2]),vmask2);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[3],vshift3[s2]),vmask3);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[4],vshift4[s2]),vmask4);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6);
-        tmp |= vaddvq_u32(cshift);
-        cshift = vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7);
-        tmp |= vaddvq_u32(cshift);
         tmp&=((1<<E2mod32)-1);
         *(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
 	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
         bit_index+=E2mod32;
       }
     }
-#endif
   }
-#else
+#else // non SIMD version
   int segpos;	
   for (s = 0; s < E2_first_segment ; s++) {
     foffset = (s>>5)*E;
