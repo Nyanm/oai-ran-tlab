@@ -392,6 +392,7 @@ if(PARALLEL_PATH == 1){
     set_abort(&dec_abort, false);
     //printf("Are you here?\n");
     // printf("n_segments = %d in test\n",n_segments);
+    dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_stream.txt");
     n_iter = ldpc_toCompare.LDPCdecoder(&decParams,
                                         0,
                                         0,
@@ -403,7 +404,7 @@ if(PARALLEL_PATH == 1){
     stop_meas(&ret.time_decoder);
     // printf("7:It works here\n");
     dumpASS(estimated_output, "ldpctest_estimateOutput_stream.txt");
-    //dumpASS(test_input, "ldpctest_TestInput_stream.txt");
+
     for (int j = 0; j < n_segments; j++) {
       //printf("estimated_output[%d] = %p\n", j, &estimated_output[j]);
       if (memcmp(estimated_output[j], test_input[j], ((Kprime + 7) & ~7) / 8) != 0) {
@@ -436,7 +437,7 @@ else{
     for (int j = 0; j < n_segments; j++) {
       start_meas(&ret.time_decoder);
       set_abort(&dec_abort, false);
-
+dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_128.txt");
       n_iter = ldpc_toCompare.LDPCdecoder(&decParams[j],
                                           0,
                                           0,

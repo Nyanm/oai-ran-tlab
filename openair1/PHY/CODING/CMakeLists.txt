@@ -56,7 +56,7 @@ if (ENABLE_LDPC_CUDA)
   if (NOT CUDA_FOUND)
     message(FATAL_ERROR "no CUDA found")
   endif()
-  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=native;")
+  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_80;")
   SET(CUDA_VERBOSE_BUILD ON)
   cuda_add_library(ldpc_cuda MODULE
 	  #                   nrLDPC_decoder_LYC/nrLDPC_decoder_LYC.cu
@@ -82,6 +82,7 @@ if (ENABLE_LDPC_CUDA)
     cuda_add_library(ldpc_cuda_stream MODULE
     nrLDPC_decoder/nrLDPC_decoder.c
     nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu  
+    nrLDPC_decoder/kernel_test.cu  
     nrLDPC_encoder/ldpc_encoder_cuda32.c
     nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
     nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c

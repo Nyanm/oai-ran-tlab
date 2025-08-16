@@ -153,23 +153,37 @@
 
 //--------------------------CUDA Area---------------------------
 #include <cuda_runtime.h>
+#define STATIC_LUT 1
+
+#if STATIC_LUT
+static bool p_lutCreated = false;
+static uint32_t numLLR;
+static t_nrLDPC_lut lut;
+static t_nrLDPC_lut* p_lut = &lut;
+#endif
 
 #ifdef PARALLEL_STREAM
+#include "decoder_graphs.h"
 static cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS];
 static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS];
 static bool streamsCreated = false;
+static bool d_mem_exist = false;
 static int currentStreamCount = 0;
 static int8_t iter_ptr_array[MAX_NUM_DLSCH_SEGMENTS];
-static  int PC_Flag_array[MAX_NUM_DLSCH_SEGMENTS];
-static  int8_t cnProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static  int8_t cnProcBufRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static  int8_t bnProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static  int8_t bnProcBufRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static  int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
-static  int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
-static  int8_t pp_llrOut[NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
-#endif
+static int PC_Flag_array[MAX_NUM_DLSCH_SEGMENTS];
+ t_nrLDPC_lut* p_lut_dev = NULL;
+static t_nrLDPC_lut* P_lut = NULL;
 
+// device buffers (allocated in LDPCinit)
+static int8_t* d_cnProcBuf = NULL;
+static int8_t* d_cnProcBufRes = NULL;
+static int8_t* d_bnProcBuf = NULL;
+static int8_t* d_bnProcBufRes = NULL;
+static int8_t* d_llrRes = NULL;
+static int8_t* d_llrProcBuf = NULL;
+static int8_t* d_llrOut = NULL;
+static int8_t* d_out = NULL; // optional if needed per-seg
+#endif
 
 extern void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut* p_lut,
                                    int8_t* cnProcBuf,
@@ -192,6 +206,8 @@ extern void nrLDPC_BnToCnPC_BG1_cuda(const t_nrLDPC_lut* p_lut,
                                      uint16_t Z,
                                      int* PC_Flag);
 #ifdef PARALLEL_STREAM
+extern void run_test_kernel();
+
 extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    int8_t* p_out,
                                                    uint32_t numLLR,
@@ -255,6 +271,17 @@ void dumpASS(int8_t* cnProcBufRes, const char* filename)
 }
 //--------------------------------------------------------------
 #ifdef PARALLEL_STREAM
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+bool is_device_pointer(const void* p);
+
+#ifdef __cplusplus
+}
+#endif
+
 static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            int8_t* p_out,
                                            int n_segments,
@@ -264,13 +291,203 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            t_nrLDPC_time_stats* p_profiler,
                                            decode_abort_t* ab);
 
+void free_graphs()
+{
+  for (int i = 0; i < MAX_NUM_DLSCH_SEGMENTS; i++) {
+    if (graphCreated[i]) {
+      cudaGraphExecDestroy(decoderGraphExec[i]);
+      cudaGraphDestroy(decoderGraphs[i]);
+      graphCreated[i] = false;
+    }
+  }
+}
+
+bool check_kernel_args_for_graph(const void* p_lut, // host expected (重要 host 常量 LUT)
+                                 const void* p_out, // may be host or device (建议 device 或 managed)
+                                 const void* cnProcBuf, // device expected
+                                 const void* cnProcBufRes, // device expected
+                                 const void* bnProcBuf, // device expected
+                                 const void* bnProcBufRes, // device expected
+                                 const void* llrRes, // device expected
+                                 const void* llrProcBuf, // device expected
+                                 const void* llrOut, // device expected         // may be host or device
+                                 const void* iter_ptr_array, // device expected (kernel iteration state)
+                                 const void* iter_ptr_array2, // device expected (第二份迭代指针)
+                                 bool strict)
+{
+  bool ok = true;
+
+  // 检查 p_lut: 必须是 Host pointer
+  if (is_device_pointer(p_lut)) {
+    fprintf(stderr, "check_kernel_args_for_graph: p_lut should be HOST pointer: %p\n", p_lut);
+    if (strict)
+      return false;
+    ok = false;
+  }
+
+  // 检查 device 预期的 buffer
+  const void* device_ptrs[] =
+      {cnProcBuf, cnProcBufRes, bnProcBuf, bnProcBufRes, llrRes, llrProcBuf, llrOut, iter_ptr_array, iter_ptr_array2};
+  const char* device_names[] = {"cnProcBuf",
+                                "cnProcBufRes",
+                                "bnProcBuf",
+                                "bnProcBufRes",
+                                "llrRes",
+                                "llrProcBuf",
+                                "llrOut",
+                                "iter_ptr_array",
+                                "iter_ptr_array2"};
+  for (int i = 0; i < (int)(sizeof(device_ptrs) / sizeof(device_ptrs[0])); i++) {
+    if (!is_device_pointer(device_ptrs[i])) {
+      fprintf(stderr, "check_kernel_args_for_graph: %s is NOT device pointer: %p\n", device_names[i], device_ptrs[i]);
+      if (strict)
+        return false;
+      ok = false;
+    }
+  }
+
+  // p_out / p_llrOut 可以是 host 也可以是 device（建议 managed 或 device）
+  if (!is_device_pointer(p_out)) {
+    fprintf(stderr, "check_kernel_args_for_graph: p_out is NOT device pointer: %p\n", p_out);
+    if (strict)
+      return false;
+    ok = false;
+  }
+  if (!is_device_pointer(d_llrOut)) {
+    fprintf(stderr, "check_kernel_args_for_graph: p_llrOut is NOT device pointer: %p\n", d_llrOut);
+    if (strict)
+      return false;
+    ok = false;
+  }
+
+  return ok;
+}
+
 int32_t LDPCinit()
 {
+  return 0;
+}
+int32_t LDPCinit_cuda()
+{
+  size_t cn_bytes = MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_CN_PROC_BUF * sizeof(int8_t);
+  size_t bn_bytes = MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_BN_PROC_BUF * sizeof(int8_t);
+  size_t llr_bytes = MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_MAX_NUM_LLR * sizeof(int8_t);
+  size_t llrOut_bytes = NR_LDPC_MAX_NUM_LLR * sizeof(int8_t);
+
+  cudaError_t err;
+  err = cudaMallocManaged((void**)&d_cnProcBuf, cn_bytes, cudaMemAttachGlobal);
+  if (err != cudaSuccess) {
+    fprintf(stderr, "cudaMalloc d_cnProcBuf failed: %s\n", cudaGetErrorString(err));
+    return -1;
+  }
+  err = cudaMalloc((void**)&d_cnProcBufRes, cn_bytes);
+  if (err != cudaSuccess) {
+    fprintf(stderr, "cudaMalloc d_cnProcBufRes failed: %s\n", cudaGetErrorString(err));
+    return -1;
+  }
+  err = cudaMalloc((void**)&d_bnProcBuf, bn_bytes);
+  if (err != cudaSuccess) {
+    fprintf(stderr, "cudaMalloc d_bnProcBuf failed: %s\n", cudaGetErrorString(err));
+    return -1;
+  }
+  err = cudaMalloc((void**)&d_bnProcBufRes, bn_bytes);
+  if (err != cudaSuccess) {
+    fprintf(stderr, "cudaMalloc d_bnProcBufRes failed: %s\n", cudaGetErrorString(err));
+    return -1;
+  }
+  err = cudaMalloc((void**)&d_llrRes, llr_bytes);
+  if (err != cudaSuccess) {
+    fprintf(stderr, "cudaMalloc d_llrRes failed: %s\n", cudaGetErrorString(err));
+    return -1;
+  }
+ err = cudaMallocManaged((void**)&d_llrProcBuf, llr_bytes, cudaMemAttachGlobal);
+if (err != cudaSuccess) {
+  fprintf(stderr, "cudaMallocManaged d_llrProcBuf failed: %s\n", cudaGetErrorString(err));
+  return -1;
+}
+ err = cudaMallocManaged((void**)&iter_ptr_array, MAX_NUM_DLSCH_SEGMENTS*sizeof(int8_t), cudaMemAttachGlobal);
+if (err != cudaSuccess) {
+  fprintf(stderr, "cudaMallocManaged iter_ptr_array failed: %s\n", cudaGetErrorString(err));
+  return -1;
+}
+
+ err = cudaMallocManaged((void**)&PC_Flag_array, MAX_NUM_DLSCH_SEGMENTS*sizeof(int), cudaMemAttachGlobal);
+if (err != cudaSuccess) {
+  fprintf(stderr, "cudaMallocManaged PC_Flag_array failed: %s\n", cudaGetErrorString(err));
+  return -1;
+}
+
+
+
+  err = cudaMalloc((void**)&d_llrOut, llrOut_bytes);
+  if (err != cudaSuccess) {
+    fprintf(stderr, "cudaMalloc d_pp_llrOut failed: %s\n", cudaGetErrorString(err));
+    return -1;
+  }
+  err = cudaMalloc((void**)&d_out, 13*8448*sizeof(uint8_t));
+  if (err != cudaSuccess) {
+    fprintf(stderr, "cudaMalloc d_out failed: %s\n", cudaGetErrorString(err));
+    return -1;
+  }
+  /*err = cudaMalloc((void**)&p_lut_dev, sizeof(t_nrLDPC_lut));
+  if (err != cudaSuccess) {
+    fprintf(stderr, "cudaMalloc for p_lut_dev failed: %s\n", cudaGetErrorString(err));
+    return -1;
+  }
+
+  // 拷贝整个结构体到 device
+  printf("Copying LUT from host %p to device %p, size=%zu\n", (void*)P_lut, (void*)p_lut_dev, sizeof(t_nrLDPC_lut));
+  err = cudaMemcpy(p_lut_dev, P_lut, sizeof(t_nrLDPC_lut), cudaMemcpyHostToDevice);
+  if (err != cudaSuccess) {
+    fprintf(stderr, "cudaMemcpy for p_lut_dev failed: %s\n", cudaGetErrorString(err));
+    return 0;
+  }*/
+  // create streams/events if not already
+  if (!streamsCreated) {
+    for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS; ++s) {
+      cudaStreamCreateWithFlags(&decoderStreams[s], cudaStreamNonBlocking);
+      cudaEventCreate(&decoderDoneEvents[s]);
+    }
+    streamsCreated = true;
+  }
+  
+
   return 0;
 }
 
 int32_t LDPCshutdown()
 {
+  return 0;
+}
+int32_t LDPCshutdown_cuda()
+{
+  if (d_cnProcBuf)
+    cudaFree(d_cnProcBuf);
+  if (d_cnProcBufRes)
+    cudaFree(d_cnProcBufRes);
+  if (d_bnProcBuf)
+    cudaFree(d_bnProcBuf);
+  if (d_bnProcBufRes)
+    cudaFree(d_bnProcBufRes);
+  if (d_llrRes)
+    cudaFree(d_llrRes);
+  if (d_llrProcBuf)
+    cudaFree(d_llrProcBuf);
+  if (d_llrOut)
+    cudaFree(d_llrOut);
+
+  for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS; ++s) {
+    if (streamsCreated) {
+      cudaEventDestroy(decoderDoneEvents[s]);
+      cudaStreamDestroy(decoderStreams[s]);
+    }
+  }
+
+  free_graphs();
+
+  streamsCreated = false;
+  d_mem_exist = false;
+
   return 0;
 }
 
@@ -282,13 +499,19 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params* p_decParams,
                     int8_t* p_out,
                     t_nrLDPC_time_stats* p_profiler,
                     decode_abort_t* ab)
-{
+{ // Initialize decoder core(s) with correct LUTs
+#if STATIC_LUT
+  if (!p_lutCreated) {
+    //P_lut = p_lut;
+    numLLR = nrLDPC_init(p_decParams, p_lut);
+    printf("I'm here everytime\n");
+    p_lutCreated = true;
+  }
+#else
   uint32_t numLLR;
   t_nrLDPC_lut lut;
   t_nrLDPC_lut* p_lut = &lut;
-
-  // Initialize decoder core(s) with correct LUTs
-  numLLR = nrLDPC_init(p_decParams, p_lut);
+#endif
 
   // Launch LDPC decoder core for one segment
   int n_segments = p_decParams->n_segments;
@@ -321,6 +544,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            t_nrLDPC_time_stats* p_profiler,
                                            decode_abort_t* ab)
 {
+  run_test_kernel();//just for testing
+
   // printf("n_segments = %d\n", n_segments);
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
@@ -334,60 +559,94 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   //  int8_t* cnProcBufRes= cnProcBufRes;
   // printf("1: It works here\n");
 
-
   // printf("2: It works here\n");
   //  Minimum number of iterations is 1
   //  0 iterations means hard-decision on input LLRs
   //  Initialize with parity check fail != 0
   // printf("3: It works here\n");
   //  Initialization
-  //cudaStream_t streams[MAX_NUM_DLSCH_SEGMENTS];
-  //cudaEvent_t done[MAX_NUM_DLSCH_SEGMENTS]; // MAX_NUM_SEGMENTS = stream数量
+  // cudaStream_t streams[MAX_NUM_DLSCH_SEGMENTS];
+  // cudaEvent_t done[MAX_NUM_DLSCH_SEGMENTS]; // MAX_NUM_SEGMENTS = stream数量
 
-  for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS; s++) {
+
+  // printf("3.1: It works here\n");
+  /*
+  if (!streamsCreated) {
+    for (int s = 0; s < n_segments; ++s) {
+      cudaStreamCreateWithFlags(&decoderStreams[s], cudaStreamNonBlocking);
+      cudaEventCreate(&decoderDoneEvents[s]);
+    }
+    printf("2\n");
+    streamsCreated = true;
+    //currentStreamCount = n_segments;
+  }
+*/
+  if (d_mem_exist == false) {
+    P_lut = p_lut_dev;
+    printf("2.1\n");
+    //printf("Check P_lut = %d\n", P_lut->posBnInCnProcBuf[0]);
+    printf("2.2\n");
+    LDPCinit_cuda(); // allocate device memory for the first time
+    printf("2.3\n");
+    d_mem_exist = true;
+  }
+
+    for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS; s++) {
     iter_ptr_array[s] = 0;
     PC_Flag_array[s] = 1;
   }
-  // printf("3.1: It works here\n");
-  if (!streamsCreated) {
-  for (int s = 0; s < n_segments; ++s) {
-    cudaStreamCreateWithFlags(&decoderStreams[s], cudaStreamNonBlocking);
-    cudaEventCreate(&decoderDoneEvents[s]);
-  }
-  streamsCreated = true;
-  currentStreamCount = n_segments;
-}
 
   // printf("3.2: It works here\n");
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
-    int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384;
-    int8_t* pp_out = p_out + CudaStreamIdx * Kprime;
+    int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384; // no need put it into device
+    int8_t* pp_out = d_out + CudaStreamIdx * Kprime;
+    printf("2.4\n");
     // printf("Stream %d: pp_out = %p\n", CudaStreamIdx, pp_out);
-    int8_t* pp_cnProcBuf = cnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
-    int8_t* pp_cnProcBufRes = cnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
-    int8_t* pp_bnProcBuf = bnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
-    int8_t* pp_bnProcBufRes = bnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
-    int8_t* pp_llrRes = llrRes + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
-    int8_t* pp_llrProcBuf = llrProcBuf + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
+    int8_t* pp_cnProcBuf = d_cnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
+    int8_t* pp_cnProcBufRes = d_cnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
+    int8_t* pp_bnProcBuf = d_bnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
+    int8_t* pp_bnProcBufRes = d_bnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
+    int8_t* pp_llrRes = d_llrRes + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
+    int8_t* pp_llrProcBuf = d_llrProcBuf + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
     // printf("4: It works here\n");
     //  LLR preprocessing
-    //NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2llrProcBuf));
+    // NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2llrProcBuf));
+    printf("2.5\n");
     nrLDPC_llr2llrProcBuf(p_lut, pp_llr, pp_llrProcBuf, Z, BG);
-    //NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2llrProcBuf));
-    //NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2CnProcBuf));
-    if (BG == 1)
+    printf("2.51\n");
+    // NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2llrProcBuf));
+    // NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2CnProcBuf));
+    if (BG == 1){
       nrLDPC_llr2CnProcBuf_BG1(p_lut, pp_llr, pp_cnProcBuf, Z);
+      printf("2.6\n");}
     else
       nrLDPC_llr2CnProcBuf_BG2(p_lut, pp_llr, pp_cnProcBuf, Z);
-    //NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2CnProcBuf));
-    // Call scheduler for this segment and stream
-    int8_t* pp_p_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? pp_out : pp_llrOut;
+    // NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2CnProcBuf));
+    //  Call scheduler for this segment and stream
+    printf("3\n");
+    int8_t* pp_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? pp_out : d_llrOut;
     // printf("5: It works here\n");
     //  Launch decoder on stream s
-    
-    //cudaEventCreate(&decoderDoneEvents[CudaStreamIdx]);
-    //printf("Launching segment %d \n",CudaStreamIdx);
-    nrLDPC_decoder_scheduler_BG1_cuda_core(p_lut,
+
+    // cudaEventCreate(&decoderDoneEvents[CudaStreamIdx]);
+    // printf("Launching segment %d \n",CudaStreamIdx);
+
+    //-------------------------check device pointer-----------------------
+    check_kernel_args_for_graph(p_lut_dev,
+                                pp_out, // pointer that will be passed to kernel (可能 host)
+                                pp_cnProcBuf, // device expected
+                                pp_cnProcBufRes,
+                                pp_bnProcBuf,
+                                pp_bnProcBufRes,
+                                pp_llrRes,
+                                pp_llrProcBuf,
+                                pp_llrOut,
+                                iter_ptr_array,
+                                PC_Flag_array,
+                                false);
+    //------------------------check area end-------------------------------
+printf("4\n");
+    nrLDPC_decoder_scheduler_BG1_cuda_core(p_lut_dev,
                                            pp_out,
                                            numLLR,
                                            pp_cnProcBuf,
@@ -397,7 +656,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            pp_llrRes,
                                            pp_llrProcBuf,
                                            pp_llrOut,
-                                           pp_p_llrOut,
+                                           pp_llrOut,
                                            Z,
                                            BG,
                                            R,
@@ -408,35 +667,30 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            decoderDoneEvents,
                                            &iter_ptr_array[CudaStreamIdx],
                                            &PC_Flag_array[CudaStreamIdx]); // stream index passed in
-  
-    
-    
-                                           //cudaEventRecord(done[CudaStreamIdx], streams[CudaStreamIdx]);
+
+    // cudaEventRecord(done[CudaStreamIdx], streams[CudaStreamIdx]);
     // printf("5: It works here\n");
   }
-for (int s = 0; s < n_segments; ++s) {
- // printf("Synchronizing segment %d \n",s);
-    cudaEventSynchronize(decoderDoneEvents[s]);  // 阻塞直到该 segment 解码完成
-}
-cudaDeviceSynchronize();
-//cudaDeviceSynchronize();
-  // Wait for all streams
- // for (int s = 0; s < n_segments; s++) {
- //   cudaEventSynchronize(done[s]); // 等待stream[i]完成
- //   // 可安全访问对应的解码输出结果 p_llrOut[i]
-//}
-if(LastTrial == 1){
-  //printf("Now is the last trial\n");
-  for (int s = 0; s < n_segments; s++) {
-    cudaEventDestroy(decoderDoneEvents[s]);
-    cudaStreamSynchronize(decoderStreams[s]);
-    cudaStreamDestroy(decoderStreams[s]);
-    streamsCreated = false;
+  for (int s = 0; s < n_segments; ++s) {
+    // printf("Synchronizing segment %d \n",s);
+    cudaEventSynchronize(decoderDoneEvents[s]); // 阻塞直到该 segment 解码完成
   }
-}
-//cudaDeviceSynchronize();
-  // dumpASS(p_out, "Dump_Output_Stream.txt");
-  // printf("6: It works here\n");
+  cudaDeviceSynchronize();
+  cudaMemcpy(p_out, d_out, 13 * Kprime * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+  cudaDeviceSynchronize();
+  // cudaDeviceSynchronize();
+  //  Wait for all streams
+  // for (int s = 0; s < n_segments; s++) {
+  //   cudaEventSynchronize(done[s]); // 等待stream[i]完成
+  //   // 可安全访问对应的解码输出结果 p_llrOut[i]
+  //}
+  if (LastTrial == 1) {
+    // printf("Now is the last trial\n");
+    LDPCshutdown_cuda();
+  }
+  // cudaDeviceSynchronize();
+  //  dumpASS(p_out, "Dump_Output_Stream.txt");
+  //  printf("6: It works here\n");
 
   return numMaxIter;
 }
@@ -469,12 +723,18 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params* p_decParams,
                     t_nrLDPC_time_stats* p_profiler,
                     decode_abort_t* ab)
 {
+#if STATIC_LUT
+  if (!p_lutCreated) {
+    numLLR = nrLDPC_init(p_decParams, p_lut);
+    printf("I'm here everytime\n");
+    p_lutCreated = true;
+  }
+#else
   uint32_t numLLR;
   t_nrLDPC_lut lut;
   t_nrLDPC_lut* p_lut = &lut;
-
+#endif
   // Initialize decoder core(s) with correct LUTs
-  numLLR = nrLDPC_init(p_decParams, p_lut);
 
   // Launch LDPC decoder core for one segment
   int numIter = nrLDPC_decoder_core(p_llr, p_out, numLLR, p_lut, p_decParams, p_profiler, ab);
@@ -519,8 +779,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   // Minimum number of iterations is 1
   // 0 iterations means hard-decision on input LLRs
   // Initialize with parity check fail != 0
-//printf("cnProcBuf address: %p\n",cnProcBuf);
-  // Initialization
+  // printf("cnProcBuf address: %p\n",cnProcBuf);
+  //  Initialization
   NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2llrProcBuf));
   nrLDPC_llr2llrProcBuf(p_lut, p_llr, llrProcBuf, Z, BG);
   NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2llrProcBuf));

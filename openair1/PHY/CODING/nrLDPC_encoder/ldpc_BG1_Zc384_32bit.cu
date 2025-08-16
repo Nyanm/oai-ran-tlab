@@ -201,6 +201,7 @@ __global__ void ldpc_BG1_Zc384_worker(uint8_t *c,uint8_t *d) {
   }
 }
 extern "C" int ldpc_BG1_Zc384_cuda32(uint8_t *c,uint8_t *d) { 
+  printf("below the encoder kernel\n");
 ldpc_BG1_Zc384_worker<<<46,384>>>(c,d);
  cudaDeviceSynchronize();
   return(0);
