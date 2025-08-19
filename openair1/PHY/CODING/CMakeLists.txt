@@ -60,6 +60,7 @@ if (ENABLE_LDPC_CUDA)
   SET(CUDA_VERBOSE_BUILD ON)
   cuda_add_library(ldpc_cuda MODULE
 	  #                   nrLDPC_decoder_LYC/nrLDPC_decoder_LYC.cu
+    nrLDPC_decoder/kernel_test.cu  
                    nrLDPC_decoder/nrLDPC_decoder.c
 		   nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu
 		   nrLDPC_encoder/ldpc_encoder_cuda32.c

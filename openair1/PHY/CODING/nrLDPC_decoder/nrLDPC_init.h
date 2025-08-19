@@ -33,8 +33,11 @@
 #include <string.h>
 #include "nrLDPC_lut.h"
 #include "nrLDPCdecoder_defs.h"
+/*
+#ifdef USE_CUDA
 #include <cuda_runtime.h>
-
+#endif
+*/
 extern t_nrLDPC_lut* p_lut_dev;
 
 #define expandArr8(namE)                                                         \
@@ -65,13 +68,8 @@ static inline uint32_t nrLDPC_init(t_nrLDPC_dec_params* p_decParams, t_nrLDPC_lu
   uint16_t Z = p_decParams->Z;
   uint8_t R = p_decParams->R;
   memset(p_lut, 0, sizeof(*p_lut));
-#ifdef PARALLEL_STREAM
- cudaError_t err = cudaMalloc((void**)&p_lut_dev, sizeof(t_nrLDPC_lut));
- if (err != cudaSuccess) {
-    fprintf(stderr, "cudaMalloc failed for p_lut_dev: %s\n", cudaGetErrorString(err));
-    exit(EXIT_FAILURE);
-}
-#endif
+  
+
   if (BG == 2) {
     // LUT that only depend on BG
     p_lut->startAddrCnGroups = lut_startAddrCnGroups_BG2;
@@ -618,11 +616,6 @@ static inline uint32_t nrLDPC_init(t_nrLDPC_dec_params* p_decParams, t_nrLDPC_lu
   } else { // BG == 1
     // LUT that only depend on BG
     p_lut->startAddrCnGroups = lut_startAddrCnGroups_BG1;
-#if PARALLER_STREAM
-    cudaMalloc(&p_lut_dev->startAddrCnGroups, 9 * sizeof(uint32_t));
-    cudaMemcpy(p_lut_dev->startAddrCnGroups, p_lut->startAddrCnGroups, 9 * sizeof(uint32), cudaMemcpyHostToDevice);
-#endif
-
     p_lut->posBnInCnProcBuf[0] = expandArr8(posBnInCnProcBuf_BG1_CNG3);
     p_lut->posBnInCnProcBuf[1] = expandArr8(posBnInCnProcBuf_BG1_CNG4);
     p_lut->posBnInCnProcBuf[2] = expandArr8(posBnInCnProcBuf_BG1_CNG5);
@@ -632,26 +625,6 @@ static inline uint32_t nrLDPC_init(t_nrLDPC_dec_params* p_decParams, t_nrLDPC_lu
     p_lut->posBnInCnProcBuf[6] = expandArr8(posBnInCnProcBuf_BG1_CNG9);
     p_lut->posBnInCnProcBuf[7] = expandArr8(posBnInCnProcBuf_BG1_CNG10);
     p_lut->posBnInCnProcBuf[8] = expandArr8(posBnInCnProcBuf_BG1_CNG19);
-#if PARALLER_STREAM
-    cudaMalloc(&p_lut_dev->posBnInCnProcBuf[0], 3 * sizeof(uint8_t));
-    cudaMalloc(&p_lut_dev->posBnInCnProcBuf[1], 4 * 5 * sizeof(uint8_t));
-    cudaMalloc(&p_lut_dev->posBnInCnProcBuf[2], 5 * 18 * sizeof(uint8_t));
-    cudaMalloc(&p_lut_dev->posBnInCnProcBuf[3], 6 * 8 * sizeof(uint8_t));
-    cudaMalloc(&p_lut_dev->posBnInCnProcBuf[4], 7 * 5 * sizeof(uint8_t));
-    cudaMalloc(&p_lut_dev->posBnInCnProcBuf[5], 8 * 2 * sizeof(uint8_t));
-    cudaMalloc(&p_lut_dev->posBnInCnProcBuf[6], 9 * 2 * sizeof(uint8_t));
-    cudaMalloc(&p_lut_dev->posBnInCnProcBuf[7], 10 * sizeof(uint8_t));
-    cudaMalloc(&p_lut_dev->posBnInCnProcBuf[8], 19 * 4 * sizeof(uint8_t));
-    cudaMemcpy(p_lut_dev->posBnInCnProcBuf[0], p_lut->posBnInCnProcBuf[0], 3 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(p_lut_dev->posBnInCnProcBuf[1], p_lut->posBnInCnProcBuf[1], 4 * 5 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(p_lut_dev->posBnInCnProcBuf[2], p_lut->posBnInCnProcBuf[2], 5 * 18 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(p_lut_dev->posBnInCnProcBuf[3], p_lut->posBnInCnProcBuf[3], 6 * 8 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(p_lut_dev->posBnInCnProcBuf[4], p_lut->posBnInCnProcBuf[4], 7 * 5 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(p_lut_dev->posBnInCnProcBuf[5], p_lut->posBnInCnProcBuf[5], 8 * 2 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(p_lut_dev->posBnInCnProcBuf[6], p_lut->posBnInCnProcBuf[6], 9 * 2 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(p_lut_dev->posBnInCnProcBuf[7], p_lut->posBnInCnProcBuf[7], 10 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(p_lut_dev->posBnInCnProcBuf[8], p_lut->posBnInCnProcBuf[8], 19 * 4 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-#endif
 
     // LUT that only depend on R
     if (R == 13) {
@@ -664,26 +637,6 @@ static inline uint32_t nrLDPC_init(t_nrLDPC_dec_params* p_decParams, t_nrLDPC_lu
       p_lut->startAddrBnProcBuf[6] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG9);
       p_lut->startAddrBnProcBuf[7] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG10);
       p_lut->startAddrBnProcBuf[8] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG19);
-#if PARALLER_STREAM
-      cudaMalloc(&p_lut_dev->startAddrBnProcBuf[0], 3 * sizeof(uint32_t));
-      cudaMalloc(&p_lut_dev->startAddrBnProcBuf[1], 4 * 5 * sizeof(uint32_t));
-      cudaMalloc(&p_lut_dev->startAddrBnProcBuf[2], 5 * 18 * sizeof(uint32_t));
-      cudaMalloc(&p_lut_dev->startAddrBnProcBuf[3], 6 * 8 * sizeof(uint32_t));
-      cudaMalloc(&p_lut_dev->startAddrBnProcBuf[4], 7 * 5 * sizeof(uint32_t));
-      cudaMalloc(&p_lut_dev->startAddrBnProcBuf[5], 8 * 2 * sizeof(uint32_t));
-      cudaMalloc(&p_lut_dev->startAddrBnProcBuf[6], 9 * 2 * sizeof(uint32_t));
-      cudaMalloc(&p_lut_dev->startAddrBnProcBuf[7], 10 * sizeof(uint32_t));
-      cudaMalloc(&p_lut_dev->startAddrBnProcBuf[8], 19 * 4 * sizeof(uint32_t));
-      cudaMemcpy(p_lut_dev->startAddrBnProcBuf[0], p_lut->startAddrBnProcBuf[0], 3 * sizeof(uint32_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->startAddrBnProcBuf[1], p_lut->startAddrBnProcBuf[1], 4 * 5 * sizeof(uint32_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->startAddrBnProcBuf[2], p_lut->startAddrBnProcBuf[2], 5 * 18 * sizeof(uint32_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->startAddrBnProcBuf[3], p_lut->startAddrBnProcBuf[3], 6 * 8 * sizeof(uint32_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->startAddrBnProcBuf[4], p_lut->startAddrBnProcBuf[4], 7 * 5 * sizeof(uint32_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->startAddrBnProcBuf[5], p_lut->startAddrBnProcBuf[5], 8 * 2 * sizeof(uint32_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->startAddrBnProcBuf[6], p_lut->startAddrBnProcBuf[6], 9 * 2 * sizeof(uint32_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->startAddrBnProcBuf[7], p_lut->startAddrBnProcBuf[7], 10 * sizeof(uint32_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->startAddrBnProcBuf[8], p_lut->startAddrBnProcBuf[8], 19 * 4 * sizeof(uint32_t), cudaMemcpyHostToDevice);
-#endif
 
       p_lut->bnPosBnProcBuf[1] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG4);
       p_lut->bnPosBnProcBuf[2] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG5);
@@ -693,26 +646,6 @@ static inline uint32_t nrLDPC_init(t_nrLDPC_dec_params* p_decParams, t_nrLDPC_lu
       p_lut->bnPosBnProcBuf[6] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG9);
       p_lut->bnPosBnProcBuf[7] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG10);
       p_lut->bnPosBnProcBuf[8] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG19);
-#if PARALLER_STREAM
-      cudaMalloc(&p_lut_dev->bnPosBnProcBuf[0], 4 * 5 * sizeof(uint8_t));
-      cudaMalloc(&p_lut_dev->bnPosBnProcBuf[1], 5 * 18 * sizeof(uint8_t));
-      cudaMalloc(&p_lut_dev->bnPosBnProcBuf[2], 4 * 5 * sizeof(uint8_t));
-      cudaMalloc(&p_lut_dev->bnPosBnProcBuf[3], 6 * 8 * sizeof(uint8_t));
-      cudaMalloc(&p_lut_dev->bnPosBnProcBuf[4], 7 * 5 * sizeof(uint8_t));
-      cudaMalloc(&p_lut_dev->bnPosBnProcBuf[5], 8 * 2 * sizeof(uint8_t));
-      cudaMalloc(&p_lut_dev->bnPosBnProcBuf[6], 9 * 2 * sizeof(uint8_t));
-      cudaMalloc(&p_lut_dev->bnPosBnProcBuf[7], 10 * sizeof(uint8_t));
-      cudaMalloc(&p_lut_dev->bnPosBnProcBuf[8], 19 * 4 * sizeof(uint8_t));
-      cudaMemcpy(p_lut_dev->bnPosBnProcBuf[0], p_lut->bnPosBnProcBuf[0], 4 * 5 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->bnPosBnProcBuf[1], p_lut->bnPosBnProcBuf[1], 5 * 18 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->bnPosBnProcBuf[2], p_lut->bnPosBnProcBuf[2], 4 * 5 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->bnPosBnProcBuf[3], p_lut->bnPosBnProcBuf[3], 6 * 8 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->bnPosBnProcBuf[4], p_lut->bnPosBnProcBuf[4], 7 * 5 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->bnPosBnProcBuf[5], p_lut->bnPosBnProcBuf[5], 8 * 2 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->bnPosBnProcBuf[6], p_lut->bnPosBnProcBuf[6], 9 * 2 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->bnPosBnProcBuf[7], p_lut->bnPosBnProcBuf[7], 10 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->bnPosBnProcBuf[8], p_lut->bnPosBnProcBuf[8], 19 * 4 * sizeof(uint8_t), cudaMemcpyHostToDevice);
-#endif
 
       p_lut->llr2llrProcBufAddr = llr2llrProcBufAddr_BG1_R13;
       p_lut->llr2llrProcBufBnPos = llr2llrProcBufBnPos_BG1_R13;
@@ -722,20 +655,6 @@ static inline uint32_t nrLDPC_init(t_nrLDPC_dec_params* p_decParams, t_nrLDPC_lu
       p_lut->startAddrBnGroups = lut_startAddrBnGroups_BG1_R13;
       p_lut->startAddrBnGroupsLlr = lut_startAddrBnGroupsLlr_BG1_R13;
 
-#if PARALLER_STREAM
-      cudaMalloc(&p_lut_dev->llr2llrProcBufAddr, 26 * sizeof(uint16_t));
-      cudaMalloc(&p_lut_dev->llr2llrProcBufBnPos, 26 * sizeof(uint8_t));
-      cudaMalloc(&p_lut_dev->numCnInCnGroups, 9 * sizeof(uint8_t));
-      cudaMalloc(&p_lut_dev->numBnInBnGroups, 30 * sizeof(uint8_t));
-      cudaMalloc(&p_lut_dev->startAddrBnGroups, 30 * sizeof(uint8_t));
-      cudaMalloc(&p_lut_dev->startAddrBnGroupsLlr, 30 * sizeof(uint16_t));
-      cudaMemcpy(p_lut_dev->llr2llrProcBufAddr, p_lut->llr2llrProcBufAddr, 26 * sizeof(uint16_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->llr2llrProcBufBnPos, p_lut->llr2llrProcBufBnPos, 26 * sizeof(uint16_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->numCnInCnGroups, p_lut->numCnInCnGroups, 9 * sizeof(uint16_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->numBnInBnGroups, p_lut->numBnInBnGroups, 30 * sizeof(uint16_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->startAddrBnGroups, p_lut->startAddrBnGroups, 30 * sizeof(uint16_t), cudaMemcpyHostToDevice);
-      cudaMemcpy(p_lut_dev->startAddrBnGroupsLlr, p_lut->startAddrBnGroupsLlr, 30 * sizeof(uint16_t), cudaMemcpyHostToDevice);
-#endif
       numLLR = NR_LDPC_NCOL_BG1_R13 * Z;
     } else if (R == 23) {
       p_lut->startAddrBnProcBuf[0] = expandArr32(startAddrBnProcBuf_BG1_R23_CNG3);
@@ -1389,35 +1308,14 @@ static inline uint32_t nrLDPC_init(t_nrLDPC_dec_params* p_decParams, t_nrLDPC_lu
         p_lut->circShift[6] = expandArr16(circShift_BG1_Z384_CNG9);
         p_lut->circShift[7] = expandArr16(circShift_BG1_Z384_CNG10);
         p_lut->circShift[8] = expandArr16(circShift_BG1_Z384_CNG19);
-#if PARALLER_STREAM
-        cudaMalloc(&p_lut_dev->circShift[0], 3 * sizeof(uint16_t));
-        cudaMalloc(&p_lut_dev->circShift[1], 4 * 5 * sizeof(uint16_t));
-        cudaMalloc(&p_lut_dev->circShift[2], 5 * 18 * sizeof(uint16_t));
-        cudaMalloc(&p_lut_dev->circShift[3], 6 * 8 * sizeof(uint16_t));
-        cudaMalloc(&p_lut_dev->circShift[4], 7 * 5 * sizeof(uint16_t));
-        cudaMalloc(&p_lut_dev->circShift[5], 8 * 2 * sizeof(uint16_t));
-        cudaMalloc(&p_lut_dev->circShift[6], 9 * 2 * sizeof(uint16_t));
-        cudaMalloc(&p_lut_dev->circShift[7], 10 * sizeof(uint16_t));
-        cudaMalloc(&p_lut_dev->circShift[8], 19 * 4 * sizeof(uint16_t));
-        cudaMemcpy(p_lut_dev->circShift[0], p_lut->circShift[0], 3 * sizeof(uint32), cudaMemcpyHostToDevice);
-        cudaMemcpy(p_lut_dev->circShift[1], p_lut->circShift[1], 4 * 5 * sizeof(uint32), cudaMemcpyHostToDevice);
-        cudaMemcpy(p_lut_dev->circShift[2], p_lut->circShift[2], 5 * 18 * sizeof(uint32), cudaMemcpyHostToDevice);
-        cudaMemcpy(p_lut_dev->circShift[3], p_lut->circShift[3], 6 * 8 * sizeof(uint32), cudaMemcpyHostToDevice);
-        cudaMemcpy(p_lut_dev->circShift[4], p_lut->circShift[4], 7 * 5 * sizeof(uint32), cudaMemcpyHostToDevice);
-        cudaMemcpy(p_lut_dev->circShift[5], p_lut->circShift[5], 8 * 2 * sizeof(uint32), cudaMemcpyHostToDevice);
-        cudaMemcpy(p_lut_dev->circShift[6], p_lut->circShift[6], 9 * 2 * sizeof(uint32), cudaMemcpyHostToDevice);
-        cudaMemcpy(p_lut_dev->circShift[7], p_lut->circShift[7], 10 * sizeof(uint32), cudaMemcpyHostToDevice);
-        cudaMemcpy(p_lut_dev->circShift[8], p_lut->circShift[8], 19 * 4 * sizeof(uint32), cudaMemcpyHostToDevice);
-#endif
+
         break;
       }
       default: {
       }
     }
-  }
-cudaDeviceSynchronize();
-printf("1\n");
-  return numLLR;
 }
-
+    return numLLR;
+  
+}
 #endif

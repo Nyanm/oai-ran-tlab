@@ -1,3 +1,4 @@
+#if PARALLEL_STREAM
 #include <cstdio>
 
 __global__ void test_kernel() {
@@ -14,3 +15,4 @@ extern "C" void run_test_kernel() {
     }
     cudaDeviceSynchronize();
 }
+#endif

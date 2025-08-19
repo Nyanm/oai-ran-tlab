@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdint.h>
+#if USE_CUDA
 #include <cuda_runtime.h>
+#endif
 // generated code for Zc=384, byte encoding
 __global__ void ldpc_BG1_Zc384_worker(uint8_t *c,uint8_t *d) {
   uint32_t *c32=(uint32_t *)c;
@@ -8,6 +10,11 @@ __global__ void ldpc_BG1_Zc384_worker(uint8_t *c,uint8_t *d) {
 
   int i2 = threadIdx.x;
   int i1 = blockIdx.x;
+
+  //if(i1 == 0 && i2 == 0){
+    //printf("The Encoder is working\n");
+  //}
+
   if (i2 < 384) {
     c32+=i2;
     d32+=i2;
@@ -201,7 +208,7 @@ __global__ void ldpc_BG1_Zc384_worker(uint8_t *c,uint8_t *d) {
   }
 }
 extern "C" int ldpc_BG1_Zc384_cuda32(uint8_t *c,uint8_t *d) { 
-  printf("below the encoder kernel\n");
+  //printf("below the encoder kernel\n");
 ldpc_BG1_Zc384_worker<<<46,384>>>(c,d);
  cudaDeviceSynchronize();
   return(0);

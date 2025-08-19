@@ -96,7 +96,7 @@ int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
   uint32_t *dd;
 
   cudaError_t err=cudaMalloc((void**)&dd,46*Zc*sizeof(uint32_t));
-  if (err != cudaSuccess) printf("CUDA Error: %s_1\n", cudaGetErrorString(err)); 							
+  if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
 #else
  uint32_t dd[46*Zc];
 #endif
@@ -109,7 +109,7 @@ int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
   memset(cc,0,sizeof(cc));
 #if USE_UMEM 
   err = cudaMemset(dd,0,46*Zc*sizeof(uint32_t));
-  if (err != cudaSuccess) printf("CUDA Error: %s_2\n", cudaGetErrorString(err)); 							
+  if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
 #else
   memset(dd,0,sizeof(dd));
 #endif
@@ -225,16 +225,15 @@ if(impp->toutput != NULL) start_meas(impp->toutput);
 //  printf("cudaMemcpy: dst %p, src %p, length %d, block_length %d, nrows %d, no_punctured_columns\n",
 //         &out32[block_length-(2*Zc)],dd,sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),block_length,nrows,no_punctured_columns);
  // uint32_t dummy[((nrows-no_punctured_columns) * Zc-removed_bit)];
-#if USE_UMEM
-  err = cudaMemcpy(&out32[block_length-(2*Zc)],dd,sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),2);
-  if (err != cudaSuccess) printf("CUDA Error: %s_3\n", cudaGetErrorString(err)); 			
+#if !USE_UMEM
+  memcpy(&out32[block_length-(2*Zc)],dd,sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit));
 #else
-memcpy(&out32[block_length-(2*Zc)],dd,sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit));
-  				
+  err = cudaMemcpy(&out32[block_length-(2*Zc)],dd,sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),2);
+  if (err != cudaSuccess) printf("CUDA Error: %s\n", cudaGetErrorString(err)); 							
 #endif
-#if USE_UMEM
-cudaFree(dd);
-//#else
+#if !USE_UMEM
+#else
+  cudaFree(dd);
 #endif
   if(impp->toutput != NULL) stop_meas(impp->toutput);
   return 0;

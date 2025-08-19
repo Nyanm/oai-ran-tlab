@@ -145,7 +145,7 @@ one_measurement_t test_ldpc(short max_iterations,
   cpu_meas_enabled = 1;
   uint8_t *test_input[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * NR_MAX_NB_LAYERS];
   uint8_t estimated_output[MAX_NUM_DLSCH_SEGMENTS][Kprime];
-  printf("Output Address: %p\n", estimated_output);
+  //printf("Output Address: %p\n", estimated_output);
   memset(estimated_output, 0, sizeof(estimated_output));
   uint8_t *channel_input[MAX_NUM_DLSCH_SEGMENTS];
   uint8_t *channel_input_optim;
@@ -392,7 +392,7 @@ if(PARALLEL_PATH == 1){
     set_abort(&dec_abort, false);
     //printf("Are you here?\n");
     // printf("n_segments = %d in test\n",n_segments);
-    dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_stream.txt");
+    //dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_stream.txt");
     n_iter = ldpc_toCompare.LDPCdecoder(&decParams,
                                         0,
                                         0,
@@ -437,7 +437,7 @@ else{
     for (int j = 0; j < n_segments; j++) {
       start_meas(&ret.time_decoder);
       set_abort(&dec_abort, false);
-dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_128.txt");
+//dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_128.txt");
       n_iter = ldpc_toCompare.LDPCdecoder(&decParams[j],
                                           0,
                                           0,
@@ -469,7 +469,7 @@ dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_128.txt");
         n_iter_max = n_iter;
 
     } // end segments
-        dumpASS(estimated_output, "ldpctest_estimateOutput_cuda128.txt");
+    dumpASS(estimated_output, "ldpctest_estimateOutput_cuda128.txt");
     //dumpASS(test_input, "ldpctest_TestInput_cuda128.txt");
     if (segment_bler != 0)
       ret.errors++;

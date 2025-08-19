@@ -152,7 +152,7 @@
 */
 
 //--------------------------CUDA Area---------------------------
-#include <cuda_runtime.h>
+
 #define STATIC_LUT 1
 
 #if STATIC_LUT
@@ -162,15 +162,55 @@ static t_nrLDPC_lut lut;
 static t_nrLDPC_lut* p_lut = &lut;
 #endif
 
+#if USE_CUDA
+#include <cuda_runtime.h>
+#endif
+
 #ifdef PARALLEL_STREAM
+#define COPY_ARR_MEMBER(member, type, groups) do { \
+    for (int i = 0; i < (groups); i++) { \
+        type* tmp_dev; \
+        if (h_lut->member[i].d != NULL && h_lut->member[i].dim1 > 0 && h_lut->member[i].dim2 > 0) { \
+            size_t sz = h_lut->member[i].dim1 * h_lut->member[i].dim2 * sizeof(type); \
+            err = cudaMalloc((void**)&tmp_dev, sz); \
+            if (err != cudaSuccess) { \
+                fprintf(stderr, "cudaMalloc failed for " #member "[%d]: %s\n", i, cudaGetErrorString(err)); \
+                exit(EXIT_FAILURE); \
+            } \
+            cudaMemcpy(tmp_dev, h_lut->member[i].d, sz, cudaMemcpyHostToDevice); \
+            /* 更新 d_lut->member[i].d 指针 */ \
+            cudaMemcpy(&(d_lut->member[i].d), &tmp_dev, sizeof(type*), cudaMemcpyHostToDevice); \
+            /* 拷贝 dim1 和 dim2 */ \
+            cudaMemcpy(&(d_lut->member[i].dim1), &(h_lut->member[i].dim1), sizeof(int), cudaMemcpyHostToDevice); \
+            cudaMemcpy(&(d_lut->member[i].dim2), &(h_lut->member[i].dim2), sizeof(int), cudaMemcpyHostToDevice); \
+        } \
+    } \
+} while(0)
+
+#define COPY_POINTER_MEMBER(member, type, count) do { \
+    type* tmp_dev; \
+    printf("tmp_dev = %p\n", (void*)tmp_dev);\
+    err = cudaMalloc((void**)&tmp_dev, (count) * sizeof(type)); \
+    printf("malloc tmp_dev = %p\n", (void*)tmp_dev);\
+    if (err != cudaSuccess) { \
+        fprintf(stderr, "cudaMalloc failed for " #member ": %s\n", cudaGetErrorString(err)); \
+        exit(EXIT_FAILURE); \
+    } \
+    printf("h_lut->member = %p\n", (void*)h_lut->member);\
+    cudaMemcpy(tmp_dev, h_lut->member, (count) * sizeof(type), cudaMemcpyHostToDevice); \
+    printf("d_lut->member");\
+    printf(" = %p\n", (void*)d_lut->member);\
+    cudaMemcpy(&(d_lut->member), &tmp_dev, sizeof(type*), cudaMemcpyHostToDevice); \
+} while(0)
+
 #include "decoder_graphs.h"
 static cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS];
 static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS];
 static bool streamsCreated = false;
 static bool d_mem_exist = false;
 static int currentStreamCount = 0;
-static int8_t iter_ptr_array[MAX_NUM_DLSCH_SEGMENTS];
-static int PC_Flag_array[MAX_NUM_DLSCH_SEGMENTS];
+static int8_t* iter_ptr_array;//size of [MAX_NUM_DLSCH_SEGMENTS];
+static int* PC_Flag_array;// size of[MAX_NUM_DLSCH_SEGMENTS];
  t_nrLDPC_lut* p_lut_dev = NULL;
 static t_nrLDPC_lut* P_lut = NULL;
 
@@ -252,6 +292,29 @@ void dump_cnProcBufRes_to_file(const int8_t* cnProcBufRes, const char* filename)
   fclose(fp);
 }
 
+void check_lut_pointers(const t_nrLDPC_lut* lut) {
+    if (!lut) {
+        printf("check_lut_pointers: lut is NULL\n");
+        return;
+    }
+
+    printf("Checking LUT pointers:\n");
+    printf("startAddrCnGroups       = %p\n", (void*)lut->startAddrCnGroups);
+    printf("numCnInCnGroups         = %p\n", (void*)lut->numCnInCnGroups);
+    printf("numBnInBnGroups         = %p\n", (void*)lut->numBnInBnGroups);
+    printf("startAddrBnGroups       = %p\n", (void*)lut->startAddrBnGroups);
+    printf("startAddrBnGroupsLlr    = %p\n", (void*)lut->startAddrBnGroupsLlr);
+    printf("llr2llrProcBufAddr      = %p\n", (void*)lut->llr2llrProcBufAddr);
+    printf("llr2llrProcBufBnPos     = %p\n", (void*)lut->llr2llrProcBufBnPos);
+
+    // 对数组类型打印首地址
+    printf("circShift               = %p\n", (void*)lut->circShift);
+    printf("startAddrBnProcBuf       = %p\n", (void*)lut->startAddrBnProcBuf);
+    printf("bnPosBnProcBuf           = %p\n", (void*)lut->bnPosBnProcBuf);
+    printf("posBnInCnProcBuf         = %p\n", (void*)lut->posBnInCnProcBuf);
+}
+
+
 void dumpASS(int8_t* cnProcBufRes, const char* filename)
 {
   FILE* fp = fopen(filename, "w");
@@ -271,6 +334,61 @@ void dumpASS(int8_t* cnProcBufRes, const char* filename)
 }
 //--------------------------------------------------------------
 #ifdef PARALLEL_STREAM
+
+t_nrLDPC_lut* copy_lut_to_device(const t_nrLDPC_lut* h_lut) {
+    cudaError_t err;
+    t_nrLDPC_lut* d_lut;
+printf("Inside copy 1\n");
+    // 分配 device 端的结构体
+    err = cudaMallocManaged((void**)&d_lut, sizeof(t_nrLDPC_lut), cudaMemAttachGlobal);
+    if (err != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc failed for d_lut: %s\n", cudaGetErrorString(err));
+        exit(EXIT_FAILURE);
+    }
+printf("Inside copy 2\n");
+    // ---------------------------
+    // 处理普通指针成员 (host 静态数组)
+    // ---------------------------
+
+
+    // 举例：假设 BG1 的 startAddrCnGroups 长度是 9
+    COPY_POINTER_MEMBER(startAddrCnGroups, uint32_t, 9);
+    printf("Inside copy 3\n");
+    COPY_POINTER_MEMBER(numCnInCnGroups, uint8_t, 9);
+    printf("Inside copy 4\n");
+    printf("host ptr = %p\n", (void*)d_lut->numBnInBnGroups);
+    COPY_POINTER_MEMBER(numBnInBnGroups, uint8_t, 30);
+    printf("Inside copy 5\n");
+    printf("host ptr = %p\n", (void*)d_lut->startAddrBnGroups);
+    printf("Inside copy 5.1\n");
+    COPY_POINTER_MEMBER(startAddrBnGroups, uint32_t, 30);
+    printf("Inside copy 6\n");
+    COPY_POINTER_MEMBER(startAddrBnGroupsLlr, uint16_t, 30);
+    printf("Inside copy 7\n");
+    COPY_POINTER_MEMBER(llr2llrProcBufAddr, uint16_t, 26);
+    printf("Inside copy 8\n");
+    COPY_POINTER_MEMBER(llr2llrProcBufBnPos, uint8_t, 26);
+    printf("Inside copy 9\n");
+    // 其他类似的成员也要按实际长度调用 COPY_POINTER_MEMBER
+    // COPY_POINTER_MEMBER(numCnInCnGroups,  uint8_t,  X);
+    // COPY_POINTER_MEMBER(numBnInBnGroups,  uint8_t,  Y);
+    // ...
+
+    // ---------------------------
+    // 处理 arr8_t/16_t/32_t
+    // ---------------------------
+
+
+    COPY_ARR_MEMBER(circShift,uint16_t, 9);
+    COPY_ARR_MEMBER(startAddrBnProcBuf,uint32_t, 9);
+    COPY_ARR_MEMBER(bnPosBnProcBuf,uint8_t, 9);
+    COPY_ARR_MEMBER(posBnInCnProcBuf,uint8_t, 9);
+
+    return d_lut;
+}
+
+
+extern void check_ptr_host(const void* p, const char* name);
 
 #ifdef __cplusplus
 extern "C" {
@@ -475,6 +593,8 @@ int32_t LDPCshutdown_cuda()
     cudaFree(d_llrProcBuf);
   if (d_llrOut)
     cudaFree(d_llrOut);
+  if (d_out)
+    cudaFree(d_out);
 
   for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS; ++s) {
     if (streamsCreated) {
@@ -503,8 +623,17 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params* p_decParams,
 #if STATIC_LUT
   if (!p_lutCreated) {
     //P_lut = p_lut;
+    printf("Start to create p_lut\n");
     numLLR = nrLDPC_init(p_decParams, p_lut);
-    printf("I'm here everytime\n");
+    printf("p_lut Created\n");
+    //check p_lut
+    check_lut_pointers(p_lut);
+
+    #ifdef PARALLEL_STREAM
+    printf("Start to create p_lut_dev\n");
+    p_lut_dev = copy_lut_to_device(p_lut);
+    printf("p_lut_dev Created\n");
+    #endif
     p_lutCreated = true;
   }
 #else
@@ -544,7 +673,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            t_nrLDPC_time_stats* p_profiler,
                                            decode_abort_t* ab)
 {
-  run_test_kernel();//just for testing
+  //run_test_kernel();//just for testing
 
   // printf("n_segments = %d\n", n_segments);
   uint16_t Z = p_decParams->Z;
@@ -554,42 +683,19 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   e_nrLDPC_outMode outMode = p_decParams->outMode;
   int Kprime = p_decParams->Kprime;
   int LastTrial = p_decParams->LastTrial;
-  // printf("Kprime = %d\n", Kprime);
-  //  int8_t* cnProcBuf=  cnProcBuf;
-  //  int8_t* cnProcBufRes= cnProcBufRes;
-  // printf("1: It works here\n");
 
-  // printf("2: It works here\n");
-  //  Minimum number of iterations is 1
-  //  0 iterations means hard-decision on input LLRs
-  //  Initialize with parity check fail != 0
-  // printf("3: It works here\n");
-  //  Initialization
-  // cudaStream_t streams[MAX_NUM_DLSCH_SEGMENTS];
-  // cudaEvent_t done[MAX_NUM_DLSCH_SEGMENTS]; // MAX_NUM_SEGMENTS = stream数量
-
-
-  // printf("3.1: It works here\n");
-  /*
-  if (!streamsCreated) {
-    for (int s = 0; s < n_segments; ++s) {
-      cudaStreamCreateWithFlags(&decoderStreams[s], cudaStreamNonBlocking);
-      cudaEventCreate(&decoderDoneEvents[s]);
-    }
-    printf("2\n");
-    streamsCreated = true;
-    //currentStreamCount = n_segments;
-  }
-*/
   if (d_mem_exist == false) {
     P_lut = p_lut_dev;
-    printf("2.1\n");
+    //printf("2.1\n");
     //printf("Check P_lut = %d\n", P_lut->posBnInCnProcBuf[0]);
-    printf("2.2\n");
+    //printf("2.2\n");
     LDPCinit_cuda(); // allocate device memory for the first time
-    printf("2.3\n");
+    //printf("2.3\n");
     d_mem_exist = true;
   }
+
+  //check_ptr_host(iter_ptr_array, "iter_ptr_array");
+  //check_ptr_host(PC_Flag_array, "PC_Flag_array");
 
     for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS; s++) {
     iter_ptr_array[s] = 0;
@@ -600,7 +706,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
     int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384; // no need put it into device
     int8_t* pp_out = d_out + CudaStreamIdx * Kprime;
-    printf("2.4\n");
+    //printf("2.4\n");
     // printf("Stream %d: pp_out = %p\n", CudaStreamIdx, pp_out);
     int8_t* pp_cnProcBuf = d_cnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     int8_t* pp_cnProcBufRes = d_cnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
@@ -611,19 +717,19 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     // printf("4: It works here\n");
     //  LLR preprocessing
     // NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2llrProcBuf));
-    printf("2.5\n");
+    //printf("2.5\n");
     nrLDPC_llr2llrProcBuf(p_lut, pp_llr, pp_llrProcBuf, Z, BG);
-    printf("2.51\n");
+    //printf("2.51\n");
     // NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2llrProcBuf));
     // NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2CnProcBuf));
-    if (BG == 1){
+    if (BG == 1)
       nrLDPC_llr2CnProcBuf_BG1(p_lut, pp_llr, pp_cnProcBuf, Z);
-      printf("2.6\n");}
+      //printf("2.6\n");}
     else
       nrLDPC_llr2CnProcBuf_BG2(p_lut, pp_llr, pp_cnProcBuf, Z);
     // NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2CnProcBuf));
     //  Call scheduler for this segment and stream
-    printf("3\n");
+    //printf("3\n");
     int8_t* pp_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? pp_out : d_llrOut;
     // printf("5: It works here\n");
     //  Launch decoder on stream s
@@ -632,7 +738,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     // printf("Launching segment %d \n",CudaStreamIdx);
 
     //-------------------------check device pointer-----------------------
-    check_kernel_args_for_graph(p_lut_dev,
+    /*check_kernel_args_for_graph(p_lut_dev,
                                 pp_out, // pointer that will be passed to kernel (可能 host)
                                 pp_cnProcBuf, // device expected
                                 pp_cnProcBufRes,
@@ -643,9 +749,9 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                 pp_llrOut,
                                 iter_ptr_array,
                                 PC_Flag_array,
-                                false);
+                                false);*/
     //------------------------check area end-------------------------------
-printf("4\n");
+//printf("4\n");
     nrLDPC_decoder_scheduler_BG1_cuda_core(p_lut_dev,
                                            pp_out,
                                            numLLR,
@@ -655,7 +761,7 @@ printf("4\n");
                                            pp_bnProcBufRes,
                                            pp_llrRes,
                                            pp_llrProcBuf,
-                                           pp_llrOut,
+                                           d_llrOut,
                                            pp_llrOut,
                                            Z,
                                            BG,
