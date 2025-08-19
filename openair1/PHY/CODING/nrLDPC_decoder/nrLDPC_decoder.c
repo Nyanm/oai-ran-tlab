@@ -540,7 +540,7 @@ if (err != cudaSuccess) {
 
 
 
-  err = cudaMalloc((void**)&d_llrOut, llrOut_bytes);
+  err = cudaMalloc((void**)&d_llrOut, MAX_NUM_DLSCH_SEGMENTS * llrOut_bytes);
   if (err != cudaSuccess) {
     fprintf(stderr, "cudaMalloc d_pp_llrOut failed: %s\n", cudaGetErrorString(err));
     return -1;
@@ -717,6 +717,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     int8_t* pp_bnProcBufRes = d_bnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
     int8_t* pp_llrRes = d_llrRes + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* pp_llrProcBuf = d_llrProcBuf + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
+    int8_t* pp_llrOut = d_llrOut + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
     // printf("4: It works here\n");
     //  LLR preprocessing
     // NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2llrProcBuf));
@@ -733,7 +734,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     // NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2CnProcBuf));
     //  Call scheduler for this segment and stream
     //printf("3\n");
-    int8_t* pp_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? pp_out : d_llrOut;
+    int8_t* PP_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? pp_out : pp_llrOut;
     // printf("5: It works here\n");
     //  Launch decoder on stream s
 
@@ -765,8 +766,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            pp_bnProcBufRes,
                                            pp_llrRes,
                                            pp_llrProcBuf,
-                                           d_llrOut,
                                            pp_llrOut,
+                                           PP_llrOut,
                                            Z,
                                            BG,
                                            R,

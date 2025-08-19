@@ -1782,6 +1782,24 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
       cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]);
     }
     CHECK(cudaGetLastError());
+/*
+    // print all the address to see if they are isolated
+    printf("Stream %d parameter addresses:\n", CudaStreamIdx);
+    printf("  p_lut       = %p\n", (void*)p_lut);
+    printf("  p_out       = %p\n", (void*)p_out);
+    printf("  cnProcBuf   = %p\n", (void*)cnProcBuf);
+    printf("  cnProcBufRes= %p\n", (void*)cnProcBufRes);
+    printf("  bnProcBuf   = %p\n", (void*)bnProcBuf);
+    printf("  bnProcBufRes= %p\n", (void*)bnProcBufRes);
+    printf("  llrRes      = %p\n", (void*)llrRes);
+    printf("  llrProcBuf  = %p\n", (void*)llrProcBuf);
+    printf("  llrOut      = %p\n", (void*)llrOut);
+    printf("  p_llrOut    = %p\n", (void*)p_llrOut);
+    printf("  iter_ptr    = %p\n", (void*)iter_ptr);
+    printf("  PC_Flag     = %p\n", (void*)PC_Flag);
+    fflush(stdout);
+*/
+
     // Start graph recording
     cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
 //check_ptr_kernel_easy<<<1,10>>>(2);
@@ -1855,7 +1873,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
     //printf("Are you here???\n");
     // reuse the graph after
     if(CudaStreamIdx != 0){
-      cudaStreamWaitEvent(streams[CudaStreamIdx], doneEvent[CudaStreamIdx-1], 0);//cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]); //uncomment it if you want streams works in sequence
+      //cudaStreamWaitEvent(streams[CudaStreamIdx], doneEvent[CudaStreamIdx-1], 0);//cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]); //uncomment it if you want streams works in sequence
     }
     cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);
