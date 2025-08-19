@@ -93,8 +93,8 @@
 
 
 #ifdef ENABLE_CUDA
-#include "SIMULATION/TOOLS/oai_cuda.h"
 #include <cuda_runtime.h>
+#include "SIMULATION/TOOLS/oai_cuda.h"
 #endif
 
 //#define DEBUG_ULSIM
@@ -183,7 +183,7 @@ int main(int argc, char *argv[])
   int slot = 8, frame = 1;
   int do_SRS = 0;
   FILE *output_fd = NULL;
-  float **s_re,**s_im,**r_re,**r_im;
+  float **s_interleaved,**r_re,**r_im;
   //uint8_t write_output_file = 0;
   int trial, n_trials = 1, n_false_positive = 0, delay = 0;
   double maxDoppler = 0.0;
@@ -664,8 +664,7 @@ int main(int argc, char *argv[])
   AssertFatal((gNB->if_inst = NR_IF_Module_init(0)) != NULL, "Cannot register interface");
   gNB->if_inst->NR_PHY_config_req = nr_phy_config_request;
 
-  s_re = malloc(n_tx*sizeof(float*));
-  s_im = malloc(n_tx*sizeof(float*));
+  s_interleaved = malloc(n_tx * sizeof(float*));
   r_re = malloc(n_rx*sizeof(float*));
   r_im = malloc(n_rx*sizeof(float*));
 
@@ -801,13 +800,13 @@ int main(int argc, char *argv[])
 
         #if defined(USE_UNIFIED_MEMORY)
             printf("Allocating CUDA Unified Memory for the channel pipeline...\n");
-            cudaMallocManaged(&h_tx_sig_pinned, n_tx * num_samples_alloc * sizeof(float2), cudaMemAttachGlobal);
+            cudaMallocManaged(&h_tx_sig_pinned, n_tx * num_samples_alloc * 2 * sizeof(float), cudaMemAttachGlobal);
             cudaMallocManaged(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float2), cudaMemAttachGlobal);
             cudaMallocManaged(&h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short2), cudaMemAttachGlobal);
-
+ 
             int deviceId;
             cudaGetDevice(&deviceId);
-            cudaMemAdvise(h_tx_sig_pinned, n_tx * num_samples_alloc * sizeof(float2), cudaMemAdviseSetReadMostly, deviceId);
+            cudaMemAdvise(h_tx_sig_pinned, n_tx * num_samples_alloc * 2 * sizeof(float), cudaMemAdviseSetReadMostly, deviceId);
             cudaMemAdvise(d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float2), cudaMemAdviseSetPreferredLocation, deviceId);
             cudaMemAdvise(h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short2), cudaMemAdviseSetPreferredLocation, deviceId);
             cudaMemAdvise(h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short2), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
@@ -817,7 +816,7 @@ int main(int argc, char *argv[])
 
         #elif defined(USE_ATS_MEMORY)
             printf("Allocating memory for ATS Hybrid path...\n");
-            h_tx_sig_pinned = malloc(n_tx * num_samples_alloc * sizeof(float2));
+            h_tx_sig_pinned = malloc(n_tx * num_samples_alloc * 2 * sizeof(float));
             cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float2));
             cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short2));
             h_final_output_pinned = malloc(n_rx * num_samples_alloc * sizeof(short2));
@@ -825,16 +824,16 @@ int main(int argc, char *argv[])
 
         #else // Default explicit copy method
             printf("Pre-allocating GPU & Pinned memory for the channel pipeline...\n");
-            cudaMalloc(&d_tx_sig, n_tx * num_samples_alloc * sizeof(float2));
+            cudaMalloc(&d_tx_sig, n_tx * num_samples_alloc * 2 * sizeof(float));
             cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float2));
             cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short2));
 
-            cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples_alloc * sizeof(float2));
+            cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples_alloc * 2 * sizeof(float));
             cudaMallocHost(&h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short2));
         #endif
 
         const int max_taps_alloc = 256; // Safe upper bound for channel length
-        size_t channel_buffer_size = n_tx * n_rx * max_taps_alloc * sizeof(float) * 2;
+        size_t channel_buffer_size = n_tx * n_rx * max_taps_alloc * sizeof(float2);
         cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size);
 
         int num_rand_elements = n_rx * num_samples_alloc;
@@ -1018,8 +1017,7 @@ int main(int argc, char *argv[])
 
   int frame_length_complex_samples = gNB->frame_parms.samples_per_subframe * NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
   for (int aatx=0; aatx<n_tx; aatx++) {
-    s_re[aatx] = calloc(1,frame_length_complex_samples*sizeof(float));
-    s_im[aatx] = calloc(1,frame_length_complex_samples*sizeof(float));
+    s_interleaved[aatx] = calloc(1, frame_length_complex_samples * 2 * sizeof(float));
   }
 
   for (int aarx=0; aarx<n_rx; aarx++) {
@@ -1086,8 +1084,7 @@ int main(int argc, char *argv[])
     csv_file = fopen(filename_csv, "a");
     if (csv_file == NULL) {
       printf("Can't open file \"%s\", errno %d\n", filename_csv, errno);
-      free(s_re);
-      free(s_im);
+      free(s_interleaved);
       free(r_re);
       free(r_im);
       return 1;
@@ -1388,32 +1385,25 @@ int main(int argc, char *argv[])
                    (double)(double)gNB->frame_parms.ofdm_symbol_size / (12 * nb_rb));
 
         
-        for (i = 0; i < slot_length; i++) {
-            for (int aa = 0; aa < UE->frame_parms.nb_antennas_tx; aa++) {
-              s_re[aa][i] = (float)UE->common_vars.txData[aa][slot_offset + i].r;
-              s_im[aa][i] = (float)UE->common_vars.txData[aa][slot_offset + i].i;
-            }
+        for (int aa = 0; aa < UE->frame_parms.nb_antennas_tx; aa++) {
+          for (i = 0; i < slot_length; i++) {
+            s_interleaved[aa][2*i]   = (float)UE->common_vars.txData[aa][slot_offset + i].r;
+            s_interleaved[aa][2*i+1] = (float)UE->common_vars.txData[aa][slot_offset + i].i;
+          }
         }
 
 #ifdef ENABLE_CUDA
         if (use_cuda) {
-            #if defined(USE_UNIFIED_MEMORY)
-                float2* managed_tx_sig = (float2*)h_tx_sig_pinned;
+            #if defined(USE_UNIFIED_MEMORY) || defined(USE_ATS_MEMORY)
+                float* h_pinned_buffer = (float*)h_tx_sig_pinned;
                 for (int aa = 0; aa < n_tx; aa++) {
-                    for (int i = 0; i < slot_length; i++) {
-                        managed_tx_sig[aa * slot_length + i] = make_float2(s_re[aa][i], s_im[aa][i]);
-                    }
+                    memcpy(h_pinned_buffer + aa * slot_length * 2, s_interleaved[aa], slot_length * 2 * sizeof(float));
                 }
+            #endif
+            #if defined(USE_UNIFIED_MEMORY)
                 int deviceId;
                 cudaGetDevice(&deviceId);
                 cudaMemPrefetchAsync(h_tx_sig_pinned, n_tx * slot_length * sizeof(float2), deviceId, 0);
-            #elif defined(USE_ATS_MEMORY)
-                float2* ats_input_buffer = (float2*)h_tx_sig_pinned;
-                for (int aa = 0; aa < n_tx; aa++) {
-                    for (int i = 0; i < slot_length; i++) {
-                        ats_input_buffer[aa * slot_length + i] = make_float2(s_re[aa][i], s_im[aa][i]);
-                    }
-                }
             #endif
             
             start_meas(&pipeline_stats);
@@ -1429,7 +1419,7 @@ int main(int argc, char *argv[])
             }
           
             run_channel_pipeline_cuda(
-                s_re, s_im, rxdata,
+                s_interleaved, rxdata,
                 n_tx, n_rx, UE2gNB->channel_length, slot_length,
                 path_loss, h_channel_coeffs,
                 (float)sigma, ts,
@@ -1441,11 +1431,11 @@ int main(int argc, char *argv[])
             );
             cudaDeviceSynchronize();
             stop_meas(&pipeline_stats);
-        } else
+          } else
 #endif
         { // Original CPU Path
             start_meas(&channel_stats);
-            multipath_channel_float(UE2gNB, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
+            multipath_channel_float(UE2gNB, s_interleaved, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
             stop_meas(&channel_stats);
           
             start_meas(&noise_stats);
@@ -1461,7 +1451,7 @@ int main(int argc, char *argv[])
                     PUSCH_PDU_BITMAP_PUSCH_PTRS,
                     gNB->frame_parms.nb_antennas_rx);
             stop_meas(&noise_stats);
-        }
+        }}
         /*End input_fd */
 
         //----------------------------------------------------------
@@ -1834,5 +1824,4 @@ int main(int argc, char *argv[])
   #endif
 
   return ret;
-}
 }

@@ -13,7 +13,6 @@
     #include "PHY/TOOLS/tools_defs.h"
 #endif
 
-
 #ifdef __NVCC__
     #include <curand_kernel.h>
 
@@ -21,7 +20,8 @@
 
     __global__ void multipath_channel_kernel(
         const float2* __restrict__ d_channel_coeffs,
-        const float2* __restrict__ tx_sig,
+        // const float2* __restrict__ tx_sig,
+        const float* __restrict__ tx_sig,
         float2* __restrict__ rx_sig,
         int num_samples,
         int channel_length,
@@ -48,9 +48,11 @@ extern "C" {
 #endif
 
 void run_channel_pipeline_cuda(
-    float **tx_sig_re, float **tx_sig_im,
+    // float **tx_sig_re, float **tx_sig_im,
+    // todo: implement interleaved version
+    float **tx_sig_interleaved,
     c16_t **output_signal,
-    int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
+    int nb_tx, int nb_rx, int channel_length, uint32_t num_samples, // Note: This is the number of IQ pairs
     float path_loss, float *h_channel_coeffs,
     float sigma2, double ts,
     uint16_t pdu_bit_map, uint16_t ptrs_bit_map, 
@@ -62,6 +64,7 @@ void run_channel_pipeline_cuda(
 
 
 void run_channel_pipeline_cuda_batched(
+    // todo: implement interleaved version
     int num_channels,
     int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
     void *d_path_loss_batch, void *d_channel_coeffs_batch,
@@ -72,19 +75,21 @@ void run_channel_pipeline_cuda_batched(
 );
 
 void run_channel_pipeline_cuda_streamed(
-    float **tx_sig_re, float **tx_sig_im,
+    float **tx_sig_interleaved,
     int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
     float path_loss, float *h_channel_coeffs,
     float sigma2, double ts,
     uint16_t pdu_bit_map, uint16_t ptrs_bit_map,
-    void *d_tx_sig, void *d_intermediate_sig, void* d_final_output,
-    void *d_curand_states, void* h_tx_sig_pinned,
-    void *d_channel_coeffs,
-    void* stream
+    void *d_tx_sig_void, void *d_intermediate_sig_void, void *d_final_output_void,
+    void *d_curand_states_void, void* h_tx_sig_pinned_void,
+    void *d_channel_coeffs_void,
+    void* stream_void
 );
 
 void multipath_channel_cuda(
-    float **tx_sig_re, float **tx_sig_im,
+    // float **tx_sig_re, float **tx_sig_im,
+    // todo: implement interleaved version
+    float **tx_sig_interleaved,
     float **rx_sig_re, float **rx_sig_im,
     int nb_tx, int nb_rx, int channel_length,
     uint32_t length, uint64_t channel_offset,
@@ -121,6 +126,16 @@ void sum_channel_outputs_cuda(
     int nb_rx,
     int num_samples
 );
+
+void interleave_channel_output_cuda(float **rx_sig_re,
+                                    float **rx_sig_im,
+                                    void **output_interleaved,
+                                    int nb_rx,
+                                    int num_samples);
+
+// Note: output_interleaved should point to arrays that can hold float2 data
+// Each output_interleaved[i] should be allocated as: malloc(num_samples * sizeof(float2))
+// The caller can safely cast to (float2**) after the function returns
 
 void* create_and_init_curand_states_cuda(int num_elements, unsigned long long seed);
 void destroy_curand_states_cuda(void* d_curand_states);

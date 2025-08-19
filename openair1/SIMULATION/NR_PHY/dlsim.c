@@ -326,7 +326,8 @@ int main(int argc, char **argv)
   c16_t **txdata;
   // double **s_re,**s_im,**r_re,**r_im;
 // CHANGING DOUBLE TO FLOAT
-  float **s_re,**s_im,**r_re,**r_im;
+  // float **s_re,**s_im,**r_re,**r_im;
+  float **s_interleaved,**r_re,**r_im;
 
 
   //double iqim = 0.0;
@@ -993,16 +994,22 @@ printf("%d\n", slot);
 
 //  CHANGING DOUBLE TO FLOAT
 
-  s_re = malloc(n_tx*sizeof(float*));
-  s_im = malloc(n_tx*sizeof(float*));
+  // s_re = malloc(n_tx*sizeof(float*));
+  // s_im = malloc(n_tx*sizeof(float*));
+  s_interleaved = malloc(n_tx * sizeof(float*));
   r_re = malloc(n_rx*sizeof(float*));
   r_im = malloc(n_rx*sizeof(float*));
   txdata = malloc(n_tx*sizeof(int*));
 
   for (i = 0; i < n_tx; i++) {
+
+    // Allocate space for interleaved I and Q float values
+    s_interleaved[i] = malloc(slot_length * 2 * sizeof(float));
+
+
     // CHANGING DOUBLE TO FLOAT
-    s_re[i] = calloc(1, slot_length * sizeof(float));
-    s_im[i] = calloc(1, slot_length * sizeof(float));
+    // s_re[i] = calloc(1, slot_length * sizeof(float));
+    // s_im[i] = calloc(1, slot_length * sizeof(float));
 
     // s_re[i] = calloc(1, slot_length * sizeof(double));
     // s_im[i] = calloc(1, slot_length * sizeof(double));
@@ -1128,8 +1135,9 @@ printf("%d\n", slot);
     csv_file = fopen(filename_csv, "a");
     if (csv_file == NULL) {
       printf("Can't open file \"%s\", errno %d\n", filename_csv, errno);
-      free(s_re);
-      free(s_im);
+      // free(s_re);
+      // free(s_im);
+      free(s_interleaved);
       free(r_re);
       free(r_im);
       free(txdata);
@@ -1315,12 +1323,20 @@ printf("%d\n", slot);
           if (n_trials==1) printf("txlev[%d] = %d (%f dB) txlev_sum %d\n",aa,txlev[aa],10*log10((double)txlev[aa]),txlev_sum);
         }
 
-        for (int i = 0; i < slot_length; i++) {
-            for (int aa = 0; aa < frame_parms->nb_antennas_tx; aa++) {
-                s_re[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1)];
-                s_im[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1];
-            }
+        // for (int i = 0; i < slot_length; i++) {
+        //     for (int aa = 0; aa < frame_parms->nb_antennas_tx; aa++) {
+        //         s_re[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1)];
+        //         s_im[aa][i] = (float)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1];
+        //     }
+        // }
+
+        for (int aa = 0; aa < frame_parms->nb_antennas_tx; aa++) {
+          for (int i = 0; i < slot_length; i++) {
+            s_interleaved[aa][2*i]   = (float)((short*)&txdata[aa][slot_offset])[2*i];     // Real part (I)
+            s_interleaved[aa][2*i+1] = (float)((short*)&txdata[aa][slot_offset])[2*i+1];   // Imaginary part (Q)
+          }
         }
+
 
         double ts = 1.0/(frame_parms->subcarrier_spacing * frame_parms->ofdm_symbol_size);
         //Compute AWGN variance
@@ -1330,26 +1346,39 @@ printf("%d\n", slot);
 
 #ifdef ENABLE_CUDA
         if (use_cuda) {
-            #if defined(USE_UNIFIED_MEMORY)
+            #if defined(USE_UNIFIED_MEMORY) || defined(USE_ATS_MEMORY)
                 // For UM, data was already prepared into s_re/s_im. Now, interleave it into the managed buffer.
-                float2* managed_tx_sig = (float2*)d_tx_sig;
+                // float2* managed_tx_sig = (float2*)d_tx_sig;
+                // for (int aa = 0; aa < n_tx; aa++) {
+                //     for (int i = 0; i < slot_length; i++) {
+                //         managed_tx_sig[aa * slot_length + i] = make_float2(s_re[aa][i], s_im[aa][i]);
+                //     }
+                // }
+
+                float* h_pinned_buffer = (float*)h_tx_sig_pinned;
                 for (int aa = 0; aa < n_tx; aa++) {
-                    for (int i = 0; i < slot_length; i++) {
-                        managed_tx_sig[aa * slot_length + i] = make_float2(s_re[aa][i], s_im[aa][i]);
-                    }
+                    memcpy(h_pinned_buffer + aa * slot_length * 2, 
+                           s_interleaved[aa],                      
+                           slot_length * 2 * sizeof(float));      
                 }
-                int deviceId;
-                cudaGetDevice(&deviceId);
-                cudaMemPrefetchAsync(d_tx_sig, n_tx * slot_length * sizeof(float) * 2, deviceId, 0);
-            #elif defined(USE_ATS_MEMORY)
-                // For ATS, interleave s_re/s_im into the host buffer the GPU will access.
-                float2* ats_input_buffer = (float2*)h_tx_sig_pinned;
-                for (int aa = 0; aa < n_tx; aa++) {
-                    for (int i = 0; i < slot_length; i++) {
-                        ats_input_buffer[aa * slot_length + i] = make_float2(s_re[aa][i], s_im[aa][i]);
-                    }
-                }
-            #endif
+
+        #endif
+        #if defined(USE_UNIFIED_MEMORY)
+                 int deviceId;
+                 cudaGetDevice(&deviceId);
+                 cudaMemPrefetchAsync(d_tx_sig, n_tx * slot_length * sizeof(float) * 2, deviceId, 0);
+        #endif
+                
+            // #elif defined(USE_ATS_MEMORY)
+            //     // For ATS, interleave s_re/s_im into the host buffer the GPU will access.
+            //     float2* ats_input_buffer = (float2*)h_tx_sig_pinned;
+            //     for (int aa = 0; aa < n_tx; aa++) {
+            //         for (int i = 0; i < slot_length; i++) {
+            //             ats_input_buffer[aa * slot_length + i] = make_float2(s_re[aa][i], s_im[aa][i]);
+            //         }
+            //     }
+            //   #endif
+          
 
             start_meas(&pipeline_stats);
             random_channel(gNB2UE, 0);
@@ -1363,7 +1392,7 @@ printf("%d\n", slot);
                 }
             }
             run_channel_pipeline_cuda(
-                s_re, s_im, UE->common_vars.rxdata,
+                s_interleaved, UE->common_vars.rxdata,
                 n_tx, n_rx, gNB2UE->channel_length, slot_length, path_loss, h_channel_coeffs,
                 (float)sigma2, ts, pdu_bit_map, 0x1, slot_offset, delay,
                 d_tx_sig, d_intermediate_sig, d_final_output,
@@ -1381,7 +1410,7 @@ printf("%d\n", slot);
               bzero(r_im[aa], slot_length * sizeof(float));
             }
             start_meas(&channel_stats);
-            multipath_channel_float(gNB2UE, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
+            multipath_channel_float(gNB2UE, s_interleaved, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
             stop_meas(&channel_stats);
 
             start_meas(&noise_stats);
@@ -1602,8 +1631,9 @@ printf("%d\n", slot);
   free_channel_desc_scm(gNB2UE);
 
   for (i = 0; i < n_tx; i++) {
-    free(s_re[i]);
-    free(s_im[i]);
+    // free(s_re[i]);
+    // free(s_im[i]);
+    free(s_interleaved[i]);
     free(txdata[i]);
   }
   for (i = 0; i < n_rx; i++) {
@@ -1631,8 +1661,9 @@ printf("%d\n", slot);
   }
 #endif
 
-  free(s_re);
-  free(s_im);
+  // free(s_re);
+  // free(s_im);
+  free(s_interleaved);
   free(r_re);
   free(r_im);
   free(txdata);

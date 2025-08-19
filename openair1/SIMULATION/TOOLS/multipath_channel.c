@@ -32,6 +32,20 @@ uint8_t multipath_channel_nosigconv(channel_desc_t *desc)
   return(1);
 }
 
+void interleave_channel_output(float **rx_sig_re,
+                               float **rx_sig_im,
+                               float **output_interleaved,
+                               int nb_rx,
+                               int num_samples)
+{
+    for (int i = 0; i < nb_rx; i++) {
+        for (int j = 0; j < num_samples; j++) {
+            output_interleaved[i][2 * j]     = rx_sig_re[i][j];
+            output_interleaved[i][2 * j + 1] = rx_sig_im[i][j];
+        }
+    }
+}
+
 //#define CHANNEL_SSE
 
 #ifdef CHANNEL_SSE
@@ -203,13 +217,10 @@ void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *des
 #endif
 
 
-
-
 #ifdef CHANNEL_SSE
 void __attribute__ ((no_sanitize_address)) multipath_channel_float(
                              channel_desc_t *desc,
-                             float **tx_sig_re,
-                             float **tx_sig_im,
+                             float **tx_sig_interleaved,
                              float **rx_sig_re,
                              float **rx_sig_im,
                              uint32_t length,
@@ -244,22 +255,19 @@ void __attribute__ ((no_sanitize_address)) multipath_channel_float(
             for (j = 0; j < desc->nb_tx; j++) {
                 for (l = 0; l < (int)desc->channel_length; l++) {
                     
-                    // Safely load 4 floats, zeroing out-of-bounds values
-                    float tx_re[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-                    float tx_im[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-
-                    if ((i - l) >= 0)     tx_re[0] = tx_sig_re[j][i - l];
-                    if ((i + 1 - l) >= 0) tx_re[1] = tx_sig_re[j][i + 1 - l];
-                    if ((i + 2 - l) >= 0) tx_re[2] = tx_sig_re[j][i + 2 - l];
-                    if ((i + 3 - l) >= 0) tx_re[3] = tx_sig_re[j][i + 3 - l];
-
-                    if ((i - l) >= 0)     tx_im[0] = tx_sig_im[j][i - l];
-                    if ((i + 1 - l) >= 0) tx_im[1] = tx_sig_im[j][i + 1 - l];
-                    if ((i + 2 - l) >= 0) tx_im[2] = tx_sig_im[j][i + 2 - l];
-                    if ((i + 3 - l) >= 0) tx_im[3] = tx_sig_im[j][i + 3 - l];
-
-                    tx128_re = simde_mm_loadu_ps(tx_re);
-                    tx128_im = simde_mm_loadu_ps(tx_im);
+                    int idx = i - l;
+                    if (idx >= 0) {
+                        // Load 2 complex numbers (4 floats) => {I0, Q0, I1, Q1}
+                        simde__m128 vec0 = simde_mm_loadu_ps(&tx_sig_interleaved[j][2 * idx]);
+                        // Load next 2 complex numbers (4 floats) => {I2, Q2, I3, Q3}
+                        simde__m128 vec1 = simde_mm_loadu_ps(&tx_sig_interleaved[j][2 * (idx + 2)]);
+                        // De-interleave into separate real and imaginary registers
+                        tx128_re = simde_mm_shuffle_ps(vec0, vec1, SIMDE_MM_SHUFFLE(2, 0, 2, 0)); // {I0,I1,I2,I3}
+                        tx128_im = simde_mm_shuffle_ps(vec0, vec1, SIMDE_MM_SHUFFLE(3, 1, 3, 1)); // {Q0,Q1,Q2,Q3}
+                    } else {
+                        tx128_re = simde_mm_setzero_ps();
+                        tx128_im = simde_mm_setzero_ps();
+                    }
 
                     // Broadcast channel coefficients to all 4 lanes
                     ch128_r = simde_mm_set1_ps((float)desc->ch[ii + (j * desc->nb_rx)][l].r);
@@ -304,8 +312,8 @@ void __attribute__ ((no_sanitize_address)) multipath_channel_float(
                 for (l = 0; l < (int)desc->channel_length; l++) {
                     if ((i - l) >= 0) {
                         struct complexf tx;
-                        tx.r = tx_sig_re[j][i - l];
-                        tx.i = tx_sig_im[j][i - l];
+                        tx.r = tx_sig_interleaved[j][2 * (i - l)];
+                        tx.i = tx_sig_interleaved[j][2 * (i - l) + 1];
                         rx_tmp.r += (tx.r * (float)chan[l].r) - (tx.i * (float)chan[l].i);
                         rx_tmp.i += (tx.i * (float)chan[l].r) + (tx.r * (float)chan[l].i);
                     }
@@ -325,11 +333,10 @@ void __attribute__ ((no_sanitize_address)) multipath_channel_float(
     }
 }
 
-#else
 
+#else
 void multipath_channel_float(channel_desc_t *desc,
-                             float **tx_sig_re,
-                             float **tx_sig_im,
+                             float **tx_sig_interleaved,
                              float **rx_sig_re,
                              float **rx_sig_im,
                              uint32_t length,
@@ -341,9 +348,7 @@ void multipath_channel_float(channel_desc_t *desc,
     uint64_t dd = desc->channel_offset;
 
     // --- Handle keep_channel flag ---
-    if (keep_channel) {
-        // do nothing - keep the existing channel
-    } else {
+    if (keep_channel == 0) {
         random_channel(desc, 0);
     }
 
@@ -363,10 +368,10 @@ void multipath_channel_float(channel_desc_t *desc,
 
                 for (int l = 0; l < (int)desc->channel_length; l++) {
                     if ((i - l) >= 0) {
-                        // 1. Get the past transmitted signal (float)
+                        // 1. Get the past transmitted signal from the interleaved buffer
                         struct complexf tx;
-                        tx.r = tx_sig_re[j][i - l];
-                        tx.i = tx_sig_im[j][i - l];
+                        tx.r = tx_sig_interleaved[j][2 * (i - l)];
+                        tx.i = tx_sig_interleaved[j][2 * (i - l) + 1];
 
                         // 2. Perform complex multiplication with mixed precision.
                         rx_tmp.r += (tx.r * (float)chan[l].r) - (tx.i * (float)chan[l].i);
