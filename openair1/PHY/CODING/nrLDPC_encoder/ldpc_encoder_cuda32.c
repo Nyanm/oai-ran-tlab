@@ -45,15 +45,6 @@
 
 #include <cuda_runtime.h>
 
-#ifdef __AVX2__
-simde__m256i input32_lut[32][256];
-#else
-#if 0
-simde__m128i input32_luta[32][256];
-simde__m128i input32_lutb[32][256];
-#endif
-#endif
-
 uint32_t *cc0[4];
 uint32_t *dd0[4];
 
@@ -91,23 +82,6 @@ void cuda_support_init() {
       cudaError_t err=cudaMalloc((void**)&dd0[i],46*384*sizeof(uint32_t));
       AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
   }
-#if 0
-  for (int i=0;i<256;i++) {
-    input32_luta[0][i] = simde_mm_insert_epi32(input32_luta[0][i],(i&128)>>7,0);
-    input32_luta[0][i] = simde_mm_insert_epi32(input32_luta[0][i],(i&64)>>6,1);
-    input32_luta[0][i] = simde_mm_insert_epi32(input32_luta[0][i],(i&32)>>5,2);
-    input32_luta[0][i] = simde_mm_insert_epi32(input32_luta[0][i],(i&16)>>4,3);
-    input32_lutb[0][i] = simde_mm_insert_epi32(input32_lutb[0][i],(i&8)>>3,0);
-    input32_lutb[0][i] = simde_mm_insert_epi32(input32_lutb[0][i],(i&4)>>2,1);
-    input32_lutb[0][i] = simde_mm_insert_epi32(input32_lutb[0][i],(i&2)>>1,2);
-    input32_lutb[0][i] = simde_mm_insert_epi32(input32_lutb[0][i],(i&1),3);
-
-    for (int j=1;j<32;j++) {
-      input32_luta[j][i]=simde_mm_slli_epi32(input32_luta[0][i],j);
-      input32_lutb[j][i]=simde_mm_slli_epi32(input32_lutb[0][i],j);
-    }
-  }
-#endif
 }
 
 int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implemparams_t *impp)
@@ -155,7 +129,6 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
     memset(cc[i],0,22*Zc*sizeof(uint32_t));
   }
 
-  //interleave up to 32 transport-block segements at a time
 
 #if 0
   // unoptimized version of input processing
@@ -170,50 +143,6 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
 #else
 #ifdef __AVX2__
 
-#else
-#if 0
-  simde__m128i temp128a,temp128b,*ccj;
-  int i2=0; 
-  uint8_t* inp;
-  simde__m128i *luta,*lutb;
-#if 1
-  for (int j = 0; j < impp->n_segments; j++) {
-    inp = input[j];
-    luta=input32_luta[j&31];
-    lutb=input32_lutb[j&31];    
-    ccj=(simde__m128i*)(&cc[j>>5][0]);
-    i2=0;
-    for (int i=0; i < (block_length>>3); i++,i2+=2) {
-       temp128a = luta[inp[i]];
-       temp128b = lutb[inp[i]];
-       ccj[i2]   = simde_mm_or_si128(ccj[i2],temp128a);
-       ccj[i2+1] = simde_mm_or_si128(ccj[i2+1],temp128b);
-    }
-  }
-#else
-  i2=0;
-  for (int i=0; i < (block_length>>3); i++,i2+=2) {
-    luta=input32_luta[0];
-    lutb=input32_lutb[0];    
-    ccj=(simde__m128i*)(&cc[0][0]);
-    simde__m128i cc128a,cc128b;
-    temp128a = luta[input[0][i]];
-    temp128b = lutb[input[0][i]];
-    cc128a   = temp128a;
-    cc128b   = temp128b;
-    for (int j =1; j < impp->n_segments; j++) {
-       luta=input32_luta[j];
-       lutb=input32_lutb[j];    
-       temp128a = luta[input[j][i]];
-       temp128b = lutb[input[j][i]];
-       cc128a   = simde_mm_or_si128(cc128a,temp128a);
-       cc128b   = simde_mm_or_si128(cc128b,temp128b);
-    }
-    ccj[i2] = cc128a;
-    ccj[i2+1] = cc128b;
-  }
-
-#endif
 #else
   int i2=0;
   const int32_t ucShifta[32][4] = { 
@@ -656,7 +585,6 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
       ccp[7] = cc7;
     }
   }
-#endif
 #endif
 #endif
   if(impp->tinput != NULL) stop_meas(impp->tinput);
