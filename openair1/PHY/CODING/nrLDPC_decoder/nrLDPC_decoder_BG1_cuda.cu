@@ -1700,7 +1700,6 @@ void nrLDPC_BnToCnPC_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
   const int numGroups = 9;
 
 #if BIG_KERNEL
-
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
 
   int maxBlockSize = 960; // Maximun threads are 960
@@ -1856,7 +1855,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
     //printf("Are you here???\n");
     // reuse the graph after
     if(CudaStreamIdx != 0){
-      //cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]); //uncomment it if you want streams works in sequence
+      cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]); //uncomment it if you want streams works in sequence
     }
     cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);

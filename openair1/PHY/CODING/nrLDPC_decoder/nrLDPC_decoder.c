@@ -166,7 +166,7 @@ static t_nrLDPC_lut* p_lut = &lut;
 #include <cuda_runtime.h>
 #endif
 
-#ifdef PARALLEL_STREAM
+#if PARALLEL_STREAM
 #define COPY_ARR_MEMBER(member, type, groups) do { \
     for (int i = 0; i < (groups); i++) { \
         type* tmp_dev; \
@@ -223,6 +223,7 @@ static int8_t* d_llrRes = NULL;
 static int8_t* d_llrProcBuf = NULL;
 static int8_t* d_llrOut = NULL;
 static int8_t* d_out = NULL; // optional if needed per-seg
+int gpuDeviceId;
 #endif
 
 extern void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut* p_lut,
@@ -492,6 +493,8 @@ int32_t LDPCinit_cuda()
   size_t llr_bytes = MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_MAX_NUM_LLR * sizeof(int8_t);
   size_t llrOut_bytes = NR_LDPC_MAX_NUM_LLR * sizeof(int8_t);
 
+  cudaGetDevice(&gpuDeviceId); //get device id
+
   cudaError_t err;
   err = cudaMallocManaged((void**)&d_cnProcBuf, cn_bytes, cudaMemAttachGlobal);
   if (err != cudaSuccess) {
@@ -752,6 +755,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                 false);*/
     //------------------------check area end-------------------------------
 //printf("4\n");
+    cudaMemPrefetchAsync(d_cnProcBuf, NR_LDPC_SIZE_CN_PROC_BUF, gpuDeviceId, decoderStreams[CudaStreamIdx]);//fetch cn_proc_buf to GPU
     nrLDPC_decoder_scheduler_BG1_cuda_core(p_lut_dev,
                                            pp_out,
                                            numLLR,
