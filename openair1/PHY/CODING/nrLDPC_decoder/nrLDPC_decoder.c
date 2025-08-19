@@ -178,9 +178,9 @@ static t_nrLDPC_lut* p_lut = &lut;
                 exit(EXIT_FAILURE); \
             } \
             cudaMemcpy(tmp_dev, h_lut->member[i].d, sz, cudaMemcpyHostToDevice); \
-            /* 更新 d_lut->member[i].d 指针 */ \
+            /* updtae d_lut->member[i].d pointer */ \
             cudaMemcpy(&(d_lut->member[i].d), &tmp_dev, sizeof(type*), cudaMemcpyHostToDevice); \
-            /* 拷贝 dim1 和 dim2 */ \
+            /* copy dim1 and dim2 */ \
             cudaMemcpy(&(d_lut->member[i].dim1), &(h_lut->member[i].dim1), sizeof(int), cudaMemcpyHostToDevice); \
             cudaMemcpy(&(d_lut->member[i].dim2), &(h_lut->member[i].dim2), sizeof(int), cudaMemcpyHostToDevice); \
         } \
@@ -308,7 +308,6 @@ void check_lut_pointers(const t_nrLDPC_lut* lut) {
     printf("llr2llrProcBufAddr      = %p\n", (void*)lut->llr2llrProcBufAddr);
     printf("llr2llrProcBufBnPos     = %p\n", (void*)lut->llr2llrProcBufBnPos);
 
-    // 对数组类型打印首地址
     printf("circShift               = %p\n", (void*)lut->circShift);
     printf("startAddrBnProcBuf       = %p\n", (void*)lut->startAddrBnProcBuf);
     printf("bnPosBnProcBuf           = %p\n", (void*)lut->bnPosBnProcBuf);
@@ -339,20 +338,18 @@ void dumpASS(int8_t* cnProcBufRes, const char* filename)
 t_nrLDPC_lut* copy_lut_to_device(const t_nrLDPC_lut* h_lut) {
     cudaError_t err;
     t_nrLDPC_lut* d_lut;
-printf("Inside copy 1\n");
-    // 分配 device 端的结构体
+//printf("Inside copy 1\n");
+    // malloc device end struct
     err = cudaMallocManaged((void**)&d_lut, sizeof(t_nrLDPC_lut), cudaMemAttachGlobal);
     if (err != cudaSuccess) {
         fprintf(stderr, "cudaMalloc failed for d_lut: %s\n", cudaGetErrorString(err));
         exit(EXIT_FAILURE);
     }
-printf("Inside copy 2\n");
+//printf("Inside copy 2\n");
     // ---------------------------
-    // 处理普通指针成员 (host 静态数组)
+    // copy all the member pointers
     // ---------------------------
 
-
-    // 举例：假设 BG1 的 startAddrCnGroups 长度是 9
     COPY_POINTER_MEMBER(startAddrCnGroups, uint32_t, 9);
     printf("Inside copy 3\n");
     COPY_POINTER_MEMBER(numCnInCnGroups, uint8_t, 9);
@@ -370,13 +367,13 @@ printf("Inside copy 2\n");
     printf("Inside copy 8\n");
     COPY_POINTER_MEMBER(llr2llrProcBufBnPos, uint8_t, 26);
     printf("Inside copy 9\n");
-    // 其他类似的成员也要按实际长度调用 COPY_POINTER_MEMBER
+    //  COPY_POINTER_MEMBER
     // COPY_POINTER_MEMBER(numCnInCnGroups,  uint8_t,  X);
     // COPY_POINTER_MEMBER(numBnInBnGroups,  uint8_t,  Y);
     // ...
 
     // ---------------------------
-    // 处理 arr8_t/16_t/32_t
+    // cope with arr8_t/16_t/32_t
     // ---------------------------
 
 
@@ -421,8 +418,8 @@ void free_graphs()
   }
 }
 
-bool check_kernel_args_for_graph(const void* p_lut, // host expected (重要 host 常量 LUT)
-                                 const void* p_out, // may be host or device (建议 device 或 managed)
+bool check_kernel_args_for_graph(const void* p_lut, // device
+                                 const void* p_out, // may be host or device 
                                  const void* cnProcBuf, // device expected
                                  const void* cnProcBufRes, // device expected
                                  const void* bnProcBuf, // device expected
@@ -431,12 +428,12 @@ bool check_kernel_args_for_graph(const void* p_lut, // host expected (重要 hos
                                  const void* llrProcBuf, // device expected
                                  const void* llrOut, // device expected         // may be host or device
                                  const void* iter_ptr_array, // device expected (kernel iteration state)
-                                 const void* iter_ptr_array2, // device expected (第二份迭代指针)
+                                 const void* iter_ptr_array2, // device expected 
                                  bool strict)
 {
   bool ok = true;
 
-  // 检查 p_lut: 必须是 Host pointer
+  // check p_lut: should be dvice pointer
   if (is_device_pointer(p_lut)) {
     fprintf(stderr, "check_kernel_args_for_graph: p_lut should be HOST pointer: %p\n", p_lut);
     if (strict)
@@ -444,7 +441,7 @@ bool check_kernel_args_for_graph(const void* p_lut, // host expected (重要 hos
     ok = false;
   }
 
-  // 检查 device 预期的 buffer
+  // check all the other buffer
   const void* device_ptrs[] =
       {cnProcBuf, cnProcBufRes, bnProcBuf, bnProcBufRes, llrRes, llrProcBuf, llrOut, iter_ptr_array, iter_ptr_array2};
   const char* device_names[] = {"cnProcBuf",
@@ -465,7 +462,7 @@ bool check_kernel_args_for_graph(const void* p_lut, // host expected (重要 hos
     }
   }
 
-  // p_out / p_llrOut 可以是 host 也可以是 device（建议 managed 或 device）
+
   if (!is_device_pointer(p_out)) {
     fprintf(stderr, "check_kernel_args_for_graph: p_out is NOT device pointer: %p\n", p_out);
     if (strict)
@@ -550,20 +547,6 @@ if (err != cudaSuccess) {
     fprintf(stderr, "cudaMalloc d_out failed: %s\n", cudaGetErrorString(err));
     return -1;
   }
-  /*err = cudaMalloc((void**)&p_lut_dev, sizeof(t_nrLDPC_lut));
-  if (err != cudaSuccess) {
-    fprintf(stderr, "cudaMalloc for p_lut_dev failed: %s\n", cudaGetErrorString(err));
-    return -1;
-  }
-
-  // 拷贝整个结构体到 device
-  printf("Copying LUT from host %p to device %p, size=%zu\n", (void*)P_lut, (void*)p_lut_dev, sizeof(t_nrLDPC_lut));
-  err = cudaMemcpy(p_lut_dev, P_lut, sizeof(t_nrLDPC_lut), cudaMemcpyHostToDevice);
-  if (err != cudaSuccess) {
-    fprintf(stderr, "cudaMemcpy for p_lut_dev failed: %s\n", cudaGetErrorString(err));
-    return 0;
-  }*/
-  // create streams/events if not already
   if (!streamsCreated) {
     for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS; ++s) {
       cudaStreamCreateWithFlags(&decoderStreams[s], cudaStreamNonBlocking);
@@ -784,17 +767,14 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   }
   for (int s = 0; s < n_segments; ++s) {
     // printf("Synchronizing segment %d \n",s);
-    cudaEventSynchronize(decoderDoneEvents[s]); // 阻塞直到该 segment 解码完成
-  }
+    cudaEventSynchronize(decoderDoneEvents[s]); // stop it until segment finish
+    }
   cudaDeviceSynchronize();
   cudaMemcpy(p_out, d_out, 13 * Kprime * sizeof(uint8_t), cudaMemcpyDeviceToHost);
   cudaDeviceSynchronize();
   // cudaDeviceSynchronize();
   //  Wait for all streams
-  // for (int s = 0; s < n_segments; s++) {
-  //   cudaEventSynchronize(done[s]); // 等待stream[i]完成
-  //   // 可安全访问对应的解码输出结果 p_llrOut[i]
-  //}
+
   if (LastTrial == 1) {
     // printf("Now is the last trial\n");
     LDPCshutdown_cuda();
