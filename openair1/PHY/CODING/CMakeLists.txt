@@ -81,7 +81,7 @@ if (ENABLE_LDPC_CUDA)
   target_compile_definitions(ldpc_cuda PRIVATE USE_CUDA)
   if (ENABLE_PARALLEL_STREAM)
     cuda_add_library(ldpc_cuda_stream MODULE
-    nrLDPC_decoder/nrLDPC_decoder.c
+    nrLDPC_decoder/nrLDPC_decoder_cuda.c
     nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu  
     nrLDPC_decoder/kernel_test.cu  
     nrLDPC_encoder/ldpc_encoder_cuda32.c

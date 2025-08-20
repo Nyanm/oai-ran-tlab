@@ -1157,11 +1157,6 @@ __global__ void cnProcKernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                              const int8_t *__restrict__ d_cnBufAll,
                                              int8_t *__restrict__ d_cnOutAll,
                                              int8_t *__restrict__ d_bnBufAll,
-                                             const uint8_t *__restrict__ block_group_ids,
-                                             const uint8_t *__restrict__ block_CN_idx,
-                                             const uint16_t *__restrict__ block_thread_counts,
-                                             const uint32_t *__restrict__ block_input_offsets,
-                                             const uint32_t *__restrict__ block_output_offsets,
                                              int Zc,
                                              int8_t *iter_ptr,
                                              int8_t numMaxIter,
@@ -1242,17 +1237,12 @@ void nrLDPC_cnProc_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                  cnProcBuf,
                                                                                  cnProcBufRes,
                                                                                  bnProcBuf,
-                                                                                 h_block_group_ids_cnProc,
-                                                                                 h_block_CN_idx_cnProc,
-                                                                                 h_block_thread_counts_cnProc,
-                                                                                 h_block_input_offsets_cnProc,
-                                                                                 h_block_output_offsets_cnProc,
                                                                                  Z,
                                                                                  iter_ptr,
                                                                                  numMaxIter,
                                                                                  PC_Flag);
    //printf("Check point 1001: ");
-   CHECK(cudaGetLastError());
+   //CHECK(cudaGetLastError());
 
 #else
   printf("To be continued ^ ^\n");
@@ -1781,7 +1771,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
     if(CudaStreamIdx != 0){
       cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]);
     }
-    CHECK(cudaGetLastError());
+    //CHECK(cudaGetLastError());
 /*
     // print all the address to see if they are isolated
     printf("Stream %d parameter addresses:\n", CudaStreamIdx);
@@ -1800,7 +1790,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
     fflush(stdout);
 */
     // Start graph recording
-    cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
+  cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
 //check_ptr_kernel_easy<<<1,10>>>(2);
 //cudaDeviceSynchronize();
 //CHECK(cudaGetLastError());
@@ -1833,7 +1823,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
      //cudaDeviceSynchronize();
 
      //printf("In stream %d 2: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
-    CHECK(cudaGetLastError());
+    //CHECK(cudaGetLastError());
     //cudaDeviceSynchronize();
     nrLDPC_BnToCnPC_BG1_cuda_stream_core(p_lut,
                                          bnProcBufRes,
