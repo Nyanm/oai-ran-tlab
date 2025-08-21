@@ -41,8 +41,7 @@ __global__ void multipath_channel_kernel(
     int num_samples,
     int channel_length,
     int nb_tx,
-    int nb_rx,
-    float path_loss)
+    int nb_rx)
 {
     extern __shared__ float2 tx_shared[];
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -79,8 +78,8 @@ __global__ void multipath_channel_kernel(
         __syncthreads();
     }
     
-    rx_sig[ii * num_samples + i].x = rx_tmp.x * path_loss;
-    rx_sig[ii * num_samples + i].y = rx_tmp.y * path_loss;
+    rx_sig[ii * num_samples + i].x = rx_tmp.x;
+    rx_sig[ii * num_samples + i].y = rx_tmp.y;
 }
 
 
@@ -91,8 +90,7 @@ __global__ void multipath_channel_kernel_batched(
     int num_samples,
     int channel_length,
     int nb_tx,
-    int nb_rx,
-    const float* __restrict__ path_loss_batch)
+    int nb_rx)
 {
     extern __shared__ float2 tx_shared[];
     
@@ -104,7 +102,6 @@ __global__ void multipath_channel_kernel_batched(
     if (i >= num_samples) return;
 
     float2 rx_tmp = make_float2(0.0f, 0.0f);
-    const float path_loss = path_loss_batch[c]; 
 
     const int channel_tx_offset = c * nb_tx * num_samples;
     const int channel_rx_offset = c * nb_rx * num_samples;
@@ -133,8 +130,8 @@ __global__ void multipath_channel_kernel_batched(
         __syncthreads();
     }
     
-    rx_sig[channel_rx_offset + ii * num_samples + i].x = rx_tmp.x * path_loss;
-    rx_sig[channel_rx_offset + ii * num_samples + i].y = rx_tmp.y * path_loss;
+    rx_sig[channel_rx_offset + ii * num_samples + i].x = rx_tmp.x;
+    rx_sig[channel_rx_offset + ii * num_samples + i].y = rx_tmp.y;
 }
 
 
@@ -147,7 +144,6 @@ void multipath_channel_cuda(
     float **rx_sig_re, float **rx_sig_im,
     int nb_tx, int nb_rx, int channel_length,
     uint32_t length, uint64_t channel_offset,
-    float path_loss,
     float *h_channel_coeffs,
     void *d_tx_sig_void, void *d_rx_sig_void,
     void *d_channel_coeffs_void,
@@ -206,7 +202,7 @@ void multipath_channel_cuda(
     dim3 numBlocks((num_samples + threadsPerBlock.x - 1) / threadsPerBlock.x, nb_rx);
     size_t sharedMemSize = (threadsPerBlock.x + channel_length - 1) * sizeof(float2);
     multipath_channel_kernel<<<numBlocks, threadsPerBlock, sharedMemSize>>>(
-        d_channel_coeffs, kernel_input_ptr, d_rx_sig, num_samples, channel_length, nb_tx, nb_rx, path_loss);
+        d_channel_coeffs, kernel_input_ptr, d_rx_sig, num_samples, channel_length, nb_tx, nb_rx);
          
     #if defined(USE_UNIFIED_MEMORY)
             CHECK_CUDA( cudaDeviceSynchronize() );

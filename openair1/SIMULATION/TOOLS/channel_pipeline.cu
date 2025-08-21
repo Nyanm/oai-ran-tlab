@@ -6,7 +6,7 @@
 __global__ void multipath_channel_kernel_batched(
     const float2* __restrict__ d_channel_coeffs, const float2* __restrict__ tx_sig,
     float2* __restrict__ rx_sig, int num_samples, int channel_length,
-    int nb_tx, int nb_rx, const float* __restrict__ path_loss_batch);
+    int nb_tx, int nb_rx);
 
 __global__ void add_noise_and_phase_noise_kernel_batched(
     const float2* __restrict__ r_sig, short2* __restrict__ output_sig,
@@ -49,11 +49,10 @@ __global__ void sum_outputs_kernel(
 extern "C" {
 
 void run_channel_pipeline_cuda(
-    // float **tx_sig_re, float **tx_sig_im,
     float **tx_sig_interleaved,
     c16_t **output_signal,
     int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
-    float path_loss, float *h_channel_coeffs,
+    float *h_channel_coeffs,
     float sigma2, double ts,
     uint16_t pdu_bit_map, uint16_t ptrs_bit_map,
     int slot_offset, int delay,
@@ -104,7 +103,7 @@ void run_channel_pipeline_cuda(
     size_t sharedMemSize = (threads_multipath.x + channel_length - 1) * sizeof(float2);
     multipath_channel_kernel<<<blocks_multipath, threads_multipath, sharedMemSize>>>(
         d_channel_coeffs,
-        kernel_input_ptr, d_intermediate_sig, num_samples, channel_length, nb_tx, nb_rx, path_loss);
+        kernel_input_ptr, d_intermediate_sig, num_samples, channel_length, nb_tx, nb_rx);
 
     dim3 threads_noise(256, 1);
     dim3 blocks_noise((num_samples + threads_noise.x - 1) / threads_noise.x, nb_rx);
@@ -182,7 +181,7 @@ void sum_channel_outputs_cuda(
 void run_channel_pipeline_cuda_streamed(
     float **tx_sig_interleaved,
     int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
-    float path_loss, float *h_channel_coeffs,
+    float *h_channel_coeffs,
     float sigma2, double ts,
     uint16_t pdu_bit_map, uint16_t ptrs_bit_map,
     void *d_tx_sig_void, void *d_intermediate_sig_void, void *d_final_output_void,
@@ -224,7 +223,7 @@ void run_channel_pipeline_cuda_streamed(
     dim3 blocks_multipath((num_samples + threads_multipath.x - 1) / threads_multipath.x, nb_rx);
     size_t sharedMemSize = (threads_multipath.x + channel_length - 1) * sizeof(float2);
     multipath_channel_kernel<<<blocks_multipath, threads_multipath, sharedMemSize, stream>>>(
-        d_channel_coeffs, kernel_input_ptr, d_intermediate_sig, num_samples, channel_length, nb_tx, nb_rx, path_loss);
+        d_channel_coeffs, kernel_input_ptr, d_intermediate_sig, num_samples, channel_length, nb_tx, nb_rx);
 
     dim3 threads_noise(256, 1);
     dim3 blocks_noise((num_samples + threads_noise.x - 1) / threads_noise.x, nb_rx);
@@ -241,36 +240,35 @@ void run_channel_pipeline_cuda_streamed(
 void run_channel_pipeline_cuda_batched(
     int num_channels,
     int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
-    void *d_path_loss_batch, void *d_channel_coeffs_batch,
+    void *d_channel_coeffs_batch,
     float sigma2, double ts,
     uint16_t pdu_bit_map, uint16_t ptrs_bit_map,
     void *d_tx_sig_batch, void *d_intermediate_sig_batch, void *d_final_output_batch,
     void *d_curand_states)
 {
 
-    // float2 *d_tx = (float2*)d_tx_sig_batch;
-    // float2 *d_intermediate = (float2*)d_intermediate_sig_batch;
-    // short2 *d_final = (short2*)d_final_output_batch;
-    // float2 *d_coeffs = (float2*)d_channel_coeffs_batch;
-    // float *d_pl = (float*)d_path_loss_batch;
-    // curandState_t *d_states = (curandState_t*)d_curand_states;
+    float2 *d_tx = (float2*)d_tx_sig_batch;
+    float2 *d_intermediate = (float2*)d_intermediate_sig_batch;
+    short2 *d_final = (short2*)d_final_output_batch;
+    float2 *d_coeffs = (float2*)d_channel_coeffs_batch;
+    curandState_t *d_states = (curandState_t*)d_curand_states;
 
-    // dim3 threads_multipath(512, 1, 1);
-    // dim3 blocks_multipath((num_samples + threads_multipath.x - 1) / threads_multipath.x, nb_rx, num_channels);
-    // size_t sharedMemSize = (threads_multipath.x + channel_length - 1) * sizeof(float2);
+    dim3 threads_multipath(512, 1, 1);
+    dim3 blocks_multipath((num_samples + threads_multipath.x - 1) / threads_multipath.x, nb_rx, num_channels);
+    size_t sharedMemSize = (threads_multipath.x + channel_length - 1) * sizeof(float2);
 
-    // multipath_channel_kernel_batched<<<blocks_multipath, threads_multipath, sharedMemSize>>>(
-    //     d_coeffs, d_tx, d_intermediate, num_samples, channel_length, nb_tx, nb_rx, d_pl);
+    multipath_channel_kernel_batched<<<blocks_multipath, threads_multipath, sharedMemSize>>>(
+        d_coeffs, d_tx, d_intermediate, num_samples, channel_length, nb_tx, nb_rx);
 
-    // dim3 threads_noise(256, 1, 1);
-    // dim3 blocks_noise((num_samples + threads_noise.x - 1) / threads_noise.x, nb_rx, num_channels);
-    // float pn_variance = 1e-5f * 2.0f * 3.1415926535f * 300.0f * (float)ts;
+    dim3 threads_noise(256, 1, 1);
+    dim3 blocks_noise((num_samples + threads_noise.x - 1) / threads_noise.x, nb_rx, num_channels);
+    float pn_variance = 1e-5f * 2.0f * 3.1415926535f * 300.0f * (float)ts;
 
-    // add_noise_and_phase_noise_kernel_batched<<<blocks_noise, threads_noise>>>(
-    //     d_intermediate, d_final, d_states, num_samples, nb_rx,
-    //     sqrtf(sigma2 / 2.0f), sqrtf(pn_variance), 
-    //     pdu_bit_map, ptrs_bit_map
-    // );
+    add_noise_and_phase_noise_kernel_batched<<<blocks_noise, threads_noise>>>(
+        d_intermediate, d_final, d_states, num_samples, nb_rx,
+        sqrtf(sigma2 / 2.0f), sqrtf(pn_variance), 
+        pdu_bit_map, ptrs_bit_map
+    );
 
     // Note that synchronization happens in the benchmark (test_channel_scalability) after this call returns.
 }

@@ -26,8 +26,7 @@
         int num_samples,
         int channel_length,
         int nb_tx,
-        int nb_rx,
-        float path_loss);
+        int nb_rx);
 
     __global__ void add_noise_and_phase_noise_kernel(
         const float2* __restrict__ r_sig,
@@ -53,7 +52,7 @@ void run_channel_pipeline_cuda(
     float **tx_sig_interleaved,
     c16_t **output_signal,
     int nb_tx, int nb_rx, int channel_length, uint32_t num_samples, // Note: This is the number of IQ pairs
-    float path_loss, float *h_channel_coeffs,
+    float *h_channel_coeffs,
     float sigma2, double ts,
     uint16_t pdu_bit_map, uint16_t ptrs_bit_map, 
     int slot_offset, int delay,                 
@@ -67,7 +66,7 @@ void run_channel_pipeline_cuda_batched(
     // todo: implement interleaved version
     int num_channels,
     int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
-    void *d_path_loss_batch, void *d_channel_coeffs_batch,
+    void *d_channel_coeffs_batch,
     float sigma2, double ts,
     uint16_t pdu_bit_map, uint16_t ptrs_bit_map,
     void *d_tx_sig_batch, void *d_intermediate_sig_batch, void *d_final_output_batch,
@@ -77,7 +76,7 @@ void run_channel_pipeline_cuda_batched(
 void run_channel_pipeline_cuda_streamed(
     float **tx_sig_interleaved,
     int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
-    float path_loss, float *h_channel_coeffs,
+    float *h_channel_coeffs,
     float sigma2, double ts,
     uint16_t pdu_bit_map, uint16_t ptrs_bit_map,
     void *d_tx_sig_void, void *d_intermediate_sig_void, void *d_final_output_void,
@@ -93,7 +92,6 @@ void multipath_channel_cuda(
     float **rx_sig_re, float **rx_sig_im,
     int nb_tx, int nb_rx, int channel_length,
     uint32_t length, uint64_t channel_offset,
-    float path_loss,
     float *h_channel_coeffs,
     void *d_tx_sig, void *d_rx_sig,
     void *d_channel_coeffs,

@@ -231,11 +231,7 @@ void __attribute__ ((no_sanitize_address)) multipath_channel_float(
     // Use __m128 for single-precision (float) operations
     simde__m128 rx_tmp128_re, rx_tmp128_im, tx128_re, tx128_im, ch128_r, ch128_i, pathloss128;
 
-    float path_loss = (float)pow(10, desc->path_loss_dB / 20.0);
     uint64_t dd = desc->channel_offset;
-
-    // Use _ps (packed single) intrinsics
-    pathloss128 = simde_mm_set1_ps(path_loss);
 
     if (keep_channel == 0) {
         random_channel(desc, 0);
@@ -298,8 +294,8 @@ void __attribute__ ((no_sanitize_address)) multipath_channel_float(
             #endif
 
             // Store results after applying path loss
-            simde_mm_storeu_ps(&rx_sig_re[ii][i + dd], simde_mm_mul_ps(rx_tmp128_re, pathloss128));
-            simde_mm_storeu_ps(&rx_sig_im[ii][i + dd], simde_mm_mul_ps(rx_tmp128_im, pathloss128));
+            simde_mm_storeu_ps(&rx_sig_re[ii][i + dd], rx_tmp128_re);
+            simde_mm_storeu_ps(&rx_sig_im[ii][i + dd], rx_tmp128_im);
         }
     }
 
@@ -327,8 +323,8 @@ void __attribute__ ((no_sanitize_address)) multipath_channel_float(
                 rx_tmp.i = (temp.i * doppler_factor.r) + (temp.r * doppler_factor.i);
             }
             #endif
-            rx_sig_re[ii][i + dd] = rx_tmp.r * path_loss;
-            rx_sig_im[ii][i + dd] = rx_tmp.i * path_loss;
+            rx_sig_re[ii][i + dd] = rx_tmp.r;
+            rx_sig_im[ii][i + dd] = rx_tmp.i;
         }
     }
 }
@@ -344,7 +340,6 @@ void multipath_channel_float(channel_desc_t *desc,
                              int log_channel)
 {
     // --- Initialization ---
-    float path_loss = (float)pow(10, desc->path_loss_dB / 20.0);
     uint64_t dd = desc->channel_offset;
 
     // --- Handle keep_channel flag ---
@@ -391,8 +386,8 @@ void multipath_channel_float(channel_desc_t *desc,
             #endif
 
             // --- Finalization and Storage ---
-            rx_sig_re[ii][i + dd] = rx_tmp.r * path_loss;
-            rx_sig_im[ii][i + dd] = rx_tmp.i * path_loss;
+            rx_sig_re[ii][i + dd] = rx_tmp.r;
+            rx_sig_im[ii][i + dd] = rx_tmp.i;
 
         } // ii (nb_rx)
     } // i (length)

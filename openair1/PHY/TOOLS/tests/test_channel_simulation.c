@@ -35,12 +35,13 @@ channel_desc_t* create_manual_channel_desc(int nb_tx, int nb_rx, int channel_len
     desc->path_loss_dB = 0.0;
     desc->channel_offset = 0;
     int num_links = nb_tx * nb_rx;
+    float path_loss = (float)pow(10, desc->path_loss_dB / 20.0);
     desc->ch = (struct complexd**)malloc(num_links * sizeof(struct complexd*));
     for (int i = 0; i < num_links; i++) {
         desc->ch[i] = (struct complexd*)malloc(channel_length * sizeof(struct complexd));
         for (int l = 0; l < channel_length; l++) {
-            desc->ch[i][l].r = (double)rand() / (double)RAND_MAX * 0.1;
-            desc->ch[i][l].i = (double)rand() / (double)RAND_MAX * 0.1;
+            desc->ch[i][l].r = ((double)rand() / (double)RAND_MAX * 0.1) * path_loss;
+            desc->ch[i][l].i = ((double)rand() / (double)RAND_MAX * 0.1) * path_loss;
         }
     }
     return desc;
@@ -131,7 +132,6 @@ int main(int argc, char **argv) {
 
         double ts = 1.0 / 30.72e6;
         float sigma2 = 1.0f / powf(10.0f, snr_db / 10.0f);
-        float path_loss = (float)pow(10, chan_desc->path_loss_dB / 20.0);
         int num_links = nb_tx * nb_rx;
         float* h_channel_coeffs = (float*)malloc(num_links * channel_length * sizeof(float2));
         for (int link = 0; link < num_links; link++) {
@@ -149,6 +149,13 @@ int main(int argc, char **argv) {
             generate_random_signal_interleaved(tx_sig_interleaved, nb_tx, num_samples);
             struct timespec start, end;
 
+            float* h_tx_ptr = (float*)h_tx_sig_pinned;
+            for (int j = 0; j < nb_tx; j++) {
+                memcpy(h_tx_ptr + j * num_samples * 2,  
+                       tx_sig_interleaved[j],              
+                       num_samples * 2 * sizeof(float));     
+            }
+    
             // Time the CPU Path
             clock_gettime(CLOCK_MONOTONIC, &start);
             multipath_channel_float(chan_desc, tx_sig_interleaved, rx_multipath_re_cpu, rx_multipath_im_cpu, num_samples, 1, 0);
@@ -161,7 +168,7 @@ int main(int argc, char **argv) {
             run_channel_pipeline_cuda(
                 tx_sig_interleaved, output_gpu,
                 nb_tx, nb_rx, channel_length, num_samples,
-                path_loss, h_channel_coeffs,
+                h_channel_coeffs,
                 sigma2, ts,
                 0, 0, 0, 0, 
                 d_tx_sig, d_rx_sig, d_output_noise, d_curand_states,

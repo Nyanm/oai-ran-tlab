@@ -1382,7 +1382,6 @@ printf("%d\n", slot);
 
             start_meas(&pipeline_stats);
             random_channel(gNB2UE, 0);
-            float path_loss = (float)pow(10, gNB2UE->path_loss_dB / 20.0);
             int num_links = gNB2UE->nb_tx * gNB2UE->nb_rx;
             for (int link = 0; link < num_links; link++) {
                 for (int l = 0; l < gNB2UE->channel_length; l++) {
@@ -1393,7 +1392,7 @@ printf("%d\n", slot);
             }
             run_channel_pipeline_cuda(
                 s_interleaved, UE->common_vars.rxdata,
-                n_tx, n_rx, gNB2UE->channel_length, slot_length, path_loss, h_channel_coeffs,
+                n_tx, n_rx, gNB2UE->channel_length, slot_length, h_channel_coeffs,
                 (float)sigma2, ts, pdu_bit_map, 0x1, slot_offset, delay,
                 d_tx_sig, d_intermediate_sig, d_final_output,
                 d_curand_states, h_tx_sig_pinned, h_final_output_pinned,

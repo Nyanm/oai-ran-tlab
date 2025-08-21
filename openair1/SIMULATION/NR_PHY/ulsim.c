@@ -1408,7 +1408,6 @@ int main(int argc, char *argv[])
             
             start_meas(&pipeline_stats);
             random_channel(UE2gNB, 0);
-            float path_loss = (float)pow(10, UE2gNB->path_loss_dB / 20.0);
             int num_links = UE2gNB->nb_tx * UE2gNB->nb_rx;
             for (int link = 0; link < num_links; link++) {
                 for (int l = 0; l < UE2gNB->channel_length; l++) {
@@ -1421,7 +1420,7 @@ int main(int argc, char *argv[])
             run_channel_pipeline_cuda(
                 s_interleaved, rxdata,
                 n_tx, n_rx, UE2gNB->channel_length, slot_length,
-                path_loss, h_channel_coeffs,
+                h_channel_coeffs,
                 (float)sigma, ts,
                 pdu_bit_map, PUSCH_PDU_BITMAP_PUSCH_PTRS,
                 slot_offset, delay,

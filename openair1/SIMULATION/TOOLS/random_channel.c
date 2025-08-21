@@ -1947,17 +1947,17 @@ int random_channel(channel_desc_t *desc, uint8_t abstraction_flag) {
           } //channel_length
 
     // // integrating path loss inside the channel model
-    // float path_loss = (float)pow(10, desc->path_loss_dB / 20.0);
-    // if (path_loss != 1.0f) {
-    //     for (aarx = 0; aarx < desc->nb_rx; aarx++) {
-    //         for (aatx = 0; aatx < desc->nb_tx; aatx++) {
-    //             for (k = 0; k < (int)desc->channel_length; k++) {
-    //                 desc->ch[aarx + (aatx * desc->nb_rx)][k].r *= path_loss;
-    //                 desc->ch[aarx + (aatx * desc->nb_rx)][k].i *= path_loss;
-    //             }
-    //         }
-    //     }
-    // }
+    float path_loss = (float)pow(10, desc->path_loss_dB / 20.0);
+    if (path_loss != 1.0f) {
+        for (aarx = 0; aarx < desc->nb_rx; aarx++) {
+            for (aatx = 0; aatx < desc->nb_tx; aatx++) {
+                for (k = 0; k < (int)desc->channel_length; k++) {
+                    desc->ch[aarx + (aatx * desc->nb_rx)][k].r *= path_loss;
+                    desc->ch[aarx + (aatx * desc->nb_rx)][k].i *= path_loss;
+                }
+            }
+        }
+    }
 
 #ifdef DEBUG_CH_POWER
           ch_power_count++;

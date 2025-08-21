@@ -35,11 +35,12 @@ channel_desc_t* create_manual_channel_desc(int nb_tx, int nb_rx, int channel_len
     desc->channel_offset = 0;
     int num_links = nb_tx * nb_rx;
     desc->ch = (struct complexd**)malloc(num_links * sizeof(struct complexd*));
+    float path_loss = (float)pow(10, desc->path_loss_dB / 20.0);
     for (int i = 0; i < num_links; i++) {
         desc->ch[i] = (struct complexd*)malloc(channel_length * sizeof(struct complexd));
         for (int l = 0; l < channel_length; l++) {
-            desc->ch[i][l].r = (double)rand() / (double)RAND_MAX;
-            desc->ch[i][l].i = (double)rand() / (double)RAND_MAX;
+            desc->ch[i][l].r = (double)rand() / (double)RAND_MAX * path_loss;
+            desc->ch[i][l].i = (double)rand() / (double)RAND_MAX * path_loss;
         }
     }
     return desc;
@@ -134,7 +135,6 @@ int main(int argc, char **argv) {
         double total_cpu_ns = 0;
         double total_gpu_ns = 0;
 
-        float path_loss = (float)pow(10, chan_desc->path_loss_dB / 20.0);
         int num_links = chan_desc->nb_tx * chan_desc->nb_rx;
         float* h_channel_coeffs = (float*)malloc(num_links * channel_length * sizeof(float2));
         for (int link = 0; link < num_links; link++) {
@@ -163,12 +163,12 @@ int main(int argc, char **argv) {
         // Time GPU path
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int t = 0; t < num_trials; t++) {
-            multipath_channel_cuda(s_interleaved, r_re_gpu, r_im_gpu, nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset, path_loss, h_channel_coeffs, d_tx_sig, d_rx_sig, d_channel_coeffs_gpu, h_tx_sig_pinned);
+            multipath_channel_cuda(s_interleaved, r_re_gpu, r_im_gpu, nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset, h_channel_coeffs, d_tx_sig, d_rx_sig, d_channel_coeffs_gpu, h_tx_sig_pinned);
         }
         cudaDeviceSynchronize();
         clock_gettime(CLOCK_MONOTONIC, &end);
         total_gpu_ns = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
-        
+
         int verification_passed = (verify_results(r_re_cpu, r_im_cpu, r_re_gpu, r_im_gpu, nb_rx, num_samples) == 0);
         double avg_cpu_us = (total_cpu_ns / num_trials) / 1000.0;
         double avg_gpu_us = (total_gpu_ns / num_trials) / 1000.0;
