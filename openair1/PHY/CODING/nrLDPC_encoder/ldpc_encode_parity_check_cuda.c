@@ -38,36 +38,16 @@
 #include <cuda_runtime.h>
 
 
-uint32_t *cc0[4];
+uint32_t **c_dev;
+uint32_t *c_host[4];
 
 int ldpc_BG1_Zc384_cuda32(uint32_t **c,uint32_t **d,int n_inputs);
 
-extern int managed;
+extern int pageable_uses_host;
 
-void encode_parity_check_part_cuda(uint32_t **cc, uint32_t **d, short BG,short Zc,short Kb, int ncols, int n_inputs)
+void encode_parity_check_part_cuda(uint32_t **c, uint32_t **d, short BG,short Zc,short Kb, int ncols, int n_inputs)
 {
   
-  uint32_t c[n_inputs][2 * 22 * Zc] ; //double size matrix of c
-				      
-  for (int s=0;s<n_inputs;s++)				      
-    for (int i1 = 0; i1 < ncols; i1++)   {
-      if (managed) {	    
-        memcpy(&c[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
-        memcpy(&c[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
-      }
-      else {
-        cudaMemcpy(&cc0[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t),1);
-        cudaMemcpy(&cc0[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t),1);
-      }
-    }
-  uint32_t *cp[n_inputs];
-  for (int s=0; s<n_inputs;s++) {
-    if (managed)	  
-      cp[s]=c[s];
-    else
-      cp[s]=cc0[s];
-  }
-
   if (BG == 1) {
     switch (Zc) {
       case 176:
@@ -82,7 +62,7 @@ void encode_parity_check_part_cuda(uint32_t **cc, uint32_t **d, short BG,short Z
 	AssertFatal(1==0,"BG %d Zc %d not supported yet for CUDA\n",BG, Zc);
         break;
       case 384:
-	ldpc_BG1_Zc384_cuda32(cp, d, n_inputs);
+	ldpc_BG1_Zc384_cuda32(c, d, n_inputs);
         break;
       default:
         AssertFatal(false, "BG %d Zc %d is not supported yet\n", BG, Zc);
@@ -115,6 +95,3 @@ void encode_parity_check_part_cuda(uint32_t **cc, uint32_t **d, short BG,short Z
   } else
     AssertFatal(false, "BG %d is not supported\n", BG);
 }
-
-
-

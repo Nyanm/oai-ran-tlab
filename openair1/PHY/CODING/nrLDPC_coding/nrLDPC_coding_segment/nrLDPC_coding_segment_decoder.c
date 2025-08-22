@@ -282,6 +282,10 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
 
 int32_t nrLDPC_coding_init(void)
 {
+  LOG_I(NR_PHY,"Initializing coding library\n");
+#ifdef ENABLE_CUDA
+  LOG_I(NR_PHY,"Calling cuda_support_init()\n");
+#endif
   cuda_support_init();	
   return 0;
 }

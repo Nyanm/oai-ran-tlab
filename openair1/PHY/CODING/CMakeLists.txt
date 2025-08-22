@@ -57,7 +57,7 @@ if (ENABLE_LDPC_CUDA)
   if (NOT CUDA_FOUND)
     message(FATAL_ERROR "no CUDA found")
   endif()
-  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=native;")
+  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_80;")
   SET(CUDA_VERBOSE_BUILD ON)
   cuda_add_library(ldpc_cuda MODULE
 	  #                   nrLDPC_decoder_LYC/nrLDPC_decoder_LYC.cu
@@ -77,7 +77,7 @@ if (ENABLE_LDPC_CUDA)
   target_link_libraries(ldpc_cuda ldpc_gen_HEADERS ${T_LIB})
   set_target_properties(ldpc_cuda PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
   set_target_properties(ldpc_cuda PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-
+  target_compile_definitions(ldpc_cuda PRIVATE ENABLE_CUDA)
   add_dependencies(ldpctest ldpc_cuda)
   add_dependencies(nr-softmodem ldpc_cuda)
   add_dependencies(nr-uesoftmodem ldpc_cuda)

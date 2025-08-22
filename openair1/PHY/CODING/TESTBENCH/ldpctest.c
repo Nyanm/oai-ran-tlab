@@ -263,6 +263,7 @@ one_measurement_t test_ldpc(short max_iterations,
   printf("To: %d\n", (Kb + nrows - no_punctured_columns) * Zc - removed_bit);
   printf("number of undecoded bits: %d\n", (Kb + nrows - no_punctured_columns - 2) * Zc - removed_bit);
 
+//  ldpc_toCompare.LDPCinit();
   // generate input block
   for (int j = 0; j < MAX_NUM_DLSCH_SEGMENTS; j++) {
     test_input[j] = malloc16(((K + 7) & ~7) / 8);
@@ -353,7 +354,6 @@ one_measurement_t test_ldpc(short max_iterations,
       decParams[j].numMaxIter = max_iterations;
       decParams[j].outMode = nrLDPC_outMode_BIT;
       decParams[j].Kprime = Kprime;
-      ldpc_toCompare.LDPCinit();
     }
     for (int j = 0; j < n_segments; j++) {
       start_meas(&ret.time_decoder);
