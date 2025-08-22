@@ -46,6 +46,8 @@ __global__ void multipath_channel_kernel(
     extern __shared__ float2 tx_shared[];
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     const int ii = blockIdx.y;
+    const int padding_len = channel_length - 1;
+    const int padded_num_samples = num_samples + padding_len;
 
     if (i >= num_samples) return;
 
@@ -57,15 +59,18 @@ __global__ void multipath_channel_kernel(
         const int shared_mem_size = blockDim.x + channel_length - 1;
 
         for (int k = tid; k < shared_mem_size; k += blockDim.x) {
-            int load_idx = block_start_idx + k - (channel_length - 1);
-            if (load_idx >= 0 && load_idx < num_samples) {
-                // tx_shared[k] = tx_sig[j * num_samples + load_idx];
-                // --- CHANGED: Read two floats and construct a float2 ---
-                int interleaved_idx = 2 * (j * num_samples + load_idx);
-                tx_shared[k] = make_float2(tx_sig[interleaved_idx], tx_sig[interleaved_idx + 1]);
-            } else {
-                tx_shared[k] = make_float2(0.0f, 0.0f);
-            }
+            // int load_idx = block_start_idx + k - (channel_length - 1);
+            // if (load_idx >= 0 && load_idx < num_samples) {
+            //     // tx_shared[k] = tx_sig[j * num_samples + load_idx];
+            //     // --- CHANGED: Read two floats and construct a float2 ---
+            //     int interleaved_idx = 2 * (j * num_samples + load_idx);
+            //     tx_shared[k] = make_float2(tx_sig[interleaved_idx], tx_sig[interleaved_idx + 1]);
+            // } else {
+            //     tx_shared[k] = make_float2(0.0f, 0.0f);
+            // }
+            int load_idx = block_start_idx + k;
+            int interleaved_idx = 2 * (j * padded_num_samples + load_idx);
+            tx_shared[k] = make_float2(tx_sig[interleaved_idx], tx_sig[interleaved_idx + 1]);
         }
         __syncthreads();
 
@@ -103,7 +108,10 @@ __global__ void multipath_channel_kernel_batched(
 
     float2 rx_tmp = make_float2(0.0f, 0.0f);
 
-    const int channel_tx_offset = c * nb_tx * num_samples;
+    const int padding_len = channel_length - 1;
+    const int padded_num_samples = num_samples + padding_len;
+
+    const int channel_tx_offset = c * nb_tx * padded_num_samples;
     const int channel_rx_offset = c * nb_rx * num_samples;
 
     for (int j = 0; j < nb_tx; j++) {
@@ -112,12 +120,8 @@ __global__ void multipath_channel_kernel_batched(
         const int shared_mem_size = blockDim.x + channel_length - 1;
 
         for (int k = tid; k < shared_mem_size; k += blockDim.x) {
-            int load_idx = block_start_idx + k - (channel_length - 1);
-            if (load_idx >= 0 && load_idx < num_samples) {
-                tx_shared[k] = tx_sig[channel_tx_offset + j * num_samples + load_idx];
-            } else {
-                tx_shared[k] = make_float2(0.0f, 0.0f);
-            }
+            int load_idx = block_start_idx + k;
+            tx_shared[k] = tx_sig[channel_tx_offset + j * padded_num_samples + load_idx];
         }
         __syncthreads();
 
@@ -139,8 +143,6 @@ __global__ void multipath_channel_kernel_batched(
 extern "C" {
 
 void multipath_channel_cuda(
-    // float **tx_sig_re, float **tx_sig_im,
-    float **tx_sig_interleaved,
     float **rx_sig_re, float **rx_sig_im,
     int nb_tx, int nb_rx, int channel_length,
     uint32_t length, uint64_t channel_offset,
@@ -155,43 +157,23 @@ void multipath_channel_cuda(
     float2 *d_rx_sig = (float2*)d_rx_sig_void;
     float2 *d_channel_coeffs = (float2*)d_channel_coeffs_void;
     int num_samples = length - (int)channel_offset;
-    // float2* kernel_input_ptr;
     float* kernel_input_ptr;
 
-    #if defined(USE_UNIFIED_MEMORY)
+    const int padding_len = channel_length - 1;
+    const size_t total_padded_tx_bytes = nb_tx * (num_samples + padding_len) * 2 * sizeof(float);
+
+
+    #if defined(USE_UNIFIED_MEMORY) || defined(USE_ATS_MEMORY)
             // for (int j = 0; j < nb_tx; j++) {
             //     for (int i = 0; i < num_samples; i++) {
             //         d_tx_sig[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
             //     }
             // }
             // For UM, we can just copy the host data into the managed buffer
-            for (int j = 0; j < nb_tx; j++) {
-                memcpy(d_tx_sig + j * num_samples * 2, tx_sig_interleaved[j], num_samples * 2 * sizeof(float));
-            }
-            kernel_input_ptr = d_tx_sig;
-    #elif defined(USE_ATS_MEMORY)
-            // float2* h_tx_sig_pinned = (float2*)h_tx_sig_pinned_void;
-            float* h_tx_sig_pinned = (float*)h_tx_sig_pinned_void;
-            for (int j = 0; j < nb_tx; j++) {
-                // for (int i = 0; i < num_samples; i++) {
-                //     h_tx_sig_pinned[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
-                // }
-                memcpy(h_tx_sig_pinned + j * num_samples * 2, tx_sig_interleaved[j], num_samples * 2 * sizeof(float));
-            }
-            kernel_input_ptr = h_tx_sig_pinned; 
+        kernel_input_ptr = (float*)h_tx_sig_pinned_void;
     #else // EXPLICIT COPY
-            // float2* h_tx_sig_pinned = (float2*)h_tx_sig_pinned_void;
             float* h_tx_sig_pinned = (float*)h_tx_sig_pinned_void;
-            for (int j = 0; j < nb_tx; j++) {
-                // for (int i = 0; i < num_samples; i++) {
-                //     h_tx_sig_pinned[j * num_samples + i] = make_float2(tx_sig_re[j][i], tx_sig_im[j][i]);
-                // }
-            // }
-            // CHECK_CUDA( cudaMemcpy(d_tx_sig, h_tx_sig_pinned, nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice) );
-            memcpy(h_tx_sig_pinned + j * num_samples * 2, tx_sig_interleaved[j], num_samples * 2 * sizeof(float));
-            }
-            CHECK_CUDA( cudaMemcpy(d_tx_sig, h_tx_sig_pinned, nb_tx * num_samples * 2 * sizeof(float), cudaMemcpyHostToDevice) );
-            
+            CHECK_CUDA( cudaMemcpy(d_tx_sig, h_tx_sig_pinned, total_padded_tx_bytes, cudaMemcpyHostToDevice) );
             kernel_input_ptr = d_tx_sig;
     #endif
 

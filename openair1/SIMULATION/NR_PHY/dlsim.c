@@ -691,38 +691,35 @@ printf("%d\n", slot);
 
 #ifdef ENABLE_CUDA
   if (use_cuda) {
-        // Define a size for pre-allocation. 30720 is a safe, typical slot length.
-        int num_samples_alloc = 30720; 
+        int num_samples_alloc = 153600; 
 
-    #if defined(USE_UNIFIED_MEMORY)
+  #if defined(USE_UNIFIED_MEMORY)
         printf("Allocating CUDA Unified Memory...\n");
-        cudaMallocManaged(&d_tx_sig, n_tx * num_samples_alloc * sizeof(float) * 2, cudaMemAttachGlobal);
+        const int max_padding_alloc = 256 - 1;
+        size_t padded_tx_alloc_bytes = n_tx * (num_samples_alloc + max_padding_alloc) * 2 * sizeof(float);
+
+        cudaMallocManaged(&d_tx_sig, padded_tx_alloc_bytes, cudaMemAttachGlobal); 
         cudaMallocManaged(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2, cudaMemAttachGlobal);
         cudaMallocManaged(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAttachGlobal);
         
+        h_tx_sig_pinned = d_tx_sig;
+        h_final_output_pinned = d_final_output;
+
         int deviceId;
         cudaGetDevice(&deviceId);
       
-        // Hint 1: The input signal will be read frequently by the GPU.
-        cudaMemAdvise(d_tx_sig, n_tx * num_samples_alloc * sizeof(float) * 2, cudaMemAdviseSetReadMostly, deviceId);
-      
-        // Hint 2: These buffers should live on the GPU for best performance.
+        cudaMemAdvise(d_tx_sig, padded_tx_alloc_bytes, cudaMemAdviseSetReadMostly, deviceId);
         cudaMemAdvise(d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
         cudaMemAdvise(d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAdviseSetPreferredLocation, deviceId);
-      
-        // Hint 3: The final output will be accessed by the CPU after the GPU is done.
         cudaMemAdvise(d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
-
-        // Pinned buffers are not needed, but we point them to the managed buffers
-        // so the pipeline function signature doesn't need to change.
-        h_tx_sig_pinned = d_tx_sig;
-        h_final_output_pinned = d_final_output;
 
     #elif defined(USE_ATS_MEMORY)
         printf("Allocating memory for ATS Hybrid path...\n");
         // For ATS, device can access host memory, so we malloc a host buffer for the input.
         // The pointer h_tx_sig_pinned will be repurposed to point to this buffer.
-        h_tx_sig_pinned = malloc(n_tx * num_samples_alloc * sizeof(float) * 2);
+        const int max_padding_alloc = 256 - 1;
+        size_t padded_tx_alloc_bytes = n_tx * (num_samples_alloc + max_padding_alloc) * 2 * sizeof(float);
+        h_tx_sig_pinned = malloc(padded_tx_alloc_bytes); 
 
         // Device-only buffers are allocated with cudaMalloc.
         cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2);
@@ -737,11 +734,15 @@ printf("%d\n", slot);
         
     #else // Original explicit copy method
         printf("Pre-allocating GPU & Pinned memory for the channel pipeline...\n");
-        cudaMalloc(&d_tx_sig, n_tx * num_samples_alloc * sizeof(float) * 2);
+
+        const int max_padding_alloc = 256 - 1;
+        size_t padded_tx_alloc_bytes = n_tx * (num_samples_alloc + max_padding_alloc) * 2 * sizeof(float);
+        cudaMalloc(&d_tx_sig, padded_tx_alloc_bytes);
+
         cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2);
         cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2);
         
-        cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples_alloc * sizeof(float) * 2);
+        cudaMallocHost(&h_tx_sig_pinned, padded_tx_alloc_bytes);
         cudaMallocHost(&h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short) * 2);
     #endif
 
@@ -752,7 +753,18 @@ printf("%d\n", slot);
 
       int num_rand_elements = n_rx * num_samples_alloc;
       d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
+
+} else {
+    printf("Pre-allocating Padded Host memory for the CPU channel pipeline...\n");
+    int num_samples_alloc = 153600;
+    const int max_padding_alloc = 256 - 1;
+    size_t padded_tx_alloc_bytes = n_tx * (num_samples_alloc + max_padding_alloc) * 2 * sizeof(float);
+    h_tx_sig_pinned = malloc(padded_tx_alloc_bytes);
+    if (h_tx_sig_pinned == NULL) {
+        printf("Error: Failed to allocate host buffer for CPU path\n");
+        exit(-1);
     }
+}
 #endif
 
 
@@ -1332,11 +1344,23 @@ printf("%d\n", slot);
 
         for (int aa = 0; aa < frame_parms->nb_antennas_tx; aa++) {
           for (int i = 0; i < slot_length; i++) {
-            s_interleaved[aa][2*i]   = (float)((short*)&txdata[aa][slot_offset])[2*i];     // Real part (I)
-            s_interleaved[aa][2*i+1] = (float)((short*)&txdata[aa][slot_offset])[2*i+1];   // Imaginary part (Q)
+            s_interleaved[aa][2*i]   = (float)((short*)&txdata[aa][slot_offset])[2*i];
+            s_interleaved[aa][2*i+1] = (float)((short*)&txdata[aa][slot_offset])[2*i+1];
           }
         }
 
+        const int padding_len = gNB2UE->channel_length - 1;
+        const int padded_slot_length = slot_length + padding_len;
+        float* h_tx_ptr = (float*)h_tx_sig_pinned;
+        size_t total_padded_bytes_for_slot = n_tx * padded_slot_length * 2 * sizeof(float);
+        memset(h_tx_ptr, 0, total_padded_bytes_for_slot);
+
+        for (int j = 0; j < n_tx; j++) {
+            float* data_start_ptr = h_tx_ptr + (j * padded_slot_length + padding_len) * 2;
+            memcpy(data_start_ptr,
+                  s_interleaved[j],
+                  slot_length * 2 * sizeof(float));
+        }
 
         double ts = 1.0/(frame_parms->subcarrier_spacing * frame_parms->ofdm_symbol_size);
         //Compute AWGN variance
@@ -1346,29 +1370,11 @@ printf("%d\n", slot);
 
 #ifdef ENABLE_CUDA
         if (use_cuda) {
-            #if defined(USE_UNIFIED_MEMORY) || defined(USE_ATS_MEMORY)
-                // For UM, data was already prepared into s_re/s_im. Now, interleave it into the managed buffer.
-                // float2* managed_tx_sig = (float2*)d_tx_sig;
-                // for (int aa = 0; aa < n_tx; aa++) {
-                //     for (int i = 0; i < slot_length; i++) {
-                //         managed_tx_sig[aa * slot_length + i] = make_float2(s_re[aa][i], s_im[aa][i]);
-                //     }
-                // }
-
-                float* h_pinned_buffer = (float*)h_tx_sig_pinned;
-                for (int aa = 0; aa < n_tx; aa++) {
-                    memcpy(h_pinned_buffer + aa * slot_length * 2, 
-                           s_interleaved[aa],                      
-                           slot_length * 2 * sizeof(float));      
-                }
-
-        #endif
-        #if defined(USE_UNIFIED_MEMORY)
+            #if defined(USE_UNIFIED_MEMORY)
                  int deviceId;
                  cudaGetDevice(&deviceId);
-                 cudaMemPrefetchAsync(d_tx_sig, n_tx * slot_length * sizeof(float) * 2, deviceId, 0);
-        #endif
-                
+                 cudaMemPrefetchAsync(d_tx_sig, n_tx * padded_slot_length * sizeof(float) * 2, deviceId, 0);
+            #endif
             // #elif defined(USE_ATS_MEMORY)
             //     // For ATS, interleave s_re/s_im into the host buffer the GPU will access.
             //     float2* ats_input_buffer = (float2*)h_tx_sig_pinned;
@@ -1379,7 +1385,6 @@ printf("%d\n", slot);
             //     }
             //   #endif
           
-
             start_meas(&pipeline_stats);
             random_channel(gNB2UE, 0);
             int num_links = gNB2UE->nb_tx * gNB2UE->nb_rx;
@@ -1391,7 +1396,7 @@ printf("%d\n", slot);
                 }
             }
             run_channel_pipeline_cuda(
-                s_interleaved, UE->common_vars.rxdata,
+                UE->common_vars.rxdata,
                 n_tx, n_rx, gNB2UE->channel_length, slot_length, h_channel_coeffs,
                 (float)sigma2, ts, pdu_bit_map, 0x1, slot_offset, delay,
                 d_tx_sig, d_intermediate_sig, d_final_output,
@@ -1400,17 +1405,27 @@ printf("%d\n", slot);
             );
             cudaDeviceSynchronize();
             stop_meas(&pipeline_stats);
-
         } else
 #endif
-        { // This is the original CPU Path
+        {
+            float **tx_sig_for_cpu = malloc(n_tx * sizeof(float*));
+            float* h_tx_ptr = (float*)h_tx_sig_pinned;
+            const int padding_len = gNB2UE->channel_length - 1;
+            const int padded_slot_length = slot_length + padding_len;
+
+            for (int j = 0; j < n_tx; j++) {
+                tx_sig_for_cpu[j] = h_tx_ptr + (j * padded_slot_length + padding_len) * 2;
+            }
+
             for (aa = 0; aa < n_rx; aa++) {
               bzero(r_re[aa], slot_length * sizeof(float));
               bzero(r_im[aa], slot_length * sizeof(float));
             }
             start_meas(&channel_stats);
-            multipath_channel_float(gNB2UE, s_interleaved, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
+            multipath_channel_float(gNB2UE, tx_sig_for_cpu, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
             stop_meas(&channel_stats);
+            
+            free(tx_sig_for_cpu);
 
             start_meas(&noise_stats);
             add_noise_float(

@@ -109,25 +109,39 @@ int main(int argc, char **argv) {
             output_gpu[i] = output_gpu[0] + i * num_samples;
         }
  
-        void *d_tx_sig, *d_rx_sig, *d_output_noise, *d_curand_states, *h_tx_sig_pinned, *h_output_sig_pinned, *d_channel_coeffs_gpu;
-        size_t channel_buffer_size = nb_tx * nb_rx * channel_length * sizeof(float2);
- 
-        #if defined(USE_UNIFIED_MEMORY)
-            cudaMallocManaged(&d_tx_sig, nb_tx * num_samples * 2 * sizeof(float), cudaMemAttachGlobal);
-            cudaMallocManaged(&d_rx_sig, nb_rx * num_samples * sizeof(float2), cudaMemAttachGlobal);
-            cudaMallocManaged(&d_output_noise, nb_rx * num_samples * sizeof(short2), cudaMemAttachGlobal);
+        void *d_tx_sig = NULL, *d_rx_sig = NULL, *d_output_noise = NULL, *d_curand_states = NULL;
+        void *h_tx_sig_pinned = NULL, *h_output_sig_pinned = NULL, *d_channel_coeffs_gpu = NULL;
 
+        const int padding_len = channel_length - 1;
+        const size_t padded_tx_buffer_bytes = nb_tx * (num_samples + padding_len) * 2 * sizeof(float);
+        const size_t rx_buffer_bytes = nb_rx * num_samples * sizeof(float2); // Intermediate buffer
+        const size_t output_buffer_bytes = nb_rx * num_samples * sizeof(short2);
+        const size_t channel_buffer_size = nb_tx * nb_rx * channel_length * sizeof(float2);
+
+
+        #if defined(USE_UNIFIED_MEMORY)
+            cudaMallocManaged(&d_tx_sig, padded_tx_buffer_bytes, cudaMemAttachGlobal);
+            cudaMallocManaged(&d_rx_sig, rx_buffer_bytes, cudaMemAttachGlobal);
+            cudaMallocManaged(&d_output_noise, output_buffer_bytes, cudaMemAttachGlobal);
             cudaMallocManaged(&d_channel_coeffs_gpu, channel_buffer_size, cudaMemAttachGlobal);
             h_tx_sig_pinned = d_tx_sig;
             h_output_sig_pinned = d_output_noise;
-        #else
-            cudaMalloc(&d_tx_sig, nb_tx * num_samples * 2 * sizeof(float));
-            cudaMalloc(&d_rx_sig, nb_rx * num_samples * sizeof(float2));
-            cudaMalloc(&d_output_noise, nb_rx * num_samples * sizeof(short2));
-            cudaMallocHost(&h_tx_sig_pinned, nb_tx * num_samples * 2 * sizeof(float));
-            cudaMallocHost(&h_output_sig_pinned, nb_rx * num_samples * sizeof(short2));
+        #elif defined(USE_ATS_MEMORY)
+            h_tx_sig_pinned = malloc(padded_tx_buffer_bytes);
+            d_tx_sig = NULL;
+            cudaMalloc(&d_rx_sig, rx_buffer_bytes);
+            cudaMalloc(&d_output_noise, output_buffer_bytes);
             cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size);
+            h_output_sig_pinned = malloc(output_buffer_bytes);
+        #else
+            cudaMalloc(&d_tx_sig, padded_tx_buffer_bytes);
+            cudaMalloc(&d_rx_sig, rx_buffer_bytes);
+            cudaMalloc(&d_output_noise, output_buffer_bytes);
+            cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size);
+            cudaMallocHost(&h_tx_sig_pinned, padded_tx_buffer_bytes);
+            cudaMallocHost(&h_output_sig_pinned, output_buffer_bytes);
         #endif
+        
         d_curand_states = create_and_init_curand_states_cuda(nb_rx * num_samples, time(NULL));
 
         double ts = 1.0 / 30.72e6;
@@ -149,34 +163,41 @@ int main(int argc, char **argv) {
             generate_random_signal_interleaved(tx_sig_interleaved, nb_tx, num_samples);
             struct timespec start, end;
 
+            const int padding_len = channel_length - 1;
+            const int padded_num_samples = num_samples + padding_len;
             float* h_tx_ptr = (float*)h_tx_sig_pinned;
+            memset(h_tx_ptr, 0, padded_tx_buffer_bytes);
             for (int j = 0; j < nb_tx; j++) {
-                memcpy(h_tx_ptr + j * num_samples * 2,  
-                       tx_sig_interleaved[j],              
-                       num_samples * 2 * sizeof(float));     
+                float* data_start_ptr = h_tx_ptr + (j * padded_num_samples + padding_len) * 2;
+                memcpy(data_start_ptr, tx_sig_interleaved[j], num_samples * 2 * sizeof(float));
             }
-    
+
             // Time the CPU Path
             clock_gettime(CLOCK_MONOTONIC, &start);
-            multipath_channel_float(chan_desc, tx_sig_interleaved, rx_multipath_re_cpu, rx_multipath_im_cpu, num_samples, 1, 0);
+            float **tx_sig_for_cpu = malloc(nb_tx * sizeof(float*));
+            for (int j = 0; j < nb_tx; j++) {
+                tx_sig_for_cpu[j] = h_tx_ptr + (j * padded_num_samples + padding_len) * 2;
+            }
+            multipath_channel_float(chan_desc, tx_sig_for_cpu, rx_multipath_re_cpu, rx_multipath_im_cpu, num_samples, 1, 0);
+            free(tx_sig_for_cpu);
             add_noise_float(output_cpu, (const float **)rx_multipath_re_cpu, (const float **)rx_multipath_im_cpu, sigma2, num_samples, 0, ts, 0, 0, 0, nb_rx);
             clock_gettime(CLOCK_MONOTONIC, &end);
             total_cpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
 
             // Time the GPU Path
             clock_gettime(CLOCK_MONOTONIC, &start);
-            run_channel_pipeline_cuda(
-                tx_sig_interleaved, output_gpu,
-                nb_tx, nb_rx, channel_length, num_samples,
-                h_channel_coeffs,
-                sigma2, ts,
-                0, 0, 0, 0, 
-                d_tx_sig, d_rx_sig, d_output_noise, d_curand_states,
-                h_tx_sig_pinned, h_output_sig_pinned, d_channel_coeffs_gpu
-            );
-            cudaDeviceSynchronize();
-            clock_gettime(CLOCK_MONOTONIC, &end);
-            total_gpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+                run_channel_pipeline_cuda(
+                    output_gpu,
+                    nb_tx, nb_rx, channel_length, num_samples,
+                    h_channel_coeffs,
+                    sigma2, ts,
+                    0, 0, 0, 0, 
+                    d_tx_sig, d_rx_sig, d_output_noise, d_curand_states,
+                    h_tx_sig_pinned, h_output_sig_pinned, d_channel_coeffs_gpu
+                );
+                cudaDeviceSynchronize();
+                clock_gettime(CLOCK_MONOTONIC, &end);
+                total_gpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
         }
         
         double avg_cpu_us = (total_cpu_ns / num_trials) / 1000.0;
@@ -194,21 +215,27 @@ int main(int argc, char **argv) {
         free(output_cpu[0]); free(output_gpu[0]);
         free(output_cpu); free(output_gpu);
 
-        #if defined(USE_UNIFIED_MEMORY)
-            cudaFree(d_tx_sig);
-            cudaFree(d_rx_sig);
-            cudaFree(d_output_noise);
-        #else
-            cudaFree(d_tx_sig);
-            cudaFree(d_rx_sig);
-            cudaFreeHost(h_tx_sig_pinned);
-            cudaFree(d_output_noise);
-            cudaFreeHost(h_output_sig_pinned);
-        #endif
-        cudaFree(d_channel_coeffs_gpu);
-        destroy_curand_states_cuda(d_curand_states);
-        
-        free_manual_channel_desc(chan_desc);
+
+    #if defined(USE_UNIFIED_MEMORY)
+        cudaFree(d_tx_sig); // In UM, h_tx_sig_pinned is an alias for d_tx_sig
+        cudaFree(d_rx_sig);
+        cudaFree(d_output_noise);
+    #elif defined(USE_ATS_MEMORY)
+        free(h_tx_sig_pinned);
+        cudaFree(d_rx_sig);
+        cudaFree(d_output_noise);
+        free(h_output_sig_pinned); 
+    #else // EXPLICIT COPY
+        cudaFree(d_tx_sig);
+        cudaFree(d_rx_sig);
+        cudaFree(d_output_noise);
+        cudaFreeHost(h_tx_sig_pinned);
+        cudaFreeHost(h_output_sig_pinned);
+    #endif
+
+    cudaFree(d_channel_coeffs_gpu);
+    destroy_curand_states_cuda(d_curand_states);
+    free_manual_channel_desc(chan_desc);
     }
     }
     }

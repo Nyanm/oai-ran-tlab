@@ -793,56 +793,72 @@ int main(int argc, char *argv[])
     exit(-1);
   }
 
- #ifdef ENABLE_CUDA
-    if (use_cuda) {
-        // Define a size for pre-allocation. A full frame is a safe size.
-        int num_samples_alloc = gNB->frame_parms.samples_per_subframe * NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
+#ifdef ENABLE_CUDA
+  const int num_samples_alloc = 153600;
 
-        #if defined(USE_UNIFIED_MEMORY)
-            printf("Allocating CUDA Unified Memory for the channel pipeline...\n");
-            cudaMallocManaged(&h_tx_sig_pinned, n_tx * num_samples_alloc * 2 * sizeof(float), cudaMemAttachGlobal);
-            cudaMallocManaged(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float2), cudaMemAttachGlobal);
-            cudaMallocManaged(&h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short2), cudaMemAttachGlobal);
- 
-            int deviceId;
-            cudaGetDevice(&deviceId);
-            cudaMemAdvise(h_tx_sig_pinned, n_tx * num_samples_alloc * 2 * sizeof(float), cudaMemAdviseSetReadMostly, deviceId);
-            cudaMemAdvise(d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float2), cudaMemAdviseSetPreferredLocation, deviceId);
-            cudaMemAdvise(h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short2), cudaMemAdviseSetPreferredLocation, deviceId);
-            cudaMemAdvise(h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short2), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
+  if (use_cuda) {
+    #if defined(USE_UNIFIED_MEMORY)
+        printf("Allocating CUDA Unified Memory...\n");
+        const int max_padding_alloc = 256 - 1;
+        size_t padded_tx_alloc_bytes = n_tx * (num_samples_alloc + max_padding_alloc) * 2 * sizeof(float);
 
-            d_tx_sig = h_tx_sig_pinned;
-            d_final_output = h_final_output_pinned;
+        cudaMallocManaged(&d_tx_sig, padded_tx_alloc_bytes, cudaMemAttachGlobal);
+        cudaMallocManaged(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2, cudaMemAttachGlobal);
+        cudaMallocManaged(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2, cudaMemAttachGlobal);
 
-        #elif defined(USE_ATS_MEMORY)
-            printf("Allocating memory for ATS Hybrid path...\n");
-            h_tx_sig_pinned = malloc(n_tx * num_samples_alloc * 2 * sizeof(float));
-            cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float2));
-            cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short2));
-            h_final_output_pinned = malloc(n_rx * num_samples_alloc * sizeof(short2));
-            d_tx_sig = NULL;
 
-        #else // Default explicit copy method
-            printf("Pre-allocating GPU & Pinned memory for the channel pipeline...\n");
-            cudaMalloc(&d_tx_sig, n_tx * num_samples_alloc * 2 * sizeof(float));
-            cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float2));
-            cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short2));
+        int deviceId;
+        cudaGetDevice(&deviceId);
+        cudaMemAdvise(d_tx_sig, n_tx * num_samples_alloc * 2 * sizeof(float), cudaMemAdviseSetReadMostly, deviceId);
+        cudaMemAdvise(d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float2), cudaMemAdviseSetPreferredLocation, deviceId);
+        cudaMemAdvise(d_final_output, n_rx * num_samples_alloc * sizeof(short2), cudaMemAdviseSetPreferredLocation, deviceId);
+        cudaMemAdvise(d_final_output, n_rx * num_samples_alloc * sizeof(short2), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId);
 
-            cudaMallocHost(&h_tx_sig_pinned, n_tx * num_samples_alloc * 2 * sizeof(float));
-            cudaMallocHost(&h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short2));
-        #endif
+        h_tx_sig_pinned = d_tx_sig;
+        h_final_output_pinned = d_final_output;
 
-        const int max_taps_alloc = 256; // Safe upper bound for channel length
-        size_t channel_buffer_size = n_tx * n_rx * max_taps_alloc * sizeof(float2);
-        cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size);
+    #elif defined(USE_ATS_MEMORY)
+        printf("Allocating memory for ATS Hybrid path...\n");
+        const int max_padding_alloc = 256 - 1;
+        size_t padded_tx_alloc_bytes = n_tx * (num_samples_alloc + max_padding_alloc) * 2 * sizeof(float);
+        h_tx_sig_pinned = malloc(padded_tx_alloc_bytes);
+        cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2);
+        cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2);
+        h_final_output_pinned = malloc(n_rx * num_samples_alloc * sizeof(short) * 2);
+        d_tx_sig = NULL;
 
-        int num_rand_elements = n_rx * num_samples_alloc;
-        d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
+    #else 
+        printf("Pre-allocating GPU & Pinned memory for the channel pipeline...\n");
+        const int max_padding_alloc = 256 - 1;
+        size_t padded_tx_alloc_bytes = n_tx * (num_samples_alloc + max_padding_alloc) * 2 * sizeof(float);
+        cudaMalloc(&d_tx_sig, padded_tx_alloc_bytes);
+        cudaMalloc(&d_intermediate_sig, n_rx * num_samples_alloc * sizeof(float) * 2);
+        cudaMalloc(&d_final_output, n_rx * num_samples_alloc * sizeof(short) * 2);
+        cudaMallocHost(&h_tx_sig_pinned, padded_tx_alloc_bytes);
+        cudaMallocHost(&h_final_output_pinned, n_rx * num_samples_alloc * sizeof(short) * 2);
+    #endif
 
-        int num_links = n_tx * n_rx;
-        h_channel_coeffs = (float*)malloc(num_links * UE2gNB->channel_length * sizeof(float2));
-    }
-  #endif
+    const int max_taps_alloc = 256;
+    size_t channel_buffer_size = n_tx * n_rx * max_taps_alloc * sizeof(float) * 2;
+    cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size);
+    int num_rand_elements = n_rx * num_samples_alloc;
+    d_curand_states = create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
+
+    int num_links = n_tx * n_rx;
+    h_channel_coeffs = (float*)malloc(num_links * UE2gNB->channel_length * sizeof(float2));
+
+  } else { // This is the CPU-only path
+      printf("Pre-allocating Padded Host memory for the CPU channel pipeline...\n");
+      const int max_padding_alloc = 256 - 1;
+      size_t padded_tx_alloc_bytes = n_tx * (num_samples_alloc + max_padding_alloc) * 2 * sizeof(float);
+      h_tx_sig_pinned = malloc(padded_tx_alloc_bytes);
+      if (h_tx_sig_pinned == NULL) {
+          printf("Error: Failed to allocate host buffer for CPU path\n");
+          exit(-1);
+      }
+  }
+#endif
+
 
   // Configure UE
   UE = calloc(1, sizeof(PHY_VARS_NR_UE));
@@ -1392,65 +1408,95 @@ int main(int argc, char *argv[])
           }
         }
 
+
+        const int padding_len = UE2gNB->channel_length - 1;
+        const int padded_slot_length = slot_length + padding_len;
+        float* h_tx_ptr = (float*)h_tx_sig_pinned;
+        size_t total_padded_bytes_for_slot = n_tx * padded_slot_length * 2 * sizeof(float);
+        memset(h_tx_ptr, 0, total_padded_bytes_for_slot);
+
+        for (int j = 0; j < n_tx; j++) {
+            float* data_start_ptr = h_tx_ptr + (j * padded_slot_length + padding_len) * 2;
+            memcpy(data_start_ptr,
+                  s_interleaved[j],
+                  slot_length * 2 * sizeof(float));
+        }
+
+
 #ifdef ENABLE_CUDA
-        if (use_cuda) {
-            #if defined(USE_UNIFIED_MEMORY) || defined(USE_ATS_MEMORY)
-                float* h_pinned_buffer = (float*)h_tx_sig_pinned;
-                for (int aa = 0; aa < n_tx; aa++) {
-                    memcpy(h_pinned_buffer + aa * slot_length * 2, s_interleaved[aa], slot_length * 2 * sizeof(float));
-                }
-            #endif
-            #if defined(USE_UNIFIED_MEMORY)
-                int deviceId;
-                cudaGetDevice(&deviceId);
-                cudaMemPrefetchAsync(h_tx_sig_pinned, n_tx * slot_length * sizeof(float2), deviceId, 0);
-            #endif
-            
-            start_meas(&pipeline_stats);
-            random_channel(UE2gNB, 0);
-            int num_links = UE2gNB->nb_tx * UE2gNB->nb_rx;
-            for (int link = 0; link < num_links; link++) {
-                for (int l = 0; l < UE2gNB->channel_length; l++) {
-                    int idx = link * UE2gNB->channel_length + l;
-                    ((float2*)h_channel_coeffs)[idx].x = (float)UE2gNB->ch[link][l].r;
-                    ((float2*)h_channel_coeffs)[idx].y = (float)UE2gNB->ch[link][l].i;
-                }
-            }
-          
-            run_channel_pipeline_cuda(
-                s_interleaved, rxdata,
-                n_tx, n_rx, UE2gNB->channel_length, slot_length,
-                h_channel_coeffs,
-                (float)sigma, ts,
-                pdu_bit_map, PUSCH_PDU_BITMAP_PUSCH_PTRS,
-                slot_offset, delay,
-                d_tx_sig, d_intermediate_sig, d_final_output,
-                d_curand_states, h_tx_sig_pinned, h_final_output_pinned,
-                d_channel_coeffs_gpu
-            );
-            cudaDeviceSynchronize();
-            stop_meas(&pipeline_stats);
-          } else
+  if (use_cuda) {
+      #if defined(USE_UNIFIED_MEMORY)
+          int deviceId;
+          cudaGetDevice(&deviceId);
+          const int padding_len = UE2gNB->channel_length - 1;
+          const int padded_slot_length = slot_length + padding_len;
+          cudaMemPrefetchAsync(d_tx_sig, n_tx * padded_slot_length * 2 * sizeof(float), deviceId, 0);
+      #endif
+
+      start_meas(&pipeline_stats);
+      random_channel(UE2gNB, 0);
+      int num_links = UE2gNB->nb_tx * UE2gNB->nb_rx;
+      if (h_channel_coeffs == NULL) {
+          h_channel_coeffs = (float*)malloc(num_links * 256 * sizeof(float2));
+      }
+
+      for (int link = 0; link < num_links; link++) {
+          for (int l = 0; l < UE2gNB->channel_length; l++) {
+              int idx = link * UE2gNB->channel_length + l;
+              ((float2*)h_channel_coeffs)[idx].x = (float)UE2gNB->ch[link][l].r;
+              ((float2*)h_channel_coeffs)[idx].y = (float)UE2gNB->ch[link][l].i;
+          }
+      }
+
+      run_channel_pipeline_cuda(
+          rxdata,
+          n_tx, n_rx, UE2gNB->channel_length, slot_length,
+          h_channel_coeffs,
+          (float)sigma, ts,
+          pdu_bit_map, PUSCH_PDU_BITMAP_PUSCH_PTRS,
+          slot_offset, delay,
+          d_tx_sig, d_intermediate_sig, d_final_output,
+          d_curand_states, h_tx_sig_pinned, h_final_output_pinned,
+          d_channel_coeffs_gpu
+      );
+      cudaDeviceSynchronize();
+      stop_meas(&pipeline_stats);
+
+    } else {
+      float **tx_sig_for_cpu = malloc(n_tx * sizeof(float*));
+      float* h_tx_ptr = (float*)h_tx_sig_pinned;
+      const int padding_len = UE2gNB->channel_length - 1;
+      const int padded_slot_length = slot_length + padding_len;
+
+      for (int j = 0; j < n_tx; j++) {
+          tx_sig_for_cpu[j] = h_tx_ptr + (j * padded_slot_length + padding_len) * 2;
+      }
+
+      start_meas(&channel_stats);
+      multipath_channel_float(UE2gNB, tx_sig_for_cpu, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
+      stop_meas(&channel_stats);
+
+      free(tx_sig_for_cpu);
+
+      start_meas(&noise_stats);
+      add_noise_float(
+              rxdata,
+              (const float **)r_re,
+              (const float **)r_im,
+              (float)sigma,
+              slot_length,
+              slot_offset,
+              ts,
+              delay,
+              pdu_bit_map, 
+              PUSCH_PDU_BITMAP_PUSCH_PTRS,
+              gNB->frame_parms.nb_antennas_rx);
+      stop_meas(&noise_stats);
+  }
 #endif
-        { // Original CPU Path
-            start_meas(&channel_stats);
-            multipath_channel_float(UE2gNB, s_interleaved, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
-            stop_meas(&channel_stats);
-          
-            start_meas(&noise_stats);
-            add_noise_float(rxdata,
-                    (const float **)r_re,
-                    (const float **)r_im,
-                    (float)sigma,
-                    slot_length,
-                    slot_offset,
-                    ts,
-                    delay,
-                    pdu_bit_map, 
-                    PUSCH_PDU_BITMAP_PUSCH_PTRS,
-                    gNB->frame_parms.nb_antennas_rx);
-            stop_meas(&noise_stats);
-        }}
+}
+
+
         /*End input_fd */
 
         //----------------------------------------------------------
@@ -1801,9 +1847,9 @@ int main(int argc, char *argv[])
   if (use_cuda) {
       printf("Freeing GPU and Pinned memory...\n");
       #if defined(USE_UNIFIED_MEMORY)
-          cudaFree(h_tx_sig_pinned);
+          cudaFree(d_tx_sig); 
           cudaFree(d_intermediate_sig);
-          cudaFree(h_final_output_pinned);
+          cudaFree(d_final_output);
       #elif defined(USE_ATS_MEMORY)
           free(h_tx_sig_pinned);
           cudaFree(d_intermediate_sig);
@@ -1819,8 +1865,10 @@ int main(int argc, char *argv[])
       cudaFree(d_channel_coeffs_gpu);
       destroy_curand_states_cuda(d_curand_states);
       free(h_channel_coeffs);
+  } else {
+      free(h_tx_sig_pinned);
   }
-  #endif
+#endif
 
   return ret;
 }

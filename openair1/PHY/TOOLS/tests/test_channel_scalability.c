@@ -183,9 +183,19 @@ int main(int argc, char **argv) {
 
     const int max_taps = 256;
 
+    const int padding_len = max_taps - 1;
+    // const int padding_len = channel_length - 1;
+    const int padded_num_samples = num_samples + padding_len;
+
+    size_t tx_batch_bytes = num_channels * nb_tx * padded_num_samples * sizeof(float2);
+    size_t channel_batch_bytes = num_channels * nb_tx * nb_rx * channel_length * sizeof(float2);
+
+    // Sizes for serial/stream mode
+    size_t tx_bytes = nb_tx * padded_num_samples * 2 * sizeof(float);
+
+
     if (strcmp(mode_str, "batch") == 0) {
 
-        size_t tx_batch_bytes = num_channels * nb_tx * num_samples * sizeof(float2);
         size_t intermediate_batch_bytes = num_channels * nb_rx * num_samples * sizeof(float2);
         size_t final_batch_bytes = num_channels * nb_rx * num_samples * sizeof(short2);
         size_t channel_batch_bytes = num_channels * nb_tx * nb_rx * channel_length * sizeof(float2);
@@ -217,8 +227,9 @@ int main(int argc, char **argv) {
     }
 
     } else { 
+
         // --- SERIAL & STREAM MODE MEMORY ALLOCATION ---
-        size_t tx_bytes = nb_tx * num_samples * sizeof(float2);
+        size_t tx_bytes = nb_tx * padded_num_samples * 2 * sizeof(float);
         size_t rx_bytes = nb_rx * num_samples * sizeof(float2);
         size_t output_bytes = nb_rx * num_samples * sizeof(short2);
 
@@ -349,51 +360,43 @@ int main(int argc, char **argv) {
 
         clock_gettime(CLOCK_MONOTONIC, &start);
 
-        if (strcmp(mode_str, "batch") == 0) {
-
+        if (strcmp(mode_str, "batch") == 0) {            
             #if defined(USE_UNIFIED_MEMORY)
                     float2* tx_batch_ptr = (float2*)d_tx_sig_batch;
+                    memset(tx_batch_ptr, 0, tx_batch_bytes);
                     for (int c = 0; c < num_channels; c++) {
                         float** current_tx = sum_outputs ? tx_sig_interleaved[c] : tx_sig_interleaved[0];
                         for (int j = 0; j < nb_tx; j++) {
+                            float2* data_start_ptr = tx_batch_ptr + (c * nb_tx + j) * padded_num_samples + padding_len;
                             for (int i = 0; i < num_samples; i++) {
-                                int batch_idx = (c * nb_tx + j) * num_samples + i;
-                                tx_batch_ptr[batch_idx] = make_float2(current_tx[j][2*i], current_tx[j][2*i+1]);
+                                data_start_ptr[i] = make_float2(current_tx[j][2*i], current_tx[j][2*i+1]);
                             }
                         }
                     }
-                    memcpy(d_channel_coeffs_batch, h_channel_coeffs_batch, num_channels * nb_tx * nb_rx * channel_length * sizeof(float2));
-            #elif defined(USE_ATS_MEMORY)
-                    float2* tx_batch_ptr_ats = (float2*)d_tx_sig_batch;
+            #else // EXPLICIT COPY (and ATS)
+                    float2* h_tx_sig_batch_interleaved = (float2*)malloc(tx_batch_bytes);
+                    memset(h_tx_sig_batch_interleaved, 0, tx_batch_bytes);
                     for (int c = 0; c < num_channels; c++) {
                         float** current_tx = sum_outputs ? tx_sig_interleaved[c] : tx_sig_interleaved[0];
                         for (int j = 0; j < nb_tx; j++) {
+                            float2* data_start_ptr = h_tx_sig_batch_interleaved + (c * nb_tx + j) * padded_num_samples + padding_len;
                             for (int i = 0; i < num_samples; i++) {
-                                int batch_idx = (c * nb_tx + j) * num_samples + i;
-                                tx_batch_ptr_ats[batch_idx] = make_float2(current_tx[j][2*i], current_tx[j][2*i+1]);
-                            }
-                         }
-                    }
-                cudaMemcpy(d_channel_coeffs_batch, h_channel_coeffs_batch, num_channels * nb_tx * nb_rx * channel_length * sizeof(float2), cudaMemcpyHostToDevice);
-            #else // EXPLICIT COPY
-                    float2* h_tx_sig_batch_interleaved = (float2*)malloc(num_channels * nb_tx * num_samples * sizeof(float2));
-                    for (int c = 0; c < num_channels; c++) {
-                        float** current_tx = sum_outputs ? tx_sig_interleaved[c] : tx_sig_interleaved[0];
-                        for (int j = 0; j < nb_tx; j++) {
-                            for (int i = 0; i < num_samples; i++) {
-                                int batch_idx = (c * nb_tx + j) * num_samples + i;
-                                h_tx_sig_batch_interleaved[batch_idx] = make_float2(current_tx[j][2*i], current_tx[j][2*i+1]);
+                                data_start_ptr[i] = make_float2(current_tx[j][2*i], current_tx[j][2*i+1]);
                             }
                         }
                     }
-                    cudaMemcpy(d_tx_sig_batch, h_tx_sig_batch_interleaved, num_channels * nb_tx * num_samples * sizeof(float2), cudaMemcpyHostToDevice);
-                    cudaMemcpy(d_channel_coeffs_batch, h_channel_coeffs_batch, num_channels * nb_tx * nb_rx * channel_length * sizeof(float2), cudaMemcpyHostToDevice);
+                    cudaMemcpy(d_tx_sig_batch, h_tx_sig_batch_interleaved, tx_batch_bytes, cudaMemcpyHostToDevice);
                     free(h_tx_sig_batch_interleaved);
-            #endif
-                        
-            run_channel_pipeline_cuda_batched(num_channels, nb_tx, nb_rx, channel_length, num_samples,
+                #endif
+            
+            
+            cudaMemcpy(d_channel_coeffs_batch, h_channel_coeffs_batch, channel_batch_bytes, cudaMemcpyHostToDevice);
+
+            run_channel_pipeline_cuda_batched(
+                num_channels, nb_tx, nb_rx, channel_length, num_samples,
                 d_channel_coeffs_batch, 0.1, 0, 0xFFFF, 0xFFFF,
-                d_tx_sig_batch, d_intermediate_sig_batch, d_final_output_batch, d_curand_states);      
+                d_tx_sig_batch, d_intermediate_sig_batch, d_final_output_batch, d_curand_states
+            );      
             cudaDeviceSynchronize();
 
             if (sum_outputs) {
@@ -404,65 +407,80 @@ int main(int argc, char **argv) {
                 sum_channel_outputs_cuda(d_individual_gpu_outputs, d_summed_gpu_output, num_channels, nb_rx, num_samples);
             }
 
-        } else if (strcmp(mode_str, "stream") == 0) {
-            cudaStream_t streams[num_channels];
-            for(int c=0; c<num_channels; c++) {
-                cudaStreamCreateWithFlags(&streams[c], cudaStreamNonBlocking);
-            }
-
-            for(int c=0; c<num_channels; c++){
-                for (int link = 0; link < nb_tx * nb_rx; link++) {
-                    for (int l = 0; l < channels[c]->channel_length; l++) {
-                        int idx = link * channels[c]->channel_length + l;
-                        ((float2*)h_channel_coeffs)[idx].x = (float)channels[c]->ch[link][l].r;
-                        ((float2*)h_channel_coeffs)[idx].y = (float)channels[c]->ch[link][l].i;
-                    }
+        } else {
+                float* h_tx_ptr = (float*)h_tx_sig_pinned;
+                memset(h_tx_ptr, 0, tx_bytes); 
+                for (int j = 0; j < nb_tx; j++) {
+                    float* data_start_ptr = h_tx_ptr + (j * padded_num_samples + padding_len) * 2;
+                    memcpy(data_start_ptr, tx_sig_interleaved[0][j], num_samples * 2 * sizeof(float));
                 }
-                
-                run_channel_pipeline_cuda_streamed(
-                    sum_outputs ? tx_sig_interleaved[c] : tx_sig_interleaved[0],
-                    nb_tx, nb_rx, channels[c]->channel_length, num_samples,
-                    h_channel_coeffs, 0.1, 0, 0xFFFF, 0xFFFF,
-                    d_tx_sig, d_rx_sig, d_individual_gpu_outputs[c], d_curand_states,
-                    h_tx_sig_pinned, d_channel_coeffs_gpu, (void*)streams[c]
-                );
-            }
 
-            if (sum_outputs) {
-                sum_channel_outputs_cuda(d_individual_gpu_outputs, d_summed_gpu_output, num_channels, nb_rx, num_samples);
-            }
-            cudaDeviceSynchronize();
+                if (strcmp(mode_str, "stream") == 0) {
+                        cudaStream_t streams[num_channels];
+                        for(int c=0; c<num_channels; c++) cudaStreamCreateWithFlags(&streams[c], cudaStreamNonBlocking);
 
-            for(int c=0; c<num_channels; c++) {
-                cudaStreamDestroy(streams[c]);
-            }
+                        for(int c=0; c<num_channels; c++){
 
-        } else if (strcmp(mode_str, "serial") == 0) {
-            c16_t** output_gpu_serial = malloc(nb_rx * sizeof(c16_t*));
-            output_gpu_serial[0] = malloc(nb_rx * num_samples * sizeof(c16_t));
-            for(int i=1; i<nb_rx; i++) output_gpu_serial[i] = output_gpu_serial[0] + i*num_samples;
+                            for (int link = 0; link < nb_tx * nb_rx; link++) {
+                                for (int l = 0; l < channels[c]->channel_length; l++) {
+                                    int idx = link * channels[c]->channel_length + l;
+                                    ((float2*)h_channel_coeffs)[idx].x = (float)channels[c]->ch[link][l].r;
+                                    ((float2*)h_channel_coeffs)[idx].y = (float)channels[c]->ch[link][l].i;
+                                }
+                            }
 
-            for(int c=0; c<num_channels; c++){
-                for (int link = 0; link < nb_tx * nb_rx; link++) {
-                    for (int l = 0; l < channels[c]->channel_length; l++) {
-                        int idx = link * channels[c]->channel_length + l;
-                        ((float2*)h_channel_coeffs)[idx].x = (float)channels[c]->ch[link][l].r;
-                        ((float2*)h_channel_coeffs)[idx].y = (float)channels[c]->ch[link][l].i;
-                    }
-                }
-                run_channel_pipeline_cuda(
-                    sum_outputs ? tx_sig_interleaved[c] : tx_sig_interleaved[0],
-                    output_gpu_serial,
-                    nb_tx, nb_rx, channels[c]->channel_length, num_samples, h_channel_coeffs, 0.1, 0, 
-                    0xFFFF, 0xFFFF, 0, 0, 
-                    d_tx_sig, d_rx_sig, d_individual_gpu_outputs[c], d_curand_states,
-                    h_tx_sig_pinned, h_output_sig_pinned,
-                    d_channel_coeffs_gpu
-                );
-            }
-            free(output_gpu_serial[0]);
-            free(output_gpu_serial);
+
+                            float** current_tx = sum_outputs ? tx_sig_interleaved[c] : tx_sig_interleaved[0];
+                            for (int j = 0; j < nb_tx; j++) {
+                                float* data_start_ptr = h_tx_ptr + (j * padded_num_samples + padding_len) * 2;
+                                memcpy(data_start_ptr, current_tx[j], num_samples * 2 * sizeof(float));
+                            }
+
+                            run_channel_pipeline_cuda_streamed(
+                                nb_tx, nb_rx, channels[c]->channel_length, num_samples,
+                                h_channel_coeffs, 0.1, 0, 0xFFFF, 0xFFFF,
+                                d_tx_sig, d_rx_sig, d_individual_gpu_outputs[c], d_curand_states,
+                                h_tx_sig_pinned, d_channel_coeffs_gpu, (void*)streams[c]
+                            );
+                        }
+                        if (sum_outputs) {
+                            sum_channel_outputs_cuda(d_individual_gpu_outputs, d_summed_gpu_output, num_channels, nb_rx, num_samples);
+                        }
+                        cudaDeviceSynchronize();
+                        for(int c=0; c<num_channels; c++) cudaStreamDestroy(streams[c]);
+
+
+                    } else if (strcmp(mode_str, "serial") == 0) {
+                        c16_t** output_gpu_serial = malloc(nb_rx * sizeof(c16_t*));
+                        output_gpu_serial[0] = malloc(nb_rx * num_samples * sizeof(c16_t));
+                        for(int i=1; i<nb_rx; i++) output_gpu_serial[i] = output_gpu_serial[0] + i*num_samples;
+
+                        for(int c=0; c<num_channels; c++){
+                            for (int link = 0; link < nb_tx * nb_rx; link++) {
+                                for (int l = 0; l < channels[c]->channel_length; l++) {
+                                    int idx = link * channels[c]->channel_length + l;
+                                    ((float2*)h_channel_coeffs)[idx].x = (float)channels[c]->ch[link][l].r;
+                                    ((float2*)h_channel_coeffs)[idx].y = (float)channels[c]->ch[link][l].i;
+                                }
+                            }
+
+                            run_channel_pipeline_cuda(
+                                output_gpu,
+                                nb_tx, nb_rx, channels[c]->channel_length, num_samples,
+                                h_channel_coeffs,
+                                0.1,
+                                0,
+                                0xFFFF, 0xFFFF,
+                                0, 0,
+                                d_tx_sig, d_rx_sig, d_individual_gpu_outputs[c], d_curand_states,
+                                h_tx_sig_pinned, h_output_sig_pinned, d_channel_coeffs_gpu
+                            );
+                        }
+
+                        free(output_gpu_serial[0]);
+                        free(output_gpu_serial);
         }
+    }
 
         clock_gettime(CLOCK_MONOTONIC, &end);
         total_gpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);

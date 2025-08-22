@@ -47,9 +47,6 @@ extern "C" {
 #endif
 
 void run_channel_pipeline_cuda(
-    // float **tx_sig_re, float **tx_sig_im,
-    // todo: implement interleaved version
-    float **tx_sig_interleaved,
     c16_t **output_signal,
     int nb_tx, int nb_rx, int channel_length, uint32_t num_samples, // Note: This is the number of IQ pairs
     float *h_channel_coeffs,
@@ -74,7 +71,6 @@ void run_channel_pipeline_cuda_batched(
 );
 
 void run_channel_pipeline_cuda_streamed(
-    float **tx_sig_interleaved,
     int nb_tx, int nb_rx, int channel_length, uint32_t num_samples,
     float *h_channel_coeffs,
     float sigma2, double ts,
@@ -86,9 +82,6 @@ void run_channel_pipeline_cuda_streamed(
 );
 
 void multipath_channel_cuda(
-    // float **tx_sig_re, float **tx_sig_im,
-    // todo: implement interleaved version
-    float **tx_sig_interleaved,
     float **rx_sig_re, float **rx_sig_im,
     int nb_tx, int nb_rx, int channel_length,
     uint32_t length, uint64_t channel_offset,

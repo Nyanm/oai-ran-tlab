@@ -111,25 +111,28 @@ int main(int argc, char **argv) {
         for (int i=0; i<nb_rx; i++) { r_re_cpu[i] = malloc(num_samples * sizeof(float)); r_im_cpu[i] = malloc(num_samples * sizeof(float)); r_re_gpu[i] = malloc(num_samples * sizeof(float)); r_im_gpu[i] = malloc(num_samples * sizeof(float)); }
        
         void *d_tx_sig = NULL, *d_rx_sig = NULL, *d_channel_coeffs_gpu = NULL, *h_tx_sig_pinned = NULL;
-        size_t channel_buffer_size = nb_tx * nb_rx * channel_length * sizeof(float2);
-        size_t tx_buffer_bytes = nb_tx * (num_samples - chan_desc->channel_offset) * 2 * sizeof(float);
-        size_t rx_buffer_bytes = nb_rx * (num_samples - chan_desc->channel_offset) * sizeof(float2);
+        const int num_samples_to_process = num_samples - chan_desc->channel_offset;
+        const int padding_len = channel_length - 1;
+        const size_t channel_buffer_size = nb_tx * nb_rx * channel_length * sizeof(float2);
+        const size_t tx_buffer_bytes = nb_tx * (num_samples_to_process + padding_len) * 2 * sizeof(float);
+        const size_t rx_buffer_bytes = nb_rx * num_samples_to_process * sizeof(float2);
+
 
         #if defined(USE_UNIFIED_MEMORY)
-                cudaMallocManaged(&d_tx_sig, tx_buffer_bytes, cudaMemAttachGlobal);
-                cudaMallocManaged(&d_rx_sig, rx_buffer_bytes, cudaMemAttachGlobal);
-                cudaMallocManaged(&d_channel_coeffs_gpu, channel_buffer_size, cudaMemAttachGlobal);
-                h_tx_sig_pinned = d_tx_sig;
+            cudaMallocManaged(&d_tx_sig, tx_buffer_bytes, cudaMemAttachGlobal);
+            cudaMallocManaged(&d_rx_sig, rx_buffer_bytes, cudaMemAttachGlobal);
+            cudaMallocManaged(&d_channel_coeffs_gpu, channel_buffer_size, cudaMemAttachGlobal);
+            h_tx_sig_pinned = d_tx_sig;
         #elif defined(USE_ATS_MEMORY)
-                h_tx_sig_pinned = malloc(tx_buffer_bytes);
-                d_tx_sig = NULL;
-                cudaMalloc(&d_rx_sig, rx_buffer_bytes);
-                cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size);
+            h_tx_sig_pinned = malloc(tx_buffer_bytes);
+            d_tx_sig = NULL;
+            cudaMalloc(&d_rx_sig, rx_buffer_bytes);
+            cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size);
         #else // EXPLICIT COPY
-                cudaMalloc(&d_tx_sig, tx_buffer_bytes);
-                cudaMalloc(&d_rx_sig, rx_buffer_bytes);
-                cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size);
-                cudaMallocHost(&h_tx_sig_pinned, tx_buffer_bytes);
+            cudaMalloc(&d_tx_sig, tx_buffer_bytes);
+            cudaMalloc(&d_rx_sig, rx_buffer_bytes);
+            cudaMalloc(&d_channel_coeffs_gpu, channel_buffer_size);
+            cudaMallocHost(&h_tx_sig_pinned, tx_buffer_bytes);
         #endif
 
         double total_cpu_ns = 0;
@@ -149,21 +152,46 @@ int main(int argc, char **argv) {
 
         generate_random_signal_interleaved(s_interleaved, nb_tx, num_samples);
 
+
+  
+        const int padded_num_samples = num_samples + padding_len;
+        float* h_tx_ptr = (float*)h_tx_sig_pinned;
+        memset(h_tx_ptr, 0, tx_buffer_bytes);
+        for (int j = 0; j < nb_tx; j++) {
+            float* data_start_ptr = h_tx_ptr + (j * padded_num_samples + padding_len) * 2;
+            memcpy(data_start_ptr,
+                s_interleaved[j],
+                num_samples * 2 * sizeof(float));
+        }
+
+        // Create temporary offset pointers for the CPU path
+        float **tx_sig_for_cpu = malloc(nb_tx * sizeof(float*));
+        for (int j = 0; j < nb_tx; j++) {
+            tx_sig_for_cpu[j] = h_tx_ptr + (j * padded_num_samples + padding_len) * 2;
+        }
+
         // Run CPU path once to get reference result
-        multipath_channel_float(chan_desc, s_interleaved, r_re_cpu, r_im_cpu, num_samples, 1, 0);
+        multipath_channel_float(chan_desc, tx_sig_for_cpu, r_re_cpu, r_im_cpu, num_samples, 1, 0);
 
         // Time CPU path
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int t = 0; t < num_trials; t++) {
-            multipath_channel_float(chan_desc, s_interleaved, r_re_cpu, r_im_cpu, num_samples, 1, 0);
+            multipath_channel_float(chan_desc, tx_sig_for_cpu, r_re_cpu, r_im_cpu, num_samples, 1, 0);
         }
         clock_gettime(CLOCK_MONOTONIC, &end);
         total_cpu_ns = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+        free(tx_sig_for_cpu);
 
         // Time GPU path
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int t = 0; t < num_trials; t++) {
-            multipath_channel_cuda(s_interleaved, r_re_gpu, r_im_gpu, nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset, h_channel_coeffs, d_tx_sig, d_rx_sig, d_channel_coeffs_gpu, h_tx_sig_pinned);
+            multipath_channel_cuda(
+                r_re_gpu, r_im_gpu,
+                nb_tx, nb_rx, channel_length, num_samples, chan_desc->channel_offset,
+                h_channel_coeffs,
+                d_tx_sig, d_rx_sig, d_channel_coeffs_gpu,
+                h_tx_sig_pinned
+            );
         }
         cudaDeviceSynchronize();
         clock_gettime(CLOCK_MONOTONIC, &end);
