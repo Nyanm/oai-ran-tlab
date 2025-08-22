@@ -49,7 +49,7 @@ add_dependencies(ldpc_cl nrLDPC_decoder_kernels_CL)
 # Base CUDA setting
 ##############################################
 
-add_boolean_option(ENABLE_LDPC_CUDA OFF "Build support for CUDA" OFF ENABLE_PARALLEL_STREAM OFF "Enable CUDA stream parallel version" OFF)
+add_boolean_option(ENABLE_LDPC_CUDA OFF "Build support for CUDA" OFF)
 
 if (ENABLE_LDPC_CUDA)
   find_package(CUDA REQUIRED)
@@ -58,10 +58,12 @@ if (ENABLE_LDPC_CUDA)
   endif()
   SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_80;")
   SET(CUDA_VERBOSE_BUILD ON)
-  cuda_add_library(ldpc_cuda MODULE
+
+  # version using NVLink-C2C in Grace Hopper
+  cuda_add_library(ldpc_cuda_GH MODULE
 	  #                   nrLDPC_decoder_LYC/nrLDPC_decoder_LYC.cu
     nrLDPC_decoder/kernel_test.cu  
-                   nrLDPC_decoder/nrLDPC_decoder.c
+                   nrLDPC_decoder/nrLDPC_decoder_cuda_GH.c
 		   nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu
 		   nrLDPC_encoder/ldpc_encoder_cuda32.c
 		   nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
@@ -70,34 +72,48 @@ if (ENABLE_LDPC_CUDA)
                    # because of cuda_add_library
                    # which already uses target_link_libraries
                    nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c
+                   nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder_cuda.c
                    nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder.c
                    nrLDPC_coding/nrLDPC_coding_segment/nr_rate_matching.c
   )
   
-  target_link_libraries(ldpc_cuda ldpc_gen_HEADERS ${T_LIB})
-  set_target_properties(ldpc_cuda PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-  set_target_properties(ldpc_cuda PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+  target_link_libraries(ldpc_cuda_GH ldpc_gen_HEADERS ${T_LIB})
+  set_target_properties(ldpc_cuda_GH PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  set_target_properties(ldpc_cuda_GH PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-  target_compile_definitions(ldpc_cuda PRIVATE USE_CUDA)
-  if (ENABLE_PARALLEL_STREAM)
-    cuda_add_library(ldpc_cuda_stream MODULE
+  add_dependencies(ldpctest ldpc_cuda_GH)
+  add_dependencies(nr-softmodem ldpc_cuda_GH)
+  add_dependencies(nr-uesoftmodem ldpc_cuda_GH)
+  add_dependencies(nr_ulsim ldpc_cuda_GH)
+  add_dependencies(nr_ulschsim ldpc_cuda_GH)
+  add_dependencies(nr_dlsim ldpc_cuda_GH)
+  add_dependencies(nr_dlschsim ldpc_cuda_GH)
+
+  target_compile_definitions(ldpc_cuda_GH PRIVATE USE_CUDA)
+
+  #version using HBM in general GPU
+  cuda_add_library(ldpc_cuda MODULE
     nrLDPC_decoder/nrLDPC_decoder_cuda.c
     nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu  
     nrLDPC_decoder/kernel_test.cu  
     nrLDPC_encoder/ldpc_encoder_cuda32.c
     nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
+                   # The slot coding layer cannot be linked with
+                   # target_link_libraries like above
+                   # because of cuda_add_library
+                   # which already uses target_link_libraries
     nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c
+    nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder_cuda.c
     nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder.c
     nrLDPC_coding/nrLDPC_coding_segment/nr_rate_matching.c
-    )
-    set_target_properties(ldpc_cuda_stream PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-    set_target_properties(ldpc_cuda_stream PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-    target_compile_definitions(ldpc_cuda_stream PRIVATE USE_CUDA PARALLEL_STREAM)
-    target_link_libraries(ldpc_cuda_stream ldpc_gen_HEADERS ${T_LIB})
-    target_compile_definitions(ldpctest PRIVATE PARALLEL_STREAM)
+  )
+  set_target_properties(ldpc_cuda PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  set_target_properties(ldpc_cuda PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+  target_compile_definitions(ldpc_cuda PRIVATE USE_CUDA PARALLEL_STREAM)
+  target_link_libraries(ldpc_cuda ldpc_gen_HEADERS ${T_LIB})
+  target_compile_definitions(ldpctest PRIVATE PARALLEL_STREAM)
   
-    add_dependencies(ldpctest ldpc_cuda_stream)
-  endif()
+  add_dependencies(ldpctest ldpc_cuda)
   add_dependencies(ldpctest ldpc_cuda)
   add_dependencies(nr-softmodem ldpc_cuda)
   add_dependencies(nr-uesoftmodem ldpc_cuda)
@@ -105,6 +121,7 @@ if (ENABLE_LDPC_CUDA)
   add_dependencies(nr_ulschsim ldpc_cuda)
   add_dependencies(nr_dlsim ldpc_cuda)
   add_dependencies(nr_dlschsim ldpc_cuda)
+
 endif()
 
 add_subdirectory(nrLDPC_coding)

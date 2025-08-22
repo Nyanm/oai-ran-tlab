@@ -571,12 +571,12 @@ int main(int argc, char *argv[])
         break;
 
       case 'G':
-        ldpc_version = "_cuda";
+        ldpc_version = "_cuda_GH";
         use32bit = 1;
         break;
 
       case 'P': // stands for "Parallel"
-        ldpc_version = "_cuda_stream";
+        ldpc_version = "_cuda";
         PARALLEL_PATH = 1;
         use32bit = 1;
         break;
