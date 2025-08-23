@@ -342,7 +342,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   // printf("3: It works here\n");
   //  Initialization
   //cudaStream_t streams[MAX_NUM_DLSCH_SEGMENTS];
-  //cudaEvent_t done[MAX_NUM_DLSCH_SEGMENTS]; // MAX_NUM_SEGMENTS = stream数量
+  //cudaEvent_t done[MAX_NUM_DLSCH_SEGMENTS]; // MAX_NUM_SEGMENTS = stream num
 
   for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS; s++) {
     iter_ptr_array[s] = 0;

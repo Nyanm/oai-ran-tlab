@@ -72,7 +72,7 @@ if (ENABLE_LDPC_CUDA)
                    # because of cuda_add_library
                    # which already uses target_link_libraries
                    nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c
-                   nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder_cuda.c
+                   nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder_cuda_GH.c
                    nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder.c
                    nrLDPC_coding/nrLDPC_coding_segment/nr_rate_matching.c
   )
