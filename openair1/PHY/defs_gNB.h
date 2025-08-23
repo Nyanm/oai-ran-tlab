@@ -506,6 +506,7 @@ typedef struct PHY_VARS_gNB_s {
   time_stats_t tprep;
   time_stats_t tparity;
   time_stats_t toutput;
+  time_stats_t tconcat;
   
   time_stats_t dlsch_rate_matching_stats;
   time_stats_t dlsch_interleaving_stats;

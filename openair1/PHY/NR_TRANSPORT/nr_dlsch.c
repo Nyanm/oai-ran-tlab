@@ -779,6 +779,7 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
   time_stats_t *tprep = &gNB->tprep;
   time_stats_t *tparity = &gNB->tparity;
   time_stats_t *toutput = &gNB->toutput;
+  time_stats_t *tconcat = &gNB->tconcat;
   time_stats_t *dlsch_rate_matching_stats = &gNB->dlsch_rate_matching_stats;
   time_stats_t *dlsch_interleaving_stats = &gNB->dlsch_interleaving_stats;
   time_stats_t *dlsch_segmentation_stats = &gNB->dlsch_segmentation_stats;
@@ -826,7 +827,6 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
 
   unsigned char output[size_output >> 3] __attribute__((aligned(64)));
   bzero(output, sizeof(output));
-
   start_meas(dlsch_encoding_stats);
   if (nr_dlsch_encoding(gNB,
                         msgTx,
@@ -838,12 +838,14 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
                         tprep,
                         tparity,
                         toutput,
+                        tconcat,
                         dlsch_rate_matching_stats,
                         dlsch_interleaving_stats,
                         dlsch_segmentation_stats)
       == -1) {
     return;
   }
+
   stop_meas(dlsch_encoding_stats);
 
   unsigned char *output_ptr = output;

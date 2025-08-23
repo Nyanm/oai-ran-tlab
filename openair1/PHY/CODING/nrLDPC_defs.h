@@ -58,6 +58,7 @@ typedef struct {
   time_stats_t *tprep;
   time_stats_t *tparity;
   time_stats_t *toutput;
+  time_stats_t *tconcat;
   /// Size in bits of the code segments
   uint32_t K;
   /// Number of lifting sizes to fit the payload
@@ -93,5 +94,7 @@ typedef int32_t(LDPC_decoderfunc_t)(t_nrLDPC_dec_params *p_decParams,
                                     t_nrLDPC_time_stats *,
                                     decode_abort_t *ab);
 typedef int32_t(LDPC_encoderfunc_t)(uint8_t **, uint8_t *, encoder_implemparams_t *);
+typedef int32_t(LDPC_encoderfunc32_t)(uint8_t **, uint32_t [4][68*384], encoder_implemparams_t *);
+
 #endif
 

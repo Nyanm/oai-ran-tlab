@@ -18,32 +18,35 @@
  * For more information about the OpenAirInterface (OAI) Software Alliance:
  *      contact@openairinterface.org
  */
-#ifndef _NRLDPC_EXTERN_H__
-#define _NRLDPC_EXTERN_H__
+
+/*!\file ldpc_encoder.c
+ * \brief Defines the LDPC encoder
+ * \author Florian Kaltenberger, Raymond Knopp, Kien le Trung (Eurecom)
+ * \email openair_tech@eurecom.fr
+ * \date 27-03-2018
+ * \version 1.0
+ * \note
+ * \warning
+ */
+
+
+
+#include <stdlib.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include "defs.h"
+#include "assertions.h"
 #include "openair1/PHY/CODING/nrLDPC_defs.h"
-/* LDPC maximum code block size - maximum E */
-#define LDPC_MAX_CB_SIZE 32768
-/* ldpc coder/decoder API*/
-typedef struct ldpc_interface_s {
-  LDPC_initfunc_t *LDPCinit;
-  LDPC_shutdownfunc_t *LDPCshutdown;
-  LDPC_decoderfunc_t *LDPCdecoder;
-  LDPC_encoderfunc_t *LDPCencoder;
-  LDPC_encoderfunc32_t *LDPCencoder32;
-} ldpc_interface_t;
+#include "openair1/PHY/CODING/nrLDPC_extern.h"
+#include "ldpc_generate_coefficient.c"
 
-// Global var to limit the rework of the dirty legacy code
-extern ldpc_interface_t ldpc_interface, ldpc_interface_offload, ldpc_interface_segment;
 
-/* functions to load the LDPC shared lib, implemented in openair1/PHY/CODING/nrLDPC_load.c */
-int load_LDPClib(char *version, ldpc_interface_t *);
-int free_LDPClib(ldpc_interface_t *ldpc_interface);
+void cuda_support_init() {
+   return;
+}
+int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implemparams_t *impp)
+{
+	AssertFatal(1==0,"Should not be getting here\n");
+}
 
-LDPC_initfunc_t LDPCinit;
-LDPC_shutdownfunc_t LDPCshutdown;
-LDPC_decoderfunc_t LDPCdecoder;
-LDPC_encoderfunc_t LDPCencoder;
-LDPC_encoderfunc32_t LDPCencoder32;
-
-// inline functions:
-#endif
