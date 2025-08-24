@@ -47,6 +47,8 @@
 //#define DEBUG_LDPC 1 
 
 #include "ldpc_encode_parity_check_cuda.c"
+uint32_t **c_dev;
+uint32_t *c_devh[4];
 uint32_t **d_dev;
 uint32_t *d_host[4];
 int managed = 0, concurrent = 0, uva = 0, pageable = 0, pageable_uses_host = 0;
@@ -77,10 +79,10 @@ void cuda_support_init() {
     cudaError_t err=cudaMalloc((void **)&c_dev,4*sizeof(uint32_t*));
     AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
     for (int i=0;i<4;i++) {
-      cudaError_t err=cudaMalloc((void**)&c_host[i],2*22*384*sizeof(uint32_t));
+      cudaError_t err=cudaMalloc((void**)&c_devh[i],2*22*384*sizeof(uint32_t));
       AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
     }
-    cudaMemcpy(c_dev,c_host,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
+    cudaMemcpy(c_dev,c_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
   }
   cudaError_t err=cudaMalloc((void**)&d_dev,4*sizeof(uint32_t*));
   AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
@@ -615,24 +617,25 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
   }
 #endif
 #endif
+  if(impp->tinput != NULL) stop_meas(impp->tinput);
+  if(impp->tinput_memcpy != NULL) start_meas(impp->tinput_memcpy);
   uint32_t c[n_inputs][2 * 22 * Zc] ; //double size matrix of c
   uint32_t *cp[4];
   for (int s=0;s<n_inputs;s++)  {
+    cp[s]=c[s];    
     for (int i1 = 0; i1 < ncols; i1++)   {
-      memcpy(&c[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
-      memcpy(&c[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
+      memcpy(&cp[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
+      memcpy(&cp[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
     }
-    cp[s]=c[s];
   }
   if (!pageable_uses_host) {
     for (int s=0;s<n_inputs;s++) {
-      cudaError_t err = cudaMemcpy(c_host[s],c[s],sizeof(uint32_t)*2*22*Zc,cudaMemcpyHostToDevice);
+      cudaError_t err = cudaMemcpy(c_devh[s],cp[s],sizeof(uint32_t)*2*22*Zc,cudaMemcpyHostToDevice);
       AssertFatal(err == cudaSuccess, "c_dev[%d] %p CUDA Error: %s\n", s, c_dev[s],cudaGetErrorString(err)); 			
     }
   }
 
-  if(impp->tinput != NULL) stop_meas(impp->tinput);
-
+  if(impp->tinput != NULL) stop_meas(impp->tinput_memcpy);
   if (BG==1 && Zc==384)  {
     //parity check part
     if(impp->tparity != NULL) start_meas(impp->tparity);
@@ -642,7 +645,6 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
   else {
     AssertFatal(1==0,"Only BG1 Zc=384 for now\n");
   }
-
   if(impp->toutput != NULL) start_meas(impp->toutput);
   for (int s=0;s<n_inputs;s++) {
     memcpy(output[s],&cc[s][2*Zc],sizeof(uint32_t)*(block_length-(2*Zc)));
@@ -650,7 +652,6 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
     AssertFatal(err == cudaSuccess, "d_dev[%d] %p CUDA Error: %s\n", s, d_dev[s],cudaGetErrorString(err)); 			
   }
   if(impp->toutput != NULL) stop_meas(impp->toutput);
-
   return 0;
 }
 

@@ -776,6 +776,7 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   time_stats_t *dlsch_encoding_stats = &gNB->dlsch_encoding_stats;
   time_stats_t *tinput = &gNB->tinput;
+  time_stats_t *tinput_memcpy = &gNB->tinput_memcpy;
   time_stats_t *tprep = &gNB->tprep;
   time_stats_t *tparity = &gNB->tparity;
   time_stats_t *toutput = &gNB->toutput;
@@ -835,6 +836,7 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
                         frame_parms,
                         output,
                         tinput,
+                        tinput_memcpy,
                         tprep,
                         tparity,
                         toutput,

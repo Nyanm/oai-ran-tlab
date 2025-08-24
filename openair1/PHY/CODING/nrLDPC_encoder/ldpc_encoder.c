@@ -61,7 +61,7 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
 
   const short *Gen_shift_values = choose_generator_matrix(BG, Zc);
   if (Gen_shift_values==NULL) {
-    printf("ldpc_encoder_orig: could not find generator matrix\n");
+    printf("ldpc_encoder_orig: could not find generator matrix BG %d Zc %d\n",BG,Zc);
     return(-1);
   }
 
@@ -104,7 +104,8 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
     char data_type[100];
     char xor_command[100];
     int mask;
-
+    char permutex_command[100];
+    int use_permutex=0;
 
 
 
@@ -116,6 +117,8 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
       mask=63;
       strcpy(data_type,"__m512i");
       strcpy(xor_command,"_mm512_xor_si512");
+      strcpy(permutex_command,"_mm512_permutex2var_epi8");
+      use_permutex=1;
     }
     else if (gen_code == 1 && (Zc&31)==0) {
       shift=5; // AVX2 - 256-bit SIMD
@@ -145,6 +148,21 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
 
     }
     fprintf(fd,"// generated code for Zc=%d, byte encoding\n",Zc);
+    if (use_permutex==1) {
+	 fprintf(fd,"  const uint8_t abshift_bytes[%d][%d] __attribute__((aligned(64)))= {\n",1+mask,1+mask); 
+         for (int i=0;i<=mask;i++) {
+	    fprintf(fd,"{");
+	    for (int j=0;j<=mask;j++) {
+              fprintf(fd,"%d",i+j);
+	      if (j<mask) fprintf(fd,",");
+	      else fprintf(fd,"}");
+	    }
+	    if (i<mask) fprintf(fd,",\n");
+	    else fprintf(fd,"};\n");
+      	}
+	fprintf(fd,"static inline __m512i abshift_get(int r)\n {\n");
+        fprintf(fd,"   return * (const __m512i *) abshift_bytes[r];\n}");
+    }
     fprintf(fd,"static inline void ldpc_BG%d_Zc%d_byte(uint8_t *c,uint8_t *d) {\n",BG,Zc);
     fprintf(fd,"  %s *csimd=(%s *)c,*dsimd=(%s *)d;\n\n",data_type,data_type,data_type);
     fprintf(fd,"  %s *c2,*d2;\n\n",data_type);
@@ -177,14 +195,38 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
 	      var=(int)((i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc)/Zc);
 	      int index =var*2*Zc + (i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc) % Zc;
 	      printf("var %d, i3 %d, i4 %d, index %d, shift %d, Zc %d, pointer_shift_values[%d] %d gen_shift_value %d\n",var,i3,i4,index,shift,Zc,temp_prime,pointer_shift_values[temp_prime],Gen_shift_values[pointer_shift_values[temp_prime]]);
-	      indlist[nind++] = ((index&mask)*((2*Zc*ncols)>>shift)/* *Kb */)+(index>>shift);
    	      printf("indlist[%d] %d, index&mask %d, index>>shift %d\n",nind,indlist[nind],index&mask,index>>shift);
+	      if (use_permutex==1) {
+                indlist[nind++] = index;
+	      }
+	      else {
+	        indlist[nind] = ((index&mask)*((2*Zc*ncols)>>shift)/* *Kb */)+(index>>shift);
+	      }
 	  }//i4
         }//i3
 	for (i4=0;i4<nind-1;i4++) {
-  	   fprintf(fd,"%s(c2[%d],",xor_command,indlist[i4]);
+           if (use_permutex==0) {
+  	      fprintf(fd,"%s(c2[%d],",xor_command,indlist[i4]);
+	   }
+	   else {
+              if ((indlist[i4]&mask) == 0) {
+  	        fprintf(fd,"%s(c2[%d],",xor_command,indlist[i4]>>shift);
+	      }
+	      else {
+                fprintf(fd,"%s(%s(c2[%d],abshift_get(%d),c2[%d]),",xor_command,permutex_command,(indlist[i4]>>shift),indlist[i4]&mask,(indlist[i4]>>shift)+1);
+	      }
+	   }
 	} //i4
-	fprintf(fd,"c2[%d]",indlist[i4]);
+	if (use_permutex==0)
+	  fprintf(fd,"c2[%d]",indlist[i4]);
+	else {
+          if ((indlist[i4]&mask) == 0) {
+  	     fprintf(fd,"c2[%d]",indlist[i4]>>shift);
+	  }
+	  else {
+             fprintf(fd,"%s(c2[%d],abshift_get(%d),c2[%d])",permutex_command,(indlist[i4]>>shift),indlist[i4]&mask,(indlist[i4]>>shift)+1);
+	  }
+	}
 	for (i4=0;i4<nind-1;i4++) fprintf(fd,")"); 
   	fprintf(fd,";\n");
        } // i1 
@@ -201,15 +243,15 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
     fprintf(fd,"#include <stdio.h>\n#include <stdint.h>\n#include <cuda_runtime.h>\n");
 
     fprintf(fd,"// generated code for Zc=%d, byte encoding\n",Zc);
-    fprintf(fd,"__global__ void ldpc_BG%d_Zc%d_worker(uint8_t *c,uint8_t *d) {\n",BG,Zc);
-    fprintf(fd,"  uint32_t *c32=(uint32_t *)c;\n  uint32_t *d32=(uint32_t *)d;\n\n");
+    fprintf(fd,"__global__ void ldpc_BG%d_Zc%d_worker(uint32_t *c[4],uint32_t *d[4]) {\n",BG,Zc);
+    fprintf(fd,"  uint32_t *c32=c[blockIdx.x];\n  uint32_t *d32=d[blockIdx.x];\n\n");
     fprintf(fd,"  int i2 = threadIdx.x;\n");
-    fprintf(fd,"  int i1 = blockIdx.x;\n");
+    fprintf(fd,"  int i1 = blockIdx.y;\n");
     fprintf(fd,"  if (i2 < %d) {\n",Zc);
     fprintf(fd,"    c32+=i2;\n");
     fprintf(fd,"    d32+=i2;\n");
     fprintf(fd,"    switch(i1) {\n");
-       
+
     for (int i1=0;i1<nrows;i1++) {
       nind = 0;
       fprintf(fd,"    case %d:\n",i1);
@@ -221,9 +263,10 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
   	  {
 	     var=(int)((i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc)/Zc);
   	     int index =var*2*Zc + (i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc) % Zc;
-//	     printf("var %d, i3 %d, i4 %d, index %d, Zc %d, pointer_shift_values[%d] %d gen_shift_value %d\n",var,i3,i4,index,Zc,temp_prime,pointer_shift_values[temp_prime],Gen_shift_values[pointer_shift_values[temp_prime]]);
+	     printf("var %d, i3 %d, i4 %d, index %d (index mod 2Zc) %d, Zc %d, pointer_shift_values[%d] %d gen_shift_value %d offset %d\n",var,i3,i4,index,index%(2*Zc),Zc,temp_prime,pointer_shift_values[temp_prime],Gen_shift_values[pointer_shift_values[temp_prime]],(i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc) % Zc);
+	     if (index%(2*Zc) >= Zc) printf("***********************\n");
    	     indlist[nind] = index;
-//	     printf("indlist[%d] %d, index %d\n",nind,indlist[nind],index);
+	     printf("indlist[%d] %d, index %d\n",nind,indlist[nind],index);
 	     nind++;
    	  } //i4
       } // i3
@@ -233,11 +276,13 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
       fprintf(fd,"c32[%d];\n\n",indlist[i4]);
       fprintf(fd,"       break;\n");
     }// i1
+    fprintf(fd,"     }\n");
+    fprintf(fd,"  }\n");
     fprintf(fd,"}\n");
 
-    fprintf(fd,"extern \"C\" int ldpc_BG%d_Zc%d_cuda32(uint8_t *c,uint8_t *d) { \n",BG,Zc);
-
-    fprintf(fd,"ldpc_BG%d_Zc%d_worker%d<<<%d,%d>>>(c,d);\n",BG,Zc,i1,nrows,Zc);
+    fprintf(fd,"extern \"C\" int ldpc_BG%d_Zc%d_cuda32(uint32_t *c[4],uint32_t *d[4],int n_inputs) { \n",BG,Zc);
+    fprintf(fd,"dim3 numblocks(n_inputs,%d);\n",nrows);
+    fprintf(fd,"ldpc_BG%d_Zc%d_worker<<<numblocks,%d>>>(c,d);\n",BG,Zc,Zc);
     fprintf(fd," cudaDeviceSynchronize();\n");
     fprintf(fd,"  return(0);\n");
     fprintf(fd,"}\n");

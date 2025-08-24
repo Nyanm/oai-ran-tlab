@@ -38,12 +38,9 @@
 #include <cuda_runtime.h>
 
 
-uint32_t **c_dev;
-uint32_t *c_host[4];
 
 int ldpc_BG1_Zc384_cuda32(uint32_t **c,uint32_t **d,int n_inputs);
 
-extern int pageable_uses_host;
 
 void encode_parity_check_part_cuda(uint32_t **c, uint32_t **d, short BG,short Zc,short Kb, int ncols, int n_inputs)
 {
