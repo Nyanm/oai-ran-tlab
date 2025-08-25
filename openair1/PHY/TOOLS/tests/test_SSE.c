@@ -59,6 +59,16 @@ double calculate_checksum_float(float **sig_re, float **sig_im, int nb_rx, int n
 }
 
 
+void generate_random_signal_float_interleaved(float **sig_interleaved, int nb_ant, int num_samples) {
+    for (int i = 0; i < nb_ant; i++) {
+        for (int j = 0; j < num_samples; j++) {
+            sig_interleaved[i][2*j]   = (float)rand() / (float)RAND_MAX; // Real part (I)
+            sig_interleaved[i][2*j+1] = (float)rand() / (float)RAND_MAX; // Imaginary part (Q)
+        }
+    }
+}
+
+
 int main(int argc, char **argv) {
     
     logInit();
@@ -143,26 +153,32 @@ int main(int argc, char **argv) {
         #endif
         mode_str = (mode == MODE_STD_FLOAT) ? "Standard C (float)" : "SSE (float)";
 
-        float **s_re = malloc(nb_tx * sizeof(float *));
-        float **s_im = malloc(nb_tx * sizeof(float *));
+        float **s_interleaved = malloc(nb_tx * sizeof(float *));
         float **r_re = malloc(nb_rx * sizeof(float *));
         float **r_im = malloc(nb_rx * sizeof(float *));
-        for (int i=0; i<nb_tx; i++) { s_re[i] = malloc(num_samples * sizeof(float)); s_im[i] = malloc(num_samples * sizeof(float)); }
-        for (int i=0; i<nb_rx; i++) { r_re[i] = malloc(num_samples * sizeof(float)); r_im[i] = malloc(num_samples * sizeof(float)); }
-        
-        generate_random_signal_float(s_re, s_im, nb_tx, num_samples);
-        
+        for (int i=0; i<nb_tx; i++) { 
+            s_interleaved[i] = malloc(num_samples * 2 * sizeof(float)); 
+        }
+        for (int i=0; i<nb_rx; i++) { 
+            r_re[i] = malloc(num_samples * sizeof(float)); 
+            r_im[i] = malloc(num_samples * sizeof(float)); 
+        }
+
+        generate_random_signal_float_interleaved(s_interleaved, nb_tx, num_samples);
+
         clock_gettime(CLOCK_MONOTONIC, &start);
         for (int t = 0; t < num_trials; t++) {
-            multipath_channel_float(chan_desc, s_re, s_im, r_re, r_im, num_samples, 1, 0);
+            multipath_channel_float(chan_desc, s_interleaved, r_re, r_im, num_samples, 1, 0);
         }
         clock_gettime(CLOCK_MONOTONIC, &end);
 
         checksum = calculate_checksum_float(r_re, r_im, nb_rx, num_samples);
 
-        for (int i=0; i<nb_tx; i++) { free(s_re[i]); free(s_im[i]); }
+        for (int i=0; i<nb_tx; i++) { free(s_interleaved[i]); }
         for (int i=0; i<nb_rx; i++) { free(r_re[i]); free(r_im[i]); }
-        free(s_re); free(s_im); free(r_re); free(r_im);
+        free(s_interleaved); 
+        free(r_re); 
+        free(r_im);
     }
     
     double total_ns = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);

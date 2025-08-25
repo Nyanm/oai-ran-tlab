@@ -16,31 +16,26 @@ The core of the channel simulation is the multipath convolution. On the CPU, thi
 
 The key to making this parallel approach efficient is the use of a tiled convolution pattern with `__shared__` memory. Instead of having every thread read from slow global memory for each step of the convolution, threads in a block cooperate to pre-fetch all the data they will need into the on-chip shared memory.
 
-The first step inside the kernel is for all threads in a block to collectively load a "tile" of the input signal. This load includes the "halo" of historical data needed from the previous block's logical space, ensuring the convolution is correct at the boundaries. The `__syncthreads()` call ensures no thread begins calculation until this shared data is fully loaded.
+To further optimize this, the responsibility for handling boundary conditions (the "halo" of past samples) has been moved from the GPU kernel to the host. The host code now prepares a larger input buffer that is **pre-padded** with `channel_length - 1` zeros before the actual signal data. This allows the kernel to be significantly simplified by removing the previous boundary-checking logic.
 
 ```cpp
-// Snippet from multipath_channel_kernel in multipath_channel.cu
-// Step 1: Threads in a block cooperate to load data into fast shared memory
-for (int j = 0; j < nb_tx; j++) {
-    const int tid = threadIdx.x;
-    const int block_start_idx = blockIdx.x * blockDim.x;
-    const int shared_mem_size = blockDim.x + channel_length - 1;
+// Snippet from the multipath_channel_kernel in multipath_channel.cu
 
-    // Each thread loads a piece of the signal from global into shared memory
-    for (int k = tid; k < shared_mem_size; k += blockDim.x) {
-        int load_idx = block_start_idx + k - (channel_length - 1);
-        if (load_idx >= 0 && load_idx < num_samples) {
-            tx_shared[k]= tx_sig[j * num_samples + load_idx];
-        } else {
-            // This zero-padding only happens at the very start of the signal (block 0)
-            tx_shared[k]= make_float2(0.0f, 0.0f);
-        }
-    }
-    // Wait for all threads to finish loading before proceeding
-    __syncthreads();
+// Step 1: Each thread cooperates to load a tile of the pre-padded signal
+// into fast shared memory.
+const int padding_len = channel_length - 1;
+const int padded_num_samples = num_samples + padding_len;
+
+for (int k = tid; k < shared_mem_size; k += blockDim.x) {
+    int load_idx = block_start_idx + k;
+    // Unconditional load from the padded buffer
+    int interleaved_idx = 2 * (j * padded_num_samples + load_idx);
+    tx_shared[k] = make_float2(tx_sig[interleaved_idx], tx_sig[interleaved_idx + 1]);
+}
+__syncthreads();
 ```
 
-Once the data is staged in fast shared memory, each thread can perform the full convolution for its assigned output sample. The inner loop iterates through the `channel_length` taps, but now all reads of the input signal (`tx_sample`) come from the fast `tx_shared` buffer. This significantly reduces memory latency and is the key to the kernel's performance. After the loop, the final accumulated result is written to global memory.
+Once the data is staged in fast shared memory, each thread can perform the full convolution for its assigned output sample. The inner loop iterates through the `channel_length` taps, and all reads of the input signal (`tx_sample`) come from the `tx_shared` buffer.
 
 ```cpp
 // Snippet from multipath_channel_kernel in multipath_channel.cu
@@ -109,7 +104,9 @@ Its second purpose is to orchestrate the execution of the individual CUDA kernel
 
 The functions within this file, such as `run_channel_pipeline_cuda`, implement a consistent workflow. Upon being called, they first cast the generic `void*` pointers received from the C host into their specific CUDA data types. The implementation then contains the conditional logic, via preprocessor directives, to support the various memory models. Following data setup, the functions define the CUDA execution grid and block dimensions and launch the two kernels sequentially. The output of the multipath kernel is directed to an intermediate buffer, which serves as the input for the subsequent noise kernel. Finally, the functions manage synchronization with the host and handle the transfer of the final results from the GPU back to host memory.
 
------
+*The external API of these pipeline functions has been streamlined. The function signatures no longer require a separate `tx_sig_interleaved` parameter, instead relying on a single, pre-padded host buffer (`h_tx_sig_pinned`) as the authoritative source for the input signal, which simplifies the data flow from the simulators.*
+
+---
 
 ## 3\. Memory Management Models
 
@@ -129,17 +126,23 @@ This is the traditional CUDA programming model. The host and device have separat
 
 -----
 
-## 4\. Project Integration
+Excellent. Let's refine the **Project Integration Section**.
+
+This section is already in good shape, but we need to update the description of the CPU and GPU paths to reflect the new, fairer benchmarking methodology we implemented. I've integrated the new logic into the existing text.
+
+***
+
+## 4. Project Integration
 
 To ensure the feature is modular, the integration into the OAI project was handled at both the build system and source code levels. All of the new CUDA source files (`channel_pipeline.cu`, `multipath_channel.cu`, `phase_noise.cu`) are compiled into a single static library named `oai_cuda_lib`. This is defined in the main `CMakeLists.txt` file and is controlled by the `CUDA_ENABLE` CMake option, which is disabled by default. When this option is activated (`-DCUDA_ENABLE=ON`), the build system compiles the CUDA library and also defines a global `ENABLE_CUDA` preprocessor macro that is visible to the rest of the project.
 
 This `ENABLE_CUDA` macro is then used within the simulator files, such as `nr_dlsim.c` and `nr_ulsim.c`, to conditionally compile all CUDA-related code. This approach allows for the inclusion of the `oai_cuda.h` header, the addition of the `--cuda` runtime flag, and the pre-allocation of GPU memory at startup, all without affecting the standard CPU-only build.
 
-Inside the main processing loop, an `if (use_cuda)` statement acts as the primary runtime switch. To enable a direct comparison, timing measurement calls have been added to both the GPU and CPU execution paths. The CPU path was also refined to use the `float` versions of the channel functions, ensuring a fair comparison against the single-precision GPU code. To execute the simulation on the GPU, the `--cuda` flag must be provided at runtime; otherwise, the program defaults to this refined CPU implementation.
+Inside the main processing loop, an `if (use_cuda)` statement acts as the primary runtime switch. To enable a direct comparison, timing measurement calls have been added to both the GPU and CPU execution paths. Also, both paths now source their data from the same common, pre-padded host buffer. The GPU path receives a pointer to the entire padded buffer and leverages its optimized kernel, while the CPU path uses a temporary array of offset pointers to work on the same data without being aware of the padding. This ensures both computations operate on the exact same source data, isolating the performance measurement to the channel processing itself. To execute the simulation on the GPU, the `--cuda` flag must be provided at runtime; otherwise, the program defaults to this refined CPU implementation.
 
 Finally, the build system links the `nr_dlsim` and `nr_ulsim` executables against the `oai_cuda_lib` only when the feature is enabled, creating a clean separation between the two codebases.
 
------
+---
 
 ## 5\. Benchmark and Analysis Suite
 
