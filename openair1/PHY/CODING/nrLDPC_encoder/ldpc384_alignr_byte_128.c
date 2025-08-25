@@ -1,3 +1,4 @@
+#ifndef __AVX2__
 #include "PHY/sse_intrin.h"
 // generated code for Zc=384, byte encoding
 static inline void ldpc384_byte(uint8_t *c,uint8_t *d) {
@@ -149,3 +150,4 @@ static inline void ldpc384_byte(uint8_t *c,uint8_t *d) {
      d2[1080]=simde_mm_xor_si128(simde_mm_alignr_epi8(c2[57],c2[56],7),simde_mm_xor_si128(simde_mm_alignr_epi8(c2[298],c2[297],5),simde_mm_alignr_epi8(c2[481],c2[480],15)));
   }
 }
+#endif

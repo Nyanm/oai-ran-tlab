@@ -37,18 +37,14 @@
 #include "common/utils/LOG/log.h"
 
 #define USE_PERMUTEX
-//#define USE_ALIGNR
+#define USE_ALIGNR
 #ifdef __AVX512F__
 #if defined(__AVX512VBMI__) && (defined(USE_PERMUTEX) || defined(USE_ALIGNR))
 //For AVX512 machines, use and AVX512 version of the encoder for Zc=384 only for now. This is used almost exclusively for 
 //high-throughput cases
 // this version uses less memory (i.e. 1/64th of the memory to store the input), but uses more reads 
 // and an AVX512 permutation instruction instead of creating 64 shifts of the input with memcpy
-#ifdef USE_ALIGNR
-#include "ldpc384_simd512_alignr_byte.c"
-#else
 #include "ldpc384_simd512_permutex_byte.c"
-#endif
 #else
 #include "ldpc384_simd512_byte.c"
 #endif
