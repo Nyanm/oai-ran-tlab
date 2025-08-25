@@ -106,7 +106,8 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
     int mask;
     char permutex_command[100];
     int use_permutex=0;
-
+    char alignr_command[100];
+    int use_alignr=0;
 
 
     fprintf(fd,"#include \"PHY/sse_intrin.h\"\n");
@@ -118,7 +119,8 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
       strcpy(data_type,"__m512i");
       strcpy(xor_command,"_mm512_xor_si512");
       strcpy(permutex_command,"_mm512_permutex2var_epi8");
-      use_permutex=1;
+      strcpy(alignr_command,"_mm512_alignr_epi8");
+      use_alignr=1;
     }
     else if (gen_code == 1 && (Zc&31)==0) {
       shift=5; // AVX2 - 256-bit SIMD
@@ -131,7 +133,8 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
       mask=15;
       strcpy(data_type,"simde__m128i");
       strcpy(xor_command,"simde_mm_xor_si128");
-
+      strcpy(alignr_command,"simde_mm_alignr_epi8");
+      use_alignr=1;
     }
     else if ((gen_code <=2) && (Zc&7)==0) {
       shift=3; // MMX  - 64-bit SIMD
@@ -196,7 +199,7 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
 	      int index =var*2*Zc + (i3*Zc + (Gen_shift_values[ pointer_shift_values[temp_prime]+i4 ]+1)%Zc) % Zc;
 	      printf("var %d, i3 %d, i4 %d, index %d, shift %d, Zc %d, pointer_shift_values[%d] %d gen_shift_value %d\n",var,i3,i4,index,shift,Zc,temp_prime,pointer_shift_values[temp_prime],Gen_shift_values[pointer_shift_values[temp_prime]]);
    	      printf("indlist[%d] %d, index&mask %d, index>>shift %d\n",nind,indlist[nind],index&mask,index>>shift);
-	      if (use_permutex==1) {
+	      if (use_permutex==1 || use_alignr==1) {
                 indlist[nind++] = index;
 	      }
 	      else {
@@ -205,26 +208,33 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
 	  }//i4
         }//i3
 	for (i4=0;i4<nind-1;i4++) {
-           if (use_permutex==0) {
+           if (use_permutex==0 && use_alignr==0) {
   	      fprintf(fd,"%s(c2[%d],",xor_command,indlist[i4]);
 	   }
 	   else {
               if ((indlist[i4]&mask) == 0) {
   	        fprintf(fd,"%s(c2[%d],",xor_command,indlist[i4]>>shift);
 	      }
-	      else {
+	      else if (use_permutex==1) {
                 fprintf(fd,"%s(%s(c2[%d],abshift_get(%d),c2[%d]),",xor_command,permutex_command,(indlist[i4]>>shift),indlist[i4]&mask,(indlist[i4]>>shift)+1);
+	      }
+	      else if (use_alignr==1) {
+                fprintf(fd,"%s(%s(c2[%d],c2[%d],%d),",xor_command,alignr_command,(indlist[i4]>>shift)+1,(indlist[i4]>>shift),indlist[i4]&mask);
 	      }
 	   }
 	} //i4
-	if (use_permutex==0)
+	if (use_permutex==0 && use_alignr==0)
 	  fprintf(fd,"c2[%d]",indlist[i4]);
 	else {
           if ((indlist[i4]&mask) == 0) {
   	     fprintf(fd,"c2[%d]",indlist[i4]>>shift);
 	  }
-	  else {
+	  else if (use_permutex==1){
              fprintf(fd,"%s(c2[%d],abshift_get(%d),c2[%d])",permutex_command,(indlist[i4]>>shift),indlist[i4]&mask,(indlist[i4]>>shift)+1);
+	  }
+	  else if (use_alignr==1) {
+             fprintf(fd,"%s(c2[%d],c2[%d],%d)",alignr_command,(indlist[i4]>>shift)+1,(indlist[i4]>>shift),indlist[i4]&mask);
+
 	  }
 	}
 	for (i4=0;i4<nind-1;i4++) fprintf(fd,")"); 

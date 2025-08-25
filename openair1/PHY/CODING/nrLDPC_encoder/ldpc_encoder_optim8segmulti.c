@@ -43,6 +43,7 @@
 #include "ldpc_encode_parity_check.c"
 #include "ldpc_generate_coefficient.c"
 
+
 void ini_input32_luts() {
 	return;
 }
@@ -111,7 +112,6 @@ int LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
   //interleave up to 8 transport-block segements at a time
 
   unsigned int i_byte = 0;
-
 #if defined(__AVX512F__) && defined(__AVX512BW__) && defined(__AVX512VBMI__)
   const __m512i masks5[8] = { _mm512_set1_epi8(0x1), _mm512_set1_epi8(0x2),
                               _mm512_set1_epi8(0x4), _mm512_set1_epi8(0x8),
