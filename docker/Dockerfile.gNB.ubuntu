@@ -95,6 +95,8 @@ COPY --from=gnb-build \
     /oai-ran/cmake_targets/ran_build/build/libtelnetsrv_rrc.so \
     /oai-ran/cmake_targets/ran_build/build/libtelnetsrv_o1.so \
     /oai-ran/cmake_targets/ran_build/build/libvrtsim.so \
+    /oai-ran/cmake_targets/ran_build/build/libfd_rfsim.so \
+    /oai-ran/cmake_targets/ran_build/build/liboai_transpro.so \
     /usr/local/lib/
 
 # Now we are copying from builder-image the UHD files.
