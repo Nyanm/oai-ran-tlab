@@ -39,7 +39,7 @@
 //#define USE_PERMUTEX
 #define USE_ALIGNR
 #ifdef __AVX512F__
-#if defined(__AVX512VBMI__) && (defined(USE_PERMUTEX) || definied(USE_ALIGNR))
+#if defined(__AVX512VBMI__) && (defined(USE_PERMUTEX) || defined(USE_ALIGNR))
 //For AVX512 machines, use and AVX512 version of the encoder for Zc=384 only for now. This is used almost exclusively for 
 //high-throughput cases
 // this version uses less memory (i.e. 1/64th of the memory to store the input), but uses more reads 
