@@ -115,31 +115,32 @@ int main(int argc, char **argv) {
     // --- MEMORY ALLOCATION ---
     // HOST MEMORY
     int num_tx_signals = sum_outputs ? num_channels : 1;
+    float *tx_sig_data = malloc(num_tx_signals * nb_tx * num_samples * 2 * sizeof(float));
     float ***tx_sig_interleaved = malloc(num_tx_signals * sizeof(float**));
-
     for(int i=0; i<num_tx_signals; i++){
         tx_sig_interleaved[i] = malloc(nb_tx * sizeof(float*));
         for(int j=0; j<nb_tx; j++){
-            tx_sig_interleaved[i][j] = malloc(num_samples * 2 * sizeof(float));
+            tx_sig_interleaved[i][j] = tx_sig_data + (i * nb_tx + j) * num_samples * 2;
         }
     }
-    
+
+    float *rx_multipath_data = malloc(nb_rx * num_samples * 2 * sizeof(float));
     float **rx_multipath_re_cpu = malloc(nb_rx * sizeof(float *));
     float **rx_multipath_im_cpu = malloc(nb_rx * sizeof(float *));
     for (int i=0; i<nb_rx; i++) {
-        rx_multipath_re_cpu[i] = malloc(num_samples * sizeof(float));
-        rx_multipath_im_cpu[i] = malloc(num_samples * sizeof(float));
+        rx_multipath_re_cpu[i] = rx_multipath_data + i * num_samples;
+        rx_multipath_im_cpu[i] = rx_multipath_data + (nb_rx + i) * num_samples;
     }
-    
+
+    c16_t *output_cpu_data = malloc(num_channels * nb_rx * num_samples * sizeof(c16_t));
     c16_t ***output_cpu = malloc(num_channels * sizeof(c16_t**));
     for(int c=0; c<num_channels; c++){
         output_cpu[c] = malloc(nb_rx * sizeof(c16_t*));
-        output_cpu[c][0] = malloc(nb_rx * num_samples * sizeof(c16_t));
-        for(int i=1; i<nb_rx; i++) {
-            output_cpu[c][i] = output_cpu[c][0] + i * num_samples;
+        for(int i=0; i<nb_rx; i++) {
+            output_cpu[c][i] = output_cpu_data + (c * nb_rx + i) * num_samples;
         }
     }
-    
+        
     channel_desc_t **channels = malloc(num_channels * sizeof(channel_desc_t*));
     
     // Define some realistic default values for the channel model
@@ -180,28 +181,26 @@ int main(int argc, char **argv) {
          *d_channel_coeffs_batch = NULL;
     float2 *h_channel_coeffs_batch = NULL;
     float *h_channel_coeffs = NULL;
+    float2* h_tx_sig_batch_interleaved = NULL;
 
     const int max_taps = 256;
-
     const int padding_len = max_taps - 1;
-    // const int padding_len = channel_length - 1;
     const int padded_num_samples = num_samples + padding_len;
 
+    // Sizes for batch mode
     size_t tx_batch_bytes = num_channels * nb_tx * padded_num_samples * sizeof(float2);
-    size_t channel_batch_bytes = num_channels * nb_tx * nb_rx * channel_length * sizeof(float2);
+    size_t intermediate_batch_bytes = num_channels * nb_rx * num_samples * sizeof(float2);
+    size_t final_batch_bytes = num_channels * nb_rx * num_samples * sizeof(short2);
+    size_t channel_batch_bytes = num_channels * nb_tx * nb_rx * max_taps * sizeof(float2); 
 
     // Sizes for serial/stream mode
     size_t tx_bytes = nb_tx * padded_num_samples * 2 * sizeof(float);
-
+    size_t rx_bytes = nb_rx * num_samples * sizeof(float2);
+    size_t output_bytes = nb_rx * num_samples * sizeof(short2);
+    size_t channel_bytes = nb_tx * nb_rx * max_taps * sizeof(float2);
 
     if (strcmp(mode_str, "batch") == 0) {
-
-        size_t intermediate_batch_bytes = num_channels * nb_rx * num_samples * sizeof(float2);
-        size_t final_batch_bytes = num_channels * nb_rx * num_samples * sizeof(short2);
-        size_t channel_batch_bytes = num_channels * nb_tx * nb_rx * channel_length * sizeof(float2);
-        
         h_channel_coeffs_batch = malloc(channel_batch_bytes);
-
     #if defined(USE_UNIFIED_MEMORY)
             printf("Memory Mode: Unified Memory\n");
             cudaMallocManaged(&d_tx_sig_batch, tx_batch_bytes, cudaMemAttachGlobal);
@@ -220,6 +219,7 @@ int main(int argc, char **argv) {
             cudaMalloc(&d_intermediate_sig_batch, intermediate_batch_bytes);
             cudaMalloc(&d_final_output_batch, final_batch_bytes);
             cudaMalloc(&d_channel_coeffs_batch, channel_batch_bytes);
+            h_tx_sig_batch_interleaved = (float2*)malloc(tx_batch_bytes);
     #endif
 
     if (sum_outputs) {
@@ -228,39 +228,34 @@ int main(int argc, char **argv) {
 
     } else { 
 
-        // --- SERIAL & STREAM MODE MEMORY ALLOCATION ---
-        size_t tx_bytes = nb_tx * padded_num_samples * 2 * sizeof(float);
-        size_t rx_bytes = nb_rx * num_samples * sizeof(float2);
-        size_t output_bytes = nb_rx * num_samples * sizeof(short2);
+        // Serial & Stream
+        h_channel_coeffs = malloc(channel_bytes);
+        d_individual_gpu_outputs = malloc(num_channels * sizeof(void*));
 
         #if defined(USE_UNIFIED_MEMORY)
-                printf("Memory Mode: Unified Memory\n");
-                cudaMallocManaged(&d_channel_coeffs_gpu, nb_tx * nb_rx * max_taps * sizeof(float2), cudaMemAttachGlobal);
-                cudaMallocManaged(&d_tx_sig, tx_bytes, cudaMemAttachGlobal);
-                cudaMallocManaged(&d_rx_sig, rx_bytes, cudaMemAttachGlobal);
-                d_individual_gpu_outputs = malloc(num_channels * sizeof(void*));
-                for (int c = 0; c < num_channels; c++) {
-                    cudaMallocManaged(&d_individual_gpu_outputs[c], output_bytes, cudaMemAttachGlobal);
-                }
-                if (sum_outputs) {
-                    cudaMallocManaged(&d_summed_gpu_output, output_bytes, cudaMemAttachGlobal);
-                }
-                h_tx_sig_pinned = d_tx_sig;
-
-                if (strcmp(mode_str, "serial") == 0) {
-                    cudaMallocHost(&h_output_sig_pinned, output_bytes);
-                    output_gpu = malloc(nb_rx * sizeof(c16_t*));
-                    output_gpu[0] = malloc(nb_rx * num_samples * sizeof(c16_t));
-                    for(int i=1; i<nb_rx; i++) output_gpu[i] = output_gpu[0] + i*num_samples;
-                }
+            printf("Memory Mode: Unified Memory\n");
+            cudaMallocManaged(&d_channel_coeffs_gpu, channel_bytes, cudaMemAttachGlobal);
+            cudaMallocManaged(&d_tx_sig, tx_bytes, cudaMemAttachGlobal);
+            cudaMallocManaged(&d_rx_sig, rx_bytes, cudaMemAttachGlobal);
+            for (int c = 0; c < num_channels; c++) {
+                cudaMallocManaged(&d_individual_gpu_outputs[c], output_bytes, cudaMemAttachGlobal);
+            }
+            if (sum_outputs) {
+                cudaMallocManaged(&d_summed_gpu_output, output_bytes, cudaMemAttachGlobal);
+            }
+            h_tx_sig_pinned = d_tx_sig;
+            if (strcmp(mode_str, "serial") == 0) {
+                cudaMallocHost(&h_output_sig_pinned, output_bytes);
+                output_gpu = malloc(nb_rx * sizeof(c16_t*));
+                output_gpu[0] = malloc(nb_rx * num_samples * sizeof(c16_t));
+                for(int i=1; i<nb_rx; i++) output_gpu[i] = output_gpu[0] + i*num_samples;
+            }
         #elif defined(USE_ATS_MEMORY)
                 printf("Memory Mode: ATS\n");
-                cudaMalloc(&d_channel_coeffs_gpu, nb_tx * nb_rx * max_taps * sizeof(float2));
+                cudaMalloc(&d_channel_coeffs_gpu, channel_bytes);
                 cudaMalloc(&d_rx_sig, rx_bytes);
                 h_tx_sig_pinned = malloc(tx_bytes);
-                d_tx_sig = NULL; 
-
-                d_individual_gpu_outputs = malloc(num_channels * sizeof(void*));
+                d_tx_sig = NULL;
                 for (int c = 0; c < num_channels; c++) {
                     cudaMalloc(&d_individual_gpu_outputs[c], output_bytes);
                 }
@@ -275,27 +270,18 @@ int main(int argc, char **argv) {
                 }
         #else
                 printf("Memory Mode: Explicit Copy\n");
-                cudaMalloc(&d_channel_coeffs_gpu, nb_tx * nb_rx * max_taps * sizeof(float2));
+                cudaMalloc(&d_channel_coeffs_gpu, channel_bytes);
                 cudaMalloc(&d_tx_sig, tx_bytes);
                 cudaMalloc(&d_rx_sig, rx_bytes);
-                cudaMallocHost(&h_tx_sig_pinned, tx_bytes); // Pinned for performance
-
-                d_individual_gpu_outputs = malloc(num_channels * sizeof(void*));
+                cudaMallocHost(&h_tx_sig_pinned, tx_bytes);
                 for (int c = 0; c < num_channels; c++) {
                     cudaMalloc(&d_individual_gpu_outputs[c], output_bytes);
                 }
                 if (sum_outputs) {
                     cudaMalloc(&d_summed_gpu_output, output_bytes);
                 }
-                if (strcmp(mode_str, "serial") == 0) {
-                    cudaMallocHost(&h_output_sig_pinned, output_bytes); // Pinned for performance
-                    output_gpu = malloc(nb_rx * sizeof(c16_t*));
-                    output_gpu[0] = malloc(nb_rx * num_samples * sizeof(c16_t));
-                    for(int i=1; i<nb_rx; i++) output_gpu[i] = output_gpu[0] + i*num_samples;
-                }
-        #endif
 
-        h_channel_coeffs = malloc(nb_tx * nb_rx * max_taps * sizeof(float2));
+        #endif
     }
 
     d_curand_states = create_and_init_curand_states_cuda(nb_rx * num_samples, time(NULL));
@@ -303,8 +289,21 @@ int main(int argc, char **argv) {
     double total_cpu_ns = 0;
     double total_gpu_ns = 0;
 
+    c16_t** output_gpu_serial = NULL;
+    if (strcmp(mode_str, "serial") == 0) {
+        output_gpu_serial = malloc(nb_rx * sizeof(c16_t*));
+        output_gpu_serial[0] = malloc(nb_rx * num_samples * sizeof(c16_t));
+        for(int i=1; i<nb_rx; i++) output_gpu_serial[i] = output_gpu_serial[0] + i*num_samples;
+        #if !defined(USE_UNIFIED_MEMORY)
+            cudaMallocHost(&h_output_sig_pinned, output_bytes);
+        #endif
+    }
+
     // --- MAIN TIMING LOOP ---
     for (int t = 0; t < num_trials; t++) {
+        if (sum_outputs) {
+            d_individual_gpu_outputs = malloc(num_channels * sizeof(void*));
+        }
         for(int i=0; i<num_tx_signals; i++) {
             generate_random_signal_interleaved(tx_sig_interleaved[i], nb_tx, num_samples);
         }
@@ -333,6 +332,7 @@ int main(int argc, char **argv) {
         total_cpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
 
         // --- GPU RUN ---
+        clock_gettime(CLOCK_MONOTONIC, &start);
         if (strcmp(mode_str, "batch") == 0) {
             for (int c = 0; c < num_channels; c++) {
                 for (int link = 0; link < nb_tx * nb_rx; link++) {
@@ -358,8 +358,6 @@ int main(int argc, char **argv) {
             }
         #endif
 
-        clock_gettime(CLOCK_MONOTONIC, &start);
-
         if (strcmp(mode_str, "batch") == 0) {            
             #if defined(USE_UNIFIED_MEMORY)
                     float2* tx_batch_ptr = (float2*)d_tx_sig_batch;
@@ -374,7 +372,6 @@ int main(int argc, char **argv) {
                         }
                     }
             #else // EXPLICIT COPY (and ATS)
-                    float2* h_tx_sig_batch_interleaved = (float2*)malloc(tx_batch_bytes);
                     memset(h_tx_sig_batch_interleaved, 0, tx_batch_bytes);
                     for (int c = 0; c < num_channels; c++) {
                         float** current_tx = sum_outputs ? tx_sig_interleaved[c] : tx_sig_interleaved[0];
@@ -386,8 +383,7 @@ int main(int argc, char **argv) {
                         }
                     }
                     cudaMemcpy(d_tx_sig_batch, h_tx_sig_batch_interleaved, tx_batch_bytes, cudaMemcpyHostToDevice);
-                    free(h_tx_sig_batch_interleaved);
-                #endif
+            #endif
             
             
             cudaMemcpy(d_channel_coeffs_batch, h_channel_coeffs_batch, channel_batch_bytes, cudaMemcpyHostToDevice);
@@ -400,7 +396,6 @@ int main(int argc, char **argv) {
             cudaDeviceSynchronize();
 
             if (sum_outputs) {
-                d_individual_gpu_outputs = malloc(num_channels * sizeof(void*));
                 for (int c = 0; c < num_channels; c++) {
                     d_individual_gpu_outputs[c] = d_final_output_batch + c * nb_rx * num_samples * sizeof(short2);
                 }
@@ -464,27 +459,22 @@ int main(int argc, char **argv) {
                                 }
                             }
 
-                            run_channel_pipeline_cuda(
-                                output_gpu,
-                                nb_tx, nb_rx, channels[c]->channel_length, num_samples,
-                                h_channel_coeffs,
-                                0.1,
-                                0,
-                                0xFFFF, 0xFFFF,
-                                0, 0,
-                                d_tx_sig, d_rx_sig, d_individual_gpu_outputs[c], d_curand_states,
-                                h_tx_sig_pinned, h_output_sig_pinned, d_channel_coeffs_gpu
-                            );
+                        run_channel_pipeline_cuda(
+                            output_gpu_serial,
+                            nb_tx, nb_rx, channels[c]->channel_length, num_samples,
+                            h_channel_coeffs, 0.1, 0, 0xFFFF, 0xFFFF, 0, 0,
+                            d_tx_sig, d_rx_sig, d_individual_gpu_outputs[c], d_curand_states,
+                            h_tx_sig_pinned, h_output_sig_pinned, d_channel_coeffs_gpu
+                        );
                         }
 
                         free(output_gpu_serial[0]);
                         free(output_gpu_serial);
         }
     }
-
+        cudaDeviceSynchronize();
         clock_gettime(CLOCK_MONOTONIC, &end);
         total_gpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
-
     }
     
     // --- FINAL REPORT ---
@@ -545,6 +535,7 @@ int main(int argc, char **argv) {
                 free(d_tx_sig_batch);
         #else
                 cudaFree(d_tx_sig_batch);
+                if (h_tx_sig_batch_interleaved) free(h_tx_sig_batch_interleaved);
         #endif
         cudaFree(d_intermediate_sig_batch);
         cudaFree(d_final_output_batch);
@@ -563,26 +554,32 @@ int main(int argc, char **argv) {
                 cudaFree(d_tx_sig);
                 cudaFree(d_rx_sig);
                 if (strcmp(mode_str, "serial") == 0) {
-                    cudaFreeHost(h_output_sig_pinned);
-                    free(output_gpu[0]);
-                    free(output_gpu);
+                    if (h_output_sig_pinned) cudaFreeHost(h_output_sig_pinned);
+                    if (output_gpu) {
+                        free(output_gpu[0]);
+                        free(output_gpu);
+                    }
                 }
         #elif defined(USE_ATS_MEMORY)
                 cudaFree(d_rx_sig);
                 free(h_tx_sig_pinned);
                 if (strcmp(mode_str, "serial") == 0) {
-                    free(h_output_sig_pinned);
+                    if (h_output_sig_pinned) free(h_output_sig_pinned);
+                    if (output_gpu) {
                     free(output_gpu[0]);
                     free(output_gpu);
+                    }
                 }
         #else
                 cudaFree(d_tx_sig);
                 cudaFree(d_rx_sig);
                 cudaFreeHost(h_tx_sig_pinned);
                 if (strcmp(mode_str, "serial") == 0) {
-                    cudaFreeHost(h_output_sig_pinned);
-                    free(output_gpu[0]);
-                    free(output_gpu);
+                    if (h_output_sig_pinned) cudaFreeHost(h_output_sig_pinned);
+                    if (output_gpu) {
+                        free(output_gpu[0]);
+                        free(output_gpu);
+                    }
                 }
         #endif
     }
