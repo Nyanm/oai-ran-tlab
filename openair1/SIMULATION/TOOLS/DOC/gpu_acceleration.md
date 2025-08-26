@@ -470,3 +470,12 @@ Finally, To provide a clear, baseline performance comparison, the `test_channel_
 | Long Channel | 2x2 | 122880 | 14,913.97 | 124.50 | 119.79x |
 | Long Channel | 4x4 | 122880 | 56,194.75 | 252.61 | 222.46x |
 | Long Channel | 8x8 | 122880 | 221,955.03 | 622.86 | 356.35x |
+
+
+
+
+
+
+## New tests
+### explicit copy mode
+
