@@ -87,7 +87,7 @@
 #include "openair1/SIMULATION/TOOLS/sim.h"
 #include "openair2/LAYER2/NR_MAC_UE/mac_proto.h"
 #include "openair2/LAYER2/NR_MAC_gNB/mac_proto.h"
-#include "openair2/RRC/NR/nr_rrc_config.h"
+#include "openair2/LAYER2/NR_MAC_gNB/nr_radio_config.h"
 #include "time_meas.h"
 #include "utils.h"
 
@@ -237,6 +237,8 @@ int main(int argc, char *argv[])
   int max_ldpc_iterations = 5;
   int num_antennas_per_thread = 1;
   uint32_t log_format = 0;
+  int threequarter_fs = 0;
+
   if ((uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY)) == 0) {
     exit_fun("[NR_ULSIM] Error, configuration module init failed\n");
   }
@@ -351,7 +353,7 @@ int main(int argc, char *argv[])
 
     case 'k':
       printf("Setting threequarter_fs_flag\n");
-      openair0_cfg[0].threequarter_fs= 1;
+      threequarter_fs = 1;
       break;
 
     case 'm':
@@ -576,7 +578,6 @@ int main(int argc, char *argv[])
 
   get_softmodem_params()->phy_test = 1;
   get_softmodem_params()->do_ra = 0;
-  get_softmodem_params()->usim_test = 1;
 
   if (snr1set == 0)
     snr1 = snr0 + 10;
@@ -585,7 +586,7 @@ int main(int argc, char *argv[])
   uint32_t samples;
   get_samplerate_and_bw(mu,
                         N_RB_DL,
-                        openair0_cfg[0].threequarter_fs,
+                        threequarter_fs,
                         &sampling_frequency,
                         &samples,
                         &tx_bandwidth,
@@ -668,12 +669,36 @@ int main(int argc, char *argv[])
                                 .timer_config.t311 = 3000,
                                 .timer_config.n311 = 1,
                                 .timer_config.t319 = 400};
+  const nr_rlc_configuration_t rlc_config = {
+    .srb = {
+      .t_poll_retransmit = 45,
+      .t_reassembly = 35,
+      .t_status_prohibit = 0,
+      .poll_pdu = -1,
+      .poll_byte = -1,
+      .max_retx_threshold = 8,
+      .sn_field_length = 12,
+    },
+    .drb_am = {
+      .t_poll_retransmit = 45,
+      .t_reassembly = 15,
+      .t_status_prohibit = 15,
+      .poll_pdu = 64,
+      .poll_byte = 1024 * 500,
+      .max_retx_threshold = 32,
+      .sn_field_length = 18,
+    },
+    .drb_um = {
+      .t_reassembly = 15,
+      .sn_field_length = 12,
+    }
+  };
 
   RC.nb_nr_macrlc_inst = 1;
   RC.nb_nr_mac_CC = (int*)malloc(RC.nb_nr_macrlc_inst*sizeof(int));
   for (i = 0; i < RC.nb_nr_macrlc_inst; i++)
     RC.nb_nr_mac_CC[i] = 1;
-  mac_top_init_gNB(ngran_gNB, scc, NULL /* scd will be updated further below */, &conf);
+  mac_top_init_gNB(ngran_gNB, scc, NULL /* scd will be updated further below */, &conf, &rlc_config);
   nr_mac_config_scc(RC.nrmac[0], scc, &conf);
 
   NR_ServingCellConfig_t *scd = calloc(1,sizeof(NR_ServingCellConfig_t));
@@ -823,14 +848,12 @@ int main(int argc, char *argv[])
 
   uint8_t  length_dmrs = pusch_len1;
   uint16_t l_prime_mask = get_l_prime(nb_symb_sch, mapping_type, add_pos, length_dmrs, start_symbol, NR_MIB__dmrs_TypeA_Position_pos2);
-  uint16_t number_dmrs_symbols = get_dmrs_symbols_in_slot(l_prime_mask, nb_symb_sch, start_symbol);
+  int number_dmrs_symbols = count_bits64_with_mask(l_prime_mask, start_symbol, nb_symb_sch);
   uint8_t  nb_re_dmrs = (dmrs_config_type == pusch_dmrs_type1) ? 6 : 4;
 
   uint32_t tbslbrm = 0;
   if (ilbrm)
-    tbslbrm = nr_compute_tbslbrm(mcs_table,
-                                 N_RB_UL,
-                                 precod_nbr_layers);
+    tbslbrm = nr_compute_tbslbrm(mcs_table, N_RB_UL, precod_nbr_layers);
 
   if ((UE->frame_parms.nb_antennas_tx==4)&&(precod_nbr_layers==4))
     num_dmrs_cdm_grps_no_data = 2;
@@ -1005,6 +1028,9 @@ int main(int argc, char *argv[])
     reset_meas(&gNB->rx_pusch_init_stats);
     reset_meas(&gNB->rx_pusch_symbol_processing_stats);
     reset_meas(&gNB->ulsch_decoding_stats);
+    reset_meas(&gNB->ts_deinterleave);
+    reset_meas(&gNB->ts_rate_unmatch);
+    reset_meas(&gNB->ts_ldpc_decode);
     reset_meas(&gNB->ulsch_channel_estimation_stats);
     reset_meas(&gNB->pusch_channel_estimation_antenna_processing_stats);
     reset_meas(&gNB->rx_srs_stats);
@@ -1566,6 +1592,9 @@ int main(int argc, char *argv[])
       printStatIndent2(&gNB->rx_pusch_init_stats, "RX PUSCH Initialization time");
       printStatIndent2(&gNB->rx_pusch_symbol_processing_stats, "RX PUSCH Symbol Processing time");
       printStatIndent(&gNB->ulsch_decoding_stats,"ULSCH total decoding time");
+      printStatIndent2(&gNB->ts_deinterleave, "ULSCH segment deinterleaving time");
+      printStatIndent2(&gNB->ts_rate_unmatch, "ULSCH segment rate recovery time");
+      printStatIndent2(&gNB->ts_ldpc_decode, "ULSCH segments decoding time");
 
       printf("\nUE TX\n");
       for (int i = PHY_PROC_TX; i <= OFDM_MOD_STATS; i++) {

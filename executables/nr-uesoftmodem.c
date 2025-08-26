@@ -170,8 +170,12 @@ void exit_function(const char *file, const char *function, const int line, const
 
   if (PHY_vars_UE_g && PHY_vars_UE_g[0]) {
     for(CC_id=0; CC_id<MAX_NUM_CCs; CC_id++) {
-      if (PHY_vars_UE_g[0][CC_id] && PHY_vars_UE_g[0][CC_id]->rfdevice.trx_end_func)
+      if (PHY_vars_UE_g[0][CC_id] && PHY_vars_UE_g[0][CC_id]->rfdevice.trx_end_func) {
+        if (PHY_vars_UE_g[0][CC_id]->rfdevice.trx_get_stats_func) {
+          PHY_vars_UE_g[0][CC_id]->rfdevice.trx_get_stats_func(&PHY_vars_UE_g[0][CC_id]->rfdevice);
+        }
         PHY_vars_UE_g[0][CC_id]->rfdevice.trx_end_func(&PHY_vars_UE_g[0][CC_id]->rfdevice);
+      }
     }
   }
 
@@ -197,11 +201,15 @@ nrUE_params_t *get_nrUE_params(void) {
 }
 static void get_options(configmodule_interface_t *cfg)
 {
-  paramdef_t cmdline_params[] =CMDLINE_NRUEPARAMS_DESC ;
+  paramdef_t cmdline_params[] = CMDLINE_NRUEPARAMS_DESC;
   int numparams = sizeofArray(cmdline_params);
   config_get(cfg, cmdline_params, numparams, NULL);
   if (nrUE_params.vcdflag > 0)
     ouput_vcd = 1;
+  AssertFatal(nrUE_params.extra_pdu_id != get_softmodem_params()->default_pdu_session_id,
+              "Default PDU ID (%d) and Extra PDU ID (%d) must be different!\n",
+              get_softmodem_params()->default_pdu_session_id,
+              nrUE_params.extra_pdu_id);
 }
 
 // set PHY vars from command line
@@ -241,7 +249,7 @@ void set_options(int CC_id, PHY_VARS_NR_UE *UE){
 
 }
 
-void init_openair0()
+static void init_openair0()
 {
   int card;
   int freq_off = 0;
@@ -253,7 +261,6 @@ void init_openair0()
   for (card=0; card<MAX_CARDS; card++) {
     uint64_t dl_carrier, ul_carrier;
     openair0_cfg[card].configFilename    = NULL;
-    openair0_cfg[card].threequarter_fs   = frame_parms->threequarter_fs;
     openair0_cfg[card].sample_rate       = frame_parms->samples_per_subframe * 1e3;
     openair0_cfg[card].samples_per_frame = frame_parms->samples_per_frame;
 
@@ -368,9 +375,6 @@ void start_oai_nrue_threads()
 
 int NB_UE_INST = 1;
 configmodule_interface_t *uniqCfg = NULL;
-
-// A global var to reduce the changes size
-ldpc_interface_t ldpc_interface = {0}, ldpc_interface_offload = {0};
 nrLDPC_coding_interface_t nrLDPC_coding_interface = {0};
 
 int main(int argc, char **argv)
@@ -506,11 +510,17 @@ int main(int argc, char **argv)
 
         UE[CC_id]->sl_mode = get_softmodem_params()->sl_mode;
         init_actor(&UE[CC_id]->sync_actor, "SYNC_", -1);
-        for (int i = 0; i < NUM_DL_ACTORS; i++) {
-          init_actor(&UE[CC_id]->dl_actors[i], "DL_", -1);
+        if (get_nrUE_params()->num_dl_actors > 0) {
+          UE[CC_id]->dl_actors = calloc_or_fail(get_nrUE_params()->num_dl_actors, sizeof(*UE[CC_id]->dl_actors));
+          for (int i = 0; i < get_nrUE_params()->num_dl_actors; i++) {
+            init_actor(&UE[CC_id]->dl_actors[i], "DL_", -1);
+          }
         }
-        for (int i = 0; i < NUM_UL_ACTORS; i++) {
-          init_actor(&UE[CC_id]->ul_actors[i], "UL_", -1);
+        if (get_nrUE_params()->num_ul_actors > 0) {
+          UE[CC_id]->ul_actors = calloc_or_fail(get_nrUE_params()->num_ul_actors, sizeof(*UE[CC_id]->ul_actors));
+          for (int i = 0; i < get_nrUE_params()->num_ul_actors; i++) {
+            init_actor(&UE[CC_id]->ul_actors[i], "UL_", -1);
+          }
         }
         init_nr_ue_vars(UE[CC_id], inst);
 
@@ -576,10 +586,10 @@ int main(int argc, char **argv)
     for (int CC_id = 0; CC_id < MAX_NUM_CCs; CC_id++) {
       PHY_VARS_NR_UE *phy_vars = PHY_vars_UE_g[0][CC_id];
       if (phy_vars) {
-        for (int i = 0; i < NUM_UL_ACTORS; i++) {
+        for (int i = 0; i < get_nrUE_params()->num_ul_actors; i++) {
           shutdown_actor(&phy_vars->ul_actors[i]);
         }
-        for (int i = 0; i < NUM_DL_ACTORS; i++) {
+        for (int i = 0; i < get_nrUE_params()->num_dl_actors; i++) {
           shutdown_actor(&phy_vars->dl_actors[i]);
         }
         int ret = pthread_join(phy_vars->main_thread, NULL);
@@ -588,6 +598,8 @@ int main(int argc, char **argv)
           ret = pthread_join(phy_vars->stat_thread, NULL);
           AssertFatal(ret == 0, "pthread_join error %d, errno %d (%s)\n", ret, errno, strerror(errno));
         }
+        if (phy_vars->rfdevice.trx_get_stats_func)
+          phy_vars->rfdevice.trx_get_stats_func(&phy_vars->rfdevice);
         if (phy_vars->rfdevice.trx_end_func)
           phy_vars->rfdevice.trx_end_func(&phy_vars->rfdevice);
       }

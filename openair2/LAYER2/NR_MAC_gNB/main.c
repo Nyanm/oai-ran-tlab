@@ -53,8 +53,6 @@
 #include "NR_ServingCellConfig.h"
 #include "NR_ServingCellConfigCommon.h"
 #include "NR_TAG.h"
-#include "RRC/NR/MESSAGES/asn1_msg.h"
-#include "RRC/NR/nr_rrc_config.h"
 #include "assertions.h"
 #include "common/ngran_types.h"
 #include "common/ran_context.h"
@@ -65,6 +63,7 @@
 #include "nr_pdcp/nr_pdcp_oai_api.h"
 #include "nr_rlc/nr_rlc_oai_api.h"
 #include "openair2/F1AP/f1ap_ids.h"
+#include "openair2/F1AP/lib/f1ap_interface_management.h"
 #include "seq_arr.h"
 #include "system.h"
 #include "time_meas.h"
@@ -90,10 +89,12 @@ void *nrmac_stats_thread(void *arg) {
     p += dump_mac_stats(gNB, p, end - p, false);
     NR_SCHED_UNLOCK(&gNB->sched_lock);
     p += snprintf(p, end - p, "\n");
-    p += print_meas_log(&gNB->eNB_scheduler, "DL & UL scheduling timing", NULL, NULL, p, end - p);
+    p += print_meas_log(&gNB->gNB_scheduler, "gNB_scheduler", NULL, NULL, p, end - p);
+    p += print_meas_log(&gNB->rx_ulsch_sdu, "rx_ulsch_sdu", NULL, NULL, p, end - p);
     p += print_meas_log(&gNB->schedule_dlsch, "dlsch scheduler", NULL, NULL, p, end - p);
+    p += print_meas_log(&gNB->schedule_ulsch, "ulsch scheduler", NULL, NULL, p, end - p);
+    p += print_meas_log(&gNB->schedule_ra, "RA scheduler", NULL, NULL, p, end - p);
     p += print_meas_log(&gNB->rlc_data_req, "rlc_data_req", NULL, NULL, p, end - p);
-    p += print_meas_log(&gNB->rlc_status_ind, "rlc_status_ind", NULL, NULL, p, end - p);
     p += print_meas_log(&gNB->nr_srs_ri_computation_timer, "UL-RI computation time", NULL, NULL, p, end - p);
     p += print_meas_log(&gNB->nr_srs_tpmi_computation_timer, "UL-TPMI computation time", NULL, NULL, p, end - p);
     fwrite(output, p - output, 1, file);
@@ -167,12 +168,13 @@ size_t dump_mac_stats(gNB_MAC_INST *gNB, char *output, size_t strlen, bool reset
 
     output += snprintf(output,
                        end - output,
-                       ", dlsch_errors %"PRIu64", pucch0_DTX %d, BLER %.5f MCS (%d) %d\n",
+                       ", dlsch_errors %"PRIu64", pucch0_DTX %d, BLER %.5f MCS (%d) %d CCE fail %d\n",
                        stats->dl.errors,
                        stats->pucch0_DTX,
                        sched_ctrl->dl_bler_stats.bler,
                        UE->current_DL_BWP.mcsTableIdx,
-                       sched_ctrl->dl_bler_stats.mcs);
+                       sched_ctrl->dl_bler_stats.mcs,
+                       sched_ctrl->dl_cce_fail);
     if (reset_rsrp) {
       stats->num_rsrp_meas = 0;
       stats->cumul_rsrp = 0;
@@ -186,7 +188,7 @@ size_t dump_mac_stats(gNB_MAC_INST *gNB, char *output, size_t strlen, bool reset
 
     output += snprintf(output,
                        end - output,
-                       ", ulsch_errors %"PRIu64", ulsch_DTX %d, BLER %.5f MCS (%d) %d (Qm %d deltaMCS %d dB) NPRB %d  SNR %d.%d dB\n",
+                       ", ulsch_errors %"PRIu64", ulsch_DTX %d, BLER %.5f MCS (%d) %d (Qm %d deltaMCS %d dB) NPRB %d  SNR %d.%d dB CCE fail %d\n",
                        stats->ul.errors,
                        stats->ulsch_DTX,
                        sched_ctrl->ul_bler_stats.bler,
@@ -196,7 +198,8 @@ size_t dump_mac_stats(gNB_MAC_INST *gNB, char *output, size_t strlen, bool reset
                        UE->mac_stats.deltaMCS,
                        UE->mac_stats.NPRB,
                        sched_ctrl->pusch_snrx10 / 10,
-                       sched_ctrl->pusch_snrx10 % 10);
+                       sched_ctrl->pusch_snrx10 % 10,
+                       sched_ctrl->ul_cce_fail);
     output += snprintf(output,
                        end - output,
                        "UE %04x: MAC:    TX %14"PRIu64" RX %14"PRIu64" bytes\n",
@@ -238,11 +241,9 @@ static void mac_rrc_init(gNB_MAC_INST *mac, ngran_node_t node_type)
 void mac_top_init_gNB(ngran_node_t node_type,
                       NR_ServingCellConfigCommon_t *scc,
                       NR_ServingCellConfig_t *scd,
-                      const nr_mac_config_t *config)
+                      const nr_mac_config_t *config,
+                      const nr_rlc_configuration_t *default_rlc_config)
 {
-  module_id_t     i;
-  gNB_MAC_INST    *nrmac;
-
   AssertFatal(RC.nb_nr_macrlc_inst == 1, "what is the point of calling %s() if you don't need exactly one MAC?\n", __func__);
 
   if (RC.nb_nr_macrlc_inst > 0) {
@@ -253,7 +254,7 @@ void mac_top_init_gNB(ngran_node_t node_type,
                 RC.nb_nr_macrlc_inst * sizeof(gNB_MAC_INST *),
                 RC.nb_nr_macrlc_inst, sizeof(gNB_MAC_INST));
 
-    for (i = 0; i < RC.nb_nr_macrlc_inst; i++) {
+    for (module_id_t i = 0; i < RC.nb_nr_macrlc_inst; i++) {
 
       RC.nrmac[i] = (gNB_MAC_INST *) malloc16(sizeof(gNB_MAC_INST));
       
@@ -270,10 +271,9 @@ void mac_top_init_gNB(ngran_node_t node_type,
       RC.nrmac[i]->tag = (NR_TAG_t*)malloc(sizeof(NR_TAG_t));
       memset((void*)RC.nrmac[i]->tag,0,sizeof(NR_TAG_t));
         
-      RC.nrmac[i]->ul_handle = 0;
-
       RC.nrmac[i]->common_channels[0].ServingCellConfigCommon = scc;
       RC.nrmac[i]->radio_config = *config;
+      RC.nrmac[i]->rlc_config = *default_rlc_config;
 
       RC.nrmac[i]->common_channels[0].pre_ServingCellConfig = scd;
 
@@ -309,16 +309,13 @@ void mac_top_init_gNB(ngran_node_t node_type,
     nr_rlc_op_mode_t mode = NODE_IS_MONOLITHIC(node_type) ? NR_RLC_OP_MODE_MONO_GNB : NR_RLC_OP_MODE_SPLIT_GNB;
     int success = nr_rlc_module_init(mode);
     AssertFatal(success == 0,"Could not initialize RLC layer\n");
-
-    // These should be out of here later
-    if (get_softmodem_params()->usim_test == 0 ) nr_pdcp_layer_init();
   } else {
     RC.nrmac = NULL;
   }
 
   // Initialize Linked-List for Active UEs
-  for (i = 0; i < RC.nb_nr_macrlc_inst; i++) {
-    nrmac = RC.nrmac[i];
+  for (module_id_t i = 0; i < RC.nb_nr_macrlc_inst; i++) {
+    gNB_MAC_INST *nrmac = RC.nrmac[i];
     nrmac->if_inst = NR_IF_Module_init(i);
     memset(&nrmac->UE_info, 0, sizeof(nrmac->UE_info));
   }
@@ -342,6 +339,9 @@ void mac_top_destroy_gNB(gNB_MAC_INST *mac)
   for (int i = 0; i < sizeofArray(UE_info->access_ue_list); ++i)
     if (UE_info->access_ue_list[i])
       delete_nr_ue_data(UE_info->access_ue_list[i], cc, &UE_info->uid_allocator);
+  if (mac->f1_config.setup_resp)
+    free_f1ap_setup_response(mac->f1_config.setup_resp);
+  free(mac->f1_config.setup_resp);
 }
 
 void nr_mac_send_f1_setup_req(void)

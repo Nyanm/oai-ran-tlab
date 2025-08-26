@@ -221,9 +221,7 @@ In the CU file:
   ignored, but we recommend to put `0.0.0.0` ("any")
 - Ports should match the ones in the DU config, but for simplicity and
   standards-conformity, simply set all to 2152:
-  - `local_s_portc` in CU should match `remote_n_portc` in DU
   - `local_s_portd` in CU should match `remote_n_portd` in DU
-  - `remote_s_portc` in CU should match `local_n_portc` in DU
   - `remote_s_portd` in CU should match `local_n_portd` in DU
 
 In the DU file:
@@ -389,8 +387,8 @@ into the RLC via `enqueue_rlc_data_req()`, or (f1ap) sends a GTP message
 through the GTP API.
 
 In the DU in DL, assuming the GTP-U tunnel exists, GTP decapsulates the packet
-and calls the reception call back `du_rlc_data_req()`, which calls
-`enqueue_rlc_data_req()` in turn.
+and calls the reception call back `nr_rlc_data_req()`, which enqueues the
+packet into the UE's RLC buffer.
 
 ## Tunnel Setup
 

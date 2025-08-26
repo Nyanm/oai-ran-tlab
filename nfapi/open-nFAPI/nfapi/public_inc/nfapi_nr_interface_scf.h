@@ -24,7 +24,7 @@
 #define NFAPI_MAX_NUM_GROUPS 8
 #define NFAPI_MAX_NUM_CB 8
 #define NFAPI_MAX_NUM_PRGS 1
-#define NFAPI_MAX_NUM_BG_IF 1
+#define NFAPI_MAX_NUM_BG_IF 6
 #define NFAPI_MAX_NUM_PERIODS 8
 
 // Extension to the generic structures for single tlv values
@@ -328,6 +328,8 @@ typedef struct
 
 #define NFAPI_NR_CONFIG_RSSI_MEASUREMENT_TAG 0x1028
 #define NFAPI_NR_CONFIG_TDD_TABLE 0x1035
+#define NFAPI_NR_CONFIG_BEAMFORMING_TABLE_TAG 0x1043 // This tag was added in version 5 of the SCF222 standard ( Table 3-50 of SCF222.10.05 )
+#define NFAPI_NR_CONFIG_PRECODING_TABLE_V6_TAG 0x104B // This tag was added in version 6 of the SCF222 standard ( Table 3-52 of SCF222.10.06 )
 
 //table 3-21
 typedef struct 
@@ -445,6 +447,13 @@ typedef struct
 
 } nfapi_nr_tdd_table_t;
 
+typedef struct {
+  nfapi_tl_t tl;
+  nfapi_nr_tdd_table_t *value;
+  uint8_t slots_per_frame;
+  uint8_t symbols_per_slot;
+} nfapi_nr_tdd_table_tlv_t;
+
 //table 3-27
 typedef struct 
 {
@@ -473,6 +482,11 @@ typedef struct {
   nfapi_nr_dig_beam_t *dig_beam_list;
 } nfapi_nr_dbt_pdu_t;
 
+typedef struct {
+  nfapi_tl_t tl;
+  nfapi_nr_dbt_pdu_t value;
+} nfapi_nr_dbt_tlv_ve_t;
+
 // Table 3–62 Precoding matrix (PM) PDU (v.222.10.04)
 typedef struct {
   int16_t precoder_weight_Re;
@@ -491,11 +505,18 @@ typedef struct {
 typedef struct {
   uint16_t num_pm_idx;
   nfapi_nr_pm_pdu_t *pmi_pdu;
-} nfapi_nr_pm_list_t;
+} nfapi_nr_pm_list_t; // This corresponds to Table 3-69 of SCF222.10.06, which introduces the num_pm_idx parameter
+
+typedef struct {
+  nfapi_tl_t tl;
+  nfapi_nr_pm_list_t value;
+} nfapi_nr_pm_tlv_ve_t;
 
 typedef struct {
   nfapi_uint8_tlv_t num_beams_period_vendor_ext;
   nfapi_uint8_tlv_t analog_bf_vendor_ext;
+  nfapi_uint8_tlv_t total_num_beams_vendor_ext;
+  nfapi_uint8_tlv_t *analog_beam_list;
 } nfapi_nr_analog_beamforming_ve_t;
 
 // ERROR enums
@@ -687,16 +708,22 @@ typedef enum {
 } nfapi_nr_stop_errors_e;
 
 //3.3.5 PHY Notifications
+
+#define NFAPI_PHY_ERROR_LIST \
+X(NFAPI_NR_PHY_API_MSG_OK              ,0x0)\
+X(NFAPI_NR_PHY_API_MSG_INVALID_STATE   ,0x1)\
+X(NFAPI_NR_PHY_API_MSG_INVALID_CONFIG  ,0x2)\
+X(NFAPI_NR_PHY_API_SFN_OUT_OF_SYNC     ,0X3)\
+X(NFAPI_NR_PHY_API_MSG_SLOR_ERR        ,0X4)\
+X(NFAPI_NR_PHY_API_MSG_BCH_MISSING     ,0X5)\
+X(NFAPI_NR_PHY_API_MSG_INVALID_SFN     ,0X6)\
+X(NFAPI_NR_PHY_API_MSG_UL_DCI_ERR      ,0X7)\
+X(NFAPI_NR_PHY_API_MSG_TX_ERR          ,0X8)
+
 typedef enum {
-  NFAPI_NR_PHY_API_MSG_OK              =0x0,
-  NFAPI_NR_PHY_API_MSG_INVALID_STATE   =0x1,
-  NFAPI_NR_PHY_API_MSG_INVALID_CONFIG  =0x2,
-  NFAPI_NR_PHY_API_SFN_OUT_OF_SYNC     =0X3,
-  NFAPI_NR_PHY_API_MSG_SLOR_ERR        =0X4,
-  NFAPI_NR_PHY_API_MSG_BCH_MISSING     =0X5,
-  NFAPI_NR_PHY_API_MSG_INVALID_SFN     =0X6,
-  NFAPI_NR_PHY_API_MSG_UL_DCI_ERR      =0X7,
-  NFAPI_NR_PHY_API_MSG_TX_ERR          =0X8
+#define X(name, value) name = value,
+  NFAPI_PHY_ERROR_LIST
+#undef X
 } nfapi_nr_phy_notifications_errors_e;
 
 typedef struct {
@@ -723,31 +750,31 @@ typedef struct {
 
 // 3.4.2
 
-//for pdcch_pdu:
+typedef struct {
+  // Index of the digital beam weight vector pre-stored at cell configuration.
+  // The vector maps this input port to output TXRUs. Value: 0->65535
+  uint16_t beam_idx;
+} nfapi_nr_dig_bf_interface_t;
 
-typedef struct
-{
-  uint16_t beam_idx;//Index of the digital beam weight vector pre-stored at cell configuration. The vector maps this input port to output TXRUs. Value: 0->65535
-
-}nfapi_nr_dig_bf_interface_t;
-
-typedef struct
-{
-  uint16_t pm_idx;//Index to precoding matrix (PM) pre-stored at cell configuration. Note: If precoding is not used this parameter should be set to 0. Value: 0->65535.
-  nfapi_nr_dig_bf_interface_t dig_bf_interface_list[NFAPI_MAX_NUM_BG_IF];//max dig_bf_interfaces
-
-}nfapi_nr_tx_precoding_and_beamforming_number_of_prgs_t;
+typedef struct {
+  // Index to precoding matrix (PM) pre-stored at cell configuration.
+  // Note: If precoding is not used this parameter should be set to 0. Value: 0->65535.
+  uint16_t pm_idx;
+  nfapi_nr_dig_bf_interface_t dig_bf_interface_list[NFAPI_MAX_NUM_BG_IF]; // max dig_bf_interfaces
+} nfapi_nr_tx_precoding_and_beamforming_number_of_prgs_t;
 
 //table 3-43
-typedef struct 
-{
-  uint16_t num_prgs;//Number of PRGs spanning this allocation. Value : 1->275 
-  uint16_t prg_size;//Size in RBs of a precoding resource block group (PRG) – to which same precoding and digital beamforming gets applied. Value: 1->275
-  //watchout: dig_bf_interfaces here, in table 3-53 it's dig_bf_interface
-  uint8_t  dig_bf_interfaces;//Number of STD ant ports (parallel streams) feeding into the digBF Value: 0->255
-  nfapi_nr_tx_precoding_and_beamforming_number_of_prgs_t prgs_list[NFAPI_MAX_NUM_PRGS];//max prg_size
-
-}nfapi_nr_tx_precoding_and_beamforming_t;
+typedef struct {
+  // Number of PRGs spanning this allocation. Value : 1->275
+  uint16_t num_prgs;
+  // Size in RBs of a precoding resource block group (PRG) to which same precoding and digital beamforming gets applied.
+  // Value: 1->275
+  uint16_t prg_size;
+  // watchout: dig_bf_interfaces here, in table 3-53 it's dig_bf_interface
+  uint8_t  dig_bf_interfaces;
+  // Number of STD ant ports (parallel streams) feeding into the digBF Value: 0->255
+  nfapi_nr_tx_precoding_and_beamforming_number_of_prgs_t prgs_list[NFAPI_MAX_NUM_PRGS]; // max prg_size
+} nfapi_nr_tx_precoding_and_beamforming_t;
 
 
 //table 3-37 
@@ -1192,7 +1219,7 @@ typedef struct
 
 typedef struct
 {
-  uint8_t trp_scheme;         // This field shall be set to 0, to identify that this table is used.
+  // uint8_t trp_scheme;         // This field shall be set to 0, to identify that this table is used. Not part of FAPI 10.02, thus removed
   uint16_t num_prgs;          // Number of PRGs spanning this allocation. Value : 1->275
   uint16_t prg_size;          // Size in RBs of a precoding resource block group (PRG) – to which the same digital beamforming gets applied. Value: 1->275
   uint8_t dig_bf_interface;   // Number of logical antenna ports (parallel streams) resulting from the Rx combining. Value: 0->255
@@ -1829,7 +1856,7 @@ typedef struct {
   uint8_t num_symbols;                  // Number of symbols for SRS. Value: 1 -> 4. If a PHY does not report for individual symbols then this parameter should be set to 1.
   uint8_t wide_band_snr;                // SNR value in dB measured within configured SRS bandwidth on each symbol. Value: 0 -> 255 representing -64 dB to 63 dB with a step size 0.5 dB. 0xff will be set if this field is invalid.
   uint8_t num_reported_symbols;         // Number of symbols reported in this message. This allows PHY to report individual symbols or aggregated symbols where this field will be set to 1. Value: 1 -> 4.
-  nfapi_nr_srs_reported_symbol_t* reported_symbol_list;
+  nfapi_nr_srs_reported_symbol_t reported_symbol_list[4];
 } nfapi_nr_srs_beamforming_report_t;
 
 // SRS indication

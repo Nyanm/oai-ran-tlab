@@ -41,12 +41,12 @@ PTP enabled switches and grandmaster clock we have tested with:
 
 These are the radio units we've used for testing:
 
-| Vendor      | Software Version |
-|-------------|------------------|
-| Foxconn RPQN-7801E RU | 2.6.9r254        |
-| Foxconn RPQN-7801E RU | 3.1.15_0p4       |
-| Foxconn RPQN-7801E RU | v3.2.0q.551.12.E.rc2.srs-AIO |
-
+| Vendor                | Software Version            |
+|-----------------------|-----------------------------|
+| Foxconn RPQN-7801E RU | 2.6.9r254                   |
+| Foxconn RPQN-7801E RU | 3.1.15_0p4                  |
+| Foxconn RPQN-7801E RU | 3.2.0q.551.12.E.rc2.srs-AIO |
+| WNC     R1220-078LE   | 1.9.0                       |
 
 The UEs that have been tested and confirmed working with Aerial are the following:
 
@@ -80,7 +80,7 @@ To set up the L1 and install the components manually refer to this [instructions
 | Applicative Threads    | Allocated CPUs |
 |------------------------|----------------|
 | PTP & PHC2SYS Services | 41             |
-| OAI `nr-softmodem`     | 13-20          |
+| OAI `nr-softmodem`     | 13-14          |
 
 ## PTP configuration
 
@@ -213,8 +213,8 @@ With the nvIPC sources in the project directory, the docker image can be built.
 In order to build the target image (`oai-gnb-aerial`), first you should build a common shared image (`ran-base`)
 ```bash
 ~$ cd ~/openairinterface5g/
-~/openairinterface5g$ docker build . -f docker/Dockerfile.base.ubuntu22 --tag ran-base:latest
-~/openairinterface5g$ docker build . -f docker/Dockerfile.gNB.aerial.ubuntu22 --tag oai-gnb-aerial:latest
+~/openairinterface5g$ docker build . -f docker/Dockerfile.base.ubuntu --tag ran-base:latest
+~/openairinterface5g$ docker build . -f docker/Dockerfile.gNB.aerial.ubuntu --tag oai-gnb-aerial:latest
 ```
 
 
@@ -230,10 +230,10 @@ After preparing the L1 software, the container needs to be committed to create a
 In this file the RU MAC address needs to be specified before commiting the image.
 
 ```bash
-~$ docker commit nv-cubb cubb-build:24-3
+~$ docker commit nv-cubb cubb-build:25-1
 ~$ docker image ls
 ..
-cubb-build                                    24-3                                           824156e0334c   2 weeks ago    23.9GB
+cubb-build                                    25-1                                           824156e0334c   2 weeks ago    23.9GB
 -..
 ```
 

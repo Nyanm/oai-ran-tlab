@@ -114,7 +114,7 @@ static void tx_func(processingData_L1tx_t *info)
   pushNotifiedFIFO(&gNB->resp_L1, res);
 
   int tx_slot_type = nr_slot_select(cfg, frame_tx, slot_tx);
-  if (tx_slot_type == NR_DOWNLINK_SLOT || tx_slot_type == NR_MIXED_SLOT || get_softmodem_params()->continuous_tx) {
+  if (tx_slot_type == NR_DOWNLINK_SLOT || tx_slot_type == NR_MIXED_SLOT || get_softmodem_params()->continuous_tx || IS_SOFTMODEM_RFSIM) {
     start_meas(&info->gNB->phy_proc_tx);
     phy_procedures_gNB_TX(info, frame_tx, slot_tx, 1);
 
@@ -231,6 +231,9 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
   output += print_meas_log(&gNB->dlsch_resource_mapping_stats, "DLSCH resource mapping", NULL, NULL, output,end-output);
   output += print_meas_log(&gNB->dlsch_precoding_stats, "DLSCH precoding", NULL, NULL, output,end-output);
   output += print_meas_log(&gNB->phy_proc_rx, "L1 Rx processing", NULL, NULL, output, end - output);
+  output += print_meas_log(&gNB->ts_deinterleave, "UL segment deinterleaving", NULL, NULL, output, end - output);
+  output += print_meas_log(&gNB->ts_rate_unmatch, "UL segment rate recovery", NULL, NULL, output, end - output);
+  output += print_meas_log(&gNB->ts_ldpc_decode, "UL segments decoding", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->ul_indication_stats, "UL Indication", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->slot_indication_stats, "Slot Indication", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->rx_pusch_stats, "PUSCH inner-receiver", NULL, NULL, output, end - output);
@@ -239,14 +242,26 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
   if (ru->feprx)
     output += print_meas_log(&ru->ofdm_demod_stats, "feprx", NULL, NULL, output, end - output);
 
+  bool full_slot = ru->half_slot_parallelization == 0;
   if (ru->feptx_prec) {
-    output += print_meas_log(&ru->precoding_stats,"feptx_prec",NULL,NULL, output, end - output);
+    output += print_meas_log(&ru->precoding_stats,
+                             full_slot ? "feptx_prec (per port)" : "feptx_prec (per port, half_slot)",
+                             NULL,
+                             NULL,
+                             output,
+                             end - output);
   }
 
   if (ru->feptx_ofdm) {
     output += print_meas_log(&ru->txdataF_copy_stats,"txdataF_copy",NULL,NULL, output, end - output);
-    output += print_meas_log(&ru->ofdm_mod_stats,"feptx_ofdm",NULL,NULL, output, end - output);
+    output += print_meas_log(&ru->ofdm_mod_stats,
+                             full_slot ? "feptx_ofdm (per port)" : "feptx_ofdm (per port, half_slot)",
+                             NULL,
+                             NULL,
+                             output,
+                             end - output);
     output += print_meas_log(&ru->ofdm_total_stats,"feptx_total",NULL,NULL, output, end - output);
+    output += print_meas_log(&ru->txdataF_copy_stats, "txdataF_copy", NULL, NULL, output, end - output);
   }
 
   if (ru->fh_north_asynch_in)
@@ -276,6 +291,9 @@ void *nrL1_stats_thread(void *param) {
   reset_meas(&gNB->phy_proc_tx);
   reset_meas(&gNB->dlsch_encoding_stats);
   reset_meas(&gNB->phy_proc_rx);
+  reset_meas(&gNB->ts_deinterleave);
+  reset_meas(&gNB->ts_rate_unmatch);
+  reset_meas(&gNB->ts_ldpc_decode);
   reset_meas(&gNB->ul_indication_stats);
   reset_meas(&gNB->slot_indication_stats);
   reset_meas(&gNB->rx_pusch_stats);
@@ -360,32 +378,29 @@ void term_gNB_Tpool(int inst) {
 }
 
 /// eNB kept in function name for nffapi calls, TO FIX
-void init_eNB_afterRU(void) {
-  int inst,ru_id,i,aa;
-  PHY_VARS_gNB *gNB;
-
-  for (inst=0; inst<RC.nb_nr_L1_inst; inst++) {
-    gNB = RC.gNB[inst];
-
+void init_eNB_afterRU(void)
+{
+  for (int inst = 0; inst < RC.nb_nr_L1_inst; inst++) {
+    PHY_VARS_gNB *gNB = RC.gNB[inst];
     phy_init_nr_gNB(gNB);
 
     // map antennas and PRACH signals to gNB RX
     if (0) AssertFatal(gNB->num_RU>0,"Number of RU attached to gNB %d is zero\n",gNB->Mod_id);
 
     LOG_D(NR_PHY, "Mapping RX ports from %d RUs to gNB %d\n", gNB->num_RU, gNB->Mod_id);
-
-    for (ru_id=0,aa=0; ru_id<gNB->num_RU; ru_id++) {
+    int aa = 0;
+    for (int ru_id = 0; ru_id < gNB->num_RU; ru_id++) {
       AssertFatal(gNB->RU_list[ru_id]->common.rxdataF != NULL, "RU %d : common.rxdataF is NULL\n", gNB->RU_list[ru_id]->idx);
       AssertFatal(gNB->RU_list[ru_id]->prach_rxsigF != NULL, "RU %d : prach_rxsigF is NULL\n", gNB->RU_list[ru_id]->idx);
-      
-      for (i=0; i<gNB->RU_list[ru_id]->nb_rx; aa++,i++) {
-        LOG_I(PHY,"Attaching RU %d antenna %d to gNB antenna %d\n",gNB->RU_list[ru_id]->idx,i,aa);
+      for (int i = 0; i < gNB->RU_list[ru_id]->nb_rx; aa++, i++) {
+        LOG_I(PHY,"Attaching RU %d antenna %d to gNB antenna %d\n", gNB->RU_list[ru_id]->idx, i, aa);
         gNB->prach_vars.rxsigF[aa] = gNB->RU_list[ru_id]->prach_rxsigF[0][i];
-        // TODO hardcoded beam to 0, still need to understand how to handle this properly
-        gNB->common_vars.rxdataF[0][aa] = (c16_t *)gNB->RU_list[ru_id]->common.rxdataF[i];
+        for (int b = 0; b < gNB->RU_list[ru_id]->num_beams_period; b++) {
+          int idx = i + b * gNB->RU_list[ru_id]->nb_rx;
+          gNB->common_vars.rxdataF[b][aa] = (c16_t *)gNB->RU_list[ru_id]->common.rxdataF[idx];
+        }
       }
     }
-
     /* TODO: review this code, there is something wrong.
      * In monolithic mode, we come here with nb_antennas_rx == 0
      * (not tested in other modes).
@@ -393,7 +408,6 @@ void init_eNB_afterRU(void) {
     //init_precoding_weights(RC.gNB[inst]);
     init_gNB_Tpool(inst);
   }
-
 }
 
 /**

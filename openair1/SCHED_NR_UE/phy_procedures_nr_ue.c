@@ -605,7 +605,34 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
     uint32_t llr_offset[NR_SYMBOLS_PER_SLOT] = {0};
 
     int32_t log2_maxh = 0;
+
+    const uint32_t rx_llr_layer_size = (G + dlsch[0].Nl - 1) / dlsch[0].Nl;
+
+    if (dlsch[0].Nl == 0 || rx_llr_layer_size == 0 || rx_llr_layer_size > 10 * 1000 * 1000) {
+      LOG_E(PHY, "rx_llr_layer_size %d, G %d, Nl, %d, discarding this pdsch\n", rx_llr_layer_size, G, dlsch[0].Nl);
+      return -1;
+    }
+    __attribute__((aligned(32))) int16_t layer_llr[dlsch[0].Nl][rx_llr_layer_size];
+
     start_meas_nr_ue_phy(ue, RX_PDSCH_STATS);
+    pdsch_scope_req_t scope_req = { .copy_chanest_to_scope = false,
+                                    .copy_rxdataF_to_scope = false,
+                                    .scope_rxdataF_offset = 0 };
+    if (UEScopeHasTryLock(ue)) {
+      metadata mt = {.frame = proc->frame_rx, .slot = proc->nr_slot_rx};
+      scope_req.copy_chanest_to_scope = UETryLockScopeData(ue,
+                                                           pdschChanEstimates,
+                                                           sizeof(c16_t),
+                                                           1,
+                                                           dlschCfg->number_rbs * NR_NB_SC_PER_RB * dlschCfg->number_symbols,
+                                                           &mt);
+      scope_req.copy_rxdataF_to_scope = UETryLockScopeData(ue,
+                                                           pdschRxdataF,
+                                                           sizeof(c16_t),
+                                                           1,
+                                                           dlschCfg->number_rbs * NR_NB_SC_PER_RB * dlschCfg->number_symbols,
+                                                           &mt);
+    }
     for (int m = dlschCfg->start_symbol; m < (dlschCfg->number_symbols + dlschCfg->start_symbol); m++) {
       bool first_symbol_flag = false;
       if (m == first_symbol_with_data)
@@ -621,6 +648,8 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
                       harq_pid,
                       pdsch_est_size,
                       pdsch_dl_ch_estimates,
+                      rx_llr_layer_size,
+                      layer_llr,
                       llr,
                       dl_valid_re,
                       rxdataF,
@@ -632,11 +661,25 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
                       ptrs_phase_per_slot,
                       ptrs_re_per_slot,
                       G,
-                      nvar)
-          < 0)
+                      nvar,
+                      &scope_req)
+          < 0) {
+        if (scope_req.copy_chanest_to_scope) {
+          UEunlockScopeData(ue, pdschChanEstimates);
+        }
+        if (scope_req.copy_rxdataF_to_scope) {
+          UEunlockScopeData(ue, pdschRxdataF);
+        }
         return -1;
+      }
     } // CRNTI active
     stop_meas_nr_ue_phy(ue, RX_PDSCH_STATS);
+    if (scope_req.copy_chanest_to_scope) {
+      UEunlockScopeData(ue, pdschChanEstimates);
+    }
+    if (scope_req.copy_rxdataF_to_scope) {
+      UEunlockScopeData(ue, pdschRxdataF);
+    }
     free(toFree);
     free(toFree2);
   }
@@ -815,7 +858,7 @@ static void nr_ue_dlsch_procedures(PHY_VARS_NR_UE *ue,
   }
 
   // DLSCH decoding finished! don't wait anymore in Tx process, we know if we should answer ACK/NACK PUCCH
-  if (dlsch[0].rnti_type == TYPE_C_RNTI_ && dlsch[0].dlsch_config.k1_feedback) {
+  if ((dlsch[0].rnti_type == TYPE_C_RNTI_ || dlsch[0].rnti_type == TYPE_RA_RNTI_) && dlsch[0].dlsch_config.k1_feedback) {
     const int ack_nack_slot_and_frame =
         (proc->nr_slot_rx + dlsch[0].dlsch_config.k1_feedback) + proc->frame_rx * ue->frame_parms.slots_per_frame;
     dynamic_barrier_join(&ue->process_slot_tx_barriers[ack_nack_slot_and_frame % NUM_PROCESS_SLOT_TX_BARRIERS]);
@@ -1010,6 +1053,8 @@ int pbch_pdcch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr_
   phy_pdcch_config->nb_search_space = 0;
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_UE_SLOT_FEP_PDCCH, VCD_FUNCTION_OUT);
   TracyCZoneEnd(ctx);
+  if (ue->phy_sim_rxdataF)
+    memcpy(ue->phy_sim_rxdataF, rxdataF[0], sizeof(int32_t) * nb_symb_pdcch * ue->frame_parms.ofdm_symbol_size);
   return sampleShift;
 }
 
@@ -1134,9 +1179,11 @@ void pdsch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr_phy_
     }
 
     if (ue->phy_sim_rxdataF)
-      memcpy(ue->phy_sim_rxdataF, rxdataF, sizeof(int32_t)*rxdataF_sz*ue->frame_parms.nb_antennas_rx);
+      memcpy(ue->phy_sim_rxdataF + start_symb_sch * ue->frame_parms.ofdm_symbol_size * sizeof(c16_t),
+             &rxdataF[0][start_symb_sch * ue->frame_parms.ofdm_symbol_size],
+             sizeof(int32_t) * nb_symb_sch * ue->frame_parms.ofdm_symbol_size);
     if (ue->phy_sim_pdsch_llr)
-      memcpy(ue->phy_sim_pdsch_llr, llr[0], sizeof(int16_t)*rx_llr_buf_sz);
+      memcpy(ue->phy_sim_pdsch_llr, llr[0], sizeof(int16_t) * rx_llr_buf_sz);
 
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_PDSCH_PROC, VCD_FUNCTION_OUT);
     for (int i=0; i<nb_codewords; i++)
@@ -1158,13 +1205,6 @@ void pdsch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr_phy_
     LOG_D(PHY,"[UE %d] Calculating bitrate Frame %d: total_TBS = %d, total_TBS_last = %d, bitrate %f kbits\n",
           ue->Mod_id,frame_rx,ue->total_TBS[gNB_id],
           ue->total_TBS_last[gNB_id],(float) ue->bitrate[gNB_id]/1000.0);
-
-#if UE_AUTOTEST_TRACE
-    if ((frame_rx % 100 == 0)) {
-      LOG_I(PHY,"[UE  %d] AUTOTEST Metric : UE_DLSCH_BITRATE = %5.2f kbps (frame = %d) \n", ue->Mod_id, (float) ue->bitrate[gNB_id]/1000.0, frame_rx);
-    }
-#endif
-
   }
 
 #ifdef EMOS

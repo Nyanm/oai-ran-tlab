@@ -48,9 +48,6 @@
 
 #define NGAP_UE_ID_FMT  "0x%06"PRIX32
 
-extern int asn_debug;
-extern int asn1_xer_print;
-
 # include "common/utils/LOG/log.h"
 # include "ngap_gNB_default_values.h"
 # define NGAP_ERROR(x, args...) LOG_E(NGAP, x, ##args)
@@ -85,6 +82,11 @@ extern int asn1_xer_print;
 typedef int (*ngap_message_decoded_callback)(sctp_assoc_t assoc_id, uint32_t stream, NGAP_NGAP_PDU_t *pdu);
 
 void encode_ngap_cause(NGAP_Cause_t *out, const ngap_cause_t *in);
+nr_guami_t decode_ngap_guami(const NGAP_GUAMI_t *in);
+ngap_ambr_t decode_ngap_UEAggregateMaximumBitRate(const NGAP_UEAggregateMaximumBitRate_t *in);
+nssai_t decode_ngap_nssai(const NGAP_S_NSSAI_t *in);
+ngap_security_capabilities_t decode_ngap_security_capabilities(const NGAP_UESecurityCapabilities_t *in);
+ngap_mobility_restriction_t decode_ngap_mobility_restriction(const NGAP_MobilityRestrictionList_t *in);
 
 /** @}*/
 

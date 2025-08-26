@@ -336,17 +336,14 @@ static void config_preamble_index(NR_UE_MAC_INST_t *mac)
       nb_of_preambles = preamb_ga;
     }
   }
-  int rand_preamb = (rand_r(&seed) % ra->ssb_ro_config.preambles_per_ssb);
+  int pream_per_ssb = min(ra->ssb_ro_config.preambles_per_ssb, nb_of_preambles);
+  int rand_preamb = rand_r(&seed) % pream_per_ssb;
   if (ra->ssb_ro_config.ssb_per_ro < 1)
     ra->ra_PreambleIndex = groupOffset + rand_preamb;
   else {
     int ssb_pr_idx = mac->ssb_list.nb_ssb_per_index[mac->mib_ssb] % (int)ra->ssb_ro_config.ssb_per_ro;
     ra->ra_PreambleIndex = groupOffset + (ssb_pr_idx * ra->ssb_ro_config.preambles_per_ssb) + rand_preamb;
   }
-  AssertFatal(ra->ra_PreambleIndex < nb_of_preambles,
-              "Error! Selected preamble %d which exceeds number of prambles available %d\n",
-              ra->ra_PreambleIndex,
-              nb_of_preambles);
 }
 
 static void configure_ra_preamble(NR_UE_MAC_INST_t *mac)
@@ -821,7 +818,7 @@ static void setup_ra_response_window(RA_config_t *ra,
 
   int ta_Common_slots = 0;
   if (ntn_Config_r17) {
-    const double ta_Common_ms = GET_COMPLETE_TIME_ADVANCE_MS(ntn_ta);
+    const double ta_Common_ms = get_total_TA_ms(ntn_ta);
     ta_Common_slots = (int)ceil(ta_Common_ms * slots_per_frame / 10);
   }
 
@@ -1069,7 +1066,7 @@ void nr_Msg3_transmitted(NR_UE_MAC_INST_t *mac, uint8_t CC_id, frame_t frameP, s
 {
   RA_config_t *ra = &mac->ra;
   NR_RACH_ConfigCommon_t *nr_rach_ConfigCommon = mac->current_UL_BWP->rach_ConfigCommon;
-  const double ta_Common_ms = GET_COMPLETE_TIME_ADVANCE_MS(&mac->ntn_ta);
+  const double ta_Common_ms = get_total_TA_ms(&mac->ntn_ta);
   const int slots_per_ms = mac->frame_structure.numb_slots_frame / 10;
 
   // start contention resolution timer

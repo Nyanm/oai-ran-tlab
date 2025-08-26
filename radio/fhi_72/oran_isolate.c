@@ -103,6 +103,11 @@ int trx_oran_set_gains(openair0_device *device, openair0_config_t *openair0_cfg)
 
 int trx_oran_get_stats(openair0_device *device)
 {
+  uint64_t total_time, used_time;
+  uint32_t num_core_used, core_used[64];
+  uint32_t ret = xran_get_time_stats(&total_time, &used_time, &num_core_used, &core_used[0], 0);
+  if (ret == 0)
+    LOG_I(HW, "xran_get_time_stats(): total thread time %ld, total time essential tasks %ld, num cores used %d\n", total_time, used_time, num_core_used);
   printf("ORAN: %s\n", __FUNCTION__);
   return (0);
 }
@@ -208,7 +213,7 @@ int trx_oran_ctlrecv(openair0_device *device, void *msg, ssize_t msg_len)
 void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
 {
   ru_info_t ru_info;
-  ru_info.nb_rx = ru->nb_rx;
+  ru_info.nb_rx = ru->nb_rx * ru->num_beams_period;
   ru_info.rxdataF = ru->common.rxdataF;
   ru_info.prach_buf = ru->prach_rxsigF[0]; // index: [prach_oca][ant_id]
 
@@ -262,7 +267,7 @@ void oran_fh_if4p5_south_out(RU_t *ru, int frame, int slot, uint64_t timestamp)
 {
   start_meas(&ru->tx_fhaul);
   ru_info_t ru_info;
-  ru_info.nb_tx = ru->nb_tx;
+  ru_info.nb_tx = ru->nb_tx * ru->num_beams_period;
   ru_info.txdataF_BF = ru->common.txdataF_BF;
   // printf("south_out:\tframe=%d\tslot=%d\ttimestamp=%ld\n",frame,slot,timestamp);
 

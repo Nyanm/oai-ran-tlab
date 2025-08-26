@@ -461,6 +461,11 @@ static uint64_t get_u64_mask(const paramdef_t *pd)
   return mask;
 }
 
+#ifdef F_RELEASE
+char bbdev_dev[32] = "";
+char bbdev_vfio_vf_token[64] = "";
+#endif
+
 static bool set_fh_io_cfg(struct xran_io_cfg *io_cfg, const paramdef_t *fhip, int nump, const int num_rus)
 {
   DevAssert(fhip != NULL);
@@ -474,8 +479,44 @@ static bool set_fh_io_cfg(struct xran_io_cfg *io_cfg, const paramdef_t *fhip, in
   for (int i = 0; i < num_dev; ++i) {
     io_cfg->dpdk_dev[i] = strdup(gpd(fhip, nump, ORAN_CONFIG_DPDK_DEVICES)->strlistptr[i]); // VFs devices
   }
+#ifdef F_RELEASE
+  io_cfg->bbdev_dev[0] = NULL; // BBDev dev name; max devices = 1
+  io_cfg->bbdev_vfio_vf_token[0] = NULL; // BBDev dev token; max devices = 1
+  char *shlibversion = NULL; // version of the LDPC coding library
+  paramdef_t LoaderParams_shlibversion[] = {{"shlibversion", NULL, 0, .strptr = &shlibversion, .defstrval = NULL, TYPE_STRING, 0, NULL}};
+  config_get(config_get_if(), LoaderParams_shlibversion, sizeofArray(LoaderParams_shlibversion), "loader.ldpc");
+  if (shlibversion != NULL && strncmp(shlibversion, "_aal", 4) == 0) {
+    uint32_t is_t2 = 0;    // If not 0 then include the BBDEV device in the EAL init for FHI
+    char *dpdk_dev = NULL;          // PCI address of the card
+    char *vfio_vf_token = NULL;     // vfio token for the bbdev card
+    paramdef_t LoaderParams[] = {
+      {"is_t2", NULL, 0, .uptr = &is_t2, .defuintval = 0, TYPE_UINT, 0, NULL},
+      {"dpdk_dev", NULL, 0, .strptr = &dpdk_dev, .defstrval = NULL, TYPE_STRING, 0, NULL},
+      {"vfio_vf_token", NULL, 0, .strptr = &vfio_vf_token, .defstrval = NULL, TYPE_STRING, 0, NULL}
+    };
+    config_get(config_get_if(), LoaderParams, sizeofArray(LoaderParams), "nrLDPC_coding_aal");
+
+    if (!is_t2) {
+      AssertFatal(dpdk_dev!=NULL, "nrLDPC_coding_aal.dpdk_dev was not provided");
+      snprintf(&bbdev_dev[0], sizeof(bbdev_dev), "%s", dpdk_dev);
+      io_cfg->bbdev_dev[0] = &bbdev_dev[0]; // BBDev dev name; max devices = 1
+      if(vfio_vf_token != NULL) {
+        snprintf(&bbdev_vfio_vf_token[0], sizeof(bbdev_vfio_vf_token), "%s", vfio_vf_token);
+        io_cfg->bbdev_vfio_vf_token[0] = &bbdev_vfio_vf_token[0]; // BBDev dev token; max devices = 1
+      } else {
+        io_cfg->bbdev_vfio_vf_token[0] = NULL; // BBDev dev token; max devices = 1
+      }
+      io_cfg->bbdev_mode = XRAN_BBDEV_MODE_HW_ON; // DPDK for BBDev
+    } else {
+      io_cfg->bbdev_mode = XRAN_BBDEV_NOT_USED; // DPDK for BBDev
+    }
+  } else {
+    io_cfg->bbdev_mode = XRAN_BBDEV_NOT_USED; // DPDK for BBDev
+  }
+#elif defined(E_RELEASE)
   io_cfg->bbdev_dev[0] = NULL; // BBDev dev name; max devices = 1
   io_cfg->bbdev_mode = XRAN_BBDEV_NOT_USED; // DPDK for BBDev
+#endif
   int dpdk_iova_mode_idx = config_paramidx_fromname((paramdef_t *)fhip, nump, ORAN_CONFIG_DPDK_IOVA_MODE);
   AssertFatal(dpdk_iova_mode_idx >= 0,"Index for dpdk_iova_mode config option not found!");
   io_cfg->dpdkIoVaMode = config_get_processedint(config_get_if(), (paramdef_t *)&fhip[dpdk_iova_mode_idx]); // IOVA mode
@@ -834,7 +875,7 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
 {
   AssertFatal(num_rus == 1 || num_rus == 2, "only support 1 or 2 RUs as of now\n");
   AssertFatal(ru_idx < num_rus, "illegal ru_idx %d: must be < %d\n", ru_idx, num_rus);
-  DevAssert(oai0->tx_num_channels > 0 && oai0->rx_num_channels > 0);
+  DevAssert(oai0->tx_num_channels > 0 && oai0->rx_num_channels > 0 && oai0->num_distributed_ru > 0);
   DevAssert(oai0->tx_bw > 0 && oai0->rx_bw > 0);
   DevAssert(oai0->tx_freq[0] > 0);
   for (int i = 1; i < oai0->tx_num_channels; ++i)
@@ -843,8 +884,6 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
   for (int i = 1; i < oai0->rx_num_channels; ++i)
     DevAssert(oai0->rx_freq[0] == oai0->rx_freq[i]);
   DevAssert(oai0->nr_band > 0);
-  AssertFatal(oai0->threequarter_fs == 0, "cannot use three-quarter sampling with O-RAN 7.2 split\n");
-
   paramdef_t FHconfigs[] = ORAN_FH_DESC;
   paramlist_def_t FH_ConfigList = {CONFIG_STRING_ORAN_FH};
   char aprefix[MAX_OPTNAME_SIZE] = {0};
@@ -879,7 +918,7 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
   fh_config->dpdk_port = ru_idx; // DPDK port number used for FH
   fh_config->sector_id = 0; // Band sector ID for FH; not used in xran
   fh_config->nCC = 1; // number of Component carriers supported on FH; M-plane info
-  fh_config->neAxc = RTE_MAX(oai0->tx_num_channels / num_rus, oai0->rx_num_channels / num_rus); // number of eAxc supported on one CC = max(PDSCH, PUSCH)
+  fh_config->neAxc = RTE_MAX(oai0->num_distributed_ru * oai0->tx_num_channels / num_rus, oai0->num_distributed_ru * oai0->rx_num_channels / num_rus); // number of eAxc supported on one CC = max(PDSCH, PUSCH)
   fh_config->neAxcUl = 0; // number of eAxc supported on one CC for UL direction = PUSCH; used only if XRAN_CATEGORY_B
   fh_config->nAntElmTRx = 0; // number of antenna elements for TX and RX = SRS; used only if XRAN_CATEGORY_B
   fh_config->nDLFftSize = 0; // DL FFT size; not used in xran

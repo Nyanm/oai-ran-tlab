@@ -78,8 +78,9 @@ TEST(yaml_config, yaml_get_existing_values) {
     uint16_t value;
     p.type = TYPE_UINT16;
     p.u16ptr = &value;
+    p.paramflags = PARAMFLAG_MANDATORY;
     char prefix[] = "test";
-    config_yaml_get(cfg, &p, 1, prefix);
+    EXPECT_EQ(config_yaml_get(cfg, &p, 1, prefix), 1);
     EXPECT_EQ(value, i);
   }
 
@@ -94,7 +95,7 @@ TEST(yaml_config, yaml_get_non_existing_values) {
   cfg->cfgP[0] = strdup("test1.yaml");
   EXPECT_EQ(config_yaml_init(cfg), 0);
 
-  // Testing paremters present in the test node
+  // Testing parameters not present in the test node
   paramdef_t p = {0};
   for (auto i = 4; i <= 5; i++) {
     sprintf(p.optname, "%s%d", "value", i);
@@ -387,6 +388,73 @@ TEST(yaml_config, test_read_mapping_as_list) {
   EXPECT_EQ(ret, 4);
 
   config_yaml_end(cfg);
+  free(cfg->cfgP[0]);
+  end_configmodule(cfg);
+}
+
+TEST(yaml_config, test_read_ipv4) {
+  configmodule_interface_t *cfg = static_cast<configmodule_interface_t*>(calloc(1, sizeof(*cfg)));
+  cfg->cfgP[0] = strdup("test_ipv4.yaml");
+  EXPECT_EQ(config_yaml_init(cfg), 0);
+
+  paramdef_t p = {};
+  p.type = TYPE_IPV4ADDR;
+  strncpy(p.optname, "ipv4_1", sizeof(p.optname) - 1);
+  uint32_t addr = 0;
+  p.uptr = &addr;
+  p.defstrval = nullptr;
+  char prefix[] = "test";
+  config_yaml_get(cfg, &p, 1, prefix);
+  printf("%x\n", addr);
+
+  strncpy(p.optname, "ipv4_2", sizeof(p.optname) - 1);
+  config_yaml_get(cfg, &p, 1, prefix);
+  printf("%x\n", addr);
+
+  p.defstrval = strdup("10.0.0.1");
+  strncpy(p.optname, "ipv4_3", sizeof(p.optname) - 1);
+  config_yaml_get(cfg, &p, 1, prefix);
+  printf("%x\n", addr);
+
+  config_yaml_end(cfg);
+  free(cfg->cfgP[0]);
+  end_configmodule(cfg);
+  free(p.defstrval);
+}
+
+TEST(yaml_config, yaml_read_str_as_int) {
+  configmodule_interface_t *cfg = static_cast<configmodule_interface_t*>(calloc(1, sizeof(*cfg)));
+  cfg->cfgP[0] = strdup("test_read_str_as_int.yaml");
+  EXPECT_EQ(config_yaml_init(cfg), 0);
+
+  // Testing paremters present in the test node
+  paramdef_t p = {0};
+  uint16_t value;
+  p.type = TYPE_UINT16;
+  p.u16ptr = &value;
+  p.paramflags = PARAMFLAG_MANDATORY;
+  char prefix[] = "test";
+  sprintf(p.optname, "%s", "var");
+  EXPECT_EQ(config_yaml_get(cfg, &p, 1, prefix), -1);
+
+
+  config_yaml_end(cfg);
+  free(cfg->cfgP[0]);
+  end_configmodule(cfg);
+}
+
+TEST(yaml_config, yaml_open_non_existing_file) {
+  configmodule_interface_t *cfg = static_cast<configmodule_interface_t*>(calloc(1, sizeof(*cfg)));
+  cfg->cfgP[0] = strdup("non_existing_file.yaml");
+  EXPECT_EQ(config_yaml_init(cfg), -1);
+  free(cfg->cfgP[0]);
+  end_configmodule(cfg);
+}
+
+TEST(yaml_config, malformed_file) {
+  configmodule_interface_t *cfg = static_cast<configmodule_interface_t*>(calloc(1, sizeof(*cfg)));
+  cfg->cfgP[0] = strdup("malformed.yaml");
+  EXPECT_EQ(config_yaml_init(cfg), -1);
   free(cfg->cfgP[0]);
   end_configmodule(cfg);
 }

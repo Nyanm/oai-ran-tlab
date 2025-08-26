@@ -138,9 +138,9 @@ typedef struct {
   int frame;
   int slot;
   // identifier for concurrent beams
-  int beam_nb;
   // prach duration in slots
   int num_slots;
+  int *beam_nb;
   nfapi_nr_prach_pdu_t pdu;  
 } gNB_PRACH_list_t;
 
@@ -287,7 +287,6 @@ typedef struct {
   /// - first index: beam index (for concurrent beams)
   /// - second index: beam_id [0.. symbols_per_frame[
   int **beam_id;
-  int num_beams;
   int num_beams_period;
   bool analog_bf;
   int32_t *debugBuff;
@@ -493,6 +492,8 @@ typedef struct PHY_VARS_gNB_s {
   int num_ulprbbl;
   uint16_t ulprbbl [MAX_BWP_SIZE];
 
+  bool enable_analog_das;
+
   time_stats_t phy_proc_tx;
   time_stats_t phy_proc_rx;
   time_stats_t rx_prach;
@@ -522,6 +523,9 @@ typedef struct PHY_VARS_gNB_s {
   time_stats_t slot_indication_stats;
   time_stats_t schedule_response_stats;
   time_stats_t ulsch_decoding_stats;
+  time_stats_t ts_deinterleave;
+  time_stats_t ts_rate_unmatch;
+  time_stats_t ts_ldpc_decode;
   time_stats_t ulsch_deinterleaving_stats;
   time_stats_t ulsch_channel_estimation_stats;
   time_stats_t pusch_channel_estimation_antenna_processing_stats;

@@ -90,7 +90,14 @@ void print_ue_mac_stats(const module_id_t mod, const int frame_rx, const int slo
   if (nbdl < 1)
     nbdl = 1;
 
-  cur += snprintf(cur, end - cur, "UE %d stats sfn: %d.%d, cumulated bad DCI %d\n", mod, frame_rx, slot_rx, mac->stats.bad_dci);
+  cur += snprintf(cur,
+                  end - cur,
+                  "UE %d RNTI %04x stats sfn: %d.%d, cumulated bad DCI %d\n",
+                  mod,
+                  mac->crnti,
+                  frame_rx,
+                  slot_rx,
+                  mac->stats.bad_dci);
 
   cur += snprintf(cur, end - cur, "    DL harq: %lu", mac->stats.dl.rounds[0]);
   int nb;
@@ -846,12 +853,11 @@ static void enqueue_nr_nfapi_msg(void *buffer, ssize_t len, nfapi_p7_message_hea
         case NFAPI_NR_PHY_MSG_TYPE_DL_TTI_REQUEST:
         {
             nfapi_nr_dl_tti_request_t *dl_tti_request = malloc16(sizeof(*dl_tti_request));
-            if (nfapi_nr_p7_message_unpack(buffer, len, dl_tti_request,
-                                            sizeof(*dl_tti_request), NULL) < 0)
-            {
-                LOG_E(NR_PHY, "Message dl_tti_request failed to unpack\n");
-                break;
-            }
+          const bool result = nfapi_nr_p7_message_unpack(buffer, len, dl_tti_request, sizeof(*dl_tti_request), NULL);
+          if (!result) {
+            LOG_E(NR_PHY, "Message dl_tti_request failed to unpack\n");
+            break;
+          }
             LOG_D(NR_PHY, "Received an NFAPI_NR_PHY_MSG_TYPE_DL_TTI_REQUEST message in sfn/slot %d %d. \n",
                     dl_tti_request->SFN, dl_tti_request->Slot);
 
@@ -870,12 +876,11 @@ static void enqueue_nr_nfapi_msg(void *buffer, ssize_t len, nfapi_p7_message_hea
         case NFAPI_NR_PHY_MSG_TYPE_TX_DATA_REQUEST:
         {
             nfapi_nr_tx_data_request_t *tx_data_request = malloc16(sizeof(*tx_data_request));
-            if (nfapi_nr_p7_message_unpack(buffer, len, tx_data_request,
-                                        sizeof(*tx_data_request), NULL) < 0)
-            {
-                LOG_E(NR_PHY, "Message tx_data_request failed to unpack\n");
-                break;
-            }
+          const bool result = nfapi_nr_p7_message_unpack(buffer, len, tx_data_request, sizeof(*tx_data_request), NULL);
+          if (!result) {
+            LOG_E(NR_PHY, "Message tx_data_request failed to unpack\n");
+            break;
+          }
             LOG_D(NR_PHY, "Received an NFAPI_NR_PHY_MSG_TYPE_TX_DATA_REQUEST message in SFN/slot %d %d. \n",
                     tx_data_request->SFN, tx_data_request->Slot);
             if (!put_queue(&nr_tx_req_queue, tx_data_request))
@@ -890,12 +895,11 @@ static void enqueue_nr_nfapi_msg(void *buffer, ssize_t len, nfapi_p7_message_hea
         case NFAPI_NR_PHY_MSG_TYPE_UL_DCI_REQUEST:
         {
             nfapi_nr_ul_dci_request_t *ul_dci_request = malloc16(sizeof(*ul_dci_request));
-            if (nfapi_nr_p7_message_unpack(buffer, len, ul_dci_request,
-                                            sizeof(*ul_dci_request), NULL) < 0)
-            {
-                LOG_E(NR_PHY, "Message ul_dci_request failed to unpack\n");
-                break;
-            }
+          const bool result = nfapi_nr_p7_message_unpack(buffer, len, ul_dci_request, sizeof(*ul_dci_request), NULL);
+          if (!result) {
+            LOG_E(NR_PHY, "Message ul_dci_request failed to unpack\n");
+            break;
+          }
             LOG_D(NR_PHY, "Received an NFAPI_NR_PHY_MSG_TYPE_UL_DCI_REQUEST message in SFN/slot %d %d. \n",
                     ul_dci_request->SFN, ul_dci_request->Slot);
             if (!put_queue(&nr_ul_dci_req_queue, ul_dci_request))
@@ -910,12 +914,11 @@ static void enqueue_nr_nfapi_msg(void *buffer, ssize_t len, nfapi_p7_message_hea
         case NFAPI_NR_PHY_MSG_TYPE_UL_TTI_REQUEST:
         {
             nfapi_nr_ul_tti_request_t *ul_tti_request = malloc16(sizeof(*ul_tti_request));
-            if (nfapi_nr_p7_message_unpack(buffer, len, ul_tti_request,
-                                           sizeof(*ul_tti_request), NULL) < 0)
-            {
-                LOG_E(NR_PHY, "Message ul_tti_request failed to unpack\n");
-                break;
-            }
+          const bool result = nfapi_nr_p7_message_unpack(buffer, len, ul_tti_request, sizeof(*ul_tti_request), NULL);
+          if (!result) {
+            LOG_E(NR_PHY, "Message ul_tti_request failed to unpack\n");
+            break;
+          }
             /* We are filtering UL_TTI_REQs below. We only care about UL_TTI_REQs that
                will trigger sending a ul_harq (CRC/RX pair). This UL_TTI_REQ will have
                NFAPI_NR_UL_CONFIG_PUSCH_PDU_TYPE. If we have not yet completed the CBRA/
@@ -1106,9 +1109,11 @@ static int handle_bcch_dlsch(NR_UE_MAC_INST_t *mac,
                              unsigned int gNB_index,
                              uint8_t ack_nack,
                              uint8_t *pduP,
-                             uint32_t pdu_len)
+                             uint32_t pdu_len,
+                             int frame,
+                             int slot)
 {
-  nr_ue_decode_BCCH_DL_SCH(mac, cc_id, gNB_index, ack_nack, pduP, pdu_len);
+  nr_ue_decode_BCCH_DL_SCH(mac, cc_id, gNB_index, ack_nack, pduP, pdu_len, frame, slot);
   return 0;
 }
 
@@ -1290,10 +1295,13 @@ static uint32_t nr_ue_dl_processing(NR_UE_MAC_INST_t *mac, nr_downlink_indicatio
           break;
         case FAPI_NR_RX_PDU_TYPE_SIB:
           ret_mask |= (handle_bcch_dlsch(mac,
-                                         dl_info->cc_id, dl_info->gNB_index,
+                                         dl_info->cc_id,
+                                         dl_info->gNB_index,
                                          rx_indication_body.pdsch_pdu.ack_nack,
                                          rx_indication_body.pdsch_pdu.pdu,
-                                         rx_indication_body.pdsch_pdu.pdu_length)) << FAPI_NR_RX_PDU_TYPE_SIB;
+                                         rx_indication_body.pdsch_pdu.pdu_length,
+                                         dl_info->frame,
+                                         dl_info->slot)) << FAPI_NR_RX_PDU_TYPE_SIB;
           break;
         case FAPI_NR_RX_PDU_TYPE_DLSCH:
           ret_mask |= (handle_dlsch(mac, dl_info, i)) << FAPI_NR_RX_PDU_TYPE_DLSCH;
