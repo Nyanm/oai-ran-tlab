@@ -347,9 +347,13 @@ static void unpack_output(uint32_t *f,
   	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5));
   	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6));
   	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7));
+	/*
         uint32_t tmp = vaddvq_u32(cshift);
 	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
 	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
+	*/
+        uint64_t tmp = (uint64_t)vaddvq_u32(cshift);
+	*(uint64_t*)(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
 	bit_index+=32;
       }
       uint32_t Emod32=E&31;
