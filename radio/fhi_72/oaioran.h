@@ -31,6 +31,13 @@ typedef struct {
   uint32_t f;
 } oran_sync_info_t;
 
+typedef struct {
+  int frame;
+  int slot;
+  int symbol;
+  struct timespec ts;
+} ru_dl_sync_info_t;
+
 /** @brief xran callback for fronthaul RX, see xran_5g_fronthault_config(). */
 void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status);
 /** @brief xran callback for time alignment, see xran_reg_physide_cb(). */

@@ -22,6 +22,8 @@
 #ifndef ORAN_INIT_H
 #define ORAN_INIT_H
 
+#define RU_SYMBOLS_PER_CALLBACK 7
+
 typedef struct oran_bufs {
   struct xran_flat_buffer tx[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN][XRAN_NUM_OF_SYMBOL_PER_SLOT];
   struct xran_flat_buffer tx_prbmap[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
@@ -53,6 +55,12 @@ typedef struct oran_port_instance_t {
   struct xran_cb_tag prach_tag;
   struct xran_cb_tag pusch_tag;
 } oran_port_instance_t;
+
+typedef struct {
+  int start_symbol;
+  int num_symbols;
+  int symbol_diff;
+} oran_symbol_callback_args_t;
 
 extern struct xran_fh_config gxran_fh_config[XRAN_PORTS_NUM];
 extern void *gxran_handle;
