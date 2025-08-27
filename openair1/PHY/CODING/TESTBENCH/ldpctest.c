@@ -321,6 +321,8 @@ one_measurement_t test_ldpc(short max_iterations,
   decode_abort_t dec_abort;
   init_abort(&dec_abort);
   
+  ldpc_toCompare.LDPCinit();
+  
   for (int trial = 0; trial < ntrials; trial++) {
     unsigned int segment_bler = 0;
     //// encoder
@@ -382,8 +384,10 @@ one_measurement_t test_ldpc(short max_iterations,
       decParams[j].LastTrial = (trial == ntrials - 1) ? 1 : 0;
 
 
-      ldpc_toCompare.LDPCinit();
+
     }
+
+printf("Encoding done\n");
 
     //Decoder
 if(PARALLEL_PATH == 1){

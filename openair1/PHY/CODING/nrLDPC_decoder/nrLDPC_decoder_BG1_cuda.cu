@@ -1866,7 +1866,7 @@ cudaDeviceSynchronize();
 CHECK(cudaGetLastError());
 */
     // Start graph recording
-  /////cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
+cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
 //check_ptr_kernel_easy<<<1,10>>>(2);
 //cudaDeviceSynchronize();
 //CHECK(cudaGetLastError());
@@ -1927,23 +1927,23 @@ CHECK(cudaGetLastError());
      }
 
       // stop recording
-    ////cudaStreamEndCapture(stream, &decoderGraphs[CudaStreamIdx]);
+    cudaStreamEndCapture(stream, &decoderGraphs[CudaStreamIdx]);
     //printf("5\n");
-    ////cudaGraphInstantiate(&decoderGraphExec[CudaStreamIdx], decoderGraphs[CudaStreamIdx], NULL, NULL, 0);
-    ////graphCreated[CudaStreamIdx] = true;
+    cudaGraphInstantiate(&decoderGraphExec[CudaStreamIdx], decoderGraphs[CudaStreamIdx], NULL, NULL, 0);
+    graphCreated[CudaStreamIdx] = true;
 
     // Execute （make sure the first trial finish）
-    ////cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
+    cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);
-    cudaDeviceSynchronize();
-    printf("Graphs should be captured\n");
+    //cudaDeviceSynchronize();
+    //printf("Graphs should be captured\n");
     //cudaStreamSynchronize(stream);
   } else {
     //printf("Are you here???\n");
     // reuse the graph after
     if(CudaStreamIdx != 0){
       //uncomment below if you want streams works in sequence
-      cudaStreamWaitEvent(streams[CudaStreamIdx], doneEvent[CudaStreamIdx-1], 0);//cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]); 
+      //cudaStreamWaitEvent(streams[CudaStreamIdx], doneEvent[CudaStreamIdx-1], 0);//cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]); 
     }
     cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);

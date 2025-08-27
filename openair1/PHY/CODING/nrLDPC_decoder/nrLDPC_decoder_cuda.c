@@ -488,12 +488,10 @@ bool check_kernel_args_for_graph(const void* p_lut, // device
   return ok;
 }
 
-int32_t LDPCinit()
-{
-  return 0;
-}
+
 int32_t LDPCinit_cuda()
 {
+  printf("CUDA LDPC decoder initiating\n");
   size_t cn_bytes = MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_CN_PROC_BUF * sizeof(int8_t);
   size_t bn_bytes = MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF * sizeof(int8_t);
   size_t llr_bytes = MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR * sizeof(int8_t);
@@ -564,10 +562,13 @@ if (err != cudaSuccess) {
   return 0;
 }
 
-int32_t LDPCshutdown()
+int32_t LDPCinit()
 {
+  printf("initialling\n");
+  LDPCinit_cuda();
   return 0;
 }
+
 int32_t LDPCshutdown_cuda()
 {
   if (d_cnProcBuf)
@@ -601,7 +602,12 @@ int32_t LDPCshutdown_cuda()
 
   return 0;
 }
+int32_t LDPCshutdown()
+{
 
+  LDPCshutdown_cuda();
+  return 0;
+}
 int32_t LDPCdecoder(t_nrLDPC_dec_params* p_decParams,
                     uint8_t harq_pid,
                     uint8_t ulsch_id,

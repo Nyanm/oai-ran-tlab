@@ -96,21 +96,22 @@ static inline void *nrLDPC_circ_memcpy(int8_t *str1, const int8_t *str2, uint16_
    \param BG Base graph
 */
 static inline void nrLDPC_llr2llrProcBuf(t_nrLDPC_lut* p_lut, int8_t* llr, int8_t* llrProcBuf, uint16_t Z, uint8_t BG)
-{printf("1\t");
+{
+//{printf("1\t");
   const uint8_t numBn2CnG1 = p_lut->numBnInBnGroups[0];
   uint32_t startColParity = (BG == 1) ? (NR_LDPC_START_COL_PARITY_BG1) : (NR_LDPC_START_COL_PARITY_BG2);
-printf("2\t");
+//printf("2\t");
   uint32_t colG1 = startColParity * Z;
-printf("3\t");
+//printf("3\t");
   const uint16_t* lut_llr2llrProcBufAddr = p_lut->llr2llrProcBufAddr;
   const uint8_t* lut_llr2llrProcBufBnPos = p_lut->llr2llrProcBufBnPos;
-printf("4\t");
-printf("llr               = %p\n", (void*)llr);
-printf("&llr[colG1]               = %p\n", (void*)&llr[colG1]);
-printf("llrProcBuf        = %p\n", (void*)llrProcBuf);
-printf("numBn2CnG1        = %u\n", numBn2CnG1);
-printf("colG1             = %u\n", colG1);
-printf("memcpy size       = %u\n", numBn2CnG1 * Z);
+//printf("4\t");
+//printf("llr               = %p\n", (void*)llr);
+//printf("&llr[colG1]               = %p\n", (void*)&llr[colG1]);
+//printf("llrProcBuf        = %p\n", (void*)llrProcBuf);
+//printf("numBn2CnG1        = %u\n", numBn2CnG1);
+//printf("colG1             = %u\n", colG1);
+//printf("memcpy size       = %u\n", numBn2CnG1 * Z);
 
   // Copy LLRs connected to 1 CN
   if (numBn2CnG1 > 0) {
