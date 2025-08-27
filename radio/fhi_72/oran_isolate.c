@@ -54,6 +54,7 @@ typedef struct {
 } oran_eth_state_t;
 
 notifiedFIFO_t oran_sync_fifo;
+notifiedFIFO_t ru_dl_sync_fifo;
 
 int trx_oran_start(openair0_device *device)
 {
@@ -209,6 +210,12 @@ int trx_oran_ctlrecv(openair0_device *device, void *msg, ssize_t msg_len)
     rru_config_msg->type = RRU_config_ok;
   }
   return 0;
+}
+
+void oran_fh_if4p5_north_in(uint32_t **txdataF, int nb_tx, sense_of_time_t* sense_of_time, int *num_symbols) {
+  *num_symbols = RU_SYMBOLS_PER_CALLBACK;
+  int ret = xran_fh_tx_read_slot(txdataF, nb_tx, &sense_of_time->frame, &sense_of_time->slot, &sense_of_time->symbol, &sense_of_time->ts);
+  AssertFatal(ret == 0, "ORAN: Error reading slot");
 }
 
 void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
@@ -401,6 +408,7 @@ __attribute__((__visibility__("default"))) int transport_init(openair0_device *d
   device->get_internal_parameter = get_internal_parameter;
   device->priv = eth;
   device->openair0_cfg = &openair0_cfg[0];
+  device->xran_api.north_in_func = oran_fh_if4p5_north_in;
 
   return 0;
 }

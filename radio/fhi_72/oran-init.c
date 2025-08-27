@@ -52,6 +52,8 @@ static struct xran_fh_init g_fh_init = {0};
 static struct xran_fh_config g_fh_config[XRAN_PORTS_NUM] = {0};
 static uint32_t g_prach_conf_duration[XRAN_PORTS_NUM] = {0};
 
+int32_t symbol_callback(void *args, struct xran_sense_of_time* p_sense_of_time);
+
 static uint32_t get_nSW_ToFpga_FTH_TxBufferLen(int mu, int sections)
 {
   uint32_t xran_max_sections_per_slot = RTE_MAX(sections, XRAN_MIN_SECTIONS_PER_SLOT);
@@ -298,6 +300,7 @@ static void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t stat
 }
 
 static void oran_allocate_buffers(void *handle,
+                                  bool is_du,
                                   int xran_inst,
                                   int num_sectors,
                                   oran_port_instance_t *portInstances,
@@ -425,8 +428,32 @@ static void oran_allocate_buffers(void *handle,
     }
   }
 
-  xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, oai_xran_fh_rx_callback, &portInstances->pusch_tag);
-  xran_5g_prach_req(pi->instanceHandle, prach, prachdecomp, oai_xran_fh_rx_prach_callback, &portInstances->prach_tag);
+  if (is_du) {
+    xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, oai_xran_fh_rx_callback, &portInstances->pusch_tag);
+    xran_5g_prach_req(pi->instanceHandle, prach, prachdecomp, oai_xran_fh_rx_prach_callback, &portInstances->prach_tag);
+  }
+  else {
+    static struct xran_sense_of_time sym_cb_time_half_slot;
+    static struct xran_sense_of_time sym_cb_time_full_slot;
+    static oran_symbol_callback_args_t args_half_slot;
+    static oran_symbol_callback_args_t args_full_slot;
+    args_half_slot = (oran_symbol_callback_args_t){
+      .start_symbol = 0,
+      .num_symbols = RU_SYMBOLS_PER_CALLBACK,
+    };
+    args_full_slot = (oran_symbol_callback_args_t){
+      .start_symbol = 7,
+      .num_symbols = RU_SYMBOLS_PER_CALLBACK,
+    };
+
+    xran_reg_sym_cb(handle, symbol_callback, &args_half_slot, &sym_cb_time_half_slot, 6, XRAN_CB_SYM_TX_WIN_END);
+    xran_reg_sym_cb(handle, symbol_callback, &args_full_slot, &sym_cb_time_full_slot, 13, XRAN_CB_SYM_TX_WIN_END);
+    // Only setup UPlane/CPlane buffers for O-RU. O-RU does not need callback for PUSCH and PRACH as the timing will be reliant on
+    // the underlying RF device
+    xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, NULL, NULL);
+    // TODO: PRACH
+    // TODO: Beamforming weights
+  }
 }
 
 int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_config *xran_fh_config)
@@ -440,6 +467,7 @@ int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_confi
     exit(-1);
   }
 
+  bool is_du = xran_fh_init->io_cfg.id == 0;
   /** process all the O-RU|O-DU for use case */
   for (int32_t o_xu_id = 0; o_xu_id < xran_fh_init->xran_ports; o_xu_id++) {
     print_fh_config(&xran_fh_config[o_xu_id]);
@@ -457,9 +485,9 @@ int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_confi
     pi->pusch_tag = tag;
 #ifdef E_RELEASE
     LOG_W(HW, "Please be aware that E release support will be removed in the future. Consider switching to F release.\n");
-    oran_allocate_buffers(gxran_handle, o_xu_id, 1, pi, &xran_fh_config[o_xu_id]);
+    oran_allocate_buffers(gxran_handle, is_du, o_xu_id, 1, pi, &xran_fh_config[o_xu_id]);
 #elif defined F_RELEASE
-    oran_allocate_buffers(gxran_handle, o_xu_id, 1, pi, xran_fh_init->mtu, &xran_fh_config[o_xu_id]);
+    oran_allocate_buffers(gxran_handle, is_du, o_xu_id, 1, pi, xran_fh_init->mtu, &xran_fh_config[o_xu_id]);
 #endif
 
     if ((xret = xran_reg_physide_cb(gxran_handle, oai_physide_dl_tti_call_back, NULL, 10, XRAN_CB_TTI)) != XRAN_STATUS_SUCCESS) {
