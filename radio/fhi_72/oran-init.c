@@ -19,6 +19,7 @@
  *      contact@openairinterface.org
  */
 
+#include "oaioran_ru.h"
 #include "xran_fh_o_du.h"
 #include "xran_pkt.h"
 #include "xran_pkt_up.h"
@@ -328,6 +329,7 @@ static void oran_allocate_cplane_buffers(void *instHandle,
 }
 
 static void oran_allocate_buffers(void *handle,
+                                  bool is_du,
                                   int xran_inst,
                                   int num_sectors,
                                   oran_port_instance_t *portInstances,
@@ -491,13 +493,19 @@ static void oran_allocate_buffers(void *handle,
     }
   }
 
+  if (is_du) {
 #ifdef K_RELEASE
-  xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, oai_xran_fh_rx_callback, &portInstances->pusch_tag, fh_config->nNumerology[0]);
-  xran_5g_prach_req(pi->instanceHandle, prachdst, prachdstdecomp, oai_xran_fh_rx_prach_callback, &portInstances->prach_tag, fh_config->nNumerology[0]);
+    xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, oai_xran_fh_rx_callback, &portInstances->pusch_tag, fh_config->nNumerology[0]);
+    xran_5g_prach_req(pi->instanceHandle, prachdst, prachdstdecomp, oai_xran_fh_rx_prach_callback, &portInstances->prach_tag, fh_config->nNumerology[0]);
 #elif defined(E_RELEASE) || defined(F_RELEASE)
-  xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, oai_xran_fh_rx_callback, &portInstances->pusch_tag);
-  xran_5g_prach_req(pi->instanceHandle, prachdst, prachdstdecomp, oai_xran_fh_rx_prach_callback, &portInstances->prach_tag);
+    xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, oai_xran_fh_rx_callback, &portInstances->pusch_tag);
+    xran_5g_prach_req(pi->instanceHandle, prachdst, prachdstdecomp, oai_xran_fh_rx_prach_callback, &portInstances->prach_tag);
 #endif
+  } else {
+    xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, NULL, NULL, fh_config->nNumerology[0]);
+    const int num_callbacks_per_slot = 2; // results in callbacks at RX window end of symbol 7 and 14.
+    install_symbol_callback(gxran_handle, num_callbacks_per_slot, fh_config->nNumerology[0]);
+  }
 }
 
 int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_config *xran_fh_config)
@@ -515,6 +523,7 @@ int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_confi
     exit(-1);
   }
 
+  bool is_du = xran_fh_init->io_cfg.id == 0;
   /** process all the O-RU|O-DU for use case */
   for (int32_t o_xu_id = 0; o_xu_id < xran_fh_init->xran_ports; o_xu_id++) {
     print_fh_config(&xran_fh_config[o_xu_id]);
@@ -532,9 +541,9 @@ int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_confi
     pi->pusch_tag = tag;
 #ifdef E_RELEASE
     LOG_W(HW, "Please be aware that E release support will be removed in the future. Consider switching to F release.\n");
-    oran_allocate_buffers(gxran_handle, o_xu_id, 1, pi, &xran_fh_config[o_xu_id]);
+    oran_allocate_buffers(gxran_handle, is_du, o_xu_id, 1, pi, &xran_fh_config[o_xu_id]);
 #elif defined(F_RELEASE) || defined(K_RELEASE)
-    oran_allocate_buffers(gxran_handle, o_xu_id, 1, pi, xran_fh_init->mtu, &xran_fh_config[o_xu_id]);
+    oran_allocate_buffers(gxran_handle, is_du, o_xu_id, 1, pi, xran_fh_init->mtu, &xran_fh_config[o_xu_id]);
 #endif
 
 #ifdef K_RELEASE
