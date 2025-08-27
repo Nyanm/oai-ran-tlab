@@ -10,6 +10,7 @@ __global__ void ldpc_BG1_Zc384_worker(uint32_t *c[4],uint32_t *d[4]) {
 
   int i2 = threadIdx.x;
   int i1 = blockIdx.y;
+  if(i1 ==0 && i2 == 0)printf("The encoder is running\n");
   if (i2 < 384) {
     c32+=i2;
     d32+=i2;

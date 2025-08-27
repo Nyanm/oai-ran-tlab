@@ -40,14 +40,15 @@
 #include "PHY/sse_intrin.h"
 #include "openair1/PHY/CODING/nrLDPC_extern.h"
 
-#include "ldpc_encode_parity_check_cuda.c"
 #include "ldpc_generate_coefficient.c"
 
 #include <cuda_runtime.h>
 
-uint32_t *cc0[4];
-uint32_t *dd0[4];
+//#define DEBUG_LDPC 1 
 
+#include "ldpc_encode_parity_check_cuda.c"
+uint32_t **d_dev;
+uint32_t *d_host[4];
 int managed = 0, concurrent = 0, uva = 0, pageable = 0, pageable_uses_host = 0;
 
 void cuda_support_init() {
@@ -58,7 +59,7 @@ printf("We are doing the init here!\n");
     cudaGetDeviceProperties(&prop, dev);
 
 
-    //cudaDeviceGetAttribute(&managed, cudaDevAttrManagedMemory, dev);
+    cudaDeviceGetAttribute(&managed, cudaDevAttrManagedMemory, dev);
     cudaDeviceGetAttribute(&concurrent, cudaDevAttrConcurrentManagedAccess, dev);
     cudaDeviceGetAttribute(&uva, cudaDevAttrUnifiedAddressing, dev);
     cudaDeviceGetAttribute(&pageable, cudaDevAttrPageableMemoryAccess, dev);
@@ -66,23 +67,29 @@ printf("We are doing the init here!\n");
 
     LOG_I(NR_PHY,"Device: %s (cc %d.%d)\n", prop.name, prop.major, prop.minor);
     LOG_I(NR_PHY,"Unified Virtual Addressing (UVA): %s\n", uva ? "YES" : "NO");
-    //LOG_I(NR_PHY,"Managed (Unified) Memory:        %s\n", managed ? "YES" : "NO");
+    LOG_I(NR_PHY,"Managed (Unified) Memory:        %s\n", managed ? "YES" : "NO");
     LOG_I(NR_PHY,"Concurrent managed access:       %s\n", concurrent ? "YES" : "NO");
     LOG_I(NR_PHY,"Pageable memory access:          %s\n", pageable ? "YES" : "NO");
     LOG_I(NR_PHY,"Uses host page tables:           %s\n", pageable_uses_host ? "YES" : "NO");
 
   // initialize input and output memory
-  if (!managed) {
+  if (!pageable_uses_host) {
     printf("How you doing?\n");
+    cudaError_t err=cudaMalloc((void **)&c_dev,4*sizeof(uint32_t*));
+    AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
     for (int i=0;i<4;i++) {
-      cudaError_t err=cudaMalloc((void**)&cc0[i],22*384*sizeof(uint32_t));
+      cudaError_t err=cudaMalloc((void**)&c_host[i],2*22*384*sizeof(uint32_t));
       AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
     }
+    cudaMemcpy(c_dev,c_host,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
   }
+  cudaError_t err=cudaMalloc((void**)&d_dev,4*sizeof(uint32_t*));
+  AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
   for (int i=0;i<4;i++) {
-      cudaError_t err=cudaMalloc((void**)&dd0[i],46*384*sizeof(uint32_t));
+      cudaError_t err=cudaMalloc((void**)&d_host[i],46*384*sizeof(uint32_t));
       AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
   }
+  cudaMemcpy(d_dev,d_host,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
 }
 
 int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implemparams_t *impp)
@@ -133,7 +140,8 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
 
 #if 0
   // unoptimized version of input processing
-  for (; i_dword < block_length; i_dword++) {
+  unsigned int temp;
+  for (int i_dword=0; i_dword < block_length; i_dword++) {
     unsigned int i = i_dword;
     for (int j = 0; j < impp->n_segments; j++) {
 
@@ -142,8 +150,28 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
     }
   }
 #else
-#ifdef __AVX2__
+#ifndef __aarch64__
+  simde__m256i andmask = simde_mm256_set_epi32(0x1,0x2,0x4,0x8,0x10,0x20,0x40,0x80);  // every 8 bits -> 8 bytes, pattern repeats.
+  simde__m256i zero256 = simde_mm256_setzero_si256();
+  simde__m256i masks[32];
+  register simde__m256i c256;
+  for (int i=0;i<32;i++) {
+    masks[i] = simde_mm256_set1_epi32(1<<i);
+  }
 
+  int i;
+  for (i=0; i < block_length; i += 8) {
+    unsigned int i8 = i >> 3;
+    for (int j0=0;j0<n_inputs;j0++) {
+      c256 = simde_mm256_and_si256(simde_mm256_cmpeq_epi32(simde_mm256_andnot_si256(simde_mm256_set1_epi32(input[j0<<5][i8]),andmask),zero256),masks[0]);
+      int j2 = 32;
+      if (j0==(n_inputs-1)) j2= impp->n_segments-(j0<<5);
+      for (int j=1; j < j2; j++) {
+        c256 = simde_mm256_or_si256(simde_mm256_and_si256(simde_mm256_cmpeq_epi32(simde_mm256_andnot_si256(simde_mm256_set1_epi32(input[(j0<<5)+j][i8]),andmask),zero256),masks[j]),c256);
+      }
+      ((simde__m256i *)cc[j0])[i8] = c256;
+    }
+  }
 #else
   int i2=0;
   const int32_t ucShifta[32][4] = { 
@@ -588,30 +616,42 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
   }
 #endif
 #endif
+  uint32_t c[n_inputs][2 * 22 * Zc] ; //double size matrix of c
+  uint32_t *cp[4];
+  for (int s=0;s<n_inputs;s++)  {
+    for (int i1 = 0; i1 < ncols; i1++)   {
+      memcpy(&c[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
+      memcpy(&c[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
+    }
+    cp[s]=c[s];
+  }
+  if (!pageable_uses_host) {
+    for (int s=0;s<n_inputs;s++) {
+      cudaError_t err = cudaMemcpy(c_host[s],c[s],sizeof(uint32_t)*2*22*Zc,cudaMemcpyHostToDevice);
+      AssertFatal(err == cudaSuccess, "c_dev[%d] %p CUDA Error: %s\n", s, c_dev[s],cudaGetErrorString(err)); 			
+    }
+  }
+
   if(impp->tinput != NULL) stop_meas(impp->tinput);
 
   if (BG==1 && Zc==384)  {
     //parity check part
     if(impp->tparity != NULL) start_meas(impp->tparity);
-    uint32_t *ccp[n_inputs];
-    for (int s=0;s<n_inputs;s++) {
-      ccp[s]=cc[s];
-    }
-    encode_parity_check_part_cuda(ccp, dd0, BG, Zc, Kb, ncols,n_inputs);
+    encode_parity_check_part_cuda(pageable_uses_host? cp : c_dev, d_dev, BG, Zc, Kb, ncols,n_inputs);
     if(impp->tparity != NULL) stop_meas(impp->tparity);
   }
   else {
-	  AssertFatal(1==0,"Only BG1 Zc=384 for now\n");
+    AssertFatal(1==0,"Only BG1 Zc=384 for now\n");
   }
-
 
   if(impp->toutput != NULL) start_meas(impp->toutput);
   for (int s=0;s<n_inputs;s++) {
     memcpy(output[s],&cc[s][2*Zc],sizeof(uint32_t)*(block_length-(2*Zc)));
-    cudaError_t err = cudaMemcpy(&output[s][block_length-(2*Zc)],dd0[s],sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),2);
-    AssertFatal(err == cudaSuccess, "dd0[%d] %p CUDA Error: %s\n", s, dd0[s],cudaGetErrorString(err)); 							
+    cudaError_t err = cudaMemcpy(&output[s][block_length-(2*Zc)],d_host[s],sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),cudaMemcpyDeviceToHost);
+    AssertFatal(err == cudaSuccess, "d_dev[%d] %p CUDA Error: %s\n", s, d_dev[s],cudaGetErrorString(err)); 			
   }
   if(impp->toutput != NULL) stop_meas(impp->toutput);
+
   return 0;
 }
 

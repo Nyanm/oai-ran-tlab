@@ -629,23 +629,99 @@ static inline uint32_t nrLDPC_init(t_nrLDPC_dec_params* p_decParams, t_nrLDPC_lu
     // LUT that only depend on R
     if (R == 13) {
       p_lut->startAddrBnProcBuf[0] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG3);
-      p_lut->startAddrBnProcBuf[1] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG4);
-      p_lut->startAddrBnProcBuf[2] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG5);
-      p_lut->startAddrBnProcBuf[3] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG6);
-      p_lut->startAddrBnProcBuf[4] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG7);
-      p_lut->startAddrBnProcBuf[5] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG8);
-      p_lut->startAddrBnProcBuf[6] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG9);
-      p_lut->startAddrBnProcBuf[7] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG10);
-      p_lut->startAddrBnProcBuf[8] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG19);
+//printf("[startAddrBnProcBuf[0]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->startAddrBnProcBuf[0].d,
+ //      p_lut->startAddrBnProcBuf[0].dim1,
+//       p_lut->startAddrBnProcBuf[0].dim2);
+
+p_lut->startAddrBnProcBuf[1] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG4);
+//printf("[startAddrBnProcBuf[1]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->startAddrBnProcBuf[1].d,
+//       p_lut->startAddrBnProcBuf[1].dim1,
+//       p_lut->startAddrBnProcBuf[1].dim2);
+
+p_lut->startAddrBnProcBuf[2] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG5);
+//printf("[startAddrBnProcBuf[2]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->startAddrBnProcBuf[2].d,
+//       p_lut->startAddrBnProcBuf[2].dim1,
+//       p_lut->startAddrBnProcBuf[2].dim2);
+
+p_lut->startAddrBnProcBuf[3] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG6);
+//printf("[startAddrBnProcBuf[3]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->startAddrBnProcBuf[3].d,
+//       p_lut->startAddrBnProcBuf[3].dim1,
+//       p_lut->startAddrBnProcBuf[3].dim2);
+
+p_lut->startAddrBnProcBuf[4] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG7);
+//printf("[startAddrBnProcBuf[4]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->startAddrBnProcBuf[4].d,
+//       p_lut->startAddrBnProcBuf[4].dim1,
+//       p_lut->startAddrBnProcBuf[4].dim2);
+
+p_lut->startAddrBnProcBuf[5] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG8);
+//printf("[startAddrBnProcBuf[5]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->startAddrBnProcBuf[5].d,
+//       p_lut->startAddrBnProcBuf[5].dim1,
+//       p_lut->startAddrBnProcBuf[5].dim2);
+
+p_lut->startAddrBnProcBuf[6] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG9);
+//printf("[startAddrBnProcBuf[6]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->startAddrBnProcBuf[6].d,
+//       p_lut->startAddrBnProcBuf[6].dim1,
+//       p_lut->startAddrBnProcBuf[6].dim2);
+
+p_lut->startAddrBnProcBuf[7] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG10);
+//printf("[startAddrBnProcBuf[7]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->startAddrBnProcBuf[7].d,
+//       p_lut->startAddrBnProcBuf[7].dim1,
+//       p_lut->startAddrBnProcBuf[7].dim2);
+
+p_lut->startAddrBnProcBuf[8] = expandArr32(startAddrBnProcBuf_BG1_R13_CNG19);
+//printf("[startAddrBnProcBuf[8]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->startAddrBnProcBuf[8].d,
+//       p_lut->startAddrBnProcBuf[8].dim1,
+//       p_lut->startAddrBnProcBuf[8].dim2);
 
       p_lut->bnPosBnProcBuf[1] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG4);
+//      printf("[bnPosBnProcBuf[1]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->bnPosBnProcBuf[1].d,
+//       p_lut->bnPosBnProcBuf[1].dim1,
+//       p_lut->bnPosBnProcBuf[1].dim2);
       p_lut->bnPosBnProcBuf[2] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG5);
+//      printf("[bnPosBnProcBuf[2]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->bnPosBnProcBuf[2].d,
+//       p_lut->bnPosBnProcBuf[2].dim1,
+//       p_lut->bnPosBnProcBuf[2].dim2);
       p_lut->bnPosBnProcBuf[3] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG6);
+//     printf("[bnPosBnProcBuf[3]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->bnPosBnProcBuf[3].d,
+//       p_lut->bnPosBnProcBuf[3].dim1,
+//       p_lut->bnPosBnProcBuf[3].dim2);
       p_lut->bnPosBnProcBuf[4] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG7);
+//      printf("[bnPosBnProcBuf[4]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->bnPosBnProcBuf[4].d,
+//       p_lut->bnPosBnProcBuf[4].dim1,
+//       p_lut->bnPosBnProcBuf[4].dim2);
       p_lut->bnPosBnProcBuf[5] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG8);
+//      printf("[bnPosBnProcBuf[5]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->bnPosBnProcBuf[5].d,
+//       p_lut->bnPosBnProcBuf[5].dim1,
+//       p_lut->bnPosBnProcBuf[5].dim2);
       p_lut->bnPosBnProcBuf[6] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG9);
+//      printf("[bnPosBnProcBuf[6]] d=%p, dim1=%d, dim2=%d\n",
+//      p_lut->bnPosBnProcBuf[6].d,
+//       p_lut->bnPosBnProcBuf[6].dim1,
+//       p_lut->bnPosBnProcBuf[6].dim2);
       p_lut->bnPosBnProcBuf[7] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG10);
-      p_lut->bnPosBnProcBuf[8] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG19);
+//      printf("[bnPosBnProcBuf[7]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->bnPosBnProcBuf[7].d,
+//       p_lut->bnPosBnProcBuf[7].dim1,
+//       p_lut->bnPosBnProcBuf[7].dim2);
+     p_lut->bnPosBnProcBuf[8] = expandArr8(bnPosBnProcBuf_BG1_R13_CNG19);
+//      printf("[bnPosBnProcBuf[8]] d=%p, dim1=%d, dim2=%d\n",
+//       p_lut->bnPosBnProcBuf[8].d,
+//       p_lut->bnPosBnProcBuf[8].dim1,
+//       p_lut->bnPosBnProcBuf[8].dim2);
 
       p_lut->llr2llrProcBufAddr = llr2llrProcBufAddr_BG1_R13;
       p_lut->llr2llrProcBufBnPos = llr2llrProcBufBnPos_BG1_R13;

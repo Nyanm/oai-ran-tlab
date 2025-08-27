@@ -187,6 +187,118 @@ static void nr_process_decode_segment(void *arg)
 
   p_decoderParms->crc_type = crcType(rdata->C, A);
   p_decoderParms->Kprime = lenWithCrc(rdata->C, A);
+  p_decoderParms->n_segments = rdata->C;
+
+  // set first 2*Z_c bits to zeros
+
+  int16_t z[68 * 384 + 16] __attribute__((aligned(16)));
+
+  start_meas(rdata->p_ts_ldpc_decode);
+
+  memset(z, 0, 2 * rdata->Z * sizeof(*z));
+  // set Filler bits
+  memset(z + Kprime, 127, rdata->F * sizeof(*z));
+  // Move coded bits before filler bits
+  memcpy(z + 2 * rdata->Z, rdata->d, (Kprime - 2 * rdata->Z) * sizeof(*z));
+  // skip filler bits
+  memcpy(z + K, rdata->d + (K - 2 * rdata->Z), (Kc * rdata->Z - K) * sizeof(*z));
+  // Saturate coded bits before decoding into 8 bits values
+  simde__m128i *pv = (simde__m128i *)&z;
+  int8_t l[68 * 384 + 16] __attribute__((aligned(16)));
+  simde__m128i *pl = (simde__m128i *)&l;
+  for (int i = 0, j = 0; j < ((Kc * rdata->Z) >> 4) + 1; i += 2, j++) {
+    pl[j] = simde_mm_packs_epi16(pv[i], pv[i + 1]);
+  }
+  //////////////////////////////////////////////////////////////////////////////////////////
+
+  //////////////////////////////////////////////////////////////////////////////////////////
+  ///////////////////////////////////// nrLDPC_decoder /////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////
+
+  ////////////////////////////////// pl =====> llrProcBuf //////////////////////////////////
+  int decodeIterations =  
+    LDPCdecoder(p_decoderParms, 0, 0, 0, l, llrProcBuf, p_procTime, rdata->abort_decode);
+  if (decodeIterations < p_decoderParms->numMaxIter) {
+    memcpy(rdata->c, llrProcBuf, K >> 3);
+    *rdata->decodeSuccess = true;
+  } else {
+    memset(rdata->c, 0, K >> 3);
+    *rdata->decodeSuccess = false;
+  }
+  stop_meas(rdata->p_ts_ldpc_decode);
+
+  // Task completed
+  completed_task_ans(rdata->ans);
+}
+
+static void nr_process_decode_segment_cuda(void *arg)
+{
+  nrLDPC_decoding_parameters_t *rdata = (nrLDPC_decoding_parameters_t *)arg;
+  t_nrLDPC_dec_params *p_decoderParms = &rdata->decoderParms;
+  const int K = rdata->K;
+  const int Kprime = K - rdata->F;
+  const int A = rdata->A;
+  const int E = rdata->E;
+  const int Qm = rdata->Qm;
+  const int rv_index = rdata->rv_index;
+  const uint8_t Kc = rdata->Kc;
+  short *ulsch_llr = rdata->llr;
+  int8_t llrProcBuf[OAI_LDPC_DECODER_MAX_NUM_LLR] __attribute__((aligned(32)));
+
+  t_nrLDPC_time_stats procTime = {0};
+  t_nrLDPC_time_stats *p_procTime = &procTime;
+
+  ////////////////////////////////////////////////////////////////////////////////////////////
+  ///////////////////////////////// nr_deinterleaving_ldpc ///////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////
+
+  //////////////////////////// ulsch_llr =====> ulsch_harq->e //////////////////////////////
+
+  start_meas(rdata->p_ts_deinterleave);
+
+  /// code blocks after bit selection in rate matching for LDPC code (38.212 V15.4.0 section 5.4.2.1)
+  int16_t harq_e[E];
+
+  nr_deinterleaving_ldpc(E, Qm, harq_e, ulsch_llr);
+
+  //////////////////////////////////////////////////////////////////////////////////////////
+
+  stop_meas(rdata->p_ts_deinterleave);
+
+  start_meas(rdata->p_ts_rate_unmatch);
+
+  //////////////////////////////////////////////////////////////////////////////////////////
+  //////////////////////////////// nr_rate_matching_ldpc_rx ////////////////////////////////
+  //////////////////////////////////////////////////////////////////////////////////////////
+
+  ///////////////////////// ulsch_harq->e =====> ulsch_harq->d /////////////////////////
+
+  if (nr_rate_matching_ldpc_rx(rdata->tbslbrm,
+                               p_decoderParms->BG,
+                               p_decoderParms->Z,
+                               rdata->d,
+                               harq_e,
+                               rdata->C,
+                               rv_index,
+                               *rdata->d_to_be_cleared,
+                               E,
+                               rdata->F,
+                               K - rdata->F - 2 * (p_decoderParms->Z))
+      == -1) {
+    stop_meas(rdata->p_ts_rate_unmatch);
+    LOG_E(PHY, "nrLDPC_coding_segment_decoder.c: Problem in rate_matching\n");
+
+    // Task completed
+    completed_task_ans(rdata->ans);
+    return;
+  }
+  stop_meas(rdata->p_ts_rate_unmatch);
+
+  *rdata->d_to_be_cleared = false;
+
+  p_decoderParms->crc_type = crcType(rdata->C, A);
+  p_decoderParms->Kprime = lenWithCrc(rdata->C, A);
+  p_decoderParms->n_segments = rdata->C;
 
   // set first 2*Z_c bits to zeros
 
@@ -282,11 +394,13 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
 int32_t nrLDPC_coding_init(void)
 {
   cuda_support_init();
+  LDPCinit_cuda();
   return 0;
 }
 
 int32_t nrLDPC_coding_shutdown(void)
 {
+  LDPCshutdown_cuda();
   return 0;
 }
 

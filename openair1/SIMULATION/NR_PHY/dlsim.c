@@ -1337,7 +1337,7 @@ printf("%d\n", slot);
         printStatIndent(&UE->phy_cpu_stats.cpu_time_stats[i], UE->phy_cpu_stats.cpu_time_stats[i].meas_name);
       }
     }
-
+//printf("1111\n");
     if (n_trials == 1) {
       unsigned int op_format = 1;
       unsigned int dec = 1;

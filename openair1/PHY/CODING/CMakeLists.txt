@@ -98,7 +98,8 @@ if (ENABLE_LDPC_CUDA)
   #version using HBM in general GPU
   cuda_add_library(ldpc_cuda MODULE
     nrLDPC_decoder/nrLDPC_decoder_cuda.c
-    nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu  
+    nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu
+    nrLDPC_encoder/ldpc_encoder_optim8segmulti.c  
     nrLDPC_decoder/kernel_test.cu  
     nrLDPC_encoder/ldpc_encoder_cuda32.c
     nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
@@ -118,7 +119,6 @@ if (ENABLE_LDPC_CUDA)
   target_link_libraries(ldpc_cuda ldpc_gen_HEADERS ${T_LIB})
   target_compile_definitions(ldpctest PRIVATE PARALLEL_STREAM)
   
-  add_dependencies(ldpctest ldpc_cuda)
   add_dependencies(ldpctest ldpc_cuda)
   add_dependencies(nr-softmodem ldpc_cuda)
   add_dependencies(nr-uesoftmodem ldpc_cuda)

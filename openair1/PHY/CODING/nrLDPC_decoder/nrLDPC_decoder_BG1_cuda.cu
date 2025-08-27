@@ -14,16 +14,16 @@
 #define ZC 384 // for BG1 test only
 #define CPU_ADDRESSING 1 // 0 means copy data into gpu memory, for common gpu; 1 for grace hopper which can read cpu memory directly
 #define CUDA_STREAM 0 // 1 means use cudastream to run kernels in parallel;
-#define MAX_NUM_DLSCH_SEGMENTS 13
+#define MAX_NUM_DLSCH_SEGMENTS_DL 132
 
 #define BIG_KERNEL 1
 
 // decoder_graphs.cu
 #include "decoder_graphs.h"
 
-cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS] = {nullptr};
-cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS] = {nullptr};
-bool graphCreated[MAX_NUM_DLSCH_SEGMENTS] = {false};
+cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
+cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
+bool graphCreated[MAX_NUM_DLSCH_SEGMENTS_DL] = {false};
 
 
 // 适配 CUDA 11+/12+
@@ -222,7 +222,7 @@ __global__ void cnProcKernel_int8_BIG(const t_nrLDPC_lut *p_lut,
 {
   int blk = blockIdx.x;
   int tid = threadIdx.x;
-
+  if(blk == 0 && tid == 0) printf("kernel launched\n");
   uint8_t groupId = block_group_ids[blk];
   uint8_t CnIdx = block_CN_idx[blk];
   uint16_t blockSize = block_thread_counts[blk];
@@ -1150,9 +1150,10 @@ extern "C" void nrLDPC_BnToCnPC_BG1_cuda(const t_nrLDPC_lut *p_lut,
   cudaDeviceSynchronize();
 }
 //------------------------------------------------------------------------
+//------------------------------------------------------------------------
 //-----------------------CUDA Scheduler Area------------------------------
 //------------------------------------------------------------------------
-
+//------------------------------------------------------------------------
 __global__ void cnProcKernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                              const int8_t *__restrict__ d_cnBufAll,
                                              int8_t *__restrict__ d_cnOutAll,
@@ -1162,21 +1163,71 @@ __global__ void cnProcKernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                              int8_t numMaxIter,
                                              int *PC_Flag)
 {
-  //if (*iter_ptr == 0)
+    int blk = blockIdx.x;
+  int tid = threadIdx.x;
+  /*
+  if (threadIdx.x == 0 && blockIdx.x == 1) {
+        printf("=== Kernel Parameter Dump ===\n");
+        printf("p_lut       = %p\n", (void*)p_lut);
+        printf("p_cnBuf        = %p\n", (void*)d_cnBufAll);
+        printf("p_cnOut= %p\n", (void*)d_cnOutAll);
+        printf("bnProcBuf   = %p\n", (void*)d_bnBufAll);
+        printf("Zc          = %d\n", Zc);
+        printf("PC_Flag     = %p\n", (int)PC_Flag);
+        printf("*PC_Flag     = %d\n", (int)*PC_Flag);
+        printf("iter_ptr    = %p\n", (void*)iter_ptr);
+        if (iter_ptr) {
+            printf("  *iter_ptr = %d\n", *iter_ptr);
+        }
+        printf("=============================\n");
+    }
+  if (blk == 1 && tid == 0) {
+  printf("=== p_lut dump ===\n");
+  printf("  startAddrCnGroups   = %p\n", (void*)p_lut->startAddrCnGroups);
+  printf("  numCnInCnGroups     = %p\n", (void*)p_lut->numCnInCnGroups);
+  printf("  numBnInBnGroups     = %p\n", (void*)p_lut->numBnInBnGroups);
+  printf("  startAddrBnGroups   = %p\n", (void*)p_lut->startAddrBnGroups);
+  printf("  startAddrBnGroupsLlr= %p\n", (void*)p_lut->startAddrBnGroupsLlr);
+  printf("  llr2llrProcBufAddr  = %p\n", (void*)p_lut->llr2llrProcBufAddr);
+  printf("  llr2llrProcBufBnPos = %p\n", (void*)p_lut->llr2llrProcBufBnPos);
+
+  // 如果需要确认这些数组不是全 0，可以打印其中几个元素
+  if (p_lut->startAddrCnGroups)
+    printf("   startAddrCnGroups[0] = %u\n", p_lut->startAddrCnGroups[0]);
+  if (p_lut->numCnInCnGroups)
+    printf("   numCnInCnGroups[0] = %u\n", p_lut->numCnInCnGroups[0]);
+  if (p_lut->numBnInBnGroups)
+    printf("   numBnInBnGroups[0] = %u\n", p_lut->numBnInBnGroups[0]);
+  if (p_lut->startAddrBnGroups)
+    printf("   startAddrBnGroups[0] = %u\n", p_lut->startAddrBnGroups[0]);
+  if (p_lut->startAddrBnGroupsLlr)
+    printf("   startAddrBnGroupsLlr[0] = %u\n", p_lut->startAddrBnGroupsLlr[0]);
+  if (p_lut->llr2llrProcBufAddr)
+    printf("   llr2llrProcBufAddr[0] = %u\n", p_lut->llr2llrProcBufAddr[0]);
+  if (p_lut->llr2llrProcBufBnPos)
+    printf("   llr2llrProcBufBnPos[0] = %u\n", p_lut->llr2llrProcBufBnPos[0]);
+  printf("====================\n");
+}
+
+    __syncthreads();
+ */
+    //if (*iter_ptr == 0)
     //*PC_Flag = 1;
   // Early stopping
   if (*iter_ptr > numMaxIter || *PC_Flag == 0) {
     return;
   }
 //printf("I'm inside cnProc_kernel\n");
-  int blk = blockIdx.x;
-  int tid = threadIdx.x;
 
+//if(blk == 1&&tid == 0) printf("I'm inside cnProc_kernel\n");
   uint8_t groupId = h_block_group_ids_cnProc[blk];
+  //if(blk == 1&&tid == 0) printf("1.1\n");
   uint8_t CnIdx = h_block_CN_idx_cnProc[blk];
   uint16_t blockSize = h_block_thread_counts_cnProc[blk];
   uint32_t inOffset = h_block_input_offsets_cnProc[blk];
   uint32_t outOffset = h_block_output_offsets_cnProc[blk];
+//if(blk == 1&&tid == 0) printf("1.2\n");
+  //  __syncthreads();
 
   if (tid >= blockSize)
     return;
@@ -1230,7 +1281,7 @@ void nrLDPC_cnProc_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
 #if BIG_KERNEL
  // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
   int maxBlockSize = 960; // Maximun threads are 960
-  dim3 gridDim(50);
+  dim3 gridDim(50);//50
   dim3 blockDim(maxBlockSize);
 
   cnProcKernel_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut,
@@ -1737,6 +1788,28 @@ void nrLDPC_BnToCnPC_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
 #endif
 }
 
+__global__ void check_lut_kernel(const t_nrLDPC_lut *p_lut) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        printf("=== Device p_lut->startAddrBnProcBuf dump ===\n");
+        for (int i = 0; i < 9; i++) {
+            printf("[%d] .d=%p, .dim1=%d, .dim2=%d\n",
+                   i,
+                   (void*)p_lut->startAddrBnProcBuf[i].d,
+                   p_lut->startAddrBnProcBuf[i].dim1,
+                   p_lut->startAddrBnProcBuf[i].dim2);
+        }
+
+        printf("=== Device p_lut->bnPosBnProcBuf dump ===\n");
+        for (int i = 0; i < 9; i++) {
+            printf("[%d] .d=%p, .dim1=%d, .dim2=%d\n",
+                   i,
+                   (void*)p_lut->bnPosBnProcBuf[i].d,
+                   p_lut->bnPosBnProcBuf[i].dim1,
+                   p_lut->bnPosBnProcBuf[i].dim2);
+        }
+    }
+}
+
 
 extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
                                                        int8_t *p_out,
@@ -1788,9 +1861,12 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
     printf("  iter_ptr    = %p\n", (void*)iter_ptr);
     printf("  PC_Flag     = %p\n", (void*)PC_Flag);
     fflush(stdout);
+check_lut_kernel<<<1,1,0,streams[CudaStreamIdx]>>>(p_lut);
+cudaDeviceSynchronize();
+CHECK(cudaGetLastError());
 */
     // Start graph recording
-  cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
+  /////cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
 //check_ptr_kernel_easy<<<1,10>>>(2);
 //cudaDeviceSynchronize();
 //CHECK(cudaGetLastError());
@@ -1806,6 +1882,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                        PC_Flag,
                                        streams,
                                        CudaStreamIdx);
+    CHECK(cudaGetLastError());
     //cd cudaDeviceSynchronize();
 
      //printf("In stream %d 1: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
@@ -1823,7 +1900,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
      //cudaDeviceSynchronize();
 
      //printf("In stream %d 2: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
-    //CHECK(cudaGetLastError());
+    CHECK(cudaGetLastError());
     //cudaDeviceSynchronize();
     nrLDPC_BnToCnPC_BG1_cuda_stream_core(p_lut,
                                          bnProcBufRes,
@@ -1842,6 +1919,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                          numLLR,
                                          streams,
                                          CudaStreamIdx);
+    CHECK(cudaGetLastError());
     //cudaDeviceSynchronize();
     //printf("In stream %d 3: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
      
@@ -1849,21 +1927,23 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
      }
 
       // stop recording
-    cudaStreamEndCapture(stream, &decoderGraphs[CudaStreamIdx]);
+    ////cudaStreamEndCapture(stream, &decoderGraphs[CudaStreamIdx]);
     //printf("5\n");
-    cudaGraphInstantiate(&decoderGraphExec[CudaStreamIdx], decoderGraphs[CudaStreamIdx], NULL, NULL, 0);
-    graphCreated[CudaStreamIdx] = true;
+    ////cudaGraphInstantiate(&decoderGraphExec[CudaStreamIdx], decoderGraphs[CudaStreamIdx], NULL, NULL, 0);
+    ////graphCreated[CudaStreamIdx] = true;
 
     // Execute （make sure the first trial finish）
-    cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
+    ////cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);
+    cudaDeviceSynchronize();
+    printf("Graphs should be captured\n");
     //cudaStreamSynchronize(stream);
   } else {
     //printf("Are you here???\n");
     // reuse the graph after
     if(CudaStreamIdx != 0){
       //uncomment below if you want streams works in sequence
-      //cudaStreamWaitEvent(streams[CudaStreamIdx], doneEvent[CudaStreamIdx-1], 0);//cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]); 
+      cudaStreamWaitEvent(streams[CudaStreamIdx], doneEvent[CudaStreamIdx-1], 0);//cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]); 
     }
     cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);

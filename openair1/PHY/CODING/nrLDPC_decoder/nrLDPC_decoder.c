@@ -222,6 +222,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 
 int32_t LDPCinit()
 {
+  cuda_support_init();
   return 0;
 }
 

@@ -410,10 +410,12 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
   for (int dlsch_id = 0; dlsch_id < nrLDPC_slot_encoding_parameters->nb_TBs; dlsch_id++) {
     // Compute number of tasks to encode TB
     nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_parameters = &nrLDPC_slot_encoding_parameters->TBs[dlsch_id];
+#ifdef ENABLE_CUDA    
     if (nrLDPC_TB_encoding_parameters->C > 8 && nrLDPC_TB_encoding_parameters->Z == 384) {
         nrLDPC_coding_encoder32(nrLDPC_slot_encoding_parameters,nrLDPC_TB_encoding_parameters);
     }
     else {
+#endif
       size_t n_seg = (nrLDPC_TB_encoding_parameters->C / 8 + ((nrLDPC_TB_encoding_parameters->C & 7) == 0 ? 0 : 1));
       nbTasks += n_seg;
 
@@ -422,7 +424,9 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
         uint32_t E = nrLDPC_TB_encoding_parameters->segments[seg_id].E;
         Emax = E > Emax ? E : Emax;
       }
+#ifdef ENABLE_CUDA
     }
+#endif
   }
   // Create f and f2 to old encoding tasks outputs
   uint32_t Emax_ceil_mod = ceil_mod(Emax, 64);
@@ -440,10 +444,10 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
     // For easier indexing we store the pointers to sub arrays of f and f2 in pointer arrays
     // Then a function to which we pass the pointer arrays can directly use f_2d[j] ans f2_2d[j]
     nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_parameters = &nrLDPC_slot_encoding_parameters->TBs[dlsch_id];
-
+#ifdef ENABLE_CUDA
     if (nrLDPC_TB_encoding_parameters->C > 8 && nrLDPC_TB_encoding_parameters->Z == 384) 
       continue;
-
+#endif
     size_t n_seg = (nrLDPC_TB_encoding_parameters->C / 8 + ((nrLDPC_TB_encoding_parameters->C & 7) == 0 ? 0 : 1));
     uint8_t *f_2d[n_seg];
     uint8_t *f2_2d[n_seg];
@@ -470,8 +474,10 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
   for (int dlsch_id = 0; dlsch_id < nrLDPC_slot_encoding_parameters->nb_TBs; dlsch_id++) {
     nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_parameters = &nrLDPC_slot_encoding_parameters->TBs[dlsch_id];
     uint32_t C = nrLDPC_TB_encoding_parameters->C;
+#ifdef ENABLE_CUDA
     if (C > 8 && nrLDPC_TB_encoding_parameters->Z == 384) 
       continue;
+#endif
     size_t n_seg = (C / 8 + ((C & 7) == 0 ? 0 : 1));
 
 

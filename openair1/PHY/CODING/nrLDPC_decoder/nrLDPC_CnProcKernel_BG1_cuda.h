@@ -150,12 +150,12 @@ __device__ void cnProcKernel_int8_G4(const t_nrLDPC_lut *p_lut,
                                      int Zc )
 {
   const uint8_t NUM = 4; // Gn = 4
-
+//if(threadIdx.x == 0 && blockIdx.x == 1)printf("1.3\n");
   const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
 
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
-
+//if(threadIdx.x == 0 && blockIdx.x == 1)printf("1.4\n");
   // if(tid == 1){
   // printf("\nThis is block %d in G4", blockIdx.x);
   //}
@@ -166,7 +166,6 @@ __device__ void cnProcKernel_int8_G4(const t_nrLDPC_lut *p_lut,
   const uint lane = tid % 96;
   // 5*384/4 = 480
   const uint16_t c_lut_idxG4[4][3] = {
-
       {480, 960, 1440},
       {0, 960, 1440},
       {0, 480, 1440},
@@ -180,15 +179,68 @@ __device__ void cnProcKernel_int8_G4(const t_nrLDPC_lut *p_lut,
 
   uint32_t ymm0, sgn, min;
   uint32_t *p_cnProcBufResBit;
-
+//if(threadIdx.x == 0 && blockIdx.x == 1)printf("1.5\n");
   const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
   const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
   const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
+//if(threadIdx.x == 0 && blockIdx.x == 1)printf("1.6\n");
+  /*
+if (threadIdx.x == 0 && blockIdx.x == 1) {
+    printf("=== LUT ptrs ===\n");
+    printf("lut_circShift_CNG          = %p\n", (void*)lut_circShift_CNG);
+    printf("lut_startAddrBnProcBuf_CNG = %p\n", (void*)lut_startAddrBnProcBuf_CNG);
+    printf("lut_bnPosBnProcBuf_CNG     = %p\n", (void*)lut_bnPosBnProcBuf_CNG);
+    printf("CnIdx=%u, row=%u, Zc=%d\n", (unsigned)CnIdx, (unsigned)row, Zc);
+}
+if (threadIdx.x == 0 && blockIdx.x == 1) {
+    printf("=== p_lut->startAddrBnProcBuf[groupId] dump (0..8) ===\n");
+    for (int i = 0; i < 9; i++) {
+        printf("[%d] = %p\n", i, p_lut->startAddrBnProcBuf[i]);
+    }
 
+    printf("=== p_lut->bnPosBnProcBuf[groupId] dump (0..8) ===\n");
+    for (int i = 0; i < 9; i++) {
+        printf("[%d] = %p\n", i, p_lut->bnPosBnProcBuf[i]);
+    }
+
+    printf("groupId=%u, row=%u\n", (unsigned)groupId, (unsigned)row);
+}*/
   const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
-  
-  p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
+/*
+  if (threadIdx.x == 0 && blockIdx.x == 1) {
+if (lut_startAddrBnProcBuf_CNG != NULL) {
+        printf("  lut_startAddrBnProcBuf_CNG[CnIdx=%d] = %u\n",
+               CnIdx, lut_startAddrBnProcBuf_CNG[CnIdx]);
+    } else {
+        printf("  lut_startAddrBnProcBuf_CNG == NULL!\n");
+    }
 
+    if (lut_bnPosBnProcBuf_CNG != NULL) {
+        printf("  lut_bnPosBnProcBuf_CNG[CnIdx=%d] = %u\n",
+               CnIdx, lut_bnPosBnProcBuf_CNG[CnIdx]);
+    } else {
+        printf("  lut_bnPosBnProcBuf_CNG == NULL!\n");
+    }
+}*/
+  p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
+  /*if (threadIdx.x == 0 && blockIdx.x == 1) {
+ printf("destByte              = %d\n", destByte);
+    printf("p_cnProcBufResBit     = %p\n", p_cnProcBufResBit);
+
+    // 打印下即将要load的地址
+    uintptr_t addr0 = (uintptr_t)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][0] * 4);
+    uintptr_t addr1 = (uintptr_t)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][1] * 4);
+    uintptr_t addr2 = (uintptr_t)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][2] * 4);
+
+    printf("LoadAddr[0] = 0x%lx\n", addr0);
+    printf("LoadAddr[1] = 0x%lx\n", addr1);
+    printf("LoadAddr[2] = 0x%lx\n", addr2);
+    printf("=========================================================\n");
+
+
+  }
+  __syncthreads();
+  */
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][0] * 4);
 
   sgn = __vxor4(&p_ones, &ymm0);
