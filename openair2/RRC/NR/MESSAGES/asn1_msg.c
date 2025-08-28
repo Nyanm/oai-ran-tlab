@@ -67,59 +67,6 @@
 #include "common/ran_context.h"
 #include "conversions.h"
 
-//#define XER_PRINT
-
-typedef struct xer_sprint_string_s {
-  char *string;
-  size_t string_size;
-  size_t string_index;
-} xer_sprint_string_t;
-
-/*
- * This is a helper function for xer_sprint, which directs all incoming data
- * into the provided string.
- */
-static int xer__nr_print2s(const void *buffer, size_t size, void *app_key)
-{
-  xer_sprint_string_t *string_buffer = (xer_sprint_string_t *) app_key;
-  size_t string_remaining = string_buffer->string_size - string_buffer->string_index;
-
-  if (string_remaining > 0) {
-    if (size > string_remaining) {
-      size = string_remaining;
-    }
-
-    memcpy(&string_buffer->string[string_buffer->string_index], buffer, size);
-    string_buffer->string_index += size;
-  }
-
-  return 0;
-}
-
-int xer_nr_sprint(char *string, size_t string_size, asn_TYPE_descriptor_t *td, void *sptr)
-{
-  asn_enc_rval_t er;
-  xer_sprint_string_t string_buffer;
-  string_buffer.string = string;
-  string_buffer.string_size = string_size;
-  string_buffer.string_index = 0;
-  er = xer_encode(td, sptr, XER_F_BASIC, xer__nr_print2s, &string_buffer);
-
-  if (er.encoded < 0) {
-    LOG_E(RRC, "xer_sprint encoding error (%zd)!", er.encoded);
-    er.encoded = string_buffer.string_size;
-  } else {
-    if (er.encoded > string_buffer.string_size) {
-      LOG_E(RRC, "xer_sprint string buffer too small, got %zd need %zd!", string_buffer.string_size, er.encoded);
-      er.encoded = string_buffer.string_size;
-    }
-  }
-
-  return er.encoded;
-}
-
-//------------------------------------------------------------------------------
-
 int do_SIB2_NR(uint8_t **msg_SIB2, NR_SSB_MTC_t *ssbmtc)
 {
   NR_SIB2_t *sib2 = calloc(1, sizeof(*sib2));
