@@ -59,6 +59,7 @@
 #include "openair2/F1AP/f1ap_ids.h"
 #include "openair2/LAYER2/NR_MAC_gNB/mac_proto.h"
 #include "openair2/LAYER2/nr_rlc/nr_rlc_oai_api.h"
+#include "LAYER2/nr_pdcp/nr_pdcp_asn1_utils.h"
 #include "openair3/SECU/key_nas_deriver.h"
 #include "openair2/SDAP/nr_sdap/nr_sdap_entity.h"
 #include "rrc_gNB_du.h"
@@ -132,6 +133,51 @@ static instance_t get_f1_gtp_instance(void)
   if (!inst)
     return -1; // means no F1
   return inst->gtpInst;
+}
+
+/* returns a default radio bearer config suitable for NSA etc */
+static NR_RadioBearerConfig_t *get_default_rbconfig(int eps_bearer_id,
+                                                    int rb_id,
+                                                    e_NR_CipheringAlgorithm ciphering_algorithm,
+                                                    e_NR_SecurityConfig__keyToUse key_to_use,
+                                                    const nr_pdcp_configuration_t *pdcp_config)
+{
+  NR_RadioBearerConfig_t *rbconfig = calloc(1, sizeof(*rbconfig));
+  rbconfig->srb_ToAddModList = NULL;
+  rbconfig->srb3_ToRelease = NULL;
+  rbconfig->drb_ToAddModList = calloc(1,sizeof(*rbconfig->drb_ToAddModList));
+  NR_DRB_ToAddMod_t *drb_ToAddMod = calloc(1,sizeof(*drb_ToAddMod));
+  drb_ToAddMod->cnAssociation = calloc(1,sizeof(*drb_ToAddMod->cnAssociation));
+  drb_ToAddMod->cnAssociation->present = NR_DRB_ToAddMod__cnAssociation_PR_eps_BearerIdentity;
+  drb_ToAddMod->cnAssociation->choice.eps_BearerIdentity= eps_bearer_id;
+  drb_ToAddMod->drb_Identity = rb_id;
+  drb_ToAddMod->reestablishPDCP = NULL;
+  drb_ToAddMod->recoverPDCP = NULL;
+  drb_ToAddMod->pdcp_Config = calloc(1,sizeof(*drb_ToAddMod->pdcp_Config));
+  asn1cCalloc(drb_ToAddMod->pdcp_Config->drb, drb);
+  asn1cCallocOne(drb->discardTimer, encode_discard_timer(pdcp_config->drb.discard_timer));
+  asn1cCallocOne(drb->pdcp_SN_SizeUL, encode_sn_size_ul(pdcp_config->drb.sn_size));
+  asn1cCallocOne(drb->pdcp_SN_SizeDL, encode_sn_size_dl(pdcp_config->drb.sn_size));
+  drb->headerCompression.present = NR_PDCP_Config__drb__headerCompression_PR_notUsed;
+  drb->headerCompression.choice.notUsed = 0;
+  drb->integrityProtection = NULL;
+  drb->statusReportRequired = NULL;
+  drb->outOfOrderDelivery = NULL;
+
+  drb_ToAddMod->pdcp_Config->moreThanOneRLC = NULL;
+  asn1cCallocOne(drb_ToAddMod->pdcp_Config->t_Reordering, encode_t_reordering(pdcp_config->drb.t_reordering));
+  drb_ToAddMod->pdcp_Config->ext1 = NULL;
+
+  asn1cSeqAdd(&rbconfig->drb_ToAddModList->list,drb_ToAddMod);
+
+  rbconfig->drb_ToReleaseList = NULL;
+
+  asn1cCalloc(rbconfig->securityConfig, secConf);
+  asn1cCalloc(secConf->securityAlgorithmConfig, secConfAlgo);
+  secConfAlgo->cipheringAlgorithm = ciphering_algorithm;
+  secConfAlgo->integrityProtAlgorithm = NULL;
+  asn1cCallocOne(secConf->keyToUse, key_to_use);
+  return rbconfig;
 }
 
 /* generate prototypes for the tree management functions (RB_INSERT used in rrc_add_nsa_user) */

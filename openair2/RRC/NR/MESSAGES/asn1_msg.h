@@ -41,6 +41,7 @@
 #include "NR_DRB-ToReleaseList.h"
 #include "NR_IntegrityProtAlgorithm.h"
 #include "NR_LogicalChannelConfig.h"
+#include "NR_RRCReconfiguration-IEs.h"
 #include "NR_MeasConfig.h"
 #include "NR_MeasTiming.h"
 #include "NR_RLC-BearerConfig.h"
@@ -51,25 +52,8 @@
 #include "NR_SRB-ToAddModList.h"
 #include "NR_SecurityConfig.h"
 #include "NR_MeasurementTimingConfiguration.h"
-#include "ds/seq_arr.h"
 #include "ds/byte_array.h"
-#include "rrc_messages_types.h"
-#include "openair2/LAYER2/nr_pdcp/nr_pdcp_configuration.h"
 struct asn_TYPE_descriptor_s;
-
-typedef struct {
-  uint8_t transaction_id;
-  NR_SRB_ToAddModList_t *srb_config_list;
-  NR_DRB_ToAddModList_t *drb_config_list;
-  NR_DRB_ToReleaseList_t *drb_release_list;
-  NR_SecurityConfig_t *security_config;
-  NR_MeasConfig_t *meas_config;
-  byte_array_t dedicated_NAS_msg_list[MAX_DRBS_PER_UE];
-  int num_nas_msg;
-  NR_CellGroupConfig_t *cell_group_config;
-  bool masterKeyUpdate;
-  int nextHopChainingCount;
-} nr_rrc_reconfig_param_t;
 
 /*
  * The variant of the above function which dumps the BASIC-XER (XER_F_BASIC)
@@ -85,18 +69,11 @@ int do_SIB2_NR(uint8_t **msg_SIB2, NR_SSB_MTC_t *ssbmtc);
 
 int do_RRCReject(uint8_t *const buffer);
 
-NR_RadioBearerConfig_t *get_default_rbconfig(int eps_bearer_id,
-                                             int rb_id,
-                                             e_NR_CipheringAlgorithm ciphering_algorithm,
-                                             e_NR_SecurityConfig__keyToUse key_to_use,
-                                             const nr_pdcp_configuration_t *pdcp_config);
-
 int do_RRCSetup(uint8_t *const buffer,
                 size_t buffer_size,
                 const uint8_t transaction_id,
                 const uint8_t *masterCellGroup,
                 int masterCellGroup_len,
-                const gNB_RrcConfigurationReq *configuration,
                 NR_SRB_ToAddModList_t *SRBs);
 
 int do_NR_SecurityModeCommand(uint8_t *const buffer,
@@ -108,7 +85,7 @@ int do_NR_SA_UECapabilityEnquiry(uint8_t *const buffer, const uint8_t Transactio
 
 int do_NR_RRCRelease(uint8_t *buffer, size_t buffer_size, uint8_t Transaction_id);
 
-byte_array_t do_RRCReconfiguration(const nr_rrc_reconfig_param_t *params);
+byte_array_t do_RRCReconfiguration(NR_RRCReconfiguration_IEs_t *ie, uint8_t transaction_id);
 
 int do_RRCSetupComplete(uint8_t *buffer,
                         size_t buffer_size,
@@ -150,15 +127,6 @@ int do_RRCReestablishment(int8_t nh_ncc, uint8_t *const buffer, size_t buffer_si
 
 int do_RRCReestablishmentComplete(uint8_t *buffer, size_t buffer_size, int64_t rrc_TransactionIdentifier);
 
-NR_MeasConfig_t *get_MeasConfig(const NR_MeasTiming_t *mt,
-                                int band,
-                                int scs,
-                                int nr_pci,
-                                NR_ReportConfigToAddMod_t *rc_PER,
-                                NR_ReportConfigToAddMod_t *rc_A2,
-                                seq_arr_t *rc_A3_seq,
-                                seq_arr_t *neigh_seq);
-void free_MeasConfig(NR_MeasConfig_t *mc);
-int do_NR_Paging(uint8_t Mod_id, uint8_t *buffer, uint32_t tmsi);
+int do_NR_Paging(uint8_t Mod_id, uint8_t *buffer, int size, uint32_t tmsi);
 
 #endif  /* __RRC_NR_MESSAGES_ASN1_MSG__H__ */

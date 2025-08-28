@@ -320,6 +320,20 @@ typedef struct {
   bool isIntraFrequencyNeighbour;
 } nr_neighbour_cell_t;
 
+typedef struct {
+  uint8_t transaction_id;
+  NR_SRB_ToAddModList_t *srb_config_list;
+  NR_DRB_ToAddModList_t *drb_config_list;
+  NR_DRB_ToReleaseList_t *drb_release_list;
+  NR_SecurityConfig_t *security_config;
+  NR_MeasConfig_t *meas_config;
+  byte_array_t dedicated_NAS_msg_list[MAX_DRBS_PER_UE];
+  int num_nas_msg;
+  NR_CellGroupConfig_t *cell_group_config;
+  bool masterKeyUpdate;
+  int nextHopChainingCount;
+} nr_rrc_reconfig_param_t;
+
 typedef struct neighbour_cell_configuration_s {
   uint64_t nr_cell_id;
   seq_arr_t *neighbour_cells;
