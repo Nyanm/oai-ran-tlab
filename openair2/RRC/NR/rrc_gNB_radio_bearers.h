@@ -57,4 +57,10 @@ bool nr_rrc_remove_drb_by_id(seq_arr_t *drb_ptr, const int drb_id);
 /// @brief Add PDU Sessions and DRBs to UE context list
 void nr_rrc_add_bearers(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession_t *sessions);
 
+/// @brief Find existing DRB that can accept a QoS flow based on resource type and multiplexing limits
+int nr_rrc_find_suitable_drb_for_qos(gNB_RRC_UE_t *UE,
+                                     const int pdusession_id,
+                                     const pdusession_level_qos_parameter_t *qos_params,
+                                     const seq_arr_t *flows);
+
 #endif

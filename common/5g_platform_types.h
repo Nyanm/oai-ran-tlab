@@ -36,6 +36,14 @@ typedef enum {
 
 typedef enum { NON_DYNAMIC, DYNAMIC } fiveQI_t;
 
+/* 5QI (5G QoS Identifier) - 3GPP TS 23.501 §5.7.2.1
+ * Range: 0..255
+ * - Standardized 5QI values: have one-to-one mapping to standardized 5G QoS characteristics (Table 5.7.4-1)
+ * - Pre-configured 5QI values: pre-configured in the AN
+ * - Dynamically assigned 5QI values: require signaling of QoS characteristics as part of QoS profile */
+#define MIN_FIVEQI 0
+#define MAX_FIVEQI 255
+
 /* ARP Priority Level - 3GPP TS 23.501 §5.7.2.2
  * The ARP priority level defines the relative importance of a QoS Flow.
  * Range: 1 to 15, with 1 as the highest priority.

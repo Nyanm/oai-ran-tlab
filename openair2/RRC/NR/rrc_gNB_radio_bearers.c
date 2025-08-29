@@ -310,6 +310,227 @@ static nr_sdap_configuration_t get_sdap_config(const bool enable_sdap)
   return sdap;
 }
 
+/** @brief Classify 5QI value by resource type per 3GPP TS 23.501 Table 5.7.4-1 */
+typedef enum {
+  QOS_RESOURCE_TYPE_NON_GBR, // 5,6,7,8,9,10,11,69,70,79,80
+  QOS_RESOURCE_TYPE_GBR, // 1,2,3,4,65,66,67,71,72,73,74,75,76
+  QOS_RESOURCE_TYPE_DC_GBR // 82-90 (Delay-critical GBR)
+} qos_resource_type_t;
+
+
+
+static const qos_resource_type_t five_qi_resource_type[MAX_STANDARDIZED_FIVEQI + 1] = {
+    /* Default (value 0) is QOS_RESOURCE_TYPE_NON_GBR */
+    [1] = QOS_RESOURCE_TYPE_GBR,
+    [2] = QOS_RESOURCE_TYPE_GBR,
+    [3] = QOS_RESOURCE_TYPE_GBR,
+    [4] = QOS_RESOURCE_TYPE_GBR,
+    [65] = QOS_RESOURCE_TYPE_GBR,
+    [66] = QOS_RESOURCE_TYPE_GBR,
+    [67] = QOS_RESOURCE_TYPE_GBR,
+    [71] = QOS_RESOURCE_TYPE_GBR,
+    [72] = QOS_RESOURCE_TYPE_GBR,
+    [73] = QOS_RESOURCE_TYPE_GBR,
+    [74] = QOS_RESOURCE_TYPE_GBR,
+    [75] = QOS_RESOURCE_TYPE_GBR,
+    [76] = QOS_RESOURCE_TYPE_GBR,
+    [82] = QOS_RESOURCE_TYPE_DC_GBR,
+    [83] = QOS_RESOURCE_TYPE_DC_GBR,
+    [84] = QOS_RESOURCE_TYPE_DC_GBR,
+    [85] = QOS_RESOURCE_TYPE_DC_GBR,
+    [86] = QOS_RESOURCE_TYPE_DC_GBR,
+    [87] = QOS_RESOURCE_TYPE_DC_GBR,
+    [88] = QOS_RESOURCE_TYPE_DC_GBR,
+    [89] = QOS_RESOURCE_TYPE_DC_GBR,
+    [90] = QOS_RESOURCE_TYPE_DC_GBR,
+};
+
+// Design-specific DRB multiplexing limits per resource type
+#define MAX_QOS_FLOWS_PER_DRB_DC_GBR 1 // Strict isolation for delay-critical GBR
+#define MAX_QOS_FLOWS_PER_DRB_GBR 2 // Conservative multiplexing for GBR
+#define MAX_QOS_FLOWS_PER_DRB_NON_GBR 5 // More flexible multiplexing for Non-GBR
+// Design-specific aggregate cap to prevent over-multiplexing when mixing resource types on the same DRB
+#define MAX_QOS_FLOWS_PER_DRB_TOTAL 5
+
+/** @brief Check if 5QI requires dedicated DRB based on QoS characteristics
+ * Delay-critical GBR (5QI 82-90) and high priority and low-PER services
+ * (e.g. mission-critical and live streaming flows) get dedicated DRBs. */
+static bool nr_rrc_qos_dedicated_drb(const uint8_t five_qi)
+{
+  DevAssert(five_qi <= MAX_FIVEQI);
+  // Delay-critical GBR (5QI 82-90) get dedicated DRBs
+  qos_resource_type_t type = five_qi_resource_type[five_qi];
+
+  if (type == QOS_RESOURCE_TYPE_DC_GBR) {
+    return true;
+  }
+  // High priority and low-PER services get dedicated DRBs
+  return (five_qi == 4 || five_qi == 6 || five_qi == 7 || five_qi == 8
+          || five_qi == 9 || five_qi == 10 || five_qi == 70
+          || five_qi == 80 || (five_qi >= 71 && five_qi <= 73));
+}
+
+/** @brief Count QoS flows mapped to a specific DRB, grouped by resource type.
+ * This function iterates through the given list of QoS flows (`qos_flows`), and for each one
+ * that is mapped to the given `drb_id`, increments a counter depending on its resource type:
+ * - Delay-Critical GBR (dc_gbr_count)
+ * - Non-delay-critical GBR (gbr_count)
+ * - Non-GBR (non_gbr_count)
+ * @param[in]  qos_flows    Pointer to the list of QoS flows (seq_arr_t)
+ * @param[in]  drb_id       DRB ID to filter flows by
+ * @param[out] dc_gbr_count number of DC-GBR flows for this DRB (pointer)
+ * @param[out] gbr_count    number of GBR flows for this DRB (pointer)
+ * @param[out] non_gbr_count number of Non-GBR flows for this DRB (pointer) */
+static void nr_rrc_count_qos_flows_by_type(const seq_arr_t *qos_flows,
+                                           const int drb_id,
+                                           int *dc_gbr_count,
+                                           int *gbr_count,
+                                           int *non_gbr_count)
+{
+  // Initialize counters
+  *dc_gbr_count = *gbr_count = *non_gbr_count = 0;
+  // Iterate through the list of QoS flows
+  FOR_EACH_SEQ_ARR(nr_rrc_qos_t *, qos, qos_flows) {
+    // Check if the QoS flow is mapped to the given DRB ID
+    if (qos->drb_id == drb_id) {
+      // Increment the counter depending on the resource type of the QoS flow
+      const uint8_t five_qi = qos->qos.fiveQI;
+      DevAssert(five_qi <= MAX_FIVEQI);
+      qos_resource_type_t type = five_qi_resource_type[five_qi];
+      switch (type) {
+        case QOS_RESOURCE_TYPE_DC_GBR:
+          (*dc_gbr_count)++;
+          break;
+        case QOS_RESOURCE_TYPE_GBR:
+          (*gbr_count)++;
+          break;
+        case QOS_RESOURCE_TYPE_NON_GBR:
+          (*non_gbr_count)++;
+          break;
+        default:
+          LOG_W(NR_RRC, "Unknown resource type for 5QI %lu\n", qos->qos.fiveQI);
+          break;
+      }
+    }
+  }
+}
+
+/** @brief Find existing DRB that can accept a QoS flow based on resource type and multiplexing limits */
+int nr_rrc_find_suitable_drb_for_qos(gNB_RRC_UE_t *UE,
+                                     const int pdusession_id,
+                                     const pdusession_level_qos_parameter_t *qos_params,
+                                     const seq_arr_t *flows)
+{
+  const uint8_t five_qi = qos_params->fiveQI;
+  DevAssert(five_qi <= MAX_FIVEQI);
+  qos_resource_type_t type = five_qi_resource_type[five_qi];
+
+  /* Dedicated flows (incl. DC-GBR 5QI 82-90): never reuse an existing DRB. Per-DRB DC-GBR
+   * multiplexing limit is one dedicated DRB each. */
+   if (nr_rrc_qos_dedicated_drb(qos_params->fiveQI) || type == QOS_RESOURCE_TYPE_DC_GBR) {
+    return -1;
+  }
+
+  // For non-dedicated flows, try to find existing DRB with available capacity
+  FOR_EACH_SEQ_ARR(drb_t *, drb, &UE->drbs) {
+    if (drb->pdusession_id != pdusession_id)
+      continue;
+
+    int dc_gbr_count = 0, gbr_count = 0, non_gbr_count = 0;
+    // Count the number of QoS flows mapped to the DRB by resource type
+    nr_rrc_count_qos_flows_by_type(flows, drb->drb_id, &dc_gbr_count, &gbr_count, &non_gbr_count);
+    // By OAI implementation choice, DC-GBR flows (5QI 82-90) always get dedicated DRBs and cannot be multiplexed
+    // Skip DRBs that contain DC-GBR flows as they cannot be reused for other flows
+    DevAssert(dc_gbr_count <= MAX_QOS_FLOWS_PER_DRB_DC_GBR);
+    if (dc_gbr_count == MAX_QOS_FLOWS_PER_DRB_DC_GBR) {
+      continue;
+    }
+
+    /* Do not reuse a DRB that already carries a dedicated QoS flow. */
+    bool has_dedicated_flow_on_drb = false;
+    FOR_EACH_SEQ_ARR(nr_rrc_qos_t *, existing_qos, flows) {
+      if (existing_qos->drb_id != drb->drb_id)
+        continue;
+      if (nr_rrc_qos_dedicated_drb(existing_qos->qos.fiveQI)) {
+        has_dedicated_flow_on_drb = true;
+        break;
+      }
+    }
+    if (has_dedicated_flow_on_drb)
+      continue;
+
+    // Check if this DRB can accept more flows of this resource type
+    bool has_capacity = false;
+    if (type == QOS_RESOURCE_TYPE_GBR) {
+      has_capacity = (gbr_count < MAX_QOS_FLOWS_PER_DRB_GBR);
+    } else if (type == QOS_RESOURCE_TYPE_NON_GBR) {
+      has_capacity = (non_gbr_count < MAX_QOS_FLOWS_PER_DRB_NON_GBR);
+    }
+
+    // Enforce aggregate total cap across all resource types
+    int total_flows_on_drb = gbr_count + non_gbr_count;
+
+    if (has_capacity && total_flows_on_drb < MAX_QOS_FLOWS_PER_DRB_TOTAL) {
+      LOG_I(NR_RRC,
+            "Found suitable DRB %d to multiplex 5QI %lu (QFI %d) - current flows: GBR=%d, Non-GBR=%d\n",
+            drb->drb_id,
+            qos_params->fiveQI,
+            qos_params->qfi,
+            gbr_count,
+            non_gbr_count);
+      return drb->drb_id;
+    }
+  }
+
+  return -1; // No suitable existing DRB found
+}
+
+/** @brief Find or create a DRB for a QoS flow and assign it
+ *  @param rrc RRC instance
+ *  @param UE UE context
+ *  @param session PDU session containing the QoS flow
+ *  @param qos QoS flow to assign DRB to (must already be in session->qos)
+ *  @return true if a new DRB was created, false if existing DRB was reused
+ *  @note TS 23.501 §5.7.1.5: AN binds QoS Flows to AN resources (DRBs). No strict 1:1
+ *  relation between QoS Flows and DRBs is required (reuse/multiplexing is allowed).
+ *  @note qos->drb_id contains the assigned DRB ID */
+bool nr_rrc_assign_drb_to_qos_flow(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const pdusession_t *session, nr_rrc_qos_t *qos)
+{
+  DevAssert(rrc);
+  DevAssert(UE);
+  DevAssert(session);
+  DevAssert(qos);
+
+  // First, try to find an existing suitable DRB
+  int drb_id = nr_rrc_find_suitable_drb_for_qos(UE, session->pdusession_id, &qos->qos, &session->qos);
+
+  // If no suitable existing DRB found, create a new one
+  bool is_new_drb = drb_id == -1;
+  if (drb_id == -1) {
+    // Create a new DRB
+    drb_t *rrc_drb = nr_rrc_add_drb(&UE->drbs, session->pdusession_id, &rrc->pdcp_config);
+    DevAssert(rrc_drb);
+    // Store the assigned DRB ID
+    drb_id = rrc_drb->drb_id;
+    is_new_drb = true;
+    LOG_I(NR_RRC, "UE %d: created new DRB %d for QFI %d (5QI %lu)\n", UE->rrc_ue_id, drb_id, qos->qos.qfi, qos->qos.fiveQI);
+  }
+
+  // Assign the DRB ID to the QoS flow
+  DevAssert(drb_id > 0 && drb_id <= MAX_DRBS_PER_UE);
+  qos->drb_id = drb_id;
+
+  LOG_I(NR_RRC,
+        "UE %d: assigned DRB %d to QFI %d (5QI %lu) in PDU session %d\n",
+        UE->rrc_ue_id,
+        drb_id,
+        qos->qos.qfi,
+        qos->qos.fiveQI,
+        session->pdusession_id);
+
+  return is_new_drb;
+}
+
 /** @brief Add PDU Sessions and DRBs to UE context list. For each QoS flow in the setup list, adds a DRB */
 void nr_rrc_add_bearers(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession_t *sessions)
 {
@@ -323,15 +544,9 @@ void nr_rrc_add_bearers(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession_t
     }
     pdusession_t *session = &pduSession->param;
 
-    // Add DRB: one DRB per PDU Session
-    drb_t *rrc_drb = nr_rrc_add_drb(&UE->drbs, session->pdusession_id, &rrc->pdcp_config);
-    if (!rrc_drb) {
-      LOG_E(NR_RRC, "UE %d: failed to add DRB for PDU session ID %d\n", UE->rrc_ue_id, session->pdusession_id);
-      continue;
+    // Intelligent QoS to DRB mapping based on 3GPP TS 23.501
+    FOR_EACH_SEQ_ARR(nr_rrc_qos_t *, qos, &session->qos) {
+      nr_rrc_assign_drb_to_qos_flow(rrc, UE, session, qos);
     }
-    DevAssert(seq_arr_size(&pduSession->param.qos) == 1);
-    nr_rrc_qos_t* qos = (nr_rrc_qos_t*) seq_arr_at(&pduSession->param.qos, 0);
-    qos->drb_id = rrc_drb->drb_id; // map DRB to QFI
-    LOG_I(NR_RRC, "UE %d: added DRB %d for PDU session ID %d\n", UE->rrc_ue_id, rrc_drb->drb_id, rrc_drb->pdusession_id);
   }
 }
