@@ -123,6 +123,7 @@ typedef struct {
   Actor_t *channel_modelling_actors;
   char *taps_socket;
   int client_num_rx_antennas;
+  struct timespec start_ts;
 } vrtsim_state_t;
 
 // Sample history for channel impulse response
@@ -211,6 +212,7 @@ static void *vrtsim_timing_job(void *arg)
     LOG_E(UTIL, "clock_gettime failed\n");
     exit(1);
   }
+  vrtsim_state->start_ts = timestamp;
   double leftover_samples = 0;
   while (vrtsim_state->run_timing_thread) {
     struct timespec current_time;
@@ -628,6 +630,14 @@ static int vrtsim_set_freq(openair0_device *device, openair0_config_t *openair0_
   return 0;
 }
 
+openair0_timestamp vrtsim_get_timestamp(openair0_device *device, struct timespec *ts)
+{
+  vrtsim_state_t *vrtsim_state = (vrtsim_state_t *)device->priv;
+  uint64_t diff = (ts->tv_sec - vrtsim_state->start_ts.tv_sec) * 1000000000 + (ts->tv_nsec - vrtsim_state->start_ts.tv_nsec);
+  double diff_samples = vrtsim_state->sample_rate * vrtsim_state->timescale * diff / 1e9;
+  return diff_samples > 0 ? diff_samples : 0;
+}
+
 __attribute__((__visibility__("default"))) int device_init(openair0_device *device, openair0_config_t *openair0_cfg)
 {
   vrtsim_state_t *vrtsim_state = calloc_or_fail(1, sizeof(vrtsim_state_t));
@@ -643,6 +653,9 @@ __attribute__((__visibility__("default"))) int device_init(openair0_device *devi
   device->trx_set_gains_func = vrtsim_stub2;
   device->trx_write_func = vrtsim_write;
   device->trx_read_func = vrtsim_read;
+  if (vrtsim_state->role == ROLE_SERVER) {
+    device->get_timestamp = vrtsim_get_timestamp;
+  }
 
   device->type = RFSIMULATOR;
   device->openair0_cfg = &openair0_cfg[0];
