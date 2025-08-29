@@ -27,8 +27,8 @@ project (OpenAirInterface LANGUAGES C CXX)
 
 
 option(CUDA_ENABLE "Enable CUDA accelerated channel simulation" OFF)
-find_package(CUDA)
 if(CUDA_ENABLE)
+    find_package(CUDA REQUIRED)
     find_package(CUDAToolkit REQUIRED)
     message(STATUS "CUDA explicitly enabled, building with GPU acceleration support.")
     
@@ -55,6 +55,22 @@ if(CUDA_ENABLE)
         message(STATUS "CUDA Explicit Copy path enabled (default ATS was overridden).")
     endif()
 
+    # Check for CUDA-capable devices
+    include(CheckCXXSourceCompiles)
+    set(CUDA_CHECK_CODE "
+    #include <cuda_runtime.h>
+    int main() {
+        int count;
+        cudaGetDeviceCount(&count);
+        return count > 0 ? 0 : 1;
+    }")
+
+    check_cxx_source_compiles("${CUDA_CHECK_CODE}" CUDA_COMPATIBLE)
+
+    if(NOT CUDA_COMPATIBLE)
+        message(FATAL_ERROR "No CUDA-capable hardware detected. Please ensure your device supports CUDA.")
+    endif()
+
     add_compile_definitions(ENABLE_CUDA)
 
     add_library(oai_cuda_lib STATIC
@@ -62,7 +78,10 @@ if(CUDA_ENABLE)
         ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/phase_noise.cu
         ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/channel_pipeline.cu
     )
-    
+
+
+    target_link_libraries(oai_cuda_lib PRIVATE ${CUDAToolkit_LIBRARIES})
+
     target_include_directories(oai_cuda_lib PUBLIC
         ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS
     )

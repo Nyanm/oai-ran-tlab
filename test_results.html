@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en-US">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+  <title>Test Results for TEMPLATE_JOB_NAME job build #TEMPLATE_BUILD_ID</title>
+</head>
+<body><div class="container-fluid" style="margin-left:1em; margin-right:1em">
+  <br>
+  <table style="border-collapse: collapse; border: none;">
+    <tr style="border-collapse: collapse; border: none;">
+      <td style="border-collapse: collapse; border: none;">
+        <a href="http://www.openairinterface.org/">
+           <img src="http://www.openairinterface.org/wp-content/uploads/2016/03/cropped-oai_final_logo2.png" alt="" border="none" height=50 width=150>
+           </img>
+        </a>
+      </td>
+      <td style="border-collapse: collapse; border: none; vertical-align: center;">
+        <b><font size = "6">Job Summary -- Job: TEMPLATE_JOB_NAME -- Build-ID: TEMPLATE_BUILD_ID</font></b>
+      </td>
+    </tr>
+  </table>
+  <br>
+  <div class="alert alert-info"><strong> <span class="glyphicon glyphicon-dashboard"></span> TEMPLATE_STAGE_NAME</strong></div>
+  <table border = "1">
+     <tr>
+       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-time"></span> Build Start Time (UTC) </td>
+       <td>TEMPLATE_BUILD_TIME</td>
+     </tr>
+     <tr>
+       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-cloud-upload"></span> GIT Repository </td>
+       <td><a href=""></a></td>
+     </tr>
+     <tr>
+       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-wrench"></span> Job Trigger </td>
+       <td>Push to Branch</td>
+     </tr>
+     <tr>
+       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-tree-deciduous"></span> Branch</td>
+       <td></td>
+     </tr>
+     <tr>
+       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-tag"></span> Commit ID </td>
+       <td></td>
+     </tr>
+     <tr>
+       <td bgcolor = "lightcyan" > <span class="glyphicon glyphicon-comment"></span> Commit Message </td>
+       <td>documentation updated</td>
+     </tr>
+  </table>
+  <br>
+  <ul class="nav nav-pills">
+    <li class="active"><a data-toggle="pill" href="#gpu-scaling-tab">GPU Scaling Test <span class="glyphicon glyphicon-stats"></span></a></li>
+  </ul>
+  <div class="tab-content">
+  <div id="gpu-scaling-tab" class="tab-pane fade in active">
+  <h3>Test Summary for <span class="glyphicon glyphicon-file"></span> gpu_scaling_test.py</h3>
+  <table class="table" border = "1">
+      <tr bgcolor = "#33CCFF" >
+        <th style="width:5%">Relative Time (s)</th>
+        <th style="width:5%">Test Id</th>
+        <th>Test Desc</th>
+        <th>Test Options</th>
+        <th style="width:5%">Test Status</th>
+        <th>Info</th>
+      </tr>
+      <tr>
+        <td bgcolor = "lightcyan" >15.6</td>
+        <td bgcolor = "lightcyan" >040101</td>
+        <td>Small-scale test (16 channels, 2x2 MIMO)</td>
+        <td>-c 16 -t 2 -r 2 -n 5 -m batch</td>
+        <td bgcolor = "lightgreen" >OK</td>
+        <td>         <pre style="display: inline flow-root list-item; margin: 0 3px 0 3px; min-width: 24em;"><pre>[LOG] init aborted, configuration couldn't be performed
+Initializing random number generator, seed 9307078083660417599
+Memory Mode: ATS
+
+--- Final Benchmark Results ---
+
++----------------------------------+--------------------------+
+| Configuration                    | Value                    |
++----------------------------------+--------------------------+
+| Parallel Channels                | 16                       |
+| MIMO Configuration (Tx x Rx)     | 2 x 2                    |
+| Signal Length (Samples)          | 122880                   |
+| Trials per configuration         | 5                        |
++----------------------------------+--------------------------+
+| Performance Metric               | Value                    |
++----------------------------------+--------------------------+
+| Total CPU Time (us)              | 0.03                     |
+| Total GPU Time (us)              | 19284.66                 |
+| Avg Time per Channel - CPU (us)  | 0.00                     |
+| Avg Time per Channel - GPU (us)  | 1205.29                  |
+| Speedup (CPU/GPU)                | 0.00x                    |
+| GPU Throughput (GSPS)            | 0.204                    |
++----------------------------------+--------------------------+
+Benchmark finished.</pre></pre>                </td>      </tr>
+      <tr>
+        <td bgcolor = "lightcyan" >17.8</td>
+        <td bgcolor = "lightcyan" >040102</td>
+        <td>Large-scale test (128 channels, 4x4 MIMO)</td>
+        <td>-c 128 -t 4 -r 4 -n 5 -m batch</td>
+        <td bgcolor = "lightgreen" >OK</td>
+        <td>         <pre style="display: inline flow-root list-item; margin: 0 3px 0 3px; min-width: 24em;"><pre>[LOG] init aborted, configuration couldn't be performed
+Initializing random number generator, seed 12916953679624344417
+Memory Mode: ATS
+
+--- Final Benchmark Results ---
+
++----------------------------------+--------------------------+
+| Configuration                    | Value                    |
++----------------------------------+--------------------------+
+| Parallel Channels                | 128                      |
+| MIMO Configuration (Tx x Rx)     | 4 x 4                    |
+| Signal Length (Samples)          | 122880                   |
+| Trials per configuration         | 5                        |
++----------------------------------+--------------------------+
+| Performance Metric               | Value                    |
++----------------------------------+--------------------------+
+| Total CPU Time (us)              | 0.03                     |
+| Total GPU Time (us)              | 319289.27                |
+| Avg Time per Channel - CPU (us)  | 0.00                     |
+| Avg Time per Channel - GPU (us)  | 2494.45                  |
+| Speedup (CPU/GPU)                | 0.00x                    |
+| GPU Throughput (GSPS)            | 0.197                    |
++----------------------------------+--------------------------+
+Benchmark finished.</pre></pre>                </td>      </tr>
+      <tr>
+        <td bgcolor = "lightcyan" >18.5</td>
+        <td bgcolor = "lightcyan" >040103</td>
+        <td>Concurrency test in stream mode</td>
+        <td>-c 64 -t 2 -r 2 -n 5 -m stream</td>
+        <td bgcolor = "lightgreen" >OK</td>
+        <td>         <pre style="display: inline flow-root list-item; margin: 0 3px 0 3px; min-width: 24em;"><pre>[LOG] init aborted, configuration couldn't be performed
+Initializing random number generator, seed 18072632314055665423
+Memory Mode: ATS
+
+--- Final Benchmark Results ---
+
++----------------------------------+--------------------------+
+| Configuration                    | Value                    |
++----------------------------------+--------------------------+
+| Parallel Channels                | 64                       |
+| MIMO Configuration (Tx x Rx)     | 2 x 2                    |
+| Signal Length (Samples)          | 122880                   |
+| Trials per configuration         | 5                        |
++----------------------------------+--------------------------+
+| Performance Metric               | Value                    |
++----------------------------------+--------------------------+
+| Total CPU Time (us)              | 0.04                     |
+| Total GPU Time (us)              | 14775.17                 |
+| Avg Time per Channel - CPU (us)  | 0.00                     |
+| Avg Time per Channel - GPU (us)  | 230.86                   |
+| Speedup (CPU/GPU)                | 0.00x                    |
+| GPU Throughput (GSPS)            | 1.065                    |
++----------------------------------+--------------------------+
+Benchmark finished.</pre></pre>                </td>      </tr>
+      <tr>
+        <th bgcolor = "#33CCFF" colspan="3">Final Tab Status</th>
+        <th bgcolor = "green" colspan="3"><font color="white">PASS <span class="glyphicon glyphicon-ok"></span> </font></th>
+      </tr>
+  </table>
+  </div>
+</div>
+  <p></p>
+  <table class="table table-condensed">
+      <tr>
+        <th colspan="5" bgcolor = "#33CCFF">Final Status</th>
+        <th colspan="3" bgcolor="green"><font color="white">PASS <span class="glyphicon glyphicon-ok"></span></font></th>
+      </tr>
+  </table>
+  <p></p>
+  <div class="well well-lg">End of Test Report -- Copyright <span class="glyphicon glyphicon-copyright-mark"></span> 2018 <a href="http://www.openairinterface.org/">OpenAirInterface</a>. All Rights Reserved.</div>
+</div></body>
+</html>

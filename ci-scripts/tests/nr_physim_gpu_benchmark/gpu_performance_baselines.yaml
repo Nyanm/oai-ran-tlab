@@ -1,0 +1,183 @@
+# --- Test Suite 1: Scalability vs. Channel Count ---
+Channels_16_Batch:
+  'Total GPU Time (us)': 5265.72
+  'Avg Time per Channel - GPU (us)': 329.11
+  'Threshold': 100.00
+
+Channels_16_Stream:
+  'Total GPU Time (us)': 5265.72
+  'Avg Time per Channel - GPU (us)': 329.11
+  'Threshold': 100.00
+
+Channels_16_Serial:
+  'Total GPU Time (us)': 5265.72
+  'Avg Time per Channel - GPU (us)': 329.11
+  'Threshold': 100.00
+
+Channels_256_Batch:
+  'Total GPU Time (us)': 85696.71
+  'Avg Time per Channel - GPU (us)': 334.75
+  'Threshold': 100.00
+
+Channels_256_Stream:
+  'Total GPU Time (us)': 85696.71
+  'Avg Time per Channel - GPU (us)': 334.75
+  'Threshold': 100.00
+
+Channels_256_Serial:
+  'Total GPU Time (us)': 85696.71
+  'Avg Time per Channel - GPU (us)': 334.75
+  'Threshold': 100.00
+
+Channels_1024_Batch:
+  'Total GPU Time (us)': 337217.10
+  'Avg Time per Channel - GPU (us)': 329.31
+  'Threshold': 100.00
+
+Channels_1024_Stream:
+  'Total GPU Time (us)': 337217.10
+  'Avg Time per Channel - GPU (us)': 329.31
+  'Threshold': 100.00 
+
+Channels_1024_Serial:
+  'Total GPU Time (us)': 337217.10
+  'Avg Time per Channel - GPU (us)': 329.31
+  'Threshold': 100.00
+
+# --- Test Suite 2: Performance vs. Channel Complexity ---
+Length_16_Batch:
+  'Total GPU Time (us)': 319082.56
+  'Avg Time per Channel - GPU (us)': 311.60
+  'Threshold': 100.00
+
+Length_16_Stream:
+  'Total GPU Time (us)': 319082.56
+  'Avg Time per Channel - GPU (us)': 311.60
+  'Threshold': 100.00
+
+Length_16_Serial:
+  'Total GPU Time (us)': 319082.56
+  'Avg Time per Channel - GPU (us)': 311.60
+  'Threshold': 100.00
+
+Length_64_Batch:
+  'Total GPU Time (us)': 366564.52
+  'Avg Time per Channel - GPU (us)': 357.97
+  'Threshold': 100.00
+
+Length_64_Stream:
+  'Total GPU Time (us)': 366564.52
+  'Avg Time per Channel - GPU (us)': 357.97
+  'Threshold': 100.00
+
+Length_64_Serial:
+  'Total GPU Time (us)': 366564.52
+  'Avg Time per Channel - GPU (us)': 357.97
+  'Threshold': 100.00
+
+Length_128_Batch:
+  'Total GPU Time (us)': 425883.51
+  'Avg Time per Channel - GPU (us)': 415.90
+  'Threshold': 100.00
+
+Length_128_Stream:
+  'Total GPU Time (us)': 425883.51
+  'Avg Time per Channel - GPU (us)': 415.90
+  'Threshold': 100.00 
+
+Length_128_Serial:
+  'Total GPU Time (us)': 425883.51
+  'Avg Time per Channel - GPU (us)': 415.90
+  'Threshold': 100.00
+
+# --- Test Suite 3: Performance vs. MIMO Configuration ---
+MIMO_2x2_Batch:
+  'Total GPU Time (us)': 158999.06
+  'Avg Time per Channel - GPU (us)': 155.27
+  'Threshold': 100.00
+
+MIMO_2x2_Stream:
+  'Total GPU Time (us)': 158999.06
+  'Avg Time per Channel - GPU (us)': 155.27
+  'Threshold': 100.00
+
+MIMO_2x2_Serial:
+  'Total GPU Time (us)': 158999.06
+  'Avg Time per Channel - GPU (us)': 155.27
+  'Threshold': 100.00
+
+MIMO_4x4_Batch:
+  'Total GPU Time (us)': 336377.55
+  'Avg Time per Channel - GPU (us)': 328.49
+  'Threshold': 100.00
+
+MIMO_4x4_Stream:
+  'Total GPU Time (us)': 336377.55
+  'Avg Time per Channel - GPU (us)': 328.49
+  'Threshold': 100.00
+
+MIMO_4x4_Serial:
+  'Total GPU Time (us)': 336377.55
+  'Avg Time per Channel - GPU (us)': 328.49
+  'Threshold': 100.00
+
+MIMO_8x8_Batch:
+  'Total GPU Time (us)': 718312.46
+  'Avg Time per Channel - GPU (us)': 701.48
+  'Threshold': 100.00
+
+MIMO_8x8_Stream:
+  'Total GPU Time (us)': 718312.46
+  'Avg Time per Channel - GPU (us)': 701.48
+  'Threshold': 100.00
+
+MIMO_8x8_Serial:
+  'Total GPU Time (us)': 718312.46
+  'Avg Time per Channel - GPU (us)': 701.48
+  'Threshold': 100.00
+
+# --- Test Suite 4: Performance vs. Signal Samples ---
+Samples_30720_Batch:
+  'Total GPU Time (us)': 84702.49
+  'Avg Time per Channel - GPU (us)': 82.72
+  'Threshold': 100.00
+
+Samples_30720_Stream:
+  'Total GPU Time (us)': 84702.49
+  'Avg Time per Channel - GPU (us)': 82.72
+  'Threshold': 100.00
+
+Samples_30720_Serial:
+  'Total GPU Time (us)': 84702.49
+  'Avg Time per Channel - GPU (us)': 82.72
+  'Threshold': 100.00
+
+Samples_61440_Batch:
+  'Total GPU Time (us)': 168761.94
+  'Avg Time per Channel - GPU (us)': 164.81
+  'Threshold': 100.00
+
+Samples_61440_Stream:
+  'Total GPU Time (us)': 168761.94
+  'Avg Time per Channel - GPU (us)': 164.81
+  'Threshold': 100.00
+
+Samples_61440_Serial:
+  'Total GPU Time (us)': 168761.94
+  'Avg Time per Channel - GPU (us)': 164.81
+  'Threshold': 100.00
+
+Samples_122880_Batch:
+  'Total GPU Time (us)': 336500.40
+  'Avg Time per Channel - GPU (us)': 328.61
+  'Threshold': 100.00
+
+Samples_122880_Stream:
+  'Total GPU Time (us)': 336500.40
+  'Avg Time per Channel - GPU (us)': 328.61
+  'Threshold': 100.00
+
+Samples_122880_Serial:
+  'Total GPU Time (us)': 336500.40
+  'Avg Time per Channel - GPU (us)': 328.61
+  'Threshold': 100.00
