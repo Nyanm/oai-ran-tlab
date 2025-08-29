@@ -664,6 +664,35 @@ int xran_fh_tx_read_slot(uint32_t **txdataF, int nb_tx, int *frame, int *slot, i
       } // sym_ind
     } // ant_ind
   } // vv_inf
+
+  static int64_t old_rx_counter[XRAN_PORTS_NUM] = {0};
+  static int64_t old_tx_counter[XRAN_PORTS_NUM] = {0};
+  struct xran_common_counters x_counters[XRAN_PORTS_NUM];
+  if ((*frame & 0x7f) == 0 && *slot == 0 && xran_get_common_counters(gxran_handle, &x_counters[0]) == XRAN_STATUS_SUCCESS) {
+    for (int o_xu_id = 0; o_xu_id < fh_init->xran_ports; o_xu_id++) {
+      LOG_I(HW,
+            "[o-ru %d][rx %7ld pps %7ld kbps %7ld][tx %7ld pps %7ld kbps %7ld] [on_time %ld early %ld late %ld corrupt %ld "
+            "pkt_dupl %ld Invalid_Ext1_packets %ld Total %ld]\n",
+            o_xu_id,
+            x_counters[o_xu_id].rx_counter,
+            x_counters[o_xu_id].rx_counter - old_rx_counter[o_xu_id],
+            x_counters[o_xu_id].rx_bytes_per_sec * 8 / 1000L,
+            x_counters[o_xu_id].tx_counter,
+            x_counters[o_xu_id].tx_counter - old_tx_counter[o_xu_id],
+            x_counters[o_xu_id].tx_bytes_per_sec * 8 / 1000L,
+            x_counters[o_xu_id].Rx_on_time,
+            x_counters[o_xu_id].Rx_early,
+            x_counters[o_xu_id].Rx_late,
+            x_counters[o_xu_id].Rx_corrupt,
+            x_counters[o_xu_id].Rx_pkt_dupl,
+            x_counters[o_xu_id].rx_invalid_ext1_packets,
+            x_counters[o_xu_id].Total_msgs_rcvd);
+      if (x_counters[o_xu_id].rx_counter > old_rx_counter[o_xu_id])
+        old_rx_counter[o_xu_id] = x_counters[o_xu_id].rx_counter;
+      if (x_counters[o_xu_id].tx_counter > old_tx_counter[o_xu_id])
+        old_tx_counter[o_xu_id] = x_counters[o_xu_id].tx_counter;
+    }
+  }
   return 0;
 }
 
