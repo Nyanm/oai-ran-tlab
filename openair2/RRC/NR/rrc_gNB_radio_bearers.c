@@ -211,7 +211,6 @@ drb_t *nr_rrc_add_drb(seq_arr_t *drb_ptr, int pdusession_id, nr_pdcp_configurati
   seq_arr_push_back(drb_ptr, &in, sizeof(drb_t));
   drb_t *out = get_drb(drb_ptr, drb_id);
   DevAssert(out);
-  LOG_I(NR_RRC, "Added DRB %d to established list (PDU Session ID=%d, total DRBs = %ld)\n", out->drb_id, pdusession_id, seq_arr_size(drb_ptr));
   return out;
 }
 
@@ -269,4 +268,36 @@ bearer_context_pdcp_config_t set_bearer_context_pdcp_config(const nr_pdcp_config
   out.rLC_Mode = um_on_default_drb ? E1AP_RLC_Mode_rlc_um_bidirectional : E1AP_RLC_Mode_rlc_am;
   out.pDCP_Reestablishment = false;
   return out;
+}
+
+static nr_sdap_configuration_t get_sdap_config(const bool enable_sdap)
+{
+  nr_sdap_configuration_t sdap = {.header_dl_absent = !enable_sdap, .header_ul_absent = !enable_sdap};
+  return sdap;
+}
+
+/** @brief Add PDU Sessions and DRBs to UE context list. For each QoS flow in the setup list, adds a DRB */
+void nr_rrc_add_bearers(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession_t *sessions)
+{
+  for (int i = 0; i < n; i++) {
+    // Retrieve SDAP configuration and PDU Session to the list
+    sessions[i].sdap_config = get_sdap_config(rrc->configuration.enable_sdap);
+    rrc_pdu_session_param_t *pduSession = add_pduSession(&UE->pduSessions, &sessions[i]);
+    if (!pduSession) {
+      LOG_E(NR_RRC, "Could not add PDU Session %d for UE %d\n", sessions[i].pdusession_id, UE->rrc_ue_id);
+      continue;
+    }
+    pdusession_t *session = &pduSession->param;
+
+    // Add DRB: one DRB per PDU Session
+    drb_t *rrc_drb = nr_rrc_add_drb(&UE->drbs, session->pdusession_id, &rrc->pdcp_config);
+    if (!rrc_drb) {
+      LOG_E(NR_RRC, "UE %d: failed to add DRB for PDU session ID %d\n", UE->rrc_ue_id, session->pdusession_id);
+      continue;
+    }
+    DevAssert(seq_arr_size(&pduSession->param.qos) == 1);
+    nr_rrc_qos_t* qos = (nr_rrc_qos_t*) seq_arr_at(&pduSession->param.qos, 0);
+    qos->drb_id = rrc_drb->drb_id; // map DRB to QFI
+    LOG_I(NR_RRC, "UE %d: added DRB %d for PDU session ID %d\n", UE->rrc_ue_id, rrc_drb->drb_id, rrc_drb->pdusession_id);
+  }
 }

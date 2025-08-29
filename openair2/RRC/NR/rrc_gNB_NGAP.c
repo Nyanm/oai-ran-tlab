@@ -296,6 +296,28 @@ static qos_flow_to_setup_t fill_e1_qos_flow_to_setup(const pdusession_level_qos_
   return qos_flow;
 }
 
+/** @brief Fills E1 PDU Session to Setup item IE */
+static pdu_session_to_setup_t fill_e1_pdusession_to_setup(const pdusession_t *session, const nr_security_configuration_t *security)
+{
+  pdu_session_to_setup_t pdu = {0};
+  // Session ID
+  pdu.sessionId = session->pdusession_id;
+  // NSSAI
+  pdu.nssai = session->nssai;
+  // Security indication
+  security_indication_t *sec = &pdu.securityIndication;
+  sec->integrityProtectionIndication = security->do_drb_integrity ? SECURITY_REQUIRED : SECURITY_NOT_NEEDED;
+  sec->confidentialityProtectionIndication = security->do_drb_ciphering ? SECURITY_REQUIRED : SECURITY_NOT_NEEDED;
+  // UP TL information
+  const gtpu_tunnel_t *n3_incoming = &session->n3_incoming;
+  pdu.UP_TL_information.teId = n3_incoming->teid;
+  memcpy(&pdu.UP_TL_information.tlAddress, n3_incoming->addr.buffer, sizeof(in_addr_t));
+  char ip_str[INET_ADDRSTRLEN] = {0};
+  inet_ntop(AF_INET, n3_incoming->addr.buffer, ip_str, sizeof(ip_str));
+  LOG_I(NR_RRC, "PDU Session to Setup: PDU Session ID=%d, incoming TEID=0x%08x, Addr=%s\n", session->pdusession_id, n3_incoming->teid, ip_str);
+  return pdu;
+}
+
 /** @brief Returns an instance of E1AP DRB To Setup List */
 static DRB_nGRAN_to_setup_t fill_e1_drb_to_setup(const drb_t *rrc_drb,
                                                  const pdusession_t *session,
@@ -328,95 +350,51 @@ static DRB_nGRAN_to_setup_t fill_e1_drb_to_setup(const drb_t *rrc_drb,
   return drb_ngran;
 }
 
-static nr_sdap_configuration_t get_sdap_config(const bool enable_sdap)
-{
-  nr_sdap_configuration_t sdap = {.header_dl_absent = !enable_sdap, .header_ul_absent = !enable_sdap};
-  return sdap;
-}
-
-/**
- * @brief Triggers bearer setup for the specified UE.
- *
- * This function initiates the setup of bearer contexts for a given UE
- * by preparing and sending an E1AP Bearer Setup Request message to the CU-UP.
- *
- * @return True if bearer setup was successfully initiated, false otherwise
- * @retval true Bearer setup was initiated successfully
- * @retval false No CU-UP is associated, so bearer setup could not be initiated
- *
- * @note the return value is expected to be used (as per declaration)
- *
- */
-bool trigger_bearer_setup(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession_t *sessions, uint64_t ueAggMaxBitRateDownlink)
+/** @brief Triggers E1 Bearer Context Setup
+ * Initiates the setup of bearer contexts for a given UE by preparing and
+ * sending an E1AP Bearer Context Setup Request message to the CU-UP.
+ * Precondition: CU-UP association is checked by callers before invocation. */
+void trigger_bearer_setup(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, uint64_t ueAggMaxBitRateDownlink)
 {
   if (ueAggMaxBitRateDownlink == UINT64_MAX) {
     LOG_E(NR_RRC, "UE %d: UE aggregate maximum bitrate must be known by the NG-RAN node\n", UE->rrc_ue_id);
-    return false;
+    return;
   }
   AssertFatal(UE->as_security_active, "logic bug: security should be active when activating DRBs\n");
-  e1ap_bearer_setup_req_t bearer_req = {
-    .gNB_cu_cp_ue_id = UE->rrc_ue_id,
-  };
 
-  // Reject bearers setup if there's no CU-UP associated
-  if (!is_cuup_associated(rrc)) {
-    return false;
-  }
+  // E1 Bearer Context Setup Request
+  e1ap_bearer_setup_req_t bearer_req = {
+      .gNB_cu_cp_ue_id = UE->rrc_ue_id,
+      .secInfo.cipheringAlgorithm = rrc->security.do_drb_ciphering ? UE->ciphering_algorithm : 0,
+      .secInfo.integrityProtectionAlgorithm = rrc->security.do_drb_integrity ? UE->integrity_algorithm : 0,
+      .ueDlAggMaxBitRate = ueAggMaxBitRateDownlink,
+  };
+  security_information_t *secInfo = &bearer_req.secInfo;
+  nr_derive_key(UP_ENC_ALG, secInfo->cipheringAlgorithm, UE->kgnb, (uint8_t *)secInfo->encryptionKey);
+  nr_derive_key(UP_INT_ALG, secInfo->integrityProtectionAlgorithm, UE->kgnb, (uint8_t *)secInfo->integrityProtectionKey);
 
   e1ap_nssai_t cuup_nssai = {0};
-  for (int i = 0; i < n; i++) {
-    // Retrieve SDAP configuration and PDU Session to the list
-    sessions[i].sdap_config = get_sdap_config(rrc->configuration.enable_sdap);
-    rrc_pdu_session_param_t *pduSession = add_pduSession(&UE->pduSessions, &sessions[i]);
-    if (!pduSession) {
-      LOG_E(NR_RRC, "Could not add PDU Session %d for UE %d\n", sessions[i].pdusession_id, UE->rrc_ue_id);
+  FOR_EACH_SEQ_ARR(rrc_pdu_session_param_t *, pduSession, &UE->pduSessions) {
+    if (pduSession->status != PDU_SESSION_STATUS_NEW)
       continue;
-    }
     pdusession_t *session = &pduSession->param;
-    // Fill E1 Bearer Context Modification Request
-    bearer_req.gNB_cu_cp_ue_id = UE->rrc_ue_id;
-    security_information_t *secInfo = &bearer_req.secInfo;
-    secInfo->cipheringAlgorithm = rrc->security.do_drb_ciphering ? UE->ciphering_algorithm : 0;
-    secInfo->integrityProtectionAlgorithm = rrc->security.do_drb_integrity ? UE->integrity_algorithm : 0;
-    nr_derive_key(UP_ENC_ALG, secInfo->cipheringAlgorithm, UE->kgnb, (uint8_t *)secInfo->encryptionKey);
-    nr_derive_key(UP_INT_ALG, secInfo->integrityProtectionAlgorithm, UE->kgnb, (uint8_t *)secInfo->integrityProtectionKey);
-    bearer_req.ueDlAggMaxBitRate = ueAggMaxBitRateDownlink;
-    pdu_session_to_setup_t *pdu = bearer_req.pduSession + bearer_req.numPDUSessions;
-    bearer_req.numPDUSessions++;
-    pdu->sessionId = session->pdusession_id;
-    pdu->nssai = sessions[i].nssai;
+    // Fill E1 PDU Session to setup item
+    pdu_session_to_setup_t *pdu = &bearer_req.pduSession[bearer_req.numPDUSessions++];
+    *pdu = fill_e1_pdusession_to_setup(session, &rrc->security);
     if (cuup_nssai.sst == 0)
       cuup_nssai = pdu->nssai; /* for CU-UP selection below */
-
-    security_indication_t *sec = &pdu->securityIndication;
-    sec->integrityProtectionIndication = rrc->security.do_drb_integrity ? SECURITY_REQUIRED
-                                                                        : SECURITY_NOT_NEEDED;
-    sec->confidentialityProtectionIndication = rrc->security.do_drb_ciphering ? SECURITY_REQUIRED
-                                                                              : SECURITY_NOT_NEEDED;
-    gtpu_tunnel_t *n3_incoming = &session->n3_incoming;
-    pdu->UP_TL_information.teId = n3_incoming->teid;
-    memcpy(&pdu->UP_TL_information.tlAddress, n3_incoming->addr.buffer, sizeof(in_addr_t));
-    char ip_str[INET_ADDRSTRLEN] = {0};
-    inet_ntop(AF_INET, n3_incoming->addr.buffer, ip_str, sizeof(ip_str));
-    LOG_I(NR_RRC, "Bearer Context Setup: PDU Session ID=%d, incoming TEID=0x%08x, Addr=%s\n", session->pdusession_id, n3_incoming->teid, ip_str);
-
-    pdu->numDRB2Setup = 1; // One DRB per PDU Session. TODO: Remove hardcoding
-    for (int j = 0; j < pdu->numDRB2Setup; j++) {
-      drb_t *rrc_drb = nr_rrc_add_drb(&UE->drbs, session->pdusession_id, &rrc->pdcp_config);
-      if (!rrc_drb) {
-        LOG_E(NR_RRC, "UE %d: failed to add DRB for PDU session ID %d\n", UE->rrc_ue_id, session->pdusession_id);
-        return false;
+    // Fill E1 DRB to setup item
+    FOR_EACH_SEQ_ARR(drb_t *, drb, &UE->drbs) {
+      if (drb->pdusession_id != session->pdusession_id) {
+        continue;
       }
-      DevAssert(seq_arr_size(&pduSession->param.qos) == 1);
-      nr_rrc_qos_t *qos = (nr_rrc_qos_t *)seq_arr_at(&pduSession->param.qos, 0);
-      qos->drb_id = rrc_drb->drb_id; // map DRB to QFI
-      LOG_I(NR_RRC, "UE %d: added DRB %d for PDU session ID %d\n", UE->rrc_ue_id, rrc_drb->drb_id, rrc_drb->pdusession_id);
-      pdu->DRBnGRanList[0] = fill_e1_drb_to_setup(rrc_drb, session, rrc->configuration.um_on_default_drb, UE->redcap_cap);
+      pdu->DRBnGRanList[pdu->numDRB2Setup++] = fill_e1_drb_to_setup(drb, session, rrc->configuration.um_on_default_drb, UE->redcap_cap);
     }
+    DevAssert(pdu->numDRB2Setup > 0);
   }
   if (bearer_req.numPDUSessions == 0) {
     LOG_W(NR_RRC, "UE %d: No PDU sessions to setup, skipping bearer context setup\n", UE->rrc_ue_id);
-    return false;
+    return;
   }
   /* Limitation: we assume one fixed CU-UP per UE. We base the selection on
    * NSSAI, but the UE might have multiple PDU sessions with differing slices,
@@ -425,7 +403,6 @@ bool trigger_bearer_setup(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession
    * CU-UPs, and send them to the different CU-UPs. */
   sctp_assoc_t assoc_id = get_new_cuup_for_ue(rrc, UE, cuup_nssai.sst, cuup_nssai.sd);
   rrc->cucp_cuup.bearer_context_setup(assoc_id, &bearer_req);
-  return true;
 }
 
 /**
@@ -542,13 +519,16 @@ int rrc_gNB_process_NGAP_INITIAL_CONTEXT_SETUP_REQ(MessageDef *msg_p, instance_t
       // do not remove the above allocation which is reused here: this is used
       // in handle_rrcReconfigurationComplete() to know that we need to send a
       // Initial context setup response message
-      if (!trigger_bearer_setup(rrc, UE, UE->n_initial_pdu, UE->initial_pdus, UE->ambr.dl_br)) {
+      // Reject bearers setup if there's no CU-UP associated
+      if (!is_cuup_associated(rrc)) {
         LOG_W(NR_RRC, "UE %d: reject PDU Session Setup in Initial Context Setup Response\n", UE->rrc_ue_id);
         ngap_cause_t cause = {.type = NGAP_CAUSE_RADIO_NETWORK, .value = NGAP_CAUSE_RADIO_NETWORK_RESOURCES_NOT_AVAILABLE_FOR_THE_SLICE};
         send_ngap_initial_context_setup_resp_fail(rrc->module_id, req, cause);
         rrc_forward_ue_nas_message(rrc, UE);
         return -1;
       }
+      nr_rrc_add_bearers(rrc, UE, UE->n_initial_pdu, UE->initial_pdus);
+      trigger_bearer_setup(rrc, UE, UE->ambr.dl_br);
     } else {
       /* no PDU sesion to setup: acknowledge this message, and forward NAS
        * message, if required */
@@ -901,16 +881,20 @@ void rrc_gNB_process_NGAP_PDUSESSION_SETUP_REQ(MessageDef *msg_p, instance_t ins
     UE->ambr.ul_br = msg->ueAggMaxBitRate.br_ul;
   }
 
-  if (!trigger_bearer_setup(rrc, UE, msg->nb_pdusessions_tosetup, to_setup, UE->ambr.dl_br)) {
+  if (!is_cuup_associated(rrc)) {
     // Reject PDU Session Resource setup if there's no CU-UP associated
     LOG_W(NR_RRC, "UE %d: reject PDU Session Setup in PDU Session Resource Setup Response\n", UE->rrc_ue_id);
     ngap_cause_t cause = {.type = NGAP_CAUSE_RADIO_NETWORK, .value = NGAP_CAUSE_RADIO_NETWORK_RESOURCES_NOT_AVAILABLE_FOR_THE_SLICE};
     send_ngap_pdu_session_setup_resp_fail(instance, msg, cause);
     rrc_forward_ue_nas_message(rrc, UE);
-  } else {
-    // Set ongoing_transaction flag to true
-    init_delayed_action(&UE->delayed_action);
+    return;
   }
+  // Add to UE context lists
+  nr_rrc_add_bearers(rrc, UE, msg->nb_pdusessions_tosetup, to_setup);
+  // Trigger bearer setup
+  trigger_bearer_setup(rrc, UE, UE->ambr.dl_br);
+  // Set ongoing_transaction flag to true
+  init_delayed_action(&UE->delayed_action);
 }
 
 /** @brief Update existing QoS Flow mapped in the UE context */
@@ -1237,9 +1221,8 @@ int rrc_gNB_process_Handover_Request(gNB_RRC_INST *rrc, ngap_handover_request_t 
   UE->ambr.dl_br = msg->ue_ambr.br_dl;
   UE->ambr.ul_br = msg->ue_ambr.br_ul;
 
-  if (!trigger_bearer_setup(rrc, UE, msg->nb_of_pdusessions, to_setup, UE->ambr.dl_br)) {
+  if (!is_cuup_associated(rrc)) {
     LOG_E(NR_RRC, "Failed to establish PDU session: handover failed\n");
-
     ngap_handover_failure_t fail = {
         .amf_ue_ngap_id = msg->amf_ue_ngap_id,
         .cause.type = NGAP_CAUSE_RADIO_NETWORK,
@@ -1249,6 +1232,10 @@ int rrc_gNB_process_Handover_Request(gNB_RRC_INST *rrc, ngap_handover_request_t 
     rrc_remove_ue(rrc, ue_context_p);
     return -1;
   }
+  // Add to UE context lists
+  nr_rrc_add_bearers(rrc, UE, msg->nb_of_pdusessions, to_setup);
+  // Trigger bearer setup
+  trigger_bearer_setup(rrc, UE, UE->ambr.dl_br);
   return 0;
 }
 

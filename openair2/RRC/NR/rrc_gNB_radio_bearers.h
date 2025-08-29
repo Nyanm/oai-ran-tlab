@@ -45,4 +45,7 @@ nr_rrc_qos_t *find_qos(seq_arr_t *seq, int qfi);
 /// @brief Add a new QoS to the list
 nr_rrc_qos_t *add_qos(seq_arr_t *qos, const pdusession_level_qos_parameter_t *in);
 
+/// @brief Add PDU Sessions and DRBs to UE context list
+void nr_rrc_add_bearers(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession_t *sessions);
+
 #endif
