@@ -38,6 +38,7 @@
 #define UNROLL_BN_PROC 1
 #define UNROLL_BN_PROC_PC 1
 #define UNROLL_BN2CN_PROC 1
+#define MAX_NUM_DLSCH_SEGMENTS_DL 132
 /*----------------------------------------------------------------------
 |                  cn processing files -->AVX512
 /----------------------------------------------------------------------*/
@@ -153,21 +154,21 @@
 
 //--------------------------CUDA Area---------------------------
 #include <cuda_runtime.h>
+#include "decoder_graphs.h"
 
-
-static cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS];
-static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS];
+static cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
+static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
 static bool streamsCreated = false;
 static int currentStreamCount = 0;
-static int8_t iter_ptr_array[MAX_NUM_DLSCH_SEGMENTS];
-static  int PC_Flag_array[MAX_NUM_DLSCH_SEGMENTS];
-static  int8_t cnProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static  int8_t cnProcBufRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static  int8_t bnProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static  int8_t bnProcBufRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static  int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
-static  int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
-static  int8_t llrOut[MAX_NUM_DLSCH_SEGMENTS * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+static int8_t iter_ptr_array[MAX_NUM_DLSCH_SEGMENTS_DL];
+static  int PC_Flag_array[MAX_NUM_DLSCH_SEGMENTS_DL];
+static  int8_t cnProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
+static  int8_t cnProcBufRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
+static  int8_t bnProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
+static  int8_t bnProcBufRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
+static  int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+static  int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+static  int8_t llrOut[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 
 
 
@@ -245,7 +246,7 @@ void dumpASS(int8_t* cnProcBufRes, const char* filename)
   }
   // printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
 
-  for (int i = 0; i < MAX_NUM_DLSCH_SEGMENTS * 68 * 384; i++) {
+  for (int i = 0; i < MAX_NUM_DLSCH_SEGMENTS_DL * 68 * 384; i++) {
     fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
     if ((i + 1) % 16 == 0)
       fprintf(fp, "\n");
@@ -264,13 +265,69 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            t_nrLDPC_time_stats* p_profiler,
                                            decode_abort_t* ab);
 
+void init_decoder_graphs() {
+  for (int i = 0; i < MAX_NUM_DLSCH_SEGMENTS_DL; i++) {
+    decoderGraphs[i] = NULL;
+    decoderGraphExec[i] = NULL;
+    graphCreated[i] = false;
+  }
+  printf("[decoder_graphs] initialized %d slots\n", MAX_NUM_DLSCH_SEGMENTS_DL);
+}
+
+void free_graphs()
+{
+  for (int i = 0; i < MAX_NUM_DLSCH_SEGMENTS_DL; i++) {
+    if (graphCreated[i]) {
+      cudaGraphExecDestroy(decoderGraphExec[i]);
+      cudaGraphDestroy(decoderGraphs[i]);
+      graphCreated[i] = false;
+    }
+  }
+   printf("[decoder_graphs] shutdown complete\n");
+}
+
+int32_t LDPCinit_cuda()
+{
+  printf("CUDA LDPC decoder initiating\n");
+  if (!streamsCreated) {
+    for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS_DL; ++s) {
+      cudaStreamCreateWithFlags(&decoderStreams[s], cudaStreamNonBlocking);
+      cudaEventCreate(&decoderDoneEvents[s]);
+    }
+    streamsCreated = true;
+  }
+  init_decoder_graphs();
+  return 0;
+}
+
 int32_t LDPCinit()
 {
+  printf("initialling\n");
+  LDPCinit_cuda();
+  return 0;
+}
+
+int32_t LDPCshutdown_cuda()
+{
+  for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS_DL; ++s) {
+    if (streamsCreated) {
+      cudaEventDestroy(decoderDoneEvents[s]);
+      cudaStreamDestroy(decoderStreams[s]);
+    }
+  }
+
+  free_graphs();
+
+  streamsCreated = false;
+  //d_mem_exist = false;
+
   return 0;
 }
 
 int32_t LDPCshutdown()
 {
+
+  LDPCshutdown_cuda();
   return 0;
 }
 
@@ -344,7 +401,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   //cudaStream_t streams[MAX_NUM_DLSCH_SEGMENTS];
   //cudaEvent_t done[MAX_NUM_DLSCH_SEGMENTS]; // MAX_NUM_SEGMENTS = stream num
 
-  for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS; s++) {
+  for (int s = 0; s < n_segments; s++) {
     iter_ptr_array[s] = 0;
     PC_Flag_array[s] = 1;
   }

@@ -117,7 +117,7 @@ static inline void nrLDPC_llr2llrProcBuf(t_nrLDPC_lut* p_lut, int8_t* llr, int8_
   if (numBn2CnG1 > 0) {
     memcpy(&llrProcBuf[0], &llr[colG1], numBn2CnG1 * Z);
   }
-printf("5\t");
+//printf("5\t");
   // First 2 columns might be set to zero directly if it's true they always belong to the groups with highest number of connected CNs...
   for (int i = 0; i < startColParity; i++) {
     const int idxBn = lut_llr2llrProcBufAddr[i] + lut_llr2llrProcBufBnPos[i] * Z;

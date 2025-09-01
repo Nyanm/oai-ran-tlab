@@ -119,6 +119,10 @@ if (ENABLE_LDPC_CUDA)
   target_link_libraries(ldpc_cuda ldpc_gen_HEADERS ${T_LIB})
   target_compile_definitions(ldpctest PRIVATE PARALLEL_STREAM)
   
+# Add AddressSanitizer flags for this target
+#target_compile_options(ldpc_cuda PRIVATE -fsanitize=address -g -O1)
+#target_link_options(ldpc_cuda PRIVATE -fsanitize=address)
+
   add_dependencies(ldpctest ldpc_cuda)
   add_dependencies(nr-softmodem ldpc_cuda)
   add_dependencies(nr-uesoftmodem ldpc_cuda)

@@ -166,7 +166,7 @@ static t_nrLDPC_lut* p_lut = &lut;
 #if USE_CUDA
 #include <cuda_runtime.h>
 #endif
-
+#include "decoder_graphs.h"
 
 #define COPY_ARR_MEMBER(member, type, groups) do { \
     for (int i = 0; i < (groups); i++) { \
@@ -204,7 +204,7 @@ static t_nrLDPC_lut* p_lut = &lut;
     cudaMemcpy(&(d_lut->member), &tmp_dev, sizeof(type*), cudaMemcpyHostToDevice); \
 } while(0)
 
-#include "decoder_graphs.h"
+
 static cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
 static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
 static bool streamsCreated = false;
@@ -571,6 +571,7 @@ int32_t LDPCinit()
 
 int32_t LDPCshutdown_cuda()
 {
+
   if (d_cnProcBuf)
     cudaFree(d_cnProcBuf);
   if (d_cnProcBufRes)
@@ -727,10 +728,11 @@ printf("=== Host p_lut->startAddrBnProcBuf dump ===\n");
     cudaMemPrefetchAsync(iter_ptr_array, MAX_NUM_DLSCH_SEGMENTS_DL*sizeof(int8_t), gpuDeviceId,0);
     cudaMemPrefetchAsync(PC_Flag_array, MAX_NUM_DLSCH_SEGMENTS_DL*sizeof(int), gpuDeviceId,0);
 //printf("Flag_ptr = %p\n", PC_Flag_array);
-   printf("3.2: It works here\n");
+//   printf("3.2: It works here\n");
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
     //printf("3.21\n");
-    int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384; // no need put it into device
+    //need to change to support ldpctest and dlsim
+    int8_t* pp_llr = p_llr + CudaStreamIdx * (68 * 384 + 16); // no need put it into device
     //printf("3.22\n");
     int8_t* pp_out = d_out + CudaStreamIdx * Kprime;
     //printf("2.4\n");
@@ -745,9 +747,9 @@ printf("=== Host p_lut->startAddrBnProcBuf dump ===\n");
     // printf("4: It works here\n");
     //  LLR preprocessing
     // NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2llrProcBuf));
-    printf("2.5\n");
+    //printf("2.5\n");
     nrLDPC_llr2llrProcBuf(p_lut, pp_llr, pp_llrProcBuf, Z, BG);
-    printf("2.51\n");
+    //printf("2.51\n");
     // NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2llrProcBuf));
     // NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2CnProcBuf));
     if (BG == 1){

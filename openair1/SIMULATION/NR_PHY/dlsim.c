@@ -1000,7 +1000,7 @@ printf("%d\n", slot);
     exit(1);
   }
 
-  for (SNR = snr0; SNR < snr1 && !stop; SNR += .2) {
+  for (SNR = snr0; SNR < snr0 +0.2/*snr1*/ && !stop; SNR += .2) {
 
     varArray_t *table_tx=initVarArray(1000,sizeof(double));
     reset_meas(&gNB->phy_proc_tx);

@@ -49,6 +49,7 @@
 
 #define OAI_LDPC_DECODER_MAX_NUM_LLR 27000 // 26112 // NR_LDPC_NCOL_BG1*NR_LDPC_ZMAX = 68*384
 // #define DEBUG_CRC
+#define MAX_NUM_DLSCH_SEGMENTS_DL 132
 #ifdef DEBUG_CRC
 #define PRINT_CRC_CHECK(a) a
 #else
@@ -89,6 +90,7 @@
  * \var p_ts_rate_unmatch pointer to rate unmatching time stats
  * \var p_ts_ldpc_decode pointer to decoding time stats
  */
+//-------------------------Debug Function-----------------------
 typedef struct nrLDPC_decoding_parameters_s {
   t_nrLDPC_dec_params decoderParms;
 
@@ -233,163 +235,189 @@ static void nr_process_decode_segment(void *arg)
 
 static void nr_process_decode_segment_cuda(void *arg)
 {
-  nrLDPC_decoding_parameters_t *rdata = (nrLDPC_decoding_parameters_t *)arg;
-  t_nrLDPC_dec_params *p_decoderParms = &rdata->decoderParms;
-  const int K = rdata->K;
-  const int Kprime = K - rdata->F;
-  const int A = rdata->A;
-  const int E = rdata->E;
-  const int Qm = rdata->Qm;
-  const int rv_index = rdata->rv_index;
-  const uint8_t Kc = rdata->Kc;
-  short *ulsch_llr = rdata->llr;
-  int8_t llrProcBuf[OAI_LDPC_DECODER_MAX_NUM_LLR] __attribute__((aligned(32)));
+  // arg points to RDATA array (nrLDPC_decoding_parameters_t *RDATA)
+  nrLDPC_decoding_parameters_t *RDATA = (nrLDPC_decoding_parameters_t *)arg;
+  DevAssert(RDATA != NULL);
 
+  // use seg0 as canonical
+  nrLDPC_decoding_parameters_t *seg0 = &RDATA[0];
+  const int C = seg0->C;
+  const int Z = seg0->Z;
+  const int Kc = seg0->Kc;
+  const int K  = seg0->K;
+  const int bytesPerSeg = K >> 3;
+  const int segLen = Kc * Z + 16; // int16 length; after packing we store int8 [segLen]
   t_nrLDPC_time_stats procTime = {0};
   t_nrLDPC_time_stats *p_procTime = &procTime;
+  // allocate big buffers on heap
+  int8_t *llrBuffer = (int8_t*)aligned_alloc(16, (size_t)MAX_NUM_DLSCH_SEGMENTS_DL * segLen * sizeof(int8_t));
+  if (!llrBuffer) { LOG_E(PHY,"alloc llrBuffer failed\n"); return; }
 
-  ////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////// nr_deinterleaving_ldpc ///////////////////////////////////
-  //////////////////////////////////////////////////////////////////////////////////////////
+  int8_t *decodedBitsBig = (int8_t*)aligned_alloc(16, MAX_NUM_DLSCH_SEGMENTS_DL * K * sizeof(int8_t));
+  if (!decodedBitsBig) { free(llrBuffer); LOG_E(PHY,"alloc decodedBitsBig failed\n"); return; }
 
-  //////////////////////////// ulsch_llr =====> ulsch_harq->e //////////////////////////////
+//  int *iterUsed = (int*)calloc(C, sizeof(int));
+  //if (!iterUsed) { free(llrBuffer); free(decodedBitsBig); LOG_E(PHY,"alloc iterUsed failed\n"); return; }
 
-  start_meas(rdata->p_ts_deinterleave);
+  // Phase 1: per-segment deinterleave+rate-match and pack into llrBuffer
+  for (int r = 0; r < C; ++r) {
+    nrLDPC_decoding_parameters_t *rdata = &RDATA[r];
+    // deinterleave
+     start_meas(rdata->p_ts_deinterleave);
+    int16_t *harq_e = (int16_t*)alloca(sizeof(int16_t) * rdata->E);
 
-  /// code blocks after bit selection in rate matching for LDPC code (38.212 V15.4.0 section 5.4.2.1)
-  int16_t harq_e[E];
-
-  nr_deinterleaving_ldpc(E, Qm, harq_e, ulsch_llr);
-
-  //////////////////////////////////////////////////////////////////////////////////////////
-
+    nr_deinterleaving_ldpc(rdata->E, rdata->Qm, harq_e, rdata->llr);
   stop_meas(rdata->p_ts_deinterleave);
-
-  start_meas(rdata->p_ts_rate_unmatch);
-
-  //////////////////////////////////////////////////////////////////////////////////////////
-  //////////////////////////////// nr_rate_matching_ldpc_rx ////////////////////////////////
-  //////////////////////////////////////////////////////////////////////////////////////////
-
-  ///////////////////////// ulsch_harq->e =====> ulsch_harq->d /////////////////////////
-
-  if (nr_rate_matching_ldpc_rx(rdata->tbslbrm,
-                               p_decoderParms->BG,
-                               p_decoderParms->Z,
-                               rdata->d,
-                               harq_e,
-                               rdata->C,
-                               rv_index,
-                               *rdata->d_to_be_cleared,
-                               E,
-                               rdata->F,
-                               K - rdata->F - 2 * (p_decoderParms->Z))
-      == -1) {
+    // rate matching
+    start_meas(rdata->p_ts_rate_unmatch);
+    if (nr_rate_matching_ldpc_rx(rdata->tbslbrm,
+                                 rdata->decoderParms.BG,
+                                 rdata->Z,
+                                 rdata->d,
+                                 harq_e,
+                                 rdata->C,             // TB segments count
+                                 rdata->rv_index,
+                                 *rdata->d_to_be_cleared,
+                                 rdata->E,
+                                 rdata->F,
+                                 rdata->K - rdata->F - 2 * (rdata->decoderParms.Z)) == -1) {
+      stop_meas(rdata->p_ts_rate_unmatch);
+      LOG_E(PHY,"rate matching failed seg %d\n", r);
+      memset(rdata->c, 0, bytesPerSeg);
+      //*rdata->decodeSuccess = false;
+      completed_task_ans(rdata->ans);
+      continue; // skip this segment
+    }
     stop_meas(rdata->p_ts_rate_unmatch);
-    LOG_E(PHY, "nrLDPC_coding_segment_decoder.c: Problem in rate_matching\n");
+    *rdata->d_to_be_cleared = false;
+    start_meas(rdata->p_ts_ldpc_decode);
 
-    // Task completed
-    completed_task_ans(rdata->ans);
+    // prepare int16 z (local)
+    int16_t *z_local = (int16_t*)alloca(sizeof(int16_t) * segLen); // segLen is safe small
+    // zero and fill z_local as before (use loops for clarity)
+    for (int i=0;i<segLen;i++) z_local[i]=0;
+    if (K - rdata->F > 2 * rdata->Z) {
+      memcpy(z_local + 2*rdata->Z, rdata->d, (size_t)(rdata->K - rdata->F - 2*rdata->Z)*sizeof(int16_t));
+    }
+    for (int i=0;i<rdata->F;i++) z_local[rdata->K - rdata->F + i] = 127; // filler
+    if (Kc * Z > K) {
+      memcpy(z_local + K, rdata->d + (K - 2*rdata->Z), (size_t)(Kc*Z - K)*sizeof(int16_t));
+    }
+
+    // pack int16 -> int8 into llrBuffer[r * segLen]
+    simde__m128i *pv = (simde__m128i*)z_local;
+    simde__m128i *pl = (simde__m128i*)(llrBuffer + (size_t)r*segLen);
+    int vecCount = ((Kc * Z) >> 4) + 1;
+    for (int j=0, idx=0; j<vecCount; ++j, idx+=2) {
+      pl[j] = simde_mm_packs_epi16(pv[idx], pv[idx+1]);
+    }
+    stop_meas(rdata->p_ts_ldpc_decode);
+  }
+  start_meas(RDATA->p_ts_ldpc_decode);
+  (&RDATA->decoderParms)->crc_type = crcType(RDATA->C, RDATA->A);
+  (&RDATA->decoderParms)->Kprime = lenWithCrc(RDATA->C, RDATA->A);
+  (&RDATA->decoderParms)->n_segments = RDATA->C;
+  // Phase 2: call batch GPU decoder (you must implement this API)
+  int decodeIterations = LDPCdecoder(&RDATA->decoderParms, 0, 0, 0, llrBuffer, decodedBitsBig, p_procTime, RDATA->abort_decode);
+  //printf("Decoder done\n");
+  //dumpASS(decodedBitsBig, "dlsim_decoded_bits.txt");
+  if (decodeIterations > (&seg0->decoderParms)->numMaxIter) {
+    LOG_E(PHY,"LDPCdecoder_cuda_batch failed\n");
+    // mark failures
+    for (int r=0;r<C;r++) { memset(RDATA[r].c,0,bytesPerSeg); *RDATA[r].decodeSuccess=false; completed_task_ans(RDATA[r].ans); }
+    stop_meas(RDATA->p_ts_ldpc_decode);
+    printf("Decoder failed\n");
+    //free(iterUsed); 
+    //free(decodedBitsBig); free(llrBuffer);
     return;
   }
-  stop_meas(rdata->p_ts_rate_unmatch);
+  stop_meas(RDATA->p_ts_ldpc_decode);
 
-  *rdata->d_to_be_cleared = false;
-
-  p_decoderParms->crc_type = crcType(rdata->C, A);
-  p_decoderParms->Kprime = lenWithCrc(rdata->C, A);
-  p_decoderParms->n_segments = rdata->C;
-
-  // set first 2*Z_c bits to zeros
-
-  int16_t z[68 * 384 + 16] __attribute__((aligned(16)));
-
-  start_meas(rdata->p_ts_ldpc_decode);
-
-  memset(z, 0, 2 * rdata->Z * sizeof(*z));
-  // set Filler bits
-  memset(z + Kprime, 127, rdata->F * sizeof(*z));
-  // Move coded bits before filler bits
-  memcpy(z + 2 * rdata->Z, rdata->d, (Kprime - 2 * rdata->Z) * sizeof(*z));
-  // skip filler bits
-  memcpy(z + K, rdata->d + (K - 2 * rdata->Z), (Kc * rdata->Z - K) * sizeof(*z));
-  // Saturate coded bits before decoding into 8 bits values
-  simde__m128i *pv = (simde__m128i *)&z;
-  int8_t l[68 * 384 + 16] __attribute__((aligned(16)));
-  simde__m128i *pl = (simde__m128i *)&l;
-  for (int i = 0, j = 0; j < ((Kc * rdata->Z) >> 4) + 1; i += 2, j++) {
-    pl[j] = simde_mm_packs_epi16(pv[i], pv[i + 1]);
+  // Phase 3: scatter results and set decodeSuccess
+  for (int r=0; r<C; ++r) {
+    nrLDPC_decoding_parameters_t *rdata = &RDATA[r];
+    if (decodeIterations <= rdata->decoderParms.numMaxIter) {
+      memcpy(rdata->c, decodedBitsBig + (size_t)r*bytesPerSeg, bytesPerSeg);
+      *rdata->decodeSuccess = true;
+    } else {
+      memset(rdata->c, 0, bytesPerSeg);
+      *rdata->decodeSuccess = false;
+    }
+    completed_task_ans(rdata->ans);
   }
-  //////////////////////////////////////////////////////////////////////////////////////////
 
-  //////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////// nrLDPC_decoder /////////////////////////////////////
-  //////////////////////////////////////////////////////////////////////////////////////////
-
-  ////////////////////////////////// pl =====> llrProcBuf //////////////////////////////////
-  int decodeIterations =  
-    LDPCdecoder(p_decoderParms, 0, 0, 0, l, llrProcBuf, p_procTime, rdata->abort_decode);
-  if (decodeIterations < p_decoderParms->numMaxIter) {
-    memcpy(rdata->c, llrProcBuf, K >> 3);
-    *rdata->decodeSuccess = true;
-  } else {
-    memset(rdata->c, 0, K >> 3);
-    *rdata->decodeSuccess = false;
-  }
-  stop_meas(rdata->p_ts_ldpc_decode);
-
-  // Task completed
-  completed_task_ans(rdata->ans);
+  //free(iterUsed);
+  free(decodedBitsBig);
+  free(llrBuffer);
 }
+
+
 
 int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters,
                                int pusch_id,
                                thread_info_tm_t *t_info)
 {
-  nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
+    nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
 
-  *nrLDPC_TB_decoding_parameters->processedSegments = 0;
-  t_nrLDPC_dec_params decParams = {.check_crc = check_crc};
-  decParams.BG = nrLDPC_TB_decoding_parameters->BG;
-  decParams.Z = nrLDPC_TB_decoding_parameters->Z;
-  decParams.numMaxIter = nrLDPC_TB_decoding_parameters->max_ldpc_iterations;
-  decParams.outMode = 0;
+    *nrLDPC_TB_decoding_parameters->processedSegments = 0;
+    t_nrLDPC_dec_params decParams = {.check_crc = check_crc};
+    decParams.BG = nrLDPC_TB_decoding_parameters->BG;
+    decParams.Z = nrLDPC_TB_decoding_parameters->Z;
+    decParams.numMaxIter = nrLDPC_TB_decoding_parameters->max_ldpc_iterations;
+    decParams.outMode = 0;
 
-  for (int r = 0; r < nrLDPC_TB_decoding_parameters->C; r++) {
-    nrLDPC_decoding_parameters_t *rdata = &((nrLDPC_decoding_parameters_t *)t_info->buf)[t_info->len];
-    DevAssert(t_info->len < t_info->cap);
-    rdata->ans = t_info->ans;
-    t_info->len += 1;
+    // Create a large RDATA array to store all the segment information
+    // The size of RDATA will be equal to the number of segments (C)
+    nrLDPC_decoding_parameters_t *RDATA = calloc(nrLDPC_TB_decoding_parameters->C, sizeof(nrLDPC_decoding_parameters_t));
+    if (!RDATA) {
+      perror("calloc RDATA");
+      return -1;
+    }
+    // Fill the RDATA array with segment-specific parameters
+    for (int r = 0; r < nrLDPC_TB_decoding_parameters->C; r++) {
+        nrLDPC_decoding_parameters_t *rdata = &RDATA[r];
+        rdata->ans = t_info->ans;
 
-    decParams.R = nrLDPC_TB_decoding_parameters->segments[r].R;
-    rdata->decoderParms = decParams;
-    rdata->llr = nrLDPC_TB_decoding_parameters->segments[r].llr;
-    rdata->Kc = decParams.BG == 2 ? 52 : 68;
-    rdata->C = nrLDPC_TB_decoding_parameters->C;
-    rdata->E = nrLDPC_TB_decoding_parameters->segments[r].E;
-    rdata->A = nrLDPC_TB_decoding_parameters->A;
-    rdata->Qm = nrLDPC_TB_decoding_parameters->Qm;
-    rdata->K = nrLDPC_TB_decoding_parameters->K;
-    rdata->Z = nrLDPC_TB_decoding_parameters->Z;
-    rdata->F = nrLDPC_TB_decoding_parameters->F;
-    rdata->rv_index = nrLDPC_TB_decoding_parameters->rv_index;
-    rdata->tbslbrm = nrLDPC_TB_decoding_parameters->tbslbrm;
-    rdata->abort_decode = nrLDPC_TB_decoding_parameters->abort_decode;
-    rdata->d = nrLDPC_TB_decoding_parameters->segments[r].d;
-    rdata->d_to_be_cleared = nrLDPC_TB_decoding_parameters->segments[r].d_to_be_cleared;
-    rdata->c = nrLDPC_TB_decoding_parameters->segments[r].c;
-    rdata->decodeSuccess = &nrLDPC_TB_decoding_parameters->segments[r].decodeSuccess;
-    rdata->p_ts_deinterleave = &nrLDPC_TB_decoding_parameters->segments[r].ts_deinterleave;
-    rdata->p_ts_rate_unmatch = &nrLDPC_TB_decoding_parameters->segments[r].ts_rate_unmatch;
-    rdata->p_ts_ldpc_decode = &nrLDPC_TB_decoding_parameters->segments[r].ts_ldpc_decode;
+        // Set the parameters for each segment
+        decParams.R = nrLDPC_TB_decoding_parameters->segments[r].R;
+        rdata->decoderParms = decParams;
+        rdata->llr = nrLDPC_TB_decoding_parameters->segments[r].llr;
+        rdata->Kc = decParams.BG == 2 ? 52 : 68;  // Set Kc based on BG
+        rdata->C = nrLDPC_TB_decoding_parameters->C;
+        rdata->E = nrLDPC_TB_decoding_parameters->segments[r].E;
+        rdata->A = nrLDPC_TB_decoding_parameters->A;
+        rdata->Qm = nrLDPC_TB_decoding_parameters->Qm;
+        rdata->K = nrLDPC_TB_decoding_parameters->K;
+        rdata->Z = nrLDPC_TB_decoding_parameters->Z;
+        rdata->F = nrLDPC_TB_decoding_parameters->F;
+        rdata->rv_index = nrLDPC_TB_decoding_parameters->rv_index;
+        rdata->tbslbrm = nrLDPC_TB_decoding_parameters->tbslbrm;
+        rdata->abort_decode = nrLDPC_TB_decoding_parameters->abort_decode;
+        rdata->d = nrLDPC_TB_decoding_parameters->segments[r].d;
+        rdata->d_to_be_cleared = nrLDPC_TB_decoding_parameters->segments[r].d_to_be_cleared;
+        rdata->c = nrLDPC_TB_decoding_parameters->segments[r].c;
+        rdata->decodeSuccess = &nrLDPC_TB_decoding_parameters->segments[r].decodeSuccess;
+        rdata->p_ts_deinterleave = &nrLDPC_TB_decoding_parameters->segments[r].ts_deinterleave;
+        rdata->p_ts_rate_unmatch = &nrLDPC_TB_decoding_parameters->segments[r].ts_rate_unmatch;
+        rdata->p_ts_ldpc_decode = &nrLDPC_TB_decoding_parameters->segments[r].ts_ldpc_decode;
 
-    task_t t = {.func = &nr_process_decode_segment, .args = rdata};
-    pushTpool(nrLDPC_slot_decoding_parameters->threadPool, t);
+        // The segment's parameters are now stored in the RDATA array
+    }
 
-    LOG_D(PHY, "Added a block to decode, in pipe: %d\n", r);
-  }
-  return nrLDPC_TB_decoding_parameters->C;
+    // Launch the CUDA kernel for parallel processing of all segments
+    // You will need to adjust this part to pass the RDATA array to your CUDA kernel
+    // The kernel can then process each segment independently using CUDA's parallel execution model
+    nr_process_decode_segment_cuda(RDATA);
+    // Log the total number of segments being processed
+    LOG_D(PHY, "Added all blocks to decode, in total: %d segments\n", nrLDPC_TB_decoding_parameters->C);
+
+    // Cleanup the RDATA array after use
+    free(RDATA);
+
+    return nrLDPC_TB_decoding_parameters->C;
 }
+
+
 
 int32_t nrLDPC_coding_init(void)
 {
