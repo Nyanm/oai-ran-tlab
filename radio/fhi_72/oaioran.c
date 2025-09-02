@@ -272,6 +272,7 @@ void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status
     oran_sync_info_prach.f = frame;
     oran_sync_info_prach.mu = mu;
 #endif
+    int32_t ntti = (tti + XRAN_N_FE_BUF_LEN - 1)  % XRAN_N_FE_BUF_LEN;
     struct xran_cb_tag *callback_tag = (struct xran_cb_tag *)pCallbackTag;
     uint32_t tti = callback_tag->slotiId;
     uint32_t ru_id = callback_tag->oXuId;
@@ -281,6 +282,8 @@ void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status
       for(uint32_t ant_id = 0; ant_id < fh_config->neAxc; ant_id++) {
         struct xran_prb_map *pRbMap = (struct xran_prb_map *)bufs->prachdstdecomp[ant_id][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
         AssertFatal(pRbMap != NULL, "(%d:%d:%d)pRbMapPrach == NULL. Aborting.\n", cc_id, tti % XRAN_N_FE_BUF_LEN, ant_id);
+        struct xran_prb_map *pRbMap_prev = (struct xran_prb_map *)bufs->prachdstdecomp[ant_id][ntti].pBuffers->pData;
+        AssertFatal(pRbMap_prev != NULL, "(%d:%d:%d)pRbMapPrach == NULL. Aborting.\n", cc_id, ntti, ant_id);
         for (uint32_t sym_id = 0; sym_id < XRAN_NUM_OF_SYMBOL_PER_SLOT; sym_id++) {
           AssertFatal(pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt <= 1, "PRACH segmentation is not supported\n");
 #ifndef USE_POLLING
@@ -288,7 +291,7 @@ void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status
 #else
           oran_sync_info_prach.nRxPkt[cc_id][ant_id][sym_id] = pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt;
 #endif
-          // pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt = 0;
+          pRbMap_prev->sFrontHaulRxPacketCtrl[sym_id].nRxPkt = 0; // Clear nRxPkt of previous slot.
         }
       }
     }
@@ -389,8 +392,13 @@ static int read_prach_data(ru_info_t *ru
 
 #ifdef K_RELEASE
   int slots_per_frame = 10 << mu;
+  int slots_per_subframe = 1 << mu;
 
   int tti = slots_per_frame * (frame) + (slot);
+  uint32_t subframe = slot / slots_per_subframe;
+  // PRACH occasion in a frame if and only if SFN % x == y, TS 38.211 Table 6.3.3.2-2/3/4
+  uint32_t is_prach_frame = (frame % prach_info.x == prach_info.y);
+  uint32_t is_prach_slot = is_prach_frame && xran_is_prach_slot(0, subframe, (slot % slots_per_subframe), mu);
 #elif defined(E_RELEASE) || defined(F_RELEASE)
   int slots_per_frame = 10 << fh_cfg->frame_conf.nNumerology;
   int slots_per_subframe = 1 << fh_cfg->frame_conf.nNumerology;
@@ -403,32 +411,38 @@ static int read_prach_data(ru_info_t *ru
 #endif
 
   int nb_rx_per_ru = ru->nb_rx / fh_init->xran_ports;
-#if defined(E_RELEASE) || defined(F_RELEASE)
+
   /* If it is PRACH slot, copy prach IQ from XRAN PRACH buffer to OAI PRACH buffer */
   if (is_prach_slot) {
-#endif
     if (!ru->prach_buf) {
       LOG_W(HW, "we get rach data from ru, but it is not scheduled %d.%d\n", frame, slot);
       return -1;
     }
-    for (sym_idx = 0; sym_idx < prach_info.N_dur; sym_idx++) {
-      for (int aa = 0; aa < ru->nb_rx; aa++) {
+    for (int aa = 0; aa < ru->nb_rx; aa++) {
+      for (sym_idx = 0; sym_idx < prach_info.N_dur; sym_idx++) {
         int16_t *dst, *src;
         int idx = 0;
         oran_buf_list_t *bufs = get_xran_buffers(aa / nb_rx_per_ru);
         // hardcoded to use only first prach occasion
         dst = (int16_t *)ru->prach_buf[0][aa];
 #ifdef K_RELEASE
-        struct xran_prb_map * pPrbMap = (struct xran_prb_map *)&bufs->prachdstdecomp[aa % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
+        struct xran_prb_map * pPrbMap = (struct xran_prb_map *)bufs->prachdstdecomp[aa % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
         struct xran_rx_packet_ctl *p_rx_packet_ctl = &pPrbMap->sFrontHaulRxPacketCtrl[sym_idx];
         if (p_rx_packet_ctl->nRxPkt == 0) {
-          LOG_E(HW, "sym_idx = %d, aa = %d: nRxPkt = 0!\n", sym_idx, aa);
-          if (sym_idx == 0) {
-            memset(dst, 0, 139 * 2 * sizeof(*dst));
-          }  
+          //LOG_E(HW, "read_prach %d.%d.%d saa = %d: nRxPkt = 0!\n", frame, slot, sym_idx, aa); // comment out as this happens at the beginning
+          memset(&dst[sym_idx], 0, 139 * 2 * sizeof(*dst));
+          continue;
+        } else if (p_rx_packet_ctl->nRxPkt > 1) { // protection
+          LOG_E(HW, "read_prach %d.%d.%d saa = %d: nRxPkt = %d!\n", frame, slot, sym_idx, aa, p_rx_packet_ctl->nRxPkt);
+          memset(&dst[sym_idx], 0, 139 * 2 * sizeof(*dst));
           continue;
         } else {
           src = (int16_t *)p_rx_packet_ctl->pData[0];
+          if (src == NULL) { // protection
+            LOG_E(HW, "read_prach %d.%d.%d saa = %d:  src = NULL!!\n", frame, slot, sym_idx, aa);
+            memset(&dst[sym_idx], 0, 139 * 2 * sizeof(*dst));
+            continue;
+          }
         }
 #elif defined(E_RELEASE) || defined(F_RELEASE)
         src = (int16_t *)bufs->prachdstdecomp[aa % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers[sym_idx].pData;
@@ -475,12 +489,9 @@ static int read_prach_data(ru_info_t *ru
             for (idx = 0; idx < (139 * 2); idx++)
               dst[idx] += (local_dst[idx + g_kbar]);
         } // COMPMETHOD_BLKFLOAT
-        p_rx_packet_ctl->nRxPkt = 0;
       } // aa
     } // symb_indx
-#if defined(E_RELEASE) || defined(F_RELEASE)
   } // is_prach_slot
-#endif
   return (0);
 }
 
