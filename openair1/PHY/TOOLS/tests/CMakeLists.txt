@@ -41,52 +41,44 @@ add_test(NAME test_sse_intrinsics
   COMMAND ./test_sse_intrinsics)
 
 
-if(ENABLE_TESTS AND CUDA_ENABLE)
+if(CUDA_ENABLE)
 
 add_executable(test_multipath test_multipath.c)
-target_link_libraries(test_multipath PRIVATE UTIL SIMU LOG T CONFIG_LIB shlib_loader m)
-# set_target_properties(test_multipath PROPERTIES
-#   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
-# )
+target_link_libraries(test_multipath PRIVATE UTIL SIMU LOG T CONFIG_LIB shlib_loader m oai_cuda_lib)
+
 add_dependencies(tests test_multipath)
 add_test(NAME test_multipath COMMAND test_multipath)
 
-
 add_executable(test_noise test_noise.c)
-target_link_libraries(test_noise PRIVATE UTIL SIMU PHY_COMMON LOG T CONFIG_LIB shlib_loader m)
+target_link_libraries(test_noise PRIVATE UTIL SIMU PHY_COMMON LOG T CONFIG_LIB shlib_loader m oai_cuda_lib)
 
 add_dependencies(tests test_noise)
 add_test(NAME test_noise COMMAND test_noise)
 
 add_executable(test_channel_simulation test_channel_simulation.c)
-target_link_libraries(test_channel_simulation PRIVATE UTIL SIMU PHY_COMMON LOG T CONFIG_LIB shlib_loader m)
+target_link_libraries(test_channel_simulation PRIVATE UTIL SIMU PHY_COMMON LOG T CONFIG_LIB shlib_loader m oai_cuda_lib)
 
 add_dependencies(tests test_channel_simulation)
 add_test(NAME test_channel_simulation COMMAND test_channel_simulation)
 
-
 add_executable(test_channel_scalability test_channel_scalability.c)
-target_link_libraries(test_channel_scalability PRIVATE UTIL SIMU PHY_COMMON LOG T CONFIG_LIB shlib_loader m)
+target_link_libraries(test_channel_scalability PRIVATE UTIL SIMU PHY_COMMON LOG T CONFIG_LIB shlib_loader m oai_cuda_lib)
 
 add_dependencies(tests test_channel_scalability)
 add_test(NAME test_channel_scalability COMMAND test_channel_scalability)
 
-if (TARGET oai_cuda_lib)
-    target_link_libraries(test_channel_scalability PRIVATE oai_cuda_lib)
-    target_link_libraries(test_multipath PRIVATE oai_cuda_lib)
-    target_link_libraries(test_noise PRIVATE oai_cuda_lib)
-    target_link_libraries(test_channel_simulation PRIVATE oai_cuda_lib)
+find_package(PythonInterp REQUIRED)
+add_test(
+NAME benchmark_gpu_scaling_suite
+COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/ci-scripts/tests/nr_physim_gpu_benchmark/gpu_test_driver.py
+  --executable $<TARGET_FILE:test_channel_scalability>
+)
 
+if (TARGET oai_cuda_lib)
     target_compile_definitions(test_channel_scalability PRIVATE ENABLE_CUDA)
     target_compile_definitions(test_multipath PRIVATE ENABLE_CUDA)
     target_compile_definitions(test_noise PRIVATE ENABLE_CUDA)
     target_compile_definitions(test_channel_simulation PRIVATE ENABLE_CUDA)
 endif()
 
-  find_package(PythonInterp REQUIRED)
-  add_test(
-  NAME benchmark_gpu_scaling_suite
-  COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/ci-scripts/tests/nr_physim_gpu_benchmark/gpu_test_driver.py
-    --executable $<TARGET_FILE:test_channel_scalability>
-)
 endif()

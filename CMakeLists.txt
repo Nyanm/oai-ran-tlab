@@ -55,36 +55,7 @@ if(CUDA_ENABLE)
         message(STATUS "CUDA Explicit Copy path enabled (default ATS was overridden).")
     endif()
 
-    # Check for CUDA-capable devices
-    include(CheckCXXSourceCompiles)
-    set(CUDA_CHECK_CODE "
-    #include <cuda_runtime.h>
-    int main() {
-        int count;
-        cudaGetDeviceCount(&count);
-        return count > 0 ? 0 : 1;
-    }")
-
-    check_cxx_source_compiles("${CUDA_CHECK_CODE}" CUDA_COMPATIBLE)
-
-    if(NOT CUDA_COMPATIBLE)
-        message(FATAL_ERROR "No CUDA-capable hardware detected. Please ensure your device supports CUDA.")
-    endif()
-
     add_compile_definitions(ENABLE_CUDA)
-
-    add_library(oai_cuda_lib STATIC
-        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/multipath_channel.cu
-        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/phase_noise.cu
-        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS/channel_pipeline.cu
-    )
-
-
-    target_link_libraries(oai_cuda_lib PRIVATE ${CUDAToolkit_LIBRARIES})
-
-    target_include_directories(oai_cuda_lib PUBLIC
-        ${CMAKE_SOURCE_DIR}/openair1/SIMULATION/TOOLS
-    )
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -156,7 +127,7 @@ set (OPENAIR3_DIR    ${OPENAIR_DIR}/openair3)
 set (OPENAIR3_DIR    ${OPENAIR_DIR}/openair3)
 set (OPENAIR_CMAKE   ${OPENAIR_DIR}/cmake_targets)
 
-# project (OpenAirInterface)
+project (OpenAirInterface)
 
 ####################################################
 # compilation flags
@@ -2169,8 +2140,8 @@ target_link_libraries(nr_ulsim PRIVATE
 target_link_libraries(nr_ulsim PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
 
 if (TARGET oai_cuda_lib)
-    target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
-    target_link_libraries(nr_ulsim PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
+    target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib)
+    target_link_libraries(nr_ulsim PRIVATE oai_cuda_lib)
 
     target_compile_definitions(nr_dlsim PRIVATE ENABLE_CUDA)
     target_compile_definitions(nr_ulsim PRIVATE ENABLE_CUDA)
@@ -2290,11 +2261,6 @@ add_subdirectory(tests)
 
 if(TARGET oai_cuda_lib)
     message(STATUS "CUDA library 'oai_cuda_lib' found, linking to targets...")
-    
-    target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
-    target_link_libraries(nr_ulsim PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
-
-    # target_link_libraries(test_multipath PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
-    # target_link_libraries(test_noise PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
-    # target_link_libraries(test_channel_simulation PRIVATE oai_cuda_lib ${CUDAToolkit_LIBRARIES})
+    target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib)
+    target_link_libraries(nr_ulsim PRIVATE oai_cuda_lib)
 endif()
