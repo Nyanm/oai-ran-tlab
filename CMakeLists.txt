@@ -2139,12 +2139,14 @@ target_link_libraries(nr_ulsim PRIVATE
   )
 target_link_libraries(nr_ulsim PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
 
-if (TARGET oai_cuda_lib)
-    target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib)
-    target_link_libraries(nr_ulsim PRIVATE oai_cuda_lib)
+if(CUDA_ENABLE)
+  if (TARGET oai_cuda_lib)
+      target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib)
+      target_link_libraries(nr_ulsim PRIVATE oai_cuda_lib)
 
-    target_compile_definitions(nr_dlsim PRIVATE ENABLE_CUDA)
-    target_compile_definitions(nr_ulsim PRIVATE ENABLE_CUDA)
+      target_compile_definitions(nr_dlsim PRIVATE ENABLE_CUDA)
+      target_compile_definitions(nr_ulsim PRIVATE ENABLE_CUDA)
+  endif()
 endif()
 
 foreach(myExe dlsim dlsim_tm7 ulsim pbchsim scansim mbmssim pdcchsim pucchsim prachsim syncsim)
