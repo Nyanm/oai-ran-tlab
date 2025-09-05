@@ -421,7 +421,7 @@ static void nr_ue_measurement_procedures(uint16_t l,
     // AGC
     //printf("start adjust gain power avg db %d\n", ue->measurements.rx_power_avg_dB[gNB_id]);
     phy_adjust_gain_nr (ue,ue->measurements.rx_power_avg_dB[gNB_id],gNB_id);
-    
+
   }
 }
 
