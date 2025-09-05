@@ -2188,7 +2188,6 @@ void dft4096(int16_t *x, int16_t *y, unsigned int *scale)
   for (i=0,j=0; i<1024; i+=4,j++) {
     transpose16_ooff(x128+i,xtmp+j,256);
   }
-
   unsigned int *scale1024 = NULL;
   if (scale)
     scale1024 = scale + 1;
