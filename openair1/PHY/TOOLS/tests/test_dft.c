@@ -198,7 +198,6 @@ int main(void)
         math_dft(d16_2, out, n, 0, 0);
       else
         math_dft(d16, out, n, 0, 1);
-      
       dft(get_dft(n), (int16_t *)d16, (int16_t *)o16, get_dft_scaling(n, (int32_t)(coeffs[coeff])));
       if (n == 12) {
         for (int i = 0; i < n; i++) {

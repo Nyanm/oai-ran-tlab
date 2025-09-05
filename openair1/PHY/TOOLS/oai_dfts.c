@@ -770,13 +770,13 @@ __attribute__((always_inline)) static inline void transpose16_ooff_simd256(simde
   ytmp6 = simde_mm256_unpacklo_epi64(ytmp2, ytmp3); // x16 x20 x24 x28 x17 x21 x25 x29
   ytmp7 = simde_mm256_unpackhi_epi64(ytmp2, ytmp3); // x18 x22 x26 x30 x19 x23 x27 x31
 
-  *y = simde_mm256_insertf128_si256(ytmp4, simde_mm256_extracti128_si256(ytmp6, 0), 1); // x0 x4 x8 x12 x16 x20 x24 x28
-  y += off;
-  *y = simde_mm256_insertf128_si256(ytmp6, simde_mm256_extracti128_si256(ytmp4, 1), 0); // x1 x5 x9 x13 x17 x21 x25 x29
-  y += off;
-  *y = simde_mm256_insertf128_si256(ytmp5, simde_mm256_extracti128_si256(ytmp7, 0), 1); // x2 x6 x10 x14 x18 x22 x26 x30
-  y += off;
-  *y = simde_mm256_insertf128_si256(ytmp7, simde_mm256_extracti128_si256(ytmp5, 1), 0); // x3 x7 x11 x15 x19 x23 x27 x31
+  *y2 = simde_mm256_insertf128_si256(ytmp4, simde_mm256_extracti128_si256(ytmp6, 0), 1); // x0 x4 x8 x12 x16 x20 x24 x28
+  y2 += off;
+  *y2 = simde_mm256_insertf128_si256(ytmp6, simde_mm256_extracti128_si256(ytmp4, 1), 0); // x1 x5 x9 x13 x17 x21 x25 x29
+  y2 += off;
+  *y2 = simde_mm256_insertf128_si256(ytmp5, simde_mm256_extracti128_si256(ytmp7, 0), 1); // x2 x6 x10 x14 x18 x22 x26 x30
+  y2 += off;
+  *y2 = simde_mm256_insertf128_si256(ytmp7, simde_mm256_extracti128_si256(ytmp5, 1), 0); // x3 x7 x11 x15 x19 x23 x27 x31
 #else
   register simde__m256i ytmp0, ytmp1, ytmp2, ytmp3;
   simde__m256i const perm_mask1 = simde_mm256_set_epi32(13, 9, 5, 1, 12, 8, 4, 0);
@@ -788,13 +788,13 @@ __attribute__((always_inline)) static inline void transpose16_ooff_simd256(simde
   ytmp1 = _mm256_permutex2var_epi32(x[2], perm_mask1, x[3]); // x16 x20 x24 x28 x17 x21 x25 x29
   ytmp2 = _mm256_permutex2var_epi32(x[0], perm_mask2, x[1]); // x2 x6  x10  x14  x3 x7  x11  x15
   ytmp3 = _mm256_permutex2var_epi32(x[2], perm_mask2, x[3]); // x18 x22 x26 x30 x19 x23 x27 x31
-  *y = _mm256_permutex2var_epi64(ytmp0, perm_mask3, ytmp1);
-  y += off;
-  *y = _mm256_permutex2var_epi64(ytmp0, perm_mask4, ytmp1);
-  y += off;
-  *y = _mm256_permutex2var_epi64(ytmp2, perm_mask3, ytmp3);
-  y += off;
-  *y = _mm256_permutex2var_epi64(ytmp2, perm_mask4, ytmp3);
+  *y2 = _mm256_permutex2var_epi64(ytmp0, perm_mask3, ytmp1);
+  y2 += off;
+  *y2 = _mm256_permutex2var_epi64(ytmp0, perm_mask4, ytmp1);
+  y2 += off;
+  *y2 = _mm256_permutex2var_epi64(ytmp2, perm_mask3, ytmp3);
+  y2 += off;
+  *y2 = _mm256_permutex2var_epi64(ytmp2, perm_mask4, ytmp3);
 #endif
 }
 
@@ -841,6 +841,8 @@ const static int16_t tw16crep[48] __attribute__((aligned(32))) = {
     0, 32767, 12540, 30272, 23170, 23169,  30273,  12539,  0, 32767, 12540, 30272, 23170, 23169,  30273,  12539,
     0, 32767, 23170, 23169, 32767, 0,      23170,  -23170, 0, 32767, 23170, 23169, 32767, 0,      23170,  -23170,
     0, 32767, 30273, 12539, 23170, -23170, -12539, -30273, 0, 32767, 30273, 12539, 23170, -23170, -12539, -30273};
+
+// #define USE_DFT16_SHIFT
 
 // Does two 16-point DFTS (x[0 .. 15] is 128 LSBs of input vector, x[16..31] is in 128 MSBs)
 __attribute__((always_inline)) static inline void dft16_simd256(int16_t *x, int16_t *y, int scale)
@@ -7662,6 +7664,10 @@ int32_t write_file_matlab(const char *fname, const char *vname, const void *data
 
   return 0;
 }
+double compute_error(int16_t *x, int16_t *y, int N, int *bitrev, int idft)
+{
+  int i;
+  cd_t xcd[N], ycd[N];
 
 double compute_error(int16_t *x, int16_t *y, int N, int *bitrev, int idft)
 {
