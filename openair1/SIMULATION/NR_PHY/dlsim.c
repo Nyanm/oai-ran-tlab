@@ -924,8 +924,7 @@ printf("%d\n", slot);
 
   init_nr_ue_transport(UE);
 
-  nr_l2_init_ue(1);
-  UE_mac = get_mac_inst(0);
+  UE_mac = nr_l2_init_ue(0);
   ue_init_config_request(UE_mac, get_slots_per_frame_from_scs(mu));
 
   UE->if_inst = nr_ue_if_module_init(0);
@@ -1033,6 +1032,7 @@ printf("%d\n", slot);
     reset_meas(&gNB->dlsch_rate_matching_stats);
     reset_meas(&gNB->dlsch_segmentation_stats);
     reset_meas(&gNB->dlsch_modulation_stats);
+    reset_meas(&gNB->dlsch_precoding_stats);
     reset_meas(&gNB->dlsch_encoding_stats);
     reset_meas(&gNB->dci_generation_stats);
     reset_meas(&gNB->tinput);
