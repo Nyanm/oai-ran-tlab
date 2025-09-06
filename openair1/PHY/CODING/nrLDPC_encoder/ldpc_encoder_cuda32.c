@@ -634,12 +634,15 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
       AssertFatal(err == cudaSuccess, "c_dev[%d] %p CUDA Error: %s\n", s, c_dev[s],cudaGetErrorString(err)); 			
     }
   }
-
+  uint32_t *dp[4];
+  if (pageable_uses_host) {
+     for (int s=0;s<n_inputs;s++) dp[s] = &output[s][block_length-(2*Zc)];
+  }
   if(impp->tinput != NULL) stop_meas(impp->tinput_memcpy);
   if (BG==1 && Zc==384)  {
     //parity check part
     if(impp->tparity != NULL) start_meas(impp->tparity);
-    encode_parity_check_part_cuda(pageable_uses_host? cp : c_dev, d_dev, BG, Zc, Kb, ncols,n_inputs);
+    encode_parity_check_part_cuda(pageable_uses_host? cp : c_dev, pageable_uses_host ? dp : d_dev, BG, Zc, Kb, ncols,n_inputs);
     if(impp->tparity != NULL) stop_meas(impp->tparity);
   }
   else {
@@ -648,8 +651,10 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
   if(impp->toutput != NULL) start_meas(impp->toutput);
   for (int s=0;s<n_inputs;s++) {
     memcpy(output[s],&cc[s][2*Zc],sizeof(uint32_t)*(block_length-(2*Zc)));
-    cudaError_t err = cudaMemcpy(&output[s][block_length-(2*Zc)],d_host[s],sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),cudaMemcpyDeviceToHost);
-    AssertFatal(err == cudaSuccess, "d_dev[%d] %p CUDA Error: %s\n", s, d_dev[s],cudaGetErrorString(err)); 			
+    if (!pageable_uses_host) {
+      cudaError_t err = cudaMemcpy(&output[s][block_length-(2*Zc)],d_host[s],sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),cudaMemcpyDeviceToHost);
+      AssertFatal(err == cudaSuccess, "d_dev[%d] %p CUDA Error: %s\n", s, d_dev[s],cudaGetErrorString(err)); 			
+    }
   }
   if(impp->toutput != NULL) stop_meas(impp->toutput);
   return 0;
