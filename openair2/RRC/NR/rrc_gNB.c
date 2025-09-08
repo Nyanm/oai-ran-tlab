@@ -2909,12 +2909,42 @@ f1ap_qos_flow_param_t get_qos_char_from_qos_flow_param(const pdusession_level_qo
   return qos_char;
 }
 
+/** @brief Aggregate DRB QoS characteristics from multiple QoS flows
+ * @param highest_priority_flow Highest priority flow (lowest ARP priority value)
+ * @param highest_arp Highest ARP priority value
+ * @return Aggregated DRB QoS characteristics
+ * @note About ARP (Allocation Retention Priority):
+ * - ARP is for admission control/preemption (priority_level: 1-15)
+ * - DRB-level QoS selection should use ARP for admission control decisions
+ * Required for F1AP spec compliance (dRB-QoS is mandatory in DRB-Information IE) */
+static f1ap_qos_flow_param_t fill_f1_drb_qos(const f1ap_qos_flow_param_t *highest_priority_flow, const uint16_t highest_arp)
+{
+  DevAssert(highest_arp >= MIN_QOS_ARP_PRIORITY_LEVEL);
+  f1ap_qos_flow_param_t drb_qos = cp_qos_flow_param(highest_priority_flow);
+  // Optional fields: delay_critical and avg_win are not copied for DRB-level QoS
+  // (they are per-flow specific, not aggregated at DRB level)
+  if (drb_qos.qos_type == DYNAMIC) {
+    free(drb_qos.dyn.delay_critical);
+    free(drb_qos.dyn.avg_win);
+  }
+  return drb_qos;
+}
+
+/** @brief Fill F1 DRB Info (NR) from QoS flows, including DRB-level QoS and QoS flows mapped to DRB
+ * @param pdu PDU session parameters
+ * @param qfis List of QFIs
+ * @param num_qfis Number of QFIs in list
+ * @return Filled F1 DRB Info (NR) */
 static f1ap_drb_info_nr_t fill_f1_drb_info_nr(pdusession_t *pdu, const uint8_t *qfis, const int num_qfis)
 {
+  uint16_t highest_arp = MAX_QOS_ARP_PRIORITY_LEVEL; // lowest priority
+  const f1ap_drb_flows_mapped_t *highest_priority_flow = NULL;
+
   f1ap_drb_info_nr_t drb_info = {0};
   drb_info.nssai = pdu->nssai;
   drb_info.flows_len = num_qfis;
   drb_info.flows = calloc_or_fail(num_qfis, sizeof(*drb_info.flows));
+
   for (int i = 0; i < num_qfis; i++) {
     int qfi = qfis[i];
     /* find the stored QoS flow parameters for this QFI */
@@ -2924,9 +2954,16 @@ static f1ap_drb_info_nr_t fill_f1_drb_info_nr(pdusession_t *pdu, const uint8_t *
     f1ap_drb_flows_mapped_t *flow = &drb_info.flows[i];
     flow->qfi = qfi;
     flow->param = get_qos_char_from_qos_flow_param(&qos_param->qos);
+    // Find flow with highest ARP priority (lowest ARP priority_level value)
+    // (lower ARP priority value = higher priority for admission/preemption)
+    if (highest_priority_flow == NULL || flow->param.arp.prio < highest_arp) {
+      highest_arp = flow->param.arp.prio;
+      highest_priority_flow = flow;
+    }
   }
-  /* DRB QoS IE: we just reuse the ones from the first flow */
-  drb_info.drb_qos = drb_info.flows[0].param;
+  /* DRB QoS IE: aggregate DRB-level QoS from all flows (highest priority) */
+  DevAssert(highest_priority_flow);
+  drb_info.drb_qos = fill_f1_drb_qos(&highest_priority_flow->param, highest_arp);
   return drb_info;
 }
 

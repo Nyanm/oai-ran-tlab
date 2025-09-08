@@ -446,7 +446,7 @@ static bool decode_qos_flow_param(const F1AP_QoSFlowLevelQoSParameters_t *f1ap, 
   return true;
 }
 
-static f1ap_qos_flow_param_t cp_qos_flow_param(const f1ap_qos_flow_param_t *orig)
+f1ap_qos_flow_param_t cp_qos_flow_param(const f1ap_qos_flow_param_t *orig)
 {
   f1ap_qos_flow_param_t cp = {
     .qos_type = orig->qos_type,
