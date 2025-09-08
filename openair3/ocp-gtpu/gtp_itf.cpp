@@ -843,36 +843,32 @@ int gtpv1u_create_ngu_tunnel(const instance_t instance,
                              gtpCallbackSDAP callBackSDAP)
 {
   LOG_D(GTPU,
-        "[%ld] Start create tunnels for ue id %lu, num_tunnels %d, TEID 0x%x\n",
+        "[%ld] Create tunnel for UE ID %lu, outgoing TEID 0x%x\n",
         instance,
         create_tunnel_req->ue_id,
-        create_tunnel_req->num_tunnels,
-        create_tunnel_req->outgoing_teid[0]);
+        create_tunnel_req->outgoing_teid);
   pthread_mutex_lock(&globGtp.gtp_lock);
   getInstRetInt(compatInst(instance));
 
   uint8_t addr[inst->foundAddrLen];
   memcpy(addr, inst->foundAddr, inst->foundAddrLen);
   pthread_mutex_unlock(&globGtp.gtp_lock);
-  for (int i = 0; i < create_tunnel_req->num_tunnels; i++) {
-    teid_t teid = newGtpuCreateTunnel(instance,
-                                      create_tunnel_req->ue_id,
-                                      create_tunnel_req->incoming_rb_id[i],
-                                      create_tunnel_req->pdusession_id[i],
-                                      create_tunnel_req->outgoing_teid[i],
-                                      create_tunnel_req->outgoing_qfi[i],
-                                      create_tunnel_req->dst_addr[i],
-                                      callBack,
-                                      callBackSDAP);
-    create_tunnel_resp->status = 0;
-    create_tunnel_resp->ue_id = create_tunnel_req->ue_id;
-    create_tunnel_resp->num_tunnels = create_tunnel_req->num_tunnels;
-    create_tunnel_resp->gnb_NGu_teid[i] = teid;
-    memcpy(create_tunnel_resp->gnb_addr.buffer, addr, sizeof(addr));
-    create_tunnel_resp->gnb_addr.length = sizeof(addr);
-    create_tunnel_resp->pdusession_id[i] = create_tunnel_req->pdusession_id[i];
-  }
-
+  teid_t teid = newGtpuCreateTunnel(instance,
+                                    create_tunnel_req->ue_id,
+                                    create_tunnel_req->incoming_rb_id,
+                                    create_tunnel_req->pdusession_id,
+                                    create_tunnel_req->outgoing_teid,
+                                    create_tunnel_req->outgoing_qfi,
+                                    create_tunnel_req->dst_addr,
+                                    callBack,
+                                    callBackSDAP);
+  /* Fill response */
+  create_tunnel_resp->status = 0;
+  create_tunnel_resp->ue_id = create_tunnel_req->ue_id;
+  create_tunnel_resp->gnb_NGu_teid = teid;
+  memcpy(create_tunnel_resp->gnb_addr.buffer, addr, sizeof(addr));
+  create_tunnel_resp->gnb_addr.length = sizeof(addr);
+  create_tunnel_resp->pdusession_id = create_tunnel_req->pdusession_id;
   return !GTPNOK;
 }
 

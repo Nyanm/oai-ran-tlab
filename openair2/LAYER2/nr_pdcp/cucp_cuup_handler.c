@@ -85,31 +85,30 @@ static void fill_DRB_configList_e1(NR_DRB_ToAddModList_t *DRB_configList, const 
   }
 }
 
-static int drb_gtpu_create(instance_t instance,
-                           uint32_t ue_id,
-                           int incoming_id,
-                           int outgoing_id,
-                           int qfi,
-                           in_addr_t tlAddress, // only IPv4 now
-                           teid_t outgoing_teid,
-                           gtpCallback callBack,
-                           gtpCallbackSDAP callBackSDAP,
-                           gtpv1u_gnb_create_tunnel_resp_t *create_tunnel_resp)
+/** @brief Fill and send request to create GTP-U tunnel (F1-U) */
+static UP_TL_information_t f1_drb_gtpu_create(const instance_t f1inst,
+                                              const gtpv1u_gnb_create_tunnel_req_t *req)
 {
-  gtpv1u_gnb_create_tunnel_req_t create_tunnel_req = {0};
-  create_tunnel_req.incoming_rb_id[0] = incoming_id;
-  create_tunnel_req.pdusession_id[0] = outgoing_id;
-  memcpy(&create_tunnel_req.dst_addr[0].buffer, &tlAddress, sizeof(uint8_t) * 4);
-  create_tunnel_req.dst_addr[0].length = 32;
-  create_tunnel_req.outgoing_teid[0] = outgoing_teid;
-  create_tunnel_req.outgoing_qfi[0] = qfi;
-  create_tunnel_req.num_tunnels = 1;
-  create_tunnel_req.ue_id = ue_id;
+  UP_TL_information_t out = {0};
 
-  // we use gtpv1u_create_ngu_tunnel because it returns the interface
-  // address and port of the interface; apart from that, we also might call
-  // newGtpuCreateTunnel() directly
-  return gtpv1u_create_ngu_tunnel(instance, &create_tunnel_req, create_tunnel_resp, callBack, callBackSDAP);
+  LOG_I(GTPU,
+        "Incoming DRB %d / PDU Session %d - UL TEID %d QFI %d\n",
+        req->incoming_rb_id,
+        req->pdusession_id,
+        req->outgoing_teid,
+        req->outgoing_qfi);
+
+  gtpv1u_gnb_create_tunnel_resp_t resp = {0};
+  int ret = gtpv1u_create_ngu_tunnel(f1inst, req, &resp, cu_f1u_data_req, NULL);
+  AssertFatal(ret >= 0, "Unable to create GTP-U tunnel for F1-U\n");
+  AssertFatal(resp.gnb_addr.length == sizeof(in_addr_t),
+              "GTP tunnel response address length %d does not match IPv4 size %zu\n",
+              resp.gnb_addr.length,
+              sizeof(in_addr_t));
+  memcpy(&out.tlAddress, resp.gnb_addr.buffer, resp.gnb_addr.length);
+  out.teId = resp.gnb_NGu_teid;
+
+  return out;
 }
 
 static instance_t get_n3_gtp_instance(void)
@@ -117,6 +116,32 @@ static instance_t get_n3_gtp_instance(void)
   const e1ap_upcp_inst_t *inst = getCxtE1(0);
   AssertFatal(inst, "need to have E1 instance\n");
   return inst->gtpInstN3;
+}
+
+/** @brief Fill and send request to create GTP-U tunnel (N3). One tunnel per PDU session. */
+static UP_TL_information_t n3_gtpu_create(const gtpv1u_gnb_create_tunnel_req_t *req)
+{
+  instance_t n3inst = get_n3_gtp_instance();
+  UP_TL_information_t out = {0};
+
+  LOG_I(GTPU,
+        "Incoming DRB %d / PDU Session %d - UL TEID %d QFI %d\n",
+        req->incoming_rb_id,
+        req->pdusession_id,
+        req->outgoing_teid,
+        req->outgoing_qfi);
+
+  gtpv1u_gnb_create_tunnel_resp_t resp = {0};
+  int ret = gtpv1u_create_ngu_tunnel(n3inst, req, &resp, nr_pdcp_data_req_drb, sdap_data_req);
+  AssertFatal(ret >= 0, "Unable to create GTP-U tunnel for N3\n");
+  AssertFatal(resp.gnb_addr.length == sizeof(in_addr_t),
+              "GTP tunnel response address length %d does not match IPv4 size %zu\n",
+              resp.gnb_addr.length,
+              sizeof(in_addr_t));
+  memcpy(&out.tlAddress, resp.gnb_addr.buffer, resp.gnb_addr.length);
+  out.teId = resp.gnb_NGu_teid;
+
+  return out;
 }
 
 static instance_t get_f1_gtp_instance(void)
@@ -158,85 +183,87 @@ void e1_bearer_context_setup(const e1ap_bearer_setup_req_t *req)
     LOG_I(E1AP, "adding UE with CU-CP UE ID %d and CU-UP UE ID %d\n", req->gNB_cu_cp_ue_id, cu_up_ue_id);
   }
 
-  instance_t n3inst = get_n3_gtp_instance();
   instance_t f1inst = get_f1_gtp_instance();
 
   e1ap_bearer_setup_resp_t resp = {
-    .gNB_cu_cp_ue_id = req->gNB_cu_cp_ue_id,
-    .gNB_cu_up_ue_id = cu_up_ue_id,
+      .gNB_cu_cp_ue_id = req->gNB_cu_cp_ue_id,
+      .gNB_cu_up_ue_id = cu_up_ue_id,
+      .numPDUSessions = req->numPDUSessions,
   };
-  resp.numPDUSessions = req->numPDUSessions;
   resp.pduSession = calloc_or_fail(req->numPDUSessions, sizeof(*resp.pduSession));
+
+  /** Loop over the number of PDU Sessions to setup
+   * for each PDU session, a GTP-U N3 Tunnel Create Request
+   * and fill the relevant item in E1 Bearer Setup Response */
   for (int i = 0; i < resp.numPDUSessions; ++i) {
     const pdu_session_to_setup_t *req_pdu = req->pduSession + i;
-    LOG_I(E1AP, "UE %d: add PDU session ID %ld (%d bearers)\n", cu_up_ue_id, req_pdu->sessionId, req_pdu->numDRB2Setup);
+    LOG_I(E1AP, "UE %d: set up PDU session ID %ld (%d bearers)\n", cu_up_ue_id, req_pdu->sessionId, req_pdu->numDRB2Setup);
 
     pdu_session_setup_t *resp_pdu = resp.pduSession + i;
     resp_pdu->id = req_pdu->sessionId;
-
-    AssertFatal(req_pdu->numDRB2Setup == 1, "can only handle one DRB per PDU session\n");
     resp_pdu->numDRBSetup = req_pdu->numDRB2Setup;
-    const DRB_nGRAN_to_setup_t *req_drb = &req_pdu->DRBnGRanList[0];
-    AssertFatal(req_drb->numQosFlow2Setup == 1, "can only handle one QoS Flow per DRB\n");
-    DRB_nGRAN_setup_t *resp_drb = &resp_pdu->DRBnGRanList[0];
-    resp_drb->id = req_drb->id;
-    resp_drb->numQosFlowSetup = req_drb->numQosFlow2Setup;
-    for (int k = 0; k < resp_drb->numQosFlowSetup; k++) {
-      const qos_flow_to_setup_t *qosflow2Setup = &req_drb->qosFlows[k];
-      qos_flow_list_t *qosflowSetup = &resp_drb->qosFlows[k];
-      qosflowSetup->qfi = qosflow2Setup->qfi;
+
+    /* Loop though the number of DRB to setup
+     * if required, for each DRB a F1-U GTP-U Tunnel Create Request
+     * and fill the relevant item in E1 Bearer Setup Response */
+    for (int d = 0; d < resp_pdu->numDRBSetup; d++) {
+      const DRB_nGRAN_to_setup_t *req_drb = &req_pdu->DRBnGRanList[d];
+      DRB_nGRAN_setup_t *resp_drb = &resp_pdu->DRBnGRanList[d];
+      resp_drb->id = req_drb->id;
+      resp_drb->numQosFlowSetup = req_drb->numQosFlow2Setup;
+      DevAssert(resp_drb->numQosFlowSetup == 1);
+      for (int k = 0; k < resp_drb->numQosFlowSetup; k++) {
+        const qos_flow_to_setup_t *qosflow2Setup = &req_drb->qosFlows[k];
+        qos_flow_list_t *qosflowSetup = &resp_drb->qosFlows[k];
+        qosflowSetup->qfi = qosflow2Setup->qfi;
+        LOG_D(E1AP, "DRB %ld with QFI %ld to setup\n", resp_drb->id, qosflow2Setup->qfi);
+      }
+      // create PDCP bearers. This will also create SDAP bearers
+      NR_DRB_ToAddModList_t DRB_configList = {0};
+      fill_DRB_configList_e1(&DRB_configList, req_pdu);
+      nr_pdcp_entity_security_keys_and_algos_t security_parameters;
+      security_parameters.ciphering_algorithm = req->secInfo.cipheringAlgorithm;
+      security_parameters.integrity_algorithm = req->secInfo.integrityProtectionAlgorithm;
+      memcpy(security_parameters.ciphering_key, req->secInfo.encryptionKey, NR_K_KEY_SIZE);
+      memcpy(security_parameters.integrity_key, req->secInfo.integrityProtectionKey, NR_K_KEY_SIZE);
+
+      e1_add_bearers(cu_up_ue_id, &DRB_configList, &security_parameters);
+      ASN_STRUCT_RESET(asn_DEF_NR_DRB_ToAddModList, &DRB_configList.list);
+
+      /* F1-U tunnel setup */
+      if (f1inst >= 0) { /* we have F1(-U) */
+        teid_t dummy_teid = 0xffff; // we will update later with answer from DU
+        in_addr_t dummy_address = {0}; // IPv4, updated later with answer from DU
+        gtpv1u_gnb_create_tunnel_req_t f1_tunnel_req = {.incoming_rb_id = req_drb->id,
+                                                        .outgoing_qfi = -1, // don't put PDU session marker in GTP
+                                                        .outgoing_teid = dummy_teid,
+                                                        .pdusession_id = req_drb->id,
+                                                        .ue_id = cu_up_ue_id,
+                                                        .dst_addr.length = 32};
+        memcpy(&f1_tunnel_req.dst_addr.buffer, &dummy_address, sizeof(uint8_t) * 4);
+        up_params_t *up = &resp_drb->UpParamList[resp_drb->numUpParam++];
+        up->tl_info = f1_drb_gtpu_create(f1inst, &f1_tunnel_req);
+        LOG_D(E1AP,
+              "Created F1-U tunnel for DRB %ld (TEID %d tlAddress %x)\n",
+              req_drb->id,
+              up->tl_info.teId,
+              up->tl_info.tlAddress);
+      }
     }
 
-    // GTP tunnel for N3/to core
-    gtpv1u_gnb_create_tunnel_resp_t resp_n3 = {0};
-    int qfi = req_drb->qosFlows[0].qfi;
-    int ret = drb_gtpu_create(n3inst,
-                              cu_up_ue_id,
-                              req_drb->id,
-                              req_pdu->sessionId,
-                              qfi,
-                              req_pdu->UP_TL_information.tlAddress,
-                              req_pdu->UP_TL_information.teId,
-                              nr_pdcp_data_req_drb,
-                              sdap_data_req,
-                              &resp_n3);
-    AssertFatal(ret >= 0, "Unable to create GTP Tunnel for NG-U\n");
-    AssertFatal(resp_n3.num_tunnels == req_pdu->numDRB2Setup, "could not create all tunnels\n");
-    resp_pdu->tl_info.teId = resp_n3.gnb_NGu_teid[0];
-    memcpy(&resp_pdu->tl_info.tlAddress, &resp_n3.gnb_addr.buffer, 4);
-
-    // create PDCP bearers. This will also create SDAP bearers
-    NR_DRB_ToAddModList_t DRB_configList = {0};
-    fill_DRB_configList_e1(&DRB_configList, req_pdu);
-    nr_pdcp_entity_security_keys_and_algos_t security_parameters;
-    security_parameters.ciphering_algorithm = req->secInfo.cipheringAlgorithm;
-    security_parameters.integrity_algorithm = req->secInfo.integrityProtectionAlgorithm;
-    memcpy(security_parameters.ciphering_key, req->secInfo.encryptionKey, NR_K_KEY_SIZE);
-    memcpy(security_parameters.integrity_key, req->secInfo.integrityProtectionKey, NR_K_KEY_SIZE);
-
-    e1_add_bearers(cu_up_ue_id, &DRB_configList, &security_parameters);
-    ASN_STRUCT_RESET(asn_DEF_NR_DRB_ToAddModList, &DRB_configList.list);
-
-    if (f1inst >= 0) { /* we have F1(-U) */
-      teid_t dummy_teid = 0xffff; // we will update later with answer from DU
-      in_addr_t dummy_address = {0}; // IPv4, updated later with answer from DU
-      gtpv1u_gnb_create_tunnel_resp_t resp_f1 = {0};
-      int qfi = -1; // don't put PDU session marker in GTP
-      int ret = drb_gtpu_create(f1inst,
-                                cu_up_ue_id,
-                                req_drb->id,
-                                req_drb->id,
-                                qfi,
-                                dummy_address,
-                                dummy_teid,
-                                cu_f1u_data_req,
-                                NULL,
-                                &resp_f1);
-      resp_drb->numUpParam = 1;
-      AssertFatal(ret >= 0, "Unable to create GTP Tunnel for F1-U\n");
-      memcpy(&resp_drb->UpParamList[0].tl_info.tlAddress, &resp_f1.gnb_addr.buffer, 4);
-      resp_drb->UpParamList[0].tl_info.teId = resp_f1.gnb_NGu_teid[0];
-    }
+    /** GTP tunnel for N3/to core: one GTP-U tunnel per PDU session
+     * which can contains multiple QoS Flows
+     * @note Mapping only the default QFI (by implementation) */
+    LOG_D(E1AP, "In %s: GTP tunnel for N3/to core for PDU Session %ld\n", __func__, req_pdu->sessionId);
+    // N3 GTP-U Tunnel Request for PDU Session
+    gtpv1u_gnb_create_tunnel_req_t n3_tunnel_req = {.ue_id = cu_up_ue_id,
+                                                    .outgoing_teid = req_pdu->UP_TL_information.teId,
+                                                    .outgoing_qfi = req_pdu->DRBnGRanList[0].qosFlows[0].qfi, // one QFI, use as marking
+                                                    .pdusession_id = req_pdu->sessionId,
+                                                    .incoming_rb_id = req_pdu->DRBnGRanList[0].id,
+                                                    .dst_addr.length = 32};
+    memcpy(&n3_tunnel_req.dst_addr.buffer, &req_pdu->UP_TL_information.tlAddress, sizeof(uint8_t) * 4); // only IPv4 now
+    resp_pdu->tl_info = n3_gtpu_create(&n3_tunnel_req);
 
     // We assume all DRBs to setup have been setup successfully, so we always
     // send successful outcome in response and no failed DRBs
