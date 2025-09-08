@@ -411,6 +411,7 @@ NR_SRB_ToAddModList_t *createSRBlist(gNB_RRC_UE_t *ue, uint8_t reestablish)
 }
 
 static NR_SDAP_Config_t *nr_rrc_build_sdap_config_ie(const int pdusession_id,
+                                                     const bool defaultDRB,
                                                      uint8_t n_flows,
                                                      pdusession_level_qos_parameter_t *qos,
                                                      const nr_sdap_configuration_t *sdap_config)
@@ -418,7 +419,7 @@ static NR_SDAP_Config_t *nr_rrc_build_sdap_config_ie(const int pdusession_id,
   DevAssert(n_flows < MAX_QOS_FLOWS);
   // SDAP
   NR_SDAP_Config_t *sc = calloc_or_fail(1, sizeof(*sc));
-  sc->defaultDRB = true;
+  sc->defaultDRB = defaultDRB;
   sc->pdu_Session = pdusession_id;
   sc->sdap_HeaderDL = sdap_config->header_dl_absent ? NR_SDAP_Config__sdap_HeaderDL_absent : NR_SDAP_Config__sdap_HeaderDL_present;
   sc->sdap_HeaderUL = sdap_config->header_ul_absent ? NR_SDAP_Config__sdap_HeaderUL_absent : NR_SDAP_Config__sdap_HeaderUL_present;
@@ -469,7 +470,9 @@ NR_DRB_ToAddModList_t *createDRBlist(gNB_RRC_UE_t *ue, bool reestablish, bool do
     }
     asn1cCalloc(drb_ToAddMod->cnAssociation, cn_association);
     cn_association->present = NR_DRB_ToAddMod__cnAssociation_PR_sdap_Config;
-    cn_association->choice.sdap_Config = nr_rrc_build_sdap_config_ie(drb->pdusession_id, n_flows, flows_to_add, &session->sdap_config);
+    nr_sdap_configuration_t *sdap = &session->sdap_config;
+    bool defaultDRB = (sdap->default_drb == drb_ToAddMod->drb_Identity);
+    cn_association->choice.sdap_Config = nr_rrc_build_sdap_config_ie(drb->pdusession_id, defaultDRB, n_flows, flows_to_add, sdap);
     asn1cSeqAdd(&DRB_configList->list, drb_ToAddMod);
   }
   if (DRB_configList->list.count == 0) {

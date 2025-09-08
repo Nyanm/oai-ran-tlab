@@ -328,7 +328,7 @@ static DRB_nGRAN_to_setup_t fill_e1_drb_to_setup(const drb_t *rrc_drb,
   DRB_nGRAN_to_setup_t drb_ngran = {0};
   drb_ngran.id = rrc_drb->drb_id;
 
-  drb_ngran.sdap_config.defaultDRB = true;
+  drb_ngran.sdap_config.defaultDRB = (session->sdap_config.default_drb == drb_ngran.id);
   drb_ngran.sdap_config.sDAP_Header_UL = session->sdap_config.header_ul_absent ? false : true;
   drb_ngran.sdap_config.sDAP_Header_DL = session->sdap_config.header_dl_absent ? false : true;
 

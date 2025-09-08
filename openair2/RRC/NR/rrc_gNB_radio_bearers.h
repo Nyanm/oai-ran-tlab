@@ -66,4 +66,7 @@ int nr_rrc_find_suitable_drb_for_qos(gNB_RRC_UE_t *UE,
 /// @brief Check if 5QI value is a standardized value (table 5.7.4-1 in 3GPP TS 23.501)
 bool is_5qi_standardized(uint16_t five_qi);
 
+/// @brief Check if a standardized 5QI corresponds to a Non-GBR resource type (from TS 23.501 Table 5.7.4-1)
+bool nr_rrc_is_non_gbr_fiveqi(uint16_t five_qi);
+
 #endif

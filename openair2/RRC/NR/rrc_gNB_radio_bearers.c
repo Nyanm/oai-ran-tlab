@@ -383,6 +383,17 @@ bool is_5qi_standardized(uint16_t five_qi)
          (five_qi >= 82 && five_qi <= MAX_STANDARDIZED_FIVEQI); // DC-GBR
 }
 
+/** @brief Check if a standardized 5QI corresponds to a Non-GBR resource type (from TS 23.501 Table 5.7.4-1)
+ * @param five_qi 5QI value to check
+ * @return true if 5QI is a Non-GBR resource type, false otherwise */
+bool nr_rrc_is_non_gbr_fiveqi(uint16_t five_qi)
+{
+  DevAssert(five_qi <= MAX_FIVEQI);
+  if (!is_5qi_standardized(five_qi))
+    return false;
+  return five_qi_resource_type[five_qi] == QOS_RESOURCE_TYPE_NON_GBR;
+}
+
 // Design-specific DRB multiplexing limits per resource type
 #define MAX_QOS_FLOWS_PER_DRB_DC_GBR 1 // Strict isolation for delay-critical GBR
 #define MAX_QOS_FLOWS_PER_DRB_GBR 2 // Conservative multiplexing for GBR
@@ -573,6 +584,7 @@ bool nr_rrc_assign_drb_to_qos_flow(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const pd
 void nr_rrc_add_bearers(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession_t *sessions)
 {
   for (int i = 0; i < n; i++) {
+    bool default_set = false;
     // Retrieve SDAP configuration and PDU Session to the list
     sessions[i].sdap_config = get_sdap_config(rrc->configuration.enable_sdap);
     rrc_pdu_session_param_t *pduSession = add_pduSession(&UE->pduSessions, &sessions[i]);
@@ -585,6 +597,19 @@ void nr_rrc_add_bearers(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession_t
     // Intelligent QoS to DRB mapping based on 3GPP TS 23.501
     FOR_EACH_SEQ_ARR(nr_rrc_qos_t *, qos, &session->qos) {
       nr_rrc_assign_drb_to_qos_flow(rrc, UE, session, qos);
+      /* TS 23.501 §5.7.2.7: the QoS Flow associated with the default QoS rule should be a Non-GBR QoS Flow
+       * from the standardized value range. Therefore, we prefer the DRB mapped from the first Non-GBR QoS flow here. */
+      DevAssert(qos->qos.fiveQI <= MAX_FIVEQI);
+      if (qos->qos.fiveQI_type == NON_DYNAMIC && nr_rrc_is_non_gbr_fiveqi(qos->qos.fiveQI) && !default_set) {
+        session->sdap_config.default_drb = qos->drb_id;
+        default_set = true;
+      }
+    }
+
+    if (!default_set) {
+      LOG_E(NR_RRC,
+            "No standardized non-GBR QoS flow found in PDU session %d; cannot set SDAP default DRB\n",
+            session->pdusession_id);
     }
   }
 }
