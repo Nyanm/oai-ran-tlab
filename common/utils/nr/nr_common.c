@@ -683,6 +683,11 @@ int get_nr_table_idx(int nr_bandP, uint8_t scs_index)
   return i;
 }
 
+nr_bandentry_t get_band_entry(int nr_band, uint8_t scs)
+{
+  return nr_bandtable[get_nr_table_idx(nr_band, scs)];
+}
+
 int get_subband_size(int NPRB,int size) {
   // implements table  5.2.1.4-2 from 36.214
   //
