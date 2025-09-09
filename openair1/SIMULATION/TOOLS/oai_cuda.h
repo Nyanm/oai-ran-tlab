@@ -151,7 +151,9 @@ void interleave_channel_output_cuda(float **rx_sig_re,
 
 void* create_and_init_curand_states_cuda(int num_elements, unsigned long long seed);
 void destroy_curand_states_cuda(void* d_curand_states);
-
+void vrtsim_cuda_init(void **context, ...);
+void vrtsim_cuda_process(void *context, ...);
+void vrtsim_cuda_shutdown(void *context);
 
 #ifdef __cplusplus
 }

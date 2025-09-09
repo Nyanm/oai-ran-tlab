@@ -5,6 +5,11 @@ set_target_properties(vrtsim PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_
 target_link_libraries(vrtsim PRIVATE SIMU shm_td_iq_channel actor noise_device)
 add_dependencies(vrtsim generate_T)
 
+if(CUDA_ENABLE)
+    target_link_libraries(vrtsim PRIVATE oai_cuda_lib)
+    target_compile_definitions(vrtsim PRIVATE ENABLE_CUDA)
+endif()
+
 add_boolean_option(OAI_VRTSIM_TAPS_CLIENT OFF "Enable taps client" ON)
 if (OAI_VRTSIM_TAPS_CLIENT)
   target_link_libraries(vrtsim PRIVATE taps_client)
