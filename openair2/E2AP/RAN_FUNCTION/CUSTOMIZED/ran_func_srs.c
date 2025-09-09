@@ -38,6 +38,7 @@
 #include "nfapi/open-nFAPI/fapi/inc/nr_fapi.h"
 #include "nfapi/open-nFAPI/fapi/inc/nr_fapi_p7_utils.h"
 
+#include "openair2/F1AP/f1ap_ids.h"
 static seq_arr_t srs_subs_data = {0};
 
 bool read_srs_sm(void* data)
@@ -82,8 +83,9 @@ static srs_ind_msg_t fill_srs_ind_msg(nfapi_nr_srs_indication_t *nfapi_srs_ind)
   for(uint32_t i = 0; i < msg.len; ++i){
     srs_indication_stats_impl_t* indication_stats = &msg.indication_stats[i];
   
-    indication_stats->rnti= nfapi_srs_ind->pdu_list[0].rnti;
-    printf("SRS.indication RNTI: %u\n", indication_stats->rnti);
+    f1_ue_data_t ue_data = du_get_f1_ue_data(nfapi_srs_ind->pdu_list[0].rnti); // Unique CU-UE ID
+    indication_stats->ue_id= ue_data.secondary_ue;
+    printf("CU-UE ID: %u\n", indication_stats->ue_id);
     size_t ba_len = get_srs_indication_size(nfapi_srs_ind);
     byte_array_t ba = {.len = ba_len};
     ba.buf = malloc(ba.len);
@@ -103,7 +105,7 @@ static srs_ind_msg_t fill_srs_ind_msg(nfapi_nr_srs_indication_t *nfapi_srs_ind)
 
     ba.len = packedBufLen;
     printf("[RIC DEBUG INFO] ba updated len: %zu bytes\n", ba.len);
-    indication_stats->srs_unpacked_pdu = copy_byte_array(ba);
+    indication_stats->srs_indication_ba = copy_byte_array(ba);
 
     // Clean up
     free_byte_array(ba);
