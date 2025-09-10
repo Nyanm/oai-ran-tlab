@@ -37,6 +37,7 @@
 #include "LAYER2/nr_rlc/nr_rlc_oai_api.h"
 
 //#define SRS_IND_DEBUG
+//#define SRS_IND_DEBUG_VERBOSE
 
 int get_ul_tda(gNB_MAC_INST *nrmac, int frame, int slot)
 {
@@ -1372,14 +1373,14 @@ static int nr_srs_tpmi_estimation(const NR_PUSCH_Config_t *pusch_Config,
             precoded_channel_matrix_re[index_gI_pI] += h_times_w.r;
             precoded_channel_matrix_im[index_gI_pI] += h_times_w.i;
 
-#ifdef SRS_IND_DEBUG
+#ifdef SRS_IND_DEBUG_VERBOSE
             LOG_I(NR_MAC, "(pI %i, gI %i,  uI %i, layer_idx %i) w = %c, channel_matrix --> real %i, imag %i\n",
                   pI, gI, uI, layer_idx, w, channel_matrix16[index].r, channel_matrix16[index].i);
 #endif
           }
         }
 
-#ifdef SRS_IND_DEBUG
+#ifdef SRS_IND_DEBUG_VERBOSE
         LOG_I(NR_MAC, "(pI %i, gI %i) precoded_channel_coef --> real %i, imag %i\n",
               pI, gI, precoded_channel_matrix_re[index_gI_pI], precoded_channel_matrix_im[index_gI_pI]);
 #endif
@@ -1409,8 +1410,17 @@ void handle_nr_srs_measurements(const module_id_t module_id,
                                 nfapi_nr_srs_indication_pdu_t *srs_ind)
 {
   gNB_MAC_INST *nrmac = RC.nrmac[module_id];
-  NR_SCHED_LOCK(&nrmac->sched_lock);
   LOG_D(NR_MAC, "(%d.%d) Received SRS indication for UE %04x\n", frame, slot, srs_ind->rnti);
+  if (srs_ind->report_type == 0) {
+    //SCF 222.10.04 Table 3-129 Report type = 0 means a null report, we can skip unpacking it
+    return;
+  }
+
+  if (srs_ind->timing_advance_offset == 0xFFFF) {
+    LOG_W(NR_MAC, "Invalid timing advance offset for RNTI %04x\n", srs_ind->rnti);
+    return;
+  }
+  NR_SCHED_LOCK(&nrmac->sched_lock);
 
 #ifdef SRS_IND_DEBUG
   LOG_I(NR_MAC, "frame = %i\n", frame);
@@ -1425,12 +1435,6 @@ void handle_nr_srs_measurements(const module_id_t module_id,
   NR_UE_info_t *UE = find_nr_UE(&RC.nrmac[module_id]->UE_info, srs_ind->rnti);
   if (!UE) {
     LOG_W(NR_MAC, "Could not find UE for RNTI %04x\n", srs_ind->rnti);
-    NR_SCHED_UNLOCK(&nrmac->sched_lock);
-    return;
-  }
-
-  if (srs_ind->timing_advance_offset == 0xFFFF) {
-    LOG_W(NR_MAC, "Invalid timing advance offset for RNTI %04x\n", srs_ind->rnti);
     NR_SCHED_UNLOCK(&nrmac->sched_lock);
     return;
   }
@@ -1501,6 +1505,7 @@ void handle_nr_srs_measurements(const module_id_t module_id,
       LOG_I(NR_MAC, "nr_srs_channel_iq_matrix.num_ue_srs_ports = %i\n", nr_srs_channel_iq_matrix.num_ue_srs_ports);
       LOG_I(NR_MAC, "nr_srs_channel_iq_matrix.prg_size = %i\n", nr_srs_channel_iq_matrix.prg_size);
       LOG_I(NR_MAC, "nr_srs_channel_iq_matrix.num_prgs = %i\n", nr_srs_channel_iq_matrix.num_prgs);
+#ifdef SRS_IND_DEBUG_VERBOSE
       c16_t *channel_matrix16 = (c16_t *)nr_srs_channel_iq_matrix.channel_matrix;
       c8_t *channel_matrix8 = (c8_t *)nr_srs_channel_iq_matrix.channel_matrix;
       for (int uI = 0; uI < nr_srs_channel_iq_matrix.num_ue_srs_ports; uI++) {
@@ -1517,6 +1522,7 @@ void handle_nr_srs_measurements(const module_id_t module_id,
           }
         }
       }
+#endif
 #endif
 
       NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
