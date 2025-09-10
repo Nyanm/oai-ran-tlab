@@ -1747,6 +1747,7 @@ add_executable(lte-softmodem
   ${OPENAIR_DIR}/executables/create_tasks_mbms.c
   ${OPENAIR_DIR}/radio/COMMON/common_lib.c
   ${OPENAIR_DIR}/radio/COMMON/record_player.c
+  ${OPENAIR_DIR}/radio/COMMON/zmq_configuration.c
   ${OPENAIR3_DIR}/NAS/UE/nas_ue_task.c
   ${PHY_INTERFACE_DIR}/queue_t.c
   ${OPENAIR_DIR}/common/utils/lte/ue_power.c
@@ -1776,6 +1777,7 @@ add_executable(oairu
   ${OPENAIR_DIR}/executables/ru_control.c
   ${OPENAIR_DIR}/radio/COMMON/common_lib.c
   ${OPENAIR_DIR}/radio/COMMON/record_player.c
+  ${OPENAIR_DIR}/radio/COMMON/zmq_configuration.c
   ${OPENAIR_DIR}/executables/softmodem-common.c
   ${OPENAIR_DIR}/openair1/SCHED/phy_procedures_lte_common.c
   ${OPENAIR_DIR}/executables/main_ru.c
@@ -1804,6 +1806,7 @@ add_executable(lte-uesoftmodem
   ${OPENAIR_DIR}/executables/create_tasks_ue.c
   ${OPENAIR_DIR}/radio/COMMON/common_lib.c
   ${OPENAIR_DIR}/radio/COMMON/record_player.c
+  ${OPENAIR_DIR}/radio/COMMON/zmq_configuration.c
   ${OPENAIR3_DIR}/NAS/UE/nas_ue_task.c
   ${OPENAIR_DIR}/common/utils/lte/ue_power.c
   ${OPENAIR_DIR}/common/utils/lte/prach_utils.c
@@ -1840,6 +1843,7 @@ add_executable(nr-softmodem
   ${OPENAIR_DIR}/executables/softmodem-common.c
   ${OPENAIR_DIR}/radio/COMMON/common_lib.c
   ${OPENAIR_DIR}/radio/COMMON/record_player.c
+  ${OPENAIR_DIR}/radio/COMMON/zmq_configuration.c
   ${OPENAIR_DIR}/common/utils/lte/ue_power.c
   ${OPENAIR_DIR}/common/utils/lte/prach_utils.c
   ${PHY_INTERFACE_DIR}/queue_t.c
@@ -1911,6 +1915,7 @@ add_executable(nr-uesoftmodem
   ${OPENAIR_DIR}/executables/softmodem-common.c
   ${OPENAIR_DIR}/radio/COMMON/common_lib.c
   ${OPENAIR_DIR}/radio/COMMON/record_player.c
+  ${OPENAIR_DIR}/radio/COMMON/zmq_configuration.c
   ${OPENAIR2_DIR}/LAYER2/NR_MAC_COMMON/nr_mac_common.c
   ${OPENAIR2_DIR}/LAYER2/NR_MAC_COMMON/nr_mac_common_tdd.c
   ${OPENAIR1_DIR}/PHY/TOOLS/phy_scope_interface.c

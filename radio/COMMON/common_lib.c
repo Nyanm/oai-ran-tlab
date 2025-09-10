@@ -99,6 +99,7 @@ int load_lib(openair0_device *device,
   char *deflibname=OAI_RF_LIBNAME;
   openair0_cfg->command_line_sample_advance = get_softmodem_params()->command_line_sample_advance;
   openair0_cfg->recplay_mode = read_recplayconfig(&(openair0_cfg->recplay_conf),&(device->recplay_state));
+  openair0_cfg->zmq_conf = get_zmq_configuration();
 
   if (openair0_cfg->recplay_mode == RECPLAY_RECORDMODE) {
     IS_SOFTMODEM_IQRECORDER = true; // softmodem has to know we use the iqrecorder to workaround randomized algorithms
@@ -124,6 +125,11 @@ int load_lib(openair0_device *device,
 	  shlib_fdesc[0].fname="transport_init";
   }
   
+  if (openair0_cfg->zmq_conf) {
+    deflibname = "oai_zmq";
+    shlib_fdesc[0].fname = "device_init";
+  }
+
   char *devname=NULL;
   paramdef_t device_params[]=DEVICE_PARAMS_DESC ;
   int numparams = sizeofArray(device_params);

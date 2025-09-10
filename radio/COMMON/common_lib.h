@@ -38,6 +38,7 @@
 #include <openair1/PHY/TOOLS/tools_defs.h>
 #include "record_player.h"
 #include "common/utils/threadPool/notified_fifo.h"
+#include "radio/zmq/zmq_configuration.h"
 
 /* default name of shared library implementing the radio front end */
 #define OAI_RF_LIBNAME        "oai_device"
@@ -290,6 +291,8 @@ typedef struct openair0_config {
   unsigned int my_port;
   //! record player configuration, definition in record_player.h
   uint32_t       recplay_mode;
+  //! ZeroMQ configuration
+  zmq_configuration_t *zmq_conf;
   recplay_conf_t *recplay_conf;
   //! number of samples per tti
   unsigned int  samples_per_tti;

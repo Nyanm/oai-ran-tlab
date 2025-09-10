@@ -47,3 +47,5 @@ add_boolean_option(OAI_RF_EMULATOR ON "Activate OAI's RF emulator" OFF)
 if(OAI_RF_EMULATOR)
   add_subdirectory(emulator)
 endif()
+
+add_subdirectory(zmq)
