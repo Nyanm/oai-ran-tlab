@@ -1106,8 +1106,7 @@ int nr_acknack_scheduling(gNB_MAC_INST *mac,
                           slot_t slot,
                           int ue_beam,
                           int r_pucch,
-                          int is_common,
-                          int min_min_fbtime)
+                          int is_common)
 {
   /* we assume that this function is mutex-protected from outside. Since it is
    * called often, don't try to lock every time */
@@ -1116,7 +1115,7 @@ int nr_acknack_scheduling(gNB_MAC_INST *mac,
   const NR_ServingCellConfigCommon_t *scc = mac->common_channels[CC_id].ServingCellConfigCommon;
   const int NTN_gNB_Koffset = get_NTN_Koffset(scc);
 
-  const int minfbtime = max(mac->radio_config.minRXTXTIME + NTN_gNB_Koffset, min_min_fbtime);
+  const int minfbtime = mac->radio_config.minRXTXTIME + NTN_gNB_Koffset;
   const NR_UE_UL_BWP_t *ul_bwp = &UE->current_UL_BWP;
   const int n_slots_frame = mac->frame_structure.numb_slots_frame;
   const frame_structure_t *fs = &mac->frame_structure;
