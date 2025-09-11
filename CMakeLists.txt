@@ -1843,6 +1843,7 @@ add_executable(oainr_ru
   ${OPENAIR_DIR}/radio/COMMON/record_player.c
   ${OPENAIR_DIR}/executables/softmodem-common.c
   ${OPENAIR_DIR}/executables/main_nr_ru.c
+  ${OPENAIR_DIR}/executables/nr-oru.c
 )
 target_link_libraries(oainr_ru PRIVATE
   -Wl,--start-group
