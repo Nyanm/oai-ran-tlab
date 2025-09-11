@@ -19,22 +19,250 @@
  *      contact@openairinterface.org
  */
 
-#include <stdio.h>
-#include <cuda_runtime.h>
 #include "oai_cuda.h"
+#include <cstdint>
+#include <cstdio>
+#include <cuda_runtime.h>
 
-void vrtsim_cuda_init(void** context, ...)
-{
-  printf("vrtsim_cuda_init called\n");
-  return;
+typedef struct complexd {
+    double r;
+    double i;
+} complexd;
+
+
+#define CHECK_CUDA(val) { \
+    if (val != cudaSuccess) { \
+        fprintf(stderr, "CUDA Error at %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(val)); \
+        exit(EXIT_FAILURE); \
+    } \
 }
-void vrtsim_cuda_process(void* context, ...)
+
+static void prepare_channel_coeffs(
+    float2* h_out, 
+    channel_desc_t* desc, 
+    int nb_tx, 
+    int nb_rx) 
 {
-  printf("vrtsim_cuda_process called\n");
-  return;
+    int idx = 0;
+    for (int rx = 0; rx < nb_rx; ++rx) {
+        for (int tx = 0; tx < nb_tx; ++tx) {
+            // Get the pointer to the channel impulse response for this link
+            struct complexd* channel_model = desc->ch[rx + (tx * nb_rx)];
+            for (int l = 0; l < desc->channel_length; ++l) {
+                h_out[idx].x = (float)channel_model[l].r;
+                h_out[idx].y = (float)channel_model[l].i;
+                idx++;
+            }
+        }
+    }
 }
-void vrtsim_cuda_shutdown(void* context, ...)
+
+struct GpuContext {
+    cudaStream_t stream;
+    curandState_t* d_curand_states;
+
+    float* h_pinned_input;
+    c16_t* h_pinned_output;
+
+    float* d_input_padded;
+    float2* d_channel_output;
+    short2* d_final_output;
+    float2* d_channel_coeffs;
+
+    c16_t* cpu_history_buffer;
+    int channel_length;
+    int nb_tx;
+};
+
+extern "C" void vrtsim_cuda_init(
+    void** context_handle,
+    int max_samples,
+    int nb_tx,
+    int nb_rx,
+    int channel_length)
 {
-  printf("vrtsim_cuda_shutdown called\n");
-  return;
+    printf("[CUDA] Initializing vrtsim GPU context...\n");
+
+    GpuContext* ctx = new GpuContext();
+    ctx->channel_length = channel_length;
+    ctx->nb_tx = nb_tx;
+
+    CHECK_CUDA(cudaStreamCreate(&ctx->stream));
+
+    const int max_padded_samples = max_samples + channel_length - 1;
+    CHECK_CUDA(cudaMalloc(&ctx->d_input_padded, max_padded_samples * nb_tx * sizeof(float2)));
+    CHECK_CUDA(cudaMalloc(&ctx->d_channel_output, max_samples * nb_rx * sizeof(float2)));
+    CHECK_CUDA(cudaMalloc(&ctx->d_final_output, max_samples * nb_rx * sizeof(short2)));
+    CHECK_CUDA(cudaMalloc(&ctx->d_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2)));
+
+    CHECK_CUDA(cudaMallocHost(&ctx->h_pinned_input, max_padded_samples * nb_tx * sizeof(float2)));
+    CHECK_CUDA(cudaMallocHost(&ctx->h_pinned_output, max_samples * nb_rx * sizeof(c16_t)));
+
+    const int num_rand_elements = max_samples * nb_rx;
+    ctx->d_curand_states = (curandState_t*)create_and_init_curand_states_cuda(num_rand_elements, time(NULL));
+
+    const int history_size = (channel_length > 0) ? (channel_length - 1) * nb_tx : 0;
+    ctx->cpu_history_buffer = new c16_t[history_size];
+    memset(ctx->cpu_history_buffer, 0, history_size * sizeof(c16_t));
+
+    *context_handle = ctx;
+
+    printf("[CUDA] GPU context initialized successfully.\n");
 }
+
+extern "C" void vrtsim_cuda_shutdown(void* context_handle) {
+    printf("[CUDA] Shutting down vrtsim GPU context...\n");
+
+    if (context_handle == nullptr) {
+        return;
+    }
+
+    GpuContext* ctx = (GpuContext*)context_handle;
+
+    CHECK_CUDA(cudaFree(ctx->d_input_padded));
+    CHECK_CUDA(cudaFree(ctx->d_channel_output));
+    CHECK_CUDA(cudaFree(ctx->d_final_output));
+    CHECK_CUDA(cudaFree(ctx->d_channel_coeffs));
+
+    CHECK_CUDA(cudaFreeHost(ctx->h_pinned_input));
+    CHECK_CUDA(cudaFreeHost(ctx->h_pinned_output));
+
+    destroy_curand_states_cuda(ctx->d_curand_states);
+
+    CHECK_CUDA(cudaStreamDestroy(ctx->stream));
+
+    delete[] ctx->cpu_history_buffer;
+
+    delete ctx;
+
+    printf("[CUDA] GPU context shut down successfully.\n");
+}
+
+// Helper function to get a pointer to the start of a specific TX antenna's data
+// in the interleaved buffer.
+static inline float* get_tx_ptr(float* base, int tx_ant, int padded_len) {
+    return base + (tx_ant * padded_len * 2);
+}
+
+// Helper for the CPU history buffer
+static inline c16_t* get_hist_ptr(c16_t* base, int tx_ant, int hist_len) {
+    return base + (tx_ant * hist_len);
+}
+
+
+extern "C" void vrtsim_cuda_process(
+    void* context_handle,
+    c16_t** input_samples, // from vrtsim.c, array of pointers per tx antenna
+    int nsamps,
+    int nb_tx,
+    int nb_rx,
+    channel_desc_t* channel_desc, // contains channel coefficients
+    float sigma2,
+    double ts,
+    uint16_t pdu_bit_map,
+    uint16_t ptrs_bit_map,
+    c16_t* final_output_buffer // a single buffer for all interleaved rx antenna outputs
+) {
+    // 1. Get the GPU context and cast it
+    GpuContext* ctx = (GpuContext*)context_handle;
+    const int hist_len = ctx->channel_length > 0 ? ctx->channel_length - 1 : 0;
+    const int padded_len = nsamps + hist_len;
+
+    // ===================================================================
+    // 2. CPU-Side Data Preparation (The "Hot Path")
+    // This is where we prepare the data in pinned memory.
+    // ===================================================================
+
+    // For each transmit antenna...
+    for (int i = 0; i < nb_tx; ++i) {
+        float* h_in_ptr = get_tx_ptr(ctx->h_pinned_input, i, padded_len);
+        c16_t* hist_ptr = get_hist_ptr(ctx->cpu_history_buffer, i, hist_len);
+        c16_t* input_ptr = input_samples[i];
+    
+        // a) Copy history from our CPU buffer to the start of the pinned buffer and convert to float
+        for (int j = 0; j < hist_len; ++j) {
+            h_in_ptr[j * 2]     = (float)hist_ptr[j].r;
+            h_in_ptr[j * 2 + 1] = (float)hist_ptr[j].i;
+        }
+
+        // b) Copy the new samples after the history and convert to float
+        for (int j = 0; j < nsamps; ++j) {
+            h_in_ptr[(hist_len + j) * 2]     = (float)input_ptr[j].r;
+            h_in_ptr[(hist_len + j) * 2 + 1] = (float)input_ptr[j].i;
+        }
+
+        // c) Update our CPU history buffer with the last samples from this chunk
+        if (hist_len > 0) {
+            memcpy(hist_ptr, input_ptr + (nsamps - hist_len), hist_len * sizeof(c16_t));
+        }
+    }
+
+    // ===================================================================
+    // 2b. Prepare and Transfer Channel Coefficients
+    // ===================================================================
+
+    // Create a temporary host buffer for the flattened coefficients.
+    // Since it's small, it can live on the stack.
+    const int coeffs_size = nb_tx * nb_rx * ctx->channel_length;
+    float2 h_temp_coeffs[coeffs_size];
+
+    // Call your helper function to prepare the coefficients
+    prepare_channel_coeffs(h_temp_coeffs, channel_desc, nb_tx, nb_rx);
+
+    // Asynchronously copy the prepared coefficients to the GPU
+    size_t channel_bytes = coeffs_size * sizeof(float2);
+    CHECK_CUDA(cudaMemcpyAsync(ctx->d_channel_coeffs, h_temp_coeffs, channel_bytes, cudaMemcpyHostToDevice, ctx->stream));
+
+    // ===================================================================
+    // 3. Launch Asynchronous GPU Pipeline
+    // ===================================================================
+
+    // a) Copy the fully prepared input buffer from Host to Device
+    size_t input_bytes = padded_len * nb_tx * sizeof(float2);
+    CHECK_CUDA(cudaMemcpyAsync(ctx->d_input_padded, ctx->h_pinned_input, input_bytes, cudaMemcpyHostToDevice, ctx->stream));
+
+    // b) Launch the channel kernel
+    dim3 threads_multipath(512, 1);
+    dim3 blocks_multipath((nsamps + threads_multipath.x - 1) / threads_multipath.x, nb_rx);
+    size_t sharedMemSize = (threads_multipath.x + ctx->channel_length - 1) * sizeof(float2);
+    multipath_channel_kernel<<<blocks_multipath, threads_multipath, sharedMemSize, ctx->stream>>>(
+        ctx->d_channel_coeffs,
+        ctx->d_input_padded,
+        ctx->d_channel_output,
+        nsamps,
+        ctx->channel_length,
+        nb_tx,
+        nb_rx
+    );
+
+    // c) Launch the noise kernel
+    float pn_variance = 1e-5f * 2.0f * 3.1415926535f * 300.0f * (float)ts;
+    dim3 threads_noise(256, 1);
+    dim3 blocks_noise((nsamps + threads_noise.x - 1) / threads_noise.x, nb_rx);
+    add_noise_and_phase_noise_kernel<<<blocks_noise, threads_noise, 0, ctx->stream>>>(
+        ctx->d_channel_output, // Reads from intermediate buffer
+        ctx->d_final_output,
+        ctx->d_curand_states,
+        nsamps,
+        sqrtf(sigma2 / 2.0f),
+        sqrtf(pn_variance),
+        pdu_bit_map,
+        ptrs_bit_map
+    );
+
+    // d) Copy the final result from Device back to Host
+    size_t output_bytes = nsamps * nb_rx * sizeof(c16_t);
+    CHECK_CUDA(cudaMemcpyAsync(ctx->h_pinned_output, ctx->d_final_output, output_bytes, cudaMemcpyDeviceToHost, ctx->stream));
+
+    // ===================================================================
+    // 4. Synchronize and Finalize
+    // ===================================================================
+
+    // This is the ONLY blocking call. It waits for all previously issued
+    // work in this stream to complete.
+    CHECK_CUDA(cudaStreamSynchronize(ctx->stream));
+
+    // The result is now available in ctx->h_pinned_output.
+    // Copy it to the final destination buffer provided by vrtsim.c.
+    memcpy(final_output_buffer, ctx->h_pinned_output, output_bytes);
+   }

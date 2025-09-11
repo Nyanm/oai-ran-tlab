@@ -81,4 +81,7 @@ if (TARGET oai_cuda_lib)
     target_compile_definitions(test_channel_simulation PRIVATE ENABLE_CUDA)
 endif()
 
+add_executable(test_vrtsim_wrapper test_vrtsim_wrapper.cu)
+target_link_libraries(test_vrtsim_wrapper PRIVATE vrtsim_static oai_cuda_lib SIMU PHY_COMMON)
+add_dependencies(test_vrtsim_wrapper vrtsim_static)
 endif()

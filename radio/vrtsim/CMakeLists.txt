@@ -1,13 +1,39 @@
 add_library(noise_device STATIC noise_device.c)
 
-add_library(vrtsim MODULE vrtsim.c)
+set(VRTSIM_SOURCES vrtsim.c)
+if(CUDA_ENABLE)
+    list(APPEND VRTSIM_SOURCES vrtsim_channel_pipeline.cu)
+endif()
+
+add_library(vrtsim MODULE ${VRTSIM_SOURCES})
+add_library(vrtsim_static STATIC ${VRTSIM_SOURCES})
+
+set(VRTSIM_COMMON_LIBS PRIVATE SIMU shm_td_iq_channel actor noise_device)
+target_link_libraries(vrtsim ${VRTSIM_COMMON_LIBS})
+target_link_libraries(vrtsim_static ${VRTSIM_COMMON_LIBS})
+
+set(VRTSIM_COMMON_INCLUDES PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../COMMON
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../common/utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../openair1/PHY/defs
+)
+target_include_directories(vrtsim ${VRTSIM_COMMON_INCLUDES})
+target_include_directories(vrtsim_static ${VRTSIM_COMMON_INCLUDES})
+
 set_target_properties(vrtsim PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-target_link_libraries(vrtsim PRIVATE SIMU shm_td_iq_channel actor noise_device)
 add_dependencies(vrtsim generate_T)
 
 if(CUDA_ENABLE)
+    set_target_properties(vrtsim vrtsim_static PROPERTIES 
+        CUDA_STANDARD 17
+        CUDA_SEPARABLE_COMPILATION ON
+        CUDA_ARCHITECTURES "70;75;80"
+    )
     target_link_libraries(vrtsim PRIVATE oai_cuda_lib)
+    target_link_libraries(vrtsim_static PRIVATE oai_cuda_lib)
     target_compile_definitions(vrtsim PRIVATE ENABLE_CUDA)
+    target_compile_definitions(vrtsim_static PRIVATE ENABLE_CUDA)
 endif()
 
 add_boolean_option(OAI_VRTSIM_TAPS_CLIENT OFF "Enable taps client" ON)

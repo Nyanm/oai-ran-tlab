@@ -23,13 +23,71 @@
 #define __OAI_CUDA_H__
 
 #include <stdint.h>
-
-
+#include <common/utils/time_meas.h>
 #ifdef __NVCC__
     typedef struct complex16 {
       int16_t r;
       int16_t i;
     } c16_t;
+    
+typedef enum {
+  CORR_LEVEL_LOW,
+  CORR_LEVEL_MEDIUM,
+  CORR_LEVEL_HIGH
+} corr_level_t;
+
+typedef enum {
+  UNSPECIFIED_MODID=0,
+  RFSIMU_MODULEID=1
+} channelmod_moduleid_t;
+
+typedef struct {
+  uint8_t nb_tx;
+  uint8_t nb_rx;
+  uint8_t nb_taps;
+  double *amps;
+  double normalization_ch_factor;
+  double *delays;
+  uint8_t channel_length;
+  struct complexd **a;
+  struct complexd **ch;
+  struct complexf **ch_ps;
+  struct complexd **chF;
+  double Td;
+  uint64_t center_freq;
+  double channel_bandwidth;
+  double sampling_rate;
+  double ricean_factor;
+  corr_level_t corr_level;
+  double aoa;
+  int8_t random_aoa;
+  double max_Doppler;
+  struct complexd **R_sqrt;
+  double path_loss_dB;
+  uint64_t channel_offset;
+  float noise_power_dB;
+  double forgetting_factor;
+  uint8_t first_run;
+  double ip;
+  uint16_t nb_paths;
+  time_stats_t random_channel;
+  time_stats_t interp_time;
+  time_stats_t interp_freq;
+  time_stats_t convolution;
+  unsigned int chan_idx;
+  int modelid;
+  channelmod_moduleid_t module_id;
+  char *model_name;  
+  unsigned int free_flags;
+  uint64_t start_TS;
+  float sat_height;
+  bool enable_dynamic_delay;
+  bool enable_dynamic_Doppler;
+  float Doppler_phase_inc;
+  float *Doppler_phase_cur;
+  bool is_uplink;
+} channel_desc_t;
+
 #else
     #include "PHY/TOOLS/tools_defs.h"
 #endif
@@ -151,9 +209,28 @@ void interleave_channel_output_cuda(float **rx_sig_re,
 
 void* create_and_init_curand_states_cuda(int num_elements, unsigned long long seed);
 void destroy_curand_states_cuda(void* d_curand_states);
-void vrtsim_cuda_init(void **context, ...);
-void vrtsim_cuda_process(void *context, ...);
-void vrtsim_cuda_shutdown(void *context);
+
+
+void vrtsim_cuda_init(
+    void** context_handle, 
+    int max_samples, 
+    int nb_tx, 
+    int nb_rx, 
+    int channel_length);
+void vrtsim_cuda_shutdown(void* context_handle);
+void vrtsim_cuda_process(
+    void* context_handle,
+    c16_t** input_samples,
+    int nsamps,
+    int nb_tx,
+    int nb_rx,
+    channel_desc_t* channel_desc,
+    float sigma2,
+    double ts,
+    uint16_t pdu_bit_map,
+    uint16_t ptrs_bit_map,
+    c16_t* final_output_buffer
+);
 
 #ifdef __cplusplus
 }
