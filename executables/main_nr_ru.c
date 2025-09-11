@@ -52,6 +52,9 @@
 #include "nfapi/oai_integration/vendor_ext.h"
 #include <executables/softmodem-common.h>
 #include <executables/thread-common.h>
+#include "nr-oru.h"
+#include "openair1/PHY/INIT/nr_phy_init.h"
+#include "openair1/SCHED_NR/sched_nr.h"
 
 pthread_cond_t sync_cond;
 pthread_mutex_t sync_mutex;
@@ -151,11 +154,16 @@ void init_timeshift_rotation(NR_DL_FRAME_PARMS *fp)
 {
   return;
 };
-int beam_index_allocation(int fapi_beam_index, NR_gNB_COMMON *common_vars, int slot, int symbols_per_slot, int bitmap_symbols)
+int beam_index_allocation(bool das,
+                          int fapi_beam_index,
+                          nfapi_nr_analog_beamforming_ve_t *analog_bf,
+                          NR_gNB_COMMON *common_vars,
+                          int slot,
+                          int symbols_per_slot,
+                          int bitmap_symbols)
 {
-  int i = 0;
-  return i;
-};
+  return 0;
+}
 void nr_fill_du(uint16_t N_ZC, const uint16_t *prach_root_sequence_map, uint16_t nr_du[NR_PRACH_SEQ_LEN_L - 1])
 {
   return;
@@ -166,6 +174,9 @@ uint64_t downlink_frequency[MAX_NUM_CCs][4];
 
 configmodule_interface_t *uniqCfg = NULL;
 THREAD_STRUCT thread_struct;
+
+extern void fill_rf_config(RU_t *ru, char *rf_config_file);
+extern void fill_split7_2_config(split7_config_t *split7, const nfapi_nr_config_request_scf_t *config, const NR_DL_FRAME_PARMS *fp);
 
 int main(int argc, char **argv)
 {
@@ -202,6 +213,22 @@ int main(int argc, char **argv)
   init_NR_RU(config_get_if(), NULL);
 
   RU_t *ru = RC.ru[0];
+  ORU_t oru;
+  oru.ru = ru;
+
+  NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+  nr_dump_frame_parms(fp);
+  nr_phy_init_RU(ru);
+  fill_rf_config(ru, ru->rf_config_file);
+  fill_split7_2_config(&ru->openair0_cfg.split7, &ru->config, fp);
+  ru->N_TA_offset = set_default_nta_offset(fp->freq_range, fp->samples_per_subframe);
+
+  int ret = openair0_transport_load(&ru->ifdevice, &ru->openair0_cfg, &ru->eth_params);
+  AssertFatal(ret == 0, "RU %u: openair0_transport_init() ret %d: cannot initialize transport protocol\n", ru->idx, ret);
+  ret = ru->nr_start_if(ru, NULL);
+  AssertFatal(ret == 0, "Could not start xran\n");
+
+  threadCreate(&oru.thread, oru_north_read_thread, (void *)&oru, "north_read_thread", -1, OAI_PRIORITY_RT_MAX);
 
   while (oai_exit == 0)
     sleep(1);
