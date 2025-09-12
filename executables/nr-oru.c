@@ -26,17 +26,12 @@
 
 #include <sched.h>
 
-void oru_downlink_processing(RU_t *ru, c16_t* txDataF_ptr[ru->nb_tx], int frame, int slot, int start_symbol, int num_symbols) {
+void oru_downlink_processing(RU_t *ru, c16_t *txDataF_ptr[ru->nb_tx], int frame, int slot, int start_symbol, int num_symbols)
+{
   start_meas(&ru->tx_fhaul);
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
   for (int aatx = 0; aatx < ru->nb_tx; aatx++) {
-    apply_nr_rotation_TX(fp,
-                         txDataF_ptr[aatx],
-                         fp->symbol_rotation[0],
-                         slot,
-                         fp->N_RB_DL,
-                         start_symbol,
-                         num_symbols);
+    apply_nr_rotation_TX(fp, txDataF_ptr[aatx], fp->symbol_rotation[0], slot, fp->N_RB_DL, start_symbol, num_symbols);
     nr_feptx0(ru, slot, start_symbol, num_symbols, aatx);
   }
   // Assume this function called in order
@@ -85,5 +80,25 @@ void *oru_north_read_thread(void *arg)
     }
     oru_downlink_processing(ru, txDataF_ptr, sense_of_time.frame, sense_of_time.slot, sense_of_time.symbol, num_symbols);
   }
+  return NULL;
+}
+
+void *oru_south_read_thread(void *arg)
+{
+  ORU_t *oru = arg;
+  RU_t *ru = oru->ru;
+
+  const int num_samples = 3000;
+  c16_t throwaway_samples[ru->nb_rx][num_samples];
+  void *rxp[ru->nb_rx];
+  for (int i = 0; i < ru->nb_rx; i++)
+    rxp[i] = throwaway_samples[i];
+
+  openair0_timestamp timestamp;
+  while (!oai_exit) {
+    ru->rfdevice.trx_read_func(&ru->rfdevice, &timestamp, rxp, num_samples, ru->nb_rx);
+  }
+
+  // Perform RX processing
   return NULL;
 }
