@@ -587,15 +587,7 @@ add_library(UTIL
   ${OPENAIR_DIR}/common/utils/LOG/vcd_signal_dumper.c
   ${OPENAIR2_DIR}/UTIL/OPT/probe.c
 )
-
-pkg_check_modules(cap libcap)
-if (cap_FOUND)
-  # see system.c for more info
-  target_link_libraries(UTIL PRIVATE cap)
-  target_compile_definitions(UTIL PRIVATE HAVE_LIB_CAP)
-endif()
-target_link_libraries(UTIL PUBLIC pthread thread-pool utils barrier actor)
-target_link_libraries(UTIL PUBLIC instrumentation)
+target_link_libraries(UTIL PUBLIC utils)
 
 set(SECURITY_SRC
   ${OPENAIR3_DIR}/SECU/secu_defs.c
