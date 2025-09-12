@@ -137,15 +137,18 @@ size_t print_meas_log(time_stats_t *ts,
     if ((total_exec_time == NULL) || (sf_exec_time== NULL))
       output += snprintf(output,
                          end - output,
-                         "%25s  %25s  %25s  %25s  %25s  %25s  %25s  %25s %25s %6f\n",
+                         "%25s  %25s  %25s  %25s  %25s  %25s  %25s  %25s  %25s  %25s  %25s %25s %6f\n",
                          "Name",
                          "Total",
                          "Max",
                          "Std",
                          "Num Trials",
-                         "median",
+                         "min",
+                         "d1",
                          "q1",
+                         "median",
                          "q3",
+                         "d9",
                          "CPU_F_GHz",
                          cpu_freq_GHz);
     else
@@ -165,15 +168,18 @@ size_t print_meas_log(time_stats_t *ts,
       if (is_enabled_time_stats_sorted_list(&ts->time_stats_sorted_list)) {
         output += snprintf(output,
                            end - output,
-                           "%25s:  %15.3f us; %15.3f us; %15.3f us; %15d; %15.3f us; %15.3f us; %15.3f us;\n",
+                           "%25s:  %15.3f us; %15.3f us; %15.3f us; %15d; %15.3f us; %15.3f us; %15.3f us; %15.3f us; %15.3f us; %15.3f us;\n",
                            name,
                            ts->diff / ts->trials / cpu_freq_GHz / 1000.0,
                            ts->max / cpu_freq_GHz / 1000.0,
                            StdDev(ts, cpu_freq_GHz),
                            ts->trials,
-                           get_median(&ts->time_stats_sorted_list) / cpu_freq_GHz / 1000.0,
+                           get_min(&ts->time_stats_sorted_list) / cpu_freq_GHz / 1000.0,
+                           get_d1(&ts->time_stats_sorted_list) / cpu_freq_GHz / 1000.0,
                            get_q1(&ts->time_stats_sorted_list) / cpu_freq_GHz / 1000.0,
-                           get_q3(&ts->time_stats_sorted_list) / cpu_freq_GHz / 1000.0);
+                           get_median(&ts->time_stats_sorted_list) / cpu_freq_GHz / 1000.0,
+                           get_q3(&ts->time_stats_sorted_list) / cpu_freq_GHz / 1000.0,
+                           get_d9(&ts->time_stats_sorted_list) / cpu_freq_GHz / 1000.0);
       } else {
         output += snprintf(output,
                            end - output,
@@ -443,6 +449,19 @@ void merge_time_stats_sorted_list(time_stats_sorted_list_t *dst, const time_stat
   }
 }
 /**
+ * \brief get the minimum from a sorted list
+ * if the sorted list is not initialized or empty then returns -1
+ * \param time_stats_sorted_list sorted list to query
+ */
+oai_cputime_t get_min(time_stats_sorted_list_t *time_stats_sorted_list)
+{
+  if (time_stats_sorted_list->size > 0 && time_stats_sorted_list->nb_elm > 0) {
+    return time_stats_sorted_list->list[0];
+  } else {
+    return -1;
+  }
+}
+/**
  * \brief get the median from a sorted list
  * if the sorted list is not initialized or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
@@ -477,6 +496,32 @@ oai_cputime_t get_q3(time_stats_sorted_list_t *time_stats_sorted_list)
 {
   if (time_stats_sorted_list->size > 0 && time_stats_sorted_list->nb_elm > 0) {
     return time_stats_sorted_list->list[3 * time_stats_sorted_list->nb_elm / 4];
+  } else {
+    return -1;
+  }
+}
+/**
+ * \brief get the first decile from a sorted list
+ * if the sorted list is not initialized or empty then returns -1
+ * \param time_stats_sorted_list sorted list to query
+ */
+oai_cputime_t get_d1(time_stats_sorted_list_t *time_stats_sorted_list)
+{
+  if (time_stats_sorted_list->size > 0 && time_stats_sorted_list->nb_elm > 0) {
+    return time_stats_sorted_list->list[time_stats_sorted_list->nb_elm / 10];
+  } else {
+    return -1;
+  }
+}
+/**
+ * \brief get the nineth decile from a sorted list
+ * if the sorted list is not initialized or empty then returns -1
+ * \param time_stats_sorted_list sorted list to query
+ */
+oai_cputime_t get_d9(time_stats_sorted_list_t *time_stats_sorted_list)
+{
+  if (time_stats_sorted_list->size > 0 && time_stats_sorted_list->nb_elm > 0) {
+    return time_stats_sorted_list->list[9 * time_stats_sorted_list->nb_elm / 10];
   } else {
     return -1;
   }

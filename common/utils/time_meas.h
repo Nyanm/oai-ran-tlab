@@ -119,6 +119,12 @@ void copy_time_stats_sorted_list(time_stats_sorted_list_t *dst, const time_stats
  */
 void merge_time_stats_sorted_list(time_stats_sorted_list_t *dst, const time_stats_sorted_list_t *src);
 /**
+ * \brief get the minimum from a sorted list
+ * if the sorted list is not initialized or empty then returns -1
+ * \param time_stats_sorted_list sorted list to query
+ */
+oai_cputime_t get_min(time_stats_sorted_list_t *time_stats_sorted_list);
+/**
  * \brief get the median from a sorted list
  * if the sorted list is not initialized or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
@@ -136,6 +142,18 @@ oai_cputime_t get_q1(time_stats_sorted_list_t *time_stats_sorted_list);
  * \param time_stats_sorted_list sorted list to query
  */
 oai_cputime_t get_q3(time_stats_sorted_list_t *time_stats_sorted_list);
+/**
+ * \brief get the first decile from a sorted list
+ * if the sorted list is not initialized or empty then returns -1
+ * \param time_stats_sorted_list sorted list to query
+ */
+oai_cputime_t get_d1(time_stats_sorted_list_t *time_stats_sorted_list);
+/**
+ * \brief get the nineth decile from a sorted list
+ * if the sorted list is not initialized or empty then returns -1
+ * \param time_stats_sorted_list sorted list to query
+ */
+oai_cputime_t get_d9(time_stats_sorted_list_t *time_stats_sorted_list);
 
 struct notifiedFIFO_elt_s;
 typedef struct time_stats {
