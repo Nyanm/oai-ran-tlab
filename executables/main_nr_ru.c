@@ -206,6 +206,7 @@ int main(int argc, char **argv)
   printf("About to Init RU threads\n");
 
   lock_memory_to_ram();
+  load_dftslib();
 
   RC.nb_RU = 1;
   RC.ru = malloc(sizeof(RC.ru));
@@ -218,6 +219,7 @@ int main(int argc, char **argv)
 
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
   nr_dump_frame_parms(fp);
+  ru->if_south = LOCAL_RF;
   nr_phy_init_RU(ru);
   fill_rf_config(ru, ru->rf_config_file);
   fill_split7_2_config(&ru->openair0_cfg.split7, &ru->config, fp);
