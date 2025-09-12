@@ -267,6 +267,9 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
       segment_parameters->c = harq_process->c[r];
       segment_parameters->decodeSuccess = false;
 
+      init_sorted_list_meas(&segment_parameters->ts_deinterleave, 1);
+      init_sorted_list_meas(&segment_parameters->ts_rate_unmatch, 1);
+      init_sorted_list_meas(&segment_parameters->ts_ldpc_decode, 1);
       reset_meas(&segment_parameters->ts_deinterleave);
       reset_meas(&segment_parameters->ts_rate_unmatch);
       reset_meas(&segment_parameters->ts_ldpc_decode);
@@ -281,7 +284,9 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
     }
   }
 
+  start_meas(&phy_vars_gNB->ulsch_decoding_stats);
   int ret_decoder = phy_vars_gNB->nrLDPC_coding_interface.nrLDPC_coding_decoder(&slot_parameters);
+  stop_meas(&phy_vars_gNB->ulsch_decoding_stats);
 
   // post decode
   for (uint8_t pusch_id = 0; pusch_id < nb_pusch; pusch_id++) {
@@ -308,6 +313,9 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
       merge_meas(&phy_vars_gNB->ts_deinterleave, &nrLDPC_segment_decoding_parameters.ts_deinterleave);
       merge_meas(&phy_vars_gNB->ts_rate_unmatch, &nrLDPC_segment_decoding_parameters.ts_rate_unmatch);
       merge_meas(&phy_vars_gNB->ts_ldpc_decode, &nrLDPC_segment_decoding_parameters.ts_ldpc_decode);
+      free_sorted_list_meas(&nrLDPC_segment_decoding_parameters.ts_deinterleave);
+      free_sorted_list_meas(&nrLDPC_segment_decoding_parameters.ts_rate_unmatch);
+      free_sorted_list_meas(&nrLDPC_segment_decoding_parameters.ts_ldpc_decode);
     }
   }
 
