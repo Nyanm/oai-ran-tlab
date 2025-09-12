@@ -11,7 +11,7 @@ target_link_libraries(nr_nas PUBLIC
     nas_common_ies_lib
     nas_utils
     ds
-    UTIL
+    utils
 )
 
 target_include_directories(nr_nas PUBLIC . 5GS/)
