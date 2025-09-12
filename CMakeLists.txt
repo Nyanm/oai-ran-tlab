@@ -584,7 +584,6 @@ add_library(HASHTABLE
 include_directories(${OPENAIR_DIR}/common/utils/hashtable)
 
 add_library(UTIL
-  ${OPENAIR_DIR}/common/utils/LOG/vcd_signal_dumper.c
   ${OPENAIR2_DIR}/UTIL/OPT/probe.c
 )
 target_link_libraries(UTIL PUBLIC utils)

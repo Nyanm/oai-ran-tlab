@@ -2,7 +2,7 @@ add_library(log_headers INTERFACE)
 target_include_directories(log_headers INTERFACE .)
 target_link_libraries(log_headers INTERFACE T_headers)
 
-set(log_sources log.c)
+set(log_sources log.c vcd_signal_dumper.c)
 if (ENABLE_LTTNG)
   find_package(LTTngUST 2.3.8 EXACT REQUIRED)
   set(log_sources ${log_sources} lttng-tp.c)
