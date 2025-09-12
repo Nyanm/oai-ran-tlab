@@ -75,12 +75,14 @@ void *oru_north_read_thread(void *arg)
     int num_symbols = 0;
     sense_of_time_t sense_of_time;
     ru->ifdevice.xran_api.north_in_func((uint32_t **)txDataF_ptr, ru->nb_tx, &sense_of_time, &num_symbols);
-    LOG_D(PHY,
-          "[RU_thread] read data: frame %d, slot %d, start_symbol %d, num_symbols %d\n",
-          sense_of_time.frame,
-          sense_of_time.slot,
-          sense_of_time.symbol,
-          num_symbols);
+    if ((sense_of_time.frame & 0xff) == 0 && sense_of_time.slot == 0) {
+      LOG_I(PHY,
+            "[RU_thread] read data: frame %d, slot %d, start_symbol %d, num_symbols %d\n",
+            sense_of_time.frame,
+            sense_of_time.slot,
+            sense_of_time.symbol,
+            num_symbols);
+    }
     oru_downlink_processing(ru, txDataF_ptr, sense_of_time.frame, sense_of_time.slot, sense_of_time.symbol, num_symbols);
   }
   return NULL;
