@@ -41,7 +41,7 @@ void exit_function(const char *file, const char *function, const int line, const
   exit(1);
 }
 
-void generate_random_signal_interleaved(float **sig_interleaved, int nb_ant, int num_samples)
+void  (float **sig_interleaved, int nb_ant, int num_samples)
 {
   for (int i = 0; i < nb_ant; i++) {
     for (int j = 0; j < num_samples; j++) {

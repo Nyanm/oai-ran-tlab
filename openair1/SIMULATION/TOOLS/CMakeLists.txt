@@ -26,6 +26,8 @@ if(CUDA_ENABLE)
         channel_pipeline.cu
     )
 
+    set_target_properties(oai_cuda_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    
     target_link_libraries(oai_cuda_lib PUBLIC CUDA::toolkit)
 
     target_include_directories(oai_cuda_lib PUBLIC

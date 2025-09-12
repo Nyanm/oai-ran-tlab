@@ -45,6 +45,7 @@
 #include "common_lib.h"
 #include "shm_td_iq_channel.h"
 #include "SIMULATION/TOOLS/sim.h"
+#include "SIMULATION/TOOLS/oai_cuda.h"
 #include "actor.h"
 #include "noise_device.h"
 #include "simde/x86/avx512.h"
@@ -121,6 +122,9 @@ typedef struct {
   int rx_num_channels;
   channel_desc_t *channel_desc;
   Actor_t *channel_modelling_actors;
+#ifdef ENABLE_CUDA
+  void *gpu_context;
+#endif
   char *taps_socket;
   int client_num_rx_antennas;
 } vrtsim_state_t;
@@ -329,6 +333,19 @@ static int vrtsim_connect(openair0_device *device)
     }
     num_tx_stats = vrtsim_state->peer_info.num_rx_antennas;
   }
+
+#ifdef ENABLE_CUDA
+  if (vrtsim_state->chanmod || vrtsim_state->taps_socket) {
+    int max_samples_per_slot = 40000;
+
+    vrtsim_cuda_init(&vrtsim_state->gpu_context,
+                     max_samples_per_slot,
+                     vrtsim_state->tx_num_channels,
+                     vrtsim_state->peer_info.num_rx_antennas,
+                     vrtsim_state->channel_desc->channel_length);
+  }
+#endif
+
   vrtsim_state->tx_timing = calloc_or_fail(num_tx_stats, sizeof(tx_timing_t));
   for (int i = 0; i < num_tx_stats; i++) {
     vrtsim_state->tx_timing[i].tx_histogram.min_samples = 100;
@@ -462,6 +479,37 @@ static void perform_channel_modelling(void *arg)
                         aarx);
 }
 
+#ifdef ENABLE_CUDA
+static void perform_channel_modelling_gpu(void *arg)
+{
+  channel_modelling_args_t *args = (channel_modelling_args_t *)arg;
+  vrtsim_state_t *vrtsim_state = args->vrtsim_state;
+  c16_t *final_output_buffer = (c16_t *)malloc(args->nsamps * vrtsim_state->peer_info.num_rx_antennas * sizeof(c16_t));
+
+  vrtsim_cuda_process(vrtsim_state->gpu_context,
+                      args->samples,
+                      args->nsamps,
+                      args->nbAnt,
+                      vrtsim_state->peer_info.num_rx_antennas,
+                      vrtsim_state->channel_desc,
+                      // TODO: Pass real sigma2 and ts
+                      1.0f, // sigma2 placeholder
+                      1.0 / vrtsim_state->sample_rate, // ts
+                      1,
+                      1, // pdu/ptrs maps
+                      final_output_buffer);
+
+  // The GPU is done. Now write the results to the shared memory channel,
+  // one antenna at a time.
+  for (int aarx = 0; aarx < vrtsim_state->peer_info.num_rx_antennas; aarx++) {
+    c16_t *antenna_output_ptr = final_output_buffer + (aarx * args->nsamps);
+    vrtsim_write_internal(vrtsim_state, args->timestamp, antenna_output_ptr, args->nsamps, aarx, args->flags, aarx);
+  }
+
+  free(final_output_buffer);
+}
+#endif
+
 static int vrtsim_write_with_chanmod(vrtsim_state_t *vrtsim_state,
                                      openair0_timestamp timestamp,
                                      void **samplesVoid,
@@ -470,20 +518,43 @@ static int vrtsim_write_with_chanmod(vrtsim_state_t *vrtsim_state,
                                      int flags)
 {
   AssertFatal(nbAnt < MAX_NUM_ANTENNAS_TX, "Number of antennas %d exceeds maximum %d\n", nbAnt, MAX_NUM_ANTENNAS_TX);
-  for (int aarx = 0; aarx < vrtsim_state->peer_info.num_rx_antennas; aarx++) {
-    notifiedFIFO_elt_t *task = newNotifiedFIFO_elt(sizeof(channel_modelling_args_t), 0, NULL, perform_channel_modelling);
+
+#ifdef ENABLE_CUDA
+  // TODO: Implement a mechanism to choose between CPU and GPU paths
+  // We'll need a way to choose. For now, let's assume a global flag or config option.
+  // For this example, we'll use the presence of gpu_context to decide.
+  if (vrtsim_state->gpu_context) {
+    notifiedFIFO_elt_t *task = newNotifiedFIFO_elt(sizeof(channel_modelling_args_t), 0, NULL, perform_channel_modelling_gpu);
     channel_modelling_args_t *args = (channel_modelling_args_t *)NotifiedFifoData(task);
     args->vrtsim_state = vrtsim_state;
     args->timestamp = timestamp;
     args->nsamps = nsamps;
     args->nbAnt = nbAnt;
     args->flags = flags;
-    args->aarx = aarx;
     for (int i = 0; i < nbAnt; i++) {
       args->samples[i] = samplesVoid[i];
     }
-    pushNotifiedFIFO(&vrtsim_state->channel_modelling_actors[aarx].fifo, task);
+    pushNotifiedFIFO(&vrtsim_state->channel_modelling_actors[0].fifo, task);
+  } else {
+#endif
+    for (int aarx = 0; aarx < vrtsim_state->peer_info.num_rx_antennas; aarx++) {
+      notifiedFIFO_elt_t *task = newNotifiedFIFO_elt(sizeof(channel_modelling_args_t), 0, NULL, perform_channel_modelling);
+      channel_modelling_args_t *args = (channel_modelling_args_t *)NotifiedFifoData(task);
+      args->vrtsim_state = vrtsim_state;
+      args->timestamp = timestamp;
+      args->nsamps = nsamps;
+      args->nbAnt = nbAnt;
+      args->flags = flags;
+      args->aarx = aarx;
+      for (int i = 0; i < nbAnt; i++) {
+        args->samples[i] = samplesVoid[i];
+      }
+      pushNotifiedFIFO(&vrtsim_state->channel_modelling_actors[aarx].fifo, task);
+    }
+#ifdef ENABLE_CUDA
   }
+#endif
+
   int start_index = timestamp % MAX_CHANNEL_LENGTH;
   int end_index = min(start_index + nsamps, MAX_CHANNEL_LENGTH);
   int cp_nsamps = end_index - start_index;
@@ -566,6 +637,13 @@ static void vrtsim_end(openair0_device *device)
     int ret = pthread_join(vrtsim_state->timing_thread, NULL);
     AssertFatal(ret == 0, "pthread_join() failed: errno: %d, %s\n", errno, strerror(errno));
   }
+
+#ifdef ENABLE_CUDA
+  if (vrtsim_state->gpu_context) {
+    vrtsim_cuda_shutdown(vrtsim_state->gpu_context);
+    vrtsim_state->gpu_context = NULL;
+  }
+#endif
 
   tx_timing_t *tx_timing = vrtsim_state->tx_timing;
   if (vrtsim_state->chanmod || vrtsim_state->taps_socket) {

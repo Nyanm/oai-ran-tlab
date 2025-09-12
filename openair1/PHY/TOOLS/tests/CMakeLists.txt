@@ -83,5 +83,21 @@ endif()
 
 add_executable(test_vrtsim_wrapper test_vrtsim_wrapper.cu)
 target_link_libraries(test_vrtsim_wrapper PRIVATE vrtsim_static oai_cuda_lib SIMU PHY_COMMON)
+
+if (TARGET oai_cuda_lib)
+    target_compile_definitions(test_vrtsim_wrapper PRIVATE ENABLE_CUDA)
+endif()
+
+# Try to find and link NVTX if available
+find_library(NVTOOLS_EXT_LIB nvToolsExt PATHS /usr/local/cuda*/lib64 /usr/lib/aarch64-linux-gnu)
+if(NVTOOLS_EXT_LIB)
+    target_link_libraries(test_vrtsim_wrapper PRIVATE ${NVTOOLS_EXT_LIB})
+    target_compile_definitions(test_vrtsim_wrapper PRIVATE NVTX_ENABLE)
+    message(STATUS "NVTX found: ${NVTOOLS_EXT_LIB}")
+else()
+    message(STATUS "NVTX not found, profiling disabled")
+endif()
+
+
 add_dependencies(test_vrtsim_wrapper vrtsim_static)
 endif()
