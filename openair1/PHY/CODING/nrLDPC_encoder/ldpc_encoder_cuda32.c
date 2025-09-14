@@ -47,11 +47,13 @@
 //#define DEBUG_LDPC 1 
 
 #include "ldpc_encode_parity_check_cuda.c"
-uint32_t **c_dev;
+uint32_t *c_dev;
+uint32_t **c_host;
 uint32_t *c_devh[4];
-uint32_t **d_dev;
-uint32_t *d_host[4];
-int managed = 0, concurrent = 0, uva = 0, pageable = 0, pageable_uses_host = 0;
+uint32_t *d_dev;
+uint32_t **d_host;
+uint32_t *d_devh[4];
+int managed = 0, concurrent = 0, uva = 0, pageable = 0, pageable_uses_host = 0, register_host = 0;
 
 void cuda_support_init() {
 
@@ -66,6 +68,7 @@ void cuda_support_init() {
     cudaDeviceGetAttribute(&uva, cudaDevAttrUnifiedAddressing, dev);
     cudaDeviceGetAttribute(&pageable, cudaDevAttrPageableMemoryAccess, dev);
     cudaDeviceGetAttribute(&pageable_uses_host, cudaDevAttrPageableMemoryAccessUsesHostPageTables, dev);
+    cudaDeviceGetAttribute(&register_host, cudaDevAttrHostRegisterSupported,dev);
 
     LOG_I(NR_PHY,"Device: %s (cc %d.%d)\n", prop.name, prop.major, prop.minor);
     LOG_I(NR_PHY,"Unified Virtual Addressing (UVA): %s\n", uva ? "YES" : "NO");
@@ -73,28 +76,66 @@ void cuda_support_init() {
     LOG_I(NR_PHY,"Concurrent managed access:       %s\n", concurrent ? "YES" : "NO");
     LOG_I(NR_PHY,"Pageable memory access:          %s\n", pageable ? "YES" : "NO");
     LOG_I(NR_PHY,"Uses host page tables:           %s\n", pageable_uses_host ? "YES" : "NO");
+    LOG_I(NR_PHY,"Host Register supported:         %s\n", register_host ? "YES" : "NO");
 
   // initialize input and output memory
-  if (!pageable) {
+  if (!pageable && !register_host) {
     cudaError_t err=cudaMalloc((void **)&c_dev,4*sizeof(uint32_t*));
-    AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+    AssertFatal(err == cudaSuccess,"CUDA Error (c_dev): %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)&c_host,4*sizeof(uint32_t*),cudaHostAllocDefault);
+    AssertFatal(err == cudaSuccess,"CUDA Error (c_host): %s\n", cudaGetErrorString(err));
     for (int i=0;i<4;i++) {
-      cudaError_t err=cudaMalloc((void**)&c_devh[i],2*22*384*sizeof(uint32_t));
-      AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+      err=cudaMalloc((void**)&c_devh[i],2*22*384*sizeof(uint32_t));
+      AssertFatal(err == cudaSuccess,"CUDA Error (c_devh[%d]): %s\n", i,cudaGetErrorString(err));
+      err=cudaHostAlloc((void**)&c_host[i],2*22*384*sizeof(uint32_t),cudaHostAllocDefault);
+      AssertFatal(err == cudaSuccess,"CUDA Error (chost[%d]): %s\n", i,cudaGetErrorString(err));
     }
-    cudaMemcpy(c_dev,c_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
-  
+    err = cudaMemcpy(c_dev,c_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy c_devh -> c_dev): %s\n", cudaGetErrorString(err));
     err=cudaMalloc((void**)&d_dev,4*sizeof(uint32_t*));
     AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)&d_host,4*sizeof(uint32_t*),cudaHostAllocDefault);
+    AssertFatal(err == cudaSuccess,"CUDA Error (d_host): %s\n", cudaGetErrorString(err));
     for (int i=0;i<4;i++) {
-        cudaError_t err=cudaMalloc((void**)&d_host[i],46*384*sizeof(uint32_t));
-        AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+      err=cudaMalloc((void**)&d_devh[i],68*384*sizeof(uint32_t));
+      AssertFatal(err == cudaSuccess,"CUDA Error (d_devh[%d]: %s\n", i,cudaGetErrorString(err));
+      err=cudaHostAlloc((void**)&d_host[i],68*384*sizeof(uint32_t),cudaHostAllocDefault);
+      AssertFatal(err == cudaSuccess,"CUDA Error (d_host[%d]): %s\n", i,cudaGetErrorString(err));
     }
-    cudaMemcpy(d_dev,d_host,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
+    err=cudaMemcpy(d_dev,d_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy d_devh -> d_dev): %s\n", cudaGetErrorString(err));
+  }
+  else {
+    LOG_I(NR_PHY,"Allocating c,d arrays for CPU/GPU shared-memory\n");
+    cudaError_t err=cudaHostAlloc((void **)&c_host,4*sizeof(uint32_t*),cudaHostAllocMapped|cudaHostAllocPortable);
+    AssertFatal(err == cudaSuccess,"CUDA Error (c_host): %s\n", cudaGetErrorString(err));
+    err = cudaHostGetDevicePointer((void**)&c_dev, c_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error (c_dev): %s\n", cudaGetErrorString(err));
+    for (int i=0;i<4;i++) {
+      err=cudaHostAlloc((void**)&c_host[i],2*22*384*sizeof(uint32_t),cudaHostAllocMapped);
+      AssertFatal(err == cudaSuccess,"CUDA Error (c_host[%d]): %s\n", i,cudaGetErrorString(err));
+      err = cudaHostGetDevicePointer((void**)&c_devh[i], c_host[i], 0);
+      AssertFatal(err == cudaSuccess,"CUDA Error (c_devh[%d]): %s\n", i,cudaGetErrorString(err));
+    }
+    err=cudaMemcpy(c_dev,c_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy c_devh -> c_dev): %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)&d_host,4*sizeof(uint32_t*),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (d_host): %s\n", cudaGetErrorString(err));
+    err=cudaHostGetDevicePointer((void**)&d_dev, d_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error cudaHostGetDevicePointer(d_dev): %s\n", cudaGetErrorString(err));
+    LOG_I(NR_PHY,"d_host %p, d_dev %p\n",d_host,d_dev);
+    for (int i=0;i<4;i++) {
+      err=cudaHostAlloc((void**)&d_host[i],68*384*sizeof(uint32_t),cudaHostAllocMapped);
+      AssertFatal(err == cudaSuccess,"CUDA Error (d_host[%d]): %s\n", i,cudaGetErrorString(err));
+      err=cudaHostGetDevicePointer((void**)&d_devh[i], d_host[i], 0);
+      AssertFatal(err == cudaSuccess,"CUDA Error (cudaHostGetDevicePointer) d_devh[%d]: %s\n", i,cudaGetErrorString(err));
+    }
+    err=cudaMemcpy(d_dev,d_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy d_devh -> d_dev): %s\n", cudaGetErrorString(err));
   }
 }
 
-int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implemparams_t *impp)
+uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
 {
   //set_log(PHY, 4);
 
@@ -620,30 +661,21 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
 #endif
   if(impp->tinput != NULL) stop_meas(impp->tinput);
   if(impp->tinput_memcpy != NULL) start_meas(impp->tinput_memcpy);
-  uint32_t c[n_inputs][2 * 22 * Zc] ; //double size matrix of c
-  uint32_t *cp[4];
   for (int s=0;s<n_inputs;s++)  {
-    cp[s]=c[s];    
     for (int i1 = 0; i1 < ncols; i1++)   {
-      memcpy(&cp[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
-      memcpy(&cp[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
+      memcpy(&c_host[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
+      memcpy(&c_host[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
     }
-  }
-  if (!pageable) {
-    for (int s=0;s<n_inputs;s++) {
-      cudaError_t err = cudaMemcpy(c_devh[s],cp[s],sizeof(uint32_t)*2*22*Zc,cudaMemcpyHostToDevice);
-      AssertFatal(err == cudaSuccess, "c_dev[%d] %p CUDA Error: %s\n", s, c_dev[s],cudaGetErrorString(err)); 			
+    if (!pageable && !register_host) {
+      cudaError_t err = cudaMemcpy(c_devh[s],c_host[s],sizeof(uint32_t)*2*22*Zc,cudaMemcpyHostToDevice);
+      AssertFatal(err == cudaSuccess, "memcpy c_host[%d] -> c_devh[%d] %p CUDA Error: %s\n", s, s, c_devh[s],cudaGetErrorString(err)); 			
     }
-  }
-  uint32_t *dp[4];
-  if (pageable) {
-     for (int s=0;s<n_inputs;s++) dp[s] = &output[s][block_length-(2*Zc)];
   }
   if(impp->tinput != NULL) stop_meas(impp->tinput_memcpy);
   if (BG==1 && Zc==384)  {
     //parity check part
     if(impp->tparity != NULL) start_meas(impp->tparity);
-    encode_parity_check_part_cuda(pageable? cp : c_dev, pageable ? dp : d_dev, BG, Zc, Kb, ncols,n_inputs);
+    encode_parity_check_part_cuda((uint32_t**)c_dev, (uint32_t**)d_dev, BG, Zc, Kb, ncols,n_inputs);
     if(impp->tparity != NULL) stop_meas(impp->tparity);
   }
   else {
@@ -651,13 +683,13 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
   }
   if(impp->toutput != NULL) start_meas(impp->toutput);
   for (int s=0;s<n_inputs;s++) {
-    memcpy(output[s],&cc[s][2*Zc],sizeof(uint32_t)*(block_length-(2*Zc)));
-    if (!pageable) {
-      cudaError_t err = cudaMemcpy(&output[s][block_length-(2*Zc)],d_host[s],sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),cudaMemcpyDeviceToHost);
-      AssertFatal(err == cudaSuccess, "d_dev[%d] %p CUDA Error: %s\n", s, d_host[s],cudaGetErrorString(err)); 			
+    memcpy(d_host[s],&cc[s][2*Zc],sizeof(uint32_t)*(block_length-(2*Zc)));
+    if (!pageable && !register_host) {
+      cudaError_t err = cudaMemcpy(&d_host[s][block_length-(2*Zc)],d_devh[s]+block_length-(2*Zc),sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),cudaMemcpyDeviceToHost);
+      AssertFatal(err == cudaSuccess, "d_dev[%d] %p CUDA Error: %s\n", s, d_devh[s],cudaGetErrorString(err)); 			
     }
   }
   if(impp->toutput != NULL) stop_meas(impp->toutput);
-  return 0;
+  return d_host;
 }
 
