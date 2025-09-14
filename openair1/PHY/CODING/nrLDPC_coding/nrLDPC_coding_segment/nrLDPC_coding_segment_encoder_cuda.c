@@ -44,6 +44,8 @@
 //#define DEBUG_LDPC_ENCODING
 //#define DEBUG_LDPC_ENCODING_FREE 1
 
+extern uint32_t **d_host;
+
 static void unpack_output(uint32_t *f,
                          uint32_t E,
                          uint32_t *f2,
@@ -495,14 +497,14 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
 
   // nrLDPC_encoder output is in "d"
   // let's make this interface happy!
-  uint32_t d[4][68*384];
+//  uint32_t d[4][68*384];
   uint8_t *c[nrLDPC_TB_encoding_parameters->C];
 
   
   for (int r = 0; r < nrLDPC_TB_encoding_parameters->C; r++)
     c[r] = nrLDPC_TB_encoding_parameters->segments[r].c;
   start_meas(&nrLDPC_TB_encoding_parameters->segments[impp.first_seg].ts_ldpc_encode);
-  LDPCencoder32(c, d, &impp);
+  LDPCencoder32(c, &impp);
   stop_meas(&nrLDPC_TB_encoding_parameters->segments[impp.first_seg].ts_ldpc_encode);
   // Compute where to place in output buffer that is concatenation of all segments
 
@@ -583,7 +585,7 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
       nr_rate_matching_ldpc32(Tbslbrm,
                               impp.BG,
                               impp.Zc,
-                              d[r],
+                              d_host[r],
                               e+(r*E),
                               impp.n_segments,
                               impp.F,
@@ -594,7 +596,7 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
       nr_rate_matching_ldpc32(Tbslbrm,
                               impp.BG,
                               impp.Zc,
-                              d[r],
+                              d_host[r],
                               e2+((r-r_shift)*E2),
                               impp.n_segments,
                               impp.F,
