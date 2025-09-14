@@ -175,6 +175,7 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
       phy_stats->dlsch_stats.current_Qm = rel15->qamModOrder[0];
     }
 
+    start_meas(dlsch_segmentation_stats);
     int max_bytes = MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * rel15->nrOfLayers * 1056;
     int B;
     if (A > NR_MAX_PDSCH_TBS) {
@@ -209,7 +210,6 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
     TB_parameters->BG = rel15->maintenance_parms_v3.ldpcBaseGraph;
     TB_parameters->Z = harq->Z;
     TB_parameters->A = A;
-    start_meas(dlsch_segmentation_stats);
     TB_parameters->Kb = nr_segmentation(harq->b,
                                         harq->c,
                                         B,
