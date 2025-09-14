@@ -56,7 +56,13 @@ uint32_t *d_devh[4];
 uint32_t *cc_dev;
 uint32_t **cc_host;
 uint32_t *cc_devh[4];
+uint32_t *input_dev;
+uint32_t **input_host;
+uint32_t *input_devh[128];
 int managed = 0, concurrent = 0, uva = 0, pageable = 0, pageable_uses_host = 0, register_host = 0;
+
+//#define USE_GPU_CIRCCOPY 1
+#define USE_GPU_FOR_INPUT 1
 
 void cuda_support_init() {
 
@@ -119,6 +125,18 @@ void cuda_support_init() {
     }
     err=cudaMemcpy(cc_dev,cc_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
     AssertFatal(err == cudaSuccess,"CUDA Error (memcpy cc_devh -> d_dev): %s\n", cudaGetErrorString(err));
+    err=cudaMalloc((void**)&input_dev,128*sizeof(uint8_t*));
+    AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)&input_host,128*sizeof(uint8_t*),cudaHostAllocDefault);
+    AssertFatal(err == cudaSuccess,"CUDA Error (cc_host): %s\n", cudaGetErrorString(err));
+    for (int i=0;i<128;i++) {
+      err=cudaMalloc((void**)&input_devh[i],(8448/8)*sizeof(uint8_t));
+      AssertFatal(err == cudaSuccess,"CUDA Error (input_devh[%d]: %s\n", i,cudaGetErrorString(err));
+      err=cudaHostAlloc((void**)&input_host[i],(8448/8)*sizeof(uint8_t),cudaHostAllocDefault);
+      AssertFatal(err == cudaSuccess,"CUDA Error (input_host[%d]): %s\n", i,cudaGetErrorString(err));
+    }
+    err=cudaMemcpy(input_dev,input_devh,128*sizeof(uint8_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy cc_devh -> d_dev): %s\n", cudaGetErrorString(err));
   }
   else {
     LOG_I(NR_PHY,"Allocating c,d,cc arrays for CPU/GPU shared-memory\n");
@@ -126,6 +144,7 @@ void cuda_support_init() {
     AssertFatal(err == cudaSuccess,"CUDA Error (c_host): %s\n", cudaGetErrorString(err));
     err = cudaHostGetDevicePointer((void**)&c_dev, c_host, 0);
     AssertFatal(err == cudaSuccess,"CUDA Error (c_dev): %s\n", cudaGetErrorString(err));
+    LOG_I(NR_PHY,"c_host %p, c_dev %p\n",c_host,c_dev);
     for (int i=0;i<4;i++) {
       err=cudaHostAlloc((void**)&c_host[i],2*22*384*sizeof(uint32_t),cudaHostAllocMapped);
       AssertFatal(err == cudaSuccess,"CUDA Error (c_host[%d]): %s\n", i,cudaGetErrorString(err));
@@ -151,7 +170,7 @@ void cuda_support_init() {
     AssertFatal(err == cudaSuccess,"CUDA Error (cc_host): %s\n", cudaGetErrorString(err));
     err=cudaHostGetDevicePointer((void**)&cc_dev, cc_host, 0);
     AssertFatal(err == cudaSuccess,"CUDA Error cudaHostGetDevicePointer(cc_dev): %s\n", cudaGetErrorString(err));
-    LOG_I(NR_PHY,"cc_host %p, cc_dev %p\n",d_host,d_dev);
+    LOG_I(NR_PHY,"cc_host %p, cc_dev %p\n",cc_host,cc_dev);
     for (int i=0;i<4;i++) {
       err=cudaHostAlloc((void**)&cc_host[i],68*384*sizeof(uint32_t),cudaHostAllocMapped);
       AssertFatal(err == cudaSuccess,"CUDA Error (cc_host[%d]): %s\n", i,cudaGetErrorString(err));
@@ -160,6 +179,19 @@ void cuda_support_init() {
     }
     err=cudaMemcpy(cc_dev,cc_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
     AssertFatal(err == cudaSuccess,"CUDA Error (memcpy d_devh -> d_dev): %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)&input_host,128*sizeof(uint8_t*),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (input_host): %s\n", cudaGetErrorString(err));
+    err=cudaHostGetDevicePointer((void**)&input_dev, input_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error cudaHostGetDevicePointer(cc_host): %s\n", cudaGetErrorString(err));
+    LOG_I(NR_PHY,"input_host %p, input_dev %p\n",input_host,input_dev);
+    for (int i=0;i<128;i++) {
+      err=cudaHostAlloc((void**)&input_host[i],(8448/8)*sizeof(uint8_t),cudaHostAllocMapped);
+      AssertFatal(err == cudaSuccess,"CUDA Error (input_host[%d]): %s\n", i,cudaGetErrorString(err));
+      err=cudaHostGetDevicePointer((void**)&input_devh[i], input_host[i], 0);
+      AssertFatal(err == cudaSuccess,"CUDA Error (cudaHostGetDevicePointer) input_devh[%d]: %s\n", i,cudaGetErrorString(err));
+    }
+    err=cudaMemcpy(input_dev,input_devh,128*sizeof(uint8_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy input_devh -> input_dev): %s\n", cudaGetErrorString(err));
   }
 }
 
@@ -175,7 +207,7 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
   int rate=3;
   int no_punctured_columns,removed_bit;
 
-  if(impp->tinput != NULL) start_meas(impp->tinput);
+//  if(impp->tinput != NULL) start_meas(impp->tinput);
   //determine number of bits in codeword
   if (BG==1)
     {
@@ -204,12 +236,13 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
   no_punctured_columns=(int)((nrows-2)*Zc+block_length-block_length*rate)/Zc;
   removed_bit=(nrows-no_punctured_columns-2) * Zc+block_length-(int)(block_length*rate);
   // clear input
+  /*
   for (int i=0;i<n_inputs;i++) { 
     if (!pageable && !register_host)
       cudaMemset(cc_devh[i],0,22*Zc*sizeof(uint32_t));
     else
       memset(cc_host[i],0,22*Zc*sizeof(uint32_t));
-  }
+  }*/
 
 
 #if 0
@@ -226,9 +259,19 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
 #else
 //  uint32_t *ccp[4];
 //  for (int s=0;s<n_inputs;s++) ccp[s]=cc[s];  
-  ldpc_input(input,(uint32_t**)cc_dev,block_length,impp->n_segments);
+#ifdef USE_GPU_FOR_INPUT
+  if(impp->tinput != NULL) start_meas(impp->tinput);
+  if (!pageable) {
+    for (int r=0;r<impp->n_segments;r++) {
+      if (!register_host)
+        cudaMemcpy(input_devh[r],input[r],block_length>>3,cudaMemcpyHostToDevice);
+      else
+        memcpy(input_host[r],input[r],block_length>>3);
+    }
+  }
+  ldpc_input(pageable? input : input_dev,(uint32_t**)cc_dev,block_length,impp->n_segments);
 //  for (int i=0;i<16;i++) printf("i %d: cc[0] %x\n",i,cc[0][i]);
-/*  
+#else  
 #ifndef __aarch64__
   simde__m256i andmask = simde_mm256_set_epi32(0x1,0x2,0x4,0x8,0x10,0x20,0x40,0x80);  // every 8 bits -> 8 bytes, pattern repeats.
   simde__m256i zero256 = simde_mm256_setzero_si256();
@@ -248,7 +291,7 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
       for (int j=1; j < j2; j++) {
         c256 = simde_mm256_or_si256(simde_mm256_and_si256(simde_mm256_cmpeq_epi32(simde_mm256_andnot_si256(simde_mm256_set1_epi32(input[(j0<<5)+j][i8]),andmask),zero256),masks[j]),c256);
       }
-      ((simde__m256i *)cc[j0])[i8] = c256;
+      ((simde__m256i *)cc_host[j0])[i8] = c256;
     }
   }
 #else
@@ -590,7 +633,7 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
       cc6 = vorrq_u32(cc6,vshlq_u32(vandq_u32(in,vmasksg),vshiftg[j]));
       cc7 = vorrq_u32(cc7,vshlq_u32(vandq_u32(in,vmasksh),vshifth[j]));
     }
-    ccp=&((uint32x4_t *)cc[0])[i2];
+    ccp=&((uint32x4_t *)cc_host[0])[i2];
     ccp[0] = cc0;
     ccp[1] = cc1;
     ccp[2] = cc2;
@@ -620,7 +663,7 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
         cc6 = vorrq_u32(cc6,vshlq_u32(vandq_u32(in,vmasksg),vshiftg[j]));
         cc7 = vorrq_u32(cc7,vshlq_u32(vandq_u32(in,vmasksh),vshifth[j]));
       }
-      ccp=&((uint32x4_t *)cc[1])[i2];
+      ccp=&((uint32x4_t *)cc_host[1])[i2];
       ccp[0] = cc0;
       ccp[1] = cc1;
       ccp[2] = cc2;
@@ -651,7 +694,7 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
         cc6 = vorrq_u32(cc6,vshlq_u32(vandq_u32(in,vmasksg),vshiftg[j]));
         cc7 = vorrq_u32(cc7,vshlq_u32(vandq_u32(in,vmasksh),vshifth[j]));
       }
-      ccp=&((uint32x4_t *)cc[2])[i2];
+      ccp=&((uint32x4_t *)cc_host[2])[i2];
       ccp[0] = cc0;
       ccp[1] = cc1;
       ccp[2] = cc2;
@@ -682,7 +725,7 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
         cc6 = vorrq_u32(cc6,vshlq_u32(vandq_u32(in,vmasksg),vshiftg[j]));
         cc7 = vorrq_u32(cc7,vshlq_u32(vandq_u32(in,vmasksh),vshifth[j]));
       }
-      ccp=&((uint32x4_t *)cc[3])[i2];
+      ccp=&((uint32x4_t *)cc_host[3])[i2];
       ccp[0] = cc0;
       ccp[1] = cc1;
       ccp[2] = cc2;
@@ -694,7 +737,7 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
     }
   }
 #endif
-*/
+#endif
 #endif
   if(impp->tinput != NULL) stop_meas(impp->tinput);
   if(impp->tinput_memcpy != NULL) start_meas(impp->tinput_memcpy);

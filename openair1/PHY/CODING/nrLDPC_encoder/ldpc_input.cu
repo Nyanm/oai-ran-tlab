@@ -20,15 +20,25 @@ __global__ void ldpc_input_worker(uint32_t **input,uint32_t *cc[4],int block_len
   uint32_t mask2 = mask>>(bit_offset&7);bit_offset++;
   uint32_t mask3 = mask>>(bit_offset&7);
   uint32_t tmp,jmod;
+  uint32_t otmp0,otmp1,otmp2,otmp3;
   if (bit_offset  < block_length) {
-      for (int j=nseg0;j<nseg1;j++) {
+      tmp=input[nseg0][uint32_offset];
+      otmp0 = ((tmp&mask0) > 0); 
+      otmp1 = ((tmp&mask1) > 0); 
+      otmp2 = ((tmp&mask2) > 0); 
+      otmp3 = ((tmp&mask3) > 0); 
+      for (int j=nseg0+1;j<nseg1;j++) {
 	 tmp=input[j][uint32_offset];
 	 jmod = j&31;
-         *out     |= (((tmp&mask0) > 0)<<jmod); 
-         *(out+1) |= (((tmp&mask1) > 0)<<jmod); 
-         *(out+2) |= (((tmp&mask2) > 0)<<jmod); 
-         *(out+3) |= (((tmp&mask3) > 0)<<jmod); 
+         otmp0 |= (((tmp&mask0) > 0)<<jmod); 
+         otmp1 |= (((tmp&mask1) > 0)<<jmod); 
+         otmp2 |= (((tmp&mask2) > 0)<<jmod); 
+         otmp3 |= (((tmp&mask3) > 0)<<jmod); 
       }	      
+      out[0]=otmp0;
+      out[1]=otmp1;
+      out[2]=otmp2;
+      out[3]=otmp3;
   } 
 }
 
@@ -44,7 +54,7 @@ __global__ void circcopy_c_worker(uint32_t **cc,uint32_t **c) {
     c[s][(2*i1+1)*384 + i] = tmp; 
   }
 }
-#define NTHREADS 768 
+#define NTHREADS 512 
 extern "C" int ldpc_input(uint32_t **input,uint32_t *cc[4],int block_length,int nseg) { 
 
  int numb = block_length/(NTHREADS*4);
