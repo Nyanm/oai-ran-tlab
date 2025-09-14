@@ -52,6 +52,7 @@ if (ENABLE_LDPC_CUDA)
 		   nrLDPC_encoder/ldpc_encoder_optim8segmulti.c
 		   nrLDPC_encoder/ldpc_encoder_cuda32.c
 		   nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
+		   nrLDPC_encoder/ldpc_input.cu
                    # The slot coding layer cannot be linked with
                    # target_link_libraries like above
                    # because of cuda_add_library

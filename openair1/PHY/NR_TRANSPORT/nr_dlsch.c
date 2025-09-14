@@ -829,8 +829,8 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
   }
 
   unsigned char output[size_output >> 3] __attribute__((aligned(64)));
-  bzero(output, sizeof(output));
   start_meas(dlsch_encoding_stats);
+  bzero(output, sizeof(output));
   if (nr_dlsch_encoding(gNB,
                         msgTx,
                         frame,
