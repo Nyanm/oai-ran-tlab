@@ -85,26 +85,9 @@ void exit_function(const char *file, const char *function, const int line, const
   }
   close_log_mem();
   oai_exit = 1;
-  RU_t *ru = RC.ru[0];
 
-  if (ru->rfdevice.trx_end_func) {
-    ru->rfdevice.trx_end_func(&ru->rfdevice);
-    ru->rfdevice.trx_end_func = NULL;
-  }
-
-  if (ru->ifdevice.trx_end_func) {
-    ru->ifdevice.trx_end_func(&ru->ifdevice);
-    ru->ifdevice.trx_end_func = NULL;
-  }
-
-  pthread_mutex_destroy(ru->ru_mutex);
-  pthread_cond_destroy(ru->ru_cond);
-  if (assert) {
+  if (assert)
     abort();
-  } else {
-    sleep(1); // allow lte-softmodem threads to exit first
-    exit(EXIT_SUCCESS);
-  }
 }
 
 static void get_options(configmodule_interface_t *cfg)
@@ -178,6 +161,11 @@ THREAD_STRUCT thread_struct;
 extern void fill_rf_config(RU_t *ru, char *rf_config_file);
 extern void fill_split7_2_config(split7_config_t *split7, const nfapi_nr_config_request_scf_t *config, const NR_DL_FRAME_PARMS *fp);
 
+void stop_ru(int sig)
+{
+  exit_function(__FILE__, __FUNCTION__, __LINE__, "interrupted", false);
+}
+
 int main(int argc, char **argv)
 {
   memset(&RC, 0, sizeof(RC));
@@ -216,6 +204,7 @@ int main(int argc, char **argv)
   RU_t *ru = RC.ru[0];
   ORU_t oru;
   oru.ru = ru;
+  cpumeas(CPUMEAS_ENABLE);
 
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
   nr_dump_frame_parms(fp);
@@ -236,26 +225,36 @@ int main(int argc, char **argv)
   ret = ru->rfdevice.trx_start_func(&ru->rfdevice);
   AssertFatal(ret == 0, "RU %u: trx_start_func() ret %d: cannot start vrtsim\n", ru->idx, ret);
 
+  signal(SIGINT, stop_ru);
   threadCreate(&oru.north_read_thread, oru_north_read_thread, (void *)&oru, "north_read_thread", -1, OAI_PRIORITY_RT_MAX);
   threadCreate(&oru.south_read_thread, oru_south_read_thread, (void *)&oru, "north_read_thread", -1, OAI_PRIORITY_RT_MAX);
 
-  while (oai_exit == 0)
+  while (oai_exit == 0) {
     sleep(1);
-  // stop threads
-
-  kill_NR_RU_proc(0);
+  }
+  ret = pthread_join(oru.north_read_thread, NULL);
+  AssertFatal(ret == 0, "pthread_join failed %d\n", ret);
+  ret = pthread_join(oru.south_read_thread, NULL);
+  AssertFatal(ret == 0, "pthread_join failed %d\n", ret);
+  LOG_I(PHY, "Threads joined\n");
 
   end_configmodule(uniqCfg);
 
+  if (ru->rfdevice.trx_stop_func) {
+    ru->rfdevice.trx_stop_func(&ru->rfdevice);
+  }
   if (ru->rfdevice.trx_end_func) {
     ru->rfdevice.trx_end_func(&ru->rfdevice);
-    ru->rfdevice.trx_end_func = NULL;
   }
 
+  if (ru->ifdevice.trx_stop_func) {
+    ru->ifdevice.trx_stop_func(&ru->ifdevice);
+  }
   if (ru->ifdevice.trx_end_func) {
     ru->ifdevice.trx_end_func(&ru->ifdevice);
-    ru->ifdevice.trx_end_func = NULL;
   }
+
+  print_meas(&ru->tx_fhaul, "TX FH processing", NULL, NULL);
 
   logClean();
   printf("Bye.\n");
