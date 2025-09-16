@@ -2367,9 +2367,20 @@ static void rrc_CU_process_ue_modification_required(MessageDef *msg_p, instance_
   }
 
   gNB_RRC_UE_t *UE = &ue_context_p->ue_context;
-  if (UE->ho_context && UE->ho_context->source && UE->ho_context->source->du && UE->ho_context->source->du->assoc_id == assoc_id) {
-    LOG_W(NR_RRC, "UE %d: UE Context Modification Required during handover, ignoring message\n", UE->rrc_ue_id);
-    return;
+  if (UE->ho_context) {
+    if (UE->ho_context->target && UE->ho_context->target->du && UE->ho_context->target->du->assoc_id == assoc_id) {
+      LOG_A(NR_RRC, "UE %d: UE Context Modification Required during handover on target DU, handover succeeded\n", UE->rrc_ue_id);
+      UE->ho_context->target->ho_success(rrc, UE);
+    } else if (UE->ho_context->source) {
+      if (UE->ho_context->source->du && UE->ho_context->source->du->assoc_id == assoc_id)
+        LOG_W(NR_RRC, "UE %d: UE Context Modification Required during handover on source DU, handover failed\n", UE->rrc_ue_id);
+      else
+        LOG_W(NR_RRC, "UE %d: UE Context Modification Required, unknown or no source DU\n", UE->rrc_ue_id);
+      UE->ho_context->source->ho_cancel(rrc, UE);
+    } else {
+      LOG_E(NR_RRC, "UE %d: UE Context Modification Required during handover: unhandled case\n", UE->rrc_ue_id);
+    }
+    nr_rrc_finalize_ho(UE);
   }
 
   if (required->du_to_cu_rrc_information && required->du_to_cu_rrc_information->cellGroupConfig) {
