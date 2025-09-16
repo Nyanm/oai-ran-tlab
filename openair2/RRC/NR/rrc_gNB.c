@@ -1279,6 +1279,8 @@ static void rrc_handle_RRCReestablishmentRequest(gNB_RRC_INST *rrc,
   }
   gNB_RRC_UE_t *UE = &ue_context_p->ue_context;
 
+  LOG_UE_UL_EVENT(UE, "RRCReestablishmentRequest\n");
+
   /* should check phys cell ID to identify the correct cell */
   const f1ap_served_cell_info_t *cell_info = &du->setup_req->cell[0].info;
   const f1ap_served_cell_info_t *previous_cell_info = get_cell_information_by_phycellId(physCellId);
@@ -2339,7 +2341,7 @@ static void rrc_CU_process_ue_context_modification_response(MessageDef *msg_p, i
     ue_data.du_assoc_id = target_ctx->du->assoc_id;
     bool success = cu_update_f1_ue_data(UE->rrc_ue_id, &ue_data);
     DevAssert(success);
-    LOG_I(NR_RRC, "UE %d handover: update RNTI from %04x to %04x\n", UE->rrc_ue_id, UE->rnti, target_ctx->new_rnti);
+    LOG_UE_EVENT(UE, "Handover: update RNTI from %04x to %04x\n", UE->rnti, target_ctx->new_rnti);
     nr_ho_source_cu_t *source_ctx = UE->ho_context->source;
     DevAssert(source_ctx->old_rnti == UE->rnti);
     UE->rnti = target_ctx->new_rnti;
@@ -2372,10 +2374,7 @@ static void rrc_CU_process_ue_modification_required(MessageDef *msg_p, instance_
 
   if (required->du_to_cu_rrc_information && required->du_to_cu_rrc_information->cellGroupConfig) {
     gNB_RRC_UE_t *UE = &ue_context_p->ue_context;
-    LOG_I(RRC,
-          "UE Context Modification Required: new CellGroupConfig for UE ID %d/RNTI %04x, triggering reconfiguration\n",
-          UE->rrc_ue_id,
-          UE->rnti);
+    LOG_UE_UL_EVENT(UE, "UE Context Modification Required: new CellGroupConfig, triggering reconfiguration\n");
 
     NR_CellGroupConfig_t *cellGroupConfig = NULL;
     asn_dec_rval_t dec_rval = uper_decode_complete(NULL,
