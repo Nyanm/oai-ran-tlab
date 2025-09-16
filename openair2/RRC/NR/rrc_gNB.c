@@ -2405,6 +2405,8 @@ static void rrc_CU_process_ue_modification_required(MessageDef *msg_p, instance_
     /* trigger reconfiguration */
     if (!UE->ongoing_reconfiguration)
       nr_rrc_reconfiguration_req(rrc, UE, 0, 0);
+    else
+      LOG_E(NR_RRC, "UE %d: reconfiguration ongoing, cannot trigger new reconfiguration\n", UE->rrc_ue_id);
     return;
   }
   LOG_W(RRC,
