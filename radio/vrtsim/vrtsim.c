@@ -207,31 +207,24 @@ static void vrtsim_readconfig(vrtsim_state_t *vrtsim_state)
 static void *vrtsim_timing_job(void *arg)
 {
   vrtsim_state_t *vrtsim_state = arg;
-  struct timespec timestamp;
-  if (clock_gettime(CLOCK_REALTIME, &timestamp)) {
+  struct timespec start_ts;
+  if (clock_gettime(CLOCK_REALTIME, &start_ts)) {
     LOG_E(UTIL, "clock_gettime failed\n");
     exit(1);
   }
-  vrtsim_state->start_ts = timestamp;
-  double leftover_samples = 0;
+  int64_t last_sample_index = 0;
+  vrtsim_state->start_ts = start_ts;
   while (vrtsim_state->run_timing_thread) {
     struct timespec current_time;
     if (clock_gettime(CLOCK_REALTIME, &current_time)) {
       LOG_E(UTIL, "clock_gettime failed\n");
       exit(1);
     }
-    uint64_t diff = (current_time.tv_sec - timestamp.tv_sec) * 1000000000 + (current_time.tv_nsec - timestamp.tv_nsec);
-    timestamp = current_time;
-    double samples_to_produce = vrtsim_state->sample_rate * vrtsim_state->timescale * diff / 1e9;
-
-    // Attempt to correct compounding rounding error
-    leftover_samples += samples_to_produce - (uint64_t)samples_to_produce;
-    if (leftover_samples > 1.0f) {
-      samples_to_produce += 1;
-      leftover_samples -= 1;
-    }
-    AssertFatal(samples_to_produce >= 0, "Negative samples to produce: %f\n", samples_to_produce);
+    uint64_t diff = (current_time.tv_sec - start_ts.tv_sec) * 1000000000 + (current_time.tv_nsec - start_ts.tv_nsec);
+    double sample_index = vrtsim_state->sample_rate * vrtsim_state->timescale * diff / 1e9;
+    int64_t samples_to_produce = sample_index - last_sample_index;
     shm_td_iq_channel_produce_samples(vrtsim_state->channel, samples_to_produce);
+    last_sample_index = sample_index;
     usleep(1);
   }
   return 0;
