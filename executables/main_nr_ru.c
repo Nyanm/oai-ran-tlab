@@ -208,6 +208,7 @@ int main(int argc, char **argv)
 
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
   nr_dump_frame_parms(fp);
+  fp->ofdm_offset_divisor = 8;
   ru->if_south = LOCAL_RF;
   nr_phy_init_RU(ru);
   fill_rf_config(ru, ru->rf_config_file);
