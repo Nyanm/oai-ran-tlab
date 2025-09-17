@@ -57,9 +57,12 @@ struct GpuContext {
   cudaStream_t stream;
   curandState_t* d_curand_states;
 
-  float* h_pinned_input;
+  c16_t* h_pinned_history;
+  c16_t* h_pinned_new_samples;
   c16_t* h_pinned_output;
 
+  c16_t* d_history_buffer;
+  c16_t* d_new_samples_buffer;
   float* d_input_padded;
   float2* d_channel_output;
   short2* d_final_output;
@@ -69,6 +72,29 @@ struct GpuContext {
   int channel_length;
   int nb_tx;
 };
+
+__global__ void prepare_input_kernel(float* d_out_padded,
+                                     const c16_t* d_in_history,
+                                     const c16_t* d_in_new,
+                                     int nsamps,
+                                     int hist_len)
+{
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int padded_len = nsamps + hist_len;
+
+  if (idx >= padded_len)
+    return;
+
+  c16_t sample;
+  if (idx < hist_len) {
+    sample = d_in_history[idx];
+  } else {
+    sample = d_in_new[idx - hist_len];
+  }
+
+  d_out_padded[idx * 2] = (float)sample.r;
+  d_out_padded[idx * 2 + 1] = (float)sample.i;
+}
 
 extern "C" void vrtsim_cuda_init(void** context_handle, int max_samples, int nb_tx, int nb_rx, int channel_length)
 {
@@ -86,7 +112,10 @@ extern "C" void vrtsim_cuda_init(void** context_handle, int max_samples, int nb_
   CHECK_CUDA(cudaMalloc(&ctx->d_final_output, max_samples * nb_rx * sizeof(short2)));
   CHECK_CUDA(cudaMalloc(&ctx->d_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2)));
 
-  CHECK_CUDA(cudaMallocHost(&ctx->h_pinned_input, max_padded_samples * nb_tx * sizeof(float2)));
+  const int history_size_per_ant = (channel_length > 0) ? channel_length - 1 : 0;
+  CHECK_CUDA(cudaMalloc(&ctx->d_history_buffer, history_size_per_ant * nb_tx * sizeof(c16_t)));
+  CHECK_CUDA(cudaMalloc(&ctx->d_new_samples_buffer, max_samples * nb_tx * sizeof(c16_t)));
+
   CHECK_CUDA(cudaMallocHost(&ctx->h_pinned_output, max_samples * nb_rx * sizeof(c16_t)));
 
   const int num_rand_elements = max_samples * nb_rx;
@@ -115,8 +144,6 @@ extern "C" void vrtsim_cuda_shutdown(void* context_handle)
   CHECK_CUDA(cudaFree(ctx->d_channel_output));
   CHECK_CUDA(cudaFree(ctx->d_final_output));
   CHECK_CUDA(cudaFree(ctx->d_channel_coeffs));
-
-  CHECK_CUDA(cudaFreeHost(ctx->h_pinned_input));
   CHECK_CUDA(cudaFreeHost(ctx->h_pinned_output));
 
   destroy_curand_states_cuda(ctx->d_curand_states);
@@ -161,24 +188,27 @@ extern "C" void vrtsim_cuda_process(void* context_handle,
   nvtxRangePushA("CPU_data_preparation");
 
   for (int i = 0; i < nb_tx; ++i) {
-    float* h_in_ptr = get_tx_ptr(ctx->h_pinned_input, i, padded_len);
     c16_t* hist_ptr = get_hist_ptr(ctx->cpu_history_buffer, i, hist_len);
     c16_t* input_ptr = input_samples[i];
 
-    for (int j = 0; j < hist_len; ++j) {
-      h_in_ptr[j * 2] = (float)hist_ptr[j].r;
-      h_in_ptr[j * 2 + 1] = (float)hist_ptr[j].i;
-    }
+    CHECK_CUDA(cudaMemcpyAsync(ctx->d_history_buffer, hist_ptr, hist_len * sizeof(c16_t), cudaMemcpyHostToDevice, ctx->stream));
+    CHECK_CUDA(cudaMemcpyAsync(ctx->d_new_samples_buffer, input_ptr, nsamps * sizeof(c16_t), cudaMemcpyHostToDevice, ctx->stream));
 
-    for (int j = 0; j < nsamps; ++j) {
-      h_in_ptr[(hist_len + j) * 2] = (float)input_ptr[j].r;
-      h_in_ptr[(hist_len + j) * 2 + 1] = (float)input_ptr[j].i;
-    }
+    float* d_padded_output_for_ant = get_tx_ptr(ctx->d_input_padded, i, padded_len);
+
+    dim3 threads(256);
+    dim3 blocks((padded_len + threads.x - 1) / threads.x);
+    prepare_input_kernel<<<blocks, threads, 0, ctx->stream>>>(d_padded_output_for_ant,
+                                                              ctx->d_history_buffer,
+                                                              ctx->d_new_samples_buffer,
+                                                              nsamps,
+                                                              hist_len);
 
     if (hist_len > 0) {
       memcpy(hist_ptr, input_ptr + (nsamps - hist_len), hist_len * sizeof(c16_t));
     }
   }
+
   nvtxRangePop(); // End CPU_data_preparation
 
   nvtxRangePushA("channel_coeffs_transfer");
@@ -193,11 +223,6 @@ extern "C" void vrtsim_cuda_process(void* context_handle,
   nvtxRangePop(); // End channel_coeffs_transfer
 
   nvtxRangePushA("GPU_pipeline_execution");
-
-  nvtxRangePushA("input_data_H2D");
-  size_t input_bytes = padded_len * nb_tx * sizeof(float2);
-  CHECK_CUDA(cudaMemcpyAsync(ctx->d_input_padded, ctx->h_pinned_input, input_bytes, cudaMemcpyHostToDevice, ctx->stream));
-  nvtxRangePop(); // End input_data_H2D
 
   nvtxRangePushA("multipath_kernel");
   dim3 threads_multipath(512, 1);
@@ -235,7 +260,6 @@ extern "C" void vrtsim_cuda_process(void* context_handle,
 
   nvtxRangePushA("synchronization_and_copy");
   CHECK_CUDA(cudaStreamSynchronize(ctx->stream));
-
   memcpy(final_output_buffer, ctx->h_pinned_output, output_bytes);
   nvtxRangePop(); // End synchronization_and_copy
   nvtxRangePop(); // End vrtsim_cuda_process_complete
