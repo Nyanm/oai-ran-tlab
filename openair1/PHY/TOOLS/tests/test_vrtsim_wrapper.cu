@@ -27,6 +27,7 @@
 #include <getopt.h>
 #include "oai_cuda.h"
 #include "common/config/config_userapi.h"
+#include <cuda_profiler_api.h>
 
 typedef struct complexd {
   double r;
@@ -135,9 +136,10 @@ int main(int argc, char** argv)
 
   std::vector<c16_t*> h_input_samples(nb_tx);
   for (int i = 0; i < nb_tx; ++i) {
-    h_input_samples[i] = new c16_t[num_samples];
+    cudaMallocHost(&h_input_samples[i], num_samples * sizeof(c16_t));
   }
-  c16_t* h_final_output = new c16_t[num_samples * nb_rx];
+  c16_t* h_final_output;
+  cudaMallocHost(&h_final_output, num_samples * nb_rx * sizeof(c16_t));
   channel_desc_t* h_channel_desc = create_manual_channel_desc(nb_tx, nb_rx, channel_length);
 
   void* gpu_context = nullptr;
@@ -145,6 +147,22 @@ int main(int argc, char** argv)
 
   double total_gpu_ns = 0;
   struct timespec start, end;
+
+  printf("Warming up GPU...\n");
+  for (int w = 0; w < 10; ++w) {
+    vrtsim_cuda_process(gpu_context,
+                        h_input_samples.data(),
+                        num_samples,
+                        nb_tx,
+                        nb_rx,
+                        h_channel_desc,
+                        1.0f,
+                        1.0 / (30720 * 2000),
+                        1,
+                        1,
+                        h_final_output);
+  }
+  printf("Warm-up complete.\n");
 
   printf("Running %d trials...\n", num_trials);
   for (int t = 0; t < num_trials; t++) {
@@ -159,6 +177,7 @@ int main(int argc, char** argv)
     }
     // You could also re-randomize the channel here if desired
 
+    cudaProfilerStart();
     clock_gettime(CLOCK_MONOTONIC, &start);
 
     vrtsim_cuda_process(gpu_context,
@@ -174,6 +193,7 @@ int main(int argc, char** argv)
                         h_final_output);
 
     clock_gettime(CLOCK_MONOTONIC, &end);
+    cudaProfilerStop();
     total_gpu_ns += (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
   }
   printf("Finished.\n\n");
@@ -193,7 +213,7 @@ int main(int argc, char** argv)
 
   for (int i = 0; i < nb_tx; ++i)
     delete[] h_input_samples[i];
-  delete[] h_final_output;
+  cudaFreeHost(h_final_output);
   free_manual_channel_desc(h_channel_desc);
 
   return 0;
