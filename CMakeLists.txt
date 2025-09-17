@@ -2051,6 +2051,13 @@ target_link_libraries(nr_prachsim PRIVATE
   m pthread ${T_LIB} ITTI dl shlib_loader physim_common)
 target_link_libraries(nr_prachsim PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
 
+add_executable(nr_prdchsim ${OPENAIR1_DIR}/SIMULATION/NR_PHY/prdchsim.c)
+target_link_libraries(nr_prdchsim PRIVATE
+  -Wl,--start-group UTIL SIMU PHY_COMMON PHY_NR_COMMON PHY_NR PHY_NR_UE SCHED_NR_LIB SCHED_NR_UE_LIB MAC_UE_NR MAC_NR_COMMON nr_rrc -Wl,--end-group
+  m pthread ${T_LIB} ITTI dl shlib_loader nr_ue_phy_meas physim_common
+)
+target_link_libraries(nr_prdchsim PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
+
 add_executable(nr_ulschsim
   ${OPENAIR1_DIR}/SIMULATION/NR_PHY/ulschsim.c
   ${PHY_INTERFACE_DIR}/queue_t.c
