@@ -76,6 +76,7 @@ typedef enum { ROLE_SERVER = 1, ROLE_CLIENT } role;
      {"role",                   "either client or server\n", 0, .strptr = &role,                                 .defstrval = ROLE_CLIENT_STRING, TYPE_STRING, 0}, \
      {"timescale",              TIME_SCALE_HLP,              0, .dblptr = &vrtsim_state->timescale,              .defdblval = 1.0,                TYPE_DOUBLE, 0}, \
      {"chanmod",                "Enable channel modelling",  0, .iptr = &vrtsim_state->chanmod,                  .defintval = 0,                  TYPE_INT,    0}, \
+     {"use_gpu", "Enable GPU acceleration for channel modeling (if available, 1=ON, 0=OFF)", 0, .iptr = &vrtsim_state->use_gpu, .defintval = 1, TYPE_INT, 0}, \
      {"taps-socket",            TAPS_SOCKET_HLP,             0, .strptr = &vrtsim_state->taps_socket,            .defstrval = NULL,               TYPE_STRING, 0}, \
      {"client-num-rx-antennas", CLIENT_NUM_RX_HLP,           0, .iptr = &vrtsim_state->client_num_rx_antennas,   .defintval = 1,                  TYPE_INT,    0}, \
   };
@@ -124,6 +125,7 @@ typedef struct {
   Actor_t *channel_modelling_actors;
 #ifdef ENABLE_CUDA
   void *gpu_context;
+  int use_gpu;
 #endif
   char *taps_socket;
   int client_num_rx_antennas;
@@ -337,14 +339,16 @@ static int vrtsim_connect(openair0_device *device)
   }
 
 #ifdef ENABLE_CUDA
-  if (vrtsim_state->chanmod || vrtsim_state->taps_socket) {
-    int max_samples_per_slot = 40000;
+  if (vrtsim_state->use_gpu) {
+    if (vrtsim_state->chanmod || vrtsim_state->taps_socket) {
+      int max_samples_per_slot = 40000;
 
-    vrtsim_cuda_init(&vrtsim_state->gpu_context,
-                     max_samples_per_slot,
-                     vrtsim_state->tx_num_channels,
-                     vrtsim_state->peer_info.num_rx_antennas,
-                     vrtsim_state->channel_desc->channel_length);
+      vrtsim_cuda_init(&vrtsim_state->gpu_context,
+                       max_samples_per_slot,
+                       vrtsim_state->tx_num_channels,
+                       vrtsim_state->peer_info.num_rx_antennas,
+                       vrtsim_state->channel_desc->channel_length);
+    }
   }
 #endif
 
@@ -518,10 +522,7 @@ static int vrtsim_write_with_chanmod(vrtsim_state_t *vrtsim_state,
   AssertFatal(nbAnt < MAX_NUM_ANTENNAS_TX, "Number of antennas %d exceeds maximum %d\n", nbAnt, MAX_NUM_ANTENNAS_TX);
 
 #ifdef ENABLE_CUDA
-  // TODO: Implement a mechanism to choose between CPU and GPU paths
-  // We'll need a way to choose. For now, let's assume a global flag or config option.
-  // For this example, we'll use the presence of gpu_context to decide.
-  if (vrtsim_state->gpu_context) {
+  if (vrtsim_state->gpu_context && vrtsim_state->use_gpu) {
     notifiedFIFO_elt_t *task = newNotifiedFIFO_elt(sizeof(channel_modelling_args_t), 0, NULL, perform_channel_modelling_gpu);
     channel_modelling_args_t *args = (channel_modelling_args_t *)NotifiedFifoData(task);
     args->vrtsim_state = vrtsim_state;
@@ -637,7 +638,7 @@ static void vrtsim_end(openair0_device *device)
   }
 
 #ifdef ENABLE_CUDA
-  if (vrtsim_state->gpu_context) {
+  if (vrtsim_state->gpu_context && vrtsim_state->use_gpu) {
     vrtsim_cuda_shutdown(vrtsim_state->gpu_context);
     vrtsim_state->gpu_context = NULL;
   }
