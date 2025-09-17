@@ -764,6 +764,7 @@ void ue_context_modification_request(const f1ap_ue_context_mod_req_t *req)
 
   if (req->rrc_container != NULL) {
     logical_chan_id_t id = 1;
+    LOG_W(NR_MAC, "forwarding UE %d bytes %ld\n", req->gNB_DU_ue_id, req->rrc_container->len);
     nr_rlc_srb_recv_sdu(req->gNB_DU_ue_id, id, req->rrc_container->buf, req->rrc_container->len);
   }
 

@@ -3563,7 +3563,7 @@ int nr_mac_interrupt_ue_transmission(gNB_MAC_INST *mac, NR_UE_info_t *UE, int sl
   // frames, after the inactivity of the UE.
   UE->UE_sched_ctrl.ta_frame = (mac->frame - 1 + 1024) % 1024;
 
-  LOG_D(NR_MAC, "UE %04x: Interrupt UE transmission (%d slots)\n", UE->rnti, slots);
+  LOG_I(NR_MAC, "UE %04x: Interrupt UE transmission (%d slots)\n", UE->rnti, slots);
   return 0;
 }
 
