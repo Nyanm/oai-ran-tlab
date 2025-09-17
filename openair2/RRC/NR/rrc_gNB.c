@@ -1294,24 +1294,7 @@ static void rrc_handle_RRCReestablishmentRequest(gNB_RRC_INST *rrc,
      * target DU and and update the association to the initial DU one */
     LOG_W(NR_RRC, "handover for UE %d/RNTI %04x failed, rollback to original cell\n", UE->rrc_ue_id, UE->rnti);
 
-    // find the transaction of handover (the corresponding reconfig) and abort it
-    for (int i = 0; i < NR_RRC_TRANSACTION_IDENTIFIER_NUMBER; ++i) {
-      if (UE->xids[i] == RRC_DEDICATED_RECONF)
-        UE->xids[i] = RRC_ACTION_NONE;
-    }
-
     source_ctx->ho_cancel(rrc, UE);
-
-    /* we need the original CellGroupConfig */
-    ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, UE->masterCellGroup);
-    UE->masterCellGroup = source_ctx->old_cellGroupConfig;
-    source_ctx->old_cellGroupConfig = NULL;
-
-    /* update to old DU assoc id -- RNTI + secondary DU UE ID further below */
-    f1_ue_data_t ue_data = cu_get_f1_ue_data(UE->rrc_ue_id);
-    ue_data.du_assoc_id = source_ctx->du->assoc_id;
-    bool success = cu_update_f1_ue_data(UE->rrc_ue_id, &ue_data);
-    DevAssert(success);
     nr_rrc_finalize_ho(UE);
   } else if (physCellId != cell_info->nr_pci) {
     /* UE was moving from previous cell so quickly that RRCReestablishment for previous cell was received in this cell */

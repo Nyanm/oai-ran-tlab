@@ -335,7 +335,26 @@ static void nr_rrc_f1_ho_complete(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE)
 
 static void nr_rrc_cancel_f1_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE)
 {
-  DevAssert(UE->ho_context != NULL);
+  DevAssert(UE->ho_context != NULL && UE->ho_context->source != NULL);
+
+  // find the transaction of handover (the corresponding reconfig) and abort it
+  for (int i = 0; i < NR_RRC_TRANSACTION_IDENTIFIER_NUMBER; ++i) {
+    if (UE->xids[i] == RRC_DEDICATED_RECONF)
+      UE->xids[i] = RRC_ACTION_NONE;
+  }
+
+  /* we need the original CellGroupConfig */
+  nr_ho_source_cu_t *source_ctx = UE->ho_context->source;
+  ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, UE->masterCellGroup);
+  UE->masterCellGroup = source_ctx->old_cellGroupConfig;
+  source_ctx->old_cellGroupConfig = NULL;
+
+  /* update to old DU assoc id -- RNTI + secondary DU UE ID further below */
+  f1_ue_data_t ue_data = cu_get_f1_ue_data(UE->rrc_ue_id);
+  ue_data.du_assoc_id = source_ctx->du->assoc_id;
+  bool success = cu_update_f1_ue_data(UE->rrc_ue_id, &ue_data);
+  DevAssert(success);
+
   nr_ho_target_cu_t *target_ctx = UE->ho_context->target;
   DevAssert(target_ctx != NULL);
   f1ap_ue_context_rel_cmd_t cmd = {
