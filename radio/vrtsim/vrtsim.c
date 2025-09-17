@@ -51,6 +51,10 @@
 #include "simde/x86/avx512.h"
 #include "taps_client.h"
 
+#ifdef ENABLE_CUDA
+#include <cuda_runtime.h>
+#endif
+
 // Simulator role
 typedef enum { ROLE_SERVER = 1, ROLE_CLIENT } role;
 
@@ -499,8 +503,6 @@ static void perform_channel_modelling_gpu(void *arg)
                       1, // pdu/ptrs maps
                       final_output_buffer);
 
-  // The GPU is done. Now write the results to the shared memory channel,
-  // one antenna at a time.
   for (int aarx = 0; aarx < vrtsim_state->peer_info.num_rx_antennas; aarx++) {
     c16_t *antenna_output_ptr = final_output_buffer + (aarx * args->nsamps);
     vrtsim_write_internal(vrtsim_state, args->timestamp, antenna_output_ptr, args->nsamps, aarx, args->flags, aarx);

@@ -57,6 +57,7 @@ struct GpuContext {
   cudaStream_t stream;
   curandState_t* d_curand_states;
 
+  c16_t* cpu_history_buffer;
   c16_t* h_pinned_history;
   c16_t* h_pinned_new_samples;
   c16_t* h_pinned_output;
@@ -64,11 +65,10 @@ struct GpuContext {
   c16_t* d_history_buffer;
   c16_t* d_new_samples_buffer;
   float* d_input_padded;
+  float2* d_channel_coeffs;
   float2* d_channel_output;
   short2* d_final_output;
-  float2* d_channel_coeffs;
 
-  c16_t* cpu_history_buffer;
   int channel_length;
   int nb_tx;
 };
@@ -109,13 +109,18 @@ extern "C" void vrtsim_cuda_init(void** context_handle, int max_samples, int nb_
   const int max_padded_samples = max_samples + channel_length - 1;
   CHECK_CUDA(cudaMalloc(&ctx->d_input_padded, max_padded_samples * nb_tx * sizeof(float2)));
   CHECK_CUDA(cudaMalloc(&ctx->d_channel_output, max_samples * nb_rx * sizeof(float2)));
-  CHECK_CUDA(cudaMalloc(&ctx->d_final_output, max_samples * nb_rx * sizeof(short2)));
   CHECK_CUDA(cudaMalloc(&ctx->d_channel_coeffs, nb_tx * nb_rx * channel_length * sizeof(float2)));
 
   const int history_size_per_ant = (channel_length > 0) ? channel_length - 1 : 0;
   CHECK_CUDA(cudaMalloc(&ctx->d_history_buffer, history_size_per_ant * nb_tx * sizeof(c16_t)));
   CHECK_CUDA(cudaMalloc(&ctx->d_new_samples_buffer, max_samples * nb_tx * sizeof(c16_t)));
 
+  printf("[CUDA] Allocating pinned staging buffers...\n");
+  CHECK_CUDA(cudaMallocHost(&ctx->h_pinned_history, history_size_per_ant * nb_tx * sizeof(c16_t)));
+  CHECK_CUDA(cudaMallocHost(&ctx->h_pinned_new_samples, max_samples * nb_tx * sizeof(c16_t)));
+
+  printf("[CUDA] Allocating output buffers...\n");
+  CHECK_CUDA(cudaMalloc(&ctx->d_final_output, max_samples * nb_rx * sizeof(short2)));
   CHECK_CUDA(cudaMallocHost(&ctx->h_pinned_output, max_samples * nb_rx * sizeof(c16_t)));
 
   const int num_rand_elements = max_samples * nb_rx;
@@ -142,9 +147,13 @@ extern "C" void vrtsim_cuda_shutdown(void* context_handle)
 
   CHECK_CUDA(cudaFree(ctx->d_input_padded));
   CHECK_CUDA(cudaFree(ctx->d_channel_output));
-  CHECK_CUDA(cudaFree(ctx->d_final_output));
   CHECK_CUDA(cudaFree(ctx->d_channel_coeffs));
+  CHECK_CUDA(cudaFreeHost(ctx->h_pinned_history));
+  CHECK_CUDA(cudaFreeHost(ctx->h_pinned_new_samples));
+  CHECK_CUDA(cudaFree(ctx->d_final_output));
   CHECK_CUDA(cudaFreeHost(ctx->h_pinned_output));
+  CHECK_CUDA(cudaFree(ctx->d_history_buffer));
+  CHECK_CUDA(cudaFree(ctx->d_new_samples_buffer));
 
   destroy_curand_states_cuda(ctx->d_curand_states);
 
@@ -191,16 +200,24 @@ extern "C" void vrtsim_cuda_process(void* context_handle,
     c16_t* hist_ptr = get_hist_ptr(ctx->cpu_history_buffer, i, hist_len);
     c16_t* input_ptr = input_samples[i];
 
-    CHECK_CUDA(cudaMemcpyAsync(ctx->d_history_buffer, hist_ptr, hist_len * sizeof(c16_t), cudaMemcpyHostToDevice, ctx->stream));
-    CHECK_CUDA(cudaMemcpyAsync(ctx->d_new_samples_buffer, input_ptr, nsamps * sizeof(c16_t), cudaMemcpyHostToDevice, ctx->stream));
+    c16_t* h_pinned_hist_offset = ctx->h_pinned_history + i * hist_len;
+    c16_t* h_pinned_new_offset = ctx->h_pinned_new_samples + i * nsamps;
+    c16_t* d_hist_offset = ctx->d_history_buffer + i * hist_len;
+    c16_t* d_new_offset = ctx->d_new_samples_buffer + i * nsamps;
+
+    memcpy(h_pinned_hist_offset, hist_ptr, hist_len * sizeof(c16_t));
+    memcpy(h_pinned_new_offset, input_ptr, nsamps * sizeof(c16_t));
+
+    CHECK_CUDA(cudaMemcpyAsync(d_hist_offset, h_pinned_hist_offset, hist_len * sizeof(c16_t), cudaMemcpyHostToDevice, ctx->stream));
+    CHECK_CUDA(cudaMemcpyAsync(d_new_offset, h_pinned_new_offset, nsamps * sizeof(c16_t), cudaMemcpyHostToDevice, ctx->stream));
 
     float* d_padded_output_for_ant = get_tx_ptr(ctx->d_input_padded, i, padded_len);
 
     dim3 threads(256);
     dim3 blocks((padded_len + threads.x - 1) / threads.x);
     prepare_input_kernel<<<blocks, threads, 0, ctx->stream>>>(d_padded_output_for_ant,
-                                                              ctx->d_history_buffer,
-                                                              ctx->d_new_samples_buffer,
+                                                              d_hist_offset,
+                                                              d_new_offset,
                                                               nsamps,
                                                               hist_len);
 
