@@ -51,10 +51,6 @@
 #include "simde/x86/avx512.h"
 #include "taps_client.h"
 
-#ifdef ENABLE_CUDA
-#include <cuda_runtime.h>
-#endif
-
 // Simulator role
 typedef enum { ROLE_SERVER = 1, ROLE_CLIENT } role;
 
@@ -132,6 +128,8 @@ typedef struct {
   char *taps_socket;
   int client_num_rx_antennas;
 } vrtsim_state_t;
+
+c16_t *vrtsim_cuda_get_pinned_output_buffer(void *context_handle);
 
 // Sample history for channel impulse response
 static c16_t saved_samples[MAX_NUM_ANTENNAS_TX][MAX_CHANNEL_LENGTH] __attribute__((aligned(32))) = {0};
@@ -488,7 +486,6 @@ static void perform_channel_modelling_gpu(void *arg)
 {
   channel_modelling_args_t *args = (channel_modelling_args_t *)arg;
   vrtsim_state_t *vrtsim_state = args->vrtsim_state;
-  c16_t *final_output_buffer = (c16_t *)malloc(args->nsamps * vrtsim_state->peer_info.num_rx_antennas * sizeof(c16_t));
 
   vrtsim_cuda_process(vrtsim_state->gpu_context,
                       args->samples,
@@ -500,15 +497,14 @@ static void perform_channel_modelling_gpu(void *arg)
                       1.0f, // sigma2 placeholder
                       1.0 / vrtsim_state->sample_rate, // ts
                       1,
-                      1, // pdu/ptrs maps
-                      final_output_buffer);
+                      1 // pdu/ptrs maps
+  );
 
+  c16_t *result_buffer = vrtsim_cuda_get_pinned_output_buffer(vrtsim_state->gpu_context);
   for (int aarx = 0; aarx < vrtsim_state->peer_info.num_rx_antennas; aarx++) {
-    c16_t *antenna_output_ptr = final_output_buffer + (aarx * args->nsamps);
+    c16_t *antenna_output_ptr = result_buffer + (aarx * args->nsamps);
     vrtsim_write_internal(vrtsim_state, args->timestamp, antenna_output_ptr, args->nsamps, aarx, args->flags, aarx);
   }
-
-  free(final_output_buffer);
 }
 #endif
 

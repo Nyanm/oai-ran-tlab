@@ -138,8 +138,6 @@ int main(int argc, char** argv)
   for (int i = 0; i < nb_tx; ++i) {
     cudaMallocHost(&h_input_samples[i], num_samples * sizeof(c16_t));
   }
-  c16_t* h_final_output;
-  cudaMallocHost(&h_final_output, num_samples * nb_rx * sizeof(c16_t));
   channel_desc_t* h_channel_desc = create_manual_channel_desc(nb_tx, nb_rx, channel_length);
 
   void* gpu_context = nullptr;
@@ -159,8 +157,7 @@ int main(int argc, char** argv)
                         1.0f,
                         1.0 / (30720 * 2000),
                         1,
-                        1,
-                        h_final_output);
+                        1);
   }
   printf("Warm-up complete.\n");
 
@@ -189,8 +186,7 @@ int main(int argc, char** argv)
                         1.0f,
                         1.0 / (30720 * 2000),
                         1,
-                        1,
-                        h_final_output);
+                        1);
 
     clock_gettime(CLOCK_MONOTONIC, &end);
     cudaProfilerStop();
@@ -213,7 +209,6 @@ int main(int argc, char** argv)
 
   for (int i = 0; i < nb_tx; ++i)
     delete[] h_input_samples[i];
-  cudaFreeHost(h_final_output);
   free_manual_channel_desc(h_channel_desc);
 
   return 0;

@@ -96,6 +96,40 @@ __global__ void prepare_input_kernel(float* d_out_padded,
   d_out_padded[idx * 2 + 1] = (float)sample.i;
 }
 
+__global__ void prepare_input_kernel_bulk(float* d_out_padded,
+                                          const c16_t* d_in_history,
+                                          const c16_t* d_in_new,
+                                          int nsamps,
+                                          int hist_len)
+{
+  const int sample_idx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int antenna_idx = blockIdx.y;
+
+  const int padded_len = nsamps + hist_len;
+  if (sample_idx >= padded_len)
+    return;
+
+  const c16_t* history_ptr = d_in_history + antenna_idx * hist_len;
+  const c16_t* new_samples_ptr = d_in_new + antenna_idx * nsamps;
+  float* output_ptr = d_out_padded + antenna_idx * padded_len * 2;
+
+  c16_t sample;
+  if (sample_idx < hist_len) {
+    sample = history_ptr[sample_idx];
+  } else {
+    sample = new_samples_ptr[sample_idx - hist_len];
+  }
+
+  output_ptr[sample_idx * 2] = (float)sample.r;
+  output_ptr[sample_idx * 2 + 1] = (float)sample.i;
+}
+
+extern "C" c16_t* vrtsim_cuda_get_pinned_output_buffer(void* context_handle)
+{
+  GpuContext* ctx = (GpuContext*)context_handle;
+  return ctx->h_pinned_output;
+}
+
 extern "C" void vrtsim_cuda_init(void** context_handle, int max_samples, int nb_tx, int nb_rx, int channel_length)
 {
   printf("[CUDA] Initializing vrtsim GPU context...\n");
@@ -185,8 +219,7 @@ extern "C" void vrtsim_cuda_process(void* context_handle,
                                     float sigma2,
                                     double ts,
                                     uint16_t pdu_bit_map,
-                                    uint16_t ptrs_bit_map,
-                                    c16_t* final_output_buffer)
+                                    uint16_t ptrs_bit_map)
 {
   nvtxRangePushA("vrtsim_cuda_process_complete");
 
@@ -196,43 +229,49 @@ extern "C" void vrtsim_cuda_process(void* context_handle,
 
   nvtxRangePushA("CPU_data_preparation");
 
+  nvtxRangePushA("CPU_Memcpy_To_Pinned");
   for (int i = 0; i < nb_tx; ++i) {
     c16_t* hist_ptr = get_hist_ptr(ctx->cpu_history_buffer, i, hist_len);
     c16_t* input_ptr = input_samples[i];
 
     c16_t* h_pinned_hist_offset = ctx->h_pinned_history + i * hist_len;
     c16_t* h_pinned_new_offset = ctx->h_pinned_new_samples + i * nsamps;
-    c16_t* d_hist_offset = ctx->d_history_buffer + i * hist_len;
-    c16_t* d_new_offset = ctx->d_new_samples_buffer + i * nsamps;
 
-    nvtxRangePushA("CPU_Memcpy_To_Pinned");
     memcpy(h_pinned_hist_offset, hist_ptr, hist_len * sizeof(c16_t));
     memcpy(h_pinned_new_offset, input_ptr, nsamps * sizeof(c16_t));
-    nvtxRangePop(); // End CPU_Memcpy_To_Pinned
+  }
+  nvtxRangePop();
 
-    nvtxRangePushA("Async_H2D_Copies");
-    CHECK_CUDA(cudaMemcpyAsync(d_hist_offset, h_pinned_hist_offset, hist_len * sizeof(c16_t), cudaMemcpyHostToDevice, ctx->stream));
-    CHECK_CUDA(cudaMemcpyAsync(d_new_offset, h_pinned_new_offset, nsamps * sizeof(c16_t), cudaMemcpyHostToDevice, ctx->stream));
-    nvtxRangePop(); // End Async_H2D_Copies
+  nvtxRangePushA("Async_H2D_Copies");
+  size_t history_bytes = hist_len * nb_tx * sizeof(c16_t);
+  size_t new_samples_bytes = nsamps * nb_tx * sizeof(c16_t);
+  CHECK_CUDA(cudaMemcpyAsync(ctx->d_history_buffer, ctx->h_pinned_history, history_bytes, cudaMemcpyHostToDevice, ctx->stream));
+  CHECK_CUDA(cudaMemcpyAsync(ctx->d_new_samples_buffer,
+                             ctx->h_pinned_new_samples,
+                             new_samples_bytes,
+                             cudaMemcpyHostToDevice,
+                             ctx->stream));
+  nvtxRangePop();
 
-    float* d_padded_output_for_ant = get_tx_ptr(ctx->d_input_padded, i, padded_len);
+  nvtxRangePushA("prepare_input_kernel_launch");
+  dim3 threads(256, 1);
+  dim3 blocks((padded_len + threads.x - 1) / threads.x, nb_tx);
+  prepare_input_kernel_bulk<<<blocks, threads, 0, ctx->stream>>>(ctx->d_input_padded,
+                                                                 ctx->d_history_buffer,
+                                                                 ctx->d_new_samples_buffer,
+                                                                 nsamps,
+                                                                 hist_len);
+  nvtxRangePop();
 
-    dim3 threads(256);
-    dim3 blocks((padded_len + threads.x - 1) / threads.x);
-    nvtxRangePushA("prepare_input_kernel_launch");
-    prepare_input_kernel<<<blocks, threads, 0, ctx->stream>>>(d_padded_output_for_ant,
-                                                              d_hist_offset,
-                                                              d_new_offset,
-                                                              nsamps,
-                                                              hist_len);
-    nvtxRangePop(); // End prepare_input_kernel_launch
-
-    nvtxRangePushA("CPU_History_Update");
+  nvtxRangePushA("CPU_History_Update");
+  for (int i = 0; i < nb_tx; ++i) {
     if (hist_len > 0) {
+      c16_t* hist_ptr = get_hist_ptr(ctx->cpu_history_buffer, i, hist_len);
+      c16_t* input_ptr = input_samples[i];
       memcpy(hist_ptr, input_ptr + (nsamps - hist_len), hist_len * sizeof(c16_t));
     }
-    nvtxRangePop(); // End CPU_History_Update
   }
+  nvtxRangePop();
 
   nvtxRangePop(); // End CPU_data_preparation
 
@@ -283,12 +322,10 @@ extern "C" void vrtsim_cuda_process(void* context_handle,
 
   nvtxRangePop(); // End GPU_pipeline_execution
 
-  nvtxRangePushA("Synchronization_and_Final_Copy");
   nvtxRangePushA("Stream_Synchronize");
   CHECK_CUDA(cudaStreamSynchronize(ctx->stream));
   nvtxRangePop(); // End Stream_Synchronize
-  memcpy(final_output_buffer, ctx->h_pinned_output, output_bytes);
+
   nvtxRangePop(); // End Final_Memcpy_To_Output
-  nvtxRangePop(); // End Synchronization_and_Final_Copy
   nvtxRangePop(); // End vrtsim_cuda_process_complete
 }

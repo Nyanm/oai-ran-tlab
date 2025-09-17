@@ -228,8 +228,7 @@ void vrtsim_cuda_process(
     float sigma2,
     double ts,
     uint16_t pdu_bit_map,
-    uint16_t ptrs_bit_map,
-    c16_t* final_output_buffer
+    uint16_t ptrs_bit_map
 );
 
 #ifdef __cplusplus
