@@ -34,7 +34,6 @@
 #define COMPONENT_LOG
 #define COMPONENT_LOG_IF
 #include <ctype.h>
-#define LOG_MAIN
 #include "log.h"
 #include "vcd_signal_dumper.h"
 #include "assertions.h"
@@ -51,6 +50,7 @@
 #define LOG_MEM_SIZE 100*1024*1024
 
 // main log variables
+log_t *g_log;
 
 /** @defgroup _max_length Maximum Length of LOG
  *  @ingroup _macro

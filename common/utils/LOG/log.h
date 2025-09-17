@@ -223,16 +223,12 @@ typedef struct {
   debug_flags_t dump_mask;
 } log_t;
 
-#ifdef LOG_MAIN
-log_t *g_log;
-#else
 #ifdef __cplusplus
 extern "C" {
 #endif
   extern log_t *g_log;
 #ifdef __cplusplus
 }
-#endif
 #endif
 #define FLAG_DEBUG_SET(flag)              \
   if (strcmp(name, #flag) == 0) {         \
