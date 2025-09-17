@@ -62,10 +62,10 @@ volatile oran_sync_info_t oran_sync_info = {0};
 
 extern notifiedFIFO_t ru_dl_sync_fifo;
 
-int32_t symbol_callback(void *args, struct xran_sense_of_time* p_sense_of_time)
+int32_t symbol_callback(void *args, struct xran_sense_of_time *p_sense_of_time)
 {
   uint32_t frame = p_sense_of_time->nFrameIdx;
-  uint32_t slot = p_sense_of_time->nSlotIdx + p_sense_of_time->nSubframeIdx * 2;
+  uint32_t slot = p_sense_of_time->nSlotIdx;
   uint32_t subframe = p_sense_of_time->nSubframeIdx;
   oran_symbol_callback_args_t *callback_args = args;
 
@@ -77,32 +77,50 @@ int32_t symbol_callback(void *args, struct xran_sense_of_time* p_sense_of_time)
     return 0;
 
   struct timespec ts;
-  if (clock_gettime(CLOCK_REALTIME, &ts)) abort();
+  if (clock_gettime(CLOCK_REALTIME, &ts))
+    abort();
 
-  LOG_D(HW, "Push %d.%d (slot %d, subframe %d, symbol_diff %d)\n", frame, slot_in_frame, slot, subframe, callback_args->symbol_diff);
+  static int last_frame = 0;
+  // Workaround for a bug in XRAN
+  // In XRAN, time is kept by GPS second and slot within GPS second (tti_counter).
+  // This is translated to 5G time within xran via xran_sfn_at_sec_start. Due to the
+  // way timers are setup in xran, the value of xran_sfn_at_sec_start might be incorrect
+  // at the beginning of the frame, causing the nFrameIdx value returned from xran to be incorrect.
+  // This was observed only when tti_counter == 0
+  int frames_per_second = 100;
+  bool is_xran_bug_triggered = p_sense_of_time->tti_counter == 0 && (last_frame - frames_per_second + 1 + 1024) % 1024 == frame;
+  if (is_xran_bug_triggered) {
+    frame = (frame + frames_per_second) % 1024;
+  }
+
+  if (last_frame != frame) {
+    if (((last_frame + 1024 + 1) % 1024) != frame) {
+      LOG_W(HW, "Frames are not in order. XRAN core might be too slow frame %d last_frame %d\n", frame, last_frame);
+    }
+    last_frame = frame;
+  }
+
   notifiedFIFO_elt_t *req = newNotifiedFIFO_elt(sizeof(ru_dl_sync_info_t), 0, NULL, NULL);
   ru_dl_sync_info_t *info = NotifiedFifoData(req);
   info->frame = frame;
-  info->slot = slot;
+  info->slot = slot_in_frame;
   info->symbol = callback_args->start_symbol;
 
-  float slot_duration_uS[] = {1000, 500, 250, 125};
   float symbol_duration_uS = slot_duration_uS[fh_cfg->frame_conf.nNumerology] / 14;
 
   // Offset current time to indicate symbol start time
-  uint64_t symbol_offset_ns = symbol_duration_uS * RU_SYMBOLS_PER_CALLBACK * 1000;
-  if (ts.tv_nsec < symbol_offset_ns) {
-    ts.tv_sec--;
-    ts.tv_nsec = 1000000000UL - (symbol_offset_ns - ts.tv_nsec);
-  } else {
-    ts.tv_nsec -= symbol_offset_ns;
-  }
-
+  int64_t symbol_offset_ns = symbol_duration_uS * RU_SYMBOLS_PER_CALLBACK * 1000;
   // This happens T1a_min_up before the last symbol OTA.
-  ts.tv_nsec += fh_cfg->T1a_min_up * 1000;
-  if (ts.tv_nsec  >= 1000000000) {
-    ts.tv_nsec -= 1000000000;
+  int64_t T1a_offset_ns = fh_cfg->T1a_min_up * 1000;
+  const long one_second_ns = 1000000000L;
+  ts.tv_nsec += T1a_offset_ns - symbol_offset_ns;
+  if (ts.tv_nsec >= one_second_ns) {
+    ts.tv_nsec -= one_second_ns;
     ts.tv_sec++;
+  }
+  if (ts.tv_nsec < 0) {
+    ts.tv_nsec += one_second_ns;
+    ts.tv_sec--;
   }
   info->ts = ts;
 
