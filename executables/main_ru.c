@@ -65,6 +65,8 @@
 static int DEFBANDS[] = {7};
 static int DEFENBS[] = {0};
 static int DEFBFW[] = {0x00007fff};
+static int DEFBW[] = {273};
+static int DEFCARRIER[] = {3430560};
 
 static int DEFRUTPCORES[] = {2,4,6,8};
 THREAD_STRUCT thread_struct;
