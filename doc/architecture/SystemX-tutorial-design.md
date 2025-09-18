@@ -1,6 +1,6 @@
 # OpenAirInterface for SystemX
 
-# Terminology
+## Terminology
 
 ****This document use the 5G terminology****
 
@@ -18,27 +18,27 @@ names like RRH/RRU/RE/RU/PNF.
 
 In OpenAir code, the terminology is often RU and BBU.
 
-# OpenAirUsage
+## OpenAirUsage
 
-## EPC and general environment
+### EPC and general environment
 
-### OAI EPC
+#### OAI EPC
 
 Use the stable OAI EPC, that can run in one machine (VM or standalone)
 
 Draft description:
 <https://open-cells.com/index.php/2017/08/22/all-in-one-openairinterface-august-22nd/>
 
-## Standalone 4G
+### Standalone 4G
 
 EPC+eNB on one machine, the UE can be commercial or OAI UE.
 
-### USRP B210
+#### USRP B210
 
 Main current issue: traffic is good only on coaxial link between UE and
 eNB (probably power management issue).
 
-### Simulated RF
+#### Simulated RF
 
 Running eNB+UE both OAI can be done over a virtual RF link.
 
@@ -109,14 +109,14 @@ route add default oaitun_ue1
 or specify the outgoing route in the traffic generator (like option “-I”
 in ping command).
 
-## 5G and F1
+### 5G and F1
 
 Today 5G achievement is limited to physical layer.
 
 The available modulation is 40MHz, that require one X310 or N300 for the
 gNB and a X310 or N300 for the nrUE.
 
-### Usage with X310
+#### Usage with X310
 
 Linux configuration:
 <https://files.ettus.com/manual/page_usrp_x3x0_config.html>
@@ -126,7 +126,7 @@ We included most of this configuration included in OAI source code.
 Remain to set the NIC (network interface card) MTU to 9000 (jumbo
 frames).
 
-### Running 5G
+#### Running 5G
 
 Usage with RFsimulator:
 
