@@ -4,7 +4,7 @@ Their internal processing is broadly independent on which transport mechanism
 is responsible for exchanging data between the 2 components.
 
 To read more about the transport mechanisms available, and how to run the split, please refer to
-[this file](./nfapi.md).
+[this file](../L1_L2/nfapi.md).
 
 [[_TOC_]]
 
