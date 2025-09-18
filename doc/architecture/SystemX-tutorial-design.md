@@ -43,7 +43,7 @@ eNB (probably power management issue).
 Running eNB+UE both OAI can be done over a virtual RF link.
 
 The UE current status is that threads synchronization is implicit in
-some cases. As the RF simulator is very quick, a “sleep()” is required
+some cases. As the RF simulator is very quick, a `“sleep()”` is required
 in the UE main loop
 
 > (line 1744, targets/RT/USER/lte-ue.c).
@@ -106,15 +106,15 @@ The traffic genenrator has to specify the interface:
 route add default oaitun_ue1
 ```
 
-or specify the outgoing route in the traffic generator (like option “-I”
+or specify the outgoing route in the traffic generator (like option `“-I”`
 in ping command).
 
 ### 5G and F1
 
 > Today 5G achievement is limited to physical layer.
 
-The available modulation is 40MHz, that require one X310 or N300 for the
-gNB and a X310 or N300 for the nrUE.
+The available modulation is `40MHz`, that require one `X310` or `N300` for the
+gNB and a `X310` or `N300` for the nrUE.
 
 #### Usage with X310
 
@@ -122,7 +122,7 @@ gNB and a X310 or N300 for the nrUE.
 
 We included most of this configuration included in OAI source code.
 
-Remain to set the NIC (network interface card) MTU to 9000 (jumbo
+Remain to set the NIC (network interface card) MTU to `9000` (jumbo
 frames).
 
 #### Running 5G
