@@ -1524,6 +1524,19 @@ void handle_nr_srs_measurements(const module_id_t module_id,
       }
 #endif
 #endif
+      T(T_GNB_MAC_UL_FREQ_CHANNEL_ESTIMATE,
+        T_INT(0),
+        T_INT(srs_ind->rnti),
+        T_INT(frame),
+        T_INT(slot),
+        T_INT(nr_srs_channel_iq_matrix.num_gnb_antenna_elements),
+        T_INT(nr_srs_channel_iq_matrix.num_ue_srs_ports),
+        T_BUFFER(nr_srs_channel_iq_matrix.channel_matrix,
+          nr_srs_channel_iq_matrix.num_gnb_antenna_elements
+          *nr_srs_channel_iq_matrix.num_ue_srs_ports
+          *nr_srs_channel_iq_matrix.num_prgs
+          *(nr_srs_channel_iq_matrix.normalized_iq_representation==0?2:4))
+       );
 
       NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
       NR_UE_UL_BWP_t *current_BWP = &UE->current_UL_BWP;
@@ -1603,14 +1616,16 @@ static bool nr_UE_is_to_be_scheduled(const frame_structure_t *fs,
    * (3) or we did not schedule it in more than 10 frames */
   const bool has_data = sched_ctrl->estimated_ul_buffer > sched_ctrl->sched_ul_bytes;
   const bool high_inactivity = diff >= (ulsch_max_frame_inactivity > 0 ? ulsch_max_frame_inactivity * n : num_slots_per_period);
+  const bool srs = sched_ctrl->sched_srs.srs_scheduled;
   LOG_D(NR_MAC,
-        "%4d.%2d UL inactivity %d slots has_data %d SR %d\n",
+        "%4d.%2d UL inactivity %d slots has_data %d SR %d, srs %d\n",
         frame,
         slot,
         diff,
         has_data,
-        sched_ctrl->SR);
-  return has_data || sched_ctrl->SR || high_inactivity;
+        sched_ctrl->SR,
+	srs);
+  return has_data || sched_ctrl->SR || high_inactivity || srs;
 }
 
 static void update_ul_ue_R_Qm(int mcs, int mcs_table, const NR_PUSCH_Config_t *pusch_Config, uint16_t *R, uint8_t *Qm)
