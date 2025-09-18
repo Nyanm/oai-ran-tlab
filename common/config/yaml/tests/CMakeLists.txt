@@ -1,5 +1,5 @@
 add_executable(test_yaml_config test_yaml_config.cpp)
-target_link_libraries(test_yaml_config PRIVATE params_yaml_static GTest::gtest CONFIG_LIB)
+target_link_libraries(test_yaml_config PRIVATE params_yaml_static GTest::gtest minimal_lib)
 add_dependencies(tests test_yaml_config)
 add_test(NAME test_yaml_config
   COMMAND ./test_yaml_config)
