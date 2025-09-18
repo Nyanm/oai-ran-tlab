@@ -1015,7 +1015,6 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
             __attribute__((aligned(32)));
         c16_t srs_estimated_channel_time_shifted[frame_parms->nb_antennas_rx][1 << srs_pdu->num_ant_ports]
                                                 [frame_parms->ofdm_symbol_size];
-        int16_t snr_per_rb[srs_pdu->bwp_size];
 
         start_meas(&gNB->generate_srs_stats);
         if (check_srs_pdu(srs_pdu, &gNB->nr_srs_info[i]->srs_pdu) == 0) {
@@ -1027,21 +1026,47 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
         int srs_est = nr_get_srs_signal(gNB, rxdataF, frame_rx, slot_rx, srs_pdu, gNB->nr_srs_info[i], srs_received_signal, srs_received_noise);
         stop_meas(&gNB->get_srs_signal_stats);
 
+        uint32_t signal_power[frame_parms->nb_antennas_rx][1 << srs_pdu->num_ant_ports];
+        uint32_t noise_power[frame_parms->nb_antennas_rx];
+        uint32_t signal_power_avg = 0;
+        uint32_t noise_power_avg = 0;
+        int16_t snr_per_rb[srs_pdu->bwp_size];
+        int16_t noise_power_per_rb[srs_pdu->bwp_size];
+        memset(noise_power_per_rb, 0, srs_pdu->bwp_size * sizeof(int16_t));
+
         if (srs_est >= 0) {
           start_meas(&gNB->srs_channel_estimation_stats);
-          nr_srs_channel_estimation(gNB,
-                                    frame_rx,
-                                    slot_rx,
-                                    srs_pdu,
-                                    gNB->nr_srs_info[i],
-                                    (const c16_t**)gNB->nr_srs_info[i]->srs_generated_signal,
-                                    srs_received_signal,
-                                    srs_received_noise,
-                                    srs_estimated_channel_freq,
-                                    srs_estimated_channel_time,
-                                    srs_estimated_channel_time_shifted,
-                                    snr_per_rb,
-                                    &gNB->srs->snr);
+          for (int ant_rx_ind = 0; ant_rx_ind < frame_parms->nb_antennas_rx; ant_rx_ind++) {
+            for (int p_ind = 0; p_ind < (1 << srs_pdu->num_ant_ports); p_ind++) {
+              nr_srs_channel_estimation(gNB,
+                                        frame_rx,
+                                        slot_rx,
+                                        ant_rx_ind,
+                                        p_ind,
+                                        srs_pdu,
+                                        gNB->nr_srs_info[i],
+                                        (const c16_t *)gNB->nr_srs_info[i]->srs_generated_signal[p_ind],
+                                        srs_received_signal[ant_rx_ind],
+                                        srs_received_noise[ant_rx_ind],
+                                        srs_estimated_channel_freq[ant_rx_ind][p_ind],
+                                        srs_estimated_channel_time[ant_rx_ind][p_ind],
+                                        srs_estimated_channel_time_shifted[ant_rx_ind][p_ind],
+                                        &signal_power[ant_rx_ind][p_ind],
+                                        &noise_power[ant_rx_ind],
+                                        noise_power_per_rb);
+              signal_power_avg += signal_power[ant_rx_ind][p_ind];
+            }
+            noise_power_avg += noise_power[ant_rx_ind];
+          }
+          signal_power_avg /= (frame_parms->nb_antennas_rx * (1 << srs_pdu->num_ant_ports));
+          noise_power_avg /= frame_parms->nb_antennas_rx;
+          signal_power_avg = max(signal_power_avg, 1);
+          gNB->srs->snr = dB_fixed(signal_power_avg) - dB_fixed(max(noise_power_avg, 1));
+
+          const uint16_t m_SRS_b = get_m_srs(srs_pdu->config_index, srs_pdu->bandwidth_index);
+          for (int rb = 0; rb < m_SRS_b; rb++) {
+            snr_per_rb[rb] = dB_fixed(signal_power_avg) - dB_fixed(max(noise_power_per_rb[rb] / frame_parms->nb_antennas_rx, 1));
+          }
           stop_meas(&gNB->srs_channel_estimation_stats);
         }
 
