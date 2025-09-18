@@ -16,7 +16,7 @@ gNB functions, depending on the functional split option. Its operation
 is controlled by the CU. Distributed Unit (DU) also known with other
 names like RRH/RRU/RE/RU/PNF.
 
-In OpenAir code, the terminology is often RU and BBU.
+> In OpenAir code, the terminology is often RU and BBU.
 
 ## OpenAirUsage
 
@@ -35,7 +35,8 @@ EPC+eNB on one machine, the UE can be commercial or OAI UE.
 
 #### USRP B210
 
-Main current issue: traffic is good only on coaxial link between UE and
+> **Main current issue** 
+> Traffic is good only on coaxial link between UE and
 eNB (probably power management issue).
 
 #### Simulated RF
@@ -46,7 +47,7 @@ The UE current status is that threads synchronization is implicit in
 some cases. As the RF simulator is very quick, a “sleep()” is required
 in the UE main loop
 
-(line 1744, targets/RT/USER/lte-ue.c).
+> (line 1744, targets/RT/USER/lte-ue.c).
 
 Running also the UE in the same machine is possible with simulated RF.
 
@@ -111,7 +112,7 @@ in ping command).
 
 ### 5G and F1
 
-Today 5G achievement is limited to physical layer.
+> Today 5G achievement is limited to physical layer.
 
 The available modulation is 40MHz, that require one X310 or N300 for the
 gNB and a X310 or N300 for the nrUE.
