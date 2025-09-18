@@ -56,6 +56,15 @@ int beam_index_allocation(bool das,
                           int start_rb,
                           int num_rb,
                           int start_symb,
-                          int num_symb);
-void update_ofh_section_info(struct oai_ofh_section *tx_s, int beam_id, int start_rb, int num_rb, int start_symb, int num_symb);
+                          int num_symb,
+                          int num_ports,
+                          int start_port);
+void update_ofh_section_info(struct oai_ofh_section *tx_s,
+                             int beam_id,
+                             int start_rb,
+                             int num_rb,
+                             int start_symb,
+                             int num_symb,
+                             int start_port,
+                             int num_port);
 #endif

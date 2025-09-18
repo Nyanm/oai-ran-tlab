@@ -89,7 +89,9 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
                                         rb_offset,
                                         n_rb,
                                         cset_start_symb,
-                                        cset_nsymb);
+                                        cset_nsymb,
+                                        1,
+                                        0);
 
     LOG_D(NR_PHY_DCI, "pdcch: Coreset rb_offset %d, nb_rb %d BWP Start %d\n", rb_offset, n_rb, pdcch_pdu_rel15->BWPStart);
     LOG_D(NR_PHY_DCI,

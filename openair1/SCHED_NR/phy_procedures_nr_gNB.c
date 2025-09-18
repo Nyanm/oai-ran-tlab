@@ -56,7 +56,9 @@ int beam_index_allocation(bool das,
                           int start_rb,
                           int num_rb,
                           int start_symb,
-                          int num_symb)
+                          int num_symb,
+                          int num_ports,
+                          int start_port)
 {
   if (das)
     return fapi_beam_index;
@@ -94,14 +96,21 @@ int beam_index_allocation(bool das,
   } else {
     // Digital or analog BF we don't care because L1 has to pass the beam index down to O-RU
     int ru_beam_idx = (fapi_beam_index & 0x7fff);
-    update_ofh_section_info(&common_vars->tx_sections, ru_beam_idx, start_rb, num_rb, start_symb, num_symb);
+    update_ofh_section_info(&common_vars->tx_sections, ru_beam_idx, start_rb, num_rb, start_symb, num_symb, start_port, num_ports);
     // in this case the beam number is not relevant for L1 as mulitple beams are handled in multiple sections
     idx = 0;
   }
   return idx;
 }
 
-void update_ofh_section_info(struct oai_ofh_section *tx_s, int beam_id, int start_rb, int num_rb, int start_symb, int num_symb)
+void update_ofh_section_info(struct oai_ofh_section *tx_s,
+                             int beam_id,
+                             int start_rb,
+                             int num_rb,
+                             int start_symb,
+                             int num_symb,
+                             int start_port,
+                             int num_ports)
 {
   struct oai_ofh_section_def *sec = tx_s->sec + tx_s->num_sections;
   sec->beam_id = beam_id;
@@ -109,6 +118,8 @@ void update_ofh_section_info(struct oai_ofh_section *tx_s, int beam_id, int star
   sec->num_prb = num_rb;
   sec->start_symbol = start_symb;
   sec->num_symbols = num_symb;
+  sec->start_port = start_port;
+  sec->num_ports = num_ports;
   tx_s->num_sections++;
 }
 
@@ -176,7 +187,9 @@ void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_n
                                       fp->ssb_start_subcarrier / NR_NB_SC_PER_RB,
                                       20 + (fp->ssb_start_subcarrier % NR_NB_SC_PER_RB != 0),
                                       ssb_start_symbol,
-                                      4);
+                                      4,
+                                      1,
+                                      0);
 
   nr_generate_pss(&txdataF[beam_nb][0][txdataF_offset], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
   nr_generate_sss(&txdataF[beam_nb][0][txdataF_offset], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
@@ -314,7 +327,9 @@ void phy_procedures_gNB_TX(processingData_L1tx_t *msgTx,
                                         csi_params->start_rb,
                                         csi_params->nr_of_rbs,
                                         mapping_parms.loverline[j],
-                                        lprime_num);
+                                        lprime_num,
+                                        1,
+                                        0);
       }
 
       nr_generate_csi_rs(&gNB->frame_parms,

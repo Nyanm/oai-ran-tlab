@@ -98,6 +98,8 @@ struct oai_ofh_section_def {
   uint16_t num_prb;
   uint16_t re_offset;
   uint16_t beam_id;
+  uint16_t num_ports;
+  uint16_t start_port;
 };
 
 #define NR_MAX_OFH_SECTIONS 6

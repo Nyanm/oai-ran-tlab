@@ -58,6 +58,7 @@ extern "C"
 
 #define CONFIG_HLP_DUMPFRAME     "dump UE received frame to rxsig_frame0.dat and exit\n"
 #define CONFIG_HLP_PHYTST        "test UE phy layer, mac disabled\n"
+#define CONFIG_HLP_MU_MIMO "Enable MU-MIMO in phy-test mode\n"
 #define CONFIG_HLP_DORA          "test gNB  and UE with RA procedures\n"
 #define CONFIG_HLP_SA            "run gNB in standalone mode\n"
 #define CONFIG_HLP_SL_MODE       "sets the NR sidelink mode (0: not in sidelink mode, 1: in-coverage/gNB, 2: out-of-coverage/no gNB)\n"
@@ -123,6 +124,7 @@ extern "C"
 #define TP_CONFIG           softmodem_params.threadPoolConfig
 #define CONTINUOUS_TX       softmodem_params.continuous_tx
 #define PHY_TEST            softmodem_params.phy_test
+#define MU_MIMO             softmodem_params.mu_mimo
 #define DO_RA               softmodem_params.do_ra
 #define SL_MODE             softmodem_params.sl_mode
 #define CHAIN_OFFSET        softmodem_params.chain_offset
@@ -152,6 +154,7 @@ extern int usrp_tx_thread;
   {"rf-config-file",        CONFIG_HLP_RFCFGF,        0,              .strptr=&RF_CONFIG_FILE,                .defstrval=NULL,          TYPE_STRING, 0},  \
   {"thread-pool",           CONFIG_HLP_TPOOL,         0,              .strptr=&TP_CONFIG,                     .defstrval="-1,-1,-1,-1,-1,-1,-1,-1",  TYPE_STRING, 0},     \
   {"phy-test",              CONFIG_HLP_PHYTST,        PARAMFLAG_BOOL, .iptr=&PHY_TEST,                        .defintval=0,             TYPE_INT,    0},  \
+  {"mu-mimo",               CONFIG_HLP_MU_MIMO,       PARAMFLAG_BOOL, .iptr=&MU_MIMO,                         .defintval=0,             TYPE_INT,    0},  \
   {"do-ra",                 CONFIG_HLP_DORA,          PARAMFLAG_BOOL, .iptr=&DO_RA,                           .defintval=0,             TYPE_INT,    0},  \
   {"sl-mode",               CONFIG_HLP_SL_MODE,       0,              .u8ptr=&SL_MODE,                        .defintval=0,             TYPE_UINT8,  0},  \
   {"clock-source",          CONFIG_HLP_CLK,           0,              .uptr=&CLOCK_SOURCE,                    .defintval=0,             TYPE_UINT,   0},  \
@@ -192,6 +195,7 @@ extern int usrp_tx_thread;
 
 // clang-format off
 #define CMDLINE_PARAMS_CHECK_DESC {         \
+    { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
@@ -318,6 +322,7 @@ typedef struct {
   char           *rf_config_file;
   char *threadPoolConfig;
   int            phy_test;
+  int            mu_mimo;
   int            do_ra;
   uint8_t        sl_mode;
   int            emulate_rf;

@@ -177,6 +177,15 @@ uint64_t reverse_bits(uint64_t in, int n_bits)
   return rev_bits;
 }
 
+uint8_t get_first_set_bit_idx(const uint32_t a)
+{
+  uint8_t i = 0;
+  while (!IS_BIT_SET(a, i) && (i < 32)) {
+    i++;
+  }
+  return i;
+}
+
 #define NUM_BW_ENTRIES 15
 
 static const int tables_5_3_2[5][NUM_BW_ENTRIES] = {
@@ -731,14 +740,10 @@ int get_dmrs_port(int nl, uint16_t dmrs_ports)
   if (dmrs_ports == 0)
     return 0; // dci 1_0
   int p = -1;
-  int found = -1;
   for (int i = 0; i < 12; i++) { // loop over dmrs ports
     if((dmrs_ports >> i) & 0x01) { // check if current bit is 1
-      found++;
-      if (found == nl) { // found antenna port number corresponding to current layer
-        p = i;
-        break;
-      }
+      p = i;
+      break;
     }
   }
   AssertFatal(p > -1, "No dmrs port corresponding to layer %d found\n", nl);

@@ -303,4 +303,6 @@ int get_delta_for_k2(int mu);
 
 int get_j_for_k2(int mu);
 
+uint16_t get_dmrs_ports_from_dci(const uint8_t table_idx);
+
 #endif

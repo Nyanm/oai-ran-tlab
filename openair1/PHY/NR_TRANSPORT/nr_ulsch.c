@@ -84,7 +84,9 @@ void nr_fill_ulsch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pusch_pdu_t 
                                            ulsch_pdu->rb_start,
                                            ulsch_pdu->rb_size,
                                            ulsch_pdu->start_symbol_index,
-                                           ulsch_pdu->nr_of_symbols);
+                                           ulsch_pdu->nr_of_symbols,
+                                           ulsch_pdu->nrOfLayers,
+                                           get_first_set_bit_idx(ulsch_pdu->dmrs_ports));
   }
   ulsch->frame = frame;
   ulsch->slot = slot;

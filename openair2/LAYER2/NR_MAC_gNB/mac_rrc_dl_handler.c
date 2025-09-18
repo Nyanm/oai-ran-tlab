@@ -551,8 +551,11 @@ static NR_UE_info_t *create_new_UE(gNB_MAC_INST *mac, uint32_t cu_id, const NR_C
   int CC_id = 0;
   rnti_t rnti;
   if (get_softmodem_params()->phy_test) {
-    AssertFatal(mac->UE_info.connected_ue_list[0] == NULL, "phytest: UE already present\n");
-    rnti = 0x1234;
+    NR_UE_info_t *prev_UE = NULL;
+    UE_iterator (mac->UE_info.connected_ue_list, UE) {
+      prev_UE = UE;
+    }
+    rnti = (prev_UE) ? prev_UE->rnti + 1 : 0x1234;
   } else {
     bool found = nr_mac_get_new_rnti(&mac->UE_info, &rnti);
     if (!found)

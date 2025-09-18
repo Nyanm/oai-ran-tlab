@@ -460,12 +460,14 @@ static inline void do_txdataF(c16_t **txdataF,
                               nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
                               int ant,
                               int start_sc,
-                              int txdataF_offset_per_symbol)
+                              int txdataF_offset_per_symbol,
+                              int nl)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   int rb = 0;
   uint16_t subCarrier = start_sc;
   nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
+  const int dmrs_port = get_dmrs_port(ant, rel15->dmrsPorts);
   while (rb < rel15->rbSize) {
     // get pmi info
     const int pmi = (pb->prg_size > 0) ? (pb->prgs_list[(int)rb / pb->prg_size].pm_idx) : 0;
@@ -477,29 +479,25 @@ static inline void do_txdataF(c16_t **txdataF,
     const int re_cnt = NR_NB_SC_PER_RB * rb_step;
 
     if (pmi == 0) { // unitary Precoding
-      if (subCarrier + re_cnt <= symbol_sz) { // RB does not cross DC
-        if (ant < rel15->nrOfLayers)
+      // For no precoding, use only as many number of antennas as layers
+      // and prevents overwriting txdataF with 0
+      if (ant == dmrs_port) {
+        if (subCarrier + re_cnt <= symbol_sz) { // RB does not cross DC
           memcpy(&txdataF[ant][txdataF_offset_per_symbol + subCarrier],
-                 &txdataF_precoding[ant][subCarrier],
+                 &txdataF_precoding[nl][subCarrier],
                  re_cnt * sizeof(**txdataF));
-        else
-          memset(&txdataF[ant][txdataF_offset_per_symbol + subCarrier], 0, re_cnt * sizeof(**txdataF));
-      } else { // RB does cross DC
-        const int neg_length = symbol_sz - subCarrier;
-        const int pos_length = re_cnt - neg_length;
-        if (ant < rel15->nrOfLayers) {
+        } else { // RB does cross DC
+          const int neg_length = symbol_sz - subCarrier;
+          const int pos_length = re_cnt - neg_length;
           memcpy(&txdataF[ant][txdataF_offset_per_symbol + subCarrier],
-                 &txdataF_precoding[ant][subCarrier],
+                 &txdataF_precoding[nl][subCarrier],
                  neg_length * sizeof(**txdataF));
-          memcpy(&txdataF[ant][txdataF_offset_per_symbol], &txdataF_precoding[ant], pos_length * sizeof(**txdataF));
-        } else {
-          memset(&txdataF[ant][txdataF_offset_per_symbol + subCarrier], 0, neg_length * sizeof(**txdataF));
-          memset(&txdataF[ant][txdataF_offset_per_symbol], 0, pos_length * sizeof(**txdataF));
+          memcpy(&txdataF[ant][txdataF_offset_per_symbol], &txdataF_precoding[nl], pos_length * sizeof(**txdataF));
         }
-      }
-      subCarrier += re_cnt;
-      if (subCarrier >= symbol_sz) {
-        subCarrier -= symbol_sz;
+        subCarrier += re_cnt;
+        if (subCarrier >= symbol_sz) {
+          subCarrier -= symbol_sz;
+        }
       }
     } else { // non-unitary Precoding
       AssertFatal(frame_parms->nb_antennas_tx > 1, "No precoding can be done with a single antenna port\n");
@@ -688,7 +686,9 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
                                       rel15->rbStart,
                                       rel15->rbSize,
                                       rel15->StartSymbolIndex,
-                                      rel15->NrOfSymbols);
+                                      rel15->NrOfSymbols,
+                                      rel15->nrOfLayers,
+                                      get_first_set_bit_idx(rel15->dmrsPorts));
 
   c16_t **txdataF = gNB->common_vars.txdataF[beam_nb];
 
@@ -762,7 +762,15 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 
     for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
       const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz + txdataF_offset;
-      do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, ant, start_sc, txdataF_offset_per_symbol);
+      do_txdataF(txdataF,
+                 symbol_sz,
+                 txdataF_precoding,
+                 gNB,
+                 rel15,
+                 ant,
+                 start_sc,
+                 txdataF_offset_per_symbol,
+                 ant % rel15->nrOfLayers);
     }
   }
 

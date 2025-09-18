@@ -54,6 +54,20 @@ uint32_t target_dl_Nl = 1;
 uint32_t target_dl_bw = 50;
 uint64_t dlsch_slot_bitmap = (1<<1);
 
+static uint8_t get_next_mu_mimo_beam(const int layer, const int num_ssb, const BIT_STRING_t *ssbBitmap)
+{
+  int sum = 0;
+  for (int i = 0; i < num_ssb; i++) {
+    if (IS_BIT_SET(ssbBitmap->buf[0], (7 - i))) {
+      if (layer == sum)
+        return i;
+      sum++;
+    }
+  }
+
+  return 0;
+}
+
 /* schedules whole bandwidth for first user, all the time */
 void nr_preprocessor_phytest(module_id_t module_id, frame_t frame, slot_t slot)
 {
@@ -62,178 +76,187 @@ void nr_preprocessor_phytest(module_id_t module_id, frame_t frame, slot_t slot)
   int slot_period = slot % mac->frame_structure.numb_slots_period;
   if (!is_xlsch_in_slot(dlsch_slot_bitmap, slot_period))
     return;
-  NR_UE_info_t *UE = mac->UE_info.connected_ue_list[0];
-  NR_ServingCellConfigCommon_t *scc = mac->common_channels[0].ServingCellConfigCommon;
-  NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
-  NR_UE_DL_BWP_t *dl_bwp = &UE->current_DL_BWP;
-  const int CC_id = 0;
 
-  /* return if all DL HARQ processes wait for feedback */
-  if (sched_ctrl->retrans_dl_harq.head == -1 && sched_ctrl->available_dl_harq.head == -1) {
-    LOG_D(NR_MAC, "[UE %04x][%4d.%2d] UE has no free DL HARQ process, skipping\n", UE->rnti, frame, slot);
-    return;
-  }
+  bool is_mu_mimo = get_softmodem_params()->mu_mimo;
+  AssertFatal((is_mu_mimo && (target_dl_Nl > 1)) || (!is_mu_mimo), "No of layers has to be more than 1 for MU-MIMO\n");
+  uint8_t num_layers_per_ue = (is_mu_mimo) ? 1 : target_dl_Nl; // Limit MU-MIMO layer to 1 per UE
+  // Tmp hack to scheduler MU-MIMO
+  uint8_t layer_indicator = 0;
 
-  const int tda = get_dl_tda(mac, slot);
-  NR_tda_info_t tda_info = get_dl_tda_info(dl_bwp,
-                                           sched_ctrl->search_space->searchSpaceType->present,
-                                           tda,
-                                           scc->dmrs_TypeA_Position,
-                                           1,
-                                           TYPE_C_RNTI_,
-                                           sched_ctrl->coreset->controlResourceSetId,
-                                           false);
-  if(!tda_info.valid_tda)
-    return;
+  UE_iterator (mac->UE_info.connected_ue_list, UE) {
+    NR_ServingCellConfigCommon_t *scc = mac->common_channels[0].ServingCellConfigCommon;
+    NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
+    NR_UE_DL_BWP_t *dl_bwp = &UE->current_DL_BWP;
+    const int CC_id = 0;
 
-  sched_ctrl->sched_pdsch.tda_info = tda_info;
-  sched_ctrl->sched_pdsch.time_domain_allocation = tda;
+    /* return if all DL HARQ processes wait for feedback */
+    if (sched_ctrl->retrans_dl_harq.head == -1 && sched_ctrl->available_dl_harq.head == -1) {
+      LOG_D(NR_MAC, "[UE %04x][%4d.%2d] UE has no free DL HARQ process, skipping\n", UE->rnti, frame, slot);
+      return;
+    }
 
-  /* find largest unallocated chunk */
-  const int bwpSize = dl_bwp->BWPSize;
-  const int BWPStart = dl_bwp->BWPStart;
+    const int tda = get_dl_tda(mac, slot);
+    NR_tda_info_t tda_info = get_dl_tda_info(dl_bwp,
+                                             sched_ctrl->search_space->searchSpaceType->present,
+                                             tda,
+                                             scc->dmrs_TypeA_Position,
+                                             1,
+                                             TYPE_C_RNTI_,
+                                             sched_ctrl->coreset->controlResourceSetId,
+                                             false);
+    if (!tda_info.valid_tda)
+      return;
 
-  // TODO implement beam procedures for phy-test mode
-  int num_ssb = 0;
-  BIT_STRING_t *ssbBitmap = NULL;
-  switch (scc->ssb_PositionsInBurst->present) {
-    case 1:
-      num_ssb = 4;
-      ssbBitmap = &scc->ssb_PositionsInBurst->choice.shortBitmap;
-      break;
+    sched_ctrl->sched_pdsch.tda_info = tda_info;
+    sched_ctrl->sched_pdsch.time_domain_allocation = tda;
 
-    case 2:
-      num_ssb = 8;
-      ssbBitmap = &scc->ssb_PositionsInBurst->choice.mediumBitmap;
-      break;
+    /* find largest unallocated chunk */
+    const int bwpSize = dl_bwp->BWPSize;
+    const int BWPStart = dl_bwp->BWPStart;
 
-    default:
-      AssertFatal(0, "SSB burst len in burst not supported\n");
-  }
-  int ssb_idx_beam = 0;
-  for (int i_ssb = 0; i_ssb < num_ssb; i_ssb++) {
-    if (IS_BIT_SET(ssbBitmap->buf[0], (7 - i_ssb))) {
-      NR_SubcarrierSpacing_t scs = *scc->ssbSubcarrierSpacing;
-      const long band = *scc->downlinkConfigCommon->frequencyInfoDL->frequencyBandList.list.array[0];
-      uint16_t ssb_start_symbol = get_ssb_start_symbol(band, scs, i_ssb);
-      // select beam for PDSCH in current slot based on SSB beam
-      if ((ssb_start_symbol / 14) == (slot % mac->frame_structure.numb_slots_period)) {
-        ssb_idx_beam = i_ssb;
+    // TODO implement beam procedures for phy-test mode
+    int num_ssb = 0;
+    const BIT_STRING_t *ssbBitmap = NULL;
+    switch (scc->ssb_PositionsInBurst->present) {
+      case 1:
+        num_ssb = 4;
+        ssbBitmap = &scc->ssb_PositionsInBurst->choice.shortBitmap;
         break;
+
+      case 2:
+        num_ssb = 8;
+        ssbBitmap = &scc->ssb_PositionsInBurst->choice.mediumBitmap;
+        break;
+
+      default:
+        AssertFatal(0, "SSB burst len in burst not supported\n");
+    }
+    int ssb_idx_beam = 0;
+    for (int i_ssb = 0; i_ssb < num_ssb; i_ssb++) {
+      if (IS_BIT_SET(ssbBitmap->buf[0], (7 - i_ssb))) {
+        NR_SubcarrierSpacing_t scs = *scc->ssbSubcarrierSpacing;
+        const long band = *scc->downlinkConfigCommon->frequencyInfoDL->frequencyBandList.list.array[0];
+        uint16_t ssb_start_symbol = get_ssb_start_symbol(band, scs, i_ssb);
+        // select beam for PDSCH in current slot based on SSB beam
+        if ((ssb_start_symbol / 14) == (slot % mac->frame_structure.numb_slots_period)) {
+          ssb_idx_beam = i_ssb;
+          break;
+        }
       }
     }
-  }
-  int beam_idx = get_fapi_beamforming_index(mac, ssb_idx_beam);
-  NR_beam_alloc_t beam = beam_allocation_procedure(&mac->beam_info, frame, slot, beam_idx, mac->frame_structure.numb_slots_frame);
-  AssertFatal(beam.idx > -1, "Can't allocate beam %d in phytest scheduler\n", beam_idx);
-  UE->UE_beam_index = get_allocated_beam(&mac->beam_info, frame, slot, mac->frame_structure.numb_slots_frame, beam.idx);
+    // If MU-MIMO, set first UE's beam to be the first beam idx available
+    const int start_beam_idx = (is_mu_mimo) ? get_next_mu_mimo_beam(layer_indicator, num_ssb, ssbBitmap) : ssb_idx_beam;
+    int beam_idx = get_fapi_beamforming_index(mac, start_beam_idx);
+    NR_beam_alloc_t beam = beam_allocation_procedure(&mac->beam_info, frame, slot, beam_idx, mac->frame_structure.numb_slots_frame);
+    AssertFatal(beam.idx > -1, "Can't allocate beam %d in phytest scheduler\n", beam_idx);
+    UE->UE_beam_index = get_allocated_beam(&mac->beam_info, frame, slot, mac->frame_structure.numb_slots_frame, beam.idx);
 
-  int rbStart = 0;
-  int rbSize = 0;
-  if (target_dl_bw>bwpSize)
-    target_dl_bw = bwpSize;
-  uint16_t *vrb_map = mac->common_channels[CC_id].vrb_map[beam.idx];
-  /* loop ensures that we allocate exactly target_dl_bw, or return */
-  while (true) {
-    /* advance to first free RB */
-    while (rbStart < bwpSize &&
-           (vrb_map[rbStart + BWPStart]&SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols)))
-      rbStart++;
-    rbSize = 1;
-    /* iterate until we are at target_dl_bw or no available RBs */
-    while (rbStart + rbSize < bwpSize &&
-           !(vrb_map[rbStart + rbSize + BWPStart]&SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols)) &&
-           rbSize < target_dl_bw)
-      rbSize++;
-    /* found target_dl_bw? */
-    if (rbSize == target_dl_bw)
-      break;
-    /* at end and below target_dl_bw? */
-    if (rbStart + rbSize >= bwpSize)
-      return;
-    rbStart += rbSize;
-  }
-
-  sched_ctrl->num_total_bytes = 0;
-  DevAssert(seq_arr_size(&sched_ctrl->lc_config) == 1);
-  const nr_lc_config_t *c = seq_arr_at(&sched_ctrl->lc_config, 0);
-  const int lcid = c->lcid;
-  const uint16_t rnti = UE->rnti;
-  /* update sched_ctrl->num_total_bytes so that postprocessor schedules data,
-   * if available */
-  sched_ctrl->rlc_status[lcid] = nr_mac_rlc_status_ind(rnti, frame, lcid);
-  sched_ctrl->num_total_bytes += sched_ctrl->rlc_status[lcid].bytes_in_buffer;
-
-  int CCEIndex = get_cce_index(mac,
-                               CC_id, slot, UE->rnti,
-                               &sched_ctrl->aggregation_level,
-                               beam.idx,
-                               sched_ctrl->search_space,
-                               sched_ctrl->coreset,
-                               &sched_ctrl->sched_pdcch,
-                               false,
-                               0);
-  AssertFatal(CCEIndex >= 0, "Could not find CCE for UE %04x\n", UE->rnti);
-
-  NR_sched_pdsch_t *sched_pdsch = &sched_ctrl->sched_pdsch;
-  if (sched_pdsch->dl_harq_pid == -1)
-    sched_pdsch->dl_harq_pid = sched_ctrl->available_dl_harq.head;
-
-  int alloc = -1;
-  if (!get_FeedbackDisabled(UE->sc_info.downlinkHARQ_FeedbackDisabled_r17, sched_pdsch->dl_harq_pid)) {
-    int r_pucch = nr_get_pucch_resource(sched_ctrl->coreset, UE->current_UL_BWP.pucch_Config, CCEIndex);
-    alloc = nr_acknack_scheduling(mac, UE, frame, slot, 0, r_pucch, 0);
-    if (alloc < 0) {
-      LOG_D(NR_MAC, "Could not find PUCCH for UE %04x@%d.%d\n", rnti, frame, slot);
-      return;
+    int rbStart = 0;
+    int rbSize = 0;
+    if (target_dl_bw > bwpSize)
+      target_dl_bw = bwpSize;
+    uint16_t *vrb_map = mac->common_channels[CC_id].vrb_map[beam.idx];
+    /* loop ensures that we allocate exactly target_dl_bw, or return */
+    while (true) {
+      /* advance to first free RB */
+      while (rbStart < bwpSize && (vrb_map[rbStart + BWPStart] & SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols)))
+        rbStart++;
+      rbSize = 1;
+      /* iterate until we are at target_dl_bw or no available RBs */
+      while (rbStart + rbSize < bwpSize
+             && !(vrb_map[rbStart + rbSize + BWPStart] & SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols))
+             && rbSize < target_dl_bw)
+        rbSize++;
+      /* found target_dl_bw? */
+      if (rbSize == target_dl_bw)
+        break;
+      /* at end and below target_dl_bw? */
+      if (rbStart + rbSize >= bwpSize)
+        return;
+      rbStart += rbSize;
     }
+
+    sched_ctrl->num_total_bytes = 0;
+    DevAssert(seq_arr_size(&sched_ctrl->lc_config) == 1);
+    const nr_lc_config_t *c = seq_arr_at(&sched_ctrl->lc_config, 0);
+    const int lcid = c->lcid;
+    const uint16_t rnti = UE->rnti;
+    /* update sched_ctrl->num_total_bytes so that postprocessor schedules data,
+     * if available */
+    sched_ctrl->rlc_status[lcid] = nr_mac_rlc_status_ind(rnti, frame, lcid);
+    sched_ctrl->num_total_bytes += sched_ctrl->rlc_status[lcid].bytes_in_buffer;
+
+    int CCEIndex = get_cce_index(mac,
+                                 CC_id,
+                                 slot,
+                                 UE->rnti,
+                                 &sched_ctrl->aggregation_level,
+                                 beam.idx,
+                                 sched_ctrl->search_space,
+                                 sched_ctrl->coreset,
+                                 &sched_ctrl->sched_pdcch,
+                                 false,
+                                 0);
+    AssertFatal(CCEIndex >= 0, "Could not find CCE for UE %04x\n", UE->rnti);
+
+    NR_sched_pdsch_t *sched_pdsch = &sched_ctrl->sched_pdsch;
+    if (sched_pdsch->dl_harq_pid == -1)
+      sched_pdsch->dl_harq_pid = sched_ctrl->available_dl_harq.head;
+
+    int alloc = -1;
+    if (!get_FeedbackDisabled(UE->sc_info.downlinkHARQ_FeedbackDisabled_r17, sched_pdsch->dl_harq_pid)) {
+      int r_pucch = nr_get_pucch_resource(sched_ctrl->coreset, UE->current_UL_BWP.pucch_Config, CCEIndex);
+      alloc = nr_acknack_scheduling(mac, UE, frame, slot, 0, r_pucch, 0);
+      if (alloc < 0) {
+        LOG_D(NR_MAC, "Could not find PUCCH for UE %04x@%d.%d\n", rnti, frame, slot);
+        return;
+      }
+    }
+
+    sched_ctrl->cce_index = CCEIndex;
+
+    fill_pdcch_vrb_map(mac, CC_id, &sched_ctrl->sched_pdcch, CCEIndex, sched_ctrl->aggregation_level, beam.idx);
+
+    // AssertFatal(alloc,
+    //             "could not find uplink slot for PUCCH (RNTI %04x@%d.%d)!\n",
+    //             rnti, frame, slot);
+
+    sched_pdsch->pucch_allocation = alloc;
+    sched_pdsch->rbStart = rbStart;
+    sched_pdsch->rbSize = rbSize;
+    sched_pdsch->bwp_info = get_pdsch_bwp_start_size(mac, UE);
+    sched_pdsch->dmrs_parms = get_dl_dmrs_params(scc, dl_bwp, &tda_info, num_layers_per_ue);
+    // Assign the right antenna port
+    if (is_mu_mimo) {
+      DevAssert((sched_pdsch->dmrs_parms.dmrs_ports_id == 0) || (sched_pdsch->dmrs_parms.dmrs_ports_id == 3));
+      sched_pdsch->dmrs_parms.dmrs_ports_id += layer_indicator++;
+    }
+
+    sched_pdsch->mcs = target_dl_mcs;
+    sched_pdsch->nrOfLayers = num_layers_per_ue;
+    sched_pdsch->Qm = nr_get_Qm_dl(sched_pdsch->mcs, dl_bwp->mcsTableIdx);
+    sched_pdsch->R = nr_get_code_rate_dl(sched_pdsch->mcs, dl_bwp->mcsTableIdx);
+    sched_ctrl->dl_bler_stats.mcs = target_dl_mcs; /* for logging output */
+    sched_pdsch->tb_size = nr_compute_tbs(sched_pdsch->Qm,
+                                          sched_pdsch->R,
+                                          sched_pdsch->rbSize,
+                                          tda_info.nrOfSymbols,
+                                          sched_pdsch->dmrs_parms.N_PRB_DMRS * sched_pdsch->dmrs_parms.N_DMRS_SLOT,
+                                          0 /* N_PRB_oh, 0 for initialBWP */,
+                                          0 /* tb_scaling */,
+                                          sched_pdsch->nrOfLayers)
+                           >> 3;
+
+    /* get the PID of a HARQ process awaiting retransmission, or -1 otherwise */
+    sched_pdsch->dl_harq_pid = sched_ctrl->retrans_dl_harq.head;
+
+    /* mark the corresponding RBs as used */
+    for (int rb = 0; rb < sched_pdsch->rbSize; rb++)
+      vrb_map[rb + sched_pdsch->rbStart + BWPStart] = SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols);
+
+    if ((frame & 127) == 0)
+      LOG_D(MAC, "phytest: %d.%d DL mcs %d, DL rbStart %d, DL rbSize %d\n", frame, slot, sched_pdsch->mcs, rbStart, rbSize);
   }
-
-  sched_ctrl->cce_index = CCEIndex;
-
-  fill_pdcch_vrb_map(mac,
-                     CC_id,
-                     &sched_ctrl->sched_pdcch,
-                     CCEIndex,
-                     sched_ctrl->aggregation_level,
-                     beam.idx);
-
-  //AssertFatal(alloc,
-  //            "could not find uplink slot for PUCCH (RNTI %04x@%d.%d)!\n",
-  //            rnti, frame, slot);
-
-  sched_pdsch->pucch_allocation = alloc;
-  sched_pdsch->rbStart = rbStart;
-  sched_pdsch->rbSize = rbSize;
-  sched_pdsch->bwp_info = get_pdsch_bwp_start_size(mac, UE);
-  sched_pdsch->dmrs_parms = get_dl_dmrs_params(scc,
-                                               dl_bwp,
-                                               &tda_info,
-                                               target_dl_Nl);
-
-  sched_pdsch->mcs = target_dl_mcs;
-  sched_pdsch->nrOfLayers = target_dl_Nl;
-  sched_pdsch->Qm = nr_get_Qm_dl(sched_pdsch->mcs, dl_bwp->mcsTableIdx);
-  sched_pdsch->R = nr_get_code_rate_dl(sched_pdsch->mcs, dl_bwp->mcsTableIdx);
-  sched_ctrl->dl_bler_stats.mcs = target_dl_mcs; /* for logging output */
-  sched_pdsch->tb_size = nr_compute_tbs(sched_pdsch->Qm,
-                                        sched_pdsch->R,
-                                        sched_pdsch->rbSize,
-                                        tda_info.nrOfSymbols,
-                                        sched_pdsch->dmrs_parms.N_PRB_DMRS * sched_pdsch->dmrs_parms.N_DMRS_SLOT,
-                                        0 /* N_PRB_oh, 0 for initialBWP */,
-                                        0 /* tb_scaling */,
-                                        sched_pdsch->nrOfLayers)
-                         >> 3;
-
-  /* get the PID of a HARQ process awaiting retransmission, or -1 otherwise */
-  sched_pdsch->dl_harq_pid = sched_ctrl->retrans_dl_harq.head;
-
-  /* mark the corresponding RBs as used */
-  for (int rb = 0; rb < sched_pdsch->rbSize; rb++)
-    vrb_map[rb + sched_pdsch->rbStart + BWPStart] = SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols);
-
-  if ((frame&127) == 0) LOG_D(MAC,"phytest: %d.%d DL mcs %d, DL rbStart %d, DL rbSize %d\n", frame, slot, sched_pdsch->mcs, rbStart,rbSize);
 }
 
 uint32_t target_ul_mcs = 9;
@@ -250,8 +273,6 @@ void nr_ul_preprocessor_phytest(gNB_MAC_INST *nr_mac, post_process_pusch_t *pp_p
   NR_ServingCellConfigCommon_t *scc = cc->ServingCellConfigCommon;
   NR_UE_info_t *UE = nr_mac->UE_info.connected_ue_list[0];
 
-  AssertFatal(nr_mac->UE_info.connected_ue_list[1] == NULL,
-              "cannot handle more than one UE\n");
   if (UE == NULL)
     return;
 

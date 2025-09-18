@@ -260,6 +260,7 @@ static __attribute__((always_inline)) inline int count_bits64_with_mask(uint64_t
 
 uint64_t reverse_bits(uint64_t in, int n_bits);
 void reverse_bits_u8(uint8_t const* in, size_t sz, uint8_t* out);
+uint8_t get_first_set_bit_idx(const uint32_t a);
 
 uint64_t from_nrarfcn(int nr_bandP, uint8_t scs_index, uint32_t dl_nrarfcn);
 uint32_t to_nrarfcn(int nr_bandP, uint64_t dl_CarrierFreq, uint8_t scs_index, uint32_t bw);

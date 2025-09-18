@@ -67,7 +67,9 @@ void nr_fill_srs(PHY_VARS_gNB *gNB, frame_t frame, slot_t slot, nfapi_nr_srs_pdu
                                              srs_pdu->bwp_start,
                                              srs_pdu->bwp_size,
                                              srs_pdu->time_start_position,
-                                             1 << srs_pdu->num_symbols);
+                                             1 << srs_pdu->num_symbols,
+                                             1,
+                                             0);
       }
       memcpy((void *)&srs->srs_pdu, (void *)srs_pdu, sizeof(nfapi_nr_srs_pdu_t));
       break;

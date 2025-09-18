@@ -78,7 +78,9 @@ void nr_fill_pucch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pucch_pdu_t 
                                                pucch_pdu->prb_start,
                                                pucch_pdu->prb_size,
                                                pucch_pdu->start_symbol_index,
-                                               pucch_pdu->nr_of_symbols);
+                                               pucch_pdu->nr_of_symbols,
+                                               1,
+                                               0);
       }
       memcpy((void *)&pucch->pucch_pdu, (void *)pucch_pdu, sizeof(nfapi_nr_pucch_pdu_t));
       LOG_D(PHY,

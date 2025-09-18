@@ -94,7 +94,9 @@ int nr_fill_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_nr_prach_pdu_t *pr
                                                 0,
                                                 273,
                                                 start_symb,
-                                                n_symb);
+                                                n_symb,
+                                                1,
+                                                0);
     }
   }
   LOG_D(NR_PHY,"Copying prach pdu %d bytes to index %d\n", (int)sizeof(*prach_pdu), prach_id);
