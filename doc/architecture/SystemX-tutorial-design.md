@@ -26,8 +26,7 @@ names like RRH/RRU/RE/RU/PNF.
 
 Use the stable OAI EPC, that can run in one machine (VM or standalone)
 
-Draft description:
-<https://open-cells.com/index.php/2017/08/22/all-in-one-openairinterface-august-22nd/>
+[Draft description](https://open-cells.com/index.php/2017/08/22/all-in-one-openairinterface-august-22nd/)
 
 ### Standalone 4G
 
@@ -119,8 +118,7 @@ gNB and a X310 or N300 for the nrUE.
 
 #### Usage with X310
 
-Linux configuration:
-<https://files.ettus.com/manual/page_usrp_x3x0_config.html>
+[Linux configuration](https://files.ettus.com/manual/page_usrp_x3x0_config.html)
 
 We included most of this configuration included in OAI source code.
 
