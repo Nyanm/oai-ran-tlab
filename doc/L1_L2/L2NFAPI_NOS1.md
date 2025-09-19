@@ -2,7 +2,7 @@
   <tr style="border-collapse: collapse; border: none;">
     <td style="border-collapse: collapse; border: none;">
       <a href="http://www.openairinterface.org/">
-         <img src="./images/oai_final_logo.png" alt="" border=3 height=50 width=150>
+         <img src="../images/oai_final_logo.png" alt="" border=3 height=50 width=150>
          </img>
       </a>
     </td>
@@ -31,7 +31,7 @@ You may not have access to an EPC or you don't want to hassle to deploy one.
 
 Example of L2 nFAPI Simulator testing environment:
 
-<img src="./images/L2-sim-noS1-2-host-deployment.png" alt="" border=3>
+<img src="../images/L2-sim-noS1-2-host-deployment.png" alt="" border=3>
 
 > Note that the IP addresses are indicative and need to be adapted to your environment.
 
