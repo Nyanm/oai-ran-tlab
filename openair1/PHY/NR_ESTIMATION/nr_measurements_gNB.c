@@ -36,49 +36,74 @@
 
 #define I0_SKIP_DC 1
 
-int nr_est_timing_advance_srs(const NR_DL_FRAME_PARMS *frame_parms,
-                              const c16_t srs_estimated_channel_time[][frame_parms->ofdm_symbol_size])
+void nr_est_srs_timing_advance_offset(uint16_t ofdm_symbol_size,
+                                      const c16_t srs_estimated_channel_time[][NR_SRS_IDFT_OVERSAMP_FACTOR * ofdm_symbol_size],
+                                      uint8_t ant,
+                                      uint8_t N_ap,
+                                      uint32_t samples_per_frame,
+                                      uint16_t *timing_advance_offset,
+                                      int16_t *timing_advance_offset_nsec)
 {
-  int timing_advance = 0;
-  int max_val = 0;
-
-  for (int i = 0; i < frame_parms->ofdm_symbol_size; i++) {
-    int temp = 0;
-    for (int aa = 0; aa < frame_parms->nb_antennas_rx; aa++) {
-      int Re = ((c16_t*)srs_estimated_channel_time[aa])[i].r;
-      int Im = ((c16_t*)srs_estimated_channel_time[aa])[i].i;
-      temp += (Re*Re/2) + (Im*Im/2);
+  int64_t mean_val = 0;
+  int64_t max_val = 0;
+  int32_t max_idx = 0;
+  int16_t ofdm_oversample_symbol_size = NR_SRS_IDFT_OVERSAMP_FACTOR * ofdm_symbol_size;
+  for (int k = 0; k < ofdm_oversample_symbol_size; k++) {
+    int64_t abs_val = 0;
+    for (int p_index = 0; p_index < N_ap; p_index++) {
+      abs_val += squaredMod(srs_estimated_channel_time[p_index][k]);
     }
-    if (temp > max_val) {
-      timing_advance = i;
-      max_val = temp;
+    mean_val += abs_val;
+    if (abs_val > max_val) {
+      max_val = abs_val;
+      max_idx = k;
     }
   }
+  max_val = max_val / N_ap;
+  mean_val = mean_val / (N_ap * ofdm_oversample_symbol_size);
 
-  if (timing_advance > frame_parms->ofdm_symbol_size/2) {
-    timing_advance = timing_advance - frame_parms->ofdm_symbol_size;
-  }
+  if (max_idx > ofdm_oversample_symbol_size >> 1)
+    max_idx = max_idx - ofdm_oversample_symbol_size;
 
-  // Scale the 16 factor in N_TA calculation in 38.213 section 4.2 according to the used FFT size
-  const uint16_t bw_scaling = frame_parms->ofdm_symbol_size >> 7;
+  // Check for detection threshold
+  if ((mean_val != 0) && (max_val / mean_val > 100)) {
+    int timing_advance = max_idx / NR_SRS_IDFT_OVERSAMP_FACTOR;
 
-  // do some integer rounding to improve TA accuracy
-  int sync_pos_rounded;
-  if (timing_advance > 0) {
-    sync_pos_rounded = timing_advance + (bw_scaling >> 1) - 1;
+    // Scale the 16 factor in N_TA calculation in 38.213 section 4.2 according to the used FFT size
+    const uint16_t bw_scaling = ofdm_symbol_size >> 7;
+
+    // do some integer rounding to improve TA accuracy
+    int sync_pos_rounded;
+    if (timing_advance > 0) {
+      sync_pos_rounded = timing_advance + (bw_scaling >> 1) - 1;
+    } else {
+      sync_pos_rounded = timing_advance - (bw_scaling >> 1) + 1;
+    }
+
+    *timing_advance_offset = sync_pos_rounded / bw_scaling;
+
+    // put timing advance command in 0..63 range
+    *timing_advance_offset += 31;
+
+    if (*timing_advance_offset < 0)
+      *timing_advance_offset = 0;
+    if (*timing_advance_offset > 63)
+      *timing_advance_offset = 63;
+
+    *timing_advance_offset_nsec = (max_idx * 1e9) / (NR_SRS_IDFT_OVERSAMP_FACTOR * samples_per_frame * 100);
   } else {
-    sync_pos_rounded = timing_advance - (bw_scaling >> 1) + 1;
+    *timing_advance_offset = 0xFFFF;
+    *timing_advance_offset_nsec = 0x8000;
   }
 
-  int timing_advance_update = sync_pos_rounded / bw_scaling;
-
-  // put timing advance command in 0..63 range
-  timing_advance_update += 31;
-
-  if (timing_advance_update < 0)  timing_advance_update = 0;
-  if (timing_advance_update > 63) timing_advance_update = 63;
-
-  return timing_advance_update;
+  LOG_D(PHY,
+        "SRS estimatd ToA [RX ant %d]: TA offset %d, TA offset ns %d (max_val %ld, mean_val %ld, max_idx %d)\n",
+        ant,
+        *timing_advance_offset,
+        *timing_advance_offset_nsec,
+        max_val,
+        mean_val,
+        max_idx);
 }
 
 void dump_nr_I0_stats(FILE *fd,PHY_VARS_gNB *gNB) {
