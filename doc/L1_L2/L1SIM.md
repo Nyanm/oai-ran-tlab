@@ -15,7 +15,7 @@
 > **Note:**
 > **Unless you know what you are doing, you likely do not need this!
 Rather, you are probably looking for the
-[RFsimulator](../radio/rfsimulator/README.md)!**
+[RFsimulator](../../radio/rfsimulator/README.md)!**
 
 oaisim has been scraped and replaced by the same programs that are used for the
 real-time operation, `lte-softmodem` and `lte-uesoftmodem`. This uses the IF4p5
@@ -28,7 +28,7 @@ multiple UEs.
 
 ## Build
 
-Build eNB/UE as normal, as also described in [How to build the eNB and the UE](./BUILD.md):
+Build eNB/UE as normal, as also described in [How to build the eNB and the UE](../BUILD.md):
 ```bash
 ./build_oai -c --ninja --eNB --UE
 ```

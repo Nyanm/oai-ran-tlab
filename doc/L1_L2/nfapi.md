@@ -138,7 +138,7 @@ nFAPI is used by default. Compile and configure as indicated above.
 
 #### How to use Aerial
 
-Refer to [this document](./Aerial_FAPI_Split_Tutorial.md) for more information.
+Refer to [this document](../tutorials/Aerial_FAPI_Split_Tutorial.md) for more information.
 
 #### How to use WLS lib
 
@@ -153,7 +153,7 @@ The WLS library has a few dependencies:
 
 Additionally, a patch needs to be applied to the WLS lib Makefile in order for
 the shared library and headers to be installed into the system, the necessary
-patch is available [here](../cmake_targets/tools/install_wls_lib.patch)
+patch is available [here](../../cmake_targets/tools/install_wls_lib.patch)
 
 Clone the code and apply the patch
 
@@ -236,7 +236,7 @@ Run the OAI-UE
 
 nFAPI has its own logging system, independent of OAI's. It can be activated by
 setting the `NFAPI_TRACE_LEVEL` environment variable to an appropriate value;
-see [the environment variables documentation](./environment-variables.md) for
+see [the environment variables documentation](../setup/environment-variables.md) for
 more info.
 
 To see the (any) periodical output at the PNF, define `NFAPI_TRACE_LEVEL=info`.

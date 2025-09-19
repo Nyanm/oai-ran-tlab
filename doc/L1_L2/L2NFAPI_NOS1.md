@@ -206,7 +206,7 @@ L1s = (
 
 ## 5. Build OAI UE and eNodeB 
 
-See [Build documentation](./BUILD.md).
+See [Build documentation](../BUILD.md).
 
 ## 6. Start the eNB 
 
@@ -327,8 +327,8 @@ iperf -c 10.0.1.1 -u -t 30 -b 2M -i 1 -fm -B 10.0.1.2 -p 5002
 
 [oai wiki home](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/home)
 
-[oai softmodem features](FEATURE_SET.md)
+[oai softmodem features](../setup/FEATURE_SET.md)
 
-[oai softmodem build procedure](BUILD.md)
+[oai softmodem build procedure](../BUILD.md)
 
 [L2 nfapi simulator](L2NFAPI.md)

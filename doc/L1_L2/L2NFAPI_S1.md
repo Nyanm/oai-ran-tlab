@@ -211,7 +211,7 @@ L1s = (
 
 ## 6. Build OAI UE and eNodeB 
 
-See [Build documentation](./BUILD.md).
+See [Build documentation](../BUILD.md).
 
 ## 7. Start EPC 
 
@@ -307,8 +307,8 @@ iperf operations can also be performed.
 
 [oai wiki home](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/home)
 
-[oai softmodem features](FEATURE_SET.md)
+[oai softmodem features](../setup/FEATURE_SET.md)
 
-[oai softmodem build procedure](BUILD.md)
+[oai softmodem build procedure](../BUILD.md)
 
 [L2 nfapi simulator](L2NFAPI.md)
