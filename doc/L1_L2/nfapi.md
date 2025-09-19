@@ -10,7 +10,7 @@ about nFAPI can be found in SCF 225.2.0.
 
 [[_TOC_]]
 
-# Quickstart
+## Quickstart
 
 Compile OAI as normal. Start the CN and make sure that the VNF configuration
 matches the PLMN/IP addresses. Then, run the VNF
@@ -29,7 +29,7 @@ VNF!)
 You should not observe a difference between nFAPI split and monolithic.
 
 
-# Status
+## Status
 
 All FAPI message can be transferred between VNF and PNF. This is because OAI
 uses FAPI with its corresponding messages internally, whether a split is in use
@@ -54,7 +54,7 @@ When using RFsim, the system might run slower than in monolithic. This is
 because the PNF needs to slow down the execution time of a specific slot,
 because it has to send a Slot.indication to the VNF for scheduling.
 
-# Configuration
+## Configuration
 
 Both PNF and VNF are run through the `nr-softmodem` executable. The type of
 mode is switched through the `--nfapi` switch, with options `MONOLITHIC`
@@ -112,7 +112,7 @@ can proceed as follows:
 Note: all L1-specific options have to be passed to the PNF, and remaining
 options to the VNF.
 
-## Transport mechanisms between VNF and PNF
+### Transport mechanisms between VNF and PNF
 
 Currently, the VNF/PNF split supports three transport mechanisms between each
 other:
@@ -131,15 +131,15 @@ The change between transport mechanisms is done at compilation time:
 - No changes to the `build_oai` call are required in order to select socket communication, as it is the default.
 - In order to select WLS as the transport mechanism between VNF and PNF, first install the WLS library, and afterwards use `-t WLS` as a parameter of `build_oai`:
 
-### How to use nFAPI
+#### How to use nFAPI
 
 nFAPI is used by default. Compile and configure as indicated above.
 
-### How to use Aerial
+#### How to use Aerial
 
 Refer to [this document](./Aerial_FAPI_Split_Tutorial.md) for more information.
 
-### How to use WLS lib
+#### How to use WLS lib
 
 Before the first compilation with WLS support, the [WLS
 library](https://docs.o-ran-sc.org/projects/o-ran-sc-o-du-phy/en/latest/wls-lib.html)
@@ -169,11 +169,11 @@ After installing WLS, you can run the build command as shown below:
 
     ./build_oai -t WLS -w USRP --gNB --nrUE --ninja -C
 
-#### How to run OAI PNF with OAI VNF
+##### How to run OAI PNF with OAI VNF
 
 Refer to the above steps in [Quickstart](#quickstart), but run the PNF first as it is the WLS "master".
 
-#### How to run OAI PNF with OSC/Radisys O-DU
+##### How to run OAI PNF with OSC/Radisys O-DU
 
 Set up the hugepages for DPDK (1GB page size, 6 pages; this only needs to be
 done once):
@@ -231,7 +231,7 @@ Run the OAI-UE
 
     sudo ./nr-uesoftmodem -r 273 --numerology 1 --band 78 -C 3400140000 --ssb 1518 --uicc0.imsi 001010000000001 --rfsim
 
-# nFAPI logging system
+## nFAPI logging system
 
 nFAPI has its own logging system, independent of OAI's. It can be activated by
 setting the `NFAPI_TRACE_LEVEL` environment variable to an appropriate value;
