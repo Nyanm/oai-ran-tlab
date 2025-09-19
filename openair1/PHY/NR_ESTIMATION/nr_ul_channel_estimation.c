@@ -958,15 +958,29 @@ int nr_srs_channel_estimation(const int ant,
 #endif
 
   // Convert to time domain
-  freq2time(ofdm_symbol_size, (int16_t *)srs_estimated_channel_freq, (int16_t *)srs_estimated_channel_time);
+  int16_t ofdm_symbol_size_half = ofdm_symbol_size >> 1;
+  int16_t ofdm_oversample_symbol_size = NR_SRS_IDFT_OVERSAMP_FACTOR * ofdm_symbol_size;
+  int16_t ofdm_oversample_symbol_size_half = ofdm_oversample_symbol_size >> 1;
+  int16_t start_offset = ofdm_oversample_symbol_size - ofdm_symbol_size_half;
 
+  c16_t chF_interpol[ofdm_oversample_symbol_size] __attribute__((aligned(32)));
+  memset(chF_interpol, 0, sizeof(chF_interpol));
+
+  // Place SRS channel estimates in FFT shifted format for oversampling
+  memcpy(&chF_interpol[0], &srs_estimated_channel_freq[0], ofdm_symbol_size_half * sizeof(c16_t));
+  memcpy(&chF_interpol[start_offset], &srs_estimated_channel_freq[ofdm_symbol_size_half], ofdm_symbol_size_half * sizeof(c16_t));
+
+  // Convert to time domain oversampled
+  freq2time(ofdm_oversample_symbol_size, (int16_t *)chF_interpol, (int16_t *)srs_estimated_channel_time);
+
+  // Do FFT shift
   memcpy(srs_estimated_channel_time_shifted,
-         &srs_estimated_channel_time[ofdm_symbol_size >> 1],
-         (ofdm_symbol_size >> 1) * sizeof(c16_t));
+         &srs_estimated_channel_time[ofdm_oversample_symbol_size_half],
+         ofdm_oversample_symbol_size_half * sizeof(c16_t));
 
-  memcpy(&srs_estimated_channel_time_shifted[ofdm_symbol_size >> 1],
+  memcpy(&srs_estimated_channel_time_shifted[ofdm_oversample_symbol_size_half],
          srs_estimated_channel_time,
-         (ofdm_symbol_size >> 1) * sizeof(c16_t));
+         ofdm_oversample_symbol_size_half * sizeof(c16_t));
 
   // Compute wideband SNR
   int tot_subcarriers = m_SRS_b * NR_NB_SC_PER_RB;
