@@ -18,11 +18,11 @@ This simulator allows to test L2 and above Layers using the nFAPI interface.
 
 The UE executable is able to "simulate" multiple UEs in order to stimulate the scheduler in the eNB.
 
-**This simulator is available starting the `v1.0.0` release on the `master` branch.**
+> **This simulator is available starting the `v1.0.0` release on the `master` branch.**
 
-**2022/03/08: CAUTION, THIS TUTORIAL IS NO LONGER VALID on the `develop` branch after the `2022.w01` tag.**
+> **2022/03/08: CAUTION, THIS TUTORIAL IS NO LONGER VALID on the `develop` branch after the `2022.w01` tag.**
 
-**2022/03/08: CAUTION, THE LAST VALID TAG on `develop` branch is `2021.w51_c`.**
+> **2022/03/08: CAUTION, THE LAST VALID TAG on `develop` branch is `2021.w51_c`.**
 
 Currently the Continuous Integration process is validating this simulator the following way:
 
@@ -38,11 +38,12 @@ Normally it should be fine to run both executables on the same host using the `l
 2. [No S1 -- eNB and UE on 2 hosts](L2NFAPI_NOS1.md)
 
 
-**2022/03/08: Starting the `2022.w01` tag on the `develop` branch, the L2 nFAPI simulation is using a proxy.**
+> **2022/03/08: Starting the `2022.w01` tag on the `develop` branch, the L2 nFAPI simulation is using a proxy.**
 
 ## 5G L2 nFAPI simulator
 
-**Note: L2 simulator does not work anymore.**
+> **Note:**
+> **L2 simulator does not work anymore.**
 
 ### Download and Build the Proxy Server (from EpiSci)
 
