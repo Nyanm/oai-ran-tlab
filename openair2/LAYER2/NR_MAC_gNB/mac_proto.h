@@ -65,7 +65,7 @@ void nr_mac_prepare_ra_ue(gNB_MAC_INST *nrmac, NR_UE_info_t *UE);
 bool add_new_UE_RA(gNB_MAC_INST *nr_mac, NR_UE_info_t *UE);
 int nr_mac_get_reconfig_delay_slots(NR_SubcarrierSpacing_t scs);
 
-int nr_mac_interrupt_ue_transmission(gNB_MAC_INST *mac, NR_UE_info_t *UE, interrupt_followup_action_t action, int slots);
+int nr_mac_interrupt_ue_transmission(gNB_MAC_INST *mac, NR_UE_info_t *UE, int slots);
 int nr_transmission_action_indicator_stop(gNB_MAC_INST *mac, NR_UE_info_t *UE_info);
 
 void clear_nr_nfapi_information(gNB_MAC_INST *gNB,
@@ -477,6 +477,9 @@ bool nr_mac_check_release(NR_UE_sched_ctrl_t *sched_ctrl, int rnti);
 void nr_mac_trigger_release_complete(gNB_MAC_INST *mac, int rnti);
 void nr_mac_release_ue(gNB_MAC_INST *mac, int rnti);
 bool nr_mac_request_release_ue(const gNB_MAC_INST *nrmac, int rnti);
+void clean_bwp_structures(NR_SpCellConfig_t *spCellConfig);
+
+bool nr_mac_ue_is_active(const NR_UE_info_t *ue);
 
 bool nr_mac_ue_is_active(const NR_UE_info_t *ue);
 

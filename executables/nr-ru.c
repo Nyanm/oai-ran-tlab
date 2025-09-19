@@ -980,10 +980,8 @@ void ru_tx_func(void *param)
   if (ru->fh_north_asynch_in == NULL && ru->feptx_ofdm)
     ru->feptx_ofdm(ru, frame_tx, slot_tx);
 
-  // do outgoing fronthaul (south) if needed
-  if ((ru->fh_north_asynch_in == NULL) && (ru->fh_south_out))
+  if (ru->fh_north_asynch_in == NULL && ru->fh_south_out)
     ru->fh_south_out(ru, frame_tx, slot_tx, info->timestamp_tx);
-
   if (ru->fh_north_out)
     ru->fh_north_out(ru);
 }
@@ -1088,14 +1086,16 @@ void *ru_thread(void *param)
       LOG_I(PHY, "RU %d: manually set CPU affinity to CPU %d\n", ru->idx, ru->ru_thread_core);
     }
 
-    LOG_I(PHY,"Starting IF interface for RU %d, nb_rx %d\n",ru->idx,ru->nb_rx);
-    AssertFatal(ru->nr_start_if(ru,NULL) == 0, "Could not start the IF device\n");
+    LOG_I(PHY, "Starting IF interface for RU %d, nb_rx %d\n", ru->idx, ru->nb_rx);
+    AssertFatal(ru->nr_start_if(ru, NULL) == 0, "Could not start the IF device\n");
 
     if (ru->has_ctrl_prt > 0) {
-      if (ru->if_south == LOCAL_RF) ret = connect_rau(ru);
-      else ret = attach_rru(ru);
+      if (ru->if_south == LOCAL_RF)
+        ret = connect_rau(ru);
+      else
+        ret = attach_rru(ru);
 
-      AssertFatal(ret==0,"Cannot connect to remote radio\n");
+      AssertFatal(ret == 0, "Cannot connect to remote radio\n");
     }
 
   } else if (ru->if_south == LOCAL_RF) { // configure RF parameters only
@@ -1287,20 +1287,9 @@ int start_write_thread(RU_t *ru) {
   return ru->rfdevice.trx_write_init(&ru->rfdevice);
 }
 
-void init_RU_proc(RU_t *ru) {
-  int i=0;
-  RU_proc_t *proc;
-  proc = &ru->proc;
-  memset((void *)proc,0,sizeof(RU_proc_t));
-  proc->ru = ru;
-  proc->first_rx                 = 1;
-  proc->first_tx                 = 1;
-  proc->frame_offset             = 0;
-  proc->num_slaves               = 0;
-  proc->frame_tx_unwrap          = 0;
-
-  for (i=0; i<10; i++) proc->symbol_mask[i]=0;
-
+void init_RU_proc(RU_t *ru)
+{
+  ru->proc = (RU_proc_t){.ru = ru, .first_rx = 1, .first_tx = 1};
   LOG_I(PHY, "Initialized RU proc %d (%s,%s),\n", ru->idx, NB_functions[ru->function], NB_timing[ru->if_timing]);
 }
 
