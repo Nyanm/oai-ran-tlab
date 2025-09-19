@@ -470,12 +470,14 @@ static inline void do_txdataF(c16_t **txdataF,
     // get pmi info
     const int pmi = (pb->prg_size > 0) ? (pb->prgs_list[(int)rb / pb->prg_size].pm_idx) : 0;
     const int pmi2 = (rb < (rel15->rbSize - 1) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 1) / pb->prg_size].pm_idx) : -1;
+    const int pmi3 = (rb < (rel15->rbSize - 2) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 2) / pb->prg_size].pm_idx) : -1;
+    const int pmi4 = (rb < (rel15->rbSize - 3) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 3) / pb->prg_size].pm_idx) : -1;
 
     // If pmi of next RB and pmi of current RB are the same, we do 2 RB in a row
     // if pmi differs, or current rb is the end (rel15->rbSize - 1), than we do 1 RB in a row
-    const int rb_step = pmi == pmi2 ? 2 : 1;
+    int rb_step0 = pmi == pmi2 ? 2 : 1;
+    const int rb_step = rb_step0==2 && pmi3==pmi && pmi4==pmi ? 4 : rb_step0;
     const int re_cnt = NR_NB_SC_PER_RB * rb_step;
-
     if (pmi == 0) { // unitary Precoding
       if (subCarrier + re_cnt <= symbol_sz) { // RB does not cross DC
         if (ant < rel15->nrOfLayers)
@@ -759,17 +761,19 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 #endif
   }
 
+  start_meas(&gNB->dlsch_pdsch_generation_stats);
   /// Resource mapping
   // Non interleaved VRB to PRB mapping
 
   AssertFatal(n_dmrs, "n_dmrs can't be 0\n");
   // make a large enough tail to process all re with SIMD regardless a garbadge filler
 
+  start_meas(&gNB->dlsch_layer_mapping_stats);
   int layerSz2 = (layerSz + 63) & ~63;
   c16_t tx_layers[rel15->nrOfLayers][layerSz2] __attribute__((aligned(64)));
   memset(tx_layers, 0, sizeof(tx_layers));
   nr_layer_mapping(rel15->NrOfCodewords, encoded_length, mod_symbs, rel15->nrOfLayers, layerSz2, nb_re, tx_layers);
-
+  stop_meas(&gNB->dlsch_layer_mapping_stats);
   /// Layer Precoding and Antenna port mapping
   // tx_layers 1-8 are mapped on antenna ports 1000-1007
   // The precoding info is supported by nfapi such as num_prgs, prg_size, prgs_list and pm_idx
@@ -777,7 +781,6 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   //        pmi = prgs_list[rbidx/prg_size].pm_idx, rbidx =0,...,rbSize-1
   // The Precoding matrix:
   // The Codebook Type I
-  start_meas(&gNB->dlsch_precoding_stats);
   nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
   // beam number in multi-beam scenario (concurrent beams)
   int bitmap = SL_to_bitmap(rel15->StartSymbolIndex, rel15->NrOfSymbols);
@@ -834,7 +837,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
       pushTpool(&gNB->threadPool, t);
   }
   join_task_ans(&ans);
-  stop_meas(&gNB->dlsch_precoding_stats);
+  stop_meas(&gNB->dlsch_pdsch_generation_stats);
   /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)
    * should remain a multiple of 8 * 64 with enough offset to fit each dlsch
    */
