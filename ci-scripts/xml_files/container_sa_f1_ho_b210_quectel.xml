@@ -144,7 +144,7 @@
     <class>Custom_Command</class>
     <desc>Attenuate DU0 by 40dB to trigger a Handover</desc>
     <node>rocket</node>
-    <command>/opt/test-minicircuits-usb/control-attenuators.py -s0 0.0 -s1 40.0 --handover</command>
+    <command>sudo /opt/test-minicircuits-usb/control-attenuators.py -s0 0.0 -s1 40.0 --handover</command>
   </testCase>
 
   <testCase id="000013">
@@ -167,7 +167,7 @@
    <class>Custom_Command</class>
     <desc>Attenuate DU1 by 40dB to trigger a Handover</desc>
     <node>rocket</node>
-    <command>/opt/test-minicircuits-usb/control-attenuators.py -s0 40.0 -s1 0.0 --handover</command>
+    <command>sudo /opt/test-minicircuits-usb/control-attenuators.py -s0 40.0 -s1 0.0 --handover</command>
   </testCase>
 
   <testCase id="000016">
@@ -190,7 +190,7 @@
    <class>Custom_Command</class>
     <desc>Attenuate DU0 by 40dB to trigger a Handover</desc>
     <node>rocket</node>
-    <command>/opt/test-minicircuits-usb/control-attenuators.py -s0 0.0 -s1 40.0 --handover</command>
+    <command>sudo /opt/test-minicircuits-usb/control-attenuators.py -s0 0.0 -s1 40.0 --handover</command>
   </testCase>
 
   <testCase id="000019">
