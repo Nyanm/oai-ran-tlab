@@ -106,6 +106,7 @@ int32_t symbol_callback(void *args, struct xran_sense_of_time *p_sense_of_time)
   info->slot = slot_in_frame;
   info->symbol = callback_args->start_symbol;
 
+  float slot_duration_uS[] = {1000, 500, 250, 125};
   float symbol_duration_uS = slot_duration_uS[fh_cfg->frame_conf.nNumerology] / 14;
 
   // Offset current time to indicate symbol start time
