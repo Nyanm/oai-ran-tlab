@@ -297,8 +297,9 @@ void validate_input_pmi(nfapi_nr_config_request_scf_t *gNB_config,
               num_antenna_ports, pmi_pdu->num_ant_ports, pmi);
 }
 
-uint32_t use_gpu=0;
 configmodule_interface_t *uniqCfg = NULL;
+extern uint32_t use_gpu;
+
 int main(int argc, char **argv)
 {
   stop = false;
