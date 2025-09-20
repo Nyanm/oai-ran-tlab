@@ -62,6 +62,9 @@ typedef struct {
   uint8_t *b;
   /// Pointers to transport block segments
   uint8_t **c;
+#ifdef ENABLE_CUDA
+  uint8_t *c_dev;
+#endif
   /// Frame where current HARQ round was sent
   uint32_t frame;
   /// Interleaver outputs
@@ -558,6 +561,7 @@ typedef struct PHY_VARS_gNB_s {
   int L1_tx_thread_core;
   struct processingData_L1tx *msgDataTx;
   void *scopeData;
+  int use_gpu;
 } PHY_VARS_gNB;
 
 struct puschSymbolReqId {

@@ -182,6 +182,7 @@ extern void fix_scd(NR_ServingCellConfig_t *scd);// forward declaration
 /* specific dlsim DL preprocessor: uses rbStart/rbSize/mcs/nrOfLayers from command line of dlsim */
 int g_mcsIndex = -1, g_mcsTableIdx = 0, g_rbStart = -1, g_rbSize = -1, g_nrOfLayers = 1, g_pmi = 0;
 
+
 void nr_dlsim_preprocessor(module_id_t module_id, frame_t frame, slot_t slot)
 {
   NR_UE_info_t *UE_info = RC.nrmac[module_id]->UE_info.connected_ue_list[0];
@@ -296,7 +297,7 @@ void validate_input_pmi(nfapi_nr_config_request_scf_t *gNB_config,
               num_antenna_ports, pmi_pdu->num_ant_ports, pmi);
 }
 
-
+uint32_t use_gpu=0;
 configmodule_interface_t *uniqCfg = NULL;
 int main(int argc, char **argv)
 {
@@ -393,7 +394,7 @@ int main(int argc, char **argv)
 
   FILE *scg_fd=NULL;
 
-  while ((c = getopt(argc, argv, "--:O:f:hA:p:f:g:i:n:s:S:t:v:x:y:z:o:H:M:N:F:GR:d:PI:L:a:b:e:m:w:T:U:q:X:Y:Z:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:f:hA:p:f:g:i:n:s:S:t:v:x:y:z:o:H:M:N:F:GR:d:PQI:L:a:b:e:m:w:T:U:q:X:Y:Z:")) != -1) {
 
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
@@ -513,7 +514,10 @@ int main(int argc, char **argv)
       print_perf=1;
       cpu_meas_enabled = 1;
       break;
-      
+     
+    case 'Q':
+      use_gpu=1;
+      break; 
     case 'I':
       max_ldpc_iterations = atoi(optarg);
       break;

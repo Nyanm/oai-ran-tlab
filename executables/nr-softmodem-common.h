@@ -96,6 +96,7 @@
 #define CONFIG_HLP_TELN          "Start embedded telnet server \n"
 #define CONFIG_HLP_SNR           "Set average SNR in dB (for --siml1 option)\n"
 #define CONFIG_HLP_NOS1          "Disable s1 interface\n"
+#define CONFIG_HLP_USEGPU        "Use GPU for processing offload"
 
 /*--------------------------------------------------------------------------------------------------------------------------------*/
 /*                                            command line parameters for LOG utility                                             */

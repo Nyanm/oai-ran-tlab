@@ -44,7 +44,7 @@ __global__ void ldpc_input_worker(uint32_t **input,uint32_t *cc[4],int block_len
 */
 
 #define ITERATIONS 1
-#define NTHREADS 768 
+#define NTHREADS 384 
 __device__ uint32_t masks[32] = {
 	0x80,0x40,0x20,0x10,0x8,0x4,0x2,0x1,
 	0x8000,0x4000,0x2000,0x1000,0x800,0x400,0x200,0x100,
@@ -61,8 +61,12 @@ __global__ void ldpc_input_worker(uint32_t **input,uint32_t *cc[4],int block_len
   else nseg1 = nseg0 + (nseg&31);
   int bit_offset = i2+block_off;
   int uint32_offset = bit_offset>>5;  
+#if ITERATIONS==1
+  uint32_t mask0 = masks[bit_offset&31];
+#else
   uint32_t *mask = &masks[bit_offset&31]; 
   uint32_t mask0 = mask[0];
+#endif
 #if ITERATIONS==4 || ITERATIONS==8
   uint32_t mask1 = mask[1];
   uint32_t mask2 = mask[2];

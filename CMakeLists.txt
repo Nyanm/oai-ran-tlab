@@ -188,6 +188,10 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
   set(commonOpts "${commonOpts} -Wno-unused-command-line-argument")
 endif()
 
+if (ENABLE_CUDA)
+  set(commonOpts "${commonOpts} -DENABLE_CUDA")
+endif()
+
 set(CMAKE_C_FLAGS
   "${C_FLAGS_PROCESSOR} ${commonOpts} -std=gnu11 -funroll-loops ${CMAKE_C_FLAGS}")
 set(CMAKE_CXX_FLAGS
@@ -987,6 +991,8 @@ set(PHY_SRC_UE
   ${OPENAIR1_DIR}/PHY/NR_TRANSPORT/srs_rx.c
   ${OPENAIR1_DIR}/PHY/NR_TRANSPORT/nr_uci_tools_common.c
   )
+  set(PHY_NR_SRC_CU
+     )
   set(PHY_NR_UE_SRC
   ${OPENAIR1_DIR}/PHY/INIT/nr_parms.c
   ${OPENAIR1_DIR}/PHY/MODULATION/nr_modulation.c
@@ -1064,7 +1070,17 @@ target_include_directories(PHY_UE PRIVATE ${blas_INCLUDE_DIRS} ${lapacke_INCLUDE
 add_library(PHY_NR_COMMON ${PHY_NR_SRC_COMMON})
 target_link_libraries(PHY_NR_COMMON PUBLIC UTIL)
 
-add_library(PHY_NR ${PHY_NR_SRC})
+if (ENABLE_CUDA)
+  find_package(CUDA REQUIRED)
+  if (NOT CUDA_FOUND)
+    message(FATAL_ERROR "no CUDA found")
+  endif()
+  set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_87;")
+  set(CUDA_VERBOS_BUILD_ON)
+  cuda_add_library(PHY_NR ${PHY_NR_SRC} ${PHY_NR_SRC_CU})
+else()
+  add_library(PHY_NR ${PHY_NR_SRC})
+endif()
 target_link_libraries(PHY_NR nr_phy_common nr_common nr_fapi_p5)
 
 add_library(PHY_NR_NO_AVX_256 ${PHY_NR_SRC})
