@@ -61,7 +61,7 @@ uint32_t **input_host;
 uint32_t *input_devh[128];
 int managed = 0, concurrent = 0, uva = 0, pageable = 0, pageable_uses_host = 0, register_host = 0;
 
-//#define USE_GPU_CIRCCOPY 1
+#define USE_GPU_CIRCCOPY 1
 #define USE_GPU_FOR_INPUT 1
 
 void cuda_support_init() {
@@ -184,6 +184,7 @@ void cuda_support_init() {
     err=cudaHostGetDevicePointer((void**)&input_dev, input_host, 0);
     AssertFatal(err == cudaSuccess,"CUDA Error cudaHostGetDevicePointer(cc_host): %s\n", cudaGetErrorString(err));
     LOG_I(NR_PHY,"input_host %p, input_dev %p\n",input_host,input_dev);
+    /*
     for (int i=0;i<128;i++) {
       err=cudaHostAlloc((void**)&input_host[i],(8448/8)*sizeof(uint8_t),cudaHostAllocMapped);
       AssertFatal(err == cudaSuccess,"CUDA Error (input_host[%d]): %s\n", i,cudaGetErrorString(err));
@@ -192,6 +193,7 @@ void cuda_support_init() {
     }
     err=cudaMemcpy(input_dev,input_devh,128*sizeof(uint8_t*),cudaMemcpyHostToDevice);
     AssertFatal(err == cudaSuccess,"CUDA Error (memcpy input_devh -> input_dev): %s\n", cudaGetErrorString(err));
+    */
   }
 }
 
@@ -207,7 +209,7 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
   int rate=3;
   int no_punctured_columns,removed_bit;
 
-//  if(impp->tinput != NULL) start_meas(impp->tinput);
+  if(impp->tinput != NULL) start_meas(impp->tinput);
   //determine number of bits in codeword
   if (BG==1)
     {
@@ -260,16 +262,12 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
 //  uint32_t *ccp[4];
 //  for (int s=0;s<n_inputs;s++) ccp[s]=cc[s];  
 #ifdef USE_GPU_FOR_INPUT
-  if(impp->tinput != NULL) start_meas(impp->tinput);
-  if (!pageable) {
+  if (!pageable && !register_host) {
     for (int r=0;r<impp->n_segments;r++) {
-      if (!register_host)
         cudaMemcpy(input_devh[r],input[r],block_length>>3,cudaMemcpyHostToDevice);
-      else
-        memcpy(input_host[r],input[r],block_length>>3);
     }
   }
-  ldpc_input(pageable? input : input_dev,(uint32_t**)cc_dev,block_length,impp->n_segments);
+  ldpc_input(pageable||register_host? input : input_dev,(uint32_t**)cc_dev,block_length,impp->n_segments);
 //  for (int i=0;i<16;i++) printf("i %d: cc[0] %x\n",i,cc[0][i]);
 #else  
 #ifndef __aarch64__
@@ -777,10 +775,14 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
   }
   if(impp->toutput != NULL) start_meas(impp->toutput);
   for (int s=0;s<n_inputs;s++) {
-    cudaMemcpy(d_host[s],&cc_devh[s][2*Zc],sizeof(uint32_t)*(block_length-(2*Zc)),cudaMemcpyDeviceToHost);
+	  
     if (!pageable && !register_host) {
+      cudaMemcpy(d_host[s],&cc_devh[s][2*Zc],sizeof(uint32_t)*(block_length-(2*Zc)),cudaMemcpyDeviceToHost);
       cudaError_t err = cudaMemcpy(&d_host[s][block_length-(2*Zc)],d_devh[s]+block_length-(2*Zc),sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),cudaMemcpyDeviceToHost);
       AssertFatal(err == cudaSuccess, "d_dev[%d] %p CUDA Error: %s\n", s, d_devh[s],cudaGetErrorString(err)); 			
+    }
+    else {
+       memcpy(d_host[s],&cc_host[s][2*Zc],sizeof(uint32_t)*(block_length-(2*Zc)));
     }
   }
   if(impp->toutput != NULL) stop_meas(impp->toutput);
