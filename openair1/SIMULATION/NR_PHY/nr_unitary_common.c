@@ -32,6 +32,7 @@
 
 // Define signal handler to attempt graceful termination
 bool stop = false;
+uint32_t use_gpu=0;
 
 void sigint_handler(int arg)
 {
