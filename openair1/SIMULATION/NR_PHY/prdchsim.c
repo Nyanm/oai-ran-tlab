@@ -93,6 +93,8 @@ void headersInsertion(uint8_t *in, int inLenBits, uint8_t *out, int outLenBits)
   out[postambleBit / 8] |= R2D_POSTAMBLE << (4 - (postambleBit % 8));
 }
 
+char filename[30];
+
 configmodule_interface_t *uniqCfg = NULL;
 int main(int argc, char **argv)
 {
@@ -143,116 +145,19 @@ int main(int argc, char **argv)
 
   // ---------------------------------------------------------------
 
-  printf("Hello, AIoT! New prdchsim is running\n");
-  printf("---------------------------------\n");
+  int RBs = 10;
+  c16_t freqFrame[14*12*RBs];
 
-  // Create Random ID Message (16-bit random ID)
-/*
-  uint16_t randomId = uniformrandom() * 0xFFFF;
-  uint16_t randomIdLen = 16; // bits
-
-  printf("Random ID: 0x%04X\n", randomId);
-
-  // Line encoding: each bit is replaced by two bits (0 -> 01, 1 -> 10)
-  uint16_t lineEncodingLen = 2 * randomIdLen; // bits
-  uint8_t lineEncodingBuf[lineEncodingLen / 8];
-  
-  lineEncoding((uint8_t *)&randomId, randomIdLen, lineEncodingBuf, lineEncodingLen);
-
-  printf("Line Encoded (hex): ");
-  for (int i = 0; i < sizeof(lineEncodingBuf); i++) {
-    printf("%02X ", lineEncodingBuf[i]);
-  }
-  printf("\n");
-
-  // Insertion of preambles and postambles
-  uint16_t txBufferLen = N_R_TAS_SIP + N_R_TAS_CAP + lineEncodingLen + N_R2D_POSTAMBLE;
-  uint8_t txBuffer[txBufferLen / 8];
-  memset(txBuffer, 0, sizeof(txBuffer));
-
-  headersInsertion(lineEncodingBuf, lineEncodingLen, txBuffer, txBufferLen);
-  
-  printf("Final TX Buffer (hex): ");
-  for (int i = 0; i < sizeof(txBuffer); i++) {
-    printf("%02X ", txBuffer[i]);
-  }
-  printf("\n");*/
-
-  uint16_t txBufferLen = N_R_TAS_SIP;
-  uint8_t txBuffer[txBufferLen / 8];
-  txBuffer[0] = 0xC0;//R_TAS_SIP; // 1100 1000
-
-  // ---------------------------------------------------------------
-
-  // Sequence modulation
-  // It repeates each bit 'count' times, where count = NDFT / M
-  // This ensures we can use 12-DFT with M bits
-  uint8_t M = 4;
-  uint8_t NDFT = 12;
-  uint8_t count = NDFT / M;
-
-  int txBits = txBufferLen;
-  int modulatedBits = txBits * count;
-  int modulatedBytes = (modulatedBits + 7) / 8;
-  uint8_t modulatedBuffer[modulatedBytes];
-  memset(modulatedBuffer, 0, sizeof(modulatedBuffer));
-
-  int modBitIdx = 0;
-  for (int i = 0; i < txBits; i++) {
-    int byteIdx = i / 8;
-    int bitIdx = 7 - (i % 8);
-    int bit = (txBuffer[byteIdx] >> bitIdx) & 0x01;
-    for (int j = 0; j < count; j++) {
-      int outByte = modBitIdx / 8;
-      int outBit = 7 - (modBitIdx % 8);
-      if (bit)
-        modulatedBuffer[outByte] |= (1 << outBit);
-      modBitIdx++;
-    }
-  }
-
-  printf("Modulated Buffer (hex): ");
-  for (int i = 0; i < modulatedBytes; i++) {
-    printf("%02X ", modulatedBuffer[i]);
-  }
-  printf("\n");
-
-  // Convert to complex numbers
-  c16_t outMod[modulatedBits], inMod[modulatedBits];
-
-  for (int i = 0; i < modulatedBits; i++) {
-    int bit = (modulatedBuffer[i / 8] >> (7 - (i % 8))) & 0x01;
-    inMod[i].r = bit * 32767; // Scale to int16 range
-    inMod[i].i = 0;
-  }
-
-  // Print output of DFT
-  printf("Before DFT (I/Q):\n");
-  for (int i = 0; i < 12; i++) {
-    printf("inMod[%2d]: (%6d, %6d)\n", i, inMod[i].r, inMod[i].i);
-  }
-
-  // Perform NDFT-12
-  uint32_t nb_re_pusch = 1 * NR_NB_SC_PER_RB;
-  nr_dft(outMod, inMod, nb_re_pusch);
-
-  char filename[30];
-  sprintf(filename,"dft12.m");
-  LOG_M(filename,"txs", outMod, modulatedBits, 1, 1);
-
-  // Print output of DFT
-  printf("Output of DFT (I/Q):\n");
-  for (int i = 0; i < 12; i++) {
-    printf("outMod[%2d]: (%6d, %6d)\n", i, outMod[i].r, outMod[i].i);
-  }
+  memset(freqFrame, 0, sizeof(freqFrame));
 
   int n_antennas = 1;
 
   NR_DL_FRAME_PARMS frame_parms_storage;
   frame_parms = &frame_parms_storage;
   memset(frame_parms, 0, sizeof(NR_DL_FRAME_PARMS));
-  frame_parms->N_RB_DL = 1;
-  frame_parms->N_RB_UL = 1;
+
+  frame_parms->N_RB_DL = RBs;
+  frame_parms->N_RB_UL = RBs;
   frame_parms->Ncp = 0; // normal CP
   frame_parms->nb_antennas_tx = n_antennas;
   frame_parms->nb_antennas_rx = n_antennas;
@@ -276,8 +181,8 @@ int main(int argc, char **argv)
   //frame_length_complex_samples_no_prefix = frame_parms->samples_per_subframe_wCP*NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
   int slot_offset = frame_parms->samples_per_subframe * slot;
   int slot_length = slot_offset - frame_parms->samples_per_subframe * (slot - 1);
+  printf("frame_length_complex_samples %d, slot_offset %d, slot_length %d\n",frame_length_complex_samples,slot_offset,slot_length);
 
-  //int txDataLen = modulatedBits * 171;
   c16_t **txDataF, **txData, **rxData;
 
   txData = malloc(n_antennas * sizeof(int*));
@@ -293,8 +198,10 @@ int main(int argc, char **argv)
 
   int ofdm_symbol_size = frame_parms->ofdm_symbol_size;
   int num_symbols = 14;
-  int points_per_symbol = 12;
+  int points_per_symbol = 12 * RBs;
 
+  memset(freqFrame, 0, sizeof(freqFrame));
+  memcpy(freqFrame, SIP_symbol_Ones, sizeof(SIP_symbol_Ones));
   memset(txDataF[0], 0, frame_length_complex_samples * sizeof(int));
 
   for (int sym = 0; sym < num_symbols; sym++) {
@@ -302,7 +209,7 @@ int main(int argc, char **argv)
     int txData_offset = sym * ofdm_symbol_size;
 
     for (int n = 0; n < points_per_symbol; n++) {
-      txDataF[0][txData_offset + n] = outMod[outMod_offset + n];
+      txDataF[0][txData_offset + n] = freqFrame[outMod_offset + n];
     }
   }
 
@@ -318,14 +225,37 @@ int main(int argc, char **argv)
                       1,
                       was_symbol_used);
 
-  sprintf(filename,"ofdm_out.m");
+  sprintf(filename,"ofdm_SIP_2RBS_Ones.m");
   LOG_M(filename,"ofdm", txData[0], slot_length, 1, 1);
 
-  // Print first 8 samples of first OFDM symbol
-  printf("First 8 samples of first OFDM symbol (I/Q):\n");
-  for (int i = 0; i < 8; i++) {
-    printf("txData[%2d]: (%6d, %6d)\n", i, txData[0][i].r, txData[0][i].i);
+
+  // ZC
+  memset(freqFrame, 0, sizeof(freqFrame));
+  memcpy(freqFrame, SIP_symbol_ZC, sizeof(SIP_symbol_ZC));
+  memset(txDataF[0], 0, frame_length_complex_samples * sizeof(int));
+
+  for (int sym = 0; sym < num_symbols; sym++) {
+    int outMod_offset = sym * points_per_symbol;
+    int txData_offset = sym * ofdm_symbol_size;
+
+    for (int n = 0; n < points_per_symbol; n++) {
+      txDataF[0][txData_offset + n] = freqFrame[outMod_offset + n];
+    }
   }
+
+  for (int i = 0; i < 14; i++) {
+    was_symbol_used[i] = true;
+  }
+
+  nr_normal_prefix_mod(txDataF[0],
+                      txData[0],
+                      14,
+                      frame_parms,
+                      1,
+                      was_symbol_used);
+
+  sprintf(filename,"ofdm_SIP_2RBS_ZC.m");
+  LOG_M(filename,"ofdm", txData[0], slot_length, 1, 1);
 
   /*double **s_re,**s_im,**r_re,**r_im;
 
