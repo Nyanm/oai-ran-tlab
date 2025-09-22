@@ -39,10 +39,13 @@
 #include <syscall.h>
 #include <openair2/UTIL/OPT/opt.h>
 
+#ifdef ENABLE_CUDA
+#include <cuda_runtime.h>
+#endif
 // #define DEBUG_DLSCH_CODING
 // #define DEBUG_DLSCH_FREE 1
 
-void free_gNB_dlsch(NR_gNB_DLSCH_t *dlsch, uint16_t N_RB, const NR_DL_FRAME_PARMS *frame_parms)
+void free_gNB_dlsch(NR_gNB_DLSCH_t *dlsch, uint16_t N_RB, const NR_DL_FRAME_PARMS *frame_parms, int use_gpumem)
 {
   int max_layers = (frame_parms->nb_antennas_tx < NR_MAX_NB_LAYERS) ? frame_parms->nb_antennas_tx : NR_MAX_NB_LAYERS;
   uint16_t a_segments = MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * max_layers;
@@ -54,7 +57,12 @@ void free_gNB_dlsch(NR_gNB_DLSCH_t *dlsch, uint16_t N_RB, const NR_DL_FRAME_PARM
 
   NR_DL_gNB_HARQ_t *harq = &dlsch->harq_process;
   if (harq->b) {
-    free16(harq->b, a_segments * 1056);
+#ifdef ENABLE_CUDA	  
+    if (use_gpumem) 
+      cudaFreeHost(harq->b);
+    else	  
+#endif  
+      free16(harq->b, a_segments * 1056);
     harq->b = NULL;
   }
   if (harq->f) {
@@ -68,7 +76,7 @@ void free_gNB_dlsch(NR_gNB_DLSCH_t *dlsch, uint16_t N_RB, const NR_DL_FRAME_PARM
   free(harq->c);
 }
 
-NR_gNB_DLSCH_t new_gNB_dlsch(NR_DL_FRAME_PARMS *frame_parms, uint16_t N_RB)
+NR_gNB_DLSCH_t new_gNB_dlsch(NR_DL_FRAME_PARMS *frame_parms, uint16_t N_RB, int use_gpumem)
 {
   int max_layers = (frame_parms->nb_antennas_tx < NR_MAX_NB_LAYERS) ? frame_parms->nb_antennas_tx : NR_MAX_NB_LAYERS;
   uint16_t a_segments = MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * max_layers; // number of segments to be allocated
@@ -89,16 +97,35 @@ NR_gNB_DLSCH_t new_gNB_dlsch(NR_DL_FRAME_PARMS *frame_parms, uint16_t N_RB)
   bzero(harq->b, dlsch_bytes);
 
   harq->c = (uint8_t **)malloc16(a_segments * sizeof(uint8_t *));
+#ifdef ENABLE_CUDA
+  uint8_t *c_devh[a_segments];
+#endif
   for (int r = 0; r < a_segments; r++) {
     // account for filler in first segment and CRCs for multiple segment case
     // [hna] 8448 is the maximum CB size in NR
     //       68*348 = 68*(maximum size of Zc)
     //       In section 5.3.2 in 38.212, the for loop is up to N + 2*Zc (maximum size of N is 66*Zc, therefore 68*Zc)
-    harq->c[r] = malloc16(8448);
+#ifdef ENABLE_CUDA
+    if (use_gpumem) {
+      cudaHostAlloc((void**)&harq->c[r], 8448/8, cudaHostAllocMapped);
+      cudaError_t err=cudaHostAlloc((void**)&harq->c[r],(8448/8)*sizeof(uint8_t),cudaHostAllocMapped);
+      AssertFatal(err == cudaSuccess,"CUDA Error (harq->c[%d]): %s\n", r,cudaGetErrorString(err));
+      err=cudaHostGetDevicePointer((void**)&c_devh[r], harq->c[r], 0);
+      AssertFatal(err == cudaSuccess,"CUDA Error (cudaHostGetDevicePointer) harq->c_devh[%d]: %s\n", r,cudaGetErrorString(err));
+    }
+    else 
+#endif
+      harq->c[r] = malloc16(8448/8);
     AssertFatal(harq->c[r], "cannot allocate harq->c[%d]\n", r);
-    bzero(harq->c[r], 8448);
+    bzero(harq->c[r], 8448/8);
   }
-
+#ifdef ENABLE_CUDA
+  if (use_gpumem) {
+    cudaError_t err=cudaMalloc((void**)&harq->c_dev,a_segments*sizeof(uint8_t*));
+    err=cudaMemcpy(harq->c_dev,c_devh,a_segments*sizeof(uint8_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy c_devh -> input_dev): %s\n", cudaGetErrorString(err));
+  }
+#endif
   harq->f = malloc16(N_RB * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB * 8 * NR_MAX_NB_LAYERS);
   AssertFatal(harq->f, "cannot allocate harq->f\n");
   bzero(harq->f, N_RB * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB * 8 * NR_MAX_NB_LAYERS);
@@ -136,7 +163,8 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
                                                        .tparity = tparity,
                                                        .toutput = toutput,
 						       .tconcat = tconcat,
-                                                       .TBs = TBs};
+                                                       .TBs = TBs,
+  						       .use_gpu = gNB->use_gpu};
 
   int num_segments = 0;
 
@@ -281,7 +309,9 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
       reset_meas(&segment_parameters->ts_rate_match);
       reset_meas(&segment_parameters->ts_ldpc_encode);
     }
-
+#ifdef ENABLE_CUDA
+    if (gNB->use_gpu) TB_parameters->c_dev = (uint8_t**)harq->c_dev;
+#endif  
     segments_offset += TB_parameters->C;
 
     /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)

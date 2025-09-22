@@ -202,6 +202,7 @@ typedef struct nrLDPC_TB_encoding_parameters_s{
   uint32_t C;
   nrLDPC_segment_encoding_parameters_t *segments;
   unsigned char *output;
+  uint8_t **c_dev;
 } nrLDPC_TB_encoding_parameters_t;
 
 /**
@@ -233,6 +234,7 @@ typedef struct nrLDPC_slot_encoding_parameters_s{
   time_stats_t *toutput;
   time_stats_t *tconcat;
   nrLDPC_TB_encoding_parameters_t *TBs;
+  uint32_t use_gpu;
 } nrLDPC_slot_encoding_parameters_t;
 
 typedef int32_t(nrLDPC_coding_init_t)(void);
