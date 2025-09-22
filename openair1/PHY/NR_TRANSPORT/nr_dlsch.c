@@ -649,7 +649,6 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   if (start_sc >= symbol_sz)
     start_sc -= symbol_sz;
 
-  const uint32_t txdataF_offset = slot * frame_parms->samples_per_slot_wCP;
 #ifdef DEBUG_DLSCH_MAPPING
   printf("PDSCH resource mapping started (start SC %d\tstart symbol %d\tN_PRB %d\tnb_re %d,nb_layers %d)\n",
          start_sc,
@@ -759,7 +758,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     stop_meas(&gNB->dlsch_resource_mapping_stats);
 
     for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
-      const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz + txdataF_offset;
+      const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz;
       do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, ant, start_sc, txdataF_offset_per_symbol);
     }
   }

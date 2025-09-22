@@ -137,7 +137,6 @@ void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_n
   LOG_D(PHY,"SS TX: frame %d, slot %d, start_symbol %d\n", frame, slot, ssb_start_symbol);
   nfapi_nr_tx_precoding_and_beamforming_t *pb = &pdu->precoding_and_beamforming;
   c16_t ***txdataF = gNB->common_vars.txdataF;
-  int txdataF_offset = slot * fp->samples_per_slot_wCP;
   // beam number in a scenario with multiple concurrent beams
   int bitmap = SL_to_bitmap(ssb_start_symbol, 4); // 4 ssb symbols
   int beam_nb = beam_index_allocation(gNB->enable_analog_das,
@@ -148,15 +147,15 @@ void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_n
                                       fp->symbols_per_slot,
                                       bitmap);
 
-  nr_generate_pss(&txdataF[beam_nb][0][txdataF_offset], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
-  nr_generate_sss(&txdataF[beam_nb][0][txdataF_offset], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
+  nr_generate_pss(txdataF[beam_nb][0], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
+  nr_generate_sss(txdataF[beam_nb][0], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
 
   uint16_t slots_per_hf = (fp->slots_per_frame) >> 1;
   int n_hf = slot < slots_per_hf ? 0 : 1;
 
   int hf = fp->Lmax == 4 ? n_hf : 0;
   nr_generate_pbch_dmrs(nr_gold_pbch(fp->Lmax, gNB->gNB_config.cell_config.phy_cell_id.value, hf, ssb_index & 7),
-                        &txdataF[beam_nb][0][txdataF_offset],
+                        txdataF[beam_nb][0],
                         gNB->TX_AMP,
                         ssb_start_symbol,
                         cfg,
@@ -174,7 +173,7 @@ void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_n
 
   nr_generate_pbch(gNB,
                    &ssb_pdu,
-                   &txdataF[beam_nb][0][txdataF_offset],
+                   txdataF[beam_nb][0],
                    ssb_start_symbol,
                    n_hf,
                    frame,
@@ -202,7 +201,6 @@ void phy_procedures_gNB_TX(processingData_L1tx_t *msgTx,
   NR_DL_FRAME_PARMS *fp = &gNB->frame_parms;
   nfapi_nr_config_request_scf_t *cfg = &gNB->gNB_config;
   int slot_prs = 0;
-  int txdataF_offset = slot * fp->samples_per_slot_wCP;
   prs_config_t *prs_config = NULL;
 
   if ((cfg->cell_config.frame_duplex_type.value == TDD) && (nr_slot_select(cfg,frame,slot) == NR_UPLINK_SLOT))
@@ -213,7 +211,7 @@ void phy_procedures_gNB_TX(processingData_L1tx_t *msgTx,
   // clear the transmit data array and beam index for the current slot
   for (int i = 0; i < gNB->common_vars.num_beams_period; i++) {
     for (int aa = 0; aa < cfg->carrier_config.num_tx_ant.value; aa++) {
-      memset(&gNB->common_vars.txdataF[i][aa][txdataF_offset], 0, fp->samples_per_slot_wCP * sizeof(int32_t));
+      memset(gNB->common_vars.txdataF[i][aa], 0, fp->samples_per_slot_wCP * sizeof(int32_t));
     }
   }
 
@@ -227,7 +225,7 @@ void phy_procedures_gNB_TX(processingData_L1tx_t *msgTx,
       {
         slot_prs = (slot - i*prs_config->PRSResourceTimeGap + fp->slots_per_frame)%fp->slots_per_frame;
         LOG_D(PHY,"gNB_TX: frame %d, slot %d, slot_prs %d, PRS Resource ID %d\n",frame, slot, slot_prs, rsc_id);
-        nr_generate_prs(slot_prs, &gNB->common_vars.txdataF[0][0][txdataF_offset], AMP, prs_config, cfg, fp);
+        nr_generate_prs(slot_prs, gNB->common_vars.txdataF[0][0], AMP, prs_config, cfg, fp);
       }
     }
   }
@@ -250,7 +248,7 @@ void phy_procedures_gNB_TX(processingData_L1tx_t *msgTx,
   
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_PHY_gNB_PDCCH_TX,1);
 
-    nr_generate_dci_top(msgTx, slot, txdataF_offset);
+    nr_generate_dci_top(msgTx, slot);
 
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_PHY_gNB_PDCCH_TX,0);
   }
@@ -315,7 +313,7 @@ void phy_procedures_gNB_TX(processingData_L1tx_t *msgTx,
     for (int aa = 0; aa < cfg->carrier_config.num_tx_ant.value; aa++) {
       if (gNB->phase_comp) {
         apply_nr_rotation_TX(fp,
-                             &gNB->common_vars.txdataF[i][aa][txdataF_offset],
+                             gNB->common_vars.txdataF[i][aa],
                              fp->symbol_rotation[0],
                              slot,
                              fp->N_RB_DL,
@@ -327,7 +325,7 @@ void phy_procedures_gNB_TX(processingData_L1tx_t *msgTx,
         T_INT(frame),
         T_INT(slot),
         T_INT(aa),
-        T_BUFFER(&gNB->common_vars.txdataF[i][aa][txdataF_offset], fp->samples_per_slot_wCP * sizeof(int32_t)));
+        T_BUFFER(gNB->common_vars.txdataF[i][aa], fp->samples_per_slot_wCP * sizeof(int32_t)));
     }
   }
   stop_meas(&gNB->phase_comp_stats);

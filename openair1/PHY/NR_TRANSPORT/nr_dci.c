@@ -53,7 +53,6 @@ static void nr_pdcch_scrambling(uint32_t *in, uint32_t size, uint32_t Nid, uint3
 
 static void nr_generate_dci(PHY_VARS_gNB *gNB,
                             nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_pdu_rel15,
-                            int txdataF_offset,
                             NR_DL_FRAME_PARMS *frame_parms,
                             int slot)
 {
@@ -176,7 +175,7 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
 
     /// Resource mapping
     uint16_t amp = gNB->TX_AMP;
-    c16_t *txdataF = gNB->common_vars.txdataF[beam_nb][0] + txdataF_offset;
+    c16_t *txdataF = gNB->common_vars.txdataF[beam_nb][0];
     if (cset_start_sc >= frame_parms->ofdm_symbol_size)
       cset_start_sc -= frame_parms->ofdm_symbol_size;
 
@@ -238,15 +237,15 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
   } // for (int d=0;d<pdcch_pdu_rel15->numDlDci;d++)
 }
 
-void nr_generate_dci_top(processingData_L1tx_t *msgTx, int slot, int txdataF_offset)
+void nr_generate_dci_top(processingData_L1tx_t *msgTx, int slot)
 {
   PHY_VARS_gNB *gNB = msgTx->gNB;
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   start_meas(&gNB->dci_generation_stats);
   for (int i = 0; i < msgTx->num_ul_pdcch; i++)
-    nr_generate_dci(msgTx->gNB, &msgTx->ul_pdcch_pdu[i].pdcch_pdu.pdcch_pdu_rel15, txdataF_offset, frame_parms, slot);
+    nr_generate_dci(msgTx->gNB, &msgTx->ul_pdcch_pdu[i].pdcch_pdu.pdcch_pdu_rel15, frame_parms, slot);
   for (int i = 0; i < msgTx->num_dl_pdcch; i++)
-    nr_generate_dci(msgTx->gNB, &msgTx->pdcch_pdu[i].pdcch_pdu_rel15, txdataF_offset, frame_parms, slot);
+    nr_generate_dci(msgTx->gNB, &msgTx->pdcch_pdu[i].pdcch_pdu_rel15, frame_parms, slot);
   stop_meas(&gNB->dci_generation_stats);
 }
 
