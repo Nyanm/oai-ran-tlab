@@ -31,6 +31,9 @@
 #define NFAPI_NR_NFAPI_TIMING_INFO_PERIOD_TAG 0x0120
 #define NFAPI_NR_FAPI_NUM_BEAMS_PERIOD_VENDOR_EXTENSION_TAG 0xA000
 #define NFAPI_NR_FAPI_ANALOG_BF_VENDOR_EXTENSION_TAG 0xA001
+#define NFAPI_NR_FAPI_TOTAL_NUM_BEAMS_VENDOR_EXTENSION_TAG 0xA002
+#define NFAPI_NR_FAPI_ANALOG_BEAM_VENDOR_EXTENSION_TAG 0xA003
+
 
 typedef struct {
   uint16_t phy_id;
@@ -107,11 +110,11 @@ uint8_t pack_nr_p5_message_body(nfapi_nr_p4_p5_message_header_t *header,
  *  \param pUnpackedBuf A pointer to the nfapi_message_header
  *  \param unpackedBufLen The size of nfapi_message_header structure.
  *  \param config A pointer to the nfapi configuration structure
- *  \return 10 ( size of the unpacked header ) on success, -1 on failure.
+ *  \return true on success, false on failure.
  *
  * The function will decode a byte stream pointed to by pMessageBuf into a nfapi p5 header structure pointed to by pUnpackedBuf
  */
-int nfapi_nr_p5_message_header_unpack(void *pMessageBuf,
+bool nfapi_nr_p5_message_header_unpack(void *pMessageBuf,
                                       uint32_t messageBufLen,
                                       void *pUnpackedBuf,
                                       uint32_t unpackedBufLen,
@@ -123,11 +126,11 @@ int nfapi_nr_p5_message_header_unpack(void *pMessageBuf,
  *  \param pUnpackedBuf A pointer to the nfapi_message_header
  *  \param unpackedBufLen The size of nfapi_message_header structure.
  *  \param config A pointer to the nfapi configuration structure
- *  \return != -1 means success, -1 means failure.
+ *  \return true on success, false on failure.
  *
  * The function will decode a byte stream pointed to by pMessageBuf into a nfapi p5 message structure pointer to by pUnpackedBuf
  */
-int nfapi_nr_p5_message_unpack(void *pMessageBuf,
+bool nfapi_nr_p5_message_unpack(void *pMessageBuf,
                                uint32_t messageBufLen,
                                void *pUnpackedBuf,
                                uint32_t unpackedBufLen,
@@ -151,13 +154,13 @@ int nfapi_nr_p7_message_pack(void *pMessageBuf, void *pPackedBuf, uint32_t packe
  *  \param pUnpackedBuf A pointer to the nfapi_message_header
  *  \param unpackedBufLen The size of nfapi_message_header structure.
  *  \param config A pointer to the nfapi configuration structure
- *  \return 0 means success, -1 means failure.
+ *  \return true on success, false on failure.
  *
  * The function will decode a byte stream pointed to by pMessageBuf into a nfapi_p7_message_header structure pointer to by
  pUnpackedBuf
 
  */
-int nfapi_nr_p7_message_header_unpack(void *pMessageBuf,
+bool nfapi_nr_p7_message_header_unpack(void *pMessageBuf,
                                       uint32_t messageBufLen,
                                       void *pUnpackedBuf,
                                       uint32_t unpackedBufLen,
@@ -169,11 +172,11 @@ int nfapi_nr_p7_message_header_unpack(void *pMessageBuf,
  *  \param pUnpackedBuf A pointer to the nfapi_message_header
  *  \param unpackedBufLen The size of nfapi_message_header structure.
  *  \param config A pointer to the nfapi configuration structure
- *  \return 0 means success, -1 means failure.
+ *  \return true on success, false failure.
  *
  * The function will decode a byte stream pointed to by pMessageBuf into a nfapi p7 message structure pointer to by pUnpackedBuf
  */
-int nfapi_nr_p7_message_unpack(void *pMessageBuf,
+bool nfapi_nr_p7_message_unpack(void *pMessageBuf,
                                uint32_t messageBufLen,
                                void *pUnpackedBuf,
                                uint32_t unpackedBufLen,

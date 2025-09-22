@@ -47,9 +47,22 @@
 //#define DEBUG_LDPC 1 
 
 #include "ldpc_encode_parity_check_cuda.c"
-uint32_t **d_dev;
-uint32_t *d_host[4];
-int managed = 0, concurrent = 0, uva = 0, pageable = 0, pageable_uses_host = 0;
+uint32_t *c_dev;
+uint32_t **c_host;
+uint32_t *c_devh[4];
+uint32_t *d_dev;
+uint32_t **d_host;
+uint32_t *d_devh[4];
+uint32_t *cc_dev;
+uint32_t **cc_host;
+uint32_t *cc_devh[4];
+uint32_t *input_dev;
+uint32_t **input_host;
+uint32_t *input_devh[128];
+int managed = 0, concurrent = 0, uva = 0, pageable = 0, pageable_uses_host = 0, register_host = 0;
+
+//#define USE_GPU_CIRCCOPY 1
+#define USE_GPU_FOR_INPUT 1
 
 void cuda_support_init() {
 printf("We are doing the init here!\n");
@@ -64,6 +77,7 @@ printf("We are doing the init here!\n");
     cudaDeviceGetAttribute(&uva, cudaDevAttrUnifiedAddressing, dev);
     cudaDeviceGetAttribute(&pageable, cudaDevAttrPageableMemoryAccess, dev);
     cudaDeviceGetAttribute(&pageable_uses_host, cudaDevAttrPageableMemoryAccessUsesHostPageTables, dev);
+    cudaDeviceGetAttribute(&register_host, cudaDevAttrHostRegisterSupported,dev);
 
     LOG_I(NR_PHY,"Device: %s (cc %d.%d)\n", prop.name, prop.major, prop.minor);
     LOG_I(NR_PHY,"Unified Virtual Addressing (UVA): %s\n", uva ? "YES" : "NO");
@@ -71,28 +85,117 @@ printf("We are doing the init here!\n");
     LOG_I(NR_PHY,"Concurrent managed access:       %s\n", concurrent ? "YES" : "NO");
     LOG_I(NR_PHY,"Pageable memory access:          %s\n", pageable ? "YES" : "NO");
     LOG_I(NR_PHY,"Uses host page tables:           %s\n", pageable_uses_host ? "YES" : "NO");
+    LOG_I(NR_PHY,"Host Register supported:         %s\n", register_host ? "YES" : "NO");
 
   // initialize input and output memory
-  if (!pageable_uses_host) {
-    printf("How you doing?\n");
+  if (!pageable && !register_host) {
     cudaError_t err=cudaMalloc((void **)&c_dev,4*sizeof(uint32_t*));
-    AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+    AssertFatal(err == cudaSuccess,"CUDA Error (c_dev): %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)&c_host,4*sizeof(uint32_t*),cudaHostAllocDefault);
+    AssertFatal(err == cudaSuccess,"CUDA Error (c_host): %s\n", cudaGetErrorString(err));
     for (int i=0;i<4;i++) {
-      cudaError_t err=cudaMalloc((void**)&c_host[i],2*22*384*sizeof(uint32_t));
-      AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+      err=cudaMalloc((void**)&c_devh[i],2*22*384*sizeof(uint32_t));
+      AssertFatal(err == cudaSuccess,"CUDA Error (c_devh[%d]): %s\n", i,cudaGetErrorString(err));
+      err=cudaHostAlloc((void**)&c_host[i],2*22*384*sizeof(uint32_t),cudaHostAllocDefault);
+      AssertFatal(err == cudaSuccess,"CUDA Error (chost[%d]): %s\n", i,cudaGetErrorString(err));
     }
-    cudaMemcpy(c_dev,c_host,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
+    err = cudaMemcpy(c_dev,c_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy c_devh -> c_dev): %s\n", cudaGetErrorString(err));
+    err=cudaMalloc((void**)&d_dev,4*sizeof(uint32_t*));
+    AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)&d_host,4*sizeof(uint32_t*),cudaHostAllocDefault);
+    AssertFatal(err == cudaSuccess,"CUDA Error (d_host): %s\n", cudaGetErrorString(err));
+    for (int i=0;i<4;i++) {
+      err=cudaMalloc((void**)&d_devh[i],68*384*sizeof(uint32_t));
+      AssertFatal(err == cudaSuccess,"CUDA Error (d_devh[%d]: %s\n", i,cudaGetErrorString(err));
+      err=cudaHostAlloc((void**)&d_host[i],68*384*sizeof(uint32_t),cudaHostAllocDefault);
+      AssertFatal(err == cudaSuccess,"CUDA Error (d_host[%d]): %s\n", i,cudaGetErrorString(err));
+    }
+    err=cudaMemcpy(d_dev,d_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy d_devh -> d_dev): %s\n", cudaGetErrorString(err));
+    err=cudaMalloc((void**)&cc_dev,4*sizeof(uint32_t*));
+    AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)&cc_host,4*sizeof(uint32_t*),cudaHostAllocDefault);
+    AssertFatal(err == cudaSuccess,"CUDA Error (cc_host): %s\n", cudaGetErrorString(err));
+    for (int i=0;i<4;i++) {
+      err=cudaMalloc((void**)&cc_devh[i],68*384*sizeof(uint32_t));
+      AssertFatal(err == cudaSuccess,"CUDA Error (cc_devh[%d]: %s\n", i,cudaGetErrorString(err));
+      err=cudaHostAlloc((void**)&cc_host[i],68*384*sizeof(uint32_t),cudaHostAllocDefault);
+      AssertFatal(err == cudaSuccess,"CUDA Error (cc_host[%d]): %s\n", i,cudaGetErrorString(err));
+    }
+    err=cudaMemcpy(cc_dev,cc_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy cc_devh -> d_dev): %s\n", cudaGetErrorString(err));
+    err=cudaMalloc((void**)&input_dev,128*sizeof(uint8_t*));
+    AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)&input_host,128*sizeof(uint8_t*),cudaHostAllocDefault);
+    AssertFatal(err == cudaSuccess,"CUDA Error (cc_host): %s\n", cudaGetErrorString(err));
+    for (int i=0;i<128;i++) {
+      err=cudaMalloc((void**)&input_devh[i],(8448/8)*sizeof(uint8_t));
+      AssertFatal(err == cudaSuccess,"CUDA Error (input_devh[%d]: %s\n", i,cudaGetErrorString(err));
+      err=cudaHostAlloc((void**)&input_host[i],(8448/8)*sizeof(uint8_t),cudaHostAllocDefault);
+      AssertFatal(err == cudaSuccess,"CUDA Error (input_host[%d]): %s\n", i,cudaGetErrorString(err));
+    }
+    err=cudaMemcpy(input_dev,input_devh,128*sizeof(uint8_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy cc_devh -> d_dev): %s\n", cudaGetErrorString(err));
   }
-  cudaError_t err=cudaMalloc((void**)&d_dev,4*sizeof(uint32_t*));
-  AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
-  for (int i=0;i<4;i++) {
-      cudaError_t err=cudaMalloc((void**)&d_host[i],46*384*sizeof(uint32_t));
-      AssertFatal(err == cudaSuccess,"CUDA Error: %s\n", cudaGetErrorString(err));
+  else {
+    LOG_I(NR_PHY,"Allocating c,d,cc arrays for CPU/GPU shared-memory\n");
+    cudaError_t err=cudaHostAlloc((void **)&c_host,4*sizeof(uint32_t*),cudaHostAllocMapped|cudaHostAllocPortable);
+    AssertFatal(err == cudaSuccess,"CUDA Error (c_host): %s\n", cudaGetErrorString(err));
+    err = cudaHostGetDevicePointer((void**)&c_dev, c_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error (c_dev): %s\n", cudaGetErrorString(err));
+    LOG_I(NR_PHY,"c_host %p, c_dev %p\n",c_host,c_dev);
+    for (int i=0;i<4;i++) {
+      err=cudaHostAlloc((void**)&c_host[i],2*22*384*sizeof(uint32_t),cudaHostAllocMapped);
+      AssertFatal(err == cudaSuccess,"CUDA Error (c_host[%d]): %s\n", i,cudaGetErrorString(err));
+      err = cudaHostGetDevicePointer((void**)&c_devh[i], c_host[i], 0);
+      AssertFatal(err == cudaSuccess,"CUDA Error (c_devh[%d]): %s\n", i,cudaGetErrorString(err));
+    }
+    err=cudaMemcpy(c_dev,c_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy c_devh -> c_dev): %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)&d_host,4*sizeof(uint32_t*),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (d_host): %s\n", cudaGetErrorString(err));
+    err=cudaHostGetDevicePointer((void**)&d_dev, d_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error cudaHostGetDevicePointer(d_dev): %s\n", cudaGetErrorString(err));
+    LOG_I(NR_PHY,"d_host %p, d_dev %p\n",d_host,d_dev);
+    for (int i=0;i<4;i++) {
+      err=cudaHostAlloc((void**)&d_host[i],68*384*sizeof(uint32_t),cudaHostAllocMapped);
+      AssertFatal(err == cudaSuccess,"CUDA Error (d_host[%d]): %s\n", i,cudaGetErrorString(err));
+      err=cudaHostGetDevicePointer((void**)&d_devh[i], d_host[i], 0);
+      AssertFatal(err == cudaSuccess,"CUDA Error (cudaHostGetDevicePointer) d_devh[%d]: %s\n", i,cudaGetErrorString(err));
+    }
+    err=cudaMemcpy(d_dev,d_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy d_devh -> d_dev): %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)&cc_host,4*sizeof(uint32_t*),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (cc_host): %s\n", cudaGetErrorString(err));
+    err=cudaHostGetDevicePointer((void**)&cc_dev, cc_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error cudaHostGetDevicePointer(cc_dev): %s\n", cudaGetErrorString(err));
+    LOG_I(NR_PHY,"cc_host %p, cc_dev %p\n",cc_host,cc_dev);
+    for (int i=0;i<4;i++) {
+      err=cudaHostAlloc((void**)&cc_host[i],68*384*sizeof(uint32_t),cudaHostAllocMapped);
+      AssertFatal(err == cudaSuccess,"CUDA Error (cc_host[%d]): %s\n", i,cudaGetErrorString(err));
+      err=cudaHostGetDevicePointer((void**)&cc_devh[i], cc_host[i], 0);
+      AssertFatal(err == cudaSuccess,"CUDA Error (cudaHostGetDevicePointer) cc_devh[%d]: %s\n", i,cudaGetErrorString(err));
+    }
+    err=cudaMemcpy(cc_dev,cc_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy d_devh -> d_dev): %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)&input_host,128*sizeof(uint8_t*),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (input_host): %s\n", cudaGetErrorString(err));
+    err=cudaHostGetDevicePointer((void**)&input_dev, input_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error cudaHostGetDevicePointer(cc_host): %s\n", cudaGetErrorString(err));
+    LOG_I(NR_PHY,"input_host %p, input_dev %p\n",input_host,input_dev);
+    for (int i=0;i<128;i++) {
+      err=cudaHostAlloc((void**)&input_host[i],(8448/8)*sizeof(uint8_t),cudaHostAllocMapped);
+      AssertFatal(err == cudaSuccess,"CUDA Error (input_host[%d]): %s\n", i,cudaGetErrorString(err));
+      err=cudaHostGetDevicePointer((void**)&input_devh[i], input_host[i], 0);
+      AssertFatal(err == cudaSuccess,"CUDA Error (cudaHostGetDevicePointer) input_devh[%d]: %s\n", i,cudaGetErrorString(err));
+    }
+    err=cudaMemcpy(input_dev,input_devh,128*sizeof(uint8_t*),cudaMemcpyHostToDevice);
+    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy input_devh -> input_dev): %s\n", cudaGetErrorString(err));
   }
-  cudaMemcpy(d_dev,d_host,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
 }
 
-int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implemparams_t *impp)
+uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
 {
   //set_log(PHY, 4);
 
@@ -104,7 +207,7 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
   int rate=3;
   int no_punctured_columns,removed_bit;
 
-  if(impp->tinput != NULL) start_meas(impp->tinput);
+//  if(impp->tinput != NULL) start_meas(impp->tinput);
   //determine number of bits in codeword
   if (BG==1)
     {
@@ -127,15 +230,19 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
   AssertFatal(Zc > 0, "no valid Zc found for block length %d\n", block_length);
 
   int n_inputs = (impp->n_segments/32)+(((impp->n_segments&31) > 0) ? 1: 0);
-  uint32_t  cc[4][22*Zc]; //padded input, unpacked, max size
+//  uint32_t  cc[4][22*Zc]; //padded input, unpacked, max size
 
   // calculate number of punctured bits
   no_punctured_columns=(int)((nrows-2)*Zc+block_length-block_length*rate)/Zc;
   removed_bit=(nrows-no_punctured_columns-2) * Zc+block_length-(int)(block_length*rate);
   // clear input
-  for (int i=0;i<n_inputs;i++) {
-    memset(cc[i],0,22*Zc*sizeof(uint32_t));
-  }
+  /*
+  for (int i=0;i<n_inputs;i++) { 
+    if (!pageable && !register_host)
+      cudaMemset(cc_devh[i],0,22*Zc*sizeof(uint32_t));
+    else
+      memset(cc_host[i],0,22*Zc*sizeof(uint32_t));
+  }*/
 
 
 #if 0
@@ -150,6 +257,21 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
     }
   }
 #else
+//  uint32_t *ccp[4];
+//  for (int s=0;s<n_inputs;s++) ccp[s]=cc[s];  
+#ifdef USE_GPU_FOR_INPUT
+  if(impp->tinput != NULL) start_meas(impp->tinput);
+  if (!pageable) {
+    for (int r=0;r<impp->n_segments;r++) {
+      if (!register_host)
+        cudaMemcpy(input_devh[r],input[r],block_length>>3,cudaMemcpyHostToDevice);
+      else
+        memcpy(input_host[r],input[r],block_length>>3);
+    }
+  }
+  ldpc_input(pageable? input : input_dev,(uint32_t**)cc_dev,block_length,impp->n_segments);
+//  for (int i=0;i<16;i++) printf("i %d: cc[0] %x\n",i,cc[0][i]);
+#else  
 #ifndef __aarch64__
   simde__m256i andmask = simde_mm256_set_epi32(0x1,0x2,0x4,0x8,0x10,0x20,0x40,0x80);  // every 8 bits -> 8 bytes, pattern repeats.
   simde__m256i zero256 = simde_mm256_setzero_si256();
@@ -169,7 +291,7 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
       for (int j=1; j < j2; j++) {
         c256 = simde_mm256_or_si256(simde_mm256_and_si256(simde_mm256_cmpeq_epi32(simde_mm256_andnot_si256(simde_mm256_set1_epi32(input[(j0<<5)+j][i8]),andmask),zero256),masks[j]),c256);
       }
-      ((simde__m256i *)cc[j0])[i8] = c256;
+      ((simde__m256i *)cc_host[j0])[i8] = c256;
     }
   }
 #else
@@ -511,7 +633,7 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
       cc6 = vorrq_u32(cc6,vshlq_u32(vandq_u32(in,vmasksg),vshiftg[j]));
       cc7 = vorrq_u32(cc7,vshlq_u32(vandq_u32(in,vmasksh),vshifth[j]));
     }
-    ccp=&((uint32x4_t *)cc[0])[i2];
+    ccp=&((uint32x4_t *)cc_host[0])[i2];
     ccp[0] = cc0;
     ccp[1] = cc1;
     ccp[2] = cc2;
@@ -541,7 +663,7 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
         cc6 = vorrq_u32(cc6,vshlq_u32(vandq_u32(in,vmasksg),vshiftg[j]));
         cc7 = vorrq_u32(cc7,vshlq_u32(vandq_u32(in,vmasksh),vshifth[j]));
       }
-      ccp=&((uint32x4_t *)cc[1])[i2];
+      ccp=&((uint32x4_t *)cc_host[1])[i2];
       ccp[0] = cc0;
       ccp[1] = cc1;
       ccp[2] = cc2;
@@ -572,7 +694,7 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
         cc6 = vorrq_u32(cc6,vshlq_u32(vandq_u32(in,vmasksg),vshiftg[j]));
         cc7 = vorrq_u32(cc7,vshlq_u32(vandq_u32(in,vmasksh),vshifth[j]));
       }
-      ccp=&((uint32x4_t *)cc[2])[i2];
+      ccp=&((uint32x4_t *)cc_host[2])[i2];
       ccp[0] = cc0;
       ccp[1] = cc1;
       ccp[2] = cc2;
@@ -603,7 +725,7 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
         cc6 = vorrq_u32(cc6,vshlq_u32(vandq_u32(in,vmasksg),vshiftg[j]));
         cc7 = vorrq_u32(cc7,vshlq_u32(vandq_u32(in,vmasksh),vshifth[j]));
       }
-      ccp=&((uint32x4_t *)cc[3])[i2];
+      ccp=&((uint32x4_t *)cc_host[3])[i2];
       ccp[0] = cc0;
       ccp[1] = cc1;
       ccp[2] = cc2;
@@ -616,42 +738,52 @@ int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implempar
   }
 #endif
 #endif
-  uint32_t c[n_inputs][2 * 22 * Zc] ; //double size matrix of c
-  uint32_t *cp[4];
+#endif
+  if(impp->tinput != NULL) stop_meas(impp->tinput);
+  if(impp->tinput_memcpy != NULL) start_meas(impp->tinput_memcpy);
+#ifdef USE_GPU_CIRCCOPY
+  circcopy_c(cc_dev,c_dev,n_inputs);
+#else
+#ifdef USE_CUDA_MEMCPY 
   for (int s=0;s<n_inputs;s++)  {
     for (int i1 = 0; i1 < ncols; i1++)   {
-      memcpy(&c[s][2 * i1 * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
-      memcpy(&c[s][(2 * i1 + 1) * Zc], &cc[s][i1 * Zc], Zc * sizeof(uint32_t));
+      cudaError_t err = cudaMemcpy(&c_devh[s][2 * i1 * Zc], &cc_devh[s][i1 * Zc], Zc * sizeof(uint32_t),cudaMemcpyDeviceToDevice);
+      AssertFatal(err == cudaSuccess, "1st memcpy cc_devh[%d] -> c_devh[%d] %p CUDA Error: %s\n", s, s, c_devh[s],cudaGetErrorString(err)); 			
+      err = cudaMemcpy(&c_devh[s][(2 * i1 + 1) * Zc], &cc_devh[s][i1 * Zc], Zc * sizeof(uint32_t),cudaMemcpyDeviceToDevice);
+      AssertFatal(err == cudaSuccess, "2nd memcpy cc_devh[%d] -> c_devh[%d] %p CUDA Error: %s\n", s, s, c_devh[s],cudaGetErrorString(err)); 			
     }
-    cp[s]=c[s];
-  }
-  if (!pageable_uses_host) {
-    for (int s=0;s<n_inputs;s++) {
-      cudaError_t err = cudaMemcpy(c_host[s],c[s],sizeof(uint32_t)*2*22*Zc,cudaMemcpyHostToDevice);
-      AssertFatal(err == cudaSuccess, "c_dev[%d] %p CUDA Error: %s\n", s, c_dev[s],cudaGetErrorString(err)); 			
+#else
+  for (int s=0;s<n_inputs;s++)  {
+    for (int i1 = 0; i1 < ncols; i1++)   {
+      memcpy(&c_host[s][2 * i1 * Zc], &cc_host[s][i1 * Zc], Zc * sizeof(uint32_t));
+      memcpy(&c_host[s][(2 * i1 + 1) * Zc], &cc_host[s][i1 * Zc], Zc * sizeof(uint32_t));
+    }
+    if (!pageable && !register_host) {
+      cudaError_t err = cudaMemcpy(c_devh[s],c_host[s],sizeof(uint32_t)*2*22*Zc,cudaMemcpyHostToDevice);
+      AssertFatal(err == cudaSuccess, "memcpy c_host[%d] -> c_devh[%d] %p CUDA Error: %s\n", s, s, c_devh[s],cudaGetErrorString(err)); 			
     }
   }
-
-  if(impp->tinput != NULL) stop_meas(impp->tinput);
-
+#endif 
+#endif
+  if(impp->tinput != NULL) stop_meas(impp->tinput_memcpy);
   if (BG==1 && Zc==384)  {
     //parity check part
     if(impp->tparity != NULL) start_meas(impp->tparity);
-    encode_parity_check_part_cuda(pageable_uses_host? cp : c_dev, d_dev, BG, Zc, Kb, ncols,n_inputs);
+    encode_parity_check_part_cuda((uint32_t**)c_dev, (uint32_t**)d_dev, BG, Zc, Kb, ncols,n_inputs);
     if(impp->tparity != NULL) stop_meas(impp->tparity);
   }
   else {
     AssertFatal(1==0,"Only BG1 Zc=384 for now\n");
   }
-
   if(impp->toutput != NULL) start_meas(impp->toutput);
   for (int s=0;s<n_inputs;s++) {
-    memcpy(output[s],&cc[s][2*Zc],sizeof(uint32_t)*(block_length-(2*Zc)));
-    cudaError_t err = cudaMemcpy(&output[s][block_length-(2*Zc)],d_host[s],sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),cudaMemcpyDeviceToHost);
-    AssertFatal(err == cudaSuccess, "d_dev[%d] %p CUDA Error: %s\n", s, d_dev[s],cudaGetErrorString(err)); 			
+    cudaMemcpy(d_host[s],&cc_devh[s][2*Zc],sizeof(uint32_t)*(block_length-(2*Zc)),cudaMemcpyDeviceToHost);
+    if (!pageable && !register_host) {
+      cudaError_t err = cudaMemcpy(&d_host[s][block_length-(2*Zc)],d_devh[s]+block_length-(2*Zc),sizeof(uint32_t)*((nrows-no_punctured_columns) * Zc-removed_bit),cudaMemcpyDeviceToHost);
+      AssertFatal(err == cudaSuccess, "d_dev[%d] %p CUDA Error: %s\n", s, d_devh[s],cudaGetErrorString(err)); 			
+    }
   }
   if(impp->toutput != NULL) stop_meas(impp->toutput);
-
-  return 0;
+  return d_host;
 }
 

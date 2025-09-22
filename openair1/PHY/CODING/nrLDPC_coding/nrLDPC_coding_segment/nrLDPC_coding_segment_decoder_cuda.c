@@ -219,7 +219,7 @@ static void nr_process_decode_segment(void *arg)
 
   ////////////////////////////////// pl =====> llrProcBuf //////////////////////////////////
   int decodeIterations =  
-    LDPCdecoder(p_decoderParms, 0, 0, 0, l, llrProcBuf, p_procTime, rdata->abort_decode);
+    LDPCdecoder(p_decoderParms,  l, llrProcBuf, p_procTime, rdata->abort_decode);
   if (decodeIterations < p_decoderParms->numMaxIter) {
     memcpy(rdata->c, llrProcBuf, K >> 3);
     *rdata->decodeSuccess = true;
@@ -318,7 +318,7 @@ static void nr_process_decode_segment_cuda(void *arg)
   (&RDATA->decoderParms)->Kprime = lenWithCrc(RDATA->C, RDATA->A);
   (&RDATA->decoderParms)->n_segments = RDATA->C;
   // Phase 2: call batch GPU decoder (you must implement this API)
-  int decodeIterations = LDPCdecoder(&RDATA->decoderParms, 0, 0, 0, llrBuffer, decodedBitsBig, p_procTime, RDATA->abort_decode);
+  int decodeIterations = LDPCdecoder(&RDATA->decoderParms, llrBuffer, decodedBitsBig, p_procTime, RDATA->abort_decode);
   //printf("Decoder done\n");
   //dumpASS(decodedBitsBig, "dlsim_decoded_bits.txt");
   if (decodeIterations > (&seg0->decoderParms)->numMaxIter) {

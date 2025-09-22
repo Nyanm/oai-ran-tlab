@@ -23,7 +23,7 @@
 #define _GNU_SOURCE             /* See feature_test_macros(7) */
 
 #include "common/config/config_userapi.h"
-#include "RRC/LTE/rrc_vars.h"
+#include "common/utils/load_module_shlib.h"
 #ifdef SMBV
 #include "PHY/TOOLS/smbv.h"
 unsigned short config_frames[4] = {2,9,11,13};
@@ -118,7 +118,6 @@ double rx_gain_off = 0.0;
 
 static int tx_max_power[MAX_NUM_CCs]; /* =  {0,0}*/;
 int chain_offset = 0;
-int emulate_rf = 0;
 int numerology = 0;
 double cpuf;
 
@@ -127,52 +126,6 @@ double cpuf;
 void pdcp_run(const protocol_ctxt_t *const ctxt_pP)
 {
   abort();
-}
-
-/*---------------------BMC: timespec helpers -----------------------------*/
-
-struct timespec min_diff_time = { .tv_sec = 0, .tv_nsec = 0 };
-struct timespec max_diff_time = { .tv_sec = 0, .tv_nsec = 0 };
-
-struct timespec clock_difftime(struct timespec start, struct timespec end) {
-  struct timespec temp;
-
-  if ((end.tv_nsec-start.tv_nsec)<0) {
-    temp.tv_sec = end.tv_sec-start.tv_sec-1;
-    temp.tv_nsec = 1000000000+end.tv_nsec-start.tv_nsec;
-  } else {
-    temp.tv_sec = end.tv_sec-start.tv_sec;
-    temp.tv_nsec = end.tv_nsec-start.tv_nsec;
-  }
-
-  return temp;
-}
-
-void print_difftimes(void)
-{
-  LOG_I(HW, "difftimes min = %lu ns ; max = %lu ns\n", min_diff_time.tv_nsec, max_diff_time.tv_nsec);
-}
-
-void update_difftimes(struct timespec start, struct timespec end) {
-  struct timespec diff_time = { .tv_sec = 0, .tv_nsec = 0 };
-  int             changed = 0;
-  diff_time = clock_difftime(start, end);
-
-  if ((min_diff_time.tv_nsec == 0) || (diff_time.tv_nsec < min_diff_time.tv_nsec)) {
-    min_diff_time.tv_nsec = diff_time.tv_nsec;
-    changed = 1;
-  }
-
-  if ((max_diff_time.tv_nsec == 0) || (diff_time.tv_nsec > max_diff_time.tv_nsec)) {
-    max_diff_time.tv_nsec = diff_time.tv_nsec;
-    changed = 1;
-  }
-
-#if 1
-
-  if (changed) print_difftimes();
-
-#endif
 }
 
 /*------------------------------------------------------------------------*/
@@ -206,11 +159,19 @@ void exit_function(const char *file, const char *function, const int line, const
 
   for (ru_id=0; ru_id<RC.nb_RU; ru_id++) {
     if (RC.ru[ru_id] && RC.ru[ru_id]->rfdevice.trx_end_func) {
+      if (RC.ru[ru_id]->rfdevice.trx_get_stats_func) {
+        RC.ru[ru_id]->rfdevice.trx_get_stats_func(&RC.ru[ru_id]->rfdevice);
+        RC.ru[ru_id]->rfdevice.trx_get_stats_func = NULL;
+      }
       RC.ru[ru_id]->rfdevice.trx_end_func(&RC.ru[ru_id]->rfdevice);
       RC.ru[ru_id]->rfdevice.trx_end_func = NULL;
     }
 
     if (RC.ru[ru_id] && RC.ru[ru_id]->ifdevice.trx_end_func) {
+      if (RC.ru[ru_id]->ifdevice.trx_get_stats_func) {
+        RC.ru[ru_id]->ifdevice.trx_get_stats_func(&RC.ru[ru_id]->ifdevice);
+        RC.ru[ru_id]->ifdevice.trx_get_stats_func = NULL;
+      }
       RC.ru[ru_id]->ifdevice.trx_end_func(&RC.ru[ru_id]->ifdevice);
       RC.ru[ru_id]->ifdevice.trx_end_func = NULL;
     }
@@ -252,9 +213,9 @@ static int create_gNB_tasks(ngran_node_t node_type, configmodule_interface_t *cf
   RC.nrrrc = calloc(1, sizeof(*RC.nrrrc));
   RC.nrrrc[0] = RCconfig_NRRRC();
 
-  if (!get_softmodem_params()->nsa && !(node_type == ngran_gNB_DU)) {
+  if (node_type != ngran_gNB_DU) {
     // we start pdcp in both cuup (for drb) and cucp (for srb)
-    init_pdcp();
+    nr_pdcp_layer_init();
   }
 
   if (get_softmodem_params()->nsa) { //&& !NODE_IS_DU(node_type)
@@ -422,11 +383,17 @@ int stop_L1(module_id_t gnb_id)
     stop_RU(RC.nb_RU);
 
   /* stop trx devices, multiple carrier currently not supported by RU */
+  if (ru->rfdevice.trx_get_stats_func) {
+    ru->rfdevice.trx_get_stats_func(&ru->rfdevice);
+  }
   if (ru->rfdevice.trx_stop_func) {
     ru->rfdevice.trx_stop_func(&ru->rfdevice);
     LOG_I(GNB_APP, "turned off RU rfdevice\n");
   }
 
+  if (ru->ifdevice.trx_get_stats_func) {
+    ru->ifdevice.trx_get_stats_func(&ru->rfdevice);
+  }
   if (ru->ifdevice.trx_stop_func) {
     ru->ifdevice.trx_stop_func(&ru->ifdevice);
     LOG_I(GNB_APP, "turned off RU ifdevice\n");
@@ -496,12 +463,6 @@ static  void wait_nfapi_init(char *thread_name)
     pthread_cond_wait( &nfapi_sync_cond, &nfapi_sync_mutex );
 
   pthread_mutex_unlock(&nfapi_sync_mutex);
-}
-
-void init_pdcp(void) {
-  if (!NODE_IS_DU(get_node_type())) {
-    nr_pdcp_layer_init();
-  }
 }
 
 #ifdef E2_AGENT

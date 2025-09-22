@@ -163,7 +163,7 @@ extern "C" {
   __attribute__((always_inline)) inline c16_t c16conj(const c16_t a) {
     return (c16_t) {
       .r =  a.r,
-      .i = (int16_t)-a.i
+      .i =  (int16_t)-a.i
     };
   }
 
@@ -532,6 +532,20 @@ static inline void multadd_cpx_vector(const c16_t *x1, const c16_t *x2, c16_t *y
   }
 }
 
+static const int16_t ones_epi16[16] __attribute__((aligned(32))) = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+static inline simde__m256i protected_abs256(const simde__m256i in)
+{
+  const simde__m256i no32768 =
+      simde_mm256_adds_epi16(simde_mm256_subs_epi16(in, *(simde__m256i *)ones_epi16), *(simde__m256i *)ones_epi16);
+  return simde_mm256_abs_epi16(no32768);
+}
+
+static inline simde__m128i protected_abs128(const simde__m128i in)
+{
+  const simde__m128i no32768 = simde_mm_adds_epi16(simde_mm_subs_epi16(in, *(simde__m128i *)ones_epi16), *(simde__m128i *)ones_epi16);
+  return simde_mm_abs_epi16(no32768);
+}
+
 // lte_dfts.c
 void init_fft(uint16_t size,
               uint8_t logsize,
@@ -814,6 +828,47 @@ static inline void rotate_cpx_vector(const c16_t *const x, const c16_t *const al
     // log2_amp - increase the output amplitude by a factor 2^log2_amp (default is 0)
     //            WARNING: log2_amp>0 can cause overflow!!
 
+
+#ifdef __aarch64__
+    if (output_shift == 15) { // allows specific NEON instruction
+
+      int16x8_t ar = (int16x8_t)vdupq_n_s16(alpha->r);
+      int16x8_t ai = (int16x8_t)vdupq_n_s16(alpha->i);
+      int16x8_t *y_128 = (int16x8_t *)y;
+      int16x8_t *x_128 = (int16x8_t *)x;
+      for (uint32_t i = 0; i < (N >> 2); i++) {
+        // Split interleaved -> separate real/imag
+        int16x8_t br = vuzp1q_s16(x_128[i], x_128[i]);
+        int16x8_t bi = vuzp2q_s16(x_128[i], x_128[i]);
+
+        // Start with the two “diagonal” products using high-half, doubling, sat:
+        // x = round( (2*ar*br) / 2^16 ), y = round( (2*ar*bi) / 2^16 )
+        int16x8_t real = vqdmulhq_s16(ar, br);
+        int16x8_t imag = vqdmulhq_s16(ar, bi);
+
+        // real -= round( (2*ai*bi) / 2^16 )
+        real = vqrdmlshq_s16(real, ai, bi);
+
+        // imag += round( (2*ai*br) / 2^16 )
+        imag = vqrdmlahq_s16(imag, ai, br);
+
+        // Re-interleave [real, imag]
+        int16x8x2_t z = vzipq_s16(real, imag);
+
+        y_128[i] = z.val[0];
+        /*
+        printf("y : (%d %d) (%d %d) (%d %d) (%d %d)\n",
+                 vgetq_lane_s16(y_128[i],0),
+                 vgetq_lane_s16(y_128[i],1),
+                 vgetq_lane_s16(y_128[i],2),
+                 vgetq_lane_s16(y_128[i],3),
+                 vgetq_lane_s16(y_128[i],4),
+                 vgetq_lane_s16(y_128[i],5),
+                 vgetq_lane_s16(y_128[i],6),
+                 vgetq_lane_s16(y_128[i],7));*/
+      }
+    } else {
+#endif
     uint32_t i; // loop counter
 
     simd_q15_t *y_128, alpha_128;
@@ -845,7 +900,10 @@ static inline void rotate_cpx_vector(const c16_t *const x, const c16_t *const al
               shift));
       // print_ints("y_128[0]=", &y_128[0]);
     }
-#if defined(__x86__) || defined(__x86_64__)
+#ifdef __aarch64__
+    }
+#endif //__aarch64__
+#if defined(__x86_64__) || defined(__i386__)
   }
 #endif
 }
@@ -918,6 +976,16 @@ c32_t dot_product(const c16_t *x,
 
 void oai_mm_separate_real_imag_parts(simde__m128i *out_re, simde__m128i *out_im, simde__m128i in0, simde__m128i in1);
 void oai_mm256_separate_real_imag_parts(simde__m256i *out_re, simde__m256i *out_im, simde__m256i in0, simde__m256i in1);
+
+// generates vpcmpeqd ymm0, ymm0, ymm0
+static inline simde__m256i allones256(void)
+{
+  return simde_mm256_set1_epi64x(-1);
+}
+static inline simde__m128i allones128(void)
+{
+  return simde_mm_set1_epi32(-1);
+}
 
 void InitSinLUT(void);
 

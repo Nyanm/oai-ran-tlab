@@ -2892,9 +2892,13 @@ int decode_BCCH_DLSCH_Message(
         if ((ctxt_pP->frame % 2) == 0) {
           // even frame
           if ((UE_rrc_inst[ctxt_pP->module_id].Info[eNB_index].SIStatus&1) == 0) {
+            if (!UE_rrc_inst[ctxt_pP->module_id].sib1[eNB_index]) {
+              LOG_E(PHY,"UE_rrc_inst[%d].sib1[%d] is null, allocating\n", ctxt_pP->module_id, eNB_index);
+              openair_rrc_ue_init(ctxt_pP->module_id, eNB_index);
+            }
             LTE_SystemInformationBlockType1_t *sib1 = UE_rrc_inst[ctxt_pP->module_id].sib1[eNB_index];
-            memcpy( (void *)sib1,
-                    (void *)&bcch_message->message.choice.c1.choice.systemInformationBlockType1,
+            memcpy( sib1,
+                    &bcch_message->message.choice.c1.choice.systemInformationBlockType1,
                     sizeof(LTE_SystemInformationBlockType1_t) );
             LOG_D( RRC, "[UE %"PRIu8"] Decoding First SIB1\n", ctxt_pP->module_id );
             decode_SIB1( ctxt_pP, eNB_index, rsrq, rsrp );
@@ -6582,15 +6586,11 @@ void process_nr_nsa_msg(nsa_msg_t *msg, int msg_len)
             }
 
             nfapi_nr_dl_tti_request_t dl_tti_request;
-            int unpack_len = nfapi_nr_p7_message_unpack((void *)msg_buffer,
-                                                         msg_len,
-                                                         &dl_tti_request,
-                                                         sizeof(nfapi_nr_dl_tti_request_t),
-                                                         NULL);
-            if (unpack_len < 0)
-            {
-                LOG_E(RRC, "%s: SSB PDU unpack failed \n", __FUNCTION__);
-                break;
+            const bool result =
+                nfapi_nr_p7_message_unpack((void *)msg_buffer, msg_len, &dl_tti_request, sizeof(nfapi_nr_dl_tti_request_t), NULL);
+            if (!result) {
+              LOG_E(RRC, "%s: SSB PDU unpack failed \n", __FUNCTION__);
+              break;
             }
             int num_pdus = dl_tti_request.dl_tti_request_body.nPDUs;
             if (num_pdus <= 0)

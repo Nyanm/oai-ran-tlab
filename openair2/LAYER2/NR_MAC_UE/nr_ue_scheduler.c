@@ -78,6 +78,10 @@ static uint8_t nr_ue_get_sdu(NR_UE_MAC_INST_t *mac,
                              int P_MAX,
                              bool *BSRsent);
 
+static void nr_ue_pucch_scheduler(NR_UE_MAC_INST_t *mac, frame_t frameP, int slotP);
+static void nr_schedule_csirs_reception(NR_UE_MAC_INST_t *mac, int frame, int slot);
+static void nr_schedule_csi_for_im(NR_UE_MAC_INST_t *mac, int frame, int slot);
+
 static void clear_ul_config_request(NR_UE_MAC_INST_t *mac)
 {
   int slots = mac->frame_structure.numb_slots_frame;
@@ -180,6 +184,27 @@ void handle_time_alignment_timer_expired(NR_UE_MAC_INST_t *mac)
   // TODO we don't have semi-persistent CSI reporting
   // maintain N_TA
   // TODO not sure what to do here
+}
+
+void handle_ulsync_loss(NR_UE_MAC_INST_t *mac)
+{
+  // flush all HARQ buffers for all Serving Cells
+  for (int k = 0; k < NR_MAX_HARQ_PROCESSES; k++) {
+    memset(&mac->dl_harq_info[k], 0, sizeof(*mac->dl_harq_info));
+    memset(&mac->ul_harq_info[k], 0, sizeof(*mac->ul_harq_info));
+    mac->dl_harq_info[k].last_ndi = -1; // initialize to invalid value
+    mac->ul_harq_info[k].last_ndi = -1; // initialize to invalid value
+  }
+  // clear any configured downlink assignments and uplink grants;
+  if (mac->dl_config_request)
+    memset(mac->dl_config_request, 0, sizeof(*mac->dl_config_request));
+  if (mac->ul_config_request)
+    clear_ul_config_request(mac);
+
+  // Need to receive SIB19 again after loosing UL SYNC
+  mac->state = UE_RECEIVING_SIB;
+  // gNB needs to send PDCCH ORDER triggering RA after detecting ULSYNC LOSS
+  LOG_W(NR_MAC, "Wait for PDCCH ORDER, RACH needs to performed to obtain ULSYNC.\n");
 }
 
 void update_mac_dl_timers(NR_UE_MAC_INST_t *mac)
@@ -776,12 +801,7 @@ int nr_config_pusch_pdu(NR_UE_MAC_INST_t *mac,
 
   int start_symbol = pusch_config_pdu->start_symbol_index;
   int number_of_symbols = pusch_config_pdu->nr_of_symbols;
-  int number_dmrs_symbols = 0;
-  for (int i = start_symbol; i < start_symbol + number_of_symbols; i++) {
-    if ((pusch_config_pdu->ul_dmrs_symb_pos >> i) & 0x01)
-      number_dmrs_symbols += 1;
-  }
-
+  int number_dmrs_symbols = count_bits64_with_mask(pusch_config_pdu->ul_dmrs_symb_pos, start_symbol, number_of_symbols);
   int nb_dmrs_re_per_rb =
       ((pusch_config_pdu->dmrs_config_type == pusch_dmrs_type1) ? 6 : 4) * pusch_config_pdu->num_dmrs_cdm_grps_no_data;
 
@@ -1266,10 +1286,11 @@ static void nr_update_rlc_buffers_status(NR_UE_MAC_INST_t *mac, frame_t frameP, 
 {
   for (int i = 0; i < mac->lc_ordered_list.count; i++) {
     nr_lcordered_info_t *lc_info = mac->lc_ordered_list.array[i];
+    if (lc_info->rb_suspended)
+      continue;
     int lcid = lc_info->lcid;
     NR_LC_SCHEDULING_INFO *lc_sched_info = get_scheduling_info_from_lcid(mac, lcid);
     mac_rlc_status_resp_t rlc_status = nr_mac_rlc_status_ind(mac->ue_id, frameP, lcid);
-
     if (rlc_status.bytes_in_buffer > 0) {
       LOG_D(NR_MAC,
             "[UE %d] LCID %d has %d bytes to transmit at sfn %d.%d\n",
@@ -1547,22 +1568,7 @@ int nr_ue_pusch_scheduler(const NR_UE_MAC_INST_t *mac,
 
   if (is_Msg3) {
 
-    switch (mu) {
-      case 0:
-        delta = 2;
-        break;
-      case 1:
-        delta = 3;
-        break;
-      case 2:
-        delta = 4;
-        break;
-      case 3:
-        delta = 6;
-        break;
-      default:
-        AssertFatal(1 == 0, "Invalid numerology %i\n", mu);
-    }
+    delta = get_delta_for_k2(mu);
 
     AssertFatal((k2 + delta) > GET_DURATION_RX_TO_TX(&mac->ntn_ta, mu),
                 "Slot offset (%ld) for Msg3 needs to be higher than DURATION_RX_TO_TX (%ld). Please set min_rxtxtime at least to "
@@ -1575,7 +1581,7 @@ int nr_ue_pusch_scheduler(const NR_UE_MAC_INST_t *mac,
     *slot_tx = (current_slot + k2 + delta) % slots_per_frame;
     *frame_tx = (current_frame + (current_slot + k2 + delta) / slots_per_frame) % MAX_FRAME_NUMBER;
   } else {
-    AssertFatal(k2 > GET_DURATION_RX_TO_TX(&mac->ntn_ta, mu),
+    AssertFatal(k2 >= GET_DURATION_RX_TO_TX(&mac->ntn_ta, mu),
                 "Slot offset K2 (%ld) needs to be higher than DURATION_RX_TO_TX (%ld). Please set min_rxtxtime at least to %ld in "
                 "gNB config file or gNBs.[0].min_rxtxtime=%ld via command line.\n",
                 k2,
@@ -1707,7 +1713,7 @@ static bool schedule_uci_on_pusch(NR_UE_MAC_INST_t *mac,
   return mux_done;
 }
 
-void nr_ue_pucch_scheduler(NR_UE_MAC_INST_t *mac, frame_t frameP, int slotP)
+static void nr_ue_pucch_scheduler(NR_UE_MAC_INST_t *mac, frame_t frameP, int slotP)
 {
   PUCCH_sched_t pucch[3] = {0}; // TODO the size might change in the future in case of multiple SR or multiple CSI in a slot
 
@@ -1782,7 +1788,7 @@ void nr_ue_pucch_scheduler(NR_UE_MAC_INST_t *mac, frame_t frameP, int slotP)
   }
 }
 
-void nr_schedule_csi_for_im(NR_UE_MAC_INST_t *mac, int frame, int slot)
+static void nr_schedule_csi_for_im(NR_UE_MAC_INST_t *mac, int frame, int slot)
 {
   if (!mac->sc_info.csi_MeasConfig)
     return;
@@ -1917,7 +1923,7 @@ uint8_t set_csirs_measurement_bitmap(NR_CSI_MeasConfig_t *csi_measconfig, NR_CSI
 }
 
 void configure_csi_resource_mapping(fapi_nr_dl_config_csirs_pdu_rel15_t *csirs_config_pdu,
-                                    NR_CSI_RS_ResourceMapping_t  *resourceMapping,
+                                    const NR_CSI_RS_ResourceMapping_t *resourceMapping,
                                     uint32_t bwp_size,
                                     uint32_t bwp_start)
 {
@@ -2023,7 +2029,7 @@ void configure_csi_resource_mapping(fapi_nr_dl_config_csirs_pdu_rel15_t *csirs_c
   }
 }
 
-void nr_schedule_csirs_reception(NR_UE_MAC_INST_t *mac, int frame, int slot)
+static void nr_schedule_csirs_reception(NR_UE_MAC_INST_t *mac, int frame, int slot)
 {
   if (!mac->sc_info.csi_MeasConfig)
     return;
@@ -2459,13 +2465,13 @@ static void nr_ue_get_sdu_mac_ce_post(NR_UE_MAC_INST_t *mac,
   mac_ce_p->cur_ptr += size;
 }
 
-uint32_t get_count_lcids_same_priority(uint8_t start, uint8_t total_active_lcids, nr_lcordered_info_t *lcid_ordered_array)
+static uint32_t get_count_lcids_same_priority(uint8_t start, uint8_t total_active_lcids, nr_lcordered_info_t *lcid_ordered_array[])
 {
   // count number of logical channels with same priority as curr_lcid
   uint8_t same_priority_count = 0;
-  uint8_t curr_lcid = lcid_ordered_array[start].lcid;
+  uint8_t curr_lcid = lcid_ordered_array[start]->lcid;
   for (uint8_t index = start; index < total_active_lcids; index++) {
-    if (lcid_ordered_array[start].priority == lcid_ordered_array[index].priority) {
+    if (lcid_ordered_array[start]->priority == lcid_ordered_array[index]->priority) {
       same_priority_count++;
     }
   }
@@ -2507,17 +2513,22 @@ static long get_num_bytes_to_reqlc(NR_UE_MAC_INST_t *mac,
     }
   }
   AssertFatal(num_remaining_bytes >= 0 && num_bytes_requested <= buflen_remain,
-              "the total number of bytes allocated until target length is greater than expected\n");
+              "the total number of bytes allocated until target length is greater than expected: num_bytes_requested %ld, "
+              "buflen_remain %d\n",
+              num_bytes_requested,
+              buflen_remain);
   LOG_D(NR_MAC, "number of bytes requested for lcid %d is %li\n", lc_num, num_bytes_requested);
 
   return num_bytes_requested;
 }
 
-bool get_dataavailability_buffers(uint8_t total_active_lcids, nr_lcordered_info_t *lcid_ordered_array, bool *data_status_lcbuffers)
+static bool get_dataavailability_buffers(uint8_t total_active_lcids,
+                                         nr_lcordered_info_t *lcid_ordered_array[],
+                                         bool *data_status_lcbuffers)
 {
   // check whether there is any data in the rlc buffer corresponding to active lcs
   for (uint8_t id = 0; id < total_active_lcids; id++) {
-    int lcid = lcid_ordered_array[id].lcid;
+    int lcid = lcid_ordered_array[id]->lcid;
     if (data_status_lcbuffers[lcid_buffer_index(lcid)]) {
       return true;
     }
@@ -2525,17 +2536,20 @@ bool get_dataavailability_buffers(uint8_t total_active_lcids, nr_lcordered_info_
   return false;
 }
 
-static uint select_logical_channels(NR_UE_MAC_INST_t *mac, nr_lcordered_info_t *active_lcids)
+static uint select_logical_channels(NR_UE_MAC_INST_t *mac, nr_lcordered_info_t *active_lcids[])
 {
   // (TODO: selection of logical channels for logical channel prioritization procedure as per 5.4.3.1.2 Selection of logical
   // channels, TS38.321)
   int nb = 0;
   // selection of logical channels with Bj > 0
   for (int i = 0; i < mac->lc_ordered_list.count; i++) {
-    int lcid = mac->lc_ordered_list.array[i]->lcid;
+    nr_lcordered_info_t *lc_info = mac->lc_ordered_list.array[i];
+    if (lc_info->rb_suspended)
+      continue;
+    int lcid = lc_info->lcid;
     NR_LC_SCHEDULING_INFO *sched_info = get_scheduling_info_from_lcid(mac, lcid);
     if (sched_info->Bj > 0) {
-      active_lcids[nb++] = *mac->lc_ordered_list.array[i];
+      active_lcids[nb++] = lc_info;
       LOG_D(NR_MAC, "The available lcid is %d with total active channels count = %d\n", lcid, nb);
     }
   }
@@ -2568,6 +2582,8 @@ static bool fill_mac_sdu(NR_UE_MAC_INST_t *mac,
         lcid_remain_buffer,
         lcid);
 
+  if (is_lcid_suspended(mac, lcid))
+    return false;
   if (mac_ce_p->end_for_tailer - mac_ce_p->cur_ptr < sizeof(NR_MAC_SUBHEADER_LONG))
     // We can't add one byte after the header
     return false;
@@ -2718,7 +2734,11 @@ static uint8_t nr_ue_get_sdu(NR_UE_MAC_INST_t *mac,
         mac->lc_ordered_list.count);
 
   // variable used to build the lcids with positive Bj
-  nr_lcordered_info_t lcids_bj_pos[mac->lc_ordered_list.count];
+  if (!mac->lc_ordered_list.count) {
+    LOG_E(NR_MAC, "Failed to init lcids_bj_pos: mac->lc_ordered_list.count = 0\n");
+    return 0;
+  }
+  nr_lcordered_info_t *lcids_bj_pos[mac->lc_ordered_list.count];
   int avail_lcids_count = select_logical_channels(mac, lcids_bj_pos);
 
   // multiplex in the order of highest priority
@@ -2739,7 +2759,7 @@ static uint8_t nr_ue_get_sdu(NR_UE_MAC_INST_t *mac,
   still space availble in the MAC PDU, then from the next run all the remaining data from the higher priority logical channel
   is placed in the MAC PDU before going on to next high priority logical channel
       */
-      int lcid = lcids_bj_pos[id].lcid;
+      int lcid = lcids_bj_pos[id]->lcid;
       int idx = lcid_buffer_index(lcid);
       // skip the logical channel if no data in the buffer initially or the data in the buffer was zero because it was written in to
       // MAC PDU
@@ -2762,11 +2782,9 @@ static uint8_t nr_ue_get_sdu(NR_UE_MAC_INST_t *mac,
             remain);
 
       if (num_lcids_same_priority == count_same_priority_lcids) {
-        buflen_ep = (remain - (count_same_priority_lcids * sizeof(NR_MAC_SUBHEADER_LONG))) / count_same_priority_lcids;
-        /* after serving equal priority LCIDs in the first round, buflen_remain could be > 0 and < (count_same_priority_lcids * sh_size)
-           if above division yeilds a remainder. hence the following sets buflen_ep to 0 if there is not enough buffer left for subsequent rounds
-        */
-        buflen_ep = buflen_ep < 0 ? 0 : buflen_ep;
+        buflen_ep = remain < count_same_priority_lcids * sizeof(NR_MAC_SUBHEADER_LONG)
+                        ? 0
+                        : (remain - (count_same_priority_lcids * sizeof(NR_MAC_SUBHEADER_LONG))) / count_same_priority_lcids;
       }
 
       while (mac_ce_info.end_for_tailer - mac_ce_info.cur_ptr > 0) {
@@ -2830,11 +2848,14 @@ static uint8_t nr_ue_get_sdu(NR_UE_MAC_INST_t *mac,
 static void schedule_ntn_config_command(fapi_nr_dl_config_request_t *dl_config, NR_UE_MAC_INST_t *mac)
 {
   fapi_nr_dl_ntn_config_command_pdu *ntn_config_command_pdu = &dl_config->dl_config_list[dl_config->number_pdus].ntn_config_command_pdu;
+
+  ntn_config_command_pdu->epoch_sfn = mac->ntn_ta.epoch_sfn;
+  ntn_config_command_pdu->epoch_subframe = mac->ntn_ta.epoch_subframe;
   ntn_config_command_pdu->cell_specific_k_offset = mac->ntn_ta.cell_specific_k_offset;
-  ntn_config_command_pdu->ntn_ta_commondrift = mac->ntn_ta.ntn_ta_commondrift;
-  ntn_config_command_pdu->N_common_ta_adj = mac->ntn_ta.N_common_ta_adj;
-  ntn_config_command_pdu->N_UE_TA_adj = mac->ntn_ta.N_UE_TA_adj;
-  ntn_config_command_pdu->ntn_total_time_advance_ms = mac->ntn_ta.N_common_ta_adj + mac->ntn_ta.N_UE_TA_adj;
+  ntn_config_command_pdu->ntn_total_time_advance_ms = get_total_TA_ms(&mac->ntn_ta);
+  ntn_config_command_pdu->ntn_total_time_advance_drift = get_total_TA_drift(&mac->ntn_ta);
+  ntn_config_command_pdu->ntn_total_time_advance_drift_variant = get_total_TA_drift_variant(&mac->ntn_ta);
+
   dl_config->dl_config_list[dl_config->number_pdus].pdu_type = FAPI_NR_DL_NTN_CONFIG_PARAMS;
   dl_config->number_pdus += 1;
 }

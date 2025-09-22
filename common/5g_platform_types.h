@@ -35,6 +35,24 @@ typedef struct nssai_s {
   uint32_t sd;
 } nssai_t;
 
+// Globally Unique AMF Identifier
+typedef struct nr_guami_s {
+  uint16_t mcc;
+  uint16_t mnc;
+  uint8_t mnc_len;
+  uint8_t amf_region_id;
+  uint16_t amf_set_id;
+  uint8_t amf_pointer;
+} nr_guami_t;
+
+typedef enum {
+  PDUSessionType_ipv4 = 0,
+  PDUSessionType_ipv6 = 1,
+  PDUSessionType_ipv4v6 = 2,
+  PDUSessionType_ethernet = 3,
+  PDUSessionType_unstructured = 4
+} pdu_session_type_t;
+
 typedef enum { NON_DYNAMIC, DYNAMIC } fiveQI_t;
 
 #endif

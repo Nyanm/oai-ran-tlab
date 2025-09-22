@@ -144,6 +144,14 @@ void nr_rrc_handle_timers(NR_UE_RRC_INST_t *rrc)
     nr_rrc_going_to_IDLE(rrc, RRC_CONNECTION_FAILURE, NULL);
   }
 
+  bool t302_expired = nr_timer_tick(&timers->T302);
+  // 5.3.14.4 in 38.331
+  // consider the barring for this Access Category to be alleviated
+  if (t302_expired) {
+    LOG_W(NR_RRC, "Timer T302 expired! Access barring alleviated!\n");
+    handle_302_expired_stopped(rrc);
+  }
+
   bool t304_expired = nr_timer_tick(&timers->T304);
   if(t304_expired) {
     LOG_W(NR_RRC, "Timer T304 expired\n");
@@ -168,6 +176,14 @@ void nr_rrc_handle_timers(NR_UE_RRC_INST_t *rrc)
     // Upon T311 expiry, the UE shall perform the actions upon going to RRC_IDLE
     // with release cause 'RRC connection failure'
     nr_rrc_going_to_IDLE(rrc, RRC_CONNECTION_FAILURE, NULL);
+  }
+
+  bool t430_expired = nr_timer_tick(&rrc->timers_and_constants.T430);
+  if (t430_expired && rrc->nrRrcState == RRC_STATE_CONNECTED_NR && rrc->is_NTN_UE) {
+    LOG_W(NR_RRC, "Timer T430 expired! Indicate UL SYNC LOSS to MAC\n");
+    // Upon T430 expiry, the UE shall reacquire SIB19 and re-obtain UL-SYNC
+    // Spec 38.331 Section 5.2.2.6
+    handle_t430_expiry(rrc);
   }
 }
 

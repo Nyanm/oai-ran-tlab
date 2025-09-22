@@ -44,6 +44,8 @@
 //#define DEBUG_LDPC_ENCODING
 //#define DEBUG_LDPC_ENCODING_FREE 1
 
+extern uint32_t **d_host;
+
 static void unpack_output(uint32_t *f,
                          uint32_t E,
                          uint32_t *f2,
@@ -255,7 +257,7 @@ static void unpack_output(uint32_t *f,
       }
     }
   }
-#elif defined(aarch64)
+#elif defined(__aarch64__)
   const int32_t ucShift0[32][4] = { {0,1,2,3}, {-1,0,1,2},{-2,-1,0,1}, {-3,-2,-1,0}, {-4,-3,-2,-1}, {-5,-4,-3,-2}, {-6,-5,-4,-3}, {-7,-6,-5,-4}, {-8,-7,-6,-5}, {-9,-8,-7,-6}, {-10,-9,-8,-7}, {-11,-10,-9,-8}, {-12,-11,-10,-9}, {-13,-12,-11,-10}, {-14,-13,-12,-11}, {-15,-14,-13,-12}, {-16,-15,-14,-13}, {-17,-16,-15,-14}, {-18,-17,-16,-15}, {-19,-18,-17,-16}, {-20,-19,-18,-17}, {-21,-20,-19,-18}, {-22,-21,-20,-19}, {-23,-22,-21,-20}, {-24,-23,-22,-21}, {-25,-24,-23,-22}, {-26,-25,-24,-23}, {-27,-26,-25,-24}, {-28,-27,-26,-25}, {-29,-28,-27,-26}, {-30,-29,-28,-27}, {-31,-30,-29,-28}}; 
 
   const int32_t ucShift1[32][4] = { {4,5,6,7}, {3,4,5,6}, {2,3,4,5}, {1,2,3,4}, {0,1,2,3}, {-1,0,1,2},{-2,-1,0,1}, {-3,-2,-1,0}, {-4,-3,-2,-1}, {-5,-4,-3,-2}, {-6,-5,-4,-3}, {-7,-6,-5,-4}, {-8,-7,-6,-5}, {-9,-8,-7,-6}, {-10,-9,-8,-7}, {-11,-10,-9,-8}, {-12,-11,-10,-9}, {-13,-12,-11,-10}, {-14,-13,-12,-11}, {-15,-14,-13,-12}, {-16,-15,-14,-13}, {-17,-16,-15,-14}, {-18,-17,-16,-15}, {-19,-18,-17,-16}, {-20,-19,-18,-17}, {-21,-20,-19,-18}, {-22,-21,-20,-19}, {-23,-22,-21,-20}, {-24,-23,-22,-21}, {-25,-24,-23,-22}, {-26,-25,-24,-23}, {-27,-26,-25,-24}}; 
@@ -347,9 +349,13 @@ static void unpack_output(uint32_t *f,
   	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[5],vshift5[s2]),vmask5));
   	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[6],vshift6[s2]),vmask6));
   	cshift = vorrq_u32(cshift,vandq_u32(vshlq_u32(fp128[7],vshift7[s2]),vmask7));
+	/*
         uint32_t tmp = vaddvq_u32(cshift);
 	*(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
 	*(output_p + (bit_index>>5)+1)   |= (tmp>>(32-(bit_index&31)));
+	*/
+        uint64_t tmp = (uint64_t)vaddvq_u32(cshift);
+	*(uint64_t*)(output_p + (bit_index>>5))     |= (tmp<<(bit_index&31));
 	bit_index+=32;
       }
       uint32_t Emod32=E&31;
@@ -447,7 +453,7 @@ static void unpack_output(uint32_t *f,
     fp = f+foffset;
     s2=s&31;
     segpos = (1<<s2);
-    printf("E %d s %d: foffset %d, s2 %d, segpos %u\n",E,s,foffset,s2,segpos);
+  //  printf("E %d s %d: foffset %d, s2 %d, segpos %u\n",E,s,foffset,s2,segpos);
     for (int i = 0; i < E; i++) {
       output_p[bit_index>>5]|=((fp[i] & segpos)!=0)<<(bit_index&31); 
       //printf("bit_index %d, output_p[%d] %x\n",bit_index, bit_index>>5,output_p[bit_index>>5]);
@@ -459,7 +465,7 @@ static void unpack_output(uint32_t *f,
     fp = f2+foffset;
     s2=s&31;
     segpos = (1<<s2);
-    printf("E2 %d s %d: foffset %d, s2 %d, segpos %u\n",E2,s,foffset,s2,segpos);
+//    printf("E2 %d s %d: foffset %d, s2 %d, segpos %u\n",E2,s,foffset,s2,segpos);
     for (int i = 0; i < E2; i++) {
       output_p[bit_index>>5]|=((fp[i] & segpos)!=0)<<(bit_index&31); 
       bit_index++;
@@ -491,14 +497,14 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
 
   // nrLDPC_encoder output is in "d"
   // let's make this interface happy!
-  uint32_t d[4][68*384];
+//  uint32_t d[4][68*384];
   uint8_t *c[nrLDPC_TB_encoding_parameters->C];
 
   
   for (int r = 0; r < nrLDPC_TB_encoding_parameters->C; r++)
     c[r] = nrLDPC_TB_encoding_parameters->segments[r].c;
   start_meas(&nrLDPC_TB_encoding_parameters->segments[impp.first_seg].ts_ldpc_encode);
-  LDPCencoder32(c, d, &impp);
+  LDPCencoder32(c, &impp);
   stop_meas(&nrLDPC_TB_encoding_parameters->segments[impp.first_seg].ts_ldpc_encode);
   // Compute where to place in output buffer that is concatenation of all segments
 
@@ -579,7 +585,7 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
       nr_rate_matching_ldpc32(Tbslbrm,
                               impp.BG,
                               impp.Zc,
-                              d[r],
+                              d_host[r],
                               e+(r*E),
                               impp.n_segments,
                               impp.F,
@@ -590,7 +596,7 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
       nr_rate_matching_ldpc32(Tbslbrm,
                               impp.BG,
                               impp.Zc,
-                              d[r],
+                              d_host[r],
                               e2+((r-r_shift)*E2),
                               impp.n_segments,
                               impp.F,
@@ -660,6 +666,7 @@ int nrLDPC_coding_encoder32(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encod
     encoder_implemparams_t common_segment_params = {
       .n_segments = nrLDPC_TB_encoding_parameters->C,
       .tinput = nrLDPC_slot_encoding_parameters->tinput,
+      .tinput_memcpy = nrLDPC_slot_encoding_parameters->tinput_memcpy,
       .tprep = nrLDPC_slot_encoding_parameters->tprep,
       .tparity = nrLDPC_slot_encoding_parameters->tparity,
       .toutput = nrLDPC_slot_encoding_parameters->toutput,
