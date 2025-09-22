@@ -21,6 +21,7 @@
 
 #include "executables/softmodem-common.h"
 #include "executables/nr-softmodem-common.h"
+#include "executables/nr-softmodem.h"
 #include "common/utils/nr/nr_common.h"
 #include "common/ran_context.h"
 #include "PHY/defs_gNB.h"
@@ -106,6 +107,8 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
   nfapi_nr_config_request_scf_t *cfg = &gNB->gNB_config;
   NR_gNB_COMMON *const common_vars  = &gNB->common_vars;
   NR_gNB_PRACH *const prach_vars   = &gNB->prach_vars;
+
+  gNB->use_gpu = use_gpu;
 
   common_vars->analog_bf = cfg->analog_beamforming_ve.analog_bf_vendor_ext.value;
   LOG_I(PHY, "L1 configured with%s analog beamforming\n", common_vars->analog_bf ? "" : "out");
@@ -421,7 +424,7 @@ void init_DLSCH_struct(PHY_VARS_gNB *gNB, processingData_L1tx_t *msg)
     LOG_D(PHY, "Allocating Transport Channel Buffers for DLSCH %d/%d\n", i, gNB->max_nb_pdsch);
     msg->dlsch[i] = (NR_gNB_DLSCH_t *)malloc16(num_cw * sizeof(NR_gNB_DLSCH_t));
     for (int j = 0; j < num_cw; j++) {
-      msg->dlsch[i][j] = new_gNB_dlsch(fp, grid_size);
+      msg->dlsch[i][j] = new_gNB_dlsch(fp, grid_size, gNB->use_gpu);
     }
   }
 }
@@ -434,7 +437,7 @@ void reset_DLSCH_struct(const PHY_VARS_gNB *gNB, processingData_L1tx_t *msg)
   int num_cw = NR_MAX_NB_LAYERS > 4? 2:1;
   for (int i = 0; i < gNB->max_nb_pdsch; i++) {
     for (int j = 0; j < num_cw; j++) {
-      free_gNB_dlsch(&msg->dlsch[i][j], grid_size, fp);
+      free_gNB_dlsch(&msg->dlsch[i][j], grid_size, fp, gNB->use_gpu);
     }
     free(msg->dlsch[i]);
   }
