@@ -44,7 +44,6 @@
 #include "NR_BCCH-BCH-Message.h"
 #include "NR_ServingCellConfigCommon.h"
 #include "NR_MIB.h"
-#include "RRC/NR/nr_rrc_config.h"
 #include "SCHED_NR/phy_frame_config_nr.h"
 #include "T.h"
 #include "asn_internal.h"
@@ -62,13 +61,7 @@
 
 c16_t convert_precoder_weight(double complex c_in)
 {
-  double cr = creal(c_in) * 32768 + 0.5;
-  if (cr < 0)
-    cr -= 1;
-  double ci = cimag(c_in) * 32768 + 0.5;
-  if (ci < 0)
-    ci -= 1;
-  return (c16_t) {.r = (short)cr, .i = (short)ci};
+  return (c16_t) {.r = round(SHRT_MAX*creal(c_in)), .i = round(SHRT_MAX*cimag(c_in))};
 }
 
 void get_K1_K2(int N1, int N2, int *K1, int *K2, int layers)
@@ -400,9 +393,7 @@ int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed)
   return ul_slot_idxs[ul_slot_idx_in_period] + period_idx * fs->numb_slots_period;
 }
 
-static void config_common(gNB_MAC_INST *nrmac,
-                          const nr_mac_config_t *config,
-                          NR_ServingCellConfigCommon_t *scc)
+static void config_common(gNB_MAC_INST *nrmac, const nr_mac_config_t *config, NR_ServingCellConfigCommon_t *scc)
 {
   nfapi_nr_config_request_scf_t *cfg = &nrmac->config[0];
   nrmac->common_channels[0].ServingCellConfigCommon = scc;
@@ -716,42 +707,71 @@ static void config_common(gNB_MAC_INST *nrmac,
   if (cfg->cell_config.frame_duplex_type.value == TDD)
     set_tdd_config_nr(cfg, fs);
 
-  int nb_tx = config->nb_bfw[0]; // number of tx antennas
-  int nb_beams = config->nb_bfw[1]; // number of beams
   // precoding matrix configuration (to be improved)
   cfg->pmi_list = init_DL_MIMO_codebook(nrmac, pdsch_AntennaPorts);
-  // beamforming matrix configuration
-  cfg->dbt_config.num_dig_beams = nb_beams;
-  if (nb_beams > 0) {
-    cfg->dbt_config.num_txrus = nb_tx;
-    cfg->dbt_config.dig_beam_list = malloc16(nb_beams * sizeof(*cfg->dbt_config.dig_beam_list));
-    AssertFatal(cfg->dbt_config.dig_beam_list, "out of memory\n");
-    for (int i = 0; i < nb_beams; i++) {
-      nfapi_nr_dig_beam_t *beam = &cfg->dbt_config.dig_beam_list[i];
-      beam->beam_idx = i;
-      beam->txru_list = malloc16(nb_tx * sizeof(*beam->txru_list));
-      for (int j = 0; j < nb_tx; j++) {
-        nfapi_nr_txru_t *txru = &beam->txru_list[j];
-        txru->dig_beam_weight_Re = config->bw_list[j + i * nb_tx] & 0xffff;
-        txru->dig_beam_weight_Im = (config->bw_list[j + i * nb_tx] >> 16) & 0xffff;
-        LOG_D(NR_MAC, "Beam %d Tx %d Weight (%d, %d)\n", i, j, txru->dig_beam_weight_Re, txru->dig_beam_weight_Im);
-      }
-    }
-  }
 
-  if (nrmac->beam_info.beam_allocation) {
+  int nb_beams = config->nb_bfw[1]; // number of beams
+  if (nrmac->beam_info.beam_mode == PRECONFIGURED_BEAM_IDX) {
+    LOG_I(NR_MAC, "Configuring analog beamforming in config_request message\n");
     cfg->analog_beamforming_ve.num_beams_period_vendor_ext.tl.tag = NFAPI_NR_FAPI_NUM_BEAMS_PERIOD_VENDOR_EXTENSION_TAG;
     cfg->analog_beamforming_ve.num_beams_period_vendor_ext.value = nrmac->beam_info.beams_per_period;
     cfg->num_tlv++;
     cfg->analog_beamforming_ve.analog_bf_vendor_ext.tl.tag = NFAPI_NR_FAPI_ANALOG_BF_VENDOR_EXTENSION_TAG;
     cfg->analog_beamforming_ve.analog_bf_vendor_ext.value = 1;  // analog BF enabled
     cfg->num_tlv++;
+    cfg->analog_beamforming_ve.total_num_beams_vendor_ext.tl.tag = NFAPI_NR_FAPI_TOTAL_NUM_BEAMS_VENDOR_EXTENSION_TAG;
+    cfg->analog_beamforming_ve.total_num_beams_vendor_ext.value = nb_beams;
+    cfg->num_tlv++;
+    cfg->analog_beamforming_ve.analog_beam_list = malloc16(nb_beams * sizeof(*cfg->analog_beamforming_ve.analog_beam_list));
+    for (int i = 0; i < nb_beams; i++) {
+      cfg->analog_beamforming_ve.analog_beam_list[i].tl.tag = NFAPI_NR_FAPI_ANALOG_BEAM_VENDOR_EXTENSION_TAG;
+      cfg->analog_beamforming_ve.analog_beam_list[i].value = config->bw_list[i];
+    }
+  } else {
+    cfg->analog_beamforming_ve.analog_bf_vendor_ext.value = 0;  // analog BF disabled
+    if (NFAPI_MODE == NFAPI_MONOLITHIC) {
+      cfg->analog_beamforming_ve.analog_bf_vendor_ext.tl.tag = NFAPI_NR_FAPI_ANALOG_BF_VENDOR_EXTENSION_TAG;
+      cfg->num_tlv++;
+    }
+  }
+
+  if (IS_SA_MODE(get_softmodem_params())) {
+    int bw = frequencyInfoDL->scs_SpecificCarrierList.list.array[0]->carrierBandwidth;
+    uint64_t bw_khz = (12 * bw) * (15 << mu);
+    uint64_t carr_dl = (cfg->carrier_config.dl_frequency.value + bw_khz / 2) * 1000;
+    uint64_t carr_ul = (cfg->carrier_config.uplink_frequency.value + bw_khz / 2) * 1000;
+    int prb_offset = (frequency_range == FR1) ?
+                     cfg->ssb_table.ssb_offset_point_a.value >> scs :
+                     cfg->ssb_table.ssb_offset_point_a.value >> (scs - 2);
+    int sc_offset = (frequency_range == FR1) ?
+                    cfg->ssb_table.ssb_subcarrier_offset.value >> scs :
+                    cfg->ssb_table.ssb_subcarrier_offset.value;
+    if (cfg->carrier_config.dl_frequency.value != cfg->carrier_config.uplink_frequency.value) {
+      LOG_I(NR_MAC,
+            "Command line parameters for OAI UE: -C %lu --CO %ld -r %d --numerology %d --band %ld --ssb %d %s\n",
+            carr_dl,
+            carr_ul - carr_dl,
+            bw,
+            mu,
+            band,
+            12 * prb_offset + sc_offset,
+            get_softmodem_params()->threequarter_fs ? "-E" : "");
+    } else {
+      LOG_I(NR_MAC,
+            "Command line parameters for OAI UE: -C %lu -r %d --numerology %d --band %ld --ssb %d %s\n",
+            carr_dl,
+            bw,
+            mu,
+            band,
+            12 * prb_offset + sc_offset,
+            get_softmodem_params()->threequarter_fs ? "-E" : "");
+    }
   }
 }
 
 static void initialize_beam_information(NR_beam_info_t *beam_info, int mu, int slots_per_frame)
 {
-  if (!beam_info->beam_allocation)
+  if (beam_info->beam_mode == NO_BEAM_MODE)
     return;
 
   int size = mu == 0 ? slots_per_frame << 1 : slots_per_frame;
@@ -812,6 +832,28 @@ static void config_sched_ctrlCommon(gNB_MAC_INST *nr_mac)
   nr_mac->cset0_bwp_size = type0_PDCCH_CSS_config.num_rbs;
 }
 
+/**
+ * \brief Initializes the UL TDA information at the scheduler, as used for
+ * every UE in UL. This just copies the information from the SCC into a smaller
+ * list. Note that this list should not be modified, as get_num_ul_tda() and
+ * nr_rrc_config_ul_tda() are designed to work in sync (get_num_ul_tda()
+ * assumes an ordering, output by nr_rrc_config_ul_tda()).
+ */
+static void init_ul_tda_info(const NR_PUSCH_TimeDomainResourceAllocationList_t *l, seq_arr_t *sa_tda)
+{
+  DevAssert(l->list.count > 0 && l->list.count <= 16);
+  DevAssert(seq_arr_size(sa_tda) == 0);
+
+  for (int i = 0; i < l->list.count; ++i) {
+    NR_PUSCH_TimeDomainResourceAllocation_t *t = l->list.array[i];
+    DevAssert(t->k2);
+    NR_tda_info_t tda = { .mapping_type = typeB, .k2 = *t->k2, .valid_tda = true };
+    SLIV2SL(t->startSymbolAndLength, &tda.startSymbolIndex, &tda.nrOfSymbols);
+    LOG_I(NR_MAC, "TDA index %d: start %d length %d k2 %ld\n", i, tda.startSymbolIndex, tda.nrOfSymbols, tda.k2);
+    seq_arr_push_back(sa_tda, &tda, sizeof(tda));
+  }
+}
+
 void nr_mac_config_scc(gNB_MAC_INST *nrmac, NR_ServingCellConfigCommon_t *scc, const nr_mac_config_t *config)
 {
   DevAssert(nrmac != NULL);
@@ -828,7 +870,7 @@ void nr_mac_config_scc(gNB_MAC_INST *nrmac, NR_ServingCellConfigCommon_t *scc, c
   nrmac->vrb_map_UL_size = size;
 
   int num_beams = 1;
-  if(nrmac->beam_info.beam_allocation)
+  if(nrmac->beam_info.beam_mode != NO_BEAM_MODE)
     num_beams = nrmac->beam_info.beams_per_period;
   for (int i = 0; i < num_beams; i++) {
     nrmac->common_channels[0].vrb_map_UL[i] = calloc(size * MAX_BWP_SIZE, sizeof(uint16_t));
@@ -845,7 +887,7 @@ void nr_mac_config_scc(gNB_MAC_INST *nrmac, NR_ServingCellConfigCommon_t *scc, c
   LOG_D(NR_MAC, "Configuring common parameters from NR ServingCellConfig\n");
 
   config_common(nrmac, config, scc);
-  fapi_beam_index_allocation(scc, nrmac);
+  fapi_beam_index_allocation(scc, config, nrmac);
 
   if (NFAPI_MODE == NFAPI_MONOLITHIC) {
     // nothing to be sent in the other cases
@@ -858,6 +900,9 @@ void nr_mac_config_scc(gNB_MAC_INST *nrmac, NR_ServingCellConfigCommon_t *scc, c
 
   if (IS_SA_MODE(get_softmodem_params()))
     config_sched_ctrlCommon(nrmac);
+
+  seq_arr_init(&nrmac->ul_tda, sizeof(NR_tda_info_t));
+  init_ul_tda_info(scc->uplinkConfigCommon->initialUplinkBWP->pusch_ConfigCommon->choice.setup->pusch_TimeDomainAllocationList, &nrmac->ul_tda);
 }
 
 bool nr_mac_configure_other_sib(gNB_MAC_INST *nrmac, int num_cu_sib, const f1ap_sib_msg_t cu_sib[num_cu_sib])
@@ -932,6 +977,96 @@ bool nr_mac_configure_other_sib(gNB_MAC_INST *nrmac, int num_cu_sib, const f1ap_
   return true;
 }
 
+bool nr_update_sib19(const gnb_sat_position_update_t *sat_position)
+{
+  gNB_MAC_INST *nrmac = RC.nrmac[0];
+  NR_COMMON_channels_t *cc = &nrmac->common_channels[0];
+  NR_ServingCellConfigCommon_t *scc = cc->ServingCellConfigCommon;
+
+  if (!scc || !scc->ext2 || !scc->ext2->ntn_Config_r17)
+    return false;
+
+  const vector_t *pos = &sat_position->position;
+  const vector_t *vel = &sat_position->velocity;
+
+  LOG_D(NR_MAC, "SFN = %d, SubFrame = %d\n", sat_position->sfn, sat_position->subframe);
+  LOG_D(NR_MAC, "TA_Common: value %d, %f msec\n", sat_position->delay, sat_position->delay * 4.072e-6);
+  LOG_D(NR_MAC, "TA_CommonDrift: value %d, = %f µsec/sec\n", sat_position->drift, sat_position->drift * 0.2e-3);
+  LOG_D(NR_MAC, "TA_CommonDriftVariant: value %d, %f µsec/sec^2\n", sat_position->accel, sat_position->accel * 0.2e-4);
+  LOG_D(NR_MAC, "SAT Position: values %d/%d/%d, %.3f/%3f/%3f metres in X/Y/Z\n", pos->X, pos->Y, pos->Z, pos->X * 1.3, pos->Y * 1.3, pos->Z * 1.3);
+  LOG_D(NR_MAC, "SAT Velocity: values %d/%d/%d, %.3f/%3f/%3f m/s in X/Y/Z\n", vel->X, vel->Y, vel->Z, vel->X * 0.06, vel->Y * 0.06, vel->Z * 0.06);
+
+  NR_SCHED_LOCK(&nrmac->sched_lock);
+
+  if (!scc->ext2->ntn_Config_r17->epochTime_r17)
+    scc->ext2->ntn_Config_r17->epochTime_r17 = calloc (1, sizeof(*scc->ext2->ntn_Config_r17->epochTime_r17));
+
+  NR_EpochTime_r17_t *epoch_time_r17 = scc->ext2->ntn_Config_r17->epochTime_r17;
+  epoch_time_r17->sfn_r17 = sat_position->sfn;
+  epoch_time_r17->subFrameNR_r17 = sat_position->subframe;
+
+  if (!scc->ext2->ntn_Config_r17->ta_Info_r17)
+    scc->ext2->ntn_Config_r17->ta_Info_r17 = calloc(1, sizeof(*scc->ext2->ntn_Config_r17->ta_Info_r17));
+
+  NR_TA_Info_r17_t *sib19_ta_info = scc->ext2->ntn_Config_r17->ta_Info_r17;
+
+  // SIB19 provides Round trip delay on feeder link (between gNB and SAT).
+  sib19_ta_info->ta_Common_r17 = sat_position->delay;
+
+  if (sat_position->drift) {
+    if (!sib19_ta_info->ta_CommonDrift_r17)
+      sib19_ta_info->ta_CommonDrift_r17 = calloc(1, sizeof(*sib19_ta_info->ta_CommonDrift_r17));
+    *sib19_ta_info->ta_CommonDrift_r17 = sat_position->drift;
+  } else
+    free_and_zero(sib19_ta_info->ta_CommonDrift_r17);
+
+  if (sat_position->accel) {
+    if (!sib19_ta_info->ta_CommonDriftVariant_r17)
+      sib19_ta_info->ta_CommonDriftVariant_r17 = calloc(1, sizeof(*sib19_ta_info->ta_CommonDriftVariant_r17));
+    *sib19_ta_info->ta_CommonDriftVariant_r17 = sat_position->accel;
+  } else
+    free_and_zero(sib19_ta_info->ta_CommonDriftVariant_r17);
+
+  // Currently PositionVelocity is supported and not yet the OrbitalParams
+  if (!scc->ext2->ntn_Config_r17->ephemerisInfo_r17) {
+    scc->ext2->ntn_Config_r17->ephemerisInfo_r17 = calloc(1, sizeof(*scc->ext2->ntn_Config_r17->ephemerisInfo_r17));
+    scc->ext2->ntn_Config_r17->ephemerisInfo_r17->present = NR_EphemerisInfo_r17_PR_NOTHING;
+  }
+  if (scc->ext2->ntn_Config_r17->ephemerisInfo_r17->present == NR_EphemerisInfo_r17_PR_orbital_r17) {
+    ASN_STRUCT_FREE(asn_DEF_NR_Orbital_r17, scc->ext2->ntn_Config_r17->ephemerisInfo_r17->choice.orbital_r17);
+    scc->ext2->ntn_Config_r17->ephemerisInfo_r17->choice.orbital_r17 = NULL;
+    scc->ext2->ntn_Config_r17->ephemerisInfo_r17->present = NR_EphemerisInfo_r17_PR_NOTHING;
+  }
+  if (!scc->ext2->ntn_Config_r17->ephemerisInfo_r17->choice.positionVelocity_r17)
+    scc->ext2->ntn_Config_r17->ephemerisInfo_r17->choice.positionVelocity_r17 =
+        calloc(1, sizeof(*scc->ext2->ntn_Config_r17->ephemerisInfo_r17->choice.positionVelocity_r17));
+
+  scc->ext2->ntn_Config_r17->ephemerisInfo_r17->present = NR_EphemerisInfo_r17_PR_positionVelocity_r17;
+  NR_PositionVelocity_r17_t *sib19_PosVel = scc->ext2->ntn_Config_r17->ephemerisInfo_r17->choice.positionVelocity_r17;
+
+  sib19_PosVel->positionX_r17 = pos->X;
+  sib19_PosVel->positionY_r17 = pos->Y;
+  sib19_PosVel->positionZ_r17 = pos->Z;
+  sib19_PosVel->velocityVX_r17 = vel->X;
+  sib19_PosVel->velocityVY_r17 = vel->Y;
+  sib19_PosVel->velocityVZ_r17 = vel->Z;
+
+  NR_SystemInformation_IEs_t *sysInfov17 = calloc(1, sizeof(*sysInfov17)); // for othersibs
+  struct NR_SystemInformation_IEs__sib_TypeAndInfo__Member *type_du = calloc(1, sizeof(*type_du));
+  type_du->present = NR_SystemInformation_IEs__sib_TypeAndInfo__Member_PR_sib19_v1700;
+  NR_SIB19_r17_t *sib19 = get_SIB19_NR(cc->ServingCellConfigCommon);
+  type_du->choice.sib19_v1700 = sib19;
+  add_sib_to_systeminformation(sysInfov17, type_du);
+
+  cc->other_sib_bcch_length[1] = encode_sysinfo_ie(sysInfov17, cc->other_sib_bcch_pdu[1], sizeof(cc->other_sib_bcch_pdu[1]));
+  AssertFatal(cc->other_sib_bcch_length[1] > 0, "could not encode SIB19\n");
+  ASN_STRUCT_FREE(asn_DEF_NR_SystemInformation_IEs, sysInfov17);
+
+  NR_SCHED_UNLOCK(&nrmac->sched_lock);
+
+  return true;
+}
+
 void prepare_du_configuration_update(gNB_MAC_INST *mac,
                                      f1ap_served_cell_info_t *info,
                                      NR_BCCH_BCH_Message_t *mib,
@@ -976,7 +1111,7 @@ bool nr_mac_add_test_ue(gNB_MAC_INST *nrmac, uint32_t rnti, NR_CellGroupConfig_t
   NR_SCHED_LOCK(&nrmac->sched_lock);
 
   NR_UE_info_t *UE = get_new_nr_ue_inst(&nrmac->UE_info.uid_allocator, rnti, CellGroup);
-  DevAssert(UE != NULL); // test-mode: we assume we can always create a UE
+  DevAssert(UE->uid < MAX_MOBILES_PER_GNB); // test-mode: we assume we can always create a UE
   free_and_zero(UE->ra); // test-mode (sims, phy-test): UE will not do RA
   bool res = add_connected_nr_ue(nrmac, UE);
   if (!res) {

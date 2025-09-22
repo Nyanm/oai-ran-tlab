@@ -227,6 +227,7 @@ typedef struct nrLDPC_slot_encoding_parameters_s{
   int nb_TBs;
   tpool_t *threadPool;
   time_stats_t *tinput;
+  time_stats_t *tinput_memcpy;
   time_stats_t *tprep;
   time_stats_t *tparity;
   time_stats_t *toutput;

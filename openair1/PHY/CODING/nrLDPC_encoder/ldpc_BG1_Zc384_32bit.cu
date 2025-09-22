@@ -6,7 +6,7 @@
 // generated code for Zc=384, byte encoding
 __global__ void ldpc_BG1_Zc384_worker(uint32_t *c[4],uint32_t *d[4]) {
   uint32_t *c32=c[blockIdx.x];
-  uint32_t *d32=d[blockIdx.x];
+  uint32_t *d32=d[blockIdx.x]+8448-2*384;
 
   int i2 = threadIdx.x;
   int i1 = blockIdx.y;
@@ -204,25 +204,14 @@ __global__ void ldpc_BG1_Zc384_worker(uint32_t *c[4],uint32_t *d[4]) {
   }
 }
 extern "C" int ldpc_BG1_Zc384_cuda32(uint32_t *c[4],uint32_t *d[4],int n_inputs) { 
-for (int i=0;i<n_inputs;i++){
-  printf("host c[%d] = %p, d[%d] = %p\n", i, (void*)c[i], i, (void*)d[i]);
-  cudaPointerAttributes attr;
-  cudaPointerAttributes attr1;
-  cudaError_t aerr = cudaPointerGetAttributes(&attr, c[i]);
-  cudaError_t aerr1 = cudaPointerGetAttributes(&attr1, d[i]);
-  if (aerr == cudaSuccess)
-    printf("  attr.memoryType=%d device=%d\n", attr.type, attr.device);
-  else
-    printf("  cudaPointerGetAttributes failed: %s\n", cudaGetErrorString(aerr));
-  if (aerr1 == cudaSuccess)
-    printf("  attr1.memoryType=%d device=%d\n", attr1.type, attr1.device);
-  else
-    printf("  cudaPointerGetAttributes failed: %s\n", cudaGetErrorString(aerr1));
-}
 
-printf("n_input = %d\n", n_inputs);
-dim3 numblocks(n_inputs,46);
-ldpc_BG1_Zc384_worker<<<numblocks,384>>>(c,d);//<<<numblocks,384>>>(c,d);
+ dim3 numblocks(n_inputs,46);
+ ldpc_BG1_Zc384_worker<<<numblocks,384>>>(c,d);
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s (c %p, d %p)\n",cudaGetErrorString(err),c,d);
+    exit(-1);
+ }
  cudaDeviceSynchronize();
-  return(0);
+ return(0);
 }

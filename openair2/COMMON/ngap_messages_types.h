@@ -34,6 +34,7 @@
 #include "common/platform_types.h"
 #include "common/5g_platform_types.h"
 #include "s1ap_messages_types.h"
+#include "ds/byte_array.h"
 
 // Defines to access message fields.
 #define NGAP_REGISTER_GNB_REQ(mSGpTR)           (mSGpTR)->ittiMsg.ngap_register_gnb_req
@@ -199,15 +200,6 @@ typedef struct pdusession_level_qos_parameter_s {
   ngap_allocation_retention_priority_t allocation_retention_priority;
 } pdusession_level_qos_parameter_t;
 
-typedef struct ngap_guami_s {
-  uint16_t mcc;
-  uint16_t mnc;
-  uint8_t  mnc_len;
-  uint8_t  amf_region_id;
-  uint16_t amf_set_id;
-  uint8_t  amf_pointer;
-} ngap_guami_t;
-
 typedef struct fiveg_s_tmsi_s {
   uint16_t amf_set_id;
   uint8_t  amf_pointer;
@@ -225,7 +217,6 @@ typedef struct ngap_ue_paging_identity_s {
 } ngap_ue_paging_identity_t;
 
 typedef enum ngap_ue_identities_presenceMask_e {
-  NGAP_UE_IDENTITIES_NONE          = 0,
   NGAP_UE_IDENTITIES_FiveG_s_tmsi  = 1 << 1,
   NGAP_UE_IDENTITIES_guami         = 1 << 2,
 } ngap_ue_identities_presenceMask_t;
@@ -233,49 +224,12 @@ typedef enum ngap_ue_identities_presenceMask_e {
 typedef struct ngap_ue_identity_s {
   ngap_ue_identities_presenceMask_t presenceMask;
   fiveg_s_tmsi_t  s_tmsi;
-  ngap_guami_t    guami;
+  nr_guami_t guami;
 } ngap_ue_identity_t;
-
-typedef struct ngap_nas_pdu_s {
-  /* Octet string data */
-  uint8_t  *buffer;
-  /* Length of the octet string */
-  uint32_t  length;
-} ngap_pdu_t;
 
 typedef struct ngap_mobility_restriction_s{
   ngap_plmn_identity_t serving_plmn;
 }ngap_mobility_restriction_t;
-
-typedef enum pdu_session_type_e {
-  PDUSessionType_ipv4 = 0,
-  PDUSessionType_ipv6 = 1,
-  PDUSessionType_ipv4v6 = 2,
-  PDUSessionType_ethernet = 3,
-  PDUSessionType_unstructured = 4
-}pdu_session_type_t;
-
-typedef struct pdusession_s {
-  /* Unique pdusession_id for the UE. */
-  int pdusession_id;
-  ngap_pdu_t nas_pdu;
-  ngap_pdu_t pdusessionTransfer;
-  uint8_t nb_qos;
-  /* Quality of service for this pdusession */
-  pdusession_level_qos_parameter_t qos[QOSFLOW_MAX_VALUE];
-  /* The transport layer address for the IP packets */
-  pdu_session_type_t pdu_session_type;
-  transport_layer_addr_t upf_addr;
-  /* Outgoing (UL) NG-U Tunnel Endpoint Identifier (S-GW/UPF) */
-  uint32_t gtp_teid;
-  /* Incoming (DL) NG-U Tunnel Endpoint Identifier (S-GW/UPF) */
-  uint32_t gNB_teid_N3;
-  transport_layer_addr_t gNB_addr_N3;
-  /* Incoming (DL) NG-U Tunnel Endpoint Identifier (S-GW/UPF) */
-  uint32_t UPF_teid_N3;
-  transport_layer_addr_t UPF_addr_N3;
-  nssai_t nssai;
-} pdusession_t;
 
 typedef enum pdusession_qosflow_mapping_ind_e{
   QOSFLOW_MAPPING_INDICATION_UL = 0,
@@ -294,10 +248,9 @@ typedef struct pdusession_setup_s {
 
   /* The transport layer address for the IP packets */
   uint8_t pdu_session_type;
-  transport_layer_addr_t gNB_addr;
 
-  /* Incoming NG-U Tunnel Endpoint Identifier (S-GW/UPF) */
-  uint32_t gtp_teid;
+  // NG-U (N3) Tunnel Endpoint on the RAN side
+  gtpu_tunnel_t n3_outgoing;
 
   /* qos flow list number */
   uint8_t  nb_of_qos_flow;
@@ -305,18 +258,6 @@ typedef struct pdusession_setup_s {
   /* qos flow list(1 ~ 64) */
   pdusession_associate_qosflow_t associated_qos_flows[QOSFLOW_MAX_VALUE];
 } pdusession_setup_t;
-
-typedef struct pdusession_tobeswitched_s {
-  /* Unique pdusession_id for the UE. */
-  uint8_t pdusession_id;
-
-  /* The transport layer address for the IP packets */
-  uint8_t pdu_session_type;
-  transport_layer_addr_t upf_addr;
-
-  /* S-GW Tunnel endpoint identifier */
-  uint32_t gtp_teid;
-} pdusession_tobeswitched_t;
 
 typedef struct qos_flow_tobe_modified_s {
   uint8_t qfi; // 0~63
@@ -506,22 +447,16 @@ typedef struct ngap_deregistered_gnb_ind_s {
  * will be the unique identifier used between RRC and NGAP.
  */
 typedef struct ngap_nas_first_req_s {
-  /* UE id for initial connection to NGAP */
+  // RAN UE NGAP ID (mandatory)
   uint32_t gNB_ue_ngap_id;
-
-  /* the chosen PLMN identity as index, see TS 36.331 6.2.2 RRC Connection
-   * Setup Complete. This index here is zero-based, unlike the standard! */
-  int selected_plmn_identity;
-
-  /* Establishment cause as sent by UE */
+  /* PLMN: Selected PLMN Identity (optional)
+   * User Location Information (mandatory) */
+  plmn_id_t plmn;
+  // RRC Establishment Cause (mandatory)
   ngap_rrc_establishment_cause_t establishment_cause;
-
-  /* NAS PDU */
-  ngap_pdu_t nas_pdu;
-
-  /* If this flag is set NGAP layer is expecting the GUAMI. If = 0,
-   * the temporary s-tmsi is used.
-   */
+  // NAS-PDU (mandatory)
+  byte_array_t nas_pdu;
+  // UE identity: 5G-S-TMSI, GUAMI
   ngap_ue_identity_t ue_identity;
 } ngap_nas_first_req_t;
 
@@ -529,12 +464,12 @@ typedef struct ngap_uplink_nas_s {
   /* Unique UE identifier within an gNB */
   uint32_t gNB_ue_ngap_id;
   /* NAS pdu */
-  ngap_pdu_t nas_pdu;
+  byte_array_t nas_pdu;
 } ngap_uplink_nas_t;
 
 typedef struct ngap_ue_cap_info_ind_s {
   uint32_t  gNB_ue_ngap_id;
-  ngap_pdu_t ue_radio_cap;
+  byte_array_t ue_radio_cap;
 } ngap_ue_cap_info_ind_t;
 
 typedef struct ngap_initial_context_setup_resp_s {
@@ -561,7 +496,7 @@ typedef struct ngap_initial_context_setup_fail_s {
 
 typedef struct ngap_nas_non_delivery_ind_s {
   uint32_t     gNB_ue_ngap_id;
-  ngap_pdu_t nas_pdu;
+  byte_array_t nas_pdu;
   /* TODO: add cause */
 } ngap_nas_non_delivery_ind_t;
 
@@ -599,9 +534,25 @@ typedef struct ngap_downlink_nas_s {
   /* UE id for initial connection to NGAP */
   uint32_t gNB_ue_ngap_id;
   /* NAS pdu */
-  ngap_pdu_t nas_pdu;
+  byte_array_t nas_pdu;
 } ngap_downlink_nas_t;
 
+/* PDU Session Resource Setup Request Transfer (9.3.4.1 3GPP TS 38.413) */
+typedef struct {
+  uint8_t nb_qos;
+  pdusession_level_qos_parameter_t qos[QOSFLOW_MAX_VALUE];
+  pdu_session_type_t pdu_session_type;
+  // UPF endpoint of the NG-U (N3) transport bearer
+  gtpu_tunnel_t n3_incoming;
+} pdusession_transfer_t;
+
+/* PDU Session Resource Setup/Modify Request Item */
+typedef struct {
+  int pdusession_id;
+  byte_array_t nas_pdu;
+  nssai_t nssai;
+  pdusession_transfer_t pdusessionTransfer;
+} pdusession_resource_item_t;
 
 typedef struct ngap_initial_context_setup_req_s {
   /* UE id for initial connection to NGAP */
@@ -610,10 +561,11 @@ typedef struct ngap_initial_context_setup_req_s {
   uint64_t amf_ue_ngap_id;
 
   /* UE aggregate maximum bitrate */
+  bool has_ue_ambr;
   ngap_ambr_t ue_ambr;
 
   /* guami */
-  ngap_guami_t guami;
+  nr_guami_t guami;
 
   /* allowed nssai */
   uint8_t nb_allowed_nssais;
@@ -627,8 +579,8 @@ typedef struct ngap_initial_context_setup_req_s {
 
   /* Number of pdusession to be setup in the list */
   uint8_t  nb_of_pdusessions;
-  /* list of pdusession to be setup by RRC layers */
-  pdusession_t  pdusession_param[NGAP_MAX_PDU_SESSION];
+  // PDU Session Resource Setup Request List
+  pdusession_resource_item_t pdusession[NGAP_MAX_PDU_SESSION];
 
   /* Mobility Restriction List */
   uint8_t                        mobility_restriction_flag;
@@ -636,7 +588,7 @@ typedef struct ngap_initial_context_setup_req_s {
 
   /* Nas Pdu */
   uint8_t                        nas_pdu_flag;
-  ngap_pdu_t nas_pdu;
+  byte_array_t nas_pdu;
 } ngap_initial_context_setup_req_t;
 
 
@@ -662,13 +614,6 @@ typedef struct ngap_paging_ind_s {
   ngap_paging_priority_t paging_priority;
 } ngap_paging_ind_t;
 
-typedef struct {
-  /* Unique pdusession_id for the UE. */
-  int pdusession_id;
-  ngap_pdu_t nas_pdu;
-  ngap_pdu_t pdusessionTransfer;
-} pdusession_setup_req_t;
-
 typedef struct ngap_pdusession_setup_req_s {
   /* UE id for initial connection to NGAP */
   uint32_t gNB_ue_ngap_id;
@@ -683,14 +628,12 @@ typedef struct ngap_pdusession_setup_req_s {
   /* Number of pdusession to be setup in the list */
   uint8_t nb_pdusessions_tosetup;
 
-  /* E RAB setup request */
-  pdusession_t pdusession_setup_params[NGAP_MAX_PDU_SESSION];
+  // PDU Session Resource Setup Request List
+  pdusession_resource_item_t pdusession[NGAP_MAX_PDU_SESSION];
 
-  /* UE Uplink Aggregated Max Bitrates */
-  uint64_t ueAggMaxBitRateUplink;
-
-  /* UE Downlink Aggregated Max Bitrates */
-  uint64_t ueAggMaxBitRateDownlink;
+  /* UE Aggregated Max Bitrates */
+  bool has_ue_ambr;
+  ngap_ambr_t ueAggMaxBitRate;
 
 } ngap_pdusession_setup_req_t;
 
@@ -707,78 +650,6 @@ typedef struct ngap_pdusession_setup_resp_s {
   pdusession_failed_t pdusessions_failed[NGAP_MAX_PDU_SESSION];
 } ngap_pdusession_setup_resp_t;
 
-typedef struct ngap_path_switch_req_s {
-  uint32_t  gNB_ue_ngap_id;
-
-  /* Number of pdusession setup-ed in the list */
-  uint8_t       nb_of_pdusessions;
-
-  /* list of pdusession setup-ed by RRC layers */
-  pdusession_setup_t pdusessions_tobeswitched[NGAP_MAX_PDU_SESSION];
-
-  /* AMF UE id  */
-  uint64_t amf_ue_ngap_id;
-
-  ngap_guami_t ue_guami;
-
-  uint16_t ue_initial_id;
-  /* Security algorithms */
-  ngap_security_capabilities_t security_capabilities;
-
-} ngap_path_switch_req_t;
-
-typedef struct ngap_path_switch_req_ack_s {
-
-  /* UE id for initial connection to NGAP */
-  uint16_t ue_initial_id;
-
-  uint32_t  gNB_ue_ngap_id;
-
-  /* AMF UE id  */
-  uint64_t amf_ue_ngap_id;
-
-  /* UE aggregate maximum bitrate */
-  ngap_ambr_t ue_ambr;
-
-  /* Number of pdusession setup-ed in the list */
-  uint8_t       nb_pdusessions_tobeswitched;
-
-  /* list of pdusession to be switched by RRC layers */
-  pdusession_tobeswitched_t pdusessions_tobeswitched[NGAP_MAX_PDU_SESSION];
-
-  /* Number of pdusessions to be released by RRC */
-  uint8_t        nb_pdusessions_tobereleased;
-
-  /* list of pdusessions to be released */
-  pdusession_failed_t pdusessions_tobereleased[NGAP_MAX_PDU_SESSION];
-
-  /* Security key */
-  int     next_hop_chain_count;
-  uint8_t next_security_key[SECURITY_KEY_LENGTH];
-
-} ngap_path_switch_req_ack_t;
-
-typedef struct ngap_pdusession_modification_ind_s {
-
-  uint32_t  gNB_ue_ngap_id;
-
-  /* AMF UE id  */
-  uint64_t amf_ue_ngap_id;
-
-  /* Number of pdusession setup-ed in the list */
-  uint8_t       nb_of_pdusessions_tobemodified;
-
-  uint8_t       nb_of_pdusessions_nottobemodified;
-
-  /* list of pdusession setup-ed by RRC layers */
-  pdusession_setup_t pdusessions_tobemodified[NGAP_MAX_PDU_SESSION];
-
-  pdusession_setup_t pdusessions_nottobemodified[NGAP_MAX_PDU_SESSION];
-
-  uint16_t ue_initial_id;
-
-} ngap_pdusession_modification_ind_t;
-
 // NGAP --> RRC messages
 typedef struct ngap_ue_release_command_s {
 
@@ -792,7 +663,7 @@ typedef struct ngap_ue_release_command_s {
 typedef struct pdusession_release_s {
   /* Unique pdusession_id for the UE. */
   uint8_t                     pdusession_id;
-  ngap_pdu_t data;
+  byte_array_t data;
 } pdusession_release_t;
 
 typedef struct ngap_ue_release_req_s {
@@ -814,8 +685,8 @@ typedef struct ngap_pdusession_modify_req_s {
   /* Number of pdusession to be modify in the list */
   uint8_t nb_pdusessions_tomodify;
 
-  /* pdu session modify request */
-  pdusession_t pdusession_modify_params[NGAP_MAX_PDU_SESSION];
+  // PDU Session Resource Modify Request List
+  pdusession_resource_item_t pdusession[NGAP_MAX_PDU_SESSION];
 } ngap_pdusession_modify_req_t;
 
 typedef struct ngap_pdusession_modify_resp_s {
@@ -840,7 +711,7 @@ typedef struct ngap_pdusession_release_command_s {
   uint32_t                       gNB_ue_ngap_id;
 
   /* The NAS PDU should be forwarded by the RRC layer to the NAS layer */
-  ngap_pdu_t nas_pdu;
+  byte_array_t nas_pdu;
 
   /* Number of pdusession to be released in the list */
   uint8_t                        nb_pdusessions_torelease;

@@ -54,6 +54,8 @@
 #include "NR_UE-MRDC-Capability.h"
 #include "NR_UE-NR-Capability.h"
 #include "intertask_interface.h"
+#include "openair2/LAYER2/nr_pdcp/nr_pdcp_configuration.h"
+#include "openair2/LAYER2/nr_rlc/nr_rlc_configuration.h"
 
 typedef enum {
   NR_RRC_OK=0,
@@ -86,15 +88,6 @@ typedef struct nr_e_rab_param_s {
   uint8_t xid; // transaction_id
 } __attribute__ ((__packed__)) nr_e_rab_param_t;
 
-typedef struct nr_rrc_guami_s {
-  uint16_t mcc;
-  uint16_t mnc;
-  uint8_t  mnc_len;
-  uint8_t  amf_region_id;
-  uint16_t amf_set_id;
-  uint8_t  amf_pointer;
-} nr_rrc_guami_t;
-
 typedef enum pdu_session_satus_e {
   PDU_SESSION_STATUS_NEW,
   PDU_SESSION_STATUS_DONE,
@@ -106,22 +99,28 @@ typedef enum pdu_session_satus_e {
   PDU_SESSION_STATUS_RELEASED
 } pdu_session_status_t;
 
+typedef struct pdusession_s {
+  /* Unique pdusession_id for the UE. */
+  int pdusession_id;
+  byte_array_t nas_pdu;
+  uint8_t nb_qos;
+  /* Quality of service for this pdusession */
+  pdusession_level_qos_parameter_t qos[QOSFLOW_MAX_VALUE];
+  /* The transport layer address for the IP packets */
+  pdu_session_type_t pdu_session_type;
+  // NG-RAN endpoint of the NG-U (N3) transport bearer
+  gtpu_tunnel_t n3_outgoing;
+  // UPF endpoint of the NG-U (N3) transport bearer
+  gtpu_tunnel_t n3_incoming;
+  nssai_t nssai;
+} pdusession_t;
+
 typedef struct pdu_session_param_s {
   pdusession_t param;
   pdu_session_status_t status;
   uint8_t xid; // transaction_id
   ngap_cause_t cause;
 } rrc_pdu_session_param_t;
-
-/**
- * @brief F1-U tunnel configuration
-*/
-typedef struct f1u_tunnel_s {
-  /* F1-U Tunnel Endpoint Identifier (on DU side) */
-  uint32_t teid;
-  /* Downlink F1-U Transport Layer (on DU side) */
-  transport_layer_addr_t addr;
-} f1u_tunnel_t;
 
 typedef struct drb_s {
   int status;
@@ -152,9 +151,9 @@ typedef struct drb_s {
     } ext1;
   } pdcp_config;
   // F1-U Downlink Tunnel Config (on DU side)
-  f1u_tunnel_t du_tunnel_config;
+  gtpu_tunnel_t du_tunnel_config;
   // F1-U Uplink Tunnel Config (on CU-UP side)
-  f1u_tunnel_t cuup_tunnel_config;
+  gtpu_tunnel_t cuup_tunnel_config;
 } drb_t;
 
 typedef enum {
@@ -169,6 +168,13 @@ typedef enum {
   RRC_PDUSESSION_RELEASE,
   RRC_UECAPABILITY_ENQUIRY,
 } rrc_action_t;
+
+typedef struct nr_redcap_ue_cap {
+  bool support_of_redcap_r17;
+  bool support_of_16drb_redcap_r17;
+  bool pdcp_drb_long_sn_redcap_r17;
+  bool rlc_am_drb_long_sn_redcap_r17;
+} nr_redcap_ue_cap_t;
 
 /* forward declaration */
 typedef struct nr_handover_context_s nr_handover_context_t;
@@ -217,7 +223,8 @@ typedef struct gNB_RRC_UE_s {
   uint64_t nr_cellid;
   uint32_t                           rrc_ue_id;
   uint64_t amf_ue_ngap_id;
-  nr_rrc_guami_t                     ue_guami;
+  // Globally Unique AMF Identifier
+  nr_guami_t ue_guami;
 
   ngap_security_capabilities_t       security_capabilities;
   //NSA block
@@ -247,12 +254,13 @@ typedef struct gNB_RRC_UE_s {
   pdusession_t *initial_pdus;
 
   /* Nas Pdu */
-  ngap_pdu_t nas_pdu;
+  byte_array_t nas_pdu;
 
   /* hack, see rrc_gNB_process_NGAP_PDUSESSION_SETUP_REQ() for more info */
   int max_delays_pdu_session;
   bool ongoing_pdusession_setup_request;
 
+  nr_redcap_ue_cap_t *redcap_cap;
 } gNB_RRC_UE_t;
 
 typedef struct rrc_gNB_ue_context_s {
@@ -309,7 +317,7 @@ typedef struct {
   plmn_identity_t plmn;
   uint32_t tac;
   bool isIntraFrequencyNeighbour;
-} nr_neighbour_gnb_configuration_t;
+} nr_neighbour_cell_t;
 
 typedef struct neighbour_cell_configuration_s {
   uint64_t nr_cell_id;
@@ -391,6 +399,8 @@ typedef struct gNB_RRC_INST_s {
   RB_HEAD(rrc_cuup_tree, nr_rrc_cuup_container_t) cuups; // CU-UPs, indexed by assoc_id
   size_t num_cuups;
 
+  nr_pdcp_configuration_t pdcp_config;
+  nr_rlc_configuration_t rlc_config;
 } gNB_RRC_INST;
 
 #define UE_LOG_FMT "(cellID %lx, UE ID %d RNTI %04x)"

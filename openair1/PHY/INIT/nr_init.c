@@ -42,6 +42,7 @@
 #include "SCHED_NR/fapi_nr_l1.h"
 #include "PHY/NR_REFSIG/ul_ref_seq_nr.h"
 #include <string.h>
+#include "nfapi/open-nFAPI/fapi/inc/nr_fapi_p5_utils.h"
 
 int l1_north_init_gNB()
 {
@@ -109,6 +110,7 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
   common_vars->analog_bf = cfg->analog_beamforming_ve.analog_bf_vendor_ext.value;
   LOG_I(PHY, "L1 configured with%s analog beamforming\n", common_vars->analog_bf ? "" : "out");
   if (common_vars->analog_bf) {
+    // True only if nrmac->beam_info.beam_mode == FAPI_ANALOG_BEAM, thus analog_beamforming=2
     common_vars->num_beams_period = cfg->analog_beamforming_ve.num_beams_period_vendor_ext.value;
     LOG_I(PHY, "Max number of concurrent beams: %d\n", common_vars->num_beams_period);
   } else
@@ -129,7 +131,6 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
 
   crcTableInit();
   init_byte2m128i();
-  init_byte2bit16();
   init_pucch2_luts();
 
   nr_init_fde(); // Init array for frequency equalization of transform precoding of PUSCH
@@ -172,8 +173,7 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
   for (int i = 0; i < common_vars->num_beams_period; i++)
     common_vars->rxdataF[i] = (c16_t **)malloc16(Prx * sizeof(c16_t*));
 
-  common_vars->num_beams = cfg->dbt_config.num_dig_beams;
-  if (common_vars->num_beams > 0) {
+  if (cfg->analog_beamforming_ve.analog_bf_vendor_ext.value) {
     common_vars->beam_id = (int **)malloc16(common_vars->num_beams_period * sizeof(int*));
     for (int i = 0; i < common_vars->num_beams_period; i++)
       common_vars->beam_id[i] = (int*)malloc16_clear(fp->symbols_per_slot * fp->slots_per_frame * sizeof(int));
@@ -364,7 +364,7 @@ void nr_phy_config_request(NR_PHY_Config_t *phy_config)
   NR_DL_FRAME_PARMS *fp = &RC.gNB[Mod_id]->frame_parms;
   nfapi_nr_config_request_scf_t *gNB_config = &RC.gNB[Mod_id]->gNB_config;
 
-  memcpy((void*)gNB_config,phy_config->cfg,sizeof(*phy_config->cfg));
+  copy_config_request(phy_config->cfg, gNB_config);
 
   uint64_t dl_bw_khz = (12*gNB_config->carrier_config.dl_grid_size[gNB_config->ssb_config.scs_common.value].value)*(15<<gNB_config->ssb_config.scs_common.value);
   fp->dl_CarrierFreq = ((dl_bw_khz>>1) + gNB_config->carrier_config.dl_frequency.value)*1000 ;

@@ -336,6 +336,7 @@ typedef struct {
 
 /// Top-level PHY Data Structure for UE
 typedef struct PHY_VARS_NR_UE_s {
+  openair0_config_t openair0_cfg[MAX_CARDS];
   /// \brief Module ID indicator for this instance
   uint8_t Mod_id;
   /// \brief Component carrier ID for this PHY instance
@@ -598,6 +599,7 @@ typedef struct nr_rxtx_thread_data_s {
   int writeBlockSize;
   nr_phy_data_t phy_data;
   dynamic_barrier_t* next_barrier;
+  uint64_t absolute_deadline_us;
 } nr_rxtx_thread_data_t;
 
 typedef struct LDPCDecode_ue_s {

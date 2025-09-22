@@ -516,7 +516,7 @@ int main(int argc, char **argv)
         bzero(output, sizeof(output));
 	if (input_fd == NULL) {
     msgDataTx.num_pdsch_slot = 1;
-	  nr_dlsch_encoding(gNB, &msgDataTx, frame, slot, frame_parms, output, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+	  nr_dlsch_encoding(gNB, &msgDataTx, frame, slot, frame_parms, output, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 	}
 
 	for (SNR = snr0; SNR < snr1 && !stop; SNR += snr_step) {

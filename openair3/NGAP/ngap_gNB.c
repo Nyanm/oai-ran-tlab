@@ -313,6 +313,7 @@ void *ngap_gNB_process_itti_msg(void *notUsed) {
 
       case NGAP_NAS_FIRST_REQ:
         ngap_gNB_handle_nas_first_req(instance, &NGAP_NAS_FIRST_REQ(received_msg));
+        free_byte_array(NGAP_NAS_FIRST_REQ(received_msg).nas_pdu);
         break;
 
       case NGAP_UPLINK_NAS:
@@ -341,14 +342,6 @@ void *ngap_gNB_process_itti_msg(void *notUsed) {
 
       case NGAP_NAS_NON_DELIVERY_IND:
         ngap_gNB_nas_non_delivery_ind(instance, &NGAP_NAS_NON_DELIVERY_IND(received_msg));
-        break;
-
-      case NGAP_PATH_SWITCH_REQ:
-        ngap_gNB_path_switch_req(instance, &NGAP_PATH_SWITCH_REQ(received_msg));
-        break;
-
-      case NGAP_PDUSESSION_MODIFICATION_IND:
-        ngap_gNB_generate_PDUSESSION_Modification_Indication(instance, &NGAP_PDUSESSION_MODIFICATION_IND(received_msg));
         break;
 
       case NGAP_UE_CONTEXT_RELEASE_COMPLETE:

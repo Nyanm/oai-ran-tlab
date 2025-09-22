@@ -48,6 +48,7 @@
 #include "executables/softmodem-common.h"
 #include "PHY/NR_REFSIG/ul_ref_seq_nr.h"
 #include <openair2/UTIL/OPT/opt.h>
+#include "PHY/log_tools.h"
 
 //#define DEBUG_PUSCH_MAPPING
 //#define DEBUG_MAC_PDU
@@ -90,8 +91,8 @@ The function pointers are set once before calling the mapping funcion for
 all symbols based on different parameters. Then the mapping is done for
 each symbol by calling the function pointers.
 */
-static void (*map_dmrs_ptr)(const unsigned int, const c16_t *, c16_t *);
-static void (*map_data_dmrs_ptr)(const unsigned int num_cdm_no_data, const c16_t *, c16_t *);
+typedef void (*map_dmrs_func_t)(const unsigned int, const c16_t *, c16_t *);
+typedef void (*map_data_dmrs_func_t)(const unsigned int, const c16_t *, c16_t *);
 
 /*
 The following set of functions map dmrs and/or data REs in one RB based on
@@ -190,7 +191,9 @@ static void map_over_dc(const unsigned int right_dc,
                         const c16_t **ptrs,
                         const c16_t **dmrs,
                         const c16_t **data,
-                        c16_t **out)
+                        c16_t **out,
+                        map_dmrs_func_t map_data_dmrs_ptr,
+                        map_dmrs_func_t map_dmrs_ptr)
 {
   // if first RE is DC no need to map in this function
   if (right_dc == 0)
@@ -276,7 +279,9 @@ static void map_current_symbol(const nr_phy_pxsch_params_t p,
                                const c16_t *dmrs_seq,
                                const c16_t *ptrs_seq,
                                const c16_t **data,
-                               c16_t *out)
+                               c16_t *out,
+                               map_dmrs_func_t map_dmrs_ptr,
+                               map_data_dmrs_func_t map_data_dmrs_ptr)
 {
   const unsigned int abs_start_rb = p.bwp_start + p.start_rb;
   const unsigned int start_sc = (p.first_sc_offset + abs_start_rb * NR_NB_SC_PER_RB) % p.fft_size;
@@ -296,7 +301,7 @@ static void map_current_symbol(const nr_phy_pxsch_params_t p,
         // map RB at DC
         if (rb_over_dc) {
           // if DC is in middle of RB, the following function handles it.
-          map_over_dc(rb_over_dc, n_cdm, p.fft_size, dmrs_per_rb, data_per_rb, p.delta, 0, NULL, &p_mod_dmrs, NULL, &out_tmp);
+          map_over_dc(rb_over_dc, n_cdm, p.fft_size, dmrs_per_rb, data_per_rb, p.delta, 0, NULL, &p_mod_dmrs, NULL, &out_tmp, map_data_dmrs_ptr, map_dmrs_ptr);
           continue;
         } else {
           // else just move the pointer and following function will map the rb
@@ -314,7 +319,7 @@ static void map_current_symbol(const nr_phy_pxsch_params_t p,
       for (unsigned int rb = 0; rb < p.nb_rb; rb++) {
         if (rb == dc_rb) {
           if (rb_over_dc) {
-            map_over_dc(rb_over_dc, n_cdm, p.fft_size, dmrs_per_rb, data_per_rb, p.delta, 0, NULL, &p_mod_dmrs, &data_tmp, &out_tmp);
+            map_over_dc(rb_over_dc, n_cdm, p.fft_size, dmrs_per_rb, data_per_rb, p.delta, 0, NULL, &p_mod_dmrs, &data_tmp, &out_tmp, map_data_dmrs_ptr, map_dmrs_ptr);
             continue;
           } else {
             out_tmp -= p.fft_size;
@@ -338,7 +343,7 @@ static void map_current_symbol(const nr_phy_pxsch_params_t p,
       if (rb < non_ptrs_rb || ptrs_idx_rb % p.K_ptrs) {
         if (rb == dc_rb) {
           if (rb_over_dc) {
-            map_over_dc(rb_over_dc, n_cdm, p.fft_size, 0, 0, p.delta, 0, NULL, NULL, &data_tmp, &out_tmp);
+            map_over_dc(rb_over_dc, n_cdm, p.fft_size, 0, 0, p.delta, 0, NULL, NULL, &data_tmp, &out_tmp, map_data_dmrs_ptr, map_dmrs_ptr);
             continue;
           } else {
             out_tmp -= p.fft_size;
@@ -350,7 +355,7 @@ static void map_current_symbol(const nr_phy_pxsch_params_t p,
       } else {
         if (rb == dc_rb) {
           if (rb_over_dc) {
-            map_over_dc(rb_over_dc, n_cdm, p.fft_size, 0, 0, p.delta, ptrs_idx_re, &p_mod_ptrs, NULL, &data_tmp, &out_tmp);
+            map_over_dc(rb_over_dc, n_cdm, p.fft_size, 0, 0, p.delta, ptrs_idx_re, &p_mod_ptrs, NULL, &data_tmp, &out_tmp, map_data_dmrs_ptr, map_dmrs_ptr);
             continue;
           } else {
             out_tmp -= p.fft_size;
@@ -369,7 +374,7 @@ static void map_current_symbol(const nr_phy_pxsch_params_t p,
     for (unsigned int rb = 0; rb < p.nb_rb; rb++) {
       if (rb == dc_rb) {
         if (rb_over_dc) {
-          map_over_dc(rb_over_dc, n_cdm, p.fft_size, 0, 0, p.delta, 0, NULL, NULL, &data_tmp, &out_tmp);
+          map_over_dc(rb_over_dc, n_cdm, p.fft_size, 0, 0, p.delta, 0, NULL, NULL, &data_tmp, &out_tmp, map_data_dmrs_ptr, map_dmrs_ptr);
           continue;
         } else {
           out_tmp -= p.fft_size;
@@ -395,7 +400,7 @@ static void dmrs_amp_mult(const uint32_t dmrs_port,
                           const pusch_dmrs_type_t dmrs_type,
                           const unsigned int num_cdm_groups_no_data)
 {
-  float beta_dmrs_pusch = get_beta_dmrs_pusch(num_cdm_groups_no_data, dmrs_type);
+  float beta_dmrs_pusch = get_beta_dmrs(num_cdm_groups_no_data, dmrs_type == pusch_dmrs_type2);
   /* short array that hold amplitude for k_prime = 0 and k_prime = 1 */
   int32_t alpha_dmrs[2] __attribute((aligned(16)));
   for (int_fast8_t i = 0; i < sizeofArray(alpha_dmrs); i++) {
@@ -419,6 +424,8 @@ static void map_symbols(const nr_phy_pxsch_params_t p,
                         c16_t *out)
 {
   // asign the function pointers
+  map_dmrs_func_t map_dmrs_ptr = NULL;
+  map_data_dmrs_func_t map_data_dmrs_ptr = NULL;
   if (p.dmrs_type == pusch_dmrs_type1) {
     map_dmrs_ptr = map_dmrs_type1_cdm1_rb;
     map_data_dmrs_ptr = (p.num_cdm_no_data == 1) ? map_data_dmrs_type1_cdm1_rb : NULL;
@@ -459,7 +466,9 @@ static void map_symbols(const nr_phy_pxsch_params_t p,
                        mod_dmrs_amp,
                        mod_ptrs_amp,
                        &cur_data, // increments every symbol
-                       out + l * p.fft_size);
+                       out + l * p.fft_size,
+                       map_dmrs_ptr,
+                       map_data_dmrs_ptr);
   }
 }
 
@@ -543,7 +552,7 @@ void nr_ue_ulsch_procedures(PHY_VARS_NR_UE *UE,
 
   /////////////////////////ULSCH coding/////////////////////////
 
-  if (nr_ulsch_encoding(UE, &phy_data->ulsch, frame, slot, G, 1, ULSCH_ids) == -1) {
+  if (nr_ulsch_encoding(UE, &phy_data->ulsch, frame, slot, G, 1, ULSCH_ids, number_dmrs_symbols) == -1) {
     stop_meas_nr_ue_phy(UE, PUSCH_PROC_STATS);
     return;
   }
@@ -602,7 +611,61 @@ void nr_ue_ulsch_procedures(PHY_VARS_NR_UE *UE,
                                rnti,
                                false,
                                scrambled_output);
+#if T_TRACER
+  if (T_ACTIVE(T_UE_PHY_UL_SCRAMBLED_TX_BITS)) {
+    // Get Time Stamp for T-tracer messages
+    char trace_time_stamp_str[30];
+    get_time_stamp_usec(trace_time_stamp_str);
+    // trace_time_stamp_str = 8 bytes timestamp = YYYYMMDD
+    //                      + 9 bytes timestamp = HHMMSSMMM
 
+    int dmrs_port = get_dmrs_port(0, pusch_pdu->dmrs_ports);
+    const uint8_t *in_bytes = (const uint8_t *)scrambled_output;
+
+    // Log UE_PHY_UL_SCRAMBLED_TX_BITS using T-Tracer if activated
+    // FORMAT = int,frame : int,slot : int,datetime_yyyymmdd : int,datetime_hhmmssmmm :
+    // int,frame_type : int,freq_range : int,subcarrier_spacing : int,cyclic_prefix : int,symbols_per_slot :
+    // int,Nid_cell : int,rnti :
+    // int,rb_size : int,rb_start : int,start_symbol_index : int,nr_of_symbols :
+    // int,qam_mod_order : int,mcs_index : int,mcs_table : int,nrOfLayers :
+    // int,transform_precoding : int,dmrs_config_type : int,ul_dmrs_symb_pos :  int,number_dmrs_symbols : int,dmrs_port :
+    // int,dmrs_nscid : nb_antennas_tx : int,number_of_bits : buffer,data Define the subcarrier spacing vector
+    // int subcarrier_spacing_vect[] = {15000, 30000, 60000, 120000};
+    int subcarrier_spacing_index = frame_parms->subcarrier_spacing / 15000 - 1;
+    T(T_UE_PHY_UL_SCRAMBLED_TX_BITS,
+      T_INT((int)frame),
+      T_INT((int)slot),
+      T_INT((int)split_time_stamp_and_convert_to_int(trace_time_stamp_str, 0, 8)),
+      T_INT((int)split_time_stamp_and_convert_to_int(trace_time_stamp_str, 8, 9)),
+      T_INT((int)frame_parms->frame_type), // Frame type (0 FDD, 1 TDD)  frame_structure
+      T_INT((int)frame_parms->freq_range), // Frequency range (0 FR1, 1 FR2)
+      T_INT((int)subcarrier_spacing_index), // Subcarrier spacing (0 15kHz, 1 30kHz, 2 60kHz)
+      T_INT((int)pusch_pdu->cyclic_prefix), // Normal or extended prefix (0 normal, 1 extended)
+      T_INT((int)frame_parms->symbols_per_slot), // Number of symbols per slot
+      T_INT((int)frame_parms->Nid_cell),
+      T_INT((int)pusch_pdu->rnti),
+      T_INT((int)pusch_pdu->rb_size),
+      T_INT((int)pusch_pdu->rb_start),
+      T_INT((int)pusch_pdu->start_symbol_index), // start_ofdm_symbol
+      T_INT((int)pusch_pdu->nr_of_symbols), // num_ofdm_symbols
+      T_INT((int)pusch_pdu->qam_mod_order), // modulation
+      T_INT((int)pusch_pdu->mcs_index), // mcs
+      T_INT((int)pusch_pdu->mcs_table), // mcs_table_index
+      T_INT((int)pusch_pdu->nrOfLayers), // num_layer
+      T_INT((int)pusch_pdu->transform_precoding), // transformPrecoder_enabled = 0, transformPrecoder_disabled = 1
+      T_INT((int)pusch_pdu->dmrs_config_type), // dmrs_resource_map_config: pusch_dmrs_type1 = 0, pusch_dmrs_type2 = 1
+      T_INT((int)pusch_pdu->ul_dmrs_symb_pos), // used to derive the DMRS symbol positions
+      T_INT((int)number_dmrs_symbols),
+      // dmrs_start_ofdm_symbol
+      // dmrs_duration_num_ofdm_symbols
+      // dmrs_num_add_positions
+      T_INT((int)dmrs_port), // dmrs_antenna_port
+      T_INT((int)pusch_pdu->scid), // dmrs_nscid
+      T_INT((int)frame_parms->nb_antennas_tx), // number of tx antennas
+      T_INT((int)available_bits), // number_of_bits
+      T_BUFFER((uint8_t *)in_bytes, available_bits / 8));
+  }
+#endif
   /////////////////////////ULSCH modulation/////////////////////////
 
   int max_num_re = Nl * number_of_symbols * nb_rb * NR_NB_SC_PER_RB;

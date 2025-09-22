@@ -34,19 +34,6 @@ add_dependencies(nr_ulschsim ldpc ldpc_orig)
 add_dependencies(nr_dlsim ldpc ldpc_orig)
 add_dependencies(nr_dlschsim ldpc ldpc_orig)
 
-add_custom_target(nrLDPC_decoder_kernels_CL
-                  COMMAND gcc nrLDPC_decoder/nrLDPC_decoder_CL.c -dD -DNRLDPC_KERNEL_SOURCE -E -o ${CMAKE_CURRENT_BINARY_DIR}/nrLDPC_decoder_kernels_CL.clc
-                  SOURCES nrLDPC_decoder/nrLDPC_decoder_CL.c
-                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
-add_library(ldpc_cl MODULE
-            nrLDPC_decoder/nrLDPC_decoder_CL.c
-            nrLDPC_encoder/ldpc_encoder_optim8segmulti.c
-)
-set_target_properties(ldpc_cl PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-target_link_libraries(ldpc_cl PRIVATE ldpc_segment OpenCL)
-add_dependencies(ldpc_cl nrLDPC_decoder_kernels_CL)
-
 ##############################################
 # Base CUDA setting
 ##############################################
@@ -58,7 +45,7 @@ if (ENABLE_LDPC_CUDA)
   if (NOT CUDA_FOUND)
     message(FATAL_ERROR "no CUDA found")
   endif()
-  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_80;")
+  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_87;")
   SET(CUDA_VERBOSE_BUILD ON)
 
   # version using NVLink-C2C in Grace Hopper
@@ -70,6 +57,7 @@ if (ENABLE_LDPC_CUDA)
 		   nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu
 		   nrLDPC_encoder/ldpc_encoder_cuda32.c
 		   nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
+		   nrLDPC_encoder/ldpc_input.cu
                    # The slot coding layer cannot be linked with
                    # target_link_libraries like above
                    # because of cuda_add_library
@@ -103,6 +91,7 @@ if (ENABLE_LDPC_CUDA)
     nrLDPC_decoder/kernel_test.cu  
     nrLDPC_encoder/ldpc_encoder_cuda32.c
     nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
+    nrLDPC_encoder/ldpc_input.cu
                    # The slot coding layer cannot be linked with
                    # target_link_libraries like above
                    # because of cuda_add_library

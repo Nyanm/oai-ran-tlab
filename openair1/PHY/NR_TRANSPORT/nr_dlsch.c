@@ -680,7 +680,9 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
   // beam number in multi-beam scenario (concurrent beams)
   int bitmap = SL_to_bitmap(rel15->StartSymbolIndex, rel15->NrOfSymbols);
-  int beam_nb = beam_index_allocation(pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
+  int beam_nb = beam_index_allocation(gNB->enable_analog_das,
+                                      pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
+                                      &gNB->gNB_config.analog_beamforming_ve,
                                       &gNB->common_vars,
                                       slot,
                                       frame_parms->symbols_per_slot,
@@ -776,6 +778,7 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   time_stats_t *dlsch_encoding_stats = &gNB->dlsch_encoding_stats;
   time_stats_t *tinput = &gNB->tinput;
+  time_stats_t *tinput_memcpy = &gNB->tinput_memcpy;
   time_stats_t *tprep = &gNB->tprep;
   time_stats_t *tparity = &gNB->tparity;
   time_stats_t *toutput = &gNB->toutput;
@@ -826,8 +829,8 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
   }
 
   unsigned char output[size_output >> 3] __attribute__((aligned(64)));
-  bzero(output, sizeof(output));
   start_meas(dlsch_encoding_stats);
+  bzero(output, sizeof(output));
   if (nr_dlsch_encoding(gNB,
                         msgTx,
                         frame,
@@ -835,6 +838,7 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
                         frame_parms,
                         output,
                         tinput,
+                        tinput_memcpy,
                         tprep,
                         tparity,
                         toutput,

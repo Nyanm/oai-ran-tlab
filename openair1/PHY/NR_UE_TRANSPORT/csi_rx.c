@@ -238,7 +238,7 @@ static int nr_get_csi_rs_signal(const PHY_VARS_NR_UE *ue,
 
   *rsrp = rsrp_sum/meas_count;
   *rsrp_dBm = dB_fixed(*rsrp) + 30 - SQ15_SQUARED_NORM_FACTOR_DB
-      - ((int)openair0_cfg[0].rx_gain[0] - (int)openair0_cfg[0].rx_gain_offset[0]) - dB_fixed(ue->frame_parms.ofdm_symbol_size);
+      - ((int)ue->openair0_cfg[0].rx_gain[0] - (int)ue->openair0_cfg[0].rx_gain_offset[0]) - dB_fixed(ue->frame_parms.ofdm_symbol_size);
 
 #ifdef NR_CSIRS_DEBUG
   LOG_I(NR_PHY, "RSRP = %i (%i dBm)\n", *rsrp, *rsrp_dBm);
@@ -592,7 +592,33 @@ int nr_csi_rs_pmi_estimation(const PHY_VARS_NR_UE *ue,
   // The first column is applicable if the UE is reporting a Rank = 1, whereas the second column is applicable if the
   // UE is reporting a Rank = 2.
 
-  if(N_ports == 1 || interference_plus_noise_power == 0) {
+  if (interference_plus_noise_power == 0) {
+    return 0;
+  }
+
+  if (N_ports == 1) {
+    // SISO case: SINR = E[|h|^2] / noise_power. No PMI to estimate.
+    int64_t signal_power = 0;
+    int count = 0;
+
+    for (int rb = csirs_config_pdu->start_rb; rb < (csirs_config_pdu->start_rb + csirs_config_pdu->nr_of_rbs); rb++) {
+      if (csirs_config_pdu->freq_density <= 1 && csirs_config_pdu->freq_density != (rb % 2)) {
+        continue;
+      }
+      uint16_t k = (frame_parms->first_carrier_offset + rb * NR_NB_SC_PER_RB) % frame_parms->ofdm_symbol_size;
+      uint16_t k_offset = k + mem_offset;
+
+      const c16_t h = csi_rs_estimated_channel_freq[0][0][k_offset];
+      signal_power += (int64_t)h.r * h.r + (int64_t)h.i * h.i;
+      count++;
+    }
+
+    if (count > 0) {
+      const int64_t avg_signal_power = signal_power / count;
+      const uint32_t sinr = avg_signal_power / interference_plus_noise_power;
+      *precoded_sinr_dB = dB_fixed(sinr);
+    }
+
     return 0;
   }
 
@@ -756,6 +782,8 @@ static void nr_csi_im_power_estimation(const PHY_VARS_NR_UE *ue,
           LOG_I(NR_PHY, "(ant_rx %i, sc %i) real %i, imag %i\n", ant_rx, sc, rx_signal[sc].r, rx_signal[sc].i);
 #endif
 
+          if (sc == 0) // skip DC for noise power estimation
+            continue;
           sum_re += rx_signal[sc].r;
           sum_im += rx_signal[sc].i;
           sum2_re += rx_signal[sc].r * rx_signal[sc].r;

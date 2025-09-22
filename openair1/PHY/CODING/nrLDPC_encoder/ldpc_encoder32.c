@@ -45,7 +45,7 @@
 void cuda_support_init() {
    return;
 }
-int LDPCencoder32(uint8_t **input, uint32_t output[4][68*384], encoder_implemparams_t *impp)
+uint32_t **LDPCencoder32(uint8_t **input,encoder_implemparams_t *impp)
 {
 	AssertFatal(1==0,"Should not be getting here\n");
 }

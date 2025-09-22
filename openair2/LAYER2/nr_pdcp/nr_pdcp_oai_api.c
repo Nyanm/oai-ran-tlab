@@ -218,22 +218,6 @@ static void enqueue_rlc_data_req(const protocol_ctxt_t *const ctxt_pP,
   if (pthread_mutex_unlock(&q.m) != 0) abort();
 }
 
-void du_rlc_data_req(const protocol_ctxt_t *const ctxt_pP,
-                     const srb_flag_t srb_flagP,
-                     const rb_id_t rb_idP,
-                     const mui_t muiP,
-                     confirm_t confirmP,
-                     sdu_size_t sdu_sizeP,
-                     uint8_t *sdu_pP)
-{
-  enqueue_rlc_data_req(ctxt_pP,
-                       srb_flagP,
-                       rb_idP, muiP,
-                       confirmP,
-                       sdu_sizeP,
-                       sdu_pP);
-}
-
 /****************************************************************************/
 /* rlc_data_req queue - end                                                 */
 /****************************************************************************/
@@ -485,7 +469,7 @@ static void deliver_pdu_drb_gnb(void *deliver_pdu_data, ue_id_t ue_id, int rb_id
   if (NODE_IS_CU(node_type)) {
     LOG_D(PDCP, "%s() (drb %d) sending message to gtp size %d\n", __func__, rb_id, size);
     extern instance_t CUuniqInstance;
-    gtpv1uSendDirect(CUuniqInstance, ue_id, rb_id, (uint8_t *)buf, size, false, false);
+    gtpv1uSendDirectWithNRUSeqNum(CUuniqInstance, ue_id, rb_id, (uint8_t *)buf, size);
   } else {
     uint8_t *memblock = malloc16(size);
     memcpy(memblock, buf, size);
