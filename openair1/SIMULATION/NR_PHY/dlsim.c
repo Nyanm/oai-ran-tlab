@@ -91,6 +91,11 @@
 #define inMicroS(a) (((double)(a))/(get_cpu_freq_GHz()*1000.0))
 #include "SIMULATION/LTE_PHY/common_sim.h"
 
+#ifdef ENABLE_CUDA
+#include <cuda_runtime.h>
+#include "SIMULATION/TOOLS/oai_cuda.h"
+#endif
+
 const char *__asan_default_options()
 {
   /* don't do leak checking in nr_ulsim, not finished yet */
@@ -316,7 +321,7 @@ int main(int argc, char **argv)
   double eff_tp_check = 0.7;
   uint32_t TBS = 0;
   c16_t **txdata;
-  double **s_re,**s_im,**r_re,**r_im;
+  float **s_interleaved, **r_re, **r_im;
   //double iqim = 0.0;
   //unsigned char pbch_pdu[6];
   //  int sync_pos, sync_pos_slot;
@@ -393,8 +398,26 @@ int main(int argc, char **argv)
 
   FILE *scg_fd=NULL;
 
-  while ((c = getopt(argc, argv, "--:O:f:hA:p:f:g:i:n:s:S:t:v:x:y:z:o:H:M:N:F:GR:d:PI:L:a:b:e:m:w:T:U:q:X:Y:Z:")) != -1) {
+  int use_cuda = 0;
 
+  void *h_tx_sig_pinned = NULL;
+
+#ifdef ENABLE_CUDA
+  void *d_tx_sig = NULL, *d_intermediate_sig = NULL, *d_final_output = NULL;
+  void *d_curand_states = NULL;
+  void *h_final_output_pinned = NULL;
+  void *d_channel_coeffs_gpu = NULL;
+#endif
+
+  static struct option long_options[] = {{"cuda", no_argument, 0, 0}, {0, 0, 0, 0}};
+  int option_index = 0;
+
+  while ((c = getopt_long(argc,
+                          argv,
+                          "O:f:hA:p:g:i:n:s:S:t:v:x:y:z:o:H:M:N:F:GR:d:PI:L:a:b:e:m:w:T:U:q:X:Y:Z:",
+                          long_options,
+                          &option_index))
+         != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -402,6 +425,14 @@ int main(int argc, char **argv)
 
     printf("handling optarg %c\n",c);
     switch (c) {
+    #ifdef ENABLE_CUDA
+    case 0:
+      if (strcmp(long_options[option_index].name, "cuda") == 0) {
+        use_cuda = 1;
+      }
+    #endif
+        break;
+
     case 'f':
       scg_fd = fopen(optarg,"r");
 
@@ -653,6 +684,31 @@ printf("%d\n", slot);
   /* initialize the sin table */
   InitSinLUT();
 
+#ifdef ENABLE_CUDA
+  init_cuda_chsim_buffers(use_cuda,
+                          n_tx,
+                          n_rx,
+                          &d_tx_sig,
+                          &d_intermediate_sig,
+                          &d_final_output,
+                          &d_curand_states,
+                          &h_tx_sig_pinned,
+                          &h_final_output_pinned,
+                          &d_channel_coeffs_gpu);
+#endif
+
+#if !defined(ENABLE_CUDA) || !use_cuda
+  printf("Pre-allocating padded host memory for the CPU channel pipeline...\n");
+  int num_samples_alloc = 153600;
+  const int max_padding_alloc = 256 - 1;
+  size_t padded_tx_alloc_bytes = n_tx * (num_samples_alloc + max_padding_alloc) * 2 * sizeof(float);
+  h_tx_sig_pinned = malloc(padded_tx_alloc_bytes);
+  if (h_tx_sig_pinned == NULL) {
+    printf("Error: Failed to allocate host buffer for CPU path\n");
+    exit(-1);
+  }
+#endif
+
   get_softmodem_params()->phy_test = 1;
   get_softmodem_params()->do_ra = 0;
   IS_SOFTMODEM_DLSIM = true;
@@ -865,6 +921,11 @@ printf("%d\n", slot);
                                 0,
                                 0);
 
+                                  float *h_channel_coeffs = NULL;
+  if (use_cuda) {
+    int num_links = n_tx * n_rx;
+    h_channel_coeffs = (float *)malloc(num_links * gNB2UE->channel_length * sizeof(float) * 2);
+  }
   if (gNB2UE==NULL) {
     printf("Problem generating channel model. Exiting.\n");
     exit(-1);
@@ -875,23 +936,20 @@ printf("%d\n", slot);
   int slot_offset = frame_parms->get_samples_slot_timestamp(slot,frame_parms,0);
   int slot_length = slot_offset - frame_parms->get_samples_slot_timestamp(slot-1,frame_parms,0);
 
-  s_re = malloc(n_tx*sizeof(double*));
-  s_im = malloc(n_tx*sizeof(double*));
-  r_re = malloc(n_rx*sizeof(double*));
-  r_im = malloc(n_rx*sizeof(double*));
-  txdata = malloc(n_tx*sizeof(int*));
+  s_interleaved = malloc(n_tx * sizeof(float *));
+  r_re = malloc(n_rx * sizeof(float *));
+  r_im = malloc(n_rx * sizeof(float *));
+  txdata = malloc(n_tx * sizeof(int *));
 
   for (i = 0; i < n_tx; i++) {
-    s_re[i] = calloc(1, slot_length * sizeof(double));
-    s_im[i] = calloc(1, slot_length * sizeof(double));
-
+    s_interleaved[i] = malloc(slot_length * 2 * sizeof(float));
     printf("Allocating %d samples for txdata\n", frame_length_complex_samples);
     txdata[i] = calloc(1, frame_length_complex_samples * sizeof(int));
   }
 
   for (i = 0; i < n_rx; i++) {
-    r_re[i] = calloc(1, slot_length * sizeof(double));
-    r_im[i] = calloc(1, slot_length * sizeof(double));
+    r_re[i] = calloc(1, slot_length * sizeof(float));
+    r_im[i] = calloc(1, slot_length * sizeof(float));
   }
 
   if (pbch_file_fd!=NULL) {
@@ -999,8 +1057,7 @@ printf("%d\n", slot);
     csv_file = fopen(filename_csv, "a");
     if (csv_file == NULL) {
       printf("Can't open file \"%s\", errno %d\n", filename_csv, errno);
-      free(s_re);
-      free(s_im);
+      free(s_interleaved);
       free(r_re);
       free(r_im);
       free(txdata);
@@ -1019,6 +1076,10 @@ printf("%d\n", slot);
     LOG_E(PHY, "out of memory\n");
     exit(1);
   }
+
+  time_stats_t channel_stats = {0};
+  time_stats_t noise_stats = {0};
+  time_stats_t pipeline_stats = {0};
 
   for (SNR = snr0; SNR < snr1 && !stop; SNR += .2) {
 
@@ -1181,11 +1242,22 @@ printf("%d\n", slot);
           if (n_trials==1) printf("txlev[%d] = %d (%f dB) txlev_sum %d\n",aa,txlev[aa],10*log10((double)txlev[aa]),txlev_sum);
         }
 
-        for (i = 0; i < slot_length; i++) {
-          for (aa=0; aa<frame_parms->nb_antennas_tx; aa++) {
-            s_re[aa][i] = ((double)(((short *)&txdata[aa][slot_offset]))[(i << 1)]);
-            s_im[aa][i] = ((double)(((short *)&txdata[aa][slot_offset]))[(i << 1) + 1]);
+        for (int aa = 0; aa < frame_parms->nb_antennas_tx; aa++) {
+          for (int i = 0; i < slot_length; i++) {
+            s_interleaved[aa][2 * i] = (float)((short *)&txdata[aa][slot_offset])[2 * i];
+            s_interleaved[aa][2 * i + 1] = (float)((short *)&txdata[aa][slot_offset])[2 * i + 1];
           }
+        }
+
+        const int padding_len = gNB2UE->channel_length - 1;
+        const int padded_slot_length = slot_length + padding_len;
+        float *h_tx_ptr = (float *)h_tx_sig_pinned;
+        size_t total_padded_bytes_for_slot = n_tx * padded_slot_length * 2 * sizeof(float);
+        memset(h_tx_ptr, 0, total_padded_bytes_for_slot);
+
+        for (int j = 0; j < n_tx; j++) {
+          float *data_start_ptr = h_tx_ptr + (j * padded_slot_length + padding_len) * 2;
+          memcpy(data_start_ptr, s_interleaved[j], slot_length * 2 * sizeof(float));
         }
 
         double ts = 1.0/(frame_parms->subcarrier_spacing * frame_parms->ofdm_symbol_size); 
@@ -1195,23 +1267,86 @@ printf("%d\n", slot);
         if (n_trials==1) printf("sigma2 %f (%f dB), txlev_sum %f (factor %f)\n",sigma2,sigma2_dB,10*log10((double)txlev_sum),(double)(double)UE->frame_parms.ofdm_symbol_size/(12*rel15->rbSize));
 
         for (aa = 0; aa < n_rx; aa++) {
-          bzero(r_re[aa], slot_length * sizeof(double));
-          bzero(r_im[aa], slot_length * sizeof(double));
+          bzero(r_re[aa], slot_length * sizeof(float));
+          bzero(r_im[aa], slot_length * sizeof(float));
         }
 
         // Apply MIMO Channel
-        multipath_channel(gNB2UE, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
-        add_noise(UE->common_vars.rxdata,
-                  (const double **)r_re,
-                  (const double **)r_im,
-                  sigma2,
-                  slot_length,
-                  slot_offset,
-                  ts,
-                  delay,
-                  pdu_bit_map,
-                  0x1,
-                  UE->frame_parms.nb_antennas_rx);
+#ifdef ENABLE_CUDA
+        if (use_cuda) {
+#if defined(USE_UNIFIED_MEMORY)
+          int deviceId;
+          cudaGetDevice(&deviceId);
+          cudaMemPrefetchAsync(d_tx_sig, n_tx * padded_slot_length * sizeof(float) * 2, deviceId, 0);
+#endif
+          start_meas(&pipeline_stats);
+          random_channel(gNB2UE, 0);
+          int num_links = gNB2UE->nb_tx * gNB2UE->nb_rx;
+          for (int link = 0; link < num_links; link++) {
+            for (int l = 0; l < gNB2UE->channel_length; l++) {
+              int idx = link * gNB2UE->channel_length + l;
+              ((float2 *)h_channel_coeffs)[idx].x = (float)gNB2UE->ch[link][l].r;
+              ((float2 *)h_channel_coeffs)[idx].y = (float)gNB2UE->ch[link][l].i;
+            }
+          }
+          run_channel_pipeline_cuda(UE->common_vars.rxdata,
+                                    n_tx,
+                                    n_rx,
+                                    gNB2UE->channel_length,
+                                    slot_length,
+                                    h_channel_coeffs,
+                                    (float)sigma2,
+                                    ts,
+                                    pdu_bit_map,
+                                    0x1,
+                                    slot_offset,
+                                    delay,
+                                    d_tx_sig,
+                                    d_intermediate_sig,
+                                    d_final_output,
+                                    d_curand_states,
+                                    h_tx_sig_pinned,
+                                    h_final_output_pinned,
+                                    d_channel_coeffs_gpu);
+          cudaDeviceSynchronize();
+          stop_meas(&pipeline_stats);
+        } else
+#endif
+        {
+          float **tx_sig_for_cpu = malloc(n_tx * sizeof(float *));
+          float *h_tx_ptr = (float *)h_tx_sig_pinned;
+          const int padding_len = gNB2UE->channel_length - 1;
+          const int padded_slot_length = slot_length + padding_len;
+
+          for (int j = 0; j < n_tx; j++) {
+            tx_sig_for_cpu[j] = h_tx_ptr + (j * padded_slot_length + padding_len) * 2;
+          }
+
+          for (aa = 0; aa < n_rx; aa++) {
+            bzero(r_re[aa], slot_length * sizeof(float));
+            bzero(r_im[aa], slot_length * sizeof(float));
+          }
+          start_meas(&channel_stats);
+          multipath_channel_float(gNB2UE, tx_sig_for_cpu, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);
+          stop_meas(&channel_stats);
+
+          free(tx_sig_for_cpu);
+
+          bool apply_phase_noise = (pdu_bit_map & 0x1);
+          start_meas(&noise_stats);
+          add_noise_float(UE->common_vars.rxdata,
+                          (const float **)r_re,
+                          (const float **)r_im,
+                          (float)sigma2,
+                          slot_length,
+                          slot_offset,
+                          ts,
+                          delay,
+                          apply_phase_noise,
+                          UE->frame_parms.nb_antennas_rx);
+          stop_meas(&noise_stats);
+        }
+
         dl_config.sfn = frame;
         dl_config.slot = slot;
         ue_dci_configuration(UE_mac, &dl_config, frame, slot);
@@ -1347,6 +1482,13 @@ printf("%d\n", slot);
       if (gNB->phase_comp)
         printStatIndent2(&gNB->phase_comp_stats, "Phase Compensation");
 
+      if (use_cuda) {
+        printStatIndent(&pipeline_stats, "GPU Channel Pipeline");
+      } else {
+        printStatIndent(&channel_stats, "Multipath Channel (CPU)");
+        printStatIndent(&noise_stats, "Add Noise (CPU)");
+      }
+
       printf("\nUE function statistics (per %d us slot)\n", 1000 >> *scc->ssbSubcarrierSpacing);
       for (int i = RX_PDSCH_STATS; i <= DLSCH_PROCEDURES_STATS; i++) {
         printStatIndent(&UE->phy_cpu_stats.cpu_time_stats[i], UE->phy_cpu_stats.cpu_time_stats[i].meas_name);
@@ -1417,8 +1559,7 @@ printf("%d\n", slot);
   free_channel_desc_scm(gNB2UE);
 
   for (i = 0; i < n_tx; i++) {
-    free(s_re[i]);
-    free(s_im[i]);
+    free(s_interleaved[i]);
     free(txdata[i]);
   }
   for (i = 0; i < n_rx; i++) {
@@ -1426,8 +1567,19 @@ printf("%d\n", slot);
     free(r_im[i]);
   }
 
-  free(s_re);
-  free(s_im);
+#ifdef ENABLE_CUDA
+  free_cuda_chsim_buffers(use_cuda,
+                          &d_tx_sig,
+                          &d_intermediate_sig,
+                          &d_final_output,
+                          &d_curand_states,
+                          &h_tx_sig_pinned,
+                          &h_final_output_pinned,
+                          &h_channel_coeffs,
+                          &d_channel_coeffs_gpu);
+#endif
+
+  free(s_interleaved);
   free(r_re);
   free(r_im);
   free(txdata);
