@@ -65,6 +65,13 @@ target_link_libraries(test_channel_scalability PRIVATE UTIL SIMU PHY_COMMON LOG 
 add_dependencies(tests test_channel_scalability)
 add_test(NAME test_channel_scalability COMMAND test_channel_scalability)
 
+find_package(PythonInterp REQUIRED)
+add_test(
+NAME benchmark_gpu_scaling_suite
+COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/ci-scripts/tests/nr_physim_gpu_benchmark/gpu_test_driver.py
+  --executable $<TARGET_FILE:test_channel_scalability>
+)
+
 if (TARGET oai_cuda_lib)
     target_compile_definitions(test_multipath PRIVATE ENABLE_CUDA)
     target_compile_definitions(test_noise PRIVATE ENABLE_CUDA)
