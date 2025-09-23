@@ -240,7 +240,7 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params* p_decParams,
 #if STATIC_LUT
   if (!p_lutCreated) {
     numLLR = nrLDPC_init(p_decParams, p_lut);
-    printf("I'm here everytime\n");
+    printf("Creating LUTs\n");
     p_lutCreated = true;
   }
 #else

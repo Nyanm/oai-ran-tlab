@@ -325,7 +325,7 @@ void dumpASS(int8_t* cnProcBufRes, const char* filename)
   }
   // printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
 
-  for (int i = 0; i < MAX_NUM_DLSCH_SEGMENTS_DL * 68 * 384; i++) {
+  for (int i = 0; i < MAX_NUM_DLSCH_SEGMENTS_DL * 8448; i++) {
     fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
     if ((i + 1) % 16 == 0)
       fprintf(fp, "\n");
@@ -642,6 +642,7 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params* p_decParams,
   uint32_t numLLR;
   t_nrLDPC_lut lut;
   t_nrLDPC_lut* p_lut = &lut;
+  numLLR = nrLDPC_init(p_decParams, p_lut);
 #endif
 
   // Launch LDPC decoder core for one segment
@@ -705,7 +706,7 @@ printf("=== Host p_lut->startAddrBnProcBuf dump ===\n");
   uint8_t numMaxIter = p_decParams->numMaxIter;
   e_nrLDPC_outMode outMode = p_decParams->outMode;
   int Kprime = p_decParams->Kprime;
-  int LastTrial = p_decParams->LastTrial;
+//  int LastTrial = p_decParams->LastTrial;
 /* move this part to LDPC_init
   if (d_mem_exist == false) {
     //P_lut = p_lut_dev;
@@ -730,12 +731,8 @@ printf("=== Host p_lut->startAddrBnProcBuf dump ===\n");
 //printf("Flag_ptr = %p\n", PC_Flag_array);
 //   printf("3.2: It works here\n");
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
-    //printf("3.21\n");
-    //need to change to support ldpctest and dlsim
-    int8_t* pp_llr = p_llr + CudaStreamIdx * (68 * 384 + 16); // no need put it into device
-    //printf("3.22\n");
-    int8_t* pp_out = d_out + CudaStreamIdx * Kprime;
-    //printf("2.4\n");
+    int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384 ;
+    int8_t* pp_out = d_out + CudaStreamIdx * 8448; 
     // printf("Stream %d: pp_out = %p\n", CudaStreamIdx, pp_out);
     int8_t* pp_cnProcBuf = d_cnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     int8_t* pp_cnProcBufRes = d_cnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
@@ -761,7 +758,7 @@ printf("=== Host p_lut->startAddrBnProcBuf dump ===\n");
     // NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2CnProcBuf));
     //  Call scheduler for this segment and stream
     //printf("3\n");
-    int8_t* PP_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? pp_out : pp_llrOut;
+    int8_t* pp_p_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? pp_out : pp_llrOut;
     // printf("5: It works here\n");
     //  Launch decoder on stream s
 
@@ -796,7 +793,7 @@ printf("=== Host p_lut->startAddrBnProcBuf dump ===\n");
                                            pp_llrRes,
                                            pp_llrProcBuf,
                                            pp_llrOut,
-                                           PP_llrOut,
+                                           pp_p_llrOut,
                                            Z,
                                            BG,
                                            R,
@@ -817,7 +814,7 @@ printf("=== Host p_lut->startAddrBnProcBuf dump ===\n");
     }
   cudaDeviceSynchronize();
   cudaMemcpy(p_out, d_out, MAX_NUM_DLSCH_SEGMENTS_DL * Kprime * sizeof(uint8_t), cudaMemcpyDeviceToHost);
-  cudaDeviceSynchronize();
+  //cudaDeviceSynchronize();
   // cudaDeviceSynchronize();
   //  Wait for all streams
 /*
@@ -826,8 +823,8 @@ printf("=== Host p_lut->startAddrBnProcBuf dump ===\n");
     LDPCshutdown_cuda();
   }
 */
-  // cudaDeviceSynchronize();
-  //  dumpASS(p_out, "Dump_Output_Stream.txt");
+   //cudaDeviceSynchronize();
+    //dumpASS(p_out, "Dump_Output_Stream_cuda.txt");
   //  printf("6: It works here\n");
 
   return numMaxIter;
