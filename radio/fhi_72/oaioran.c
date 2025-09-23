@@ -680,6 +680,7 @@ int xran_fh_tx_read_slot(uint32_t **txdataF, int nb_tx, int *frame, int *slot, i
             exit(-1);
           }
         }
+        pRbElm->nSecDesc[sym_idx] = 0;
       } // sym_ind
     } // ant_ind
   } // vv_inf
