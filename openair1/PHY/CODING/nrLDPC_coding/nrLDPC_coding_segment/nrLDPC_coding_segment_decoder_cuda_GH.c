@@ -91,6 +91,42 @@
  * \var p_ts_ldpc_decode pointer to decoding time stats
  */
 //-------------------------Debug Function-----------------------
+void dumpAssUltra(int8_t* cnProcBufRes, const char* filename)
+{
+  FILE* fp = fopen(filename, "w");
+  if (fp == NULL) {
+    perror("Failed to open dump file");
+    exit(EXIT_FAILURE);
+  }
+  // printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
+
+  for (int i = 0; i < 3 * 27000; i++) { //only dump the first 3 segments
+    fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
+    if ((i + 1) % 16 == 0)
+      fprintf(fp, "\n");
+  }
+
+  fclose(fp);
+}
+
+void dumpAssUltraInput(int8_t* cnProcBufRes, const char* filename)
+{
+  FILE* fp = fopen(filename, "w");
+  if (fp == NULL) {
+    perror("Failed to open dump file");
+    exit(EXIT_FAILURE);
+  }
+  // printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
+
+  for (int i = 0; i < 3 * 68 * 384; i++) { //only dump the first 3 segments
+    fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
+    if ((i + 1) % 16 == 0)
+      fprintf(fp, "\n");
+  }
+
+  fclose(fp);
+}
+
 typedef struct nrLDPC_decoding_parameters_s {
   t_nrLDPC_dec_params decoderParms;
 
@@ -245,12 +281,12 @@ static void nr_process_decode_segment_cuda(void *arg)
   const int Z = seg0->Z;
   const int Kc = seg0->Kc;
   const int K  = seg0->K;
-  const int bytesPerSeg = K >> 3;
-  const int segLen = Kc * Z + 16; // int16 length; after packing we store int8 [segLen]
+  const int bytesPerSeg = 8448;//seg0->K - seg0->F;//Kprime >> 3
+  const int segLen = 68*384; // int16 length; after packing we store int8 [segLen]
   t_nrLDPC_time_stats procTime = {0};
   t_nrLDPC_time_stats *p_procTime = &procTime;
   // allocate big buffers on heap
-  int8_t *llrBuffer = (int8_t*)aligned_alloc(16, (size_t)MAX_NUM_DLSCH_SEGMENTS_DL * segLen * sizeof(int8_t));
+  int8_t *llrBuffer = (int8_t*)aligned_alloc(16, (size_t)MAX_NUM_DLSCH_SEGMENTS_DL * OAI_LDPC_DECODER_MAX_NUM_LLR * sizeof(int8_t));
   if (!llrBuffer) { LOG_E(PHY,"alloc llrBuffer failed\n"); return; }
 
   int8_t *decodedBitsBig = (int8_t*)aligned_alloc(16, MAX_NUM_DLSCH_SEGMENTS_DL * K * sizeof(int8_t));
@@ -319,6 +355,8 @@ static void nr_process_decode_segment_cuda(void *arg)
   (&RDATA->decoderParms)->n_segments = RDATA->C;
   // Phase 2: call batch GPU decoder (you must implement this API)
   int decodeIterations = LDPCdecoder(&RDATA->decoderParms, llrBuffer, decodedBitsBig, p_procTime, RDATA->abort_decode);
+  //dumpAssUltraInput(llrBuffer, "dlsim_decoder_input_cuda_GH.txt");
+  //dumpAssUltra(decodedBitsBig, "dlsim_decoder_output_cuda_GH.txt");
   //printf("Decoder done\n");
   //dumpASS(decodedBitsBig, "dlsim_decoded_bits.txt");
   if (decodeIterations > (&seg0->decoderParms)->numMaxIter) {
@@ -331,7 +369,7 @@ static void nr_process_decode_segment_cuda(void *arg)
     //free(decodedBitsBig); free(llrBuffer);
     return;
   }
-  stop_meas(RDATA->p_ts_ldpc_decode);
+
 
   // Phase 3: scatter results and set decodeSuccess
   for (int r=0; r<C; ++r) {
@@ -349,6 +387,7 @@ static void nr_process_decode_segment_cuda(void *arg)
   //free(iterUsed);
   free(decodedBitsBig);
   free(llrBuffer);
+  stop_meas(RDATA->p_ts_ldpc_decode);
 }
 
 

@@ -36,7 +36,7 @@ static const char* ptrTypeName(cudaMemoryType type) {
     default:                         return "Unknown";
   }
 }
-// 简单的错误检查宏
+// 
 #define CHECK_CUDA(call) do {                                      \
   cudaError_t _e = (call);                                         \
   if (_e != cudaSuccess) {                                         \
@@ -46,7 +46,7 @@ static const char* ptrTypeName(cudaMemoryType type) {
   }                                                                \
 } while(0)
 
-// 你已有的：打印指针属性（别去解引用）
+// 
 extern "C" void check_ptr_host(const void *p, const char *name) {
   cudaPointerAttributes attr;
   cudaError_t e = cudaPointerGetAttributes(&attr, p);
@@ -82,16 +82,16 @@ static void dump_arr32_host(const arr32_t *a, const char *name, int idx) {
   check_ptr_host(a->d, tag);
 }
 
-// 用设备指针调用这个函数
+// check lut
 void inspect_lut(const t_nrLDPC_lut *p_lut_dev) {
   printf("==== Inspect t_nrLDPC_lut(dev) @ %p ====\n", (void*)p_lut_dev);
   check_ptr_host(p_lut_dev, "p_lut_dev");
 
-  // 1) 先把“头”拷回主机（浅拷贝）
+  // 1) 
   t_nrLDPC_lut h = {0};
   CHECK_CUDA(cudaMemcpy(&h, p_lut_dev, sizeof(h), cudaMemcpyDeviceToHost));
 
-  // 2) 现在用这份主机副本里的“设备指针值”做属性查询即可
+  // 2) 
   check_ptr_host(h.startAddrCnGroups,    "startAddrCnGroups");
   check_ptr_host(h.numCnInCnGroups,      "numCnInCnGroups");
   check_ptr_host(h.numBnInBnGroups,      "numBnInBnGroups");
