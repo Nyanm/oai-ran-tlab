@@ -179,10 +179,11 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
       common_vars->beam_id[i] = (int*)malloc16_clear(fp->symbols_per_slot * fp->slots_per_frame * sizeof(int));
   }
   common_vars->txdataF = (c16_t ***)malloc16(common_vars->num_beams_period * sizeof(c16_t**));
+  const int symbol_samples_sz = ALNARS_64_16(fp->N_RB_DL * NR_NB_SC_PER_RB); // 64 byte aligned
   for (int i = 0; i < common_vars->num_beams_period; i++) {
     common_vars->txdataF[i] = (c16_t**)malloc16_clear(Ptx * sizeof(c16_t*));
     for (int j = 0; j < Ptx; j++)
-      common_vars->txdataF[i][j] = (c16_t*)malloc16_clear(fp->samples_per_slot_wCP * sizeof(c16_t));
+      common_vars->txdataF[i][j] = (c16_t *)malloc16_clear(symbol_samples_sz * NR_NUMBER_OF_SYMBOLS_PER_SLOT * sizeof(c16_t));
   }
   common_vars->debugBuff = (int32_t*)malloc16_clear(fp->samples_per_frame*sizeof(int32_t)*100);	
   common_vars->debugBuff_sample_offset = 0; 

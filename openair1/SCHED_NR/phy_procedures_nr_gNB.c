@@ -211,7 +211,7 @@ void phy_procedures_gNB_TX(processingData_L1tx_t *msgTx,
   // clear the transmit data array and beam index for the current slot
   for (int i = 0; i < gNB->common_vars.num_beams_period; i++) {
     for (int aa = 0; aa < cfg->carrier_config.num_tx_ant.value; aa++) {
-      memset(gNB->common_vars.txdataF[i][aa], 0, fp->samples_per_slot_wCP * sizeof(int32_t));
+      memset(gNB->common_vars.txdataF[i][aa], 0, fp->N_RB_DL * NR_NB_SC_PER_RB * NR_NUMBER_OF_SYMBOLS_PER_SLOT * sizeof(int32_t));
     }
   }
 
@@ -314,18 +314,21 @@ void phy_procedures_gNB_TX(processingData_L1tx_t *msgTx,
       if (gNB->phase_comp) {
         apply_nr_rotation_TX(fp,
                              gNB->common_vars.txdataF[i][aa],
+                             true,
                              fp->symbol_rotation[0],
                              slot,
                              fp->N_RB_DL,
                              0,
-                             fp->Ncp == EXTENDED ? 12 : 14);
+                             fp->Ncp == EXTENDED ? 12 : 14,
+                             ALNARS_64_16(fp->N_RB_DL * NR_NB_SC_PER_RB));
       }
       T(T_GNB_PHY_DL_OUTPUT_SIGNAL,
         T_INT(0),
         T_INT(frame),
         T_INT(slot),
         T_INT(aa),
-        T_BUFFER(gNB->common_vars.txdataF[i][aa], fp->samples_per_slot_wCP * sizeof(int32_t)));
+        T_BUFFER(gNB->common_vars.txdataF[i][aa],
+                 ALNARS_64_16(fp->N_RB_DL * NR_NB_SC_PER_RB * NR_NUMBER_OF_SYMBOLS_PER_SLOT) * sizeof(int32_t)));
     }
   }
   stop_meas(&gNB->phase_comp_stats);
