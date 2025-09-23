@@ -116,6 +116,45 @@ void print_meas(time_stats_t *ts,
   }
 }
 
+size_t print_meas_log_header(time_stats_t *total_exec_time,
+                             time_stats_t *sf_exec_time,
+                             char *output,
+                             size_t outputlen)
+{
+  const char *begin = output;
+  const char *end = output + outputlen;
+
+  if ((total_exec_time == NULL) || (sf_exec_time== NULL))
+    output += snprintf(output,
+                       end - output,
+                       "%25s   %18s  %18s  %18s  %15s  %18s  %18s  %18s  %18s  %18s  %18s %9s %6f\n",
+                       "Name",
+                       "Total",
+                       "Max",
+                       "Std",
+                       "Num Trials",
+                       "min",
+                       "d1",
+                       "q1",
+                       "median",
+                       "q3",
+                       "d9",
+                       "CPU_F_GHz",
+                       cpu_freq_GHz);
+  else
+    output += snprintf(output,
+                       end - output,
+                       "%25s   %18s  %18s  %15s %9s %6f\n",
+                       "Name",
+                       "Total",
+                       "Average/Frame",
+                       "Trials",
+                       "CPU_F_GHz",
+                       cpu_freq_GHz);
+
+  return output - begin;
+}
+
 size_t print_meas_log(time_stats_t *ts,
                       const char *name,
                       time_stats_t *total_exec_time,
@@ -125,43 +164,10 @@ size_t print_meas_log(time_stats_t *ts,
 {
   const char *begin = output;
   const char *end = output + outputlen;
-  static int first_time = 0;
   static double cpu_freq_GHz = 0.0;
 
   if (cpu_freq_GHz == 0.0)
     cpu_freq_GHz = get_cpu_freq_GHz();
-
-  if (first_time == 0) {
-    first_time=1;
-
-    if ((total_exec_time == NULL) || (sf_exec_time== NULL))
-      output += snprintf(output,
-                         end - output,
-                         "%25s  %25s  %25s  %25s  %25s  %25s  %25s  %25s  %25s  %25s  %25s %25s %6f\n",
-                         "Name",
-                         "Total",
-                         "Max",
-                         "Std",
-                         "Num Trials",
-                         "min",
-                         "d1",
-                         "q1",
-                         "median",
-                         "q3",
-                         "d9",
-                         "CPU_F_GHz",
-                         cpu_freq_GHz);
-    else
-      output += snprintf(output,
-                         end - output,
-                         "%25s  %25s  %25s  %20s %15s %6f\n",
-                         "Name",
-                         "Total",
-                         "Average/Frame",
-                         "Trials",
-                         "CPU_F_GHz",
-                         cpu_freq_GHz);
-  }
 
   if (ts->trials>0) {
     if ((total_exec_time == NULL) || (sf_exec_time== NULL)) {
