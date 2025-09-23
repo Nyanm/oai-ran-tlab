@@ -815,11 +815,14 @@ int get_mcs_from_bler(const NR_bler_options_t *bler_options,
                       const NR_mac_dir_stats_t *stats,
                       NR_bler_stats_t *bler_stats,
                       int max_mcs,
-                      frame_t frame)
+                      frame_t frame,
+                      bool ue_is_active)
 {
   int diff = frame - bler_stats->last_frame;
   if (diff < 0) // wrap around
     diff += 1024;
+
+  bler_stats->frames_inactive = ue_is_active ? 0 : bler_stats->frames_inactive + diff;
 
   max_mcs = min(max_mcs, bler_options->max_mcs);
   const uint8_t old_mcs = min(bler_stats->mcs, max_mcs);

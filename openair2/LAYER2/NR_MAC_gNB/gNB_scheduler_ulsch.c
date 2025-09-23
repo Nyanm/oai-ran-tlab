@@ -2004,13 +2004,14 @@ static int  pf_ul(gNB_MAC_INST *nrmac,
     const int max_mcs = min(bo->max_mcs, max_mcs_table); /* no per-user maximum MCS yet */
     int selected_mcs;
     int nrOfLayers = get_ul_nrOfLayers(sched_ctrl, current_BWP->dci_format);
+    bool sched_inactive = B == 0 && do_sched;
     if (bo->harq_round_max == 1) {
       selected_mcs = get_mcs_from_SINRx10(current_BWP->mcs_table, sched_ctrl->pusch_pc.avg_snr * 10, nrOfLayers);
       selected_mcs = min(max_mcs, selected_mcs);
       selected_mcs = max(bo->min_mcs, selected_mcs);
       sched_ctrl->ul_bler_stats.mcs = selected_mcs;
     } else {
-      selected_mcs = get_mcs_from_bler(bo, stats, &sched_ctrl->ul_bler_stats, max_mcs, frame);
+      selected_mcs = get_mcs_from_bler(bo, stats, &sched_ctrl->ul_bler_stats, max_mcs, frame, !sched_inactive);
       LOG_D(NR_MAC, "%d.%d starting mcs %d bler %f\n", frame, slot, selected_mcs, sched_ctrl->ul_bler_stats.bler);
     }
 
@@ -2028,7 +2029,6 @@ static int  pf_ul(gNB_MAC_INST *nrmac,
                                         nrOfLayers)
                          >> 3;
     float coeff_ue = (float) tbs / UE->ul_thr_ue;
-    bool sched_inactive = B == 0 && do_sched;
     LOG_D(NR_MAC, "[UE %04x][%4d.%2d] b %d, ul_thr_ue %f, tbs %d, coeff_ue %f, sched_inactive %d\n",
           UE->rnti,
           frame,
