@@ -59,7 +59,6 @@ struct GpuContext {
 
   c16_t* cpu_history_buffer;
   c16_t* h_pinned_history;
-  c16_t* h_pinned_new_samples;
   c16_t* h_pinned_output;
 
   c16_t* d_history_buffer;
@@ -149,9 +148,8 @@ extern "C" void vrtsim_cuda_init(void** context_handle, int max_samples, int nb_
   CHECK_CUDA(cudaMalloc(&ctx->d_history_buffer, history_size_per_ant * nb_tx * sizeof(c16_t)));
   CHECK_CUDA(cudaMalloc(&ctx->d_new_samples_buffer, max_samples * nb_tx * sizeof(c16_t)));
 
-  printf("[CUDA] Allocating pinned staging buffers...\n");
+  printf("[CUDA] Allocating pinned staging buffers for history only...\n");
   CHECK_CUDA(cudaMallocHost(&ctx->h_pinned_history, history_size_per_ant * nb_tx * sizeof(c16_t)));
-  CHECK_CUDA(cudaMallocHost(&ctx->h_pinned_new_samples, max_samples * nb_tx * sizeof(c16_t)));
 
   printf("[CUDA] Allocating output buffers...\n");
   CHECK_CUDA(cudaMalloc(&ctx->d_final_output, max_samples * nb_rx * sizeof(short2)));
@@ -183,7 +181,6 @@ extern "C" void vrtsim_cuda_shutdown(void* context_handle)
   CHECK_CUDA(cudaFree(ctx->d_channel_output));
   CHECK_CUDA(cudaFree(ctx->d_channel_coeffs));
   CHECK_CUDA(cudaFreeHost(ctx->h_pinned_history));
-  CHECK_CUDA(cudaFreeHost(ctx->h_pinned_new_samples));
   CHECK_CUDA(cudaFree(ctx->d_final_output));
   CHECK_CUDA(cudaFreeHost(ctx->h_pinned_output));
   CHECK_CUDA(cudaFree(ctx->d_history_buffer));
@@ -229,28 +226,28 @@ extern "C" void vrtsim_cuda_process(void* context_handle,
 
   nvtxRangePushA("CPU_data_preparation");
 
-  nvtxRangePushA("CPU_Memcpy_To_Pinned");
+  nvtxRangePushA("CPU_Memcpy_To_Pinned_History_Only");
   for (int i = 0; i < nb_tx; ++i) {
     c16_t* hist_ptr = get_hist_ptr(ctx->cpu_history_buffer, i, hist_len);
-    c16_t* input_ptr = input_samples[i];
-
     c16_t* h_pinned_hist_offset = ctx->h_pinned_history + i * hist_len;
-    c16_t* h_pinned_new_offset = ctx->h_pinned_new_samples + i * nsamps;
 
     memcpy(h_pinned_hist_offset, hist_ptr, hist_len * sizeof(c16_t));
-    memcpy(h_pinned_new_offset, input_ptr, nsamps * sizeof(c16_t));
   }
   nvtxRangePop();
 
   nvtxRangePushA("Async_H2D_Copies");
   size_t history_bytes = hist_len * nb_tx * sizeof(c16_t);
-  size_t new_samples_bytes = nsamps * nb_tx * sizeof(c16_t);
   CHECK_CUDA(cudaMemcpyAsync(ctx->d_history_buffer, ctx->h_pinned_history, history_bytes, cudaMemcpyHostToDevice, ctx->stream));
-  CHECK_CUDA(cudaMemcpyAsync(ctx->d_new_samples_buffer,
-                             ctx->h_pinned_new_samples,
-                             new_samples_bytes,
-                             cudaMemcpyHostToDevice,
-                             ctx->stream));
+
+  // Copy input samples directly from pinned memory (per antenna)
+  for (int i = 0; i < nb_tx; ++i) {
+    size_t offset = i * nsamps * sizeof(c16_t);
+    CHECK_CUDA(cudaMemcpyAsync(((char*)ctx->d_new_samples_buffer) + offset,
+                               input_samples[i],
+                               nsamps * sizeof(c16_t),
+                               cudaMemcpyHostToDevice,
+                               ctx->stream));
+  }
   nvtxRangePop();
 
   nvtxRangePushA("prepare_input_kernel_launch");
@@ -289,7 +286,7 @@ extern "C" void vrtsim_cuda_process(void* context_handle,
   nvtxRangePushA("GPU_pipeline_execution");
 
   nvtxRangePushA("multipath_kernel");
-  dim3 threads_multipath(512, 1);
+  dim3 threads_multipath(256, 1);
   dim3 blocks_multipath((nsamps + threads_multipath.x - 1) / threads_multipath.x, nb_rx);
   size_t sharedMemSize = (threads_multipath.x + ctx->channel_length - 1) * sizeof(float2);
   multipath_channel_kernel<<<blocks_multipath, threads_multipath, sharedMemSize, ctx->stream>>>(ctx->d_channel_coeffs,

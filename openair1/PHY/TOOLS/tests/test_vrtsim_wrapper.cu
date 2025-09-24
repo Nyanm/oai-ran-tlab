@@ -208,7 +208,7 @@ int main(int argc, char** argv)
   printf("+----------------------------------+--------------------------+\n");
 
   for (int i = 0; i < nb_tx; ++i)
-    delete[] h_input_samples[i];
+    cudaFreeHost(h_input_samples[i]);
   free_manual_channel_desc(h_channel_desc);
 
   return 0;

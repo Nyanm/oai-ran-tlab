@@ -27,6 +27,10 @@
 #include <math.h>
 #include "openair1/PHY/defs_RU.h"
 
+#ifdef ENABLE_CUDA
+#include <cuda_runtime.h>
+#endif
+
 void init_prach_ru_list(RU_t *ru);
 
 void nr_phy_init_RU(RU_t *ru)
@@ -63,14 +67,24 @@ void nr_phy_init_RU(RU_t *ru)
 
     for (int i = 0; i < nb_tx_streams; i++) {
       // Allocate 10 subframes of I/Q TX signal data (time) if not
+    #ifdef ENABLE_CUDA
+      LOG_I(NR_PHY, "Initializing pinned buffers for ru\n");
+      size_t alloc_size = (ru->sf_extension + fp->samples_per_frame) * sizeof(int32_t);
+      int32_t *full_buffer;
+      cudaMallocHost((void**)&full_buffer, alloc_size);
+      memset(full_buffer, 0, alloc_size);
+      ru->common.txdata[i] = &full_buffer[ru->sf_extension];
+    #else
       ru->common.txdata[i] = (int32_t*)malloc16_clear((ru->sf_extension + fp->samples_per_frame) * sizeof(int32_t));
+      ru->common.txdata[i] = &ru->common.txdata[i][ru->sf_extension];
+    #endif
+
       LOG_D(PHY,
             "[INIT] common.txdata[%d] = %p (%lu bytes,sf_extension %d)\n",
             i,
             ru->common.txdata[i],
             (ru->sf_extension + fp->samples_per_frame) * sizeof(int32_t),
             ru->sf_extension);
-      ru->common.txdata[i] = &ru->common.txdata[i][ru->sf_extension];
 
       LOG_D(PHY, "[INIT] common.txdata[%d] = %p \n", i, ru->common.txdata[i]);
     }
@@ -142,8 +156,14 @@ void nr_phy_free_RU(RU_t *ru)
   if (ru->if_south <= REMOTE_IF5) { // this means REMOTE_IF5 or LOCAL_RF, so free memory for time-domain signals
     // Hack: undo what is done at allocation
     for (int i = 0; i < nb_tx_streams; i++) {
+    #ifdef ENABLE_CUDA
+      int32_t *p = &ru->common.txdata[i][-ru->sf_extension];
+      cudaFreeHost(p);
+      ru->common.txdata[i] = NULL;
+    #else
       int32_t *p = &ru->common.txdata[i][-ru->sf_extension];
       free_and_zero(p);
+    #endif
     }
     free_and_zero(ru->common.txdata);
 

@@ -37,6 +37,10 @@
 #include "SCHED_NR_UE/harq_nr.h"
 #include "nr-uesoftmodem.h"
 
+#ifdef ENABLE_CUDA
+#include <cuda_runtime.h>
+#endif
+
 void RCconfig_nrUE_prs(void *cfg)
 {
   int j = 0, k = 0, gNB_id = 0;
@@ -241,7 +245,13 @@ int init_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
   common_vars->txData = malloc16(fp->nb_antennas_tx * sizeof(c16_t *));
 
   for (int i = 0; i < fp->nb_antennas_tx; i++) {
+  #ifdef ENABLE_CUDA
+    LOG_I(PHY, "Initializing pinned buffers for ue\n");
+    cudaMallocHost((void**)&common_vars->txData[i], (fp->samples_per_frame) * sizeof(c16_t));
+    memset(common_vars->txData[i], 0, (fp->samples_per_frame) * sizeof(c16_t));
+  #else
     common_vars->txData[i] = malloc16_clear((fp->samples_per_frame) * sizeof(c16_t));
+  #endif
   }
 
   // init RX buffers
@@ -298,7 +308,12 @@ void term_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
   NR_UE_COMMON* common_vars = &ue->common_vars;
 
   for (int i = 0; i < fp->nb_antennas_tx; i++) {
+  #ifdef ENABLE_CUDA
+    cudaFreeHost(common_vars->txData[i]);
+    common_vars->txData[i] = NULL;
+  #else
     free_and_zero(common_vars->txData[i]);
+  #endif
   }
 
   free_and_zero(common_vars->txData);
