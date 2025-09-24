@@ -146,7 +146,7 @@ int main(int argc, char **argv)
   // ---------------------------------------------------------------
 
   int RBs = 10;
-  c16_t freqFrame[14*12*RBs];
+  c16_t freqFrame[NR_NUMBER_OF_SYMBOLS_PER_SLOT*NR_NB_SC_PER_RB*RBs];
 
   memset(freqFrame, 0, sizeof(freqFrame));
 
@@ -162,7 +162,7 @@ int main(int argc, char **argv)
   frame_parms->nb_antennas_tx = n_antennas;
   frame_parms->nb_antennas_rx = n_antennas;
   frame_parms->subcarrier_spacing = 15e3;
-  frame_parms->symbols_per_slot = 14;
+  frame_parms->symbols_per_slot = NR_NUMBER_OF_SYMBOLS_PER_SLOT;
   frame_parms->slots_per_subframe = 1;
   frame_parms->slots_per_frame = 10;
   frame_parms->ofdm_symbol_size = 2048;
@@ -197,11 +197,12 @@ int main(int argc, char **argv)
   }
 
   int ofdm_symbol_size = frame_parms->ofdm_symbol_size;
-  int num_symbols = 14;
-  int points_per_symbol = 12 * RBs;
+  int num_symbols = NR_NUMBER_OF_SYMBOLS_PER_SLOT;
+  int points_per_symbol = NR_NB_SC_PER_RB * RBs;
+  bool was_symbol_used[NR_NUMBER_OF_SYMBOLS_PER_SLOT];
 
   memset(freqFrame, 0, sizeof(freqFrame));
-  memcpy(freqFrame, SIP_symbol_Ones, sizeof(SIP_symbol_Ones));
+  memcpy(freqFrame, SIP_symbol_10RBs_ZC, sizeof(SIP_symbol_10RBs_ZC));
   memset(txDataF[0], 0, frame_length_complex_samples * sizeof(int));
 
   for (int sym = 0; sym < num_symbols; sym++) {
@@ -213,25 +214,22 @@ int main(int argc, char **argv)
     }
   }
 
-  bool was_symbol_used[NR_NUMBER_OF_SYMBOLS_PER_SLOT];
-  for (int i = 0; i < 14; i++) {
+  for (int i = 0; i < NR_NUMBER_OF_SYMBOLS_PER_SLOT; i++) {
     was_symbol_used[i] = true;
   }
 
   nr_normal_prefix_mod(txDataF[0],
                       txData[0],
-                      14,
+                      NR_NUMBER_OF_SYMBOLS_PER_SLOT,
                       frame_parms,
                       1,
                       was_symbol_used);
 
-  sprintf(filename,"ofdm_SIP_2RBS_Ones.m");
+  sprintf(filename,"ofdm_SIP_%dRBS_ZC.m", RBs);
   LOG_M(filename,"ofdm", txData[0], slot_length, 1, 1);
 
-
-  // ZC
   memset(freqFrame, 0, sizeof(freqFrame));
-  memcpy(freqFrame, SIP_symbol_ZC, sizeof(SIP_symbol_ZC));
+  memcpy(freqFrame, SIP_symbol_10RBs_ones, sizeof(SIP_symbol_10RBs_ones));
   memset(txDataF[0], 0, frame_length_complex_samples * sizeof(int));
 
   for (int sym = 0; sym < num_symbols; sym++) {
@@ -243,18 +241,18 @@ int main(int argc, char **argv)
     }
   }
 
-  for (int i = 0; i < 14; i++) {
+  for (int i = 0; i < NR_NUMBER_OF_SYMBOLS_PER_SLOT; i++) {
     was_symbol_used[i] = true;
   }
 
   nr_normal_prefix_mod(txDataF[0],
                       txData[0],
-                      14,
+                      NR_NUMBER_OF_SYMBOLS_PER_SLOT,
                       frame_parms,
                       1,
                       was_symbol_used);
 
-  sprintf(filename,"ofdm_SIP_2RBS_ZC.m");
+  sprintf(filename,"ofdm_SIP_%dRBS_ones.m", RBs);
   LOG_M(filename,"ofdm", txData[0], slot_length, 1, 1);
 
   /*double **s_re,**s_im,**r_re,**r_im;
@@ -277,19 +275,15 @@ int main(int argc, char **argv)
   bzero(r_re[0], slot_length * sizeof(double));
   bzero(r_im[0], slot_length * sizeof(double));
 
-  printf("frame_length_complex_samples %d, slot_offset %d, slot_length %d\n",frame_length_complex_samples,slot_offset,slot_length);
-
-  uint8_t nb_antennas = 1;
   SCM_t channel_model = AWGN;
   uint64_t fc = 0; // Carrier frequency n8 band, #50 RB
   double DS_TDL = .03;
   int delay = 0;
-  int N_RB_DL = 6;
-  double samples = N_RB2sampling_rate(N_RB_DL);
-  double rxbw = N_RB2channel_bandwidth(N_RB_DL);
+  double samples = N_RB2sampling_rate(RBs);
+  double rxbw = N_RB2channel_bandwidth(RBs);
 
-  channel_desc_t *channel = new_channel_desc_scm(nb_antennas,
-                                  nb_antennas,
+  channel_desc_t *channel = new_channel_desc_scm(n_antennas,
+                                  n_antennas,
                                   channel_model,
                                   samples,//sampling frequency in MHz
                                   fc,
