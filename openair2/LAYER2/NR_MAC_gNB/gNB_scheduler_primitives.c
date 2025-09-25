@@ -836,13 +836,12 @@ int get_mcs_from_bler(const NR_bler_options_t *bler_options,
   bler_stats->bler = BLER_FILTER * bler_stats->bler + (1 - BLER_FILTER) * bler_window;
 
   int new_mcs = old_mcs;
-  if (bler_stats->bler < bler_options->lower && old_mcs < max_mcs && num_dl_sched > 3)
+  if (bler_stats->bler < bler_options->lower && new_mcs < max_mcs)
     new_mcs += 1;
-  else if (bler_stats->bler > bler_options->upper || num_dl_sched <= 3) // above threshold or no activity
+  else if (bler_stats->bler > bler_options->upper && new_mcs > bler_options->min_mcs)
     new_mcs -= 1;
-  // else we are within threshold boundaries
+  // else we are within threshold boundaries or at limits
 
-  new_mcs = max(new_mcs, bler_options->min_mcs);
   bler_stats->last_frame = frame;
   bler_stats->mcs = new_mcs;
   memcpy(bler_stats->rounds, stats->rounds, sizeof(stats->rounds));
