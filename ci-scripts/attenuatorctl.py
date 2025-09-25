@@ -14,31 +14,69 @@ logging.basicConfig(
     format="%(message)s"
 )
 
+# helper class parsing command line options for channels and attenuators
 class ValidateChAtt(argparse.Action):
+    def _parse_channels(s):
+        if len(s.split("-")) == 2:
+            s, e = [int(x) for x in s.split("-")]
+            chs = [x for x in range(s, e+1)]
+            if len(chs) == 0:
+                raise Exception(f"empty range")
+        elif len(s.split(",")) > 1:
+            chs = [int(x) for x in s.split(",")]
+        elif s.isdigit():
+            chs = [int(s)]
+        else:
+            raise Exception(f"could not parse channel expression")
+        for c in chs:
+            if not 1 <= c <= 4:
+                raise Exception(f"channel number must be within [1,4], but have {c}")
+        return chs
+
     def __call__(self, parse, args, values, option_string=None):
         ch, att = values
-        if not ch.isdigit():
-            parse.exit(1, f'expected number for channel, but got {ch}\n')
-        if not 1 <= int(ch) <= 4:
-            parse.exit(1, f'channel number must be within [1,4], but is {ch}\n')
+        try:
+            chs = ValidateChAtt._parse_channels(ch)
+        except Exception as e:
+            parse.exit(1, f"while parsing channel expression {ch}: {e}\n")
         if not att.isdigit():
             parse.exit(1, f'expected number for attenuation, but got {att}\n')
-        if not 0 <= int(att) <= 80:
-            parse.exit(1, f'attenuation must be within [0,80], but is {attr}\n')
-        opts = getattr(args, self.dest) or []
-        opts.append((int(ch), int(att)))
+        if not 0 <= int(att) <= 63:
+            parse.exit(1, f'attenuation must be within [0,63], but is {attr}\n')
+        opts = getattr(args, self.dest) or {}
+        for c in chs:
+            opts[c] = int(att)
         setattr(args, self.dest, opts)
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description='Minicircuits attenuator: set attenuations for channels',
-                                     epilog='--set and --reach are mutually exclusive',
+    epilog = '''
+[CHs] can have the following forms:
+  (1) single channel number w (within [1-4])
+  (2) a range of channels in the form x-y (x <= y)
+  (3) a list of channels in the form a,b,c
+[ATT] must be within [0,63] (dB)
+
+--set and --reach are mutually exclusive
+
+Examples:
+- reset all channels to 0: -s 1-4 0
+- set channels 3 and 4 to attenuation 70: -s 3,4 70
+- perform attenuation sweep durang 10s, reaching ch. 1+2 to 60: -r 1,2 60 -d 10
+'''
+    parser = argparse.ArgumentParser(description='Mini-Circuit RC*DAT attenuator controller',
+                                     epilog=epilog,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    parser.add_argument('--info', '-i', action='store_true', default=False, help='Get Infos for all connected Mini-Circuits RC*DAT',)
-    parser.add_argument('--set', '-s', nargs=2, metavar=("[CH]","[ATT]"), action=ValidateChAtt, help="Set a fixed attenuation ATT on channel CH")
-    parser.add_argument('--reach', '-r', nargs=2, metavar=("[CH]","[ATT]"), action=ValidateChAtt, help="Perform an \"attenuation sweep\": reach attenuation ATT on channel CH")
-    parser.add_argument('--duration', '-d', action='store', type=float, default=5.0, help='Duration for attenuation sweep to --reach given attenuation (Default: 5)',)
-    parser.add_argument('--progress', '-p', action='store_true', default=False, help='If provided, will show progress during attenuation sweep',)
+    parser.add_argument('--info', '-i', action='store_true', default=False,
+                        help='Get Infos for all connected Mini-Circuits RC*DAT',)
+    parser.add_argument('--set', '-s', nargs=2, metavar=("[CHs]","[ATT]"),
+                        action=ValidateChAtt, help="Set a fixed attenuation ATT on channels CHs")
+    parser.add_argument('--reach', '-r', nargs=2, metavar=("[CHs]","[ATT]"),
+                        action=ValidateChAtt, help="Perform an \"attenuation sweep\": reach attenuation ATT on channels CHs")
+    parser.add_argument('--duration', '-d', action='store', type=float, default=5.0,
+                        help='DURATION for attenuation sweep to --reach given attenuation (Default: 5)',)
+    parser.add_argument('--progress', '-p', action='store_true', default=False,
+                        help='If provided, will show progress during attenuation sweep',)
     return parser.parse_args()
 
 def _exec(dev, cmd):
@@ -126,10 +164,10 @@ if __name__ == '__main__':
         _info(dev)
 
     if args.set:
-        _set_attenuation(dev, args.set)
+        _set_attenuation(dev, [(k,v) for k,v in args.set.items()])
 
     if args.reach:
-        _continuous_set_attenuation(dev, args.reach, args.duration, args.progress)
+        _continuous_set_attenuation(dev, [(k,v) for k,v in args.reach.items()], args.duration, args.progress)
 
     ident = devId(dev)
     for i, a in enumerate(_get_attenuation(dev)):
