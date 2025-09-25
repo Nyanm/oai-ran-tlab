@@ -716,7 +716,7 @@ static radio_tx_gpio_flag_t get_gpio_flags(RU_t *ru, int slot)
   return flags_gpio;
 }
 
-void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
+void tx_rf_symbols(RU_t *ru, int frame, int slot, uint64_t timestamp, int start_symbol, int num_symbols)
 {
   RU_proc_t *proc = &ru->proc;
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
@@ -729,7 +729,7 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
     T_INT(0),
     T_BUFFER(&ru->common.txdata[0][fp->get_samples_slot_timestamp(slot, fp, 0)], fp->get_samples_per_slot(slot, fp) * 4));
   int sf_extension = 0;
-  int siglen=fp->get_samples_per_slot(slot,fp);
+  uint32_t siglen = 0;
   radio_tx_burst_flag_t flags_burst = TX_BURST_INVALID;
   radio_tx_gpio_flag_t flags_gpio = 0;
 
@@ -743,22 +743,23 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
           txsymb++;
       }
 
-      AssertFatal(txsymb>0,"illegal txsymb %d\n",txsymb);
+      AssertFatal(txsymb > 0, "illegal txsymb %d\n", txsymb);
 
-      if (fp->slots_per_subframe == 1) {
-        if (txsymb <= 7)
-          siglen = (fp->ofdm_symbol_size + fp->nb_prefix_samples0) + (txsymb - 1) * (fp->ofdm_symbol_size + fp->nb_prefix_samples);
-        else
-          siglen = 2 * (fp->ofdm_symbol_size + fp->nb_prefix_samples0) + (txsymb - 2) * (fp->ofdm_symbol_size + fp->nb_prefix_samples);
-      } else {
-        if(slot%(fp->slots_per_subframe/2))
-          siglen = txsymb * (fp->ofdm_symbol_size + fp->nb_prefix_samples);
-        else
-          siglen = (fp->ofdm_symbol_size + fp->nb_prefix_samples0) + (txsymb - 1) * (fp->ofdm_symbol_size + fp->nb_prefix_samples);
+      if (txsymb < start_symbol) {
+        // No DL symbols in this transmission
+        return;
       }
 
-      //+ ru->end_of_burst_delay;
-      flags_burst = TX_BURST_END;
+      int end_symbol = start_symbol + num_symbols - 1;
+      if (end_symbol >= txsymb) {
+        flags_burst = TX_BURST_END;
+      } else {
+        flags_burst = TX_BURST_MIDDLE;
+      }
+
+      int num_symbols_this_transmission = min(txsymb, end_symbol) - start_symbol + 1;
+
+      siglen = get_samples_symbol_duration(fp, slot, start_symbol, num_symbols_this_transmission);
     } else if (slot_type == NR_DOWNLINK_SLOT) {
       int prevslot_type = nr_slot_select(cfg,frame,(slot+(fp->slots_per_frame-1))%fp->slots_per_frame);
       int nextslot_type = nr_slot_select(cfg,frame,(slot+1)%fp->slots_per_frame);
@@ -770,9 +771,11 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
       } else {
         flags_burst = proc->first_tx == 1 ? TX_BURST_START : TX_BURST_MIDDLE;
       }
+      siglen = get_samples_symbol_duration(fp, slot, start_symbol, num_symbols);
     }
   } else { // FDD
     flags_burst = proc->first_tx == 1 ? TX_BURST_START : TX_BURST_MIDDLE;
+    siglen = get_samples_symbol_duration(fp, slot, start_symbol, num_symbols);
   }
 
   if (ru->openair0_cfg.gpio_controller != RU_GPIO_CONTROL_NONE)
@@ -787,8 +790,9 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
 
   int nt = ru->nb_tx * ru->num_beams_period;
   void *txp[nt];
+  uint32_t time_offset = fp->get_samples_slot_timestamp(slot, fp, 0) + get_samples_symbol_timestamp(fp, slot, start_symbol);
   for (int i = 0; i < nt; i++)
-    txp[i] = (void *)&ru->common.txdata[i][fp->get_samples_slot_timestamp(slot, fp, 0)] - sf_extension * sizeof(int32_t);
+    txp[i] = (void *)&ru->common.txdata[i][time_offset] - sf_extension * sizeof(int32_t);
 
   VCD_SIGNAL_DUMPER_DUMP_VARIABLE_BY_NAME(VCD_SIGNAL_DUMPER_VARIABLES_TRX_TST, (timestamp + ru->ts_offset) & 0xffffffff);
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_WRITE, 1);
@@ -813,6 +817,11 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
         txs,
         10 * log10((double)signal_energy(txp[0], siglen + sf_extension)));
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_WRITE, 0);
+}
+
+void tx_rf(RU_t *ru, int frame, int slot, uint64_t timestamp)
+{
+  tx_rf_symbols(ru, frame, slot, timestamp, 0, 14);
 }
 
 void fill_rf_config(RU_t *ru, char *rf_config_file)
