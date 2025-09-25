@@ -1,0 +1,69 @@
+services:
+    oai_gnb1:
+        image: ${REGISTRY:-oaisoftwarealliance}/${GNB_IMG:-oai-gnb}:${TAG:-develop}
+        container_name: oai-gnb1-mono-ho
+        cap_drop:
+            - ALL
+        cap_add:
+            - SYS_NICE
+            - IPC_LOCK
+        ulimits:
+          core: -1 # for core dumps
+        environment:
+            USE_B2XX: 'yes'
+            USE_ADDITIONAL_OPTIONS: --RUs.[0].sdr_addrs serial=30AD30F --sa
+                                    --gNBs.[0].nr_cellid 12345678
+                                    --gNBs.[0].gNB_ID 0xe00
+                                    --gNBs.[0].plmn_list.[0].mcc 001
+                                    --gNBs.[0].plmn_list.[0].mnc 03
+                                    --gNBs.[0].servingCellConfigCommon.[0].physCellId 0
+                                    --gNBs.[0].servingCellConfigCommon.[0].absoluteFrequencySSB 629376
+                                    --gNBs.[0].servingCellConfigCommon.[0].dl_absoluteFrequencyPointA 628720
+                                    --gNBs.[0].servingCellConfigCommon.[0].ra_ResponseWindow 5
+                                    --log_config.global_log_options level,nocolor,utc_time,line_num,function
+            ASAN_OPTIONS: detect_leaks=0:detect_odr_violation=0
+        devices:
+            - /dev/bus/usb/:/dev/bus/usb/
+        volumes:
+            - ../../conf_files/neighbour-config-ho.conf:/opt/oai-gnb/etc/neighbour-config-ho.conf
+            - ../../conf_files/gnb.sa.band78.51prb.usrpb200.conf:/opt/oai-gnb/etc/gnb.conf
+        network_mode: "host"
+        healthcheck:
+            test: /bin/bash -c "ps aux | grep -v grep | grep -c softmodem"
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+    oai_gnb2:
+        image: ${REGISTRY:-oaisoftwarealliance}/${GNB_IMG:-oai-gnb}:${TAG:-develop}
+        container_name: oai-gnb2-mono-ho
+        cap_drop:
+            - ALL
+        cap_add:
+            - SYS_NICE
+            - IPC_LOCK
+        ulimits:
+          core: -1 # for core dumps
+        environment:
+            USE_B2XX: 'yes'
+            USE_ADDITIONAL_OPTIONS: --RUs.[0].sdr_addrs serial=31F8010 --sa
+                                    --gNBs.[0].nr_cellid 11111111
+                                    --gNBs.[0].gNB_ID 0xe01
+                                    --gNBs.[0].plmn_list.[0].mcc 001
+                                    --gNBs.[0].plmn_list.[0].mnc 03
+                                    --gNBs.[0].servingCellConfigCommon.[0].physCellId 1
+                                    --gNBs.[0].servingCellConfigCommon.[0].absoluteFrequencySSB 629376
+                                    --gNBs.[0].servingCellConfigCommon.[0].dl_absoluteFrequencyPointA 628720
+                                    --gNBs.[0].servingCellConfigCommon.[0].ra_ResponseWindow 5
+                                    --log_config.global_log_options level,nocolor,utc_time,line_num,function
+        devices:
+            - /dev/bus/usb/:/dev/bus/usb/
+        volumes:
+            - ../../conf_files/neighbour-config-ho.conf:/opt/oai-gnb/etc/neighbour-config-ho.conf
+            - ../../conf_files/gnb.sa.band78.51prb.usrpb200.conf:/opt/oai-gnb/etc/gnb.conf
+        network_mode: "host"
+        healthcheck:
+            test: /bin/bash -c "ps aux | grep -v grep | grep -c softmodem"
+            interval: 10s
+            timeout: 5s
+            retries: 5
