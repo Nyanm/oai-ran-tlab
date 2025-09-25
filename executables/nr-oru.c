@@ -40,7 +40,7 @@ typedef struct {
   initial_sync_t initial_sync;
 } sync_params_t;
 
-extern void tx_rf(RU_t *ru, int frame, int slot, uint64_t timestamp);
+extern void tx_rf_symbols(RU_t *ru, int frame, int slot, uint64_t timestamp, int start_symbol, int num_symbols);
 
 void perform_initial_sync(ORU_t *oru, sense_of_time_t *sense_of_time, sync_params_t *sync_params)
 {
@@ -63,41 +63,6 @@ void perform_initial_sync(ORU_t *oru, sense_of_time_t *sense_of_time, sync_param
         sync_params->sync_offset);
 }
 
-static inline int get_samples_symbol(int slot, int symbol, NR_DL_FRAME_PARMS *fp)
-{
-  if (symbol == 0) {
-    return 0;
-  }
-
-  if (fp->numerology_index == 0) {
-    int num_samples = 0;
-    int num_symbols_to_add = symbol;
-
-    // Add symbol 7
-    if (symbol > 7) {
-      num_samples += fp->nb_prefix_samples0 + fp->ofdm_symbol_size;
-      num_symbols_to_add--;
-    }
-    // add symbol 0
-    num_samples += fp->nb_prefix_samples0 + fp->ofdm_symbol_size;
-    num_symbols_to_add--;
-
-    num_samples += num_symbols_to_add * (fp->nb_prefix_samples + fp->ofdm_symbol_size);
-    return num_samples;
-  } else {
-    int num_samples = 0;
-    int num_symbols_to_add = symbol;
-
-    // Add first symbol
-    num_samples += (slot % (fp->slots_per_subframe / 2)) ? fp->nb_prefix_samples : fp->nb_prefix_samples0;
-    num_samples += fp->ofdm_symbol_size;
-    num_symbols_to_add--;
-
-    num_samples += (fp->ofdm_symbol_size + fp->nb_prefix_samples) * num_symbols_to_add;
-    return num_samples;
-  }
-}
-
 openair0_timestamp get_timestamp(ORU_t *oru, sense_of_time_t *sense_of_time, sync_params_t *sync_params)
 {
   if (sync_params->last_frame > sense_of_time->frame) {
@@ -109,7 +74,7 @@ openair0_timestamp get_timestamp(ORU_t *oru, sense_of_time_t *sense_of_time, syn
 
   uint64_t timestamp = (uint64_t)(num_frames)*fp->samples_per_subframe * 10
                        + fp->get_samples_slot_timestamp(sense_of_time->slot, fp, 0)
-                       + get_samples_symbol(sense_of_time->slot, sense_of_time->symbol, fp);
+                       + get_samples_symbol_timestamp(fp, sense_of_time->slot, sense_of_time->symbol);
 
   timestamp += sync_params->sync_offset;
   return timestamp;
@@ -125,11 +90,19 @@ void oru_downlink_processing(RU_t *ru,
 {
   start_meas(&ru->tx_fhaul);
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+  for (int symbol = start_symbol; symbol < start_symbol + num_symbols; symbol++) {
+    LOG_D(PHY,
+          "Ant 0 Signal energy %d.%d.%d %.3f\n",
+          frame,
+          slot,
+          symbol,
+          10 * log10(signal_energy_nodc(&txDataF_ptr[0][fp->ofdm_symbol_size * symbol], fp->ofdm_symbol_size)));
+  }
   for (int aatx = 0; aatx < ru->nb_tx; aatx++) {
     apply_nr_rotation_TX(fp, txDataF_ptr[aatx], fp->symbol_rotation[0], slot, fp->N_RB_DL, start_symbol, num_symbols);
     nr_feptx0(ru, slot, start_symbol, num_symbols, aatx);
   }
-  tx_rf(ru, frame, slot, timestamp_tx);
+  tx_rf_symbols(ru, frame, slot, timestamp_tx, start_symbol, num_symbols);
   stop_meas(&ru->tx_fhaul);
 }
 
@@ -173,13 +146,16 @@ void *oru_north_read_thread(void *arg)
             sense_of_time.symbol,
             num_symbols);
     }
-    oru_downlink_processing(ru,
-                            txDataF_ptr,
-                            sense_of_time.frame,
-                            sense_of_time.slot,
-                            sense_of_time.symbol,
-                            num_symbols,
-                            timestamp_tx);
+    nfapi_nr_config_request_scf_t *cfg = &ru->config;
+    int slot_type = nr_slot_select(cfg, sense_of_time.frame, sense_of_time.slot % fp->slots_per_frame);
+    if (slot_type != NR_UPLINK_SLOT)
+      oru_downlink_processing(ru,
+                              txDataF_ptr,
+                              sense_of_time.frame,
+                              sense_of_time.slot,
+                              sense_of_time.symbol,
+                              num_symbols,
+                              timestamp_tx);
   }
   return NULL;
 }
