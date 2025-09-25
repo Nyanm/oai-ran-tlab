@@ -25,8 +25,8 @@
 | gracehopper3-oai | Gracehopper3       | build                | --                                                    |
 | acamas        | Acamas                | 4G and 5G rfsimulator| --                                                    |
 
-Note: The available resources, and their current usage, is indicated here:
-- [Lockable resources of jenkins-oai](https://jenkins-oai.eurecom.fr/lockable-resources/):
+> **Note:** The available resources, and their current usage, is indicated here:
+> - [Lockable resources of jenkins-oai](https://jenkins-oai.eurecom.fr/lockable-resources/):
   "New" Jenkins, i.e., with RAN-Container-Parent
 
 ## Testbenches
@@ -340,7 +340,7 @@ right image (Ubuntu or RHEL)!
 
 #### Core dump in a file
 
-**This is not recommended, as files could pile up and fill the system disk
+> **This is not recommended, as files could pile up and fill the system disk
 completely!** Prefer another method further down.
 
 If the core pattern is a path: it should at least include the time in the
@@ -363,7 +363,7 @@ sudo coredumpctl dump <PID> > /tmp/coredump
 
 #### Core dump via abrt (automatic bug reporting tool)
 
-TBD: use the documentation page for the moment.
+> TBD: use the documentation page for the moment.
 
 #### Core dump via apport
 
