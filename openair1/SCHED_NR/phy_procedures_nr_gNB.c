@@ -333,7 +333,10 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
   }
 
   //apply the OFDM symbol rotation here
-  start_meas(&gNB->phase_comp_stats);
+  int slot_type = nr_slot_select(&gNB->gNB_config, frame, slot);
+  if (slot_type == NR_DOWNLINK_SLOT) {
+    start_meas(&gNB->phase_comp_stats);
+  }
   for (int i = 0; i < gNB->common_vars.num_beams_period; ++i) {
     for (int aa = 0; aa < cfg->carrier_config.num_tx_ant.value; aa++) {
       if (gNB->phase_comp) {
@@ -353,7 +356,9 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
         T_BUFFER(&gNB->common_vars.txdataF[i][aa][txdataF_offset], fp->samples_per_slot_wCP * sizeof(int32_t)));
     }
   }
-  stop_meas(&gNB->phase_comp_stats);
+  if (slot_type == NR_DOWNLINK_SLOT) {
+    stop_meas(&gNB->phase_comp_stats);
+  }
 
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_PHY_PROCEDURES_gNB_TX + gNB->CC_id, 0);
 }
@@ -1027,7 +1032,10 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
   }
 
   const int soffset = (slot_rx & 3) * nb_symb * ofdm_symbol_size;
-  start_meas(&gNB->phy_proc_rx);
+  int slot_type = nr_slot_select(&gNB->gNB_config, frame_rx, slot_rx);
+  if (slot_type == NR_UPLINK_SLOT) {
+    start_meas(&gNB->phy_proc_rx);
+  }
 
   for (int i = 0; i < gNB->max_nb_pucch; i++) {
     NR_gNB_PUCCH_t *pucch = &gNB->pucch[i];
@@ -1389,7 +1397,9 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
     stop_meas(&gNB->rx_srs_stats);
   }
 
-  stop_meas(&gNB->phy_proc_rx);
+  if (slot_type == NR_UPLINK_SLOT) {
+    stop_meas(&gNB->phy_proc_rx);
+  }
 
   if (pucch_decode_done || pusch_decode_done) {
     T(T_GNB_PHY_PUCCH_PUSCH_IQ,
