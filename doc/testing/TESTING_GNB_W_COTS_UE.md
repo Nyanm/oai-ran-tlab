@@ -37,7 +37,7 @@ Our code might not work with all 5G phones yet, but we are constantly improving 
 *  Simcom SIMCOM8200EA 
 *  Quectel RM500Q-GL
 
-Note1: In the version we have at Eurecom, you need to set the PLMN to 50501, and you also need to change the firmware to "11.0.0 (RD1A.201105.003.B1, Nov 2020, EU carriers)" (see https://developers.google.com/android/images)
+> **Note1:** In the version we have at Eurecom, you need to set the PLMN to 50501, and you also need to change the firmware to "11.0.0 (RD1A.201105.003.B1, Nov 2020, EU carriers)" (see https://developers.google.com/android/images)
 
 ## Repository
 
@@ -214,7 +214,7 @@ Execute:
 - **gNB** (on the gNB host)
 
 
-**ATTENTION** : for the gNB execution,    
+> **ATTENTION** : for the gNB execution,
 The **-E** option is required to enable the tri-quarter sampling rate when using a B2xx serie USRP  
 The **-E** option is **NOT supported** when using a a N300 USRP  
 
