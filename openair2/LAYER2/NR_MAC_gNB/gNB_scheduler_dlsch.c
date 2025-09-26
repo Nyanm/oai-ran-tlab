@@ -732,6 +732,10 @@ static void pf_dl(gNB_MAC_INST *mac,
   UEsched_t *iterator = UE_sched;
 
   const int min_rbSize = 5;
+  const int UEperTTI = 4;
+  const int schedUE = max(1, min(UEperTTI, numUE));
+  DevAssert(num_beams == 1);
+  const int rbPerUE = n_rb_sched[0] / schedUE;
 
   /* Loop UE_sched to find max coeff and allocate transmission */
   while (iterator->UE != NULL) {
@@ -788,7 +792,7 @@ static void pf_dl(gNB_MAC_INST *mac,
     int bwp_size = bwp_info.bwpSize;
     // Freq-demain allocation
     int max_rbSize = 0;
-    if (!get_rb_alloc(min_rbSize, bwp_size, bwp_start, bwp_size, rballoc_mask, slbitmap, &rbStart, &max_rbSize)) {
+    if (!get_rb_alloc(min_rbSize, rbPerUE, bwp_start, bwp_size, rballoc_mask, slbitmap, &rbStart, &max_rbSize)) {
       LOG_D(NR_MAC,
             "(%d.%d) Cannot schedule RNTI %04x, rbStart %d, rbSize %d\n",
             frame,
@@ -905,8 +909,7 @@ static void nr_dlsch_preprocessor(gNB_MAC_INST *mac, post_process_pdsch_t *pp_pd
   for (int i = 0; i < num_beams; i++)
     n_rb_sched[i] = bw;
 
-  int average_agg_level = 4; // TODO find a better estimation
-  int max_sched_ues = bw / (average_agg_level * NR_NB_REG_PER_CCE);
+  int max_sched_ues = 10;
 
   // FAPI cannot handle more than MAX_DCI_CORESET DCIs
   max_sched_ues = min(max_sched_ues, MAX_DCI_CORESET);
