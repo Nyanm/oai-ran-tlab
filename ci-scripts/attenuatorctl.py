@@ -42,7 +42,7 @@ class ValidateChAtt(argparse.Action):
         if not att.isdigit():
             parse.exit(1, f'expected number for attenuation, but got {att}\n')
         if not 0 <= int(att) <= 63:
-            parse.exit(1, f'attenuation must be within [0,63], but is {attr}\n')
+            parse.exit(1, f'attenuation must be within [0,63], but is {att}\n')
         opts = getattr(args, self.dest) or {}
         for c in chs:
             opts[c] = int(att)
