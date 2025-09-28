@@ -523,6 +523,8 @@ typedef struct PHY_VARS_NR_UE_s {
   ntn_config_message_t* ntn_config_message;
   pthread_t main_thread;
   pthread_t stat_thread;
+  int use_gpu;
+  int use_fp16;
 } PHY_VARS_NR_UE;
 
 typedef struct {

@@ -45,7 +45,11 @@ extern const char nr_W_4l_4p[5][4][4];
 void nr_modulation(const uint32_t *in,
                    uint32_t length,
                    uint16_t mod_order,
-                   int16_t *out);
+                   int16_t *out
+#ifdef FLT16_MAX
+		   ,_Float16 *out_fp16
+#endif
+  		   );
 
 /*! \brief Perform NR layer mapping. TS 38.211 V15.4.0 subclause 7.3.1.3
   @param[in] mod_symbs, double Pointer to modulated symbols for each codeword
@@ -139,7 +143,11 @@ c16_t nr_layer_precoder_cm(int n_layers,
                            c16_t datatx_F_precoding[n_layers][symSz],
                            int ap,
                            nfapi_nr_pm_pdu_t *pmi_pdu,
-                           int offset);
+                           int offset
+#ifdef FLT16_MAX
+			   ,int use_fp16
+#endif
+			   );
 
 /*! \brief Precoding with SIMDe, txdataF_precoded[] = prec_matrix[] * txdataF_res_mapped[]
   @param[in]  txdataF_res_mapped Tx data after resource mapping, before precoding.
@@ -154,5 +162,9 @@ void nr_layer_precoder_simd(const int n_layers,
                             const nfapi_nr_pm_pdu_t *pmi_pdu,
                             const int sc_offset,
                             const int re_cnt,
-                            c16_t *txdataF_precoded);
+                            c16_t *txdataF_precoded
+#ifdef FLT16_MAX
+			   ,int use_fp16
+#endif
+		           );
 #endif

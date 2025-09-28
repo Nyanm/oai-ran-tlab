@@ -34,6 +34,8 @@
 #include "nr_dci.h"
 #include "nr_dlsch.h"
 #include "nr_sch_dmrs.h"
+#define __STDC_WANT_IEC_60559_TYPES_EXT__
+#include <float.h>
 #include "PHY/MODULATION/nr_modulation.h"
 #include "common/utils/nr/nr_common.h"
 #include "SCHED_NR/sched_nr.h"
@@ -117,8 +119,15 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
     /// DMRS QPSK modulation
     for (int symb = cset_start_symb; symb < cset_start_symb + pdcch_pdu_rel15->DurationSymbols; symb++) {
       const uint32_t *gold = nr_gold_pdcch(frame_parms->N_RB_DL, frame_parms->symbols_per_slot, dci_pdu->ScramblingId, slot, symb);
-      nr_modulation(gold, dmrs_length, DMRS_MOD_ORDER, (int16_t *)mod_dmrs[symb]); // Qm = 2 as DMRS is QPSK modulated
+#ifdef FLT16_MAX
+      if (gNB->use_fp16)
+        nr_modulation(gold, dmrs_length, DMRS_MOD_ORDER, NULL,(_Float16 *)mod_dmrs[symb]); // Qm = 2 as DMRS is QPSK modulated
+      else
+        nr_modulation(gold, dmrs_length, DMRS_MOD_ORDER, (int16_t *)mod_dmrs[symb],NULL); // Qm = 2 as DMRS is QPSK modulated
 
+#else
+      nr_modulation(gold, dmrs_length, DMRS_MOD_ORDER, (int16_t *)mod_dmrs[symb]); // Qm = 2 as DMRS is QPSK modulated
+#endif
 #ifdef DEBUG_PDCCH_DMRS
       if(dci_pdu->RNTI!=0xFFFF) {
         for (int i=0; i<dmrs_length>>1; i++)
@@ -166,7 +175,14 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
 #endif
     /// QPSK modulation
     c16_t mod_dci[NR_MAX_DCI_SIZE / 2] __attribute__((aligned(16)));
-    nr_modulation(scrambled_output, encoded_length, DMRS_MOD_ORDER, (int16_t *)mod_dci); // Qm = 2 as DMRS is QPSK modulated
+#ifdef FLT16_MAX
+    if (gNB->use_fp16) 
+      nr_modulation(scrambled_output, encoded_length, DMRS_MOD_ORDER, NULL, (_Float16 *)mod_dci); // Qm = 2 as DMRS is QPSK modulated
+    else
+      nr_modulation(scrambled_output, encoded_length, DMRS_MOD_ORDER, (int16_t *)mod_dci,NULL); // Qm = 2 as DMRS is QPSK modulated
+#else
+      nr_modulation(scrambled_output, encoded_length, DMRS_MOD_ORDER, (int16_t *)mod_dci); // Qm = 2 as DMRS is QPSK modulated
+#endif
 #ifdef DEBUG_DCI
     
     for (int i=0; i<encoded_length>>1; i++)

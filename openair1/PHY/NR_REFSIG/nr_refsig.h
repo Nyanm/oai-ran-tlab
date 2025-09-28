@@ -39,7 +39,7 @@ int nr_pusch_dmrs_rx(PHY_VARS_gNB *gNB,
                      uint8_t dmrs_type,
                      int16_t dmrs_scaling);
 
-void nr_generate_modulation_table(void);
+void nr_generate_modulation_table();
 
 extern simde__m128i byte2m128i[256];
 

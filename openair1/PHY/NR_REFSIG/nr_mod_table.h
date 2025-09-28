@@ -22,6 +22,10 @@
 #ifndef __PHY_NR_REFSIG_NR_MOD_TABLE__H__
 #define __PHY_NR_REFSIG_NR_MOD_TABLE__H__
 
+#ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
+#define __STDC_WANT_IEC_60559_TYPES_EXT__
+#endif
+#include <float.h>
 #define NR_MOD_TABLE_SIZE_SHORT 686
 #define NR_MOD_TABLE_BPSK_OFFSET 1
 #define NR_MOD_TABLE_QAM16_OFFSET 7
@@ -29,15 +33,33 @@
 #define NR_MOD_TABLE_QAM256_OFFSET 87
 
 extern c16_t nr_qpsk_mod_table[4];
+#ifdef FLT16_MAX
+extern cf16_t nr_qpsk_mod_table_fp16[4];
+#endif
 
 extern int32_t nr_16qam_mod_table[16];
-#if defined(__SSE2__)
+#ifdef FLT16_MAX
+extern int32_t nr_16qam_mod_table_fp16[16];
+#endif
+#if defined(__SSE2__) || defined(__aarch64__)
 extern simde__m128i nr_qpsk_byte_mod_table[2048];
+#ifdef FLT16_MAX
+extern simde__m128i nr_qpsk_byte_mod_table_fp16[2048];
+#endif
 #endif
 
 extern int64_t nr_16qam_byte_mod_table[1024];
-
+#ifdef FLT16_MAX
+extern int64_t nr_16qam_byte_mod_table_fp16[1024];
+#endif
 extern int64_t nr_64qam_mod_table[4096];
 
+#ifdef FLT16_MAX
+extern int64_t nr_64qam_mod_table_fp16[4096];
+#endif
+
 extern int32_t nr_256qam_mod_table[512];
+#ifdef FLT16_MAX
+extern int32_t nr_256qam_mod_table_fp16[512];
+#endif
 #endif

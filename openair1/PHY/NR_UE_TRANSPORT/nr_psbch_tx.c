@@ -24,6 +24,7 @@
 #include "PHY/NR_REFSIG/nr_mod_table.h"
 #include "PHY/NR_UE_TRANSPORT/nr_transport_proto_ue.h"
 #include "PHY/CODING/nrPolar_tools/nr_polar_psbch_defs.h"
+#define __STDC_WANT_IEC_60559_TYPES_EXT__
 #include "PHY/MODULATION/nr_modulation.h"
 
 // #define SL_DEBUG
@@ -163,7 +164,11 @@ void sl_generate_and_map_psbch(c16_t *txF,
                                uint16_t re_offset,
                                uint16_t scaling_factor,
                                uint16_t symbol_size,
-                               c16_t *psbch_dmrs)
+                               c16_t *psbch_dmrs
+#ifdef FLT16_MAX
+                               ,int use_fp16
+#endif
+	)
 {
   uint64_t psbch_a_reversed = 0;
   uint16_t num_psbch_modsym = 0, numsym = 0;
@@ -223,8 +228,14 @@ void sl_generate_and_map_psbch(c16_t *txF,
 #endif
 
   /// 38.211 QPSK modulation
+#ifdef FLT16_MAX
+  if (use_fp16)
+    nr_modulation(encoder_output, num_psbch_modsym * mod_order, mod_order, NULL,(_Float16 *)psbch_modsym);
+  else
+    nr_modulation(encoder_output, num_psbch_modsym * mod_order, mod_order, (int16_t *)psbch_modsym,NULL);
+#else
   nr_modulation(encoder_output, num_psbch_modsym * mod_order, mod_order, (int16_t *)psbch_modsym);
-
+#endif
   // RE MApping of PSBCH and PSBCH DMRS
   int index = 0, dmrs_index = 0;
   const int numre = SL_NR_NUM_PSBCH_RE_IN_ONE_SYMBOL;
@@ -372,7 +383,11 @@ void nr_tx_psbch(PHY_VARS_NR_UE *UE, uint32_t frame_tx, uint32_t slot_tx, sl_nr_
 
   struct complex16 *psbch_dmrs = &sl_ue_phy_params->init_params.psbch_dmrs_modsym[slss_id][0];
 
-  sl_generate_and_map_psbch(txF, &psbch_payload, slss_id, sl_fp->Ncp, re_offset, scaling_factor, symbol_size, psbch_dmrs);
+  sl_generate_and_map_psbch(txF, &psbch_payload, slss_id, sl_fp->Ncp, re_offset, scaling_factor, symbol_size, psbch_dmrs
+#ifdef FLT16_MAX
+                   ,UE->use_fp16
+#endif 
+		  );
 
 #ifdef SL_DEBUG
   printf("DEBUG PSBCH TX: txdataF Prepared\n");

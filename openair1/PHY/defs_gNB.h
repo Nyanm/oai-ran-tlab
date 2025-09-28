@@ -562,6 +562,7 @@ typedef struct PHY_VARS_gNB_s {
   struct processingData_L1tx *msgDataTx;
   void *scopeData;
   int use_gpu;
+  int use_fp16;
 } PHY_VARS_gNB;
 
 struct puschSymbolReqId {

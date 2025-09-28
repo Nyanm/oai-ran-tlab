@@ -299,6 +299,7 @@ void validate_input_pmi(nfapi_nr_config_request_scf_t *gNB_config,
 
 configmodule_interface_t *uniqCfg = NULL;
 extern uint32_t use_gpu;
+extern uint32_t use_fp16;
 
 int main(int argc, char **argv)
 {
@@ -395,7 +396,7 @@ int main(int argc, char **argv)
 
   FILE *scg_fd=NULL;
 
-  while ((c = getopt(argc, argv, "--:O:f:hA:p:f:g:i:n:s:S:t:v:x:y:z:o:H:M:N:F:GR:d:PQI:L:a:b:e:m:w:T:U:q:X:Y:Z:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:f:hA:p:f:g:i:n:s:S:t:v:x:y:z:o:H:M:N:F:GR:d:PQVI:L:a:b:e:m:w:T:U:q:X:Y:Z:")) != -1) {
 
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
@@ -515,7 +516,11 @@ int main(int argc, char **argv)
       print_perf=1;
       cpu_meas_enabled = 1;
       break;
-     
+
+    case 'V':
+      use_fp16=1;
+      break; 
+
     case 'Q':
       use_gpu=1;
       break; 

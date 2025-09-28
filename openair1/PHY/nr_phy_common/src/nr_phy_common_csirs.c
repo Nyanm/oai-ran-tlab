@@ -21,6 +21,10 @@
 
 #include "PHY/nr_phy_common/inc/nr_phy_common.h"
 
+#ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
+#define __STDC_WANT_IEC_60559_TYPES_EXT__
+#endif
+#include <float.h>
 static void csi_rs_resource_mapping(c16_t **dataF,
                                     int csi_rs_length,
                                     int16_t mod_csi[][csi_rs_length >> 1],
@@ -94,27 +98,59 @@ static void get_modulated_csi_symbols(int symbols_per_slot,
                                       int l0,
                                       int l1,
                                       int row,
-                                      int scramb_id)
+                                      int scramb_id
+#ifdef FLT16_MAX
+				      ,int use_fp16
+#endif
+				      )
 {
   for (int lp = 0; lp <= lprime; lp++) {
     int symb = l0;
     const uint32_t *gold =
         nr_gold_csi_rs(N_RB_DL, symbols_per_slot, slot, symb + lp, scramb_id);
+#ifdef FLT16_MAX
+    if (use_fp16)
+      nr_modulation(gold, mod_length, DMRS_MOD_ORDER, NULL, (_Float16*)mod_csi[symb + lp]);
+    else
+      nr_modulation(gold, mod_length, DMRS_MOD_ORDER, mod_csi[symb + lp],NULL);
+#else
     nr_modulation(gold, mod_length, DMRS_MOD_ORDER, mod_csi[symb + lp]);
+#endif
     if ((row == 5) || (row == 7) || (row == 11) || (row == 13) || (row == 16)) {
       const uint32_t *gold =
           nr_gold_csi_rs(N_RB_DL, symbols_per_slot, slot, symb + 1, scramb_id);
+#ifdef FLT16_MAX
+    if (use_fp16)
+      nr_modulation(gold, mod_length, DMRS_MOD_ORDER, NULL, (_Float16*)mod_csi[symb + 1]);
+    else
+      nr_modulation(gold, mod_length, DMRS_MOD_ORDER, mod_csi[symb + 1],NULL);
+#else
       nr_modulation(gold, mod_length, DMRS_MOD_ORDER, mod_csi[symb + 1]);
+#endif
     }
     if ((row == 14) || (row == 13) || (row == 16) || (row == 17)) {
       symb = l1;
       const uint32_t *gold =
           nr_gold_csi_rs(N_RB_DL, symbols_per_slot, slot, symb + lp, scramb_id);
-      nr_modulation(gold, mod_length, DMRS_MOD_ORDER, mod_csi[symb + lp]);
-      if ((row == 13) || (row == 16)) {
+#ifdef FLT16_MAX
+    if (use_fp16)
+      nr_modulation(gold, mod_length, DMRS_MOD_ORDER, NULL, (_Float16*)mod_csi[symb + lp]);
+    else
+      nr_modulation(gold, mod_length, DMRS_MOD_ORDER, mod_csi[symb + lp],NULL);
+#else
+    nr_modulation(gold, mod_length, DMRS_MOD_ORDER, mod_csi[symb + lp]);
+#endif
+    if ((row == 13) || (row == 16)) {
         const uint32_t *gold =
             nr_gold_csi_rs(N_RB_DL, symbols_per_slot, slot, symb + 1, scramb_id);
-        nr_modulation(gold, mod_length, DMRS_MOD_ORDER, mod_csi[symb + 1]);
+#ifdef FLT16_MAX
+        if (use_fp16)
+          nr_modulation(gold, mod_length, DMRS_MOD_ORDER, NULL, (_Float16*)mod_csi[symb + 1]);
+	else
+          nr_modulation(gold, mod_length, DMRS_MOD_ORDER, mod_csi[symb + 1],NULL);
+#else
+          nr_modulation(gold, mod_length, DMRS_MOD_ORDER, mod_csi[symb + 1]);
+#endif
       }
     }
   }
@@ -574,7 +610,11 @@ void nr_generate_csi_rs(const NR_DL_FRAME_PARMS *frame_parms,
                         const uint16_t scramb_id,
                         const uint8_t power_control_offset_ss,
                         const uint8_t cdm_type,
-                        c16_t **dataF)
+                        c16_t **dataF
+#ifdef FLT16_MAX
+			,int use_fp16
+#endif
+			)
 {
 #ifdef NR_CSIRS_DEBUG
   LOG_I(NR_PHY,
@@ -610,7 +650,11 @@ void nr_generate_csi_rs(const NR_DL_FRAME_PARMS *frame_parms,
                             symb_l0,
                             symb_l1,
                             row,
-                            scramb_id);
+                            scramb_id
+#ifdef FLT16_MAX
+			    ,use_fp16
+#endif
+			    );
 
   const uint32_t beta = get_csi_beta_amplitude(amp, power_control_offset_ss);
   const double alpha = (phy_csi_parms->ports == 1) ? rho : 2 * rho;

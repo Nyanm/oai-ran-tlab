@@ -18,11 +18,12 @@
  * For more information about the OpenAirInterface (OAI) Software Alliance:
  *      contact@openairinterface.org
  */
-
+#define __STDC_WANT_IEC_60559_TYPES_EXT__
 #include "nr_modulation.h"
-#include "PHY/NR_REFSIG/nr_mod_table.h"
 #include "executables/softmodem-common.h"
 #include <simde/x86/avx512.h>
+#include "PHY/NR_REFSIG/nr_mod_table.h"
+#include <float.h>
 // Lacking declaration in present simde external package, will be detected as compilation error when they will add it
 #define simde_mm512_extracti64x2_epi64(a...) _mm512_extracti64x2_epi64(a)
 
@@ -117,33 +118,58 @@ const char nr_W_4l_4p[5][4][4] = {
     {{'1', '1', '1', '1'}, {'1', 'n', '1', 'n'}, {'j', 'j', 'o', 'o'}, {'j', 'o', 'o', 'j'}} // pmi 4
 };
 
+#ifdef FLT16_MAX
+void nr_modulation(const uint32_t *in, uint32_t length, uint16_t mod_order, int16_t *out, _Float16 *out_fp16)
+#else
 void nr_modulation(const uint32_t *in, uint32_t length, uint16_t mod_order, int16_t *out)
+#endif
 {
+#ifdef FLT16_MAX	
+  AssertFatal((!out && out_fp16) || (out && !out_fp16), "out %p, out_fp16 %p, one needs to be null\n",out,out_fp16);
+#else
+  AssertFatal(out == NULL, "out is NULL\n");
+#endif  
   uint16_t mask = ((1 << mod_order) - 1);
   int32_t *nr_mod_table32;
+  int64_t *nr_mod_table64;
+
+#ifdef FLT16_MAX
+  int32_t *out32 = out?(int32_t*)out:(int32_t*)out_fp16;
+#else
   int32_t *out32 = (int32_t *)out;
+#endif
+  int64_t *out64 = (int64_t *)out32;
   const uint8_t *in_bytes = (const uint8_t *)in;
   const uint64_t *in64 = (const uint64_t *)in;
-  int64_t *out64 = (int64_t *)out;
   uint32_t i = 0;
 
-#if defined(__SSE2__)
+#if defined(__SSE2__) || defined(__aarch64__)
   simde__m128i *nr_mod_table128;
-  simde__m128i *out128;
+  simde__m128i *out128 = (simde__m128i *)out32;
 #endif
 
-  LOG_D(PHY, "nr_modulation: length %d, mod_order %d\n", length, mod_order);
+  LOG_D(PHY, "nr_modulation: length %d, mod_order %d (fp16 %s)\n", length, mod_order,out_fp16?"yes":"no");
 
   switch (mod_order) {
-#if defined(__SSE2__)
+#if defined(__SSE2__) || defined(__aarch64__)
     case 2:
-      nr_mod_table128 = (simde__m128i *)nr_qpsk_byte_mod_table;
-      out128 = (simde__m128i *)out;
+#ifdef FLT16_MAX
+      if (out_fp16) 
+	nr_mod_table128 = (simde__m128i *)nr_qpsk_byte_mod_table_fp16;
+      else 
+#endif
+	nr_mod_table128 = (simde__m128i *)nr_qpsk_byte_mod_table;
+
       for (i = 0; i < length / 8; i++)
         out128[i] = nr_mod_table128[in_bytes[i]];
       // the bits that are left out
       i = i * 8 / 2;
-      nr_mod_table32 = (int32_t *)nr_qpsk_mod_table;
+#ifdef FLT16_MAX
+      if (out_fp16) 
+       nr_mod_table32 = (int32_t *)nr_qpsk_mod_table_fp16; 
+      else 
+#endif
+        nr_mod_table32 = (int32_t *)nr_qpsk_mod_table;
       while (i < length / 2) {
         const int idx = ((in_bytes[(i * 2) / 8] >> ((i * 2) & 0x7)) & mask);
         out32[i] = nr_mod_table32[idx];
@@ -152,7 +178,12 @@ void nr_modulation(const uint32_t *in, uint32_t length, uint16_t mod_order, int1
       return;
 #else
     case 2:
-      nr_mod_table32 = (int32_t *)nr_qpsk_mod_table;
+#ifdef FLT16_MAX
+      if (out_fp16) 
+       nr_mod_table32 = (int32_t *)nr_qpsk_mod_table_fp16; 
+      else 
+#endif
+       nr_mod_table32 = (int32_t *)nr_qpsk_mod_table;
       for (i = 0; i < length / mod_order; i++) {
         const int idx = ((in[i * 2 / 32] >> ((i * 2) & 0x1f)) & mask);
         out32[i] = nr_mod_table32[idx];
@@ -161,81 +192,103 @@ void nr_modulation(const uint32_t *in, uint32_t length, uint16_t mod_order, int1
 #endif
 
     case 4:
-      out64 = (int64_t *)out;
+#ifdef FLT16_MAX
+      if (out_fp16) {
+       nr_mod_table64 = (int64_t *)nr_16qam_byte_mod_table_fp16; 
+       nr_mod_table32 = (int32_t *)nr_16qam_mod_table_fp16;
+      }
+      else 
+#endif
+      {	      
+       nr_mod_table64 = (int64_t *)nr_16qam_byte_mod_table; 
+       nr_mod_table32 = (int32_t *)nr_16qam_mod_table;
+      }
+
       for (i = 0; i < length / 8; i++)
-        out64[i] = nr_16qam_byte_mod_table[in_bytes[i]];
+        out64[i] = nr_mod_table64[in_bytes[i]];
       // the bits that are left out
       i = i * 8 / 4;
       while (i < length / 4) {
         const int idx = ((in_bytes[(i * 4) / 8] >> ((i * 4) & 0x7)) & mask);
-        out32[i] = nr_16qam_mod_table[idx];
+        out32[i] = nr_mod_table32[idx];
         i++;
       }
       return;
 
     case 6:
+#ifdef FLT16_MAX
+      if (out_fp16) 
+       nr_mod_table64 = (int64_t *)nr_64qam_mod_table_fp16; 
+      else  
+#endif
+       nr_mod_table64 = (int64_t *)nr_64qam_mod_table; 
       if (length > (3 * 64))
         for (i = 0; i < length - 3 * 64; i += 3 * 64) {
           uint64_t x = *in64++;
           uint64_t x1 = x & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x1 = (x >> 12) & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x1 = (x >> 24) & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x1 = (x >> 36) & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x1 = (x >> 48) & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           uint64_t x2 = (x >> 60);
           x = *in64++;
           x2 |= x << 4;
           x1 = x2 & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x1 = (x2 >> 12) & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x1 = (x2 >> 24) & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x1 = (x2 >> 36) & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x1 = (x2 >> 48) & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x2 = ((x >> 56) & 0xf0) | (x2 >> 60);
           x = *in64++;
           x2 |= x << 8;
           x1 = x2 & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x1 = (x2 >> 12) & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x1 = (x2 >> 24) & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x1 = (x2 >> 36) & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x1 = (x2 >> 48) & 0xfff;
-          *out64++ = nr_64qam_mod_table[x1];
+          *out64++ = nr_mod_table64[x1];
           x2 = ((x >> 52) & 0xff0) | (x2 >> 60);
-          *out64++ = nr_64qam_mod_table[x2];
+          *out64++ = nr_mod_table64[x2];
         }
 
       while (i + 24 <= length) {
         uint32_t xx = 0;
         memcpy(&xx, in_bytes + i / 8, 3);
         uint64_t x1 = xx & 0xfff;
-        *out64++ = nr_64qam_mod_table[x1];
+        *out64++ = nr_mod_table64[x1];
         x1 = (xx >> 12) & 0xfff;
-        *out64++ = nr_64qam_mod_table[x1];
+        *out64++ = nr_mod_table64[x1];
         i += 24;
       }
       if (i != length) {
         uint32_t xx = 0;
         memcpy(&xx, in_bytes + i / 8, 2);
         uint64_t x1 = xx & 0xfff;
-        *out64++ = nr_64qam_mod_table[x1];
+        *out64++ = nr_mod_table64[x1];
       }
       return;
 
     case 8:
-      nr_mod_table32 = (int32_t *)nr_256qam_mod_table;
+#ifdef FLT16_MAX
+      if (out_fp16) 
+       nr_mod_table32 = (int32_t *)nr_256qam_mod_table_fp16; 
+      else 
+#endif
+       nr_mod_table32 = (int32_t *)nr_256qam_mod_table;
       for (i = 0; i < length / 8; i++)
         out32[i] = nr_mod_table32[in_bytes[i]];
       return;
@@ -721,7 +774,11 @@ c16_t nr_layer_precoder_cm(int n_layers,
                            c16_t datatx_F_precoding[n_layers][symSz],
                            int ap,
                            nfapi_nr_pm_pdu_t *pmi_pdu,
-                           int offset)
+                           int offset
+#ifdef FLT16_MAX
+			   ,int use_fp16
+#endif
+	 	          )
 {
   c16_t precodatatx_F = {0};
   for (int al = 0; al < n_layers; al++) {
@@ -739,7 +796,11 @@ void nr_layer_precoder_simd(const int n_layers,
                             const nfapi_nr_pm_pdu_t *pmi_pdu,
                             const int sc_offset,
                             const int re_cnt,
-                            c16_t *txdataF_precoded)
+                            c16_t *txdataF_precoded
+#ifdef FLT16_MAX
+			    ,int use_fp16
+#endif
+			    )
 {
   uint32_t sc = sc_offset;
   c16_t prec_weight = {0};

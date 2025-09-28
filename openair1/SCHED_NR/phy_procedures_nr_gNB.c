@@ -31,6 +31,10 @@
 #include "common/utils/LOG/log.h"
 #include "common/utils/LOG/vcd_signal_dumper.h"
 #include "PHY/INIT/nr_phy_init.h"
+#ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
+#define __STDC_WANT_IEC_60559_TYPES_EXT__
+#endif
+#include <float.h>
 #include "PHY/MODULATION/nr_modulation.h"
 #include "PHY/NR_UE_TRANSPORT/srs_modulation_nr.h"
 #include "T.h"
@@ -43,7 +47,6 @@
 #include <stdint.h>
 #include <openair1/PHY/TOOLS/phy_scope_interface.h>
 #include "PHY/log_tools.h"
-
 //#define DEBUG_RXDATA
 //#define SRS_IND_DEBUG
 
@@ -305,7 +308,11 @@ void phy_procedures_gNB_TX(processingData_L1tx_t *msgTx,
                          csi_params->scramb_id,
                          csi_params->power_control_offset_ss,
                          csi_params->cdm_type,
-                         gNB->common_vars.txdataF[beam_nb]);
+                         gNB->common_vars.txdataF[beam_nb]
+#ifdef FLT16_MAX
+                         ,gNB->use_fp16
+#endif			 
+			 );
       csirs->active = 0;
     }
   }
@@ -1018,7 +1025,11 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
 
         start_meas(&gNB->generate_srs_stats);
         if (check_srs_pdu(srs_pdu, &gNB->nr_srs_info[i]->srs_pdu) == 0) {
-          generate_srs_nr(srs_pdu, frame_parms, gNB->nr_srs_info[i]->srs_generated_signal, 0, gNB->nr_srs_info[i], AMP, frame_rx, slot_rx);
+          generate_srs_nr(srs_pdu, frame_parms, gNB->nr_srs_info[i]->srs_generated_signal, 0, gNB->nr_srs_info[i], AMP, frame_rx, slot_rx
+#ifdef FLT16_MAX
+			  ,gNB->use_fp16
+#endif
+			  );
         }
         stop_meas(&gNB->generate_srs_stats);
         c16_t **rxdataF = gNB->common_vars.rxdataF[srs->beam_nb];

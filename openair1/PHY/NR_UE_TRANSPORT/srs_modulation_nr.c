@@ -38,7 +38,10 @@
 #include "PHY/NR_REFSIG/ss_pbch_nr.h"
 #include "PHY/NR_REFSIG/dmrs_nr.h"
 #include "PHY/NR_REFSIG/ul_ref_seq_nr.h"
-
+#ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
+#define __STDC_WANT_IEC_60559_TYPES_EXT__
+#endif
+#include <float.h>
 #include "PHY/NR_UE_TRANSPORT/srs_modulation_nr.h"
 //#define SRS_DEBUG
 
@@ -184,7 +187,11 @@ int generate_srs_nr(nfapi_nr_srs_pdu_t *srs_config_pdu,
                     nr_srs_info_t *nr_srs_info,
                     int16_t amp,
                     frame_t frame_number,
-                    slot_t slot_number)
+                    slot_t slot_number
+#ifdef FLT16_MAX
+		    ,int use_fp16
+#endif
+		    )
 {
 #ifdef SRS_DEBUG
   LOG_I(NR_PHY,"Calling %s function\n", __FUNCTION__);
@@ -394,7 +401,15 @@ int generate_srs_nr(nfapi_nr_srs_pdu_t *srs_config_pdu,
         LOG_I(NR_PHY, "(%d)  \t%i\t%i\n", subcarrier_log, r_amp.r, r_amp.i);
 #endif
 
-        txdataF[p_index][symbol_offset + l_line_offset + subcarrier] = r_amp;
+#ifdef FLT16_MAX
+	if (use_fp16) {
+          cf16_t r_amp_fp16 = {(_Float16)round((double)amp * r.r / sqrt_N_ap),
+                               (_Float16)round((double)amp * r.i / sqrt_N_ap)};
+          *(cf16_t*)&txdataF[p_index][symbol_offset + l_line_offset + subcarrier] = r_amp_fp16;
+	}
+	else	
+#endif
+          txdataF[p_index][symbol_offset + l_line_offset + subcarrier] = r_amp;
 
         // Subcarrier increment
         subcarrier += K_TC;
@@ -474,8 +489,11 @@ int ue_srs_procedures_nr(PHY_VARS_NR_UE *ue,
   NR_DL_FRAME_PARMS *frame_parms = &(ue->frame_parms);
   uint16_t symbol_offset = (frame_parms->symbols_per_slot - 1 - srs_config_pdu->time_start_position)*frame_parms->ofdm_symbol_size;
 
-  if (generate_srs_nr(srs_config_pdu, frame_parms, txdataF, symbol_offset, ue->nr_srs_info, AMP, proc->frame_tx, proc->nr_slot_tx)
-      == 0) {
+  if (generate_srs_nr(srs_config_pdu, frame_parms, txdataF, symbol_offset, ue->nr_srs_info, AMP, proc->frame_tx, proc->nr_slot_tx
+#ifdef FLT16_MAX
+			  ,ue->use_fp16
+#endif
+			  ) == 0) {
     return 0;
   } else {
     return -1;

@@ -39,6 +39,11 @@
 #include "common/utils/utils.h"
 #include "common/utils/LOG/log.h"
 
+#ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
+#define __STDC_WANT_IEC_60559_TYPES_EXT__
+#endif
+#include <float.h>
+
 #define simd_q15_t simde__m128i
 #define shiftright_int16(a,shift) simde_mm_srai_epi16(a,shift)
 #define set1_int16(a) simde_mm_set1_epi16(a)
@@ -63,7 +68,17 @@ extern "C" {
     float r;
     float i;
   } cf_t;
-
+#ifdef FLT16_MAX
+  typedef struct complexf16 {
+#ifdef __aarch64__
+    __fp16 r;
+    __fp16 i;    
+#else
+    _Float16 r;
+    _Float16 i;
+#endif
+  } cf16_t;
+#endif
   typedef struct complex8 {
     int8_t r;
     int8_t i;

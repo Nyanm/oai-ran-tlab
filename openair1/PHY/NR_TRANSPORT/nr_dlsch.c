@@ -352,7 +352,8 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
                               int16_t amp_dmrs,
                               int l_prime,
                               nfapi_nr_dmrs_type_e dmrs_Type,
-                              c16_t *dmrs_start)
+                              c16_t *dmrs_start,
+	                      int use_fp16)
 {
   c16_t *txl = txl_start;
   const uint sz = rel15->rbSize * NR_NB_SC_PER_RB;
@@ -376,7 +377,16 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
         __attribute__((aligned(64))); // max only to please sanitizer, that kills if 0 even if it is not a error
     const uint32_t *gold =
         nr_gold_pdsch(frame_parms->N_RB_DL, frame_parms->symbols_per_slot, rel15->dlDmrsScramblingId, rel15->SCID, slot, l_symbol);
+#ifdef  FLT16_MAX
+    if (use_fp16)
+      nr_modulation(gold, n_ptrs * DMRS_MOD_ORDER, DMRS_MOD_ORDER, NULL, (_Float16 *)mod_ptrs);
+    else
+      nr_modulation(gold, n_ptrs * DMRS_MOD_ORDER, DMRS_MOD_ORDER, (int16_t *)mod_ptrs, NULL);
+#else
     nr_modulation(gold, n_ptrs * DMRS_MOD_ORDER, DMRS_MOD_ORDER, (int16_t *)mod_ptrs);
+
+#endif
+
     txl += do_ptrs_symbol(rel15, start_sc, symbol_sz, output, txl, amp, mod_ptrs);
 
   } else if (rel15->dlDmrsSymbPos & (1 << l_symbol)) {
@@ -522,12 +532,20 @@ static inline void do_txdataF(c16_t **txdataF,
                                pmi_pdu,
                                subCarrier,
                                re_cnt,
-                               &txdataF[ant][txdataF_offset_per_symbol]);
+                               &txdataF[ant][txdataF_offset_per_symbol]
+#ifdef FLT16_MAX
+			       ,gNB->use_fp16
+#endif			       
+			       );
         subCarrier += re_cnt;
       } else { // crossing ofdm_symbol_size, use simple arithmetic operations
         for (int i = 0; i < re_cnt; i++) {
           txdataF[ant][txdataF_offset_per_symbol + subCarrier] =
-              nr_layer_precoder_cm(rel15->nrOfLayers, symbol_sz, txdataF_precoding, ant, pmi_pdu, subCarrier);
+              nr_layer_precoder_cm(rel15->nrOfLayers, symbol_sz, txdataF_precoding, ant, pmi_pdu, subCarrier
+#ifdef FLT16_MAX
+			      ,gNB->use_fp16
+#endif
+			      );
 #ifdef DEBUG_DLSCH_MAPPING
           printf("antenna %d\t l %d \t subCarrier %d \t txdataF: %d %d\n",
                  ant,
@@ -629,7 +647,14 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     stop_meas(dlsch_scrambling_stats);
     /// Modulation
     start_meas(dlsch_modulation_stats);
+#ifdef  FLT16_MAX
+    if (gNB->use_fp16)
+      nr_modulation(scrambled_output, encoded_length, Qm, NULL, (_Float16 *)mod_symbs[codeWord]);
+    else
+      nr_modulation(scrambled_output, encoded_length, Qm, (int16_t *)mod_symbs[codeWord],NULL);
+#else
     nr_modulation(scrambled_output, encoded_length, Qm, (int16_t *)mod_symbs[codeWord]);
+#endif
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_gNB_PDSCH_MODULATION, 0);
     stop_meas(dlsch_modulation_stats);
 #ifdef DEBUG_DLSCH
@@ -719,8 +744,14 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
                                            slot,
                                            l_symbol);
       // Qm = 1 as DMRS is QPSK modulated
+#ifdef FLT16_MAX
+      if (gNB->use_fp16) 
+        nr_modulation(gold, n_dmrs * DMRS_MOD_ORDER, DMRS_MOD_ORDER, NULL, (_Float16 *)mod_dmrs);
+      else 
+        nr_modulation(gold, n_dmrs * DMRS_MOD_ORDER, DMRS_MOD_ORDER, (int16_t *)mod_dmrs,NULL);
+#else
       nr_modulation(gold, n_dmrs * DMRS_MOD_ORDER, DMRS_MOD_ORDER, (int16_t *)mod_dmrs);
-
+#endif
 #ifdef DEBUG_DLSCH_MAPPING
       printf("DMRS modulation (symbol %d, %d symbols, type %d):\n", l_symbol, n_dmrs, dmrs_Type);
       for (int i = 0; i < n_dmrs / 2; i += 8) {
@@ -753,7 +784,8 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
                              amp_dmrs,
                              l_prime,
                              dmrs_Type,
-                             mod_dmrs + dmrs_idx);
+                             mod_dmrs + dmrs_idx,
+			     gNB->use_fp16);
     } // layer loop
     re_beginning_of_symbol += layer_sz;
     stop_meas(&gNB->dlsch_resource_mapping_stats);

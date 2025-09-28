@@ -105,7 +105,7 @@ static inline uint64_t rdtsc_oai(void) __attribute__((always_inline));
 static inline uint64_t rdtsc_oai(void)
 {
 	  uint64_t r = 0;
-	    asm volatile("mrs %0, cntvct_el0" : "=r"(r));
+	    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(r));
 	      return r;
 }
 
@@ -113,7 +113,7 @@ static inline uint64_t rdtsc_oai(void)
 static inline uint32_t rdtsc_oai(void) __attribute__((always_inline));
 static inline uint32_t rdtsc_oai(void) {
   uint32_t r = 0;
-  asm volatile("mrc p15, 0, %0, c9, c13, 0" : "=r"(r) );
+  __asm__ volatile("mrc p15, 0, %0, c9, c13, 0" : "=r"(r) );
   return r;
 }
 #endif

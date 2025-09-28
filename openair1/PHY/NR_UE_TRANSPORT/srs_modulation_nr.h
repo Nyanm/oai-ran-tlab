@@ -61,7 +61,11 @@ int generate_srs_nr(nfapi_nr_srs_pdu_t *srs_config_pdu,
                     nr_srs_info_t *nr_srs_info,
                     int16_t amp,
                     frame_t frame_number,
-                    slot_t slot_number);
+                    slot_t slot_number
+#ifdef FLT16_MAX
+                    ,int use_fp16
+#endif
+		    );
 
 /** \brief This function checks for periodic srs if srs should be transmitted in this slot
  *  @param p_SRS_Resource pointer to active resource

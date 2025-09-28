@@ -35,6 +35,9 @@
 #include "PHY/NR_REFSIG/refsig_defs_ue.h"
 #include "PHY/NR_UE_TRANSPORT/nr_transport_ue.h"
 #include "PHY/NR_UE_TRANSPORT/nr_transport_proto_ue.h"
+#ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
+#define __STDC_WANT_IEC_60559_TYPES_EXT__
+#endif
 #include "PHY/MODULATION/nr_modulation.h"
 #include "PHY/MODULATION/modulation_common.h"
 #include "common/utils/assertions.h"
@@ -421,7 +424,11 @@ static void map_symbols(const nr_phy_pxsch_params_t p,
                         const unsigned int slot,
                         const c16_t *dmrs_seq,
                         const c16_t *data,
-                        c16_t *out)
+                        c16_t *out
+#ifdef FLT16_MAX
+                        ,int use_fp16
+#endif
+		)
 {
   // asign the function pointers
   map_dmrs_func_t map_dmrs_ptr = NULL;
@@ -448,7 +455,14 @@ static void map_symbols(const nr_phy_pxsch_params_t p,
     if (dmrs_symbol) {
       c16_t mod_dmrs[ALNARS_16_4(n_dmrs)] __attribute((aligned(16)));
       if (p.transform_precoding == transformPrecoder_disabled) {
+#ifdef FLT16_MAX
+	if (use_fp16)
+          nr_modulation(gold, n_dmrs * 2, DMRS_MOD_ORDER, NULL,(_Float16 *)mod_dmrs);
+	else
+          nr_modulation(gold, n_dmrs * 2, DMRS_MOD_ORDER, (int16_t *)mod_dmrs,NULL);
+#else
         nr_modulation(gold, n_dmrs * 2, DMRS_MOD_ORDER, (int16_t *)mod_dmrs);
+#endif
         dmrs_amp_mult(p.dmrs_port, p.Wt, p.Wf, mod_dmrs, mod_dmrs_amp, n_dmrs, p.dmrs_type, p.num_cdm_no_data);
       } else {
         dmrs_amp_mult(p.dmrs_port, p.Wt, p.Wf, dmrs_seq, mod_dmrs_amp, n_dmrs, p.dmrs_type, p.num_cdm_no_data);
@@ -456,7 +470,14 @@ static void map_symbols(const nr_phy_pxsch_params_t p,
     } else if ((p.pdu_bit_map & PUSCH_PDU_BITMAP_PUSCH_PTRS) && ptrs_symbol) {
       AssertFatal(p.transform_precoding == transformPrecoder_disabled, "PTRS NOT SUPPORTED IF TRANSFORM PRECODING IS ENABLED\n");
       c16_t mod_ptrs[ALNARS_16_4(p.nb_rb)] __attribute((aligned(16)));
+#ifdef FLT16_MAX
+      if (use_fp16)
+        nr_modulation(gold, p.nb_rb, DMRS_MOD_ORDER, NULL,(_Float16 *)mod_ptrs);
+      else
+        nr_modulation(gold, p.nb_rb, DMRS_MOD_ORDER, (int16_t *)mod_ptrs,NULL);
+#else
       nr_modulation(gold, p.nb_rb, DMRS_MOD_ORDER, (int16_t *)mod_ptrs);
+#endif
       const unsigned int beta_ptrs = 1; // temp value until power control is implemented
       mult_complex_vector_real_scalar(mod_ptrs, beta_ptrs * AMP, mod_ptrs_amp, p.nb_rb);
     }
@@ -670,12 +691,24 @@ void nr_ue_ulsch_procedures(PHY_VARS_NR_UE *UE,
 
   int max_num_re = Nl * number_of_symbols * nb_rb * NR_NB_SC_PER_RB;
   c16_t d_mod[max_num_re] __attribute__((aligned(16)));
-
+#ifdef FLT16_MAX
+  if (UE->use_fp16)
+    nr_modulation(scrambled_output, // assume one codeword for the moment
+                  available_bits,
+                  mod_order,
+		  NULL,
+                  (_Float16 *)d_mod);
+  else 
+    nr_modulation(scrambled_output, // assume one codeword for the moment
+                  available_bits,
+                  mod_order,
+                  (int16_t *)d_mod,NULL);
+#else
   nr_modulation(scrambled_output, // assume one codeword for the moment
                 available_bits,
                 mod_order,
                 (int16_t *)d_mod);
-
+#endif
   /////////////////////////ULSCH layer mapping/////////////////////////
 
   const int sz = available_bits / mod_order / Nl;
@@ -794,7 +827,11 @@ void nr_ue_ulsch_procedures(PHY_VARS_NR_UE *UE,
                                     .delta = delta,
                                     .num_cdm_no_data = cdm_grps_no_data};
 
-    map_symbols(params, slot, dmrs_seq, data, tx_precoding[nl]);
+    map_symbols(params, slot, dmrs_seq, data, tx_precoding[nl]
+#ifdef FLT16_MAX
+		    ,UE->use_fp16
+#endif
+		    );
 
   } // for (nl=0; nl < Nl; nl++)
 
