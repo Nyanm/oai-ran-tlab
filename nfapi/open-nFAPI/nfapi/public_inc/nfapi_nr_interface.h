@@ -34,6 +34,32 @@
 #define NFAPI_NR_FAPI_TOTAL_NUM_BEAMS_VENDOR_EXTENSION_TAG 0xA002
 #define NFAPI_NR_FAPI_ANALOG_BEAM_VENDOR_EXTENSION_TAG 0xA003
 
+typedef struct {
+  uint16_t  segment_length;
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+  uint8_t   segment_number:7;
+  uint8_t   more:1;
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+  uint8_t   more:1;
+  uint8_t   segment_number:7;
+#endif
+  uint8_t   sequence_number;
+  uint32_t  transmit_timestamp;
+} nfapi_nr_scf225_p5_p19c_header_t;
+
+typedef struct {
+  uint16_t sequence_number;
+  uint8_t  sdu_length[3];
+  uint8_t  byte_offset[3];
+  uint32_t transmit_timestamp;
+} nfapi_nr_scf225_p7_p19s_header_t;
+
+typedef struct {
+  uint8_t   reserved;
+  uint8_t   phy_id;
+  uint16_t  message_id;
+  uint32_t  message_length;
+} nfapi_nr_scf225_message_header_t;
 
 typedef struct {
   uint16_t phy_id;
