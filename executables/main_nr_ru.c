@@ -129,14 +129,6 @@ struct timespec timespec_sub(struct timespec, struct timespec)
   return t;
 };
 
-void perform_symbol_rotation(NR_DL_FRAME_PARMS *fp, double f0, c16_t *symbol_rotation)
-{
-  return;
-}
-void init_timeshift_rotation(NR_DL_FRAME_PARMS *fp)
-{
-  return;
-};
 int beam_index_allocation(bool das,
                           int fapi_beam_index,
                           nfapi_nr_analog_beamforming_ve_t *analog_bf,
@@ -208,6 +200,7 @@ int main(int argc, char **argv)
 
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
   nr_dump_frame_parms(fp);
+  init_symbol_rotation(fp);
   fp->ofdm_offset_divisor = 8;
   ru->if_south = LOCAL_RF;
   nr_phy_init_RU(ru);
