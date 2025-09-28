@@ -113,6 +113,7 @@ void *oru_north_read_thread(void *arg)
   for (int aatx = 0; aatx < ru->nb_tx; aatx++) {
     txDataF_ptr[aatx] = txDataF[aatx];
   }
+  ru->common.txdataF_BF = (int32_t **)txDataF_ptr;
   sync_params_t sync_params;
 
   while (!oai_exit) {
