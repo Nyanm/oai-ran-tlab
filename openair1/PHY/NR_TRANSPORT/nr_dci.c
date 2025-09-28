@@ -34,7 +34,9 @@
 #include "nr_dci.h"
 #include "nr_dlsch.h"
 #include "nr_sch_dmrs.h"
+#ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
 #define __STDC_WANT_IEC_60559_TYPES_EXT__
+#endif
 #include <float.h>
 #include "PHY/MODULATION/nr_modulation.h"
 #include "common/utils/nr/nr_common.h"
@@ -236,15 +238,6 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
 
           } else { // DCI payload
             txdataF[l * frame_parms->ofdm_symbol_size + k] = c16mulRealShift(mod_dci[dci_idx], amp, 15);
-#ifdef DEBUG_DCI
-            LOG_I(NR_PHY_DCI,
-                  "PDCCH: l %d position %d => (%d,%d)\n",
-                  l,
-                  k,
-		  		  txdataF[l * frame_parms->ofdm_symbol_size + k].r,
-		  txdataF[l * frame_parms->ofdm_symbol_size + k].i;
-#endif
-
             dci_idx++;
           }
 

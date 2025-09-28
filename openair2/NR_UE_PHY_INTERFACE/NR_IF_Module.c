@@ -374,7 +374,6 @@ static void fill_mib_in_rx_ind(nfapi_nr_dl_tti_request_pdu_t *pdu_list, fapi_nr_
   rx_ind->rx_indication_body[pdu_idx].ssb_pdu.pdu[0] = (ssb_pdu->bchPayload) & 0xff;
   rx_ind->rx_indication_body[pdu_idx].ssb_pdu.pdu[1] = (ssb_pdu->bchPayload >> 8) & 0xff;
   rx_ind->rx_indication_body[pdu_idx].ssb_pdu.pdu[2] = (ssb_pdu->bchPayload >> 16) & 0xff;
-  rx_ind->rx_indication_body[pdu_idx].ssb_pdu.rsrp_dBm = ssb_pdu->ssbRsrp;
   rx_ind->rx_indication_body[pdu_idx].ssb_pdu.ssb_index = ssb_pdu->SsbBlockIndex;
   rx_ind->rx_indication_body[pdu_idx].ssb_pdu.ssb_length = pdu_list->PDUSize;
   rx_ind->rx_indication_body[pdu_idx].ssb_pdu.ssb_start_subcarrier = ssb_pdu->SsbSubcarrierOffset;
@@ -1138,13 +1137,6 @@ static nr_dci_format_t handle_dci(NR_UE_MAC_INST_t *mac,
   return nr_ue_process_dci_indication_pdu(mac, frame, slot, dci);
 }
 
-static void handle_ssb_meas(NR_UE_MAC_INST_t *mac, uint8_t ssb_index, int16_t rsrp_dbm, float_t sinr_dB)
-{
-  mac->ssb_measurements.ssb_index = ssb_index;
-  mac->ssb_measurements.ssb_rsrp_dBm = rsrp_dbm;
-  mac->ssb_measurements.ssb_sinr_dB = sinr_dB;
-}
-
 // L2 Abstraction Layer
 // Note: sdu should always be processed because data and timing advance updates are transmitted by the UE
 static int8_t handle_dlsch(NR_UE_MAC_INST_t *mac, nr_downlink_indication_t *dl_info, int pdu_id)
@@ -1174,13 +1166,11 @@ static void handle_rlm(rlm_t rlm_result, int frame, NR_UE_MAC_INST_t *mac)
   nr_mac_rrc_sync_ind(mac->ue_id, frame, is_sync);
 }
 
-static int8_t handle_csirs_measurements(NR_UE_MAC_INST_t *mac,
-                                        frame_t frame,
-                                        int slot,
-                                        fapi_nr_csirs_measurements_t *csirs_measurements)
+static int8_t handle_l1_measurements(NR_UE_MAC_INST_t *mac, frame_t frame, int slot, fapi_nr_l1_measurements_t *l1_measurements)
 {
-  handle_rlm(csirs_measurements->radiolink_monitoring, frame, mac);
-  return nr_ue_process_csirs_measurements(mac, frame, slot, csirs_measurements);
+  handle_rlm(l1_measurements->radiolink_monitoring, frame, mac);
+  nr_ue_process_l1_measurements(mac, frame, slot, l1_measurements);
+  return 0;
 }
 
 void update_harq_status(NR_UE_MAC_INST_t *mac, uint8_t harq_pid, uint8_t ack_nack)
@@ -1270,16 +1260,12 @@ static uint32_t nr_ue_dl_processing(NR_UE_MAC_INST_t *mac, nr_downlink_indicatio
             rx_indication_body.pdu_type,
             dl_info->rx_ind->number_pdus);
 
-      switch(rx_indication_body.pdu_type){
+      switch(rx_indication_body.pdu_type) {
         case FAPI_NR_RX_PDU_TYPE_SSB:
           handle_rlm(rx_indication_body.ssb_pdu.radiolink_monitoring,
                      dl_info->frame,
                      mac);
           if(rx_indication_body.ssb_pdu.decoded_pdu) {
-            handle_ssb_meas(mac,
-                            rx_indication_body.ssb_pdu.ssb_index,
-                            rx_indication_body.ssb_pdu.rsrp_dBm,
-                            rx_indication_body.ssb_pdu.sinr_dB);
             ret_mask |= (handle_bcch_bch(mac,
                                          dl_info->cc_id,
                                          dl_info->gNB_index,
@@ -1316,11 +1302,11 @@ static uint32_t nr_ue_dl_processing(NR_UE_MAC_INST_t *mac, nr_downlink_indicatio
           }
           ret_mask |= (handle_dlsch(mac, dl_info, i)) << FAPI_NR_RX_PDU_TYPE_RAR;
           break;
-        case FAPI_NR_CSIRS_IND:
-          ret_mask |= (handle_csirs_measurements(mac,
-                                                 dl_info->frame,
-                                                 dl_info->slot,
-                                                 &rx_indication_body.csirs_measurements)) << FAPI_NR_CSIRS_IND;
+        case FAPI_NR_MEAS_IND:
+          ret_mask |= (handle_l1_measurements(mac,
+                                              dl_info->frame,
+                                              dl_info->slot,
+                                              &rx_indication_body.l1_measurements)) << FAPI_NR_MEAS_IND;
           break;
         default:
           break;

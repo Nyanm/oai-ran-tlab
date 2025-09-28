@@ -53,6 +53,7 @@ from cls_ci_helper import archiveArtifact
 # (e.g., cls_cluster.py)
 #-----------------------------------------------------------
 IMAGES = ['oai-enb', 'oai-lte-ru', 'oai-lte-ue', 'oai-gnb', 'oai-nr-cuup', 'oai-gnb-aw2s', 'oai-nr-ue', 'oai-enb-asan', 'oai-gnb-asan', 'oai-lte-ue-asan', 'oai-nr-ue-asan', 'oai-nr-cuup-asan', 'oai-gnb-aerial', 'oai-gnb-fhi72']
+DEFAULT_REGISTRY = "gracehopper3-oai.sboai.cs.eurecom.fr"
 
 def CreateWorkspace(host, sourcePath, ranRepository, ranCommitID, ranTargetBranch, ranAllowMerge):
 	if ranCommitID == '':
@@ -66,7 +67,8 @@ def CreateWorkspace(host, sourcePath, ranRepository, ranCommitID, ranTargetBranc
 			ranTargetBranch = 'develop'
 		options += f" {ranTargetBranch}"
 	logging.info(f'execute "{script}" with options "{options}" on node {host}')
-	ret = cls_cmd.runScript(host, script, 90, options)
+	with cls_cmd.getConnection(host) as c:
+		ret = c.exec_script(script, 90, options)
 	logging.debug(f'"{script}" finished with code {ret.returncode}, output:\n{ret.stdout}')
 	return ret.returncode == 0
 
@@ -303,13 +305,18 @@ class Containerize():
 		result = re.search('build_cross_arm64', self.imageKind)
 		if result is not None:
 			self.dockerfileprefix = '.ubuntu.cross-arm64'
-		result = re.search('native_arm', self.imageKind)
+		result = re.search('native_armv9', self.imageKind)
 		if result is not None:
 			imageNames.append(('oai-gnb', 'gNB', 'oai-gnb', ''))
 			imageNames.append(('ran-build-fhi72', 'build.fhi72.native_arm', 'ran-build-fhi72', ''))
 			imageNames.append(('oai-nr-cuup', 'nr-cuup', 'oai-nr-cuup', ''))
 			imageNames.append(('oai-nr-ue', 'nrUE', 'oai-nr-ue', ''))
 			imageNames.append(('oai-gnb-aerial', 'gNB.aerial', 'oai-gnb-aerial', ''))
+		result = re.search('native_armv8', self.imageKind)
+		if result is not None:
+			imageNames.append(('oai-gnb', 'gNB', 'oai-gnb', ''))
+			imageNames.append(('oai-nr-cuup', 'nr-cuup', 'oai-nr-cuup', ''))
+			imageNames.append(('oai-nr-ue', 'nrUE', 'oai-nr-ue', ''))
 		
 		cmd.cd(lSourcePath)
 		# if asterix, copy the entitlement and subscription manager configurations
@@ -362,7 +369,6 @@ class Containerize():
 			cmd.close()
 			logging.error('\u001B[1m Building OAI Images Failed\u001B[0m')
 			HTML.CreateHtmlTestRow(self.imageKind, 'KO', CONST.ALL_PROCESSES_OK)
-			HTML.CreateHtmlTabFooter(False)
 			return False
 		else:
 			result = re.search(r'Size *= *(?P<size>[0-9\-]+) *bytes', cmd.getBefore())
@@ -486,7 +492,6 @@ class Containerize():
 				logging.error('\u001B[1m Build of L2sim proxy failed\u001B[0m')
 				ssh.close()
 				HTML.CreateHtmlTestRow('commit ' + tag, 'KO', CONST.ALL_PROCESSES_OK)
-				HTML.CreateHtmlTabFooter(False)
 				return False
 		else:
 			logging.debug('L2sim proxy image for tag ' + tag + ' already exists, skipping build')
@@ -555,7 +560,6 @@ class Containerize():
 		if ret.returncode != 0:
 			logging.error(f'No {baseImage} image present, cannot build tests')
 			HTML.CreateHtmlTestRow(self.imageKind, 'KO', CONST.ALL_PROCESSES_OK)
-			HTML.CreateHtmlTabFooter(False)
 			return False
 
 		# build ran-unittests image
@@ -566,7 +570,6 @@ class Containerize():
 		if ret.returncode != 0:
 			logging.error(f'Cannot build unit tests')
 			HTML.CreateHtmlTestRow("Unit test build failed", 'KO', [dockerfile])
-			HTML.CreateHtmlTabFooter(False)
 			return False
 
 		HTML.CreateHtmlTestRowQueue("Build unit tests", 'OK', [dockerfile])
@@ -585,18 +588,16 @@ class Containerize():
 
 		if ret.returncode == 0:
 			HTML.CreateHtmlTestRowQueue('Unit tests succeeded', 'OK', [ret.stdout])
-			HTML.CreateHtmlTabFooter(True)
 			return True
 		else:
 			HTML.CreateHtmlTestRowQueue('Unit tests failed (see also doc/UnitTests.md)', 'KO', [ret.stdout])
-			HTML.CreateHtmlTabFooter(False)
 			return False
 
 	def Push_Image_to_Local_Registry(self, node, HTML, tag_prefix=""):
 		lSourcePath = self.eNBSourceCodePath
 		logging.debug('Pushing images to server: ' + node)
 		ssh = cls_cmd.getConnection(node)
-		imagePrefix = 'porcepix.sboai.cs.eurecom.fr'
+		imagePrefix = DEFAULT_REGISTRY
 		ret = ssh.run(f'docker login -u oaicicd -p oaicicd {imagePrefix}')
 		if ret.returncode != 0:
 			msg = 'Could not log into local registry'
@@ -667,7 +668,7 @@ class Containerize():
 		msg = "Pulled Images:\n" + '\n'.join(pulled_images)
 		return True, msg
 
-	def Pull_Image_from_Registry(self, HTML, node, images, tag=None, tag_prefix="", registry="porcepix.sboai.cs.eurecom.fr", username="oaicicd", password="oaicicd"):
+	def Pull_Image_from_Registry(self, HTML, node, images, tag=None, tag_prefix="", registry=DEFAULT_REGISTRY, username="oaicicd", password="oaicicd"):
 		logging.debug(f'\u001B[1m Pulling image(s) on server: {node}\u001B[0m')
 		if not tag:
 			tag = CreateTag(self.ranCommitID, self.ranBranch, self.ranAllowMerge)

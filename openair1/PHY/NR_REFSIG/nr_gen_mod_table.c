@@ -85,7 +85,7 @@ void nr_generate_modulation_table() {
   //16QAM
   table = (int16_t*) nr_16qam_byte_mod_table;
 #ifdef FLT16_MAX
-  table = (_Float16*) nr_16qam_byte_mod_table_fp16;
+  table2 = (_Float16*) nr_16qam_byte_mod_table_fp16;
 #endif
   for (i=0; i<256; i++) {
     for (j=0; j<2; j++) {
