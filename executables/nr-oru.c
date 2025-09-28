@@ -90,14 +90,6 @@ void oru_downlink_processing(RU_t *ru,
 {
   start_meas(&ru->tx_fhaul);
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
-  for (int symbol = start_symbol; symbol < start_symbol + num_symbols; symbol++) {
-    LOG_D(PHY,
-          "Ant 0 Signal energy %d.%d.%d %.3f\n",
-          frame,
-          slot,
-          symbol,
-          10 * log10(signal_energy_nodc(&txDataF_ptr[0][fp->ofdm_symbol_size * symbol], fp->ofdm_symbol_size)));
-  }
   for (int aatx = 0; aatx < ru->nb_tx; aatx++) {
     apply_nr_rotation_TX(fp, txDataF_ptr[aatx], fp->symbol_rotation[0], slot, fp->N_RB_DL, start_symbol, num_symbols);
     nr_feptx0(ru, slot, start_symbol, num_symbols, aatx);

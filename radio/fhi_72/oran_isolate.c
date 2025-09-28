@@ -211,10 +211,47 @@ int trx_oran_ctlrecv(openair0_device *device, void *msg, ssize_t msg_len)
   return 0;
 }
 
+void dump_nonzero_symbol(c16_t *txdataF, uint32_t ofdm_symbol_size, int frame, int slot, int symbol)
+{
+  float signal_energy = signal_energy_nodc(txdataF, ofdm_symbol_size);
+  if (g_log->log_component[HW].level < OAILOG_DEBUG) {
+    return;
+  }
+  if (signal_energy > 1) {
+    // Prepare a buffer to hold the formatted string for the symbol
+    const int num_chars_per_sample = 4 + 6 * 2;
+    char symbol_buf[ofdm_symbol_size * num_chars_per_sample]; // Enough for "(r,i) " per sample
+    int offset = 0;
+    bool is_zero_block = true;
+    for (int i = 0; i < ofdm_symbol_size; i++) {
+      bool is_zero = txdataF[i].r == 0 && txdataF[i].i == 0;
+      if (is_zero_block && !is_zero) {
+        offset += snprintf(symbol_buf + offset, sizeof(symbol_buf) - offset, "[sc %d]: ", i);
+        is_zero_block = false;
+      }
+      if (!is_zero_block && is_zero) {
+        is_zero_block = true;
+      }
+      if (!is_zero) {
+        offset += snprintf(symbol_buf + offset, sizeof(symbol_buf) - offset, "(%d,%d) ", txdataF[i].r, txdataF[i].i);
+      }
+    }
+    symbol_buf[offset] = '\0';
+    LOG_D(HW, "Antenna 0 Frame.Slot.Symbol %d.%d.%d signal_energy %.3f samples: %s\n", frame, slot, symbol, 10 * log10(signal_energy), symbol_buf);
+  }
+}
+
 void oran_fh_if4p5_north_in(uint32_t **txdataF, int nb_tx, sense_of_time_t* sense_of_time, int *num_symbols) {
   *num_symbols = RU_SYMBOLS_PER_CALLBACK;
   int ret = xran_fh_tx_read_slot(txdataF, nb_tx, &sense_of_time->frame, &sense_of_time->slot, &sense_of_time->symbol, &sense_of_time->ts);
   AssertFatal(ret == 0, "ORAN: Error reading slot");
+
+  int fftsize = 1 << get_xran_fh_config(0)->ru_conf.fftSize;
+  if (sense_of_time->frame == 0 && sense_of_time->slot == 0) {
+    for (int symbol = sense_of_time->symbol; symbol < sense_of_time->symbol + *num_symbols; symbol++) {
+      dump_nonzero_symbol((c16_t *)&txdataF[0][fftsize * symbol], fftsize, sense_of_time->frame, sense_of_time->slot, symbol);
+    }
+  }
 }
 
 void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
@@ -277,6 +314,13 @@ void oran_fh_if4p5_south_out(RU_t *ru, int frame, int slot, uint64_t timestamp)
   ru_info.nb_tx = ru->nb_tx * ru->num_beams_period;
   ru_info.txdataF_BF = ru->common.txdataF_BF;
   // printf("south_out:\tframe=%d\tslot=%d\ttimestamp=%ld\n",frame,slot,timestamp);
+
+  int fftsize = 1 << get_xran_fh_config(0)->ru_conf.fftSize;
+  if (frame == 0 && slot == 0) {
+    for (int symbol = 0; symbol < 14; symbol++) {
+      dump_nonzero_symbol((c16_t *)&ru_info.txdataF_BF[0][fftsize * symbol], fftsize, frame, slot, symbol);
+    }
+  }
 
   int ret = xran_fh_tx_send_slot(&ru_info, frame, slot, timestamp);
   if (ret != 0) {
