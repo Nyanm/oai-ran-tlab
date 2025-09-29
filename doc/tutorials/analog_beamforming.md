@@ -2,7 +2,7 @@ This document explains the implementation of analog beamforming in OAI codebase.
 
 [[_TOC_]]
 
-# Introduction to analog beamforming
+## Introduction to analog beamforming
 
 Beamforming is a technique applied to antenna arrays to create a directional radiation pattern. This often consists in providing a different phase shift to each element of the array such that signals with a different angle of arrival/departure experience a change in radiation pattern because of constructive or destructive interference.
 
@@ -12,7 +12,7 @@ The presence of a limited number of predefined beams at RU poses constraints to 
 
 Analog beamforming implementation also allows to enable distributed antenna systems (DAS), where each beam corrisponds to one antenna (or a set of antennas) of the system. In this scenario, the scheduler constaint is alleviated because normally the number of concurrent beams allowed equals the total number of beams.
 
-# Configuration file fields for analog beamforming
+## Configuration file fields for analog beamforming
 
 A set of parameters in configuration files controls the implementation of analog beamforming and instructs the scheduler on how to behave in such scenarios. Since most notably this technique in 5G is employed in FR2, the configuration file example currently available is a RFsim one for band 261. [Config file example](../ci-scripts/conf_files/gnb.sa.band261.u3.32prb.rfsim.conf)
 
@@ -26,7 +26,7 @@ Setting analog beamforming to 1 or 2 changes the way FAPI beam index is treated.
 
 DAS is enabled by setting to 1 the parameter `enable_das` in the L1 section of the configuration file. In case of DAS enabled, the field `beam_weights` in `MACRLC` section can be omitted.
 
-# Implementation in OAI scheduler
+## Implementation in OAI scheduler
 
 A new MAC structure `NR_beam_info_t` controls the behavior of the scheduler in presence of analog beamforming. Besides the already mentioned parameters `beam_duration` and `beams_per_period`, the structure also holds a matrix `beam_allocation[i][j]`, whose indices `i` and `j` stands respectively for the number of beams in the period and the slot index (the size of the latter depends on the frame characteristics).
 This matrix contains the beams already allocated in a given slot, to flag the scheduler to use one of these to schedule a UE in one of these beams. If the matrix is full (all the beams in the given period, e.g. slot) are already allocated, the scheduler can't allocate a UE in a new beam.
@@ -34,7 +34,7 @@ To this goal, we extended the virtual resource block (VRB) map by one dimension 
 
 It is important to note that in current implementation, there are several periodical channels, e.g. PRACH or PUCCH for CSI et cetera, that have the precendence in being assigned a beam, that is because the scheduling is automatic, set in RRC configuration, and not up to the scheduler. For these instances, we assume the beam is available (if not there are assertions to stop the process). For data channels, the currently implemented PF scheduler is used. The only modification is that a UE can be served only if there is a free beam available or the one of the beams already in use correspond to that UE beam.
 
-# FAPI implementation
+## FAPI implementation
 
 To be noted that in our implementation analog beamforming is only supported in non-split/monolithic mode because we don't support yet SCF P19 interface that would be needed to manage these procedure in a split scenario with SCF FAPI.
 
@@ -46,14 +46,14 @@ In `config_request` structure, a vendor extension (`nfapi_nr_analog_beamforming_
 
 Additionally, L2 provides in each channel FAPI message information about the beam index. Small Cell Forum (SCF) FAPI provides in its PHY API specifications for the channels only a field for digital beamforming as part of the `precoding_and_beamforming` stucture. Therefore without a better option, we are currently using that one to store the internal analog beamforming index. This is the index used internally by the code to progressively identify the beam with a value from 0 to `total_num_beams_vendor_ext`.
 
-# L1 implementation
+## L1 implementation
 
 To handle multiple concurrent beams, the buffers containing Tx and Rx data in frequency domain (`txdataF` and `rxdataF`) have been extended by one dimension to contain multiple concurrent beams to be transmitted/received.
 The function `beam_index_allocation`, called by every L1 channel, is responsible to match the FAPI analog beam index to the RU beam index and to store the latter `beam_id` structure, which allocates the beams per symbol, despite L2 only supporting beam change at slot level. At the same time, the function returns the concurrent beam index, to be used to store data in frequency domain buffers. While doing so, the function also checks if there is room for current beam in the list of concurrent beams, which should always be the case, if L2 properly allocated the channels.
 
 In case of DAS, since each beam corresponds to a specific antenna port, the `beam_index_allocation` function is simplified in the sense that the beam index corresponds to the antenna port index of the frequency domain buffers.
 
-# RU implementation
+## RU implementation
 
 The implementation is still work in progress.
 
