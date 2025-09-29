@@ -6,13 +6,11 @@ STATUS 2020/10/15 : added External Resources section and links
 
 ## External Resources
 
-Additional Resources to this page can be found here (special mention to Walter Maguire <wmaguire@live.com>) :  
-https://docs.google.com/document/d/1pL8Szm0ocGxdl5ESVp12Ff71a4PbhCb9SpvbLZzwYbo/edit?usp=sharing  
+Additional Resources to this page can be found [here](https://docs.google.com/document/d/1pL8Szm0ocGxdl5ESVp12Ff71a4PbhCb9SpvbLZzwYbo/edit?usp=sharing) (special mention to Walter Maguire, [wmaguire@live.com](mailto:wmaguire@live.com)).
 At time of writing, the openairinterface5G Commit Tag is 2020.w39
 
 
-Faraday Cages can be found here :  
-http://www.saelig.com/MFR00066/ste2300.htm
+Faraday Cages can be found [here](http://www.saelig.com/MFR00066/ste2300.htm)
 
 
 ## Configuration Overview
@@ -37,11 +35,11 @@ Our code might not work with all 5G phones yet, but we are constantly improving 
 *  Simcom SIMCOM8200EA 
 *  Quectel RM500Q-GL
 
-> **Note1:** In the version we have at Eurecom, you need to set the PLMN to 50501, and you also need to change the firmware to "11.0.0 (RD1A.201105.003.B1, Nov 2020, EU carriers)" (see https://developers.google.com/android/images)
+> **Note1:** In the version we have at Eurecom, you need to set the PLMN to 50501, and you also need to change the firmware to "11.0.0 (RD1A.201105.003.B1, Nov 2020, EU carriers)" (see [here](https://developers.google.com/android/images))
 
 ## Repository
 
-https://gitlab.eurecom.fr/oai/openairinterface5g/tree/develop
+[https://gitlab.eurecom.fr/oai/openairinterface5g/tree/develop](https://gitlab.eurecom.fr/oai/openairinterface5g/tree/develop)
 
 ## Architecture Setup
 
@@ -57,7 +55,7 @@ The photo depicts the FR1 setup part of the scheme above:
 ## Build and Install
 
 General guidelines to build eNB and gNB :
-See https://gitlab.eurecom.fr/oai/openairinterface5g/blob/develop/doc/BUILD.md#building-ues-enodeb-and-gnodeb-executables
+See [here](https://gitlab.eurecom.fr/oai/openairinterface5g/blob/develop/doc/BUILD.md#building-ues-enodeb-and-gnodeb-executables)
 
 
 - **eNB**
@@ -83,7 +81,7 @@ cd cmake_targets/
 - **EPC**
 
 for reference:
-https://github.com/OPENAIRINTERFACE/openair-epc-fed/blob/master/docs/DEPLOY_HOME.md
+[https://github.com/OPENAIRINTERFACE/openair-epc-fed/blob/master/docs/DEPLOY_HOME.md](https://github.com/OPENAIRINTERFACE/openair-epc-fed/blob/master/docs/DEPLOY_HOME.md)
 
 
 
@@ -198,7 +196,7 @@ The test takes typically a few seconds, max 10-15 seconds. If it takes more than
 - **EPC** (on EPC host):
 
 for reference:
-https://github.com/OPENAIRINTERFACE/openair-epc-fed/blob/master/docs/DEPLOY_HOME.md
+[https://github.com/OPENAIRINTERFACE/openair-epc-fed/blob/master/docs/DEPLOY_HOME.md](https://github.com/OPENAIRINTERFACE/openair-epc-fed/blob/master/docs/DEPLOY_HOME.md)
 
 
 
@@ -229,7 +227,7 @@ Execute:
 
 The test case corresponds to the UE attachement, that is the UE connection and its initial access in 5G, as depicted below:
 
-**Source** : https://www.sharetechnote.com/html/5G/5G_LTE_Interworking.html  
+**Source** : [5G_LTE_Interworking.html](https://www.sharetechnote.com/html/5G/5G_LTE_Interworking.html)
 
 ![image info](./testing_gnb_w_cots_ue_resources/attach_signaling_scheme.jpg)
 
