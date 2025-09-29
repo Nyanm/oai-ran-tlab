@@ -2,7 +2,7 @@
   <tr style="border-collapse: collapse; border: none;">
     <td style="border-collapse: collapse; border: none;">
       <a href="http://www.openairinterface.org/">
-         <img src="./images/oai_final_logo.png" alt="" border=3 height=50 width=150>
+         <img src="../images/oai_final_logo.png" alt="" border=3 height=50 width=150>
          </img>
       </a>
     </td>
@@ -14,7 +14,7 @@
 
 This document explains some options for running 5G executables.
 
-After you have [built the softmodem executables](BUILD.md) you can set your
+After you have [built the softmodem executables](../BUILD.md) you can set your
 default directory  to the build directory `cmake_targets/ran_build/build/` and
 start testing some use cases. Below, the description of the different OAI
 functionalities should help you choose the OAI configuration that suits your
@@ -37,7 +37,7 @@ It is planned to enhance this simulator with the following functionalities:
 
 - Support for multiple eNodeB's or gNodeB's for hand-over tests
 
-This is an easy use-case to setup and test, as no specific hardware is required. The [rfsimulator page](../radio/rfsimulator/README.md) contains the detailed documentation.
+This is an easy use-case to setup and test, as no specific hardware is required. The [rfsimulator page](../../radio/rfsimulator/README.md) contains the detailed documentation.
 
 ### L2 nFAPI Simulator
 
@@ -46,7 +46,7 @@ short-cutting the L1 layer. The objective of this simulator is to allow multi
 UEs simulation, with a large number of UEs (ideally up to 255).
 
 As for the RFsimulator, no specific hardware is required. The [L2 nfapi
-simulator page](./L2NFAPI.md) contains the detailed documentation.
+simulator page](../L1_L2/nfapi.md) contains the detailed documentation.
 
 ## Running with a true radio head
 
@@ -54,7 +54,7 @@ OAI supports different radio heads, the following are tested in the CI:
 
 1. [Monolithic eNodeB](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/HowToConnectCOTSUEwithOAIeNBNew) where the whole signal processing is performed in a single process
 2. IF4P5 mode, where frequency domain samples are carried over ethernet, from the RRU which implement part of L1(FFT,IFFT,part of PRACH),  to a RAU
-3. Monolithic gNodeB: see next section, or the [standalone tutorial](NR_SA_Tutorial_COTS_UE.md)
+3. Monolithic gNodeB: see next section, or the [standalone tutorial](../tutorials/NR_SA_Tutorial_COTS_UE.md)
 
 
 ## 5G NR
@@ -123,9 +123,9 @@ sudo ./nr-uesoftmodem -r 106 --numerology 1 --band 78 -C 3619200000 --ssb 516
 
 With the **RFsimulator** (on the same machine), just add the option `--rfsim` to both gNB and NR UE command lines.
 
-UE capabilities can be passed according to the [UE Capabilities](#UE-Capabilities) section.
+UE capabilities can be passed according to the [UE Capabilities](#ue-capabilities) section.
 
-A detailed tutorial is provided at this page [NR_SA_Tutorial_OAI_nrUE.md](./NR_SA_Tutorial_OAI_nrUE.md).
+A detailed tutorial is provided at this page [NR_SA_Tutorial_OAI_nrUE.md](../tutorials/NR_SA_Tutorial_OAI_nrUE.md).
 
 ### Optional NR-UE command line options
 
@@ -183,7 +183,7 @@ sudo ./nr-uesoftmodem -r 106 --numerology 1 --band 78 -C 3319680000 --ue-nb-ant-
 A 5G NR NTN configuration only works in a non-terrestrial setup.
 Therefore either SDR boards and a dedicated NTN channel emulator are required, or RFsimulator has to be configured to simulate a NTN channel.
 
-As shown on the [rfsimulator page](../radio/rfsimulator/README.md), RFsimulator provides different possibilities.
+As shown on the [rfsimulator page](../../radio/rfsimulator/README.md), RFsimulator provides different possibilities.
 E.g. to perform a simple simulation of a satellite in geostationary orbit (GEO), these parameters should be added to both gNB and UE command lines:
 ```
 --rfsimulator.prop_delay 238.74
@@ -397,7 +397,7 @@ In summary:
   * `scp usera@machineA:/the/path/where/you/launched/nr-softmodem/r*config.raw userb@machineB:/the/path/where/you/will/launch/nr-uesoftmodem/`
   * Obviously this operation should be done before launching the `nr-uesoftmodem` executable.
 
-In phy-test mode it is possible to mimic the reception of UE Capabilities at gNB through the command line parameter `--uecap_file`. Refer to the [UE Capabilities](#UE-Capabilities) section for more details.
+In phy-test mode it is possible to mimic the reception of UE Capabilities at gNB through the command line parameter `--uecap_file`. Refer to the [UE Capabilities](#ue-capabilities) section for more details.
 
 ### noS1 setup with OAI UE
 
@@ -433,7 +433,7 @@ The do-ra flag is used to ran the NR Random Access procedures in contention-free
 
 In order to run the RA, the `--do-ra` flag is needed for both the gNB and the UE.
 
-In do-ra mode it is possible to mimic the reception of UE Capabilities at gNB through the command line parameter `--uecap_file`. Refer to the [UE Capabilities](#UE-Capabilities) section for more details.
+In do-ra mode it is possible to mimic the reception of UE Capabilities at gNB through the command line parameter `--uecap_file`. Refer to the [UE Capabilities](#ue-capabilities) section for more details.
 
 To run using the RFsimulator:
 
@@ -498,7 +498,7 @@ The following step is to set the number of PDSCH logical antenna ports. These ne
 <table style="border-collapse: collapse; border: none;">
   <tr style="border-collapse: collapse; border: none;">
     <td style="border-collapse: collapse; border: none;">
-         <img src="./images/mimo_antenna_ports.png" alt="" border=3 height=100 width=300>
+         <img src="../images/mimo_antenna_ports.png" alt="" border=3 height=100 width=300>
          </img>
     </td>
   </tr>
