@@ -35,7 +35,7 @@ git config --global user.name "Your Name"
 git config --global user.email "Your email address"
 ```
 
-More information can be found in [the contributing page](../CONTRIBUTING.md).
+More information can be found in [the contributing page](../../CONTRIBUTING.md).
 
 ## Which branch to checkout?
 
@@ -54,4 +54,4 @@ The tag naming conventions are:
   * `xx` the week number within the year
 
 More information on work flow and policies can be found in [this
-document](./code-style-contrib.md).
+document](code-style-contrib.md).

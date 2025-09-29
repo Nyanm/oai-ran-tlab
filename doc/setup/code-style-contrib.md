@@ -10,7 +10,7 @@ OpenAirInterface employs both human review and automated CI tests to judge
 whether a code contribution is ready to be merged.
 
 The contributor has to sign a contributor license agreement (CLA) as described
-in [`CONTRIBUTING.md`](../CONTRIBUTING.md). After creating an account on the
+in [`CONTRIBUTING.md`](../../CONTRIBUTING.md). After creating an account on the
 Eurecom Gitlab, the contributor can open a merge request: he becomes the
 "author" of such code contribution. A senior OAI member will review this work,
 and make suggestions for possible improvements. Each week, we discuss the
@@ -19,7 +19,7 @@ call](https://gitlab.eurecom.fr/oai/openairinterface5g/-/wikis/OpenAirDevMeeting
 and discuss which merge requests can be merged.
 
 The CI consists in various Jenkins pipelines that run on each merge request.
-See [`TESTBenches.md`](./TESTBenches.md) for more details about the CI setup.
+See [`TESTBenches.md`](../testing/TESTBenches.md) for more details about the CI setup.
 
 There is the official [Gitlab Help](https://docs.gitlab.com/) that can help you
 with any questions regarding Gitlab. We recommend reading the [Git
@@ -30,7 +30,7 @@ Book](https://git-scm.com/book/en/v2) to use Git properly.
 You should respect the `.clang-format` file in the root of the repository. The
 `clang-format` tool will pick up this file when being applied to code in the
 repository. Please also refer to the [corresponding
-documentation](./clang-format.md).
+documentation](clang-format.md).
 
 A number of high-level comments:
 
@@ -196,7 +196,7 @@ Failure to add a label will prevent the CI from running. You can add both
 CI posts the results in the comments section of the merge request. Both merge
 request authors and reviewers are responsible for manual inspection and
 pre-filtering of the CI results. An overview of the CI tests is in
-[`TESTBenches.md`](./TESTBenches.md).
+[`TESTBenches.md`](../testing/TESTBenches.md).
 
 To communicate the review progress both between author and reviewer, as well as
 to the outside world, we (ab-)use the milestones feature of Gitlab to track the
@@ -246,7 +246,7 @@ Additional optional questions in case they apply:
 
 ## Reporting bugs
 
-Please report only true bugs in the [issue tracker](../../issues). Do not
+Please report only true bugs in the [issue tracker](../../../issues). Do not
 report general user problems; use the [mailing
 lists](https://gitlab.eurecom.fr/oai/openairinterface5g/-/wikis/MailingList)
 instead.  If in doubt, prefer the mailing lists and if needed and requested by

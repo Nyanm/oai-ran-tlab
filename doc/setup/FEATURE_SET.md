@@ -11,12 +11,12 @@
 -  FAPI (IF2)  : specified by Small Cell Forum (open-nFAPI implementation)
 -  IF1         : F1 in 3GPP Release 15
 
-![Functional Split Architecture](./images/oai_enb_func_split_arch.png)
+![Functional Split Architecture](../images/oai_enb_func_split_arch.png)
 
 
 ## OpenAirInterface Block Diagram
 
-![Block Diagram](./images/oai_enb_block_diagram.png)
+![Block Diagram](../images/oai_enb_block_diagram.png)
 
 ## OpenAirInterface 5G-NR Feature Set
 
@@ -625,6 +625,6 @@ The NAS layer is based on **3GPP 24.301** and implements the following functions
 
 [OAI wiki home](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/home)
 
-[OAI softmodem build procedure](BUILD.md)
+[OAI softmodem build procedure](../BUILD.md)
 
-[Running the OAI softmodem ](RUNMODEM.md)
+[Running the OAI softmodem ](../usage/RUNMODEM.md)

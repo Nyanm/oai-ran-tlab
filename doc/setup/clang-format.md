@@ -67,4 +67,4 @@ When this is done, you are set up. How to use:
 
 ## Checking errors introduced by a branch
 
-Here is the script that can be used to detect any clang-format errors introduced by a branch [here](../tools/formatting/README.md)
+Here is the script that can be used to detect any clang-format errors introduced by a branch [here](../../tools/formatting/README.md)
