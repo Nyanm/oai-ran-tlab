@@ -439,10 +439,6 @@ int main(int argc, char **argv)
   do_tdd_config_sim(gNB, mu);
 
   phy_init_nr_gNB(gNB);
-  /* RU handles rxdataF, and gNB just has a pointer. Here, we don't have an RU,
-   * so we need to allocate that memory as well. */
-  for (i = 0; i < n_rx; i++)
-    gNB->common_vars.rxdataF[0][i] = malloc16_clear(gNB->frame_parms.samples_per_frame_wCP * sizeof(c16_t));
 
   double fs,txbw,rxbw;
   uint32_t samples;
@@ -771,10 +767,6 @@ int main(int argc, char **argv)
     free(gNB->gNB_config.tdd_table.max_tdd_periodicity_list[i].max_num_of_symbol_per_slot_list);
   free(gNB->gNB_config.tdd_table.max_tdd_periodicity_list);
 
-  for (int j = 0; j < gNB->common_vars.num_beams_period; j++) {
-    for (i = 0; i < n_rx; i++)
-      free(gNB->common_vars.rxdataF[j][i]);
-  }
   phy_free_nr_gNB(gNB);
   free(RC.gNB[0]);
   free(RC.gNB);

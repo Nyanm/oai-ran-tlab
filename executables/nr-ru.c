@@ -1239,6 +1239,18 @@ void *ru_thread(void *param)
           VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_PHY_RU_PRACH_RX, 0);
         } // end if (prach_id >= 0)
       } // end if (ru->feprx)
+
+      // Copy this slot rxdataF to gNB buffer. Will be replaced with RX beamforming in later commit.
+      for (int beam = 0; beam < ru->num_beams_period; beam++) {
+        for (int ant = 0; ant < ru->nb_rx; ant++) {
+          int idx = ant + beam * ru->nb_rx;
+          const int soffset = (proc->tti_rx % RU_RX_SLOT_DEPTH) * fp->symbols_per_slot * fp->ofdm_symbol_size;
+          memcpy(gNB->common_vars.rxdataF[beam][ant] + soffset,
+                 ru->common.rxdataF[idx] + soffset,
+                 fp->samples_per_slot_wCP * sizeof(c16_t));
+        }
+      }
+
     } // end if (slot_type == NR_UPLINK_SLOT || slot_type == NR_MIXED_SLOT) {
 
     notifiedFIFO_elt_t *resTx = newNotifiedFIFO_elt(sizeof(processingData_L1tx_t), 0, &gNB->L1_tx_out, NULL);
