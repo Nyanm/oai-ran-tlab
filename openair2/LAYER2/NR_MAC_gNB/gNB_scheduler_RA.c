@@ -510,7 +510,8 @@ void schedule_nr_prach(module_id_t module_idP, frame_t frameP, slot_t slotP)
           prach_pdu->beamforming.num_prgs = 1;
           prach_pdu->beamforming.prg_size = n_ra_rb;
           prach_pdu->beamforming.dig_bf_interface = num_td_occ;
-          prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list[num_td_occ - 1].beam_idx = beam_index;
+          const uint16_t fapi_beam = convert_to_fapi_beam(beam_index, gNB->beam_info.beam_mode);
+          prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list[num_td_occ - 1].beam_idx = fapi_beam;
 
           LOG_D(NR_MAC,
                 "Frame %d, Slot %d: Prach Occasion id = %u  fdm index = %u start symbol = %u slot index = %u subframe index = %u \n",
@@ -893,7 +894,8 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
                                                         0,
                                                         ra->msg3_round,
                                                         ul_bwp->pusch_Config && ul_bwp->pusch_Config->frequencyHopping,
-                                                        UE->rnti);
+                                                        UE->rnti,
+                                                        nr_mac->beam_info.beam_mode);
     future_ul_tti_req->n_pdus += 1;
 
     // generation of DCI 0_0 to schedule msg3 retransmission
@@ -932,7 +934,7 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
                                                      coreset,
                                                      aggregation_level,
                                                      CCEIndex,
-                                                     UE->UE_beam_index,
+                                                     convert_to_fapi_beam(UE->UE_beam_index, nr_mac->beam_info.beam_mode),
                                                      UE->rnti);
     pdcch_pdu_rel15->numDlDci++;
 
@@ -1198,7 +1200,8 @@ static void nr_add_msg3(module_id_t module_idP, int CC_id, frame_t frameP, slot_
                                                       0,
                                                       0,
                                                       ul_bwp->pusch_Config && ul_bwp->pusch_Config->frequencyHopping,
-                                                      UE->rnti);
+                                                      UE->rnti,
+                                                      mac->beam_info.beam_mode);
   future_ul_tti_req->n_pdus += 1;
 
   // calling function to fill rar message
@@ -1320,6 +1323,7 @@ static void prepare_dl_pdus(gNB_MAC_INST *nr_mac,
   NR_COMMON_channels_t *cc = &nr_mac->common_channels[CC_id];
   NR_ServingCellConfigCommon_t *scc = cc->ServingCellConfigCommon;
   NR_UE_DL_BWP_t *dl_bwp = &UE->current_DL_BWP;
+  const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, nr_mac->beam_info.beam_mode);
   nfapi_nr_dl_tti_pdsch_pdu_rel15_t *pdsch_pdu_rel15 = prepare_pdsch_pdu(dl_tti_pdsch_pdu,
                                                                          nr_mac,
                                                                          UE,
@@ -1328,7 +1332,7 @@ static void prepare_dl_pdus(gNB_MAC_INST *nr_mac,
                                                                          false,
                                                                          round,
                                                                          rnti,
-                                                                         UE->UE_beam_index,
+                                                                         fapi_beam,
                                                                          1,
                                                                          pduindex);
 
@@ -1339,7 +1343,7 @@ static void prepare_dl_pdus(gNB_MAC_INST *nr_mac,
                                                    coreset,
                                                    aggregation_level,
                                                    CCEIndex,
-                                                   UE->UE_beam_index,
+                                                   fapi_beam,
                                                    rnti);
   pdcch_pdu_rel15->numDlDci++;
 

@@ -784,7 +784,7 @@ static void initialize_beam_information(NR_beam_info_t *beam_info, int mu, int s
   for (int i = 0; i < beam_info->beams_per_period; i++) {
     beam_info->beam_allocation[i] = malloc16(beam_info->beam_allocation_size * sizeof(int));
     for (int j = 0; j < beam_info->beam_allocation_size; j++)
-      beam_info->beam_allocation[i][j] = -1;
+      beam_info->beam_allocation[i][j] = 0;
   }
 }
 

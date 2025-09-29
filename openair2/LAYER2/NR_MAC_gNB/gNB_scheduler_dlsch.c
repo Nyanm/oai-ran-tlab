@@ -1155,6 +1155,7 @@ void nr_schedule_ue_spec(module_id_t module_id,
     //       for PDSCH supported by the UE for the serving cell (5.4.2.1 of 38.212)
     long maxMIMO_Layers = UE->sc_info.maxMIMO_Layers_PDSCH ? *UE->sc_info.maxMIMO_Layers_PDSCH : 1;
     const int nl_tbslbrm = min(maxMIMO_Layers, 4);
+    const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, gNB_mac->beam_info.beam_mode);
     nfapi_nr_dl_tti_pdsch_pdu_rel15_t *pdsch_pdu = prepare_pdsch_pdu(dl_tti_pdsch_pdu,
                                                                      gNB_mac,
                                                                      UE,
@@ -1163,7 +1164,7 @@ void nr_schedule_ue_spec(module_id_t module_id,
                                                                      false,
                                                                      harq->round,
                                                                      rnti,
-                                                                     UE->UE_beam_index,
+                                                                     fapi_beam,
                                                                      nl_tbslbrm,
                                                                      pduindex);
 
@@ -1176,7 +1177,7 @@ void nr_schedule_ue_spec(module_id_t module_id,
                                                      sched_ctrl->coreset,
                                                      sched_ctrl->aggregation_level,
                                                      sched_ctrl->cce_index,
-                                                     UE->UE_beam_index,
+                                                     fapi_beam,
                                                      rnti);
     pdcch_pdu->numDlDci++;
 

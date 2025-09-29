@@ -1338,7 +1338,8 @@ void nr_configure_pucch(nfapi_nr_pucch_pdu_t *pucch_pdu,
                         uint16_t O_csi,
                         uint16_t O_ack,
                         uint8_t O_sr,
-                        int r_pucch)
+                        int r_pucch,
+                        nr_beam_mode_t beam_mode)
 {
   NR_PUCCH_Resource_t *pucchres;
   NR_PUCCH_FormatConfig_t *pucchfmt;
@@ -1546,7 +1547,8 @@ void nr_configure_pucch(nfapi_nr_pucch_pdu_t *pucch_pdu,
   pucch_pdu->beamforming.num_prgs = 1;
   pucch_pdu->beamforming.prg_size = pucch_pdu->prb_size;
   pucch_pdu->beamforming.dig_bf_interface = 1;
-  pucch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = UE->UE_beam_index;
+  const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, beam_mode);
+  pucch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = fapi_beam;
 }
 
 void set_r_pucch_parms(int rsetindex,
@@ -3279,7 +3281,8 @@ void nr_csirs_scheduling(int Mod_idP, frame_t frame, slot_t slot, nfapi_nr_dl_tt
           csirs_pdu_rel15->precodingAndBeamforming.prg_size = resourceMapping.freqBand.nrofRBs; //1 PRG of max size
           csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces = 1;
           csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].pm_idx = 0;
-          csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = UE->UE_beam_index;
+          const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, gNB_mac->beam_info.beam_mode);
+          csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = fapi_beam;
           csirs_pdu_rel15->bwp_size = dl_bwp->BWPSize;
           csirs_pdu_rel15->bwp_start = dl_bwp->BWPStart;
           csirs_pdu_rel15->subcarrier_spacing = dl_bwp->scs;
@@ -3727,7 +3730,7 @@ void fapi_beam_index_allocation(NR_ServingCellConfigCommon_t *scc, const nr_mac_
       mac->fapi_beam_index[i] = fapi_index;
       index++;
     } else
-      mac->fapi_beam_index[i] = -1;
+      mac->fapi_beam_index[i] = 0;
   }
 }
 
@@ -3746,7 +3749,7 @@ NR_beam_alloc_t beam_allocation_procedure(NR_beam_info_t *beam_info, int frame, 
   for (int i = 0; i < beam_info->beams_per_period; i++) {
     NR_beam_alloc_t beam_struct = {.new_beam = false, .idx = i};
     int *beam = &beam_info->beam_allocation[i][index];
-    if (*beam == -1) {
+    if (*beam == 0) { // beamId 0 is no BF as per O-RAN spec
       beam_struct.new_beam = true;
       *beam = beam_index;
     }
@@ -3759,6 +3762,22 @@ NR_beam_alloc_t beam_allocation_procedure(NR_beam_info_t *beam_info, int frame, 
   return (NR_beam_alloc_t) {.new_beam = false, .idx = -1};
 }
 
+uint16_t convert_to_fapi_beam(const uint16_t beam_idx, const nr_beam_mode_t mode)
+{
+  AssertFatal(beam_idx >= 0 && beam_idx < 32768, "Beam index out of range. Valid range is [0, 32767]\n");
+  return (mode == LOPHY_BEAM_IDX) ? SET_BIT(beam_idx, 15) : beam_idx;
+}
+
+int get_allocated_beam(const NR_beam_info_t *beam_info, int frame, int slot, int slots_per_frame, int beam_number_in_period)
+{
+  uint16_t beam_idx = 0;
+  if (beam_info->beam_mode != NO_BEAM_MODE) {
+    const int index = get_beam_index(beam_info, frame, slot, slots_per_frame);
+    beam_idx = beam_info->beam_allocation[beam_number_in_period][index];
+  }
+  return beam_idx;
+}
+
 void reset_beam_status(NR_beam_info_t *beam_info, int frame, int slot, int beam_index, int slots_per_frame, bool new_beam)
 {
   if(!new_beam) // need to reset only if the beam was allocated specifically for this instance
@@ -3766,7 +3785,7 @@ void reset_beam_status(NR_beam_info_t *beam_info, int frame, int slot, int beam_
   const int index = get_beam_index(beam_info, frame, slot, slots_per_frame);
   for (int i = 0; i < beam_info->beams_per_period; i++) {
     if (beam_info->beam_allocation[i][index] == beam_index)
-      beam_info->beam_allocation[i][index] = -1;
+      beam_info->beam_allocation[i][index] = 0;
   }
 }
 
