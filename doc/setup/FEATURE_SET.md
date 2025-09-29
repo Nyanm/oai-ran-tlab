@@ -25,7 +25,7 @@
 The following features are valid for the gNB and the 5G-NR UE.
 
 *  Static TDD
-   - Multi TDD pattern supported refer [TDD Configuration](MAC/mac-usage.md)
+   - Multi TDD pattern supported refer [TDD Configuration](../MAC/mac-usage.md)
 *  Static FDD
 *  Normal CP
 *  Subcarrier spacings: 15 and 30kHz (FR1), 120kHz (FR2)
