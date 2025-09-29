@@ -467,7 +467,19 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
   return (0);
 }
 
+/** @details Write to xran buffers the section information which includes
+ * PRB and symbol allocation and beam ID for UL slots. This function should
+ * be called at least T1a_max_cp_ul in advance. It OAI we could call it right
+ * after MAC scheduler returns as we have a slot ahead of 4 slots for mu 1
+ * which is adequate for most RUs and deployments.
+ */
+int xran_fh_rx_send_slot_cfg(ru_info_t *ru, int frame, int slot)
+{
+  return 0;
+}
+
 #define ALIGNARRAYSIZE(a, b) (((a + b - 1) / b) * b)
+
 /** @details Write PDSCH IQ-data from OAI txdataF_BF buffer to xran buffers. If
  * I/Q compression (bitwidth < 16 bits) is configured, compresses the data
  * before writing. */

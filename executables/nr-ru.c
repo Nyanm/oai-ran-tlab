@@ -1082,6 +1082,9 @@ void *ru_thread(void *param)
       t = ru->ifdevice.get_internal_parameter("fh_if4p5_south_out");
       if (t != NULL)
         ru->fh_south_out = t;
+      t = ru->ifdevice.get_internal_parameter("fh_if4p5_south_out_ctrl");
+      if (t != NULL)
+        ru->fh_south_out_ctrl = t;
     } else {
       malloc_IF4p5_buffer(ru);
     }
