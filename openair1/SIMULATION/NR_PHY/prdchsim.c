@@ -145,7 +145,7 @@ int main(int argc, char **argv)
 
   // ---------------------------------------------------------------
 
-  int RBs = 10;
+  int RBs = 6;
   c16_t freqFrame[NR_NUMBER_OF_SYMBOLS_PER_SLOT*NR_NB_SC_PER_RB*RBs];
 
   memset(freqFrame, 0, sizeof(freqFrame));
@@ -202,7 +202,7 @@ int main(int argc, char **argv)
   bool was_symbol_used[NR_NUMBER_OF_SYMBOLS_PER_SLOT];
 
   memset(freqFrame, 0, sizeof(freqFrame));
-  memcpy(freqFrame, SIP_symbol_10RBs_ZC, sizeof(SIP_symbol_10RBs_ZC));
+  memcpy(freqFrame, SIP_symbol_6RBs_ZC, sizeof(SIP_symbol_6RBs_ZC));
   memset(txDataF[0], 0, frame_length_complex_samples * sizeof(int));
 
   for (int sym = 0; sym < num_symbols; sym++) {
@@ -228,56 +228,34 @@ int main(int argc, char **argv)
   sprintf(filename,"ofdm_SIP_%dRBS_ZC.m", RBs);
   LOG_M(filename,"ofdm", txData[0], slot_length, 1, 1);
 
-  memset(freqFrame, 0, sizeof(freqFrame));
-  memcpy(freqFrame, SIP_symbol_10RBs_ones, sizeof(SIP_symbol_10RBs_ones));
-  memset(txDataF[0], 0, frame_length_complex_samples * sizeof(int));
+  double **s_re,**s_im,**r_re,**r_im;
 
-  for (int sym = 0; sym < num_symbols; sym++) {
-    int outMod_offset = sym * points_per_symbol;
-    int txData_offset = sym * ofdm_symbol_size;
+  s_re = malloc(NB_ANTENNAS_TX * sizeof(double *));
+  s_im = malloc(NB_ANTENNAS_TX * sizeof(double *));
+  r_re = malloc(NB_ANTENNAS_TX * sizeof(double *));
+  r_im = malloc(NB_ANTENNAS_TX * sizeof(double *));
 
-    for (int n = 0; n < points_per_symbol; n++) {
-      txDataF[0][txData_offset + n] = freqFrame[outMod_offset + n];
-    }
-  }
-
-  for (int i = 0; i < NR_NUMBER_OF_SYMBOLS_PER_SLOT; i++) {
-    was_symbol_used[i] = true;
-  }
-
-  nr_normal_prefix_mod(txDataF[0],
-                      txData[0],
-                      NR_NUMBER_OF_SYMBOLS_PER_SLOT,
-                      frame_parms,
-                      1,
-                      was_symbol_used);
-
-  sprintf(filename,"ofdm_SIP_%dRBS_ones.m", RBs);
-  LOG_M(filename,"ofdm", txData[0], slot_length, 1, 1);
-
-  /*double **s_re,**s_im,**r_re,**r_im;
-
-  s_re = malloc(n_antennas * sizeof(double *));
-  s_im = malloc(n_antennas * sizeof(double *));
-  r_re = malloc(n_antennas * sizeof(double *));
-  r_im = malloc(n_antennas * sizeof(double *));
-
-  for (int i = 0; i < n_antennas; i++) {
+  for (int i = 0; i < NB_ANTENNAS_TX; i++) {
     s_re[i] = calloc(1, slot_length * sizeof(double));
     s_im[i] = calloc(1, slot_length * sizeof(double));
   }
 
-  for (int i = 0; i < n_antennas; i++) {
+  for (int i = 0; i < NB_ANTENNAS_TX; i++) {
     r_re[i] = calloc(1, slot_length * sizeof(double));
     r_im[i] = calloc(1, slot_length * sizeof(double));
   }
 
+  bzero(s_re[0], slot_length * sizeof(double));
+  bzero(s_im[0], slot_length * sizeof(double));
   bzero(r_re[0], slot_length * sizeof(double));
   bzero(r_im[0], slot_length * sizeof(double));
 
   SCM_t channel_model = AWGN;
-  uint64_t fc = 0; // Carrier frequency n8 band, #50 RB
+  uint64_t fc = 897500000; // Carrier frequency n8 band, #50 RB
   double DS_TDL = .03;
+  double SNR = 30.0;
+  double path_loss_dB = -20;
+  double noise_power_dB = -160.0;
   int delay = 0;
   double samples = N_RB2sampling_rate(RBs);
   double rxbw = N_RB2channel_bandwidth(RBs);
@@ -293,26 +271,38 @@ int main(int argc, char **argv)
                                   CORR_LEVEL_LOW,
                                   0,
                                   delay,
-                                  0,
-                                  0);
+                                  path_loss_dB,
+                                  noise_power_dB);
   
-  int txlev;
-  int l_ofdm = 6;
-  double SNR = 10.0;
-  txlev = signal_energy((int32_t *)txData[0],
+  int txlev = signal_energy((int32_t *)&txData[0][0],
   frame_parms->ofdm_symbol_size + frame_parms->nb_prefix_samples);
-  printf("txlev = %d (%f dB)\n",txlev,10*log10((double)txlev));
+  double txlev_dB = 10*log10((double)txlev);
+  printf("txlev = %d (%f dB)\n",txlev,txlev_dB);
 
   for (int i = 0; i < slot_length; i++) {
-    s_re[0][i] = (double) txData[0][0].r;
-    s_im[0][i] = (double) txData[0][0].i;
+    s_re[0][i] = (double) txData[0][i].r;
+    s_im[0][i] = (double) txData[0][i].i;
   }
+
+  for (int i = 0; i < 16; i++)
+  {
+    printf("s_re[0][%d] = %f, s_im[0][%d] = %f\n", i, s_re[0][i], i, s_im[0][i]);
+  }
+
+  double *output = malloc(2 * sizeof(double) * slot_length);
+  for (int i = 0; i < slot_length; i++) {
+    output[2 * i] = s_re[0][i];
+    output[2 * i + 1] = s_im[0][i];
+  }
+
+  sprintf(filename,"channel.m");
+  LOG_M(filename,"channelx", output, slot_length, 1, 8);
 
   double ts = 1.0/(frame_parms->subcarrier_spacing * frame_parms->ofdm_symbol_size); 
   //Compute AWGN variance
-  double sigma2_dB = 10 * log10((double)txlev * ((double)frame_parms->ofdm_symbol_size/(12*1))) - SNR;
+  double sigma2_dB = 10 * log10((double)txlev * ((double)frame_parms->ofdm_symbol_size/points_per_symbol)) + path_loss_dB - SNR;
   double sigma2    = pow(10, sigma2_dB/10);
-  printf("sigma2 %f (%f dB), txlev %f (factor %f)\n",sigma2,sigma2_dB,10*log10((double)txlev),(double)(double)frame_parms->ofdm_symbol_size/(12*1));
+  printf("sigma2 %f (%f dB), txlev %f (factor %f)\n",sigma2,sigma2_dB,10*log10((double)txlev),(double)(double)frame_parms->ofdm_symbol_size/points_per_symbol);
 
   multipath_channel(channel, s_re, s_im, r_re, r_im, slot_length, 0, 1);
   add_noise(rxData,
@@ -320,18 +310,31 @@ int main(int argc, char **argv)
             (const double **)r_im,
             sigma2,
             slot_length,
-            slot_offset,
+            0,
             ts,
             delay,
             0x0,
             0x1,
             frame_parms->nb_antennas_rx);
 
-  for (int i = 0; i < n_antennas; i++) {
+  for (int i = 0; i < slot_length; i++) {
+    output[2 * i] = r_re[0][i];
+    output[2 * i + 1] = r_im[0][i];
+  }
+
+  sprintf(filename,"channel_out.m");
+  LOG_M(filename,"channelx_out", output, slot_length, 1, 8);
+
+  free(output);
+
+  sprintf(filename,"rxdata_6RBs.m");
+  LOG_M(filename,"rxdata", rxData[0], slot_length, 1, 1);
+
+  for (int i = 0; i < NB_ANTENNAS_TX; i++) {
     free(s_re[i]);
     free(s_im[i]);
   }
-  for (int i = 0; i < n_antennas; i++) {
+  for (int i = 0; i < NB_ANTENNAS_RX; i++) {
     free(r_re[i]);
     free(r_im[i]);
   }
@@ -341,7 +344,7 @@ int main(int argc, char **argv)
   free(r_re);
   free(r_im);
 
-  free_channel_desc_scm(channel);*/
+  free_channel_desc_scm(channel);
 
   return 0;
 }
