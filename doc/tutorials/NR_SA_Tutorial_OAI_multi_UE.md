@@ -2,7 +2,7 @@
   <tr style="border-collapse: collapse; border: none;">
     <td style="border-collapse: collapse; border: none;">
       <a href="http://www.openairinterface.org/">
-         <img src="./images/oai_final_logo.png" alt="" border=3 height=50 width=150>
+         <img src="../images/oai_final_logo.png" alt="" border=3 height=50 width=150>
          </img>
       </a>
     </td>
@@ -25,9 +25,9 @@ This tutorial is assuming that OAI CN5G and OAI RAN are already deployed. To lea
 
 Also, it is suggested to get some knowledge on how the channel simulation with OAI RFsimulator works. Please refer to the following documentation to learn about the relevant topics discussed:
 
-- RFsimulator tutorial [rfsimulator/README.md](../radio/rfsimulator/README.md)
-- Channel simulation with OAI [channel_simulation.md](../openair1/SIMULATION/TOOLS/DOC/channel_simulation.md)
-- Telnet server usage [telnetusage.md](../common/utils/telnetsrv/DOC/telnetusage.md).
+- RFsimulator tutorial [rfsimulator/README.md](../../radio/rfsimulator/README.md)
+- Channel simulation with OAI [channel_simulation.md](../../openair1/SIMULATION/TOOLS/DOC/channel_simulation.md)
+- Telnet server usage [telnetusage.md](../../common/utils/telnetsrv/DOC/telnetusage.md).
 
 ## Run multiple UEs in RFsimulator
 
@@ -36,7 +36,7 @@ Also, it is suggested to get some knowledge on how the channel simulation with O
 Important notes:
 
 * This should be run on the same host as the OAI gNB
-* Use the script [multi_ue.sh](../tools/scripts/multi-ue.sh) to make namespaces for multiple UEs.
+* Use the script [multi_ue.sh](../../tools/scripts/multi-ue.sh) to make namespaces for multiple UEs.
 * For each UE, a namespace shall be created, each one has a different address that will be used as rfsim server address
 * Each UE shall have a different IMSI, which shall be present in the relevant tables of the MySQL database
 * Each UE shall run a telnet server on a different port, with command line option `--telnetsrv.listenport`
@@ -77,7 +77,7 @@ in the command above, please note that the IMSI and the telnet port changed.
    docker pull oaisoftwarealliance/oai-nr-ue:latest
    ```
 
-2. Configure your setup by editing the Docker compose file e.g. in [docker-compose.yaml](../ci-scripts/yaml_files/5g_rfsimulator/docker-compose.yaml).
+2. Configure your setup by editing the Docker compose file e.g. in [docker-compose.yaml](../../ci-scripts/yaml_files/5g_rfsimulator/docker-compose.yaml).
 
 3. Deploy the UEs, e.g. for 3 UEs:
 
@@ -114,6 +114,6 @@ in the command above, please note that the IMSI and the telnet port changed.
 
 For more details and scenarios, refer to the following files:
 
-* [RFSIM deployment in the CI](../ci-scripts/yaml_files/5g_rfsimulator/README.md)
-* [E1 deployment in the CI](../ci-scripts/yaml_files/5g_rfsimulator_e1/README.md)
-* [Docker documentation](../docker/README.md)
+* [RFSIM deployment in the CI](../../ci-scripts/yaml_files/5g_rfsimulator/README.md)
+* [E1 deployment in the CI](../../ci-scripts/yaml_files/5g_rfsimulator_e1/README.md)
+* [Docker documentation](../../docker/README.md)

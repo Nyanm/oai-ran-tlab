@@ -2,7 +2,7 @@
   <tr style="border-collapse: collapse; border: none;">
     <td style="border-collapse: collapse; border: none;">
       <a href="http://www.openairinterface.org/">
-         <img src="./images/oai_final_logo.png" alt="" border=3 height=50 width=150>
+         <img src="../images/oai_final_logo.png" alt="" border=3 height=50 width=150>
          </img>
       </a>
     </td>
@@ -172,7 +172,7 @@ sudo ./nr-uesoftmodem -r 32 --numerology 3 --band 257 -C 27533280000 --uicc0.ims
 
 A configuration file can be fed to the nrUE command line in order to connect to the local NGC.
 
-The nrUE configuration file (e.g. [ue.conf](../targets/PROJECTS/GENERIC-NR-5GC/CONF/ue.conf)) is structured in a key-value format and contains the relevant UICC parameters that are necessary to authenticate the UE to the local 5GC. E.g.:
+The nrUE configuration file (e.g. [ue.conf](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/ue.conf)) is structured in a key-value format and contains the relevant UICC parameters that are necessary to authenticate the UE to the local 5GC. E.g.:
 
 ```shell
 uicc0 = {
@@ -249,7 +249,7 @@ sudo ethtool -G enp1s0f0 tx 4096 rx 4096
 - Sometimes, the nrUE would keep repeating RA procedure because of Msg3 failure at the gNB. If it happens, add the `-A` option at the nrUE and/or gNB side, e.g., `-A 45`. This modifies the timing advance (in samples). Adjust +/-5 if the issue persists.
 - This can be necessary since certain USRPs have larger signal delays than others; it is therefore specific to the used USRP model.
 - The x310 and B210 are found to work with the default configuration; N310 and x410 can benefit from setting this timing advance.
-- For example if the OAI UE uses the X410 and the gNB based on [Nvidia Aerial and Foxconn](./Aerial_FAPI_Split_Tutorial.md) a timing advance of 90 has been found to work well.  
+- For example if the OAI UE uses the X410 and the gNB based on [Nvidia Aerial and Foxconn](Aerial_FAPI_Split_Tutorial.md) a timing advance of 90 has been found to work well.
 
 
 ### 6.5 Lower latency on user plane

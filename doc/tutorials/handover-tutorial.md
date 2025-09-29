@@ -11,7 +11,7 @@ position ("new pos"), it will trigger an event such that the CU triggers a
 handover of the UE from DU0 to DU1. Alternatively, a manual trigger can do the
 same.
 
-![F1 Handover setup](./RRC/ho.png)
+![F1 Handover setup](../RRC/ho.png)
 
 ## What is a gNB neighbor?
 
@@ -51,10 +51,10 @@ corresponding tutorial](./NR_SA_Tutorial_OAI_CN5G.md) if this is not the case
 yet.
 
 We will use the TDD configuration files in the repository for the
-[CU](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-cu.sa.f1.conf) as well for
-[DU0](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band78.106prb.rfsim.pci0.conf)
+[CU](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-cu.sa.f1.conf) as well for
+[DU0](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band78.106prb.rfsim.pci0.conf)
 and
-[DU1](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band78.106prb.rfsim.pci1.conf).
+[DU1](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band78.106prb.rfsim.pci1.conf).
 Note how the DUs differ in their DU ID (for identification at the CU), nr
 cellid (global identification), physical cell ID (identification through UE),
 frequency (limitation at OAI UE), and IP address.
@@ -163,7 +163,7 @@ neighbour relation of the DUs at the CU. To do so, proceed as follows:
    ```
    cat nrRRC_stats.log
    ```
-1. Fill in the [`neighbour-config.conf`](../ci-scripts/conf_files/neighbour-config.conf) configuration file as shown below, and
+1. Fill in the [`neighbour-config.conf`](../../ci-scripts/conf_files/neighbour-config.conf) configuration file as shown below, and
    `@include` it in the CU file.
 1. Start the CU and both DUs.
 1. Bring the phone close to one cell, and leave flight mode. It should connect
@@ -387,7 +387,7 @@ telnet command. Therefore, ensure that both gNBs and UE are built with telnet su
 ./build_oai --ninja --nrUE --gNB --build-lib telnetsrv
 ```
 
-Run the 5G Core Network if not already running. See [OAI CN5G tutorial](./NR_SA_Tutorial_OAI_CN5G.md).
+Run the 5G Core Network if not already running. See [OAI CN5G tutorial](NR_SA_Tutorial_OAI_CN5G.md).
 
 2. Start the source gNB (gNB-PCI0) e.g.
 

@@ -2,7 +2,7 @@
   <tr style="border-collapse: collapse; border: none;">
     <td style="border-collapse: collapse; border: none;">
       <a href="http://www.openairinterface.org/">
-         <img src="./images/oai_final_logo.png" alt="" border=3 height=50 width=150>
+         <img src="../images/oai_final_logo.png" alt="" border=3 height=50 width=150>
          </img>
       </a>
     </td>
@@ -167,7 +167,7 @@ docker exec -it oai-ext-dn iperf -u -t 86400 -i 1 -fk -B 192.168.70.135 -b 100M 
 
 ## 6. Advanced configurations (optional)
 
-See also the [dedicated document on performance tuning](./tuning_and_security.md).
+See also the [dedicated document on performance tuning](../testing/tuning_and_security.md).
 
 ### 6.1 USRP N300 and X300 Ethernet Tuning
 
@@ -225,7 +225,7 @@ The value passed to this option should be ideally equal to half the operational 
 
 A visual representation of the impact of tune-offset with a 120 MHz bandwidth daughterboard:
 
-![Tune_Offset](./images/USRP_tune_offset.png)
+![Tune_Offset](../images/USRP_tune_offset.png)
 
 ### 6.3.2 UL PRBs Blacklist
 
