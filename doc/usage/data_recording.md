@@ -17,7 +17,7 @@ Regarding to the APIs between different services, they are such as the following
 
 The following figure shows OAI gNB and UE with the Data Recording App system architecture. 
 
-<img src="images/data_recording_arch.svg" alt="OAI gNB and UE with the Data Recording App system architectur" width="1000">
+<img src="../images/data_recording_arch.svg" alt="OAI gNB and UE with the Data Recording App system architectur" width="1000">
 
 ## Required Packages
 Install all required system packages with the following commands:
@@ -38,11 +38,11 @@ python3 -m pip install -r common/utils/data_recording/requirements.txt
 
 ## Configuration Files
 ### Main Data Recording JSON Configuration File
-The Data Recording application provides configuration file in [JSON](http://www.json.org/) format. It is stored in [common/utils/data_recording/config/config_data_recording.json](../common/utils/data_recording/config/config_data_recording.json) folder. The main parameters are:
+The Data Recording application provides configuration file in [JSON](http://www.json.org/) format. It is stored in [common/utils/data_recording/config/config_data_recording.json](../../common/utils/data_recording/config/config_data_recording.json) folder. The main parameters are:
 - **data_storage_path**: Path to directory for data storage
 - **num_records**: Number of requested data records in slots
 - **t_tracer_message_definition_file**: T-Tracer message definition file
-- **parameter_map_file**: Parameter mapping dictionary (OAI parameters to standardized metadata). It is located here: [common/utils/data_recording/config/wireless_link_parameter_map.yaml](../common/utils/data_recording/config/wireless_link_parameter_map.yaml) 
+- **parameter_map_file**: Parameter mapping dictionary (OAI parameters to standardized metadata). It is located here: [common/utils/data_recording/config/wireless_link_parameter_map.yaml](../../common/utils/data_recording/config/wireless_link_parameter_map.yaml) 
 - **start_frame_number**: It can be used to start the recording from a specific frame, but it is not yet supported.
 - **base_station**:
     - requested_tracer_messages: Requested base station data traces. The supported messages are:
@@ -119,7 +119,7 @@ The figure below illustrates an example of a JSON Data Recording App configurati
 ```
 
 ### Wireless Link Parameter Map Dictionary
-Since every signal recorder has related configuration with different naming scheme, the [common/utils/data_recording/config/wireless_link_parameter_map.yaml](../common/utils/data_recording/config/wireless_link_parameter_map.yaml) is a dictionary to do the parameters pair between the signal configuration and the SigMF metadata (e.g. OAI parameter name vs. SigMF metadata parameter name). It eases of adoption in case of adding new parameters. In case of changing the name of given parameters in OAI and we need to get those parameters in metadata, the required changes need to be done in the parameter map dictionary.
+Since every signal recorder has related configuration with different naming scheme, the [common/utils/data_recording/config/wireless_link_parameter_map.yaml](../../common/utils/data_recording/config/wireless_link_parameter_map.yaml) is a dictionary to do the parameters pair between the signal configuration and the SigMF metadata (e.g. OAI parameter name vs. SigMF metadata parameter name). It eases of adoption in case of adding new parameters. In case of changing the name of given parameters in OAI and we need to get those parameters in metadata, the required changes need to be done in the parameter map dictionary.
 
 The following figure shows an example of Wireless Link Parameter Map Dictionary. For example, the frequency range is called in standardized  SigMF metadata `frequency_range` while it is called in OAI `freq_range` and it is called in NI 5G NR RFmx `frequency range`.
 
@@ -141,7 +141,7 @@ The following figure shows an example of Wireless Link Parameter Map Dictionary.
 
 ### Global Metadata
 There are some metadata parameters that the user may need to change only once. Those parameters have been hard coded in the Data Recording App header.
-[common/utils/data_recording/data_recording_app_v1.0.py](../common/utils/data_recording/data_recording_app_v1.0.py). Those are:
+[common/utils/data_recording/data_recording_app_v1.0.py](../../common/utils/data_recording/data_recording_app_v1.0.py). Those are:
 - The global metadata such as: author, description,  sigmf collection file prefix, datetime_offset, enable saving config Data Recording App in json file with recorded data, and name of signal generator (i.e. 5gnr_oai). The name of signal generator is used for parameter mapping dictionary (OAI parameters to standardized metadata).
 - The mapping between supported OAI messages and file_name_prefix, scope, and description.
 
@@ -285,7 +285,7 @@ python3 data_recording_app_v1.0.py
 The recorded data set will be stored in the configured path, assume `/home/user/workarea/oai_recorded_data/`. 
 The following figure shows an example of recorded data set.
 
-<img src="images/sigmf_dataset.svg" alt="Example from SigMF recorded data set" width="600">
+<img src="../images/sigmf_dataset.svg" alt="Example from SigMF recorded data set" width="600">
 
 ## Overview on Collected Data Set
 
@@ -482,7 +482,7 @@ For synchronization validation and to show how to read SigMF metadata, a simple 
     - Number of OFDM symbols = 13
     - So, the valid number of bits in the transport block (slot) is: 3312 bits. If we will fill DMRS locations by zeros, the number of bits is: 3744 bits, but it is not done due to the real-timing issues. For Tx scrambled bits data de-serialization, the user can reconstruct the Tx Scrambled Bits Grid (2D Grid) by using the captured DMRS grid or Channel Estimates Grid as a reference and no need to derive the DMRS symbols locations based on 5G NR config parameters.
 
-<img src="images/data_serialization_tx_scrambled_bit_message.svg" alt="Data serialization " width="500">
+<img src="../images/data_serialization_tx_scrambled_bit_message.svg" alt="Data serialization " width="500">
 
 ### To Do List:
 - Provide an overview about the different services of the Data Recording App (Data Control Service, Data collection (T-Tracer) Service, Data Conversion Service) and the APIs definition between them.

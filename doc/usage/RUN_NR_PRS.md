@@ -2,7 +2,7 @@
   <tr style="border-collapse: collapse; border: none;">
     <td style="border-collapse: collapse; border: none;">
       <a href="http://www.openairinterface.org/">
-         <img src="./images/oai_final_logo.png" alt="" border=3 height=50 width=150>
+         <img src="../images/oai_final_logo.png" alt="" border=3 height=50 width=150>
          </img>
       </a>
     </td>
@@ -15,7 +15,7 @@
 This page is valid on tags starting from **`2022.w37`**.
 
 
-After you have [built the softmodem executables](BUILD.md), go to the build directory `openairinterface5g/cmake_targets/ran_build/build/` and start testing the Rel16 PRS usecases.
+After you have [built the softmodem executables](../BUILD.md), go to the build directory `openairinterface5g/cmake_targets/ran_build/build/` and start testing the Rel16 PRS usecases.
 
 ## PRS parameters and config files
 
@@ -185,8 +185,8 @@ This script will read the IQ data from extracted PRS dumps(chF_gnbX_Y.raw and ch
 <table style="border-collapse: collapse; border: none;">
   <tr style="border-collapse: collapse; border: none;">
     <td style="border-collapse: collapse; border: none;">
-         <img src="./images/PRS_CFR_FR2_64PRB_8rsc.PNG" alt="" border=1 height=400 width=500>
-         <img src="./images/PRS_CIR_FR2_64PRB_8rsc.PNG" alt="" border=1 height=400 width=500>
+         <img src="../images/PRS_CFR_FR2_64PRB_8rsc.PNG" alt="" border=1 height=400 width=500>
+         <img src="../images/PRS_CIR_FR2_64PRB_8rsc.PNG" alt="" border=1 height=400 width=500>
          </img>
          <figcaption align = "center"><b>Fig.1 - FR2 100MHz test</b></figcaption>
     </td>
