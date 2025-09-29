@@ -57,7 +57,11 @@ int nr_generate_pss(c16_t *txdataF,
                     int16_t amp,
                     uint8_t ssb_start_symbol,
                     nfapi_nr_config_request_scf_t *config,
-                    NR_DL_FRAME_PARMS *frame_parms);
+                    NR_DL_FRAME_PARMS *frame_parms
+#ifdef FLT16_MAX
+		    ,int use_fp16
+#endif
+		    );
 
 /*!
 \fn int nr_generate_sss
@@ -69,7 +73,11 @@ int nr_generate_sss(c16_t *txdataF,
                     int16_t amp,
                     uint8_t ssb_start_symbol,
                     nfapi_nr_config_request_scf_t *config,
-                    NR_DL_FRAME_PARMS *frame_parms);
+                    NR_DL_FRAME_PARMS *frame_parms
+#ifdef FLT16_MAX
+		    ,int use_fp16
+#endif
+		   );
 
 /*!
 \fn void nr_generate_pbch_dmrs

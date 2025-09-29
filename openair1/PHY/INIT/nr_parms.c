@@ -582,7 +582,11 @@ int nr_init_frame_parms_ue_sl(NR_DL_FRAME_PARMS *fp,
   // ssb_offset_pointa points to the first RE where Sidelink-PSBCH starts
   fp->ssb_start_subcarrier = config->sl_bwp_config.sl_ssb_offset_point_a;
 
-  perform_symbol_rotation(fp, fp->sl_CarrierFreq, fp->symbol_rotation[link_type_sl]);
+  perform_symbol_rotation(fp, fp->sl_CarrierFreq, fp->symbol_rotation[link_type_sl]
+#ifdef FLT16_MAX
+		  ,0//use_fp16
+#endif
+		  );
   init_timeshift_rotation(fp);
 
   // Not used for Sidelink

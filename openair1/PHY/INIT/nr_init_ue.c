@@ -271,7 +271,11 @@ int init_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
   }
 
   ue->init_averaging = 1;
-  init_symbol_rotation(fp);
+  init_symbol_rotation(fp
+#ifdef FLT16_MAX
+		       ,ue->use_fp16 
+#endif
+		  );
   init_timeshift_rotation(fp);
 
   // initialize to false only for SA since in do-ra and phy-test it is already set to true before getting here

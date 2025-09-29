@@ -21,6 +21,10 @@
 
 
 #include "PHY/NR_TRANSPORT/nr_transport_proto.h"
+#ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
+#define __STDC_WANT_IEC_60559_TYPES_EXT__
+#endif
+#include <float.h>
 
 //#define NR_PSS_DEBUG
 
@@ -28,7 +32,11 @@ int nr_generate_pss(  c16_t *txdataF,
                       int16_t amp,
                       uint8_t ssb_start_symbol,
                       nfapi_nr_config_request_scf_t* config,
-                      NR_DL_FRAME_PARMS *frame_parms)
+                      NR_DL_FRAME_PARMS *frame_parms
+#ifdef FLT16_MAX
+		      ,int use_fp16
+#endif
+		      )
 {
   int16_t x[NR_PSS_LENGTH];
   const int x_initial[7] = {0, 1, 1 , 0, 1, 1, 1};
@@ -57,9 +65,19 @@ int nr_generate_pss(  c16_t *txdataF,
   uint8_t Nid2 = config->cell_config.phy_cell_id.value % 3;
   for (int i = 0; i < NR_PSS_LENGTH; i++) {
     int m = (i + 43*Nid2)%(NR_PSS_LENGTH);
-    int16_t d_pss = (1 - 2*x[m]) * 23170;
+#ifdef FLT16_MAX
+    if (use_fp16) {
+      double d_pss = (double)(1 - 2*x[m]) / sqrt(2.0f);
+      ((_Float16*)txdataF)[2*(l*frame_parms->ofdm_symbol_size + k)] = (_Float16)d_pss;
+    }
+    else
+#endif
+    {
+      int16_t d_pss = (1 - 2*x[m]) * 23170;
     //      printf("pss: writing position k %d / %d\n",k,frame_parms->ofdm_symbol_size);
-    ((int16_t*)txdataF)[2*(l*frame_parms->ofdm_symbol_size + k)] = (((int16_t)amp) * d_pss) >> 15;
+
+      ((int16_t*)txdataF)[2*(l*frame_parms->ofdm_symbol_size + k)] = (((int16_t)amp) * d_pss) >> 15;
+    }
     k++;
 
     if (k >= frame_parms->ofdm_symbol_size)

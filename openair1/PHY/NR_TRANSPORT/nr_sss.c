@@ -20,6 +20,10 @@
  */
 
 #include "PHY/NR_TRANSPORT/nr_transport_proto.h"
+#ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
+#define __STDC_WANT_IEC_60559_TYPES_EXT__
+#endif
+#include <float.h>
 
 //#define NR_SSS_DEBUG
 
@@ -27,7 +31,11 @@ int nr_generate_sss(  c16_t *txdataF,
                       int16_t amp,
                       uint8_t ssb_start_symbol,
                       nfapi_nr_config_request_scf_t* config,
-                      NR_DL_FRAME_PARMS *frame_parms)
+                      NR_DL_FRAME_PARMS *frame_parms
+#ifdef FLT16_MAX
+		      ,int use_fp16
+#endif
+		      )
 {
   int16_t x0[NR_SSS_LENGTH];
   int16_t x1[NR_SSS_LENGTH];
@@ -63,8 +71,17 @@ int nr_generate_sss(  c16_t *txdataF,
   int l = ssb_start_symbol + 2;
 
   for (int i = 0; i < NR_SSS_LENGTH; i++) {
-    int16_t d_sss = (1 - 2*x0[(i + m0) % NR_SSS_LENGTH] ) * (1 - 2*x1[(i + m1) % NR_SSS_LENGTH] ) * 23170;
-    ((int16_t*)txdataF)[2*(l*frame_parms->ofdm_symbol_size + k)] = (((int16_t)amp) * d_sss) >> 15;
+#ifdef FLT16_MAX
+    if (use_fp16) {
+      double d_sss = (double)(1 - 2*x0[(i + m0) % NR_SSS_LENGTH] ) * (1 - 2*x1[(i + m1) % NR_SSS_LENGTH] ) / sqrt(2.0f);
+      ((_Float16*)txdataF)[2*(l*frame_parms->ofdm_symbol_size + k)] = (_Float16)d_sss;
+    }
+    else
+#endif
+    {
+      int16_t d_sss = (1 - 2*x0[(i + m0) % NR_SSS_LENGTH] ) * (1 - 2*x1[(i + m1) % NR_SSS_LENGTH] ) * 23170;
+      ((int16_t*)txdataF)[2*(l*frame_parms->ofdm_symbol_size + k)] = (((int16_t)amp) * d_sss) >> 15;
+    }
     k++;
 
     if (k >= frame_parms->ofdm_symbol_size)

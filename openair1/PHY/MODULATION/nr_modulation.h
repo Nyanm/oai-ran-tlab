@@ -113,11 +113,23 @@ void apply_nr_rotation_TX(const NR_DL_FRAME_PARMS *fp,
                           int slot,
                           int nb_rb,
                           int first_symbol,
-                          int nsymb);
+                          int nsymb
+#ifdef FLT16_MAX
+			  ,int use_fp16,int tx_amp
+#endif
+			  );
 
-void perform_symbol_rotation(NR_DL_FRAME_PARMS *fp, double f0, c16_t *symbol_rotation);
+void perform_symbol_rotation(NR_DL_FRAME_PARMS *fp, double f0, c16_t *symbol_rotation
+#ifdef FLT16_MAX
+  		,int use_fp16
+#endif
+		);
 
-void init_symbol_rotation(NR_DL_FRAME_PARMS *fp);
+void init_symbol_rotation(NR_DL_FRAME_PARMS *fp
+#ifdef FLT16_MAX
+		,int use_fp16
+#endif
+		);
 
 void init_timeshift_rotation(NR_DL_FRAME_PARMS *fp);
 

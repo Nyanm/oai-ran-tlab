@@ -75,8 +75,8 @@ void nr_generate_modulation_table() {
       *table++ = (int16_t)(1 - 2 * ((i >> (j * 2)) & 1)) * val * sqrt2 * sqrt2;
       *table++ = (int16_t)(1 - 2 * ((i >> (j * 2 + 1)) & 1)) * val * sqrt2 * sqrt2;
 #ifdef FLT16_MAX
-      *table2++ = (_Float16)((1 - 2 * ((i >> (j * 2)) & 1)) * val * sqrt2 * sqrt2);
-      *table2++ = (_Float16)((1 - 2 * ((i >> (j * 2 + 1)) & 1)) * val * sqrt2 * sqrt2);
+      *table2++ = (_Float16)((1 - 2 * ((i >> (j * 2)) & 1)) * sqrt2 * sqrt2);
+      *table2++ = (_Float16)((1 - 2 * ((i >> (j * 2 + 1)) & 1)) * sqrt2 * sqrt2);
 #endif
       //printf("%d j%d\n",nr_qpsk_byte_mod_table[i*8+(j*2)],nr_qpsk_byte_mod_table[i*8+(j*2)+1]);
     }
@@ -92,8 +92,8 @@ void nr_generate_modulation_table() {
       *table++ = (int16_t)((1 - 2 * ((i >> (j * 4)) & 1)) * (2 - (1 - 2 * ((i >> (j * 4 + 2)) & 1)))) * val * sqrt10 * sqrt2;
       *table++ = (int16_t)((1 - 2 * ((i >> (j * 4 + 1)) & 1)) * (2 - (1 - 2 * ((i >> (j * 4 + 3)) & 1)))) * val * sqrt10 * sqrt2;
 #ifdef FLT16_MAX
-      *table2++ = (_Float16)(((1 - 2 * ((i >> (j * 4)) & 1)) * (2 - (1 - 2 * ((i >> (j * 4 + 2)) & 1)))) * val * sqrt10 * sqrt2);
-      *table2++ = (_Float16)(((1 - 2 * ((i >> (j * 4 + 1)) & 1)) * (2 - (1 - 2 * ((i >> (j * 4 + 3)) & 1)))) * val * sqrt10 * sqrt2);
+      *table2++ = (_Float16)(((1 - 2 * ((i >> (j * 4)) & 1)) * (2 - (1 - 2 * ((i >> (j * 4 + 2)) & 1)))) * sqrt10 * sqrt2);
+      *table2++ = (_Float16)(((1 - 2 * ((i >> (j * 4 + 1)) & 1)) * (2 - (1 - 2 * ((i >> (j * 4 + 3)) & 1)))) * sqrt10 * sqrt2);
 #endif
       // printf("%d j%d\n",nr_16qam_byte_mod_table[i*4+(j*2)],nr_16qam_byte_mod_table[i*4+(j*2)+1]);
     }
@@ -107,8 +107,8 @@ void nr_generate_modulation_table() {
     *table++ = (int16_t)((1 - 2 * (i & 1)) * (2 - (1 - 2 * ((i >> 2) & 1)))) * val * sqrt10 * sqrt2;
     *table++ = (int16_t)((1 - 2 * ((i >> 1) & 1)) * (2 - (1 - 2 * ((i >> 3) & 1)))) * val * sqrt10 * sqrt2;
 #ifdef FLT16_MAX
-    *table2++ = (_Float16)(((1 - 2 * (i & 1)) * (2 - (1 - 2 * ((i >> 2) & 1)))) * val * sqrt10 * sqrt2);
-    *table2++ = (_Float16)(((1 - 2 * ((i >> 1) & 1)) * (2 - (1 - 2 * ((i >> 3) & 1)))) * val * sqrt10 * sqrt2);
+    *table2++ = (_Float16)(((1 - 2 * (i & 1)) * (2 - (1 - 2 * ((i >> 2) & 1)))) * sqrt10 * sqrt2);
+    *table2++ = (_Float16)(((1 - 2 * ((i >> 1) & 1)) * (2 - (1 - 2 * ((i >> 3) & 1)))) * sqrt10 * sqrt2);
 #endif
       //printf("%d j%d\n",table[i*2],table[i*2+1]);
   }
@@ -129,10 +129,10 @@ void nr_generate_modulation_table() {
 #ifdef FLT16_MAX
       *table2++ = (_Float16)((1 - 2 * ((i >> (j * 6)) & 1))
                          * (4 - (1 - 2 * ((i >> (j * 6 + 2)) & 1)) * (2 - (1 - 2 * ((i >> (j * 6 + 4)) & 1)))))
-                 * val * sqrt42 * sqrt2;
+                 * sqrt42 * sqrt2;
       *table2++ = (_Float16)((1 - 2 * ((i >> (j * 6 + 1)) & 1))
                          * (4 - (1 - 2 * ((i >> (j * 6 + 3)) & 1)) * (2 - (1 - 2 * ((i >> (j * 6 + 5)) & 1)))))
-                 * val * sqrt42 * sqrt2;
+                 * sqrt42 * sqrt2;
 #endif
       //printf("%d j%d\n",table[i*4+(j*2)],table[i*4+(j*2)+1]);
     }
@@ -153,10 +153,10 @@ void nr_generate_modulation_table() {
 #ifdef FLT16_MAX
     *table2++ = (_Float16)((1 - 2 * (i & 1))
                        * (8 - (1 - 2 * ((i >> 2) & 1)) * (4 - (1 - 2 * ((i >> 4) & 1)) * (2 - (1 - 2 * ((i >> 6) & 1))))))
-               * val * sqrt170 * sqrt2;
+               * sqrt170 * sqrt2;
     *table2++ = (_Float16)((1 - 2 * ((i >> 1) & 1))
                        * (8 - (1 - 2 * ((i >> 3) & 1)) * (4 - (1 - 2 * ((i >> 5) & 1)) * (2 - (1 - 2 * ((i >> 7) & 1))))))
-               * val * sqrt170 * sqrt2;
+               * sqrt170 * sqrt2;
 #endif
   }
 }

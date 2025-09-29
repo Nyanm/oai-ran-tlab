@@ -151,8 +151,16 @@ void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_n
                                       fp->symbols_per_slot,
                                       bitmap);
 
-  nr_generate_pss(&txdataF[beam_nb][0][txdataF_offset], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
-  nr_generate_sss(&txdataF[beam_nb][0][txdataF_offset], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
+  nr_generate_pss(&txdataF[beam_nb][0][txdataF_offset], gNB->TX_AMP, ssb_start_symbol, cfg, fp
+#ifdef FLT16_MAX
+		  ,gNB->use_fp16
+#endif
+		  );
+  nr_generate_sss(&txdataF[beam_nb][0][txdataF_offset], gNB->TX_AMP, ssb_start_symbol, cfg, fp
+#ifdef FLT16_MAX
+		  ,gNB->use_fp16
+#endif
+		  );
 
   uint16_t slots_per_hf = (fp->slots_per_frame) >> 1;
   int n_hf = slot < slots_per_hf ? 0 : 1;
@@ -327,7 +335,11 @@ void phy_procedures_gNB_TX(processingData_L1tx_t *msgTx,
                              slot,
                              fp->N_RB_DL,
                              0,
-                             fp->Ncp == EXTENDED ? 12 : 14);
+                             fp->Ncp == EXTENDED ? 12 : 14
+#ifdef FLT16_MAX
+			     ,gNB->use_fp16,gNB->TX_AMP
+#endif
+			     );
       }
       T(T_GNB_PHY_DL_OUTPUT_SIGNAL,
         T_INT(0),

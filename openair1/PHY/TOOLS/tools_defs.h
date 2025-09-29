@@ -1009,6 +1009,65 @@ void InitSinLUT(void);
 // ret.i == sinus << 14
 c16_t get_sin_cos(double phase);
 
+#ifdef FLT16_MAX
+// Interleaved input: [re0, im0, re1, im1, ...] as _Float16 (assumed to be -1...1
+// Interleaved output: c16_t Q15 with truncation rounding
+static inline void fp16_to_q15(const cf16_t *in_ri,
+                               c16_t *out_q15,
+                               int n_complex,
+		   	       int16_t amp)
+{
+   const int N = n_complex * 2;
+   int i = 0;
+   int16_t *out_q15_2 = (int16_t *)out_q15;
+#if defined(__AVX512FP16__) && defined(__AVX512BW__)
+   const _Float16 *in=(_Float16 *)in_ri;
+   const int N = n_complex * 2;
+   const __m512h k = _mm512_set1_ph((_Float16)amp);     // FP16 scale
+   for (; i + 32 <= N; i += 32) {                  // 32 halves per iter
+      __m512h h  = _mm512_loadu_ph(in + i);    // unaligned ok
+      __m512h hs = _mm512_mul_ph(h, k);           // scale
+      __m512i q  = _mm512_cvtph_epi16(hs);        // trunc→i16, saturating
+      _mm512_storeu_si512((__m512i*)(out_q15_2 + i), q);
+   }
+#elif defined(__aarch64__)
+   const float16_t *in=(float16_t *)in_ri;
+   const float16x8_t k = vdupq_n_f16((float16_t)amp);
+   for (; i + 8 <= N; i += 8) {
+     float16x8_t h  = vld1q_f16((float16_t*)(in + i));     // 8 halves (4 complex)
+     float16x8_t hs = vmulq_f16(h, k);          // scale to Q15 domain
+     int16x8_t   q  = vcvtq_s16_f16(hs);        // truncate toward zero, saturate
+     vst1q_s16((int16_t*)(out_q15_2 + i), q);
+   }
+#endif
+   for (; i < N; ++i) {                           // tail
+     float f = (float)in[i] * amp;
+     int   x = (int) (f > 0 ? floorf(f) : ceilf(f));  // trunc toward zero
+     if (x >  32767) x =  32767;                      // saturate
+     if (x < -32768) x = -32768;
+     out_q15_2[i] = (int16_t)x;
+   }
+}
+static inline void rotate_cpx_vector_fp16(const cf16_t *const x, const cf16_t *const alpha, cf16_t *y, uint32_t N)
+{
+#if defined(__aarch64__)
+    const float16x8_t zeros=vdupq_n_f16(0.0f);
+    const uint32x4_t alpha16x8=vdupq_n_u32(*(uint32_t*)alpha);
+    for (uint32_t i = 0; i < N*2 ; i+=8) {
+       float16x8_t x16x8 = vld1q_f16((float16_t*)(x + i));	    
+       float16x8_t y16x8 = vcmlaq_f16(zeros,x16x8,*((float16x8_t*)&alpha16x8));
+       vst1q_f16((float16_t*)(y + i),y16x8);
+    }
+#elif defined(__AVX512FP16__) && defined(__AVX512BW__)
+    const __m512i alpha512=_mm512_set1_epi32(*(uint32_t*)alpha);
+    for (uint32_t i=0; i < N*2; i+=32) {
+       __m512h x512 = _mm512_loadu_ph(x + i);
+       __m512h y512 = _mm512_cmul_pch(x512,alpha512);
+       _mm512_storeu_ph((__mm512h*)(y + i),y512);
+    }
+#endif
+}
+#endif
 #ifdef __cplusplus
 }
 #endif

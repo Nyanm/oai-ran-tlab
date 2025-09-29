@@ -938,7 +938,11 @@ uint8_t nr_ue_pusch_common_procedures(PHY_VARS_NR_UE *UE,
     if (was_symbol_used[i] == false)
       continue;
     for (int ap = 0; ap < n_antenna_ports; ap++) {
-      apply_nr_rotation_TX(frame_parms, txdataF[ap], frame_parms->symbol_rotation[linktype], slot, N_RB, i, 1);
+      apply_nr_rotation_TX(frame_parms, txdataF[ap], frame_parms->symbol_rotation[linktype], slot, N_RB, i, 1
+#ifdef FLT16_MAX
+		      ,UE->use_fp16,520
+#endif
+		      );
     }
   }
 

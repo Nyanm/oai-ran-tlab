@@ -354,7 +354,11 @@ void nr_phy_config_request_sim(PHY_VARS_gNB *gNB,
   nr_init_frame_parms(gNB_config, fp);
 
   fp->ofdm_offset_divisor = UINT_MAX;
-  init_symbol_rotation(fp);
+  init_symbol_rotation(fp
+#ifdef FLT16_MAX
+		  ,gNB->use_fp16
+#endif
+		  );
   init_timeshift_rotation(fp);
 
   gNB->configured = 1;
@@ -407,7 +411,11 @@ void nr_phy_config_request(NR_PHY_Config_t *phy_config)
   RC.gNB[Mod_id]->configured     = 1;
 
   fp->ofdm_offset_divisor = RC.gNB[Mod_id]->ofdm_offset_divisor;
-  init_symbol_rotation(fp);
+  init_symbol_rotation(fp
+#ifdef FLT16_MAX
+		  ,RC.gNB[Mod_id]->use_fp16
+#endif
+		  );
   init_timeshift_rotation(fp);
 }
 

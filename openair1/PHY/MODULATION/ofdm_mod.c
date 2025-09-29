@@ -292,7 +292,11 @@ void apply_nr_rotation_TX(const NR_DL_FRAME_PARMS *fp,
                           int slot,
                           int nb_rb,
                           int first_symbol,
-                          int nsymb)
+                          int nsymb
+#ifdef FLT16_MAX
+			  ,int use_fp16,int tx_amp
+#endif
+			  )
 {
   int symb_offset = (slot % fp->slots_per_subframe) * fp->symbols_per_slot;
 
@@ -310,19 +314,54 @@ void apply_nr_rotation_TX(const NR_DL_FRAME_PARMS *fp,
       this_rotation->i);
 
     if (nb_rb & 1) {
-      rotate_cpx_vector(this_symbol, this_rotation, this_symbol,
-                        (nb_rb + 1) * 6, 15);
-      rotate_cpx_vector(this_symbol + fp->first_carrier_offset - 6,
-                        this_rotation,
-                        this_symbol + fp->first_carrier_offset - 6,
-                        (nb_rb + 1) * 6, 15);
+#ifdef FLT16_MAX
+      if (use_fp16) {
+        rotate_cpx_vector_fp16((cf16_t*)this_symbol, (cf16_t*)this_rotation, (cf16_t*)this_symbol,
+                          (nb_rb + 1) * 6);
+	fp16_to_q15((cf16_t*)this_symbol,this_symbol,(nb_rb + 1) * 6,tx_amp);
+        rotate_cpx_vector_fp16((cf16_t*)this_symbol + fp->first_carrier_offset - 6,
+                          (cf16_t*)this_rotation,
+                          (cf16_t*)this_symbol + fp->first_carrier_offset - 6,
+                          (nb_rb + 1) * 6);
+	fp16_to_q15((cf16_t*)this_symbol + fp->first_carrier_offset - 6,
+	            this_symbol + fp->first_carrier_offset - 6,
+		    (nb_rb + 1) * 6,tx_amp);
+      }
+      else
+#endif
+      {	      
+        rotate_cpx_vector(this_symbol, this_rotation, this_symbol,
+                          (nb_rb + 1) * 6, 15);
+        rotate_cpx_vector(this_symbol + fp->first_carrier_offset - 6,
+                          this_rotation,
+                          this_symbol + fp->first_carrier_offset - 6,
+                          (nb_rb + 1) * 6, 15);
+      }
     } else {
-      rotate_cpx_vector(this_symbol, this_rotation, this_symbol,
-                        nb_rb * 6, 15);
-      rotate_cpx_vector(this_symbol + fp->first_carrier_offset,
-                        this_rotation,
-                        this_symbol + fp->first_carrier_offset,
-                        nb_rb * 6, 15);
+#ifdef FLT16_MAX
+      if (use_fp16) {
+        rotate_cpx_vector_fp16((cf16_t*)this_symbol, (cf16_t*)this_rotation, (cf16_t*)this_symbol,
+                          nb_rb * 6);
+	fp16_to_q15((cf16_t*)this_symbol,this_symbol,nb_rb  * 6,tx_amp);
+        rotate_cpx_vector_fp16((cf16_t*)this_symbol + fp->first_carrier_offset,
+                          (cf16_t*)this_rotation,
+                          (cf16_t*)this_symbol + fp->first_carrier_offset,
+                          nb_rb * 6);
+	fp16_to_q15((cf16_t*)this_symbol + fp->first_carrier_offset,
+		    this_symbol + fp->first_carrier_offset,
+		    nb_rb  * 6,
+		    tx_amp);
+      }
+      else
+#endif
+      {
+        rotate_cpx_vector(this_symbol, this_rotation, this_symbol,
+                          nb_rb * 6, 15);
+        rotate_cpx_vector(this_symbol + fp->first_carrier_offset,
+                          this_rotation,
+                          this_symbol + fp->first_carrier_offset,
+                          nb_rb * 6, 15);
+      }
     }
   }
 }
