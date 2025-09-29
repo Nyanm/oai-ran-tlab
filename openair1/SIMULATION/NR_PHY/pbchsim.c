@@ -533,6 +533,7 @@ int main(int argc, char **argv)
   processingData_L1tx_t msgDataTx;
   // generate signal
   const uint32_t rxdataF_sz = UE->frame_parms.samples_per_slot_wCP;
+  const int symb_buff_sz = ALNARS_64_16(frame_parms->N_RB_DL * NR_NB_SC_PER_RB);
   __attribute__ ((aligned(32))) c16_t rxdataF[UE->frame_parms.nb_antennas_rx][rxdataF_sz];
   if (input_fd==NULL) {
 
@@ -549,9 +550,8 @@ int main(int argc, char **argv)
         start_symbol = nr_get_ssb_start_symbol(frame_parms,i);
         int slot = start_symbol/14;
 
-        const int symb_buff_sz = ALNARS_64_16(frame_parms->N_RB_DL * NR_NB_SC_PER_RB);
         for (aa=0; aa<gNB->frame_parms.nb_antennas_tx; aa++)
-          memset(gNB->common_vars.txdataF[0][aa], 0, symb_buff_sz * NR_SYMBOLS_PER_SLOT * sizeof(int32_t));
+          memset(gNB->common_vars.tx_grid_info[aa].dataF, 0, symb_buff_sz * NR_SYMBOLS_PER_SLOT * sizeof(int32_t));
 
         nr_common_signal_procedures (gNB,frame,slot,msgDataTx.ssb[i].ssb_pdu);
 
@@ -561,7 +561,7 @@ int main(int argc, char **argv)
           memset(fft_in_buff, 0, sizeof(fft_in_buff));
           if (cyclic_prefix_type == 1) {
             apply_nr_rotation_TX(frame_parms,
-                                 gNB->common_vars.txdataF[0][aa],
+                                 gNB->common_vars.tx_grid_info[aa].dataF,
                                  true,
                                  frame_parms->symbol_rotation[0],
                                  slot,
@@ -570,7 +570,7 @@ int main(int argc, char **argv)
                                  12,
                                  symb_buff_sz);
 
-            fft_shift(gNB->common_vars.txdataF[0][aa],
+            fft_shift(gNB->common_vars.tx_grid_info[aa].dataF,
                       symb_buff_sz,
                       frame_parms->N_RB_DL,
                       fft_in_buff,
@@ -586,7 +586,7 @@ int main(int argc, char **argv)
                          CYCLIC_PREFIX);
           } else {
             apply_nr_rotation_TX(frame_parms,
-                                 gNB->common_vars.txdataF[0][aa],
+                                 gNB->common_vars.tx_grid_info[aa].dataF,
                                  true,
                                  frame_parms->symbol_rotation[0],
                                  slot,
@@ -595,7 +595,7 @@ int main(int argc, char **argv)
                                  14,
                                  symb_buff_sz);
 
-            fft_shift(gNB->common_vars.txdataF[0][aa],
+            fft_shift(gNB->common_vars.tx_grid_info[aa].dataF,
                       symb_buff_sz,
                       frame_parms->N_RB_DL,
                       fft_in_buff,
@@ -620,9 +620,9 @@ int main(int argc, char **argv)
         }
       }
     }
-    LOG_M("txsigF0.m","txsF0", gNB->common_vars.txdataF[0][0],frame_length_complex_samples_no_prefix, 1, 1);
+    LOG_M("txsigF0.m", "txsF0", gNB->common_vars.tx_grid_info[0].dataF, symb_buff_sz * NR_SYMBOLS_PER_SLOT, 1, 1);
     if (gNB->frame_parms.nb_antennas_tx>1)
-      LOG_M("txsigF1.m","txsF1", gNB->common_vars.txdataF[0][1],frame_length_complex_samples_no_prefix, 1, 1);
+      LOG_M("txsigF1.m", "txsF1", gNB->common_vars.tx_grid_info[1].dataF, symb_buff_sz * NR_SYMBOLS_PER_SLOT, 1, 1);
 
   } else {
     printf("Reading %d samples from file to antenna buffer %d\n",frame_length_complex_samples,0);

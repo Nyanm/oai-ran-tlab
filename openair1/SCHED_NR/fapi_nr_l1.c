@@ -37,6 +37,7 @@
 #include "nfapi/oai_integration/vendor_ext.h"
 #include "openair2/NR_PHY_INTERFACE/nr_sched_response.h"
 #include "nfapi/oai_integration/nfapi_vnf.h"
+#include "PHY/phy_digital_beamforming.h"
 
 void handle_nr_nfapi_ssb_pdu(processingData_L1tx_t *msgTx,int frame,int slot,
                              nfapi_nr_dl_tti_request_pdu_t *dl_tti_pdu)
@@ -94,7 +95,7 @@ void nr_schedule_dl_tti_req(PHY_VARS_gNB *gNB, nfapi_nr_dl_tti_request_t *DL_req
 
   for (int i = 0; i < number_dl_pdu; i++) {
     nfapi_nr_dl_tti_request_pdu_t *dl_tti_pdu = &DL_req->dl_tti_request_body.dl_tti_pdu_list[i];
-    LOG_D(NR_PHY, "NFAPI: dl_pdu %d : type %d\n", i, dl_tti_pdu->PDUType);
+    LOG_D(NR_PHY, "frame %d, slot %d, NFAPI: dl_pdu %d : type %d\n", frame, slot, i, dl_tti_pdu->PDUType);
     switch (dl_tti_pdu->PDUType) {
       case NFAPI_NR_DL_TTI_SSB_PDU_TYPE:
         handle_nr_nfapi_ssb_pdu(msgTx, frame, slot, dl_tti_pdu);
@@ -156,7 +157,7 @@ void nr_schedule_ul_tti_req(PHY_VARS_gNB *gNB, nfapi_nr_ul_tti_request_t *UL_tti
         nfapi_nr_prach_pdu_t *prach_pdu = &UL_tti_req->pdus_list[i].prach_pdu;
         int id = nr_fill_prach(gNB, UL_tti_req->SFN, UL_tti_req->Slot, prach_pdu);
         if (gNB->RU_list[0]->if_south == LOCAL_RF || gNB->RU_list[0]->if_south == REMOTE_IF5)
-          nr_fill_prach_ru(gNB->RU_list[0], UL_tti_req->SFN, UL_tti_req->Slot, prach_pdu, gNB->prach_vars.list[id].beam_nb);
+          nr_fill_prach_ru(gNB->RU_list[0], UL_tti_req->SFN, UL_tti_req->Slot, prach_pdu, gNB->prach_vars.list[id].beam_id);
         break;
       case NFAPI_NR_UL_CONFIG_SRS_PDU_TYPE:
         LOG_D(NR_PHY,
@@ -168,6 +169,9 @@ void nr_schedule_ul_tti_req(PHY_VARS_gNB *gNB, nfapi_nr_ul_tti_request_t *UL_tti
         nr_fill_srs(gNB, UL_tti_req->SFN, UL_tti_req->Slot, &UL_tti_req->pdus_list[i].srs_pdu);
         break;
     }
+    /* Store the UL scheduling info in RU to do beamforming when samples are received.
+       In case of a 7.2 radio, the stored info can be sent to O-RU after the current function returns. */
+    fill_rx_grid_info(gNB->RU_list[0], frame, slot, &UL_tti_req->pdus_list[i]);
   }
 }
 
@@ -211,7 +215,6 @@ void nr_schedule_response(NR_Sched_Rsp_t *Sched_INFO)
 
   int slot_type = nr_slot_select(cfg, frame, slot);
 
-  clear_slot_beamid(gNB, slot);  // reset beam_id information for the slot to be processed
   DevAssert(NFAPI_MODE == NFAPI_MONOLITHIC);
   bool is_dl = slot_type == NR_DOWNLINK_SLOT || slot_type == NR_MIXED_SLOT;
 

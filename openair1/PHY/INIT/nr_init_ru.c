@@ -26,6 +26,7 @@
 #include "assertions.h"
 #include <math.h>
 #include "openair1/PHY/defs_RU.h"
+#include "queue.h"
 
 void init_prach_ru_list(RU_t *ru);
 
@@ -35,26 +36,11 @@ void nr_phy_init_RU(RU_t *ru)
 
   LOG_D(PHY, "Initializing RU signal buffers (if_south %s) nb_tx %d, nb_rx %d\n", ru_if_types[ru->if_south], ru->nb_tx, ru->nb_rx);
 
-  nfapi_nr_config_request_scf_t *cfg = &ru->config;
-  ru->nb_log_antennas = 0;
-  for (int n = 0; n < ru->num_gNB; n++) {
-    if (cfg->carrier_config.num_tx_ant.value > ru->nb_log_antennas)
-      ru->nb_log_antennas = cfg->carrier_config.num_tx_ant.value;
-  }
-
   // copy configuration from gNB[0] in to RU, assume that all gNB instances sharing RU use the same configuration
   // (at least the parts that are needed by the RU, numerology and PRACH)
 
-  AssertFatal(ru->nb_log_antennas > 0 && ru->nb_log_antennas < 13, "ru->nb_log_antennas %d ! \n",ru->nb_log_antennas);
-
-  nfapi_nr_analog_beamforming_ve_t *analog_config = &cfg->analog_beamforming_ve;
-  ru->num_beams_period = analog_config->analog_bf_vendor_ext.value ? analog_config->num_beams_period_vendor_ext.value : 1;
-  int nb_tx_streams = ru->nb_tx * ru->num_beams_period;
-  int nb_rx_streams = ru->nb_rx * ru->num_beams_period;
-  LOG_I(NR_PHY, "nb_tx_streams %d, nb_rx_streams %d, num_Beams_period %d\n", nb_tx_streams, nb_rx_streams, ru->num_beams_period);
-  ru->common.beam_id = malloc16_clear(ru->num_beams_period * sizeof(int*));
-  for(int i = 0; i < ru->num_beams_period; i++)
-    ru->common.beam_id[i] = malloc16_clear(fp->symbols_per_slot * fp->slots_per_frame * sizeof(int));
+  int nb_tx_streams = ru->nb_tx;
+  int nb_rx_streams = ru->nb_rx;
 
   if (ru->if_south <= REMOTE_IF5) { // this means REMOTE_IF5 or LOCAL_RF, so allocate memory for time-domain signals 
     // Time-domain signals
@@ -113,6 +99,9 @@ void nr_phy_init_RU(RU_t *ru)
       LOG_D(PHY, "rxdataF[%d] %p for RU %d\n", i, ru->common.rxdataF[i], ru->idx);
     }
 
+    // Init rx grid slots list
+    SLIST_INIT(&ru->common.rx_grid);
+
     /* number of elements of an array X is computed as sizeof(X) / sizeof(X[0]) */
     //    AssertFatal(ru->nb_rx <= sizeof(ru->prach_rxsigF) / sizeof(ru->prach_rxsigF[0]),
     //		"nb_antennas_rx too large");
@@ -137,8 +126,8 @@ void nr_phy_init_RU(RU_t *ru)
 void nr_phy_free_RU(RU_t *ru)
 {
   LOG_D(PHY, "Freeing RU signal buffers (if_south %s) nb_tx %d\n", ru_if_types[ru->if_south], ru->nb_tx);
-  int nb_tx_streams = ru->nb_tx * ru->num_beams_period;
-  int nb_rx_streams = ru->nb_rx * ru->num_beams_period;
+  int nb_tx_streams = ru->nb_tx;
+  int nb_rx_streams = ru->nb_rx;
 
   if (ru->if_south <= REMOTE_IF5) { // this means REMOTE_IF5 or LOCAL_RF, so free memory for time-domain signals
     // Hack: undo what is done at allocation
@@ -178,9 +167,6 @@ void nr_phy_free_RU(RU_t *ru)
 	free_and_zero(ru->prach_rxsigF[j][i]);
       free_and_zero(ru->prach_rxsigF[j]);
     }
-    for(int i = 0; i < ru->num_beams_period; ++i)
-      free_and_zero(ru->common.beam_id[i]);
-    free_and_zero(ru->common.beam_id);
   }
 
   PHY_VARS_gNB *gNB0 = ru->gNB_list[0];

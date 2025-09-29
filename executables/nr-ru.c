@@ -67,6 +67,7 @@ static int DEFRUTPCORES[] = {-1,-1,-1,-1};
 #include "nfapi_interface.h"
 #include <nfapi/oai_integration/vendor_ext.h>
 #include "executables/nr-softmodem-common.h"
+#include "PHY/phy_digital_beamforming.h"
 
 static void NRRCconfig_RU(configmodule_interface_t *cfg);
 
@@ -570,7 +571,7 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
   AssertFatal(*slot < fp->slots_per_frame && *slot >= 0, "slot %d is illegal (%d)\n", *slot, fp->slots_per_frame);
 
   start_meas(&ru->rx_fhaul);
-  int nb = ru->nb_rx * ru->num_beams_period;
+  int nb = ru->nb_rx;
   void *rxp[nb];
   for (int i = 0; i < nb; i++)
     rxp[i] = (void *)&ru->common.rxdata[i][fp->get_samples_slot_timestamp(*slot, fp, 0)];
@@ -669,26 +670,31 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
   stop_meas(&ru->rx_fhaul);
 }
 
+static uint16_t prev_beam;
+
 static radio_tx_gpio_flag_t get_gpio_flags(RU_t *ru, int slot)
 {
   radio_tx_gpio_flag_t flags_gpio = 0;
-  NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
   openair0_config_t *cfg0 = &ru->openair0_cfg;
+
+  /* We should tell MAC about the limitation of analog beamforming so that MAC schedules them accordingly.
+    Here, we assume that MAC changes beams only in slot boundary and we don't have to check its correctness.*/
+
+  // For analog beam switching, we assume MAC sends one section per slot
+  uint16_t beam_id = ru->common.ru_tx_grid->grid_info[0].beam_id;
+  // And the MSB is set
+  AssertFatal(IS_BIT_SET(beam_id, 15), "RU based analog beam switching enabled but MAC beam id MSB not set\n");
+  beam_id &= 0x7fff;
 
   switch (cfg0->gpio_controller) {
     case RU_GPIO_CONTROL_GENERIC:
       // currently we switch beams at the beginning of a slot and we take the beam index of the first symbol of this slot
       // we only send the beam to the gpio if the beam is different from the previous slot
 
-      if (ru->common.beam_id) {
-        int prev_slot = (slot - 1 + fp->slots_per_frame) % fp->slots_per_frame;
-        const int *beam_ids = ru->common.beam_id[0];
-        int prev_beam = beam_ids[prev_slot * fp->symbols_per_slot];
-        int beam = beam_ids[slot * fp->symbols_per_slot];
-        if (prev_beam != beam) {
-          flags_gpio = beam | TX_GPIO_CHANGE; // enable change of gpio
-          LOG_I(HW, "slot %d, beam %d\n", slot, ru->common.beam_id[0][slot * fp->symbols_per_slot]);
-        }
+      if (prev_beam != beam_id) {
+        flags_gpio = beam_id | TX_GPIO_CHANGE; // enable change of gpio
+        LOG_I(HW, "slot %d, beam %d\n", slot, beam_id);
+        prev_beam = beam_id;
       }
       break;
 
@@ -696,7 +702,7 @@ static radio_tx_gpio_flag_t get_gpio_flags(RU_t *ru, int slot)
       // the beam index is written in bits 8-10 of the flags
       // bit 11 enables the gpio programming
       int beam = 0;
-      if ((slot % 10 == 0) && ru->common.beam_id && (ru->common.beam_id[0][slot * fp->symbols_per_slot] < 64)) {
+      if ((slot % 10 == 0) && beam_id < 64) {
         // beam = ru->common.beam_id[0][slot*fp->symbols_per_slot] | 64;
         beam = 1024; // hardcoded now for beam32 boresight
         // beam = 127; //for the sake of trying beam63
@@ -783,7 +789,7 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
   VCD_SIGNAL_DUMPER_DUMP_VARIABLE_BY_NAME(VCD_SIGNAL_DUMPER_VARIABLES_FRAME_NUMBER_TX0_RU, frame);
   VCD_SIGNAL_DUMPER_DUMP_VARIABLE_BY_NAME(VCD_SIGNAL_DUMPER_VARIABLES_TTI_NUMBER_TX0_RU, slot);
 
-  int nt = ru->nb_tx * ru->num_beams_period;
+  int nt = ru->nb_tx;
   void *txp[nt];
   for (int i = 0; i < nt; i++)
     txp[i] = (void *)&ru->common.txdata[i][fp->get_samples_slot_timestamp(slot, fp, 0)] - sf_extension * sizeof(int32_t);
@@ -841,13 +847,13 @@ static void fill_rf_config(RU_t *ru, char *rf_config_file)
 
   cfg->Mod_id = 0;
   cfg->num_rb_dl = N_RB;
-  cfg->tx_num_channels = ru->nb_tx * ru->num_beams_period;
-  cfg->rx_num_channels = ru->nb_rx * ru->num_beams_period;
-  cfg->num_distributed_ru = ru->num_beams_period;
+  cfg->tx_num_channels = ru->nb_tx;
+  cfg->rx_num_channels = ru->nb_rx;
+  cfg->num_distributed_ru = 1; // Need to verify this with Raymond
   LOG_I(PHY,"Setting RF config for N_RB %d, NB_RX %d, NB_TX %d\n",cfg->num_rb_dl,cfg->rx_num_channels,cfg->tx_num_channels);
   LOG_I(PHY,"tune_offset %.0f Hz, sample_rate %.0f Hz\n",cfg->tune_offset,cfg->sample_rate);
 
-  for (int i = 0; i < ru->nb_tx * ru->num_beams_period; i++) {
+  for (int i = 0; i < ru->nb_tx; i++) {
     if (ru->if_frequency == 0) {
       cfg->tx_freq[i] = fp->dl_CarrierFreq;
     } else if (ru->if_freq_offset) {
@@ -862,7 +868,7 @@ static void fill_rf_config(RU_t *ru, char *rf_config_file)
           i, cfg->tx_gain[i],cfg->tx_freq[i]);
   }
 
-  for (int i = 0; i < ru->nb_rx * ru->num_beams_period; i++) {
+  for (int i = 0; i < ru->nb_rx; i++) {
     if (ru->if_frequency == 0) {
       cfg->rx_freq[i] = fp->ul_CarrierFreq;
     } else if (ru->if_freq_offset) {
@@ -934,7 +940,7 @@ int setup_RU_buffers(RU_t *ru)
 
   if (ru->openair0_cfg.mmapped_dma == 1) {
     // replace RX signal buffers with mmaped HW versions
-    for (int i = 0; i < ru->nb_rx * ru->num_beams_period; i++) {
+    for (int i = 0; i < ru->nb_rx; i++) {
       int card = i / 4;
       int ant = i % 4;
       LOG_D(PHY, "Mapping RU id %u, rx_ant %d, on card %d, chain %d\n", ru->idx, i, ru->rf_map.card + card, ru->rf_map.chain + ant);
@@ -946,7 +952,7 @@ int setup_RU_buffers(RU_t *ru)
       }
     }
 
-    for (int i = 0; i < ru->nb_tx * ru->num_beams_period; i++) {
+    for (int i = 0; i < ru->nb_tx; i++) {
       int card = i / 4;
       int ant = i % 4;
       LOG_D(PHY, "Mapping RU id %u, tx_ant %d, on card %d, chain %d\n", ru->idx, i, ru->rf_map.card + card, ru->rf_map.chain + ant);
@@ -1223,8 +1229,14 @@ void *ru_thread(void *param)
 
           for (int prach_oc = 0; prach_oc < p->num_prach_ocas; prach_oc++) {
             int prachStartSymbol = p->prachStartSymbol + prach_oc * N_dur;
-            int beam_id = ru->prach_list[prach_id].beam ? ru->prach_list[prach_id].beam[prach_oc] : 0;
-            //comment FK: the standard 38.211 section 5.3.2 has one extra term +14*N_RA_slot. This is because there prachStartSymbol is given wrt to start of the 15kHz slot or 60kHz slot. Here we work slot based, so this function is anyway only called in slots where there is PRACH. Its up to the MAC to schedule another PRACH PDU in the case there are there N_RA_slot \in {0,1}.
+            // FAPI beam ID is LSB 15 bits
+            int beam_id = ru->prach_list[prach_id].beam_id[prach_oc];
+            AssertFatal(!IS_BIT_SET(beam_id, 15), "PRACH: LoPHY beamforming signaled for split 8 radio\n");
+            beam_id &= 0x7fff;
+            // comment FK: the standard 38.211 section 5.3.2 has one extra term +14*N_RA_slot. This is because there
+            // prachStartSymbol is given wrt to start of the 15kHz slot or 60kHz slot. Here we work slot based, so this function is
+            // anyway only called in slots where there is PRACH. Its up to the MAC to schedule another PRACH PDU in the case there
+            // are there N_RA_slot \in {0,1}.
             rx_nr_prach_ru(ru,
                            p->fmt, // could also use format
                            p->numRA,
@@ -1240,16 +1252,8 @@ void *ru_thread(void *param)
         } // end if (prach_id >= 0)
       } // end if (ru->feprx)
 
-      // Copy this slot rxdataF to gNB buffer. Will be replaced with RX beamforming in later commit.
-      for (int beam = 0; beam < ru->num_beams_period; beam++) {
-        for (int ant = 0; ant < ru->nb_rx; ant++) {
-          int idx = ant + beam * ru->nb_rx;
-          const int soffset = (proc->tti_rx % RU_RX_SLOT_DEPTH) * fp->symbols_per_slot * fp->ofdm_symbol_size;
-          memcpy(gNB->common_vars.rxdataF[beam][ant] + soffset,
-                 ru->common.rxdataF[idx] + soffset,
-                 fp->samples_per_slot_wCP * sizeof(c16_t));
-        }
-      }
+      /* Apply beamforming if MAC has signaled BF in L1. Applicable for split 8 and 7.2 radios. */
+      apply_rx_beamforming(ru, proc->frame_rx, proc->tti_rx);
 
     } // end if (slot_type == NR_UPLINK_SLOT || slot_type == NR_MIXED_SLOT) {
 
@@ -1503,7 +1507,7 @@ void set_function_spec_param(RU_t *ru)
         ru->do_prach             = 0;                       // no prach processing in RU
         ru->feprx                = nr_fep_tp;     // this is frequency-shift + DFTs
         ru->feptx_ofdm           = nr_feptx_tp;             // this is fep with idft and precoding
-        ru->feptx_prec           = NULL;                    
+        ru->feptx_prec           = nr_feptx_prec;
         ru->fh_north_in          = NULL;                    // no incoming fronthaul from north
         ru->fh_north_out         = NULL;                    // no outgoing fronthaul to north
         ru->nr_start_if          = NULL;                    // no if interface
@@ -1520,8 +1524,8 @@ void set_function_spec_param(RU_t *ru)
       ru->do_prach               = 0;
       ru->txfh_in_fep            = 0;
       ru->feprx                  = nr_fep_tp;     // this is frequency-shift + DFTs
-      ru->feptx_prec             = NULL;          // need to do transmit Precoding + IDFTs
-      ru->feptx_ofdm             = nr_feptx_tp; // need to do transmit Precoding + IDFTs
+      ru->feptx_prec             = nr_feptx_prec; // transmit precoding
+      ru->feptx_ofdm             = nr_feptx_tp; // IDFTs
       ru->fh_south_in            = fh_if5_south_in;     // synchronous IF5 reception
       ru->fh_south_out           = (ru->txfh_in_fep>0) ? NULL : fh_if5_south_out;    // synchronous IF5 transmission
       ru->fh_south_asynch_in     = NULL;                // no asynchronous UL

@@ -202,6 +202,18 @@ int get_cdm_group_size(int cdm_type)
   return gs;
 }
 
+uint32_t get_csi_rs_port_map(const csi_mapping_parms_t *mapping_parms, const uint8_t cdm_type)
+{
+  uint32_t port_map = 0;
+  const uint8_t gs = get_cdm_group_size(cdm_type);
+  for (int ji = 0; ji < mapping_parms->size; ji++) { // loop over CDM groups
+    for (int s = 0 ; s < gs; s++)  { // loop over each CDM group size
+      port_map |= (1 << (s + mapping_parms->j[ji] * gs));
+    }
+  }
+  return port_map;
+}
+
 csi_mapping_parms_t get_csi_mapping_parms(int row, int b, int l0, int l1)
 {
   AssertFatal(b != 0, "Invalid CSI frequency domain mapping: no bit selected in bitmap\n");

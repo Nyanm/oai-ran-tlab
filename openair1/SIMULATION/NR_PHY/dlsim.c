@@ -1121,17 +1121,9 @@ int main(int argc, char **argv)
         const int symb_buff_size = ALNARS_64_16(frame_parms->N_RB_DL * NR_NB_SC_PER_RB);
         const int slot_buff_size = symb_buff_size * NR_NUMBER_OF_SYMBOLS_PER_SLOT;
         if (n_trials == 1) {
-          LOG_M("txsigF0.m","txsF0=",
-                gNB->common_vars.txdataF[0][0],
-                slot_buff_size,
-                1,
-                1);
+          LOG_M("txsigF0.m", "txsF0=", gNB->common_vars.tx_grid_info[0].dataF, slot_buff_size, 1, 1);
           if (gNB->frame_parms.nb_antennas_tx>1)
-            LOG_M("txsigF1.m","txsF1=",
-                  gNB->common_vars.txdataF[0][1],
-                  slot_buff_size,
-                  1,
-                  1);
+            LOG_M("txsigF1.m", "txsF1=", gNB->common_vars.tx_grid_info[1].dataF, slot_buff_size, 1, 1);
         }
 
         //TODO: loop over slots
@@ -1139,7 +1131,7 @@ int main(int argc, char **argv)
           c16_t fft_in_buff[frame_parms->ofdm_symbol_size * frame_parms->symbols_per_slot] __attribute__((aligned(64)));
           memset(fft_in_buff, 0, sizeof(fft_in_buff));
           if (cyclic_prefix_type == 1) {
-            fft_shift(gNB->common_vars.txdataF[0][aa],
+            fft_shift(gNB->common_vars.tx_grid_info[aa].dataF,
                       symb_buff_size,
                       frame_parms->N_RB_DL,
                       fft_in_buff,
@@ -1157,7 +1149,7 @@ int main(int argc, char **argv)
             for (int i = 0; i < 14; i++) {
               was_symbol_used[i] = true;
             }
-            fft_shift(gNB->common_vars.txdataF[0][aa],
+            fft_shift(gNB->common_vars.tx_grid_info[aa].dataF,
                       symb_buff_size,
                       frame_parms->N_RB_DL,
                       fft_in_buff,

@@ -19,45 +19,16 @@
  *      contact@openairinterface.org
  */
 
-#ifndef _ORAN_ISOLATE_H_
-#define _ORAN_ISOLATE_H_
+#ifndef __PHY_DIGITAL_BEAMFORMING__H__
+#define __PHY_DIGITAL_BEAMFORMING__H__
 
-#include <stdio.h>
+#include "defs_RU.h"
 
-#include <pthread.h>
-#include <stdint.h>
+void fill_rx_grid_info(RU_t *ru, const uint32_t frame, const uint32_t slot, const nfapi_nr_ul_tti_request_number_of_pdus_t *ul_pdu);
+struct grid_slot_entry *get_grid_slot(struct grid_slots_head *head, const uint32_t frame, const uint32_t slot);
+void remove_grid_slot(struct grid_slots_head *head, const uint32_t frame, const uint32_t slot);
+void apply_rx_beamforming(RU_t *ru, const uint32_t frame, const uint32_t slot);
+void apply_tx_beamforming(RU_t *ru, const uint32_t frame, const uint32_t slot);
+void process_rx_grid_info_bf(RU_t *ru, const uint32_t frame, const uint32_t slot);
 
-#include "xran_fh_o_du.h"
-
-#include "openair1/PHY/defs_RU.h"
-
-/*
- * Structure added to bear the information needed from OAI RU
- */
-typedef struct ru_info_s {
-  // Needed for UL
-  int nb_rx;
-  int32_t **rxdataF;
-
-  // Needed for DL
-  int nb_tx;
-  int32_t **txdataF_BF;
-
-  // Needed for Prach
-  int16_t **prach_buf;
-  // Info to section CP packets
-  struct nr_grid *tx_grid;
-  struct nr_grid *rx_grid;
-
-} ru_info_t;
-
-/** @brief Reads RX data (PRACH/PUSCH) of next slot.
- *
- * @param ru pointer to structure keeping pointers to OAI data.
- * @param frame output of the frame which has been read.
- * @param slot output of the slot which has been read. */
-int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot);
-/** @brief Writes TX data (PDSCH) of given slot. */
-int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp);
-
-#endif /* _ORAN_ISOLATE_H_ */
+#endif

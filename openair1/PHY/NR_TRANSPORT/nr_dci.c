@@ -78,15 +78,7 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
     uint32_t cset_start_symb = pdcch_pdu_rel15->StartSymbolIndex;
     uint32_t cset_nsymb = pdcch_pdu_rel15->DurationSymbols;
     int dci_idx = 0;
-    // multi-beam number (for concurrent beams)
-    int bitmap = SL_to_bitmap(cset_start_symb, pdcch_pdu_rel15->DurationSymbols);
-    int beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                        dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                        &gNB->gNB_config.analog_beamforming_ve,
-                                        &gNB->common_vars,
-                                        slot,
-                                        frame_parms->symbols_per_slot,
-                                        bitmap);
+    uint16_t beam_id = dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
 
     LOG_D(NR_PHY_DCI, "pdcch: Coreset rb_offset %d, nb_rb %d BWP Start %d\n", rb_offset, n_rb, pdcch_pdu_rel15->BWPStart);
     LOG_D(NR_PHY_DCI,
@@ -175,10 +167,20 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
 
     /// Resource mapping
     uint16_t amp = gNB->TX_AMP;
-    const int symb_buf_sz = ALNARS_64_16(frame_parms->N_RB_DL * NR_NB_SC_PER_RB);
-    c16_t *txdataF = gNB->common_vars.txdataF[beam_nb][0];
-
     int num_regs = dci_pdu->AggregationLevel * NR_NB_REG_PER_CCE / pdcch_pdu_rel15->DurationSymbols;
+    const int symb_buf_sz = ALNARS_64_16(frame_parms->N_RB_DL * NR_NB_SC_PER_RB);
+
+    // Update grid info. Create new section for each DCI. We assume REGs are contiguous and not interleaved
+    const int port = 0; // No precoding. Send all DCI via port 0
+    c16_t *txdataF = gNB->common_vars.tx_grid_info[port].dataF;
+    update_grid_info(gNB->common_vars.tx_grid_info,
+                     port,
+                     beam_id,
+                     pdcch_pdu_rel15->BWPStart + rb_offset + reg_list[d][0],
+                     reg_list[d][num_regs - 1] - reg_list[d][0],
+                     cset_start_symb,
+                     pdcch_pdu_rel15->DurationSymbols);
+
     /*Mapping the encoded DCI along with the DMRS */
     for(int symbol_idx = 0; symbol_idx < pdcch_pdu_rel15->DurationSymbols; symbol_idx++) {
       // allocating rbs per symbol

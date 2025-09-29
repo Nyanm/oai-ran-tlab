@@ -435,7 +435,7 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
   return txl - txl_start;
 }
 
-static inline void do_txdataF(c16_t **txdataF,
+static inline void do_txdataF(struct nr_grid *tx_grid,
                               int symbol_sz,
                               c16_t txdataF_precoding[][symbol_sz],
                               PHY_VARS_gNB *gNB,
@@ -460,11 +460,11 @@ static inline void do_txdataF(c16_t **txdataF,
 
     if (pmi == 0) { // unitary Precoding
       if (ant < rel15->nrOfLayers)
-        memcpy(&txdataF[ant][txdataF_offset_per_symbol + subCarrier],
+        memcpy(&tx_grid[ant].dataF[txdataF_offset_per_symbol + subCarrier],
                &txdataF_precoding[ant][subCarrier],
-               re_cnt * sizeof(**txdataF));
+               re_cnt * sizeof(c16_t));
       else
-        memset(&txdataF[ant][txdataF_offset_per_symbol + subCarrier], 0, re_cnt * sizeof(**txdataF));
+        memset(&tx_grid[ant].dataF[txdataF_offset_per_symbol + subCarrier], 0, re_cnt * sizeof(c16_t));
       subCarrier += re_cnt;
     } else { // non-unitary Precoding
       AssertFatal(frame_parms->nb_antennas_tx > 1, "No precoding can be done with a single antenna port\n");
@@ -486,7 +486,7 @@ static inline void do_txdataF(c16_t **txdataF,
                              pmi_pdu,
                              subCarrier,
                              re_cnt,
-                             &txdataF[ant][txdataF_offset_per_symbol]);
+                             &tx_grid[ant].dataF[txdataF_offset_per_symbol]);
       subCarrier += re_cnt;
     } // else { // non-unitary Precoding
 
@@ -621,18 +621,6 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   // The Precoding matrix:
   // The Codebook Type I
   start_meas(&gNB->dlsch_precoding_stats);
-  nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
-  // beam number in multi-beam scenario (concurrent beams)
-  int bitmap = SL_to_bitmap(rel15->StartSymbolIndex, rel15->NrOfSymbols);
-  int beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                      pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                      &gNB->gNB_config.analog_beamforming_ve,
-                                      &gNB->common_vars,
-                                      slot,
-                                      frame_parms->symbols_per_slot,
-                                      bitmap);
-
-  c16_t **txdataF = gNB->common_vars.txdataF[beam_nb];
 
   // Loop Over OFDM symbols:
   for (int l_symbol = rel15->StartSymbolIndex; l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols; l_symbol++) {
@@ -705,8 +693,24 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 
     for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
       const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz;
-      do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, ant, start_sc, txdataF_offset_per_symbol);
+      do_txdataF(gNB->common_vars.tx_grid_info, symbol_sz, txdataF_precoding, gNB, rel15, ant, start_sc, txdataF_offset_per_symbol);
     }
+  }
+  
+  // Update grid info
+  for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
+    nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
+    // Assume all PRGs have same PMI
+    const int pmi = (pb->prg_size > 0) ? (pb->prgs_list[0].pm_idx) : 0;
+    int beam_id = pb->prgs_list[0].dig_bf_interface_list[0].beam_idx;
+    if (((pmi == 0) && (ant < rel15->nrOfLayers)) || (pmi != 0))
+      update_grid_info(gNB->common_vars.tx_grid_info,
+                       ant,
+                       beam_id,
+                       rel15->BWPStart + rel15->rbStart,
+                       rel15->rbSize,
+                       rel15->StartSymbolIndex,
+                       rel15->NrOfSymbols);
   }
 
   stop_meas(&gNB->dlsch_precoding_stats);
