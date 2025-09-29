@@ -33,7 +33,6 @@ typedef struct ru_info_s {
   // Info to section CP packets
   struct nr_grid *tx_grid;
   struct nr_grid *rx_grid;
-
 } ru_info_t;
 
 /** @brief Reads RX data (PRACH/PUSCH) of next slot.
@@ -44,5 +43,7 @@ typedef struct ru_info_s {
 int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot);
 /** @brief Writes TX data (PDSCH) of given slot. */
 int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp);
+/** @brief Writes RX slot configuration into xran buffer. */
+int xran_fh_rx_send_slot_cfg(ru_info_t *ru, int frame, int slot);
 
 #endif /* _ORAN_ISOLATE_H_ */
