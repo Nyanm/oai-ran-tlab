@@ -2,7 +2,7 @@
   <tr style="border-collapse: collapse; border: none;">
     <td style="border-collapse: collapse; border: none;">
       <a href="http://www.openairinterface.org/">
-         <img src="./images/oai_final_logo.png" alt="" border=3 height=50 width=150>
+         <img src="../images/oai_final_logo.png" alt="" border=3 height=50 width=150>
          </img>
       </a>
     </td>
@@ -17,7 +17,7 @@
 [[_TOC_]]
 
 This documentation describes the integration of LDPC coding for lookaside acceleration using O-RAN AAL/DPDK BBDEV in OAI, along with its usage.
-For details on the implementation, please consult the [developer notes](../openair1/PHY/CODING/nrLDPC_coding/nrLDPC_coding_aal/README.md).
+For details on the implementation, please consult the [developer notes](../../openair1/PHY/CODING/nrLDPC_coding/nrLDPC_coding_aal/README.md).
 
 ## Requirements
 
@@ -59,7 +59,7 @@ The following DPDK versions are supported:
 > - If you are using the Intel ACC100, you will need to [patch](https://github.com/DPDK/dpdk/commit/fdde63a1dfc129d0a510a831aa98253b36a2a1cd) the ACC100's driver if you are using DPDK22.11 or DPDK23.11. 
 
 
-Refer to the guide [here](./ORAN_FHI7.2_Tutorial.md?ref_type=heads#dpdk-data-plane-development-kit) to install, and then validate your DPDK installation.
+Refer to the guide [here](ORAN_FHI7.2_Tutorial.md?ref_type=heads#dpdk-data-plane-development-kit) to install, and then validate your DPDK installation.
 
 <details open> 
 <summary> Notes on DPDK patching/installation for Xilinx T2. </summary>

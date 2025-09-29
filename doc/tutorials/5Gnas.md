@@ -35,28 +35,28 @@ The following tables lists implemented NAS messages and whether there is an enco
 
 ### Code Structure
 
-[openair3/NAS/NR_UE/nr_nas_msg.c](../openair3/NAS/NR_UE/nr_nas_msg.c):
+[openair3/NAS/NR_UE/nr_nas_msg.c](../../openair3/NAS/NR_UE/nr_nas_msg.c):
 * NAS procedures and message handlers/callbacks
 * Integration with RRC (ITTI) and SDAP
 * Invokes enc/dec libraries
 * Handles 5GMM state and mode
 
-[openair3/NAS/NR_UE/5GS/fgs_nas_lib.c](../openair3/NAS/NR_UE/5GS/fgs_nas_lib.c):
-[openair3/NAS/NR_UE/5GS/NR_NAS_defs.h](../openair3/NAS/NR_UE/5GS/NR_NAS_defs.h):
+[openair3/NAS/NR_UE/5GS/fgs_nas_lib.c](../../openair3/NAS/NR_UE/5GS/fgs_nas_lib.c):
+[openair3/NAS/NR_UE/5GS/NR_NAS_defs.h](../../openair3/NAS/NR_UE/5GS/NR_NAS_defs.h):
 * encoding and decoding functions for 5G NAS message headers and payloads
 * relies on 5GMM/5GSM messages libs for payload encoding
 
-[openair3/NAS/NR_UE/5GS/fgs_nas_utils.h](../openair3/NAS/NR_UE/5GS/fgs_nas_utils.h):
+[openair3/NAS/NR_UE/5GS/fgs_nas_utils.h](../../openair3/NAS/NR_UE/5GS/fgs_nas_utils.h):
 * NAS helpers, macros
 
-[openair3/NAS/NR_UE/5GS/5GMM](../openair3/NAS/NR_UE/5GS/5GMM):
+[openair3/NAS/NR_UE/5GS/5GMM](../../openair3/NAS/NR_UE/5GS/5GMM):
 * encoding/decoding functions and definitions for 5GMM NAS messages payloads
 
-[openair3/NAS/NR_UE/5GS/5GMM/MSG/fgmm_lib.c](../openair3/NAS/NR_UE/5GS/5GMM/MSG/fgmm_lib.c):
-[openair3/NAS/NR_UE/5GS/5GMM/MSG/fgmm_lib.h](../openair3/NAS/NR_UE/5GS/5GMM/MSG/fgmm_lib.h):
+[openair3/NAS/NR_UE/5GS/5GMM/MSG/fgmm_lib.c](../../openair3/NAS/NR_UE/5GS/5GMM/MSG/fgmm_lib.c):
+[openair3/NAS/NR_UE/5GS/5GMM/MSG/fgmm_lib.h](../../openair3/NAS/NR_UE/5GS/5GMM/MSG/fgmm_lib.h):
 * encoding/decoding functions and definitions for common 5GMM IEs
 
-[openair3/NAS/NR_UE/5GS/5GSM](../openair3/NAS/NR_UE/5GS/5GSM):
+[openair3/NAS/NR_UE/5GS/5GSM](../../openair3/NAS/NR_UE/5GS/5GSM):
 * encoding and decoding functions for 5GSM NAS messages payloads
 
 ## USIM Simulation

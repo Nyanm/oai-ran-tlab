@@ -2,7 +2,7 @@
   <tr style="border-collapse: collapse; border: none;">
     <td style="border-collapse: collapse; border: none;">
       <a href="http://www.openairinterface.org/">
-         <img src="./images/oai_final_logo.png" alt="" border=3 height=50 width=150>
+         <img src="../images/oai_final_logo.png" alt="" border=3 height=50 width=150>
          </img>
       </a>
     </td>
@@ -587,7 +587,7 @@ dl_tuning_special_slot=0x13b6
 
 #### LITEON
 
-The OAI configuration file [`gnb.sa.band78.273prb.fhi72.4x4-liteon.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-liteon.conf) corresponds to:
+The OAI configuration file [`gnb.sa.band78.273prb.fhi72.4x4-liteon.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-liteon.conf) corresponds to:
 - TDD pattern `DDDSU`, 2.5ms
 - Bandwidth 100MHz
 - MTU 1500
@@ -627,7 +627,7 @@ jumboframe 1 # enable jumbo frame
 
 **Version 3.x**
 
-The OAI configuration file [`gnb.sa.band77.273prb.fhi72.4x4-vvdn.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band77.273prb.fhi72.4x4-vvdn.conf) corresponds to:
+The OAI configuration file [`gnb.sa.band77.273prb.fhi72.4x4-vvdn.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band77.273prb.fhi72.4x4-vvdn.conf) corresponds to:
 - TDD pattern `DDDSU`, 2.5ms
 - Bandwidth 100MHz
 - MTU 9600
@@ -680,7 +680,7 @@ sysrepocfg --edit=vi -d running
 
 **Version 2.0.6**
 
-The OAI configuration file [`gnb.sa.band78.273prb.fhi72.4x4-metanoia.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-metanoia.conf) corresponds to:
+The OAI configuration file [`gnb.sa.band78.273prb.fhi72.4x4-metanoia.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-metanoia.conf) corresponds to:
 - TDD pattern `DDDSU`, 2.5ms (`DDDDDDDSUU`, 5ms, also supported)
 - Bandwidth 100MHz
 - 4TX4R
@@ -701,7 +701,7 @@ At this stage, RU must be rebooted so the changes apply.
 
 **Version v3.1.15q.551_rc10**
 
-The OAI configuration file [`gnb.sa.band78.273prb.fhi72.4X4-foxconn.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4X4-foxconn.conf) corresponds to:
+The OAI configuration file [`gnb.sa.band78.273prb.fhi72.4X4-foxconn.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4X4-foxconn.conf) corresponds to:
 - TDD pattern `DDDSU`, 2.5ms
 - Bandwidth 100MHz
 - MTU 9600
@@ -939,18 +939,18 @@ sudo /usr/local/bin/dpdk-devbind.py --bind $DRIVER $C_PLANE_PCI_BUS_ADD
 
 Sample configuration files for OAI gNB, specific to the manufacturer of the radio unit, are available at:
 1. LITEON RU:
-[`gnb.sa.band78.273prb.fhi72.4x4-liteon.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-liteon.conf)
+[`gnb.sa.band78.273prb.fhi72.4x4-liteon.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-liteon.conf)
 2. VVDN RU:
-[`gnb.sa.band77.273prb.fhi72.4x4-vvdn.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band77.273prb.fhi72.4x4-vvdn.conf)
-[`gnb.sa.band77.106prb.fhi72.4x4-vvdn.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band77.106prb.fhi72.4x4-vvdn.conf)
-[`gnb.sa.band77.273prb.fhi72.2x2-vvdn.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band77.273prb.fhi72.2x2-vvdn.conf)
+[`gnb.sa.band77.273prb.fhi72.4x4-vvdn.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band77.273prb.fhi72.4x4-vvdn.conf)
+[`gnb.sa.band77.106prb.fhi72.4x4-vvdn.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band77.106prb.fhi72.4x4-vvdn.conf)
+[`gnb.sa.band77.273prb.fhi72.2x2-vvdn.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band77.273prb.fhi72.2x2-vvdn.conf)
 3. Benetel 650 RU:
-[`gnb-du.sa.band77.273prb.fhi72.4x4-benetel650.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.4x4-benetel650.conf)
+[`gnb-du.sa.band77.273prb.fhi72.4x4-benetel650.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.4x4-benetel650.conf)
 4. Benetel 550 RU:
-[`gnb.sa.band78.273prb.fhi72.4x4-benetel550.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-benetel550.conf)
-[`gnb.sa.band78.273prb.fhi72.4x2-benetel550.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x2-benetel550.conf)
+[`gnb.sa.band78.273prb.fhi72.4x4-benetel550.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-benetel550.conf)
+[`gnb.sa.band78.273prb.fhi72.4x2-benetel550.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x2-benetel550.conf)
 5. Metanoia RU:
-[`gnb.sa.band78.273prb.fhi72.4x4-metanoia.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-metanoia.conf)
+[`gnb.sa.band78.273prb.fhi72.4x4-metanoia.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-metanoia.conf)
 
 Edit the sample OAI gNB configuration file and check following parameters:
 
@@ -1203,7 +1203,7 @@ fhi_72 = {
 </details>
 
 Compare also with the example (DU) configuration in
-[`gnb-du.sa.band77.273prb.fhi72.8x8-benetel650_650.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.8x8-benetel650_650.conf).
+[`gnb-du.sa.band77.273prb.fhi72.8x8-benetel650_650.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.8x8-benetel650_650.conf).
 
 Afterwards, start the gNB with the modified configuration file. If everything
 went well, you should see the RU counters for both RUs go up:
@@ -1395,9 +1395,9 @@ echo "<DU-pub-key>" >>  ~/.ssh/authorized_keys
 
 ### gNB configuration
 The reference gNB configuration file for one Benetel RAN550:
-[`gnb.sa.band78.273prb.fhi72.4x4-benetel550-mplane.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-benetel550-mplane.conf)
+[`gnb.sa.band78.273prb.fhi72.4x4-benetel550-mplane.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-benetel550-mplane.conf)
 The reference DU configuration file for two Benetel RAN650:
-[gnb-du.sa.band77.273prb.fhi72.8x8-benetel650_650-mplane.conf](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.8x8-benetel650_650-mplane.conf)
+[gnb-du.sa.band77.273prb.fhi72.8x8-benetel650_650-mplane.conf](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.8x8-benetel650_650-mplane.conf)
 
 In order to run gNB/DU with M-plane, we need to modify Tx gain `att_tx` in RU section, as well as the `fhi_72` section in the configuration file.
 Example for one RU:
