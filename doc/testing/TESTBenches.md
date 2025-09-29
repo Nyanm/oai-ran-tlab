@@ -35,42 +35,42 @@
 
 **Purpose**: Over-the-air 4G/5G (NSA/SA) tests, performance tests
 
-![5G OTA Testbench](testbenches_doc_resources/5g-ota-bench.png)
+![5G OTA Testbench](../testbenches_doc_resources/5g-ota-bench.png)
 
-[LaTeX/TikZ version](testbenches_doc_resources/5g-ota-bench.tex) if you want to modify to reflect your setup
+[LaTeX/TikZ version](../testbenches_doc_resources/5g-ota-bench.tex) if you want to modify to reflect your setup
 
 
 ### 5G NSA/Faraday Cage Testbench
 
 **Purpose**: Faraday cage 5G tests, functional tests
 
-![5G NSA/Faraday Cage Testbench](testbenches_doc_resources/5g-nsa-faraday-bench.png)
+![5G NSA/Faraday Cage Testbench](../testbenches_doc_resources/5g-nsa-faraday-bench.png)
 
-[PDF version](testbenches_doc_resources/5g-nsa-faraday-bench.pdf) | [LaTeX/TikZ version](testbenches_doc_resources/5g-nsa-faraday-bench.tex) if you want to modify to reflect your setup
+[PDF version](../testbenches_doc_resources/5g-nsa-faraday-bench.pdf) | [LaTeX/TikZ version](../testbenches_doc_resources/5g-nsa-faraday-bench.tex) if you want to modify to reflect your setup
 
 ### 5G AW2S Testbench
 
 **Purpose**: AW2S tests with Amarisoft UE simulator
 
-![5G AW2S Testbench](testbenches_doc_resources/5g-aw2s-bench.png)
+![5G AW2S Testbench](../testbenches_doc_resources/5g-aw2s-bench.png)
 
-[PDF version](testbenches_doc_resources/5g-aw2s-bench.pdf) | [LaTeX/TikZ version](testbenches_doc_resources/5g-aw2s-bench.tex) if you want to modify to reflect your setup
+[PDF version](../testbenches_doc_resources/5g-aw2s-bench.pdf) | [LaTeX/TikZ version](../testbenches_doc_resources/5g-aw2s-bench.tex) if you want to modify to reflect your setup
 
 ### 5G UE OTA Testbench
 
 **Purpose**: Over-the-air 5G tests with OAI UE
 
-![OAI UE Testbench](testbenches_doc_resources/5g-nrue-bench.png)
+![OAI UE Testbench](../testbenches_doc_resources/5g-nrue-bench.png)
 
-[PDF version](testbenches_doc_resources/5g-nrue-bench.pdf) | [LaTeX/TikZ version](testbenches_doc_resources/5g-nrue-bench.tex) if you want to modify to reflect your setup
+[PDF version](../testbenches_doc_resources/5g-nrue-bench.pdf) | [LaTeX/TikZ version](../testbenches_doc_resources/5g-nrue-bench.tex) if you want to modify to reflect your setup
 
 ### 4G Testbench(es)
 
 **Purpose**: 4G/LTE testbenches
 
-![4G Faraday Cage Testbench](testbenches_doc_resources/4g-faraday-bench.png)
+![4G Faraday Cage Testbench](../testbenches_doc_resources/4g-faraday-bench.png)
 
-[PDF version](testbenches_doc_resources/4g-faraday-bench.pdf) | [LaTeX/TikZ version](testbenches_doc_resources/4g-faraday-bench.tex) if you want to modify to reflect your setup
+[PDF version](../testbenches_doc_resources/4g-faraday-bench.pdf) | [LaTeX/TikZ version](../testbenches_doc_resources/4g-faraday-bench.tex) if you want to modify to reflect your setup
 
 ## Pipelines
 
@@ -80,7 +80,7 @@
 Webhook ~documentation ~BUILD-ONLY ~4G-LTE ~5G-NR ~nrUE
 
 This pipeline has basically two main stages, as follows. For the image build,
-please also refer to the [dedicated documentation](../docker/README.md) for
+please also refer to the [dedicated documentation](../../docker/README.md) for
 information on how the images are built.
 
 #### Image Build pipelines
@@ -183,15 +183,15 @@ information on how the images are built.
 - [RAN-PhySim-Cluster-4G](https://jenkins-oai.eurecom.fr/job/RAN-PhySim-Cluster-4G/)
   ~4G-LTE
   - tests 4G physical simulators (`nr_dlsim`, etc.) in OpenShift Cluster (x86)
-  - see [`./physical-simulators.md`](./physical-simulators.md) for an overview
+  - see [`../usage/physical-simulators.md`](../usage/physical-simulators.md) for an overview
 - [RAN-PhySim-Cluster-5G](https://jenkins-oai.eurecom.fr/job/RAN-PhySim-Cluster-5G/)
   ~5G-NR ~nrUE
   - tests 5G physical simulators (`nr_dlsim`, etc.) in OpenShift Cluster (x86)
-  - see [`./physical-simulators.md`](./physical-simulators.md) for an overview
+  - see [`../usage/physical-simulators.md`](../usage/physical-simulators.md) for an overview
 - [RAN-PhySim-GraceHopper-5G](https://jenkins-oai.eurecom.fr/job/RAN-PhySim-GraceHopper-5G/)
   ~5G-NR ~nrUE
   - tests 5G physical simulators (`nr_dlsim`, etc.) on Nvidia GraceHopper (ARMv9)
-  - see [`./physical-simulators.md`](./physical-simulators.md) for an overview
+  - see [`../usage/physical-simulators.md`](../usage/physical-simulators.md) for an overview
 - [RAN-RF-Sim-Test-4G](https://jenkins-oai.eurecom.fr/job/RAN-RF-Sim-Test-4G/)
   ~4G-LTE
   - acamas (eNB, lteUE, OAI EPC)
@@ -300,7 +300,7 @@ as of which the pipeline failed. Let's assume the coredump is stored at
 `/tmp/coredump.tar.xz`, and the image is in `/tmp/oai-nr-ue.tar.gz`. First, you
 should check out the corresponding branch (or directly the commit), let's say
 in `~/oai-branch-fail`. Now, unpack the core dump, load the image into docker,
-and use the script [`docker/debug_core_image.sh`](../docker/debug_core_image.sh)
+and use the script [`docker/debug_core_image.sh`](../../docker/debug_core_image.sh)
 to open gdb, as follows:
 
 ```
