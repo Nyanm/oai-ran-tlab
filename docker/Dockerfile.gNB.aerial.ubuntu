@@ -48,7 +48,7 @@ RUN /bin/sh oaienv && \
     tar -xvzf nvipc_src.*.tar.gz  && \
     cd nvipc_src.* && \
     rm -rf build && mkdir build && cd build && \
-    cmake .. -DNVIPC_DPDK_ENABLE=OFF -DNVIPC_DOCA_ENABLE=OFF -DNVIPC_CUDA_ENABLE=OFF -DENABLE_SLT_RSP=ON && \
+    cmake .. -DNVIPC_DPDK_ENABLE=OFF -DNVIPC_DOCA_ENABLE=OFF -DNVIPC_CUDA_ENABLE=OFF -DENABLE_SLT_RSP=ON  -DSCF_FAPI_10_04_SRS=ON && \
     make -j && make install
 
 RUN /bin/sh oaienv && \
