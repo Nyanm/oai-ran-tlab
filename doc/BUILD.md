@@ -2,7 +2,7 @@
   <tr style="border-collapse: collapse; border: none;">
     <td style="border-collapse: collapse; border: none;">
       <a href="http://www.openairinterface.org/">
-         <img src="./images/oai_final_logo.png" alt="" border=3 height=50 width=150>
+         <img src="images/oai_final_logo.png" alt="" border=3 height=50 width=150>
          </img>
       </a>
     </td>
@@ -20,7 +20,7 @@ This page is valid on tags starting from **`2019.w09`**.
 
 The [OAI EPC](https://github.com/OPENAIRINTERFACE/openair-epc-fed/blob/master/docs/DEPLOY_HOME_MAGMA_MME.md) and [OAI 5GC](https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-fed/-/blob/master/docs/DEPLOY_HOME.md) are developed in distinct projects with their own documentation and are not further described here.
 
-OAI softmodem sources, which aim to implement 3GPP compliant UEs, eNodeB and gNodeB can be downloaded from the Eurecom [gitlab repository](./GET_SOURCES.md).
+OAI softmodem sources, which aim to implement 3GPP compliant UEs, eNodeB and gNodeB can be downloaded from the Eurecom [gitlab repository](setup/GET_SOURCES.md).
 
 Sources come with a build script [build_oai](../cmake_targets/build_oai) located at the root of the `openairinterface5g/cmake_targets` directory. This script is developed to build the oai binaries (executables,shared libraries) for different hardware platforms, and use cases.
 
@@ -40,7 +40,7 @@ Running the  [build_oai](../cmake_targets/build_oai) script also generates some 
 - `nvram`: a binary used to build (4G) UE (IMEI...) and EMM (IMSI, registered PLMN) non volatile data.
 - `genids` T Tracer utility, used at build time to generate `T_IDs.h` include file. This binary is located in the [T Tracer source file directory](../common/utils/T) .
 
-The build system for OAI uses [cmake](https://cmake.org/) which is a  tool to generate makefiles. The `build_oai` script is a wrapper using `cmake` and `make`/`ninja` to ease the oai build and use. It logs the `cmake` and `ninja`/`make` commands it executes. The file describing how to build the executables from source files is the [CMakeLists.txt](../CMakeLists.txt), it is used as input by cmake to generate the makefiles.
+The build system for OAI uses [cmake](https://cmake.org/) which is a  tool to generate makefiles. The `build_oai` script is a wrapper using `cmake` and `make`/`ninja` to ease the oai build and use. It logs the `cmake` and `ninja`/`make` commands it executes. The file describing how to build the executables from source files is the [CMakeLists.txt](CMakeLists.txt), it is used as input by cmake to generate the makefiles.
 
 cmake is further extended by using [CPM](https://github.com/cpm-cmake/CPM.cmake). CPM is a cmake script that handles external code dependencies. It is setup to cache downloaded code in `~/.cache/cpm`. While most external dependencies should be handled by system package managers, CPM has the advantage of using any code that is available in a public git repository.
 
@@ -64,7 +64,7 @@ Calling the `build_oai` script with the `-h` option gives the list of all availa
 - `--ninja` is to use the `ninja` build tool, which speeds up compilation.
 - `-c` is to clean the workspace and force a complete rebuild.
 
-`build_oai` also provides various options to enable runtime error checkers, i.e. sanitizers in order to find various types of bugs in the codebase and eventually enhance the stability of the OAI softmodems. Refer to [sanitizers.md](./dev_tools/sanitizers.md) for more details.
+`build_oai` also provides various options to enable runtime error checkers, i.e. sanitizers in order to find various types of bugs in the codebase and eventually enhance the stability of the OAI softmodems. Refer to [sanitizers.md](dev_tools/sanitizers.md) for more details.
 
 ## Installing dependencies
 
@@ -150,7 +150,7 @@ cd openairinterface5g/cmake_targets/
 
 After completing the build, the binaries are available in the `cmake_targets/ran_build/build` directory.
 
-Detailed information about these simulators can be found [in the dedicated page](./physical-simulators.md)
+Detailed information about these simulators can be found [in the dedicated page](usage/physical-simulators.md)
 
 ## Building UEs, eNodeB and gNodeB Executables
 
@@ -243,5 +243,5 @@ To build using a build preset:
 
 # Cross Compile
 
-If you want to use cross-compiler on x86 platform for aarch64 version, please refer the [cross-compile.md](./cross-compile.md) for more information.
+If you want to use cross-compiler on x86 platform for aarch64 version, please refer the [cross-compile.md](setup/cross-compile.md) for more information.
 
