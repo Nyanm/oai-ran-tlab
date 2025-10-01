@@ -607,6 +607,15 @@ static int comparator(const void *p, const void *q)
   return 0;
 }
 
+static uint8_t get_est_mcs(const dl_est_mcs_t *est_mcs)
+{
+  if (est_mcs->from_csirs_cqi)
+    return est_mcs->from_csirs_cqi;
+  if (est_mcs->from_ssb_sinr)
+    return est_mcs->from_ssb_sinr;
+  return 0;
+}
+
 static void pf_dl(gNB_MAC_INST *mac,
                   post_process_pdsch_t *pp_pdsch,
                   NR_UE_info_t **UE_list,
@@ -695,7 +704,7 @@ static void pf_dl(gNB_MAC_INST *mac,
       // UE is active if there is some traffic over time (more 1 Kb/s),
       // or sudden burst
       bool ue_is_active = UE->dl_thr_ue > 1000 || sched_ctrl->num_total_bytes >= 300;
-      const int est_mcs = sched_ctrl->dl_max_mcs;
+      const int est_mcs = get_est_mcs(&sched_ctrl->dl_est_mcs);
       int selected_mcs = estimate_next_mcs(bo, stats, &sched_ctrl->dl_bler_stats, max_mcs_table, est_mcs, frame, ue_is_active);
       LOG_D(NR_MAC, "%d.%d UE %04x mcs %d bler %f\n", frame, slot, UE->rnti, selected_mcs, sched_ctrl->dl_bler_stats.bler);
       int l = get_dl_nrOfLayers(sched_ctrl, current_BWP->dci_format);

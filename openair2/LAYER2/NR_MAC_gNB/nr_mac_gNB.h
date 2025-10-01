@@ -608,6 +608,11 @@ typedef struct nr_power_control {
   float tpc_in_flight; /// TPCs applied by UE but not yet in average SNR
 } nr_power_control_t;
 
+typedef struct dl_est_mcs {
+  uint8_t from_csirs_cqi;
+  uint8_t from_ssb_sinr;
+} dl_est_mcs_t;
+
 /*! \brief scheduling control information set through an API */
 typedef struct {
   /// CCE index and aggregation, should be coherent with cce_list
@@ -638,8 +643,7 @@ typedef struct {
   /// PHR info: nominal UE transmit power levels (dBm)
   int pcmax;
 
-  /// UE-estimated maximum MCS (from CSI-RS)
-  uint8_t dl_max_mcs;
+  dl_est_mcs_t dl_est_mcs;
 
   /// For UL synchronization: store last UL scheduling grant
   frame_t last_ul_frame;
