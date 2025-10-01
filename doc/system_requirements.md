@@ -82,8 +82,7 @@ The minimum requirements stated in [simulated radio](.##simulated-radio) apply.
 - DDR4 or DDR5 RAM, minimum 5Gi
 - USB 3.0
 
-Apart from this you should follow [tuning and security tips](./tuning_and_security.md) to 
-tune your system to get high performance. 
+Apart from this you should follow [tuning and security tips](tuning/tuning_and_security.md) to tune your system to get high performance.
 
 ### USRP N3XX/X3XX/X4XX/AW2S
 
@@ -91,8 +90,7 @@ USRP N3XX/X3XX/X4XX requires two dedicated 10G SFP+ connections. For these radio
 
 The minimum requirements stated in [simulated radio](.##simulated-radio) apply.
 
-Apart from this you should follow [tuning and security tips](./tuning_and_security.md) to 
-tune your system to get high performance. 
+Apart from this you should follow [tuning and security tips](tuning/tuning_and_security.md) to tune your system to get high performance.
 
 **NOTE**: In case you are using Mellanox NIC cards then you have to download `mlnx-ofed` and configure your NIC for performance. 
 
@@ -118,6 +116,6 @@ tune your system to get high performance.
 
 ### O-RAN Radio Units
 
-We have dedicated documentation for O-RAN Radio Units. [Refer to 7.2 FH documentation](./ORAN_FHI7.2_Tutorial.md) before purchasing a Desktop server or rack/blade server. 
+We have dedicated documentation for O-RAN Radio Units. [Refer to 7.2 FH documentation](tutorials/ORAN_FHI7.2_Tutorial.md) before purchasing a Desktop server or rack/blade server.
 
 The minimum requirements stated in [simulated radio](.##simulated-radio) apply.
