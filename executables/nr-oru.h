@@ -25,9 +25,17 @@
 #include "openair1/PHY/defs_RU.h"
 
 typedef struct {
+  openair0_timestamp sample;
+  int slot;
+  int frame;
+  int symbol;
+} initial_sync_t;
+
+typedef struct {
   pthread_t north_read_thread;
   pthread_t south_read_thread;
   RU_t *ru;
+  notifiedFIFO_t sync_fifo;
 } ORU_t;
 
 void *oru_north_read_thread(void *arg);

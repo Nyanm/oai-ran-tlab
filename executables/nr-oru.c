@@ -23,44 +23,39 @@
 #include "openair1/PHY/defs_nr_common.h"
 #include "openair1/PHY/INIT/nr_phy_init.h"
 #include "openair1/SCHED_NR/sched_nr.h"
+#include "notified_fifo.h"
 
 #include <sched.h>
-
-typedef struct {
-  openair0_timestamp sample;
-  int slot;
-  int frame;
-  int symbol;
-} initial_sync_t;
 
 typedef struct {
   int frame_unwrap;
   int last_frame;
   int64_t sync_offset;
-  initial_sync_t initial_sync;
 } sync_params_t;
 
 extern void tx_rf_symbols(RU_t *ru, int frame, int slot, uint64_t timestamp, int start_symbol, int num_symbols);
 
-void perform_initial_sync(ORU_t *oru, sense_of_time_t *sense_of_time, sync_params_t *sync_params)
+void perform_initial_sync(ORU_t *oru, sense_of_time_t *sense_of_time, initial_sync_t *initial_sync)
 {
-  initial_sync_t *initial_sync = &sync_params->initial_sync;
   initial_sync->frame = sense_of_time->frame;
   initial_sync->slot = sense_of_time->slot;
   initial_sync->symbol = sense_of_time->symbol;
   initial_sync->sample = oru->ru->rfdevice.get_timestamp(&oru->ru->rfdevice, &sense_of_time->ts);
-  NR_DL_FRAME_PARMS *fp = oru->ru->nr_frame_parms;
-  sync_params->frame_unwrap = 0;
-  sync_params->last_frame = initial_sync->frame;
-  sync_params->sync_offset = initial_sync->sample;
-  sync_params->sync_offset -= (uint64_t)(sync_params->initial_sync.frame) * fp->samples_per_subframe * 10
-                              + fp->get_samples_slot_timestamp(sync_params->initial_sync.slot, fp, 0);
   LOG_I(PHY,
-        "RU synchronized: frame, slot %d.%d, symbol %d,  offset: %ld\n",
+        "RU synchronized: frame, slot %d.%d, symbol %d, sample: %ld\n",
         initial_sync->frame,
         initial_sync->slot,
         initial_sync->symbol,
-        sync_params->sync_offset);
+        initial_sync->sample);
+}
+
+void initialize_sync_params(NR_DL_FRAME_PARMS *fp, sync_params_t *sync_params, initial_sync_t *initial_sync)
+{
+  sync_params->frame_unwrap = 0;
+  sync_params->last_frame = initial_sync->frame;
+  sync_params->sync_offset = initial_sync->sample;
+  sync_params->sync_offset -=
+      (uint64_t)(initial_sync->frame) * fp->samples_per_subframe * 10 + fp->get_samples_slot_timestamp(initial_sync->slot, fp, 0);
 }
 
 openair0_timestamp get_timestamp(ORU_t *oru, sense_of_time_t *sense_of_time, sync_params_t *sync_params)
@@ -124,15 +119,19 @@ void *oru_north_read_thread(void *arg)
   ru->common.txdataF_BF = (int32_t **)txDataF_ptr;
   sync_params_t sync_params;
 
+  notifiedFIFO_elt_t *sync_msg = newNotifiedFIFO_elt(sizeof(initial_sync_t), 0, NULL, NULL);
+  initial_sync_t *initial_sync = NotifiedFifoData(sync_msg);
   while (!oai_exit) {
     int num_symbols = 0;
     sense_of_time_t sense_of_time;
     ru->ifdevice.xran_api.north_in_func((uint32_t **)txDataF_ptr, ru->nb_tx, &sense_of_time, &num_symbols);
     if (sense_of_time.symbol == 0) {
-      perform_initial_sync(oru, &sense_of_time, &sync_params);
+      perform_initial_sync(oru, &sense_of_time, initial_sync);
+      initialize_sync_params(oru->ru->nr_frame_parms, &sync_params, initial_sync);
       break;
     }
   }
+  pushNotifiedFIFO(&oru->sync_fifo, sync_msg);
 
   while (!oai_exit) {
     int num_symbols = 0;
@@ -161,10 +160,10 @@ void *oru_north_read_thread(void *arg)
   return NULL;
 }
 
-void *oru_south_read_thread(void *arg)
+void rx_initial_sync(ORU_t *oru, int *slot, int *frame)
 {
-  ORU_t *oru = arg;
   RU_t *ru = oru->ru;
+  NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
 
   const int num_samples = 3000;
   c16_t throwaway_samples[ru->nb_rx][num_samples];
@@ -173,8 +172,97 @@ void *oru_south_read_thread(void *arg)
     rxp[i] = throwaway_samples[i];
 
   openair0_timestamp timestamp;
+  initial_sync_t initial_sync;
   while (!oai_exit) {
-    ru->rfdevice.trx_read_func(&ru->rfdevice, &timestamp, rxp, num_samples, ru->nb_rx);
+    int samples_read = ru->rfdevice.trx_read_func(&ru->rfdevice, &timestamp, rxp, num_samples, ru->nb_rx);
+    AssertFatal(samples_read == num_samples, "Unexpected number of samples received\n");
+    notifiedFIFO_elt_t *elt = pollNotifiedFIFO(&oru->sync_fifo);
+    if (elt) {
+      memcpy(&initial_sync, NotifiedFifoData(elt), sizeof(initial_sync));
+      break;
+    }
+  }
+
+  // Synchornize to ORAN timing
+  int next_slot = initial_sync.slot;
+  int next_frame = initial_sync.frame;
+  openair0_timestamp next_sample = timestamp + num_samples;
+  int64_t diff = next_sample - initial_sync.sample;
+  LOG_I(PHY,
+        "Sychronizing to frame slot %d.%d, sample %ld next_sample %ld diff %ld\n",
+        next_frame,
+        next_slot,
+        initial_sync.sample,
+        next_sample,
+        diff);
+
+  uint64_t samples_to_sync_by = 0;
+  if (diff < 0) {
+    samples_to_sync_by = -diff;
+  } else {
+    while (diff > 0) {
+      uint32_t samples_per_slot = fp->get_samples_per_slot(next_slot, fp);
+      samples_to_sync_by += samples_per_slot;
+      diff -= samples_per_slot;
+      next_slot++;
+      if (next_slot == fp->slots_per_frame) {
+        next_slot = 0;
+        next_frame++;
+        if (next_frame == 1024) {
+          next_frame = 0;
+        }
+      }
+    }
+    samples_to_sync_by += diff;
+  }
+
+  LOG_I(PHY, "Thrashing %lu samples to sync to slot %d, frame %d\n", samples_to_sync_by, next_slot, next_frame);
+  while (!oai_exit && samples_to_sync_by > 0) {
+    int samples_to_read = min(num_samples, samples_to_sync_by);
+    int samples_read = ru->rfdevice.trx_read_func(&ru->rfdevice, &timestamp, rxp, samples_to_read, ru->nb_rx);
+    AssertFatal(samples_to_read == samples_read, "Unexpected number of samples received\n");
+    samples_to_sync_by -= samples_to_read;
+  }
+  *slot = next_slot;
+  *frame = next_frame;
+}
+
+void *oru_south_read_thread(void *arg)
+{
+  ORU_t *oru = arg;
+  RU_t *ru = oru->ru;
+  NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+
+  int current_slot = 0;
+  int current_frame = 0;
+  rx_initial_sync(oru, &current_slot, &current_frame);
+  const int symbols_per_iteration = 7;
+
+  while (!oai_exit) {
+    int rx_slot_type = nr_slot_select(&ru->config, current_frame, current_slot);
+    for (int symbol = 0; symbol < 14; symbol += symbols_per_iteration) {
+      int samples_to_read = get_samples_symbol_duration(fp, current_slot, symbol, symbols_per_iteration);
+      size_t offset = fp->get_samples_slot_timestamp(current_slot, fp, 0) + get_samples_symbol_timestamp(fp, current_slot, symbol);
+      c16_t *rxp[fp->nb_antennas_rx];
+      for (int aarx = 0; aarx < fp->nb_antennas_rx; aarx++) {
+        rxp[aarx] = (c16_t *)&ru->common.rxdata[aarx][offset];
+      }
+
+      openair0_timestamp timestamp;
+      int num_samples_read = ru->rfdevice.trx_read_func(&ru->rfdevice, &timestamp, (void **)rxp, samples_to_read, ru->nb_rx);
+      AssertFatal(num_samples_read == samples_to_read, "Unexpected number of samples received\n");
+      if (rx_slot_type == NR_UPLINK_SLOT || rx_slot_type == NR_MIXED_SLOT) {
+        // Check for PRACH
+      }
+    }
+    current_slot++;
+    if (current_slot == fp->slots_per_frame) {
+      current_slot = 0;
+      current_frame++;
+      if (current_frame == 1024) {
+        current_frame = 0;
+      }
+    }
   }
 
   // Perform RX processing
