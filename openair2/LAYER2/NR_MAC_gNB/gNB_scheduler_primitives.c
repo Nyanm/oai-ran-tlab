@@ -811,6 +811,7 @@ NR_pusch_dmrs_t get_ul_dmrs_params(const NR_ServingCellConfigCommon_t *scc,
 
 #define BLER_UPDATE_FRAME 10
 #define BLER_FILTER 0.9f
+#define MAX_BLER_EST_MCS_DIFF 10
 #define MAX_FRAMES_ACTIVE 100
 int estimate_next_mcs(const NR_bler_options_t *bler_options,
                       const NR_mac_dir_stats_t *stats,
@@ -837,6 +838,12 @@ int estimate_next_mcs(const NR_bler_options_t *bler_options,
       est_mcs = min(est_mcs, max_mcs);
       new_mcs = max(est_mcs, bler_options->min_mcs);
     }
+  } else if (est_mcs > 0 && abs(bler_stats->mcs - est_mcs) >= MAX_BLER_EST_MCS_DIFF) {
+    // there is a big difference between MCS from BLER and what is estimated,
+    // correct this quickly
+    LOG_D(NR_MAC, "correct MCS %d => %d\n", bler_stats->mcs, est_mcs);
+    est_mcs = min(est_mcs, max_mcs);
+    new_mcs = max(est_mcs, bler_options->min_mcs);
   } else {
     if (diff < BLER_UPDATE_FRAME)
       return bler_stats->mcs; // no update
