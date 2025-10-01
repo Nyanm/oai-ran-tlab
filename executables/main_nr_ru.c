@@ -30,6 +30,7 @@
  * \warning
  */
 
+#include "notified_fifo.h"
 #define _GNU_SOURCE /* See feature_test_macros(7) */
 #include <sched.h>
 #include "assertions.h"
@@ -194,7 +195,8 @@ int main(int argc, char **argv)
   init_NR_RU(config_get_if(), NULL);
 
   RU_t *ru = RC.ru[0];
-  ORU_t oru;
+  ORU_t oru = {0};
+  initNotifiedFIFO(&oru.sync_fifo);
   oru.ru = ru;
   cpumeas(CPUMEAS_ENABLE);
 
