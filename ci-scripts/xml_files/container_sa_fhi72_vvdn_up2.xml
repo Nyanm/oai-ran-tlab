@@ -90,8 +90,7 @@
 
   <testCase>
     <class>Iperf</class>
-    <desc>Optional iperf (DL/700Mbps/UDP)(30 sec)</desc>
-    <may_fail>true</may_fail>
+    <desc>Iperf (DL/700Mbps/UDP)(30 sec)</desc>
     <iperf_args>-u -b 700M -t 30 -R</iperf_args>
     <id>up2-fhi72</id>
     <iperf_packetloss_threshold>10</iperf_packetloss_threshold>
