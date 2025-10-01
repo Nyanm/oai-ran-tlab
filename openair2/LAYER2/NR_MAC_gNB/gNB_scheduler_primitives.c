@@ -828,8 +828,9 @@ int estimate_next_mcs(const NR_bler_options_t *bler_options,
 
   max_mcs = min(max_mcs, bler_options->max_mcs);
   int new_mcs = bler_stats->mcs;
-  if (bler_stats->frames_inactive >= MAX_FRAMES_ACTIVE) {
+  if (bler_stats->frames_inactive >= MAX_FRAMES_ACTIVE || bler_options->harq_round_max == 1) {
     // if UE is inactive, return MCS estimation (or previous if no estimation)
+    // or if there is no HARQ => no retransmission => no BLER
     if (est_mcs > 0) {
       // bound the estimation between user configured min/max MCS and current
       // MCS table max

@@ -692,19 +692,12 @@ static void pf_dl(gNB_MAC_INST *mac,
       /* Calculate coeff */
       const NR_bler_options_t *bo = &mac->dl_bler;
       const int max_mcs_table = current_BWP->mcsTableIdx == 1 ? 27 : 28;
-      int selected_mcs;
       // UE is active if there is some traffic over time (more 1 Kb/s),
       // or sudden burst
       bool ue_is_active = UE->dl_thr_ue > 1000 || sched_ctrl->num_total_bytes >= 300;
-      if (bo->harq_round_max == 1) {
-        const int max_mcs = min(sched_ctrl->dl_max_mcs, max_mcs_table);
-        int new_mcs = min(bo->max_mcs, max_mcs);
-        selected_mcs = max(bo->min_mcs, new_mcs);
-        sched_ctrl->dl_bler_stats.mcs = selected_mcs;
-      } else {
-        const int est_mcs = sched_ctrl->dl_max_mcs;
-        selected_mcs = estimate_next_mcs(bo, stats, &sched_ctrl->dl_bler_stats, max_mcs_table, est_mcs, frame, ue_is_active);
-      }
+      const int est_mcs = sched_ctrl->dl_max_mcs;
+      int selected_mcs = estimate_next_mcs(bo, stats, &sched_ctrl->dl_bler_stats, max_mcs_table, est_mcs, frame, ue_is_active);
+      LOG_D(NR_MAC, "%d.%d UE %04x mcs %d bler %f\n", frame, slot, UE->rnti, selected_mcs, sched_ctrl->dl_bler_stats.bler);
       int l = get_dl_nrOfLayers(sched_ctrl, current_BWP->dci_format);
       const uint8_t Qm = nr_get_Qm_dl(selected_mcs, current_BWP->mcsTableIdx);
       const uint16_t R = nr_get_code_rate_dl(selected_mcs, current_BWP->mcsTableIdx);
