@@ -811,10 +811,12 @@ NR_pusch_dmrs_t get_ul_dmrs_params(const NR_ServingCellConfigCommon_t *scc,
 
 #define BLER_UPDATE_FRAME 10
 #define BLER_FILTER 0.9f
-int get_mcs_from_bler(const NR_bler_options_t *bler_options,
+#define MAX_FRAMES_ACTIVE 100
+int estimate_next_mcs(const NR_bler_options_t *bler_options,
                       const NR_mac_dir_stats_t *stats,
                       NR_bler_stats_t *bler_stats,
                       int max_mcs,
+                      int est_mcs,
                       frame_t frame,
                       bool ue_is_active)
 {
@@ -825,28 +827,37 @@ int get_mcs_from_bler(const NR_bler_options_t *bler_options,
   bler_stats->frames_inactive = ue_is_active ? 0 : bler_stats->frames_inactive + diff;
 
   max_mcs = min(max_mcs, bler_options->max_mcs);
-  const uint8_t old_mcs = min(bler_stats->mcs, max_mcs);
-  if (diff < BLER_UPDATE_FRAME)
-    return old_mcs; // no update
+  int new_mcs = bler_stats->mcs;
+  if (bler_stats->frames_inactive >= MAX_FRAMES_ACTIVE) {
+    // if UE is inactive, return MCS estimation (or previous if no estimation)
+    if (est_mcs > 0) {
+      // bound the estimation between user configured min/max MCS and current
+      // MCS table max
+      est_mcs = min(est_mcs, max_mcs);
+      new_mcs = max(est_mcs, bler_options->min_mcs);
+    }
+  } else {
+    if (diff < BLER_UPDATE_FRAME)
+      return bler_stats->mcs; // no update
 
-  // last update is longer than x frames ago
-  const int num_dl_sched = (int)(stats->rounds[0] - bler_stats->rounds[0]);
-  const int num_dl_retx = (int)(stats->rounds[1] - bler_stats->rounds[1]);
-  const float bler_window = num_dl_sched > 0 ? (float) num_dl_retx / num_dl_sched : bler_stats->bler;
-  bler_stats->bler = BLER_FILTER * bler_stats->bler + (1 - BLER_FILTER) * bler_window;
+    // last update is longer than x frames ago
+    const int num_dl_sched = (int)(stats->rounds[0] - bler_stats->rounds[0]);
+    const int num_dl_retx = (int)(stats->rounds[1] - bler_stats->rounds[1]);
+    const float bler_window = num_dl_sched > 0 ? (float) num_dl_retx / num_dl_sched : bler_stats->bler;
+    bler_stats->bler = BLER_FILTER * bler_stats->bler + (1 - BLER_FILTER) * bler_window;
 
-  int new_mcs = old_mcs;
-  if (bler_stats->bler < bler_options->lower && new_mcs < max_mcs)
-    new_mcs += 1;
-  else if (bler_stats->bler > bler_options->upper && new_mcs > bler_options->min_mcs)
-    new_mcs -= 1;
-  // else we are within threshold boundaries or at limits
+    if (bler_stats->bler < bler_options->lower && new_mcs < max_mcs)
+      new_mcs += 1;
+    else if (bler_stats->bler > bler_options->upper && new_mcs > bler_options->min_mcs)
+      new_mcs -= 1;
+    // else we are within threshold boundaries or at limits
+    LOG_D(MAC, "frame %4d MCS %d -> %d (num_dl_sched %d, num_dl_retx %d, BLER wnd %.3f avg %.6f)\n",
+          frame, bler_stats->mcs, new_mcs, num_dl_sched, num_dl_retx, bler_window, bler_stats->bler);
+  }
 
   bler_stats->last_frame = frame;
   bler_stats->mcs = new_mcs;
   memcpy(bler_stats->rounds, stats->rounds, sizeof(stats->rounds));
-  LOG_D(MAC, "frame %4d MCS %d -> %d (num_dl_sched %d, num_dl_retx %d, BLER wnd %.3f avg %.6f)\n",
-        frame, old_mcs, new_mcs, num_dl_sched, num_dl_retx, bler_window, bler_stats->bler);
   return new_mcs;
 }
 

@@ -22,16 +22,17 @@ UEs with retransmissions are allocated first; similarly, UEs that have not been
 scheduled for some time in UL are scheduled automatically in UL and have
 therefore priority over data with "normal" traffic.
 
-The MCS selection is done in `get_mcs_from_bler()` in file
+The MCS selection is done in `estimate_next_mcs()` in file
 [`gNB_scheduler_primitives.c`](../../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_primitives.c).
-It consider two thresholds for a "BLER" that is computed from the number of
-first-round retransmissions over total transmissions in the last window (50ms).
-If that ratio is higher than an "upper" threshold (see
-`dl/ul_bler_target_upper` in the configuration section below), it is
-interpreted as "bad channel" and MCS is decremented by 1.  If the ratio is
-lower than a "lower" threshold (see `dl/ul_bler_target_lower`), it is
+On UE inactivity (low traffic), it returns an estimated MCS (from CQI, SINR,
+...). On UE activity (UE with active traffic), it calculates the MCS from BLER
+computed from the number of first-round retransmissions over total
+transmissions in the last window (50ms).  If that ratio is higher than an
+"upper" threshold (see `dl/ul_bler_target_upper` in the configuration section
+below), it is interpreted as "bad channel" and MCS is decremented by 1.  If the
+ratio is lower than a "lower" threshold (see `dl/ul_bler_target_lower`), it is
 interpreted as "good channel" and MCS is incremented by 1. This happens each
-window.
+window of 10 frames.
 
 The actual scheduler implementation can be found in functions `pf_dl()` and
 `pf_ul()` in files

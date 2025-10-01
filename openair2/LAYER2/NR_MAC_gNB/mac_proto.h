@@ -434,10 +434,11 @@ bool get_rb_alloc(int rbSize_min,
                   int *rbStart_ptr,
                   int *rbSize_ptr);
 
-int get_mcs_from_bler(const NR_bler_options_t *bler_options,
+int estimate_next_mcs(const NR_bler_options_t *bler_options,
                       const NR_mac_dir_stats_t *stats,
                       NR_bler_stats_t *bler_stats,
                       int max_mcs,
+                      int est_mcs,
                       frame_t frame,
                       bool ue_is_active);
 

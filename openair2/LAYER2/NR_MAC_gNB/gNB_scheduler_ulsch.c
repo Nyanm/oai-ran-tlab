@@ -2001,17 +2001,18 @@ static int  pf_ul(gNB_MAC_INST *nrmac,
 
     const NR_bler_options_t *bo = &nrmac->ul_bler;
     const int max_mcs_table = (current_BWP->mcs_table == 0 || current_BWP->mcs_table == 2) ? 28 : 27;
-    const int max_mcs = min(bo->max_mcs, max_mcs_table); /* no per-user maximum MCS yet */
     int selected_mcs;
     int nrOfLayers = get_ul_nrOfLayers(sched_ctrl, current_BWP->dci_format);
     bool sched_inactive = B == 0 && do_sched;
+    const int est_mcs = get_mcs_from_SINRx10(current_BWP->mcs_table, sched_ctrl->pusch_pc.avg_snr * 10, nrOfLayers);
     if (bo->harq_round_max == 1) {
-      selected_mcs = get_mcs_from_SINRx10(current_BWP->mcs_table, sched_ctrl->pusch_pc.avg_snr * 10, nrOfLayers);
+      selected_mcs = est_mcs;
+      const int max_mcs = min(bo->max_mcs, max_mcs_table);
       selected_mcs = min(max_mcs, selected_mcs);
       selected_mcs = max(bo->min_mcs, selected_mcs);
       sched_ctrl->ul_bler_stats.mcs = selected_mcs;
     } else {
-      selected_mcs = get_mcs_from_bler(bo, stats, &sched_ctrl->ul_bler_stats, max_mcs, frame, !sched_inactive);
+      selected_mcs = estimate_next_mcs(bo, stats, &sched_ctrl->ul_bler_stats, max_mcs_table, est_mcs, frame, !sched_inactive);
       LOG_D(NR_MAC, "%d.%d starting mcs %d bler %f\n", frame, slot, selected_mcs, sched_ctrl->ul_bler_stats.bler);
     }
 
