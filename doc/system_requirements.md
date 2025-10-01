@@ -1,3 +1,4 @@
+
 # System Requirements for Using OAI Stack
 
 This document describes the minimal and performant system requirements for OpenAirInterface (OAI) 4G/5G software stack (UE and gNB stack). The information provided in this document is based on experimentation, if you have a feedback then open an issue or send an email on the mailing list. 
@@ -62,7 +63,7 @@ likely won't work well.
 
 USRP B2XX or Blade RF are USB based radios recommended to use with USB 3.0. You can choose a minimum hardware to do functional testing and performance hardware for performance testing. This hardware you can find in Mini-PCs or laptops.
 
-The minimum requirements stated in [simulated radio](.##simulated-radio) apply.
+The minimum requirements stated in [simulated radio](#simulated-radio) apply.
 
 #### Minimum requirements for both gNB and UE Stack
 
@@ -88,7 +89,7 @@ Apart from this you should follow [tuning and security tips](tuning/tuning_and_s
 
 USRP N3XX/X3XX/X4XX requires two dedicated 10G SFP+ connections. For these radios we only recommend having performance hardware. This hardware you can find in Desktop servers or rack/blade servers. For the gNB, the same applies in case of using AW2S radios.
 
-The minimum requirements stated in [simulated radio](.##simulated-radio) apply.
+The minimum requirements stated in [simulated radio](#simulated-radio) apply.
 
 Apart from this you should follow [tuning and security tips](tuning/tuning_and_security.md) to tune your system to get high performance.
 
@@ -118,4 +119,4 @@ Apart from this you should follow [tuning and security tips](tuning/tuning_and_s
 
 We have dedicated documentation for O-RAN Radio Units. [Refer to 7.2 FH documentation](tutorials/ORAN_FHI7.2_Tutorial.md) before purchasing a Desktop server or rack/blade server.
 
-The minimum requirements stated in [simulated radio](.##simulated-radio) apply.
+The minimum requirements stated in [simulated radio](#simulated-radio) apply.
