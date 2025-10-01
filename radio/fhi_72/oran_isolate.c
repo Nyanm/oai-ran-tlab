@@ -19,6 +19,7 @@
  *      contact@openairinterface.org
  */
 
+#include "assertions.h"
 #include <stdio.h>
 #include <string.h>
 #include "common_lib.h"
@@ -296,6 +297,46 @@ void oran_fh_if4p5_south_out(RU_t *ru, int frame, int slot, uint64_t timestamp)
   stop_meas(&ru->tx_fhaul);
 }
 
+void oran_write_prach(uint32_t** prach_dataF,
+                      int slot,
+                      int frame)
+{
+  write_prach_data(prach_dataF, 1, frame, slot);
+}
+
+void oran_prepare_packets(int slot, int start_antenna_index, int num_antennas, uint32_t symbol_mask)
+{
+  int xran_port_id = 0; // TODO: support multiple ports
+  int first_cc = 0;
+  int num_cc = 1; // TODO: support multiple CCs
+  int first_symbol = 0;
+  for (int i = 0; i < 32; ++i) {
+    if (symbol_mask & (1u << i)) {
+      first_symbol = i;
+      break;
+    }
+  }
+  int last_symbol = 31;
+  for (int i = 31; i >= 0; --i) {
+    if (symbol_mask & (1u << i)) {
+      last_symbol = i;
+      break;
+    }
+  }
+  int num_symbols = last_symbol - first_symbol + 1;
+  AssertFatal(num_symbols > 0, "ORAN: no symbols to prepare in %s\n", __FUNCTION__);
+
+  xran_prepare_up_dl_sym(xran_port_id,
+                         slot,
+                         first_cc,
+                         num_cc,
+                         symbol_mask,
+                         start_antenna_index,
+                         num_antennas,
+                         first_symbol,
+                         num_symbols);
+}
+
 void *get_internal_parameter(char *name)
 {
   printf("ORAN: %s\n", __FUNCTION__);
@@ -409,6 +450,8 @@ __attribute__((__visibility__("default"))) int transport_init(openair0_device *d
   device->priv = eth;
   device->openair0_cfg = &openair0_cfg[0];
   device->xran_api.north_in_func = oran_fh_if4p5_north_in;
+  device->xran_api.north_write_prach_func = oran_write_prach;
+  device->xran_api.north_out_func = oran_prepare_packets;
 
   return 0;
 }

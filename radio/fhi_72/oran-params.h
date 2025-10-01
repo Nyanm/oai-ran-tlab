@@ -99,6 +99,7 @@
 #define ORAN_FH_CONFIG_T1A_CP_UL "T1a_cp_ul"
 #define ORAN_FH_CONFIG_T1A_UP "T1a_up"
 #define ORAN_FH_CONFIG_TA4 "Ta4"
+#define ORAN_FH_CONFIG_TA3_UP "Ta3_up"
 
 #define ORAN_FH_HLP_CPLT " parameter of RU in list form (Min&Max, length 2!)\n"
 
@@ -108,6 +109,7 @@
   {ORAN_FH_CONFIG_T1A_CP_UL,    "T1a_cp_ul" ORAN_FH_HLP_CPLT,  PARAMFLAG_MANDATORY, .uptr=NULL, .defintarrayval=0, TYPE_UINTARRAY, 0}, \
   {ORAN_FH_CONFIG_T1A_UP,       "T1a_up" ORAN_FH_HLP_CPLT,     PARAMFLAG_MANDATORY, .uptr=NULL, .defintarrayval=0, TYPE_UINTARRAY, 0}, \
   {ORAN_FH_CONFIG_TA4,          "Ta4" ORAN_FH_HLP_CPLT,        PARAMFLAG_MANDATORY, .uptr=NULL, .defintarrayval=0, TYPE_UINTARRAY, 0}, \
+  {ORAN_FH_CONFIG_TA3_UP,       "Ta3_up" ORAN_FH_HLP_CPLT,     PARAMFLAG_MANDATORY, .uptr=NULL, .defintarrayval=0, TYPE_UINTARRAY, 0}, \
 }
 // clang-format on
 

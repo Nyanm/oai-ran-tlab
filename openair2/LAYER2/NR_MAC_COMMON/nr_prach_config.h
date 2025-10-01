@@ -29,6 +29,8 @@
 * \note The PRACH configuration tables are used in the MAC layer for scheduling and beyond.
 *       For example the PRACH duration is requested in the O-RAN 7.2 FrontHaul Interface
 */
+#ifndef NR_PRACH_CONFIG_H_
+#define NR_PRACH_CONFIG_H_
 
 /**
  * @brief Fetch PRACH format (format only) from PRACH configuration tables
@@ -73,3 +75,5 @@ nr_prach_info_t get_nr_prach_occasion_info_from_index(uint8_t index, frequency_r
  * @return PRACH format (format concatenated with format2)
  */
 uint16_t get_nr_prach_format_from_index(uint8_t index, uint32_t pointa, uint8_t unpaired);
+
+#endif

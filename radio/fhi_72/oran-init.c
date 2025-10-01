@@ -451,7 +451,9 @@ static void oran_allocate_buffers(void *handle,
     // Only setup UPlane/CPlane buffers for O-RU. O-RU does not need callback for PUSCH and PRACH as the timing will be reliant on
     // the underlying RF device
     xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, NULL, NULL);
-    // TODO: PRACH
+    struct xran_buffer_list *pDstBufferDecomp[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
+    memset(pDstBufferDecomp, 0, sizeof(pDstBufferDecomp));
+    xran_5g_prach_req(pi->instanceHandle, prach, pDstBufferDecomp, NULL, NULL);
     // TODO: Beamforming weights
   }
 }

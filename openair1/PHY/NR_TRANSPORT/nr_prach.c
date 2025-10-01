@@ -30,6 +30,7 @@
  * \warning
  */
 
+#include "PHY/TOOLS/tools_defs.h"
 #include "PHY/defs_gNB.h"
 #include "SCHED_NR/sched_nr.h"
 #include "PHY/NR_TRANSPORT/nr_transport_proto.h"

@@ -120,6 +120,8 @@ typedef enum {
 #define CONFIG_STRING_RU_FRAME_TYPE               "frame_type"
 #define CONFIG_STRING_RU_PRACH_CONFIGID           "prach_config_index"
 #define CONFIG_STRING_RU_PRACH_MSG1FREQ           "prach_msg1_start"
+#define CONFIG_STRING_RU_PRACH_ROOTSEQ             "prach_root_sequence_index"
+#define CONFIG_STRING_RU_NUM_ROOTSEQ            "num_root_sequences"
 #define CONFIG_STRING_RU_NUMEROLOGY               "mu"
 #define CONFIG_STRING_RU_TDD_PERIOD               "tdd_period"
 #define CONFIG_STRING_RU_NUM_DL_SLOTS             "num_dl_slots"

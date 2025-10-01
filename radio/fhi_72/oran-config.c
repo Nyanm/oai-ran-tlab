@@ -970,6 +970,8 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
     return false;
   if (!set_maxmin_pd(fhp, nfh, ORAN_FH_CONFIG_TA4, &fh_config->Ta4_min, &fh_config->Ta4_max)) // both E and F - min not used in xran, max yes
     return false;
+  if (!set_maxmin_pd(fhp, nfh, ORAN_FH_CONFIG_TA3_UP, &fh_config->Ta3_min, &fh_config->Ta3_max)) // both E and F - min not used in xran, max yes
+    return false;
 
   fh_config->enableCP = 1; // enable C-plane
   fh_config->prachEnable = 1; // enable PRACH

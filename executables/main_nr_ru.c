@@ -30,7 +30,9 @@
  * \warning
  */
 
+#include "nfapi_nr_interface_scf.h"
 #include "notified_fifo.h"
+#include "time_meas.h"
 #define _GNU_SOURCE /* See feature_test_macros(7) */
 #include <sched.h>
 #include "assertions.h"
@@ -56,6 +58,7 @@
 #include "nr-oru.h"
 #include "openair1/PHY/INIT/nr_phy_init.h"
 #include "openair1/SCHED_NR/sched_nr.h"
+#include "openair2/LAYER2/NR_MAC_COMMON/nr_prach_config.h"
 
 pthread_cond_t sync_cond;
 pthread_mutex_t sync_mutex;
@@ -140,10 +143,7 @@ int beam_index_allocation(bool das,
 {
   return 0;
 }
-void nr_fill_du(uint16_t N_ZC, const uint16_t *prach_root_sequence_map, uint16_t nr_du[NR_PRACH_SEQ_LEN_L - 1])
-{
-  return;
-};
+
 uint16_t nr_du[838];
 
 uint64_t downlink_frequency[MAX_NUM_CCs][4];
@@ -201,14 +201,32 @@ int main(int argc, char **argv)
   cpumeas(CPUMEAS_ENABLE);
 
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+
   nr_dump_frame_parms(fp);
   init_symbol_rotation(fp);
   fp->ofdm_offset_divisor = 8;
   ru->if_south = LOCAL_RF;
   nr_phy_init_RU(ru);
   fill_rf_config(ru, ru->rf_config_file);
+
+  /* set PRACH configuration */
+  nfapi_nr_prach_config_t *prach_config = &ru->config.prach_config;
+  prach_config->prach_ConfigurationIndex.value = ru->prach_config_index;
+  prach_config->num_prach_fd_occasions_list[0].k1.value = ru->prach_msg1_freq;
+  prach_config->prach_sequence_length.value = 1;
+  prach_config->prach_sub_c_spacing.value = 1;
+  prach_config->num_prach_fd_occasions.value = 1;
+  prach_config->num_prach_fd_occasions_list[0].num_root_sequences.value = ru->num_root_sequences;
+  prach_config->num_prach_fd_occasions_list[0].prach_root_sequence_index.value = ru->prach_root_sequence_index;
+
   fill_split7_2_config(&ru->openair0_cfg.split7, &ru->config, fp);
   ru->N_TA_offset = set_default_nta_offset(fp->freq_range, fp->samples_per_subframe);
+
+  reset_meas(&oru.rx_prach);
+  oru.prach_info = get_nr_prach_occasion_info_from_index(ru->prach_config_index, FR1, fp->frame_type);
+  LOG_A(PHY, "PRACH configuration index %d\n", ru->prach_config_index);
+  LOG_A(PHY, "PRACH format %d start_symbol %d duration %d\n", oru.prach_info.format, oru.prach_info.start_symbol,
+        oru.prach_info.N_dur);
 
   int ret = openair0_transport_load(&ru->ifdevice, &ru->openair0_cfg, &ru->eth_params);
   AssertFatal(ret == 0, "RU %u: openair0_transport_init() ret %d: cannot initialize transport protocol\n", ru->idx, ret);

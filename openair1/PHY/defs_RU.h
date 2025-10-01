@@ -475,6 +475,8 @@ typedef struct RU_t_s {
   int prach_config_index;
   /// 3GPP MSG1 Start frequency
   int prach_msg1_freq;
+  int num_root_sequences;
+  int prach_root_sequence_index;
   /// 3GPP TDD periodicity (0.5 ms, 1 0.625ms, 2 1ms, 3 1.25ms, 4 2ms,5 2.5ms, 6 5ms, 7 10ms, 8 3ms, 9 4ms
   int tdd_period;
   /// number of DL slots

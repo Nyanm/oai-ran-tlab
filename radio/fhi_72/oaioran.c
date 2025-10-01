@@ -313,6 +313,36 @@ static int read_prach_data(ru_info_t *ru, int frame, int slot)
   return (0);
 }
 
+int write_prach_data(uint32_t **prachDataF, int nb_rx, int frame, int slot)
+{
+
+  struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
+  int prach_sym = get_prach_conf_duration(0);
+  struct xran_ru_config *ru_conf = &fh_cfg->ru_conf;
+  AssertFatal(ru_conf->compMeth_PRACH == XRAN_COMPMETHOD_NONE, "Only COMPMETHOD_NONE is supported in write_prach_data\n");
+  int slots_per_frame = 10 << fh_cfg->frame_conf.nNumerology;
+  int slots_per_subframe = 1 << fh_cfg->frame_conf.nNumerology;
+
+  int tti = slots_per_frame * frame + slot;
+  uint32_t subframe = slot / slots_per_subframe;
+  uint32_t is_prach_slot = xran_is_prach_slot(0, subframe, (slot % slots_per_subframe));
+  AssertFatal(is_prach_slot, "Trying to write PRACH data in non PRACH slot %d.%d\n", frame, slot);
+
+  for (int sym_idx = 0; sym_idx < prach_sym; sym_idx++) {
+    for (int aa = 0; aa < nb_rx; aa++) {
+      oran_buf_list_t *bufs = get_xran_buffers(0);
+      int16_t *dst = (int16_t *)bufs->prachdst[aa][tti % XRAN_N_FE_BUF_LEN].pBuffers[sym_idx].pData;
+      int16_t *src = (int16_t *)prachDataF[aa];
+      if (ru_conf->compMeth_PRACH == XRAN_COMPMETHOD_NONE) {
+        for (int idx = 0; idx < 139 * 2; idx++) {
+          dst[idx] = ((int16_t)ntohs(src[idx + g_kbar]));
+        }
+      }
+    }
+  }
+  return 0;
+}
+
 /** @brief Check if symbol in slot is UL.
  *
  * @param frame_conf xran frame configuration

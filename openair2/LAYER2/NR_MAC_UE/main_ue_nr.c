@@ -275,6 +275,7 @@ void release_mac_configuration(NR_UE_MAC_INST_t *mac, NR_UE_MAC_reset_cause_t ca
   memset(&mac->sc_info, 0, sizeof(mac->sc_info));
 
   mac->current_DL_BWP = NULL;
+  LOG_W(NR_MAC, "Releasing MAC configuration for UE %d cause %d\n", mac->ue_id, cause);
   mac->current_UL_BWP = NULL;
 
   // in case of re-establishment we don't need to release initial BWP config common

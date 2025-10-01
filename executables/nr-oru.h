@@ -20,9 +20,10 @@
  */
 #ifndef NR_ORU_H
 #define NR_ORU_H
-#include "nr-oru.h"
 #include <executables/softmodem-common.h>
 #include "openair1/PHY/defs_RU.h"
+#include "openair1/PHY/defs_nr_common.h"
+#include "openair2/LAYER2/NR_MAC_COMMON/nr_prach_config.h"
 
 typedef struct {
   openair0_timestamp sample;
@@ -36,6 +37,8 @@ typedef struct {
   pthread_t south_read_thread;
   RU_t *ru;
   notifiedFIFO_t sync_fifo;
+  nr_prach_info_t prach_info;
+  time_stats_t rx_prach;
 } ORU_t;
 
 void *oru_north_read_thread(void *arg);

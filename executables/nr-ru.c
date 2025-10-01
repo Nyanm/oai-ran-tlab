@@ -1823,7 +1823,7 @@ static void NRRCconfig_RU(configmodule_interface_t *cfg)
       ru->carrier_freq_rx[i] = param[RU_RX_CARRIER_LIST_IDX].iptr[i];
     }
     ru->frame_type = *param[RU_FRAME_TYPE_IDX].iptr;
-    ru->prach_config_index = *param[RU_PRACH_MSG1FREQ_IDX].iptr;
+    ru->prach_config_index = *param[RU_PRACH_CONFIGID_IDX].iptr;
     ru->prach_msg1_freq = *param[RU_PRACH_MSG1FREQ_IDX].iptr;
     ru->numerology = *param[RU_NUMEROLOGY_IDX].iptr;
     ru->tdd_period = *param[RU_TDD_PERIOD_IDX].iptr;
