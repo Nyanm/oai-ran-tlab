@@ -13,68 +13,68 @@ Beware if you previously pulled the `develop` branch that your repository may be
 
 ## General
 
-- [FEATURE_SET.md](./FEATURE_SET.md): lists supported features
-- [GET_SOURCES.md](./GET_SOURCES.md): how to download the sources
-- [BUILD.md](./BUILD.md): how to build the sources
-- [code-style-contrib.md](./code-style-contrib.md): overall working practices, code style, and review process
-- [cross-compile.md](./cross-compile.md): how to cross-compile OAI for ARM
-- [clang-format.md](./clang-format.md): how to format the code
-- [sanitizers.md](./dev_tools/sanitizers.md): how to run with ASan/UBSan/MemSAN/TSan
-- [environment-variables.md](./environment-variables.md): the environment variables used by OAI
-- [tuning_and_security.md](./tuning_and_security.md): performance and security considerations
+- [FEATURE_SET.md](setup/FEATURE_SET.md): lists supported features
+- [GET_SOURCES.md](setup/GET_SOURCES.md): how to download the sources
+- [BUILD.md](BUILD.md): how to build the sources
+- [code-style-contrib.md](setup/code-style-contrib.md): overall working practices, code style, and review process
+- [cross-compile.md](setup/cross-compile.md): how to cross-compile OAI for ARM
+- [clang-format.md](setup/clang-format.md): how to format the code
+- [sanitizers.md](dev_tools/sanitizers.md): how to run with ASan/UBSan/MemSAN/TSan
+- [environment-variables.md](setup/environment-variables.md): the environment variables used by OAI
+- [tuning_and_security.md](testing/tuning_and_security.md): performance and security considerations
 
 There is some general information in the [OpenAirInterface Gitlab Wiki](https://gitlab.eurecom.fr/oai/openairinterface5g/-/wikis/home)
 
 ## Tutorials
 
 - Step-by-step tutorials to set up 5G:
-  * [OAI 5GC](./NR_SA_Tutorial_OAI_CN5G.md)
-  * [OAI gNB with COTS UE](./NR_SA_Tutorial_COTS_UE.md)
-  * [OAI NR-UE](./NR_SA_Tutorial_OAI_nrUE.md)
-  * [Multiple OAI NR-UE with RFsimulator](./NR_SA_Tutorial_OAI_multi_UE.md)
-- [RUNMODEM.md](./RUNMODEM.md): Generic information on how to
+  * [OAI 5GC](tutorials/NR_SA_Tutorial_OAI_CN5G.md)
+  * [OAI gNB with COTS UE](tutorials/NR_SA_Tutorial_COTS_UE.md)
+  * [OAI NR-UE](tutorials/NR_SA_Tutorial_OAI_nrUE.md)
+  * [Multiple OAI NR-UE with RFsimulator](tutorials/NR_SA_Tutorial_OAI_multi_UE.md)
+- [RUNMODEM.md](usage/RUNMODEM.md): Generic information on how to
   * Run simulators
   * Run with hardware
   * Specific OAI modes (phy-test, do-ra, noS1)
   * (5G) Using SDAP and custom DRBs
   * IF setups and arbitrary frequencies
   * MIMO
-- [How to run OAI with O-RAN 7.2 FHI](./ORAN_FHI7.2_Tutorial.md)
-- [How to run a 5G-NSA setup](./TESTING_GNB_W_COTS_UE.md)
-- [How to run a 4G setup using L1 simulator](./L1SIM.md) _Note: we recommend the RFsimulator_
-- [How to use the L2 simulator](./L2NFAPI.md)
+- [How to run OAI with O-RAN 7.2 FHI](tutorials/ORAN_FHI7.2_Tutorial.md)
+- [How to run a 5G-NSA setup](testing/TESTING_GNB_W_COTS_UE.md)
+- [How to run a 4G setup using L1 simulator](L1_L2/L1SIM.md) _Note: we recommend the RFsimulator_
+- [How to use the L2 simulator](L1_L2/L2NFAPI.md)
 - [How to use the OAI channel simulator](../openair1/SIMULATION/TOOLS/DOC/channel_simulation.md)
-- [How to use multiple BWPs](./RUN_NR_multiple_BWPs.md)
-- [How to run OAI-VNF and OAI-PNF](./nfapi.md): how to run the FAPI/nFAPI split,
+- [How to use multiple BWPs](usage/RUN_NR_multiple_BWPs.md)
+- [How to run OAI-VNF and OAI-PNF](L1_L2/nfapi.md): how to run the FAPI/nFAPI split,
   including some general remarks on FAPI/nFAPI.
-- [How to use the positioning reference signal (PRS)](./RUN_NR_PRS.md)
-- [How to use device-to-device communication (D2D, 4G)](./d2d_emulator_setup.txt)
+- [How to use the positioning reference signal (PRS)](usage/RUN_NR_PRS.md)
+- [How to use device-to-device communication (D2D, 4G)](setup/d2d_emulator_setup.txt)
 - [How to run with E2 agent](../openair2/E2AP/README.md)
-- [How to run the physical simulators](./physical-simulators.md)
-- [How to setup OAI with Nvidia Aerial and Foxconn](./Aerial_FAPI_Split_Tutorial.md)
-- [How to setup OAI with LDPC accelerators (Xilinx T2/Intel ACCs)](./LDPC_OFFLOAD_SETUP.md)
-- [How to do a handover](./handover-tutorial.md)
-- [How to setup gNB frequency](./gNB_frequency_setup.md)
+- [How to run the physical simulators](usage/physical-simulators.md)
+- [How to setup OAI with Nvidia Aerial and Foxconn](tutorials/Aerial_FAPI_Split_Tutorial.md)
+- [How to setup OAI with LDPC accelerators (Xilinx T2/Intel ACCs)](tutorials/LDPC_OFFLOAD_SETUP.md)
+- [How to do a handover](tutorials/handover-tutorial.md)
+- [How to setup gNB frequency](setup/gNB_frequency_setup.md)
 
 Legacy unmaintained files:
-- [`L2NFAPI_NOS1.md`](./L2NFAPI_NOS1.md), [`L2NFAPI_S1.md`](./L2NFAPI_S1.md):
+- [`L2NFAPI_NOS1.md`](L1_L2/L2NFAPI_NOS1.md), [`L2NFAPI_S1.md`](L1_L2/L2NFAPI_S1.md):
   old L2simulator, not valid anymore
-- [`SystemX-tutorial-design.md`](./SystemX-tutorial-design.md): old, high-level
+- [`SystemX-tutorial-design.md`](architecture/SystemX-tutorial-design.md): old, high-level
   documentation
-- [`UL_MIMO.txt`](./UL_MIMO.txt): UL-MIMO specific notes
+- [`UL_MIMO.txt`](usage/UL_MIMO.txt): UL-MIMO specific notes
 
 ## Designs
 
 - General software architecture notes: [SW_archi.md](./SW_archi.md)
-- [Information on E1](./E1AP/E1-design.md)
-- [Information on F1](./F1AP/F1-design.md)
-- [Information on how NR nFAPI works](./NR_NFAPI_archi.md)
-- [Flow graph of the L1 in gNB](SW-archi-graph.md)
-- [L1 threads in NR-UE](./nr-ue-design.md)
-- [Information on gNB MAC](./MAC/mac-usage.md)
-- [Information on gNB RRC](./RRC/rrc-usage.md)
-- [Information on analog beamforming implementation](./analog_beamforming.md)
-- [Information on the UE 5G NAS implementation](./5Gnas.md)
+- [Information on E1](E1AP/E1-design.md)
+- [Information on F1](F1AP/F1-design.md)
+- [Information on how NR nFAPI works](architecture/NR_NFAPI_archi.md)
+- [Flow graph of the L1 in gNB](architecture/SW-archi-graph.md)
+- [L1 threads in NR-UE](architecture/nr-ue-design.md)
+- [Information on gNB MAC](MAC/mac-usage.md)
+- [Information on gNB RRC](RRC/rrc-usage.md)
+- [Information on analog beamforming implementation](tutorials/analog_beamforming.md)
+- [Information on the UE 5G NAS implementation](tutorials/5Gnas.md)
 
 ## Building and running from images
 
@@ -94,7 +94,7 @@ Legacy unmaintained files:
 - The [shared object loader](../common/utils/DOC/loader.md)
 - The [threadpool](../common/utils/threadPool/thread-pool.md) used in L1
 - The [LDPC implementation](../openair1/PHY/CODING/DOC/LDPCImplementation.md) is a shared library
-- The [time management](time_management.md) module
+- The [time management](architecture/time_management.md) module
 
 ### Radios
 
@@ -118,10 +118,10 @@ The other SDRs (AW2S, LimeSDR, ...) have no READMEs.
 
 ## Testing
 
-- [UnitTests.md](./UnitTests.md) explains the unit testing setup
+- [UnitTests.md](testing/UnitTests.md) explains the unit testing setup
 - Component tests are under `tests/`. Currently, there is a simple CU-UP
   tester, see the corresponding [README.md](../tests/nr-cuup/README.md).
-- [TESTBenches.md](./TESTBenches.md) lists the CI setup and links to pipelines
+- [TESTBenches.md](testing/TESTBenches.md) lists the CI setup and links to pipelines
 - The CI setup uses a [custom framework](../ci-scripts/README.md) to run
   end-to-end tests.
 
