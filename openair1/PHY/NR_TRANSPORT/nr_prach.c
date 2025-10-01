@@ -30,6 +30,7 @@
  * \warning
  */
 
+#include "PHY/TOOLS/tools_defs.h"
 #include "PHY/defs_gNB.h"
 #include "SCHED_NR/sched_nr.h"
 #include "PHY/NR_TRANSPORT/nr_transport_proto.h"
@@ -438,6 +439,9 @@ void rx_nr_prach_ru(RU_t *ru,
       for (int i=1;i<reps;i++) rxsigF_tmp[j] += rxsigF2[k2+(i*dftlen<<1)];
     }
     memcpy((void*)rxsigF2,(void *)rxsigF_tmp,N_ZC<<2);
+    int energy = signal_energy_nodc((c16_t *)rxsigF2, N_ZC << 2);
+    if (aa == 0 && energy > 0)
+      LOG_I(PHY, "PRACH combining done for antenna %d energy = %d\n", aa, energy);
   }
 }
 

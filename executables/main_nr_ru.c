@@ -201,12 +201,22 @@ int main(int argc, char **argv)
   cpumeas(CPUMEAS_ENABLE);
 
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+
   nr_dump_frame_parms(fp);
   init_symbol_rotation(fp);
   fp->ofdm_offset_divisor = 8;
   ru->if_south = LOCAL_RF;
   nr_phy_init_RU(ru);
   fill_rf_config(ru, ru->rf_config_file);
+
+  /* set PRACH configuration */
+  nfapi_nr_prach_config_t *prach_config = &ru->config.prach_config;
+  prach_config->prach_ConfigurationIndex.value = 159;
+  prach_config->num_prach_fd_occasions_list[0].k1.value = 0;
+  nfapi_nr_config_request_scf_t *cfg = &ru->config;
+  cfg->prach_config.prach_sequence_length.value = 1;
+  cfg->prach_config.prach_sub_c_spacing.value = 1;
+
   fill_split7_2_config(&ru->openair0_cfg.split7, &ru->config, fp);
   ru->N_TA_offset = set_default_nta_offset(fp->freq_range, fp->samples_per_subframe);
 

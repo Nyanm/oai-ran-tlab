@@ -18,12 +18,14 @@
  * For more information about the OpenAirInterface (OAI) Software Alliance:
  *      contact@openairinterface.org
  */
+#include "PHY/TOOLS/tools_defs.h"
 #define _GNU_SOURCE
 #include "nr-oru.h"
 #include "openair1/PHY/defs_nr_common.h"
 #include "openair1/PHY/INIT/nr_phy_init.h"
 #include "openair1/SCHED_NR/sched_nr.h"
 #include "notified_fifo.h"
+#include "openair1/PHY/NR_TRANSPORT/nr_transport_proto.h"
 
 #include <sched.h>
 
@@ -252,8 +254,18 @@ void *oru_south_read_thread(void *arg)
       int num_samples_read = ru->rfdevice.trx_read_func(&ru->rfdevice, &timestamp, (void **)rxp, samples_to_read, ru->nb_rx);
       AssertFatal(num_samples_read == samples_to_read, "Unexpected number of samples received\n");
       if (rx_slot_type == NR_UPLINK_SLOT || rx_slot_type == NR_MIXED_SLOT) {
-        // Check for PRACH
+        if (current_slot == 19 && symbol + symbols_per_iteration > 13) {
+          int prach_fmt = 8; // TODO: get this from RU config
+          int numRA = 0; // TODO: get this from RU config
+          int beam = 0; // TODO: Set to 0 for now
+          int prachStartSymbol = 0; // TODO: get this from RU config
+          int prachStartSlot = current_slot; // TODO: get this from RU config
+          int prachOccasion = 0; // TODO: get this from RU config
+          rx_nr_prach_ru(ru, prach_fmt, numRA, beam, prachStartSymbol, prachStartSlot, prachOccasion, current_frame, current_slot);
+          ru->ifdevice.xran_api.north_write_prach_func((uint32_t **)ru->prach_rxsigF[0], current_slot, current_frame);   
+        }
       }
+      ru->ifdevice.xran_api.north_out_func(current_slot, 0, ru->nb_rx, ((1 << symbols_per_iteration) - 1) << symbol);
     }
     current_slot++;
     if (current_slot == fp->slots_per_frame) {

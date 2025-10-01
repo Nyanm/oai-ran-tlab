@@ -633,6 +633,19 @@ struct openair0_device_t {
      * \param num_symbols number of symbols
      */
     void (*north_in_func)(uint32_t **txdataF, int nb_tx, sense_of_time_t* sense_of_time, int *num_symbols);
+
+    /*! \brief O-RU only: writes PRACH FD IQ.
+     * \param prachF buffer containing PRACH samples
+     * \param slot
+     */
+    void (*north_write_prach_func)(uint32_t **prachF, int slot, int frame);
+    /*! \brief O-RU only: sends UL FD IQ.
+     * \param slot
+     * \param start_antenna_index first antenna index to send
+     * \param num_antennas number of antennas to send
+     * \param symbol_mask bit mask indicating which symbols to send
+     */
+    void (*north_out_func)(int slot, int start_antenna_index, int num_antennas, uint32_t symbol_mask);
   } xran_api;
 };
 
