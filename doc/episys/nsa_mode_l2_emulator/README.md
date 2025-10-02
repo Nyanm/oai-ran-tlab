@@ -6,7 +6,7 @@ the layer 1 (PHY) layer functionality. Becasue we are bypassing the PHY layer, s
 channel modeling capabilty has been added in the LTE UE `phy_stub_ue.c` file. To understand
 the interfaces between the different components associated with NSA mode, the image is shown below.
 
-![functional_diagram_proxy_nsa](../functional_diagram_proxy_nsa.png)
+![functional_diagram_proxy_nsa](../images/functional_diagram_proxy_nsa.png)
 
 This functionality allows the user to plug in their own channel model and emulate the packet dropping procedure
 in real time. The channel modeling has not been provided by EpiSci, but the OAI code
@@ -15,7 +15,7 @@ that is included in the `phy_stub_ue.c` file only includes the downlink channel 
 Any uplink channel modeling must be conducted in some sort of proxy, which would sit
 between the UEs and eNB/gNB. (A description of the downlink channel modeling is illustrated below).
 
-![Channel_Abstraction_UE_Handling_LTE](../Channel_Abstraction_UE_Handling_LTE.PNG)
+![Channel_Abstraction_UE_Handling_LTE](../images/Channel_Abstraction_UE_Handling_LTE.PNG)
 
 The updates to the OAI code base removed some latent bugs, added multi-UE scalability,
 and were tested with a standard bypass proxy between the UE(s) and eNB/gNB. The bypass proxy is
