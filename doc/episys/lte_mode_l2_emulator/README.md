@@ -4,16 +4,18 @@ entity between the UE(s) and eNB. The UEs use nFAPI to communicate with the eNB.
 nFAPI interface allows us to run in an emulated layer 2 mode, meaning that we are bypassing
 the layer 1 (PHY) functionality. Because we are bypassing the PHY layer,
 channel modeling capabilties have been added in the LTE UE phy_stub_ue.c file. To understand
-the interfaces between the different components associated with LTE mode, the image
-functional_diagram_proxy_lte.png has been provided.
+the interfaces between the different components associated with LTE mode, the image is shown below.
+
+![functional_diagram_proxy_lte](../functional_diagram_proxy_lte.png)
 
 This functionality allows the user to plug in their own channel model and emulate the packet dropping procedure
 in real time. The channel modeling has not been provided by EpiSci, but the OAI code
 base already has some BLER curves available for use. The channel modeling functionality
 that is included in the phy_stub_ue.c file only includes the downlink channel modeling.
 Any uplink channel modeling must be conducted in some sort of proxy, which would sit
-between the UEs and eNB. (A description of the downlink channel modeling is shown in the
-Channel_Abstraction_UE_Handling_LTE.PNG image).
+between the UEs and eNB. (A description of the downlink channel modeling is illustrated below).
+
+![Channel_Abstraction_UE_Handling_LTE](../Channel_Abstraction_UE_Handling_LTE.PNG)
 
 The updates to the OAI code base removed some latent bugs, added multi-UE scalability,
 and were tested with a standard bypass proxy between the UE(s) and eNB. The bypass proxy is
