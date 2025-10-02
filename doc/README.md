@@ -48,7 +48,7 @@ There is some general information in the [OpenAirInterface Gitlab Wiki](https://
 - [How to run OAI-VNF and OAI-PNF](L1_L2/nfapi.md): how to run the FAPI/nFAPI split,
   including some general remarks on FAPI/nFAPI.
 - [How to use the positioning reference signal (PRS)](usage/RUN_NR_PRS.md)
-- [How to use device-to-device communication (D2D, 4G)](setup/d2d_emulator_setup.txt)
+- [How to use device-to-device communication (D2D, 4G)](setup/d2d_emulator_setup.md)
 - [How to run with E2 agent](../openair2/E2AP/README.md)
 - [How to run the physical simulators](usage/physical-simulators.md)
 - [How to setup OAI with Nvidia Aerial and Foxconn](tutorials/Aerial_FAPI_Split_Tutorial.md)
@@ -59,13 +59,11 @@ There is some general information in the [OpenAirInterface Gitlab Wiki](https://
 Legacy unmaintained files:
 - [`L2NFAPI_NOS1.md`](L1_L2/L2NFAPI_NOS1.md), [`L2NFAPI_S1.md`](L1_L2/L2NFAPI_S1.md):
   old L2simulator, not valid anymore
-- [`SystemX-tutorial-design.md`](architecture/SystemX-tutorial-design.md): old, high-level
-  documentation
 - [`UL_MIMO.md`](usage/UL_MIMO.md): UL-MIMO specific notes
 
 ## Designs
 
-- General software architecture notes: [SW_archi.md](./SW_archi.md)
+- General software architecture notes: [SW_archi.md](architecture/SW_archi.md)
 - [Information on E1](E1AP/E1-design.md)
 - [Information on F1](F1AP/F1-design.md)
 - [Information on how NR nFAPI works](architecture/NR_NFAPI_archi.md)
@@ -103,7 +101,7 @@ Some directories under `radio` contain READMEs:
 - [RFsimulator](../radio/rfsimulator/README.md)
 - [USRP](../radio/USRP/README.md)
 - [BladeRF](../radio/BLADERF/README)
-- [IQPlayer](../radio/iqplayer/DOC/iqrecordplayer_usage.md), and [general documentation](./iqrecordplayer_usage.md)
+- [IQPlayer](../radio/iqplayer/DOC/iqrecordplayer_usage.md), and [general documentation](usage/iqrecordplayer_usage.md)
 - [fhi_72](../radio/fhi_72/README.md)
 - [vrtsim](../radio/vrtsim/README.md)
 - [rf_emulator](../radio/emulator/README.md)

@@ -523,7 +523,7 @@ Contact the RU vendor and get the configuration manual to understand the below c
 
 #### Benetel 650
 
-The OAI configuration file [`gnb-du.sa.band77.273prb.fhi72.4x4-benetel650.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.4x4-benetel650.conf) corresponds to:
+The OAI configuration file [`gnb-du.sa.band77.273prb.fhi72.4x4-benetel650.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.4x4-benetel650.conf) corresponds to:
 - TDD pattern `DDDSU`, 2.5ms
 - Bandwidth 100MHz
 - MTU 9600
@@ -549,7 +549,7 @@ dl_ul_tuning_special_slot=0xfd00000
 
 #### Benetel 550
 
-The OAI configuration file [`gnb.sa.band78.273prb.fhi72.4x4-benetel550.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-benetel550.conf) corresponds to:
+The OAI configuration file [`gnb.sa.band78.273prb.fhi72.4x4-benetel550.conf`](../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.273prb.fhi72.4x4-benetel550.conf) corresponds to:
 - TDD pattern `DDDDDDDSUU`, 5ms
 - Bandwidth 100MHz
 - MTU 9600
@@ -1100,7 +1100,7 @@ do not do any jumps (during the last hour). While an occasional jump is not
 necessarily problematic for the gNB, many such messages mean that the system is
 not working, and UEs might not be able to attach or reach good performance.
 Also, you can try to compile with polling (see [the build
-section](.#build-oai-gnb)) to see if it resolves the problem.
+section](#build-oai-gnb)) to see if it resolves the problem.
 
 ## Operation with multiple RUs
 

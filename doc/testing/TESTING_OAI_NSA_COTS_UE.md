@@ -90,8 +90,8 @@ Each component (EPC, eNB, gNB) has its own configuration file.
 These config files are passed as arguments of the run command line, using the option -O \<conf file\>
 
 The **REFERENCE** files for eNB and gNB, **used by the CI**, can be found here:  
-* [enb conf file](../ci-scripts/conf_files/enb.band7.25prb.usrpb200.tm1.conf)
-* [gnb conf file](../ci-scripts/conf_files/gnb-du.sa.band78.106prb.usrpb200.conf)
+* [enb conf file](../../ci-scripts/conf_files/enb.band7.25prb.usrpb200.tm1.conf)
+* [gnb conf file](../../ci-scripts/conf_files/gnb-du.sa.band78.106prb.usrpb200.conf)
 
 These files have to be updated manually to set the IP addresses and frequency.  
 
@@ -240,8 +240,8 @@ The test reaches step **12. E-RAB modifcation confirmation** , eventhough not al
 
 From the log file that is generated, we can monitor several important steps, to assess that the test was successful.  
 Log files examples can be found here:  
-* [enb log file](./testing_oai_nsa_w_cots_ue_resources/oai_enb.log)  
-* [gnb log file](./testing_oai_nsa_w_cots_ue_resources/oai_gnb.log)
+* [enb log file](../testing_oai_nsa_w_cots_ue_resources/oai_enb.log)
+* [gnb log file](../testing_oai_nsa_w_cots_ue_resources/oai_gnb.log)
 
 
 - eNB receives UE capabilities information, including its NR capabilites, and triggers sGNB Addition Request message:

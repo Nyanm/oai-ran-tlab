@@ -32,7 +32,7 @@ The following DPDK versions are supported:
 - DPDK22.11.7*.
 - DPDK23.11.3*.
 - DPDK24.11.2.
-> Note: [Patch]((https://github.com/DPDK/dpdk/commit/fdde63a1dfc129d0a510a831aa98253b36a2a1cd)) required for pre-DPDK24.11 versions when using the Intel ACC100.
+> Note: [Patch](https://github.com/DPDK/dpdk/commit/fdde63a1dfc129d0a510a831aa98253b36a2a1cd) required for pre-DPDK24.11 versions when using the Intel ACC100.
 
 #### Intel ACC200 (also known as VRB1)
 - DPDK22.11.7.

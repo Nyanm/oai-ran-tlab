@@ -8,8 +8,7 @@ without sudo.
 
 ## Performance Tuning
 
-Please also refer to the [advanced configuration in the
-tutorial](NR_SA_Tutorial_COTS_UE.md#6-advanced-configurations-optional), which
+Please also refer to the [advanced configuration in the tutorial](../tutorials/NR_SA_Tutorial_COTS_UE.md#6-advanced-configurations-optional), which
 groups many tips and tricks.
 
 ### CPU

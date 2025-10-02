@@ -189,7 +189,7 @@ sudo ./nr-uesoftmodem --rfsim --rfsimulator.serveraddr 127.0.0.1 -r 106 --numero
 ```
 The CL option `--uicc0.imsi`  can override the IMSI value in the configuration file if necessary (e.g. when running multiple UEs): `--uicc0.imsi  001010000000001`.
 
-More details available at [ci-scripts/yaml_files/5g_rfsimulator/README.md](../ci-scripts/yaml_files/5g_rfsimulator/README.md).
+More details available at [ci-scripts/yaml_files/5g_rfsimulator/README.md](../../ci-scripts/yaml_files/5g_rfsimulator/README.md).
 
 **Note:** From tag `2024.w45`, OAI nrUE runs by default in standalone (SA) mode.  
 In earlier versions the default mode was non-standalone (NSA).  
