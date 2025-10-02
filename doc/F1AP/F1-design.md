@@ -47,7 +47,7 @@ This is the current status:
   * SA
   * Single cell per DU
   * Multiple DUs connected to one CU (both CP and UP)
-  * [Mobility between DUs connected to a single CU](../handover-tutorial.md)
+  * [Mobility between DUs connected to a single CU](../tutorials/handover-tutorial.md)
 - Not supported:
   * NSA
 
@@ -55,7 +55,7 @@ This is the current status:
 
 #### F1AP messages
 
-Refer to [FEATURE_SET.md](../FEATURE_SET.md#gnb-f1ap) to learn about the current F1AP implementation status.
+Refer to [FEATURE_SET.md](../setup/FEATURE_SET.md#gnb-f1ap) to learn about the current F1AP implementation status.
 
 #### High-level F1-C code structure
 

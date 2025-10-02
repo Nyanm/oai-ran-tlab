@@ -23,7 +23,7 @@ This function handles the establishment, modification, and release of E1 bearer 
 
 ## OAI implementation
 
-For the E1AP design in OAI, please refer to the [E1 Design](./E1-design.md) document.
+For the E1AP design in OAI, please refer to the [E1 Design](E1-design.md) document.
 
 ### E1 re-establishment
 

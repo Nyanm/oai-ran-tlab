@@ -75,11 +75,11 @@ sequenceDiagram
   Note over u: E1AP_CUUP_task (SCTP Handler)
   Note over u: ASN1 decoder
 ```
-More details about the E1AP procedures in OAI are available in this document: [E1 Procedures](./e1ap_procedures.md).
+More details about the E1AP procedures in OAI are available in this document: [E1 Procedures](e1ap_procedures.md).
 
 ## 2. Running the E1 Split
 
-The setup is assuming that all modules are running on the same machine. The user can refer to the [F1 design document](./../F1AP/F1-design.md) for local deployment of the DU.
+The setup is assuming that all modules are running on the same machine. The user can refer to the [F1 design document](../F1AP/F1-design.md) for local deployment of the DU.
 
 ### 2.1 Configuration File
 
@@ -132,7 +132,7 @@ Alternatively, you can use the config files `ci-scripts/conf_files/gnb-cucp.sa.f
 
 ### 2.2 Steps to Run the Split in rfsimulator with OAI UE
 
-Note: A 5G core must be running at this point. Steps to start the OAI 5G core can be found [in the oai-cn5g-fed repository](https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-fed/-/blob/master/docs/DEPLOY_HOME.md) or [here](../NR_SA_Tutorial_OAI_CN5G.md).
+Note: A 5G core must be running at this point. Steps to start the OAI 5G core can be found [in the oai-cn5g-fed repository](https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-fed/-/blob/master/docs/DEPLOY_HOME.md) or [here](../tutorials/NR_SA_Tutorial_OAI_CN5G.md).
 
 0. Open wireshark to capture the E1AP messages. You might set the capture filter
    to `sctp` to limit the number of captured packages.
@@ -169,9 +169,9 @@ sudo ./nr-uesoftmodem -r 106 --numerology 1 --band 78 -C 3619200000 --rfsim --rf
 
 You can also run the nodes on different machines. If you do so please change the interface parameters accordingly and make sure the interfaces are reachable. Please refer to the following figure for an overview of all parameters.
 
-![E1/F1/NG parameters](./images/e1-archi.png){width=1200}
+![E1/F1/NG parameters](images/e1-archi.png){width=1200}
 
-[PDF version](./images/e1-archi.pdf) | [LaTeX/TikZ version](./images/e1-archi.tex) if you want to modify to reflect your setup
+[PDF version](images/e1-archi.pdf) | [LaTeX/TikZ version](images/e1-archi.tex) if you want to modify to reflect your setup
 
 ## 4. Multiple CU-UP
 
