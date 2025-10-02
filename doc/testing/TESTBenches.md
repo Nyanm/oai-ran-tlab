@@ -35,42 +35,42 @@
 
 **Purpose**: Over-the-air 4G/5G (NSA/SA) tests, performance tests
 
-![5G OTA Testbench](../testbenches_doc_resources/5g-ota-bench.png)
+![5G OTA Testbench](../testbenches_doc_resources/images/5g-ota-bench.png)
 
-[LaTeX/TikZ version](../testbenches_doc_resources/5g-ota-bench.tex) if you want to modify to reflect your setup
+[LaTeX/TikZ version](../testbenches_doc_resources/tex/5g-ota-bench.tex) if you want to modify to reflect your setup
 
 
 ### 5G NSA/Faraday Cage Testbench
 
 **Purpose**: Faraday cage 5G tests, functional tests
 
-![5G NSA/Faraday Cage Testbench](../testbenches_doc_resources/5g-nsa-faraday-bench.png)
+![5G NSA/Faraday Cage Testbench](../testbenches_doc_resources/images/5g-nsa-faraday-bench.png)
 
-[PDF version](../testbenches_doc_resources/5g-nsa-faraday-bench.pdf) | [LaTeX/TikZ version](../testbenches_doc_resources/5g-nsa-faraday-bench.tex) if you want to modify to reflect your setup
+[PDF version](../testbenches_doc_resources/pdfs/5g-nsa-faraday-bench.pdf) | [LaTeX/TikZ version](../testbenches_doc_resources/tex/5g-nsa-faraday-bench.tex) if you want to modify to reflect your setup
 
 ### 5G AW2S Testbench
 
 **Purpose**: AW2S tests with Amarisoft UE simulator
 
-![5G AW2S Testbench](../testbenches_doc_resources/5g-aw2s-bench.png)
+![5G AW2S Testbench](../testbenches_doc_resources/images/5g-aw2s-bench.png)
 
-[PDF version](../testbenches_doc_resources/5g-aw2s-bench.pdf) | [LaTeX/TikZ version](../testbenches_doc_resources/5g-aw2s-bench.tex) if you want to modify to reflect your setup
+[PDF version](../testbenches_doc_resources/pdfs/5g-aw2s-bench.pdf) | [LaTeX/TikZ version](../testbenches_doc_resources/tex/5g-aw2s-bench.tex) if you want to modify to reflect your setup
 
 ### 5G UE OTA Testbench
 
 **Purpose**: Over-the-air 5G tests with OAI UE
 
-![OAI UE Testbench](../testbenches_doc_resources/5g-nrue-bench.png)
+![OAI UE Testbench](../testbenches_doc_resources/images/5g-nrue-bench.png)
 
-[PDF version](../testbenches_doc_resources/5g-nrue-bench.pdf) | [LaTeX/TikZ version](../testbenches_doc_resources/5g-nrue-bench.tex) if you want to modify to reflect your setup
+[PDF version](../testbenches_doc_resources/pdfs/5g-nrue-bench.pdf) | [LaTeX/TikZ version](../testbenches_doc_resources/tex/5g-nrue-bench.tex) if you want to modify to reflect your setup
 
 ### 4G Testbench(es)
 
 **Purpose**: 4G/LTE testbenches
 
-![4G Faraday Cage Testbench](../testbenches_doc_resources/4g-faraday-bench.png)
+![4G Faraday Cage Testbench](../testbenches_doc_resources/images/4g-faraday-bench.png)
 
-[PDF version](../testbenches_doc_resources/4g-faraday-bench.pdf) | [LaTeX/TikZ version](../testbenches_doc_resources/4g-faraday-bench.tex) if you want to modify to reflect your setup
+[PDF version](../testbenches_doc_resources/pdfs/4g-faraday-bench.pdf) | [LaTeX/TikZ version](../testbenches_doc_resources/tex/4g-faraday-bench.tex) if you want to modify to reflect your setup
 
 ## Pipelines
 
@@ -279,7 +279,7 @@ steps look like this:
    might need to change IP information in the config to match your core.
 
 If you wish, you can rebuild CI images locally following [these
-steps](../docker/README.md) and then use the docker-compose file directly.
+steps](../../docker/README.md) and then use the docker-compose file directly.
 
 Some tests are run from source (e.g.
 `ci-scripts/xml_files/gnb_phytest_usrp_run.xml`), which directly give the
