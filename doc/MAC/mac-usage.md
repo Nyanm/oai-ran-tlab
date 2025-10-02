@@ -4,7 +4,7 @@ out the various configuration options that influence its behavior.
 
 [[_TOC_]]
 
-# General
+## General
 
 The 5G MAC scheduler is a proportional fair (PF) scheduler, "approximating
 wide-band CQI" (for lack of a better term, but CQI is typically used for PF)
