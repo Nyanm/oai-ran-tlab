@@ -2,7 +2,7 @@ This document describes the basic functioning of the 5G RRC layer, describes
 the periodic output, and explains the various configuration options that
 influence its behavior.
 
-Developer documentation, such as UE connection control flow, reestablishment, or handover, are described in [a separate page](./rrc-dev.md).
+Developer documentation, such as UE connection control flow, reestablishment, or handover, are described in [a separate page](rrc-dev.md).
 
 [[_TOC_]]
 
@@ -99,7 +99,7 @@ the [MAC configuration](../MAC/mac-usage.md) as well for SIB configuration.
 
 #### Neighbor-gNB configuration
 
-Refer to the [handover tutorial](../handover-tutorial.md) for detailed information about gNB neighbors and handover procedures.
+Refer to the [handover tutorial](../tutorials/handover-tutorial.md) for detailed information about gNB neighbors and handover procedures.
 
 ##### Required configuration parameters
 
@@ -138,4 +138,4 @@ neighbour_list = (
 );
 ```
 
-Refer to the [handover tutorial](../handover-tutorial.md) for complete examples and detailed setup instructions.
+Refer to the [handover tutorial](../tutorials/handover-tutorial.md) for complete examples and detailed setup instructions.

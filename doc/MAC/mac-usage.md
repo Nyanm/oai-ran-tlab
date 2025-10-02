@@ -179,8 +179,7 @@ In the last lines:
 
 ## Split-related options (running in a DU)
 
-See [nFAPI documentation](../nfapi.md) or [Aerial
-tutorial](../Aerial_FAPI_Split_Tutorial.md) for information about the (n)FAPI
+See [nFAPI documentation](../L1_L2/nfapi.md) or [Aerial tutorial](../tutorials/Aerial_FAPI_Split_Tutorial.md) for information about the (n)FAPI
 split.
 
 See [F1 documentation](../F1AP/F1-design.md) for information about the F1 split.
@@ -226,7 +225,7 @@ In the `MACRLCs` section of the gNB/DU configuration file:
 * `identity_precoding_matrix` (default 0=false): flag to enable to use only
   the identity precoding matrix in DL precoding
 * `set_analog_beamforming` (default 0=false): flag to enable analog
-  beamforming (for more information [`analog_beamforming.md`](../analog_beamforming.md))
+  beamforming (for more information [`analog_beamforming.md`](../tutorials/analog_beamforming.md))
 * `beam_duration` (default 1): duration/number of consecutive slots for a given set of
   beams, depending on hardware switching performance
 * `beams_per_period` (default 1): set of beams that can be simultaneously allocated in a
@@ -244,11 +243,11 @@ SIBs are configured at the DU and some at the CU; please consult the [RRC
 configuration](../RRC/rrc-usage.md) as well for SIB configuration.
 
 * `pdsch_AntennaPorts_XP` (default 1): number of XP logical antenna
-  ports in PDSCH (see also [`RUNMODEM.md`](../RUNMODEM.md))
+  ports in PDSCH (see also [`RUNMODEM.md`](../usage/RUNMODEM.md))
 * `pdsch_AntennaPorts_N1` (default 1): number of horizontal logical antenna
-  ports in PDSCH (see also [`RUNMODEM.md`](../RUNMODEM.md))
+  ports in PDSCH (see also [`RUNMODEM.md`](../usage/RUNMODEM.md))
 * `pdsch_AntennaPorts_N2` (default 1): number of vertical logical antenna
-  ports in PDSCH (see also [`RUNMODEM.md`](../RUNMODEM.md))
+  ports in PDSCH (see also [`RUNMODEM.md`](../usage/RUNMODEM.md))
 * `pusch_AntennaPorts` (default 1): number of antenna ports in PUSCH
 * `maxMIMO_layers` (default -1=unlimited): maximum number of MIMO layers to use
   in downlink
@@ -269,7 +268,7 @@ configuration](../RRC/rrc-usage.md) as well for SIB configuration.
 * `force_UL256qam_off` (default 0=false): flag whether to disable 256QAM (limit to
   64QAM) in DL
 * `disable_harq` (default 0=false): flag whether to disable HARQ completely
-  (useful for NTN operation, see <../RUNMODEM.md>). **this is a Rel-17 feature
+  (useful for NTN operation, see <../usage/RUNMODEM.md>). **this is a Rel-17 feature
   and you need to have a capable UE for this**
 * `use_deltaMCS` (default 0=false): flag whether to enable deltaMCS (**this is not fully tested
   and might not work** and you might need to adjust other parameters such as
@@ -291,7 +290,7 @@ configuration](../RRC/rrc-usage.md) as well for SIB configuration.
 
 DL-MIMO is configured using following parameters:
 `pdsch_AntennaPorts_XP` , `pdsch_AntennaPorts_N1` , `pdsch_AntennaPorts_N2`, `maxMIMO_layers`
-(see also [`RUNMODEM.md`](../RUNMODEM.md))
+(see also [`RUNMODEM.md`](../usage/RUNMODEM.md))
 
 ## ServingCellConfigCommon parameters
 
@@ -308,7 +307,7 @@ Below is a description of some of these parameters.
 
 There are many parameters, such as `absoluteFrequencySSB`, etc., that have an
 impact on the frequency used by the gNB. For more information, please check the
-[corresponding document](../gNB_frequency_setup.md).
+[corresponding document](../setup/gNB_frequency_setup.md).
 
 ### TDD pattern configuration
 

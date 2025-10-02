@@ -4,7 +4,7 @@ schemes (connection, reestablishment, handover) including their interworking
 with other layers.
 
 User documentation, such as general configuration options, are described in [a
-separate page](./rrc-usage.md).
+separate page](rrc-usage.md).
 
 [[_TOC_]]
 
