@@ -11,7 +11,7 @@ position ("new pos"), it will trigger an event such that the CU triggers a
 handover of the UE from DU0 to DU1. Alternatively, a manual trigger can do the
 same.
 
-![F1 Handover setup](../RRC/ho.png)
+![F1 Handover setup](../RRC/images/ho.png)
 
 ## What is a gNB neighbor?
 
