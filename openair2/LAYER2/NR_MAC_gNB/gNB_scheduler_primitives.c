@@ -961,7 +961,18 @@ void config_uldci(const NR_UE_ServingCell_Info_t *sc_info,
       // antenna_ports.val = 0 for transform precoder is disabled, dmrs-Type=1, maxLength=1, Rank=1/2/3/4
       // Antenna Ports
 
-      dci_pdu_rel15->antenna_ports.val = NFAPI_MODE == NFAPI_MODE_AERIAL ? 2 : 0;
+      // 38.212 v15 Table 7.3.1.1.2-8 through 7.3.1.1.2-11:
+      if( NFAPI_MODE != NFAPI_MODE_AERIAL /*dmrs.numDmrsCdmGrpsNoData == 1*/) {
+	 //  Rank 1: DMRS ports 0 Rank2: DMRS ports 0,1
+         dci_pdu_rel15->antenna_ports.val = 0;
+      } else { // numDmrsCdmGrpsNoData == 2
+	 if (srs_feedback->ul_ri == 0 ) {
+           // Rank 1, DMRS port 0
+           dci_pdu_rel15->antenna_ports.val = 2;
+	 } else { // Rank 2, 3, 4: DMRS ports 0,1, 0-2, 0-3 respectively
+           dci_pdu_rel15->antenna_ports.val = 1;
+	 }
+      }
 
       // DMRS sequence initialization
       dci_pdu_rel15->dmrs_sequence_initialization.val = pusch_pdu->scid;
