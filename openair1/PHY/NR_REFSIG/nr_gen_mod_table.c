@@ -49,7 +49,7 @@ void nr_generate_modulation_table() {
   float sqrt42 = 0.15430;
   float sqrt170 = 0.076696;
   float val = 32768.0;
-  uint32_t i,j;
+  int i,j;
   int16_t* table;
 #ifdef FLT16_MAX
   _Float16* table2;
@@ -144,19 +144,28 @@ void nr_generate_modulation_table() {
   table2 = (_Float16*) nr_256qam_mod_table_fp16;
 #endif
   for (i=0; i<256; i++) {
-    *table++ = (short)((1 - 2 * (i & 1))
+    table[2*i] = (short)((1 - 2 * (i & 1))
                        * (8 - (1 - 2 * ((i >> 2) & 1)) * (4 - (1 - 2 * ((i >> 4) & 1)) * (2 - (1 - 2 * ((i >> 6) & 1))))))
                * val * sqrt170 * sqrt2;
-    *table++ = (short)((1 - 2 * ((i >> 1) & 1))
+    table[1+2*i] = (short)((1 - 2 * ((i >> 1) & 1))
                        * (8 - (1 - 2 * ((i >> 3) & 1)) * (4 - (1 - 2 * ((i >> 5) & 1)) * (2 - (1 - 2 * ((i >> 7) & 1))))))
                * val * sqrt170 * sqrt2;
 #ifdef FLT16_MAX
-    *table2++ = (_Float16)((1 - 2 * (i & 1))
+    table2[2*i] = (_Float16)(((1 - 2 * (i & 1))
                        * (8 - (1 - 2 * ((i >> 2) & 1)) * (4 - (1 - 2 * ((i >> 4) & 1)) * (2 - (1 - 2 * ((i >> 6) & 1))))))
-               * sqrt170 * sqrt2;
-    *table2++ = (_Float16)((1 - 2 * ((i >> 1) & 1))
+               * sqrt170 * sqrt2);
+    table2[1+2*i] = (_Float16)(((1 - 2 * ((i >> 1) & 1))
                        * (8 - (1 - 2 * ((i >> 3) & 1)) * (4 - (1 - 2 * ((i >> 5) & 1)) * (2 - (1 - 2 * ((i >> 7) & 1))))))
-               * sqrt170 * sqrt2;
+               * sqrt170 * sqrt2);
+   printf("256QAM %d : %f,%f, (%f,%f) (%f,%f)\n",i,(float)table2[2*i],(float)table2[1+2*i],
+		  (float)((1 - 2 * (i & 1))
+		                         * (8 - (1 - 2 * ((i >> 2) & 1)) * (4 - (1 - 2 * ((i >> 4) & 1)) * (2 - (1 - 2 * ((i >> 6) & 1))))))
+		  * sqrt170 * sqrt2,
+		  (float)((1 - 2 * ((i >> 1) & 1))
+		                        * (8 - (1 - 2 * ((i >> 3) & 1)) * (4 - (1 - 2 * ((i >> 5) & 1)) * (2 - (1 - 2 * ((i >> 7) & 1))))))
+		  * sqrt170 * sqrt2, ((double)table[2*i])/32768.0,((double)table[1+2*i])/32768  
+		   
+		   );
 #endif
   }
 }

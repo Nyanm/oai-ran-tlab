@@ -109,6 +109,7 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
   NR_gNB_PRACH *const prach_vars   = &gNB->prach_vars;
 
   gNB->use_gpu = use_gpu;
+  gNB->use_fp16 = use_fp16;
 
   common_vars->analog_bf = cfg->analog_beamforming_ve.analog_bf_vendor_ext.value;
   LOG_I(PHY, "L1 configured with%s analog beamforming\n", common_vars->analog_bf ? "" : "out");

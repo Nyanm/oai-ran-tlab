@@ -97,7 +97,7 @@ typedef union {
   c16_t s[2];
 } amp_t;
 
-static inline int interleave_with_0_signal_first(c16_t *output, c16_t *mod_dmrs, const int16_t amp_dmrs, int sz)
+static inline int interleave_with_0_signal_first(c16_t *output, c16_t *mod_dmrs, void *amp_dmrs, int sz, int use_fp16)
 {
 #ifdef DEBUG_DLSCH_MAPPING
   printf("doing DMRS pattern for port 0 : d0 0 d1 0 ... dNm2 0 dNm1 0 (ul %d, rr %d)\n", upper_limit, remaining_re);
@@ -149,7 +149,7 @@ static inline int interleave_with_0_signal_first(c16_t *output, c16_t *mod_dmrs,
   return 0;
 }
 
-static inline int interleave_with_0_start_with_0(c16_t *output, c16_t *mod_dmrs, const int16_t amp_dmrs, int sz)
+static inline int interleave_with_0_start_with_0(c16_t *output, c16_t *mod_dmrs, void *amp_dmrs, int sz, int use_fp16)
 {
 #ifdef DEBUG_DLSCH_MAPPING
   printf("doing DMRS pattern for port 2 : 0 d0 0 d1 ... 0 dNm2 0 dNm1\n");
@@ -200,7 +200,7 @@ static inline int interleave_with_0_start_with_0(c16_t *output, c16_t *mod_dmrs,
   return 0;
 }
 
-static inline int interleave_signals(c16_t *output, c16_t *signal1, const int amp, c16_t *signal2, const int amp2, int sz)
+static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c16_t *signal2, void *amp2, int sz, int use_fp16) 
 {
 #ifdef DEBUG_DLSCH_MAPPING
   printf("doing DMRS pattern for port 0 : d0 X0 d1 X1 ... dNm2 XNm2 dNm1 XNm1\n");
@@ -209,49 +209,96 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, const int am
   c16_t *out = output;
   int i = 0;
   int end = sz / 2;
-#if defined(__AVX512BW__)
-  simde__m512i amp2512 = simde_mm512_set1_epi16(amp2), amp512 = simde_mm512_set1_epi16(amp);
-  simde__m512i perml = simde_mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
-  simde__m512i permh = simde_mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
-  for (; i < (end & ~15); i += 16) {
-    simde__m512i d0 = simde_mm512_mulhrs_epi16(_mm512_loadu_si512((simde__m512i *)(signal2 + i)), amp2512);
-    simde__m512i d1 = simde_mm512_mulhrs_epi16(_mm512_loadu_si512((simde__m512i *)(signal1 + i)), amp512);
-    simde_mm512_storeu_si512((simde__m512i *)out, simde_mm512_permutex2var_epi32(d0, perml, d1));
-    out += 16;
-    simde_mm512_storeu_si512((simde__m512i *)out, simde_mm512_permutex2var_epi32(d0, permh, d1));
-    out += 16;
+#if defined(__AVX512__) && defined(__AVX512FP16__) && defined(FLT16_MAX)
+  if (use_fp16) {
+    __m512h amp2512 = _mm512_set1_ph(*(_Float16*)amp2), amp512 = _mm512_set1_ph(*(_Float16*)amp);
+    __m512i perml = _mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
+    __m512i permh = _mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
+    for (; i < (end & ~15); i += 16) {
+      __m512h d0 = _mm512_mul_ph(_mm512_loadu_si512((__m512h *)(signal2 + i)), amp2512);
+      __m512h d1 = _mm512_mul_ph(_mm512_loadu_si512((__m512h *)(signal1 + i)), amp512);
+      _mm512_storeu_si512((simde__m512h *)out, simde_mm512_permutex2var_ph(d0, perml, d1));
+      out += 16;
+      simde_mm512_storeu_si512((simde__m512h *)out, simde_mm512_permutex2var_ph(d0, permh, d1));
+      out += 16;
+    }
+    __m256h amp2256 = _mm256_set1_ph(*(_Float16*)amp2), amp256 = _mm256_set1_ph(*(_Float16*)amp);
+    for (; i < (end & ~7); i += 8) {
+      __m256h d0 = _mm256_mul_ph(_mm256_loadu_si256((__m256h *)(signal2 + i)), amp2256);
+      __m256h d1 = _mm256_mul_ph(_mm256_loadu_si256((__m256h *)(signal1 + i)), amp256);
+      __m256h d2 = (__m256h)_mm256_unpacklo_epi32(d0, d1);
+      __m256h d3 = (__m256h)_mm256_unpackhi_epi32(d0, d1);
+      _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_si256(d2, d3, 32));
+      out += 8;
+      _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_si256(d2, d3, 49));
+      out += 8;
+    }
+    __m128h amp2128 = _mm_set1_ph(amp2), amp128 = _mm_set1_ph(amp);
+    for (; i < (end & ~3); i += 4) {
+      __m128h d0 = _mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(signal2 + i)), amp2128);
+      __m128h d1 = _mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(signal1 + i)), amp128);
+      __m128h d2 = _mm_unpacklo_epi32(d0, d1);
+      __m128h d3 = _mm_unpackhi_epi32(d0, d1);
+      simde_mm_storeu_si128((simde__m128i *)out, d2);
+      out += 4;
+      simde_mm_storeu_si128((simde__m128i *)out, d3);
+      out += 4;
+    }
+    for (; i < end; i++) {
+      *out++ = c16mulRealShift(signal2[i], amp2, 15);
+      *out++ = c16mulRealShift(signal1[i], amp, 15);
+    }
   }
+  else
+#else
+  {
+#if defined(__AVX512__) && defined(__AVX512BW__)
+  
+    simde__m512i amp2512 = simde_mm512_set1_epi16(amp2), amp512 = simde_mm512_set1_epi16(amp);
+    simde__m512i perml = simde_mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
+    simde__m512i permh = simde_mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
+    for (; i < (end & ~15); i += 16) {
+      simde__m512i d0 = simde_mm512_mulhrs_epi16(_mm512_loadu_si512((simde__m512i *)(signal2 + i)), amp2512);
+      simde__m512i d1 = simde_mm512_mulhrs_epi16(_mm512_loadu_si512((simde__m512i *)(signal1 + i)), amp512);
+      simde_mm512_storeu_si512((simde__m512i *)out, simde_mm512_permutex2var_epi32(d0, perml, d1));
+      out += 16;
+      simde_mm512_storeu_si512((simde__m512i *)out, simde_mm512_permutex2var_epi32(d0, permh, d1));
+      out += 16;
+    }
 #endif
 #if defined(__AVX2__)
-  simde__m256i amp2256 = simde_mm256_set1_epi16(amp2), amp256 = simde_mm256_set1_epi16(amp);
-  for (; i < (end & ~7); i += 8) {
-    simde__m256i d0 = simde_mm256_mulhrs_epi16(simde_mm256_loadu_si256((simde__m256i *)(signal2 + i)), amp2256);
-    simde__m256i d1 = simde_mm256_mulhrs_epi16(simde_mm256_loadu_si256((simde__m256i *)(signal1 + i)), amp256);
-    simde__m256i d2 = simde_mm256_unpacklo_epi32(d0, d1);
-    simde__m256i d3 = simde_mm256_unpackhi_epi32(d0, d1);
-    simde_mm256_storeu_si256((simde__m256i *)out, simde_mm256_permute2x128_si256(d2, d3, 32));
-    out += 8;
-    simde_mm256_storeu_si256((simde__m256i *)out, simde_mm256_permute2x128_si256(d2, d3, 49));
-    out += 8;
+    simde__m256i amp2256 = simde_mm256_set1_epi16(amp2), amp256 = simde_mm256_set1_epi16(amp);
+    for (; i < (end & ~7); i += 8) {
+      simde__m256i d0 = simde_mm256_mulhrs_epi16(simde_mm256_loadu_si256((simde__m256i *)(signal2 + i)), amp2256);
+      simde__m256i d1 = simde_mm256_mulhrs_epi16(simde_mm256_loadu_si256((simde__m256i *)(signal1 + i)), amp256);
+      simde__m256i d2 = simde_mm256_unpacklo_epi32(d0, d1);
+      simde__m256i d3 = simde_mm256_unpackhi_epi32(d0, d1);
+      simde_mm256_storeu_si256((simde__m256i *)out, simde_mm256_permute2x128_si256(d2, d3, 32));
+      out += 8;
+      simde_mm256_storeu_si256((simde__m256i *)out, simde_mm256_permute2x128_si256(d2, d3, 49));
+      out += 8;
+    }
+#endif
+    simde__m128i amp2128 = simde_mm_set1_epi16(amp2), amp128 = simde_mm_set1_epi16(amp);
+    for (; i < (end & ~3); i += 4) {
+      simde__m128i d0 = simde_mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(signal2 + i)), amp2128);
+      simde__m128i d1 = simde_mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(signal1 + i)), amp128);
+      simde__m128i d2 = simde_mm_unpacklo_epi32(d0, d1);
+      simde__m128i d3 = simde_mm_unpackhi_epi32(d0, d1);
+      simde_mm_storeu_si128((simde__m128i *)out, d2);
+      out += 4;
+      simde_mm_storeu_si128((simde__m128i *)out, d3);
+      out += 4;
+    }
+    for (; i < end; i++) {
+      *out++ = c16mulRealShift(signal2[i], amp2, 15);
+      *out++ = c16mulRealShift(signal1[i], amp, 15);
+    }
   }
 #endif
-#if defined(USE128BIT)
-  simde__m128i amp2128 = simde_mm_set1_epi16(amp2), amp128 = simde_mm_set1_epi16(amp);
-  for (; i < (end & ~3); i += 4) {
-    simde__m128i d0 = simde_mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(signal2 + i)), amp2128);
-    simde__m128i d1 = simde_mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(signal1 + i)), amp128);
-    simde__m128i d2 = simde_mm_unpacklo_epi32(d0, d1);
-    simde__m128i d3 = simde_mm_unpackhi_epi32(d0, d1);
-    simde_mm_storeu_si128((simde__m128i *)out, d2);
-    out += 4;
-    simde_mm_storeu_si128((simde__m128i *)out, d3);
-    out += 4;
-  }
+#if defined __aarch64__
+
 #endif
-  for (; i < end; i++) {
-    *out++ = c16mulRealShift(signal2[i], amp2, 15);
-    *out++ = c16mulRealShift(signal1[i], amp, 15);
-  }
   return sz / 2;
 }
 
@@ -348,8 +395,8 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
                               int l_symbol,
                               uint16_t dlPtrsSymPos,
                               int n_ptrs,
-                              int amp,
-                              int16_t amp_dmrs,
+                              void *amp,
+                              void *amp_dmrs,
                               int l_prime,
                               nfapi_nr_dmrs_type_e dmrs_Type,
                               c16_t *dmrs_start,
@@ -396,47 +443,47 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
       if (rel15->numDmrsCdmGrpsNoData == 2) {
         switch (dmrs_port & 3) {
           case 0:
-            txl += interleave_with_0_signal_first(output + start_sc, dmrs_start, amp_dmrs, upper_limit);
-            txl += interleave_with_0_signal_first(output, dmrs_start + upper_limit / 2, amp_dmrs, remaining_re);
+            txl += interleave_with_0_signal_first(output + start_sc, dmrs_start, amp_dmrs, upper_limit,use_fp16);
+            txl += interleave_with_0_signal_first(output, dmrs_start + upper_limit / 2, amp_dmrs, remaining_re,use_fp16);
             break;
           case 1: {
             c16_t dmrs[sz / 2];
             neg_dmrs(dmrs_start, dmrs, sz / 2);
-            txl += interleave_with_0_signal_first(output + start_sc, dmrs, amp_dmrs, upper_limit);
-            txl += interleave_with_0_signal_first(output, dmrs + upper_limit / 2, amp_dmrs, remaining_re);
+            txl += interleave_with_0_signal_first(output + start_sc, dmrs, amp_dmrs, upper_limit,use_fp16);
+            txl += interleave_with_0_signal_first(output, dmrs + upper_limit / 2, amp_dmrs, remaining_re,use_fp16);
           } break;
           case 2:
-            txl += interleave_with_0_start_with_0(output + start_sc, dmrs_start, amp_dmrs, upper_limit);
-            txl += interleave_with_0_start_with_0(output, dmrs_start + upper_limit / 2, amp_dmrs, remaining_re);
+            txl += interleave_with_0_start_with_0(output + start_sc, dmrs_start, amp_dmrs, upper_limit,use_fp16);
+            txl += interleave_with_0_start_with_0(output, dmrs_start + upper_limit / 2, amp_dmrs, remaining_re,use_fp16);
             break;
           case 3: {
             c16_t dmrs[sz / 2];
             neg_dmrs(dmrs_start, dmrs, sz / 2);
-            txl += interleave_with_0_start_with_0(output + start_sc, dmrs, amp_dmrs, upper_limit);
-            txl += interleave_with_0_start_with_0(output, dmrs + upper_limit / 2, amp_dmrs, remaining_re);
+            txl += interleave_with_0_start_with_0(output + start_sc, dmrs, amp_dmrs, upper_limit,use_fp16);
+            txl += interleave_with_0_start_with_0(output, dmrs + upper_limit / 2, amp_dmrs, remaining_re,use_fp16);
           } break;
         }
       } else if (rel15->numDmrsCdmGrpsNoData == 1) {
         switch (dmrs_port & 3) {
           case 0:
-            txl += interleave_signals(output + start_sc, txl, amp, dmrs_start, amp_dmrs, upper_limit);
-            txl += interleave_signals(output, txl, amp, dmrs_start + upper_limit / 2, amp_dmrs, remaining_re);
+            txl += interleave_signals(output + start_sc, txl, amp, dmrs_start, amp_dmrs, upper_limit,use_fp16);
+            txl += interleave_signals(output, txl, amp, dmrs_start + upper_limit / 2, amp_dmrs, remaining_re,use_fp16);
             break;
           case 1: {
             c16_t dmrs[sz / 2];
             neg_dmrs(dmrs_start, dmrs, sz / 2);
-            txl += interleave_signals(output + start_sc, txl, amp, dmrs, amp_dmrs, upper_limit);
-            txl += interleave_signals(output, txl, amp, dmrs + upper_limit / 2, amp_dmrs, remaining_re);
+            txl += interleave_signals(output + start_sc, txl, amp, dmrs, amp_dmrs, upper_limit,use_fp16);
+            txl += interleave_signals(output, txl, amp, dmrs + upper_limit / 2, amp_dmrs, remaining_re,use_fp16);
           } break;
           case 2:
-            txl += interleave_signals(output + start_sc, dmrs_start, amp_dmrs, txl, amp, upper_limit);
-            txl += interleave_signals(output, dmrs_start + upper_limit / 2, amp_dmrs, txl, amp, remaining_re);
+            txl += interleave_signals(output + start_sc, dmrs_start, amp_dmrs, txl, amp, upper_limit,use_fp16);
+            txl += interleave_signals(output, dmrs_start + upper_limit / 2, amp_dmrs, txl, amp, remaining_re,use_fp16);
             break;
           case 3: {
             c16_t dmrs[sz / 2];
             neg_dmrs(dmrs_start, dmrs, sz / 2);
-            txl += interleave_signals(output + start_sc, dmrs, amp_dmrs, txl, amp, upper_limit);
-            txl += interleave_signals(output, dmrs + upper_limit / 2, amp_dmrs, txl, amp, remaining_re);
+            txl += interleave_signals(output + start_sc, dmrs, amp_dmrs, txl, amp, upper_limit,use_fp16);
+            txl += interleave_signals(output, dmrs + upper_limit / 2, amp_dmrs, txl, amp, remaining_re,use_fp16);
           } break;
         }
       } else
@@ -454,11 +501,12 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
                          dmrs_Type,
                          symbol_sz,
                          l_prime,
-                         rel15->numDmrsCdmGrpsNoData);
+                         rel15->numDmrsCdmGrpsNoData,
+			 use_fp16);
     } // generic DMRS case
   } else { // no PTRS or DMRS in this symbol
-    txl += no_ptrs_dmrs_case(output + start_sc, txl, amp, upper_limit);
-    txl += no_ptrs_dmrs_case(output, txl, amp, remaining_re);
+    txl += no_ptrs_dmrs_case(output + start_sc, txl, amp, upper_limit,use_fp16);
+    txl += no_ptrs_dmrs_case(output, txl, amp, remaining_re,use_fp16);
   } // no DMRS/PTRS in symbol
   return txl - txl_start;
 }
@@ -480,12 +528,14 @@ static inline void do_txdataF(c16_t **txdataF,
     // get pmi info
     const int pmi = (pb->prg_size > 0) ? (pb->prgs_list[(int)rb / pb->prg_size].pm_idx) : 0;
     const int pmi2 = (rb < (rel15->rbSize - 1) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 1) / pb->prg_size].pm_idx) : -1;
+    const int pmi3 = (rb < (rel15->rbSize - 2) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 2) / pb->prg_size].pm_idx) : -1;
+    const int pmi4 = (rb < (rel15->rbSize - 3) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 3) / pb->prg_size].pm_idx) : -1;
 
     // If pmi of next RB and pmi of current RB are the same, we do 2 RB in a row
     // if pmi differs, or current rb is the end (rel15->rbSize - 1), than we do 1 RB in a row
-    const int rb_step = pmi == pmi2 ? 2 : 1;
+    int rb_step0 = pmi == pmi2 ? 2 : 1;
+    const int rb_step = rb_step0==2 && pmi3==pmi && pmi4==pmi ? 4 : rb_step0;
     const int re_cnt = NR_NB_SC_PER_RB * rb_step;
-
     if (pmi == 0) { // unitary Precoding
       if (subCarrier + re_cnt <= symbol_sz) { // RB does not cross DC
         if (ant < rel15->nrOfLayers)
@@ -566,7 +616,6 @@ static inline void do_txdataF(c16_t **txdataF,
 }
 static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSCH_t *dlsch, int slot)
 {
-  const int16_t amp = gNB->TX_AMP;
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
 
   time_stats_t *dlsch_scrambling_stats = &gNB->dlsch_scrambling_stats;
@@ -577,7 +626,13 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   const int symbol_sz=frame_parms->ofdm_symbol_size;
   const int dmrs_Type = rel15->dmrsConfigType;
   const int nb_re_dmrs = rel15->numDmrsCdmGrpsNoData * (rel15->dmrsConfigType == NFAPI_NR_DMRS_TYPE1 ? 6 : 4);
+#ifdef FLT16_MAX
+  const _Float16 amp = 1.0f;
+  const _Float16 amp_dmrs = (_Float16)sqrt(rel15->numDmrsCdmGrpsNoData);
+#else
+  const int16_t amp = gNB->TX_AMP;
   const int16_t amp_dmrs = min((double)amp * sqrt(rel15->numDmrsCdmGrpsNoData), INT16_MAX); // 3GPP TS 38.214 Section 4.1: Table 4.1-1
+#endif
   LOG_D(PHY,
         "pdsch: BWPStart %d, BWPSize %d, rbStart %d, rbsize %d\n",
         rel15->BWPStart,
@@ -655,6 +710,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 #else
     nr_modulation(scrambled_output, encoded_length, Qm, (int16_t *)mod_symbs[codeWord]);
 #endif
+    for (int i=0;i<16;i++) printf("mod output %d : %f\n",i,(double)((_Float16*)mod_symbs[codeWord])[i]);
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_gNB_PDSCH_MODULATION, 0);
     stop_meas(dlsch_modulation_stats);
 #ifdef DEBUG_DLSCH
@@ -668,6 +724,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 #endif
   }
 
+  start_meas(&gNB->dlsch_pdsch_generation_stats);
   /// Resource mapping
   // Non interleaved VRB to PRB mapping
   uint16_t start_sc = frame_parms->first_carrier_offset + (rel15->rbStart + rel15->BWPStart) * NR_NB_SC_PER_RB;
@@ -689,6 +746,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   c16_t mod_dmrs[(n_dmrs+63)&~63] __attribute__((aligned(64)));
   unsigned int re_beginning_of_symbol = 0;
 
+  start_meas(&gNB->dlsch_layer_mapping_stats);
   int layerSz2 = (layerSz + 63) & ~63;
   c16_t tx_layers[rel15->nrOfLayers][layerSz2] __attribute__((aligned(64)));
   memset(tx_layers, 0, sizeof(tx_layers));
@@ -701,7 +759,6 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   //        pmi = prgs_list[rbidx/prg_size].pm_idx, rbidx =0,...,rbSize-1
   // The Precoding matrix:
   // The Codebook Type I
-  start_meas(&gNB->dlsch_precoding_stats);
   nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
   // beam number in multi-beam scenario (concurrent beams)
   int bitmap = SL_to_bitmap(rel15->StartSymbolIndex, rel15->NrOfSymbols);
@@ -714,9 +771,10 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
                                       bitmap);
 
   c16_t **txdataF = gNB->common_vars.txdataF[beam_nb];
-
+  stop_meas(&gNB->dlsch_layer_mapping_stats);
   // Loop Over OFDM symbols:
   for (int l_symbol = rel15->StartSymbolIndex; l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols; l_symbol++) {
+    start_meas(&gNB->dlsch_resource_mapping_stats);
     int l_prime = 0; // single symbol layer 0
     int l_overline = get_l0(rel15->dlDmrsSymbPos);
 
@@ -780,8 +838,8 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
                              l_symbol,
                              dlPtrsSymPos,
                              n_ptrs,
-                             amp,
-                             amp_dmrs,
+                             (void*)&amp,
+                             (void*)&amp_dmrs,
                              l_prime,
                              dmrs_Type,
                              mod_dmrs + dmrs_idx,
@@ -790,13 +848,14 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     re_beginning_of_symbol += layer_sz;
     stop_meas(&gNB->dlsch_resource_mapping_stats);
 
+    start_meas(&gNB->dlsch_precoding_stats);
     for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
       const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz + txdataF_offset;
       do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, ant, start_sc, txdataF_offset_per_symbol);
     }
+    stop_meas(&gNB->dlsch_precoding_stats);
   }
-
-  stop_meas(&gNB->dlsch_precoding_stats);
+  stop_meas(&gNB->dlsch_pdsch_generation_stats);
   /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)
    * should remain a multiple of 8 * 64 with enough offset to fit each dlsch
    */
