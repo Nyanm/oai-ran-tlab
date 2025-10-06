@@ -228,9 +228,9 @@ uint16_t get_pm_index(const gNB_MAC_INST *nrmac,
 // command line: nr_dlsim -n 10000 -m 0 -R 25 -b 25 -e MCS -s START_SNR -t 99.99
 // SNR Thresholds for MCS=[0,...,28]; START_SNR=chosen values with a resolution of 0.2dB to maintain a BLER of 10^-3
 static const int SINRx10_MCS_mapping[29] = {
-  -10,  -4,   6,  16,  24,  34,  42,  50,  56,  62, //  0..9
-   86,  92,  98, 104, 112, 118, 124, 140, 146, 154, // 10..19
-  162, 170, 178, 186, 194, 202, 212, 220, 245       // 20..28
+  -16,  -8,   2,  12,  22,  32,  40,  48,  52,  60, //  0..9
+   82,  86,  94, 100, 110, 116, 122, 136, 142, 150, // 10..19
+  160, 164, 174, 182, 192, 200, 212, 216, 242       // 20..28
 };
 
 int get_mcs_from_SINRx10(int mcs_table, int SINRx10, int Nl)
