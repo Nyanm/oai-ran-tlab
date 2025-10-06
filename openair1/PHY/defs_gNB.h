@@ -525,7 +525,7 @@ typedef struct PHY_VARS_gNB_s {
   notifiedFIFO_t respPuschSymb;
   notifiedFIFO_t respDecode;
   notifiedFIFO_t resp_L1;
-  notifiedFIFO_t L1_tx_free;
+  notifiedFIFO_t sched_not_done;
   notifiedFIFO_t L1_tx_filled;
   notifiedFIFO_t L1_tx_out;
   notifiedFIFO_t L1_rx_out;

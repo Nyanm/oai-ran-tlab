@@ -996,41 +996,45 @@ void ru_tx_func(void *param)
  *
  * Certain radios, e.g., RFsim, can run faster than real-time. This might
  * create problems, e.g., if RX and TX get too far from each other. This
- * function ensures that a maximum of 4 RX slots are processed at a time (and
- * not more than those four are started).
+ * function ensures that a maximum of RU_RX_SLOT_DEPTH RX slots are processed
+ * at a time (and not more than those four are started).
  *
  * Through the queue L1_rx_out, we are informed about completed RX jobs.
  * rx_tti_busy keeps track of individual slots that have been started; this
  * function blocks until the current frame/slot is completed, signaled through
  * a message.
  *
+ * This function is also used to ensure the scheduler for current RX slot is
+ * finished so that the scheduling information of this slot is used to do
+ * Rx beamforming in the RU thread.
+ *
  * @param L1_rx_out the queue from which to read completed RX jobs
+ * @param size array size of next param
  * @param rx_tti_busy array to mark RX job completion
  * @param frame_rx the frame to wait for
  * @param slot_rx the slot to wait for
+ * @param target_slot slot to set as busy
  */
-static bool wait_free_rx_tti(notifiedFIFO_t *L1_rx_out, bool rx_tti_busy[RU_RX_SLOT_DEPTH], int frame_rx, int slot_rx)
+static bool wait_free_rx_tti(notifiedFIFO_t *fifo, int size, bool is_busy[size], int frame_rx, int slot_rx, int target_slot)
 {
-  int idx = slot_rx % RU_RX_SLOT_DEPTH;
-  if (rx_tti_busy[idx]) {
+  int idx = slot_rx % size;
+  if (is_busy[idx]) {
     bool not_done = true;
-    LOG_D(NR_PHY, "%d.%d Waiting to access RX slot %d\n", frame_rx, slot_rx, idx);
     // block and wait for frame_rx/slot_rx free from previous slot processing.
     // as we can get other slots, we loop on the queue
     while (not_done) {
-      notifiedFIFO_elt_t *res = pullNotifiedFIFO(L1_rx_out);
+      notifiedFIFO_elt_t *res = pullNotifiedFIFO(fifo);
       if (!res)
         return false;
       processingData_L1_t *info = NotifiedFifoData(res);
-      LOG_D(NR_PHY, "%d.%d Got access to RX slot %d.%d (%d)\n", frame_rx, slot_rx, info->frame_rx, info->slot_rx, idx);
-      rx_tti_busy[info->slot_rx % RU_RX_SLOT_DEPTH] = false;
-      if ((info->slot_rx % RU_RX_SLOT_DEPTH) == idx)
+      is_busy[info->slot_rx % size] = false;
+      if ((info->slot_rx % size) == idx)
         not_done = false;
       delNotifiedFIFO_elt(res);
     }
   }
   // set the tti to busy: the caller will process this slot now
-  rx_tti_busy[idx] = true;
+  is_busy[target_slot % size] = true;
   return true;
 }
 
@@ -1048,6 +1052,8 @@ void *ru_thread(void *param)
   int initial_wait = 0;
 
   bool rx_tti_busy[RU_RX_SLOT_DEPTH] = {false};
+  bool sched_not_done[fp->slots_per_frame];
+  memset(sched_not_done, 0, sizeof(sched_not_done));
   // set default return value
   ru_thread_status = 0;
   // set default return value
@@ -1195,10 +1201,17 @@ void *ru_thread(void *param)
     if (ru->idx != 0)
       proc->frame_tx = (proc->frame_tx + proc->frame_offset) & 1023;
 
+    /* We have to wait for this Rx slot scheduler to finish because the allocation information is used
+       to do Rx beamforming in apply_rx_beamforming(). It is necessary because RFsim runs much faster than
+       real radio and this thread could catch with L1_tx_thread and there is posibility that this slot is
+       finished in this thread before scheduler returns. */
+    if (!wait_free_rx_tti(&gNB->sched_not_done, fp->slots_per_frame, sched_not_done, proc->frame_rx, proc->tti_rx, proc->tti_tx))
+      break;
+
     // do RX front-end processing (frequency-shift, dft) if needed
     int slot_type = nr_slot_select(&ru->config, proc->frame_rx, proc->tti_rx);
     if (slot_type == NR_UPLINK_SLOT || slot_type == NR_MIXED_SLOT) {
-      if (!wait_free_rx_tti(&gNB->L1_rx_out, rx_tti_busy, proc->frame_rx, proc->tti_rx))
+      if (!wait_free_rx_tti(&gNB->L1_rx_out, RU_RX_SLOT_DEPTH, rx_tti_busy, proc->frame_rx, proc->tti_rx, proc->tti_rx))
         break; // nothing to wait for: we have to stop
       if (ru->feprx) {
         ru->feprx(ru,proc->tti_rx);

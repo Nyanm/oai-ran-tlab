@@ -104,7 +104,11 @@ static void tx_func(processingData_L1tx_t *info)
 
   // At this point, MAC scheduler just ran, including scheduling
 
-  // Pass FAPI beam info to RU to configure UL slots in advance
+  /* Pass FAPI beam info to RU to configure UL slots in advance. Here we assume that
+  scheduling sl_ahead is enough time for sending config info to 7.2 radio but there is
+  a possibilty of this thread running slower and the RU thread would catch up as with
+  RFsim. If that happens, then we would be late to configure the 7.2 radio for the
+  scheduled UL slot. */
   process_rx_grid_info_bf(gNB->RU_list[0], frame_tx, slot_tx);
 
   // PRACH/PUCCH/PUSCH, so trigger RX chain processing
@@ -117,6 +121,15 @@ static void tx_func(processingData_L1tx_t *info)
   syncMsg->timestamp_tx = info->timestamp_tx;
   res->key = slot_rx;
   pushNotifiedFIFO(&gNB->resp_L1, res);
+
+  // Unblock RU Rx thread after current Rx slot is scheduled.
+  res = newNotifiedFIFO_elt(sizeof(processingData_L1_t), 0, NULL, NULL);
+  syncMsg = NotifiedFifoData(res);
+  syncMsg->gNB = gNB;
+  syncMsg->frame_rx = frame_tx;
+  syncMsg->slot_rx = slot_tx;
+  res->key = slot_tx;
+  pushNotifiedFIFO(&gNB->sched_not_done, res);
 
   int tx_slot_type = nr_slot_select(cfg, frame_tx, slot_tx);
   if (tx_slot_type == NR_DOWNLINK_SLOT || tx_slot_type == NR_MIXED_SLOT || get_softmodem_params()->continuous_tx || IS_SOFTMODEM_RFSIM) {
@@ -345,7 +358,7 @@ void init_gNB_Tpool(int inst)
   // L1 RX result FIFO
   initNotifiedFIFO(&gNB->resp_L1);
   // L1 TX result FIFO 
-  initNotifiedFIFO(&gNB->L1_tx_free);
+  initNotifiedFIFO(&gNB->sched_not_done);
   initNotifiedFIFO(&gNB->L1_tx_filled);
   initNotifiedFIFO(&gNB->L1_tx_out);
   initNotifiedFIFO(&gNB->L1_rx_out);
@@ -377,7 +390,7 @@ void term_gNB_Tpool(int inst) {
   abortTpool(&gNB->threadPool);
   abortNotifiedFIFO(&gNB->respPuschSymb);
   abortNotifiedFIFO(&gNB->respDecode);
-  abortNotifiedFIFO(&gNB->L1_tx_free);
+  abortNotifiedFIFO(&gNB->sched_not_done);
   abortNotifiedFIFO(&gNB->L1_tx_filled);
   abortNotifiedFIFO(&gNB->L1_rx_out);
 
