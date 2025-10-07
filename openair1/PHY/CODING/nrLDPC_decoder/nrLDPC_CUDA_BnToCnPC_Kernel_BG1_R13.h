@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "nrLDPC_types.h"
-#include "nrLDPC_CnProcKernel_BG1_cuda.h"
+#include "nrLDPC_CUDA_CnProcKernel_BG1_R13.h"
 
 // #define arrPos(a, b) a.d + b *a.dim2
 
