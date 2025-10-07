@@ -213,7 +213,7 @@ int main(int argc, char **argv)
 
   memset(freqFrame, 0, sizeof(freqFrame));
 
-  int n_antennas = 1;
+  const int n_antennas = 1;
 
   NR_DL_FRAME_PARMS frame_parms_storage;
   frame_parms = &frame_parms_storage;
@@ -221,7 +221,9 @@ int main(int argc, char **argv)
 
   frame_parms->N_RB_DL = RBs;
   frame_parms->N_RB_UL = RBs;
+  frame_parms->N_RB_SL = 0;
   frame_parms->Ncp = 0; // normal CP
+  frame_parms->frame_type = TDD;
   frame_parms->nb_antennas_tx = n_antennas;
   frame_parms->nb_antennas_rx = n_antennas;
   frame_parms->subcarrier_spacing = 15e3;
@@ -268,7 +270,7 @@ int main(int argc, char **argv)
   bool was_symbol_used[NR_NUMBER_OF_SYMBOLS_PER_SLOT];
 
   memset(freqFrame, 0, sizeof(freqFrame));
-  memcpy(freqFrame, Payload_6RBs_ZC, sizeof(Payload_6RBs_ZC));
+  memcpy(freqFrame, SIP_SCs_ZC_6RBs_M4, sizeof(SIP_SCs_ZC_6RBs_M4));
   memset(txDataF[0], 0, frame_length_complex_samples * sizeof(int));
 
   for (int sym = 0; sym < num_symbols; sym++) {
@@ -313,9 +315,9 @@ int main(int argc, char **argv)
 
   SCM_t channel_model = AWGN;
   uint64_t fc = 897500000; // Carrier frequency n8 band, #50 RB
-  double DS_TDL = .03;
-  double SNR = 30.0;
-  double path_loss_dB = -20;
+  double DS_TDL = 0; //.03;
+  double SNR = 0; // 30.0;
+  double path_loss_dB = 0; //-20;
   double noise_power_dB = -160.0;
   int delay = 0;
   double samples = N_RB2sampling_rate(RBs);
@@ -366,6 +368,9 @@ int main(int argc, char **argv)
          sigma2_dB,
          10 * log10((double)txlev),
          (double)(double)frame_parms->ofdm_symbol_size / points_per_symbol);
+
+  sigma2 = 0;
+  delay = 0;
 
   multipath_channel(channel, s_re, s_im, r_re, r_im, slot_length, 0, 1);
   add_noise(rxData,
@@ -421,8 +426,65 @@ int main(int argc, char **argv)
   sprintf(filename, "%s/downsampled.m", foldername);
   LOG_M(filename, "downsampledx", downSampled, downSampled_length, 1, 1);
 
+  // Correlate the received signal with known SIP sequence
+  int SIP_downsampled_length = 2*ofdm_symbol_size/N + frame_parms->nb_prefix_samples/N;
+  c16_t SIP_ideal[SIP_downsampled_length];
+  c16_t value0 = (c16_t){0, 0};
+  c16_t value1 = (c16_t){16384, 0};
+
+  for (int i = 0; i < 4; i++) {
+    for (int k = 0; k < ofdm_symbol_size/N/4; k++)
+    {
+      SIP_ideal[i*ofdm_symbol_size/N/4 + k] = R_TAS_SIP & (1 << (7 - i)) ? value1 : value0;
+    }
+  }
+
+  for (int k = 0; k < frame_parms->nb_prefix_samples/N; k++)
+  {
+    SIP_ideal[4*ofdm_symbol_size/N/4 + k] = value0;
+  }
+
+  for (int i = 4; i < 8; i++) {
+    for (int k = 0; k < ofdm_symbol_size/N/4; k++)
+    {
+      SIP_ideal[frame_parms->nb_prefix_samples/N + i*ofdm_symbol_size/N/4 + k] = R_TAS_SIP & (1 << (7 - i)) ? value1 : value0;
+    }
+  }
+
+  sprintf(filename, "%s/SIP_ideal.m", foldername);
+  LOG_M(filename, "SIP_idealx", SIP_ideal, SIP_downsampled_length, 1, 1);
+
+  double *correlation = malloc(downSampled_length * sizeof(double));
+  memset(correlation, 0, downSampled_length * sizeof(double));
+
+  int corr_len = sizeof(SIP_ideal) / sizeof(SIP_ideal[0]);
+  for (int i = 0; i < downSampled_length - corr_len; i++) {
+    double sum = 0.0;
+    for (int j = 0; j < corr_len; j++) {
+      sum += downSampled[i + j].r * SIP_ideal[j].r + downSampled[i + j].i * SIP_ideal[j].i;
+    }
+    correlation[i] = sum;
+  }
+
+  sprintf(filename, "%s/correlation.m", foldername);
+  LOG_M(filename, "correlationx", correlation, downSampled_length, 1, 7);
+
+  double max_value = 0.0;
+  int SIP_offset = 0;
+  for (int i = 0; i < downSampled_length - corr_len; i++)
+  {
+    if(max_value < correlation[i]) {
+      max_value = correlation[i];
+      SIP_offset = i;
+    }
+  }
+
+  printf("SIP offset: %d\n", SIP_offset);
+
+  free(correlation);
+
   // Remove CP (CP0 size = 10, CP size = 9, OFDM symbol size = 128)
-  int cleared_length = num_symbols * (frame_parms->ofdm_symbol_size/N);
+  /*int cleared_length = num_symbols * (frame_parms->ofdm_symbol_size/N);
   c16_t *cleared = malloc(cleared_length * sizeof(c16_t));
   for (int i = 0, cp = 0; i < num_symbols; i++)
   {
@@ -458,8 +520,8 @@ int main(int argc, char **argv)
   printf("Received payload: 0x%02X\n", payload);
 
   free(energy);
+  free(cleared);*/
   free(downSampled);
-  free(cleared);
 
   for (int i = 0; i < NB_ANTENNAS_TX; i++) {
     free(s_re[i]);
