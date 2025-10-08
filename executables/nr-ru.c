@@ -784,19 +784,24 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
   VCD_SIGNAL_DUMPER_DUMP_VARIABLE_BY_NAME(VCD_SIGNAL_DUMPER_VARIABLES_TTI_NUMBER_TX0_RU, slot);
 
   int nt = ru->nb_tx * ru->num_beams_period;
-  void *txp[nt];
-  for (int i = 0; i < nt; i++)
-    txp[i] = (void *)&ru->common.txdata[i][fp->get_samples_slot_timestamp(slot, fp, 0)] - sf_extension * sizeof(int32_t);
+  void **txpBeam[ru->num_beams_period];
+  void *txp[ru->num_beams_period][ru->nb_tx];
+  for (int b = 0; b < ru->num_beams_period; b++) {
+    txpBeam[b] = txp[b];
+    for (int i = 0; i < ru->nb_tx; i++)
+      txp[b][i] = (void *)&ru->common.txdata[i * b][fp->get_samples_slot_timestamp(slot, fp, 0)] - sf_extension * sizeof(int32_t);
+  }
 
   VCD_SIGNAL_DUMPER_DUMP_VARIABLE_BY_NAME(VCD_SIGNAL_DUMPER_VARIABLES_TRX_TST, (timestamp + ru->ts_offset) & 0xffffffff);
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_WRITE, 1);
   // prepare tx buffer pointers
-  uint32_t txs = ru->rfdevice.trx_write_func(&ru->rfdevice,
-                                             timestamp + ru->ts_offset - sf_extension,
-                                             txp,
-                                             siglen + sf_extension,
-                                             nt,
-                                             flags);
+  uint32_t txs = ru->rfdevice.trx_write_beams_func(&ru->rfdevice,
+                                                   timestamp + ru->ts_offset - sf_extension,
+                                                   (void ***)txpBeam,
+                                                   siglen + sf_extension,
+                                                   nt,
+                                                   1,
+                                                   flags);
   LOG_D(PHY,
         "[TXPATH] RU %d tx_rf, writing to TS %lu, %d.%d, unwrapped_frame %d, slot %d, flags %d, siglen+sf_extension %d, "
         "returned %d, E %f\n",
@@ -809,7 +814,7 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
         flags,
         siglen + sf_extension,
         txs,
-        10 * log10((double)signal_energy(txp[0], siglen + sf_extension)));
+        10 * log10((double)signal_energy(txp[0][0], siglen + sf_extension)));
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_WRITE, 0);
 }
 
