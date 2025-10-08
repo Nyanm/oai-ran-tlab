@@ -1357,7 +1357,6 @@ extern "C" {
 
     switch ((int)openair0_cfg[0].sample_rate) {
       case 46080000:
-        s->usrp->set_master_clock_rate(46.08e6);
         //openair0_cfg[0].samples_per_packet    = 1024;
         openair0_cfg[0].tx_sample_advance     = 164;
         openair0_cfg[0].tx_bw                 = 40e6;
@@ -1365,7 +1364,6 @@ extern "C" {
         break;
 
       case 30720000:
-        s->usrp->set_master_clock_rate(30.72e6);
         //openair0_cfg[0].samples_per_packet    = 1024;
         openair0_cfg[0].tx_sample_advance     = 115;
         openair0_cfg[0].tx_bw                 = 20e6;
@@ -1373,7 +1371,6 @@ extern "C" {
         break;
 
       case 23040000:
-        s->usrp->set_master_clock_rate(23.04e6); //to be checked
         //openair0_cfg[0].samples_per_packet    = 1024;
         openair0_cfg[0].tx_sample_advance     = 113;
         openair0_cfg[0].tx_bw                 = 20e6;
@@ -1381,7 +1378,6 @@ extern "C" {
         break;
 
       case 15360000:
-        s->usrp->set_master_clock_rate(30.72e06);
         //openair0_cfg[0].samples_per_packet    = 1024;
         openair0_cfg[0].tx_sample_advance     = 103;
         openair0_cfg[0].tx_bw                 = 20e6;
@@ -1389,7 +1385,6 @@ extern "C" {
         break;
 
       case 7680000:
-        s->usrp->set_master_clock_rate(30.72e6);
         //openair0_cfg[0].samples_per_packet    = 1024;
         openair0_cfg[0].tx_sample_advance     = 80;
         openair0_cfg[0].tx_bw                 = 20e6;
@@ -1397,7 +1392,6 @@ extern "C" {
         break;
 
       case 1920000:
-        s->usrp->set_master_clock_rate(30.72e6);
         //openair0_cfg[0].samples_per_packet    = 1024;
         openair0_cfg[0].tx_sample_advance     = 40;
         openair0_cfg[0].tx_bw                 = 20e6;
