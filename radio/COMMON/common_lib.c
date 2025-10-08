@@ -175,7 +175,8 @@ int openair0_transport_load(openair0_device *device,
   return rc;
 }
 
-static void writerEnqueue(re_order_t *ctx, openair0_timestamp timestamp, void **txp, int nsamps, int nbAnt, int flags)
+static void
+writerEnqueue(re_order_t *ctx, openair0_timestamp timestamp, void ***txp, int nsamps, int nbAnt, int num_beams, int flags)
 {
   pthread_mutex_lock(&ctx->mutex_store);
   LOG_D(HW, "Enqueue write for TS: %lu\n", timestamp);
@@ -187,9 +188,11 @@ static void writerEnqueue(re_order_t *ctx, openair0_timestamp timestamp, void **
       ctx->queue[i].nsamps = nsamps;
       ctx->queue[i].nbAnt = nbAnt;
       ctx->queue[i].flags = flags;
+      ctx->queue[i].num_beams = num_beams;
       AssertFatal(nbAnt <= NB_ANTENNAS_TX, "");
-      for (int j = 0; j < nbAnt; j++)
-        ctx->queue[i].txp[j] = txp[j];
+      for (int b = 0; b < num_beams; b++)
+        for (int j = 0; j < nbAnt; j++)
+          ctx->queue[i].txp[b][j] = txp[b][j];
       break;
     }
   AssertFatal(i < WRITE_QUEUE_SZ, "Write queue full\n");
@@ -210,15 +213,19 @@ static void writerProcessWaitingQueue(openair0_device *device)
         int nsamps = ctx->queue[i].nsamps;
         int nbAnt = ctx->queue[i].nbAnt;
         int flags = ctx->queue[i].flags;
-        void *txp[NB_ANTENNAS_TX];
-        AssertFatal(nbAnt <= NB_ANTENNAS_TX, "");
-        for (int j = 0; j < nbAnt; j++)
-          txp[j] = ctx->queue[i].txp[j];
+        int num_beams =  ctx->queue[i].num_beams;
+        void **txpBeams[num_beams];
+        void *txp[num_beams][nbAnt];
+        for (int b = 0; b < num_beams; b++) {
+          txpBeams[b] = txp[b];
+          for (int j = 0; j < nbAnt; j++)
+            txp[b][j] = ctx->queue[i].txp[b][j];
+        }
         ctx->queue[i].active = false;
         pthread_mutex_unlock(&ctx->mutex_store);
         found = true;
         if (flags || IS_SOFTMODEM_RFSIM) {
-          int wroteSamples = device->trx_write_func(device, timestamp, txp, nsamps, nbAnt, flags);
+          int wroteSamples = device->trx_write_beams(device, timestamp, txpBeams, nsamps, nbAnt, num_beams, flags);
           if (wroteSamples != nsamps)
             LOG_E(HW, "Failed to write to rf\n");
         }
@@ -235,7 +242,13 @@ static void writerProcessWaitingQueue(openair0_device *device)
 // but to make zerocopy and agnostic design, we need to make a proper ring buffer with mutex protection
 // mutex (or atomic flags) will be mandatory because this out order system root cause is there are several writer threads
 
-int openair0_write_reorder(openair0_device *device, openair0_timestamp timestamp, void **txp, int nsamps, int nbAnt, int flags)
+int openair0_write_reorder(openair0_device *device,
+                           openair0_timestamp timestamp,
+                           void ***txp,
+                           int nsamps,
+                           int nbAnt,
+                           int num_beams,
+                           int flags)
 {
   int wroteSamples = 0;
   re_order_t *ctx = &device->reOrder;
@@ -250,19 +263,19 @@ int openair0_write_reorder(openair0_device *device, openair0_timestamp timestamp
     // We have the write exclusivity
     if (llabs(timestamp - ctx->nextTS) < MAX_GAP) { // We are writing in sequence of the previous write
       if (flags || IS_SOFTMODEM_RFSIM)
-        wroteSamples = device->trx_write_func(device, timestamp, txp, nsamps, nbAnt, flags);
+        wroteSamples = device->trx_write_beams(device, timestamp, txp, nsamps, nbAnt, num_beams, flags);
       else
         wroteSamples = nsamps;
       ctx->nextTS = timestamp + nsamps;
 
     } else {
-      writerEnqueue(ctx, timestamp, txp, nsamps, nbAnt, flags);
+      writerEnqueue(ctx, timestamp, txp, nsamps, nbAnt, num_beams, flags);
     }
     writerProcessWaitingQueue(device);
     pthread_mutex_unlock(&ctx->mutex_write);
     return wroteSamples ? wroteSamples : nsamps;
   }
-  writerEnqueue(ctx, timestamp, txp, nsamps, nbAnt, flags);
+  writerEnqueue(ctx, timestamp, txp, nsamps, nbAnt, num_beams, flags);
   if (pthread_mutex_trylock(&ctx->mutex_write) == 0) {
     writerProcessWaitingQueue(device);
     pthread_mutex_unlock(&ctx->mutex_write);

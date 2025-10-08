@@ -401,9 +401,10 @@ typedef struct {
   struct {
     bool active;
     openair0_timestamp timestamp;
-    void *txp[NB_ANTENNAS_TX];
+    void *txp[64][NB_ANTENNAS_TX];
     int nsamps;
     int nbAnt;
+    int num_beams;
     int flags;
   } queue[WRITE_QUEUE_SZ];
 } re_order_t;
@@ -493,10 +494,27 @@ struct openair0_device_t {
       @param timestamp The timestamp at whicch the first sample MUST be sent
       @param buff Buffer which holds the samples (2 dimensional)
       @param nsamps number of samples to be sent
-      @param number of antennas 
+      @param antenna_id
+      @param num_beams
       @param flags flags must be set to true if timestamp parameter needs to be applied
   */
-  int (*trx_write_func)(openair0_device *device, openair0_timestamp timestamp, void **buff, int nsamps,int antenna_id, int flags);
+  int (*trx_write_beams)(openair0_device *device,
+                         openair0_timestamp timestamp,
+                         void ***buff,
+                         int nsamps,
+                         int antenna_id,
+                         int num_beams,
+                         int flags);
+
+  /*! \brief Called to send samples to the RF target
+      @param device pointer to the device structure specific to the RF hardware target
+      @param timestamp The timestamp at whicch the first sample MUST be sent
+      @param buff Buffer which holds the samples (2 dimensional)
+      @param nsamps number of samples to be sent
+      @param number of antennas
+      @param flags flags must be set to true if timestamp parameter needs to be applied
+  */
+  int (*trx_write_func)(openair0_device *device, openair0_timestamp timestamp, void **buff, int nsamps, int antenna_id, int flags);
 
   /*! \brief Called to send samples to the RF target
       @param device pointer to the device structure specific to the RF hardware target
@@ -629,6 +647,7 @@ typedef struct {
   uint64_t timestamp;      // Timestamp value of first sample
   uint32_t option_value;   // Option value
   uint32_t option_flag;    // Option flag
+  uint64_t beam_map;
 } samplesBlockHeader_t;
 
 #ifdef __cplusplus
@@ -678,7 +697,13 @@ extern int read_recplayconfig(recplay_conf_t **recplay_conf, recplay_state_t **r
 /*! \brief store recorded iqs from memory to file. */
 extern void iqrecorder_end(openair0_device *device);
 
-int openair0_write_reorder(openair0_device *device, openair0_timestamp timestamp, void **txp, int nsamps, int nbAnt, int flags);
+int openair0_write_reorder(openair0_device *device,
+                           openair0_timestamp timestamp,
+                           void ***txp,
+                           int nsamps,
+                           int nbAnt,
+                           int num_beams,
+                           int flags);
 void openair0_write_reorder_clear_context(openair0_device *device);
 #include <unistd.h>
 #ifndef gettid

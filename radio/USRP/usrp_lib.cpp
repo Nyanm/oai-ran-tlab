@@ -423,12 +423,15 @@ static void trx_usrp_end(openair0_device *device) {
       @param antenna_id index of the antenna if the device has multiple antennas
       @param flags flags must be set to true if timestamp parameter needs to be applied
 */
-static int trx_usrp_write(openair0_device *device,
-			  openair0_timestamp timestamp,
-			  void **buff,
-			  int nsamps,
-			  int cc,
-			  int flags) {
+
+static int usrp_write_beams(openair0_device *device,
+                            openair0_timestamp timestamp,
+                            void ***buff,
+                            int nsamps,
+                            int cc,
+                            int num_beams,
+                            int flags)
+{
   int ret=0;
   usrp_state_t *s = (usrp_state_t *)device->priv;
   timestamp -= device->openair0_cfg->command_line_sample_advance + device->openair0_cfg->tx_sample_advance;
@@ -481,10 +484,10 @@ static int trx_usrp_write(openair0_device *device,
       // bring RX data into 12 LSBs for softmodem RX
       for (int i = 0; i < cc; i++) {
         for (int j = 0; j < nsamps2; j++) {
-          if ((((uintptr_t)buff[i]) & 0x1F) == 0) {
-            buff_tx[i][j] = simde_mm256_slli_epi16(((simde__m256i *)buff[i])[j], 4);
+          if ((((uintptr_t)buff[0][i]) & 0x1F) == 0) {
+            buff_tx[i][j] = simde_mm256_slli_epi16(((simde__m256i *)buff[0][i])[j], 4);
           } else {
-            simde__m256i tmp = simde_mm256_loadu_si256(((simde__m256i *)buff[i]) + j);
+            simde__m256i tmp = simde_mm256_loadu_si256(((simde__m256i *)buff[0][i]) + j);
             buff_tx[i][j] = simde_mm256_slli_epi16(tmp, 4);
           }
         }
@@ -541,7 +544,7 @@ VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_BEAM_SWITCHI
       write_package[end].last_packet = last_packet_state;
       write_package[end].flags_gpio = flags_gpio;
       for (int i = 0; i < cc; i++)
-        write_package[end].buff[i] = buff[i];
+        write_package[end].buff[i] = buff[0][i];
       write_thread->count_write++;
       write_thread->end = (write_thread->end + 1) % MAX_WRITE_THREAD_PACKAGE;
       LOG_D(HW, "Signaling TX TS %llu\n", (unsigned long long)timestamp);
@@ -550,7 +553,11 @@ VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_BEAM_SWITCHI
       return 0;
     }
 }
-
+static int trx_usrp_write(openair0_device *device, openair0_timestamp timestamp, void **buff, int nsamps, int cc, int flags)
+{
+  void **tmp = buff;
+  return usrp_write_beams(device, timestamp, &tmp, nsamps, cc, 1, flags);
+}
 //-----------------------start--------------------------
 /*! \brief Called to send samples to the USRP RF target
       @param device pointer to the device structure specific to the RF hardware target
@@ -1537,6 +1544,7 @@ extern "C" {
   std::cout << boost::format("Using Device: %s") % s->usrp->get_pp_string() << std::endl;
   LOG_I(HW,"Device timestamp: %f...\n", s->usrp->get_time_now().get_real_secs());
   device->trx_write_func = trx_usrp_write;
+  device->trx_write_beams = usrp_write_beams;
   device->trx_read_func  = trx_usrp_read;
   s->sample_rate = openair0_cfg[0].sample_rate;
 
