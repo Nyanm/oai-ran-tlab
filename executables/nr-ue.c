@@ -386,7 +386,8 @@ static void RU_write(nr_rxtx_thread_data_t *rxtxD, bool sl_tx_action, c16_t **tx
   const int maxWriteBlockSize = get_samples_per_slot(proc->nr_slot_tx, fp);
   while (writeBlockSize > maxWriteBlockSize) {
     const int dummyBlockSize = min(writeBlockSize - maxWriteBlockSize, maxWriteBlockSize);
-    int tmp = openair0_write_reorder(&UE->rfdevice, writeTimestamp, (void **)txp, dummyBlockSize, fp->nb_antennas_tx, flags);
+    void **tx = (void **)txp;
+    int tmp = openair0_write_reorder(&UE->rfdevice, writeTimestamp, &tx, dummyBlockSize, fp->nb_antennas_tx, 1, flags);
     AssertFatal(tmp == dummyBlockSize, "");
 
     writeTimestamp += dummyBlockSize;
@@ -401,8 +402,8 @@ static void RU_write(nr_rxtx_thread_data_t *rxtxD, bool sl_tx_action, c16_t **tx
     for (int i = 0; i < fp->nb_antennas_tx; i++)
       nr_fo_compensation(ul_freq_offset, fp->samples_per_subframe, writeTimestamp, txp[i], txp[i], writeBlockSize);
   }
-
-  int tmp = openair0_write_reorder(&UE->rfdevice, writeTimestamp, (void **)txp, writeBlockSize, fp->nb_antennas_tx, flags);
+  void **tx = (void **)txp;
+  int tmp = openair0_write_reorder(&UE->rfdevice, writeTimestamp, &tx, writeBlockSize, fp->nb_antennas_tx, 1, flags);
   AssertFatal(tmp == writeBlockSize, "");
 }
 
