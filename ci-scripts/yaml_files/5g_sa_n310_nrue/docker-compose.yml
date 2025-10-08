@@ -18,7 +18,7 @@ services:
         environment:
             TZ: Europe/Paris
             USE_B2XX: 'yes'
-            USE_ADDITIONAL_OPTIONS:  --usrp-args type=b200 -r 106 --numerology 1 --band 78 --C 3350010000 -r 106 --numerology 1 --ssb 513 --ue-fo-compensation -A 30 --log_config.global_log_options level,nocolor,time --uicc0.imsi 208970000000004 --uicc0.nssai_sd 16777215 -E
+            USE_ADDITIONAL_OPTIONS:  --usrp-args type=b200 -C 3350010000 -r 78 --numerology 1 --band 78 --ssb 345 --ue-fo-compensation -A 35 --log_config.global_log_options level,nocolor,time --uicc0.imsi 208970000000004 --uicc0.nssai_sd 16777215
             #USE_ADDITIONAL_OPTIONS:  --usrp-args type=b200 -r 106 --numerology 1 --band 78 -C 3425010000 --ssb 509 --ue-fo-compensation -A 30 --log_config.global_log_options level,nocolor,time --uicc0.imsi 001020000000111 --uicc0.nssai_sd 16777215 -E
         volumes:
             - ../../conf_files/ue.sa.conf:/opt/oai-nr-ue/etc/nr-ue.conf
