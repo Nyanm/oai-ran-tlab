@@ -1,4 +1,4 @@
-const c16_t Payload_SCs_ZC_1RBs_M4_00[12] = {
+const c16_t Payload_SCs_ZC_1RBs_M4_0[12] = {
     {.r = 32767, .i = 18919},
     {.r = 0, .i = 0},
     {.r = -21845, .i = 0},
@@ -13,7 +13,7 @@ const c16_t Payload_SCs_ZC_1RBs_M4_00[12] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_ZC_6RBs_M4_00[72] = {
+const c16_t Payload_SCs_ZC_6RBs_M4_0[72] = {
     {.r = 25695, .i = 17636},
     {.r = 0, .i = 0},
     {.r = -1447, .i = 2059},
@@ -88,7 +88,7 @@ const c16_t Payload_SCs_ZC_6RBs_M4_00[72] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_ZC_25RBs_M4_00[300] = {
+const c16_t Payload_SCs_ZC_25RBs_M4_0[300] = {
     {.r = 17980, .i = 17608},
     {.r = 0, .i = 0},
     {.r = -2906, .i = 0},
@@ -391,7 +391,7 @@ const c16_t Payload_SCs_ZC_25RBs_M4_00[300] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_ZC_50RBs_M4_00[600] = {
+const c16_t Payload_SCs_ZC_50RBs_M4_0[600] = {
     {.r = 19558, .i = 17353},
     {.r = 0, .i = 0},
     {.r = -171, .i = 202},
@@ -994,7 +994,7 @@ const c16_t Payload_SCs_ZC_50RBs_M4_00[600] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_ZC_100RBs_M4_00[1200] = {
+const c16_t Payload_SCs_ZC_100RBs_M4_0[1200] = {
     {.r = 18647, .i = 17151},
     {.r = 0, .i = 0},
     {.r = -86, .i = 97},
@@ -2197,7 +2197,7 @@ const c16_t Payload_SCs_ZC_100RBs_M4_00[1200] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_Ones_1RBs_M4_00[12] = {
+const c16_t Payload_SCs_Ones_1RBs_M4_0[12] = {
     {.r = 32767, .i = 0},
     {.r = 0, .i = 0},
     {.r = -10923, .i = 18919},
@@ -2212,7 +2212,7 @@ const c16_t Payload_SCs_Ones_1RBs_M4_00[12] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_Ones_6RBs_M4_00[72] = {
+const c16_t Payload_SCs_Ones_6RBs_M4_0[72] = {
     {.r = 32767, .i = 0},
     {.r = 0, .i = 0},
     {.r = -1820, .i = 20808},
@@ -2287,7 +2287,7 @@ const c16_t Payload_SCs_Ones_6RBs_M4_00[72] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_Ones_25RBs_M4_00[300] = {
+const c16_t Payload_SCs_Ones_25RBs_M4_0[300] = {
     {.r = 32767, .i = 0},
     {.r = 0, .i = 0},
     {.r = -437, .i = 20858},
@@ -2590,7 +2590,7 @@ const c16_t Payload_SCs_Ones_25RBs_M4_00[300] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_Ones_50RBs_M4_00[600] = {
+const c16_t Payload_SCs_Ones_50RBs_M4_0[600] = {
     {.r = 32767, .i = 0},
     {.r = 0, .i = 0},
     {.r = -218, .i = 20860},
@@ -3193,7 +3193,7 @@ const c16_t Payload_SCs_Ones_50RBs_M4_00[600] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_Ones_100RBs_M4_00[1200] = {
+const c16_t Payload_SCs_Ones_100RBs_M4_0[1200] = {
     {.r = 32767, .i = 0},
     {.r = 0, .i = 0},
     {.r = -109, .i = 20861},
@@ -4396,7 +4396,7 @@ const c16_t Payload_SCs_Ones_100RBs_M4_00[1200] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_ZC_1RBs_M4_01[12] = {
+const c16_t Payload_SCs_ZC_1RBs_M4_1[12] = {
     {.r = 29205, .i = 16861},
     {.r = -13298, .i = -15907},
     {.r = 0, .i = 0},
@@ -4411,7 +4411,7 @@ const c16_t Payload_SCs_ZC_1RBs_M4_01[12] = {
     {.r = -19470, .i = -7126},
 };
 
-const c16_t Payload_SCs_ZC_6RBs_M4_01[72] = {
+const c16_t Payload_SCs_ZC_6RBs_M4_1[72] = {
     {.r = 28010, .i = 19225},
     {.r = -13911, .i = -9253},
     {.r = 0, .i = 0},
@@ -4486,7 +4486,7 @@ const c16_t Payload_SCs_ZC_6RBs_M4_01[72] = {
     {.r = -15910, .i = -13592},
 };
 
-const c16_t Payload_SCs_ZC_25RBs_M4_01[300] = {
+const c16_t Payload_SCs_ZC_25RBs_M4_1[300] = {
     {.r = 23432, .i = 22947},
     {.r = -11631, .i = -12512},
     {.r = 0, .i = 0},
@@ -4789,7 +4789,7 @@ const c16_t Payload_SCs_ZC_25RBs_M4_01[300] = {
     {.r = -11890, .i = -12265},
 };
 
-const c16_t Payload_SCs_ZC_50RBs_M4_01[600] = {
+const c16_t Payload_SCs_ZC_50RBs_M4_1[600] = {
     {.r = 25258, .i = 22410},
     {.r = -12596, .i = -10721},
     {.r = 0, .i = 0},
@@ -5392,7 +5392,7 @@ const c16_t Payload_SCs_ZC_50RBs_M4_01[600] = {
     {.r = -12845, .i = -13065},
 };
 
-const c16_t Payload_SCs_ZC_100RBs_M4_01[1200] = {
+const c16_t Payload_SCs_ZC_100RBs_M4_1[1200] = {
     {.r = 24653, .i = 22674},
     {.r = -12308, .i = -10956},
     {.r = 0, .i = 0},
@@ -6595,7 +6595,7 @@ const c16_t Payload_SCs_ZC_100RBs_M4_01[1200] = {
     {.r = -12432, .i = -12686},
 };
 
-const c16_t Payload_SCs_Ones_1RBs_M4_01[12] = {
+const c16_t Payload_SCs_Ones_1RBs_M4_1[12] = {
     {.r = 32767, .i = 0},
     {.r = -20382, .i = -5461},
     {.r = 0, .i = 0},
@@ -6610,7 +6610,7 @@ const c16_t Payload_SCs_Ones_1RBs_M4_01[12] = {
     {.r = -20382, .i = 5461},
 };
 
-const c16_t Payload_SCs_Ones_6RBs_M4_01[72] = {
+const c16_t Payload_SCs_Ones_6RBs_M4_1[72] = {
     {.r = 32767, .i = 0},
     {.r = -20848, .i = -910},
     {.r = 0, .i = 0},
@@ -6685,7 +6685,7 @@ const c16_t Payload_SCs_Ones_6RBs_M4_01[72] = {
     {.r = -20848, .i = 910},
 };
 
-const c16_t Payload_SCs_Ones_25RBs_M4_01[300] = {
+const c16_t Payload_SCs_Ones_25RBs_M4_1[300] = {
     {.r = 32767, .i = 0},
     {.r = -20860, .i = -218},
     {.r = 0, .i = 0},
@@ -6988,7 +6988,7 @@ const c16_t Payload_SCs_Ones_25RBs_M4_01[300] = {
     {.r = -20860, .i = 218},
 };
 
-const c16_t Payload_SCs_Ones_50RBs_M4_01[600] = {
+const c16_t Payload_SCs_Ones_50RBs_M4_1[600] = {
     {.r = 32767, .i = 0},
     {.r = -20861, .i = -109},
     {.r = 0, .i = 0},
@@ -7591,7 +7591,7 @@ const c16_t Payload_SCs_Ones_50RBs_M4_01[600] = {
     {.r = -20861, .i = 109},
 };
 
-const c16_t Payload_SCs_Ones_100RBs_M4_01[1200] = {
+const c16_t Payload_SCs_Ones_100RBs_M4_1[1200] = {
     {.r = 32767, .i = 0},
     {.r = -20861, .i = -55},
     {.r = 0, .i = 0},
@@ -8794,7 +8794,7 @@ const c16_t Payload_SCs_Ones_100RBs_M4_01[1200] = {
     {.r = -20861, .i = 55},
 };
 
-const c16_t Payload_SCs_ZC_1RBs_M4_10[12] = {
+const c16_t Payload_SCs_ZC_1RBs_M4_2[12] = {
     {.r = 32767, .i = 18919},
     {.r = 14921, .i = 17847},
     {.r = 0, .i = 0},
@@ -8809,7 +8809,7 @@ const c16_t Payload_SCs_ZC_1RBs_M4_10[12] = {
     {.r = 21845, .i = 7996},
 };
 
-const c16_t Payload_SCs_ZC_6RBs_M4_10[72] = {
+const c16_t Payload_SCs_ZC_6RBs_M4_2[72] = {
     {.r = 28010, .i = 19225},
     {.r = 13911, .i = 9253},
     {.r = 0, .i = 0},
@@ -8884,7 +8884,7 @@ const c16_t Payload_SCs_ZC_6RBs_M4_10[72] = {
     {.r = 15910, .i = 13592},
 };
 
-const c16_t Payload_SCs_ZC_25RBs_M4_10[300] = {
+const c16_t Payload_SCs_ZC_25RBs_M4_2[300] = {
     {.r = 23432, .i = 22947},
     {.r = 11631, .i = 12512},
     {.r = 0, .i = 0},
@@ -9187,7 +9187,7 @@ const c16_t Payload_SCs_ZC_25RBs_M4_10[300] = {
     {.r = 11890, .i = 12265},
 };
 
-const c16_t Payload_SCs_ZC_50RBs_M4_10[600] = {
+const c16_t Payload_SCs_ZC_50RBs_M4_2[600] = {
     {.r = 25258, .i = 22410},
     {.r = 12596, .i = 10721},
     {.r = 0, .i = 0},
@@ -9790,7 +9790,7 @@ const c16_t Payload_SCs_ZC_50RBs_M4_10[600] = {
     {.r = 12845, .i = 13065},
 };
 
-const c16_t Payload_SCs_ZC_100RBs_M4_10[1200] = {
+const c16_t Payload_SCs_ZC_100RBs_M4_2[1200] = {
     {.r = 24653, .i = 22674},
     {.r = 12308, .i = 10956},
     {.r = 0, .i = 0},
@@ -10993,7 +10993,7 @@ const c16_t Payload_SCs_ZC_100RBs_M4_10[1200] = {
     {.r = 12432, .i = 12686},
 };
 
-const c16_t Payload_SCs_Ones_1RBs_M4_10[12] = {
+const c16_t Payload_SCs_Ones_1RBs_M4_2[12] = {
     {.r = 32767, .i = 0},
     {.r = 20382, .i = 5461},
     {.r = 0, .i = 0},
@@ -11008,7 +11008,7 @@ const c16_t Payload_SCs_Ones_1RBs_M4_10[12] = {
     {.r = 20382, .i = -5461},
 };
 
-const c16_t Payload_SCs_Ones_6RBs_M4_10[72] = {
+const c16_t Payload_SCs_Ones_6RBs_M4_2[72] = {
     {.r = 32767, .i = 0},
     {.r = 20848, .i = 910},
     {.r = 0, .i = 0},
@@ -11083,7 +11083,7 @@ const c16_t Payload_SCs_Ones_6RBs_M4_10[72] = {
     {.r = 20848, .i = -910},
 };
 
-const c16_t Payload_SCs_Ones_25RBs_M4_10[300] = {
+const c16_t Payload_SCs_Ones_25RBs_M4_2[300] = {
     {.r = 32767, .i = 0},
     {.r = 20860, .i = 218},
     {.r = 0, .i = 0},
@@ -11386,7 +11386,7 @@ const c16_t Payload_SCs_Ones_25RBs_M4_10[300] = {
     {.r = 20860, .i = -218},
 };
 
-const c16_t Payload_SCs_Ones_50RBs_M4_10[600] = {
+const c16_t Payload_SCs_Ones_50RBs_M4_2[600] = {
     {.r = 32767, .i = 0},
     {.r = 20861, .i = 109},
     {.r = 0, .i = 0},
@@ -11989,7 +11989,7 @@ const c16_t Payload_SCs_Ones_50RBs_M4_10[600] = {
     {.r = 20861, .i = -109},
 };
 
-const c16_t Payload_SCs_Ones_100RBs_M4_10[1200] = {
+const c16_t Payload_SCs_Ones_100RBs_M4_2[1200] = {
     {.r = 32767, .i = 0},
     {.r = 20861, .i = 55},
     {.r = 0, .i = 0},
@@ -13192,7 +13192,7 @@ const c16_t Payload_SCs_Ones_100RBs_M4_10[1200] = {
     {.r = 20861, .i = -55},
 };
 
-const c16_t Payload_SCs_ZC_1RBs_M4_11[12] = {
+const c16_t Payload_SCs_ZC_1RBs_M4_3[12] = {
     {.r = 19661, .i = 11351},
     {.r = 0, .i = 0},
     {.r = 13107, .i = 0},
@@ -13207,7 +13207,7 @@ const c16_t Payload_SCs_ZC_1RBs_M4_11[12] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_ZC_6RBs_M4_11[72] = {
+const c16_t Payload_SCs_ZC_6RBs_M4_3[72] = {
     {.r = 23794, .i = 16331},
     {.r = 0, .i = 0},
     {.r = 1339, .i = -1907},
@@ -13282,7 +13282,7 @@ const c16_t Payload_SCs_ZC_6RBs_M4_11[72] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_ZC_25RBs_M4_11[300] = {
+const c16_t Payload_SCs_ZC_25RBs_M4_3[300] = {
     {.r = 17980, .i = 17608},
     {.r = 0, .i = 0},
     {.r = 2906, .i = 0},
@@ -13585,7 +13585,7 @@ const c16_t Payload_SCs_ZC_25RBs_M4_11[300] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_ZC_50RBs_M4_11[600] = {
+const c16_t Payload_SCs_ZC_50RBs_M4_3[600] = {
     {.r = 19482, .i = 17286},
     {.r = 0, .i = 0},
     {.r = 171, .i = -201},
@@ -14188,7 +14188,7 @@ const c16_t Payload_SCs_ZC_50RBs_M4_11[600] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_ZC_100RBs_M4_11[1200] = {
+const c16_t Payload_SCs_ZC_100RBs_M4_3[1200] = {
     {.r = 18638, .i = 17142},
     {.r = 0, .i = 0},
     {.r = 86, .i = -97},
@@ -15391,7 +15391,7 @@ const c16_t Payload_SCs_ZC_100RBs_M4_11[1200] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_Ones_1RBs_M4_11[12] = {
+const c16_t Payload_SCs_Ones_1RBs_M4_3[12] = {
     {.r = 32767, .i = 0},
     {.r = 0, .i = 0},
     {.r = 10923, .i = -18919},
@@ -15406,7 +15406,7 @@ const c16_t Payload_SCs_Ones_1RBs_M4_11[12] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_Ones_6RBs_M4_11[72] = {
+const c16_t Payload_SCs_Ones_6RBs_M4_3[72] = {
     {.r = 32767, .i = 0},
     {.r = 0, .i = 0},
     {.r = 1820, .i = -20808},
@@ -15481,7 +15481,7 @@ const c16_t Payload_SCs_Ones_6RBs_M4_11[72] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_Ones_25RBs_M4_11[300] = {
+const c16_t Payload_SCs_Ones_25RBs_M4_3[300] = {
     {.r = 32767, .i = 0},
     {.r = 0, .i = 0},
     {.r = 437, .i = -20858},
@@ -15784,7 +15784,7 @@ const c16_t Payload_SCs_Ones_25RBs_M4_11[300] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_Ones_50RBs_M4_11[600] = {
+const c16_t Payload_SCs_Ones_50RBs_M4_3[600] = {
     {.r = 32767, .i = 0},
     {.r = 0, .i = 0},
     {.r = 218, .i = -20860},
@@ -16387,7 +16387,7 @@ const c16_t Payload_SCs_Ones_50RBs_M4_11[600] = {
     {.r = 0, .i = 0},
 };
 
-const c16_t Payload_SCs_Ones_100RBs_M4_11[1200] = {
+const c16_t Payload_SCs_Ones_100RBs_M4_3[1200] = {
     {.r = 32767, .i = 0},
     {.r = 0, .i = 0},
     {.r = 109, .i = -20861},
@@ -17589,4 +17589,67 @@ const c16_t Payload_SCs_Ones_100RBs_M4_11[1200] = {
     {.r = 109, .i = 20861},
     {.r = 0, .i = 0},
 };
+
+const c16_t *Payload_SCs_select(int RBs, int payload, bool ZC_Ones) {
+  if(payload > 3) AssertFatal(1==0,"Payload value higher than M");
+  switch (RBs) {
+    case 1:
+      switch (payload) {
+        case 0:
+          return ZC_Ones ? Payload_SCs_ZC_1RBs_M4_0 : Payload_SCs_Ones_1RBs_M4_0;
+        case 1:
+          return ZC_Ones ? Payload_SCs_ZC_1RBs_M4_1 : Payload_SCs_Ones_1RBs_M4_1;
+        case 2:
+          return ZC_Ones ? Payload_SCs_ZC_1RBs_M4_2 : Payload_SCs_Ones_1RBs_M4_2;
+        case 3:
+          return ZC_Ones ? Payload_SCs_ZC_1RBs_M4_3 : Payload_SCs_Ones_1RBs_M4_3;
+      }
+    case 6:
+      switch (payload) {
+        case 0:
+          return ZC_Ones ? Payload_SCs_ZC_6RBs_M4_0 : Payload_SCs_Ones_6RBs_M4_0;
+        case 1:
+          return ZC_Ones ? Payload_SCs_ZC_6RBs_M4_1 : Payload_SCs_Ones_6RBs_M4_1;
+        case 2:
+          return ZC_Ones ? Payload_SCs_ZC_6RBs_M4_2 : Payload_SCs_Ones_6RBs_M4_2;
+        case 3:
+          return ZC_Ones ? Payload_SCs_ZC_6RBs_M4_3 : Payload_SCs_Ones_6RBs_M4_3;
+      }
+    case 25:
+      switch (payload) {
+        case 0:
+          return ZC_Ones ? Payload_SCs_ZC_25RBs_M4_0 : Payload_SCs_Ones_25RBs_M4_0;
+        case 1:
+          return ZC_Ones ? Payload_SCs_ZC_25RBs_M4_1 : Payload_SCs_Ones_25RBs_M4_1;
+        case 2:
+          return ZC_Ones ? Payload_SCs_ZC_25RBs_M4_2 : Payload_SCs_Ones_25RBs_M4_2;
+        case 3:
+          return ZC_Ones ? Payload_SCs_ZC_25RBs_M4_3 : Payload_SCs_Ones_25RBs_M4_3;
+      }
+    case 50:
+      switch (payload) {
+        case 0:
+          return ZC_Ones ? Payload_SCs_ZC_50RBs_M4_0 : Payload_SCs_Ones_50RBs_M4_0;
+        case 1:
+          return ZC_Ones ? Payload_SCs_ZC_50RBs_M4_1 : Payload_SCs_Ones_50RBs_M4_1;
+        case 2:
+          return ZC_Ones ? Payload_SCs_ZC_50RBs_M4_2 : Payload_SCs_Ones_50RBs_M4_2;
+        case 3:
+          return ZC_Ones ? Payload_SCs_ZC_50RBs_M4_3 : Payload_SCs_Ones_50RBs_M4_3;
+      }
+    case 100:
+      switch (payload) {
+        case 0:
+          return ZC_Ones ? Payload_SCs_ZC_100RBs_M4_0 : Payload_SCs_Ones_100RBs_M4_0;
+        case 1:
+          return ZC_Ones ? Payload_SCs_ZC_100RBs_M4_1 : Payload_SCs_Ones_100RBs_M4_1;
+        case 2:
+          return ZC_Ones ? Payload_SCs_ZC_100RBs_M4_2 : Payload_SCs_Ones_100RBs_M4_2;
+        case 3:
+          return ZC_Ones ? Payload_SCs_ZC_100RBs_M4_3 : Payload_SCs_Ones_100RBs_M4_3;
+      }
+    default:
+      AssertFatal(1==0,"Unknown N_PRB");
+  }
+}
 

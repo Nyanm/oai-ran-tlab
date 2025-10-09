@@ -1,4 +1,6 @@
-const c16_t SIP_SCs_ZC_1RBs_M4[24] = {
+/* Precomputed SIP SCs */
+
+const c16_t SIP_SCs_ZC_1RBs[24] = {
     {.r = 29205, .i = 16861},
     {.r = 15907, .i = -13298},
     {.r = 0, .i = 0},
@@ -25,7 +27,7 @@ const c16_t SIP_SCs_ZC_1RBs_M4[24] = {
     {.r = 6172, .i = 13298},
 };
 
-const c16_t SIP_SCs_ZC_6RBs_M4[144] = {
+const c16_t SIP_SCs_ZC_6RBs[144] = {
     {.r = 28010, .i = 19225},
     {.r = 9253, .i = -13911},
     {.r = 0, .i = 0},
@@ -172,7 +174,7 @@ const c16_t SIP_SCs_ZC_6RBs_M4[144] = {
     {.r = 1159, .i = 14751},
 };
 
-const c16_t SIP_SCs_ZC_25RBs_M4[600] = {
+const c16_t SIP_SCs_ZC_25RBs[600] = {
     {.r = 23432, .i = 22947},
     {.r = 12512, .i = -11631},
     {.r = 0, .i = 0},
@@ -775,7 +777,7 @@ const c16_t SIP_SCs_ZC_25RBs_M4[600] = {
     {.r = -188, .i = 12078},
 };
 
-const c16_t SIP_SCs_ZC_50RBs_M4[1200] = {
+const c16_t SIP_SCs_ZC_50RBs[1200] = {
     {.r = 25258, .i = 22410},
     {.r = 10721, .i = -12596},
     {.r = 0, .i = 0},
@@ -1978,7 +1980,7 @@ const c16_t SIP_SCs_ZC_50RBs_M4[1200] = {
     {.r = -110, .i = 12955},
 };
 
-const c16_t SIP_SCs_ZC_100RBs_M4[2400] = {
+const c16_t SIP_SCs_ZC_100RBs[2400] = {
     {.r = 24653, .i = 22674},
     {.r = 10956, .i = -12308},
     {.r = 0, .i = 0},
@@ -4381,7 +4383,7 @@ const c16_t SIP_SCs_ZC_100RBs_M4[2400] = {
     {.r = -127, .i = 12559},
 };
 
-const c16_t SIP_SCs_Ones_1RBs_M4[24] = {
+const c16_t SIP_SCs_Ones_1RBs[24] = {
     {.r = 32767, .i = 0},
     {.r = 5461, .i = -20382},
     {.r = 0, .i = 0},
@@ -4408,7 +4410,7 @@ const c16_t SIP_SCs_Ones_1RBs_M4[24] = {
     {.r = 12922, .i = 7460},
 };
 
-const c16_t SIP_SCs_Ones_6RBs_M4[144] = {
+const c16_t SIP_SCs_Ones_6RBs[144] = {
     {.r = 32767, .i = 0},
     {.r = 910, .i = -20848},
     {.r = 0, .i = 0},
@@ -4555,7 +4557,7 @@ const c16_t SIP_SCs_Ones_6RBs_M4[144] = {
     {.r = 10879, .i = 9969},
 };
 
-const c16_t SIP_SCs_Ones_25RBs_M4[600] = {
+const c16_t SIP_SCs_Ones_25RBs[600] = {
     {.r = 32767, .i = 0},
     {.r = 218, .i = -20860},
     {.r = 0, .i = 0},
@@ -5158,7 +5160,7 @@ const c16_t SIP_SCs_Ones_25RBs_M4[600] = {
     {.r = 10539, .i = 10321},
 };
 
-const c16_t SIP_SCs_Ones_50RBs_M4[1200] = {
+const c16_t SIP_SCs_Ones_50RBs[1200] = {
     {.r = 32767, .i = 0},
     {.r = 109, .i = -20861},
     {.r = 0, .i = 0},
@@ -6361,7 +6363,7 @@ const c16_t SIP_SCs_Ones_50RBs_M4[1200] = {
     {.r = 10485, .i = 10376},
 };
 
-const c16_t SIP_SCs_Ones_100RBs_M4[2400] = {
+const c16_t SIP_SCs_Ones_100RBs[2400] = {
     {.r = 32767, .i = 0},
     {.r = 55, .i = -20861},
     {.r = 0, .i = 0},
@@ -8763,4 +8765,21 @@ const c16_t SIP_SCs_Ones_100RBs_M4[2400] = {
     {.r = 55, .i = 10430},
     {.r = 10458, .i = 10403},
 };
+
+const c16_t *SIP_SCs_select(int RBs, bool ZC_Ones) {
+  switch (RBs) {
+    case 1:
+      return ZC_Ones ? SIP_SCs_ZC_1RBs : SIP_SCs_Ones_1RBs;
+    case 6:
+      return ZC_Ones ? SIP_SCs_ZC_6RBs : SIP_SCs_Ones_6RBs;
+    case 25:
+      return ZC_Ones ? SIP_SCs_ZC_25RBs : SIP_SCs_Ones_25RBs;
+    case 50:
+      return ZC_Ones ? SIP_SCs_ZC_50RBs : SIP_SCs_Ones_50RBs;
+    case 100:
+      return ZC_Ones ? SIP_SCs_ZC_100RBs : SIP_SCs_Ones_100RBs;
+    default:
+      AssertFatal(1==0,"Unknown N_PRB");
+  }
+}
 

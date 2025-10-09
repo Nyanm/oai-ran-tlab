@@ -34,13 +34,16 @@
 #define __PHY_DEFS_AIOT_R2D__H__
 
 #define R_TAS_SIP    0xC8
-#define N_R_TAS_SIP  8
+#define R_TAS_SIP_N  8
+#define R_TAS_SIP_M  4
 
 #define R_TAS_CAP    0xA
-#define N_R_TAS_CAP  4
+#define R_TAS_CAP_N  4
 
 #define R2D_POSTAMBLE    0xF
-#define N_R2D_POSTAMBLE  4
+#define R2D_POSTAMBLE_N  4
+
+#define MAX_AIOT_R2D_PAYLOAD_SIZE  125 // bytes
 
 #include "precomputed_SIP.h"
 #include "precomputed_CAS.h"

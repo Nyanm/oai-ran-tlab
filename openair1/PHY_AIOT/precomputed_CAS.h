@@ -1,3 +1,5 @@
+/* Precomputed CAS SCs */
+
 const c16_t CAS_SCs_ZC_1RBs_M1[48] = {
     {.r = 30786, .i = 19069},
     {.r = 23962, .i = 24003},
@@ -30663,4 +30665,57 @@ const c16_t CAS_SCs_Ones_100RBs_M4[1200] = {
     {.r = 109, .i = 20861},
     {.r = 0, .i = 0},
 };
+
+const c16_t *CAS_SCs_select(int RBs, int M, bool ZC_Ones) {
+  if(M != 1 && M != 2 && M != 4) AssertFatal(1==0,"Unknown M %d",M);
+  switch (RBs) {
+    case 1:
+      switch (M) {
+        case 1:
+          return ZC_Ones ? CAS_SCs_ZC_1RBs_M1 : CAS_SCs_Ones_1RBs_M1;
+        case 2:
+          return ZC_Ones ? CAS_SCs_ZC_1RBs_M2 : CAS_SCs_Ones_1RBs_M2;
+        case 4:
+          return ZC_Ones ? CAS_SCs_ZC_1RBs_M4 : CAS_SCs_Ones_1RBs_M4;
+      }
+    case 6:
+      switch (M) {
+        case 1:
+          return ZC_Ones ? CAS_SCs_ZC_6RBs_M1 : CAS_SCs_Ones_6RBs_M1;
+        case 2:
+          return ZC_Ones ? CAS_SCs_ZC_6RBs_M2 : CAS_SCs_Ones_6RBs_M2;
+        case 4:
+          return ZC_Ones ? CAS_SCs_ZC_6RBs_M4 : CAS_SCs_Ones_6RBs_M4;
+      }
+    case 25:
+      switch (M) {
+        case 1:
+          return ZC_Ones ? CAS_SCs_ZC_25RBs_M1 : CAS_SCs_Ones_25RBs_M1;
+        case 2:
+          return ZC_Ones ? CAS_SCs_ZC_25RBs_M2 : CAS_SCs_Ones_25RBs_M2;
+        case 4:
+          return ZC_Ones ? CAS_SCs_ZC_25RBs_M4 : CAS_SCs_Ones_25RBs_M4;
+      }
+    case 50:
+      switch (M) {
+        case 1:
+          return ZC_Ones ? CAS_SCs_ZC_50RBs_M1 : CAS_SCs_Ones_50RBs_M1;
+        case 2:
+          return ZC_Ones ? CAS_SCs_ZC_50RBs_M2 : CAS_SCs_Ones_50RBs_M2;
+        case 4:
+          return ZC_Ones ? CAS_SCs_ZC_50RBs_M4 : CAS_SCs_Ones_50RBs_M4;
+      }
+    case 100:
+      switch (M) {
+        case 1:
+          return ZC_Ones ? CAS_SCs_ZC_100RBs_M1 : CAS_SCs_Ones_100RBs_M1;
+        case 2:
+          return ZC_Ones ? CAS_SCs_ZC_100RBs_M2 : CAS_SCs_Ones_100RBs_M2;
+        case 4:
+          return ZC_Ones ? CAS_SCs_ZC_100RBs_M4 : CAS_SCs_Ones_100RBs_M4;
+      }
+    default:
+      AssertFatal(1==0,"Unknown N_PRB");
+  }
+}
 

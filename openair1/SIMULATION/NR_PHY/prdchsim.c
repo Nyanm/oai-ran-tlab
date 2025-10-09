@@ -78,22 +78,6 @@ void lineEncoding(uint8_t *in, int inLenBits, uint8_t *out, int outLenBits)
   }
 }
 
-void headersInsertion(uint8_t *in, int inLenBits, uint8_t *out, int outLenBits)
-{
-  memset(out, 0, (outLenBits + 7) / 8);
-
-  out[0] = R_TAS_SIP; // R_TAS_SIP
-  out[1] = R_TAS_CAP << 4; // R_TAS_CAP
-
-  for (int i = 0; i < inLenBits / 8; i++) {
-    out[i + 1] |= (in[i] >> 4) & 0x0F;
-    out[i + 2] = (in[i] & 0x0F) << 4;
-  }
-
-  int postambleBit = N_R_TAS_SIP + N_R_TAS_CAP + inLenBits;
-  out[postambleBit / 8] |= R2D_POSTAMBLE << (4 - (postambleBit % 8));
-}
-
 // Butterworth 3rd-order LPF coefficients (fs=1.92 MHz, fc=0.625 MHz)
 static const double b[4] = {0.0976, 0.2929, 0.2929, 0.0976};
 static const double a[4] = {1.0000, -0.0000, 0.1716, -0.0000};
@@ -173,8 +157,26 @@ int main(int argc, char **argv)
     exit_fun("[NR_AIOT_PRDCHSIM] Error, configuration module init failed\n");
   }
 
+  // Prepare variables for parameters
+  int RBs = 6;
+  int M = 4;
+  const int n_antennas = 1;
+  bool ZC_Ones = true;
+  SCM_t channel_model = AWGN;
+  uint64_t fc = 897500000; // Carrier frequency n8 band, #50 RB
+  double DS_TDL = .03;
+  double SNR = 30.0;
+  double path_loss_dB = -20;
+  double noise_power_dB = -140.0;
+  int delay = 0;
+
+  uint8_t payload[MAX_AIOT_R2D_PAYLOAD_SIZE] = { 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0,
+                                                 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+                                                 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF };
+  uint16_t payloadSize = 20*8; // payload size in bits
+
   int c;
-  while ((c = getopt(argc, argv, "--:O:h:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:h:R:P:p:M:Z:S:N:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -184,12 +186,73 @@ int main(int argc, char **argv)
     switch (c) {
       default:
       case 'h':
-        printf("%s -h(elp)\n", argv[0]);
+        printf("%s -h(elp) -R rbs -P payload -p <payload_size> -Z (1 - Zadoff-Chu, 0 - Ones)\n", argv[0]);
         // printf("%s -h(elp) -p(extended_prefix) -N cell_id -f output_filename -F input_filename -g channel_model -n n_frames -t
         // Delayspread -s snr0 -S snr1 -x transmission_mode -y TXant -z RXant -i Intefrence0 -j Interference1 -A interpolation_file
         // -C(alibration offset dB) -N CellId\n", argv[0]);
         printf("-h This message\n");
         exit(-1);
+        break;
+      case 'R':
+        RBs = atoi(optarg);
+        if (RBs != 1 && RBs != 6 && RBs != 25 && RBs != 50 && RBs != 100) {
+          printf("Error: number of RBs %d not supported, use 1, 6, 25, 50 or 100\n", RBs);
+          exit(-1);
+        } else {
+          printf("Using %d RBs\n", RBs);
+        }
+        break;
+
+      case 'P':
+        // Load hex string from optarg into payload array
+        int hex_len = strlen(optarg);
+        if (hex_len > 250)
+          hex_len = 250; // 2 chars per byte, max 125 bytes
+
+        for (int i = 0; i < hex_len; i++) {
+          sscanf(optarg + 2 * i, "%2hhx", &payload[i]);
+        }
+        printf("Loaded payload %s of %d bytes\n", payload, hex_len);
+        break;
+
+      case 'p':
+        payloadSize = atoi(optarg);
+        if (payloadSize > MAX_AIOT_R2D_PAYLOAD_SIZE * 8) {
+          printf("Error: maximum payload bit size is %d\n", MAX_AIOT_R2D_PAYLOAD_SIZE * 8);
+          exit(-1);
+        } else {
+          printf("Using payload size %d bits\n", payloadSize);
+        }
+        break;
+
+      case 'M':
+        M = atoi(optarg);
+        if (M != 1 && M != 2 && M != 3 && M != 4) {
+          printf("Error: M must be between 1 and 4\n");
+          exit(-1);
+        } else {
+          printf("Using M=%d\n", M);
+        }
+        break;
+
+      case 'Z':
+        ZC_Ones = atoi(optarg);
+        if (ZC_Ones != 0 && ZC_Ones != 1) {
+          printf("Error: ZC_Ones must be 0 for Ones or 1 for Zadoff-Chu\n");
+          exit(-1);
+        } else {
+          printf("Using %s\n", ZC_Ones ? "Zadoff-Chu" : "Ones");
+        }
+        break;
+      
+      case 'S':
+        SNR = atof(optarg);
+        printf("Using SNR=%f dB\n", SNR);
+        break;
+      
+      case 'N':
+        path_loss_dB = atof(optarg);
+        printf("Using path_loss_dB=%f dB\n", path_loss_dB);
         break;
     }
   }
@@ -199,7 +262,7 @@ int main(int argc, char **argv)
 
   get_softmodem_params()->phy_test = 1;
   get_softmodem_params()->do_ra = 0;
-  IS_SOFTMODEM_DLSIM = true;
+  IS_SOFTMODEM_RFSIM = true;
 
   randominit(0);
   load_dftslib();
@@ -208,13 +271,7 @@ int main(int argc, char **argv)
 
   // ---------------------------------------------------------------
 
-  int RBs = 6;
-  c16_t freqFrame[NR_NUMBER_OF_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB * RBs];
-
-  memset(freqFrame, 0, sizeof(freqFrame));
-
-  const int n_antennas = 1;
-
+  // Setting of frame parameters
   NR_DL_FRAME_PARMS frame_parms_storage;
   frame_parms = &frame_parms_storage;
   memset(frame_parms, 0, sizeof(NR_DL_FRAME_PARMS));
@@ -223,7 +280,6 @@ int main(int argc, char **argv)
   frame_parms->N_RB_UL = RBs;
   frame_parms->N_RB_SL = 0;
   frame_parms->Ncp = 0; // normal CP
-  frame_parms->frame_type = TDD;
   frame_parms->nb_antennas_tx = n_antennas;
   frame_parms->nb_antennas_rx = n_antennas;
   frame_parms->subcarrier_spacing = 15e3;
@@ -234,150 +290,194 @@ int main(int argc, char **argv)
   frame_parms->nb_prefix_samples = 144;
   frame_parms->nb_prefix_samples0 = 160;
   frame_parms->numerology_index = 0;
-  frame_parms->samples_per_frame_wCP = frame_parms->slots_per_frame * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
-  frame_parms->samples_per_subframe = (frame_parms->nb_prefix_samples0 + frame_parms->ofdm_symbol_size) * 2
+  frame_parms->samples_per_frame_wCP =
+      frame_parms->slots_per_frame * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
+  frame_parms->samples_per_slot_wCP = frame_parms->ofdm_symbol_size * frame_parms->symbols_per_slot;
+  frame_parms->samples_per_subframe_wCP = frame_parms->samples_per_slot_wCP * frame_parms->slots_per_subframe;
+  frame_parms->samples_per_subframe = ((frame_parms->nb_prefix_samples0 + frame_parms->ofdm_symbol_size) * 2
                                       + (frame_parms->nb_prefix_samples + frame_parms->ofdm_symbol_size)
-                                            * (frame_parms->symbols_per_slot * frame_parms->slots_per_subframe - 2);
+                                      * (frame_parms->symbols_per_slot - 2))
+                                      * frame_parms->slots_per_subframe;
 
-  int slot = 1;
+  // Packet constants calculation
+  int r2d_line_encoded_bits = 2 * payloadSize;
+  int r2d_symbols = R_TAS_SIP_N / R_TAS_SIP_M + ((R_TAS_CAP_N + r2d_line_encoded_bits + R2D_POSTAMBLE_N) + (M-1)) / M; // ceil
+  int r2d_slots = (r2d_symbols + (NR_NUMBER_OF_SYMBOLS_PER_SLOT-1)) / NR_NUMBER_OF_SYMBOLS_PER_SLOT; // ceil
+  int r2d_subcarriers = NR_NB_SC_PER_RB * RBs;
+  int r2d_samples = frame_parms->samples_per_subframe / frame_parms->slots_per_subframe * r2d_slots; // packet samples aligned to slots
 
-  int frame_length_complex_samples = frame_parms->samples_per_subframe * NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
-  // frame_length_complex_samples_no_prefix = frame_parms->samples_per_subframe_wCP*NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
-  int slot_offset = frame_parms->samples_per_subframe * slot;
-  int slot_length = slot_offset - frame_parms->samples_per_subframe * (slot - 1);
-  printf("frame_length_complex_samples %d, slot_offset %d, slot_length %d\n",
-         frame_length_complex_samples,
-         slot_offset,
-         slot_length);
+  printf("R2D packet parameters:\n");
+  printf("  RBs: %d\n", RBs);
+  printf("  M: %d\n", M);
+  printf("  ZC_Ones: %s\n", ZC_Ones ? "Zadoff-Chu" : "Ones");
+  printf("  Payload size: %d bits\n", payloadSize);
+  printf("  Line encoded payload size: %d bits\n", r2d_line_encoded_bits);
+  printf("  Packet symbols: %d\n", r2d_symbols);
+  printf("  Packet slots: %d\n", r2d_slots);
+  printf("  Packet subcarriers: %d\n", r2d_subcarriers);
+  printf("  Packet samples (aligned to slots): %d\n", r2d_samples);
 
-  c16_t **txDataF, **txData, **rxData, *filteredData;
+  // Create R2D packet
+  c16_t *SCsPacket = malloc(r2d_symbols * r2d_subcarriers * sizeof(c16_t));
+  memset(SCsPacket, 0, r2d_symbols * r2d_subcarriers * sizeof(c16_t));
 
-  txData = malloc(n_antennas * sizeof(int *));
-  txDataF = malloc(n_antennas * sizeof(int *));
-  rxData = malloc(n_antennas * sizeof(int *));
-  filteredData = calloc(1, frame_length_complex_samples * sizeof(int));
+  // Copy R-TAS SIP preamble to the packet
+  const c16_t *SIP_SCs_selection = SIP_SCs_select(RBs, ZC_Ones);
+  int SIP_length = R_TAS_SIP_N / R_TAS_SIP_M * r2d_subcarriers;
+  memcpy(SCsPacket, SIP_SCs_selection, SIP_length * sizeof(c16_t)); // SIP
 
-  for (int i = 0; i < n_antennas; i++) {
-    printf("Allocating %d samples for txdata\n", frame_length_complex_samples);
-    txData[i] = calloc(1, frame_length_complex_samples * sizeof(int));
-    txDataF[i] = calloc(1, frame_length_complex_samples * sizeof(int));
-    rxData[i] = calloc(1, frame_length_complex_samples * sizeof(int));
+  // Copy R-TAS CAS preamble to the packet
+  const c16_t *CAS_SCs_selection = CAS_SCs_select(RBs, M, ZC_Ones);
+  int CAS_length = R_TAS_CAP_N / M * r2d_subcarriers;
+  memcpy(SCsPacket + SIP_length, CAS_SCs_selection, CAS_length * sizeof(c16_t)); // CAS
+
+  // Copy payload to the packet (using Manchester line encoding embedded in the symbol mapping)
+  int Payload_length = (r2d_line_encoded_bits + (M-1)) / M * r2d_subcarriers;
+  for(int i = 0, j = 0; i < payloadSize; i+=M/2, j++) {
+    uint8_t symbol = 0;
+    for(int k = 0; k < M/2; k++) {
+      if(i+k < payloadSize) {
+        int bit = (payload[(i+k)/8] >> (7 - ((i+k)%8))) & 0x01;
+        symbol = (symbol << 1) | bit;
+      } else {
+        symbol = (symbol << 1);
+      }
+    }
+
+    const c16_t *Payload_SCs_selection = Payload_SCs_select(RBs, symbol, ZC_Ones);
+    memcpy(SCsPacket + SIP_length + CAS_length + j * r2d_subcarriers,
+      Payload_SCs_selection,
+      r2d_subcarriers * sizeof(c16_t));
   }
 
-  int ofdm_symbol_size = frame_parms->ofdm_symbol_size;
-  int num_symbols = NR_NUMBER_OF_SYMBOLS_PER_SLOT;
-  int points_per_symbol = NR_NB_SC_PER_RB * RBs;
-  bool was_symbol_used[NR_NUMBER_OF_SYMBOLS_PER_SLOT];
+  // Copy R-TAS postamble
+  const c16_t *Postamble_SCs_selection = Postamble_SCs_select(RBs, M, ZC_Ones);
+  int Postamble_length = R2D_POSTAMBLE_N / M * r2d_subcarriers;
+  memcpy(SCsPacket + SIP_length + CAS_length + Payload_length,
+         Postamble_SCs_selection,
+         Postamble_length * sizeof(c16_t)); // Postamble
 
-  memset(freqFrame, 0, sizeof(freqFrame));
-  memcpy(freqFrame, SIP_SCs_ZC_6RBs_M4, sizeof(SIP_SCs_ZC_6RBs_M4));
-  memset(txDataF[0], 0, frame_length_complex_samples * sizeof(int));
+  // Allocatate TX and RX buffers
+  c16_t *txData = calloc(1, r2d_samples * sizeof(c16_t));
+  memset(txData, 0, r2d_samples * sizeof(c16_t));
 
-  for (int sym = 0; sym < num_symbols; sym++) {
-    int outMod_offset = sym * points_per_symbol;
-    int txData_offset = sym * ofdm_symbol_size;
+  c16_t *txDataF = calloc(1, r2d_samples * sizeof(c16_t));
+  memset(txDataF, 0, r2d_samples * sizeof(c16_t));
 
-    for (int n = 0; n < points_per_symbol; n++) {
-      txDataF[0][txData_offset + n] = freqFrame[outMod_offset + n];
+  printf("Allocating %d samples for txdata\n", r2d_samples);
+
+  for (int sym = 0; sym < r2d_symbols; sym++) {
+    int outMod_offset = sym * r2d_subcarriers;
+    int txData_offset = sym * frame_parms->ofdm_symbol_size;
+
+    for (int n = 0; n < r2d_subcarriers; n++) {
+      txDataF[txData_offset + n] = SCsPacket[outMod_offset + n];
     }
   }
 
-  for (int i = 0; i < NR_NUMBER_OF_SYMBOLS_PER_SLOT; i++) {
-    was_symbol_used[i] = true;
+  for (int slot = 0; slot < r2d_slots; slot++)
+  {
+    bool was_symbol_used[NR_NUMBER_OF_SYMBOLS_PER_SLOT];
+    for (int i = 0; i < NR_NUMBER_OF_SYMBOLS_PER_SLOT; i++) {
+      was_symbol_used[i] = true;
+    }
+
+    nr_normal_prefix_mod(txDataF + slot*frame_parms->samples_per_slot_wCP,
+     txData + slot*(frame_parms->samples_per_subframe/frame_parms->slots_per_subframe), 0, frame_parms, 0, was_symbol_used);
   }
+  
+  sprintf(filename, "%s/TX_Signal_IQ.m", foldername);
+  LOG_M(filename, "TX_IQ", txData, r2d_samples, 1, 1);
 
-  nr_normal_prefix_mod(txDataF[0], txData[0], NR_NUMBER_OF_SYMBOLS_PER_SLOT, frame_parms, 1, was_symbol_used);
+  free(SCsPacket);
+  free(txDataF);
 
-  sprintf(filename, "%s/ofdm_SIP_%dRBS_ZC.m", foldername, RBs);
-  LOG_M(filename, "ofdm", txData[0], slot_length, 1, 1);
-
-  double **s_re, **s_im, **r_re, **r_im;
-
-  s_re = malloc(NB_ANTENNAS_TX * sizeof(double *));
-  s_im = malloc(NB_ANTENNAS_TX * sizeof(double *));
-  r_re = malloc(NB_ANTENNAS_TX * sizeof(double *));
-  r_im = malloc(NB_ANTENNAS_TX * sizeof(double *));
+  // Initialization of channel signals
+  double **s_re = malloc(NB_ANTENNAS_TX * sizeof(double *));
+  double **s_im = malloc(NB_ANTENNAS_TX * sizeof(double *));
+  double **r_re = malloc(NB_ANTENNAS_TX * sizeof(double *));
+  double **r_im = malloc(NB_ANTENNAS_TX * sizeof(double *));
 
   for (int i = 0; i < NB_ANTENNAS_TX; i++) {
-    s_re[i] = calloc(1, slot_length * sizeof(double));
-    s_im[i] = calloc(1, slot_length * sizeof(double));
+    s_re[i] = calloc(1, r2d_samples * sizeof(double));
+    s_im[i] = calloc(1, r2d_samples * sizeof(double));
   }
 
   for (int i = 0; i < NB_ANTENNAS_TX; i++) {
-    r_re[i] = calloc(1, slot_length * sizeof(double));
-    r_im[i] = calloc(1, slot_length * sizeof(double));
+    r_re[i] = calloc(1, r2d_samples * 2 * sizeof(double));
+    r_im[i] = calloc(1, r2d_samples * 2 * sizeof(double));
   }
 
-  bzero(s_re[0], slot_length * sizeof(double));
-  bzero(s_im[0], slot_length * sizeof(double));
-  bzero(r_re[0], slot_length * sizeof(double));
-  bzero(r_im[0], slot_length * sizeof(double));
+  bzero(s_re[0], r2d_samples * sizeof(double));
+  bzero(s_im[0], r2d_samples * sizeof(double));
+  bzero(r_re[0], r2d_samples * 2 * sizeof(double));
+  bzero(r_im[0], r2d_samples * 2 * sizeof(double));
 
-  SCM_t channel_model = AWGN;
-  uint64_t fc = 897500000; // Carrier frequency n8 band, #50 RB
-  double DS_TDL = 0; //.03;
-  double SNR = 0; // 30.0;
-  double path_loss_dB = 0; //-20;
-  double noise_power_dB = -160.0;
-  int delay = 0;
+  // Setup radio channel
   double samples = N_RB2sampling_rate(RBs);
   double rxbw = N_RB2channel_bandwidth(RBs);
+  double txbw = N_RB2channel_bandwidth(RBs);
+
+  printf("Channel parameters:\n");
+  printf("  Channel model: %s\n", channel_model == AWGN ? "AWGN" : "TDL");
+  printf("  Sampling rate: %f MHz\n", samples);
+  printf("  RX bandwidth: %f MHz\n", rxbw);
+  printf("  TX bandwidth: %f MHz\n", txbw);
+  printf("  Carrier frequency: %f MHz\n", ((double)fc) / 1e6);
+  printf("  Delay spread: %f us\n", DS_TDL);
+  printf("  SNR: %f dB\n", SNR);
+  printf("  Path loss: %f dB\n", path_loss_dB);
+  printf("  Noise power: %f dB\n", noise_power_dB);
 
   channel_desc_t *channel = new_channel_desc_scm(n_antennas,
-                                                 n_antennas,
-                                                 channel_model,
-                                                 samples, // sampling frequency in MHz
-                                                 fc,
-                                                 rxbw,
-                                                 DS_TDL,
-                                                 0.0,
-                                                 CORR_LEVEL_LOW,
-                                                 0,
-                                                 delay,
-                                                 path_loss_dB,
-                                                 noise_power_dB);
+                                                  n_antennas,
+                                                  channel_model,
+                                                  samples, // sampling frequency in MHz
+                                                  fc,
+                                                  rxbw,
+                                                  DS_TDL,
+                                                  0.0,
+                                                  CORR_LEVEL_LOW,
+                                                  0,
+                                                  delay,
+                                                  path_loss_dB,
+                                                  noise_power_dB);
 
-  int txlev = signal_energy((int32_t *)&txData[0][0], frame_parms->ofdm_symbol_size + frame_parms->nb_prefix_samples);
+  int txlev = signal_energy((int32_t *) txData, frame_parms->ofdm_symbol_size + frame_parms->nb_prefix_samples0);
   double txlev_dB = 10 * log10((double)txlev);
   printf("txlev = %d (%f dB)\n", txlev, txlev_dB);
 
-  for (int i = 0; i < slot_length; i++) {
-    s_re[0][i] = (double)txData[0][i].r;
-    s_im[0][i] = (double)txData[0][i].i;
+  for (int i = 0; i < r2d_samples; i++) {
+    s_re[0][i] = (double)txData[i].r;
+    s_im[0][i] = (double)txData[i].i;
   }
 
-  for (int i = 0; i < 16; i++) {
-    printf("s_re[0][%d] = %f, s_im[0][%d] = %f\n", i, s_re[0][i], i, s_im[0][i]);
-  }
-
-  double *output = malloc(2 * sizeof(double) * slot_length);
-  for (int i = 0; i < slot_length; i++) {
-    output[2 * i] = s_re[0][i];
-    output[2 * i + 1] = s_im[0][i];
-  }
-
-  sprintf(filename, "%s/channel.m", foldername);
-  LOG_M(filename, "channelx", output, slot_length, 1, 8);
+  free(txData);
 
   double ts = 1.0 / (frame_parms->subcarrier_spacing * frame_parms->ofdm_symbol_size);
   // Compute AWGN variance
-  double sigma2_dB = 10 * log10((double)txlev * ((double)frame_parms->ofdm_symbol_size / points_per_symbol)) + path_loss_dB - SNR;
+  double sigma2_dB = 10 * log10((double)txlev /* *((double)frame_parms->ofdm_symbol_size / r2d_subcarriers)*/) + path_loss_dB - SNR;
   double sigma2 = pow(10, sigma2_dB / 10);
   printf("sigma2 %f (%f dB), txlev %f (factor %f)\n",
-         sigma2,
-         sigma2_dB,
-         10 * log10((double)txlev),
-         (double)(double)frame_parms->ofdm_symbol_size / points_per_symbol);
+          sigma2,
+          sigma2_dB,
+          10 * log10((double)txlev),
+          (double)(double)frame_parms->ofdm_symbol_size / r2d_subcarriers);
+  
+  c16_t **rxData = malloc(n_antennas * sizeof(c16_t *));
 
-  sigma2 = 0;
-  delay = 0;
+  for (int i = 0; i < n_antennas; i++) {
+    printf("Allocating %d samples for rxdata\n", r2d_samples);
+    rxData[i] = calloc(1, r2d_samples * 2 * sizeof(c16_t));
+    memset(rxData[i], 0, r2d_samples * 2 * sizeof(c16_t));
+  }
 
-  multipath_channel(channel, s_re, s_im, r_re, r_im, slot_length, 0, 1);
+  multipath_channel(channel, s_re, s_im, r_re, r_im, r2d_samples, 0, 1);
   add_noise(rxData,
             (const double **)r_re,
             (const double **)r_im,
             sigma2,
-            slot_length,
+            r2d_samples,
             0,
             ts,
             delay,
@@ -385,74 +485,92 @@ int main(int argc, char **argv)
             0x1,
             frame_parms->nb_antennas_rx);
 
-  for (int i = 0; i < slot_length; i++) {
+  // Save channel output
+  double *output = malloc(2 * r2d_samples * sizeof(double));
+
+  for (int i = 0; i < r2d_samples; i++) {
     output[2 * i] = r_re[0][i];
     output[2 * i + 1] = r_im[0][i];
   }
 
-  sprintf(filename, "%s/channel_out.m", foldername);
-  LOG_M(filename, "channelx_out", output, slot_length, 1, 8);
+  sprintf(filename, "%s/Channel_Signal_IQ.m", foldername);
+  LOG_M(filename, "Channel_IQ", output, r2d_samples, 1, 8);
 
   free(output);
 
-  sprintf(filename, "%s/rxdata_6RBs.m", foldername);
-  LOG_M(filename, "rxdata", rxData[0], slot_length, 1, 1);
+  // Save AWGN received signal
+  sprintf(filename, "%s/RX_Signal_IQ.m", foldername);
+  LOG_M(filename, "RX_IQ", rxData[0], r2d_samples, 1, 1);
+
+  for (int i = 0; i < NB_ANTENNAS_TX; i++) {
+    free(s_re[i]);
+    free(s_im[i]);
+  }
+  for (int i = 0; i < NB_ANTENNAS_RX; i++) {
+    free(r_re[i]);
+    free(r_im[i]);
+  }
+
+  free(s_re);
+  free(s_im);
+  free(r_re);
+  free(r_im);
+  free_channel_desc_scm(channel);
 
   // Envelope detector (squared)
-  for (int i = 0; i < slot_length; i++) {
+  for (int i = 0; i < r2d_samples; i++) {
     rxData[0][i] = c16MulConjShift(rxData[0][i], rxData[0][i], 15);
   }
 
-  sprintf(filename, "%s/envelope.m", foldername);
-  LOG_M(filename, "envelopex", rxData[0], slot_length, 1, 1);
+  sprintf(filename, "%s/Envelope_Signal.m", foldername);
+  LOG_M(filename, "Envelope", rxData[0], r2d_samples, 1, 1);
 
   // Butterworth filter 3rd order
   iir_state_t st = {0};
+  c16_t *filteredData = calloc(1, r2d_samples * sizeof(c16_t));
 
   // fill input[] with complex samples
-  butterworth_filter(rxData[0], filteredData, slot_length, &st);
+  butterworth_filter(rxData[0], filteredData, r2d_samples, &st);
 
-  sprintf(filename, "%s/filtered.m", foldername);
-  LOG_M(filename, "filteredx", filteredData, slot_length, 1, 1);
+  sprintf(filename, "%s/Filtered_Signal.m", foldername);
+  LOG_M(filename, "Filtered", filteredData, r2d_samples, 1, 1);
 
   // Downsample the signal by N = 16
   int N = 16;
-  int downSampled_length = slot_length / N;
+  int downSampled_length = r2d_samples / N;
   c16_t *downSampled = malloc(downSampled_length * sizeof(c16_t));
   for (int i = 0; i < downSampled_length; i++) {
     downSampled[i] = filteredData[i * N];
   }
 
-  sprintf(filename, "%s/downsampled.m", foldername);
-  LOG_M(filename, "downsampledx", downSampled, downSampled_length, 1, 1);
+  sprintf(filename, "%s/Downsampled_Signal.m", foldername);
+  LOG_M(filename, "Downsampled", downSampled, downSampled_length, 1, 1);
 
   // Correlate the received signal with known SIP sequence
-  int SIP_downsampled_length = 2*ofdm_symbol_size/N + frame_parms->nb_prefix_samples/N;
+  int SIP_downsampled_length = 2 * frame_parms->ofdm_symbol_size / N + frame_parms->nb_prefix_samples / N;
   c16_t SIP_ideal[SIP_downsampled_length];
   c16_t value0 = (c16_t){0, 0};
   c16_t value1 = (c16_t){16384, 0};
 
   for (int i = 0; i < 4; i++) {
-    for (int k = 0; k < ofdm_symbol_size/N/4; k++)
-    {
-      SIP_ideal[i*ofdm_symbol_size/N/4 + k] = R_TAS_SIP & (1 << (7 - i)) ? value1 : value0;
+    for (int k = 0; k < frame_parms->ofdm_symbol_size / N / 4; k++) {
+      SIP_ideal[i * frame_parms->ofdm_symbol_size / N / 4 + k] = R_TAS_SIP & (1 << (7 - i)) ? value1 : value0;
     }
   }
 
-  for (int k = 0; k < frame_parms->nb_prefix_samples/N; k++)
-  {
-    SIP_ideal[4*ofdm_symbol_size/N/4 + k] = value0;
+  for (int k = 0; k < frame_parms->nb_prefix_samples / N; k++) {
+    SIP_ideal[4 * frame_parms->ofdm_symbol_size / N / 4 + k] = value0;
   }
 
   for (int i = 4; i < 8; i++) {
-    for (int k = 0; k < ofdm_symbol_size/N/4; k++)
-    {
-      SIP_ideal[frame_parms->nb_prefix_samples/N + i*ofdm_symbol_size/N/4 + k] = R_TAS_SIP & (1 << (7 - i)) ? value1 : value0;
+    for (int k = 0; k < frame_parms->ofdm_symbol_size / N / 4; k++) {
+      SIP_ideal[frame_parms->nb_prefix_samples / N + i * frame_parms->ofdm_symbol_size / N / 4 + k] =
+          R_TAS_SIP & (1 << (7 - i)) ? value1 : value0;
     }
   }
 
-  sprintf(filename, "%s/SIP_ideal.m", foldername);
-  LOG_M(filename, "SIP_idealx", SIP_ideal, SIP_downsampled_length, 1, 1);
+  sprintf(filename, "%s/SIP_Signal.m", foldername);
+  LOG_M(filename, "SIP", SIP_ideal, SIP_downsampled_length, 1, 1);
 
   double *correlation = malloc(downSampled_length * sizeof(double));
   memset(correlation, 0, downSampled_length * sizeof(double));
@@ -466,14 +584,13 @@ int main(int argc, char **argv)
     correlation[i] = sum;
   }
 
-  sprintf(filename, "%s/correlation.m", foldername);
-  LOG_M(filename, "correlationx", correlation, downSampled_length, 1, 7);
+  sprintf(filename, "%s/Correlation_Signal.m", foldername);
+  LOG_M(filename, "Correlation", correlation, downSampled_length, 1, 7);
 
   double max_value = 0.0;
   int SIP_offset = 0;
-  for (int i = 0; i < downSampled_length - corr_len; i++)
-  {
-    if(max_value < correlation[i]) {
+  for (int i = 0; i < downSampled_length - corr_len; i++) {
+    if (max_value < correlation[i]) {
       max_value = correlation[i];
       SIP_offset = i;
     }
@@ -481,7 +598,14 @@ int main(int argc, char **argv)
 
   printf("SIP offset: %d\n", SIP_offset);
 
+  // Move the detected SIP to the start of the buffer
+  int num_symbols = r2d_line_encoded_bits + R_TAS_SIP_N / R_TAS_SIP_M + (R_TAS_CAP_N + R2D_POSTAMBLE_N + (M-1)) / M; // ceil
+  c16_t *shifted = malloc(num_symbols * frame_parms->ofdm_symbol_size / N * sizeof(c16_t));
+  memset(shifted, 0, num_symbols * frame_parms->ofdm_symbol_size / N * sizeof(c16_t));
+
   free(correlation);
+  free(rxData[0]);
+  free(rxData);
 
   // Remove CP (CP0 size = 10, CP size = 9, OFDM symbol size = 128)
   /*int cleared_length = num_symbols * (frame_parms->ofdm_symbol_size/N);
@@ -520,7 +644,7 @@ int main(int argc, char **argv)
   printf("Received payload: 0x%02X\n", payload);
 
   free(energy);
-  free(cleared);*/
+  free(cleared);
   free(downSampled);
 
   for (int i = 0; i < NB_ANTENNAS_TX; i++) {
@@ -537,7 +661,7 @@ int main(int argc, char **argv)
   free(r_re);
   free(r_im);
 
-  free_channel_desc_scm(channel);
+  free_channel_desc_scm(channel);*/
 
   return 0;
 }
