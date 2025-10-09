@@ -806,10 +806,12 @@ typedef struct {
 } NR_UEs_t;
 
 typedef enum {
-  NO_BEAM_MODE,
-  PRECONFIGURED_BEAM_IDX,
-  LOPHY_BEAM_IDX,
-} nr_beam_mode_t;
+  NO_BEAMFORMING,
+  PREDEFINED_BEAM,
+  WEIGHT_BASED_BEAM,
+} nr_beam_type_t;
+
+typedef enum { HIPHY_BEAMFORMING, LOPHY_BEAMFORMING } nr_beam_mode_t;
 
 typedef struct {
   /// list of allocated beams per period
@@ -817,6 +819,7 @@ typedef struct {
   int beam_duration; // in slots
   int beams_per_period;
   int beam_allocation_size;
+  nr_beam_type_t beam_type;
   nr_beam_mode_t beam_mode;
 } NR_beam_info_t;
 

@@ -3703,7 +3703,7 @@ int get_fapi_beamforming_index(gNB_MAC_INST *mac, int ssb_idx)
 // for now the fapi beam index is the number of SSBs transmitted before ssb_index i
 void fapi_beam_index_allocation(NR_ServingCellConfigCommon_t *scc, const nr_mac_config_t *config, gNB_MAC_INST *mac)
 {
-  if (mac->beam_info.beam_mode == NO_BEAM_MODE)
+  if (mac->beam_info.beam_type == NO_BEAMFORMING)
     return;
   int len = 0;
   uint8_t* buf = NULL;
@@ -3726,7 +3726,7 @@ void fapi_beam_index_allocation(NR_ServingCellConfigCommon_t *scc, const nr_mac_
   int index = 0;
   for (int i = 0; i < len; ++i) {
     if ((buf[i / 8] >> (7 - i % 8)) & 0x1) {
-      int fapi_index = mac->beam_info.beam_mode == LOPHY_BEAM_IDX ? config->bw_list[index] : index;
+      int fapi_index = mac->beam_info.beam_type == PREDEFINED_BEAM ? config->bw_list[index] : index;
       mac->fapi_beam_index[i] = fapi_index;
       index++;
     } else
@@ -3742,7 +3742,7 @@ static inline int get_beam_index(const NR_beam_info_t *beam_info, int frame, int
 NR_beam_alloc_t beam_allocation_procedure(NR_beam_info_t *beam_info, int frame, int slot, int beam_index, int slots_per_frame)
 {
   // if no beam allocation for analog beamforming we always return beam index 0 (no multiple beams)
-  if (beam_info->beam_mode == NO_BEAM_MODE)
+  if (beam_info->beam_type == NO_BEAMFORMING)
     return (NR_beam_alloc_t) {.new_beam = false, .idx = 0};
 
   const int index = get_beam_index(beam_info, frame, slot, slots_per_frame);
@@ -3765,13 +3765,13 @@ NR_beam_alloc_t beam_allocation_procedure(NR_beam_info_t *beam_info, int frame, 
 uint16_t convert_to_fapi_beam(const uint16_t beam_idx, const nr_beam_mode_t mode)
 {
   AssertFatal(beam_idx >= 0 && beam_idx < 32768, "Beam index out of range. Valid range is [0, 32767]\n");
-  return (mode == LOPHY_BEAM_IDX) ? SET_BIT(beam_idx, 15) : beam_idx;
+  return (mode == LOPHY_BEAMFORMING) ? SET_BIT(beam_idx, 15) : beam_idx;
 }
 
 int get_allocated_beam(const NR_beam_info_t *beam_info, int frame, int slot, int slots_per_frame, int beam_number_in_period)
 {
   uint16_t beam_idx = 0;
-  if (beam_info->beam_mode != NO_BEAM_MODE) {
+  if (beam_info->beam_type != NO_BEAMFORMING) {
     const int index = get_beam_index(beam_info, frame, slot, slots_per_frame);
     beam_idx = beam_info->beam_allocation[beam_number_in_period][index];
   }
@@ -3792,7 +3792,7 @@ void reset_beam_status(NR_beam_info_t *beam_info, int frame, int slot, int beam_
 void beam_selection_procedures(gNB_MAC_INST *mac, NR_UE_info_t *UE)
 {
   // do not perform beam procedures if there is no beam information
-  if (mac->beam_info.beam_mode == NO_BEAM_MODE)
+  if (mac->beam_info.beam_type == NO_BEAMFORMING)
     return;
   RSRP_report_t *rsrp_report = &UE->UE_sched_ctrl.CSI_report.ssb_rsrp_report;
   // simple beam switching algorithm -> we select beam with highest RSRP from CSI report
