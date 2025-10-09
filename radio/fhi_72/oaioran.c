@@ -475,6 +475,30 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
  */
 int xran_fh_rx_send_slot_cfg(ru_info_t *ru, int frame, int slot)
 {
+  int tti = /*frame*SUBFRAMES_PER_SYSTEMFRAME*SLOTNUM_PER_SUBFRAME+*/ 20 * frame
+            + slot; // commented out temporarily to check that compilation of oran 5g is working.
+  const struct xran_fh_init *fh_init = get_xran_fh_init();
+  int nb_rx_per_ru = ru->nb_rx / fh_init->xran_ports;
+
+  for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) { // OAI does not support multiple CC yet.
+
+    for (uint8_t ant_id = 0; ant_id < ru->nb_rx; ant_id++) {
+      const struct xran_frame_config *frame_conf = &get_xran_fh_config(ant_id / nb_rx_per_ru)->frame_conf;
+      // skip processing. this slot is TX (no RX in this slot)
+      if (is_tdd_dl_guard_slot(frame_conf, slot))
+        continue;
+
+      oran_buf_list_t *bufs = get_xran_buffers(ant_id / nb_rx_per_ru);
+      uint8_t *pPrbMapData = bufs->dstcp[ant_id % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
+      struct xran_prb_map *pPrbMap = (struct xran_prb_map *)pPrbMapData;
+
+      for (uint32_t idxElm = 0; idxElm < pPrbMap->nPrbElm; idxElm++) {
+        struct xran_prb_elm *p_prbMapElm = &pPrbMap->prbMap[idxElm];
+        /* For now we assume only one section so pass first section's beam id from grid info struct. */
+        p_prbMapElm->nBeamIndex = ru->rx_grid[ant_id].grid_info[0].beam_id & 0x7fff;
+      }
+    }
+  }
   return 0;
 }
 
@@ -525,6 +549,8 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
           for (idxElm = 0; idxElm < pRbMap->nPrbElm; idxElm++) {
             struct xran_section_desc *p_sec_desc = NULL;
             p_prbMapElm = &pRbMap->prbMap[idxElm];
+            /* For now we assume only one section so pass first section's beam id from grid info struct. */
+            p_prbMapElm->nBeamIndex = ru->tx_grid[ant_id].grid_info[0].beam_id & 0x7fff;
             // assumes one fragment per symbol
 #ifdef E_RELEASE
             p_sec_desc = p_prbMapElm->p_sec_desc[sym_id][0];
