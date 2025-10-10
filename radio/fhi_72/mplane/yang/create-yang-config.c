@@ -280,7 +280,7 @@ static bool create_uplane_conf_v2(const ru_session_t *ru_session, const openair0
     ret = lyd_new_term(rx_carrier_node, NULL, "n-ta-offset", "0", 0, NULL);
     VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Failed to create \"n-ta-offset\" node.\n");
 
-    ret = lyd_new_term(rx_carrier_node, NULL, "active", "ACTIVE", 0, NULL);
+    ret = lyd_new_term(rx_carrier_node, NULL, "active", "INACTIVE", 0, NULL);
     VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Failed to create \"active\" node.\n");
   }
 
@@ -322,7 +322,7 @@ static bool create_uplane_conf_v2(const ru_session_t *ru_session, const openair0
     ret = lyd_new_term(tx_carrier_node, NULL, "downlink-sfn-offset", "0", 0, NULL);
     VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Failed to create \"downlink-sfn-offset\" node.\n");
 
-    ret = lyd_new_term(tx_carrier_node, NULL, "active", "ACTIVE", 0, NULL);
+    ret = lyd_new_term(tx_carrier_node, NULL, "active", "INACTIVE", 0, NULL);
     VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Failed to create \"active\" node.\n");
   }
 
