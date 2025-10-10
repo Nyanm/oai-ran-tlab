@@ -23,6 +23,7 @@
 
 #include <libxml/parser.h>
 #include <string.h>
+#include <stdlib.h>
 
 static char *find_ru_xml_node(xmlNode *node, const char *filter)
 {
@@ -52,7 +53,7 @@ static char *find_ru_xml_node(xmlNode *node, const char *filter)
 char *get_ru_xml_node(const char *buffer, const char *filter)
 {
   // Initialize the xml file
-  size_t len = strlen(buffer) + 1;
+  size_t len = strlen(buffer);
   xmlDoc *doc = xmlReadMemory(buffer, len, NULL, NULL, 0);
   xmlNode *root_element = xmlDocGetRootElement(doc);
 
@@ -88,7 +89,7 @@ static void find_ru_xml_list(xmlNode *node, const char *filter, char ***match_li
 void get_ru_xml_list(const char *buffer, const char *filter, char ***match_list, size_t *count)
 {
   // Initialize the xml file
-  size_t len = strlen(buffer) + 1;
+  size_t len = strlen(buffer);
   xmlDoc *doc = xmlReadMemory(buffer, len, NULL, NULL, 0);
   xmlNode *root_element = xmlDocGetRootElement(doc);
 
