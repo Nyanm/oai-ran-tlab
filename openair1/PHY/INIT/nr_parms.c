@@ -207,6 +207,8 @@ void set_scs_parameters (NR_DL_FRAME_PARMS *fp, int mu, int N_RB_DL)
   while(fp->ofdm_symbol_size < N_RB_DL * 12)
     fp->ofdm_symbol_size <<= 1;
 
+  fp->ofdm_symbol_size = 4096;
+  LOG_I(PHY, "Hardcoding FFT size to 4096 even though the BW and SCS are 40MHz and 30kHz.\n");
   fp->first_carrier_offset = fp->ofdm_symbol_size - (N_RB_DL * 12 / 2);
   fp->nb_prefix_samples    = fp->ofdm_symbol_size / 128 * 9;
   fp->nb_prefix_samples0   = fp->ofdm_symbol_size / 128 * (9 + (1 << mu));
