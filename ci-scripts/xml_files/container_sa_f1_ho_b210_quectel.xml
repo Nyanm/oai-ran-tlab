@@ -59,7 +59,7 @@
   <testCase id="000001">
     <class>DeployCoreNetwork</class>
     <desc>Initialize 5G Core</desc>
-    <cn_id>oc-cn5g-00102-ho</cn_id>
+    <cn_id>oc-cn5g-00103-ho</cn_id>
   </testCase>
 
   <testCase id="000002">
@@ -90,9 +90,9 @@
 
   <testCase id="000027">
     <class>Custom_Command</class>
-    <desc>Set attenuator to 0</desc>
+    <desc>Set attenuator to 0 for DU0 and 17 for DU1</desc>
     <node>rocket</node>
-    <command>/opt/test-minicircuits-usb/control-attenuators.py -s0 0</command>
+    <command>/opt/rc4dat/attenuatorctl.py -r 3,4 0 -r 1,2 17 -d 5</command>
   </testCase>
 
   <testCase id="000006">
@@ -100,15 +100,23 @@
     <desc>Deploy gNB-CU in a container</desc>
     <yaml_path>ci-scripts/yaml_files/5g_sa_f1_b210_ho</yaml_path>
     <node>groot</node>
-    <services>oai_cu</services>
+    <services>oai-cu</services>
   </testCase>
 
   <testCase id="000007">
     <class>Deploy_Object</class>
     <desc>Deploy gNB-DU0 (TDD/Band77/20MHz/B210) in a container</desc>
     <yaml_path>ci-scripts/yaml_files/5g_sa_f1_b210_ho</yaml_path>
-    <services>oai_du0</services>
+    <services>oai-du0</services>
     <node>groot</node>
+  </testCase>
+
+  <testCase id="000010">
+    <class>Deploy_Object</class>
+    <desc>Deploy gNB-DU1 (TDD/Band77/20MHz/B210) in a container</desc>
+    <yaml_path>ci-scripts/yaml_files/5g_sa_f1_b210_ho</yaml_path>
+    <node>rocket</node>
+    <services>oai-du1</services>
   </testCase>
 
   <testCase id="000008">
@@ -121,17 +129,9 @@
     <class>Ping</class>
     <desc>Ping: 100pings in 20sec</desc>
     <id>raspix</id>
-    <svr_id>oc-cn5g-00102-ho</svr_id>
+    <svr_id>oc-cn5g-00103-ho</svr_id>
     <ping_args>-c 100 -i 0.2</ping_args>
     <ping_packetloss_threshold>5</ping_packetloss_threshold>
-  </testCase>
-
-  <testCase id="000010">
-    <class>Deploy_Object</class>
-    <desc>Deploy gNB-DU1 (TDD/Band77/20MHz/B210) in a container</desc>
-    <yaml_path>ci-scripts/yaml_files/5g_sa_f1_b210_ho</yaml_path>
-    <node>rocket</node>
-    <services>oai_du1</services>
   </testCase>
 
   <testCase id="000011">
@@ -142,16 +142,16 @@
 
   <testCase id="000012">
     <class>Custom_Command</class>
-    <desc>Attenuate DU0 by 40dB to trigger a Handover</desc>
+    <desc>Attenuate DU0 by 15 and remove the attenuation on DU1 to trigger Handover</desc>
     <node>rocket</node>
-    <command>sudo /opt/test-minicircuits-usb/control-attenuators.py -s0 0.0 -s1 40.0 --handover</command>
+    <command>/opt/rc4dat/attenuatorctl.py -r 3,4 15 -r 1,2 0 -d 5</command>
   </testCase>
 
   <testCase id="000013">
     <class>Ping</class>
     <desc>Ping: 50pings in 10sec</desc>
     <id>raspix</id>
-    <svr_id>oc-cn5g-00102-ho</svr_id>
+    <svr_id>oc-cn5g-00103-ho</svr_id>
     <ping_args>-c 50 -i 0.2</ping_args>
     <ping_packetloss_threshold>5</ping_packetloss_threshold>
   </testCase>
@@ -165,16 +165,16 @@
 
   <testCase id="000015">
    <class>Custom_Command</class>
-    <desc>Attenuate DU1 by 40dB to trigger a Handover</desc>
+    <desc>Attenuate DU1 by 17dB and remove attenuation on DU0 to trigger Handover</desc>
     <node>rocket</node>
-    <command>sudo /opt/test-minicircuits-usb/control-attenuators.py -s0 40.0 -s1 0.0 --handover</command>
+    <command>/opt/rc4dat/attenuatorctl.py -r 3,4 0 -r 1,2 17 -d 5</command>
   </testCase>
 
   <testCase id="000016">
     <class>Ping</class>
     <desc>Ping: 50pings in 10sec</desc>
     <id>raspix</id>
-    <svr_id>oc-cn5g-00102-ho</svr_id>
+    <svr_id>oc-cn5g-00103-ho</svr_id>
     <ping_args>-c 50 -i 0.2</ping_args>
     <ping_packetloss_threshold>5</ping_packetloss_threshold>
   </testCase>
@@ -188,16 +188,16 @@
 
   <testCase id="000018">
    <class>Custom_Command</class>
-    <desc>Attenuate DU0 by 40dB to trigger a Handover</desc>
+    <desc>Attenuate DU0 by 15 and remove the attenuation on DU1 to trigger Handover</desc>
     <node>rocket</node>
-    <command>sudo /opt/test-minicircuits-usb/control-attenuators.py -s0 0.0 -s1 40.0 --handover</command>
+    <command>/opt/rc4dat/attenuatorctl.py -r 3,4 15 -r 1,2 0 -d 5</command>
   </testCase>
 
   <testCase id="000019">
     <class>Ping</class>
     <desc>Ping: 50pings in 10sec</desc>
     <id>raspix</id>
-    <svr_id>oc-cn5g-00102-ho</svr_id>
+    <svr_id>oc-cn5g-00103-ho</svr_id>
     <ping_args>-c 50 -i 0.2</ping_args>
     <ping_packetloss_threshold>5</ping_packetloss_threshold>
   </testCase>
@@ -252,7 +252,7 @@
     <class>UndeployCoreNetwork</class>
     <always_exec>true</always_exec>
     <desc>Terminate 5G Core</desc>
-    <cn_id>oc-cn5g-00102-ho</cn_id>
+    <cn_id>oc-cn5g-00103-ho</cn_id>
   </testCase>
 
 </testCaseList>
