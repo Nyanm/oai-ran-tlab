@@ -84,7 +84,7 @@ static bool load_from_operational_ds(xmlNode *node, ru_session_t *ru_session, st
   for (xmlNode *schemas_node = node; schemas_node; schemas_node = schemas_node->next) {
     if(schemas_node->type != XML_ELEMENT_NODE)
       continue;
-    if (strcmp((const char *)schemas_node->name, "schemas") == 0) {
+    if (strcmp((const char *)schemas_node->name, "schemas") == 0) { // this node doesn't exist in Eridan RU
       return store_schemas(schemas_node->children, ru_session, ctx);
     } else {
       bool success = load_from_operational_ds(schemas_node->children, ru_session, ctx);
@@ -100,7 +100,7 @@ bool load_yang_models(ru_session_t *ru_session, const char *buffer)
   struct ly_ctx **ctx = (struct ly_ctx **)&ru_session->ctx;
 
   // Initialize the xml file
-  size_t len = strlen(buffer) + 1;
+  size_t len = strlen(buffer); // Teodora to fix
   xmlDoc *doc = xmlReadMemory(buffer, len, NULL, NULL, 0);
   xmlNode *root_element = xmlDocGetRootElement(doc);
 
