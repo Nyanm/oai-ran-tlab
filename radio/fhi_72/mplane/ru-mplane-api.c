@@ -60,6 +60,24 @@ static void fix_benetel_setting(xran_mplane_t *xran_mplane, const uint32_t inter
   }
 }
 
+static void fix_eridan_setting(xran_mplane_t *xran_mplane, const uint32_t interface_mtu, const int16_t first_iq_width, const int max_num_ant)
+{
+  if (interface_mtu != 9600) {
+    MP_LOG_I("Interface MTU %d unreliable/not correctly reported by Eridan O-RU, hardcoding to 9600.\n", interface_mtu);
+    xran_mplane->mtu = 9600;
+  } else {
+    xran_mplane->mtu = interface_mtu;
+  }
+
+  if (first_iq_width != 9) { // Eridan implemented it correctly, but I need to fix it
+    xran_mplane->iq_width = 9;
+  } else {
+    xran_mplane->iq_width = first_iq_width;
+  }
+
+  xran_mplane->prach_offset = max_num_ant;
+}
+
 bool get_config_for_xran(const char *buffer, const int max_num_ant, xran_mplane_t *xran_mplane)
 {
   /* some O-RU vendors are not fully compliant as per M-plane specifications */
@@ -69,7 +87,7 @@ bool get_config_for_xran(const char *buffer, const int max_num_ant, xran_mplane_
   xran_mplane->ru_mac_addr = get_ru_xml_node(buffer, "mac-address"); // TODO: support for VVDN, as it defines multiple MAC addresses
 
   // MTU
-  const uint32_t interface_mtu = (uint32_t)atoi(get_ru_xml_node(buffer, "l2-mtu"));
+  const uint32_t interface_mtu = 0; //(uint32_t)atoi(get_ru_xml_node(buffer, "l2-mtu")); does not exist in Eridan operational datastore
 
   // IQ bitwidth
   char **match_list = NULL;
@@ -118,8 +136,9 @@ bool get_config_for_xran(const char *buffer, const int max_num_ant, xran_mplane_
 
   if (strcasecmp(ru_vendor, "BENETEL") == 0 /* || strcmp(ru_vendor, "VVDN-LPRU") == 0 || strcmp(ru_vendor, "Metanoia") == 0 */) {
     fix_benetel_setting(xran_mplane, interface_mtu, first_iq_width, max_num_ant, model_name);
-  } else {
-    AssertError(false, return false, "[MPLANE] %s RU currently not supported.\n", ru_vendor);
+  } else if ((strcasecmp(ru_vendor, "Eridan") == 0)) {
+    fix_eridan_setting(xran_mplane, interface_mtu, first_iq_width, max_num_ant);
+    //AssertError(false, return false, "[MPLANE] %s RU currently not supported.\n", ru_vendor);
   }
 
   MP_LOG_I("Storing the following information to forward to xran:\n\
