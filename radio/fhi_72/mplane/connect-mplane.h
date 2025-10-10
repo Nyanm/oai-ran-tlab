@@ -24,6 +24,8 @@
 
 #include "ru-mplane-api.h"
 
+bool listen_mplane(ru_session_t *ru_session);
+
 bool connect_mplane(ru_session_t *ru_session);
 
 void disconnect_mplane(void *rus_disconnect);

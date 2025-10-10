@@ -308,7 +308,7 @@ __attribute__((__visibility__("default"))) int transport_init(openair0_device *d
   bool ru_configured[ru_session_list.num_rus];
   for (size_t i = 0; i < ru_session_list.num_rus; i++) {
     ru_session_t *ru_session = &ru_session_list.ru_session[i];
-    ru_configured[i] = connect_mplane(ru_session);
+    ru_configured[i] = listen_mplane(ru_session);
     if (!ru_configured[i]) {
       continue;
     }

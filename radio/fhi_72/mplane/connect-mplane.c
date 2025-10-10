@@ -26,6 +26,8 @@
 #include <libyang/libyang.h>
 #include <nc_client.h>
 
+#define CLI_CH_TIMEOUT 60
+
 static int my_auth_hostkey_check(const char *hostname, ssh_session session, void *priv)
 {
   (void)hostname;
@@ -33,6 +35,41 @@ static int my_auth_hostkey_check(const char *hostname, ssh_session session, void
   (void)priv;
 
   return 0;
+}
+
+bool listen_mplane(ru_session_t *ru_session)
+{
+  int port = NC_PORT_CH_SSH;
+  char *host = "0.0.0.0";       // better IPv4
+  int timeout = CLI_CH_TIMEOUT;
+
+  /* create the session */
+  nc_client_ssh_ch_set_username(ru_session->username);
+  nc_client_ssh_ch_add_bind_listen(host, port);
+
+  nc_client_ssh_ch_set_auth_pref(NC_SSH_AUTH_PASSWORD, 1);
+  nc_client_ssh_ch_set_auth_pref(NC_SSH_AUTH_PUBLICKEY, -1);  // ssh-key identification
+  nc_client_ssh_ch_set_auth_pref(NC_SSH_AUTH_INTERACTIVE, -1);
+
+  //int keypair_ret = nc_client_ssh_ch_add_keypair(pub_key, priv_key);
+  //assert(keypair_ret == 0 && "Unable to authenticate RU\n");
+  //nc_client_ssh_ch_set_auth_hostkey_check_clb(my_auth_hostkey_check, "DATA");  // host-key identification
+
+  printf("Waiting %ds for a SSH Call Home connection on port %u...\n", timeout, port);
+
+  struct nc_session *ru_session_ptr = NULL;
+  int ret = nc_accept_callhome(timeout * 1000, NULL, &ru_session_ptr); // check the right session; maybe session[0] is already ongoing, and need to create session[1]
+  assert(ret == 1 && "SSH Call Home failed.");
+
+  ru_session->session = (void *)ru_session_ptr;
+  nc_client_ssh_ch_del_bind(host, port);
+
+  //const char *ru_ip_add = nc_session_get_host(ru_session->session);
+  //ru_session->ru_ip_add = malloc(strlen(ru_ip_add) + 1);
+  //memcpy(ru_session->ru_ip_add, ru_ip_add, strlen(ru_ip_add) + 1);
+  printf("Successfuly connected to RU\n"); // with IP address %s\n", ru_session->ru_ip_add);
+
+  return true;
 }
 
 bool connect_mplane(ru_session_t *ru_session)
