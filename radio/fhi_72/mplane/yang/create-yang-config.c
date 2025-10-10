@@ -141,6 +141,15 @@ static LY_ERR fill_uplane_ch_common_v2(const uplane_dir_t dir, const xran_mplane
   ret = lyd_new_term(*root, NULL, "offset-to-absolute-frequency-center", freq_offset, 0, NULL);
   VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Failed to create \"offset-to-absolute-frequency-center\" node.\n");
 
+  struct lyd_node *prbs_per_scs = NULL;
+  ret = lyd_new_list(*root, NULL, "number-of-prb-per-scs", 0, &prbs_per_scs, scs_name[oai->nr_scs_for_raster]);
+  VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Failed to create \"number-of-prb-per-scs\" node.\n");
+
+  char number_of_prbs[8];
+  snprintf(number_of_prbs, sizeof(number_of_prbs), "%d", oai->num_rb_dl); // no num_rb_ul in openair0_config_t => assuming it's the same value
+  ret = lyd_new_term(prbs_per_scs, NULL, "number-of-prb", number_of_prbs, 0, NULL);
+  VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Failed to create \"number-of-prb\" node.\n");
+
   struct lyd_node *compression_node = NULL;
   ret = lyd_new_inner(*root, NULL, "compression", 0, &compression_node);
   VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Failed to create \"compression\" node.\n");
@@ -154,8 +163,8 @@ static LY_ERR fill_uplane_ch_common_v2(const uplane_dir_t dir, const xran_mplane
     ret = lyd_new_term(compression_node, NULL, "compression-type", "STATIC", 0, NULL);
     VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Failed to create \"compression-type\" node.\n");
 
-    // ret = lyd_new_term(compression_node, NULL, "compression-method", "BLOCK_FLOATING_POINT", 0, NULL);
-    // VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Failed to create \"compression-method\" node.\n");
+    ret = lyd_new_term(compression_node, NULL, "compression-method", "BLOCK_FLOATING_POINT", 0, NULL);
+    VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Failed to create \"compression-method\" node.\n");
   }
 
   struct lyd_node *eaxc_conf = NULL;
