@@ -148,14 +148,14 @@ static bool get_current_state(const char* buffer, const char* query, const char 
 
 static void init_ru_notif(ru_session_t *ru_session, const char* buffer)
 {
-  bool usage_state = get_current_state(buffer, "usage-state", "busy");
-  ru_session->ru_notif.rx_carrier_state = usage_state;
-  ru_session->ru_notif.tx_carrier_state = usage_state;
-  ru_session->ru_notif.config_change = usage_state;
+  //bool usage_state = get_current_state(buffer, "usage-state", "busy");
+  ru_session->ru_notif.rx_carrier_state = false; // usage_state;
+  ru_session->ru_notif.tx_carrier_state = false; // usage_state;
+  ru_session->ru_notif.config_change = false; // usage_state;
 
   ru_session->ru_notif.hardware.oper_state = get_current_state(buffer, "oper-state", "enabled");
   ru_session->ru_notif.hardware.admin_state = get_current_state(buffer, "admin-state", "unlocked");
-  ru_session->ru_notif.hardware.avail_state = get_current_state(buffer, "availability-state", "NORMAL");
+ //ru_session->ru_notif.hardware.avail_state = get_current_state(buffer, "availability-state", "NORMAL");
 
   ru_session->ru_notif.ptp_state = get_current_state(buffer, "sync-state", "LOCKED");
   if (ru_session->ru_notif.ptp_state) {
@@ -206,7 +206,7 @@ bool manage_ru(ru_session_t *ru_session, const openair0_config_t *oai, const siz
   success = load_yang_models(ru_session, operational_ds);
   AssertError(success, return false, "[MPLANE] Unable to load yang models.\n");
 
-  if (ru_session->ru_notif.ptp_state && ru_session->ru_notif.hardware.oper_state && ru_session->ru_notif.hardware.admin_state && ru_session->ru_notif.hardware.avail_state) {
+//  if (ru_session->ru_notif.ptp_state && ru_session->ru_notif.hardware.oper_state && ru_session->ru_notif.hardware.admin_state && ru_session->ru_notif.hardware.avail_state) {
     char *content = NULL;
     success = configure_ru_from_yang(ru_session, oai, num_rus, &content);
     AssertError(success, return false, "[MPLANE] Unable to create content for <edit-config> RPC for start-up procedure.\n");
@@ -214,7 +214,7 @@ bool manage_ru(ru_session_t *ru_session, const openair0_config_t *oai, const siz
     success = edit_val_commmit_rpc(ru_session, content);
     AssertError(success, return false, "[MPLANE] Unable to continue.\n");
     free(content);
-  }
+//  }
 
   free(operational_ds);
   free(watchdog_answer);
