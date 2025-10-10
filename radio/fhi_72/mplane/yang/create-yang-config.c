@@ -513,7 +513,7 @@ bool configure_ru_from_yang(const ru_session_t *ru_session, const openair0_confi
 
   // <o-ran-pm>
   struct lyd_node *pm_conf = NULL;
-  if (ru_session->pm_stats.start_up_timing) {
+ /*if (ru_session->pm_stats.start_up_timing) {
     success = create_pm_conf_v2(ru_session, "true", &pm_conf);
     VERIFY_SUCCESS(success, "[MPLANE] Cannot create PM activation.\n");
   } else {
@@ -522,7 +522,7 @@ bool configure_ru_from_yang(const ru_session_t *ru_session, const openair0_confi
   }
 
   ret = lyd_merge_siblings(&all_merge, pm_conf, 0);
-  VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Cannot merge CU-plane interface, processing element, U-plane configuration and PM configuration.\n");
+  VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Cannot merge CU-plane interface, processing element, U-plane configuration and PM configuration.\n");*/
 
   lyd_print_mem(result, all_merge, LYD_XML, LYD_PRINT_WITHSIBLINGS);
 
