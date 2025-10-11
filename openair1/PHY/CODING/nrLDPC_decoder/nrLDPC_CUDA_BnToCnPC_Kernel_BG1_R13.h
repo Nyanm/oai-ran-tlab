@@ -644,14 +644,21 @@ __device__ void CnToBnPC_Kernel_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
 
 __device__ void llrRes2llrOut_Kernel_int8_BG1(const t_nrLDPC_lut *p_lut, int8_t *llrOut, int8_t *llrRes, int Zc)
 {
-  int colIdx = blockIdx.x; //
-  int tid = threadIdx.x; //
-
+  /*
+int colIdx = blockIdx.x; //
+int tid = threadIdx.x; //
   if (tid >= (Zc / 4))
+   return;
+   */
+
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int colIdx = tid / 96;
+  int lane = tid % 96;
+  if (colIdx >= 42)
     return;
 
-  const uint8_t numBn2CnG1 = p_lut->numBnInBnGroups[0];
-  uint32_t startColParity =
+  const uint8_t numBn2CnG1 = p_lut->numBnInBnGroups[0]; //numBnInBnGroups[0] = 42
+uint32_t startColParity = //BG1=26
       NR_LDPC_START_COL_PARITY_BG1; //(BG == 1) ? (NR_LDPC_START_COL_PARITY_BG1) : (NR_LDPC_START_COL_PARITY_BG2);
 
   uint32_t colG1 = startColParity * Zc;
@@ -662,16 +669,16 @@ __device__ void llrRes2llrOut_Kernel_int8_BG1(const t_nrLDPC_lut *p_lut, int8_t 
   int8_t *p_llrOut = &llrOut[0];
   if (colIdx < startColParity) {
     const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
-    int32_t *dst_ptr2 = (int32_t *)(p_llrOut + colIdx * Zc + tid * 4);
-    int32_t *src_ptr2 = (int32_t *)(&llrRes[idxBn] + tid * 4);
+    int32_t *dst_ptr2 = (int32_t *)(p_llrOut + colIdx * Zc + lane * 4);
+    int32_t *src_ptr2 = (int32_t *)(&llrRes[idxBn] + lane * 4);
     *dst_ptr2 = *src_ptr2; // 0x01010101*colIdx;//
   }
 
   //  __syncthreads();
   if (numBn2CnG1 > 0) {
     if (colIdx < numBn2CnG1) {
-      int32_t *dst_ptr1 = (int32_t *)(&llrOut[colG1] + colIdx * Zc + tid * 4);
-      int32_t *src_ptr1 = (int32_t *)(llrRes + colIdx * Zc + tid * 4);
+      int32_t *dst_ptr1 = (int32_t *)(&llrOut[colG1] + colIdx * Zc + lane * 4);
+      int32_t *src_ptr1 = (int32_t *)(llrRes + colIdx * Zc + lane * 4);
       *dst_ptr1 = *src_ptr1; // 0x10101010*colIdx;//
     }
   }

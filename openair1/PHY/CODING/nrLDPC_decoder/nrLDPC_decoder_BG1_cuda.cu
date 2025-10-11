@@ -4,7 +4,7 @@
 #include "nrLDPC_types.h"
 // #include <cooperative_groups.h>
 // amespace cg = cooperative_groups;
-
+#include "nrLDPC_CUDA_lut.h"
 #include "nrLDPC_CUDA_CnProcKernel_BG1_R13.h"
 #include "nrLDPC_CUDA_BnProcKernel_BG1_R13.h"
 #include "nrLDPC_CUDA_BnToCnPC_Kernel_BG1_R13.h"
@@ -138,140 +138,6 @@ __global__ void check_ptr_kernel_easy(int id)
   printf("hello!\n");
 }
 
-__device__ __constant__ uint8_t h_block_group_ids_cnProc[50] = {0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-                                                                2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4,
-                                                                4, 4, 4, 5, 5, 6, 6, 7, 8, 8, 8, 8, 8, 8, 8, 8};
-
-__device__ __constant__ uint8_t h_block_CN_idx_cnProc[50] = {0,  0,  1,  2,  3,  4,  0,  1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-                                                             11, 12, 13, 14, 15, 16, 17, 0, 1, 2, 3, 4, 5, 6, 7, 0, 1,
-                                                             2,  3,  4,  0,  1,  0,  1,  0, 0, 0, 1, 1, 2, 2, 3, 3};
-
-__device__ __constant__ uint16_t h_block_thread_counts_cnProc[50] = {
-    288, 384, 384, 384, 384, 384, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 576,
-    576, 576, 576, 576, 576, 576, 576, 672, 672, 672, 672, 672, 768, 768, 864, 864, 960, 912, 912, 912, 912, 912, 912, 912, 912};
-
-__device__ __constant__ uint32_t h_block_input_offsets_cnProc[50] = {
-    0,     1152,  1536,  1920,  2304,  2688,  8832,  9216,  9600,  9984,  10368, 10752, 11136, 11520, 11904, 12288, 12672,
-    13056, 13440, 13824, 14208, 14592, 14976, 15360, 43392, 43776, 44160, 44544, 44928, 45312, 45696, 46080, 61824, 62208,
-    62592, 62976, 63360, 75264, 75648, 81408, 81792, 88320, 92160, 92160, 92544, 92544, 92928, 92928, 93312, 93312};
-
-__device__ __constant__ uint32_t h_block_output_offsets_cnProc[50] = {
-    0,     1152,  1536,  1920,  2304,  2688,  8832,  9216,  9600,  9984,  10368, 10752, 11136, 11520, 11904, 12288, 12672,
-    13056, 13440, 13824, 14208, 14592, 14976, 15360, 43392, 43776, 44160, 44544, 44928, 45312, 45696, 46080, 61824, 62208,
-    62592, 62976, 63360, 75264, 75648, 81408, 81792, 88320, 92160, 92160, 92544, 92544, 92928, 92928, 93312, 93312};
-
-__device__ __constant__ uint8_t h_block_group_ids_BnToCnPC[46] = {0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-                                                                  2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,
-                                                                  4, 4, 4, 4, 4, 5, 5, 6, 6, 7, 8, 8, 8, 8};
-
-__device__ __constant__ uint8_t h_block_CN_idx_BnToCnPC[46] = {0,  0,  1,  2,  3,  4,  0,  1,  2, 3, 4, 5, 6, 7, 8, 9,
-                                                               10, 11, 12, 13, 14, 15, 16, 17, 0, 1, 2, 3, 4, 5, 6, 7,
-                                                               0,  1,  2,  3,  4,  0,  1,  0,  1, 0, 0, 1, 2, 3};
-
-__device__ __constant__ uint16_t h_block_thread_counts_BnToCnPC[46] = {
-    288, 384, 384, 384, 384, 384, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480, 480,
-    480, 576, 576, 576, 576, 576, 576, 576, 576, 672, 672, 672, 672, 672, 768, 768, 864, 864, 960, 912, 912, 912, 912};
-
-__device__ __constant__ uint32_t h_block_input_offsets_BnToCnPC[46] = {
-    0,     1152,  1536,  1920,  2304,  2688,  8832,  9216,  9600,  9984,  10368, 10752, 11136, 11520, 11904, 12288,
-    12672, 13056, 13440, 13824, 14208, 14592, 14976, 15360, 43392, 43776, 44160, 44544, 44928, 45312, 45696, 46080,
-    61824, 62208, 62592, 62976, 63360, 75264, 75648, 81408, 81792, 88320, 92160, 92544, 92928, 93312};
-
-__device__ __constant__ uint32_t h_block_output_offsets_BnToCnPC[46] = {
-    0,     1152,  1536,  1920,  2304,  2688,  8832,  9216,  9600,  9984,  10368, 10752, 11136, 11520, 11904, 12288,
-    12672, 13056, 13440, 13824, 14208, 14592, 14976, 15360, 43392, 43776, 44160, 44544, 44928, 45312, 45696, 46080,
-    61824, 62208, 62592, 62976, 63360, 75264, 75648, 81408, 81792, 88320, 92160, 92544, 92928, 93312};
-
-  __device__ __constant__ uint8_t lut_CnGrpIdx_BG1_R13[316] = {
-    // Group 1 (3 messages)
-    1, 1, 1, 
-    // Group 2 (20 messages)
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
-    // Group 3 (90 messages)
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
-    // Group 4 (48 messages)
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
-    4, 4, 4, 4, 4, 4, 4, 4, 
-    // Group 5 (35 messages)
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
-    // Group 6 (16 messages)
-    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 
-    // Group 7 (18 messages)
-    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
-    // Group 8 (10 messages)
-    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
-    // Group 9 (76 messages)
-    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 
-    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 
-    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 
-    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9
-};
-  __device__ __constant__ uint8_t lut_CnMsgIdx_BG1_R13[316] = {
-    // Group 1 (Nbn=3, Ncn=1)
-    1, 2, 3, 
-    // Group 2 (Nbn=4, Ncn=5)
-    1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 
-    // Group 3 (Nbn=5, Ncn=18)
-    1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 
-    1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 
-    1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 
-    1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 
-    1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 
-    // Group 4 (Nbn=6, Ncn=8)
-    1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 
-    3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 
-    5, 6, 1, 2, 3, 4, 5, 6, 
-    // Group 5 (Nbn=7, Ncn=5)
-    1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 
-    7, 1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 
-    // Group 6 (Nbn=8, Ncn=2)
-    1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 
-    // Group 7 (Nbn=9, Ncn=2)
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 
-    // Group 8 (Nbn=10, Ncn=1)
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
-    // Group 9 (Nbn=19, Ncn=4)
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19
-};
-__device__ __constant__ uint8_t lut_CnIdx_BG1_R13[316] = {
-    // Group 1 (Nbn=3, Ncn=1) -> 1 repeated 3 times
-    1, 1, 1, 
-    // Group 2 (Nbn=4, Ncn=5) -> 1,2,3,4,5 each repeated 4 times
-    1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 
-    // Group 3 (Nbn=5, Ncn=18) -> 1..18 each repeated 5 times
-    1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 
-    5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 
-    9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 
-    13, 13, 13, 13, 13, 14, 14, 14, 14, 14, 15, 15, 15, 15, 15, 16, 16, 16, 16, 16, 
-    17, 17, 17, 17, 17, 18, 18, 18, 18, 18, 
-    // Group 4 (Nbn=6, Ncn=8) -> 1..8 each repeated 6 times
-    1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 
-    4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 
-    7, 7, 8, 8, 8, 8, 8, 8, 
-    // Group 5 (Nbn=7, Ncn=5) -> 1..5 each repeated 7 times
-    1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 
-    3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 
-    // Group 6 (Nbn=8, Ncn=2) -> 1,2 each repeated 8 times
-    1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 
-    // Group 7 (Nbn=9, Ncn=2) -> 1,2 each repeated 9 times
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
-    // Group 8 (Nbn=10, Ncn=1) -> 1 repeated 10 times
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
-    // Group 9 (Nbn=19, Ncn=4) -> 1..4 each repeated 19 times
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
-};
 
 __constant__ static uint8_t d_lut_numBnInCnGroups_BG1_R13[9];
 __constant__ static int d_lut_numThreadsEachCnGroupsNeed_BG1_R13[9];
@@ -325,7 +191,7 @@ inline cudaError_t ErrorCheck(cudaError_t error_code, const char *filename, int 
 //-----------------------CUDA Scheduler Area------------------------------
 //------------------------------------------------------------------------
 //------------------------------------------------------------------------
-__global__ void cnProcKernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
+__global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                              const int8_t *__restrict__ d_cnBufAll,
                                              int8_t *__restrict__ d_cnOutAll,
                                              int8_t *__restrict__ d_bnBufAll,
@@ -394,7 +260,7 @@ __global__ void cnProcKernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   }
 }
 
-void nrLDPC_cnProc_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
+void nrLDPC_cnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                         int8_t *cnProcBuf,
                                         int8_t *cnProcBufRes,
                                         int8_t *bnProcBuf,
@@ -411,7 +277,7 @@ void nrLDPC_cnProc_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
   dim3 gridDim(30); // 50
   dim3 blockDim(maxBlockSize);
 
-  cnProcKernel_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut,
+  cnProcKernel_BG1_R13_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut,
                                                                                  cnProcBuf,
                                                                                  cnProcBufRes,
                                                                                  bnProcBuf,
@@ -427,7 +293,7 @@ void nrLDPC_cnProc_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
 #endif
 }
 
-__global__ void bnProcPcKernel_int8_BIG_stream(const int8_t *__restrict__ d_bnProcBuf,
+__global__ void bnProcPcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ d_bnProcBuf,
                                                int8_t *__restrict__ d_bnProcBufRes,
                                                int8_t *__restrict__ d_llrProcBuf,
                                                int8_t *__restrict__ d_llrRes,
@@ -485,7 +351,7 @@ __global__ void bnProcPcKernel_int8_BIG_stream(const int8_t *__restrict__ d_bnPr
   // t1:
 }
 
-__global__ void bnProcKernel_int8_BIG_stream(const int8_t *__restrict__ d_bnProcBuf,
+__global__ void bnProcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ d_bnProcBuf,
                                              int8_t *__restrict__ d_bnProcBufRes,
                                              int8_t *__restrict__ d_llrProcBuf,
                                              int8_t *__restrict__ d_llrRes,
@@ -579,7 +445,7 @@ __global__ void bnProcKernel_int8_BIG_stream(const int8_t *__restrict__ d_bnProc
                        Zc);
 }
 
-void nrLDPC_bnProc_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
+void nrLDPC_bnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                         int8_t *bnProcBuf,
                                         int8_t *bnProcBufRes,
                                         int8_t *llrProcBuf,
@@ -611,7 +477,7 @@ void nrLDPC_bnProc_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
   dim3 gridDim(totalBlocks);
   dim3 blockDim(maxBlockSize);
 
-  bnProcPcKernel_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_bnProcBuf,
+  bnProcPcKernel_BG1_R13_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_bnProcBuf,
                                                                                    p_bnProcBufRes,
                                                                                    p_llrProcBuf,
                                                                                    p_llrRes,
@@ -623,7 +489,7 @@ void nrLDPC_bnProc_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                    numMaxIter,
                                                                                    PC_Flag);
   // printf("In stream %d B: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
-  bnProcKernel_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_bnProcBuf,
+  bnProcKernel_BG1_R13_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_bnProcBuf,
                                                                                  p_bnProcBufRes,
                                                                                  p_llrProcBuf,
                                                                                  p_llrRes,
@@ -642,7 +508,7 @@ void nrLDPC_bnProc_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
 #endif
 }
 
-__global__ void BnToCnPC_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
+__global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                                 int8_t *__restrict__ d_bnOutAll,
                                                 const int8_t *__restrict__ d_cnBufAll,
                                                 int8_t *__restrict__ d_cnOutAll,
@@ -828,7 +694,7 @@ __global__ void BnToCnPC_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   }
 }
 
-__global__ void OutPut_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
+__global__ void OutPut_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                               int Zc,
                                               int8_t *iter_ptr,
                                               int8_t numMaxIter,
@@ -851,7 +717,7 @@ __global__ void OutPut_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
     return;
 }
 
-void nrLDPC_BnToCnPC_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
+void nrLDPC_BnToCnPC_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                           int8_t *bnProcBufRes,
                                           int8_t *cnProcBuf,
                                           int8_t *cnProcBufRes,
@@ -881,7 +747,7 @@ void nrLDPC_BnToCnPC_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
   dim3 blockDim(maxBlockSize);
   // printf("bnProcBuf =  %p\n", bnProcBuf);
   // printf("In stream %d BC: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
-  BnToCnPC_Kernel_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut,
+  BnToCnPC_Kernel_BG1_R13_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut,
                                                                                     bnProcBufRes,
                                                                                     cnProcBuf,
                                                                                     cnProcBufRes,
@@ -897,7 +763,7 @@ void nrLDPC_BnToCnPC_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                     p_llrOut,
                                                                                     numLLR);
 
-  OutPut_Kernel_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut,
+  OutPut_Kernel_BG1_R13_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut,
                                                                                   Z,
                                                                                   iter_ptr,
                                                                                   numMaxIter,
@@ -1000,7 +866,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
     // CHECK(cudaGetLastError());
     for (int i = 0; i <= numMaxIter; i++) {
       // printf("I'm inside the loop i = %d\n", i);
-      nrLDPC_cnProc_BG1_cuda_stream_core(p_lut,
+      nrLDPC_cnProc_BG1_R13_cuda_stream_core(p_lut,
                                          cnProcBuf,
                                          cnProcBufRes,
                                          bnProcBuf,
@@ -1014,7 +880,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
       // cd cudaDeviceSynchronize();
 
       // printf("In stream %d 1: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
-      nrLDPC_bnProc_BG1_cuda_stream_core(p_lut,
+      nrLDPC_bnProc_BG1_R13_cuda_stream_core(p_lut,
                                          bnProcBuf,
                                          bnProcBufRes,
                                          llrProcBuf,
@@ -1030,7 +896,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
       // printf("In stream %d 2: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
       CHECK(cudaGetLastError());
       // cudaDeviceSynchronize();
-      nrLDPC_BnToCnPC_BG1_cuda_stream_core(p_lut,
+      nrLDPC_BnToCnPC_BG1_R13_cuda_stream_core(p_lut,
                                            bnProcBufRes,
                                            cnProcBuf,
                                            cnProcBufRes,
