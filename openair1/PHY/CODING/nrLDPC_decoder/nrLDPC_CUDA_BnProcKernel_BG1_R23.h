@@ -3,15 +3,8 @@
 #include <stdio.h>
 #include "nrLDPC_types.h"
 
-__device__ void gpu_sleep(unsigned int cycles)
-{
-  clock_t start = clock();
-  while ((clock() - start) < cycles) {
-    // Busy wait
-  }
-}
 
-__device__ void bnProcPcKernel_int8_Gn(const int8_t *__restrict__ d_bnProcBuf,
+__device__ void bnProcPcKernel_BG1_R23_int8_Gn(const int8_t *__restrict__ d_bnProcBuf,
                                        const int8_t *__restrict__ d_bnProcBufRes,
                                        const int8_t *__restrict__ d_llrProcBuf,
                                        const int8_t *__restrict__ d_llrRes,
@@ -46,7 +39,7 @@ __device__ void bnProcPcKernel_int8_Gn(const int8_t *__restrict__ d_bnProcBuf,
   *(int32_t *)(d_llrRes_BnIdx + lane * 4) = ymm0Res;
 }
 
-__device__ void bnProcKernel_int8_Gn(const int8_t *__restrict__ d_bnProcBuf,
+__device__ void bnProcKernel_BG1_R23_int8_Gn(const int8_t *__restrict__ d_bnProcBuf,
                                      const int8_t *__restrict__ d_bnProcBufRes,
                                      const int8_t *__restrict__ d_llrProcBuf,
                                      const int8_t *__restrict__ d_llrRes,
@@ -85,7 +78,7 @@ __device__ void bnProcKernel_int8_Gn(const int8_t *__restrict__ d_bnProcBuf,
   }*/
 }
 
-__device__ void bnProcKernel_int8_Gn_United(const int8_t *__restrict__ d_bnProcBuf,
+__device__ void bnProcKernel_BG1_R23_int8_Gn_United(const int8_t *__restrict__ d_bnProcBuf,
                                             const int8_t *__restrict__ d_bnProcBufRes,
                                             const int8_t *__restrict__ d_llrProcBuf,
                                             const int8_t *__restrict__ d_llrRes,

@@ -4,57 +4,11 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "nrLDPC_types.h"
-#include "nrLDPC_CUDA_CnProcKernel_BG1_R13.h"
+#include "nrLDPC_CUDA_public.h"
 
-// #define arrPos(a, b) a.d + b *a.dim2
-
-// enum CircShiftDirection { FORWARD = 0, INVERSE = 1 };
-// enum CircShiftOp { PUT_BRICKS = 0, GET_BRICKS = 1 };
-/*
-__device__ void moveBricks_circ(int8_t *__restrict__ dstBuf,
-                                uint16_t dstBuf_Offset,
-                                uint8_t *__restrict__ Four_Bricks,
-                                uint16_t Z,
-                                uint16_t cshift,
-                                CircShiftDirection dir,
-                                CircShiftOp op)
-{
-  int8_t *DstBuf = (int8_t *)dstBuf;
-  uint16_t shift;
-
-  if (dir == FORWARD) {
-    shift = (Z - ((cshift + dstBuf_Offset) % Z)) % Z;
-  } else {
-    shift = (cshift + dstBuf_Offset) % Z;
-  }
-
-  uint16_t pos = shift;
-  uintptr_t ptr = (uintptr_t)(DstBuf + pos);
-
-  if (op == PUT_BRICKS) {
-    // put bricks
-    if ((pos + 3 < Z) && ((ptr & 0x3) == 0)) {
-      *(uint32_t *)(DstBuf + pos) = *(const uint32_t *)(Four_Bricks);
-    } else {
-      for (uint16_t j = 0; j < 4; j++) {
-        DstBuf[(pos + j) % Z] = Four_Bricks[j];
-      }
-    }
-  } else if (op == GET_BRICKS) {
-    // get bricks
-    if ((pos + 3 < Z) && ((ptr & 0x3) == 0)) {
-      *(uint32_t *)(Four_Bricks) = *(const uint32_t *)(DstBuf + pos);
-    } else {
-      for (uint16_t j = 0; j < 4; j++) {
-        Four_Bricks[j] = DstBuf[(pos + j) % Z];
-      }
-    }
-  }
-}
-*/
 
 //------------------------------Stream Version------------------------
-__device__ void CnToBnPC_Kernel_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_R13_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -110,7 +64,7 @@ __device__ void CnToBnPC_Kernel_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
   }
 }
 
-__device__ void CnToBnPC_Kernel_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_R13_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -177,7 +131,7 @@ __device__ void CnToBnPC_Kernel_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
   }
 }
 
-__device__ void CnToBnPC_Kernel_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_R13_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -243,7 +197,7 @@ __device__ void CnToBnPC_Kernel_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
     }
   }
 }
-__device__ void CnToBnPC_Kernel_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_R13_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -309,7 +263,7 @@ __device__ void CnToBnPC_Kernel_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
     }
   }
 }
-__device__ void CnToBnPC_Kernel_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_R13_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -375,7 +329,7 @@ __device__ void CnToBnPC_Kernel_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
     }
   }
 }
-__device__ void CnToBnPC_Kernel_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_R13_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -441,7 +395,7 @@ __device__ void CnToBnPC_Kernel_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
     }
   }
 }
-__device__ void CnToBnPC_Kernel_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_R13_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -507,7 +461,7 @@ __device__ void CnToBnPC_Kernel_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
     }
   }
 }
-__device__ void CnToBnPC_Kernel_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_R13_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
                                                 int8_t *__restrict__ d_bnOutAll,
                                                 const int8_t *__restrict__ d_cnBufAll,
                                                 int8_t *__restrict__ d_cnOutAll,
@@ -573,7 +527,7 @@ __device__ void CnToBnPC_Kernel_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
     }
   }
 }
-__device__ void CnToBnPC_Kernel_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_R13_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
                                                 int8_t *__restrict__ d_bnOutAll,
                                                 const int8_t *__restrict__ d_cnBufAll,
                                                 int8_t *__restrict__ d_cnOutAll,
@@ -642,7 +596,7 @@ __device__ void CnToBnPC_Kernel_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
   }
 }
 
-__device__ void llrRes2llrOut_Kernel_int8_BG1(const t_nrLDPC_lut *p_lut, int8_t *llrOut, int8_t *llrRes, int Zc)
+__device__ void llrRes2llrOut_Kernel_BG1_R13_int8(const t_nrLDPC_lut *p_lut, int8_t *llrOut, int8_t *llrRes, int Zc)
 {
   /*
 int colIdx = blockIdx.x; //
@@ -684,7 +638,7 @@ uint32_t startColParity = //BG1=26
   }
 }
 
-__device__ void llr2bitPacked_Kernel_int8_BG1(uint8_t *out, int8_t *llrOut, uint32_t numLLR)
+__device__ void llr2bitPacked_Kernel_BG1_R13_int8(uint8_t *out, int8_t *llrOut, uint32_t numLLR)
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   int totalGroups = numLLR >> 3; // every 8  LLR as a group
@@ -703,7 +657,7 @@ __device__ void llr2bitPacked_Kernel_int8_BG1(uint8_t *out, int8_t *llrOut, uint
   out[tid] = result;
 }
 
-__device__ void llr2bit_Kernel_int8_BG1(uint8_t *out, int8_t *llrOut, uint32_t numLLR)
+__device__ void llr2bit_Kernel_BG1_R13_int8(uint8_t *out, int8_t *llrOut, uint32_t numLLR)
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   int totalGroups = numLLR >> 3; // every 8 LLR as a group

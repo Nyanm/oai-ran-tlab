@@ -6,14 +6,15 @@
 #include "nrLDPC_types.h"
 #include "nrLDPC_CUDA_public.h"
 
-__device__ void cnProcKernel_int8_G3(const t_nrLDPC_lut *p_lut,
-                                     const int8_t *__restrict__ d_cnBufAll,
-                                     int8_t *__restrict__ d_cnOutAll,
-                                     int8_t *__restrict__ d_bnBufAll,
-                                     int tid,
-                                     uint8_t groupId,
-                                     uint8_t CnIdx,
-                                     int Zc)
+__device__ void cnProcKernel_BG1_R23_int8_G3(const t_nrLDPC_lut *p_lut,
+                                             const int8_t *__restrict__ d_cnBufAll,
+                                             int8_t *__restrict__ d_cnOutAll,
+                                             int8_t *__restrict__ d_bnBufAll,
+                                             int8_t MsgIdx,
+                                             int lane,
+                                             uint8_t groupIdx,
+                                             uint8_t CnIdx,
+                                             int Zc)
 {
   const uint8_t NUM = 3; // Gn = 3
   const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
@@ -21,11 +22,7 @@ __device__ void cnProcKernel_int8_G3(const t_nrLDPC_lut *p_lut,
 
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
-  if (tid >= NUM * Zc / 4) // NUM * Zc / 4 is the number of threads assigned to each block
-    return;
-  const uint row = tid / 96; // row = 0,1,2  -> 3 BNs
-  const uint lane = tid % 96; // lane = 0,1,...,95 -> one thread in one of 96 process units
-                              // and produce 1/96 of the Msg to one BN
+  const uint row = MsgIdx - 1; // row = 0,1,2  -> 3 BNs
 
   // 1*384/4 = 96
   const uint16_t c_lut_idxG3[3][2] = {{96, 192}, {0, 192}, {0, 96}};
@@ -56,41 +53,28 @@ __device__ void cnProcKernel_int8_G3(const t_nrLDPC_lut *p_lut,
   *p_cnProcBufResBit = __vsign4(&min, &sgn); // 0x13131313;
   uint8_t *BricksToBeMoved = (uint8_t *)p_cnProcBufResBit;
 
-  const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-  const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
-  // const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
+  const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupIdx], row);
+  const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupIdx], row);
+  // const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupIdx], row);
 
   const int idxBn = lut_startAddrBnProcBuf_CNG[0];
 
   // printf("tid = %d,row = %d\n", tid, row);
 
-  if (tid == 0) {
-    // printf("moveBricks_circ call:\n");
-    // printf("lut_startAddrBnProcBuf_CNG = %p\n", lut_startAddrBnProcBuf_CNG);
-    // printf("lut_bnPosBnProcBuf_CNG = %p\n", lut_bnPosBnProcBuf_CNG);
-    // printf("lut_startAddrBnProcBuf_CNG[%d] = %d\n", row,lut_startAddrBnProcBuf_CNG[row]);
-    // printf("lut_bnPosBnProcBuf_CNG[%d] = %d\n", row,lut_bnPosBnProcBuf_CNG[row]);
-    // printf("idxBn = %d\n", idxBn);
-    // printf("dstBuf = %p\n", (int8_t *)&p_bnProcBuf[idxBn]);
-
-    // printf("dstBuf_Offset = %d\n", lane * 4);
-    // printf("BricksToBeMoved = [%d, %d, %d, %d]\n", BricksToBeMoved[0], BricksToBeMoved[1], BricksToBeMoved[2],
-    // BricksToBeMoved[3]); printf("Z = %d\n", Zc); printf("cshift = %d\n", lut_circShift_CNG[CnIdx]); printf("inverse = %d\n",
-    // INVERSE);
-  }
   moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
 }
 
 // R23 doesn't have G4,G5,G6
 
-__device__ void cnProcKernel_int8_G7(const t_nrLDPC_lut *p_lut,
-                                     const int8_t *__restrict__ d_cnBufAll,
-                                     int8_t *__restrict__ d_cnOutAll,
-                                     int8_t *__restrict__ d_bnBufAll,
-                                     int tid,
-                                     uint8_t groupId,
-                                     uint8_t CnIdx,
-                                     int Zc)
+__device__ void cnProcKernel_BG1_R23_int8_G7(const t_nrLDPC_lut *p_lut,
+                                             const int8_t *__restrict__ d_cnBufAll,
+                                             int8_t *__restrict__ d_cnOutAll,
+                                             int8_t *__restrict__ d_bnBufAll,
+                                             int8_t MsgIdx,
+                                             int lane,
+                                             uint8_t groupIdx,
+                                             uint8_t CnIdx,
+                                             int Zc)
 {
   const uint8_t NUM = 7; // Gn = 7
 
@@ -99,12 +83,10 @@ __device__ void cnProcKernel_int8_G7(const t_nrLDPC_lut *p_lut,
 
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
-  if (tid >= NUM * Zc / 4)
-    return;
 
-  const uint row = tid / 96;
-  const uint lane = tid % 96;
-  // 3 * 384 / 4 = 480      //it's 3 here in R23 compared to R13
+  const uint8_t row = MsgIdx - 1;
+ 
+ // 3 * 384 / 4 = 480      //it's 3 here in R23 compared to R13
   const uint16_t c_lut_idxG7[7][6] = {
 
       {288, 576, 864, 1152, 1440, 1728},
@@ -114,9 +96,8 @@ __device__ void cnProcKernel_int8_G7(const t_nrLDPC_lut *p_lut,
       {0, 288, 576, 864, 1440, 1728},
       {0, 288, 576, 864, 1152, 1440},
   };
-
-  const uint baseShift = 3 * Zc * row; // offset pointed at different BN
-  const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
+  const uint32_t baseShift = 3 * Zc * row; // offset pointed at different BN
+  const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
   // const uint srcByte = tid * 4;
   const uint32_t p_ones = 0x01010101;
   const uint32_t maxLLR = 0x7F7F7F7F;
@@ -148,23 +129,24 @@ __device__ void cnProcKernel_int8_G7(const t_nrLDPC_lut *p_lut,
   *p_cnProcBufResBit = __vsign4(&min, &sgn); // 0x17171717;
   uint8_t *BricksToBeMoved = (uint8_t *)p_cnProcBufResBit;
 
-  const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-  const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
-  const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
+  const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupIdx], row);
+  const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupIdx], row);
+  const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupIdx], row);
 
   const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
   moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
 }
 
-__device__ void cnProcKernel_int8_G8(const t_nrLDPC_lut *p_lut,
-                                     const int8_t *__restrict__ d_cnBufAll,
-                                     int8_t *__restrict__ d_cnOutAll,
-                                     int8_t *__restrict__ d_bnBufAll,
-                                     int tid,
-                                     uint8_t groupId,
-                                     uint8_t CnIdx,
-                                     int Zc)
+__device__ void cnProcKernel_BG1_R23_int8_G8(const t_nrLDPC_lut *p_lut,
+                                             const int8_t *__restrict__ d_cnBufAll,
+                                             int8_t *__restrict__ d_cnOutAll,
+                                             int8_t *__restrict__ d_bnBufAll,
+                                             int8_t MsgIdx,
+                                             int lane,
+                                             uint8_t groupIdx,
+                                             uint8_t CnIdx,
+                                             int Zc)
 {
   const uint8_t NUM = 8; // Gn = 8
 
@@ -173,11 +155,8 @@ __device__ void cnProcKernel_int8_G8(const t_nrLDPC_lut *p_lut,
 
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
-  if (tid >= NUM * Zc / 4)
-    return;
-
-  const uint row = tid / 96;
-  const uint lane = tid % 96;
+  const uint8_t row = MsgIdx - 1;
+ 
   // 2 * 384 / 4 = 192
   const uint16_t c_lut_idxG8[8][7] = {
 
@@ -189,8 +168,8 @@ __device__ void cnProcKernel_int8_G8(const t_nrLDPC_lut *p_lut,
       {0, 192, 384, 576, 768, 1152, 1344},
       {0, 192, 384, 576, 768, 960, 1344},
       {0, 192, 384, 576, 768, 960, 1152}};
-  const uint baseShift = 2 * Zc * row; // offset pointed at different BN
-  const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
+  const uint32_t baseShift = 2 * Zc * row; // offset pointed at different BN
+  const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
   // const uint srcByte = lane * 4;
   const uint32_t p_ones = 0x01010101;
   const uint32_t maxLLR = 0x7F7F7F7F;
@@ -225,23 +204,24 @@ __device__ void cnProcKernel_int8_G8(const t_nrLDPC_lut *p_lut,
   *p_cnProcBufResBit = __vsign4(&min, &sgn); // 0x18181818;
   uint8_t *BricksToBeMoved = (uint8_t *)p_cnProcBufResBit;
 
-  const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-  const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
-  const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
+  const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupIdx], row);
+  const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupIdx], row);
+  const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupIdx], row);
 
   const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
   moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
 }
 
-__device__ void cnProcKernel_int8_G9(const t_nrLDPC_lut *p_lut,
-                                     const int8_t *__restrict__ d_cnBufAll,
-                                     int8_t *__restrict__ d_cnOutAll,
-                                     int8_t *__restrict__ d_bnBufAll,
-                                     int tid,
-                                     uint8_t groupId,
-                                     uint8_t CnIdx,
-                                     int Zc)
+__device__ void cnProcKernel_BG1_R23_int8_G9(const t_nrLDPC_lut *p_lut,
+                                             const int8_t *__restrict__ d_cnBufAll,
+                                             int8_t *__restrict__ d_cnOutAll,
+                                             int8_t *__restrict__ d_bnBufAll,
+                                             int8_t MsgIdx,
+                                             int lane,
+                                             uint8_t groupIdx,
+                                             uint8_t CnIdx,
+                                             int Zc)
 {
   const uint8_t NUM = 9; // Gn = 9
   const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
@@ -249,8 +229,6 @@ __device__ void cnProcKernel_int8_G9(const t_nrLDPC_lut *p_lut,
 
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
-  if (tid >= NUM * Zc / 4)
-    return;
   /*
           if(tid == 0 && blockIdx.x == 0){
               printf("BG7 CN: p_cnProcBuf first all elements: ");
@@ -262,8 +240,8 @@ __device__ void cnProcKernel_int8_G9(const t_nrLDPC_lut *p_lut,
               __syncthreads();
           }*/
 
-  const uint row = tid / 96;
-  const uint lane = tid % 96;
+  const uint8_t row = MsgIdx - 1;
+ 
   // 2 * 384 / 4 = 192
   const uint16_t c_lut_idxG9[9][8] = {
 
@@ -277,8 +255,8 @@ __device__ void cnProcKernel_int8_G9(const t_nrLDPC_lut *p_lut,
       {0, 192, 384, 576, 768, 960, 1152, 1536},
       {0, 192, 384, 576, 768, 960, 1152, 1344}};
 
-  const uint baseShift = 2 * Zc * row; // offset pointed at different BN
-  const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
+  const uint32_t baseShift = 2 * Zc * row; // offset pointed at different BN
+  const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
   // const uint srcByte = tid * 4;
   const uint32_t p_ones = 0x01010101;
   const uint32_t maxLLR = 0x7F7F7F7F;
@@ -316,23 +294,24 @@ __device__ void cnProcKernel_int8_G9(const t_nrLDPC_lut *p_lut,
   *p_cnProcBufResBit = __vsign4(&min, &sgn); // 0x19191919;
   uint8_t *BricksToBeMoved = (uint8_t *)p_cnProcBufResBit;
 
-  const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-  const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
-  const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
+  const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupIdx], row);
+  const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupIdx], row);
+  const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupIdx], row);
 
   const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
   moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
 }
 
-__device__ void cnProcKernel_int8_G10(const t_nrLDPC_lut *p_lut,
-                                      const int8_t *__restrict__ d_cnBufAll,
-                                      int8_t *__restrict__ d_cnOutAll,
-                                      int8_t *__restrict__ d_bnBufAll,
-                                      int tid,
-                                      uint8_t groupId,
-                                      uint8_t CnIdx,
-                                      int Zc)
+__device__ void cnProcKernel_BG1_R23_int8_G10(const t_nrLDPC_lut *p_lut,
+                                              const int8_t *__restrict__ d_cnBufAll,
+                                              int8_t *__restrict__ d_cnOutAll,
+                                              int8_t *__restrict__ d_bnBufAll,
+                                              int8_t MsgIdx,
+                                              int lane,
+                                              uint8_t groupIdx,
+                                              uint8_t CnIdx,
+                                              int Zc)
 {
   const uint8_t NUM = 10; // Gn = 10
   const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
@@ -340,11 +319,8 @@ __device__ void cnProcKernel_int8_G10(const t_nrLDPC_lut *p_lut,
 
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
-  if (tid >= NUM * Zc / 4)
-    return;
-
-  const uint row = tid / 96;
-  const uint lane = tid % 96;
+  const uint8_t row = MsgIdx - 1;
+ 
   // 1 * 384 / 4 = 96
   const uint16_t c_lut_idxG10[10][9] = {
 
@@ -359,8 +335,8 @@ __device__ void cnProcKernel_int8_G10(const t_nrLDPC_lut *p_lut,
       {0, 96, 192, 288, 384, 480, 576, 672, 864},
       {0, 96, 192, 288, 384, 480, 576, 672, 768}};
 
-  const uint baseShift = 1 * Zc * row; // offset pointed at different BN
-  const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
+  const uint32_t baseShift = 1 * Zc * row; // offset pointed at different BN
+  const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
   // const uint srcByte = tid * 4;
   const uint32_t p_ones = 0x01010101;
   const uint32_t maxLLR = 0x7F7F7F7F;
@@ -401,23 +377,24 @@ __device__ void cnProcKernel_int8_G10(const t_nrLDPC_lut *p_lut,
   *p_cnProcBufResBit = __vsign4(&min, &sgn); // 0x1a1a1a1a;
   uint8_t *BricksToBeMoved = (uint8_t *)p_cnProcBufResBit;
 
-  const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-  const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
-  const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
+  const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupIdx], row);
+  const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupIdx], row);
+  const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupIdx], row);
 
   const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
   moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
 }
 
-__device__ void cnProcKernel_int8_G19(const t_nrLDPC_lut *p_lut,
-                                      const int8_t *__restrict__ d_cnBufAll,
-                                      int8_t *__restrict__ d_cnOutAll,
-                                      int8_t *__restrict__ d_bnBufAll,
-                                      int Tid,
-                                      uint8_t groupId,
-                                      uint8_t CnIdx,
-                                      int Zc)
+__device__ void cnProcKernel_BG1_R23_int8_G19(const t_nrLDPC_lut *p_lut,
+                                              const int8_t *__restrict__ d_cnBufAll,
+                                              int8_t *__restrict__ d_cnOutAll,
+                                              int8_t *__restrict__ d_bnBufAll,
+                                              int8_t MsgIdx,
+                                              int lane,
+                                              uint8_t groupIdx,
+                                              uint8_t CnIdx,
+                                              int Zc)
 {
   const uint8_t NUM = 19; // Gn = 19
   // Here the block 0 and block 1, block 2 and block 3, ... are doing the same thing, so we use blockIdx.x/2 to tackle this
@@ -427,13 +404,9 @@ __device__ void cnProcKernel_int8_G19(const t_nrLDPC_lut *p_lut,
 
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
-  int tid = Tid + 912 * (blockIdx.x % 2); // same reason, now the following no need to change
 
-  if (tid >= NUM * Zc / 4)
-    return;
-
-  const uint row = tid / 96; // row = 0,1,...,18
-  const uint lane = tid % 96;
+  const uint8_t row = MsgIdx - 1; // row = 0,1,...,18
+ 
   // 4 * 384 / 4 = 384
   const uint16_t c_lut_idxG19[19][18] = {
 
@@ -457,8 +430,8 @@ __device__ void cnProcKernel_int8_G19(const t_nrLDPC_lut *p_lut,
       {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6912},
       {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528}};
 
-  const uint baseShift = 4 * Zc * row; // offset pointed at different BN
-  const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
+  const uint32_t baseShift = 4 * Zc * row; // offset pointed at different BN
+  const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
   //// const uint srcByte = tid * 4;
   const uint32_t p_ones = 0x01010101;
   const uint32_t maxLLR = 0x7F7F7F7F;
@@ -530,26 +503,12 @@ __device__ void cnProcKernel_int8_G19(const t_nrLDPC_lut *p_lut,
   *p_cnProcBufResBit = __vsign4(&min, &sgn); // 0xbcbcbcbc;
   uint8_t *BricksToBeMoved = (uint8_t *)p_cnProcBufResBit;
 
-  const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-  const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
-  const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
+  const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupIdx], row);
+  const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupIdx], row);
+  const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupIdx], row);
 
   const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
-  /*if (0) {
-    printf("moveBricks_circ call:\n");
-    // printf("lut_startAddrBnProcBuf_CNG = %p\n", lut_startAddrBnProcBuf_CNG);
-    printf("lut_bnPosBnProcBuf_CNG = %p\n", lut_bnPosBnProcBuf_CNG);
-    printf("lut_startAddrBnProcBuf_CNG[%d] = %d\n", row, lut_startAddrBnProcBuf_CNG[row]);
-    printf("lut_bnPosBnProcBuf_CNG[%d] = %d\n", row, lut_bnPosBnProcBuf_CNG[row]);
-    printf("idxBn = %d\n", idxBn);
-    printf("dstBuf = %p\n", (int8_t *)&p_bnProcBuf[idxBn]);
 
-    // printf("dstBuf_Offset = %d\n", lane * 4);
-    // printf("BricksToBeMoved = [%d, %d, %d, %d]\n", BricksToBeMoved[0], BricksToBeMoved[1], BricksToBeMoved[2],
-    // BricksToBeMoved[3]); printf("Z = %d\n", Zc);
-    printf("cshift = %d\n", lut_circShift_CNG[CnIdx]);
-    // printf("inverse = %d\n", INVERSE);
-    moveBricks_circ((const int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, tid);
-  }*/
   moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
 }
+
