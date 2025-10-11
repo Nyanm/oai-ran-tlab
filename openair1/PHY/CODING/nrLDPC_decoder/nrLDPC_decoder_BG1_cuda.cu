@@ -182,6 +182,97 @@ __device__ __constant__ uint32_t h_block_output_offsets_BnToCnPC[46] = {
     12672, 13056, 13440, 13824, 14208, 14592, 14976, 15360, 43392, 43776, 44160, 44544, 44928, 45312, 45696, 46080,
     61824, 62208, 62592, 62976, 63360, 75264, 75648, 81408, 81792, 88320, 92160, 92544, 92928, 93312};
 
+  __device__ __constant__ uint8_t lut_CnGrpIdx_BG1_R13[316] = {
+    // Group 1 (3 messages)
+    1, 1, 1, 
+    // Group 2 (20 messages)
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
+    // Group 3 (90 messages)
+    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
+    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
+    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
+    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
+    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
+    // Group 4 (48 messages)
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 
+    4, 4, 4, 4, 4, 4, 4, 4, 
+    // Group 5 (35 messages)
+    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
+    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
+    // Group 6 (16 messages)
+    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 
+    // Group 7 (18 messages)
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
+    // Group 8 (10 messages)
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+    // Group 9 (76 messages)
+    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 
+    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 
+    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 
+    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9
+};
+  __device__ __constant__ uint8_t lut_CnMsgIdx_BG1_R13[316] = {
+    // Group 1 (Nbn=3, Ncn=1)
+    1, 2, 3, 
+    // Group 2 (Nbn=4, Ncn=5)
+    1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 
+    // Group 3 (Nbn=5, Ncn=18)
+    1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 
+    1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 
+    1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 
+    1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 
+    1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 
+    // Group 4 (Nbn=6, Ncn=8)
+    1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 
+    3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 
+    5, 6, 1, 2, 3, 4, 5, 6, 
+    // Group 5 (Nbn=7, Ncn=5)
+    1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 
+    7, 1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 
+    // Group 6 (Nbn=8, Ncn=2)
+    1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 
+    // Group 7 (Nbn=9, Ncn=2)
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 
+    // Group 8 (Nbn=10, Ncn=1)
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
+    // Group 9 (Nbn=19, Ncn=4)
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19
+};
+__device__ __constant__ uint8_t lut_CnIdx_BG1_R13[316] = {
+    // Group 1 (Nbn=3, Ncn=1) -> 1 repeated 3 times
+    1, 1, 1, 
+    // Group 2 (Nbn=4, Ncn=5) -> 1,2,3,4,5 each repeated 4 times
+    1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 
+    // Group 3 (Nbn=5, Ncn=18) -> 1..18 each repeated 5 times
+    1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 
+    5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 
+    9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 
+    13, 13, 13, 13, 13, 14, 14, 14, 14, 14, 15, 15, 15, 15, 15, 16, 16, 16, 16, 16, 
+    17, 17, 17, 17, 17, 18, 18, 18, 18, 18, 
+    // Group 4 (Nbn=6, Ncn=8) -> 1..8 each repeated 6 times
+    1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 
+    4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 
+    7, 7, 8, 8, 8, 8, 8, 8, 
+    // Group 5 (Nbn=7, Ncn=5) -> 1..5 each repeated 7 times
+    1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 
+    3, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 
+    // Group 6 (Nbn=8, Ncn=2) -> 1,2 each repeated 8 times
+    1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 
+    // Group 7 (Nbn=9, Ncn=2) -> 1,2 each repeated 9 times
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
+    // Group 8 (Nbn=10, Ncn=1) -> 1 repeated 10 times
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+    // Group 9 (Nbn=19, Ncn=4) -> 1..4 each repeated 19 times
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 
+    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
+    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
+};
+
 __constant__ static uint8_t d_lut_numBnInCnGroups_BG1_R13[9];
 __constant__ static int d_lut_numThreadsEachCnGroupsNeed_BG1_R13[9];
 //__constant__ static uint8_t d_lut_numCnInCnGroups_BG1_R13[9];
@@ -243,106 +334,62 @@ __global__ void cnProcKernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                              int8_t numMaxIter,
                                              int *PC_Flag)
 {
-  int blk = blockIdx.x;
-  int tid = threadIdx.x;
-  /*
-  if (threadIdx.x == 0 && blockIdx.x == 1) {
-        printf("=== Kernel Parameter Dump ===\n");
-        printf("p_lut       = %p\n", (void*)p_lut);
-        printf("p_cnBuf        = %p\n", (void*)d_cnBufAll);
-        printf("p_cnOut= %p\n", (void*)d_cnOutAll);
-        printf("bnProcBuf   = %p\n", (void*)d_bnBufAll);
-        printf("Zc          = %d\n", Zc);
-        printf("PC_Flag     = %p\n", (int)PC_Flag);
-        printf("*PC_Flag     = %d\n", (int)*PC_Flag);
-        printf("iter_ptr    = %p\n", (void*)iter_ptr);
-        if (iter_ptr) {
-            printf("  *iter_ptr = %d\n", *iter_ptr);
-        }
-        printf("=============================\n");
-    }
-  if (blk == 1 && tid == 0) {
-  printf("=== p_lut dump ===\n");
-  printf("  startAddrCnGroups   = %p\n", (void*)p_lut->startAddrCnGroups);
-  printf("  numCnInCnGroups     = %p\n", (void*)p_lut->numCnInCnGroups);
-  printf("  numBnInBnGroups     = %p\n", (void*)p_lut->numBnInBnGroups);
-  printf("  startAddrBnGroups   = %p\n", (void*)p_lut->startAddrBnGroups);
-  printf("  startAddrBnGroupsLlr= %p\n", (void*)p_lut->startAddrBnGroupsLlr);
-  printf("  llr2llrProcBufAddr  = %p\n", (void*)p_lut->llr2llrProcBufAddr);
-  printf("  llr2llrProcBufBnPos = %p\n", (void*)p_lut->llr2llrProcBufBnPos);
-
-  // 如果需要确认这些数组不是全 0，可以打印其中几个元素
-  if (p_lut->startAddrCnGroups)
-    printf("   startAddrCnGroups[0] = %u\n", p_lut->startAddrCnGroups[0]);
-  if (p_lut->numCnInCnGroups)
-    printf("   numCnInCnGroups[0] = %u\n", p_lut->numCnInCnGroups[0]);
-  if (p_lut->numBnInBnGroups)
-    printf("   numBnInBnGroups[0] = %u\n", p_lut->numBnInBnGroups[0]);
-  if (p_lut->startAddrBnGroups)
-    printf("   startAddrBnGroups[0] = %u\n", p_lut->startAddrBnGroups[0]);
-  if (p_lut->startAddrBnGroupsLlr)
-    printf("   startAddrBnGroupsLlr[0] = %u\n", p_lut->startAddrBnGroupsLlr[0]);
-  if (p_lut->llr2llrProcBufAddr)
-    printf("   llr2llrProcBufAddr[0] = %u\n", p_lut->llr2llrProcBufAddr[0]);
-  if (p_lut->llr2llrProcBufBnPos)
-    printf("   llr2llrProcBufBnPos[0] = %u\n", p_lut->llr2llrProcBufBnPos[0]);
-  printf("====================\n");
-}
-
-    __syncthreads();
- */
-  // if (*iter_ptr == 0)
-  //*PC_Flag = 1;
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
   // Early stopping
   if (*iter_ptr > numMaxIter || *PC_Flag == 0) {
     return;
   }
   // printf("I'm inside cnProc_kernel\n");
 
+  const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
+
+  int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...315
+  int lane = tid % 96; // to decide the inner lane
   // if(blk == 1&&tid == 0) printf("I'm inside cnProc_kernel\n");
-  uint8_t groupId = h_block_group_ids_cnProc[blk];
+  uint8_t groupIdx = lut_CnGrpIdx_BG1_R13[row] - 1;
   // if(blk == 1&&tid == 0) printf("1.1\n");
-  uint8_t CnIdx = h_block_CN_idx_cnProc[blk];
-  uint16_t blockSize = h_block_thread_counts_cnProc[blk];
-  uint32_t inOffset = h_block_input_offsets_cnProc[blk];
-  uint32_t outOffset = h_block_output_offsets_cnProc[blk];
+  uint8_t CnIdx = lut_CnIdx_BG1_R13[row] - 1;
+  uint8_t MsgIdx = lut_CnMsgIdx_BG1_R13[row];
+  //uint16_t blockSize = h_block_thread_counts_cnProc[blk];
+  uint32_t inOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
+  uint32_t outOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
   // if(blk == 1&&tid == 0) printf("1.2\n");
   //   __syncthreads();
 
-  if (tid >= blockSize)
+  if (tid >= 30336) //30336 is the total processed 316 msg * 96
     return;
 
   const int8_t *p_cnProcBuf = (const int8_t *)(d_cnBufAll + inOffset);
   int8_t *p_cnProcBufRes = (int8_t *)(d_cnOutAll + outOffset);
   int8_t *p_bnProcBuf = (int8_t *)d_bnBufAll;
 
-  switch (groupId) {
+  switch (groupIdx) {
     case 0:
-      cnProcKernel_BG1_R13_int8_G3(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      cnProcKernel_BG1_R13_int8_G3(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 1:
-      cnProcKernel_BG1_R13_int8_G4(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      cnProcKernel_BG1_R13_int8_G4 (p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 2:
-      cnProcKernel_BG1_R13_int8_G5(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      cnProcKernel_BG1_R13_int8_G5 (p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 3:
-      cnProcKernel_BG1_R13_int8_G6(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      cnProcKernel_BG1_R13_int8_G6 (p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 4:
-      cnProcKernel_BG1_R13_int8_G7(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      cnProcKernel_BG1_R13_int8_G7 (p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 5:
-      cnProcKernel_BG1_R13_int8_G8(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      cnProcKernel_BG1_R13_int8_G8 (p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 6:
-      cnProcKernel_BG1_R13_int8_G9(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      cnProcKernel_BG1_R13_int8_G9 (p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 7:
-      cnProcKernel_BG1_R13_int8_G10(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      cnProcKernel_BG1_R13_int8_G10 (p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 8:
-      cnProcKernel_BG1_R13_int8_G19(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, tid, groupId, CnIdx, Zc);
+      cnProcKernel_BG1_R13_int8_G19 (p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
   }
 }
@@ -360,8 +407,8 @@ void nrLDPC_cnProc_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
 {
 #if BIG_KERNEL
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
-  int maxBlockSize = 960; // Maximun threads are 960
-  dim3 gridDim(50); // 50
+  int maxBlockSize = 1024; // Maximun threads are 960
+  dim3 gridDim(30); // 50
   dim3 blockDim(maxBlockSize);
 
   cnProcKernel_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut,
@@ -601,11 +648,6 @@ __global__ void BnToCnPC_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                                 int8_t *__restrict__ d_cnOutAll,
                                                 int8_t *__restrict__ d_bnBufAll,
                                                 int8_t *d_llrRes,
-                                                const uint8_t *__restrict__ block_group_ids,
-                                                const uint8_t *__restrict__ block_CN_idx,
-                                                const uint16_t *__restrict__ block_thread_counts,
-                                                const uint32_t *__restrict__ block_input_offsets,
-                                                const uint32_t *__restrict__ block_output_offsets,
                                                 int Zc,
                                                 int8_t *iter_ptr,
                                                 int8_t numMaxIter,
@@ -616,44 +658,55 @@ __global__ void BnToCnPC_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                                 int8_t *p_llrOut,
                                                 uint32_t numLLR)
 {
-  int blk = blockIdx.x;
-  int tid = threadIdx.x;
 
-  uint8_t groupId = h_block_group_ids_BnToCnPC[blk];
-  uint8_t CnIdx = h_block_CN_idx_BnToCnPC[blk];
-  uint16_t blockSize = h_block_thread_counts_BnToCnPC[blk];
-  uint32_t inOffset = h_block_input_offsets_BnToCnPC[blk];
-  uint32_t outOffset = h_block_output_offsets_BnToCnPC[blk];
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (tid >= blockSize)
+
+  const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
+
+  int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...315
+  int lane = tid % 96; // to decide the inner lane
+  // if(blk == 1&&tid == 0) printf("I'm inside cnProc_kernel\n");
+  uint8_t groupIdx = lut_CnGrpIdx_BG1_R13[row] - 1;
+  // if(blk == 1&&tid == 0) printf("1.1\n");
+  uint8_t CnIdx = lut_CnIdx_BG1_R13[row] - 1;
+  uint8_t MsgIdx = lut_CnMsgIdx_BG1_R13[row];
+  uint32_t inOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
+  uint32_t outOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
+  // if(blk == 1&&tid == 0) printf("1.2\n");
+  //   __syncthreads();
+
+  if (tid >= 30336) //30336 is the total processed 316 msg * 96
     return;
 
-  int8_t *p_bnProcBufRes = (int8_t *)d_bnOutAll;
   const int8_t *p_cnProcBuf = (const int8_t *)(d_cnBufAll + inOffset);
   int8_t *p_cnProcBufRes = (int8_t *)(d_cnOutAll + outOffset);
   int8_t *p_bnProcBuf = (int8_t *)d_bnBufAll;
+  int8_t *p_bnProcBufRes = (int8_t *)d_bnOutAll;
   int8_t *p_llrRes = (int8_t *)d_llrRes;
+
+
 
   // Early stopping
   if (!(*iter_ptr > numMaxIter || *PC_Flag == 0)) {
-    if (tid == 0 && blk == 0) {
+    if (tid == 0) {
       *PC_Flag = 0;
-
       // printf("4: Iter = %d, PC_Flag = %d\n", *iter_ptr, *PC_Flag);
     }
     //__syncthreads();
 
     // uint32_t pcRes = 0; // setting flag for Parity Check
 
-    switch (groupId) {
+    switch (groupIdx) {
       case 0:
         CnToBnPC_Kernel_int8_G3_Stream(p_lut,
                                        p_bnProcBufRes,
                                        p_cnProcBuf,
                                        p_cnProcBufRes,
                                        p_bnProcBuf,
-                                       tid,
-                                       groupId,
+                                       MsgIdx,
+                                       lane,
+                                       groupIdx,
                                        CnIdx,
                                        Zc,
                                        PC_Flag);
@@ -664,8 +717,9 @@ __global__ void BnToCnPC_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                        p_cnProcBuf,
                                        p_cnProcBufRes,
                                        p_bnProcBuf,
-                                       tid,
-                                       groupId,
+                                       MsgIdx,
+                                       lane,
+                                       groupIdx,
                                        CnIdx,
                                        Zc,
                                        PC_Flag);
@@ -676,8 +730,9 @@ __global__ void BnToCnPC_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                        p_cnProcBuf,
                                        p_cnProcBufRes,
                                        p_bnProcBuf,
-                                       tid,
-                                       groupId,
+                                       MsgIdx,
+                                       lane,
+                                       groupIdx,
                                        CnIdx,
                                        Zc,
                                        PC_Flag);
@@ -688,8 +743,9 @@ __global__ void BnToCnPC_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                        p_cnProcBuf,
                                        p_cnProcBufRes,
                                        p_bnProcBuf,
-                                       tid,
-                                       groupId,
+                                       MsgIdx,
+                                       lane,
+                                       groupIdx,
                                        CnIdx,
                                        Zc,
                                        PC_Flag);
@@ -700,8 +756,9 @@ __global__ void BnToCnPC_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                        p_cnProcBuf,
                                        p_cnProcBufRes,
                                        p_bnProcBuf,
-                                       tid,
-                                       groupId,
+                                       MsgIdx,
+                                       lane,
+                                       groupIdx,
                                        CnIdx,
                                        Zc,
                                        PC_Flag);
@@ -712,8 +769,9 @@ __global__ void BnToCnPC_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                        p_cnProcBuf,
                                        p_cnProcBufRes,
                                        p_bnProcBuf,
-                                       tid,
-                                       groupId,
+                                       MsgIdx,
+                                       lane,
+                                       groupIdx,
                                        CnIdx,
                                        Zc,
                                        PC_Flag);
@@ -724,8 +782,9 @@ __global__ void BnToCnPC_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                        p_cnProcBuf,
                                        p_cnProcBufRes,
                                        p_bnProcBuf,
-                                       tid,
-                                       groupId,
+                                       MsgIdx,
+                                       lane,
+                                       groupIdx,
                                        CnIdx,
                                        Zc,
                                        PC_Flag);
@@ -736,8 +795,9 @@ __global__ void BnToCnPC_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                         p_cnProcBuf,
                                         p_cnProcBufRes,
                                         p_bnProcBuf,
-                                        tid,
-                                        groupId,
+                                        MsgIdx,
+                                        lane,
+                                        groupIdx,
                                         CnIdx,
                                         Zc,
                                         PC_Flag);
@@ -748,8 +808,9 @@ __global__ void BnToCnPC_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                         p_cnProcBuf,
                                         p_cnProcBufRes,
                                         p_bnProcBuf,
-                                        tid,
-                                        groupId,
+                                        MsgIdx,
+                                        lane,
+                                        groupIdx,
                                         CnIdx,
                                         Zc,
                                         PC_Flag);
@@ -760,7 +821,7 @@ __global__ void BnToCnPC_Kernel_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   if (*iter_ptr == numMaxIter) { // output
     llrRes2llrOut_Kernel_int8_BG1(p_lut, p_llrOut, p_llrRes, Zc);
   } else {
-    if (tid == 0 && blk == 0) {
+    if (tid == 0) {
       // printf("Why you guys not here when iter_ptr = %d???\n",*iter_ptr);
       (*iter_ptr)++;
     }
@@ -815,8 +876,8 @@ void nrLDPC_BnToCnPC_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
 #if BIG_KERNEL
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
 
-  int maxBlockSize = 960; // Maximun threads are 960
-  dim3 gridDim(46);
+  int maxBlockSize = 1024; // Maximun threads are 960
+  dim3 gridDim(30);
   dim3 blockDim(maxBlockSize);
   // printf("bnProcBuf =  %p\n", bnProcBuf);
   // printf("In stream %d BC: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
@@ -826,11 +887,6 @@ void nrLDPC_BnToCnPC_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                     cnProcBufRes,
                                                                                     bnProcBuf,
                                                                                     llrRes,
-                                                                                    h_block_group_ids_BnToCnPC,
-                                                                                    h_block_CN_idx_BnToCnPC,
-                                                                                    h_block_thread_counts_BnToCnPC,
-                                                                                    h_block_input_offsets_BnToCnPC,
-                                                                                    h_block_output_offsets_BnToCnPC,
                                                                                     Z,
                                                                                     iter_ptr,
                                                                                     numMaxIter,
