@@ -13,7 +13,7 @@ __device__ void bnProcPcKernel_BG1_R23_int8_Gn(const int8_t *__restrict__ d_bnPr
                                        int8_t BnIdx,
                                        int8_t GrpNum,
                                        int Zc)
-// cg::grid_group grid)
+
 {
   const uint8_t NUM = (const uint8_t)GrpIdx;
 
@@ -49,7 +49,6 @@ __device__ void bnProcKernel_BG1_R23_int8_Gn(const int8_t *__restrict__ d_bnProc
                                      int8_t BnIdx,
                                      int8_t GrpNum,
                                      int Zc)
-// cg::grid_group grid)
 {
   const uint8_t NUM = (const uint8_t)GrpIdx;
 
