@@ -56,6 +56,9 @@
 #include "nfapi/open-nFAPI/vnf/inc/vnf_p7.h"
 #include "system.h"
 #include "fapi_vnf_p7.h"
+#ifdef E2_AGENT
+#include "openair2/E2AP/RAN_FUNCTION/CUSTOMIZED/ran_func_srs_extern.h"
+#endif
 
 #define MAX_EVENTS 10
 #define RECV_BUF_LEN 8192
@@ -139,6 +142,9 @@ static int ipc_handle_rx_msg(nv_ipc_t *ipc, nv_ipc_msg_t *msg)
         if (vnf_p7_config->_public.nr_srs_indication) {
           (vnf_p7_config->_public.nr_srs_indication)(&ind);
         }
+        #ifdef E2_AGENT
+        signal_nfapi_srs_indication(&ind);
+        #endif
         break;
       }
 

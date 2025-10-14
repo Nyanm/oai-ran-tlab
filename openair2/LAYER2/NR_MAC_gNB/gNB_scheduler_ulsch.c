@@ -38,6 +38,7 @@
 
 //#define SRS_IND_DEBUG
 
+#ifdef SRS_IND_DEBUG
 static void dump_srs_channel_iq_matrix(nfapi_nr_srs_normalized_channel_iq_matrix_t* channel_iq_matrix, const char* filename) {
   FILE* f = fopen(filename, "wb");
   if (!f) {
@@ -63,11 +64,13 @@ static void dump_srs_channel_iq_matrix(nfapi_nr_srs_normalized_channel_iq_matrix
 
   return;
 }
+#endif
 
 /* \brief Get the number of UL TDAs that could be used in slot, reachable
  * via specific k2. The output parameter first_idx is a pointer to the first
  * suitable TDA, and the function returns the number of suitable TDAs, or 0. */
 int get_num_ul_tda(gNB_MAC_INST *nrmac, int slot, int k2, const NR_tda_info_t **first_idx)
+{
 
   /* we assume that this function is mutex-protected from outside */
   NR_SCHED_ENSURE_LOCKED(&nrmac->sched_lock);
@@ -1616,9 +1619,9 @@ void handle_nr_srs_measurements(const module_id_t module_id,
                                                  report_tlv->length,
                                                  &nr_srs_channel_iq_matrix,
                                                  sizeof(nfapi_nr_srs_normalized_channel_iq_matrix_t));
-      dump_srs_channel_iq_matrix(&nr_srs_channel_iq_matrix, "mac_channel_rfsim.iq");
 
 #ifdef SRS_IND_DEBUG
+      dump_srs_channel_iq_matrix(&nr_srs_channel_iq_matrix, "mac_channel_rfsim.iq");
       LOG_I(NR_MAC, "nr_srs_channel_iq_matrix.normalized_iq_representation = %i\n", nr_srs_channel_iq_matrix.normalized_iq_representation);
       LOG_I(NR_MAC, "nr_srs_channel_iq_matrix.num_gnb_antenna_elements = %i\n", nr_srs_channel_iq_matrix.num_gnb_antenna_elements);
       LOG_I(NR_MAC, "nr_srs_channel_iq_matrix.num_ue_srs_ports = %i\n", nr_srs_channel_iq_matrix.num_ue_srs_ports);

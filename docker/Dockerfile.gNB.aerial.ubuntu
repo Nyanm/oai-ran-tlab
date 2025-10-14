@@ -22,14 +22,21 @@
 #
 # Dockerfile for the Open-Air-Interface BUILD service
 #   Valid for Ubuntu 24.04
+#   The default build target produces a gNB for use with the Aerial L1
+#   Using --target oai-gnb-ric produces a gNB with the e2 agent that can connect to nearRT-RIC,
+#   and a the SRS channel display or visualization application.
 #
 #---------------------------------------------------------------------
 
-FROM ran-base:latest AS ran-build
+ARG E2AP_VERSION=E2AP_V3
+ARG KPM_VERSION=KPM_V3_00
 
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get upgrade --yes && \
-    DEBIAN_FRONTEND=noninteractive apt-get install --yes \
+FROM ran-base:2025.w40 AS ran-base
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt update && \
+    apt upgrade --yes && \
+    apt install --yes \
        wget \
        ninja-build \
        #unzip is needed for protobuf
@@ -37,35 +44,66 @@ RUN apt-get update && \
        moreutils \
        vim-tiny \
        nano \
+       # For the RIC visualization
+       libglew-dev libglfw3 libglfw3-dev \
        # To build libnvipc
        cmake libpcap-dev libcunit1-dev libnuma-dev pkg-config
+
+WORKDIR /tmp
+COPY nvipc_src.*.tar.gz .
+
+RUN tar -xvzf nvipc_src.*.tar.gz  && \
+    cd nvipc_src.* && \
+    rm -rf build && mkdir build && cd build && \
+    cmake .. -DNVIPC_DPDK_ENABLE=OFF -DNVIPC_DOCA_ENABLE=OFF -DNVIPC_CUDA_ENABLE=OFF -DENABLE_SLT_RSP=ON && \
+    make -j && make install
+
+
+FROM ran-base AS ran-build
+ARG E2AP_VERSION
+ARG KPM_VERSION
 
 RUN rm -Rf /oai-ran
 WORKDIR /oai-ran
 COPY . .
 
 RUN /bin/sh oaienv && \
-    tar -xvzf nvipc_src.*.tar.gz  && \
-    cd nvipc_src.* && \
-    rm -rf build && mkdir build && cd build && \
-    cmake .. -DNVIPC_DPDK_ENABLE=OFF -DNVIPC_DOCA_ENABLE=OFF -DNVIPC_CUDA_ENABLE=OFF -DENABLE_SLT_RSP=ON && \
-    make -j && make install
+    cd cmake_targets && \
+    mkdir -p log && \
+      ./build_oai -c --gNB --ninja --build-tool-opt -k10 \
+      --cmake-opt -DE2AP_VERSION=$E2AP_VERSION \
+      --cmake-opt -DKPM_VERSION=$KPM_VERSION \
+      --cmake-opt -DCMAKE_C_FLAGS="-Werror" --cmake-opt -DCMAKE_CXX_FLAGS="-Werror" \
+      --cmake-opt -DOAI_AERIAL=ON;
+
+FROM ran-build AS ran-build-ric
+ARG E2AP_VERSION
+ARG KPM_VERSION
+
+RUN cd openair2/E2AP/flexric && \
+    git submodule update --init --recursive && \
+    git checkout origin/srs_sm_aerial && \
+    cmake -B build -GNinja -DOAI_AERIAL=ON \
+    -DE2AP_VERSION=$E2AP_VERSION -DKPM_VERSION=$KPM_VERSION && \
+    cmake --build build --target install -- -j30
 
 RUN /bin/sh oaienv && \
     cd cmake_targets && \
-    mkdir -p log && \
-    ./build_oai -c -w AERIAL --gNB --ninja --build-tool-opt -k10 \
-      --cmake-opt -DCMAKE_C_FLAGS="-Werror" --cmake-opt -DCMAKE_CXX_FLAGS="-Werror"
+      ./build_oai -c --gNB --ninja --build-tool-opt -k10 \
+      --build-e2 \
+      --cmake-opt -DE2AP_VERSION=$E2AP_VERSION \
+      --cmake-opt -DKPM_VERSION=$KPM_VERSION \
+      --cmake-opt -DCMAKE_C_FLAGS="-Werror" --cmake-opt -DCMAKE_CXX_FLAGS="-Werror" \
+      --cmake-opt -DOAI_AERIAL=ON;
 
-
-#start from scratch for target executable
-FROM ubuntu:noble AS oai-gnb-aerial
-ENV DEBIAN_FRONTEND=noninteractive
+##start from scratch for target executable
+FROM ubuntu:noble AS oai-gnb-base
 ENV TZ=Europe
+ENV PATH="$PATH:/opt/oai-gnb/bin"
 
-RUN apt-get update && \
-    apt-get upgrade --yes && \
-    apt-get install --yes \
+RUN apt update && \
+    apt upgrade --yes && \
+    apt install --yes \
         software-properties-common \
         procps \
         libsctp1 \
@@ -79,13 +117,15 @@ RUN apt-get update && \
         iputils-ping \
         gdb \
         moreutils \
-        libusb-1.0-0 \
-        libyaml-cpp-dev && \
-    rm -rf /var/lib/apt/lists/*
+        util-linux \
+        libyaml-cpp-dev
+        #Cleanup done in the final FROM, so we don't need to re-update in oai-gnb-ric
 
 WORKDIR /opt/oai-gnb/bin
 COPY --from=ran-build \
-    /oai-ran/cmake_targets/ran_build/build/nr-softmodem ./
+    /oai-ran/cmake_targets/ran_build/build/nr-softmodem \
+    /opt/oai-gnb/bin/
+
 COPY ./docker/scripts/gnb_entrypoint.sh ./entrypoint.sh
 
 COPY --from=ran-build \
@@ -93,7 +133,7 @@ COPY --from=ran-build \
   /oai-ran/cmake_targets/ran_build/build/libparams_yaml.so \
   /usr/local/lib/
 
-#copy files from nvIPC
+FROM oai-gnb-base AS oai-gnb
 COPY --from=ran-build \
     /usr/local/lib/libfmtlog-shared.so \
     /usr/local/lib/libnvlog.so \
@@ -113,3 +153,32 @@ WORKDIR /opt/oai-gnb
 COPY --from=ran-build /tini /tini
 ENTRYPOINT ["/tini", "-v", "--", "/opt/oai-gnb/bin/entrypoint.sh"]
 CMD ["/opt/oai-gnb/bin/nr-softmodem"]
+
+FROM oai-gnb AS oai-gnb-ric
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get install --yes libglew-dev libglfw3 libglfw3-dev
+
+COPY --from=ran-build-ric \
+  /oai-ran/openair2/E2AP/flexric/flexric.conf \
+  /usr/local/etc/flexric/
+
+COPY --from=ran-build-ric \
+  /usr/local/lib/flexric/ \
+  /usr/local/lib/flexric
+
+COPY --from=ran-build-ric \
+  /oai-ran/openair2/E2AP/flexric/build/examples/xApp/c/srs/xapp_srs_channel \
+  /oai-ran/openair2/E2AP/flexric/build/examples/xApp/c/srs/localization_plots/demo \
+  /oai-ran/openair2/E2AP/flexric/build/examples/xApp/c/srs/xapp_srs_ind \
+  /oai-ran/openair2/E2AP/flexric/build/examples/ric/nearRT-RIC \
+  /opt/oai-gnb/bin/
+
+COPY --from=ran-build-ric \
+    /oai-ran/cmake_targets/ran_build/build/nr-softmodem \
+    /opt/oai-gnb/bin/
+
+RUN rm -rf /var/lib/apt/lists/*
+  
+#This makes the non-RIC version the default target.
+FROM oai-gnb AS default-gnb
+RUN rm -rf /var/lib/apt/lists/*

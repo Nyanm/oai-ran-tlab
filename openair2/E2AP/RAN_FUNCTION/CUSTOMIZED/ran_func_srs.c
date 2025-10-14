@@ -93,11 +93,13 @@ static srs_ind_msg_t fill_srs_ind_msg(nfapi_nr_srs_indication_t *nfapi_srs_ind)
     uint8_t *pWritePackedMessage    = pPackedBuf;
     uint8_t *pPackMessageEnd =  pPackedBuf + ba.len;
 
+    #ifdef RIC_DEBUG
     printf("[RIC DEBUG INFO] pointer = %p\n",(void*)nfapi_srs_ind);
     printf("[RIC DEBUG INFO] ba initialized len: %zu bytes\n", ba.len);
     printf("[RIC DEBUG INFO] Sending SFN: %u\n", nfapi_srs_ind->sfn);
     printf("[RIC DEBUG INFO] Sending Slot: %u\n", nfapi_srs_ind->slot);
     printf("[RIC DEBUG INFO] Sending num srs: %d\n", nfapi_srs_ind->number_of_pdus);
+    #endif
 
     const uint8_t result = pack_nr_srs_indication(nfapi_srs_ind, &pWritePackedMessage, pPackMessageEnd, 0);
     assert(result != 0 && "Error in packing SRS Indication message"); 
