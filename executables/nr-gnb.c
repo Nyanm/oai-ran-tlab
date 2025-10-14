@@ -69,6 +69,7 @@
 #include "thread-pool.h"
 #include "time_meas.h"
 #include "utils.h"
+#include "PHY/phy_digital_beamforming.h"
 
 #define TICK_TO_US(ts) (ts.trials==0?0:ts.diff/ts.trials)
 #define L1STATSSTRLEN 16384
@@ -102,6 +103,14 @@ static void tx_func(processingData_L1tx_t *info)
   info->gNB = gNB;
 
   // At this point, MAC scheduler just ran, including scheduling
+
+  /* Pass FAPI beam info to RU to configure UL slots in advance. Here we assume that
+  scheduling sl_ahead is enough time for sending config info to 7.2 radio but there is
+  a possibilty of this thread running slower and the RU thread would catch up as with
+  RFsim. If that happens, then we would be late to configure the 7.2 radio for the
+  scheduled UL slot. */
+  process_rx_grid_info_bf(gNB->RU_list[0], frame_tx, slot_tx);
+
   // PRACH/PUCCH/PUSCH, so trigger RX chain processing
   LOG_D(NR_PHY, "Trigger RX for %d.%d\n", frame_rx, slot_rx);
   notifiedFIFO_elt_t *res = newNotifiedFIFO_elt(sizeof(processingData_L1_t), 0, &gNB->resp_L1, NULL);
@@ -112,6 +121,15 @@ static void tx_func(processingData_L1tx_t *info)
   syncMsg->timestamp_tx = info->timestamp_tx;
   res->key = slot_rx;
   pushNotifiedFIFO(&gNB->resp_L1, res);
+
+  // Unblock RU Rx thread after current Rx slot is scheduled.
+  res = newNotifiedFIFO_elt(sizeof(processingData_L1_t), 0, NULL, NULL);
+  syncMsg = NotifiedFifoData(res);
+  syncMsg->gNB = gNB;
+  syncMsg->frame_rx = frame_tx;
+  syncMsg->slot_rx = slot_tx;
+  res->key = slot_tx;
+  pushNotifiedFIFO(&gNB->sched_not_done, res);
 
   int tx_slot_type = nr_slot_select(cfg, frame_tx, slot_tx);
   if (tx_slot_type == NR_DOWNLINK_SLOT || tx_slot_type == NR_MIXED_SLOT || get_softmodem_params()->continuous_tx || IS_SOFTMODEM_RFSIM) {
@@ -136,6 +154,9 @@ static void tx_func(processingData_L1tx_t *info)
     LOG_D(NR_PHY, "Calling deref_sched_response for id %d (tx_func) in %d.%d\n", info->sched_response_id, frame_tx, slot_tx);
     deref_sched_response(info->sched_response_id);
   }
+
+  // Remove current rx slot info that is no longer needed
+  remove_grid_slot(&gNB->RU_list[0]->common.rx_grid, frame_rx, slot_rx);
 }
 
 void *L1_rx_thread(void *arg) 
@@ -191,17 +212,15 @@ static void rx_func(processingData_L1_t *info)
     if (gNB->phase_comp) {
       //apply the rx signal rotation here
       int soffset = (slot_rx & 3) * gNB->frame_parms.symbols_per_slot * gNB->frame_parms.ofdm_symbol_size;
-      for (int bb = 0; bb < gNB->common_vars.num_beams_period; bb++) {
-        for (int aa = 0; aa < gNB->frame_parms.nb_antennas_rx; aa++) {
-          apply_nr_rotation_RX(&gNB->frame_parms,
-                               gNB->common_vars.rxdataF[bb][aa],
-                               gNB->frame_parms.symbol_rotation[1],
-                               slot_rx,
-                               gNB->frame_parms.N_RB_UL,
-                               soffset,
-                               0,
-                               gNB->frame_parms.Ncp == EXTENDED ? 12 : 14);
-        }
+      for (int aa = 0; aa < gNB->frame_parms.nb_antennas_rx; aa++) {
+        apply_nr_rotation_RX(&gNB->frame_parms,
+                             gNB->common_vars.rxdataF[aa],
+                             gNB->frame_parms.symbol_rotation[1],
+                             slot_rx,
+                             gNB->frame_parms.N_RB_UL,
+                             soffset,
+                             0,
+                             gNB->frame_parms.Ncp == EXTENDED ? 12 : 14);
       }
     }
     phy_procedures_gNB_uespec_RX(gNB, frame_rx, slot_rx, &UL_INFO);
@@ -247,7 +266,7 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
   bool full_slot = ru->half_slot_parallelization == 0;
   if (ru->feptx_prec) {
     output += print_meas_log(&ru->precoding_stats,
-                             full_slot ? "feptx_prec (per port)" : "feptx_prec (per port, half_slot)",
+                             "feptx_prec",
                              NULL,
                              NULL,
                              output,
@@ -339,7 +358,7 @@ void init_gNB_Tpool(int inst)
   // L1 RX result FIFO
   initNotifiedFIFO(&gNB->resp_L1);
   // L1 TX result FIFO 
-  initNotifiedFIFO(&gNB->L1_tx_free);
+  initNotifiedFIFO(&gNB->sched_not_done);
   initNotifiedFIFO(&gNB->L1_tx_filled);
   initNotifiedFIFO(&gNB->L1_tx_out);
   initNotifiedFIFO(&gNB->L1_rx_out);
@@ -371,7 +390,7 @@ void term_gNB_Tpool(int inst) {
   abortTpool(&gNB->threadPool);
   abortNotifiedFIFO(&gNB->respPuschSymb);
   abortNotifiedFIFO(&gNB->respDecode);
-  abortNotifiedFIFO(&gNB->L1_tx_free);
+  abortNotifiedFIFO(&gNB->sched_not_done);
   abortNotifiedFIFO(&gNB->L1_tx_filled);
   abortNotifiedFIFO(&gNB->L1_rx_out);
 
@@ -397,10 +416,6 @@ void init_eNB_afterRU(void)
       for (int i = 0; i < gNB->RU_list[ru_id]->nb_rx; aa++, i++) {
         LOG_I(PHY,"Attaching RU %d antenna %d to gNB antenna %d\n", gNB->RU_list[ru_id]->idx, i, aa);
         gNB->prach_vars.rxsigF[aa] = gNB->RU_list[ru_id]->prach_rxsigF[0][i];
-        for (int b = 0; b < gNB->RU_list[ru_id]->num_beams_period; b++) {
-          int idx = i + b * gNB->RU_list[ru_id]->nb_rx;
-          gNB->common_vars.rxdataF[b][aa] = (c16_t *)gNB->RU_list[ru_id]->common.rxdataF[idx];
-        }
       }
     }
     /* TODO: review this code, there is something wrong.

@@ -94,13 +94,45 @@ void nr_preprocessor_phytest(module_id_t module_id, frame_t frame, slot_t slot)
   const int BWPStart = dl_bwp->BWPStart;
 
   // TODO implement beam procedures for phy-test mode
-  int beam = 0;
+  int num_ssb = 0;
+  BIT_STRING_t *ssbBitmap = NULL;
+  switch (scc->ssb_PositionsInBurst->present) {
+    case 1:
+      num_ssb = 4;
+      ssbBitmap = &scc->ssb_PositionsInBurst->choice.shortBitmap;
+      break;
+
+    case 2:
+      num_ssb = 8;
+      ssbBitmap = &scc->ssb_PositionsInBurst->choice.mediumBitmap;
+      break;
+
+    default:
+      AssertFatal(0, "SSB burst len in burst not supported\n");
+  }
+  int ssb_idx_beam = 0;
+  for (int i_ssb = 0; i_ssb < num_ssb; i_ssb++) {
+    if (IS_BIT_SET(ssbBitmap->buf[0], (7 - i_ssb))) {
+      NR_SubcarrierSpacing_t scs = *scc->ssbSubcarrierSpacing;
+      const long band = *scc->downlinkConfigCommon->frequencyInfoDL->frequencyBandList.list.array[0];
+      uint16_t ssb_start_symbol = get_ssb_start_symbol(band, scs, i_ssb);
+      // select beam for PDSCH in current slot based on SSB beam
+      if ((ssb_start_symbol / 14) == (slot % mac->frame_structure.numb_slots_period)) {
+        ssb_idx_beam = i_ssb;
+        break;
+      }
+    }
+  }
+  int beam_idx = get_fapi_beamforming_index(mac, ssb_idx_beam);
+  NR_beam_alloc_t beam = beam_allocation_procedure(&mac->beam_info, frame, slot, beam_idx, mac->frame_structure.numb_slots_frame);
+  AssertFatal(beam.idx > -1, "Can't allocate beam %d in phytest scheduler\n", beam_idx);
+  UE->UE_beam_index = get_allocated_beam(&mac->beam_info, frame, slot, mac->frame_structure.numb_slots_frame, beam.idx);
 
   int rbStart = 0;
   int rbSize = 0;
   if (target_dl_bw>bwpSize)
     target_dl_bw = bwpSize;
-  uint16_t *vrb_map = mac->common_channels[CC_id].vrb_map[beam];
+  uint16_t *vrb_map = mac->common_channels[CC_id].vrb_map[beam.idx];
   /* loop ensures that we allocate exactly target_dl_bw, or return */
   while (true) {
     /* advance to first free RB */
@@ -135,7 +167,7 @@ void nr_preprocessor_phytest(module_id_t module_id, frame_t frame, slot_t slot)
   int CCEIndex = get_cce_index(mac,
                                CC_id, slot, UE->rnti,
                                &sched_ctrl->aggregation_level,
-                               beam,
+                               beam.idx,
                                sched_ctrl->search_space,
                                sched_ctrl->coreset,
                                &sched_ctrl->sched_pdcch,
@@ -163,7 +195,7 @@ void nr_preprocessor_phytest(module_id_t module_id, frame_t frame, slot_t slot)
                      &sched_ctrl->sched_pdcch,
                      CCEIndex,
                      sched_ctrl->aggregation_level,
-                     beam);
+                     beam.idx);
 
   //AssertFatal(alloc,
   //            "could not find uplink slot for PUCCH (RNTI %04x@%d.%d)!\n",

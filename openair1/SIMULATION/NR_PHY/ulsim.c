@@ -88,6 +88,7 @@
 #include "openair2/LAYER2/NR_MAC_UE/mac_proto.h"
 #include "openair2/LAYER2/NR_MAC_gNB/mac_proto.h"
 #include "openair2/LAYER2/NR_MAC_gNB/nr_radio_config.h"
+#include "PHY/phy_digital_beamforming.h"
 #include "time_meas.h"
 #include "utils.h"
 
@@ -730,10 +731,7 @@ int main(int argc, char *argv[])
   initNotifiedFIFO(&gNB->respDecode);
 
   initNotifiedFIFO(&gNB->respPuschSymb);
-  initNotifiedFIFO(&gNB->L1_tx_free);
-  initNotifiedFIFO(&gNB->L1_tx_filled);
-  initNotifiedFIFO(&gNB->L1_tx_out);
-  notifiedFIFO_elt_t *msgL1Tx = newNotifiedFIFO_elt(sizeof(processingData_L1tx_t), 0, &gNB->L1_tx_free, NULL);
+  notifiedFIFO_elt_t *msgL1Tx = newNotifiedFIFO_elt(sizeof(processingData_L1tx_t), 0, NULL, NULL);
   processingData_L1tx_t *msgDataTx = (processingData_L1tx_t *)NotifiedFifoData(msgL1Tx);
   msgDataTx->slot = -1;
   gNB->msgDataTx = msgDataTx;
@@ -846,10 +844,6 @@ int main(int argc, char *argv[])
   gNB->chest_time = chest_type[1];
 
   phy_init_nr_gNB(gNB);
-  /* RU handles rxdataF, and gNB just has a pointer. Here, we don't have an RU,
-   * so we need to allocate that memory as well. */
-  for (i = 0; i < n_rx; i++)
-    gNB->common_vars.rxdataF[0][i] = malloc16_clear(gNB->frame_parms.samples_per_frame_wCP*sizeof(int32_t));
   N_RB_DL = gNB->frame_parms.N_RB_DL;
 
   /* no RU: need to have rxdata */
@@ -1299,7 +1293,6 @@ int main(int argc, char *argv[])
         UE_proc.gNB_id = 0;
 
         // prepare ULSCH/PUSCH reception
-        pushNotifiedFIFO(&gNB->L1_tx_free, msgL1Tx); // to unblock the process in the beginning
         nr_schedule_response(Sched_INFO);
 
         // --------- setting parameters for UE --------
@@ -1469,7 +1462,7 @@ int main(int argc, char *argv[])
           for (int aa = 0; aa < gNB->frame_parms.nb_antennas_rx; aa++)
             nr_slot_fep_ul(&gNB->frame_parms,
                            (int32_t *)rxdata[aa],
-                           (int32_t *)gNB->common_vars.rxdataF[0][aa],
+                           (int32_t *)gNB->common_vars.rxdataF[aa],
                            symbol,
                            slot,
                            0);
@@ -1477,7 +1470,7 @@ int main(int argc, char *argv[])
         int offset = (slot & 3) * gNB->frame_parms.symbols_per_slot * gNB->frame_parms.ofdm_symbol_size;
         for (int aa = 0; aa < gNB->frame_parms.nb_antennas_rx; aa++)  {
           apply_nr_rotation_RX(&gNB->frame_parms,
-                               gNB->common_vars.rxdataF[0][aa],
+                               gNB->common_vars.rxdataF[aa],
                                gNB->frame_parms.symbol_rotation[1],
                                slot,
                                gNB->frame_parms.N_RB_UL,
@@ -1490,22 +1483,22 @@ int main(int argc, char *argv[])
 
         if (n_trials == 1 && round == 0) {
           LOG_M("rxsig0.m", "rx0", &rxdata[0][slot_offset], slot_length, 1, 1 | log_format);
-          LOG_M("rxsigF0.m", "rxsF0", gNB->common_vars.rxdataF[0][0], 14 * gNB->frame_parms.ofdm_symbol_size, 1, 1 | log_format);
+          LOG_M("rxsigF0.m", "rxsF0", gNB->common_vars.rxdataF[0], 14 * gNB->frame_parms.ofdm_symbol_size, 1, 1 | log_format);
           if (precod_nbr_layers > 1) {
             LOG_M("rxsig1.m", "rx1", &rxdata[1][slot_offset], slot_length, 1, 1);
-            LOG_M("rxsigF1.m", "rxsF1", gNB->common_vars.rxdataF[0][1], 14 * gNB->frame_parms.ofdm_symbol_size, 1, 1 | log_format);
+            LOG_M("rxsigF1.m", "rxsF1", gNB->common_vars.rxdataF[1], 14 * gNB->frame_parms.ofdm_symbol_size, 1, 1 | log_format);
             if (precod_nbr_layers == 4) {
               LOG_M("rxsig2.m", "rx2", &rxdata[2][slot_offset], slot_length, 1, 1);
               LOG_M("rxsig3.m", "rx3", &rxdata[3][slot_offset], slot_length, 1, 1);
               LOG_M("rxsigF2.m",
                     "rxsF2",
-                    gNB->common_vars.rxdataF[0][2],
+                    gNB->common_vars.rxdataF[2],
                     14 * gNB->frame_parms.ofdm_symbol_size,
                     1,
                     1 | log_format);
               LOG_M("rxsigF3.m",
                     "rxsF3",
-                    gNB->common_vars.rxdataF[0][3],
+                    gNB->common_vars.rxdataF[3],
                     14 * gNB->frame_parms.ofdm_symbol_size,
                     1,
                     1 | log_format);
@@ -1636,6 +1629,7 @@ int main(int argc, char *argv[])
           printf("*************\n");
           break;
         }
+        remove_grid_slot(&gNB->RU_list[0]->common.rx_grid, frame, slot);
       } // round
 
       if (n_trials == 1 && errors_scrambling[0] > 0) {

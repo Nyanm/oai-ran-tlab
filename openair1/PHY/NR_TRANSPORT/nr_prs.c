@@ -22,6 +22,7 @@ int nr_generate_prs(int slot,
 
   // PRS resource mapping with combsize=k which means PRS symbols exist in every k-th subcarrier in frequency domain
   // According to ts138.211 sec.7.4.1.7.2
+  const int symb_buf_sz = ALNARS_64_16(frame_parms->N_RB_DL * NR_NB_SC_PER_RB);
   for (int l = prs_cfg->SymbolStart; l < prs_cfg->SymbolStart + prs_cfg->NumPRSSymbols; l++) {
 
     int symInd = l-prs_cfg->SymbolStart;
@@ -37,9 +38,9 @@ int nr_generate_prs(int slot,
     else if (prs_cfg->CombSize == 12){
       k_prime = k_prime_table[3][symInd];
     }
-    
-    k = (prs_cfg->REOffset+k_prime) % prs_cfg->CombSize + prs_cfg->RBOffset*12 + frame_parms->first_carrier_offset;
-    
+
+    k = (prs_cfg->REOffset + k_prime) % prs_cfg->CombSize + prs_cfg->RBOffset * 12;
+
     // QPSK modulation
     uint32_t *gold = nr_gold_prs(prs_cfg->NPRSID, slot, l);
     for (int m = 0; m < (12/prs_cfg->CombSize) * prs_cfg->NumRB; m++) {
@@ -49,13 +50,10 @@ int nr_generate_prs(int slot,
 #ifdef DEBUG_PRS_MAP
       LOG_D("m %d at k %d of l %d reIdx %d\n", m, k, l, (l*frame_parms->ofdm_symbol_size + k)<<1);
 #endif
-      txdataF[l * frame_parms->ofdm_symbol_size + k] = c16mulRealShift(mod_prs[m], amp, 15);
+      txdataF[l * symb_buf_sz + k] = c16mulRealShift(mod_prs[m], amp, 15);
 
       k = k +  prs_cfg->CombSize;
-    
-      if (k >= frame_parms->ofdm_symbol_size)
-        k-=frame_parms->ofdm_symbol_size;
-      }
+    }
   }
 #ifdef DEBUG_PRS_MAP
   LOG_M("nr_prs.m", "prs",(int16_t *)&txdataF[prs_cfg->SymbolStart*frame_parms->ofdm_symbol_size],prs_cfg->NumPRSSymbols*frame_parms->ofdm_symbol_size, 1, 1);

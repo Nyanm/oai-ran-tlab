@@ -533,6 +533,7 @@ int main(int argc, char **argv)
   processingData_L1tx_t msgDataTx;
   // generate signal
   const uint32_t rxdataF_sz = UE->frame_parms.samples_per_slot_wCP;
+  const int symb_buff_sz = ALNARS_64_16(frame_parms->N_RB_DL * NR_NB_SC_PER_RB);
   __attribute__ ((aligned(32))) c16_t rxdataF[UE->frame_parms.nb_antennas_rx][rxdataF_sz];
   if (input_fd==NULL) {
 
@@ -550,22 +551,34 @@ int main(int argc, char **argv)
         int slot = start_symbol/14;
 
         for (aa=0; aa<gNB->frame_parms.nb_antennas_tx; aa++)
-          memset(gNB->common_vars.txdataF[0][aa], 0, frame_parms->samples_per_slot_wCP * sizeof(int32_t));
+          memset(gNB->common_vars.tx_grid_info[aa].dataF, 0, symb_buff_sz * NR_SYMBOLS_PER_SLOT * sizeof(int32_t));
 
         nr_common_signal_procedures (gNB,frame,slot,msgDataTx.ssb[i].ssb_pdu);
 
         int samp = frame_parms->get_samples_slot_timestamp(slot, frame_parms, 0);
-        for (aa=0; aa<gNB->frame_parms.nb_antennas_tx; aa++) {
+        for (aa = 0; aa < gNB->frame_parms.nb_antennas_tx; aa++) {
+          c16_t fft_in_buff[frame_parms->ofdm_symbol_size * frame_parms->symbols_per_slot] __attribute__((aligned(64)));
+          memset(fft_in_buff, 0, sizeof(fft_in_buff));
           if (cyclic_prefix_type == 1) {
             apply_nr_rotation_TX(frame_parms,
-                                 gNB->common_vars.txdataF[0][aa],
+                                 gNB->common_vars.tx_grid_info[aa].dataF,
+                                 true,
                                  frame_parms->symbol_rotation[0],
                                  slot,
                                  frame_parms->N_RB_DL,
                                  0,
-                                 12);
+                                 12,
+                                 symb_buff_sz);
 
-            PHY_ofdm_mod((int *)gNB->common_vars.txdataF[0][aa],
+            fft_shift(gNB->common_vars.tx_grid_info[aa].dataF,
+                      symb_buff_sz,
+                      frame_parms->N_RB_DL,
+                      fft_in_buff,
+                      frame_parms->ofdm_symbol_size,
+                      0,
+                      12);
+
+            PHY_ofdm_mod((int *)fft_in_buff,
                          (int *)&txdata[aa][samp],
                          frame_parms->ofdm_symbol_size,
                          12,
@@ -573,22 +586,32 @@ int main(int argc, char **argv)
                          CYCLIC_PREFIX);
           } else {
             apply_nr_rotation_TX(frame_parms,
-                                 gNB->common_vars.txdataF[0][aa],
+                                 gNB->common_vars.tx_grid_info[aa].dataF,
+                                 true,
                                  frame_parms->symbol_rotation[0],
                                  slot,
                                  frame_parms->N_RB_DL,
                                  0,
-                                 14);
+                                 14,
+                                 symb_buff_sz);
 
-            PHY_ofdm_mod((int *)gNB->common_vars.txdataF[0][aa],
-                         (int*)&txdata[aa][samp],
+            fft_shift(gNB->common_vars.tx_grid_info[aa].dataF,
+                      symb_buff_sz,
+                      frame_parms->N_RB_DL,
+                      fft_in_buff,
+                      frame_parms->ofdm_symbol_size,
+                      0,
+                      14);
+
+            PHY_ofdm_mod((int *)fft_in_buff,
+                         (int *)&txdata[aa][samp],
                          frame_parms->ofdm_symbol_size,
                          1,
                          frame_parms->nb_prefix_samples0,
                          CYCLIC_PREFIX);
 
-            PHY_ofdm_mod((int *)&gNB->common_vars.txdataF[0][aa][frame_parms->ofdm_symbol_size],
-                         (int*)&txdata[aa][samp + frame_parms->nb_prefix_samples0 + frame_parms->ofdm_symbol_size],
+            PHY_ofdm_mod((int *)fft_in_buff + frame_parms->ofdm_symbol_size,
+                         (int *)&txdata[aa][samp + frame_parms->nb_prefix_samples0 + frame_parms->ofdm_symbol_size],
                          frame_parms->ofdm_symbol_size,
                          13,
                          frame_parms->nb_prefix_samples,
@@ -597,9 +620,9 @@ int main(int argc, char **argv)
         }
       }
     }
-    LOG_M("txsigF0.m","txsF0", gNB->common_vars.txdataF[0][0],frame_length_complex_samples_no_prefix, 1, 1);
+    LOG_M("txsigF0.m", "txsF0", gNB->common_vars.tx_grid_info[0].dataF, symb_buff_sz * NR_SYMBOLS_PER_SLOT, 1, 1);
     if (gNB->frame_parms.nb_antennas_tx>1)
-      LOG_M("txsigF1.m","txsF1", gNB->common_vars.txdataF[0][1],frame_length_complex_samples_no_prefix, 1, 1);
+      LOG_M("txsigF1.m", "txsF1", gNB->common_vars.tx_grid_info[1].dataF, symb_buff_sz * NR_SYMBOLS_PER_SLOT, 1, 1);
 
   } else {
     printf("Reading %d samples from file to antenna buffer %d\n",frame_length_complex_samples,0);

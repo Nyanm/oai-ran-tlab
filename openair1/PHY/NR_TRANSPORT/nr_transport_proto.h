@@ -127,8 +127,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
                    uint8_t ulsch_id,
                    uint32_t frame,
                    uint8_t slot,
-                   unsigned char harq_pid,
-                   int beam_nb);
+                   unsigned char harq_pid);
 
 /*!
 \brief This function implements the idft transform precoding in PUSCH
@@ -221,7 +220,7 @@ void rx_nr_prach_ru(RU_t *ru,
                     int frame,
                     int subframe);
 
-void nr_fill_prach_ru(RU_t *ru,int SFN, int Slot, nfapi_nr_prach_pdu_t *prach_pdu, int *beam_nb);
+void nr_fill_prach_ru(RU_t *ru,int SFN, int Slot, nfapi_nr_prach_pdu_t *prach_pdu, int *beam_id);
 
 int16_t find_nr_prach(PHY_VARS_gNB *gNB,int frame,int slot, find_type_t type);
 int16_t find_nr_prach_ru(RU_t *ru,int frame,int slot, find_type_t type);

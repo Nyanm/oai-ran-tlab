@@ -41,6 +41,7 @@
 #include "nfapi_nr_interface_scf.h"
 #include "common/utils/threadPool/task_ans.h"
 #include "common/utils/threadPool/thread-pool.h"
+#include "queue.h"
 
 #define MAX_BANDS_PER_RRU 4
 #define MAX_RRU_CONFIG_SIZE 1024
@@ -91,6 +92,40 @@ typedef enum {
   synch_to_mobipass_standalone  // special case for mobipass in standalone mode
 } node_timing_t;
 
+struct grid_info {
+  uint16_t start_symbol;
+  uint16_t num_symbols;
+  uint16_t start_prb;
+  uint16_t num_prb;
+  uint16_t beam_id;
+  uint8_t numerology;
+  uint16_t reMask;
+};
+
+#define NR_MAX_GRID_SECTIONS 273 // same as xran
+// Holds grid info for a port
+struct nr_grid {
+  c16_t *dataF;
+  uint16_t port_id;
+  int num_sections;
+  struct grid_info grid_info[NR_MAX_GRID_SECTIONS];
+};
+
+#define NR_MAX_ANTENNA_PORTS 16
+// Holds grid info for a slot
+struct nr_grid_slot {
+  uint32_t frame;
+  uint32_t slot;
+  struct nr_grid grid[NR_MAX_ANTENNA_PORTS];
+};
+
+// Holds grid info for list of slot
+struct grid_slot_entry {
+  struct nr_grid_slot grid;
+  SLIST_ENTRY(grid_slot_entry) next;
+};
+
+SLIST_HEAD(grid_slots_head, grid_slot_entry);
 
 typedef struct {
   /// \brief Holds the transmit data in the frequency domain (1 frame).
@@ -129,12 +164,13 @@ typedef struct {
   /// - second index: tx antenna [0..nb_antennas_tx[
   /// - third index: frequency [0..]
   int32_t **tdd_calib_coeffs;
-  /// \brief Anaglogue beam ID for each OFDM symbol (used when beamforming not done in RU)
-  /// - first index: concurrent beam
-  /// - second index: beam_id [0.. symbols_per_frame[
-  int **beam_id;
+  /// \brief Holds grid info specific to one physical Tx RU port
+  struct nr_grid *ru_tx_grid;
+  /// \brief Holds grid info slots scheduled ahead
+  struct grid_slots_head rx_grid;
+  /// \brief Holds beam weights table configured by MAC
+  nfapi_nr_dbt_tlv_ve_t dbt;
 } RU_COMMON;
-
 
 typedef struct {
   /// \brief Received frequency-domain signal after extraction.
@@ -198,7 +234,7 @@ typedef struct {
   int prachStartSymbol;
   int num_prach_ocas;
   int num_slots;
-  int *beam;
+  int *beam_id;
 } RU_PRACH_list_t;
 
 #define NUMBER_OF_NR_RU_PRACH_MAX 8
@@ -478,10 +514,6 @@ typedef struct RU_t_s {
   int nb_rx;
   /// number of TX paths on device
   int nb_tx;
-  /// number of concurrent analog beams in period
-  int num_beams_period;
-  /// number of logical antennas at TX beamformer input
-  int nb_log_antennas;
   /// maximum PDSCH RS EPRE
   int max_pdschReferenceSignalPower;
   /// maximum RX gain
@@ -533,6 +565,8 @@ typedef struct RU_t_s {
   void (*fh_south_in)(struct RU_t_s *ru, int *frame, int *subframe);
   /// function pointer to synchronous TX fronthaul function
   void (*fh_south_out)(struct RU_t_s *ru, int frame_tx, int tti_tx, uint64_t timestamp_tx);
+  /// function pointer to synchronous TX fronthaul function
+  void (*fh_south_out_ctrl)(struct RU_t_s *ru, int frame_tx, int tti_tx, struct nr_grid *nrg);
   /// function pointer to synchronous RX fronthaul function (RRU)
   void (*fh_north_in)(struct RU_t_s *ru, int *frame, int *subframe);
   /// function pointer to synchronous RX fronthaul function (RRU)

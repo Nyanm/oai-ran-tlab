@@ -965,11 +965,8 @@ int main(int argc, char **argv)
   //NR_COMMON_channels_t *cc = RC.nrmac[0]->common_channels;
   int ret = 1;
   initNamedTpool(gNBthreads, &gNB->threadPool, true, "gNB-tpool");
-  initNotifiedFIFO(&gNB->L1_tx_free);
-  initNotifiedFIFO(&gNB->L1_tx_filled);
-  initNotifiedFIFO(&gNB->L1_tx_out);
   // we create 2 threads for L1 tx processing
-  notifiedFIFO_elt_t *msgL1Tx = newNotifiedFIFO_elt(sizeof(processingData_L1tx_t),0,&gNB->L1_tx_free,processSlotTX);
+  notifiedFIFO_elt_t *msgL1Tx = newNotifiedFIFO_elt(sizeof(processingData_L1tx_t),0,NULL,NULL);
   processingData_L1tx_t *msgDataTx = (processingData_L1tx_t *)NotifiedFifoData(msgL1Tx);
   init_DLSCH_struct(gNB, msgDataTx);
   msgDataTx->slot = slot;
@@ -1091,7 +1088,6 @@ int main(int argc, char **argv)
         Sched_INFO->frame = frame;
         Sched_INFO->slot = slot;
         Sched_INFO->UL_dci_req.numPdus = 0;
-        pushNotifiedFIFO(&gNB->L1_tx_free,msgL1Tx);
         nr_schedule_response(Sched_INFO);
 
         /* PTRS values for DLSIM calculations   */
@@ -1118,29 +1114,27 @@ int main(int argc, char **argv)
         phy_procedures_gNB_TX(msgDataTx,frame,slot,1);
         stop_meas(&gNB->phy_proc_tx);
 
-        int txdataF_offset = slot * frame_parms->samples_per_slot_wCP;
-
-        if (n_trials==1) {
-          LOG_M("txsigF0.m","txsF0=",
-                &gNB->common_vars.txdataF[0][0][txdataF_offset +2 * frame_parms->ofdm_symbol_size],
-                frame_parms->ofdm_symbol_size,
-                1,
-                1);
+        const int symb_buff_size = ALNARS_64_16(frame_parms->N_RB_DL * NR_NB_SC_PER_RB);
+        const int slot_buff_size = symb_buff_size * NR_NUMBER_OF_SYMBOLS_PER_SLOT;
+        if (n_trials == 1) {
+          LOG_M("txsigF0.m", "txsF0=", gNB->common_vars.tx_grid_info[0].dataF, slot_buff_size, 1, 1);
           if (gNB->frame_parms.nb_antennas_tx>1)
-            LOG_M("txsigF1.m","txsF1=",
-                  &gNB->common_vars.txdataF[0][1][txdataF_offset + 2 * frame_parms->ofdm_symbol_size],
-                  frame_parms->ofdm_symbol_size,
-                  1,
-                  1);
+            LOG_M("txsigF1.m", "txsF1=", gNB->common_vars.tx_grid_info[1].dataF, slot_buff_size, 1, 1);
         }
-        if (n_trials == 1)
-          printf("slot_offset %d, txdataF_offset %d \n", slot_offset, txdataF_offset);
 
         //TODO: loop over slots
         for (aa=0; aa<gNB->frame_parms.nb_antennas_tx; aa++) {
-
+          c16_t fft_in_buff[frame_parms->ofdm_symbol_size * frame_parms->symbols_per_slot] __attribute__((aligned(64)));
+          memset(fft_in_buff, 0, sizeof(fft_in_buff));
           if (cyclic_prefix_type == 1) {
-            PHY_ofdm_mod((int *)&gNB->common_vars.txdataF[0][aa][txdataF_offset],
+            fft_shift(gNB->common_vars.tx_grid_info[aa].dataF,
+                      symb_buff_size,
+                      frame_parms->N_RB_DL,
+                      fft_in_buff,
+                      frame_parms->ofdm_symbol_size,
+                      0,
+                      12);
+            PHY_ofdm_mod((int *)fft_in_buff,
                          (int *)&txdata[aa][slot_offset],
                          frame_parms->ofdm_symbol_size,
                          12,
@@ -1151,7 +1145,14 @@ int main(int argc, char **argv)
             for (int i = 0; i < 14; i++) {
               was_symbol_used[i] = true;
             }
-            nr_normal_prefix_mod(&gNB->common_vars.txdataF[0][aa][txdataF_offset],
+            fft_shift(gNB->common_vars.tx_grid_info[aa].dataF,
+                      symb_buff_size,
+                      frame_parms->N_RB_DL,
+                      fft_in_buff,
+                      frame_parms->ofdm_symbol_size,
+                      0,
+                      14);
+            nr_normal_prefix_mod(fft_in_buff,
                                  &txdata[aa][slot_offset],
                                  14,
                                  frame_parms,

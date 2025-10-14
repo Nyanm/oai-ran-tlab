@@ -1280,7 +1280,7 @@ static uint8_t unpack_dbt_table_tlv_value(void *tlv, uint8_t **ppReadPackedMsg, 
     }
     for (int k = 0; k < dbt_config->num_txrus; k++) {
       nfapi_nr_txru_t *tx_ru = &dig_beam->txru_list[k];
-      if (!(pull16(ppReadPackedMsg, &tx_ru->dig_beam_weight_Re, end) && pull16(ppReadPackedMsg, &tx_ru->dig_beam_weight_Im, end))) {
+      if (!(pull16(ppReadPackedMsg, (uint16_t *)&tx_ru->dig_beam_weight_Re, end) && pull16(ppReadPackedMsg, (uint16_t *)&tx_ru->dig_beam_weight_Im, end))) {
         return 0;
       }
     }

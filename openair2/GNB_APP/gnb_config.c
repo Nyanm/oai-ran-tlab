@@ -899,7 +899,6 @@ void RCconfig_NR_L1(void)
       gNB->TX_AMP = min(32767.0 / pow(10.0, .05 * (double)(*L1_ParamList.paramarray[j][L1_TX_AMP_BACKOFF_dB].uptr)), INT16_MAX);
       gNB->phase_comp = *L1_ParamList.paramarray[j][L1_PHASE_COMP].uptr;
       gNB->dmrs_num_antennas_per_thread = *(L1_ParamList.paramarray[j][NUM_ANTENNAS_PER_THREAD].uptr);
-      gNB->enable_analog_das = *(L1_ParamList.paramarray[j][L1_ANALOG_DAS].uptr);
       LOG_I(NR_PHY, "TX_AMP = %d (-%d dBFS)\n", gNB->TX_AMP, *L1_ParamList.paramarray[j][L1_TX_AMP_BACKOFF_dB].uptr);
       AssertFatal(gNB->TX_AMP > 300, "TX_AMP is too small, must be larger than 300 (is %d)\n", gNB->TX_AMP);
       // Midhaul configuration
@@ -1607,34 +1606,38 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
         LOG_I(NR_PHY, "Copying %d blacklisted PRB to L1 context\n", num_ulprbbl);
         memcpy(RC.nrmac[j]->ulprbbl, prbbl, MAX_BWP_SIZE * sizeof(prbbl[0]));
       }
-      int ab = *MacRLC_ParamList.paramarray[j][MACRLC_ANALOG_BEAMFORMING_IDX].u8ptr;
-      if (ab > 0) {
-        if (ab == 1)
-          AssertFatal(NFAPI_MODE == NFAPI_MONOLITHIC, "Analog beamforming only supported for monolithic scenario\n");
+
+      // Beamforming configuration
+      int bf_type = *MacRLC_ParamList.paramarray[j][MACRLC_BEAMFORMING_TYPE_IDX].u8ptr;
+      int bf_mode = *MacRLC_ParamList.paramarray[j][MACRLC_BEAMFORMING_MODE_IDX].u8ptr;
+      if (bf_type != NO_BEAMFORMING) {
         NR_beam_info_t *beam_info = &RC.nrmac[j]->beam_info;
-        int beams_per_period = *MacRLC_ParamList.paramarray[j][MACRLC_ANALOG_BEAMS_PERIOD_IDX].u8ptr;
+        int beams_per_period = *MacRLC_ParamList.paramarray[j][MACRLC_BEAMS_PERIOD_IDX].u8ptr;
         beam_info->beam_allocation = malloc16(beams_per_period * sizeof(int *));
-        beam_info->beam_duration = *MacRLC_ParamList.paramarray[j][MACRLC_ANALOG_BEAM_DURATION_IDX].u8ptr;
+        beam_info->beam_duration = *MacRLC_ParamList.paramarray[j][MACRLC_BEAM_DURATION_IDX].u8ptr;
         beam_info->beams_per_period = beams_per_period;
         beam_info->beam_allocation_size = -1; // to be initialized once we have information on frame configuration
-        beam_info->beam_mode = ab == 1 ? PRECONFIGURED_BEAM_IDX : LOPHY_BEAM_IDX;
-      } else {
-        RC.nrmac[j]->beam_info.beam_mode = NO_BEAM_MODE;
+        // TODO: Indicate this to MAC via FAPI TLV 0x0164.
+        beam_info->beam_type = bf_type;
+        beam_info->beam_mode = bf_mode;
+        // For O-RAN 7.2 split beam mode has to be LOPHY_BEAM_IDX
+        if (RUParamList.numelt > 0) {
+          for (int i = 0; i < RUParamList.numelt; i++)
+            AssertFatal((bf_mode == LOPHY_BEAMFORMING)
+                            && !strcmp(*(RUParamList.paramarray[i][RU_TRANSPORT_PREFERENCE_IDX].strptr), "raw_if4p5"),
+                        "Beamforming mode has to be LoPHY for 7.2 O-RU\n");
+        }
       }
       // TODO config_isparamset doesn't seem to work for array types, checking numelt instead
       int n = MacRLC_ParamList.paramarray[j][MACRLC_BEAMWEIGHTS_IDX].numelt;
       if (n > 0) {
-        if (NFAPI_MODE == NFAPI_MONOLITHIC) {
-          GET_PARAMS_LIST(L1_ParamList, L1_Params, L1PARAMS_DESC, CONFIG_STRING_L1_LIST, NULL);
-          AssertFatal(*(L1_ParamList.paramarray[j][L1_ANALOG_DAS].uptr) == 0, "No need to set beam weights in case of DAS\n");
-        }
         int num_beam = n;
-        if (!ab) {
-          AssertFatal(n % num_tx == 0, "Error! Number of beam input needs to be multiple of TX antennas\n");
+        if (bf_type == PREDEFINED_BEAM) {
+          AssertFatal(n % num_tx == 0, "Error! Number of beam weights input needs to be multiple of TX antennas\n");
           num_beam = n / num_tx;
         }
         // each beam is described by a set of weights (one for each antenna)
-        // in case of analog beamforming an index to the RU beam identifier is provided
+        // in case of PBBF an index to the RU beam identifier is provided
         // (one for each beam regardless of the number of antennas per beam)
         config.nb_bfw[0] = num_tx;  // number of tx antennas
         config.nb_bfw[1] = num_beam; // number of beams weights/indices

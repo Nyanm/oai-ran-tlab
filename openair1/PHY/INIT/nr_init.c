@@ -107,15 +107,6 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
   NR_gNB_COMMON *const common_vars  = &gNB->common_vars;
   NR_gNB_PRACH *const prach_vars   = &gNB->prach_vars;
 
-  common_vars->analog_bf = cfg->analog_beamforming_ve.analog_bf_vendor_ext.value;
-  LOG_I(PHY, "L1 configured with%s analog beamforming\n", common_vars->analog_bf ? "" : "out");
-  if (common_vars->analog_bf) {
-    // True only if nrmac->beam_info.beam_mode == FAPI_ANALOG_BEAM, thus analog_beamforming=2
-    common_vars->num_beams_period = cfg->analog_beamforming_ve.num_beams_period_vendor_ext.value;
-    LOG_I(PHY, "Max number of concurrent beams: %d\n", common_vars->num_beams_period);
-  } else
-    common_vars->num_beams_period = 1;
-
   int Ptx = cfg->carrier_config.num_tx_ant.value;
   int Prx = cfg->carrier_config.num_rx_ant.value;
   int max_ul_mimo_layers = 4;
@@ -167,25 +158,13 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
     }
   }
 
-  /* Do NOT allocate per-antenna rxdataF: the gNB gets a pointer to the
-   * RU to copy/recover freq-domain memory from there */
-  common_vars->rxdataF = (c16_t ***)malloc16(common_vars->num_beams_period * sizeof(c16_t**));
-  for (int i = 0; i < common_vars->num_beams_period; i++)
-    common_vars->rxdataF[i] = (c16_t **)malloc16(Prx * sizeof(c16_t*));
-
-  if (cfg->analog_beamforming_ve.analog_bf_vendor_ext.value) {
-    common_vars->beam_id = (int **)malloc16(common_vars->num_beams_period * sizeof(int*));
-    for (int i = 0; i < common_vars->num_beams_period; i++)
-      common_vars->beam_id[i] = (int*)malloc16_clear(fp->symbols_per_slot * fp->slots_per_frame * sizeof(int));
-  }
-  common_vars->txdataF = (c16_t ***)malloc16(common_vars->num_beams_period * sizeof(c16_t**));
-  for (int i = 0; i < common_vars->num_beams_period; i++) {
-    common_vars->txdataF[i] = (c16_t**)malloc16_clear(Ptx * sizeof(c16_t*));
-    for (int j = 0; j < Ptx; j++)
-      common_vars->txdataF[i][j] = (c16_t*)malloc16_clear(fp->samples_per_frame_wCP * sizeof(c16_t));
-  }
-  common_vars->debugBuff = (int32_t*)malloc16_clear(fp->samples_per_frame*sizeof(int32_t)*100);	
-  common_vars->debugBuff_sample_offset = 0; 
+  common_vars->rxdataF = (c16_t **)malloc16(Prx * sizeof(c16_t*));
+  for (int j = 0; j < Prx; j++)
+    common_vars->rxdataF[j] = malloc16_clear(fp->samples_per_slot_wCP * RU_RX_SLOT_DEPTH * sizeof(c16_t));
+  const int symbol_samples_sz = ALNARS_64_16(fp->N_RB_DL * NR_NB_SC_PER_RB); // 64 byte aligned
+  common_vars->tx_grid_info = calloc(Prx, sizeof(*common_vars->tx_grid_info));
+  for (int j = 0; j < Ptx; j++)
+    common_vars->tx_grid_info[j].dataF = (c16_t*)malloc16_clear(symbol_samples_sz * NR_NUMBER_OF_SYMBOLS_PER_SLOT * sizeof(c16_t));
 
   // PRACH
   prach_vars->rxsigF = (int16_t **)malloc16_clear(Prx*sizeof(int16_t*));
@@ -245,24 +224,14 @@ void phy_free_nr_gNB(PHY_VARS_gNB *gNB)
   reset_nr_transport(gNB);
 
   NR_gNB_COMMON * common_vars = &gNB->common_vars;
-  for (int j = 0; j < common_vars->num_beams_period; j++) {
-    if (common_vars->beam_id)
-      free_and_zero(common_vars->beam_id[j]);
-    for (int i = 0; i < Ptx; i++) {
-      free_and_zero(common_vars->txdataF[j][i]);
-    }
-    free_and_zero(common_vars->txdataF[j]);
+  for (int i = 0; i < Ptx; i++) {
+    free_and_zero(common_vars->tx_grid_info[i].dataF);
   }
+  free_and_zero(common_vars->tx_grid_info);
 
-  /* Do NOT free per-antenna txdataF/rxdataF: the gNB gets a pointer to the
-   * RU's txdataF/rxdataF, and the RU will free that */
-  for (int j = 0; j < common_vars->num_beams_period; j++)
+  for (int j = 0; j < Prx; j++)
     free_and_zero(common_vars->rxdataF[j]);
-  free_and_zero(common_vars->txdataF);
   free_and_zero(common_vars->rxdataF);
-  free_and_zero(common_vars->beam_id);
-
-  free_and_zero(common_vars->debugBuff);
 
   NR_gNB_PRACH* prach_vars = &gNB->prach_vars;
   free_and_zero(prach_vars->rxsigF);

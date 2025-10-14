@@ -467,6 +467,43 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
   return (0);
 }
 
+/** @details Write to xran buffers the section information which includes
+ * PRB and symbol allocation and beam ID for UL slots. This function should
+ * be called at least T1a_max_cp_ul in advance. It OAI we could call it right
+ * after MAC scheduler returns as we have a slot ahead of 4 slots for mu 1
+ * which is adequate for most RUs and deployments.
+ */
+int xran_fh_rx_send_slot_cfg(ru_info_t *ru, int frame, int slot)
+{
+  int tti = /*frame*SUBFRAMES_PER_SYSTEMFRAME*SLOTNUM_PER_SUBFRAME+*/ 20 * frame
+            + slot; // commented out temporarily to check that compilation of oran 5g is working.
+  const struct xran_fh_init *fh_init = get_xran_fh_init();
+  int nb_rx_per_ru = ru->nb_rx / fh_init->xran_ports;
+
+  for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) { // OAI does not support multiple CC yet.
+
+    for (uint8_t ant_id = 0; ant_id < ru->nb_rx; ant_id++) {
+      const struct xran_frame_config *frame_conf = &get_xran_fh_config(ant_id / nb_rx_per_ru)->frame_conf;
+      // skip processing. this slot is TX (no RX in this slot)
+      if (is_tdd_dl_guard_slot(frame_conf, slot))
+        continue;
+
+      oran_buf_list_t *bufs = get_xran_buffers(ant_id / nb_rx_per_ru);
+      uint8_t *pPrbMapData = bufs->dstcp[ant_id % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
+      struct xran_prb_map *pPrbMap = (struct xran_prb_map *)pPrbMapData;
+
+      for (uint32_t idxElm = 0; idxElm < pPrbMap->nPrbElm; idxElm++) {
+        struct xran_prb_elm *p_prbMapElm = &pPrbMap->prbMap[idxElm];
+        /* For now we assume only one section so pass first section's beam id from grid info struct. */
+        p_prbMapElm->nBeamIndex = ru->rx_grid[ant_id].grid_info[0].beam_id & 0x7fff;
+      }
+    }
+  }
+  return 0;
+}
+
+#define ALIGNARRAYSIZE(a, b) (((a + b - 1) / b) * b)
+
 /** @details Write PDSCH IQ-data from OAI txdataF_BF buffer to xran buffers. If
  * I/Q compression (bitwidth < 16 bits) is configured, compresses the data
  * before writing. */
@@ -482,7 +519,7 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
   const struct xran_fh_init *fh_init = get_xran_fh_init();
   const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
   int nPRBs = fh_cfg->nDLRBs;
-  int fftsize = 1 << fh_cfg->ru_conf.fftSize;
+  int symb_buf_sz = ALIGNARRAYSIZE(nPRBs * N_SC_PER_PRB, 16);
   int nb_tx_per_ru = ru->nb_tx / fh_init->xran_ports;
 
   for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) { // OAI does not support multiple CC yet.
@@ -495,7 +532,7 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
         uint8_t *pPrbMapData = bufs->srccp[ant_id % nb_tx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
         struct xran_prb_map *pPrbMap = (struct xran_prb_map *)pPrbMapData;
         ptr = pData;
-        pos = &ru->txdataF_BF[ant_id][sym_idx * fftsize];
+        pos = &ru->txdataF_BF[ant_id][sym_idx * symb_buf_sz]; // is already 64 byte aligned
 
         uint8_t *u8dptr;
         struct xran_prb_map *pRbMap = pPrbMap;
@@ -512,6 +549,8 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
           for (idxElm = 0; idxElm < pRbMap->nPrbElm; idxElm++) {
             struct xran_section_desc *p_sec_desc = NULL;
             p_prbMapElm = &pRbMap->prbMap[idxElm];
+            /* For now we assume only one section so pass first section's beam id from grid info struct. */
+            p_prbMapElm->nBeamIndex = ru->tx_grid[ant_id].grid_info[0].beam_id & 0x7fff;
             // assumes one fragment per symbol
 #ifdef E_RELEASE
             p_sec_desc = p_prbMapElm->p_sec_desc[sym_id][0];
@@ -527,27 +566,12 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
             }
             uint16_t *dst16 = (uint16_t *)dst;
 
-            int pos_len = 0;
-            int neg_len = 0;
-
-            if (p_prbMapElm->nRBStart < (nPRBs >> 1)) // there are PRBs left of DC
-              neg_len = min((nPRBs * 6) - (p_prbMapElm->nRBStart * 12), p_prbMapElm->nRBSize * N_SC_PER_PRB);
-            pos_len = (p_prbMapElm->nRBSize * N_SC_PER_PRB) - neg_len;
-            // Calculation of the pointer for the section in the buffer.
-            // start of positive frequency component
-            uint16_t *src1 = (uint16_t *)&pos[(neg_len == 0) ? ((p_prbMapElm->nRBStart * N_SC_PER_PRB) - (nPRBs * 6)) : 0];
-            // start of negative frequency component
-            uint16_t *src2 = (uint16_t *)&pos[(p_prbMapElm->nRBStart * N_SC_PER_PRB) + fftsize - (nPRBs * 6)];
-
-            uint32_t local_src[p_prbMapElm->nRBSize * N_SC_PER_PRB] __attribute__((aligned(64)));
-            memcpy((void *)local_src, (void *)src2, neg_len * 4);
-            memcpy((void *)&local_src[neg_len], (void *)src1, pos_len * 4);
             if (p_prbMapElm->compMethod == XRAN_COMPMETHOD_NONE) {
               payload_len = p_prbMapElm->nRBSize * N_SC_PER_PRB * 4L;
               /* convert to Network order */
               // NOTE: ggc 11 knows how to generate AVX2 for this!
-              for (idx = 0; idx < (pos_len + neg_len) * 2; idx++)
-                ((uint16_t *)dst16)[idx] = htons(((uint16_t *)local_src)[idx]);
+              for (idx = 0; idx < p_prbMapElm->nRBSize * N_SC_PER_PRB * 2; idx++)
+                ((uint16_t *)dst16)[idx] = htons(((uint16_t *)pos)[idx]);
             } else if (p_prbMapElm->compMethod == XRAN_COMPMETHOD_BLKFLOAT) {
               payload_len = (3 * p_prbMapElm->iqWidth + 1) * p_prbMapElm->nRBSize;
 
@@ -555,7 +579,7 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
               struct xranlib_compress_request bfp_com_req = {};
               struct xranlib_compress_response bfp_com_rsp = {};
 
-              bfp_com_req.data_in = (int16_t *)local_src;
+              bfp_com_req.data_in = (int16_t *)pos;
               bfp_com_req.numRBs = p_prbMapElm->nRBSize;
               bfp_com_req.len = payload_len;
               bfp_com_req.compMethod = p_prbMapElm->compMethod;
@@ -566,7 +590,7 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
 
               xranlib_compress_avx512(&bfp_com_req, &bfp_com_rsp);
 #elif defined(__arm__) || defined(__aarch64__)
-              armral_bfp_compression(p_prbMapElm->iqWidth, p_prbMapElm->nRBSize, (int16_t *)local_src, (int8_t *)dst);
+              armral_bfp_compression(p_prbMapElm->iqWidth, p_prbMapElm->nRBSize, (int16_t *)pos, (int8_t *)dst);
 #else
               AssertFatal(1 == 0, "BFP compression not supported on this architecture");
 #endif

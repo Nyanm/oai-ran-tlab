@@ -19,29 +19,16 @@
  *      contact@openairinterface.org
  */
 
-#ifndef __PHY_NR_TRANSPORT_DCI__H
-#define __PHY_NR_TRANSPORT_DCI__H
+#ifndef __PHY_DIGITAL_BEAMFORMING__H__
+#define __PHY_DIGITAL_BEAMFORMING__H__
 
-#include "PHY/defs_gNB.h"
-#include "PHY/NR_REFSIG/nr_refsig.h"
-#include "nfapi/open-nFAPI/nfapi/public_inc/nfapi_nr_interface.h"
+#include "defs_RU.h"
 
-void nr_generate_dci_top(processingData_L1tx_t *msgTx, int slot);
+void fill_rx_grid_info(RU_t *ru, const uint32_t frame, const uint32_t slot, const nfapi_nr_ul_tti_request_number_of_pdus_t *ul_pdu);
+struct grid_slot_entry *get_grid_slot(struct grid_slots_head *head, const uint32_t frame, const uint32_t slot);
+void remove_grid_slot(struct grid_slots_head *head, const uint32_t frame, const uint32_t slot);
+void apply_rx_beamforming(RU_t *ru, const uint32_t frame, const uint32_t slot);
+void apply_tx_beamforming(RU_t *ru, const uint32_t frame, const uint32_t slot);
+void process_rx_grid_info_bf(RU_t *ru, const uint32_t frame, const uint32_t slot);
 
-int16_t find_nr_pdcch(int frame,int slot, PHY_VARS_gNB *gNB,find_type_t type);
-
-void nr_fill_dci(PHY_VARS_gNB *gNB,
-                 int frame,
-                 int slot,
-		 nfapi_nr_dl_tti_pdcch_pdu *pdcch_pdu);
-
-int16_t find_nr_ul_dci(int frame,int slot, PHY_VARS_gNB *gNB,find_type_t type);
-
-void nr_fill_ul_dci(PHY_VARS_gNB *gNB,
-		    int frame,
-		    int slot,
-		    nfapi_nr_ul_dci_request_pdus_t *pdcch_pdu);
-
-void nr_fill_reg_list(int cce_list[MAX_DCI_CORESET][NR_MAX_PDCCH_AGG_LEVEL * NR_NB_REG_PER_CCE], nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_pdu_rel15);
-
-#endif //__PHY_NR_TRANSPORT_DCI__H
+#endif

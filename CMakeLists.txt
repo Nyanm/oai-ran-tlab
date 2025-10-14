@@ -968,6 +968,7 @@ set(PHY_SRC_UE
   ${OPENAIR1_DIR}/PHY/NR_TRANSPORT/pucch_rx.c
   ${OPENAIR1_DIR}/PHY/NR_TRANSPORT/srs_rx.c
   ${OPENAIR1_DIR}/PHY/NR_TRANSPORT/nr_uci_tools_common.c
+  ${OPENAIR1_DIR}/PHY/phy_digital_beamforming.c
   )
   set(PHY_NR_UE_SRC
   ${OPENAIR1_DIR}/PHY/INIT/nr_parms.c
@@ -1961,8 +1962,10 @@ add_library(physim_common OBJECT ${OPENAIR1_DIR}/SIMULATION/NR_PHY/nr_unitary_co
 target_link_libraries(physim_common PRIVATE UTIL)
 
 add_executable(nr_dlschsim ${OPENAIR1_DIR}/SIMULATION/NR_PHY/dlschsim.c)
+# IMPORTANT: thread-pool must be linked with --whole-archive because
+# libldpc.so needs init_task_ans at runtime
 target_link_libraries(nr_dlschsim PRIVATE
-  -Wl,--start-group UTIL SIMU PHY_COMMON PHY_NR_COMMON PHY_NR PHY_NR_UE SCHED_NR_LIB CONFIG_LIB MAC_NR_COMMON -Wl,--end-group
+  -Wl,--start-group -Wl,--whole-archive thread-pool -Wl,--no-whole-archive UTIL SIMU PHY_COMMON PHY_NR_COMMON PHY_NR PHY_NR_UE SCHED_NR_LIB CONFIG_LIB MAC_NR_COMMON -Wl,--end-group
   m pthread ${T_LIB} ITTI dl shlib_loader physim_common
   )
 target_link_libraries(nr_dlschsim PRIVATE asn1_nr_rrc_hdrs)
@@ -2019,8 +2022,10 @@ add_executable(nr_ulschsim
   ${OPENAIR1_DIR}/SIMULATION/NR_PHY/ulschsim.c
   ${PHY_INTERFACE_DIR}/queue_t.c
   )
+# IMPORTANT: thread-pool must be linked with --whole-archive because
+# libldpc.so needs init_task_ans at runtime
 target_link_libraries(nr_ulschsim PRIVATE
-  -Wl,--start-group UTIL SIMU PHY_COMMON PHY_NR_COMMON PHY_NR PHY_NR_UE SCHED_NR_LIB CONFIG_LIB MAC_NR_COMMON -Wl,--end-group
+  -Wl,--start-group -Wl,--whole-archive thread-pool -Wl,--no-whole-archive UTIL SIMU PHY_COMMON PHY_NR_COMMON PHY_NR PHY_NR_UE SCHED_NR_LIB CONFIG_LIB MAC_NR_COMMON -Wl,--end-group
   m pthread ${T_LIB} ITTI dl shlib_loader physim_common
 )
 target_link_libraries(nr_ulschsim PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
