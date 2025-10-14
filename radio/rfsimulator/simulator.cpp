@@ -1103,10 +1103,14 @@ static std::vector<std::vector<c16_t>> combine_tx_beams(rfsimulator_state_t *t,
       for (int aatx = 0; aatx < num_aatx; aatx++) {
         c16_t *buffer = (c16_t *)pkt->payload;
         c16_t *tx_ant_buffer_in = &buffer[(num_aatx * beam + aatx) * pkt->header.size + read_start_idx];
-        for (int s = write_start_idx; s < write_end_idx; s++) {
-          ant_buffers[aatx][s].r += tx_ant_buffer_in->r * gain_linear;
-          ant_buffers[aatx][s].i += tx_ant_buffer_in->i * gain_linear;
-          tx_ant_buffer_in++;
+        if (gain_dB == 0) {
+          memcpy(&ant_buffers[aatx][write_start_idx], tx_ant_buffer_in, (write_end_idx - write_start_idx) * sizeof(c16_t));
+        } else {
+          for (int s = write_start_idx; s < write_end_idx; s++) {
+            ant_buffers[aatx][s].r += tx_ant_buffer_in->r * gain_linear;
+            ant_buffers[aatx][s].i += tx_ant_buffer_in->i * gain_linear;
+            tx_ant_buffer_in++;
+          }
         }
       }
     }
@@ -1189,7 +1193,7 @@ static void rfsimulator_read_internal(rfsimulator_state_t *t,
                                       int rx_beam_id)
 {
   cf_t temp_array[nbAnt][nsamps];
-  memset(temp_array, 0, sizeof(temp_array));
+  bool channel_modelling = false;
   // Add all input nodes signal in the output buffer
   for (int sock = 0; sock < MAX_FD_RFSIMU; sock++) {
     buffer_t *ptr = &t->buf[sock];
@@ -1204,6 +1208,10 @@ static void rfsimulator_read_internal(rfsimulator_state_t *t,
         random_channel(ptr->channel_model, 0);
 
       if (ptr->channel_model != NULL) { // apply a channel model
+        if (!channel_modelling) {
+          memset(temp_array, 0, sizeof(temp_array));
+          channel_modelling = true;
+        }
         const uint64_t dd = ptr->channel_model->channel_offset;
         const uint64_t channel_length = ptr->channel_model->channel_length;
         std::vector<std::vector<c16_t>> ant_buffers = combine_tx_beams(t,
@@ -1242,19 +1250,25 @@ static void rfsimulator_read_internal(rfsimulator_state_t *t,
 
   bool apply_global_noise = get_noise_power_dBFS() != INVALID_DBFS_VALUE;
   if (apply_global_noise) {
+    if (!channel_modelling) {
+      memset(temp_array, 0, sizeof(temp_array));
+      channel_modelling = true;
+    }
+    int16_t noise_power = (int16_t)(32767.0 / powf(10.0, .05 * -get_noise_power_dBFS()));
     for (int a = 0; a < nbAnt; a++) {
       for (int i = 0; i < nsamps; i++) {
-        int16_t noise_power = (int16_t)(32767.0 / powf(10.0, .05 * -get_noise_power_dBFS()));
         temp_array[a][i].r += noise_power + gaussZiggurat(0.0, 1.0);
         temp_array[a][i].i += noise_power * gaussZiggurat(0.0, 1.0);
       }
     }
   }
 
-  for (int a = 0; a < nbAnt; a++) {
-    for (int i = 0; i < nsamps; i++) {
-      samples[a][i].r += lroundf(temp_array[a][i].r);
-      samples[a][i].i += lroundf(temp_array[a][i].i);
+  if (channel_modelling) {
+    for (int a = 0; a < nbAnt; a++) {
+      for (int i = 0; i < nsamps; i++) {
+        samples[a][i].r += lroundf(temp_array[a][i].r);
+        samples[a][i].i += lroundf(temp_array[a][i].i);
+      }
     }
   }
 }
