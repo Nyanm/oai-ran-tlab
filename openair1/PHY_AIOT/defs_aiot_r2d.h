@@ -44,6 +44,7 @@
 #define R2D_POSTAMBLE_N  4
 
 #define MAX_AIOT_R2D_PAYLOAD_SIZE  125 // bytes
+#define MAX_AIOT_R2D_PACKET_SIZE   (MAX_AIOT_R2D_PAYLOAD_SIZE + 2) // SIP + CAS + PAYLOAD + POSTAMBLE
 
 #include "precomputed_SIP.h"
 #include "precomputed_CAS.h"
