@@ -1360,9 +1360,8 @@ void ue_ulsch_uespec_procedures(PHY_VARS_UE *ue,
         ue->ulsch[eNB_id]->harq_processes[harq_pid]->subframe_scheduling_flag);
 
   if (ue->mac_enabled == 1) {
-    if ((ue->ulsch_Msg3_active[eNB_id] == 1)       &&
-        (ue->ulsch_Msg3_frame[eNB_id] == frame_tx) &&
-        (ue->ulsch_Msg3_subframe[eNB_id] == subframe_tx)) { // Initial Transmission of Msg3
+    if ((ue->ulsch_Msg3_active[eNB_id] == 1) && (ue->ulsch_Msg3_frame[eNB_id] == frame_tx)
+        && (ue->ulsch_Msg3_subframe[eNB_id] == (subframe_tx % 1024))) { // Initial Transmission of Msg3
       ue->ulsch[eNB_id]->harq_processes[harq_pid]->subframe_scheduling_flag = 1;
 
       if (ue->ulsch[eNB_id]->harq_processes[harq_pid]->round==0)
@@ -4321,13 +4320,6 @@ int phy_procedures_slot_parallelization_UE_RX(PHY_VARS_UE *ue,
     LOG_D(PHY,"[UE %d] Calculating bitrate Frame %d: total_TBS = %d, total_TBS_last = %d, bitrate %f kbits\n",
           ue->Mod_id,frame_rx,ue->total_TBS[eNB_id],
           ue->total_TBS_last[eNB_id],(float) ue->bitrate[eNB_id]/1000.0);
-#if UE_AUTOTEST_TRACE
-
-    if ((frame_rx % 100 == 0)) {
-      LOG_I(PHY,"[UE  %d] AUTOTEST Metric : UE_DLSCH_BITRATE = %5.2f kbps (frame = %d) \n", ue->Mod_id, (float) ue->bitrate[eNB_id]/1000.0, frame_rx);
-    }
-
-#endif
   }
 
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_PHY_PROCEDURES_UE_RX, VCD_FUNCTION_OUT);

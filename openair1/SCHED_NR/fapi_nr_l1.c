@@ -29,9 +29,6 @@
  * \note
  * \warning
  */
-#ifdef ENABLE_AERIAL
-#include "nfapi/oai_integration/aerial/fapi_vnf_p5.h"
-#endif
 #include "fapi_nr_l1.h"
 #include "common/ran_context.h"
 #include "PHY/NR_TRANSPORT/nr_transport_proto.h"
@@ -157,9 +154,9 @@ void nr_schedule_ul_tti_req(PHY_VARS_gNB *gNB, nfapi_nr_ul_tti_request_t *UL_tti
               UL_tti_req->SFN,
               UL_tti_req->Slot);
         nfapi_nr_prach_pdu_t *prach_pdu = &UL_tti_req->pdus_list[i].prach_pdu;
-        nr_fill_prach(gNB, UL_tti_req->SFN, UL_tti_req->Slot, prach_pdu);
+        int id = nr_fill_prach(gNB, UL_tti_req->SFN, UL_tti_req->Slot, prach_pdu);
         if (gNB->RU_list[0]->if_south == LOCAL_RF || gNB->RU_list[0]->if_south == REMOTE_IF5)
-          nr_fill_prach_ru(gNB->RU_list[0], UL_tti_req->SFN, UL_tti_req->Slot, prach_pdu);
+          nr_fill_prach_ru(gNB->RU_list[0], UL_tti_req->SFN, UL_tti_req->Slot, prach_pdu, gNB->prach_vars.list[id].beam_nb);
         break;
       case NFAPI_NR_UL_CONFIG_SRS_PDU_TYPE:
         LOG_D(NR_PHY,

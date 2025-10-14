@@ -36,14 +36,8 @@ int nr_pusch_dmrs_rx(PHY_VARS_gNB *gNB,
                      unsigned char lp,
                      unsigned short nb_pusch_rb,
                      uint32_t re_offset,
-                     uint8_t dmrs_type);
-
-void nr_generate_csi_rs(const NR_DL_FRAME_PARMS *frame_parms,
-                        int32_t **dataF,
-                        const int16_t amp,
-                        const nfapi_nr_dl_tti_csi_rs_pdu_rel15_t *csi_params,
-                        const int slot,
-                        const csi_mapping_parms_t *phy_csi_parms);
+                     uint8_t dmrs_type,
+                     int16_t dmrs_scaling);
 
 void nr_generate_modulation_table(void);
 

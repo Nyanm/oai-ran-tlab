@@ -38,7 +38,7 @@
 int nas_sock_fd[MAX_MOBILES_PER_ENB * 2]; // Allocated for both LTE UE and NR UE.
 int nas_sock_mbms_fd;
 
-static int tun_alloc(const char *dev)
+int tun_alloc(const char *dev)
 {
   struct ifreq ifr;
   int fd, err;
@@ -120,7 +120,7 @@ static bool setInterfaceParameter(int sock_fd, const char *ifn, int af, const ch
 {
   DevAssert(af == AF_INET || af == AF_INET6);
   struct ifreq ifr = {0};
-  strncpy(ifr.ifr_name, ifn, sizeof(ifr.ifr_name));
+  strncpy(ifr.ifr_name, ifn, sizeof(ifr.ifr_name) - 1);
   struct in6_ifreq ifr6 = {0};
 
   void *ioctl_opt = NULL;
@@ -157,20 +157,25 @@ static bool setInterfaceParameter(int sock_fd, const char *ifn, int af, const ch
   return success;
 }
 
-/*
- * \brief bring interface up (up != 0) or down (up == 0)
- */
+
 typedef enum { INTERFACE_DOWN, INTERFACE_UP } if_action_t;
+/*
+* \brief bring interface up (up != 0) or down (up == 0)
+*/
 static bool change_interface_state(int sock_fd, const char *ifn, if_action_t if_action)
 {
-  const char* action = if_action == INTERFACE_DOWN ? "DOWN" : "UP";
+  const char *action = if_action == INTERFACE_DOWN ? "DOWN" : "UP";
 
   struct ifreq ifr = {0};
-  strncpy(ifr.ifr_name, ifn, sizeof(ifr.ifr_name));
+  strncpy(ifr.ifr_name, ifn, sizeof(ifr.ifr_name) - 1);
+
   /* get flags of this interface: see netdevice(7) */
   bool success = ioctl(sock_fd, SIOCGIFFLAGS, (caddr_t)&ifr) == 0;
-  if (!success)
-    goto fail_interface_state;
+  if (!success && if_action == INTERFACE_DOWN && errno == ENODEV) {
+    LOG_W(OIP, "trying to remove non-existant device %s\n", ifn);
+    return true;
+  }
+  LOG_D(OIP, "Got flags for %s: 0x%x (action: %s)\n", ifn, ifr.ifr_flags, action);
 
   if (if_action == INTERFACE_UP) {
     ifr.ifr_flags |= IFF_UP | IFF_NOARP | IFF_POINTOPOINT;
@@ -182,12 +187,15 @@ static bool change_interface_state(int sock_fd, const char *ifn, if_action_t if_
   success = ioctl(sock_fd, SIOCSIFFLAGS, (caddr_t)&ifr) == 0;
   if (!success)
     goto fail_interface_state;
+  LOG_D(OIP, "Interface %s successfully set %s\n", ifn, action);
+
   return true;
 
 fail_interface_state:
   LOG_E(OIP, "Bringing interface %s for %s: ioctl call failed: %d, %s\n", action, ifn, errno, strerror(errno));
   return false;
 }
+
 
 bool tun_config(const char* ifname, const char *ipv4, const char *ipv6)
 {
@@ -199,10 +207,6 @@ bool tun_config(const char* ifname, const char *ipv4, const char *ipv6)
     return false;
   }
 
-  if (!change_interface_state(sock_fd, ifname, INTERFACE_DOWN)) {
-    close(sock_fd);
-    return false;
-  }
   bool success = true;
   if (ipv4 != NULL)
     success = setInterfaceParameter(sock_fd, ifname, AF_INET, ipv4, SIOCSIFADDR);
@@ -261,4 +265,29 @@ void setup_ue_ipv4_route(const char* ifname, int instance_id, const char *ipv4)
 int tun_generate_ifname(char *ifname, const char *ifprefix, int instance_id)
 {
   return snprintf(ifname, IFNAMSIZ, "%s%d", ifprefix, instance_id + 1);
+}
+
+int tun_generate_ue_ifname(char *ifname, int instance_id, int pdu_session_id)
+{
+  char pdu_session_string[10];
+  snprintf(pdu_session_string, sizeof(pdu_session_string), "p%d", pdu_session_id);
+  return snprintf(ifname, IFNAMSIZ, "%s%d%s", "oaitun_ue", instance_id + 1, pdu_session_id == -1 ? "" : pdu_session_string);
+}
+
+void tun_destroy(const char *dev)
+{
+  // Use a new socket for ioctl operations
+  int fd = socket(AF_INET, SOCK_DGRAM, 0);
+  if (fd < 0) {
+    LOG_E(UTIL, "Failed to create socket for interface teardown: %d, %s\n", errno, strerror(errno));
+    return;
+  }
+
+  bool success = change_interface_state(fd, dev, INTERFACE_DOWN);
+  if (success) {
+    LOG_I(UTIL, "Interface %s is now down.\n", dev);
+  } else {
+    LOG_E(UTIL, "Could not bring interface %s down.\n", dev);
+  }
+  close(fd);
 }

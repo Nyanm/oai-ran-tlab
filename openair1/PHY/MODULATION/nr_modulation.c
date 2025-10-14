@@ -119,49 +119,33 @@ const char nr_W_4l_4p[5][4][4] = {
 
 void nr_modulation(const uint32_t *in, uint32_t length, uint16_t mod_order, int16_t *out)
 {
-  uint16_t mask = ((1 << mod_order) - 1);
-  int32_t *nr_mod_table32;
+  const uint16_t mask = ((1 << mod_order) - 1);
   int32_t *out32 = (int32_t *)out;
   const uint8_t *in_bytes = (const uint8_t *)in;
   const uint64_t *in64 = (const uint64_t *)in;
   int64_t *out64 = (int64_t *)out;
   uint32_t i = 0;
 
-#if defined(__SSE2__)
-  simde__m128i *nr_mod_table128;
-  simde__m128i *out128;
-#endif
-
   LOG_D(PHY, "nr_modulation: length %d, mod_order %d\n", length, mod_order);
 
   switch (mod_order) {
-#if defined(__SSE2__)
-    case 2:
-      nr_mod_table128 = (simde__m128i *)nr_qpsk_byte_mod_table;
-      out128 = (simde__m128i *)out;
+    case 2: {
+      simde__m128i *nr_mod_table128 = (simde__m128i *)nr_qpsk_byte_mod_table;
+      simde__m128i *out128 = (simde__m128i *)out;
       for (i = 0; i < length / 8; i++)
         out128[i] = nr_mod_table128[in_bytes[i]];
       // the bits that are left out
       i = i * 8 / 2;
-      nr_mod_table32 = (int32_t *)nr_qpsk_mod_table;
+      int32_t *nr_mod_table32 = (int32_t *)nr_qpsk_mod_table;
       while (i < length / 2) {
         const int idx = ((in_bytes[(i * 2) / 8] >> ((i * 2) & 0x7)) & mask);
         out32[i] = nr_mod_table32[idx];
         i++;
       }
+    }
       return;
-#else
-    case 2:
-      nr_mod_table32 = (int32_t *)nr_qpsk_mod_table;
-      for (i = 0; i < length / mod_order; i++) {
-        const int idx = ((in[i * 2 / 32] >> ((i * 2) & 0x1f)) & mask);
-        out32[i] = nr_mod_table32[idx];
-      }
-      return;
-#endif
 
     case 4:
-      out64 = (int64_t *)out;
       for (i = 0; i < length / 8; i++)
         out64[i] = nr_16qam_byte_mod_table[in_bytes[i]];
       // the bits that are left out
@@ -234,10 +218,11 @@ void nr_modulation(const uint32_t *in, uint32_t length, uint16_t mod_order, int1
       }
       return;
 
-    case 8:
-      nr_mod_table32 = (int32_t *)nr_256qam_mod_table;
+    case 8: {
+      int32_t *nr_mod_table32 = (int32_t *)nr_256qam_mod_table;
       for (i = 0; i < length / 8; i++)
         out32[i] = nr_mod_table32[in_bytes[i]];
+    }
       return;
 
     default:
@@ -414,7 +399,7 @@ void nr_layer_mapping(int nbCodes,
       }
 
 #ifdef DEBUG_LAYER_MAPPING
-      printf("\nsymb %d/%d\n", i << 3, n_symbs);
+      printf("\nsymb %d/%u\n", i << 3, n_symbs);
       printf(" layer 0:\t");
       for (int j = 0; j < 8 * 6; j += 6) {
         printf("%d %d ", ((int16_t *)&mod[i << 3])[j], ((int16_t *)&mod[i << 3])[j + 1]);
@@ -765,9 +750,8 @@ void nr_layer_precoder_simd(const int n_layers,
       // Multiplication and shift
       const simde__m256i reals =
           simde_mm256_srai_epi32(simde_mm256_madd_epi16(x, w_c), 15); // (int32_t) .r = (x.r * w.r - x.i * w.i) >> 15
-      const simde__m256i imags = simde_mm256_slli_epi32(
-          simde_mm256_madd_epi16(x, w_s),
-          1); // (int32_t) .i = (x.r * w.i + x.i * w.r) << 1, since higher 16 bit of each 32 bit is taken by blend_epi16
+      const simde__m256i imags =
+          simde_mm256_slli_epi32(simde_mm256_madd_epi16(x, w_s),  1); // (int32_t) .i = (x.r * w.i + x.i * w.r) << 1, since higher 16 bit of each 32 bit is taken by blend_epi16
 
       // Re-arrange to match c16_t format
       const simde__m256i produ = simde_mm256_blend_epi16(reals, imags, 0xAA);

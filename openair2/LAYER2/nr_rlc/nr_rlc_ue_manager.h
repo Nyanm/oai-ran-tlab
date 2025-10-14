@@ -24,18 +24,15 @@
 #include "common/platform_types.h"
 #include "nr_rlc_entity.h"
 #include "common/platform_constants.h"
+#include "common/ngran_types.h"
 
 typedef void nr_rlc_ue_manager_t;
 
-typedef enum nr_rlc_rb_type { NR_RLC_NONE = 0, NR_RLC_SRB = 1, NR_RLC_DRB = 2 } nr_rlc_rb_type;
-
-typedef struct nr_rlc_rb_t {
-  nr_rlc_rb_type type;
-  union {
-    int srb_id;
-    int drb_id;
-  } choice;
-} nr_rlc_rb_t;
+typedef enum {
+  NR_RLC_OP_MODE_SPLIT_GNB,
+  NR_RLC_OP_MODE_MONO_GNB,
+  NR_RLC_OP_MODE_UE,
+} nr_rlc_op_mode_t;
 
 typedef void (*rlf_handler_t)(int rnti);
 
@@ -44,7 +41,7 @@ typedef struct nr_rlc_ue_t {
   nr_rlc_entity_t *srb0;
   nr_rlc_entity_t *srb[3];
   nr_rlc_entity_t *drb[MAX_DRBS_PER_UE];
-  nr_rlc_rb_t lcid2rb[32];
+  nr_lcid_rb_t lcid2rb[32];
   rlf_handler_t rlf_handler;
 } nr_rlc_ue_t;
 
@@ -52,8 +49,9 @@ typedef struct nr_rlc_ue_t {
 /* manager functions                                                   */
 /***********************************************************************/
 
-nr_rlc_ue_manager_t *new_nr_rlc_ue_manager(int gnb_flag);
+nr_rlc_ue_manager_t *new_nr_rlc_ue_manager(nr_rlc_op_mode_t mode);
 
+bool nr_rlc_manager_rlc_is_split(nr_rlc_ue_manager_t *_m);
 int nr_rlc_manager_get_gnb_flag(nr_rlc_ue_manager_t *m);
 
 void nr_rlc_manager_lock(nr_rlc_ue_manager_t *m);

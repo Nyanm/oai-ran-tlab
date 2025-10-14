@@ -171,7 +171,6 @@ int init_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
   NR_DL_FRAME_PARMS *const fp            = &ue->frame_parms;
   NR_UE_COMMON *const common_vars        = &ue->common_vars;
   NR_UE_PRACH **const prach_vars         = ue->prach_vars;
-  NR_UE_SRS **const srs_vars             = ue->srs_vars;
 
   LOG_I(PHY, "Initializing UE vars for gNB TXant %u, UE RXant %u\n", fp->nb_antennas_tx, fp->nb_antennas_rx);
 
@@ -181,8 +180,10 @@ int init_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
   AssertFatal( nb_connected_gNB <= NUMBER_OF_CONNECTED_gNB_MAX, "n_connected_gNB is too large" );
   // init phy_vars_ue
 
-  for (int i = 0; i < fp->Lmax; i++)
+  for (int i = 0; i < fp->Lmax; i++) {
     ue->measurements.ssb_rsrp_dBm[i] = INT_MIN;
+    ue->measurements.ssb_sinr_dB[i] = INT_MIN;
+  }
 
   for (int i = 0; i < 4; i++) {
     ue->rx_gain_max[i] = 135;
@@ -257,14 +258,13 @@ int init_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
   // DLSCH
   for (int gNB_id = 0; gNB_id < ue->n_connected_gNB; gNB_id++) {
     prach_vars[gNB_id] = malloc16_clear(sizeof(NR_UE_PRACH));
-    srs_vars[gNB_id] = malloc16_clear(sizeof(NR_UE_SRS));
-    srs_vars[gNB_id]->active = false;
 
     // ceil((NB_RB*8(max allocation per RB)*2(QPSK))/32)
     ue->nr_csi_info = malloc16_clear(sizeof(nr_csi_info_t));
-    ue->nr_csi_info->csi_rs_generated_signal = malloc16(NR_MAX_NB_PORTS * sizeof(int32_t *));
+    ue->nr_csi_info->csi_rs_generated_signal = malloc16(NR_MAX_NB_PORTS * sizeof(*ue->nr_csi_info->csi_rs_generated_signal));
     for (int i = 0; i < NR_MAX_NB_PORTS; i++) {
-      ue->nr_csi_info->csi_rs_generated_signal[i] = malloc16_clear(fp->samples_per_frame_wCP * sizeof(int32_t));
+      ue->nr_csi_info->csi_rs_generated_signal[i] =
+          malloc16_clear(fp->samples_per_frame_wCP * sizeof(**ue->nr_csi_info->csi_rs_generated_signal));
     }
 
     ue->nr_srs_info = malloc16_clear(sizeof(nr_srs_info_t));
@@ -317,8 +317,6 @@ void term_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
     free_and_zero(ue->nr_csi_info);
 
     free_and_zero(ue->nr_srs_info);
-
-    free_and_zero(ue->srs_vars[gNB_id]);
 
     free_and_zero(ue->prach_vars[gNB_id]);
   }
@@ -486,8 +484,6 @@ void clean_UE_harq(PHY_VARS_NR_UE *UE)
   }
   for (int harq_pid = 0; harq_pid < NR_MAX_ULSCH_HARQ_PROCESSES; harq_pid++) {
     NR_UL_UE_HARQ_t *ul_harq_process = &UE->ul_harq_processes[harq_pid];
-    ul_harq_process->tx_status = NEW_TRANSMISSION_HARQ;
-    ul_harq_process->ULstatus = SCH_IDLE;
     ul_harq_process->round = 0;
   }
 }
@@ -522,17 +518,6 @@ static void sl_generate_psbch_dmrs_qpsk_sequences(PHY_VARS_NR_UE *UE, struct com
     idx = (((sl_dmrs_sequence[(m << 1) >> 5]) >> ((m << 1) & 0x1f)) & 3);
     modulated_dmrs_sym[m].r = mod_table[idx].r;
     modulated_dmrs_sym[m].i = mod_table[idx].i;
-
-#ifdef SL_DEBUG_INIT_DATA
-    printf("m:%d gold seq: %d b0-b1: %d-%d DMRS Symbols: %d %d\n",
-           m,
-           sl_dmrs_sequence[(m << 1) >> 5],
-           (((sl_dmrs_sequence[(m << 1) >> 5]) >> ((m << 1) & 0x1f)) & 1),
-           (((sl_dmrs_sequence[((m << 1) + 1) >> 5]) >> (((m << 1) + 1) & 0x1f)) & 1),
-           modulated_dmrs_sym[m].r,
-           modulated_dmrs_sym[m].i);
-    printf("idx:%d, qpsk_table.r:%d, qpsk_table.i:%d\n", idx, mod_table[idx].r, mod_table[idx].i);
-#endif
   }
 
 #ifdef SL_DUMP_INIT_SAMPLES

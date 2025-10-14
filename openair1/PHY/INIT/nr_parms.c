@@ -85,6 +85,11 @@ static const int nr_ssb_table[][3] = {
     {93, 15, nr_ssb_type_A},
     {94, 15, nr_ssb_type_A},
     {96, 30, nr_ssb_type_C},
+    {100, 15, nr_ssb_type_A},
+    {101, 15, nr_ssb_type_A},
+    {101, 30, nr_ssb_type_C},
+    {102, 30, nr_ssb_type_C},
+    {104, 30, nr_ssb_type_C},
     {254, 15, nr_ssb_type_A},
     {254, 30, nr_ssb_type_C},
     {255, 15, nr_ssb_type_A},
@@ -275,7 +280,7 @@ uint32_t get_samples_slot_timestamp(int slot, const NR_DL_FRAME_PARMS *fp, unsig
     for(unsigned int idx_slot = 0; idx_slot < slot; idx_slot++)
       samp_count += fp->get_samples_per_slot(idx_slot, fp);
   } else {
-    for(unsigned int idx_slot = slot; idx_slot < slot+sl_ahead; idx_slot++)
+    for (unsigned int idx_slot = slot; idx_slot < slot + sl_ahead; idx_slot++)
       samp_count += fp->get_samples_per_slot(idx_slot, fp);
   }
   return samp_count;

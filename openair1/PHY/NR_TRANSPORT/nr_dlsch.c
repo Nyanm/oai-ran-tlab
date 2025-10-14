@@ -468,7 +468,7 @@ static inline void do_txdataF(c16_t **txdataF,
   nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
   while (rb < rel15->rbSize) {
     // get pmi info
-    const int pmi = (pb->num_prgs > 0 && pb->prg_size > 0) ? (pb->prgs_list[(int)rb / pb->prg_size].pm_idx) : 0;
+    const int pmi = (pb->prg_size > 0) ? (pb->prgs_list[(int)rb / pb->prg_size].pm_idx) : 0;
     const int pmi2 = (rb < (rel15->rbSize - 1) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 1) / pb->prg_size].pm_idx) : -1;
 
     // If pmi of next RB and pmi of current RB are the same, we do 2 RB in a row
@@ -600,14 +600,14 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   printf("\nEncoded payload:\n");
   for (int i = 0; i < encoded_length; i += 8) {
     for (int j = 0; j < 8; j++)
-      printf("%d", input_ptr[i + j]);
+      printf("%d", (input_ptr[i >> 3] >> j) & 1);
     printf("\t");
   }
   printf("\n");
 #endif
 
   if (IS_SOFTMODEM_DLSIM)
-    memcpy(harq->f, input_ptr, encoded_length);
+    memcpy(harq->f, input_ptr, (encoded_length + 7) >> 3);
 
   c16_t mod_symbs[rel15->NrOfCodewords][encoded_length] __attribute__((aligned(64)));
   for (int codeWord = 0; codeWord < rel15->NrOfCodewords; codeWord++) {
@@ -680,7 +680,9 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
   // beam number in multi-beam scenario (concurrent beams)
   int bitmap = SL_to_bitmap(rel15->StartSymbolIndex, rel15->NrOfSymbols);
-  int beam_nb = beam_index_allocation(pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
+  int beam_nb = beam_index_allocation(gNB->enable_analog_das,
+                                      pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
+                                      &gNB->gNB_config.analog_beamforming_ve,
                                       &gNB->common_vars,
                                       slot,
                                       frame_parms->symbols_per_slot,
@@ -730,7 +732,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 #endif
     }
     uint32_t dmrs_idx = rel15->rbStart;
-    if (rel15->rnti != SI_RNTI)
+    if (rel15->refPoint == 0)
       dmrs_idx += rel15->BWPStart;
     dmrs_idx *= dmrs_Type == NFAPI_NR_DMRS_TYPE1 ? 6 : 4;
     c16_t txdataF_precoding[rel15->nrOfLayers][symbol_sz] __attribute__((aligned(64)));
@@ -763,11 +765,11 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   }
 
   stop_meas(&gNB->dlsch_precoding_stats);
-  /* output and its parts for each dlsch should be aligned on 64 bytes
-   * should remain a multiple of 64 with enough offset to fit each dlsch
+  /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)
+   * should remain a multiple of 8 * 64 with enough offset to fit each dlsch
    */
   uint32_t size_output_tb = rel15->rbSize * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB * Qm * rel15->nrOfLayers;
-  return ceil_mod(size_output_tb,64);
+  return ((size_output_tb + 511) >> 9) << 6;
 }
 
 void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
@@ -817,15 +819,15 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
     /// CRC, coding, interleaving and rate matching
     AssertFatal(harq->pdu != NULL, "%4d.%2d no HARQ PDU for PDSCH generation\n", msgTx->frame, msgTx->slot);
 
-    /* output and its parts for each dlsch should be aligned on 64 bytes
-     * => size_output is a sum of parts sizes rounded up to a multiple of 64
+    /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)
+     * => size_output is a sum of parts sizes rounded up to a multiple of 8 * 64
      */
     size_t size_output_tb = rel15->rbSize * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB * Qm * rel15->nrOfLayers;
-    size_output += ceil_mod(size_output_tb, 64);
+    size_output += ceil_mod(size_output_tb, 8 * 64);
   }
 
-  unsigned char output[size_output] __attribute__((aligned(64)));
-  bzero(output, size_output);
+  unsigned char output[size_output >> 3] __attribute__((aligned(64)));
+  bzero(output, sizeof(output));
 
   start_meas(dlsch_encoding_stats);
   if (nr_dlsch_encoding(gNB,

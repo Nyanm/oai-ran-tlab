@@ -52,27 +52,25 @@ There is some general information in the [OpenAirInterface Gitlab Wiki](https://
   * IF setups and arbitrary frequencies
   * MIMO
 - [How to run OAI with O-RAN 7.2 FHI](./ORAN_FHI7.2_Tutorial.md)
-- [How to run a 5G-NSA setup](./TESTING_GNB_W_COTS_UE.md)
+- [How to run a 5G-NSA setup](./TESTING_OAI_NSA_COTS_UE.md)
 - [How to run a 4G setup using L1 simulator](./L1SIM.md) _Note: we recommend the RFsimulator_
 - [How to use the L2 simulator](./L2NFAPI.md)
 - [How to use the OAI channel simulator](../openair1/SIMULATION/TOOLS/DOC/channel_simulation.md)
 - [How to use multiple BWPs](./RUN_NR_multiple_BWPs.md)
-- [How to run OAI-VNF and OAI-PNF](./nfapi.md): how to run the nFAPI split,
+- [How to run OAI-VNF and OAI-PNF](./nfapi.md): how to run the FAPI/nFAPI split,
   including some general remarks on FAPI/nFAPI.
 - [How to use the positioning reference signal (PRS)](./RUN_NR_PRS.md)
-- [How to use device-to-device communication (D2D, 4G)](./d2d_emulator_setup.txt)
+- [How to use device-to-device communication (D2D, 4G)](./d2d_emulator_setup.md)
 - [How to run with E2 agent](../openair2/E2AP/README.md)
 - [How to run the physical simulators](./physical-simulators.md)
 - [How to setup OAI with Nvidia Aerial and Foxconn](./Aerial_FAPI_Split_Tutorial.md)
-- [How to setup OAI with AMD T2 Telco card](./LDPC_T2_OFFLOAD_SETUP.md)
+- [How to setup OAI with LDPC accelerators (Xilinx T2/Intel ACCs)](./LDPC_OFFLOAD_SETUP.md)
 - [How to do a handover](./handover-tutorial.md)
 - [How to setup gNB frequency](./gNB_frequency_setup.md)
 
 Legacy unmaintained files:
 - [`L2NFAPI_NOS1.md`](./L2NFAPI_NOS1.md), [`L2NFAPI_S1.md`](./L2NFAPI_S1.md):
   old L2simulator, not valid anymore
-- [`SystemX-tutorial-design.md`](./SystemX-tutorial-design.md): old, high-level
-  documentation
 - [`UL_MIMO.txt`](./UL_MIMO.txt): UL-MIMO specific notes
 
 # Designs
@@ -86,9 +84,7 @@ Legacy unmaintained files:
 - [Information on gNB MAC](./MAC/mac-usage.md)
 - [Information on gNB RRC](./RRC/rrc-usage.md)
 - [Information on analog beamforming implementation](./analog_beamforming.md)
-
-Legacy unmaintained files:
-- [`5Gnas.md`](./5Gnas.md)
+- [Information on the UE 5G NAS implementation](./5Gnas.md)
 
 # Building and running from images
 
@@ -108,6 +104,7 @@ Legacy unmaintained files:
 - The [shared object loader](../common/utils/DOC/loader.md)
 - The [threadpool](../common/utils/threadPool/thread-pool.md) used in L1
 - The [LDPC implementation](../openair1/PHY/CODING/DOC/LDPCImplementation.md) is a shared library
+- The [time management](time_management.md) module
 
 ## Radios
 
@@ -119,6 +116,7 @@ Some directories under `radio` contain READMEs:
 - [IQPlayer](../radio/iqplayer/DOC/iqrecordplayer_usage.md), and [general documentation](./iqrecordplayer_usage.md)
 - [fhi_72](../radio/fhi_72/README.md)
 - [vrtsim](../radio/vrtsim/README.md)
+- [rf_emulator](../radio/emulator/README.md)
 
 The other SDRs (AW2S, LimeSDR, ...) have no READMEs.
 
@@ -131,10 +129,14 @@ The other SDRs (AW2S, LimeSDR, ...) have no READMEs.
 # Testing
 
 - [UnitTests.md](./UnitTests.md) explains the unit testing setup
+- Component tests are under `tests/`. Currently, there is a simple CU-UP
+  tester, see the corresponding [README.md](../tests/nr-cuup/README.md).
 - [TESTBenches.md](./TESTBenches.md) lists the CI setup and links to pipelines
+- The CI setup uses a [custom framework](../ci-scripts/README.md) to run
+  end-to-end tests.
 
 # Developer tools
 
 - [formatting](../tools/formatting/README.md) is a clang-format error detection tool
 - [iwyu](../tools/iwyu/README.md) is a tool to detect `#include` errors
-- [docker-dev-env](../tools/docker-dev-env/README.md) is a ubuntu22 docker development environment
+- [docker-dev-env](../tools/docker-dev-env/README.md) is a ubuntu24 docker development environment

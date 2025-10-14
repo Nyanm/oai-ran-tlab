@@ -35,6 +35,8 @@ def gitCommitAuthorEmailAddr
 // list of failing stages
 def failingStages = ""
 
+OAI_Registry = "gracehopper3-oai.sboai.cs.eurecom.fr"
+
 pipeline {
   agent {
     label nodeExecutor
@@ -175,6 +177,28 @@ pipeline {
             }
           }
         }
+        stage ("Ubuntu-Jetson-Image-Builder") {
+          steps {
+            script {
+              triggerSlaveJob ('RAN-Ubuntu-Jetson-Image-Builder', 'Ubuntu-Jetson-Image-Builder')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                ubuntuJetsonBuildStatus = finalizeSlaveJob('RAN-Ubuntu-Jetson-Image-Builder')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += ubuntuJetsonBuildStatus
+              }
+            }
+          }
+        }
         stage ("RHEL-Cluster-Image-Builder") {
           steps {
             script {
@@ -246,11 +270,11 @@ pipeline {
     stage ("Image Test Processes") {
       when { expression {doBuild} }
       parallel {
-        stage ("PhySim-Cluster") {
-          when { expression {do4Gtest || do5Gtest || do5GUeTest} }
+        stage ("PhySim-Cluster-5G") {
+          when { expression {do5Gtest || do5GUeTest} }
           steps {
             script {
-              triggerSlaveJob ('RAN-PhySim-Cluster', 'PhySim-Cluster')
+              triggerSlaveJob ('RAN-PhySim-Cluster-5G', 'PhySim-Cluster-5G')
             }
           }
           post {
@@ -258,13 +282,59 @@ pipeline {
               script {
                 // Using a unique variable name for each test stage to avoid overwriting on a global variable
                 // due to parallel-time concurrency
-                physimStatus = finalizeSlaveJob('RAN-PhySim-Cluster')
+                physim5GStatus = finalizeSlaveJob('RAN-PhySim-Cluster-5G')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
-                failingStages += physimStatus
+                failingStages += physim5GStatus
+              }
+            }
+          }
+        }
+        stage ("PhySim-GraceHopper-5G") {
+          when { expression {do5Gtest || do5GUeTest} }
+          steps {
+            script {
+              triggerSlaveJob ('RAN-PhySim-GraceHopper-5G', 'PhySim-GraceHopper-5G')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                physimGH5GStatus = finalizeSlaveJob('RAN-PhySim-GraceHopper-5G')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += physimGH5GStatus
+              }
+            }
+          }
+        }
+        stage ("PhySim-Cluster-4G") {
+          when { expression {do4Gtest} }
+          steps {
+            script {
+              triggerSlaveJob ('RAN-PhySim-Cluster-4G', 'PhySim-Cluster-4G')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                physim4GStatus = finalizeSlaveJob('RAN-PhySim-Cluster-4G')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += physim4GStatus
               }
             }
           }
@@ -638,6 +708,29 @@ pipeline {
             }
           }
         }
+        stage ("SA-Handover-CN5G") {
+          when { expression {do5Gtest} }
+          steps {
+            script {
+              triggerSlaveJob ('RAN-SA-Handover-CN5G', 'SA-Handover-CN5G')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                saHandoverStatus = finalizeSlaveJob('RAN-SA-Handover-CN5G')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += saHandoverStatus
+              }
+            }
+          }
+        }
         stage ("SA-OAIUE-CN5G") {
           when { expression {do5Gtest || do5GUeTest} }
           steps {
@@ -743,11 +836,11 @@ def triggerCN5GSlaveJob (jobName, gitlabStatusName) {
     shortenShaOne = sh returnStdout: true, script: 'git log -1 --pretty=format:"%h" --abbrev=8 ' + env.gitlabMergeRequestLastCommit
     shortenShaOne = shortenShaOne.trim()
     branchName = env.gitlabSourceBranch.replaceAll("/", "-").trim()
-    fullRanTag = 'porcepix.sboai.cs.eurecom.fr/oai-gnb:' + env.gitlabSourceBranch + '-' + shortenShaOne
+    fullRanTag = OAI_Registry + '/oai-gnb:' + env.gitlabSourceBranch + '-' + shortenShaOne
   } else {
     shortenShaOne = sh returnStdout: true, script: 'git log -1 --pretty=format:"%h" --abbrev=8 ' + env.GIT_COMMIT
     shortenShaOne = shortenShaOne.trim()
-    fullRanTag = 'porcepix.sboai.cs.eurecom.fr/oai-gnb:develop-' + shortenShaOne
+    fullRanTag = OAI_Registry + '/oai-gnb:develop-' + shortenShaOne
   }
   // Workaround for the "cancelled" GitLab pipeline notification
   // The slave job is triggered with the propagate false so the following commands are executed
@@ -812,11 +905,13 @@ def finalizeSlaveJob(jobName) {
         selector: lastCompleted())
       if (fileExists(fileName)) {
         sh "sed -i -e 's#TEMPLATE_BUILD_TIME#${JOB_TIMESTAMP}#' ${fileName}"
-        archiveArtifacts artifacts: fileName
-        // BUILD_URL is like  http://server:port/jenkins/job/foo/15/
-        // no need to add a prefixed '/'
-        artifactUrl += 'artifact/' + fileName
+      } else {
+        sh "echo \"could not copy results from ${jobName}, please check pipeline ${BUILD_URL}\" > ${fileName}"
       }
+      archiveArtifacts artifacts: fileName
+      // BUILD_URL is like  http://server:port/jenkins/job/foo/15/
+      // no need to add a prefixed '/'
+      artifactUrl += 'artifact/' + fileName
     }
     artifactUrl = "\n * [${jobName}](${artifactUrl})"
     return artifactUrl

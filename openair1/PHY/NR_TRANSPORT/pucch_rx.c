@@ -41,7 +41,6 @@
 #include "PHY/defs_nr_common.h"
 #include "PHY/defs_gNB.h"
 #include "PHY/sse_intrin.h"
-#include "PHY/NR_UE_TRANSPORT/pucch_nr.h"
 #include "PHY/CODING/nrSmallBlock/nr_small_block_defs.h"
 #include "PHY/NR_TRANSPORT/nr_transport_common_proto.h"
 #include "PHY/NR_TRANSPORT/nr_transport_proto.h"
@@ -57,10 +56,7 @@
 
 //#define DEBUG_NR_PUCCH_RX 1
 
-void nr_fill_pucch(PHY_VARS_gNB *gNB,
-                   int frame,
-                   int slot,
-                   nfapi_nr_pucch_pdu_t *pucch_pdu)
+void nr_fill_pucch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pucch_pdu_t *pucch_pdu)
 {
   bool found = false;
   for (int i = 0; i < gNB->max_nb_pucch; i++) {
@@ -73,7 +69,13 @@ void nr_fill_pucch(PHY_VARS_gNB *gNB,
       if (gNB->common_vars.beam_id) {
         int fapi_beam_idx = pucch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
         int bitmap = SL_to_bitmap(pucch_pdu->start_symbol_index, pucch_pdu->nr_of_symbols);
-        pucch->beam_nb = beam_index_allocation(fapi_beam_idx, &gNB->common_vars, slot, NR_NUMBER_OF_SYMBOLS_PER_SLOT, bitmap);
+        pucch->beam_nb = beam_index_allocation(gNB->enable_analog_das,
+                                               fapi_beam_idx,
+                                               &gNB->gNB_config.analog_beamforming_ve,
+                                               &gNB->common_vars,
+                                               slot,
+                                               NR_NUMBER_OF_SYMBOLS_PER_SLOT,
+                                               bitmap);
       }
       memcpy((void *)&pucch->pucch_pdu, (void *)pucch_pdu, sizeof(nfapi_nr_pucch_pdu_t));
       LOG_D(PHY,
@@ -915,8 +917,6 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
                       nfapi_nr_pucch_pdu_t* pucch_pdu)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
-  const simde__m256i conj256 = simde_mm256_set_epi16(-1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1);
-
   //pucch_GroupHopping_t pucch_GroupHopping = pucch_pdu->group_hop_flag + (pucch_pdu->sequence_hop_flag<<1);
   const int nb_symbols=pucch_pdu->nr_of_symbols;
 
@@ -932,12 +932,13 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
 
   int l2 = pucch_pdu->start_symbol_index;
   int soffset = (slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
+  uint16_t starting_prb = pucch_pdu->prb_start + pucch_pdu->bwp_start;
   int re_offset[nb_symbols];
-  re_offset[0] =
-      (12 * (pucch_pdu->prb_start + pucch_pdu->bwp_start) + frame_parms->first_carrier_offset) % frame_parms->ofdm_symbol_size;
-  if (nb_symbols==2) {
-    if (pucch_pdu->freq_hop_flag )
-      re_offset[1] = (12*(pucch_pdu->second_hop_prb+pucch_pdu->bwp_start) + frame_parms->first_carrier_offset) % frame_parms->ofdm_symbol_size ;
+  re_offset[0] = (12 * starting_prb + frame_parms->first_carrier_offset) % frame_parms->ofdm_symbol_size;
+  if (nb_symbols == 2) {
+    if (pucch_pdu->freq_hop_flag)
+      re_offset[1] = (12 * (pucch_pdu->second_hop_prb + pucch_pdu->bwp_start) + frame_parms->first_carrier_offset)
+                     % frame_parms->ofdm_symbol_size;
     else
       re_offset[1] = re_offset[0];
   }
@@ -1076,12 +1077,12 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
     printf("slot %d, start_symbol_index %d, symbol %d, dmrs_scrambling_id %d\n",
            slot,pucch_pdu->start_symbol_index,symb,pucch_pdu->dmrs_scrambling_id);
 #endif
-    uint32_t *sGold = gold_cache(x2, pucch_pdu->prb_start / 4 + ngroup / 2);
+    uint32_t *sGold = gold_cache(x2, starting_prb / 4 + ngroup / 2);
     // Compute pilot conjugate
     c16_t pil_dmrs[nb_re_dmrs] __attribute__((aligned(32)));
-    uint8_t *sGold8 = (uint8_t *)(sGold + pucch_pdu->prb_start / 4);
+    uint8_t *sGold8 = (uint8_t *)(sGold + starting_prb / 4);
     for (int group = 0; group < nb_re_dmrs; group += 4)
-      *(simde__m128i *)(pil_dmrs + group) = simde_mm_sign_epi16(byte2m128i[*sGold8++], *(simde__m128i *)&conj256);
+      *(simde__m128i *)(pil_dmrs + group) = oai_mm_conj(byte2m128i[*sGold8++]);
 
     // Compute delay
     c16_t ch_ls[128] __attribute__((aligned(32))) = {0};
@@ -1160,7 +1161,7 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
       for (simde__m256i *ptr = (simde__m256i *)r_ext[aa][symb], *ptr2 = (simde__m256i *)r_ext2[aa][symb]; pil_ptr < end;
            ptr++, pil_ptr++, ptr2++) {
         simde__m256i tmp = simde_mm256_srai_epi16(*ptr, scaling);
-        *ptr2 = simde_mm256_sign_epi16(simde_mm256_sign_epi16(simde_mm256_shuffle_epi8(tmp, swap), *pil_ptr), conj256);
+        *ptr2 = oai_mm256_conj(simde_mm256_sign_epi16(simde_mm256_shuffle_epi8(tmp, swap), *pil_ptr));
         *ptr = simde_mm256_sign_epi16(tmp, *pil_ptr);
       }
     }

@@ -148,6 +148,7 @@
 // Define the UE L2 states with X-Macro
 #define NR_UE_L2_STATES \
   UE_STATE(UE_NOT_SYNC) \
+  UE_STATE(UE_BARRED) \
   UE_STATE(UE_RECEIVING_SIB) \
   UE_STATE(UE_PERFORMING_RA) \
   UE_STATE(UE_CONNECTED) \
@@ -196,7 +197,10 @@ typedef enum {
   GO_TO_IDLE,
   DETACH,
   T300_EXPIRY,
-  RE_ESTABLISHMENT
+  RE_ESTABLISHMENT,
+  RRC_SETUP_REESTAB_RESUME,
+  UL_SYNC_LOST_T430_EXPIRED,
+  REJECT,
 } NR_UE_MAC_reset_cause_t;
 
 typedef struct {
@@ -300,6 +304,26 @@ typedef struct {
 } NR_pdcch_order_config_t;
 
 typedef struct {
+  NR_PUCCH_Resource_t *pucch_resource;
+  uint32_t ack_payload;
+  uint8_t sr_payload;
+  uint32_t csi_part1_payload;
+  uint32_t csi_part2_payload;
+  int n_sr;
+  int n_csi;
+  int n_harq;
+  int n_CCE;
+  int N_CCE;
+  int initial_pucch_id;
+} PUCCH_sched_t;
+
+typedef struct {
+  int sched_frame;
+  int sched_slot;
+  PUCCH_sched_t pucch_sched;
+} RA_PUCCH_SCHED_t;
+
+typedef struct {
   // pointer to RACH config dedicated
   NR_RACH_ConfigDedicated_t *rach_ConfigDedicated;
   /// state of RA procedure
@@ -350,6 +374,8 @@ typedef struct {
   int preambleRxTargetPower;
   int msg3_deltaPreamble;
   int preambleReceivedTargetPower_config;
+  RA_PUCCH_SCHED_t *ra_pucch;
+
   /// Random-access Contention Resolution Timer
   NR_timer_t contention_resolution_timer;
   /// Transmitted UE Contention Resolution Identifier
@@ -400,23 +426,9 @@ typedef struct {
 } RAR_grant_t;
 
 typedef struct {
-  NR_PUCCH_Resource_t *pucch_resource;
-  uint32_t ack_payload;
-  uint8_t sr_payload;
-  uint32_t csi_part1_payload;
-  uint32_t csi_part2_payload;
-  int n_sr;
-  int n_csi;
-  int n_harq;
-  int n_CCE;
-  int N_CCE;
-  int initial_pucch_id;
-} PUCCH_sched_t;
-
-typedef struct {
-  uint32_t ssb_index;
   /// SSB RSRP in dBm
-  short ssb_rsrp_dBm;
+  int ssb_rsrp_dBm;
+  float_t ssb_sinr_dB;
 } NR_SSB_meas_t;
 
 typedef enum ta_type {
@@ -449,6 +461,8 @@ typedef struct nr_lcordered_info_s {
   uint32_t bucket_size;
   bool sr_DelayTimerApplied;
   bool lc_SRMask;
+  nr_lcid_rb_t rb;
+  bool rb_suspended;
 } nr_lcordered_info_t;
 
 typedef struct {
@@ -456,17 +470,18 @@ typedef struct {
 } __attribute__ ((__packed__)) NR_CCCH_PDU;
 
 typedef struct {
-  NR_SearchSpace_t *otherSI_SS;
-  NR_SearchSpace_t *ra_SS;
-  NR_SearchSpace_t *paging_SS;
+  long otherSI_SS_id;
+  long ra_SS_id;
+  long paging_SS_id;
   NR_ControlResourceSet_t *commonControlResourceSet;
   A_SEQUENCE_OF(NR_ControlResourceSet_t) list_Coreset;
+  A_SEQUENCE_OF(NR_SearchSpace_t) list_common_SS;
   A_SEQUENCE_OF(NR_SearchSpace_t) list_SS;
 } NR_BWP_PDCCH_t;
 
 typedef struct csi_payload {
-  uint32_t part1_payload;
-  uint32_t part2_payload;
+  uint64_t part1_payload;
+  uint64_t part2_payload;
   int p1_bits;
   int p2_bits;
 } csi_payload_t;
@@ -520,12 +535,21 @@ typedef struct {
 } si_schedInfo_t;
 
 typedef struct ntn_timing_advance_components {
+  int epoch_sfn;
+  int epoch_subframe;
+
   // N_common_ta_adj represents common round-trip-time between gNB and SAT received in SIB19 (ms)
   double N_common_ta_adj;
+  // drift rate of common ta in µs/s
+  double N_common_ta_drift;
+  // change rate of common ta drift in µs/s²
+  double N_common_ta_drift_variant;
   // N_UE_TA_adj calculated round-trip-time between UE and SAT (ms)
   double N_UE_TA_adj;
-  // drift rate of common ta in µs/s
-  double ntn_ta_commondrift;
+  // drift rate of N_UE_TA in µs/s
+  double N_UE_TA_drift;
+  // change rate of N_UE_TA drift in µs/s²
+  double N_UE_TA_drift_variant;
   // cell scheduling offset expressed in terms of 15kHz SCS
   long cell_specific_k_offset;
 
@@ -539,7 +563,7 @@ typedef struct NR_UE_MAC_INST_s {
   int servCellIndex;
   long physCellId;
   bool get_sib1;
-  bool get_otherSI;
+  bool get_otherSI[MAX_SI_GROUPS];
   NR_MIB_t *mib;
 
   si_schedInfo_t si_SchedInfo;
@@ -577,8 +601,8 @@ typedef struct NR_UE_MAC_INST_s {
 
   nr_csi_report_t csi_report_template[MAX_CSI_REPORTCONFIG];
 
-  /// measurements from CSI-RS
-  fapi_nr_csirs_measurements_t csirs_measurements;
+  /// measurements from SS or CSI-RS
+  fapi_nr_l1_measurements_t l1_measurements;
 
   ////	FAPI-like interface message
   fapi_nr_ul_config_request_t *ul_config_request;
@@ -608,7 +632,7 @@ typedef struct NR_UE_MAC_INST_s {
   uint8_t ssb_subcarrier_offset;
   int ssb_start_subcarrier;
 
-  NR_SSB_meas_t ssb_measurements;
+  NR_SSB_meas_t ssb_measurements[MAX_NB_SSB];
 
   dci_pdu_rel15_t def_dci_pdu_rel15[NR_MAX_SLOTS_PER_FRAME][8];
 
@@ -637,6 +661,7 @@ typedef struct NR_UE_MAC_INST_s {
   bool msg3_C_RNTI;
   pthread_mutex_t if_mutex;
   ue_mac_stats_t stats;
+  notifiedFIFO_t input_nf;
 } NR_UE_MAC_INST_t;
 
 static inline int GET_NTN_UE_K_OFFSET(const ntn_timing_advance_componets_t *ntn_ta, int scs)
@@ -644,14 +669,24 @@ static inline int GET_NTN_UE_K_OFFSET(const ntn_timing_advance_componets_t *ntn_
   return (int)ntn_ta->cell_specific_k_offset << scs;
 }
 
-static inline double GET_COMPLETE_TIME_ADVANCE_MS(const ntn_timing_advance_componets_t *ntn_ta)
+static inline long GET_DURATION_RX_TO_TX(const ntn_timing_advance_componets_t *ntn_ta, int scs)
+{
+  return NR_UE_CAPABILITY_SLOT_RX_TO_TX + (ntn_ta->cell_specific_k_offset << scs);
+}
+
+static inline double get_total_TA_ms(const ntn_timing_advance_componets_t *ntn_ta)
 {
   return ntn_ta->N_common_ta_adj + ntn_ta->N_UE_TA_adj;
 }
 
-static inline long GET_DURATION_RX_TO_TX(const ntn_timing_advance_componets_t *ntn_ta, int scs)
+static inline double get_total_TA_drift(const ntn_timing_advance_componets_t *ntn_ta)
 {
-  return NR_UE_CAPABILITY_SLOT_RX_TO_TX + (ntn_ta->cell_specific_k_offset << scs);
+  return ntn_ta->N_common_ta_drift + ntn_ta->N_UE_TA_drift;
+}
+
+static inline double get_total_TA_drift_variant(const ntn_timing_advance_componets_t *ntn_ta)
+{
+  return ntn_ta->N_common_ta_drift_variant + ntn_ta->N_UE_TA_drift_variant;
 }
 
 /*@}*/

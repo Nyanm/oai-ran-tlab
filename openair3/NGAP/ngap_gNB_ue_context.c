@@ -60,8 +60,11 @@ static int ngap_gNB_compare_gNB_ue_ngap_id(struct ngap_gNB_ue_context_s *p1, str
 RB_GENERATE(ngap_ue_map, ngap_gNB_ue_context_s, entries,
             ngap_gNB_compare_gNB_ue_ngap_id);
 
-void ngap_store_ue_context(struct ngap_gNB_ue_context_s *ue_desc_p)
+void ngap_store_ue_context(const ngap_gNB_ue_context_t *ue)
 {
+  LOG_I(NGAP, "Create UE context (ID %d) for AMF '%s' (assoc_id %d)\n", ue->gNB_ue_ngap_id, ue->amf_ref->amf_name, ue->amf_ref->assoc_id);
+  ngap_gNB_ue_context_t *ue_desc_p = calloc_or_fail(1, sizeof(*ue_desc_p));
+  *ue_desc_p = *ue;
   if (RB_INSERT(ngap_ue_map, &ngap_ue_head, ue_desc_p))
     LOG_E(NGAP, "Bug in UE uniq number allocation %u, we try to add a existing UE\n", ue_desc_p->gNB_ue_ngap_id);
   return;
@@ -70,6 +73,12 @@ void ngap_store_ue_context(struct ngap_gNB_ue_context_s *ue_desc_p)
 struct ngap_gNB_ue_context_s *ngap_get_ue_context(uint32_t gNB_ue_ngap_id)
 {
   ngap_gNB_ue_context_t temp = {.gNB_ue_ngap_id = gNB_ue_ngap_id};
+  return RB_FIND(ngap_ue_map, &ngap_ue_head, &temp);
+}
+
+ngap_gNB_ue_context_t *ngap_get_ue_context_from_amf_ue_ngap_id(uint32_t amf_ue_ngap_id)
+{
+  ngap_gNB_ue_context_t temp = {.amf_ue_ngap_id = amf_ue_ngap_id};
   return RB_FIND(ngap_ue_map, &ngap_ue_head, &temp);
 }
 

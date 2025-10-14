@@ -49,16 +49,25 @@ typedef enum {
   NFAPI_NR_FORMAT_0_1_AND_1_1,
 } nfapi_nr_dci_formats_e;
 
+typedef enum {
+  NFAPI_NR_CSI_MEAS,
+  NFAPI_NR_SS_MEAS
+} nfapi_nr_meas_type_e;
 
 typedef struct {
-  uint32_t rsrp;
+  uint32_t gNB_index;
+  uint16_t Nid_cell;
+  nfapi_nr_meas_type_e meas_type;
+  bool is_neighboring_cell;
+  int ssb_index;
   int rsrp_dBm;
+  float sinr_dB;  
   uint8_t rank_indicator;
   uint16_t i1;
   uint8_t i2;
   uint8_t cqi;
   rlm_t radiolink_monitoring;
-} fapi_nr_csirs_measurements_t;
+} fapi_nr_l1_measurements_t;
 
 typedef struct {
   /// frequency_domain_resource;
@@ -126,7 +135,6 @@ typedef struct {
   uint8_t ssb_length;
   uint16_t cell_id;
   uint16_t ssb_start_subcarrier;
-  short rsrp_dBm;
   long arfcn;
   rlm_t radiolink_monitoring; // -1 no monitoring, 0 out_of_sync, 1 in_sync
 } fapi_nr_ssb_pdu_t;
@@ -143,7 +151,7 @@ typedef struct {
     fapi_nr_pdsch_pdu_t pdsch_pdu;
     fapi_nr_ssb_pdu_t ssb_pdu;
     fapi_nr_sib_pdu_t sib_pdu;
-    fapi_nr_csirs_measurements_t csirs_measurements;
+    fapi_nr_l1_measurements_t l1_measurements;
   };
 } fapi_nr_rx_indication_body_t;
 
@@ -555,16 +563,18 @@ typedef struct {
 } fapi_nr_ta_command_pdu;
 
 typedef struct {
-  // N_common_ta_adj represents common round-trip-time between gNB and SAT received in SIB19 (ms)
-  double N_common_ta_adj;
-  // N_UE_TA_adj calculated round-trip-time between UE and SAT (ms)
-  double N_UE_TA_adj;
-  // drift rate of common ta in µs/s
-  double ntn_ta_commondrift;
+  int epoch_sfn;
+  int epoch_subframe;
+
   // cell scheduling offset expressed in terms of 15kHz SCS
   long cell_specific_k_offset;
 
+  // ntn_total_time_advance_ms represents the complete round-trip-time between gNB and UE via SAT
   double ntn_total_time_advance_ms;
+  // drift rate of ntn_total_time_advance_ms in µs/s
+  double ntn_total_time_advance_drift;
+  // change rate of ntn_total_time_advance_ms drift in µs/s²
+  double ntn_total_time_advance_drift_variant;
 } fapi_nr_dl_ntn_config_command_pdu;
 
 typedef struct {

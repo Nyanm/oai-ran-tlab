@@ -32,6 +32,7 @@
 #include "nr_nas_msg.h"
 #include <netinet/in.h>
 #include "NR_NAS_defs.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,6 +50,8 @@
 #include "RegistrationAccept.h"
 #include "SORTransparentContainer.h"
 #include "FGSIdentityResponse.h"
+#include "fgmm_authentication_request.h"
+#include "fgmm_identity_request.h"
 #include "T.h"
 #include "aka_functions.h"
 #include "assertions.h"
@@ -64,19 +67,23 @@
 #include "secu_defs.h"
 #include "utils.h"
 #include "openair2/SDAP/nr_sdap/nr_sdap.h"
+#include "openair2/SDAP/nr_sdap/nr_sdap_entity.h"
 #include "fgs_nas_utils.h"
 #include "fgmm_service_accept.h"
+#include "fgmm_service_reject.h"
+#include "fgmm_authentication_reject.h"
+#include "ds/byte_array.h"
+#include "key_nas_deriver.h"
+#include "nr-uesoftmodem.h"
 
-#define MAX_NAS_UE 4
-
-static nr_ue_nas_t nr_ue_nas[MAX_NAS_UE] = {0};
+static nr_ue_nas_t nr_ue_nas[MAX_NUM_NR_UE_INST] = {0};
 
 #define FOREACH_STATE(TYPE_DEF)                  \
   TYPE_DEF(NAS_SECURITY_NO_SECURITY_CONTEXT, 0)  \
-  TYPE_DEF(NAS_SECURITY_NEW_SECURITY_CONTEXT, 1) \
-  TYPE_DEF(NAS_SECURITY_UNPROTECTED, 2)          \
-  TYPE_DEF(NAS_SECURITY_INTEGRITY_FAILED, 3)     \
-  TYPE_DEF(NAS_SECURITY_INTEGRITY_PASSED, 4)     \
+  TYPE_DEF(NAS_SECURITY_UNPROTECTED, 1)          \
+  TYPE_DEF(NAS_SECURITY_INTEGRITY_PASSED, 2)     \
+  TYPE_DEF(NAS_SECURITY_NEW_SECURITY_CONTEXT, 3) \
+  TYPE_DEF(NAS_SECURITY_INTEGRITY_FAILED, 4)     \
   TYPE_DEF(NAS_SECURITY_BAD_INPUT, 5)
 
 const char *nr_release_cause_desc[] = {"RRC_CONNECTION_FAILURE", "RRC_RESUME_FAILURE", "OTHER"};
@@ -126,34 +133,255 @@ static const char *print_info(uint8_t id, const text_info_t *array, uint8_t arra
   return "N/A";
 }
 
-static security_state_t nas_security_rx_process(nr_ue_nas_t *nas, uint8_t *pdu_buffer, int pdu_length)
+/** @brief Check whether a message belongs to the list of messages that
+ *  are allowed to be integrity unprotected (4.4.4.2 3GPP TS 24.501) */
+static bool unprotected_allowed(byte_array_t buffer, fgs_nas_msg_t msg_type)
+{
+  switch (msg_type) {
+    case FGS_IDENTITY_REQUEST: // check on SUCI done in the handler
+    case FGS_AUTHENTICATION_REQUEST:
+    case FGS_AUTHENTICATION_RESULT:
+    case FGS_AUTHENTICATION_REJECT:
+    case FGS_DEREGISTRATION_ACCEPT_UE_ORIGINATING: // for non switch off: deregistration type IE set to NORMAL_DEREGISTRATION
+      return true;
+    case FGS_REGISTRATION_REJECT:
+    case FGS_SERVICE_REJECT:
+      // unprotected if the 5GMM cause is not #76
+      return buffer.buf[4] != Not_authorized_for_this_CAG_or_authorized_for_CAG_cells_only;
+    default:
+      return false;
+  }
+}
+
+/**
+ * @brief Get the MAC of a Security Protected NAS message
+ * @param[in] pdu_buffer The buffer containing the NAS message
+ * @param[in] pdu_length The length of the NAS message
+ * @param[out] mac The MAC of the NAS message
+ * @return true if the MAC was successfully extracted, false otherwise
+ */
+bool nas_security_get_mac(uint8_t *pdu_buffer, int pdu_length, uint8_t *mac)
+{
+  /* Check for Security Protected Header */
+  /* at least 8 bytes for Security Protected MM Message */
+  if (pdu_length < 8)
+    return false;
+
+  /* Only message type, that is not protected (c.f.
+     TS 24.501 9.3 Security Header Type) */
+  if ((Security_header_t)pdu_buffer[1] == PLAIN_5GS_MSG)
+    return false;
+
+  /* Get the MAC [EPD][SecHdr][MAC0]..[MAC3] - success */
+  for (int i = 0; i < 4; i++)
+    mac[i] = pdu_buffer[2 + i];
+  return true;
+}
+
+/*
+ * @brief Get the Security Header of a NAS message
+ * @param[in] msg The buffer containing the NAS message
+ * @param[in] msg_length The length of the NAS message
+ * @param[out] sec_hdr The Security Header of the NAS message
+ * @return true if the Security Header was successfully extracted, false otherwise
+ */
+bool nas_security_get_sec_hdr(uint8_t *msg, int msg_length, Security_header_t *sec_hdr)
+{
+  /* Shortest message is [EPD][SecHdrType][Payl]*/
+  if (msg_length < 3) {
+    LOG_E(NAS, "Invalid NAS message length %d\n", msg_length);
+    return false;
+  }
+
+  /* Get the SecHdr and check for validity */
+  uint8_t sec_hdr_type = msg[1] & 0x0f;
+  if (sec_hdr_type > INTEGRITY_PROTECTED_AND_CIPHERED_WITH_NEW_SECU_CTX) {
+    LOG_E(NAS, "Invalid Security Header Type %d\n", sec_hdr_type);
+    return false;
+  }
+
+  /* Check ok. */
+  *sec_hdr = (Security_header_t)sec_hdr_type;
+  return true;
+}
+
+/*
+ * @brief Compute the MAC of a NAS message
+ * @param[in] nas The NAS context
+ * @param[in] pdu_buffer The buffer containing the NAS message
+ * @param[in] is_uplink True if the message is uplink, false Downlink
+ * @param[in] is3gpp_access True if the message is 3GPP access, false otherwise
+ * @param[in] pdu_length The length of the NAS message
+ * @param[out] mac The MAC of the NAS message
+ */
+static void nas_security_compute_mac(nr_ue_nas_t *nas,
+                                     byte_array_t buffer,
+                                     const bool is_uplink,
+                                     const bool is3gpp_access,
+                                     uint8_t *mac)
+{
+  uint8_t *buf = buffer.buf + SECURITY_PROTECTED_5GS_NAS_MESSAGE_HEADER_LENGTH - 1;
+  int len = buffer.len - SECURITY_PROTECTED_5GS_NAS_MESSAGE_HEADER_LENGTH + 1;
+
+  /* Compute the MAC */
+  nas_stream_cipher_t stream_cipher;
+  stream_cipher.context = nas->security_container->integrity_context;
+
+  /* Select the right count in the context */
+  if (is_uplink)
+    stream_cipher.count = nas->security.nas_count_ul;
+  else
+    stream_cipher.count = nas->security.nas_count_dl;
+
+  /* 3GPP access is 1, non-3GPP access is 2 - see 3GPP TS 33.501 6.4.2.2 */
+  stream_cipher.bearer = is3gpp_access ? 1 : 2;
+
+  /* Configure Direction for MAC protection */
+  stream_cipher.direction = is_uplink ? 0 : 1;
+
+  /* Possibly encrypted message  */
+  stream_cipher.message = buf;
+
+  /* length in bits */
+  stream_cipher.blength = len << 3;
+
+  stream_compute_integrity(nas->security_container->integrity_algorithm, &stream_cipher, mac);
+}
+
+/*
+ * @brief: Decrypt the payload of a NAS message. The buffer is modified in place
+ * @param[in] nas The NAS context
+ * @param[in] pdu_buffer The buffer containing the full (header + payload) NAS message
+ * @param[in] is_uplink True if the message is uplink, false Downlink
+ * @param[in] is3gpp_access True if the message is 3GPP access, false otherwise
+ * @param[in] pdu_length The length of the NAS message
+ */
+static void nas_security_decrypt_payload(nr_ue_nas_t *nas, byte_array_t buffer, const bool is_uplink, const bool is3gpp_access)
+{
+  Security_header_t sec_hdr;
+
+  if (!nas_security_get_sec_hdr(buffer.buf, buffer.len, &sec_hdr)) {
+    LOG_E(NAS, "Failed to get Security Header\n");
+    return;
+  }
+
+  /* Nothing to do for unencrypted msgs */
+  if (sec_hdr == PLAIN_5GS_MSG || sec_hdr == INTEGRITY_PROTECTED) {
+    return;
+  }
+
+  /* Get integrity keys, and algorithms */
+  nas_stream_cipher_t stream_cipher;
+  stream_cipher.context = nas->security_container->ciphering_context;
+
+  /* Use the estimated count the right count in the context */
+  stream_cipher.count = nas->security.nas_count_dl;
+  /* 3GPP access is 1, non-3GPP access is 2 - see 3GPP TS 33.501 6.4.2.2 */
+  stream_cipher.bearer = is3gpp_access ? 1 : 2;
+
+  /* Decryption only in downlink direction */
+  stream_cipher.direction = 1;
+
+  /* [EPD][SHR][MAC0]..[MAC3][PDU...]*/
+  uint8_t *plain_payload = buffer.buf + SECURITY_PROTECTED_5GS_NAS_MESSAGE_HEADER_LENGTH;
+  stream_cipher.message = plain_payload;
+
+  /* length in bits */
+  int plain_length = buffer.len - SECURITY_PROTECTED_5GS_NAS_MESSAGE_HEADER_LENGTH;
+  stream_cipher.blength = plain_length << 3;
+
+  /* Allocate output buffer for body only */
+  uint8_t *decrypted = malloc_or_fail(plain_length);
+
+  stream_compute_encrypt(nas->security_container->ciphering_algorithm, &stream_cipher, decrypted);
+
+  /* Override and free the decrypted payload */
+  memcpy(plain_payload, decrypted, plain_length);
+  free(decrypted);
+}
+
+static fgs_nas_msg_t get_msg_type(uint8_t *pdu_buffer, uint32_t length)
+{
+  if (pdu_buffer == NULL)
+    goto error;
+
+  /* get security header type */
+  if (length < 2)
+    goto error;
+
+  int security_header_type = pdu_buffer[1];
+
+  if (security_header_type == 0) {
+    /* plain NAS message */
+    if (length < 3)
+      goto error;
+    return pdu_buffer[2];
+  }
+
+  if (length < 10)
+    goto error;
+
+  int msg_type = pdu_buffer[9];
+
+  if (msg_type == FGS_DOWNLINK_NAS_TRANSPORT) {
+    if (length < 17)
+      goto error;
+
+    msg_type = pdu_buffer[16];
+  }
+
+  return msg_type;
+
+error:
+  LOG_E(NAS, "[UE] Received invalid downlink message\n");
+  return 0;
+}
+
+static security_state_t nas_security_rx_process(nr_ue_nas_t *nas, byte_array_t buffer)
 {
   if (nas->security_container == NULL)
     return NAS_SECURITY_NO_SECURITY_CONTEXT;
-  /* header is 7 bytes, require at least one byte of payload */
-  if (pdu_length < 8)
-    return NAS_SECURITY_BAD_INPUT;
 
-  switch (pdu_buffer[1]) {
-    case PLAIN_5GS_MSG:
-      return NAS_SECURITY_UNPROTECTED;
+  if (buffer.len < sizeof(fgmm_msg_header_t)) {
+    LOG_E(NAS, "Invalid buffer length = %ld: must hold at least a plain 5GMM header\n", buffer.len);
+    return NAS_SECURITY_BAD_INPUT;
+  }
+  int security_type = buffer.buf[1];
+  LOG_D(NAS, "Security type is: %s\n", print_info(security_type, security_header_type_s, sizeofArray(security_header_type_s)));
+
+  switch (security_type) {
+    case PLAIN_5GS_MSG: {
+      fgs_nas_msg_t msg_type = get_msg_type(buffer.buf, buffer.len);
+      return unprotected_allowed(buffer, msg_type) ? NAS_SECURITY_UNPROTECTED : NAS_SECURITY_BAD_INPUT;
+      break;
+    }
+    case INTEGRITY_PROTECTED_WITH_NEW_SECU_CTX:
+      stream_security_container_delete(nas->security_container);
+      nas->security_container = NULL;
+      nas->security.nas_count_dl = 0;
+      return NAS_SECURITY_NO_SECURITY_CONTEXT;
       break;
     case INTEGRITY_PROTECTED:
-    case INTEGRITY_PROTECTED_WITH_NEW_SECU_CTX:
     case INTEGRITY_PROTECTED_AND_CIPHERED_WITH_NEW_SECU_CTX:
       /* only accept "integrity protected and ciphered" messages */
-      if (pdu_buffer[6] == 0)
-        LOG_E(NAS, "Received nas_count_dl = %d\n", pdu_buffer[6]);
-      LOG_E(NAS, "todo: unhandled security type %s (pdu_buffer[1] = %d)\n", security_header_type_s[pdu_buffer[1]].text, pdu_buffer[1]);
+      if (buffer.buf[6] == 0)
+        LOG_E(NAS, "Received nas_count_dl = %d\n", buffer.buf[6]);
+      LOG_E(NAS, "todo: unhandled security type %s (buffer.buf[1] = %d)\n", security_header_type_s[buffer.buf[1]].text, buffer.buf[1]);
       return NAS_SECURITY_BAD_INPUT;
       break;
     default:
       break;
   }
 
+  /* header is 7 bytes, require at least one byte of payload */
+  if (buffer.len < 8) {
+    LOG_E(NAS, "Invalid buffer length = %ld\n", buffer.len);
+    return NAS_SECURITY_BAD_INPUT;
+  }
+
   /* synchronize NAS SQN, based on 24.501 4.4.3.1 */
   // Sequence number
-  int nas_sqn = pdu_buffer[6];
+  int nas_sqn = buffer.buf[6];
   int target_sqn = nas->security.nas_count_dl & 0xff;
   if (nas_sqn != target_sqn) {
     if (nas_sqn < target_sqn)
@@ -169,35 +397,22 @@ static security_state_t nas_security_rx_process(nr_ue_nas_t *nas, uint8_t *pdu_b
   }
 
   /* check integrity */
+  /* [EPD][SHD][MAC0]...[MAC3][SEQNO][PAYL]*/
+  uint8_t *received_mac = buffer.buf + 2;
   uint8_t computed_mac[NAS_INTEGRITY_SIZE];
-  nas_stream_cipher_t stream_cipher;
-  stream_cipher.context = nas->security_container->integrity_context;
-  stream_cipher.count = nas->security.nas_count_dl;
-  stream_cipher.bearer = 1; /* todo: don't hardcode */
-  stream_cipher.direction = 1;
-  stream_cipher.message = pdu_buffer + SECURITY_PROTECTED_5GS_NAS_MESSAGE_HEADER_LENGTH - 1;
-  /* length in bits */
-  stream_cipher.blength = (pdu_length - SECURITY_PROTECTED_5GS_NAS_MESSAGE_HEADER_LENGTH + 1) << 3;
-  stream_compute_integrity(nas->security_container->integrity_algorithm, &stream_cipher, computed_mac);
-
-  uint8_t *received_mac = pdu_buffer + 2;
+  nas_security_compute_mac(nas,
+                           buffer,
+                           false,
+                           true,
+                           computed_mac);
 
   if (memcmp(received_mac, computed_mac, NAS_INTEGRITY_SIZE) != 0)
     return NAS_SECURITY_INTEGRITY_FAILED;
 
   /* decipher */
-  uint8_t payload_len = pdu_length - SECURITY_PROTECTED_5GS_NAS_MESSAGE_HEADER_LENGTH;
-  uint8_t buf[payload_len];
-  stream_cipher.context = nas->security_container->ciphering_context;
-  stream_cipher.count = nas->security.nas_count_dl;
-  stream_cipher.bearer = 1; /* todo: don't hardcode */
-  stream_cipher.direction = 1;
-  stream_cipher.message = pdu_buffer + SECURITY_PROTECTED_5GS_NAS_MESSAGE_HEADER_LENGTH;
-  /* length in bits */
-  stream_cipher.blength = (payload_len) << 3;
-  stream_compute_encrypt(nas->security_container->ciphering_algorithm, &stream_cipher, buf);
-  memcpy(pdu_buffer + SECURITY_PROTECTED_5GS_NAS_MESSAGE_HEADER_LENGTH, buf, payload_len);
+  nas_security_decrypt_payload(nas, buffer, false, true);
 
+  /* update estimated DL Counter */
   nas->security.nas_count_dl++;
 
   return NAS_SECURITY_INTEGRITY_PASSED;
@@ -404,41 +619,6 @@ void derive_knas(algorithm_type_dist_t nas_alg_type, uint8_t nas_alg_id, uint8_t
   memcpy(knas, out + 16, 16);
 }
 
-static void derive_kgnb(uint8_t kamf[32], uint32_t count, uint8_t *kgnb)
-{
-  /* Compute the KDF input parameter
-   * S = FC(0x6E) || UL NAS Count || 0x00 0x04 || 0x01 || 0x00 0x01
-   */
-  uint8_t input[32] = {0};
-  //    uint16_t length    = 4;
-  //    int      offset    = 0;
-
-  LOG_TRACE(INFO, "%s  with count= %d", __FUNCTION__, count);
-  memset(input, 0, 32);
-  input[0] = 0x6E;
-  // P0
-  input[1] = count >> 24;
-  input[2] = (uint8_t)(count >> 16);
-  input[3] = (uint8_t)(count >> 8);
-  input[4] = (uint8_t)count;
-  // L0
-  input[5] = 0;
-  input[6] = 4;
-  // P1
-  input[7] = 0x01;
-  // L1
-  input[8] = 0;
-  input[9] = 1;
-
-  byte_array_t data = {.buf = input, .len = 10};
-  kdf(kamf, data, 32, kgnb);
-
-  printf("kgnb : ");
-  for (int pp = 0; pp < 32; pp++)
-    printf("%02x ", kgnb[pp]);
-  printf("\n");
-}
-
 static void derive_ue_keys(uint8_t *buf, nr_ue_nas_t *nas)
 {
   uint8_t ak[6];
@@ -470,7 +650,7 @@ static void derive_ue_keys(uint8_t *buf, nr_ue_nas_t *nas)
   derive_kausf(ck, ik, sqn, kausf, nas->uicc);
   derive_kseaf(kausf, kseaf, nas->uicc);
   derive_kamf(kseaf, kamf, 0x0000, nas->uicc);
-  derive_kgnb(kamf, 0, kgnb);
+  derive_kgnb(kamf, nas->security.nas_count_ul, kgnb);
 
   printf("kausf:");
   for (int i = 0; i < 32; i++) {
@@ -494,7 +674,7 @@ static void derive_ue_keys(uint8_t *buf, nr_ue_nas_t *nas)
 
 nr_ue_nas_t *get_ue_nas_info(module_id_t module_id)
 {
-  DevAssert(module_id < MAX_NAS_UE);
+  AssertFatal(module_id < MAX_NUM_NR_UE_INST, "Invalid module_id %d\n", module_id);
   if (!nr_ue_nas[module_id].uicc) {
     nr_ue_nas[module_id].uicc = checkUicc(module_id);
     nr_ue_nas[module_id].UE_id = module_id;
@@ -789,7 +969,7 @@ void generateServiceRequest(as_nas_info_t *initialNasMsg, nr_ue_nas_t *nas)
   }
 }
 
-void generateIdentityResponse(as_nas_info_t *initialNasMsg, uint8_t identitytype, uicc_t *uicc)
+static void generateIdentityResponse(as_nas_info_t *initialNasMsg, const uint8_t identitytype, uicc_t *uicc)
 {
   int size = sizeof(fgmm_msg_header_t);
   fgmm_nas_message_plain_t plain = {0};
@@ -808,6 +988,39 @@ void generateIdentityResponse(as_nas_info_t *initialNasMsg, uint8_t identitytype
   initialNasMsg->nas_data = malloc_or_fail(size * sizeof(*initialNasMsg->nas_data));
 
   initialNasMsg->length = mm_msg_encode(&plain, initialNasMsg->nas_data, size);
+}
+
+static void handle_identity_request(as_nas_info_t *initialNasMsg, nr_ue_nas_t *nas, const byte_array_t buffer)
+{
+  fgmm_msg_header_t mm_header = {0};
+  fgs_identity_request_msg_t msg = {0};
+
+  // Decode plain NAS header
+  int decoded = decode_5gmm_msg_header(&mm_header, buffer.buf, buffer.len);
+  if (decoded < 0) {
+    LOG_E(NAS, "Failed to decode NAS Identity Request header\n");
+    return;
+  }
+
+  byte_array_t payload = {.buf = &buffer.buf[decoded], .len = buffer.len - decoded};
+
+  // Decode identity request payload
+  if (decode_fgs_identity_request(&msg, &payload) < 0) {
+    LOG_E(NAS, "Failed to decode Identity Request message\n");
+    return;
+  }
+
+  LOG_I(NAS,
+        "Received IDENTITY REQUEST for identity type: %s\n",
+        print_info(msg.fgsmobileidentity, fgs_identity_type_text, sizeofArray(fgs_identity_type_text)));
+
+  if (mm_header.message_type == NAS_SECURITY_UNPROTECTED && msg.fgsmobileidentity != FGS_MOBILE_IDENTITY_SUCI) {
+    // see 3GPP TS 24.501 4.4.4.2
+    LOG_E(NAS, "Only SUCI mobile identity is expected in a security-unprotected request\n");
+    return;
+  }
+
+  generateIdentityResponse(initialNasMsg, msg.fgsmobileidentity, nas->uicc);
 }
 
 static void generateAuthenticationResp(nr_ue_nas_t *nas, as_nas_info_t *initialNasMsg, uint8_t *buf)
@@ -835,6 +1048,85 @@ static void generateAuthenticationResp(nr_ue_nas_t *nas, as_nas_info_t *initialN
   initialNasMsg->length = mm_msg_encode(&plain, initialNasMsg->nas_data, size);
   // Free res value after encode
   free(res.value);
+}
+
+/** @brief Send Authentication Failure message from the UE to the AMF to
+ * indicate that authentication of the network has failed */
+static void generateAuthenticationFailure(nr_ue_nas_t *nas, as_nas_info_t *initialNasMsg, cause_id_t cause)
+{
+  int size = sizeof(fgmm_msg_header_t);
+  fgmm_nas_message_plain_t plain = {0};
+
+  // Plain 5GMM header
+  plain.header = set_mm_header(FGS_AUTHENTICATION_FAILURE, PLAIN_5GS_MSG);
+  size += sizeof(plain.header);
+  // 5GMM Cause (Mandatory)
+  fgmm_auth_failure_t *mm_msg = &plain.mm_msg.fgmm_auth_failure;
+  mm_msg->cause = cause;
+  size += 1;
+  initialNasMsg->nas_data = malloc_or_fail(size * sizeof(*initialNasMsg->nas_data));
+  initialNasMsg->length = mm_msg_encode(&plain, initialNasMsg->nas_data, size);
+}
+
+static void handle_fgmm_authentication_request(nr_ue_nas_t *nas, as_nas_info_t *initialNasMsg, byte_array_t *buffer)
+{
+  LOG_D(NAS, "Received NAS Authentication Request\n");
+  fgs_authentication_request_t msg = {0};
+  int size = 0;
+  int decoded = 0;
+
+  // decode plain 5GMM message header
+  fgmm_msg_header_t mm_header = {0};
+  if ((decoded = decode_5gmm_msg_header(&mm_header, buffer->buf + size, buffer->len - size)) < 0) {
+    LOG_E(NAS, "decode_5gmm_msg_header failure in NAS Authentication Request handling\n");
+    return;
+  }
+  size += decoded;
+  // NAS key set identifier (Mandatory)
+  if ((decoded = decode_nas_key_set_identifier(&msg.ngKSI, 0, buffer->buf[decoded])) < 0) {
+    LOG_E(NAS, "decode_nas_key_set_identifier failure in NAS Authentication Request handling\n");
+    return;
+  }
+  size += decoded;
+  if (!nas->ksi) {
+    nas->ksi = malloc_or_fail(sizeof(*nas->ksi));
+    *nas->ksi = msg.ngKSI.naskeysetidentifier;
+    LOG_D(NAS, "Stored NAS Key Set Identifier %d\n", *nas->ksi);
+  } else if (*nas->ksi == msg.ngKSI.naskeysetidentifier) {
+    /* If the ngKSI value received is already associated with one
+    of the 5G security contexts stored in the UE, send failure message */
+    LOG_E(NAS, "Invalid NAS Key Set Identifier: send Authentication Failure\n");
+    generateAuthenticationFailure(nas, initialNasMsg, ngKSI_already_in_use);
+    return;
+  }
+  generateAuthenticationResp(nas, initialNasMsg, buffer->buf);
+}
+
+/** @brief Handle authentication not accepted by the network
+ * This function assumes the message is not integrity protected, processes the received
+ * NAS message and logs whether a EAP-failure is enclosed. The UE enters state: 5GMM-DEREGISTERED.
+ * @todo The UE shall performs actions as per 5.4.1.3.5 of 3GPP TS 24.501, including
+ * (1) Abort any ongoing 5GMM procedure (2) Stop all active timers: T3510, T3516, T3517,
+ * T3519, T3520, T3521 (3) Delete stored SUCI. (4) handle EAP-failure message. */
+static void handle_authentication_reject(nr_ue_nas_t *nas, as_nas_info_t *initialNasMsg, uint8_t *pdu, int pdu_length)
+{
+  LOG_E(NAS, "Received Authentication Reject message from the network\n");
+  uint8_t eap_msg[MAX_EAP_CONTENTS_LEN] = {0};
+  fgmm_auth_reject_msg_t msg = {.eap_msg.buf = eap_msg};
+
+  byte_array_t ba = {.buf = pdu + 3 /* skip header */, .len = pdu_length};
+  if (decode_fgmm_auth_reject(&msg, &ba) < 0) {
+    LOG_E(NAS, "Could not decode Authentication Reject\n");
+    return;
+  }
+
+  if (msg.eap_msg.len > 0) {
+    /** @todo UE handling EAP-failure message (5.4.1.2.2.11 of 3GPP TS 24.501) */
+    LOG_W(NAS, "NAS Authentication Reject contains an EAP message: handling is not implemented\n");
+    log_hex_buffer("EAP-Failure", msg.eap_msg.buf, msg.eap_msg.len);
+  }
+
+  nas->fiveGMM_state = FGS_DEREGISTERED;
 }
 
 int nas_itti_kgnb_refresh_req(instance_t instance, const uint8_t kgnb[32])
@@ -917,10 +1209,103 @@ static void generateSecurityModeComplete(nr_ue_nas_t *nas, as_nas_info_t *initia
   }
 }
 
+/** @brief Generates the Security Mode Reject message to be sent by the UE to the AMF
+ * to indicate that the corresponding security mode command has been rejected  */
+static void generateSecurityModeReject(nr_ue_nas_t *nas, as_nas_info_t *initialNasMsg, cause_id_t cause)
+{
+  LOG_I(NAS, "Send Security Mode Reject\n");
+  fgmm_msg_header_t plain_header = set_mm_header(FGS_SECURITY_MODE_REJECT, PLAIN_5GS_MSG);
+  int size = sizeof(plain_header);
+  fgs_security_mode_reject_msg msg = {.cause = cause};
+  size += 1;
+
+  /** The UE shall apply the 5G NAS security context in use
+   * before the initiation of the security mode control procedure,
+   * if any, to protect the SECURITY MODE REJECT message */
+  bool has_security_context = nas->security_container && nas->security_container->integrity_context;
+  if (has_security_context) {
+    fgmm_nas_msg_security_protected_t sp = {0};
+    sp.header.protocol_discriminator = FGS_MOBILITY_MANAGEMENT_MESSAGE;
+    sp.header.security_header_type = INTEGRITY_PROTECTED;
+    sp.header.sequence_number = nas->security.nas_count_ul & 0xff;
+    size += sizeof(sp.header);
+    sp.plain.header = plain_header;
+    sp.plain.mm_msg.fgs_security_mode_reject = msg;
+    // Security protected header encoding
+    int security_header_len = nas_protected_security_header_encode(initialNasMsg->nas_data, &sp.header, size);
+    initialNasMsg->length =
+        security_header_len + mm_msg_encode(&sp.plain, initialNasMsg->nas_data + security_header_len, size - security_header_len);
+    /* ciphering */
+    uint8_t buf[initialNasMsg->length - 7];
+    nas_stream_cipher_t stream_cipher;
+    stream_cipher.context = nas->security_container->ciphering_context;
+    AssertFatal(nas->security.nas_count_ul <= 0xffffff, "fatal: NAS COUNT UL too big (todo: fix that)\n");
+    stream_cipher.count = nas->security.nas_count_ul;
+    stream_cipher.bearer = 1;
+    stream_cipher.direction = 0;
+    stream_cipher.message = (unsigned char *)(initialNasMsg->nas_data + 7);
+    /* length in bits */
+    stream_cipher.blength = (initialNasMsg->length - 7) << 3;
+    stream_compute_encrypt(nas->security_container->ciphering_algorithm, &stream_cipher, buf);
+    memcpy(stream_cipher.message, buf, initialNasMsg->length - 7);
+    /* integrity protection */
+    uint8_t mac[4];
+    stream_cipher.context = nas->security_container->integrity_context;
+    stream_cipher.count = nas->security.nas_count_ul++;
+    stream_cipher.bearer = 1;
+    stream_cipher.direction = 0;
+    stream_cipher.message = (unsigned char *)(initialNasMsg->nas_data + 6);
+    /* length in bits */
+    stream_cipher.blength = (initialNasMsg->length - 6) << 3;
+    stream_compute_integrity(nas->security_container->integrity_algorithm, &stream_cipher, mac);
+    LOG_D(NAS, "Integrity protected initial NAS message: mac = %x %x %x %x \n", mac[0], mac[1], mac[2], mac[3]);
+    for (int i = 0; i < 4; i++)
+      initialNasMsg->nas_data[2 + i] = mac[i];
+  } else {
+    fgmm_nas_message_plain_t plain = {0};
+    plain.header = plain_header;
+    plain.mm_msg.fgs_security_mode_reject = msg;
+    // encode the message
+    initialNasMsg->nas_data = malloc_or_fail(size);
+    initialNasMsg->length = mm_msg_encode(&plain, initialNasMsg->nas_data, size);
+  }
+}
+
 static void handle_security_mode_command(nr_ue_nas_t *nas, as_nas_info_t *initialNasMsg, uint8_t *pdu, int pdu_length)
 {
+  /* Handle security mode command: must be authenticated, especially if no security
+    context has been previously established. */
+  uint8_t recv_mac[4];
+  Security_header_t sec_hdr;
+
+  /* Must have valid security header*/
+  if(!nas_security_get_sec_hdr(pdu, pdu_length, &sec_hdr)) {
+    LOG_E(NAS, "Received Security Mode Command without integrity protection.\n");
+    generateSecurityModeReject(nas, initialNasMsg, Security_mode_rejected_unspecified);
+    return;
+  }
+
+  /* Must be integrity protected with new context (=3), see 3GPP TS 24.501 5.4.2.2 */
+  if(sec_hdr != INTEGRITY_PROTECTED_WITH_NEW_SECU_CTX) {
+    LOG_E(NAS, "Received Security Mode Command with invalid security header type %d.\n", sec_hdr);
+    generateSecurityModeReject(nas, initialNasMsg, Security_mode_rejected_unspecified);
+    return;
+  }
+
+  /* Must have a MAC - checked after deriving keys */
+  if(!nas_security_get_mac(pdu, pdu_length, recv_mac)) {
+    LOG_E(NAS, "Received Security Mode Command with invalid MAC.\n");
+    generateSecurityModeReject(nas, initialNasMsg, Security_mode_rejected_unspecified);
+    return;
+  }
+
   /* retrieve integrity and ciphering algorithms  */
-  AssertFatal(pdu_length > 10, "nas: bad pdu\n");
+  if (pdu_length < 10) {
+    LOG_E(NAS, "Invalid pdu_length=%d : send Security Mode Reject\n", pdu_length);
+    // 3GPP TS 24.501 5.4.2.5 NAS security mode command not accepted by the UE
+    generateSecurityModeReject(nas, initialNasMsg, Security_mode_rejected_unspecified);
+  }
+
   int ciphering_algorithm = (pdu[10] >> 4) & 0x0f;
   int integrity_algorithm = pdu[10] & 0x0f;
 
@@ -944,8 +1329,38 @@ static void handle_security_mode_command(nr_ue_nas_t *nas, as_nas_info_t *initia
   }
   printf("\n");
 
-  /* todo: stream_security_container_delete() is not called anywhere, deal with that */
-  nas->security_container = stream_security_container_init(ciphering_algorithm, integrity_algorithm, knas_enc, knas_int);
+  if (integrity_algorithm != EIA0_ALG_ID) {
+    nas->security_container = stream_security_container_init(ciphering_algorithm, integrity_algorithm, knas_enc, knas_int);
+  } else {
+    LOG_E(NAS, "Rejecting Invalid NULL integrity %d for 5G!\n",
+      integrity_algorithm);
+    nas->security_container = NULL;
+  }
+
+  /* Handle the invalid container with a reject message */
+  if(nas->security_container == NULL) {
+    LOG_W(NAS, "Could not create security container!\n");
+    generateSecurityModeReject(nas, initialNasMsg, Security_mode_rejected_unspecified);
+    return;
+  }
+
+  /* Check MAC and delete context if it does not match */
+  uint8_t computed_mac[NAS_INTEGRITY_SIZE];
+  byte_array_t ba = {.buf = pdu, .len = pdu_length};
+  nas_security_compute_mac(nas, ba, false, true, computed_mac);
+
+  /* Teardown security container if mismatch. */
+  if(memcmp(computed_mac, recv_mac, NAS_INTEGRITY_SIZE) != 0) {
+    LOG_W(NAS, "MAC does not match\n");
+    LOG_W(NAS, "Expected: %x %x %x %x\n", computed_mac[0], computed_mac[1], computed_mac[2], computed_mac[3]);
+    LOG_W(NAS, "Received: %x %x %x %x\n", recv_mac[0], recv_mac[1], recv_mac[2], recv_mac[3]);
+    stream_security_container_delete(nas->security_container);
+    nas->security_container = NULL;
+
+    /* Signal rejection */
+    generateSecurityModeReject(nas, initialNasMsg, Security_mode_rejected_unspecified);
+    return;
+  }
 
   nas_itti_kgnb_refresh_req(nas->UE_id, nas->security.kgnb);
   generateSecurityModeComplete(nas, initialNasMsg);
@@ -1058,7 +1473,7 @@ static int capture_ipv6_addr(const uint8_t *addr, char *ip, size_t len)
  * @brief Process PDU Session Address in PDU Session Establishment Accept message
  *        and configure the tun interface
  */
-static void process_pdu_session_addr(pdu_session_establishment_accept_msg_t *msg)
+static void process_pdu_session_addr(pdu_session_establishment_accept_msg_t *msg, int instance_id, int pdu_session_id)
 {
   uint8_t *addr = msg->pdu_addr_ie.pdu_addr_oct;
 
@@ -1066,18 +1481,13 @@ static void process_pdu_session_addr(pdu_session_establishment_accept_msg_t *msg
     case PDU_SESSION_TYPE_IPV4: {
       char ip[20];
       capture_ipv4_addr(&addr[0], ip, sizeof(ip));
-      char ifname[IFNAMSIZ];
-      tun_generate_ifname(ifname, "oaitun_ue", 0);
-      tun_config(ifname, ip, NULL);
-      setup_ue_ipv4_route(ifname, 0, ip);
+      create_ue_ip_if(ip, NULL, instance_id, pdu_session_id);
     } break;
 
     case PDU_SESSION_TYPE_IPV6: {
       char ipv6[40];
       capture_ipv6_addr(addr, ipv6, sizeof(ipv6));
-      char ifname[IFNAMSIZ];
-      tun_generate_ifname(ifname, "oaitun_ue", 0);
-      tun_config(ifname, NULL, ipv6);
+      create_ue_ip_if(NULL, ipv6, instance_id, pdu_session_id);
     } break;
 
     case PDU_SESSION_TYPE_IPV4V6: {
@@ -1085,10 +1495,7 @@ static void process_pdu_session_addr(pdu_session_establishment_accept_msg_t *msg
       capture_ipv6_addr(addr, ipv6, sizeof(ipv6));
       char ipv4[20];
       capture_ipv4_addr(&addr[IPv6_INTERFACE_ID_LENGTH], ipv4, sizeof(ipv4));
-      char ifname[IFNAMSIZ];
-      tun_generate_ifname(ifname, "oaitun_ue", 0);
-      tun_config(ifname, ipv4, ipv6);
-      setup_ue_ipv4_route(ifname, 0, ipv4);
+      create_ue_ip_if(ipv4, ipv6, instance_id, pdu_session_id);
     } break;
 
     default:
@@ -1100,7 +1507,7 @@ static void process_pdu_session_addr(pdu_session_establishment_accept_msg_t *msg
 /**
  * @brief Handle PDU Session Establishment Accept and process decoded message
  */
-static void handle_pdu_session_accept(uint8_t *pdu_buffer, uint32_t msg_length)
+static void handle_pdu_session_accept(uint8_t *pdu_buffer, uint32_t msg_length, int instance)
 {
   pdu_session_establishment_accept_msg_t msg = {0};
   int size = 0;
@@ -1142,24 +1549,27 @@ static void handle_pdu_session_accept(uint8_t *pdu_buffer, uint32_t msg_length)
     LOG_E(NAS, "decode_pdu_session_establishment_accept_msg failure\n");
 
   // process PDU Session
-
   if (msg.pdu_addr_ie.pdu_length)
-    process_pdu_session_addr(&msg);
+    process_pdu_session_addr(&msg, instance, sm_header.pdu_session_id);
   else
     LOG_W(NAS, "Optional PDU Address IE was not provided\n");
   
-  set_qfi_pduid(msg.qos_rules.rule->qfi, sm_header.pdu_session_id);
+  set_qfi(msg.qos_rules.rule->qfi, sm_header.pdu_session_id, instance);
 }
 
 /**
  * @brief Handle DL NAS Transport and process piggybacked 5GSM messages
  */
-static void handleDownlinkNASTransport(uint8_t *pdu_buffer, uint32_t msg_length)
+void handleDownlinkNASTransport(uint8_t * pdu_buffer, int pdu_length, int instance)
 {
+  if (pdu_length < 17) {
+    LOG_E(NAS, "Received DL NAS Transport message too short (%d)\n", pdu_length);
+    return;
+  }
   uint8_t msg_type = *(pdu_buffer + 16);
   if (msg_type == FGS_PDU_SESSION_ESTABLISHMENT_ACC) {
     LOG_A(NAS, "Received PDU Session Establishment Accept in DL NAS Transport\n");
-    handle_pdu_session_accept(pdu_buffer, msg_length);
+    handle_pdu_session_accept(pdu_buffer, pdu_length, instance);
   } else {
     LOG_E(NAS, "Received unexpected message in DLinformationTransfer %d\n", msg_type);
   }
@@ -1181,7 +1591,7 @@ static void generateDeregistrationRequest(nr_ue_nas_t *nas, as_nas_info_t *initi
 
   // Plain 5GMM
   fgs_deregistration_request_ue_originating_msg *mm_msg = &sp_msg.plain.mm_msg.fgs_deregistration_request_ue_originating;
-  mm_msg->deregistrationtype.switchoff = NORMAL_DEREGISTRATION;
+  mm_msg->deregistrationtype.switchoff = NORMAL_DEREGISTRATION; // note: in case this is changed to SWITCH_OFF, handle in unprotected_allowed
   mm_msg->deregistrationtype.reregistration_required = REREGISTRATION_NOT_REQUIRED;
   mm_msg->deregistrationtype.access_type = TGPP_ACCESS;
   mm_msg->naskeysetidentifier.naskeysetidentifier = 1;
@@ -1335,43 +1745,6 @@ static void generatePduSessionEstablishRequest(nr_ue_nas_t *nas, as_nas_info_t *
   }
 }
 
-static uint8_t get_msg_type(uint8_t *pdu_buffer, uint32_t length)
-{
-  if (pdu_buffer == NULL)
-    goto error;
-
-  /* get security header type */
-  if (length < 2)
-    goto error;
-
-  int security_header_type = pdu_buffer[1];
-
-  if (security_header_type == 0) {
-    /* plain NAS message */
-    if (length < 3)
-      goto error;
-    return pdu_buffer[2];
-  }
-
-  if (length < 10)
-    goto error;
-
-  int msg_type = pdu_buffer[9];
-
-  if (msg_type == FGS_DOWNLINK_NAS_TRANSPORT) {
-    if (length < 17)
-      goto error;
-
-    msg_type = pdu_buffer[16];
-  }
-
-  return msg_type;
-
-error:
-  LOG_E(NAS, "[UE] Received invalid downlink message\n");
-  return 0;
-}
-
 static void send_nas_uplink_data_req(nr_ue_nas_t *nas, const as_nas_info_t *initial_nas_msg)
 {
   MessageDef *msg = itti_alloc_new_message(TASK_NAS_NRUE, nas->UE_id, NAS_UPLINK_DATA_REQ);
@@ -1399,21 +1772,24 @@ static void send_nas_5gmm_ind(instance_t instance, const Guti5GSMobileIdentity_t
   itti_send_msg_to_task(TASK_RRC_NRUE, instance, msg);
 }
 
-static void request_default_pdusession(nr_ue_nas_t *nas)
+static void request_pdusession(nr_ue_nas_t *nas, int pdusession_id)
 {
   MessageDef *message_p = itti_alloc_new_message(TASK_NAS_NRUE, nas->UE_id, NAS_PDU_SESSION_REQ);
-  NAS_PDU_SESSION_REQ(message_p).pdusession_id = 10; /* first or default pdu session */
+  NAS_PDU_SESSION_REQ(message_p).pdusession_id = pdusession_id;
   NAS_PDU_SESSION_REQ(message_p).pdusession_type = 0x91; // 0x91 = IPv4, 0x92 = IPv6, 0x93 = IPv4v6
   NAS_PDU_SESSION_REQ(message_p).sst = nas->uicc->nssai_sst;
   NAS_PDU_SESSION_REQ(message_p).sd = nas->uicc->nssai_sd;
   itti_send_msg_to_task(TASK_NAS_NRUE, nas->UE_id, message_p);
 }
 
-static int get_user_nssai_idx(const nr_nas_msg_snssai_t allowed_nssai[8], const nr_ue_nas_t *nas)
+static int get_user_nssai_idx(const nr_nas_msg_snssai_t allowed_nssai[NAS_MAX_NUMBER_SLICES], const nr_ue_nas_t *nas)
 {
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < NAS_MAX_NUMBER_SLICES; i++) {
     const nr_nas_msg_snssai_t *nssai = allowed_nssai + i;
-    if ((nas->uicc->nssai_sst == nssai->sst) && (nas->uicc->nssai_sd == nssai->sd))
+    /* If it was received in Registration Accept, check the SD
+       in the stored Allowed N-SSAI, else, consider the SD valid */
+    bool sd_match = !nssai->sd || (nas->uicc->nssai_sd == *nssai->sd);
+    if ((nas->uicc->nssai_sst == nssai->sst) && sd_match)
       return i;
   }
   return -1;
@@ -1437,7 +1813,6 @@ static void process_guti(Guti5GSMobileIdentity_t *guti, nr_ue_nas_t *nas)
 
 static void handle_registration_accept(nr_ue_nas_t *nas, const uint8_t *pdu_buffer, uint32_t msg_length)
 {
-  LOG_I(NAS, "[UE] Received REGISTRATION ACCEPT message\n");
   registration_accept_msg msg = {0};
   fgs_nas_message_security_header_t sp_header = {0};
   const uint8_t *end = pdu_buffer + msg_length;
@@ -1460,15 +1835,22 @@ static void handle_registration_accept(nr_ue_nas_t *nas, const uint8_t *pdu_buff
   }
   pdu_buffer += decoded;
   // plain payload
-  if ((decoded = decode_registration_accept(&msg, pdu_buffer, end - pdu_buffer)) < 0) {
+  const byte_array_t ba = {.buf = (uint8_t *)pdu_buffer, .len = end - pdu_buffer};
+  if ((decoded = decode_registration_accept(&msg, ba)) < 0) {
     LOG_E(NAS, "Failed to decode NAS Registration Accept\n");
     return;
   }
+  LOG_I(NAS,
+        "Received Registration Accept with result %s\n",
+        msg.result == FGS_REGISTRATION_RESULT_3GPP       ? "3GPP"
+        : msg.result == FGS_REGISTRATION_RESULT_NON_3GPP ? "non-3PP"
+                                                         : "3GPP and non-3GPP");
+  LOG_I(NAS, "SMS %s in 5GS Registration Result\n", msg.sms_allowed ? "allowed" : "not allowed");
+
   pdu_buffer += decoded;
   // process GUTI
   if (msg.guti) {
     process_guti(&msg.guti->guti, nas);
-    free(msg.guti);
   } else {
     LOG_W(NAS, "no GUTI in registration accept\n");
   }
@@ -1485,8 +1867,13 @@ static void handle_registration_accept(nr_ue_nas_t *nas, const uint8_t *pdu_buff
   if (get_user_nssai_idx(msg.nas_allowed_nssai, nas) < 0) {
     LOG_E(NAS, "NSSAI parameters not match with allowed NSSAI. Couldn't request PDU session.\n");
   } else {
-    request_default_pdusession(nas);
+    request_pdusession(nas, get_softmodem_params()->default_pdu_session_id);
+    if (get_nrUE_params()->extra_pdu_id != -1) {
+      request_pdusession(nas, get_nrUE_params()->extra_pdu_id);
+    }
   }
+  // Free local message after processing
+  free_fgmm_registration_accept(&msg);
 }
 
 /* 3GPP TS 24.008 10.5.7.3 GPRS Timer */
@@ -1529,6 +1916,17 @@ static void handle_service_accept(nr_ue_nas_t *nas, const byte_array_t *buffer)
           "Received PDU Session %d reactivation result error cause %s\n",
           msg.cause->pdu_session_id,
           print_info(msg.cause->cause, cause_text_info, sizeofArray(cause_text_info)));
+}
+
+static void handle_service_reject(nr_ue_nas_t *nas, const byte_array_t *buffer)
+{
+  fgs_service_reject_msg_t msg = {0};
+  decode_fgs_service_reject(&msg, buffer);
+  // Extract timer t3448 in seconds (optional IE)
+  nas->t3448 = process_gprs_timer(msg.t3448);
+  // Extract timer t3446 in seconds (optional IE)
+  nas->t3446 = process_gprs_timer(msg.t3446);
+  LOG_E(NAS, "Received NAS Service Reject message with cause %s\n", fgmm_cause_s[msg.cause].text);
 }
 
 void *nas_nrue(void *args_p)
@@ -1608,25 +2006,22 @@ void *nas_nrue(void *args_p)
               NAS_CONN_ESTABLI_CNF(msg_p).errCode,
               NAS_CONN_ESTABLI_CNF(msg_p).nasMsg.length);
 
-        uint8_t *pdu_buffer = NAS_CONN_ESTABLI_CNF(msg_p).nasMsg.nas_data;
-        int pdu_length = NAS_CONN_ESTABLI_CNF(msg_p).nasMsg.length;
-
-        security_state_t security_state = nas_security_rx_process(nas, pdu_buffer, pdu_length);
-        if (security_state != NAS_SECURITY_INTEGRITY_PASSED && security_state != NAS_SECURITY_NO_SECURITY_CONTEXT) {
+        byte_array_t ba = {.buf = NAS_CONN_ESTABLI_CNF(msg_p).nasMsg.nas_data, .len = NAS_CONN_ESTABLI_CNF(msg_p).nasMsg.length};
+        security_state_t security_state = nas_security_rx_process(nas, ba);
+        if (security_state > NAS_SECURITY_INTEGRITY_PASSED) {
           LOG_E(NAS, "NAS integrity failed, discard incoming message: security state is %s\n", security_state_info[security_state].text);
           break;
         }
 
-        int msg_type = get_msg_type(pdu_buffer, pdu_length);
-
+        fgs_nas_msg_t msg_type = get_msg_type(ba.buf, ba.len);
         if (msg_type == FGS_REGISTRATION_ACCEPT) {
-          handle_registration_accept(nas, pdu_buffer, pdu_length);
+          handle_registration_accept(nas, ba.buf, ba.len);
         } else if (msg_type == FGS_PDU_SESSION_ESTABLISHMENT_ACC) {
-          handle_pdu_session_accept(pdu_buffer, pdu_length);
+          handle_pdu_session_accept(ba.buf, ba.len, nas->UE_id);
         }
 
         // Free NAS buffer memory after use (coming from RRC)
-        free(pdu_buffer);
+        free_byte_array(ba);
         break;
       }
 
@@ -1676,43 +2071,39 @@ void *nas_nrue(void *args_p)
       } break;
 
       case NAS_DOWNLINK_DATA_IND: {
-        LOG_I(NAS,
-              "[UE %ld] Received %s: length %u , buffer %p\n",
-              nas->UE_id,
-              ITTI_MSG_NAME(msg_p),
-              NAS_DOWNLINK_DATA_IND(msg_p).nasMsg.length,
-              NAS_DOWNLINK_DATA_IND(msg_p).nasMsg.nas_data);
         as_nas_info_t initialNasMsg = {0};
-
         uint8_t *pdu_buffer = NAS_DOWNLINK_DATA_IND(msg_p).nasMsg.nas_data;
         int pdu_length = NAS_DOWNLINK_DATA_IND(msg_p).nasMsg.length;
-        int msg_type = get_msg_type(pdu_buffer, pdu_length);
-
-        security_state_t security_state = nas_security_rx_process(nas, pdu_buffer, pdu_length);
-        /* special cases accepted without protection */
-        if (security_state == NAS_SECURITY_UNPROTECTED) {
-          /* for the moment, only FGS_DEREGISTRATION_ACCEPT_UE_ORIGINATING is accepted */
-          if (msg_type == FGS_DEREGISTRATION_ACCEPT_UE_ORIGINATING)
-            security_state = NAS_SECURITY_INTEGRITY_PASSED;
-        }
-
-        if (security_state != NAS_SECURITY_INTEGRITY_PASSED && security_state != NAS_SECURITY_NO_SECURITY_CONTEXT) {
+        byte_array_t buffer = {.buf = pdu_buffer, .len = pdu_length};
+        security_state_t security_state = nas_security_rx_process(nas, buffer);
+        if (security_state > NAS_SECURITY_INTEGRITY_PASSED) {
           LOG_E(NAS, "NAS integrity failed, discard incoming message\n");
           break;
         }
 
+        fgs_nas_msg_t msg_type = get_msg_type(pdu_buffer, pdu_length);
+        LOG_I(NAS,
+              "[UE %ld] Received %s type %s with length %u\n",
+              nas->UE_id,
+              ITTI_MSG_NAME(msg_p),
+              print_info(msg_type, message_text_info, sizeofArray(message_text_info)),
+              NAS_DOWNLINK_DATA_IND(msg_p).nasMsg.length);
+
         switch (msg_type) {
           case FGS_IDENTITY_REQUEST:
-            generateIdentityResponse(&initialNasMsg, *(pdu_buffer + 3), nas->uicc);
+            handle_identity_request(&initialNasMsg, nas, buffer);
             break;
           case FGS_AUTHENTICATION_REQUEST:
-            generateAuthenticationResp(nas, &initialNasMsg, pdu_buffer);
+            handle_fgmm_authentication_request(nas, &initialNasMsg, &buffer);
+            break;
+          case FGS_AUTHENTICATION_REJECT:
+            handle_authentication_reject(nas, &initialNasMsg, pdu_buffer, pdu_length);
             break;
           case FGS_SECURITY_MODE_COMMAND:
             handle_security_mode_command(nas, &initialNasMsg, pdu_buffer, pdu_length);
             break;
           case FGS_DOWNLINK_NAS_TRANSPORT:
-            handleDownlinkNASTransport(pdu_buffer, pdu_length);
+            handleDownlinkNASTransport(pdu_buffer, pdu_length, nas->UE_id);
             break;
           case FGS_REGISTRATION_ACCEPT:
             handle_registration_accept(nas, pdu_buffer, pdu_length);
@@ -1723,20 +2114,39 @@ void *nas_nrue(void *args_p)
             nas->fiveGMM_state = FGS_DEREGISTERED;
             break;
           case FGS_PDU_SESSION_ESTABLISHMENT_ACC:
-            handle_pdu_session_accept(pdu_buffer, pdu_length);
+            handle_pdu_session_accept(pdu_buffer, pdu_length, nas->UE_id);
             break;
           case FGS_PDU_SESSION_ESTABLISHMENT_REJ:
             LOG_E(NAS, "Received PDU Session Establishment reject\n");
             break;
-          case FGS_REGISTRATION_REJECT:
-            LOG_E(NAS, "Received Registration reject cause: %s\n", cause_text_info[pdu_buffer[17]].text);
+          case FGS_REGISTRATION_REJECT: {
+
+            if (pdu_length < 18) {
+              LOG_E(NAS, "Received Registration reject message too short\n");
+              break;
+            }
+
+            uint8_t cause = pdu_buffer[17];
+            if (cause >= sizeof(cause_text_info) / sizeof(cause_text_info[0])) {
+              LOG_E(NAS, "Received Registration reject cause %d unknown\n", cause);
+              break;
+            }
+
+            LOG_E(NAS, "Received Registration reject cause: %s\n", cause_text_info[cause].text);
             exit(1);
             break;
+          }
           case FGS_SERVICE_ACCEPT: {
-            byte_array_t buffer = {.buf = pdu_buffer, .len = pdu_length};
             handle_service_accept(nas, &buffer);
             break;
           }
+
+          case FGS_SERVICE_REJECT: {
+            byte_array_t buffer = {.buf = pdu_buffer, .len = pdu_length};
+            handle_service_reject(nas, &buffer);
+            break;
+          }
+
           default:
             LOG_W(NR_RRC, "unknown message type %d\n", msg_type);
             break;
@@ -1747,6 +2157,15 @@ void *nas_nrue(void *args_p)
         if (initialNasMsg.length > 0)
           send_nas_uplink_data_req(nas, &initialNasMsg);
       } break;
+
+      case NAS_INIT_NOS1_IF: {
+        const int pdu_session_id = get_softmodem_params()->default_pdu_session_id;
+        const char *ip = !get_softmodem_params()->nsa ? "10.0.1.2" : "10.0.1.3";
+        const int qfi = 7;
+        create_ue_ip_if(ip, NULL, nas->UE_id, pdu_session_id);
+        set_qfi(qfi, pdu_session_id, nas->UE_id);
+        break;
+      }
 
       default:
         LOG_E(NAS, "[UE %ld] Received unexpected message %s\n", nas->UE_id, ITTI_MSG_NAME(msg_p));

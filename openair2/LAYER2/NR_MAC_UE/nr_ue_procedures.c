@@ -78,6 +78,12 @@ const uint16_t table_7_2_1[16] = {
     1920, // row index 13
 };
 
+typedef struct {
+  uint32_t ssb_index;
+  short ssb_rsrp_dBm;
+  float_t ssb_sinr_dB;
+} NR_RSRP_meas_t;
+
 /* TS 36.213 Table 9.2.3-3: Mapping of values for one HARQ-ACK bit to sequences */
 static const int sequence_cyclic_shift_1_harq_ack_bit[2]
 /*        HARQ-ACK Value        0    1 */
@@ -112,6 +118,42 @@ random-access procedure
 @returns timing advance or 0xffff if preamble doesn't match
 */
 static void nr_ue_process_rar(NR_UE_MAC_INST_t *mac, nr_downlink_indication_t *dl_info, int pdu_id);
+
+/*! \fn int8_t nr_ue_get_SR(NR_UE_MAC_INST_t *mac, frame_t frame, slot_t slot, NR_SchedulingRequestId_t sr_id);
+   \brief This function schedules a positive or negative SR for schedulingRequestID sr_id
+          depending on the presence of any active SR and the prohibit timer.
+          If the max number of retransmissions is reached, it triggers a new RA  */
+static int8_t nr_ue_get_SR(NR_UE_MAC_INST_t *mac, frame_t frame, slot_t slot, NR_SchedulingRequestId_t sr_id);
+
+static csi_payload_t get_ssb_rsrp_payload(NR_UE_MAC_INST_t *mac,
+                                          struct NR_CSI_ReportConfig *csi_reportconfig,
+                                          NR_CSI_ResourceConfigId_t csi_ResourceConfigId,
+                                          NR_CSI_MeasConfig_t *csi_MeasConfig);
+
+static csi_payload_t get_csirs_RI_PMI_CQI_payload(NR_UE_MAC_INST_t *mac,
+                                                  struct NR_CSI_ReportConfig *csi_reportconfig,
+                                                  NR_CSI_ResourceConfigId_t csi_ResourceConfigId,
+                                                  NR_CSI_MeasConfig_t *csi_MeasConfig,
+                                                  CSI_mapping_t mapping_type);
+static csi_payload_t get_csirs_RSRP_payload(NR_UE_MAC_INST_t *mac,
+                                            struct NR_CSI_ReportConfig *csi_reportconfig,
+                                            NR_CSI_ResourceConfigId_t csi_ResourceConfigId,
+                                            const NR_CSI_MeasConfig_t *csi_MeasConfig);
+
+static uint8_t get_rsrp_diff_index(int best_rsrp, int current_rsrp);
+
+static void nr_ue_process_mac_pdu(NR_UE_MAC_INST_t *mac, nr_downlink_indication_t *dl_info, int pdu_id);
+
+static void set_harq_status(NR_UE_MAC_INST_t *mac,
+                            uint8_t pucch_id,
+                            uint8_t harq_id,
+                            int8_t delta_pucch,
+                            uint16_t data_toul_fb,
+                            uint8_t dai,
+                            int n_CCE,
+                            int N_CCE,
+                            frame_t frame,
+                            int slot);
 
 int get_pucch0_mcs(const int O_ACK, const int O_SR, const int ack_payload, const int sr_payload)
 {
@@ -238,37 +280,31 @@ void nr_ue_decode_mib(NR_UE_MAC_INST_t *mac, int cc_id)
   mac->ssb_subcarrier_offset = ssb_subcarrier_offset;
   mac->dmrs_TypeA_Position = mac->mib->dmrs_TypeA_Position;
 
-  if (get_softmodem_params()->phy_test)
-    mac->state = UE_CONNECTED;
-  else if (mac->state == UE_NOT_SYNC) {
-    if (IS_SA_MODE(get_softmodem_params()) && mac->get_sib1)
-      mac->state = UE_RECEIVING_SIB;
-    else
-      mac->state = UE_PERFORMING_RA;
-  }
 }
 
 static void configure_ratematching_csi(fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_pdu,
-                                       fapi_nr_dl_config_request_t *dl_config,
+                                       const fapi_nr_dl_config_request_t *dl_config,
                                        int rnti_type,
                                        int frame,
                                        int slot,
                                        int mu,
                                        int slots_per_frame,
-                                       NR_PDSCH_Config_t *pdsch_config)
+                                       const NR_PDSCH_Config_t *pdsch_config,
+                                       NR_CSI_MeasConfig_t *csi_MeasConfig)
 {
   // only for C-RNTI, MCS-C-RNTI, CS-RNTI (and only C-RNTI is supported for now)
   if (rnti_type != TYPE_C_RNTI_)
     return;
 
   if (pdsch_config && pdsch_config->zp_CSI_RS_ResourceToAddModList) {
-    for (int i = 0; i < pdsch_config->zp_CSI_RS_ResourceToAddModList->list.count; i++) {
-      NR_ZP_CSI_RS_Resource_t *zp_res = pdsch_config->zp_CSI_RS_ResourceToAddModList->list.array[i];
-      NR_ZP_CSI_RS_ResourceId_t id = zp_res->zp_CSI_RS_ResourceId;
-      NR_SetupRelease_ZP_CSI_RS_ResourceSet_t *zp_set = pdsch_config->p_ZP_CSI_RS_ResourceSet;
-      AssertFatal(zp_set && zp_set->choice.setup, "Only periodic ZP resource set is implemented\n");
-      bool found = false;
-      for (int j = 0; j < zp_set->choice.setup->zp_CSI_RS_ResourceIdList.list.count; j++) {
+    bool found = false;
+    const NR_SetupRelease_ZP_CSI_RS_ResourceSet_t *zp_set = pdsch_config->p_ZP_CSI_RS_ResourceSet;
+    AssertFatal(zp_set && zp_set->choice.setup, "Only periodic ZP resource set is implemented\n");
+    const NR_ZP_CSI_RS_Resource_t *zp_res = NULL;
+    for (int j = 0; j < zp_set->choice.setup->zp_CSI_RS_ResourceIdList.list.count; j++) {
+      for (int i = 0; i < pdsch_config->zp_CSI_RS_ResourceToAddModList->list.count; i++) {
+        zp_res = pdsch_config->zp_CSI_RS_ResourceToAddModList->list.array[i];
+        NR_ZP_CSI_RS_ResourceId_t id = zp_res->zp_CSI_RS_ResourceId;
         if (*zp_set->choice.setup->zp_CSI_RS_ResourceIdList.list.array[j] == id) {
           found = true;
           break;
@@ -289,9 +325,28 @@ static void configure_ratematching_csi(fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsc
     }
   }
 
+  // Handle NZP CSI-RS for rate matching
+  if (csi_MeasConfig && csi_MeasConfig->nzp_CSI_RS_ResourceToAddModList) {
+    for (int i = 0; i < csi_MeasConfig->nzp_CSI_RS_ResourceToAddModList->list.count; i++) {
+      NR_NZP_CSI_RS_Resource_t *nzp_res = csi_MeasConfig->nzp_CSI_RS_ResourceToAddModList->list.array[i];
+      if (nzp_res->periodicityAndOffset) {
+        int period, offset;
+        csi_period_offset(NULL, nzp_res->periodicityAndOffset, &period, &offset);
+        if ((frame * slots_per_frame + slot - offset) % period != 0)
+          continue;
+        AssertFatal(dlsch_pdu->numCsiRsForRateMatching < NFAPI_MAX_NUM_CSI_RATEMATCH, "csiRsForRateMatching out of bounds\n");
+        fapi_nr_dl_config_csirs_pdu_rel15_t *csi_pdu = &dlsch_pdu->csiRsForRateMatching[dlsch_pdu->numCsiRsForRateMatching];
+        csi_pdu->csi_type = 1; // NZP CSI-RS
+        csi_pdu->subcarrier_spacing = mu;
+        configure_csi_resource_mapping(csi_pdu, &nzp_res->resourceMapping, dlsch_pdu->BWPSize, dlsch_pdu->BWPStart);
+        dlsch_pdu->numCsiRsForRateMatching++;
+      }
+    }
+  }
+
   for (int i = 0; i < dl_config->number_pdus; i++) {
     // This assumes that CSI-RS are scheduled before this moment which is true in current implementation
-    fapi_nr_dl_config_request_pdu_t *csi_req = &dl_config->dl_config_list[i];
+    const fapi_nr_dl_config_request_pdu_t *csi_req = &dl_config->dl_config_list[i];
     if (csi_req->pdu_type == FAPI_NR_DL_CONFIG_TYPE_CSI_RS) {
       AssertFatal(dlsch_pdu->numCsiRsForRateMatching < NFAPI_MAX_NUM_CSI_RATEMATCH, "csiRsForRateMatching out of bounds\n");
       dlsch_pdu->csiRsForRateMatching[dlsch_pdu->numCsiRsForRateMatching] = csi_req->csirs_config_pdu.csirs_config_rel15;
@@ -300,18 +355,25 @@ static void configure_ratematching_csi(fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsc
   }
 }
 
-int8_t nr_ue_decode_BCCH_DL_SCH(NR_UE_MAC_INST_t *mac,
-                                int cc_id,
-                                unsigned int gNB_index,
-                                uint8_t ack_nack,
-                                uint8_t *pduP,
-                                uint32_t pdu_len)
+void nr_ue_decode_BCCH_DL_SCH(NR_UE_MAC_INST_t *mac,
+                              int cc_id,
+                              unsigned int gNB_index,
+                              uint8_t ack_nack,
+                              uint8_t *pduP,
+                              uint32_t pdu_len,
+                              int frame,
+                              int slot)
 {
   if(ack_nack) {
     LOG_D(NR_MAC, "Decoding NR-BCCH-DL-SCH-Message (SIB1 or SI)\n");
-    nr_mac_rrc_data_ind_ue(mac->ue_id, cc_id, gNB_index, 0, 0, 0, mac->physCellId, 0, NR_BCCH_DL_SCH, (uint8_t *) pduP, pdu_len);
-    mac->get_sib1 = false;
-    mac->get_otherSI = false;
+    nr_mac_rrc_data_ind_ue(mac->ue_id, cc_id, gNB_index, frame, slot, 0, mac->physCellId, 0, NR_BCCH_DL_SCH, (uint8_t *) pduP, pdu_len);
+    if (mac->get_sib1)
+      mac->get_sib1 = false;
+    for (int i = 0; i < MAX_SI_GROUPS; i++) {
+      if (mac->get_otherSI[i])
+        mac->get_otherSI[i] = false;
+    }
+    mac->si_SchedInfo.si_window_start = -1;
     T(T_NRUE_MAC_DL_PDU_WITH_DATA,
       T_INT(SI_RNTI),
       T_INT(-1 /* frame, unavailable here */),
@@ -319,9 +381,10 @@ int8_t nr_ue_decode_BCCH_DL_SCH(NR_UE_MAC_INST_t *mac,
       T_INT(0 /* harq_pid */),
       T_BUFFER(pduP, pdu_len));
   }
-  else
+  else {
     LOG_E(NR_MAC, "Got NACK on NR-BCCH-DL-SCH-Message (%s)\n", mac->get_sib1 ? "SIB1" : "other SI");
-  return 0;
+    nr_mac_rrc_data_ind_ue(mac->ue_id, cc_id, gNB_index, frame, slot, 0, mac->physCellId, 0, NR_BCCH_DL_SCH, NULL, 0);
+  }
 }
 
 /*
@@ -717,8 +780,13 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
       dlsch_pdu->SubcarrierSpacing = mac->mib->subCarrierSpacingCommon + 2;
   } else {
     dlsch_pdu->SubcarrierSpacing = current_DL_BWP->scs;
-    if (nr_timer_is_active(&mac->ra.response_window_timer) && rnti_type == TYPE_RA_RNTI_) {
-      dl_conf_req->pdu_type = FAPI_NR_DL_CONFIG_TYPE_RA_DLSCH;
+    if (rnti_type == TYPE_RA_RNTI_) {
+      if (nr_timer_is_active(&mac->ra.response_window_timer)) {
+        dl_conf_req->pdu_type = FAPI_NR_DL_CONFIG_TYPE_RA_DLSCH;
+      } else {
+        // Discard the DCI
+        return -1;
+      }
     } else {
       dl_conf_req->pdu_type = FAPI_NR_DL_CONFIG_TYPE_DLSCH;
     }
@@ -726,8 +794,15 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
 
   dlsch_pdu->numCsiRsForRateMatching = 0;
   int slots_frame = mac->frame_structure.numb_slots_frame;
-  configure_ratematching_csi(dlsch_pdu, dl_config, rnti_type, frame, slot, dlsch_pdu->SubcarrierSpacing, slots_frame, pdsch_config);
-
+  configure_ratematching_csi(dlsch_pdu,
+                             dl_config,
+                             rnti_type,
+                             frame,
+                             slot,
+                             dlsch_pdu->SubcarrierSpacing,
+                             slots_frame,
+                             pdsch_config,
+                             mac->sc_info.csi_MeasConfig);
 
   /* IDENTIFIER_DCI_FORMATS */
   /* FREQ_DOM_RESOURCE_ASSIGNMENT_DL */
@@ -742,8 +817,10 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
     LOG_W(MAC, "[%d.%d] Invalid frequency_domain_assignment. Possibly due to false DCI. Ignoring DCI!\n", frame, slot);
     return -1;
   }
+
   dlsch_pdu->rb_offset = dlsch_pdu->start_rb + dlsch_pdu->BWPStart;
-  if (mac->get_sib1 || mac->get_otherSI)
+
+  if (mac->get_sib1)
     dlsch_pdu->rb_offset -= dlsch_pdu->BWPStart;
 
   /* TIME_DOM_RESOURCE_ASSIGNMENT */
@@ -924,11 +1001,21 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
   /* PDSCH_TO_HARQ_FEEDBACK_TIME_IND */
   // according to TS 38.213 9.2.3
   const int ntn_ue_koffset = GET_NTN_UE_K_OFFSET(&mac->ntn_ta, dlsch_pdu->SubcarrierSpacing);
-  const uint16_t feedback_ti = 1 + dci->pdsch_to_harq_feedback_timing_indicator.val + ntn_ue_koffset;
+  uint16_t feedback_ti = 0;
+
+  if (rnti_type == TYPE_RA_RNTI_) {
+    // RA-RNTI indicates RAR. Ensure we can decode RAR before the earliest UL scheduler call
+    // that can process the MSG3. Also assume that RAR is sent in the same slot as DCI (k0 == 0)
+    // This is not perfect as the MSG3 might end up being scheduled later, so we could be
+    // halting the UL scheduler for a longer time than necessary.
+    feedback_ti = max(1 + GET_DURATION_RX_TO_TX(&mac->ntn_ta, dlsch_pdu->SubcarrierSpacing),
+                      get_delta_for_k2(mac->current_UL_BWP->scs) + get_j_for_k2(mac->current_UL_BWP->scs));
+  }
 
   if (rnti_type != TYPE_RA_RNTI_ && rnti_type != TYPE_SI_RNTI_) {
     if (!get_FeedbackDisabled(mac->sc_info.downlinkHARQ_FeedbackDisabled_r17, dci->harq_pid.val)) {
-      AssertFatal(feedback_ti > GET_DURATION_RX_TO_TX(&mac->ntn_ta, dlsch_pdu->SubcarrierSpacing),
+      feedback_ti = 1 + dci->pdsch_to_harq_feedback_timing_indicator.val + ntn_ue_koffset;
+      AssertFatal(feedback_ti >= GET_DURATION_RX_TO_TX(&mac->ntn_ta, dlsch_pdu->SubcarrierSpacing),
                   "PDSCH to HARQ feedback time (%d) needs to be higher than DURATION_RX_TO_TX (%ld).\n",
                   feedback_ti,
                   GET_DURATION_RX_TO_TX(&mac->ntn_ta, dlsch_pdu->SubcarrierSpacing));
@@ -1050,7 +1137,15 @@ static int nr_ue_process_dci_dl_11(NR_UE_MAC_INST_t *mac,
   nr_rnti_type_t rnti_type = get_rnti_type(mac, dci_ind->rnti);
   dlsch_pdu->numCsiRsForRateMatching = 0;
   int slots_frame = mac->frame_structure.numb_slots_frame;
-  configure_ratematching_csi(dlsch_pdu, dl_config, rnti_type, frame, slot, current_DL_BWP->scs, slots_frame, pdsch_Config);
+  configure_ratematching_csi(dlsch_pdu,
+                             dl_config,
+                             rnti_type,
+                             frame,
+                             slot,
+                             current_DL_BWP->scs,
+                             slots_frame,
+                             pdsch_Config,
+                             mac->sc_info.csi_MeasConfig);
 
   /* IDENTIFIER_DCI_FORMATS */
   /* CARRIER_IND */
@@ -1220,10 +1315,11 @@ static int nr_ue_process_dci_dl_11(NR_UE_MAC_INST_t *mac,
   /* PDSCH_TO_HARQ_FEEDBACK_TIME_IND */
   // according to TS 38.213 Table 9.2.3-1
   const int ntn_ue_koffset = GET_NTN_UE_K_OFFSET(&mac->ntn_ta, dlsch_pdu->SubcarrierSpacing);
-  const uint16_t feedback_ti = pucch_Config->dl_DataToUL_ACK->list.array[dci->pdsch_to_harq_feedback_timing_indicator.val][0] + ntn_ue_koffset;
+  uint16_t feedback_ti = 0;
 
   if (!get_FeedbackDisabled(mac->sc_info.downlinkHARQ_FeedbackDisabled_r17, dci->harq_pid.val)) {
-    AssertFatal(feedback_ti > GET_DURATION_RX_TO_TX(&mac->ntn_ta, dlsch_pdu->SubcarrierSpacing),
+    feedback_ti = pucch_Config->dl_DataToUL_ACK->list.array[dci->pdsch_to_harq_feedback_timing_indicator.val][0] + ntn_ue_koffset;
+    AssertFatal(feedback_ti >= GET_DURATION_RX_TO_TX(&mac->ntn_ta, dlsch_pdu->SubcarrierSpacing),
                 "PDSCH to HARQ feedback time (%d) needs to be higher than DURATION_RX_TO_TX (%ld). Min feedback time set in config "
                 "file (min_rxtxtime).\n",
                 feedback_ti,
@@ -1413,25 +1509,34 @@ nr_dci_format_t nr_ue_process_dci_indication_pdu(NR_UE_MAC_INST_t *mac, frame_t 
   return format;
 }
 
-int8_t nr_ue_process_csirs_measurements(NR_UE_MAC_INST_t *mac,
-                                        frame_t frame,
-                                        int slot,
-                                        fapi_nr_csirs_measurements_t *csirs_measurements) {
-  LOG_D(NR_MAC,"(%d.%d) Received CSI-RS measurements\n", frame, slot);
-  memcpy(&mac->csirs_measurements, csirs_measurements, sizeof(*csirs_measurements));
-  return 0;
+void nr_ue_process_l1_measurements(NR_UE_MAC_INST_t *mac, frame_t frame, int slot, fapi_nr_l1_measurements_t *l1_measurements)
+{
+  LOG_D(NR_MAC, "(%d.%d) Received CSI-RS measurements\n", frame, slot);
+  memcpy(&mac->l1_measurements, l1_measurements, sizeof(*l1_measurements));
+  bool csi_meas = l1_measurements->meas_type == NFAPI_NR_CSI_MEAS;
+  if (!csi_meas && !l1_measurements->is_neighboring_cell) {
+    int ssb_index = l1_measurements->ssb_index;
+    mac->ssb_measurements[ssb_index].ssb_rsrp_dBm = l1_measurements->rsrp_dBm;
+    mac->ssb_measurements[ssb_index].ssb_sinr_dB = l1_measurements->sinr_dB;
+  }
+  nr_mac_rrc_meas_ind_ue(mac->ue_id,
+                         l1_measurements->gNB_index,
+                         l1_measurements->Nid_cell,
+                         csi_meas,
+                         l1_measurements->is_neighboring_cell,
+                         l1_measurements->rsrp_dBm);
 }
 
-void set_harq_status(NR_UE_MAC_INST_t *mac,
-                     uint8_t pucch_id,
-                     uint8_t harq_id,
-                     int8_t delta_pucch,
-                     uint16_t data_toul_fb,
-                     uint8_t dai,
-                     int n_CCE,
-                     int N_CCE,
-                     frame_t frame,
-                     int slot)
+static void set_harq_status(NR_UE_MAC_INST_t *mac,
+                            uint8_t pucch_id,
+                            uint8_t harq_id,
+                            int8_t delta_pucch,
+                            uint16_t data_toul_fb,
+                            uint8_t dai,
+                            int n_CCE,
+                            int N_CCE,
+                            frame_t frame,
+                            int slot)
 {
   NR_UE_DL_HARQ_STATUS_t *current_harq = &mac->dl_harq_info[harq_id];
   current_harq->active = true;
@@ -1626,7 +1731,9 @@ int nr_ue_configure_pucch(NR_UE_MAC_INST_t *mac,
         pucch_pdu->dmrs_scrambling_id = id0 != NULL ? *id0 : mac->physCellId;
         pucch_pdu->prb_size = compute_pucch_prb_size(2,
                                                      pucchres->format.choice.format2->nrofPRBs,
-                                                     n_uci,
+                                                     pucch->n_csi,
+                                                     pucch->n_harq,
+                                                     pucch->n_sr,
                                                      pucch_Config->format2->choice.setup->maxCodeRate,
                                                      2,
                                                      pucchres->format.choice.format2->nrofSymbols,
@@ -1659,7 +1766,9 @@ int nr_ue_configure_pucch(NR_UE_MAC_INST_t *mac,
         }
         pucch_pdu->prb_size = compute_pucch_prb_size(3,
                                                      pucchres->format.choice.format3->nrofPRBs,
-                                                     n_uci,
+                                                     pucch->n_csi,
+                                                     pucch->n_harq,
+                                                     pucch->n_sr,
                                                      pucch_Config->format3->choice.setup->maxCodeRate,
                                                      2 - pucch_pdu->pi_2bpsk,
                                                      pucchres->format.choice.format3->nrofSymbols - f3_dmrs_symbols,
@@ -2503,7 +2612,7 @@ bool trigger_periodic_scheduling_request(NR_UE_MAC_INST_t *mac, PUCCH_sched_t *p
   return sr_count > 0;
 }
 
-int8_t nr_ue_get_SR(NR_UE_MAC_INST_t *mac, frame_t frame, slot_t slot, NR_SchedulingRequestId_t sr_id)
+static int8_t nr_ue_get_SR(NR_UE_MAC_INST_t *mac, frame_t frame, slot_t slot, NR_SchedulingRequestId_t sr_id)
 {
   // no UL-SCH resources available for this tti && UE has a valid PUCCH resources for SR configuration for this tti
   NR_UE_SCHEDULING_INFO *si = &mac->scheduling_info;
@@ -2636,6 +2745,123 @@ int nr_get_csi_measurements(NR_UE_MAC_INST_t *mac, frame_t frame, int slot, PUCC
   return num_csi;
 }
 
+// Referred - Table 10.1.16.1-1 in 38.133 V16.7.0.
+static uint8_t get_sinr_index(float sinr)
+{
+  int index = sinr * 2 + 47;
+  if (sinr >= 40)
+    index = 127;
+  if (sinr < -23)
+    index = 0;
+
+  return index;
+}
+
+// Reffered Table 10.1.16.1-2 in 38.133 V16.7.0. Differential value is reported.
+static uint8_t get_sinr_diff_index(float best_sinr, float current_sinr)
+{
+  int diff = best_sinr - current_sinr;
+  if (diff >= 15)
+    return 15;
+  else if (diff <= 0)
+    return 0;
+  else
+    return diff;
+}
+
+// Comparison function for sorting SSB SINR measurements in descending order
+static int compare_ssb_sinr(const void *a, const void *b)
+{
+  const NR_RSRP_meas_t *ma = (const NR_RSRP_meas_t *)a;
+  const NR_RSRP_meas_t *mb = (const NR_RSRP_meas_t *)b;
+  return mb->ssb_sinr_dB - ma->ssb_sinr_dB;
+}
+
+static csi_payload_t get_ssb_sinr_payload(NR_UE_MAC_INST_t *mac,
+                                          struct NR_CSI_ReportConfig *csi_reportconfig,
+                                          NR_CSI_ResourceConfigId_t csi_ResourceConfigId,
+                                          NR_CSI_MeasConfig_t *csi_MeasConfig)
+{
+  int nb_ssb = 0; // nb of ssb in the resource
+  int nb_meas = 0; // nb of ssb to report measurements on
+  int bits = 0;
+  uint64_t temp_payload = 0;
+
+  for (int csi_resourceidx = 0; csi_resourceidx < csi_MeasConfig->csi_ResourceConfigToAddModList->list.count; csi_resourceidx++) {
+    struct NR_CSI_ResourceConfig *csi_resourceconfig = csi_MeasConfig->csi_ResourceConfigToAddModList->list.array[csi_resourceidx];
+    if (csi_resourceconfig->csi_ResourceConfigId == csi_ResourceConfigId) {
+      if (csi_reportconfig->groupBasedBeamReporting.present == NR_CSI_ReportConfig__groupBasedBeamReporting_PR_disabled) {
+        if (csi_reportconfig->groupBasedBeamReporting.choice.disabled->nrofReportedRS != NULL)
+          nb_meas = *(csi_reportconfig->groupBasedBeamReporting.choice.disabled->nrofReportedRS) + 1;
+        else
+          nb_meas = 1;
+      } else
+        nb_meas = 2;
+
+      struct NR_CSI_SSB_ResourceSet__csi_SSB_ResourceList SSB_resource;
+      for (int csi_ssb_idx = 0; csi_ssb_idx < csi_MeasConfig->csi_SSB_ResourceSetToAddModList->list.count; csi_ssb_idx++) {
+        if (csi_MeasConfig->csi_SSB_ResourceSetToAddModList->list.array[csi_ssb_idx]->csi_SSB_ResourceSetId
+            == *(csi_resourceconfig->csi_RS_ResourceSetList.choice.nzp_CSI_RS_SSB->csi_SSB_ResourceSetList->list.array[0])) {
+          SSB_resource = csi_MeasConfig->csi_SSB_ResourceSetToAddModList->list.array[csi_ssb_idx]->csi_SSB_ResourceList;
+          /// only one SSB resource set from spec 38.331 IE CSI-ResourceConfig
+          nb_ssb = SSB_resource.list.count;
+          break;
+        }
+      }
+
+      AssertFatal(nb_ssb > 0, "No SSB found in the resource set\n");
+      AssertFatal(nb_meas <= 4,"Can't report more than 4 RSRPs\n");
+      int ssbri_bits = ceil(log2(nb_ssb));
+
+      // map SSB index to SSB resource table index, copy measurements, sort in descending order
+      NR_RSRP_meas_t sorted_sinr_measurements[nb_ssb];
+      int sorted_idx = 0;
+      for (int measured_ssb_idx = 0; measured_ssb_idx < MAX_NB_SSB; measured_ssb_idx++) {
+        // searching for the SSB index in the SSB resource table
+        for (int ssb_resource = 0; ssb_resource < nb_ssb; ssb_resource++) {
+          if (*SSB_resource.list.array[ssb_resource] == measured_ssb_idx) {
+            sorted_sinr_measurements[sorted_idx].ssb_index = ssb_resource;
+            sorted_sinr_measurements[sorted_idx].ssb_rsrp_dBm = mac->ssb_measurements[measured_ssb_idx].ssb_rsrp_dBm;
+            sorted_sinr_measurements[sorted_idx].ssb_sinr_dB = mac->ssb_measurements[measured_ssb_idx].ssb_sinr_dB;
+            sorted_idx++;
+            break;
+          }
+        }
+      }
+      qsort(sorted_sinr_measurements, nb_ssb, sizeof(NR_RSRP_meas_t), compare_ssb_sinr);
+
+      uint8_t ssbi;
+
+      // TS38.212 v16.5.0: Table 6.3.1.1.2-8A
+      if (ssbri_bits > 0) {
+        ssbi = sorted_sinr_measurements[0].ssb_index;
+        temp_payload = reverse_bits(ssbi, ssbri_bits);
+        bits += ssbri_bits;
+      }
+
+      uint8_t sinr_idx = get_sinr_index(sorted_sinr_measurements[0].ssb_sinr_dB);
+      temp_payload |= (reverse_bits(sinr_idx, 7) << bits);
+      bits += 7; // 7 bits for highest SINR
+
+      // from the second SSB, differential report
+      for (int i = 1; i < nb_meas; i++) {
+        ssbi = sorted_sinr_measurements[i].ssb_index;
+        temp_payload |= (reverse_bits(ssbi, ssbri_bits) << bits);
+        bits += ssbri_bits;
+
+        sinr_idx = get_sinr_diff_index(sorted_sinr_measurements[0].ssb_sinr_dB, sorted_sinr_measurements[i].ssb_sinr_dB);
+        temp_payload |= (reverse_bits(sinr_idx, 4) << bits);
+        bits += 4; // 4 bits for differential SINR
+      }
+      break; // resource found
+    }
+  }
+  int max_bits = sizeof(((csi_payload_t *)0)->part1_payload) * 8;
+  AssertFatal(bits <= max_bits, "Not supporting CSI report with more than %d bits (payload: %d bits)\n", max_bits, bits);
+  csi_payload_t csi = {.part1_payload = temp_payload, .part2_payload = 0, .p1_bits = bits, csi.p2_bits = 0};
+  return csi;
+}
+
 csi_payload_t nr_get_csi_payload(NR_UE_MAC_INST_t *mac,
                                  int csi_report_id,
                                  CSI_mapping_t mapping_type,
@@ -2645,40 +2871,72 @@ csi_payload_t nr_get_csi_payload(NR_UE_MAC_INST_t *mac,
   csi_payload_t csi = {0};
   struct NR_CSI_ReportConfig *csi_reportconfig = csi_MeasConfig->csi_ReportConfigToAddModList->list.array[csi_report_id];
   NR_CSI_ResourceConfigId_t csi_ResourceConfigId = csi_reportconfig->resourcesForChannelMeasurement;
-  switch(csi_reportconfig->reportQuantity.present) {
-    case NR_CSI_ReportConfig__reportQuantity_PR_none:
-      break;
-    case NR_CSI_ReportConfig__reportQuantity_PR_ssb_Index_RSRP:
-      csi = get_ssb_rsrp_payload(mac, csi_reportconfig, csi_ResourceConfigId, csi_MeasConfig);
-      break;
-    case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_PMI_CQI:
-      csi = get_csirs_RI_PMI_CQI_payload(mac, csi_reportconfig, csi_ResourceConfigId, csi_MeasConfig, mapping_type);
-      break;
-    case NR_CSI_ReportConfig__reportQuantity_PR_cri_RSRP:
-      csi = get_csirs_RSRP_payload(mac, csi_reportconfig, csi_ResourceConfigId, csi_MeasConfig);
-      break;
-    case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_i1:
-    case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_i1_CQI:
-    case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_CQI:
-    case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_LI_PMI_CQI:
-      LOG_E(NR_MAC,"Measurement report %d based on CSI-RS is not available\n", csi_reportconfig->reportQuantity.present);
-      break;
-    default:
-      AssertFatal(1==0,"Invalid CSI report quantity type %d\n",csi_reportconfig->reportQuantity.present);
+  if (csi_reportconfig->ext2 && csi_reportconfig->ext2->reportQuantity_r16) {
+    switch (csi_reportconfig->ext2->reportQuantity_r16->present) {
+      case NR_CSI_ReportConfig__ext2__reportQuantity_r16_PR_ssb_Index_SINR_r16:
+        csi = get_ssb_sinr_payload(mac, csi_reportconfig, csi_ResourceConfigId, csi_MeasConfig);
+        break;
+      case NR_CSI_ReportConfig__ext2__reportQuantity_r16_PR_cri_SINR_r16:
+        LOG_E(NR_MAC, "CSI Reporting of CSI-RS based SINR not yet available\n");
+        break;
+      default:
+        AssertFatal(1 == 0, "Invalid CSI report quantity r16 type %d\n", csi_reportconfig->ext2->reportQuantity_r16->present);
+    }
+  } else {
+    switch (csi_reportconfig->reportQuantity.present) {
+      case NR_CSI_ReportConfig__reportQuantity_PR_none:
+        break;
+      case NR_CSI_ReportConfig__reportQuantity_PR_ssb_Index_RSRP:
+        csi = get_ssb_rsrp_payload(mac, csi_reportconfig, csi_ResourceConfigId, csi_MeasConfig);
+        break;
+      case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_PMI_CQI:
+        csi = get_csirs_RI_PMI_CQI_payload(mac, csi_reportconfig, csi_ResourceConfigId, csi_MeasConfig, mapping_type);
+        break;
+      case NR_CSI_ReportConfig__reportQuantity_PR_cri_RSRP:
+        csi = get_csirs_RSRP_payload(mac, csi_reportconfig, csi_ResourceConfigId, csi_MeasConfig);
+        break;
+      case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_i1:
+      case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_i1_CQI:
+      case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_CQI:
+      case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_LI_PMI_CQI:
+        LOG_E(NR_MAC, "Measurement report %d based on CSI-RS is not available\n", csi_reportconfig->reportQuantity.present);
+        break;
+      default:
+        AssertFatal(1 == 0, "Invalid CSI report quantity type %d\n", csi_reportconfig->reportQuantity.present);
+    }
   }
   return csi;
 }
 
+// Comparison function for sorting SSB RSRP measurements in descending order
+static int compare_ssb_rsrp(const void *a, const void *b)
+{
+  const NR_RSRP_meas_t *ma = (const NR_RSRP_meas_t *)a;
+  const NR_RSRP_meas_t *mb = (const NR_RSRP_meas_t *)b;
+  return mb->ssb_rsrp_dBm - ma->ssb_rsrp_dBm;
+}
 
-csi_payload_t get_ssb_rsrp_payload(NR_UE_MAC_INST_t *mac,
-                                   struct NR_CSI_ReportConfig *csi_reportconfig,
-                                   NR_CSI_ResourceConfigId_t csi_ResourceConfigId,
-                                   NR_CSI_MeasConfig_t *csi_MeasConfig)
+// returns index from RSRP
+// according to Table 10.1.6.1-1 in 38.133
+static uint8_t get_rsrp_index(int rsrp)
+{
+  int index = rsrp + 157;
+  if (rsrp > -44)
+    index = 113;
+  if (rsrp < -140)
+    index = 16;
+  return index;
+}
+
+static csi_payload_t get_ssb_rsrp_payload(NR_UE_MAC_INST_t *mac,
+                                          struct NR_CSI_ReportConfig *csi_reportconfig,
+                                          NR_CSI_ResourceConfigId_t csi_ResourceConfigId,
+                                          NR_CSI_MeasConfig_t *csi_MeasConfig)
 {
   int nb_ssb = 0;  // nb of ssb in the resource
   int nb_meas = 0; // nb of ssb to report measurements on
   int bits = 0;
-  uint32_t temp_payload = 0;
+  uint64_t temp_payload = 0;
 
   for (int csi_resourceidx = 0; csi_resourceidx < csi_MeasConfig->csi_ResourceConfigToAddModList->list.count; csi_resourceidx++) {
     struct NR_CSI_ResourceConfig *csi_resourceconfig = csi_MeasConfig->csi_ResourceConfigToAddModList->list.array[csi_resourceidx];
@@ -2686,7 +2944,7 @@ csi_payload_t get_ssb_rsrp_payload(NR_UE_MAC_INST_t *mac,
 
       if (csi_reportconfig->groupBasedBeamReporting.present == NR_CSI_ReportConfig__groupBasedBeamReporting_PR_disabled) {
         if (csi_reportconfig->groupBasedBeamReporting.choice.disabled->nrofReportedRS != NULL)
-          nb_meas = *(csi_reportconfig->groupBasedBeamReporting.choice.disabled->nrofReportedRS)+1;
+          nb_meas = *(csi_reportconfig->groupBasedBeamReporting.choice.disabled->nrofReportedRS) + 1;
         else
           nb_meas = 1;
       } else
@@ -2703,58 +2961,64 @@ csi_payload_t get_ssb_rsrp_payload(NR_UE_MAC_INST_t *mac,
         }
       }
 
-      AssertFatal(nb_ssb>0,"No SSB found in the resource set\n");
-      AssertFatal(nb_meas==1,"PHY currently reports only the strongest SSB to MAC. Can't report more than 1 RSRP\n");
+      AssertFatal(nb_ssb > 0,"No SSB found in the resource set\n");
+      AssertFatal(nb_meas <= 4,"Can't report more than 4 RSRPs\n");
       int ssbri_bits = ceil(log2(nb_ssb));
 
-      int ssb_rsrp[2][nb_meas]; // the array contains index and RSRP of each SSB to be reported (nb_meas highest RSRPs)
-      memset(ssb_rsrp, 0, sizeof(ssb_rsrp));
-
-      //TODO replace the following 2 lines with a function to order the nb_meas highest SSB RSRPs
-      for (int i=0; i<nb_ssb; i++) {
-        if(*SSB_resource.list.array[i] == mac->mib_ssb) {
-          ssb_rsrp[0][0] = i;
-          break;
+      // map SSB index to SSB resource table index, copy measurements, sort in descending order
+      NR_RSRP_meas_t sorted_rsrp_measurements[nb_ssb];
+      int sorted_idx = 0;
+      for (int measured_ssb_idx = 0; measured_ssb_idx < MAX_NB_SSB; measured_ssb_idx++) {
+        // searching for the SSB index in the SSB resource table
+        for (int ssb_resource = 0; ssb_resource < nb_ssb; ssb_resource++) {
+          if (*SSB_resource.list.array[ssb_resource] == measured_ssb_idx) {
+            sorted_rsrp_measurements[sorted_idx].ssb_index = ssb_resource;
+            sorted_rsrp_measurements[sorted_idx].ssb_rsrp_dBm = mac->ssb_measurements[measured_ssb_idx].ssb_rsrp_dBm;
+            sorted_rsrp_measurements[sorted_idx].ssb_sinr_dB = mac->ssb_measurements[measured_ssb_idx].ssb_sinr_dB;
+            sorted_idx++;
+            break;
+          }
         }
       }
-      AssertFatal(*SSB_resource.list.array[ssb_rsrp[0][0]] == mac->mib_ssb, "Couldn't find corresponding SSB in csi_SSB_ResourceList\n");
-      ssb_rsrp[1][0] = mac->ssb_measurements.ssb_rsrp_dBm;
+      qsort(sorted_rsrp_measurements, nb_ssb, sizeof(NR_RSRP_meas_t), compare_ssb_rsrp);
 
-      uint8_t ssbi;
+      uint32_t ssbi;
 
       if (ssbri_bits > 0) {
-        ssbi = ssb_rsrp[0][0];
+        ssbi = sorted_rsrp_measurements[0].ssb_index;
         temp_payload = reverse_bits(ssbi, ssbri_bits);
         bits += ssbri_bits;
       }
 
-      uint8_t rsrp_idx = get_rsrp_index(ssb_rsrp[1][0]);
+      uint8_t rsrp_idx = get_rsrp_index(sorted_rsrp_measurements[0].ssb_rsrp_dBm);
       temp_payload |= (reverse_bits(rsrp_idx, 7) << bits);
       bits += 7; // 7 bits for highest RSRP
 
       // from the second SSB, differential report
-      for (int i=1; i<nb_meas; i++){
-        ssbi = ssb_rsrp[0][i];
-        temp_payload = reverse_bits(ssbi, ssbri_bits);
+      for (int i = 1; i < nb_meas; i++) {
+        ssbi = sorted_rsrp_measurements[i].ssb_index;
+        temp_payload |= (reverse_bits(ssbi, ssbri_bits) << bits);
         bits += ssbri_bits;
 
-        rsrp_idx = get_rsrp_diff_index(ssb_rsrp[1][0],ssb_rsrp[1][i]);
+        rsrp_idx = get_rsrp_diff_index(sorted_rsrp_measurements[0].ssb_rsrp_dBm,sorted_rsrp_measurements[i].ssb_rsrp_dBm);
         temp_payload |= (reverse_bits(rsrp_idx, 4) << bits);
-        bits += 4; // 7 bits for highest RSRP
+        bits += 4; // 4 bits for subsequent RSRP
       }
       break; // resorce found
     }
   }
-  AssertFatal(bits <= 32, "Not supporting CSI report with more than 32 bits\n");
-  csi_payload_t csi = {.part1_payload = temp_payload, .p1_bits = bits, csi.p2_bits = 0};
+  int max_bits = sizeof(((csi_payload_t *)0)->part1_payload) * 8;
+  AssertFatal(bits <= max_bits, "Not supporting CSI report with more than %d bits (payload: %d bits)\n", max_bits, bits);
+
+  csi_payload_t csi = {.part1_payload = temp_payload, .part2_payload = 0, .p1_bits = bits, .p2_bits = 0};
   return csi;
 }
 
-csi_payload_t get_csirs_RI_PMI_CQI_payload(NR_UE_MAC_INST_t *mac,
-                                           struct NR_CSI_ReportConfig *csi_reportconfig,
-                                           NR_CSI_ResourceConfigId_t csi_ResourceConfigId,
-                                           NR_CSI_MeasConfig_t *csi_MeasConfig,
-                                           CSI_mapping_t mapping_type)
+static csi_payload_t get_csirs_RI_PMI_CQI_payload(NR_UE_MAC_INST_t *mac,
+                                                  struct NR_CSI_ReportConfig *csi_reportconfig,
+                                                  NR_CSI_ResourceConfigId_t csi_ResourceConfigId,
+                                                  NR_CSI_MeasConfig_t *csi_MeasConfig,
+                                                  CSI_mapping_t mapping_type)
 {
   int p1_bits = 0;
   int p2_bits = 0;
@@ -2781,9 +3045,9 @@ csi_payload_t get_csirs_RI_PMI_CQI_payload(NR_UE_MAC_INST_t *mac,
           AssertFatal(csi_report, "Couldn't find CSI report with ID %ld\n", csi_reportconfig->reportConfigId);
           int cri_bitlen = csi_report->csi_meas_bitlen.cri_bitlen;
           int ri_bitlen = csi_report->csi_meas_bitlen.ri_bitlen;
-          int pmi_x1_bitlen = csi_report->csi_meas_bitlen.pmi_x1_bitlen[mac->csirs_measurements.rank_indicator];
-          int pmi_x2_bitlen = csi_report->csi_meas_bitlen.pmi_x2_bitlen[mac->csirs_measurements.rank_indicator];
-          int cqi_bitlen = csi_report->csi_meas_bitlen.cqi_bitlen[mac->csirs_measurements.rank_indicator];
+          int pmi_x1_bitlen = csi_report->csi_meas_bitlen.pmi_x1_bitlen[mac->l1_measurements.rank_indicator];
+          int pmi_x2_bitlen = csi_report->csi_meas_bitlen.pmi_x2_bitlen[mac->l1_measurements.rank_indicator];
+          int cqi_bitlen = csi_report->csi_meas_bitlen.cqi_bitlen[mac->l1_measurements.rank_indicator];
 
           if (get_softmodem_params()->emulate_l1) {
             static const uint8_t mcs_to_cqi[] = {0, 1, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9,
@@ -2791,9 +3055,9 @@ csi_payload_t get_csirs_RI_PMI_CQI_payload(NR_UE_MAC_INST_t *mac,
             CHECK_INDEX(nr_bler_data, NR_NUM_MCS - 1);
             int mcs = get_mcs_from_sinr(nr_bler_data, (mac->nr_ue_emul_l1.cqi - 640) * 0.1);
             CHECK_INDEX(mcs_to_cqi, mcs);
-            mac->csirs_measurements.rank_indicator = mac->nr_ue_emul_l1.ri;
-            mac->csirs_measurements.i1 = mac->nr_ue_emul_l1.pmi;
-            mac->csirs_measurements.cqi = mcs_to_cqi[mcs];
+            mac->l1_measurements.rank_indicator = mac->nr_ue_emul_l1.ri;
+            mac->l1_measurements.i1 = mac->nr_ue_emul_l1.pmi;
+            mac->l1_measurements.cqi = mcs_to_cqi[mcs];
           }
 
           int padding_bitlen = 0;
@@ -2802,19 +3066,19 @@ csi_payload_t get_csirs_RI_PMI_CQI_payload(NR_UE_MAC_INST_t *mac,
             p1_bits = cri_bitlen + ri_bitlen + cqi_bitlen;
             p2_bits = pmi_x1_bitlen + pmi_x2_bitlen;
             temp_payload_1 = (0/*mac->csi_measurements.cri*/ << (cqi_bitlen + ri_bitlen)) |
-                             (mac->csirs_measurements.rank_indicator << cqi_bitlen) |
-                             (mac->csirs_measurements.cqi);
-            temp_payload_2 = (mac->csirs_measurements.i1 << pmi_x2_bitlen) |
-                             mac->csirs_measurements.i2;
+                             (mac->l1_measurements.rank_indicator << cqi_bitlen) |
+                             (mac->l1_measurements.cqi);
+            temp_payload_2 = (mac->l1_measurements.i1 << pmi_x2_bitlen) |
+                             mac->l1_measurements.i2;
           }
           else {
             p1_bits = nr_get_csi_bitlen(csi_report);
             padding_bitlen = p1_bits - (cri_bitlen + ri_bitlen + pmi_x1_bitlen + pmi_x2_bitlen + cqi_bitlen);
             temp_payload_1 = (0/*mac->csi_measurements.cri*/ << (cqi_bitlen + pmi_x2_bitlen + pmi_x1_bitlen + padding_bitlen + ri_bitlen)) |
-                             (mac->csirs_measurements.rank_indicator << (cqi_bitlen + pmi_x2_bitlen + pmi_x1_bitlen + padding_bitlen)) |
-                             (mac->csirs_measurements.i1 << (cqi_bitlen + pmi_x2_bitlen)) |
-                             (mac->csirs_measurements.i2 << (cqi_bitlen)) |
-                             (mac->csirs_measurements.cqi);
+                             (mac->l1_measurements.rank_indicator << (cqi_bitlen + pmi_x2_bitlen + pmi_x1_bitlen + padding_bitlen)) |
+                             (mac->l1_measurements.i1 << (cqi_bitlen + pmi_x2_bitlen)) |
+                             (mac->l1_measurements.i2 << (cqi_bitlen)) |
+                             (mac->l1_measurements.cqi);
           }
 
           temp_payload_1 = reverse_bits(temp_payload_1, p1_bits);
@@ -2838,10 +3102,10 @@ csi_payload_t get_csirs_RI_PMI_CQI_payload(NR_UE_MAC_INST_t *mac,
   return csi;
 }
 
-csi_payload_t get_csirs_RSRP_payload(NR_UE_MAC_INST_t *mac,
-                                     struct NR_CSI_ReportConfig *csi_reportconfig,
-                                     NR_CSI_ResourceConfigId_t csi_ResourceConfigId,
-                                     const NR_CSI_MeasConfig_t *csi_MeasConfig)
+static csi_payload_t get_csirs_RSRP_payload(NR_UE_MAC_INST_t *mac,
+                                            struct NR_CSI_ReportConfig *csi_reportconfig,
+                                            NR_CSI_ResourceConfigId_t csi_ResourceConfigId,
+                                            const NR_CSI_MeasConfig_t *csi_MeasConfig)
 {
   int n_bits = 0;
   uint64_t temp_payload = 0;
@@ -2873,25 +3137,14 @@ csi_payload_t get_csirs_RSRP_payload(NR_UE_MAC_INST_t *mac,
           }
 
           // TODO: Improvements will be needed to cri_ssbri_bitlen>0
-          // TS 38.133 - Table 10.1.6.1-1
-          int rsrp_dBm = mac->csirs_measurements.rsrp_dBm;
-          if (rsrp_dBm < -140) {
-            temp_payload = 16;
-          } else if (rsrp_dBm > -44) {
-            temp_payload = 113;
-          } else {
-            temp_payload = mac->csirs_measurements.rsrp_dBm + 157;
-          }
-
+          temp_payload = get_rsrp_index(mac->l1_measurements.rsrp_dBm);
           temp_payload = reverse_bits(temp_payload, n_bits);
 
           LOG_D(NR_MAC, "cri_ssbri_bitlen = %d\n", cri_ssbri_bitlen);
           LOG_D(NR_MAC, "rsrp_bitlen = %d\n", rsrp_bitlen);
           LOG_D(NR_MAC, "diff_rsrp_bitlen = %d\n", diff_rsrp_bitlen);
-
           LOG_D(NR_MAC, "n_bits = %d\n", n_bits);
           LOG_D(NR_MAC, "csi_part1_payload = 0x%lx\n", temp_payload);
-
           break;
         }
       }
@@ -2902,31 +3155,15 @@ csi_payload_t get_csirs_RSRP_payload(NR_UE_MAC_INST_t *mac,
   return csi;
 }
 
-// returns index from RSRP
-// according to Table 10.1.6.1-1 in 38.133
-
-uint8_t get_rsrp_index(int rsrp) {
-
-  int index = rsrp + 157;
-  if (rsrp>-44)
-    index = 113;
-  if (rsrp<-140)
-    index = 16;
-
-  return index;
-}
-
-
 // returns index from differential RSRP
 // according to Table 10.1.6.1-2 in 38.133
-uint8_t get_rsrp_diff_index(int best_rsrp,int current_rsrp) {
-
+static uint8_t get_rsrp_diff_index(int best_rsrp, int current_rsrp)
+{
   int diff = best_rsrp-current_rsrp;
   if (diff>30)
     return 15;
   else
     return (diff>>1);
-
 }
 
 void nr_ue_send_sdu(NR_UE_MAC_INST_t *mac, nr_downlink_indication_t *dl_info, int pdu_id)
@@ -2993,7 +3230,7 @@ static void extract_10_ra_rnti(dci_pdu_rel15_t *dci_pdu_rel15, const uint8_t *dc
   EXTRACT_DCI_ITEM(dci_pdu_rel15->tb_scaling, 2);
 }
 
-static void extract_10_si_rnti(dci_pdu_rel15_t *dci_pdu_rel15, const uint8_t *dci_pdu, int pos, const int N_RB)
+static uint8_t extract_10_si_rnti(dci_pdu_rel15_t *dci_pdu_rel15, const uint8_t *dci_pdu, int pos, const int N_RB)
 {
   LOG_D(NR_MAC_DCI, "Received dci 1_0 SI rnti\n");
 
@@ -3009,6 +3246,7 @@ static void extract_10_si_rnti(dci_pdu_rel15_t *dci_pdu_rel15, const uint8_t *dc
   EXTRACT_DCI_ITEM(dci_pdu_rel15->rv, 2);
   // System information indicator 1 bit
   EXTRACT_DCI_ITEM(dci_pdu_rel15->system_info_indicator, 1);
+  return dci_pdu_rel15->system_info_indicator;
 }
 
 static bool extract_10_c_rnti(NR_UE_MAC_INST_t *mac,
@@ -3312,7 +3550,10 @@ static nr_dci_format_t nr_extract_dci_00_10(NR_UE_MAC_INST_t *mac,
       n_RB = get_nrb_for_dci(mac, format, ss_type);
       if (n_RB == 0)
         return NR_DCI_NONE;
-      extract_10_si_rnti(dci_pdu_rel15, dci_pdu, pos, n_RB);
+      uint8_t sys_info = extract_10_si_rnti(dci_pdu_rel15, dci_pdu, pos, n_RB);
+      // sys info = 0 for SIB1 and 1 for other SIB
+      if (mac->get_sib1 == 0 && sys_info == 0)
+        return NR_DCI_NONE;
       break;
     case TYPE_C_RNTI_ :
       // Identifier for DCI formats
@@ -3551,7 +3792,7 @@ static int nr_ue_validate_successrar(uint8_t *pduP,
 //  F:    lenght of L is 0:8 or 1:16 bits wide
 //  R:    Reserved bit, set to zero.
 ////////////////////////////////
-void nr_ue_process_mac_pdu(NR_UE_MAC_INST_t *mac, nr_downlink_indication_t *dl_info, int pdu_id)
+static void nr_ue_process_mac_pdu(NR_UE_MAC_INST_t *mac, nr_downlink_indication_t *dl_info, int pdu_id)
 {
   frame_t frameP = dl_info->frame;
   int slot = dl_info->slot;
@@ -3590,7 +3831,7 @@ void nr_ue_process_mac_pdu(NR_UE_MAC_INST_t *mac, nr_downlink_indication_t *dl_i
 
     LOG_D(MAC, "[UE] LCID %d, PDU length %d\n", rx_lcid, pdu_len);
     bool ret;
-    switch(rx_lcid){
+    switch (rx_lcid) {
       //  MAC CE
       case DL_SCH_LCID_CCCH:
         //  MSG4 RRC Setup 38.331
@@ -3727,6 +3968,11 @@ void nr_ue_process_mac_pdu(NR_UE_MAC_INST_t *mac, nr_downlink_indication_t *dl_i
       case 1 ... 32:
         if (!get_mac_len(pduP, pdu_len, &mac_len, &mac_subheader_len))
           return;
+        // discard the received subPDU if RB is suspended
+        if (is_lcid_suspended(mac, rx_lcid)) {
+          LOG_W(NR_MAC, "Received PDU for a suspended RB, corresponding to LCID %d. Dropping it.\n", rx_lcid);
+          break;
+        }
         LOG_D(NR_MAC, "%4d.%2d : DLSCH -> LCID %d %d bytes\n", frameP, slot, rx_lcid, mac_len);
         nr_mac_rlc_data_ind(mac->ue_id, mac->ue_id, false, rx_lcid, (char *)(pduP + mac_subheader_len), mac_len);
         break;
@@ -3734,8 +3980,8 @@ void nr_ue_process_mac_pdu(NR_UE_MAC_INST_t *mac, nr_downlink_indication_t *dl_i
         LOG_W(MAC, "unknown lcid %02x\n", rx_lcid);
         break;
     }
-    pduP += ( mac_subheader_len + mac_len );
-    pdu_len -= ( mac_subheader_len + mac_len );
+    pduP += (mac_subheader_len + mac_len);
+    pdu_len -= (mac_subheader_len + mac_len);
     if (pdu_len < 0)
       LOG_E(MAC, "[UE %d][%d.%d] nr_ue_process_mac_pdu, residual mac pdu length %d < 0!\n", mac->ue_id, frameP, slot, pdu_len);
   }
@@ -3869,9 +4115,10 @@ static void handle_rar_reception(NR_UE_MAC_INST_t *mac, NR_MAC_RAR *rar, frame_t
   const NR_UE_UL_BWP_t *current_UL_BWP = mac->current_UL_BWP;
   const NR_UE_DL_BWP_t *current_DL_BWP = mac->current_DL_BWP;
   const NR_BWP_PDCCH_t *pdcch_config = &mac->config_BWP_PDCCH[current_DL_BWP->bwp_id];
+  const NR_SearchSpace_t *ra_SS = get_common_search_space(mac, pdcch_config->ra_SS_id);
   NR_tda_info_t tda_info = get_ul_tda_info(current_UL_BWP,
-                                           *pdcch_config->ra_SS->controlResourceSetId,
-                                           pdcch_config->ra_SS->searchSpaceType->present,
+                                           *ra_SS->controlResourceSetId,
+                                           ra_SS->searchSpaceType->present,
                                            TYPE_RA_RNTI_,
                                            rar_grant.Msg3_t_alloc);
   if (!tda_info.valid_tda || tda_info.nrOfSymbols == 0) {

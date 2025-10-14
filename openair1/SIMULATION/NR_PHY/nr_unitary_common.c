@@ -112,20 +112,20 @@ int32_t get_uldl_offset(int nr_bandP)
 void configure_nr_nfapi_pnf(char *vnf_ip_addr, int vnf_p5_port, char *pnf_ip_addr, int pnf_p7_port, int vnf_p7_port)
 {
 }
-void configure_nr_nfapi_vnf(char *vnf_addr, int vnf_p5_port, char *pnf_ip_addr, int pnf_p7_port, int vnf_p7_port)
+void configure_nr_nfapi_vnf(eth_params_t params)
 {
 }
 int nfapi_nr_p7_message_pack(void *pMessageBuf, void *pPackedBuf, uint32_t packedBufLen, nfapi_p7_codec_config_t *config)
 {
   return 0;
 }
-int nfapi_nr_p7_message_unpack(void *pMessageBuf,
+bool nfapi_nr_p7_message_unpack(void *pMessageBuf,
                                uint32_t messageBufLen,
                                void *pUnpackedBuf,
                                uint32_t unpackedBufLen,
                                nfapi_p7_codec_config_t *config)
 {
-  return 0;
+  return false;
 }
 int nfapi_p7_message_header_unpack(void *pMessageBuf,
                                    uint32_t messageBufLen,
@@ -178,15 +178,12 @@ void *rrc_nrue(void *notUsed)
 {
   return NULL;
 }
-int8_t nr_mac_rrc_sl_mib_ind(const module_id_t module_id,
-                             const int CC_id,
-                             const uint8_t gNB_index,
-                             const frame_t frame,
-                             const int slot,
-                             const int channel,
-                             const uint8_t *pduP,
-                             const sdu_size_t pdu_len,
-                             const uint16_t rx_slss_id)
+
+void nr_mac_rrc_meas_ind_ue(module_id_t module_id,
+                            uint32_t gNB_index,
+                            uint16_t Nid_cell,
+                            bool csi_meas,
+                            bool is_neighboring_cell,
+                            int rsrp_dBm)
 {
-  return 1;
 }

@@ -66,7 +66,6 @@ extern "C"
 #define CONFIG_HLP_CLK           "tells hardware to use a clock reference (0:internal, 1:external, 2:gpsdo)\n"
 #define CONFIG_HLP_TME           "tells hardware to use a time reference (0:internal, 1:external, 2:gpsdo)\n"
 #define CONFIG_HLP_TUNE_OFFSET   "LO tuning offset to use in Hz\n"
-#define CONFIG_HLP_USIM          "use XOR autentication algo in case of test usim mode\n"
 #define CONFIG_HLP_NOSNGLT       "Disables single-thread mode in lte-softmodem\n"
 #define CONFIG_HLP_DLF           "Set the downlink frequency for all component carriers\n"
 #define CONFIG_HLP_ULF           "Set the uplink frequency offset for all component carriers\n"
@@ -97,7 +96,6 @@ extern "C"
 
 #define CONFIG_HLP_NUMEROLOGY    "adding numerology for 5G\n"
 #define CONFIG_HLP_BAND          "band index\n"
-#define CONFIG_HLP_EMULATE_RF    "Emulated RF enabled(disable by defult)\n"
 #define CONFIG_HLP_PARALLEL_CMD  "three config for level of parallelism 'PARALLEL_SINGLE_THREAD', 'PARALLEL_RU_L1_SPLIT', or 'PARALLEL_RU_L1_TRX_SPLIT'\n"
 #define CONFIG_HLP_WORKER_CMD    "two option for worker 'WORKER_DISABLE' or 'WORKER_ENABLE'\n"
 #define CONFIG_HLP_USRP_THREAD   "having extra thead for usrp tx\n"
@@ -129,12 +127,10 @@ extern "C"
 #define CHAIN_OFFSET        softmodem_params.chain_offset
 #define NUMEROLOGY          softmodem_params.numerology
 #define BAND                softmodem_params.band
-#define EMULATE_RF          softmodem_params.emulate_rf
 #define CLOCK_SOURCE        softmodem_params.clock_source
 #define TIMING_SOURCE       softmodem_params.timing_source
 #define TUNE_OFFSET         softmodem_params.tune_offset
 #define SEND_DMRSSYNC       softmodem_params.send_dmrs_sync
-#define USIM_TEST           softmodem_params.usim_test
 #define CHEST_FREQ          softmodem_params.chest_freq
 #define CHEST_TIME          softmodem_params.chest_time
 #define NFAPI               softmodem_params.nfapi
@@ -144,6 +140,7 @@ extern "C"
 #define EMULATE_L1          softmodem_params.emulate_l1
 #define CONTINUOUS_TX       softmodem_params.continuous_tx
 #define SYNC_REF            softmodem_params.sync_ref
+#define DEFAULT_PDU_ID      softmodem_params.default_pdu_session_id
 
 #define DEFAULT_RFCONFIG_FILE    "/usr/local/etc/syriq/ue.band7.tm1.PRB100.NR40.dat";
 
@@ -155,7 +152,6 @@ extern int usrp_tx_thread;
   {"phy-test",              CONFIG_HLP_PHYTST,        PARAMFLAG_BOOL, .iptr=&PHY_TEST,                        .defintval=0,             TYPE_INT,    0},  \
   {"do-ra",                 CONFIG_HLP_DORA,          PARAMFLAG_BOOL, .iptr=&DO_RA,                           .defintval=0,             TYPE_INT,    0},  \
   {"sl-mode",               CONFIG_HLP_SL_MODE,       0,              .u8ptr=&SL_MODE,                        .defintval=0,             TYPE_UINT8,  0},  \
-  {"usim-test",             CONFIG_HLP_USIM,          PARAMFLAG_BOOL, .u8ptr=&USIM_TEST,                      .defintval=0,             TYPE_UINT8,  0},  \
   {"clock-source",          CONFIG_HLP_CLK,           0,              .uptr=&CLOCK_SOURCE,                    .defintval=0,             TYPE_UINT,   0},  \
   {"time-source",           CONFIG_HLP_TME,           0,              .uptr=&TIMING_SOURCE,                   .defintval=0,             TYPE_UINT,   0},  \
   {"tune-offset",           CONFIG_HLP_TUNE_OFFSET,   0,              .dblptr=&TUNE_OFFSET,                   .defintval=0,             TYPE_DOUBLE, 0},  \
@@ -166,7 +162,6 @@ extern int usrp_tx_thread;
   {"q" ,                    CONFIG_HLP_STMON,         PARAMFLAG_BOOL, .iptr=&cpu_meas_enabled,                     .defintval=0,             TYPE_INT,    0},  \
   {"numerology" ,           CONFIG_HLP_NUMEROLOGY,    0,              .iptr=&NUMEROLOGY,                      .defintval=1,             TYPE_INT,    0},  \
   {"band" ,                 CONFIG_HLP_BAND,          0,              .iptr=&BAND,                            .defintval=78,            TYPE_INT,    0},  \
-  {"emulate-rf" ,           CONFIG_HLP_EMULATE_RF,    PARAMFLAG_BOOL, .iptr=&EMULATE_RF,                      .defintval=0,             TYPE_INT,    0},  \
   {"parallel-config",       CONFIG_HLP_PARALLEL_CMD,  0,              .strptr=&parallel_config,               .defstrval=NULL,          TYPE_STRING, 0},  \
   {"worker-config",         CONFIG_HLP_WORKER_CMD,    0,              .strptr=&worker_config,                 .defstrval=NULL,          TYPE_STRING, 0},  \
   {"noS1",                  CONFIG_HLP_NOS1,          PARAMFLAG_BOOL, .uptr=&noS1,                            .defintval=0,             TYPE_UINT,   0},  \
@@ -188,6 +183,7 @@ extern int usrp_tx_thread;
   {"E" ,                    CONFIG_HLP_TQFS,          PARAMFLAG_BOOL, .iptr=&softmodem_params.threequarter_fs, .defintval=0,            TYPE_INT,    0}, \
   {"imscope" ,              CONFIG_HLP_IMSCOPE,       PARAMFLAG_BOOL, .uptr=&enable_imscope,                   .defintval=0,            TYPE_UINT,   0}, \
   {"imscope-record" ,       CONFIG_HLP_IMSCOPE_RECORD,PARAMFLAG_BOOL, .uptr=&enable_imscope_record,            .defintval=0,            TYPE_UINT,   0}, \
+  {"default-pdu-id",        NULL,                     0,              .iptr=&DEFAULT_PDU_ID,                   .defintval=10,           TYPE_INT,    0}, \
 }
 // clang-format on
 
@@ -218,12 +214,11 @@ extern int usrp_tx_thread;
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
-    { .s5 = { NULL } },                     \
-    { .s5 = { NULL } },                     \
     { .s3a = { config_checkstr_assign_integer, \
                {"MONOLITHIC", "PNF", "VNF", "AERIAL","UE_STUB_PNF","UE_STUB_OFFNET","STANDALONE_PNF"}, \
                {NFAPI_MONOLITHIC, NFAPI_MODE_PNF, NFAPI_MODE_VNF, NFAPI_MODE_AERIAL,NFAPI_UE_STUB_PNF,NFAPI_UE_STUB_OFFNET,NFAPI_MODE_STANDALONE_PNF}, \
                7 } }, \
+    { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
@@ -321,8 +316,6 @@ typedef struct {
   int            phy_test;
   int            do_ra;
   uint8_t        sl_mode;
-  uint8_t        usim_test;
-  int            emulate_rf;
   int            chain_offset;
   int            numerology;
   int            band;
@@ -343,6 +336,8 @@ typedef struct {
   uint32_t       sync_ref;
   int no_itti;
   int threequarter_fs;
+  int default_pdu_session_id;
+  int extra_pdu_session_id;
 } softmodem_params_t;
 
 #define IS_SA_MODE(sM_params) (!(sM_params)->phy_test && !(sM_params)->do_ra && !(sM_params)->nsa)

@@ -38,6 +38,7 @@
 #include "assertions.h"
 #include "common/utils/utils.h"
 
+#define MAX_SI_GROUPS 3
 #define NR_MAX_PDSCH_TBS 3824
 #define MAX_NUM_BEAM_PERIODS 4
 #define MAX_BWP_SIZE 275
@@ -93,6 +94,12 @@ static inline const char *rnti_types(nr_rnti_type_t rr)
 // the total shift is 2 * 15, in dB scale thats 10log10(2^(15*2))
 #define SQ15_SQUARED_NORM_FACTOR_DB 90.3089986992
 
+typedef struct {
+  uint8_t *SIB_buffer;
+  int SIB_size;
+  int SIB_type;
+} nr_SIBs_t;
+
 typedef struct nr_bandentry_s {
   int16_t band;
   uint64_t ul_min;
@@ -122,6 +129,11 @@ typedef enum frequency_range_e {
   FR1 = 0,
   FR2
 } frequency_range_t;
+
+typedef enum {
+  pusch_dmrs_type1 = 0,
+  pusch_dmrs_type2 = 1
+} pusch_dmrs_type_t;
 
 #define MAX_NUM_SLOTS_ALLOWED 80 // up to numerology 3 (120 KHz SCS) is supported
 enum slot_type { TDD_NR_DOWNLINK_SLOT, TDD_NR_UPLINK_SLOT, TDD_NR_MIXED_SLOT };
@@ -162,6 +174,17 @@ typedef struct {
   uint32_t target;
   uint32_t step;
 } NR_timer_t;
+
+typedef struct val_init {
+  int val;
+  bool init;
+} val_init_t;
+
+typedef struct meas_s {
+  uint16_t Nid_cell;
+  val_init_t ss_rsrp_dBm;
+  val_init_t csi_rsrp_dBm;
+} meas_t;
 
 /**
  * @brief To start a timer
@@ -210,6 +233,12 @@ bool nr_timer_is_active(const NR_timer_t *timer);
  * @return Time passed since start of timer
  */
 uint32_t nr_timer_elapsed_time(const NR_timer_t *timer);
+/**
+ * @brief To return how much time is left until the timer expires
+ * @param timer Timer to be checked
+ * @return Time left until the timer expires
+ */
+uint32_t nr_timer_remaining_time(const NR_timer_t *timer);
 
 int set_default_nta_offset(frequency_range_t freq_range, uint32_t samples_per_subframe);
 
@@ -232,6 +261,12 @@ static inline int count_bits(uint8_t *arr, int sz)
 static __attribute__((always_inline)) inline int count_bits64(uint64_t v)
 {
   return __builtin_popcountll(v);
+}
+
+static __attribute__((always_inline)) inline int count_bits64_with_mask(uint64_t v, int start, int num)
+{
+  uint64_t mask = ((1LL << num) - 1) << start;
+  return count_bits64(v & mask);
 }
 
 uint64_t reverse_bits(uint64_t in, int n_bits);
@@ -294,6 +329,17 @@ int get_slot_idx_in_period(const int slot, const frame_structure_t *fs);
 frequency_range_t get_freq_range_from_freq(uint64_t freq);
 frequency_range_t get_freq_range_from_arfcn(uint32_t arfcn);
 frequency_range_t get_freq_range_from_band(uint16_t band);
+
+/**
+ * @brief Calculates the scaling factor for the ratio of PUSCH/PDSCH EPRE to DMRS EPRE.
+ *
+ * @param num_cdm_groups_no_data The number of CDM groups without data.
+ * @param is_type2 true if calculating for DMRS configuration type 2
+ * @return The calculated beta scaling factor for the ratio of PUSCH/PDSCH EPRE to DMRS EPRE.
+ *
+ * @note The values are the same for PUSCH and PDSCH and are derived from TS 38.214 Table 6.2.2-1./4.1-1
+ */
+float get_beta_dmrs(int num_cdm_groups_no_data, bool is_type2);
 
 #define CEILIDIV(a,b) ((a+b-1)/b)
 #define ROUNDIDIV(a,b) (((a<<1)+b)/(b<<1))

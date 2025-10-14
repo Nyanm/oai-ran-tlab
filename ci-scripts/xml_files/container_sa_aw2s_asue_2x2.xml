@@ -70,15 +70,13 @@
   <testCase id="800813">
     <class>Create_Workspace</class>
     <desc>Create new Workspace</desc>
-    <eNB_instance>0</eNB_instance>
-    <eNB_serverId>0</eNB_serverId>
+    <node>avra</node>
   </testCase>
   <testCase id="020000">
     <class>Deploy_Object</class>
     <desc>Deploy gNB (TDD/Band78/20MHz/aw2s) in a container</desc>
+    <node>avra</node>
     <yaml_path>ci-scripts/yaml_files/sa_aw2s_2x2_gnb</yaml_path>
-    <eNB_instance>0</eNB_instance>
-    <eNB_serverId>0</eNB_serverId>
   </testCase>
 
   <testCase id="001000">
@@ -179,7 +177,7 @@
 
   <testCase id="000010">
     <class>Iperf</class>
-    <desc>iperf (DL/4Mbps/UDP)(30 sec)(multi-ue profile)</desc>
+    <desc>iperf (DL/4Mbps/UDP)(30 sec)</desc>
     <iperf_args>-u -b 60M -t 30 -R</iperf_args>
     <id>amarisoft_ue_1 amarisoft_ue_2 amarisoft_ue_3 amarisoft_ue_4 amarisoft_ue_5 amarisoft_ue_6 amarisoft_ue_7 amarisoft_ue_8 amarisoft_ue_9 amarisoft_ue_10 amarisoft_ue_11 amarisoft_ue_12 amarisoft_ue_13 amarisoft_ue_14 amarisoft_ue_15</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -190,7 +188,7 @@
 
   <testCase id="000030">
     <class>Iperf</class>
-    <desc>iperf (DL/TCP)(30 sec)(multi-ue profile)</desc>
+    <desc>iperf (DL/TCP)(30 sec)</desc>
     <iperf_args>-t 30 -R</iperf_args>
     <id>amarisoft_ue_1 amarisoft_ue_2 amarisoft_ue_3 amarisoft_ue_4 amarisoft_ue_5 amarisoft_ue_6 amarisoft_ue_7 amarisoft_ue_8 amarisoft_ue_9 amarisoft_ue_10 amarisoft_ue_11 amarisoft_ue_12 amarisoft_ue_13 amarisoft_ue_14 amarisoft_ue_15</id>
     <iperf_tcp_rate_target>3.9</iperf_tcp_rate_target>
@@ -199,7 +197,7 @@
 
   <testCase id="000020">
     <class>Iperf</class>
-    <desc>iperf (UL/1.5Mbps/UDP)(30 sec)(multi-ue profile)</desc>
+    <desc>iperf (UL/1.5Mbps/UDP)(30 sec)</desc>
     <iperf_args>-u -b 22.5M -t 30</iperf_args>
     <id>amarisoft_ue_1 amarisoft_ue_2 amarisoft_ue_3 amarisoft_ue_4 amarisoft_ue_5 amarisoft_ue_6 amarisoft_ue_7 amarisoft_ue_8 amarisoft_ue_9 amarisoft_ue_10 amarisoft_ue_11 amarisoft_ue_12 amarisoft_ue_13 amarisoft_ue_14 amarisoft_ue_15</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -210,7 +208,7 @@
 
   <testCase id="000040">
     <class>Iperf</class>
-    <desc>iperf (UL/TCP)(30 sec)(multi-ue profile)</desc>
+    <desc>iperf (UL/TCP)(30 sec)</desc>
     <iperf_args>-t 30</iperf_args>
     <svr_id>oc-cn5g</svr_id>
     <id>amarisoft_ue_1 amarisoft_ue_2 amarisoft_ue_3 amarisoft_ue_4 amarisoft_ue_5 amarisoft_ue_6 amarisoft_ue_7 amarisoft_ue_8 amarisoft_ue_9 amarisoft_ue_10 amarisoft_ue_11 amarisoft_ue_12 amarisoft_ue_13 amarisoft_ue_14 amarisoft_ue_15</id>
@@ -268,16 +266,15 @@
     <class>Undeploy_Object</class>
     <always_exec>true</always_exec>
     <desc>Undeploy gNB</desc>
+    <node>avra</node>
     <yaml_path>ci-scripts/yaml_files/sa_aw2s_2x2_gnb</yaml_path>
-    <eNB_instance>0</eNB_instance>
-    <eNB_serverId>0</eNB_serverId>
   </testCase>
 
   <testCase id="333333">
     <class>Clean_Test_Server_Images</class>
     <always_exec>true</always_exec>
     <desc>Clean Test Images on Test Server</desc>
-    <svr_id>0</svr_id>
+    <node>avra</node>
     <images>oai-gnb-aw2s</images>
   </testCase>
 

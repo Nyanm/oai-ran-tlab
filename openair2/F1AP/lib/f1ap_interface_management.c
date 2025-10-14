@@ -30,7 +30,7 @@
 #include "f1ap_lib_common.h"
 #include "f1ap_lib_includes.h"
 #include "f1ap_messages_types.h"
-#include "f1ap_lib_extern.h"
+#include "lib/f1ap_interface_management.h"
 
 F1AP_UE_associatedLogicalF1_ConnectionItem_t encode_f1ap_ue_to_reset(const f1ap_ue_to_reset_t *to_reset)
 {
@@ -156,9 +156,9 @@ bool decode_f1ap_reset(const F1AP_F1AP_PDU_t *pdu, f1ap_reset_t *out)
   /* Check presence of mandatory IEs */
   F1AP_Reset_t *in = &pdu->choice.initiatingMessage->value.choice.Reset;
   F1AP_ResetIEs_t *ie;
-  F1AP_LIB_FIND_IE(F1AP_ResetIEs_t, ie, in, F1AP_ProtocolIE_ID_id_TransactionID, true);
-  F1AP_LIB_FIND_IE(F1AP_ResetIEs_t, ie, in, F1AP_ProtocolIE_ID_id_Cause, true);
-  F1AP_LIB_FIND_IE(F1AP_ResetIEs_t, ie, in, F1AP_ProtocolIE_ID_id_ResetType, true);
+  F1AP_LIB_FIND_IE(F1AP_ResetIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
+  F1AP_LIB_FIND_IE(F1AP_ResetIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
+  F1AP_LIB_FIND_IE(F1AP_ResetIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_ResetType, true);
 
   /* Loop over all IEs */
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
@@ -303,7 +303,7 @@ bool decode_f1ap_reset_ack(const struct F1AP_F1AP_PDU *pdu, f1ap_reset_ack_t *ou
   /* Check presence of mandatory IEs */
   F1AP_ResetAcknowledge_t *in = &pdu->choice.successfulOutcome->value.choice.ResetAcknowledge;
   F1AP_ResetAcknowledgeIEs_t *ie;
-  F1AP_LIB_FIND_IE(F1AP_ResetAcknowledgeIEs_t, ie, in, F1AP_ProtocolIE_ID_id_TransactionID, true);
+  F1AP_LIB_FIND_IE(F1AP_ResetAcknowledgeIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
 
   /* Loop over all IEs */
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
@@ -394,11 +394,7 @@ static int read_slice_info(const F1AP_ServedPLMNs_Item_t *plmn, nssai_t *nssai, 
   AssertFatal(ssl->list.count <= max_nssai, "cannot handle more than 16 slices\n");
   for (int s = 0; s < ssl->list.count; ++s) {
     const F1AP_SliceSupportItem_t *sl = ssl->list.array[s];
-    nssai_t *n = &nssai[s];
-    OCTET_STRING_TO_INT8(&sl->sNSSAI.sST, n->sst);
-    n->sd = 0xffffff;
-    if (sl->sNSSAI.sD != NULL)
-      OCTET_STRING_TO_INT24(sl->sNSSAI.sD, n->sd);
+    nssai[s] = decode_nssai(&sl->sNSSAI);
   }
 
   return ssl->list.count;
@@ -418,12 +414,7 @@ static F1AP_ProtocolExtensionContainer_10696P34_t *write_slice_info(int num_ssi,
 
   for (int s = 0; s < num_ssi; s++) {
     asn1cSequenceAdd(slice_support_list->list, F1AP_SliceSupportItem_t, slice);
-    const nssai_t *n = &nssai[s];
-    INT8_TO_OCTET_STRING(n->sst, &slice->sNSSAI.sST);
-    if (n->sd != 0xffffff) {
-      asn1cCalloc(slice->sNSSAI.sD, tmp);
-      INT24_TO_OCTET_STRING(n->sd, tmp);
-    }
+    slice->sNSSAI = encode_nssai(&nssai[s]);
   }
 
   return p;
@@ -653,11 +644,9 @@ static void encode_cells_to_activate(const served_cells_to_activate_t *cell, F1A
         &cells_to_be_activated_itemExtIEs->extensionValue.choice.GNB_CUSystemInformation;
     const f1ap_sib_msg_t *SI_msg = &cell->SI_msg[n];
     if (SI_msg->SI_container != NULL) {
-      if (SI_msg->SI_type > 6 && SI_msg->SI_type != 9) {
-        asn1cSequenceAdd(gNB_CUSystemInformation->sibtypetobeupdatedlist.list, F1AP_SibtypetobeupdatedListItem_t, sib_item);
-        sib_item->sIBtype = SI_msg->SI_type;
-        OCTET_STRING_fromBuf(&sib_item->sIBmessage, (const char *)SI_msg->SI_container, SI_msg->SI_container_length);
-      }
+      asn1cSequenceAdd(gNB_CUSystemInformation->sibtypetobeupdatedlist.list, F1AP_SibtypetobeupdatedListItem_t, sib_item);
+      sib_item->sIBtype = SI_msg->SI_type;
+      OCTET_STRING_fromBuf(&sib_item->sIBmessage, (const char *)SI_msg->SI_container, SI_msg->SI_container_length);
     }
   }
 }
@@ -824,9 +813,9 @@ bool decode_f1ap_setup_request(const F1AP_F1AP_PDU_t *pdu, f1ap_setup_req_t *out
   /* Check presence of mandatory IEs */
   F1AP_F1SetupRequest_t *in = &pdu->choice.initiatingMessage->value.choice.F1SetupRequest;
   F1AP_F1SetupRequestIEs_t *ie;
-  F1AP_LIB_FIND_IE(F1AP_F1SetupRequestIEs_t, ie, in, F1AP_ProtocolIE_ID_id_TransactionID, true);
-  F1AP_LIB_FIND_IE(F1AP_F1SetupRequestIEs_t, ie, in, F1AP_ProtocolIE_ID_id_gNB_DU_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_F1SetupRequestIEs_t, ie, in, F1AP_ProtocolIE_ID_id_GNB_DU_RRC_Version, true);
+  F1AP_LIB_FIND_IE(F1AP_F1SetupRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
+  F1AP_LIB_FIND_IE(F1AP_F1SetupRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_DU_ID, true);
+  F1AP_LIB_FIND_IE(F1AP_F1SetupRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_GNB_DU_RRC_Version, true);
   /* Loop over all IEs */
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     AssertError(in->protocolIEs.list.array[i] != NULL, return false, "in->protocolIEs.list.array[i] is NULL");
@@ -1097,8 +1086,8 @@ bool decode_f1ap_setup_response(const F1AP_F1AP_PDU_t *pdu, f1ap_setup_resp_t *o
   /* Check presence of mandatory IEs */
   F1AP_F1SetupResponse_t *in = &pdu->choice.successfulOutcome->value.choice.F1SetupResponse;
   F1AP_F1SetupResponseIEs_t *ie;
-  F1AP_LIB_FIND_IE(F1AP_F1SetupResponseIEs_t, ie, in, F1AP_ProtocolIE_ID_id_TransactionID, true);
-  F1AP_LIB_FIND_IE(F1AP_F1SetupResponseIEs_t, ie, in, F1AP_ProtocolIE_ID_id_GNB_CU_RRC_Version, true);
+  F1AP_LIB_FIND_IE(F1AP_F1SetupResponseIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
+  F1AP_LIB_FIND_IE(F1AP_F1SetupResponseIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_GNB_CU_RRC_Version, true);
   /* Loop over all IEs */
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     ie = in->protocolIEs.list.array[i];
@@ -1221,7 +1210,7 @@ f1ap_setup_resp_t cp_f1ap_setup_response(const f1ap_setup_resp_t *msg)
       const f1ap_sib_msg_t *b_SI_msg = &msg_cell->SI_msg[j];
       cp_SI_msg->SI_container_length = b_SI_msg->SI_container_length;
       cp_SI_msg->SI_container = malloc_or_fail(cp_SI_msg->SI_container_length);
-      *cp_SI_msg->SI_container = *b_SI_msg->SI_container;
+      memcpy(cp_SI_msg->SI_container, b_SI_msg->SI_container, b_SI_msg->SI_container_length);
       cp_SI_msg->SI_type = b_SI_msg->SI_type;
     }
   }
@@ -1308,8 +1297,8 @@ bool decode_f1ap_setup_failure(const F1AP_F1AP_PDU_t *pdu, f1ap_setup_failure_t 
   F1AP_F1SetupFailureIEs_t *ie;
   F1AP_F1SetupFailure_t *in = &pdu->choice.unsuccessfulOutcome->value.choice.F1SetupFailure;
   /* Check presence of mandatory IEs */
-  F1AP_LIB_FIND_IE(F1AP_F1SetupFailureIEs_t, ie, in, F1AP_ProtocolIE_ID_id_TransactionID, true);
-  F1AP_LIB_FIND_IE(F1AP_F1SetupFailureIEs_t, ie, in, F1AP_ProtocolIE_ID_id_Cause, true);
+  F1AP_LIB_FIND_IE(F1AP_F1SetupFailureIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
+  F1AP_LIB_FIND_IE(F1AP_F1SetupFailureIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
   /* Loop over all IEs */
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     ie = in->protocolIEs.list.array[i];
@@ -1425,7 +1414,7 @@ F1AP_F1AP_PDU_t *encode_f1ap_du_configuration_update(const f1ap_gnb_du_configura
           &served_cells_to_modify_item_ies->value.choice.Served_Cells_To_Modify_Item;
 
       F1AP_NRCGI_t *oldNRCGI = &served_cells_to_modify_item->oldNRCGI;
-      const f1ap_plmn_t *old_plmn = &msg->cell_to_modify[i].old_plmn;
+      const plmn_id_t *old_plmn = &msg->cell_to_modify[i].old_plmn;
       MCC_MNC_TO_PLMNID(old_plmn->mcc, old_plmn->mnc, old_plmn->mnc_digit_length, &oldNRCGI->pLMN_Identity);
       NR_CELL_ID_TO_BIT_STRING(msg->cell_to_modify[i].old_nr_cellid, &oldNRCGI->nRCellIdentity);
 
@@ -1451,9 +1440,31 @@ F1AP_F1AP_PDU_t *encode_f1ap_du_configuration_update(const f1ap_gnb_du_configura
       F1AP_Served_Cells_To_Delete_Item_t *served_cells_to_delete_item =
           &served_cells_to_delete_item_ies->value.choice.Served_Cells_To_Delete_Item;
       F1AP_NRCGI_t *oldNRCGI = &served_cells_to_delete_item->oldNRCGI;
-      const f1ap_plmn_t *plmn = &msg->cell_to_delete[i].plmn;
+      const plmn_id_t *plmn = &msg->cell_to_delete[i].plmn;
       MCC_MNC_TO_PLMNID(plmn->mcc, plmn->mnc, plmn->mnc_digit_length, &(oldNRCGI->pLMN_Identity));
       NR_CELL_ID_TO_BIT_STRING(msg->cell_to_delete[i].nr_cellid, &(oldNRCGI->nRCellIdentity));
+    }
+  }
+
+  if (msg->num_status > 0) {
+    asn1cSequenceAdd(out->protocolIEs.list, F1AP_GNBDUConfigurationUpdateIEs_t, ie4);
+    ie4->id = F1AP_ProtocolIE_ID_id_Cells_Status_List;
+    ie4->criticality = F1AP_Criticality_reject;
+    ie4->value.present = F1AP_GNBDUConfigurationUpdateIEs__value_PR_Cells_Status_List;
+    for (int i = 0; i < msg->num_status; i++) {
+      const f1ap_cell_status_t *cs = &msg->status[i];
+      asn1cSequenceAdd(ie4->value.choice.Cells_Status_List.list, F1AP_Cells_Status_ItemIEs_t, cell_status);
+      cell_status->id = F1AP_ProtocolIE_ID_id_Cells_Status_Item;
+      cell_status->criticality = F1AP_Criticality_reject;
+      cell_status->value.present = F1AP_Cells_Status_ItemIEs__value_PR_Cells_Status_Item;
+      F1AP_Cells_Status_Item_t *cell_status_item = &cell_status->value.choice.Cells_Status_Item;
+
+      F1AP_NRCGI_t *nrcgi = &cell_status_item->nRCGI;
+      MCC_MNC_TO_PLMNID(cs->plmn.mcc, cs->plmn.mnc, cs->plmn.mnc_digit_length, &nrcgi->pLMN_Identity);
+      NR_CELL_ID_TO_BIT_STRING(cs->nr_cellid, &nrcgi->nRCellIdentity);
+      F1AP_Service_Status_t *ss = &cell_status_item->service_status;
+      ss->service_state =
+          cs->service_state == F1AP_STATE_IN_SERVICE ? F1AP_Service_State_in_service : F1AP_Service_State_out_of_service;
     }
   }
 
@@ -1483,7 +1494,7 @@ bool decode_f1ap_du_configuration_update(const F1AP_F1AP_PDU_t *pdu, f1ap_gnb_du
   F1AP_GNBDUConfigurationUpdate_t *in = &pdu->choice.initiatingMessage->value.choice.GNBDUConfigurationUpdate;
   F1AP_GNBDUConfigurationUpdateIEs_t *ie;
   /* Check mandatory IEs */
-  F1AP_LIB_FIND_IE(F1AP_GNBDUConfigurationUpdateIEs_t, ie, in, F1AP_ProtocolIE_ID_id_TransactionID, true);
+  F1AP_LIB_FIND_IE(F1AP_GNBDUConfigurationUpdateIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
   /* Loop over all IEs */
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     AssertError(in->protocolIEs.list.array[i] != NULL, return false, "in->protocolIEs.list.array[i] is NULL");
@@ -1521,7 +1532,7 @@ bool decode_f1ap_du_configuration_update(const F1AP_F1AP_PDU_t *pdu, f1ap_gnb_du
                    ->value.choice.Served_Cells_To_Modify_Item;
           /* Old NR CGI (M) */
           F1AP_NRCGI_t *oldNRCGI = &served_cells_item->oldNRCGI;
-          f1ap_plmn_t *old_plmn = &out->cell_to_modify[i].old_plmn;
+          plmn_id_t *old_plmn = &out->cell_to_modify[i].old_plmn;
           PLMNID_TO_MCC_MNC(&oldNRCGI->pLMN_Identity, old_plmn->mcc, old_plmn->mnc, old_plmn->mnc_digit_length);
           /* Old NR CGI Cell ID */
           BIT_STRING_TO_NR_CELL_IDENTITY(&oldNRCGI->nRCellIdentity, out->cell_to_modify[i].old_nr_cellid);
@@ -1544,7 +1555,7 @@ bool decode_f1ap_du_configuration_update(const F1AP_F1AP_PDU_t *pdu, f1ap_gnb_du
               &((F1AP_Served_Cells_To_Delete_ItemIEs_t *)ie->value.choice.Served_Cells_To_Delete_List.list.array[i])
                    ->value.choice.Served_Cells_To_Delete_Item;
           F1AP_NRCGI_t *oldNRCGI = &served_cells_item->oldNRCGI;
-          f1ap_plmn_t *plmn = &out->cell_to_delete[i].plmn;
+          plmn_id_t *plmn = &out->cell_to_delete[i].plmn;
           /* Old NR CGI (M) */
           PLMNID_TO_MCC_MNC(&(oldNRCGI->pLMN_Identity), plmn->mcc, plmn->mnc, plmn->mnc_digit_length);
           // NR cellID
@@ -1553,7 +1564,21 @@ bool decode_f1ap_du_configuration_update(const F1AP_F1AP_PDU_t *pdu, f1ap_gnb_du
       } break;
       case F1AP_ProtocolIE_ID_id_Cells_Status_List:
         /* Cells Status List (O) */
-        AssertError(1 == 0, return false, "F1AP_ProtocolIE_ID_id_Cells_Status_List is not supported");
+        out->num_status = ie->value.choice.Cells_Status_List.list.count;
+        for (int i = 0; i < out->num_status; ++i) {
+          const F1AP_Cells_Status_ItemIEs_t *csi_ie =
+              (F1AP_Cells_Status_ItemIEs_t *)ie->value.choice.Cells_Status_List.list.array[i];
+          AssertError(csi_ie->value.present == F1AP_Cells_Status_ItemIEs__value_PR_Cells_Status_Item,
+                      return false,
+                      "CellStatus_ItemIE has no cell status\n");
+          const F1AP_Cells_Status_Item_t *f1ap_cell_status = &csi_ie->value.choice.Cells_Status_Item;
+          const F1AP_NRCGI_t *nrcgi = &f1ap_cell_status->nRCGI;
+          f1ap_cell_status_t *cs = &out->status[i];
+          PLMNID_TO_MCC_MNC(&nrcgi->pLMN_Identity, cs->plmn.mcc, cs->plmn.mnc, cs->plmn.mnc_digit_length);
+          BIT_STRING_TO_NR_CELL_IDENTITY(&nrcgi->nRCellIdentity, cs->nr_cellid);
+          F1AP_Service_State_t state = f1ap_cell_status->service_status.service_state;
+          cs->service_state = state == F1AP_Service_State_in_service ? F1AP_STATE_IN_SERVICE : F1AP_STATE_OUT_OF_SERVICE;
+        }
         break;
       case F1AP_ProtocolIE_ID_id_Dedicated_SIDelivery_NeededUE_List:
         /* Dedicated SI Delivery Needed UE List (O) */
@@ -1561,6 +1586,7 @@ bool decode_f1ap_du_configuration_update(const F1AP_F1AP_PDU_t *pdu, f1ap_gnb_du
         break;
       case F1AP_ProtocolIE_ID_id_gNB_DU_ID:
         /* gNB-DU ID (O)*/
+        out->gNB_DU_ID = malloc_or_fail(sizeof(*out->gNB_DU_ID));
         asn_INTEGER2ulong(&ie->value.choice.GNB_DU_ID, out->gNB_DU_ID);
         break;
       case F1AP_ProtocolIE_ID_id_GNB_DU_TNL_Association_To_Remove_List:
@@ -1588,6 +1614,8 @@ void free_f1ap_du_configuration_update(const f1ap_gnb_du_configuration_update_t 
  */
 bool eq_f1ap_du_configuration_update(const f1ap_gnb_du_configuration_update_t *a, const f1ap_gnb_du_configuration_update_t *b)
 {
+  if ((a->gNB_DU_ID != NULL) ^ (b->gNB_DU_ID != NULL))
+    return false;
   if (a->gNB_DU_ID != NULL && b->gNB_DU_ID != NULL)
     _F1_EQ_CHECK_LONG(*a->gNB_DU_ID, *b->gNB_DU_ID);
   _F1_EQ_CHECK_LONG(a->transaction_id, b->transaction_id);
@@ -1616,6 +1644,16 @@ bool eq_f1ap_du_configuration_update(const f1ap_gnb_du_configuration_update_t *a
       return false;
     if (!eq_f1ap_sys_info(a->cell_to_modify[i].sys_info, b->cell_to_modify[i].sys_info))
       return false;
+  }
+  /* cell status */
+  _F1_EQ_CHECK_INT(a->num_status, b->num_status);
+  for (int i = 0; i < a->num_status; ++i) {
+    const f1ap_cell_status_t *astatus = &a->status[i];
+    const f1ap_cell_status_t *bstatus = &b->status[i];
+    if (!eq_f1ap_plmn(&astatus->plmn, &bstatus->plmn))
+      return false;
+    _F1_EQ_CHECK_LONG(astatus->nr_cellid, bstatus->nr_cellid);
+    _F1_EQ_CHECK_INT(astatus->service_state, bstatus->service_state);
   }
   return true;
 }
@@ -1653,6 +1691,10 @@ f1ap_gnb_du_configuration_update_t cp_f1ap_du_configuration_update(const f1ap_gn
     cp.cell_to_modify[i].info = copy_f1ap_served_cell_info(&msg->cell_to_modify[i].info);
     cp.cell_to_modify[i].sys_info = copy_f1ap_gnb_du_system_info(msg->cell_to_modify[i].sys_info);
   }
+  /* cell status */
+  cp.num_status  = msg->num_status;
+  for (int i = 0; i < cp.num_status; ++i)
+    cp.status[i] = msg->status[i];
   return cp;
 }
 
@@ -1709,7 +1751,7 @@ bool decode_f1ap_cu_configuration_update(const F1AP_F1AP_PDU_t *pdu, f1ap_gnb_cu
   /* Check presence of mandatory IEs */
   F1AP_GNBCUConfigurationUpdate_t *in = &pdu->choice.initiatingMessage->value.choice.GNBCUConfigurationUpdate;
   F1AP_GNBCUConfigurationUpdateIEs_t *ie;
-  F1AP_LIB_FIND_IE(F1AP_GNBCUConfigurationUpdateIEs_t, ie, in, F1AP_ProtocolIE_ID_id_TransactionID, true);
+  F1AP_LIB_FIND_IE(F1AP_GNBCUConfigurationUpdateIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
   /* Loop over all IEs */
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     ie = in->protocolIEs.list.array[i];
@@ -1835,7 +1877,7 @@ F1AP_F1AP_PDU_t *encode_f1ap_cu_configuration_update_acknowledge(const f1ap_gnb_
       p1->cause.present = F1AP_Cause_PR_radioNetwork;
       p1->cause.choice.radioNetwork = msg->cells_failed_to_be_activated[i].cause;
       // NR CGI (M)
-      const f1ap_plmn_t *plmn = &msg->cells_failed_to_be_activated[i].plmn;
+      const plmn_id_t *plmn = &msg->cells_failed_to_be_activated[i].plmn;
       MCC_MNC_TO_PLMNID(plmn->mcc, plmn->mnc, plmn->mnc_digit_length, &(p1->nRCGI.pLMN_Identity));
       printf("plmn->mcc %d %d %d %ld \n",
         p1->nRCGI.pLMN_Identity.buf[0], p1->nRCGI.pLMN_Identity.buf[1], p1->nRCGI.pLMN_Identity.buf[2], p1->nRCGI.pLMN_Identity.size);
@@ -1861,7 +1903,7 @@ bool decode_f1ap_cu_configuration_update_acknowledge(const F1AP_F1AP_PDU_t *pdu,
   F1AP_GNBCUConfigurationUpdateAcknowledge_t *in = &pdu->choice.successfulOutcome->value.choice.GNBCUConfigurationUpdateAcknowledge;
   F1AP_GNBCUConfigurationUpdateAcknowledgeIEs_t *ie;
   /* Check mandatory IEs */
-  F1AP_LIB_FIND_IE(F1AP_GNBCUConfigurationUpdateAcknowledgeIEs_t, ie, in, F1AP_ProtocolIE_ID_id_TransactionID, true);
+  F1AP_LIB_FIND_IE(F1AP_GNBCUConfigurationUpdateAcknowledgeIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
   /* Loop over all IEs */
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     ie = in->protocolIEs.list.array[i];
@@ -1882,7 +1924,7 @@ bool decode_f1ap_cu_configuration_update_acknowledge(const F1AP_F1AP_PDU_t *pdu,
               (F1AP_Cells_Failed_to_be_Activated_List_ItemIEs_t *)cell_fail_list->list.array[j];
           const F1AP_Cells_Failed_to_be_Activated_List_Item_t *item = &itemIE->value.choice.Cells_Failed_to_be_Activated_List_Item;
           // NR CGI (M)
-          f1ap_plmn_t *plmn = &out->cells_failed_to_be_activated[j].plmn;
+          plmn_id_t *plmn = &out->cells_failed_to_be_activated[j].plmn;
           PLMNID_TO_MCC_MNC(&(item->nRCGI.pLMN_Identity), plmn->mcc, plmn->mnc, plmn->mnc_digit_length);
           BIT_STRING_TO_NR_CELL_IDENTITY(&item->nRCGI.nRCellIdentity, out->cells_failed_to_be_activated[j].nr_cellid);
           // Cause (M)
@@ -2037,7 +2079,7 @@ bool decode_f1ap_du_configuration_update_acknowledge(const F1AP_F1AP_PDU_t *pdu,
   F1AP_GNBDUConfigurationUpdateAcknowledge_t *in = &pdu->choice.successfulOutcome->value.choice.GNBDUConfigurationUpdateAcknowledge;
   F1AP_GNBDUConfigurationUpdateAcknowledgeIEs_t *ie;
   /* Check mandatory IEs */
-  F1AP_LIB_FIND_IE(F1AP_GNBDUConfigurationUpdateAcknowledgeIEs_t, ie, in, F1AP_ProtocolIE_ID_id_TransactionID, true);
+  F1AP_LIB_FIND_IE(F1AP_GNBDUConfigurationUpdateAcknowledgeIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
   /* Loop over all IEs */
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     ie = in->protocolIEs.list.array[i];
@@ -2109,8 +2151,12 @@ f1ap_gnb_du_configuration_update_acknowledge_t cp_f1ap_du_configuration_update_a
   for (int i = 0; i < cp.num_cells_to_activate; i++) {
     cp.cells_to_activate[i] = msg->cells_to_activate[i];
     for (int s = 0; s < cp.cells_to_activate[i].num_SI; s++) {
-      cp.cells_to_activate[i].SI_msg[s].SI_container = calloc_or_fail(1, sizeof(*cp.cells_to_activate[i].SI_msg[s].SI_container));
-      *cp.cells_to_activate[i].SI_msg[s].SI_container = *msg->cells_to_activate[i].SI_msg[s].SI_container;
+      f1ap_sib_msg_t *cp_sib = &cp.cells_to_activate[i].SI_msg[s];
+      const f1ap_sib_msg_t *msg_sib = &msg->cells_to_activate[i].SI_msg[s];
+      cp_sib->SI_type = msg_sib->SI_type;
+      cp_sib->SI_container_length = msg_sib->SI_container_length;
+      cp_sib->SI_container = calloc_or_fail(cp_sib->SI_container_length, sizeof(*cp_sib->SI_container));
+      memcpy(cp_sib->SI_container, msg_sib->SI_container, cp_sib->SI_container_length);
     }
   }
   return cp;

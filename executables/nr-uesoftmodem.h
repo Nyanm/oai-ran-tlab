@@ -5,6 +5,10 @@
 #include "common/utils/threadPool/thread-pool.h"
 #include "PHY/defs_nr_UE.h"
 
+#define MAX_NUM_NR_UE_INST 32
+extern int NB_UE_INST;
+extern uint16_t ue_id_g;
+
 #define  CONFIG_HLP_IF_FREQ                "IF frequency for RF, if needed\n"
 #define  CONFIG_HLP_IF_FREQ_OFF            "UL IF frequency offset for RF, if needed\n"
 #define  CONFIG_HLP_DLSCH_PARA             "number of threads for dlsch processing 0 for no parallelization\n"
@@ -14,7 +18,14 @@
 #define  CONFIG_HLP_TIME_SYNC_I            "coefficient for Integrating part of time sync PI controller\n"
 #define  CONFIG_HLP_NTN_INIT_TIME_DRIFT    "Initial NTN DL time drift (feeder link and service link), given in µs/s\n"
 #define  CONFIG_HLP_AUTONOMOUS_TA          "Autonomously update TA based on DL drift (useful if main contribution to DL drift is movement, e.g. LEO satellite)\n"
+#define  CONFIG_HLP_INITIAL_FO             "Initially compensated DL frequency offset (e.g. known Doppler shift in NTN LEO scenario)\n"
+#define  CONFIG_HLP_FREQ_SYNC_P            "coefficient for Proportional part of continuous frequency offset compensation PI controller\n"
+#define  CONFIG_HLP_FREQ_SYNC_I            "coefficient for Integrating part of continuous frequency offset compensation PI controller\n"
+#define  CONFIG_HLP_CONT_FO_COMP           "Enable continuous frequency offset (FO) estimation and compensation and specify main FO source (1 = local oscillator, 2 = Doppler shift)\n"
 #define  CONFIG_HLP_AGC                    "Rx Gain control used for UE\n"
+#define  CONFIG_HLP_NUM_UL_ACTORS          "Number of UL actors to use. Set to 0 to disable UL actor framework and do processing inline\n"
+#define  CONFIG_HLP_NUM_DL_ACTORS          "Number of DL actors to use. Set to 0 to disable DL actor framework and do processing inline\n"
+#define  CONFIG_HLP_EXTRA_PDU_ID           "ID of an additional PDU session to configure alongside default PDU session\n"
 
 /***************************************************************************************************************************************/
 /* command line options definitions, CMDLINE_XXXX_DESC macros are used to initialize paramdef_t arrays which are then used as argument
@@ -65,7 +76,14 @@
   {"time-sync-I",                  CONFIG_HLP_TIME_SYNC_I,     0,               .dblptr=&(nrUE_params.time_sync_I),          .defdblval=0.0,    TYPE_DOUBLE,   0}, \
   {"ntn-initial-time-drift",       CONFIG_HLP_NTN_INIT_TIME_DRIFT, 0,           .dblptr=&(nrUE_params.ntn_init_time_drift),  .defdblval=0.0,    TYPE_DOUBLE,   0}, \
   {"autonomous-ta",                CONFIG_HLP_AUTONOMOUS_TA,   PARAMFLAG_BOOL,  .iptr=&(nrUE_params.autonomous_ta),          .defintval=0,      TYPE_INT,      0}, \
+  {"initial-fo",                   CONFIG_HLP_INITIAL_FO,      0,               .dblptr=&(nrUE_params.initial_fo),           .defdblval=0.0,    TYPE_DOUBLE,   0}, \
+  {"freq-sync-P",                  CONFIG_HLP_FREQ_SYNC_P,     0,               .dblptr=&(nrUE_params.freq_sync_P),          .defdblval=0.01,   TYPE_DOUBLE,   0}, \
+  {"freq-sync-I",                  CONFIG_HLP_FREQ_SYNC_I,     0,               .dblptr=&(nrUE_params.freq_sync_I),          .defdblval=0.001,  TYPE_DOUBLE,   0}, \
+  {"cont-fo-comp",                 CONFIG_HLP_CONT_FO_COMP,    0,               .iptr=&(nrUE_params.cont_fo_comp),           .defintval=0,      TYPE_INT,      0}, \
   {"agc",                          CONFIG_HLP_AGC,             PARAMFLAG_BOOL,  .iptr=&(nrUE_params.agc),                    .defintval=0,      TYPE_INT,      0}, \
+  {"num-ul-actors",                CONFIG_HLP_NUM_UL_ACTORS,   0,               .iptr=&nrUE_params.num_ul_actors,            .defintval=2,      TYPE_INT,      0}, \
+  {"num-dl-actors",                CONFIG_HLP_NUM_DL_ACTORS,  0,                .iptr=&nrUE_params.num_dl_actors,            .defintval=4,      TYPE_INT,      0}, \
+  {"extra-pdu-id",                 CONFIG_HLP_EXTRA_PDU_ID,   0,                .iptr=&nrUE_params.extra_pdu_id,             .defintval=-1,     TYPE_INT,      0}, \
 }
 // clang-format on
 
@@ -89,6 +107,10 @@ typedef struct {
   double time_sync_I;
   double ntn_init_time_drift;
   int autonomous_ta;
+  double initial_fo;
+  double freq_sync_P;
+  double freq_sync_I;
+  int cont_fo_comp;
   int agc;
   char *usrp_args;
   char *tx_subdev;
@@ -101,6 +123,9 @@ typedef struct {
   double rx_gain_off;
   int vcdflag;
   int tx_max_power;
+  int num_ul_actors;
+  int num_dl_actors;
+  int extra_pdu_id;
 } nrUE_params_t;
 extern uint64_t get_nrUE_optmask(void);
 extern uint64_t set_nrUE_optmask(uint64_t bitmask);

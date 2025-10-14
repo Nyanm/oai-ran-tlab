@@ -11,12 +11,12 @@
 -  FAPI (IF2)  : specified by Small Cell Forum (open-nFAPI implementation)
 -  IF1         : F1 in 3GPP Release 15
 
-![Functional Split Architecture](./oai_enb_func_split_arch.png)
+![Functional Split Architecture](./images/oai_enb_func_split_arch.png)
 
 
 # OpenAirInterface Block Diagram #
 
-![Block Diagram](./oai_enb_block_diagram.png)
+![Block Diagram](./images/oai_enb_block_diagram.png)
 
 # OpenAirInterface 5G-NR Feature Set #
 
@@ -25,7 +25,7 @@
 The following features are valid for the gNB and the 5G-NR UE.
 
 *  Static TDD
-   - Multi TDD pattern supported refer [TDD Configuration](NR_SA_Multi_TDD_Pattern.md)
+   - Multi TDD pattern supported refer [TDD Configuration](MAC/mac-usage.md)
 *  Static FDD
 *  Normal CP
 *  Subcarrier spacings: 15 and 30kHz (FR1), 120kHz (FR2)
@@ -105,7 +105,7 @@ These modes of operation are supported:
 
 - MAC -> PHY configuration using NR FAPI P5 interface
 - MAC <-> PHY data interface using FAPI P7 interface for BCH PDU, DCI PDU, PDSCH PDU
-- Scheduler procedures for SIB1
+- Generation of and scheduler procedures for MIB/SIB1
 - Scheduler procedures for RA
     - 4-Step RA
         - Contention Free RA procedure
@@ -139,7 +139,12 @@ These modes of operation are supported:
   - evaluation of CQI report
 - MAC scheduling of SR reception
 - Intra-frequency handover
+- Inter-frequency handover
+    - Measurement gaps are automatically computed at the DU if the CU has neighbor information and the configured
+      neighbors include cells operating on different frequencies
+    - DUs must be synchronized with each other for the measurements to be properly performed
 - Initial support for RedCap
+- Scheduling of SIBs (2, 19)
 
 ## gNB RLC
 
@@ -174,7 +179,7 @@ These modes of operation are supported:
 
 - NR RRC (38.331) Rel 17 messages using new [asn1c](https://github.com/mouse07410/asn1c)
 - LTE RRC (36.331) also updated to Rel 15
-- Generation of MIB/SIB1 (received from DU)
+- Generation of system information (SIB2)
 - RRC can configure PDCP, RLC, MAC
 - Interface with GTP-U (tunnel creation/handling for S1-U (NSA), N3 (SA), F1 interfaces)
 - Integration of RRC messages and procedures supporting UE 5G SA connection

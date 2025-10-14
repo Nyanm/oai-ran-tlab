@@ -81,7 +81,9 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
     int dci_idx = 0;
     // multi-beam number (for concurrent beams)
     int bitmap = SL_to_bitmap(cset_start_symb, pdcch_pdu_rel15->DurationSymbols);
-    int beam_nb = beam_index_allocation(dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx,
+    int beam_nb = beam_index_allocation(gNB->enable_analog_das,
+                                        dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx,
+                                        &gNB->gNB_config.analog_beamforming_ve,
                                         &gNB->common_vars,
                                         slot,
                                         frame_parms->symbols_per_slot,
@@ -218,15 +220,6 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
 
           } else { // DCI payload
             txdataF[l * frame_parms->ofdm_symbol_size + k] = c16mulRealShift(mod_dci[dci_idx], amp, 15);
-#ifdef DEBUG_DCI
-            LOG_I(NR_PHY_DCI,
-                  "PDCCH: l %d position %d => (%d,%d)\n",
-                  l,
-                  k,
-		  		  txdataF[l * frame_parms->ofdm_symbol_size + k].r,
-		  txdataF[l * frame_parms->ofdm_symbol_size + k].i;
-#endif
-
             dci_idx++;
           }
 

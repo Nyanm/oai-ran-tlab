@@ -51,7 +51,7 @@ PROJECT_BRIEF          = "Full experimental OpenSource LTE and NR implementation
 # pixels and the maximum width should not exceed 200 pixels. Doxygen will copy
 # the logo to the output directory.
 
-PROJECT_LOGO           = @CMAKE_SOURCE_DIR@/doc/oai_logo.png
+PROJECT_LOGO           = @CMAKE_SOURCE_DIR@/doc/images/oai_logo.png
 
 # The OUTPUT_DIRECTORY tag is used to specify the (relative or absolute) path
 # into which the generated documentation will be written. If a relative path is
@@ -1021,7 +1021,6 @@ INPUT                  = \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair3/S1AP/s1ap_eNB_ue_context.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair3/S1AP/s1ap_eNB_management_procedures.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair3/S1AP/s1ap_eNB_context_management_procedures.c \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair3/S1AP/s1ap_common.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair3/S1AP/s1ap_eNB_decoder.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair3/S1AP/s1ap_eNB_management_procedures.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair3/S1AP/s1ap_eNB_handlers.h \
@@ -1677,6 +1676,7 @@ INPUT                  = \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_ulsch.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/NR_MAC_gNB/mac_rrc_ul_direct.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/NR_MAC_gNB/nr_mac_gNB.h \
+@CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/NR_MAC_gNB/nr_radio_config.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/NR_MAC_gNB/mac_rrc_dl_handler.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_dlsch.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/NR_MAC_gNB/mac_rrc_dl_handler.h \
@@ -1687,6 +1687,7 @@ INPUT                  = \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_RA.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_phytest.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_bch.c \
+@CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/NR_MAC_gNB/nr_radio_config.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/openair2_proc.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/RLC/rlc.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/LAYER2/NR_MAC_UE/mac_tables.c \
@@ -1844,12 +1845,9 @@ INPUT                  = \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR_UE/rrc_defs.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR_UE/L2_interface_ue.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/L2_INTERFACE/openair_rrc_L2_interface.h \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/rrc_gNB_internode.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/nr_rrc_defs.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/cucp_cuup_if.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/cucp_cuup_direct.c \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/nr_rrc_config.c \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/rrc_gNB_GTPV1U.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/mac_rrc_dl_direct.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/rrc_gNB_radio_bearers.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/rrc_gNB_NGAP.h \
@@ -1860,12 +1858,9 @@ INPUT                  = \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/rrc_gNB_UE_context.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/cucp_cuup_e1ap.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/rrc_gNB.c \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/nr_rrc_config.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/rrc_gNB_radio_bearers.h \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/rrc_gNB_reconfig.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/rrc_gNB_NGAP.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/mac_rrc_dl_f1ap.c \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/rrc_gNB_GTPV1U.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/mac_rrc_dl.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/NR/rrc_gNB_nsa.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair2/RRC/LTE/rrc_eNB_GTPV1U.c \
@@ -2137,10 +2132,8 @@ INPUT                  = \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/CODING/nrLDPC_encoder/ldpc_encode_parity_check.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/CODING/nrLDPC_encoder/ldpc_BG2_Zc176_byte.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/CODING/nrLDPC_encoder/ldpc_BG2_Zc352_byte.c \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/CODING/nrLDPC_encoder/ldpc_encoder_optim.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/CODING/nrLDPC_encoder/ldpc_BG2_Zc128_byte_128.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/CODING/nrLDPC_encoder/ldpc224_byte.c \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/CODING/nrLDPC_encoder/ldpc_encoder_optim8seg.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/CODING/nrLDPC_encoder/ldpc_generate_coefficient.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/CODING/nrLDPC_encoder/ldpc_BG2_Zc104_byte.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/CODING/nrLDPC_encoder/ldpc320_byte_128.c \
@@ -2241,18 +2234,14 @@ INPUT                  = \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/cdot_prod.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/phy_scope_interface.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/oai_dfts_neon.c \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/cmult_vv.c \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/cmult_sv.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/dB_routines.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/dfts_load.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/log2_approx.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/phy_scope_interface.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/simde_operations.c \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/lut.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/nr_phy_scope.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/nr_phy_scope.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/lte_phy_scope.c \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/cadd_vv.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/phy_scope.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/signal_energy.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/TOOLS/oai_dfts.c \

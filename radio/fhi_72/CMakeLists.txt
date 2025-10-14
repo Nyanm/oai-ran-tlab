@@ -16,13 +16,16 @@ add_library(oran_fhlib_5g MODULE
             oran-init.c
 )
 
+set(E_VERSION 5.1.6)
+set(F_VERSION 6.1.4)
+
 find_package(xran REQUIRED)
-if(xran_VERSION VERSION_EQUAL 5.1.5)
+if(xran_VERSION VERSION_EQUAL E_VERSION)
   target_compile_definitions(oran_fhlib_5g PRIVATE E_RELEASE)
-elseif(xran_VERSION VERSION_EQUAL 6.1.2)
+elseif(xran_VERSION VERSION_EQUAL F_VERSION)
   target_compile_definitions(oran_fhlib_5g PRIVATE F_RELEASE)
 else()
-  message(FATAL_ERROR "Found xran version ${xran_VERSION} but needed 5.1.5 (E release) or 6.1.2 (F release)")
+  message(FATAL_ERROR "Found xran version ${xran_VERSION} but needed ${E_VERSION} (E release) or ${F_VERSION} (F release)")
 endif()
 
 # Ignore xran-specific warning: we don't care/can't change the following warning, so suppress
@@ -30,7 +33,8 @@ endif()
 add_compile_options(-Wno-packed-not-aligned)
 
 set_target_properties(oran_fhlib_5g PROPERTIES COMPILE_FLAGS "-fvisibility=hidden -march=native")
-target_link_libraries(oran_fhlib_5g PRIVATE xran::xran ${dpdk_LINK_LIBRARIES} ${T_LIB} pthread dl rt m numa)
+target_link_libraries(oran_fhlib_5g PRIVATE xran::xran ${dpdk_LINK_LIBRARIES} pthread dl rt m numa)
+target_link_libraries(oran_fhlib_5g PRIVATE log_headers)
 target_include_directories(oran_fhlib_5g PRIVATE ${dpdk_INCLUDE_DIRS})
 if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
   find_package(armral REQUIRED)

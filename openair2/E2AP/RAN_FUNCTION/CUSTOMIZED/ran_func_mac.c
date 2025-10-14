@@ -37,7 +37,7 @@ bool read_mac_sm(void* data)
 
   NR_UEs_t *UE_info = &RC.nrmac[mod_id]->UE_info;
   size_t num_ues = 0;
-  UE_iterator(UE_info->list, ue) {
+  UE_iterator(UE_info->connected_ue_list, ue) {
     if (ue)
       num_ues += 1;
   }
@@ -49,7 +49,7 @@ bool read_mac_sm(void* data)
   }
 
   size_t i = 0; //TODO
-  UE_iterator(UE_info->list, UE) {
+  UE_iterator(UE_info->connected_ue_list, UE) {
     const NR_UE_sched_ctrl_t* sched_ctrl = &UE->UE_sched_ctrl;
     mac_ue_stats_impl_t* rd = &mac->msg.ue_stats[i];
 
@@ -66,7 +66,7 @@ bool read_mac_sm(void* data)
     }
     if (is_ul_slot(rd->slot, &RC.nrmac[mod_id]->frame_structure)) {
       rd->ul_curr_tbs = UE->mac_stats.ul.current_bytes;
-      rd->ul_sched_rb = sched_ctrl->sched_pusch.rbSize;
+      rd->ul_sched_rb = UE->mac_stats.ul.current_rbs;
     }
 
     rd->rnti = UE->rnti;

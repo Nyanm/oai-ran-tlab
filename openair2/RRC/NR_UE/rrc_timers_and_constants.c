@@ -43,33 +43,113 @@ void init_SI_timers(NR_UE_RRC_SI_INFO *SInfo)
   nr_timer_setup(&SInfo->SInfo_r17.sib19_timer, 10800000, 10);
 }
 
-static SIB_validity_t check_sib_timer_validity(SIB_validity_t sib_validity, NR_timer_t *sib_timer)
-{
-  if (sib_validity == SIB_VALID) {
-    bool sib_expired = nr_timer_tick(sib_timer);
-    if (sib_expired)
-      return SIB_NOT_VALID;
-  }
-  return sib_validity;
-}
-
 void nr_rrc_SI_timers(NR_UE_RRC_SI_INFO *SInfo)
 {
-  SInfo->sib1_validity = check_sib_timer_validity(SInfo->sib1_validity, &SInfo->sib1_timer);
-  SInfo->sib2_validity = check_sib_timer_validity(SInfo->sib2_validity, &SInfo->sib2_timer);
-  SInfo->sib3_validity = check_sib_timer_validity(SInfo->sib3_validity, &SInfo->sib3_timer);
-  SInfo->sib4_validity = check_sib_timer_validity(SInfo->sib4_validity, &SInfo->sib4_timer);
-  SInfo->sib5_validity = check_sib_timer_validity(SInfo->sib5_validity, &SInfo->sib5_timer);
-  SInfo->sib6_validity = check_sib_timer_validity(SInfo->sib6_validity, &SInfo->sib6_timer);
-  SInfo->sib7_validity = check_sib_timer_validity(SInfo->sib7_validity, &SInfo->sib7_timer);
-  SInfo->sib8_validity = check_sib_timer_validity(SInfo->sib8_validity, &SInfo->sib8_timer);
-  SInfo->sib9_validity = check_sib_timer_validity(SInfo->sib9_validity, &SInfo->sib9_timer);
-  SInfo->sib10_validity = check_sib_timer_validity(SInfo->sib10_validity, &SInfo->sib10_timer);
-  SInfo->sib11_validity = check_sib_timer_validity(SInfo->sib11_validity, &SInfo->sib11_timer);
-  SInfo->sib12_validity = check_sib_timer_validity(SInfo->sib12_validity, &SInfo->sib12_timer);
-  SInfo->sib13_validity = check_sib_timer_validity(SInfo->sib13_validity, &SInfo->sib13_timer);
-  SInfo->sib14_validity = check_sib_timer_validity(SInfo->sib14_validity, &SInfo->sib14_timer);
-  SInfo->SInfo_r17.sib19_validity = check_sib_timer_validity(SInfo->SInfo_r17.sib19_validity, &SInfo->SInfo_r17.sib19_timer);
+  if (SInfo->sib1_validity) {
+   bool sib1_expired = nr_timer_tick(&SInfo->sib1_timer);
+   if (sib1_expired)
+     SInfo->sib1_validity = false;
+  }
+  if (SInfo->sib2_validity) {
+   bool sib2_expired = nr_timer_tick(&SInfo->sib2_timer);
+   if (sib2_expired)
+     SInfo->sib2_validity = false;
+  }
+  if (SInfo->sib3_validity) {
+   bool sib3_expired = nr_timer_tick(&SInfo->sib3_timer);
+   if (sib3_expired)
+     SInfo->sib3_validity = false;
+  }
+  if (SInfo->sib4_validity) {
+   bool sib4_expired = nr_timer_tick(&SInfo->sib4_timer);
+   if (sib4_expired)
+     SInfo->sib4_validity = false;
+  }
+  if (SInfo->sib5_validity) {
+   bool sib5_expired = nr_timer_tick(&SInfo->sib5_timer);
+   if (sib5_expired)
+     SInfo->sib5_validity = false;
+  }
+  if (SInfo->sib6_validity) {
+   bool sib6_expired = nr_timer_tick(&SInfo->sib6_timer);
+   if (sib6_expired)
+     SInfo->sib6_validity = false;
+  }
+  if (SInfo->sib7_validity) {
+   bool sib7_expired = nr_timer_tick(&SInfo->sib7_timer);
+   if (sib7_expired)
+     SInfo->sib7_validity = false;
+  }
+  if (SInfo->sib8_validity) {
+   bool sib8_expired = nr_timer_tick(&SInfo->sib8_timer);
+   if (sib8_expired)
+     SInfo->sib8_validity = false;
+  }
+  if (SInfo->sib9_validity) {
+   bool sib9_expired = nr_timer_tick(&SInfo->sib9_timer);
+   if (sib9_expired)
+     SInfo->sib9_validity = false;
+  }
+  if (SInfo->sib10_validity) {
+   bool sib10_expired = nr_timer_tick(&SInfo->sib10_timer);
+   if (sib10_expired)
+     SInfo->sib10_validity = false;
+  }
+  if (SInfo->sib11_validity) {
+   bool sib11_expired = nr_timer_tick(&SInfo->sib11_timer);
+   if (sib11_expired)
+     SInfo->sib11_validity = false;
+  }
+  if (SInfo->sib12_validity) {
+   bool sib12_expired = nr_timer_tick(&SInfo->sib12_timer);
+   if (sib12_expired)
+     SInfo->sib12_validity = false;
+  }
+  if (SInfo->sib13_validity) {
+   bool sib13_expired = nr_timer_tick(&SInfo->sib13_timer);
+   if (sib13_expired)
+     SInfo->sib13_validity = false;
+  }
+  if (SInfo->sib14_validity) {
+   bool sib14_expired = nr_timer_tick(&SInfo->sib14_timer);
+   if (sib14_expired)
+     SInfo->sib14_validity = false;
+  }
+  if (SInfo->SInfo_r17.sib19_validity) {
+   bool sib19_expired = nr_timer_tick(&SInfo->SInfo_r17.sib19_timer);
+   if (sib19_expired)
+     SInfo->SInfo_r17.sib19_validity = false;
+  }
+}
+
+void handle_meas_timers(NR_UE_RRC_INST_t *rrc)
+{
+  for (int i = 0; i < NB_CNX_UE; i++) {
+    rrcPerNB_t *nb = &rrc->perNB[i];
+    l3_measurements_t *l3_measurements = &nb->l3_measurements;
+
+    bool ta2_expired = nr_timer_tick(&l3_measurements->TA2);
+    if (ta2_expired && l3_measurements->trigger_quantity > 0) {
+      rrc_ue_generate_measurementReport(nb, rrc->ue_id);
+      l3_measurements->reports_sent = 1;
+
+      if (l3_measurements->reports_sent < l3_measurements->max_reports) {
+        nr_timer_setup(&l3_measurements->periodic_report_timer, l3_measurements->report_interval_ms, 10);
+        nr_timer_start(&l3_measurements->periodic_report_timer);
+      }
+    }
+
+    bool periodic_expired = nr_timer_tick(&l3_measurements->periodic_report_timer);
+    if (periodic_expired && l3_measurements->reports_sent < l3_measurements->max_reports) {
+      rrc_ue_generate_measurementReport(nb, rrc->ue_id);
+      l3_measurements->reports_sent++;
+
+      if (l3_measurements->reports_sent < l3_measurements->max_reports) {
+        nr_timer_setup(&l3_measurements->periodic_report_timer, l3_measurements->report_interval_ms, 10);
+        nr_timer_start(&l3_measurements->periodic_report_timer);
+      }
+    }
+  }
 }
 
 void nr_rrc_handle_timers(NR_UE_RRC_INST_t *rrc)
@@ -82,7 +162,7 @@ void nr_rrc_handle_timers(NR_UE_RRC_INST_t *rrc)
 
   bool t300_expired = nr_timer_tick(&timers->T300);
   if(t300_expired) {
-    LOG_W(NR_RRC, "Timer T300 expired! No timely response to RRCSetupRequest\n");
+    LOG_W(NR_RRC, "[UE %ld] Timer T300 expired! No timely response to RRCSetupRequest\n", rrc->ue_id);
     handle_t300_expiry(rrc);
   }
 
@@ -90,13 +170,21 @@ void nr_rrc_handle_timers(NR_UE_RRC_INST_t *rrc)
   // Upon T301 expiry, the UE shall perform the actions upon going to RRC_IDLE
   // with release cause 'RRC connection failure'
   if(t301_expired) {
-    LOG_W(NR_RRC, "Timer T301 expired! No timely response to RRCReestabilshmentRequest\n");
+    LOG_W(NR_RRC, "[UE %ld] Timer T301 expired! No timely response to RRCReestabilshmentRequest\n", rrc->ue_id);
     nr_rrc_going_to_IDLE(rrc, RRC_CONNECTION_FAILURE, NULL);
+  }
+
+  bool t302_expired = nr_timer_tick(&timers->T302);
+  // 5.3.14.4 in 38.331
+  // consider the barring for this Access Category to be alleviated
+  if (t302_expired) {
+    LOG_W(NR_RRC, "[UE %ld] Timer T302 expired! Access barring alleviated!\n", rrc->ue_id);
+    handle_302_expired_stopped(rrc);
   }
 
   bool t304_expired = nr_timer_tick(&timers->T304);
   if(t304_expired) {
-    LOG_W(NR_RRC, "Timer T304 expired\n");
+    LOG_W(NR_RRC, "[UE %ld] Timer T304 expired\n", rrc->ue_id);
     // TODO
     // For T304 of MCG, in case of the handover from NR or intra-NR
     // handover, initiate the RRC re-establishment procedure;
@@ -106,19 +194,29 @@ void nr_rrc_handle_timers(NR_UE_RRC_INST_t *rrc)
 
   bool t310_expired = nr_timer_tick(&timers->T310);
   if(t310_expired) {
-    LOG_W(NR_RRC, "Timer T310 expired\n");
+    LOG_W(NR_RRC, "[UE %ld] Timer T310 expired\n", rrc->ue_id);
     // handle detection of radio link failure
     // as described in 5.3.10.3 of 38.331
     handle_rlf_detection(rrc);
   }
 
   bool t311_expired = nr_timer_tick(&timers->T311);
-  if(t311_expired) {
-    LOG_W(NR_RRC, "Timer T311 expired! No suitable cell found in time after initiation of re-establishment\n");
+  if (t311_expired) {
+    LOG_W(NR_RRC, "[UE %ld] Timer T311 expired! No suitable cell found in time after initiation of re-establishment\n", rrc->ue_id);
     // Upon T311 expiry, the UE shall perform the actions upon going to RRC_IDLE
     // with release cause 'RRC connection failure'
     nr_rrc_going_to_IDLE(rrc, RRC_CONNECTION_FAILURE, NULL);
   }
+
+  bool t430_expired = nr_timer_tick(&rrc->timers_and_constants.T430);
+  if (t430_expired && rrc->nrRrcState == RRC_STATE_CONNECTED_NR && rrc->is_NTN_UE) {
+    LOG_W(NR_RRC, "[UE %ld] Timer T430 expired! Indicate UL SYNC LOSS to MAC\n", rrc->ue_id);
+    // Upon T430 expiry, the UE shall reacquire SIB19 and re-obtain UL-SYNC
+    // Spec 38.331 Section 5.2.2.6
+    handle_t430_expiry(rrc);
+  }
+
+  handle_meas_timers(rrc);
 }
 
 int nr_rrc_get_T304(long t304)
@@ -563,4 +661,44 @@ void reset_rlf_timers_and_constants(NR_UE_Timers_Constants_t *tac)
   // reset the counters N310 and N311
   tac->N310_cnt = 0;
   tac->N311_cnt = 0;
+}
+
+int get_A2_event_time_to_trigger(long time_to_trigger)
+{
+  switch (time_to_trigger) {
+    case NR_TimeToTrigger_ms0:
+      return 0;
+    case NR_TimeToTrigger_ms40:
+      return 40;
+    case NR_TimeToTrigger_ms64:
+      return 64;
+    case NR_TimeToTrigger_ms80:
+      return 80;
+    case NR_TimeToTrigger_ms100:
+      return 100;
+    case NR_TimeToTrigger_ms128:
+      return 128;
+    case NR_TimeToTrigger_ms160:
+      return 160;
+    case NR_TimeToTrigger_ms256:
+      return 256;
+    case NR_TimeToTrigger_ms320:
+      return 320;
+    case NR_TimeToTrigger_ms480:
+      return 480;
+    case NR_TimeToTrigger_ms512:
+      return 512;
+    case NR_TimeToTrigger_ms640:
+      return 640;
+    case NR_TimeToTrigger_ms1024:
+      return 1024;
+    case NR_TimeToTrigger_ms1280:
+      return 1280;
+    case NR_TimeToTrigger_ms2560:
+      return 2560;
+    case NR_TimeToTrigger_ms5120:
+      return 5120;
+    default:
+      AssertFatal(false, "Invalid TimeToTrigger %ld\n", time_to_trigger);
+  }
 }

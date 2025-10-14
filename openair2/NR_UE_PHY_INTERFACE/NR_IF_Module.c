@@ -90,7 +90,14 @@ void print_ue_mac_stats(const module_id_t mod, const int frame_rx, const int slo
   if (nbdl < 1)
     nbdl = 1;
 
-  cur += snprintf(cur, end - cur, "UE %d stats sfn: %d.%d, cumulated bad DCI %d\n", mod, frame_rx, slot_rx, mac->stats.bad_dci);
+  cur += snprintf(cur,
+                  end - cur,
+                  "UE %d RNTI %04x stats sfn: %d.%d, cumulated bad DCI %d\n",
+                  mod,
+                  mac->crnti,
+                  frame_rx,
+                  slot_rx,
+                  mac->stats.bad_dci);
 
   cur += snprintf(cur, end - cur, "    DL harq: %lu", mac->stats.dl.rounds[0]);
   int nb;
@@ -367,7 +374,6 @@ static void fill_mib_in_rx_ind(nfapi_nr_dl_tti_request_pdu_t *pdu_list, fapi_nr_
   rx_ind->rx_indication_body[pdu_idx].ssb_pdu.pdu[0] = (ssb_pdu->bchPayload) & 0xff;
   rx_ind->rx_indication_body[pdu_idx].ssb_pdu.pdu[1] = (ssb_pdu->bchPayload >> 8) & 0xff;
   rx_ind->rx_indication_body[pdu_idx].ssb_pdu.pdu[2] = (ssb_pdu->bchPayload >> 16) & 0xff;
-  rx_ind->rx_indication_body[pdu_idx].ssb_pdu.rsrp_dBm = ssb_pdu->ssbRsrp;
   rx_ind->rx_indication_body[pdu_idx].ssb_pdu.ssb_index = ssb_pdu->SsbBlockIndex;
   rx_ind->rx_indication_body[pdu_idx].ssb_pdu.ssb_length = pdu_list->PDUSize;
   rx_ind->rx_indication_body[pdu_idx].ssb_pdu.ssb_start_subcarrier = ssb_pdu->SsbSubcarrierOffset;
@@ -846,12 +852,11 @@ static void enqueue_nr_nfapi_msg(void *buffer, ssize_t len, nfapi_p7_message_hea
         case NFAPI_NR_PHY_MSG_TYPE_DL_TTI_REQUEST:
         {
             nfapi_nr_dl_tti_request_t *dl_tti_request = malloc16(sizeof(*dl_tti_request));
-            if (nfapi_nr_p7_message_unpack(buffer, len, dl_tti_request,
-                                            sizeof(*dl_tti_request), NULL) < 0)
-            {
-                LOG_E(NR_PHY, "Message dl_tti_request failed to unpack\n");
-                break;
-            }
+          const bool result = nfapi_nr_p7_message_unpack(buffer, len, dl_tti_request, sizeof(*dl_tti_request), NULL);
+          if (!result) {
+            LOG_E(NR_PHY, "Message dl_tti_request failed to unpack\n");
+            break;
+          }
             LOG_D(NR_PHY, "Received an NFAPI_NR_PHY_MSG_TYPE_DL_TTI_REQUEST message in sfn/slot %d %d. \n",
                     dl_tti_request->SFN, dl_tti_request->Slot);
 
@@ -870,12 +875,11 @@ static void enqueue_nr_nfapi_msg(void *buffer, ssize_t len, nfapi_p7_message_hea
         case NFAPI_NR_PHY_MSG_TYPE_TX_DATA_REQUEST:
         {
             nfapi_nr_tx_data_request_t *tx_data_request = malloc16(sizeof(*tx_data_request));
-            if (nfapi_nr_p7_message_unpack(buffer, len, tx_data_request,
-                                        sizeof(*tx_data_request), NULL) < 0)
-            {
-                LOG_E(NR_PHY, "Message tx_data_request failed to unpack\n");
-                break;
-            }
+          const bool result = nfapi_nr_p7_message_unpack(buffer, len, tx_data_request, sizeof(*tx_data_request), NULL);
+          if (!result) {
+            LOG_E(NR_PHY, "Message tx_data_request failed to unpack\n");
+            break;
+          }
             LOG_D(NR_PHY, "Received an NFAPI_NR_PHY_MSG_TYPE_TX_DATA_REQUEST message in SFN/slot %d %d. \n",
                     tx_data_request->SFN, tx_data_request->Slot);
             if (!put_queue(&nr_tx_req_queue, tx_data_request))
@@ -890,12 +894,11 @@ static void enqueue_nr_nfapi_msg(void *buffer, ssize_t len, nfapi_p7_message_hea
         case NFAPI_NR_PHY_MSG_TYPE_UL_DCI_REQUEST:
         {
             nfapi_nr_ul_dci_request_t *ul_dci_request = malloc16(sizeof(*ul_dci_request));
-            if (nfapi_nr_p7_message_unpack(buffer, len, ul_dci_request,
-                                            sizeof(*ul_dci_request), NULL) < 0)
-            {
-                LOG_E(NR_PHY, "Message ul_dci_request failed to unpack\n");
-                break;
-            }
+          const bool result = nfapi_nr_p7_message_unpack(buffer, len, ul_dci_request, sizeof(*ul_dci_request), NULL);
+          if (!result) {
+            LOG_E(NR_PHY, "Message ul_dci_request failed to unpack\n");
+            break;
+          }
             LOG_D(NR_PHY, "Received an NFAPI_NR_PHY_MSG_TYPE_UL_DCI_REQUEST message in SFN/slot %d %d. \n",
                     ul_dci_request->SFN, ul_dci_request->Slot);
             if (!put_queue(&nr_ul_dci_req_queue, ul_dci_request))
@@ -910,12 +913,11 @@ static void enqueue_nr_nfapi_msg(void *buffer, ssize_t len, nfapi_p7_message_hea
         case NFAPI_NR_PHY_MSG_TYPE_UL_TTI_REQUEST:
         {
             nfapi_nr_ul_tti_request_t *ul_tti_request = malloc16(sizeof(*ul_tti_request));
-            if (nfapi_nr_p7_message_unpack(buffer, len, ul_tti_request,
-                                           sizeof(*ul_tti_request), NULL) < 0)
-            {
-                LOG_E(NR_PHY, "Message ul_tti_request failed to unpack\n");
-                break;
-            }
+          const bool result = nfapi_nr_p7_message_unpack(buffer, len, ul_tti_request, sizeof(*ul_tti_request), NULL);
+          if (!result) {
+            LOG_E(NR_PHY, "Message ul_tti_request failed to unpack\n");
+            break;
+          }
             /* We are filtering UL_TTI_REQs below. We only care about UL_TTI_REQs that
                will trigger sending a ul_harq (CRC/RX pair). This UL_TTI_REQ will have
                NFAPI_NR_UL_CONFIG_PUSCH_PDU_TYPE. If we have not yet completed the CBRA/
@@ -1106,9 +1108,12 @@ static int handle_bcch_dlsch(NR_UE_MAC_INST_t *mac,
                              unsigned int gNB_index,
                              uint8_t ack_nack,
                              uint8_t *pduP,
-                             uint32_t pdu_len)
+                             uint32_t pdu_len,
+                             int frame,
+                             int slot)
 {
-  return nr_ue_decode_BCCH_DL_SCH(mac, cc_id, gNB_index, ack_nack, pduP, pdu_len);
+  nr_ue_decode_BCCH_DL_SCH(mac, cc_id, gNB_index, ack_nack, pduP, pdu_len, frame, slot);
+  return 0;
 }
 
 //  L2 Abstraction Layer
@@ -1130,12 +1135,6 @@ static nr_dci_format_t handle_dci(NR_UE_MAC_INST_t *mac,
     nr_timer_suspension(&mac->ra.response_window_timer);
 
   return nr_ue_process_dci_indication_pdu(mac, frame, slot, dci);
-}
-
-static void handle_ssb_meas(NR_UE_MAC_INST_t *mac, uint8_t ssb_index, int16_t rsrp_dbm)
-{
-  mac->ssb_measurements.ssb_index = ssb_index;
-  mac->ssb_measurements.ssb_rsrp_dBm = rsrp_dbm;
 }
 
 // L2 Abstraction Layer
@@ -1167,13 +1166,11 @@ static void handle_rlm(rlm_t rlm_result, int frame, NR_UE_MAC_INST_t *mac)
   nr_mac_rrc_sync_ind(mac->ue_id, frame, is_sync);
 }
 
-static int8_t handle_csirs_measurements(NR_UE_MAC_INST_t *mac,
-                                        frame_t frame,
-                                        int slot,
-                                        fapi_nr_csirs_measurements_t *csirs_measurements)
+static int8_t handle_l1_measurements(NR_UE_MAC_INST_t *mac, frame_t frame, int slot, fapi_nr_l1_measurements_t *l1_measurements)
 {
-  handle_rlm(csirs_measurements->radiolink_monitoring, frame, mac);
-  return nr_ue_process_csirs_measurements(mac, frame, slot, csirs_measurements);
+  handle_rlm(l1_measurements->radiolink_monitoring, frame, mac);
+  nr_ue_process_l1_measurements(mac, frame, slot, l1_measurements);
+  return 0;
 }
 
 void update_harq_status(NR_UE_MAC_INST_t *mac, uint8_t harq_pid, uint8_t ack_nack)
@@ -1183,7 +1180,7 @@ void update_harq_status(NR_UE_MAC_INST_t *mac, uint8_t harq_pid, uint8_t ack_nac
   if (current_harq->active) {
     LOG_D(PHY,"Updating harq_status for harq_id %d, ack/nak %d\n", harq_pid, current_harq->ack);
     // we can prepare feedback for MSG4 in advance
-    if (mac->ra.ra_state == nrRA_WAIT_CONTENTION_RESOLUTION)
+    if (mac->ra.ra_state == nrRA_WAIT_CONTENTION_RESOLUTION || mac->ra.ra_state == nrRA_WAIT_MSGB)
       prepare_msg4_msgb_feedback(mac, harq_pid, ack_nack);
     else {
       current_harq->ack = ack_nack;
@@ -1263,15 +1260,12 @@ static uint32_t nr_ue_dl_processing(NR_UE_MAC_INST_t *mac, nr_downlink_indicatio
             rx_indication_body.pdu_type,
             dl_info->rx_ind->number_pdus);
 
-      switch(rx_indication_body.pdu_type){
+      switch(rx_indication_body.pdu_type) {
         case FAPI_NR_RX_PDU_TYPE_SSB:
           handle_rlm(rx_indication_body.ssb_pdu.radiolink_monitoring,
                      dl_info->frame,
                      mac);
           if(rx_indication_body.ssb_pdu.decoded_pdu) {
-            handle_ssb_meas(mac,
-                            rx_indication_body.ssb_pdu.ssb_index,
-                            rx_indication_body.ssb_pdu.rsrp_dBm);
             ret_mask |= (handle_bcch_bch(mac,
                                          dl_info->cc_id,
                                          dl_info->gNB_index,
@@ -1287,10 +1281,13 @@ static uint32_t nr_ue_dl_processing(NR_UE_MAC_INST_t *mac, nr_downlink_indicatio
           break;
         case FAPI_NR_RX_PDU_TYPE_SIB:
           ret_mask |= (handle_bcch_dlsch(mac,
-                                         dl_info->cc_id, dl_info->gNB_index,
+                                         dl_info->cc_id,
+                                         dl_info->gNB_index,
                                          rx_indication_body.pdsch_pdu.ack_nack,
                                          rx_indication_body.pdsch_pdu.pdu,
-                                         rx_indication_body.pdsch_pdu.pdu_length)) << FAPI_NR_RX_PDU_TYPE_SIB;
+                                         rx_indication_body.pdsch_pdu.pdu_length,
+                                         dl_info->frame,
+                                         dl_info->slot)) << FAPI_NR_RX_PDU_TYPE_SIB;
           break;
         case FAPI_NR_RX_PDU_TYPE_DLSCH:
           ret_mask |= (handle_dlsch(mac, dl_info, i)) << FAPI_NR_RX_PDU_TYPE_DLSCH;
@@ -1301,15 +1298,15 @@ static uint32_t nr_ue_dl_processing(NR_UE_MAC_INST_t *mac, nr_downlink_indicatio
             // resume RAR response window timer if MSG2 decoding failed
             nr_timer_suspension(&mac->ra.response_window_timer);
           } else {
-            LOG_I(PHY, "RAR-Msg2 decoded\n");
+            LOG_I(PHY, "[UE %d] RAR-Msg2 decoded\n", mac->ue_id);
           }
           ret_mask |= (handle_dlsch(mac, dl_info, i)) << FAPI_NR_RX_PDU_TYPE_RAR;
           break;
-        case FAPI_NR_CSIRS_IND:
-          ret_mask |= (handle_csirs_measurements(mac,
-                                                 dl_info->frame,
-                                                 dl_info->slot,
-                                                 &rx_indication_body.csirs_measurements)) << FAPI_NR_CSIRS_IND;
+        case FAPI_NR_MEAS_IND:
+          ret_mask |= (handle_l1_measurements(mac,
+                                              dl_info->frame,
+                                              dl_info->slot,
+                                              &rx_indication_body.l1_measurements)) << FAPI_NR_MEAS_IND;
           break;
         default:
           break;

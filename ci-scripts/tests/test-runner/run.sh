@@ -22,14 +22,7 @@ python3 main.py \
   --ranCommitID=${commit} \
   --ranAllowMerge=true \
   --ranTargetBranch=develop \
-  --eNBIPAddress=localhost \
-  --eNBUserName=NONE \
-  --eNBPassword=NONE \
   --eNBSourceCodePath=NONE \
-  --UEIPAddress=localhost \
-  --UEUserName=NONE \
-  --UEPassword=NONE \
-  --UESourceCodePath=NONE \
   --XMLTestFile=tests/test-runner/test.xml
 
 python3 main.py \

@@ -100,7 +100,7 @@ static void nr_fill_nfapi_pucch(gNB_MAC_INST *nrmac, frame_t frame, slot_t slot,
 #define MIN_RSRP_VALUE -141
 #define MAX_RSRP_VALUE -43
 
-//Measured RSRP Values Table 10.1.16.1-1 from 36.133
+//Measured RSRP Values Table 10.1.16.1-1 from 38.133
 //Stored all the upper limits[Max RSRP Value of corresponding index]
 //stored -1 for invalid values
 static const int L1_SSB_CSI_RSRP_measReport_mapping_38133_10_1_6_1_1[128] = {
@@ -119,7 +119,7 @@ static const int L1_SSB_CSI_RSRP_measReport_mapping_38133_10_1_6_1_1[128] = {
     -1,   -1,   -1,   -1,   -1,      -1,   -1,      -1 // 120 - 127
 };
 
-//Differential RSRP values Table 10.1.6.1-2 from 36.133
+//Differential RSRP values Table 10.1.6.1-2 from 38.133
 //Stored the upper limits[MAX RSRP Value]
 static const int diff_rsrp_ssb_csi_meas_10_1_6_1_2[16] = {
     0,
@@ -171,39 +171,54 @@ static int get_pucch_index(int frame, int slot, const frame_structure_t *fs, int
   return (frame_start + ul_period_start + ul_period_slot) % sched_pucch_size;
 }
 
-void nr_schedule_pucch(gNB_MAC_INST *nrmac, frame_t frameP, slot_t slotP)
+static void schedule_pucch_core(gNB_MAC_INST *nrmac, NR_UE_info_t *UE, frame_t frame, slot_t slot)
+{
+  NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
+  const int pucch_index = get_pucch_index(frame, slot, &nrmac->frame_structure, sched_ctrl->sched_pucch_size);
+  NR_sched_pucch_t *curr_pucch = &UE->UE_sched_ctrl.sched_pucch[pucch_index];
+  if (!curr_pucch->active)
+    return;
+  if (frame != curr_pucch->frame || slot != curr_pucch->ul_slot) {
+    LOG_E(NR_MAC,
+          "PUCCH frame/slot mismatch: current %4d.%2d vs. request %4d.%2d: not scheduling PUCCH\n",
+          curr_pucch->frame,
+          curr_pucch->ul_slot,
+          frame,
+          slot);
+    memset(curr_pucch, 0, sizeof(*curr_pucch));;
+    return;
+  }
+
+  const uint16_t O_ack = curr_pucch->dai_c;
+  const uint16_t O_csi = curr_pucch->csi_bits;
+  const uint8_t O_sr = curr_pucch->sr_flag;
+  LOG_D(NR_MAC,
+        "Scheduling PUCCH[%d] RX for UE %04x in %4d.%2d O_ack %d, O_sr %d, O_csi %d\n",
+        pucch_index,
+        UE->rnti,
+        curr_pucch->frame,
+        curr_pucch->ul_slot,
+        O_ack,O_sr,
+        O_csi);
+  nr_fill_nfapi_pucch(nrmac, frame, slot, curr_pucch, UE);
+  memset(curr_pucch, 0, sizeof(*curr_pucch));
+}
+
+void nr_schedule_pucch(gNB_MAC_INST *nrmac, frame_t frame, slot_t slot)
 {
   /* already mutex protected: held in gNB_dlsch_ulsch_scheduler() */
   NR_SCHED_ENSURE_LOCKED(&nrmac->sched_lock);
 
-  if (!is_ul_slot(slotP, &nrmac->frame_structure))
+  if (!is_ul_slot(slot, &nrmac->frame_structure))
     return;
 
-  UE_iterator(nrmac->UE_info.list, UE) {
-    NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
-    const int pucch_index = get_pucch_index(frameP, slotP, &nrmac->frame_structure, sched_ctrl->sched_pucch_size);
-    NR_sched_pucch_t *curr_pucch = &UE->UE_sched_ctrl.sched_pucch[pucch_index];
-    if (!curr_pucch->active)
-      continue;
-    if (frameP != curr_pucch->frame || slotP != curr_pucch->ul_slot) {
-      LOG_E(NR_MAC,
-            "PUCCH frame/slot mismatch: current %4d.%2d vs. request %4d.%2d: not scheduling PUCCH\n",
-            curr_pucch->frame,
-            curr_pucch->ul_slot,
-            frameP,
-            slotP);
-      memset(curr_pucch, 0, sizeof(*curr_pucch));;
-      continue;
-    }
+  UE_iterator(nrmac->UE_info.access_ue_list, init_UE) {
+    if (init_UE->ra->ra_state == nrRA_WAIT_Msg4_MsgB_ACK)
+      schedule_pucch_core(nrmac, init_UE, frame, slot);
+  }
 
-    const uint16_t O_ack = curr_pucch->dai_c;
-    const uint16_t O_csi = curr_pucch->csi_bits;
-    const uint8_t O_sr = curr_pucch->sr_flag;
-    LOG_D(NR_MAC,"Scheduling PUCCH[%d] RX for UE %04x in %4d.%2d O_ack %d, O_sr %d, O_csi %d\n",
-          pucch_index,UE->rnti,curr_pucch->frame,curr_pucch->ul_slot,O_ack,O_sr,O_csi);
-    nr_fill_nfapi_pucch(nrmac, frameP, slotP, curr_pucch, UE);
-    memset(curr_pucch, 0, sizeof(*curr_pucch));
-
+  UE_iterator(nrmac->UE_info.connected_ue_list, UE) {
+    schedule_pucch_core(nrmac, UE, frame, slot);
   }
 }
 
@@ -217,11 +232,11 @@ void nr_csi_meas_reporting(int Mod_idP,frame_t frame, slot_t slot)
   /* already mutex protected: held in gNB_dlsch_ulsch_scheduler() */
   NR_SCHED_ENSURE_LOCKED(&nrmac->sched_lock);
 
-  UE_iterator(nrmac->UE_info.list, UE ) {
+  UE_iterator(nrmac->UE_info.connected_ue_list, UE) {
     NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
     NR_UE_UL_BWP_t *ul_bwp = &UE->current_UL_BWP;
     const int n_slots_frame = nrmac->frame_structure.numb_slots_frame;
-    if (nr_timer_is_active(&sched_ctrl->transm_interrupt) || (sched_ctrl->ul_failure && !get_softmodem_params()->phy_test)) {
+    if (!nr_mac_ue_is_active(UE) && !get_softmodem_params()->phy_test) {
       continue;
     }
     const NR_CSI_MeasConfig_t *csi_measconfig = UE->sc_info.csi_MeasConfig;
@@ -399,6 +414,25 @@ static void handle_dl_harq(NR_UE_info_t * UE,
   }
 }
 
+// Referred Table 10.1.16.1-1 in 38.133 V16.7.0.
+static int get_measured_sinr(int index)
+{
+  if (index < 0 || index > 127)
+    return INT_MAX;
+
+  return -235 + index * 5;
+}
+
+// Referred Table 10.1.16.1-2 in 38.133 V16.7.0.
+static int get_diff_sinr(int index, int best_SINRx10)
+{
+  if (index <= 0)
+    return best_SINRx10;
+  if (index >= 15)
+    return best_SINRx10 - 150;
+  return best_SINRx10 - index * 10;
+}
+
 //returns the measured RSRP value (upper limit)
 static bool get_measured_rsrp(uint8_t index, int *rsrp)
 {
@@ -427,6 +461,89 @@ static uint8_t pickandreverse_bits(uint8_t *payload, uint16_t bitlen, uint8_t st
   for (int i = 0; i < bitlen; i++)
     rev_bits |= ((payload[(start_bit + i) / 8] >> ((start_bit + i) % 8)) & 0x01) << (bitlen - i - 1);
   return rev_bits;
+}
+
+static void evaluate_sinr_report(gNB_MAC_INST *nrmac,
+                                 NR_UE_info_t *UE,
+                                 NR_UE_sched_ctrl_t *sched_ctrl,
+                                 uint8_t csi_report_id,
+                                 uint8_t *payload,
+                                 int *cumul_bits,
+                                 NR_CSI_ReportConfig__ext2__reportQuantity_r16_PR reportQuantity_type_r16)
+{
+  /*! As per the spec 38.212 and table:  6.3.1.1.2-12 in a single UCI sequence we can have multiple CSI_report
+   * the number of CSI_report will depend on number of CSI resource sets that are configured in CSI-ResourceConfig RRC IE
+   * From spec 38.331 from the IE CSI-ResourceConfig for SSB RSRP reporting we can configure only one resource set
+   * From spec 38.214 section 5.2.1.2 For periodic and semi-persistent CSI Resource Settings, the number of CSI-RS Resource Sets
+   * configured is limited to S=1
+   */
+
+  /** from 38.214 sec 5.2.1.4.2
+  - if the UE is configured with the higher layer parameter groupBasedBeamReporting set to 'disabled', the UE is
+    not required to update measurements for more than 64 CSI-RS and/or SSB resources, and the UE shall report in
+    a single report nrofReportedRS (higher layer configured) different CRI or SSBRI for each report setting
+
+  - if the UE is configured with the higher layer parameter groupBasedBeamReporting set to 'enabled', the UE is not
+    required to update measurements for more than 64 CSI-RS and/or SSB resources, and the UE shall report in a
+    single reporting instance two different CRI or SSBRI for each report setting, where CSI-RS and/or SSB
+    resources can be received simultaneously by the UE either with a single spatial domain receive filter, or with
+    multiple simultaneous spatial domain receive filter
+  */
+
+  nr_csi_report_t *csi_report = &UE->csi_report_template[csi_report_id];
+  RSRP_report_t *sinr_report;
+  long **index_list;
+  switch (reportQuantity_type_r16) {
+    case NR_CSI_ReportConfig__ext2__reportQuantity_r16_PR_ssb_Index_SINR_r16:
+      sinr_report = &sched_ctrl->CSI_report.ssb_rsrp_report;
+      index_list = csi_report->SSB_Index_list;
+      break;
+    case NR_CSI_ReportConfig__ext2__reportQuantity_r16_PR_cri_SINR_r16:
+      sinr_report = &sched_ctrl->CSI_report.csirs_rsrp_report;
+      index_list = csi_report->CSI_Index_list;
+      break;
+    default:
+      AssertFatal(false, "Invalid RSRP report type\n");
+  }
+
+  sinr_report->nr_reports = csi_report->CSI_report_bitlen.nb_ssbri_cri;
+  uint16_t curr_payload;
+  for (int i = 0; i < sinr_report->nr_reports; i++) {
+    int bitlen = csi_report->CSI_report_bitlen.cri_ssbri_bitlen;
+    curr_payload = pickandreverse_bits(payload, bitlen, *cumul_bits);
+    sinr_report->resource_id[i] = *(index_list[bitlen > 0 ? ((curr_payload) & ~(~1U << (bitlen - 1))) : bitlen]);
+    LOG_D(MAC, "SSB/CSI-RS index = %d\n", sinr_report->resource_id[i]);
+    *cumul_bits += bitlen;
+  }
+
+  curr_payload = pickandreverse_bits(payload, 7, *cumul_bits);
+  int sinr_index = curr_payload & 0x7f;
+  *cumul_bits += 7;
+
+  csi_report->nb_of_csi_ssb_report++;
+  int SINRx10 = get_measured_sinr(sinr_index);
+  if (SINRx10 == INT_MAX) {
+    LOG_E(NR_MAC, "UE %04x: reported SINR index %d invalid\n", UE->rnti, sinr_index);
+    return;
+  }
+  sinr_report->SINRx10[0] = SINRx10;
+
+  for (int i = 1; i < sinr_report->nr_reports; i++) {
+    curr_payload = pickandreverse_bits(payload, 4, *cumul_bits);
+    sinr_report->SINRx10[i] = get_diff_sinr(curr_payload & 0x0f, sinr_report->SINRx10[0]);
+    *cumul_bits += 4;
+  }
+
+  NR_mac_stats_t *stats = &UE->mac_stats;
+  // including ssb SINR in mac stats
+  stats->cumul_sinrx10 += sinr_report->SINRx10[0];
+  stats->num_sinr_meas++;
+
+  const int mcs_table = UE->current_DL_BWP.mcsTableIdx;
+  const int nrOfLayers = get_dl_nrOfLayers(sched_ctrl, UE->current_DL_BWP.dci_format);
+  sched_ctrl->dl_max_mcs = get_mcs_from_SINRx10(mcs_table, sinr_report->SINRx10[0], nrOfLayers);
+
+  LOG_D(MAC, "Reported SSB-SINR = %d.%d, dl_max_mcs %d\n", sinr_report->SINRx10[0] / 10, sinr_report->SINRx10[0] % 10, sched_ctrl->dl_max_mcs);
 }
 
 static void evaluate_rsrp_report(gNB_MAC_INST *nrmac,
@@ -471,29 +588,31 @@ static void evaluate_rsrp_report(gNB_MAC_INST *nrmac,
   }
 
   rsrp_report->nr_reports = csi_report->CSI_report_bitlen.nb_ssbri_cri;
-  uint16_t curr_payload;
-  for (int i = 0; i < rsrp_report->nr_reports; i++) {
-    int bitlen = csi_report->CSI_report_bitlen.cri_ssbri_bitlen;
-    curr_payload = pickandreverse_bits(payload, bitlen, *cumul_bits);
-    rsrp_report->resource_id[i] = *(index_list[bitlen > 0 ? ((curr_payload) & ~(~1U << (bitlen - 1))) : bitlen]);
-    LOG_D(MAC,"SSB/CSI-RS index = %d\n", rsrp_report->resource_id[i]);
-    *cumul_bits += bitlen;
-  }
+  int bitlen = csi_report->CSI_report_bitlen.cri_ssbri_bitlen;
+  uint8_t curr_payload = pickandreverse_bits(payload, bitlen, *cumul_bits);
+  rsrp_report->resource_id[0] = *(index_list[bitlen > 0 ? ((curr_payload) & ~(~1U << (bitlen - 1))) : bitlen]);
+  *cumul_bits += bitlen;
 
   curr_payload = pickandreverse_bits(payload, 7, *cumul_bits);
-  int rsrp_index = curr_payload & 0x7f;
+  int rsrp = curr_payload & 0x7f;
   *cumul_bits += 7;
-
   csi_report->nb_of_csi_ssb_report++;
-  bool valid = get_measured_rsrp(rsrp_index, &rsrp_report->RSRP[0]);
+  bool valid = get_measured_rsrp(rsrp, &rsrp_report->RSRP[0]);
+  LOG_D(NR_MAC, "SSB/CSI-RS index %d RSRP %d\n", rsrp_report->resource_id[0], rsrp_report->RSRP[0]);
   if (!valid) {
-    LOG_E(NR_MAC, "UE %04x: reported RSRP index %d invalid\n", UE->rnti, rsrp_index);
+    LOG_E(NR_MAC, "UE %04x: reported RSRP index %d invalid\n", UE->rnti, rsrp);
     return;
   }
 
   for (int i = 1; i < rsrp_report->nr_reports; i++) {
+    curr_payload = pickandreverse_bits(payload, bitlen, *cumul_bits);
+    rsrp_report->resource_id[i] = *(index_list[bitlen > 0 ? ((curr_payload) & ~(~1U << (bitlen - 1))) : bitlen]);
+    *cumul_bits += bitlen;
+
     curr_payload = pickandreverse_bits(payload, 4, *cumul_bits);
+    csi_report->nb_of_csi_ssb_report++;
     rsrp_report->RSRP[i] = get_diff_rsrp(curr_payload & 0x0f, rsrp_report->RSRP[0]);
+    LOG_D(NR_MAC, "SSB/CSI-RS index %d RSRP %d\n", rsrp_report->resource_id[i], rsrp_report->RSRP[i]);
     *cumul_bits += 4;
   }
 
@@ -627,6 +746,8 @@ static void extract_pucch_csi_report(NR_CSI_MeasConfig_t *csi_MeasConfig,
   uint8_t *payload = uci_pdu->csi_part1.csi_part1_payload;
   uint16_t bitlen = uci_pdu->csi_part1.csi_part1_bit_len;
   NR_CSI_ReportConfig__reportQuantity_PR reportQuantity_type = NR_CSI_ReportConfig__reportQuantity_PR_NOTHING;
+  NR_CSI_ReportConfig__ext2__reportQuantity_r16_PR reportQuantity_type_r16 =
+      NR_CSI_ReportConfig__ext2__reportQuantity_r16_PR_NOTHING;
   NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
   NR_UE_UL_BWP_t *ul_bwp = &UE->current_UL_BWP;
   NR_UE_DL_BWP_t *dl_bwp = &UE->current_DL_BWP;
@@ -650,72 +771,78 @@ static void extract_pucch_csi_report(NR_CSI_MeasConfig_t *csi_MeasConfig,
     // verify if report with current id has been scheduled for this frame and slot
     if ((n_slots_frame*frame + slot - offset)%period == 0) {
       reportQuantity_type = csi_report->reportQuantity_type;
-      // phy-test has hardcoded allocation, so no use to handle CSI reports except RSRP
-      if (get_softmodem_params()->phy_test
-          && reportQuantity_type != NR_CSI_ReportConfig__reportQuantity_PR_ssb_Index_RSRP
-          && reportQuantity_type != NR_CSI_ReportConfig__reportQuantity_PR_cri_RSRP)
-        continue;
-      LOG_D(MAC,"SFN/SF:%d/%d reportQuantity type = %d\n",frame,slot,reportQuantity_type);
-      switch(reportQuantity_type) {
-        case NR_CSI_ReportConfig__reportQuantity_PR_cri_RSRP:
-          evaluate_rsrp_report(nrmac, UE, sched_ctrl, csi_report_id, payload, &cumul_bits, reportQuantity_type);
-          break;
-        case NR_CSI_ReportConfig__reportQuantity_PR_ssb_Index_RSRP:
-          evaluate_rsrp_report(nrmac, UE, sched_ctrl, csi_report_id, payload, &cumul_bits, reportQuantity_type);
-          beam_selection_procedures(nrmac, UE);
-          break;
-        case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_CQI:
-          sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.print_report = true;
-          cri_bitlen = csi_report->csi_meas_bitlen.cri_bitlen;
-          if(cri_bitlen)
-            evaluate_cri_report(payload,cri_bitlen,cumul_bits,sched_ctrl);
-          cumul_bits += cri_bitlen;
-          ri_bitlen = csi_report->csi_meas_bitlen.ri_bitlen;
-          if(ri_bitlen)
-            r_index = evaluate_ri_report(payload,ri_bitlen,csi_report->csi_meas_bitlen.ri_restriction,cumul_bits,sched_ctrl);
-          cumul_bits += ri_bitlen;
-          if (r_index != -1)
-            skip_zero_padding(&cumul_bits,csi_report,r_index,bitlen);
-          evaluate_cqi_report(payload,csi_report,cumul_bits,r_index,UE,cqi_table);
-          break;
-        case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_PMI_CQI:
-          sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.print_report = true;
-          cri_bitlen = csi_report->csi_meas_bitlen.cri_bitlen;
-          if(cri_bitlen)
-            evaluate_cri_report(payload,cri_bitlen,cumul_bits,sched_ctrl);
-          cumul_bits += cri_bitlen;
-          ri_bitlen = csi_report->csi_meas_bitlen.ri_bitlen;
-          if(ri_bitlen)
-            r_index = evaluate_ri_report(payload,ri_bitlen,csi_report->csi_meas_bitlen.ri_restriction,cumul_bits,sched_ctrl);
-          cumul_bits += ri_bitlen;
-          if (r_index != -1)
-            skip_zero_padding(&cumul_bits,csi_report,r_index,bitlen);
-          pmi_bitlen = evaluate_pmi_report(payload,csi_report,cumul_bits,r_index,sched_ctrl);
-          sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.csi_report_id = csi_report_id;
-          cumul_bits += pmi_bitlen;
-          evaluate_cqi_report(payload,csi_report,cumul_bits,r_index,UE,cqi_table);
-          break;
-        case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_LI_PMI_CQI:
-          sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.print_report = true;
-          cri_bitlen = csi_report->csi_meas_bitlen.cri_bitlen;
-          if(cri_bitlen)
-            evaluate_cri_report(payload,cri_bitlen,cumul_bits,sched_ctrl);
-          cumul_bits += cri_bitlen;
-          ri_bitlen = csi_report->csi_meas_bitlen.ri_bitlen;
-          if(ri_bitlen)
-            r_index = evaluate_ri_report(payload,ri_bitlen,csi_report->csi_meas_bitlen.ri_restriction,cumul_bits,sched_ctrl);
-          cumul_bits += ri_bitlen;
-          li_bitlen = evaluate_li_report(payload,csi_report,cumul_bits,r_index,sched_ctrl);
-          cumul_bits += li_bitlen;
-          if (r_index != -1)
-            skip_zero_padding(&cumul_bits,csi_report,r_index,bitlen);
-          pmi_bitlen = evaluate_pmi_report(payload,csi_report,cumul_bits,r_index,sched_ctrl);
-          sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.csi_report_id = csi_report_id;
-          cumul_bits += pmi_bitlen;
-          evaluate_cqi_report(payload,csi_report,cumul_bits,r_index,UE,cqi_table);
-          break;
-        default:
-          AssertFatal(1==0, "Invalid or not supported CSI measurement report\n");
+      reportQuantity_type_r16 = csi_report->reportQuantity_type_r16;
+      LOG_D(MAC, "SFN/SF:%d/%d reportQuantity type = %d, type_r16 = %d\n", frame, slot, reportQuantity_type, reportQuantity_type_r16);
+      if (reportQuantity_type_r16 == NR_CSI_ReportConfig__ext2__reportQuantity_r16_PR_cri_SINR_r16
+          || reportQuantity_type_r16 == NR_CSI_ReportConfig__ext2__reportQuantity_r16_PR_ssb_Index_SINR_r16) {
+        evaluate_sinr_report(nrmac, UE, sched_ctrl, csi_report_id, payload, &cumul_bits, reportQuantity_type_r16);
+      } else {
+        // phy-test has hardcoded allocation, so no use to handle CSI reports except RSRP
+        if (get_softmodem_params()->phy_test
+            && reportQuantity_type != NR_CSI_ReportConfig__reportQuantity_PR_ssb_Index_RSRP
+            && reportQuantity_type != NR_CSI_ReportConfig__reportQuantity_PR_cri_RSRP)
+          continue;
+        switch (reportQuantity_type) {
+          case NR_CSI_ReportConfig__reportQuantity_PR_cri_RSRP:
+            evaluate_rsrp_report(nrmac, UE, sched_ctrl, csi_report_id, payload, &cumul_bits, reportQuantity_type);
+            break;
+          case NR_CSI_ReportConfig__reportQuantity_PR_ssb_Index_RSRP:
+            evaluate_rsrp_report(nrmac, UE, sched_ctrl, csi_report_id, payload, &cumul_bits, reportQuantity_type);
+            beam_selection_procedures(nrmac, UE);
+            break;
+          case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_CQI:
+            sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.print_report = true;
+            cri_bitlen = csi_report->csi_meas_bitlen.cri_bitlen;
+            if (cri_bitlen)
+              evaluate_cri_report(payload, cri_bitlen, cumul_bits, sched_ctrl);
+            cumul_bits += cri_bitlen;
+            ri_bitlen = csi_report->csi_meas_bitlen.ri_bitlen;
+            if (ri_bitlen)
+              r_index = evaluate_ri_report(payload, ri_bitlen, csi_report->csi_meas_bitlen.ri_restriction, cumul_bits, sched_ctrl);
+            cumul_bits += ri_bitlen;
+            if (r_index != -1)
+              skip_zero_padding(&cumul_bits, csi_report, r_index, bitlen);
+            evaluate_cqi_report(payload, csi_report, cumul_bits, r_index, UE, cqi_table);
+            break;
+          case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_PMI_CQI:
+            sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.print_report = true;
+            cri_bitlen = csi_report->csi_meas_bitlen.cri_bitlen;
+            if (cri_bitlen)
+              evaluate_cri_report(payload, cri_bitlen, cumul_bits, sched_ctrl);
+            cumul_bits += cri_bitlen;
+            ri_bitlen = csi_report->csi_meas_bitlen.ri_bitlen;
+            if (ri_bitlen)
+              r_index = evaluate_ri_report(payload, ri_bitlen, csi_report->csi_meas_bitlen.ri_restriction, cumul_bits, sched_ctrl);
+            cumul_bits += ri_bitlen;
+            if (r_index != -1)
+              skip_zero_padding(&cumul_bits, csi_report, r_index, bitlen);
+            pmi_bitlen = evaluate_pmi_report(payload, csi_report, cumul_bits, r_index, sched_ctrl);
+            sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.csi_report_id = csi_report_id;
+            cumul_bits += pmi_bitlen;
+            evaluate_cqi_report(payload, csi_report, cumul_bits, r_index, UE, cqi_table);
+            break;
+          case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_LI_PMI_CQI:
+            sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.print_report = true;
+            cri_bitlen = csi_report->csi_meas_bitlen.cri_bitlen;
+            if (cri_bitlen)
+              evaluate_cri_report(payload, cri_bitlen, cumul_bits, sched_ctrl);
+            cumul_bits += cri_bitlen;
+            ri_bitlen = csi_report->csi_meas_bitlen.ri_bitlen;
+            if (ri_bitlen)
+              r_index = evaluate_ri_report(payload, ri_bitlen, csi_report->csi_meas_bitlen.ri_restriction, cumul_bits, sched_ctrl);
+            cumul_bits += ri_bitlen;
+            li_bitlen = evaluate_li_report(payload, csi_report, cumul_bits, r_index, sched_ctrl);
+            cumul_bits += li_bitlen;
+            if (r_index != -1)
+              skip_zero_padding(&cumul_bits, csi_report, r_index, bitlen);
+            pmi_bitlen = evaluate_pmi_report(payload, csi_report, cumul_bits, r_index, sched_ctrl);
+            sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.csi_report_id = csi_report_id;
+            cumul_bits += pmi_bitlen;
+            evaluate_cqi_report(payload, csi_report, cumul_bits, r_index, UE, cqi_table);
+            break;
+          default:
+            AssertFatal(1 == 0, "Invalid or not supported CSI measurement report\n");
+        }
       }
     }
   }
@@ -774,14 +901,19 @@ void handle_nr_uci_pucch_0_1(module_id_t mod_id, frame_t frame, slot_t slot, con
   gNB_MAC_INST *nrmac = RC.nrmac[mod_id];
   int rssi_threshold = nrmac->pucch_rssi_threshold;
   NR_SCHED_LOCK(&nrmac->sched_lock);
-  NR_UE_info_t * UE = find_nr_UE(&nrmac->UE_info, uci_01->rnti);
+  NR_UE_info_t *UE = find_nr_UE(&nrmac->UE_info, uci_01->rnti);
+  bool is_ra = false;
   if (!UE) {
-    LOG_E(NR_MAC, "%s(): unknown RNTI %04x in PUCCH UCI\n", __func__, uci_01->rnti);
-    NR_SCHED_UNLOCK(&nrmac->sched_lock);
-    return;
+    UE = find_ra_UE(&nrmac->UE_info, uci_01->rnti);
+    if (UE)
+      is_ra = true;
+    else {
+      LOG_E(NR_MAC, "Unknown RNTI %04x in PUCCH UCI\n", uci_01->rnti);
+      NR_SCHED_UNLOCK(&nrmac->sched_lock);
+      return;
+    }
   }
   NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
-
   if (((uci_01->pduBitmap >> 1) & 0x01)) {
     // iterate over received harq bits
     for (int harq_bit = 0; harq_bit < uci_01->harq.num_harq; harq_bit++) {
@@ -797,10 +929,17 @@ void handle_nr_uci_pucch_0_1(module_id_t mod_id, frame_t frame, slot_t slot, con
       remove_front_nr_list(&sched_ctrl->feedback_dl_harq);
       LOG_D(NR_MAC,"%4d.%2d bit %d pid %d ack/nack %d\n",frame, slot, harq_bit,pid,harq_value);
       nr_mac_update_pdcch_closed_loop_adjust(sched_ctrl, harq_confidence != 0);
-      handle_dl_harq(UE, pid, harq_value == 0 && harq_confidence == 0, nrmac->dl_bler.harq_round_max);
-      if (!UE->Msg4_MsgB_ACKed && harq_value == 0 && harq_confidence == 0)
-        UE->Msg4_MsgB_ACKed = true;
-      if (harq_confidence == 1)  UE->mac_stats.pucch0_DTX++;
+      bool success = harq_value == 0 && harq_confidence == 0;
+      handle_dl_harq(UE, pid, success, nrmac->dl_bler.harq_round_max);
+      if (is_ra) {
+        bool ue_rejected = nr_check_Msg4_MsgB_Ack(mod_id, frame, slot, UE, success);
+        if (ue_rejected) {
+          NR_SCHED_UNLOCK(&nrmac->sched_lock);
+          return;
+        }
+      }
+      if (harq_confidence == 1)
+        UE->mac_stats.pucch0_DTX++;
     }
 
     // tpc (power control) only if we received AckNack
@@ -1139,11 +1278,11 @@ void nr_sr_reporting(gNB_MAC_INST *nrmac, frame_t SFN, slot_t slot)
   if (!is_ul_slot(slot, &nrmac->frame_structure))
     return;
   const int CC_id = 0;
-  UE_iterator(nrmac->UE_info.list, UE) {
+  UE_iterator(nrmac->UE_info.connected_ue_list, UE) {
     NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
     NR_UE_UL_BWP_t *ul_bwp = &UE->current_UL_BWP;
     const int n_slots_frame = nrmac->frame_structure.numb_slots_frame;
-    if (sched_ctrl->ul_failure || nr_timer_is_active(&sched_ctrl->transm_interrupt))
+    if (!nr_mac_ue_is_active(UE))
       continue;
     NR_PUCCH_Config_t *pucch_Config = ul_bwp->pucch_Config;
 

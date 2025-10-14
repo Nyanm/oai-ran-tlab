@@ -34,14 +34,13 @@
 #include "NR_LogicalChannelIdentity.h"
 #include "NR_RadioBearerConfig.h"
 #include "NR_CellGroupConfig.h"
-#include "openair2/RRC/NR/nr_rrc_proto.h"
 #include "nr_rlc_ue_manager.h"
 
 
 struct NR_RLC_Config;
 struct NR_LogicalChannelConfig;
 
-int nr_rlc_module_init(int gnb_flag);
+int nr_rlc_module_init(nr_rlc_op_mode_t mode);
 void nr_mac_rlc_data_ind(const module_id_t  module_idP,
                          const uint16_t ue_id,
                          const bool gnb_flagP,
@@ -80,6 +79,8 @@ void nr_rlc_release_entity(int ue_id, logical_chan_id_t channel_id);
 void nr_rlc_reconfigure_entity(int ue_id, int lc_id, NR_RLC_Config_t *rlc_Config);
 
 int nr_rlc_get_available_tx_space(const int ue_id, const logical_chan_id_t channel_idP);
+
+int nr_rlc_tx_list_occupancy(int ue_id, logical_chan_id_t lcid);
 
 void nr_rlc_activate_avg_time_to_tx(const int ue_id, const logical_chan_id_t channel_id, const bool is_on);
 

@@ -68,11 +68,7 @@ NR_IF_Module_t *NR_IF_Module_init(int Mod_id) { return (NULL); }
 nfapi_mode_t nfapi_getmode(void) { return NFAPI_MODE_UNKNOWN; }
 
 uint8_t const nr_rv_round_map[4] = {0, 2, 3, 1};
-const short conjugate[8]__attribute__((aligned(16))) = {-1,1,-1,1,-1,1,-1,1};
-const short conjugate2[8]__attribute__((aligned(16))) = {1,-1,1,-1,1,-1,1,-1};
 double cpuf;
-//uint8_t nfapi_mode = 0;
-const int NB_UE_INST = 1;
 
 // needed for some functions
 PHY_VARS_NR_UE *PHY_vars_UE_g[1][1] = { { NULL } };
@@ -517,7 +513,8 @@ int main(int argc, char **argv)
 
   if (input_fd == NULL) {
     uint8_t ULSCH_ids[] = {0};
-    nr_ulsch_encoding(UE, ulsch_ue, 0, 0, &G, 1, ULSCH_ids);
+    nr_ulsch_pre_encoding(UE, ulsch_ue, 0, 0, &G, 1, ULSCH_ids);
+    nr_ulsch_encoding(UE, ulsch_ue, 0, 0, &G, 1, ULSCH_ids, 0);
   }
   
   printf("\n");
@@ -546,7 +543,7 @@ int main(int argc, char **argv)
             }
         */
 
-        if (harq_process_ul_ue->f[i] == 0)
+        if ((harq_process_ul_ue->f[i >> 3] & (1 << (i & 7))) == 0)
           modulated_input[i] = 1.0;        ///sqrt(2);  //QPSK
         else
           modulated_input[i] = -1.0;        ///sqrt(2);

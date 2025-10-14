@@ -59,11 +59,7 @@ int32_t uplink_frequency_offset[MAX_NUM_CCs][4];
 uint64_t downlink_frequency[MAX_NUM_CCs][4];
 
 double cpuf;
-//uint8_t nfapi_mode = 0;
-const int NB_UE_INST = 1;
 uint8_t const nr_rv_round_map[4] = {0, 2, 3, 1};
-const short conjugate[8]__attribute__((aligned(16))) = {-1,1,-1,1,-1,1,-1,1};
-const short conjugate2[8]__attribute__((aligned(16))) = {1,-1,1,-1,1,-1,1,-1};
 // needed for some functions
 PHY_VARS_NR_UE *PHY_vars_UE_g[1][1] = {{NULL}};
 static softmodem_params_t softmodem_params;
@@ -113,6 +109,7 @@ int main(int argc, char **argv)
   //int subframe_offset;
   //char fname[40], vname[40];
   int trial,n_trials=100,n_errors=0,ack_nack_errors=0,sr_errors=0;
+  int ret = 1;
   uint8_t transmission_mode = 1,n_tx=1,n_rx=1;
   uint16_t Nid_cell=0;
   uint64_t SSB_positions=0x01;
@@ -762,6 +759,7 @@ int main(int argc, char **argv)
       printf("ACK/NACK: SNR=%f, n_trials=%d, n_bit_errors=%d\n",SNR,n_trials,ack_nack_errors);
     if((float)(ack_nack_errors+sr_errors)/(float)(n_trials)<=target_error_rate){
       printf("PUCCH test OK\n");
+      ret = 0;
       break;
     }
   }
@@ -803,5 +801,5 @@ int main(int argc, char **argv)
   loader_reset();
   logTerm();
 
-  return(n_errors);
+  return ret;
 }

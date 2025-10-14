@@ -81,7 +81,6 @@
 #define bzero(s,n) (memset((s),0,(n)))
 /// suppress compiler warning for unused arguments
 #define UNUSED(x) (void)x;
-#define NUM_DL_ACTORS 4
 
 // Set the number of barriers for processSlotTX to 512. This value has to be at least 483 for NTN where
 // DL-to-UL offset is up to 483. The selected value is also half of the frame range so that
@@ -139,6 +138,7 @@ typedef struct {
   uint32_t rsrp[7];
   short rsrp_dBm[7];
   int ssb_rsrp_dBm[64];
+  float ssb_sinr_dB[64];
   // common measurements
   //! estimated noise power (linear)
   unsigned int   n0_power[NB_ANTENNAS_RX];
@@ -312,7 +312,7 @@ typedef struct {
 
 typedef struct {
   uint8_t csi_rs_generated_signal_bits;
-  int32_t **csi_rs_generated_signal;
+  c16_t **csi_rs_generated_signal;
   bool csi_im_meas_computed;
   uint32_t interference_plus_noise_power;
 } nr_csi_info_t;
@@ -336,6 +336,7 @@ typedef struct {
 
 /// Top-level PHY Data Structure for UE
 typedef struct PHY_VARS_NR_UE_s {
+  openair0_config_t openair0_cfg[MAX_CARDS];
   /// \brief Module ID indicator for this instance
   uint8_t Mod_id;
   /// \brief Component carrier ID for this PHY instance
@@ -401,7 +402,6 @@ typedef struct PHY_VARS_NR_UE_s {
   nr_synch_request_t synch_request;
 
   NR_UE_PRACH     *prach_vars[NUMBER_OF_CONNECTED_gNB_MAX];
-  NR_UE_SRS       *srs_vars[NUMBER_OF_CONNECTED_gNB_MAX];
   NR_UE_PRS       *prs_vars[NR_MAX_PRS_COMB_SIZE];
   uint8_t          prs_active_gNBs;
   NR_DL_UE_HARQ_t  dl_harq_processes[2][NR_MAX_DLSCH_HARQ_PROCESSES];
@@ -460,6 +460,11 @@ typedef struct PHY_VARS_NR_UE_s {
   int64_t max_pos_iir; /// Timing offset IIR filter
   int max_pos_acc; /// Timing offset accumuluated error for PI filter
 
+  double initial_fo; /// initial frequency offset provided by the user
+  int cont_fo_comp; /// flag enabling the continuous frequency offset estimation and compensation
+  double freq_offset; /// currently compensated frequency offset
+  double freq_off_acc; /// accumulated frequency error (for PI controller)
+
   /// Timing Advance updates variables
   /// Timing advance update computed from the TA command signalled from gNB
   int timing_advance;
@@ -494,6 +499,9 @@ typedef struct PHY_VARS_NR_UE_s {
   /// RF and Interface devices per CC
   openair0_device rfdevice;
 
+  /// Phase precompensation flag
+  bool no_phase_pre_comp;
+
   void* scopeData;
   // Pointers to hold PDSCH data only for phy simulators
   void *phy_sim_rxdataF;
@@ -503,6 +511,7 @@ typedef struct PHY_VARS_NR_UE_s {
   void *phy_sim_pdsch_dl_ch_estimates;
   void *phy_sim_pdsch_dl_ch_estimates_ext;
   uint8_t *phy_sim_dlsch_b;
+  uint8_t *phy_sim_test_buf;
 
   dynamic_barrier_t process_slot_tx_barriers[NUM_PROCESS_SLOT_TX_BARRIERS];
 
@@ -513,8 +522,8 @@ typedef struct PHY_VARS_NR_UE_s {
   sl_nr_sidelink_mode_t sl_mode;
   sl_nr_ue_phy_params_t SL_UE_PHY_PARAMS;
   Actor_t sync_actor;
-  Actor_t dl_actors[NUM_DL_ACTORS];
-  Actor_t ul_actor;
+  Actor_t *dl_actors;
+  Actor_t *ul_actors;
   ntn_config_message_t* ntn_config_message;
   pthread_t main_thread;
   pthread_t stat_thread;
@@ -525,10 +534,6 @@ typedef struct {
   int gNB_id;
   /// NR slot index within frame_tx [0 .. slots_per_frame - 1] to act upon for transmission
   int nr_slot_tx;
-  /// NR slot index tx offset to resume
-  /// in case of NTN, tx_offset can be changed dynamically via SIB19
-  /// we need to notify the right tx thread slot based on TX offset change
-  int nr_slot_tx_offset;
   int rx_slot_type;
   /// NR slot index within frame_rx [0 .. slots_per_frame - 1] to act upon for transmission
   int nr_slot_rx;
@@ -571,11 +576,11 @@ typedef struct {
 typedef struct nr_phy_data_tx_s {
   NR_UE_ULSCH_t ulsch;
   NR_UE_PUCCH pucch_vars;
+  NR_UE_SRS srs_vars;
 
   // Sidelink Rx action decided by MAC
   sl_nr_tx_config_type_enum_t sl_tx_action;
   sl_nr_tx_config_psbch_pdu_t psbch_vars;
-
 } nr_phy_data_tx_t;
 
 typedef struct nr_phy_data_s {
@@ -597,7 +602,8 @@ typedef struct nr_rxtx_thread_data_s {
   PHY_VARS_NR_UE    *UE;
   int writeBlockSize;
   nr_phy_data_t phy_data;
-  dynamic_barrier_t *next_barrier;
+  dynamic_barrier_t* next_barrier;
+  uint64_t absolute_deadline_us;
 } nr_rxtx_thread_data_t;
 
 typedef struct LDPCDecode_ue_s {

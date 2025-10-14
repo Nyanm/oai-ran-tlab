@@ -352,10 +352,12 @@ static void configure_ntn_params(PHY_VARS_NR_UE *ue, fapi_nr_dl_ntn_config_comma
     ue->ntn_config_message = CALLOC(1, sizeof(*ue->ntn_config_message));
   }
 
+  ue->ntn_config_message->ntn_config_params.epoch_sfn = ntn_params_message->epoch_sfn;
+  ue->ntn_config_message->ntn_config_params.epoch_subframe = ntn_params_message->epoch_subframe;
   ue->ntn_config_message->ntn_config_params.cell_specific_k_offset = ntn_params_message->cell_specific_k_offset;
-  ue->ntn_config_message->ntn_config_params.N_common_ta_adj = ntn_params_message->N_common_ta_adj;
-  ue->ntn_config_message->ntn_config_params.ntn_ta_commondrift = ntn_params_message->ntn_ta_commondrift;
   ue->ntn_config_message->ntn_config_params.ntn_total_time_advance_ms = ntn_params_message->ntn_total_time_advance_ms;
+  ue->ntn_config_message->ntn_config_params.ntn_total_time_advance_drift = ntn_params_message->ntn_total_time_advance_drift;
+  ue->ntn_config_message->ntn_config_params.ntn_total_time_advance_drift_variant = ntn_params_message->ntn_total_time_advance_drift_variant;
   ue->ntn_config_message->update = true;
 }
 
@@ -518,7 +520,7 @@ static void nr_ue_scheduled_response_ul(PHY_VARS_NR_UE *phy, fapi_nr_ul_config_r
                  pdu->pusch_config_pdu.tx_request_body.pdu_length);
         }
 
-        harq_process_ul_ue->ULstatus = ACTIVE;
+        phy_data->ulsch.status = ACTIVE;
         pdu->pdu_type = FAPI_NR_UL_CONFIG_TYPE_DONE; // not handle it any more
       } break;
 
@@ -549,8 +551,8 @@ static void nr_ue_scheduled_response_ul(PHY_VARS_NR_UE *phy, fapi_nr_ul_config_r
 
       case FAPI_NR_UL_CONFIG_TYPE_SRS:
         // srs config pdu
-        phy->srs_vars[0]->srs_config_pdu = pdu->srs_config_pdu;
-        phy->srs_vars[0]->active = true;
+        phy_data->srs_vars.srs_config_pdu = pdu->srs_config_pdu;
+        phy_data->srs_vars.active = true;
         pdu->pdu_type = FAPI_NR_UL_CONFIG_TYPE_DONE; // not handle it any more
         break;
 

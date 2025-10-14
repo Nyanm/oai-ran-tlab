@@ -31,6 +31,8 @@
 #include "gtpv1_u_messages_types.h"
 #include "intertask_interface.h"
 #include "rlc.h"
+#include "tun_if.h"
+#include "nr_sdap.h"
 
 typedef struct {
   nr_sdap_entity_t *sdap_entity_llist;
@@ -103,7 +105,7 @@ static bool nr_sdap_tx_entity(nr_sdap_entity_t *entity,
   /* The offset of the SDAP header, it might be 0 if has_sdap_tx is not true in the pdcp entity. */
   int offset=0;
   bool ret = false;
-  /*Hardcode DRB ID given from upper layer (ue/enb_tun_read_thread rb_id), it will change if we have SDAP*/
+  /*Hardcode DRB ID given from upper layer (ue/gnb_tun_read_thread rb_id), it will change if we have SDAP*/
   rb_id_t sdap_drb_id = rb_id;
   int pdcp_ent_has_sdap = 0;
 
@@ -321,14 +323,13 @@ static void nr_sdap_rx_entity(nr_sdap_entity_t *entity,
      * 5.2.2 Downlink
      * deliver the retrieved SDAP SDU to the upper layer.
      */
-    extern int nas_sock_fd[];
-    int len = write(nas_sock_fd[0], &buf[offset], size-offset);
+    int len = write(entity->pdusession_sock, &buf[offset], size - offset);
     LOG_D(SDAP, "RX Entity len : %d\n", len);
     LOG_D(SDAP, "RX Entity size : %d\n", size);
     LOG_D(SDAP, "RX Entity offset : %d\n", offset);
 
     if (len != size-offset)
-      LOG_E(SDAP, "%s:%d:%s: fatal\n", __FILE__, __LINE__, __FUNCTION__);
+      LOG_E(SDAP, "write failed to fd %d! errno = %s\n", entity->pdusession_sock, strerror(errno));
   }
 }
 
@@ -501,6 +502,7 @@ nr_sdap_entity_t *new_nr_sdap_entity(int is_gnb,
 
   sdap_entity->ue_id = ue_id;
   sdap_entity->pdusession_id = pdusession_id;
+  sdap_entity->is_gnb = is_gnb;
 
   sdap_entity->tx_entity = nr_sdap_tx_entity;
   sdap_entity->rx_entity = nr_sdap_rx_entity;
@@ -513,6 +515,8 @@ nr_sdap_entity_t *new_nr_sdap_entity(int is_gnb,
   sdap_entity->qfi2drb_map_delete = nr_sdap_qfi2drb_map_del;
   sdap_entity->qfi2drb_map = nr_sdap_qfi2drb_map;
 
+  sdap_entity->pdusession_sock = -1;
+
   if(is_defaultDRB) {
     sdap_entity->default_drb = drb_identity;
     LOG_I(SDAP, "Default DRB for the created SDAP entity: %ld \n", sdap_entity->default_drb);
@@ -523,6 +527,12 @@ nr_sdap_entity_t *new_nr_sdap_entity(int is_gnb,
 
   sdap_entity->next_entity = sdap_info.sdap_entity_llist;
   sdap_info.sdap_entity_llist = sdap_entity;
+
+  if (IS_SOFTMODEM_NOS1 && is_gnb) {
+    // In NOS1 mode, terminate SDAP for the first UE on the gNB. This allows injecting/receiving
+    // PDCP SDUs to/from the TUN interface.
+    start_sdap_tun_gnb_first_ue_default_pdu_session(ue_id);
+  }
   return sdap_entity;
 }
 
@@ -567,20 +577,21 @@ bool nr_sdap_delete_entity(ue_id_t ue_id, int pdusession_id)
 {
   nr_sdap_entity_t *entityPtr = sdap_info.sdap_entity_llist;
   nr_sdap_entity_t *entityPrev = NULL;
-  bool ret = false;
   int upperBound = 0;
 
   if (entityPtr == NULL && (pdusession_id) * (pdusession_id - NGAP_MAX_PDU_SESSION) > 0) {
     LOG_E(SDAP, "SDAP entities not established or Invalid range of pdusession_id [0, 256].\n");
-    return ret;
+    return false;
   }
   LOG_D(SDAP, "Deleting SDAP entity for UE %lx and PDU Session id %d\n", ue_id, entityPtr->pdusession_id);
 
   if (entityPtr->ue_id == ue_id && entityPtr->pdusession_id == pdusession_id) {
     sdap_info.sdap_entity_llist = sdap_info.sdap_entity_llist->next_entity;
+    if (entityPtr->pdusession_sock != -1)
+      remove_ip_if(entityPtr);
     free(entityPtr);
     LOG_D(SDAP, "Successfully deleted Entity.\n");
-    ret = true;
+    return true;
   } else {
     while ((entityPtr->ue_id != ue_id || entityPtr->pdusession_id != pdusession_id) && entityPtr->next_entity != NULL
            && upperBound < SDAP_MAX_NUM_OF_ENTITIES) {
@@ -591,13 +602,16 @@ bool nr_sdap_delete_entity(ue_id_t ue_id, int pdusession_id)
 
     if (entityPtr->ue_id == ue_id && entityPtr->pdusession_id == pdusession_id) {
       entityPrev->next_entity = entityPtr->next_entity;
+      if (entityPtr->pdusession_sock != -1) {
+        remove_ip_if(entityPtr);
+      }
       free(entityPtr);
       LOG_D(SDAP, "Successfully deleted Entity.\n");
-      ret = true;
+      return true;
     }
   }
   LOG_E(SDAP, "Entity does not exist or it was not found.\n");
-  return ret;
+  return false;
 }
 
 bool nr_sdap_delete_ue_entities(ue_id_t ue_id)
@@ -615,6 +629,8 @@ bool nr_sdap_delete_ue_entities(ue_id_t ue_id)
   /* Handle scenario where ue_id matches the head of the list */
   while (entityPtr != NULL && entityPtr->ue_id == ue_id && upperBound < MAX_DRBS_PER_UE) {
     sdap_info.sdap_entity_llist = entityPtr->next_entity;
+    if (entityPtr->pdusession_sock != -1)
+      remove_ip_if(entityPtr);
     free(entityPtr);
     entityPtr = sdap_info.sdap_entity_llist;
     ret = true;
@@ -626,6 +642,8 @@ bool nr_sdap_delete_ue_entities(ue_id_t ue_id)
       entityPtr = entityPtr->next_entity;
     } else {
       entityPrev->next_entity = entityPtr->next_entity;
+      if (entityPtr->pdusession_sock != -1)
+        remove_ip_if(entityPtr);
       free(entityPtr);
       entityPtr = entityPrev->next_entity;
       LOG_I(SDAP, "Successfully deleted SDAP entity for UE %ld\n", ue_id);
@@ -673,4 +691,12 @@ void nr_reconfigure_sdap_entity(NR_SDAP_Config_t *sdap_config, ue_id_t ue_id, in
       sdap_entity->qfi2drb_map_delete(sdap_entity, qfi);
     }
   }
+}
+
+void set_qfi(uint8_t qfi, uint8_t pduid, ue_id_t ue_id)
+{
+  nr_sdap_entity_t *entity = nr_sdap_get_entity(ue_id, pduid);
+  DevAssert(entity != NULL);
+  entity->qfi = qfi;
+  return;
 }

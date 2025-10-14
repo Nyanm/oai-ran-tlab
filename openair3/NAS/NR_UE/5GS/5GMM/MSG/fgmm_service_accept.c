@@ -133,7 +133,7 @@ int decode_fgs_service_accept(fgs_service_accept_msg_t *msg, const byte_array_t 
         break;
 
       case IEI_EAPMSG:
-        DECODE_NAS_IE(ba, decode_eap_msg_ie(&ba), decoded);
+        DECODE_NAS_IE(ba, decode_eap_msg_ie(&msg->eap_msg, &ba), decoded);
         break;
 
       default:
@@ -172,8 +172,8 @@ bool eq_service_accept(const fgs_service_accept_msg_t *a, const fgs_service_acce
       PRINT_NAS_ERROR("t3448 equality check failed\n");
       return false;
     }
-    _NAS_EQ_CHECK_INT(a->t3448->value, b->t3448->value);
-    _NAS_EQ_CHECK_INT(a->t3448->unit, b->t3448->unit);
+    if (!eq_gprs_timer(a->t3448, b->t3448))
+      return false;
   }
   return true;
 }

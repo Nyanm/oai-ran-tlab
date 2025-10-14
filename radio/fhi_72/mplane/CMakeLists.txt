@@ -6,9 +6,9 @@ add_library(oran_fhlib_5g_mplane MODULE
 )
 add_dependencies(oran_fhlib_5g_mplane oran_fhlib_5g)
 
-if(xran_VERSION VERSION_EQUAL 5.1.4)
+if(xran_VERSION VERSION_EQUAL E_VERSION)
   target_compile_definitions(oran_fhlib_5g_mplane PRIVATE E_RELEASE)
-elseif(xran_VERSION VERSION_EQUAL 6.1.1)
+elseif(xran_VERSION VERSION_EQUAL F_VERSION)
   target_compile_definitions(oran_fhlib_5g_mplane PRIVATE F_RELEASE)
 endif()
 
@@ -17,7 +17,7 @@ endif()
 add_compile_options(-Wno-packed-not-aligned)
 
 set_target_properties(oran_fhlib_5g_mplane PROPERTIES COMPILE_FLAGS "-fvisibility=hidden -march=native")
-target_link_libraries(oran_fhlib_5g_mplane PRIVATE xran::xran ${dpdk_LINK_LIBRARIES} ${T_LIB} pthread dl rt m numa)
+target_link_libraries(oran_fhlib_5g_mplane PRIVATE xran::xran ${dpdk_LINK_LIBRARIES} log_headers pthread dl rt m numa)
 target_include_directories(oran_fhlib_5g_mplane PRIVATE ${dpdk_INCLUDE_DIRS})
 
 target_compile_definitions(oran_fhlib_5g_mplane PRIVATE OAI_MPLANE)

@@ -29,6 +29,7 @@
 #ifndef RRC_MESSAGES_TYPES_H_
 #define RRC_MESSAGES_TYPES_H_
 #include "common/utils/mem/oai_memory.h"
+#include "openair1/PHY/defs_common.h"
 #include "as_message.h"
 #include "rrc_types.h"
 #include "s1ap_messages_types.h"
@@ -43,6 +44,12 @@
 #include "NR_RACH-ConfigCommon.h"
 #include "NR_ServingCellConfigCommon.h"
 #include "NR_ServingCellConfig.h"
+#include "NR_SIB1.h"
+#include "NR_SIB19-r17.h"
+#include "NR_CellGroupConfig.h"
+#include "NR_BCCH-BCH-Message.h"
+#include "NR_ReestablishmentCause.h"
+#include "NR_UE-NR-Capability.h"
 
 //-------------------------------------------------------------------------------------------//
 // Messages for RRC logging
@@ -98,11 +105,6 @@
 
 #define NAS_OAI_TUN_NSA(mSGpTR)         (mSGpTR)->ittiMsg.nas_oai_tun_nsa
 #define NAS_PDU_SESSION_REQ(mSGpTR) (mSGpTR)->ittiMsg.nas_pdu_session_req
-#define NR_MAC_RRC_CONFIG_RESET(mSGpTR) (mSGpTR)->ittiMsg.nr_mac_rrc_config_reset
-#define NR_MAC_RRC_CONFIG_CG(mSGpTR) (mSGpTR)->ittiMsg.nr_mac_rrc_config_cg
-#define NR_MAC_RRC_CONFIG_MIB(mSGpTR) (mSGpTR)->ittiMsg.nr_mac_rrc_config_mib
-#define NR_MAC_RRC_CONFIG_SIB1(mSGpTR) (mSGpTR)->ittiMsg.nr_mac_rrc_config_sib1
-#define NR_MAC_RRC_CONFIG_OTHER_SIB(mSGpTR) (mSGpTR)->ittiMsg.nr_mac_rrc_config_other_sib
 
 #define NR_RRC_RLC_MAXRTX(mSGpTR) (mSGpTR)->ittiMsg.nr_rlc_maxrtx_indication
 
@@ -416,9 +418,7 @@ typedef struct NbIoTRrcConfigurationReq_s {
 // gNB: GNB_APP -> RRC messages
 typedef struct NRRrcConfigurationReq_s {
   uint32_t                tac;
-  uint16_t                mcc[PLMN_LIST_MAX_SIZE];
-  uint16_t                mnc[PLMN_LIST_MAX_SIZE];
-  uint8_t                 mnc_digit_length[PLMN_LIST_MAX_SIZE];
+  plmn_id_t plmn[PLMN_LIST_MAX_SIZE];
   uint8_t                 num_plmn;
 
   bool um_on_default_drb;
@@ -465,7 +465,11 @@ typedef struct {
   int ue_id;
 } RlcMaxRtxIndication;
 
-#include "openair2/RRC/NR_UE/rrc_defs.h"
+typedef struct {
+  bool is_srb;
+  int rb_id;
+} nr_mac_rrc_resume_rb_t;
+
 typedef struct {
   NR_ReestablishmentCause_t cause;
 } nr_mac_rrc_config_reset_t;
@@ -476,6 +480,7 @@ typedef struct {
 typedef struct {
   NR_BCCH_BCH_Message_t *bcch;
   int get_sib;
+  bool access_barred;
 } nr_mac_rrc_config_mib_t;
 typedef struct {
   NR_SIB1_t *sib1;
@@ -485,5 +490,26 @@ typedef struct {
   NR_SIB19_r17_t *sib19;
   bool can_start_ra;
 } nr_mac_rrc_config_other_sib_t;
+
+enum payload_type {
+  NR_MAC_RRC_CONFIG_RESET,
+  NR_MAC_RRC_CONFIG_CG,
+  NR_MAC_RRC_CONFIG_MIB,
+  NR_MAC_RRC_CONFIG_SIB1,
+  NR_MAC_RRC_CONFIG_OTHER_SIB,
+  NR_MAC_RRC_RESUME_RB
+};
+
+typedef struct {
+  enum payload_type payload_type;
+  union {
+    nr_mac_rrc_config_reset_t config_reset;
+    nr_mac_rrc_config_cg_t config_cg;
+    nr_mac_rrc_config_mib_t config_mib;
+    nr_mac_rrc_config_sib1_t config_sib1;
+    nr_mac_rrc_config_other_sib_t config_other_sib;
+    nr_mac_rrc_resume_rb_t resume_rb;
+  } payload;
+} nr_mac_rrc_message_t;
 
 #endif /* RRC_MESSAGES_TYPES_H_ */

@@ -1818,8 +1818,8 @@ rrc_ue_process_ueCapabilityEnquiry(
   ul_dcch_msg.message.choice.c1.choice.ueCapabilityInformation.rrc_TransactionIdentifier = UECapabilityEnquiry->rrc_TransactionIdentifier;
   ue_CapabilityRAT_Container.rat_Type = LTE_RAT_Type_eutra;
   OCTET_STRING_fromBuf(&ue_CapabilityRAT_Container.ueCapabilityRAT_Container,
-                       (const char *)UE_rrc_inst[ctxt_pP->module_id].UECapability,
-                       UE_rrc_inst[ctxt_pP->module_id].UECapability_size);
+                       (const char *)UE_rrc_inst[ctxt_pP->module_id].UECap->sdu,
+                       UE_rrc_inst[ctxt_pP->module_id].UECap->sdu_size);
   //  ue_CapabilityRAT_Container.ueCapabilityRAT_Container.buf  = UE_rrc_inst[ue_mod_idP].UECapability;
   // ue_CapabilityRAT_Container.ueCapabilityRAT_Container.size = UE_rrc_inst[ue_mod_idP].UECapability_size;
   AssertFatal(UECapabilityEnquiry->criticalExtensions.present == LTE_UECapabilityEnquiry__criticalExtensions_PR_c1,
@@ -2892,9 +2892,13 @@ int decode_BCCH_DLSCH_Message(
         if ((ctxt_pP->frame % 2) == 0) {
           // even frame
           if ((UE_rrc_inst[ctxt_pP->module_id].Info[eNB_index].SIStatus&1) == 0) {
+            if (!UE_rrc_inst[ctxt_pP->module_id].sib1[eNB_index]) {
+              LOG_E(PHY,"UE_rrc_inst[%d].sib1[%d] is null, allocating\n", ctxt_pP->module_id, eNB_index);
+              openair_rrc_ue_init(ctxt_pP->module_id, eNB_index);
+            }
             LTE_SystemInformationBlockType1_t *sib1 = UE_rrc_inst[ctxt_pP->module_id].sib1[eNB_index];
-            memcpy( (void *)sib1,
-                    (void *)&bcch_message->message.choice.c1.choice.systemInformationBlockType1,
+            memcpy( sib1,
+                    &bcch_message->message.choice.c1.choice.systemInformationBlockType1,
                     sizeof(LTE_SystemInformationBlockType1_t) );
             LOG_D( RRC, "[UE %"PRIu8"] Decoding First SIB1\n", ctxt_pP->module_id );
             decode_SIB1( ctxt_pP, eNB_index, rsrq, rsrp );
@@ -6582,15 +6586,11 @@ void process_nr_nsa_msg(nsa_msg_t *msg, int msg_len)
             }
 
             nfapi_nr_dl_tti_request_t dl_tti_request;
-            int unpack_len = nfapi_nr_p7_message_unpack((void *)msg_buffer,
-                                                         msg_len,
-                                                         &dl_tti_request,
-                                                         sizeof(nfapi_nr_dl_tti_request_t),
-                                                         NULL);
-            if (unpack_len < 0)
-            {
-                LOG_E(RRC, "%s: SSB PDU unpack failed \n", __FUNCTION__);
-                break;
+            const bool result =
+                nfapi_nr_p7_message_unpack((void *)msg_buffer, msg_len, &dl_tti_request, sizeof(nfapi_nr_dl_tti_request_t), NULL);
+            if (!result) {
+              LOG_E(RRC, "%s: SSB PDU unpack failed \n", __FUNCTION__);
+              break;
             }
             int num_pdus = dl_tti_request.dl_tti_request_body.nPDUs;
             if (num_pdus <= 0)

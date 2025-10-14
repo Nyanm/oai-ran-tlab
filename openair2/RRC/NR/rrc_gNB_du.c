@@ -30,6 +30,7 @@
 #include "asn_codecs.h"
 #include "assertions.h"
 #include "common/ran_context.h"
+#include "common/utils/nr/nr_common.h"
 #include "common/utils/T/T.h"
 #include "common/utils/alg/foreach.h"
 #include "common/utils/ds/seq_arr.h"
@@ -61,6 +62,15 @@ int get_ssb_scs(const struct f1ap_served_cell_info_t *cell_info)
   return cell_info->mode == F1AP_MODE_TDD ? cell_info->tdd.tbw.scs : cell_info->fdd.dl_tbw.scs;
 }
 
+static NR_SSB_MTC_t *get_ssb_mtc(const NR_MeasurementTimingConfiguration_t *mtc)
+{
+  // TODO verify which element of the list to pick
+  NR_MeasTimingList_t *mtlist = mtc->criticalExtensions.choice.c1->choice.measTimingConf->measTiming;
+  NR_SSB_MTC_t *ssb_mtc = calloc(1, sizeof(*ssb_mtc));
+  *ssb_mtc = mtlist->list.array[0]->frequencyAndTiming->ssb_MeasurementTimingConfiguration;
+  return ssb_mtc;
+}
+
 static int ssb_arfcn_mtc(const NR_MeasurementTimingConfiguration_t *mtc)
 {
   /* format has been verified when accepting MeasurementTimingConfiguration */
@@ -90,8 +100,7 @@ static bool rrc_gNB_plmn_matches(const gNB_RRC_INST *rrc, const f1ap_served_cell
 {
   const gNB_RrcConfigurationReq *conf = &rrc->configuration;
   return conf->num_plmn == 1 // F1 supports only one
-    && conf->mcc[0] == info->plmn.mcc
-    && conf->mnc[0] == info->plmn.mnc;
+         && conf->plmn[0].mcc == info->plmn.mcc && conf->plmn[0].mnc == info->plmn.mnc;
 }
 
 static bool extract_sys_info(const f1ap_gnb_du_system_info_t *sys_info, NR_MIB_t **mib, NR_SIB1_t **sib1)
@@ -102,7 +111,7 @@ static bool extract_sys_info(const f1ap_gnb_du_system_info_t *sys_info, NR_MIB_t
 
   asn_dec_rval_t dec_rval = uper_decode_complete(NULL, &asn_DEF_NR_MIB, (void **)mib, sys_info->mib, sys_info->mib_length);
   if (dec_rval.code != RC_OK) {
-    LOG_E(RRC, "Failed to decode NR_MIB (%zu bits) of DU\n", dec_rval.consumed);
+    LOG_E(NR_RRC, "Failed to decode NR_MIB (%zu bits) of DU\n", dec_rval.consumed);
     ASN_STRUCT_FREE(asn_DEF_NR_MIB, *mib);
     return false;
   }
@@ -112,7 +121,7 @@ static bool extract_sys_info(const f1ap_gnb_du_system_info_t *sys_info, NR_MIB_t
     if (dec_rval.code != RC_OK) {
       ASN_STRUCT_FREE(asn_DEF_NR_MIB, *mib);
       ASN_STRUCT_FREE(asn_DEF_NR_SIB1, *sib1);
-      LOG_E(RRC, "Failed to decode NR_SIB1 (%zu bits), rejecting DU\n", dec_rval.consumed);
+      LOG_E(NR_RRC, "Failed to decode NR_SIB1 (%zu bits), rejecting DU\n", dec_rval.consumed);
       return false;
     }
   }
@@ -140,7 +149,7 @@ static NR_MeasurementTimingConfiguration_t *extract_mtc(uint8_t *buf, int buf_le
       || mtc->criticalExtensions.choice.c1->choice.measTimingConf == NULL
       || mtc->criticalExtensions.choice.c1->choice.measTimingConf->measTiming == NULL
       || mtc->criticalExtensions.choice.c1->choice.measTimingConf->measTiming->list.count == 0) {
-    LOG_E(RRC, "error: measurementTimingConfiguration does not have expected format (at least one measTiming entry\n");
+    LOG_E(NR_RRC, "error: measurementTimingConfiguration does not have expected format (at least one measTiming entry\n");
     if (LOG_DEBUGFLAG(DEBUG_ASN1))
       xer_fprint(stdout, &asn_DEF_NR_MeasurementTimingConfiguration, mtc);
     ASN_STRUCT_FREE(asn_DEF_NR_MeasurementTimingConfiguration, mtc);
@@ -193,7 +202,7 @@ const struct f1ap_served_cell_info_t *get_cell_information_by_phycellId(int phyC
 static void is_intra_frequency_neighbour(void *ssb_arfcn, void *neighbour_cell)
 {
   uint32_t *ssb_arfcn_ptr = (uint32_t *)ssb_arfcn;
-  nr_neighbour_gnb_configuration_t *neighbour_cell_ptr = (nr_neighbour_gnb_configuration_t *)neighbour_cell;
+  nr_neighbour_cell_t *neighbour_cell_ptr = (nr_neighbour_cell_t *)neighbour_cell;
 
   if (*ssb_arfcn_ptr == neighbour_cell_ptr->absoluteFrequencySSB) {
     LOG_D(NR_RRC, "HO LOG: found intra frequency neighbour %lu!\n", neighbour_cell_ptr->nrcell_id);
@@ -228,7 +237,7 @@ static bool valid_du_in_neighbour_configs(const seq_arr_t *neighbour_cell_config
   for (int c = 0; c < neighbour_cell_configuration->size; c++) {
     const neighbour_cell_configuration_t *neighbour_config = seq_arr_at(neighbour_cell_configuration, c);
     for (int ni = 0; ni < neighbour_config->neighbour_cells->size; ni++) {
-      const nr_neighbour_gnb_configuration_t *nc = seq_arr_at(neighbour_config->neighbour_cells, ni);
+      const nr_neighbour_cell_t *nc = seq_arr_at(neighbour_config->neighbour_cells, ni);
       if (nc->nrcell_id != cell->nr_cellid)
         continue;
       // current cell is in the nc config, check that config matches
@@ -300,9 +309,9 @@ void rrc_gNB_process_f1_setup_req(f1ap_setup_req_t *req, sctp_assoc_t assoc_id)
   if (!rrc_gNB_plmn_matches(rrc, cell_info)) {
     LOG_E(NR_RRC,
           "PLMN mismatch: CU %03d.%0*d, DU %03d%0*d\n",
-          rrc->configuration.mcc[0],
-          rrc->configuration.mnc_digit_length[0],
-          rrc->configuration.mnc[0],
+          rrc->configuration.plmn[0].mcc,
+          rrc->configuration.plmn[0].mnc_digit_length,
+          rrc->configuration.plmn[0].mnc,
           cell_info->plmn.mcc,
           cell_info->plmn.mnc_digit_length,
           cell_info->plmn.mnc);
@@ -361,15 +370,15 @@ void rrc_gNB_process_f1_setup_req(f1ap_setup_req_t *req, sctp_assoc_t assoc_id)
 
   if (sys_info != NULL && sys_info->mib != NULL && !(sys_info->sib1 == NULL && IS_SA_MODE(get_softmodem_params()))) {
     if (!extract_sys_info(sys_info, &mib, &sib1)) {
-      LOG_W(RRC, "rejecting DU ID %ld\n", req->gNB_DU_id);
+      LOG_W(NR_RRC, "rejecting DU ID %ld\n", req->gNB_DU_id);
       fail.cause = F1AP_CauseProtocol_semantic_error;
       rrc->mac_rrc.f1_setup_failure(assoc_id, &fail);
       ASN_STRUCT_FREE(asn_DEF_NR_MeasurementTimingConfiguration, mtc);
       return;
     }
   }
-  LOG_I(RRC, "Accepting DU %ld (%s), sending F1 Setup Response\n", req->gNB_DU_id, req->gNB_DU_name);
-  LOG_I(RRC, "DU uses RRC version %u.%u.%u\n", req->rrc_ver[0], req->rrc_ver[1], req->rrc_ver[2]);
+  LOG_I(NR_RRC, "Accepting DU %ld (%s), sending F1 Setup Response\n", req->gNB_DU_id, req->gNB_DU_name);
+  LOG_I(NR_RRC, "DU uses RRC version %u.%u.%u\n", req->rrc_ver[0], req->rrc_ver[1], req->rrc_ver[2]);
 
   // we accept the DU
   nr_rrc_du_container_t *du = calloc(1, sizeof(*du));
@@ -397,6 +406,26 @@ void rrc_gNB_process_f1_setup_req(f1ap_setup_req_t *req, sctp_assoc_t assoc_id)
       .num_SI = 0,
   };
 
+  // Encode CU SIBs and configure setup response with sysinfo
+  seq_arr_t *sibs = rrc->SIBs;
+  if (sibs) {
+    for (int i = 0; i < sibs->size; i++) {
+      nr_SIBs_t *sib = (nr_SIBs_t *)seq_arr_at(sibs, i);
+      switch (sib->SIB_type) {
+        case 2: {
+          NR_SSB_MTC_t *ssbmtc = get_ssb_mtc(mtc);
+          sib->SIB_size = do_SIB2_NR(&sib->SIB_buffer, ssbmtc);
+          cell.SI_msg[cell.num_SI].SI_container = sib->SIB_buffer;
+          cell.SI_msg[cell.num_SI].SI_container_length = sib->SIB_size;
+          cell.SI_msg[cell.num_SI].SI_type = sib->SIB_type;
+          cell.num_SI++;
+        } break;
+        default:
+          AssertFatal(false, "SIB%d not handled yet\n", sib->SIB_type);
+      }
+    }
+  }
+
   if (du->mib != NULL && du->sib1 != NULL)
     label_intra_frequency_neighbours(rrc, du, cell_info);
 
@@ -408,21 +437,28 @@ void rrc_gNB_process_f1_setup_req(f1ap_setup_req_t *req, sctp_assoc_t assoc_id)
   if (rrc->node_name != NULL)
     resp.gNB_CU_name = strdup(rrc->node_name);
   rrc->mac_rrc.f1_setup_response(assoc_id, &resp);
+  free_f1ap_setup_response(&resp);
+
+  /* we need to setup one default UE for phy-test and do-ra modes in the MAC */
+  if (get_softmodem_params()->phy_test > 0 || get_softmodem_params()->do_ra > 0)
+    rrc_add_nsa_user(rrc, NULL, assoc_id);
 }
 
 static int invalidate_du_connections(gNB_RRC_INST *rrc, sctp_assoc_t assoc_id)
 {
   int count = 0;
+  seq_arr_t ue_context_to_remove;
+  seq_arr_init(&ue_context_to_remove, sizeof(rrc_gNB_ue_context_t *));
   rrc_gNB_ue_context_t *ue_context_p = NULL;
   RB_FOREACH(ue_context_p, rrc_nr_ue_tree_s, &rrc->rrc_ue_head) {
     gNB_RRC_UE_t *UE = &ue_context_p->ue_context;
     uint32_t ue_id = UE->rrc_ue_id;
-    if (UE->ho_context != NULL) {
+    if (UE->ho_context != NULL)
       LOG_W(NR_RRC, "DU disconnected while handover for UE %d active\n", ue_id);
-      nr_rrc_finalize_ho(UE);
-    }
     f1_ue_data_t ue_data = cu_get_f1_ue_data(ue_id);
-    if (ue_data.du_assoc_id == assoc_id) {
+    if (ue_data.du_assoc_id != assoc_id)
+      continue; /* this UE is on another DU */
+    if (IS_SA_MODE(get_softmodem_params())) {
       /* this UE belongs to the DU that disconnected, set du_assoc_id to 0,
        * meaning DU is offline, then trigger release request */
       ue_data.du_assoc_id = 0;
@@ -431,8 +467,17 @@ static int invalidate_du_connections(gNB_RRC_INST *rrc, sctp_assoc_t assoc_id)
       ngap_cause_t cause = {.type = NGAP_CAUSE_RADIO_NETWORK, .value = NGAP_CAUSE_RADIO_NETWORK_RADIO_CONNECTION_WITH_UE_LOST};
       rrc_gNB_send_NGAP_UE_CONTEXT_RELEASE_REQ(0, ue_context_p, cause);
       count++;
+    } else {
+      seq_arr_push_back(&ue_context_to_remove, &ue_context_p, sizeof(ue_context_p));
     }
   }
+  for (int i = 0; i < seq_arr_size(&ue_context_to_remove); ++i) {
+    /* we retrieve a pointer (=iterator) to the UE context pointer
+     * (ue_context_p), so dereference once */
+    rrc_gNB_ue_context_t *p = *(rrc_gNB_ue_context_t **)seq_arr_at(&ue_context_to_remove, i);
+    rrc_remove_nsa_user_context(rrc, p);
+  }
+  seq_arr_free(&ue_context_to_remove, NULL);
   return count;
 }
 
@@ -453,7 +498,7 @@ static void update_cell_info(nr_rrc_du_container_t *du, const f1ap_served_cell_i
     ASN_STRUCT_FREE(asn_DEF_NR_MeasurementTimingConfiguration, du->mtc);
     du->mtc = new_mtc;
   } else {
-    LOG_E(RRC, "error decoding MeasurementTimingConfiguration during cell update, ignoring new config\n");
+    LOG_E(NR_RRC, "error decoding MeasurementTimingConfiguration during cell update, ignoring new config\n");
     ASN_STRUCT_FREE(asn_DEF_NR_MeasurementTimingConfiguration, new_mtc);
   }
 }
@@ -476,7 +521,7 @@ void rrc_gNB_process_f1_du_configuration_update(f1ap_gnb_du_configuration_update
   const f1ap_served_cell_info_t *info = &du->setup_req->cell[0].info;
   if (conf_up->num_cells_to_add > 0) {
     // Here we check if the number of cell limit is respectet, otherwise send failure
-    LOG_W(RRC, "du_configuration_update->cells_to_add_list is not supported yet");
+    LOG_W(NR_RRC, "du_configuration_update->cells_to_add_list is not supported yet");
   }
 
   if (conf_up->num_cells_to_modify > 0) {
@@ -484,13 +529,13 @@ void rrc_gNB_process_f1_du_configuration_update(f1ap_gnb_du_configuration_update
     AssertFatal(conf_up->num_cells_to_modify == 1, "cannot handle more than one cell!\n");
 
     if (info->nr_cellid != conf_up->cell_to_modify[0].old_nr_cellid) {
-      LOG_W(RRC, "no cell with ID %ld found, ignoring gNB-DU configuration update\n", conf_up->cell_to_modify[0].old_nr_cellid);
+      LOG_W(NR_RRC, "no cell with ID %ld found, ignoring gNB-DU configuration update\n", conf_up->cell_to_modify[0].old_nr_cellid);
       return;
     }
 
     // verify the new plmn of the cell
     if (!rrc_gNB_plmn_matches(rrc, &conf_up->cell_to_modify[0].info)) {
-      LOG_W(RRC, "PLMN does not match, ignoring gNB-DU configuration update\n");
+      LOG_W(NR_RRC, "PLMN does not match, ignoring gNB-DU configuration update\n");
       return;
     }
 
@@ -509,11 +554,11 @@ void rrc_gNB_process_f1_du_configuration_update(f1ap_gnb_du_configuration_update
 
       NR_MIB_t *mib = NULL;
       if (!extract_sys_info(sys_info, &mib, &du->sib1)) {
-        LOG_W(RRC, "cannot update sys_info for DU %ld\n", du->setup_req->gNB_DU_id);
+        LOG_W(NR_RRC, "cannot update sys_info for DU %ld\n", du->setup_req->gNB_DU_id);
       } else {
         DevAssert(mib != NULL);
         du->mib = mib;
-        LOG_I(RRC, "update system information of DU %ld\n", du->setup_req->gNB_DU_id);
+        LOG_I(NR_RRC, "update system information of DU %ld\n", du->setup_req->gNB_DU_id);
       }
     }
     if (du->mib != NULL && du->sib1 != NULL) {
@@ -524,7 +569,14 @@ void rrc_gNB_process_f1_du_configuration_update(f1ap_gnb_du_configuration_update
 
   if (conf_up->num_cells_to_delete > 0) {
     // delete the cell and send cell to desactive IE in the response.
-    LOG_W(RRC, "du_configuration_update->cells_to_delete_list is not supported yet");
+    LOG_W(NR_RRC, "du_configuration_update->cells_to_delete_list is not supported yet");
+  }
+
+  for (int i = 0; i < conf_up->num_status; ++i) {
+    const f1ap_cell_status_t *cs = &conf_up->status[i];
+    const char *status = cs->service_state == F1AP_STATE_IN_SERVICE ? "in service" : "out of service";
+    const plmn_id_t *p = &cs->plmn;
+    LOG_I(NR_RRC, "cell PLMN %03d.%0*d Cell ID %ld is %s\n", p->mcc, p->mnc_digit_length, p->mnc, cs->nr_cellid, status);
   }
 
   /* Send DU Configuration Acknowledgement */
@@ -545,13 +597,16 @@ void rrc_CU_process_f1_lost_connection(gNB_RRC_INST *rrc, f1ap_lost_connection_t
   }
 
   f1ap_setup_req_t *req = du->setup_req;
-  LOG_I(RRC, "releasing DU ID %ld (%s) on assoc_id %d\n", req->gNB_DU_id, req->gNB_DU_name, assoc_id);
+  LOG_I(NR_RRC, "releasing DU ID %ld (%s) on assoc_id %d\n", req->gNB_DU_id, req->gNB_DU_name, assoc_id);
   ASN_STRUCT_FREE(asn_DEF_NR_MIB, du->mib);
   ASN_STRUCT_FREE(asn_DEF_NR_SIB1, du->sib1);
   ASN_STRUCT_FREE(asn_DEF_NR_MeasurementTimingConfiguration, du->mtc);
-  /* TODO: free setup request */
+  if (du->setup_req)
+    free_f1ap_setup_request(du->setup_req);
+  free(du->setup_req);
   nr_rrc_du_container_t *removed = RB_REMOVE(rrc_du_tree, &rrc->dus, du);
   DevAssert(removed != NULL);
+  free(du);
   rrc->num_dus--;
 
   int num = invalidate_du_connections(rrc, assoc_id);
@@ -562,6 +617,8 @@ void rrc_CU_process_f1_lost_connection(gNB_RRC_INST *rrc, f1ap_lost_connection_t
 
 nr_rrc_du_container_t *get_du_for_ue(gNB_RRC_INST *rrc, uint32_t ue_id)
 {
+  if (!cu_exists_f1_ue_data(ue_id))
+    return NULL;
   f1_ue_data_t ue_data = cu_get_f1_ue_data(ue_id);
   return get_du_by_assoc_id(rrc, ue_data.du_assoc_id);
 }

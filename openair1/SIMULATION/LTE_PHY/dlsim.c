@@ -90,7 +90,6 @@ static int cmpdouble(const void *p1, const void *p2) {
 }
 RAN_CONTEXT_t RC;
 
-int emulate_rf = 0;
 void handler(int sig) {
   void *array[10];
   size_t size;
@@ -892,7 +891,7 @@ int main(int argc, char **argv) {
   set_glog_onlinelog(true);
   // enable these lines if you need debug info
   set_glog(loglvl);
-  SET_LOG_DEBUG(DEBUG_UE_TIMING);
+  // SET_LOG_DEBUG(DEBUG_UE_TIMING);
   // moreover you need to init itti with the following line
   // however itti will catch all signals, so ctrl-c won't work anymore
   // alternatively you can disable ITTI completely in CMakeLists.txt
