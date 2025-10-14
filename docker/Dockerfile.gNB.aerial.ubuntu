@@ -70,11 +70,10 @@ COPY . .
 RUN /bin/sh oaienv && \
     cd cmake_targets && \
     mkdir -p log && \
-      ./build_oai -c --gNB --ninja --build-tool-opt -k10 \
+      ./build_oai -c -w AERIAL --gNB --ninja --build-tool-opt -k10 \
       --cmake-opt -DE2AP_VERSION=$E2AP_VERSION \
       --cmake-opt -DKPM_VERSION=$KPM_VERSION \
-      --cmake-opt -DCMAKE_C_FLAGS="-Werror" --cmake-opt -DCMAKE_CXX_FLAGS="-Werror" \
-      --cmake-opt -DOAI_AERIAL=ON;
+      --cmake-opt -DCMAKE_C_FLAGS="-Werror" --cmake-opt -DCMAKE_CXX_FLAGS="-Werror"
 
 FROM ran-build AS ran-build-ric
 ARG E2AP_VERSION

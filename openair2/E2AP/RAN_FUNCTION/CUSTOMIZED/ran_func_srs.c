@@ -85,7 +85,6 @@ static srs_ind_msg_t fill_srs_ind_msg(nfapi_nr_srs_indication_t *nfapi_srs_ind)
   
     f1_ue_data_t ue_data = du_get_f1_ue_data(nfapi_srs_ind->pdu_list[0].rnti); // Unique CU-UE ID
     indication_stats->ue_id= ue_data.secondary_ue;
-    printf("CU-UE ID: %u\n", indication_stats->ue_id);
     size_t ba_len = get_srs_indication_size(nfapi_srs_ind);
     byte_array_t ba = {.len = ba_len};
     ba.buf = malloc(ba.len);
@@ -94,11 +93,14 @@ static srs_ind_msg_t fill_srs_ind_msg(nfapi_nr_srs_indication_t *nfapi_srs_ind)
     uint8_t *pPackMessageEnd =  pPackedBuf + ba.len;
 
     #ifdef RIC_DEBUG
+    printf("CU-UE ID: %u\n", indication_stats->ue_id);
+    #ifdef RIC_DEBUG_VERBOSE
     printf("[RIC DEBUG INFO] pointer = %p\n",(void*)nfapi_srs_ind);
     printf("[RIC DEBUG INFO] ba initialized len: %zu bytes\n", ba.len);
     printf("[RIC DEBUG INFO] Sending SFN: %u\n", nfapi_srs_ind->sfn);
     printf("[RIC DEBUG INFO] Sending Slot: %u\n", nfapi_srs_ind->slot);
     printf("[RIC DEBUG INFO] Sending num srs: %d\n", nfapi_srs_ind->number_of_pdus);
+    #endif
     #endif
 
     const uint8_t result = pack_nr_srs_indication(nfapi_srs_ind, &pWritePackedMessage, pPackMessageEnd, 0);
@@ -106,7 +108,9 @@ static srs_ind_msg_t fill_srs_ind_msg(nfapi_nr_srs_indication_t *nfapi_srs_ind)
     size_t packedBufLen = pWritePackedMessage - pPackedBuf;// this should be eq to the ba.len
 
     ba.len = packedBufLen;
+    #ifdef RIC_DEBUG
     printf("[RIC DEBUG INFO] ba updated len: %zu bytes\n", ba.len);
+    #endif
     indication_stats->srs_indication_ba = copy_byte_array(ba);
 
     // Clean up
@@ -119,7 +123,9 @@ static srs_ind_msg_t fill_srs_ind_msg(nfapi_nr_srs_indication_t *nfapi_srs_ind)
 static void send_ric_indication(const uint32_t ric_req_id, srs_ind_data_t* srs_ind_data)
 {
   async_event_agent_api(ric_req_id, srs_ind_data);
-  printf("Event for RIC Req ID %u generated\n", ric_req_id);
+  #ifdef RIC_DEBUG
+  printf("[RIC DEBUG INFO] Event for RIC Req ID %u generated\n", ric_req_id);
+  #endif
 }
 
 
