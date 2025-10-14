@@ -493,7 +493,7 @@ static inline void do_txdataF(c16_t **txdataF,
     } // else { // non-unitary Precoding
 
     rb += rb_step;
-  } // RB loop: while(rb < rel15->rbSize) 
+  } // RB loop: while(rb < rel15->rbSize)
 }
 
 typedef struct pdschSymbolProc_s {
@@ -512,21 +512,22 @@ typedef struct pdschSymbolProc_s {
   c16_t *tx_layers[4];
 } pdschSymbolProc_t;
 
-static void nr_pdsch_symbol_processing(void *arg) 
+static void nr_pdsch_symbol_processing(void *arg)
 {
-  pdschSymbolProc_t *rdata=(pdschSymbolProc_t *)arg;
+  pdschSymbolProc_t *rdata = (pdschSymbolProc_t *)arg;
 
   PHY_VARS_gNB *gNB = rdata->gNB;
   NR_DL_FRAME_PARMS *frame_parms = rdata->frame_parms;
   const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15 = rdata->rel15;
   int slot = rdata->slot;
   c16_t *tx_layers[rel15->nrOfLayers];
-  for (int l=0;l<rel15->nrOfLayers;l++) tx_layers[l]=rdata->tx_layers[l];
+  for (int l = 0; l < rel15->nrOfLayers; l++)
+    tx_layers[l] = rdata->tx_layers[l];
   const int nb_re_dmrs = rel15->numDmrsCdmGrpsNoData * (rel15->dmrsConfigType == NFAPI_NR_DMRS_TYPE1 ? 6 : 4);
   const int n_dmrs = (rel15->BWPStart + rel15->rbStart + rel15->rbSize) * nb_re_dmrs;
   // Loop Over OFDM symbols:
-  c16_t mod_dmrs[(n_dmrs+63)&~63] __attribute__((aligned(64)));
-  const int symbol_sz=frame_parms->ofdm_symbol_size;
+  c16_t mod_dmrs[(n_dmrs + 63) & ~63] __attribute__((aligned(64)));
+  const int symbol_sz = frame_parms->ofdm_symbol_size;
 
   c16_t **txdataF = gNB->common_vars.txdataF[rdata->beam_nb];
   uint16_t start_sc = (rel15->rbStart + rel15->BWPStart) * NR_NB_SC_PER_RB;
@@ -536,13 +537,13 @@ static void nr_pdsch_symbol_processing(void *arg)
 #ifdef DEBUG_DLSCH_MAPPING
   printf("slot %d PDSCH resource mapping started (start SC %d\tstart symbol %d\tnum symbols %d\tN_PRB %d,nb_layers %d)\n",
          rdata->slot,
-	 start_sc,
+         start_sc,
          rdata->startSymbol,
-	 rdata->numSymbols,
+         rdata->numSymbols,
          rel15->rbSize,
          rel15->nrOfLayers);
 #endif
-  for (int l_symbol = rdata->startSymbol; l_symbol < rdata->startSymbol+rdata->numSymbols; l_symbol++) {
+  for (int l_symbol = rdata->startSymbol; l_symbol < rdata->startSymbol + rdata->numSymbols; l_symbol++) {
     start_meas(&gNB->dlsch_resource_mapping_stats);
     int l_prime = 0; // single symbol layer 0
     int l_overline = get_l0(rel15->dlDmrsSymbPos);
@@ -601,7 +602,7 @@ static void nr_pdsch_symbol_processing(void *arg)
                   rdata->dlPtrsSymPos,
                   rdata->n_ptrs,
                   gNB->TX_AMP,
-                  min((double)gNB->TX_AMP * sqrt(rel15->numDmrsCdmGrpsNoData), INT16_MAX), 
+                  min((double)gNB->TX_AMP * sqrt(rel15->numDmrsCdmGrpsNoData), INT16_MAX),
                   l_prime,
                   rel15->dmrsConfigType,
                   mod_dmrs + dmrs_idx);
@@ -618,7 +619,7 @@ static void nr_pdsch_symbol_processing(void *arg)
   // Task running in // completed
   completed_task_ans(rdata->ans);
 }
- 
+
 static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSCH_t *dlsch, int slot)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
@@ -737,49 +738,50 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
                                       bitmap);
   stop_meas(&gNB->dlsch_layer_mapping_stats);
 
-  // spawn symbol threads 
+  // spawn symbol threads
 
-  int nb_tasks = rel15->NrOfSymbols/gNB->num_pdsch_symbols_per_thread;
-  if ((rel15->NrOfSymbols%gNB->num_pdsch_symbols_per_thread) >0) nb_tasks++;
+  int nb_tasks = rel15->NrOfSymbols / gNB->num_pdsch_symbols_per_thread;
+  if ((rel15->NrOfSymbols % gNB->num_pdsch_symbols_per_thread) > 0)
+    nb_tasks++;
   pdschSymbolProc_t arr[nb_tasks];
   task_ans_t ans;
   init_task_ans(&ans, nb_tasks);
   int sz_arr = 0;
-  unsigned int re_beginning_of_symbol=0;
-  int res=0;
-  for (int l_symbol = rel15->StartSymbolIndex; l_symbol < rel15->StartSymbolIndex+rel15->NrOfSymbols; l_symbol += gNB->num_pdsch_symbols_per_thread) {
+  unsigned int re_beginning_of_symbol = 0;
+  int res = 0;
+  for (int l_symbol = rel15->StartSymbolIndex; l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols;
+       l_symbol += gNB->num_pdsch_symbols_per_thread) {
+    pdschSymbolProc_t *rdata = &arr[sz_arr];
+    rdata->ans = &ans;
+    ++sz_arr;
 
-      pdschSymbolProc_t *rdata = &arr[sz_arr];
-      rdata->ans = &ans;
-      ++sz_arr;
-
-      rdata->gNB = gNB;
-      rdata->frame_parms = frame_parms;
-      rdata->rel15 = rel15;
-      rdata->slot = slot;
-      rdata->startSymbol = l_symbol;
-      res = rel15->NrOfSymbols-(l_symbol-rel15->StartSymbolIndex);
-      if (res >= gNB->num_pdsch_symbols_per_thread)
-        rdata->numSymbols = gNB->num_pdsch_symbols_per_thread;
-      else
-        rdata->numSymbols = res;
-      rdata->layerSz2 = layerSz2;
-      rdata->dlPtrsSymPos = dlPtrsSymPos;
-      rdata->n_ptrs = n_ptrs;
-      rdata->beam_nb = beam_nb;
-      for (int s=0;s<rdata->numSymbols;s++) {
-        rdata->re_beginning_of_symbol[l_symbol+s] = re_beginning_of_symbol;
-        re_beginning_of_symbol += rel15->rbSize * NR_NB_SC_PER_RB;
-        if (n_ptrs > 0 && is_ptrs_symbol(l_symbol,dlPtrsSymPos)) {
-	    re_beginning_of_symbol -= n_ptrs;
-	}
-        else if (rel15->dlDmrsSymbPos & (1 << l_symbol)) {
-            re_beginning_of_symbol -= n_dmrs;
-	}
-      }	
-      for (int l=0;l<rel15->nrOfLayers;l++) rdata->tx_layers[l]=tx_layers[l];
-      task_t t = {.func = &nr_pdsch_symbol_processing, .args = rdata};
-      pushTpool(&gNB->threadPool, t);
+    rdata->gNB = gNB;
+    rdata->frame_parms = frame_parms;
+    rdata->rel15 = rel15;
+    rdata->slot = slot;
+    rdata->startSymbol = l_symbol;
+    res = rel15->NrOfSymbols - (l_symbol - rel15->StartSymbolIndex);
+    if (res >= gNB->num_pdsch_symbols_per_thread)
+      rdata->numSymbols = gNB->num_pdsch_symbols_per_thread;
+    else
+      rdata->numSymbols = res;
+    rdata->layerSz2 = layerSz2;
+    rdata->dlPtrsSymPos = dlPtrsSymPos;
+    rdata->n_ptrs = n_ptrs;
+    rdata->beam_nb = beam_nb;
+    for (int s = 0; s < rdata->numSymbols; s++) {
+      rdata->re_beginning_of_symbol[l_symbol + s] = re_beginning_of_symbol;
+      re_beginning_of_symbol += rel15->rbSize * NR_NB_SC_PER_RB;
+      if (n_ptrs > 0 && is_ptrs_symbol(l_symbol, dlPtrsSymPos)) {
+        re_beginning_of_symbol -= n_ptrs;
+      } else if (rel15->dlDmrsSymbPos & (1 << l_symbol)) {
+        re_beginning_of_symbol -= n_dmrs;
+      }
+    }
+    for (int l = 0; l < rel15->nrOfLayers; l++)
+      rdata->tx_layers[l] = tx_layers[l];
+    task_t t = {.func = &nr_pdsch_symbol_processing, .args = rdata};
+    pushTpool(&gNB->threadPool, t);
   }
   join_task_ans(&ans);
   stop_meas(&gNB->dlsch_pdsch_generation_stats);
