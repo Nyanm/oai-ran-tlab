@@ -283,6 +283,17 @@ extern "C" {
     };
   }
 
+#ifdef __aarch64__
+  __attribute__((always_inline)) inline cf16_t cf16mulReal(const cf16_t a, const __fp16 b)
+  {
+    return (cf16_t){.r = (__fp16)(a.r * b), .i = (__fp16)(a.i * b)};
+  }
+#else
+  __attribute__((always_inline)) inline cf16_t cf16mulReal(const cf16_t a, const _Float16 b)
+  {
+    return (cf16_t){.r = (_Float16)(a.r * b), .i = (_Float16)(a.i * b)};
+  }
+#endif
   // On N complex numbers
   //   y.r += (x * alpha.r) >> 14
   //   y.i += (x * alpha.i) >> 14
@@ -1053,14 +1064,15 @@ static inline void rotate_cpx_vector_fp16(const cf16_t *const x, const cf16_t *c
 #if defined(__aarch64__)
     const float16x8_t zeros=vdupq_n_f16(0.0f);
     const uint32x4_t alpha16x8=vdupq_n_u32(*(uint32_t*)alpha);
-    for (uint32_t i = 0; i < N*2 ; i+=8) {
+    for (uint32_t i = 0; i < N ; i+=4) {
        float16x8_t x16x8 = vld1q_f16((float16_t*)(x + i));	    
+       for (int j=0;j<4;j++) printf("i+j %d %f.%f\n",(i+j),(double)*(float16_t*)&x[i+j].r,(double)*(float16_t*)&x[i+j].i); 
        float16x8_t y16x8 = vcmlaq_f16(zeros,x16x8,*((float16x8_t*)&alpha16x8));
        vst1q_f16((float16_t*)(y + i),y16x8);
     }
 #elif defined(__AVX512FP16__) && defined(__AVX512BW__)
     const __m512i alpha512=_mm512_set1_epi32(*(uint32_t*)alpha);
-    for (uint32_t i=0; i < N*2; i+=32) {
+    for (uint32_t i=0; i < N; i+=16) {
        __m512h x512 = _mm512_loadu_ph(x + i);
        __m512h y512 = _mm512_cmul_pch(x512,alpha512);
        _mm512_storeu_ph((__mm512h*)(y + i),y512);

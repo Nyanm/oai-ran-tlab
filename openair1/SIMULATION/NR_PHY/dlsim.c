@@ -675,6 +675,7 @@ int main(int argc, char **argv)
   memset(RC.gNB[0],0,sizeof(PHY_VARS_gNB));
 
   gNB = RC.gNB[0];
+  gNB->use_fp16 = use_fp16;
   gNB->ofdm_offset_divisor = UINT_MAX;
   gNB->phase_comp = true; // we need to perform phase compensation, otherwise everything will fail
   frame_parms = &gNB->frame_parms; //to be initialized I suppose (maybe not necessary for PBCH)
@@ -1270,6 +1271,7 @@ int main(int argc, char **argv)
             if (errors_scrambling[round] == 0) {
               LOG_D(PHY,"First bit in error in unscrambling = %d\n",i);
             }
+	    else printf("error in bit %d\n",i);
             errors_scrambling[round]++;
           }
         }

@@ -56,8 +56,9 @@ static int do_ptrs_symbol(nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
                           int symbol_sz,
                           c16_t *txF,
                           c16_t *tx_layer,
-                          int amp,
-                          c16_t *mod_ptrs)
+                          void *amp,
+                          c16_t *mod_ptrs,
+			  int use_fp16)
 {
   int ptrs_idx = 0;
   int k = start_sc;
@@ -69,7 +70,10 @@ static int do_ptrs_symbol(nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
     if (is_ptrs_re) {
       /* check if cuurent RE is PTRS RE*/
       uint16_t beta_ptrs = 1;
-      txF[k] = c16mulRealShift(mod_ptrs[ptrs_idx], beta_ptrs * amp, 15);
+      if (use_fp16)
+        txF[k] = mod_ptrs[ptrs_idx];
+      else
+        txF[k] = c16mulRealShift(mod_ptrs[ptrs_idx], beta_ptrs * *(int16_t*)amp, 15);
 #ifdef DEBUG_DLSCH_MAPPING
       printf("ptrs_idx %d\t \t k %d \t \t txdataF: %d %d, mod_ptrs: %d %d\n",
              ptrs_idx,
@@ -81,7 +85,10 @@ static int do_ptrs_symbol(nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
 #endif
       ptrs_idx++;
     } else {
-      txF[k] = c16mulRealShift(*in++, amp, 15);
+      if (use_fp16)
+        txF[k] = *in++;
+      else
+        txF[k] = c16mulRealShift(*in++, *(int16_t*)amp, 15);
 #ifdef DEBUG_DLSCH_MAPPING
       printf("k %d \t txdataF: %d %d\n", k, txF[k].r, txF[k].i);
 #endif
@@ -99,52 +106,112 @@ typedef union {
 
 static inline int interleave_with_0_signal_first(c16_t *output, c16_t *mod_dmrs, void *amp_dmrs, int sz, int use_fp16)
 {
-#ifdef DEBUG_DLSCH_MAPPING
-  printf("doing DMRS pattern for port 0 : d0 0 d1 0 ... dNm2 0 dNm1 0 (ul %d, rr %d)\n", upper_limit, remaining_re);
-#endif
   // add filler to process all as SIMD
   c16_t *out = output;
   int i = 0;
   int end = sz / 2;
-#if defined(__AVX512BW__)
-  simde__m512i zeros512 = simde_mm512_setzero_si512(), amp_dmrs512 = simde_mm512_set1_epi16(amp_dmrs);
-  simde__m512i perml = simde_mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
-  simde__m512i permh = simde_mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
-  for (; i < (end & ~15); i += 16) {
-    simde__m512i d0 = simde_mm512_mulhrs_epi16(_mm512_loadu_si512((simde__m512i *)(mod_dmrs + i)), amp_dmrs512);
-    simde_mm512_storeu_si512((simde__m512i *)out, simde_mm512_permutex2var_epi32(d0, perml, zeros512));
-    out += 16;
-    simde_mm512_storeu_si512((simde__m512i *)out, simde_mm512_permutex2var_epi32(d0, permh, zeros512));
-    out += 16;
+  if (use_fp16) {
+#if defined(__AVX512__) && defined(__AVX512FP16__) && defined(FLT16_MAX)
+    __m512h zeros512 = _mm512_setzero_si512(), amp_dmrs512 = _mm512_set1_ph(*((int16_t*)amp_dmrs);
+    __m512i perml = _mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
+    __m512i permh = _mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
+    for (; i < (end & ~15); i += 16) {
+      __m512h d0 = _mm512_mul_ph(_mm512_loadu_ph((__m512h *)(mod_dmrs + i)), amp_dmrs512);
+      _mm512_storeu_si512((simde__m512h *)out, simde_mm512_permutex2var_epi32((__mm512i)d0, perml, zeros512));
+      out += 16;
+      _mm512_storeu_si512((__m512i *)out, _mm512_permutex2var_epi32((__mm512i)d0, permh, zeros512));
+      out += 16;
+    }
+    __m256h zeros256 = _mm256_setzero_si256(), amp_dmrs256 = _mm256_set1_ph(*(_Float16*)amp_dmrs);
+    for (; i < (end & ~7); i += 8) {
+      __m256h d0 = _mm256_mul_ph(_mm256_loadu_si256((__m256h *)(mod_dmrs + i)), amp_dmrs256);
+      __m256i d2 = _mm256_unpacklo_epi32((__m256i)d0, zeros256);
+      __m256i d3 = _mm256_unpackhi_epi32((__m256i)d0, zeros256);
+      _mm256_storeu_si256((simde__m256h *)out, _mm256_permute2x128_si256(d2, d3, 32));
+      out += 8;
+      simde_mm256_storeu_si256((__m256h *)out, _mm256_permute2x128_si256(d2, d3, 49));
+      out += 8;
+    }
+    __m128h zeros = _mm_setzero_si128(), amp_dmrs128 = _mm_set1_ph(*(_Float16*)amp_dmrs);
+    for (; i < (end & ~3); i += 4) {
+      __m128h d0 = _mm_mul_ph(_mm_loadu_si128((__m128h *)(mod_dmrs + i)), amp_dmrs128);
+      __m128i d2 = _mm_unpacklo_epi32((__m128i)d0, zeros);
+      __m128i d3 = _mm_unpackhi_epi32((__m128i)d0, zeros);
+      _mm_storeu_si128((__m128h *)out, d2);
+      out += 4;
+      simde_mm_storeu_si128((__m128i *)out, d3);
+      out += 4;
+    }
+#elif defined(__aarch64__)
+    uint32x4_t zeros = vdupq_n_u32(0); 
+    float16x8_t amp_dmrs128 = vdupq_n_f16(*(float16_t*)amp_dmrs);
+    printf("Doing DMRS modulation for 2 CdmGrps, amp_dmrs %f, dmrs0 (%f %f)\n",*(float16_t*)amp_dmrs,((float16_t*)mod_dmrs)[0],((float16_t*)mod_dmrs)[1]);
+    for (; i < (end & ~3); i += 4) {
+      float16x8_t d0 = vmulq_f16(vld1q_f16((float16_t *)(mod_dmrs + i)), amp_dmrs128);
+      float16x8_t d2 = (float16x8_t)vzip1q_u32((uint32x4_t)d0, zeros);
+      float16x8_t d3 = (float16x8_t)vzip2q_u32((uint32x4_t)d0, zeros);
+      vst1q_f16((float16_t *)out, d2);
+      out += 4;
+      vst1q_f16((float16_t *)out, d3);
+      out += 4;
+    }
+#else
+    AssertFatal(1==0,"Architecture doesn't support fp16\n");
+#endif
+    cf16_t *out_cf16 = (cf16_t*)out;
+    for (; i < end; i++) {
+#ifdef __aarch64__
+      out_cf16->r = mod_dmrs[i].r * *(__fp16*)amp_dmrs;
+      out_cf16->i = mod_dmrs[i].i * *(__fp16*)amp_dmrs;
+      out_cf16++;
+#else
+      *out_cf16++ = cf16mulReal((cf16_t)mod_dmrs[i], *(_float16*)amp_dmrs);
+#endif
+      *out_cf16++ = (cf16_t){};
+    }
   }
+  else {
+    printf("interleave_with_0_signal_first : use_fp16 = 0\n");
+#if defined(__AVX512__) && defined(__AVX512BW__)
+    __m512i zeros512 = _mm512_setzero_si512(), amp_dmrs512 = simde_mm512_set1_epi16(((int16_t*)amp_dmrs);
+    __m512i perml = _mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
+    __m512i permh = _mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
+    for (; i < (end & ~15); i += 16) {
+      __m512i d0 = simde_mm512_mulhrs_epi16(_mm512_loadu_si512((__m512i *)(mod_dmrs + i)), amp_dmrs512);
+      _mm512_storeu_si512((__m512i *)out, _mm512_permutex2var_epi32(d0, perml, zeros512));
+      out += 16;
+      _mm512_storeu_si512((__m512i *)out, _mm512_permutex2var_epi32(d0, permh, zeros512));
+      out += 16;
+    }
 #endif
 #if defined(__AVX2__)
-  simde__m256i zeros256 = simde_mm256_setzero_si256(), amp_dmrs256 = simde_mm256_set1_epi16(amp_dmrs);
-  for (; i < (end & ~7); i += 8) {
-    simde__m256i d0 = simde_mm256_mulhrs_epi16(simde_mm256_loadu_si256((simde__m256i *)(mod_dmrs + i)), amp_dmrs256);
-    simde__m256i d2 = simde_mm256_unpacklo_epi32(d0, zeros256);
-    simde__m256i d3 = simde_mm256_unpackhi_epi32(d0, zeros256);
-    simde_mm256_storeu_si256((simde__m256i *)out, simde_mm256_permute2x128_si256(d2, d3, 32));
-    out += 8;
-    simde_mm256_storeu_si256((simde__m256i *)out, simde_mm256_permute2x128_si256(d2, d3, 49));
-    out += 8;
-  }
+    simde__m256i zeros256 = simde_mm256_setzero_si256(), amp_dmrs256 = simde_mm256_set1_epi16(*(int16_t*)amp_dmrs);
+    for (; i < (end & ~7); i += 8) {
+      simde__m256i d0 = simde_mm256_mulhrs_epi16(simde_mm256_loadu_si256((simde__m256i *)(mod_dmrs + i)), amp_dmrs256);
+      simde__m256i d2 = simde_mm256_unpacklo_epi32(d0, zeros256);
+      simde__m256i d3 = simde_mm256_unpackhi_epi32(d0, zeros256);
+      simde_mm256_storeu_si256((simde__m256i *)out, simde_mm256_permute2x128_si256(d2, d3, 32));
+      out += 8;
+      simde_mm256_storeu_si256((simde__m256i *)out, simde_mm256_permute2x128_si256(d2, d3, 49));
+      out += 8;
+    }
 #endif
 #if defined(USE128BIT)
-  simde__m128i zeros = simde_mm_setzero_si128(), amp_dmrs128 = simde_mm_set1_epi16(amp_dmrs);
-  for (; i < (end & ~3); i += 4) {
-    simde__m128i d0 = simde_mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(mod_dmrs + i)), amp_dmrs128);
-    simde__m128i d2 = simde_mm_unpacklo_epi32(d0, zeros);
-    simde__m128i d3 = simde_mm_unpackhi_epi32(d0, zeros);
-    simde_mm_storeu_si128((simde__m128i *)out, d2);
-    out += 4;
-    simde_mm_storeu_si128((simde__m128i *)out, d3);
-    out += 4;
-  }
+    simde__m128i zeros = simde_mm_setzero_si128(), amp_dmrs128 = simde_mm_set1_epi16(*(int16_t*)amp_dmrs);
+    for (; i < (end & ~3); i += 4) {
+      simde__m128i d0 = simde_mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(mod_dmrs + i)), amp_dmrs128);
+      simde__m128i d2 = simde_mm_unpacklo_epi32(d0, zeros);
+      simde__m128i d3 = simde_mm_unpackhi_epi32(d0, zeros);
+      simde_mm_storeu_si128((simde__m128i *)out, d2);
+      out += 4;
+      simde_mm_storeu_si128((simde__m128i *)out, d3);
+      out += 4;
+    }
 #endif
-  for (; i < end; i++) {
-    *out++ = c16mulRealShift(mod_dmrs[i], amp_dmrs, 15);
-    *out++ = (c16_t){};
+    for (; i < end; i++) {
+      *out++ = c16mulRealShift(mod_dmrs[i], *(int16_t*)amp_dmrs, 15);
+      *out++ = (c16_t){};
+    }
   }
   return 0;
 }
@@ -157,45 +224,108 @@ static inline int interleave_with_0_start_with_0(c16_t *output, c16_t *mod_dmrs,
   c16_t *out = output;
   int i = 0;
   int end = sz / 2;
-#if defined(__AVX512BW__)
-  simde__m512i zeros512 = simde_mm512_setzero_si512(), amp_dmrs512 = simde_mm512_set1_epi16(amp_dmrs);
-  simde__m512i perml = simde_mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
-  simde__m512i permh = simde_mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
-  for (; i < (end & ~15); i += 16) {
-    simde__m512i d0 = simde_mm512_mulhrs_epi16(_mm512_loadu_si512((simde__m512i *)(mod_dmrs + i)), amp_dmrs512);
-    simde_mm512_storeu_si512((simde__m512i *)out, simde_mm512_permutex2var_epi32(zeros512, perml, d0));
-    out += 16;
-    simde_mm512_storeu_si512((simde__m512i *)out, simde_mm512_permutex2var_epi32(zeros512, permh, d0));
-    out += 16;
+  if (use_fp16) {
+#if defined(__AVX512__) && defined(__AVX512FP16__) && defined(FLT16_MAX)
+    __m512h zeros512 = _mm512_setzero_si512(), amp_dmrs512 = _mm512_set1_ph(*(_Float16*)amp_dmrs);
+    __m512i perml = _mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
+    __m512i permh = _mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
+    for (; i < (end & ~15); i += 16) {
+      __m512h d0 = _mm512_mul_ph(_mm512_loadu_si512((__m512h *)(mod_dmrs + i)), *amp_dmrs512);
+      _mm512_storeu_si512((__m512h *)out, _mm512_permutex2var_ph(zeros512, perml, d0));
+      out += 16;
+      _mm512_storeu_si512((__m512h *)out, _mm512_permutex2var_ph(zeros512, permh, d0));
+      out += 16;
+    }
+    __m256h zeros256 = _mm256_setzero_si256(), amp_dmrs256 = _mm256_set1_ph(*(_Float16*)amp_dmrs);
+    for (; i < (end & ~7); i += 8) {
+      __m256h d0 = _mm256_mul_ph(_mm256_loadu_si256((__m256h *)(mod_dmrs + i)), amp_dmrs256);
+      __m256i d2 = _mm256_unpacklo_epi32(zeros256, d0);
+      __m256i d3 = _mm256_unpackhi_epi32(zeros256, d0);
+      _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_epi16(d2, d3, 32));
+      out += 8;
+     _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_epi16(d2, d3, 49));
+      out += 8;
+    }
+    __m128h zeros = _mm_setzero_si128(), amp_dmrs128 = _mm_set1_ph(*(_Float16*)amp_dmrs);
+    for (; i < (end & ~3); i += 4) {
+      __m128h d0 = _mm_mul_ph(_mm_loadu_si128((__m128i *)(mod_dmrs + i)), amp_dmrs128);
+      __m128i d2 = _mm_unpacklo_epi32(zeros, d0);
+      __m128i d3 = _mm_unpackhi_epi32(zeros, d0);
+      _mm_storeu_si128((__m128i *)out, d2);
+      out += 4;
+      _mm_storeu_si128((__m128i *)out, d3);
+      out += 4;
+    }
+#elif defined(__aarch64__)
+    uint32x4_t zeros = vdupq_n_u32(0); 
+    float16x8_t amp_dmrs128 = vdupq_n_f16(*(float16_t*)amp_dmrs);
+    for (; i < (end & ~3); i += 4) {
+      float16x8_t d0 = vmulq_f16(vld1q_f16((float16_t *)(mod_dmrs + i)), amp_dmrs128);
+      float16x8_t d2 = (float16x8_t)vzip1q_u32(zeros, (uint32x4_t)d0);
+      float16x8_t d3 = (float16x8_t)vzip2q_u32(zeros, (uint32x4_t)d0);
+      vst1q_f16((float16_t *)out, d2);
+      out += 4;
+      vst1q_f16((float16_t *)out, d3);
+      out += 4;
+    }
+#else
+    AssertFatal(1==0,"Architecture doesn't support fp16\n");
+#endif
+    cf16_t *out_cf16 = (cf16_t*)out;
+    for (; i < end; i++) {
+#ifdef __aarch64__
+      out_cf16->r = mod_dmrs[i].r * *(__fp16*)amp_dmrs;
+      out_cf16->i = mod_dmrs[i].i * *(__fp16*)amp_dmrs;
+      out_cf16++;
+#else
+      *out_cf16++ = cf16mulReal((cf16_t)mod_dmrs[i], *(_float16*)amp_dmrs);
+#endif
+      *out_cf16++ = (cf16_t){};
+    }
   }
+  else 
+  {
+    printf("interleave_with_0_start_with_0: use_fp16 = 0\n");
+#if defined(__AVX512__) && defined(__AVX512BW__)
+    simde__m512i zeros512 = simde_mm512_setzero_si512(), amp_dmrs512 = simde_mm512_set1_epi16(*(int16_t*)amp_dmrs);
+    simde__m512i perml = simde_mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
+    simde__m512i permh = simde_mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
+    for (; i < (end & ~15); i += 16) {
+      simde__m512i d0 = simde_mm512_mulhrs_epi16(_mm512_loadu_si512((simde__m512i *)(mod_dmrs + i)), amp_dmrs512);
+      simde_mm512_storeu_si512((simde__m512i *)out, simde_mm512_permutex2var_epi32(zeros512, perml, d0));
+      out += 16;
+      simde_mm512_storeu_si512((simde__m512i *)out, simde_mm512_permutex2var_epi32(zeros512, permh, d0));
+      out += 16;
+    }
 #endif
 #if defined(__AVX2__)
-  simde__m256i zeros256 = simde_mm256_setzero_si256(), amp_dmrs256 = simde_mm256_set1_epi16(amp_dmrs);
-  for (; i < (end & ~7); i += 8) {
-    simde__m256i d0 = simde_mm256_mulhrs_epi16(simde_mm256_loadu_si256((simde__m256i *)(mod_dmrs + i)), amp_dmrs256);
-    simde__m256i d2 = simde_mm256_unpacklo_epi32(zeros256, d0);
-    simde__m256i d3 = simde_mm256_unpackhi_epi32(zeros256, d0);
-    simde_mm256_storeu_si256((simde__m256i *)out, simde_mm256_permute2x128_si256(d2, d3, 32));
-    out += 8;
-    simde_mm256_storeu_si256((simde__m256i *)out, simde_mm256_permute2x128_si256(d2, d3, 49));
-    out += 8;
-  }
+    simde__m256i zeros256 = simde_mm256_setzero_si256(), amp_dmrs256 = simde_mm256_set1_epi16(*(int16_t*)amp_dmrs);
+    for (; i < (end & ~7); i += 8) {
+      simde__m256i d0 = simde_mm256_mulhrs_epi16(simde_mm256_loadu_si256((simde__m256i *)(mod_dmrs + i)), amp_dmrs256);
+      simde__m256i d2 = simde_mm256_unpacklo_epi32(zeros256, d0);
+      simde__m256i d3 = simde_mm256_unpackhi_epi32(zeros256, d0);
+      simde_mm256_storeu_si256((simde__m256i *)out, simde_mm256_permute2x128_si256(d2, d3, 32));
+      out += 8;
+      simde_mm256_storeu_si256((simde__m256i *)out, simde_mm256_permute2x128_si256(d2, d3, 49));
+      out += 8;
+    }
 #endif
 #if defined(USE128BIT)
-  simde__m128i zeros = simde_mm_setzero_si128(), amp_dmrs128 = simde_mm_set1_epi16(amp_dmrs);
-  for (; i < (end & ~3); i += 4) {
-    simde__m128i d0 = simde_mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(mod_dmrs + i)), amp_dmrs128);
-    simde__m128i d2 = simde_mm_unpacklo_epi32(zeros, d0);
-    simde__m128i d3 = simde_mm_unpackhi_epi32(zeros, d0);
-    simde_mm_storeu_si128((simde__m128i *)out, d2);
-    out += 4;
-    simde_mm_storeu_si128((simde__m128i *)out, d3);
-    out += 4;
-  }
+    simde__m128i zeros = simde_mm_setzero_si128(), amp_dmrs128 = simde_mm_set1_epi16(*(int16_t*)amp_dmrs);
+    for (; i < (end & ~3); i += 4) {
+      simde__m128i d0 = simde_mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(mod_dmrs + i)), amp_dmrs128);
+      simde__m128i d2 = simde_mm_unpacklo_epi32(zeros, d0);
+      simde__m128i d3 = simde_mm_unpackhi_epi32(zeros, d0);
+      simde_mm_storeu_si128((simde__m128i *)out, d2);
+      out += 4;
+      simde_mm_storeu_si128((simde__m128i *)out, d3);
+      out += 4;
+    }
 #endif
-  for (; i < end; i++) {
-    *out++ = (c16_t){};
-    *out++ = c16mulRealShift(mod_dmrs[i], amp_dmrs, 15);
+    for (; i < end; i++) {
+      *out++ = (c16_t){};
+      *out++ = c16mulRealShift(mod_dmrs[i], *(int16_t*)amp_dmrs, 15);
+    }
   }
   return 0;
 }
@@ -209,8 +339,8 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c
   c16_t *out = output;
   int i = 0;
   int end = sz / 2;
-#if defined(__AVX512__) && defined(__AVX512FP16__) && defined(FLT16_MAX)
   if (use_fp16) {
+#if defined(__AVX512__) && defined(__AVX512FP16__) && defined(FLT16_MAX)
     __m512h amp2512 = _mm512_set1_ph(*(_Float16*)amp2), amp512 = _mm512_set1_ph(*(_Float16*)amp);
     __m512i perml = _mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
     __m512i permh = _mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
@@ -244,17 +374,43 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c
       simde_mm_storeu_si128((simde__m128i *)out, d3);
       out += 4;
     }
+#elif defined(__aarch64__)
+    float16x8_t amp2128 = vdupq_n_f16(*(float16_t*)amp2), amp128 = vdupq_n_f16(*(float16_t*)amp);
+    for (; i < (end & ~3); i += 4) {
+      float16x8_t d0 = vmulq_f16(vld1q_f16((float16_t *)(signal2 + i)), amp2128);
+      float16x8_t d1 = vmulq_f16(vld1q_f16((float16_t *)(signal1 + i)), amp128);
+      float16x8_t d2 = (float16x8_t)vzip1q_u32((uint32x4_t)d0,(uint32x4_t)d1);
+      float16x8_t d3 = (float16x8_t)vzip2q_u32((uint32x4_t)d0,(uint32x4_t)d1);
+      vst1q_f16((float16_t *)out, d2);
+      out += 4;
+      vst1q_f16((float16_t *)out, d3);
+      out += 4;
+    }
+#else
+    AssertFatal(1==0,"Architecture doesn't support fp16\n");
+#endif
+    cf16_t *out_cf16 = (cf16_t*)out;
     for (; i < end; i++) {
-      *out++ = c16mulRealShift(signal2[i], amp2, 15);
-      *out++ = c16mulRealShift(signal1[i], amp, 15);
+#ifdef __aarch64__
+      out_cf16->r = signal2[i].r * *(__fp16*)amp2;
+      out_cf16->i = signal2[i].i * *(__fp16*)amp2;
+      out_cf16++;
+      out_cf16->r = signal1[i].r * *(__fp16*)amp;
+      out_cf16->i = signal1[i].i * *(__fp16*)amp;
+      out_cf16++;
+#else
+      *out_cf16++ = cf16mulReal((cf16_t)signal2[i], *(_Float16*)amp2);
+      *out_cf16++ = cf16mulReal((cf16_t)signal1[i], *(_Float16*)amp);
+#endif
     }
   }
   else
-#else
-  {
+  {  
+
+    printf("interleave_signals: use_fp16 = 0\n");
 #if defined(__AVX512__) && defined(__AVX512BW__)
   
-    simde__m512i amp2512 = simde_mm512_set1_epi16(amp2), amp512 = simde_mm512_set1_epi16(amp);
+    simde__m512i amp2512 = simde_mm512_set1_epi16(*(int16_t*)amp2), amp512 = simde_mm512_set1_epi16(*(int16_t*)amp);
     simde__m512i perml = simde_mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
     simde__m512i permh = simde_mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
     for (; i < (end & ~15); i += 16) {
@@ -267,7 +423,7 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c
     }
 #endif
 #if defined(__AVX2__)
-    simde__m256i amp2256 = simde_mm256_set1_epi16(amp2), amp256 = simde_mm256_set1_epi16(amp);
+    simde__m256i amp2256 = simde_mm256_set1_epi16(*(int16_t*)amp2), amp256 = simde_mm256_set1_epi16(*(int16_t*)amp);
     for (; i < (end & ~7); i += 8) {
       simde__m256i d0 = simde_mm256_mulhrs_epi16(simde_mm256_loadu_si256((simde__m256i *)(signal2 + i)), amp2256);
       simde__m256i d1 = simde_mm256_mulhrs_epi16(simde_mm256_loadu_si256((simde__m256i *)(signal1 + i)), amp256);
@@ -279,7 +435,7 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c
       out += 8;
     }
 #endif
-    simde__m128i amp2128 = simde_mm_set1_epi16(amp2), amp128 = simde_mm_set1_epi16(amp);
+    simde__m128i amp2128 = simde_mm_set1_epi16(*(int16_t*)amp2), amp128 = simde_mm_set1_epi16(*(int16_t*)amp);
     for (; i < (end & ~3); i += 4) {
       simde__m128i d0 = simde_mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(signal2 + i)), amp2128);
       simde__m128i d1 = simde_mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(signal1 + i)), amp128);
@@ -291,22 +447,18 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c
       out += 4;
     }
     for (; i < end; i++) {
-      *out++ = c16mulRealShift(signal2[i], amp2, 15);
-      *out++ = c16mulRealShift(signal1[i], amp, 15);
+      *out++ = c16mulRealShift(signal2[i], *(int16_t*)amp2, 15);
+      *out++ = c16mulRealShift(signal1[i], *(int16_t*)amp, 15);
     }
   }
-#endif
-#if defined __aarch64__
-
-#endif
   return sz / 2;
 }
 
 static inline int dmrs_case00(c16_t *output,
                               c16_t *txl,
                               c16_t *mod_dmrs,
-                              const int16_t amp_dmrs,
-                              const int amp,
+                              void *amp_dmrs,
+                              void *amp,
                               int sz,
                               int start_sc,
                               int remaining_re,
@@ -314,7 +466,8 @@ static inline int dmrs_case00(c16_t *output,
                               const int dmrs_Type,
                               int symbol_sz,
                               int l_prime,
-                              uint8_t numDmrsCdmGrpsNoData)
+                              uint8_t numDmrsCdmGrpsNoData,
+			      int use_fp16)
 {
   // DMRS params for this dmrs port
   int Wt[2], Wf[2];
@@ -326,9 +479,23 @@ static inline int dmrs_case00(c16_t *output,
   c16_t *in = txl;
   uint8_t k_prime = 0;
   uint16_t n = 0;
+
   for (int i = 0; i < sz; i++) {
     if (k == ((start_sc + get_dmrs_freq_idx(n, k_prime, delta, dmrs_Type)) % (symbol_sz))) {
-      output[k] = c16mulRealShift(mod_dmrs[dmrs_idx], Wt[l_prime] * Wf[k_prime] * amp_dmrs, 15);
+#ifdef FLT16_MAX
+      if (use_fp16) {
+	cf16_t *output_cf16 = (cf16_t*)&output[k];
+	cf16_t *mod_dmrs_cf16 = (cf16_t*)&mod_dmrs[dmrs_idx];
+#ifdef __aarch64__
+        *output_cf16 = cf16mulReal(*mod_dmrs_cf16, Wt[l_prime] * Wf[k_prime] * *(__fp16*)amp_dmrs);
+#else
+        *output_cf16 = cf16mulReal((cf16_t)mod_dmrs[dmrs_idx], Wt[l_prime] * Wf[k_prime] * *(_Float16*)amp_dmrs);
+#endif
+      }
+      else
+#else
+        output[k] = c16mulRealShift(mod_dmrs[dmrs_idx], Wt[l_prime] * Wf[k_prime] * *(int16_t*)amp_dmrs, 15);
+#endif
       dmrs_idx++;
       k_prime = (k_prime + 1) & 1;
       n += (k_prime ? 0 : 1);
@@ -336,7 +503,19 @@ static inline int dmrs_case00(c16_t *output,
     /* Map PTRS Symbol */
     /* Map DATA Symbol */
     else if (allowed_xlsch_re_in_dmrs_symbol(k, start_sc, symbol_sz, numDmrsCdmGrpsNoData, dmrs_Type)) {
-      output[k] = c16mulRealShift(*in++, amp, 15);
+#ifdef FLT16_MAX
+      if (use_fp16) {
+	cf16_t *output_cf16 = (cf16_t*)&output[k];
+	cf16_t *in_cf16 = (cf16_t*)in++;
+#ifdef __aarch64__
+        *output_cf16 = cf16mulReal(*in_cf16,*(__fp16*)amp);
+#else
+        *output_cf16 = cf16mulReal(*in_cf16,*(_Float16*)amp);
+#endif
+      }
+      else
+#endif
+        output[k] = c16mulRealShift(*in++, *(int16_t*)amp, 15);
     }
     /* mute RE */
     else {
@@ -347,41 +526,58 @@ static inline int dmrs_case00(c16_t *output,
   return in - txl;
 }
 
-static inline int no_ptrs_dmrs_case(c16_t *output, c16_t *txl, const int amp, const int sz)
+static inline int no_ptrs_dmrs_case(c16_t *output, c16_t *txl, void *amp, const int sz,int use_fp16)
 {
   // Loop Over SCs:
   int i = 0;
-#if defined(__AVX512BW__)
-  simde__m512i amp512 = simde_mm512_set1_epi16(amp);
-  for (; i < (sz & ~15); i += 16) {
-    const simde__m512i txL = simde_mm512_loadu_si512((simde__m512i *)(txl + i));
-    simde_mm512_storeu_si512((simde__m512i *)(output + i), simde_mm512_mulhrs_epi16(amp512, txL));
-  }
+#if (defined(__AVX512__) && defined(__AVX512BW__) && defined(__AVX512FP16__) && defined(FLT16_MAX))|| defined(__aarch64__)
+  if (use_fp16) 
+    memcpy((void*)output,(void*)txl,sz*sizeof(uint32_t));
+  else
+#endif
+  {
+    printf("no_ptrs_dmrs_case: use_fp16=0\n");
+#if defined(__AVX512__) && defined(__AVX512BW__)
+    simde__m512i amp512 = simde_mm512_set1_epi16(*(int16_t*)amp);
+    for (; i < (sz & ~15); i += 16) {
+      const simde__m512i txL = simde_mm512_loadu_si512((simde__m512i *)(txl + i));
+      simde_mm512_storeu_si512((simde__m512i *)(output + i), simde_mm512_mulhrs_epi16(amp512, txL));
+    }
 #endif
 #if defined(__AVX2__)
-  simde__m256i amp256 = simde_mm256_set1_epi16(amp);
-  for (; i < (sz & ~7); i += 8) {
-    const simde__m256i txL = simde_mm256_loadu_si256((simde__m256i *)(txl + i));
-    simde_mm256_storeu_si256((simde__m256i *)(output + i), _mm256_mulhrs_epi16(amp256, txL));
-  }
+    simde__m256i amp256 = simde_mm256_set1_epi16(*(int16_t*)amp);
+    for (; i < (sz & ~7); i += 8) {
+      const simde__m256i txL = simde_mm256_loadu_si256((simde__m256i *)(txl + i));
+      simde_mm256_storeu_si256((simde__m256i *)(output + i), _mm256_mulhrs_epi16(amp256, txL));
+    }
 #endif
 #if defined(USE128BIT)
-  simde__m128i amp128 = simde_mm_set1_epi16(amp);
-  for (; i < (sz & ~3); i += 4) {
-    const simde__m128i txL = simde_mm_loadu_si128((simde__m128i *)(txl + i));
-    simde_mm_storeu_si128((simde__m128i *)(output + i), simde_mm_mulhrs_epi16(amp128, txL));
-  }
+    simde__m128i amp128 = simde_mm_set1_epi16(*(int16_t*)amp);
+    for (; i < (sz & ~3); i += 4) {
+      const simde__m128i txL = simde_mm_loadu_si128((simde__m128i *)(txl + i));
+      simde_mm_storeu_si128((simde__m128i *)(output + i), simde_mm_mulhrs_epi16(amp128, txL));
+    }
 #endif
-  for (; i < sz; i++) {
-    output[i] = c16mulRealShift(txl[i], amp, 15);
+#if !(defined(__AVX512FP16__) && defined(FLT16_MAX))
+    for (; i < sz; i++) {
+      output[i] = c16mulRealShift(txl[i], *(int16_t*)amp, 15);
+    }
+#endif
   }
   return sz;
 }
 
-static inline void neg_dmrs(c16_t *in, c16_t *out, int sz)
+static inline void neg_dmrs(c16_t *in, c16_t *out, int sz, int use_fp16)
 {
-  for (int i = 0; i < sz; i++)
-    *out++ = i % 2 ? (c16_t){-in[i].r, -in[i].i} : in[i];
+  if (use_fp16) 
+    for (int i = 0; i < sz; i++) {
+      cf16_t *inp = (cf16_t*)&in[i];
+      cf16_t *outp = (cf16_t*)out++;      
+      *outp = i % 2 ? (cf16_t){-inp->r, -inp->i} : *inp;
+    }
+  else
+    for (int i = 0; i < sz; i++)
+      *out++ = i % 2 ? (c16_t){-in[i].r, -in[i].i} : in[i];
 }
 
 static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
@@ -434,7 +630,7 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
 
 #endif
 
-    txl += do_ptrs_symbol(rel15, start_sc, symbol_sz, output, txl, amp, mod_ptrs);
+    txl += do_ptrs_symbol(rel15, start_sc, symbol_sz, output, txl, amp, mod_ptrs,use_fp16);
 
   } else if (rel15->dlDmrsSymbPos & (1 << l_symbol)) {
     /* Map DMRS Symbol */
@@ -448,7 +644,7 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
             break;
           case 1: {
             c16_t dmrs[sz / 2];
-            neg_dmrs(dmrs_start, dmrs, sz / 2);
+            neg_dmrs(dmrs_start, dmrs, sz / 2,use_fp16);
             txl += interleave_with_0_signal_first(output + start_sc, dmrs, amp_dmrs, upper_limit,use_fp16);
             txl += interleave_with_0_signal_first(output, dmrs + upper_limit / 2, amp_dmrs, remaining_re,use_fp16);
           } break;
@@ -458,7 +654,7 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
             break;
           case 3: {
             c16_t dmrs[sz / 2];
-            neg_dmrs(dmrs_start, dmrs, sz / 2);
+            neg_dmrs(dmrs_start, dmrs, sz / 2,use_fp16);
             txl += interleave_with_0_start_with_0(output + start_sc, dmrs, amp_dmrs, upper_limit,use_fp16);
             txl += interleave_with_0_start_with_0(output, dmrs + upper_limit / 2, amp_dmrs, remaining_re,use_fp16);
           } break;
@@ -471,7 +667,7 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
             break;
           case 1: {
             c16_t dmrs[sz / 2];
-            neg_dmrs(dmrs_start, dmrs, sz / 2);
+            neg_dmrs(dmrs_start, dmrs, sz / 2,use_fp16);
             txl += interleave_signals(output + start_sc, txl, amp, dmrs, amp_dmrs, upper_limit,use_fp16);
             txl += interleave_signals(output, txl, amp, dmrs + upper_limit / 2, amp_dmrs, remaining_re,use_fp16);
           } break;
@@ -481,7 +677,7 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
             break;
           case 3: {
             c16_t dmrs[sz / 2];
-            neg_dmrs(dmrs_start, dmrs, sz / 2);
+            neg_dmrs(dmrs_start, dmrs, sz / 2,use_fp16);
             txl += interleave_signals(output + start_sc, dmrs, amp_dmrs, txl, amp, upper_limit,use_fp16);
             txl += interleave_signals(output, dmrs + upper_limit / 2, amp_dmrs, txl, amp, remaining_re,use_fp16);
           } break;
@@ -508,6 +704,10 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
     txl += no_ptrs_dmrs_case(output + start_sc, txl, amp, upper_limit,use_fp16);
     txl += no_ptrs_dmrs_case(output, txl, amp, remaining_re,use_fp16);
   } // no DMRS/PTRS in symbol
+  if (use_fp16) 
+    for (int i=0;i<24;i++) printf("symbol %d layer %d cdmGrps %d dmrs_port %d output[%d] = (%f,%f) amp %f, amp_dmrs %f\n",l_symbol, layer, rel15->numDmrsCdmGrpsNoData, get_dmrs_port(layer, rel15->dmrsPorts), i,(double)((cf16_t*)(output+start_sc))[i].r,(double)((cf16_t*)(output+start_sc))[i].i,(double)*(__fp16*)amp,(double)*(__fp16*)amp_dmrs); 
+  else
+    for (int i=0;i<24;i++) printf("symbol %d output[%d] = (%d,%d)\n",l_symbol,i,(output+start_sc)[i].r,(output+start_sc)[i].i); 
   return txl - txl_start;
 }
 
@@ -538,10 +738,13 @@ static inline void do_txdataF(c16_t **txdataF,
     const int re_cnt = NR_NB_SC_PER_RB * rb_step;
     if (pmi == 0) { // unitary Precoding
       if (subCarrier + re_cnt <= symbol_sz) { // RB does not cross DC
-        if (ant < rel15->nrOfLayers)
+        if (ant < rel15->nrOfLayers) {
           memcpy(&txdataF[ant][txdataF_offset_per_symbol + subCarrier],
                  &txdataF_precoding[ant][subCarrier],
                  re_cnt * sizeof(**txdataF));
+	  if (gNB->use_fp16) 
+	    for (int i=0;i<re_cnt;i++) printf("txdataF[%d][%d] %f.%f\n",ant,txdataF_offset_per_symbol + subCarrier + i,(double)(*(__fp16*)&txdataF[ant][txdataF_offset_per_symbol+subCarrier+i].r),(double)(*(__fp16*)&txdataF[ant][txdataF_offset_per_symbol+subCarrier+i].i));
+	}
         else
           memset(&txdataF[ant][txdataF_offset_per_symbol + subCarrier], 0, re_cnt * sizeof(**txdataF));
       } else { // RB does cross DC
@@ -552,6 +755,8 @@ static inline void do_txdataF(c16_t **txdataF,
                  &txdataF_precoding[ant][subCarrier],
                  neg_length * sizeof(**txdataF));
           memcpy(&txdataF[ant][txdataF_offset_per_symbol], &txdataF_precoding[ant], pos_length * sizeof(**txdataF));
+	  if (gNB->use_fp16) 
+	    for (int i=0;i<neg_length;i++) printf("**txdataF[%d][%d] %f.%f\n",ant,txdataF_offset_per_symbol + subCarrier + i,(double)(*(__fp16*)&txdataF[ant][txdataF_offset_per_symbol+subCarrier+i].r),(double)(*(__fp16*)&txdataF[ant][txdataF_offset_per_symbol+i].i));
         } else {
           memset(&txdataF[ant][txdataF_offset_per_symbol + subCarrier], 0, neg_length * sizeof(**txdataF));
           memset(&txdataF[ant][txdataF_offset_per_symbol], 0, pos_length * sizeof(**txdataF));
@@ -597,12 +802,12 @@ static inline void do_txdataF(c16_t **txdataF,
 #endif
 			      );
 #ifdef DEBUG_DLSCH_MAPPING
-          printf("antenna %d\t l %d \t subCarrier %d \t txdataF: %d %d\n",
+          printf("antenna %d\t off %d \t subCarrier %d \t txdataF: %d %d\n",
                  ant,
-                 l_symbol,
+                 txdataF_offset_per_symbol,
                  subCarrier,
-                 txdataF[ant][l_symbol * symbol_sz + subCarrier + txdataF_offset].r,
-                 txdataF[ant][l_symbol * symbol_sz + subCarrier + txdataF_offset].i);
+                 txdataF[ant][txdataF_offset_per_symbol + subCarrier].r,
+                 txdataF[ant][txdataF_offset_per_symbol + subCarrier].i);
 #endif
           if (++subCarrier >= symbol_sz) {
             subCarrier -= symbol_sz;
@@ -627,12 +832,11 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   const int dmrs_Type = rel15->dmrsConfigType;
   const int nb_re_dmrs = rel15->numDmrsCdmGrpsNoData * (rel15->dmrsConfigType == NFAPI_NR_DMRS_TYPE1 ? 6 : 4);
 #ifdef FLT16_MAX
-  const _Float16 amp = 1.0f;
-  const _Float16 amp_dmrs = (_Float16)sqrt(rel15->numDmrsCdmGrpsNoData);
-#else
+  const _Float16 amp_fp16 = 1.0f;
+  const _Float16 amp_dmrs_fp16 = (_Float16)sqrt(rel15->numDmrsCdmGrpsNoData);
+#endif
   const int16_t amp = gNB->TX_AMP;
   const int16_t amp_dmrs = min((double)amp * sqrt(rel15->numDmrsCdmGrpsNoData), INT16_MAX); // 3GPP TS 38.214 Section 4.1: Table 4.1-1
-#endif
   LOG_D(PHY,
         "pdsch: BWPStart %d, BWPSize %d, rbStart %d, rbsize %d\n",
         rel15->BWPStart,
@@ -710,7 +914,10 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 #else
     nr_modulation(scrambled_output, encoded_length, Qm, (int16_t *)mod_symbs[codeWord]);
 #endif
-    for (int i=0;i<16;i++) printf("mod output %d : %f\n",i,(double)((_Float16*)mod_symbs[codeWord])[i]);
+    if (gNB->use_fp16)
+      for (int i=0;i<16;i++) printf("mod output %d : %f\n",i,(double)((__fp16*)mod_symbs[codeWord])[i]);
+    else
+      for (int i=0;i<16;i++) printf("mod output %d : %d\n",i,((int16_t*)mod_symbs[codeWord])[i]);
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_gNB_PDSCH_MODULATION, 0);
     stop_meas(dlsch_modulation_stats);
 #ifdef DEBUG_DLSCH
@@ -838,8 +1045,13 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
                              l_symbol,
                              dlPtrsSymPos,
                              n_ptrs,
+#ifdef FLT16_MAX
+			     gNB->use_fp16?(void*)&amp_fp16:(void*)&amp,
+			     gNB->use_fp16?(void*)&amp_dmrs_fp16:(void*)&amp_dmrs,
+#else
                              (void*)&amp,
                              (void*)&amp_dmrs,
+#endif
                              l_prime,
                              dmrs_Type,
                              mod_dmrs + dmrs_idx,
@@ -847,7 +1059,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     } // layer loop
     re_beginning_of_symbol += layer_sz;
     stop_meas(&gNB->dlsch_resource_mapping_stats);
-
+ 
     start_meas(&gNB->dlsch_precoding_stats);
     for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
       const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz + txdataF_offset;

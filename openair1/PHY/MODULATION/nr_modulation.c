@@ -689,8 +689,9 @@ void perform_symbol_rotation(NR_DL_FRAME_PARMS *fp, double f0, c16_t *symbol_rot
     exp_im = sin(-poff);
  #ifdef FLT16_MAX
     if (use_fp16) {
-      (*(cf16_t*)&symbol_rotation[l]).r = (_Float16)floor(exp_re);
-      (*(cf16_t*)&symbol_rotation[l]).i = (_Float16)floor(exp_im);
+      (*(cf16_t*)&symbol_rotation[l]).r = (_Float16)exp_re;
+      (*(cf16_t*)&symbol_rotation[l]).i = (_Float16)exp_im;
+      printf("initialize fp16 rotation  %d: %f %f\n", l, (double) (*(cf16_t*)&symbol_rotation[l]).r, (double) (*(cf16_t*)&symbol_rotation[l]).i);
     }
     else
 #endif
@@ -723,7 +724,7 @@ void init_symbol_rotation(NR_DL_FRAME_PARMS *fp
     if (f0 == 0)
       continue;
     c16_t *rot = fp->symbol_rotation[ll];
-
+    printf("Initializing rotation %d\n",ll);
     perform_symbol_rotation(fp, f0, rot
 #ifdef FLT16_MAX
 			  ,use_fp16
@@ -922,6 +923,8 @@ void nr_layer_precoder_simd(const int n_layers,
   // 512/256 SIMD: Do 16/8 RE in one iteration, 3 iterations for 2 RB
   c16_t *beginning = txdataF_precoded + sc_offset;
   c16_t *out=beginning;
+  printf("nr_layer_precoder_simd, use_fp16 %d\n",use_fp16);
+
 #if defined(__AVX512F__) && defined(__AVX512BW__)
   c16_t *end = out + (re_cnt & ~15);
 #ifdef FLT16_MAX && defined(__AVX512FP16__)
@@ -1130,6 +1133,7 @@ void nr_layer_precoder_simd(const int n_layers,
 #ifdef __aarch64__
 #ifdef FLT16_MAX
   if (use_fp16) {
+    printf("Running precoding for aarch64 fp16\n");
     cf16_t weights_fp16[n_layers];
     for (int l=0;l<n_layers;l++) {
       weights_fp16[l].r = ((float16_t)pmi_pdu->weights[l][ant].r)/32768.0;
@@ -1144,6 +1148,10 @@ void nr_layer_precoder_simd(const int n_layers,
         float16x8_t y = vcmlaq_f16(zero,x0,w0);
         // Store the result to txdataF
         *(float16x8_t *)out = y;
+	printf("re %ld %f.%f\n",out-beginning, ((cf16_t*)out)[0].r, ((cf16_t*)out)[0].i);
+	printf("re %ld %f.%f\n",out-beginning+1, ((cf16_t*)out)[1].r, ((cf16_t*)out)[1].i);
+	printf("re %ld %f.%f\n",out-beginning+2, ((cf16_t*)out)[2].r, ((cf16_t*)out)[2].i);
+	printf("re %ld %f.%f\n",out-beginning+3, ((cf16_t*)out)[3].r, ((cf16_t*)out)[3].i);
       }
     }
     else if (n_layers == 2) {

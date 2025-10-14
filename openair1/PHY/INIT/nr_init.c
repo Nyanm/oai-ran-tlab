@@ -355,6 +355,7 @@ void nr_phy_config_request_sim(PHY_VARS_gNB *gNB,
   nr_init_frame_parms(gNB_config, fp);
 
   fp->ofdm_offset_divisor = UINT_MAX;
+  printf("Init symbol rotation, fp16 %s\n",gNB->use_fp16?"yes":"no");
   init_symbol_rotation(fp
 #ifdef FLT16_MAX
 		  ,gNB->use_fp16
@@ -412,6 +413,7 @@ void nr_phy_config_request(NR_PHY_Config_t *phy_config)
   RC.gNB[Mod_id]->configured     = 1;
 
   fp->ofdm_offset_divisor = RC.gNB[Mod_id]->ofdm_offset_divisor;
+  printf("Init symbol rotation, fp16 %s\n",RC.gNB[Mod_id]->use_fp16?"yes":"no");
   init_symbol_rotation(fp
 #ifdef FLT16_MAX
 		  ,RC.gNB[Mod_id]->use_fp16
