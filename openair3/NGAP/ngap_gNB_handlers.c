@@ -726,6 +726,21 @@ static int ngap_gNB_handle_handover_request(sctp_assoc_t assoc_id, uint32_t stre
   }
 
   NGAP_INFO("Received NG Handover Request from AMF %s (ID=%lu)\n", amf_desc_p->amf_name, msg->amf_ue_ngap_id);
+
+  // Create UE context for handover with PLMN from GUAMI
+  ngap_gNB_ue_context_t ue_context_p = {
+      .amf_ref = amf_desc_p,
+      .amf_ue_ngap_id = msg->amf_ue_ngap_id,
+      .gNB_instance = amf_desc_p->ngap_gNB_instance,
+      .ue_state = NGAP_UE_CONNECTED,
+      .selected_plmn_identity = {.mcc = msg->guami.mcc, .mnc = msg->guami.mnc, .mnc_digit_length = msg->guami.mnc_len},
+  };
+  plmn_id_t *plmn = &ue_context_p.selected_plmn_identity;
+  LOG_I(NGAP, "Created UE context with PLMN MCC=%03d MNC=%0*d from GUAMI\n", plmn->mcc, plmn->mnc_digit_length, plmn->mnc);
+
+  // Store the UE context (will be updated by NG Handover Request Acknowledge with gNB_ue_ngap_id)
+  ngap_store_ue_context(&ue_context_p);
+
   itti_send_msg_to_task(TASK_RRC_GNB, amf_desc_p->ngap_gNB_instance->instance, message_p);
 
   return 0;

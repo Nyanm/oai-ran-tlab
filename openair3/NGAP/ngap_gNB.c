@@ -382,23 +382,28 @@ static int ngap_gNB_handover_request_acknowledge(instance_t instance, ngap_hando
     return -1;
   }
 
-  // Create and store NGAP UE context
-  ngap_gNB_ue_context_t ue_context_p = {
-    .amf_ref = ngap_gNB_get_AMF_from_instance(ngap),
-    .gNB_ue_ngap_id = msg->gNB_ue_ngap_id,
-    .amf_ue_ngap_id = msg->amf_ue_ngap_id,
-    .gNB_instance = ngap,
-    .ue_state = NGAP_UE_CONNECTED,
-  };
-  if (!ue_context_p.amf_ref) {
-    NGAP_ERROR("Failed to fetch AMF for current NGAP instance\n");
+  // Update existing UE context (created during handover request)
+  ngap_gNB_ue_context_t *ue_context_p = ngap_get_ue_context_from_amf_ue_ngap_id(msg->amf_ue_ngap_id);
+  if (!ue_context_p) {
+    NGAP_ERROR("Failed to find UE context for handover request acknowledge (amf_ue_ngap_id=%lu)\n", msg->amf_ue_ngap_id);
     ASN_STRUCT_FREE(asn_DEF_NGAP_NGAP_PDU, pdu);
     return -1;
   }
-  ngap_store_ue_context(&ue_context_p);
+
+  // Update the UE context with the gNB UE NGAP ID
+  ue_context_p->gNB_ue_ngap_id = msg->gNB_ue_ngap_id;
+
+  plmn_id_t *plmn = &ue_context_p->selected_plmn_identity;
+  LOG_I(NGAP,
+        "Updated UE context (gNB_ue_ngap_id=%u, amf_ue_ngap_id=%lu) with PLMN MCC=%03d MNC=%0*d\n",
+        ue_context_p->gNB_ue_ngap_id,
+        ue_context_p->amf_ue_ngap_id,
+        plmn->mcc,
+        plmn->mnc_digit_length,
+        plmn->mnc);
 
   /* UE associated signalling -> use the allocated stream */
-  ngap_gNB_itti_send_sctp_data_req(ngap->instance, ue_context_p.amf_ref->assoc_id, ba.buf, ba.len, ue_context_p.tx_stream);
+  ngap_gNB_itti_send_sctp_data_req(ngap->instance, ue_context_p->amf_ref->assoc_id, ba.buf, ba.len, ue_context_p->tx_stream);
   NGAP_INFO("Sent Handover Request Acknowledge to AMF\n");
   ASN_STRUCT_FREE(asn_DEF_NGAP_NGAP_PDU, pdu);
   return 0;
