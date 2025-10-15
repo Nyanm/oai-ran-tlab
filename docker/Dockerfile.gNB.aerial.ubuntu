@@ -31,7 +31,7 @@
 ARG E2AP_VERSION=E2AP_V3
 ARG KPM_VERSION=KPM_V3_00
 
-FROM ran-base:2025.w40 AS ran-base
+FROM ran-base:latest AS ran-base
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt update && \
