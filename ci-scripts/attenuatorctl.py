@@ -61,7 +61,7 @@ def _parse_args() -> argparse.Namespace:
 Examples:
 - reset all channels to 0: -s 1-4 0
 - set channels 3 and 4 to attenuation 60: -s 3,4 60
-- perform attenuation sweep durang 10s, reaching ch. 1+2 to 60: -r 1,2 60 -d 10
+- perform attenuation sweep during 10s, reaching ch. 1+2 to 60: -r 1,2 60 -d 10
 '''
     parser = argparse.ArgumentParser(description='Mini-Circuit RC*DAT attenuator controller',
                                      epilog=epilog,
