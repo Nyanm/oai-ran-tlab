@@ -786,6 +786,13 @@ int nr_pbch_channel_estimation(const NR_DL_FRAME_PARMS *fp,
       // do ifft of channel estimate
       LOG_D(PHY,"Channel Impulse Computation Slot %d Symbol %d ch_offset %d\n", Ns, symbol, ch_offset);
       freq2time(fp->ofdm_symbol_size, (int16_t *)&dl_ch_estimates[aarx][ch_offset], (int16_t *)&dl_ch_estimates_time[aarx]);
+      T(T_GNB_PHY_PBCH_FREQ_CHANNEL_ESTIMATE,
+        T_INT(0),
+        T_INT(0),
+        T_INT(0),
+        T_INT(0),
+        T_INT(0),
+        T_BUFFER(&dl_ch_estimates[aarx][ch_offset], 240 * sizeof(c16_t)));
     }
   }
 

@@ -21,17 +21,25 @@ int next_ue_id;
 
 typedef struct {
   widget *pucch_pusch_iq_plot;
+  widget *pss_corr_ue_xy_plot;
+  widget *pbch_freq_estimate_ue_xy_plot;
   widget *ul_freq_estimate_ue_xy_plot;
   widget *ul_time_estimate_ue_xy_plot;
   widget *ul_snr_estimate_ue_xy_plot;
+  widget *csirs_time_estimate_ue_xy_plot;
+  widget *csirs_freq_estimate_ue_xy_plot;
   widget *current_ue_label;
   widget *current_ue_button;
   widget *prev_ue_button;
   widget *next_ue_button;
   logger *pucch_pusch_iq_logger;
+  logger *pss_corr_ue_logger;
+  logger *pbch_freq_estimate_ue_logger;
   logger *ul_freq_estimate_ue_logger;
   logger *ul_time_estimate_ue_logger;
   logger *ul_snr_ue_logger;
+  logger *csirs_time_estimate_ue_logger;
+  logger *csirs_freq_estimate_ue_logger;
 } gnb_gui;
 
 typedef struct {
@@ -96,17 +104,29 @@ static void set_current_ue(gui *g, gnb_data *e, int ue)
   sprintf(s, "[UE %d]  ", ue);
   label_set_text(g, e->e->current_ue_label, s);
 
-  sprintf(s, "GNB_PHY_PUCCH_PUSCH_IQ [UE %d]", ue);
-  xy_plot_set_title(g, e->e->pucch_pusch_iq_plot, s);
+  //sprintf(s, "GNB_PHY_PUCCH_PUSCH_IQ [UE %d]", ue);
+  //xy_plot_set_title(g, e->e->pucch_pusch_iq_plot, s);
 
-  sprintf(s, "UL channel estimation in frequency domain [UE %d]", ue);
+  sprintf(s, "PSS correlation");
+  xy_plot_set_title(g, e->e->pss_corr_ue_xy_plot, s);
+
+  sprintf(s, "PBCH channel estimation in frequency domain");
+  xy_plot_set_title(g, e->e->pbch_freq_estimate_ue_xy_plot, s);
+
+  sprintf(s, "UL channel estimation based on SRS in frequency domain [UE %d]", ue);
   xy_plot_set_title(g, e->e->ul_freq_estimate_ue_xy_plot, s);
 
-  sprintf(s, "UL channel estimation in time domain [UE %d]", ue);
+  sprintf(s, "UL channel estimation based on SRS in time domain [UE %d]", ue);
   xy_plot_set_title(g, e->e->ul_time_estimate_ue_xy_plot, s);
 
   sprintf(s, "UL SNR per RB based on SRS [UE %d]", ue);
   xy_plot_set_title(g, e->e->ul_snr_estimate_ue_xy_plot, s);
+
+  sprintf(s, "DL channel estimation based on CSI-RS in time domain");
+  xy_plot_set_title(g, e->e->csirs_time_estimate_ue_xy_plot, s);
+
+  sprintf(s, "DL channel estimation based on CSI-RS in frequency domain");
+  xy_plot_set_title(g, e->e->csirs_freq_estimate_ue_xy_plot, s);
 }
 
 void reset_ue_ids(void)
@@ -155,16 +175,117 @@ static void gnb_main_gui(gnb_gui *e, gui *g, event_handler *h, void *database, g
   logger *l;
   view *v;
 
-  main_window = new_toplevel_window(g, 1500, 460, "gNB tracer");
+  main_window = new_toplevel_window(g, 950, 925, "OAI Tracer");
   top_container = new_container(g, VERTICAL);
   widget_add_child(g, main_window, top_container, -1);
 
   line = new_container(g, HORIZONTAL);
   widget_add_child(g, top_container, line, -1);
 
-  logo = new_image(g, openair_logo_png, openair_logo_png_len);
+  /* PUCCH/PUSCH IQ data */
+  /*w = new_xy_plot(g, 200, 200, "", 10);
+  e->pucch_pusch_iq_plot = w;
+  widget_add_child(g, line, w, -1);
+  xy_plot_set_range(g, w, -1000, 1000, -1000, 1000);
+  l = new_iqlog_full(h, database, "GNB_PHY_PUCCH_PUSCH_IQ", "rxdataF");
+  v = new_view_xy(300*12*14,10,g,w,new_color(g,"#000"),XY_FORCED_MODE);
+  logger_add_view(l, v);
+  e->pucch_pusch_iq_logger = l;*/
+
+  /* PSS correlation */
+  w = new_xy_plot(g, 410, 200, "", 50);
+  e->pss_corr_ue_xy_plot = w;
+  widget_add_child(g, line, w, -1);
+  xy_plot_set_range(g, w, 0, 2048, 40, 100);
+  l = new_framelog(h, database, "GNB_PHY_PSS_CORRELATION", "subframe", "pss_corr");
+  framelog_set_update_only_at_sf9(l, 0);
+  framelog_set_type_buffer_db(l);
+  v = new_view_xy(2048, 10, g, w, new_color(g, "#0c0c72"), XY_LOOP_MODE);
+  logger_add_view(l, v);
+  e->pss_corr_ue_logger = l;
+
+  /* PBCH channel estimation in frequency  domain */
+  w = new_xy_plot(g, 410, 200, "", 50);
+  e->pbch_freq_estimate_ue_xy_plot = w;
+  widget_add_child(g, line, w, -1);
+  xy_plot_set_range(g, w, 0, 240, -10, 80);
+  l = new_framelog(h, database, "GNB_PHY_PBCH_FREQ_CHANNEL_ESTIMATE", "subframe", "chest_f");
+  framelog_set_update_only_at_sf9(l, 0);
+  v = new_view_xy(240, 10, g, w, new_color(g, "#0c0c72"), XY_LOOP_MODE);
+  logger_add_view(l, v);
+  e->pbch_freq_estimate_ue_logger = l;
+
+  line = new_container(g, HORIZONTAL);
+  widget_add_child(g, top_container, line, -1);
+
+  /* DL channel estimation in time domain */
+  w = new_xy_plot(g, 410, 200, "", 50);
+  e->csirs_time_estimate_ue_xy_plot = w;
+  widget_add_child(g, line, w, -1);
+  xy_plot_set_range(g, w, 0, 2048, -10, 80);
+  l = new_framelog(h, database, "GNB_PHY_DL_TIME_CHANNEL_ESTIMATE", "subframe", "chest_t");
+  framelog_set_update_only_at_sf9(l, 0);
+  v = new_view_xy(2048, 10, g, w, new_color(g, "#0c0c72"), XY_LOOP_MODE);
+  logger_add_view(l, v);
+  e->csirs_time_estimate_ue_logger = l;
+
+  /* DL channel estimation in frequency domain */
+  w = new_xy_plot(g, 410, 200, "", 50);
+  e->csirs_freq_estimate_ue_xy_plot = w;
+  widget_add_child(g, line, w, -1);
+  xy_plot_set_range(g, w, 0, 2048, -10, 80);
+  l = new_framelog(h, database, "GNB_PHY_DL_FREQ_CHANNEL_ESTIMATE", "subframe", "chest_f");
+  framelog_set_update_only_at_sf9(l, 0);
+  v = new_view_xy(2048, 10, g, w, new_color(g, "#0c0c72"), XY_LOOP_MODE);
+  logger_add_view(l, v);
+  e->csirs_freq_estimate_ue_logger = l;
+
+  line = new_container(g, HORIZONTAL);
+  widget_add_child(g, top_container, line, -1);
+
+  /* UL channel estimation in time domain */
+  w = new_xy_plot(g, 410, 200, "", 50);
+  e->ul_time_estimate_ue_xy_plot = w;
+  widget_add_child(g, line, w, -1);
+  xy_plot_set_range(g, w, 0, 2048, -10, 80);
+  l = new_framelog(h, database, "GNB_PHY_UL_TIME_CHANNEL_ESTIMATE", "subframe", "chest_t");
+  framelog_set_update_only_at_sf9(l, 0);
+  v = new_view_xy(2048, 10, g, w, new_color(g, "#0c0c72"), XY_LOOP_MODE);
+  logger_add_view(l, v);
+  e->ul_time_estimate_ue_logger = l;
+
+  /* UL channel estimation in frequency domain */
+  w = new_xy_plot(g, 410, 200, "", 50);
+  e->ul_freq_estimate_ue_xy_plot = w;
+  widget_add_child(g, line, w, -1);
+  xy_plot_set_range(g, w, 0, 2048, -10, 80);
+  l = new_framelog(h, database, "GNB_PHY_UL_FREQ_CHANNEL_ESTIMATE", "subframe", "chest_f");
+  framelog_set_update_only_at_sf9(l, 0);
+  v = new_view_xy(2048, 10, g, w, new_color(g, "#0c0c72"), XY_LOOP_MODE);
+  logger_add_view(l, v);
+  e->ul_freq_estimate_ue_logger = l;
+
+  line = new_container(g, HORIZONTAL);
+  widget_add_child(g, top_container, line, -1);
+
+  /* UL SNR based on SRS */
+  w = new_xy_plot(g, 650, 200, "", 50);
+  e->ul_snr_estimate_ue_xy_plot = w;
+  widget_add_child(g, line, w, -1);
+  xy_plot_set_range(g, w, 0, 273, -10, 65);
+  l = new_framelog(h, database, "GNB_PHY_UL_SNR_ESTIMATE", "subframe", "snr");
+  framelog_set_update_only_at_sf9(l, 0);
+  framelog_set_type_buffer_db(l);
+  v = new_view_xy(273, 10, g, w, new_color(g, "#0c0c72"), XY_LOOP_MODE);
+  logger_add_view(l, v);
+  e->ul_snr_ue_logger = l;
+
+  /* space */
+  w = new_space(g, 50, 200);
+  widget_add_child(g, line, w, -1);
 
   /* logo + prev/next UE buttons */
+  logo = new_image(g, openair_logo_png, openair_logo_png_len);
   col = new_container(g, VERTICAL);
   widget_add_child(g, col, logo, -1);
   w = new_container(g, HORIZONTAL);
@@ -183,53 +304,6 @@ static void gnb_main_gui(gnb_gui *e, gui *g, event_handler *h, void *database, g
   label_set_clickable(g, w2, 1);
   e->next_ue_button = w2;
   widget_add_child(g, line, col, -1);
-
-  /* PUCCH/PUSCH IQ data */
-  w = new_xy_plot(g, 200, 200, "", 10);
-  e->pucch_pusch_iq_plot = w;
-  widget_add_child(g, line, w, -1);
-  xy_plot_set_range(g, w, -1000, 1000, -1000, 1000);
-  l = new_iqlog_full(h, database, "GNB_PHY_PUCCH_PUSCH_IQ", "rxdataF");
-  v = new_view_xy(300*12*14,10,g,w,new_color(g,"#000"),XY_FORCED_MODE);
-  logger_add_view(l, v);
-  e->pucch_pusch_iq_logger = l;
-
-  /* UL channel estimation in frequency domain */
-  w = new_xy_plot(g, 490, 200, "", 50);
-  e->ul_freq_estimate_ue_xy_plot = w;
-  widget_add_child(g, line, w, -1);
-  xy_plot_set_range(g, w, 0, 2048, -10, 80);
-  l = new_framelog(h, database, "GNB_PHY_UL_FREQ_CHANNEL_ESTIMATE", "subframe", "chest_f");
-  framelog_set_update_only_at_sf9(l, 0);
-  v = new_view_xy(2048, 10, g, w, new_color(g, "#0c0c72"), XY_LOOP_MODE);
-  logger_add_view(l, v);
-  e->ul_freq_estimate_ue_logger = l;
-
-  /* UL channel estimation in time domain */
-  w = new_xy_plot(g, 490, 200, "", 50);
-  e->ul_time_estimate_ue_xy_plot = w;
-  widget_add_child(g, line, w, -1);
-  xy_plot_set_range(g, w, 0, 2048, -10, 80);
-  l = new_framelog(h, database, "GNB_PHY_UL_TIME_CHANNEL_ESTIMATE", "subframe", "chest_t");
-  framelog_set_update_only_at_sf9(l, 0);
-  v = new_view_xy(2048, 10, g, w, new_color(g, "#0c0c72"), XY_LOOP_MODE);
-  logger_add_view(l, v);
-  e->ul_time_estimate_ue_logger = l;
-
-  line = new_container(g, HORIZONTAL);
-  widget_add_child(g, top_container, line, -1);
-
-  /* UL SNR based on SRS */
-  w = new_xy_plot(g, 1280, 200, "", 190);
-  e->ul_snr_estimate_ue_xy_plot = w;
-  widget_add_child(g, line, w, -1);
-  xy_plot_set_range(g, w, 0, 273, -10, 65);
-  l = new_framelog(h, database, "GNB_PHY_UL_SNR_ESTIMATE", "subframe", "snr");
-  framelog_set_update_only_at_sf9(l, 0);
-  framelog_set_type_buffer_db(l);
-  v = new_view_xy(273, 10, g, w, new_color(g, "#0c0c72"), XY_LOOP_MODE);
-  logger_add_view(l, v);
-  e->ul_snr_ue_logger = l;
 
   set_current_ue(g, ed, ed->ue);
   register_notifier(g, "click", e->current_ue_button, click, ed);
@@ -273,10 +347,14 @@ int main(int n, char **v)
 
   h = new_handler(database);
 
-  on_off(database, "GNB_PHY_PUCCH_PUSCH_IQ", is_on, 1);
+  //on_off(database, "GNB_PHY_PUCCH_PUSCH_IQ", is_on, 1);
+  on_off(database, "GNB_PHY_PSS_CORRELATION", is_on, 1);
+  on_off(database, "GNB_PHY_PBCH_FREQ_CHANNEL_ESTIMATE", is_on, 1);
   on_off(database, "GNB_PHY_UL_FREQ_CHANNEL_ESTIMATE", is_on, 1);
   on_off(database, "GNB_PHY_UL_TIME_CHANNEL_ESTIMATE", is_on, 1);
   on_off(database, "GNB_PHY_UL_SNR_ESTIMATE", is_on, 1);
+  on_off(database, "GNB_PHY_DL_TIME_CHANNEL_ESTIMATE", is_on, 1);
+  on_off(database, "GNB_PHY_DL_FREQ_CHANNEL_ESTIMATE", is_on, 1);
 
   gnb_data.ue = 0;
   gnb_data.e = &eg;

@@ -420,6 +420,37 @@ static int nr_csi_rs_channel_estimation(
 #ifdef NR_CSIRS_DEBUG
   LOG_I(NR_PHY, "Noise power estimation based on CSI-RS: %i\n", *noise_power);
 #endif
+
+  if (T_stdout == 0 || T_stdout == 2) {
+    c16_t csirs_freq[fp->ofdm_symbol_size] __attribute__((aligned(32)));
+    memset(csirs_freq, 0, fp->ofdm_symbol_size * sizeof(c16_t));
+    int len1 = fp->ofdm_symbol_size - fp->first_carrier_offset;
+    int len2 = fp->ofdm_symbol_size - len1;
+    memcpy(csirs_freq, &csi_rs_estimated_channel_freq[0][0][fp->first_carrier_offset], len1 * sizeof(c16_t));
+    memcpy(&csirs_freq[len1], csi_rs_estimated_channel_freq[0][0], len2 * sizeof(c16_t));
+    T(T_GNB_PHY_DL_FREQ_CHANNEL_ESTIMATE,
+      T_INT(0),
+      T_INT(0),
+      T_INT(0),
+      T_INT(0),
+      T_INT(0),
+      T_BUFFER(csirs_freq, fp->ofdm_symbol_size * sizeof(int32_t)));
+
+    c16_t csirs_time[fp->ofdm_symbol_size] __attribute__((aligned(32)));
+    memset(csirs_time, 0, fp->ofdm_symbol_size * sizeof(c16_t));
+    freq2time(fp->ofdm_symbol_size, (int16_t *)csi_rs_estimated_channel_freq[0][0], (int16_t *)csirs_time);
+    c16_t csirs_time_shifted[fp->ofdm_symbol_size] __attribute__((aligned(32)));
+    memcpy(csirs_time_shifted, &csirs_time[fp->ofdm_symbol_size >> 1], (fp->ofdm_symbol_size >> 1) * sizeof(c16_t));
+    memcpy(&csirs_time_shifted[fp->ofdm_symbol_size >> 1], csirs_time, (fp->ofdm_symbol_size >> 1) * sizeof(c16_t));
+    T(T_GNB_PHY_DL_TIME_CHANNEL_ESTIMATE,
+      T_INT(0),
+      T_INT(0),
+      T_INT(0),
+      T_INT(0),
+      T_INT(0),
+      T_BUFFER(csirs_time_shifted, fp->ofdm_symbol_size * sizeof(int32_t)));
+  }
+
   return 0;
 }
 
@@ -894,7 +925,7 @@ void nr_ue_csi_rs_procedures(PHY_VARS_NR_UE *ue,
   int16_t log2_re = 0;
   int16_t log2_maxh = 0;
   // if we need to measure only RSRP no need to do channel estimation
-  if (csirs_config_pdu->measurement_bitmap > 1)
+  if (csirs_config_pdu->measurement_bitmap > 1 || T_stdout == 0 || T_stdout == 2)
     nr_csi_rs_channel_estimation(frame_parms,
                                  csirs_config_pdu,
                                  csi_info,

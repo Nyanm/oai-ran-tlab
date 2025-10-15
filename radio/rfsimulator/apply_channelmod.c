@@ -224,7 +224,7 @@ void rxAddInput(c16_t **input_sig, cf_t *after_channel_sig, int rxAnt, channel_d
   // the normalized OAI value seems to be 256 as average amplitude (numerical amplification = 1)
   const double noise_per_sample = pow(10, channelDesc->noise_power_dB / 10.0) * 256;
   const int nbTx = channelDesc->nb_tx;
-  double Doppler_phase_cur = channelDesc->Doppler_phase_cur[rxAnt];
+  double Doppler_phase_cur = channelDesc->enable_dynamic_Doppler ? channelDesc->Doppler_phase_cur[rxAnt] : 0;
   Doppler_phase_cur -= 2 * M_PI * round(Doppler_phase_cur / (2 * M_PI));
 
   for (int i = 0; i < nbSamples; i++) {
@@ -260,7 +260,8 @@ void rxAddInput(c16_t **input_sig, cf_t *after_channel_sig, int rxAnt, channel_d
     out_ptr++;
   }
 
-  channelDesc->Doppler_phase_cur[rxAnt] = Doppler_phase_cur;
+  if (channelDesc->enable_dynamic_Doppler)
+    channelDesc->Doppler_phase_cur[rxAnt] = Doppler_phase_cur;
 
   // Cast to a wrong type for compatibility !
   LOG_D(HW,

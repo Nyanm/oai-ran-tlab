@@ -284,7 +284,7 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
         } break;
     }
   }
- 
+
   if (num_pdsch > 0) {
     LOG_D(PHY, "PDSCH generation started (%d) in frame %d.%d\n", num_pdsch, frame, slot);
     nr_generate_pdsch(gNB, num_pdsch, gNB->dlsch, frame, slot);

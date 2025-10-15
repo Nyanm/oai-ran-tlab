@@ -1092,6 +1092,42 @@ int pbch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr_phy_da
           __attribute__ ((aligned(32))) struct complex16 dl_ch_estimates[fp->nb_antennas_rx][estimateSz];
           __attribute__ ((aligned(32))) struct complex16 dl_ch_estimates_time[fp->nb_antennas_rx][fp->ofdm_symbol_size];
 
+          if (T_stdout == 0 || T_stdout == 2) {
+            c16_t pss_time[fp->ofdm_symbol_size] __attribute__((aligned(32)));
+            int nid2 = GET_NID2(fp->Nid_cell);
+            generate_pss_nr_time(fp, nid2, fp->ssb_start_subcarrier, pss_time);
+            int maxval = 0;
+            for (int i = 0; i < fp->ofdm_symbol_size; i++) {
+              maxval = max(maxval, abs(pss_time[i].r));
+              maxval = max(maxval, abs(pss_time[i].i));
+            }
+            int shift = log2_approx(maxval);
+            int length = fp->ofdm_symbol_size;
+            int16_t pss_corr[length];
+            memset(pss_corr, 0, length * sizeof(int16_t));
+            unsigned int rx_offset = get_samples_slot_timestamp(fp, proc->nr_slot_rx);
+            unsigned int symbol = ssb_start_symbol % fp->symbols_per_slot;
+            unsigned int abs_symbol = proc->nr_slot_rx * fp->symbols_per_slot + symbol;
+            for (int idx_symb = proc->nr_slot_rx * fp->symbols_per_slot; idx_symb <= abs_symbol; idx_symb++)
+              rx_offset += (idx_symb % (0x7 << fp->numerology_index)) ? fp->nb_prefix_samples : fp->nb_prefix_samples0;
+            rx_offset += fp->ofdm_symbol_size * symbol;
+            rx_offset -= (fp->nb_prefix_samples / fp->ofdm_offset_divisor);
+            rx_offset %= (2 * fp->samples_per_frame);
+            c16_t *rxdata = &ue->common_vars.rxdata[0][rx_offset];
+            for (int n = 0; n < length; n++) {
+              const c32_t result = dot_product(pss_time, (c16_t *)&(rxdata[n]), fp->ofdm_symbol_size, shift);
+              const c64_t r64 = {.r = result.r, .i = result.i};
+              pss_corr[n] = dB_fixed64(squaredMod(r64));
+            }
+            T(T_GNB_PHY_PSS_CORRELATION,
+              T_INT(0),
+              T_INT(0),
+              T_INT(frame_rx),
+              T_INT(0),
+              T_INT(0),
+              T_BUFFER(pss_corr, length * sizeof(int16_t)));
+          }
+
           for (int i=1; i<4; i++) {
             nr_slot_fep(ue,
                         fp,
