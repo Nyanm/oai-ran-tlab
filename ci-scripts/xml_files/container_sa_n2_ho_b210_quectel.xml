@@ -193,7 +193,6 @@
     <desc>Undeploy Monolithic gNB-PCI0</desc>
     <node>groot</node>
     <yaml_path>ci-scripts/yaml_files/5g_sa_n2_ho_b210</yaml_path>
-    <services>oai-gnb-pci0</services>
   </testCase>
 
   <testCase id="000019">
@@ -202,7 +201,6 @@
     <desc>Undeploy Monolithic gNB-PCI1</desc>
     <node>rocket</node>
     <yaml_path>ci-scripts/yaml_files/5g_sa_n2_ho_b210</yaml_path>
-    <services>oai-gnb-pci1</services>
   </testCase>
 
   <testCase id="000020">
