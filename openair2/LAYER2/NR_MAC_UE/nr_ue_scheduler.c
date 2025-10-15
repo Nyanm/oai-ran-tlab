@@ -1283,23 +1283,24 @@ static void nr_update_sr(NR_UE_MAC_INST_t *mac, bool BSRsent)
 
 static void nr_update_rlc_buffers_status(NR_UE_MAC_INST_t *mac, frame_t frameP, slot_t slotP, uint8_t gNB_index)
 {
+  logical_chan_id_t ch[MAX_DRBS_PER_UE];
+  int n = 0;
   for (int i = 0; i < mac->lc_ordered_list.count; i++) {
     nr_lcordered_info_t *lc_info = mac->lc_ordered_list.array[i];
-    if (lc_info->rb_suspended)
+    if (lc_info->rb_suspended) // TODO memset?
       continue;
-    int lcid = lc_info->lcid;
+    ch[n++] = lc_info->lcid;
+  }
+
+  mac_rlc_status_resp_t ret[MAX_DRBS_PER_UE];
+  nr_mac_rlc_status_ind(mac->ue_id, frameP, n, ch, ret);
+  for (int i = 0; i < n; ++i) {
+    logical_chan_id_t lcid = ch[i];
+    rlc_buffer_occupancy_t b = ret[i].bytes_in_buffer;
     NR_LC_SCHEDULING_INFO *lc_sched_info = get_scheduling_info_from_lcid(mac, lcid);
-    mac_rlc_status_resp_t rlc_status = nr_mac_rlc_status_ind(mac->ue_id, frameP, lcid);
-    if (rlc_status.bytes_in_buffer > 0) {
-      LOG_D(NR_MAC,
-            "[UE %d] LCID %d has %d bytes to transmit at sfn %d.%d\n",
-            mac->ue_id,
-            lcid,
-            rlc_status.bytes_in_buffer,
-            frameP,
-            slotP);
-    }
-    lc_sched_info->LCID_buffer_remain = rlc_status.bytes_in_buffer;
+    if (b > 0)
+      LOG_D(NR_MAC, "[UE %d] LCID %d has %d bytes to transmit at sfn %d.%d\n", mac->ue_id, lcid, b, frameP, slotP);
+    lc_sched_info->LCID_buffer_remain = b;
   }
 }
 

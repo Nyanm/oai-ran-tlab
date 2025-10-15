@@ -229,15 +229,10 @@ tbs_size_t nr_mac_rlc_data_req(const module_id_t  module_idP,
   return ret;
 }
 
-mac_rlc_status_resp_t nr_mac_rlc_status_ind(const uint16_t ue_id, const frame_t frame, const logical_chan_id_t channel_idP)
+static mac_rlc_status_resp_t _nr_rlc_status_ind(nr_rlc_ue_t *ue, frame_t frame, logical_chan_id_t channel_idP)
 {
   mac_rlc_status_resp_t ret;
 
-  start_meas(&RC.nrmac[0]->rlc_status_ind_lock);
-  nr_rlc_manager_lock(nr_rlc_ue_manager);
-  stop_meas(&RC.nrmac[0]->rlc_status_ind_lock);
-  start_meas(&RC.nrmac[0]->rlc_status_ind_work);
-  nr_rlc_ue_t *ue = nr_rlc_manager_get_ue(nr_rlc_ue_manager, ue_id);
   nr_rlc_entity_t *rb = get_rlc_entity_from_lcid(ue, channel_idP);
 
   if (rb != NULL) {
@@ -252,10 +247,9 @@ mac_rlc_status_resp_t nr_mac_rlc_status_ind(const uint16_t ue_id, const frame_t 
     ret.bytes_in_buffer = buf_stat.status_size + buf_stat.retx_size + buf_stat.tx_size;
   } else {
     if (!(frame % 128) || channel_idP == 0) //to suppress this warning message
-      LOG_W(RLC, "Radio Bearer (channel ID %d) is NULL for UE %d\n", channel_idP, ue_id);
+      LOG_W(RLC, "Radio Bearer (channel ID %d) is NULL for UE %d\n", channel_idP, ue->ue_id);
     ret.bytes_in_buffer = 0;
   }
-  stop_meas(&RC.nrmac[0]->rlc_status_ind_work);
 
   nr_rlc_manager_unlock(nr_rlc_ue_manager);
 
@@ -265,6 +259,20 @@ mac_rlc_status_resp_t nr_mac_rlc_status_ind(const uint16_t ue_id, const frame_t 
   ret.head_sdu_remaining_size_to_send = 0;
   ret.head_sdu_is_segmented = 0;
   return ret;
+}
+
+void nr_mac_rlc_status_ind(uint16_t ue_id, frame_t frame, int n_ch, const logical_chan_id_t *ch, mac_rlc_status_resp_t *ret)
+{
+  start_meas(&RC.nrmac[0]->rlc_ind_lock);
+  nr_rlc_manager_lock(nr_rlc_ue_manager);
+  stop_meas(&RC.nrmac[0]->rlc_ind_lock);
+  start_meas(&RC.nrmac[0]->rlc_ind_work);
+  nr_rlc_ue_t *ue = nr_rlc_manager_get_ue(nr_rlc_ue_manager, ue_id);
+  for (int i = 0; i < n_ch; ++i) {
+    ret[i] = _nr_rlc_status_ind(ue, frame, ch[i]);
+  }
+  stop_meas(&RC.nrmac[0]->rlc_ind_work);
+  nr_rlc_manager_unlock(nr_rlc_ue_manager);
 }
 
 rlc_op_status_t nr_rlc_data_req(const protocol_ctxt_t *const ctxt_pP,
