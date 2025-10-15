@@ -93,7 +93,7 @@
     <class>Custom_Command</class>
     <desc>Set attenuator to 0 for DU0 and 17 for DU1</desc>
     <node>rocket</node>
-    <command>python3 %%workspace%%/ci-scripts/attenuatorctl.py -r 3,4 0 -r 1,2 17 -d 5</command>
+    <command>python3 %%workspace%%/ci-scripts/attenuatorctl.py -r 1,2 0 -r 3,4 17 -d 5</command>
   </testCase>
 
   <testCase id="000007">
@@ -145,7 +145,7 @@
     <class>Custom_Command</class>
     <desc>Attenuate DU0 by 15 and remove the attenuation on DU1 to trigger Handover</desc>
     <node>rocket</node>
-    <command>python3 %%workspace%%/ci-scripts/attenuatorctl.py -r 3,4 15 -r 1,2 0 -d 5</command>
+    <command>python3 %%workspace%%/ci-scripts/attenuatorctl.py -r 1,2 15 -r 3,4 0 -d 5</command>
   </testCase>
 
   <testCase id="000014">
@@ -168,7 +168,7 @@
    <class>Custom_Command</class>
     <desc>Attenuate DU1 by 17dB and remove attenuation on DU0 to trigger Handover</desc>
     <node>rocket</node>
-    <command>python3 %%workspace%%/ci-scripts/attenuatorctl.py -r 3,4 0 -r 1,2 17 -d 5</command>
+    <command>python3 %%workspace%%/ci-scripts/attenuatorctl.py -r 1,2 0 -r 3,4 17 -d 5</command>
   </testCase>
 
   <testCase id="000017">
@@ -191,7 +191,7 @@
    <class>Custom_Command</class>
     <desc>Attenuate DU0 by 15 and remove the attenuation on DU1 to trigger Handover</desc>
     <node>rocket</node>
-    <command>python3 %%workspace%%/ci-scripts/attenuatorctl.py -r 3,4 15 -r 1,2 0 -d 5</command>
+    <command>python3 %%workspace%%/ci-scripts/attenuatorctl.py -r 1,2 15 -r 3,4 0 -d 5</command>
   </testCase>
 
   <testCase id="000020">
