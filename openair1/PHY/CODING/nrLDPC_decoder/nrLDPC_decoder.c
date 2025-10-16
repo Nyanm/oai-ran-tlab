@@ -162,6 +162,7 @@ static t_nrLDPC_lut lut;
 static t_nrLDPC_lut* p_lut = &lut;
 #endif
 
+/*
 #if USE_CUDA
 #include <cuda_runtime.h>
 #endif
@@ -188,7 +189,8 @@ extern void nrLDPC_BnToCnPC_BG1_cuda(const t_nrLDPC_lut* p_lut,
                                      uint16_t Z,
                                      int* PC_Flag);
 
-
+*/
+///
 //--------------------------------------------------------------
 
 //-------------------------Debug Function-----------------------
@@ -222,7 +224,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 
 int32_t LDPCinit()
 {
-  cuda_support_init();
+//  cuda_support_init();
   return 0;
 }
 
@@ -231,9 +233,20 @@ int32_t LDPCshutdown()
   return 0;
 }
 
+#ifndef USE_CUDA
+int32_t LDPCinit_cuda() {
+
+	return 0;
+}
+int32_t LDPCshutdown_cuda()
+{
+  return 0;
+}
+#endif
+
 int32_t LDPCdecoder(t_nrLDPC_dec_params* p_decParams,
                     int8_t* p_llr,
-                    int8_t* p_out,
+                    uint8_t* p_out,
                     t_nrLDPC_time_stats* p_profiler,
                     decode_abort_t* ab)
 {
@@ -317,7 +330,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   // First iteration
   // CN processing
   NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->cnProc));
-#ifdef USE_CUDA
+#if 0
   // printf("We're not here when CUDA stream enabled ^ ^ (but nothing here yet)\n");
   //       printf("\nHere we use CUDA\n");
   //  dump_cnProcBufRes_to_file(cnProcBuf, "First_cnProcBuf_dump_cuda.txt");
@@ -438,7 +451,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #endif
 #endif
   // BN processing
-#ifdef USE_CUDA
+#if 0 /*def USE_CUDA*/
 
   NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->bnProcPc));
   NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->bnProcPc));
@@ -663,7 +676,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #ifdef NR_LDPC_PROFILER_DETAIL
     start_meas(&p_profiler->cnProc);
 #endif
-#ifdef USE_CUDA
+#if 0 /*def USE_CUDA*/
     // dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_last_dump.txt");
     nrLDPC_cnProc_BG1_cuda(p_lut, cnProcBuf, cnProcBufRes, bnProcBuf, Z);
     if (numIter == 0) {
@@ -788,7 +801,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #endif
     // BN Processing
 
-#ifdef USE_CUDA
+#if 0 /*def USE_CUDA*/
 
     NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->bnProcPc));
     NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->bnProcPc));
@@ -1054,3 +1067,14 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   // #endif
   return numIter;
 }
+#ifndef USE_CUDA
+int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
+                    int8_t* p_llr,
+                    uint8_t* p_out,
+                    t_nrLDPC_time_stats* p_profiler,
+                    decode_abort_t* ab)
+{
+
+	return(0);
+}
+#endif

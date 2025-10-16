@@ -66,7 +66,7 @@ void nr_interleaving_ldpc(uint32_t E, uint8_t Qm, uint8_t *e, uint8_t *f)
       simde__m128i *f_128 = (simde__m128i *)f;
       simde__m128i *e0_128 = (simde__m128i *)e0;
       simde__m128i *e1_128 = (simde__m128i *)e1;
-      for (; i < (EQm & ~15); i += 64) {
+      for (; i < (EQm & ~15); i += 16) {
         simde__m128i e0j = simde_mm_loadu_si128(e0_128++);
         simde__m128i e1j = simde_mm_loadu_si128(e1_128++);
         simde_mm_storeu_si128(f_128++, simde_mm_unpacklo_epi8(e0j, e1j));

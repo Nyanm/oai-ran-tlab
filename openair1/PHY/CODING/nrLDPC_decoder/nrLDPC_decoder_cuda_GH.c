@@ -215,25 +215,6 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
 
 //--------------------------------------------------------------
 
-//-------------------------Debug Function-----------------------
-void dump_cnProcBufRes_to_file(const int8_t* cnProcBufRes, const char* filename)
-{
-  FILE* fp = fopen(filename, "w");
-  if (fp == NULL) {
-    perror("Failed to open dump file");
-    exit(EXIT_FAILURE);
-  }
-  // printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
-
-  for (int i = 0; i < NR_LDPC_SIZE_CN_PROC_BUF; i++) {
-    fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
-    if ((i + 1) % 16 == 0)
-      fprintf(fp, "\n");
-  }
-
-  fclose(fp);
-}
-
 void dumpASS(int8_t* cnProcBufRes, const char* filename)
 {
   FILE* fp = fopen(filename, "w");
@@ -284,8 +265,12 @@ void free_graphs()
   printf("[decoder_graphs] shutdown complete\n");
 }
 
+extern int cuda_support_set;
+
 int32_t LDPCinit_cuda()
 {
+  printf("Calling encoder initializations\n");	
+  if (cuda_support_set == 0 ) cuda_support_init();
   printf("CUDA LDPC decoder initiating\n");
   if (!streamsCreated) {
     for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS_DL; ++s) {
@@ -295,13 +280,6 @@ int32_t LDPCinit_cuda()
     streamsCreated = true;
   }
   init_decoder_graphs();
-  return 0;
-}
-
-int32_t LDPCinit()
-{
-  printf("initialling\n");
-  LDPCinit_cuda();
   return 0;
 }
 
@@ -322,20 +300,14 @@ int32_t LDPCshutdown_cuda()
   return 0;
 }
 
-int32_t LDPCshutdown()
-{
-  LDPCshutdown_cuda();
-  return 0;
-}
-
-int32_t LDPCdecoder(t_nrLDPC_dec_params* p_decParams,
-                    // uint8_t harq_pid,
-                    // uint8_t ulsch_id,
-                    // uint8_t C,
-                    int8_t* p_llr,
-                    int8_t* p_out,
-                    t_nrLDPC_time_stats* p_profiler,
-                    decode_abort_t* ab)
+int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
+                         // uint8_t harq_pid,
+                         // uint8_t ulsch_id,
+                         // uint8_t C,
+                         int8_t* p_llr,
+                         uint8_t* p_out,
+                         t_nrLDPC_time_stats* p_profiler,
+                         decode_abort_t* ab)
 {
   if (!((p_decParams->R == 23 || p_decParams->R == 13)&&p_decParams->BG == 1)) { // format check
     printf("Current format: BG = %d, R = %d\n", p_decParams->BG, p_decParams->R);
@@ -382,7 +354,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 {
   // printf("n_segments = %d\n", n_segments);
 
-  int8_t temp_out[MAX_NUM_DLSCH_SEGMENTS_DL * 8448] __attribute__((aligned(64))) = {0};
+  int8_t temp_out[/*MAX_NUM_DLSCH_SEGMENTS_DL*/n_segments * 8448] __attribute__((aligned(64))); /* = {0};*/
+  memset(temp_out,0,n_segments * 8448);
 
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
@@ -405,7 +378,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   // cudaStream_t streams[MAX_NUM_DLSCH_SEGMENTS];
   // cudaEvent_t done[MAX_NUM_DLSCH_SEGMENTS]; // MAX_NUM_SEGMENTS = stream num
 
-  for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS_DL; s++) {
+  for (int s = 0; s < n_segments /*MAX_NUM_DLSCH_SEGMENTS_DL*/; s++) {
     iter_ptr_array[s] = 0;
     PC_Flag_array[s] = 1;
   }
@@ -516,7 +489,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   }
     */
   // cudaDeviceSynchronize();
-  memcpy(p_out, temp_out, MAX_NUM_DLSCH_SEGMENTS_DL * 8448);
+  //printf("p_out %p, temp_out %p\n",p_out,temp_out);
+  memcpy(p_out, temp_out, n_segments /*MAX_NUM_DLSCH_SEGMENTS_DL*/ * 8448);
   //dumpASS(p_out, "Dump_Output_Stream_GH.txt");
   // printf("6: It works here\n");
 
