@@ -969,7 +969,7 @@ __global__ void bnProcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict__ 
 
   //                                          1, 2, 3, 4, 5, 6, 7, 8, 9,10,11, 12, 13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,
   //                                          28,29, 30
-  static const uint8_t lut_BnToAddrIdx[30] = {9, 1, 5, 3, 7, 8, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+  static const uint8_t lut_BnToAddrIdx[30] = {1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 7, 8, 0, 0, 0,
                                               0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   int row = tid / 96; // to decide the inner block
   int lane = tid % 96; // to decide the inner lane
