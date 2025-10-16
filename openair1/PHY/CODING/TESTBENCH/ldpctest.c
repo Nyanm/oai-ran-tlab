@@ -400,12 +400,14 @@ one_measurement_t test_ldpc(short max_iterations,
       start_meas(&ret.time_decoder);
       set_abort(&dec_abort, false);
 //dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_128.txt");
-      if (use32bit && j==0)
+      if (use32bit)
+      {if(j == 0)
         n_iter = ldpc_toCompare.LDPCdecoder_cuda(&decParams[j],
                                                  channel_output_fixed,
                                                  estimated_output,
                                                  &decoder_profiler,
-                                                 &dec_abort);
+                                                 &dec_abort);}
+        
       else
         n_iter = ldpc_toCompare.LDPCdecoder(&decParams[j],
                                             &channel_output_fixed[j*384*68],
@@ -686,7 +688,7 @@ int main(int argc, char *argv[])
     printf("\n");
 
     time_stats_t *t_decoder = &res.time_decoder;
-    if (use32bit) printf("Decoding time mean (all segments)");
+    if (use32bit) printf("Decoding time mean (per segment in average)");
     else printf("Decoding time mean (per segment)");
     printf(": %15.3f us\n", (double)t_decoder->diff / t_decoder->trials / 1000.0 / cpu_freq);
     printf("Decoding time std: %15.3f us\n",
