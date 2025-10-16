@@ -63,9 +63,9 @@ int managed = 0, concurrent = 0, uva = 0, pageable = 0, pageable_uses_host = 0, 
 
 #define USE_GPU_CIRCCOPY 1
 #define USE_GPU_FOR_INPUT 1
+int cuda_support_set = 0;
 
 void cuda_support_init() {
-printf("We are doing the init here!\n");
 
     int dev = 0;
     struct cudaDeviceProp prop;
@@ -195,6 +195,7 @@ printf("We are doing the init here!\n");
     AssertFatal(err == cudaSuccess,"CUDA Error (memcpy input_devh -> input_dev): %s\n", cudaGetErrorString(err));
     */
   }
+  cuda_support_set=1;
 }
 
 uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)

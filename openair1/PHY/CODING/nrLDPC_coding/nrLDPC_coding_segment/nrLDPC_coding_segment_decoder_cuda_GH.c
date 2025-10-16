@@ -255,7 +255,7 @@ static void nr_process_decode_segment(void *arg)
 
   ////////////////////////////////// pl =====> llrProcBuf //////////////////////////////////
   int decodeIterations =  
-    LDPCdecoder(p_decoderParms, l, llrProcBuf, p_procTime, rdata->abort_decode);
+    LDPCdecoder_cuda(p_decoderParms, l, llrProcBuf, p_procTime, rdata->abort_decode);
   if (decodeIterations < p_decoderParms->numMaxIter) {
     memcpy(rdata->c, llrProcBuf, K >> 3);
     *rdata->decodeSuccess = true;
@@ -292,6 +292,7 @@ static void nr_process_decode_segment_cuda(void *arg)
   int8_t *decodedBitsBig = (int8_t*)aligned_alloc(16, MAX_NUM_DLSCH_SEGMENTS_DL * K * sizeof(int8_t));
   if (!decodedBitsBig) { free(llrBuffer); LOG_E(PHY,"alloc decodedBitsBig failed\n"); return; }
 
+  //printf("decodedBitsBig %p, llrBuffer %p\n",decodedBitsBig,llrBuffer);
 //  int *iterUsed = (int*)calloc(C, sizeof(int));
   //if (!iterUsed) { free(llrBuffer); free(decodedBitsBig); LOG_E(PHY,"alloc iterUsed failed\n"); return; }
 
@@ -299,11 +300,11 @@ static void nr_process_decode_segment_cuda(void *arg)
   for (int r = 0; r < C; ++r) {
     nrLDPC_decoding_parameters_t *rdata = &RDATA[r];
     // deinterleave
-     start_meas(rdata->p_ts_deinterleave);
+    start_meas(rdata->p_ts_deinterleave);
     int16_t *harq_e = (int16_t*)alloca(sizeof(int16_t) * rdata->E);
 
     nr_deinterleaving_ldpc(rdata->E, rdata->Qm, harq_e, rdata->llr);
-  stop_meas(rdata->p_ts_deinterleave);
+    stop_meas(rdata->p_ts_deinterleave);
     // rate matching
     start_meas(rdata->p_ts_rate_unmatch);
     if (nr_rate_matching_ldpc_rx(rdata->tbslbrm,
@@ -354,7 +355,7 @@ static void nr_process_decode_segment_cuda(void *arg)
   (&RDATA->decoderParms)->Kprime = lenWithCrc(RDATA->C, RDATA->A);
   (&RDATA->decoderParms)->n_segments = RDATA->C;
   // Phase 2: call batch GPU decoder (you must implement this API)
-  int decodeIterations = LDPCdecoder(&RDATA->decoderParms, llrBuffer, decodedBitsBig, p_procTime, RDATA->abort_decode);
+  int decodeIterations = LDPCdecoder_cuda(&RDATA->decoderParms, llrBuffer, decodedBitsBig, p_procTime, RDATA->abort_decode);
   //dumpAssUltraInput(llrBuffer, "dlsim_decoder_input_cuda_GH.txt");
   //dumpAssUltra(decodedBitsBig, "dlsim_decoder_output_cuda_GH.txt");
   //printf("Decoder done\n");
@@ -381,12 +382,12 @@ static void nr_process_decode_segment_cuda(void *arg)
       memset(rdata->c, 0, bytesPerSeg);
       *rdata->decodeSuccess = false;
     }
-    completed_task_ans(rdata->ans);
   }
 
   //free(iterUsed);
-  free(decodedBitsBig);
-  free(llrBuffer);
+  printf("decodedBitsBig %p, llrBuffer %p\n",decodedBitsBig,llrBuffer);
+  if (decodedBitsBig) free(decodedBitsBig);
+  if (llrBuffer) free(llrBuffer);
   stop_meas(RDATA->p_ts_ldpc_decode);
 }
 
@@ -471,7 +472,7 @@ int32_t nrLDPC_coding_shutdown(void)
   return 0;
 }
 
-int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters)
+int32_t nrLDPC_coding_decoder_cuda(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters)
 {
   int nbSegments = 0;
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
@@ -487,8 +488,6 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_dec
     (void)nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters, pusch_id, &t_info);
   }
 
-  // Execute thread pool tasks
-  join_task_ans(t_info.ans);
 
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
     nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];

@@ -53,6 +53,7 @@ if (ENABLE_LDPC_CUDA)
 	  #                   nrLDPC_decoder_LYC/nrLDPC_decoder_LYC.cu
     nrLDPC_decoder/kernel_test.cu  
                    nrLDPC_decoder/nrLDPC_decoder_cuda_GH.c
+                   nrLDPC_decoder/nrLDPC_decoder.c
 		   nrLDPC_encoder/ldpc_encoder_optim8segmulti.c
 		   nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu
 		   nrLDPC_encoder/ldpc_encoder_cuda32.c
