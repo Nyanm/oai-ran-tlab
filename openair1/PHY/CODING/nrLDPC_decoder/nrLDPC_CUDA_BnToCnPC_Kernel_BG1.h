@@ -8,7 +8,7 @@
 
 
 //------------------------------Stream Version------------------------
-__device__ void CnToBnPC_Kernel_BG1_R13_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -64,7 +64,7 @@ __device__ void CnToBnPC_Kernel_BG1_R13_int8_G3_Stream(const t_nrLDPC_lut *p_lut
   }
 }
 
-__device__ void CnToBnPC_Kernel_BG1_R13_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -131,7 +131,7 @@ __device__ void CnToBnPC_Kernel_BG1_R13_int8_G4_Stream(const t_nrLDPC_lut *p_lut
   }
 }
 
-__device__ void CnToBnPC_Kernel_BG1_R13_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -197,7 +197,7 @@ __device__ void CnToBnPC_Kernel_BG1_R13_int8_G5_Stream(const t_nrLDPC_lut *p_lut
     }
   }
 }
-__device__ void CnToBnPC_Kernel_BG1_R13_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -263,7 +263,7 @@ __device__ void CnToBnPC_Kernel_BG1_R13_int8_G6_Stream(const t_nrLDPC_lut *p_lut
     }
   }
 }
-__device__ void CnToBnPC_Kernel_BG1_R13_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -329,7 +329,7 @@ __device__ void CnToBnPC_Kernel_BG1_R13_int8_G7_Stream(const t_nrLDPC_lut *p_lut
     }
   }
 }
-__device__ void CnToBnPC_Kernel_BG1_R13_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -395,7 +395,7 @@ __device__ void CnToBnPC_Kernel_BG1_R13_int8_G8_Stream(const t_nrLDPC_lut *p_lut
     }
   }
 }
-__device__ void CnToBnPC_Kernel_BG1_R13_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
                                                int8_t *__restrict__ d_bnOutAll,
                                                const int8_t *__restrict__ d_cnBufAll,
                                                int8_t *__restrict__ d_cnOutAll,
@@ -461,7 +461,7 @@ __device__ void CnToBnPC_Kernel_BG1_R13_int8_G9_Stream(const t_nrLDPC_lut *p_lut
     }
   }
 }
-__device__ void CnToBnPC_Kernel_BG1_R13_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
                                                 int8_t *__restrict__ d_bnOutAll,
                                                 const int8_t *__restrict__ d_cnBufAll,
                                                 int8_t *__restrict__ d_cnOutAll,
@@ -527,7 +527,7 @@ __device__ void CnToBnPC_Kernel_BG1_R13_int8_G10_Stream(const t_nrLDPC_lut *p_lu
     }
   }
 }
-__device__ void CnToBnPC_Kernel_BG1_R13_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
+__device__ void CnToBnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
                                                 int8_t *__restrict__ d_bnOutAll,
                                                 const int8_t *__restrict__ d_cnBufAll,
                                                 int8_t *__restrict__ d_cnOutAll,
@@ -596,7 +596,7 @@ __device__ void CnToBnPC_Kernel_BG1_R13_int8_G19_Stream(const t_nrLDPC_lut *p_lu
   }
 }
 
-__device__ void llrRes2llrOut_Kernel_BG1_R13_int8(const t_nrLDPC_lut *p_lut, int8_t *llrOut, int8_t *llrRes, int Zc)
+__device__ void llrRes2llrOut_Kernel_BG1_int8(const t_nrLDPC_lut *p_lut, int8_t *llrOut, int8_t *llrRes, int Zc)
 {
   /*
 int colIdx = blockIdx.x; //
@@ -638,7 +638,7 @@ uint32_t startColParity = //BG1=26
   }
 }
 
-__device__ void llr2bitPacked_Kernel_BG1_R13_int8(uint8_t *out, int8_t *llrOut, uint32_t numLLR)
+__device__ void llr2bitPacked_Kernel_BG1_int8(uint8_t *out, int8_t *llrOut, uint32_t numLLR)
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   int totalGroups = numLLR >> 3; // every 8  LLR as a group
@@ -657,7 +657,7 @@ __device__ void llr2bitPacked_Kernel_BG1_R13_int8(uint8_t *out, int8_t *llrOut, 
   out[tid] = result;
 }
 
-__device__ void llr2bit_Kernel_BG1_R13_int8(uint8_t *out, int8_t *llrOut, uint32_t numLLR)
+__device__ void llr2bit_Kernel_BG1_int8(uint8_t *out, int8_t *llrOut, uint32_t numLLR)
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   int totalGroups = numLLR >> 3; // every 8 LLR as a group

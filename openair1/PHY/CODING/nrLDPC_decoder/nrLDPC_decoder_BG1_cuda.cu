@@ -5,12 +5,10 @@
 // #include <cooperative_groups.h>
 // amespace cg = cooperative_groups;
 #include "nrLDPC_CUDA_lut.h"
-#include "nrLDPC_CUDA_CnProcKernel_BG1_R13.h"
-#include "nrLDPC_CUDA_BnProcKernel_BG1_R13.h"
-#include "nrLDPC_CUDA_BnToCnPC_Kernel_BG1_R13.h"
-#include "nrLDPC_CUDA_CnProcKernel_BG1_R23.h"
-#include "nrLDPC_CUDA_BnProcKernel_BG1_R23.h"
-#include "nrLDPC_CUDA_BnToCnPC_Kernel_BG1_R23.h"
+#include "nrLDPC_CUDA_CnProcKernel_BG1.h"
+#include "nrLDPC_CUDA_BnProcKernel_BG1.h"
+#include "nrLDPC_CUDA_BnToCnPC_Kernel_BG1.h"
+
 
 #define Q_SCALE 8.0
 #define BG1_GRP0_CN 1
@@ -150,7 +148,7 @@ __constant__ static int d_lut_numThreadsEachCnGroupsNeed_BG1_R13[9];
 // Example usage: CHECK(cudaMalloc(&ptr, size));
 #define CHECK(call) ErrorCheck((call), __FILE__, __LINE__)
 
-void dump_cnProcBufRes_to_file(const int8_t *cnProcBufRes, const char *filename)
+void dumpAssCUDA(const int8_t *cnProcBufRes, const char *filename)
 {
   FILE *fp = fopen(filename, "w");
   if (fp == NULL) {
@@ -236,31 +234,31 @@ __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
 
   switch (groupIdx) {
     case 0:
-      cnProcKernel_BG1_R13_int8_G3(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G3(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 1:
-      cnProcKernel_BG1_R13_int8_G4(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G4(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 2:
-      cnProcKernel_BG1_R13_int8_G5(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G5(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 3:
-      cnProcKernel_BG1_R13_int8_G6(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G6(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 4:
-      cnProcKernel_BG1_R13_int8_G7(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G7(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 5:
-      cnProcKernel_BG1_R13_int8_G8(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G8(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 6:
-      cnProcKernel_BG1_R13_int8_G9(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G9(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 7:
-      cnProcKernel_BG1_R13_int8_G10(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G10(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 8:
-      cnProcKernel_BG1_R13_int8_G19(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G19(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
   }
 }
@@ -350,7 +348,7 @@ __global__ void bnProcPcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict_
   const int8_t *p_llrProcBuf_Grp = (const int8_t *)(d_llrProcBuf + lut_startAddrBnLlr[BnToAddrIdx - 1]);
   const int8_t *p_llrRes_Grp = (const int8_t *)(d_llrRes + lut_startAddrBnLlr[BnToAddrIdx - 1]);
 
-  bnProcPcKernel_BG1_R13_int8_Gn(p_bnProcBuf_Grp,
+  bnProcPcKernel_BG1_int8_Gn(p_bnProcBuf_Grp,
                                  p_bnProcBufRes_Grp,
                                  p_llrProcBuf_Grp,
                                  p_llrRes_Grp,
@@ -407,7 +405,7 @@ __global__ void bnProcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ 
   const int8_t *p_llrProcBuf_Grp = (const int8_t *)(d_llrProcBuf + lut_startAddrBnLlr[BnToAddrIdx - 1]);
   const int8_t *p_llrRes_Grp = (const int8_t *)(d_llrRes + lut_startAddrBnLlr[BnToAddrIdx - 1]);
 
-  bnProcKernel_BG1_R13_int8_Gn(p_bnProcBuf_Grp,
+  bnProcKernel_BG1_int8_Gn(p_bnProcBuf_Grp,
                                p_bnProcBufRes_Grp,
                                p_llrProcBuf_Grp,
                                p_llrRes_Grp,
@@ -535,7 +533,7 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
 
     switch (groupIdx) {
       case 0:
-        CnToBnPC_Kernel_BG1_R13_int8_G3_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G3_Stream(p_lut,
                                                p_bnProcBufRes,
                                                p_cnProcBuf,
                                                p_cnProcBufRes,
@@ -548,7 +546,7 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
                                                PC_Flag);
         break;
       case 1:
-        CnToBnPC_Kernel_BG1_R13_int8_G4_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G4_Stream(p_lut,
                                                p_bnProcBufRes,
                                                p_cnProcBuf,
                                                p_cnProcBufRes,
@@ -561,7 +559,7 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
                                                PC_Flag);
         break;
       case 2:
-        CnToBnPC_Kernel_BG1_R13_int8_G5_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G5_Stream(p_lut,
                                                p_bnProcBufRes,
                                                p_cnProcBuf,
                                                p_cnProcBufRes,
@@ -574,7 +572,7 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
                                                PC_Flag);
         break;
       case 3:
-        CnToBnPC_Kernel_BG1_R13_int8_G6_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G6_Stream(p_lut,
                                                p_bnProcBufRes,
                                                p_cnProcBuf,
                                                p_cnProcBufRes,
@@ -587,7 +585,7 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
                                                PC_Flag);
         break;
       case 4:
-        CnToBnPC_Kernel_BG1_R13_int8_G7_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G7_Stream(p_lut,
                                                p_bnProcBufRes,
                                                p_cnProcBuf,
                                                p_cnProcBufRes,
@@ -600,7 +598,7 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
                                                PC_Flag);
         break;
       case 5:
-        CnToBnPC_Kernel_BG1_R13_int8_G8_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G8_Stream(p_lut,
                                                p_bnProcBufRes,
                                                p_cnProcBuf,
                                                p_cnProcBufRes,
@@ -613,7 +611,7 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
                                                PC_Flag);
         break;
       case 6:
-        CnToBnPC_Kernel_BG1_R13_int8_G9_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G9_Stream(p_lut,
                                                p_bnProcBufRes,
                                                p_cnProcBuf,
                                                p_cnProcBufRes,
@@ -626,7 +624,7 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
                                                PC_Flag);
         break;
       case 7:
-        CnToBnPC_Kernel_BG1_R13_int8_G10_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G10_Stream(p_lut,
                                                 p_bnProcBufRes,
                                                 p_cnProcBuf,
                                                 p_cnProcBufRes,
@@ -639,7 +637,7 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
                                                 PC_Flag);
         break;
       case 8:
-        CnToBnPC_Kernel_BG1_R13_int8_G19_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G19_Stream(p_lut,
                                                 p_bnProcBufRes,
                                                 p_cnProcBuf,
                                                 p_cnProcBufRes,
@@ -655,7 +653,7 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
   }
 
   if (*iter_ptr == numMaxIter) { // output
-    llrRes2llrOut_Kernel_BG1_R13_int8(p_lut, p_llrOut, p_llrRes, Zc);
+    llrRes2llrOut_Kernel_BG1_int8(p_lut, p_llrOut, p_llrRes, Zc);
   } else {
     if (tid == 0) {
       // printf("Why you guys not here when iter_ptr = %d???\n",*iter_ptr);
@@ -679,10 +677,10 @@ __global__ void OutPut_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
 
   if (*iter_ptr == numMaxIter) {
     if (outMode == nrLDPC_outMode_BIT)
-      llr2bitPacked_Kernel_BG1_R13_int8((uint8_t *)p_out, p_llrOut, numLLR);
+      llr2bitPacked_Kernel_BG1_int8((uint8_t *)p_out, p_llrOut, numLLR);
 
     else // if (outMode == nrLDPC_outMode_BITINT8)
-      llr2bit_Kernel_BG1_R13_int8((uint8_t *)p_out, p_llrOut, numLLR);
+      llr2bit_Kernel_BG1_int8((uint8_t *)p_out, p_llrOut, numLLR);
   } else
     return;
 }
@@ -795,7 +793,7 @@ __global__ void cnProcKernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
 
   const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
 
-  int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...315
+  int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...143
   int lane = tid % 96; // to decide the inner lane
   // if(blk == 1&&tid == 0) printf("I'm inside cnProc_kernel\n");
   uint8_t groupIdx = lut_CnGrpIdx_BG1_R23[row] - 1;
@@ -817,7 +815,7 @@ __global__ void cnProcKernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
 
   switch (groupIdx) {
     case 0:
-      cnProcKernel_BG1_R23_int8_G3(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G3(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 1:
       printf("Shouldn't see case 1 in R23");
@@ -829,19 +827,19 @@ __global__ void cnProcKernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
       printf("Shouldn't see case 3 in R23");
       break;
     case 4:
-      cnProcKernel_BG1_R23_int8_G7(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G7(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 5:
-      cnProcKernel_BG1_R23_int8_G8(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G8(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 6:
-      cnProcKernel_BG1_R23_int8_G9(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G9(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 7:
-      cnProcKernel_BG1_R23_int8_G10(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G10(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 8:
-      cnProcKernel_BG1_R23_int8_G19(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G19(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
   }
 }
@@ -928,7 +926,7 @@ __global__ void bnProcPcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict_
   const int8_t *p_llrProcBuf_Grp = (const int8_t *)(d_llrProcBuf + lut_startAddrBnLlr[BnToAddrIdx - 1]);
   const int8_t *p_llrRes_Grp = (const int8_t *)(d_llrRes + lut_startAddrBnLlr[BnToAddrIdx - 1]);
 
-  bnProcPcKernel_BG1_R23_int8_Gn(p_bnProcBuf_Grp,
+  bnProcPcKernel_BG1_int8_Gn(p_bnProcBuf_Grp,
                                  p_bnProcBufRes_Grp,
                                  p_llrProcBuf_Grp,
                                  p_llrRes_Grp,
@@ -985,7 +983,7 @@ __global__ void bnProcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict__ 
   const int8_t *p_llrProcBuf_Grp = (const int8_t *)(d_llrProcBuf + lut_startAddrBnLlr[BnToAddrIdx - 1]);
   const int8_t *p_llrRes_Grp = (const int8_t *)(d_llrRes + lut_startAddrBnLlr[BnToAddrIdx - 1]);
 
-  bnProcKernel_BG1_R23_int8_Gn(p_bnProcBuf_Grp,
+  bnProcKernel_BG1_int8_Gn(p_bnProcBuf_Grp,
                                p_bnProcBufRes_Grp,
                                p_llrProcBuf_Grp,
                                p_llrRes_Grp,
@@ -1113,7 +1111,7 @@ __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lu
 
     switch (groupIdx) {
       case 0:
-        CnToBnPC_Kernel_BG1_R23_int8_G3_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G3_Stream(p_lut,
                                                p_bnProcBufRes,
                                                p_cnProcBuf,
                                                p_cnProcBufRes,
@@ -1135,7 +1133,7 @@ __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lu
         printf("Shouldn't see case 3 in R23");
         break;
       case 4:
-        CnToBnPC_Kernel_BG1_R23_int8_G7_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G7_Stream(p_lut,
                                                p_bnProcBufRes,
                                                p_cnProcBuf,
                                                p_cnProcBufRes,
@@ -1148,7 +1146,7 @@ __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lu
                                                PC_Flag);
         break;
       case 5:
-        CnToBnPC_Kernel_BG1_R23_int8_G8_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G8_Stream(p_lut,
                                                p_bnProcBufRes,
                                                p_cnProcBuf,
                                                p_cnProcBufRes,
@@ -1161,7 +1159,7 @@ __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lu
                                                PC_Flag);
         break;
       case 6:
-        CnToBnPC_Kernel_BG1_R23_int8_G9_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G9_Stream(p_lut,
                                                p_bnProcBufRes,
                                                p_cnProcBuf,
                                                p_cnProcBufRes,
@@ -1174,7 +1172,7 @@ __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lu
                                                PC_Flag);
         break;
       case 7:
-        CnToBnPC_Kernel_BG1_R23_int8_G10_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G10_Stream(p_lut,
                                                 p_bnProcBufRes,
                                                 p_cnProcBuf,
                                                 p_cnProcBufRes,
@@ -1187,7 +1185,7 @@ __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lu
                                                 PC_Flag);
         break;
       case 8:
-        CnToBnPC_Kernel_BG1_R23_int8_G19_Stream(p_lut,
+        CnToBnPC_Kernel_BG1_int8_G19_Stream(p_lut,
                                                 p_bnProcBufRes,
                                                 p_cnProcBuf,
                                                 p_cnProcBufRes,
@@ -1203,7 +1201,7 @@ __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lu
   }
 
   if (*iter_ptr == numMaxIter) { // output
-    llrRes2llrOut_Kernel_BG1_R23_int8(p_lut, p_llrOut, p_llrRes, Zc);
+    llrRes2llrOut_Kernel_BG1_int8(p_lut, p_llrOut, p_llrRes, Zc);
   } else {
     if (tid == 0) {
       // printf("Why you guys not here when iter_ptr = %d???\n",*iter_ptr);
@@ -1227,10 +1225,10 @@ __global__ void OutPut_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
 
   if (*iter_ptr == numMaxIter) {
     if (outMode == nrLDPC_outMode_BIT)
-      llr2bitPacked_Kernel_BG1_R23_int8((uint8_t *)p_out, p_llrOut, numLLR);
+      llr2bitPacked_Kernel_BG1_int8((uint8_t *)p_out, p_llrOut, numLLR);
 
     else // if (outMode == nrLDPC_outMode_BITINT8)
-      llr2bit_Kernel_BG1_R23_int8((uint8_t *)p_out, p_llrOut, numLLR);
+      llr2bit_Kernel_BG1_int8((uint8_t *)p_out, p_llrOut, numLLR);
   } else
     return;
 }
@@ -1261,7 +1259,7 @@ void nrLDPC_BnToCnPC_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
 
   int maxBlockSize = 1024; // Maximun threads are 1024
-  dim3 gridDim(30);
+  dim3 gridDim(14); // only need 14 for R23
   dim3 blockDim(maxBlockSize);
   // printf("bnProcBuf =  %p\n", bnProcBuf);
   // printf("In stream %d BC: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
@@ -1300,7 +1298,7 @@ void nrLDPC_BnToCnPC_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
 #endif
 }
 
-//-----------------------------------------↑↑↑ R13 ↑↑↑----------------------------------------
+//-----------------------------------------↑↑↑ R23 ↑↑↑----------------------------------------
 
 extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
                                                        int8_t *p_out,
@@ -1328,7 +1326,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
 
   cudaStream_t stream = streams[CudaStreamIdx];
   // cudaEvent_t captureDoneEvent[MAX_NUM_DLSCH_SEGMENTS];
-  // cudaEvent_t captureDoneEvent[MAX_NUM_DLSCH_SEGMENTS];
+
 
   if (!graphCreated[CudaStreamIdx]) {
     printf("Creating the graph for stream %d, format R%d\n", CudaStreamIdx,R);
@@ -1411,8 +1409,14 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  streams,
                                                  CudaStreamIdx);
           CHECK(cudaGetLastError());
-          // cd cudaDeviceSynchronize();
-
+          
+          //cudaDeviceSynchronize();
+          /*if(i == 0){
+            dumpAssCUDA(cnProcBuf, "Dump_cnProcBuf_cuda.txt");
+            dumpAssCUDA(cnProcBufRes, "Dump_cnProcBufRes_cuda.txt");
+            dumpAssCUDA(bnProcBuf, "Dump_bnProcBuf_cuda.txt");
+          }
+            */
           // printf("In stream %d 1: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
           nrLDPC_bnProc_BG1_R23_cuda_stream_core(p_lut,
                                                  bnProcBuf,
@@ -1425,8 +1429,13 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  PC_Flag,
                                                  streams,
                                                  CudaStreamIdx);
-          // cudaDeviceSynchronize();
 
+          //cudaDeviceSynchronize();
+/*          if(i == 0){
+            dumpAssCUDA(bnProcBufRes, "Dump_bnProcBufRes_cuda.txt");
+            dumpAssCUDA(llrRes, "Dump_llrRes_cuda.txt");
+          }
+            */
           // printf("In stream %d 2: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
           CHECK(cudaGetLastError());
           // cudaDeviceSynchronize();
@@ -1448,7 +1457,8 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                    streams,
                                                    CudaStreamIdx);
           CHECK(cudaGetLastError());
-          // cudaDeviceSynchronize();
+          //cudaDeviceSynchronize();
+
           // printf("In stream %d 3: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
         }
         break;
