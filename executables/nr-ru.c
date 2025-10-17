@@ -526,7 +526,8 @@ static radio_tx_gpio_flag_t get_gpio_flags(RU_t *ru, int slot)
 static void ctrl_rf(RU_t *ru, int frame, int slot, uint64_t timestamp)
 {
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
-  uint64_t beam_map = 0;
+  int num_beams = 0;
+  int beams[64] = {0};
   for (int i = 0; i < ru->num_beams_period; i++) {
     int beam = -1;
     for (int j = 0; j < fp->symbols_per_slot; j++) {
@@ -536,8 +537,10 @@ static void ctrl_rf(RU_t *ru, int frame, int slot, uint64_t timestamp)
                   "Cannot handle more than 1 beam per slot");
       beam = ru->common.beam_id[i][slot * fp->symbols_per_slot + j];
     }
-    if (beam != -1)
-      beam_map |= 1 << beam;
+    if (beam != -1) {
+      beams[num_beams] = beam;
+      num_beams++;
+    }
   }
 
   uint64_t ts = timestamp + ru->ts_offset;
@@ -551,9 +554,10 @@ static void ctrl_rf(RU_t *ru, int frame, int slot, uint64_t timestamp)
       && !IS_SOFTMODEM_RFSIM)
     ts -= ru->sf_extension;
 
-  if (beam_map != 0) {
-    LOG_D(NR_PHY, "Frame %d Slot %d Beam map %lu\n", frame, slot, beam_map);
-    ru->rfdevice.trx_set_beams(&ru->rfdevice, beam_map, ts);
+  if (num_beams != 0) {
+    for (int i = 0; i < num_beams; i++)
+      LOG_D(NR_PHY, "Frame %d Slot %d Beam %d\n", frame, slot, beams[i]);
+    ru->rfdevice.trx_set_beams2(&ru->rfdevice, beams, num_beams, ts);
   }
 }
 
