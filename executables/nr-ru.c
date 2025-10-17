@@ -570,18 +570,21 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
   AssertFatal(*slot < fp->slots_per_frame && *slot >= 0, "slot %d is illegal (%d)\n", *slot, fp->slots_per_frame);
 
   start_meas(&ru->rx_fhaul);
-  int nb = ru->nb_rx * ru->num_beams_period;
-  void *rxp[nb];
-  for (int i = 0; i < nb; i++)
-    rxp[i] = (void *)&ru->common.rxdata[i][fp->get_samples_slot_timestamp(*slot, fp, 0)];
-
+  void *rxp[ru->num_beams_period][ru->nb_rx];
+  void **beams[ru->num_beams_period];
+  for (int j = 0; j < ru->num_beams_period; j++) {
+    beams[j] = rxp[j];
+    for (int i = 0; i < ru->nb_rx; i++) {
+      rxp[j][i] = (void *)&ru->common.rxdata[i + j * ru->nb_rx][fp->get_samples_slot_timestamp(*slot, fp, 0)];
+    }
+  }
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_READ, 1);
   openair0_timestamp old_ts = proc->timestamp_rx;
   LOG_D(PHY,"Reading %d samples for slot %d (%p)\n", samples_per_slot, *slot, rxp[0]);
 
   openair0_timestamp ts;
   unsigned int rxs;
-  rxs = ru->rfdevice.trx_read_func(&ru->rfdevice, &ts, rxp, samples_per_slot, nb);
+  rxs = ru->rfdevice.trx_read_beams_func(&ru->rfdevice, &ts, (void ***)beams, samples_per_slot, ru->nb_rx, ru->num_beams_period);
 
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME( VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_READ, 0 );
   proc->timestamp_rx = ts-ru->ts_offset;
@@ -717,7 +720,8 @@ static radio_tx_gpio_flag_t get_gpio_flags(RU_t *ru, int slot)
 static void ctrl_rf(RU_t *ru, int frame, int slot, uint64_t timestamp)
 {
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
-  uint64_t beam_map = 0;
+  int num_beams = 0;
+  int beams[64] = {0};
   for (int i = 0; i < ru->num_beams_period; i++) {
     int beam = -1;
     for (int j = 0; j < fp->symbols_per_slot; j++) {
@@ -727,15 +731,18 @@ static void ctrl_rf(RU_t *ru, int frame, int slot, uint64_t timestamp)
                   "Cannot handle more than 1 beam per slot");
       beam = ru->common.beam_id[i][slot * fp->symbols_per_slot + j];
     }
-    if (beam != -1)
-      beam_map |= 1 << beam;
+    if (beam != -1) {
+      beams[num_beams] = beam;
+      num_beams++;
+    }
   }
 
   // TODO in TX function we have timestamp + ru->ts_offset - sf_extension
   // do I need to do the same?
-  if (beam_map != 0) {
-    LOG_D(NR_PHY, "Frame %d Slot %d Beam map %lu\n", frame, slot, beam_map);
-    ru->rfdevice.trx_set_beams(&ru->rfdevice, beam_map, timestamp);
+  if (num_beams != 0) {
+    for (int i = 0; i < num_beams; i++)
+      LOG_D(NR_PHY, "Frame %d Slot %d Beam %d\n", frame, slot, beams[i]);
+    ru->rfdevice.trx_set_beams2(&ru->rfdevice, beams, num_beams, timestamp);
   }
 }
 
@@ -803,13 +810,12 @@ static void tx_rf(RU_t *ru, int frame, int slot, uint64_t timestamp)
   VCD_SIGNAL_DUMPER_DUMP_VARIABLE_BY_NAME(VCD_SIGNAL_DUMPER_VARIABLES_FRAME_NUMBER_TX0_RU, frame);
   VCD_SIGNAL_DUMPER_DUMP_VARIABLE_BY_NAME(VCD_SIGNAL_DUMPER_VARIABLES_TTI_NUMBER_TX0_RU, slot);
 
-  int nt = ru->nb_tx * ru->num_beams_period;
   void **txpBeam[ru->num_beams_period];
   void *txp[ru->num_beams_period][ru->nb_tx];
   for (int b = 0; b < ru->num_beams_period; b++) {
     txpBeam[b] = txp[b];
     for (int i = 0; i < ru->nb_tx; i++)
-      txp[b][i] = (void *)&ru->common.txdata[i * b][fp->get_samples_slot_timestamp(slot, fp, 0)] - sf_extension * sizeof(int32_t);
+      txp[b][i] = (void *)&ru->common.txdata[i + b * ru->nb_tx][fp->get_samples_slot_timestamp(slot, fp, 0)] - sf_extension * sizeof(int32_t);
   }
 
   VCD_SIGNAL_DUMPER_DUMP_VARIABLE_BY_NAME(VCD_SIGNAL_DUMPER_VARIABLES_TRX_TST, (timestamp + ru->ts_offset) & 0xffffffff);
@@ -819,8 +825,8 @@ static void tx_rf(RU_t *ru, int frame, int slot, uint64_t timestamp)
                                                    timestamp + ru->ts_offset - sf_extension,
                                                    (void ***)txpBeam,
                                                    siglen + sf_extension,
-                                                   nt,
-                                                   1,
+                                                   ru->nb_tx,
+                                                   ru->num_beams_period,
                                                    flags_burst);
   LOG_D(PHY,
         "[TXPATH] RU %d tx_rf, writing to TS %lu, %d.%d, unwrapped_frame %d, slot %d, flags %d, siglen+sf_extension %d, "
