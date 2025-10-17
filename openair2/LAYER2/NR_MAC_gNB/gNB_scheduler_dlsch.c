@@ -628,11 +628,11 @@ static void pf_dl(gNB_MAC_INST *mac,
 
   NR_ServingCellConfigCommon_t *scc=mac->common_channels[0].ServingCellConfigCommon;
   // UEs that could be scheduled
-  UEsched_t UE_sched[MAX_MOBILES_PER_GNB + 1] = {0};
+  UEsched_t UE_cand[MAX_MOBILES_PER_GNB + 1] = {0};
   int remainUEs[num_beams];
   for (int i = 0; i < num_beams; i++)
     remainUEs[i] = max_num_ue;
-  int numUE = 0;
+  int candUE = 0;
   int CC_id = 0;
   int slots_per_frame = mac->frame_structure.numb_slots_frame;
 
@@ -727,24 +727,27 @@ static void pf_dl(gNB_MAC_INST *mac,
             UE->dl_thr_ue,
             tbs,
             coeff_ue);
-      /* Create UE_sched list for UEs eligible for new transmission*/
-      UE_sched[numUE].coef = coeff_ue;
-      UE_sched[numUE].UE = UE;
-      UE_sched[numUE].selected_mcs = selected_mcs;
-      numUE++;
+      /* Create UE_cand list for UEs eligible for new transmission*/
+      UE_cand[candUE].coef = coeff_ue;
+      UE_cand[candUE].UE = UE;
+      UE_cand[candUE].selected_mcs = selected_mcs;
+      candUE++;
     }
   }
 
-  qsort(UE_sched, numUE, sizeof(UEsched_t), comparator);
-  UEsched_t *iterator = UE_sched;
+  qsort(UE_cand, candUE, sizeof(UEsched_t), comparator);
+  UEsched_t *iterator = UE_cand;
 
   const int min_rbSize = 5;
   const int UEperTTI = 4;
-  const int schedUE = max(1, min(UEperTTI, numUE));
+  const int maxSchedUE = max(1, min(UEperTTI, candUE));
   DevAssert(num_beams == 1);
-  const int rbPerUE = n_rb_sched[0] / schedUE;
+  const int rbPerUE = n_rb_sched[0] / maxSchedUE;
 
-  /* Loop UE_sched to find max coeff and allocate transmission */
+  /* UEs that will definitely be allocated */
+  UEsched_t UE_sched[MAX_MOBILES_PER_GNB + 1] = {0};
+  int schedUE = 0;
+  /* Loop UE_cand to find max coeff and verify can allocate transmission */
   while (iterator->UE != NULL) {
 
     NR_UE_sched_ctrl_t *sched_ctrl = &iterator->UE->UE_sched_ctrl;
@@ -802,6 +805,10 @@ static void pf_dl(gNB_MAC_INST *mac,
     fill_pdcch_vrb_map(mac, CC_id, &sched_ctrl->sched_pdcch, CCEIndex, sched_ctrl->aggregation_level, beam.idx);
 
     /* this UE can be allocated for sure, assuming enough PRBs! */
+    UE_sched[schedUE] = *iterator;
+    schedUE++;
+  }
+
     NR_UE_DL_BWP_t *dl_bwp = &iterator->UE->current_DL_BWP;
 
     /* MCS has been set above */
