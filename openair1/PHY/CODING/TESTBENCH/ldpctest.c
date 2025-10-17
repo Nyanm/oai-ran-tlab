@@ -437,8 +437,16 @@ one_measurement_t test_ldpc(short max_iterations,
         n_iter_max = n_iter;
 
     } // end segments
-    //dumpASS((int8_t*)estimated_output, "ldpctest_estimateOutput_cuda128.txt",n_segments);
+/*
+    if (use32bit){
+      dumpASS(estimated_output, "ldpctest_estimateOutput_cuda.txt",n_segments);
+    }
+    else{
+      //dumpASS(estimated_output, "ldpctest_estimateOutput_128.txt",n_segments);
+    }
+    */    
     //dumpASS(test_input, "ldpctest_TestInput_cuda128.txt");
+
     if (segment_bler != 0)
       ret.errors++;
   }
@@ -625,7 +633,7 @@ int main(int argc, char *argv[])
           "SNR BLER BER UNCODED_BER ENCODER_MEAN ENCODER_STD ENCODER_MAX DECODER_TIME_MEAN DECODER_TIME_STD DECODER_TIME_MAX "
           "DECODER_ITER_MEAN DECODER_ITER_STD DECODER_ITER_MAX\n");
 
-  for (double SNR = SNR0; SNR < SNR0 + 2.0 /*20.0*/; SNR += SNR_step) {
+  for (double SNR = SNR0; SNR < SNR0 + 5.0 /*20.0*/; SNR += SNR_step) {
     double SNR_lin;
     if (test_uncoded == 1)
       SNR_lin = pow(10, SNR / 10.0);

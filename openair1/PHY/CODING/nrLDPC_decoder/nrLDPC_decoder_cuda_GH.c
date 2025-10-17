@@ -214,9 +214,9 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
                          t_nrLDPC_time_stats* p_profiler,
                          decode_abort_t* ab)
 {
-  if (!((p_decParams->R == 23 || p_decParams->R == 13)&&p_decParams->BG == 1)) { // format check
-    printf("Current format: BG = %d, R = %d\n", p_decParams->BG, p_decParams->R);
-    AssertFatal(false, "Format cuda not support, only support BG = 1 and R = 13, 23 right now\n");
+  if (!((p_decParams->R == 23 || p_decParams->R == 13)&&p_decParams->BG == 1 && p_decParams->Z == 384)) { // format check
+    printf("Current format: BG = %d, R = %d, Zc = %d\n", p_decParams->BG, p_decParams->R, p_decParams->Z);
+    AssertFatal(false, "Format cuda not support, only support BG = 1, Zc = 384 and R = 13, 23 right now\n");
     return 0;
   }
   uint32_t numLLR;
