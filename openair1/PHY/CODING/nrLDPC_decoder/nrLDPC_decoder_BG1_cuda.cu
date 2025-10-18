@@ -320,19 +320,19 @@ __global__ void bnProcPcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict_
   if (tid >= 6528) {
     return;
   }
-  static const uint8_t lut_GrpIdx[68] = {
+  static __device__ __constant__ uint8_t lut_GrpIdx[68] = {
       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
       1, 1, 1, 1, 1, 1, 1, 1, 4, 5, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 10, 10, 10, 10, 11, 11, 11, 12, 12, 12, 12, 13, 28, 30,
   };
 
-  static const uint8_t lut_BnIdx[68] = {
+  static __device__ __constant__ uint8_t lut_BnIdx[68] = {
       1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
       24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 1,  1,  1,  2,
       1,  2,  3,  4,  1,  2,  3,  1,  1,  2,  3,  4,  1,  2,  3,  1,  2,  3,  4,  1,  1,  1,
   };
   //                                          1, 2, 3, 4, 5, 6, 7, 8, 9,10,11, 12,
   //                                          13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29, 30
-  static const uint8_t lut_BnToAddrIdx[30] = {1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0,
+  static __device__ __constant__ uint8_t lut_BnToAddrIdx[30] = {1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0,
                                               0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  12, 0, 13};
   int row = tid / 96; // to decide the inner block
   int lane = tid % 96; // to decide the inner lane
@@ -389,7 +389,7 @@ __global__ void bnProcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ 
 
   //                                          1, 2, 3, 4, 5, 6, 7, 8, 9,10,11, 12, 13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,
   //                                          28,29, 30
-  static const uint8_t lut_BnToAddrIdx[30] = {1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0,
+  static __device__ __constant__ uint8_t lut_BnToAddrIdx[30] = {1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0,
                                               0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  12, 0, 13};
   int row = tid / 96; // to decide the inner block
   int lane = tid % 96; // to decide the inner lane
@@ -901,14 +901,14 @@ __global__ void bnProcPcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict_
   if (tid >= 3360) {
     return;
   }
-  static const uint8_t lut_BnPcGrpIdx_BG1_R23[35] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 3, 3, 3, 3, 3, 4,  4, 4,
+  static __device__ __constant__ uint8_t lut_BnPcGrpIdx_BG1_R23[35] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 3, 3, 3, 3, 3, 4,  4, 4,
                                                      5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 11, 12};
 
-  static const uint8_t lut_BnPcIdx_BG1_R23[35] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 1, 2, 3, 4, 5, 1, 2, 3,
+  static __device__ __constant__ uint8_t lut_BnPcIdx_BG1_R23[35] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 1, 2, 3, 4, 5, 1, 2, 3,
                                                   1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 8, 1, 1};
   //                                          1, 2, 3, 4, 5, 6, 7, 8, 9,10,11, 12,
   //                                          13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29, 30
-  static const uint8_t lut_BnPcToAddrIdx_BG1_R23[30] = {1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 7, 8, 0, 0, 0,
+  static __device__ __constant__ uint8_t lut_BnPcToAddrIdx_BG1_R23[30] = {1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 7, 8, 0, 0, 0,
                                                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   // BG1: 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30
   // R23{ 9, 1, 5, 3, 7, 8, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -967,7 +967,7 @@ __global__ void bnProcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict__ 
 
   //                                          1, 2, 3, 4, 5, 6, 7, 8, 9,10,11, 12, 13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,
   //                                          28,29, 30
-  static const uint8_t lut_BnToAddrIdx[30] = {1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 7, 8, 0, 0, 0,
+  static __device__ __constant__ uint8_t lut_BnToAddrIdx[30] = {1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 7, 8, 0, 0, 0,
                                               0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   int row = tid / 96; // to decide the inner block
   int lane = tid % 96; // to decide the inner lane

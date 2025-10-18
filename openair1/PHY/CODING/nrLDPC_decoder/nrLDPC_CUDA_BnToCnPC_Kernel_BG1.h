@@ -650,9 +650,13 @@ __device__ void llr2bitPacked_Kernel_BG1_int8(uint8_t *out, int8_t *llrOut, uint
   uint8_t result = 0;
 
   //  shuffling
+#if 1
   for (int i = 0; i < 8; i++) {
     result |= (p_llr[7 - i] < 0) << i;
   }
+#else
+  result = (p_llr[7] < 0) | ((p_llr[6] < 0)<<1) | ((p_llr[5] < 0)<<2) | ((p_llr[4] < 0)<<3) | ((p_llr[3] < 0)<<4) | ((p_llr[2] < 0)<<5) | ((p_llr[1] < 0)<<6) | ((p_llr[0] < 0)<<7);
+#endif
 
   out[tid] = result;
 }
