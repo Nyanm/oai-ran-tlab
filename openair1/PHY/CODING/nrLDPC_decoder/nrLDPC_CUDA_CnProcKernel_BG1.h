@@ -6,6 +6,7 @@
 #include "nrLDPC_types.h"
 #include "nrLDPC_CUDA_public.h"
 
+__device__ __constant__ uint16_t c_lut_idxG3[3][2] = {{96, 192}, {0, 192}, {0, 96}};
 __device__ void cnProcKernel_BG1_int8_G3(const t_nrLDPC_lut *p_lut,
                                              const int8_t *__restrict__ d_cnBufAll,
                                              int8_t *__restrict__ d_cnOutAll,
@@ -25,7 +26,6 @@ __device__ void cnProcKernel_BG1_int8_G3(const t_nrLDPC_lut *p_lut,
   const uint row = MsgIdx - 1; // row = 0,1,2  -> 3 BNs
 
   // 1*384/4 = 96
-  const uint16_t c_lut_idxG3[3][2] = {{96, 192}, {0, 192}, {0, 96}};
 
   const uint baseShift = Zc * row; // offset pointed at different BN
   const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -64,6 +64,7 @@ __device__ void cnProcKernel_BG1_int8_G3(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
 }
 
+__device__ __constant__ uint16_t c_lut_idxG4[4][3] = {{480, 960, 1440}, {0, 960, 1440}, {0, 480, 1440}, {0, 480, 960}};
 __device__ void cnProcKernel_BG1_int8_G4(const t_nrLDPC_lut *p_lut,
                                              const int8_t *__restrict__ d_cnBufAll,
                                              int8_t *__restrict__ d_cnOutAll,
@@ -88,7 +89,6 @@ __device__ void cnProcKernel_BG1_int8_G4(const t_nrLDPC_lut *p_lut,
   const uint8_t row = MsgIdx - 1;
 
   // 5*384/4 = 480
-  const uint16_t c_lut_idxG4[4][3] = {{480, 960, 1440}, {0, 960, 1440}, {0, 480, 1440}, {0, 480, 960}};
 
   const uint baseShift = 5 * Zc * row; // offset pointed at different BN
   const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -185,6 +185,13 @@ if (threadIdx.x == 0 && blockIdx.x == 1) {
   // }
 }
 
+__device__ __constant__ uint16_t c_lut_idxG5[5][4] = {
+      {1728, 3456, 5184, 6912},
+      {0, 3456, 5184, 6912},
+      {0, 1728, 5184, 6912},
+      {0, 1728, 3456, 6912},
+      {0, 1728, 3456, 5184}};
+
 __device__ void cnProcKernel_BG1_int8_G5(const t_nrLDPC_lut *p_lut,
                                              const int8_t *__restrict__ d_cnBufAll,
                                              int8_t *__restrict__ d_cnOutAll,
@@ -205,13 +212,6 @@ __device__ void cnProcKernel_BG1_int8_G5(const t_nrLDPC_lut *p_lut,
   const uint8_t row = MsgIdx - 1;
  
   // 18 * 384 / 4 = 1728
-  const uint16_t c_lut_idxG5[5][4] = {
-      {1728, 3456, 5184, 6912},
-      {0, 3456, 5184, 6912},
-      {0, 1728, 5184, 6912},
-      {0, 1728, 3456, 6912},
-      {0, 1728, 3456, 5184}};
-
   const uint baseShift = 18 * Zc * row; // offset pointed at different BN
   const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
   // const uint srcByte = tid * 4;
@@ -249,6 +249,14 @@ __device__ void cnProcKernel_BG1_int8_G5(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
 }
 
+__device__ __constant__ uint16_t c_lut_idxG6[6][5] = {
+
+      {768, 1536, 2304, 3072, 3840},
+      {0, 1536, 2304, 3072, 3840},
+      {0, 768, 2304, 3072, 3840},
+      {0, 768, 1536, 3072, 3840},
+      {0, 768, 1536, 2304, 3840},
+      {0, 768, 1536, 2304, 3072}};
 __device__ void cnProcKernel_BG1_int8_G6(const t_nrLDPC_lut *p_lut,
                                              const int8_t *__restrict__ d_cnBufAll,
                                              int8_t *__restrict__ d_cnOutAll,
@@ -269,14 +277,6 @@ __device__ void cnProcKernel_BG1_int8_G6(const t_nrLDPC_lut *p_lut,
   const uint8_t row = MsgIdx - 1;
  
   // 8 * 384 / 4 = 768
-  const uint16_t c_lut_idxG6[6][5] = {
-
-      {768, 1536, 2304, 3072, 3840},
-      {0, 1536, 2304, 3072, 3840},
-      {0, 768, 2304, 3072, 3840},
-      {0, 768, 1536, 3072, 3840},
-      {0, 768, 1536, 2304, 3840},
-      {0, 768, 1536, 2304, 3072}};
 
   const uint32_t baseShift = 8 * Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -317,6 +317,15 @@ __device__ void cnProcKernel_BG1_int8_G6(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
 }
 
+__device__ __constant__ uint16_t c_lut_idxG7[7][6] = {
+
+      {480, 960, 1440, 1920, 2400, 2880},
+      {0, 960, 1440, 1920, 2400, 2880},
+      {0, 480, 1440, 1920, 2400, 2880},
+      {0, 480, 960, 1920, 2400, 2880},
+      {0, 480, 960, 1440, 2400, 2880},
+      {0, 480, 960, 1440, 1920, 2880},
+      {0, 480, 960, 1440, 1920, 2400}};
 __device__ void cnProcKernel_BG1_int8_G7(const t_nrLDPC_lut *p_lut,
                                              const int8_t *__restrict__ d_cnBufAll,
                                              int8_t *__restrict__ d_cnOutAll,
@@ -338,15 +347,6 @@ __device__ void cnProcKernel_BG1_int8_G7(const t_nrLDPC_lut *p_lut,
   const uint8_t row = MsgIdx - 1;
  
   // 5 * 384 / 4 = 480
-  const uint16_t c_lut_idxG7[7][6] = {
-
-      {480, 960, 1440, 1920, 2400, 2880},
-      {0, 960, 1440, 1920, 2400, 2880},
-      {0, 480, 1440, 1920, 2400, 2880},
-      {0, 480, 960, 1920, 2400, 2880},
-      {0, 480, 960, 1440, 2400, 2880},
-      {0, 480, 960, 1440, 1920, 2880},
-      {0, 480, 960, 1440, 1920, 2400}};
 
   const uint32_t baseShift = 5 * Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -390,6 +390,16 @@ __device__ void cnProcKernel_BG1_int8_G7(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
 }
 
+__device__ __constant__ uint16_t c_lut_idxG8[8][7] = {
+
+      {192, 384, 576, 768, 960, 1152, 1344},
+      {0, 384, 576, 768, 960, 1152, 1344},
+      {0, 192, 576, 768, 960, 1152, 1344},
+      {0, 192, 384, 768, 960, 1152, 1344},
+      {0, 192, 384, 576, 960, 1152, 1344},
+      {0, 192, 384, 576, 768, 1152, 1344},
+      {0, 192, 384, 576, 768, 960, 1344},
+      {0, 192, 384, 576, 768, 960, 1152}};
 __device__ void cnProcKernel_BG1_int8_G8(const t_nrLDPC_lut *p_lut,
                                              const int8_t *__restrict__ d_cnBufAll,
                                              int8_t *__restrict__ d_cnOutAll,
@@ -410,16 +420,6 @@ __device__ void cnProcKernel_BG1_int8_G8(const t_nrLDPC_lut *p_lut,
   const uint8_t row = MsgIdx - 1;
  
   // 2 * 384 / 4 = 192
-  const uint16_t c_lut_idxG8[8][7] = {
-
-      {192, 384, 576, 768, 960, 1152, 1344},
-      {0, 384, 576, 768, 960, 1152, 1344},
-      {0, 192, 576, 768, 960, 1152, 1344},
-      {0, 192, 384, 768, 960, 1152, 1344},
-      {0, 192, 384, 576, 960, 1152, 1344},
-      {0, 192, 384, 576, 768, 1152, 1344},
-      {0, 192, 384, 576, 768, 960, 1344},
-      {0, 192, 384, 576, 768, 960, 1152}};
   const uint32_t baseShift = 2 * Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
   // const uint srcByte = lane * 4;
@@ -465,6 +465,18 @@ __device__ void cnProcKernel_BG1_int8_G8(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
 }
 
+__device__ __constant__ uint16_t c_lut_idxG9[9][8] = {
+
+      {192, 384, 576, 768, 960, 1152, 1344, 1536},
+      {0, 384, 576, 768, 960, 1152, 1344, 1536},
+      {0, 192, 576, 768, 960, 1152, 1344, 1536},
+      {0, 192, 384, 768, 960, 1152, 1344, 1536},
+      {0, 192, 384, 576, 960, 1152, 1344, 1536},
+      {0, 192, 384, 576, 768, 1152, 1344, 1536},
+      {0, 192, 384, 576, 768, 960, 1344, 1536},
+      {0, 192, 384, 576, 768, 960, 1152, 1536},
+      {0, 192, 384, 576, 768, 960, 1152, 1344}};
+
 __device__ void cnProcKernel_BG1_int8_G9(const t_nrLDPC_lut *p_lut,
                                              const int8_t *__restrict__ d_cnBufAll,
                                              int8_t *__restrict__ d_cnOutAll,
@@ -495,17 +507,6 @@ __device__ void cnProcKernel_BG1_int8_G9(const t_nrLDPC_lut *p_lut,
   const uint8_t row = MsgIdx - 1;
  
   // 2 * 384 / 4 = 192
-  const uint16_t c_lut_idxG9[9][8] = {
-
-      {192, 384, 576, 768, 960, 1152, 1344, 1536},
-      {0, 384, 576, 768, 960, 1152, 1344, 1536},
-      {0, 192, 576, 768, 960, 1152, 1344, 1536},
-      {0, 192, 384, 768, 960, 1152, 1344, 1536},
-      {0, 192, 384, 576, 960, 1152, 1344, 1536},
-      {0, 192, 384, 576, 768, 1152, 1344, 1536},
-      {0, 192, 384, 576, 768, 960, 1344, 1536},
-      {0, 192, 384, 576, 768, 960, 1152, 1536},
-      {0, 192, 384, 576, 768, 960, 1152, 1344}};
 
   const uint32_t baseShift = 2 * Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -555,6 +556,19 @@ __device__ void cnProcKernel_BG1_int8_G9(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
 }
 
+__device__ __constant__ uint16_t c_lut_idxG10[10][9] = {
+
+      {96, 192, 288, 384, 480, 576, 672, 768, 864},
+      {0, 192, 288, 384, 480, 576, 672, 768, 864},
+      {0, 96, 288, 384, 480, 576, 672, 768, 864},
+      {0, 96, 192, 384, 480, 576, 672, 768, 864},
+      {0, 96, 192, 288, 480, 576, 672, 768, 864},
+      {0, 96, 192, 288, 384, 576, 672, 768, 864},
+      {0, 96, 192, 288, 384, 480, 672, 768, 864},
+      {0, 96, 192, 288, 384, 480, 576, 768, 864},
+      {0, 96, 192, 288, 384, 480, 576, 672, 864},
+      {0, 96, 192, 288, 384, 480, 576, 672, 768}};
+
 __device__ void cnProcKernel_BG1_int8_G10(const t_nrLDPC_lut *p_lut,
                                               const int8_t *__restrict__ d_cnBufAll,
                                               int8_t *__restrict__ d_cnOutAll,
@@ -574,18 +588,6 @@ __device__ void cnProcKernel_BG1_int8_G10(const t_nrLDPC_lut *p_lut,
   const uint8_t row = MsgIdx - 1;
  
   // 1 * 384 / 4 = 96
-  const uint16_t c_lut_idxG10[10][9] = {
-
-      {96, 192, 288, 384, 480, 576, 672, 768, 864},
-      {0, 192, 288, 384, 480, 576, 672, 768, 864},
-      {0, 96, 288, 384, 480, 576, 672, 768, 864},
-      {0, 96, 192, 384, 480, 576, 672, 768, 864},
-      {0, 96, 192, 288, 480, 576, 672, 768, 864},
-      {0, 96, 192, 288, 384, 576, 672, 768, 864},
-      {0, 96, 192, 288, 384, 480, 672, 768, 864},
-      {0, 96, 192, 288, 384, 480, 576, 768, 864},
-      {0, 96, 192, 288, 384, 480, 576, 672, 864},
-      {0, 96, 192, 288, 384, 480, 576, 672, 768}};
 
   const uint32_t baseShift = 1 * Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -638,6 +640,27 @@ __device__ void cnProcKernel_BG1_int8_G10(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
 }
 
+__device__ __constant__ uint16_t c_lut_idxG19[19][18] = {
+
+      {384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+      {0, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+      {0, 384, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+      {0, 384, 768, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+      {0, 384, 768, 1152, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+      {0, 384, 768, 1152, 1536, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+      {0, 384, 768, 1152, 1536, 1920, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+      {0, 384, 768, 1152, 1536, 1920, 2304, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
+      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4992, 5376, 5760, 6144, 6528, 6912},
+      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 5376, 5760, 6144, 6528, 6912},
+      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5760, 6144, 6528, 6912},
+      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 6144, 6528, 6912},
+      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6528, 6912},
+      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6912},
+      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528}};
 __device__ void cnProcKernel_BG1_int8_G19(const t_nrLDPC_lut *p_lut,
                                               const int8_t *__restrict__ d_cnBufAll,
                                               int8_t *__restrict__ d_cnOutAll,
@@ -660,27 +683,6 @@ __device__ void cnProcKernel_BG1_int8_G19(const t_nrLDPC_lut *p_lut,
   const uint8_t row = MsgIdx - 1; // row = 0,1,...,18
  
   // 4 * 384 / 4 = 384
-  const uint16_t c_lut_idxG19[19][18] = {
-
-      {384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-      {0, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-      {0, 384, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-      {0, 384, 768, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-      {0, 384, 768, 1152, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-      {0, 384, 768, 1152, 1536, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-      {0, 384, 768, 1152, 1536, 1920, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-      {0, 384, 768, 1152, 1536, 1920, 2304, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 4224, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4608, 4992, 5376, 5760, 6144, 6528, 6912},
-      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4992, 5376, 5760, 6144, 6528, 6912},
-      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 5376, 5760, 6144, 6528, 6912},
-      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5760, 6144, 6528, 6912},
-      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 6144, 6528, 6912},
-      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6528, 6912},
-      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6912},
-      {0, 384, 768, 1152, 1536, 1920, 2304, 2688, 3072, 3456, 3840, 4224, 4608, 4992, 5376, 5760, 6144, 6528}};
 
   const uint32_t baseShift = 4 * Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
