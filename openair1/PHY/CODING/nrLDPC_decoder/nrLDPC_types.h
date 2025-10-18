@@ -69,6 +69,19 @@ typedef struct nrLDPC_lut {
     arr8_t posBnInCnProcBuf[NR_LDPC_NUM_CN_GROUPS_BG1]; /**< LUT for llr2cnProcBuf */
 } t_nrLDPC_lut;
 
+typedef struct nrLDPC_lut_gpu {
+    const uint32_t* startAddrCnGroups; /**< Start addresses for CN groups in CN processing buffer */
+    const uint32_t*  numCnInCnGroups; /**< Number of CNs in every CN group */
+    const uint32_t*  numBnInBnGroups; /**< Number of CNs in every BN group */
+    const uint32_t* startAddrBnGroups; /**< Start addresses for BN groups in BN processing buffer  */
+    const uint32_t* startAddrBnGroupsLlr; /**< Start addresses for BN groups in LLR processing buffer  */
+    arr32_t circShift[NR_LDPC_NUM_CN_GROUPS_BG1]; /**< LUT for circular shift values for all CN groups and Zs */
+    arr32_t startAddrBnProcBuf[NR_LDPC_NUM_CN_GROUPS_BG1]; /**< LUT of start addresses of CN groups in BN proc buffer */
+    arr32_t bnPosBnProcBuf[NR_LDPC_NUM_CN_GROUPS_BG1]; /**< LUT of BN positions in BG for CN groups */
+    const uint32_t* llr2llrProcBufAddr; /**< LUT for transferring input LLRs to LLR processing buffer */
+    const uint32_t*  llr2llrProcBufBnPos; /**< LUT BN position in BG */
+    arr32_t posBnInCnProcBuf[NR_LDPC_NUM_CN_GROUPS_BG1]; /**< LUT for llr2cnProcBuf */
+} t_nrLDPC_lut_gpu;
 /**
    Enum with possible LDPC output formats.
  */

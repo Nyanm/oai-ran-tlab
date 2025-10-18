@@ -1996,18 +1996,29 @@ target_link_libraries(smallblocktest PRIVATE
 )
 
 
+
 add_executable(ldpctest
   ${OPENAIR1_DIR}/PHY/CODING/TESTBENCH/ldpctest.c
   ${OPENAIR1_DIR}/PHY/CODING/nrLDPC_load.c
 )
+
+#if (ENABLE_CUDA)
+#  find_package(CUDA REQUIRED)
+#  if (NOT CUDA_FOUND)
+#    message(FATAL_ERROR "no CUDA found")
+#  endif()
+#  cuda_add_library(ldpctest)
+#else()
+#endif() 
 target_link_libraries(ldpctest PRIVATE
   -Wl,--start-group UTIL SIMU PHY_COMMON PHY_NR_COMMON -Wl,--end-group
-  m pthread dl shlib_loader ${T_LIB}
+  m pthread dl shlib_loader ${T_LIB} ${CUDA_LIBRARIES}
   # link 'check_crc' to make it resolved in the LDPC coding libraries
   # 'check_crc' is not used in ldpctest so it is not linked in the executable by default
   # --whole-archive links 'check_crc' in the executable even though it is note used, see 'man ld'
   -Wl,--whole-archive crc_byte -Wl,--no-whole-archive
 )
+
 
 add_library(physim_common OBJECT ${OPENAIR1_DIR}/SIMULATION/NR_PHY/nr_unitary_common.c)
 target_link_libraries(physim_common PRIVATE UTIL)

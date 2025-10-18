@@ -37,6 +37,10 @@
 // BG1
 // Group of CNs with 3 BNs (CNG3)
 // e.g. first and second value correspond to row 4 col 0 and 1 in the BG table (modulo Z)
+#ifdef USE_CUDA
+#include <cuda_runtime.h>
+#endif
+
 static const uint16_t circShift_BG1_Z2_CNG3[3][1] = {{1},{0},{0}};
 static const uint16_t circShift_BG1_Z3_CNG3[3][1] = {{2},{1},{0}};
 static const uint16_t circShift_BG1_Z5_CNG3[3][1] = {{3},{0},{0}};

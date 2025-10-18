@@ -27,121 +27,16 @@
 
 #include <stdint.h>
 #include "PHY/sse_intrin.h"
-#include "nrLDPCdecoder_defs.h"
+//#include "nrLDPCdecoder_defs.h"
 #include "nrLDPC_types.h"
 #include "nrLDPC_init.h"
 #include "nrLDPC_mPass.h"
 #include "nrLDPC_cnProc.h"
 #include "nrLDPC_bnProc.h"
 #include "openair1/PHY/CODING/coding_defs.h"
-#define UNROLL_CN_PROC 1
-#define UNROLL_BN_PROC 1
-#define UNROLL_BN_PROC_PC 1
-#define UNROLL_BN2CN_PROC 1
-#define MAX_NUM_DLSCH_SEGMENTS_DL 132
-/*----------------------------------------------------------------------
-|                  cn processing files -->AVX512
-/----------------------------------------------------------------------*/
-
-// BG1-------------------------------------------------------------------
-#if defined(__AVX512BW__)
-
-#include "cnProc_avx512/nrLDPC_cnProc_BG1_R13_AVX512.h"
-#include "cnProc_avx512/nrLDPC_cnProc_BG1_R23_AVX512.h"
-#include "cnProc_avx512/nrLDPC_cnProc_BG1_R89_AVX512.h"
-// BG2-------------------------------------------------------------------
-#include "cnProc_avx512/nrLDPC_cnProc_BG2_R15_AVX512.h"
-#include "cnProc_avx512/nrLDPC_cnProc_BG2_R13_AVX512.h"
-#include "cnProc_avx512/nrLDPC_cnProc_BG2_R23_AVX512.h"
-
-#elif defined(__AVX2__)
-
-/*----------------------------------------------------------------------
-|                  cn Processing files -->AVX2
-/----------------------------------------------------------------------*/
-
-// BG1------------------------------------------------------------------
-#include "cnProc/nrLDPC_cnProc_BG1_R13_AVX2.h"
-#include "cnProc/nrLDPC_cnProc_BG1_R23_AVX2.h"
-#include "cnProc/nrLDPC_cnProc_BG1_R89_AVX2.h"
-// BG2 --------------------------------------------------------------------
-#include "cnProc/nrLDPC_cnProc_BG2_R15_AVX2.h"
-#include "cnProc/nrLDPC_cnProc_BG2_R13_AVX2.h"
-#include "cnProc/nrLDPC_cnProc_BG2_R23_AVX2.h"
-
-#else
-
-// BG1------------------------------------------------------------------
-#include "cnProc128/nrLDPC_cnProc_BG1_R13_128.h"
-#include "cnProc128/nrLDPC_cnProc_BG1_R23_128.h"
-#include "cnProc128/nrLDPC_cnProc_BG1_R89_128.h"
-// BG2 --------------------------------------------------------------------
-#include "cnProc128/nrLDPC_cnProc_BG2_R15_128.h"
-#include "cnProc128/nrLDPC_cnProc_BG2_R13_128.h"
-#include "cnProc128/nrLDPC_cnProc_BG2_R23_128.h"
-#endif
-
-/*----------------------------------------------------------------------
-|                 bn Processing files -->AVX2
-/----------------------------------------------------------------------*/
-
-// bnProcPc-------------------------------------------------------------
-#ifdef __AVX2__
-// BG1------------------------------------------------------------------
-#include "bnProcPc/nrLDPC_bnProcPc_BG1_R13_AVX2.h"
-#include "bnProcPc/nrLDPC_bnProcPc_BG1_R23_AVX2.h"
-#include "bnProcPc/nrLDPC_bnProcPc_BG1_R89_AVX2.h"
-// BG2 --------------------------------------------------------------------
-#include "bnProcPc/nrLDPC_bnProcPc_BG2_R15_AVX2.h"
-#include "bnProcPc/nrLDPC_bnProcPc_BG2_R13_AVX2.h"
-#include "bnProcPc/nrLDPC_bnProcPc_BG2_R23_AVX2.h"
-#else
-#include "bnProcPc128/nrLDPC_bnProcPc_BG1_R13_128.h"
-#include "bnProcPc128/nrLDPC_bnProcPc_BG1_R23_128.h"
-#include "bnProcPc128/nrLDPC_bnProcPc_BG1_R89_128.h"
-#include "bnProcPc128/nrLDPC_bnProcPc_BG2_R15_128.h"
-#include "bnProcPc128/nrLDPC_bnProcPc_BG2_R13_128.h"
-#include "bnProcPc128/nrLDPC_bnProcPc_BG2_R23_128.h"
-#endif
-
-// bnProc----------------------------------------------------------------
-
-#if defined(__AVX512BW__)
-// BG1-------------------------------------------------------------------
-#include "bnProc_avx512/nrLDPC_bnProc_BG1_R13_AVX512.h"
-#include "bnProc_avx512/nrLDPC_bnProc_BG1_R23_AVX512.h"
-#include "bnProc_avx512/nrLDPC_bnProc_BG1_R89_AVX512.h"
-// BG2 --------------------------------------------------------------------
-#include "bnProc_avx512/nrLDPC_bnProc_BG2_R15_AVX512.h"
-#include "bnProc_avx512/nrLDPC_bnProc_BG2_R13_AVX512.h"
-#include "bnProc_avx512/nrLDPC_bnProc_BG2_R23_AVX512.h"
-
-#elif defined(__AVX2__)
-#include "bnProc/nrLDPC_bnProc_BG1_R13_AVX2.h"
-#include "bnProc/nrLDPC_bnProc_BG1_R23_AVX2.h"
-#include "bnProc/nrLDPC_bnProc_BG1_R89_AVX2.h"
-// BG2 --------------------------------------------------------------------
-#include "bnProc/nrLDPC_bnProc_BG2_R15_AVX2.h"
-#include "bnProc/nrLDPC_bnProc_BG2_R13_AVX2.h"
-#include "bnProc/nrLDPC_bnProc_BG2_R23_AVX2.h"
-#else
-#include "bnProc128/nrLDPC_bnProc_BG1_R13_128.h"
-#include "bnProc128/nrLDPC_bnProc_BG1_R23_128.h"
-#include "bnProc128/nrLDPC_bnProc_BG1_R89_128.h"
-// BG2 --------------------------------------------------------------------
-#include "bnProc128/nrLDPC_bnProc_BG2_R15_128.h"
-#include "bnProc128/nrLDPC_bnProc_BG2_R13_128.h"
-#include "bnProc128/nrLDPC_bnProc_BG2_R23_128.h"
-#endif
-
-// #define NR_LDPC_PROFILER_DETAIL(a) a
-#define NR_LDPC_PROFILER_DETAIL(a)
 
 #include "openair1/PHY/CODING/nrLDPC_extern.h"
 
-#ifdef NR_LDPC_DEBUG_MODE
-#include "nrLDPC_tools/nrLDPC_debug.h"
-#endif
 
 // decoder interface
 /**
@@ -156,19 +51,146 @@
 #include <cuda_runtime.h>
 #include "decoder_graphs.h"
 
+static bool streamsCreated = false;
 static cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
 static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
-static bool streamsCreated = false;
-static int currentStreamCount = 0;
-static int8_t iter_ptr_array[MAX_NUM_DLSCH_SEGMENTS_DL];
-static int PC_Flag_array[MAX_NUM_DLSCH_SEGMENTS_DL];
-static int8_t cnProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static int8_t cnProcBufRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static int8_t bnProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static int8_t bnProcBufRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
-static int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
-static int8_t llrOut[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+int8_t *iter_ptr_array_dev;
+int *PC_Flag_array_dev;
+int8_t *cnProcBuf_dev;
+int8_t *cnProcBufRes_dev;
+int8_t *bnProcBuf_dev;
+int8_t *bnProcBufRes_dev;
+int8_t *llrRes_dev;
+int8_t *llrProcBuf_dev;
+int8_t *llrOut_dev;
+t_nrLDPC_lut *lut_dev;
+
+int8_t *iter_ptr_array_host;
+int *PC_Flag_array_host;
+int8_t *cnProcBuf_host;
+int8_t *cnProcBufRes_host;
+int8_t *bnProcBuf_host;
+int8_t *bnProcBufRes_host;
+int8_t *llrRes_host;
+int8_t *llrProcBuf_host;
+int8_t *llrOut_host;
+t_nrLDPC_lut *lut_host;
+
+extern int pageable, register_host;
+/* 
+const uint32_t startAddrCnGroups_BG1[NR_LDPC_NUM_CN_GROUPS_BG1] = {0, 1152, 8832, 43392, 61824, 75264, 81408, 88320, 92160};
+extern uint32_t *gpu_lut_startAddrCnGroups_BG1;
+
+const uint32_t startAddrBnGroups_BG1_R13[NR_LDPC_NUM_BN_GROUPS_BG1_R13] = {0, 16128, 17664, 19584, 24192, 34944, 44160, 47616, 62976, 75648, 94080, 99072, 109824};
+extern uint32_t *gpu_lut_startAddrBnGroups_BG1_R13;
+
+const uint32_t startAddrBnGroups_BG1_R23[NR_LDPC_NUM_BN_GROUPS_BG1_R23] = {0, 3456, 4224, 9984, 14592, 28032, 46464, 50688};
+extern uint32_t *gpu_lut_startAddrBnGroups_BG1_R23;
+
+const uint32_t numBnInBnGroups_BG1_R13[NR_LDPC_NUM_BN_GROUPS_BG1_R13] = {42, 0, 0, 1, 1, 2, 4, 3, 1, 4, 3, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1};
+extern uint32_t *gpu_lut_numBnInBnGroups_BG1_R13;
+
+const uint32_t numBnInBnGroups_BG1_R23[NR_LDPC_NUM_BN_GROUPS_BG1_R13] = { 9, 1, 5, 3, 7, 8, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+extern uint32_t *gpu_lut_numBnInBnGroups_BG1_R23;
+
+const uint32_t startAddrBnGroupsLlr_BG1_R13[NR_LDPC_NUM_BN_GROUPS_BG1_R13] = {0, 16128, 16512, 16896, 17664, 19200, 20352, 20736, 22272, 23424, 24960, 25344, 25728};
+extern uint32_t *gpu_lut_startAddrBnGroupsLlr_BG1_R13;
+
+const uint32_t startAddrBnGroupsLlr_BG1_R23[NR_LDPC_NUM_BN_GROUPS_BG1_R23] = {0, 3456, 3840, 5760, 6912, 9600, 12672, 13056};
+extern uint32_t *gpu_lut_startAddrBnGroupsLlr_BG1_R23;
+*/
+int cuda_support_init_decoder() {
+  if (!pageable && !register_host) {
+    cudaError_t err=cudaMalloc((void **)&cnProcBuf_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF);
+    AssertFatal(err == cudaSuccess,"CUDA Error (cnProcBuf_dev): %s\n", cudaGetErrorString(err));
+    err=cudaMalloc((void **)&cnProcBufRes_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF);
+    AssertFatal(err == cudaSuccess,"CUDA Error (cnProcBufRes_dev): %s\n", cudaGetErrorString(err));
+    err=cudaMalloc((void **)&bnProcBuf_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_BN_PROC_BUF);
+    AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBuf_dev): %s\n", cudaGetErrorString(err));
+    err=cudaMalloc((void **)&bnProcBufRes_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_BN_PROC_BUF);
+    AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBufRes_dev): %s\n", cudaGetErrorString(err));
+    err=cudaMalloc((void **)&llrRes_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
+    AssertFatal(err == cudaSuccess,"CUDA Error (llrRes_dev): %s\n", cudaGetErrorString(err));
+    err=cudaMalloc((void **)&llrProcBuf_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
+    AssertFatal(err == cudaSuccess,"CUDA Error (llrProcBuf_dev): %s\n", cudaGetErrorString(err));
+    err=cudaMalloc((void **)&llrOut_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
+    AssertFatal(err == cudaSuccess,"CUDA Error (llrProcBuf_dev): %s\n", cudaGetErrorString(err));
+    err=cudaMalloc((void **)&iter_ptr_array_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4);
+    AssertFatal(err == cudaSuccess,"CUDA Error (iter_ptr_array_dev): %s\n", cudaGetErrorString(err));
+    err=cudaMalloc((void **)&PC_Flag_array_dev,sizeof(int)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4);
+    AssertFatal(err == cudaSuccess,"CUDA Error (PC_Flag_array_dev): %s\n", cudaGetErrorString(err));
+    err=cudaMalloc((void **)&lut_dev,sizeof(*lut_dev));
+    AssertFatal(err == cudaSuccess,"CUDA Error (lut_dev): %s\n", cudaGetErrorString(err));
+  }
+  else {
+    cudaError_t err=cudaHostAlloc((void **)&cnProcBuf_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF,cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (c_dev): %s\n", cudaGetErrorString(err));
+    err = cudaHostGetDevicePointer((void**)&cnProcBuf_dev, cnProcBuf_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error (cnProcBuf_host): %s\n", cudaGetErrorString(err));
+
+    err=cudaHostAlloc((void **)&cnProcBufRes_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF,cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (cnProcBufRes_host): %s\n", cudaGetErrorString(err));
+    err = cudaHostGetDevicePointer((void**)&cnProcBufRes_dev, cnProcBufRes_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error (cnProcBufRes_dev): %s\n", cudaGetErrorString(err));
+
+    err=cudaHostAlloc((void **)&bnProcBuf_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_BN_PROC_BUF,cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBuf_host): %s\n", cudaGetErrorString(err));
+    err = cudaHostGetDevicePointer((void**)&bnProcBuf_dev, bnProcBuf_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBuf_dev): %s\n", cudaGetErrorString(err));
+
+    err=cudaHostAlloc((void **)&bnProcBufRes_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_BN_PROC_BUF,cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBufRes_host): %s\n", cudaGetErrorString(err));
+    err = cudaHostGetDevicePointer((void**)&bnProcBufRes_dev, bnProcBufRes_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBufRes_dev): %s\n", cudaGetErrorString(err));
+
+    err=cudaHostAlloc((void **)&llrRes_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR,cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (llrRes_host): %s\n", cudaGetErrorString(err));
+    err = cudaHostGetDevicePointer((void**)&llrRes_dev, llrRes_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error (llrRes_dev): %s\n", cudaGetErrorString(err));
+
+    err=cudaHostAlloc((void **)&llrProcBuf_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR,cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (llrProcBuf_host): %s\n", cudaGetErrorString(err));
+    err = cudaHostGetDevicePointer((void**)&llrProcBuf_dev, llrProcBuf_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error (llrProcBuf_dev): %s\n", cudaGetErrorString(err));
+
+    err=cudaHostAlloc((void **)&llrOut_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR,cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (llrOut_host): %s\n", cudaGetErrorString(err));
+    err = cudaHostGetDevicePointer((void**)&llrOut_dev, llrOut_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error (llrOut_dev): %s\n", cudaGetErrorString(err));
+
+    err=cudaHostAlloc((void **)&iter_ptr_array_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4,cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (iter_ptr_array_host): %s\n", cudaGetErrorString(err));
+    err = cudaHostGetDevicePointer((void**)&iter_ptr_array_dev, iter_ptr_array_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error (iter_ptr_array_dev): %s\n", cudaGetErrorString(err));
+
+    err=cudaHostAlloc((void **)&PC_Flag_array_host,sizeof(int)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4,cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (PC_Flag_array_host): %s\n", cudaGetErrorString(err));
+    err = cudaHostGetDevicePointer((void**)&PC_Flag_array_dev, PC_Flag_array_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error (PC_Flag_array_dev): %s\n", cudaGetErrorString(err));
+
+    err=cudaHostAlloc((void **)&lut_host,sizeof(*lut_host),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (lut_host): %s\n", cudaGetErrorString(err));
+    err = cudaHostGetDevicePointer((void**)&lut_dev, lut_host, 0);
+    AssertFatal(err == cudaSuccess,"CUDA Error (lut_dev): %s\n", cudaGetErrorString(err));
+/*
+    err=cudaHostAlloc((void **)gpu_lut_startAddrCnGroups_BG1,sizeof(startAddrCnGroups_BG1),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (gpu_lut_startAddrCnGroups_BG1): %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)gpu_lut_startAddrBnGroups_BG1_R13,sizeof(startAddrBnGroups_BG1_R13),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (gpu_lut_startAddrBnGroups_BG1_R13): %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)gpu_lut_startAddrBnGroups_BG1_R23,sizeof(startAddrBnGroups_BG1_R23),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (gpu_lut_startAddrBnGroups_BG1_R23): %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)gpu_lut_numBnInBnGroups_BG1_R13,sizeof(numBnInBnGroups_BG1_R13),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (gpu_lut_numBnInBnGroups_BG1_R13): %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)gpu_lut_numBnInBnGroups_BG1_R23,sizeof(numBnInBnGroups_BG1_R23),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (gpu_lut_numBnInBnGroups_BG1_R23): %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)gpu_lut_startAddrBnGroupsLlr_BG1_R13,sizeof(startAddrBnGroupsLlr_BG1_R13),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (gpu_lut_startAddrBnGroupsLlr_BG1_R13): %s\n", cudaGetErrorString(err));
+    err=cudaHostAlloc((void **)gpu_lut_startAddrBnGroupsLlr_BG1_R23,sizeof(startAddrBnGroupsLlr_BG1_R23),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (gpu_lut_startAddrBnGroupsLlr_BG1_R23): %s\n", cudaGetErrorString(err));
+    */
+  }
+  return 0;
+}
 
 extern void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut* p_lut,
                                    int8_t* cnProcBuf,
@@ -215,6 +237,27 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
 
 //--------------------------------------------------------------
 
+void check_lut_pointers(const t_nrLDPC_lut* lut) {
+    if (!lut) {
+        printf("check_lut_pointers: lut is NULL\n");
+        return;
+    }
+
+    printf("Checking LUT pointers:\n");
+    printf("startAddrCnGroups       = %p\n", (void*)lut->startAddrCnGroups);
+    printf("numCnInCnGroups         = %p\n", (void*)lut->numCnInCnGroups);
+    printf("numBnInBnGroups         = %p\n", (void*)lut->numBnInBnGroups);
+    printf("startAddrBnGroups       = %p\n", (void*)lut->startAddrBnGroups);
+    printf("startAddrBnGroupsLlr    = %p\n", (void*)lut->startAddrBnGroupsLlr);
+    printf("llr2llrProcBufAddr      = %p\n", (void*)lut->llr2llrProcBufAddr);
+    printf("llr2llrProcBufBnPos     = %p\n", (void*)lut->llr2llrProcBufBnPos);
+
+    printf("circShift               = %p\n", (void*)lut->circShift);
+    printf("startAddrBnProcBuf       = %p\n", (void*)lut->startAddrBnProcBuf);
+    printf("bnPosBnProcBuf           = %p\n", (void*)lut->bnPosBnProcBuf);
+    printf("posBnInCnProcBuf         = %p\n", (void*)lut->posBnInCnProcBuf);
+}
+
 void dumpASS(int8_t* cnProcBufRes, const char* filename)
 {
   FILE* fp = fopen(filename, "w");
@@ -225,7 +268,7 @@ void dumpASS(int8_t* cnProcBufRes, const char* filename)
   // printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
 
   for (int i = 0; i < MAX_NUM_DLSCH_SEGMENTS_DL * 8448; i++) {
-    fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
+    fprintf(fp, "%02x ", (uint8_t)cnProcBufRes_host[i]);
     if ((i + 1) % 16 == 0)
       fprintf(fp, "\n");
   }
@@ -269,17 +312,19 @@ extern int cuda_support_set;
 
 int32_t LDPCinit_cuda()
 {
-  printf("Calling encoder initializations\n");	
-  if (cuda_support_set == 0 ) cuda_support_init();
-  printf("CUDA LDPC decoder initiating\n");
+  if (cuda_support_set == 0 ) {
+    printf("Calling encoder initializations\n");	
+    cuda_support_init();
+  }
   if (!streamsCreated) {
+    printf("CUDA LDPC decoder initiating\n");
     for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS_DL; ++s) {
-      cudaStreamCreateWithFlags(&decoderStreams[s], cudaStreamNonBlocking);
-      cudaEventCreate(&decoderDoneEvents[s]);
+        cudaStreamCreateWithFlags(&decoderStreams[s], cudaStreamNonBlocking);
+        cudaEventCreate(&decoderDoneEvents[s]);
     }
     streamsCreated = true;
+    init_decoder_graphs();
   }
-  init_decoder_graphs();
   return 0;
 }
 
@@ -315,12 +360,10 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
     return 0;
   }
   uint32_t numLLR;
-  t_nrLDPC_lut lut;
-  t_nrLDPC_lut* p_lut = &lut;
+  t_nrLDPC_lut* p_lut = lut_host;
 
   // Initialize decoder core(s) with correct LUTs
   numLLR = nrLDPC_init(p_decParams, p_lut);
-
   // Launch LDPC decoder core for one segment
   int n_segments = p_decParams->n_segments;
   int numIter = nrLDPC_decoder_core(p_llr, p_out, n_segments, numLLR, p_lut, p_decParams, p_profiler, ab);
@@ -379,8 +422,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   // cudaEvent_t done[MAX_NUM_DLSCH_SEGMENTS]; // MAX_NUM_SEGMENTS = stream num
 
   for (int s = 0; s < n_segments /*MAX_NUM_DLSCH_SEGMENTS_DL*/; s++) {
-    iter_ptr_array[s] = 0;
-    PC_Flag_array[s] = 1;
+    iter_ptr_array_host[s] = 0;
+    PC_Flag_array_host[s] = 1;
   }
   // printf("3.1: It works here\n");
   /*
@@ -425,13 +468,13 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
       break;
     }
     */
-    int8_t* pp_cnProcBuf = cnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
-    int8_t* pp_cnProcBufRes = cnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
-    int8_t* pp_bnProcBuf = bnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
-    int8_t* pp_bnProcBufRes = bnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
-    int8_t* pp_llrRes = llrRes + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
-    int8_t* pp_llrProcBuf = llrProcBuf + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
-    int8_t* pp_llrOut = llrOut + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
+    int8_t* pp_cnProcBuf = cnProcBuf_dev + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
+    int8_t* pp_cnProcBufRes = cnProcBufRes_dev + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
+    int8_t* pp_bnProcBuf = bnProcBuf_dev + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
+    int8_t* pp_bnProcBufRes = bnProcBufRes_dev + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
+    int8_t* pp_llrRes = llrRes_dev + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
+    int8_t* pp_llrProcBuf = llrProcBuf_dev + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
+    int8_t* pp_llrOut = llrOut_dev + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
     // printf("4: It works here\n");
     //  LLR preprocessing
     // NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2llrProcBuf));
@@ -469,8 +512,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            decoderStreams,
                                            CudaStreamIdx,
                                            decoderDoneEvents,
-                                           &iter_ptr_array[CudaStreamIdx],
-                                           &PC_Flag_array[CudaStreamIdx]); // stream index passed in
+                                           &iter_ptr_array_dev[CudaStreamIdx],
+                                           &PC_Flag_array_dev[CudaStreamIdx]); // stream index passed in
   }
   for (int s = 0; s < n_segments; ++s) {
     // printf("Synchronizing segment %d \n",s);

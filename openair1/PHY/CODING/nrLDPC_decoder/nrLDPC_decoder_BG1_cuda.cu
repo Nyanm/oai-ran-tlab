@@ -28,6 +28,7 @@ cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
 cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
 bool graphCreated[MAX_NUM_DLSCH_SEGMENTS_DL] = {false};
 
+
 // for CUDA 11+/12+
 static const char *ptrTypeName(cudaMemoryType type)
 {
@@ -70,10 +71,10 @@ extern "C" void check_ptr_host(const void *p, const char *name)
     type = "Device";
   if (attr.type == cudaMemoryTypeManaged)
     type = "Managed";
-  printf("Ptr %-24s = %p  type=%s  device=%d  devicePointer=%p  hostPointer=%p\n",
+  printf("Ptr %-24s = %p  type=%s(%d)  device=%d  devicePointer=%p  hostPointer=%p\n",
          name,
          p,
-         type,
+         type,attr.type,
          attr.device,
          attr.devicePointer,
          attr.hostPointer);
@@ -141,9 +142,8 @@ __global__ void check_ptr_kernel_easy(int id)
   printf("hello!\n");
 }
 
-__constant__ static uint8_t d_lut_numBnInCnGroups_BG1_R13[9];
-__constant__ static int d_lut_numThreadsEachCnGroupsNeed_BG1_R13[9];
-//__constant__ static uint8_t d_lut_numCnInCnGroups_BG1_R13[9];
+
+
 
 // === CUDA Error Checking ===
 // Wrap any CUDA API call with CHECK(...) to automatically print error info with file and line number
@@ -212,18 +212,18 @@ __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   }
   // printf("I'm inside cnProc_kernel\n");
 
-  const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
+  const uint32_t *lut_startAddrs = gpu_lut_startAddrCnGroups_BG1;
 
   int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...315
   int lane = tid % 96; // to decide the inner lane
   // if(blk == 1&&tid == 0) printf("I'm inside cnProc_kernel\n");
-  uint8_t groupIdx = lut_CnGrpIdx_BG1_R13[row] - 1;
+  uint32_t groupIdx = lut_CnGrpIdx_BG1_R13[row] - 1;
   // if(blk == 1&&tid == 0) printf("1.1\n");
-  uint8_t CnIdx = lut_CnIdx_BG1_R13[row] - 1;
-  uint8_t MsgIdx = lut_CnMsgIdx_BG1_R13[row];
+  uint32_t CnIdx = lut_CnIdx_BG1_R13[row] - 1;
+  uint32_t MsgIdx = lut_CnMsgIdx_BG1_R13[row];
   // uint16_t blockSize = h_block_thread_counts_cnProc[blk];
-  uint32_t inOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
-  uint32_t outOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
+  uint32_t inOffset = lut_startAddrs[groupIdx] + Zc * CnIdx;
+  uint32_t outOffset = lut_startAddrs[groupIdx] + Zc * CnIdx;
   // if(blk == 1&&tid == 0) printf("1.2\n");
   //   __syncthreads();
 
@@ -302,9 +302,9 @@ __global__ void bnProcPcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict_
                                                        int8_t *__restrict__ d_bnProcBufRes,
                                                        int8_t *__restrict__ d_llrProcBuf,
                                                        int8_t *__restrict__ d_llrRes,
-                                                       const uint8_t *lut_numBnInBnGroups,
+                                                       const uint32_t *lut_numBnInBnGroups,
                                                        const uint32_t *lut_startAddrBnBuf,
-                                                       const uint16_t *lut_startAddrBnLlr,
+                                                       const uint32_t *lut_startAddrBnLlr,
                                                        int Zc,
                                                        int8_t *iter_ptr,
                                                        int8_t numMaxIter,
@@ -322,28 +322,28 @@ __global__ void bnProcPcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict_
   if (tid >= 6528) {
     return;
   }
-  static const uint8_t lut_GrpIdx[68] = {
+  static const uint32_t lut_GrpIdx[68] = {
       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
       1, 1, 1, 1, 1, 1, 1, 1, 4, 5, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 10, 10, 10, 10, 11, 11, 11, 12, 12, 12, 12, 13, 28, 30,
   };
 
-  static const uint8_t lut_BnIdx[68] = {
+  static const uint32_t lut_BnIdx[68] = {
       1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
       24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 1,  1,  1,  2,
       1,  2,  3,  4,  1,  2,  3,  1,  1,  2,  3,  4,  1,  2,  3,  1,  2,  3,  4,  1,  1,  1,
   };
   //                                          1, 2, 3, 4, 5, 6, 7, 8, 9,10,11, 12,
   //                                          13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29, 30
-  static const uint8_t lut_BnToAddrIdx[30] = {1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0,
+  static const uint32_t lut_BnToAddrIdx[30] = {1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0,
                                               0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  12, 0, 13};
   int row = tid / 96; // to decide the inner block
   int lane = tid % 96; // to decide the inner lane
 
-  uint8_t GrpIdx = lut_GrpIdx[row];
+  uint32_t GrpIdx = lut_GrpIdx[row];
   // uint8_t MsgIdx = lut_MsgIdx[row];
-  uint8_t BnIdx = lut_BnIdx[row];
-  uint8_t BnToAddrIdx = lut_BnToAddrIdx[GrpIdx - 1];
-  uint8_t GrpNum = lut_numBnInBnGroups[GrpIdx - 1];
+  uint32_t BnIdx = lut_BnIdx[row];
+  uint32_t BnToAddrIdx = lut_BnToAddrIdx[GrpIdx - 1];
+  uint32_t GrpNum = lut_numBnInBnGroups[GrpIdx - 1];
 
   const int8_t *p_bnProcBuf_Grp = (const int8_t *)(d_bnProcBuf + lut_startAddrBnBuf[BnToAddrIdx - 1]);
   const int8_t *p_bnProcBufRes_Grp = (const int8_t *)(d_bnProcBufRes + lut_startAddrBnBuf[BnToAddrIdx - 1]);
@@ -368,9 +368,9 @@ __global__ void bnProcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ 
                                                      int8_t *__restrict__ d_bnProcBufRes,
                                                      int8_t *__restrict__ d_llrProcBuf,
                                                      int8_t *__restrict__ d_llrRes,
-                                                     const uint8_t *lut_numBnInBnGroups,
+                                                     const uint32_t *lut_numBnInBnGroups,
                                                      const uint32_t *lut_startAddrBnBuf,
-                                                     const uint16_t *lut_startAddrBnLlr,
+                                                     const uint32_t *lut_startAddrBnLlr,
                                                      int Zc,
                                                      int8_t *iter_ptr,
                                                      int8_t numMaxIter,
@@ -391,16 +391,16 @@ __global__ void bnProcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ 
 
   //                                          1, 2, 3, 4, 5, 6, 7, 8, 9,10,11, 12, 13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,
   //                                          28,29, 30
-  static const uint8_t lut_BnToAddrIdx[30] = {1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0,
+  static const uint32_t lut_BnToAddrIdx[30] = {1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0,
                                               0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  12, 0, 13};
   int row = tid / 96; // to decide the inner block
   int lane = tid % 96; // to decide the inner lane
 
-  uint8_t GrpIdx = lut_BnGrpIdx_BG1_R13[row];
-  uint8_t MsgIdx = lut_BnMsgIdx_BG1_R13[row];
-  uint8_t BnIdx = lut_BnIdx_BG1_R13[row];
-  uint8_t BnToAddrIdx = lut_BnToAddrIdx[GrpIdx - 1];
-  uint8_t GrpNum = lut_numBnInBnGroups[GrpIdx - 1];
+  uint32_t GrpIdx = lut_BnGrpIdx_BG1_R13[row];
+  uint32_t MsgIdx = lut_BnMsgIdx_BG1_R13[row];
+  uint32_t BnIdx = lut_BnIdx_BG1_R13[row];
+  uint32_t BnToAddrIdx = lut_BnToAddrIdx[GrpIdx - 1];
+  uint32_t GrpNum = lut_numBnInBnGroups[GrpIdx - 1];
 
   const int8_t *p_bnProcBuf_Grp = (const int8_t *)(d_bnProcBuf + lut_startAddrBnBuf[BnToAddrIdx - 1]);
   const int8_t *p_bnProcBufRes_Grp = (const int8_t *)(d_bnProcBufRes + lut_startAddrBnBuf[BnToAddrIdx - 1]);
@@ -431,19 +431,20 @@ void nrLDPC_bnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
-  const uint8_t *lut_numBnInBnGroups;
+  const uint32_t *lut_numBnInBnGroups;
   const uint32_t *lut_startAddrBnGroups;
-  const uint16_t *lut_startAddrBnGroupsLlr;
+  const uint32_t *lut_startAddrBnGroupsLlr;
 
-  lut_numBnInBnGroups = p_lut->numBnInBnGroups;
-  lut_startAddrBnGroups = p_lut->startAddrBnGroups;
-  lut_startAddrBnGroupsLlr = p_lut->startAddrBnGroupsLlr;
+  lut_numBnInBnGroups = gpu_lut_numBnInBnGroups_BG1_R13;
+  lut_startAddrBnGroups = gpu_lut_startAddrBnGroups_BG1_R13;
+  lut_startAddrBnGroupsLlr = gpu_lut_startAddrBnGroupsLlr_BG1_R13;
 
   int8_t *p_bnProcBuf = (int8_t *)bnProcBuf;
   int8_t *p_bnProcBufRes = (int8_t *)bnProcBufRes;
   int8_t *p_llrProcBuf = (int8_t *)llrProcBuf;
   int8_t *p_llrRes = (int8_t *)llrRes;
 
+  printf("nrLDPC_bnProc_BG1_R13_cuda_stream_core %p,%p,%p,%p\n",bnProcBuf,bnProcBufRes,llrProcBuf,llrRes);
 #if BIG_KERNEL
   int maxBlockSize = 1024; // Z;
   int totalBlocks = 30;
@@ -462,7 +463,10 @@ void nrLDPC_bnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                            iter_ptr,
                                                                                            numMaxIter,
                                                                                            PC_Flag);
-  // printf("In stream %d B: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
+          cudaDeviceSynchronize();
+          CHECK(cudaGetLastError());
+  printf("In stream %d B: Iter = %d, PC_Flag = %d (%p,%p,%p)\n", CudaStreamIdx, *iter_ptr, *PC_Flag,lut_numBnInBnGroups,lut_startAddrBnGroups,lut_startAddrBnGroupsLlr);
+
   bnProcKernel_BG1_R13_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_bnProcBuf,
                                                                                          p_bnProcBufRes,
                                                                                          p_llrProcBuf,
@@ -475,6 +479,8 @@ void nrLDPC_bnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                          numMaxIter,
                                                                                          PC_Flag);
 
+          cudaDeviceSynchronize();
+          CHECK(cudaGetLastError());
 #else
 
   printf("\n *************** To be continued *************** \n");
@@ -500,17 +506,17 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-  const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
+  const uint32_t *lut_startAddrs = gpu_lut_startAddrCnGroups_BG1;
 
   int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...315
   int lane = tid % 96; // to decide the inner lane
   // if(blk == 1&&tid == 0) printf("I'm inside cnProc_kernel\n");
-  uint8_t groupIdx = lut_CnGrpIdx_BG1_R13[row] - 1;
+  uint32_t groupIdx = lut_CnGrpIdx_BG1_R13[row] - 1;
   // if(blk == 1&&tid == 0) printf("1.1\n");
-  uint8_t CnIdx = lut_CnIdx_BG1_R13[row] - 1;
-  uint8_t MsgIdx = lut_CnMsgIdx_BG1_R13[row];
-  uint32_t inOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
-  uint32_t outOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
+  uint32_t CnIdx = lut_CnIdx_BG1_R13[row] - 1;
+  uint32_t MsgIdx = lut_CnMsgIdx_BG1_R13[row];
+  uint32_t inOffset = lut_startAddrs[groupIdx] + Zc * CnIdx;
+  uint32_t outOffset = lut_startAddrs[groupIdx] + Zc * CnIdx;
   // if(blk == 1&&tid == 0) printf("1.2\n");
   //   __syncthreads();
 
@@ -705,7 +711,7 @@ void nrLDPC_BnToCnPC_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                               cudaStream_t *streams,
                                               int8_t CudaStreamIdx)
 {
-  const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
+  const uint32_t *lut_startAddrCnGroups = gpu_lut_startAddrCnGroups_BG1;
 
   const int numGroups = 9;
 
@@ -793,18 +799,18 @@ __global__ void cnProcKernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   }
   // printf("I'm inside cnProc_kernel\n");
 
-  const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
+  const uint32_t *lut_startAddrs = gpu_lut_startAddrCnGroups_BG1;
 
   int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...315
   int lane = tid % 96; // to decide the inner lane
   // if(blk == 1&&tid == 0) printf("I'm inside cnProc_kernel\n");
-  uint8_t groupIdx = lut_CnGrpIdx_BG1_R23[row] - 1;
+  uint32_t groupIdx = lut_CnGrpIdx_BG1_R23[row] - 1;
   // if(blk == 1&&tid == 0) printf("1.1\n");
-  uint8_t CnIdx = lut_CnIdx_BG1_R23[row] - 1;
-  uint8_t MsgIdx = lut_CnMsgIdx_BG1_R23[row];
+  uint32_t CnIdx = lut_CnIdx_BG1_R23[row] - 1;
+  uint32_t MsgIdx = lut_CnMsgIdx_BG1_R23[row];
   // uint16_t blockSize = h_block_thread_counts_cnProc[blk];
-  uint32_t inOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
-  uint32_t outOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
+  uint32_t inOffset = lut_startAddrs[groupIdx] + Zc * CnIdx;
+  uint32_t outOffset = lut_startAddrs[groupIdx] + Zc * CnIdx;
   // if(blk == 1&&tid == 0) printf("1.2\n");
   //   __syncthreads();
 
@@ -883,9 +889,9 @@ __global__ void bnProcPcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict_
                                                        int8_t *__restrict__ d_bnProcBufRes,
                                                        int8_t *__restrict__ d_llrProcBuf,
                                                        int8_t *__restrict__ d_llrRes,
-                                                       const uint8_t *lut_numBnInBnGroups,
+                                                       const uint32_t *lut_numBnInBnGroups,
                                                        const uint32_t *lut_startAddrBnBuf,
-                                                       const uint16_t *lut_startAddrBnLlr,
+                                                       const uint32_t *lut_startAddrBnLlr,
                                                        int Zc,
                                                        int8_t *iter_ptr,
                                                        int8_t numMaxIter,
@@ -903,25 +909,25 @@ __global__ void bnProcPcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict_
   if (tid >= 3360) {
     return;
   }
-  static const uint8_t lut_BnPcGrpIdx_BG1_R23[35] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 3, 3, 3, 3, 3, 4,  4, 4,
+  static const uint32_t lut_BnPcGrpIdx_BG1_R23[35] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 3, 3, 3, 3, 3, 4,  4, 4,
                                                      5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 11, 12};
 
-  static const uint8_t lut_BnPcIdx_BG1_R23[35] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 1, 2, 3, 4, 5, 1, 2, 3,
+  static const uint32_t lut_BnPcIdx_BG1_R23[35] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 1, 2, 3, 4, 5, 1, 2, 3,
                                                   1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 8, 1, 1};
   //                                          1, 2, 3, 4, 5, 6, 7, 8, 9,10,11, 12,
   //                                          13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29, 30
-  static const uint8_t lut_BnPcToAddrIdx_BG1_R23[30] = {1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 7, 8, 0, 0, 0,
+  static const uint32_t lut_BnPcToAddrIdx_BG1_R23[30] = {1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 7, 8, 0, 0, 0,
                                                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   // BG1: 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30
   // R23{ 9, 1, 5, 3, 7, 8, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   int row = tid / 96; // to decide the inner block
   int lane = tid % 96; // to decide the inner lane
 
-  uint8_t GrpIdx = lut_BnPcGrpIdx_BG1_R23[row];
+  uint32_t GrpIdx = lut_BnPcGrpIdx_BG1_R23[row];
   // uint8_t MsgIdx = lut_MsgIdx[row];
-  uint8_t BnIdx = lut_BnPcIdx_BG1_R23[row];
-  uint8_t BnToAddrIdx = lut_BnPcToAddrIdx_BG1_R23[GrpIdx - 1];
-  uint8_t GrpNum = lut_numBnInBnGroups[GrpIdx - 1];
+  uint32_t BnIdx = lut_BnPcIdx_BG1_R23[row];
+  uint32_t BnToAddrIdx = lut_BnPcToAddrIdx_BG1_R23[GrpIdx - 1];
+  uint32_t GrpNum = lut_numBnInBnGroups[GrpIdx - 1];
 
   const int8_t *p_bnProcBuf_Grp = (const int8_t *)(d_bnProcBuf + lut_startAddrBnBuf[BnToAddrIdx - 1]);
   const int8_t *p_bnProcBufRes_Grp = (const int8_t *)(d_bnProcBufRes + lut_startAddrBnBuf[BnToAddrIdx - 1]);
@@ -946,9 +952,9 @@ __global__ void bnProcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict__ 
                                                      int8_t *__restrict__ d_bnProcBufRes,
                                                      int8_t *__restrict__ d_llrProcBuf,
                                                      int8_t *__restrict__ d_llrRes,
-                                                     const uint8_t *lut_numBnInBnGroups,
+                                                     const uint32_t *lut_numBnInBnGroups,
                                                      const uint32_t *lut_startAddrBnBuf,
-                                                     const uint16_t *lut_startAddrBnLlr,
+                                                     const uint32_t *lut_startAddrBnLlr,
                                                      int Zc,
                                                      int8_t *iter_ptr,
                                                      int8_t numMaxIter,
@@ -969,16 +975,16 @@ __global__ void bnProcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict__ 
 
   //                                          1, 2, 3, 4, 5, 6, 7, 8, 9,10,11, 12, 13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,
   //                                          28,29, 30
-  static const uint8_t lut_BnToAddrIdx[30] = {9, 1, 5, 3, 7, 8, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+  static const uint32_t lut_BnToAddrIdx[30] = {9, 1, 5, 3, 7, 8, 0, 0, 0, 0, 1, 1, 0, 0, 0,
                                               0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   int row = tid / 96; // to decide the inner block
   int lane = tid % 96; // to decide the inner lane
 
-  uint8_t GrpIdx = lut_BnGrpIdx_BG1_R23[row];
-  uint8_t MsgIdx = lut_BnMsgIdx_BG1_R23[row];
-  uint8_t BnIdx = lut_BnIdx_BG1_R23[row];
-  uint8_t BnToAddrIdx = lut_BnToAddrIdx[GrpIdx - 1];
-  uint8_t GrpNum = lut_numBnInBnGroups[GrpIdx - 1];
+  uint32_t GrpIdx = lut_BnGrpIdx_BG1_R23[row];
+  uint32_t MsgIdx = lut_BnMsgIdx_BG1_R23[row];
+  uint32_t BnIdx = lut_BnIdx_BG1_R23[row];
+  uint32_t BnToAddrIdx = lut_BnToAddrIdx[GrpIdx - 1];
+  uint32_t GrpNum = lut_numBnInBnGroups[GrpIdx - 1];
 
   const int8_t *p_bnProcBuf_Grp = (const int8_t *)(d_bnProcBuf + lut_startAddrBnBuf[BnToAddrIdx - 1]);
   const int8_t *p_bnProcBufRes_Grp = (const int8_t *)(d_bnProcBufRes + lut_startAddrBnBuf[BnToAddrIdx - 1]);
@@ -1009,13 +1015,13 @@ void nrLDPC_bnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
-  const uint8_t *lut_numBnInBnGroups;
+  const uint32_t *lut_numBnInBnGroups;
   const uint32_t *lut_startAddrBnGroups;
-  const uint16_t *lut_startAddrBnGroupsLlr;
+  const uint32_t *lut_startAddrBnGroupsLlr;
 
-  lut_numBnInBnGroups = p_lut->numBnInBnGroups;
-  lut_startAddrBnGroups = p_lut->startAddrBnGroups;
-  lut_startAddrBnGroupsLlr = p_lut->startAddrBnGroupsLlr;
+  lut_numBnInBnGroups = gpu_lut_numBnInBnGroups_BG1_R23;
+  lut_startAddrBnGroups = gpu_lut_startAddrBnGroups_BG1_R23;
+  lut_startAddrBnGroupsLlr = gpu_lut_startAddrBnGroupsLlr_BG1_R23;
 
   int8_t *p_bnProcBuf = (int8_t *)bnProcBuf;
   int8_t *p_bnProcBufRes = (int8_t *)bnProcBufRes;
@@ -1078,17 +1084,17 @@ __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lu
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-  const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
+  const uint32_t *lut_startAddrs = gpu_lut_startAddrCnGroups_BG1;
 
   int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...315
   int lane = tid % 96; // to decide the inner lane
   // if(blk == 1&&tid == 0) printf("I'm inside cnProc_kernel\n");
-  uint8_t groupIdx = lut_CnGrpIdx_BG1_R23[row] - 1;
+  uint32_t groupIdx = lut_CnGrpIdx_BG1_R23[row] - 1;
   // if(blk == 1&&tid == 0) printf("1.1\n");
-  uint8_t CnIdx = lut_CnIdx_BG1_R23[row] - 1;
-  uint8_t MsgIdx = lut_CnMsgIdx_BG1_R23[row];
-  uint32_t inOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
-  uint32_t outOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
+  uint32_t CnIdx = lut_CnIdx_BG1_R23[row] - 1;
+  uint32_t MsgIdx = lut_CnMsgIdx_BG1_R23[row];
+  uint32_t inOffset = lut_startAddrs[groupIdx] + Zc * CnIdx;
+  uint32_t outOffset = lut_startAddrs[groupIdx] + Zc * CnIdx;
   // if(blk == 1&&tid == 0) printf("1.2\n");
   //   __syncthreads();
 
@@ -1253,7 +1259,7 @@ void nrLDPC_BnToCnPC_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                               cudaStream_t *streams,
                                               int8_t CudaStreamIdx)
 {
-  const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
+  const uint32_t *lut_startAddrCnGroups = gpu_lut_startAddrCnGroups_BG1;
 
   const int numGroups = 9;
 
@@ -1302,6 +1308,7 @@ void nrLDPC_BnToCnPC_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
 
 //-----------------------------------------↑↑↑ R13 ↑↑↑----------------------------------------
 
+
 extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
                                                        int8_t *p_out,
                                                        uint32_t numLLR,
@@ -1330,6 +1337,8 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
   // cudaEvent_t captureDoneEvent[MAX_NUM_DLSCH_SEGMENTS];
   // cudaEvent_t captureDoneEvent[MAX_NUM_DLSCH_SEGMENTS];
 
+  check_ptr_host(gpu_lut_startAddrCnGroups_BG1,"gpu_lut_startAddrCnGroups_BG1");
+
   if (!graphCreated[CudaStreamIdx]) {
     printf("Creating the graph for stream %d, format R%d\n", CudaStreamIdx,R);
     if (CudaStreamIdx != 0) {
@@ -1337,14 +1346,27 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
     }
 
     // Start graph recording
-    cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
+ /*   cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
+      */
     // check_ptr_kernel_easy<<<1,10>>>(2);
     // cudaDeviceSynchronize();
     // CHECK(cudaGetLastError());
     switch (R) {
       case 13:
         for (int i = 0; i <= numMaxIter; i++) {
-          // printf("I'm inside the loop i = %d\n", i);
+		
+          printf("I'm inside the loop i = %d, p_lut %p, cnProcBuf %p, cnProcBufRes %p, bnProcBuf %p, Z %d, iter_ptr %p, numMaxIter %d, PC_flag %p, streams %p, CudaStreamIdx %d\n", i,
+          p_lut,
+                                                 cnProcBuf,
+                                                 cnProcBufRes,
+                                                 bnProcBuf,
+                                                 (int)Z,
+                                                 iter_ptr,
+                                                 numMaxIter,
+                                                 PC_Flag,
+                                                 streams,
+                                                 CudaStreamIdx);
+						 
           nrLDPC_cnProc_BG1_R13_cuda_stream_core(p_lut,
                                                  cnProcBuf,
                                                  cnProcBufRes,
@@ -1356,9 +1378,21 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  streams,
                                                  CudaStreamIdx);
           CHECK(cudaGetLastError());
-          // cd cudaDeviceSynchronize();
+          cudaDeviceSynchronize();
 
-          // printf("In stream %d 1: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
+          printf("In stream %d 1: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
+          printf("I'm inside the loop i = %d, p_lut %p, bnProcBuf %p, bnProcBufRes %p, llrProcBuf %p, llrRes %p, Z %d, iter_ptr %p, numMaxIter %d, PC_flag %p, streams %p, CudaStreamIdx %d\n", i,
+          p_lut,
+                                                 bnProcBuf,
+						 bnProcBufRes,
+						 llrProcBuf,
+						 llrRes,
+                                                 (int)Z,
+                                                 iter_ptr,
+                                                 numMaxIter,
+                                                 PC_Flag,
+                                                 streams,
+                                                 CudaStreamIdx);
           nrLDPC_bnProc_BG1_R13_cuda_stream_core(p_lut,
                                                  bnProcBuf,
                                                  bnProcBufRes,
@@ -1370,11 +1404,11 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  PC_Flag,
                                                  streams,
                                                  CudaStreamIdx);
-          // cudaDeviceSynchronize();
+          cudaDeviceSynchronize();
 
-          // printf("In stream %d 2: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
+          printf("In stream %d 2: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
           CHECK(cudaGetLastError());
-          // cudaDeviceSynchronize();
+          cudaDeviceSynchronize();
           nrLDPC_BnToCnPC_BG1_R13_cuda_stream_core(p_lut,
                                                    bnProcBufRes,
                                                    cnProcBuf,
@@ -1393,8 +1427,8 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                    streams,
                                                    CudaStreamIdx);
           CHECK(cudaGetLastError());
-          // cudaDeviceSynchronize();
-          // printf("In stream %d 3: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
+          cudaDeviceSynchronize();
+          printf("In stream %d 3: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
         }
         break;
       case 23:

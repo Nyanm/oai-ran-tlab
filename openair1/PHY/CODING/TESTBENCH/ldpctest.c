@@ -34,7 +34,9 @@
 #include "openair1/PHY/defs_nr_common.h"
 #include "coding_unitary_defs.h"
 #include "common/utils/LOG/log.h"
-
+#ifdef ENABLE_CUDA
+#include <cuda_runtime.h>
+#endif
 #define MAX_BLOCK_LENGTH 8448
 
 #ifndef malloc16
@@ -119,6 +121,9 @@ typedef struct {
   n_iter_stats_t dec_iter;
 } one_measurement_t;
 
+uint8_t *estimated_output_dev,*estimated_output;
+int8_t *channel_output_fixed_dev,*channel_output_fixed;
+
 one_measurement_t test_ldpc(short max_iterations,
                             int nom_rate,
                             int denom_rate,
@@ -144,17 +149,12 @@ one_measurement_t test_ldpc(short max_iterations,
   sigma = 1.0 / sqrt(2 * SNR);
   cpu_meas_enabled = 1;
   uint8_t *test_input[n_segments * NR_MAX_NB_LAYERS];
-  uint8_t estimated_output[n_segments * Kprime];
-  //printf("Output Address: %p\n", estimated_output);
-  memset(estimated_output, 0, sizeof(estimated_output));
   uint8_t *channel_input[n_segments];
   uint8_t *channel_input_optim;
 
   // double channel_output[68 * 384];
   double modulated_input[n_segments][68 * 384];
   memset(modulated_input,0,sizeof(modulated_input));
-  int8_t channel_output_fixed[n_segments * 68 * 384];
-  memset(modulated_input,0,sizeof(channel_output_fixed));
   short BG = 0, nrows = 0; //,ncols;
   int i1, Kb = 0;
   int R_ind = 0;
@@ -248,6 +248,9 @@ one_measurement_t test_ldpc(short max_iterations,
     exit(1);
   }
 
+  memset(channel_output_fixed,0,sizeof(channel_output_fixed));
+  memset(estimated_output, 0, sizeof(estimated_output));
+    	  
   // find minimum value in all sets of lifting size
   int Zc = 0;
   const short lift_size[51] = {2,  3,   4,   5,   6,   7,   8,   9,   10,  11,  12,  13,  14,  15,  16,  18,  20,
@@ -342,8 +345,10 @@ one_measurement_t test_ldpc(short max_iterations,
     impp.n_segments = n_segments;
     start_meas(&ret.time_optim);
     impp.first_seg = 0;
+    
     if (use32bit==0) ldpc_toCompare.LDPCencoder(test_input, channel_input_optim, &impp);
     else output32=ldpc_toCompare.LDPCencoder32(test_input, &impp);
+ 
     stop_meas(&ret.time_optim);
 
     if (ntrials == 1)
@@ -400,18 +405,21 @@ one_measurement_t test_ldpc(short max_iterations,
       start_meas(&ret.time_decoder);
       set_abort(&dec_abort, false);
 //dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_128.txt");
+#ifdef ENABLE_CUDA
       if (use32bit && j==0)
         n_iter = ldpc_toCompare.LDPCdecoder_cuda(&decParams[j],
-                                                 channel_output_fixed,
-                                                 estimated_output,
+                                                 channel_output_fixed_dev,
+                                                 estimated_output_dev,
                                                  &decoder_profiler,
                                                  &dec_abort);
       else
+#else
         n_iter = ldpc_toCompare.LDPCdecoder(&decParams[j],
                                             &channel_output_fixed[j*384*68],
                                             &estimated_output[j*Kprime],
                                             &decoder_profiler,
                                             &dec_abort);
+#endif
       stop_meas(&ret.time_decoder);
 
       // count errors
@@ -613,6 +621,22 @@ int main(int argc, char *argv[])
 
   // find minimum value in all sets of lifting size
   Zc = 0;
+#ifdef ENABLE_CUDA
+  cudaError_t err = cudaHostAlloc((void**)&estimated_output,sizeof(uint8_t)* n_segments * Kprime,cudaHostAllocMapped);
+  AssertFatal(err==cudaSuccess,"estimated_output n_segments %d Kprime %d\n",n_segments,Kprime);
+  err = cudaHostAlloc((void**)&channel_output_fixed,sizeof(int8_t)* n_segments * 68 * 384,cudaHostAllocMapped);
+  AssertFatal(err==cudaSuccess,"channel_output_fixed n_segments %d\n",n_segments);
+  if (use32bit==1) {
+     err = cudaHostGetDevicePointer((void**)&estimated_output_dev,estimated_output,0);  
+     AssertFatal(err==cudaSuccess,"estimated_output_dev\n");
+     err = cudaHostGetDevicePointer((void**)&channel_output_fixed_dev,channel_output_fixed,0);  
+     AssertFatal(err==cudaSuccess,"channel_output_fixed_dev\n");
+     printf("estimated_output_dev %p, channel_output_fixed_dev %p\n",estimated_output_dev,channel_output_fixed_dev);
+  }
+#else
+  estimated_output = malloc(n_segments * Kprime);
+  channel_output_fixed=malloc(n_segments * 68 * 384);
+#endif
 
   char fname[200];
   sprintf(fname, "ldpctest_BG_%d_Zc_%d_rate_%d-%d_Kprime_%d_maxit_%d.txt", BG, Zc, nom_rate, denom_rate, Kprime, max_iterations);

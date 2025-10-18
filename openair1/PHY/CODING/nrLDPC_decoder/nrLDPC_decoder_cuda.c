@@ -27,7 +27,7 @@
 
 #include <stdint.h>
 #include "PHY/sse_intrin.h"
-#include "nrLDPCdecoder_defs.h"
+//#include "nrLDPCdecoder_defs.h"
 #include "nrLDPC_types.h"
 #include "nrLDPC_init.h"
 #include "nrLDPC_mPass.h"

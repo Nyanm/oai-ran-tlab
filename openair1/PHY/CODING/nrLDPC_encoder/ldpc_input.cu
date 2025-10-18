@@ -154,7 +154,7 @@ extern "C" int ldpc_input(uint32_t **input,uint32_t *cc[4],int block_length,int 
  ldpc_input_worker<<<numblocks,NTHREADS>>>(input,cc,block_length,nseg);
  cudaError_t err=cudaPeekAtLastError();
  if (err!=cudaSuccess) {
-    printf("cuda error: %s (input %p, cc %p, block_length %d, nseg %d, numb %d, ns %d)\n",cudaGetErrorString(err),input,cc,block_length,nseg,numb,ns);
+    printf("ldpc_input : cuda error: %s (input %p, cc %p, block_length %d, nseg %d, numb %d, ns %d)\n",cudaGetErrorString(err),input,cc,block_length,nseg,numb,ns);
     exit(-1);
  }
  cudaDeviceSynchronize();
@@ -167,7 +167,7 @@ extern "C" int circcopy_c(uint32_t **cc,uint32_t **c,int n_inputs) {
  circcopy_c_worker<<<numblocks,384>>>(cc,c);
  cudaError_t err=cudaPeekAtLastError();
  if (err!=cudaSuccess) {
-    printf("cuda error: %s (cc %p, c %p, n_inputs %d)\n",cudaGetErrorString(err),cc,c,n_inputs);
+    printf("circcopy_c : cuda error: %s (cc %p, c %p, n_inputs %d)\n",cudaGetErrorString(err),cc,c,n_inputs);
     exit(-1);
  }
  cudaDeviceSynchronize();

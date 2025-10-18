@@ -266,3 +266,16 @@ __device__ __constant__ uint8_t lut_BnMsgIdx_BG1_R23[144] = {
     // Group 12 (Nbn=1, R=12) -> {1..12} repeated 1 time
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
 };
+__device__ __constant__ uint32_t gpu_lut_startAddrCnGroups_BG1[NR_LDPC_NUM_CN_GROUPS_BG1] = {0, 1152, 8832, 43392, 61824, 75264, 81408, 88320, 92160};
+
+__device__ __constant__ uint32_t gpu_lut_startAddrBnGroups_BG1_R13[NR_LDPC_NUM_BN_GROUPS_BG1_R13] = {0, 16128, 17664, 19584, 24192, 34944, 44160, 47616, 62976, 75648, 94080, 99072, 109824};
+
+__device__ __constant__ uint32_t gpu_lut_startAddrBnGroups_BG1_R23[NR_LDPC_NUM_BN_GROUPS_BG1_R23] = {0, 3456, 4224, 9984, 14592, 28032, 46464, 50688};
+
+__device__ __constant__ uint32_t gpu_lut_numBnInBnGroups_BG1_R13[NR_LDPC_NUM_BN_GROUPS_BG1_R13] = {42, 0, 0, 1, 1, 2, 4, 3, 1, 4, 3, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1};
+
+__device__ __constant__ uint32_t gpu_lut_numBnInBnGroups_BG1_R23[NR_LDPC_NUM_BN_GROUPS_BG1_R13] = { 9, 1, 5, 3, 7, 8, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+__device__ __constant__ uint32_t gpu_lut_startAddrBnGroupsLlr_BG1_R13[NR_LDPC_NUM_BN_GROUPS_BG1_R13] = {0, 16128, 16512, 16896, 17664, 19200, 20352, 20736, 22272, 23424, 24960, 25344, 25728};
+
+__device__ __constant__ uint32_t gpu_lut_startAddrBnGroupsLlr_BG1_R23[NR_LDPC_NUM_BN_GROUPS_BG1_R23] = {0, 3456, 3840, 5760, 6912, 9600, 12672, 13056};

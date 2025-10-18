@@ -61,9 +61,11 @@ uint32_t **input_host;
 uint32_t *input_devh[128];
 int managed = 0, concurrent = 0, uva = 0, pageable = 0, pageable_uses_host = 0, register_host = 0;
 
-#define USE_GPU_CIRCCOPY 1
-#define USE_GPU_FOR_INPUT 1
+//#define USE_GPU_CIRCCOPY 1
+//#define USE_GPU_FOR_INPUT 1
 int cuda_support_set = 0;
+
+extern int cuda_support_init_decoder();
 
 void cuda_support_init() {
 
@@ -195,6 +197,7 @@ void cuda_support_init() {
     AssertFatal(err == cudaSuccess,"CUDA Error (memcpy input_devh -> input_dev): %s\n", cudaGetErrorString(err));
     */
   }
+  AssertFatal(cuda_support_init_decoder()==0,"Failed to initialize decoder memory\n");
   cuda_support_set=1;
 }
 
