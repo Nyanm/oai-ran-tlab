@@ -1353,7 +1353,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  PC_Flag,
                                                  streams,
                                                  CudaStreamIdx);
-          CHECK(cudaGetLastError());
+//          CHECK(cudaGetLastError());
           // cd cudaDeviceSynchronize();
 
           // printf("In stream %d 1: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
@@ -1371,7 +1371,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
           // cudaDeviceSynchronize();
 
           // printf("In stream %d 2: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
-          CHECK(cudaGetLastError());
+  //        CHECK(cudaGetLastError());
           // cudaDeviceSynchronize();
           nrLDPC_BnToCnPC_BG1_R13_cuda_stream_core(p_lut,
                                                    bnProcBufRes,
@@ -1390,7 +1390,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                    numLLR,
                                                    streams,
                                                    CudaStreamIdx);
-          CHECK(cudaGetLastError());
+    //      CHECK(cudaGetLastError());
           // cudaDeviceSynchronize();
           // printf("In stream %d 3: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
         }
