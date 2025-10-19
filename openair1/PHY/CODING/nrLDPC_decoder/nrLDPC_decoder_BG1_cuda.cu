@@ -19,7 +19,7 @@
 
 #define BIG_KERNEL 1
 
-#define RECORD_GRAPH 0
+#define RECORD_GRAPH 1
 
 // decoder_graphs.cu
 #include "decoder_graphs.h"

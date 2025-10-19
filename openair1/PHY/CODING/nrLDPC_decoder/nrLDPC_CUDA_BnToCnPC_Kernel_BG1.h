@@ -6,23 +6,22 @@
 #include "nrLDPC_types.h"
 #include "nrLDPC_CUDA_public.h"
 
-
 //------------------------------Stream Version------------------------
 __device__ void CnToBnPC_Kernel_BG1_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
-                                               int8_t *__restrict__ d_bnOutAll,
-                                               const int8_t *__restrict__ d_cnBufAll,
-                                               int8_t *__restrict__ d_cnOutAll,
-                                               int8_t *__restrict__ d_bnBufAll,
-                                               int8_t MsgIdx,
-                                               int lane,
-                                               uint8_t groupId,
-                                               uint8_t CnIdx,
-                                               int Zc,
-                                               int *PC_Flag)
+                                                   int8_t *__restrict__ d_bnOutAll,
+                                                   const int8_t *__restrict__ d_cnBufAll,
+                                                   int8_t *__restrict__ d_cnOutAll,
+                                                   int8_t *__restrict__ d_bnBufAll,
+                                                   int8_t MsgIdx,
+                                                   int lane,
+                                                   uint8_t groupId,
+                                                   uint8_t CnIdx,
+                                                   int Zc,
+                                                   int *PC_Flag)
 {
   const uint8_t NUM = 3; // Gn = 3
   const uint row = MsgIdx - 1;
-  int tid = row* 96 + lane;
+  int tid = row * 96 + lane;
 
   uint32_t *p_cnProcBufBit, *p_cnProcBufResBit;
 
@@ -44,16 +43,18 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
   //------------------------------------Done----------------------------------
   __syncthreads();
   uint32_t pcRes = 0;
-  uint32_t ymm0, ymm1;
+  uint32_t tmp[3];
   if (tid < 96) {
-    #pragma unroll 3
+    uint32_t tmp[8];
+#pragma unroll
     for (int i = 0; i < 3; i++) {
-      p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 1 * Zc * i + tid * 4);
-      p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 1 * Zc * i + tid * 4);
-      ymm0 = *p_cnProcBufBit;
-      ymm1 = *p_cnProcBufResBit;
-
-      pcRes ^= __vcmples4(__vaddss4(ymm0, ymm1), 0);
+      uint32_t ymm0 = *(uint32_t *)(d_cnBufAll + Zc * i + tid * 4);
+      uint32_t ymm1 = *(uint32_t *)(d_cnOutAll + Zc * i + tid * 4);
+      tmp[i] = __vcmples4(__vaddss4(ymm0, ymm1), 0);
+    }
+#pragma unroll
+    for (int i = 0; i < 3; i++) {
+      pcRes ^= tmp[i];
     }
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
@@ -66,16 +67,16 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
 }
 
 __device__ void CnToBnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
-                                               int8_t *__restrict__ d_bnOutAll,
-                                               const int8_t *__restrict__ d_cnBufAll,
-                                               int8_t *__restrict__ d_cnOutAll,
-                                               int8_t *__restrict__ d_bnBufAll,
-                                               int8_t MsgIdx,
-                                               int lane,
-                                               uint8_t groupId,
-                                               uint8_t CnIdx,
-                                               int Zc,
-                                               int *PC_Flag)
+                                                   int8_t *__restrict__ d_bnOutAll,
+                                                   const int8_t *__restrict__ d_cnBufAll,
+                                                   int8_t *__restrict__ d_cnOutAll,
+                                                   int8_t *__restrict__ d_bnBufAll,
+                                                   int8_t MsgIdx,
+                                                   int lane,
+                                                   uint8_t groupId,
+                                                   uint8_t CnIdx,
+                                                   int Zc,
+                                                   int *PC_Flag)
 {
   const uint8_t NUM = 4; // Gn = 4
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -85,8 +86,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
   const uint row = MsgIdx - 1;
-  int tid = row* 96 + lane;
-
+  int tid = row * 96 + lane;
 
   const uint baseShift = 5 * Zc * row; // offset pointed at different BN
   const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -112,17 +112,19 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
   uint32_t pcRes = 0;
-  uint32_t ymm0, ymm1;
+  uint32_t tmp[4];
   if (tid < 96) {
-    #pragma unroll 4
+#pragma unroll
     for (int i = 0; i < 4; i++) {
-      p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 5 * Zc * i + tid * 4);
-      p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 5 * Zc * i + tid * 4);
-      ymm0 = *p_cnProcBufBit;
-      ymm1 = *p_cnProcBufResBit;
-
-      pcRes ^= __vcmples4(__vaddss4(ymm0, ymm1), 0);
+      uint32_t ymm0 = *(uint32_t *)(d_cnBufAll + 5 * Zc * i + tid * 4);
+      uint32_t ymm1 = *(uint32_t *)(d_cnOutAll + 5 * Zc * i + tid * 4);
+      tmp[i] = __vcmples4(__vaddss4(ymm0, ymm1), 0);
     }
+#pragma unroll
+    for (int i = 0; i < 4; i++) {
+      pcRes ^= tmp[i];
+    }
+
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
@@ -134,16 +136,16 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
 }
 
 __device__ void CnToBnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
-                                               int8_t *__restrict__ d_bnOutAll,
-                                               const int8_t *__restrict__ d_cnBufAll,
-                                               int8_t *__restrict__ d_cnOutAll,
-                                               int8_t *__restrict__ d_bnBufAll,
-                                               int8_t MsgIdx,
-                                               int lane,
-                                               uint8_t groupId,
-                                               uint8_t CnIdx,
-                                               int Zc,
-                                               int *PC_Flag)
+                                                   int8_t *__restrict__ d_bnOutAll,
+                                                   const int8_t *__restrict__ d_cnBufAll,
+                                                   int8_t *__restrict__ d_cnOutAll,
+                                                   int8_t *__restrict__ d_bnBufAll,
+                                                   int8_t MsgIdx,
+                                                   int lane,
+                                                   uint8_t groupId,
+                                                   uint8_t CnIdx,
+                                                   int Zc,
+                                                   int *PC_Flag)
 {
   const uint8_t NUM = 5; // Gn = 5
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -153,8 +155,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
   const uint row = MsgIdx - 1;
-  int tid = row* 96 + lane;
-
+  int tid = row * 96 + lane;
 
   const uint baseShift = 18 * Zc * row; // offset pointed at different BN
   const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -180,16 +181,17 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
   uint32_t pcRes = 0;
-  uint32_t ymm0, ymm1;
+  uint32_t tmp[5];
   if (tid < 96) {
-    #pragma unroll 5
+#pragma unroll
     for (int i = 0; i < 5; i++) {
-      p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 18 * Zc * i + tid * 4);
-      p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 18 * Zc * i + tid * 4);
-      ymm0 = *p_cnProcBufBit;
-      ymm1 = *p_cnProcBufResBit;
-
-      pcRes ^= __vcmples4(__vaddss4(ymm0, ymm1), 0);
+      uint32_t ymm0 = *(uint32_t *)(d_cnBufAll + 18 * Zc * i + tid * 4);
+      uint32_t ymm1 = *(uint32_t *)(d_cnOutAll + 18 * Zc * i + tid * 4);
+      tmp[i] = __vcmples4(__vaddss4(ymm0, ymm1), 0);
+    }
+#pragma unroll
+    for (int i = 0; i < 5; i++) {
+      pcRes ^= tmp[i];
     }
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
@@ -201,16 +203,16 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
   }
 }
 __device__ void CnToBnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
-                                               int8_t *__restrict__ d_bnOutAll,
-                                               const int8_t *__restrict__ d_cnBufAll,
-                                               int8_t *__restrict__ d_cnOutAll,
-                                               int8_t *__restrict__ d_bnBufAll,
-                                               int8_t MsgIdx,
-                                               int lane,
-                                               uint8_t groupId,
-                                               uint8_t CnIdx,
-                                               int Zc,
-                                               int *PC_Flag)
+                                                   int8_t *__restrict__ d_bnOutAll,
+                                                   const int8_t *__restrict__ d_cnBufAll,
+                                                   int8_t *__restrict__ d_cnOutAll,
+                                                   int8_t *__restrict__ d_bnBufAll,
+                                                   int8_t MsgIdx,
+                                                   int lane,
+                                                   uint8_t groupId,
+                                                   uint8_t CnIdx,
+                                                   int Zc,
+                                                   int *PC_Flag)
 {
   const uint8_t NUM = 6; // Gn = 6
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -220,8 +222,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
   const uint row = MsgIdx - 1;
-  int tid = row* 96 + lane;
-
+  int tid = row * 96 + lane;
 
   const uint baseShift = 8 * Zc * row; // offset pointed at different BN
   const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -247,17 +248,19 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
   uint32_t pcRes = 0;
-  uint32_t ymm0, ymm1;
+  uint32_t tmp[6];
   if (tid < 96) {
-    #pragma unroll 6
+#pragma unroll
     for (int i = 0; i < 6; i++) {
-      p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 8 * Zc * i + tid * 4);
-      p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 8 * Zc * i + tid * 4);
-      ymm0 = *p_cnProcBufBit;
-      ymm1 = *p_cnProcBufResBit;
-
-      pcRes ^= __vcmples4(__vaddss4(ymm0, ymm1), 0);
+      uint32_t ymm0 = *(uint32_t *)(d_cnBufAll + 8 * Zc * i + tid * 4);
+      uint32_t ymm1 = *(uint32_t *)(d_cnOutAll + 8 * Zc * i + tid * 4);
+      tmp[i] = __vcmples4(__vaddss4(ymm0, ymm1), 0);
     }
+#pragma unroll
+    for (int i = 0; i < 6; i++) {
+      pcRes ^= tmp[i];
+    }
+
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
       if (tid % warpSize == 0) {
@@ -268,16 +271,16 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
   }
 }
 __device__ void CnToBnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
-                                               int8_t *__restrict__ d_bnOutAll,
-                                               const int8_t *__restrict__ d_cnBufAll,
-                                               int8_t *__restrict__ d_cnOutAll,
-                                               int8_t *__restrict__ d_bnBufAll,
-                                               int8_t MsgIdx,
-                                               int lane,
-                                               uint8_t groupId,
-                                               uint8_t CnIdx,
-                                               int Zc,
-                                               int *PC_Flag)
+                                                   int8_t *__restrict__ d_bnOutAll,
+                                                   const int8_t *__restrict__ d_cnBufAll,
+                                                   int8_t *__restrict__ d_cnOutAll,
+                                                   int8_t *__restrict__ d_bnBufAll,
+                                                   int8_t MsgIdx,
+                                                   int lane,
+                                                   uint8_t groupId,
+                                                   uint8_t CnIdx,
+                                                   int Zc,
+                                                   int *PC_Flag)
 {
   const uint8_t NUM = 7; // Gn = 7
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -287,8 +290,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
   const uint row = MsgIdx - 1;
-  int tid = row* 96 + lane;
-
+  int tid = row * 96 + lane;
 
   const uint baseShift = 5 * Zc * row; // offset pointed at different BN
   const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -314,16 +316,17 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
   uint32_t pcRes = 0;
-  uint32_t ymm0, ymm1;
+  uint32_t tmp[7];
   if (tid < 96) {
-    #pragma unroll 7
+#pragma unroll
     for (int i = 0; i < 7; i++) {
-      p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 5 * Zc * i + tid * 4);
-      p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 5 * Zc * i + tid * 4);
-      ymm0 = *p_cnProcBufBit;
-      ymm1 = *p_cnProcBufResBit;
-
-      pcRes ^= __vcmples4(__vaddss4(ymm0, ymm1), 0);
+      uint32_t ymm0 = *(uint32_t *)(d_cnBufAll + 5 * Zc * i + tid * 4);
+      uint32_t ymm1 = *(uint32_t *)(d_cnOutAll + 5 * Zc * i + tid * 4);
+      tmp[i] = __vcmples4(__vaddss4(ymm0, ymm1), 0);
+    }
+#pragma unroll
+    for (int i = 0; i < 7; i++) {
+      pcRes ^= tmp[i];
     }
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
@@ -335,16 +338,16 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
   }
 }
 __device__ void CnToBnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
-                                               int8_t *__restrict__ d_bnOutAll,
-                                               const int8_t *__restrict__ d_cnBufAll,
-                                               int8_t *__restrict__ d_cnOutAll,
-                                               int8_t *__restrict__ d_bnBufAll,
-                                               int8_t MsgIdx,
-                                               int lane,
-                                               uint8_t groupId,
-                                               uint8_t CnIdx,
-                                               int Zc,
-                                               int *PC_Flag)
+                                                   int8_t *__restrict__ d_bnOutAll,
+                                                   const int8_t *__restrict__ d_cnBufAll,
+                                                   int8_t *__restrict__ d_cnOutAll,
+                                                   int8_t *__restrict__ d_bnBufAll,
+                                                   int8_t MsgIdx,
+                                                   int lane,
+                                                   uint8_t groupId,
+                                                   uint8_t CnIdx,
+                                                   int Zc,
+                                                   int *PC_Flag)
 {
   const uint8_t NUM = 8; // Gn = 8
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -354,8 +357,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
   const uint row = MsgIdx - 1;
-  int tid = row* 96 + lane;
-
+  int tid = row * 96 + lane;
 
   const uint baseShift = 2 * Zc * row; // offset pointed at different BN
   const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -381,16 +383,17 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
   uint32_t pcRes = 0;
-  uint32_t ymm0, ymm1;
+  uint32_t tmp[8];
   if (tid < 96) {
-    #pragma unroll 8
+#pragma unroll
     for (int i = 0; i < 8; i++) {
-      p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 2 * Zc * i + tid * 4);
-      p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 2 * Zc * i + tid * 4);
-      ymm0 = *p_cnProcBufBit;
-      ymm1 = *p_cnProcBufResBit;
-
-      pcRes ^= __vcmples4(__vaddss4(ymm0, ymm1), 0);
+      uint32_t ymm0 = *(uint32_t *)(d_cnBufAll + 2 * Zc * i + tid * 4);
+      uint32_t ymm1 = *(uint32_t *)(d_cnOutAll + 2 * Zc * i + tid * 4);
+      tmp[i] = __vcmples4(__vaddss4(ymm0, ymm1), 0);
+    }
+#pragma unroll
+    for (int i = 0; i < 8; i++) {
+      pcRes ^= tmp[i];
     }
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
@@ -402,16 +405,16 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
   }
 }
 __device__ void CnToBnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
-                                               int8_t *__restrict__ d_bnOutAll,
-                                               const int8_t *__restrict__ d_cnBufAll,
-                                               int8_t *__restrict__ d_cnOutAll,
-                                               int8_t *__restrict__ d_bnBufAll,
-                                               int8_t MsgIdx,
-                                               int lane,
-                                               uint8_t groupId,
-                                               uint8_t CnIdx,
-                                               int Zc,
-                                               int *PC_Flag)
+                                                   int8_t *__restrict__ d_bnOutAll,
+                                                   const int8_t *__restrict__ d_cnBufAll,
+                                                   int8_t *__restrict__ d_cnOutAll,
+                                                   int8_t *__restrict__ d_bnBufAll,
+                                                   int8_t MsgIdx,
+                                                   int lane,
+                                                   uint8_t groupId,
+                                                   uint8_t CnIdx,
+                                                   int Zc,
+                                                   int *PC_Flag)
 {
   const uint8_t NUM = 9; // Gn = 9
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -421,8 +424,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
   const uint row = MsgIdx - 1;
-  int tid = row* 96 + lane;
-
+  int tid = row * 96 + lane;
 
   const uint baseShift = 2 * Zc * row; // offset pointed at different BN
   const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -448,16 +450,17 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
   uint32_t pcRes = 0;
-  uint32_t ymm0, ymm1;
+  uint32_t tmp[9];
   if (tid < 96) {
-    #pragma unroll 9
+#pragma unroll
     for (int i = 0; i < 9; i++) {
-      p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 2 * Zc * i + tid * 4);
-      p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 2 * Zc * i + tid * 4);
-      ymm0 = *p_cnProcBufBit;
-      ymm1 = *p_cnProcBufResBit;
-
-      pcRes ^= __vcmples4(__vaddss4(ymm0, ymm1), 0);
+      uint32_t ymm0 = *(uint32_t *)(d_cnBufAll + 2 * Zc * i + tid * 4);
+      uint32_t ymm1 = *(uint32_t *)(d_cnOutAll + 2 * Zc * i + tid * 4);
+      tmp[i] = __vcmples4(__vaddss4(ymm0, ymm1), 0);
+    }
+#pragma unroll
+    for (int i = 0; i < 9; i++) {
+      pcRes ^= tmp[i];
     }
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
@@ -469,16 +472,16 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
   }
 }
 __device__ void CnToBnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
-                                                int8_t *__restrict__ d_bnOutAll,
-                                                const int8_t *__restrict__ d_cnBufAll,
-                                                int8_t *__restrict__ d_cnOutAll,
-                                                int8_t *__restrict__ d_bnBufAll,
-                                                int8_t MsgIdx,
-                                               int lane,
-                                                uint8_t groupId,
-                                                uint8_t CnIdx,
-                                                int Zc,
-                                                int *PC_Flag)
+                                                    int8_t *__restrict__ d_bnOutAll,
+                                                    const int8_t *__restrict__ d_cnBufAll,
+                                                    int8_t *__restrict__ d_cnOutAll,
+                                                    int8_t *__restrict__ d_bnBufAll,
+                                                    int8_t MsgIdx,
+                                                    int lane,
+                                                    uint8_t groupId,
+                                                    uint8_t CnIdx,
+                                                    int Zc,
+                                                    int *PC_Flag)
 {
   const uint8_t NUM = 10; // Gn = 10
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -488,8 +491,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
   const uint row = MsgIdx - 1;
-  int tid = row* 96 + lane;
-
+  int tid = row * 96 + lane;
 
   const uint baseShift = 1 * Zc * row; // offset pointed at different BN
   const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -515,16 +517,17 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
   uint32_t pcRes = 0;
-  uint32_t ymm0, ymm1;
+  uint32_t tmp[10];
   if (tid < 96) {
-    #pragma unroll 10
+#pragma unroll
     for (int i = 0; i < 10; i++) {
-      p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 1 * Zc * i + tid * 4);
-      p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 1 * Zc * i + tid * 4);
-      ymm0 = *p_cnProcBufBit;
-      ymm1 = *p_cnProcBufResBit;
-
-      pcRes ^= __vcmples4(__vaddss4(ymm0, ymm1), 0);
+      uint32_t ymm0 = *(uint32_t *)(d_cnBufAll + Zc * i + tid * 4);
+      uint32_t ymm1 = *(uint32_t *)(d_cnOutAll + Zc * i + tid * 4);
+      tmp[i] = __vcmples4(__vaddss4(ymm0, ymm1), 0);
+    }
+#pragma unroll
+    for (int i = 0; i < 10; i++) {
+      pcRes ^= tmp[i];
     }
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
@@ -536,16 +539,16 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
   }
 }
 __device__ void CnToBnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
-                                                int8_t *__restrict__ d_bnOutAll,
-                                                const int8_t *__restrict__ d_cnBufAll,
-                                                int8_t *__restrict__ d_cnOutAll,
-                                                int8_t *__restrict__ d_bnBufAll,
-                                                int8_t MsgIdx,
-                                               int lane,
-                                                uint8_t groupId,
-                                                uint8_t CnIdx,
-                                                int Zc,
-                                                int *PC_Flag)
+                                                    int8_t *__restrict__ d_bnOutAll,
+                                                    const int8_t *__restrict__ d_cnBufAll,
+                                                    int8_t *__restrict__ d_cnOutAll,
+                                                    int8_t *__restrict__ d_bnBufAll,
+                                                    int8_t MsgIdx,
+                                                    int lane,
+                                                    uint8_t groupId,
+                                                    uint8_t CnIdx,
+                                                    int Zc,
+                                                    int *PC_Flag)
 {
   const uint8_t NUM = 19; // Gn = 19
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -554,9 +557,8 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
 
   const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
-
   uint row = MsgIdx - 1;
-  int tid = row* 96 + lane;
+  int tid = row * 96 + lane;
 
   uint baseShift = 4 * Zc * row; // offset pointed at different BN
   uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -580,20 +582,20 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
 
   *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
 
-
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
   uint32_t pcRes = 0;
-  uint32_t ymm0, ymm1;
+  uint32_t tmp[19];
   if (tid < 96) {
-    #pragma unroll 19
+#pragma unroll
     for (int i = 0; i < 19; i++) {
-      p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 4 * Zc * i + tid * 4);
-      p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 4 * Zc * i + tid * 4);
-      ymm0 = *p_cnProcBufBit;
-      ymm1 = *p_cnProcBufResBit;
-
-      pcRes ^= __vcmples4(__vaddss4(ymm0, ymm1), 0);
+      uint32_t ymm0 = *(uint32_t *)(d_cnBufAll + 4 * Zc * i + tid * 4);
+      uint32_t ymm1 = *(uint32_t *)(d_cnOutAll + 4 * Zc * i + tid * 4);
+      tmp[i] = __vcmples4(__vaddss4(ymm0, ymm1), 0);
+    }
+#pragma unroll
+    for (int i = 0; i < 19; i++) {
+      pcRes ^= tmp[i];
     }
 
     if (__any_sync(0xffffffff, pcRes != 0)) {
@@ -620,8 +622,8 @@ int tid = threadIdx.x; //
   if (colIdx >= 42)
     return;
 
-  const uint8_t numBn2CnG1 = p_lut->numBnInBnGroups[0]; //numBnInBnGroups[0] = 42
-uint32_t startColParity = //BG1=26
+  const uint8_t numBn2CnG1 = p_lut->numBnInBnGroups[0]; // numBnInBnGroups[0] = 42
+  uint32_t startColParity = // BG1=26
       NR_LDPC_START_COL_PARITY_BG1; //(BG == 1) ? (NR_LDPC_START_COL_PARITY_BG1) : (NR_LDPC_START_COL_PARITY_BG2);
 
   uint32_t colG1 = startColParity * Zc;
@@ -664,7 +666,8 @@ __device__ void llr2bitPacked_Kernel_BG1_int8(uint8_t *out, int8_t *llrOut, uint
     result |= (p_llr[7 - i] < 0) << i;
   }
 #else
-  result = (p_llr[7] < 0) | ((p_llr[6] < 0)<<1) | ((p_llr[5] < 0)<<2) | ((p_llr[4] < 0)<<3) | ((p_llr[3] < 0)<<4) | ((p_llr[2] < 0)<<5) | ((p_llr[1] < 0)<<6) | ((p_llr[0] < 0)<<7);
+  result = (p_llr[7] < 0) | ((p_llr[6] < 0) << 1) | ((p_llr[5] < 0) << 2) | ((p_llr[4] < 0) << 3) | ((p_llr[3] < 0) << 4)
+           | ((p_llr[2] < 0) << 5) | ((p_llr[1] < 0) << 6) | ((p_llr[0] < 0) << 7);
 #endif
 
   out[tid] = result;
