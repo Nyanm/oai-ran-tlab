@@ -515,51 +515,6 @@ static int nr_ue_pbch_procedures(PHY_VARS_NR_UE *ue,
   return ret;
 }
 
-static freq_alloc_bitmap_t set_start_end_from_bitmap(int size, int alloc_size, const uint8_t bitmap[alloc_size])
-{
-  freq_alloc_bitmap_t alloc = {
-    .num_rbs = 0,
-    .num_blocks = 0
-  };
-
-  bool pos_bit = false;
-  for (int i = 0; i < size; i++) {
-    if ((bitmap[i / 8] >> i % 8) & 0x1) {
-      if (!pos_bit) {
-        pos_bit = true;
-        alloc.start[alloc.num_blocks] = i;
-        AssertFatal(alloc.num_blocks < MAX_FA_BLOCKS, "Number of type0 PDSCH RBG exceeting %d\n", MAX_FA_BLOCKS);
-        alloc.num_blocks++;
-      }
-      alloc.num_rbs++;
-    } else {
-      if (pos_bit) {
-        pos_bit = false;
-        alloc.end[alloc.num_blocks - 1] = i - 1;
-      }
-    }
-  }
-  if (pos_bit)
-    alloc.end[alloc.num_blocks - 1] = size - 1;
-  AssertFatal(alloc.num_blocks > 0, "Frequency allocation bitmap empty\n");
-  memcpy(alloc.bitmap, bitmap, alloc_size * sizeof(uint8_t));
-  return alloc;
-}
-
-static freq_alloc_bitmap_t set_bitmap_from_start_size(int start, int size)
-{
-  freq_alloc_bitmap_t alloc = {
-    .num_rbs = size,
-    .num_blocks = 1,
-    .start[0] = start,
-    .end[0] = start + size - 1
-  };
-  memset(alloc.bitmap, 0, 36 * sizeof(uint8_t));
-  for (int i = start; i < size + start; i++)
-    alloc.bitmap[i / 8] += 1 << (i % 8);
-  return alloc;
-}
-
 static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
                                   const UE_nr_rxtx_proc_t *proc,
                                   NR_UE_DLSCH_t dlsch[2],

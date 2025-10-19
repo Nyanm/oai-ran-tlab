@@ -52,6 +52,7 @@ static void nr_pdsch_codeword_scrambling(uint8_t *in, uint32_t size, uint8_t q, 
 }
 
 static int do_ptrs_symbol(const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
+                          const freq_alloc_bitmap_t *freq_alloc,
                           int start_sc,
                           int symbol_sz,
                           c16_t *txF,
@@ -62,32 +63,42 @@ static int do_ptrs_symbol(const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
   int ptrs_idx = 0;
   int k = start_sc;
   c16_t *in = tx_layer;
-  for (int i = 0; i < rel15->rbSize * NR_NB_SC_PER_RB; i++) {
-    /* check for PTRS symbol and set flag for PTRS RE */
-    bool is_ptrs_re =
-        is_ptrs_subcarrier(k, rel15->rnti, rel15->PTRSFreqDensity, rel15->rbSize, rel15->PTRSReOffset, start_sc, symbol_sz);
-    if (is_ptrs_re) {
-      /* check if cuurent RE is PTRS RE*/
-      uint16_t beta_ptrs = 1;
-      txF[k] = c16mulRealShift(mod_ptrs[ptrs_idx], beta_ptrs * amp, 15);
+  int last_rb = freq_alloc->end[freq_alloc->num_blocks - 1];
+  int first_rb = freq_alloc->start[0];
+  for (int j = first_rb; j <= last_rb; j++) {
+    if (check_rb_in_bitmap(freq_alloc, j)) {
+      for (int i = 0; i < NR_NB_SC_PER_RB; i++) {
+        /* check for PTRS symbol and set flag for PTRS RE */
+        bool is_ptrs_re =
+            is_ptrs_subcarrier(k, rel15->rnti, rel15->PTRSFreqDensity, freq_alloc->num_rbs, rel15->PTRSReOffset, start_sc, symbol_sz);
+        if (is_ptrs_re) {
+          /* check if cuurent RE is PTRS RE*/
+          uint16_t beta_ptrs = 1;
+          txF[k] = c16mulRealShift(mod_ptrs[ptrs_idx], beta_ptrs * amp, 15);
 #ifdef DEBUG_DLSCH_MAPPING
-      printf("ptrs_idx %d\t \t k %d \t \t txdataF: %d %d, mod_ptrs: %d %d\n",
-             ptrs_idx,
-             k,
-             txF[k].r,
-             txF[k].i,
-             mod_ptrs[ptrs_idx].r,
-             mod_ptrs[ptrs_idx].i);
+          printf("ptrs_idx %d\t \t k %d \t \t txdataF: %d %d, mod_ptrs: %d %d\n",
+                 ptrs_idx,
+                 k,
+                 txF[k].r,
+                 txF[k].i,
+                 mod_ptrs[ptrs_idx].r,
+                 mod_ptrs[ptrs_idx].i);
 #endif
-      ptrs_idx++;
+          ptrs_idx++;
+        } else {
+          txF[k] = c16mulRealShift(*in++, amp, 15);
+#ifdef DEBUG_DLSCH_MAPPING
+          printf("k %d \t txdataF: %d %d\n", k, txF[k].r, txF[k].i);
+#endif
+        }
+        if (++k >= symbol_sz)
+          k -= symbol_sz;
+      }
     } else {
-      txF[k] = c16mulRealShift(*in++, amp, 15);
-#ifdef DEBUG_DLSCH_MAPPING
-      printf("k %d \t txdataF: %d %d\n", k, txF[k].r, txF[k].i);
-#endif
+      k += NR_NB_SC_PER_RB;
+      if (k >= symbol_sz)
+        k -= symbol_sz;
     }
-    if (++k >= symbol_sz)
-      k -= symbol_sz;
   }
   return in - tx_layer;
 }
@@ -258,9 +269,9 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, const int am
 static inline int dmrs_case00(c16_t *output,
                               c16_t *txl,
                               c16_t *mod_dmrs,
+                              const freq_alloc_bitmap_t *freq_alloc,
                               const int16_t amp_dmrs,
                               const int amp,
-                              int sz,
                               int start_sc,
                               int dmrs_port,
                               const int dmrs_Type,
@@ -278,21 +289,24 @@ static inline int dmrs_case00(c16_t *output,
   c16_t *in = txl;
   uint8_t k_prime = 0;
   uint16_t n = 0;
+  int rb_span = freq_alloc->end[freq_alloc->num_blocks - 1] - freq_alloc->start[0] + 1;
+  int sz = rb_span * NR_NB_SC_PER_RB;
   for (int i = 0; i < sz; i++) {
-    if (k == ((start_sc + get_dmrs_freq_idx(n, k_prime, delta, dmrs_Type)) % (symbol_sz))) {
-      output[k] = c16mulRealShift(mod_dmrs[dmrs_idx], Wt[l_prime] * Wf[k_prime] * amp_dmrs, 15);
-      dmrs_idx++;
-      k_prime = (k_prime + 1) & 1;
-      n += (k_prime ? 0 : 1);
-    }
-    /* Map PTRS Symbol */
-    /* Map DATA Symbol */
-    else if (allowed_xlsch_re_in_dmrs_symbol(k, start_sc, symbol_sz, numDmrsCdmGrpsNoData, dmrs_Type)) {
-      output[k] = c16mulRealShift(*in++, amp, 15);
-    }
-    /* mute RE */
-    else {
-      output[k] = (c16_t){0};
+    int rb = freq_alloc->start[0] + (i / NR_NB_SC_PER_RB);
+    if (check_rb_in_bitmap(freq_alloc, rb)) {
+      if (k == ((start_sc + get_dmrs_freq_idx(n, k_prime, delta, dmrs_Type)) % (symbol_sz))) {
+        output[k] = c16mulRealShift(mod_dmrs[dmrs_idx], Wt[l_prime] * Wf[k_prime] * amp_dmrs, 15);
+        dmrs_idx++;
+        k_prime = (k_prime + 1) & 1;
+        n += (k_prime ? 0 : 1);
+      } else if (allowed_xlsch_re_in_dmrs_symbol(k, start_sc, symbol_sz, numDmrsCdmGrpsNoData, dmrs_Type)) {
+        /* Map PTRS Symbol */
+        /* Map DATA Symbol */
+        output[k] = c16mulRealShift(*in++, amp, 15);
+      }  else {
+        /* mute RE */
+        output[k] = (c16_t){0};
+      }
     }
     k = (k + 1) % symbol_sz;
   } // RE loop
@@ -336,13 +350,21 @@ static inline void neg_dmrs(c16_t *in, c16_t *out, int sz)
     *out++ = i % 2 ? (c16_t){-in[i].r, -in[i].i} : in[i];
 }
 
+static uint32_t get_block_start_sc(NR_DL_FRAME_PARMS *fp, int block_start, int bwp_start, int symbol_sz)
+{
+  uint32_t start_sc = fp->first_carrier_offset + (block_start + bwp_start) * NR_NB_SC_PER_RB;
+  if (start_sc >= symbol_sz)
+    start_sc -= symbol_sz;
+  return start_sc;
+}
+
 static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
                               int slot,
                               const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
+                              const freq_alloc_bitmap_t *freq_alloc,
                               int layer,
                               c16_t *output,
                               c16_t *txl_start,
-                              int start_sc,
                               int symbol_sz,
                               int l_symbol,
                               uint16_t dlPtrsSymPos,
@@ -354,13 +376,7 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
                               c16_t *dmrs_start)
 {
   c16_t *txl = txl_start;
-  const uint sz = rel15->rbSize * NR_NB_SC_PER_RB;
-  int upper_limit = sz;
-  int remaining_re = 0;
-  if (start_sc + upper_limit > symbol_sz) {
-    upper_limit = symbol_sz - start_sc;
-    remaining_re = sz - upper_limit;
-  }
+  uint32_t start_sc = get_block_start_sc(frame_parms, freq_alloc->start[0], rel15->BWPStart, symbol_sz);
 
   /* calculate if current symbol is PTRS symbols */
   int ptrs_symbol = 0;
@@ -376,67 +392,79 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
     const uint32_t *gold =
         nr_gold_pdsch(frame_parms->N_RB_DL, frame_parms->symbols_per_slot, rel15->dlDmrsScramblingId, rel15->SCID, slot, l_symbol);
     nr_modulation(gold, n_ptrs * DMRS_MOD_ORDER, DMRS_MOD_ORDER, (int16_t *)mod_ptrs);
-    txl += do_ptrs_symbol(rel15, start_sc, symbol_sz, output, txl, amp, mod_ptrs);
+    txl += do_ptrs_symbol(rel15, freq_alloc, start_sc, symbol_sz, output, txl, amp, mod_ptrs);
 
   } else if (rel15->dlDmrsSymbPos & (1 << l_symbol)) {
     /* Map DMRS Symbol */
     int dmrs_port = get_dmrs_port(layer, rel15->dmrsPorts);
     if (l_prime == 0 && dmrs_Type == NFAPI_NR_DMRS_TYPE1) {
-      if (rel15->numDmrsCdmGrpsNoData == 2) {
-        switch (dmrs_port & 3) {
-          case 0:
-            txl += interleave_with_0_signal_first(output + start_sc, dmrs_start, amp_dmrs, upper_limit);
-            txl += interleave_with_0_signal_first(output, dmrs_start + upper_limit / 2, amp_dmrs, remaining_re);
-            break;
-          case 1: {
-            c16_t dmrs[sz / 2];
-            neg_dmrs(dmrs_start, dmrs, sz / 2);
-            txl += interleave_with_0_signal_first(output + start_sc, dmrs, amp_dmrs, upper_limit);
-            txl += interleave_with_0_signal_first(output, dmrs + upper_limit / 2, amp_dmrs, remaining_re);
-          } break;
-          case 2:
-            txl += interleave_with_0_start_with_0(output + start_sc, dmrs_start, amp_dmrs, upper_limit);
-            txl += interleave_with_0_start_with_0(output, dmrs_start + upper_limit / 2, amp_dmrs, remaining_re);
-            break;
-          case 3: {
-            c16_t dmrs[sz / 2];
-            neg_dmrs(dmrs_start, dmrs, sz / 2);
-            txl += interleave_with_0_start_with_0(output + start_sc, dmrs, amp_dmrs, upper_limit);
-            txl += interleave_with_0_start_with_0(output, dmrs + upper_limit / 2, amp_dmrs, remaining_re);
-          } break;
+      for (int i = 0; i < freq_alloc->num_blocks; i++) {
+        if (i != 0)
+          start_sc = get_block_start_sc(frame_parms, freq_alloc->start[i], rel15->BWPStart, symbol_sz);
+        const int rb_span = freq_alloc->end[i] - freq_alloc->start[i] + 1;
+        const int sz = rb_span * NR_NB_SC_PER_RB;
+        int upper_limit = sz;
+        int remaining_re = 0;
+        if (start_sc + upper_limit > symbol_sz) {
+          upper_limit = symbol_sz - start_sc;
+          remaining_re = sz - upper_limit;
         }
-      } else if (rel15->numDmrsCdmGrpsNoData == 1) {
-        switch (dmrs_port & 3) {
-          case 0:
-            txl += interleave_signals(output + start_sc, txl, amp, dmrs_start, amp_dmrs, upper_limit);
-            txl += interleave_signals(output, txl, amp, dmrs_start + upper_limit / 2, amp_dmrs, remaining_re);
-            break;
-          case 1: {
-            c16_t dmrs[sz / 2];
-            neg_dmrs(dmrs_start, dmrs, sz / 2);
-            txl += interleave_signals(output + start_sc, txl, amp, dmrs, amp_dmrs, upper_limit);
-            txl += interleave_signals(output, txl, amp, dmrs + upper_limit / 2, amp_dmrs, remaining_re);
-          } break;
-          case 2:
-            txl += interleave_signals(output + start_sc, dmrs_start, amp_dmrs, txl, amp, upper_limit);
-            txl += interleave_signals(output, dmrs_start + upper_limit / 2, amp_dmrs, txl, amp, remaining_re);
-            break;
-          case 3: {
-            c16_t dmrs[sz / 2];
-            neg_dmrs(dmrs_start, dmrs, sz / 2);
-            txl += interleave_signals(output + start_sc, dmrs, amp_dmrs, txl, amp, upper_limit);
-            txl += interleave_signals(output, dmrs + upper_limit / 2, amp_dmrs, txl, amp, remaining_re);
-          } break;
-        }
-      } else
-        AssertFatal(false, "rel15->numDmrsCdmGrpsNoData is %d\n", rel15->numDmrsCdmGrpsNoData);
+        if (rel15->numDmrsCdmGrpsNoData == 2) {
+          switch (dmrs_port & 3) {
+            case 0:
+              txl += interleave_with_0_signal_first(output + start_sc, dmrs_start, amp_dmrs, upper_limit);
+              txl += interleave_with_0_signal_first(output, dmrs_start + upper_limit / 2, amp_dmrs, remaining_re);
+              break;
+            case 1: {
+              c16_t dmrs[sz / 2];
+              neg_dmrs(dmrs_start, dmrs, sz / 2);
+              txl += interleave_with_0_signal_first(output + start_sc, dmrs, amp_dmrs, upper_limit);
+              txl += interleave_with_0_signal_first(output, dmrs + upper_limit / 2, amp_dmrs, remaining_re);
+            } break;
+            case 2:
+              txl += interleave_with_0_start_with_0(output + start_sc, dmrs_start, amp_dmrs, upper_limit);
+              txl += interleave_with_0_start_with_0(output, dmrs_start + upper_limit / 2, amp_dmrs, remaining_re);
+              break;
+            case 3: {
+              c16_t dmrs[sz / 2];
+              neg_dmrs(dmrs_start, dmrs, sz / 2);
+              txl += interleave_with_0_start_with_0(output + start_sc, dmrs, amp_dmrs, upper_limit);
+              txl += interleave_with_0_start_with_0(output, dmrs + upper_limit / 2, amp_dmrs, remaining_re);
+            } break;
+          }
+        } else if (rel15->numDmrsCdmGrpsNoData == 1) {
+          switch (dmrs_port & 3) {
+            case 0:
+              txl += interleave_signals(output + start_sc, txl, amp, dmrs_start, amp_dmrs, upper_limit);
+              txl += interleave_signals(output, txl, amp, dmrs_start + upper_limit / 2, amp_dmrs, remaining_re);
+              break;
+            case 1: {
+              c16_t dmrs[sz / 2];
+              neg_dmrs(dmrs_start, dmrs, sz / 2);
+              txl += interleave_signals(output + start_sc, txl, amp, dmrs, amp_dmrs, upper_limit);
+              txl += interleave_signals(output, txl, amp, dmrs + upper_limit / 2, amp_dmrs, remaining_re);
+            } break;
+            case 2:
+              txl += interleave_signals(output + start_sc, dmrs_start, amp_dmrs, txl, amp, upper_limit);
+              txl += interleave_signals(output, dmrs_start + upper_limit / 2, amp_dmrs, txl, amp, remaining_re);
+              break;
+            case 3: {
+              c16_t dmrs[sz / 2];
+              neg_dmrs(dmrs_start, dmrs, sz / 2);
+              txl += interleave_signals(output + start_sc, dmrs, amp_dmrs, txl, amp, upper_limit);
+              txl += interleave_signals(output, dmrs + upper_limit / 2, amp_dmrs, txl, amp, remaining_re);
+            } break;
+          }
+        } else
+          AssertFatal(false, "rel15->numDmrsCdmGrpsNoData is %d\n", rel15->numDmrsCdmGrpsNoData);
+      }
     } else {
       txl += dmrs_case00(output,
                          txl,
                          dmrs_start,
+                         freq_alloc,
                          amp_dmrs,
                          amp,
-                         sz,
                          start_sc,
                          dmrs_port,
                          dmrs_Type,
@@ -445,8 +473,20 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
                          rel15->numDmrsCdmGrpsNoData);
     } // generic DMRS case
   } else { // no PTRS or DMRS in this symbol
-    txl += no_ptrs_dmrs_case(output + start_sc, txl, amp, upper_limit);
-    txl += no_ptrs_dmrs_case(output, txl, amp, remaining_re);
+    for (int i = 0; i < freq_alloc->num_blocks; i++) {
+      if (i != 0)
+        start_sc = get_block_start_sc(frame_parms, freq_alloc->start[i], rel15->BWPStart, symbol_sz);
+      const int rb_span = freq_alloc->end[i] - freq_alloc->start[i] + 1;
+      const int sz = rb_span * NR_NB_SC_PER_RB;
+      int upper_limit = sz;
+      int remaining_re = 0;
+      if (start_sc + upper_limit > symbol_sz) {
+        upper_limit = symbol_sz - start_sc;
+        remaining_re = sz - upper_limit;
+      }
+      txl += no_ptrs_dmrs_case(output + start_sc, txl, amp, upper_limit);
+      txl += no_ptrs_dmrs_case(output, txl, amp, remaining_re);
+    }
   } // no DMRS/PTRS in symbol
   return txl - txl_start;
 }
@@ -457,24 +497,25 @@ static inline void do_txdataF(c16_t **txdataF,
                               PHY_VARS_gNB *gNB,
                               const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
                               int ant,
-                              int start_sc,
+                              int rb_start,
+                              int rb_size,
                               int txdataF_offset_per_symbol)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   int rb = 0;
-  uint16_t subCarrier = start_sc;
+  uint16_t subCarrier = get_block_start_sc(frame_parms, rb_start, rel15->BWPStart, symbol_sz);
   const nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
-  while (rb < rel15->rbSize) {
+  while (rb < rb_size) {
     // get pmi info
     const int pmi = (pb->prg_size > 0) ? (pb->prgs_list[(int)rb / pb->prg_size].pm_idx) : 0;
-    const int pmi2 = (rb < (rel15->rbSize - 1) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 1) / pb->prg_size].pm_idx) : -1;
-    const int pmi3 = (rb < (rel15->rbSize - 2) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 2) / pb->prg_size].pm_idx) : -1;
-    const int pmi4 = (rb < (rel15->rbSize - 3) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 3) / pb->prg_size].pm_idx) : -1;
+    const int pmi2 = (rb < (rb_size - 1) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 1) / pb->prg_size].pm_idx) : -1;
+    const int pmi3 = (rb < (rb_size - 2) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 2) / pb->prg_size].pm_idx) : -1;
+    const int pmi4 = (rb < (rb_size - 3) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 3) / pb->prg_size].pm_idx) : -1;
 
     // If pmi of next RB and pmi of current RB are the same, we do 2 RB in a row
-    // if pmi differs, or current rb is the end (rel15->rbSize - 1), than we do 1 RB in a row
+    // if pmi differs, or current rb is the end (rb_size - 1), than we do 1 RB in a row
     int rb_step0 = pmi == pmi2 ? 2 : 1;
-    const int rb_step = rb_step0==2 && pmi3==pmi && pmi4==pmi ? 4 : rb_step0;
+    const int rb_step = rb_step0 == 2 && pmi3 == pmi && pmi4 == pmi ? 4 : rb_step0;
     const int re_cnt = NR_NB_SC_PER_RB * rb_step;
     if (pmi == 0) { // unitary Precoding
       if (subCarrier + re_cnt <= symbol_sz) { // RB does not cross DC
@@ -544,8 +585,9 @@ static inline void do_txdataF(c16_t **txdataF,
     } // else { // non-unitary Precoding
 
     rb += rb_step;
-  } // RB loop: while(rb < rel15->rbSize)
+  } // RB loop: while(rb < rb_size)
 }
+
 static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSCH_t *dlsch, int slot)
 {
   const int16_t amp = gNB->TX_AMP;
@@ -553,24 +595,20 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 
   time_stats_t *dlsch_scrambling_stats = &gNB->dlsch_scrambling_stats;
   time_stats_t *dlsch_modulation_stats = &gNB->dlsch_modulation_stats;
+  freq_alloc_bitmap_t *freq_alloc = &dlsch->freq_alloc;
   const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15 = &dlsch->pdsch_pdu->pdsch_pdu_rel15;
   const int layerSz = frame_parms->N_RB_DL * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB;
   const int symbol_sz=frame_parms->ofdm_symbol_size;
   const int dmrs_Type = rel15->dmrsConfigType;
   const int nb_re_dmrs = rel15->numDmrsCdmGrpsNoData * (rel15->dmrsConfigType == NFAPI_NR_DMRS_TYPE1 ? 6 : 4);
-  const int16_t amp_dmrs = min((double)amp * sqrt(rel15->numDmrsCdmGrpsNoData), INT16_MAX); // 3GPP TS 38.214 Section 4.1: Table 4.1-1
-  LOG_D(PHY,
-        "pdsch: BWPStart %d, BWPSize %d, rbStart %d, rbsize %d\n",
-        rel15->BWPStart,
-        rel15->BWPSize,
-        rel15->rbStart,
-        rel15->rbSize);
-  const int n_dmrs = (rel15->BWPStart + rel15->rbStart + rel15->rbSize) * nb_re_dmrs;
+  // 3GPP TS 38.214 Section 4.1: Table 4.1-1
+  const int16_t amp_dmrs = min((double)amp * sqrt(rel15->numDmrsCdmGrpsNoData), INT16_MAX);
+  const int n_dmrs = (rel15->BWPStart + freq_alloc->end[freq_alloc->num_blocks - 1] + 1) * nb_re_dmrs;
 
   const int dmrs_symbol_map = rel15->dlDmrsSymbPos; // single DMRS: 010000100 Double DMRS 110001100
   const int xOverhead = 0;
   const int nb_re =
-      (12 * rel15->NrOfSymbols - nb_re_dmrs * get_num_dmrs(rel15->dlDmrsSymbPos) - xOverhead) * rel15->rbSize * rel15->nrOfLayers;
+      (12 * rel15->NrOfSymbols - nb_re_dmrs * get_num_dmrs(rel15->dlDmrsSymbPos) - xOverhead) * freq_alloc->num_rbs * rel15->nrOfLayers;
   const int Qm = rel15->qamModOrder[0];
   const int encoded_length = nb_re * Qm;
 
@@ -583,7 +621,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
                       rel15->StartSymbolIndex,
                       1 << rel15->PTRSTimeDensity,
                       rel15->dlDmrsSymbPos);
-    n_ptrs = (rel15->rbSize + rel15->PTRSFreqDensity - 1) / rel15->PTRSFreqDensity;
+    n_ptrs = (freq_alloc->num_rbs + rel15->PTRSFreqDensity - 1) / rel15->PTRSFreqDensity;
   }
 
 #ifdef DEBUG_DLSCH
@@ -641,16 +679,11 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   start_meas(&gNB->dlsch_pdsch_generation_stats);
   /// Resource mapping
   // Non interleaved VRB to PRB mapping
-  uint16_t start_sc = frame_parms->first_carrier_offset + (rel15->rbStart + rel15->BWPStart) * NR_NB_SC_PER_RB;
-  if (start_sc >= symbol_sz)
-    start_sc -= symbol_sz;
-
   const uint32_t txdataF_offset = slot * frame_parms->samples_per_slot_wCP;
 #ifdef DEBUG_DLSCH_MAPPING
-  printf("PDSCH resource mapping started (start SC %d\tstart symbol %d\tN_PRB %d\tnb_re %d,nb_layers %d)\n",
-         start_sc,
+  printf("PDSCH resource mapping started (start symbol %d\tN_PRB %d\tnb_re %d,nb_layers %d)\n",
          rel15->StartSymbolIndex,
-         rel15->rbSize,
+         freq_alloc->num_rbs,
          nb_re,
          rel15->nrOfLayers);
 #endif
@@ -727,7 +760,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
       }
 #endif
     }
-    uint32_t dmrs_idx = rel15->rbStart;
+    uint32_t dmrs_idx = freq_alloc->start[0];
     if (rel15->refPoint == 0)
       dmrs_idx += rel15->BWPStart;
     dmrs_idx *= dmrs_Type == NFAPI_NR_DMRS_TYPE1 ? 6 : 4;
@@ -737,10 +770,10 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
       layer_sz = do_onelayer(frame_parms,
                              slot,
                              rel15,
+                             freq_alloc,
                              layer,
                              txdataF_precoding[layer],
                              tx_layers[layer] + re_beginning_of_symbol,
-                             start_sc,
                              symbol_sz,
                              l_symbol,
                              dlPtrsSymPos,
@@ -755,9 +788,20 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     stop_meas(&gNB->dlsch_resource_mapping_stats);
 
     start_meas(&gNB->dlsch_precoding_stats);
+    const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz + txdataF_offset;
     for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
-      const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz + txdataF_offset;
-      do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, ant, start_sc, txdataF_offset_per_symbol);
+      for (int b = 0; b < freq_alloc->num_blocks; b++) {
+        int nb_rb_block = freq_alloc->end[b] - freq_alloc->start[b] + 1;
+        do_txdataF(txdataF,
+                   symbol_sz,
+                   txdataF_precoding,
+                   gNB,
+                   rel15,
+                   ant,
+                   freq_alloc->start[b],
+                   nb_rb_block,
+                   txdataF_offset_per_symbol);
+      }
     }
     stop_meas(&gNB->dlsch_precoding_stats);
   }
@@ -765,7 +809,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)
    * should remain a multiple of 8 * 64 with enough offset to fit each dlsch
    */
-  uint32_t size_output_tb = rel15->rbSize * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB * Qm * rel15->nrOfLayers;
+  uint32_t size_output_tb = freq_alloc->num_rbs * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB * Qm * rel15->nrOfLayers;
   return ((size_output_tb + 511) >> 9) << 6;
 }
 
@@ -786,12 +830,19 @@ void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_arr
     NR_gNB_DLSCH_t *dlsch = &dlsch_array[i];
     const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15 = &dlsch->pdsch_pdu->pdsch_pdu_rel15;
 
+    if (rel15->resourceAlloc == 0) {
+      int alloc_size = (rel15->BWPSize / 8) + (rel15->BWPSize % 8 > 0);
+      dlsch->freq_alloc = set_start_end_from_bitmap(rel15->BWPSize, alloc_size, rel15->rbBitmap);
+    } else {
+      dlsch->freq_alloc = set_bitmap_from_start_size(rel15->rbStart, rel15->rbSize);
+    }
     LOG_D(PHY,
-          "pdsch: BWPStart %d, BWPSize %d, rbStart %d, rbsize %d\n",
+          "pdsch: BWPStart %d, BWPSize %d, rbStart %d, rbEnd %d rbsize %d\n",
           rel15->BWPStart,
           rel15->BWPSize,
-          rel15->rbStart,
-          rel15->rbSize);
+          dlsch->freq_alloc.start[0],
+          dlsch->freq_alloc.end[dlsch->freq_alloc.num_blocks - 1],
+          dlsch->freq_alloc.num_rbs);
 
     const int Qm = rel15->qamModOrder[0];
 
@@ -805,7 +856,7 @@ void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_arr
                         rel15->StartSymbolIndex,
                         1 << rel15->PTRSTimeDensity,
                         rel15->dlDmrsSymbPos);
-      n_ptrs = (rel15->rbSize + rel15->PTRSFreqDensity - 1) / rel15->PTRSFreqDensity;
+      n_ptrs = (dlsch->freq_alloc.num_rbs + rel15->PTRSFreqDensity - 1) / rel15->PTRSFreqDensity;
       ptrsSymbPerSlot = get_ptrs_symbols_in_slot(dlPtrsSymPos, rel15->StartSymbolIndex, rel15->NrOfSymbols);
     }
     dlsch->unav_res = ptrsSymbPerSlot * n_ptrs;
@@ -816,7 +867,7 @@ void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_arr
     /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)
      * => size_output is a sum of parts sizes rounded up to a multiple of 8 * 64
      */
-    size_t size_output_tb = rel15->rbSize * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB * Qm * rel15->nrOfLayers;
+    size_t size_output_tb = dlsch->freq_alloc.num_rbs * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB * Qm * rel15->nrOfLayers;
     size_output += ceil_mod(size_output_tb, 8 * 64);
   }
 

@@ -25,6 +25,7 @@
 #define __NR_REFSIG_DEFS__H__
 
 #include "PHY/defs_nr_UE.h"
+#include "openair1/PHY/LTE_TRANSPORT/transport_proto.h" // for lte_gold_generic()
 
 void sl_generate_pss(SL_NR_UE_INIT_PARAMS_t *sl_init_params, uint8_t n_sl_id2, uint16_t scaling);
 void sl_generate_pss_ifft_samples(sl_nr_ue_phy_params_t *sl_ue_params, SL_NR_UE_INIT_PARAMS_t *sl_init_params);

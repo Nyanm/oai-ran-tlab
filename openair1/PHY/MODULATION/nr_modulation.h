@@ -24,7 +24,6 @@
 
 #include <stdint.h>
 #include "PHY/defs_nr_common.h"
-#include "PHY/defs_gNB.h"
 
 #define DMRS_MOD_ORDER 2
 /*Precoding matices: W[pmi][antenna_port][layer]*/
