@@ -162,36 +162,6 @@ static t_nrLDPC_lut lut;
 static t_nrLDPC_lut* p_lut = &lut;
 #endif
 
-/*
-#if USE_CUDA
-#include <cuda_runtime.h>
-#endif
-
-
-extern void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut* p_lut,
-                                   int8_t* cnProcBuf,
-                                   int8_t* cnProcBufRes,
-                                   int8_t* bnProcBuf,
-                                   uint16_t Z);
-
-extern void nrLDPC_bnProc_BG1_cuda(const t_nrLDPC_lut* p_lut,
-                                   int8_t* bnProcBuf,
-                                   int8_t* bnProcBufRes,
-                                   int8_t* llrProcBuf,
-                                   int8_t* llrRes,
-                                   uint16_t Z);
-
-extern void nrLDPC_BnToCnPC_BG1_cuda(const t_nrLDPC_lut* p_lut,
-                                     int8_t* bnProcBufRes,
-                                     int8_t* cnProcBuf,
-                                     int8_t* cnProcBufRes,
-                                     int8_t* bnProcBuf,
-                                     uint16_t Z,
-                                     int* PC_Flag);
-
-*/
-///
-//--------------------------------------------------------------
 
 //-------------------------Debug Function-----------------------
 void dump_cnProcBufRes_to_file(const int8_t* cnProcBufRes, const char* filename)
