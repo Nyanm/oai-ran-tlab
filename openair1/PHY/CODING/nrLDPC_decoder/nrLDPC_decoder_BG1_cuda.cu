@@ -19,7 +19,7 @@
 
 #define BIG_KERNEL 1
 
-#define RECORD_GRAPH 1
+#define RECORD_GRAPH 1 //set 1 to enable graph recording, 0 to unable
 
 // decoder_graphs.cu
 #include "decoder_graphs.h"
@@ -322,34 +322,20 @@ __global__ void bnProcPcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict_
   if (tid >= 6528) {
     return;
   }
-  static __device__ __constant__ uint8_t lut_GrpIdx[68] = {
-      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
-      1, 1, 1, 1, 1, 1, 1, 1, 4, 5, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 10, 10, 10, 10, 11, 11, 11, 12, 12, 12, 12, 13, 28, 30,
-  };
-
-  static __device__ __constant__ uint8_t lut_BnIdx[68] = {
-      1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-      24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 1,  1,  1,  2,
-      1,  2,  3,  4,  1,  2,  3,  1,  1,  2,  3,  4,  1,  2,  3,  1,  2,  3,  4,  1,  1,  1,
-  };
-  //                                          1, 2, 3, 4, 5, 6, 7, 8, 9,10,11, 12,
-  //                                          13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29, 30
-  static __device__ __constant__ uint8_t lut_BnToAddrIdx[30] = {1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0,
-                                              0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  12, 0, 13};
-  int row = tid / 96; // to decide the inner block
+int row = tid / 96; // to decide the inner block
   int lane = tid % 96; // to decide the inner lane
 
-  uint8_t GrpIdx = lut_GrpIdx[row];
+  uint8_t GrpIdx = lut_BnPcGrpIdx_BG1_R13[row];
   // uint8_t MsgIdx = lut_MsgIdx[row];
-  uint8_t BnIdx = lut_BnIdx[row];
-  uint8_t BnToAddrIdx = lut_BnToAddrIdx[GrpIdx - 1];
+  uint8_t BnIdx = lut_BnPcIdx_BG1_R13[row];
+  uint8_t BnToAddrIdx = lut_BnPcToAddrIdx_BG1_R13[GrpIdx - 1];
   uint8_t GrpNum = lut_numBnInBnGroups[GrpIdx - 1];
 
   const int8_t *p_bnProcBuf_Grp = (const int8_t *)(d_bnProcBuf + lut_startAddrBnBuf[BnToAddrIdx - 1]);
   const int8_t *p_bnProcBufRes_Grp = (const int8_t *)(d_bnProcBufRes + lut_startAddrBnBuf[BnToAddrIdx - 1]);
   const int8_t *p_llrProcBuf_Grp = (const int8_t *)(d_llrProcBuf + lut_startAddrBnLlr[BnToAddrIdx - 1]);
   const int8_t *p_llrRes_Grp = (const int8_t *)(d_llrRes + lut_startAddrBnLlr[BnToAddrIdx - 1]);
-
+  
   bnProcPcKernel_BG1_int8_Gn(p_bnProcBuf_Grp,
                                  p_bnProcBufRes_Grp,
                                  p_llrProcBuf_Grp,
@@ -903,15 +889,7 @@ __global__ void bnProcPcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict_
   if (tid >= 3360) {
     return;
   }
-  static __device__ __constant__ uint8_t lut_BnPcGrpIdx_BG1_R23[35] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 3, 3, 3, 3, 3, 4,  4, 4,
-                                                     5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 11, 12};
 
-  static __device__ __constant__ uint8_t lut_BnPcIdx_BG1_R23[35] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 1, 2, 3, 4, 5, 1, 2, 3,
-                                                  1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7, 8, 1, 1};
-  //                                          1, 2, 3, 4, 5, 6, 7, 8, 9,10,11, 12,
-  //                                          13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29, 30
-  static __device__ __constant__ uint8_t lut_BnPcToAddrIdx_BG1_R23[30] = {1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 7, 8, 0, 0, 0,
-                                                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   // BG1: 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30
   // R23{ 9, 1, 5, 3, 7, 8, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   int row = tid / 96; // to decide the inner block
@@ -1331,9 +1309,9 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
 
 
   if (!graphCreated[CudaStreamIdx]) {
-    #if RECORD_GRAPH
+#if RECORD_GRAPH
         printf("Creating the graph for stream %d, format R%d\n", CudaStreamIdx,R);
-    #endif
+#endif
     if (CudaStreamIdx != 0) {
       cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]);
     }
@@ -1473,9 +1451,8 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
         printf("Format not support yet\n");
         _exit;
     }
-
-    // stop recording
   #if RECORD_GRAPH
+    // stop recording
     cudaStreamEndCapture(stream, &decoderGraphs[CudaStreamIdx]);
     // printf("5\n");
     cudaGraphInstantiate(&decoderGraphExec[CudaStreamIdx], decoderGraphs[CudaStreamIdx], NULL, NULL, 0);
