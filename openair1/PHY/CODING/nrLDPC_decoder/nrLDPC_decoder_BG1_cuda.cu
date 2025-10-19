@@ -19,6 +19,8 @@
 
 #define BIG_KERNEL 1
 
+#define RECORD_GRAPH 0
+
 // decoder_graphs.cu
 #include "decoder_graphs.h"
 
@@ -1329,13 +1331,17 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
 
 
   if (!graphCreated[CudaStreamIdx]) {
-    printf("Creating the graph for stream %d, format R%d\n", CudaStreamIdx,R);
+    #if RECORD_GRAPH
+        printf("Creating the graph for stream %d, format R%d\n", CudaStreamIdx,R);
+    #endif
     if (CudaStreamIdx != 0) {
       cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]);
     }
 
     // Start graph recording
+#if RECORD_GRAPH
     cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
+#endif
     // check_ptr_kernel_easy<<<1,10>>>(2);
     // cudaDeviceSynchronize();
     // CHECK(cudaGetLastError());
@@ -1469,13 +1475,15 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
     }
 
     // stop recording
+  #if RECORD_GRAPH
     cudaStreamEndCapture(stream, &decoderGraphs[CudaStreamIdx]);
     // printf("5\n");
     cudaGraphInstantiate(&decoderGraphExec[CudaStreamIdx], decoderGraphs[CudaStreamIdx], NULL, NULL, 0);
     graphCreated[CudaStreamIdx] = true;
-
+  
     // Execute （make sure the first trial finish）
     cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
+  #endif
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);
     // cudaDeviceSynchronize();
     // printf("Graphs should be captured\n");

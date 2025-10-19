@@ -46,6 +46,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
   uint32_t pcRes = 0;
   uint32_t ymm0, ymm1;
   if (tid < 96) {
+    #pragma unroll 3
     for (int i = 0; i < 3; i++) {
       p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 1 * Zc * i + tid * 4);
       p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 1 * Zc * i + tid * 4);
@@ -113,6 +114,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
   uint32_t pcRes = 0;
   uint32_t ymm0, ymm1;
   if (tid < 96) {
+    #pragma unroll 4
     for (int i = 0; i < 4; i++) {
       p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 5 * Zc * i + tid * 4);
       p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 5 * Zc * i + tid * 4);
@@ -180,6 +182,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
   uint32_t pcRes = 0;
   uint32_t ymm0, ymm1;
   if (tid < 96) {
+    #pragma unroll 5
     for (int i = 0; i < 5; i++) {
       p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 18 * Zc * i + tid * 4);
       p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 18 * Zc * i + tid * 4);
@@ -246,6 +249,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
   uint32_t pcRes = 0;
   uint32_t ymm0, ymm1;
   if (tid < 96) {
+    #pragma unroll 6
     for (int i = 0; i < 6; i++) {
       p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 8 * Zc * i + tid * 4);
       p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 8 * Zc * i + tid * 4);
@@ -312,6 +316,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
   uint32_t pcRes = 0;
   uint32_t ymm0, ymm1;
   if (tid < 96) {
+    #pragma unroll 7
     for (int i = 0; i < 7; i++) {
       p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 5 * Zc * i + tid * 4);
       p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 5 * Zc * i + tid * 4);
@@ -378,6 +383,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
   uint32_t pcRes = 0;
   uint32_t ymm0, ymm1;
   if (tid < 96) {
+    #pragma unroll 8
     for (int i = 0; i < 8; i++) {
       p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 2 * Zc * i + tid * 4);
       p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 2 * Zc * i + tid * 4);
@@ -444,6 +450,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
   uint32_t pcRes = 0;
   uint32_t ymm0, ymm1;
   if (tid < 96) {
+    #pragma unroll 9
     for (int i = 0; i < 9; i++) {
       p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 2 * Zc * i + tid * 4);
       p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 2 * Zc * i + tid * 4);
@@ -510,6 +517,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
   uint32_t pcRes = 0;
   uint32_t ymm0, ymm1;
   if (tid < 96) {
+    #pragma unroll 10
     for (int i = 0; i < 10; i++) {
       p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 1 * Zc * i + tid * 4);
       p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 1 * Zc * i + tid * 4);
@@ -578,6 +586,7 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
   uint32_t pcRes = 0;
   uint32_t ymm0, ymm1;
   if (tid < 96) {
+    #pragma unroll 19
     for (int i = 0; i < 19; i++) {
       p_cnProcBufBit = (uint32_t *)(d_cnBufAll + 4 * Zc * i + tid * 4);
       p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + 4 * Zc * i + tid * 4);
