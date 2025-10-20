@@ -35,10 +35,6 @@
 #include "nrLDPC_bnProc.h"
 #include "openair1/PHY/CODING/coding_defs.h"
 
-#define MAX_NUM_DLSCH_SEGMENTS_DL 132
-// #define NR_LDPC_PROFILER_DETAIL(a) a
-#define NR_LDPC_PROFILER_DETAIL(a)
-
 #include "openair1/PHY/CODING/nrLDPC_extern.h"
 
 #ifdef NR_LDPC_DEBUG_MODE
@@ -71,6 +67,8 @@ static int8_t bnProcBufRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF]
 static int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrOut[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+static int8_t temp_out[MAX_NUM_DLSCH_SEGMENTS_DL * 8448] __attribute__((aligned(64)))= {0};
+
 
 extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    int8_t* p_out,
@@ -151,8 +149,9 @@ extern int cuda_support_set;
 
 int32_t LDPCinit_cuda()
 {
-  printf("Calling encoder initializations\n");	
-  if (cuda_support_set == 0 ) cuda_support_init();
+  printf("Calling encoder initializations\n");
+  if (cuda_support_set == 0)
+    cuda_support_init();
   printf("CUDA LDPC decoder initiating\n");
   if (!streamsCreated) {
     for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS_DL; ++s) {
@@ -191,7 +190,7 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
                          t_nrLDPC_time_stats* p_profiler,
                          decode_abort_t* ab)
 {
-  if (!((p_decParams->R == 23 || p_decParams->R == 13)&&p_decParams->BG == 1 && p_decParams->Z == 384)) { // format check
+  if (!((p_decParams->R == 23 || p_decParams->R == 13) && p_decParams->BG == 1 && p_decParams->Z == 384)) { // format check
     printf("Current format: BG = %d, R = %d, Zc = %d\n", p_decParams->BG, p_decParams->R, p_decParams->Z);
     AssertFatal(false, "Format cuda not support, only support BG = 1, Zc = 384 and R = 13, 23 right now\n");
     return 0;
@@ -235,9 +234,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            decode_abort_t* ab)
 {
   // printf("n_segments = %d\n", n_segments);
-
-  int8_t temp_out[/*MAX_NUM_DLSCH_SEGMENTS_DL*/n_segments * 8448] __attribute__((aligned(64))); /* = {0};*/
-  memset(temp_out,0,n_segments * 8448);
+  memset(temp_out, 0, n_segments * 8448);
 
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
@@ -249,64 +246,100 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   for (int s = 0; s < n_segments /*MAX_NUM_DLSCH_SEGMENTS_DL*/; s++) {
     iter_ptr_array[s] = 0;
     PC_Flag_array[s] = 1;
+  }  
+  
+  int segPerPack;
+  switch (R) {
+    case 13:
+      segPerPack = 8;
+      break; // GH200 has 132 SMs, 264 blocks available, one R13 segment needs 30 blocks,
+             // so maximent it can run 264/30 = 8 segments at one time
+    case 23:
+      segPerPack = 18;
+      break; // For R23, it's 264/14 = 18
+
+    default:
+      break;
   }
+  int NumSegPacks = (n_segments + segPerPack - 1) / segPerPack;
+
+for (int p = 0; p < NumSegPacks; ++p) {
+    segmentPacks[p].packIdx  = p;
+    segmentPacks[p].startSeg = p * segPerPack;
+    segmentPacks[p].nSeg     = (n_segments - p * segPerPack > segPerPack) ? segPerPack : n_segments - p * segPerPack;
+
+    segmentPacks[p].stream = decoderStreams[p];
+    segmentPacks[p].doneEvt = decoderDoneEvents[p];
+/*
+    printf("Pack %d -> startSeg=%d, nSeg=%d\n",
+           segmentPacks[p].packIdx,
+           segmentPacks[p].startSeg,
+           segmentPacks[p].nSeg);
+*/         
+}
 
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
-    int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384 ;
-    int8_t* pp_out = temp_out + CudaStreamIdx * 8448; // use temp_out rather than p_out
+    int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384;
     // printf("Stream %d: pp_out = %p\n", CudaStreamIdx, pp_out);
-
     int8_t* pp_cnProcBuf = cnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
-    int8_t* pp_cnProcBufRes = cnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
-    int8_t* pp_bnProcBuf = bnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
-    int8_t* pp_bnProcBufRes = bnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
-    int8_t* pp_llrRes = llrRes + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* pp_llrProcBuf = llrProcBuf + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
-    int8_t* pp_llrOut = llrOut + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
-
     nrLDPC_llr2llrProcBuf(p_lut, pp_llr, pp_llrProcBuf, Z, BG);
 
     if (BG == 1)
       nrLDPC_llr2CnProcBuf_BG1(p_lut, pp_llr, pp_cnProcBuf, Z);
     else
       nrLDPC_llr2CnProcBuf_BG2(p_lut, pp_llr, pp_cnProcBuf, Z);
+  }
 
+  for (int SegPackIdx = 0; SegPackIdx < NumSegPacks; SegPackIdx++){
+
+    int PackShiftIdx = segmentPacks[SegPackIdx].startSeg;
+
+    int8_t* perpack_llr = p_llr + PackShiftIdx * 68 * 384;
+    int8_t* perpack_cnProcBuf = cnProcBuf + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
+    int8_t* perpack_llrProcBuf = llrProcBuf + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
+    int8_t* perpack_bnProcBuf = bnProcBuf + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
+    int8_t* perpack_bnProcBufRes = bnProcBufRes + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
+    int8_t* perpack_llrRes = llrRes + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
+    int8_t* perpack_cnProcBufRes = cnProcBufRes + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
+    int8_t* perpack_llrOut = llrOut + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
+    int8_t* perpack_out = temp_out + PackShiftIdx * 8448; // use temp_out rather than p_out
     //  Call scheduler for this segment and stream
-    int8_t* pp_p_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? pp_out : pp_llrOut;
+    int8_t* perpack_p_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? perpack_out : perpack_llrOut;
 
     //  Launch decoder on stream
     nrLDPC_decoder_scheduler_BG1_cuda_core(p_lut,
-                                           pp_out,
+                                           perpack_out,
                                            numLLR,
-                                           pp_cnProcBuf,
-                                           pp_cnProcBufRes,
-                                           pp_bnProcBuf,
-                                           pp_bnProcBufRes,
-                                           pp_llrRes,
-                                           pp_llrProcBuf,
-                                           pp_llrOut,
-                                           pp_p_llrOut,
+                                           perpack_cnProcBuf,
+                                           perpack_cnProcBufRes,
+                                           perpack_bnProcBuf,
+                                           perpack_bnProcBufRes,
+                                           perpack_llrRes,
+                                           perpack_llrProcBuf,
+                                           perpack_llrOut,
+                                           perpack_p_llrOut,
                                            Z,
                                            BG,
                                            R,
                                            numMaxIter,
                                            outMode,
                                            decoderStreams,
-                                           CudaStreamIdx,
+                                           SegPackIdx, // Index for the whole pack
                                            decoderDoneEvents,
-                                           &iter_ptr_array[CudaStreamIdx],
-                                           &PC_Flag_array[CudaStreamIdx]); // stream index passed in
+                                           &iter_ptr_array[PackShiftIdx],
+                                           &PC_Flag_array[PackShiftIdx]); // stream index passed in
   }
-  for (int s = 0; s < n_segments; ++s) {
+  for (int s = 0; s < NumSegPacks; ++s) {
     // printf("Synchronizing segment %d \n",s);
     cudaEventSynchronize(decoderDoneEvents[s]); // stop until segment decode
   }
   cudaDeviceSynchronize();
- 
+
   // cudaDeviceSynchronize();
-  //printf("p_out %p, temp_out %p\n",p_out,temp_out);
+  // printf("p_out %p, temp_out %p\n",p_out,temp_out);
   memcpy(p_out, temp_out, n_segments /*MAX_NUM_DLSCH_SEGMENTS_DL*/ * 8448);
-  //dumpASS(p_out, "Dump_Output_Stream_GH.txt");
+  // dumpASS(p_out, "Dump_Output_Stream_GH.txt");
 
   return numMaxIter;
 }
