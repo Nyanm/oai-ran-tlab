@@ -478,8 +478,8 @@ endif()
 
 # Hardware dependant options
 ###################################
-add_list1_option(NB_ANTENNAS_RX "4" "Number of antennas in reception" "1" "2" "4")
-add_list1_option(NB_ANTENNAS_TX "4" "Number of antennas in transmission" "1" "2" "4")
+add_list1_option(NB_ANTENNAS_RX "1" "Number of antennas in reception" "1" "2" "4")
+add_list1_option(NB_ANTENNAS_TX "1" "Number of antennas in transmission" "1" "2" "4")
 
 set (CONFIG_ROOTDIR ${OPENAIR_DIR}/common/config)
 add_library(config_internals OBJECT

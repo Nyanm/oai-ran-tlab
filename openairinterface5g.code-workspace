@@ -1,0 +1,21 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"chrono": "c",
+			"algorithm": "c",
+			"format": "c",
+			"precomputed_sip.h": "c",
+			"precomputed_cas.h": "c",
+			"precomputed_payload.h": "c",
+			"precomputed_postamble.h": "c",
+			"vector": "c",
+			"load_module_shlib.h": "c",
+			"signal.h": "c"
+		}
+	}
+}

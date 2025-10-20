@@ -117,6 +117,7 @@ typedef struct {
 } nr_srs_info_t;
 
 typedef struct NR_DL_FRAME_PARMS NR_DL_FRAME_PARMS;
+typedef struct NR_AIOT_DL_FRAME_PARMS NR_AIOT_DL_FRAME_PARMS;
 
 typedef uint32_t (*get_samples_per_slot_t)(int slot, const NR_DL_FRAME_PARMS *fp);
 typedef uint32_t (*get_slot_from_timestamp_t)(openair0_timestamp timestamp_rx, const NR_DL_FRAME_PARMS *fp);
@@ -243,6 +244,23 @@ struct NR_DL_FRAME_PARMS {
   uint8_t tdd_period;
   bool print_ue_help_cmdline_log;
 };
+
+struct NR_AIOT_DL_FRAME_PARMS {
+  // original NR structure
+  NR_DL_FRAME_PARMS nr_frame_parms;
+
+  // additional AIoT parameters
+  bool Zadoff_Chu;         // true -> use Zadoff-Chu sequence, false -> use standard Zadoff-Chu sequence
+  int  M;                  // number of chips in OFDM symbol
+
+  // packet parameters
+  int packet_encoded_size; // Manchester encoded payload size in bits
+  int packet_symbols;      // number of OFDM symbols in R2D packet
+  int packet_slots;        // number of slots in R2D packet
+  int packet_subcarriers;  // number of subcarriers in R2D packet
+  int packet_samples;      // number of samples in R2D packet (aligned to slots)
+};
+
 
 // PRS config structures
 typedef struct {
