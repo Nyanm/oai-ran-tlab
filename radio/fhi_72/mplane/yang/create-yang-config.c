@@ -483,23 +483,23 @@ bool configure_ru_from_yang(const ru_session_t *ru_session, const openair0_confi
 
   for (size_t i = 0; i < num_cu_planes; i++) {
     // <ietf-interfaces>
-    struct lyd_node *cu_interface = NULL;
-    char int_name[12];
-    snprintf(int_name, sizeof(int_name), "INTERFACE_%ld", i);
-    success = create_cu_interface_v2(ru_session, i, int_name, &cu_interface);
-    VERIFY_SUCCESS(success, "[MPLANE] Cannot create CU-plane interface.\n");
+    //struct lyd_node *cu_interface = NULL;
+    //char int_name[12];
+    //snprintf(int_name, sizeof(int_name), "INTERFACE_%ld", i);
+    //success = create_cu_interface_v2(ru_session, i, int_name, &cu_interface);
+    //VERIFY_SUCCESS(success, "[MPLANE] Cannot create CU-plane interface.\n");
 
     // <o-ran-processing-element>
     struct lyd_node *proc_elem = NULL;
-    success = create_proc_elem_v2(ru_session, i, int_name, &proc_elem);
+    success = create_proc_elem_v2(ru_session, i, "eth1", &proc_elem);
     VERIFY_SUCCESS(success, "[MPLANE] Cannot create CU-plane processing element.\n");
 
-    ret = lyd_merge_siblings(&all_merge, cu_interface, 0);
-    VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Cannot merge CU-plane interface.\n");
+    //ret = lyd_merge_siblings(&all_merge, cu_interface, 0);
+    //VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Cannot merge CU-plane interface.\n");
     ret = lyd_merge_siblings(&all_merge, proc_elem, 0);
     VERIFY_SUCCESS(ret == LY_SUCCESS, "[MPLANE] Cannot merge processing element.\n");
 
-    lyd_free_tree(cu_interface);
+    //lyd_free_tree(cu_interface);
     lyd_free_tree(proc_elem);
   }
 
