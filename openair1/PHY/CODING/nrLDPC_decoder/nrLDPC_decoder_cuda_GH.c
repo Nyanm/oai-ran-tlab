@@ -303,33 +303,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384 ;
     int8_t* pp_out = temp_out + CudaStreamIdx * 8448; // use temp_out rather than p_out
     // printf("Stream %d: pp_out = %p\n", CudaStreamIdx, pp_out);
-        /*
-    int8_t* pp_cnProcBuf ,pp_cnProcBufRes , pp_bnProcBuf ,pp_bnProcBufRes ,pp_llrRes ,pp_llrProcBuf ,pp_llrOut ;
-    switch (R)
-    {
-    case 13:
-    pp_cnProcBuf = cnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
-    pp_cnProcBufRes = cnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
-    pp_bnProcBuf = bnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
-    pp_bnProcBufRes = bnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
-    pp_llrRes = llrRes + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
-    pp_llrProcBuf = llrProcBuf + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
-    pp_llrOut = llrOut + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
-      break;
-    case 23:
-      pp_cnProcBuf = cnProcBuf + CudaStreamIdx * 144*384;
-    pp_cnProcBufRes = cnProcBufRes + CudaStreamIdx * 144*384;
-    pp_bnProcBuf = bnProcBuf + CudaStreamIdx * 144*384;
-    pp_bnProcBufRes = bnProcBufRes + CudaStreamIdx * 144*384;
-    pp_llrRes = llrRes + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
-    pp_llrProcBuf = llrProcBuf + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
-    pp_llrOut = llrOut + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
-      break;
-    
-    default:
-      break;
-    }
-    */
+
     int8_t* pp_cnProcBuf = cnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     int8_t* pp_cnProcBufRes = cnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     int8_t* pp_bnProcBuf = bnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
