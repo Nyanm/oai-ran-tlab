@@ -111,7 +111,7 @@ __device__ void bnProcKernel_BG1_int8_Gn(const int8_t *__restrict__ d_bnProcBuf,
 
   int8_t *d_bnProcBuf_BnIdx = (int8_t *)(d_bnProcBuf + (BnIdx - 1) * Zc);
   int8_t *d_bnProcBufRes_BnIdx = (int8_t *)(d_bnProcBufRes + (BnIdx - 1) * Zc);
-  int8_t *d_llrProcBuf_BnIdx = (int8_t *)(d_llrProcBuf + (BnIdx - 1) * Zc);
+  //int8_t *d_llrProcBuf_BnIdx = (int8_t *)(d_llrProcBuf + (BnIdx - 1) * Zc);
   int8_t *d_llrRes_BnIdx = (int8_t *)(d_llrRes + (BnIdx - 1) * Zc);
 
   int32_t ymm0Res = *(const int32_t *)(d_llrRes_BnIdx + lane * 4);
@@ -123,7 +123,177 @@ __device__ void bnProcKernel_BG1_int8_Gn(const int8_t *__restrict__ d_bnProcBuf,
   *(int32_t *)(d_bnProcBufRes_BnIdx + (MsgIdx - 1) * GrpNum * Zc + lane * 4) = MsgRes;
 }
 
-__device__ void bnProcKernel_BG1_int8_Gn_United(const int8_t *__restrict__ d_bnProcBuf,
+template<int NUM>
+__device__ __forceinline__ void bnProcKernelMerge_BG1_int8_NUM(
+    const int8_t *__restrict__ d_bnProcBuf,
+    int8_t *__restrict__ d_bnProcBufRes,
+    const int8_t *__restrict__ d_llrProcBuf,
+    int8_t *__restrict__ d_llrRes,
+    int lane,
+    int MsgIdx,
+    int BnIdx,
+    int GrpNum,
+    int Zc)
+{
+    const int laneByte = lane * 4;
+    const int baseBn = (BnIdx - 1) * Zc;
+
+    const int8_t *p_bnProcBuf_BnIdx  = d_bnProcBuf + baseBn;
+    int8_t *p_bnProcBufRes_BnIdx     = d_bnProcBufRes + baseBn;
+    const int8_t *p_llrProcBuf_BnIdx = d_llrProcBuf + baseBn;
+    int8_t *p_llrRes_BnIdx           = d_llrRes + baseBn;
+
+    const int32_t *bnProcBufPtr = reinterpret_cast<const int32_t *>(p_bnProcBuf_BnIdx + laneByte);
+
+    // ---- ① Unrolled accumulation ----
+    int32_t MsgSum = bnProcBufPtr[0];
+#pragma unroll
+    for (int i = 1; i < NUM; ++i) {
+        int offsetWords = (GrpNum * i * Zc) >> 2;
+        int32_t val = bnProcBufPtr[offsetWords];
+        MsgSum = __vaddss4(MsgSum, val);
+    }
+
+    // ---- ② Compute llrRes ----
+    int32_t llrProcVal = *(const int32_t *)(p_llrProcBuf_BnIdx + laneByte);
+    int32_t computed_llrRes = __vaddss4(MsgSum, llrProcVal);
+
+    //  Only write to llrRes when MsgIdx == 1 
+    if (MsgIdx == 1) {
+        *(int32_t *)(p_llrRes_BnIdx + laneByte) = computed_llrRes;
+    }
+
+    // ---- ③ Compute MsgRes ----
+    int prevIdxWords = ((MsgIdx - 1) * GrpNum * Zc) >> 2;
+    int32_t prevMsg = *(const int32_t *)(p_bnProcBuf_BnIdx + (prevIdxWords << 2) + laneByte);
+    int32_t MsgRes = __vsubss4(computed_llrRes, prevMsg);
+
+    // ---- ④ Write result ----
+    *(int32_t *)(p_bnProcBufRes_BnIdx + (prevIdxWords << 2) + laneByte) = MsgRes;
+}
+
+__device__ __forceinline__ void bnProcKernelMerge_BG1_int8_Gn(
+    const int8_t *__restrict__ d_bnProcBuf,
+    int8_t *__restrict__ d_bnProcBufRes,
+    const int8_t *__restrict__ d_llrProcBuf,
+    int8_t *__restrict__ d_llrRes,
+    int lane,
+    int GrpIdx,
+    int MsgIdx,
+    int BnIdx,
+    int GrpNum,
+    int Zc)
+{
+    switch (GrpIdx)
+    {
+    case 1:  bnProcKernelMerge_BG1_int8_NUM<1 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 2:  bnProcKernelMerge_BG1_int8_NUM<2 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 3:  bnProcKernelMerge_BG1_int8_NUM<3 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 4:  bnProcKernelMerge_BG1_int8_NUM<4 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 5:  bnProcKernelMerge_BG1_int8_NUM<5 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 6:  bnProcKernelMerge_BG1_int8_NUM<6 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 7:  bnProcKernelMerge_BG1_int8_NUM<7 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 8:  bnProcKernelMerge_BG1_int8_NUM<8 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 9:  bnProcKernelMerge_BG1_int8_NUM<9 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 10: bnProcKernelMerge_BG1_int8_NUM<10>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 11: bnProcKernelMerge_BG1_int8_NUM<11>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 12: bnProcKernelMerge_BG1_int8_NUM<12>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 13: bnProcKernelMerge_BG1_int8_NUM<13>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 14: bnProcKernelMerge_BG1_int8_NUM<14>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 15: bnProcKernelMerge_BG1_int8_NUM<15>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 16: bnProcKernelMerge_BG1_int8_NUM<16>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 17: bnProcKernelMerge_BG1_int8_NUM<17>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 18: bnProcKernelMerge_BG1_int8_NUM<18>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 19: bnProcKernelMerge_BG1_int8_NUM<19>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 20: bnProcKernelMerge_BG1_int8_NUM<20>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 21: bnProcKernelMerge_BG1_int8_NUM<21>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 22: bnProcKernelMerge_BG1_int8_NUM<22>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 23: bnProcKernelMerge_BG1_int8_NUM<23>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 24: bnProcKernelMerge_BG1_int8_NUM<24>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 25: bnProcKernelMerge_BG1_int8_NUM<25>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 26: bnProcKernelMerge_BG1_int8_NUM<26>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 27: bnProcKernelMerge_BG1_int8_NUM<27>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 28: bnProcKernelMerge_BG1_int8_NUM<28>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 29: bnProcKernelMerge_BG1_int8_NUM<29>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 30: bnProcKernelMerge_BG1_int8_NUM<30>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    default: break;
+    }
+}
+
+
+/*
+__device__ void bnProcKernelMerge_BG1_int8_Gn(
+    const int8_t *__restrict__ d_bnProcBuf,
+    int8_t *__restrict__ d_bnProcBufRes,
+    const int8_t *__restrict__ d_llrProcBuf,
+    int8_t *__restrict__ d_llrRes,
+    int lane,
+    int GrpIdx,
+    int MsgIdx,
+    int BnIdx,
+    int GrpNum,
+    int Zc)
+{
+    // base pointers for this BN index
+    const int baseBn = (BnIdx - 1) * Zc; // bytes offset
+    const int laneByte = lane * 4;
+
+    const int8_t *p_bnProcBuf_BnIdx = d_bnProcBuf + baseBn;
+    int8_t *p_bnProcBufRes_BnIdx = d_bnProcBufRes + baseBn;
+    const int8_t *p_llrProcBuf_BnIdx = d_llrProcBuf + baseBn;
+    int8_t *p_llrRes_BnIdx = d_llrRes + baseBn;
+
+    // pointer to int32 words for lane
+    const int32_t *bnProcBufPtr = (const int32_t *)(p_bnProcBuf_BnIdx + laneByte);
+
+    // Sum messages across groups (MsgSum)
+    int32_t MsgSum = bnProcBufPtr[0];
+
+    // Note: if NUM is small and known, replace the loop with unrolled/template version
+    //#pragma unroll using this makes it even slower
+    for (int i = 1; i < GrpIdx; ++i) {
+        // compute word index: (GrpNum * i * Zc) / 4
+        int idx = (GrpNum * i * Zc) >> 2; // use >>2 if guaranteed divisible by 4
+        int32_t v = bnProcBufPtr[idx];
+        MsgSum = __vaddss4(MsgSum, v);
+    }
+
+    // llrProcBuf value (per-lane)
+    int32_t llrProcVal = *(const int32_t *)(p_llrProcBuf_BnIdx + laneByte);
+
+    // computed llrRes for this lane (what PC would write)
+    int32_t computed_llrRes = __vaddss4(MsgSum, llrProcVal);
+
+    // If you'd like other threads in the same block to see this newly computed llrRes,
+    // you must write it out and synchronize. If the read of llrRes for next steps
+    // is local to this same thread, it's enough to use computed_llrRes directly.
+    if (MsgIdx == 1) {
+        // write computed value to global llrRes
+        *(int32_t *)(p_llrRes_BnIdx + laneByte) = computed_llrRes;
+        // If some other *other threads in same block* need to read this just-written llrRes
+        // *before* they proceed, you must call __syncthreads() here.
+        // But avoid __syncthreads() unless you are sure all these threads belong to the same block.
+        // __syncthreads();
+    }
+
+    // For computing MsgRes we must use the authoritative llrRes:
+    // - if MsgIdx == 1: we should use computed_llrRes (we just computed it)
+    // - else: use the existing llrRes in memory
+    int32_t llrForMsg;
+    llrForMsg = computed_llrRes;
+
+    // prev message
+    int prevIdxWords = ((MsgIdx - 1) * GrpNum * Zc) >> 2; // /4 to get words
+    int32_t prevMsg = *(const int32_t *)(p_bnProcBuf_BnIdx + prevIdxWords*4 + laneByte);
+
+    int32_t MsgRes = __vsubss4(llrForMsg, prevMsg);
+
+    // write out bnProcBufRes
+    *(int32_t *)(p_bnProcBufRes_BnIdx + prevIdxWords*4 + laneByte) = MsgRes;
+}
+*/
+/*
+__device__ void bnProcKernelMerge_BG1_int8_Gn(const int8_t *__restrict__ d_bnProcBuf,
                                                 const int8_t *__restrict__ d_bnProcBufRes,
                                                 const int8_t *__restrict__ d_llrProcBuf,
                                                 const int8_t *__restrict__ d_llrRes,
@@ -142,7 +312,7 @@ __device__ void bnProcKernel_BG1_int8_Gn_United(const int8_t *__restrict__ d_bnP
   int8_t *d_llrProcBuf_BnIdx = (int8_t *)(d_llrProcBuf + (BnIdx - 1) * Zc);
   int8_t *d_llrRes_BnIdx = (int8_t *)(d_llrRes + (BnIdx - 1) * Zc);
 
-  if (MsgIdx == 1) {
+
     int32_t *bnProcBufPtr = (int32_t *)(d_bnProcBuf_BnIdx + lane * 4);
 
     int32_t MsgSum = bnProcBufPtr[0];
@@ -155,13 +325,13 @@ __device__ void bnProcKernel_BG1_int8_Gn_United(const int8_t *__restrict__ d_bnP
     int32_t llrData = *(const int32_t *)(d_llrProcBuf_BnIdx + lane * 4);
 
     int32_t ymm0Res = __vaddss4(MsgSum, llrData);
-
+  if (MsgIdx == 1) {
     *(int32_t *)(d_llrRes_BnIdx + lane * 4) = ymm0Res;
   }
 
-  __syncthreads();
+  //__syncthreads();
 
-  int32_t ymm0Res = *(const int32_t *)(d_llrRes_BnIdx + lane * 4);
+  ymm0Res = llrData;
 
   int32_t prevMsg = *(const int32_t *)(d_bnProcBuf_BnIdx + (MsgIdx - 1) * GrpNum * Zc + lane * 4);
 
@@ -169,14 +339,4 @@ __device__ void bnProcKernel_BG1_int8_Gn_United(const int8_t *__restrict__ d_bnP
 
   *(int32_t *)(d_bnProcBufRes_BnIdx + (MsgIdx - 1) * GrpNum * Zc + lane * 4) = MsgRes;
 
-  // --------------------------
-  // check MsgRes == 0 and print
-  // --------------------------
-  /*if (MsgRes == 0)
-  {
-      printf(
-          "bnProcKernel_int8_Gn Debug | lane=%d | GrpIdx=%d | MsgIdx=%d | BnIdx=%d | GrpNum=%d | Zc=%d | ymm0Res=0x%08x |
-  prevMsg=0x%08x | MsgRes=0x%08x\n", lane, GrpIdx, MsgIdx, BnIdx, GrpNum, Zc, ymm0Res, prevMsg, MsgRes
-      );
-  }*/
-}
+}*/
