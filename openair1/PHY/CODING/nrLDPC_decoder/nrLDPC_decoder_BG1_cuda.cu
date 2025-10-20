@@ -2,154 +2,24 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "nrLDPC_types.h"
-// #include <cooperative_groups.h>
-// amespace cg = cooperative_groups;
+
 #include "nrLDPC_CUDA_lut.h"
 #include "nrLDPC_CUDA_CnProcKernel_BG1.h"
 #include "nrLDPC_CUDA_BnProcKernel_BG1.h"
 #include "nrLDPC_CUDA_BnToCnPC_Kernel_BG1.h"
-
-
-#define Q_SCALE 8.0
-#define BG1_GRP0_CN 1
-#define ZC 384 // for BG1 test only
-#define CPU_ADDRESSING 1 // 0 means copy data into gpu memory, for common gpu; 1 for grace hopper which can read cpu memory directly
-#define CUDA_STREAM 0 // 1 means use cudastream to run kernels in parallel;
-#define MAX_NUM_DLSCH_SEGMENTS_DL 132
-
-#define BIG_KERNEL 1
-
-#define RECORD_GRAPH 1 //set 1 to enable graph recording, 0 to unable
-
-// decoder_graphs.cu
 #include "decoder_graphs.h"
+
+#define ZC 384 // for BG1 test only
+#define MAX_NUM_DLSCH_SEGMENTS_DL 132
+#define RECORD_GRAPH 1 //set 1 to enable graph recording, 0 to unable
 
 cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
 cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
 bool graphCreated[MAX_NUM_DLSCH_SEGMENTS_DL] = {false};
 
-// for CUDA 11+/12+
-static const char *ptrTypeName(cudaMemoryType type)
-{
-  switch (type) {
-    case cudaMemoryTypeUnregistered:
-      return "Unregistered/Unknown";
-    case cudaMemoryTypeHost:
-      return "Host (pinned)";
-    case cudaMemoryTypeDevice:
-      return "Device";
-    case cudaMemoryTypeManaged:
-      return "Managed";
-    default:
-      return "Unknown";
-  }
-}
-//
-#define CHECK_CUDA(call)                                                                     \
-  do {                                                                                       \
-    cudaError_t _e = (call);                                                                 \
-    if (_e != cudaSuccess) {                                                                 \
-      fprintf(stderr, "CUDA error %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(_e)); \
-      return;                                                                                \
-    }                                                                                        \
-  } while (0)
 
-//
-extern "C" void check_ptr_host(const void *p, const char *name)
-{
-  cudaPointerAttributes attr;
-  cudaError_t e = cudaPointerGetAttributes(&attr, p);
-  if (e != cudaSuccess) {
-    printf("Ptr %-24s = %p  <cudaPointerGetAttributes failed: %s>\n", name, p, cudaGetErrorString(e));
-    return;
-  }
-  const char *type = "Unregistered/Unknown";
-  if (attr.type == cudaMemoryTypeHost)
-    type = "Host";
-  if (attr.type == cudaMemoryTypeDevice)
-    type = "Device";
-  if (attr.type == cudaMemoryTypeManaged)
-    type = "Managed";
-  printf("Ptr %-24s = %p  type=%s  device=%d  devicePointer=%p  hostPointer=%p\n",
-         name,
-         p,
-         type,
-         attr.device,
-         attr.devicePointer,
-         attr.hostPointer);
-}
 
-static void dump_arr8_host(const arr8_t *a, const char *name, int idx)
-{
-  char tag[64];
-  snprintf(tag, sizeof(tag), "%s[%d].d", name, idx);
-  printf("%s[%d]: dim1=%d dim2=%d\n", name, idx, a->dim1, a->dim2);
-  check_ptr_host(a->d, tag);
-}
-static void dump_arr16_host(const arr16_t *a, const char *name, int idx)
-{
-  char tag[64];
-  snprintf(tag, sizeof(tag), "%s[%d].d", name, idx);
-  printf("%s[%d]: dim1=%d dim2=%d\n", name, idx, a->dim1, a->dim2);
-  check_ptr_host(a->d, tag);
-}
-static void dump_arr32_host(const arr32_t *a, const char *name, int idx)
-{
-  char tag[64];
-  snprintf(tag, sizeof(tag), "%s[%d].d", name, idx);
-  printf("%s[%d]: dim1=%d dim2=%d\n", name, idx, a->dim1, a->dim2);
-  check_ptr_host(a->d, tag);
-}
-
-// check lut
-void inspect_lut(const t_nrLDPC_lut *p_lut_dev)
-{
-  printf("==== Inspect t_nrLDPC_lut(dev) @ %p ====\n", (void *)p_lut_dev);
-  check_ptr_host(p_lut_dev, "p_lut_dev");
-
-  // 1)
-  t_nrLDPC_lut h = {0};
-  CHECK_CUDA(cudaMemcpy(&h, p_lut_dev, sizeof(h), cudaMemcpyDeviceToHost));
-
-  // 2)
-  check_ptr_host(h.startAddrCnGroups, "startAddrCnGroups");
-  check_ptr_host(h.numCnInCnGroups, "numCnInCnGroups");
-  check_ptr_host(h.numBnInBnGroups, "numBnInBnGroups");
-  check_ptr_host(h.startAddrBnGroups, "startAddrBnGroups");
-  check_ptr_host(h.startAddrBnGroupsLlr, "startAddrBnGroupsLlr");
-  check_ptr_host(h.llr2llrProcBufAddr, "llr2llrProcBufAddr");
-  check_ptr_host(h.llr2llrProcBufBnPos, "llr2llrProcBufBnPos");
-
-  for (int i = 0; i < NR_LDPC_NUM_CN_GROUPS_BG1; ++i) {
-    dump_arr16_host(&h.circShift[i], "circShift", i);
-    dump_arr32_host(&h.startAddrBnProcBuf[i], "startAddrBnProcBuf", i);
-    dump_arr8_host(&h.bnPosBnProcBuf[i], "bnPosBnProcBuf", i);
-    dump_arr8_host(&h.posBnInCnProcBuf[i], "posBnInCnProcBuf", i);
-  }
-  printf("========================================\n");
-}
-
-__global__ void check_ptr_kernel(const void *ptr, int id)
-{
-  if (threadIdx.x == 0 && blockIdx.x == 0) {
-    printf("check_ptr id=%d ptr=%p\n", id, ptr);
-  }
-}
-
-__global__ void check_ptr_kernel_easy(int id)
-{
-  printf("hello!\n");
-}
-
-__constant__ static uint8_t d_lut_numBnInCnGroups_BG1_R13[9];
-__constant__ static int d_lut_numThreadsEachCnGroupsNeed_BG1_R13[9];
-//__constant__ static uint8_t d_lut_numCnInCnGroups_BG1_R13[9];
-
-// === CUDA Error Checking ===
-// Wrap any CUDA API call with CHECK(...) to automatically print error info with file and line number
-// Example usage: CHECK(cudaMalloc(&ptr, size));
-#define CHECK(call) ErrorCheck((call), __FILE__, __LINE__)
-
+/* debug function
 void dumpAssCUDA(const int8_t *cnProcBufRes, const char *filename)
 {
   FILE *fp = fopen(filename, "w");
@@ -167,6 +37,12 @@ void dumpAssCUDA(const int8_t *cnProcBufRes, const char *filename)
 
   fclose(fp);
 }
+*/
+
+// === CUDA Error Checking ===
+// Wrap any CUDA API call with CHECK(...) to automatically print error info with file and line number
+// Example usage: CHECK(cudaMalloc(&ptr, size));
+#define CHECK(call) ErrorCheck((call), __FILE__, __LINE__)
 /**
  * @brief Checks CUDA error status and prints detailed diagnostic info if an error occurred.
  *
@@ -187,12 +63,6 @@ inline cudaError_t ErrorCheck(cudaError_t error_code, const char *filename, int 
   }
   return error_code;
 }
-
-//------------------------------------------------------------------------
-//------------------------------------------------------------------------
-//-----------------------CUDA Scheduler Area------------------------------
-//------------------------------------------------------------------------
-//------------------------------------------------------------------------
 
 //-----------------------------------------↓↓↓ R13 ↓↓↓----------------------------------------
 
@@ -276,7 +146,7 @@ void nrLDPC_cnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
-#if BIG_KERNEL
+
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
   int maxBlockSize = 1024; // Maximun threads are 960
   dim3 gridDim(30); // 50
@@ -293,9 +163,7 @@ void nrLDPC_cnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
   // printf("Check point 1001: ");
   // CHECK(cudaGetLastError());
 
-#else
-  printf("To be continued ^ ^\n");
-#endif
+
 }
 
 
@@ -375,7 +243,6 @@ void nrLDPC_bnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
   int8_t *p_llrProcBuf = (int8_t *)llrProcBuf;
   int8_t *p_llrRes = (int8_t *)llrRes;
 
-#if BIG_KERNEL
   int maxBlockSize = 1024; // Z;
   int totalBlocks = 30;
 
@@ -395,11 +262,6 @@ void nrLDPC_bnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                            numMaxIter,
                                                                                            PC_Flag);
 
-#else
-
-  printf("\n *************** To be continued *************** \n");
-
-#endif
 }
 
 __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
@@ -444,7 +306,7 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
   int8_t *p_llrRes = (int8_t *)d_llrRes;
 
   // Early stopping
-  if (!(*iter_ptr > numMaxIter || *PC_Flag == 0)) {
+  if (!(*iter_ptr > numMaxIter - 1 || *PC_Flag == 0)) {
     if (tid == 0) {
       *PC_Flag = 0;
       // printf("4: Iter = %d, PC_Flag = %d\n", *iter_ptr, *PC_Flag);
@@ -625,11 +487,7 @@ void nrLDPC_BnToCnPC_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                               cudaStream_t *streams,
                                               int8_t CudaStreamIdx)
 {
-  const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
 
-  const int numGroups = 9;
-
-#if BIG_KERNEL
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
 
   int maxBlockSize = 1024; // Maximun threads are 1024
@@ -654,9 +512,6 @@ void nrLDPC_BnToCnPC_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                             numLLR);
 
   
-#else
-  printf("To be continued ^ ^");
-#endif
 }
 
 void nrLDPC_OutPut_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
@@ -677,13 +532,6 @@ void nrLDPC_OutPut_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                               cudaStream_t *streams,
                                               int8_t CudaStreamIdx)
 {
-  const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
-
-  const int numGroups = 9;
-
-#if BIG_KERNEL
-  // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
-
   int maxBlockSize = 1024; // Maximun threads are 1024
   dim3 gridDim(30);
   dim3 blockDim(maxBlockSize);
@@ -701,35 +549,6 @@ void nrLDPC_OutPut_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                           numLLR);
  
 
-  // printf("Check point 1001: ");
-
-  // CHECK(cudaGetLastError());
-#else
-  printf("To be continued ^ ^");
-#endif
-}
-
-__global__ void check_lut_kernel(const t_nrLDPC_lut *p_lut)
-{
-  if (threadIdx.x == 0 && blockIdx.x == 0) {
-    printf("=== Device p_lut->startAddrBnProcBuf dump ===\n");
-    for (int i = 0; i < 9; i++) {
-      printf("[%d] .d=%p, .dim1=%d, .dim2=%d\n",
-             i,
-             (void *)p_lut->startAddrBnProcBuf[i].d,
-             p_lut->startAddrBnProcBuf[i].dim1,
-             p_lut->startAddrBnProcBuf[i].dim2);
-    }
-
-    printf("=== Device p_lut->bnPosBnProcBuf dump ===\n");
-    for (int i = 0; i < 9; i++) {
-      printf("[%d] .d=%p, .dim1=%d, .dim2=%d\n",
-             i,
-             (void *)p_lut->bnPosBnProcBuf[i].d,
-             p_lut->bnPosBnProcBuf[i].dim1,
-             p_lut->bnPosBnProcBuf[i].dim2);
-    }
-  }
 }
 //-----------------------------------------↑↑↑ R13 ↑↑↑----------------------------------------
 
@@ -814,9 +633,7 @@ void nrLDPC_cnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
-#if BIG_KERNEL
-  // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
-  int maxBlockSize = 1024; // Maximun threads are 1024
+ int maxBlockSize = 1024; // Maximun threads are 1024
   dim3 gridDim(14); // 50
   dim3 blockDim(maxBlockSize);
 
@@ -828,12 +645,7 @@ void nrLDPC_cnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                          iter_ptr,
                                                                                          numMaxIter,
                                                                                          PC_Flag);
-  // printf("Check point 1001: ");
-  // CHECK(cudaGetLastError());
 
-#else
-  printf("To be continued ^ ^\n");
-#endif
 }
 
 
@@ -914,7 +726,6 @@ void nrLDPC_bnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
   int8_t *p_llrProcBuf = (int8_t *)llrProcBuf;
   int8_t *p_llrRes = (int8_t *)llrRes;
 
-#if BIG_KERNEL
   int maxBlockSize = 1024; // Z;
   int totalBlocks = 14;
 
@@ -933,11 +744,6 @@ void nrLDPC_bnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                          numMaxIter,
                                                                                          PC_Flag);
 
-#else
-
-  printf("\n *************** To be continued *************** \n");
-
-#endif
 }
 
 __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
@@ -982,7 +788,7 @@ __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lu
   int8_t *p_llrRes = (int8_t *)d_llrRes;
 
   // Early stopping
-  if (!(*iter_ptr > numMaxIter || *PC_Flag == 0)) {
+  if (!(*iter_ptr > numMaxIter - 1 || *PC_Flag == 0)) {
     if (tid == 0) {
       *PC_Flag = 0;
       // printf("4: Iter = %d, PC_Flag = %d\n", *iter_ptr, *PC_Flag);
@@ -1133,11 +939,6 @@ void nrLDPC_BnToCnPC_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                               cudaStream_t *streams,
                                               int8_t CudaStreamIdx)
 {
-  const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
-
-  const int numGroups = 9;
-
-#if BIG_KERNEL
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
 
   int maxBlockSize = 1024; // Maximun threads are 1024
@@ -1162,9 +963,7 @@ void nrLDPC_BnToCnPC_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                             numLLR);
 
   
-#else
-  printf("To be continued ^ ^");
-#endif
+
 }
 
 void nrLDPC_OutPut_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
@@ -1185,12 +984,6 @@ void nrLDPC_OutPut_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                               cudaStream_t *streams,
                                               int8_t CudaStreamIdx)
 {
-  const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
-
-  const int numGroups = 9;
-
-#if BIG_KERNEL
-  // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
 
   int maxBlockSize = 1024; // Maximun threads are 1024
   dim3 gridDim(14); // only need 14 for R23
@@ -1208,15 +1001,17 @@ void nrLDPC_OutPut_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                           p_llrOut,
                                                                                           numLLR);
 
-  // printf("Check point 1001: ");
 
-  // CHECK(cudaGetLastError());
-#else
-  printf("To be continued ^ ^");
-#endif
 }
 
 //-----------------------------------------↑↑↑ R23 ↑↑↑----------------------------------------
+
+//------------------------------------------------------------------------
+//------------------------------------------------------------------------
+//-----------------------CUDA Scheduler Area------------------------------
+//------------------------------------------------------------------------
+//------------------------------------------------------------------------
+
 
 extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut,
                                                        int8_t *p_out,
@@ -1240,11 +1035,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                        int8_t *iter_ptr,
                                                        int *PC_Flag)
 {
-#if 1 // CPU_ADDRESSING
-
   cudaStream_t stream = streams[CudaStreamIdx];
-  // cudaEvent_t captureDoneEvent[MAX_NUM_DLSCH_SEGMENTS];
-
 
   if (!graphCreated[CudaStreamIdx]) {
 #if RECORD_GRAPH
@@ -1378,7 +1169,6 @@ nrLDPC_OutPut_BG1_R13_cuda_stream_core(p_lut,
             dumpAssCUDA(llrRes, "Dump_llrRes_cuda.txt");
           }
             */
-          // printf("In stream %d 2: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
           CHECK(cudaGetLastError());
           // cudaDeviceSynchronize();
           nrLDPC_BnToCnPC_BG1_R23_cuda_stream_core(p_lut,
@@ -1401,7 +1191,6 @@ nrLDPC_OutPut_BG1_R13_cuda_stream_core(p_lut,
           CHECK(cudaGetLastError());
           //cudaDeviceSynchronize();
 
-          // printf("In stream %d 3: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
         }
       nrLDPC_OutPut_BG1_R23_cuda_stream_core(p_lut,
                                                    bnProcBufRes,
@@ -1428,12 +1217,11 @@ nrLDPC_OutPut_BG1_R13_cuda_stream_core(p_lut,
 
       default:
         printf("Format not support yet\n");
-        _exit;
+        break;
     }
   #if RECORD_GRAPH
     // stop recording
     cudaStreamEndCapture(stream, &decoderGraphs[CudaStreamIdx]);
-    // printf("5\n");
     cudaGraphInstantiate(&decoderGraphExec[CudaStreamIdx], decoderGraphs[CudaStreamIdx], NULL, NULL, 0);
     graphCreated[CudaStreamIdx] = true;
   
@@ -1441,11 +1229,9 @@ nrLDPC_OutPut_BG1_R13_cuda_stream_core(p_lut,
     cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
   #endif
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);
-    // cudaDeviceSynchronize();
-    // printf("Graphs should be captured\n");
-    // cudaStreamSynchronize(stream);
+
   } else {
-    // printf("Are you here???\n");
+
     //  reuse the graph after
     if (CudaStreamIdx != 0) {
       // uncomment below if you want streams works in sequence
@@ -1456,10 +1242,7 @@ nrLDPC_OutPut_BG1_R13_cuda_stream_core(p_lut,
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);
     //
   }
-  // CHECK(cudaGetLastError());
-#else
-  printf("To be continued ^ ^\n");
-#endif
+
 }
 
 extern "C" bool is_device_pointer(const void *p)

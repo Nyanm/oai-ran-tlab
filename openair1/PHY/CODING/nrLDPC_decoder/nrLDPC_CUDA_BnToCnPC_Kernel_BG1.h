@@ -609,13 +609,6 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
 
 __device__ void llrRes2llrOut_Kernel_BG1_int8(const t_nrLDPC_lut *p_lut, int8_t *llrOut, int8_t *llrRes, int Zc)
 {
-  /*
-int colIdx = blockIdx.x; //
-int tid = threadIdx.x; //
-  if (tid >= (Zc / 4))
-   return;
-   */
-
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   int colIdx = tid / 96;
   int lane = tid % 96;
@@ -661,14 +654,10 @@ __device__ void llr2bitPacked_Kernel_BG1_int8(uint8_t *out, int8_t *llrOut, uint
   uint8_t result = 0;
 
   //  shuffling
-#if 1
-  for (int i = 0; i < 8; i++) {
+#pragma unroll
+  for(int i = 0; i < 8; i++) {
     result |= (p_llr[7 - i] < 0) << i;
   }
-#else
-  result = (p_llr[7] < 0) | ((p_llr[6] < 0) << 1) | ((p_llr[5] < 0) << 2) | ((p_llr[4] < 0) << 3) | ((p_llr[3] < 0) << 4)
-           | ((p_llr[2] < 0) << 5) | ((p_llr[1] < 0) << 6) | ((p_llr[0] < 0) << 7);
-#endif
 
   out[tid] = result;
 }
@@ -684,7 +673,7 @@ __device__ void llr2bit_Kernel_BG1_int8(uint8_t *out, int8_t *llrOut, uint32_t n
   int8_t *p_llr = llrOut + tid * 8;
   uint8_t result = 0;
 
-  // don't need shuffle
+#pragma unroll
   for (int i = 0; i < 8; i++)
     out[tid * 8 + i] = (p_llr[i] < 0);
 }
