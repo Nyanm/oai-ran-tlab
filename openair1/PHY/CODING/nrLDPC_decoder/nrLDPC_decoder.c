@@ -262,7 +262,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
   uint8_t R = p_decParams->R; // Decoding rate: Format 15,13,... for code rates 1/5, 1/3,... */
-  uint8_t numMaxIter = p_decParams->numMaxIter;
+  uint8_t numMaxIter = p_decParams->numMaxIter ;// To match the actual iterations
   e_nrLDPC_outMode outMode = p_decParams->outMode;
   // int8_t* cnProcBuf=  cnProcBuf;
   // int8_t* cnProcBufRes= cnProcBufRes;
