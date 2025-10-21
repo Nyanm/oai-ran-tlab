@@ -10,7 +10,7 @@
 #include "decoder_graphs.h"
 
 #define ZC 384 // for BG1 test only
-#define RECORD_GRAPH 1 // set 1 to enable graph recording, 0 to unable
+#define RECORD_GRAPH 0 // set 1 to enable graph recording, 0 to unable
 
 cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
 cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
@@ -19,7 +19,7 @@ bool graphCreated[MAX_NUM_DLSCH_SEGMENTS_DL] = {false};
 SegmentPack segmentPacks[MAX_NUM_DLSCH_SEGMENTS_DL];
 
 KernelLaunchConfig Kdim[MAX_NUM_DLSCH_SEGMENTS_DL / 8];
-/* debug function
+ //debug function
 void dumpAssCUDA(const int8_t *cnProcBufRes, const char *filename)
 {
   FILE *fp = fopen(filename, "w");
@@ -29,7 +29,7 @@ void dumpAssCUDA(const int8_t *cnProcBufRes, const char *filename)
   }
   // printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
 
-  for (int i = 0; i < NR_LDPC_SIZE_CN_PROC_BUF; i++) {
+  for (int i = 0; i < 8 * NR_LDPC_SIZE_CN_PROC_BUF; i++) {
     fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
     if ((i + 1) % 16 == 0)
       fprintf(fp, "\n");
@@ -37,7 +37,7 @@ void dumpAssCUDA(const int8_t *cnProcBufRes, const char *filename)
 
   fclose(fp);
 }
-*/
+
 
 // === CUDA Error Checking ===
 // Wrap any CUDA API call with CHECK(...) to automatically print error info with file and line number
@@ -1046,7 +1046,13 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  CudaStreamIdx);
           //          CHECK(cudaGetLastError());
           // cd cudaDeviceSynchronize();
-
+          /*cudaDeviceSynchronize();
+          if(i == 0){
+            dumpAssCUDA(cnProcBuf, "Dump_cnProcBuf_cuda.txt");
+            dumpAssCUDA(cnProcBufRes, "Dump_cnProcBufRes_cuda.txt");
+            dumpAssCUDA(bnProcBuf, "Dump_bnProcBuf_cuda.txt");
+          }
+*/
           // printf("In stream %d 1: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
           nrLDPC_bnProc_BG1_R13_cuda_stream_core(p_lut,
                                                  bnProcBuf,
@@ -1060,7 +1066,11 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  streams,
                                                  CudaStreamIdx);
           // cudaDeviceSynchronize();
-
+          /*  cudaDeviceSynchronize();
+                    if(i == 0){
+                      dumpAssCUDA(bnProcBufRes, "Dump_bnProcBufRes_cuda.txt");
+                      dumpAssCUDA(llrRes, "Dump_llrRes_cuda.txt");
+                    }*/
           // printf("In stream %d 2: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
           //        CHECK(cudaGetLastError());
           // cudaDeviceSynchronize();
@@ -1121,8 +1131,8 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  CudaStreamIdx);
           CHECK(cudaGetLastError());
 
-          // cudaDeviceSynchronize();
-          /*if(i == 0){
+         //  cudaDeviceSynchronize();
+         /* if(i == 0){
             dumpAssCUDA(cnProcBuf, "Dump_cnProcBuf_cuda.txt");
             dumpAssCUDA(cnProcBufRes, "Dump_cnProcBufRes_cuda.txt");
             dumpAssCUDA(bnProcBuf, "Dump_bnProcBuf_cuda.txt");
@@ -1141,8 +1151,8 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  streams,
                                                  CudaStreamIdx);
 
-          // cudaDeviceSynchronize();
-          /*          if(i == 0){
+          /* cudaDeviceSynchronize();
+                    if(i == 0){
                       dumpAssCUDA(bnProcBufRes, "Dump_bnProcBufRes_cuda.txt");
                       dumpAssCUDA(llrRes, "Dump_llrRes_cuda.txt");
                     }

@@ -331,7 +331,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
         nrLDPC_cnProc_BG1_R13_AVX2(cnProcBuf, cnProcBufRes, Z);
 #else
         // printf("\nCheckpoint 6\n ");
-        // dump_cnProcBufRes_to_file(cnProcBuf, "First_cnProcBuf_dump_128.txt");
+        //dump_cnProcBufRes_to_file(cnProcBuf, "Dump_cnProcBuf_128.txt");
         nrLDPC_cnProc_BG1_R13_128(cnProcBuf, cnProcBufRes, Z);
         // dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBufRes_dump_128.txt");
 #endif
@@ -413,7 +413,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   if (BG == 1) {
     nrLDPC_cn2bnProcBuf_BG1(p_lut, cnProcBufRes, bnProcBuf, Z);
     //dump_cnProcBufRes_to_file(cnProcBufRes, "Dump_cnProcBufRes_128.txt");
-     //dump_cnProcBufRes_to_file(bnProcBuf, "Dump_bnProcBuf_128.txt");
+    //dump_cnProcBufRes_to_file(bnProcBuf, "Dump_bnProcBuf_128.txt");
   } else
     nrLDPC_cn2bnProcBuf_BG2(p_lut, cnProcBufRes, bnProcBuf, Z);
   NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->cn2bnProcBuf));
@@ -537,6 +537,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
         nrLDPC_bnProc_BG1_R13_AVX2(bnProcBuf, bnProcBufRes, llrRes, Z);
 #else
         nrLDPC_bnProc_BG1_R13_128(bnProcBuf, bnProcBufRes, llrRes, Z);
+        //dump_cnProcBufRes_to_file(bnProcBufRes, "Dump_bnProcBufRes_128.txt");
+        //dump_cnProcBufRes_to_file(llrRes, "Dump_llrRes_128.txt");
         
 #endif
         break;

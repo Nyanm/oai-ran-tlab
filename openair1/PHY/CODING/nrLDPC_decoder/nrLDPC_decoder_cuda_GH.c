@@ -69,8 +69,7 @@ static int8_t bnProcBufRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF]
 static int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrOut[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
-static int8_t temp_out[MAX_NUM_DLSCH_SEGMENTS_DL * 8448] __attribute__((aligned(64)))= {0};
-
+static int8_t temp_out[MAX_NUM_DLSCH_SEGMENTS_DL * 8448] __attribute__((aligned(64))) = {0};
 
 extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    int8_t* p_out,
@@ -248,38 +247,38 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   for (int s = 0; s < n_segments /*MAX_NUM_DLSCH_SEGMENTS_DL*/; s++) {
     iter_ptr_array[s] = 0;
     PC_Flag_array[s] = 1;
-  }  
-  if(!SegmentPacked){
-  int segPerPack;
-  switch (R) {
-    case 13:
-      segPerPack = 8;//maximun is 8
-      break; // GH200 has 132 SMs, 264 blocks available, one R13 segment needs 30 blocks,
-             // so maximent it can run 264/30 = 8 segments at one time
-    case 23:
-      segPerPack = 18;
-      break; // For R23, it's 264/14 = 18
-
-    default:
-      break;
   }
-  NumSegPacks = (n_segments + segPerPack - 1) / segPerPack;
+  if (!SegmentPacked) {
+    int segPerPack;
+    switch (R) {
+      case 13:
+        segPerPack = 8; // maximun is 8
+        break; // GH200 has 132 SMs, 264 blocks available, one R13 segment needs 30 blocks,
+               // so maximent it can run 264/30 = 8 segments at one time
+      case 23:
+        segPerPack = 18;
+        break; // For R23, it's 264/14 = 18
 
-for (int p = 0; p < NumSegPacks; ++p) {
-    segmentPacks[p].packIdx  = p;
-    segmentPacks[p].startSeg = p * segPerPack;
-    segmentPacks[p].nSeg     = (n_segments - p * segPerPack > segPerPack) ? segPerPack : n_segments - p * segPerPack;
+      default:
+        break;
+    }
+    NumSegPacks = (n_segments + segPerPack - 1) / segPerPack;
 
-    segmentPacks[p].stream = decoderStreams[p];
-    segmentPacks[p].doneEvt = decoderDoneEvents[p];
-/*
-    printf("Pack %d -> startSeg=%d, nSeg=%d\n",
-           segmentPacks[p].packIdx,
-           segmentPacks[p].startSeg,
-           segmentPacks[p].nSeg);
-*/         
-}
-SegmentPacked = true;
+    for (int p = 0; p < NumSegPacks; ++p) {
+      segmentPacks[p].packIdx = p;
+      segmentPacks[p].startSeg = p * segPerPack;
+      segmentPacks[p].nSeg = (n_segments - p * segPerPack > segPerPack) ? segPerPack : n_segments - p * segPerPack;
+
+      segmentPacks[p].stream = decoderStreams[p];
+      segmentPacks[p].doneEvt = decoderDoneEvents[p];
+      /*
+          printf("Pack %d -> startSeg=%d, nSeg=%d\n",
+                 segmentPacks[p].packIdx,
+                 segmentPacks[p].startSeg,
+                 segmentPacks[p].nSeg);
+      */
+    }
+    SegmentPacked = true;
   }
 
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
@@ -295,8 +294,7 @@ SegmentPacked = true;
       nrLDPC_llr2CnProcBuf_BG2(p_lut, pp_llr, pp_cnProcBuf, Z);
   }
 
-  for (int SegPackIdx = 0; SegPackIdx < NumSegPacks; SegPackIdx++){
-
+  for (int SegPackIdx = 0; SegPackIdx < NumSegPacks; SegPackIdx++) {
     int PackShiftIdx = segmentPacks[SegPackIdx].startSeg;
 
     int8_t* perpack_llr = p_llr + PackShiftIdx * 68 * 384;
