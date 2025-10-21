@@ -57,6 +57,8 @@
 static cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
 static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
 static bool streamsCreated = false;
+static bool SegmentPacked = false;
+static int NumSegPacks;
 static int currentStreamCount = 0;
 static int8_t iter_ptr_array[MAX_NUM_DLSCH_SEGMENTS_DL];
 static int PC_Flag_array[MAX_NUM_DLSCH_SEGMENTS_DL];
@@ -247,7 +249,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     iter_ptr_array[s] = 0;
     PC_Flag_array[s] = 1;
   }  
-  
+  if(!SegmentPacked){
   int segPerPack;
   switch (R) {
     case 13:
@@ -261,7 +263,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     default:
       break;
   }
-  int NumSegPacks = (n_segments + segPerPack - 1) / segPerPack;
+  NumSegPacks = (n_segments + segPerPack - 1) / segPerPack;
 
 for (int p = 0; p < NumSegPacks; ++p) {
     segmentPacks[p].packIdx  = p;
@@ -277,6 +279,8 @@ for (int p = 0; p < NumSegPacks; ++p) {
            segmentPacks[p].nSeg);
 */         
 }
+SegmentPacked = true;
+  }
 
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
     int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384;
