@@ -1208,8 +1208,8 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
     //  reuse the graph after
     if (CudaStreamIdx != 0) {
       // uncomment below if you want streams works in sequence
-      // cudaStreamWaitEvent(streams[CudaStreamIdx], doneEvent[CudaStreamIdx-1], 0);//cudaEventSynchronize(doneEvent[CudaStreamIdx -
-      // 1]);
+      cudaStreamWaitEvent(streams[CudaStreamIdx], doneEvent[CudaStreamIdx-1], 0);
+      cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]);
     }
     cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
     cudaEventRecord(doneEvent[CudaStreamIdx], stream);

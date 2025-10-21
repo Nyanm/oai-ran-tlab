@@ -251,7 +251,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   int segPerPack;
   switch (R) {
     case 13:
-      segPerPack = 5;//maximun is 8
+      segPerPack = 8;//maximun is 8
       break; // GH200 has 132 SMs, 264 blocks available, one R13 segment needs 30 blocks,
              // so maximent it can run 264/30 = 8 segments at one time
     case 23:
