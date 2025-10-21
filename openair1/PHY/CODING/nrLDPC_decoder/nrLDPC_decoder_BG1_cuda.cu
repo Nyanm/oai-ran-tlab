@@ -11,7 +11,7 @@
 
 #define ZC 384 // for BG1 test only
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
-#define RECORD_GRAPH 1 //set 1 to enable graph recording, 0 to unable
+#define RECORD_GRAPH 1 //set 1 to enable graph recording, 0 to unable.
 
 cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
 cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
