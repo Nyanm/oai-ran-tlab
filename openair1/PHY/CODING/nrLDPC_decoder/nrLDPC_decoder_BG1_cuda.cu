@@ -6,7 +6,7 @@
 #include "nrLDPC_CUDA_lut.h"
 #include "nrLDPC_CUDA_CnProcKernel_BG1.h"
 #include "nrLDPC_CUDA_BnProcKernel_BG1.h"
-#include "nrLDPC_CUDA_BnToCnPC_Kernel_BG1.h"
+#include "nrLDPC_CUDA_mPass_Kernel_BG1.h"
 #include "decoder_graphs.h"
 
 #define ZC 384 // for BG1 test only
@@ -19,6 +19,7 @@ bool graphCreated[MAX_NUM_DLSCH_SEGMENTS_DL] = {false};
 SegmentPack segmentPacks[MAX_NUM_DLSCH_SEGMENTS_DL];
 
 KernelLaunchConfig Kdim[MAX_NUM_DLSCH_SEGMENTS_DL / 8];
+
  //debug function
 void dumpAssCUDA(const int8_t *cnProcBufRes, const char *filename)
 {
@@ -209,7 +210,8 @@ __global__ void bnProcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ 
       (const int8_t *)(d_bnProcBufRes + segIdx * NR_LDPC_SIZE_BN_PROC_BUF + lut_startAddrBnBuf[BnToAddrIdx - 1]);
   const int8_t *p_llrProcBuf_Grp =
       (const int8_t *)(d_llrProcBuf + segIdx * NR_LDPC_MAX_NUM_LLR + lut_startAddrBnLlr[BnToAddrIdx - 1]);
-  const int8_t *p_llrRes_Grp = (const int8_t *)(d_llrRes + segIdx * NR_LDPC_MAX_NUM_LLR + lut_startAddrBnLlr[BnToAddrIdx - 1]);
+  const int8_t *p_llrRes_Grp = 
+      (const int8_t *)(d_llrRes + segIdx * NR_LDPC_MAX_NUM_LLR + lut_startAddrBnLlr[BnToAddrIdx - 1]);
 
   bnProcKernelMerge_BG1_int8_Gn(p_bnProcBuf_Grp,
                                 (int8_t *)p_bnProcBufRes_Grp,
@@ -1016,11 +1018,11 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
   if (!graphCreated[CudaStreamIdx]) {
 #if RECORD_GRAPH
     printf("Creating the graph for stream %d, format R%d\n", CudaStreamIdx, R);
-#endif
+
     if (CudaStreamIdx != 0) {
       cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]);
     }
-
+#endif
     // Start graph recording
 #if RECORD_GRAPH
     cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);

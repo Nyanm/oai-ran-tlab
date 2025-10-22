@@ -607,6 +607,49 @@ __device__ void CnToBnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
   }
 }
 
+__global__ void llrPreProc_Kernel_BG1_int8(const t_nrLDPC_lut *p_lut,
+                                               const int8_t * llr,
+                                               int8_t * llrProcBuf,
+                                               int8_t* cnProcBuf,
+                                               int Zc)
+{
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int colIdx = tid / 96;   
+    int lane   = tid % 96;   
+
+    if (colIdx >= 42)//need to modify later
+        return;
+
+
+    
+
+    const uint8_t numBn2CnG1 = p_lut->numBnInBnGroups[0]; // for R13 is 42
+    const uint32_t startColParity = NR_LDPC_START_COL_PARITY_BG1; // 26 for BG1
+    const uint32_t colG1 = startColParity * Zc;
+
+    const uint16_t *lut_addr = p_lut->llr2llrProcBufAddr;
+    const uint8_t  *lut_pos  = p_lut->llr2llrProcBufBnPos;
+
+    // -----------------------------
+    // Part 1: Copy parity section
+    // -----------------------------
+    if (numBn2CnG1 > 0 && colIdx < numBn2CnG1) {
+        int32_t *dst = (int32_t *)(&llrProcBuf[colIdx * Zc] + lane * 4);
+        int32_t *src = (int32_t *)(&llr[colG1 + colIdx * Zc] + lane * 4);
+        *dst = *src;
+    }
+
+    // -----------------------------
+    // Part 2: Copy systematic section (0..startColParity)
+    // -----------------------------
+    if (colIdx < startColParity) {
+        const int idxBn = lut_addr[colIdx] + lut_pos[colIdx] * Zc;
+        int32_t *dst = (int32_t *)(&llrProcBuf[idxBn] + lane * 4);
+        int32_t *src = (int32_t *)(&llr[colIdx * Zc] + lane * 4);
+        *dst = *src;
+    }
+}
+
 __device__ void llrRes2llrOut_Kernel_BG1_int8(const t_nrLDPC_lut *p_lut, int8_t *llrOut, int8_t *llrRes, int Zc)
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
