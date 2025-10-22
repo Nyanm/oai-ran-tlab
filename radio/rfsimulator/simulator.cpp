@@ -1067,17 +1067,18 @@ static std::vector<int> get_beam_ids(uint64_t beam_map)
  * @param start_timestamp The start timestamp for the combination process.
  * @param num_aatx The number of antennas to process.
  * @param num_samples The number of samples to process.
- * @return A vector of vectors containing the combined samples for each antenna.
+ * @param rx_beam_id The receiver beam ID.
+ * @param samples Pointer to the output buffer where combined samples will be stored.
  */
-static std::vector<std::vector<c16_t>> combine_tx_beams(rfsimulator_state_t *t,
-                                                        std::queue<rfsim_packet_t *> &received_packets,
-                                                        uint64_t start_timestamp,
-                                                        int num_aatx,
-                                                        size_t num_samples,
-                                                        int rx_beam_id)
+void combine_tx_beams(rfsimulator_state_t *t,
+                      std::queue<rfsim_packet_t *> &received_packets,
+                      uint64_t start_timestamp,
+                      int num_aatx,
+                      size_t num_samples,
+                      int rx_beam_id,
+                      c16_t **samples)
 {
   // Assume received_packets is ordered by timestamp
-  std::vector<std::vector<c16_t>> ant_buffers(num_aatx, std::vector<c16_t>(num_samples, {0, 0}));
   std::queue<rfsim_packet_t *> packets_copy = received_packets;
   while (!packets_copy.empty()) {
     rfsim_packet_t *pkt = packets_copy.front();
@@ -1103,16 +1104,38 @@ static std::vector<std::vector<c16_t>> combine_tx_beams(rfsimulator_state_t *t,
       for (int aatx = 0; aatx < num_aatx; aatx++) {
         c16_t *buffer = (c16_t *)pkt->payload;
         c16_t *tx_ant_buffer_in = &buffer[(num_aatx * beam + aatx) * pkt->header.size + read_start_idx];
-        for (int s = write_start_idx; s < write_end_idx; s++) {
-          ant_buffers[aatx][s].r += tx_ant_buffer_in->r * gain_linear;
-          ant_buffers[aatx][s].i += tx_ant_buffer_in->i * gain_linear;
-          tx_ant_buffer_in++;
+        if (beam == 0) {
+          // For the first beam, we can directly copy the samples
+          if (gain_dB == 0.0f) {
+            // If gain is 0 dB, we can use memcpy for efficiency
+            memcpy(&samples[aatx][write_start_idx], tx_ant_buffer_in, (write_end_idx - write_start_idx) * sizeof(c16_t));
+          } else {
+            for (int s = write_start_idx; s < write_end_idx; s++) {
+              samples[aatx][s].r = tx_ant_buffer_in->r * gain_linear;
+              samples[aatx][s].i = tx_ant_buffer_in->i * gain_linear;
+              tx_ant_buffer_in++;
+            }
+          }
+        } else {
+          // For subsequent beams, we need to ensure we accumulate the samples
+          if (gain_dB == 0.0f) {
+            for (int s = write_start_idx; s < write_end_idx; s++) {
+              samples[aatx][s].r += tx_ant_buffer_in->r;
+              samples[aatx][s].i += tx_ant_buffer_in->i;
+              tx_ant_buffer_in++;
+            }
+          } else {
+            for (int s = write_start_idx; s < write_end_idx; s++) {
+              samples[aatx][s].r += tx_ant_buffer_in->r * gain_linear;
+              samples[aatx][s].i += tx_ant_buffer_in->i * gain_linear;
+              tx_ant_buffer_in++;
+            }
+          }
         }
       }
     }
     packets_copy.pop();
   }
-  return ant_buffers;
 }
 
 static bool flushInput(rfsimulator_state_t *t, int timeout, bool first_time)
@@ -1186,11 +1209,13 @@ static void rfsimulator_read_internal(rfsimulator_state_t *t,
                                       openair0_timestamp timestamp,
                                       int nsamps,
                                       int nbAnt,
-                                      int rx_beam_id)
+                                      int rx_beam_id,
+                                      bool is_first_beam)
 {
   cf_t temp_array[nbAnt][nsamps];
   bool channel_modelling = false;
   // Add all input nodes signal in the output buffer
+  bool is_first_peer = true;
   for (int sock = 0; sock < MAX_FD_RFSIMU; sock++) {
     buffer_t *ptr = &t->buf[sock];
 
@@ -1210,38 +1235,52 @@ static void rfsimulator_read_internal(rfsimulator_state_t *t,
         }
         const uint64_t channel_offset = ptr->channel_model->channel_offset;
         const uint64_t channel_length = ptr->channel_model->channel_length;
-        std::vector<std::vector<c16_t>> ant_buffers = combine_tx_beams(t,
-                                                                       ptr->received_packets,
-                                                                       timestamp - channel_offset - (channel_length - 1),
-                                                                       ptr->nbAnt,
-                                                                       nsamps + channel_length - 1,
-                                                                       rx_beam_id);
-        const c16_t *input[ant_buffers.size()];
+        std::vector<std::vector<c16_t>> ant_buffers(ptr->nbAnt, std::vector<c16_t>(nsamps + channel_length - 1, {0, 0}));
+        c16_t *input[ant_buffers.size()];
         for (uint aatx = 0; aatx < ant_buffers.size(); aatx++) {
           input[aatx] = ant_buffers[aatx].data();
         }
+
+        combine_tx_beams(t,
+                         ptr->received_packets,
+                         timestamp - channel_offset - (channel_length - 1),
+                         ptr->nbAnt,
+                         nsamps + channel_length - 1,
+                         rx_beam_id,
+                         input);
+
         for (int aarx = 0; aarx < nbAnt; aarx++) {
           rxAddInput(input, temp_array[aarx], aarx, ptr->channel_model, nsamps, timestamp);
         }
       } else {
-        std::vector<std::vector<c16_t>> ant_buffers =
-            combine_tx_beams(t, ptr->received_packets, timestamp, ptr->nbAnt, nsamps, rx_beam_id);
-        for (int aarx = 0; aarx < nbAnt; aarx++) {
-          double H_awgn_mimo_coeff[ant_buffers.size()];
-          for (int aatx = 0; aatx < (int)ant_buffers.size(); aatx++) {
-            uint32_t ant_diff = std::abs(aatx - aarx);
-            H_awgn_mimo_coeff[aatx] = ant_diff ? (0.2 / ant_diff) : 1.0;
+        if (is_first_beam && is_first_peer && (ptr->nbAnt == 1 || nbAnt == 1)) {
+          // optimization: if only one antenna either on TX or RX side, we can directly write to output buffer. Disable MIMO simulation below
+          combine_tx_beams(t, ptr->received_packets, timestamp, 1, nsamps, rx_beam_id, samples);
+        } else {
+          std::vector<std::vector<c16_t>> ant_buffers(ptr->nbAnt, std::vector<c16_t>(nsamps, {0, 0}));
+          c16_t *input[ant_buffers.size()];
+          for (uint aatx = 0; aatx < ant_buffers.size(); aatx++) {
+            input[aatx] = ant_buffers[aatx].data();
           }
+          combine_tx_beams(t, ptr->received_packets, timestamp, ptr->nbAnt, nsamps, rx_beam_id, input);
+          for (int aarx = 0; aarx < nbAnt; aarx++) {
+            double H_awgn_mimo_coeff[ant_buffers.size()];
+            for (int aatx = 0; aatx < (int)ant_buffers.size(); aatx++) {
+              uint32_t ant_diff = std::abs(aatx - aarx);
+              H_awgn_mimo_coeff[aatx] = ant_diff ? (0.2 / ant_diff) : 1.0;
+            }
 
-          for (uint aatx = 0; aatx < ant_buffers.size(); aatx++) { // sum up signals from nbAnt_tx antennas
-            for (int i = 0; i < nsamps; i++) { // loop over nsamps
-              samples[aarx][i].r += ant_buffers[aatx][i].r * H_awgn_mimo_coeff[aatx];
-              samples[aarx][i].i += ant_buffers[aatx][i].i * H_awgn_mimo_coeff[aatx];
-            } // end for a_tx
-          } // end for i (number of samps)
-        } // end for a_rx
+            for (uint aatx = 0; aatx < ant_buffers.size(); aatx++) { // sum up signals from nbAnt_tx antennas
+              for (int i = 0; i < nsamps; i++) { // loop over nsamps
+                samples[aarx][i].r += ant_buffers[aatx][i].r * H_awgn_mimo_coeff[aatx];
+                samples[aarx][i].i += ant_buffers[aatx][i].i * H_awgn_mimo_coeff[aatx];
+              } // end for a_tx
+            } // end for i (number of samps)
+          } // end for a_rx
+        }
       }
     }
+    is_first_peer = false;
   }
 
   bool apply_global_noise = get_noise_power_dBFS() != INVALID_DBFS_VALUE;
@@ -1369,7 +1408,7 @@ static int rfsimulator_read_beams(openair0_device *device,
       for (int i = 0; i < nbAnt; i++) {
         samples_beam[i] = (c16_t *)samplesVoid[beam][i] + timestamp - t->nextRxTstamp;
       }
-      rfsimulator_read_internal(t, samples_beam, timestamp, nsamps_beam_map, nbAnt, rx_beam_ids[beam]);
+      rfsimulator_read_internal(t, samples_beam, timestamp, nsamps_beam_map, nbAnt, rx_beam_ids[beam], beam == 0);
     }
     timestamp += nsamps_beam_map;
     nsamps_to_process -= nsamps_beam_map;
