@@ -71,10 +71,13 @@ static int8_t bnProcBufRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF]
 static int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrOut[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+static int8_t temp_out[MAX_NUM_DLSCH_SEGMENTS_DL * 8448] __attribute__((aligned(64)));
+static int8_t temp_in[MAX_NUM_DLSCH_SEGMENTS_DL * 68 * 384] __attribute__((aligned(64)));
 
 extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    int8_t* p_out,
                                                    uint32_t numLLR,
+                                                   int8_t* llr,
                                                    int8_t* cnProcBuf,
                                                    int8_t* cnProcBufRes,
                                                    int8_t* bnProcBuf,
@@ -95,7 +98,7 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    int* PC_Flag);
 
 //--------------------------------------------------------------
-/*debug function
+//debug function
 void dumpASS(int8_t* cnProcBufRes, const char* filename)
 {
   FILE* fp = fopen(filename, "w");
@@ -113,7 +116,7 @@ void dumpASS(int8_t* cnProcBufRes, const char* filename)
 
   fclose(fp);
 }
-  */
+  
 //--------------------------------------------------------------
 
 static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
@@ -236,8 +239,9 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 {
   // printf("n_segments = %d\n", n_segments);
 
-  int8_t temp_out[/*MAX_NUM_DLSCH_SEGMENTS_DL*/n_segments * 8448] __attribute__((aligned(64))); /* = {0};*/
-  memset(temp_out,0,n_segments * 8448);
+   /* = {0};*/
+  memcpy(temp_in , p_llr ,  n_segments * 68 * 384);
+  memset(temp_out, 0     ,  n_segments * 8448);
 
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
@@ -252,7 +256,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   }
 
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
-    int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384 ;
+    int8_t* pp_llr = temp_in + CudaStreamIdx * 68 * 384 ;
     int8_t* pp_out = temp_out + CudaStreamIdx * 8448; // use temp_out rather than p_out
     // printf("Stream %d: pp_out = %p\n", CudaStreamIdx, pp_out);
 
@@ -263,14 +267,14 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     int8_t* pp_llrRes = llrRes + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* pp_llrProcBuf = llrProcBuf + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* pp_llrOut = llrOut + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
-
+/*
     nrLDPC_llr2llrProcBuf(p_lut, pp_llr, pp_llrProcBuf, Z, BG);
 
     if (BG == 1)
       nrLDPC_llr2CnProcBuf_BG1(p_lut, pp_llr, pp_cnProcBuf, Z);
     else
       nrLDPC_llr2CnProcBuf_BG2(p_lut, pp_llr, pp_cnProcBuf, Z);
-
+*/
     //  Call scheduler for this segment and stream
     int8_t* pp_p_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? pp_out : pp_llrOut;
 
@@ -278,6 +282,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     nrLDPC_decoder_scheduler_BG1_cuda_core(p_lut,
                                            pp_out,
                                            numLLR,
+                                           pp_llr,
                                            pp_cnProcBuf,
                                            pp_cnProcBufRes,
                                            pp_bnProcBuf,
@@ -306,7 +311,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   // cudaDeviceSynchronize();
   //printf("p_out %p, temp_out %p\n",p_out,temp_out);
   memcpy(p_out, temp_out, n_segments /*MAX_NUM_DLSCH_SEGMENTS_DL*/ * 8448);
-  //dumpASS(p_out, "Dump_Output_Stream_GH.txt");
+  //dumpASS(p_out, "Dump_Output_Stream_GH_new.txt");
 
   return numMaxIter;
 }
