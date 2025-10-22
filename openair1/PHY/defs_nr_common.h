@@ -259,6 +259,12 @@ struct NR_AIOT_DL_FRAME_PARMS {
   int packet_slots;        // number of slots in R2D packet
   int packet_subcarriers;  // number of subcarriers in R2D packet
   int packet_samples;      // number of samples in R2D packet (aligned to slots)
+
+  // RX parameters
+  int N; // downsampling factor
+  int packet_downsampled_samples; // number of downsampled samples in R2D packet
+  int packet_received_symbols;  // number of received OFDM symbols
+  int packet_payload_size;    // decoded payload size in bits
 };
 
 

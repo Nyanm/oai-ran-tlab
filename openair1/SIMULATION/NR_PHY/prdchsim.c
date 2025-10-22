@@ -47,7 +47,7 @@ NR_AIOT_DL_FRAME_PARMS *frame_parms;
 
 double cpuf;
 char filename[50];
-char foldername[] = "results/";
+char foldername[] = "./results";
 
 static softmodem_params_t softmodem_params;
 softmodem_params_t *get_softmodem_params(void)
@@ -66,7 +66,21 @@ softmodem_params_t *get_softmodem_params(void)
 #define CP0_SYMBOL_SIZE_DEFAULT 160
 #define CP_SYMBOL_SIZE_DEFAULT 144
 
-void AIOT_R2D_PHY_calc_packet_sizes(int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame)
+// Channel model structure
+typedef struct {
+  SCM_t channel_model;
+  uint64_t fc;
+  double DS_TDL;
+  double SNR;
+  double path_loss_dB;
+  double noise_power_dB;
+  int delay;
+  double sampling_rate;
+  double bw;
+} channel_model_t;
+
+
+void AIOT_R2D_PHY_TX_calc_packet_sizes(int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame)
 {
   frame->packet_encoded_size = 2 * payloadSize;
   frame->packet_symbols = R_TAS_SIP_N / R_TAS_SIP_M
@@ -79,7 +93,7 @@ void AIOT_R2D_PHY_calc_packet_sizes(int payloadSize, NR_AIOT_DL_FRAME_PARMS *fra
   printf("Calculated R2D packet size: %d symbols, each %d SCs\n", frame->packet_symbols, frame->packet_subcarriers);
 }
 
-c16_t *AIOT_R2D_PHY_REs(uint8_t *payload, NR_AIOT_DL_FRAME_PARMS *frame)
+c16_t *AIOT_R2D_PHY_TX_REs(uint8_t *payload, NR_AIOT_DL_FRAME_PARMS *frame)
 {
   printf("Creating R2D packet\n");
 
@@ -132,19 +146,13 @@ c16_t *AIOT_R2D_PHY_REs(uint8_t *payload, NR_AIOT_DL_FRAME_PARMS *frame)
          Postamble_length * sizeof(c16_t)); // Postamble
   printf("Inserted postamble\n");
 
-  sprintf(filename, "%s/1_REs_Packet.m", foldername);
+  sprintf(filename, "%s/A_REs_Packet.m", foldername);
   LOG_M(filename, "REs_Packet_sig", REsPacket, frame->packet_symbols * frame->packet_subcarriers, 1, 1);
 
   return REsPacket;
 }
 
-void AIOT_R2D_PHY_REs_free(c16_t *REsPacket)
-{
-  if (REsPacket != NULL)
-    free(REsPacket);
-}
-
-c16_t *AIOT_R2D_PHY_Signal(c16_t *REsPacket, NR_AIOT_DL_FRAME_PARMS *frame)
+c16_t *AIOT_R2D_PHY_TX_Signal(c16_t *REsPacket, NR_AIOT_DL_FRAME_PARMS *frame)
 {
   // Allocate TX buffers
   c16_t *txData = calloc(1, frame->packet_samples * sizeof(c16_t));
@@ -185,45 +193,137 @@ c16_t *AIOT_R2D_PHY_Signal(c16_t *REsPacket, NR_AIOT_DL_FRAME_PARMS *frame)
 
   free(txDataF);
 
-  sprintf(filename, "%s/2_TX_Frame.m", foldername);
-  LOG_M(filename, "TX_Frame_sig", txData, frame->packet_samples, 1, 1);
+  sprintf(filename, "%s/B_TX_IQ.m", foldername);
+  LOG_M(filename, "TX_IQ_sig", txData, frame->packet_samples, 1, 1);
 
   return txData;
 }
 
-
-void AIOT_R2D_PHY_Signal_free(c16_t *txData)
+c16_t **SIM_Channel_propagate(c16_t *in, channel_model_t *channel, NR_AIOT_DL_FRAME_PARMS *frame)
 {
-  if (txData != NULL)
-    free(txData);
-}
+  // Initialization of transmit IQ signals
+  double **s_re = malloc(frame->nr_frame_parms.nb_antennas_tx * sizeof(double *));
+  double **s_im = malloc(frame->nr_frame_parms.nb_antennas_tx * sizeof(double *));
 
-
-void AIOT_R2D_PHY_IQ(double ***s_re, double ***s_im, c16_t *txData, NR_AIOT_DL_FRAME_PARMS *frame)
-{
-  // Initialization of channel signals
-  *s_re = malloc(NB_ANTENNAS_TX * sizeof(double *));
-  *s_im = malloc(NB_ANTENNAS_TX * sizeof(double *));
-
-  for (int i = 0; i < NB_ANTENNAS_TX; i++) {
-    (*s_re)[i] = calloc(1, frame->packet_samples * sizeof(double));
-    (*s_im)[i] = calloc(1, frame->packet_samples * sizeof(double));
+  for (int i = 0; i < frame->nr_frame_parms.nb_antennas_tx; i++) {
+    s_re[i] = calloc(1, frame->packet_samples * sizeof(double));
+    s_im[i] = calloc(1, frame->packet_samples * sizeof(double));
   }
 
   for (int i = 0; i < frame->packet_samples; i++) {
-    (*s_re)[0][i] = (double)txData[i].r;
-    (*s_im)[0][i] = (double)txData[i].i;
+    s_re[0][i] = (double)in[i].r;
+    s_im[0][i] = (double)in[i].i;
   }
-}
 
-void AIOT_R2D_PHY_IQ_free(double **s_re, double **s_im)
-{
-  for (int i = 0; i < NB_ANTENNAS_TX; i++) {
+  // Initialization of receive IQ signals
+  double **r_re = malloc(frame->nr_frame_parms.nb_antennas_rx * sizeof(double *));
+  double **r_im = malloc(frame->nr_frame_parms.nb_antennas_rx * sizeof(double *));
+
+  int rx_size = frame->packet_samples * 2;
+  for (int i = 0; i < frame->nr_frame_parms.nb_antennas_rx; i++) {
+    r_re[i] = calloc(1, rx_size * sizeof(double));
+    r_im[i] = calloc(1, rx_size * sizeof(double));
+  }
+
+  bzero(r_re[0], rx_size * sizeof(double));
+  bzero(r_im[0], rx_size * sizeof(double));
+
+  channel_desc_t *channel_params = new_channel_desc_scm(frame->nr_frame_parms.nb_antennas_tx,
+                                                 frame->nr_frame_parms.nb_antennas_rx,
+                                                 channel->channel_model,
+                                                 channel->sampling_rate,
+                                                 channel->fc,
+                                                 channel->bw,
+                                                 channel->DS_TDL,
+                                                 0.0,
+                                                 CORR_LEVEL_LOW,
+                                                 0,
+                                                 channel->delay,
+                                                 channel->path_loss_dB,
+                                                 channel->noise_power_dB);
+
+  int txlev = signal_energy((int32_t *) in, frame->nr_frame_parms.ofdm_symbol_size + frame->nr_frame_parms.nb_prefix_samples0);
+  double txlev_dB = 10 * log10((double)txlev);
+  printf("Signal energy: %d (%f dB)\n", txlev, txlev_dB);
+
+  double ts = 1.0 / (frame->nr_frame_parms.subcarrier_spacing * frame->nr_frame_parms.ofdm_symbol_size);
+  // Compute AWGN variance
+  double sigma2_dB = 10 * log10((double)txlev) + channel->path_loss_dB - channel->SNR; // *((double)frame_parms->ofdm_symbol_size / r2d_subcarriers)
+  double sigma2 = pow(10, sigma2_dB / 10);
+  printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dB);
+
+  c16_t **rxData = malloc(frame->nr_frame_parms.nb_antennas_rx * sizeof(c16_t *));
+
+  for (int i = 0; i < frame->nr_frame_parms.nb_antennas_rx; i++) {
+    printf("Allocating %d samples for rxdata\n", frame->packet_samples * 2);
+    rxData[i] = calloc(1, frame->packet_samples * 2 * sizeof(c16_t));
+    memset(rxData[i], 0, frame->packet_samples * 2 * sizeof(c16_t));
+  }
+
+  multipath_channel(channel_params, s_re, s_im, r_re, r_im, frame->packet_samples, 0, 1);
+  add_noise(rxData,
+            (const double **)r_re,
+            (const double **)r_im,
+            sigma2,
+            rx_size,
+            0,
+            ts,
+            0,
+            0x0,
+            0x1,
+            frame->nr_frame_parms.nb_antennas_rx);
+
+  // Save channel output
+  double *output = malloc(rx_size * 2 * sizeof(double));
+
+  for (int i = 0; i < rx_size; i++) {
+    output[2 * i] = r_re[0][i];
+    output[2 * i + 1] = r_im[0][i];
+  }
+
+  sprintf(filename, "%s/C_Channel.m", foldername);
+  LOG_M(filename, "Channel_sig", output, rx_size, 1, 8);
+
+  free(output);
+
+  // Save AWGN received signal
+  sprintf(filename, "%s/D_RX_IQ.m", foldername);
+  LOG_M(filename, "RX_IQ_sig", rxData[0], rx_size, 1, 1);
+
+  for (int i = 0; i < frame->nr_frame_parms.nb_antennas_tx; i++) {
     free(s_re[i]);
     free(s_im[i]);
   }
+
   free(s_re);
   free(s_im);
+
+  for (int i = 0; i < frame->nr_frame_parms.nb_antennas_rx; i++) {
+    free(r_re[i]);
+    free(r_im[i]);
+  }
+
+  free(r_re);
+  free(r_im);
+
+  free_channel_desc_scm(channel_params);
+
+  return rxData;
+}
+
+c16_t *AIOT_R2D_PHY_RX_Envelope_Detector(c16_t **rxData, int rx_size)
+{
+  c16_t *envelope = malloc(rx_size * sizeof(c16_t *));
+
+  // Envelope detector (squared)
+  for (int i = 0; i < rx_size; i++) {
+    envelope[i] = c16MulConjShift(rxData[0][i], rxData[0][i], 15);
+  }
+
+  sprintf(filename, "%s/E_Envelope.m", foldername);
+  LOG_M(filename, "Envelope_sig", envelope, rx_size, 1, 1);
+
+  return envelope;
 }
 
 // Butterworth 3rd-order LPF coefficients (fs=1.92 MHz, fc=0.625 MHz)
@@ -287,6 +387,273 @@ void butterworth_filter(c16_t *in, c16_t *out, int length, iir_state_t *st)
   }
 }
 
+c16_t *AIOT_R2D_PHY_RX_Filter(c16_t *in, int length)
+{
+  c16_t *out = malloc(length * sizeof(c16_t));
+  iir_state_t st;
+  memset(&st, 0, sizeof(iir_state_t));
+
+  // Butterworth filter 3rd order
+  butterworth_filter(in, out, length, &st);
+
+  sprintf(filename, "%s/F_Filter.m", foldername);
+  LOG_M(filename, "Filter_sig", out, length, 1, 1);
+
+  return out;
+}
+
+c16_t *AIOT_R2D_PHY_RX_Downsample(c16_t *in, int length, NR_AIOT_DL_FRAME_PARMS *frame)
+{
+  frame->packet_downsampled_samples = length / frame->N;
+  c16_t *out = malloc(frame->packet_downsampled_samples * sizeof(c16_t));
+
+  for (int i = 0; i < frame->packet_downsampled_samples; i++) {
+    out[i] = in[i * frame->N];
+  }
+
+  sprintf(filename, "%s/G_Downsampled.m", foldername);
+  LOG_M(filename, "Downsampled_sig", out, frame->packet_downsampled_samples, 1, 1);
+
+  return out;
+}
+
+int AIOT_R2D_PHY_RX_getSIPindex(c16_t *signal, NR_AIOT_DL_FRAME_PARMS *frame_parms)
+{
+  // Compute lengths for downsampled SIP ideal sequence
+  int downsampled_OFDM_size = frame_parms->nr_frame_parms.ofdm_symbol_size / frame_parms->N;
+  int downsampled_CP_size = frame_parms->nr_frame_parms.nb_prefix_samples / frame_parms->N;
+  //int downsampled_CP0_size = frame_parms->nr_frame_parms.nb_prefix_samples0 / frame_parms->N;
+  int SIP_downsampled_length = 2 * downsampled_OFDM_size + downsampled_CP_size;
+
+  // Generate ideal SIP sequence for correlation
+  c16_t SIP_ideal[SIP_downsampled_length];
+  c16_t value0 = (c16_t){0, 0};
+  c16_t value1 = (c16_t){16384, 0};
+
+  for (int i = 0; i < 4; i++) {
+    for (int k = 0; k < downsampled_OFDM_size / 4; k++) {
+      SIP_ideal[i * downsampled_OFDM_size / 4 + k] = R_TAS_SIP & (1 << (7 - i)) ? value1 : value0;
+    }
+  }
+
+  for (int k = 0; k < downsampled_CP_size; k++) {
+    SIP_ideal[4 * downsampled_OFDM_size / 4 + k] = value0;
+  }
+
+  for (int i = 4; i < 8; i++) {
+    for (int k = 0; k < downsampled_OFDM_size / 4; k++) {
+      SIP_ideal[downsampled_CP_size + i * downsampled_OFDM_size / 4 + k] =
+          R_TAS_SIP & (1 << (7 - i)) ? value1 : value0;
+    }
+  }
+
+  /*sprintf(filename, "%s/SIP_Signal.m", foldername);
+  LOG_M(filename, "SIP_sig", SIP_ideal, SIP_downsampled_length, 1, 1);*/
+
+  double *correlation = malloc(frame_parms->packet_downsampled_samples * sizeof(double));
+  memset(correlation, 0, frame_parms->packet_downsampled_samples * sizeof(double));
+
+  int corr_len = sizeof(SIP_ideal) / sizeof(SIP_ideal[0]);
+  for (int i = 0; i < frame_parms->packet_downsampled_samples - corr_len; i++) {
+    double sum = 0.0;
+    for (int j = 0; j < corr_len; j++) {
+      sum += signal[i + j].r * SIP_ideal[j].r + signal[i + j].i * SIP_ideal[j].i;
+    }
+    correlation[i] = sum;
+  }
+
+  sprintf(filename, "%s/H_Correlation.m", foldername);
+  LOG_M(filename, "Correlation_sig", correlation, frame_parms->packet_downsampled_samples, 1, 7);
+
+  double max_value = 0.0;
+  int SIP_offset = 0;
+  for (int i = 0; i < frame_parms->packet_downsampled_samples - corr_len; i++) {
+    if (max_value < correlation[i]) {
+      max_value = correlation[i];
+      SIP_offset = i;
+    }
+  }
+
+  free(correlation);
+
+  return SIP_offset;
+}
+
+c16_t *AIOT_R2D_PHY_RX_Move_And_Remove_CP(c16_t *in, int SIP_offset, NR_AIOT_DL_FRAME_PARMS *frame_parms)
+{
+  // Compute lengths for downsampled SIP ideal sequence
+  int downsampled_OFDM_size = frame_parms->nr_frame_parms.ofdm_symbol_size / frame_parms->N;
+  int downsampled_CP_size = frame_parms->nr_frame_parms.nb_prefix_samples / frame_parms->N;
+  int downsampled_CP0_size = frame_parms->nr_frame_parms.nb_prefix_samples0 / frame_parms->N;
+  int cleared_length_samples = frame_parms->packet_downsampled_samples - SIP_offset;
+  frame_parms->packet_received_symbols = 0;
+
+  // Allocate memory for cleared signal
+  c16_t *cleared = malloc(cleared_length_samples * sizeof(c16_t));
+  memset(cleared, 0, cleared_length_samples * sizeof(c16_t));
+
+  // Move the start and remove CP (CP0 size = 10, CP size = 9, OFDM symbol size = 128)
+  for (int i = 0, cp = 0; SIP_offset + (i+1)*downsampled_OFDM_size + cp < frame_parms->packet_downsampled_samples; i++)
+  {
+    if(i != 0) cp += ((i%7) == 0) ? downsampled_CP0_size : downsampled_CP_size;
+    for (int j = 0; j < downsampled_OFDM_size; j++) {
+      cleared[i*downsampled_OFDM_size + j] = in[SIP_offset + i*downsampled_OFDM_size + j + cp];
+    }
+    frame_parms->packet_received_symbols++;
+  }
+
+  sprintf(filename, "%s/I_Cleared.m", foldername);
+  LOG_M(filename, "Cleared_sig", cleared, frame_parms->packet_received_symbols * downsampled_OFDM_size, 1, 1);
+
+  return cleared;
+}
+
+int *AIOT_R2D_PHY_RX_Energy(c16_t *in, NR_AIOT_DL_FRAME_PARMS *frame_parms)
+{
+  int downsampled_chip_size = frame_parms->nr_frame_parms.ofdm_symbol_size / frame_parms->N / frame_parms->M;
+
+  // Calculate energy of chips
+  int energy_length = R_TAS_SIP_N + (frame_parms->packet_received_symbols-2) * frame_parms->M; // first 2 symbols are SIP (M=4), rest is decoded with M
+  int *energy = malloc(energy_length * sizeof(int));
+  memset(energy, 0, energy_length * sizeof(int));
+
+  for (int i = 0; i < energy_length; i++) {
+    for (int j = 0; j < downsampled_chip_size; j++)
+    {
+      energy[i] += in[i*downsampled_chip_size + j].r;
+    }
+  }
+
+  sprintf(filename, "%s/J_Energy.m", foldername);
+  LOG_M(filename, "Energy_sig", energy, energy_length, 1, 2);
+
+  frame_parms->packet_payload_size = energy_length;
+  return energy;
+}
+
+uint8_t *AIOT_R2D_PHY_RX_Decode(int *in, NR_AIOT_DL_FRAME_PARMS *frame_parms)
+{
+  // Find threshold
+  int threshold = 0;
+  for (int i = R_TAS_SIP_N; i < R_TAS_SIP_N + R_TAS_CAP_N; i++)
+  {
+    threshold += in[i];
+  }
+  threshold /= R_TAS_CAP_N;
+  threshold /= 2; // postamble has 2x lower energy
+
+  // Decode line encoding
+  uint8_t *rx_payload = malloc(MAX_AIOT_R2D_PACKET_SIZE);
+  memset(rx_payload, 0, MAX_AIOT_R2D_PACKET_SIZE);
+
+  uint8_t end = 0;
+  printf("Energy threshold: %d\n", threshold);
+  printf("Decoding payload\n");
+
+  for (int i = R_TAS_SIP_N + R_TAS_CAP_N, j=0; i < frame_parms->packet_payload_size; i++)
+  {
+    end = (end << 1) | ((in[i] >= threshold) ? 1 : 0);
+
+    if((end & 0x0F) == 0x0F) {
+      printf("End of payload detected, length: %d\n", j);
+      frame_parms->packet_payload_size = j-1;
+      break;
+    }
+
+    if(i%2 != 0) continue;
+
+    //threshold = (threshold*3 + in[i] + in[i+1]) / 5;
+    int bit0 = (in[i] > in[i+1]) ? 1 : 0;
+    rx_payload[j/8] = (rx_payload[j/8] << 1) | bit0;
+    j++;
+  }
+
+  return rx_payload;
+}
+
+void AIOT_R2D_PHY_TX_REs_free(c16_t *REsPacket)
+{
+  if (REsPacket != NULL)
+    free(REsPacket);
+}
+
+void AIOT_R2D_PHY_TX_Signal_free(c16_t *txData)
+{
+  if (txData != NULL)
+    free(txData);
+}
+
+void SIM_Channel_propagate_free(c16_t **rxData, int nb_antennas_rx)
+{
+  if (rxData != NULL) {
+    for (int i = 0; i < nb_antennas_rx; i++) {
+      if (rxData[i] != NULL)
+        free(rxData[i]);
+    }
+    free(rxData);
+  }
+}
+
+void AIOT_R2D_PHY_RX_Downsample_free(c16_t *downSampled)
+{
+  if (downSampled != NULL)
+    free(downSampled);
+}
+
+void AIOT_R2D_PHY_RX_Filter_free(c16_t *filteredData)
+{
+  if (filteredData != NULL)
+    free(filteredData);
+}
+
+void AIOT_R2D_PHY_RX_Envelope_Detector_free(c16_t *envelope)
+{
+  if (envelope != NULL)
+    free(envelope);
+}
+
+void AIOT_R2D_PHY_RX_Move_And_Remove_CP_free(c16_t *cleared)
+{
+  if (cleared != NULL)
+    free(cleared);
+}
+
+void AIOT_R2D_PHY_RX_Energy_free(int *energy)
+{
+  if (energy != NULL)
+    free(energy);
+}
+
+void AIOT_R2D_PHY_RX_Decode_free(uint8_t *rx_payload)
+{
+  if (rx_payload != NULL)
+    free(rx_payload);
+}
+
+int calculate_BER(uint8_t *rx_payload, uint8_t *payload, NR_AIOT_DL_FRAME_PARMS *frame_parms)
+{
+  printf("Received payload (%d bits):\n", frame_parms->packet_payload_size);
+  for(int i = 0; i < (frame_parms->packet_payload_size+7)/8; i++) {
+    printf("%02X ", rx_payload[i]);
+  }
+  printf("\n");
+
+  int BER_errors = 0;
+  double BER = 0.0;
+  for (int i = 0; i < frame_parms->packet_payload_size/8; i++) {
+    int diff = payload[i] ^ rx_payload[i];
+
+    // Count ones in diff
+    for (int b = 0; b < 8; b++) {
+      BER_errors += (diff >> b) & 0x01;
+    }
+  }
+
+  BER = (double)BER_errors / (double)frame_parms->packet_payload_size;
+  printf("BER: %f, Error bits: %d, Payload size: %d\n", 100.0 * BER, BER_errors, frame_parms->packet_payload_size);
+
+}
+
 configmodule_interface_t *uniqCfg = NULL;
 int main(int argc, char **argv)
 {
@@ -301,15 +668,6 @@ int main(int argc, char **argv)
   if ((uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY)) == 0) {
     exit_fun("[NR_AIOT_PRDCHSIM] Error, configuration module init failed\n");
   }
-
-  // Prepare variables for parameters
-  SCM_t channel_model = AWGN;
-  uint64_t fc = 897500000; // Carrier frequency n8 band, #50 RB
-  double DS_TDL = .03;
-  double SNR = 20.0;
-  double path_loss_dB = -40.0;
-  double noise_power_dB = -140.0;
-  int delay = 1290;
 
   uint8_t payload[MAX_AIOT_R2D_PAYLOAD_SIZE] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44,
                                                 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
@@ -356,6 +714,17 @@ int main(int argc, char **argv)
   // AIoT-specific frame parameters
   frame_parms->Zadoff_Chu = ZC_Ones_DEFAULT;
   frame_parms->M = M_DEFAULT;
+
+  // Fill in channel model default parameters
+  channel_model_t channel_model = {
+    .channel_model = AWGN,
+    .fc = 897500000, // Carrier frequency n8 band, #50 RB
+    .DS_TDL = .03,
+    .SNR = 20.0,
+    .path_loss_dB = -40.0,
+    .noise_power_dB = -140.0,
+    .delay = 1290
+  };
 
   int c;
   while ((c = getopt(argc, argv, "--:O:h:L:R:P:p:M:Z:S:N:D:")) != -1) {
@@ -441,18 +810,18 @@ int main(int argc, char **argv)
         break;
 
       case 'S':
-        SNR = atof(optarg);
-        printf("Using SNR=%f dB\n", SNR);
+        channel_model.SNR = atof(optarg);
+        printf("Using SNR=%f dB\n", channel_model.SNR);
         break;
 
       case 'N':
-        path_loss_dB = atof(optarg);
-        printf("Using path_loss_dB=%f dB\n", path_loss_dB);
+        channel_model.path_loss_dB = -atof(optarg);
+        printf("Using path_loss_dB=%f dB\n", channel_model.path_loss_dB);
         break;
 
       case 'D':
-        delay = atoi(optarg);
-        printf("Using delay=%d samples\n", delay);
+        channel_model.delay = atoi(optarg);
+        printf("Using delay=%d samples\n", channel_model.delay);
         break;
     }
   }
@@ -471,17 +840,7 @@ int main(int argc, char **argv)
 
   // ---------------------------------------------------------------
 
-  // Packet constants calculation
-  /*
-    int r2d_line_encoded_bits = 2 * payloadSize;
-    int r2d_symbols = R_TAS_SIP_N / R_TAS_SIP_M + ((R_TAS_CAP_N + r2d_line_encoded_bits + R2D_POSTAMBLE_N) + (M-1)) / M; // ceil
-    int r2d_slots = (r2d_symbols + (NR_NUMBER_OF_SYMBOLS_PER_SLOT-1)) / NR_NUMBER_OF_SYMBOLS_PER_SLOT; // ceil
-    int r2d_subcarriers = NR_NB_SC_PER_RB * RBs;
-    int r2d_samples = frame_parms->samples_per_subframe / frame_parms->slots_per_subframe * r2d_slots; // packet samples aligned to
-    slots
-  */
-
-  AIOT_R2D_PHY_calc_packet_sizes(payloadSize, frame_parms);
+  AIOT_R2D_PHY_TX_calc_packet_sizes(payloadSize, frame_parms);
 
   printf("R2D packet parameters:\n");
   printf("  RBs: %d\n", frame_parms->nr_frame_parms.N_RB_DL);
@@ -499,297 +858,64 @@ int main(int argc, char **argv)
   }
   printf("\n");
 
-    // Setup radio channel
-  double samples = N_RB2sampling_rate(frame_parms->nr_frame_parms.N_RB_DL); // in MHz
-  double rxbw = N_RB2channel_bandwidth(frame_parms->nr_frame_parms.N_RB_DL);
-  double txbw = N_RB2channel_bandwidth(frame_parms->nr_frame_parms.N_RB_DL);
+  // Setup radio channel
+  channel_model.sampling_rate = N_RB2sampling_rate(frame_parms->nr_frame_parms.N_RB_DL); // in MHz
+  channel_model.bw = N_RB2channel_bandwidth(frame_parms->nr_frame_parms.N_RB_DL);
 
   printf("Channel parameters:\n");
-  printf("  Channel model: %s\n", channel_model == AWGN ? "AWGN" : "TDL");
-  printf("  Sampling rate: %f MHz\n", samples);
-  printf("  RX bandwidth: %f MHz\n", rxbw);
-  printf("  TX bandwidth: %f MHz\n", txbw);
-  printf("  Carrier frequency: %f MHz\n", ((double)fc) / 1e6);
-  printf("  Delay spread: %f us\n", DS_TDL);
-  printf("  SNR: %f dB\n", SNR);
-  printf("  Delay: %d samples\n", delay);
-  printf("  Path loss: %f dB\n", path_loss_dB);
-  printf("  Noise power: %f dB\n", noise_power_dB);
+  printf("  Channel model: %s\n", channel_model.channel_model == AWGN ? "AWGN" : "TDL");
+  printf("  Sampling rate: %f MHz\n", channel_model.sampling_rate);
+  printf("  Bandwidth: %f MHz\n", channel_model.bw);
+  printf("  Carrier frequency: %f MHz\n", ((double)channel_model.fc) / 1e6);
+  printf("  Delay spread: %f us\n", channel_model.DS_TDL);
+  printf("  SNR: %f dB\n", channel_model.SNR);
+  printf("  Delay: %d samples\n", channel_model.delay);
+  printf("  Path loss: %f dB\n", channel_model.path_loss_dB);
+  printf("  Noise power: %f dB\n", channel_model.noise_power_dB);
 
   c16_t *REsPacket = NULL, *txData = NULL;
-  double **s_re, **s_im, **r_re, **r_im;
 
-  REsPacket = AIOT_R2D_PHY_REs(payload, frame_parms);
-  txData = AIOT_R2D_PHY_Signal(REsPacket, frame_parms);
-  AIOT_R2D_PHY_IQ(&s_re, &s_im, txData, frame_parms);
+  REsPacket = AIOT_R2D_PHY_TX_REs(payload, frame_parms);
+  txData = AIOT_R2D_PHY_TX_Signal(REsPacket, frame_parms);
 
-  // Initialization of channel signals
-  r_re = malloc(NB_ANTENNAS_TX * sizeof(double *));
-  r_im = malloc(NB_ANTENNAS_TX * sizeof(double *));
-
+  c16_t **rxData, *envelope, *filteredData, *downSampled, *cleared;
+  int *energy;
+  uint8_t *rx_payload;
   int rx_size = frame_parms->packet_samples * 2;
-  for (int i = 0; i < NB_ANTENNAS_TX; i++) {
-    r_re[i] = calloc(1, rx_size * sizeof(double));
-    r_im[i] = calloc(1, rx_size * sizeof(double));
-  }
 
-  bzero(r_re[0], rx_size * sizeof(double));
-  bzero(r_im[0], rx_size * sizeof(double));
-
-  channel_desc_t *channel = new_channel_desc_scm(frame_parms->nr_frame_parms.nb_antennas_tx,
-                                                 frame_parms->nr_frame_parms.nb_antennas_rx,
-                                                 channel_model,
-                                                 samples, // sampling frequency in MHz
-                                                 fc,
-                                                 rxbw,
-                                                 DS_TDL,
-                                                 0.0,
-                                                 CORR_LEVEL_LOW,
-                                                 0,
-                                                 delay,
-                                                 path_loss_dB,
-                                                 noise_power_dB);
-
-  int txlev = signal_energy((int32_t *) txData, frame_parms->nr_frame_parms.ofdm_symbol_size + frame_parms->nr_frame_parms.nb_prefix_samples0);
-  double txlev_dB = 10 * log10((double)txlev);
-  printf("Signal energy: %d (%f dB)\n", txlev, txlev_dB);
-
-  for (int i = 0; i < frame_parms->packet_samples; i++) {
-    s_re[0][i] = (double)txData[i].r;
-    s_im[0][i] = (double)txData[i].i;
-  }
-
-  double ts = 1.0 / (frame_parms->nr_frame_parms.subcarrier_spacing * frame_parms->nr_frame_parms.ofdm_symbol_size);
-  // Compute AWGN variance
-  double sigma2_dB = 10 * log10((double)txlev) + path_loss_dB - SNR; // *((double)frame_parms->ofdm_symbol_size / r2d_subcarriers)
-  double sigma2 = pow(10, sigma2_dB / 10);
-  printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dB);
-
-  c16_t **rxData = malloc(frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(c16_t *));
-
-  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
-    printf("Allocating %d samples for rxdata\n", frame_parms->packet_samples * 2);
-    rxData[i] = calloc(1, frame_parms->packet_samples * 2 * sizeof(c16_t));
-    memset(rxData[i], 0, frame_parms->packet_samples * 2 * sizeof(c16_t));
-  }
-
-  multipath_channel(channel, s_re, s_im, r_re, r_im, frame_parms->packet_samples, 0, 1);
-  add_noise(rxData,
-            (const double **)r_re,
-            (const double **)r_im,
-            sigma2,
-            rx_size,
-            0,
-            ts,
-            0,
-            0x0,
-            0x1,
-            frame_parms->nr_frame_parms.nb_antennas_rx);
-
-  // Save channel output
-  double *output = malloc(rx_size * 2 * sizeof(double));
-
-  for (int i = 0; i < rx_size; i++) {
-    output[2 * i] = r_re[0][i];
-    output[2 * i + 1] = r_im[0][i];
-  }
-
-  sprintf(filename, "%s/Channel_Signal_IQ.m", foldername);
-  LOG_M(filename, "Channel_IQ", output, rx_size, 1, 8);
-
-  free(output);
-
-  // Save AWGN received signal
-  sprintf(filename, "%s/RX_Signal_IQ.m", foldername);
-  LOG_M(filename, "RX_IQ", rxData[0], rx_size, 1, 1);
+  rxData = SIM_Channel_propagate(txData, &channel_model, frame_parms);
 
   // Envelope detector (squared)
-  for (int i = 0; i < rx_size; i++) {
-    rxData[0][i] = c16MulConjShift(rxData[0][i], rxData[0][i], 15);
-  }
-
-  sprintf(filename, "%s/Envelope_Signal.m", foldername);
-  LOG_M(filename, "Envelope", rxData[0], rx_size, 1, 1);
-
-  // Butterworth filter 3rd order
-  iir_state_t st = {0};
-  c16_t *filteredData = calloc(1, rx_size * sizeof(c16_t));
-
-  // fill input[] with complex samples
-  butterworth_filter(rxData[0], filteredData, rx_size, &st);
-
-  sprintf(filename, "%s/Filtered_Signal.m", foldername);
-  LOG_M(filename, "Filtered", filteredData, rx_size, 1, 1);
+  envelope = AIOT_R2D_PHY_RX_Envelope_Detector(rxData, rx_size);
+  filteredData = AIOT_R2D_PHY_RX_Filter(envelope, rx_size);
 
   // Downsample the signal by N = 16
-  int N = 16;
-  int downSampled_length = rx_size / N;
-  c16_t *downSampled = malloc(downSampled_length * sizeof(c16_t));
-  for (int i = 0; i < downSampled_length; i++) {
-    downSampled[i] = filteredData[i * N];
-  }
-
-  sprintf(filename, "%s/Downsampled_Signal.m", foldername);
-  LOG_M(filename, "Downsampled", downSampled, downSampled_length, 1, 1);
+  frame_parms->N = 16;
+  downSampled = AIOT_R2D_PHY_RX_Downsample(filteredData, rx_size, frame_parms);
 
   // Correlate the received signal with known SIP sequence
-  int downsampled_OFDM_size = frame_parms->nr_frame_parms.ofdm_symbol_size / N;
-  int downsampled_CP_size = frame_parms->nr_frame_parms.nb_prefix_samples / N;
-  int downsampled_CP0_size = frame_parms->nr_frame_parms.nb_prefix_samples0 / N;
-  int SIP_downsampled_length = 2 * downsampled_OFDM_size + downsampled_CP_size;
-  c16_t SIP_ideal[SIP_downsampled_length];
-  c16_t value0 = (c16_t){0, 0};
-  c16_t value1 = (c16_t){16384, 0};
-
-  for (int i = 0; i < 4; i++) {
-    for (int k = 0; k < downsampled_OFDM_size / 4; k++) {
-      SIP_ideal[i * downsampled_OFDM_size / 4 + k] = R_TAS_SIP & (1 << (7 - i)) ? value1 : value0;
-    }
-  }
-
-  for (int k = 0; k < downsampled_CP_size; k++) {
-    SIP_ideal[4 * downsampled_OFDM_size / 4 + k] = value0;
-  }
-
-  for (int i = 4; i < 8; i++) {
-    for (int k = 0; k < downsampled_OFDM_size / 4; k++) {
-      SIP_ideal[downsampled_CP_size + i * downsampled_OFDM_size / 4 + k] =
-          R_TAS_SIP & (1 << (7 - i)) ? value1 : value0;
-    }
-  }
-
-  sprintf(filename, "%s/SIP_Signal.m", foldername);
-  LOG_M(filename, "SIP", SIP_ideal, SIP_downsampled_length, 1, 1);
-
-  double *correlation = malloc(downSampled_length * sizeof(double));
-  memset(correlation, 0, downSampled_length * sizeof(double));
-
-  int corr_len = sizeof(SIP_ideal) / sizeof(SIP_ideal[0]);
-  for (int i = 0; i < downSampled_length - corr_len; i++) {
-    double sum = 0.0;
-    for (int j = 0; j < corr_len; j++) {
-      sum += downSampled[i + j].r * SIP_ideal[j].r + downSampled[i + j].i * SIP_ideal[j].i;
-    }
-    correlation[i] = sum;
-  }
-
-  sprintf(filename, "%s/Correlation_Signal.m", foldername);
-  LOG_M(filename, "Correlation", correlation, downSampled_length, 1, 7);
-
-  double max_value = 0.0;
-  int SIP_offset = 0;
-  for (int i = 0; i < downSampled_length - corr_len; i++) {
-    if (max_value < correlation[i]) {
-      max_value = correlation[i];
-      SIP_offset = i;
-    }
-  }
-
+  int SIP_offset = AIOT_R2D_PHY_RX_getSIPindex(downSampled, frame_parms);
   printf("SIP offset: %d\n", SIP_offset);
 
-  // Move the start and remove CP (CP0 size = 10, CP size = 9, OFDM symbol size = 128)
-  int cleared_length = downSampled_length - SIP_offset;
-  int rx_symbols = 0;
-  c16_t *cleared = malloc(cleared_length * sizeof(c16_t));
-  memset(cleared, 0, cleared_length * sizeof(c16_t));
-  for (int i = 0, cp = 0; SIP_offset + (i+1)*downsampled_OFDM_size + cp < downSampled_length; i++)
-  {
-    if(i != 0) cp += ((i%7) == 0) ? downsampled_CP0_size : downsampled_CP_size;
-    for (int j = 0; j < downsampled_OFDM_size; j++) {
-      cleared[i*downsampled_OFDM_size + j] = downSampled[SIP_offset + i*downsampled_OFDM_size + j + cp];
-    }
-    rx_symbols++;
-  }
-
-  sprintf(filename, "%s/Cleared_Signal.m", foldername);
-  LOG_M(filename, "Cleared", cleared, cleared_length, 1, 1);
+  cleared = AIOT_R2D_PHY_RX_Move_And_Remove_CP(downSampled, SIP_offset, frame_parms);
 
   // Calculate energy of chips
-  int energy_length = (rx_symbols-2) * frame_parms->M + 2*4; // first 2 symbols are SIP (M=4), rest is decoded with M
-  int *energy = malloc(energy_length * sizeof(int));
-  memset(energy, 0, energy_length * sizeof(int));
-  for (int i = 0; i < energy_length; i++) {
-    for (int j = 0; j < (downsampled_OFDM_size / frame_parms->M); j++)
-    {
-      energy[i] += cleared[i*(downsampled_OFDM_size / frame_parms->M) + j].r;
-    }
-  }
-
-  sprintf(filename, "%s/Energy_Signal.m", foldername);
-  LOG_M(filename, "Energy", energy, energy_length, 1, 2);
-
-  // Find threshold
-  int threshold = 0;
-  for (int i = R_TAS_SIP_N; i < R_TAS_SIP_N + R_TAS_CAP_N; i++)
-  {
-    threshold += energy[i];
-  }
-  threshold /= R_TAS_CAP_N;
+  energy = AIOT_R2D_PHY_RX_Energy(cleared, frame_parms);
 
   // Decode line encoding
-  uint8_t rx_payload[MAX_AIOT_R2D_PACKET_SIZE] = {0};
-  uint8_t end = 0;
-  printf("Energy threshold: %d\n", threshold);
-  printf("Decoding payload\n");
+  rx_payload = AIOT_R2D_PHY_RX_Decode(energy, frame_parms);
 
-  for (int i = R_TAS_SIP_N + R_TAS_CAP_N, j=0; i < energy_length; i++)
-  {
-    end = (end << 2) | ((energy[i] > threshold) ? 1 : 0);
+  calculate_BER(rx_payload, payload, frame_parms);
 
-    if((end & 0x0F) == 0x0F) {
-      printf("\nEnd of payload detected, length: %d\n", j);
-      payloadSize = j;
-      break;
-    }
-
-    if(i%2 != 0) continue;
-
-    //threshold = (threshold*3 + energy[i] + energy[i+1]) / 5;
-    int bit0 = (energy[i] > energy[i+1]) ? 1 : 0;
-    rx_payload[j/8] = (rx_payload[j/8] << 1) | bit0;
-    j++;
-  }
-
-  printf("Received payload (%d bits):\n", payloadSize);
-  for(int i = 0; i < (payloadSize+7)/8; i++) {
-    printf("%02X ", rx_payload[i]);
-  }
-  printf("\n");
-
-  int BER_errors = 0;
-  double BER = 0.0;
-  for (int i = 0; i < payloadSize/8; i++) {
-    int diff = payload[i] ^ rx_payload[i];
-
-    // Count ones in diff
-    for (int b = 0; b < 8; b++) {
-      BER_errors += (diff >> b) & 0x01;
-    }
-  }
-
-  BER = (double)BER_errors / (double)payloadSize;
-  printf("BER: %f, Error bits: %d, Payload size: %d\n", 100.0 * BER, BER_errors, payloadSize);
-
-  AIOT_R2D_PHY_REs_free(REsPacket);
-  AIOT_R2D_PHY_Signal_free(txData);
-  AIOT_R2D_PHY_IQ_free(s_re, s_im);
-
-  free(filteredData);
-  free(correlation);
-  free(rxData[0]);
-  free(rxData);
-  free(energy);
-  free(cleared);
-  free(downSampled);
-
-  for (int i = 0; i < NB_ANTENNAS_RX; i++) {
-    free(r_re[i]);
-    free(r_im[i]);
-  }
-
-  free(r_re);
-  free(r_im);
-  free_channel_desc_scm(channel);
+  AIOT_R2D_PHY_TX_REs_free(REsPacket);
+  AIOT_R2D_PHY_TX_Signal_free(txData);
+  SIM_Channel_propagate_free(rxData, frame_parms->nr_frame_parms.nb_antennas_rx);
+  AIOT_R2D_PHY_RX_Envelope_Detector_free(envelope);
+  AIOT_R2D_PHY_RX_Filter_free(filteredData);
+  AIOT_R2D_PHY_RX_Downsample_free(downSampled);
+  AIOT_R2D_PHY_RX_Move_And_Remove_CP_free(cleared);
+  AIOT_R2D_PHY_RX_Energy_free(energy);
+  AIOT_R2D_PHY_RX_Decode_free(rx_payload);
 
   end_configmodule(uniqCfg);
   logTerm();

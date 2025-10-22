@@ -15,7 +15,9 @@
 			"precomputed_postamble.h": "c",
 			"vector": "c",
 			"load_module_shlib.h": "c",
-			"signal.h": "c"
+			"signal.h": "c",
+			"tools_defs.h": "c",
+			"defs_aiot_ue.h": "c"
 		}
 	}
 }
