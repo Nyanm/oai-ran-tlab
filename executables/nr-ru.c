@@ -733,8 +733,14 @@ static void ctrl_rf(RU_t *ru, int frame, int slot, uint64_t timestamp)
 
   // TODO in TX function we have timestamp + ru->ts_offset - sf_extension
   // do I need to do the same?
-  if (beam_map != 0)
+  if (beam_map != 0) {
+    static uint64_t old_beam_map = 0;
+    if (beam_map != old_beam_map) {
+      LOG_I(HW, "frame %d slot %d, beam_map changed from 0x%lx to 0x%lx\n", frame, slot, old_beam_map, beam_map);
+      old_beam_map = beam_map;
+    }
     ru->rfdevice.trx_set_beams(&ru->rfdevice, beam_map, timestamp);
+  }
 }
 
 static void tx_rf(RU_t *ru, int frame, int slot, uint64_t timestamp)

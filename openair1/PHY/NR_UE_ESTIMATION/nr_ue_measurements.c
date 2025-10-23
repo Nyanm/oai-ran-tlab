@@ -220,9 +220,11 @@ void nr_ue_ssb_rsrp_measurements(PHY_VARS_NR_UE *ue,
   int SNRtimes10 = dB_fixed_x10(signal_pwr) - dB_fixed_x10(ue->measurements.n0_power_avg);
   ue->measurements.ssb_sinr_dB[ssb_index] = SNRtimes10 / 10.0;
 
-  LOG_D(PHY,
-        "[UE %d] ssb %d SS-RSRP: %d dBm/RE (%f dB/RE), SS-SINR: %f dB\n",
+  LOG_I(PHY,
+        "[UE %d] frame.slot %d.%d ssb %d SS-RSRP: %d dBm/RE (%f dB/RE), SS-SINR: %f dB\n",
         ue->Mod_id,
+        proc->frame_rx,
+        proc->nr_slot_rx,
         ssb_index,
         ue->measurements.ssb_rsrp_dBm[ssb_index],
         rsrp_db_per_re,

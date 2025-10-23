@@ -886,6 +886,11 @@ static int rfsimulator_write_internal(rfsimulator_state_t *t,
                                       int flags)
 {
   mutexlock(t->Sockmutex);
+  static uint64_t beam_map_old = 0;
+  if (beam_map != beam_map_old) {
+    LOG_I(HW, "Switching to beam map 0x%lx at time %lu\n", beam_map, timestamp);
+    beam_map_old = beam_map;
+  }
   LOG_D(HW, "Sending %d samples at time: %ld, nbAnt %d\n", nsamps, timestamp, nbAnt);
 
   for (int i = 0; i < MAX_FD_RFSIMU; i++) {
@@ -905,8 +910,8 @@ static int rfsimulator_write_internal(rfsimulator_state_t *t,
     }
   }
 
-  if (t->lastWroteTS > timestamp)
-    LOG_W(HW, "Not supported to send Tx out of order %lu, %lu\n", t->lastWroteTS, timestamp);
+  // if (t->lastWroteTS > timestamp)
+  //   LOG_W(HW, "Not supported to send Tx out of order %lu, %lu\n", t->lastWroteTS, timestamp);
 
   if ((flags != TX_BURST_START) && (flags != TX_BURST_START_AND_END) && (t->lastWroteTS < timestamp))
     LOG_W(HW,
