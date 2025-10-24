@@ -2688,6 +2688,10 @@ int nfapi_nr_p7_message_pack(void *pMessageBuf, void *pPackedBuf, uint32_t packe
       result = pack_nr_timing_info(pMessageHeader, &pWritePackedMessage, end, config);
       break;
 
+    case NFAPI_NR_PHY_MSG_TYPE_VENDOR_EXT_SLOT_RESPONSE:
+      result = pack_nr_slot_response(pMessageHeader, &pWritePackedMessage, end, config);
+      break;
+
     default: {
       if (pMessageHeader->message_id >= NFAPI_VENDOR_EXT_MSG_MIN && pMessageHeader->message_id <= NFAPI_VENDOR_EXT_MSG_MAX) {
         if (config && config->pack_p7_vendor_extension) {

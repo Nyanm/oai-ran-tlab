@@ -1943,4 +1943,13 @@ typedef struct
 
 } nfapi_nr_rach_indication_t;
 
+typedef struct
+{
+  nfapi_nr_p7_message_header_t header;
+  uint16_t sfn;
+  uint16_t slot;
+  uint16_t rnti;
+  uint16_t message_types;
+} nfapi_nr_slot_response_t;
+
 #endif

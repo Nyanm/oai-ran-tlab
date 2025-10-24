@@ -581,7 +581,7 @@ static int nr_ue_process_dci_ul_00(NR_UE_MAC_INST_t *mac,
                                 dci_ind->rnti,
                                 dci_ind->ss_type,
                                 NR_UL_DCI_FORMAT_0_0);
-  if (ret != 0)
+  if (ret != 0) 
     remove_ul_config_last_item(pdu);
   release_ul_config(pdu, false);
   return ret;
@@ -1704,6 +1704,8 @@ int nr_ue_configure_pucch(NR_UE_MAC_INST_t *mac,
         pucch_pdu->nr_of_symbols = pucchres->format.choice.format0->nrofSymbols;
         pucch_pdu->start_symbol_index = pucchres->format.choice.format0->startingSymbolIndex;
         pucch_pdu->mcs = get_pucch0_mcs(pucch->n_harq, pucch->n_sr, pucch->ack_payload, pucch->sr_payload);
+        pucch_pdu->payload = (pucch->ack_payload << 1) | (pucch->n_sr > 0);
+        pucch_pdu->n_bit = pucch->n_harq + 1;
         break;
       case NR_PUCCH_Resource__format_PR_format1 :
         pucch_pdu->format_type = 1;
@@ -2602,6 +2604,7 @@ bool trigger_periodic_scheduling_request(NR_UE_MAC_INST_t *mac, PUCCH_sched_t *p
         return false;
       }
       pucch->sr_payload = ret;
+      mac->nr_ue_emul_l1.num_srs = ret;
       sr_count++;
       AssertFatal(sr_count < 2, "Cannot handle more than 1 SR per slot yet\n");
     }
@@ -2655,7 +2658,7 @@ static int8_t nr_ue_get_SR(NR_UE_MAC_INST_t *mac, frame_t frame, slot_t slot, NR
   sr_info->pending = false;
   sr_info->counter = 0;
   nr_timer_stop(&sr_info->prohibitTimer);
-  schedule_RA_after_SR_failure(mac);
+    schedule_RA_after_SR_failure(mac);
   return -1;
 }
 
@@ -2961,6 +2964,12 @@ static csi_payload_t get_ssb_rsrp_payload(NR_UE_MAC_INST_t *mac,
           }
         }
       }
+      
+      // L2 proxy: Support emulated L1 mode by overriding RSRP measurements
+      if (get_softmodem_params()->emulate_l1 && sorted_idx > 0) {
+        sorted_rsrp_measurements[0].ssb_rsrp_dBm = mac->nr_ue_emul_l1.rsrp_dBm;
+      }
+      
       qsort(sorted_rsrp_measurements, nb_ssb, sizeof(NR_RSRP_meas_t), compare_ssb_rsrp);
 
       for (int i = 0; i < nb_meas; i++) {
