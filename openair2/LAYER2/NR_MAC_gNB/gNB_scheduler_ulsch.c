@@ -37,6 +37,7 @@
 #include "LAYER2/nr_rlc/nr_rlc_oai_api.h"
 
 //#define SRS_IND_DEBUG
+#define SCHED_PENDING_SR
 
 int get_ul_tda(gNB_MAC_INST *nrmac, int frame, int slot)
 {
@@ -1958,9 +1959,21 @@ static void pf_ul(module_id_t module_id,
       sched_pusch->mcs = get_mcs_from_bler(bo, stats, &sched_ctrl->ul_bler_stats, max_mcs, frame);
       LOG_D(NR_MAC, "%d.%d starting mcs %d bler %f\n", frame, slot, sched_pusch->mcs, sched_ctrl->ul_bler_stats.bler);
     }
+
+  bool sched_pending_sr = false;
+  #ifdef SCHED_PENDING_SR
+    // If enabled, prevent blocking of pending SRs by making sure UE is scheduled at least once every 48 slots
+    if (do_sched)
+      sched_ctrl->pending_sr_ctr++;
+
+    if (sched_ctrl->pending_sr_ctr > max_slot_wait)
+      sched_pending_sr = true;
+  #endif
     /* Schedule UE on SR or UL inactivity and no data (otherwise, will be scheduled
      * based on data to transmit) */
-    if (B == 0 && do_sched) {
+    const int max_slot_wait = 48; 
+    
+    if (do_sched && (B == 0 || sched_pending_sr)) {
       /* if no data, pre-allocate 5RB */
       /* Find a free CCE */
       int CCEIndex = get_cce_index(nrmac,
@@ -2017,6 +2030,8 @@ static void pf_ul(module_id_t module_id,
 
       sched_ctrl->cce_index = CCEIndex;
       fill_pdcch_vrb_map(nrmac, CC_id, &sched_ctrl->sched_pdcch, CCEIndex, sched_ctrl->aggregation_level, dci_beam.idx);
+
+      sched_ctrl->pending_sr_ctr = 0;
 
       NR_sched_pusch_t *sched_pusch = &sched_ctrl->sched_pusch;
       update_ul_ue_R_Qm(sched_pusch->mcs, current_BWP->mcs_table, current_BWP->pusch_Config, &sched_pusch->R, &sched_pusch->Qm);
@@ -2233,6 +2248,7 @@ static void pf_ul(module_id_t module_id,
 
     sched_ctrl->cce_index = CCEIndex;
     fill_pdcch_vrb_map(nrmac, CC_id, &sched_ctrl->sched_pdcch, CCEIndex, sched_ctrl->aggregation_level, dci_beam.idx);
+    sched_ctrl->pending_sr_ctr = 0;
 
     n_rb_sched[beam.idx] -= sched_pusch->rbSize;
     for (int rb = bwpStart; rb < sched_ctrl->sched_pusch.rbSize; rb++)

@@ -113,7 +113,6 @@ int check_nr_fapi_unpack_length(nfapi_nr_phy_msg_type_e msgId, uint32_t unpacked
       break;
 
     case NFAPI_NR_PHY_MSG_TYPE_SLOT_INDICATION:
-    case NFAPI_NR_PHY_MSG_TYPE_VENDOR_EXT_SLOT_RESPONSE:
       if (unpackedBufLen >= sizeof(nfapi_nr_slot_indication_scf_t))
         retLen = sizeof(nfapi_nr_slot_indication_scf_t);
       break;
@@ -157,6 +156,12 @@ int check_nr_fapi_unpack_length(nfapi_nr_phy_msg_type_e msgId, uint32_t unpacked
       if (unpackedBufLen >= sizeof(nfapi_nr_ul_node_sync_t))
         retLen = sizeof(nfapi_nr_ul_node_sync_t);
       break;
+
+    case NFAPI_NR_PHY_MSG_TYPE_VENDOR_EXT_SLOT_RESPONSE:
+      if (unpackedBufLen >= sizeof(nfapi_nr_slot_response_t))
+        retLen = sizeof(nfapi_nr_slot_response_t);
+      break;
+
     default:
       NFAPI_TRACE(NFAPI_TRACE_ERROR, "%s Unknown message ID %d\n", __FUNCTION__, msgId);
       break;

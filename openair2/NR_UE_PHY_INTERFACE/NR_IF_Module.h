@@ -66,6 +66,13 @@ extern slot_rnti_mcs_s slot_rnti_mcs[NUM_NFAPI_SLOT];
 typedef struct NR_UL_TIME_ALIGNMENT NR_UL_TIME_ALIGNMENT_t;
 
 typedef struct {
+  bool rach;
+  bool rx_data;
+  bool crc;
+  bool uci;
+} slot_response_t;
+
+typedef struct {
     /// module id
   module_id_t module_id;
   /// gNB index
@@ -302,6 +309,8 @@ typedef struct nfapi_dl_tti_config_req_tx_data_req_t
     nfapi_nr_dl_tti_request_pdu_t *dl_itti_config_req;
     nfapi_nr_tx_data_request_t *tx_data_req_pdu_list;
 } nfapi_dl_tti_config_req_tx_data_req_t;
+
+void send_slot_response(uint16_t frame, uint16_t slot);
 
 void send_nsa_standalone_msg(NR_UL_IND_t *UL_INFO, uint16_t msg_id);
 

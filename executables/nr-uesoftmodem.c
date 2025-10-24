@@ -128,6 +128,23 @@ int               otg_enabled;
 double            cpuf;
 uint32_t       N_RB_DL    = 106;
 
+void *emu_l1_mac_ue(void *notUsed)
+{
+  MessageDef *msg = NULL;
+  itti_receive_msg(TASK_MAC_UE, &msg);
+  if (msg)
+    process_msg_rcc_to_mac(msg);
+  return NULL;
+}
+
+void *emu_l1_mac_ue_task(void *args_p)
+{
+  itti_mark_task_ready(TASK_MAC_UE);
+  while (1) {
+    emu_l1_mac_ue(NULL);
+  }
+}
+
 int create_tasks_nrue(uint32_t ue_nb) {
   LOG_D(NR_RRC, "%s(ue_nb:%d)\n", __FUNCTION__, ue_nb);
   itti_wait_ready(1);
@@ -150,6 +167,13 @@ int create_tasks_nrue(uint32_t ue_nb) {
     if (itti_create_task(TASK_NAS_NRUE, nas_nrue_task, &parmsNAS) < 0) {
       LOG_E(NR_RRC, "Create task for NAS UE failed\n");
       return -1;
+    }
+    if(get_softmodem_params()->emulate_l1) {
+      const ittiTask_parms_t parmsEmuMacUe = {NULL, emu_l1_mac_ue};
+      if (itti_create_task(TASK_MAC_UE, emu_l1_mac_ue_task, &parmsEmuMacUe) < 0) {
+        LOG_E(NR_RRC, "Create task for Emu L1 MAC UE failed\n");
+        return -1;
+      }
     }
   }
 

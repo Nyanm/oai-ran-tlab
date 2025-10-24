@@ -1359,6 +1359,33 @@ uint8_t unpack_nr_slot_indication(uint8_t **ppReadPackedMsg,
   return 1;
 }
 
+uint8_t pack_nr_slot_response(void *msg, uint8_t **ppWritePackedMsg, uint8_t *end, nfapi_p7_codec_config_t *config)
+{
+  nfapi_nr_slot_response_t *pNfapiMsg = (nfapi_nr_slot_response_t *)msg;
+
+  if (!(push16(pNfapiMsg->sfn, ppWritePackedMsg, end) && push16(pNfapiMsg->slot, ppWritePackedMsg, end) && 
+        push16(pNfapiMsg->rnti, ppWritePackedMsg, end) &&
+        push16(pNfapiMsg->message_types, ppWritePackedMsg, end)))
+    return 0;
+
+  return 1;
+}
+
+uint8_t unpack_nr_slot_response(uint8_t **ppReadPackedMsg,
+                                uint8_t *end,
+                                void *msg,
+                                nfapi_p7_codec_config_t *config)
+{
+  nfapi_nr_slot_response_t *pNfapiMsg = (nfapi_nr_slot_response_t *)msg;
+
+  if (!(pull16(ppReadPackedMsg, &pNfapiMsg->sfn, end) && pull16(ppReadPackedMsg, &pNfapiMsg->slot, end) && 
+        pull16(ppReadPackedMsg, &pNfapiMsg->rnti, end) &&
+        pull16(ppReadPackedMsg, &pNfapiMsg->message_types, end)))
+    return 0;
+
+  return 1;
+}
+
 static uint8_t pack_ul_dci_pdu_list_value(void *tlv, uint8_t **ppWritePackedMsg, uint8_t *end)
 {
   nfapi_nr_ul_dci_request_pdus_t *value = (nfapi_nr_ul_dci_request_pdus_t *)tlv;

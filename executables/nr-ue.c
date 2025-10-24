@@ -44,6 +44,7 @@
 #include "nr_phy_common.h"
 #include "common/utils/time_manager/time_manager.h"
 #include "log.h"
+#include "nfapi/open-nFAPI/common/public_inc/debug.h"
 
 /*
  *  NR SLOT PROCESSING SEQUENCE
@@ -222,19 +223,29 @@ static void process_queued_nr_nfapi_msgs(NR_UE_MAC_INST_t *mac, int sfn, int slo
   nfapi_nr_dl_tti_request_t *dl_tti_request = get_queue(&nr_dl_tti_req_queue);
   nfapi_nr_ul_dci_request_t *ul_dci_request = get_queue(&nr_ul_dci_req_queue);
 
+  nfapi_nr_ul_tti_request_t *ul_tti_request_crc_curr_slot = unqueue_matching(&nr_ul_tti_req_queue, MAX_QUEUE_SIZE, sfn_slot_matcher, &sfn_slot);
+
   for (int i = 0; i < NR_MAX_HARQ_PROCESSES; i++) {
-    LOG_D(NR_MAC,
+    LOG_T(NR_MAC,
           "Try to get a ul_tti_req by matching CRC active sfn/slot %d.%d from queue with %lu items\n",
           sfn,
           slot,
           nr_ul_tti_req_queue.num_items);
     struct sfn_slot_s sfn_sf = {.sfn = mac->nr_ue_emul_l1.harq[i].active_ul_harq_sfn, .slot = mac->nr_ue_emul_l1.harq[i].active_ul_harq_slot };
-    nfapi_nr_ul_tti_request_t *ul_tti_request_crc = unqueue_matching(&nr_ul_tti_req_queue, MAX_QUEUE_SIZE, sfn_slot_matcher, &sfn_sf);
+    nfapi_nr_ul_tti_request_t *ul_tti_request_crc;
+    if (ul_tti_request_crc_curr_slot && ul_tti_request_crc_curr_slot->n_pdus > 0 && sfn_sf.sfn == sfn && sfn_sf.slot == slot) {
+      ul_tti_request_crc = ul_tti_request_crc_curr_slot;
+    } else {
+      ul_tti_request_crc = unqueue_matching(&nr_ul_tti_req_queue, MAX_QUEUE_SIZE, sfn_slot_matcher, &sfn_sf);
+    }
+    
     if (ul_tti_request_crc && ul_tti_request_crc->n_pdus > 0) {
+      LOG_D(NR_MAC, "Got ul_tti_req for sfn/slot %d.%d\n", sfn, slot);
       check_and_process_dci(NULL, NULL, NULL, ul_tti_request_crc);
       free_and_zero(ul_tti_request_crc);
     }
   }
+
 
   if (rach_ind && rach_ind->number_of_pdus > 0) {
       NR_UL_IND_t UL_INFO = {
@@ -246,8 +257,19 @@ static void process_queued_nr_nfapi_msgs(NR_UE_MAC_INST_t *mac, int sfn, int slo
   }
   if (dl_tti_request) {
     struct sfn_slot_s sfn_slot = {.sfn = dl_tti_request->SFN, .slot = dl_tti_request->Slot};
-    nfapi_nr_tx_data_request_t *tx_data_request = unqueue_matching(&nr_tx_req_queue, MAX_QUEUE_SIZE, sfn_slot_matcher, &sfn_slot);
+    nfapi_nr_tx_data_request_t *tx_data_request = NULL;
+    int try_ctr = 10;
+    int sleep_time = 0;
+    while (try_ctr-- > 0) {
+      tx_data_request = unqueue_matching(&nr_tx_req_queue, MAX_QUEUE_SIZE, sfn_slot_matcher, &sfn_slot);
+      if (tx_data_request)
+        break;
+      usleep(200);
+      sleep_time += 200;
+    }
     if (!tx_data_request) {
+      NFAPI_TRACE(NFAPI_TRACE_DEBUG, "[%d.%d] No corresponding tx_data_request for given dl_tti_request sfn/slot\n",
+            dl_tti_request->SFN, dl_tti_request->Slot);
       LOG_E(NR_MAC, "[%d.%d] No corresponding tx_data_request for given dl_tti_request sfn/slot\n",
             dl_tti_request->SFN, dl_tti_request->Slot);
       if (get_softmodem_params()->nsa)
@@ -255,6 +277,10 @@ static void process_queued_nr_nfapi_msgs(NR_UE_MAC_INST_t *mac, int sfn, int slo
       free_and_zero(dl_tti_request);
     }
     else if (dl_tti_request->dl_tti_request_body.nPDUs > 0 && tx_data_request->Number_of_PDUs > 0) {
+      // if (sleep_time > 0) {
+      //   LOG_E(NR_MAC, "[%d.%d] Had to wait for %d us for tx_data_request for sfn/slot\n",
+      //       dl_tti_request->SFN, dl_tti_request->Slot, sleep_time);
+      // }
       if (get_softmodem_params()->nsa)
         save_nr_measurement_info(dl_tti_request);
       check_and_process_dci(dl_tti_request, tx_data_request, NULL, NULL);
@@ -312,7 +338,7 @@ static void *NRUE_phy_stub_standalone_pnf_task(void *arg)
     }
     else if (ch_info) {
       sfn_slot = ch_info->sfn_slot;
-      free_and_zero(ch_info);
+      // free_and_zero(ch_info);
     }
 
     int mu = 1; // NR-UE emul-L1 is hardcoded to 30kHZ, see check_and_process_dci()
@@ -325,7 +351,14 @@ static void *NRUE_phy_stub_standalone_pnf_task(void *arg)
     }
     last_sfn_slot = sfn_slot;
 
-    LOG_D(NR_MAC, "The received sfn/slot [%d %d] from proxy\n",
+    int ret = pthread_mutex_lock(&mac->if_mutex);
+    AssertFatal(!ret, "mutex failed %d\n", ret);
+    update_mac_ul_timers(mac);
+    update_mac_dl_timers(mac);
+    ret = pthread_mutex_unlock(&mac->if_mutex);
+    AssertFatal(!ret, "mutex failed %d\n", ret);  
+
+    LOG_D(NR_MAC, "Received sfn/slot indication [%d %d] from proxy\n",
           frame, slot);
 
     if (IS_SA_MODE(get_softmodem_params()) && mac->mib == NULL) {
@@ -350,7 +383,11 @@ static void *NRUE_phy_stub_standalone_pnf_task(void *arg)
       mac->nr_ue_emul_l1.pmi = ch_info->csi[0].pmi;
       mac->nr_ue_emul_l1.ri = ch_info->csi[0].ri;
       mac->nr_ue_emul_l1.cqi = ch_info->csi[0].cqi;
+      mac->nr_ue_emul_l1.rsrp_dBm = ch_info->csi[0].rsrp;
       free_and_zero(ch_info);
+    }
+    else {
+      mac->nr_ue_emul_l1.rsrp_dBm = -44;
     }
 
     if (is_dl_slot(slot, &mac->frame_structure)) {
@@ -372,6 +409,8 @@ static void *NRUE_phy_stub_standalone_pnf_task(void *arg)
       nr_ue_ul_scheduler(mac, &ul_info);
     }
     process_queued_nr_nfapi_msgs(mac, frame, slot);
+
+    send_slot_response(frame, slot);
   }
   return NULL;
 }

@@ -330,6 +330,8 @@ typedef struct {
   int active_ul_harq_sfn;
   int active_ul_harq_slot;
   bool active;
+  int ack_received;
+  int ack;
 } emul_l1_harq_t;
 
 typedef struct {
@@ -347,6 +349,7 @@ typedef struct {
   uint8_t pmi;
   uint8_t ri;
   uint8_t cqi;
+  float rsrp_dBm;
 } nr_emulated_l1_t;
 
 typedef struct {

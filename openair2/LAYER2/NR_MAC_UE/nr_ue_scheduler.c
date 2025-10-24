@@ -1470,6 +1470,9 @@ void nr_ue_ul_scheduler(NR_UE_MAC_INST_t *mac, nr_uplink_indication_t *ul_info)
                                                   .phy_data = ul_info->phy_data};
     mac->if_module->scheduled_response(&scheduled_response);
   }
+  mac->nr_ue_emul_l1.num_srs = 0;
+  mac->nr_ue_emul_l1.num_harqs = 0;
+  mac->nr_ue_emul_l1.num_csi_reports = 0;
 
   if(mac->state == UE_CONNECTED)
     nr_update_sr(mac, BSRsent);
@@ -1718,9 +1721,6 @@ void nr_ue_pucch_scheduler(NR_UE_MAC_INST_t *mac, frame_t frameP, int slotP)
 {
   PUCCH_sched_t pucch[3] = {0}; // TODO the size might change in the future in case of multiple SR or multiple CSI in a slot
 
-  mac->nr_ue_emul_l1.num_srs = 0;
-  mac->nr_ue_emul_l1.num_harqs = 0;
-  mac->nr_ue_emul_l1.num_csi_reports = 0;
   int num_res = 0;
 
   // SR

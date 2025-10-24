@@ -50,30 +50,30 @@ queue_t nr_crc_ind_queue;
 queue_t nr_uci_ind_queue;
 queue_t nr_rach_ind_queue;
 
-static void fill_uci_2_3_4(nfapi_nr_uci_pucch_pdu_format_2_3_4_t *pdu_2_3_4,
-                           fapi_nr_ul_config_pucch_pdu *pucch_pdu)
-{
-  NR_UE_MAC_INST_t *mac = get_mac_inst(0);
-  memset(pdu_2_3_4, 0, sizeof(*pdu_2_3_4));
-  pdu_2_3_4->handle = 0;
-  pdu_2_3_4->rnti = pucch_pdu->rnti;
-  pdu_2_3_4->pucch_format = 2;
-  pdu_2_3_4->ul_cqi = 255;
-  pdu_2_3_4->timing_advance = 0;
-  pdu_2_3_4->rssi = 0;
-  // TODO: Eventually check 38.212:Sect.631 to know when to use csi_part2, for now only using csi_part1
-  pdu_2_3_4->pduBitmap = 4;
-  pdu_2_3_4->csi_part1.csi_part1_bit_len = mac->nr_ue_emul_l1.num_csi_reports;
-  int csi_part1_byte_len = (int)((pdu_2_3_4->csi_part1.csi_part1_bit_len / 8) + 1);
-  AssertFatal(!pdu_2_3_4->csi_part1.csi_part1_payload, "pdu_2_3_4->csi_part1.csi_part1_payload != NULL\n");
-  pdu_2_3_4->csi_part1.csi_part1_payload = CALLOC(csi_part1_byte_len,
-                                                  sizeof(pdu_2_3_4->csi_part1.csi_part1_payload));
-  for (int k = 0; k < csi_part1_byte_len; k++)
-  {
-    pdu_2_3_4->csi_part1.csi_part1_payload[k] = (pucch_pdu->payload >> (k * 8)) & 0xff;
-  }
-  pdu_2_3_4->csi_part1.csi_part1_crc = 0;
-}
+// static void fill_uci_2_3_4(nfapi_nr_uci_pucch_pdu_format_2_3_4_t *pdu_2_3_4,
+//                            fapi_nr_ul_config_pucch_pdu *pucch_pdu)
+// {
+//   NR_UE_MAC_INST_t *mac = get_mac_inst(0);
+//   memset(pdu_2_3_4, 0, sizeof(*pdu_2_3_4));
+//   pdu_2_3_4->handle = 0;
+//   pdu_2_3_4->rnti = pucch_pdu->rnti;
+//   pdu_2_3_4->pucch_format = 2;
+//   pdu_2_3_4->ul_cqi = 255;
+//   pdu_2_3_4->timing_advance = 0;
+//   pdu_2_3_4->rssi = 0;
+//   // TODO: Eventually check 38.212:Sect.631 to know when to use csi_part2, for now only using csi_part1
+//   pdu_2_3_4->pduBitmap = 4;
+//   pdu_2_3_4->csi_part1.csi_part1_bit_len = mac->nr_ue_emul_l1.num_csi_reports;
+//   int csi_part1_byte_len = (int)((pdu_2_3_4->csi_part1.csi_part1_bit_len / 8) + 1);
+//   AssertFatal(!pdu_2_3_4->csi_part1.csi_part1_payload, "pdu_2_3_4->csi_part1.csi_part1_payload != NULL\n");
+//   pdu_2_3_4->csi_part1.csi_part1_payload = CALLOC(csi_part1_byte_len,
+//                                                   sizeof(pdu_2_3_4->csi_part1.csi_part1_payload));
+//   for (int k = 0; k < csi_part1_byte_len; k++)
+//   {
+//     pdu_2_3_4->csi_part1.csi_part1_payload[k] = (pucch_pdu->payload >> (k * 8)) & 0xff;
+//   }
+//   pdu_2_3_4->csi_part1.csi_part1_crc = 0;
+// }
 
 static void free_uci_inds(nfapi_nr_uci_indication_t *uci_ind)
 {
@@ -123,8 +123,9 @@ int8_t nr_ue_scheduled_response_stub(nr_scheduled_response_t *scheduled_response
           rach_ind->pdu_list[pdu_index].freq_index = prach_pdu->num_ra;
           rach_ind->pdu_list[pdu_index].avg_rssi = 128;
           rach_ind->pdu_list[pdu_index].avg_snr = 0xff; // invalid for now
-          const int num_p = rach_ind->pdu_list[pdu_index].num_preamble;
-          AssertFatal(num_p == 1, "can handle only one preamble in preamble_list\n");
+          // RDF: The below assertion will always fail.
+          // const int num_p = rach_ind->pdu_list[pdu_index].num_preamble;
+          // AssertFatal(num_p == 1, "can handle only one preamble in preamble_list\n");
           rach_ind->pdu_list[pdu_index].num_preamble = 1;
           rach_ind->pdu_list[pdu_index].preamble_list[0].preamble_index = prach_pdu->ra_PreambleIndex;
           rach_ind->pdu_list[pdu_index].preamble_list[0].timing_advance = 0;
@@ -177,6 +178,7 @@ int8_t nr_ue_scheduled_response_stub(nr_scheduled_response_t *scheduled_response
               crc_ind->crc_list[j].tb_crc_status = 0;
               crc_ind->crc_list[j].timing_advance = 31;
               crc_ind->crc_list[j].ul_cqi = 255;
+              crc_ind->crc_list[j].rssi = 255;
               emul_l1_harq_t *harq = &mac->nr_ue_emul_l1.harq[crc_ind->crc_list[j].harq_id];
               AssertFatal(harq->active_ul_harq_sfn == -1 && harq->active_ul_harq_slot == -1,
                           "We did not send an active CRC when we should have!\n");
@@ -228,7 +230,64 @@ int8_t nr_ue_scheduled_response_stub(nr_scheduled_response_t *scheduled_response
               uci_ind->uci_list[j].pdu_type = NFAPI_NR_UCI_FORMAT_2_3_4_PDU_TYPE;
               uci_ind->uci_list[j].pdu_size = sizeof(nfapi_nr_uci_pucch_pdu_format_2_3_4_t);
               nfapi_nr_uci_pucch_pdu_format_2_3_4_t *pdu_2_3_4 = &uci_ind->uci_list[j].pucch_pdu_format_2_3_4;
-              fill_uci_2_3_4(pdu_2_3_4, &it->pucch_config_pdu);
+              // fill_uci_2_3_4(pdu_2_3_4, &it->pucch_config_pdu);
+              fapi_nr_ul_config_pucch_pdu *pucch_pdu = &it->pucch_config_pdu;
+              memset(pdu_2_3_4, 0, sizeof(*pdu_2_3_4));
+              pdu_2_3_4->handle = 0;
+              pdu_2_3_4->rnti = pucch_pdu->rnti;
+              pdu_2_3_4->pucch_format = 2;
+              pdu_2_3_4->ul_cqi = 255;
+              pdu_2_3_4->timing_advance = 0;
+              pdu_2_3_4->rssi = 0;
+              
+              if (mac->nr_ue_emul_l1.num_csi_reports > 0) {
+                pdu_2_3_4->pduBitmap |= 4;
+                pdu_2_3_4->csi_part1.csi_part1_bit_len = mac->nr_ue_emul_l1.num_csi_reports;
+                int csi_part1_byte_len = (int)((pdu_2_3_4->csi_part1.csi_part1_bit_len / 8) + 1);
+                AssertFatal(!pdu_2_3_4->csi_part1.csi_part1_payload, "pdu_2_3_4->csi_part1.csi_part1_payload != NULL\n");
+                pdu_2_3_4->csi_part1.csi_part1_payload = CALLOC(csi_part1_byte_len,
+                                                                sizeof(pdu_2_3_4->csi_part1.csi_part1_payload));
+                for (int k = 0; k < csi_part1_byte_len; k++)
+                {
+                  pdu_2_3_4->csi_part1.csi_part1_payload[k] = (pucch_pdu->payload >> (k * 8)) & 0xff;
+                }
+                pdu_2_3_4->csi_part1.csi_part1_crc = 0;
+              }
+
+              // RDF fix
+              if (mac->nr_ue_emul_l1.num_harqs > 0) {
+                int harq_index = 0;
+                pdu_2_3_4->pduBitmap |= 2; // (value->pduBitmap >> 1) & 0x01) == HARQ and (value->pduBitmap) & 0x01) == SR
+                // pdu_2_3_4->harq.num_harq = mac->nr_ue_emul_l1.num_harqs > 0 ? mac->nr_ue_emul_l1.num_harqs : 1;
+                int harq_pid = -1;
+                uint8_t *payload = calloc(1, NR_MAX_HARQ_PROCESSES/8 + 1);
+                for (int k = 0; k < NR_MAX_HARQ_PROCESSES; k++) {
+                  if (mac->nr_ue_emul_l1.harq[k].active && mac->nr_ue_emul_l1.harq[k].active_dl_harq_sfn == uci_ind->sfn
+                      && mac->nr_ue_emul_l1.harq[k].active_dl_harq_slot == uci_ind->slot) {
+                    mac->nr_ue_emul_l1.harq[k].active = false;
+                    harq_pid = k;
+                    // AssertFatal(harq_index < pdu_2_3_4->harq.num_harq, "Invalid harq_index %d\n", harq_index);
+                    // RDF: mac->dl_harq_info[k].ack never gets set anywhere, so below will always indicate NACK.
+                    // pdu_2_3_4->harq.harq_list[harq_index].harq_value = !mac->dl_harq_info[k].ack;
+                    pdu_2_3_4->harq.harq_crc = 0;
+                    if (mac->nr_ue_emul_l1.harq[k].ack_received && mac->nr_ue_emul_l1.harq[k].ack) {
+                      payload[harq_index / 8] |= (1 << (harq_index % 8));
+                      mac->nr_ue_emul_l1.harq[k].ack_received = false;
+                      mac->nr_ue_emul_l1.harq[k].ack = 0;
+                    }
+                    harq_index++;
+                  }
+                }
+                pdu_2_3_4->harq.harq_bit_len = harq_index;
+                if (harq_index > 0) {
+                  int num_bytes = harq_index/8 + 1;
+                  pdu_2_3_4->harq.harq_payload = calloc(1, num_bytes);
+                  memcpy(pdu_2_3_4->harq.harq_payload, payload, num_bytes);
+                }
+                free(payload);
+                AssertFatal(harq_pid != -1, "No active harq_pid, sfn_slot = %u.%u", uci_ind->sfn, uci_ind->slot);
+              }
+
             } else {
               nfapi_nr_uci_pucch_pdu_format_0_1_t *pdu_0_1 = &uci_ind->uci_list[j].pucch_pdu_format_0_1;
               uci_ind->uci_list[j].pdu_type = NFAPI_NR_UCI_FORMAT_0_1_PDU_TYPE;
@@ -240,9 +299,16 @@ int8_t nr_ue_scheduled_response_stub(nr_scheduled_response_t *scheduled_response
               pdu_0_1->ul_cqi = 255;
               pdu_0_1->timing_advance = 0;
               pdu_0_1->rssi = 0;
+              if (mac->nr_ue_emul_l1.num_srs > 0) {
+                pdu_0_1->pduBitmap = 1;
+                pdu_0_1->sr.sr_indication = 1;
+                pdu_0_1->sr.sr_confidence_level = 0;
+              }
+              // RDF fix
               if (mac->nr_ue_emul_l1.num_harqs > 0) {
                 int harq_index = 0;
-                pdu_0_1->pduBitmap = 2; // (value->pduBitmap >> 1) & 0x01) == HARQ and (value->pduBitmap) & 0x01) == SR
+                pdu_0_1->pduBitmap |= 2; // (value->pduBitmap >> 1) & 0x01) == HARQ and (value->pduBitmap) & 0x01) == SR
+                // pdu_0_1->harq.num_harq = mac->nr_ue_emul_l1.num_harqs > 0 ? mac->nr_ue_emul_l1.num_harqs : 1;
                 pdu_0_1->harq.num_harq = mac->nr_ue_emul_l1.num_harqs;
                 pdu_0_1->harq.harq_confidence_level = 0;
                 int harq_pid = -1;
@@ -252,7 +318,13 @@ int8_t nr_ue_scheduled_response_stub(nr_scheduled_response_t *scheduled_response
                     mac->nr_ue_emul_l1.harq[k].active = false;
                     harq_pid = k;
                     AssertFatal(harq_index < pdu_0_1->harq.num_harq, "Invalid harq_index %d\n", harq_index);
-                    pdu_0_1->harq.harq_list[harq_index].harq_value = !mac->dl_harq_info[k].ack;
+                    // RDF: mac->dl_harq_info[k].ack never gets set anywhere, so below will always indicate NACK.
+                    // pdu_0_1->harq.harq_list[harq_index].harq_value = !mac->dl_harq_info[k].ack;
+                    if (mac->nr_ue_emul_l1.harq[k].ack_received) {
+                      pdu_0_1->harq.harq_list[harq_index].harq_value = !mac->nr_ue_emul_l1.harq[k].ack;
+                      mac->nr_ue_emul_l1.harq[k].ack_received = false;
+                      mac->nr_ue_emul_l1.harq[k].ack = 0;
+                    }
                     harq_index++;
                   }
                 }

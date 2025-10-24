@@ -2673,6 +2673,7 @@ bool add_connected_nr_ue(gNB_MAC_INST *nr_mac, NR_UE_info_t *UE)
   sched_ctrl->sched_srs.frame = -1;
   sched_ctrl->sched_srs.slot = -1;
   sched_ctrl->pdcch_cl_adjust = 0;
+  sched_ctrl->pending_sr_ctr = 0;  // RDF: For L2 Sim mode to prevent head-of-line blocking when many UEs have traffic
   reset_srs_stats(UE);
 
   // Initialize bler_stats

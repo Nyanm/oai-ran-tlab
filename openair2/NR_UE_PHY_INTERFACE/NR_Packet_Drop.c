@@ -104,18 +104,12 @@ float get_bler_val(uint8_t mcs, int sinr)
 
 bool is_channel_modeling(void)
 {
-  /* TODO: For now we enable channel modeling based on the node_number.
-     Replace with a command line option to enable/disable channel modeling.
-     The LTE UE will crash when channel modeling is conducted for NSA
-     mode. It does not crash for LTE mode. We have not implemented channel
-     modeling for NSA mode yet. For now, we ensure only do do channel modeling
-     in LTE/NR mode. */
-  return get_softmodem_params()->node_number == 0 && !get_softmodem_params()->nsa;
+  return get_softmodem_params()->emulate_l1;
 }
 
 bool should_drop_transport_block(int slot, uint16_t rnti)
 {
-  if (!is_channel_modeling())
+  if (!is_channel_modeling() || nr_bler_data[0].length == 0)
   {
     return false;
   }
@@ -157,17 +151,21 @@ bool should_drop_transport_block(int slot, uint16_t rnti)
         slot_rnti_mcs[slot].rnti[n], mcs, slot, slot_rnti_mcs[slot].sinr);
 
       float bler_val;
-      if (slot_rnti_mcs[slot].rvIndex[n] != 0)
+      if (slot_rnti_mcs[slot].rvIndex[n] != 0) {
         bler_val = 0;
-      else
+      }
+      else {
         bler_val = get_bler_val(mcs, ((int)(slot_rnti_mcs[slot].sinr * 10)));
+        if (bler_val > 1)
+          LOG_W(NR_MAC, "Invalid BLER value %.3f > 1\n", bler_val);
+      }
       double drop_cutoff = ((double) rand() / (RAND_MAX));
       assert(drop_cutoff <= 1);
       LOG_D(NR_MAC, "SINR = %f, Bler_val = %f, MCS = %"PRIu8"\n", slot_rnti_mcs[slot].sinr, bler_val, slot_rnti_mcs[slot].mcs[n]);
       if (drop_cutoff <= bler_val)
       {
         slot_rnti_mcs[slot].drop_flag[n] = true;
-        LOG_T(NR_MAC, "We are dropping this packet. Bler_val = %f, MCS = %"PRIu8", slot = %d\n", bler_val, slot_rnti_mcs[slot].mcs[n], slot);
+        LOG_D(NR_MAC, "We are dropping this packet. Bler_val = %f, MCS = %"PRIu8", slot = %d\n", bler_val, slot_rnti_mcs[slot].mcs[n], slot);
         return slot_rnti_mcs[slot].drop_flag[n];
       }
     }
@@ -210,6 +208,8 @@ int get_mcs_from_sinr(nr_bler_struct *nr_bler_data, float sinr)
 void init_nr_bler_table(const char *env_string)
 {
   memset(nr_bler_data, 0, sizeof(nr_bler_data));
+
+  nr_bler_data[0].length = 0; // Set in case unable to load file
 
   const char *awgn_results_dir = getenv(env_string);
   if (!awgn_results_dir) {
