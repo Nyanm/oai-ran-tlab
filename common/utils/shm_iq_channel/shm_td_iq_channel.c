@@ -20,8 +20,10 @@
  */
 
 #include "shm_td_iq_channel.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <sys/mman.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -34,6 +36,9 @@
 #include "common/utils/threadPool/pthread_utils.h"
 
 #define CIRCULAR_BUFFER_SIZE (30720 * 14 * 20)
+// Buffer prefix is a copy of the ending of the buffer to the beginning to
+// allow continuous read up to this size without wrapping when doing channel modelling
+#define BUFFER_PREFIX_SIZE 30720
 
 typedef struct {
   int magic;
@@ -58,8 +63,8 @@ ShmTDIQChannel *shm_td_iq_channel_create(const char *name, int num_tx_ant, int n
   // Create shared memory segment
   int fd = shm_open(name, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
   AssertFatal(fd != -1, "shm_open failed: %s\n", strerror(errno));
-  size_t tx_buffer_size = CIRCULAR_BUFFER_SIZE * sizeof(sample_t) * num_tx_ant;
-  size_t rx_buffer_size = CIRCULAR_BUFFER_SIZE * sizeof(sample_t) * num_rx_ant;
+  size_t tx_buffer_size = (CIRCULAR_BUFFER_SIZE + BUFFER_PREFIX_SIZE) * sizeof(sample_t) * num_tx_ant;
+  size_t rx_buffer_size = (CIRCULAR_BUFFER_SIZE + BUFFER_PREFIX_SIZE) * sizeof(sample_t) * num_rx_ant;
   size_t total_size = sizeof(ShmTDIQChannelData) + tx_buffer_size + rx_buffer_size;
 
   // Set the size of the shared memory segment
@@ -130,9 +135,9 @@ ShmTDIQChannel *shm_td_iq_channel_connect(const char *name, int timeout_in_secon
 
   ShmTDIQChannel *channel = calloc_or_fail(1, sizeof(ShmTDIQChannel));
   channel->data = shm_ptr;
-  channel->tx_iq_data = (sample_t *)(shm_ptr + 1);
-  size_t tx_buffer_size = CIRCULAR_BUFFER_SIZE * sizeof(sample_t) * channel->data->num_antennas_tx;
-  channel->rx_iq_data = channel->tx_iq_data + tx_buffer_size / sizeof(sample_t);
+  channel->rx_iq_data = (sample_t *)(shm_ptr + 1);
+  size_t tx_buffer_size = (CIRCULAR_BUFFER_SIZE + BUFFER_PREFIX_SIZE) * sizeof(sample_t) * channel->data->num_antennas_tx;
+  channel->tx_iq_data = channel->rx_iq_data + tx_buffer_size / sizeof(sample_t);
   channel->type = IQ_CHANNEL_TYPE_CLIENT;
   while (shm_ptr->magic != SHM_MAGIC_NUMBER) {
     printf("Waiting for server to initialize shared memory\n");
@@ -140,6 +145,16 @@ ShmTDIQChannel *shm_td_iq_channel_connect(const char *name, int timeout_in_secon
   }
   close(fd);
   return channel;
+}
+
+static sample_t *get_prefix_buffer_ptr(sample_t *base_ptr, int antenna)
+{
+  return base_ptr + antenna * (CIRCULAR_BUFFER_SIZE + BUFFER_PREFIX_SIZE);
+}
+
+static sample_t *get_main_buffer_ptr(sample_t *base_ptr, int antenna)
+{
+  return get_prefix_buffer_ptr(base_ptr, antenna) + BUFFER_PREFIX_SIZE;
 }
 
 IQChannelErrorType shm_td_iq_channel_tx(ShmTDIQChannel *channel,
@@ -159,13 +174,7 @@ IQChannelErrorType shm_td_iq_channel_tx(ShmTDIQChannel *channel,
     return CHANNEL_ERROR_TOO_EARLY;
   }
 
-  sample_t *base_ptr;
-  if (channel->type == IQ_CHANNEL_TYPE_CLIENT) {
-    base_ptr = channel->rx_iq_data + antenna * CIRCULAR_BUFFER_SIZE;
-  } else {
-    base_ptr = channel->tx_iq_data + antenna * CIRCULAR_BUFFER_SIZE;
-  }
-
+  sample_t *base_ptr = get_main_buffer_ptr(channel->tx_iq_data, antenna);
   uint64_t first_sample = timestamp % CIRCULAR_BUFFER_SIZE;
   uint64_t last_sample = first_sample + num_samples - 1;
   if (last_sample >= CIRCULAR_BUFFER_SIZE) {
@@ -175,6 +184,19 @@ IQChannelErrorType shm_td_iq_channel_tx(ShmTDIQChannel *channel,
   } else {
     memcpy(base_ptr + first_sample, tx_iq_data, num_samples * sizeof(sample_t));
   }
+
+  // Mirror end of buffer to prefix buffer for continuous zero copy reading
+  int64_t mirror_start = CIRCULAR_BUFFER_SIZE - BUFFER_PREFIX_SIZE;
+  int64_t mirror_end = CIRCULAR_BUFFER_SIZE;
+  int64_t tx_end = (first_sample + num_samples);
+  int64_t tx_start = first_sample;
+  int64_t overlap_start = (tx_start > mirror_start) ? tx_start : mirror_start;
+  int64_t overlap_end = (tx_end < mirror_end) ? tx_end : mirror_end;
+  if (overlap_end - overlap_start > 0) {
+    sample_t *prefix_ptr = get_prefix_buffer_ptr(channel->tx_iq_data, antenna);
+    memcpy(prefix_ptr + (overlap_start - mirror_start), base_ptr + overlap_start, (overlap_end - overlap_start) * sizeof(sample_t));
+  }
+
   return CHANNEL_NO_ERROR;
 }
 
@@ -195,12 +217,7 @@ IQChannelErrorType shm_td_iq_channel_rx(ShmTDIQChannel *channel,
     return CHANNEL_ERROR_TOO_LATE;
   }
 
-  sample_t *base_ptr;
-  if (channel->type == IQ_CHANNEL_TYPE_CLIENT) {
-    base_ptr = channel->tx_iq_data + antenna * CIRCULAR_BUFFER_SIZE;
-  } else {
-    base_ptr = channel->rx_iq_data + antenna * CIRCULAR_BUFFER_SIZE;
-  }
+  sample_t *base_ptr = get_main_buffer_ptr(channel->rx_iq_data, antenna);
 
   uint64_t first_sample = timestamp % CIRCULAR_BUFFER_SIZE;
   uint64_t last_sample = first_sample + num_samples - 1;
@@ -210,6 +227,40 @@ IQChannelErrorType shm_td_iq_channel_rx(ShmTDIQChannel *channel,
     memcpy(tx_iq_data + num_samples_first_copy, base_ptr, (num_samples - num_samples_first_copy) * sizeof(sample_t));
   } else {
     memcpy(tx_iq_data, base_ptr + first_sample, num_samples * sizeof(sample_t));
+  }
+  return CHANNEL_NO_ERROR;
+}
+
+IQChannelErrorType shm_td_iq_channel_zc_rx(ShmTDIQChannel *channel,
+                                           uint64_t timestamp,
+                                           uint64_t num_samples,
+                                           int antenna,
+                                           sample_t **rx_iq_data)
+{
+  AssertFatal(num_samples < BUFFER_PREFIX_SIZE,
+              "Number of samples %lu exceeds buffer prefix size %d for zero-copy RX\n",
+              num_samples,
+              BUFFER_PREFIX_SIZE);
+  ShmTDIQChannelData *data = channel->data;
+  // timestamp in the future
+  uint64_t current_time = data->timestamp;
+  if (timestamp > current_time) {
+    return CHANNEL_ERROR_TOO_EARLY;
+  }
+  // timestamp is too far in the past
+  if (current_time - timestamp >= CIRCULAR_BUFFER_SIZE) {
+    return CHANNEL_ERROR_TOO_LATE;
+  }
+
+  sample_t *base_ptr = get_prefix_buffer_ptr(channel->rx_iq_data, antenna);
+
+  uint64_t first_sample_index = timestamp % CIRCULAR_BUFFER_SIZE;
+  if (first_sample_index + num_samples > CIRCULAR_BUFFER_SIZE) {
+    uint64_t num_samples_in_prefix_buffer = CIRCULAR_BUFFER_SIZE - first_sample_index;
+    // Handle wrap around inside the prefix buffer
+    *rx_iq_data = base_ptr + (BUFFER_PREFIX_SIZE - num_samples_in_prefix_buffer);
+  } else {
+    *rx_iq_data = base_ptr + BUFFER_PREFIX_SIZE + first_sample_index;
   }
   return CHANNEL_NO_ERROR;
 }
@@ -243,7 +294,7 @@ int shm_td_iq_channel_wait(ShmTDIQChannel *channel, uint64_t timestamp, uint64_t
       fprintf(stderr, "Error: clock_gettime failed: %s\n", strerror(errno));
       return 1;
     }
-    
+
     ts.tv_sec += timeout_uS / 1000000; // Convert microseconds to seconds
     ts.tv_nsec += (timeout_uS % 1000000) * 1000; // Convert remaining microseconds to nanoseconds
 
