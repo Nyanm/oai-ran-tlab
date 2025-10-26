@@ -2371,7 +2371,72 @@ int load_channellist(uint8_t nb_tx, uint8_t nb_rx, double sampling_rate, uint64_
   return channel_list.numelt;
 } /* load_channelist */
 
-int get_noise_power_dBFS(void) {
+channel_desc_t *load_channel(uint8_t nb_tx,
+                             uint8_t nb_rx,
+                             double sampling_rate,
+                             uint64_t center_freq,
+                             double channel_bandwidth,
+                             const char *name)
+{
+  paramdef_t achannel_params[] = CHANNELMOD_MODEL_PARAMS_DESC;
+  paramlist_def_t channel_list;
+  memset(&channel_list, 0, sizeof(paramlist_def_t));
+  memcpy(channel_list.listname, modellist_name, sizeof(channel_list.listname) - 1);
+  int numparams = sizeofArray(achannel_params);
+  config_getlist(config_get_if(), &channel_list, achannel_params, numparams, CHANNELMOD_SECTION);
+  AssertFatal(channel_list.numelt > 0, "List %s.%s not found in config file\n", CHANNELMOD_SECTION, channel_list.listname);
+  int pindex_NAME = config_paramidx_fromname(achannel_params, numparams, CHANNELMOD_MODEL_NAME_PNAME);
+  int pindex_DT = config_paramidx_fromname(achannel_params, numparams, CHANNELMOD_MODEL_DT_PNAME);
+  int pindex_FF = config_paramidx_fromname(achannel_params, numparams, CHANNELMOD_MODEL_FF_PNAME);
+  int pindex_CO = config_paramidx_fromname(achannel_params, numparams, CHANNELMOD_MODEL_CO_PNAME);
+  int pindex_PL = config_paramidx_fromname(achannel_params, numparams, CHANNELMOD_MODEL_PL_PNAME);
+  int pindex_NP = config_paramidx_fromname(achannel_params, numparams, CHANNELMOD_MODEL_NP_PNAME);
+  int pindex_TYPE = config_paramidx_fromname(achannel_params, numparams, CHANNELMOD_MODEL_TYPE_PNAME);
+
+  for (int i = 0; i < channel_list.numelt; i++) {
+    int modid = modelid_fromstrtype(*(channel_list.paramarray[i][pindex_TYPE].strptr));
+
+    if (modid < 0) {
+      LOG_E(OCM, "Valid channel model types:\n");
+
+      for (int m = 0; channelmod_names[i].name != NULL; m++) {
+        printf(" %s ", map_int_to_str(channelmod_names, m));
+      }
+
+      AssertFatal(0, "\n  Choose a valid model type\n");
+    }
+    if (strncmp(*channel_list.paramarray[i][pindex_NAME].strptr, name, strlen(name)) == 0) {
+      channel_desc_t *channeldesc_p = new_channel_desc_scm(nb_tx,
+                                                           nb_rx,
+                                                           modid,
+                                                           sampling_rate,
+                                                           center_freq,
+                                                           channel_bandwidth,
+                                                           *(channel_list.paramarray[i][pindex_DT].dblptr),
+                                                           0.0,
+                                                           CORR_LEVEL_LOW,
+                                                           *(channel_list.paramarray[i][pindex_FF].dblptr),
+                                                           *(channel_list.paramarray[i][pindex_CO].iptr),
+                                                           *(channel_list.paramarray[i][pindex_PL].dblptr),
+                                                           *(channel_list.paramarray[i][pindex_NP].dblptr));
+      AssertFatal((channeldesc_p != NULL),
+                  "Could not allocate channel %s type %s \n",
+                  *(channel_list.paramarray[i][pindex_NAME].strptr),
+                  *(channel_list.paramarray[i][pindex_TYPE].strptr));
+      channeldesc_p->model_name = strdup(*(channel_list.paramarray[i][pindex_NAME].strptr));
+      LOG_I(OCM,
+            "Model %s type %s allocated from config file, list %s\n",
+            *(channel_list.paramarray[i][pindex_NAME].strptr),
+            *(channel_list.paramarray[i][pindex_TYPE].strptr),
+            modellist_name);
+      return channeldesc_p;
+    } /* for loop on channel_list */
+  }
+  return NULL;
+}
+
+int get_noise_power_dBFS(void)
+{
   return noise_power_dBFS;
 }
 
