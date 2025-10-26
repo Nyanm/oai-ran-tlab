@@ -287,7 +287,8 @@ static int vrtsim_connect(openair0_device *device)
     vrtsim_state->peer_info.num_rx_antennas = vrtsim_state->client_num_rx_antennas;
     vrtsim_state->channel = shm_td_iq_channel_create(DEFAULT_CHANNEL_NAME,
                                                      vrtsim_state->peer_info.num_rx_antennas,
-                                                     device->openair0_cfg[0].rx_num_channels);
+                                                     device->openair0_cfg[0].rx_num_channels,
+                                                     false);
     // Exchange peer info
     client_info_t client_info = {
         .server_num_rx_antennas = device->openair0_cfg[0].rx_num_channels,
@@ -532,7 +533,7 @@ static int vrtsim_read(openair0_device *device, openair0_timestamp *ptimestamp, 
     uint64_t start_sample = shm_td_iq_channel_get_current_sample(vrtsim_state->channel);
     uint64_t timeout_uS = 2 * 1000 * 1000; // 2 seconds timeout waiting for sample number to change
     //
-    while (shm_td_iq_channel_wait(vrtsim_state->channel, vrtsim_state->last_received_sample + nsamps, timeout_uS) == 1) {
+    while (shm_td_iq_channel_wait(vrtsim_state->channel, vrtsim_state->last_received_sample + nsamps, timeout_uS) != 0) {
       uint64_t sample = shm_td_iq_channel_get_current_sample(vrtsim_state->channel);
       if (sample == start_sample) {
         LOG_E(HW,

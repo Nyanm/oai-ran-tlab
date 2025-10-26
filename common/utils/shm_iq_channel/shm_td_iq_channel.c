@@ -41,12 +41,19 @@
 #define BUFFER_PREFIX_SIZE 30720
 
 typedef struct {
-  int magic;
-  int num_antennas_tx;
-  int num_antennas_rx;
   uint64_t timestamp;
   pthread_mutex_t mutex;
   pthread_cond_t cond;
+} sync_data_t;
+
+typedef struct {
+  int magic;
+  int num_antennas_tx;
+  int num_antennas_rx;
+  sync_data_t sync_data;
+
+  bool client_sync;
+  sync_data_t client_sync_data;
 } ShmTDIQChannelData;
 
 typedef struct ShmTDIQChannel_s {
@@ -58,7 +65,76 @@ typedef struct ShmTDIQChannel_s {
   bool abort;
 } ShmTDIQChannel;
 
-ShmTDIQChannel *shm_td_iq_channel_create(const char *name, int num_tx_ant, int num_rx_ant)
+static void init_sync_data(sync_data_t *sync_data)
+{
+  sync_data->timestamp = 0;
+  pthread_mutexattr_t mutex_attr;
+  pthread_condattr_t cond_attr;
+  int ret = pthread_mutexattr_init(&mutex_attr);
+  AssertFatal(ret == 0, "pthread_mutexattr_init() failed: errno %d, %s\n", errno, strerror(errno));
+
+  ret = pthread_condattr_init(&cond_attr);
+  AssertFatal(ret == 0, "pthread_condattr_init() failed: errno %d, %s\n", errno, strerror(errno));
+
+  ret = pthread_mutexattr_setpshared(&mutex_attr, PTHREAD_PROCESS_SHARED);
+  AssertFatal(ret == 0, "pthread_mutexattr_setpshared() failed: errno %d, %s\n", errno, strerror(errno));
+
+  ret = pthread_condattr_setpshared(&cond_attr, PTHREAD_PROCESS_SHARED);
+  AssertFatal(ret == 0, "pthread_condattr_setpshared() failed: errno %d, %s\n", errno, strerror(errno));
+
+  ret = pthread_mutex_init(&sync_data->mutex, &mutex_attr);
+  AssertFatal(ret == 0, "pthread_mutex_init() failed: errno %d, %s\n", errno, strerror(errno));
+
+  ret = pthread_cond_init(&sync_data->cond, &cond_attr);
+  AssertFatal(ret == 0, "pthread_cond_init() failed: errno %d, %s\n", errno, strerror(errno));
+}
+
+static void wait_for_sync(sync_data_t *sync_data, uint64_t timestamp, bool *should_abort)
+{
+  mutexlock(sync_data->mutex);
+  while (sync_data->timestamp < timestamp && !*should_abort) {
+    condwait(sync_data->cond, sync_data->mutex);
+  }
+  mutexunlock(sync_data->mutex);
+}
+
+static int wait_for_sync_with_timeout(sync_data_t *sync_data, uint64_t timestamp, uint64_t timeout_uS, bool *should_abort)
+{
+  struct timespec ts = {.tv_sec = 0, .tv_nsec = 0};
+  if (clock_gettime(CLOCK_REALTIME, &ts) != 0) {
+    fprintf(stderr, "Error: clock_gettime failed: %s\n", strerror(errno));
+    return 1;
+  }
+
+  ts.tv_sec += timeout_uS / 1000000; // Convert microseconds to seconds
+  ts.tv_nsec += (timeout_uS % 1000000) * 1000; // Convert remaining microseconds to nanoseconds
+
+  mutexlock(sync_data->mutex);
+  while (sync_data->timestamp < timestamp && !*should_abort) {
+    int ret = pthread_cond_timedwait(&sync_data->cond, &sync_data->mutex, &ts);
+    if (ret == ETIMEDOUT) {
+      fprintf(stderr, "Error: Timed out waiting for samples.\n");
+      mutexunlock(sync_data->mutex);
+      return 1;
+    } else if (ret != 0) {
+      fprintf(stderr, "Error: pthread_cond_timedwait failed: %s\n", strerror(ret));
+      mutexunlock(sync_data->mutex);
+      return 1;
+    }
+  }
+  mutexunlock(sync_data->mutex);
+  return 0;
+}
+
+static void update_timestamp(sync_data_t *sync_data, uint64_t timestamp)
+{
+  mutexlock(sync_data->mutex);
+  sync_data->timestamp = timestamp;
+  condbroadcast(sync_data->cond);
+  mutexunlock(sync_data->mutex);
+}
+
+ShmTDIQChannel *shm_td_iq_channel_create(const char *name, int num_tx_ant, int num_rx_ant, bool client_sync)
 {
   // Create shared memory segment
   int fd = shm_open(name, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
@@ -85,27 +161,15 @@ ShmTDIQChannel *shm_td_iq_channel_create(const char *name, int num_tx_ant, int n
   channel->rx_iq_data = channel->tx_iq_data + tx_buffer_size / sizeof(sample_t);
   channel->data = shm_ptr;
   channel->type = IQ_CHANNEL_TYPE_SERVER;
-  pthread_mutexattr_t mutex_attr;
-  pthread_condattr_t cond_attr;
-  int ret = pthread_mutexattr_init(&mutex_attr);
-  AssertFatal(ret == 0, "pthread_mutexattr_init() failed: errno %d, %s\n", errno, strerror(errno));
 
-  ret = pthread_condattr_init(&cond_attr);
-  AssertFatal(ret == 0, "pthread_condattr_init() failed: errno %d, %s\n", errno, strerror(errno));
-
-  ret = pthread_mutexattr_setpshared(&mutex_attr, PTHREAD_PROCESS_SHARED);
-  AssertFatal(ret == 0, "pthread_mutexattr_setpshared() failed: errno %d, %s\n", errno, strerror(errno));
-
-  ret = pthread_condattr_setpshared(&cond_attr, PTHREAD_PROCESS_SHARED);
-  AssertFatal(ret == 0, "pthread_condattr_setpshared() failed: errno %d, %s\n", errno, strerror(errno));
-
-  ret = pthread_mutex_init(&shm_ptr->mutex, &mutex_attr);
-  AssertFatal(ret == 0, "pthread_mutex_init() failed: errno %d, %s\n", errno, strerror(errno));
-
-  ret = pthread_cond_init(&shm_ptr->cond, &cond_attr);
-  AssertFatal(ret == 0, "pthread_cond_init() failed: errno %d, %s\n", errno, strerror(errno));
+  init_sync_data(&shm_ptr->sync_data);
 
   shm_ptr->magic = SHM_MAGIC_NUMBER;
+
+  if (client_sync) {
+    shm_ptr->client_sync = true;
+    init_sync_data(&shm_ptr->client_sync_data);
+  }
   close(fd);
   return channel;
 }
@@ -165,7 +229,7 @@ IQChannelErrorType shm_td_iq_channel_tx(ShmTDIQChannel *channel,
 {
   ShmTDIQChannelData *data = channel->data;
   // timestamp in the past
-  uint64_t current_time = data->timestamp;
+  uint64_t current_time = data->sync_data.timestamp;
   if (timestamp < current_time) {
     return CHANNEL_ERROR_TOO_LATE;
   }
@@ -197,6 +261,10 @@ IQChannelErrorType shm_td_iq_channel_tx(ShmTDIQChannel *channel,
     memcpy(prefix_ptr + (overlap_start - mirror_start), base_ptr + overlap_start, (overlap_end - overlap_start) * sizeof(sample_t));
   }
 
+  if (channel->type == IQ_CHANNEL_TYPE_CLIENT && data->client_sync) {
+    update_timestamp(&data->client_sync_data, timestamp + num_samples);
+  }
+
   return CHANNEL_NO_ERROR;
 }
 
@@ -208,7 +276,7 @@ IQChannelErrorType shm_td_iq_channel_rx(ShmTDIQChannel *channel,
 {
   ShmTDIQChannelData *data = channel->data;
   // timestamp in the future
-  uint64_t current_time = data->timestamp;
+  uint64_t current_time = data->sync_data.timestamp;
   if (timestamp > current_time) {
     return CHANNEL_ERROR_TOO_EARLY;
   }
@@ -237,18 +305,20 @@ IQChannelErrorType shm_td_iq_channel_zc_rx(ShmTDIQChannel *channel,
                                            int antenna,
                                            sample_t **rx_iq_data)
 {
-  AssertFatal(num_samples < BUFFER_PREFIX_SIZE,
+  AssertFatal(num_samples <= BUFFER_PREFIX_SIZE,
               "Number of samples %lu exceeds buffer prefix size %d for zero-copy RX\n",
               num_samples,
               BUFFER_PREFIX_SIZE);
   ShmTDIQChannelData *data = channel->data;
   // timestamp in the future
-  uint64_t current_time = data->timestamp;
+  uint64_t current_time = data->client_sync_data.timestamp;
   if (timestamp > current_time) {
+    *rx_iq_data = NULL;
     return CHANNEL_ERROR_TOO_EARLY;
   }
   // timestamp is too far in the past
   if (current_time - timestamp >= CIRCULAR_BUFFER_SIZE) {
+    *rx_iq_data = NULL;
     return CHANNEL_ERROR_TOO_LATE;
   }
 
@@ -268,69 +338,58 @@ IQChannelErrorType shm_td_iq_channel_zc_rx(ShmTDIQChannel *channel,
 void shm_td_iq_channel_produce_samples(ShmTDIQChannel *channel, size_t num_samples)
 {
   ShmTDIQChannelData *data = channel->data;
-  mutexlock(data->mutex);
-  data->timestamp += num_samples;
-  condbroadcast(data->cond);
-  mutexunlock(data->mutex);
+  update_timestamp(&data->sync_data, data->sync_data.timestamp + num_samples);
 }
 
 int shm_td_iq_channel_wait(ShmTDIQChannel *channel, uint64_t timestamp, uint64_t timeout_uS)
 {
   ShmTDIQChannelData *data = channel->data;
-  size_t current_timestamp = data->timestamp;
+  size_t current_timestamp = data->sync_data.timestamp;
   if (current_timestamp >= timestamp) {
     return 0;
   }
   if (timeout_uS == 0) {
-    mutexlock(data->mutex);
-    while (current_timestamp < timestamp && !channel->abort) {
-      condwait(data->cond, data->mutex);
-      current_timestamp = data->timestamp;
-    }
-    mutexunlock(data->mutex);
+    wait_for_sync(&data->sync_data, timestamp, &channel->abort);
+    return 0;
   } else {
-    struct timespec ts = {.tv_sec = 0, .tv_nsec = 0};
-    if (clock_gettime(CLOCK_REALTIME, &ts) != 0) {
-      fprintf(stderr, "Error: clock_gettime failed: %s\n", strerror(errno));
-      return 1;
-    }
-
-    ts.tv_sec += timeout_uS / 1000000; // Convert microseconds to seconds
-    ts.tv_nsec += (timeout_uS % 1000000) * 1000; // Convert remaining microseconds to nanoseconds
-
-    mutexlock(data->mutex);
-    while (current_timestamp < timestamp && !channel->abort) {
-      int ret = pthread_cond_timedwait(&data->cond, &data->mutex, &ts);
-      if (ret == ETIMEDOUT) {
-        fprintf(stderr, "Error: Timed out waiting for samples.\n");
-        mutexunlock(data->mutex);
-        return 1;
-      } else if (ret != 0) {
-        fprintf(stderr, "Error: pthread_cond_timedwait failed: %s\n", strerror(ret));
-        mutexunlock(data->mutex);
-        return 1;
-      } else {
-        current_timestamp = data->timestamp;
-      }
-    }
-    mutexunlock(data->mutex);
+    return wait_for_sync_with_timeout(&data->sync_data, timestamp, timeout_uS, &channel->abort);
   }
-  return 0;
+}
+
+int shm_td_iq_channel_wait_for_client(ShmTDIQChannel *channel, uint64_t timestamp, uint64_t timeout_uS)
+{
+  ShmTDIQChannelData *data = channel->data;
+  AssertFatal(data->client_sync, "Client sync not enabled on this channel\n");
+  size_t current_timestamp = data->client_sync_data.timestamp;
+  if (current_timestamp >= timestamp) {
+    return 0;
+  }
+  if (timeout_uS == 0) {
+    wait_for_sync(&data->client_sync_data, timestamp, &channel->abort);
+    return 0;
+  } else {
+    return wait_for_sync_with_timeout(&data->client_sync_data, timestamp, timeout_uS, &channel->abort);
+  }
 }
 
 uint64_t shm_td_iq_channel_get_current_sample(const ShmTDIQChannel *channel)
 {
   ShmTDIQChannelData *data = channel->data;
-  return data->timestamp;
+  return data->sync_data.timestamp;
 }
 
 void shm_td_iq_channel_abort(ShmTDIQChannel *channel)
 {
   ShmTDIQChannelData *data = channel->data;
-  mutexlock(data->mutex);
+  mutexlock(data->sync_data.mutex);
   channel->abort = true;
-  condbroadcast(data->cond);
-  mutexunlock(data->mutex);
+  condbroadcast(data->sync_data.cond);
+  mutexunlock(data->sync_data.mutex);
+  if (data->client_sync) {
+    mutexlock(data->client_sync_data.mutex);
+    condbroadcast(data->client_sync_data.cond);
+    mutexunlock(data->client_sync_data.mutex);
+  }
 }
 
 bool shm_td_iq_channel_is_aborted(const ShmTDIQChannel *channel)

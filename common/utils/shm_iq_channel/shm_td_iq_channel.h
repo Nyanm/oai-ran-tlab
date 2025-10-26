@@ -60,9 +60,10 @@ typedef struct ShmTDIQChannel_s ShmTDIQChannel;
  * @param name The name of the shared memory segment.
  * @param num_tx_ant The number of TX antennas.
  * @param num_rx_ant The number of RX antennas.
+ * @param client_sync Whether to enable client synchronization.
  * @return A pointer to the created ShmTDIQChannel structure.
  */
-ShmTDIQChannel *shm_td_iq_channel_create(const char *name, int num_tx_ant, int num_rx_ant);
+ShmTDIQChannel *shm_td_iq_channel_create(const char *name, int num_tx_ant, int num_rx_ant, bool client_sync);
 
 /**
  * @brief Connects to an existing shared memory IQ channel.
@@ -125,6 +126,16 @@ void shm_td_iq_channel_produce_samples(ShmTDIQChannel *channel, uint64_t num_sam
  */
 int shm_td_iq_channel_wait(ShmTDIQChannel *channel, uint64_t timestamp, uint64_t timeout_uS);
 
+/**
+ * @brief Wait until sample at the specified timestamp is transmitted by the client
+ *
+ * @param channel The ShmTDIQChannel structure.
+ * @param timestamp The timestamp for which to wait.
+ * @param timeout_uS The timeout in microseconds to wait for the sample. 0 means wait indefinitely.
+ *
+ * @return 0 if the sample is available, 1 if timed out
+ */
+int shm_td_iq_channel_wait_for_client(ShmTDIQChannel *channel, uint64_t timestamp, uint64_t timeout_uS);
 /**
  * @brief Aborts the IQ channel causing the wait to return immediately
  *
