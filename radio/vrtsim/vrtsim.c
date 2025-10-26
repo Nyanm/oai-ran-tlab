@@ -123,6 +123,7 @@ typedef struct {
   Actor_t *channel_modelling_actors;
   char *taps_socket;
   int client_num_rx_antennas;
+  void *taps_client;
 } vrtsim_state_t;
 
 // Sample history for channel impulse response
@@ -320,11 +321,11 @@ static int vrtsim_connect(openair0_device *device)
       init_actor(&vrtsim_state->channel_modelling_actors[i], "chanmod", -1);
     }
     if (vrtsim_state->taps_socket) {
-      taps_client_connect(0,
-                          vrtsim_state->taps_socket,
-                          device->openair0_cfg[0].tx_num_channels,
-                          vrtsim_state->peer_info.num_rx_antennas,
-                          &vrtsim_state->channel_desc);
+      vrtsim_state->taps_client = taps_client_connect(0,
+                                                      vrtsim_state->taps_socket,
+                                                      device->openair0_cfg[0].tx_num_channels,
+                                                      vrtsim_state->peer_info.num_rx_antennas,
+                                                      &vrtsim_state->channel_desc);
     } else {
       load_channel_model(vrtsim_state);
     }
@@ -584,7 +585,7 @@ static void vrtsim_end(openair0_device *device)
     tx_timing->average_tx_budget /= vrtsim_state->peer_info.num_rx_antennas;
     free_noise_device();
     if (vrtsim_state->taps_socket) {
-      taps_client_stop();
+      taps_client_stop(vrtsim_state->taps_client);
     }
   }
   shm_td_iq_channel_abort(vrtsim_state->channel);
