@@ -133,8 +133,8 @@
 #include "bnProc128/nrLDPC_bnProc_BG2_R23_128.h"
 #endif
 
-// #define NR_LDPC_PROFILER_DETAIL(a) a
-#define NR_LDPC_PROFILER_DETAIL(a)
+ #define NR_LDPC_PROFILER_DETAIL(a) a
+//#define NR_LDPC_PROFILER_DETAIL(a)
 
 #include "openair1/PHY/CODING/nrLDPC_extern.h"
 
@@ -606,9 +606,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #endif
   }
 
-#ifdef NR_LDPC_PROFILER_DETAIL
   stop_meas(&p_profiler->bnProc);
-#endif
 
 #ifdef NR_LDPC_DEBUG_MODE
   nrLDPC_debug_initBuffer2File(nrLDPC_buffers_BN_PROC_RES);
