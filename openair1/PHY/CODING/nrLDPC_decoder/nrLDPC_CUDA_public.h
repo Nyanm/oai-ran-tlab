@@ -99,17 +99,17 @@ __device__ __forceinline__ void moveBricks_invget_circ(int8_t *__restrict__ dstB
 		    Four_Bricks[3] = DstBuf[2];
 		    break;
 	    default :
-		    Four_Bricks[0] = DstBuf[0];
-		    Four_Bricks[1] = DstBuf[1];
-		    Four_Bricks[2] = DstBuf[2];
-		    Four_Bricks[3] = DstBuf[3];
+		    Four_Bricks[0] = DstBuf[pos];
+		    Four_Bricks[1] = DstBuf[pos+1];
+		    Four_Bricks[2] = DstBuf[pos+2];
+		    Four_Bricks[3] = DstBuf[pos+3];
 		    break;
     }
-	  /*
+/*	 
     for (uint16_t j = 0; j < 4; j++) {
       Four_Bricks[j] = DstBuf[(pos + j) % Z];
     }
-      */
+  */   
   }
 }
 __device__ __forceinline__ void moveBricks_circ(int8_t *__restrict__ dstBuf,
