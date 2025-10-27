@@ -62,6 +62,84 @@ inline cudaError_t ErrorCheck(cudaError_t error_code, const char *filename, int 
   return error_code;
 }
 
+#define COPY_ARR_MEMBER(member, type, groups) do { \
+    for (int i = 0; i < (groups); i++) { \
+        type* tmp_dev; \
+        if (h_lut.member[i].d != NULL && h_lut.member[i].dim1 > 0 && h_lut.member[i].dim2 > 0) { \
+            size_t sz = h_lut.member[i].dim1 * h_lut.member[i].dim2 * sizeof(type); \
+            err = cudaMalloc((void**)&tmp_dev, sz); \
+            if (err != cudaSuccess) { \
+                fprintf(stderr, "cudaMalloc failed for " #member "[%d]: %s\n", i, cudaGetErrorString(err)); \
+                exit(EXIT_FAILURE); \
+            } \
+            cudaMemcpy(tmp_dev, h_lut.member[i].d, sz, cudaMemcpyHostToDevice); \
+            /* updtae d_lut->member[i].d pointer */ \
+            cudaMemcpy(&(d_lut->member[i].d), &tmp_dev, sizeof(type*), cudaMemcpyHostToDevice); \
+            /* copy dim1 and dim2 */ \
+            cudaMemcpy(&(d_lut->member[i].dim1), &(h_lut.member[i].dim1), sizeof(int), cudaMemcpyHostToDevice); \
+            cudaMemcpy(&(d_lut->member[i].dim2), &(h_lut.member[i].dim2), sizeof(int), cudaMemcpyHostToDevice); \
+        } \
+    } \
+} while(0)
+
+#define COPY_POINTER_MEMBER(member, type, count) do { \
+    type* tmp_dev; \
+    printf("tmp_dev = %p\n", (void*)tmp_dev);\
+    err = cudaMalloc((void**)&tmp_dev, (count) * sizeof(type)); \
+    printf("malloc tmp_dev = %p\n", (void*)tmp_dev);\
+    if (err != cudaSuccess) { \
+        fprintf(stderr, "cudaMalloc failed for " #member ": %s\n", cudaGetErrorString(err)); \
+        exit(EXIT_FAILURE); \
+    } \
+    printf("h_lut.member = %p\n", (void*)h_lut.member);\
+    cudaMemcpy(tmp_dev, h_lut.member, (count) * sizeof(type), cudaMemcpyHostToDevice); \
+    printf("d_lut->member");\
+    printf(" = %p\n", (void*)d_lut->member);\
+    cudaMemcpy(&(d_lut->member), &tmp_dev, sizeof(type*), cudaMemcpyHostToDevice); \
+} while(0)
+
+__device__ __constant__ t_nrLDPC_lut lut384_R13;
+__device__ __constant__ t_nrLDPC_lut lut384_R23;
+
+void copy_luts_to_constant() {
+    cudaError_t err;
+    t_nrLDPC_lut h_lut;
+    // ---------------------------
+    // copy all the member pointers
+    // ---------------------------
+    t_nrLDPC_lut *d_lut = &lut384_R13;
+    COPY_POINTER_MEMBER(startAddrCnGroups, uint32_t, 9);
+    printf("Inside copy 3\n");
+    COPY_POINTER_MEMBER(numCnInCnGroups, uint8_t, 9);
+    printf("Inside copy 4\n");
+    printf("host ptr = %p\n", (void*)d_lut->numBnInBnGroups);
+    COPY_POINTER_MEMBER(numBnInBnGroups, uint8_t, 30);
+    printf("Inside copy 5\n");
+    printf("host ptr = %p\n", (void*)d_lut->startAddrBnGroups);
+    printf("Inside copy 5.1\n");
+    COPY_POINTER_MEMBER(startAddrBnGroups, uint32_t, 30);
+    printf("Inside copy 6\n");
+    COPY_POINTER_MEMBER(startAddrBnGroupsLlr, uint16_t, 30);
+    printf("Inside copy 7\n");
+    COPY_POINTER_MEMBER(llr2llrProcBufAddr, uint16_t, 26);
+    printf("Inside copy 8\n");
+    COPY_POINTER_MEMBER(llr2llrProcBufBnPos, uint8_t, 26);
+    printf("Inside copy 9\n");
+    //  COPY_POINTER_MEMBER
+    // COPY_POINTER_MEMBER(numCnInCnGroups,  uint8_t,  X);
+    // COPY_POINTER_MEMBER(numBnInBnGroups,  uint8_t,  Y);
+    // ...
+
+    // ---------------------------
+    // cope with arr8_t/16_t/32_t
+    // ---------------------------
+
+
+    COPY_ARR_MEMBER(circShift,uint16_t, 9);
+    COPY_ARR_MEMBER(startAddrBnProcBuf,uint32_t, 9);
+    COPY_ARR_MEMBER(bnPosBnProcBuf,uint8_t, 9);
+    COPY_ARR_MEMBER(posBnInCnProcBuf,uint8_t, 9);
+}
 //-----------------------------------------↓↓↓ R13 ↓↓↓----------------------------------------
 __global__ void llrPreProc_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                                           int8_t *__restrict__ d_llr,

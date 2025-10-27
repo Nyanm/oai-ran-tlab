@@ -33,11 +33,14 @@ __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_NUM(
 
     // ---- ① Unrolled accumulation ----
     int32_t MsgSum = bnProcBufPtr[0];
+//    int delta = (GrpNum * Zc)>>2;
+//    int offsetWords=delta;
 #pragma unroll
     for (int i = 1; i < NUM; ++i) {
         int offsetWords = (GrpNum * i * Zc) >> 2;
         int32_t val = bnProcBufPtr[offsetWords];
         MsgSum = __vaddss4(MsgSum, val);
+//	offsetWords+=delta;
     }
 
     // ---- ② Compute llrRes ----
