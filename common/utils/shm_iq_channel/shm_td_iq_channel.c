@@ -38,7 +38,7 @@
 #define CIRCULAR_BUFFER_SIZE (30720 * 14 * 20)
 // Buffer prefix is a copy of the ending of the buffer to the beginning to
 // allow continuous read up to this size without wrapping when doing channel modelling
-#define BUFFER_PREFIX_SIZE 30720
+#define BUFFER_PREFIX_SIZE (30720 * 10)
 
 typedef struct {
   uint64_t timestamp;
@@ -362,6 +362,8 @@ IQChannelErrorType shm_td_iq_channel_zc_rx(ShmTDIQChannel *channel,
   } else {
     *rx_iq_data = base_ptr + BUFFER_PREFIX_SIZE + first_sample_index;
   }
+  AssertFatal(*rx_iq_data + num_samples < base_ptr + BUFFER_PREFIX_SIZE + CIRCULAR_BUFFER_SIZE,
+              "Requested samples exceed buffer limits\n");
   return CHANNEL_NO_ERROR;
 }
 
