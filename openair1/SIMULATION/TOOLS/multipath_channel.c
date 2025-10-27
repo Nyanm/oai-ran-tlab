@@ -173,7 +173,8 @@ void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *des
   }
 #endif
 
-  struct complexd cexp_doppler[length];
+  cd_t *cexp_doppler = malloc(length * sizeof(cd_t));
+
   if (desc->max_Doppler != 0.0) {
     get_cexp_doppler(cexp_doppler, desc, length);
   }
@@ -225,6 +226,8 @@ void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *des
 
     } // ii
   } // i
+
+  free(cexp_doppler);
 }
 #endif
 

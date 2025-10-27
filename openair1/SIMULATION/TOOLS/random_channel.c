@@ -1391,7 +1391,7 @@ channel_desc_t *new_channel_desc_scm(uint8_t nb_tx,
                         channel_offset,
                         path_loss_dB,
                         0);
-      printf("AWGN: ricean_factor %f\n",chan_desc->ricean_factor);
+      //printf("AWGN: ricean_factor %f\n",chan_desc->ricean_factor);
       break;
 
     case TS_SHIFT:
