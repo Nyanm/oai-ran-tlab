@@ -279,7 +279,7 @@ void rrc_gNB_send_NGAP_NAS_FIRST_REQ(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, NR_RRC
     uint32_t amf_Id = BIT_STRING_to_uint32(&r_amf->amf_Identifier);
     UE->ue_guami = req->ue_identity.guami = get_guami(amf_Id, req->plmn);
     LOG_I(NGAP,
-          "GUAMI in NGAP_NAS_FIRST_REQ (UE %04x): AMF Set ID %u, Region ID %u, Pointer %u\n",
+          "GUAMI in NGAP_NAS_FIRST_REQ (UE %04x): AMF Set ID %hu, Region ID %u, Pointer %u\n",
           UE->rnti,
           req->ue_identity.guami.amf_set_id,
           req->ue_identity.guami.amf_region_id,

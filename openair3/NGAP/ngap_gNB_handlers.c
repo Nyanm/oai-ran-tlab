@@ -160,7 +160,7 @@ static void ngap_dump_served_guami(const ngap_gNB_amf_data_t *amf_desc_p)
       NGAP_DEBUG("   AMF Region ID: %d\n", region_p->amf_region_id);
     }
     STAILQ_FOREACH(set_id_p, &guami_p->amf_set_ids, next) {
-      NGAP_DEBUG("   AMF Set ID: %d\n", set_id_p->amf_set_id);
+      NGAP_DEBUG("   AMF Set ID: %hu\n", set_id_p->amf_set_id);
     }
     STAILQ_FOREACH(pointer_p, &guami_p->amf_pointers, next) {
       NGAP_DEBUG("   AMF Pointer: %d\n", pointer_p->amf_pointer);
@@ -1132,15 +1132,17 @@ static int ngap_gNB_handle_paging(sctp_assoc_t assoc_id, uint32_t stream, NGAP_N
    NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, container, NGAP_ProtocolIE_ID_id_UEPagingIdentity, true);
 
    struct NGAP_FiveG_S_TMSI *fiveG_S_TMSI = ie->value.choice.UEPagingIdentity.choice.fiveG_S_TMSI;
-   OCTET_STRING_TO_INT16(&fiveG_S_TMSI->aMFSetID, msg->ue_paging_identity.s_tmsi.amf_set_id);
-   OCTET_STRING_TO_INT8(&fiveG_S_TMSI->aMFPointer, msg->ue_paging_identity.s_tmsi.amf_pointer);
-   OCTET_STRING_TO_INT32(&fiveG_S_TMSI->fiveG_TMSI, msg->ue_paging_identity.s_tmsi.m_tmsi);
+   fiveg_s_tmsi_t *s_tmsi = &msg->ue_paging_identity.s_tmsi;
 
-   NGAP_DEBUG("[SCTP %u] Received Paging Identity amf_set_id %d, amf_pointer %d, m_tmsi %d\n",
+   OCTET_STRING_TO_INT16(&fiveG_S_TMSI->aMFSetID, s_tmsi->amf_set_id);
+   OCTET_STRING_TO_INT8(&fiveG_S_TMSI->aMFPointer, s_tmsi->amf_pointer);
+   OCTET_STRING_TO_INT32(&fiveG_S_TMSI->fiveG_TMSI, s_tmsi->m_tmsi);
+
+   NGAP_DEBUG("[SCTP %u] Received Paging Identity amf_set_id %hu, amf_pointer %d, m_tmsi %d\n",
               assoc_id,
-              msg->ue_paging_identity.s_tmsi.amf_set_id,
-              msg->ue_paging_identity.s_tmsi.amf_pointer,
-              msg->ue_paging_identity.s_tmsi.m_tmsi);
+              s_tmsi->amf_set_id,
+              s_tmsi->amf_pointer,
+              s_tmsi->m_tmsi);
 
    msg->paging_drx = NGAP_PAGING_DRX_256;
    /* id-pagingDRX */
@@ -1176,11 +1178,15 @@ static int ngap_gNB_handle_paging(sctp_assoc_t assoc_id, uint32_t stream, NGAP_N
   }
 
   //paging parameter values
-  NGAP_DEBUG("[SCTP %u] Received Paging parameters: Paging Identity amf_set_id %d amf_pointer %d m_tmsi %d paging_drx %d paging_priority %d\n",assoc_id,
-             msg->ue_paging_identity.s_tmsi.amf_set_id,
-             msg->ue_paging_identity.s_tmsi.amf_pointer,
-             msg->ue_paging_identity.s_tmsi.m_tmsi,
-             msg->paging_drx, msg->paging_priority);
+  NGAP_DEBUG(
+      "[SCTP %u] Received Paging parameters: Paging Identity amf_set_id %hu amf_pointer %d m_tmsi %d paging_drx %d paging_priority "
+      "%d\n",
+      assoc_id,
+      s_tmsi->amf_set_id,
+      s_tmsi->amf_pointer,
+      s_tmsi->m_tmsi,
+      msg->paging_drx,
+      msg->paging_priority);
   /* send message to RRC */
   itti_send_msg_to_task(TASK_RRC_GNB, ngap_gNB_instance->instance, message_p);
 

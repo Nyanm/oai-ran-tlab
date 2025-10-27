@@ -75,7 +75,7 @@ static ngap_gNB_amf_data_t *select_amf(ngap_gNB_instance_t *instance_p, const ng
   if (msg->ue_identity.presenceMask & NGAP_UE_IDENTITIES_guami) {
     const nr_guami_t *guami = &msg->ue_identity.guami;
     LOG_D(NGAP,
-          "GUAMI is present: MCC=%03d MNC=%0*d RegionID=%d SetID=%d Pointer=%d\n",
+          "GUAMI is present: MCC=%03d MNC=%0*d RegionID=%d SetID=%hu Pointer=%d\n",
           guami->plmn.mcc,
           guami->plmn.mnc_digit_length,
           guami->plmn.mnc,
@@ -85,7 +85,7 @@ static ngap_gNB_amf_data_t *select_amf(ngap_gNB_instance_t *instance_p, const ng
     amf = ngap_gNB_nnsf_select_amf_by_guami(instance_p, msg->establishment_cause, *guami);
     if (amf) {
       LOG_I(NGAP,
-            "UE %d: Selected AMF '%s' (assoc_id %d) through GUAMI MCC=%03d MNC=%0*d AMFRI %d AMFSI %d AMFPT %d\n",
+            "UE %d: Selected AMF '%s' (assoc_id %d) through GUAMI MCC=%03d MNC=%0*d AMFRI %d AMFSI %hu AMFPT %d\n",
             msg->gNB_ue_ngap_id,
             amf->amf_name,
             amf->assoc_id,
@@ -106,7 +106,7 @@ static ngap_gNB_amf_data_t *select_amf(ngap_gNB_instance_t *instance_p, const ng
       amf = ngap_gNB_nnsf_select_amf_by_amf_setid(instance_p, msg->establishment_cause, msg->plmn, fgs_tmsi->amf_set_id);
       if (amf) {
         LOG_I(NGAP,
-              "UE %d: Selected AMF '%s' (assoc_id %d) through S-TMSI AMFSI %d and selected PLMN MCC=%03d MNC=%0*d\n",
+              "UE %d: Selected AMF '%s' (assoc_id %d) through S-TMSI AMFSI %hu and selected PLMN MCC=%03d MNC=%0*d\n",
               msg->gNB_ue_ngap_id,
               amf->amf_name,
               amf->assoc_id,
