@@ -3384,6 +3384,105 @@ int rrc_gNB_generate_pcch_msg(sctp_assoc_t assoc_id, const NR_SIB1_t *sib1, uint
 
 /* F1AP UE Context Management Procedures */
 
+/** @brief Fill DRB to Be Setup List for F1 UE Context Setup Request
+ * Returns number of DRBs filled, 0 if none */
+static int rrc_fill_f1_drb_to_setup(const gNB_RRC_INST *rrc, const gNB_RRC_UE_t *ue, f1ap_drb_to_setup_t drbs[MAX_DRBS_PER_UE])
+{
+  int nb_drb = 0;
+
+  FOR_EACH_SEQ_ARR(drb_t *, rrc_drb, &ue->drbs) {
+    DevAssert(nb_drb < MAX_DRBS_PER_UE);
+    f1ap_drb_to_setup_t *drb = &drbs[nb_drb];
+    nr_pdcp_configuration_t *pdcp = &rrc_drb->pdcp_config;
+    nb_drb++;
+    /* fetch an existing PDU session for this DRB */
+    rrc_pdu_session_param_t *pdu = find_pduSession_from_drbId((gNB_RRC_UE_t *)ue, rrc_drb->drb_id);
+    AssertFatal(pdu != NULL, "no PDU session for DRB ID %d\n", rrc_drb->drb_id);
+
+    drb->id = rrc_drb->drb_id;
+
+    drb->qos_choice = F1AP_QOS_CHOICE_NR;
+    drb->nr.nssai = pdu->param.nssai;
+    drb->nr.flows_len = 1;
+    drb->nr.flows = calloc_or_fail(1, sizeof(*drb->nr.flows));
+
+    /* QoS flow associated with this DRB: use first QoS flow */
+    AssertFatal(seq_arr_size(&pdu->param.qos) == 1, "only 1 Qos flow supported\n");
+    nr_rrc_qos_t *qos_param = (nr_rrc_qos_t *)seq_arr_at(&pdu->param.qos, 0);
+    DevAssert(qos_param->qos.qfi > 0);
+    drb->nr.flows[0].qfi = qos_param->qos.qfi;
+    drb->nr.flows[0].param = get_qos_char_from_qos_flow_param(&qos_param->qos);
+    /* the DRB QoS parameters: reuse the ones from the first flow */
+    drb->nr.drb_qos = drb->nr.flows[0].param;
+
+    memcpy(&drb->up_ul_tnl[0].tl_address, &rrc_drb->cuup_tunnel_config.addr.buffer, sizeof(uint8_t) * 4);
+    drb->up_ul_tnl[0].teid = rrc_drb->cuup_tunnel_config.teid;
+    drb->up_ul_tnl_len = 1;
+
+    drb->rlc_mode = rrc->configuration.um_on_default_drb ? F1AP_RLC_MODE_UM_BIDIR : F1AP_RLC_MODE_AM;
+    DevAssert(pdcp->drb.sn_size == 18 || pdcp->drb.sn_size == 12);
+    drb->dl_pdcp_sn_len = malloc_or_fail(sizeof(*drb->dl_pdcp_sn_len));
+    *drb->dl_pdcp_sn_len = pdcp->drb.sn_size == 18 ? F1AP_PDCP_SN_18B : F1AP_PDCP_SN_12B;
+    drb->ul_pdcp_sn_len = malloc_or_fail(sizeof(*drb->ul_pdcp_sn_len));
+    *drb->ul_pdcp_sn_len = pdcp->drb.sn_size == 18 ? F1AP_PDCP_SN_18B : F1AP_PDCP_SN_12B;
+  }
+  return nb_drb;
+}
+
+f1ap_ue_context_setup_req_t rrc_fill_f1_ue_context_setup(const gNB_RRC_INST *rrc,
+                                                         gNB_RRC_UE_t *ue,
+                                                         const nr_rrc_du_container_t *du,
+                                                         const uint32_t *gNB_DU_ue_id)
+{
+  f1ap_drb_to_setup_t *drbs = calloc_or_fail(MAX_DRBS_PER_UE, sizeof(*drbs));
+  int nb_srb = 2;
+  f1ap_srb_to_setup_t *srbs = calloc_or_fail(nb_srb, sizeof(*srbs));
+
+  /* Fill DRBs */
+  int nb_drb = rrc_fill_f1_drb_to_setup(rrc, ue, drbs);
+
+  /* Prepare SRBs */
+  srbs[0].id = SRB1;
+  srbs[1].id = SRB2;
+
+  /* Update measurement config for target DU */
+  free_MeasConfig(ue->measConfig);
+  ue->measConfig = nr_rrc_get_measconfig(rrc, du->setup_req->cell[0].info.nr_cellid);
+  byte_array_t *meas_config = calloc_or_fail(1, sizeof(*meas_config));
+  meas_config->buf = calloc_or_fail(1, NR_RRC_BUF_SIZE);
+  meas_config->len = do_NR_MeasConfig(ue->measConfig, meas_config->buf, NR_RRC_BUF_SIZE);
+  byte_array_t *meas_timing_config = get_meas_timing_config(du->mtc, ue->measConfig);
+
+  /* UE Aggregate Maximum Bit Rate Uplink is C-ifDRBSetup: 1 Gbps */
+  uint64_t *ue_agg_mbr = malloc_or_fail(sizeof(*ue_agg_mbr));
+  *ue_agg_mbr = 1000000000; /*bps*/
+
+  f1ap_served_cell_info_t *cell_info = &du->setup_req->cell[0].info;
+  f1ap_ue_context_setup_req_t req = {
+      .gNB_CU_ue_id = ue->rrc_ue_id,
+      .plmn.mcc = cell_info->plmn.mcc,
+      .plmn.mnc = cell_info->plmn.mnc,
+      .plmn.mnc_digit_length = cell_info->plmn.mnc_digit_length,
+      .nr_cellid = cell_info->nr_cellid,
+      .servCellIndex = 0,
+      .srbs_len = 2,
+      .srbs = srbs,
+      .drbs_len = nb_drb,
+      .drbs = drbs,
+      .cu_to_du_rrc_info.meas_config = meas_config,
+      .cu_to_du_rrc_info.meas_timing_config = meas_timing_config,
+      .gnb_du_ue_agg_mbr_ul = ue_agg_mbr,
+  };
+
+  /* If gNB_DU_ue_id is provided, set it in the request */
+  if (gNB_DU_ue_id) {
+    req.gNB_DU_ue_id = malloc_or_fail(sizeof(*req.gNB_DU_ue_id));
+    *req.gNB_DU_ue_id = *gNB_DU_ue_id;
+  }
+
+  return req;
+}
+
 //-----------------------------------------------------------------------------
 void rrc_gNB_generate_UeContextSetupRequest(const gNB_RRC_INST *rrc,
                                             rrc_gNB_ue_context_t *const ue_context_pP,

@@ -124,4 +124,10 @@ void activate_srb(gNB_RRC_UE_t *UE, int srb_id);
 void e1_notify_pdcp_status(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const ngap_drb_status_t *drb_status);
 void init_delayed_action(delayed_action_state_t *delayed_action);
 
+/** @brief Prepare a complete F1AP UE Context Setup Request with SRBs/DRBs and Meas configs */
+f1ap_ue_context_setup_req_t rrc_fill_f1_ue_context_setup(const gNB_RRC_INST *rrc,
+                                                         gNB_RRC_UE_t *ue,
+                                                         const nr_rrc_du_container_t *du,
+                                                         const uint32_t *gNB_DU_ue_id);
+
 #endif
