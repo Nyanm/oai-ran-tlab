@@ -12,7 +12,35 @@
 #define ZC 384 // for BG1 test only
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
 #define RECORD_GRAPH 1 // set 1 to enable graph recording, 0 to unable.
+/*
+#define CUDA_THREADS 1024
+#define CUDA_BLOCKS_R13 30
+*/
+/*
+#define CUDA_THREADS 960
+#define CUDA_BLOCKS_R13 32 // ceil(30336/960)
+#define CUDA_BLOCKS_R23 15 // ceil(13824/960)
+*/
+/*
+#define CUDA_THREADS 768 
+#define CUDA_BLOCKS_R13 40 // ceil(30336/768)
+#define CUDA_BLOCKS_R23 18 // ceil(13824/768)
+*/
+/*
+#define CUDA_THREADS 512
+#define CUDA_BLOCKS_R13 60 // ceil(30336/512)
+#define CUDA_BLOCKS_R23 27 // ceil(13824/512)
+*/
 
+#define CUDA_THREADS 128
+#define CUDA_BLOCKS_R13 237 // ceil(30336/128)
+#define CUDA_BLOCKS_R23 108 // ceil(13824/128)
+
+/*
+#define CUDA_THREADS 64 
+#define CUDA_BLOCKS_R13 474 // ceil(30336/64)
+#define CUDA_BLOCKS_R23 216 // ceil(13824/64)
+*/
 cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
 cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
 bool graphCreated[MAX_NUM_DLSCH_SEGMENTS_DL] = {false};
@@ -206,11 +234,18 @@ void nrLDPC_llrPreProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                 int8_t CudaStreamIdx)
 {
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
-  int maxBlockSize = 1024; // Maximun threads are 960
-  dim3 gridDim(30); // 50
+  int maxBlockSize = CUDA_THREADS;//1024; // Maximun threads are 960
+  dim3 gridDim(CUDA_BLOCKS_R13); // 50
   dim3 blockDim(maxBlockSize);
 
   llrPreProc_Kernel_BG1_R13_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut, llr, llrProcBuf, cnProcBuf, Z);
+  /*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
   // printf("Check point 1001: ");
   // CHECK(cudaGetLastError());
 }
@@ -284,6 +319,27 @@ __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   }
 }
 
+void check_lut_pointers_cu(const t_nrLDPC_lut* lut) {
+    if (!lut) {
+        printf("check_lut_pointers: lut is NULL\n");
+        return;
+    }
+
+    printf("Checking LUT pointers:\n");
+    printf("startAddrCnGroups       = %p\n", (void*)lut->startAddrCnGroups);
+    printf("numCnInCnGroups         = %p\n", (void*)lut->numCnInCnGroups);
+    printf("numBnInBnGroups         = %p\n", (void*)lut->numBnInBnGroups);
+    printf("startAddrBnGroups       = %p\n", (void*)lut->startAddrBnGroups);
+    printf("startAddrBnGroupsLlr    = %p\n", (void*)lut->startAddrBnGroupsLlr);
+    printf("llr2llrProcBufAddr      = %p\n", (void*)lut->llr2llrProcBufAddr);
+    printf("llr2llrProcBufBnPos     = %p\n", (void*)lut->llr2llrProcBufBnPos);
+
+    printf("circShift               = %p\n", (void*)lut->circShift);
+    printf("startAddrBnProcBuf       = %p\n", (void*)lut->startAddrBnProcBuf);
+    printf("bnPosBnProcBuf           = %p\n", (void*)lut->bnPosBnProcBuf);
+    printf("posBnInCnProcBuf         = %p\n", (void*)lut->posBnInCnProcBuf);
+}
+
 void nrLDPC_cnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             int8_t *cnProcBuf,
                                             int8_t *cnProcBufRes,
@@ -296,10 +352,12 @@ void nrLDPC_cnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             int8_t CudaStreamIdx)
 {
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
-  int maxBlockSize = 1024; // Maximun threads are 960
-  dim3 gridDim(30); // 50
+  int maxBlockSize = CUDA_THREADS;//1024; // Maximun threads are 960
+  dim3 gridDim(CUDA_BLOCKS_R13); // 50
   dim3 blockDim(maxBlockSize);
-
+  //check_lut_pointers_cu(p_lut); 
+  //printf("cnProcBuf %p, cnProcBufRes %p, bnProcBuf %p, iter_ptr %p, PC_Flag %p\n",
+//	 cnProcBuf,cnProcBufRes,bnProcBuf,iter_ptr,PC_Flag);
   cnProcKernel_BG1_R13_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut,
                                                                                          cnProcBuf,
                                                                                          cnProcBufRes,
@@ -310,6 +368,13 @@ void nrLDPC_cnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                          PC_Flag);
   // printf("Check point 1001: ");
   // CHECK(cudaGetLastError());
+/* 
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 
 __global__ void bnProcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ d_bnProcBuf,
@@ -388,8 +453,8 @@ void nrLDPC_bnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
   int8_t *p_llrProcBuf = (int8_t *)llrProcBuf;
   int8_t *p_llrRes = (int8_t *)llrRes;
 
-  int maxBlockSize = 1024; // Z;
-  int totalBlocks = 30;
+  int maxBlockSize = CUDA_THREADS;//1024; // Z;
+  int totalBlocks = CUDA_BLOCKS_R13;
 
   dim3 gridDim(totalBlocks);
   dim3 blockDim(maxBlockSize);
@@ -405,6 +470,13 @@ void nrLDPC_bnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                          iter_ptr,
                                                                                          numMaxIter,
                                                                                          PC_Flag);
+  /*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 
 __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
@@ -632,8 +704,8 @@ void nrLDPC_BnToCnPC_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
 {
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
 
-  int maxBlockSize = 1024; // Maximun threads are 1024
-  dim3 gridDim(30);
+  int maxBlockSize = CUDA_THREADS;//1024; // Maximun threads are 1024
+  dim3 gridDim(CUDA_BLOCKS_R13);
   dim3 blockDim(maxBlockSize);
   // printf("bnProcBuf =  %p\n", bnProcBuf);
   // printf("In stream %d BC: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
@@ -652,6 +724,13 @@ void nrLDPC_BnToCnPC_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                             llrOut,
                                                                                             p_llrOut,
                                                                                             numLLR);
+ /*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 
 void nrLDPC_OutPut_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
@@ -672,8 +751,8 @@ void nrLDPC_OutPut_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
-  int maxBlockSize = 1024; // Maximun threads are 1024
-  dim3 gridDim(30);
+  int maxBlockSize = CUDA_THREADS;//1024; // Maximun threads are 1024
+  dim3 gridDim(CUDA_BLOCKS_R13);
   dim3 blockDim(maxBlockSize);
   // printf("bnProcBuf =  %p\n", bnProcBuf);
   // printf("In stream %d BC: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
@@ -687,6 +766,14 @@ void nrLDPC_OutPut_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                           llrOut,
                                                                                           p_llrOut,
                                                                                           numLLR);
+  
+  /*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 //-----------------------------------------↑↑↑ R13 ↑↑↑----------------------------------------
 
@@ -756,13 +843,20 @@ void nrLDPC_llrPreProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                 int8_t CudaStreamIdx)
 {
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
-  int maxBlockSize = 1024; // Maximun threads are 960
-  dim3 gridDim(14); // 50
+  int maxBlockSize = CUDA_THREADS;//1024; // Maximun threads are 960
+  dim3 gridDim(CUDA_BLOCKS_R23); // 50
   dim3 blockDim(maxBlockSize);
 
   llrPreProc_Kernel_BG1_R23_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut, llr, llrProcBuf, cnProcBuf, Z);
   // printf("Check point 1001: ");
   // CHECK(cudaGetLastError());
+/*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 
 __global__ void cnProcKernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
@@ -845,8 +939,8 @@ void nrLDPC_cnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
-  int maxBlockSize = 1024; // Maximun threads are 1024
-  dim3 gridDim(14); // 50
+  int maxBlockSize = CUDA_THREADS; // Maximun threads are 1024
+  dim3 gridDim(CUDA_BLOCKS_R23); // 50
   dim3 blockDim(maxBlockSize);
 
   cnProcKernel_BG1_R23_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut,
@@ -857,6 +951,13 @@ void nrLDPC_cnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                          iter_ptr,
                                                                                          numMaxIter,
                                                                                          PC_Flag);
+  /*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 
 __global__ void bnProcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict__ d_bnProcBuf,
@@ -935,8 +1036,8 @@ void nrLDPC_bnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
   int8_t *p_llrProcBuf = (int8_t *)llrProcBuf;
   int8_t *p_llrRes = (int8_t *)llrRes;
 
-  int maxBlockSize = 1024; // Z;
-  int totalBlocks = 14;
+  int maxBlockSize = CUDA_THREADS; // Z;
+  int totalBlocks = CUDA_BLOCKS_R23;
 
   dim3 gridDim(totalBlocks);
   dim3 blockDim(maxBlockSize);
@@ -952,6 +1053,13 @@ void nrLDPC_bnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                          iter_ptr,
                                                                                          numMaxIter,
                                                                                          PC_Flag);
+  /*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 
 __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
@@ -1149,8 +1257,8 @@ void nrLDPC_BnToCnPC_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
 {
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
 
-  int maxBlockSize = 1024; // Maximun threads are 1024
-  dim3 gridDim(14); // only need 14 for R23
+  int maxBlockSize = CUDA_THREADS; // Maximun threads are 1024
+  dim3 gridDim(CUDA_BLOCKS_R23); // only need 14 for R23
   dim3 blockDim(maxBlockSize);
   // printf("bnProcBuf =  %p\n", bnProcBuf);
   // printf("In stream %d BC: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
@@ -1169,6 +1277,13 @@ void nrLDPC_BnToCnPC_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                             llrOut,
                                                                                             p_llrOut,
                                                                                             numLLR);
+  /*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 
 void nrLDPC_OutPut_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
@@ -1189,8 +1304,8 @@ void nrLDPC_OutPut_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
-  int maxBlockSize = 1024; // Maximun threads are 1024
-  dim3 gridDim(14); // only need 14 for R23
+  int maxBlockSize = CUDA_THREADS; // Maximun threads are 1024
+  dim3 gridDim(CUDA_BLOCKS_R23); // only need 14 for R23
   dim3 blockDim(maxBlockSize);
   // printf("bnProcBuf =  %p\n", bnProcBuf);
   // printf("In stream %d BC: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
@@ -1204,6 +1319,13 @@ void nrLDPC_OutPut_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                           llrOut,
                                                                                           p_llrOut,
                                                                                           numLLR);
+  /*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 
 //-----------------------------------------↑↑↑ R23 ↑↑↑----------------------------------------

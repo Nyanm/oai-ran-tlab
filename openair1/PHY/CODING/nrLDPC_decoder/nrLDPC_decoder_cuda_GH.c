@@ -58,7 +58,7 @@
 #include <cuda_runtime.h>
 #include "decoder_graphs.h"
 
-#define USE_STATIC_ALLOC
+//#define USE_STATIC_ALLOC
 static cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
 static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
 static bool streamsCreated = false;
@@ -135,11 +135,32 @@ extern int pageable, register_host;
     printf("h_lut->member = %p\n", (void*)h_lut->member);\
     memcpy(tmp_dev, h_lut->member, (count) * sizeof(type)); \
     printf("d_lut->member");\
-    printf(" = %p\n", (void*)d_lut->member);\
-    memcpy(&(d_lut->member), &tmp_dev, sizeof(type*)); \
+    printf(" = %p, tmp_dev %p\n", (void*)d_lut->member,tmp_dev);\
+    d_lut->member = tmp_dev; \
 } while(0)
 
 int numLLR_R13,numLLR_R23;
+
+void check_lut_pointers(const t_nrLDPC_lut* lut) {
+    if (!lut) {
+        printf("check_lut_pointers: lut is NULL\n");
+        return;
+    }
+
+    printf("Checking LUT pointers:\n");
+    printf("startAddrCnGroups       = %p\n", (void*)lut->startAddrCnGroups);
+    printf("numCnInCnGroups         = %p\n", (void*)lut->numCnInCnGroups);
+    printf("numBnInBnGroups         = %p\n", (void*)lut->numBnInBnGroups);
+    printf("startAddrBnGroups       = %p\n", (void*)lut->startAddrBnGroups);
+    printf("startAddrBnGroupsLlr    = %p\n", (void*)lut->startAddrBnGroupsLlr);
+    printf("llr2llrProcBufAddr      = %p\n", (void*)lut->llr2llrProcBufAddr);
+    printf("llr2llrProcBufBnPos     = %p\n", (void*)lut->llr2llrProcBufBnPos);
+
+    printf("circShift               = %p\n", (void*)lut->circShift);
+    printf("startAddrBnProcBuf       = %p\n", (void*)lut->startAddrBnProcBuf);
+    printf("bnPosBnProcBuf           = %p\n", (void*)lut->bnPosBnProcBuf);
+    printf("posBnInCnProcBuf         = %p\n", (void*)lut->posBnInCnProcBuf);
+}
 
 void copy_luts_to_pinned() {
     cudaError_t err;
@@ -185,6 +206,8 @@ void copy_luts_to_pinned() {
     COPY_ARR_MEMBER(startAddrBnProcBuf,uint32_t, 9);
     COPY_ARR_MEMBER(bnPosBnProcBuf,uint8_t, 9);
     COPY_ARR_MEMBER(posBnInCnProcBuf,uint8_t, 9);
+
+    //check_lut_pointers(d_lut);
 
     h_lut = h_lut_R23;
     d_lut = d_lut_R23;
@@ -516,10 +539,11 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
 #ifdef USE_STATIC_ALLOC
     int8_t* pp_llr = temp_in + CudaStreamIdx * 68 * 384 ;
+    int8_t* pp_out = temp_out + CudaStreamIdx * 8448; // use temp_out rather than p_out
 #else
     int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384 ;
+    int8_t* pp_out = p_out + CudaStreamIdx * 8448; // use temp_out rather than p_out
 #endif
-    int8_t* pp_out = temp_out + CudaStreamIdx * 8448; // use temp_out rather than p_out
     // printf("Stream %d: pp_out = %p\n", CudaStreamIdx, pp_out);
 
 #ifdef USE_STATIC_ALLOC
@@ -589,7 +613,9 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
  
   // cudaDeviceSynchronize();
   //printf("p_out %p, temp_out %p\n",p_out,temp_out);
+#ifdef USE_STATIC_ALLOC 
   memcpy(p_out, temp_out, n_segments /*MAX_NUM_DLSCH_SEGMENTS_DL*/ * 8448);
+#endif
   //dumpASS(p_out, "Dump_Output_Stream_GH_new.txt");
 
   return numMaxIter;
