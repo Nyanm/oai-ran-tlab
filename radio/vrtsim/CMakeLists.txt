@@ -26,6 +26,6 @@ if (OAI_VRTSIM_TAPS_CLIENT)
 
   add_library(taps_client taps_client.cpp ${TAPS_API_HEADER})
   target_include_directories(taps_client PUBLIC .)
-  find_package(Flatbuffers REQUIRED)
+  find_package(FlatBuffers REQUIRED)
   target_link_libraries(taps_client PUBLIC flatbuffers taps_api SIMU nanomsg)
 endif()
