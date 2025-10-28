@@ -98,14 +98,30 @@ IQChannelErrorType shm_td_iq_channel_tx(ShmTDIQChannel *channel,
  * @param timestamp The timestamp for which to get the RX IQ data slot.
  * @param num_samples The number of samples to read.
  * @param antenna The antenna index.
- * @param tx_iq_data pointer to the RX IQ data slot.
+ * @param rx_iq_data pointer to the RX IQ data.
  * @return CHANNEL_NO_ERROR if successful, error type otherwise
  */
 IQChannelErrorType shm_td_iq_channel_rx(ShmTDIQChannel *channel,
                                         uint64_t timestamp,
                                         uint64_t num_samples,
                                         int antenna,
-                                        sample_t *tx_iq_data);
+                                        sample_t *rx_iq_data);
+
+/**
+ * @brief Receive iq data from the channel, zero-copy interface
+ *
+ * @param channel The ShmTDIQChannel structure.
+ * @param timestamp The timestamp for which to get the RX IQ data slot.
+ * @param num_samples The number of samples to read.
+ * @param antenna The antenna index.
+ * @param rx_iq_data pointer to the RX IQ data slot.
+ * @return CHANNEL_NO_ERROR if successful, error type otherwise
+ */
+IQChannelErrorType shm_td_iq_channel_zc_rx(ShmTDIQChannel *channel,
+                                           uint64_t timestamp,
+                                           uint64_t num_samples,
+                                           int antenna,
+                                           sample_t **rx_iq_data);
 
 /**
  * @brief Advances the time in the channel by specified number of samples
@@ -166,5 +182,17 @@ void shm_td_iq_channel_destroy(ShmTDIQChannel *channel);
  * @return Current time as sample count since beginning of transmission
  */
 uint64_t shm_td_iq_channel_get_current_sample(const ShmTDIQChannel *channel);
+
+/**
+ * @brief Returns current sample written by the client
+ *
+ * @param channel The ShmTDIQChannel structure.
+ *
+ * @return Current time as sample count since beginning of transmission written by the client
+ */
+uint64_t shm_td_iq_channel_get_current_client_sample(const ShmTDIQChannel *channel);
+
+int shm_td_iq_channel_get_nb_antennas_tx(ShmTDIQChannel *channel);
+int shm_td_iq_channel_get_nb_antennas_rx(ShmTDIQChannel *channel);
 
 #endif

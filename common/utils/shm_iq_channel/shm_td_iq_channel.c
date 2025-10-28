@@ -62,6 +62,8 @@ typedef struct ShmTDIQChannel_s {
   char name[256];
   sample_t *tx_iq_data;
   sample_t *rx_iq_data;
+  int num_antennas_tx;
+  int num_antennas_rx;
   bool abort;
 } ShmTDIQChannel;
 
@@ -136,6 +138,8 @@ static void update_timestamp(sync_data_t *sync_data, uint64_t timestamp)
 
 ShmTDIQChannel *shm_td_iq_channel_create(const char *name, int num_tx_ant, int num_rx_ant, bool client_sync)
 {
+  AssertFatal(num_tx_ant > 0, "Number of TX antennas must be greater than 0\n");
+  AssertFatal(num_rx_ant > 0, "Number of RX antennas must be greater than 0\n");
   // Create shared memory segment
   int fd = shm_open(name, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
   AssertFatal(fd != -1, "shm_open failed: %s\n", strerror(errno));
@@ -159,6 +163,8 @@ ShmTDIQChannel *shm_td_iq_channel_create(const char *name, int num_tx_ant, int n
   strncpy(channel->name, name, sizeof(channel->name) - 1);
   channel->tx_iq_data = (sample_t *)(shm_ptr + 1);
   channel->rx_iq_data = channel->tx_iq_data + tx_buffer_size / sizeof(sample_t);
+  channel->num_antennas_tx = num_tx_ant;
+  channel->num_antennas_rx = num_rx_ant;
   channel->data = shm_ptr;
   channel->type = IQ_CHANNEL_TYPE_SERVER;
 
@@ -203,12 +209,24 @@ ShmTDIQChannel *shm_td_iq_channel_connect(const char *name, int timeout_in_secon
   size_t tx_buffer_size = (CIRCULAR_BUFFER_SIZE + BUFFER_PREFIX_SIZE) * sizeof(sample_t) * channel->data->num_antennas_tx;
   channel->tx_iq_data = channel->rx_iq_data + tx_buffer_size / sizeof(sample_t);
   channel->type = IQ_CHANNEL_TYPE_CLIENT;
+  channel->num_antennas_rx = shm_ptr->num_antennas_tx;
+  channel->num_antennas_tx = shm_ptr->num_antennas_rx;
   while (shm_ptr->magic != SHM_MAGIC_NUMBER) {
     printf("Waiting for server to initialize shared memory\n");
     sleep(1);
   }
   close(fd);
   return channel;
+}
+
+int shm_td_iq_channel_get_nb_antennas_tx(ShmTDIQChannel *channel)
+{
+  return channel->num_antennas_tx;
+}
+
+int shm_td_iq_channel_get_nb_antennas_rx(ShmTDIQChannel *channel)
+{
+  return channel->num_antennas_rx;
 }
 
 static sample_t *get_prefix_buffer_ptr(sample_t *base_ptr, int antenna)
@@ -227,6 +245,10 @@ IQChannelErrorType shm_td_iq_channel_tx(ShmTDIQChannel *channel,
                                         int antenna,
                                         const sample_t *tx_iq_data)
 {
+  AssertFatal(antenna < channel->num_antennas_tx,
+              "Antenna index %d out of range (num antennas: %d)\n",
+              antenna,
+              channel->num_antennas_tx);
   ShmTDIQChannelData *data = channel->data;
   // timestamp in the past
   uint64_t current_time = data->sync_data.timestamp;
@@ -272,8 +294,12 @@ IQChannelErrorType shm_td_iq_channel_rx(ShmTDIQChannel *channel,
                                         uint64_t timestamp,
                                         uint64_t num_samples,
                                         int antenna,
-                                        sample_t *tx_iq_data)
+                                        sample_t *rx_iq_data)
 {
+  AssertFatal(antenna < channel->num_antennas_rx,
+              "Antenna index %d out of range (num antennas: %d)\n",
+              antenna,
+              channel->num_antennas_rx);
   ShmTDIQChannelData *data = channel->data;
   // timestamp in the future
   uint64_t current_time = data->sync_data.timestamp;
@@ -291,10 +317,10 @@ IQChannelErrorType shm_td_iq_channel_rx(ShmTDIQChannel *channel,
   uint64_t last_sample = first_sample + num_samples - 1;
   if (last_sample >= CIRCULAR_BUFFER_SIZE) {
     size_t num_samples_first_copy = CIRCULAR_BUFFER_SIZE - first_sample;
-    memcpy(tx_iq_data, base_ptr + first_sample, num_samples_first_copy * sizeof(sample_t));
-    memcpy(tx_iq_data + num_samples_first_copy, base_ptr, (num_samples - num_samples_first_copy) * sizeof(sample_t));
+    memcpy(rx_iq_data, base_ptr + first_sample, num_samples_first_copy * sizeof(sample_t));
+    memcpy(rx_iq_data + num_samples_first_copy, base_ptr, (num_samples - num_samples_first_copy) * sizeof(sample_t));
   } else {
-    memcpy(tx_iq_data, base_ptr + first_sample, num_samples * sizeof(sample_t));
+    memcpy(rx_iq_data, base_ptr + first_sample, num_samples * sizeof(sample_t));
   }
   return CHANNEL_NO_ERROR;
 }
@@ -309,6 +335,10 @@ IQChannelErrorType shm_td_iq_channel_zc_rx(ShmTDIQChannel *channel,
               "Number of samples %lu exceeds buffer prefix size %d for zero-copy RX\n",
               num_samples,
               BUFFER_PREFIX_SIZE);
+  AssertFatal(antenna < channel->num_antennas_rx,
+              "Antenna index %d out of range (num antennas: %d)\n",
+              antenna,
+              channel->num_antennas_rx);
   ShmTDIQChannelData *data = channel->data;
   // timestamp in the future
   uint64_t current_time = data->client_sync_data.timestamp;
@@ -376,6 +406,12 @@ uint64_t shm_td_iq_channel_get_current_sample(const ShmTDIQChannel *channel)
 {
   ShmTDIQChannelData *data = channel->data;
   return data->sync_data.timestamp;
+}
+
+uint64_t shm_td_iq_channel_get_current_client_sample(const ShmTDIQChannel *channel)
+{
+  ShmTDIQChannelData *data = channel->data;
+  return data->client_sync_data.timestamp;
 }
 
 void shm_td_iq_channel_abort(ShmTDIQChannel *channel)
