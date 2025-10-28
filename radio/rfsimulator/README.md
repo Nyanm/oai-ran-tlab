@@ -209,3 +209,42 @@ to reduce the amount of transported samples:
 A possible, unimplemented optimization would be to compress samples.
 
 You can further [tune your machine](../../doc/tuning_and_security.md)
+
+# Beam simulation
+
+RFsimulator supports beam domain simulation.
+
+## Configuration
+
+Several new CLI parameters were added
+
+* `--rfsimulator.enable_beams` : enable beam domain simulation. Should match on server and all clients.
+* `--rfsimulator.beam_gains <comma separated list>` : Set the beam gain matrix. The beam gain matrix
+  will be constructed using the list as first row and projecting them onto diagonals.
+ 
+ Example list: `0,-2,-3`
+ Resulting matrix:
+ ```
+ [[0,-2,-3],
+  [-2,0,-2],
+  [-3,-2,0]]
+ ```
+
+ The beam gain matrix will be used during beam combining. RX beam selects the row and TX beam selects column.
+ Using the example above, if gNB is receiving in beam 1 but the UE is transmitting in beam 1, an additional
+ 2 dB pathloss will be applied on top of the pathloss from the channel model (if present).
+
+* `--rfsimulator.beam_map <beam_map>` : where `<beam_map>` is a `uint64_t` value where each bit is an enabled TX/RX beam.
+   For gNB: Initial beam_map, i.e. which beams gNB transmits/receives before calling beam APIs.
+   For UE: Beam position in beam space in the simulation. The UE is not expected to use the beam APIs for now.
+   Its position is controlled via this command line parameter or telnet command
+
+## Moving the UE in beam space
+
+Use telnet command `rfsimu setbeams <beam_map>`. It works similar to the CLI command `--rfsimulator.beam_map <beam_map>`.
+Suggest to onyl use single bits here
+
+### Modifying the gNB beam
+
+It is possible to test the beam domain simulation without implementing the beam APIs. The same telnet command can be used
+to modify the tx/rx beam of the gNB. The gNB does not need to be beam-aware and use the new APIs. 
