@@ -74,24 +74,24 @@ FILE *fdavx2,*fdavx2b;
 
 
 
-typedef int16_t llr_t; // internal decoder LLR data is 16-bit fixed
+typedef int16_t llr16_t; // internal decoder LLR data is 16-bit fixed
 typedef int16_t channel_t;
 #define MAX 256
 
-void log_map16avx2(llr_t* systematic,channel_t* y_parity, llr_t* m11, llr_t* m10, llr_t *alpha, llr_t *beta, llr_t* ext,uint16_t frame_length,unsigned char term_flag,unsigned char F,int offset8_flag,time_stats_t *alpha_stats,time_stats_t *beta_stats,time_stats_t *gamma_stats,time_stats_t *ext_stats);
-void compute_gamma16avx2(llr_t* m11,llr_t* m10,llr_t* systematic, channel_t* y_parity, uint16_t frame_length,unsigned char term_flag);
-void compute_alpha16avx2(llr_t*alpha,llr_t *beta, llr_t* m11,llr_t* m10, uint16_t frame_length,unsigned char F);
-void compute_beta16avx2(llr_t*alpha, llr_t* beta,llr_t* m11,llr_t* m10, uint16_t frame_length,unsigned char F,int offset8_flag);
-void compute_ext16avx2(llr_t* alpha,llr_t* beta,llr_t* m11,llr_t* m10,llr_t* extrinsic, llr_t* ap, uint16_t frame_length);
+void log_map16avx2(llr16_t* systematic,channel_t* y_parity, llr16_t* m11, llr16_t* m10, llr16_t *alpha, llr16_t *beta, llr16_t* ext,uint16_t frame_length,unsigned char term_flag,unsigned char F,int offset8_flag,time_stats_t *alpha_stats,time_stats_t *beta_stats,time_stats_t *gamma_stats,time_stats_t *ext_stats);
+void compute_gamma16avx2(llr16_t* m11,llr16_t* m10,llr16_t* systematic, channel_t* y_parity, uint16_t frame_length,unsigned char term_flag);
+void compute_alpha16avx2(llr16_t*alpha,llr16_t *beta, llr16_t* m11,llr16_t* m10, uint16_t frame_length,unsigned char F);
+void compute_beta16avx2(llr16_t*alpha, llr16_t* beta,llr16_t* m11,llr16_t* m10, uint16_t frame_length,unsigned char F,int offset8_flag);
+void compute_ext16avx2(llr16_t* alpha,llr16_t* beta,llr16_t* m11,llr16_t* m10,llr16_t* extrinsic, llr16_t* ap, uint16_t frame_length);
 
 
-void log_map16avx2(llr_t* systematic,
+void log_map16avx2(llr16_t* systematic,
 		   channel_t* y_parity,
-		   llr_t* m11,
-		   llr_t* m10,
-		   llr_t *alpha,
-		   llr_t *beta,
-		   llr_t* ext,
+		   llr16_t* m11,
+		   llr16_t* m10,
+		   llr16_t *alpha,
+		   llr16_t *beta,
+		   llr16_t* ext,
 		   uint16_t frame_length,
 		   unsigned char term_flag,
 		   unsigned char F,
@@ -123,7 +123,7 @@ void log_map16avx2(llr_t* systematic,
 
 }
 
-void compute_gamma16avx2(llr_t* m11,llr_t* m10,llr_t* systematic,channel_t* y_parity,
+void compute_gamma16avx2(llr16_t* m11,llr16_t* m10,llr16_t* systematic,channel_t* y_parity,
                      uint16_t frame_length,unsigned char term_flag)
 {
   int k,K1;
@@ -169,7 +169,7 @@ void compute_gamma16avx2(llr_t* m11,llr_t* m10,llr_t* systematic,channel_t* y_pa
 
 #define L 40
 
-void compute_alpha16avx2(llr_t* alpha,llr_t* beta,llr_t* m_11,llr_t* m_10,uint16_t frame_length,unsigned char F)
+void compute_alpha16avx2(llr16_t* alpha,llr16_t* beta,llr16_t* m_11,llr16_t* m_10,uint16_t frame_length,unsigned char F)
 {
   int k,l,l2,K1,rerun_flag=0;
 
@@ -381,7 +381,7 @@ void compute_alpha16avx2(llr_t* alpha,llr_t* beta,llr_t* m_11,llr_t* m_10,uint16
 }
 
 
-void compute_beta16avx2(llr_t* alpha,llr_t* beta,llr_t *m_11,llr_t* m_10,uint16_t frame_length,unsigned char F,int offset8_flag)
+void compute_beta16avx2(llr16_t* alpha,llr16_t* beta,llr16_t *m_11,llr16_t* m_10,uint16_t frame_length,unsigned char F,int offset8_flag)
 {
 
   int k,rerun_flag=0;
@@ -394,10 +394,10 @@ void compute_beta16avx2(llr_t* alpha,llr_t* beta,llr_t *m_11,llr_t* m_10,uint16_
   __m256i *beta128,*alpha128,*beta_ptr;
   __m256i beta_max;
 
-  llr_t m11,m10,beta0_16,beta1_16,beta2_16,beta3_16,beta4_16,beta5_16,beta6_16,beta7_16,beta0_2,beta1_2,beta2_2,beta3_2,beta_m;
-  llr_t m11_cw2,m10_cw2,beta0_cw2_16,beta1_cw2_16,beta2_cw2_16,beta3_cw2_16,beta4_cw2_16,beta5_cw2_16,beta6_cw2_16,beta7_cw2_16,beta0_2_cw2,beta1_2_cw2,beta2_2_cw2,beta3_2_cw2,beta_m_cw2;
-  llr_t beta0,beta1;
-  llr_t beta0_cw2,beta1_cw2;
+  llr16_t m11,m10,beta0_16,beta1_16,beta2_16,beta3_16,beta4_16,beta5_16,beta6_16,beta7_16,beta0_2,beta1_2,beta2_2,beta3_2,beta_m;
+  llr16_t m11_cw2,m10_cw2,beta0_cw2_16,beta1_cw2_16,beta2_cw2_16,beta3_cw2_16,beta4_cw2_16,beta5_cw2_16,beta6_cw2_16,beta7_cw2_16,beta0_2_cw2,beta1_2_cw2,beta2_2_cw2,beta3_2_cw2,beta_m_cw2;
+  llr16_t beta0,beta1;
+  llr16_t beta0_cw2,beta1_cw2;
 
   unsigned long long timein,timeout;
 
@@ -687,7 +687,7 @@ void compute_beta16avx2(llr_t* alpha,llr_t* beta,llr_t *m_11,llr_t* m_10,uint16_
   }
 }
 
-void compute_ext16avx2(llr_t* alpha,llr_t* beta,llr_t* m_11,llr_t* m_10,llr_t* ext, llr_t* systematic,uint16_t frame_length)
+void compute_ext16avx2(llr16_t* alpha,llr16_t* beta,llr16_t* m_11,llr16_t* m_10,llr16_t* ext, llr16_t* systematic,uint16_t frame_length)
 {
 
   __m256i *alpha128=(__m256i *)alpha;
@@ -909,23 +909,23 @@ unsigned char phy_threegpplte_turbo_decoder16avx2(int16_t *y,
       n is the size in bits of the coded block, with the tail */
 
 
-  llr_t systematic0[2*(n+16)] __attribute__ ((aligned(32)));
-  llr_t systematic1[2*(n+16)] __attribute__ ((aligned(32)));
-  llr_t systematic2[2*(n+16)] __attribute__ ((aligned(32)));
-  llr_t yparity1[2*(n+16)] __attribute__ ((aligned(32)));
-  llr_t yparity2[2*(n+16)] __attribute__ ((aligned(32)));
+  llr16_t systematic0[2*(n+16)] __attribute__ ((aligned(32)));
+  llr16_t systematic1[2*(n+16)] __attribute__ ((aligned(32)));
+  llr16_t systematic2[2*(n+16)] __attribute__ ((aligned(32)));
+  llr16_t yparity1[2*(n+16)] __attribute__ ((aligned(32)));
+  llr16_t yparity2[2*(n+16)] __attribute__ ((aligned(32)));
 
-  llr_t ext[2*(n+128)] __attribute__((aligned(32)));
-  llr_t ext2[2*(n+128)] __attribute__((aligned(32)));
+  llr16_t ext[2*(n+128)] __attribute__((aligned(32)));
+  llr16_t ext2[2*(n+128)] __attribute__((aligned(32)));
 
-  llr_t alpha[(n+16)*16] __attribute__ ((aligned(32)));
-  llr_t beta[(n+16)*16] __attribute__ ((aligned(32)));
-  llr_t m11[2*(n+16)] __attribute__ ((aligned(32)));
-  llr_t m10[2*(n+16)] __attribute__ ((aligned(32)));
+  llr16_t alpha[(n+16)*16] __attribute__ ((aligned(32)));
+  llr16_t beta[(n+16)*16] __attribute__ ((aligned(32)));
+  llr16_t m11[2*(n+16)] __attribute__ ((aligned(32)));
+  llr16_t m10[2*(n+16)] __attribute__ ((aligned(32)));
 
 
   int *pi2_p,*pi4_p,*pi5_p,*pi6_p;
-  llr_t *s,*s1,*s2,*yp1,*yp2,*yp,*yp_cw2;
+  llr16_t *s,*s1,*s2,*yp1,*yp2,*yp,*yp_cw2;
   uint32_t i,j,iind;//,pi;
   uint8_t iteration_cnt=0;
   uint32_t crc,oldcrc,crc_cw2,oldcrc_cw2,crc_len;
@@ -1112,8 +1112,8 @@ unsigned char phy_threegpplte_turbo_decoder16avx2(int16_t *y,
     yp128_cw2+=3;
 
   }
-  yp=(llr_t*)yp128;
-  yp_cw2=(llr_t*)yp128_cw2;
+  yp=(llr16_t*)yp128;
+  yp_cw2=(llr16_t*)yp128_cw2;
 #else
   
   pi2_p    = &pi2tab16avx2[iind][0];
@@ -1125,8 +1125,8 @@ unsigned char phy_threegpplte_turbo_decoder16avx2(int16_t *y,
     yp2[*pi2_p]   = y[j];
     yp2[(*pi2_p++)+8] = y2[j++];
   }    
-  yp=(llr_t*)&y[j];
-  yp_cw2=(llr_t*)&y2[j];
+  yp=(llr16_t*)&y[j];
+  yp_cw2=(llr16_t*)&y2[j];
 #endif
 
 
@@ -1256,22 +1256,22 @@ unsigned char phy_threegpplte_turbo_decoder16avx2(int16_t *y,
 
       for (i=0; i<(n>>3); i++) {
 
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[*pi6_p],7);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[8+*pi6_p++],15);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[*pi6_p],6);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[8+*pi6_p++],14);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[*pi6_p],5);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[8+*pi6_p++],13);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[*pi6_p],4);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[8+*pi6_p++],12);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[*pi6_p],3);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[8+*pi6_p++],11);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[*pi6_p],2);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[8+*pi6_p++],10);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[*pi6_p],1);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[8+*pi6_p++],9);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[*pi6_p],0);
-        tmp=_mm256_insert_epi16(tmp, ((llr_t*)ext2)[8+*pi6_p++],8);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[*pi6_p],7);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[8+*pi6_p++],15);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[*pi6_p],6);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[8+*pi6_p++],14);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[*pi6_p],5);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[8+*pi6_p++],13);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[*pi6_p],4);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[8+*pi6_p++],12);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[*pi6_p],3);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[8+*pi6_p++],11);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[*pi6_p],2);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[8+*pi6_p++],10);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[*pi6_p],1);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[8+*pi6_p++],9);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[*pi6_p],0);
+        tmp=_mm256_insert_epi16(tmp, ((llr16_t*)ext2)[8+*pi6_p++],8);
 #ifdef DEBUG_LOGMAP
 	print_shorts("tmp",(int16_t*)&tmp);
 #endif

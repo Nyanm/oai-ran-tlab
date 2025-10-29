@@ -80,17 +80,17 @@
 
 
 
-typedef int8_t llr_t; // internal decoder LLR data is 8-bit fixed
+typedef int8_t llr8_t; // internal decoder LLR data is 8-bit fixed
 typedef int8_t channel_t;
 #define MAX8 127
 
 
-void log_map8(llr_t* systematic,channel_t* y_parity, llr_t* m11, llr_t* m10, llr_t *alpha, llr_t *beta, llr_t* ext,unsigned short frame_length,unsigned char term_flag,unsigned char F,int offset8_flag,
+void log_map8(llr8_t* systematic,channel_t* y_parity, llr8_t* m11, llr8_t* m10, llr8_t *alpha, llr8_t *beta, llr8_t* ext,unsigned short frame_length,unsigned char term_flag,unsigned char F,int offset8_flag,
               time_stats_t *alpha_stats,time_stats_t *beta_stats,time_stats_t *gamma_stats,time_stats_t *ext_stats);
-void compute_gamma8(llr_t* m11,llr_t* m10,llr_t* systematic, channel_t* y_parity, unsigned short frame_length,unsigned char term_flag);
-void compute_alpha8(llr_t*alpha,llr_t *beta, llr_t* m11,llr_t* m10, unsigned short frame_length,unsigned char F);
-void compute_beta8(llr_t*alpha, llr_t* beta,llr_t* m11,llr_t* m10, unsigned short frame_length,unsigned char F,int offset8_flag);
-void compute_ext8(llr_t* alpha,llr_t* beta,llr_t* m11,llr_t* m10,llr_t* extrinsic, llr_t* ap, unsigned short frame_length);
+void compute_gamma8(llr8_t* m11,llr8_t* m10,llr8_t* systematic, channel_t* y_parity, unsigned short frame_length,unsigned char term_flag);
+void compute_alpha8(llr8_t*alpha,llr8_t *beta, llr8_t* m11,llr8_t* m10, unsigned short frame_length,unsigned char F);
+void compute_beta8(llr8_t*alpha, llr8_t* beta,llr8_t* m11,llr8_t* m10, unsigned short frame_length,unsigned char F,int offset8_flag);
+void compute_ext8(llr8_t* alpha,llr8_t* beta,llr8_t* m11,llr8_t* m10,llr8_t* extrinsic, llr8_t* ap, unsigned short frame_length);
 
 
 void print_bytes(char *s, int8_t *x)
@@ -104,13 +104,13 @@ void print_bytes(char *s, int8_t *x)
 }
 
 
-void log_map8(llr_t* systematic,
+void log_map8(llr8_t* systematic,
               channel_t* y_parity,
-              llr_t* m11,
-              llr_t* m10,
-              llr_t *alpha,
-              llr_t *beta,
-              llr_t* ext,
+              llr8_t* m11,
+              llr8_t* m10,
+              llr8_t *alpha,
+              llr8_t *beta,
+              llr8_t* ext,
               unsigned short frame_length,
               unsigned char term_flag,
               unsigned char F,
@@ -141,7 +141,7 @@ void log_map8(llr_t* systematic,
 
 }
 
-void compute_gamma8(llr_t* m11,llr_t* m10,llr_t* systematic,channel_t* y_parity,
+void compute_gamma8(llr8_t* m11,llr8_t* m10,llr8_t* systematic,channel_t* y_parity,
                     unsigned short frame_length,unsigned char term_flag)
 {
   int k,K1;
@@ -203,7 +203,7 @@ void compute_gamma8(llr_t* m11,llr_t* m10,llr_t* systematic,channel_t* y_parity,
 
 #define L 16
 
-void compute_alpha8(llr_t* alpha,llr_t* beta,llr_t* m_11,llr_t* m_10,unsigned short frame_length,unsigned char F)
+void compute_alpha8(llr8_t* alpha,llr8_t* beta,llr8_t* m_11,llr8_t* m_10,unsigned short frame_length,unsigned char F)
 {
   int k,loopval,rerun_flag;
 
@@ -402,7 +402,7 @@ void compute_alpha8(llr_t* alpha,llr_t* beta,llr_t* m_11,llr_t* m_10,unsigned sh
 }
 
 
-void compute_beta8(llr_t* alpha,llr_t* beta,llr_t *m_11,llr_t* m_10,unsigned short frame_length,unsigned char F,int offset8_flag)
+void compute_beta8(llr8_t* alpha,llr8_t* beta,llr8_t *m_11,llr8_t* m_10,unsigned short frame_length,unsigned char F,int offset8_flag)
 {
 
   int k,rerun_flag, loopval;
@@ -421,9 +421,9 @@ void compute_beta8(llr_t* alpha,llr_t* beta,llr_t *m_11,llr_t* m_10,unsigned sho
   int8x16_t *beta128,*alpha128,*beta_ptr;
   int8x16_t beta_max;
 #endif
-  llr_t beta0,beta1;
+  llr8_t beta0,beta1;
 
-  llr_t beta2,beta3,beta4,beta5,beta6,beta7;
+  llr8_t beta2,beta3,beta4,beta5,beta6,beta7;
 
 
 #if 0
@@ -679,7 +679,7 @@ void compute_beta8(llr_t* alpha,llr_t* beta,llr_t *m_11,llr_t* m_10,unsigned sho
   }
 }
 
-void compute_ext8(llr_t* alpha,llr_t* beta,llr_t* m_11,llr_t* m_10,llr_t* ext, llr_t* systematic,unsigned short frame_length)
+void compute_ext8(llr8_t* alpha,llr8_t* beta,llr8_t* m_11,llr8_t* m_10,llr8_t* ext, llr8_t* systematic,unsigned short frame_length)
 {
 
 #if defined(__x86_64__) || defined(__i386__)
@@ -914,27 +914,27 @@ unsigned char phy_threegpplte_turbo_decoder8(short *y,
 
   int n2;
 
-  llr_t y8[3*(n+16)] __attribute__((aligned(16)));
+  llr8_t y8[3*(n+16)] __attribute__((aligned(16)));
 
 
-  llr_t systematic0[n+16] __attribute__ ((aligned(16)));
-  llr_t systematic1[n+16] __attribute__ ((aligned(16)));
-  llr_t systematic2[n+16] __attribute__ ((aligned(16)));
-  llr_t yparity1[n+16] __attribute__ ((aligned(16)));
-  llr_t yparity2[n+16] __attribute__ ((aligned(16)));
+  llr8_t systematic0[n+16] __attribute__ ((aligned(16)));
+  llr8_t systematic1[n+16] __attribute__ ((aligned(16)));
+  llr8_t systematic2[n+16] __attribute__ ((aligned(16)));
+  llr8_t yparity1[n+16] __attribute__ ((aligned(16)));
+  llr8_t yparity2[n+16] __attribute__ ((aligned(16)));
 
-  llr_t ext[n+128] __attribute__((aligned(16)));
-  llr_t ext2[n+128] __attribute__((aligned(16)));
+  llr8_t ext[n+128] __attribute__((aligned(16)));
+  llr8_t ext2[n+128] __attribute__((aligned(16)));
 
-  llr_t alpha[(n+16)*8] __attribute__ ((aligned(16)));
-  llr_t beta[(n+16)*8] __attribute__ ((aligned(16)));
-  llr_t m11[n+16] __attribute__ ((aligned(16)));
-  llr_t m10[n+16] __attribute__ ((aligned(16)));
+  llr8_t alpha[(n+16)*8] __attribute__ ((aligned(16)));
+  llr8_t beta[(n+16)*8] __attribute__ ((aligned(16)));
+  llr8_t m11[n+16] __attribute__ ((aligned(16)));
+  llr8_t m10[n+16] __attribute__ ((aligned(16)));
 
 
   //  int *pi2_p,*pi4_p,*pi5_p,*pi6_p;
   int *pi4_p,*pi5_p,*pi6_p;
-  llr_t *s,*s1,*s2,*yp1,*yp2,*yp;
+  llr8_t *s,*s1,*s2,*yp1,*yp2,*yp;
 
   unsigned int i,j,iind;//,pi;
   unsigned char iteration_cnt=0;
@@ -1282,7 +1282,7 @@ unsigned char phy_threegpplte_turbo_decoder8(short *y,
 
 #endif
 
-  yp=(llr_t*)yp128;
+  yp=(llr8_t*)yp128;
 
   if (n2>n) {
     /*
@@ -1292,7 +1292,7 @@ unsigned char phy_threegpplte_turbo_decoder8(short *y,
     s1[n+4]=0;s1[n+5]=0;s1[n+6]=0;s1[n+7]=0;
     s2[n]=0;s2[n+1]=0;s2[n+2]=0;s2[n+3]=0;
     s2[n+4]=0;s2[n+5]=0;s2[n+6]=0;s2[n+7]=0;*/
-    yp=(llr_t*)(y8+n);
+    yp=(llr8_t*)(y8+n);
   }
 
   //  printf("n=%d,n2=%d\n",n,n2);
@@ -1343,39 +1343,39 @@ unsigned char phy_threegpplte_turbo_decoder8(short *y,
 
     for (i=0; i<(n2>>4); i++) { // steady-state portion
 #if defined(__x86_64__) || defined(__i386__)
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],0);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],1);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],2);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],3);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],4);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],5);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],6);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],7);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],8);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],9);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],10);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],11);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],12);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],13);
-      tmp=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],14);
-      ((__m128i *)systematic2)[i]=_mm_insert_epi8(tmp,((llr_t*)ext)[*pi4_p++],15);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],0);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],1);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],2);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],3);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],4);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],5);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],6);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],7);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],8);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],9);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],10);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],11);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],12);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],13);
+      tmp=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],14);
+      ((__m128i *)systematic2)[i]=_mm_insert_epi8(tmp,((llr8_t*)ext)[*pi4_p++],15);
 #elif defined(__arm__)
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,0);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,1);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,2);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,3);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,4);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,5);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,6);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,7);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,8);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,9);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,10);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,11);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,12);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,13);
-      tmp=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,14);
-      ((int8x16_t *)systematic2)[i]=vsetq_lane_s8(((llr_t*)ext)[*pi4_p++],tmp,15);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,0);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,1);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,2);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,3);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,4);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,5);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,6);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,7);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,8);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,9);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,10);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,11);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,12);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,13);
+      tmp=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,14);
+      ((int8x16_t *)systematic2)[i]=vsetq_lane_s8(((llr8_t*)ext)[*pi4_p++],tmp,15);
 #endif
     }
 
@@ -1540,41 +1540,41 @@ unsigned char phy_threegpplte_turbo_decoder8(short *y,
 
         for (i=0; i<(n2>>4); i++) {
 #if defined(__x86_64__) || defined(__i386__)
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],7);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],6);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],5);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],4);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],3);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],2);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],1);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],0);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],15);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],14);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],13);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],12);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],11);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],10);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],9);
-          tmp=_mm_insert_epi8(tmp, ((llr_t *)tmp128)[*pi6_p++],8);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],7);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],6);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],5);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],4);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],3);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],2);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],1);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],0);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],15);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],14);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],13);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],12);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],11);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],10);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],9);
+          tmp=_mm_insert_epi8(tmp, ((llr8_t *)tmp128)[*pi6_p++],8);
           tmp=_mm_cmpgt_epi8(tmp,zeros);
           ((uint16_t *)decoded_bytes)[i]=(uint16_t)_mm_movemask_epi8(tmp);
 #elif defined(__arm__)
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,7);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,6);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,5);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,4);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,3);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,2);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,1);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,0);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,15);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,14);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,13);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,12);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,11);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,10);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,9);
-          tmp=vsetq_lane_s8(((llr_t *)tmp128)[*pi6_p++],tmp,8);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,7);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,6);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,5);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,4);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,3);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,2);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,1);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,0);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,15);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,14);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,13);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,12);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,11);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,10);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,9);
+          tmp=vsetq_lane_s8(((llr8_t *)tmp128)[*pi6_p++],tmp,8);
 	  uint64x2_t Mask= vpaddlq_u32(vpaddlq_u16(vpaddlq_u8(vandq_u8(vcgtq_s8(tmp,zeros), Powers))));
 	  vst1q_lane_u8(&((uint8_t*)&decoded_bytes[i])[0], (uint8x16_t)Mask, 0);
 	  vst1q_lane_u8(&((uint8_t*)&decoded_bytes[i])[1], (uint8x16_t)Mask, 8);

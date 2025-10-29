@@ -120,7 +120,8 @@
 
 
 typedef char Binary;
-typedef short llr_t; // internal decoder data is 16-bit fixed
+// Change llr_t from 16-bit to 32-bit to fix decoding issues in the scalar Turbo Decoder
+typedef int32_t llr_t;
 typedef short channel_t;
 
 #define LLR_MAX 32767

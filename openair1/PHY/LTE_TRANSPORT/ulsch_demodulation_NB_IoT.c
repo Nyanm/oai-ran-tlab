@@ -1516,6 +1516,7 @@ void  turbo_decoding_NB_IoT(PHY_VARS_eNB           *eNB,
 {  
           NB_IoT_UL_eNB_HARQ_t    *ulsch_harq       = ulsch_NB_IoT->harq_process;
 
+
           int            r = 0, Kr = 0;
           unsigned int   r_offset=0,Kr_bytes,iind=0;
           uint8_t        crc_type;
@@ -1609,6 +1610,7 @@ void  turbo_decoding_NB_IoT(PHY_VARS_eNB           *eNB,
 
 //***************************Scalar Turbo Decoder ******************
 
+// Declaración del buffer temporal de 32 bits
               unsigned char inst = 0;
  
               ret = tc(&ulsch_harq->d[r][96],
