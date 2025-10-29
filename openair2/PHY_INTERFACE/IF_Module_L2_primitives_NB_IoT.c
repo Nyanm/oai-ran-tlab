@@ -168,7 +168,7 @@ void UL_indication_NB_IoT(UL_IND_NB_IoT_t *UL_INFO)
           ue_info->direction=0;
         }else
         {
-          LOG_I(MAC,"This UE get the response of HARQ DL : ACK\n");
+          LOG_I(MAC,"This UE get the response of HARQ DL : NACK\n");
           ue_info->direction=-1;
           //ue_info->ul_total_buffer = 11;
           UE_state_machine = rach_for_auth_rsp;

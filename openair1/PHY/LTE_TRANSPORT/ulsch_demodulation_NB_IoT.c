@@ -1829,7 +1829,7 @@ void decode_NPUSCH_msg_NB_IoT(PHY_VARS_eNB        *eNB,
 
                   //fill_crc_indication_NB_IoT(eNB,0,rx_frame,rx_subframe,0);                              // indicate NAK to MAC
                   fill_rx_indication_NB_IoT(eNB,proc,npusch_format,0);
-                  LOG_D(PHY,"  decoded ACK of DL Data (include MSG4)  \n"); 
+                  LOG_D(PHY,"  decoded NACK of DL Data (include MSG4)  \n"); 
 
             } else  {  //when equality (8 bits 0 vs 8 bits 1), soft decision
            
