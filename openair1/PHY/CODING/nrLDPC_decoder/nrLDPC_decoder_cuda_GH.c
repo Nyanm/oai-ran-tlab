@@ -69,11 +69,13 @@ static int8_t bnProcBufRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF]
 static int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrOut[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
-static int8_t temp_out[MAX_NUM_DLSCH_SEGMENTS_DL * 8448] __attribute__((aligned(64))) = {0};
+static int8_t temp_out[MAX_NUM_DLSCH_SEGMENTS_DL * 8448] __attribute__((aligned(64)));
+static int8_t temp_in[MAX_NUM_DLSCH_SEGMENTS_DL * 68 * 384] __attribute__((aligned(64)));
 
 extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    int8_t* p_out,
                                                    uint32_t numLLR,
+                                                   int8_t* llr,
                                                    int8_t* cnProcBuf,
                                                    int8_t* cnProcBufRes,
                                                    int8_t* bnProcBuf,
@@ -94,7 +96,7 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    int* PC_Flag);
 
 //--------------------------------------------------------------
-/*debug function
+//debug function
 void dumpASS(int8_t* cnProcBufRes, const char* filename)
 {
   FILE* fp = fopen(filename, "w");
@@ -112,7 +114,7 @@ void dumpASS(int8_t* cnProcBufRes, const char* filename)
 
   fclose(fp);
 }
-  */
+  
 //--------------------------------------------------------------
 
 static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
@@ -235,12 +237,15 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            decode_abort_t* ab)
 {
   // printf("n_segments = %d\n", n_segments);
-  memset(temp_out, 0, n_segments * 8448);
+
+   /* = {0};*/
+  memcpy(temp_in , p_llr ,  n_segments * 68 * 384);
+  memset(temp_out, 0     ,  n_segments * 8448);
 
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
   uint8_t R = p_decParams->R; // Decoding rate: Format 15,13,... for code rates 1/5, 1/3,... */
-  uint8_t numMaxIter = p_decParams->numMaxIter;
+  uint8_t numMaxIter = p_decParams->numMaxIter ;// To match the actual iterations
   e_nrLDPC_outMode outMode = p_decParams->outMode;
   int Kprime = p_decParams->Kprime;
 
@@ -282,10 +287,13 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   }
 
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
-    int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384;
+    int8_t* pp_llr = temp_in + CudaStreamIdx * 68 * 384 ;
+    int8_t* pp_out = temp_out + CudaStreamIdx * 8448; // use temp_out rather than p_out
     // printf("Stream %d: pp_out = %p\n", CudaStreamIdx, pp_out);
     int8_t* pp_cnProcBuf = cnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     int8_t* pp_llrProcBuf = llrProcBuf + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
+    int8_t* pp_llrOut = llrOut + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
+
     nrLDPC_llr2llrProcBuf(p_lut, pp_llr, pp_llrProcBuf, Z, BG);
     nrLDPC_llr2CnProcBuf_BG1(p_lut, pp_llr, pp_cnProcBuf, Z);
   }
@@ -294,6 +302,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     int PackShiftIdx = segmentPacks[SegPackIdx].startSeg;
 
     int8_t* perpack_llr = p_llr + PackShiftIdx * 68 * 384;
+    int8_t* perpack_cnProcBuf = cnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
+    int8_t* pp_llrProcBuf = llrProcBuf + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_cnProcBuf = cnProcBuf + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     int8_t* perpack_llrProcBuf = llrProcBuf + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_bnProcBuf = bnProcBuf + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
@@ -309,14 +319,14 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     nrLDPC_decoder_scheduler_BG1_cuda_core(p_lut,
                                            perpack_out,
                                            numLLR,
-                                           perpack_cnProcBuf,
-                                           perpack_cnProcBufRes,
-                                           perpack_bnProcBuf,
-                                           perpack_bnProcBufRes,
-                                           perpack_llrRes,
-                                           perpack_llrProcBuf,
-                                           perpack_llrOut,
-                                           perpack_p_llrOut,
+                                           pp_cnProcBuf,
+                                           pp_cnProcBufRes,
+                                           pp_bnProcBuf,
+                                           pp_bnProcBufRes,
+                                           pp_llrRes,
+                                           pp_llrProcBuf,
+                                           pp_llrOut,
+                                           pp_p_llrOut,
                                            Z,
                                            BG,
                                            R,

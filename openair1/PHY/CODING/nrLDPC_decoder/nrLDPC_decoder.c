@@ -262,7 +262,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
   uint8_t R = p_decParams->R; // Decoding rate: Format 15,13,... for code rates 1/5, 1/3,... */
-  uint8_t numMaxIter = p_decParams->numMaxIter;
+  uint8_t numMaxIter = p_decParams->numMaxIter ;// To match the actual iterations
   e_nrLDPC_outMode outMode = p_decParams->outMode;
   // int8_t* cnProcBuf=  cnProcBuf;
   // int8_t* cnProcBufRes= cnProcBufRes;
@@ -331,7 +331,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
         nrLDPC_cnProc_BG1_R13_AVX2(cnProcBuf, cnProcBufRes, Z);
 #else
         // printf("\nCheckpoint 6\n ");
-        //dump_cnProcBufRes_to_file(cnProcBuf, "Dump_cnProcBuf_128.txt");
+        //dump_cnProcBufRes_to_file(cnProcBuf, "First_cnProcBuf_dump_128.txt");
         nrLDPC_cnProc_BG1_R13_128(cnProcBuf, cnProcBufRes, Z);
         // dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBufRes_dump_128.txt");
 #endif
@@ -465,6 +465,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
         nrLDPC_bnProcPc_BG1_R13_AVX2(bnProcBuf, bnProcBufRes, llrRes, llrProcBuf, Z);
 #else
         nrLDPC_bnProcPc_BG1_R13_128(bnProcBuf, bnProcBufRes, llrRes, llrProcBuf, Z);
+        //dump_cnProcBufRes_to_file(llrProcBuf, "Dump_llrProcBuf_128.txt");
 #endif
         break;
       }
