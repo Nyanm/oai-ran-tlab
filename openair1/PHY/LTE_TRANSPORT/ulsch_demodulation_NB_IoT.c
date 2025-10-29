@@ -1523,7 +1523,7 @@ void  turbo_decoding_NB_IoT(PHY_VARS_eNB           *eNB,
           int16_t        dummy_w[MAX_NUM_ULSCH_SEGMENTS_NB_IoT][3*(6144+64)];
           int            ret = 1;
           unsigned int   E; 
-
+//**************Scalar Turbo Decoder**********************
           uint8_t (*tc)(int16_t *y,
                         uint8_t *,
                         uint16_t,
@@ -1532,16 +1532,11 @@ void  turbo_decoding_NB_IoT(PHY_VARS_eNB           *eNB,
                         uint8_t,
                         uint8_t,
                         uint8_t,
-                        time_stats_t *,
-                        time_stats_t *,
-                        time_stats_t *,
-                        time_stats_t *,
-                        time_stats_t *,
-                        time_stats_t *,
-                        time_stats_t *);
+                        uint8_t);
 
-          tc = phy_threegpplte_turbo_decoder16;
+          tc = phy_threegpplte_turbo_decoder_scalar;
 
+//*********************************************************
           for (r=0; r<ulsch_harq->C; r++)
           {
               // Get Turbo interleaver parameters
@@ -1610,7 +1605,12 @@ void  turbo_decoding_NB_IoT(PHY_VARS_eNB           *eNB,
               }else{
                   crc_type = CRC24_B;
               }
-              // turbo decoding and CRC 
+              // turbo decoding and CRC
+
+//***************************Scalar Turbo Decoder ******************
+
+              unsigned char inst = 0;
+ 
               ret = tc(&ulsch_harq->d[r][96],
                        ulsch_harq->c[r],
                        Kr,
@@ -1619,13 +1619,9 @@ void  turbo_decoding_NB_IoT(PHY_VARS_eNB           *eNB,
                        ulsch_NB_IoT->max_turbo_iterations, // MAX_TURBO_ITERATIONS,
                        crc_type,
                        (r==0) ? ulsch_harq->F : 0,
-                       &eNB->ulsch_tc_init_stats,
-                       &eNB->ulsch_tc_alpha_stats,
-                       &eNB->ulsch_tc_beta_stats,
-                       &eNB->ulsch_tc_gamma_stats,
-                       &eNB->ulsch_tc_ext_stats,
-                       &eNB->ulsch_tc_intl1_stats,
-                       &eNB->ulsch_tc_intl2_stats); 
+                       inst); 
+
+//********************************************** ********************
               ///////////////end decoding /////////////
               if (ret != (1+ulsch_NB_IoT->max_turbo_iterations)) 
               {   
