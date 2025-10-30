@@ -1,9 +1,18 @@
 add_library(noise_device STATIC noise_device.c)
 target_link_libraries(noise_device PRIVATE log_headers)
 
-add_library(vrtsim MODULE vrtsim.c)
+add_boolean_option(OAI_VRTSIM_CIRDB ON "Enable in-process CIR DB playback" ON)
+
+add_library(vrtsim MODULE vrtsim.c cirdb_provider.c)
 set_target_properties(vrtsim PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-target_link_libraries(vrtsim PRIVATE SIMU shm_td_iq_channel actor noise_device log_headers)
+find_package(Threads REQUIRED)
+target_link_libraries(vrtsim PRIVATE SIMU shm_td_iq_channel actor noise_device log_headers Threads::Threads)
+
+if(OAI_VRTSIM_CIRDB)
+  target_compile_definitions(vrtsim PRIVATE VRTSIM_USE_CIRDB=1)
+else()
+  target_compile_definitions(vrtsim PRIVATE VRTSIM_USE_CIRDB=0)
+endif()
 
 add_boolean_option(OAI_VRTSIM_TAPS_CLIENT OFF "Enable taps client" ON)
 if (OAI_VRTSIM_TAPS_CLIENT)
@@ -29,3 +38,4 @@ if (OAI_VRTSIM_TAPS_CLIENT)
   find_package(Flatbuffers REQUIRED)
   target_link_libraries(taps_client PUBLIC flatbuffers taps_api SIMU nanomsg)
 endif()
+
