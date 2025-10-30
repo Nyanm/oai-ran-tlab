@@ -19,7 +19,8 @@
 			"tools_defs.h": "c",
 			"defs_aiot_ue.h": "c",
 			"nr_unitary_defs.h": "c",
-			"defs_aiot_gnb.h": "c"
+			"defs_aiot_gnb.h": "c",
+			"random": "c"
 		}
 	}
 }
