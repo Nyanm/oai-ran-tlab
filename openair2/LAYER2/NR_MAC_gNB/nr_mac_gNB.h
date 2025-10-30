@@ -633,8 +633,6 @@ typedef struct {
 
   /// PHR info: power headroom level (dB)
   int ph;
-  /// PHR info: power headroom level (dB) for 1 PRB
-  int ph0;
 
   /// PHR info: nominal UE transmit power levels (dBm)
   int pcmax;

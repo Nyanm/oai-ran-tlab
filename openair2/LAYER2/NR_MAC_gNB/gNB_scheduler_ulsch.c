@@ -564,7 +564,6 @@ static int nr_process_mac_pdu(instance_t module_idP,
                                              sched_pusch->dmrs_info.num_dmrs_symb * sched_pusch->dmrs_info.N_PRB_DMRS, // n_dmrs
                                              deltaMCS,
                                              true);
-        sched_ctrl->ph0 = PH;
         /* 38.133 Table10.1.18.1-1 */
         sched_ctrl->pcmax = PCMAX - 29;
         LOG_D(NR_MAC,
