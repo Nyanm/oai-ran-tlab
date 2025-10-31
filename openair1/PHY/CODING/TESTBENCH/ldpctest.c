@@ -401,13 +401,14 @@ one_measurement_t test_ldpc(short max_iterations,
       set_abort(&dec_abort, false);
 //dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_128.txt");
       if (use32bit)
-      {if(j == 0)
+      {if(j == 0){
+        //dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_128.txt",n_segments);
         n_iter = ldpc_toCompare.LDPCdecoder_cuda(&decParams[j],
                                                  channel_output_fixed,
                                                  estimated_output,
                                                  &decoder_profiler,
                                                  &dec_abort);}
-        
+      }
       else
         n_iter = ldpc_toCompare.LDPCdecoder(&decParams[j],
                                             &channel_output_fixed[j*384*68],
@@ -633,7 +634,7 @@ int main(int argc, char *argv[])
           "SNR BLER BER UNCODED_BER ENCODER_MEAN ENCODER_STD ENCODER_MAX DECODER_TIME_MEAN DECODER_TIME_STD DECODER_TIME_MAX "
           "DECODER_ITER_MEAN DECODER_ITER_STD DECODER_ITER_MAX\n");
 
-  for (double SNR = SNR0; SNR < SNR0 + 5.0 /*20.0*/; SNR += SNR_step) {
+  for (double SNR = SNR0; SNR < SNR0+0.2  /*20.0*/; SNR += SNR_step) {
     double SNR_lin;
     if (test_uncoded == 1)
       SNR_lin = pow(10, SNR / 10.0);
