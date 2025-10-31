@@ -12,10 +12,17 @@
 #define ZC 384 // for BG1 test only
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
 #define RECORD_GRAPH 1 // set 1 to enable graph recording, 0 to unable.
-/*
+
+#ifndef JETSON_TARGET
 #define CUDA_THREADS 1024
 #define CUDA_BLOCKS_R13 30
-*/
+#define CUDA_BLOCKS_R23 24
+#else
+#define CUDA_THREADS 128
+#define CUDA_BLOCKS_R13 237 // ceil(30336/128)
+#define CUDA_BLOCKS_R23 108 // ceil(13824/128)
+#endif
+
 /*
 #define CUDA_THREADS 960
 #define CUDA_BLOCKS_R13 32 // ceil(30336/960)
@@ -31,11 +38,18 @@
 #define CUDA_BLOCKS_R13 60 // ceil(30336/512)
 #define CUDA_BLOCKS_R23 27 // ceil(13824/512)
 */
+/*
+#define CUDA_THREADS 384
+#define CUDA_BLOCKS_R13 79// ceil(30336/384)
+#define CUDA_BLOCKS_R23 36// ceil(13824/384)
+*/
 
-#define CUDA_THREADS 128
-#define CUDA_BLOCKS_R13 237 // ceil(30336/128)
-#define CUDA_BLOCKS_R23 108 // ceil(13824/128)
 
+/*
+#define CUDA_THREADS 96
+#define CUDA_BLOCKS_R13 316 // ceil(30336/128)
+#define CUDA_BLOCKS_R23 144 // ceil(13824/128)
+*/
 /*
 #define CUDA_THREADS 64 
 #define CUDA_BLOCKS_R13 474 // ceil(30336/64)
