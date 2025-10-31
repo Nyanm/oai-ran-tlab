@@ -973,21 +973,24 @@ static void _nr_rx_sdu(const module_id_t gnb_mod_idP,
       if (timing_advance != 0xffff)
         UE_scheduling_control->ta_update = timing_advance;
       UE_scheduling_control->raw_rssi = rssi;
-      UE_scheduling_control->pusch_snrx10 = ul_cqi * 5 - 640 - (txpower_calc * 10);
-      if (UE_scheduling_control->tpc0 > 1)
-        LOG_D(NR_MAC,
-              "[UE %04x] %d.%d. PUSCH TPC %d and TA %d pusch_snrx10 %d rssi %d phrx_tx_power %d PHR (1PRB) %d mcs %d, nb_rb %d\n",
+      int pusch_snrx10 = ul_cqi * 5 - 640;
+      UE_scheduling_control->pusch_snrx10 = pusch_snrx10 - (txpower_calc * 10);
+      if (true)
+        LOG_I(NR_MAC,
+              "[UE %04x] %4d.%2d. PUSCH rssi %4d snrx10 %3d phrx_tx_power %3d (mcs %d, nb_rb %2d) snrx10norm %4d (target %2d) PHR %d => TPC %d and TA %d\n",
               UE->rnti,
               frameP,
               slotP,
-              UE_scheduling_control->tpc0,
-              UE_scheduling_control->ta_update,
-              UE_scheduling_control->pusch_snrx10,
               UE_scheduling_control->raw_rssi,
+	      pusch_snrx10,
               txpower_calc,
-              UE_scheduling_control->ph,
               UE_scheduling_control->ul_harq_processes[harq_pid].sched_pusch.mcs,
-              UE_scheduling_control->ul_harq_processes[harq_pid].sched_pusch.rbSize);
+              UE_scheduling_control->ul_harq_processes[harq_pid].sched_pusch.rbSize,
+              UE_scheduling_control->pusch_snrx10,
+	      target_snrx10,
+              UE_scheduling_control->ph,
+              UE_scheduling_control->tpc0,
+              UE_scheduling_control->ta_update);
 
       NR_UE_ul_harq_t *cur_harq = &UE_scheduling_control->ul_harq_processes[harq_pid];
       if (cur_harq->round == 0)
