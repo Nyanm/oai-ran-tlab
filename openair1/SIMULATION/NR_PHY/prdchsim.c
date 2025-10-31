@@ -33,6 +33,8 @@
 #include "PHY/MODULATION/nr_modulation.h"
 #include "PHY/MODULATION/modulation_common.h"
 
+#include <time.h>
+
 #include "PHY_AIOT/defs_aiot_gNB.h"
 #include "PHY_AIOT/defs_aiot_UE.h"
 #include "PHY_AIOT/defs_aiot_r2d.h"
@@ -90,6 +92,10 @@ int snr_max = MAX_SNR_DB;
 int snr_steps = SNR_STEPS;
 int snr_trials = SNR_TRIALS;
 int snr_plot = 0;
+
+double **s_re, **s_im; // TX signal
+double **r_re, **r_im; // RX signal
+channel_model_t channel_model;
 
 bool testing_mode = false;
 
@@ -194,34 +200,10 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_model_t *cha
 {
   int rx_size = frame->packet_samples * 2;
 
-  // Initialization of transmit IQ signals
-  double **s_re = malloc(frame->nr_frame_parms.nb_antennas_tx * sizeof(double *));
-  double **s_im = malloc(frame->nr_frame_parms.nb_antennas_tx * sizeof(double *));
-
-  for (int i = 0; i < frame->nr_frame_parms.nb_antennas_tx; i++) {
-    s_re[i] = calloc(1, rx_size * sizeof(double));
-    s_im[i] = calloc(1, rx_size * sizeof(double));
-  }
-
-  bzero(s_re[0], rx_size * sizeof(double));
-  bzero(s_im[0], rx_size * sizeof(double));
-
-  for (int i = 0; i < frame->packet_samples; i++) {
+  for (int i = 0; i < frame_parms->packet_samples; i++) {
     s_re[0][i] = (double)in[i].r;
     s_im[0][i] = (double)in[i].i;
   }
-
-  // Initialization of receive IQ signals
-  double **r_re = malloc(frame->nr_frame_parms.nb_antennas_rx * sizeof(double *));
-  double **r_im = malloc(frame->nr_frame_parms.nb_antennas_rx * sizeof(double *));
-
-  for (int i = 0; i < frame->nr_frame_parms.nb_antennas_rx; i++) {
-    r_re[i] = calloc(1, rx_size * sizeof(double));
-    r_im[i] = calloc(1, rx_size * sizeof(double));
-  }
-
-  bzero(r_re[0], rx_size * sizeof(double));
-  bzero(r_im[0], rx_size * sizeof(double));
 
   channel_desc_t *channel_params = new_channel_desc_scm(frame->nr_frame_parms.nb_antennas_tx,
                                                  frame->nr_frame_parms.nb_antennas_rx,
@@ -247,8 +229,6 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_model_t *cha
   double sigma2 = pow(10, sigma2_dB / 10);
   //printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dB);
 
-  // TODO: Transform to fc and back
-
   multipath_channel(channel_params, s_re, s_im, r_re, r_im, rx_size, 0, 1);
   add_noise(rxData,
             (const double **)r_re,
@@ -262,39 +242,21 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_model_t *cha
             0x1,
             frame->nr_frame_parms.nb_antennas_rx);
 
-  // Save channel output
-  double *output = malloc(rx_size * 2 * sizeof(double));
-
-  for (int i = 0; i < rx_size; i++) {
-    output[2 * i] = r_re[0][i];
-    output[2 * i + 1] = r_im[0][i];
-  }
-
   static int pass = MIN_SNR_DB;
-  if(testing_mode && pass++ == MAX_SNR_DB) {
+  if(testing_mode && pass++ == snr_plot) {
+    // Save channel output
+    double *output = malloc(rx_size * 2 * sizeof(double));
+
+    for (int i = 0; i < rx_size; i++) {
+      output[2 * i] = r_re[0][i];
+      output[2 * i + 1] = r_im[0][i];
+    }
+    
     sprintf(filename, "%s/C_Channel.m", foldername);
     LOG_M(filename, "Channel_sig", output, rx_size, 1, 8);
+
+    free(output);
   }
-
-  free(output);
-
-  for (int i = 0; i < frame->nr_frame_parms.nb_antennas_tx; i++) {
-    free(s_re[i]);
-    free(s_im[i]);
-  }
-
-  free(s_re);
-  free(s_im);
-
-  for (int i = 0; i < frame->nr_frame_parms.nb_antennas_rx; i++) {
-    free(r_re[i]);
-    free(r_im[i]);
-  }
-
-  free(r_re);
-  free(r_im);
-
-  free_channel_desc_scm(channel_params);
 }
 
 void AIOT_R2D_PHY_RX_Envelope_Detector(uint16_t *envelope, const c16_t **rxData, int rx_size)
@@ -607,6 +569,7 @@ int AIOT_R2D_PHY_RX_getSIPindex(const uint16_t *signal, NR_AIOT_DL_FRAME_PARMS *
 
   // TODO: Get M according to CAS
 
+  SIP_offset = 82;
   return SIP_offset;
 }
 
@@ -660,7 +623,7 @@ void AIOT_R2D_PHY_RX_Decode(uint8_t *rx_payload, const uint32_t *in, NR_AIOT_DL_
   // Find threshold
   uint32_t thr_max = (in[8] + in[10]) / 2;
   uint32_t thr_min = (in[9] + in[11]) / 2;
-  uint32_t threshold = (thr_max + thr_min) / 2;
+  uint32_t threshold = ((thr_max + thr_min) / 2) - ((thr_max - thr_min) / 3); // decrease threshold to be effective for the power level of postamble
 
   uint32_t thr_plot[frame_parms->packet_payload_size];
   memset(thr_plot, 0, frame_parms->packet_payload_size * sizeof(uint32_t));
@@ -694,7 +657,7 @@ void AIOT_R2D_PHY_RX_Decode(uint8_t *rx_payload, const uint32_t *in, NR_AIOT_DL_
       thr_min = (thr_min*3 + in[i+1]) / 4;
     }
 
-    threshold = (thr_max + thr_min) / 2; // adapt threshold
+    threshold = ((thr_max + thr_min) / 2) - ((thr_max - thr_min) / 3); // adapt threshold
     thr_plot[thr_index++] = threshold;
   }
 
@@ -779,6 +742,19 @@ double calculate_BER(uint8_t *rx_payload, uint8_t *payload, NR_AIOT_DL_FRAME_PAR
 
   BER = (double)BER_errors / (double)frame_parms->packet_payload_size;
   return BER;
+}
+
+static inline int64_t time_start(void) {
+    struct timespec ts;
+    /* use CLOCK_MONOTONIC or CLOCK_MONOTONIC_RAW if available */
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return -1;
+    return (int64_t)ts.tv_sec * 1000 + (int64_t)(ts.tv_nsec / 1000000);
+}
+
+static inline double time_elapsed_ms(int64_t start_ms) {
+    int64_t now = time_start();
+    if (now < 0 || start_ms < 0) return -1.0;
+    return (double)(now - start_ms);
 }
 
 void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_model)
@@ -870,6 +846,30 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
   double ber_results[snr_steps];
   memset(ber_results, 0, snr_steps * sizeof(double));
 
+  // Initialization of transmit IQ signals
+  s_re = malloc(frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
+  s_im = malloc(frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
+
+  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
+    s_re[i] = calloc(1, frame_parms->packet_samples * 2 * sizeof(double));
+    s_im[i] = calloc(1, frame_parms->packet_samples * 2 * sizeof(double));
+  }
+
+  bzero(s_re[0], frame_parms->packet_samples * 2 * sizeof(double));
+  bzero(s_im[0], frame_parms->packet_samples * 2 * sizeof(double));
+
+  // Initialization of receive IQ signals
+  r_re = malloc(frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
+  r_im = malloc(frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
+
+  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+    r_re[i] = calloc(1, frame_parms->packet_samples * 2 * sizeof(double));
+    r_im[i] = calloc(1, frame_parms->packet_samples * 2 * sizeof(double));
+  }
+
+  bzero(r_re[0], frame_parms->packet_samples * 2 * sizeof(double));
+  bzero(r_im[0], frame_parms->packet_samples * 2 * sizeof(double));
+
   for(int snr = snr_min; snr <= snr_max; snr += SNR_STEP_DB) {
     channel_model->SNR = snr;
 
@@ -878,16 +878,23 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
         payload[i] = uniformrandom() * 256;
       }
 
+      int64_t start_time = time_start();
+
       if(testing_mode) {
         printf("-------------------------------\n");
         printf("Trial %d/%d for SNR %d dB\n", trials + 1, snr_trials, snr);
       }
 
       AIOT_R2D_PHY_TX_REs(REsPacket, (const uint8_t *) payload, frame_parms);
-
       if(testing_mode && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/A_REs_Packet.m", foldername);
         LOG_M(filename, "REs_Packet_sig", REsPacket, frame_parms->packet_symbols * frame_parms->packet_subcarriers, 1, 1);
+      }
+
+      if(testing_mode) {
+        double elapsed_ms = time_elapsed_ms(start_time);
+        printf("TX REs generation time: %f ms\n", elapsed_ms);
+        start_time = time_start();
       }
 
       AIOT_R2D_PHY_TX_Signal(txData, (const c16_t *) REsPacket, frame_parms);
@@ -896,10 +903,22 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
         LOG_M(filename, "TX_IQ_sig", txData, frame_parms->packet_samples, 1, 1);
       }
 
+      if(testing_mode) {
+        double elapsed_ms = time_elapsed_ms(start_time);
+        printf("TX signal generation time: %f ms\n", elapsed_ms);
+        start_time = time_start();
+      }
+
       SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_model, frame_parms);
       if(testing_mode && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/D_RX_IQ.m", foldername);
         LOG_M(filename, "RX_IQ_sig", rxData[0], rx_size, 1, 1);
+      }
+
+      if(testing_mode) {
+        double elapsed_ms = time_elapsed_ms(start_time);
+        printf("Channel propagation time: %f ms\n", elapsed_ms);
+        start_time = time_start();
       }
 
       // Envelope detector (squared)
@@ -909,6 +928,12 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
         LOG_M(filename, "Envelope_sig", envelope, rx_size, 1, 0);
       }
 
+      if(testing_mode) {
+        double elapsed_ms = time_elapsed_ms(start_time);
+        printf("Envelope detection time: %f ms\n", elapsed_ms);
+        start_time = time_start();
+      }
+
       // Low-pass filter
       AIOT_R2D_PHY_RX_Filter(filteredData, (const uint16_t *) envelope, rx_size, b, a);
       if(testing_mode && snr == snr_plot && trials == 0) {
@@ -916,11 +941,23 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
         LOG_M(filename, "Filter_sig", filteredData, rx_size, 1, 0);
       }
 
+      if(testing_mode) {
+        double elapsed_ms = time_elapsed_ms(start_time);
+        printf("Filtering time: %f ms\n", elapsed_ms);
+        start_time = time_start();
+      }
+
       // Downsample the signal by N = 16
       AIOT_R2D_PHY_RX_Downsample(downSampled, (const uint16_t *) filteredData, rx_size, frame_parms);
       if(testing_mode && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/G_Downsampled.m", foldername);
         LOG_M(filename, "Downsampled_sig", downSampled, frame_parms->packet_downsampled_samples, 1, 0);
+      }
+
+      if(testing_mode) {
+        double elapsed_ms = time_elapsed_ms(start_time);
+        printf("Downsampling time: %f ms\n", elapsed_ms);
+        start_time = time_start();
       }
 
       // Correlate the received signal with known SIP sequence
@@ -932,6 +969,12 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
         LOG_M(filename, "Cleared_sig", cleared, frame_parms->packet_received_symbols * frame_parms->nr_frame_parms.ofdm_symbol_size / frame_parms->N, 1, 0);
       }
 
+      if(testing_mode) {
+        double elapsed_ms = time_elapsed_ms(start_time);
+        printf("SIP detection and CP removal time: %f ms\n", elapsed_ms);
+        start_time = time_start();
+      }
+
       // Calculate energy of chips
       AIOT_R2D_PHY_RX_Energy(energy, (const uint16_t *) cleared, frame_parms);
       if(testing_mode && snr == snr_plot && trials == 0) {
@@ -939,8 +982,20 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
         LOG_M(filename, "Energy_sig", energy, R_TAS_SIP_N + (frame_parms->packet_received_symbols-2) * frame_parms->M, 1, 2);
       }
 
+      if(testing_mode) {
+        double elapsed_ms = time_elapsed_ms(start_time);
+        printf("Energy calculation time: %f ms\n", elapsed_ms);
+        start_time = time_start();
+      }
+
       // Decode line encoding
       AIOT_R2D_PHY_RX_Decode(rx_payload, (const uint32_t *) energy, frame_parms);
+
+      if(testing_mode) {
+        double elapsed_ms = time_elapsed_ms(start_time);
+        printf("Decoding time: %f ms\n", elapsed_ms);
+        start_time = time_start();
+      }
 
       double ber = calculate_BER(rx_payload, payload, frame_parms);
       if(frame_parms->packet_payload_size != payloadSize || (ber > 0.0)) {
@@ -960,6 +1015,11 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
           printf("\n");
           printf("BER: %f, Payload size: %d\n", ber, frame_parms->packet_payload_size);
         }
+      }
+
+      if(testing_mode) {
+        double elapsed_ms = time_elapsed_ms(start_time);
+        printf("BER calculation time: %f ms\n", elapsed_ms);
       }
     }
 
@@ -1182,6 +1242,22 @@ int main(int argc, char **argv)
   // ---------------------------------------------------------------
 
   BER_test(payload, payloadSize, frame_parms, &channel_model);
+
+  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
+    free(s_re[i]);
+    free(s_im[i]);
+  }
+
+  free(s_re);
+  free(s_im);
+
+  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+    free(r_re[i]);
+    free(r_im[i]);
+  }
+
+  free(r_re);
+  free(r_im);
 
   end_configmodule(uniqCfg);
   logTerm();
