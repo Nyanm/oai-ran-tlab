@@ -998,8 +998,8 @@ static void _nr_rx_sdu(const module_id_t gnb_mod_idP,
       LOG_D(NR_MAC, "[UE %04x] PUSCH TPC %d and TA %d\n",UE->rnti,UE_scheduling_control->tpc0,UE_scheduling_control->ta_update);
     }
     else{
-      LOG_D(NR_MAC,"[UE %04x] Detected DTX : increasing UE TX power\n",UE->rnti);
-      UE_scheduling_control->tpc0 = 1;
+      LOG_W(NR_MAC,"[UE %04x] %4d.%2d Detected DTX : increasing UE TX power\n",UE->rnti, frameP, slotP);
+      UE_scheduling_control->tpc0 = 2;
     }
 
 #if defined(ENABLE_MAC_PAYLOAD_DEBUG)
