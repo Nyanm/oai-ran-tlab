@@ -17,15 +17,9 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G3(const t_nrLDPC_lut *p_l
                                              uint8_t CnIdx,
                                              int Zc)
 {
-<<<<<<< HEAD
-  const uint8_t NUM = 3; // Gn = 3
-  const int32_t *p_cnProcBuf = (const int32_t *)d_cnBufAll + lane; // input pointer each block tackle with
-  const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
-=======
   //const uint8_t NUM = 3; // Gn = 3
   //const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   //const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
->>>>>>> ldpc_decoder_cuda_R23
 
   //const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
@@ -43,17 +37,12 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G3(const t_nrLDPC_lut *p_l
 
   //p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
 
-<<<<<<< HEAD
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG3[row][0] );
-  sgn = __vxor4(&p_ones, &ymm0);
-=======
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][0] * 4);
   sgn = __vxor4_first(0x01010101, &ymm0);
->>>>>>> ldpc_decoder_cuda_R23
   min = __vabs4(ymm0);
 
   // loop starts here
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG3[row][1] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][1] * 4);
   /*if(row == 0 && blockIdx.x == 0){
       printf("In thread %d, in address offset: %d, ymm0 = %02x\n", tid, lane * 4 + c_lut_idxG3[row][0], ymm0);
   }*/
@@ -72,11 +61,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G3(const t_nrLDPC_lut *p_l
 
   // printf("tid = %d,row = %d\n", tid, row);
 
-<<<<<<< HEAD
-  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
-=======
-  moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
->>>>>>> ldpc_decoder_cuda_R23
+  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
 }
 
 __device__ __forceinline__ void cnProcKernel_BG1_int8_G4(const t_nrLDPC_lut *p_lut,
@@ -91,13 +76,8 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G4(const t_nrLDPC_lut *p_l
 {
   //const uint8_t NUM = 4; // Gn = 4
   // if(threadIdx.x == 0 && blockIdx.x == 1)printf("1.3\n");
-<<<<<<< HEAD
-  const int32_t *p_cnProcBuf = (const int32_t *)d_cnBufAll + lane; // input pointer each block tackle with
-  const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
-=======
   //const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   //const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
->>>>>>> ldpc_decoder_cuda_R23
 
   //const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
@@ -123,15 +103,15 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G4(const t_nrLDPC_lut *p_l
 
   //p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
 
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG4[row][0] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][0] * 4);
 
   sgn = __vxor4_first(0x01010101, &ymm0);
   min = __vabs4(ymm0);
   //-------------------------loop starts here-------------------------------
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG4[row][1] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][1] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG4[row][2] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][2] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
   //-------------------------------------------------------------------------
@@ -141,11 +121,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G4(const t_nrLDPC_lut *p_l
   //uint8_t *BricksToBeMoved = (uint8_t *)p_cnProcBufResBit;
 
 
-<<<<<<< HEAD
-  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
-=======
-  moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
->>>>>>> ldpc_decoder_cuda_R23
+  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
 
 }
 
@@ -162,13 +138,8 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G5(const t_nrLDPC_lut *p_l
 {
   //const uint8_t NUM = 5; // Gn = 5
 
-<<<<<<< HEAD
-  const int32_t *p_cnProcBuf = (const int32_t *)d_cnBufAll + lane; // input pointer each block tackle with
-  const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
-=======
   //const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   //const int8_t *p_cnProcBuf = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
->>>>>>> ldpc_decoder_cuda_R23
 
   //const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
@@ -184,23 +155,18 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G5(const t_nrLDPC_lut *p_l
   //uint32_t *p_cnProcBufResBit;
   //p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
 
-<<<<<<< HEAD
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG5[row][0] );
-  sgn = __vxor4(&p_ones, &ymm0);
-=======
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][0] * 4);
   sgn = __vxor4_first(0x01010101, &ymm0);
->>>>>>> ldpc_decoder_cuda_R23
   min = __vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG5[row][1] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][1] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG5[row][2] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][2] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG5[row][3] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][3] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
   //-------------------------------------------------------------------------
@@ -214,11 +180,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G5(const t_nrLDPC_lut *p_l
 
   const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
-<<<<<<< HEAD
-  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
-=======
-  moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
->>>>>>> ldpc_decoder_cuda_R23
+  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
 }
 
 __device__ __forceinline__ void cnProcKernel_BG1_int8_G6(const t_nrLDPC_lut *p_lut,
@@ -233,13 +195,8 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G6(const t_nrLDPC_lut *p_l
 {
   //const uint8_t NUM = 6; // Gn = 6
 
-<<<<<<< HEAD
-  const int32_t *p_cnProcBuf = (const int32_t *)d_cnBufAll + lane; // input pointer each block tackle with
-  const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
-=======
   //const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   //const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
->>>>>>> ldpc_decoder_cuda_R23
 
   //const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
@@ -253,30 +210,23 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G6(const t_nrLDPC_lut *p_l
   //const uint32_t p_ones = 0x01010101;
   //const uint32_t maxLLR = 0x7F7F7F7F;
   uint32_t ymm0, sgn, min;
-<<<<<<< HEAD
-  uint32_t *p_cnProcBufResBit;
-  p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG6[row][0] );
-  sgn = __vxor4(&p_ones, &ymm0);
-=======
   //uint32_t *p_cnProcBufResBit;
   //p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][0] * 4);
   sgn = __vxor4_first(0x01010101, &ymm0);
->>>>>>> ldpc_decoder_cuda_R23
   min = __vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG6[row][1] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][1] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG6[row][2] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][2] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG6[row][3] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][3] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG6[row][4] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][4] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
   //-------------------------------------------------------------------------
@@ -290,11 +240,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G6(const t_nrLDPC_lut *p_l
 
   const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
-<<<<<<< HEAD
-  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
-=======
-  moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
->>>>>>> ldpc_decoder_cuda_R23
+  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
 }
 
 __device__ __forceinline__ void cnProcKernel_BG1_int8_G7(const t_nrLDPC_lut *p_lut,
@@ -309,13 +255,8 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G7(const t_nrLDPC_lut *p_l
 {
   //const uint8_t NUM = 7; // Gn = 7
 
-<<<<<<< HEAD
-  const int32_t *p_cnProcBuf = (const int32_t *)d_cnBufAll + lane; // input pointer each block tackle with
-  const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
-=======
   //const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   //const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
->>>>>>> ldpc_decoder_cuda_R23
 
   //const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
@@ -330,33 +271,26 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G7(const t_nrLDPC_lut *p_l
   //const uint32_t p_ones = 0x01010101;
   //const uint32_t maxLLR = 0x7F7F7F7F;
   uint32_t ymm0, sgn, min;
-<<<<<<< HEAD
-  uint32_t *p_cnProcBufResBit;
-  p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG7[row][0] );
-  sgn = __vxor4(&p_ones, &ymm0);
-=======
   //uint32_t *p_cnProcBufResBit;
   //p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][0] * 4);
   sgn = __vxor4_first(0x01010101, &ymm0);
->>>>>>> ldpc_decoder_cuda_R23
   min = __vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG7[row][1] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][1] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG7[row][2] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][2] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG7[row][3] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][3] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG7[row][4] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][4] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG7[row][5] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][5] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
   //-------------------------------------------------------------------------
@@ -370,11 +304,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G7(const t_nrLDPC_lut *p_l
 
   const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
-<<<<<<< HEAD
-  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
-=======
-  moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
->>>>>>> ldpc_decoder_cuda_R23
+  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
 }
 
 __device__ __forceinline__ void cnProcKernel_BG1_int8_G8(const t_nrLDPC_lut *p_lut,
@@ -389,13 +319,8 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G8(const t_nrLDPC_lut *p_l
 {
   //const uint8_t NUM = 8; // Gn = 8
 
-<<<<<<< HEAD
-  const int32_t *p_cnProcBuf = (const int32_t *)d_cnBufAll + lane; // input pointer each block tackle with
-  const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
-=======
   //const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   //const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
->>>>>>> ldpc_decoder_cuda_R23
 
   //const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
@@ -408,36 +333,29 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G8(const t_nrLDPC_lut *p_l
   //const uint32_t p_ones = 0x01010101;
   //const uint32_t maxLLR = 0x7F7F7F7F;
   uint32_t ymm0, sgn, min;
-<<<<<<< HEAD
-  uint32_t *p_cnProcBufResBit;
-  p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG8[row][0] );
-  sgn = __vxor4(&p_ones, &ymm0);
-=======
   //uint32_t *p_cnProcBufResBit;
   //p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][0] * 4);
   sgn = __vxor4_first(0x01010101, &ymm0);
->>>>>>> ldpc_decoder_cuda_R23
   min = __vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG8[row][1] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][1] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG8[row][2] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][2] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG8[row][3] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][3] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG8[row][4] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][4] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG8[row][5] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][5] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG8[row][6] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][6] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
   //-------------------------------------------------------------------------
@@ -451,11 +369,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G8(const t_nrLDPC_lut *p_l
 
   const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
-<<<<<<< HEAD
-  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
-=======
-  moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
->>>>>>> ldpc_decoder_cuda_R23
+  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
 }
 
 
@@ -469,15 +383,9 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G9(const t_nrLDPC_lut *p_l
                                              uint8_t CnIdx,
                                              int Zc)
 {
-<<<<<<< HEAD
-  const uint8_t NUM = 9; // Gn = 9
-  const int32_t *p_cnProcBuf = (const int32_t *)d_cnBufAll + lane; // input pointer each block tackle with
-  const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
-=======
   //const uint8_t NUM = 9; // Gn = 9
   //const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   //const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
->>>>>>> ldpc_decoder_cuda_R23
 
   //const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
@@ -491,39 +399,32 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G9(const t_nrLDPC_lut *p_l
   //const uint32_t p_ones = 0x01010101;
   //const uint32_t maxLLR = 0x7F7F7F7F;
   uint32_t ymm0, sgn, min;
-<<<<<<< HEAD
-  uint32_t *p_cnProcBufResBit;
-  p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG9[row][0] );
-  sgn = __vxor4(&p_ones, &ymm0);
-=======
   //uint32_t *p_cnProcBufResBit;
   //p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][0] * 4);
   sgn = __vxor4_first(0x01010101, &ymm0);
->>>>>>> ldpc_decoder_cuda_R23
   min = __vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG9[row][1] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][1] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG9[row][2] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][2] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG9[row][3] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][3] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG9[row][4] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][4] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG9[row][5] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][5] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG9[row][6] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][6] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG9[row][7] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][7] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
   //-------------------------------------------------------------------------
@@ -537,11 +438,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G9(const t_nrLDPC_lut *p_l
 
   const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
-<<<<<<< HEAD
-  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
-=======
-  moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
->>>>>>> ldpc_decoder_cuda_R23
+  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
 }
 
 
@@ -555,15 +452,9 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G10(const t_nrLDPC_lut *p_
                                               uint8_t CnIdx,
                                               int Zc)
 {
-<<<<<<< HEAD
-  const uint8_t NUM = 10; // Gn = 10
-  const int32_t *p_cnProcBuf = (const int32_t *)d_cnBufAll + lane; // input pointer each block tackle with
-  const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
-=======
   //const uint8_t NUM = 10; // Gn = 10
   //const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   //const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
->>>>>>> ldpc_decoder_cuda_R23
 
   //const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
@@ -577,42 +468,35 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G10(const t_nrLDPC_lut *p_
   //const uint32_t p_ones = 0x01010101;
   //const uint32_t maxLLR = 0x7F7F7F7F;
   uint32_t ymm0, sgn, min;
-<<<<<<< HEAD
-  uint32_t *p_cnProcBufResBit;
-  p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG10[row][0] );
-  sgn = __vxor4(&p_ones, &ymm0);
-=======
   //uint32_t *p_cnProcBufResBit;
   //p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][0] * 4);
   sgn = __vxor4_first(0x01010101, &ymm0);
->>>>>>> ldpc_decoder_cuda_R23
   min = __vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG10[row][1] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][1] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG10[row][2] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][2] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG10[row][3] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][3] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG10[row][4] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][4] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG10[row][5] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][5] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG10[row][6] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][6] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG10[row][7] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][7] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG10[row][8] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][8] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
   //-------------------------------------------------------------------------
@@ -626,11 +510,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G10(const t_nrLDPC_lut *p_
 
   const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
-<<<<<<< HEAD
-  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
-=======
-  moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
->>>>>>> ldpc_decoder_cuda_R23
+  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
 }
 
 __device__ __forceinline__ void cnProcKernel_BG1_int8_G19(const t_nrLDPC_lut *p_lut,
@@ -646,13 +526,8 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G19(const t_nrLDPC_lut *p_
   //const uint8_t NUM = 19; // Gn = 19
   // Here the block 0 and block 1, block 2 and block 3, ... are doing the same thing, so we use blockIdx.x/2 to tackle this
 
-<<<<<<< HEAD
-  const int32_t *p_cnProcBuf = (const int32_t *)d_cnBufAll + lane; // input pointer each block tackle with
-  const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
-=======
   //const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   //const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
->>>>>>> ldpc_decoder_cuda_R23
 
   //const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
 
@@ -667,69 +542,63 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G19(const t_nrLDPC_lut *p_
   //const uint32_t p_ones = 0x01010101;
   //const uint32_t maxLLR = 0x7F7F7F7F;
   uint32_t ymm0, sgn, min;
-<<<<<<< HEAD
-  uint32_t *p_cnProcBufResBit;
-  p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][0] );
-=======
   //uint32_t *p_cnProcBufResBit;
   //p_cnProcBufResBit = (uint32_t *)(p_cnProcBufRes + destByte);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][0] * 4);
->>>>>>> ldpc_decoder_cuda_R23
 
   sgn = __vxor4_first(0x01010101, &ymm0);
   min = __vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][1] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][1] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][2] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][2] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][3] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][3] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][4] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][4] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][5] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][5] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][6] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][6] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][7] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][7] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][8] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][8] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][9] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][9] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][10] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][10] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][11] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][11] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][12] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][12] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][13] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][13] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][14] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][14] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][15] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][15] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][16] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][16] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
-  ymm0 = *(const uint32_t *)(p_cnProcBuf + c_lut_idxG19[row][17] );
+  ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][17] * 4);
   min = __vminu4(min, __vabs4(ymm0));
   sgn = __vxor4(&sgn, &ymm0);
   //-------------------------------------------------------------------------
@@ -743,9 +612,5 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G19(const t_nrLDPC_lut *p_
 
   const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
-<<<<<<< HEAD
-  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
-=======
-  moveBricks_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, PUT_BRICKS);
->>>>>>> ldpc_decoder_cuda_R23
+  moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
 }
