@@ -354,7 +354,6 @@ void dumpASS(int8_t* cnProcBufRes, const char* filename)
 }
   
 //--------------------------------------------------------------
-
 static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            int8_t* p_out,
                                            int n_segments,
