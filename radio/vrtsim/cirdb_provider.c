@@ -20,7 +20,7 @@
  */
 
 
- 
+
 /*
  * In-process CIR DB provider for VRTSIM
  * Reads cir_db.bin and periodically updates channel_desc->ch_ps
@@ -39,6 +39,7 @@
 #include <unistd.h>
 #include <libgen.h>
 #include <limits.h>
+#include <common/utils/utils.h> 
 
 #include "common/utils/LOG/log.h"
 #include "common/utils/assertions.h"
@@ -187,10 +188,9 @@ static const char *resolve_db_path(char out[PATH_MAX]) {
 /* ---------- allocation and IO helpers ---------- */
 
 static inline void *xcalloc(size_t n, size_t sz) {
-  void *p = calloc(n, sz);
-  AssertFatal(p != NULL, "calloc failed for %zu x %zu", n, sz);
-  return p;
+  return calloc_or_fail(n, sz);
 }
+
 
 static inline void fread_exact(void *dst, size_t sz, FILE *fh) {
   size_t r = fread(dst, 1, sz, fh);

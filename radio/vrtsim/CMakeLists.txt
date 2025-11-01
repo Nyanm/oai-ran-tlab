@@ -1,22 +1,29 @@
+# Noise device static lib
 add_library(noise_device STATIC noise_device.c)
 target_link_libraries(noise_device PRIVATE log_headers)
 
+# Option: in-process CIR DB playback
 add_boolean_option(OAI_VRTSIM_CIRDB ON "Enable in-process CIR DB playback" ON)
 
+# vrtsim module and CIR DB provider
 add_library(vrtsim MODULE vrtsim.c cirdb_provider.c)
 set_target_properties(vrtsim PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
 find_package(Threads REQUIRED)
 target_link_libraries(vrtsim PRIVATE SIMU shm_td_iq_channel actor noise_device log_headers Threads::Threads)
 
+# Compile-time switch used by code, keep explicit for clarity
 if(OAI_VRTSIM_CIRDB)
   target_compile_definitions(vrtsim PRIVATE VRTSIM_USE_CIRDB=1)
 else()
   target_compile_definitions(vrtsim PRIVATE VRTSIM_USE_CIRDB=0)
 endif()
 
+# Optional: taps client support
 add_boolean_option(OAI_VRTSIM_TAPS_CLIENT OFF "Enable taps client" ON)
 if (OAI_VRTSIM_TAPS_CLIENT)
   target_link_libraries(vrtsim PRIVATE taps_client)
+
   file(DOWNLOAD
     "https://gitlab.eurecom.fr/oai/raytracing-channel-emulator/-/raw/59589ad2a534881810b2aa7dd81e63066245bb8d/server/api/taps.fbs?inline=false"
     ${CMAKE_SOURCE_DIR}/taps.fbs
@@ -30,6 +37,7 @@ if (OAI_VRTSIM_TAPS_CLIENT)
     DEPENDS ${TAPS_IF_PATH}
     COMMENT "Generating flatbuffers API from ${TAPS_IF_PATH}"
   )
+
   add_library(taps_api INTERFACE)
   target_include_directories(taps_api INTERFACE ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -38,4 +46,3 @@ if (OAI_VRTSIM_TAPS_CLIENT)
   find_package(Flatbuffers REQUIRED)
   target_link_libraries(taps_client PUBLIC flatbuffers taps_api SIMU nanomsg)
 endif()
-

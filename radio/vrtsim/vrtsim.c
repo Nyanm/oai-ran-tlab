@@ -49,7 +49,10 @@
 #include "noise_device.h"
 #include "simde/x86/avx512.h"
 #include "taps_client.h"
+
+#ifdef OAI_VRTSIM_CIRDB
 #include "cirdb_provider.h"  // CIR DB provider API
+#endif
 
 // Simulator role
 typedef enum { ROLE_SERVER = 1, ROLE_CLIENT } role;
@@ -334,7 +337,10 @@ static int vrtsim_connect(openair0_device *device)
                           device->openair0_cfg[0].tx_num_channels,
                           vrtsim_state->peer_info.num_rx_antennas,
                           &vrtsim_state->channel_desc);
-    } else if (vrtsim_state->use_cirdb) {
+    }
+
+#ifdef OAI_VRTSIM_CIRDB
+    else if (vrtsim_state->use_cirdb) {
       if (vrtsim_state->cirdb_path && vrtsim_state->cirdb_path[0]) {
         cirdb_set_path_override(vrtsim_state->cirdb_path);
       }
@@ -343,7 +349,15 @@ static int vrtsim_connect(openair0_device *device)
                     vrtsim_state->peer_info.num_rx_antennas,
                     &vrtsim_state->channel_desc);
       LOG_A(HW, "VRTSIM: channel taps via CIR DB\n");
-    } else {
+    }
+#else
+    else if (vrtsim_state->use_cirdb) {
+      AssertFatal(false,
+                  "VRTSIM built without OAI_VRTSIM_CIRDB, but cirdb=1 in config. "
+                  "Enable OAI_VRTSIM_CIRDB at build time or set cirdb=0.");
+    }
+#endif
+    else {
       load_channel_model(vrtsim_state);
     }
 
@@ -605,9 +619,12 @@ static void vrtsim_end(openair0_device *device)
     }
     tx_timing->average_tx_budget /= vrtsim_state->peer_info.num_rx_antennas;
     free_noise_device();
+#ifdef OAI_VRTSIM_CIRDB
     if (vrtsim_state->use_cirdb) {
       cirdb_stop();
-    } else if (vrtsim_state->taps_socket) {
+    } else
+#endif
+    if (vrtsim_state->taps_socket) {
       taps_client_stop();
     }
   }
