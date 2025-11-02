@@ -133,8 +133,8 @@
 #include "bnProc128/nrLDPC_bnProc_BG2_R23_128.h"
 #endif
 
-// #define NR_LDPC_PROFILER_DETAIL(a) a
-#define NR_LDPC_PROFILER_DETAIL(a)
+ #define NR_LDPC_PROFILER_DETAIL(a) a
+//#define NR_LDPC_PROFILER_DETAIL(a)
 
 #include "openair1/PHY/CODING/nrLDPC_extern.h"
 
@@ -280,6 +280,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   //  Initialization
   NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2llrProcBuf));
   nrLDPC_llr2llrProcBuf(p_lut, p_llr, llrProcBuf, Z, BG);
+  //dump_cnProcBufRes_to_file(llrProcBuf, "Dump_llrProcBuf_128_BG1.txt");
   NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2llrProcBuf));
 #ifdef NR_LDPC_DEBUG_MODE
   nrLDPC_debug_initBuffer2File(nrLDPC_buffers_LLR_PROC);
@@ -287,9 +288,11 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #endif
 
   NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2CnProcBuf));
-  if (BG == 1)
+  if (BG == 1){
     nrLDPC_llr2CnProcBuf_BG1(p_lut, p_llr, cnProcBuf, Z);
-  else
+    //dump_cnProcBufRes_to_file(cnProcBuf, "Dump_cnProcBuf_128_BG1.txt");
+  }
+    else
     nrLDPC_llr2CnProcBuf_BG2(p_lut, p_llr, cnProcBuf, Z);
   NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2CnProcBuf));
 
@@ -345,7 +348,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
         nrLDPC_cnProc_BG1_R23_AVX2(cnProcBuf, cnProcBufRes, Z);
 #else
         nrLDPC_cnProc_BG1_R23_128(cnProcBuf, cnProcBufRes, Z);
-        //dump_cnProcBufRes_to_file(cnProcBuf, "Dump_cnProcBuf_128.txt");
+        //dump_cnProcBufRes_to_file(cnProcBufRes, "Dump_cnProcBufRes_128_R23.txt");
 #endif
         break;
       }
@@ -549,8 +552,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
         nrLDPC_bnProc_BG1_R23_AVX2(bnProcBuf, bnProcBufRes, llrRes, Z);
 #else
         nrLDPC_bnProc_BG1_R23_128(bnProcBuf, bnProcBufRes, llrRes, Z);
-        //dump_cnProcBufRes_to_file(bnProcBufRes, "Dump_bnProcBufRes_128.txt");
-        //dump_cnProcBufRes_to_file(llrRes, "Dump_llrRes_128.txt");
+        //dump_cnProcBufRes_to_file(bnProcBufRes, "Dump_bnProcBufRes_128_R23.txt");
+        //dump_cnProcBufRes_to_file(llrRes, "Dump_llrRes_128_R23.txt");
 #endif
         break;
       }
@@ -606,9 +609,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #endif
   }
 
-#ifdef NR_LDPC_PROFILER_DETAIL
   stop_meas(&p_profiler->bnProc);
-#endif
 
 #ifdef NR_LDPC_DEBUG_MODE
   nrLDPC_debug_initBuffer2File(nrLDPC_buffers_BN_PROC_RES);
