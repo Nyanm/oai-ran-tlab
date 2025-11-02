@@ -512,9 +512,6 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            t_nrLDPC_time_stats* p_profiler,
                                            decode_abort_t* ab)
 {
-  // printf("n_segments = %d\n", n_segments);
-
-   /* = {0};*/
   int8_t temp_out[n_segments * 8448] __attribute__((aligned(64))); 
 #ifdef USE_STATIC_ALLOC
   memcpy(temp_in , p_llr ,  n_segments * 68 * 384);
