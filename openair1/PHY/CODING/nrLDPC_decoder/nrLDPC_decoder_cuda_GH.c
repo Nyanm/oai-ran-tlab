@@ -58,7 +58,7 @@
 #include <cuda_runtime.h>
 #include "decoder_graphs.h"
 
-#define USE_STATIC_ALLOC
+//#define USE_STATIC_ALLOC
 static cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
 static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
 static bool streamsCreated = false;

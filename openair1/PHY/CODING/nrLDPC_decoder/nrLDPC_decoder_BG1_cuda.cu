@@ -13,14 +13,27 @@
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
 #define RECORD_GRAPH 1 // set 1 to enable graph recording, 0 to unable.
 
+#define JETSON_TARGET
+
 #ifndef JETSON_TARGET
 #define CUDA_THREADS 1024
 #define CUDA_BLOCKS_R13 30
 #define CUDA_BLOCKS_R23 14
 #else
+/*
+#define CUDA_THREADS 512
+#define CUDA_BLOCKS_R13 60 // ceil(30336/512)
+#define CUDA_BLOCKS_R23 27 // ceil(13824/512)
+*/
+/*
 #define CUDA_THREADS 128
 #define CUDA_BLOCKS_R13 237 // ceil(30336/128)
 #define CUDA_BLOCKS_R23 108 // ceil(13824/128)
+*/
+
+#define CUDA_THREADS 256 
+#define CUDA_BLOCKS_R13 119 // ceil(30336/256)
+#define CUDA_BLOCKS_R23 54 // ceil(13824/256)
 #endif
 
 /*
