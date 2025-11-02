@@ -16,7 +16,7 @@
 #ifndef JETSON_TARGET
 #define CUDA_THREADS 1024
 #define CUDA_BLOCKS_R13 30
-#define CUDA_BLOCKS_R23 24
+#define CUDA_BLOCKS_R23 14
 #else
 #define CUDA_THREADS 128
 #define CUDA_BLOCKS_R13 237 // ceil(30336/128)
