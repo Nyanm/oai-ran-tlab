@@ -1,5 +1,5 @@
 diff --git a/fhi_lib/app/src/common.h b/fhi_lib/app/src/common.h
-index ac5f471..b0f7ed1 100644
+index ac5f471..94c2d7c 100644
 --- a/fhi_lib/app/src/common.h
 +++ b/fhi_lib/app/src/common.h
 @@ -28,7 +28,7 @@
@@ -7,7 +7,7 @@ index ac5f471..b0f7ed1 100644
  #include <rte_mbuf.h>
  
 -#define VERSIONX                "oran_f_release_v1.0"
-+#define VERSIONX                "oran_f_release_v1.5"
++#define VERSIONX                "oran_f_release_v1.6"
  
  #define APP_O_DU  0
  #define APP_O_RU  1
@@ -535,7 +535,7 @@ index 08660f3..2bb5187 100644
  #include <rte_eal.h>
  #include <rte_errno.h>
 diff --git a/fhi_lib/lib/src/xran_common.c b/fhi_lib/lib/src/xran_common.c
-index dc40ad9..5968d01 100644
+index dc40ad9..eb9bb9f 100644
 --- a/fhi_lib/lib/src/xran_common.c
 +++ b/fhi_lib/lib/src/xran_common.c
 @@ -31,7 +31,10 @@
@@ -600,7 +600,46 @@ index dc40ad9..5968d01 100644
          /* PRACH packet has ruportid = num_eAxc + ant_id */
              Ant_ID -= PrachCfg->eAxC_offset;
          symbol_total_bytes[p_dev_ctx->xran_port_id][CC_ID][Ant_ID] += num_bytes;
-@@ -1412,7 +1416,7 @@ int generate_cpmsg_prach(void *pHandle, struct xran_cp_gen_params *params, struc
+@@ -904,7 +908,8 @@ inline int32_t prepare_symbol_ex(enum xran_pkt_dir direction,
+                 uint32_t do_copy,
+                 enum xran_comp_hdr_type staticEn,
+                 uint16_t num_sections,
+-                uint16_t iq_offset)
++                uint16_t iq_offset,
++                bool is_prach)
+ {
+     int32_t n_bytes , iq_len_aggr = 0;
+     int32_t prep_bytes;
+@@ -964,7 +969,7 @@ inline int32_t prepare_symbol_ex(enum xran_pkt_dir direction,
+         xp[idx].app_params.data_feature.value = 0x10;
+         xp[idx].app_params.data_feature.data_direction = direction;
+         // xp[idx].app_params.payl_ver       = 1;
+-        // xp[idx].app_params.filter_id      = 0;
++        xp[idx].app_params.data_feature.filter_id = is_prach ? 1 : 0;
+         xp[idx].app_params.frame_id       = frame_id;
+         xp[idx].app_params.sf_slot_sym.subframe_id    = subframe_id;
+         xp[idx].app_params.sf_slot_sym.slot_id        = xran_slotid_convert(slot_id, 0);
+@@ -1154,7 +1159,8 @@ int send_symbol_mult_section_ex(void *handle,
+                              do_copy,
+                              staticEn,
+                              1,
+-                             0); /*Send a single section */
++                             0,
++                             true); /*Send a single section */
+         prb_offset += prb_num_sec;
+         data_offset += n_bytes;
+         if(sent) {
+@@ -1262,7 +1268,8 @@ int send_symbol_ex(void *handle,
+                          do_copy,
+                          staticEn,
+                          1,
+-                         0); /*Send a single section */
++                         0,
++                         true); /*Send a single section */
+ 
+     if(sent){
+         pCnt->tx_counter++;
+@@ -1412,7 +1419,7 @@ int generate_cpmsg_prach(void *pHandle, struct xran_cp_gen_params *params, struc
      if(XRAN_FILTERINDEX_PRACH_ABC == pPrachCPConfig->filterIdx)
      {
      timeOffset = timeOffset >> nNumerology; //original number is Tc, convert to Ts based on mu
@@ -609,7 +648,7 @@ index dc40ad9..5968d01 100644
          timeOffset += 16;
      }
      else
-@@ -1547,8 +1551,7 @@ int32_t ring_processing_func(void* args)
+@@ -1547,8 +1554,7 @@ int32_t ring_processing_func(void* args)
  
      for (i = 0; i < ctx->io_cfg.num_vfs && i < XRAN_VF_MAX; i++){
          for(qi = 0; qi < ctx->rxq_per_port[i]; qi++) {
@@ -619,6 +658,20 @@ index dc40ad9..5968d01 100644
          }
      }
  
+diff --git a/fhi_lib/lib/src/xran_common.h b/fhi_lib/lib/src/xran_common.h
+index 04076fd..245b1c0 100644
+--- a/fhi_lib/lib/src/xran_common.h
++++ b/fhi_lib/lib/src/xran_common.h
+@@ -201,7 +201,8 @@ int32_t prepare_symbol_ex(enum xran_pkt_dir direction,
+                 uint32_t do_copy,
+                 enum xran_comp_hdr_type staticEn,
+                 uint16_t num_sections,
+-                uint16_t iq_buffer_offset);
++                uint16_t iq_buffer_offset,
++                bool is_prach);
+ int32_t prepare_sf_slot_sym (enum xran_pkt_dir direction,
+                 uint8_t frame_id,
+                 uint8_t subframe_id,
 diff --git a/fhi_lib/lib/src/xran_compression.cpp b/fhi_lib/lib/src/xran_compression.cpp
 index 112caae..7c74342 100644
 --- a/fhi_lib/lib/src/xran_compression.cpp
@@ -1686,10 +1739,18 @@ index 72249bc..6b30084 100644
  #include <rte_config.h>
  
 diff --git a/fhi_lib/lib/src/xran_tx_proc.c b/fhi_lib/lib/src/xran_tx_proc.c
-index 45a17a8..85ce6fa 100644
+index 45a17a8..b7db317 100644
 --- a/fhi_lib/lib/src/xran_tx_proc.c
 +++ b/fhi_lib/lib/src/xran_tx_proc.c
-@@ -35,7 +35,11 @@
+@@ -23,6 +23,7 @@
+  * @author Intel Corporation
+  **/
+ 
++#include <stdbool.h>
+ #define _GNU_SOURCE
+ #include <sched.h>
+ #include <assert.h>
+@@ -35,7 +36,11 @@
  #include <stdio.h>
  #include <pthread.h>
  #include <malloc.h>
@@ -1701,7 +1762,27 @@ index 45a17a8..85ce6fa 100644
  
  #include <rte_common.h>
  #include <rte_eal.h>
-@@ -1514,7 +1518,11 @@ xran_process_tx_sym_cp_on_opt(void* pHandle, uint8_t ctx_id, uint32_t tti, int32
+@@ -417,7 +422,8 @@ int32_t xran_process_tx_sym_cp_off(void *pHandle, uint8_t ctx_id, uint32_t tti,
+                                       0,
+                                       staticEn,
+                                       num_sections,
+-                                      p_sec_desc->iq_buffer_offset);
++                                      p_sec_desc->iq_buffer_offset,
++                                      false);
+ 
+                     curr_sect_id += num_sections;
+ 
+@@ -679,7 +685,8 @@ xran_process_tx_srs_cp_off(void *pHandle, uint8_t ctx_id, uint32_t tti, int32_t
+                               0,
+                               staticEn,
+                               num_sections,
+-                              0);
++                              0,
++                              false);
+ 
+             section_id += num_sections;
+ 
+@@ -1514,7 +1521,11 @@ xran_process_tx_sym_cp_on_opt(void* pHandle, uint8_t ctx_id, uint32_t tti, int32
                          mb_oran_hdr_ext->buf_addr = ext_buff;
                          mb_oran_hdr_ext->buf_iova = ((struct rte_mempool_objhdr*)RTE_PTR_SUB(mb_base, rte_mempool_objhdr_size))->iova + RTE_PTR_DIFF(ext_buff, mb_base);
                          mb_oran_hdr_ext->buf_len = ext_buff_len;
@@ -1713,7 +1794,7 @@ index 45a17a8..85ce6fa 100644
                          mb_oran_hdr_ext->shinfo = p_share_data;
                          mb_oran_hdr_ext->data_off = (uint16_t)RTE_MIN((uint16_t)RTE_PKTMBUF_HEADROOM, (uint16_t)mb_oran_hdr_ext->buf_len) - rte_ether_hdr_size;
                          mb_oran_hdr_ext->data_len = (uint16_t)(mb_oran_hdr_ext->data_len + rte_ether_hdr_size);
-@@ -1532,8 +1540,13 @@ xran_process_tx_sym_cp_on_opt(void* pHandle, uint8_t ctx_id, uint32_t tti, int32
+@@ -1532,8 +1543,13 @@ xran_process_tx_sym_cp_on_opt(void* pHandle, uint8_t ctx_id, uint32_t tti, int32
  
                          /* Fill in the ethernet header. */
  #ifndef TRANSMIT_BURST
@@ -1727,7 +1808,7 @@ index 45a17a8..85ce6fa 100644
                          ((struct rte_ether_hdr*)pStart)->ether_type = ETHER_TYPE_ECPRI_BE;                            /* ethertype */
  #endif
                          nPktSize = sizeof(struct rte_ether_hdr)
-@@ -1878,7 +1891,11 @@ xran_process_tx_srs_cp_on(void* pHandle, uint8_t ctx_id, uint32_t tti, int32_t s
+@@ -1878,7 +1894,11 @@ xran_process_tx_srs_cp_on(void* pHandle, uint8_t ctx_id, uint32_t tti, int32_t s
                          mb_oran_hdr_ext->buf_addr = ext_buff;
                          mb_oran_hdr_ext->buf_iova = ((struct rte_mempool_objhdr*)RTE_PTR_SUB(mb_base, rte_mempool_objhdr_size))->iova + RTE_PTR_DIFF(ext_buff, mb_base);
                          mb_oran_hdr_ext->buf_len = ext_buff_len;
@@ -1739,7 +1820,7 @@ index 45a17a8..85ce6fa 100644
                          mb_oran_hdr_ext->shinfo = p_share_data;
                          mb_oran_hdr_ext->data_off = (uint16_t)RTE_MIN((uint16_t)RTE_PKTMBUF_HEADROOM, (uint16_t)mb_oran_hdr_ext->buf_len) - rte_ether_hdr_size;
                          mb_oran_hdr_ext->data_len = (uint16_t)(mb_oran_hdr_ext->data_len + rte_ether_hdr_size);
-@@ -1887,8 +1904,13 @@ xran_process_tx_srs_cp_on(void* pHandle, uint8_t ctx_id, uint32_t tti, int32_t s
+@@ -1887,8 +1907,13 @@ xran_process_tx_srs_cp_on(void* pHandle, uint8_t ctx_id, uint32_t tti, int32_t s
                          pStart = (char*)((char*)mb_oran_hdr_ext->buf_addr + mb_oran_hdr_ext->data_off);
  
                          /* Fill in the ethernet header. */
