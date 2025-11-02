@@ -19,7 +19,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
                                                    int Zc,
                                                    int *PC_Flag)
 {
-  const uint8_t NUM = 3; // Gn = 3
+ // const uint8_t NUM = 3; // Gn = 3
   const uint row = MsgIdx - 1;
   int tid = row * 96 + lane;
 
@@ -32,6 +32,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
   uint8_t *BricksToBeMoved = bricksLocal;
 
   p_cnProcBufBit = (uint32_t *)(d_cnBufAll + destByte);
+  p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + destByte);
 
   const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
   const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
@@ -40,12 +41,32 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&d_bnOutAll[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, GET_BRICKS);
 
   *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
+  uint32_t diff = (*p_cnProcBufBit) ^ (*p_cnProcBufResBit);
+  if (__any_sync(0xffffffff, ((diff & 0x80808080u) != 0))) {
+    if ((threadIdx.x & 31) == 0)
+        *PC_Flag = 1;//atomicOr(PC_Flag, 1);
+}
+
+
+  //进行p_cnProcBufBit, p_cnProcBufResBit的比较操作
+  //由于都是int32所以会有四个比特位，只要有一个比特位不对就触发全局写
+  /*比如这样
+  if (__any_sync(0xffffffff, pcRes != 0)) {
+      if (tid % warpSize == 0) {
+        ////printf("It's wrong here G3, pcRes = %d\n", pcRes);
+        *PC_Flag = 1; // atomicOr(PC_Flag, 1);
+      }
+    }
+  
+  */
+ //下面这里可以删去
+ /*
   //------------------------------------Done----------------------------------
   __syncthreads();
   uint32_t pcRes = 0;
   uint32_t tmp[3];
   if (tid < 96) {
-    uint32_t tmp[8];
+    //uint32_t tmp[8];
 #pragma unroll
     for (int i = 0; i < 3; i++) {
       uint32_t ymm0 = *(uint32_t *)(d_cnBufAll + Zc * i + tid * 4);
@@ -64,6 +85,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
       }
     }
   }
+    */
 }
 
 __device__ void BnToCnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
@@ -78,7 +100,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
                                                    int Zc,
                                                    int *PC_Flag)
 {
-  const uint8_t NUM = 4; // Gn = 4
+ // const uint8_t NUM = 4; // Gn = 4
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
   const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
@@ -97,6 +119,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
   uint8_t *BricksToBeMoved = bricksLocal;
 
   p_cnProcBufBit = (uint32_t *)(d_cnBufAll + destByte);
+  p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + destByte);
 
   const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
   const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
@@ -109,6 +132,12 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
 
   *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
 
+  uint32_t diff = (*p_cnProcBufBit) ^ (*p_cnProcBufResBit);
+  if (__any_sync(0xffffffff, ((diff & 0x80808080u) != 0))) {
+    if ((threadIdx.x & 31) == 0)
+        *PC_Flag = 1;//atomicOr(PC_Flag, 1);
+}
+/*
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
   uint32_t pcRes = 0;
@@ -132,6 +161,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
       }
     }
   }
+    */
 }
 
 __device__ void BnToCnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
@@ -146,7 +176,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
                                                    int Zc,
                                                    int *PC_Flag)
 {
-  const uint8_t NUM = 5; // Gn = 5
+  //const uint8_t NUM = 5; // Gn = 5
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
   const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
@@ -165,6 +195,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
   uint8_t *BricksToBeMoved = bricksLocal;
 
   p_cnProcBufBit = (uint32_t *)(d_cnBufAll + destByte);
+  p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + destByte);
 
   const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
   const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
@@ -176,6 +207,12 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBufRes[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, GET_BRICKS);
 
   *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
+    uint32_t diff = (*p_cnProcBufBit) ^ (*p_cnProcBufResBit);
+  if (__any_sync(0xffffffff, ((diff & 0x80808080u) != 0))) {
+    if ((threadIdx.x & 31) == 0)
+        *PC_Flag = 1;//atomicOr(PC_Flag, 1);
+}
+/*
 
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
@@ -200,6 +237,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
       }
     }
   }
+    */
 }
 __device__ void BnToCnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
                                                    int8_t *__restrict__ d_bnOutAll,
@@ -213,7 +251,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
                                                    int Zc,
                                                    int *PC_Flag)
 {
-  const uint8_t NUM = 6; // Gn = 6
+ // const uint8_t NUM = 6; // Gn = 6
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
   const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
@@ -232,6 +270,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
   uint8_t *BricksToBeMoved = bricksLocal;
 
   p_cnProcBufBit = (uint32_t *)(d_cnBufAll + destByte);
+  p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + destByte);
 
   const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
   const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
@@ -243,6 +282,13 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBufRes[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, GET_BRICKS);
 
   *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
+    
+    uint32_t diff = (*p_cnProcBufBit) ^ (*p_cnProcBufResBit);
+  if (__any_sync(0xffffffff, ((diff & 0x80808080u) != 0))) {
+    if ((threadIdx.x & 31) == 0)
+        *PC_Flag = 1;//atomicOr(PC_Flag, 1);
+}
+/*
 
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
@@ -267,6 +313,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
       }
     }
   }
+    */
 }
 __device__ void BnToCnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
                                                    int8_t *__restrict__ d_bnOutAll,
@@ -280,7 +327,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
                                                    int Zc,
                                                    int *PC_Flag)
 {
-  const uint8_t NUM = 7; // Gn = 7
+ // const uint8_t NUM = 7; // Gn = 7
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
   const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
@@ -299,6 +346,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
   uint8_t *BricksToBeMoved = bricksLocal;
 
   p_cnProcBufBit = (uint32_t *)(d_cnBufAll + destByte);
+  p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + destByte);
 
   const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
   const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
@@ -310,6 +358,13 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBufRes[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, GET_BRICKS);
 
   *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
+
+    uint32_t diff = (*p_cnProcBufBit) ^ (*p_cnProcBufResBit);
+  if (__any_sync(0xffffffff, ((diff & 0x80808080u) != 0))) {
+    if ((threadIdx.x & 31) == 0)
+        *PC_Flag = 1;//atomicOr(PC_Flag, 1);
+}
+/*
 
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
@@ -334,6 +389,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
       }
     }
   }
+    */
 }
 __device__ void BnToCnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
                                                    int8_t *__restrict__ d_bnOutAll,
@@ -347,7 +403,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
                                                    int Zc,
                                                    int *PC_Flag)
 {
-  const uint8_t NUM = 8; // Gn = 8
+ // const uint8_t NUM = 8; // Gn = 8
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
   const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
@@ -366,6 +422,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
   uint8_t *BricksToBeMoved = bricksLocal;
 
   p_cnProcBufBit = (uint32_t *)(d_cnBufAll + destByte);
+  p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + destByte);
 
   const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
   const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
@@ -377,6 +434,13 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBufRes[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, GET_BRICKS);
 
   *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
+
+    uint32_t diff = (*p_cnProcBufBit) ^ (*p_cnProcBufResBit);
+  if (__any_sync(0xffffffff, ((diff & 0x80808080u) != 0))) {
+    if ((threadIdx.x & 31) == 0)
+        *PC_Flag = 1;//atomicOr(PC_Flag, 1);
+}
+/*
 
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
@@ -401,6 +465,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
       }
     }
   }
+    */
 }
 __device__ void BnToCnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
                                                    int8_t *__restrict__ d_bnOutAll,
@@ -414,7 +479,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
                                                    int Zc,
                                                    int *PC_Flag)
 {
-  const uint8_t NUM = 9; // Gn = 9
+ // const uint8_t NUM = 9; // Gn = 9
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
   const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
@@ -433,6 +498,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
   uint8_t *BricksToBeMoved = bricksLocal;
 
   p_cnProcBufBit = (uint32_t *)(d_cnBufAll + destByte);
+  p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + destByte);
 
   const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
   const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
@@ -444,6 +510,13 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBufRes[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, GET_BRICKS);
 
   *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
+
+    uint32_t diff = (*p_cnProcBufBit) ^ (*p_cnProcBufResBit);
+  if (__any_sync(0xffffffff, ((diff & 0x80808080u) != 0))) {
+    if ((threadIdx.x & 31) == 0)
+        *PC_Flag = 1;//atomicOr(PC_Flag, 1);
+}
+/*
 
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
@@ -468,6 +541,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
       }
     }
   }
+    */
 }
 __device__ void BnToCnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
                                                     int8_t *__restrict__ d_bnOutAll,
@@ -481,7 +555,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
                                                     int Zc,
                                                     int *PC_Flag)
 {
-  const uint8_t NUM = 10; // Gn = 10
+ // const uint8_t NUM = 10; // Gn = 10
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
   const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
@@ -500,6 +574,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
   uint8_t *BricksToBeMoved = bricksLocal;
 
   p_cnProcBufBit = (uint32_t *)(d_cnBufAll + destByte);
+  p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + destByte);
 
   const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
   const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
@@ -511,6 +586,13 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBufRes[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, GET_BRICKS);
 
   *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
+
+    uint32_t diff = (*p_cnProcBufBit) ^ (*p_cnProcBufResBit);
+  if (__any_sync(0xffffffff, ((diff & 0x80808080u) != 0))) {
+    if ((threadIdx.x & 31) == 0)
+        *PC_Flag = 1;//atomicOr(PC_Flag, 1);
+}
+/*
 
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
@@ -535,6 +617,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
       }
     }
   }
+    */
 }
 __device__ void BnToCnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
                                                     int8_t *__restrict__ d_bnOutAll,
@@ -548,7 +631,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
                                                     int Zc,
                                                     int *PC_Flag)
 {
-  const uint8_t NUM = 19; // Gn = 19
+ // const uint8_t NUM = 19; // Gn = 19
   const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
   const int8_t *p_cnProcBuf = (const int8_t *)d_cnBufAll; // input pointer each block tackle with
   const int8_t *p_cnProcBufRes = (const int8_t *)d_cnOutAll; // output pointer each block tackle with
@@ -567,7 +650,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
   uint8_t *BricksToBeMoved = bricksLocal;
 
   p_cnProcBufBit = (uint32_t *)(d_cnBufAll + destByte);
-  // p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + destByte);
+  p_cnProcBufResBit = (uint32_t *)(d_cnOutAll + destByte);
 
   const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
   uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
@@ -579,6 +662,13 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
   moveBricks_circ((int8_t *)&p_bnProcBufRes[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx], INVERSE, GET_BRICKS);
 
   *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
+
+    uint32_t diff = (*p_cnProcBufBit) ^ (*p_cnProcBufResBit);
+  if (__any_sync(0xffffffff, ((diff & 0x80808080u) != 0))) {
+    if ((threadIdx.x & 31) == 0)
+        *PC_Flag = 1;//atomicOr(PC_Flag, 1);
+}
+/*
 
   //-------------------------------------DONE----------------------------------------
   __syncthreads();
@@ -603,6 +693,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
       }
     }
   }
+    */
 }
 
 __device__ void llrPreProc_Kernel_BG1_int8_G3_stream(const t_nrLDPC_lut *p_lut,
@@ -615,7 +706,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G3_stream(const t_nrLDPC_lut *p_lut,
                                                      uint8_t CnIdx,
                                                      int Zc)
 { // first part it should be llr to CnProc
-  const uint8_t NUM = 3; // Gn = 3
+  //const uint8_t NUM = 3; // Gn = 3
   const int8_t *p_llr = (const int8_t *)llr;
   const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
@@ -687,7 +778,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G4_stream(const t_nrLDPC_lut *p_lut,
                                                      uint8_t CnIdx,
                                                      int Zc)
 { // first part it should be llr to CnProc
-  const uint8_t NUM = 4; // Gn = 4
+  //const uint8_t NUM = 4; // Gn = 4
   const int8_t *p_llr = (const int8_t *)llr;
   const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
@@ -757,7 +848,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G5_stream(const t_nrLDPC_lut *p_lut,
                                                      uint8_t CnIdx,
                                                      int Zc)
 { // first part it should be llr to CnProc
-  const uint8_t NUM = 5; // Gn = 4
+  //const uint8_t NUM = 5; // Gn = 5
   const int8_t *p_llr = (const int8_t *)llr;
   const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
@@ -830,7 +921,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G6_stream(const t_nrLDPC_lut *p_lut,
                                                      uint8_t CnIdx,
                                                      int Zc)
 { // first part it should be llr to CnProc
-  const uint8_t NUM = 6; // Gn = 6
+  //const uint8_t NUM = 6; // Gn = 6
   const int8_t *p_llr = (const int8_t *)llr;
   const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
@@ -903,7 +994,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G7_stream(const t_nrLDPC_lut *p_lut,
                                                      uint8_t CnIdx,
                                                      int Zc)
 { // first part it should be llr to CnProc
-  const uint8_t NUM = 7; // Gn = 7
+  //const uint8_t NUM = 7; // Gn = 7
   const int8_t *p_llr = (const int8_t *)llr;
   const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
@@ -976,7 +1067,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G8_stream(const t_nrLDPC_lut *p_lut,
                                                      uint8_t CnIdx,
                                                      int Zc)
 { // first part it should be llr to CnProc
-  const uint8_t NUM = 8; // Gn = 8
+ // const uint8_t NUM = 8; // Gn = 8
   const int8_t *p_llr = (const int8_t *)llr;
   const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
@@ -1049,7 +1140,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G9_stream(const t_nrLDPC_lut *p_lut,
                                                      uint8_t CnIdx,
                                                      int Zc)
 { // first part it should be llr to CnProc
-  const uint8_t NUM = 9; // Gn = 9
+  //const uint8_t NUM = 9; // Gn = 9
   const int8_t *p_llr = (const int8_t *)llr;
   const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
@@ -1122,7 +1213,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G10_stream(const t_nrLDPC_lut *p_lut,
                                                      uint8_t CnIdx,
                                                      int Zc)
 { // first part it should be llr to CnProc
-  const uint8_t NUM = 10; // Gn = 10
+ // const uint8_t NUM = 10; // Gn = 10
   const int8_t *p_llr = (const int8_t *)llr;
   const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
@@ -1195,7 +1286,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G19_stream(const t_nrLDPC_lut *p_lut,
                                                      uint8_t CnIdx,
                                                      int Zc)
 { // first part it should be llr to CnProc
-  const uint8_t NUM = 19; // Gn = 19
+ // const uint8_t NUM = 19; // Gn = 19
   const int8_t *p_llr = (const int8_t *)llr;
   const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
