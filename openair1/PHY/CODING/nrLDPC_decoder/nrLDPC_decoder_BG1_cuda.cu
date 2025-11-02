@@ -73,15 +73,15 @@ __global__ void llrPreProc_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_
 
   const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
 
-  int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...315
-  int lane = tid % 96; // to decide the inner lane
+  int row = tid / RowLength; // to decide the global MsgIdx; row = 0,1,2...315
+  int lane = tid % RowLength; // to decide the inner lane
 
   uint8_t groupIdx = lut_CnGrpIdx_BG1_R13[row] - 1;
   uint8_t CnIdx = lut_CnIdx_BG1_R13[row] - 1;
   uint8_t MsgIdx = lut_CnMsgIdx_BG1_R13[row];
   uint32_t inOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
 
-  if (tid >= 30336) // 30336 is the total processed 316 msg * 96
+  if (tid >= num_TotalThreads_BG1_R13) // 30336 is the total processed 316 msg * 96
     return;
 
   int8_t *p_cnProcBuf = (int8_t *)(d_cnProcBuf + inOffset);
@@ -148,7 +148,7 @@ __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (tid >= 30336) // 30336 is the total processed 316 msg * 96
+  if (tid >= num_TotalThreads_BG1_R13) // 30336 is the total processed 316 msg * 96
     return;
 
   // Early stopping
@@ -159,8 +159,8 @@ __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
 
   const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
 
-  int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...315
-  int lane = tid % 96; // to decide the inner lane
+  int row = tid / RowLength; // to decide the global MsgIdx; row = 0,1,2...315
+  int lane = tid % RowLength; // to decide the inner lane
   // if(blk == 1&&tid == 0) printf("I'm inside cnProc_kernel\n");
   uint8_t groupIdx = lut_CnGrpIdx_BG1_R13[row] - 1;
   // if(blk == 1&&tid == 0) printf("1.1\n");
@@ -257,12 +257,12 @@ __global__ void bnProcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ 
   /*if (tid == 0) {
     printf("3: Iter = %d, PC_Flag = %d\n", *iter_ptr, *PC_Flag);
   }*/
-  if (tid >= 30336) {
+  if (tid >= num_TotalThreads_BG1_R13) {
     return;
   }
 
-  int row = tid / 96; // to decide the inner block
-  int lane = tid % 96; // to decide the inner lane
+  int row = tid / RowLength; // to decide the inner block
+  int lane = tid % RowLength; // to decide the inner lane
 
   uint8_t GrpIdx = lut_BnGrpIdx_BG1_R13[row];
   uint8_t MsgIdx = lut_BnMsgIdx_BG1_R13[row];
@@ -352,8 +352,8 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
 
   const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
 
-  int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...315
-  int lane = tid % 96; // to decide the inner lane
+  int row = tid / RowLength; // to decide the global MsgIdx; row = 0,1,2...315
+  int lane = tid % RowLength; // to decide the inner lane
   // if(blk == 1&&tid == 0) printf("I'm inside cnProc_kernel\n");
   uint8_t groupIdx = lut_CnGrpIdx_BG1_R13[row] - 1;
   // if(blk == 1&&tid == 0) printf("1.1\n");
@@ -364,7 +364,7 @@ __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lu
   // if(blk == 1&&tid == 0) printf("1.2\n");
   //   __syncthreads();
 
-  if (tid >= 30336) // 30336 is the total processed 316 msg * 96
+  if (tid >= num_TotalThreads_BG1_R13) // 30336 is the total processed 316 msg * 96
     return;
 
   const int8_t *p_cnProcBuf = (const int8_t *)(d_cnBufAll + inOffset);
@@ -628,15 +628,15 @@ __global__ void llrPreProc_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_
 
   const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
 
-  int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...315
-  int lane = tid % 96; // to decide the inner lane
+  int row = tid / RowLength; // to decide the global MsgIdx; row = 0,1,2...315
+  int lane = tid % RowLength; // to decide the inner lane
 
   uint8_t groupIdx = lut_CnGrpIdx_BG1_R23[row] - 1;
   uint8_t CnIdx = lut_CnIdx_BG1_R23[row] - 1;
   uint8_t MsgIdx = lut_CnMsgIdx_BG1_R23[row];
   uint32_t inOffset = lut_startAddrs[groupIdx] + 384 * CnIdx;
 
-  if (tid >= 13824) // 30336 is the total processed 316 msg * 96
+  if (tid >= num_TotalThreads_BG1_R23) // 13824 is the total processed 316 msg * 96
     return;
 
   int8_t *p_cnProcBuf = (int8_t *)(d_cnProcBuf + inOffset);
@@ -710,8 +710,8 @@ __global__ void cnProcKernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
 
   const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
 
-  int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...143
-  int lane = tid % 96; // to decide the inner lane
+  int row = tid / RowLength; // to decide the global MsgIdx; row = 0,1,2...143
+  int lane = tid % RowLength; // to decide the inner lane
   // if(blk == 1&&tid == 0) printf("I'm inside cnProc_kernel\n");
   uint8_t groupIdx = lut_CnGrpIdx_BG1_R23[row] - 1;
   // if(blk == 1&&tid == 0) printf("1.1\n");
@@ -723,7 +723,7 @@ __global__ void cnProcKernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   // if(blk == 1&&tid == 0) printf("1.2\n");
   //   __syncthreads();
 
-  if (tid >= 13824) // 13824 is the total processed 144 msg * 96
+  if (tid >= num_TotalThreads_BG1_R23) // 13824 is the total processed 144 msg * 96
     return;
 
   const int8_t *p_cnProcBuf = (const int8_t *)(d_cnBufAll + inOffset);
@@ -807,12 +807,12 @@ __global__ void bnProcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict__ 
   /*if (tid == 0) {
     printf("3: Iter = %d, PC_Flag = %d\n", *iter_ptr, *PC_Flag);
   }*/
-  if (tid >= 13824) {
+  if (tid >= num_TotalThreads_BG1_R23) {
     return;
   }
 
-  int row = tid / 96; // to decide the inner block
-  int lane = tid % 96; // to decide the inner lane
+  int row = tid / RowLength; // to decide the inner block
+  int lane = tid % RowLength; // to decide the inner lane
 
   uint8_t GrpIdx = lut_BnGrpIdx_BG1_R23[row];
   uint8_t MsgIdx = lut_BnMsgIdx_BG1_R23[row];
@@ -901,8 +901,8 @@ __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lu
 
   const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
 
-  int row = tid / 96; // to decide the global MsgIdx; row = 0,1,2...315
-  int lane = tid % 96; // to decide the inner lane
+  int row = tid / RowLength; // to decide the global MsgIdx; row = 0,1,2...315
+  int lane = tid % RowLength; // to decide the inner lane
   // if(blk == 1&&tid == 0) printf("I'm inside cnProc_kernel\n");
   uint8_t groupIdx = lut_CnGrpIdx_BG1_R23[row] - 1;
   // if(blk == 1&&tid == 0) printf("1.1\n");
@@ -913,7 +913,7 @@ __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lu
   // if(blk == 1&&tid == 0) printf("1.2\n");
   //   __syncthreads();
 
-  if (tid >= 13824) // 30336 is the total processed 144 msg * 96
+  if (tid >= num_TotalThreads_BG1_R23) // 13824 is the total processed 144 msg * 96
     return;
 
   const int8_t *p_cnProcBuf = (const int8_t *)(d_cnBufAll + inOffset);

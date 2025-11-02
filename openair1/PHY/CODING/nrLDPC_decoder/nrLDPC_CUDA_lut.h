@@ -2,6 +2,10 @@
 
 #include <cuda_runtime.h>
 
+#define num_TotalThreads_BG1_R13 30336
+#define num_TotalThreads_BG1_R23 13824
+#define RowLength 96 //Zc = 384/4 = 96
+
 __device__ __constant__ uint8_t h_block_group_ids_cnProc[50] = {0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
                                                                 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4,
                                                                 4, 4, 4, 5, 5, 6, 6, 7, 8, 8, 8, 8, 8, 8, 8, 8};
