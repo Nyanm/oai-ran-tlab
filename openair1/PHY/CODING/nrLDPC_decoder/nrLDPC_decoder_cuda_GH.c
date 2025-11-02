@@ -357,7 +357,7 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    int* PC_Flag);
 
 //--------------------------------------------------------------
-//debug function
+// debug function
 void dumpASS(int8_t* cnProcBufRes, const char* filename)
 {
   FILE* fp = fopen(filename, "w");
@@ -375,7 +375,7 @@ void dumpASS(int8_t* cnProcBufRes, const char* filename)
 
   fclose(fp);
 }
-  
+
 //--------------------------------------------------------------
 static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            int8_t* p_out,
@@ -457,7 +457,7 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
                          t_nrLDPC_time_stats* p_profiler,
                          decode_abort_t* ab)
 {
-  if (!((p_decParams->R == 23 || p_decParams->R == 13)&&p_decParams->BG == 1 && p_decParams->Z == 384)) { // format check
+  if (!((p_decParams->R == 23 || p_decParams->R == 13) && p_decParams->BG == 1 && p_decParams->Z == 384)) { // format check
     printf("Current format: BG = %d, R = %d, Zc = %d\n", p_decParams->BG, p_decParams->R, p_decParams->Z);
     AssertFatal(false, "Format cuda not support, only support BG = 1, Zc = 384 and R = 13, 23 right now\n");
     return 0;
@@ -482,6 +482,8 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
   // Launch LDPC decoder core for one segment
   int n_segments = p_decParams->n_segments;
   int numIter = nrLDPC_decoder_core(p_llr, p_out, n_segments, numLLR, p_lut, p_decParams, p_profiler, ab);
+
+
   // printf("6.1: It works here\n");
   if (numIter >= p_decParams->numMaxIter) {
     LOG_D(PHY, "set abort: %d, %d\n", numIter, p_decParams->numMaxIter);
@@ -522,7 +524,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
   uint8_t R = p_decParams->R; // Decoding rate: Format 15,13,... for code rates 1/5, 1/3,... */
-  uint8_t numMaxIter = p_decParams->numMaxIter ;// To match the actual iterations
+  uint8_t numMaxIter = p_decParams->numMaxIter; // To match the actual iterations
   e_nrLDPC_outMode outMode = p_decParams->outMode;
   int Kprime = p_decParams->Kprime;
 
@@ -535,7 +537,6 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     PC_Flag_array_dev[s] = 1;
 #endif
   }
-
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
 #ifdef USE_STATIC_ALLOC
     int8_t* pp_llr = temp_in + CudaStreamIdx * 68 * 384 ;
@@ -566,12 +567,12 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #endif
 /*
     nrLDPC_llr2llrProcBuf(p_lut, pp_llr, pp_llrProcBuf, Z, BG);
-
     if (BG == 1)
       nrLDPC_llr2CnProcBuf_BG1(p_lut, pp_llr, pp_cnProcBuf, Z);
     else
       nrLDPC_llr2CnProcBuf_BG2(p_lut, pp_llr, pp_cnProcBuf, Z);
 */
+
     //  Call scheduler for this segment and stream
     int8_t* pp_p_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? pp_out : pp_llrOut;
 
@@ -610,7 +611,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     cudaEventSynchronize(decoderDoneEvents[s]); // stop until segment decode
   }
   cudaDeviceSynchronize();
- 
+
   // cudaDeviceSynchronize();
   //printf("p_out %p, temp_out %p\n",p_out,temp_out);
 #ifdef USE_STATIC_ALLOC 
