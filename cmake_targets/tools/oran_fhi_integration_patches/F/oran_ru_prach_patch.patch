@@ -1,0 +1,89 @@
+diff --git a/fhi_lib/lib/src/xran_common.c b/fhi_lib/lib/src/xran_common.c
+index 5968d01..eb9bb9f 100644
+--- a/fhi_lib/lib/src/xran_common.c
++++ b/fhi_lib/lib/src/xran_common.c
+@@ -908,7 +908,8 @@ inline int32_t prepare_symbol_ex(enum xran_pkt_dir direction,
+                 uint32_t do_copy,
+                 enum xran_comp_hdr_type staticEn,
+                 uint16_t num_sections,
+-                uint16_t iq_offset)
++                uint16_t iq_offset,
++                bool is_prach)
+ {
+     int32_t n_bytes , iq_len_aggr = 0;
+     int32_t prep_bytes;
+@@ -968,7 +969,7 @@ inline int32_t prepare_symbol_ex(enum xran_pkt_dir direction,
+         xp[idx].app_params.data_feature.value = 0x10;
+         xp[idx].app_params.data_feature.data_direction = direction;
+         // xp[idx].app_params.payl_ver       = 1;
+-        // xp[idx].app_params.filter_id      = 0;
++        xp[idx].app_params.data_feature.filter_id = is_prach ? 1 : 0;
+         xp[idx].app_params.frame_id       = frame_id;
+         xp[idx].app_params.sf_slot_sym.subframe_id    = subframe_id;
+         xp[idx].app_params.sf_slot_sym.slot_id        = xran_slotid_convert(slot_id, 0);
+@@ -1158,7 +1159,8 @@ int send_symbol_mult_section_ex(void *handle,
+                              do_copy,
+                              staticEn,
+                              1,
+-                             0); /*Send a single section */
++                             0,
++                             true); /*Send a single section */
+         prb_offset += prb_num_sec;
+         data_offset += n_bytes;
+         if(sent) {
+@@ -1266,7 +1268,8 @@ int send_symbol_ex(void *handle,
+                          do_copy,
+                          staticEn,
+                          1,
+-                         0); /*Send a single section */
++                         0,
++                         true); /*Send a single section */
+ 
+     if(sent){
+         pCnt->tx_counter++;
+diff --git a/fhi_lib/lib/src/xran_common.h b/fhi_lib/lib/src/xran_common.h
+index 04076fd..245b1c0 100644
+--- a/fhi_lib/lib/src/xran_common.h
++++ b/fhi_lib/lib/src/xran_common.h
+@@ -201,7 +201,8 @@ int32_t prepare_symbol_ex(enum xran_pkt_dir direction,
+                 uint32_t do_copy,
+                 enum xran_comp_hdr_type staticEn,
+                 uint16_t num_sections,
+-                uint16_t iq_buffer_offset);
++                uint16_t iq_buffer_offset,
++                bool is_prach);
+ int32_t prepare_sf_slot_sym (enum xran_pkt_dir direction,
+                 uint8_t frame_id,
+                 uint8_t subframe_id,
+diff --git a/fhi_lib/lib/src/xran_tx_proc.c b/fhi_lib/lib/src/xran_tx_proc.c
+index 85ce6fa..b7db317 100644
+--- a/fhi_lib/lib/src/xran_tx_proc.c
++++ b/fhi_lib/lib/src/xran_tx_proc.c
+@@ -23,6 +23,7 @@
+  * @author Intel Corporation
+  **/
+ 
++#include <stdbool.h>
+ #define _GNU_SOURCE
+ #include <sched.h>
+ #include <assert.h>
+@@ -421,7 +422,8 @@ int32_t xran_process_tx_sym_cp_off(void *pHandle, uint8_t ctx_id, uint32_t tti,
+                                       0,
+                                       staticEn,
+                                       num_sections,
+-                                      p_sec_desc->iq_buffer_offset);
++                                      p_sec_desc->iq_buffer_offset,
++                                      false);
+ 
+                     curr_sect_id += num_sections;
+ 
+@@ -683,7 +685,8 @@ xran_process_tx_srs_cp_off(void *pHandle, uint8_t ctx_id, uint32_t tti, int32_t
+                               0,
+                               staticEn,
+                               num_sections,
+-                              0);
++                              0,
++                              false);
+ 
+             section_id += num_sections;
+ 
