@@ -261,7 +261,7 @@ void nrLDPC_llrPreProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
  }
  cudaDeviceSynchronize();*/
   // printf("Check point 1001: ");
-  // CHECK(cudaGetLastError());
+   CHECK(cudaGetLastError());
 }
 
 __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
@@ -274,6 +274,10 @@ __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                                      int *PC_Flag)
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (tid >= 30336) // 30336 is the total processed 316 msg * 96
+    return;
+
   // Early stopping
   if (*iter_ptr > numMaxIter || *PC_Flag == 0) {
     return;
@@ -295,8 +299,6 @@ __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   // if(blk == 1&&tid == 0) printf("1.2\n");
   //   __syncthreads();
 
-  if (tid >= 30336) // 30336 is the total processed 316 msg * 96
-    return;
 
   const int8_t *p_cnProcBuf = (const int8_t *)(d_cnBufAll + inOffset);
   int8_t *p_cnProcBufRes = (int8_t *)(d_cnOutAll + outOffset);
@@ -381,14 +383,7 @@ void nrLDPC_cnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                          numMaxIter,
                                                                                          PC_Flag);
   // printf("Check point 1001: ");
-  // CHECK(cudaGetLastError());
-/* 
- cudaError_t err=cudaPeekAtLastError();
- if (err!=cudaSuccess) {
-    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
-    exit(-1);
- }
- cudaDeviceSynchronize();*/
+   CHECK(cudaGetLastError());
 }
 
 __global__ void bnProcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ d_bnProcBuf,
@@ -484,13 +479,7 @@ void nrLDPC_bnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                          iter_ptr,
                                                                                          numMaxIter,
                                                                                          PC_Flag);
-  /*
- cudaError_t err=cudaPeekAtLastError();
- if (err!=cudaSuccess) {
-    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
-    exit(-1);
- }
- cudaDeviceSynchronize();*/
+CHECK(cudaGetLastError());
 }
 
 __global__ void BnToCnPC_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
@@ -738,13 +727,7 @@ void nrLDPC_BnToCnPC_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                             llrOut,
                                                                                             p_llrOut,
                                                                                             numLLR);
- /*
- cudaError_t err=cudaPeekAtLastError();
- if (err!=cudaSuccess) {
-    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
-    exit(-1);
- }
- cudaDeviceSynchronize();*/
+  CHECK(cudaGetLastError());
 }
 
 void nrLDPC_OutPut_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
@@ -780,14 +763,7 @@ void nrLDPC_OutPut_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                           llrOut,
                                                                                           p_llrOut,
                                                                                           numLLR);
-  
-  /*
- cudaError_t err=cudaPeekAtLastError();
- if (err!=cudaSuccess) {
-    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
-    exit(-1);
- }
- cudaDeviceSynchronize();*/
+  CHECK(cudaGetLastError());
 }
 //-----------------------------------------↑↑↑ R13 ↑↑↑----------------------------------------
 
