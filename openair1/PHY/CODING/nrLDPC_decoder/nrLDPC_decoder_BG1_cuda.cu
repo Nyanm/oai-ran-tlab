@@ -13,6 +13,48 @@
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
 #define RECORD_GRAPH 1 // set 1 to enable graph recording, 0 to unable.
 
+#ifndef JETSON_TARGET
+#define CUDA_THREADS 1024
+#define CUDA_BLOCKS_R13 30
+#define CUDA_BLOCKS_R23 14
+#else
+#define CUDA_THREADS 128
+#define CUDA_BLOCKS_R13 237 // ceil(30336/128)
+#define CUDA_BLOCKS_R23 108 // ceil(13824/128)
+#endif
+
+/*
+#define CUDA_THREADS 960
+#define CUDA_BLOCKS_R13 32 // ceil(30336/960)
+#define CUDA_BLOCKS_R23 15 // ceil(13824/960)
+*/
+/*
+#define CUDA_THREADS 768 
+#define CUDA_BLOCKS_R13 40 // ceil(30336/768)
+#define CUDA_BLOCKS_R23 18 // ceil(13824/768)
+*/
+/*
+#define CUDA_THREADS 512
+#define CUDA_BLOCKS_R13 60 // ceil(30336/512)
+#define CUDA_BLOCKS_R23 27 // ceil(13824/512)
+*/
+/*
+#define CUDA_THREADS 384
+#define CUDA_BLOCKS_R13 79// ceil(30336/384)
+#define CUDA_BLOCKS_R23 36// ceil(13824/384)
+*/
+
+
+/*
+#define CUDA_THREADS 96
+#define CUDA_BLOCKS_R13 316 // ceil(30336/128)
+#define CUDA_BLOCKS_R23 144 // ceil(13824/128)
+*/
+/*
+#define CUDA_THREADS 64 
+#define CUDA_BLOCKS_R13 474 // ceil(30336/64)
+#define CUDA_BLOCKS_R23 216 // ceil(13824/64)
+*/
 cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
 cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
 bool graphCreated[MAX_NUM_DLSCH_SEGMENTS_DL] = {false};
@@ -62,6 +104,84 @@ inline cudaError_t ErrorCheck(cudaError_t error_code, const char *filename, int 
   return error_code;
 }
 
+#define COPY_ARR_MEMBER(member, type, groups) do { \
+    for (int i = 0; i < (groups); i++) { \
+        type* tmp_dev; \
+        if (h_lut.member[i].d != NULL && h_lut.member[i].dim1 > 0 && h_lut.member[i].dim2 > 0) { \
+            size_t sz = h_lut.member[i].dim1 * h_lut.member[i].dim2 * sizeof(type); \
+            err = cudaMalloc((void**)&tmp_dev, sz); \
+            if (err != cudaSuccess) { \
+                fprintf(stderr, "cudaMalloc failed for " #member "[%d]: %s\n", i, cudaGetErrorString(err)); \
+                exit(EXIT_FAILURE); \
+            } \
+            cudaMemcpy(tmp_dev, h_lut.member[i].d, sz, cudaMemcpyHostToDevice); \
+            /* updtae d_lut->member[i].d pointer */ \
+            cudaMemcpy(&(d_lut->member[i].d), &tmp_dev, sizeof(type*), cudaMemcpyHostToDevice); \
+            /* copy dim1 and dim2 */ \
+            cudaMemcpy(&(d_lut->member[i].dim1), &(h_lut.member[i].dim1), sizeof(int), cudaMemcpyHostToDevice); \
+            cudaMemcpy(&(d_lut->member[i].dim2), &(h_lut.member[i].dim2), sizeof(int), cudaMemcpyHostToDevice); \
+        } \
+    } \
+} while(0)
+
+#define COPY_POINTER_MEMBER(member, type, count) do { \
+    type* tmp_dev; \
+    printf("tmp_dev = %p\n", (void*)tmp_dev);\
+    err = cudaMalloc((void**)&tmp_dev, (count) * sizeof(type)); \
+    printf("malloc tmp_dev = %p\n", (void*)tmp_dev);\
+    if (err != cudaSuccess) { \
+        fprintf(stderr, "cudaMalloc failed for " #member ": %s\n", cudaGetErrorString(err)); \
+        exit(EXIT_FAILURE); \
+    } \
+    printf("h_lut.member = %p\n", (void*)h_lut.member);\
+    cudaMemcpy(tmp_dev, h_lut.member, (count) * sizeof(type), cudaMemcpyHostToDevice); \
+    printf("d_lut->member");\
+    printf(" = %p\n", (void*)d_lut->member);\
+    cudaMemcpy(&(d_lut->member), &tmp_dev, sizeof(type*), cudaMemcpyHostToDevice); \
+} while(0)
+
+__device__ __constant__ t_nrLDPC_lut lut384_R13;
+__device__ __constant__ t_nrLDPC_lut lut384_R23;
+
+void copy_luts_to_constant() {
+    cudaError_t err;
+    t_nrLDPC_lut h_lut;
+    // ---------------------------
+    // copy all the member pointers
+    // ---------------------------
+    t_nrLDPC_lut *d_lut = &lut384_R13;
+    COPY_POINTER_MEMBER(startAddrCnGroups, uint32_t, 9);
+    printf("Inside copy 3\n");
+    COPY_POINTER_MEMBER(numCnInCnGroups, uint8_t, 9);
+    printf("Inside copy 4\n");
+    printf("host ptr = %p\n", (void*)d_lut->numBnInBnGroups);
+    COPY_POINTER_MEMBER(numBnInBnGroups, uint8_t, 30);
+    printf("Inside copy 5\n");
+    printf("host ptr = %p\n", (void*)d_lut->startAddrBnGroups);
+    printf("Inside copy 5.1\n");
+    COPY_POINTER_MEMBER(startAddrBnGroups, uint32_t, 30);
+    printf("Inside copy 6\n");
+    COPY_POINTER_MEMBER(startAddrBnGroupsLlr, uint16_t, 30);
+    printf("Inside copy 7\n");
+    COPY_POINTER_MEMBER(llr2llrProcBufAddr, uint16_t, 26);
+    printf("Inside copy 8\n");
+    COPY_POINTER_MEMBER(llr2llrProcBufBnPos, uint8_t, 26);
+    printf("Inside copy 9\n");
+    //  COPY_POINTER_MEMBER
+    // COPY_POINTER_MEMBER(numCnInCnGroups,  uint8_t,  X);
+    // COPY_POINTER_MEMBER(numBnInBnGroups,  uint8_t,  Y);
+    // ...
+
+    // ---------------------------
+    // cope with arr8_t/16_t/32_t
+    // ---------------------------
+
+
+    COPY_ARR_MEMBER(circShift,uint16_t, 9);
+    COPY_ARR_MEMBER(startAddrBnProcBuf,uint32_t, 9);
+    COPY_ARR_MEMBER(bnPosBnProcBuf,uint8_t, 9);
+    COPY_ARR_MEMBER(posBnInCnProcBuf,uint8_t, 9);
+}
 //-----------------------------------------↓↓↓ R13 ↓↓↓----------------------------------------
 __global__ void llrPreProc_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                                           int8_t *__restrict__ d_llr,
@@ -102,7 +222,7 @@ __global__ void llrPreProc_Kernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_
       llrPreProc_Kernel_BG1_int8_G6_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 4:
-      llrPreProc_Kernel_BG1_int8_G7_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      llrPreProc_Kernel_BG1_int8_G7_R13_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 5:
       llrPreProc_Kernel_BG1_int8_G8_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
@@ -128,11 +248,18 @@ void nrLDPC_llrPreProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                 int8_t CudaStreamIdx)
 {
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
-  int maxBlockSize = 1024; // Maximun threads are 960
-  dim3 gridDim(30); // 50
+  int maxBlockSize = CUDA_THREADS;//1024; // Maximun threads are 960
+  dim3 gridDim(CUDA_BLOCKS_R13); // 50
   dim3 blockDim(maxBlockSize);
 
   llrPreProc_Kernel_BG1_R13_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut, llr, llrProcBuf, cnProcBuf, Z);
+  /*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
   // printf("Check point 1001: ");
    CHECK(cudaGetLastError());
 }
@@ -208,6 +335,27 @@ __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   }
 }
 
+void check_lut_pointers_cu(const t_nrLDPC_lut* lut) {
+    if (!lut) {
+        printf("check_lut_pointers: lut is NULL\n");
+        return;
+    }
+
+    printf("Checking LUT pointers:\n");
+    printf("startAddrCnGroups       = %p\n", (void*)lut->startAddrCnGroups);
+    printf("numCnInCnGroups         = %p\n", (void*)lut->numCnInCnGroups);
+    printf("numBnInBnGroups         = %p\n", (void*)lut->numBnInBnGroups);
+    printf("startAddrBnGroups       = %p\n", (void*)lut->startAddrBnGroups);
+    printf("startAddrBnGroupsLlr    = %p\n", (void*)lut->startAddrBnGroupsLlr);
+    printf("llr2llrProcBufAddr      = %p\n", (void*)lut->llr2llrProcBufAddr);
+    printf("llr2llrProcBufBnPos     = %p\n", (void*)lut->llr2llrProcBufBnPos);
+
+    printf("circShift               = %p\n", (void*)lut->circShift);
+    printf("startAddrBnProcBuf       = %p\n", (void*)lut->startAddrBnProcBuf);
+    printf("bnPosBnProcBuf           = %p\n", (void*)lut->bnPosBnProcBuf);
+    printf("posBnInCnProcBuf         = %p\n", (void*)lut->posBnInCnProcBuf);
+}
+
 void nrLDPC_cnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             int8_t *cnProcBuf,
                                             int8_t *cnProcBufRes,
@@ -220,10 +368,12 @@ void nrLDPC_cnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             int8_t CudaStreamIdx)
 {
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
-  int maxBlockSize = 1024; // Maximun threads are 960
-  dim3 gridDim(30); // 50
+  int maxBlockSize = CUDA_THREADS;//1024; // Maximun threads are 960
+  dim3 gridDim(CUDA_BLOCKS_R13); // 50
   dim3 blockDim(maxBlockSize);
-
+  //check_lut_pointers_cu(p_lut); 
+  //printf("cnProcBuf %p, cnProcBufRes %p, bnProcBuf %p, iter_ptr %p, PC_Flag %p\n",
+//	 cnProcBuf,cnProcBufRes,bnProcBuf,iter_ptr,PC_Flag);
   cnProcKernel_BG1_R13_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut,
                                                                                          cnProcBuf,
                                                                                          cnProcBufRes,
@@ -312,8 +462,8 @@ void nrLDPC_bnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
   int8_t *p_llrProcBuf = (int8_t *)llrProcBuf;
   int8_t *p_llrRes = (int8_t *)llrRes;
 
-  int maxBlockSize = 1024; // Z;
-  int totalBlocks = 30;
+  int maxBlockSize = CUDA_THREADS;//1024; // Z;
+  int totalBlocks = CUDA_BLOCKS_R13;
 
   dim3 gridDim(totalBlocks);
   dim3 blockDim(maxBlockSize);
@@ -557,8 +707,8 @@ void nrLDPC_BnToCnPC_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
 {
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
 
-  int maxBlockSize = 1024; // Maximun threads are 1024
-  dim3 gridDim(30);
+  int maxBlockSize = CUDA_THREADS;//1024; // Maximun threads are 1024
+  dim3 gridDim(CUDA_BLOCKS_R13);
   dim3 blockDim(maxBlockSize);
   // printf("bnProcBuf =  %p\n", bnProcBuf);
   // printf("In stream %d BC: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
@@ -598,8 +748,8 @@ void nrLDPC_OutPut_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
-  int maxBlockSize = 1024; // Maximun threads are 1024
-  dim3 gridDim(30);
+  int maxBlockSize = CUDA_THREADS;//1024; // Maximun threads are 1024
+  dim3 gridDim(CUDA_BLOCKS_R13);
   dim3 blockDim(maxBlockSize);
   // printf("bnProcBuf =  %p\n", bnProcBuf);
   // printf("In stream %d BC: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
@@ -657,7 +807,7 @@ __global__ void llrPreProc_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_
       printf("Shouldn't see case 3 in R23");
       break;
     case 4:
-      llrPreProc_Kernel_BG1_int8_G7_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      llrPreProc_Kernel_BG1_int8_G7_R23_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
       break;
     case 5:
       llrPreProc_Kernel_BG1_int8_G8_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
@@ -683,13 +833,20 @@ void nrLDPC_llrPreProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                 int8_t CudaStreamIdx)
 {
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
-  int maxBlockSize = 1024; // Maximun threads are 960
-  dim3 gridDim(14); // 50
+  int maxBlockSize = CUDA_THREADS;//1024; // Maximun threads are 960
+  dim3 gridDim(CUDA_BLOCKS_R23); // 50
   dim3 blockDim(maxBlockSize);
 
   llrPreProc_Kernel_BG1_R23_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut, llr, llrProcBuf, cnProcBuf, Z);
   // printf("Check point 1001: ");
   // CHECK(cudaGetLastError());
+/*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 
 __global__ void cnProcKernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
@@ -772,8 +929,8 @@ void nrLDPC_cnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
-  int maxBlockSize = 1024; // Maximun threads are 1024
-  dim3 gridDim(14); // 50
+  int maxBlockSize = CUDA_THREADS; // Maximun threads are 1024
+  dim3 gridDim(CUDA_BLOCKS_R23); // 50
   dim3 blockDim(maxBlockSize);
 
   cnProcKernel_BG1_R23_int8_BIG_stream<<<gridDim, blockDim, 0, streams[CudaStreamIdx]>>>(p_lut,
@@ -784,6 +941,13 @@ void nrLDPC_cnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                          iter_ptr,
                                                                                          numMaxIter,
                                                                                          PC_Flag);
+  /*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 
 __global__ void bnProcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict__ d_bnProcBuf,
@@ -862,8 +1026,8 @@ void nrLDPC_bnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
   int8_t *p_llrProcBuf = (int8_t *)llrProcBuf;
   int8_t *p_llrRes = (int8_t *)llrRes;
 
-  int maxBlockSize = 1024; // Z;
-  int totalBlocks = 14;
+  int maxBlockSize = CUDA_THREADS; // Z;
+  int totalBlocks = CUDA_BLOCKS_R23;
 
   dim3 gridDim(totalBlocks);
   dim3 blockDim(maxBlockSize);
@@ -879,6 +1043,13 @@ void nrLDPC_bnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                          iter_ptr,
                                                                                          numMaxIter,
                                                                                          PC_Flag);
+  /*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 
 __global__ void BnToCnPC_Kernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
@@ -1076,8 +1247,8 @@ void nrLDPC_BnToCnPC_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
 {
   // printf("\nInitial addr : cnProcBuf = %p, cnProcBufRes = %p\n", cnProcBuf, cnProcBufRes);
 
-  int maxBlockSize = 1024; // Maximun threads are 1024
-  dim3 gridDim(14); // only need 14 for R23
+  int maxBlockSize = CUDA_THREADS; // Maximun threads are 1024
+  dim3 gridDim(CUDA_BLOCKS_R23); // only need 14 for R23
   dim3 blockDim(maxBlockSize);
   // printf("bnProcBuf =  %p\n", bnProcBuf);
   // printf("In stream %d BC: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
@@ -1096,6 +1267,13 @@ void nrLDPC_BnToCnPC_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                             llrOut,
                                                                                             p_llrOut,
                                                                                             numLLR);
+  /*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 
 void nrLDPC_OutPut_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
@@ -1116,8 +1294,8 @@ void nrLDPC_OutPut_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
-  int maxBlockSize = 1024; // Maximun threads are 1024
-  dim3 gridDim(14); // only need 14 for R23
+  int maxBlockSize = CUDA_THREADS; // Maximun threads are 1024
+  dim3 gridDim(CUDA_BLOCKS_R23); // only need 14 for R23
   dim3 blockDim(maxBlockSize);
   // printf("bnProcBuf =  %p\n", bnProcBuf);
   // printf("In stream %d BC: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
@@ -1131,6 +1309,13 @@ void nrLDPC_OutPut_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                                                           llrOut,
                                                                                           p_llrOut,
                                                                                           numLLR);
+  /*
+ cudaError_t err=cudaPeekAtLastError();
+ if (err!=cudaSuccess) {
+    printf("cuda error: %s %s)\n",cudaGetErrorString(err),__FUNCTION__);
+    exit(-1);
+ }
+ cudaDeviceSynchronize();*/
 }
 
 //-----------------------------------------↑↑↑ R23 ↑↑↑----------------------------------------
@@ -1181,11 +1366,13 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
     // check_ptr_kernel_easy<<<1,10>>>(2);
     // cudaDeviceSynchronize();
     // CHECK(cudaGetLastError());
+    nrLDPC_llrPreProc_BG1_R13_cuda_stream_core(p_lut, llr, llrProcBuf, cnProcBuf, Z, streams, CudaStreamIdx);
     switch (R) {
       case 13: {
-        nrLDPC_llrPreProc_BG1_R13_cuda_stream_core(p_lut, llr, llrProcBuf, cnProcBuf, Z, streams, CudaStreamIdx);
+        
         //cudaDeviceSynchronize();
-        //dumpAssCUDA(cnProcBuf, "Dump_cnProcBuf_cuda.txt");
+        //dumpAssCUDA(cnProcBuf, "Dump_cnProcBuf_cuda_R13_pre.txt");
+        //dumpAssCUDA(llrProcBuf, "Dump_llrProcBuf_cuda_R13_pre.txt");
         for (int i = 0; i <= numMaxIter; i++) {
           // printf("I'm inside the loop i = %d\n", i);
           nrLDPC_cnProc_BG1_R13_cuda_stream_core(p_lut,
@@ -1263,7 +1450,10 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
 
       } break;
       case 23: {
-        nrLDPC_llrPreProc_BG1_R23_cuda_stream_core(p_lut, llr, llrProcBuf, cnProcBuf, Z, streams, CudaStreamIdx);
+        
+        //cudaDeviceSynchronize();
+        //dumpAssCUDA(cnProcBuf, "Dump_cnProcBuf_cuda_R23_pre.txt");
+        //dumpAssCUDA(llrProcBuf, "Dump_llrProcBuf_cuda_R23_pre.txt");
         for (int i = 0; i <= numMaxIter; i++) {
           // printf("I'm inside the loop i = %d\n", i);
           nrLDPC_cnProc_BG1_R23_cuda_stream_core(p_lut,
@@ -1278,13 +1468,14 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  CudaStreamIdx);
           CHECK(cudaGetLastError());
 
-          // cudaDeviceSynchronize();
-          /*if(i == 0){
-            dumpAssCUDA(cnProcBuf, "Dump_cnProcBuf_cuda.txt");
-            dumpAssCUDA(cnProcBufRes, "Dump_cnProcBufRes_cuda.txt");
-            dumpAssCUDA(bnProcBuf, "Dump_bnProcBuf_cuda.txt");
-          }
-            */
+          /*
+          if(i == 0){
+            cudaDeviceSynchronize();
+            dumpAssCUDA(cnProcBuf, "Dump_cnProcBuf_cuda_R23.txt");
+            dumpAssCUDA(cnProcBufRes, "Dump_cnProcBufRes_cuda_R23.txt");
+            dumpAssCUDA(bnProcBuf, "Dump_bnProcBuf_cuda_R23.txt");
+          }*/ 
+            
           // printf("In stream %d 1: Iter = %d, PC_Flag = %d\n", CudaStreamIdx, *iter_ptr, *PC_Flag);
           nrLDPC_bnProc_BG1_R23_cuda_stream_core(p_lut,
                                                  bnProcBuf,
@@ -1298,12 +1489,13 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  streams,
                                                  CudaStreamIdx);
 
-          // cudaDeviceSynchronize();
-          /*          if(i == 0){
-                      dumpAssCUDA(bnProcBufRes, "Dump_bnProcBufRes_cuda.txt");
-                      dumpAssCUDA(llrRes, "Dump_llrRes_cuda.txt");
+           /*
+                    if(i == 0){
+                      cudaDeviceSynchronize();
+                      dumpAssCUDA(bnProcBufRes, "Dump_bnProcBufRes_cuda_R23.txt");
+                      dumpAssCUDA(llrRes, "Dump_llrRes_cuda_R23.txt");
                     }
-                      */
+                     */ 
           CHECK(cudaGetLastError());
           // cudaDeviceSynchronize();
           nrLDPC_BnToCnPC_BG1_R23_cuda_stream_core(p_lut,
