@@ -130,35 +130,16 @@ static int8_t* d_llrRes = NULL;
 static int8_t* d_llrProcBuf = NULL;
 static int8_t* d_llrOut = NULL;
 static int8_t* d_out = NULL; // optional if needed per-seg
+static int8_t* temp_out = NULL;
+static int8_t* temp_in = NULL;
+
 int gpuDeviceId;
 
-
-extern void nrLDPC_cnProc_BG1_cuda(const t_nrLDPC_lut* p_lut,
-                                   int8_t* cnProcBuf,
-                                   int8_t* cnProcBufRes,
-                                   int8_t* bnProcBuf,
-                                   uint16_t Z);
-
-extern void nrLDPC_bnProc_BG1_cuda(const t_nrLDPC_lut* p_lut,
-                                   int8_t* bnProcBuf,
-                                   int8_t* bnProcBufRes,
-                                   int8_t* llrProcBuf,
-                                   int8_t* llrRes,
-                                   uint16_t Z);
-
-extern void nrLDPC_BnToCnPC_BG1_cuda(const t_nrLDPC_lut* p_lut,
-                                     int8_t* bnProcBufRes,
-                                     int8_t* cnProcBuf,
-                                     int8_t* cnProcBufRes,
-                                     int8_t* bnProcBuf,
-                                     uint16_t Z,
-                                     int* PC_Flag);
-
-extern void run_test_kernel();
 
 extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    int8_t* p_out,
                                                    uint32_t numLLR,
+                                                   int8_t* llr,
                                                    int8_t* cnProcBuf,
                                                    int8_t* cnProcBufRes,
                                                    int8_t* bnProcBuf,
@@ -177,8 +158,6 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    cudaEvent_t* doneEvent,
                                                    int8_t* iter_ptr,
                                                    int* PC_Flag);
-
-
 //--------------------------------------------------------------
 
 //-------------------------Debug Function-----------------------
@@ -406,7 +385,7 @@ int32_t LDPCinit_cuda()
   cudaGetDevice(&gpuDeviceId); //get device id
 
   cudaError_t err;
-  err = cudaMallocManaged((void**)&d_cnProcBuf, cn_bytes, cudaMemAttachGlobal);
+  err = cudaMalloc((void**)&d_cnProcBuf, cn_bytes);
   if (err != cudaSuccess) {
     fprintf(stderr, "cudaMalloc d_cnProcBuf failed: %s\n", cudaGetErrorString(err));
     return -1;
@@ -431,7 +410,7 @@ int32_t LDPCinit_cuda()
     fprintf(stderr, "cudaMalloc d_llrRes failed: %s\n", cudaGetErrorString(err));
     return -1;
   }
- err = cudaMallocManaged((void**)&d_llrProcBuf, llr_bytes, cudaMemAttachGlobal);
+ err = cudaMalloc((void**)&d_llrProcBuf, llr_bytes);
 if (err != cudaSuccess) {
   fprintf(stderr, "cudaMallocManaged d_llrProcBuf failed: %s\n", cudaGetErrorString(err));
   return -1;
@@ -453,6 +432,16 @@ if (err != cudaSuccess) {
     return -1;
   }
   err = cudaMalloc((void**)&d_out, MAX_NUM_DLSCH_SEGMENTS_DL*8448*sizeof(uint8_t));
+  if (err != cudaSuccess) {
+    fprintf(stderr, "cudaMalloc d_out failed: %s\n", cudaGetErrorString(err));
+    return -1;
+  }
+  err = cudaMalloc((void**)&temp_out, MAX_NUM_DLSCH_SEGMENTS_DL*8448*sizeof(uint8_t));
+  if (err != cudaSuccess) {
+    fprintf(stderr, "cudaMalloc d_out failed: %s\n", cudaGetErrorString(err));
+    return -1;
+  }
+  err = cudaMalloc((void**)&temp_in, MAX_NUM_DLSCH_SEGMENTS_DL*68*384*sizeof(uint8_t));
   if (err != cudaSuccess) {
     fprintf(stderr, "cudaMalloc d_out failed: %s\n", cudaGetErrorString(err));
     return -1;
@@ -515,10 +504,7 @@ int32_t LDPCshutdown()
   LDPCshutdown_cuda();
   return 0;
 }
-int32_t LDPCdecoder(t_nrLDPC_dec_params* p_decParams,
-                    //uint8_t harq_pid,
-                    //uint8_t ulsch_id,
-                    //uint8_t C,
+int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
                     int8_t* p_llr,
                     uint8_t* p_out,
                     t_nrLDPC_time_stats* p_profiler,
@@ -606,26 +592,14 @@ printf("=== Host p_lut->startAddrBnProcBuf dump ===\n");
         }
   printf("n_segments = %d, R = %d\n", n_segments, p_decParams->R);
 */
+  cudaMemcpy(temp_in , p_llr ,  n_segments * 68 * 384, cudaMemcpyHostToDevice);
+  cudaMemset(temp_out, 0     ,  n_segments * 8448);
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
   uint8_t R = p_decParams->R; // Decoding rate: Format 15,13,... for code rates 1/5, 1/3,... */
   uint8_t numMaxIter = p_decParams->numMaxIter;
   e_nrLDPC_outMode outMode = p_decParams->outMode;
   int Kprime = p_decParams->Kprime;
-//  int LastTrial = p_decParams->LastTrial;
-/* move this part to LDPC_init
-  if (d_mem_exist == false) {
-    //P_lut = p_lut_dev;
-    printf("2.1\n");
-    //printf("Check P_lut = %d\n", P_lut->posBnInCnProcBuf[0]);
-    //printf("2.2\n");
-    LDPCinit_cuda(); // allocate device memory for the first time
-    printf("2.3\n");
-    d_mem_exist = true;
-  }
-*/
-  //check_ptr_host(iter_ptr_array, "iter_ptr_array");
-  //check_ptr_host(PC_Flag_array, "PC_Flag_array");
 
     for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS_DL; s++) {
     iter_ptr_array[s] = 0;
@@ -637,9 +611,10 @@ printf("=== Host p_lut->startAddrBnProcBuf dump ===\n");
 //printf("Flag_ptr = %p\n", PC_Flag_array);
 //   printf("3.2: It works here\n");
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
-    int8_t* pp_llr = p_llr + CudaStreamIdx * 68 * 384 ;
-    int8_t* pp_out = d_out + CudaStreamIdx * 8448; 
+    int8_t* pp_llr = temp_in + CudaStreamIdx * 68 * 384 ;
+    int8_t* pp_out = temp_out + CudaStreamIdx * 8448; // use temp_out rather than p_out
     // printf("Stream %d: pp_out = %p\n", CudaStreamIdx, pp_out);
+
     int8_t* pp_cnProcBuf = d_cnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     int8_t* pp_cnProcBufRes = d_cnProcBufRes + CudaStreamIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     int8_t* pp_bnProcBuf = d_bnProcBuf + CudaStreamIdx * NR_LDPC_SIZE_BN_PROC_BUF;
@@ -647,51 +622,22 @@ printf("=== Host p_lut->startAddrBnProcBuf dump ===\n");
     int8_t* pp_llrRes = d_llrRes + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* pp_llrProcBuf = d_llrProcBuf + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* pp_llrOut = d_llrOut + CudaStreamIdx * NR_LDPC_MAX_NUM_LLR;
-    // printf("4: It works here\n");
-    //  LLR preprocessing
-    // NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2llrProcBuf));
-    //printf("2.5\n");
+/*
     nrLDPC_llr2llrProcBuf(p_lut, pp_llr, pp_llrProcBuf, Z, BG);
-    //printf("2.51\n");
-    // NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2llrProcBuf));
-    // NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->llr2CnProcBuf));
-    if (BG == 1){
+
+    if (BG == 1)
       nrLDPC_llr2CnProcBuf_BG1(p_lut, pp_llr, pp_cnProcBuf, Z);
-      //printf("2.6\n");
-      }
     else
       nrLDPC_llr2CnProcBuf_BG2(p_lut, pp_llr, pp_cnProcBuf, Z);
-    // NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->llr2CnProcBuf));
+*/
     //  Call scheduler for this segment and stream
-    //printf("3\n");
     int8_t* pp_p_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? pp_out : pp_llrOut;
-    // printf("5: It works here\n");
-    //  Launch decoder on stream s
 
-    // cudaEventCreate(&decoderDoneEvents[CudaStreamIdx]);
-    // printf("Launching segment %d \n",CudaStreamIdx);
-
-    //-------------------------check device pointer-----------------------
-    /*check_kernel_args_for_graph(p_lut_dev,
-                                pp_out, // pointer that will be passed to kernel (可能 host)
-                                pp_cnProcBuf, // device expected
-                                pp_cnProcBufRes,
-                                pp_bnProcBuf,
-                                pp_bnProcBufRes,
-                                pp_llrRes,
-                                pp_llrProcBuf,
-                                pp_llrOut,
-                                iter_ptr_array,
-                                PC_Flag_array,
-                                false);*/
-    //------------------------check area end-------------------------------
-//printf("4\n");
-    cudaMemPrefetchAsync(pp_cnProcBuf, NR_LDPC_SIZE_CN_PROC_BUF, gpuDeviceId, decoderStreams[CudaStreamIdx]);//fetch cn_proc_buf to GPU
-    cudaMemPrefetchAsync(pp_llrProcBuf, NR_LDPC_MAX_NUM_LLR*sizeof(int8_t), gpuDeviceId, decoderStreams[CudaStreamIdx]);
-//printf("5\n");
-    nrLDPC_decoder_scheduler_BG1_cuda_core(p_lut_dev,
+    //  Launch decoder on stream
+    nrLDPC_decoder_scheduler_BG1_cuda_core(p_lut,
                                            pp_out,
                                            numLLR,
+                                           pp_llr,
                                            pp_cnProcBuf,
                                            pp_cnProcBufRes,
                                            pp_bnProcBuf,
@@ -710,9 +656,6 @@ printf("=== Host p_lut->startAddrBnProcBuf dump ===\n");
                                            decoderDoneEvents,
                                            &iter_ptr_array[CudaStreamIdx],
                                            &PC_Flag_array[CudaStreamIdx]); // stream index passed in
-//printf("6\n");
-    // cudaEventRecord(done[CudaStreamIdx], streams[CudaStreamIdx]);
-    // printf("5: It works here\n");
   }
   for (int s = 0; s < n_segments; ++s) {
     // printf("Synchronizing segment %d \n",s);
