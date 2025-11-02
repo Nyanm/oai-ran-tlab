@@ -401,13 +401,14 @@ one_measurement_t test_ldpc(short max_iterations,
       set_abort(&dec_abort, false);
 //dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_128.txt");
       if (use32bit)
-      {if(j == 0)
+      {if(j == 0){
+        //dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_128.txt",n_segments);
         n_iter = ldpc_toCompare.LDPCdecoder_cuda(&decParams[j],
                                                  channel_output_fixed,
                                                  estimated_output,
                                                  &decoder_profiler,
                                                  &dec_abort);}
-        
+      }
       else
         n_iter = ldpc_toCompare.LDPCdecoder(&decParams[j],
                                             &channel_output_fixed[j*384*68],
@@ -437,14 +438,14 @@ one_measurement_t test_ldpc(short max_iterations,
         n_iter_max = n_iter;
 
     } // end segments
-/*
+
     if (use32bit){
       dumpASS(estimated_output, "ldpctest_estimateOutput_cuda.txt",n_segments);
     }
     else{
-      //dumpASS(estimated_output, "ldpctest_estimateOutput_128.txt",n_segments);
+      dumpASS(estimated_output, "ldpctest_estimateOutput_128.txt",n_segments);
     }
-    */    
+      
     //dumpASS(test_input, "ldpctest_TestInput_cuda128.txt");
 
     if (segment_bler != 0)

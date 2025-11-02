@@ -5,6 +5,10 @@
 extern "C" {
 #endif
 
+#define num_TotalThreads_BG1_R13 30336
+#define num_TotalThreads_BG1_R23 13824
+#define RowLength 96 //Zc = 384/4 = 96
+
 extern cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL];
 extern cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL];
 extern bool graphCreated[MAX_NUM_DLSCH_SEGMENTS_DL];
@@ -26,4 +30,10 @@ typedef struct SegmentPack {
     cudaEvent_t doneEvt; // event to signal when pack finishes
 } SegmentPack;
 
+typedef struct ThreadSize {
+    int NumBlocks;
+    int NumThreads;
+}ThreadSize;
+
 extern SegmentPack segmentPacks[MAX_NUM_DLSCH_SEGMENTS_DL];
+extern ThreadSize threadSize;
