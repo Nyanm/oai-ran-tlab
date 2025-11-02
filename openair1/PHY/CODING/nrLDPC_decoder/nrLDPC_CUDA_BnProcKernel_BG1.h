@@ -21,41 +21,36 @@ __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_NUM(
     int GrpNum,
     int Zc)
 {
-    const int laneByte = lane * 4;
     const int baseBn = (BnIdx - 1) * Zc;
 
-    const int8_t *p_bnProcBuf_BnIdx  = d_bnProcBuf + baseBn;
-    int8_t *p_bnProcBufRes_BnIdx     = d_bnProcBufRes + baseBn;
-    const int8_t *p_llrProcBuf_BnIdx = d_llrProcBuf + baseBn;
-    int8_t *p_llrRes_BnIdx           = d_llrRes + baseBn;
+//    int8_t *p_bnProcBufRes_BnIdx     = d_bnProcBufRes + baseBn;
+//    const int8_t *p_llrProcBuf_BnIdx = d_llrProcBuf + baseBn;
+//    int8_t *p_llrRes_BnIdx           = d_llrRes + baseBn;
 
-    const int32_t *bnProcBufPtr = reinterpret_cast<const int32_t *>(p_bnProcBuf_BnIdx + laneByte);
+    const int32_t *bnProcBufPtr = (const int32_t *)(d_bnProcBuf + baseBn) + lane;
+    int prevIdxWords = ((MsgIdx - 1) * GrpNum * Zc) >> 2;
+    int32_t prev = bnProcBufPtr[prevIdxWords];
 
     // ---- ① Unrolled accumulation ----
     int32_t MsgSum = bnProcBufPtr[0];
+    int off = (GrpNum * Zc) >> 2;
 #pragma unroll
     for (int i = 1; i < NUM; ++i) {
-        int offsetWords = (GrpNum * i * Zc) >> 2;
-        int32_t val = bnProcBufPtr[offsetWords];
-        MsgSum = __vaddss4(MsgSum, val);
+	bnProcBufPtr += off;
+	MsgSum = __vaddss4(MsgSum,*bnProcBufPtr);
     }
 
     // ---- ② Compute llrRes ----
-    int32_t llrProcVal = *(const int32_t *)(p_llrProcBuf_BnIdx + laneByte);
-    int32_t computed_llrRes = __vaddss4(MsgSum, llrProcVal);
-
+//    int32_t computed_llrRes = __vaddss4(MsgSum,((const int32_t*)p_llrProcBuf_BnIdx)[lane]);
+    int32_t computed_llrRes = __vaddss4(MsgSum,((const int32_t*)(d_llrProcBuf+baseBn))[lane]);
     //  Only write to llrRes when MsgIdx == 1 
     if (MsgIdx == 1) {
-        *(int32_t *)(p_llrRes_BnIdx + laneByte) = computed_llrRes;
+      ((int32_t *)(d_llrRes+baseBn))[lane]  = computed_llrRes;
     }
 
-    // ---- ③ Compute MsgRes ----
-    int prevIdxWords = ((MsgIdx - 1) * GrpNum * Zc) >> 2;
-    int32_t prevMsg = *(const int32_t *)(p_bnProcBuf_BnIdx + (prevIdxWords << 2) + laneByte);
-    int32_t MsgRes = __vsubss4(computed_llrRes, prevMsg);
 
     // ---- ④ Write result ----
-    *(int32_t *)(p_bnProcBufRes_BnIdx + (prevIdxWords << 2) + laneByte) = MsgRes;
+    ((int32_t *)(d_bnProcBufRes+baseBn))[prevIdxWords  + lane] = __vsubss4(computed_llrRes, prev);
 }
 
 __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_Gn(
