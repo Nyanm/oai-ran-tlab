@@ -72,7 +72,7 @@ static t_nrLDPC_lut* p_lut = &lut;
 #if USE_CUDA
 #include <cuda_runtime.h>
 #endif
-#include "decoder_graphs.h"
+#include "nrLDPC_CUDA_shared_param.h"
 
 #define COPY_ARR_MEMBER(member, type, groups) do { \
     for (int i = 0; i < (groups); i++) { \

@@ -54,6 +54,7 @@
 #include <cuda_runtime.h>
 #include "nrLDPC_CUDA_shared_param.h"
 
+#define USE_STATIC_ALLOC
 static cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
 static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
 static bool streamsCreated = false;
@@ -337,6 +338,7 @@ int cuda_support_init_decoder() {
   return 0;
 }
 #endif
+
 extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    int8_t* p_out,
                                                    uint32_t numLLR,
@@ -534,17 +536,17 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 
   if (!SegmentPacked) {
     int segPerPack = 0;
-    BG1_R13_threadSize.NumThreads = 384;//maximum 1024
+    BG1_R13_threadSize.NumThreads = 512;//maximum 1024
     BG1_R13_threadSize.NumBlocks = (num_TotalThreads_BG1_R13 + BG1_R13_threadSize.NumThreads - 1) / BG1_R13_threadSize.NumThreads;
-    BG1_R23_threadSize.NumThreads = 1024;//maximum 1024
+    BG1_R23_threadSize.NumThreads = 512;//maximum 1024
     BG1_R23_threadSize.NumBlocks = (num_TotalThreads_BG1_R23 + BG1_R23_threadSize.NumThreads - 1) / BG1_R23_threadSize.NumThreads;
     switch (R) {
       case 13:
         segPerPack = 30; // It's quite free here, GPU can handle this 
         break; 
       case 23:
-        segPerPack = 18;
-        break; // For R23, it's 264/14 = 18
+        segPerPack = 30;
+        break; 
       default:
         printf("Not supporting R");
         return 0;
