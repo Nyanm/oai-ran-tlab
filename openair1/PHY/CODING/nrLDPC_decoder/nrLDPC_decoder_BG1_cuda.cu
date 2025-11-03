@@ -7,7 +7,7 @@
 #include "nrLDPC_CUDA_CnProcKernel_BG1.h"
 #include "nrLDPC_CUDA_BnProcKernel_BG1.h"
 #include "nrLDPC_CUDA_mPassKernel_BG1.h"
-#include "decoder_graphs.h"
+#include "nrLDPC_CUDA_shared_param.h"
 
 #define ZC 384 // for BG1 test only
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132

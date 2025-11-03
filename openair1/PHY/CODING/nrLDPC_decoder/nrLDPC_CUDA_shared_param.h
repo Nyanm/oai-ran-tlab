@@ -36,4 +36,4 @@ typedef struct ThreadSize {
 }ThreadSize;
 
 extern SegmentPack segmentPacks[MAX_NUM_DLSCH_SEGMENTS_DL];
-extern ThreadSize threadSize;
+extern ThreadSize BG1_R13_threadSize, BG1_R23_threadSize;
