@@ -48,7 +48,7 @@ RUN /bin/sh oaienv && \
 #start from scratch for target executable
 FROM registry.access.redhat.com/ubi9/ubi:latest AS oai-physim
 
-RUN dnf update -y && \
+RUN dnf update -y --allowerasing --skip-broken --nobest && \
     dnf install -y \
         lksctp-tools \
         tzdata \

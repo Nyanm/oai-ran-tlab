@@ -44,7 +44,7 @@ ENV TZ=Europe/Paris
 # Install EPEL for RHEL9
 RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
 
-RUN dnf update -y && \
+RUN dnf update -y --allowerasing --skip-broken --nobest && \
     dnf install -y \
         procps-ng \
         libXpm \

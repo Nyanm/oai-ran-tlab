@@ -34,7 +34,7 @@ FROM ran-build:latest AS ru-build
 FROM registry.access.redhat.com/ubi9/ubi:latest AS oai-lte-ru
 ENV TZ=Europe/Paris
 
-RUN dnf update -y && \
+RUN dnf update -y --allowerasing --skip-broken --nobest && \
     dnf install -y \
         tzdata \
         procps-ng \
