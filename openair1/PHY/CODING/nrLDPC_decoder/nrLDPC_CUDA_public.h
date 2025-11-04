@@ -17,48 +17,33 @@ __device__ __forceinline__ void moveBricks_invput_circ(int8_t *__restrict__ dstB
                                 uint16_t Z,
                                 uint16_t cshift)
 {
-  int8_t *DstBuf = (int8_t *)dstBuf;
-  uint16_t shift;
+  uint16_t pos = (cshift + dstBuf_Offset) % Z; 
 
-  shift = (cshift + dstBuf_Offset) % Z;
-
-  uint16_t pos = shift;
-  uintptr_t ptr = (uintptr_t)(DstBuf + pos);
-
-  // put bricks
-  if ((pos + 3 < Z) && ((ptr & 0x3) == 0)) {
-    *(uint32_t *)(DstBuf + pos) = *(const uint32_t *)(Four_Bricks);
-  } else {
-    switch (pos+3-Z) {
+  switch (pos+3-Z) {
 	    case 0 :
-		    DstBuf[pos]   = Four_Bricks[0];
-		    DstBuf[pos+1] = Four_Bricks[1];
-		    DstBuf[pos+2] = Four_Bricks[2];
-		    DstBuf[0]     = Four_Bricks[3];
+		    dstBuf[pos]   = Four_Bricks[0];
+		    dstBuf[pos+1] = Four_Bricks[1];
+		    dstBuf[pos+2] = Four_Bricks[2];
+		    dstBuf[0]     = Four_Bricks[3];
 		    break;
 	    case 1 :
-		    DstBuf[pos]   = Four_Bricks[0];
-		    DstBuf[pos+1] = Four_Bricks[1];
-		    DstBuf[0]     = Four_Bricks[2];
-		    DstBuf[1]     = Four_Bricks[3];
+		    dstBuf[pos]   = Four_Bricks[0];
+		    dstBuf[pos+1] = Four_Bricks[1];
+		    dstBuf[0]     = Four_Bricks[2];
+		    dstBuf[1]     = Four_Bricks[3];
 		    break;
 	    case 2 :
-		    DstBuf[pos] = Four_Bricks[0];
-		    DstBuf[0]   = Four_Bricks[1];
-		    DstBuf[1]   = Four_Bricks[2];
-		    DstBuf[2]   = Four_Bricks[3];
+		    dstBuf[pos] = Four_Bricks[0];
+		    dstBuf[0]   = Four_Bricks[1];
+		    dstBuf[1]   = Four_Bricks[2];
+		    dstBuf[2]   = Four_Bricks[3];
 		    break;
             default:
-		    DstBuf[pos]   = Four_Bricks[0];
-		    DstBuf[pos+1] = Four_Bricks[1];
-		    DstBuf[pos+2] = Four_Bricks[2];
-		    DstBuf[pos+3] = Four_Bricks[3];
+		    dstBuf[pos]   = Four_Bricks[0];
+		    dstBuf[pos+1] = Four_Bricks[1];
+		    dstBuf[pos+2] = Four_Bricks[2];
+		    dstBuf[pos+3] = Four_Bricks[3];
 		    break;
-    }
-/*
-    for (uint16_t j = 0; j < 4; j++) {
-      DstBuf[(pos + j) % Z] = Four_Bricks[j];
-    }*/
   }
 }
 __device__ __forceinline__ void moveBricks_invget_circ(int8_t *__restrict__ dstBuf,
@@ -67,49 +52,33 @@ __device__ __forceinline__ void moveBricks_invget_circ(int8_t *__restrict__ dstB
                                 uint16_t Z,
                                 uint16_t cshift)
 {
-  int8_t *DstBuf = (int8_t *)dstBuf;
-  uint16_t shift;
+  uint16_t pos = (cshift + dstBuf_Offset) % Z;
 
-  shift = (cshift + dstBuf_Offset) % Z;
-
-  uint16_t pos = shift;
-  uintptr_t ptr = (uintptr_t)(DstBuf + pos);
-
-  // get bricks
-  if ((pos + 3 < Z) && ((ptr & 0x3) == 0)) {
-    *(uint32_t *)(Four_Bricks) = *(const uint32_t *)(DstBuf + pos);
-  } else {
-    switch(pos+3-Z) {
+  switch(pos+3-Z) {
 	    case 0 :
-		    Four_Bricks[0] = DstBuf[pos];
-		    Four_Bricks[1] = DstBuf[pos+1];
-		    Four_Bricks[2] = DstBuf[pos+2];
-		    Four_Bricks[3] = DstBuf[0];
+		    Four_Bricks[0] = dstBuf[pos];
+		    Four_Bricks[1] = dstBuf[pos+1];
+		    Four_Bricks[2] = dstBuf[pos+2];
+		    Four_Bricks[3] = dstBuf[0];
 		    break;
 	    case 1 :
-		    Four_Bricks[0] = DstBuf[pos];
-		    Four_Bricks[1] = DstBuf[pos+1];
-		    Four_Bricks[2] = DstBuf[0];
-		    Four_Bricks[3] = DstBuf[1];
+		    Four_Bricks[0] = dstBuf[pos];
+		    Four_Bricks[1] = dstBuf[pos+1];
+		    Four_Bricks[2] = dstBuf[0];
+		    Four_Bricks[3] = dstBuf[1];
 		    break;
 	    case 2 :
-		    Four_Bricks[0] = DstBuf[pos];
-		    Four_Bricks[1] = DstBuf[0];
-		    Four_Bricks[2] = DstBuf[1];
-		    Four_Bricks[3] = DstBuf[2];
+		    Four_Bricks[0] = dstBuf[pos];
+		    Four_Bricks[1] = dstBuf[0];
+		    Four_Bricks[2] = dstBuf[1];
+		    Four_Bricks[3] = dstBuf[2];
 		    break;
 	    default :
-		    Four_Bricks[0] = DstBuf[pos];
-		    Four_Bricks[1] = DstBuf[pos+1];
-		    Four_Bricks[2] = DstBuf[pos+2];
-		    Four_Bricks[3] = DstBuf[pos+3];
+		    Four_Bricks[0] = dstBuf[pos];
+		    Four_Bricks[1] = dstBuf[pos+1];
+		    Four_Bricks[2] = dstBuf[pos+2];
+		    Four_Bricks[3] = dstBuf[pos+3];
 		    break;
-    }
-/*	 
-    for (uint16_t j = 0; j < 4; j++) {
-      Four_Bricks[j] = DstBuf[(pos + j) % Z];
-    }
-  */   
   }
 }
 __device__ __forceinline__ void moveBricks_circ(int8_t *__restrict__ dstBuf,
