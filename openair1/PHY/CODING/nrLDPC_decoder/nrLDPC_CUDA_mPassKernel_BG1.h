@@ -705,7 +705,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G3_stream(const t_nrLDPC_lut *p_lut,
                                                      int lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc)
+                                                     int Zc,
+                                                    uint8_t BG)
 { // first part it should be llr to CnProc
   //const uint8_t NUM = 3; // Gn = 3
   //const int8_t *p_llr = (const int8_t *)llr;
@@ -777,7 +778,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G4_stream(const t_nrLDPC_lut *p_lut,
                                                      int lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc)
+                                                     int Zc,
+                                                    uint8_t BG)
 { // first part it should be llr to CnProc
   //const uint8_t NUM = 4; // Gn = 4
   //const int8_t *p_llr = (const int8_t *)llr;
@@ -847,7 +849,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G5_stream(const t_nrLDPC_lut *p_lut,
                                                      int lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc)
+                                                     int Zc,
+                                                    uint8_t BG)
 { // first part it should be llr to CnProc
   //const uint8_t NUM = 5; // Gn = 5
   //const int8_t *p_llr = (const int8_t *)llr;
@@ -920,7 +923,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G6_stream(const t_nrLDPC_lut *p_lut,
                                                      int lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc)
+                                                     int Zc,
+                                                    uint8_t BG)
 { // first part it should be llr to CnProc
   //const uint8_t NUM = 6; // Gn = 6
   //const int8_t *p_llr = (const int8_t *)llr;
@@ -993,7 +997,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G7_stream(const t_nrLDPC_lut *p_lut,
                                                      int lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc)
+                                                     int Zc,
+                                                    uint8_t BG)
 { // first part it should be llr to CnProc
   //const uint8_t NUM = 7; // Gn = 7
   //const int8_t *p_llr = (const int8_t *)llr;
@@ -1066,7 +1071,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G8_stream(const t_nrLDPC_lut *p_lut,
                                                      int lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc)
+                                                     int Zc,
+                                                    uint8_t BG)
 { // first part it should be llr to CnProc
  // const uint8_t NUM = 8; // Gn = 8
   //const int8_t *p_llr = (const int8_t *)llr;
@@ -1139,7 +1145,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G9_stream(const t_nrLDPC_lut *p_lut,
                                                      int lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc)
+                                                     int Zc,
+                                                    uint8_t BG)
 { // first part it should be llr to CnProc
   //const uint8_t NUM = 9; // Gn = 9
   //const int8_t *p_llr = (const int8_t *)llr;
@@ -1212,7 +1219,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G10_stream(const t_nrLDPC_lut *p_lut,
                                                      int lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc)
+                                                     int Zc,
+                                                    uint8_t BG)
 { // first part it should be llr to CnProc
  // const uint8_t NUM = 10; // Gn = 10
   //const int8_t *p_llr = (const int8_t *)llr;
@@ -1285,7 +1293,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G19_stream(const t_nrLDPC_lut *p_lut,
                                                      int lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc)
+                                                     int Zc,
+                                                    uint8_t BG)
 { // first part it should be llr to CnProc
  // const uint8_t NUM = 19; // Gn = 19
   //const int8_t *p_llr = (const int8_t *)llr;

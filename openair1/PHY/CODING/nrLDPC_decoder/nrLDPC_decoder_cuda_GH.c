@@ -533,19 +533,21 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   e_nrLDPC_outMode outMode = p_decParams->outMode;
   int Kprime = p_decParams->Kprime;
 
-
+//Pack setting area
   if (!SegmentPacked) {
     int segPerPack = 0;
-    BG1_R13_threadSize.NumThreads = 512;//maximum 1024
+    int NumThreads = 576;  //maximum 1024, suggesting multiples of 96:480,576,672,768,864,960
+                           //at least should be multiples of 32
+    BG1_R13_threadSize.NumThreads = NumThreads;
     BG1_R13_threadSize.NumBlocks = (num_TotalThreads_BG1_R13 + BG1_R13_threadSize.NumThreads - 1) / BG1_R13_threadSize.NumThreads;
-    BG1_R23_threadSize.NumThreads = 512;//maximum 1024
+    BG1_R23_threadSize.NumThreads = NumThreads;
     BG1_R23_threadSize.NumBlocks = (num_TotalThreads_BG1_R23 + BG1_R23_threadSize.NumThreads - 1) / BG1_R23_threadSize.NumThreads;
     switch (R) {
       case 13:
-        segPerPack = 30; // It's quite free here, GPU can handle this 
-        break; 
-      case 23:
-        segPerPack = 30;
+        segPerPack = 132; // It's quite free here, GPU can handle this 
+        break;           //And also, the best practice should be only use one stream in the whole decoding
+      case 23:           //So we set the maximum threads in one pack to a large number
+        segPerPack = 132;
         break; 
       default:
         printf("Not supporting R");
