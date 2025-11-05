@@ -262,6 +262,7 @@ struct NR_AIOT_DL_FRAME_PARMS {
 
   // RX parameters
   int N; // downsampling factor
+  int received_M;          // detected M from R-TAS-CAP
   int packet_downsampled_samples; // number of downsampled samples in R2D packet
   int packet_received_symbols;  // number of received OFDM symbols
   int packet_payload_size;    // decoded payload size in bits

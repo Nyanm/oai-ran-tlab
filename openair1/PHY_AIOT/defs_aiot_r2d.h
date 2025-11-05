@@ -47,7 +47,7 @@
 #define MAX_AIOT_R2D_PACKET_SIZE   (MAX_AIOT_R2D_PAYLOAD_SIZE + 2) // SIP + CAS + PAYLOAD + POSTAMBLE
 
 #include "precomputed_SIP.h"
-#include "precomputed_CAS.h"
+#include "precomputed_CAP.h"
 #include "precomputed_payload.h"
 #include "precomputed_Postamble.h"
 

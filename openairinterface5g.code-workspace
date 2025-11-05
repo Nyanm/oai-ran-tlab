@@ -20,7 +20,13 @@
 			"defs_aiot_ue.h": "c",
 			"nr_unitary_defs.h": "c",
 			"defs_aiot_gnb.h": "c",
-			"random": "c"
+			"random": "c",
+			"cmath": "c",
+			"complex": "c",
+			"compare": "c",
+			"cstdint": "c",
+			"precomputed_cap.h": "c",
+			"valarray": "c"
 		}
 	}
 }
