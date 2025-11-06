@@ -626,12 +626,6 @@ static int nr_ue_process_dci_ul_01(NR_UE_MAC_INST_t *mac,
   // - SECOND_DAI
   // - SRS_RESOURCE_IND
 
-  /* CSI_REQUEST */
-  long csi_K2 = -1;
-  csi_payload_t csi_report = {0};
-  if (dci->csi_request.nbits > 0 && dci->csi_request.val > 0)
-    csi_report = nr_ue_aperiodic_csi_reporting(mac, dci->csi_request, dci->time_domain_assignment.val, &csi_K2);
-
   /* SRS_REQUEST */
   AssertFatal(dci->srs_request.nbits == 2, "If SUL is supported in the cell, there is an additional bit in SRS request field\n");
   if (dci->srs_request.val > 0)
@@ -650,6 +644,19 @@ static int nr_ue_process_dci_ul_01(NR_UE_MAC_INST_t *mac,
 
   if (!tda_info.valid_tda || tda_info.nrOfSymbols == 0)
     return -1;
+
+  /* CSI_REQUEST */
+  long csi_K2 = -1;
+  csi_payload_t csi_report = {0};
+  if (dci->csi_request.nbits > 0 && dci->csi_request.val > 0)
+    csi_report = nr_ue_aperiodic_csi_reporting(mac, dci->csi_request, dci->time_domain_assignment.val, &csi_K2);
+  else {
+    frame_t frame_tx;
+    int slot_tx;
+    get_pusch_frame_slot(frame, slot, tda_info.k2, 0, mac->frame_structure.numb_slots_frame, &frame_tx, &slot_tx);
+    csi_report = nr_ue_periodic_csi_reporting(mac, frame_tx, slot_tx);
+    csi_K2 = tda_info.k2;
+  }
 
   if (dci->ulsch_indicator == 0) {
     // in case of CSI on PUSCH and no ULSCH we need to use reportSlotOffset in trigger state
@@ -673,7 +680,7 @@ static int nr_ue_process_dci_ul_01(NR_UE_MAC_INST_t *mac,
                                 &tda_info,
                                 &pdu->pusch_config_pdu,
                                 dci,
-                                &csi_report,
+                                (csi_report.p1_bits == 0) ? NULL : &csi_report,
                                 NULL,
                                 dci_ind->rnti,
                                 dci_ind->ss_type,

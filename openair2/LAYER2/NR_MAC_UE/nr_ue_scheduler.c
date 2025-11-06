@@ -556,8 +556,8 @@ int nr_config_pusch_pdu(NR_UE_MAC_INST_t *mac,
 
   } else if (dci) {
     pusch_config_pdu->ulsch_indicator = dci->ulsch_indicator;
-    if (dci->csi_request.nbits > 0 && dci->csi_request.val > 0) {
-      AssertFatal(csi_report, "CSI report needs to be present in case of CSI request\n");
+    // CSI on PUSCH
+    if (csi_report) {
       pusch_config_pdu->pusch_uci.csi_part1_bit_length = csi_report->p1_bits;
       pusch_config_pdu->pusch_uci.csi_part1_payload = csi_report->part1_payload;
       pusch_config_pdu->pusch_uci.csi_part2_bit_length = csi_report->p2_bits;
@@ -577,10 +577,6 @@ int nr_config_pusch_pdu(NR_UE_MAC_INST_t *mac,
                                                      *beta_offsets->betaOffsetCSI_Part2_Index1 :
                                                      *beta_offsets->betaOffsetCSI_Part2_Index2;
       pusch_config_pdu->pusch_uci.alpha_scaling = onPusch->scaling;
-    }
-    else {
-      pusch_config_pdu->pusch_uci.csi_part1_bit_length = 0;
-      pusch_config_pdu->pusch_uci.csi_part2_bit_length = 0;
     }
 
     pusch_config_pdu->pusch_uci.harq_ack_bit_length = 0;
@@ -1737,12 +1733,18 @@ static bool schedule_uci_on_pusch(NR_UE_MAC_INST_t *mac,
       pusch_pdu->pusch_uci.alpha_scaling = onPusch->scaling;
       mux_done = true;
     } else {
-      LOG_E(NR_MAC, "UCI on PUSCH need to be configured to schedule UCI on PUSCH\n");
+      LOG_E(NR_MAC, "UCI on PUSCH need to be configured to schedule ACK/NACK on PUSCH\n");
     }
   }
-  if (pusch_pdu->pusch_uci.csi_part1_bit_length == 0 && pusch_pdu->pusch_uci.csi_part2_bit_length == 0) {
-    // To support this we would need to shift some bits into CSI part2 -> need to change the logic
-    AssertFatal(pucch->n_csi == 0, "Multiplexing periodic CSI on PUSCH not supported\n");
+
+  // Check if the PUSCH PDU has CSI report filled while UL DCI was processed
+  if (pusch_pdu->pusch_uci.csi_part1_bit_length > 0) {
+    NR_PUSCH_Config_t *pusch_Config = mac->current_UL_BWP->pusch_Config;
+    if (pusch_Config && pusch_Config->uci_OnPUSCH) {
+      mux_done = true;
+    } else {
+      LOG_E(NR_MAC, "UCI on PUSCH need to be configured to schedule CSI report on PUSCH\n");
+    }
   }
 
   release_ul_config(ulcfg_pdu, false);
