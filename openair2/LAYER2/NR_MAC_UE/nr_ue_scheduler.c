@@ -1541,6 +1541,18 @@ static uint8_t nr_locate_BsrIndexByBufferSize(int size, int value)
   }
 }
 
+void get_pusch_frame_slot(const int current_frame,
+                          const int current_slot,
+                          const int k2,
+                          const int delta,
+                          const int slots_per_frame,
+                          frame_t *frame_tx,
+                          int *slot_tx)
+{
+  *slot_tx = (current_slot + k2 + delta) % slots_per_frame;
+  *frame_tx = (current_frame + (current_slot + k2 + delta) / slots_per_frame) % MAX_FRAME_NUMBER;
+}
+
 // PUSCH scheduler:
 // - Calculate the slot in which ULSCH should be scheduled. This is current slot + K2,
 // - where K2 is the offset between the slot in which UL DCI is received and the slot
@@ -1578,8 +1590,7 @@ int nr_ue_pusch_scheduler(const NR_UE_MAC_INST_t *mac,
                 GET_DURATION_RX_TO_TX(&mac->ntn_ta, mu),
                 GET_DURATION_RX_TO_TX(&mac->ntn_ta, mu));
 
-    *slot_tx = (current_slot + k2 + delta) % slots_per_frame;
-    *frame_tx = (current_frame + (current_slot + k2 + delta) / slots_per_frame) % MAX_FRAME_NUMBER;
+    get_pusch_frame_slot(current_frame, current_slot, k2, delta, slots_per_frame, frame_tx, slot_tx);
   } else {
     AssertFatal(k2 >= GET_DURATION_RX_TO_TX(&mac->ntn_ta, mu),
                 "Slot offset K2 (%ld) needs to be higher than DURATION_RX_TO_TX (%ld). Please set min_rxtxtime at least to %ld in "
@@ -1595,8 +1606,7 @@ int nr_ue_pusch_scheduler(const NR_UE_MAC_INST_t *mac,
     }
 
     // Calculate TX slot and frame
-    *slot_tx = (current_slot + k2) % slots_per_frame;
-    *frame_tx = (current_frame + (current_slot + k2) / slots_per_frame) % MAX_FRAME_NUMBER;
+    get_pusch_frame_slot(current_frame, current_slot, k2, 0, slots_per_frame, frame_tx, slot_tx);
   }
 
   LOG_D(NR_MAC, "[%04d.%02d] UL transmission in [%04d.%02d] (k2 %ld delta %d)\n", current_frame, current_slot, *frame_tx, *slot_tx, k2, delta);

@@ -361,4 +361,11 @@ void nr_ue_sidelink_scheduler(nr_sidelink_indication_t *sl_ind, NR_UE_MAC_INST_t
 
 NR_SearchSpace_t *get_common_search_space(const NR_UE_MAC_INST_t *mac, const NR_SearchSpaceId_t ss_id);
 
+void get_pusch_frame_slot(const int current_frame,
+                          const int current_slot,
+                          const int k2,
+                          const int delta,
+                          const int slots_per_frame,
+                          frame_t *frame_tx,
+                          int *slot_tx);
 #endif
