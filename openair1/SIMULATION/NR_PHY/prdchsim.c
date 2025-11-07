@@ -162,24 +162,20 @@ void AIOT_R2D_PHY_TX_REs(c16_t *REsPacket, const uint8_t *payload, NR_AIOT_DL_FR
          Postamble_length * sizeof(c16_t)); // Postamble
 }
 
-void AIOT_R2D_PHY_TX_Signal(c16_t *txData, const c16_t *REsPacket, NR_AIOT_DL_FRAME_PARMS *frame)
+void AIOT_R2D_PHY_TX_Signal(c16_t *txData, c16_t* txDataF, const c16_t *REsPacket, NR_AIOT_DL_FRAME_PARMS *frame)
 {
-  // Allocate TX buffers
-  c16_t *txDataF = calloc(1, frame->packet_samples * sizeof(c16_t));
-  memset(txDataF, 0, frame->packet_samples * sizeof(c16_t));
-
   if(txData == NULL || txDataF == NULL) {
     printf("Memory allocation failed\n");
     return;
   }
 
+  memset(txDataF, 0, frame->packet_samples * sizeof(c16_t));
+
   for (int sym = 0; sym < frame->packet_symbols; sym++) {
     int in_offset = sym * frame->packet_subcarriers;
     int out_offset = sym * frame->nr_frame_parms.ofdm_symbol_size;
 
-    for (int n = 0; n < frame->packet_subcarriers; n++) {
-      txDataF[out_offset + n] = REsPacket[in_offset + n];
-    }
+    memcpy(txDataF + out_offset, REsPacket + in_offset, frame->packet_subcarriers * sizeof(c16_t));
   }
 
   bool was_symbol_used[NR_NUMBER_OF_SYMBOLS_PER_SLOT];
@@ -195,11 +191,9 @@ void AIOT_R2D_PHY_TX_Signal(c16_t *txData, const c16_t *REsPacket, NR_AIOT_DL_FR
                          0,
                          was_symbol_used);
   }
-
-  free(txDataF);
 }
 
-void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_model_t *channel, NR_AIOT_DL_FRAME_PARMS *frame)
+void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *channel, double SNR, NR_AIOT_DL_FRAME_PARMS *frame)
 {
   int rx_size = frame->packet_samples * 2;
 
@@ -208,31 +202,17 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_model_t *cha
     s_im[0][i] = (double) in[i].i;
   }
 
-  channel_desc_t *channel_params = new_channel_desc_scm(frame->nr_frame_parms.nb_antennas_tx,
-                                                 frame->nr_frame_parms.nb_antennas_rx,
-                                                 channel->channel_model,
-                                                 channel->sampling_rate,
-                                                 channel->fc,
-                                                 channel->bw,
-                                                 channel->DS_TDL,
-                                                 0.0,
-                                                 CORR_LEVEL_LOW,
-                                                 0,
-                                                 channel->delay,
-                                                 channel->path_loss_dB,
-                                                 channel->noise_power_dB);
-
   int txlev = signal_energy((int32_t *) in, frame->nr_frame_parms.ofdm_symbol_size + frame->nr_frame_parms.nb_prefix_samples0);
   double txlev_dBm = 10 * log10((double)txlev);
   //printf("Signal energy: %d (%f dB)\n", txlev, txlev_dBm);
 
   double ts = 1.0 / (frame->nr_frame_parms.subcarrier_spacing * frame->nr_frame_parms.ofdm_symbol_size);
   // Compute AWGN variance
-  double sigma2_dBm = txlev_dBm + channel->path_loss_dB - channel->SNR; // *((double)frame_parms->ofdm_symbol_size / r2d_subcarriers)
+  double sigma2_dBm = txlev_dBm + channel->path_loss_dB - SNR; // *((double)frame_parms->ofdm_symbol_size / r2d_subcarriers)
   double sigma2 = pow(10, sigma2_dBm / 10);
   //printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dBm);
 
-  multipath_channel(channel_params, s_re, s_im, r_re, r_im, rx_size, 0, 1);
+  multipath_channel(channel, s_re, s_im, r_re, r_im, rx_size, 0, 1);
   add_noise(rxData,
             (const double **)r_re,
             (const double **)r_im,
@@ -295,154 +275,105 @@ void AIOT_R2D_PHY_RX_Envelope_Detector(uint16_t *envelope, const c16_t **rxData,
   }
 }
 
-// Filter state
+// --- 1st-Order Section (Floating-Point) ---
 typedef struct {
-  double xr[4]; // past real inputs
-  double xi[4]; // past imag inputs
-  double yr[4]; // past real outputs
-  double yi[4]; // past imag outputs
-} iir_state_t;
+    double b[2]; // b0, b1
+    double a[2]; // a0, a1 (a0 is always 1.0)
+    double s[1]; // state
+} iir_ord1_f64_t;
+
+// --- 2nd-Order (Biquad) Section (Floating-Point) ---
+typedef struct {
+    double b[3]; // b0, b1, b2
+    double a[3]; // a0, a1, a2 (a0 is always 1.0)
+    double s[2]; // states s1, s2
+} iir_biquad_f64_t;
+
+// --- 3rd-Order Filter (Cascade) ---
+typedef struct {
+    iir_ord1_f64_t   sec1; // 1st-order section
+    iir_biquad_f64_t sec2; // 2nd-order section
+} iir_butter3_f64_t;
+
+iir_butter3_f64_t filter;
 
 /**
- * @brief Design a 3rd-order (order-3) digital low-pass Butterworth IIR filter.
- *
- * This function computes a 3rd-order Butterworth low-pass filter by first
- * prewarping the desired digital cutoff frequency (fc) to its analog
- * equivalent (wc = 2*fs*tan(pi*fc/fs)), forming the normalized 3rd-order
- * Butterworth prototype, and then applying the bilinear transform
- * (k = 2*fs) to obtain polynomials in x = z^{-1}. The resulting denominator is normalized so that
- * a[0] == 1.0 and the numerator is scaled so the DC gain (sum(b)/sum(a)) == 1.0.
- *
- * @param[in]  fs     Sampling frequency in Hz (must be > 0).
- * @param[in]  fc     Digital cutoff frequency in Hz (must satisfy 0 < fc < fs/2).
- * @param[out] out_b  Output array of 4 numerator coefficients {b0, b1, b2, b3}
- *                    corresponding to H(z) numerator b0 + b1 z^{-1} + b2 z^{-2} + b3 z^{-3}.
- * @param[out] out_a  Output array of 4 denominator coefficients {a0, a1, a2, a3}
- *                    corresponding to H(z) denominator a0 + a1 z^{-1} + a2 z^{-2} + a3 z^{-3}.
- *                    Coefficients are normalized so that a0 == 1.
- *
- * @return 0 on success; -1 on invalid input (null pointers, out-of-range frequencies)
- *         or numerical failure (extremely small intermediate values).
- *
- * @note The routine performs checks for fs, fc and for very small intermediate
- *       values (to avoid division by zero). The arrays out_b and out_a must
- *       point to at least 4 contiguous doubles each.
+ * @brief Initializes the filter state to zero.
  */
-int butterworth3_design(double fs, double fc, double out_b[4], double out_a[4])
-{
-  if (!out_b || !out_a || fs <= 0.0 || fc <= 0.0 || fc >= 0.5 * fs)
-    return -1;
-
-  /* Prewarp cutoff (analog) */
-  double wc = 2.0 * fs * tan(M_PI * fc / fs); /* rad/s analog cutoff after prewarp */
-
-  /* Prototype (normalized) coefficients for 3rd-order Butterworth:
-     A_norm(s) = s^3 + 2 s^2 + 2 s + 1
-     Scale for cutoff wc: A(s) = s^3 + 2*wc*s^2 + 2*wc^2*s + wc^3
-  */
-  double a3 = 1.0;
-  double a2 = 2.0 * wc;
-  double a1 = 2.0 * wc * wc;
-  double a0 = wc * wc * wc;
-
-  /* Bilinear transform constant */
-  double k = 2.0 * fs;
-  double k3 = k * k * k;
-  double k2 = k * k;
-  double k1 = k;
-
-  /* Pre-expanded polynomials in x = z^-1 (coeff order: x^0 .. x^3):
-     p1 = (1-x)^3         = 1 - 3x + 3x^2 - x^3
-     p2 = (1-x)^2*(1+x)   = 1 -  x -  x^2 + x^3
-     p3 = (1-x)*(1+x)^2   = 1 +  x -  x^2 - x^3
-     p4 = (1+x)^3         = 1 + 3x + 3x^2 + x^3
-  */
-  const double p1[4] = {1.0, -3.0,  3.0, -1.0};
-  const double p2[4] = {1.0, -1.0, -1.0,  1.0};
-  const double p3[4] = {1.0,  1.0, -1.0, -1.0};
-  const double p4[4] = {1.0,  3.0,  3.0,  1.0};
-
-  double D[4] = {0.0, 0.0, 0.0, 0.0};
-  double B[4] = {0.0, 0.0, 0.0, 0.0};
-
-  for (int i = 0; i < 4; i++) {
-    D[i] = a3 * k3 * p1[i] + a2 * k2 * p2[i] + a1 * k1 * p3[i] + a0 * p4[i];
-    B[i] = a0 * p4[i];
-  }
-
-  /* Normalize so that a[0] == 1.0 (MATLAB convention) */
-  if (fabs(D[0]) < 1e-300)
-    return -1;
-
-  for (int i = 0; i < 4; i++) {
-    out_a[i] = D[i] / D[0];
-    out_b[i] = B[i] / D[0];
-  }
-
-  /* Scale numerator so DC gain == 1.0 (sum(b)/sum(a) == 1) */
-  double sum_a = out_a[0] + out_a[1] + out_a[2] + out_a[3];
-  double sum_b = out_b[0] + out_b[1] + out_b[2] + out_b[3];
-
-  if (fabs(sum_a) < 1e-300 || fabs(sum_b) < 1e-300)
-    return -1;
-
-  double dc_gain = sum_b / sum_a;
-  if (dc_gain == 0.0)
-    return -1;
-
-  for (int i = 0; i < 4; i++)
-    out_b[i] /= dc_gain;
-
-  return 0;
+void iir_butter3_init(iir_butter3_f64_t* filt) {
+    memset(filt->sec1.s, 0, sizeof(filt->sec1.s));
+    memset(filt->sec2.s, 0, sizeof(filt->sec2.s));
 }
 
-/* Filter real-valued sequences (Direct Form II Transposed 3rd-order Butterworth).
- * Input and output are uint16_t. Internally computations use double.
- *
+/**
+ * @brief Generates 3rd-Order Butterworth LPF coefficients.
+ * (This is identical to the fixed-point generator, just simpler storage)
  */
-static void butterworth_filter(uint16_t *out, const uint16_t *in, int length, iir_state_t *st, double *b, double *a)
-{
-  if (!in || !out || !st || length <= 0)
-    return;
+void generate_butter_coeffs_f64(iir_butter3_f64_t* filt, double fc, double fs) {
+    // --- 1. Pre-warp frequency ---
+    double w = 2.0 * fs * tan(M_PI * fc / fs);
+    double T = 1.0 / fs;
 
-  /* Use st->xr[0..2] as DF-II-T states for the real filter (s0,s1,s2).
-     The state values are stored in the same floating domain as 'x' (i.e. [-1..1]). */
+    // --- 2. Calculate 1st-Order Section ---
+    // H(z) = (b0 + b1*z^-1) / (a0 + a1*z^-1)
+    filt->sec1.a[0] = 2.0 + w * T;
+    filt->sec1.b[0] = w * T;
+    filt->sec1.b[1] = w * T;
+    filt->sec1.a[1] = w * T - 2.0;
+    
+    // --- 3. Calculate 2nd-Order Section ---
+    // H(z) = (b0 + b1*z^-1 + b2*z^-2) / (a0 + a1*z^-1 + a2*z^-2)
+    filt->sec2.a[0] = 4.0 + 2.0*w*T + w*w*T*T;
+    filt->sec2.b[0] = w*w*T*T;
+    filt->sec2.b[1] = 2.0*w*w*T*T;
+    filt->sec2.b[2] = w*w*T*T;
+    filt->sec2.a[1] = -8.0 + 2.0*w*w*T*T;
+    filt->sec2.a[2] = 4.0 - 2.0*w*T + w*w*T*T;
+
+    // --- 4. Normalize coefficients (so a0 is 1.0) ---
+    // This is crucial for the Direct Form II Transposed implementation.
+    double a0_inv_1 = 1.0 / filt->sec1.a[0];
+    filt->sec1.b[0] *= a0_inv_1;
+    filt->sec1.b[1] *= a0_inv_1;
+    filt->sec1.a[1] *= a0_inv_1;
+    filt->sec1.a[0] = 1.0;
+
+    double a0_inv_2 = 1.0 / filt->sec2.a[0];
+    filt->sec2.b[0] *= a0_inv_2;
+    filt->sec2.b[1] *= a0_inv_2;
+    filt->sec2.b[2] *= a0_inv_2;
+    filt->sec2.a[1] *= a0_inv_2;
+    filt->sec2.a[2] *= a0_inv_2;
+    filt->sec2.a[0] = 1.0;
+
+    // 5. Clear state
+    iir_butter3_init(filt);
+}
+
+/**
+ * @brief Processes one sample through the 3rd-order filter.
+ * This is the high-speed, floating-point function.
+ */
+double iir_butter3_filter(iir_butter3_f64_t* filt, double input) {
+    // --- Process 1st-Order Section (DF-II Transposed) ---
+    double y1 = (filt->sec1.b[0] * input) + filt->sec1.s[0];
+    filt->sec1.s[0] = (filt->sec1.b[1] * input) - (filt->sec1.a[1] * y1);
+    
+    // --- Process 2nd-Order Section (DF-II Transposed) ---
+    double y2 = (filt->sec2.b[0] * y1) + filt->sec2.s[0];
+    filt->sec2.s[0] = (filt->sec2.b[1] * y1) - (filt->sec2.a[1] * y2) + filt->sec2.s[1];
+    filt->sec2.s[1] = (filt->sec2.b[2] * y1) - (filt->sec2.a[2] * y2);
+    
+    return y2; // Final output
+}
+
+void AIOT_R2D_PHY_RX_Filter(uint16_t *out, const uint16_t *in, int length, iir_butter3_f64_t *filt)
+{
+  iir_butter3_init(filt);
+
   for (int n = 0; n < length; n++) {
-    /* convert Q1.15 input to double */
-    double x = (double)in[n] / UINT16_MAX;
-
-    double s0 = st->xr[0];
-    double s1 = st->xr[1];
-    double s2 = st->xr[2];
-
-    /* DF-II-T output (double domain) */
-    double y = b[0] * x + s0;
-
-    /* update states */
-    double ns0 = b[1] * x - a[1] * y + s1;
-    double ns1 = b[2] * x - a[2] * y + s2;
-    double ns2 = b[3] * x - a[3] * y;
-
-    st->xr[0] = ns0;
-    st->xr[1] = ns1;
-    st->xr[2] = ns2;
-
-    /* convert back to Q1.15 int16_t with rounding and clamping */
-    long tmp = lround(y * UINT16_MAX); /* use 32767 for symmetric positive scaling */
-    if (tmp > UINT32_MAX)
-      tmp = UINT32_MAX;
-    if (tmp < 0)
-      tmp = 0;
-    out[n] = (uint16_t)tmp;
+    out[n] = iir_butter3_filter(filt, in[n]);
   }
-}
-
-void AIOT_R2D_PHY_RX_Filter(uint16_t *out, const uint16_t *in, int length, double *b, double *a)
-{
-  iir_state_t st = {0};
-
-  // Butterworth filter 3rd order
-  butterworth_filter(out, in, length, &st, b, a);
 }
 
 void AIOT_R2D_PHY_RX_Downsample(uint16_t *out, const uint16_t *in, int length, NR_AIOT_DL_FRAME_PARMS *frame)
@@ -451,6 +382,8 @@ void AIOT_R2D_PHY_RX_Downsample(uint16_t *out, const uint16_t *in, int length, N
     out[i] = in[i * frame->N];
   }
 }
+
+double *SIP_ideal = NULL;
 
 double *generate_SIP_ideal_sequence(NR_AIOT_DL_FRAME_PARMS *frame_parms)
 {
@@ -462,7 +395,7 @@ double *generate_SIP_ideal_sequence(NR_AIOT_DL_FRAME_PARMS *frame_parms)
   int SIP_downsampled_length = downsampled_CP0_size + downsampled_OFDM_size + downsampled_CP_size + downsampled_OFDM_size;
 
   // Generate ideal SIP sequence for correlation
-  double *SIP_ideal = malloc(SIP_downsampled_length * sizeof(double));
+  SIP_ideal = malloc(SIP_downsampled_length * sizeof(double));
   double value_minus_1 = -1.5;
   double value0 = 0.0;
   double value1 = 1.0;
@@ -532,14 +465,14 @@ void free_SIP_ideal_sequence(double *SIP_ideal)
 
 void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const uint16_t *signal, NR_AIOT_DL_FRAME_PARMS *frame_parms)
 {
-  double *SIP_ideal = generate_SIP_ideal_sequence(frame_parms);
-
   int downsampled_OFDM_size = frame_parms->nr_frame_parms.ofdm_symbol_size / frame_parms->N;
   int downsampled_CP_size = frame_parms->nr_frame_parms.nb_prefix_samples / frame_parms->N;
   int downsampled_CP0_size = frame_parms->nr_frame_parms.nb_prefix_samples0 / frame_parms->N;
   int SIP_downsampled_length = downsampled_CP0_size + downsampled_OFDM_size + downsampled_CP_size + downsampled_OFDM_size;
   int M4_chip_size = downsampled_OFDM_size / R_TAS_SIP_M;
   frame_parms->packet_payload_size = frame_parms->packet_downsampled_samples - SIP_downsampled_length; // Max payload size in bits
+
+  static int pass = MIN_SNR_DB;
 
   // Correlate received signal with ideal SIP
   int SIP_offset = 0;
@@ -566,23 +499,22 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const uint16_t *signal, NR_A
   if(testing_mode) {
     printf("Detected SIP at offset %d\n", SIP_offset);
 
-    // Correlate received signal with ideal SIP
-    double *correlation = malloc((frame_parms->packet_downsampled_samples - SIP_downsampled_length) * sizeof(double));
-    memset(correlation, 0, (frame_parms->packet_downsampled_samples - SIP_downsampled_length) * sizeof(double));
+    if(testing_mode && pass == snr_plot) {
+      // Correlate received signal with ideal SIP
+      double *correlation = malloc((frame_parms->packet_downsampled_samples - SIP_downsampled_length) * sizeof(double));
+      memset(correlation, 0, (frame_parms->packet_downsampled_samples - SIP_downsampled_length) * sizeof(double));
 
-    for (int i = 0; i < frame_parms->packet_downsampled_samples - SIP_downsampled_length; i++) {
-      for (int j = 0; j < SIP_downsampled_length; j++) {
-        correlation[i] += signal[i + j] * SIP_ideal[j];
+      for (int i = 0; i < frame_parms->packet_downsampled_samples - SIP_downsampled_length; i++) {
+        for (int j = 0; j < SIP_downsampled_length; j++) {
+          correlation[i] += signal[i + j] * SIP_ideal[j];
+        }
       }
-    }
 
-    static int pass = MIN_SNR_DB;
-    if(testing_mode && pass++ == snr_plot) {
       sprintf(filename, "%s/H_Correlation.m", foldername);
       LOG_M(filename, "Correlation_sig", correlation, frame_parms->packet_downsampled_samples - SIP_downsampled_length, 1, 7);
-    }
 
-    free(correlation);
+      free(correlation);
+    }
   }
 
   int CAP_energy[R_TAS_CAP_N] = {0};
@@ -653,15 +585,21 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const uint16_t *signal, NR_A
   int CAP_symbols = R_TAS_CAP_N / frame_parms->received_M;
   position += (CAP_symbols * downsampled_OFDM_size) + ((CAP_symbols - 1) * downsampled_CP_size); // Move to payload start (before CP)
 
-  // Energy plotting
-  uint32_t energy_plot[frame_parms->packet_payload_size];
-  memset(energy_plot, 0, frame_parms->packet_payload_size * sizeof(uint32_t));
-  int energy_index = 0;
+  uint32_t *energy_plot = NULL, *thr_plot = NULL;
+  int energy_index = 0, thr_index = 0;
 
-  // Threshold plotting
-  uint32_t thr_plot[frame_parms->packet_payload_size];
-  memset(thr_plot, 0, frame_parms->packet_payload_size * sizeof(uint32_t));
-  int thr_index = 0;
+  if(testing_mode && pass == snr_plot) {
+    // Energy plotting
+    energy_plot = malloc(frame_parms->packet_payload_size * sizeof(uint32_t));
+    memset(energy_plot, 0, frame_parms->packet_payload_size * sizeof(uint32_t));
+
+    // Threshold plotting
+    thr_plot = malloc(frame_parms->packet_payload_size * sizeof(uint32_t));
+    memset(thr_plot, 0, frame_parms->packet_payload_size * sizeof(uint32_t));
+
+    // Threshold for next bit
+    thr_plot[thr_index++] = threshold;
+  }
 
   int symbolCounter = (R_TAS_SIP_N / R_TAS_SIP_M) + (R_TAS_CAP_N / frame_parms->received_M);
   int endCounter = 0;
@@ -669,9 +607,6 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const uint16_t *signal, NR_A
   int chip = 0;
   uint32_t energy[2] = {0};
   frame_parms->packet_payload_size = 0;
-
-  // Threshold for next bit
-  thr_plot[thr_index++] = threshold;
 
   while(position + 2*received_chip_size < frame_parms->packet_downsampled_samples)
   {
@@ -690,8 +625,10 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const uint16_t *signal, NR_A
       energy[chip%2] += signal[position + j];
     }
 
-    // Save energy for plotting
-    energy_plot[energy_index++] = energy[chip%2];
+    if(testing_mode && pass == snr_plot) {
+      // Save energy for plotting
+      energy_plot[energy_index++] = energy[chip%2];
+    }
 
     // Move to next chip
     position += received_chip_size;
@@ -722,14 +659,17 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const uint16_t *signal, NR_A
     }
 
     threshold = ((thr_max + thr_min) / 2);// - ((thr_max - thr_min) / 4); // adapt threshold
-    thr_plot[thr_index++] = threshold;
+
+    if(testing_mode && pass == snr_plot) {
+      // Save threshold for plotting
+      thr_plot[thr_index++] = threshold;
+    }
 
     energy[0] = 0;
     energy[1] = 0;
   }
 
-  static int pass = MIN_SNR_DB;
-  if(testing_mode && pass++ == snr_plot) {
+  if(testing_mode && pass == snr_plot) {
     sprintf(filename, "%s/Adaptive_threshold.m", foldername);
     LOG_M(filename, "Adaptive_threshold_sig", thr_plot, thr_index, 1, 2);
 
@@ -737,103 +677,9 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const uint16_t *signal, NR_A
     LOG_M(filename, "Energy_sig", energy_plot, energy_index, 1, 2);
   }
 
-  free_SIP_ideal_sequence(SIP_ideal);
+  pass++;
 }
 
-/*void AIOT_R2D_PHY_RX_Move_And_Remove_CP(uint16_t *cleared, const uint16_t *in, int SIP_offset, NR_AIOT_DL_FRAME_PARMS *frame_parms)
-{
-  // Compute lengths for downsampled SIP ideal sequence
-  int downsampled_OFDM_size = frame_parms->nr_frame_parms.ofdm_symbol_size / frame_parms->N;
-  int downsampled_CP_size = frame_parms->nr_frame_parms.nb_prefix_samples / frame_parms->N;
-  int downsampled_CP0_size = frame_parms->nr_frame_parms.nb_prefix_samples0 / frame_parms->N;
-  frame_parms->packet_received_symbols = 0;
-
-  if(testing_mode) printf("SIP offset: %d samples\n", SIP_offset);
-
-  // Move the start and remove CP (CP0 size = 10, CP size = 9, OFDM symbol size = 128)
-  for (int i = 0, cp = 0; SIP_offset + (i+1)*downsampled_OFDM_size + cp < frame_parms->packet_downsampled_samples; i++)
-  {
-    cp += ((i%7) == 0) ? downsampled_CP0_size : downsampled_CP_size;
-    for (int j = 0; j < downsampled_OFDM_size; j++) {
-      cleared[i*downsampled_OFDM_size + j] = in[SIP_offset + i*downsampled_OFDM_size + j + cp];
-    }
-    frame_parms->packet_received_symbols++;
-  }
-}
-
-void AIOT_R2D_PHY_RX_Energy(uint32_t* energy, const uint16_t *in, NR_AIOT_DL_FRAME_PARMS *frame_parms)
-{
-  int downsampled_chip_size = (frame_parms->nr_frame_parms.ofdm_symbol_size / frame_parms->N) / frame_parms->M;
-  int downsampled_SIP_chip_size = (frame_parms->nr_frame_parms.ofdm_symbol_size / frame_parms->N) / R_TAS_SIP_M;
-  int energy_length = R_TAS_SIP_N + (frame_parms->packet_received_symbols - (R_TAS_SIP_N/R_TAS_SIP_M)) * frame_parms->M;
-  memset(energy, 0, energy_length * sizeof(uint32_t));
-
-  for (int i = 0; i < R_TAS_SIP_N; i++) {
-    for (int j = 0; j < downsampled_SIP_chip_size; j++)
-    {
-      energy[i] += in[i*downsampled_SIP_chip_size + j];
-    }
-  }
-
-  for (int i = 0; i < energy_length - R_TAS_SIP_N; i++) {
-    for (int j = 0; j < downsampled_chip_size; j++)
-    {
-      energy[R_TAS_SIP_N + i] += in[R_TAS_SIP_N*downsampled_SIP_chip_size + i*downsampled_chip_size + j];
-    }
-  }
-
-  frame_parms->packet_payload_size = energy_length;
-}
-
-void AIOT_R2D_PHY_RX_Decode(uint8_t *rx_payload, const uint32_t *in, NR_AIOT_DL_FRAME_PARMS *frame_parms)
-{
-  // Find threshold
-  uint32_t thr_max = (in[8] + in[10]) / 2;
-  uint32_t thr_min = (in[9] + in[11]) / 2;
-  uint32_t threshold = ((thr_max + thr_min) / 2) - ((thr_max - thr_min) / 3); // decrease threshold to be effective for the power level of postamble
-
-  uint32_t thr_plot[frame_parms->packet_payload_size];
-  memset(thr_plot, 0, frame_parms->packet_payload_size * sizeof(uint32_t));
-  int thr_index = 0;
-  thr_plot[thr_index++] = threshold;
-  
-  if(testing_mode) printf("Threshold: %d\n", threshold);
-
-  int endCounter = 0;
-
-  for (int i = R_TAS_SIP_N + R_TAS_CAP_N, j=0; i < frame_parms->packet_payload_size; i+=2)
-  {
-    if(in[i] > threshold && in[i+1] > threshold) {
-      if(++endCounter >= 2) {
-        frame_parms->packet_payload_size = j-1; // exclude the last 2 bits (postamble)
-        break;
-      }
-    } else {
-      endCounter = 0;
-    }
-
-    int bit0 = (in[i] > in[i+1]) ? 1 : 0;
-    rx_payload[j/8] = (rx_payload[j/8] << 1) | bit0;
-    j++;
-
-    if(bit0 == 0) {
-      thr_max = (thr_max*3 + in[i+1]) / 4;
-      thr_min = (thr_min*3 + in[i]) / 4;
-    } else {
-      thr_max = (thr_max*3 + in[i]) / 4;
-      thr_min = (thr_min*3 + in[i+1]) / 4;
-    }
-
-    threshold = ((thr_max + thr_min) / 2) - ((thr_max - thr_min) / 3); // adapt threshold
-    thr_plot[thr_index++] = threshold;
-  }
-
-  static int pass = MIN_SNR_DB;
-  if(testing_mode && pass++ == snr_plot) {
-    sprintf(filename, "%s/Adaptive_threshold.m", foldername);
-    LOG_M(filename, "Adaptive_threshold_sig", thr_plot, thr_index, 1, 2);
-  }
-}*/
 
 void AIOT_R2D_PHY_TX_REs_free(c16_t *REsPacket)
 {
@@ -879,7 +725,6 @@ void AIOT_R2D_PHY_RX_Envelope_Detector_free(uint16_t *envelope)
 double calculate_BER(uint8_t *rx_payload, uint8_t *payload, NR_AIOT_DL_FRAME_PARMS *frame_parms)
 {
   int BER_errors = 0;
-  double BER = 0.0;
   for (int i = 0; i < frame_parms->packet_payload_size/8; i++) {
     int diff = payload[i] ^ rx_payload[i];
 
@@ -889,21 +734,7 @@ double calculate_BER(uint8_t *rx_payload, uint8_t *payload, NR_AIOT_DL_FRAME_PAR
     }
   }
 
-  BER = (double)BER_errors / (double)frame_parms->packet_payload_size;
-  return BER;
-}
-
-static inline int64_t time_start(void) {
-    struct timespec ts;
-    /* use CLOCK_MONOTONIC or CLOCK_MONOTONIC_RAW if available */
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return -1;
-    return (int64_t)ts.tv_sec * 1000 + (int64_t)(ts.tv_nsec / 1000000);
-}
-
-static inline double time_elapsed_ms(int64_t start_ms) {
-    int64_t now = time_start();
-    if (now < 0 || start_ms < 0) return -1.0;
-    return (double)(now - start_ms);
+  return (double)BER_errors / (double)frame_parms->packet_payload_size;
 }
 
 time_stats_t time_stats = {0};
@@ -947,6 +778,20 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
   printf("Starting BER test over SNR range %d dB to %d dB with step %d dB (%d trials per SNR)...\n",
          snr_min, snr_max, snr_steps, snr_trials);
 
+  channel_desc_t *channel_params = new_channel_desc_scm(frame_parms->nr_frame_parms.nb_antennas_tx,
+                                        frame_parms->nr_frame_parms.nb_antennas_rx,
+                                        channel_model->channel_model,
+                                        channel_model->sampling_rate,
+                                        channel_model->fc,
+                                        channel_model->bw,
+                                        channel_model->DS_TDL,
+                                        0.0,
+                                        CORR_LEVEL_LOW,
+                                        0,
+                                        channel_model->delay,
+                                        channel_model->path_loss_dB,
+                                        channel_model->noise_power_dB);
+
   c16_t *REsPacket = NULL, *txData = NULL;
   c16_t **rxData;
   uint16_t *envelope, *filteredData, *downSampled, *cleared;
@@ -954,21 +799,17 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
   uint8_t *rx_payload;
   int rx_size = frame_parms->packet_samples * 2;
 
-  // Butterworth 3rd-order LPF coefficients
-  double b[4] = { 0 };
-  double a[4] = { 0 };
-
-  butterworth3_design((double)channel_model->sampling_rate * 1e6, channel_model->bw * 1e6, b, a);
-
-  printf("Butterworth 3rd-order LPF coefficients:\n");
-  printf("b : %f, %f, %f, %f\n", b[0], b[1], b[2], b[3]);
-  printf("a : %f, %f, %f, %f\n", a[0], a[1], a[2], a[3]);
+  generate_butter_coeffs_f64(&filter, channel_model->bw * 1e6, (double)channel_model->sampling_rate * 1e6);
+  printf("Butterworth 3rd-order LPF\n");
 
   // Allocate memory for the whole R2D packet
   REsPacket = malloc(frame_parms->packet_symbols * frame_parms->packet_subcarriers * sizeof(c16_t));
 
   txData = malloc(frame_parms->packet_samples * sizeof(c16_t));
   memset(txData, 0, frame_parms->packet_samples * sizeof(c16_t));
+
+  // Allocate TX buffers
+  c16_t *txDataF = malloc(frame_parms->packet_samples * sizeof(c16_t));
 
   rxData = malloc(frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(c16_t *));
 
@@ -1022,11 +863,20 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
   bzero(r_re[0], frame_parms->packet_samples * 2 * sizeof(double));
   bzero(r_im[0], frame_parms->packet_samples * 2 * sizeof(double));
 
-  //double *SIP_ideal = generate_SIP_ideal_sequence(frame_parms);
+  SIP_ideal = generate_SIP_ideal_sequence(frame_parms);
 
   if(testing_timing) {
     start_meas(&time_stats);
   }
+
+  double time_tx_REs = 0.0;
+  double time_tx_signal = 0.0;
+  double time_channel = 0.0;
+  double time_envelope = 0.0;
+  double time_filter = 0.0;
+  double time_downsample = 0.0;
+  double time_rx_packet = 0.0;
+  double time_ber = 0.0;
 
   for(int snr = snr_min; snr <= snr_max; snr += SNR_STEP_DB) {
     channel_model->SNR = snr;
@@ -1038,7 +888,7 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_mode) {
         printf("-------------------------------\n");
-        printf("Trial %d/%d for SNR %d dB\n", trials + 1, snr_trials, snr);
+        printf("Testing SNR %d dB\n", snr);
       }
 
       AIOT_R2D_PHY_TX_REs(REsPacket, (const uint8_t *) payload, frame_parms);
@@ -1049,13 +899,13 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        double elapsed_us = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_tx_REs = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("TX REs generation time: %f us\n", elapsed_us);
+        printf("TX REs generation time: %f us\n", time_tx_REs);
       }
 
-      AIOT_R2D_PHY_TX_Signal(txData, (const c16_t *) REsPacket, frame_parms);
+      AIOT_R2D_PHY_TX_Signal(txData, txDataF, (const c16_t *) REsPacket, frame_parms);
       if(testing_mode && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/B_TX_IQ.m", foldername);
         LOG_M(filename, "TX_IQ_sig", txData, frame_parms->packet_samples, 1, 1);
@@ -1063,13 +913,13 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        double elapsed_us = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_tx_signal = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("TX signal generation time: %f us\n", elapsed_us);
+        printf("TX signal generation time: %f us\n", time_tx_signal);
       }
 
-      SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_model, frame_parms);
+      SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, channel_model->SNR, frame_parms);
       if(testing_mode && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/D_RX_IQ.m", foldername);
         LOG_M(filename, "RX_IQ_sig", rxData[0], rx_size, 1, 1);
@@ -1077,10 +927,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        double elapsed_us = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_channel = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("Channel propagation time: %f us\n", elapsed_us);
+        printf("Channel propagation time: %f us\n", time_channel);
       }
 
       // Envelope detector (squared)
@@ -1092,14 +942,14 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        double elapsed_us = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_envelope = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("Envelope detection time: %f us\n", elapsed_us);
+        printf("Envelope detection time: %f us\n", time_envelope);
       }
 
       // Low-pass filter
-      AIOT_R2D_PHY_RX_Filter(filteredData, (const uint16_t *) envelope, rx_size, b, a);
+      AIOT_R2D_PHY_RX_Filter(filteredData, (const uint16_t *) envelope, rx_size, &filter);
       if(testing_mode && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/F_Filter.m", foldername);
         LOG_M(filename, "Filter_sig", filteredData, rx_size, 1, 0);
@@ -1107,10 +957,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        double elapsed_us = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_filter = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("Filtering time: %f us\n", elapsed_us);
+        printf("Filtering time: %f us\n", time_filter);
       }
 
       // Downsample the signal by N = 16
@@ -1122,10 +972,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        double elapsed_us = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_downsample = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("Downsampling time: %f us\n", elapsed_us);
+        printf("Downsampling time: %f us\n", time_downsample);
       }
 
       // Correlate the received signal with known SIP sequence
@@ -1133,10 +983,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        double elapsed_us = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_rx_packet = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("Packet extraction time: %f us\n", elapsed_us);
+        printf("Packet extraction time: %f us\n", time_rx_packet);
       }
 
       double ber = calculate_BER(rx_payload, payload, frame_parms);
@@ -1161,10 +1011,11 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        double elapsed_us = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_ber = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("BER calculation time: %f us\n", elapsed_us);
+        printf("BER calculation time: %f us\n", time_ber);
+        printf("Total time per packet: %f us\n", time_tx_REs + time_tx_signal + time_channel + time_envelope + time_filter + time_downsample + time_rx_packet + time_ber);
       }
     }
 
@@ -1172,15 +1023,38 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
     printf("Completed SNR %d dB: BLER = %f\n", snr, ber_results[snr - snr_min]);
   }
 
+  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
+    free(s_re[i]);
+    free(s_im[i]);
+  }
+
+  free(s_re);
+  free(s_im);
+
+  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+    free(r_re[i]);
+    free(r_im[i]);
+  }
+
+  free(r_re);
+  free(r_im);
+
   AIOT_R2D_PHY_TX_REs_free(REsPacket);
   AIOT_R2D_PHY_TX_Signal_free(txData);
   SIM_Channel_propagate_free(rxData, frame_parms->nr_frame_parms.nb_antennas_rx);
   AIOT_R2D_PHY_RX_Envelope_Detector_free(envelope);
   AIOT_R2D_PHY_RX_Filter_free(filteredData);
   AIOT_R2D_PHY_RX_Downsample_free(downSampled);
+  free_SIP_ideal_sequence(SIP_ideal);
 
+  free_channel_desc_scm(channel_params);
+
+  free(txDataF);
   free(rx_payload);
 
+  printf("-------------------------------\n");
+  printf("            Results\n");
+  printf("-------------------------------\n");
   for(int snr = MIN_SNR_DB; snr <= MAX_SNR_DB; snr += SNR_STEP_DB) {
     printf("SNR %d dB: BER = %f\n", snr, ber_results[snr - MIN_SNR_DB]);
   }
@@ -1198,7 +1072,7 @@ int main(int argc, char **argv)
   __attribute__((unused)) struct sigaction oldaction;
   sigaction(SIGINT, &sigint_action, &oldaction);
 
-  int loglvl = OAILOG_WARNING;
+  int loglvl = OAILOG_ERR;
 
   cpuf = get_cpu_freq_GHz();
 
@@ -1388,22 +1262,6 @@ int main(int argc, char **argv)
   // ---------------------------------------------------------------
 
   BER_test(payload, payloadSize, frame_parms, &channel_model);
-
-  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
-    free(s_re[i]);
-    free(s_im[i]);
-  }
-
-  free(s_re);
-  free(s_im);
-
-  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
-    free(r_re[i]);
-    free(r_im[i]);
-  }
-
-  free(r_re);
-  free(r_im);
 
   end_configmodule(uniqCfg);
   logTerm();
