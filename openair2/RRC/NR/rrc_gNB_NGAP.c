@@ -934,13 +934,30 @@ static void nr_rrc_update_qos(seq_arr_t *list, const int nb_qos, const pdusessio
   DevAssert(nb_qos == 1);
   DevAssert(nb_qos < MAX_QOS_FLOWS);
   for (uint8_t i = 0; i < nb_qos; ++i) {
-    nr_rrc_qos_t *qos = find_qos(list, in_qos[i].qfi);
+    const pdusession_level_qos_parameter_t *q_in = &in_qos[i];
+
+    // Validate QFI range (0-63)
+    if (q_in->qfi < 0 || q_in->qfi > 63) {
+      LOG_E(NR_RRC, "QoS flow QFI=%d: Invalid QFI (must be 0-63). Skipping QoS flow.\n", q_in->qfi);
+      continue;
+    }
+
+    // Validate 5QI value
+    if (!is_5qi_standardized(q_in->fiveQI)) {
+      LOG_W(NR_RRC,
+            "QoS flow QFI=%d: 5QI %lu is not a standardized value (1-9, 65-90). Skipping QoS flow.\n",
+            q_in->qfi,
+            q_in->fiveQI);
+      continue;
+    }
+
+    nr_rrc_qos_t *qos = find_qos(list, q_in->qfi);
     if (qos) {
-      AssertFatal(qos->qos.qfi == in_qos[i].qfi, "QoS Flow to modify must match existing one");
-      LOG_I(NR_RRC, "Updating QoS for QFI=%d\n", in_qos[i].qfi);
-      qos->qos = in_qos[i];
+      AssertFatal(qos->qos.qfi == q_in->qfi, "QoS Flow to modify must match existing one");
+      LOG_I(NR_RRC, "Updating QoS for QFI=%d\n", q_in->qfi);
+      qos->qos = *q_in;
     } else {
-      LOG_E(NR_RRC, "Failed to update QoS for QFI=%d: QoS flow not found\n", in_qos[i].qfi);
+      LOG_E(NR_RRC, "Failed to update QoS for QFI=%d: QoS flow not found\n", q_in->qfi);
     }
   }
 }

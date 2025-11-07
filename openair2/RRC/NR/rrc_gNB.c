@@ -1007,42 +1007,14 @@ static void rrc_gNB_generate_dedicatedRRCReconfiguration(gNB_RRC_INST *rrc, gNB_
 
 void rrc_gNB_modify_dedicatedRRCReconfiguration(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue_p)
 {
-  int qos_flow_index = 0;
   nr_rrc_reconfig_param_t params = get_RRCReconfiguration_params(rrc, ue_p, 0, false);
   ue_p->xids[params.transaction_id] = RRC_PDUSESSION_MODIFY;
 
   FOR_EACH_SEQ_ARR(rrc_pdu_session_param_t *, item, &ue_p->pduSessions) {
-    pdusession_t *session = &item->param;
     item->xid = params.transaction_id;
     // bypass the new and already configured pdu sessions
     if (item->status != PDU_SESSION_STATUS_TOMODIFY) {
       continue;
-    }
-
-    // Reference TS23501 Table 5.7.4-1: Standardized 5QI to QoS characteristics mapping
-    FOR_EACH_SEQ_ARR(nr_rrc_qos_t *, qos, &session->qos) {
-      switch (qos->qos.fiveQI) {
-        case 1: //100ms
-        case 2: //150ms
-        case 3: //50ms
-        case 4: //300ms
-        case 5: //100ms
-        case 6: //300ms
-        case 7: //100ms
-        case 8: //300ms
-        case 9: //300ms Video (Buffered Streaming)TCP-based (e.g., www, e-mail, chat, ftp, p2p file sharing, progressive video, etc.)
-          // TODO
-          break;
-
-        default:
-          LOG_E(NR_RRC, "not supported 5qi %lu\n", qos->qos.fiveQI);
-          ngap_cause_t cause = {.type = NGAP_CAUSE_RADIO_NETWORK, .value = NGAP_CauseRadioNetwork_not_supported_5QI_value};
-          item->status = PDU_SESSION_STATUS_FAILED;
-          item->xid = params.transaction_id;
-          item->cause = cause;
-          continue;
-      }
-      LOG_I(NR_RRC, "PDU Session ID %d, QOS flow %d, 5QI %ld \n", session->pdusession_id, qos_flow_index, qos->qos.fiveQI);
     }
   }
 

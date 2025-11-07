@@ -48,6 +48,26 @@ nr_rrc_qos_t *add_qos(seq_arr_t *qos, const pdusession_level_qos_parameter_t *in
     return NULL;
   }
 
+  // Validate QFI range (0-63)
+  if (in->qfi > 63) {
+    LOG_E(NR_RRC, "Invalid QFI=%d: QFI must be in range 0-63. Skipping QoS flow.\n", in->qfi);
+    return NULL;
+  }
+
+  // TS 23.501: "The QFI shall be unique within a PDU Session."
+  // If QFI already exists, keep the existing mapping to avoid ambiguity.
+  nr_rrc_qos_t *existing = find_qos(qos, in->qfi);
+  if (existing) {
+    LOG_W(NR_RRC, "Duplicate QoS flow QFI=%d for the same PDU session; skipping add (keeping existing)\n", in->qfi);
+    return existing;
+  }
+
+  // Validate 5QI value (TS 23.501 allows dynamically assigned 5QIs)
+  if (in->fiveQI_type == NON_DYNAMIC && !is_5qi_standardized(in->fiveQI)) {
+    LOG_W(NR_RRC, "QoS flow QFI=%d: 5QI %ld is not a standardized value. Skipping QoS flow.\n", in->qfi, in->fiveQI);
+    return NULL;
+  }
+
   nr_rrc_qos_t item = {.qos = *in};
   seq_arr_push_back(qos, &item, sizeof(nr_rrc_qos_t));
 
@@ -55,9 +75,6 @@ nr_rrc_qos_t *add_qos(seq_arr_t *qos, const pdusession_level_qos_parameter_t *in
   nr_rrc_qos_t *added = find_qos(qos, in->qfi);
   DevAssert(added);
   LOG_I(NR_RRC, "Added QoS flow with qfi=%d, total number of QoS flows = %ld\n", in->qfi, seq_arr_size(qos));
-
-  // Only one QoS flow is supported
-  AssertFatal(seq_arr_size(qos) == 1, "only 1 Qos flow supported\n");
 
   return added;
 }
@@ -80,6 +97,12 @@ static void free_rrc_qos_list(seq_arr_t *seq)
 bool rm_qos(seq_arr_t *flows, int qfi)
 {
   DevAssert(flows);
+
+  // Validate QFI range (0-63)
+  if (qfi < 0 || qfi > 63) {
+    LOG_E(NR_RRC, "Invalid QFI=%d: QFI must be in range 0-63. Skipping QoS flow release.\n", qfi);
+    return false;
+  }
 
   nr_rrc_qos_t *qos = find_qos(flows, qfi);
   if (!qos) {
@@ -345,6 +368,21 @@ static const qos_resource_type_t five_qi_resource_type[MAX_STANDARDIZED_FIVEQI +
     [90] = QOS_RESOURCE_TYPE_DC_GBR,
 };
 
+/** @brief Check if 5QI value is a standardized value (table 5.7.4-1 in 3GPP TS 23.501)
+ * @param five_qi 5QI value to check
+ * @return true if 5QI is standardized value (1-9, 65-90), false otherwise */
+bool is_5qi_standardized(uint16_t five_qi)
+{
+  DevAssert(five_qi <= MAX_FIVEQI);
+  // TS 23.501 Table 5.7.4-1: standardized 5QI values
+  return (five_qi >= 1 && five_qi <= 10) || // GBR / Non-GBR
+         (five_qi >= 65 && five_qi <= 67) || // GBR
+         (five_qi >= 69 && five_qi <= 70) || // Non-GBR
+         (five_qi >= 71 && five_qi <= 76) || // GBR
+         (five_qi >= 79 && five_qi <= 80) || // Non-GBR
+         (five_qi >= 82 && five_qi <= MAX_STANDARDIZED_FIVEQI); // DC-GBR
+}
+
 // Design-specific DRB multiplexing limits per resource type
 #define MAX_QOS_FLOWS_PER_DRB_DC_GBR 1 // Strict isolation for delay-critical GBR
 #define MAX_QOS_FLOWS_PER_DRB_GBR 2 // Conservative multiplexing for GBR
@@ -472,7 +510,7 @@ int nr_rrc_find_suitable_drb_for_qos(gNB_RRC_UE_t *UE,
 
     if (has_capacity && total_flows_on_drb < MAX_QOS_FLOWS_PER_DRB_TOTAL) {
       LOG_I(NR_RRC,
-            "Found suitable DRB %d to multiplex 5QI %lu (QFI %d) - current flows: GBR=%d, Non-GBR=%d\n",
+            "Found suitable DRB %d to multiplex 5QI %ld (QFI %d) - current flows: GBR=%d, Non-GBR=%d\n",
             drb->drb_id,
             qos_params->fiveQI,
             qos_params->qfi,

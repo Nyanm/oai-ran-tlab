@@ -42,6 +42,7 @@ typedef enum { NON_DYNAMIC, DYNAMIC } fiveQI_t;
  * - Pre-configured 5QI values: pre-configured in the AN
  * - Dynamically assigned 5QI values: require signaling of QoS characteristics as part of QoS profile */
 #define MIN_FIVEQI 0
+#define MAX_STANDARDIZED_FIVEQI 90
 #define MAX_FIVEQI 255
 
 /* ARP Priority Level - 3GPP TS 23.501 §5.7.2.2
