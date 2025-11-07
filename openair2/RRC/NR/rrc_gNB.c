@@ -2929,6 +2929,13 @@ static f1ap_qos_flow_param_t nr_rrc_get_f1_qos_flow_param(const pdusession_level
   qos_char.arp.preempt_cap =
       a->pre_emp_capability == PEC_MAY_TRIGGER_PREEMPTION ? MAY_TRIGGER_PREEMPTION : SHALL_NOT_TRIGGER_PREEMPTION;
   qos_char.arp.preempt_vuln = a->pre_emp_vulnerability == PEV_PREEMPTABLE ? PREEMPTABLE : NOT_PREEMPTABLE;
+
+  // GBR QoS Flow Information (only for GBR flows)
+  if (qos_param->gbr_qos_flow_information != NULL) {
+    qos_char.gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+    *qos_char.gbr_qos_flow_information = *qos_param->gbr_qos_flow_information;
+  }
+
   return qos_char;
 }
 
@@ -2949,6 +2956,11 @@ static f1ap_qos_flow_param_t fill_f1_drb_qos(const f1ap_qos_flow_param_t *highes
   if (drb_qos.qos_type == DYNAMIC) {
     free(drb_qos.dyn.delay_critical);
     free(drb_qos.dyn.avg_win);
+  }
+  // GBR information from highest priority flow (if present)
+  if (highest_priority_flow->gbr_qos_flow_information != NULL) {
+    drb_qos.gbr_qos_flow_information = calloc_or_fail(1, sizeof(*drb_qos.gbr_qos_flow_information));
+    *drb_qos.gbr_qos_flow_information = *highest_priority_flow->gbr_qos_flow_information;
   }
   return drb_qos;
 }

@@ -764,15 +764,39 @@ static void test_f1ap_ue_context_setup_request()
   drb1->qos_choice = F1AP_QOS_CHOICE_NR;
   f1ap_arp_t arp = { 1, MAY_TRIGGER_PREEMPTION, PREEMPTABLE, };
   drb1->nr.drb_qos.qos_type = NON_DYNAMIC;
-  drb1->nr.drb_qos.nondyn.fiveQI = 3;
+  drb1->nr.drb_qos.nondyn.fiveQI = 1; // Highest priority flow has 5QI 1 (GBR)
   drb1->nr.drb_qos.arp = arp;
+  // DRB-level GBR from highest priority flow (flow[0] has GBR)
+  drb1->nr.drb_qos.gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+  drb1->nr.drb_qos.gbr_qos_flow_information->dl.guaranteedFlowBitRate = 100000; // 100 Mbps
+  drb1->nr.drb_qos.gbr_qos_flow_information->dl.maximumFlowBitRate = 200000; // 200 Mbps
+  drb1->nr.drb_qos.gbr_qos_flow_information->ul.guaranteedFlowBitRate = 50000; // 50 Mbps
+  drb1->nr.drb_qos.gbr_qos_flow_information->ul.maximumFlowBitRate = 100000; // 100 Mbps
   drb1->nr.nssai = (nssai_t) {.sst = 1, .sd = 123};
-  drb1->nr.flows_len = 1;
-  f1ap_drb_flows_mapped_t *flow = drb1->nr.flows = calloc_or_fail(drb1->nr.flows_len, sizeof(*flow));
-  flow->qfi = 2;
-  flow->param.qos_type = NON_DYNAMIC;
-  flow->param.nondyn.fiveQI = 3;
-  flow->param.arp = arp;
+  // Test case: Support multiple QoS flows
+  drb1->nr.flows_len = 2; // Test with 2 QoS flows
+  drb1->nr.flows = calloc_or_fail(drb1->nr.flows_len, sizeof(*drb1->nr.flows));
+
+  // Configure first QoS flow (GBR flow - 5QI 1 for voice)
+  f1ap_drb_flows_mapped_t *f1 = &drb1->nr.flows[0];
+  f1->qfi = 1;
+  f1->param.qos_type = NON_DYNAMIC;
+  f1->param.nondyn.fiveQI = 1; // 5QI 1 is GBR flow
+  f1->param.arp = arp;
+  // Add GBR information for GBR flow (5QI < 5)
+  f1->param.gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+  f1->param.gbr_qos_flow_information->dl.guaranteedFlowBitRate = 100000; // 100 Mbps
+  f1->param.gbr_qos_flow_information->dl.maximumFlowBitRate = 200000; // 200 Mbps
+  f1->param.gbr_qos_flow_information->ul.guaranteedFlowBitRate = 50000; // 50 Mbps
+  f1->param.gbr_qos_flow_information->ul.maximumFlowBitRate = 100000; // 100 Mbps
+
+  // Configure second QoS flow (Non-GBR flow)
+  f1ap_drb_flows_mapped_t *f2 = &drb1->nr.flows[1];
+  f2->qfi = 2;
+  f2->param.qos_type = NON_DYNAMIC;
+  f2->param.nondyn.fiveQI = 9; // 5QI 9 is Non-GBR flow
+  f2->param.arp = arp;
+  // No GBR information for Non-GBR flow
   drb1->up_ul_tnl_len = 1;
   inet_pton(AF_INET, "192.168.40.23", &drb1->up_ul_tnl[0].tl_address);
   drb1->up_ul_tnl[0].teid = 0x11223344;
@@ -793,6 +817,12 @@ static void test_f1ap_ue_context_setup_request()
   _F1_MALLOC(dyn->avg_win, 3000);
   f1ap_arp_t arp2 = { 13, SHALL_NOT_TRIGGER_PREEMPTION, NOT_PREEMPTABLE, };
   drb2->nr.drb_qos.arp = arp2;
+  // DRB-level GBR from highest priority flow (flow2[0] has GBR)
+  drb2->nr.drb_qos.gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+  drb2->nr.drb_qos.gbr_qos_flow_information->dl.guaranteedFlowBitRate = 50000; // 50 Mbps
+  drb2->nr.drb_qos.gbr_qos_flow_information->dl.maximumFlowBitRate = 150000; // 150 Mbps
+  drb2->nr.drb_qos.gbr_qos_flow_information->ul.guaranteedFlowBitRate = 25000; // 25 Mbps
+  drb2->nr.drb_qos.gbr_qos_flow_information->ul.maximumFlowBitRate = 75000; // 75 Mbps
   drb2->nr.nssai = (nssai_t) {.sst = 2, .sd = 0xffffff};
   drb2->nr.flows_len = 2;
   f1ap_drb_flows_mapped_t *flow2 = drb2->nr.flows = calloc_or_fail(drb2->nr.flows_len, sizeof(*flow2));
@@ -803,6 +833,12 @@ static void test_f1ap_ue_context_setup_request()
   flow2[0].param.dyn.per.scalar = 4;
   flow2[0].param.dyn.per.exponent = 8;
   flow2[0].param.arp = arp2;
+  // Add GBR information for Dynamic5QI GBR flow
+  flow2[0].param.gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+  flow2[0].param.gbr_qos_flow_information->dl.guaranteedFlowBitRate = 50000; // 50 Mbps
+  flow2[0].param.gbr_qos_flow_information->dl.maximumFlowBitRate = 150000; // 150 Mbps
+  flow2[0].param.gbr_qos_flow_information->ul.guaranteedFlowBitRate = 25000; // 25 Mbps
+  flow2[0].param.gbr_qos_flow_information->ul.maximumFlowBitRate = 75000; // 75 Mbps
   flow2[1].qfi = 5;
   flow2[1].param.qos_type = NON_DYNAMIC;
   flow2[1].param.nondyn.fiveQI = 3;
@@ -1010,15 +1046,40 @@ static void test_f1ap_ue_context_modification_request()
   drb1->qos_choice = F1AP_QOS_CHOICE_NR;
   f1ap_arp_t arp = { 2, SHALL_NOT_TRIGGER_PREEMPTION, NOT_PREEMPTABLE, };
   drb1->nr.drb_qos.qos_type = NON_DYNAMIC;
-  drb1->nr.drb_qos.nondyn.fiveQI = 8;
+  drb1->nr.drb_qos.nondyn.fiveQI = 1; // Highest priority flow has 5QI 1 (GBR)
   drb1->nr.drb_qos.arp = arp;
+  // DRB-level GBR from highest priority flow (flow[0] has GBR)
+  drb1->nr.drb_qos.gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+  drb1->nr.drb_qos.gbr_qos_flow_information->dl.guaranteedFlowBitRate = 80000; // 80 Mbps
+  drb1->nr.drb_qos.gbr_qos_flow_information->dl.maximumFlowBitRate = 180000; // 180 Mbps
+  drb1->nr.drb_qos.gbr_qos_flow_information->ul.guaranteedFlowBitRate = 40000; // 40 Mbps
+  drb1->nr.drb_qos.gbr_qos_flow_information->ul.maximumFlowBitRate = 90000; // 90 Mbps
   drb1->nr.nssai = (nssai_t) {.sst = 2, .sd = 0xffffff};
-  drb1->nr.flows_len = 1;
-  f1ap_drb_flows_mapped_t *flow = drb1->nr.flows = calloc_or_fail(drb1->nr.flows_len, sizeof(*flow));
-  flow->qfi = 2;
-  flow->param.qos_type = NON_DYNAMIC;
-  flow->param.nondyn.fiveQI = 9;
-  flow->param.arp = arp;
+  // Test case: Support multiple QoS flows
+  drb1->nr.flows_len = 2; // Test with 2 QoS flows
+  drb1->nr.flows = calloc_or_fail(drb1->nr.flows_len, sizeof(*drb1->nr.flows));
+
+  // Configure first QoS flow (GBR flow - 5QI 1 for voice)
+  f1ap_drb_flows_mapped_t *f1 = &drb1->nr.flows[0];
+  f1->qfi = 1;
+  f1->param.qos_type = NON_DYNAMIC;
+  f1->param.nondyn.fiveQI = 1; // 5QI 1 is GBR flow
+  f1->param.arp = arp;
+  // Add GBR information for GBR flow (5QI < 5)
+  f1->param.gbr_qos_flow_information = calloc_or_fail(1, sizeof(gbr_qos_flow_information_t));
+  gbr_qos_flow_information_t *gbr = f1->param.gbr_qos_flow_information;
+  gbr->dl.guaranteedFlowBitRate = 80000; // 80 Mbps
+  gbr->dl.maximumFlowBitRate = 180000; // 180 Mbps
+  gbr->ul.guaranteedFlowBitRate = 40000; // 40 Mbps
+  gbr->ul.maximumFlowBitRate = 90000; // 90 Mbps
+
+  // Configure second QoS flow (Non-GBR flow)
+  f1ap_drb_flows_mapped_t *f2 = &drb1->nr.flows[1];
+  f2->qfi = 2;
+  f2->param.qos_type = NON_DYNAMIC;
+  f2->param.nondyn.fiveQI = 9; // 5QI 9 is Non-GBR flow
+  f2->param.arp = arp;
+  // No GBR information for Non-GBR flow
   drb1->up_ul_tnl_len = 1;
   inet_pton(AF_INET, "8.8.8.8", &drb1->up_ul_tnl[0].tl_address);
   drb1->up_ul_tnl[0].teid = 0x9876541;
