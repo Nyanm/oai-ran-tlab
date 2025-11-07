@@ -69,10 +69,22 @@ typedef struct {
   qos_pev_t pre_emp_vulnerability;
 } qos_arp_t;
 
+/* QoS Priority Level - 3GPP TS 23.501 §5.7.3.3
+ * The Priority Level associated with 5G QoS characteristics indicates a priority
+ * in scheduling resources among QoS Flows. The lowest Priority Level value
+ * corresponds to the highest priority.
+ * Range: 1 to 127, with 1 as the highest priority and 127 as the lowest priority.
+ * Used for scheduling resources among QoS Flows (different from ARP priority level
+ * which is used for admission control/preemption).
+ * Every standardized 5QI is associated with a default Priority Level value. */
+typedef uint8_t qos_priority_level_t;
+#define MIN_QOS_PRIORITY_LEVEL 1 // highest priority
+#define MAX_QOS_PRIORITY_LEVEL 127 // lowest priority
+
 typedef struct pdusession_level_qos_parameter_s {
   uint8_t qfi;
   uint64_t fiveQI;
-  uint64_t qos_priority;
+  qos_priority_level_t qos_priority;
   fiveQI_t fiveQI_type;
   qos_arp_t arp;
 } pdusession_level_qos_parameter_t;
