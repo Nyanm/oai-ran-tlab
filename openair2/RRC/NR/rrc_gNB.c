@@ -1391,6 +1391,26 @@ static void f1u_dl_gtp_rollback(gNB_RRC_UE_t *UE)
   }
 }
 
+/** @brief Handle UE access on a different DU than the original one
+ *        Per 38.401 8.7: "If the UE accessed from a gNB-DU other than the original
+ *        one, the gNB-CU should trigger the UE Context Setup procedure".
+ *        This applies to both handover scenarios (where the different DU might be
+ *        the target DU) and other scenarios (e.g., reestablishment on a different DU).
+ *        Note: The caller must verify that the UE is accessing a different DU before calling this function.
+ *        The DU will assign the gNB_DU_ue_id in the response.
+ * @param rrc RRC instance
+ * @param UE UE context
+ * @param du DU container where the UE is accessing */
+static void rrc_handle_ue_access_different_du(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const nr_rrc_du_container_t *du)
+{
+  LOG_I(NR_RRC, "Triggering UE Context Setup for UE %d on DU %d\n", UE->rrc_ue_id, du->assoc_id);
+  DevAssert(du != NULL);
+  DevAssert(du->assoc_id != 0);
+  f1ap_ue_context_setup_req_t req = rrc_fill_f1_ue_context_setup(rrc, UE, du, NULL);
+  rrc->mac_rrc.ue_context_setup_request(du->assoc_id, &req);
+  free_ue_context_setup_req(&req);
+}
+
 static void rrc_handle_RRCReestablishmentRequest(gNB_RRC_INST *rrc,
                                                  sctp_assoc_t assoc_id,
                                                  const NR_RRCReestablishmentRequest_IEs_t *req,
@@ -1701,17 +1721,41 @@ static void rrc_gNB_process_MeasurementReport(gNB_RRC_INST *rrc, gNB_RRC_UE_t *U
   LOG_E(NR_RRC, "Incoming Report Type: %d is not supported! \n", report_config->choice.reportConfigNR->reportType.present);
 }
 
-static int handle_rrcReestablishmentComplete(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const NR_RRCReestablishmentComplete_t *cplt)
+static void handle_rrcReestablishmentComplete(gNB_RRC_INST *rrc,
+                                              gNB_RRC_UE_t *UE,
+                                              const uint32_t gNB_DU_ue_id,
+                                              const NR_RRCReestablishmentComplete_t *cplt,
+                                              const sctp_assoc_t assoc_id)
 {
   NR_RRCReestablishmentComplete__criticalExtensions_PR p = cplt->criticalExtensions.present;
   if (p != NR_RRCReestablishmentComplete__criticalExtensions_PR_rrcReestablishmentComplete) {
     LOG_E(NR_RRC, "UE %d: expected presence of rrcReestablishmentComplete, but message has %d\n", UE->rrc_ue_id, p);
-    return -1;
+    return;
   }
+
+  /* Check if UE is accessing a different DU and trigger UE Context Setup if needed */
+  f1_ue_data_t ue_data = cu_get_f1_ue_data(UE->rrc_ue_id);
+  RETURN_IF_INVALID_ASSOC_ID(ue_data.du_assoc_id);
+  if (ue_data.du_assoc_id != assoc_id) {
+    LOG_W(NR_RRC,
+      "UE %d: Reestablishment Complete on a different DU (assoc_id=%d, gNB_DU_ue_id=%u, current du_assoc_id=%d)\n",
+      UE->rrc_ue_id,
+      assoc_id,
+      gNB_DU_ue_id,
+      ue_data.du_assoc_id);
+    /* UE is accessing a different DU - trigger UE Context Setup */
+    nr_rrc_du_container_t *du = get_du_by_assoc_id(rrc, assoc_id);
+    if (du == NULL) {
+      LOG_E(NR_RRC, "UE %d: cannot find DU for assoc_id %d\n", UE->rrc_ue_id, assoc_id);
+      return;
+    }
+    rrc_handle_ue_access_different_du(rrc, UE, du);
+    return; // UE Context Setup was triggered, nothing more to do
+  }
+
   rrc_gNB_process_RRCReestablishmentComplete(rrc, UE, cplt->rrc_TransactionIdentifier);
 
   UE->ue_reestablishment_counter++;
-  return 0;
 }
 
 /**
@@ -2017,7 +2061,7 @@ static void rrc_gNB_generate_UECapabilityEnquiry(gNB_RRC_INST *rrc, gNB_RRC_UE_t
   nr_rrc_transfer_protected_rrc_message(rrc, ue, DL_SCH_LCID_DCCH, msg_id, buffer, size);
 }
 
-static int rrc_gNB_decode_dcch(gNB_RRC_INST *rrc, const f1ap_ul_rrc_message_t *msg)
+static int rrc_gNB_decode_dcch(gNB_RRC_INST *rrc, const f1ap_ul_rrc_message_t *msg, const sctp_assoc_t assoc_id)
 {
   /* we look up by CU UE ID! Do NOT change back to RNTI! */
   rrc_gNB_ue_context_t *ue_context_p = rrc_gNB_get_ue_context(rrc, msg->gNB_CU_ue_id);
@@ -2122,7 +2166,8 @@ static int rrc_gNB_decode_dcch(gNB_RRC_INST *rrc, const f1ap_ul_rrc_message_t *m
 
       case NR_UL_DCCH_MessageType__c1_PR_rrcReestablishmentComplete:
         LOG_UE_UL_EVENT(UE, "Received RRCReestablishmentComplete\n");
-        handle_rrcReestablishmentComplete(rrc, UE, ul_dcch_msg->message.choice.c1->choice.rrcReestablishmentComplete);
+        const NR_RRCReestablishmentComplete_t *rc = ul_dcch_msg->message.choice.c1->choice.rrcReestablishmentComplete;
+        handle_rrcReestablishmentComplete(rrc, UE, msg->gNB_DU_ue_id, rc, assoc_id);
         break;
 
       default:
@@ -2616,6 +2661,32 @@ static void rrc_CU_process_ue_modification_required(MessageDef *msg_p, instance_
     return;
   }
 
+  /* Check if UE is accessing a different DU than its current one */
+  f1_ue_data_t ue_data = cu_get_f1_ue_data(UE->rrc_ue_id);
+  RETURN_IF_INVALID_ASSOC_ID(ue_data.du_assoc_id);
+  if (ue_data.du_assoc_id != assoc_id) {
+    /* Get DU container - use target DU if available during handover, otherwise look it up */
+    const nr_rrc_du_container_t *du = NULL;
+    if (UE->ho_context && UE->ho_context->target && UE->ho_context->target->du
+        && UE->ho_context->target->du->assoc_id == assoc_id) {
+      du = UE->ho_context->target->du;
+    } else {
+      du = get_du_by_assoc_id(rrc, assoc_id);
+    }
+
+    if (du == NULL) {
+      LOG_E(NR_RRC, "UE %d: cannot find DU for assoc_id %d\n", UE->rrc_ue_id, assoc_id);
+      return;
+    }
+    LOG_W(NR_RRC,
+          "UE %d: UE Context Modification Required from different DU (assoc_id %d, current %d), triggering UE Context Setup\n",
+          UE->rrc_ue_id,
+          assoc_id,
+          ue_data.du_assoc_id);
+    rrc_handle_ue_access_different_du(rrc, UE, du);
+    return; // UE Context Setup was triggered, nothing more to do
+  }
+
   if (required->du_to_cu_rrc_information && required->du_to_cu_rrc_information->cellGroupConfig) {
     gNB_RRC_UE_t *UE = &ue_context_p->ue_context;
     LOG_I(RRC,
@@ -3081,7 +3152,7 @@ void *rrc_gnb_task(void *args_p) {
       /* Messages from PDCP */
       /* From DU -> CU */
       case F1AP_UL_RRC_MESSAGE:
-        rrc_gNB_decode_dcch(RC.nrrrc[instance], &F1AP_UL_RRC_MESSAGE(msg_p));
+        rrc_gNB_decode_dcch(RC.nrrrc[instance], &F1AP_UL_RRC_MESSAGE(msg_p), msg_p->ittiMsgHeader.originInstance);
         free_ul_rrc_message_transfer(&F1AP_UL_RRC_MESSAGE(msg_p));
         break;
 
