@@ -126,7 +126,14 @@ static void test_rrc_qos(void)
   LOG_A(NR_RRC, "Created PDU Session %d for QoS test\n", session_id);
 
   const int qfi = 4;
-  const pdusession_level_qos_parameter_t param = { .fiveQI = 9, .fiveQI_type = NON_DYNAMIC, .qfi = qfi };
+  const pdusession_level_qos_parameter_t param = {
+      .qfi = qfi,
+      .fiveQI_type = NON_DYNAMIC,
+      .qos_characteristics.non_dynamic =
+          {
+              .fiveQI = 9,
+          },
+  };
   LOG_A(NR_RRC, "Adding QoS flow with QFI %d\n", qfi);
   nr_rrc_qos_t *added = add_qos(&in.qos, &param);
   AssertFatal(added, "add_qos failed");
@@ -135,6 +142,30 @@ static void test_rrc_qos(void)
   nr_rrc_qos_t *found = find_qos(&in.qos, qfi);
   AssertFatal(found && found == added, "find_qos failed");
   LOG_A(NR_RRC, "QoS flow find test passed\n");
+
+  const int dyn_qfi = 5;
+  uint16_t dyn_fiveqi = 7;
+  const pdusession_level_qos_parameter_t dyn_param = {
+      .qfi = dyn_qfi,
+      .fiveQI_type = DYNAMIC,
+      .qos_characteristics.dynamic =
+          {
+              .fiveQI = &dyn_fiveqi,
+              .qos_priority = 10,
+              .packet_delay_budget = 20,
+              .per = {.scalar = 1, .exponent = 6},
+          },
+  };
+  LOG_A(NR_RRC, "Adding Dynamic QoS flow with QFI %d\n", dyn_qfi);
+  nr_rrc_qos_t *dyn_added = add_qos(&in.qos, &dyn_param);
+  AssertFatal(dyn_added, "add_qos (dynamic) failed");
+
+  nr_rrc_qos_t *dyn_found = find_qos(&in.qos, dyn_qfi);
+  AssertFatal(dyn_found && dyn_found == dyn_added, "find_qos (dynamic) failed");
+  AssertFatal(dyn_found->qos.fiveQI_type == DYNAMIC, "dynamic flow type mismatch");
+  AssertFatal(dyn_found->qos.qos_characteristics.dynamic.fiveQI != NULL, "dynamic fiveQI missing");
+  AssertFatal(*dyn_found->qos.qos_characteristics.dynamic.fiveQI == dyn_fiveqi, "dynamic fiveQI mismatch");
+  LOG_A(NR_RRC, "Dynamic QoS flow add/find test passed\n");
 
   seq_arr_free(&pduSessions, free_pdusession);
 }

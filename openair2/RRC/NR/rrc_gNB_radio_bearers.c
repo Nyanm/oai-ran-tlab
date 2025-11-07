@@ -11,16 +11,38 @@
 #include "assertions.h"
 #include "common/platform_constants.h"
 #include "common/utils/T/T.h"
+#include "common/utils/utils.h"
 #include "ngap_messages_types.h"
 #include "oai_asn1.h"
 #include "openair2/LAYER2/nr_pdcp/nr_pdcp_asn1_utils.h"
 #include "common/utils/alg/find.h"
+
+#define NO_FIVEQI UINT16_MAX
+/* Implementation policy: dedicated-DRB heuristic for Dynamic 5QI without a numeric 5QI.
+ * These thresholds are not specified by 3GPP but reflect a conservative mapping choice. */
+#define DYN5QI_DEDICATED_DRB_PDB_THRESHOLD_MS 50
+#define DYN5QI_DEDICATED_DRB_PER_SCALAR_MAX 1
+#define DYN5QI_DEDICATED_DRB_PER_EXPONENT_MIN 6
+#define DYN5QI_DEDICATED_DRB_QOS_PRIORITY_MAX 10
 
 static bool eq_qfi(const void *vval, const void *vit)
 {
   const int id = *(const int *)vval;
   const nr_rrc_qos_t *elem = (const nr_rrc_qos_t *)vit;
   return elem->qos.qfi == id;
+}
+
+static uint16_t get_qos_fiveqi(const pdusession_level_qos_parameter_t *qos)
+{
+  if (qos->fiveQI_type == NON_DYNAMIC) {
+    DevAssert(qos->qos_characteristics.non_dynamic.fiveQI <= MAX_STANDARDIZED_FIVEQI);
+    return qos->qos_characteristics.non_dynamic.fiveQI;
+  }
+  if (qos->qos_characteristics.dynamic.fiveQI != NULL) {
+    DevAssert(*qos->qos_characteristics.dynamic.fiveQI <= MAX_FIVEQI);
+    return *qos->qos_characteristics.dynamic.fiveQI;
+  }
+  return NO_FIVEQI;
 }
 
 /** @brief Retrieves mapped QoS in UE context for the input @param qfi
@@ -63,12 +85,27 @@ nr_rrc_qos_t *add_qos(seq_arr_t *qos, const pdusession_level_qos_parameter_t *in
   }
 
   // Validate 5QI value (TS 23.501 allows dynamically assigned 5QIs)
-  if (in->fiveQI_type == NON_DYNAMIC && !is_5qi_standardized(in->fiveQI)) {
-    LOG_W(NR_RRC, "QoS flow QFI=%d: 5QI %ld is not a standardized value. Skipping QoS flow.\n", in->qfi, in->fiveQI);
+  if (in->fiveQI_type == NON_DYNAMIC && !is_5qi_standardized(in->qos_characteristics.non_dynamic.fiveQI)) {
+    LOG_W(NR_RRC,
+          "QoS flow QFI=%d: 5QI %d is not a standardized value. Skipping QoS flow.\n",
+          in->qfi,
+          in->qos_characteristics.non_dynamic.fiveQI);
     return NULL;
   }
 
   nr_rrc_qos_t item = {.qos = *in};
+  const dynamic_5qi_t *in_dyn = &in->qos_characteristics.dynamic;
+  dynamic_5qi_t *out_dyn = &item.qos.qos_characteristics.dynamic;
+  if (in->fiveQI_type == DYNAMIC && in_dyn->fiveQI != NULL) {
+    out_dyn->fiveQI = calloc_or_fail(1, sizeof(*out_dyn->fiveQI));
+    *out_dyn->fiveQI = *in_dyn->fiveQI;
+  }
+  const non_dynamic_5qi_t *in_non_dyn = &in->qos_characteristics.non_dynamic;
+  non_dynamic_5qi_t *out_non_dyn = &item.qos.qos_characteristics.non_dynamic;
+  if (in->fiveQI_type == NON_DYNAMIC && in_non_dyn->qos_priority != NULL) {
+    out_non_dyn->qos_priority = calloc_or_fail(1, sizeof(*out_non_dyn->qos_priority));
+    *out_non_dyn->qos_priority = *in_non_dyn->qos_priority;
+  }
   seq_arr_push_back(qos, &item, sizeof(nr_rrc_qos_t));
 
   // Double check successful add
@@ -82,8 +119,11 @@ nr_rrc_qos_t *add_qos(seq_arr_t *qos, const pdusession_level_qos_parameter_t *in
 /** @brief Free QoS flows list items */
 static void free_qos(void *ptr)
 {
-  /*nothing to do*/
-  UNUSED(ptr);
+  nr_rrc_qos_t *q = ptr;
+  if (q->qos.fiveQI_type == DYNAMIC)
+    free_and_zero(q->qos.qos_characteristics.dynamic.fiveQI);
+  if (q->qos.fiveQI_type == NON_DYNAMIC)
+    free_and_zero(q->qos.qos_characteristics.non_dynamic.qos_priority);
 }
 
 /** @brief Free QoS flows list */
@@ -401,22 +441,40 @@ bool nr_rrc_is_non_gbr_fiveqi(uint16_t five_qi)
 // Design-specific aggregate cap to prevent over-multiplexing when mixing resource types on the same DRB
 #define MAX_QOS_FLOWS_PER_DRB_TOTAL 5
 
-/** @brief Check if 5QI requires dedicated DRB based on QoS characteristics
- * Delay-critical GBR (5QI 82-90) and high priority and low-PER services
- * (e.g. mission-critical and live streaming flows) get dedicated DRBs. */
-static bool nr_rrc_qos_dedicated_drb(const uint8_t five_qi)
+/** @brief Decide whether a QoS flow should get a dedicated DRB.
+ *
+ * - If a numeric 5QI is available (Non-Dynamic 5QI, or Dynamic 5QI with 5QI present), we apply
+ *   the implementation's 5QI-based isolation policy. In particular, Delay-Critical GBR (5QI 82-90)
+ *   and selected high priority / low-PER services are isolated on dedicated DRBs.
+ *
+ * - For Dynamic 5QI where the numeric 5QI is absent, 3GPP allows relying on the signaled QoS
+ *   characteristics. We use a conservative heuristic based on priority, PDB and PER thresholds */
+static bool nr_rrc_qos_dedicated_drb(const pdusession_level_qos_parameter_t *qos)
 {
-  DevAssert(five_qi <= MAX_FIVEQI);
-  // Delay-critical GBR (5QI 82-90) get dedicated DRBs
-  qos_resource_type_t type = five_qi_resource_type[five_qi];
-
-  if (type == QOS_RESOURCE_TYPE_DC_GBR) {
-    return true;
+  const uint16_t five_qi = get_qos_fiveqi(qos);
+  if (five_qi != NO_FIVEQI) {
+    if (!is_5qi_standardized(five_qi)) {
+      return true; // Dynamic non-standardized 5QI: conservative behavior to prevent unintended multiplexing
+    }
+    // Delay-critical GBR (5QI 82-90) get dedicated DRBs
+    qos_resource_type_t type = five_qi_resource_type[five_qi];
+    if (type == QOS_RESOURCE_TYPE_DC_GBR)
+      return true;
+    // High priority and low-PER services get dedicated DRBs
+    return (five_qi == 4 || five_qi == 6 || five_qi == 7 || five_qi == 8 || five_qi == 9 || five_qi == 10 || five_qi == 70
+            || five_qi == 80 || (five_qi >= 71 && five_qi <= 73));
   }
-  // High priority and low-PER services get dedicated DRBs
-  return (five_qi == 4 || five_qi == 6 || five_qi == 7 || five_qi == 8
-          || five_qi == 9 || five_qi == 10 || five_qi == 70
-          || five_qi == 80 || (five_qi >= 71 && five_qi <= 73));
+
+  // Dynamic 5QI without a numeric 5QI: decide based on signaled characteristics.
+  DevAssert(qos->fiveQI_type == DYNAMIC);
+  const dynamic_5qi_t *dyn = &qos->qos_characteristics.dynamic;
+  const qos_per_t *per = &dyn->per;
+  /* Conservative policy for low-latency / high-reliability / high-priority flows. */
+  const bool low_latency = dyn->packet_delay_budget <= DYN5QI_DEDICATED_DRB_PDB_THRESHOLD_MS;
+  const bool high_reliability =
+      (per->scalar <= DYN5QI_DEDICATED_DRB_PER_SCALAR_MAX && per->exponent >= DYN5QI_DEDICATED_DRB_PER_EXPONENT_MIN);
+  const bool high_priority = dyn->qos_priority <= DYN5QI_DEDICATED_DRB_QOS_PRIORITY_MAX;
+  return low_latency || high_reliability || high_priority;
 }
 
 /** @brief Count QoS flows mapped to a specific DRB, grouped by resource type.
@@ -443,8 +501,14 @@ static void nr_rrc_count_qos_flows_by_type(const seq_arr_t *qos_flows,
     // Check if the QoS flow is mapped to the given DRB ID
     if (qos->drb_id == drb_id) {
       // Increment the counter depending on the resource type of the QoS flow
-      const uint8_t five_qi = qos->qos.fiveQI;
-      DevAssert(five_qi <= MAX_FIVEQI);
+      const uint16_t five_qi = get_qos_fiveqi(&qos->qos);
+      if (five_qi == NO_FIVEQI || !is_5qi_standardized(five_qi)) {
+        /* Dynamic 5QI may omit the numeric 5QI; in that case we can't classify by 5QI-derived resource type.
+         * Count conservatively to avoid reusing/multiplexing such flows on existing DRBs. */
+        (*dc_gbr_count)++;
+        continue;
+      }
+      DevAssert(five_qi <= MAX_STANDARDIZED_FIVEQI);
       qos_resource_type_t type = five_qi_resource_type[five_qi];
       switch (type) {
         case QOS_RESOURCE_TYPE_DC_GBR:
@@ -457,7 +521,7 @@ static void nr_rrc_count_qos_flows_by_type(const seq_arr_t *qos_flows,
           (*non_gbr_count)++;
           break;
         default:
-          LOG_W(NR_RRC, "Unknown resource type for 5QI %lu\n", qos->qos.fiveQI);
+          LOG_W(NR_RRC, "Unknown resource type for 5QI %u\n", five_qi);
           break;
       }
     }
@@ -470,13 +534,16 @@ int nr_rrc_find_suitable_drb_for_qos(gNB_RRC_UE_t *UE,
                                      const pdusession_level_qos_parameter_t *qos_params,
                                      const seq_arr_t *flows)
 {
-  const uint8_t five_qi = qos_params->fiveQI;
-  DevAssert(five_qi <= MAX_FIVEQI);
+  const uint16_t five_qi = get_qos_fiveqi(qos_params);
+  if (five_qi == NO_FIVEQI || !is_5qi_standardized(five_qi)) {
+    DevAssert(qos_params->fiveQI_type == DYNAMIC);
+    return -1; // Dynamic 5QI without standardized numeric value: no table-based classification.
+  }
   qos_resource_type_t type = five_qi_resource_type[five_qi];
 
   /* Dedicated flows (incl. DC-GBR 5QI 82-90): never reuse an existing DRB. Per-DRB DC-GBR
    * multiplexing limit is one dedicated DRB each. */
-   if (nr_rrc_qos_dedicated_drb(qos_params->fiveQI) || type == QOS_RESOURCE_TYPE_DC_GBR) {
+   if (nr_rrc_qos_dedicated_drb(qos_params) || type == QOS_RESOURCE_TYPE_DC_GBR) {
     return -1;
   }
 
@@ -500,7 +567,7 @@ int nr_rrc_find_suitable_drb_for_qos(gNB_RRC_UE_t *UE,
     FOR_EACH_SEQ_ARR(nr_rrc_qos_t *, existing_qos, flows) {
       if (existing_qos->drb_id != drb->drb_id)
         continue;
-      if (nr_rrc_qos_dedicated_drb(existing_qos->qos.fiveQI)) {
+      if (nr_rrc_qos_dedicated_drb(&existing_qos->qos)) {
         has_dedicated_flow_on_drb = true;
         break;
       }
@@ -521,9 +588,9 @@ int nr_rrc_find_suitable_drb_for_qos(gNB_RRC_UE_t *UE,
 
     if (has_capacity && total_flows_on_drb < MAX_QOS_FLOWS_PER_DRB_TOTAL) {
       LOG_I(NR_RRC,
-            "Found suitable DRB %d to multiplex 5QI %ld (QFI %d) - current flows: GBR=%d, Non-GBR=%d\n",
+            "Found suitable DRB %d to multiplex 5QI %d (QFI %d) - current flows: GBR=%d, Non-GBR=%d\n",
             drb->drb_id,
-            qos_params->fiveQI,
+            five_qi,
             qos_params->qfi,
             gbr_count,
             non_gbr_count);
@@ -550,6 +617,8 @@ bool nr_rrc_assign_drb_to_qos_flow(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const pd
   DevAssert(session);
   DevAssert(qos);
 
+  const uint16_t five_qi = get_qos_fiveqi(&qos->qos);
+
   // First, try to find an existing suitable DRB
   int drb_id = nr_rrc_find_suitable_drb_for_qos(UE, session->pdusession_id, &qos->qos, &session->qos);
 
@@ -562,7 +631,7 @@ bool nr_rrc_assign_drb_to_qos_flow(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const pd
     // Store the assigned DRB ID
     drb_id = rrc_drb->drb_id;
     is_new_drb = true;
-    LOG_I(NR_RRC, "UE %d: created new DRB %d for QFI %d (5QI %lu)\n", UE->rrc_ue_id, drb_id, qos->qos.qfi, qos->qos.fiveQI);
+    LOG_I(NR_RRC, "UE %d: created new DRB %d for QFI %d (5QI %d)\n", UE->rrc_ue_id, drb_id, qos->qos.qfi, five_qi);
   }
 
   // Assign the DRB ID to the QoS flow
@@ -570,11 +639,11 @@ bool nr_rrc_assign_drb_to_qos_flow(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const pd
   qos->drb_id = drb_id;
 
   LOG_I(NR_RRC,
-        "UE %d: assigned DRB %d to QFI %d (5QI %lu) in PDU session %d\n",
+        "UE %d: assigned DRB %d to QFI %d (5QI %d) in PDU session %d\n",
         UE->rrc_ue_id,
         drb_id,
         qos->qos.qfi,
-        qos->qos.fiveQI,
+        five_qi,
         session->pdusession_id);
 
   return is_new_drb;
@@ -599,8 +668,11 @@ void nr_rrc_add_bearers(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession_t
       nr_rrc_assign_drb_to_qos_flow(rrc, UE, session, qos);
       /* TS 23.501 §5.7.2.7: the QoS Flow associated with the default QoS rule should be a Non-GBR QoS Flow
        * from the standardized value range. Therefore, we prefer the DRB mapped from the first Non-GBR QoS flow here. */
-      DevAssert(qos->qos.fiveQI <= MAX_FIVEQI);
-      if (qos->qos.fiveQI_type == NON_DYNAMIC && nr_rrc_is_non_gbr_fiveqi(qos->qos.fiveQI) && !default_set) {
+      const uint16_t five_qi = get_qos_fiveqi(&qos->qos);
+      if (five_qi == NO_FIVEQI)
+        continue; // Dynamic 5QI: not eligible for default QoS rule selection here.
+      DevAssert(five_qi <= MAX_FIVEQI);
+      if (qos->qos.fiveQI_type == NON_DYNAMIC && nr_rrc_is_non_gbr_fiveqi(five_qi) && !default_set) {
         session->sdap_config.default_drb = qos->drb_id;
         default_set = true;
       }

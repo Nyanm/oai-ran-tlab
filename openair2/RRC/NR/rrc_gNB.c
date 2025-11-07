@@ -2887,21 +2887,44 @@ unsigned int mask_flip(unsigned int x) {
   return((((x>>8) + (x<<8))&0xffff)>>6);
 }
 
-/* \bref return F1AP QoS characteristics based on Qos flow parameters */
-f1ap_qos_flow_param_t get_qos_char_from_qos_flow_param(const pdusession_level_qos_parameter_t *qos_param)
+/** @brief Get F1AP QoS flow parameters from PDU session QoS parameters
+ * @param qos_param PDU session level QoS parameters from NGAP
+ * @return F1AP QoS flow parameters */
+static f1ap_qos_flow_param_t nr_rrc_get_f1_qos_flow_param(const pdusession_level_qos_parameter_t *qos_param)
 {
   f1ap_qos_flow_param_t qos_char = {0};
-  if (qos_param->fiveQI_type == DYNAMIC) {
+
+  if (qos_param->fiveQI_type == DYNAMIC) {  // Dynamic 5QI
+    const dynamic_5qi_t *dyn = &qos_param->qos_characteristics.dynamic;
     qos_char.qos_type = DYNAMIC;
-    qos_char.dyn.prio = qos_param->qos_priority;
-    qos_char.dyn.pdb = 100; // TODO
-    qos_char.dyn.per.scalar = 10; // TODO
-    qos_char.dyn.per.exponent = 100; // TODO
-  } else {
+    // Mandatory for Dynamic5QI (range 1..127)
+    DevAssert(dyn->qos_priority >= MIN_QOS_PRIORITY_LEVEL && dyn->qos_priority <= MAX_QOS_PRIORITY_LEVEL);
+    qos_char.dyn.prio = dyn->qos_priority;
+
+    // Packet Delay Budget (0..1023)
+    DevAssert(dyn->packet_delay_budget >= MIN_PACKET_DELAY_BUDGET && dyn->packet_delay_budget <= MAX_PACKET_DELAY_BUDGET);
+    qos_char.dyn.pdb = dyn->packet_delay_budget;
+
+    // Packet Error Rate (0..9 for scalar/exponent)
+    const qos_per_t *per = &dyn->per;
+    DevAssert(per->scalar >= MIN_PACKET_ERROR_RATE_SCALAR && per->scalar <= MAX_PACKET_ERROR_RATE_SCALAR);
+    DevAssert(per->exponent >= MIN_PACKET_ERROR_RATE_EXPONENT && per->exponent <= MAX_PACKET_ERROR_RATE_EXPONENT);
+    qos_char.dyn.per.scalar = per->scalar;
+    qos_char.dyn.per.exponent = per->exponent;
+  } else { // Non-Dynamic 5QI
+    const non_dynamic_5qi_t *non_dyn = &qos_param->qos_characteristics.non_dynamic;
     qos_char.qos_type = NON_DYNAMIC;
-    qos_char.nondyn.fiveQI = qos_param->fiveQI;
+    // 5QI (0..255)
+    const uint16_t five_qi = non_dyn->fiveQI;
+    DevAssert(five_qi >= MIN_FIVEQI && five_qi <= MAX_FIVEQI);
+    qos_char.nondyn.fiveQI = five_qi;
+    // Note: F1AP non-dynamic 5QI doesn't have priority field
   }
+
+  // Allocation and Retention Priority (ARP)
   const qos_arp_t *a = &qos_param->arp;
+  // ARP Priority Level (1..15)
+  DevAssert(a->priority_level >= MIN_QOS_ARP_PRIORITY_LEVEL && a->priority_level <= MAX_QOS_ARP_PRIORITY_LEVEL);
   qos_char.arp.prio = a->priority_level;
   qos_char.arp.preempt_cap =
       a->pre_emp_capability == PEC_MAY_TRIGGER_PREEMPTION ? MAY_TRIGGER_PREEMPTION : SHALL_NOT_TRIGGER_PREEMPTION;
@@ -2953,7 +2976,7 @@ static f1ap_drb_info_nr_t fill_f1_drb_info_nr(pdusession_t *pdu, const uint8_t *
     /* QoS flows Flows Mapped to DRB Item */
     f1ap_drb_flows_mapped_t *flow = &drb_info.flows[i];
     flow->qfi = qfi;
-    flow->param = get_qos_char_from_qos_flow_param(&qos_param->qos);
+    flow->param = nr_rrc_get_f1_qos_flow_param(&qos_param->qos);
     // Find flow with highest ARP priority (lowest ARP priority_level value)
     // (lower ARP priority value = higher priority for admission/preemption)
     if (highest_priority_flow == NULL || flow->param.arp.prio < highest_arp) {

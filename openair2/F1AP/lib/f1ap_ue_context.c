@@ -386,6 +386,7 @@ static F1AP_QoSFlowLevelQoSParameters_t encode_qos_flow_param(const f1ap_qos_flo
   if (p->qos_type == NON_DYNAMIC) {
     f1ap.qoS_Characteristics.present = F1AP_QoS_Characteristics_PR_non_Dynamic_5QI;
     asn1cCalloc(f1ap.qoS_Characteristics.choice.non_Dynamic_5QI, nd);
+    DevAssert(p->nondyn.fiveQI >= MIN_FIVEQI && p->nondyn.fiveQI <= MAX_FIVEQI);
     nd->fiveQI = p->nondyn.fiveQI;
   } else {
     DevAssert(p->qos_type == DYNAMIC);

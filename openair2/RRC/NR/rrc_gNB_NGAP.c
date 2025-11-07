@@ -11,6 +11,7 @@
 #include <netinet/sctp.h>
 #include <openair3/ocp-gtpu/gtp_itf.h>
 #include <stdbool.h>
+#include "common/utils/utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -285,12 +286,22 @@ static qos_flow_to_setup_t fill_e1_qos_flow_to_setup(const pdusession_level_qos_
   // QoS Characteristics
   qos_characteristics_t *qos_characteristics = &qos_flow.qos_params.qos_characteristics;
   if (qos->fiveQI_type == NON_DYNAMIC) {
-    qos_characteristics->non_dynamic.fiveqi = qos->fiveQI;
-    qos_characteristics->non_dynamic.qos_priority_level = qos->qos_priority;
+    const non_dynamic_5qi_t *non_dynamic = &qos->qos_characteristics.non_dynamic;
+    typeof(qos_characteristics->non_dynamic) *out_non_dynamic = &qos_characteristics->non_dynamic;
+    out_non_dynamic->fiveqi = non_dynamic->fiveQI;
+    if (non_dynamic->qos_priority) {
+      out_non_dynamic->qos_priority_level = *non_dynamic->qos_priority;
+    }
   } else {
-    qos_characteristics->dynamic.fiveqi = qos->fiveQI;
-    qos_characteristics->dynamic.qos_priority_level = qos->qos_priority;
-    // NOTE: missing packet error rate and delay budget
+    const dynamic_5qi_t *dynamic = &qos->qos_characteristics.dynamic;
+    typeof(qos_characteristics->dynamic) *out_dynamic = &qos_characteristics->dynamic;
+    if (dynamic->fiveQI != NULL) {
+      out_dynamic->fiveqi = *dynamic->fiveQI;
+    }
+    out_dynamic->qos_priority_level = dynamic->qos_priority;
+    out_dynamic->packet_delay_budget = dynamic->packet_delay_budget;
+    out_dynamic->packet_error_rate.per_scalar = dynamic->per.scalar;
+    out_dynamic->packet_error_rate.per_exponent = dynamic->per.exponent;
   }
   qos_characteristics->qos_type = qos->fiveQI_type;
 
@@ -943,19 +954,50 @@ static void nr_rrc_update_qos(seq_arr_t *list, const int nb_qos, const pdusessio
     }
 
     // Validate 5QI value
-    if (!is_5qi_standardized(q_in->fiveQI)) {
+    const non_dynamic_5qi_t *in_non_dynamic = &q_in->qos_characteristics.non_dynamic;
+    const dynamic_5qi_t *in_dynamic = &q_in->qos_characteristics.dynamic;
+    if (q_in->fiveQI_type == NON_DYNAMIC && !is_5qi_standardized(in_non_dynamic->fiveQI)) {
       LOG_W(NR_RRC,
-            "QoS flow QFI=%d: 5QI %lu is not a standardized value (1-9, 65-90). Skipping QoS flow.\n",
+            "QoS flow QFI=%d: 5QI %u is not a standardized value (1-9, 65-90). Skipping QoS flow.\n",
             q_in->qfi,
-            q_in->fiveQI);
+            in_non_dynamic->fiveQI);
       continue;
     }
 
     nr_rrc_qos_t *qos = find_qos(list, q_in->qfi);
     if (qos) {
+      pdusession_level_qos_parameter_t *dst_qos = &qos->qos;
       AssertFatal(qos->qos.qfi == q_in->qfi, "QoS Flow to modify must match existing one");
       LOG_I(NR_RRC, "Updating QoS for QFI=%d\n", q_in->qfi);
-      qos->qos = *q_in;
+      DevAssert(dst_qos->fiveQI_type == q_in->fiveQI_type);
+
+      dst_qos->qfi = q_in->qfi;
+      dst_qos->arp = q_in->arp;
+
+      if (q_in->fiveQI_type == DYNAMIC) {
+        dynamic_5qi_t *out_dyn = &dst_qos->qos_characteristics.dynamic;
+        out_dyn->qos_priority = in_dynamic->qos_priority;
+        out_dyn->packet_delay_budget = in_dynamic->packet_delay_budget;
+        out_dyn->per = in_dynamic->per;
+        if (in_dynamic->fiveQI == NULL) {
+          free_and_zero(out_dyn->fiveQI);
+        } else {
+          if (out_dyn->fiveQI == NULL)
+            out_dyn->fiveQI = calloc_or_fail(1, sizeof(*out_dyn->fiveQI));
+          *out_dyn->fiveQI = *in_dynamic->fiveQI;
+        }
+      } else { /* NON_DYNAMIC */
+        non_dynamic_5qi_t *out_non_dyn = &dst_qos->qos_characteristics.non_dynamic;
+        out_non_dyn->fiveQI = in_non_dynamic->fiveQI;
+
+        if (in_non_dynamic->qos_priority == NULL) {
+          free_and_zero(out_non_dyn->qos_priority);
+        } else {
+          if (out_non_dyn->qos_priority == NULL)
+            out_non_dyn->qos_priority = calloc_or_fail(1, sizeof(*out_non_dyn->qos_priority));
+          *out_non_dyn->qos_priority = *in_non_dynamic->qos_priority;
+        }
+      }
     } else {
       LOG_E(NR_RRC, "Failed to update QoS for QFI=%d: QoS flow not found\n", q_in->qfi);
     }

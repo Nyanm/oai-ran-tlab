@@ -90,11 +90,56 @@ typedef uint8_t qos_priority_level_t;
 #define MIN_QOS_PRIORITY_LEVEL 1 // highest priority
 #define MAX_QOS_PRIORITY_LEVEL 127 // lowest priority
 
+/* Packet Delay Budget (PDB) - 3GPP TS 23.501 §5.7.3.4
+ * Upper bound for packet delay between UE and UPF N6 termination point (0..1023 ms).
+ * Used for scheduling and link layer configuration (e.g. HARQ target operating points).
+ * For Delay-critical GBR flows, packets delayed more than PDB are counted as lost. */
+#define MIN_PACKET_DELAY_BUDGET 0
+#define MAX_PACKET_DELAY_BUDGET 1023
+
+/* Packet Error Rate (PER) - 3GPP TS 23.501 §5.7.3.5
+ * Upper bound for rate of non-congestion related packet losses (0..9 for scalar/exponent).
+ * Used for link layer protocol configuration (e.g. RLC, HARQ).
+ * PER = Scalar * 10^(-Exponent) */
+#define MIN_PACKET_ERROR_RATE_SCALAR 0
+#define MAX_PACKET_ERROR_RATE_SCALAR 9
+#define MIN_PACKET_ERROR_RATE_EXPONENT 0
+#define MAX_PACKET_ERROR_RATE_EXPONENT 9
+
+typedef struct {
+  // Packet Error Rate Scalar (0..9)
+  uint8_t scalar;
+  // Packet Error Rate Exponent (0..9)
+  uint8_t exponent;
+} qos_per_t;
+
+/** QoS Characteristics for a standardized or
+ * pre-configured 5QI for downlink and uplink*/
+typedef struct {
+  uint16_t fiveQI;
+  qos_priority_level_t *qos_priority;
+} non_dynamic_5qi_t;
+
+/** QoS Characteristics for a Non-standardised or
+ * not pre-configured 5QI for downlink and uplink. */
+typedef struct {
+  uint16_t *fiveQI;
+  qos_priority_level_t qos_priority;
+  // Packet Delay Budget (0..1023 ms)
+  int packet_delay_budget;
+  // Packet Error Rate (0..9 for scalar/exponent)
+  qos_per_t per;
+} dynamic_5qi_t;
+
 typedef struct pdusession_level_qos_parameter_s {
   uint8_t qfi;
-  uint64_t fiveQI;
-  qos_priority_level_t qos_priority;
+  // QoS Characteristics
   fiveQI_t fiveQI_type;
+  union {
+    non_dynamic_5qi_t non_dynamic;
+    dynamic_5qi_t dynamic;
+  } qos_characteristics;
+  // NG-RAN Allocation and Retention Priority
   qos_arp_t arp;
 } pdusession_level_qos_parameter_t;
 
