@@ -36,25 +36,14 @@ typedef enum {
 
 typedef enum { NON_DYNAMIC, DYNAMIC } fiveQI_t;
 
-/* QoS Priority Level */
-typedef enum {
-  QOS_PRIORITY_SPARE = 0,
-  QOS_PRIORITY_HIGHEST,
-  QOS_PRIORITY_2,
-  QOS_PRIORITY_3,
-  QOS_PRIORITY_4,
-  QOS_PRIORITY_5,
-  QOS_PRIORITY_6,
-  QOS_PRIORITY_7,
-  QOS_PRIORITY_8,
-  QOS_PRIORITY_9,
-  QOS_PRIORITY_10,
-  QOS_PRIORITY_11,
-  QOS_PRIORITY_12,
-  QOS_PRIORITY_13,
-  QOS_PRIORITY_LOWEST,
-  QOS_NO_PRIORITY
-} qos_priority_t;
+/* ARP Priority Level - 3GPP TS 23.501 §5.7.2.2
+ * The ARP priority level defines the relative importance of a QoS Flow.
+ * Range: 1 to 15, with 1 as the highest priority.
+ * ARP priority levels 1-8: authorized by serving network (prioritized treatment)
+ * ARP priority levels 9-15: authorized by home network (roaming scenarios) */
+typedef uint8_t qos_arp_priority_level_t;
+#define MIN_QOS_ARP_PRIORITY_LEVEL 1 // highest priority
+#define MAX_QOS_ARP_PRIORITY_LEVEL 15 // lowest priority
 
 /* Pre-emption Capability */
 typedef enum {
@@ -70,9 +59,12 @@ typedef enum {
   PEV_MAX,
 } qos_pev_t;
 
-/* Allocation Retention Priority */
+/* Allocation and Retention Priority (ARP) - 3GPP TS 23.501 §5.7.2.2
+ * Contains information about priority level, pre-emption capability and vulnerability.
+ * Used for admission control of GBR traffic and pre-emption decisions. */
 typedef struct {
-  qos_priority_t priority_level;
+  // ARP priority level (1-15, 1 = highest)
+  qos_arp_priority_level_t priority_level;
   qos_pec_t pre_emp_capability;
   qos_pev_t pre_emp_vulnerability;
 } qos_arp_t;
