@@ -131,6 +131,26 @@ typedef struct {
   qos_per_t per;
 } dynamic_5qi_t;
 
+/* Bit Rate (kbps) - 3GPP TS 38.413 */
+typedef struct qos_bitrate_s {
+  // Guaranteed Flow Bit Rate (GFBR) (kbps)
+  uint64_t guaranteedFlowBitRate;
+  // Maximum Flow Bit Rate (MFBR) (kbps)
+  uint64_t maximumFlowBitRate;
+} qos_bitrate_t;
+
+/* GBR QoS Flow Information - 3GPP TS 23.501 §5.7.1.2, TS 38.413 §9.3.1.19
+ * Present only for GBR QoS flows (5QI < 5 for NonDynamic5QI, or Dynamic5QI with GBR).
+ * For GBR QoS Flow only, the QoS profile SHALL include for DL and UL:
+ * - Guaranteed Flow Bit Rate (GFBR)
+ * - Maximum Flow Bit Rate (MFBR) */
+typedef struct gbr_qos_flow_information_s {
+  // Downlink bit rates (kbps)
+  qos_bitrate_t dl;
+  // Uplink bit rates (kbps)
+  qos_bitrate_t ul;
+} gbr_qos_flow_information_t;
+
 typedef struct pdusession_level_qos_parameter_s {
   uint8_t qfi;
   // QoS Characteristics
@@ -141,6 +161,8 @@ typedef struct pdusession_level_qos_parameter_s {
   } qos_characteristics;
   // NG-RAN Allocation and Retention Priority
   qos_arp_t arp;
+  /* GBR QoS Flow Information (optional - only for GBR flows) */
+  gbr_qos_flow_information_t *gbr_qos_flow_information;
 } pdusession_level_qos_parameter_t;
 
 #endif

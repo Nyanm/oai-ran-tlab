@@ -15,6 +15,7 @@
 #include "NGAP_AllowedNSSAI-Item.h"
 #include "NGAP_AssociatedQosFlowItem.h"
 #include "NGAP_BroadcastPLMNItem.h"
+#include "NGAP_GBR-QosInformation.h"
 #include "NGAP_GlobalGNB-ID.h"
 #include "NGAP_GTPTunnel.h"
 #include "NGAP_InitiatingMessage.h"

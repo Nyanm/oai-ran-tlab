@@ -233,6 +233,19 @@ pdusession_level_qos_parameter_t fill_qos(uint8_t qfi, const NGAP_QosFlowLevelQo
   out.arp.pre_emp_capability = arp->pre_emptionCapability;
   out.arp.pre_emp_vulnerability = arp->pre_emptionVulnerability;
 
+  // Extract GBR QoS Flow Information (optional - only for GBR flows)
+  if (params->gBR_QosInformation != NULL) {
+    const NGAP_GBR_QosInformation_t *gBR = params->gBR_QosInformation;
+    out.gbr_qos_flow_information = calloc_or_fail(1, sizeof(*out.gbr_qos_flow_information));
+    gbr_qos_flow_information_t *gbr_info = out.gbr_qos_flow_information;
+
+    // Extract bit rates (NGAP_BitRate_t is INTEGER_t, requires conversion function)
+    asn_INTEGER2ulong(&gBR->guaranteedFlowBitRateDL, &gbr_info->dl.guaranteedFlowBitRate);
+    asn_INTEGER2ulong(&gBR->maximumFlowBitRateDL, &gbr_info->dl.maximumFlowBitRate);
+    asn_INTEGER2ulong(&gBR->guaranteedFlowBitRateUL, &gbr_info->ul.guaranteedFlowBitRate);
+    asn_INTEGER2ulong(&gBR->maximumFlowBitRateUL, &gbr_info->ul.maximumFlowBitRate);
+  }
+
   return out;
 }
 
