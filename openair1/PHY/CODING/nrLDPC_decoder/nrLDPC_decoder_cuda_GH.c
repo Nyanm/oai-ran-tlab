@@ -536,7 +536,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 //Pack setting area
   if (!SegmentPacked) {
     int segPerPack = 0;
-    int NumThreads = 1024;  //maximum 1024, suggesting multiples of 96:480,576,672,768,864,960
+    int NumThreads = 384;  //maximum 1024, suggesting multiples of 96:384,480,576,672,768,864,960
                            //at least should be multiples of 32
     BG1_R13_threadSize.NumThreads = NumThreads;
     BG1_R13_threadSize.NumBlocks = (num_TotalThreads_BG1_R13 + BG1_R13_threadSize.NumThreads - 1) / BG1_R13_threadSize.NumThreads;

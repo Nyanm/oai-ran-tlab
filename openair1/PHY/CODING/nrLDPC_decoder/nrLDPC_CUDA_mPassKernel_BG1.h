@@ -1450,7 +1450,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G19_stream(const t_nrLDPC_lut *p_lut,
   }
 }
 
-__device__ void llrRes2llrOut_Kernel_BG1_int8(const t_nrLDPC_lut *p_lut, int8_t *llrOut, int8_t *llrRes, int Zc)
+__device__ void llrRes2llrOut_Kernel_BG1_int8(uint8_t R, int8_t *llrOut, int8_t *llrRes, int Zc)
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   int colIdx = tid / RowLength;
@@ -1458,14 +1458,14 @@ __device__ void llrRes2llrOut_Kernel_BG1_int8(const t_nrLDPC_lut *p_lut, int8_t 
   if (colIdx >= 42)
     return;
 
-  const uint8_t numBn2CnG1 = p_lut->numBnInBnGroups[0]; // numBnInBnGroups[0] = 42
+  const uint8_t numBn2CnG1 = (R == 13) ? d_lut_numBnInBnGroups_BG1_R13[0] : d_lut_numBnInBnGroups_BG1_R23[0]; // numBnInBnGroups[0] = 42
   uint32_t startColParity = // BG1=26
       NR_LDPC_START_COL_PARITY_BG1; //(BG == 1) ? (NR_LDPC_START_COL_PARITY_BG1) : (NR_LDPC_START_COL_PARITY_BG2);
 
   uint32_t colG1 = startColParity * Zc;
 
-  const uint16_t *lut_llr2llrProcBufAddr = p_lut->llr2llrProcBufAddr;
-  const uint8_t *lut_llr2llrProcBufBnPos = p_lut->llr2llrProcBufBnPos;
+  const uint16_t *lut_llr2llrProcBufAddr = (R == 13)? d_llr2llrProcBufAddr_BG1_R13  : d_llr2llrProcBufAddr_BG1_R23;
+  const uint8_t *lut_llr2llrProcBufBnPos = (R == 13)? d_llr2llrProcBufBnPos_BG1_R13 : d_llr2llrProcBufBnPos_BG1_R23;
 
   int8_t *p_llrOut = &llrOut[0];
   if (colIdx < startColParity) {

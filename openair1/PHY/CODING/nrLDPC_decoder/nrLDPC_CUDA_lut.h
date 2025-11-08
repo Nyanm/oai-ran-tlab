@@ -13,6 +13,14 @@ __device__ __constant__ uint32_t d_lut_startAddrBnGroups_BG1_R23[NR_LDPC_NUM_BN_
 __device__ __constant__ uint16_t d_lut_startAddrBnGroupsLlr_BG1_R13[NR_LDPC_NUM_BN_GROUPS_BG1_R13] = {0, 16128, 16512, 16896, 17664, 19200, 20352, 20736, 22272, 23424, 24960, 25344, 25728};
 __device__ __constant__ uint16_t d_lut_startAddrBnGroupsLlr_BG1_R23[NR_LDPC_NUM_BN_GROUPS_BG1_R23] = {0, 3456, 3840, 5760, 6912, 9600, 12672, 13056};
 
+// R13
+__device__ __constant__ uint16_t d_llr2llrProcBufAddr_BG1_R13[26] = {25728,25344,17664,22272,20352,16128,19200,23424,19200,17664,23424,20736,23424,22272,20736,17664,20736,20736,24960,17664,19200,22272,23424,16512,16896,16896};
+__device__ __constant__ uint8_t d_llr2llrProcBufBnPos_BG1_R13[26] = {0,0,0,0,0,0,0,0,1,1,1,0,2,1,1,2,2,3,0,3,2,2,3,0,0,1};
+// R23
+__device__ __constant__ uint16_t d_llr2llrProcBufAddr_BG1_R23[26] = {13056,12672,5760,6912,6912,3840,5760,6912,6912,3840,9600,9600,9600,9600,6912,3840,9600,6912,9600,5760,6912,9600,9600,3840,3840,3456};
+__device__ __constant__ uint8_t d_llr2llrProcBufBnPos_BG1_R23[26] = {0,0,0,0,1,0,1,2,3,1,0,1,2,3,4,2,4,5,5,2,6,6,7,3,4,0};
+
+
 __device__ __constant__ uint8_t lut_CnGrpIdx_BG1_R13[316] = {
     // Group 1 (3 messages)
     1, 1, 1, 
