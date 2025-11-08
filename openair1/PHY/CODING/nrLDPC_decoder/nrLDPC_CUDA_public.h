@@ -46,6 +46,42 @@ __device__ __forceinline__ void moveBricks_invput_circ(int8_t *__restrict__ dstB
 		    break;
   }
 }
+__device__ __forceinline__ void moveBricks_forput_circ(
+    int8_t *__restrict__ dstBuf,
+    uint16_t dstBuf_Offset,
+    const uint8_t *__restrict__ Four_Bricks,
+    uint16_t Z,
+    uint16_t cshift)
+{
+    uint16_t pos = (dstBuf_Offset - cshift + Z) % Z;
+
+    switch (pos + 3 - Z) {
+        case 0:
+            dstBuf[pos]   = Four_Bricks[0];
+            dstBuf[pos+1] = Four_Bricks[1];
+            dstBuf[pos+2] = Four_Bricks[2];
+            dstBuf[0]     = Four_Bricks[3];
+            break;
+        case 1:
+            dstBuf[pos]   = Four_Bricks[0];
+            dstBuf[pos+1] = Four_Bricks[1];
+            dstBuf[0]     = Four_Bricks[2];
+            dstBuf[1]     = Four_Bricks[3];
+            break;
+        case 2:
+            dstBuf[pos]   = Four_Bricks[0];
+            dstBuf[0]     = Four_Bricks[1];
+            dstBuf[1]     = Four_Bricks[2];
+            dstBuf[2]     = Four_Bricks[3];
+            break;
+        default:
+            dstBuf[pos]   = Four_Bricks[0];
+            dstBuf[pos+1] = Four_Bricks[1];
+            dstBuf[pos+2] = Four_Bricks[2];
+            dstBuf[pos+3] = Four_Bricks[3];
+            break;
+    }
+}
 __device__ __forceinline__ void moveBricks_invget_circ(int8_t *__restrict__ dstBuf,
                                 uint16_t dstBuf_Offset,
                                 uint8_t *__restrict__ Four_Bricks,

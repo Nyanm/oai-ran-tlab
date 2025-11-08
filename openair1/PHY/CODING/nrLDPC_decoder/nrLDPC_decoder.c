@@ -624,7 +624,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #endif
   if (BG == 1) {
     nrLDPC_bn2cnProcBuf_BG1(p_lut, bnProcBufRes, cnProcBuf, Z);
-    // dump_cnProcBufRes_to_file(cnProcBuf, "First_cnProcBuf_New_dump_128.txt");
+    //dump_cnProcBufRes_to_file(cnProcBuf, "Dump_cnProcBuf_de_Bn_128.txt");
     // dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBufRes_dump_128.txt");
   } else
     nrLDPC_bn2cnProcBuf_BG2(p_lut, bnProcBufRes, cnProcBuf, Z);

@@ -9,6 +9,8 @@ extern "C" {
 #define num_TotalThreads_BG1_R23 13824
 #define RowLength 96 //Zc = 384/4 = 96
 
+#define DUMPCNBN 0
+
 extern cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL];
 extern cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL];
 extern bool graphCreated[MAX_NUM_DLSCH_SEGMENTS_DL];
@@ -37,3 +39,15 @@ typedef struct ThreadSize {
 
 extern SegmentPack segmentPacks[MAX_NUM_DLSCH_SEGMENTS_DL];
 extern ThreadSize BG1_R13_threadSize, BG1_R23_threadSize;
+
+
+typedef struct {
+    int idxBn;
+    int idxCn;
+    int preBuf;
+    int circShift;
+    int8_t dd;
+} DumpEntry;
+
+__device__ DumpEntry dumpBuf[316];
+__device__ DumpEntry dumpBn[316];

@@ -12,22 +12,23 @@
 template<int NUM>
 __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_NUM(
     const int8_t *__restrict__ d_bnProcBuf,
-    int8_t *__restrict__ d_bnProcBufRes,
+    int8_t *__restrict__ d_cnProcBuf,
     const int8_t *__restrict__ d_llrProcBuf,
     int8_t *__restrict__ d_llrRes,
     int lane,
     int MsgIdx,
     int BnIdx,
     int GrpNum,
+    uint16_t circShift,
     int Zc)
 {
-    const int baseBn = (BnIdx - 1) * Zc;
+    
 
 //    int8_t *p_bnProcBufRes_BnIdx     = d_bnProcBufRes + baseBn;
 //    const int8_t *p_llrProcBuf_BnIdx = d_llrProcBuf + baseBn;
 //    int8_t *p_llrRes_BnIdx           = d_llrRes + baseBn;
 
-    const int32_t *bnProcBufPtr = (const int32_t *)(d_bnProcBuf + baseBn) + lane;
+    const int32_t *bnProcBufPtr = (const int32_t *)(d_bnProcBuf) + lane;
     int prevIdxWords = ((MsgIdx - 1) * GrpNum * Zc) >> 2;
     int32_t prev = bnProcBufPtr[prevIdxWords];
 
@@ -42,20 +43,20 @@ __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_NUM(
 
     // ---- ② Compute llrRes ----
 //    int32_t computed_llrRes = __vaddss4(MsgSum,((const int32_t*)p_llrProcBuf_BnIdx)[lane]);
-    int32_t computed_llrRes = __vaddss4(MsgSum,((const int32_t*)(d_llrProcBuf+baseBn))[lane]);
+    int32_t computed_llrRes = __vaddss4(MsgSum,((const int32_t*)(d_llrProcBuf))[lane]);
     //  Only write to llrRes when MsgIdx == 1 
     if (MsgIdx == 1) {
-      ((int32_t *)(d_llrRes+baseBn))[lane]  = computed_llrRes;
+      ((int32_t *)(d_llrRes))[lane]  = computed_llrRes;
     }
 
-
+    uint32_t BricksToBeGet = __vsubss4(computed_llrRes, prev);//0x01010101*NUM;
     // ---- ④ Write result ----
-    ((int32_t *)(d_bnProcBufRes+baseBn))[prevIdxWords  + lane] = __vsubss4(computed_llrRes, prev);
-}
+    moveBricks_forput_circ(d_cnProcBuf, lane * 4, (uint8_t*)&BricksToBeGet, Zc, circShift);
+}   
 
 __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_Gn(
     const int8_t *__restrict__ d_bnProcBuf,
-    int8_t *__restrict__ d_bnProcBufRes,
+    int8_t *__restrict__ d_cnProcBuf,
     const int8_t *__restrict__ d_llrProcBuf,
     int8_t *__restrict__ d_llrRes,
     int lane,
@@ -63,40 +64,41 @@ __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_Gn(
     int MsgIdx,
     int BnIdx,
     int GrpNum,
+    uint16_t circShift,
     int Zc)
 {
     switch (GrpIdx)
     {
-    case 1:  bnProcKernelMerge_BG1_int8_NUM<1 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 2:  bnProcKernelMerge_BG1_int8_NUM<2 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 3:  bnProcKernelMerge_BG1_int8_NUM<3 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 4:  bnProcKernelMerge_BG1_int8_NUM<4 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 5:  bnProcKernelMerge_BG1_int8_NUM<5 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 6:  bnProcKernelMerge_BG1_int8_NUM<6 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 7:  bnProcKernelMerge_BG1_int8_NUM<7 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 8:  bnProcKernelMerge_BG1_int8_NUM<8 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 9:  bnProcKernelMerge_BG1_int8_NUM<9 >(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 10: bnProcKernelMerge_BG1_int8_NUM<10>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 11: bnProcKernelMerge_BG1_int8_NUM<11>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 12: bnProcKernelMerge_BG1_int8_NUM<12>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 13: bnProcKernelMerge_BG1_int8_NUM<13>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 14: bnProcKernelMerge_BG1_int8_NUM<14>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 15: bnProcKernelMerge_BG1_int8_NUM<15>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 16: bnProcKernelMerge_BG1_int8_NUM<16>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 17: bnProcKernelMerge_BG1_int8_NUM<17>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 18: bnProcKernelMerge_BG1_int8_NUM<18>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 19: bnProcKernelMerge_BG1_int8_NUM<19>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 20: bnProcKernelMerge_BG1_int8_NUM<20>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 21: bnProcKernelMerge_BG1_int8_NUM<21>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 22: bnProcKernelMerge_BG1_int8_NUM<22>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 23: bnProcKernelMerge_BG1_int8_NUM<23>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 24: bnProcKernelMerge_BG1_int8_NUM<24>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 25: bnProcKernelMerge_BG1_int8_NUM<25>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 26: bnProcKernelMerge_BG1_int8_NUM<26>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 27: bnProcKernelMerge_BG1_int8_NUM<27>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 28: bnProcKernelMerge_BG1_int8_NUM<28>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 29: bnProcKernelMerge_BG1_int8_NUM<29>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
-    case 30: bnProcKernelMerge_BG1_int8_NUM<30>(d_bnProcBuf, d_bnProcBufRes, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, Zc); break;
+    case 1:  bnProcKernelMerge_BG1_int8_NUM<1 >(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 2:  bnProcKernelMerge_BG1_int8_NUM<2 >(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 3:  bnProcKernelMerge_BG1_int8_NUM<3 >(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 4:  bnProcKernelMerge_BG1_int8_NUM<4 >(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 5:  bnProcKernelMerge_BG1_int8_NUM<5 >(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 6:  bnProcKernelMerge_BG1_int8_NUM<6 >(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 7:  bnProcKernelMerge_BG1_int8_NUM<7 >(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 8:  bnProcKernelMerge_BG1_int8_NUM<8 >(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 9:  bnProcKernelMerge_BG1_int8_NUM<9 >(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 10: bnProcKernelMerge_BG1_int8_NUM<10>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 11: bnProcKernelMerge_BG1_int8_NUM<11>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 12: bnProcKernelMerge_BG1_int8_NUM<12>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 13: bnProcKernelMerge_BG1_int8_NUM<13>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 14: bnProcKernelMerge_BG1_int8_NUM<14>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 15: bnProcKernelMerge_BG1_int8_NUM<15>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 16: bnProcKernelMerge_BG1_int8_NUM<16>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 17: bnProcKernelMerge_BG1_int8_NUM<17>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 18: bnProcKernelMerge_BG1_int8_NUM<18>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 19: bnProcKernelMerge_BG1_int8_NUM<19>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 20: bnProcKernelMerge_BG1_int8_NUM<20>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 21: bnProcKernelMerge_BG1_int8_NUM<21>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 22: bnProcKernelMerge_BG1_int8_NUM<22>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 23: bnProcKernelMerge_BG1_int8_NUM<23>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 24: bnProcKernelMerge_BG1_int8_NUM<24>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 25: bnProcKernelMerge_BG1_int8_NUM<25>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 26: bnProcKernelMerge_BG1_int8_NUM<26>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 27: bnProcKernelMerge_BG1_int8_NUM<27>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 28: bnProcKernelMerge_BG1_int8_NUM<28>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 29: bnProcKernelMerge_BG1_int8_NUM<29>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
+    case 30: bnProcKernelMerge_BG1_int8_NUM<30>(d_bnProcBuf, d_cnProcBuf, d_llrProcBuf, d_llrRes, lane, MsgIdx, BnIdx, GrpNum, circShift, Zc); break;
     default: break;
     }
 }
