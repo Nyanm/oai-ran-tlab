@@ -930,6 +930,33 @@ csi_payload_t nr_ue_aperiodic_csi_reporting(NR_UE_MAC_INST_t *mac, dci_field_t c
   return csi;
 }
 
+csi_payload_t nr_ue_periodic_csi_reporting(NR_UE_MAC_INST_t *mac, const int frame, const int slot)
+{
+  csi_payload_t csi = {0};
+  if (!mac->sc_info.csi_MeasConfig)
+    return csi;
+
+  const NR_CSI_MeasConfig_t *csi_measconfig = mac->sc_info.csi_MeasConfig;
+  for (int csi_report_id = 0; csi_report_id < csi_measconfig->csi_ReportConfigToAddModList->list.count; csi_report_id++) {
+    AssertFatal(csi_report_id == 0, "Only one pediodic CSI report supported for now\n");
+    const NR_CSI_ReportConfig_t *csirep = csi_measconfig->csi_ReportConfigToAddModList->list.array[csi_report_id];
+
+    if (csirep->reportConfigType.present != NR_CSI_ReportConfig__reportConfigType_PR_periodic) {
+      continue;
+    }
+
+    int period, offset;
+    csi_period_offset(csirep, NULL, &period, &offset);
+    const int n_slots_frame = mac->frame_structure.numb_slots_frame;
+    if (((n_slots_frame * frame + slot - offset) % period)) {
+      continue;
+    }
+
+    csi = nr_get_csi_payload(mac, csi_report_id, ON_PUSCH, csi_measconfig);
+  }
+  return csi;
+}
+
 int configure_srs_pdu(NR_UE_MAC_INST_t *mac,
                       NR_SRS_Resource_t *srs_resource,
                       fapi_nr_ul_config_srs_pdu *srs_config_pdu,
