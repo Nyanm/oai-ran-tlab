@@ -1740,10 +1740,13 @@ static bool schedule_uci_on_pusch(NR_UE_MAC_INST_t *mac,
       LOG_E(NR_MAC, "UCI on PUSCH need to be configured to schedule UCI on PUSCH\n");
     }
   }
-  if (pusch_pdu->pusch_uci.csi_part1_bit_length == 0 && pusch_pdu->pusch_uci.csi_part2_bit_length == 0) {
-    // To support this we would need to shift some bits into CSI part2 -> need to change the logic
-    AssertFatal(pucch->n_csi == 0, "Multiplexing periodic CSI on PUSCH not supported\n");
-  }
+  /* Get periodic CSI report scheduled for transmission in this slot. The one stored in pucch PDU is not
+     in the right format for sending over PUSCH */
+  csi_payload_t csi = nr_ue_periodic_csi_reporting(mac, frame_tx, slot_tx);
+  pusch_pdu->pusch_uci.csi_part1_bit_length = csi.p1_bits;
+  pusch_pdu->pusch_uci.csi_part1_payload = csi.part1_payload;
+  pusch_pdu->pusch_uci.csi_part2_bit_length = csi.p2_bits;
+  pusch_pdu->pusch_uci.csi_part2_payload = csi.part2_payload;
 
   release_ul_config(ulcfg_pdu, false);
   // only use PUSCH if any mux is done otherwise send PUCCH
