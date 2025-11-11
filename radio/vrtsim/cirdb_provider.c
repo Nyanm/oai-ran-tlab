@@ -19,122 +19,80 @@
  *      contact@openairinterface.org
  */
 
-
-
-/*
- * In-process CIR DB provider for VRTSIM
- * Reads cir_db.bin and periodically updates channel_desc->ch_ps
- * Layout in file is TX-major, RX-minor, then L complex taps, interleaved float32.
- */
-
 #include <errno.h>
 #include <inttypes.h>
-#include <math.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <libgen.h>
 #include <limits.h>
-#include <common/utils/utils.h> 
+#include <unistd.h>
 
 #include "common/utils/LOG/log.h"
 #include "common/utils/assertions.h"
 #include "SIMULATION/TOOLS/sim.h"
+
 #include "cirdb_provider.h"
-
-// Package header "<4sII"
-typedef struct __attribute__((packed)) {
-  char     magic[4];   // "CIRP"
-  uint32_t version;    // 1
-  uint32_t entry_count;
-} cir_pkg_hdr_t;
-
-// Directory entry "<Q H H H I I d d f f f f f f I Q Q"
-typedef struct __attribute__((packed)) {
-  uint64_t key;
-  uint16_t model_id;         // TDL-A..E as 0..4
-  uint16_t n_rx;
-  uint16_t n_tx;
-  uint32_t L;                // taps per link in file
-  uint32_t S;                // snapshots
-  double   fs_hz;
-  double   fc_hz;
-  float    ds_ns;
-  float    speed_mps;
-  float    rho_rx;
-  float    rho_tx;
-  float    snapshot_dt_s;
-  float    k1_db_or_nan;
-  uint32_t pair_order;       // 0 = TX-major then RX-minor
-  uint64_t offset;           // start of snapshots
-  uint64_t nbytes;           // total bytes for entry
-} cir_dir_ent_t;
+#include "cirdb_yaml.h"
 
 #define NUM_TAPS_BUFFERS 4
 #define MAX_L_PUBLISH    8
 
 typedef struct {
-  void *taps_blob;            // contiguous complexf for all links
-  channel_desc_t *ch;         // ch_ps points into taps_blob
+  void *taps_blob;          /* contiguous complexf for all links */
+  channel_desc_t *ch;       /* ch_ps points into taps_blob */
 } cirdb_buffer_t;
 
 typedef struct {
-  pthread_t thread;
-  bool should_run;
-
+  /* I/O */
   FILE *fh;
-  cir_dir_ent_t *dir;
-  size_t dir_count;
 
-  cir_dir_ent_t sel;
+  /* Selected entry meta */
+  int model_id;
+  int n_tx;
+  int n_rx;
+  int L_full;
+  int S;
+  double fs_hz;
+  double snapshot_dt_s;
+  float ds_ns;
+  float speed_mps;
+  uint64_t sel_offset;
+  uint64_t sel_nbytes;
+
+  /* Publication control */
   uint32_t L_out;
   uint32_t snap_idx;
-  bool animate;
-  float interval_s;
 
+  /* Shape in publication */
   int num_tx;
   int num_rx;
 
+  /* Double buffering for readers */
   cirdb_buffer_t bufs[NUM_TAPS_BUFFERS];
   int cur;
 
-  void *snapshot_tmp;
+  /* Temporary read buffer for one snapshot of full L_full taps */
+  void  *snapshot_tmp;
   size_t snapshot_tmp_bytes;
 
+  /* Published pointer location owned by caller */
   channel_desc_t **channel_desc_out;
+
+  /* Path resolution helper */
+  char path_override[PATH_MAX];
+
+  /* Bookkeeping of last step computed from elapsed time */
+  int64_t last_step_applied;  /* -1 until first update */
 } cirdb_g;
 
 static cirdb_g G;
 
-// Step 1 defaults
-static const int   k_model_id    = 0;     // 0=TDL-A, 1=TDL-B, 2=TDL-C, 3=TDL-D, 4=TDL-E
-static const float k_ds_ns       = 30.0f;
-static const float k_speed_mps   = 1.5f;
-static const bool  k_animate     = true;
-static const float k_interval_s  = 0.5f;
-
-/* ---------- path override handling and path helpers ---------- */
-
-static char g_path_override[PATH_MAX] = {0};
-
-void cirdb_set_path_override(const char *path) {
-  if (!path) {
-    g_path_override[0] = '\0';
-    return;
-  }
-  size_t n = strnlen(path, PATH_MAX - 1);
-  memcpy(g_path_override, path, n);
-  g_path_override[n] = '\0';
-}
-
-// returns 1 if file exists and is readable
-static int file_readable(const char *p) {
-  return p && p[0] && access(p, R_OK) == 0;
-}
+/* returns 1 if file exists and is readable */
+static int file_readable(const char *p) { return p && p[0] && access(p, R_OK) == 0; }
 
 static int get_exe_dir(char out[PATH_MAX]) {
   char exe[PATH_MAX] = {0};
@@ -142,7 +100,6 @@ static int get_exe_dir(char out[PATH_MAX]) {
   if (n <= 0) return 0;
   exe[n] = 0;
   char tmp[PATH_MAX];
-  // dirname may modify its input
   if (snprintf(tmp, sizeof(tmp), "%s", exe) >= (int)sizeof(tmp)) return 0;
   char *dir = dirname(tmp);
   if (!dir || !dir[0]) return 0;
@@ -159,38 +116,32 @@ static int path_join(char out[PATH_MAX], const char *dir, const char *leaf) {
   return n > 0 && n < (int)PATH_MAX;
 }
 
-// return chosen path into out, even if not readable, so fopen can report
+/* Optional public override helper kept for backward compatibility */
+void cirdb_set_path_override(const char *path) {
+  if (!path) { G.path_override[0] = '\0'; return; }
+  size_t n = strnlen(path, PATH_MAX - 1);
+  memcpy(G.path_override, path, n);
+  G.path_override[n] = '\0';
+}
+
+/* Resolve cir_db.bin path */
 static const char *resolve_db_path(char out[PATH_MAX]) {
-  // 1) explicit override via setter
-  if (file_readable(g_path_override)) {
-    snprintf(out, PATH_MAX, "%s", g_path_override);
+  if (file_readable(G.path_override)) {
+    snprintf(out, PATH_MAX, "%s", G.path_override);
     return out;
   }
-
-  // 2) try exe-dir relatives
   char exe_dir[PATH_MAX];
   if (get_exe_dir(exe_dir)) {
     if (path_join(out, exe_dir, "cir_db.bin") && file_readable(out)) return out;
     if (path_join(out, exe_dir, "radio/vrtsim/cir_db.bin") && file_readable(out)) return out;
   }
-
-  // 3) try CWD relatives
   snprintf(out, PATH_MAX, "%s", "cir_db.bin");
   if (file_readable(out)) return out;
   snprintf(out, PATH_MAX, "%s", "radio/vrtsim/cir_db.bin");
   if (file_readable(out)) return out;
-
-  // 4) last resort, return default name and let fopen fail with a clear error
   snprintf(out, PATH_MAX, "%s", "cir_db.bin");
   return out;
 }
-
-/* ---------- allocation and IO helpers ---------- */
-
-static inline void *xcalloc(size_t n, size_t sz) {
-  return calloc_or_fail(n, sz);
-}
-
 
 static inline void fread_exact(void *dst, size_t sz, FILE *fh) {
   size_t r = fread(dst, 1, sz, fh);
@@ -202,8 +153,7 @@ static inline void fread_exact(void *dst, size_t sz, FILE *fh) {
 
 static inline size_t cf_bytes(size_t n) { return n * sizeof(struct complexf); }
 
-/* ---------- channel_desc pointing and compaction ---------- */
-
+/* Point channel_desc ch_ps into a compacted taps buffer */
 static void point_channel_desc(channel_desc_t *ch,
                                struct complexf *base,
                                int num_tx, int num_rx, int L_out) {
@@ -219,6 +169,7 @@ static void point_channel_desc(channel_desc_t *ch,
   ch->nb_rx = num_rx;
 }
 
+/* Copy first L_out taps per link from a full L_full snapshot */
 static void compact_L_out(struct complexf *dst,
                           const struct complexf *src_full,
                           int num_tx, int num_rx,
@@ -233,166 +184,162 @@ static void compact_L_out(struct complexf *dst,
   }
 }
 
-/* ---------- selection ---------- */
+/* Load snapshot index s into the next publication buffer and flip */
+static void load_snapshot_and_publish(uint32_t s)
+{
+  uint64_t stride = (uint64_t)G.n_tx * (uint64_t)G.n_rx *
+                    (uint64_t)G.L_full * sizeof(struct complexf);
+  uint64_t off = G.sel_offset + (uint64_t)s * stride;
 
-// robust selector: exact match on model_id and shape, nearest on ds_ns and speed_mps
-// also tries swapping tx/rx in case caller and DB differ on orientation
-static bool select_entry_best(const cir_dir_ent_t *dir, size_t n,
-                              int want_model, int want_tx, int want_rx,
-                              float want_ds_ns, float want_speed,
-                              cir_dir_ent_t *out) {
-  const float W_DS = 1.0f;        // weight for delay spread
-  const float W_SP = 0.2f;        // weight for speed
-  bool found = false;
-  double best_cost = 1e300;
-
-  for (size_t i = 0; i < n; i++) {
-    const cir_dir_ent_t *e = &dir[i];
-    if (e->pair_order != 0) continue;
-    if (e->model_id != (uint16_t)want_model) continue;
-
-    bool shape_ok = (e->n_tx == (uint16_t)want_tx && e->n_rx == (uint16_t)want_rx);
-    bool shape_ok_swap = (e->n_tx == (uint16_t)want_rx && e->n_rx == (uint16_t)want_tx);
-
-    if (!shape_ok && !shape_ok_swap) continue;
-
-    double cds = fabs((double)e->ds_ns - (double)want_ds_ns);
-    double csp = fabs((double)e->speed_mps - (double)want_speed);
-    double cost = W_DS * cds + W_SP * csp;
-
-    if (!found || cost < best_cost) {
-      *out = *e;
-      best_cost = cost;
-      found = true;
-    }
+  if (fseeko(G.fh, (off_t)off, SEEK_SET) != 0) {
+    LOG_E(HW, "CIRDB fseoko failed errno=%d\n", errno);
+    abort();
   }
-  return found;
+  fread_exact(G.snapshot_tmp, (size_t)stride, G.fh);
+
+  int next = (G.cur + 1) % NUM_TAPS_BUFFERS;
+  cirdb_buffer_t *buf = &G.bufs[next];
+
+  compact_L_out((struct complexf *)buf->taps_blob,
+                (const struct complexf *)G.snapshot_tmp,
+                G.n_tx, G.n_rx, G.L_full, (int)G.L_out);
+
+  point_channel_desc(buf->ch,
+                     (struct complexf *)buf->taps_blob,
+                     G.n_tx, G.n_rx, (int)G.L_out);
+
+  *G.channel_desc_out = buf->ch;
+  G.cur = next;
 }
-
-/* ---------- worker thread ---------- */
-
-static void *worker(void *arg) {
-  (void)arg;
-  while (G.should_run) {
-    int next = (G.cur + 1) % NUM_TAPS_BUFFERS;
-    cirdb_buffer_t *buf = &G.bufs[next];
-
-    uint64_t stride_bytes = (uint64_t)G.sel.n_tx * (uint64_t)G.sel.n_rx *
-                            (uint64_t)G.sel.L * sizeof(struct complexf);
-    uint64_t off = G.sel.offset + (uint64_t)G.snap_idx * stride_bytes;
-
-    if (fseeko(G.fh, (off_t)off, SEEK_SET) != 0) {
-      LOG_E(HW, "CIRDB fseeko failed errno=%d\n", errno);
-      break;
-    }
-    fread_exact(G.snapshot_tmp, (size_t)stride_bytes, G.fh);
-
-    compact_L_out((struct complexf *)buf->taps_blob,
-                  (const struct complexf *)G.snapshot_tmp,
-                  G.num_tx, G.num_rx, (int)G.sel.L, (int)G.L_out);
-
-    point_channel_desc(buf->ch,
-                       (struct complexf *)buf->taps_blob,
-                       G.num_tx, G.num_rx, (int)G.L_out);
-
-    *G.channel_desc_out = buf->ch;
-    G.cur = next;
-
-    if (G.animate) G.snap_idx = (G.snap_idx + 1) % G.sel.S;
-
-    useconds_t us = (useconds_t)(G.interval_s * 1e6f);
-    if (us == 0) us = 1;
-    usleep(us);
-  }
-  return NULL;
-}
-
-/* ---------- public API ---------- */
 
 void cirdb_connect(int id,
                    int num_tx_antennas,
                    int num_rx_antennas,
-                   channel_desc_t **channel_desc_out) {
+                   const cirdb_select_opts_t *sel,
+                   channel_desc_t **channel_desc_out)
+{
   (void)id;
   memset(&G, 0, sizeof(G));
-  G.should_run        = true;
+  G.channel_desc_out  = channel_desc_out;
   G.num_tx            = num_tx_antennas;
   G.num_rx            = num_rx_antennas;
-  G.animate           = k_animate;
-  G.interval_s        = k_interval_s;
-  G.channel_desc_out  = channel_desc_out;
+  G.cur               = 0;
+  G.last_step_applied = -1;
 
-  char dbpath[PATH_MAX];
-  const char *use_path = resolve_db_path(dbpath);
-  G.fh = fopen(use_path, "rb");
-  if (!G.fh) {
-    LOG_E(HW, "open %s failed, errno=%d", use_path, errno);
-    abort();
+  /* Resolve binary path with priority: sel->bin_path, optional override, exe-dir fallbacks, CWD fallbacks */
+  char binpath[PATH_MAX];
+  const char *use_bin = NULL;
+  if (sel && sel->bin_path && sel->bin_path[0]) {
+    use_bin = sel->bin_path;
+  } else {
+    use_bin = resolve_db_path(binpath);
   }
+  G.fh = fopen(use_bin, "rb");
+  AssertFatal(G.fh != NULL, "open %s failed, errno=%d", use_bin, errno);
 
-  cir_pkg_hdr_t hdr;
-  fread_exact(&hdr, sizeof(hdr), G.fh);
-  if (memcmp(hdr.magic, "CIRP", 4) != 0 || hdr.version != 1) {
-    LOG_E(HW, "Bad CIR DB header");
-    abort();
-  }
-  G.dir_count = hdr.entry_count;
-  G.dir = (cir_dir_ent_t *)xcalloc(G.dir_count, sizeof(cir_dir_ent_t));
-  fread_exact(G.dir, G.dir_count * sizeof(cir_dir_ent_t), G.fh);
-
-  // robust selection
-  bool ok = select_entry_best(G.dir, G.dir_count,
-                              k_model_id, G.num_tx, G.num_rx,
-                              k_ds_ns, k_speed_mps, &G.sel);
-  if (!ok) {
-    LOG_E(HW, "Entry not found after nearest search: model=%d want %dx%d DS=%.3fns speed=%.3fm/s",
-          k_model_id, G.num_tx, G.num_rx, k_ds_ns, k_speed_mps);
-    // try with swapped shape as last resort, in case PHY requested reversed
-    ok = select_entry_best(G.dir, G.dir_count,
-                           k_model_id, G.num_rx, G.num_tx,
-                           k_ds_ns, k_speed_mps, &G.sel);
-    if (ok) {
-      LOG_W(HW, "Using DB entry with swapped shape %ux%u instead of requested %ux%u",
-            G.sel.n_tx, G.sel.n_rx, G.num_tx, G.num_rx);
-      // use DB shape for publication
-      G.num_tx = G.sel.n_tx;
-      G.num_rx = G.sel.n_rx;
+  /* Resolve YAML sidecar path with priority: sel->yaml_path, then derive from bin */
+  char sidecar[PATH_MAX];
+  if (sel && sel->yaml_path && sel->yaml_path[0]) {
+    snprintf(sidecar, PATH_MAX, "%s", sel->yaml_path);
+  } else {
+    size_t n = strnlen(use_bin, PATH_MAX - 6);
+    snprintf(sidecar, PATH_MAX, "%s", use_bin);
+    if (n >= 4 && strcmp(&use_bin[n-4], ".bin") == 0) {
+      sidecar[n] = '\0';
+      snprintf(sidecar + n, PATH_MAX - n, "%s", ".yaml");
+    } else {
+      snprintf(sidecar, PATH_MAX, "%s.yaml", use_bin);
     }
   }
-  AssertFatal(ok, "No suitable CIR entry found in DB");
 
-  G.L_out = G.sel.L < MAX_L_PUBLISH ? G.sel.L : MAX_L_PUBLISH;
+  /* Selection request */
+  int   want_model_id = (sel && sel->want_model_id  > 0) ? sel->want_model_id  : -1;
+  float want_ds       = (sel && sel->want_ds_ns     > 0) ? sel->want_ds_ns     : -1.0f;
+  float want_speed    = (sel && sel->want_speed_mps > 0) ? sel->want_speed_mps : -1.0f;
 
-  G.snapshot_tmp_bytes = (size_t)G.sel.n_tx * (size_t)G.sel.n_rx *
-                         (size_t)G.sel.L * sizeof(struct complexf);
-  G.snapshot_tmp = xcalloc(1, G.snapshot_tmp_bytes);
+  cirdb_entry_meta_t m = (cirdb_entry_meta_t){0};
+  cirdb_select_req_t req = {
+    .want_model_id    = want_model_id,
+    .want_tx          = G.num_tx,
+    .want_rx          = G.num_rx,
+    .want_ds_ns       = want_ds,
+    .want_speed_mps   = want_speed,
+    .allow_shape_swap = 1,
+    .w_ds             = 1.0f,
+    .w_speed          = 0.2f,
+    .yaml_path        = sidecar
+  };
+
+  int ok = cirdb_yaml_select(&req, &m);
+
+  if (ok <= 0) {
+    cirdb_select_req_t req_relaxed = req;
+    req_relaxed.want_tx = 0;
+    req_relaxed.want_rx = 0;
+    ok = cirdb_yaml_select(&req_relaxed, &m);
+  }
+
+  AssertFatal(ok > 0, "No suitable CIR entry found in YAML %s", sidecar);
+
+  G.model_id      = m.model_id;
+  G.n_tx          = m.n_tx;
+  G.n_rx          = m.n_rx;
+  G.L_full        = m.L;
+  G.S             = m.S;
+  G.fs_hz         = m.fs_hz;
+  G.snapshot_dt_s = m.snapshot_dt_s;
+  G.ds_ns         = m.ds_ns;
+  G.speed_mps     = m.speed_mps;
+  G.sel_offset    = m.offset_bytes;
+  G.sel_nbytes    = m.nbytes;
+  G.L_out         = (m.L <= MAX_L_PUBLISH ? (uint32_t)m.L : MAX_L_PUBLISH);
+  G.snap_idx      = 0;
+
+  G.snapshot_tmp_bytes = (size_t)G.n_tx * (size_t)G.n_rx *
+                         (size_t)G.L_full * sizeof(struct complexf);
+  G.snapshot_tmp = calloc(1, G.snapshot_tmp_bytes);
+  AssertFatal(G.snapshot_tmp != NULL, "Alloc snapshot_tmp failed");
 
   for (int i = 0; i < NUM_TAPS_BUFFERS; i++) {
-    size_t blob_cf = (size_t)G.num_tx * (size_t)G.num_rx * (size_t)G.L_out;
-    G.bufs[i].taps_blob = xcalloc(1, blob_cf * sizeof(struct complexf));
-    G.bufs[i].ch = (channel_desc_t *)xcalloc(1, sizeof(channel_desc_t));
-    G.bufs[i].ch->ch_ps = (struct complexf **)xcalloc(G.num_rx * G.num_tx, sizeof(struct complexf *));
-    G.bufs[i].ch->nb_tx = G.num_tx;
-    G.bufs[i].ch->nb_rx = G.num_rx;
+    size_t blob_cf = (size_t)G.n_tx * (size_t)G.n_rx * (size_t)G.L_out;
+    G.bufs[i].taps_blob = calloc(1, blob_cf * sizeof(struct complexf));
+    AssertFatal(G.bufs[i].taps_blob != NULL, "Alloc taps_blob failed");
+    G.bufs[i].ch = (channel_desc_t *)calloc(1, sizeof(channel_desc_t));
+    G.bufs[i].ch->ch_ps = (struct complexf **)calloc(G.n_rx * G.n_tx, sizeof(struct complexf *));
+    G.bufs[i].ch->nb_tx = G.n_tx;
+    G.bufs[i].ch->nb_rx = G.n_rx;
   }
-  G.cur = 0;
 
-  LOG_I(HW, "CIRDB ready: model=%u DS=%.3fns shape=%ux%u L=%u/%u S=%u fs=%.0f dt=%.6fs speed=%.3fm/s",
-        G.sel.model_id, G.sel.ds_ns, G.num_tx, G.num_rx,
-        G.L_out, G.sel.L, G.sel.S, G.sel.fs_hz, G.sel.snapshot_dt_s, G.sel.speed_mps);
+  if (G.S > 0) {
+    load_snapshot_and_publish(0);
+  }
 
-  int ret = pthread_create(&G.thread, NULL, worker, NULL);
-  if (ret != 0) {
-    LOG_E(HW, "pthread_create failed errno=%d", errno);
-    abort();
+  LOG_I(HW, "CIRDB: model=%d DS=%.3fns shape=%ux%u L=%u/%u S=%u fs=%.0f dt=%.6fs speed=%.3fm/s",
+        G.model_id, G.ds_ns, G.n_tx, G.n_rx, G.L_out, G.L_full,
+        G.S, G.fs_hz, G.snapshot_dt_s, G.speed_mps);
+}
+
+void cirdb_update(uint64_t ns_since_start)
+{
+  if (!G.channel_desc_out || !*G.channel_desc_out) return;
+  if (G.S <= 0) return;
+
+  double dt_s = (G.snapshot_dt_s > 0.0 ? G.snapshot_dt_s : 0.5);
+  if (dt_s <= 0.0) dt_s = 0.5;
+
+  double steps_f = (ns_since_start * 1e-9) / dt_s;
+  int64_t step = (int64_t)(steps_f >= 0.0 ? steps_f : 0.0);
+
+  if (step != G.last_step_applied) {
+    uint32_t s = (uint32_t)(step % G.S);
+    load_snapshot_and_publish(s);
+    G.snap_idx = s;
+    G.last_step_applied = step;
   }
 }
 
-void cirdb_stop(void) {
-  if (!G.should_run) return;
-  G.should_run = false;
-  pthread_join(G.thread, NULL);
-
+void cirdb_stop(void)
+{
   for (int i = 0; i < NUM_TAPS_BUFFERS; i++) {
     free(G.bufs[i].taps_blob);
     if (G.bufs[i].ch) {
@@ -401,6 +348,7 @@ void cirdb_stop(void) {
     }
   }
   free(G.snapshot_tmp);
-  free(G.dir);
   if (G.fh) fclose(G.fh);
+  memset(&G, 0, sizeof(G));
+  G.last_step_applied = -1;
 }

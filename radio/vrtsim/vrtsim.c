@@ -51,7 +51,8 @@
 #include "taps_client.h"
 
 #ifdef OAI_VRTSIM_CIRDB
-#include "cirdb_provider.h"  // CIR DB provider API
+#include "cirdb_provider.h"
+#include "cirdb_yaml.h"
 #endif
 
 // Simulator role
@@ -80,9 +81,16 @@ typedef enum { ROLE_SERVER = 1, ROLE_CLIENT } role;
      {"timescale",              TIME_SCALE_HLP,              0, .dblptr = &vrtsim_state->timescale,              .defdblval = 1.0,                TYPE_DOUBLE, 0}, \
      {"chanmod",                "Enable channel modelling",  0, .iptr = &vrtsim_state->chanmod,                  .defintval = 0,                  TYPE_INT,    0}, \
      {"taps-socket",            TAPS_SOCKET_HLP,             0, .strptr = &vrtsim_state->taps_socket,            .defstrval = NULL,               TYPE_STRING, 0}, \
-     {"cirdb",                  "Use CIR database for channel taps (1 yes, 0 no)", 0, .iptr = &vrtsim_state->use_cirdb,  .defintval = 0,    TYPE_INT,    0}, \
-     {"cirdb-path",             "Path to CIR database root (overrides CIR_DB_PATH env var)", 0, .strptr = &vrtsim_state->cirdb_path, .defstrval = NULL, TYPE_STRING, 0}, \
      {"client-num-rx-antennas", CLIENT_NUM_RX_HLP,           0, .iptr = &vrtsim_state->client_num_rx_antennas,   .defintval = 1,                  TYPE_INT,    0}, \
+     /* CIR DB enable and paths */ \
+     {"cirdb",                  "Use CIR database for channel taps (1 yes, 0 no)", 0, .iptr = &vrtsim_state->use_cirdb,  .defintval = 0, TYPE_INT, 0}, \
+     {"cirdb-path",             "Directory that holds vrtsim.yaml and cir_db.bin. Overrides CIR_DB_PATH env when set", 0, .strptr = &vrtsim_state->cirdb_path, .defstrval = NULL, TYPE_STRING, 0}, \
+     {"cirdb_yaml",             "Absolute path to CIR DB YAML file (optional, overrides cirdb-path)", 0, .strptr = &vrtsim_state->cirdb_yaml, .defstrval = NULL, TYPE_STRING, 0}, \
+     {"cirdb_file",             "Absolute path to CIR DB binary file (optional, overrides cirdb-path)", 0, .strptr = &vrtsim_state->cirdb_file, .defstrval = NULL, TYPE_STRING, 0}, \
+     /* CIR DB selection knobs */ \
+     {"cirdb_model_id",         "Preferred TDL model id 0..4", 0, .iptr  = &vrtsim_state->cirdb_model_id,  .defintval = 0,    TYPE_INT,    0}, \
+     {"cirdb_ds_ns",            "Desired RMS delay spread in ns", 0, .dblptr = &vrtsim_state->cirdb_ds_ns, .defdblval = 10.0, TYPE_DOUBLE, 0}, \
+     {"cirdb_speed_mps",        "Desired speed in m/s", 0, .dblptr = &vrtsim_state->cirdb_speed_mps, .defdblval = 1.5, TYPE_DOUBLE, 0}, \
   };
 // clang-format on
 
@@ -127,10 +135,16 @@ typedef struct {
   int rx_num_channels;
   channel_desc_t *channel_desc;
   Actor_t *channel_modelling_actors;
-  int   use_cirdb;        // runtime flag
-  char *cirdb_path;       // runtime path, optional
   char *taps_socket;
   int client_num_rx_antennas;
+  /* CIR DB state */
+  int   use_cirdb;
+  char *cirdb_path;
+  char *cirdb_yaml;
+  char *cirdb_file;
+  int    cirdb_model_id;
+  double cirdb_ds_ns;
+  double cirdb_speed_mps;
 } vrtsim_state_t;
 
 // Sample history for channel impulse response
@@ -209,7 +223,6 @@ static void vrtsim_readconfig(vrtsim_state_t *vrtsim_state)
     AssertFatal(false, "Invalid configuration: Build with ENABLE_TAPS_CLIENT to use taps socket\n");
   }
 #endif
-
   if (vrtsim_state->use_cirdb) {
     LOG_A(HW, "VRTSIM: CIR DB is enabled at runtime\n");
   }
@@ -325,12 +338,15 @@ static int vrtsim_connect(openair0_device *device)
 
   // Handle channel modelling after number of RX antennas are known
   int num_tx_stats = 1;
-  if (vrtsim_state->chanmod || vrtsim_state->taps_socket || vrtsim_state->use_cirdb) {
+  if (vrtsim_state->chanmod || vrtsim_state->taps_socket
+#ifdef OAI_VRTSIM_CIRDB
+      || vrtsim_state->use_cirdb
+#endif
+      ) {
     vrtsim_state->channel_modelling_actors = calloc_or_fail(vrtsim_state->peer_info.num_rx_antennas, sizeof(Actor_t));
     for (int i = 0; i < vrtsim_state->peer_info.num_rx_antennas; i++) {
       init_actor(&vrtsim_state->channel_modelling_actors[i], "chanmod", -1);
     }
-
     if (vrtsim_state->taps_socket) {
       taps_client_connect(0,
                           vrtsim_state->taps_socket,
@@ -338,32 +354,54 @@ static int vrtsim_connect(openair0_device *device)
                           vrtsim_state->peer_info.num_rx_antennas,
                           &vrtsim_state->channel_desc);
     }
-
 #ifdef OAI_VRTSIM_CIRDB
     else if (vrtsim_state->use_cirdb) {
-      if (vrtsim_state->cirdb_path && vrtsim_state->cirdb_path[0]) {
-        cirdb_set_path_override(vrtsim_state->cirdb_path);
+      const char *yaml_path = NULL;
+      const char *bin_path  = NULL;
+
+      if (vrtsim_state->cirdb_yaml && vrtsim_state->cirdb_yaml[0]) yaml_path = vrtsim_state->cirdb_yaml;
+      if (vrtsim_state->cirdb_file && vrtsim_state->cirdb_file[0]) bin_path  = vrtsim_state->cirdb_file;
+
+      char yaml_buf[PATH_MAX];
+      char bin_buf[PATH_MAX];
+
+      if (!yaml_path || !bin_path) {
+        const char *base = NULL;
+        if (vrtsim_state->cirdb_path && vrtsim_state->cirdb_path[0]) {
+          base = vrtsim_state->cirdb_path;
+        } else {
+          base = getenv("CIR_DB_PATH");
+        }
+        if (base && base[0]) {
+          if (!yaml_path) { snprintf(yaml_buf, sizeof(yaml_buf), "%s/%s", base, "vrtsim.yaml"); yaml_path = yaml_buf; }
+          if (!bin_path)  { snprintf(bin_buf,  sizeof(bin_buf),  "%s/%s", base, "cir_db.bin");  bin_path  = bin_buf;  }
+        }
       }
+
+      cirdb_select_opts_t sel = (cirdb_select_opts_t){0};
+      sel.yaml_path      = yaml_path;
+      sel.bin_path       = bin_path;
+      sel.want_model_id  = vrtsim_state->cirdb_model_id > 0 ? vrtsim_state->cirdb_model_id : -1;
+      sel.want_ds_ns     = (float)(vrtsim_state->cirdb_ds_ns     > 0.0 ? vrtsim_state->cirdb_ds_ns     : -1.0);
+      sel.want_speed_mps = (float)(vrtsim_state->cirdb_speed_mps > 0.0 ? vrtsim_state->cirdb_speed_mps : -1.0);
+
+      LOG_A(HW, "VRTSIM: CIR DB select yaml='%s' bin='%s'\n",
+            sel.yaml_path ? sel.yaml_path : "(auto)",
+            sel.bin_path  ? sel.bin_path  : "(auto)");
+
       cirdb_connect(0,
                     device->openair0_cfg[0].tx_num_channels,
                     vrtsim_state->peer_info.num_rx_antennas,
+                    &sel,
                     &vrtsim_state->channel_desc);
       LOG_A(HW, "VRTSIM: channel taps via CIR DB\n");
-    }
-#else
-    else if (vrtsim_state->use_cirdb) {
-      AssertFatal(false,
-                  "VRTSIM built without OAI_VRTSIM_CIRDB, but cirdb=1 in config. "
-                  "Enable OAI_VRTSIM_CIRDB at build time or set cirdb=0.");
     }
 #endif
     else {
       load_channel_model(vrtsim_state);
     }
-
     num_tx_stats = vrtsim_state->peer_info.num_rx_antennas;
   }
-
   vrtsim_state->tx_timing = calloc_or_fail(num_tx_stats, sizeof(tx_timing_t));
   for (int i = 0; i < num_tx_stats; i++) {
     vrtsim_state->tx_timing[i].tx_histogram.min_samples = 100;
@@ -432,11 +470,21 @@ static void perform_channel_modelling(void *arg)
     return;
   }
 
+#ifdef OAI_VRTSIM_CIRDB
+  if (vrtsim_state->use_cirdb) {
+    double seconds = (double)channel_modelling_args->timestamp / vrtsim_state->sample_rate;
+    uint64_t elapsed_ns = (uint64_t)(seconds * 1e9 + 0.5);
+    cirdb_update(elapsed_ns);
+  }
+#endif
+
   cf_t channel_impulse_response[nb_tx_ant][channel_desc->channel_length];
   cf_t *channel_impulse_response_p[nb_tx_ant];
-
-  const bool using_cirdb = vrtsim_state->use_cirdb;
-  if ((vrtsim_state->taps_socket == NULL) && !using_cirdb) {
+  if (!vrtsim_state->taps_socket
+#ifdef OAI_VRTSIM_CIRDB
+      && !vrtsim_state->use_cirdb
+#endif
+      ) {
     const float pathloss_linear = powf(10, channel_desc->path_loss_dB / 20.0);
     // Convert channel impulse response to float + apply pathloss
     for (int aatx = 0; aatx < nb_tx_ant; aatx++) {
@@ -551,7 +599,11 @@ static int vrtsim_write(openair0_device *device, openair0_timestamp timestamp, v
   AssertFatal(timestamp >= 0, "Timestamp must be non-negative, got %ld\n", timestamp);
   timestamp -= device->openair0_cfg->command_line_sample_advance;
   vrtsim_state_t *vrtsim_state = (vrtsim_state_t *)device->priv;
-  const bool channel_modelling = vrtsim_state->chanmod || vrtsim_state->taps_socket || vrtsim_state->use_cirdb;
+  bool channel_modelling = vrtsim_state->chanmod || vrtsim_state->taps_socket
+#ifdef OAI_VRTSIM_CIRDB
+                           || vrtsim_state->use_cirdb
+#endif
+                           ;
   return channel_modelling ? vrtsim_write_with_chanmod(vrtsim_state, timestamp, samplesVoid, nsamps, nbAnt, flags)
                            : vrtsim_write_internal(vrtsim_state, timestamp, (c16_t *)samplesVoid[0], nsamps, 0, flags, 0);
 }
@@ -605,7 +657,11 @@ static void vrtsim_end(openair0_device *device)
   }
 
   tx_timing_t *tx_timing = vrtsim_state->tx_timing;
-  if (vrtsim_state->chanmod || vrtsim_state->taps_socket || vrtsim_state->use_cirdb) {
+  if (vrtsim_state->chanmod || vrtsim_state->taps_socket
+#ifdef OAI_VRTSIM_CIRDB
+      || vrtsim_state->use_cirdb
+#endif
+      ) {
     for (int i = 0; i < vrtsim_state->peer_info.num_rx_antennas; i++) {
       shutdown_actor(&vrtsim_state->channel_modelling_actors[i]);
     }
@@ -697,7 +753,11 @@ __attribute__((__visibility__("default"))) int device_init(openair0_device *devi
   vrtsim_state->tx_num_channels = openair0_cfg->tx_num_channels;
   vrtsim_state->rx_num_channels = openair0_cfg->rx_num_channels;
 
-  if (vrtsim_state->chanmod || vrtsim_state->taps_socket || vrtsim_state->use_cirdb) {
+  if (vrtsim_state->chanmod || vrtsim_state->taps_socket
+#ifdef OAI_VRTSIM_CIRDB
+      || vrtsim_state->use_cirdb
+#endif
+      ) {
     init_channelmod();
     int noise_power_dBFS = get_noise_power_dBFS();
     int16_t noise_power = noise_power_dBFS == INVALID_DBFS_VALUE ? 0 : (int16_t)(32767.0 / powf(10.0, .05 * -noise_power_dBFS));
