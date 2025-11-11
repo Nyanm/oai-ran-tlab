@@ -19,8 +19,8 @@ __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_NUM(
     int MsgIdx,
     int BnIdx,
     int GrpNum,
-    uint16_t circShift,
-    int Zc)
+    uint32_t circShift,
+    uint32_t Zc)
 {
     
 
@@ -64,8 +64,8 @@ __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_Gn(
     int MsgIdx,
     int BnIdx,
     int GrpNum,
-    uint16_t circShift,
-    int Zc)
+    uint32_t circShift,
+    uint32_t Zc)
 {
     switch (GrpIdx)
     {
