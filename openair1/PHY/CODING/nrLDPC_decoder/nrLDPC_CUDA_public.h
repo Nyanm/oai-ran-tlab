@@ -5,125 +5,123 @@
 #include <stdio.h>
 #include "nrLDPC_types.h"
 
-
 #define arrPos(a, b) a.d + b *a.dim2
 
 enum CircShiftDirection { FORWARD = 0, INVERSE = 1 };
 enum CircShiftOp { PUT_BRICKS = 0, GET_BRICKS = 1 };
 
 __device__ __forceinline__ void moveBricks_invput_circ(int8_t *__restrict__ dstBuf,
-                                uint32_t dstBuf_Offset,
-                                uint8_t *__restrict__ Four_Bricks,
-                                uint32_t Z,
-                                uint32_t cshift)
+                                                       uint32_t dstBuf_Offset,
+                                                       uint8_t *__restrict__ Four_Bricks,
+                                                       uint32_t Z,
+                                                       uint32_t cshift)
 {
-  uint32_t pos = (cshift + dstBuf_Offset) % Z; 
+  uint32_t pos = (cshift + dstBuf_Offset) % Z;
 
-  switch (pos+3-Z) {
-	    case 0 :
-		    dstBuf[pos]   = Four_Bricks[0];
-		    dstBuf[pos+1] = Four_Bricks[1];
-		    dstBuf[pos+2] = Four_Bricks[2];
-		    dstBuf[0]     = Four_Bricks[3];
-		    break;
-	    case 1 :
-		    dstBuf[pos]   = Four_Bricks[0];
-		    dstBuf[pos+1] = Four_Bricks[1];
-		    dstBuf[0]     = Four_Bricks[2];
-		    dstBuf[1]     = Four_Bricks[3];
-		    break;
-	    case 2 :
-		    dstBuf[pos] = Four_Bricks[0];
-		    dstBuf[0]   = Four_Bricks[1];
-		    dstBuf[1]   = Four_Bricks[2];
-		    dstBuf[2]   = Four_Bricks[3];
-		    break;
-            default:
-		    dstBuf[pos]   = Four_Bricks[0];
-		    dstBuf[pos+1] = Four_Bricks[1];
-		    dstBuf[pos+2] = Four_Bricks[2];
-		    dstBuf[pos+3] = Four_Bricks[3];
-		    break;
+  switch (pos + 3 - Z) {
+    case 0:
+      dstBuf[pos] = Four_Bricks[0];
+      dstBuf[pos + 1] = Four_Bricks[1];
+      dstBuf[pos + 2] = Four_Bricks[2];
+      dstBuf[0] = Four_Bricks[3];
+      break;
+    case 1:
+      dstBuf[pos] = Four_Bricks[0];
+      dstBuf[pos + 1] = Four_Bricks[1];
+      dstBuf[0] = Four_Bricks[2];
+      dstBuf[1] = Four_Bricks[3];
+      break;
+    case 2:
+      dstBuf[pos] = Four_Bricks[0];
+      dstBuf[0] = Four_Bricks[1];
+      dstBuf[1] = Four_Bricks[2];
+      dstBuf[2] = Four_Bricks[3];
+      break;
+    default:
+      dstBuf[pos] = Four_Bricks[0];
+      dstBuf[pos + 1] = Four_Bricks[1];
+      dstBuf[pos + 2] = Four_Bricks[2];
+      dstBuf[pos + 3] = Four_Bricks[3];
+      break;
   }
 }
-__device__ __forceinline__ void moveBricks_forput_circ(
-    int8_t *__restrict__ dstBuf,
-    uint32_t dstBuf_Offset,
-    const uint8_t *__restrict__ Four_Bricks,
-    uint32_t Z,
-    uint32_t cshift)
+__device__ __forceinline__ void moveBricks_forput_circ(int8_t *__restrict__ dstBuf,
+                                                       uint32_t dstBuf_Offset,
+                                                       const uint8_t *__restrict__ Four_Bricks,
+                                                       uint32_t Z,
+                                                       uint32_t cshift)
 {
-    uint32_t pos = (dstBuf_Offset - cshift + Z) % Z;
+  uint32_t pos = (dstBuf_Offset - cshift + Z) % Z;
 
-    switch (pos + 3 - Z) {
-        case 0:
-            dstBuf[pos]   = Four_Bricks[0];
-            dstBuf[pos+1] = Four_Bricks[1];
-            dstBuf[pos+2] = Four_Bricks[2];
-            dstBuf[0]     = Four_Bricks[3];
-            break;
-        case 1:
-            dstBuf[pos]   = Four_Bricks[0];
-            dstBuf[pos+1] = Four_Bricks[1];
-            dstBuf[0]     = Four_Bricks[2];
-            dstBuf[1]     = Four_Bricks[3];
-            break;
-        case 2:
-            dstBuf[pos]   = Four_Bricks[0];
-            dstBuf[0]     = Four_Bricks[1];
-            dstBuf[1]     = Four_Bricks[2];
-            dstBuf[2]     = Four_Bricks[3];
-            break;
-        default:
-            dstBuf[pos]   = Four_Bricks[0];
-            dstBuf[pos+1] = Four_Bricks[1];
-            dstBuf[pos+2] = Four_Bricks[2];
-            dstBuf[pos+3] = Four_Bricks[3];
-            break;
-    }
+  switch (pos + 3 - Z) {
+    case 0:
+      dstBuf[pos] = Four_Bricks[0];
+      dstBuf[pos + 1] = Four_Bricks[1];
+      dstBuf[pos + 2] = Four_Bricks[2];
+      dstBuf[0] = Four_Bricks[3];
+      break;
+    case 1:
+      dstBuf[pos] = Four_Bricks[0];
+      dstBuf[pos + 1] = Four_Bricks[1];
+      dstBuf[0] = Four_Bricks[2];
+      dstBuf[1] = Four_Bricks[3];
+      break;
+    case 2:
+      dstBuf[pos] = Four_Bricks[0];
+      dstBuf[0] = Four_Bricks[1];
+      dstBuf[1] = Four_Bricks[2];
+      dstBuf[2] = Four_Bricks[3];
+      break;
+    default:
+      dstBuf[pos] = Four_Bricks[0];
+      dstBuf[pos + 1] = Four_Bricks[1];
+      dstBuf[pos + 2] = Four_Bricks[2];
+      dstBuf[pos + 3] = Four_Bricks[3];
+      break;
+  }
 }
 __device__ __forceinline__ void moveBricks_invget_circ(int8_t *__restrict__ dstBuf,
-                                uint16_t dstBuf_Offset,
-                                uint8_t *__restrict__ Four_Bricks,
-                                uint16_t Z,
-                                uint16_t cshift)
+                                                       uint16_t dstBuf_Offset,
+                                                       uint8_t *__restrict__ Four_Bricks,
+                                                       uint16_t Z,
+                                                       uint16_t cshift)
 {
   uint16_t pos = (cshift + dstBuf_Offset) % Z;
 
-  switch(pos+3-Z) {
-	    case 0 :
-		    Four_Bricks[0] = dstBuf[pos];
-		    Four_Bricks[1] = dstBuf[pos+1];
-		    Four_Bricks[2] = dstBuf[pos+2];
-		    Four_Bricks[3] = dstBuf[0];
-		    break;
-	    case 1 :
-		    Four_Bricks[0] = dstBuf[pos];
-		    Four_Bricks[1] = dstBuf[pos+1];
-		    Four_Bricks[2] = dstBuf[0];
-		    Four_Bricks[3] = dstBuf[1];
-		    break;
-	    case 2 :
-		    Four_Bricks[0] = dstBuf[pos];
-		    Four_Bricks[1] = dstBuf[0];
-		    Four_Bricks[2] = dstBuf[1];
-		    Four_Bricks[3] = dstBuf[2];
-		    break;
-	    default :
-		    Four_Bricks[0] = dstBuf[pos];
-		    Four_Bricks[1] = dstBuf[pos+1];
-		    Four_Bricks[2] = dstBuf[pos+2];
-		    Four_Bricks[3] = dstBuf[pos+3];
-		    break;
+  switch (pos + 3 - Z) {
+    case 0:
+      Four_Bricks[0] = dstBuf[pos];
+      Four_Bricks[1] = dstBuf[pos + 1];
+      Four_Bricks[2] = dstBuf[pos + 2];
+      Four_Bricks[3] = dstBuf[0];
+      break;
+    case 1:
+      Four_Bricks[0] = dstBuf[pos];
+      Four_Bricks[1] = dstBuf[pos + 1];
+      Four_Bricks[2] = dstBuf[0];
+      Four_Bricks[3] = dstBuf[1];
+      break;
+    case 2:
+      Four_Bricks[0] = dstBuf[pos];
+      Four_Bricks[1] = dstBuf[0];
+      Four_Bricks[2] = dstBuf[1];
+      Four_Bricks[3] = dstBuf[2];
+      break;
+    default:
+      Four_Bricks[0] = dstBuf[pos];
+      Four_Bricks[1] = dstBuf[pos + 1];
+      Four_Bricks[2] = dstBuf[pos + 2];
+      Four_Bricks[3] = dstBuf[pos + 3];
+      break;
   }
 }
 __device__ __forceinline__ void moveBricks_circ(int8_t *__restrict__ dstBuf,
-                                uint16_t dstBuf_Offset,
-                                uint8_t *__restrict__ Four_Bricks,
-                                uint16_t Z,
-                                uint16_t cshift,
-                                CircShiftDirection dir,
-                                CircShiftOp op)
+                                                uint16_t dstBuf_Offset,
+                                                uint8_t *__restrict__ Four_Bricks,
+                                                uint16_t Z,
+                                                uint16_t cshift,
+                                                CircShiftDirection dir,
+                                                CircShiftOp op)
 {
   int8_t *DstBuf = (int8_t *)dstBuf;
   uint16_t shift;
@@ -163,7 +161,7 @@ __device__ __forceinline__ uint32_t __vxor4_first(const uint32_t a, uint32_t *b)
   return a ^ b[0]; // increase accuracy
 }
 
-__device__ __forceinline__ uint32_t __vxor4(const uint32_t* a, uint32_t *b)
+__device__ __forceinline__ uint32_t __vxor4(const uint32_t *a, uint32_t *b)
 {
   return a[0] ^ b[0]; // increase accuracy
 }

@@ -343,12 +343,12 @@ __global__ void bnProcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ 
   uint8_t BnIdx = lut_BnIdx_BG1_R13[row];
   uint8_t BnToAddrIdx = lut_BnToAddrIdx_BG1_R13[GrpIdx - 1];
   uint8_t GrpNum = d_lut_numBnInBnGroups_BG1_R13[GrpIdx - 1];
-  uint16_t cirShift = bn_cn_map_BG1_R13[row][2];
+  uint16_t cirShift = bn_cn_map_BG1_R13[row][1];
   const int baseBn = (BnIdx - 1) * Zc;
 
   const int8_t *p_bnProcBuf_Grp =
       (const int8_t *)(d_bnProcBuf + baseBn + segIdx * NR_LDPC_SIZE_BN_PROC_BUF + d_lut_startAddrBnGroups_BG1_R13[BnToAddrIdx - 1]);
-  const int8_t *p_cnProcBuf_Grp = (const int8_t *)(d_cnProcBuf + segIdx * NR_LDPC_SIZE_CN_PROC_BUF + bn_cn_map_BG1_R13[row][1]);
+  const int8_t *p_cnProcBuf_Grp = (const int8_t *)(d_cnProcBuf + segIdx * NR_LDPC_SIZE_CN_PROC_BUF + bn_cn_map_BG1_R13[row][0]);
   const int8_t *p_llrProcBuf_Grp =
       (const int8_t *)(d_llrProcBuf + baseBn + segIdx * NR_LDPC_MAX_NUM_LLR + d_lut_startAddrBnGroupsLlr_BG1_R13[BnToAddrIdx - 1]);
   const int8_t *p_llrRes_Grp =
@@ -542,12 +542,12 @@ __global__ void bnProcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict__ 
   uint8_t BnIdx = lut_BnIdx_BG1_R23[row];
   uint8_t BnToAddrIdx = lut_BnToAddrIdx_BG1_R23[GrpIdx - 1];
   uint8_t GrpNum = d_lut_numBnInBnGroups_BG1_R23[GrpIdx - 1];
-  uint16_t cirShift = bn_cn_map_BG1_R23[row][2];
+  uint16_t cirShift = bn_cn_map_BG1_R23[row][1];
   const int baseBn = (BnIdx - 1) * Zc;
 
   const int8_t *p_bnProcBuf_Grp =
       (const int8_t *)(d_bnProcBuf + baseBn + segIdx * NR_LDPC_SIZE_BN_PROC_BUF + d_lut_startAddrBnGroups_BG1_R23[BnToAddrIdx - 1]);
-  const int8_t *p_cnProcBuf_Grp = (const int8_t *)(d_cnProcBuf + segIdx * NR_LDPC_SIZE_CN_PROC_BUF + bn_cn_map_BG1_R23[row][1]);
+  const int8_t *p_cnProcBuf_Grp = (const int8_t *)(d_cnProcBuf + segIdx * NR_LDPC_SIZE_CN_PROC_BUF + bn_cn_map_BG1_R23[row][0]);
   const int8_t *p_llrProcBuf_Grp =
       (const int8_t *)(d_llrProcBuf + baseBn + segIdx * NR_LDPC_MAX_NUM_LLR + d_lut_startAddrBnGroupsLlr_BG1_R23[BnToAddrIdx - 1]);
   const int8_t *p_llrRes_Grp =
@@ -609,7 +609,7 @@ __global__ void llrPreProc_Kernel_BG1_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                                           int8_t *__restrict__ d_llr,
                                                           int8_t *__restrict__ d_llrProcBuf,
                                                           int8_t *__restrict__ d_cnProcBuf,
-                                                          int Zc,
+                                                          int32_t Zc,
                                                           uint8_t BG)
 {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -626,10 +626,10 @@ __global__ void llrPreProc_Kernel_BG1_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   uint8_t groupIdx = lut_CnGrpIdx_BG1_R13[row] - 1;
   uint8_t CnIdx = lut_CnIdx_BG1_R13[row] - 1;
   uint8_t MsgIdx = lut_CnMsgIdx_BG1_R13[row];
-  uint32_t InnerOffset = d_lut_startAddrCnGroups_BG1[groupIdx] + 384 * CnIdx;
+  uint32_t InnerOffset = d_lut_startAddrCnGroups_BG1[groupIdx] + Zc * CnIdx;
 
   int8_t *p_cnProcBuf = (int8_t *)(d_cnProcBuf + segIdx * NR_LDPC_SIZE_CN_PROC_BUF + InnerOffset);
-  int8_t *p_llr = (int8_t *)(d_llr + segIdx * 68 * 384);
+  int8_t *p_llr = (int8_t *)(d_llr + segIdx * 68 * Zc);
   int8_t *p_llrProcBuf = (int8_t *)(d_llrProcBuf + segIdx * NR_LDPC_MAX_NUM_LLR);
 
   switch (groupIdx) {
@@ -667,7 +667,7 @@ void nrLDPC_llrPreProc_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                                 int8_t *llr,
                                                 int8_t *llrProcBuf,
                                                 int8_t *cnProcBuf,
-                                                int Z,
+                                                int32_t Z,
                                                 uint8_t BG,
                                                 cudaStream_t *streams,
                                                 int8_t CudaStreamIdx)
@@ -797,7 +797,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                        int8_t *llrProcBuf,
                                                        int8_t *llrOut,
                                                        int8_t *p_llrOut,
-                                                       int Z,
+                                                       int32_t Z,
                                                        uint8_t BG,
                                                        uint8_t R,
                                                        uint8_t numMaxIter,
