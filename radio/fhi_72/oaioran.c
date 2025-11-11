@@ -76,10 +76,6 @@ int32_t symbol_callback(void *args, struct xran_sense_of_time *p_sense_of_time)
   if (!first_call_set)
     return 0;
 
-  struct timespec ts;
-  if (clock_gettime(CLOCK_REALTIME, &ts))
-    abort();
-
   static int last_frame = 0;
   // Workaround for a bug in XRAN
   // In XRAN, time is kept by GPS second and slot within GPS second (tti_counter).
@@ -106,25 +102,16 @@ int32_t symbol_callback(void *args, struct xran_sense_of_time *p_sense_of_time)
   info->slot = slot_in_frame;
   info->symbol = callback_args->start_symbol;
 
-  float slot_duration_uS[] = {1000, 500, 250, 125};
-  float symbol_duration_uS = slot_duration_uS[fh_cfg->frame_conf.nNumerology] / 14;
+  int slot_duration_uS[] = {1000, 500, 250, 125};
+  uint64_t slot_in_second_offset_nS = ((uint64_t)p_sense_of_time->tti_counter * slot_duration_uS[fh_cfg->frame_conf.nNumerology]) * 1000UL;
 
-  // Offset current time to indicate symbol start time
-  int64_t symbol_offset_ns = symbol_duration_uS * RU_SYMBOLS_PER_CALLBACK * 1000;
-  // This happens T1a_min_up before the last symbol OTA.
-  int64_t T1a_offset_ns = fh_cfg->T1a_min_up * 1000;
-  const long one_second_ns = 1000000000L;
-  ts.tv_nsec += T1a_offset_ns - symbol_offset_ns;
-  if (ts.tv_nsec >= one_second_ns) {
-    ts.tv_nsec -= one_second_ns;
-    ts.tv_sec++;
-  }
-  if (ts.tv_nsec < 0) {
-    ts.tv_nsec += one_second_ns;
-    ts.tv_sec--;
-  }
-  info->ts = ts;
+  float symbol_duration_nS = ((float)slot_duration_uS[fh_cfg->frame_conf.nNumerology] * 1000) / 14.0f;
+  uint64_t symbol_in_slot_offset_nS = (uint64_t)(callback_args->start_symbol * symbol_duration_nS);
 
+  info->ts.tv_sec = p_sense_of_time->nSecond;
+  info->ts.tv_nsec = slot_in_second_offset_nS + symbol_in_slot_offset_nS;
+
+  AssertFatal(info->ts.tv_nsec < 1000000000UL, "ORAN: Invalid tv_nsec %ld\n", info->ts.tv_nsec);
   pushNotifiedFIFO(&ru_dl_sync_fifo, req);
   return 0;
 }
