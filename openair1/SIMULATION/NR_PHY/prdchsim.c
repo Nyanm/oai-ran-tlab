@@ -100,7 +100,7 @@ double **r_re, **r_im; // RX signal
 channel_model_t channel_model;
 
 bool testing_mode = false;
-bool testing_timing = true;
+bool testing_timing = false;
 
 void AIOT_R2D_PHY_TX_calc_packet_sizes(const int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame)
 {
@@ -195,7 +195,7 @@ void AIOT_R2D_PHY_TX_Signal(c16_t *txData, c16_t* txDataF, const c16_t *REsPacke
 
 void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *channel, double SNR, NR_AIOT_DL_FRAME_PARMS *frame)
 {
-  int rx_size = frame->packet_samples * 2;
+  int rx_size = frame->packet_samples + channel->channel_offset + 200;
 
   for (int i = 0; i < frame->packet_samples; i++) {
     s_re[0][i] = (double) in[i].r;
@@ -212,12 +212,12 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
   double sigma2 = pow(10, sigma2_dBm / 10);
   //printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dBm);
 
-  multipath_channel(channel, s_re, s_im, r_re, r_im, rx_size, 0, 1);
+  multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + channel->channel_offset + 200, 0, 1);
   add_noise(rxData,
             (const double **)r_re,
             (const double **)r_im,
             sigma2,
-            rx_size,
+            frame->packet_samples + channel->channel_offset + 200,
             0,
             ts,
             0,
@@ -461,7 +461,7 @@ void free_SIP_ideal_sequence(double *SIP_ideal)
   }
 }
 
-#define CORR_THRESHOLD (frame_parms->Zadoff_Chu ? 5000 : 500)
+#define CORR_THRESHOLD (frame_parms->Zadoff_Chu ? 5000 : 5000)
 
 void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const uint16_t *signal, NR_AIOT_DL_FRAME_PARMS *frame_parms)
 {
@@ -608,7 +608,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const uint16_t *signal, NR_A
   uint32_t energy[2] = {0};
   frame_parms->packet_payload_size = 0;
 
-  while(position + 2*received_chip_size < frame_parms->packet_downsampled_samples)
+  while(position + received_chip_size <= frame_parms->packet_downsampled_samples)
   {
     // Add CP if needed
     if((chip % frame_parms->received_M) == 0) {
@@ -797,7 +797,7 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
   uint16_t *envelope, *filteredData, *downSampled, *cleared;
   uint32_t *energy;
   uint8_t *rx_payload;
-  int rx_size = frame_parms->packet_samples * 2;
+  int rx_size = frame_parms->packet_samples + channel_model->delay + 200;
 
   generate_butter_coeffs_f64(&filter, channel_model->bw * 1e6, (double)channel_model->sampling_rate * 1e6);
   printf("Butterworth 3rd-order LPF\n");
@@ -844,24 +844,24 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
   s_im = malloc(frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
 
   for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
-    s_re[i] = calloc(1, frame_parms->packet_samples * 2 * sizeof(double));
-    s_im[i] = calloc(1, frame_parms->packet_samples * 2 * sizeof(double));
+    s_re[i] = calloc(1, rx_size * sizeof(double));
+    s_im[i] = calloc(1, rx_size * sizeof(double));
   }
 
-  bzero(s_re[0], frame_parms->packet_samples * 2 * sizeof(double));
-  bzero(s_im[0], frame_parms->packet_samples * 2 * sizeof(double));
+  bzero(s_re[0], rx_size * sizeof(double));
+  bzero(s_im[0], rx_size * sizeof(double));
 
   // Initialization of receive IQ signals
   r_re = malloc(frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
   r_im = malloc(frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
 
   for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
-    r_re[i] = calloc(1, frame_parms->packet_samples * 2 * sizeof(double));
-    r_im[i] = calloc(1, frame_parms->packet_samples * 2 * sizeof(double));
+    r_re[i] = calloc(1, rx_size * sizeof(double));
+    r_im[i] = calloc(1, rx_size * sizeof(double));
   }
 
-  bzero(r_re[0], frame_parms->packet_samples * 2 * sizeof(double));
-  bzero(r_im[0], frame_parms->packet_samples * 2 * sizeof(double));
+  bzero(r_re[0], rx_size * sizeof(double));
+  bzero(r_im[0], rx_size * sizeof(double));
 
   SIP_ideal = generate_SIP_ideal_sequence(frame_parms);
 
@@ -1140,7 +1140,7 @@ int main(int argc, char **argv)
   };
 
   int c;
-  while ((c = getopt(argc, argv, "--:O:h:L:R:P:p:M:Z:S:N:D:t:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:h:L:R:P:p:M:Z:S:N:D:t:T:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -1242,6 +1242,10 @@ int main(int argc, char **argv)
         snr_trials = 1;
         testing_mode = true;
         snr_plot = atoi(optarg);
+        break;
+      
+      case 'T':
+        testing_timing = true;
         break;
     }
   }
