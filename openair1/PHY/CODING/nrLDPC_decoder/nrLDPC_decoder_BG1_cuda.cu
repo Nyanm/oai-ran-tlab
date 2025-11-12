@@ -11,7 +11,7 @@
 
 #define ZC 384 // for BG1 test only
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
-#define RECORD_GRAPH 1 // set 1 to enable graph recording, 0 to unable.
+#define RECORD_GRAPH 0 // set 1 to enable graph recording, 0 to unable.
 
 #ifndef JETSON_TARGET
 #define CUDA_THREADS 1024
@@ -222,9 +222,10 @@ __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   // if(blk == 1&&tid == 0) printf("1.1\n");
   uint8_t CnIdx = lut_CnIdx_BG1_R13[row] - 1;
   uint8_t MsgIdx = lut_CnMsgIdx_BG1_R13[row];
-  // uint16_t blockSize = h_block_thread_counts_cnProc[blk];
   uint32_t InnerOffset = d_lut_startAddrCnGroups_BG1[groupIdx] + 384 * CnIdx;
-  // uint32_t outOffset = d_lut_startAddrCnGroups_BG1[groupIdx] + 384 * CnIdx;
+  uint32_t idxBn = cn_bn_map_BG1_R13[row][0];
+  uint32_t circShift = cn_bn_map_BG1_R13[row][1];
+
 
   const int8_t *p_cnProcBuf = (const int8_t *)(d_cnBufAll + segIdx * NR_LDPC_SIZE_CN_PROC_BUF + InnerOffset);
   int8_t *p_cnProcBufRes = (int8_t *)(d_cnOutAll + segIdx * NR_LDPC_SIZE_CN_PROC_BUF + InnerOffset);
@@ -232,31 +233,31 @@ __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
 
   switch (groupIdx) {
     case 0:
-      cnProcKernel_BG1_int8_G3(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G3(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
     case 1:
-      cnProcKernel_BG1_int8_G4(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G4(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
     case 2:
-      cnProcKernel_BG1_int8_G5(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G5(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
     case 3:
-      cnProcKernel_BG1_int8_G6(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G6(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
     case 4:
-      cnProcKernel_BG1_int8_G7(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G7(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
     case 5:
-      cnProcKernel_BG1_int8_G8(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G8(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
     case 6:
-      cnProcKernel_BG1_int8_G9(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G9(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
     case 7:
-      cnProcKernel_BG1_int8_G10(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G10(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
     case 8:
-      cnProcKernel_BG1_int8_G19(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G19(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
   }
 }
@@ -439,17 +440,18 @@ __global__ void cnProcKernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   uint8_t MsgIdx = lut_CnMsgIdx_BG1_R23[row];
   // uint16_t blockSize = h_block_thread_counts_cnProc[blk];
   uint32_t inOffset = d_lut_startAddrCnGroups_BG1[groupIdx] + 384 * CnIdx;
-  uint32_t outOffset = d_lut_startAddrCnGroups_BG1[groupIdx] + 384 * CnIdx;
+  uint32_t idxBn = cn_bn_map_BG1_R23[row][0];
+  uint32_t circShift = cn_bn_map_BG1_R23[row][1];
   // if(blk == 1&&tid == 0) printf("1.2\n");
   //   __syncthreads();
 
   const int8_t *p_cnProcBuf = (const int8_t *)(d_cnBufAll + segIdx * NR_LDPC_SIZE_CN_PROC_BUF + inOffset);
-  int8_t *p_cnProcBufRes = (int8_t *)(d_cnOutAll + segIdx * NR_LDPC_SIZE_CN_PROC_BUF + outOffset);
+  int8_t *p_cnProcBufRes = (int8_t *)(d_cnOutAll + segIdx * NR_LDPC_SIZE_CN_PROC_BUF + inOffset);
   int8_t *p_bnProcBuf = (int8_t *)(d_bnBufAll + segIdx * NR_LDPC_SIZE_BN_PROC_BUF);
 
   switch (groupIdx) {
     case 0:
-      cnProcKernel_BG1_int8_G3(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G3(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
     case 1:
       printf("Shouldn't see case 1 in R23");
@@ -461,19 +463,19 @@ __global__ void cnProcKernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
       printf("Shouldn't see case 3 in R23");
       break;
     case 4:
-      cnProcKernel_BG1_int8_G7(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G7(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
     case 5:
-      cnProcKernel_BG1_int8_G8(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G8(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
     case 6:
-      cnProcKernel_BG1_int8_G9(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G9(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
     case 7:
-      cnProcKernel_BG1_int8_G10(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G10(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
     case 8:
-      cnProcKernel_BG1_int8_G19(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc);
+      cnProcKernel_BG1_int8_G19(p_lut, p_cnProcBuf, p_cnProcBufRes, p_bnProcBuf, MsgIdx, lane, idxBn, circShift, Zc);
       break;
   }
 }
