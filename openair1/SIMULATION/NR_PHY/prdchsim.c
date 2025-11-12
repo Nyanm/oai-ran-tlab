@@ -36,8 +36,6 @@
 
 #include <time.h>
 
-#include "PHY_AIOT/defs_aiot_gNB.h"
-#include "PHY_AIOT/defs_aiot_UE.h"
 #include "PHY_AIOT/defs_aiot_r2d.h"
 
 const char *__asan_default_options()

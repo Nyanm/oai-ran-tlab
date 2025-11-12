@@ -85,8 +85,6 @@ typedef struct {
   struct PHY_VARS_eNB_s ***eNB;
   /// gNB context variables
   struct PHY_VARS_gNB_s **gNB;
-  /// gNB AIOT context variables
-  struct PHY_VARS_gNB_AIOT_s **gNB_AIOT;
   /// NB_IoT L1 context variables
   struct PHY_VARS_eNB_NB_IoT_s **L1_NB_IoT;
   /// RRC context variables
