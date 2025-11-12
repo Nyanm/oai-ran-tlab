@@ -8,6 +8,7 @@
 #include "nrLDPC_CUDA_shared_param.h"
 
 //------------------------------Stream Version------------------------
+#if 0
 __device__ void BnToCnPC_Kernel_BG1_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
                                                    int8_t *__restrict__ p_bnProcBufRes,
                                                    const int8_t *__restrict__ p_cnProcBuf,
@@ -18,13 +19,13 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
                                                    uint8_t groupId,
                                                    uint8_t CnIdx,
                                                    int Zc,
-                                                   int *PC_Flag)
+                                                   int8_t *PC_Flag)
 {
   uint32_t *p_cnProcBufBit, *p_cnProcBufResBit;
   {
     // const uint8_t NUM = 3; // Gn = 3
-    const uint row = MsgIdx - 1;
-    int tid = row * RowLength + lane;
+    const uint32_t row = MsgIdx - 1;
+    uint32_t tid = row * RowLength + lane;
 
     const uint baseShift = Zc * row;
     const uint destByte = baseShift + lane * 4;
@@ -37,7 +38,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G3_Stream(const t_nrLDPC_lut *p_lut,
 
     const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
     const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
-    const int idxBn = lut_startAddrBnProcBuf_CNG[0];
+    const uint32_t idxBn = lut_startAddrBnProcBuf_CNG[0];
 
     #if DUMPCNBN
     if (lane == 0) {
@@ -99,7 +100,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
                                                    uint8_t groupId,
                                                    uint8_t CnIdx,
                                                    int Zc,
-                                                   int *PC_Flag)
+                                                   int8_t *PC_Flag)
 {
   // const uint8_t NUM = 4; // Gn = 4
   // const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -109,8 +110,8 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
   uint32_t *p_cnProcBufBit, *p_cnProcBufResBit;
   {
-    const uint row = MsgIdx - 1;
-    int tid = row * RowLength + lane;
+    const uint32_t row = MsgIdx - 1;
+    uint32_t tid = row * RowLength + lane;
 
     const uint baseShift = 5 * Zc * row; // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -125,7 +126,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G4_Stream(const t_nrLDPC_lut *p_lut,
     const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
     const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
 
-    const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
     #if DUMPCNBN
     if (lane == 0) {
       int GlobalId = (blockIdx.x * blockDim.x + threadIdx.x) / RowLength;
@@ -185,7 +186,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
                                                    uint8_t groupId,
                                                    uint8_t CnIdx,
                                                    int Zc,
-                                                   int *PC_Flag)
+                                                   int8_t *PC_Flag)
 {
   // const uint8_t NUM = 5; // Gn = 5
   // const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -195,8 +196,8 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
   uint32_t *p_cnProcBufBit, *p_cnProcBufResBit;
   {
-    const uint row = MsgIdx - 1;
-    int tid = row * RowLength + lane;
+    const uint32_t row = MsgIdx - 1;
+    uint32_t tid = row * RowLength + lane;
 
     const uint baseShift = 18 * Zc * row; // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -211,7 +212,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G5_Stream(const t_nrLDPC_lut *p_lut,
     const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
     const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
 
-    const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
     #if DUMPCNBN
     if (lane == 0) {
@@ -273,7 +274,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
                                                    uint8_t groupId,
                                                    uint8_t CnIdx,
                                                    int Zc,
-                                                   int *PC_Flag)
+                                                   int8_t *PC_Flag)
 {
   // const uint8_t NUM = 6; // Gn = 6
   // const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -283,8 +284,8 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
   uint32_t *p_cnProcBufBit, *p_cnProcBufResBit;
   {
-    const uint row = MsgIdx - 1;
-    int tid = row * RowLength + lane;
+    const uint32_t row = MsgIdx - 1;
+    uint32_t tid = row * RowLength + lane;
 
     const uint baseShift = 8 * Zc * row; // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -299,7 +300,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G6_Stream(const t_nrLDPC_lut *p_lut,
     const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
     const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
 
-    const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
     #if DUMPCNBN
     if (lane == 0) {
@@ -361,7 +362,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
                                                    uint8_t groupId,
                                                    uint8_t CnIdx,
                                                    int Zc,
-                                                   int *PC_Flag)
+                                                   int8_t *PC_Flag)
 {
   // const uint8_t NUM = 7; // Gn = 7
   // const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -371,8 +372,8 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
   uint32_t *p_cnProcBufBit, *p_cnProcBufResBit;
   {
-    const uint row = MsgIdx - 1;
-    int tid = row * RowLength + lane;
+    const uint32_t row = MsgIdx - 1;
+    uint32_t tid = row * RowLength + lane;
 
     const uint baseShift = 5 * Zc * row; // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -387,7 +388,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G7_Stream(const t_nrLDPC_lut *p_lut,
     const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
     const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
 
-    const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
     #if DUMPCNBN
     if (lane == 0) {
@@ -448,7 +449,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
                                                    uint8_t groupId,
                                                    uint8_t CnIdx,
                                                    int Zc,
-                                                   int *PC_Flag)
+                                                   int8_t *PC_Flag)
 {
   // const uint8_t NUM = 8; // Gn = 8
   // const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -458,8 +459,8 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
   uint32_t *p_cnProcBufBit, *p_cnProcBufResBit;
   {
-    const uint row = MsgIdx - 1;
-    int tid = row * RowLength + lane;
+    const uint32_t row = MsgIdx - 1;
+    uint32_t tid = row * RowLength + lane;
 
     const uint baseShift = 2 * Zc * row; // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -474,7 +475,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G8_Stream(const t_nrLDPC_lut *p_lut,
     const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
     const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
 
-    const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
     #if DUMPCNBN
     if (lane == 0) {
@@ -535,7 +536,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
                                                    uint8_t groupId,
                                                    uint8_t CnIdx,
                                                    int Zc,
-                                                   int *PC_Flag)
+                                                   int8_t *PC_Flag)
 {
   // const uint8_t NUM = 9; // Gn = 9
   // const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -546,8 +547,8 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
 
   uint32_t *p_cnProcBufBit, *p_cnProcBufResBit;
   {
-    const uint row = MsgIdx - 1;
-    int tid = row * RowLength + lane;
+    const uint32_t row = MsgIdx - 1;
+    uint32_t tid = row * RowLength + lane;
 
     const uint baseShift = 2 * Zc * row; // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -562,7 +563,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G9_Stream(const t_nrLDPC_lut *p_lut,
     const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
     const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
 
-    const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
     #if DUMPCNBN
     if (lane == 0) {
@@ -623,7 +624,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
                                                     uint8_t groupId,
                                                     uint8_t CnIdx,
                                                     int Zc,
-                                                    int *PC_Flag)
+                                                    int8_t *PC_Flag)
 {
   // const uint8_t NUM = 10; // Gn = 10
   // const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -633,8 +634,8 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_bnProcBuf = (const int8_t *)d_bnBufAll;
   uint32_t *p_cnProcBufBit, *p_cnProcBufResBit;
   {
-    const uint row = MsgIdx - 1;
-    int tid = row * RowLength + lane;
+    const uint32_t row = MsgIdx - 1;
+    uint32_t tid = row * RowLength + lane;
 
     const uint baseShift = 1 * Zc * row; // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -649,7 +650,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G10_Stream(const t_nrLDPC_lut *p_lut,
     const uint32_t *lut_startAddrBnProcBuf_CNG = arrPos(p_lut->startAddrBnProcBuf[groupId], row);
     const uint8_t *lut_bnPosBnProcBuf_CNG = arrPos(p_lut->bnPosBnProcBuf[groupId], row);
 
-    const int idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_startAddrBnProcBuf_CNG[CnIdx] + lut_bnPosBnProcBuf_CNG[CnIdx] * Zc;
 
     #if DUMPCNBN
     if (lane == 0) {
@@ -710,7 +711,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
                                                     uint8_t groupId,
                                                     uint8_t CnIdx,
                                                     int Zc,
-                                                    int *PC_Flag)
+                                                    int8_t *PC_Flag)
 {
   // const uint8_t NUM = 19; // Gn = 19
   // const int8_t *p_bnProcBufRes = (const int8_t *)d_bnOutAll;
@@ -721,7 +722,7 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
   uint32_t *p_cnProcBufBit, *p_cnProcBufResBit;
   {
     uint row = MsgIdx - 1;
-    int tid = row * RowLength + lane;
+    uint32_t tid = row * RowLength + lane;
 
     uint baseShift = 4 * Zc * row; // offset pointed at different BN
     uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -787,15 +788,17 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
     }
       */
 }
+#endif
+
 __device__ void llrPreProc_Kernel_BG1_int8_Gn_stream(const t_nrLDPC_lut *p_lut,
                                                      const int8_t *p_llr,
                                                      int8_t *p_llrProcBuf,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
-                                                     int lane,
+                                                     uint32_t lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc,
+                                                     uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
   // const uint8_t NUM = 3; // Gn = 3
@@ -803,7 +806,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_Gn_stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   // const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
   {
-    const uint row = MsgIdx - 1;
+    const uint32_t row = MsgIdx - 1;
 
     // const uint8_t *lut_numCnInCnGroups = p_lut->numCnInCnGroups;
     // const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
@@ -814,7 +817,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_Gn_stream(const t_nrLDPC_lut *p_lut,
     const uint16_t *lut_circShift_CNG3 = p_lut->circShift[0].d;
     const uint8_t *lut_posBnInCnProcBuf_CNG3 = p_lut->posBnInCnProcBuf[0].d;
 
-    const int idxBn = lut_posBnInCnProcBuf_CNG3[row] * Zc;
+    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG3[row] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -828,8 +831,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_Gn_stream(const t_nrLDPC_lut *p_lut,
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
   // Sencond part is llr to llrProcBuf
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int colIdx = tid / RowLength;
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t colIdx = tid / RowLength;
   if (colIdx >= 42) // need to modify later
     return;
 
@@ -853,7 +856,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_Gn_stream(const t_nrLDPC_lut *p_lut,
   // Part 2: Copy systematic section (0..startColParity)
   // -----------------------------
   if (colIdx < startColParity) {
-    const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
+    const uint32_t idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
     int32_t *dst = (int32_t *)(&p_llrProcBuf[idxBn] + lane * 4);
     int32_t *src = (int32_t *)(&p_llr[colIdx * Zc] + lane * 4);
     *dst = *src;
@@ -864,10 +867,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G3_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_llrProcBuf,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
-                                                     int lane,
+                                                     uint32_t lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc,
+                                                     uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
   // const uint8_t NUM = 3; // Gn = 3
@@ -875,7 +878,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G3_stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   // const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
   {
-    const uint row = MsgIdx - 1;
+    const uint32_t row = MsgIdx - 1;
 
     // const uint8_t *lut_numCnInCnGroups = p_lut->numCnInCnGroups;
     // const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
@@ -886,7 +889,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G3_stream(const t_nrLDPC_lut *p_lut,
     const uint16_t *lut_circShift_CNG3 = p_lut->circShift[0].d;
     const uint8_t *lut_posBnInCnProcBuf_CNG3 = p_lut->posBnInCnProcBuf[0].d;
 
-    const int idxBn = lut_posBnInCnProcBuf_CNG3[row] * Zc;
+    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG3[row] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -900,8 +903,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G3_stream(const t_nrLDPC_lut *p_lut,
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
   // Sencond part is llr to llrProcBuf
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int colIdx = tid / RowLength;
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t colIdx = tid / RowLength;
   if (colIdx >= 42) // need to modify later
     return;
 
@@ -925,7 +928,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G3_stream(const t_nrLDPC_lut *p_lut,
   // Part 2: Copy systematic section (0..startColParity)
   // -----------------------------
   if (colIdx < startColParity) {
-    const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
+    const uint32_t idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
     int32_t *dst = (int32_t *)(&p_llrProcBuf[idxBn] + lane * 4);
     int32_t *src = (int32_t *)(&p_llr[colIdx * Zc] + lane * 4);
     *dst = *src;
@@ -937,10 +940,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G4_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_llrProcBuf,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
-                                                     int lane,
+                                                     uint32_t lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc,
+                                                     uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
   // const uint8_t NUM = 4; // Gn = 4
@@ -948,8 +951,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G4_stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   // const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
   {
-    const uint row = MsgIdx - 1;
-    // int tid = row * 96 + lane;
+    const uint32_t row = MsgIdx - 1;
+    // uint32_t tid = row * 96 + lane;
 
     // const uint baseShift = 5 * Zc * row; // offset pointed at different BN
     // const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
@@ -957,7 +960,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G4_stream(const t_nrLDPC_lut *p_lut,
     const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
     const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const int idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -971,8 +974,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G4_stream(const t_nrLDPC_lut *p_lut,
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
   // Sencond part is llr to llrProcBuf
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int colIdx = tid / RowLength;
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t colIdx = tid / RowLength;
   if (colIdx >= 42) // need to modify later
     return;
 
@@ -996,7 +999,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G4_stream(const t_nrLDPC_lut *p_lut,
   // Part 2: Copy systematic section (0..startColParity)
   // -----------------------------
   if (colIdx < startColParity) {
-    const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
+    const uint32_t idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
     int32_t *dst = (int32_t *)(&p_llrProcBuf[idxBn] + lane * 4);
     int32_t *src = (int32_t *)(&p_llr[colIdx * Zc] + lane * 4);
     *dst = *src;
@@ -1008,10 +1011,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G5_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_llrProcBuf,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
-                                                     int lane,
+                                                     uint32_t lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc,
+                                                     uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
   // const uint8_t NUM = 5; // Gn = 5
@@ -1019,8 +1022,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G5_stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   // const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
   {
-    const uint row = MsgIdx - 1;
-    // int tid = row * 96 + lane;
+    const uint32_t row = MsgIdx - 1;
+    // uint32_t tid = row * 96 + lane;
 
     // const uint8_t *lut_numCnInCnGroups = p_lut->numCnInCnGroups;
     // const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
@@ -1031,7 +1034,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G5_stream(const t_nrLDPC_lut *p_lut,
     const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
     const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const int idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1045,8 +1048,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G5_stream(const t_nrLDPC_lut *p_lut,
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
   // Sencond part is llr to llrProcBuf
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int colIdx = tid / RowLength;
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t colIdx = tid / RowLength;
   if (colIdx >= 42) // need to modify later
     return;
 
@@ -1070,7 +1073,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G5_stream(const t_nrLDPC_lut *p_lut,
   // Part 2: Copy systematic section (0..startColParity)
   // -----------------------------
   if (colIdx < startColParity) {
-    const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
+    const uint32_t idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
     int32_t *dst = (int32_t *)(&p_llrProcBuf[idxBn] + lane * 4);
     int32_t *src = (int32_t *)(&p_llr[colIdx * Zc] + lane * 4);
     *dst = *src;
@@ -1082,10 +1085,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G6_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_llrProcBuf,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
-                                                     int lane,
+                                                     uint32_t lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc,
+                                                     uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
   // const uint8_t NUM = 6; // Gn = 6
@@ -1093,8 +1096,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G6_stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   // const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
   {
-    const uint row = MsgIdx - 1;
-    // int tid = row * 96 + lane;
+    const uint32_t row = MsgIdx - 1;
+    // uint32_t tid = row * 96 + lane;
 
     // const uint8_t *lut_numCnInCnGroups = p_lut->numCnInCnGroups;
     // const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
@@ -1105,7 +1108,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G6_stream(const t_nrLDPC_lut *p_lut,
     const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
     const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const int idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1119,8 +1122,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G6_stream(const t_nrLDPC_lut *p_lut,
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
   // Sencond part is llr to llrProcBuf
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int colIdx = tid / RowLength;
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t colIdx = tid / RowLength;
   if (colIdx >= 42) // need to modify later
     return;
 
@@ -1144,7 +1147,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G6_stream(const t_nrLDPC_lut *p_lut,
   // Part 2: Copy systematic section (0..startColParity)
   // -----------------------------
   if (colIdx < startColParity) {
-    const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
+    const uint32_t idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
     int32_t *dst = (int32_t *)(&p_llrProcBuf[idxBn] + lane * 4);
     int32_t *src = (int32_t *)(&p_llr[colIdx * Zc] + lane * 4);
     *dst = *src;
@@ -1156,10 +1159,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G7_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_llrProcBuf,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
-                                                     int lane,
+                                                     uint32_t lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc,
+                                                     uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
   // const uint8_t NUM = 7; // Gn = 7
@@ -1167,8 +1170,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G7_stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   // const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
   {
-    const uint row = MsgIdx - 1;
-    // int tid = row * 96 + lane;
+    const uint32_t row = MsgIdx - 1;
+    // uint32_t tid = row * 96 + lane;
 
     // const uint8_t *lut_numCnInCnGroups = p_lut->numCnInCnGroups;
     // const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
@@ -1179,7 +1182,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G7_stream(const t_nrLDPC_lut *p_lut,
     const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
     const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const int idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1193,8 +1196,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G7_stream(const t_nrLDPC_lut *p_lut,
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
   // Sencond part is llr to llrProcBuf
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int colIdx = tid / RowLength;
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t colIdx = tid / RowLength;
   if (colIdx >= 42) // need to modify later
     return;
 
@@ -1218,7 +1221,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G7_stream(const t_nrLDPC_lut *p_lut,
   // Part 2: Copy systematic section (0..startColParity)
   // -----------------------------
   if (colIdx < startColParity) {
-    const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
+    const uint32_t idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
     int32_t *dst = (int32_t *)(&p_llrProcBuf[idxBn] + lane * 4);
     int32_t *src = (int32_t *)(&p_llr[colIdx * Zc] + lane * 4);
     *dst = *src;
@@ -1230,10 +1233,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G8_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_llrProcBuf,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
-                                                     int lane,
+                                                     uint32_t lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc,
+                                                     uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
   // const uint8_t NUM = 8; // Gn = 8
@@ -1241,8 +1244,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G8_stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   // const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
   {
-    const uint row = MsgIdx - 1;
-    // int tid = row * 96 + lane;
+    const uint32_t row = MsgIdx - 1;
+    // uint32_t tid = row * 96 + lane;
 
     // const uint8_t *lut_numCnInCnGroups = p_lut->numCnInCnGroups;
     // const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
@@ -1253,7 +1256,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G8_stream(const t_nrLDPC_lut *p_lut,
     const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
     const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const int idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1267,8 +1270,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G8_stream(const t_nrLDPC_lut *p_lut,
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
   // Sencond part is llr to llrProcBuf
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int colIdx = tid / RowLength;
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t colIdx = tid / RowLength;
   if (colIdx >= 42) // need to modify later
     return;
 
@@ -1292,7 +1295,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G8_stream(const t_nrLDPC_lut *p_lut,
   // Part 2: Copy systematic section (0..startColParity)
   // -----------------------------
   if (colIdx < startColParity) {
-    const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
+    const uint32_t idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
     int32_t *dst = (int32_t *)(&p_llrProcBuf[idxBn] + lane * 4);
     int32_t *src = (int32_t *)(&p_llr[colIdx * Zc] + lane * 4);
     *dst = *src;
@@ -1304,10 +1307,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G9_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_llrProcBuf,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
-                                                     int lane,
+                                                     uint32_t lane,
                                                      uint8_t groupId,
                                                      uint8_t CnIdx,
-                                                     int Zc,
+                                                     uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
   // const uint8_t NUM = 9; // Gn = 9
@@ -1315,8 +1318,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G9_stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   // const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
   {
-    const uint row = MsgIdx - 1;
-    // int tid = row * 96 + lane;
+    const uint32_t row = MsgIdx - 1;
+    // uint32_t tid = row * 96 + lane;
 
     // const uint8_t *lut_numCnInCnGroups = p_lut->numCnInCnGroups;
     // const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
@@ -1327,7 +1330,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G9_stream(const t_nrLDPC_lut *p_lut,
     const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
     const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const int idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1341,8 +1344,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G9_stream(const t_nrLDPC_lut *p_lut,
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
   // Sencond part is llr to llrProcBuf
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int colIdx = tid / RowLength;
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t colIdx = tid / RowLength;
   if (colIdx >= 42) // need to modify later
     return;
 
@@ -1366,7 +1369,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G9_stream(const t_nrLDPC_lut *p_lut,
   // Part 2: Copy systematic section (0..startColParity)
   // -----------------------------
   if (colIdx < startColParity) {
-    const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
+    const uint32_t idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
     int32_t *dst = (int32_t *)(&p_llrProcBuf[idxBn] + lane * 4);
     int32_t *src = (int32_t *)(&p_llr[colIdx * Zc] + lane * 4);
     *dst = *src;
@@ -1389,8 +1392,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G10_stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   // const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
   {
-    const uint row = MsgIdx - 1;
-    // int tid = row * 96 + lane;
+    const uint32_t row = MsgIdx - 1;
+    // uint32_t tid = row * 96 + lane;
 
     // const uint8_t *lut_numCnInCnGroups = p_lut->numCnInCnGroups;
     // const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
@@ -1401,7 +1404,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G10_stream(const t_nrLDPC_lut *p_lut,
     const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
     const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const int idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1415,8 +1418,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G10_stream(const t_nrLDPC_lut *p_lut,
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
   // Sencond part is llr to llrProcBuf
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int colIdx = tid / RowLength;
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t colIdx = tid / RowLength;
   if (colIdx >= 42) // need to modify later
     return;
 
@@ -1440,7 +1443,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G10_stream(const t_nrLDPC_lut *p_lut,
   // Part 2: Copy systematic section (0..startColParity)
   // -----------------------------
   if (colIdx < startColParity) {
-    const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
+    const uint32_t idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
     int32_t *dst = (int32_t *)(&p_llrProcBuf[idxBn] + lane * 4);
     int32_t *src = (int32_t *)(&p_llr[colIdx * Zc] + lane * 4);
     *dst = *src;
@@ -1463,8 +1466,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G19_stream(const t_nrLDPC_lut *p_lut,
   // const int8_t *p_llrProcBuf = (const int8_t *)llrProcBuf; // input pointer each block tackle with
   // const int8_t *p_cnProcBuf = (const int8_t *)cnProcBuf; // output pointer each block tackle with
   {
-    const uint row = MsgIdx - 1;
-    // int tid = row * 96 + lane;
+    const uint32_t row = MsgIdx - 1;
+    // uint32_t tid = row * 96 + lane;
 
     // const uint8_t *lut_numCnInCnGroups = p_lut->numCnInCnGroups;
     // const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
@@ -1475,7 +1478,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G19_stream(const t_nrLDPC_lut *p_lut,
     const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
     const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const int idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1489,8 +1492,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G19_stream(const t_nrLDPC_lut *p_lut,
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
   // Sencond part is llr to llrProcBuf
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int colIdx = tid / RowLength;
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t colIdx = tid / RowLength;
   if (colIdx >= 42) // need to modify later
     return;
 
@@ -1514,7 +1517,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G19_stream(const t_nrLDPC_lut *p_lut,
   // Part 2: Copy systematic section (0..startColParity)
   // -----------------------------
   if (colIdx < startColParity) {
-    const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
+    const uint32_t idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
     int32_t *dst = (int32_t *)(&p_llrProcBuf[idxBn] + lane * 4);
     int32_t *src = (int32_t *)(&p_llr[colIdx * Zc] + lane * 4);
     *dst = *src;
@@ -1523,8 +1526,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G19_stream(const t_nrLDPC_lut *p_lut,
 
 __device__ void llrRes2llrOut_Kernel_BG1_int8(uint8_t R, int8_t *llrOut, int8_t *llrRes, int Zc)
 {
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int colIdx = tid / RowLength;
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t colIdx = tid / RowLength;
   int lane = tid % RowLength;
   if (colIdx >= 42)
     return;
@@ -1540,7 +1543,7 @@ __device__ void llrRes2llrOut_Kernel_BG1_int8(uint8_t R, int8_t *llrOut, int8_t 
 
   int8_t *p_llrOut = &llrOut[0];
   if (colIdx < startColParity) {
-    const int idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
+    const uint32_t idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
     int32_t *dst_ptr2 = (int32_t *)(p_llrOut + colIdx * Zc + lane * 4);
     int32_t *src_ptr2 = (int32_t *)(&llrRes[idxBn] + lane * 4);
     *dst_ptr2 = *src_ptr2; // 0x01010101*colIdx;//
@@ -1558,7 +1561,7 @@ __device__ void llrRes2llrOut_Kernel_BG1_int8(uint8_t R, int8_t *llrOut, int8_t 
 
 __device__ void llr2bitPacked_Kernel_BG1_int8(uint8_t *out, int8_t *llrOut, uint32_t numLLR)
 {
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
   int totalGroups = numLLR >> 3; // every 8  LLR as a group
 
   if (tid >= totalGroups)
@@ -1578,7 +1581,7 @@ __device__ void llr2bitPacked_Kernel_BG1_int8(uint8_t *out, int8_t *llrOut, uint
 
 __device__ void llr2bit_Kernel_BG1_int8(uint8_t *out, int8_t *llrOut, uint32_t numLLR)
 {
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
   int totalGroups = numLLR >> 3; // every 8 LLR as a group
 
   if (tid >= totalGroups)
