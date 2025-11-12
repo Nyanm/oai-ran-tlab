@@ -639,6 +639,15 @@ struct openair0_device_t {
      * \param slot
      */
     void (*north_write_prach_func)(uint32_t **prachF, int slot, int frame);
+    
+    /*! \brief O-RU only: writes PUSCH FD IQ.
+     * \param puschF buffer containing PUSCH samples
+     * \param slot
+     * \param frame
+     * \param antenna_id antenna index to write to
+     * \param symbol_mask bit mask indicating which symbols to read from puschF
+     */
+    void (*north_write_pusch_func)(uint32_t *puschF, int slot, int frame, int antenna_id, uint32_t symbol_mask);
     /*! \brief O-RU only: sends UL FD IQ.
      * \param slot
      * \param start_antenna_index first antenna index to send

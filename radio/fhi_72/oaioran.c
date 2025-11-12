@@ -330,6 +330,38 @@ int write_prach_data(uint32_t **prachDataF, int nb_rx, int frame, int slot)
   return 0;
 }
 
+int write_pusch_data(uint32_t *puschDataF, int slot, int frame, int aarx, uint32_t symbol_mask)
+{
+  struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
+  struct xran_ru_config *ru_conf = &fh_cfg->ru_conf;
+  AssertFatal(ru_conf->compMeth == XRAN_COMPMETHOD_NONE, "Only COMPMETHOD_NONE is supported in write_pusch_data\n");
+  int slots_per_frame = 10 << fh_cfg->frame_conf.nNumerology;
+
+  int tti = slots_per_frame * frame + slot;
+  int fftsize = 1 << fh_cfg->ru_conf.fftSize;
+  int nPRBs = fh_cfg->nDLRBs;
+  int num_subcarriers = nPRBs * 12;
+  int first_carrier_offset = fftsize - (num_subcarriers / 2);
+  oran_buf_list_t *bufs = get_xran_buffers(0);
+  for (int sym_idx = 0; sym_idx < 14; sym_idx++) {
+    if (((1 << sym_idx) & symbol_mask) == 0)
+      continue;
+    int16_t *dst = (int16_t *)bufs->dst[aarx][tti % XRAN_N_FE_BUF_LEN].pBuffers[sym_idx].pData;
+    int16_t *src = (int16_t *)&puschDataF[fftsize * sym_idx];
+    if (ru_conf->compMeth == XRAN_COMPMETHOD_NONE) {
+      int sc_index = 0;
+      for (int idx = first_carrier_offset; idx < fftsize; idx++) {
+        dst[sc_index++] = ((int16_t)ntohs(src[idx]));
+      }
+      int scs_left = num_subcarriers - sc_index;
+      for (int idx = 0; idx < scs_left; idx++) {
+        dst[sc_index++] = ((int16_t)ntohs(src[idx]));
+      }
+    }
+  }
+  return 0;
+}
+
 /** @brief Check if symbol in slot is UL.
  *
  * @param frame_conf xran frame configuration

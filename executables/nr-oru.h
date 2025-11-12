@@ -24,6 +24,9 @@
 #include "openair1/PHY/defs_RU.h"
 #include "openair1/PHY/defs_nr_common.h"
 #include "openair2/LAYER2/NR_MAC_COMMON/nr_prach_config.h"
+#include "actor.h"
+
+#define NUM_PUSCH_ACTORS 2
 
 typedef struct {
   openair0_timestamp sample;
@@ -39,6 +42,9 @@ typedef struct {
   notifiedFIFO_t sync_fifo;
   nr_prach_info_t prach_info;
   time_stats_t rx_prach;
+  pthread_barrier_t barrier;
+  Actor_t prach_actor;
+  Actor_t pusch_actors[NUM_PUSCH_ACTORS];
 } ORU_t;
 
 void *oru_north_read_thread(void *arg);

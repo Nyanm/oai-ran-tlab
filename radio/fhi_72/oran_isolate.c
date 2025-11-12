@@ -304,6 +304,11 @@ void oran_write_prach(uint32_t** prach_dataF,
   write_prach_data(prach_dataF, 1, frame, slot);
 }
 
+void oran_write_push(uint32_t *pusch_dataF, int slot, int frame, int aarx, uint32_t symbol_mask)
+{
+  write_pusch_data(pusch_dataF, slot, frame, aarx, symbol_mask);
+}
+
 void oran_prepare_packets(int slot, int start_antenna_index, int num_antennas, uint32_t symbol_mask)
 {
   int xran_port_id = 0; // TODO: support multiple ports
@@ -451,6 +456,7 @@ __attribute__((__visibility__("default"))) int transport_init(openair0_device *d
   device->openair0_cfg = &openair0_cfg[0];
   device->xran_api.north_in_func = oran_fh_if4p5_north_in;
   device->xran_api.north_write_prach_func = oran_write_prach;
+  device->xran_api.north_write_pusch_func = oran_write_push;
   device->xran_api.north_out_func = oran_prepare_packets;
 
   return 0;

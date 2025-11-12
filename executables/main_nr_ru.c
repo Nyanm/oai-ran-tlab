@@ -59,6 +59,7 @@
 #include "openair1/PHY/INIT/nr_phy_init.h"
 #include "openair1/SCHED_NR/sched_nr.h"
 #include "openair2/LAYER2/NR_MAC_COMMON/nr_prach_config.h"
+#include "actor.h"
 
 pthread_cond_t sync_cond;
 pthread_mutex_t sync_mutex;
@@ -196,6 +197,14 @@ int main(int argc, char **argv)
 
   RU_t *ru = RC.ru[0];
   ORU_t oru = {0};
+  pthread_barrier_init(&oru.barrier, NULL, NUM_PUSCH_ACTORS + 1);
+  for (int i = 0; i < NUM_PUSCH_ACTORS; i++) {
+    char actor_name[20];
+    sprintf(actor_name, "PUSCH_Actor%d", i);
+    init_actor(&oru.pusch_actors[i], actor_name, -1);
+  }
+  init_actor(&oru.prach_actor, "PRACH_Actor", -1);
+
   initNotifiedFIFO(&oru.sync_fifo);
   oru.ru = ru;
   cpumeas(CPUMEAS_ENABLE);

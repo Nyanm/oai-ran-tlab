@@ -21,6 +21,7 @@
 #include "PHY/TOOLS/tools_defs.h"
 #include "PHY/defs_RU.h"
 #include "nfapi_nr_interface_scf.h"
+#include <bits/pthreadtypes.h>
 #define _GNU_SOURCE
 #include "nr-oru.h"
 #include "openair1/PHY/defs_nr_common.h"
@@ -33,10 +34,32 @@
 #include <sched.h>
 
 typedef struct {
+  int x;
+  int y;
+  int size_x;
+  int size_y;
+} thread_grid2d_t;
+
+typedef struct {
   int frame_unwrap;
   int last_frame;
   int64_t sync_offset;
 } sync_params_t;
+
+typedef struct {
+  ORU_t *oru;
+  int frame;
+  int slot;
+} prach_task_args_t;
+
+typedef struct {
+  ORU_t *oru;
+  int frame;
+  int slot;
+  int num_symbols;
+  int start_symbol;
+  thread_grid2d_t thread_grid;
+} pusch_task_args_t;
 
 extern void tx_rf_symbols(RU_t *ru, int frame, int slot, uint64_t timestamp, int start_symbol, int num_symbols);
 
@@ -322,6 +345,54 @@ void receive_prach(ORU_t *oru, int frame, int slot)
   }
 }
 
+void receive_pusch(ORU_t *oru, int frame, int slot, int start_symbol, int num_symbols, thread_grid2d_t *thread_grid)
+{
+  int aarx_start = thread_grid->y;
+  int aarx_stride = thread_grid->size_y;
+  int symbol_start = start_symbol + thread_grid->x;
+  int symbol_stride = thread_grid->size_x;
+
+  RU_t *ru = oru->ru;
+  NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+
+  c16_t rxdataF[fp->symbols_per_slot * fp->ofdm_symbol_size] __attribute__((aligned(32)));
+  for (int aarx = aarx_start; aarx < fp->nb_antennas_rx; aarx += aarx_stride) {
+    uint32_t symbol_mask = 0;
+    for (int symbol = symbol_start; symbol < start_symbol + num_symbols; symbol += symbol_stride) {
+      symbol_mask |= (1 << symbol);
+      nr_slot_fep_ul(fp,
+                     ru->common.rxdata[aarx],
+                     (int32_t *)rxdataF,
+                     symbol,
+                     slot,
+                     ru->N_TA_offset);
+      apply_nr_rotation_symbol_RX(fp,
+                                  &rxdataF[symbol * fp->ofdm_symbol_size],
+                                  fp->symbol_rotation[1],
+                                  fp->N_RB_UL,
+                                  slot,
+                                  symbol);
+    }
+    ru->ifdevice.xran_api.north_write_pusch_func((uint32_t *)rxdataF,
+                                                 slot,
+                                                 frame,
+                                                 aarx,
+                                                 symbol_mask);
+  }
+}
+
+void pusch_job(void *args) {
+  pusch_task_args_t *job = (pusch_task_args_t *)args;
+  receive_pusch(job->oru, job->frame, job->slot, job->start_symbol, job->num_symbols, &job->thread_grid);
+  pthread_barrier_wait(&job->oru->barrier);
+}
+
+void prach_job(void *args) {
+  prach_task_args_t *job = (prach_task_args_t *)args;
+  receive_prach(job->oru, job->frame, job->slot);
+  pthread_barrier_wait(&job->oru->barrier);
+}
+
 void *oru_south_read_thread(void *arg)
 {
   ORU_t *oru = arg;
@@ -349,11 +420,37 @@ void *oru_south_read_thread(void *arg)
 
       bool is_slot_end = (symbol + symbols_per_iteration) >= fp->symbols_per_slot;
       if (rx_slot_type == NR_UPLINK_SLOT || rx_slot_type == NR_MIXED_SLOT) {
+        int num_prach_jobs = is_slot_end ? 1 : 0;
+        int num_push_jobs = NUM_PUSCH_ACTORS;
+        int num_barrier_waits = num_prach_jobs + num_push_jobs + 1;
+        pthread_barrier_init(&oru->barrier, NULL, num_barrier_waits);
         if (is_slot_end) {
-          receive_prach(oru, current_frame, current_slot);
+          notifiedFIFO_elt_t *prach_task = newNotifiedFIFO_elt(sizeof(prach_task_args_t), 0, NULL, prach_job);
+          prach_task_args_t *job = NotifiedFifoData(prach_task);
+          job->oru = oru;
+          job->frame = current_frame;
+          job->slot = current_slot;
+          pushNotifiedFIFO(&oru->prach_actor.fifo, prach_task);
         }
+
+        for (int i = 0; i < NUM_PUSCH_ACTORS; i++) {
+          notifiedFIFO_elt_t *pusch_task = newNotifiedFIFO_elt(sizeof(pusch_task_args_t), 0, NULL, pusch_job);
+          pusch_task_args_t *job = NotifiedFifoData(pusch_task);
+          job->oru = oru;
+          job->frame = current_frame;
+          job->slot = current_slot;
+          job->start_symbol = symbol;
+          job->num_symbols = symbols_per_iteration;
+          job->thread_grid.x = 0;
+          job->thread_grid.size_x = 1;
+          job->thread_grid.y = i;
+          job->thread_grid.size_y = NUM_PUSCH_ACTORS;
+          pushNotifiedFIFO(&oru->pusch_actors[i].fifo, pusch_task);
+        }
+
+        pthread_barrier_wait(&oru->barrier);
+        ru->ifdevice.xran_api.north_out_func(current_slot, 0, ru->nb_rx, ((1 << symbols_per_iteration) - 1) << symbol);
       }
-      ru->ifdevice.xran_api.north_out_func(current_slot, 0, ru->nb_rx, ((1 << symbols_per_iteration) - 1) << symbol);
     }
     current_slot++;
     if (current_slot == fp->slots_per_frame) {
