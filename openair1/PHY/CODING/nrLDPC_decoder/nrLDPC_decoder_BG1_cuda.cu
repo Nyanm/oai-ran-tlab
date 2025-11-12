@@ -629,6 +629,8 @@ __global__ void llrPreProc_Kernel_BG1_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   uint8_t CnIdx = lut_CnIdx_BG1_R13[row] - 1;
   uint8_t MsgIdx = lut_CnMsgIdx_BG1_R13[row];
   uint32_t InnerOffset = d_lut_startAddrCnGroups_BG1[groupIdx] + Zc * CnIdx;
+  uint32_t idxBn = llr_cn_preProc_map_BG1_R13[row][0];
+  uint32_t circShift = llr_cn_preProc_map_BG1_R13[row][1];
 
   int8_t *p_cnProcBuf = (int8_t *)(d_cnProcBuf + segIdx * NR_LDPC_SIZE_CN_PROC_BUF + InnerOffset);
   int8_t *p_llr = (int8_t *)(d_llr + segIdx * 68 * Zc);
@@ -636,31 +638,31 @@ __global__ void llrPreProc_Kernel_BG1_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
 
   switch (groupIdx) {
     case 0:
-      llrPreProc_Kernel_BG1_int8_G3_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc, BG);
+      llrPreProc_Kernel_BG1_int8_G3_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, idxBn, circShift, Zc, BG);
       break;
     case 1:
-      llrPreProc_Kernel_BG1_int8_G4_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc, BG);
+      llrPreProc_Kernel_BG1_int8_G4_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, idxBn, circShift, Zc, BG);
       break;
     case 2:
-      llrPreProc_Kernel_BG1_int8_G5_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc, BG);
+      llrPreProc_Kernel_BG1_int8_G5_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, idxBn, circShift, Zc, BG);
       break;
     case 3:
-      llrPreProc_Kernel_BG1_int8_G6_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc, BG);
+      llrPreProc_Kernel_BG1_int8_G6_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, idxBn, circShift, Zc, BG);
       break;
     case 4:
-      llrPreProc_Kernel_BG1_int8_G7_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc, BG);
+      llrPreProc_Kernel_BG1_int8_G7_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, idxBn, circShift, Zc, BG);
       break;
     case 5:
-      llrPreProc_Kernel_BG1_int8_G8_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc, BG);
+      llrPreProc_Kernel_BG1_int8_G8_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, idxBn, circShift, Zc, BG);
       break;
     case 6:
-      llrPreProc_Kernel_BG1_int8_G9_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc, BG);
+      llrPreProc_Kernel_BG1_int8_G9_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, idxBn, circShift, Zc, BG);
       break;
     case 7:
-      llrPreProc_Kernel_BG1_int8_G10_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc, BG);
+      llrPreProc_Kernel_BG1_int8_G10_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, idxBn, circShift, Zc, BG);
       break;
     case 8:
-      llrPreProc_Kernel_BG1_int8_G19_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, groupIdx, CnIdx, Zc, BG);
+      llrPreProc_Kernel_BG1_int8_G19_stream(p_lut, p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, idxBn, circShift, Zc, BG);
       break;
   }
 }
