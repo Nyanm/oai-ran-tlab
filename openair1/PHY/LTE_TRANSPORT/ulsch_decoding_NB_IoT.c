@@ -156,10 +156,10 @@ NB_IoT_eNB_NULSCH_t *new_eNB_ulsch_NB_IoT(uint8_t max_turbo_iterations,uint8_t N
             else
               exit_flag=2;
 
-            ulsch->harq_process->d[r] = (short*)malloc16(((3*8*6144)+12+96)*sizeof(short));
+            ulsch->harq_process->d[r] = (int32_t*)malloc16(((3*8*6144)+12+96)*sizeof(int32_t));
 
             if (ulsch->harq_process->d[r])
-              memset(ulsch->harq_process->d[r],0,((3*8*6144)+12+96)*sizeof(short));
+              memset(ulsch->harq_process->d[r],0,((3*8*6144)+12+96)*sizeof(int32_t));
             else
               exit_flag=2;
           }
