@@ -479,7 +479,7 @@ typedef struct {
   int16_t               q_ACK[MAX_ACK_PAYLOAD_NB_IoT];
   /// Number of code segments (for definition see 36-212 V8.6 2009-03, p.9)
   /// Concatenated "e"-sequences (for definition see 36-212 V8.6 2009-03, p.17-18)
-  int16_t               e[MAX_NUM_CHANNEL_BITS_NB_IoT] __attribute__((aligned(32)));
+  int32_t               e[MAX_NUM_CHANNEL_BITS_NB_IoT] __attribute__((aligned(32)));
   /// coded RI bits
   int16_t               q_RI[MAX_RI_PAYLOAD_NB_IoT];
   /// "q" sequences for CQI/PMI (for definition see 36-212 V8.6 2009-03, p.27)
