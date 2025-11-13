@@ -87,7 +87,7 @@ void free_eNB_ulsch_NB_IoT(NB_IoT_eNB_NULSCH_t *ulsch)
 
         for (r=0; r<MAX_NUM_ULSCH_SEGMENTS; r++)
           if (ulsch->harq_process->d[r]) {
-            free16(ulsch->harq_process->d[r],((3*8*6144)+12+96)*sizeof(short));
+            free16(ulsch->harq_process->d[r],((3*8*6144)+12+96)*sizeof(int32_t));
             ulsch->harq_process->d[r] = NULL;
           }
 
