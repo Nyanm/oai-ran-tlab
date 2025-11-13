@@ -927,7 +927,7 @@ int ulsch_decoding_data_NB_IoT(PHY_VARS_eNB *eNB,int UE_id,int harq_pid,int llr8
   uint8_t crc_type;
   int offset = 0;
   int ret = 1;
-  int16_t dummy_w[MAX_NUM_ULSCH_SEGMENTS_NB_IoT][3*(6144+64)];
+  int32_t dummy_w[MAX_NUM_ULSCH_SEGMENTS_NB_IoT][3*(6144+64)];
   NB_IoT_eNB_NULSCH_t *ulsch = eNB->ulsch_NB_IoT[UE_id];
   // NB_IoT_UL_eNB_HARQ_t *ulsch_harq = ulsch->harq_process[harq_pid];
   NB_IoT_UL_eNB_HARQ_t *ulsch_harq = ulsch->harq_process;
@@ -935,7 +935,7 @@ int ulsch_decoding_data_NB_IoT(PHY_VARS_eNB *eNB,int UE_id,int harq_pid,int llr8
   int G = ulsch_harq->G;
   unsigned int E;
 
-  uint8_t (*tc)(int16_t *y,
+  uint8_t (*tc)(int32_t *y,
                 uint8_t *,
                 uint16_t,
                 uint16_t,
@@ -943,18 +943,12 @@ int ulsch_decoding_data_NB_IoT(PHY_VARS_eNB *eNB,int UE_id,int harq_pid,int llr8
                 uint8_t,
                 uint8_t,
                 uint8_t,
-                time_stats_t *,
-                time_stats_t *,
-                time_stats_t *,
-                time_stats_t *,
-                time_stats_t *,
-                time_stats_t *,
-                time_stats_t *);
+                uint8_t);
 
   if (llr8_flag == 0)
-    tc = phy_threegpplte_turbo_decoder16;
+    tc = phy_threegpplte_turbo_decoder_scalar;
   else
-    tc = phy_threegpplte_turbo_decoder8;
+    tc = phy_threegpplte_turbo_decoder_scalar;
 
 
   for (r=0; r<ulsch_harq->C; r++) {
@@ -985,7 +979,7 @@ int ulsch_decoding_data_NB_IoT(PHY_VARS_eNB *eNB,int UE_id,int harq_pid,int llr8
     printf("f1 %d, f2 %d, F %d\n",f1f2mat_old[2*iind],f1f2mat_old[1+(2*iind)],(r==0) ? ulsch_harq->F : 0);
 #endif
 
-    memset(&dummy_w[r][0],0,3*(6144+64)*sizeof(short));
+    memset(&dummy_w[r][0],0,3*(6144+64)*sizeof(int32_t));
     ulsch_harq->RTC[r] = generate_dummy_w(4+(Kr_bytes*8),
                                           (uint8_t*)&dummy_w[r][0],
                                           (r==0) ? ulsch_harq->F : 0);
@@ -1035,7 +1029,9 @@ int ulsch_decoding_data_NB_IoT(PHY_VARS_eNB *eNB,int UE_id,int harq_pid,int llr8
       crc_type = CRC24_B;
    
    // start_meas(&eNB->ulsch_turbo_decoding_stats);
-    
+
+    unsigned char inst = 0;
+
     ret = tc(&ulsch_harq->d[r][96],
 	     ulsch_harq->c[r],
 	     Kr,
@@ -1044,13 +1040,7 @@ int ulsch_decoding_data_NB_IoT(PHY_VARS_eNB *eNB,int UE_id,int harq_pid,int llr8
 	     ulsch->max_turbo_iterations,//MAX_TURBO_ITERATIONS,
 	     crc_type,
 	     (r==0) ? ulsch_harq->F : 0,
-	     &eNB->ulsch_tc_init_stats,
-	     &eNB->ulsch_tc_alpha_stats,
-	     &eNB->ulsch_tc_beta_stats,
-	     &eNB->ulsch_tc_gamma_stats,
-	     &eNB->ulsch_tc_ext_stats,
-	     &eNB->ulsch_tc_intl1_stats,
-	     &eNB->ulsch_tc_intl2_stats);
+	     inst);
     
    // stop_meas(&eNB->ulsch_turbo_decoding_stats);
     
