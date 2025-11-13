@@ -1,0 +1,27 @@
+services:
+    oai-nr-ue:
+        image: ${REGISTRY-oaisoftwarealliance/}${NRUE_IMG:-oai-nr-ue}:${TAG:-develop}
+        network_mode: host
+        container_name: oai-nr-ue
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_ADMIN  # for interface bringup
+            - NET_RAW    # for ping
+            - SYS_NICE   # for performance
+            - IPC_LOCK   # for memory locking
+        devices:
+             - /dev/net/tun:/dev/net/tun
+        ulimits:
+          core: -1 # for core dumps
+        #entrypoint: /bin/bash -c "sleep infinity"
+        environment:
+            TZ: Europe/Paris
+            USE_ADDITIONAL_OPTIONS:  --usrp-args type=b200 -C 3350010000 -r 78 --numerology 1 --band 78 --ssb 345 --ue-fo-compensation --uicc0.imsi 208970100001127 --A 60 --thread-pool 8,9,10 --num-dl-actors 3 --num-ul-actors 3 --ue-txgain 5 --ue-rxgain 115 --loader.ldpc.shlibversion _cuda --log_config.global_log_options utc_time
+        volumes:
+            - ../../conf_files/ue.sa.conf:/opt/oai-nr-ue/etc/nr-ue.conf
+        healthcheck:
+            test: /bin/bash -c "pgrep nr-uesoftmodem"
+            interval: 10s
+            timeout: 5s
+            retries: 5
