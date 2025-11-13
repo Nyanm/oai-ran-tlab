@@ -841,7 +841,7 @@ typedef struct {
   int ulsch_power_1[2];
   /// \brief llr values.
   /// - first index: ? [0..1179743] (hard coded)
-  int16_t *llr;
+  int32_t *llr;
 #ifdef LOCALIZATION
   /// number of active subcarrier for a specific UE
   int32_t active_subcarrier;
