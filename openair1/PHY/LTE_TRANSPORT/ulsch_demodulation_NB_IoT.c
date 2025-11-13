@@ -1521,11 +1521,11 @@ void  turbo_decoding_NB_IoT(PHY_VARS_eNB           *eNB,
           unsigned int   r_offset=0,Kr_bytes,iind=0;
           uint8_t        crc_type;
           int            offset = 0;
-          int16_t        dummy_w[MAX_NUM_ULSCH_SEGMENTS_NB_IoT][3*(6144+64)];
+          int32_t        dummy_w[MAX_NUM_ULSCH_SEGMENTS_NB_IoT][3*(6144+64)];
           int            ret = 1;
           unsigned int   E; 
 //**************Scalar Turbo Decoder**********************
-          uint8_t (*tc)(int16_t *y,
+          uint8_t (*tc)(int32_t *y,
                         uint8_t *,
                         uint16_t,
                         uint16_t,
@@ -1570,7 +1570,7 @@ void  turbo_decoding_NB_IoT(PHY_VARS_eNB           *eNB,
                   LOG_E(PHY,"ulsch_decoding: Illegal codeword size %d!!!\n",Kr_bytes);
               }
 
-              memset(&dummy_w[r][0],0,3*(6144+64)*sizeof(short));
+              memset(&dummy_w[r][0],0,3*(6144+64)*sizeof(int32_t));
               ulsch_harq->RTC[r] = generate_dummy_w(4+(Kr_bytes*8),
                                                     (uint8_t*)&dummy_w[r][0],
                                                     (r==0) ? ulsch_harq->F : 0);
