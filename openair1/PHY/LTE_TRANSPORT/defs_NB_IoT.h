@@ -491,9 +491,9 @@ typedef struct {
   /// coded CQI bits
   int8_t                o_d[96+((MAX_CQI_BITS_NB_IoT+8)*3)];
   /// soft bits for each received segment ("w"-sequence)(for definition see 36-212 V8.6 2009-03, p.15)
-  int16_t               w[MAX_NUM_ULSCH_SEGMENTS_NB_IoT][3*(6144+64)];
+  int32_t               w[MAX_NUM_ULSCH_SEGMENTS_NB_IoT][3*(6144+64)];
   /// soft bits for each received segment ("d"-sequence)(for definition see 36-212 V8.6 2009-03, p.15)
-  int16_t               *d[MAX_NUM_ULSCH_SEGMENTS_NB_IoT];
+  int32_t               *d[MAX_NUM_ULSCH_SEGMENTS_NB_IoT];
   ///
   uint32_t              C;
   /// Number of "small" code segments (for definition see 36-212 V8.6 2009-03, p.10)
