@@ -1689,11 +1689,11 @@ void  turbo_decoding_NB_IoT(PHY_VARS_eNB           *eNB,
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
-void deinterleaving_NPUSCH_data_NB_IoT(NB_IoT_UL_eNB_HARQ_t *ulsch_harq, int16_t *y, unsigned int G)
+void deinterleaving_NPUSCH_data_NB_IoT(NB_IoT_UL_eNB_HARQ_t *ulsch_harq, int32_t *y, unsigned int G)
 {
     
     unsigned int    j2=0;
-    int16_t         *yp,*ep;
+    int32_t         *yp,*ep;
     int             iprime;
 
     for (iprime=0,yp=&y[j2],ep=&ulsch_harq->e[0]; iprime<G; iprime+=8,j2+=8,ep+=8,yp+=8)

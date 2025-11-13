@@ -409,7 +409,7 @@ void decode_NPUSCH_msg_NB_IoT(PHY_VARS_eNB        *eNB,
                               uint8_t             rx_subframe,
                               uint32_t            rx_frame);
 
-void deinterleaving_NPUSCH_data_NB_IoT(NB_IoT_UL_eNB_HARQ_t *ulsch_harq, int16_t *y, unsigned int G);
+void deinterleaving_NPUSCH_data_NB_IoT(NB_IoT_UL_eNB_HARQ_t *ulsch_harq, int32_t *y, unsigned int G);
 
 
 uint8_t rx_ulsch_Gen_NB_IoT(PHY_VARS_eNB             *eNB,
