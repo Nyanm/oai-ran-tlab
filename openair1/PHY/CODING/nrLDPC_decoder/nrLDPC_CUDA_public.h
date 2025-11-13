@@ -81,12 +81,12 @@ __device__ __forceinline__ void moveBricks_forput_circ(int8_t *__restrict__ dstB
   }
 }
 __device__ __forceinline__ void moveBricks_invget_circ(int8_t *__restrict__ dstBuf,
-                                                       uint16_t dstBuf_Offset,
+                                                       uint32_t dstBuf_Offset,
                                                        uint8_t *__restrict__ Four_Bricks,
-                                                       uint16_t Z,
-                                                       uint16_t cshift)
+                                                       uint32_t Z,
+                                                       uint32_t cshift)
 {
-  uint16_t pos = (cshift + dstBuf_Offset) % Z;
+  uint32_t pos = (cshift + dstBuf_Offset) % Z;
 
   switch (pos + 3 - Z) {
     case 0:

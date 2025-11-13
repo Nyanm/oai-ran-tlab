@@ -868,8 +868,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G3_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
                                                      uint32_t lane,
-                                                     uint8_t groupId,
-                                                     uint8_t CnIdx,
+                                                     uint32_t idxBn,
+                                                     uint32_t circShift,
                                                      uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
@@ -886,10 +886,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G3_stream(const t_nrLDPC_lut *p_lut,
     // const uint baseShift = 1 * Zc * row; // offset pointed at different BN
     // const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
 
-    const uint16_t *lut_circShift_CNG3 = p_lut->circShift[0].d;
-    const uint8_t *lut_posBnInCnProcBuf_CNG3 = p_lut->posBnInCnProcBuf[0].d;
+    //const uint16_t *lut_circShift_CNG3 = p_lut->circShift[0].d;
+    //const uint8_t *lut_posBnInCnProcBuf_CNG3 = p_lut->posBnInCnProcBuf[0].d;
 
-    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG3[row] * Zc;
+    //const uint32_t idxBn = lut_posBnInCnProcBuf_CNG3[row] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -898,7 +898,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G3_stream(const t_nrLDPC_lut *p_lut,
 
     p_cnProcBufBit = (uint32_t *)(p_cnProcBuf + 1 * Zc * row + lane * 4);
 
-    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG3[row]);
+    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, circShift);
 
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
@@ -941,8 +941,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G4_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
                                                      uint32_t lane,
-                                                     uint8_t groupId,
-                                                     uint8_t CnIdx,
+                                                     uint32_t idxBn,
+                                             uint32_t circShift,
                                                      uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
@@ -957,10 +957,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G4_stream(const t_nrLDPC_lut *p_lut,
     // const uint baseShift = 5 * Zc * row; // offset pointed at different BN
     // const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
 
-    const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-    const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
+    //const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
+    //const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    //const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -969,7 +969,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G4_stream(const t_nrLDPC_lut *p_lut,
 
     p_cnProcBufBit = (uint32_t *)(p_cnProcBuf + 5 * Zc * row + lane * 4);
 
-    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
+    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, circShift);
 
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
@@ -1012,8 +1012,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G5_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
                                                      uint32_t lane,
-                                                     uint8_t groupId,
-                                                     uint8_t CnIdx,
+                                                     uint32_t idxBn,
+                                             uint32_t circShift,
                                                      uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
@@ -1031,10 +1031,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G5_stream(const t_nrLDPC_lut *p_lut,
     // const uint baseShift = 18 * Zc * row; // offset pointed at different BN
     // const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
 
-    const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-    const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
+    //const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
+    //const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    //const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1043,7 +1043,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G5_stream(const t_nrLDPC_lut *p_lut,
 
     p_cnProcBufBit = (uint32_t *)(p_cnProcBuf + 18 * Zc * row + lane * 4);
 
-    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
+    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, circShift);
 
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
@@ -1086,8 +1086,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G6_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
                                                      uint32_t lane,
-                                                     uint8_t groupId,
-                                                     uint8_t CnIdx,
+                                                     uint32_t idxBn,
+                                             uint32_t circShift,
                                                      uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
@@ -1105,10 +1105,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G6_stream(const t_nrLDPC_lut *p_lut,
     const uint baseShift = 8 * Zc * row; // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
 
-    const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-    const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
+    //const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
+    //const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    //const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1117,7 +1117,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G6_stream(const t_nrLDPC_lut *p_lut,
 
     p_cnProcBufBit = (uint32_t *)(p_cnProcBuf + destByte);
 
-    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
+    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, circShift);
 
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
@@ -1160,8 +1160,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G7_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
                                                      uint32_t lane,
-                                                     uint8_t groupId,
-                                                     uint8_t CnIdx,
+                                                     uint32_t idxBn,
+                                             uint32_t circShift,
                                                      uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
@@ -1179,10 +1179,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G7_stream(const t_nrLDPC_lut *p_lut,
     const uint baseShift = 5 * Zc * row; // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
 
-    const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-    const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
+    //const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
+    //const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    //const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1191,7 +1191,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G7_stream(const t_nrLDPC_lut *p_lut,
 
     p_cnProcBufBit = (uint32_t *)(p_cnProcBuf + destByte);
 
-    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
+    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, circShift);
 
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
@@ -1234,8 +1234,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G8_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
                                                      uint32_t lane,
-                                                     uint8_t groupId,
-                                                     uint8_t CnIdx,
+                                                     uint32_t idxBn,
+                                             uint32_t circShift,
                                                      uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
@@ -1253,10 +1253,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G8_stream(const t_nrLDPC_lut *p_lut,
     const uint baseShift = 2 * Zc * row; // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
 
-    const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-    const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
+    //const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
+    //const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    //const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1265,7 +1265,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G8_stream(const t_nrLDPC_lut *p_lut,
 
     p_cnProcBufBit = (uint32_t *)(p_cnProcBuf + destByte);
 
-    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
+    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, circShift);
 
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
@@ -1308,8 +1308,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G9_stream(const t_nrLDPC_lut *p_lut,
                                                      int8_t *p_cnProcBuf,
                                                      int8_t MsgIdx,
                                                      uint32_t lane,
-                                                     uint8_t groupId,
-                                                     uint8_t CnIdx,
+                                                     uint32_t idxBn,
+                                             uint32_t circShift,
                                                      uint32_t Zc,
                                                      uint8_t BG)
 { // first part it should be llr to CnProc
@@ -1327,10 +1327,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G9_stream(const t_nrLDPC_lut *p_lut,
     const uint baseShift = 2 * Zc * row; // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
 
-    const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-    const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
+    //const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
+    //const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    //const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1339,7 +1339,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G9_stream(const t_nrLDPC_lut *p_lut,
 
     p_cnProcBufBit = (uint32_t *)(p_cnProcBuf + destByte);
 
-    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
+    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, circShift);
 
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
@@ -1382,8 +1382,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G10_stream(const t_nrLDPC_lut *p_lut,
                                                       int8_t *p_cnProcBuf,
                                                       int8_t MsgIdx,
                                                       int lane,
-                                                      uint8_t groupId,
-                                                      uint8_t CnIdx,
+                                                      uint32_t idxBn,
+                                             uint32_t circShift,
                                                       int Zc,
                                                       uint8_t BG)
 { // first part it should be llr to CnProc
@@ -1401,10 +1401,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G10_stream(const t_nrLDPC_lut *p_lut,
     const uint baseShift = 1 * Zc * row; // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
 
-    const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-    const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
+    //const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
+    //const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    //const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1413,7 +1413,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G10_stream(const t_nrLDPC_lut *p_lut,
 
     p_cnProcBufBit = (uint32_t *)(p_cnProcBuf + destByte);
 
-    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
+    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, circShift);
 
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
@@ -1456,8 +1456,8 @@ __device__ void llrPreProc_Kernel_BG1_int8_G19_stream(const t_nrLDPC_lut *p_lut,
                                                       int8_t *p_cnProcBuf,
                                                       int8_t MsgIdx,
                                                       int lane,
-                                                      uint8_t groupId,
-                                                      uint8_t CnIdx,
+                                                      uint32_t idxBn,
+                                             uint32_t circShift,
                                                       int Zc,
                                                       uint8_t BG)
 { // first part it should be llr to CnProc
@@ -1475,10 +1475,10 @@ __device__ void llrPreProc_Kernel_BG1_int8_G19_stream(const t_nrLDPC_lut *p_lut,
     const uint baseShift = 4 * Zc * row; // offset pointed at different BN
     const uint destByte = baseShift + lane * 4; // offset to different part inside different BN
 
-    const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
-    const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
+    //const uint16_t *lut_circShift_CNG = arrPos(p_lut->circShift[groupId], row);
+    //const uint8_t *lut_posBnInCnProcBuf_CNG = arrPos(p_lut->posBnInCnProcBuf[groupId], row);
 
-    const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
+    //const uint32_t idxBn = lut_posBnInCnProcBuf_CNG[CnIdx] * Zc;
 
     uint32_t *p_cnProcBufBit;
 
@@ -1487,7 +1487,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_G19_stream(const t_nrLDPC_lut *p_lut,
 
     p_cnProcBufBit = (uint32_t *)(p_cnProcBuf + destByte);
 
-    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, lut_circShift_CNG[CnIdx]);
+    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, circShift);
 
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }

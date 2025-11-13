@@ -203,7 +203,7 @@ __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   if (tid >= num_TotalThreads_BG1_R13) // 30336 is the total processed 316 msg * 96
     return;
 
-  uint32_t segIdx = blockIdx.y;
+  uint8_t segIdx = blockIdx.y;
   int8_t *p_iter_ptr = iter_ptr + segIdx;
   int8_t *p_PC_Flag = PC_Flag + segIdx;
 
@@ -319,7 +319,7 @@ __global__ void bnProcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ 
                                                      int8_t numMaxIter,
                                                      int8_t *PC_Flag)
 {
-  uint32_t segIdx = blockIdx.y;
+  uint8_t segIdx = blockIdx.y;
   int8_t *p_iter_ptr = iter_ptr + segIdx;
   int8_t *p_PC_Flag = PC_Flag + segIdx;
 
@@ -420,7 +420,7 @@ __global__ void cnProcKernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= num_TotalThreads_BG1_R23) // 13824 is the total processed 144 msg * 96
     return;
-  uint32_t segIdx = blockIdx.y;
+  uint8_t segIdx = blockIdx.y;
   int8_t *p_iter_ptr = iter_ptr + segIdx;
   int8_t *p_PC_Flag = PC_Flag + segIdx;
   // Early stopping
@@ -518,7 +518,7 @@ __global__ void bnProcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict__ 
                                                      int8_t numMaxIter,
                                                      int8_t *PC_Flag)
 {
-  uint32_t segIdx = blockIdx.y;
+  uint8_t segIdx = blockIdx.y;
   int8_t *p_iter_ptr = iter_ptr + segIdx;
   int8_t *p_PC_Flag = PC_Flag + segIdx;
 
@@ -615,7 +615,7 @@ __global__ void llrPreProc_Kernel_BG1_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                                           uint8_t BG)
 {
   uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
-  uint32_t segIdx = blockIdx.y;
+  uint8_t segIdx = blockIdx.y;
 
   if (tid >= num_TotalThreads_BG1_R13) // 30336 is the total processed 316 msg * 96
     return;
@@ -694,7 +694,7 @@ __global__ void llrRes2llrOut_Kernel_BG1_int8_BIG_stream(uint8_t R,
                                                          int8_t *p_llrOut,
                                                          uint32_t numLLR)
 {
-  uint32_t segIdx = blockIdx.y;
+  uint8_t segIdx = blockIdx.y;
   int8_t *p_iter_ptr = iter_ptr + segIdx;
   int8_t *p_PC_Flag = PC_Flag + segIdx;
 
@@ -718,13 +718,13 @@ __global__ void OutPut_Kernel_BG1_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                                   uint32_t numLLR)
 {
   // only activate in the last iteration
-  uint32_t segIdx = blockIdx.y;
+  uint8_t segIdx = blockIdx.y;
 
   int8_t *p_iter_ptr = iter_ptr + segIdx;
   int8_t *p_p_out = p_out + segIdx * 8448;
   int8_t *p_p_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? p_llrOut + segIdx * 8448 : p_llrOut + segIdx * NR_LDPC_MAX_NUM_LLR;
 
-  if (*iter_ptr == numMaxIter) {
+  if (*p_iter_ptr == numMaxIter) {
     if (outMode == nrLDPC_outMode_BIT)
       llr2bitPacked_Kernel_BG1_int8((uint8_t *)p_p_out, p_p_llrOut, numLLR);
 
