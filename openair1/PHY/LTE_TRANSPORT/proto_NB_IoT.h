@@ -370,8 +370,8 @@ void get_llr_per_sf_NB_IoT(PHY_VARS_eNB        *eNB,
                            uint16_t            Nsc_RU);
 
 void descrambling_NPUSCH_data_NB_IoT(LTE_DL_FRAME_PARMS  *fp,
-                                     int16_t             *ulsch_llr,
-                                     int16_t             *y,
+                                     int32_t             *ulsch_llr,
+                                     int32_t             *y,
                                      uint8_t             Qm,
                                      unsigned int        Cmux,
                                      uint32_t            rnti_tmp,

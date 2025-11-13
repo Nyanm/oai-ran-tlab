@@ -1409,8 +1409,8 @@ void get_llr_per_sf_NB_IoT(PHY_VARS_eNB        *eNB,
 ////////////////////////////////////descrambling NPUSCH //////////////////////////////////////////
 
 void descrambling_NPUSCH_data_NB_IoT(LTE_DL_FRAME_PARMS  *fp,
-                                     int16_t             *ulsch_llr,
-                                     int16_t             *y,
+                                     int32_t             *ulsch_llr,
+                                     int32_t             *y,
                                      uint8_t             Qm,
                                      unsigned int        Cmux,
                                      uint32_t            rnti_tmp,
@@ -1735,10 +1735,10 @@ void decode_NPUSCH_msg_NB_IoT(PHY_VARS_eNB        *eNB,
           
       if (npusch_format == 0)
       {
-          int16_t         *ulsch_llr    = eNB->pusch_vars[0]->llr;  // eNB->pusch_vars[eNB_id]->llr;      //UE_id=0
+          int32_t         *ulsch_llr    = eNB->pusch_vars[0]->llr;  // eNB->pusch_vars[eNB_id]->llr;      //UE_id=0
 
           unsigned int    G,H,Hprime,Hpp,Cmux,Rmux_prime;
-          int16_t         y[6*14*1200] __attribute__((aligned(32)));
+          int32_t         y[6*14*1200] __attribute__((aligned(32)));
           uint8_t         ytag[14*1200];
           G     =  (7-pilots_slot) * Qm * N_UL_slots * Nsc_RU; //(1 * Q_m) * 6 * 16; // Vincent : see 36.212, Section 5.1.4.1.2  // 16 slot(total number of slots) * 6 symboles (7-pilots_slot) * Qm*1 
           // x1 is set in lte_gold_generic
@@ -1796,11 +1796,11 @@ void decode_NPUSCH_msg_NB_IoT(PHY_VARS_eNB        *eNB,
 
             int32_t      llr_msg5[16]; 
             int32_t      y_msg5[16];
-            int16_t      *llrp2;
+            int32_t      *llrp2;
             int          l = 0;
             uint16_t     counter_ack = 0;   // ack counter for decision ack/nack
             
-            llrp2 = (int16_t*)&pusch_vars->llr[0];
+            llrp2 = (int32_t*)&pusch_vars->llr[0];
 
             for (l=0;l<16;l++) // putting reanl and im over 32 bits                   /// Add real and imaginary parts of BPSK constellation 
             {
