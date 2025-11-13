@@ -11,7 +11,7 @@
 
 #define ZC 384 // for BG1 test only
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
-#define RECORD_GRAPH 0 // set 1 to enable graph recording, 0 to unable.
+#define RECORD_GRAPH 1 // set 1 to enable graph recording, 0 to unable.
 
 #ifndef JETSON_TARGET
 #define CUDA_THREADS 1024
@@ -607,7 +607,7 @@ __global__ void llrPreProc_Kernel_BG1_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                                           uint32_t Zc)
 {
   uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
-  uint32_t segIdx = blockIdx.y;
+  uint32_t  segIdx = blockIdx.y;
 
   if (tid >= num_TotalThreads_BG1_R13) // 30336 is the total processed 316 msg * 96
     return;
