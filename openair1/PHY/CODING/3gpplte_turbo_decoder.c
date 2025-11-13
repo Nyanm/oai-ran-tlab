@@ -346,7 +346,8 @@ void compute_gamma_s(llr_t* m11,llr_t* m10,llr_t* systematic,channel_t* y_parity
   }
 }
 
-short systematic0[6144],systematic1[6144],systematic2[6144],yparity1[6144],yparity2[6144];
+int32_t systematic0[6144],systematic1[6144],systematic2[6144];
+short yparity1[6144],yparity2[6144];
 
 void compute_alpha_s(llr_t* alpha,llr_t* m_11,llr_t* m_10,unsigned short frame_length,unsigned char F)
 {
