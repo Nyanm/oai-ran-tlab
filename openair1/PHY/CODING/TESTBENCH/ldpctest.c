@@ -461,14 +461,14 @@ one_measurement_t test_ldpc(short max_iterations,
         n_iter_max = n_iter;
 
     } // end segments
-
+/*
     if (use32bit){
       dumpASS(estimated_output, "ldpctest_estimateOutput_cuda.txt",n_segments);
     }
     else{
       dumpASS(estimated_output, "ldpctest_estimateOutput_128.txt",n_segments);
     }
-      
+*/      
     //dumpASS(test_input, "ldpctest_TestInput_cuda128.txt");
 
     if (segment_bler != 0)

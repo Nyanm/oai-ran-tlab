@@ -70,8 +70,8 @@ cudaError_t Err;
 #ifdef USE_STATIC_ALLOC
 
 //static int currentStreamCount = 0;
-static int8_t iter_ptr_array[MAX_NUM_DLSCH_SEGMENTS_DL];
-static int PC_Flag_array[MAX_NUM_DLSCH_SEGMENTS_DL];
+//static int8_t iter_ptr_array[MAX_NUM_DLSCH_SEGMENTS_DL];
+//static int PC_Flag_array[MAX_NUM_DLSCH_SEGMENTS_DL];
 static int8_t cnProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
 //static int8_t cnProcBufRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
 static int8_t bnProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
@@ -82,8 +82,8 @@ static int8_t llrOut[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribut
 static int8_t temp_out[MAX_NUM_DLSCH_SEGMENTS_DL * 8448] __attribute__((aligned(64)));
 static int8_t temp_in[MAX_NUM_DLSCH_SEGMENTS_DL * 68 * 384] __attribute__((aligned(64)));
 #else
-int8_t *iter_ptr_array_dev;
-int *PC_Flag_array_dev;
+//int8_t *iter_ptr_array_dev;
+//int *PC_Flag_array_dev;
 int8_t *cnProcBuf_dev;
 //int8_t *cnProcBufRes_dev;
 int8_t *bnProcBuf_dev;
@@ -94,8 +94,8 @@ int8_t *llrOut_dev;
 t_nrLDPC_lut *d_lut_R13;
 t_nrLDPC_lut *d_lut_R23;
 
-int8_t *iter_ptr_array_host;
-int *PC_Flag_array_host;
+//int8_t *iter_ptr_array_host;
+//int *PC_Flag_array_host;
 int8_t *cnProcBuf_host;
 int8_t *cnProcBufRes_host;
 int8_t *bnProcBuf_host;
@@ -270,10 +270,10 @@ int cuda_support_init_decoder() {
     AssertFatal(err == cudaSuccess,"CUDA Error (llrProcBuf_dev): %s\n", cudaGetErrorString(err));
     err=cudaMalloc((void **)&llrOut_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
     AssertFatal(err == cudaSuccess,"CUDA Error (llrProcBuf_dev): %s\n", cudaGetErrorString(err));
-    err=cudaMalloc((void **)&iter_ptr_array_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4);
-    AssertFatal(err == cudaSuccess,"CUDA Error (iter_ptr_array_dev): %s\n", cudaGetErrorString(err));
-    err=cudaMalloc((void **)&PC_Flag_array_dev,sizeof(int)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4);
-    AssertFatal(err == cudaSuccess,"CUDA Error (PC_Flag_array_dev): %s\n", cudaGetErrorString(err));
+    //err=cudaMalloc((void **)&iter_ptr_array_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4);
+    //AssertFatal(err == cudaSuccess,"CUDA Error (iter_ptr_array_dev): %s\n", cudaGetErrorString(err));
+    //err=cudaMalloc((void **)&PC_Flag_array_dev,sizeof(int)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4);
+    //AssertFatal(err == cudaSuccess,"CUDA Error (PC_Flag_array_dev): %s\n", cudaGetErrorString(err));
     err=cudaMalloc((void **)&d_lut_R13,sizeof(*d_lut_R13));
     AssertFatal(err == cudaSuccess,"CUDA Error (d_lut_R13): %s\n", cudaGetErrorString(err));
     err=cudaMalloc((void **)&d_lut_R23,sizeof(*d_lut_R23));
@@ -315,15 +315,15 @@ int cuda_support_init_decoder() {
     err = cudaHostGetDevicePointer((void**)&llrOut_dev, llrOut_host, 0);
     AssertFatal(err == cudaSuccess,"CUDA Error (llrOut_dev): %s\n", cudaGetErrorString(err));
 
-    err=cudaHostAlloc((void **)&iter_ptr_array_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4,cudaHostAllocMapped);
-    AssertFatal(err == cudaSuccess,"CUDA Error (iter_ptr_array_host): %s\n", cudaGetErrorString(err));
-    err = cudaHostGetDevicePointer((void**)&iter_ptr_array_dev, iter_ptr_array_host, 0);
-    AssertFatal(err == cudaSuccess,"CUDA Error (iter_ptr_array_dev): %s\n", cudaGetErrorString(err));
+    //err=cudaHostAlloc((void **)&iter_ptr_array_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4,cudaHostAllocMapped);
+    //AssertFatal(err == cudaSuccess,"CUDA Error (iter_ptr_array_host): %s\n", cudaGetErrorString(err));
+    //err = cudaHostGetDevicePointer((void**)&iter_ptr_array_dev, iter_ptr_array_host, 0);
+    //AssertFatal(err == cudaSuccess,"CUDA Error (iter_ptr_array_dev): %s\n", cudaGetErrorString(err));
 
-    err=cudaHostAlloc((void **)&PC_Flag_array_host,sizeof(int)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4,cudaHostAllocMapped);
-    AssertFatal(err == cudaSuccess,"CUDA Error (PC_Flag_array_host): %s\n", cudaGetErrorString(err));
-    err = cudaHostGetDevicePointer((void**)&PC_Flag_array_dev, PC_Flag_array_host, 0);
-    AssertFatal(err == cudaSuccess,"CUDA Error (PC_Flag_array_dev): %s\n", cudaGetErrorString(err));
+    //err=cudaHostAlloc((void **)&PC_Flag_array_host,sizeof(int)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4,cudaHostAllocMapped);
+    //AssertFatal(err == cudaSuccess,"CUDA Error (PC_Flag_array_host): %s\n", cudaGetErrorString(err));
+    //err = cudaHostGetDevicePointer((void**)&PC_Flag_array_dev, PC_Flag_array_host, 0);
+    //AssertFatal(err == cudaSuccess,"CUDA Error (PC_Flag_array_dev): %s\n", cudaGetErrorString(err));
 
     err=cudaHostAlloc((void **)&h_lut_R13,sizeof(*h_lut_R13),cudaHostAllocMapped);
     AssertFatal(err == cudaSuccess,"CUDA Error (h_lut_R13): %s\n", cudaGetErrorString(err));
@@ -356,9 +356,7 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    e_nrLDPC_outMode outMode,
                                                    cudaStream_t* streams,
                                                    uint8_t CudaStreamIdx,
-                                                   cudaEvent_t* doneEvent,
-                                                   int8_t* iter_ptr,
-                                                   int* PC_Flag);
+                                                   cudaEvent_t* doneEvent);
 
 //--------------------------------------------------------------
 // debug function
@@ -564,6 +562,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     }
     SegmentPacked = true;
   }
+#if 0
 for (int s = 0; s < n_segments /*MAX_NUM_DLSCH_SEGMENTS_DL*/; s++) {
     #ifdef USE_STATIC_ALLOC
     iter_ptr_array[s] = 0;
@@ -573,7 +572,7 @@ for (int s = 0; s < n_segments /*MAX_NUM_DLSCH_SEGMENTS_DL*/; s++) {
     PC_Flag_array_dev[s] = 1;
 #endif
   }
-
+#endif
 for (int SegPackIdx = 0; SegPackIdx < NumSegPacks; SegPackIdx++) {
 
     int PackShiftIdx = segmentPacks[SegPackIdx].startSeg;
@@ -618,14 +617,7 @@ for (int SegPackIdx = 0; SegPackIdx < NumSegPacks; SegPackIdx++) {
                                            outMode,
                                            decoderStreams,
                                            SegPackIdx, // Index for the whole pack
-                                           decoderDoneEvents,
-#ifdef USE_STATIC_ALLOC
-                                           &iter_ptr_array[SegPackIdx],
-                                           &PC_Flag_array[SegPackIdx]
-#else
-                                           &iter_ptr_array_dev[SegPackIdx],
-                                           &PC_Flag_array_dev[SegPackIdx]
-#endif 
+                                           decoderDoneEvents
            );// stream index passed in
 }
 

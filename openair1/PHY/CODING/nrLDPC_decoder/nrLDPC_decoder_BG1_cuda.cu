@@ -193,9 +193,7 @@ __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                                      const int8_t *__restrict__ d_cnBufAll,
                                                      int8_t *__restrict__ d_bnBufAll,
                                                      uint32_t Zc,
-                                                     int8_t *iter_ptr,
-                                                     int8_t numMaxIter,
-                                                     int *PC_Flag)
+                                                     int8_t numMaxIter)
 {
   uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -203,13 +201,7 @@ __global__ void cnProcKernel_BG1_R13_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
     return;
 
   uint32_t  segIdx = blockIdx.y;
-  int8_t *p_iter_ptr = iter_ptr + segIdx;
-  int *p_PC_Flag = PC_Flag + segIdx;
 
-  // Early stopping
-  if (*p_iter_ptr > numMaxIter || *p_PC_Flag == 0) {
-    return;
-  }
   // printf("I'm inside cnProc_kernel\n");
 
   // const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
@@ -287,9 +279,7 @@ void nrLDPC_cnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             int8_t *cnProcBuf,
                                             int8_t *bnProcBuf,
                                             uint32_t Z,
-                                            int8_t *iter_ptr,
                                             int8_t numMaxIter,
-                                            int *PC_Flag,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
@@ -300,9 +290,7 @@ void nrLDPC_cnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
       cnProcBuf,
       bnProcBuf,
       Z,
-      iter_ptr,
-      numMaxIter,
-      PC_Flag);
+      numMaxIter);
   // printf("Check point 1001: ");
   CHECK(cudaGetLastError());
 }
@@ -312,18 +300,9 @@ __global__ void bnProcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ 
                                                      int8_t *__restrict__ d_llrProcBuf,
                                                      int8_t *__restrict__ d_llrRes,
                                                      uint32_t Zc,
-                                                     int8_t *iter_ptr,
-                                                     int8_t numMaxIter,
-                                                     int *PC_Flag)
+                                                     int8_t numMaxIter)
 {
   uint32_t segIdx = blockIdx.y;
-  int8_t *p_iter_ptr = iter_ptr + segIdx;
-  int *p_PC_Flag = PC_Flag + segIdx;
-
-  // Early stopping
-  if (*p_iter_ptr > numMaxIter || *p_PC_Flag == 0) {
-    return;
-  }
 
   uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
   /*if (tid == 0) {
@@ -373,9 +352,7 @@ __global__ void bnProcKernel_BG1_R13_int8_BIG_stream(const int8_t *__restrict__ 
                                 GrpNum,
                                 cirShift,
                                 Zc);
-  if (tid == 0 && (*p_iter_ptr) < numMaxIter) {
-    (*p_iter_ptr)++;
-  }
+
 }
 
 void nrLDPC_bnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
@@ -384,9 +361,7 @@ void nrLDPC_bnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             int8_t *llrProcBuf,
                                             int8_t *llrRes,
                                             uint32_t Z,
-                                            int8_t *iter_ptr,
                                             int8_t numMaxIter,
-                                            int *PC_Flag,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
@@ -396,9 +371,7 @@ void nrLDPC_bnProc_BG1_R13_cuda_stream_core(const t_nrLDPC_lut *p_lut,
       llrProcBuf,
       llrRes,
       Z,
-      iter_ptr,
-      numMaxIter,
-      PC_Flag);
+      numMaxIter);
 }
 
 //-----------------------------------------↑↑↑ R13 ↑↑↑----------------------------------------
@@ -409,20 +382,13 @@ __global__ void cnProcKernel_BG1_R23_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                                      const int8_t *__restrict__ d_cnBufAll,
                                                      int8_t *__restrict__ d_bnBufAll,
                                                      uint32_t Zc,
-                                                     int8_t *iter_ptr,
-                                                     int8_t numMaxIter,
-                                                     int *PC_Flag)
+                                                     int8_t numMaxIter)
 {
   uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
   if (tid >= num_TotalThreads_BG1_R23) // 13824 is the total processed 144 msg * 96
     return;
   uint32_t  segIdx = blockIdx.y;
-  int8_t *p_iter_ptr = iter_ptr + segIdx;
-  int *p_PC_Flag = PC_Flag + segIdx;
-  // Early stopping
-  if (*p_iter_ptr > numMaxIter || *p_PC_Flag == 0) {
-    return;
-  }
+
   // printf("I'm inside cnProc_kernel\n");
 
   // const uint32_t *lut_startAddrs = p_lut->startAddrCnGroups;
@@ -479,9 +445,7 @@ void nrLDPC_cnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             int8_t *cnProcBuf,
                                             int8_t *bnProcBuf,
                                             uint32_t Z,
-                                            int8_t *iter_ptr,
                                             int8_t numMaxIter,
-                                            int *PC_Flag,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
@@ -490,9 +454,7 @@ void nrLDPC_cnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
       cnProcBuf,
       bnProcBuf,
       Z,
-      iter_ptr,
-      numMaxIter,
-      PC_Flag);
+      numMaxIter);
   /*
  cudaError_t err=cudaPeekAtLastError();
  if (err!=cudaSuccess) {
@@ -507,18 +469,9 @@ __global__ void bnProcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict__ 
                                                      int8_t *__restrict__ d_llrProcBuf,
                                                      int8_t *__restrict__ d_llrRes,
                                                      uint32_t Zc,
-                                                     int8_t *iter_ptr,
-                                                     int8_t numMaxIter,
-                                                     int *PC_Flag)
+                                                     int8_t numMaxIter)
 {
   uint32_t  segIdx = blockIdx.y;
-  int8_t *p_iter_ptr = iter_ptr + segIdx;
-  int *p_PC_Flag = PC_Flag + segIdx;
-
-  // Early stopping
-  if (*p_iter_ptr > numMaxIter || *p_PC_Flag == 0) {
-    return;
-  }
 
   uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -569,9 +522,6 @@ __global__ void bnProcKernel_BG1_R23_int8_BIG_stream(const int8_t *__restrict__ 
                                 GrpNum,
                                 cirShift,
                                 Zc);
-  if (tid == 0 && (*p_iter_ptr) < numMaxIter) {
-    (*p_iter_ptr)++;
-  }
 }
 
 void nrLDPC_bnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
@@ -580,9 +530,7 @@ void nrLDPC_bnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                             int8_t *llrProcBuf,
                                             int8_t *llrRes,
                                             uint32_t Z,
-                                            int8_t *iter_ptr,
                                             int8_t numMaxIter,
-                                            int *PC_Flag,
                                             cudaStream_t *streams,
                                             int8_t CudaStreamIdx)
 {
@@ -592,9 +540,7 @@ void nrLDPC_bnProc_BG1_R23_cuda_stream_core(const t_nrLDPC_lut *p_lut,
       llrProcBuf,
       llrRes,
       Z,
-      iter_ptr,
-      numMaxIter,
-      PC_Flag);
+      numMaxIter      );
   // cudaDeviceSynchronize();
 }
 
@@ -678,30 +624,24 @@ void nrLDPC_llrPreProc_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
 __global__ void llrRes2llrOut_Kernel_BG1_int8_BIG_stream(uint8_t R,
                                                          int8_t *d_llrRes,
                                                          uint32_t Zc,
-                                                         int8_t *iter_ptr,
                                                          int8_t numMaxIter,
-                                                         int *PC_Flag,
                                                          e_nrLDPC_outMode outMode,
                                                          int8_t *p_llrOut,
                                                          uint32_t numLLR)
 {
   uint32_t  segIdx = blockIdx.y;
-  int8_t *p_iter_ptr = iter_ptr + segIdx;
-  int *p_PC_Flag = PC_Flag + segIdx;
 
   int8_t *p_llrRes = (int8_t *)(d_llrRes + segIdx * NR_LDPC_MAX_NUM_LLR);
   int8_t *p_p_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? p_llrOut + segIdx * 8448 : p_llrOut + segIdx * NR_LDPC_MAX_NUM_LLR;
 
-  if (*p_iter_ptr == numMaxIter) { // output
+ // output
     llrRes2llrOut_Kernel_BG1_int8(R, p_p_llrOut, p_llrRes, Zc);
-  }
+
 }
 
 __global__ void OutPut_Kernel_BG1_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
                                                   uint32_t Zc,
-                                                  int8_t *iter_ptr,
                                                   int8_t numMaxIter,
-                                                  int *PC_Flag,
                                                   e_nrLDPC_outMode outMode,
                                                   int8_t *p_out,
                                                   int8_t *llrOut,
@@ -711,27 +651,21 @@ __global__ void OutPut_Kernel_BG1_int8_BIG_stream(const t_nrLDPC_lut *p_lut,
   // only activate in the last iteration
   uint32_t  segIdx = blockIdx.y;
 
-  int8_t *p_iter_ptr = iter_ptr + segIdx;
   int8_t *p_p_out = p_out + segIdx * 8448;
   int8_t *p_p_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? p_llrOut + segIdx * 8448 : p_llrOut + segIdx * NR_LDPC_MAX_NUM_LLR;
 
-  if (*p_iter_ptr == numMaxIter) {
     if (outMode == nrLDPC_outMode_BIT)
       llr2bitPacked_Kernel_BG1_int8((uint8_t *)p_p_out, p_p_llrOut, numLLR);
 
     else // if (outMode == nrLDPC_outMode_BITINT8)
       llr2bit_Kernel_BG1_int8((uint8_t *)p_p_out, p_p_llrOut, numLLR);
-  } else
-    return;
 }
 
 void nrLDPC_OutPut_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                         int8_t *llrRes,
                                         uint32_t Z,
                                         uint8_t R,
-                                        int8_t *iter_ptr,
                                         int8_t numMaxIter,
-                                        int *PC_Flag,
                                         e_nrLDPC_outMode outMode,
                                         int8_t *p_out,
                                         int8_t *llrOut,
@@ -746,9 +680,7 @@ void nrLDPC_OutPut_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
                                              streams[CudaStreamIdx]>>>(R,
                                                                        llrRes,
                                                                        Z,
-                                                                       iter_ptr,
                                                                        numMaxIter,
-                                                                       PC_Flag,
                                                                        outMode,
                                                                        p_llrOut,
                                                                        numLLR);
@@ -756,9 +688,7 @@ void nrLDPC_OutPut_BG1_cuda_stream_core(const t_nrLDPC_lut *p_lut,
   OutPut_Kernel_BG1_int8_BIG_stream<<<Kdim_R13[CudaStreamIdx].grid, Kdim_R13[CudaStreamIdx].block, 0, streams[CudaStreamIdx]>>>(
       p_lut,
       Z,
-      iter_ptr,
       numMaxIter,
-      PC_Flag,
       outMode,
       p_out,
       llrOut,
@@ -797,9 +727,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                        e_nrLDPC_outMode outMode,
                                                        cudaStream_t *streams,
                                                        uint8_t CudaStreamIdx,
-                                                       cudaEvent_t *doneEvent,
-                                                       int8_t *iter_ptr,
-                                                       int *PC_Flag)
+                                                       cudaEvent_t *doneEvent)
 {
   cudaStream_t stream = streams[CudaStreamIdx];
 
@@ -830,9 +758,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  cnProcBuf,
                                                  bnProcBuf,
                                                  Z,
-                                                 iter_ptr,
                                                  numMaxIter,
-                                                 PC_Flag,
                                                  streams,
                                                  CudaStreamIdx);
           //          CHECK(cudaGetLastError());
@@ -851,9 +777,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  llrProcBuf,
                                                  llrRes,
                                                  Z,
-                                                 iter_ptr,
                                                  numMaxIter,
-                                                 PC_Flag,
                                                  streams,
                                                  CudaStreamIdx);
           // cudaDeviceSynchronize();
@@ -880,9 +804,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  cnProcBuf,
                                                  bnProcBuf,
                                                  Z,
-                                                 iter_ptr,
                                                  numMaxIter,
-                                                 PC_Flag,
                                                  streams,
                                                  CudaStreamIdx);
           CHECK(cudaGetLastError());
@@ -902,9 +824,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                                  llrProcBuf,
                                                  llrRes,
                                                  Z,
-                                                 iter_ptr,
                                                  numMaxIter,
-                                                 PC_Flag,
                                                  streams,
                                                  CudaStreamIdx);
 
@@ -931,9 +851,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut *p_lut
                                        llrRes,
                                        Z,
                                        R,
-                                       iter_ptr,
                                        numMaxIter,
-                                       PC_Flag,
                                        outMode,
                                        p_out,
                                        llrOut,
