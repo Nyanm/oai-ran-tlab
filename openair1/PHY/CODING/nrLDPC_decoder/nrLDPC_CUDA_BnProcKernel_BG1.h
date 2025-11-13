@@ -18,7 +18,7 @@ __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_NUM(
     uint32_t lane,
     uint8_t MsgIdx,
     uint32_t BnIdx,
-    uint8_t GrpNum,
+    uint32_t GrpNum,
     uint32_t circShift,
     uint32_t Zc)
 {
@@ -29,12 +29,12 @@ __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_NUM(
 //    int8_t *p_llrRes_BnIdx           = d_llrRes + baseBn;
 
     const int32_t *bnProcBufPtr = (const int32_t *)(d_bnProcBuf) + lane;
-    int32_t prevIdxWords = ((MsgIdx - 1) * GrpNum * Zc) >> 2;
-    int32_t prev = bnProcBufPtr[prevIdxWords];
+    uint32_t prevIdxWords = ( MsgIdx  * GrpNum * Zc) >> 2;
+    uint32_t prev = bnProcBufPtr[prevIdxWords];
 
     // ---- ① Unrolled accumulation ----
-    int32_t MsgSum = bnProcBufPtr[0];
-    int32_t off = (GrpNum * Zc) >> 2;
+    uint32_t MsgSum = bnProcBufPtr[0];
+    uint32_t off = (GrpNum * Zc) >> 2;
 #pragma unroll
     for (int i = 1; i < NUM; ++i) {
 	bnProcBufPtr += off;
@@ -45,7 +45,7 @@ __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_NUM(
 //    int32_t computed_llrRes = __vaddss4(MsgSum,((const int32_t*)p_llrProcBuf_BnIdx)[lane]);
     int32_t computed_llrRes = __vaddss4(MsgSum,((const int32_t*)(d_llrProcBuf))[lane]);
     //  Only write to llrRes when MsgIdx == 1 
-    if (MsgIdx == 1) {
+    if (MsgIdx == 0) {
       ((int32_t *)(d_llrRes))[lane]  = computed_llrRes;
     }
 

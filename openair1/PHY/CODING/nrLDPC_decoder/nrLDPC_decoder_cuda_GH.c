@@ -73,9 +73,9 @@ cudaError_t Err;
 static int8_t iter_ptr_array[MAX_NUM_DLSCH_SEGMENTS_DL];
 static int PC_Flag_array[MAX_NUM_DLSCH_SEGMENTS_DL];
 static int8_t cnProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static int8_t cnProcBufRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
+//static int8_t cnProcBufRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
 static int8_t bnProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
-static int8_t bnProcBufRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
+//static int8_t bnProcBufRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
 static int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrOut[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
@@ -85,9 +85,9 @@ static int8_t temp_in[MAX_NUM_DLSCH_SEGMENTS_DL * 68 * 384] __attribute__((align
 int8_t *iter_ptr_array_dev;
 int *PC_Flag_array_dev;
 int8_t *cnProcBuf_dev;
-int8_t *cnProcBufRes_dev;
+//int8_t *cnProcBufRes_dev;
 int8_t *bnProcBuf_dev;
-int8_t *bnProcBufRes_dev;
+//int8_t *bnProcBufRes_dev;
 int8_t *llrRes_dev;
 int8_t *llrProcBuf_dev;
 int8_t *llrOut_dev;
@@ -258,12 +258,12 @@ int cuda_support_init_decoder() {
   if (!pageable && !register_host) {
     cudaError_t err=cudaMalloc((void **)&cnProcBuf_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF);
     AssertFatal(err == cudaSuccess,"CUDA Error (cnProcBuf_dev): %s\n", cudaGetErrorString(err));
-    err=cudaMalloc((void **)&cnProcBufRes_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF);
-    AssertFatal(err == cudaSuccess,"CUDA Error (cnProcBufRes_dev): %s\n", cudaGetErrorString(err));
+    //err=cudaMalloc((void **)&cnProcBufRes_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF);
+    //AssertFatal(err == cudaSuccess,"CUDA Error (cnProcBufRes_dev): %s\n", cudaGetErrorString(err));
     err=cudaMalloc((void **)&bnProcBuf_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_BN_PROC_BUF);
     AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBuf_dev): %s\n", cudaGetErrorString(err));
-    err=cudaMalloc((void **)&bnProcBufRes_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_BN_PROC_BUF);
-    AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBufRes_dev): %s\n", cudaGetErrorString(err));
+    //err=cudaMalloc((void **)&bnProcBufRes_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_BN_PROC_BUF);
+    //AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBufRes_dev): %s\n", cudaGetErrorString(err));
     err=cudaMalloc((void **)&llrRes_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
     AssertFatal(err == cudaSuccess,"CUDA Error (llrRes_dev): %s\n", cudaGetErrorString(err));
     err=cudaMalloc((void **)&llrProcBuf_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
@@ -285,20 +285,20 @@ int cuda_support_init_decoder() {
     err = cudaHostGetDevicePointer((void**)&cnProcBuf_dev, cnProcBuf_host, 0);
     AssertFatal(err == cudaSuccess,"CUDA Error (cnProcBuf_host): %s\n", cudaGetErrorString(err));
 
-    err=cudaHostAlloc((void **)&cnProcBufRes_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF,cudaHostAllocMapped);
-    AssertFatal(err == cudaSuccess,"CUDA Error (cnProcBufRes_host): %s\n", cudaGetErrorString(err));
-    err = cudaHostGetDevicePointer((void**)&cnProcBufRes_dev, cnProcBufRes_host, 0);
-    AssertFatal(err == cudaSuccess,"CUDA Error (cnProcBufRes_dev): %s\n", cudaGetErrorString(err));
+    ///err=cudaHostAlloc((void **)&cnProcBufRes_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF,cudaHostAllocMapped);
+    //AssertFatal(err == cudaSuccess,"CUDA Error (cnProcBufRes_host): %s\n", cudaGetErrorString(err));
+    //err = cudaHostGetDevicePointer((void**)&cnProcBufRes_dev, cnProcBufRes_host, 0);
+    //AssertFatal(err == cudaSuccess,"CUDA Error (cnProcBufRes_dev): %s\n", cudaGetErrorString(err));
 
     err=cudaHostAlloc((void **)&bnProcBuf_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_BN_PROC_BUF,cudaHostAllocMapped);
     AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBuf_host): %s\n", cudaGetErrorString(err));
     err = cudaHostGetDevicePointer((void**)&bnProcBuf_dev, bnProcBuf_host, 0);
     AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBuf_dev): %s\n", cudaGetErrorString(err));
 
-    err=cudaHostAlloc((void **)&bnProcBufRes_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_BN_PROC_BUF,cudaHostAllocMapped);
-    AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBufRes_host): %s\n", cudaGetErrorString(err));
-    err = cudaHostGetDevicePointer((void**)&bnProcBufRes_dev, bnProcBufRes_host, 0);
-    AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBufRes_dev): %s\n", cudaGetErrorString(err));
+    //err=cudaHostAlloc((void **)&bnProcBufRes_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_BN_PROC_BUF,cudaHostAllocMapped);
+    //AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBufRes_host): %s\n", cudaGetErrorString(err));
+    //err = cudaHostGetDevicePointer((void**)&bnProcBufRes_dev, bnProcBufRes_host, 0);
+    //AssertFatal(err == cudaSuccess,"CUDA Error (bnProcBufRes_dev): %s\n", cudaGetErrorString(err));
 
     err=cudaHostAlloc((void **)&llrRes_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR,cudaHostAllocMapped);
     AssertFatal(err == cudaSuccess,"CUDA Error (llrRes_host): %s\n", cudaGetErrorString(err));
@@ -344,9 +344,7 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(const t_nrLDPC_lut* p_lut,
                                                    uint32_t numLLR,
                                                    int8_t* llr,
                                                    int8_t* cnProcBuf,
-                                                   int8_t* cnProcBufRes,
                                                    int8_t* bnProcBuf,
-                                                   int8_t* bnProcBufRes,
                                                    int8_t* llrRes,
                                                    int8_t* llrProcBuf,
                                                    int8_t* llrOut,
@@ -582,9 +580,9 @@ for (int SegPackIdx = 0; SegPackIdx < NumSegPacks; SegPackIdx++) {
 #ifdef USE_STATIC_ALLOC
     int8_t* perpack_llr = temp_in + PackShiftIdx * 68 * 384;
     int8_t* perpack_cnProcBuf = cnProcBuf + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
-    int8_t* perpack_cnProcBufRes = cnProcBufRes + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
+    //int8_t* perpack_cnProcBufRes = cnProcBufRes + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     int8_t* perpack_bnProcBuf = bnProcBuf + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
-    int8_t* perpack_bnProcBufRes = bnProcBufRes + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
+    //int8_t* perpack_bnProcBufRes = bnProcBufRes + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
     int8_t* perpack_llrProcBuf = llrProcBuf + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_llrRes = llrRes + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_llrOut = llrOut + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
@@ -592,9 +590,9 @@ for (int SegPackIdx = 0; SegPackIdx < NumSegPacks; SegPackIdx++) {
 #else
     int8_t* perpack_llr = p_llr + PackShiftIdx * 68 * 384 ;
     int8_t* perpack_cnProcBuf = cnProcBuf_dev + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
-    int8_t* perpack_cnProcBufRes = cnProcBufRes_dev + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
+    //int8_t* perpack_cnProcBufRes = cnProcBufRes_dev + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     int8_t* perpack_bnProcBuf = bnProcBuf_dev + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
-    int8_t* perpack_bnProcBufRes = bnProcBufRes_dev + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
+    //int8_t* perpack_bnProcBufRes = bnProcBufRes_dev + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
     int8_t* perpack_llrRes = llrRes_dev + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_llrProcBuf = llrProcBuf_dev + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_llrOut = llrOut_dev + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
@@ -608,9 +606,7 @@ for (int SegPackIdx = 0; SegPackIdx < NumSegPacks; SegPackIdx++) {
                                            numLLR,
                                            perpack_llr,
                                            perpack_cnProcBuf,
-                                           perpack_cnProcBufRes,
                                            perpack_bnProcBuf,
-                                           perpack_bnProcBufRes,
                                            perpack_llrRes,
                                            perpack_llrProcBuf,
                                            perpack_llrOut,
