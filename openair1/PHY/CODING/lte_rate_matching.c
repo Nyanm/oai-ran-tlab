@@ -180,13 +180,13 @@ uint32_t sub_block_interleaving_cc(uint32_t D, uint8_t *d,uint8_t *w)
   return(RCC);
 }
 
-void sub_block_deinterleaving_turbo(uint32_t D,int16_t *d,int16_t *w)
+void sub_block_deinterleaving_turbo(uint32_t D,int32_t *d,int32_t *w)
 {
 
   uint32_t RTC = (D>>5), ND, ND3;
   uint32_t row,col,Kpi,index;
   uint32_t index3,k,k2;
-  int16_t *d1,*d2,*d3;
+  int32_t *d1,*d2,*d3;
 
   if ((D&0x1f) > 0)
     RTC++;

@@ -124,7 +124,7 @@ This function takes the w-sequence and generates the d-sequence.  The nu-sequenc
 \param d Pointer to output (d-sequence, turbo code output)
 \param w Pointer to input (w-sequence, interleaver output)
 */
-void sub_block_deinterleaving_turbo(uint32_t D, int16_t *d,int16_t *w);
+void sub_block_deinterleaving_turbo(uint32_t D, int32_t *d,int32_t *w);
 
 /** \fn void sub_block_deinterleaving_cc(uint32_t D, int8_t *d,int8_t *w)
 \brief This is the subblock deinterleaving algorithm for convolutionally-coded data from 36-212 (Release 8, 8.6 2009-03), pages 15-16.
