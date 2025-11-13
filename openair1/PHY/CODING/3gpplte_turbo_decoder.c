@@ -888,7 +888,7 @@ unsigned char phy_threegpplte_turbo_decoder_scalar(llr_t *y,
   /*  y is a pointer to the input
     decoded_bytes is a pointer to the decoded output
     n is the size in bits of the coded block, with the tail */
-  short ext[n],ext2[n];
+  int32_t ext[n],ext2[n];
 
   //  short systematic0[n],systematic1[n],systematic2[n],yparity1[n],yparity2[n];
   llr_t *yp = y;
