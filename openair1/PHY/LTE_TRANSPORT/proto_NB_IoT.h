@@ -523,12 +523,12 @@ int32_t ulsch_bpsk_llr_NB_IoT(PHY_VARS_eNB *eNB,
 int32_t ulsch_qpsk_llr_NB_IoT(PHY_VARS_eNB *eNB, 
                               LTE_DL_FRAME_PARMS *frame_parms,
                               int32_t **rxdataF_comp,
-                              int16_t *ulsch_llr, 
+                              int32_t *ulsch_llr, 
                               uint8_t symbol, 
                               uint8_t UE_id,
                               uint16_t ul_sc_start,
                               uint8_t Nsc_RU, 
-                              int16_t *llrp);
+                              int32_t *llrp);
 
 void rotate_bpsk_NB_IoT(PHY_VARS_eNB *eNB, 
                         LTE_DL_FRAME_PARMS *frame_parms,
