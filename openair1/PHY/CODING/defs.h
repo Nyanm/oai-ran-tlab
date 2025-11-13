@@ -542,7 +542,7 @@ uint8_t phy_threegpplte_turbo_decoder8(int16_t *y,
                                        time_stats_t *intl1_stats,
                                        time_stats_t *intl2_stats);
 
-uint8_t phy_threegpplte_turbo_decoder_scalar(llr_t *y,
+uint8_t phy_threegpplte_turbo_decoder_scalar(int32_t *y,
     uint8_t *decoded_bytes,
     uint16_t n,
     uint16_t interleaver_f1,

@@ -1368,16 +1368,16 @@ void get_llr_per_sf_NB_IoT(PHY_VARS_eNB        *eNB,
                            uint16_t            Nsc_RU)
 {
       LTE_eNB_PUSCH           *pusch_vars      =  eNB->pusch_vars[0]; // UE_id
-      int16_t                 *llrp;
+      int32_t                 *llrp;
       uint32_t                l,ii=0; 
 
       if(npusch_format == 0)   // format 1
       { 
-             llrp = (int16_t*)&pusch_vars->llr[0+ (N_SF_per_word-counter_sf)*24];  /// 24= 12 symbols/SF * 2 // since Real and im
+             llrp = (int32_t*)&pusch_vars->llr[0+ (N_SF_per_word-counter_sf)*24];  /// 24= 12 symbols/SF * 2 // since Real and im
 
       } else {                      // format 2        
 
-              llrp = (int16_t*)&pusch_vars->llr[0+ (2-counter_sf)*16]; // 16 = 8 symbols/SF * 2 // since real and im
+              llrp = (int32_t*)&pusch_vars->llr[0+ (2-counter_sf)*16]; // 16 = 8 symbols/SF * 2 // since real and im
       }
 
       for (l=0; l<fp->symbols_per_tti; l++)
