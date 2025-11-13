@@ -25,7 +25,6 @@
   <htmlTabName>Longrun 40 MHz TDD SA</htmlTabName>
   <htmlTabIcon>tasks</htmlTabIcon>
   <TestCaseRequestedList>
-    060000
     800813
     020001
     000001
@@ -42,15 +41,8 @@
     001000
     000100
     040001
-    333333
   </TestCaseRequestedList>
   <TestCaseExclusionList></TestCaseExclusionList>
-
-  <testCase id="060000">
-    <class>DeployCoreNetwork</class>
-    <desc>Initialize 5G Core</desc>
-    <cn_id>oc-cn5g</cn_id>
-  </testCase>
 
   <testCase id="800813">
     <class>Create_Workspace</class>
@@ -77,7 +69,7 @@
     <desc>iperf (DL/10Mbps/UDP)(10 min)</desc>
     <iperf_args>-u -b 10M -t 600 -i 1 -R</iperf_args>
     <id>oai_ue_jetson2</id>
-    <svr_id>oc-cn5g</svr_id>
+    <svr_id>oc-cn5g-20897-aerial</svr_id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
     <iperf_bitrate_threshold>80</iperf_bitrate_threshold>
   </testCase>
@@ -86,7 +78,7 @@
     <class>Ping</class>
     <desc>Ping: 20pings in 20sec</desc>
     <id>oai_ue_jetson2</id>
-    <svr_id>oc-cn5g</svr_id>
+    <svr_id>oc-cn5g-20897-aerial</svr_id>
     <ping_args>-c 20</ping_args>
     <ping_packetloss_threshold>1</ping_packetloss_threshold>
     <ping_rttavg_threshold>25</ping_rttavg_threshold>
@@ -98,14 +90,6 @@
     <desc>Undeploy nr UE</desc>
     <node>jetson2</node>
     <yaml_path>ci-scripts/yaml_files/5g_sa_b200_jetson_nrue</yaml_path>
-  </testCase>
-
-  <testCase id="333333">
-    <class>Clean_Test_Server_Images</class>
-    <always_exec>true</always_exec>
-    <desc>Clean Test Images on Test Server</desc>
-    <node>jetson2</node>
-    <images>oai-nr-ue</images>
   </testCase>
 
 </testCaseList>
