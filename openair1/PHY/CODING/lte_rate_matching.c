@@ -682,9 +682,9 @@ uint32_t lte_rate_matching_cc(uint32_t RCC,
 
 int lte_rate_matching_turbo_rx(uint32_t RTC,
                                uint32_t G,
-                               int16_t *w,
+                               int32_t *w,
                                uint8_t *dummy_w,
-                               int16_t *soft_input,
+                               int32_t *soft_input,
                                uint8_t C,
                                uint32_t Nsoft,
                                uint8_t Mdlharq,
@@ -699,7 +699,7 @@ int lte_rate_matching_turbo_rx(uint32_t RTC,
 
 
   uint32_t Nir,Ncb,Gp,GpmodC,E,Ncbmod,ind,k;
-  int16_t *soft_input2;
+  int32_t *soft_input2;
   //   int32_t w_tmp;
 #ifdef RM_DEBUG
   int nulled=0;
@@ -739,7 +739,7 @@ int lte_rate_matching_turbo_rx(uint32_t RTC,
 #endif
 
   if (clear==1)
-    memset(w,0,Ncb*sizeof(int16_t));
+    memset(w,0,Ncb*sizeof(int32_t));
 
   soft_input2 = soft_input;// + (r*E);
   k=0;
