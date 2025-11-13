@@ -759,6 +759,7 @@ static void extract_pucch_csi_report(NR_CSI_MeasConfig_t *csi_MeasConfig,
   const int n_slots_frame = nrmac->frame_structure.numb_slots_frame;
   int cumul_bits = 0;
   int r_index = -1;
+  bool beam_change = false;
   for (int csi_report_id = 0; csi_report_id < csi_MeasConfig->csi_ReportConfigToAddModList->list.count; csi_report_id++) {
     nr_csi_report_t *csi_report = &UE->csi_report_template[csi_report_id];
     csi_report->nb_of_csi_ssb_report = 0;
@@ -795,7 +796,7 @@ static void extract_pucch_csi_report(NR_CSI_MeasConfig_t *csi_MeasConfig,
             break;
           case NR_CSI_ReportConfig__reportQuantity_PR_ssb_Index_RSRP:
             evaluate_rsrp_report(nrmac, UE, sched_ctrl, csi_report_id, payload, &cumul_bits, reportQuantity_type);
-            beam_selection_procedures(nrmac, UE);
+            beam_change = beam_selection_procedures(nrmac, UE);
             break;
           case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_CQI:
             sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.print_report = true;
@@ -853,6 +854,9 @@ static void extract_pucch_csi_report(NR_CSI_MeasConfig_t *csi_MeasConfig,
       }
     }
   }
+  if (beam_change)
+    // Trigger RRCReconfiguration. Need to be out of the for loop as it may modify csi_MeasConfig
+    nr_mac_trigger_reconfiguration(nrmac, UE, -1, true);
 }
 
 static NR_UE_harq_t *find_harq(frame_t frame, slot_t slot, NR_UE_info_t * UE, int harq_round_max)
@@ -1232,6 +1236,24 @@ int nr_acknack_scheduling(gNB_MAC_INST *mac,
       memset(curr_pucch, 0, sizeof(*curr_pucch));
     }
     else { // unoccupied occasion
+      {
+        NR_beam_info_t *beam_info = &mac->beam_info;
+        if (beam_info->beam_mode != NO_BEAM_MODE) {
+          int num_beam = (mac->radio_config.nb_bfw[1] > 0) ? mac->radio_config.nb_bfw[1] : 1;
+          int beams_per_period = (beam_info->beams_per_period > 0) ? beam_info->beams_per_period : 1;
+          int NUM_SSB_period = (num_beam % beams_per_period > 0) ? num_beam / beams_per_period + 1 : num_beam / beams_per_period;
+          if ((pucch_slot / fs->numb_slots_period) % NUM_SSB_period != (UE->UE_beam_index / beams_per_period)) {
+            LOG_D(NR_MAC,
+                  "DL %4d.%2d, UL_ACK %4d.%2d beam %d could not be allocated for PUCCH\n",
+                  frame,
+                  slot,
+                  pucch_frame,
+                  pucch_slot,
+                  UE->UE_beam_index);
+            continue;
+          }
+        }
+      }
       // checking if in ul_slot the resources potentially to be assigned to this PUCCH are available
       set_pucch_allocation(ul_bwp, r_pucch, bwp_size, curr_pucch);
       NR_beam_alloc_t beam = beam_allocation_procedure(&mac->beam_info, pucch_frame, pucch_slot, ue_beam, n_slots_frame);

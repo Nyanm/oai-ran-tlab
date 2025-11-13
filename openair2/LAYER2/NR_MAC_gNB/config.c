@@ -362,9 +362,12 @@ int get_ul_slots_per_frame(const frame_structure_t *fs)
  * @param fs frame structure
  * @param idx UE index
  * @param count_mixed indicates whether counting mixed slot with UL symbols (e.g. for SRS) or only full UL slots
+ * @param beam_idx beam index
+ * @param beams_per_period no of concurrent beams
+ * @param num_beam no of beams
  * @return slot index offset
  */
-int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed)
+int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed, int beam_idx, int beams_per_period, int num_beam)
 {
   DevAssert(fs);
 
@@ -373,14 +376,18 @@ int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed)
     return idx;
 
   // UL slots indexes in period
-  int ul_slot_idxs[fs->numb_slots_period];
+  int ul_slot_idxs[num_beam][fs->numb_slots_period];
   int ul_slot_count = 0;
 
   /* Populate the indices of UL slots in the TDD period from the bitmap
   count also mixed slots with UL symbols if flag count_mixed is present */
-  for (int i = 0; i < fs->numb_slots_period; i++) {
-    if ((count_mixed && is_ul_slot(i, fs)) || fs->period_cfg.tdd_slot_bitmap[i].slot_type == TDD_NR_UPLINK_SLOT) {
-      ul_slot_idxs[ul_slot_count++] = i;
+  int NUM_SSB_period = (num_beam % beams_per_period > 0) ? num_beam / beams_per_period + 1 : num_beam / beams_per_period;
+  for (int j = 0; j < NUM_SSB_period; j++) {
+    ul_slot_count = 0;
+    for (int i = 0; i < fs->numb_slots_period; i++) {
+      if ((count_mixed && is_ul_slot(i, fs)) || fs->period_cfg.tdd_slot_bitmap[i].slot_type == TDD_NR_UPLINK_SLOT) {
+        ul_slot_idxs[j][ul_slot_count++] = i + j * fs->numb_slots_period;
+      }
     }
   }
 
@@ -388,7 +395,7 @@ int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed)
   int period_idx = idx / ul_slot_count; // wrap up the count of complete TDD periods spanned by the index
   int ul_slot_idx_in_period = idx % ul_slot_count; // wrap up the UL slot index within the current TDD period
 
-  return ul_slot_idxs[ul_slot_idx_in_period] + period_idx * fs->numb_slots_period;
+  return ul_slot_idxs[beam_idx / beams_per_period][ul_slot_idx_in_period] + period_idx * fs->numb_slots_period * NUM_SSB_period;
 }
 
 static void config_common(gNB_MAC_INST *nrmac, const nr_mac_config_t *config, NR_ServingCellConfigCommon_t *scc)
@@ -1088,7 +1095,7 @@ bool nr_trigger_bwp_switch(uint16_t rnti, int bwp_id)
   } else if (UE->current_DL_BWP.bwp_id == bwp_id) {
     LOG_W(NR_MAC, "UE %04x is already on BWP ID %d, not triggering reconfiguration\n", rnti, bwp_id);
   } else { // UE != NULL && current_DL_BWP.bwp_id != bwp_id
-    nr_mac_trigger_reconfiguration(nrmac, UE, bwp_id);
+    nr_mac_trigger_reconfiguration(nrmac, UE, bwp_id, false);
     success = true;
   }
   NR_SCHED_UNLOCK(&nrmac->sched_lock);

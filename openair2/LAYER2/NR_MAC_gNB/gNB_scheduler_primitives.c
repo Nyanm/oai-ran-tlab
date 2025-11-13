@@ -3698,19 +3698,20 @@ void reset_beam_status(NR_beam_info_t *beam_info, int frame, int slot, int beam_
   }
 }
 
-void beam_selection_procedures(gNB_MAC_INST *mac, NR_UE_info_t *UE)
+bool beam_selection_procedures(gNB_MAC_INST *mac, NR_UE_info_t *UE)
 {
   // do not perform beam procedures if there is no beam information
   if (mac->beam_info.beam_mode == NO_BEAM_MODE)
-    return;
+    return false;
   RSRP_report_t *rsrp_report = &UE->UE_sched_ctrl.CSI_report.ssb_rsrp_report;
   // simple beam switching algorithm -> we select beam with highest RSRP from CSI report
   int new_bf_index = get_fapi_beamforming_index(mac, rsrp_report->resource_id[0]);
   if (UE->UE_beam_index == new_bf_index)
-    return; // no beam change needed
+    return false; // no beam change needed
 
   LOG_I(NR_MAC, "[UE %x] Switching to beam with ID %d (SSB number %d)\n", UE->rnti, new_bf_index, rsrp_report->resource_id[0]);
   UE->UE_beam_index = new_bf_index;
+  return true;
 }
 
 void send_initial_ul_rrc_message(int rnti, const uint8_t *sdu, sdu_size_t sdu_len, void *data)
@@ -3764,7 +3765,9 @@ bool prepare_initial_ul_rrc_message(gNB_MAC_INST *mac, NR_UE_info_t *UE)
   int CC_id = 0;
   int srb_id = 1;
   const NR_ServingCellConfigCommon_t *scc = mac->common_channels[CC_id].ServingCellConfigCommon;
-  NR_CellGroupConfig_t *cellGroupConfig = get_initial_cellGroupConfig(UE->uid, scc, &mac->radio_config, &mac->rlc_config);
+  NR_COMMON_channels_t *cc = &mac->common_channels[CC_id];
+  int ssb_index = cc->ssb_index[UE->UE_beam_index];
+  NR_CellGroupConfig_t *cellGroupConfig = get_initial_cellGroupConfig(UE->uid, scc, &mac->radio_config, &mac->rlc_config, ssb_index, UE->UE_beam_index);
   ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, UE->CellGroup);
   UE->CellGroup = cellGroupConfig;
   UE->local_bwp_id = mac->radio_config.first_active_bwp;
@@ -3890,24 +3893,42 @@ static bool verify_bwp_switch(const NR_UE_info_t *UE, const nr_mac_config_t *con
   return false;
 }
 
-void nr_mac_trigger_reconfiguration(const gNB_MAC_INST *nrmac, NR_UE_info_t *UE, int new_bwp_id)
+void nr_mac_trigger_reconfiguration(const gNB_MAC_INST *nrmac, NR_UE_info_t *UE, int new_bwp_id, bool new_beam)
 {
   DevAssert(UE->CellGroup != NULL);
   NR_CellGroupConfig_t *cellGroup_for_UE = NULL;
-  if (new_bwp_id >= 0) {
-    AssertFatal(UE->current_DL_BWP.bwp_id == UE->current_UL_BWP.bwp_id, "We only support same BWP for UL and DL\n");
-    if (!verify_bwp_switch(UE, &nrmac->radio_config, new_bwp_id))
-      return;
-    else {
+  if (new_beam) {
       UE->sc_info.csi_MeasConfig = NULL;  // to avoid segfault when freeing csi_MeasConfig in configDedicated
-      UE->local_bwp_id = new_bwp_id;
-      cellGroup_for_UE = update_cellGroupConfig_for_BWP_switch(UE->CellGroup,
+      NR_UE_UL_BWP_t *current_BWP = &UE->current_UL_BWP;
+      current_BWP->srs_Config = NULL;
+      int ssb_index = nrmac->common_channels[0].ssb_index[UE->UE_beam_index];
+      cellGroup_for_UE = update_cellGroupConfig_for_beam_switch(UE->CellGroup,
                                                                &nrmac->radio_config,
                                                                UE->capability,
                                                                nrmac->common_channels[0].ServingCellConfigCommon,
                                                                UE->uid,
                                                                UE->current_DL_BWP.bwp_id,
-                                                               new_bwp_id);
+                                                               ssb_index,
+                                                               UE->UE_beam_index);
+  } else {
+    if (new_bwp_id >= 0) {
+      AssertFatal(UE->current_DL_BWP.bwp_id == UE->current_UL_BWP.bwp_id, "We only support same BWP for UL and DL\n");
+      if (!verify_bwp_switch(UE, &nrmac->radio_config, new_bwp_id))
+        return;
+      else {
+        UE->sc_info.csi_MeasConfig = NULL;  // to avoid segfault when freeing csi_MeasConfig in configDedicated
+        UE->local_bwp_id = new_bwp_id;
+        int ssb_index = nrmac->common_channels[0].ssb_index[UE->UE_beam_index];
+        cellGroup_for_UE = update_cellGroupConfig_for_BWP_switch(UE->CellGroup,
+                                                                &nrmac->radio_config,
+                                                                UE->capability,
+                                                                nrmac->common_channels[0].ServingCellConfigCommon,
+                                                                UE->uid,
+                                                                UE->current_DL_BWP.bwp_id,
+                                                                new_bwp_id,
+                                                                ssb_index,
+                                                                UE->UE_beam_index);
+      }
     }
   }
   uint8_t buf[2048];
