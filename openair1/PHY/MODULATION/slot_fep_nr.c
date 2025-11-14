@@ -19,6 +19,7 @@
  *      contact@openairinterface.org
  */
 
+#include "PHY/TOOLS/tools_defs.h"
 #include "PHY/defs_nr_UE.h"
 #include "PHY/defs_gNB.h"
 #include "modulation_UE.h"

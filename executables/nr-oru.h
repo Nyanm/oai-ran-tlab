@@ -42,7 +42,7 @@ typedef struct {
   notifiedFIFO_t sync_fifo;
   nr_prach_info_t prach_info;
   time_stats_t rx_prach;
-  pthread_barrier_t barrier;
+  time_stats_t rx;
   Actor_t prach_actor;
   Actor_t pusch_actors[NUM_PUSCH_ACTORS];
 } ORU_t;

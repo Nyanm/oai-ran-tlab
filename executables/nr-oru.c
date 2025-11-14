@@ -20,8 +20,13 @@
  */
 #include "PHY/TOOLS/tools_defs.h"
 #include "PHY/defs_RU.h"
+#include "PHY/impl_defs_nr.h"
 #include "nfapi_nr_interface_scf.h"
+#include "platform_types.h"
+#include "time_meas.h"
 #include <bits/pthreadtypes.h>
+#include <time.h>
+#include <unistd.h>
 #define _GNU_SOURCE
 #include "nr-oru.h"
 #include "openair1/PHY/defs_nr_common.h"
@@ -113,14 +118,6 @@ void oru_downlink_processing(RU_t *ru,
 {
   start_meas(&ru->tx_fhaul);
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
-  for (int symbol = start_symbol; symbol < start_symbol + num_symbols; symbol++) {
-    LOG_D(PHY,
-          "Ant 0 Signal energy %d.%d.%d %.3f\n",
-          frame,
-          slot,
-          symbol,
-          10 * log10(signal_energy_nodc(&txDataF_ptr[0][fp->ofdm_symbol_size * symbol], fp->ofdm_symbol_size)));
-  }
   for (int aatx = 0; aatx < ru->nb_tx; aatx++) {
     apply_nr_rotation_TX(fp, txDataF_ptr[aatx], fp->symbol_rotation[0], slot, fp->N_RB_DL, start_symbol, num_symbols);
     nr_feptx0(ru, slot, start_symbol, num_symbols, aatx);
@@ -340,7 +337,7 @@ void receive_prach(ORU_t *oru, int frame, int slot)
     uint32_t *prach_sig[fp->nb_antennas_rx];
     for (int i = 0; i < fp->nb_antennas_rx; i++) {
         prach_sig[i] = (uint32_t *)prach_id.rxsigF[0][i];
-      }
+    }
     ru->ifdevice.xran_api.north_write_prach_func(prach_sig, prach_id.slot, prach_id.frame);
   }
 }
@@ -355,11 +352,20 @@ void receive_pusch(ORU_t *oru, int frame, int slot, int start_symbol, int num_sy
   RU_t *ru = oru->ru;
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
 
+  nfapi_nr_config_request_scf_t *config = &ru->config;
+  nfapi_nr_tdd_table_t *tdd_table = &config->tdd_table;
+  AssertFatal(tdd_table->tdd_period.tl.tag == NFAPI_NR_CONFIG_TDD_PERIOD_TAG, "");
+  int nb_periods_per_frame = get_nb_periods_per_frame(tdd_table->tdd_period.value);
+  int n_tdd_period = fp->slots_per_frame / nb_periods_per_frame;
+  AssertFatal(n_tdd_period > 0, "n_tdd_period is zero\n");
+  nfapi_nr_max_num_of_symbol_per_slot_t *max_num_of_symbol_per_slot_list =
+      config->tdd_table.max_tdd_periodicity_list[slot % n_tdd_period].max_num_of_symbol_per_slot_list;
+
   c16_t rxdataF[fp->symbols_per_slot * fp->ofdm_symbol_size] __attribute__((aligned(32)));
   for (int aarx = aarx_start; aarx < fp->nb_antennas_rx; aarx += aarx_stride) {
-    uint32_t symbol_mask = 0;
     for (int symbol = symbol_start; symbol < start_symbol + num_symbols; symbol += symbol_stride) {
-      symbol_mask |= (1 << symbol);
+      if (max_num_of_symbol_per_slot_list[symbol].slot_config.value != 1)
+        continue;
       nr_slot_fep_ul(fp,
                      ru->common.rxdata[aarx],
                      (int32_t *)rxdataF,
@@ -368,29 +374,27 @@ void receive_pusch(ORU_t *oru, int frame, int slot, int start_symbol, int num_sy
                      ru->N_TA_offset);
       apply_nr_rotation_symbol_RX(fp,
                                   &rxdataF[symbol * fp->ofdm_symbol_size],
-                                  fp->symbol_rotation[1],
+                                  fp->symbol_rotation[link_type_ul],
                                   fp->N_RB_UL,
                                   slot,
                                   symbol);
+      ru->ifdevice.xran_api.north_write_pusch_func((uint32_t *)&rxdataF[symbol * fp->ofdm_symbol_size],
+                                                    frame,
+                                                    slot,
+                                                    symbol,
+                                                    aarx);
     }
-    ru->ifdevice.xran_api.north_write_pusch_func((uint32_t *)rxdataF,
-                                                 slot,
-                                                 frame,
-                                                 aarx,
-                                                 symbol_mask);
   }
 }
 
 void pusch_job(void *args) {
   pusch_task_args_t *job = (pusch_task_args_t *)args;
   receive_pusch(job->oru, job->frame, job->slot, job->start_symbol, job->num_symbols, &job->thread_grid);
-  pthread_barrier_wait(&job->oru->barrier);
 }
 
 void prach_job(void *args) {
   prach_task_args_t *job = (prach_task_args_t *)args;
   receive_prach(job->oru, job->frame, job->slot);
-  pthread_barrier_wait(&job->oru->barrier);
 }
 
 void *oru_south_read_thread(void *arg)
@@ -403,11 +407,14 @@ void *oru_south_read_thread(void *arg)
   int current_frame = 0;
   rx_initial_sync(oru, &current_slot, &current_frame);
   const int symbols_per_iteration = 7;
+  notifiedFIFO_t response_fifo;
+  initNotifiedFIFO(&response_fifo);
 
   while (!oai_exit) {
     int rx_slot_type = nr_slot_select(&ru->config, current_frame, current_slot);
     for (int symbol = 0; symbol < 14; symbol += symbols_per_iteration) {
-      int samples_to_read = get_samples_symbol_duration(fp, current_slot, symbol, symbols_per_iteration);
+      int num_symbols = min(symbols_per_iteration, 14 - symbol);
+      int samples_to_read = get_samples_symbol_duration(fp, current_slot, symbol, num_symbols);
       size_t offset = fp->get_samples_slot_timestamp(current_slot, fp, 0) + get_samples_symbol_timestamp(fp, current_slot, symbol);
       c16_t *rxp[fp->nb_antennas_rx];
       for (int aarx = 0; aarx < fp->nb_antennas_rx; aarx++) {
@@ -418,14 +425,13 @@ void *oru_south_read_thread(void *arg)
       int num_samples_read = ru->rfdevice.trx_read_func(&ru->rfdevice, &timestamp, (void **)rxp, samples_to_read, ru->nb_rx);
       AssertFatal(num_samples_read == samples_to_read, "Unexpected number of samples received\n");
 
-      bool is_slot_end = (symbol + symbols_per_iteration) >= fp->symbols_per_slot;
+      bool is_slot_end = (symbol + num_symbols) >= fp->symbols_per_slot;
       if (rx_slot_type == NR_UPLINK_SLOT || rx_slot_type == NR_MIXED_SLOT) {
-        int num_prach_jobs = is_slot_end ? 1 : 0;
-        int num_push_jobs = NUM_PUSCH_ACTORS;
-        int num_barrier_waits = num_prach_jobs + num_push_jobs + 1;
-        pthread_barrier_init(&oru->barrier, NULL, num_barrier_waits);
+        int num_jobs = 0;
+        start_meas(&oru->rx);
         if (is_slot_end) {
-          notifiedFIFO_elt_t *prach_task = newNotifiedFIFO_elt(sizeof(prach_task_args_t), 0, NULL, prach_job);
+          num_jobs++;
+          notifiedFIFO_elt_t *prach_task = newNotifiedFIFO_elt(sizeof(prach_task_args_t), 0, &response_fifo, prach_job);
           prach_task_args_t *job = NotifiedFifoData(prach_task);
           job->oru = oru;
           job->frame = current_frame;
@@ -434,13 +440,14 @@ void *oru_south_read_thread(void *arg)
         }
 
         for (int i = 0; i < NUM_PUSCH_ACTORS; i++) {
-          notifiedFIFO_elt_t *pusch_task = newNotifiedFIFO_elt(sizeof(pusch_task_args_t), 0, NULL, pusch_job);
+          num_jobs++;
+          notifiedFIFO_elt_t *pusch_task = newNotifiedFIFO_elt(sizeof(pusch_task_args_t), 0, &response_fifo, pusch_job);
           pusch_task_args_t *job = NotifiedFifoData(pusch_task);
           job->oru = oru;
           job->frame = current_frame;
           job->slot = current_slot;
           job->start_symbol = symbol;
-          job->num_symbols = symbols_per_iteration;
+          job->num_symbols = num_symbols;
           job->thread_grid.x = 0;
           job->thread_grid.size_x = 1;
           job->thread_grid.y = i;
@@ -448,8 +455,13 @@ void *oru_south_read_thread(void *arg)
           pushNotifiedFIFO(&oru->pusch_actors[i].fifo, pusch_task);
         }
 
-        pthread_barrier_wait(&oru->barrier);
-        ru->ifdevice.xran_api.north_out_func(current_slot, 0, ru->nb_rx, ((1 << symbols_per_iteration) - 1) << symbol);
+        while (num_jobs > 0) {
+          notifiedFIFO_elt_t *elt = pullNotifiedFIFO(&response_fifo);
+          delNotifiedFIFO_elt(elt);
+          num_jobs--;
+        }
+        ru->ifdevice.xran_api.north_out_func(current_slot, 0, ru->nb_rx, ((1 << num_symbols) - 1) << symbol);
+        stop_meas(&oru->rx);
       }
     }
     current_slot++;

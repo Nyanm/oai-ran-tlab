@@ -213,10 +213,45 @@ int trx_oran_ctlrecv(openair0_device *device, void *msg, ssize_t msg_len)
   return 0;
 }
 
+void dump_nonzero_symbol(c16_t *txdataF, uint32_t ofdm_symbol_size, int frame, int slot, int symbol, const char* loc)
+{
+  return;
+  float signal_energy = signal_energy_nodc(txdataF, ofdm_symbol_size);
+  if (signal_energy > 1) {
+    // Prepare a buffer to hold the formatted string for the symbol
+    const int num_chars_per_sample = 4 + 6 * 2;
+    char symbol_buf[ofdm_symbol_size * num_chars_per_sample]; // Enough for "(r,i) " per sample 
+    int offset = 0;
+    bool is_zero_block = true;
+    for (int i = 0; i < ofdm_symbol_size; i++) {
+      bool is_zero = txdataF[i].r == 0 && txdataF[i].i == 0;
+      if (is_zero_block && !is_zero) {
+        offset += snprintf(symbol_buf + offset, sizeof(symbol_buf) - offset, "[sc %d]: ", i);
+        is_zero_block = false;
+      }
+      if (!is_zero_block && is_zero) {
+        is_zero_block = true;
+      }
+      if (!is_zero) {
+        offset += snprintf(symbol_buf + offset, sizeof(symbol_buf) - offset, "(%d,%d) ", txdataF[i].r, txdataF[i].i);
+      }
+    }
+    symbol_buf[offset] = '\0';
+    LOG_I(HW, "Antenna 0 Frame.Slot.Symbol %d.%d.%d (%s) signal_energy %.3f samples: %s\n", frame, slot, symbol, loc, 10 * log10(signal_energy), symbol_buf);
+  }
+}
+
 void oran_fh_if4p5_north_in(uint32_t **txdataF, int nb_tx, sense_of_time_t* sense_of_time, int *num_symbols) {
   *num_symbols = RU_SYMBOLS_PER_CALLBACK;
   int ret = xran_fh_tx_read_slot(txdataF, nb_tx, &sense_of_time->frame, &sense_of_time->slot, &sense_of_time->symbol, &sense_of_time->ts);
   AssertFatal(ret == 0, "ORAN: Error reading slot");
+
+  int fftsize = 1 << get_xran_fh_config(0)->ru_conf.fftSize;
+  if (sense_of_time->frame == 0 && sense_of_time->slot == 0) {
+    for (int symbol = sense_of_time->symbol; symbol < sense_of_time->symbol + *num_symbols; symbol++) {
+      dump_nonzero_symbol((c16_t *)&txdataF[0][fftsize * symbol], fftsize, sense_of_time->frame, sense_of_time->slot, symbol, "north_in");
+    }
+  }
 }
 
 void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
@@ -242,6 +277,14 @@ void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
     printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX function \n", f, sl);
   }
 
+  for (int symbol = 0; symbol < 14; symbol++) {
+    dump_nonzero_symbol((c16_t *)&ru->common.rxdataF[0][ru->nr_frame_parms->ofdm_symbol_size * symbol],
+                        ru->nr_frame_parms->ofdm_symbol_size,
+                        f,
+                        sl,
+                        symbol,
+                        "south_in");
+  }
   int slots_per_frame = 10 << (ru->openair0_cfg.nr_scs_for_raster);
   proc->tti_rx = sl;
   proc->frame_rx = f;
@@ -290,6 +333,13 @@ void oran_fh_if4p5_south_out(RU_t *ru, int frame, int slot, uint64_t timestamp)
 
   // printf("south_out:\tframe=%d\tslot=%d\ttimestamp=%ld\n",frame,slot,timestamp);
 
+  int fftsize = 1 << get_xran_fh_config(0)->ru_conf.fftSize;
+  if (frame == 0 && slot == 0) {
+    for (int symbol = 0; symbol < 14; symbol++) {
+      dump_nonzero_symbol((c16_t *)&ru_info.txdataF_BF[0][fftsize * symbol], fftsize, frame, slot, symbol, "south_out");
+    }
+  }
+
   int ret = xran_fh_tx_send_slot(&ru_info, frame, slot, timestamp);
   if (ret != 0) {
     printf("ORAN: ORAN_fh_if4p5_south_out ERROR in TX function \n");
@@ -304,9 +354,13 @@ void oran_write_prach(uint32_t** prach_dataF,
   write_prach_data(prach_dataF, 1, frame, slot);
 }
 
-void oran_write_push(uint32_t *pusch_dataF, int slot, int frame, int aarx, uint32_t symbol_mask)
+void oran_write_pusch(uint32_t *pusch_dataF, int frame, int slot, int symbol, int aarx)
 {
-  write_pusch_data(pusch_dataF, slot, frame, aarx, symbol_mask);
+  if (aarx == 0) {
+    int fftsize = 1 << get_xran_fh_config(0)->ru_conf.fftSize;
+    dump_nonzero_symbol((c16_t *)pusch_dataF, fftsize, frame, slot, symbol, "write_pusch");
+  }
+  write_pusch(pusch_dataF, frame, slot, symbol, aarx);
 }
 
 void oran_prepare_packets(int slot, int start_antenna_index, int num_antennas, uint32_t symbol_mask)
@@ -456,7 +510,7 @@ __attribute__((__visibility__("default"))) int transport_init(openair0_device *d
   device->openair0_cfg = &openair0_cfg[0];
   device->xran_api.north_in_func = oran_fh_if4p5_north_in;
   device->xran_api.north_write_prach_func = oran_write_prach;
-  device->xran_api.north_write_pusch_func = oran_write_push;
+  device->xran_api.north_write_pusch_func = oran_write_pusch;
   device->xran_api.north_out_func = oran_prepare_packets;
 
   return 0;

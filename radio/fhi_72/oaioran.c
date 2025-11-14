@@ -19,11 +19,13 @@
  *      contact@openairinterface.org
  */
 
+#include "assertions.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include "xran_fh_o_du.h"
 #include "xran_compression.h"
+#include "xran_pkt_up.h"
 #include "armral_bfp_compression.h"
 
 #if defined(__arm__) || defined(__aarch64__)
@@ -52,6 +54,7 @@
 volatile bool first_call_set = false;
 
 int xran_is_prach_slot(uint8_t PortId, uint32_t subframe_id, uint32_t slot_id);
+static bool is_tdd_ul_symbol(const struct xran_frame_config *frame_conf, int slot, int sym_idx);
 #include "common/utils/LOG/log.h"
 
 #ifndef USE_POLLING
@@ -330,36 +333,90 @@ int write_prach_data(uint32_t **prachDataF, int nb_rx, int frame, int slot)
   return 0;
 }
 
-int write_pusch_data(uint32_t *puschDataF, int slot, int frame, int aarx, uint32_t symbol_mask)
+int write_pusch(uint32_t* txdataF_symb, int frame, int slot, int symbol, int aarx)
 {
-  struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
-  struct xran_ru_config *ru_conf = &fh_cfg->ru_conf;
-  AssertFatal(ru_conf->compMeth == XRAN_COMPMETHOD_NONE, "Only COMPMETHOD_NONE is supported in write_pusch_data\n");
-  int slots_per_frame = 10 << fh_cfg->frame_conf.nNumerology;
+  AssertFatal(txdataF_symb != NULL, "txdataF_symb is NULL\n");
+  int tti = 20 * frame + slot;
 
-  int tti = slots_per_frame * frame + slot;
-  int fftsize = 1 << fh_cfg->ru_conf.fftSize;
+  void *ptr = NULL;
+  int32_t *pos = NULL;
+  int idx = 0;
+
+  const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
   int nPRBs = fh_cfg->nDLRBs;
-  int num_subcarriers = nPRBs * 12;
-  int first_carrier_offset = fftsize - (num_subcarriers / 2);
+  int fftsize = 1 << fh_cfg->ru_conf.fftSize;
+
   oran_buf_list_t *bufs = get_xran_buffers(0);
-  for (int sym_idx = 0; sym_idx < 14; sym_idx++) {
-    if (((1 << sym_idx) & symbol_mask) == 0)
-      continue;
-    int16_t *dst = (int16_t *)bufs->dst[aarx][tti % XRAN_N_FE_BUF_LEN].pBuffers[sym_idx].pData;
-    int16_t *src = (int16_t *)&puschDataF[fftsize * sym_idx];
-    if (ru_conf->compMeth == XRAN_COMPMETHOD_NONE) {
-      int sc_index = 0;
-      for (int idx = first_carrier_offset; idx < fftsize; idx++) {
-        dst[sc_index++] = ((int16_t)ntohs(src[idx]));
-      }
-      int scs_left = num_subcarriers - sc_index;
-      for (int idx = 0; idx < scs_left; idx++) {
-        dst[sc_index++] = ((int16_t)ntohs(src[idx]));
-      }
-    }
+  const struct xran_frame_config *frame_conf = &get_xran_fh_config(0)->frame_conf;
+  if(!is_tdd_ul_symbol(frame_conf, slot, symbol)){
+    LOG_W(HW, "Trying to write PUSCH data in non UL symbol %d.%d.%d\n", frame, slot, symbol);
   }
-  return 0;
+
+  uint8_t *pData = bufs->src[aarx][tti % XRAN_N_FE_BUF_LEN].pBuffers[symbol % XRAN_NUM_OF_SYMBOL_PER_SLOT].pData;
+  AssertFatal(pData != NULL, "pData is NULL\n");
+  uint8_t *pPrbMapData = bufs->srccp[aarx][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
+  struct xran_prb_map *pPrbMap = (struct xran_prb_map *)pPrbMapData;
+  ptr = pData;
+  pos = (int32_t*)txdataF_symb;
+
+  uint8_t *u8dptr;
+  struct xran_prb_map *pRbMap = pPrbMap;
+
+  uint32_t idxElm = 0;
+  u8dptr = (uint8_t *)ptr;
+  int16_t payload_len = 0;
+
+  uint8_t *dst = (uint8_t *)u8dptr;
+
+  struct xran_prb_elm *p_prbMapElm = &pRbMap->prbMap[idxElm];
+
+  for (idxElm = 0; idxElm < pRbMap->nPrbElm; idxElm++) {
+    struct xran_section_desc *p_sec_desc = NULL;
+    p_prbMapElm = &pRbMap->prbMap[idxElm];
+
+
+    p_sec_desc = &p_prbMapElm->sec_desc[symbol][0];
+    dst = xran_add_hdr_offset(dst, p_prbMapElm->compMethod);
+
+    AssertFatal(p_sec_desc != NULL, "p_sec_desc == NULL\n");
+    uint16_t *dst16 = (uint16_t *)dst;
+
+    int pos_len = 0;
+    int neg_len = 0;
+
+    if (p_prbMapElm->nRBStart < (nPRBs >> 1)) // there are PRBs left of DC
+      neg_len = min((nPRBs * 6) - (p_prbMapElm->nRBStart * 12), p_prbMapElm->nRBSize * N_SC_PER_PRB);
+    pos_len = (p_prbMapElm->nRBSize * N_SC_PER_PRB) - neg_len;
+    // Calculation of the pointer for the section in the buffer.
+    // start of positive frequency component
+    uint16_t *src1 = (uint16_t *)&pos[(neg_len == 0) ? ((p_prbMapElm->nRBStart * N_SC_PER_PRB) - (nPRBs * 6)) : 0];
+    // start of negative frequency component
+    uint16_t *src2 = (uint16_t *)&pos[(p_prbMapElm->nRBStart * N_SC_PER_PRB) + fftsize - (nPRBs * 6)];
+
+    uint32_t local_src[p_prbMapElm->nRBSize * N_SC_PER_PRB] __attribute__((aligned(64)));
+    memcpy((void *)local_src, (void *)src2, neg_len * 4);
+    memcpy((void *)&local_src[neg_len], (void *)src1, pos_len * 4);
+    if (p_prbMapElm->compMethod == XRAN_COMPMETHOD_NONE) {
+      payload_len = p_prbMapElm->nRBSize * N_SC_PER_PRB * 4L;
+      /* convert to Network order */
+      // NOTE: ggc 11 knows how to generate AVX2 for this!
+      for (idx = 0; idx < (pos_len + neg_len) * 2; idx++)
+        ((uint16_t *)dst16)[idx] = htons(((uint16_t *)local_src)[idx]);
+    } else {
+      printf("p_prbMapElm->compMethod == %d is not supported\n", p_prbMapElm->compMethod);
+      exit(-1);
+    }
+
+    p_sec_desc->iq_buffer_offset = RTE_PTR_DIFF(dst, u8dptr);
+    p_sec_desc->iq_buffer_len = payload_len;
+
+    dst += payload_len;
+    dst = xran_add_hdr_offset(dst, p_prbMapElm->compMethod);
+  }
+
+  // The tti should be updated as it increased.
+  pRbMap->tti_id = tti;
+  return (0);
 }
 
 /** @brief Check if symbol in slot is UL.

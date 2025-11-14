@@ -43,6 +43,6 @@ void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status);
 /** @brief xran callback for time alignment, see xran_reg_physide_cb(). */
 int oai_physide_dl_tti_call_back(void *param);
 int write_prach_data(uint32_t **prachDataF, int nb_rx, int frame, int slot);
-int write_pusch_data(uint32_t *puschDataF, int slot, int frame, int aarx, uint32_t symbol_mask);
+int write_pusch(uint32_t* txdataF_symb, int frame, int slot, int symbol, int aarx);
 
 #endif /* OAIORAN_H */

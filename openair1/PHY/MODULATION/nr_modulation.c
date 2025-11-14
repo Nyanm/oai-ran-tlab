@@ -647,6 +647,7 @@ void init_symbol_rotation(NR_DL_FRAME_PARMS *fp)
 
 void init_timeshift_rotation(NR_DL_FRAME_PARMS *fp)
 {
+  AssertFatal(fp->ofdm_offset_divisor != 0, "OFDM offset divisor is zero\n");
   const int sample_offset = fp->nb_prefix_samples / fp->ofdm_offset_divisor;
   for (int i = 0; i < fp->ofdm_symbol_size; i++) {
     double poff = -i * 2.0 * M_PI * sample_offset / fp->ofdm_symbol_size;

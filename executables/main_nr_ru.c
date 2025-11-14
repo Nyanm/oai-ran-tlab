@@ -60,6 +60,7 @@
 #include "openair1/SCHED_NR/sched_nr.h"
 #include "openair2/LAYER2/NR_MAC_COMMON/nr_prach_config.h"
 #include "actor.h"
+#include "instrumentation.h"
 
 pthread_cond_t sync_cond;
 pthread_mutex_t sync_mutex;
@@ -197,13 +198,12 @@ int main(int argc, char **argv)
 
   RU_t *ru = RC.ru[0];
   ORU_t oru = {0};
-  pthread_barrier_init(&oru.barrier, NULL, NUM_PUSCH_ACTORS + 1);
   for (int i = 0; i < NUM_PUSCH_ACTORS; i++) {
     char actor_name[20];
-    sprintf(actor_name, "PUSCH_Actor%d", i);
+    sprintf(actor_name, "PUSCH%d", i);
     init_actor(&oru.pusch_actors[i], actor_name, -1);
   }
-  init_actor(&oru.prach_actor, "PRACH_Actor", -1);
+  init_actor(&oru.prach_actor, "PRACH", -1);
 
   initNotifiedFIFO(&oru.sync_fifo);
   oru.ru = ru;
@@ -214,6 +214,7 @@ int main(int argc, char **argv)
   nr_dump_frame_parms(fp);
   init_symbol_rotation(fp);
   fp->ofdm_offset_divisor = 8;
+  init_timeshift_rotation(fp);
   ru->if_south = LOCAL_RF;
   nr_phy_init_RU(ru);
   fill_rf_config(ru, ru->rf_config_file);
@@ -250,7 +251,7 @@ int main(int argc, char **argv)
 
   signal(SIGINT, stop_ru);
   threadCreate(&oru.north_read_thread, oru_north_read_thread, (void *)&oru, "north_read_thread", -1, OAI_PRIORITY_RT_MAX);
-  threadCreate(&oru.south_read_thread, oru_south_read_thread, (void *)&oru, "north_read_thread", -1, OAI_PRIORITY_RT_MAX);
+  threadCreate(&oru.south_read_thread, oru_south_read_thread, (void *)&oru, "south_read_thread", -1, OAI_PRIORITY_RT_MAX);
 
   while (oai_exit == 0) {
     sleep(1);
@@ -278,6 +279,7 @@ int main(int argc, char **argv)
   }
 
   print_meas(&ru->tx_fhaul, "TX FH processing", NULL, NULL);
+  print_meas(&oru.rx, "RX processing", NULL, NULL);
 
   logClean();
   printf("Bye.\n");

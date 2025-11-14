@@ -647,7 +647,7 @@ struct openair0_device_t {
      * \param antenna_id antenna index to write to
      * \param symbol_mask bit mask indicating which symbols to read from puschF
      */
-    void (*north_write_pusch_func)(uint32_t *puschF, int slot, int frame, int antenna_id, uint32_t symbol_mask);
+    void (*north_write_pusch_func)(uint32_t *puschF, int frame, int slot, int symbol, int aarx);
     /*! \brief O-RU only: sends UL FD IQ.
      * \param slot
      * \param start_antenna_index first antenna index to send
