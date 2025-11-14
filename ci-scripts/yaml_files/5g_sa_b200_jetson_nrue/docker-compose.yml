@@ -19,7 +19,7 @@ services:
         environment:
             TZ: Europe/Paris
             USE_B2XX: 'yes'
-            USE_ADDITIONAL_OPTIONS:  --usrp-args serial=8001860 -C 3350010000 -r 78 --numerology 1 --band 78 --ssb 345 --ue-fo-compensation --uicc0.imsi 208970100001127 --A 60 --thread-pool 7,8,9,10 --num-dl-actors 4 --num-ul-actors 2 --ue-txgain 15 --ue-rxgain 110
+            USE_ADDITIONAL_OPTIONS:  --usrp-args serial=8001860 -C 3350010000 -r 78 --numerology 1 --band 78 --ssb 345 --ue-fo-compensation --uicc0.imsi 208970000000001 --A 60 --thread-pool 7,8,9,10,11 --num-dl-actors 5 --num-ul-actors 2 --ue-txgain 10 --ue-rxgain 110
         volumes:
             - ../../conf_files/ue.sa.conf:/opt/oai-nr-ue/etc/nr-ue.conf
         healthcheck:
