@@ -92,7 +92,7 @@ void PHY_ofdm_mod(int *input,                       /// pointer to complex input
   volatile int *output_ptr=(int*)0;
 
   int *temp_ptr=(int*)0;
-  void (*idft)(int16_t *,int16_t *, int);
+  void (*idft)(int32_t *,int32_t *, int);
 
   switch (fftsize) {
   case 128:

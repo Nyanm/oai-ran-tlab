@@ -41,9 +41,9 @@ int slot_fep_ul(LTE_DL_FRAME_PARMS *frame_parms,
   //  unsigned int subframe_offset;
   unsigned int slot_offset;
 
-  void (*dft)(int16_t *,int16_t *, int);
+  void (*dft)(int32_t *,int32_t *, int);
 
-  int tmp_dft_in[2048] __attribute__ ((aligned (32)));  // This is for misalignment issues for 6 and 15 PRBs
+  uint32_t tmp_dft_in[2048] __attribute__ ((aligned (32)));  // This is for misalignment issues for 6 and 15 PRBs
   unsigned int frame_length_samples = frame_parms->samples_per_tti * 10;
   unsigned int rx_offset;
 
@@ -103,8 +103,8 @@ int slot_fep_ul(LTE_DL_FRAME_PARMS *frame_parms,
     rx_offset = slot_offset +nb_prefix_samples0;
     if (l==0) {
 
-      dft( (int16_t *)&eNB_common_vars->rxdata_7_5kHz[eNB_id][aa][rx_offset],
-           (int16_t *)&eNB_common_vars->rxdataF[eNB_id][aa][frame_parms->ofdm_symbol_size*symbol],
+      dft( &eNB_common_vars->rxdata_7_5kHz[eNB_id][aa][rx_offset],
+           &eNB_common_vars->rxdataF[eNB_id][aa][frame_parms->ofdm_symbol_size*symbol],
            1
          );
     } else {
@@ -123,15 +123,15 @@ int slot_fep_ul(LTE_DL_FRAME_PARMS *frame_parms,
       if( (rx_offset & 15) != 0){
         memcpy((void *)&tmp_dft_in,
 	       (void *)&eNB_common_vars->rxdata_7_5kHz[eNB_id][aa][(rx_offset % frame_length_samples)],
-	       frame_parms->ofdm_symbol_size*sizeof(int));
-        dft( (short *) tmp_dft_in,
-             (short*)  &eNB_common_vars->rxdataF[eNB_id][aa][frame_parms->ofdm_symbol_size*symbol],
+	       frame_parms->ofdm_symbol_size*sizeof(int32_t));
+        dft( (int32_t *) tmp_dft_in,
+             (int32_t*)  &eNB_common_vars->rxdataF[eNB_id][aa][frame_parms->ofdm_symbol_size*symbol],
              1
            );
       }
       else{
-      dft( (short *)&eNB_common_vars->rxdata_7_5kHz[eNB_id][aa][rx_offset],
-           (short*)&eNB_common_vars->rxdataF[eNB_id][aa][frame_parms->ofdm_symbol_size*symbol],
+      dft( (int32_t *)&eNB_common_vars->rxdata_7_5kHz[eNB_id][aa][rx_offset],
+           (int32_t*)&eNB_common_vars->rxdataF[eNB_id][aa][frame_parms->ofdm_symbol_size*symbol],
            1
          );
       }

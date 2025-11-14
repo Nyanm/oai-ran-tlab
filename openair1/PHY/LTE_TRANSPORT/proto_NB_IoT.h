@@ -617,7 +617,7 @@ int ul_chest_tmp_f2_NB_IoT(int32_t **rxdataF_ext,
                            uint16_t ul_sc_start,
                            LTE_DL_FRAME_PARMS *frame_parms);
 
-void rotate_channel_sc_tmp_NB_IoT(int16_t *estimated_channel,
+void rotate_channel_sc_tmp_NB_IoT(int32_t *estimated_channel,
                                   uint8_t l, 
                                   uint8_t Qm, 
                                   uint8_t counter_msg3,

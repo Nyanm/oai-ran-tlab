@@ -44,7 +44,7 @@ int slot_fep_mbsfn(PHY_VARS_UE *ue,
 
   //   int i;
   unsigned int frame_length_samples = frame_parms->samples_per_tti * 10;
-  void (*dft)(int16_t *,int16_t *, int);
+  void (*dft)(int32_t *,int32_t *, int);
 
   switch (frame_parms->ofdm_symbol_size) {
 
@@ -114,11 +114,11 @@ int slot_fep_mbsfn(PHY_VARS_UE *ue,
 #if UE_TIMING_TRACE
         start_meas(&ue->rx_dft_stats);
 #endif
-      dft((int16_t *)&common_vars->rxdata[aa][(sample_offset +
+      dft((int32_t *)&common_vars->rxdata[aa][(sample_offset +
           nb_prefix_samples0 +
           subframe_offset -
           SOFFSET) % frame_length_samples],
-          (int16_t *)&common_vars->common_vars_rx_data_per_thread[subframe&0x1].rxdataF[aa][frame_parms->ofdm_symbol_size*l],1);
+          (int32_t *)&common_vars->common_vars_rx_data_per_thread[subframe&0x1].rxdataF[aa][frame_parms->ofdm_symbol_size*l],1);
 #if UE_TIMING_TRACE
       stop_meas(&ue->rx_dft_stats);
 #endif
@@ -128,19 +128,19 @@ int slot_fep_mbsfn(PHY_VARS_UE *ue,
            (frame_parms->ofdm_symbol_size+nb_prefix_samples)*(l-1) +
            subframe_offset-
            SOFFSET) > (frame_length_samples - frame_parms->ofdm_symbol_size))
-        memcpy((short *)&common_vars->rxdata[aa][frame_length_samples],
-               (short *)&common_vars->rxdata[aa][0],
+        memcpy((int32_t *)&common_vars->rxdata[aa][frame_length_samples],
+               (int32_t *)&common_vars->rxdata[aa][0],
                frame_parms->ofdm_symbol_size*sizeof(int));
 
 #if UE_TIMING_TRACE
       start_meas(&ue->rx_dft_stats);
 #endif
-      dft((int16_t *)&common_vars->rxdata[aa][(sample_offset +
+      dft((int32_t *)&common_vars->rxdata[aa][(sample_offset +
           (frame_parms->ofdm_symbol_size+nb_prefix_samples0+nb_prefix_samples) +
           (frame_parms->ofdm_symbol_size+nb_prefix_samples)*(l-1) +
           subframe_offset-
           SOFFSET) % frame_length_samples],
-          (int16_t *)&common_vars->common_vars_rx_data_per_thread[subframe&0x1].rxdataF[aa][frame_parms->ofdm_symbol_size*l],1);
+          (int32_t *)&common_vars->common_vars_rx_data_per_thread[subframe&0x1].rxdataF[aa][frame_parms->ofdm_symbol_size*l],1);
 #if UE_TIMING_TRACE
       stop_meas(&ue->rx_dft_stats);
 #endif

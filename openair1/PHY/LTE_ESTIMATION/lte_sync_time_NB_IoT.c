@@ -152,29 +152,29 @@ int lte_sync_time_init_NB_IoT(NB_IoT_DL_FRAME_PARMS *frame_parms )   // LTE_UE_C
 
     switch (frame_parms->N_RB_DL) {
     case 6:
-      idft128((short*)syncF_tmp,          /// complex input
-  	   (short*)sync_tmp, /// complex output
+      idft128((int32_t*)syncF_tmp,          /// complex input
+  	   (int32_t*)sync_tmp, /// complex output
   	   1);
       break;
     case 25:
-      idft512((short*)syncF_tmp,          /// complex input
-  	   (short*)sync_tmp, /// complex output
+      idft512((int32_t*)syncF_tmp,          /// complex input
+  	   (int32_t*)sync_tmp, /// complex output
   	   1);
       break;
     case 50:
-      idft1024((short*)syncF_tmp,          /// complex input
-  	    (short*)sync_tmp, /// complex output
+      idft1024((int32_t*)syncF_tmp,          /// complex input
+  	    (int32_t*)sync_tmp, /// complex output
   	    1);
       break;
       
     case 75:
-      idft1536((short*)syncF_tmp,          /// complex input
-  	     (short*)sync_tmp,
+      idft1536((int32_t*)syncF_tmp,          /// complex input
+  	     (int32_t*)sync_tmp,
   	     1); /// complex output
       break;
     case 100:
-      idft2048((short*)syncF_tmp,          /// complex input
-  	     (short*)sync_tmp, /// complex output
+      idft2048((int32_t*)syncF_tmp,          /// complex input
+  	     (int32_t*)sync_tmp, /// complex output
   	     1);
       break;
     default:

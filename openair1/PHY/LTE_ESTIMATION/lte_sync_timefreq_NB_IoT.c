@@ -267,7 +267,7 @@ void lte_sync_timefreq_NB_IoT(PHY_VARS_UE_NB_IoT *ue,int band,unsigned int DL_fr
         }
 
         // ifft, accumulate energy over two half-frames
-        idft256((int16_t*)autocorr0,(int16_t*)tmp_t,1);
+        idft256((int32_t*)autocorr0,(int32_t*)tmp_t,1);
         /*
               if (i==12288) {
           sprintf(fname,"corr256F_%d.m",abs(f));
@@ -285,7 +285,7 @@ void lte_sync_timefreq_NB_IoT(PHY_VARS_UE_NB_IoT *ue,int band,unsigned int DL_fr
         for (re=0; re<(256/4); re++)
           autocorr0_t[re] = _mm_add_epi32(autocorr0_t[re],_mm_madd_epi16(tmp_t[re],tmp_t[re]));
 
-        idft256((int16_t*)autocorr1,(int16_t*)tmp_t,1);
+        idft256((int32_t*)autocorr1,(int32_t*)tmp_t,1);
 
         for (re=0; re<(256/4); re++)
           autocorr1_t[re] = _mm_add_epi32(autocorr1_t[re],_mm_madd_epi16(tmp_t[re],tmp_t[re]));

@@ -1606,7 +1606,7 @@ int phy_init_lte_eNB(PHY_VARS_eNB *eNB,
           }
         } //eNB_id
 
-        pusch_vars[UE_id]->llr = (int16_t*)malloc16_clear( (8*((3*8*6144)+12))*sizeof(int16_t) );
+        pusch_vars[UE_id]->llr = (int32_t*)malloc16_clear( (8*((3*8*6144)+12))*sizeof(int32_t) );
       } // abstraction_flag
     } //UE_id
 

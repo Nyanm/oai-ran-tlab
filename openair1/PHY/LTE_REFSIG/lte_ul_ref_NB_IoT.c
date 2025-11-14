@@ -45,8 +45,8 @@
 uint16_t sequence_length[4] = {100,100,100,100}; //the "32" value corresponds to the max gold sequence length 
 
 // int16_t *ul_ref_sigs[30][33];
-int16_t *ul_ref_sigs_rx_NB_IoT[30][4]; //these contain the sequences in repeated format and quantized to QPSK ifdef IFFT_FPGA
-int16_t *ul_ref_sigs_f2_rx_NB_IoT[16]; //this table contain the 16 possible pilots for format 2 NPUSCH
+int32_t *ul_ref_sigs_rx_NB_IoT[30][4]; //these contain the sequences in repeated format and quantized to QPSK ifdef IFFT_FPGA
+int32_t *ul_ref_sigs_f2_rx_NB_IoT[16]; //this table contain the 16 possible pilots for format 2 NPUSCH
 uint16_t u_max[4] = {16,12,14,30}; // maximum u value, see 36.211, Section 10.1.4
 
 /* 36.211 table 5.5.1.2-1 */
@@ -234,8 +234,8 @@ void generate_ul_ref_sigs_rx_NB_IoT(void)
 
   unsigned int u,index_Nsc_RU,n,m; // Vincent: index_Nsc_RU 0,1,2,3 ---> number of sc 1,3,6,12 
   //uint8_t npusch_format = 1; // NB-IoT: format 1 (data), or 2: ack. Should be defined in higher layer 
-  int16_t  a;
-  int16_t   qpsk[2]; 
+  int32_t  a;
+  int32_t   qpsk[2]; 
   unsigned int x1, x2; // NB-IoT: defined in 36.211, Section 10.1.4.1.1
   int16_t ref_sigs_sc1[2*sequence_length[0]]; // this is for format 1
   //int16_t ref_sigs_sc1_f2[2*sequence_length[0]]; // this is for format 2
@@ -256,8 +256,8 @@ void generate_ul_ref_sigs_rx_NB_IoT(void)
         case 0: // 36.211, Section 10.1.4.1.1
     x2=35;
     s = lte_gold_generic_NB_IoT(&x1, &x2, 1);
-          ul_ref_sigs_rx_NB_IoT[u][index_Nsc_RU] = (int16_t*)malloc(sizeof(int16_t)*(2*sequence_length[index_Nsc_RU]*12+24)); // *12 is mandatory to fit channel estimation functions
-    ul_ref_sigs_f2_rx_NB_IoT[u] = (int16_t*)malloc(sizeof(int16_t)*(2*12*12+24)); // first "*12" is mandatory to fit channel estimation functions; first "*12" is the length of pilot sequence for                        format 2
+          ul_ref_sigs_rx_NB_IoT[u][index_Nsc_RU] = (int32_t*)malloc(sizeof(int16_t)*(2*sequence_length[index_Nsc_RU]*12+24)); // *12 is mandatory to fit channel estimation functions
+    ul_ref_sigs_f2_rx_NB_IoT[u] = (int32_t*)malloc(sizeof(int32_t)*(2*12*12+24)); // first "*12" is mandatory to fit channel estimation functions; first "*12" is the length of pilot sequence for                        format 2
           // NB-IoT: for same reason, +24 is added in order to fit the possible subcarrier start shift when index_Nsc_RU = 0, 1, 2 --> see ul_sc_start in channel estimation function
           for (n=0; n<sequence_length[index_Nsc_RU]; n++) 
     {
@@ -291,6 +291,7 @@ void generate_ul_ref_sigs_rx_NB_IoT(void)
   }
 }
 
+
 void free_ul_ref_sigs_NB_IoT(void)
 {
 
@@ -299,7 +300,7 @@ void free_ul_ref_sigs_NB_IoT(void)
   for (index_Nsc_RU=0; index_Nsc_RU<4; index_Nsc_RU++) {
     for (u=0; u<30; u++) {
         if (ul_ref_sigs_rx_NB_IoT[u][index_Nsc_RU])
-          free16(ul_ref_sigs_rx_NB_IoT[u][index_Nsc_RU],4*sizeof(int16_t)*sequence_length[index_Nsc_RU]);
+          free16(ul_ref_sigs_rx_NB_IoT[u][index_Nsc_RU],4*sizeof(int32_t)*sequence_length[index_Nsc_RU]);
     }
   }
 }

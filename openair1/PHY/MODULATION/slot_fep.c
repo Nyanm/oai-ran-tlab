@@ -52,7 +52,7 @@ int slot_fep(PHY_VARS_UE *ue,
   LTE_DL_UE_HARQ_t *dlsch0_harq = dlsch_ue[0]->harq_processes[harq_pid];
   int uespec_pilot[9][1200];*/
 
-  void (*dft)(int16_t *,int16_t *, int);
+  void (*dft)(int32_t *,int32_t *, int);
   int tmp_dft_in[2048] __attribute__ ((aligned (32)));  // This is for misalignment issues for 6 and 15 PRBs
 
   switch (frame_parms->ofdm_symbol_size) {
@@ -118,23 +118,23 @@ int slot_fep(PHY_VARS_UE *ue,
     if (l==0) {
 
       if (rx_offset > (frame_length_samples - frame_parms->ofdm_symbol_size))
-        memcpy((short *)&common_vars->rxdata[aa][frame_length_samples],
-               (short *)&common_vars->rxdata[aa][0],
+        memcpy((int32_t *)&common_vars->rxdata[aa][frame_length_samples],
+               (int32_t *)&common_vars->rxdata[aa][0],
                frame_parms->ofdm_symbol_size*sizeof(int));
 
       if ((rx_offset&7)!=0) {  // if input to dft is not 256-bit aligned, issue for size 6,15 and 25 PRBs
         memcpy((void *)tmp_dft_in,
                (void *)&common_vars->rxdata[aa][rx_offset % frame_length_samples],
                frame_parms->ofdm_symbol_size*sizeof(int));
-        dft((int16_t *)tmp_dft_in,
-            (int16_t *)&common_vars->common_vars_rx_data_per_thread[(Ns>>1)&0x1].rxdataF[aa][frame_parms->ofdm_symbol_size*symbol],1);
+        dft((int32_t *)tmp_dft_in,
+            (int32_t *)&common_vars->common_vars_rx_data_per_thread[(Ns>>1)&0x1].rxdataF[aa][frame_parms->ofdm_symbol_size*symbol],1);
       } else { // use dft input from RX buffer directly
 #if UE_TIMING_TRACE
           start_meas(&ue->rx_dft_stats);
 #endif
 
-        dft((int16_t *)&common_vars->rxdata[aa][(rx_offset) % frame_length_samples],
-            (int16_t *)&common_vars->common_vars_rx_data_per_thread[(Ns>>1)&0x1].rxdataF[aa][frame_parms->ofdm_symbol_size*symbol],1);
+        dft((int32_t *)&common_vars->rxdata[aa][(rx_offset) % frame_length_samples],
+            (int32_t *)&common_vars->common_vars_rx_data_per_thread[(Ns>>1)&0x1].rxdataF[aa][frame_parms->ofdm_symbol_size*symbol],1);
 #if UE_TIMING_TRACE
         stop_meas(&ue->rx_dft_stats);
 #endif
@@ -162,12 +162,12 @@ int slot_fep(PHY_VARS_UE *ue,
         memcpy((void *)tmp_dft_in,
                (void *)&common_vars->rxdata[aa][(rx_offset) % frame_length_samples],
                frame_parms->ofdm_symbol_size*sizeof(int));
-        dft((int16_t *)tmp_dft_in,
-            (int16_t *)&common_vars->common_vars_rx_data_per_thread[(Ns>>1)&0x1].rxdataF[aa][frame_parms->ofdm_symbol_size*symbol],1);
+        dft((int32_t *)tmp_dft_in,
+            (int32_t *)&common_vars->common_vars_rx_data_per_thread[(Ns>>1)&0x1].rxdataF[aa][frame_parms->ofdm_symbol_size*symbol],1);
       } else { // use dft input from RX buffer directly
 
-        dft((int16_t *)&common_vars->rxdata[aa][(rx_offset) % frame_length_samples],
-            (int16_t *)&common_vars->common_vars_rx_data_per_thread[(Ns>>1)&0x1].rxdataF[aa][frame_parms->ofdm_symbol_size*symbol],1);
+        dft((int32_t *)&common_vars->rxdata[aa][(rx_offset) % frame_length_samples],
+            (int32_t *)&common_vars->common_vars_rx_data_per_thread[(Ns>>1)&0x1].rxdataF[aa][frame_parms->ofdm_symbol_size*symbol],1);
       }
 #if UE_TIMING_TRACE
       stop_meas(&ue->rx_dft_stats);

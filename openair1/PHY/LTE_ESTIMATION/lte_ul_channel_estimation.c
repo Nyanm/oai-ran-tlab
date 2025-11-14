@@ -267,16 +267,16 @@ int32_t lte_ul_channel_estimation(PHY_VARS_eNB *eNB,
 #endif
 
         for(i=symbol_offset; i<symbol_offset+Msc_RS; i++) {
-          ul_ch_estimates_re = ((int16_t*) ul_ch_estimates[aa])[i<<1];
-          ul_ch_estimates_im = ((int16_t*) ul_ch_estimates[aa])[(i<<1)+1];
+          ul_ch_estimates_re = ((int32_t*) ul_ch_estimates[aa])[i<<1];
+          ul_ch_estimates_im = ((int32_t*) ul_ch_estimates[aa])[(i<<1)+1];
           //    ((int16_t*) ul_ch_estimates[aa])[i<<1] =  (i%2 == 1? 1:-1) * ul_ch_estimates_re;
-          ((int16_t*) ul_ch_estimates[aa])[i<<1] =
-            (int16_t) (((int32_t) (alpha_re[alpha_ind]) * (int32_t) (ul_ch_estimates_re) +
+          ((int32_t*) ul_ch_estimates[aa])[i<<1] =
+            (int32_t) (((int32_t) (alpha_re[alpha_ind]) * (int32_t) (ul_ch_estimates_re) +
                         (int32_t) (alpha_im[alpha_ind]) * (int32_t) (ul_ch_estimates_im))>>15);
 
           //((int16_t*) ul_ch_estimates[aa])[(i<<1)+1] =  (i%2 == 1? 1:-1) * ul_ch_estimates_im;
-          ((int16_t*) ul_ch_estimates[aa])[(i<<1)+1] =
-            (int16_t) (((int32_t) (alpha_re[alpha_ind]) * (int32_t) (ul_ch_estimates_im) -
+          ((int32_t*) ul_ch_estimates[aa])[(i<<1)+1] =
+            (int32_t) (((int32_t) (alpha_re[alpha_ind]) * (int32_t) (ul_ch_estimates_im) -
                         (int32_t) (alpha_im[alpha_ind]) * (int32_t) (ul_ch_estimates_re))>>15);
 
           alpha_ind+=cyclic_shift;
@@ -301,26 +301,26 @@ int32_t lte_ul_channel_estimation(PHY_VARS_eNB *eNB,
       switch(frame_parms->N_RB_DL) {
       case 6:
 	
-	idft128((int16_t*) temp_in_ifft_0,
-	       (int16_t*) ul_ch_estimates_time[aa],
+	idft128((int32_t*) temp_in_ifft_0,
+	       (int32_t*) ul_ch_estimates_time[aa],
 	       1);
 	break;
       case 25:
 	
-	idft512((int16_t*) temp_in_ifft_0,
-	       (int16_t*) ul_ch_estimates_time[aa],
+	idft512((int32_t*) temp_in_ifft_0,
+	       (int32_t*) ul_ch_estimates_time[aa],
 	       1);
 	break;
       case 50:
 	
-	idft1024((int16_t*) temp_in_ifft_0,
-	       (int16_t*) ul_ch_estimates_time[aa],
+	idft1024((int32_t*) temp_in_ifft_0,
+	       (int32_t*) ul_ch_estimates_time[aa],
 	       1);
 	break;
       case 100:
 	
-	idft2048((int16_t*) temp_in_ifft_0,
-	       (int16_t*) ul_ch_estimates_time[aa],
+	idft2048((int32_t*) temp_in_ifft_0,
+	       (int32_t*) ul_ch_estimates_time[aa],
 	       1);
 	break;
       }
@@ -365,16 +365,16 @@ int32_t lte_ul_channel_estimation(PHY_VARS_eNB *eNB,
 
         // Compensating for the phase shift introduced at the transmitter
         for(i=symbol_offset; i<symbol_offset+Msc_RS; i++) {
-          ul_ch_estimates_re = ((int16_t*) ul_ch_estimates[aa])[i<<1];
-          ul_ch_estimates_im = ((int16_t*) ul_ch_estimates[aa])[(i<<1)+1];
+          ul_ch_estimates_re = ((int32_t*) ul_ch_estimates[aa])[i<<1];
+          ul_ch_estimates_im = ((int32_t*) ul_ch_estimates[aa])[(i<<1)+1];
           //    ((int16_t*) ul_ch_estimates[aa])[i<<1] =  (i%2 == 1? 1:-1) * ul_ch_estimates_re;
-          ((int16_t*) ul_ch_estimates[aa])[i<<1] =
-            (int16_t) (((int32_t) (alpha_re[alpha_ind]) * (int32_t) (ul_ch_estimates_re) +
+          ((int32_t*) ul_ch_estimates[aa])[i<<1] =
+            (int32_t) (((int32_t) (alpha_re[alpha_ind]) * (int32_t) (ul_ch_estimates_re) +
                         (int32_t) (alpha_im[alpha_ind]) * (int32_t) (ul_ch_estimates_im))>>15);
 
           //((int16_t*) ul_ch_estimates[aa])[(i<<1)+1] =  (i%2 == 1? 1:-1) * ul_ch_estimates_im;
-          ((int16_t*) ul_ch_estimates[aa])[(i<<1)+1] =
-            (int16_t) (((int32_t) (alpha_re[alpha_ind]) * (int32_t) (ul_ch_estimates_im) -
+          ((int32_t*) ul_ch_estimates[aa])[(i<<1)+1] =
+            (int32_t) (((int32_t) (alpha_re[alpha_ind]) * (int32_t) (ul_ch_estimates_im) -
                         (int32_t) (alpha_im[alpha_ind]) * (int32_t) (ul_ch_estimates_re))>>15);
 
           alpha_ind+=10;
@@ -396,34 +396,34 @@ int32_t lte_ul_channel_estimation(PHY_VARS_eNB *eNB,
 
 	switch (frame_parms->N_RB_DL) {
 	case 6:
-	  idft128((int16_t*) &temp_in_ifft_0[0],                          // Performing IFFT on Combined Channel Estimates
+	  idft128((int32_t*) &temp_in_ifft_0[0],                          // Performing IFFT on Combined Channel Estimates
 		  temp_out_ifft_0,
 		  1);
-	  idft128((int16_t*) &temp_in_ifft_1[0],                          // Performing IFFT on Combined Channel Estimates
+	  idft128((int32_t*) &temp_in_ifft_1[0],                          // Performing IFFT on Combined Channel Estimates
 		  temp_out_ifft_1,
 		  1);
 	  break;
 	case 25:
-	  idft512((int16_t*) &temp_in_ifft_0[0],                          // Performing IFFT on Combined Channel Estimates
+	  idft512((int32_t*) &temp_in_ifft_0[0],                          // Performing IFFT on Combined Channel Estimates
 		  temp_out_ifft_0,
 		  1);
-	  idft512((int16_t*) &temp_in_ifft_1[0],                          // Performing IFFT on Combined Channel Estimates
+	  idft512((int32_t*) &temp_in_ifft_1[0],                          // Performing IFFT on Combined Channel Estimates
 		  temp_out_ifft_1,
 		  1);
 	  break;
 	case 50:
-	  idft1024((int16_t*) &temp_in_ifft_0[0],                          // Performing IFFT on Combined Channel Estimates
+	  idft1024((int32_t*) &temp_in_ifft_0[0],                          // Performing IFFT on Combined Channel Estimates
 		  temp_out_ifft_0,
 		  1);
-	  idft1024((int16_t*) &temp_in_ifft_1[0],                          // Performing IFFT on Combined Channel Estimates
+	  idft1024((int32_t*) &temp_in_ifft_1[0],                          // Performing IFFT on Combined Channel Estimates
 		  temp_out_ifft_1,
 		  1);
 	  break;
 	case 100:
-	  idft2048((int16_t*) &temp_in_ifft_0[0],                          // Performing IFFT on Combined Channel Estimates
+	  idft2048((int32_t*) &temp_in_ifft_0[0],                          // Performing IFFT on Combined Channel Estimates
 		  temp_out_ifft_0,
 		  1);
-	  idft2048((int16_t*) &temp_in_ifft_1[0],                          // Performing IFFT on Combined Channel Estimates
+	  idft2048((int32_t*) &temp_in_ifft_1[0],                          // Performing IFFT on Combined Channel Estimates
 		  temp_out_ifft_1,
 		  1);
 	  break;
@@ -449,25 +449,25 @@ int32_t lte_ul_channel_estimation(PHY_VARS_eNB *eNB,
 
 	switch (frame_parms->N_RB_DL) {
         case 6:
-	  dft128((int16_t*) &temp_in_fft_0[0],     
+	  dft128((int32_t*) &temp_in_fft_0[0],     
 		 // Performing FFT to obtain the Channel Estimates for UE0 to eNB1
 		 temp_out_fft_0,
 		 1);
 	  break;
         case 25:
-	  dft512((int16_t*) &temp_in_fft_0[0],     
+	  dft512((int32_t*) &temp_in_fft_0[0],     
 		 // Performing FFT to obtain the Channel Estimates for UE0 to eNB1
 		 temp_out_fft_0,
 		 1);
 	  break;
         case 50:
-	  dft1024((int16_t*) &temp_in_fft_0[0],     
+	  dft1024((int32_t*) &temp_in_fft_0[0],     
 		 // Performing FFT to obtain the Channel Estimates for UE0 to eNB1
 		 temp_out_fft_0,
 		 1);
 	  break;
         case 100:
-	  dft2048((int16_t*) &temp_in_fft_0[0],     
+	  dft2048((int32_t*) &temp_in_fft_0[0],     
 		 // Performing FFT to obtain the Channel Estimates for UE0 to eNB1
 		 temp_out_fft_0,
 		 1);

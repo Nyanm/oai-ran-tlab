@@ -48,7 +48,7 @@ void send_IF4p5(PHY_VARS_eNB *eNB, int frame, int subframe, uint16_t packet_type
   LTE_DL_FRAME_PARMS *fp = &eNB->frame_parms;
   int32_t **txdataF      = (eNB->CC_id==0) ? eNB->common_vars.txdataF[0] : PHY_vars_eNB_g[0][0]->common_vars.txdataF[0];
   int32_t **rxdataF      = eNB->common_vars.rxdataF[0];
-  int16_t **rxsigF       = eNB->prach_vars.rxsigF;  
+  int32_t **rxsigF       = eNB->prach_vars.rxsigF;  
   void *tx_buffer        = eNB->ifbuffer.tx[subframe&1];
   void *tx_buffer_prach  = eNB->ifbuffer.tx_prach;
       
@@ -88,11 +88,19 @@ void send_IF4p5(PHY_VARS_eNB *eNB, int frame, int subframe, uint16_t packet_type
       if (eNB->CC_id==1) LOG_I(PHY,"DL_IF4p5: CC_id %d : frame %d, subframe %d, symbol %d\n",eNB->CC_id,frame,subframe,symbol_id);
       
       for (element_id=0; element_id<db_halflength; element_id++) {
-        i = (uint16_t*) &txdataF[eNB->CC_id][blockoffsetF+element_id];
-        data_block[element_id] = ((uint16_t) lin2alaw_if4p5[*i]) | (lin2alaw_if4p5[*(i+1)]<<8);
 
-        i = (uint16_t*) &txdataF[eNB->CC_id][slotoffsetF+element_id];
-        data_block[element_id+db_halflength] = ((uint16_t) lin2alaw_if4p5[*i]) | (lin2alaw_if4p5[*(i+1)]<<8);        
+                uint32_t packed_sample_A = (uint32_t)txdataF[eNB->CC_id][blockoffsetF+element_id];
+                int16_t I_A = (int16_t)packed_sample_A;         // I (bits 0-15)
+                int16_t Q_A = (int16_t)(packed_sample_A >> 16);  // Q (bits 16-31)
+                
+               
+                data_block[element_id] = ((uint16_t) lin2alaw_if4p5[I_A]) | (lin2alaw_if4p5[Q_A]<<8);
+                
+                uint32_t packed_sample_B = (uint32_t)txdataF[eNB->CC_id][slotoffsetF+element_id];
+                int16_t I_B = (int16_t)packed_sample_B;
+                int16_t Q_B = (int16_t)(packed_sample_B >> 16);
+                
+                data_block[element_id+db_halflength] = ((uint16_t) lin2alaw_if4p5[I_B]) | (lin2alaw_if4p5[Q_B]<<8);        
       }
       VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME( VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_COMPR_IF, 0 );
 				 		
@@ -139,13 +147,19 @@ void send_IF4p5(PHY_VARS_eNB *eNB, int frame, int subframe, uint16_t packet_type
       VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME( VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_COMPR_IF, 1 );
 	LOG_D(PHY,"IF4p5_PULFFT: frame %d, subframe %d, symbol %d\n",frame,subframe,symbol_id);
 	for (element_id=0; element_id<db_halflength; element_id++) {
-	  i = (uint16_t*) &rxdataF[0][blockoffsetF+element_id];
-	  data_block[element_id] = ((uint16_t) lin2alaw_if4p5[*i]) | ((uint16_t)(lin2alaw_if4p5[*(i+1)]<<8));
-	  
-	  i = (uint16_t*) &rxdataF[0][slotoffsetF+element_id];
-	  data_block[element_id+db_halflength] = ((uint16_t) lin2alaw_if4p5[*i]) | ((uint16_t)(lin2alaw_if4p5[*(i+1)]<<8));
-	  //if (element_id==0) LOG_I(PHY,"send_if4p5: symbol %d rxdata0 = (%d,%d)\n",symbol_id,*i,*(i+1));
-		
+
+	  uint32_t packed_sample_A = (uint32_t)rxdataF[0][blockoffsetF+element_id];
+                    int16_t I_A = (int16_t)packed_sample_A;
+                    int16_t Q_A = (int16_t)(packed_sample_A >> 16);
+                    
+                    data_block[element_id] = ((uint16_t) lin2alaw_if4p5[I_A]) | ((uint16_t)(lin2alaw_if4p5[Q_A]<<8));
+                    
+                    // --- DESEMPAQUETAMIENTO UL: MUESTRA B (slotoffsetF) ---
+                    uint32_t packed_sample_B = (uint32_t)rxdataF[0][slotoffsetF+element_id];
+                    int16_t I_B = (int16_t)packed_sample_B;
+                    int16_t Q_B = (int16_t)(packed_sample_B >> 16);
+                    
+                    data_block[element_id+db_halflength] = ((uint16_t) lin2alaw_if4p5[I_B]) | ((uint16_t)(lin2alaw_if4p5[Q_B]<<8));		
 	}
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME( VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_COMPR_IF, 0 );   	
 	packet_header->frame_status &= ~(0x000f<<26);
