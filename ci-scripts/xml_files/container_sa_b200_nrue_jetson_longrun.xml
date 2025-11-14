@@ -22,7 +22,7 @@
 -->
 <testCaseList>
   <htmlTabRef>LONGRUN-5G-NRUE</htmlTabRef>
-  <htmlTabName>Longrun 40 MHz TDD SA</htmlTabName>
+  <htmlTabName>Longrun 30 MHz TDD SA JETSON</htmlTabName>
   <htmlTabIcon>tasks</htmlTabIcon>
   <TestCaseRequestedList>
     800813
@@ -47,14 +47,14 @@
   <testCase id="800813">
     <class>Create_Workspace</class>
     <desc>Create new Workspace</desc>
-    <node>jetson2</node>
+    <node>jetson2-oai</node>
   </testCase>
 
   <testCase id="020001">
     <class>Deploy_Object</class>
     <desc>Deploy nrUE (TDD/Band78/40MHz/N310) in a container</desc>
     <yaml_path>ci-scripts/yaml_files/5g_sa_b200_jetson_nrue</yaml_path>
-    <node>jetson2</node>
+    <node>jetson2-oai</node>
     <num_attempts>3</num_attempts>
   </testCase>
 
@@ -88,7 +88,7 @@
     <class>Undeploy_Object</class>
     <always_exec>true</always_exec>
     <desc>Undeploy nr UE</desc>
-    <node>jetson2</node>
+    <node>jetson2-oai</node>
     <yaml_path>ci-scripts/yaml_files/5g_sa_b200_jetson_nrue</yaml_path>
   </testCase>
 
