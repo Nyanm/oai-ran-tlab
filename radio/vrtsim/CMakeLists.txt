@@ -2,22 +2,17 @@
 add_library(noise_device STATIC noise_device.c)
 target_link_libraries(noise_device PRIVATE log_headers)
 
-# Option: in-process CIR DB playback
-add_boolean_option(OAI_VRTSIM_CIRDB ON "Enable in-process CIR DB playback" ON)
-
-# Collect vrtsim sources
-set(VRTSIM_SOURCES vrtsim.c)
-if(OAI_VRTSIM_CIRDB)
-  list(APPEND VRTSIM_SOURCES cirdb_provider.c cirdb_yaml.cpp)
-endif()
+# Collect vrtsim sources - always include CIR DB sources
+set(VRTSIM_SOURCES vrtsim.c cirdb_provider.c cirdb_yaml.cpp)
 
 # vrtsim module
 add_library(vrtsim MODULE ${VRTSIM_SOURCES})
 set_target_properties(vrtsim PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 find_package(Threads REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
-# Link libraries common to all builds
+# Link libraries - always link yaml-cpp
 target_link_libraries(vrtsim
   PRIVATE
     SIMU
@@ -26,16 +21,8 @@ target_link_libraries(vrtsim
     noise_device
     log_headers
     Threads::Threads
+    yaml-cpp
 )
-
-# CIR DB extras only when enabled
-if(OAI_VRTSIM_CIRDB)
-  find_package(yaml-cpp REQUIRED)
-  target_link_libraries(vrtsim PRIVATE yaml-cpp)
-  target_compile_definitions(vrtsim PRIVATE OAI_VRTSIM_CIRDB=1 VRTSIM_USE_CIRDB=1)
-else()
-  target_compile_definitions(vrtsim PRIVATE OAI_VRTSIM_CIRDB=0 VRTSIM_USE_CIRDB=0)
-endif()
 
 # Optional taps client
 add_boolean_option(OAI_VRTSIM_TAPS_CLIENT OFF "Enable taps client" ON)
