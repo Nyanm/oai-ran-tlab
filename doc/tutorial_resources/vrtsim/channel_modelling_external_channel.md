@@ -52,7 +52,7 @@ Optional, print the selected entry before streaming:
 
 gNB (server role):
 
-    sudo ./nr-softmodem -O ../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.fr1.106PRB.usrpb210.conf --device.name vrtsim --vrtsim.role server -vrtsim.taps-socket tcp://127.0.0.1:5555 --gNBs.[0].min_rxtxtime 3
+    sudo ./nr-softmodem -O ../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.fr1.106PRB.usrpb210.conf --device.name vrtsim --vrtsim.role server --vrtsim.taps-socket tcp://127.0.0.1:5555 --gNBs.[0].min_rxtxtime 3
 
 UE (client role):
 
