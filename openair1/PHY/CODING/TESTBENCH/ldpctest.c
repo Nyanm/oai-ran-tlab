@@ -366,7 +366,7 @@ one_measurement_t test_ldpc(short max_iterations,
     if (ntrials == 1)
       for (int j = 0; j < n_segments; j++)
         for (int i = 0; i < K + (nrows - no_punctured_columns) * Zc - removed_bit; i++) {
-          if (((use32bit == 0) && (channel_input[j][i] != ((channel_input_optim[i] >> j) & 0x1))) ||                 ((use32bit == 1) && (channel_input[j][i] != (((output32[0][i] >> j) & 0x1))))) {
+          if (((use32bit == 0) && (channel_input[j][i] != ((channel_input_optim[i] >> j) & 0x1))) ||                 ((use32bit == 1) && (channel_input[j][i] != (((output32[j>>5][i] >> (j&31)) & 0x1))))) {
                printf("differ in seg %d pos %d (%u,%u)\n", j, i, channel_input[j][i], (((uint32_t*)channel_input_optim)[i] >> j) & 0x1);
                return ret;
             }
@@ -379,7 +379,7 @@ one_measurement_t test_ldpc(short max_iterations,
         if ((i & 0xf) == 0)
           printf("\ne %d..%d:    ", i, i + 15);
 #endif
-        bit = (use32bit==0) ? ((channel_input_optim[i - 2 * Zc] >> j) & 0x1) : ((output32[0][i - 2 * Zc] >> j) & 0x1);
+        bit = (use32bit==0) ? ((channel_input_optim[i - 2 * Zc] >> j) & 0x1) : ((output32[j>>5][i - 2 * Zc] >> (j&31)) & 0x1);
 
 	if (bit == 0)
           modulated_input[j][i] = 1.0; /// sqrt(2);  //QPSK
