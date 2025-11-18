@@ -8,6 +8,7 @@ target_link_libraries(vrtsim PRIVATE SIMU shm_td_iq_channel actor noise_device l
 add_boolean_option(OAI_VRTSIM_TAPS_CLIENT OFF "Enable taps client" ON)
 if (OAI_VRTSIM_TAPS_CLIENT)
   target_link_libraries(vrtsim PRIVATE taps_client)
+  target_compile_definitions(vrtsim PRIVATE ENABLE_TAPS_CLIENT=ON)
   file(DOWNLOAD
     "https://gitlab.eurecom.fr/oai/raytracing-channel-emulator/-/raw/59589ad2a534881810b2aa7dd81e63066245bb8d/server/api/taps.fbs?inline=false"
     ${CMAKE_SOURCE_DIR}/taps.fbs
