@@ -1350,8 +1350,8 @@ int main(int argc, char *argv[])
               .beta_offset_harq_ack = 11,
               .harq_ack_bit_length = 3,
               .harq_payload = 3,
-              //.csi_part1_bit_length = 4,
-              //.csi_part1_payload = 15
+              .csi_part1_bit_length = 4,
+              .csi_part1_payload = 15
           };
           pusch_config_pdu->pusch_uci = pusch_uci;
           prepare_ue_pusch_pdu_from_matlab_vector(uci_on_pusch, uci_ulsch_matlab_vec, pusch_config_pdu, cw_buf);
@@ -1623,7 +1623,6 @@ int main(int argc, char *argv[])
             }
           }
         }
-        round++;
         if (uci_on_pusch && uci_ulsch_matlab_vec && (errors_scrambling[round] == 0)) {
           ret = 0;
           printf("*************\n");
@@ -1631,6 +1630,7 @@ int main(int argc, char *argv[])
           printf("*************\n");
           break;
         }
+        round++;
       } // round
 
       if (n_trials == 1 && errors_scrambling[0] > 0) {
