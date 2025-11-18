@@ -26,7 +26,10 @@
 			"compare": "c",
 			"cstdint": "c",
 			"precomputed_cap.h": "c",
-			"valarray": "c"
+			"valarray": "c",
+			"defs_aiot_r2d.h": "c",
+			"time.h": "c",
+			"rf.h": "c"
 		}
 	}
 }

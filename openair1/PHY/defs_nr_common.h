@@ -118,6 +118,7 @@ typedef struct {
 
 typedef struct NR_DL_FRAME_PARMS NR_DL_FRAME_PARMS;
 typedef struct NR_AIOT_DL_FRAME_PARMS NR_AIOT_DL_FRAME_PARMS;
+typedef struct NR_AIOT_UL_FRAME_PARMS NR_AIOT_UL_FRAME_PARMS;
 
 typedef uint32_t (*get_samples_per_slot_t)(int slot, const NR_DL_FRAME_PARMS *fp);
 typedef uint32_t (*get_slot_from_timestamp_t)(openair0_timestamp timestamp_rx, const NR_DL_FRAME_PARMS *fp);
@@ -266,6 +267,30 @@ struct NR_AIOT_DL_FRAME_PARMS {
   int packet_downsampled_samples; // number of downsampled samples in R2D packet
   int packet_received_symbols;  // number of received OFDM symbols
   int packet_payload_size;    // decoded payload size in bits
+};
+
+struct NR_AIOT_UL_FRAME_PARMS {
+  // original NR structure
+  NR_DL_FRAME_PARMS nr_frame_parms;
+
+  // additional AIoT parameters (TS 38.391 6.2.1.6-1)
+  uint8_t T_bit; // 3 bits, D2R bit duration options
+  bool R_block; // block repetition number - true=2, false=1
+  uint8_t R_SFS; // 3 bits, small frequency shift factor
+  uint8_t I_bit; // 2 bits, the interval in bits for D2R midamble section
+  bool L_preamble; // length of preamble - false=short 7 bits or true=long 31 bits
+  bool I_add; // additional D2R midable insertion indicator - false=absent, true=present
+  bool R_code; // the channel coding indicator - true=FEC, false=No FEC
+  uint8_t size; // the transport block size in bytes
+
+  // packet parameters
+  int N_bit; // number of samples per D2R bit
+  int N_chip; // number of samples per D2R chip
+  int N_preamble; // number of bits in D2R preamble
+  int N_SFS; // value of small frequency shift
+  int N_midamble_space; // number of bits in D2R midamble
+  int payload_size; // decoded payload size in bits
+  int packet_size;
 };
 
 

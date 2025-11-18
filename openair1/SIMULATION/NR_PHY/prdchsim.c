@@ -48,7 +48,7 @@ NR_AIOT_DL_FRAME_PARMS *frame_parms;
 
 double cpuf;
 char filename[50];
-char foldername[] = "./results";
+char foldername[] = "./R2D_results";
 
 static softmodem_params_t softmodem_params;
 softmodem_params_t *get_softmodem_params(void)
