@@ -144,8 +144,8 @@ void PHY_ofdm_mod(int *input,                       /// pointer to complex input
          1);
 #else
     // on AVX2 need 256-bit alignment
-    idft((int16_t *)&input[i*fftsize],
-         (int16_t *)temp,
+    idft((int32_t *)&input[i*fftsize],
+         (int32_t *)temp,
          1);
 
 #endif

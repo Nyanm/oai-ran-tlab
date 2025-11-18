@@ -56,7 +56,7 @@ void send_IF4p5(PHY_VARS_eNB *eNB, int frame, int subframe, uint16_t packet_type
   uint16_t db_fulllength, db_halflength; 
   int slotoffsetF=0, blockoffsetF=0; 
 
-  uint16_t *data_block=NULL, *i=NULL;
+  uint32_t *data_block=NULL, *i=NULL;
 
   IF4p5_header_t *packet_header=NULL;
   eth_state_t *eth = (eth_state_t*) (eNB->ifdevice.priv);
@@ -76,10 +76,10 @@ void send_IF4p5(PHY_VARS_eNB *eNB, int frame, int subframe, uint16_t packet_type
 
     if (eth->flags == ETH_RAW_IF4p5_MODE) {
       packet_header = (IF4p5_header_t *)(tx_buffer + MAC_HEADER_SIZE_BYTES);
-      data_block = (uint16_t*)(tx_buffer + MAC_HEADER_SIZE_BYTES + sizeof_IF4p5_header_t);
+      data_block = (uint32_t*)(tx_buffer + MAC_HEADER_SIZE_BYTES + sizeof_IF4p5_header_t);
     } else {
       packet_header = (IF4p5_header_t *)(tx_buffer);
-      data_block = (uint16_t*)(tx_buffer + sizeof_IF4p5_header_t);
+      data_block = (uint32_t*)(tx_buffer + sizeof_IF4p5_header_t);
     }    
     gen_IF4p5_dl_header(packet_header, frame, subframe);
 		    
@@ -89,18 +89,11 @@ void send_IF4p5(PHY_VARS_eNB *eNB, int frame, int subframe, uint16_t packet_type
       
       for (element_id=0; element_id<db_halflength; element_id++) {
 
-                uint32_t packed_sample_A = (uint32_t)txdataF[eNB->CC_id][blockoffsetF+element_id];
-                int16_t I_A = (int16_t)packed_sample_A;         // I (bits 0-15)
-                int16_t Q_A = (int16_t)(packed_sample_A >> 16);  // Q (bits 16-31)
-                
-               
-                data_block[element_id] = ((uint16_t) lin2alaw_if4p5[I_A]) | (lin2alaw_if4p5[Q_A]<<8);
-                
-                uint32_t packed_sample_B = (uint32_t)txdataF[eNB->CC_id][slotoffsetF+element_id];
-                int16_t I_B = (int16_t)packed_sample_B;
-                int16_t Q_B = (int16_t)(packed_sample_B >> 16);
-                
-                data_block[element_id+db_halflength] = ((uint16_t) lin2alaw_if4p5[I_B]) | (lin2alaw_if4p5[Q_B]<<8);        
+                i = (uint32_t*) &txdataF[eNB->CC_id][blockoffsetF+element_id];
+        data_block[element_id] = ((uint32_t) lin2alaw_if4p5[*i]) | (lin2alaw_if4p5[*(i+1)]<<8);
+
+        i = (uint32_t*) &txdataF[eNB->CC_id][slotoffsetF+element_id];
+        data_block[element_id+db_halflength] = ((uint32_t) lin2alaw_if4p5[*i]) | (lin2alaw_if4p5[*(i+1)]<<8);        
       }
       VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME( VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_COMPR_IF, 0 );
 				 		
@@ -134,10 +127,10 @@ void send_IF4p5(PHY_VARS_eNB *eNB, int frame, int subframe, uint16_t packet_type
 
     if (eth->flags == ETH_RAW_IF4p5_MODE) {
       packet_header = (IF4p5_header_t *)(tx_buffer + MAC_HEADER_SIZE_BYTES);
-      data_block = (uint16_t*)(tx_buffer + MAC_HEADER_SIZE_BYTES + sizeof_IF4p5_header_t);
+      data_block = (uint32_t*)(tx_buffer + MAC_HEADER_SIZE_BYTES + sizeof_IF4p5_header_t);
     } else {
       packet_header = (IF4p5_header_t *)(tx_buffer);
-      data_block = (uint16_t*)(tx_buffer + sizeof_IF4p5_header_t);
+      data_block = (uint32_t*)(tx_buffer + sizeof_IF4p5_header_t);
     }
     gen_IF4p5_ul_header(packet_header, packet_type, frame, subframe);
 
@@ -148,18 +141,12 @@ void send_IF4p5(PHY_VARS_eNB *eNB, int frame, int subframe, uint16_t packet_type
 	LOG_D(PHY,"IF4p5_PULFFT: frame %d, subframe %d, symbol %d\n",frame,subframe,symbol_id);
 	for (element_id=0; element_id<db_halflength; element_id++) {
 
-	  uint32_t packed_sample_A = (uint32_t)rxdataF[0][blockoffsetF+element_id];
-                    int16_t I_A = (int16_t)packed_sample_A;
-                    int16_t Q_A = (int16_t)(packed_sample_A >> 16);
-                    
-                    data_block[element_id] = ((uint16_t) lin2alaw_if4p5[I_A]) | ((uint16_t)(lin2alaw_if4p5[Q_A]<<8));
-                    
-                    // --- DESEMPAQUETAMIENTO UL: MUESTRA B (slotoffsetF) ---
-                    uint32_t packed_sample_B = (uint32_t)rxdataF[0][slotoffsetF+element_id];
-                    int16_t I_B = (int16_t)packed_sample_B;
-                    int16_t Q_B = (int16_t)(packed_sample_B >> 16);
-                    
-                    data_block[element_id+db_halflength] = ((uint16_t) lin2alaw_if4p5[I_B]) | ((uint16_t)(lin2alaw_if4p5[Q_B]<<8));		
+	   i = (uint32_t*) &rxdataF[0][blockoffsetF+element_id];
+	  data_block[element_id] = ((uint32_t) lin2alaw_if4p5[*i]) | ((uint16_t)(lin2alaw_if4p5[*(i+1)]<<8));
+	  
+	  i = (uint32_t*) &rxdataF[0][slotoffsetF+element_id];
+	  data_block[element_id+db_halflength] = ((uint32_t) lin2alaw_if4p5[*i]) | ((uint32_t)(lin2alaw_if4p5[*(i+1)]<<8));
+	  //if (element_id==0) LOG_I(PHY,"send_if4p5: symbol %d rxdata0 = (%d,%d)\n",symbol_id,*i,*(i+1));		
 	}
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME( VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_COMPR_IF, 0 );   	
 	packet_header->frame_status &= ~(0x000f<<26);
@@ -195,19 +182,19 @@ void send_IF4p5(PHY_VARS_eNB *eNB, int frame, int subframe, uint16_t packet_type
     
     if (eth->flags == ETH_RAW_IF4p5_MODE) {
       packet_header = (IF4p5_header_t *)(tx_buffer_prach + MAC_HEADER_SIZE_BYTES);
-      data_block = (uint16_t*)(tx_buffer + MAC_HEADER_SIZE_BYTES + sizeof_IF4p5_header_t);
+      data_block = (uint32_t*)(tx_buffer + MAC_HEADER_SIZE_BYTES + sizeof_IF4p5_header_t);
     } else {
       packet_header = (IF4p5_header_t *)(tx_buffer_prach);
-      data_block = (uint16_t*)(tx_buffer_prach + sizeof_IF4p5_header_t);
+      data_block = (uint32_t*)(tx_buffer_prach + sizeof_IF4p5_header_t);
     }  
     gen_IF4p5_prach_header(packet_header, frame, subframe);
 
     if (eth->flags == ETH_RAW_IF4p5_MODE) {
-      memcpy((int16_t*)(tx_buffer_prach + MAC_HEADER_SIZE_BYTES + sizeof_IF4p5_header_t),
+      memcpy((int32_t*)(tx_buffer_prach + MAC_HEADER_SIZE_BYTES + sizeof_IF4p5_header_t),
              (&rxsigF[0][k]), 
              PRACH_BLOCK_SIZE_BYTES);
     } else {
-      memcpy((int16_t*)(tx_buffer_prach + sizeof_IF4p5_header_t),
+      memcpy((int32_t*)(tx_buffer_prach + sizeof_IF4p5_header_t),
              (&rxsigF[0][k]),
              PRACH_BLOCK_SIZE_BYTES);
     }
@@ -252,7 +239,7 @@ void recv_IF4p5(PHY_VARS_eNB *eNB, int *frame, int *subframe, uint16_t *packet_t
   db_halflength = db_fulllength>>1;
 
   IF4p5_header_t *packet_header=NULL;
-  uint16_t *data_block=NULL, *i=NULL;
+  uint32_t *data_block=NULL, *i=NULL;
 
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME( VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_READ_IF, 1 );   
   if (eNB->ifdevice.trx_read_func(&eNB->ifdevice,
@@ -265,10 +252,10 @@ void recv_IF4p5(PHY_VARS_eNB *eNB, int *frame, int *subframe, uint16_t *packet_t
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME( VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_READ_IF, 0 );
   if (eth->flags == ETH_RAW_IF4p5_MODE) {
     packet_header = (IF4p5_header_t*) (rx_buffer+MAC_HEADER_SIZE_BYTES);
-    data_block = (uint16_t*) (rx_buffer+MAC_HEADER_SIZE_BYTES+sizeof_IF4p5_header_t);
+    data_block = (uint32_t*) (rx_buffer+MAC_HEADER_SIZE_BYTES+sizeof_IF4p5_header_t);
   } else {
     packet_header = (IF4p5_header_t*) (rx_buffer);
-    data_block = (uint16_t*) (rx_buffer+sizeof_IF4p5_header_t);
+    data_block = (uint32_t*) (rx_buffer+sizeof_IF4p5_header_t);
   }
 
 
@@ -288,11 +275,11 @@ void recv_IF4p5(PHY_VARS_eNB *eNB, int *frame, int *subframe, uint16_t *packet_t
     
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME( VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_DECOMPR_IF, 1 );    
     for (element_id=0; element_id<db_halflength; element_id++) {
-      i = (uint16_t*) &txdataF[0][blockoffsetF+element_id];
+      i = (uint32_t*) &txdataF[0][blockoffsetF+element_id];
       *i = alaw2lin_if4p5[ (data_block[element_id] & 0xff) ]; 
       *(i+1) = alaw2lin_if4p5[ (data_block[element_id]>>8) ];
 
-      i = (uint16_t*) &txdataF[0][slotoffsetF+element_id];
+      i = (uint32_t*) &txdataF[0][slotoffsetF+element_id];
       *i = alaw2lin_if4p5[ (data_block[element_id+db_halflength] & 0xff) ]; 
       *(i+1) = alaw2lin_if4p5[ (data_block[element_id+db_halflength]>>8) ];
     }
@@ -306,11 +293,11 @@ void recv_IF4p5(PHY_VARS_eNB *eNB, int *frame, int *subframe, uint16_t *packet_t
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME( VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_DECOMPR_IF, 1 );  
     if (eNB->CC_id==0) LOG_D(PHY,"UL_IF4p5: CC_id %d : frame %d, subframe %d, symbol %d\n",eNB->CC_id,*frame,*subframe,*symbol_number);
     for (element_id=0; element_id<db_halflength; element_id++) {
-      i = (uint16_t*) &rxdataF[0][blockoffsetF+element_id];
+      i = (uint32_t*) &rxdataF[0][blockoffsetF+element_id];
       *i = alaw2lin_if4p5[ (data_block[element_id] & 0xff) ]; 
       *(i+1) = alaw2lin_if4p5[ (data_block[element_id]>>8) ];
 
-      i = (uint16_t*) &rxdataF[0][slotoffsetF+element_id];
+      i = (uint32_t*) &rxdataF[0][slotoffsetF+element_id];
       *i = alaw2lin_if4p5[ (data_block[element_id+db_halflength] & 0xff) ]; 
       *(i+1) = alaw2lin_if4p5[ (data_block[element_id+db_halflength]>>8) ];
 
@@ -326,11 +313,11 @@ void recv_IF4p5(PHY_VARS_eNB *eNB, int *frame, int *subframe, uint16_t *packet_t
 
     if (eth->flags == ETH_RAW_IF4p5_MODE) {		
       memcpy((&rxsigF[0][0]), 
-             (int16_t*) (rx_buffer+MAC_HEADER_SIZE_BYTES+sizeof_IF4p5_header_t), 
+             (int32_t*) (rx_buffer+MAC_HEADER_SIZE_BYTES+sizeof_IF4p5_header_t), 
              PRACH_BLOCK_SIZE_BYTES);
     } else {
       memcpy((&rxsigF[0][0]),
-             (int16_t*) (rx_buffer+sizeof_IF4p5_header_t),
+             (int32_t*) (rx_buffer+sizeof_IF4p5_header_t),
              PRACH_BLOCK_SIZE_BYTES);
     }
   } else if (*packet_type == IF4p5_PULTICK) {

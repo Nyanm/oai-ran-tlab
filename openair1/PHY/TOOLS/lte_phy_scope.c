@@ -158,11 +158,11 @@ void phy_scope_eNB(FD_lte_phy_scope_enb *form,
   int nsymb_ce = 12*frame_parms->N_RB_UL*frame_parms->symbols_per_tti;
   uint8_t nb_antennas_rx = frame_parms->nb_antennas_rx;
   uint8_t nb_antennas_tx = 1; // frame_parms->nb_antennas_tx; // in LTE Rel. 8 and 9 only a single transmit antenna is assumed at the UE
-  int16_t **rxsig_t;
-  int16_t **chest_t;
-  int16_t **chest_f;
-  int16_t *pusch_llr;
-  int16_t *pusch_comp;
+  int32_t **rxsig_t;
+  int32_t **chest_t;
+  int32_t **chest_f;
+  int32_t *pusch_llr;
+  int32_t *pusch_comp;
   int32_t *pucch1_comp;
   int32_t *pucch1_thres;
   int32_t *pucch1ab_comp;
@@ -195,12 +195,12 @@ void phy_scope_eNB(FD_lte_phy_scope_enb *form,
   llr = (float*) calloc(coded_bits_per_codeword,sizeof(float)); // init to zero
   bit = malloc(coded_bits_per_codeword*sizeof(float));
 
-  rxsig_t = (int16_t**) phy_vars_enb->common_vars.rxdata[eNB_id];
+  rxsig_t = (int32_t**) phy_vars_enb->common_vars.rxdata[eNB_id];
   //chest_t = (int16_t**) phy_vars_enb->pusch_vars[UE_id]->drs_ch_estimates_time[eNB_id];
-  chest_t = (int16_t**) phy_vars_enb->srs_vars[UE_id].srs_ch_estimates[eNB_id];
-  chest_f = (int16_t**) phy_vars_enb->pusch_vars[UE_id]->drs_ch_estimates[eNB_id];
-  pusch_llr = (int16_t*) phy_vars_enb->pusch_vars[UE_id]->llr;
-  pusch_comp = (int16_t*) phy_vars_enb->pusch_vars[UE_id]->rxdataF_comp[eNB_id][0];
+  chest_t = (int32_t**) phy_vars_enb->srs_vars[UE_id].srs_ch_estimates[eNB_id];
+  chest_f = (int32_t**) phy_vars_enb->pusch_vars[UE_id]->drs_ch_estimates[eNB_id];
+  pusch_llr = (int32_t*) phy_vars_enb->pusch_vars[UE_id]->llr;
+  pusch_comp = (int32_t*) phy_vars_enb->pusch_vars[UE_id]->rxdataF_comp[eNB_id][0];
   pucch1_comp = (int32_t*) phy_vars_enb->pucch1_stats[UE_id];
   pucch1_thres = (int32_t*) phy_vars_enb->pucch1_stats_thres[UE_id];
   pucch1ab_comp = (int32_t*) phy_vars_enb->pucch1ab_stats[UE_id];

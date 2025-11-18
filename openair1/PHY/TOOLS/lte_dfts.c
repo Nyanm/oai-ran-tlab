@@ -5965,7 +5965,7 @@ static inline void dft12f(simd_q15_t *x0,
 
 
 
-void dft12(int16_t *x,int16_t *y)
+void dft12(int32_t *x,int32_t *y)
 {
 
   simd_q15_t *x128 = (simd_q15_t *)x,*y128 = (simd_q15_t *)y;
