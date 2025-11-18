@@ -7,7 +7,7 @@
 #include "nrLDPC_CUDA_public.h"
 #include "nrLDPC_CUDA_lut.h"
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G3(const t_nrLDPC_lut *p_lut,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G3(
                                                          const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
@@ -38,7 +38,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G3(const t_nrLDPC_lut *p_l
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G4(const t_nrLDPC_lut *p_lut,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G4(
                                                          const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
@@ -72,7 +72,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G4(const t_nrLDPC_lut *p_l
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G5(const t_nrLDPC_lut *p_lut,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G5(
                                                          const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
@@ -108,7 +108,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G5(const t_nrLDPC_lut *p_l
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G6(const t_nrLDPC_lut *p_lut,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G6(
                                                          const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
@@ -148,7 +148,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G6(const t_nrLDPC_lut *p_l
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G7(const t_nrLDPC_lut *p_lut,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G7(
                                                          const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
@@ -189,7 +189,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G7(const t_nrLDPC_lut *p_l
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G8(const t_nrLDPC_lut *p_lut,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G8(
                                                          const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
@@ -233,7 +233,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G8(const t_nrLDPC_lut *p_l
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G9(const t_nrLDPC_lut *p_lut,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G9(
                                                          const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
@@ -280,7 +280,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G9(const t_nrLDPC_lut *p_l
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G10(const t_nrLDPC_lut *p_lut,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G10(
                                                           const int8_t *__restrict__ p_cnProcBuf,
                                                           int8_t *__restrict__ p_bnProcBuf,
                                                           uint32_t row,
@@ -331,7 +331,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G10(const t_nrLDPC_lut *p_
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G19(const t_nrLDPC_lut *p_lut,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G19(
                                                           const int8_t *__restrict__ p_cnProcBuf,
                                                           int8_t *__restrict__ p_bnProcBuf,
                                                           uint32_t row,

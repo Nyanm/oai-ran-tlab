@@ -9,7 +9,7 @@
 
 //------------------------------Stream Version------------------------
 
-__device__ void llrPreProc_Kernel_BG1_int8_Gn_stream(const t_nrLDPC_lut *p_lut,
+__device__ void llrPreProc_Kernel_BG1_int8_Gn_stream(
                                                      const int8_t *p_llr,
                                                      int8_t *p_llrProcBuf,
                                                      int8_t *p_cnProcBuf,
