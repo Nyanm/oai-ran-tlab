@@ -79,8 +79,8 @@ sudo ./nr-softmodem \
   --vrtsim.role server \
   --gNBs.[0].min_rxtxtime 3 \
   --vrtsim.cirdb 1 \
-  --vrtsim.cirdb_yaml /home/merkeb/openairinterface5g/radio/vrtsim/cir_db.yaml \
-  --vrtsim.cirdb_file /home/merkeb/openairinterface5g/radio/vrtsim/cir_db.bin \
+  --vrtsim.cirdb_yaml /openairinterface5g/radio/vrtsim/cir_db.yaml \
+  --vrtsim.cirdb_file /openairinterface5g/radio/vrtsim/cir_db.bin \
   --vrtsim.cirdb_model_id 0 \
   --vrtsim.cirdb_ds_ns 10 \
   --vrtsim.cirdb_speed_mps 1.5
