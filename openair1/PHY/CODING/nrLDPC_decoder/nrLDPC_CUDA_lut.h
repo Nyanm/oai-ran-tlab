@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cuda_runtime.h>
+__device__ __constant__ uint32_t d_lut_numCnInCnGroups_BG1_R13[NR_LDPC_NUM_CN_GROUPS_BG1] = {1, 5, 18, 8, 5, 2, 2,  1,  4};
 
 __device__ __constant__ uint32_t d_lut_startAddrCnGroups_BG1[NR_LDPC_NUM_CN_GROUPS_BG1] = {0, 1152, 8832, 43392, 61824, 75264, 81408, 88320, 92160};
 

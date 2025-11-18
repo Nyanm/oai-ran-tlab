@@ -16,7 +16,7 @@ __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_NUM(
     const int8_t *__restrict__ d_llrProcBuf,
     int8_t *__restrict__ d_llrRes,
     uint32_t lane,
-    uint8_t MsgIdx,
+    uint32_t MsgIdx,
     uint32_t BnIdx,
     uint32_t GrpNum,
     uint32_t circShift,
@@ -60,10 +60,10 @@ __device__ __forceinline__ void bnProcKernelMerge_BG1_int8_Gn(
     const int8_t *__restrict__ d_llrProcBuf,
     int8_t *__restrict__ d_llrRes,
     uint32_t lane,
-    uint8_t GrpIdx,
-    uint8_t MsgIdx,
+    uint32_t GrpIdx,
+    uint32_t MsgIdx,
     uint32_t BnIdx,
-    uint8_t GrpNum,
+    uint32_t GrpNum,
     uint32_t circShift,
     uint32_t Zc)
 {

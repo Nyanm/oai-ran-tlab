@@ -790,6 +790,63 @@ __device__ void BnToCnPC_Kernel_BG1_int8_G19_Stream(const t_nrLDPC_lut *p_lut,
 }
 #endif
 
+__device__ void llrPreProc_Kernel_BG1_int8_Gn_stream(const t_nrLDPC_lut *p_lut,
+                                                     const int8_t *p_llr,
+                                                     int8_t *p_llrProcBuf,
+                                                     int8_t *p_cnProcBuf,
+                                                     uint32_t row,
+                                                     uint32_t lane,
+                                                     uint32_t idxBn,
+                                                     uint32_t GrpIdx,
+                                                     uint32_t circShift,
+                                                     uint32_t Zc,
+                                                     uint32_t R)
+{   
+  {
+    uint32_t *p_cnProcBufBit;
+
+    uint8_t bricksLocal[4];
+    uint8_t *BricksToBeMoved = bricksLocal;
+
+    p_cnProcBufBit = (uint32_t *)(p_cnProcBuf + d_lut_numCnInCnGroups_BG1_R13[GrpIdx] * Zc * row + lane * 4);
+
+    moveBricks_invget_circ((int8_t *)&p_llr[idxBn], lane * 4, BricksToBeMoved, Zc, circShift);
+
+    *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
+  }
+  // Sencond part is llr to llrProcBuf
+  uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+  uint32_t colIdx = tid / RowLength;
+  if (colIdx >= 42) // need to modify later
+    return;
+
+  const uint8_t numBn2CnG1 = (R == 13) ? d_lut_numBnInBnGroups_BG1_R13[0]:d_lut_numBnInBnGroups_BG1_R23[0]; // for R13 is 42
+  const uint32_t startColParity = NR_LDPC_START_COL_PARITY_BG1; // 26 for BG1
+  const uint32_t colG1 = startColParity * Zc;
+
+  const uint32_t *lut_llr2llrProcBufAddr = (R == 13) ? d_llr2llrProcBufAddr_BG1_R13:d_llr2llrProcBufAddr_BG1_R23;
+  const uint32_t *lut_llr2llrProcBufBnPos = (R == 13) ? d_llr2llrProcBufBnPos_BG1_R13:d_llr2llrProcBufBnPos_BG1_R23;
+
+  // -----------------------------
+  // Part 1: Copy parity section
+  // -----------------------------
+  if (numBn2CnG1 > 0 && colIdx < numBn2CnG1) {
+    int32_t *dst = (int32_t *)(&p_llrProcBuf[colIdx * Zc] + lane * 4);
+    int32_t *src = (int32_t *)(&p_llr[colG1 + colIdx * Zc] + lane * 4);
+    *dst = *src;
+  }
+
+  // -----------------------------
+  // Part 2: Copy systematic section (0..startColParity)
+  // -----------------------------
+  if (colIdx < startColParity) {
+    const uint32_t idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * Zc;
+    int32_t *dst = (int32_t *)(&p_llrProcBuf[idxBn] + lane * 4);
+    int32_t *src = (int32_t *)(&p_llr[colIdx * Zc] + lane * 4);
+    *dst = *src;
+  }
+}
+
 __device__ void llrPreProc_Kernel_BG1_int8_G3_stream(const t_nrLDPC_lut *p_lut,
                                                      const int8_t *p_llr,
                                                      int8_t *p_llrProcBuf,
@@ -905,12 +962,12 @@ __device__ void llrPreProc_Kernel_BG1_int8_G4_stream(const t_nrLDPC_lut *p_lut,
   if (colIdx >= 42) // need to modify later
     return;
 
-  const uint8_t numBn2CnG1 = p_lut->numBnInBnGroups[0]; // for R13 is 42
+  const uint8_t numBn2CnG1 = 42; // for R13 is 42
   const uint32_t startColParity = NR_LDPC_START_COL_PARITY_BG1; // 26 for BG1
   const uint32_t colG1 = startColParity * Zc;
 
-  const uint16_t *lut_llr2llrProcBufAddr = p_lut->llr2llrProcBufAddr;
-  const uint8_t *lut_llr2llrProcBufBnPos = p_lut->llr2llrProcBufBnPos;
+  const uint32_t *lut_llr2llrProcBufAddr = d_llr2llrProcBufAddr_BG1_R13;
+  const uint32_t *lut_llr2llrProcBufBnPos = d_llr2llrProcBufBnPos_BG1_R13;
 
   // -----------------------------
   // Part 1: Copy parity section
