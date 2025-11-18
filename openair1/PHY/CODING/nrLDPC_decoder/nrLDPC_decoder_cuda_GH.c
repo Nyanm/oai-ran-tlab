@@ -79,8 +79,6 @@ static int8_t bnProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF] __
 static int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrOut[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
-static int8_t temp_out[MAX_NUM_DLSCH_SEGMENTS_DL * 8448] __attribute__((aligned(64)));
-static int8_t temp_in[MAX_NUM_DLSCH_SEGMENTS_DL * 68 * 384] __attribute__((aligned(64)));
 #else
 //int8_t *iter_ptr_array_dev;
 //int *PC_Flag_array_dev;
@@ -516,11 +514,11 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            decode_abort_t* ab)
 {
 
-  int8_t temp_out[n_segments * 8448] __attribute__((aligned(64))); 
+//  int8_t temp_out[n_segments * 8448] __attribute__((aligned(64))); 
 #ifdef USE_STATIC_ALLOC
-  memcpy(temp_in , p_llr ,  n_segments * 68 * 384);
+//  memcpy(temp_in , p_llr ,  n_segments * 68 * 384);
+//  memset(temp_out, 0     ,  n_segments * 8448);
 #endif
-  memset(temp_out, 0     ,  n_segments * 8448);
 
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
@@ -577,7 +575,7 @@ for (int SegPackIdx = 0; SegPackIdx < NumSegPacks; SegPackIdx++) {
 
     int PackShiftIdx = segmentPacks[SegPackIdx].startSeg;
 #ifdef USE_STATIC_ALLOC
-    int8_t* perpack_llr = temp_in + PackShiftIdx * 68 * 384;
+    int8_t* perpack_llr = p_llr + PackShiftIdx * 68 * 384;
     int8_t* perpack_cnProcBuf = cnProcBuf + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     //int8_t* perpack_cnProcBufRes = cnProcBufRes + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     int8_t* perpack_bnProcBuf = bnProcBuf + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
@@ -585,7 +583,7 @@ for (int SegPackIdx = 0; SegPackIdx < NumSegPacks; SegPackIdx++) {
     int8_t* perpack_llrProcBuf = llrProcBuf + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_llrRes = llrRes + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_llrOut = llrOut + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
-    int8_t* perpack_out = temp_out + PackShiftIdx * 8448; // use temp_out rather than p_out
+    int8_t* perpack_out = p_out + PackShiftIdx * 8448; // use temp_out rather than p_out
 #else
     int8_t* perpack_llr = p_llr + PackShiftIdx * 68 * 384 ;
     int8_t* perpack_cnProcBuf = cnProcBuf_dev + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
@@ -630,9 +628,6 @@ for (int SegPackIdx = 0; SegPackIdx < NumSegPacks; SegPackIdx++) {
     // cudaDeviceSynchronize();
     // printf("p_out %p, temp_out %p\n",p_out,temp_out);
     
-#ifdef USE_STATIC_ALLOC 
-  memcpy(p_out, temp_out, n_segments /*MAX_NUM_DLSCH_SEGMENTS_DL*/ * 8448);
-#endif
      //dumpASS(p_out, "Dump_Output_Stream_GH.txt");
 
     return numMaxIter;
