@@ -115,46 +115,7 @@ __device__ __forceinline__ void moveBricks_invget_circ(int8_t *__restrict__ dstB
       break;
   }
 }
-__device__ __forceinline__ void moveBricks_circ(int8_t *__restrict__ dstBuf,
-                                                uint16_t dstBuf_Offset,
-                                                uint8_t *__restrict__ Four_Bricks,
-                                                uint16_t Z,
-                                                uint16_t cshift,
-                                                CircShiftDirection dir,
-                                                CircShiftOp op)
-{
-  int8_t *DstBuf = (int8_t *)dstBuf;
-  uint16_t shift;
 
-  if (dir == FORWARD) {
-    shift = (Z - ((cshift + dstBuf_Offset) % Z)) % Z;
-  } else {
-    shift = (cshift + dstBuf_Offset) % Z;
-  }
-
-  uint16_t pos = shift;
-  uintptr_t ptr = (uintptr_t)(DstBuf + pos);
-
-  if (op == PUT_BRICKS) {
-    // put bricks
-    if ((pos + 3 < Z) && ((ptr & 0x3) == 0)) {
-      *(uint32_t *)(DstBuf + pos) = *(const uint32_t *)(Four_Bricks);
-    } else {
-      for (uint16_t j = 0; j < 4; j++) {
-        DstBuf[(pos + j) % Z] = Four_Bricks[j];
-      }
-    }
-  } else if (op == GET_BRICKS) {
-    // get bricks
-    if ((pos + 3 < Z) && ((ptr & 0x3) == 0)) {
-      *(uint32_t *)(Four_Bricks) = *(const uint32_t *)(DstBuf + pos);
-    } else {
-      for (uint16_t j = 0; j < 4; j++) {
-        Four_Bricks[j] = DstBuf[(pos + j) % Z];
-      }
-    }
-  }
-}
 
 __device__ __forceinline__ uint32_t __vxor4_first(const uint32_t a, uint32_t *b)
 {
