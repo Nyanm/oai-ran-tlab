@@ -1,4 +1,4 @@
-## Option #1: Work via Emitter
+## Option 1: Work via Emitter
 
 ### About
 
@@ -61,7 +61,7 @@ sudo ./nr-uesoftmodem -C 3619200000 -r 106 --numerology 1 --ssb 516 --band 78 --
 
 ---
 
-## Option #2: Read DB Directly (In-process CIRDB)
+## Option 2: Read DB Directly (In-process CIRDB)
 
 ### About
 
