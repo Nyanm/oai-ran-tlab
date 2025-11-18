@@ -23,14 +23,14 @@ sudo ip netns add ue_ns
 2. Run UE in the new namespace
 
 ```bash
-sudo ip netns exec bash
+sudo ip netns exec ue_ns bash
 sudo ./nr-uesoftmodem -C 3619200000 -r 106 --numerology 1 --ssb 516 --band 78 --device.name vrtsim --noS1 --do-ra
 ```
 
 3. Run iperf server in the UE namespace
 
 ```bash
-sudo ip netns exec bash
+sudo ip netns exec ue_ns bash
 iperf -s -B 10.0.1.2
 ```
 
