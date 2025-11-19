@@ -9,8 +9,7 @@
 
 //------------------------------Stream Version------------------------
 
-__device__ void llrPreProc_Kernel_BG1_int8_Gn_stream(
-                                                     const int8_t *p_llr,
+__device__ void llrPreProc_Kernel_BG1_int8_Gn_stream(const int8_t *p_llr,
                                                      int8_t *p_llrProcBuf,
                                                      int8_t *p_cnProcBuf,
                                                      uint32_t row,
@@ -20,7 +19,7 @@ __device__ void llrPreProc_Kernel_BG1_int8_Gn_stream(
                                                      uint32_t circShift,
                                                      uint32_t Zc,
                                                      uint32_t R)
-{   
+{
   {
     uint32_t *p_cnProcBufBit;
 
@@ -39,12 +38,12 @@ __device__ void llrPreProc_Kernel_BG1_int8_Gn_stream(
   if (colIdx >= 42) // need to modify later
     return;
 
-  const uint8_t numBn2CnG1 = (R == 13) ? d_lut_numBnInBnGroups_BG1_R13[0]:d_lut_numBnInBnGroups_BG1_R23[0]; // for R13 is 42
+  const uint8_t numBn2CnG1 = (R == 13) ? d_lut_numBnInBnGroups_BG1_R13[0] : d_lut_numBnInBnGroups_BG1_R23[0]; // for R13 is 42
   const uint32_t startColParity = NR_LDPC_START_COL_PARITY_BG1; // 26 for BG1
   const uint32_t colG1 = startColParity * Zc;
 
-  const uint32_t *lut_llr2llrProcBufAddr = (R == 13) ? d_llr2llrProcBufAddr_BG1_R13:d_llr2llrProcBufAddr_BG1_R23;
-  const uint32_t *lut_llr2llrProcBufBnPos = (R == 13) ? d_llr2llrProcBufBnPos_BG1_R13:d_llr2llrProcBufBnPos_BG1_R23;
+  const uint32_t *lut_llr2llrProcBufAddr = (R == 13) ? d_llr2llrProcBufAddr_BG1_R13 : d_llr2llrProcBufAddr_BG1_R23;
+  const uint32_t *lut_llr2llrProcBufBnPos = (R == 13) ? d_llr2llrProcBufBnPos_BG1_R13 : d_llr2llrProcBufBnPos_BG1_R23;
 
   // -----------------------------
   // Part 1: Copy parity section
@@ -65,7 +64,6 @@ __device__ void llrPreProc_Kernel_BG1_int8_Gn_stream(
     *dst = *src;
   }
 }
-
 
 __device__ void llrRes2llrOut_Kernel_BG1_int8(uint8_t R, int8_t *llrOut, int8_t *llrRes, uint32_t Zc)
 {

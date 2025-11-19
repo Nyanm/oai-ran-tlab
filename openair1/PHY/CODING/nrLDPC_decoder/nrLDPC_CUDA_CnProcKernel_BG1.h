@@ -7,8 +7,7 @@
 #include "nrLDPC_CUDA_public.h"
 #include "nrLDPC_CUDA_lut.h"
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G3(
-                                                         const int8_t *__restrict__ p_cnProcBuf,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G3(const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
                                                          uint32_t lane,
@@ -16,7 +15,6 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G3(
                                                          uint32_t circShift,
                                                          uint32_t Zc)
 {
-
   const uint32_t baseShift = Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
 
@@ -33,13 +31,12 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G3(
   sgn = __vxor4(&sgn, &ymm0);
   min = __vminu4(min, 0x7F7F7F7F);
 
-  uint32_t BricksToBeMoved = __vsign4(&min, &sgn); 
+  uint32_t BricksToBeMoved = __vsign4(&min, &sgn);
 
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G4(
-                                                         const int8_t *__restrict__ p_cnProcBuf,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G4(const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
                                                          uint32_t lane,
@@ -47,7 +44,6 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G4(
                                                          uint32_t circShift,
                                                          uint32_t Zc)
 {
-
   const uint32_t baseShift = 5 * Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
 
@@ -67,13 +63,12 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G4(
   //-------------------------------------------------------------------------
 
   min = __vminu4(min, 0x7F7F7F7F);
-  uint32_t BricksToBeMoved = __vsign4(&min, &sgn); 
+  uint32_t BricksToBeMoved = __vsign4(&min, &sgn);
 
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G5(
-                                                         const int8_t *__restrict__ p_cnProcBuf,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G5(const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
                                                          uint32_t lane,
@@ -81,7 +76,6 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G5(
                                                          uint32_t circShift,
                                                          uint32_t Zc)
 {
-
   const uint32_t baseShift = 18 * Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
 
@@ -103,13 +97,12 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G5(
   sgn = __vxor4(&sgn, &ymm0);
   //-------------------------------------------------------------------------
   min = __vminu4(min, 0x7F7F7F7F);
-  uint32_t BricksToBeMoved = __vsign4(&min, &sgn); 
+  uint32_t BricksToBeMoved = __vsign4(&min, &sgn);
 
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G6(
-                                                         const int8_t *__restrict__ p_cnProcBuf,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G6(const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
                                                          uint32_t lane,
@@ -117,7 +110,6 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G6(
                                                          uint32_t circShift,
                                                          uint32_t Zc)
 {
-
   const uint32_t baseShift = 8 * Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
 
@@ -148,8 +140,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G6(
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G7(
-                                                         const int8_t *__restrict__ p_cnProcBuf,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G7(const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
                                                          uint32_t lane,
@@ -157,7 +148,6 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G7(
                                                          uint32_t circShift,
                                                          uint32_t Zc)
 {
-
   const uint32_t baseShift = 5 * Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
 
@@ -185,12 +175,11 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G7(
   sgn = __vxor4(&sgn, &ymm0);
   //-------------------------------------------------------------------------
   min = __vminu4(min, 0x7F7F7F7F);
-  uint32_t BricksToBeMoved = __vsign4(&min, &sgn); 
+  uint32_t BricksToBeMoved = __vsign4(&min, &sgn);
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G8(
-                                                         const int8_t *__restrict__ p_cnProcBuf,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G8(const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
                                                          uint32_t lane,
@@ -198,7 +187,6 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G8(
                                                          uint32_t circShift,
                                                          uint32_t Zc)
 {
-
   const uint32_t baseShift = 2 * Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
 
@@ -229,12 +217,11 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G8(
   sgn = __vxor4(&sgn, &ymm0);
   //-------------------------------------------------------------------------
   min = __vminu4(min, 0x7F7F7F7F);
-  uint32_t BricksToBeMoved = __vsign4(&min, &sgn); 
+  uint32_t BricksToBeMoved = __vsign4(&min, &sgn);
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G9(
-                                                         const int8_t *__restrict__ p_cnProcBuf,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G9(const int8_t *__restrict__ p_cnProcBuf,
                                                          int8_t *__restrict__ p_bnProcBuf,
                                                          uint32_t row,
                                                          uint32_t lane,
@@ -280,8 +267,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G9(
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G10(
-                                                          const int8_t *__restrict__ p_cnProcBuf,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G10(const int8_t *__restrict__ p_cnProcBuf,
                                                           int8_t *__restrict__ p_bnProcBuf,
                                                           uint32_t row,
                                                           uint32_t lane,
@@ -289,7 +275,6 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G10(
                                                           uint32_t circShift,
                                                           uint32_t Zc)
 {
-
   const uint32_t baseShift = 1 * Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
 
@@ -326,13 +311,12 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G10(
   sgn = __vxor4(&sgn, &ymm0);
   //-------------------------------------------------------------------------
   min = __vminu4(min, 0x7F7F7F7F);
-  uint32_t BricksToBeMoved = __vsign4(&min, &sgn); 
+  uint32_t BricksToBeMoved = __vsign4(&min, &sgn);
 
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
 
-__device__ __forceinline__ void cnProcKernel_BG1_int8_G19(
-                                                          const int8_t *__restrict__ p_cnProcBuf,
+__device__ __forceinline__ void cnProcKernel_BG1_int8_G19(const int8_t *__restrict__ p_cnProcBuf,
                                                           int8_t *__restrict__ p_bnProcBuf,
                                                           uint32_t row,
                                                           uint32_t lane,
@@ -340,7 +324,6 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G19(
                                                           uint32_t circShift,
                                                           uint32_t Zc)
 {
-
   const uint32_t baseShift = 4 * Zc * row; // offset pointed at different BN
   const uint32_t destByte = baseShift + lane * 4; // offset to different part inside different BN
 
@@ -405,7 +388,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G19(
   sgn = __vxor4(&sgn, &ymm0);
   //-------------------------------------------------------------------------
   min = __vminu4(min, 0x7F7F7F7F);
-  uint32_t BricksToBeMoved = __vsign4(&min, &sgn); 
-  
+  uint32_t BricksToBeMoved = __vsign4(&min, &sgn);
+
   moveBricks_invput_circ((int8_t *)&p_bnProcBuf[idxBn], lane * 4, (uint8_t *)&BricksToBeMoved, Zc, circShift);
 }
