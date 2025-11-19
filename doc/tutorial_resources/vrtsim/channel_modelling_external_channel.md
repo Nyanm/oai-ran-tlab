@@ -44,8 +44,8 @@ git checkout vrtsim_cirdb_read
 ### Build
 ```bash
 cd openairinterface5g/cmake_targets
-rm -rf build
 cd build 
+cmake ../.. -GNinja   -DCMAKE_BUILD_TYPE=RelWithDebInfo   -DOAI_VRTSIM_TAPS_CLIENT=ON   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build . --target taps_client vrtsim rfsimulator nr-softmodem nr-uesoftmodem ldpc params_libconfig -j"$(nproc)"
 ```
 
