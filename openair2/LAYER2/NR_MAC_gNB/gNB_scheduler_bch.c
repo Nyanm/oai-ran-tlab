@@ -162,6 +162,7 @@ void schedule_nr_mib(module_id_t module_idP, frame_t frameP, slot_t slotP, nfapi
 
       NR_SubcarrierSpacing_t scs = *scc->ssbSubcarrierSpacing;
       const long band = *scc->downlinkConfigCommon->frequencyInfoDL->frequencyBandList.list.array[0];
+      const int bw = scc->downlinkConfigCommon->frequencyInfoDL->scs_SpecificCarrierList.list.array[0]->carrierBandwidth;
       const uint16_t offset_pointa = gNB->ssb_OffsetPointA;
       uint8_t ssbSubcarrierOffset = gNB->ssb_SubcarrierOffset;
 
@@ -193,6 +194,7 @@ void schedule_nr_mib(module_id_t module_idP, frame_t frameP, slot_t slotP, nfapi
                                                         scs,
                                                         FR1,
                                                         band,
+                                                        bw,
                                                         i_ssb,
                                                         ssb_frame_periodicity,
                                                         prb_offset);
@@ -225,6 +227,7 @@ void schedule_nr_mib(module_id_t module_idP, frame_t frameP, slot_t slotP, nfapi
                                                         scs,
                                                         FR1,
                                                         band,
+                                                        bw,
                                                         i_ssb,
                                                         ssb_frame_periodicity,
                                                         prb_offset);
@@ -257,6 +260,7 @@ void schedule_nr_mib(module_id_t module_idP, frame_t frameP, slot_t slotP, nfapi
                                                         scs,
                                                         FR2,
                                                         band,
+                                                        bw,
                                                         i_ssb,
                                                         ssb_frame_periodicity,
                                                         prb_offset);
