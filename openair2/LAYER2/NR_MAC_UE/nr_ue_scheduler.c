@@ -1710,9 +1710,14 @@ static bool schedule_uci_on_pusch(NR_UE_MAC_INST_t *mac,
       LOG_E(NR_MAC, "UCI on PUSCH need to be configured to schedule UCI on PUSCH\n");
     }
   }
-  if (pusch_pdu->pusch_uci.csi_payload.p1_bits == 0 && pusch_pdu->pusch_uci.csi_payload.p1_bits == 0) {
-    // To support this we would need to shift some bits into CSI part2 -> need to change the logic
-    AssertFatal(pucch->csi_payload.p1_bits == 0, "Multiplexing periodic CSI on PUSCH not supported\n");
+
+  AssertFatal(pusch_pdu->pusch_uci.csi_payload.p1_bits == 0, "PUSCH already has CSI report\n");
+
+  // Check if this PUCCH has CSI report to send. If so, multiplex it on PUSCH
+  if (pucch->csi_payload.p1_bits > 0) {
+    nfapi_nr_ue_csi_payload_t *csi_payload = &pusch_pdu->pusch_uci.csi_payload;
+    NR_PUCCH_Resource_t *csi_pucch = NULL;
+    nr_get_csi_measurements(mac, frame_tx, slot_tx, csi_payload, &csi_pucch, true);
   }
 
   release_ul_config(ulcfg_pdu, false);
@@ -1743,7 +1748,7 @@ static void nr_ue_pucch_scheduler(NR_UE_MAC_INST_t *mac, frame_t frame, int slot
     // CSI
     int csi_res = 0;
     if (mac->state == UE_CONNECTED)
-      csi_res = nr_get_csi_measurements(mac, frame, slot, &pucch[num_res]);
+      csi_res = nr_get_csi_measurements(mac, frame, slot, &pucch[num_res].csi_payload, &pucch[num_res].pucch_resource, false);
     if (csi_res > 0) {
       num_res += csi_res;
     }
