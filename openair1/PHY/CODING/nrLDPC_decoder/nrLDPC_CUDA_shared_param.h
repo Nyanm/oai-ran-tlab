@@ -7,6 +7,7 @@ extern "C" {
 
 #define num_TotalThreads_BG1_R13 30336
 #define num_TotalThreads_BG1_R23 13824
+#define num_TotalThreads_llr_llrRes 6528
 #define RowLength 96 //Zc = 384/4 = 96
 
 #define DUMPCNBN 0
@@ -34,11 +35,13 @@ typedef struct SegmentPack {
 
 typedef struct ThreadSize {
     int NumBlocks;
+    int NumBlocks_llr;
+    int NumBlocks_output;
     int NumThreads;
 }ThreadSize;
 
 extern SegmentPack segmentPacks[MAX_NUM_DLSCH_SEGMENTS_DL];
-extern ThreadSize BG1_R13_threadSize, BG1_R23_threadSize;
+extern ThreadSize BG1_R13_threadSize, BG1_R23_threadSize, R_general_threadSize;
 
 
 typedef struct {

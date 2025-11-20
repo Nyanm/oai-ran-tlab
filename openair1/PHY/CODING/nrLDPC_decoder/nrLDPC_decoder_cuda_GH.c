@@ -95,24 +95,23 @@ static int8_t cnProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_CN_PROC_BUF] __
 static int8_t bnProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
 static int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
-static int8_t llrOut[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 #else
 
 int8_t* cnProcBuf_dev;
 int8_t* bnProcBuf_dev;
 int8_t* llrRes_dev;
 int8_t* llrProcBuf_dev;
-int8_t* llrOut_dev;
+
 t_nrLDPC_lut* d_lut_R13;
 t_nrLDPC_lut* d_lut_R23;
 
 int8_t* cnProcBuf_host;
-int8_t* cnProcBufRes_host;
+
 int8_t* bnProcBuf_host;
-int8_t* bnProcBufRes_host;
+
 int8_t* llrRes_host;
 int8_t* llrProcBuf_host;
-int8_t* llrOut_host;
+
 t_nrLDPC_lut* h_lut_R13;
 t_nrLDPC_lut* h_lut_R23;
 
@@ -281,8 +280,8 @@ int cuda_support_init_decoder()
     AssertFatal(err == cudaSuccess, "CUDA Error (llrRes_dev): %s\n", cudaGetErrorString(err));
     err = cudaMalloc((void**)&llrProcBuf_dev, sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
     AssertFatal(err == cudaSuccess, "CUDA Error (llrProcBuf_dev): %s\n", cudaGetErrorString(err));
-    err = cudaMalloc((void**)&llrOut_dev, sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
-    AssertFatal(err == cudaSuccess, "CUDA Error (llrProcBuf_dev): %s\n", cudaGetErrorString(err));
+    //err = cudaMalloc((void**)&llrOut_dev, sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
+    //AssertFatal(err == cudaSuccess, "CUDA Error (llrProcBuf_dev): %s\n", cudaGetErrorString(err));
     // err=cudaMalloc((void **)&iter_ptr_array_dev,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4);
     // AssertFatal(err == cudaSuccess,"CUDA Error (iter_ptr_array_dev): %s\n", cudaGetErrorString(err));
     // err=cudaMalloc((void **)&PC_Flag_array_dev,sizeof(int)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4);
@@ -331,12 +330,12 @@ int cuda_support_init_decoder()
     err = cudaHostGetDevicePointer((void**)&llrProcBuf_dev, llrProcBuf_host, 0);
     AssertFatal(err == cudaSuccess, "CUDA Error (llrProcBuf_dev): %s\n", cudaGetErrorString(err));
 
-    err = cudaHostAlloc((void**)&llrOut_host,
-                        sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR,
-                        cudaHostAllocMapped);
-    AssertFatal(err == cudaSuccess, "CUDA Error (llrOut_host): %s\n", cudaGetErrorString(err));
-    err = cudaHostGetDevicePointer((void**)&llrOut_dev, llrOut_host, 0);
-    AssertFatal(err == cudaSuccess, "CUDA Error (llrOut_dev): %s\n", cudaGetErrorString(err));
+    //err = cudaHostAlloc((void**)&llrOut_host,
+    //                    sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR,
+     //                   cudaHostAllocMapped);
+    //AssertFatal(err == cudaSuccess, "CUDA Error (llrOut_host): %s\n", cudaGetErrorString(err));
+    //err = cudaHostGetDevicePointer((void**)&llrOut_dev, llrOut_host, 0);
+    //AssertFatal(err == cudaSuccess, "CUDA Error (llrOut_dev): %s\n", cudaGetErrorString(err));
 
     // err=cudaHostAlloc((void **)&iter_ptr_array_host,sizeof(int8_t)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4,cudaHostAllocMapped);
     // AssertFatal(err == cudaSuccess,"CUDA Error (iter_ptr_array_host): %s\n", cudaGetErrorString(err));
@@ -357,6 +356,7 @@ int cuda_support_init_decoder()
     err = cudaHostGetDevicePointer((void**)&d_lut_R23, h_lut_R23, 0);
     AssertFatal(err == cudaSuccess, "CUDA Error (d_lut_R23): %s\n", cudaGetErrorString(err));
     copy_luts_to_pinned();
+    printf("All cudaHostAlloc done\n");
   }
   return 0;
 }
@@ -369,8 +369,6 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t* p_out,
                                                    int8_t* bnProcBuf,
                                                    int8_t* llrRes,
                                                    int8_t* llrProcBuf,
-                                                   int8_t* llrOut,
-                                                   int8_t* p_llrOut,
                                                    int Z,
                                                    uint8_t BG,
                                                    uint8_t R,
@@ -529,12 +527,15 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   // Pack setting area
   if (!SegmentPacked) {
     int segPerPack = 0;
-    int NumThreads = 384; // maximum 1024, suggesting multiples of 96:384,480,576,672,768,864,960
+    int NumThreads = 384; // maximum 1024, suggesting multiples of 96:288,384,480,576,672,768,864,960
                           // at least should be multiples of 32
     BG1_R13_threadSize.NumThreads = NumThreads;
     BG1_R13_threadSize.NumBlocks = (num_TotalThreads_BG1_R13 + BG1_R13_threadSize.NumThreads - 1) / BG1_R13_threadSize.NumThreads;
     BG1_R23_threadSize.NumThreads = NumThreads;
     BG1_R23_threadSize.NumBlocks = (num_TotalThreads_BG1_R23 + BG1_R23_threadSize.NumThreads - 1) / BG1_R23_threadSize.NumThreads;
+    R_general_threadSize.NumThreads = NumThreads;
+    R_general_threadSize.NumBlocks_llr = (num_TotalThreads_llr_llrRes + R_general_threadSize.NumThreads - 1) / R_general_threadSize.NumThreads;
+    R_general_threadSize.NumBlocks_output = ((numLLR>>3) + R_general_threadSize.NumThreads - 1) / R_general_threadSize.NumThreads;
     switch (R) {
       case 13:
         segPerPack = 132; // It's quite free here, GPU can handle this
@@ -568,7 +569,6 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     int8_t* perpack_bnProcBuf = bnProcBuf + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
     int8_t* perpack_llrProcBuf = llrProcBuf + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_llrRes = llrRes + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
-    int8_t* perpack_llrOut = llrOut + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_out = p_out + PackShiftIdx * 8448;
 #else
     int8_t* perpack_llr = p_llr + PackShiftIdx * 68 * 384;
@@ -576,10 +576,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     int8_t* perpack_bnProcBuf = bnProcBuf_dev + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
     int8_t* perpack_llrRes = llrRes_dev + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_llrProcBuf = llrProcBuf_dev + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
-    int8_t* perpack_llrOut = llrOut_dev + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_out = p_out + PackShiftIdx * 8448;
 #endif
-    int8_t* perpack_p_llrOut = (outMode == nrLDPC_outMode_LLRINT8) ? perpack_out : perpack_llrOut;
     //  Call scheduler for this segment and stream
     //  Launch decoder on stream
     nrLDPC_decoder_scheduler_BG1_cuda_core(perpack_out,
@@ -589,8 +587,6 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            perpack_bnProcBuf,
                                            perpack_llrRes,
                                            perpack_llrProcBuf,
-                                           perpack_llrOut,
-                                           perpack_p_llrOut,
                                            Z,
                                            BG,
                                            R,
