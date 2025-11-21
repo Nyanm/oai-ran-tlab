@@ -166,7 +166,12 @@ static void handle_nr_ulsch(NR_UL_IND_t *UL_info)
     return;
   }
 
+  LOG_D(NR_MAC, "[ULSCH_HANDLE] rx_ind.number_of_pdus=%d, crc_ind.number_crcs=%d, sfn=%d, slot=%d\n",
+        UL_info->rx_ind.number_of_pdus, UL_info->crc_ind.number_crcs, UL_info->frame, UL_info->slot);
+  
   if (UL_info->rx_ind.number_of_pdus > 0 && UL_info->crc_ind.number_crcs > 0) {
+    LOG_I(NR_MAC, "[ULSCH_PROCESS] Processing %d PDUs at sfn=%d, slot=%d\n",
+          UL_info->rx_ind.number_of_pdus, UL_info->frame, UL_info->slot);
     AssertFatal(UL_info->rx_ind.number_of_pdus == UL_info->crc_ind.number_crcs,
                 "number_of_pdus %d, number_crcs %d\n",
                 UL_info->rx_ind.number_of_pdus, UL_info->crc_ind.number_crcs);
@@ -427,9 +432,11 @@ static void NR_UL_indication(NR_UL_IND_t *UL_info)
       UL_info->uci_ind = *uci_ind;
     }
     if (gnb_rx_ind_queue.num_items > 0 && gnb_crc_ind_queue.num_items > 0) {
-      LOG_D(NR_MAC, "gnb_rx_ind_queue size = %zu and gnb_crc_ind_queue size = %zu\n",
+      LOG_I(NR_MAC, "[QUEUE_DEQUEUE] gnb_rx_ind_queue size = %zu and gnb_crc_ind_queue size = %zu\n",
             gnb_rx_ind_queue.num_items, gnb_crc_ind_queue.num_items);
       rx_ind = get_queue(&gnb_rx_ind_queue);
+      LOG_I(NR_MAC, "[QUEUE_DEQUEUE] Dequeued RX_IND: sfn=%d, slot=%d, num_pdus=%d\n",
+            rx_ind->sfn, rx_ind->slot, rx_ind->number_of_pdus);
       struct sfn_slot sfn_slot = {.sfn = rx_ind->sfn, .slot = rx_ind->slot};
       crc_ind = unqueue_matching(&gnb_crc_ind_queue,
                                  MAX_QUEUE_SIZE,

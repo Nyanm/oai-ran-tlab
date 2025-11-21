@@ -179,7 +179,18 @@ void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame, slot_t slo
   }
 
   bool wait_prach_completed = gNB->num_scheduled_prach_rx >= NUM_PRACH_RX_FOR_NOISE_ESTIMATE;
-  if (gNB->print_ue_stats && (wait_prach_completed || get_softmodem_params()->phy_test) && (slot == 0) && (frame & 127) == 0) {
+  bool is_nfapi_mode = get_softmodem_params()->nfapi;
+  
+  // Log the condition status periodically
+  static int sched_log_counter = 0;
+  if ((++sched_log_counter % 1000) == 0) {
+    LOG_I(NR_MAC, "[gNB SCHEDULER] frame.slot %d.%d: wait_prach=%d (num_rx=%lu/%d), phy_test=%d, nfapi=%d, will_schedule_mib=%d\n",
+          frame, slot, wait_prach_completed, gNB->num_scheduled_prach_rx, NUM_PRACH_RX_FOR_NOISE_ESTIMATE,
+          get_softmodem_params()->phy_test, is_nfapi_mode,
+          (wait_prach_completed || get_softmodem_params()->phy_test || is_nfapi_mode));
+  }
+  
+  if (gNB->print_ue_stats && (wait_prach_completed || get_softmodem_params()->phy_test || is_nfapi_mode) && (slot == 0) && (frame & 127) == 0) {
     char stats_output[32656] = {0};
     dump_mac_stats(gNB, stats_output, sizeof(stats_output), true);
     LOG_I(NR_MAC, "Frame.Slot %d.%d\n%s\n", frame, slot, stats_output);
@@ -201,13 +212,25 @@ void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame, slot_t slo
   nr_measgap_scheduling(gNB, frame, slot);
   nr_mac_update_timers(module_idP, frame, slot);
 
-  if (wait_prach_completed || get_softmodem_params()->phy_test) {
+  // In nFAPI mode, we need to schedule MIB immediately without waiting for PRACH
+  // because the UE needs MIB to start PRACH (chicken-and-egg problem)
+  if (wait_prach_completed || get_softmodem_params()->phy_test || is_nfapi_mode) {
     // This schedules MIB
     schedule_nr_mib(module_idP, frame, slot, &sched_info->DL_req);
 
     // This schedules SIB1
     // SIB19 will be scheduled if ntn_Config_r17 is initialized
-    if (IS_SA_MODE(get_softmodem_params())) {
+    bool is_sa_mode = IS_SA_MODE(get_softmodem_params());
+    static int sa_mode_log_counter = 0;
+    if ((++sa_mode_log_counter % 1000) == 0) {
+      LOG_I(NR_MAC, "[SA_MODE_CHECK] frame.slot %d.%d: is_sa_mode=%d (phy_test=%d, do_ra=%d, nsa=%d)\n",
+            frame, slot, is_sa_mode, 
+            get_softmodem_params()->phy_test,
+            get_softmodem_params()->do_ra,
+            get_softmodem_params()->nsa);
+    }
+    
+    if (is_sa_mode) {
       schedule_nr_sib1(module_idP, frame, slot, &sched_info->DL_req, &sched_info->TX_req);
       schedule_nr_other_sib(module_idP, frame, slot, &sched_info->DL_req, &sched_info->TX_req);
     }

@@ -2419,7 +2419,10 @@ void remove_nr_list(NR_list_t *listP, int id)
     prev = cur;
     cur = &listP->next[*cur];
   }
-  AssertFatal(*cur != -1, "ID %d not found in UE_list\n", id);
+  if (*cur == -1) {
+    LOG_W(NR_MAC, "ID %d not found in list, skipping removal\n", id);
+    return;
+  }
   int *next = &listP->next[*cur];
   *cur = listP->next[*cur];
   *next = -1;

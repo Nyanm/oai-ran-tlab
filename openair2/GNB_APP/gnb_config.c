@@ -581,6 +581,18 @@ void fix_scc(NR_ServingCellConfigCommon_t *scc, uint64_t ssbmap)
     // will select: mu=0 => 4 (10 slots), mu=1 => 5 (20 slots), mu>=3 => 7 (80 slots)
     rach_ConfigCommon->rach_ConfigGeneric.ra_ResponseWindow = min(NR_RACH_ConfigGeneric__ra_ResponseWindow_sl80, NR_RACH_ConfigGeneric__ra_ResponseWindow_sl10 + mu);
   }
+  
+  // In nFAPI mode, increase the RA response window to account for message forwarding latency
+  // between PNF (UE PHY) -> L2 Proxy -> VNF (gNB L2)
+  if (get_softmodem_params()->nfapi) {
+    // Ensure we have at least sl20 (20 slots) for nFAPI mode
+    if (rach_ConfigCommon->rach_ConfigGeneric.ra_ResponseWindow < NR_RACH_ConfigGeneric__ra_ResponseWindow_sl20) {
+      LOG_I(GNB_APP, "nFAPI mode: increasing ra_ResponseWindow from %ld to sl20 (20 slots) to accommodate message forwarding latency\n",
+            rach_ConfigCommon->rach_ConfigGeneric.ra_ResponseWindow);
+      rach_ConfigCommon->rach_ConfigGeneric.ra_ResponseWindow = NR_RACH_ConfigGeneric__ra_ResponseWindow_sl20;
+    }
+  }
+  
   DevAssert(rach_ConfigCommon->rach_ConfigGeneric.ra_ResponseWindow >= 0);
 
   // prepare DL Allocation lists
@@ -1571,7 +1583,9 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
       }
 
       if (strcmp(*(MacRLC_ParamList.paramarray[j][MACRLC_TRANSPORT_S_PREFERENCE_IDX].strptr), "local_L1") == 0) {
+        LOG_I(GNB_APP, "MACRLC %d: Using local_L1 transport\n", j);
       } else if (strcmp(*(MacRLC_ParamList.paramarray[j][MACRLC_TRANSPORT_S_PREFERENCE_IDX].strptr), "nfapi") == 0) {
+        LOG_I(GNB_APP, "MACRLC %d: Configuring nFAPI VNF transport\n", j);
         RC.nrmac[j]->eth_params_s.my_addr = strdup(*(MacRLC_ParamList.paramarray[j][MACRLC_LOCAL_S_ADDRESS_IDX].strptr));
         RC.nrmac[j]->eth_params_s.remote_addr = strdup(*(MacRLC_ParamList.paramarray[j][MACRLC_REMOTE_S_ADDRESS_IDX].strptr));
         RC.nrmac[j]->eth_params_s.my_portc = *(MacRLC_ParamList.paramarray[j][MACRLC_LOCAL_S_PORTC_IDX].iptr);
@@ -1579,6 +1593,10 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
         RC.nrmac[j]->eth_params_s.my_portd = *(MacRLC_ParamList.paramarray[j][MACRLC_LOCAL_S_PORTD_IDX].iptr);
         RC.nrmac[j]->eth_params_s.remote_portd = *(MacRLC_ParamList.paramarray[j][MACRLC_REMOTE_S_PORTD_IDX].iptr);
         RC.nrmac[j]->eth_params_s.transp_preference = ETH_UDP_MODE;
+        LOG_I(GNB_APP, "MACRLC %d: VNF addr %s:%d, PNF addr %s:%d (P7: VNF %d, PNF %d)\n", j,
+              RC.nrmac[j]->eth_params_s.my_addr, RC.nrmac[j]->eth_params_s.my_portc,
+              RC.nrmac[j]->eth_params_s.remote_addr, RC.nrmac[j]->eth_params_s.remote_portc,
+              RC.nrmac[j]->eth_params_s.my_portd, RC.nrmac[j]->eth_params_s.remote_portd);
 
         configure_nr_nfapi_vnf(RC.nrmac[j]->eth_params_s);
       } else if(strcmp(*(MacRLC_ParamList.paramarray[j][MACRLC_TRANSPORT_S_PREFERENCE_IDX].strptr), "aerial") == 0){

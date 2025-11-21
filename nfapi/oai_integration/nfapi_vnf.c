@@ -647,6 +647,7 @@ int phy_crc_indication(struct nfapi_vnf_p7_config *config, nfapi_crc_indication_
 
 int phy_nr_crc_indication(nfapi_nr_crc_indication_t *ind)
 {
+  printf("[GNB_VNF_DEBUG] Received CRC_IND: sfn=%d, slot=%d, num_crcs=%d\n", ind->sfn, ind->slot, ind->number_crcs);
   LOG_D(NR_MAC, "In %s() NFAPI SFN/SF: %d/%d number_of_pdus :%u\n", __FUNCTION__, ind->sfn, ind->slot, ind->number_crcs);
 
   if (NFAPI_MODE == NFAPI_MODE_VNF || NFAPI_MODE == NFAPI_MODE_AERIAL) {
@@ -742,6 +743,7 @@ int phy_rx_indication(struct nfapi_vnf_p7_config *config, nfapi_rx_indication_t 
 
 int phy_nr_rx_data_indication(nfapi_nr_rx_data_indication_t *ind)
 {
+  printf("[GNB_VNF_DEBUG] Received RX_DATA_IND: sfn=%d, slot=%d, num_pdus=%d\n", ind->sfn, ind->slot, ind->number_of_pdus);
   LOG_D(NR_MAC,
         "In %s() NFAPI SFN/SF: %d/%d number_of_pdus :%u, and pdu %p\n",
         __FUNCTION__,
@@ -1783,6 +1785,7 @@ void configure_nr_nfapi_vnf(eth_params_t params)
 #endif
 
 #ifdef ENABLE_SOCKET
+  LOG_I(GNB_APP, "ENABLE_SOCKET is defined, starting VNF P5 thread\n");
   config->unpack_func = &nfapi_nr_p5_message_unpack;
   config->hdr_unpack_func = &nfapi_nr_p5_message_header_unpack;
   config->pack_func = &nfapi_nr_p5_message_pack;
@@ -1790,6 +1793,7 @@ void configure_nr_nfapi_vnf(eth_params_t params)
   NFAPI_TRACE(NFAPI_TRACE_INFO, "[VNF] Creating VNF NFAPI start thread %s\n", __FUNCTION__);
   pthread_create(&vnf_p5_init_and_receive_pthread, NULL, (void *)&vnf_start_p5_thread, config);
   NFAPI_TRACE(NFAPI_TRACE_INFO, "[VNF] Created VNF NFAPI start thread %s\n", __FUNCTION__);
+  LOG_I(GNB_APP, "VNF P5 thread created successfully\n");
 #endif
 #ifdef ENABLE_AERIAL
   config->unpack_func = &fapi_nr_p5_message_unpack;

@@ -769,6 +769,17 @@ static void start_ra_contention_resolution_timer(NR_RA_t *ra, const long ra_Cont
   // Value sf8 corresponds to 8 subframes, value sf16 corresponds to 16 subframes, and so on.
   // We add 2 * K2 because the timer runs from Msg2 transmission till Msg4 ACK reception
   ra->contention_resolution_timer = ((((int)ra_ContentionResolutionTimer + 1) * 8) << scs) + 2 * K2;
+  
+  // In nFAPI VNF mode, extend contention resolution timer to account for L2 proxy delays
+  // nfapi_mode values: 0=MONOLITHIC, 1=PNF, 2=VNF
+  extern uint8_t nfapi_mode;
+  if (nfapi_mode == 2) {  // VNF mode
+    int extension = 80; // 40ms additional margin for nFAPI split architecture with Msg4 ACK delays
+    LOG_D(NR_MAC, "[RA_TIMER] nFAPI VNF mode: extending contention resolution timer from %d to %d slots\n", 
+          ra->contention_resolution_timer, ra->contention_resolution_timer + extension);
+    ra->contention_resolution_timer += extension;
+  }
+  
   LOG_D(NR_MAC,
         "Starting RA Contention Resolution timer with %d ms + 2 * %d K2 (%d slots) duration\n",
         ((int)ra_ContentionResolutionTimer + 1) * 8,
@@ -1246,6 +1257,17 @@ static int get_response_window(e_NR_RACH_ConfigGeneric__ra_ResponseWindow respon
     default:
       AssertFatal(false, "Invalid response window value %d\n", response_window);
   }
+  
+  // In nFAPI VNF mode, extend RA window to account for L2 proxy delays
+  // and queue processing delays (typically 20-40 slots additional margin)
+  // nfapi_mode values: 0=MONOLITHIC, 1=PNF, 2=VNF
+  extern uint8_t nfapi_mode;
+  if (nfapi_mode == 2) {  // VNF mode
+    int extension = 40; // 20ms additional margin for nFAPI split architecture
+    LOG_D(NR_MAC, "[RA_WINDOW] nFAPI VNF mode: extending RA window from %d to %d slots\n", slots, slots + extension);
+    slots += extension;
+  }
+  
   return slots;
 }
 
@@ -1266,14 +1288,15 @@ static bool msg2_in_response_window(int rach_frame,
   bool in_window = diff <= window_slots;
   if (!in_window) {
     LOG_W(NR_MAC,
-          "exceeded RA window: preamble at %d.%2d now %d.%d (diff %d), ra_ResponseWindow %ld/%d slots\n",
+          "exceeded RA window: preamble at %d.%2d now %d.%d (diff %d), ra_ResponseWindow enum=%ld slots=%d %s\n",
           rach_frame,
           rach_slot,
           current_frame,
           current_slot,
           diff,
           rrc_ra_ResponseWindow,
-          window_slots);
+          window_slots,
+          get_softmodem_params()->emulate_l1 ? "[nFAPI mode]" : "");
   }
   return in_window;
 }
@@ -2159,6 +2182,25 @@ void nr_schedule_RA(module_id_t module_idP,
       NR_RA_t *ra = UE->ra;
       if (ra->ra_state != nrRA_gNB_IDLE)
         LOG_D(NR_MAC, "UE %04x frame.slot %d.%d RA state: %d\n", UE->rnti, frameP, slotP, ra->ra_state);
+
+      // Check RAR window timeout for Msg2/Msg3 states (before contention resolution timer starts)
+      if (ra->ra_type == RA_4_STEP && (ra->ra_state == nrRA_Msg2 || ra->ra_state == nrRA_WAIT_Msg3)) {
+        NR_COMMON_channels_t *cc = &mac->common_channels[CC_id];
+        NR_ServingCellConfigCommon_t *scc = cc->ServingCellConfigCommon;
+        long rrc_ra_ResponseWindow =
+            scc->uplinkConfigCommon->initialUplinkBWP->rach_ConfigCommon->choice.setup->rach_ConfigGeneric.ra_ResponseWindow;
+        const int n_slots_frame = mac->frame_structure.numb_slots_frame;
+        if (!msg2_in_response_window(ra->preamble_frame, ra->preamble_slot, n_slots_frame, rrc_ra_ResponseWindow, frameP, slotP)) {
+          LOG_W(NR_MAC,
+                "(%d.%d) RAR window expired for UE 0x%04x (state %d), releasing RA process\n",
+                frameP,
+                slotP,
+                UE->rnti,
+                ra->ra_state);
+          nr_release_ra_UE(mac, UE->rnti);
+          continue;
+        }
+      }
 
       // Check RA Contention Resolution timer (TODO check this procedure)
       if (ra->ra_type == RA_4_STEP && ra->ra_state > nrRA_WAIT_Msg3) {
