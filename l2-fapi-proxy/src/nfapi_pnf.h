@@ -98,15 +98,21 @@ typedef struct
     char tx_addr[80];
 } udp_data;
 
+#ifndef PHY_VARS_ENB_DEFINED
+#define PHY_VARS_ENB_DEFINED
 typedef struct
 {
 
 } PHY_VARS_eNB;
+#endif
 
+#ifndef PHY_VARS_GNB_DEFINED
+#define PHY_VARS_GNB_DEFINED
 typedef struct
 {
 
 } PHY_VARS_gNB;
+#endif
 
 typedef struct
 {

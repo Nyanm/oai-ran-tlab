@@ -507,6 +507,8 @@ typedef struct {
 } eNB_UCI_STATS_t;
 
 /// Top-level PHY Data Structure for eNB
+#ifndef PHY_VARS_ENB_DEFINED
+#define PHY_VARS_ENB_DEFINED
 typedef struct PHY_VARS_eNB_s {
   /// Module ID indicator for this instance
   module_id_t          Mod_id;
@@ -748,6 +750,7 @@ typedef struct PHY_VARS_eNB_s {
   int32_t pusch_stats_BO[NUMBER_OF_UE_MAX][10240];
   int32_t pusch_signal_threshold;
 } PHY_VARS_eNB;
+#endif
 
 
 struct turboReqId {

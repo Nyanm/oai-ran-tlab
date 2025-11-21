@@ -38,6 +38,8 @@ typedef struct {
   const char* ch_trace_path;
 } l2_proxy_config_t;
 
+#ifndef ETH_PARAMS_T_DEFINED
+#define ETH_PARAMS_T_DEFINED
 typedef struct {
   char *remote_addr;
   //! remote port number for Ethernet interface (control)
@@ -57,7 +59,10 @@ typedef struct {
   //! compression enable (0: No comp/ 1: A-LAW)
   uint8_t if_compress;
 } eth_params_t;
+#endif
 
+#ifndef NR_CHANNEL_STATUS_DEFINED
+#define NR_CHANNEL_STATUS_DEFINED
 typedef struct {
   float sinr;
   float rsrp;
@@ -75,6 +80,7 @@ typedef struct nr_phy_channel_params_t {
   uint16_t nb_of_csi;
   nr_channel_status csi[1];
 } nr_phy_channel_params_t;
+#endif /* NR_CHANNEL_STATUS_DEFINED */
 
 void exit_function(const char *file, const char *function, const int line, const char *s, const int assert);
 

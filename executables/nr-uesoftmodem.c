@@ -118,7 +118,7 @@ void *emu_l1_mac_ue(void *notUsed)
   MessageDef *msg = NULL;
   itti_receive_msg(TASK_MAC_UE, &msg);
   if (msg)
-    process_msg_rcc_to_mac(msg);
+    process_msg_rcc_to_mac(msg, 0);  // L2 proxy: Use instance 0 for emulated L1 mode
   return NULL;
 }
 

@@ -40,14 +40,10 @@
 #include "utils.h"
 #include "SCHED_NR_UE/phy_sch_processing_time.h"
 #include "openair1/PHY/phy_extern_nr_ue.h"
+#include "openair2/PHY_INTERFACE/queue_t.h"
 
 const char *const dl_pdu_type[] = {"DCI", "DLSCH", "RA_DLSCH", "SI_DLSCH", "P_DLSCH", "CSI_RS", "CSI_IM", "TA"};
 const char *const ul_pdu_type[] = {"PRACH", "PUCCH", "PUSCH", "SRS"};
-
-queue_t nr_rx_ind_queue;
-queue_t nr_crc_ind_queue;
-queue_t nr_uci_ind_queue;
-queue_t nr_rach_ind_queue;
 
 // static void fill_uci_2_3_4(nfapi_nr_uci_pucch_pdu_format_2_3_4_t *pdu_2_3_4,
 //                            fapi_nr_ul_config_pucch_pdu *pucch_pdu)

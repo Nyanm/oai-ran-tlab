@@ -42,14 +42,36 @@
 #include <stdio.h>
 #include "openair2/GNB_APP/MACRLC_nr_paramdef.h"
 #include "nfapi/open-nFAPI/common/public_inc/debug.h"
-#include "nfapi_pnf.h"
+#include "l2-fapi-proxy/src/nfapi_pnf.h"
+#include "l2-fapi-proxy/src/queue.h"
 
 #define MAX_IF_MODULES 100
 #define MU 1 // RDF Hardcode 
 
 int nr_ul_tti_req_queue_size_last = 0;
 
+UL_IND_t *UL_INFO = NULL;
+
+static eth_params_t         stub_eth_params;
 static nr_ue_if_module_t *nr_ue_if_module_inst[MAX_IF_MODULES];
+static int ue_tx_sock_descriptor = -1;
+static int ue_rx_sock_descriptor = -1;
+static int g_harq_pid;
+sem_t sfn_slot_semaphore;
+
+queue_t nr_sfn_slot_queue;
+queue_t nr_chan_param_queue;
+queue_t nr_rx_ind_queue;
+queue_t nr_crc_ind_queue;
+queue_t nr_uci_ind_queue;
+queue_t nr_rach_ind_queue;
+queue_t nr_dl_tti_req_queue;
+queue_t nr_tx_req_queue;
+queue_t nr_ul_dci_req_queue;
+queue_t nr_ul_tti_req_queue;
+static void save_pdsch_pdu_for_crnti(nfapi_nr_dl_tti_request_t *dl_tti_request);
+
+static slot_rnti_mcs_s slot_rnti_mcs[20];
 
 static slot_response_t slot_response[NUM_NFAPI_SLOT];
 
@@ -871,6 +893,15 @@ void check_and_process_dci(nfapi_nr_dl_tti_request_t *dl_tti_request,
                                         .frame = slot + slot_ahead >= slots_per_frame ? (frame + 1) % 1024 : frame};
       nr_ue_ul_scheduler(mac, &ul_info);
     }
+}
+
+// Stub for NSA-specific function that doesn't exist in w45
+// This function was used to send measurement info from NR UE to LTE UE in NSA mode
+static void nsa_sendmsg_to_lte_ue(const void *buffer, size_t len, int msg_type)
+{
+    LOG_W(NR_RRC, "nsa_sendmsg_to_lte_ue called but NSA support not available in this version (msg_type=%d, len=%zu)\n", msg_type, len);
+    // In w25, this would send the message to LTE UE for NSA coordination
+    // In w45, NSA support may have been refactored or removed
 }
 
 void save_nr_measurement_info(nfapi_nr_dl_tti_request_t *dl_tti_request)

@@ -177,3 +177,54 @@ void *unqueue_matching(queue_t *q, size_t max_depth, queue_matcher_t *matcher, v
     pthread_mutex_unlock(&q->mutex);
     return item;
 }
+
+void *put_queue_replace(queue_t *q, void *item)
+{
+    assert(item != NULL);
+    if (pthread_mutex_lock(&q->mutex) != 0)
+    {
+        LOG_ERROR("mutex_lock failed");
+        return NULL;
+    }
+
+    void *evicted = NULL;
+    if (q->num_items >= MAX_QUEUE_SIZE)
+    {
+        // Queue is full, evict the oldest item
+        evicted = q->items[q->read_index];
+        assert(evicted != NULL);
+        q->items[q->read_index] = NULL;
+        q->read_index = (q->read_index + 1) % MAX_QUEUE_SIZE;
+        q->num_items--;
+    }
+
+    // Now add the new item
+    assert(q->items[q->write_index] == NULL);
+    q->items[q->write_index] = item;
+    q->write_index = (q->write_index + 1) % MAX_QUEUE_SIZE;
+    q->num_items++;
+
+    pthread_mutex_unlock(&q->mutex);
+    return evicted;
+}
+
+void reset_queue(queue_t *q)
+{
+    if (pthread_mutex_lock(&q->mutex) != 0)
+    {
+        LOG_ERROR("mutex_lock failed");
+        return;
+    }
+
+    // Clear all items
+    for (size_t i = 0; i < MAX_QUEUE_SIZE; i++)
+    {
+        q->items[i] = NULL;
+    }
+    
+    q->read_index = 0;
+    q->write_index = 0;
+    q->num_items = 0;
+
+    pthread_mutex_unlock(&q->mutex);
+}

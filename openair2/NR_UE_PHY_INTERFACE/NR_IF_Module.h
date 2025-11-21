@@ -37,6 +37,10 @@
 #include "fapi_nr_ue_interface.h"
 #include "openair2/NR_PHY_INTERFACE/NR_IF_Module.h"
 #include "nfapi/open-nFAPI/nfapi/public_inc/sidelink_nr_ue_interface.h"
+#include "NR_Packet_Drop.h"
+
+// Forward declaration for L2 proxy queue type
+typedef struct queue_t queue_t;
 
 typedef enum sl_sidelink_slot_type {
 
@@ -320,6 +324,18 @@ int nr_ue_ul_indication(nr_uplink_indication_t *ul_info);
 void nr_ue_sl_indication(nr_sidelink_indication_t *sl_indication);
 
 void print_ue_mac_stats(const module_id_t mod, const int frame_rx, const int slot_rx);
+
+// L2 proxy: External queue declarations for standalone mode
+extern queue_t nr_sfn_slot_queue;
+extern queue_t nr_chan_param_queue;
+extern queue_t nr_rx_ind_queue;
+extern queue_t nr_crc_ind_queue;
+extern queue_t nr_uci_ind_queue;
+extern queue_t nr_rach_ind_queue;
+extern queue_t nr_dl_tti_req_queue;
+extern queue_t nr_tx_req_queue;
+extern queue_t nr_ul_dci_req_queue;
+extern queue_t nr_ul_tti_req_queue;
 
 #endif
 

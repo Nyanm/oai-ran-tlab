@@ -80,3 +80,10 @@ typedef bool queue_matcher_t(void *wanted, void *candidate);
    Look only at the last `max_depth` items on the queue, at most.
    Returns the candidate item, or NULL if none matches */
 void *unqueue_matching(queue_t *q, size_t max_depth, queue_matcher_t *matcher, void *wanted);
+
+/* Put the given item into the queue, replacing the oldest item if the queue is full.
+   Returns the evicted item, or NULL if the queue was not full */
+void *put_queue_replace(queue_t *q, void *item);
+
+/* Reset the queue to empty state */
+void reset_queue(queue_t *q);

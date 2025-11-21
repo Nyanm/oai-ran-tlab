@@ -136,6 +136,7 @@ extern "C"
 #define NSA                 softmodem_params.nsa
 #define NODE_NUMBER         softmodem_params.node_number
 #define NON_STOP            softmodem_params.non_stop
+#define EMULATE_L1          softmodem_params.emulate_l1
 #define CONTINUOUS_TX       softmodem_params.continuous_tx
 #define SYNC_REF            softmodem_params.sync_ref
 #define DEFAULT_PDU_ID      softmodem_params.default_pdu_session_id
@@ -327,6 +328,7 @@ typedef struct {
   int            nsa;
   uint16_t       node_number;
   int            non_stop;
+  int            emulate_l1;
   int            continuous_tx;
   uint32_t       sync_ref;
   int no_itti;
