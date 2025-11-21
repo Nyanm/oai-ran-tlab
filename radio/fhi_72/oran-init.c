@@ -445,9 +445,11 @@ static void oran_allocate_buffers(void *handle,
       .start_symbol = 7,
       .num_symbols = RU_SYMBOLS_PER_CALLBACK,
     };
-
-    xran_reg_sym_cb(handle, symbol_callback, &args_half_slot, &sym_cb_time_half_slot, 6, XRAN_CB_SYM_TX_WIN_END);
-    xran_reg_sym_cb(handle, symbol_callback, &args_full_slot, &sym_cb_time_full_slot, 13, XRAN_CB_SYM_TX_WIN_END);
+    LOG_I(HW, "Installing oran RX window end callbacks\n");
+    int ret = xran_reg_sym_cb(handle, symbol_callback, &args_half_slot, &sym_cb_time_half_slot, 6, XRAN_CB_SYM_RX_WIN_END);
+    AssertFatal(ret == 0, "Callback not installed\n");
+    ret = xran_reg_sym_cb(handle, symbol_callback, &args_full_slot, &sym_cb_time_full_slot, 13, XRAN_CB_SYM_RX_WIN_END);
+    AssertFatal(ret == 0, "Callback not installed\n");
     // Only setup UPlane/CPlane buffers for O-RU. O-RU does not need callback for PUSCH and PRACH as the timing will be reliant on
     // the underlying RF device
     xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, NULL, NULL);
