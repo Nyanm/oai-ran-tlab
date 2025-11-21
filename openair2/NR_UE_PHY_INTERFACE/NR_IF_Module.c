@@ -167,7 +167,7 @@ void nrue_init_standalone_socket(int tx_port, int rx_port)
     }
     assert(ue_tx_sock_descriptor == -1);
     ue_tx_sock_descriptor = sd;
-    LOG_T(NR_RRC, "Successfully set up tx_socket in %s.\n", __FUNCTION__);
+    LOG_I(NR_MAC, "[SOCKET_INIT] Successfully set up TX socket %d to %s:%d\n", sd, stub_eth_params.remote_addr, tx_port);
   }
 
   {
@@ -241,6 +241,7 @@ void send_slot_response(uint16_t frame, uint16_t slot)
 
 void send_nsa_standalone_msg(NR_UL_IND_t *UL_INFO, uint16_t msg_id)
 {
+  LOG_I(NR_MAC, "[SEND_NSA] Called with msg_id=0x%04x\n", msg_id);
   switch(msg_id)
   {
     case NFAPI_NR_PHY_MSG_TYPE_RACH_INDICATION:
@@ -255,13 +256,15 @@ void send_nsa_standalone_msg(NR_UL_IND_t *UL_INFO, uint16_t msg_id)
                 return;
         }
 
-        LOG_D(NR_MAC, "NR_RACH_IND sent to Proxy, Size: %d Frame %d Slot %d Num PDUS %d\n", encoded_size,
-                UL_INFO->rach_ind.sfn, UL_INFO->rach_ind.slot, UL_INFO->rach_ind.number_of_pdus);
-        if (send(ue_tx_sock_descriptor, buffer, encoded_size, 0) < 0)
+        LOG_I(NR_MAC, "[RACH_SEND] NR_RACH_IND sending to Proxy via socket %d, Size: %d Frame %d Slot %d Num PDUS %d\n", 
+                ue_tx_sock_descriptor, encoded_size, UL_INFO->rach_ind.sfn, UL_INFO->rach_ind.slot, UL_INFO->rach_ind.number_of_pdus);
+        int sent_bytes = send(ue_tx_sock_descriptor, buffer, encoded_size, 0);
+        if (sent_bytes < 0)
         {
-                LOG_E(NR_MAC, "Send Proxy NR_UE failed\n");
+                LOG_E(NR_MAC, "[RACH_SEND] Send Proxy NR_UE failed: errno=%d (%s)\n", errno, strerror(errno));
                 return;
         }
+        LOG_I(NR_MAC, "[RACH_SEND] Successfully sent %d bytes to proxy\n", sent_bytes);
         break;
     }
     case NFAPI_NR_PHY_MSG_TYPE_RX_DATA_INDICATION:
@@ -276,13 +279,15 @@ void send_nsa_standalone_msg(NR_UL_IND_t *UL_INFO, uint16_t msg_id)
                 return;
         }
 
-        LOG_D(NR_MAC, "NR_RX_IND sent to Proxy, Size: %d Frame %d Slot %d Num PDUS %d\n", encoded_size,
-                UL_INFO->rx_ind.sfn, UL_INFO->rx_ind.slot, UL_INFO->rx_ind.number_of_pdus);
-        if (send(ue_tx_sock_descriptor, buffer, encoded_size, 0) < 0)
+        LOG_I(NR_MAC, "[RX_SEND] NR_RX_IND sending to Proxy via socket %d, Size: %d Frame %d Slot %d Num PDUS %d\n", 
+                ue_tx_sock_descriptor, encoded_size, UL_INFO->rx_ind.sfn, UL_INFO->rx_ind.slot, UL_INFO->rx_ind.number_of_pdus);
+        int sent_bytes_rx = send(ue_tx_sock_descriptor, buffer, encoded_size, 0);
+        if (sent_bytes_rx < 0)
         {
-                LOG_E(NR_MAC, "Send Proxy NR_UE failed\n");
+                LOG_E(NR_MAC, "[RX_SEND] Send Proxy NR_UE failed: errno=%d (%s)\n", errno, strerror(errno));
                 return;
         }
+        LOG_I(NR_MAC, "[RX_SEND] Successfully sent %d bytes to proxy\n", sent_bytes_rx);
         break;
     }
     case NFAPI_NR_PHY_MSG_TYPE_CRC_INDICATION:
@@ -297,13 +302,15 @@ void send_nsa_standalone_msg(NR_UL_IND_t *UL_INFO, uint16_t msg_id)
                 return;
         }
 
-        LOG_D(NR_MAC, "NR_CRC_IND sent to Proxy, Size: %d Frame %d Slot %d Num PDUS %d\n", encoded_size,
-                UL_INFO->crc_ind.sfn, UL_INFO->crc_ind.slot, UL_INFO->crc_ind.number_crcs);
-        if (send(ue_tx_sock_descriptor, buffer, encoded_size, 0) < 0)
+        LOG_I(NR_MAC, "[CRC_SEND] NR_CRC_IND sending to Proxy via socket %d, Size: %d Frame %d Slot %d Num CRCs %d\n", 
+                ue_tx_sock_descriptor, encoded_size, UL_INFO->crc_ind.sfn, UL_INFO->crc_ind.slot, UL_INFO->crc_ind.number_crcs);
+        int sent_bytes_crc = send(ue_tx_sock_descriptor, buffer, encoded_size, 0);
+        if (sent_bytes_crc < 0)
         {
-                LOG_E(NR_MAC, "Send Proxy NR_UE failed\n");
+                LOG_E(NR_MAC, "[CRC_SEND] Send Proxy NR_UE failed: errno=%d (%s)\n", errno, strerror(errno));
                 return;
         }
+        LOG_I(NR_MAC, "[CRC_SEND] Successfully sent %d bytes to proxy\n", sent_bytes_crc);
         break;
     }
     case NFAPI_NR_PHY_MSG_TYPE_UCI_INDICATION:
@@ -420,7 +427,8 @@ static void fill_mib_in_rx_ind(NR_UE_MAC_INST_t *mac, nfapi_nr_dl_tti_request_pd
               "pdu_index (%d) is greater than rx_indication_body size!\n", pdu_idx);
   AssertFatal(pdu_idx == rx_ind->number_pdus,  "Invalid pdu_idx %d!\n", pdu_idx);
 
-  LOG_T(NR_MAC, "Recevied an SSB and are filling rx_ind with the MIB!\n");
+  // LOG_I(NR_MAC, "[MIB_DEBUG] fill_mib_in_rx_ind: Received SSB, filling rx_ind pdu_idx=%d with MIB payload=0x%x\n",
+  //       pdu_idx, pdu_list->ssb_pdu.ssb_pdu_rel15.bchPayload);
 
   nfapi_nr_dl_tti_ssb_pdu_rel15_t *ssb_pdu = &pdu_list->ssb_pdu.ssb_pdu_rel15;
   rx_ind->rx_indication_body[pdu_idx].ssb_pdu.cell_id = ssb_pdu->PhysCellId;
@@ -495,10 +503,14 @@ static void copy_dl_tti_req_to_dl_info(nr_downlink_indication_t *dl_info, nfapi_
 
     int num_pdus = dl_tti_request->dl_tti_request_body.nPDUs;
     AssertFatal(num_pdus >= 0, "Invalid dl_tti_request number of PDUS\n");
+    // LOG_I(NR_MAC, "[MIB_DEBUG] copy_dl_tti_req_to_dl_info: Processing %d PDUs for sfn/slot %d.%d, mac->state=%d\n",
+    //       num_pdus, dl_tti_request->SFN, dl_tti_request->Slot, mac->state);
 
     for (int i = 0; i < num_pdus; i++)
     {
         nfapi_nr_dl_tti_request_pdu_t *pdu_list = &dl_tti_request->dl_tti_request_body.dl_tti_pdu_list[i];
+        // LOG_I(NR_MAC, "[MIB_DEBUG] PDU[%d]: PDUType=%d (SSB=%d, PDCCH=%d, PDSCH=%d)\n",
+        //       i, pdu_list->PDUType, NFAPI_NR_DL_TTI_SSB_PDU_TYPE, NFAPI_NR_DL_TTI_PDCCH_PDU_TYPE, NFAPI_NR_DL_TTI_PDSCH_PDU_TYPE);
         if (pdu_list->PDUType == NFAPI_NR_DL_TTI_PDSCH_PDU_TYPE)
         {
             LOG_D(NR_PHY, "[%d, %d] PDSCH PDU for rnti %x\n",
@@ -532,19 +544,19 @@ static void copy_dl_tti_req_to_dl_info(nr_downlink_indication_t *dl_info, nfapi_
                     {
                         mac->nr_ue_emul_l1.expected_sib = true;
                         mac->nr_ue_emul_l1.index_has_sib[pdu_idx] = true;
-                        LOG_T(NR_MAC, "Setting index_has_sib[%d] = true\n", j);
+                        LOG_I(NR_MAC, "[SIB_DEBUG] DL_TTI: Setting index_has_sib[%d] = true for SI-RNTI (DCI #%d)\n", pdu_idx, j);
                     }
                     else if (dci_pdu_list->RNTI == mac->ra.ra_rnti)
                     {
                         mac->nr_ue_emul_l1.expected_rar = true;
                         mac->nr_ue_emul_l1.index_has_rar[pdu_idx] = true;
-                        LOG_T(NR_MAC, "Setting index_has_rar[%d] = true\n", j);
+                        LOG_I(NR_MAC, "[RAR_DEBUG] DL_TTI: Setting index_has_rar[%d] = true for RA-RNTI=0x%x (DCI #%d)\n", pdu_idx, mac->ra.ra_rnti, j);
                     }
                     else
                     {
                         mac->nr_ue_emul_l1.expected_dci = true;
                         mac->nr_ue_emul_l1.index_has_dci[pdu_idx] = true;
-                        LOG_T(NR_MAC, "Setting index_has_dci[%d] = true\n", j);
+                        LOG_I(NR_MAC, "[DCI_DEBUG] DL_TTI: Setting index_has_dci[%d] = true for RNTI=0x%x (DCI #%d)\n", pdu_idx, dci_pdu_list->RNTI, j);
                     }
                     valid_pdu_idx++;
                   }
@@ -561,6 +573,8 @@ static void copy_dl_tti_req_to_dl_info(nr_downlink_indication_t *dl_info, nfapi_
                will be freed after handling. This is why the PDU index will
                always be zero for the RX_IND becasue we should not have more than
                one MIB. */
+            // LOG_I(NR_MAC, "[MIB_DEBUG] Found SSB PDU (MIB) at pdu_idx=%d, PhysCellId=%d, bchPayload=0x%x\n",
+            //       i, pdu_list->ssb_pdu.ssb_pdu_rel15.PhysCellId, pdu_list->ssb_pdu.ssb_pdu_rel15.bchPayload);
             if (!dl_info->rx_ind)
             {
                 dl_info->rx_ind = CALLOC(1, sizeof(*dl_info->rx_ind));
@@ -569,7 +583,9 @@ static void copy_dl_tti_req_to_dl_info(nr_downlink_indication_t *dl_info, nfapi_
             rx_ind->sfn = dl_tti_request->SFN;
             rx_ind->slot = dl_tti_request->Slot;
             fill_mib_in_rx_ind(mac, pdu_list, rx_ind, 0, FAPI_NR_RX_PDU_TYPE_SSB);
+            // LOG_I(NR_MAC, "[MIB_DEBUG] Calling nr_ue_dl_indication to process MIB\n");
             nr_ue_dl_indication(&mac->dl_info);
+            // LOG_I(NR_MAC, "[MIB_DEBUG] After nr_ue_dl_indication, mac->state=%d, mac->mib=%p\n", mac->state, mac->mib);
         }
     }
     dl_info->slot = dl_tti_request->Slot;
@@ -627,18 +643,23 @@ static void copy_tx_data_req_to_dl_info(nr_downlink_indication_t *dl_info, nfapi
     rx_ind->slot = tx_data_request->Slot;
 
     int pdu_idx = 0;
+    LOG_I(NR_MAC, "[SIB_DEBUG] TX_DATA: Processing %d PDUs for sfn/slot %d.%d\n", num_pdus, tx_data_request->SFN, tx_data_request->Slot);
     for (int i = 0; i < num_pdus; i++)
     {
         nfapi_nr_pdu_t *pdu_list = &tx_data_request->pdu_list[i];
+        LOG_I(NR_MAC, "[SIB_DEBUG] TX_DATA: PDU[%d] - index_has_sib=%d, index_has_rar=%d, index_has_dci=%d\n",
+              i, mac->nr_ue_emul_l1.index_has_sib[i], mac->nr_ue_emul_l1.index_has_rar[i], mac->nr_ue_emul_l1.index_has_dci[i]);
         if (mac->nr_ue_emul_l1.index_has_sib[i])
         {
             AssertFatal(!get_softmodem_params()->nsa,
                         "Should not be processing SIB in NSA mode, something bad happened\n");
+            LOG_I(NR_MAC, "[SIB_DEBUG] TX_DATA: PDU[%d] is SIB, creating RX_IND pdu_idx=%d\n", i, pdu_idx);
             fill_rx_ind(pdu_list, rx_ind, pdu_idx, FAPI_NR_RX_PDU_TYPE_SIB);
             pdu_idx++;
         }
         else if (mac->nr_ue_emul_l1.index_has_rar[i])
         {
+            LOG_I(NR_MAC, "[RAR_DEBUG] TX_DATA: PDU[%d] is RAR, creating RX_IND pdu_idx=%d\n", i, pdu_idx);
             fill_rx_ind(pdu_list, rx_ind, pdu_idx, FAPI_NR_RX_PDU_TYPE_RAR);
             pdu_idx++;
         }
@@ -702,40 +723,54 @@ static void copy_ul_dci_data_req_to_dl_info(nr_downlink_indication_t *dl_info, n
 
 static bool send_crc_ind_and_rx_ind(int sfn, int slot)
 {
-  bool sent_crc_rx = true;
+  bool sent_crc_rx = false;
 
   struct sfn_slot_s sfn_slot = {.sfn = sfn, .slot = slot};
   nfapi_nr_rx_data_indication_t *rx_ind = unqueue_matching(&nr_rx_ind_queue, MAX_QUEUE_SIZE, sfn_slot_matcher, &sfn_slot);
   nfapi_nr_crc_indication_t *crc_ind = unqueue_matching(&nr_crc_ind_queue, MAX_QUEUE_SIZE, sfn_slot_matcher, &sfn_slot);
+
+  LOG_I(NR_MAC, "[SEND_UL_IND] sfn/slot %d.%d: rx_ind=%p (pdus=%d), crc_ind=%p (crcs=%d), queue_sizes: rx=%lu crc=%lu\n",
+        sfn, slot, rx_ind, rx_ind ? rx_ind->number_of_pdus : 0,
+        crc_ind, crc_ind ? crc_ind->number_crcs : 0,
+        nr_rx_ind_queue.num_items, nr_crc_ind_queue.num_items);
 
   if (crc_ind && crc_ind->number_crcs > 0)
   {
     NR_UE_MAC_INST_t *mac = get_mac_inst(0);
     for (int i = 0; i < crc_ind->number_crcs; i++) {
         int harq_pid = crc_ind->crc_list[i].harq_id;
-        LOG_T(NR_MAC, "Resetting harq_pid %d active_ul_harq_sfn/slot\n", harq_pid);
+        LOG_I(NR_MAC, "[SEND_UL_IND] Resetting harq_pid %d active_ul_harq_sfn/slot, sending CRC_IND\n", harq_pid);
         mac->nr_ue_emul_l1.harq[harq_pid].active_ul_harq_sfn = -1;
         mac->nr_ue_emul_l1.harq[harq_pid].active_ul_harq_slot = -1;
     }
     NR_UL_IND_t UL_INFO = {
       .crc_ind = *crc_ind,
     };
+    LOG_I(NR_MAC, "[SEND_UL_IND] Sending CRC_IND for sfn/slot %d.%d with %d CRCs\n",
+          crc_ind->sfn, crc_ind->slot, crc_ind->number_crcs);
     send_nsa_standalone_msg(&UL_INFO, crc_ind->header.message_id);
     free(crc_ind->crc_list);
     free(crc_ind);
+    sent_crc_rx = true;
   }
   if (rx_ind && rx_ind->number_of_pdus > 0)
   {
     NR_UL_IND_t UL_INFO = {
       .rx_ind = *rx_ind,
     };
+    LOG_I(NR_MAC, "[SEND_UL_IND] Sending RX_IND for sfn/slot %d.%d with %d PDUs\n",
+          rx_ind->sfn, rx_ind->slot, rx_ind->number_of_pdus);
     send_nsa_standalone_msg(&UL_INFO, rx_ind->header.message_id);
+    for (int i = 0; i < rx_ind->number_of_pdus; i++) {
+      free(rx_ind->pdu_list[i].pdu);
+    }
     free(rx_ind->pdu_list);
     free(rx_ind);
+    sent_crc_rx = true;
   }
-  else
-  {
-    sent_crc_rx = false;
+  
+  if (!sent_crc_rx) {
+    LOG_D(NR_MAC, "[SEND_UL_IND] No RX_IND or CRC_IND found for sfn/slot %d.%d\n", sfn, slot);
   }
   return sent_crc_rx;
 }
@@ -747,15 +782,21 @@ static void copy_ul_tti_data_req_to_dl_info(nr_downlink_indication_t *dl_info, n
     AssertFatal(num_pdus <= sizeof(ul_tti_req->pdus_list) / sizeof(ul_tti_req->pdus_list[0]),
                 "Too many pdus %d in ul_tti_req\n", num_pdus);
 
+    LOG_I(NR_MAC, "[COPY_UL_TTI] Processing UL_TTI_REQ for sfn/slot %d.%d with %d PDUs\n",
+          ul_tti_req->SFN, ul_tti_req->Slot, num_pdus);
+
     if (!send_crc_ind_and_rx_ind(ul_tti_req->SFN, ul_tti_req->Slot))
     {
-        LOG_D(NR_MAC, "CRC_RX ind not sent\n");
+        LOG_W(NR_MAC, "[COPY_UL_TTI] CRC_RX ind not sent for %d.%d, re-queueing UL_TTI_REQ\n",
+              ul_tti_req->SFN, ul_tti_req->Slot);
         if (!put_queue(&nr_ul_tti_req_queue, ul_tti_req))
         {
-            LOG_E(NR_PHY, "put_queue failed for ul_tti_req.\n");
+            LOG_E(NR_PHY, "[COPY_UL_TTI] put_queue failed for ul_tti_req.\n");
         }
         return;
     }
+    LOG_I(NR_MAC, "[COPY_UL_TTI] Successfully sent CRC/RX ind for %d.%d\n",
+          ul_tti_req->SFN, ul_tti_req->Slot);
 }
 
 static void fill_dci_from_dl_config(nr_downlink_indication_t*dl_ind, fapi_nr_dl_config_request_t *dl_config)
@@ -944,6 +985,7 @@ void save_nr_measurement_info(nfapi_nr_dl_tti_request_t *dl_tti_request)
 static void enqueue_nr_nfapi_msg(void *buffer, ssize_t len, nfapi_p7_message_header_t header)
 {
     NR_UE_MAC_INST_t *mac = get_mac_inst(0);
+    // LOG_W(NR_PHY, "[ENQUEUE_ENTRY] Called with message_id=0x%04x\n", header.message_id);
     switch (header.message_id)
     {
         case NFAPI_NR_PHY_MSG_TYPE_DL_TTI_REQUEST:
@@ -955,18 +997,20 @@ static void enqueue_nr_nfapi_msg(void *buffer, ssize_t len, nfapi_p7_message_hea
                 LOG_E(NR_PHY, "Message dl_tti_request failed to unpack\n");
                 break;
             }
-            LOG_D(NR_PHY, "Received an NFAPI_NR_PHY_MSG_TYPE_DL_TTI_REQUEST message in sfn/slot %d %d. \n",
-                    dl_tti_request->SFN, dl_tti_request->Slot);
+            // LOG_I(NR_PHY, "[ENQUEUE] Received DL_TTI_REQUEST for sfn/slot %d.%d with %d PDUs\n",
+            //         dl_tti_request->SFN, dl_tti_request->Slot, dl_tti_request->dl_tti_request_body.nPDUs);
 
             if (is_channel_modeling())
                 save_pdsch_pdu_for_crnti(dl_tti_request);
 
             if (!put_queue(&nr_dl_tti_req_queue, dl_tti_request))
             {
-                LOG_E(NR_PHY, "put_queue failed for dl_tti_request.\n");
+                LOG_E(NR_PHY, "[ENQUEUE] put_queue failed for dl_tti_request.\n");
                 free(dl_tti_request);
                 dl_tti_request = NULL;
-            }
+            } // else {
+            //     LOG_I(NR_PHY, "[ENQUEUE] Successfully queued DL_TTI_REQUEST, queue size now: %lu\n", nr_dl_tti_req_queue.num_items);
+            // }
             break;
         }
 
@@ -1019,12 +1063,14 @@ static void enqueue_nr_nfapi_msg(void *buffer, ssize_t len, nfapi_p7_message_hea
                 LOG_E(NR_PHY, "Message ul_tti_request failed to unpack\n");
                 break;
             }
+            // LOG_I(NR_PHY, "[ENQUEUE] Received UL_TTI_REQUEST for sfn/slot %d.%d, n_pdus=%d, ra_state=%d\n",
+            //       ul_tti_request->SFN, ul_tti_request->Slot, ul_tti_request->n_pdus, mac->ra.ra_state);
             /* We are filtering UL_TTI_REQs below. We only care about UL_TTI_REQs that
                will trigger sending a ul_harq (CRC/RX pair). This UL_TTI_REQ will have
                NFAPI_NR_UL_CONFIG_PUSCH_PDU_TYPE. If we have not yet completed the CBRA/
                CFRA procedure, we need to queue all UL_TTI_REQs. */
             for (int i = 0; i < ul_tti_request->n_pdus; i++) {
-              uint16_t pdu_type = ul_tti_request->pdus_list[i].pdu_type == NFAPI_NR_UL_CONFIG_PUSCH_PDU_TYPE;
+              uint16_t pdu_type = ul_tti_request->pdus_list[i].pdu_type;
               if (mac->ra.ra_state < nrRA_SUCCEEDED || 
                   (pdu_type == NFAPI_NR_UL_CONFIG_PUSCH_PDU_TYPE && mac->ra.ra_state >= nrRA_SUCCEEDED)) {
 
@@ -1042,6 +1088,8 @@ static void enqueue_nr_nfapi_msg(void *buffer, ssize_t len, nfapi_p7_message_hea
                 if (rnti != 0xffff && !is_my_dci(mac, rnti))
                   continue;
                 
+                // LOG_I(NR_PHY, "[ENQUEUE] Queueing UL_TTI_REQUEST for sfn/slot %d.%d (pdu_type=%d, rnti=0x%x)\n",
+                //       ul_tti_request->SFN, ul_tti_request->Slot, ul_tti_request->pdus_list[i].pdu_type, rnti);
                 if (!put_queue(&nr_ul_tti_req_queue, ul_tti_request)) {
                   LOG_D(NR_PHY, "put_queue failed for ul_tti_request, calling put_queue_replace.\n");
                   nfapi_nr_ul_tti_request_t *evicted_ul_tti_req = put_queue_replace(&nr_ul_tti_req_queue, ul_tti_request);
@@ -1234,6 +1282,7 @@ static int handle_bcch_dlsch(NR_UE_MAC_INST_t *mac,
                              int frame,
                              int slot)
 {
+  LOG_I(NR_MAC, "[SIB_DEBUG] handle_bcch_dlsch called: pdu_len=%d, frame=%d, slot=%d, mac->state=%d\n", pdu_len, frame, slot, mac->state);
   nr_ue_decode_BCCH_DL_SCH(mac, cc_id, gNB_index, ack_nack, pduP, pdu_len, frame, slot);
   return 0;
 }
@@ -1295,7 +1344,9 @@ void update_harq_status(NR_UE_MAC_INST_t *mac, uint8_t harq_pid, uint8_t ack_nac
   if (current_harq->active) {
     LOG_D(PHY,"Updating harq_status for harq_id %d, ack/nak %d\n", harq_pid, current_harq->ack);
     // we can prepare feedback for MSG4 in advance
-    if (mac->ra.ra_state == nrRA_WAIT_CONTENTION_RESOLUTION || mac->ra.ra_state == nrRA_WAIT_MSGB)
+    // Note: RA state might already be nrRA_SUCCEEDED if contention resolution happened before HARQ processing
+    if (mac->ra.ra_state == nrRA_WAIT_CONTENTION_RESOLUTION || mac->ra.ra_state == nrRA_WAIT_MSGB || 
+        (mac->ra.ra_state == nrRA_SUCCEEDED && mac->ra.ra_pucch == NULL))
       prepare_msg4_msgb_feedback(mac, harq_pid, ack_nack);
     else {
       current_harq->ack = ack_nack;
@@ -1461,6 +1512,33 @@ void nr_ue_slot_indication(uint8_t mod_id, bool is_tx)
   AssertFatal(!ret, "mutex failed %d\n", ret);
 }
 
+void RCconfig_nr_ue_macrlc(void) {
+  int j;
+  paramdef_t MACRLC_Params[] = MACRLCPARAMS_DESC;
+  paramlist_def_t MACRLC_ParamList = {CONFIG_STRING_MACRLC_LIST, NULL, 0};
+
+  config_getlist(config_get_if(), &MACRLC_ParamList, MACRLC_Params, sizeofArray(MACRLC_Params), NULL);
+  if (MACRLC_ParamList.numelt > 0) {
+    for (j = 0; j < MACRLC_ParamList.numelt; j++) {
+      if (strcmp(*(MACRLC_ParamList.paramarray[j][MACRLC_TRANSPORT_N_PREFERENCE_IDX].strptr), "nfapi") == 0) {
+        stub_eth_params.my_addr = strdup(
+            *(MACRLC_ParamList.paramarray[j][MACRLC_LOCAL_N_ADDRESS_IDX].strptr));
+        stub_eth_params.remote_addr = strdup(
+            *(MACRLC_ParamList.paramarray[j][MACRLC_REMOTE_N_ADDRESS_IDX].strptr));
+        stub_eth_params.my_portc =
+            *(MACRLC_ParamList.paramarray[j][MACRLC_LOCAL_N_PORTC_IDX].iptr);
+        stub_eth_params.remote_portc =
+            *(MACRLC_ParamList.paramarray[j][MACRLC_REMOTE_N_PORTC_IDX].iptr);
+        stub_eth_params.my_portd =
+            *(MACRLC_ParamList.paramarray[j][MACRLC_LOCAL_N_PORTD_IDX].iptr);
+        stub_eth_params.remote_portd =
+            *(MACRLC_ParamList.paramarray[j][MACRLC_REMOTE_N_PORTD_IDX].iptr);
+        stub_eth_params.transp_preference = ETH_UDP_MODE;
+      }
+    }
+  }
+}
+
 nr_ue_if_module_t *nr_ue_if_module_init(uint32_t module_id)
 {
   if (nr_ue_if_module_inst[module_id] == NULL) {
@@ -1476,7 +1554,15 @@ nr_ue_if_module_t *nr_ue_if_module_init(uint32_t module_id)
       nr_ue_if_module_inst[module_id]->sl_phy_config_request = nr_ue_sl_phy_config_request;
       nr_ue_if_module_inst[module_id]->sl_indication = nr_ue_sl_indication;
     }
-    nr_ue_if_module_inst[module_id]->scheduled_response = nr_ue_scheduled_response;
+    // In emulated L1 mode, use stub function that sends nFAPI messages instead of configuring PHY
+    LOG_I(NR_MAC, "[INIT] Checking emulate_l1 flag: %d\n", get_softmodem_params()->emulate_l1);
+    if (get_softmodem_params()->emulate_l1) {
+      nr_ue_if_module_inst[module_id]->scheduled_response = nr_ue_scheduled_response_stub;
+      LOG_I(NR_MAC, "[INIT] Using nr_ue_scheduled_response_stub for emulated L1 mode\n");
+    } else {
+      nr_ue_if_module_inst[module_id]->scheduled_response = nr_ue_scheduled_response;
+      LOG_I(NR_MAC, "[INIT] Using nr_ue_scheduled_response for normal mode\n");
+    }
     nr_ue_if_module_inst[module_id]->dl_indication = nr_ue_dl_indication;
     nr_ue_if_module_inst[module_id]->ul_indication = nr_ue_ul_indication;
     nr_ue_if_module_inst[module_id]->slot_indication = nr_ue_slot_indication;

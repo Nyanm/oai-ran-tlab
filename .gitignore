@@ -5,6 +5,18 @@
 cmake_targets/log/
 cmake_targets/*/build/
 cmake_targets/ran_build/
+cmake_targets/CMakeCache.txt
+cmake_targets/CMakeFiles/
+cmake_targets/Makefile
+cmake_targets/*.cmake
+cmake_targets/common/
+cmake_targets/doc/
+cmake_targets/nfapi/
+cmake_targets/openair1/
+cmake_targets/openair2/
+cmake_targets/openair3/
+cmake_targets/radio/
+cmake_targets/tests/
 log/
 lte_build_oai/
 
@@ -25,3 +37,15 @@ nfapi_nr_interface_scf
 *.log
 *.out
 CMakeUserPresets.json
+
+# Debug and analysis documentation (temporary files, not for version control)
+*_DEBUG*.md
+*_SUMMARY*.md
+*_FIX*.md
+*_ANALYSIS*.md
+*_GUIDE.md
+*_COMMANDS.md
+*_SESSION.md
+*_PROGRESS.md
+*_REVIEW.md
+gdb_*.txt

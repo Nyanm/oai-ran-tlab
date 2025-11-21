@@ -80,6 +80,7 @@ extern "C"
 #define CONFIG_HLP_CHESTTIME     "Set channel estimation type in time domain. 0-Symbols take estimates of the last preceding DMRS symbol (default). 1-Symbol based averaging of channel estimates in time. \n"
 #define CONFIG_HLP_IMSCOPE       "Enable phy scope based on imgui and implot"
 #define CONFIG_HLP_IMSCOPE_RECORD "Enable recording scope data to filesystem"
+#define CONFIG_HLP_EMULATE_L1    "Enable emulated L1 mode for L2 proxy operation\n"
 
 #define CONFIG_HLP_NONSTOP       "Go back to frame sync mode after 100 consecutive PBCH failures\n"
 //#define CONFIG_HLP_NUMUES        "Set the number of UEs for the emulation"
@@ -181,6 +182,7 @@ extern int usrp_tx_thread;
   {"E" ,                    CONFIG_HLP_TQFS,          PARAMFLAG_BOOL, .iptr=&softmodem_params.threequarter_fs, .defintval=0,            TYPE_INT,    0}, \
   {"imscope" ,              CONFIG_HLP_IMSCOPE,       PARAMFLAG_BOOL, .uptr=&enable_imscope,                   .defintval=0,            TYPE_UINT,   0}, \
   {"imscope-record" ,       CONFIG_HLP_IMSCOPE_RECORD,PARAMFLAG_BOOL, .uptr=&enable_imscope_record,            .defintval=0,            TYPE_UINT,   0}, \
+  {"emulate-l1",            CONFIG_HLP_EMULATE_L1,    PARAMFLAG_BOOL, .iptr=&EMULATE_L1,                       .defintval=0,            TYPE_INT,    0}, \
   {"default-pdu-id",        NULL,                     0,              .iptr=&DEFAULT_PDU_ID,                   .defintval=10,           TYPE_INT,    0}, \
 }
 // clang-format on
@@ -216,6 +218,7 @@ extern int usrp_tx_thread;
                {"MONOLITHIC", "PNF", "VNF", "AERIAL","UE_STUB_PNF","UE_STUB_OFFNET","STANDALONE_PNF"}, \
                {NFAPI_MONOLITHIC, NFAPI_MODE_PNF, NFAPI_MODE_VNF, NFAPI_MODE_AERIAL,NFAPI_UE_STUB_PNF,NFAPI_UE_STUB_OFFNET,NFAPI_MODE_STANDALONE_PNF}, \
                7 } }, \
+    { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \

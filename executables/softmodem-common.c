@@ -91,6 +91,10 @@ void get_common_options(configmodule_interface_t *cfg)
   nfapi_index = config_paramidx_fromname(cmdline_params, numparams, "nfapi");
   AssertFatal(nfapi_index >= 0,"Index for nfapi config option not found!");
   nfapi_mode = config_get_processedint(cfg, &cmdline_params[nfapi_index]);
+  softmodem_params.nfapi = nfapi_mode;  // Also set in softmodem_params for scheduler access
+  
+  LOG_I(UTIL, "[NFAPI_INIT] nfapi_mode=%d, softmodem_params.nfapi=%d (0=MONOLITHIC, 1=PNF, 2=VNF)\n",
+        nfapi_mode, softmodem_params.nfapi);
 
   paramdef_t cmdline_logparams[] =CMDLINE_LOGPARAMS_DESC ;
   checkedparam_t cmdline_log_CheckParams[] = CMDLINE_LOGPARAMS_CHECK_DESC;
