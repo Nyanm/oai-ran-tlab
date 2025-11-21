@@ -2423,6 +2423,14 @@ bool get_downlink_ack(NR_UE_MAC_INST_t *mac, frame_t frame, int slot, PUCCH_sche
               dl_harq_pid, current_harq->ul_frame, current_harq->ul_slot);
         /* check if current tx slot should transmit downlink acknowlegment */
         if (current_harq->ul_frame == frame && current_harq->ul_slot == slot) {
+          // For emulated L1 mode, activate HARQ state for UCI indication generation
+          if (get_softmodem_params()->emulate_l1) {
+            mac->nr_ue_emul_l1.harq[dl_harq_pid].active = true;
+            mac->nr_ue_emul_l1.harq[dl_harq_pid].active_dl_harq_sfn = frame;
+            mac->nr_ue_emul_l1.harq[dl_harq_pid].active_dl_harq_slot = slot;
+            LOG_D(NR_MAC, "[EMUL_L1_HARQ] Activated HARQ pid %d for UCI at %d.%d\n", dl_harq_pid, frame, slot);
+          }
+          
           if (res_ind != -1 && res_ind != current_harq->pucch_resource_indicator)
             LOG_E(NR_MAC,
                   "Value of pucch_resource_indicator %d not matching with what set before %d (Possibly due to a false DCI) \n",

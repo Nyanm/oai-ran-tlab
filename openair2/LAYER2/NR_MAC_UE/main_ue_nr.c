@@ -55,6 +55,7 @@ void nr_ue_init_mac(NR_UE_MAC_INST_t *mac)
 {
   LOG_I(NR_MAC, "[UE%d] Initializing MAC\n", mac->ue_id);
   nr_ue_reset_sync_state(mac);
+  LOG_I(NR_MAC, "[UE%d] After nr_ue_reset_sync_state: mac->state=%d (should be UE_NOT_SYNC=0)\n", mac->ue_id, mac->state);
   mac->get_sib1 = false;
   for (int i = 0; i < MAX_SI_GROUPS; i++)
     mac->get_otherSI[i] = false;

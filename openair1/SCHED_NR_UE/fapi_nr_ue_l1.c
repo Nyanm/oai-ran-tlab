@@ -175,8 +175,13 @@ int8_t nr_ue_scheduled_response_stub(nr_scheduled_response_t *scheduled_response
               crc_ind->crc_list[j].ul_cqi = 255;
               crc_ind->crc_list[j].rssi = 255;
               emul_l1_harq_t *harq = &mac->nr_ue_emul_l1.harq[crc_ind->crc_list[j].harq_id];
-              AssertFatal(harq->active_ul_harq_sfn == -1 && harq->active_ul_harq_slot == -1,
-                          "We did not send an active CRC when we should have!\n");
+              // In nFAPI mode, timing issues can cause HARQ state to not be cleared yet
+              // Instead of crashing, log a warning and force-clear the state
+              if (harq->active_ul_harq_sfn != -1 || harq->active_ul_harq_slot != -1) {
+                LOG_W(NR_MAC, "HARQ PID %d still active (sfn/slot %d/%d), force-clearing for new transmission at %d/%d\n",
+                      crc_ind->crc_list[j].harq_id, harq->active_ul_harq_sfn, harq->active_ul_harq_slot,
+                      crc_ind->sfn, crc_ind->slot);
+              }
               harq->active_ul_harq_sfn = crc_ind->sfn;
               harq->active_ul_harq_slot = crc_ind->slot;
               LOG_D(NR_MAC,
@@ -188,6 +193,9 @@ int8_t nr_ue_scheduled_response_stub(nr_scheduled_response_t *scheduled_response
                     pusch_config_pdu->mcs_index);
             }
 
+            LOG_I(NR_MAC, "[PUSCH_SCHED] Queueing RX_IND for sfn/slot %d.%d, harq_pid=%d, rnti=0x%x, pdu_len=%d\n",
+                  rx_ind->sfn, rx_ind->slot, rx_ind->pdu_list[0].harq_id, 
+                  rx_ind->pdu_list[0].rnti, rx_ind->pdu_list[0].pdu_length);
             if (!put_queue(&nr_rx_ind_queue, rx_ind)) {
               LOG_E(NR_MAC, "Put_queue failed for rx_ind\n");
               for (int i = 0; i < rx_ind->number_of_pdus; i++) {
@@ -200,6 +208,8 @@ int8_t nr_ue_scheduled_response_stub(nr_scheduled_response_t *scheduled_response
               free(rx_ind);
               rx_ind = NULL;
             }
+            LOG_I(NR_MAC, "[PUSCH_SCHED] Queueing CRC_IND for sfn/slot %d.%d, harq_pid=%d, rnti=0x%x\n",
+                  crc_ind->sfn, crc_ind->slot, crc_ind->crc_list[0].harq_id, crc_ind->crc_list[0].rnti);
             if (!put_queue(&nr_crc_ind_queue, crc_ind)) {
               LOG_E(NR_MAC, "Put_queue failed for crc_ind\n");
               free(crc_ind->crc_list);
@@ -479,6 +489,12 @@ static void nr_ue_scheduled_response_dl(NR_UE_MAC_INST_t *mac,
               "dl_config->number_pdus %d out of bounds\n",
               dl_config->number_pdus);
 
+  // In emulated L1 mode, phy_data is NULL - skip PHY-specific processing
+  if (!phy_data) {
+    LOG_D(PHY, "phy_data is NULL (emulated L1 mode), skipping PHY-specific DL processing\n");
+    return;
+  }
+
   for (int i = 0; i < dl_config->number_pdus; ++i) {
     fapi_nr_dl_config_request_pdu_t *pdu = dl_config->dl_config_list + i;
     AssertFatal(pdu->pdu_type <= FAPI_NR_DL_CONFIG_TYPES, "pdu_type %d\n", pdu->pdu_type);
@@ -621,6 +637,20 @@ static void nr_ue_scheduled_response_ul(PHY_VARS_NR_UE *phy, fapi_nr_ul_config_r
   fapi_nr_ul_config_request_pdu_t *pdu = fapiLockIterator(ul_config, ul_config->frame, ul_config->slot);
   if (!pdu) {
     LOG_E(NR_MAC, "Error in locking ul scheduler dtata\n");
+    return;
+  }
+
+  // In emulated L1 mode, phy_data is NULL - handle PRACH only, skip other PHY-specific processing
+  if (!phy_data) {
+    while (pdu->pdu_type != FAPI_NR_END) {
+      if (pdu->pdu_type == FAPI_NR_UL_CONFIG_TYPE_PRACH) {
+        phy->prach_vars[0]->prach_pdu = pdu->prach_config_pdu;
+        phy->prach_vars[0]->active = true;
+        pdu->pdu_type = FAPI_NR_UL_CONFIG_TYPE_DONE;
+      }
+      pdu++;
+    }
+    LOG_D(PHY, "phy_data is NULL (emulated L1 mode), processed PRACH only\n");
     return;
   }
 

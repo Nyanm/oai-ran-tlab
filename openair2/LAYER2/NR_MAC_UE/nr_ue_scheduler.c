@@ -1358,13 +1358,17 @@ void nr_ue_ul_scheduler(NR_UE_MAC_INST_t *mac, nr_uplink_indication_t *ul_info)
   RA_config_t *ra = &mac->ra;
 
   if (mac->state == UE_PERFORMING_RA && ra->ra_state == nrRA_UE_IDLE) {
+    // LOG_I(NR_MAC, "[RA] Initializing Random Access procedure at frame %d\n", frame_tx);
     init_RA(mac, frame_tx);
     // perform the Random Access Resource selection procedure (see clause 5.1.2 and .2a)
     ra_resource_selection(mac);
+    // LOG_I(NR_MAC, "[RA] After init: ra_state=%d\n", ra->ra_state);
   }
 
-  if (mac->state == UE_PERFORMING_RA && ra->ra_state == nrRA_GENERATE_PREAMBLE)
+  if (mac->state == UE_PERFORMING_RA && ra->ra_state == nrRA_GENERATE_PREAMBLE) {
+    // LOG_I(NR_MAC, "[RA] Generating PRACH preamble at frame %d.%d\n", frame_tx, slot_tx);
     nr_ue_prach_scheduler(mac, frame_tx, slot_tx);
+  }
 
   bool BSRsent = false;
   if (mac->state == UE_CONNECTED) {
@@ -1788,6 +1792,14 @@ static void nr_ue_pucch_scheduler(NR_UE_MAC_INST_t *mac, frame_t frame, int slot
                                       &pdu->pucch_config_pdu);
       if (ret != 0)
         remove_ul_config_last_item(pdu);
+      else {
+        // For emulated L1 mode, set num_harqs so UCI indication will include HARQ feedback
+        if (get_softmodem_params()->emulate_l1 && pucch[j].n_harq > 0) {
+          mac->nr_ue_emul_l1.num_harqs = pucch[j].n_harq;
+          LOG_D(NR_MAC, "[EMUL_L1_PUCCH] Set num_harqs=%d for UCI at %d.%d\n", 
+                mac->nr_ue_emul_l1.num_harqs, frame, slot);
+        }
+      }
       release_ul_config(pdu, false);
     }
   }
