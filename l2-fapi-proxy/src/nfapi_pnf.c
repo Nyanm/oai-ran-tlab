@@ -3129,6 +3129,8 @@ static void oai_slot_aggregate_crc_ind(slot_msgs_t *msgs)
         }
     }
 
+    printf("[PROXY_DEBUG] Forwarding CRC_IND to gNB: sfn=%d, slot=%d, num_crcs=%d\n", 
+           agg.sfn, agg.slot, agg.number_crcs);
     for (int gnb_idx = 0; gnb_idx < num_pnf_p7_conn; gnb_idx++) 
     {
         agg.header.phy_id = gnb_idx + 1;
@@ -3415,6 +3417,8 @@ static void oai_slot_aggregate_rx_data_ind(slot_msgs_t *msgs)
         }
     }
 
+    printf("[PROXY_DEBUG] Forwarding RX_DATA_IND to gNB: sfn=%d, slot=%d, num_pdus=%d\n", 
+           agg.sfn, agg.slot, agg.number_of_pdus);
     for (int gnb_idx = 0; gnb_idx < num_pnf_p7_conn; gnb_idx++) 
     {
         agg.header.phy_id = gnb_idx + 1;
@@ -4502,10 +4506,12 @@ bool dequeue_ue_slot_msgs(slot_msgs_t *slot_msgs, uint16_t sfn_slot_tx)
                   break;
               case NFAPI_NR_PHY_MSG_TYPE_CRC_INDICATION:
                   ue_info->crc_recvd = true;
+                  printf("[PROXY_DEBUG] UE %d: Received CRC_IND for frame %d slot %d\n", i, msg_frame, msg_slot);
                   NFAPI_TRACE(NFAPI_TRACE_DEBUG, "Received CRC IND for frame %d slot %d.\n", msg_frame, msg_slot);
                   break;
               case NFAPI_NR_PHY_MSG_TYPE_RX_DATA_INDICATION:
                   ue_info->rx_data_recvd = true;
+                  printf("[PROXY_DEBUG] UE %d: Received RX_DATA_IND for frame %d slot %d\n", i, msg_frame, msg_slot);
                   NFAPI_TRACE(NFAPI_TRACE_DEBUG, "Received RX_DATA IND for frame %d slot %d.\n", msg_frame, msg_slot);
                   break;
               case NFAPI_NR_PHY_MSG_TYPE_UCI_INDICATION:
@@ -4530,6 +4536,11 @@ bool dequeue_ue_slot_msgs(slot_msgs_t *slot_msgs, uint16_t sfn_slot_tx)
           // }
 
           if (ue_info->crc_recvd && ! ue_info->rx_data_recvd) {
+            printf("[PROXY_DEBUG] UE %d: CRC received but RX_DATA not yet, waiting...\n", i);
+            slot_msgs_pending = true;
+          }
+          if (ue_info->rx_data_recvd && ! ue_info->crc_recvd) {
+            printf("[PROXY_DEBUG] UE %d: RX_DATA received but CRC not yet, waiting...\n", i);
             slot_msgs_pending = true;
           }
       }
@@ -4538,8 +4549,13 @@ bool dequeue_ue_slot_msgs(slot_msgs_t *slot_msgs, uint16_t sfn_slot_tx)
         done = true;
       }
       else if (wait_time_exceeded) {
-        // NFAPI_TRACE(NFAPI_TRACE_DEBUG, "Wait time exceeded while waiting on UL messages from UEs");
-        printf("Wait time exceeded while waiting on UL messages from UEs\n");
+        printf("[PROXY_DEBUG] Wait time exceeded (%d us) while waiting on UL messages from UEs\n", wait_time);
+        for (int i = 0; i < num_ues; i++) {
+          if (ue_slot_info[i].crc_recvd || ue_slot_info[i].rx_data_recvd) {
+            printf("[PROXY_DEBUG] UE %d status: crc_recvd=%d, rx_data_recvd=%d\n", 
+                   i, ue_slot_info[i].crc_recvd, ue_slot_info[i].rx_data_recvd);
+          }
+        }
         done = true;
       }
       else {

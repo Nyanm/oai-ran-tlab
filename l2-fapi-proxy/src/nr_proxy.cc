@@ -200,6 +200,9 @@ void Multi_UE_NR_Proxy::receive_message_from_nr_ue(int ue_idx)
                 return ;
             }
             uint16_t sfn_slot = nfapi_get_sfnslot(MU, buffer, buflen);
+            printf("[PROXY_SOCKET] UE %d: Received msg_id=0x%04x, sfn=%d, slot=%d, buflen=%d\n",
+                   ue_idx, header.message_id, NFAPI_SFNSLOTDEC2SFN(MU, sfn_slot), 
+                   NFAPI_SFNSLOTDEC2SLOT(MU, sfn_slot), buflen);
             NFAPI_TRACE(NFAPI_TRACE_INFO , "(Proxy) Proxy has received %d uplink message from OAI UE at socket. Frame: %d, Slot: %d",
                     header.message_id, NFAPI_SFNSLOTDEC2SFN(MU, sfn_slot), NFAPI_SFNSLOTDEC2SLOT(MU, sfn_slot));
         }
