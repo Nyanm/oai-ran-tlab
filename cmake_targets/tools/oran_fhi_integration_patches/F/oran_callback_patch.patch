@@ -1,0 +1,52 @@
+diff --git a/fhi_lib/lib/src/xran_cb_proc.c b/fhi_lib/lib/src/xran_cb_proc.c
+index 2bb5187..8c5b848 100644
+--- a/fhi_lib/lib/src/xran_cb_proc.c
++++ b/fhi_lib/lib/src/xran_cb_proc.c
+@@ -460,7 +460,7 @@ xran_reg_sym_cb_rx_win_end(struct xran_device_ctx * p_dev_ctx, xran_callback_sym
+     int32_t ret = XRAN_STATUS_SUCCESS;
+     struct cb_user_per_sym_ctx *p_loc_sym_cb_ctx = &p_dev_ctx->symCbCtx[symb][XRAN_CB_SYM_RX_WIN_END];
+     uint32_t time_diff_us      = 0;
+-    uint32_t time_diff_nSymb   = 0;
++    int32_t time_diff_nSymb   = 0;
+     uint32_t absolute_ota_sym  = 0;
+     uint32_t interval_us_local = p_dev_ctx->interval_us_local;
+ 
+@@ -470,17 +470,29 @@ xran_reg_sym_cb_rx_win_end(struct xran_device_ctx * p_dev_ctx, xran_callback_sym
+         return ret;
+     }
+ 
+-    time_diff_us = p_dev_ctx->fh_cfg.Ta4_max;
+-    printf("RX WIN end Ta4_max is %d [us] where TTI is %d [us] \n", time_diff_us, interval_us_local);
+-    time_diff_nSymb = time_diff_us*1000/(interval_us_local*1000/N_SYM_PER_SLOT);
+-    if ((time_diff_nSymb/1000/(interval_us_local*1000/N_SYM_PER_SLOT)) < time_diff_us) {
+-        time_diff_nSymb+=1;
+-        printf("time duration %d rounded up to duration of %d symbols\n", time_diff_us, time_diff_nSymb);
++    if (p_dev_ctx->fh_init.io_cfg.id == O_DU) {
++        time_diff_us = p_dev_ctx->fh_cfg.Ta4_max;
++        printf("RX WIN end Ta4_max is %d [us] where TTI is %d [us] \n", time_diff_us, interval_us_local);
++        time_diff_nSymb = time_diff_us*1000/(interval_us_local*1000/N_SYM_PER_SLOT);
++        if ((time_diff_nSymb/1000/(interval_us_local*1000/N_SYM_PER_SLOT)) < time_diff_us) {
++            time_diff_nSymb+=1;
++            printf("time duration %d rounded up to duration of %d symbols\n", time_diff_us, time_diff_nSymb);
++        }
++        printf("U-plane UL delay %d [us] measured against OTA time [offset in symbols is %d]\n", time_diff_us, time_diff_nSymb);
++    } else {
++        time_diff_us = p_dev_ctx->fh_cfg.T2a_min_up;
++        printf("RX WIN end T2a_min_up is %d [us] where TTI is %d [us] \n", time_diff_us, interval_us_local);
++        time_diff_nSymb = time_diff_us*1000/(interval_us_local*1000/N_SYM_PER_SLOT);
++        time_diff_nSymb *= -1;
++        printf("U-plane DL advance %d [us] measured against OTA time [offset in symbols is %d]\n", time_diff_us, time_diff_nSymb);
++        if (time_diff_nSymb == 0) {
++            print_err("T2a_min_up of %d results in 0 symbol offset leaving no time for O-RU processing. Increase T2a_min_up at least above 1 symbol\n", time_diff_us);
++            return -1;
++        }
+     }
+-    printf("U-plane UL delay %d [us] measured against OTA time [offset in symbols is %d]\n", time_diff_us, time_diff_nSymb);
+-    absolute_ota_sym =  (symb + time_diff_nSymb) % XRAN_NUM_OF_SYMBOL_PER_SLOT;
++    absolute_ota_sym =  (symb + time_diff_nSymb + XRAN_NUM_OF_SYMBOL_PER_SLOT) % XRAN_NUM_OF_SYMBOL_PER_SLOT;
+     printf("requested symb %d pkt arrival time [deadline] coresponds to symb %d OTA time\n", symb, absolute_ota_sym);
+-
++    fflush(stdout);
+     p_loc_sym_cb_ctx->symb_num_req  = symb;
+     p_loc_sym_cb_ctx->sym_diff      = -time_diff_nSymb;
+     p_loc_sym_cb_ctx->symb_num_ota  = absolute_ota_sym;
