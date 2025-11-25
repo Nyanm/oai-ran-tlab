@@ -193,9 +193,9 @@ int8_t nr_ue_scheduled_response_stub(nr_scheduled_response_t *scheduled_response
                     pusch_config_pdu->mcs_index);
             }
 
-            LOG_I(NR_MAC, "[PUSCH_SCHED] Queueing RX_IND for sfn/slot %d.%d, harq_pid=%d, rnti=0x%x, pdu_len=%d\n",
-                  rx_ind->sfn, rx_ind->slot, rx_ind->pdu_list[0].harq_id, 
-                  rx_ind->pdu_list[0].rnti, rx_ind->pdu_list[0].pdu_length);
+            // LOG_I(NR_MAC, "[PUSCH_SCHED] Queueing RX_IND for sfn/slot %d.%d, harq_pid=%d, rnti=0x%x, pdu_len=%d\n",
+            //       rx_ind->sfn, rx_ind->slot, rx_ind->pdu_list[0].harq_id, 
+            //       rx_ind->pdu_list[0].rnti, rx_ind->pdu_list[0].pdu_length);
             if (!put_queue(&nr_rx_ind_queue, rx_ind)) {
               LOG_E(NR_MAC, "Put_queue failed for rx_ind\n");
               for (int i = 0; i < rx_ind->number_of_pdus; i++) {
@@ -208,8 +208,8 @@ int8_t nr_ue_scheduled_response_stub(nr_scheduled_response_t *scheduled_response
               free(rx_ind);
               rx_ind = NULL;
             }
-            LOG_I(NR_MAC, "[PUSCH_SCHED] Queueing CRC_IND for sfn/slot %d.%d, harq_pid=%d, rnti=0x%x\n",
-                  crc_ind->sfn, crc_ind->slot, crc_ind->crc_list[0].harq_id, crc_ind->crc_list[0].rnti);
+            // LOG_I(NR_MAC, "[PUSCH_SCHED] Queueing CRC_IND for sfn/slot %d.%d, harq_pid=%d, rnti=0x%x\n",
+            //       crc_ind->sfn, crc_ind->slot, crc_ind->crc_list[0].harq_id, crc_ind->crc_list[0].rnti);
             if (!put_queue(&nr_crc_ind_queue, crc_ind)) {
               LOG_E(NR_MAC, "Put_queue failed for crc_ind\n");
               free(crc_ind->crc_list);

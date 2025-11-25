@@ -647,7 +647,7 @@ int phy_crc_indication(struct nfapi_vnf_p7_config *config, nfapi_crc_indication_
 
 int phy_nr_crc_indication(nfapi_nr_crc_indication_t *ind)
 {
-  printf("[GNB_VNF_DEBUG] Received CRC_IND: sfn=%d, slot=%d, num_crcs=%d\n", ind->sfn, ind->slot, ind->number_crcs);
+  // printf("[GNB_VNF_DEBUG] Received CRC_IND: sfn=%d, slot=%d, num_crcs=%d\n", ind->sfn, ind->slot, ind->number_crcs);
   LOG_D(NR_MAC, "In %s() NFAPI SFN/SF: %d/%d number_of_pdus :%u\n", __FUNCTION__, ind->sfn, ind->slot, ind->number_crcs);
 
   if (NFAPI_MODE == NFAPI_MODE_VNF || NFAPI_MODE == NFAPI_MODE_AERIAL) {
@@ -743,7 +743,7 @@ int phy_rx_indication(struct nfapi_vnf_p7_config *config, nfapi_rx_indication_t 
 
 int phy_nr_rx_data_indication(nfapi_nr_rx_data_indication_t *ind)
 {
-  printf("[GNB_VNF_DEBUG] Received RX_DATA_IND: sfn=%d, slot=%d, num_pdus=%d\n", ind->sfn, ind->slot, ind->number_of_pdus);
+  // printf("[GNB_VNF_DEBUG] Received RX_DATA_IND: sfn=%d, slot=%d, num_pdus=%d\n", ind->sfn, ind->slot, ind->number_of_pdus);
   LOG_D(NR_MAC,
         "In %s() NFAPI SFN/SF: %d/%d number_of_pdus :%u, and pdu %p\n",
         __FUNCTION__,

@@ -119,8 +119,8 @@ static int16_t ssb_index_from_prach(module_id_t module_idP,
     }
   }
 
-  LOG_D(NR_MAC, "Frame %d, Slot %d: Prach Occasion id = %d ssb per RO = %f number of active SSB %u index = %d fdm %u symbol index %u freq_index %u total_RApreambles %u\n",
-        frameP, slotP, prach_occasion_id, num_ssb_per_RO, num_active_ssb, index, fdm, start_symbol_index, freq_index, total_RApreambles);
+  // LOG_D(NR_MAC, "Frame %d, Slot %d: Prach Occasion id = %d ssb per RO = %f number of active SSB %u index = %d fdm %u symbol index %u freq_index %u total_RApreambles %u\n",
+  //       frameP, slotP, prach_occasion_id, num_ssb_per_RO, num_active_ssb, index, fdm, start_symbol_index, freq_index, total_RApreambles);
 
   return index;
 }
@@ -310,7 +310,7 @@ static void schedule_nr_MsgA_pusch(NR_UplinkConfigCommon_t *uplinkConfigCommon,
   pusch_pdu->pusch_data.tb_size = TBS;
   pusch_pdu->maintenance_parms_v3.ldpcBaseGraph = get_BG(TBS << 3, R);
 
-  LOG_D(NR_MAC, "Scheduling MsgA PUSCH in %d.%d\n", msgA_pusch_frame, msgA_pusch_slot);
+  // LOG_D(NR_MAC, "Scheduling MsgA PUSCH in %d.%d\n", msgA_pusch_frame, msgA_pusch_slot);
 
   UL_tti_req->n_pdus += 1;
 }
@@ -563,7 +563,7 @@ int nr_fill_successrar(const NR_UE_sched_ctrl_t *ue_sched_ctl,
                        unsigned char *mac_pdu,
                        int mac_pdu_length)
 {
-  LOG_D(NR_MAC, "mac_pdu_length = %d\n", mac_pdu_length);
+  // LOG_D(NR_MAC, "mac_pdu_length = %d\n", mac_pdu_length);
   int timing_advance_cmd = ue_sched_ctl->ta_update;
   // TS 38.321 - Figure 6.1.5a-1: BI MAC subheader
   NR_RA_HEADER_BI_MSGB *bi = (NR_RA_HEADER_BI_MSGB *)&mac_pdu[mac_pdu_length];
@@ -621,7 +621,7 @@ int nr_fill_successrar(const NR_UE_sched_ctrl_t *ue_sched_ctl,
         successRAR->PUCCH_RI,
         timing_advance_cmd,
         crnti);
-  LOG_D(NR_MAC, "mac_pdu_length = %d\n", mac_pdu_length);
+  // LOG_D(NR_MAC, "mac_pdu_length = %d\n", mac_pdu_length);
   return mac_pdu_length;
 }
 
@@ -775,8 +775,8 @@ static void start_ra_contention_resolution_timer(NR_RA_t *ra, const long ra_Cont
   extern uint8_t nfapi_mode;
   if (nfapi_mode == 2) {  // VNF mode
     int extension = 80; // 40ms additional margin for nFAPI split architecture with Msg4 ACK delays
-    LOG_D(NR_MAC, "[RA_TIMER] nFAPI VNF mode: extending contention resolution timer from %d to %d slots\n", 
-          ra->contention_resolution_timer, ra->contention_resolution_timer + extension);
+    // LOG_D(NR_MAC, "[RA_TIMER] nFAPI VNF mode: extending contention resolution timer from %d to %d slots\n", 
+    //       ra->contention_resolution_timer, ra->contention_resolution_timer + extension);
     ra->contention_resolution_timer += extension;
   }
   
@@ -1035,7 +1035,7 @@ static bool get_feasible_msg3_tda(const NR_ServingCellConfigCommon_t *scc,
     int start, nr;
     SLIV2SL(startSymbolAndLength, &start, &nr);
     uint16_t msg3_mask = SL_to_bitmap(start, nr);
-    LOG_D(NR_MAC, "Check Msg3 TDA %d for slot %d: k2 %ld, S %d L %d\n", i, temp_slot, k2, start, nr);
+    // LOG_D(NR_MAC, "Check Msg3 TDA %d for slot %d: k2 %ld, S %d L %d\n", i, temp_slot, k2, start, nr);
     /* if this start and length of this TDA cannot be fulfilled, skip */
     if ((slot_mask & msg3_mask) != msg3_mask)
       continue;
@@ -1095,7 +1095,7 @@ static bool nr_get_Msg3alloc(gNB_MAC_INST *mac, int CC_id, int current_slot, fra
     while (rbStart < bwpSize && (vrb_map_UL[rbStart + bwpStart] & SL_to_bitmap(ra->msg3_startsymb, ra->msg3_nbSymb)))
       rbStart++;
     if (rbStart + msg3_nb_rb > bwpSize) {
-      LOG_D(NR_MAC, "No space to allocate Msg 3\n");
+      // LOG_D(NR_MAC, "No space to allocate Msg 3\n");
       return false;
     }
     while (rbStart + rbSize < bwpSize
@@ -1144,7 +1144,7 @@ static void nr_add_msg3(module_id_t module_idP, int CC_id, frame_t frameP, slot_
     vrb_map_UL[i + ra->msg3_first_rb + ra->msg3_bwp_start] |= mask;
   }
 
-  LOG_D(NR_MAC, "UE %04x: %d.%d RA is active, Msg3 in (%d,%d)\n", UE->rnti, frameP, slotP, ra->Msg3_frame, ra->Msg3_slot);
+  // LOG_D(NR_MAC, "UE %04x: %d.%d RA is active, Msg3 in (%d,%d)\n", UE->rnti, frameP, slotP, ra->Msg3_frame, ra->Msg3_slot);
   buffer_index = ul_buffer_index(ra->Msg3_frame, ra->Msg3_slot, slots_frame, mac->UL_tti_req_ahead_size);
   nfapi_nr_ul_tti_request_t *future_ul_tti_req = &mac->UL_tti_req_ahead[CC_id][buffer_index];
   AssertFatal(future_ul_tti_req->SFN == ra->Msg3_frame
@@ -1264,7 +1264,7 @@ static int get_response_window(e_NR_RACH_ConfigGeneric__ra_ResponseWindow respon
   extern uint8_t nfapi_mode;
   if (nfapi_mode == 2) {  // VNF mode
     int extension = 40; // 20ms additional margin for nFAPI split architecture
-    LOG_D(NR_MAC, "[RA_WINDOW] nFAPI VNF mode: extending RA window from %d to %d slots\n", slots, slots + extension);
+    // LOG_D(NR_MAC, "[RA_WINDOW] nFAPI VNF mode: extending RA window from %d to %d slots\n", slots, slots + extension);
     slots += extension;
   }
   

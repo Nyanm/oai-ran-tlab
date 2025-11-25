@@ -936,8 +936,8 @@ static void _nr_rx_sdu(const module_id_t gnb_mod_idP,
 {
   gNB_MAC_INST *gNB_mac = RC.nrmac[gnb_mod_idP];
   const int current_rnti = rntiP;
-  LOG_I(NR_MAC, "[RX_SDU] %d.%d rnti %04x, sdu_len=%d, harq_pid=%d, sduP=%p\n", 
-        frameP, slotP, current_rnti, sdu_lenP, harq_pid, sduP);
+  // LOG_I(NR_MAC, "[RX_SDU] %d.%d rnti %04x, sdu_len=%d, harq_pid=%d, sduP=%p\n", 
+  //       frameP, slotP, current_rnti, sdu_lenP, harq_pid, sduP);
   const int target_snrx10 = gNB_mac->pusch_target_snrx10;
   const int rssi_threshold = gNB_mac->pusch_rssi_threshold;
   const int pusch_failure_thres = gNB_mac->pusch_failure_thres;
@@ -1020,8 +1020,8 @@ static void _nr_rx_sdu(const module_id_t gnb_mod_idP,
 #endif
 
     if (sduP != NULL) {
-      LOG_I(NR_MAC, "[RX_SDU] %d.%d UE %04x: Received PDU at MAC gNB, calling nr_process_mac_pdu\n", 
-            frameP, slotP, UE->rnti);
+      // LOG_I(NR_MAC, "[RX_SDU] %d.%d UE %04x: Received PDU at MAC gNB, calling nr_process_mac_pdu\n", 
+      //       frameP, slotP, UE->rnti);
       UE->UE_sched_ctrl.pusch_consecutive_dtx_cnt = 0;
       UE_scheduling_control->sched_ul_bytes -= sdu_lenP;
       if (UE_scheduling_control->sched_ul_bytes < 0)

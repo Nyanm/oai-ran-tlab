@@ -184,10 +184,10 @@ void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame, slot_t slo
   // Log the condition status periodically
   static int sched_log_counter = 0;
   if ((++sched_log_counter % 1000) == 0) {
-    LOG_I(NR_MAC, "[gNB SCHEDULER] frame.slot %d.%d: wait_prach=%d (num_rx=%lu/%d), phy_test=%d, nfapi=%d, will_schedule_mib=%d\n",
-          frame, slot, wait_prach_completed, gNB->num_scheduled_prach_rx, NUM_PRACH_RX_FOR_NOISE_ESTIMATE,
-          get_softmodem_params()->phy_test, is_nfapi_mode,
-          (wait_prach_completed || get_softmodem_params()->phy_test || is_nfapi_mode));
+    // LOG_I(NR_MAC, "[gNB SCHEDULER] frame.slot %d.%d: wait_prach=%d (num_rx=%lu/%d), phy_test=%d, nfapi=%d, will_schedule_mib=%d\n",
+    //       frame, slot, wait_prach_completed, gNB->num_scheduled_prach_rx, NUM_PRACH_RX_FOR_NOISE_ESTIMATE,
+    //       get_softmodem_params()->phy_test, is_nfapi_mode,
+    //       (wait_prach_completed || get_softmodem_params()->phy_test || is_nfapi_mode));
   }
   
   if (gNB->print_ue_stats && (wait_prach_completed || get_softmodem_params()->phy_test || is_nfapi_mode) && (slot == 0) && (frame & 127) == 0) {
@@ -223,11 +223,11 @@ void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame, slot_t slo
     bool is_sa_mode = IS_SA_MODE(get_softmodem_params());
     static int sa_mode_log_counter = 0;
     if ((++sa_mode_log_counter % 1000) == 0) {
-      LOG_I(NR_MAC, "[SA_MODE_CHECK] frame.slot %d.%d: is_sa_mode=%d (phy_test=%d, do_ra=%d, nsa=%d)\n",
-            frame, slot, is_sa_mode, 
-            get_softmodem_params()->phy_test,
-            get_softmodem_params()->do_ra,
-            get_softmodem_params()->nsa);
+      // LOG_I(NR_MAC, "[SA_MODE_CHECK] frame.slot %d.%d: is_sa_mode=%d (phy_test=%d, do_ra=%d, nsa=%d)\n",
+      //       frame, slot, is_sa_mode, 
+      //       get_softmodem_params()->phy_test,
+      //       get_softmodem_params()->do_ra,
+      //       get_softmodem_params()->nsa);
     }
     
     if (is_sa_mode) {
