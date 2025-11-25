@@ -323,7 +323,7 @@ int write_prach_data(uint32_t **prachDataF, int nb_rx, int frame, int slot)
 {
 
   struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
-  int prach_sym = get_prach_conf_duration(0);
+  int prach_sym = 1; // TODO: Use get_prach_conf_duration(0);
   struct xran_ru_config *ru_conf = &fh_cfg->ru_conf;
   AssertFatal(ru_conf->compMeth_PRACH == XRAN_COMPMETHOD_NONE, "Only COMPMETHOD_NONE is supported in write_prach_data\n");
   int slots_per_frame = 10 << fh_cfg->frame_conf.nNumerology;
@@ -341,7 +341,7 @@ int write_prach_data(uint32_t **prachDataF, int nb_rx, int frame, int slot)
       int16_t *src = (int16_t *)prachDataF[aa];
       if (ru_conf->compMeth_PRACH == XRAN_COMPMETHOD_NONE) {
         for (int idx = 0; idx < 139 * 2; idx++) {
-          dst[idx] = ((int16_t)ntohs(src[idx + g_kbar]));
+          dst[idx + g_kbar] = ((int16_t)htons(src[idx]));
         }
       }
     }
