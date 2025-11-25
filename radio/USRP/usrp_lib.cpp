@@ -548,7 +548,7 @@ static int trx_usrp_write(openair0_device *device,
       LOG_D(HW, "Signaling TX TS %llu\n", (unsigned long long)timestamp);
       pthread_cond_signal(&write_thread->cond_write);
       pthread_mutex_unlock(&write_thread->mutex_write);
-      return 0;
+      return nsamps; // This should be the ret from  trx_usrp_write_thread::tx_stream->send(), but better than 0.
     }
 }
 
