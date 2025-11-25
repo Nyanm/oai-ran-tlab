@@ -215,7 +215,6 @@ int trx_oran_ctlrecv(openair0_device *device, void *msg, ssize_t msg_len)
 
 void dump_nonzero_symbol(c16_t *txdataF, uint32_t ofdm_symbol_size, int frame, int slot, int symbol, const char* loc)
 {
-  return;
   float signal_energy = signal_energy_nodc(txdataF, ofdm_symbol_size);
   if (signal_energy > 1) {
     // Prepare a buffer to hold the formatted string for the symbol
@@ -285,6 +284,9 @@ void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
                         symbol,
                         "south_in");
   }
+  if (prach_id) {
+    dump_nonzero_symbol((c16_t *)prach_id->rxsigF[0][0], 139, f, sl, 0, "prach_south_in");
+  }
   int slots_per_frame = 10 << (ru->openair0_cfg.nr_scs_for_raster);
   proc->tti_rx = sl;
   proc->frame_rx = f;
@@ -351,6 +353,13 @@ void oran_write_prach(uint32_t** prach_dataF,
                       int slot,
                       int frame)
 {
+  // TODO: Why is this hardcoded array transferred correctly, but not the one from PRACH RX?
+  // uint16_t* prach = (uint16_t*)prach_dataF[0];
+  // for (int i = 0; i < 139; i++) {
+  //   prach[2 * i] = i;
+  //   prach[2 * i + 1] = -i;
+  // }
+  dump_nonzero_symbol((c16_t *)prach_dataF[0], 139, frame, slot, 0, "write_prach");
   write_prach_data(prach_dataF, 1, frame, slot);
 }
 
