@@ -22,38 +22,51 @@ sudo -E echo start_server -uid 0 | sudo -E nvidia-cuda-mps-control
 # Start cuphycontroller_scf
 # Check if an argument is provided
 if [ $# -eq 0 ]; then
-    # No argument provided, use default value
-    serverVendorAndModel=$(cat /sys/devices/virtual/dmi/id/board_vendor)
-    serverVendorAndModel+="-"
-    serverVendorAndModel+=$(cat /sys/devices/virtual/dmi/id/board_name)
-    echo $serverVendorAndModel
-    case $serverVendorAndModel in
+# No argument provided, use default value
+		serverVendorAndModel=$(cat /sys/devices/virtual/dmi/id/board_vendor)
+		serverVendorAndModel+="-"
+		serverVendorAndModel+=$(cat /sys/devices/virtual/dmi/id/board_name)
+		echo $serverVendorAndModel
+		case $serverVendorAndModel in
 	"Dell Inc.-06V45N")
-    	   argument="P5G_FXN_R750"
-	   ;;
+		argument="P5G_FXN_R750"
+		;;
 	"GIGABYTE-MU71-SU0-00")
-    	   argument="P5G_FXN"
-	   ;;
-        "Supermicro-G1SMH-G")
-    	   argument="P5G_WNC_GH"
-	   ;;
+		argument="P5G_FXN"
+		;;
+	"Supermicro-G1SMH-G")
+		argument="P5G_WNC_GH"
+		#argument="P5G_FXN_GH"
+		;;
 	*)
-	   echo "Unrecognized server: $serverVendorAndModel"
-	   exit
-	   ;;
-    esac
+		echo "Unrecognized server: $serverVendorAndModel"
+		exit
+		;;
+	esac
 else
-    # Argument provided, use it
-    argument="$1"
+	# Argument provided, use it
+	argument="$1"
 fi
 configFile=${cuBB_SDK}/cuPHY-CP/cuphycontroller/config/cuphycontroller_${argument}.yaml  
 
 #Change this to the MAC address of the ORU
-sudo -E sed -i "s/ dst_mac_addr:.*/ dst_mac_addr: e8:c7:cf:ac:58:3e/" ${configFile}  
+sudo -E sed -i "s/ dst_mac_addr:.*/ dst_mac_addr: e8:c7:cf:ac:58:32/" ${configFile}
+if [ $argument == "P5G_FXN_GH" ]; then
+	sudo -E sed -i "s/ dst_mac_addr:.*/ dst_mac_addr: 6c:ad:ad:00:04:6c/" ${configFile}
+	sudo -E sed -i "s/ vlan:.*/ vlan: 2/" ${configFile}
+fi
+# Uncomment for below config
+#config="UL-Heavy"
+if [ $config = "UL-Heavy" ]; then
+	sudo -E sed -i "s/shm_log_level: 4/shm_log_level: 5/" ${configFile}
+	sudo -E sed -i "s/pusch_aggr_per_ctx:.*/pusch_aggr_per_ctx: 12/" ${configFile}
+	sudo -E sed -i "s/prach_aggr_per_ctx.*/prach_aggr_per_ctx: 4/" ${configFile}
+	sudo -E sed -i "s/ul_input_buffer_per_cell:.*/ul_input_buffer_per_cell: 20/" ${configFile}
+fi
 
 export AERIAL_LOG_PATH=/var/log/aerial
-sudo -E "$cuBB_Path"/build/cuPHY-CP/cuphycontroller/examples/cuphycontroller_scf $argument
-sudo -E ./build/cuPHY-CP/gt_common_libs/nvIPC/tests/pcap/pcap_collect nvipc /tmp
+sudo -E "$cuBB_Path"/build.$(uname -m)/cuPHY-CP/cuphycontroller/examples/cuphycontroller_scf $argument
+sudo -E ./build.$(uname -m)/cuPHY-CP/gt_common_libs/nvIPC/tests/pcap/pcap_collect nvipc /tmp
 sudo -E mv /tmp/nvipc*.pcap $AERIAL_LOG_PATH
 
 #Uncomment this if using multiple nvipc interfaces
