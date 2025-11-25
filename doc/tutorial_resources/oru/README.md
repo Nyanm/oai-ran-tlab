@@ -32,3 +32,11 @@ sudo ./nr-softmodem -O ../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band77.
 ```
 
 7. Observe UE detecting SSB and decoding SIB1
+
+# New config file used on my MS-A2 PC
+
+Two sets of config files were added that I've been using on my minipc. These need to be adapted to OAI INFRA
+
+`ru.band77.106prb.fhi72.2x2.conf`, `gnb.2x2.conf` - 2x2 106 PRB mu1 
+`ru.band77.106prb.fhi72.4x4.conf`, `gnb.conf` - 4x4 106 PRB mu1
+`setup_ru_ifs.sh` - the way to setup the vfs on the minipc
