@@ -21,6 +21,7 @@
 #include "PHY/TOOLS/tools_defs.h"
 #include "PHY/defs_RU.h"
 #include "PHY/impl_defs_nr.h"
+#include "log.h"
 #include "nfapi_nr_interface_scf.h"
 #include "platform_types.h"
 #include "time_meas.h"
@@ -122,6 +123,13 @@ void oru_downlink_processing(RU_t *ru,
     apply_nr_rotation_TX(fp, txDataF_ptr[aatx], fp->symbol_rotation[0], slot, fp->N_RB_DL, start_symbol, num_symbols);
     nr_feptx0(ru, slot, start_symbol, num_symbols, aatx);
   }
+  LOG_D(PHY,
+        "[RU_thread] transmit data: frame %d, slot %d, start_symbol %d, num_symbols %d, timestamp %ld\n",
+        frame,
+        slot,
+        start_symbol,
+        num_symbols,
+        timestamp_tx);
   tx_rf_symbols(ru, frame, slot, timestamp_tx, start_symbol, num_symbols);
   stop_meas(&ru->tx_fhaul);
 }
@@ -424,6 +432,14 @@ void *oru_south_read_thread(void *arg)
       openair0_timestamp timestamp;
       int num_samples_read = ru->rfdevice.trx_read_func(&ru->rfdevice, &timestamp, (void **)rxp, samples_to_read, ru->nb_rx);
       AssertFatal(num_samples_read == samples_to_read, "Unexpected number of samples received\n");
+      LOG_D(PHY,
+            "[ORU south] read data: frame %d, slot %d, symbol %d, timestamp %ld num_symbols %d, samples %d\n",
+            current_frame,
+            current_slot,
+            symbol,
+            timestamp,
+            num_symbols,
+            num_samples_read);
 
       bool is_slot_end = (symbol + num_symbols) >= fp->symbols_per_slot;
       if (rx_slot_type == NR_UPLINK_SLOT || rx_slot_type == NR_MIXED_SLOT) {

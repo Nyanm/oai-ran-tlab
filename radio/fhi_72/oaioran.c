@@ -20,6 +20,7 @@
  */
 
 #include "assertions.h"
+#include <bits/time.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -27,6 +28,7 @@
 #include "xran_compression.h"
 #include "xran_pkt_up.h"
 #include "armral_bfp_compression.h"
+#include <time.h>
 
 #if defined(__arm__) || defined(__aarch64__)
 #else
@@ -114,7 +116,21 @@ int32_t symbol_callback(void *args, struct xran_sense_of_time *p_sense_of_time)
   info->ts.tv_sec = p_sense_of_time->nSecond;
   info->ts.tv_nsec = slot_in_second_offset_nS + symbol_in_slot_offset_nS;
 
+  uint64_t symbol_in_slot_callback_offset_nS = (uint64_t)(p_sense_of_time->nSymIdx * symbol_duration_nS);
+  int64_t tv_nsec = slot_in_second_offset_nS + symbol_in_slot_callback_offset_nS;
+
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
   AssertFatal(info->ts.tv_nsec < 1000000000UL, "ORAN: Invalid tv_nsec %ld\n", info->ts.tv_nsec);
+  LOG_D(HW,
+        "symbol time %ld.%ld current_time %ld.%ld, diff %ld diff cb %ld expected %.1f\n",
+        info->ts.tv_sec,
+        info->ts.tv_nsec,
+        ts.tv_sec,
+        ts.tv_nsec,
+        info->ts.tv_nsec - ts.tv_nsec,
+        tv_nsec - ts.tv_nsec,
+        7 * symbol_duration_nS);
   pushNotifiedFIFO(&ru_dl_sync_fifo, req);
   return 0;
 }
