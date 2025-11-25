@@ -93,10 +93,394 @@ int snr_steps = SNR_STEPS;
 int snr_trials = SNR_TRIALS;
 int snr_plot = 0;
 
+int rx_size;
+
+double **s_re, **s_im; // TX signal
+double **r_re, **r_im; // RX signal
 channel_model_t channel_model;
 
 bool testing_mode = false;
 bool testing_timing = false;
+
+// --- Fixed Point Configuration ---
+// Data: Q1.15 [-1, 1)
+// Coeffs: Q2.29 [-4, 4) to handle high sample rate precision
+#define SHIFT_COEFF 29
+
+// Helper: Convert float to Q2.29
+int32_t dbl_to_fixed(double x) {
+    return (int32_t)(x * (1 << SHIFT_COEFF));
+}
+
+// Helper: Saturation (Clamp to valid int16 range)
+// Prevents wrapping if the filter overshoots 32767
+int16_t saturate_q15(int64_t x) {
+    if (x > 32767) return 32767;
+    if (x < -32768) return -32768;
+    return (int16_t)x;
+}
+
+/* 3rd Order Butterworth Filter State 
+   - Coefficients are shared between Real/Imag paths.
+   - State history (x, y) must be separate for Real/Imag.
+*/
+typedef struct {
+    // --- Coefficients (Q2.29) ---
+    int32_t b0_1, b1_1, a1_1;             // Stage 1 (1st order)
+    int32_t b0_2, b1_2, b2_2, a1_2, a2_2; // Stage 2 (2nd order)
+
+    // --- State History: REAL Path (Q1.15) ---
+    int16_t x1_r, y1_r;           
+    int16_t x2_1_r, x2_2_r;       
+    int16_t y2_1_r, y2_2_r;       
+
+    // --- State History: IMAG Path (Q1.15) ---
+    int16_t x1_i, y1_i;           
+    int16_t x2_1_i, x2_2_i;       
+    int16_t y2_1_i, y2_2_i;       
+} Butter3_c16;
+
+void butter3_c16_clear(Butter3_c16 *f) {
+  // 1. Clear States
+  f->x1_r = 0;
+  f->y1_r = 0;
+  f->x2_1_r = 0;
+  f->x2_2_r = 0;
+  f->y2_1_r = 0;
+  f->y2_2_r = 0;
+  
+  f->x1_i = 0;
+  f->y1_i = 0;
+  f->x2_1_i = 0;
+  f->x2_2_i = 0;
+  f->y2_1_i = 0;
+  f->y2_2_i = 0;
+}
+
+// Initialize Filter
+void butter3_c16_init(Butter3_c16 *f, double Fc, double Fs) {
+  // 1. Clear States
+  butter3_c16_clear(f);
+
+  // 2. Calculate Coefficients (Bilinear Transform)
+  double omega = 2.0 * M_PI * Fc;
+  double T = 1.0 / Fs;
+  double wa = (2.0 / T) * tan(omega * T / 2.0);
+
+  // Stage 1: 1st Order Section
+  double g1 = wa * T / 2.0;
+  double D1 = 1.0 + g1;
+  
+  f->b0_1 = dbl_to_fixed(g1 / D1);
+  f->b1_1 = dbl_to_fixed(g1 / D1);
+  f->a1_1 = dbl_to_fixed((g1 - 1.0) / D1);
+
+  // Stage 2: 2nd Order Section
+  double g2 = wa * T / 2.0;
+  double D2 = 1.0 + g2 + g2 * g2;
+
+  f->b0_2 = dbl_to_fixed((g2 * g2) / D2);
+  f->b1_2 = dbl_to_fixed(2.0 * (g2 * g2) / D2);
+  f->b2_2 = dbl_to_fixed((g2 * g2) / D2);
+  f->a1_2 = dbl_to_fixed((2.0 * g2 * g2 - 2.0) / D2);
+  f->a2_2 = dbl_to_fixed((1.0 - g2 + g2 * g2) / D2);
+
+  printf("Filter Initialized (c16_t)\n");
+}
+
+// Process Block of c16_t data
+void butter3_c16_process(Butter3_c16 *f, const c16_t *input, c16_t *output, size_t length) {
+  for (size_t i = 0; i < length; i++) {
+    
+    // ==============================
+    // PATH 1: REAL COMPONENT
+    // ==============================
+    int16_t in_r = input[i].r;
+    
+    // Stage 1 (1st Order)
+    // Q1.15 * Q2.29 = Q3.44 (requires 64-bit accumulator)
+    int64_t acc1_r = 0;
+    acc1_r += (int64_t)in_r * f->b0_1;
+    acc1_r += (int64_t)f->x1_r * f->b1_1;
+    acc1_r -= (int64_t)f->y1_r * f->a1_1;
+    
+    // Shift back to Q15 (with rounding) and Saturate
+    int16_t st1_out_r = saturate_q15((acc1_r + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF);
+    
+    f->x1_r = in_r; 
+    f->y1_r = st1_out_r;
+
+    // Stage 2 (2nd Order)
+    int64_t acc2_r = 0;
+    acc2_r += (int64_t)st1_out_r * f->b0_2;
+    acc2_r += (int64_t)f->x2_1_r * f->b1_2;
+    acc2_r += (int64_t)f->x2_2_r * f->b2_2;
+    acc2_r -= (int64_t)f->y2_1_r * f->a1_2;
+    acc2_r -= (int64_t)f->y2_2_r * f->a2_2;
+    
+    int16_t final_r = saturate_q15((acc2_r + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF);
+
+    f->x2_2_r = f->x2_1_r; f->x2_1_r = st1_out_r;
+    f->y2_2_r = f->y2_1_r; f->y2_1_r = final_r;
+
+    // ==============================
+    // PATH 2: IMAGINARY COMPONENT
+    // ==============================
+    int16_t in_i = input[i].i;
+
+    // Stage 1 (1st Order)
+    int64_t acc1_i = 0;
+    acc1_i += (int64_t)in_i * f->b0_1;
+    acc1_i += (int64_t)f->x1_i * f->b1_1;
+    acc1_i -= (int64_t)f->y1_i * f->a1_1;
+    
+    int16_t st1_out_i = saturate_q15((acc1_i + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF);
+
+    f->x1_i = in_i; 
+    f->y1_i = st1_out_i;
+
+    // Stage 2 (2nd Order)
+    int64_t acc2_i = 0;
+    acc2_i += (int64_t)st1_out_i * f->b0_2;
+    acc2_i += (int64_t)f->x2_1_i * f->b1_2;
+    acc2_i += (int64_t)f->x2_2_i * f->b2_2;
+    acc2_i -= (int64_t)f->y2_1_i * f->a1_2;
+    acc2_i -= (int64_t)f->y2_2_i * f->a2_2;
+    
+    int16_t final_i = saturate_q15((acc2_i + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF);
+
+    f->x2_2_i = f->x2_1_i; f->x2_1_i = st1_out_i;
+    f->y2_2_i = f->y2_1_i; f->y2_1_i = final_i;
+
+    // ==============================
+    // OUTPUT
+    // ==============================
+    output[i].r = final_r;
+    output[i].i = final_i;
+  }
+}
+
+/* 3rd Order Butterworth Filter Structure
+   Implemented as Cascaded Sections:
+   [Section 1: 1st Order] -> [Section 2: 2nd Order (Biquad)]
+*/
+typedef struct {
+  // --- Coefficients (Q2.29) ---
+  int32_t b0_1, b1_1, a1_1;             // Stage 1
+  int32_t b0_2, b1_2, b2_2, a1_2, a2_2; // Stage 2
+
+  // --- State History (Q1.15) ---
+  int16_t x1, y1;               // Stage 1 history
+  int16_t x2_1, x2_2;           // Stage 2 input history
+  int16_t y2_1, y2_2;           // Stage 2 output history
+} Butter3_Q15;
+
+void butter3_clear(Butter3_Q15 *f) {
+  f->x1 = 0;
+  f->y1 = 0;
+
+  f->x2_1 = 0;
+  f->x2_2 = 0;
+  f->y2_1 = 0;
+  f->y2_2 = 0;
+}
+
+void butter3_init(Butter3_Q15 *f, double Fc, double Fs) {
+  // 1. Clear State
+  butter3_clear(f);
+
+  // 2. Bilinear Transform Math (Pre-warping)
+  double omega = 2.0 * M_PI * Fc;
+  double T = 1.0 / Fs;
+  double wa = (2.0 / T) * tan(omega * T / 2.0);
+
+  // 3. Calculate Stage 1 (1st Order)
+  // H(s) = 1 / (s + 1) normalized
+  double gamma1 = wa * T / 2.0;
+  double D1 = 1.0 + gamma1;
+  
+  f->b0_1 = dbl_to_fixed(gamma1 / D1);
+  f->b1_1 = dbl_to_fixed(gamma1 / D1);
+  f->a1_1 = dbl_to_fixed((gamma1 - 1.0) / D1);
+
+  // 4. Calculate Stage 2 (2nd Order)
+  // H(s) = 1 / (s^2 + s + 1) normalized
+  double gamma2 = wa * T / 2.0;
+  double D2 = 1.0 + gamma2 + gamma2 * gamma2;
+
+  f->b0_2 = dbl_to_fixed((gamma2 * gamma2) / D2);
+  f->b1_2 = dbl_to_fixed(2.0 * (gamma2 * gamma2) / D2);
+  f->b2_2 = dbl_to_fixed((gamma2 * gamma2) / D2);
+  f->a1_2 = dbl_to_fixed((2.0 * gamma2 * gamma2 - 2.0) / D2);
+  f->a2_2 = dbl_to_fixed((1.0 - gamma2 + gamma2 * gamma2) / D2);
+
+  printf("Filter Initialized for Q1.15 Data processing.\n");
+}
+
+void butter3_process(Butter3_Q15 *f, const int16_t *input, int16_t *output, size_t length) {
+  for (size_t i = 0; i < length; i++) {
+    int16_t in_sample = input[i];
+
+    // --- STAGE 1: 1st Order ---
+    // Math: (Q1.15 * Q2.29) = Q3.44. Accumulator needs 64-bit.
+    int64_t acc1 = 0;
+    acc1 += (int64_t)in_sample * f->b0_1;
+    acc1 += (int64_t)f->x1     * f->b1_1;
+    acc1 -= (int64_t)f->y1     * f->a1_1;
+
+    // Rounding (add half LSB) and Shift back to Q1.15
+    // Result is technically Q3.15 now, so we must saturate before casting to int16
+    int64_t stage1_raw = (acc1 + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF;
+    int16_t stage1_out = saturate_q15(stage1_raw);
+
+    // Update Stage 1 State
+    f->x1 = in_sample;
+    f->y1 = stage1_out;
+
+    // --- STAGE 2: 2nd Order ---
+    int64_t acc2 = 0;
+    acc2 += (int64_t)stage1_out * f->b0_2;
+    acc2 += (int64_t)f->x2_1    * f->b1_2;
+    acc2 += (int64_t)f->x2_2    * f->b2_2;
+    acc2 -= (int64_t)f->y2_1    * f->a1_2;
+    acc2 -= (int64_t)f->y2_2    * f->a2_2;
+
+    // Rounding and shifting
+    int64_t stage2_raw = (acc2 + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF;
+    int16_t final_out = saturate_q15(stage2_raw);
+
+    // Update Stage 2 State
+    f->x2_2 = f->x2_1;
+    f->x2_1 = stage1_out;
+    f->y2_2 = f->y2_1;
+    f->y2_1 = final_out;
+
+    output[i] = final_out;
+  }
+}
+
+/*  ************    BANDPASS BUTTERWORTH FILTER ************    */
+
+#define Q_SHIFT 14
+#define SCALE (1 << Q_SHIFT)
+
+// Biquad section: y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
+typedef struct {
+  int16_t b0, b1, b2;
+  int16_t a1, a2;
+  int16_t x1, x2;
+  int16_t y1, y2;
+} Biquad;
+
+// 3rd Order Butterworth Bandpass (Total order 6)
+typedef struct {
+  Biquad sections[3];
+} ButterworthBP3;
+
+void BP_init(ButterworthBP3* filter) {
+  memset(filter, 0, sizeof(ButterworthBP3));
+}
+
+static inline int16_t biquad_process(Biquad *bq, int16_t input) {
+  int64_t accum;
+
+  accum  = (int64_t)bq->b0 * input;
+  accum += (int64_t)bq->b1 * bq->x1;
+  accum += (int64_t)bq->b2 * bq->x2;
+  accum -= (int64_t)bq->a1 * bq->y1;
+  accum -= (int64_t)bq->a2 * bq->y2;
+
+  // Rounding and scaling
+  accum = (accum + (SCALE >> 1)) >> Q_SHIFT;
+
+  bq->x2 = bq->x1;
+  bq->x1 = input;
+  bq->y2 = bq->y1;
+  
+  // Saturation
+  if (accum > 32767) accum = 32767;
+  if (accum < -32768) accum = -32768;
+  
+  bq->y1 = (int16_t)accum;
+
+  return bq->y1;
+}
+
+int16_t BP_process(ButterworthBP3* filter, int16_t input) {
+  int16_t signal = input;
+  
+  signal = biquad_process(&filter->sections[0], signal);
+  signal = biquad_process(&filter->sections[1], signal);
+  signal = biquad_process(&filter->sections[2], signal);
+  
+  return signal;
+}
+
+int16_t double_to_fixed(double val) {
+  long raw = (long)(val * SCALE);
+  if (raw > 32767) return 32767;
+  if (raw < -32768) return -32768;
+  return (int16_t)raw;
+}
+
+void BP_calculate_coefficients(double fs, double f_low, double f_high, ButterworthBP3* filter) {
+  BP_init(filter);
+
+  double w_low = 2.0 * M_PI * f_low;
+  double w_high = 2.0 * M_PI * f_high;
+  
+  // Pre-warp
+  double wa_low = tan(w_low / (2.0 * fs));
+  double wa_high = tan(w_high / (2.0 * fs));
+  
+  double w0_sq = wa_low * wa_high;
+  double bw = wa_high - wa_low;
+
+  // Section 1: Derived from Real LP Pole
+  {
+      double r = 1.0; 
+      double D = 1.0 + r * bw + w0_sq;
+      
+      double b0 = (r * bw) / D;
+      double b1 = 0.0;
+      double b2 = -(r * bw) / D;
+      double a1 = (2.0 * (w0_sq - 1.0)) / D;
+      double a2 = (1.0 - r * bw + w0_sq) / D;
+
+      filter->sections[0].b0 = double_to_fixed(b0);
+      filter->sections[0].b1 = double_to_fixed(b1);
+      filter->sections[0].b2 = double_to_fixed(b2);
+      filter->sections[0].a1 = double_to_fixed(a1);
+      filter->sections[0].a2 = double_to_fixed(a2);
+  }
+
+  // Sections 2 & 3: Approximated Synchronous Bandpass sections
+  for(int k=1; k<=2; k++) {
+        double D = 1.0 + bw + w0_sq;
+        double b0 = bw / D;
+        double b2 = -bw / D;
+        double a1 = (2.0 * (w0_sq - 1.0)) / D;
+        double a2 = (1.0 - bw + w0_sq) / D;
+        
+        filter->sections[k].b0 = double_to_fixed(b0);
+        filter->sections[k].b1 = 0;
+        filter->sections[k].b2 = double_to_fixed(b2);
+        filter->sections[k].a1 = double_to_fixed(a1);
+        filter->sections[k].a2 = double_to_fixed(a2);
+  }
+}
+
+// Clears filter history (state) to process a new signal without recalculating coefficients
+void butterworth_reset(ButterworthBP3* filter) {
+    for(int i=0; i<3; i++) {
+        filter->sections[i].x1 = 0;
+        filter->sections[i].x2 = 0;
+        filter->sections[i].y1 = 0;
+        filter->sections[i].y2 = 0;
+    }
+}
+
+/* ***************          *************************  */
 
 void AIOT_D2R_PHY_TX_calc_packet_sizes(const int payloadSize, NR_AIOT_UL_FRAME_PARMS *frame)
 {
@@ -123,16 +507,22 @@ void AIOT_D2R_PHY_TX_calc_packet_sizes(const int payloadSize, NR_AIOT_UL_FRAME_P
 
   // Calculate packet size
   frame->payload_size = payloadSize;
-  frame->packet_size = frame->payload_size;
+  frame->packet_samples = frame->payload_size;
   if(frame->I_add) {
-    frame->packet_size += (1 + ceil(frame->payload_size / (double)frame->N_midamble_space)) * frame->N_preamble;
+    frame->packet_samples += (1 + ceil(frame->payload_size / (double)frame->N_midamble_space)) * frame->N_preamble;
   } else {
-    frame->packet_size += (1 + (frame->payload_size / frame->N_midamble_space)) * frame->N_preamble;
+    frame->packet_samples += (1 + (frame->payload_size / frame->N_midamble_space)) * frame->N_preamble;
   }
-  frame->packet_size *= frame->N_SFS * 2 * frame->N_chip;
+  frame->packet_samples *= frame->N_SFS * 2 * frame->N_chip;
 
   printf("Calculated chip samples: %d, bit samples: %d, midamble spacing: %d\n", frame->N_chip, frame->N_bit, frame->N_midamble_space);
-  printf("Calculated D2R packet size: %d samples\n", frame->packet_size);
+  printf("Calculated D2R packet size: %d samples\n", frame->packet_samples);
+
+  // Calculate small frequency shift
+  double f_sfs = 1/(2*T_chip); // in Hz
+  frame->f_min = f_sfs - 4e3;
+  frame->f_max = f_sfs + 4e3;
+  printf("Calculated SFS min: %.2f Hz, max: %.2f Hz\n", frame->f_min, frame->f_max);
 }
 
 void AIOT_D2R_PHY_TX_Signal(c16_t *txData, const uint8_t *payload, NR_AIOT_UL_FRAME_PARMS *frame)
@@ -141,6 +531,9 @@ void AIOT_D2R_PHY_TX_Signal(c16_t *txData, const uint8_t *payload, NR_AIOT_UL_FR
     printf("Memory allocation failed\n");
     return;
   }
+
+  const int value1 = 32767;
+  const int value0 = 0;
 
   int dataIndex = 0;
 
@@ -151,8 +544,8 @@ void AIOT_D2R_PHY_TX_Signal(c16_t *txData, const uint8_t *payload, NR_AIOT_UL_FR
     unsigned bit = (D_TAS_preamble >> (frame->N_preamble - 1 - i)) & 0x01;
 
     // Prepare bits for Manchester encoding
-    const c16_t valueBit0 = {((bit) ? 0 : 32767), 0};
-    const c16_t valueBit1 = {((bit) ? 32767 : 0), 0};
+    const c16_t valueBit0 = {((bit) ? value0 : value1), 0};
+    const c16_t valueBit1 = {((bit) ? value1 : value0), 0};
 
     // Repeat each bit N_SFS times with OOK modulation
     for(int j = 0; j < frame->N_SFS; j++) {
@@ -173,8 +566,8 @@ void AIOT_D2R_PHY_TX_Signal(c16_t *txData, const uint8_t *payload, NR_AIOT_UL_FR
         unsigned bit = (D_TAS_preamble >> (frame->N_preamble - 1 - m)) & 0x01;
 
         // Prepare bits for Manchester encoding
-        const c16_t valueBit0 = {((bit) ? 0 : 32767), 0};
-        const c16_t valueBit1 = {((bit) ? 32767 : 0), 0};
+        const c16_t valueBit0 = {((bit) ? value0 : value1), 0};
+        const c16_t valueBit1 = {((bit) ? value1 : value0), 0};
 
         // Repeat each bit N_SFS times with OOK modulation
         for(int j = 0; j < frame->N_SFS; j++) {
@@ -191,8 +584,8 @@ void AIOT_D2R_PHY_TX_Signal(c16_t *txData, const uint8_t *payload, NR_AIOT_UL_FR
     unsigned bit = (payload[i / 8] >> (7 - (i % 8))) & 0x01;
 
     // Prepare bits for Manchester encoding
-    const c16_t valueBit0 = {((bit) ? 0 : 32767), 0};
-    const c16_t valueBit1 = {((bit) ? 32767 : 0), 0};
+    const c16_t valueBit0 = {((bit) ? value0 : value1), 0};
+    const c16_t valueBit1 = {((bit) ? value1 : value0), 0};
 
     // Repeat each bit N_SFS times with OOK modulation
     for(int j = 0; j < frame->N_SFS; j++) {
@@ -211,8 +604,8 @@ void AIOT_D2R_PHY_TX_Signal(c16_t *txData, const uint8_t *payload, NR_AIOT_UL_FR
       unsigned bit = (D_TAS_preamble >> (frame->N_preamble - 1 - m)) & 0x01;
 
       // Prepare bits for Manchester encoding
-      const c16_t valueBit0 = {((bit) ? 0 : 32767), 0};
-      const c16_t valueBit1 = {((bit) ? 32767 : 0), 0};
+      const c16_t valueBit0 = {((bit) ? value0 : value1), 0};
+      const c16_t valueBit1 = {((bit) ? value1 : value0), 0};
 
       // Repeat each bit N_SFS times with OOK modulation
       for(int j = 0; j < frame->N_SFS; j++) {
@@ -227,11 +620,290 @@ void AIOT_D2R_PHY_TX_Signal(c16_t *txData, const uint8_t *payload, NR_AIOT_UL_FR
   }
 }
 
+void AIOT_D2R_PHY_TX_Filter(c16_t *out, const c16_t *in, int length, Butter3_c16 *filt)
+{
+  butter3_c16_clear(filt);
+  butter3_c16_process(filt, in, out, length);
+}
+
+void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *channel, double SNR, NR_AIOT_UL_FRAME_PARMS *frame)
+{
+  for (int i = 0; i < frame->packet_samples; i++) {
+    s_re[0][i] = (double) in[i].r;
+    s_im[0][i] = (double) in[i].i;
+  }
+
+  int txlev = signal_energy((int32_t *) in, frame->nr_frame_parms.ofdm_symbol_size + frame->nr_frame_parms.nb_prefix_samples0);
+  double txlev_dBm = 10 * log10((double)txlev);
+  //printf("Signal energy: %d (%f dB)\n", txlev, txlev_dBm);
+
+  double ts = 1.0 / (frame->nr_frame_parms.subcarrier_spacing * frame->nr_frame_parms.ofdm_symbol_size);
+  // Compute AWGN variance
+  double sigma2_dBm = txlev_dBm + channel->path_loss_dB - SNR; // *((double)frame_parms->ofdm_symbol_size / r2d_subcarriers)
+  double sigma2 = pow(10, sigma2_dBm / 10);
+  //printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dBm);
+
+  multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + channel->channel_offset + 200, 0, 1);
+  add_noise(rxData,
+            (const double **)r_re,
+            (const double **)r_im,
+            sigma2,
+            frame->packet_samples + channel->channel_offset + 200,
+            0,
+            ts,
+            0,
+            0x0,
+            0x1,
+            frame->nr_frame_parms.nb_antennas_rx);
+
+  static int pass = MIN_SNR_DB;
+  if(testing_mode && pass++ == snr_plot) {
+    // Save channel output
+    double *output = malloc(rx_size * 2 * sizeof(double));
+
+    for (int i = 0; i < rx_size; i++) {
+      output[2 * i] = r_re[0][i];
+      output[2 * i + 1] = r_im[0][i];
+    }
+    
+    sprintf(filename, "%s/D2R_Channel.m", foldername);
+    LOG_M(filename, "Channel_sig", output, rx_size, 1, 8);
+
+    free(output);
+  }
+}
+
+void AIOT_D2R_PHY_RX_Envelope_Detector(int16_t *envelope, const c16_t **rxData, int rx_size)
+{
+  // Envelope detector (squared)
+  for (int i = 0; i < rx_size; i++) {
+    //envelope[i] = iSqrt(rxData[0][i].r * rxData[0][i].r + rxData[0][i].i * rxData[0][i].i);
+
+    //envelope[i] = c16MulConjShift(rxData[0][i], rxData[0][i], 15).r;
+
+    // 1. Calculate the absolute values (still Q1.15).
+    int16_t abs_I = abs(rxData[0][i].r);
+    int16_t abs_Q = abs(rxData[0][i].i);
+
+    int16_t max_val;
+    int16_t min_val;
+
+    // 2. Determine Max and Min
+    if (abs_I > abs_Q) {
+        max_val = abs_I;
+        min_val = abs_Q;
+    } else {
+        max_val = abs_Q;
+        min_val = abs_I;
+    }
+
+    // 3. Calculate: Magnitude ≈ (1 * max_val) + (1/4 * min_val)
+    
+    // Multiplication by 1/4 is a right shift by 2 (>> 2).
+    // The result 'beta_min' is still in Q1.15.
+    int16_t beta_min = min_val >> 2;
+
+    // 4. Final Addition
+    envelope[i] = min(max_val + beta_min, 32767); // Clamp to uint16_t max
+  }
+}
+
+void AIOT_D2R_PHY_RX_Filter(int16_t *out, const int16_t *in, int length, Butter3_Q15 *filt)
+{
+  butter3_clear(filt);
+  butter3_process(filt, in, out, length);
+
+  /*butterworth_reset(filt);
+  for(int i = 0; i < length; i++) {
+    out[i] = BP_process(filt, in[i]);
+  }*/
+}
+
+int *Preamble_ideal = NULL;
+
+int *generate_preamble_ideal_sequence(NR_AIOT_UL_FRAME_PARMS *frame)
+{
+  // Compute lengths for preamble
+  frame->preamble_samples = frame->N_preamble * frame->N_SFS * 2 * frame->N_chip;
+
+  // Generate ideal SIP sequence for correlation
+  Preamble_ideal = malloc(frame->preamble_samples * sizeof(int));
+  int value0 = 0;
+  int value1 = 1;
+  int samples = 0;
+
+  // Add D-TAS preamble (short or long)
+  uint32_t D_TAS_preamble = (frame->L_preamble) ? D_TAS_31_BITS : D_TAS_7_BITS;
+
+  for(int i = 0; i < frame->N_preamble; i++) {
+    unsigned bit = (D_TAS_preamble >> (frame->N_preamble - 1 - i)) & 0x01;
+
+    // Prepare bits for Manchester encoding
+    const int valueBit0 = ((bit) ? value0 : value1);
+    const int valueBit1 = ((bit) ? value1 : value0);
+
+    // Repeat each bit N_SFS times with OOK modulation
+    for(int j = 0; j < frame->N_SFS; j++) {
+      for(int k = 0; k < frame->N_chip; k++) {
+        Preamble_ideal[samples++] = valueBit0;
+      }
+      for(int k = 0; k < frame->N_chip; k++) {
+        Preamble_ideal[samples++] = valueBit1;
+      }
+    }
+  }
+
+  // Find mean of the SIP signal
+  /*double Preamble_mean = 0;
+  for (int i = 0; i < frame->preamble_samples; i++) {
+    Preamble_mean += Preamble_ideal[i];
+  }
+  Preamble_mean /= frame->preamble_samples;
+
+  // Remove DC component
+  for (int i = 0; i < frame->preamble_samples; i++) {
+    Preamble_ideal[i] -= Preamble_mean;
+  }*/
+
+  frame->preamble_threshold = frame->preamble_samples/2 * 6000 * 0.85;
+  printf("Calculated preamble threshold: %d\n", frame->preamble_threshold);
+
+  return Preamble_ideal;
+}
+
+#define CORR_THRESHOLD 1000000
+
+void AIOT_D2R_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, NR_AIOT_UL_FRAME_PARMS *frame)
+{
+  static int pass = MIN_SNR_DB;
+
+  // Correlate received signal with ideal Preamble
+  int Preamble_offset = 0;
+  int64_t max_corr = 0;
+
+  for (int i = 0; i < rx_size - frame->preamble_samples; i++) {
+    int64_t sum = 0;
+    for (int j = 0; j < frame->preamble_samples; j++) {
+      sum += signal[i + j] * Preamble_ideal[j];
+    }
+
+    // Threshold to detect Preamble presence
+    if(sum > frame->preamble_threshold) {
+      if(sum > max_corr) {
+        max_corr = sum;
+        Preamble_offset = i;
+      }
+    } else {
+      if(Preamble_offset != 0) {
+        int start = Preamble_offset;
+
+        // Check 5 shift chip positions ahead to see if they are stronger
+        for(int k = 1; k <= 5; k++) {
+          sum = 0;
+          for (int j = 0; j < frame->preamble_samples; j++) {
+            sum += signal[start + (k*frame->N_chip*2) + j] * Preamble_ideal[j];
+          }
+
+          if(sum > max_corr) {
+            max_corr = sum;
+            Preamble_offset = start + (k*frame->N_chip*2);
+          } else {
+            break;
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  if(testing_mode) {
+    printf("Detected Preamble at offset %d\n", Preamble_offset);
+
+    if(testing_mode && pass == snr_plot) {
+      // Correlate received signal with ideal Preamble
+      double *correlation = malloc((rx_size - frame->preamble_samples) * sizeof(double));
+      memset(correlation, 0, (rx_size - frame->preamble_samples) * sizeof(double));
+
+      for (int i = 0; i < rx_size - frame->preamble_samples; i++) {
+        for (int j = 0; j < frame->preamble_samples; j++) {
+          correlation[i] += signal[i + j] * Preamble_ideal[j];
+        }
+      }
+
+      sprintf(filename, "%s/D2R_Correlation.m", foldername);
+      LOG_M(filename, "Correlation_sig", correlation, rx_size - frame->preamble_samples, 1, 7);
+
+      free(correlation);
+    }
+
+    pass++;
+  }
+
+  int index = Preamble_offset + frame->preamble_samples;
+  frame->packet_payload_size = frame->payload_size;
+
+  for(int i = 0; i < frame->packet_payload_size; i++) {
+    if(i % frame->N_midamble_space == 0 && i != 0) {
+      // Insert midamble (fixed pattern 101010...)
+      index += frame->preamble_samples;
+    }
+
+    int sum1 = 0;
+    int sum2 = 0;
+
+    // Repeat each bit N_SFS times with OOK modulation
+    for(int j = 0; j < frame->N_SFS; j++) {
+      for(int k = 0; k < frame->N_chip; k++) {
+        sum1 += signal[index++];
+      }
+      for(int k = 0; k < frame->N_chip; k++) {
+        sum2 += signal[index++];
+      }
+    }
+
+    // Decision based on sums
+    int bit0 = (sum1 > sum2) ? 0 : 1;
+    rx_payload[i/8] = (rx_payload[i/8] << 1) | bit0;
+  }
+}
+
+void SIM_Channel_propagate_free(c16_t **rxData, int nb_antennas_rx)
+{
+  if (rxData != NULL) {
+    for (int i = 0; i < nb_antennas_rx; i++) {
+      if (rxData[i] != NULL)
+        free(rxData[i]);
+    }
+    free(rxData);
+  }
+}
+
+void free_Preamble_ideal_sequence(int *Preamble_ideal)
+{
+  if(Preamble_ideal) {
+    free(Preamble_ideal);
+  }
+}
 
 void AIOT_D2R_PHY_TX_Signal_free(c16_t *txData)
 {
   if (txData != NULL)
     free(txData);
+}
+
+double calculate_BER(uint8_t *rx_payload, uint8_t *payload, NR_AIOT_UL_FRAME_PARMS *frame_parms)
+{
+  int BER_errors = 0;
+  for (int i = 0; i < frame_parms->packet_payload_size/8; i++) {
+    int diff = payload[i] ^ rx_payload[i];
+
+    // Count ones in diff
+    for (int b = 0; b < 8; b++) {
+      BER_errors += (diff >> b) & 0x01;
+    }
+  }
+
+  return (double)BER_errors / (double)frame_parms->packet_payload_size;
 }
 
 time_stats_t time_stats = {0};
@@ -259,8 +931,8 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_UL_FRAME_PARMS *frame_p
   printf("\n");
 
   // Setup radio channel
-  channel_model->sampling_rate = 30.72; // N_RB2sampling_rate(frame_parms->nr_frame_parms.N_RB_DL); // in MHz
-  channel_model->bw = frame_parms->nr_frame_parms.N_RB_DL * 0.2/2; // N_RB2channel_bandwidth(frame_parms->nr_frame_parms.N_RB_DL); // in MHz
+  channel_model->sampling_rate = 1.92; // N_RB2sampling_rate(frame_parms->nr_frame_parms.N_RB_DL); // in MHz
+  channel_model->bw = 0.015; // N_RB2channel_bandwidth(frame_parms->nr_frame_parms.N_RB_DL); // in MHz
 
   printf("Channel parameters:\n");
   printf("  Channel model: %s\n", channel_model->channel_model == AWGN ? "AWGN" : "TDL");
@@ -291,22 +963,257 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_UL_FRAME_PARMS *frame_p
                                         channel_model->path_loss_dB,
                                         channel_model->noise_power_dB);
 
-  c16_t *txData = NULL;
+  c16_t *txData = NULL, *txFiltered = NULL;
+  c16_t **rxData = NULL;
+  int16_t *envelope, *filteredData;
+  uint8_t *rx_payload;
+  rx_size = frame_parms->packet_samples + channel_model->delay + 200;
 
-  txData = malloc(frame_parms->packet_size * sizeof(c16_t));
-  memset(txData, 0, frame_parms->packet_size * sizeof(c16_t));
+  //generate_butter_coeffs_f64(&filter, channel_model->bw * 1e6, (double)channel_model->sampling_rate * 1e6);
+  Butter3_c16 filter;
+  butter3_c16_init(&filter, channel_model->bw * 1e6, (double)channel_model->sampling_rate * 1e6);
 
-  // TODO: Block repetition
-  // TODO: Channel coding
+  Butter3_Q15 filter_q15;
+  butter3_init(&filter_q15, 600e3, (double)channel_model->sampling_rate * 1e6);
 
-  AIOT_D2R_PHY_TX_Signal(txData, payload, frame_parms);
+  /*ButterworthBP3 bpFilter;
+  BP_calculate_coefficients((double)channel_model->sampling_rate * 1e6, frame_parms->f_min, frame_parms->f_max, &bpFilter);
 
-  sprintf(filename, "%s/D2R_TX_IQ.m", foldername);
-  LOG_M(filename, "TX_IQ_sig", txData, frame_parms->packet_size, 1, 1);
+  printf("Bandpass Butterworth filter coefficients:\n");
+  for(int i=0; i<3; i++) {
+      printf(" Section %d: b0=%d, b1=%d, b2=%d, a1=%d, a2=%d\n", i,
+             bpFilter.sections[i].b0,
+             bpFilter.sections[i].b1,
+             bpFilter.sections[i].b2,
+             bpFilter.sections[i].a1,
+             bpFilter.sections[i].a2);
+  }*/
+
+  txData = malloc(frame_parms->packet_samples * sizeof(c16_t));
+  memset(txData, 0, frame_parms->packet_samples * sizeof(c16_t));
+
+  txFiltered = malloc(frame_parms->packet_samples * sizeof(c16_t));
+  memset(txFiltered, 0, frame_parms->packet_samples * sizeof(c16_t));
+
+  rxData = malloc(frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(c16_t *));
+
+  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+    rxData[i] = calloc(1, rx_size * sizeof(c16_t));
+    memset(rxData[i], 0, rx_size * sizeof(c16_t));
+  }
+
+  envelope = malloc(rx_size * sizeof(int16_t));
+  filteredData = malloc(rx_size * sizeof(int16_t));
+
+  rx_payload = malloc(MAX_AIOT_D2R_PACKET_SIZE);
+  memset(rx_payload, 0, MAX_AIOT_D2R_PACKET_SIZE);
+
+  double ber_results[snr_steps];
+  memset(ber_results, 0, snr_steps * sizeof(double));
+
+  // Initialization of transmit IQ signals
+  s_re = malloc(frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
+  s_im = malloc(frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
+
+  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
+    s_re[i] = calloc(1, rx_size * sizeof(double));
+    s_im[i] = calloc(1, rx_size * sizeof(double));
+  }
+
+  bzero(s_re[0], rx_size * sizeof(double));
+  bzero(s_im[0], rx_size * sizeof(double));
+
+  // Initialization of receive IQ signals
+  r_re = malloc(frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
+  r_im = malloc(frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
+
+  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+    r_re[i] = calloc(1, rx_size * sizeof(double));
+    r_im[i] = calloc(1, rx_size * sizeof(double));
+  }
+
+  bzero(r_re[0], rx_size * sizeof(double));
+  bzero(r_im[0], rx_size * sizeof(double));
+
+  Preamble_ideal = generate_preamble_ideal_sequence(frame_parms);
+
+  if(testing_mode) {
+    int preamble_samples = frame_parms->N_preamble * frame_parms->N_SFS * 2 * frame_parms->N_chip;
+    sprintf(filename, "%s/D2R_Preamble_Ideal.m", foldername);
+    LOG_M(filename, "Preamble_Ideal_sig", Preamble_ideal, preamble_samples, 1, 2);
+  }
+
+  if(testing_timing) {
+    start_meas(&time_stats);
+  }
+
+  double time_tx_REs = 0.0;
+  double time_tx_signal = 0.0;
+  double time_channel = 0.0;
+  double time_envelope = 0.0;
+  double time_filter = 0.0;
+  double time_downsample = 0.0;
+  double time_rx_packet = 0.0;
+  double time_ber = 0.0;
+
+  for(int snr = snr_min; snr <= snr_max; snr += SNR_STEP_DB) {
+    channel_model->SNR = snr;
+
+    for(int trials = 0; trials < snr_trials; trials++) {
+      for(int i = 0; i < payloadSize / 8; i++) {
+        payload[i] = uniformrandom() * 256;
+      }
+
+      if(testing_mode) {
+        printf("-------------------------------\n");
+        printf("Testing SNR %d dB\n", snr);
+      }
+
+      // TODO: Block repetition
+      // TODO: Channel coding
+      AIOT_D2R_PHY_TX_Signal(txData, payload, frame_parms);
+      if(testing_mode && snr == snr_plot && trials == 0) {
+        sprintf(filename, "%s/D2R_TX_IQ.m", foldername);
+        LOG_M(filename, "TX_IQ_sig", txData, frame_parms->packet_samples, 1, 1);
+      }
+
+      AIOT_D2R_PHY_TX_Filter(txFiltered, (const c16_t *) txData, frame_parms->packet_samples, &filter);
+      if(testing_mode && snr == snr_plot && trials == 0) {
+        sprintf(filename, "%s/D2R_TX_Filter.m", foldername);
+        LOG_M(filename, "TX_Filter_sig", txFiltered, frame_parms->packet_samples, 1, 1);
+      }
+
+      if(testing_timing) {
+        stop_meas(&time_stats);
+        time_tx_REs = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&time_stats);
+        start_meas(&time_stats);
+        printf("TX Packet generation time: %f us\n", time_tx_REs);
+      }
+
+      SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, channel_model->SNR, frame_parms);
+      if(testing_mode && snr == snr_plot && trials == 0) {
+        sprintf(filename, "%s/D2R_RX_IQ.m", foldername);
+        LOG_M(filename, "RX_IQ_sig", rxData[0], rx_size, 1, 1);
+      }
+
+      if(testing_timing) {
+        stop_meas(&time_stats);
+        time_channel = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&time_stats);
+        start_meas(&time_stats);
+        printf("Channel propagation time: %f us\n", time_channel);
+      }
+
+      // Envelope detector
+      AIOT_D2R_PHY_RX_Envelope_Detector(envelope, (const c16_t **) rxData, rx_size);
+      if(testing_mode && snr == snr_plot && trials == 0) {
+        sprintf(filename, "%s/D2R_Envelope.m", foldername);
+        LOG_M(filename, "Envelope_sig", envelope, rx_size, 1, 0);
+      }
+
+      if(testing_timing) {
+        stop_meas(&time_stats);
+        time_envelope = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&time_stats);
+        start_meas(&time_stats);
+        printf("Envelope detection time: %f us\n", time_envelope);
+      }
+
+      // Low-pass filter
+      AIOT_D2R_PHY_RX_Filter(filteredData, (const int16_t *) envelope, rx_size, &filter_q15);
+      if(testing_mode && snr == snr_plot && trials == 0) {
+        sprintf(filename, "%s/D2R_Filter.m", foldername);
+        LOG_M(filename, "Filter_sig", filteredData, rx_size, 1, 0);
+      }
+
+      if(testing_timing) {
+        stop_meas(&time_stats);
+        time_filter = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&time_stats);
+        start_meas(&time_stats);
+        printf("Filtering time: %f us\n", time_filter);
+      }
+
+      AIOT_D2R_PHY_RX_GetPacket(rx_payload, (const int16_t *) filteredData, frame_parms);
+
+      if(testing_timing) {
+        stop_meas(&time_stats);
+        time_rx_packet = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&time_stats);
+        start_meas(&time_stats);
+        printf("Packet extraction time: %f us\n", time_rx_packet);
+      }
+
+      double ber = calculate_BER(rx_payload, payload, frame_parms);
+      if(frame_parms->packet_payload_size != payloadSize || (ber > 0.0)) {
+        ber_results[snr - snr_min] += 1;
+
+        if(testing_mode) {
+          printf("Payload: \n");
+          for(int i = 0; i < payloadSize / 8; i++) {
+            printf("%02X ", payload[i]);
+          }
+          printf("\n");
+
+          printf("Received payload (%d bits):\n", frame_parms->packet_payload_size);
+          for(int i = 0; i < (frame_parms->packet_payload_size+7)/8; i++) {
+            printf("%02X ", rx_payload[i]);
+          }
+          printf("\n");
+          printf("BER: %f, Payload size: %d\n", ber, frame_parms->packet_payload_size);
+        }
+      }
+
+      if(testing_timing) {
+        stop_meas(&time_stats);
+        time_ber = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&time_stats);
+        start_meas(&time_stats);
+        printf("BER calculation time: %f us\n", time_ber);
+        printf("Total time per packet: %f us\n", time_tx_REs + time_tx_signal + time_channel + time_envelope + time_filter + time_downsample + time_rx_packet + time_ber);
+      }
+    }
+  }
+
+  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
+    free(s_re[i]);
+    free(s_im[i]);
+  }
+
+  free(s_re);
+  free(s_im);
+
+  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+    free(r_re[i]);
+    free(r_im[i]);
+  }
+
+  free(r_re);
+  free(r_im);
   
   AIOT_D2R_PHY_TX_Signal_free(txData);
+  SIM_Channel_propagate_free(rxData, frame_parms->nr_frame_parms.nb_antennas_rx);
+
+  free_Preamble_ideal_sequence(Preamble_ideal);
 
   free_channel_desc_scm(channel_params);
+
+  free(rx_payload);
+  free(envelope);
+  free(filteredData);
+
+  printf("-------------------------------\n");
+  printf("            Results\n");
+  printf("-------------------------------\n");
+  for(int snr = MIN_SNR_DB; snr <= MAX_SNR_DB; snr += SNR_STEP_DB) {
+    printf("SNR %d dB: BER = %f\n", snr, ber_results[snr - MIN_SNR_DB]);
+  }
+
+  if(!testing_mode) {
+    sprintf(filename, "%s/BLER_SIZE%d.m", foldername, payloadSize);
+    LOG_M(filename, "BLER", ber_results, MAX_SNR_DB - MIN_SNR_DB + 1, 1, 7);
+  }
 }
 
 configmodule_interface_t *uniqCfg = NULL;
@@ -372,7 +1279,7 @@ int main(int argc, char **argv)
   frame_parms->R_SFS = 0; // N_SFS = 1
   frame_parms->I_bit = 0; // interval I_bit not used in this
   frame_parms->L_preamble = false; // short preamble
-  frame_parms->I_add = true; // additional midamble
+  frame_parms->I_add = false; // additional midamble
   frame_parms->R_code = false; // no FEC
 
   // Fill in channel model default parameters
@@ -388,7 +1295,7 @@ int main(int argc, char **argv)
   };
 
   int c;
-  while ((c = getopt(argc, argv, "--:O:h:L:R:P:p:S:N:D:t:T:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:h:L:P:p:S:N:D:t:T:R:r:s:i:l:a:b:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -401,28 +1308,25 @@ int main(int argc, char **argv)
         printf("%s <options>\n", argv[0]);
         printf("-h This message\n");
         printf("-L <log level, 0(errors), 1(warning), 2(analysis), 3(info), 4(debug), 5(trace)>\n");
-        printf("-R Number of RBs (supported: 1, 6, 25, 50, 100)\n");
         printf("-P Payload in hex string (e.g. 1234ABCD)\n");
         printf("-p Payload size in bits (max %d)\n", MAX_AIOT_D2R_PAYLOAD_SIZE * 8);
         printf("-S SNR in dB\n");
         printf("-N Path loss in dB\n");
         printf("-D Delay in samples\n");
         printf("-t Testing mode, parameter is SNR to plot\n");
+        printf("-T Testing timing mode\n");
+
+        printf("-R Channel coding: 0=No FEC, 1=FEC\n");
+        printf("-r Block repetition: 1=1, 2=2\n");
+        printf("-s Small frequency shift factor (0 to 7)\n");
+        printf("-i Midamble interval: 0=16, 1=32, 2=64, 3=128\n");
+        printf("-l Preamble length: 0=short(7 bits), 1=long(31 bits)\n");
+        printf("-a Additional midamble: 0=no, 1=yes\n");
+        printf("-b Bit duration option T_bit: 0(T_bit=2*tau), 1(4*tau), 2(8*tau), 3(16*tau)\n");
         exit(-1);
         break;
       case 'L':
         loglvl = atoi(optarg);
-        break;
-      case 'R':
-        int RBs = atoi(optarg);
-        if (RBs != 1 && RBs != 6 && RBs != 25 && RBs != 50 && RBs != 100) {
-          printf("Error: number of RBs %d not supported, use 1, 6, 25, 50 or 100\n", RBs);
-          exit(-1);
-        } else {
-          printf("Using %d RBs\n", RBs);
-          frame_parms->nr_frame_parms.N_RB_DL = RBs;
-          frame_parms->nr_frame_parms.N_RB_UL = RBs;
-        }
         break;
 
       case 'P':
@@ -470,6 +1374,72 @@ int main(int argc, char **argv)
       
       case 'T':
         testing_timing = true;
+        break;
+
+      case 'R':
+        if (atoi(optarg) != 0 && atoi(optarg) != 1)
+        {
+          printf("Error: R_code must be 0 for No FEC or 1 for FEC\n");
+          exit(-1);
+        }
+        
+        frame_parms->R_code = (atoi(optarg) == 1) ? true : false;
+        printf("Using channel coding: %s\n", (frame_parms->R_code) ? "FEC" : "No FEC");
+        break;
+      
+      case 'r':
+        if(atoi(optarg) != 1 && atoi(optarg) != 2)
+        {
+          printf("Error: R_block must be 1 or 2\n");
+          exit(-1);
+        }
+        frame_parms->R_block = (atoi(optarg) == 2) ? true : false;
+        printf("Using block repetition: %s\n", (frame_parms->R_block) ? "2" : "1");
+        break;
+
+      case 's':
+        if(atoi(optarg) < 0 || atoi(optarg) > 7) {
+          printf("Error: R_SFS must be between 0 and 7\n");
+          exit(-1);
+        }
+        frame_parms->R_SFS = atoi(optarg);
+        printf("Using small frequency shift factor: %d\n", frame_parms->R_SFS);
+        break;
+
+      case 'i':
+        if(atoi(optarg) < 0 || atoi(optarg) > 3) {
+          printf("Error: I_bit must be between 0 and 3\n");
+          exit(-1);
+        }
+        frame_parms->I_bit = atoi(optarg);
+        printf("Using midamble interval: %d bits\n", I_BIT_TABLE[frame_parms->I_bit]);
+        break;
+
+      case 'l':
+        if(atoi(optarg) != 0 && atoi(optarg) != 1) {
+          printf("Error: L_preamble must be 0 for short or 1 for long\n");
+          exit(-1);
+        }
+        frame_parms->L_preamble = (atoi(optarg) == 1) ? true : false;
+        printf("Using preamble length: %s\n", (frame_parms->L_preamble) ? "long (31 bits)" : "short (7 bits)");
+        break;
+
+      case 'a':
+        if(atoi(optarg) != 0 && atoi(optarg) != 1) {
+          printf("Error: I_add must be 0 for no or 1 for yes\n");
+          exit(-1);
+        }
+        frame_parms->I_add = (atoi(optarg) == 1) ? true : false;
+        printf("Using additional midamble: %s\n", (frame_parms->I_add) ? "yes" : "no");
+        break;
+
+      case 'b':
+        if(atoi(optarg) < 0 || atoi(optarg) > 3) {
+          printf("Error: T_bit must be between 0 and 3\n");
+          exit(-1);
+        }
+        frame_parms->T_bit = atoi(optarg);
+        printf("Using bit duration option T_bit=%d\n", frame_parms->T_bit);
         break;
     }
   }

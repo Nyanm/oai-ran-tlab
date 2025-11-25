@@ -678,7 +678,6 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const uint16_t *signal, NR_A
   pass++;
 }
 
-
 void AIOT_R2D_PHY_TX_REs_free(c16_t *REsPacket)
 {
   if (REsPacket != NULL)
@@ -791,7 +790,7 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
                                         channel_model->noise_power_dB);
 
   c16_t *REsPacket = NULL, *txData = NULL;
-  c16_t **rxData;
+  c16_t **rxData = NULL;
   uint16_t *envelope, *filteredData, *downSampled, *cleared;
   uint32_t *energy;
   uint8_t *rx_payload;

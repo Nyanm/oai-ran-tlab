@@ -290,7 +290,14 @@ struct NR_AIOT_UL_FRAME_PARMS {
   int N_SFS; // value of small frequency shift
   int N_midamble_space; // number of bits in D2R midamble
   int payload_size; // decoded payload size in bits
-  int packet_size;
+  int packet_samples; // number of samples in D2R packet
+  int preamble_samples; // number of samples in D2R preamble
+
+  // rx parameters
+  double f_min; // minimum frequency shift
+  double f_max; // maximum frequency shift
+  int preamble_threshold; // correlation threshold for preamble detection
+  int packet_payload_size; // decoded payload size in bits
 };
 
 
