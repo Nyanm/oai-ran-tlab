@@ -50,6 +50,10 @@
 #include <openair1/SIMULATION/TOOLS/sim.h>
 #include "rfsimulator.h"
 
+#ifdef ENABLE_TAPS_CLIENT
+#include "../vrtsim/taps_client.h"
+#endif
+
 #define PORT 4043 // default TCP port for this simulator
 //
 // CirSize defines the number of samples inquired for a read cycle
@@ -101,6 +105,84 @@ typedef enum { SIMU_ROLE_SERVER = 1, SIMU_ROLE_CLIENT } simuRole;
       {"offset", "<channel offset in samps>\n", simOpt, .u64ptr = &(rfsimulator->chan_offset), .defint64val = 0, TYPE_UINT64, 0}, \
     {"prop_delay",             "<propagation delay in ms>\n",         simOpt,  .dblptr=&(rfsimulator->prop_delay_ms),  .defdblval=0.0,                   TYPE_DOUBLE,    0 },\
     {"wait_timeout",           "<wait timeout if no UE connected>\n", simOpt,  .iptr=&(rfsimulator->wait_timeout),     .defintval=1,                     TYPE_INT,       0 },\
+  };
+// clang-format on
+static void getset_currentchannels_type(char *buf, int debug, webdatadef_t *tdata, telnet_printfunc_t prnt);
+extern int get_currentchannels_type(char *buf, int debug, webdatadef_t *tdata, telnet_printfunc_t prnt); // in random_channel.c
+static int rfsimu_setchanmod_cmd(char *buff, int debug, telnet_printfunc_t prnt, void *arg);
+static int rfsimu_setdistance_cmd(char *buff, int debug, telnet_printfunc_t prnt, void *arg);
+static int rfsimu_getdistance_cmd(char *buff, int debug, telnet_printfunc_t prnt, void *arg);
+static int rfsimu_vtime_cmd(char *buff, int debug, telnet_printfunc_t prnt, void *arg);
+// clang-format off
+static telnetshell_cmddef_t rfsimu_cmdarray[] = {
+    {"show models", "", (cmdfunc_t)rfsimu_setchanmod_cmd, {(webfunc_t)getset_currentchannels_type}, TELNETSRV_CMDFLAG_WEBSRVONLY | TELNETSRV_CMDFLAG_GETWEBTBLDATA, NULL},
+    {"setmodel", "<model name> <model type>", (cmdfunc_t)rfsimu_setchanmod_cmd, {NULL}, TELNETSRV_CMDFLAG_PUSHINTPOOLQ | TELNETSRV_CMDFLAG_TELNETONLY, NULL},
+    {"setdistance", "<model name> <distance>", (cmdfunc_t)rfsimu_setdistance_cmd, {NULL}, TELNETSRV_CMDFLAG_PUSHINTPOOLQ | TELNETSRV_CMDFLAG_NEEDPARAM },
+    {"getdistance", "<model name>", (cmdfunc_t)rfsimu_getdistance_cmd, {NULL}, TELNETSRV_CMDFLAG_PUSHINTPOOLQ},
+    {"vtime", "", (cmdfunc_t)rfsimu_vtime_cmd, {NULL}, TELNETSRV_CMDFLAG_PUSHINTPOOLQ | TELNETSRV_CMDFLAG_AUTOUPDATE},
+    {"", "", NULL},
+};
+// clang-format on
+static telnetshell_cmddef_t *setmodel_cmddef = &(rfsimu_cmdarray[1]);
+
+static telnetshell_vardef_t rfsimu_vardef[] = {{"", 0, 0, NULL}};
+static uint64_t CirSize = minCirSize;
+typedef c16_t sample_t; // 2*16 bits complex number
+
+typedef struct buffer_s {
+  int conn_sock;
+  openair0_timestamp lastReceivedTS;
+  bool headerMode;
+  bool trashingPacket;
+  samplesBlockHeader_t th;
+  char *transferPtr;
+  uint64_t remainToTransfer;
+  char *circularBufEnd;
+  sample_t *circularBuf;
+  channel_desc_t *channel_model;
+} buffer_t;
+
+typedef struct {
+  int listen_sock, epollfd;
+  pthread_mutex_t Sockmutex;
+  unsigned int nb_cnx;
+  openair0_timestamp nextRxTstamp;
+  openair0_timestamp lastWroteTS;
+  simuRole role;
+  char *ip;
+  uint16_t port;
+  int saveIQfile;
+  buffer_t buf[MAX_FD_RFSIMU];
+  int next_buf;
+  int rx_num_channels;
+  int tx_num_channels;
+  double sample_rate;
+  double rx_freq;
+  double tx_bw;
+  int channelmod;
+  double chan_pathloss;
+  double chan_forgetfact;
+  uint64_t chan_offset;
+  void *telnetcmd_qid;
+  poll_telnetcmdq_func_t poll_telnetcmdq;
+  int wait_timeout;
+  double prop_delay_ms;
+  char *taps_socket;
+  channel_desc_t *ext_channel_desc;
+} rfsimulator_state_t;
+
+#define RFSIMULATOR_PARAMS_DESC {					\
+    {"serveraddr",             "<ip address to connect to>\n",        simOpt,  .strptr=&rfsimulator->ip,               .defstrval="127.0.0.1",           TYPE_STRING,    0 },\
+      {"serverport", "<port to connect to>\n", simOpt, .u16ptr = &(rfsimulator->port), .defuintval = PORT, TYPE_UINT16, 0},       \
+      {RFSIMU_OPTIONS_PARAMNAME, RFSIM_CONFIG_HELP_OPTIONS, 0, .strlistptr = NULL, .defstrlistval = NULL, TYPE_STRINGLIST, 0},    \
+    {"IQfile",                 "<file path to use when saving IQs>\n",simOpt,  .strptr=&saveF,                         .defstrval="/tmp/rfsimulator.iqs",TYPE_STRING,    0 },\
+      {"modelname", "<channel model name>\n", simOpt, .strptr = &modelname, .defstrval = "AWGN", TYPE_STRING, 0},                 \
+      {"ploss", "<channel path loss in dB>\n", simOpt, .dblptr = &(rfsimulator->chan_pathloss), .defdblval = 0, TYPE_DOUBLE, 0},  \
+    {"forgetfact",             "<channel forget factor ((0 to 1)>\n", simOpt,  .dblptr=&(rfsimulator->chan_forgetfact),.defdblval=0,                     TYPE_DOUBLE,    0 },\
+      {"offset", "<channel offset in samps>\n", simOpt, .u64ptr = &(rfsimulator->chan_offset), .defint64val = 0, TYPE_UINT64, 0}, \
+    {"prop_delay",             "<propagation delay in ms>\n",         simOpt,  .dblptr=&(rfsimulator->prop_delay_ms),  .defdblval=0.0,                   TYPE_DOUBLE,    0 },\
+    {"wait_timeout",           "<wait timeout if no UE connected>\n", simOpt,  .iptr=&(rfsimulator->wait_timeout),     .defintval=1,                     TYPE_INT,       0 },\
+    {"taps-socket",            "<TCP address for external taps emitter>\n",    simOpt,  .strptr=&(rfsimulator->taps_socket),    .defstrval=NULL,                  TYPE_STRING,    0 },\
   };
 // clang-format on
 static void getset_currentchannels_type(char *buf, int debug, webdatadef_t *tdata, telnet_printfunc_t prnt);
@@ -989,10 +1071,18 @@ static int rfsimulator_read(openair0_device *device, openair0_timestamp *ptimest
             memset(temp_array, 0, sizeof(temp_array));
           }
           num_chanmod_channels++;
+          
+          channel_desc_t *active_channel = ptr->channel_model;
+#ifdef ENABLE_TAPS_CLIENT
+          if (t->ext_channel_desc != NULL) {
+            active_channel = t->ext_channel_desc;
+          }
+#endif
+          
           rxAddInput(ptr->circularBuf,
                      temp_array[a_rx],
                      a_rx,
-                     ptr->channel_model,
+                     active_channel,
                      nsamps,
                      t->nextRxTstamp,
                      CirSize,
@@ -1084,6 +1174,15 @@ static int rfsimulator_reset_stats(openair0_device *device) {
 }
 static void rfsimulator_end(openair0_device *device) {
   rfsimulator_state_t *s = device->priv;
+  
+#ifdef ENABLE_TAPS_CLIENT
+  if (s->ext_channel_desc != NULL) {
+    LOG_I(HW, "RFSim: Stopping external taps client\n");
+    taps_client_stop();
+    s->ext_channel_desc = NULL;
+  }
+#endif
+  
   for (int i = 0; i < MAX_FD_RFSIMU; i++) {
     buffer_t *b = &s->buf[i];
     if (b->conn_sock >= 0)
@@ -1137,6 +1236,24 @@ int device_init(openair0_device *device, openair0_config_t *openair0_cfg) {
     rfsimulator->prop_delay_ms = rfsimulator->chan_offset * 1000 / rfsimulator->sample_rate;
     LOG_I(HW, "propagation delay %f ms, %lu samples\n", rfsimulator->prop_delay_ms, rfsimulator->chan_offset);
   }
+#ifdef ENABLE_TAPS_CLIENT
+  if (rfsimulator->taps_socket != NULL && rfsimulator->taps_socket[0] != '\0') {
+    LOG_I(HW, "RFSim: Connecting to external taps emitter at %s\n", rfsimulator->taps_socket);
+    
+    taps_client_connect(0,
+                        rfsimulator->taps_socket,
+                        openair0_cfg->tx_num_channels,
+                        openair0_cfg->rx_num_channels,
+                        &rfsimulator->ext_channel_desc);
+    
+    LOG_I(HW, "RFSim: External taps client initialized (TX=%d, RX=%d)\n",
+          openair0_cfg->tx_num_channels, openair0_cfg->rx_num_channels);
+  } else {
+    rfsimulator->ext_channel_desc = NULL;
+  }
+#else
+  rfsimulator->ext_channel_desc = NULL;
+#endif
   mutexinit(rfsimulator->Sockmutex);
   LOG_I(HW,
         "Running as %s\n",
