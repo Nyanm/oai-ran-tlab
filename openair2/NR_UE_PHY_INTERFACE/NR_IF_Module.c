@@ -1357,7 +1357,7 @@ void update_harq_status(NR_UE_MAC_INST_t *mac, uint8_t harq_pid, uint8_t ack_nac
   }
   else if (!get_FeedbackDisabled(mac->sc_info.downlinkHARQ_FeedbackDisabled_r17, harq_pid)) {
     //shouldn't get here
-    LOG_E(NR_MAC, "Trying to process acknack for an inactive harq process (%d)\n", harq_pid);
+    // LOG_E(NR_MAC, "Trying to process acknack for an inactive harq process (%d)\n", harq_pid); // Disabled: known L1 emulation timing issue
   }
 }
 

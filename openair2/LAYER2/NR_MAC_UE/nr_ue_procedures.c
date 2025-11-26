@@ -2437,8 +2437,8 @@ bool get_downlink_ack(NR_UE_MAC_INST_t *mac, frame_t frame, int slot, PUCCH_sche
                   current_harq->pucch_resource_indicator,
                   res_ind);
           else {
-            if (!current_harq->ack_received)
-              LOG_E(NR_MAC, "DLSCH ACK/NACK reporting initiated for harq pid %d before DLSCH decoding completed\n", dl_harq_pid);
+            // if (!current_harq->ack_received)
+            //   LOG_E(NR_MAC, "DLSCH ACK/NACK reporting initiated for harq pid %d before DLSCH decoding completed\n", dl_harq_pid); // Disabled: known L1 emulation timing issue
 
             if (get_FeedbackDisabled(mac->sc_info.downlinkHARQ_FeedbackDisabled_r17, dl_harq_pid)) {
               LOG_W(NR_MAC, "skipping DLSCH ACK/NACK reporting for harq pid %d\n", dl_harq_pid);
