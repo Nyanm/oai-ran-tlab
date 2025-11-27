@@ -55,9 +55,10 @@ if [[ $argument == "P5G_FXN_GH" ]]; then
 	sudo -E sed -i "s/ dst_mac_addr:.*/ dst_mac_addr: 6c:ad:ad:00:04:6c/" ${configFile}
 	sudo -E sed -i "s/ vlan:.*/ vlan: 2/" ${configFile}
 fi
-# Uncomment for below config
-#config="UL-Heavy"
+# Uncomment for below config. Because aerial is mounted as a volume the $configFile needs to be reverted.
+#config="UL-Heavy" # Commenting this line won't revert the change
 if [[ $config = "UL-Heavy" ]]; then
+	echo "Doing UL-heavy"
 	sudo -E sed -i "s/shm_log_level: 4/shm_log_level: 5/" ${configFile}
 	sudo -E sed -i "s/pusch_aggr_per_ctx:.*/pusch_aggr_per_ctx: 12/" ${configFile}
 	sudo -E sed -i "s/prach_aggr_per_ctx.*/prach_aggr_per_ctx: 4/" ${configFile}
