@@ -51,13 +51,13 @@ configFile=${cuBB_SDK}/cuPHY-CP/cuphycontroller/config/cuphycontroller_${argumen
 
 #Change this to the MAC address of the ORU
 sudo -E sed -i "s/ dst_mac_addr:.*/ dst_mac_addr: e8:c7:cf:ac:58:32/" ${configFile}
-if [ $argument == "P5G_FXN_GH" ]; then
+if [[ $argument == "P5G_FXN_GH" ]]; then
 	sudo -E sed -i "s/ dst_mac_addr:.*/ dst_mac_addr: 6c:ad:ad:00:04:6c/" ${configFile}
 	sudo -E sed -i "s/ vlan:.*/ vlan: 2/" ${configFile}
 fi
 # Uncomment for below config
 #config="UL-Heavy"
-if [ $config = "UL-Heavy" ]; then
+if [[ $config = "UL-Heavy" ]]; then
 	sudo -E sed -i "s/shm_log_level: 4/shm_log_level: 5/" ${configFile}
 	sudo -E sed -i "s/pusch_aggr_per_ctx:.*/pusch_aggr_per_ctx: 12/" ${configFile}
 	sudo -E sed -i "s/prach_aggr_per_ctx.*/prach_aggr_per_ctx: 4/" ${configFile}
