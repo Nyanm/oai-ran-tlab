@@ -121,8 +121,13 @@ static void tx_func(processingData_L1tx_t *info)
   // selection is implemented
   if (tx_slot_type == NR_DOWNLINK_SLOT || tx_slot_type == NR_MIXED_SLOT || get_softmodem_params()->continuous_tx || IS_SOFTMODEM_RFSIM 
     || cfg->analog_beamforming_ve.analog_beam_list) {
-    start_meas(&info->gNB->phy_proc_tx);
-    phy_procedures_gNB_TX(info, frame_tx, slot_tx, 1);
+    phy_procedures_gNB_TX(info->gNB,
+                          &sched_response.DL_req,
+                          &sched_response.TX_req,
+                          &sched_response.UL_dci_req,
+                          frame_tx,
+                          slot_tx,
+                          1);
   }
   processingData_RU_t syncMsgRU;
   syncMsgRU.frame_tx = frame_tx;
@@ -131,7 +136,6 @@ static void tx_func(processingData_L1tx_t *info)
   syncMsgRU.timestamp_tx = info->timestamp_tx;
   ru_ctrl_func((void *)&syncMsgRU);
   if (tx_slot_type == NR_DOWNLINK_SLOT || tx_slot_type == NR_MIXED_SLOT || get_softmodem_params()->continuous_tx || IS_SOFTMODEM_RFSIM) {
->>>>>>> 55c041f350 (RU control function for beam information (unfinished))
     LOG_D(PHY, "gNB: %d.%d : calling RU TX function\n", syncMsgRU.frame_tx, syncMsgRU.slot_tx);
     ru_tx_func((void *)&syncMsgRU);
     stop_meas(&info->gNB->phy_proc_tx);
