@@ -22,6 +22,15 @@ static void copy_c16_data_to_slot_memory(c16_t *src, c16_t *dst_slot, int nb_re_
 {
   memcpy(&dst_slot[nb_re_pusch * symbol], src, nb_re_pusch * sizeof(c16_t));
 }
+
+// Static thread-local buffers for T-Tracer to avoid dynamic allocation overhead
+// Sized for maximum configuration: 275 RBs * 12 subcarriers * 14 symbols * 4 layers * 4 RX antennas
+// Since data recording app supports only SISO, set nb_layers and nb_rx_ant to 1
+#define MAX_TTRACER_SLOT_BUFFER_SIZE (275 * 12 * 14 * 1 * 1)
+static _Thread_local c16_t ttracer_pusch_dmrs_slot_mem[MAX_TTRACER_SLOT_BUFFER_SIZE];
+static _Thread_local c16_t ttracer_pusch_ch_est_dmrs_pos_slot_mem[MAX_TTRACER_SLOT_BUFFER_SIZE];
+static _Thread_local c16_t ttracer_pusch_ch_est_dmrs_interpl_slot_mem[MAX_TTRACER_SLOT_BUFFER_SIZE];
+static _Thread_local c16_t ttracer_rxFext_slot_mem[MAX_TTRACER_SLOT_BUFFER_SIZE];
 #endif
 
 void nr_idft(int32_t *z, uint32_t Msc_PUSCH)
@@ -946,11 +955,11 @@ static void inner_rx(PHY_VARS_gNB *gNB,
                            frame_parms);
 #if T_TRACER
       int nb_re_pusch = NR_NB_SC_PER_RB * rel15_ul->rb_size;
-      // Assume assume Tx and Rx = 1
-      if (T_ACTIVE(T_GNB_PHY_UL_FD_PUSCH_IQ)) {
+      // Assume Tx and Rx = 1
+      if (T_ACTIVE(T_GNB_PHY_UL_FD_PUSCH_IQ) && rxFext_slot != NULL) {
         copy_c16_data_to_slot_memory(rxFext[aarx], rxFext_slot, nb_re_pusch, symbol);
       }
-      if (T_ACTIVE(T_GNB_PHY_UL_FD_CHAN_EST_DMRS_INTERPL)) {
+      if (T_ACTIVE(T_GNB_PHY_UL_FD_CHAN_EST_DMRS_INTERPL) && chFext_slot != NULL) {
         copy_c16_data_to_slot_memory(chFext[aatx][aarx], chFext_slot, nb_re_pusch, symbol);
       }
 #endif
@@ -1163,48 +1172,29 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
   LOG_D(PHY,"pusch %d.%d : ul_dmrs_symb_pos %x\n",frame,slot,rel15_ul->ul_dmrs_symb_pos);
 
   // Memories to store data for data recording
-  int buffer_length_slot = rel15_ul->rb_size * NR_NB_SC_PER_RB * 14; // 14 OFDM Symbols per slot
   int nb_rx_ant = frame_parms->nb_antennas_rx;
   int nb_layer = rel15_ul->nrOfLayers;
 
-  // Initialize memory for DMRS signals
+  // Point to static thread-local buffers or NULL depending on trace activation
   c16_t *pusch_dmrs_slot_mem = NULL;
-  // Initialize memory for channel estimates based on DMRS positions
   c16_t *pusch_ch_est_dmrs_pos_slot_mem = NULL;
-  // memory to store slot grid with channel coefficients based on DMRS positions after interpolation
   c16_t *pusch_ch_est_dmrs_interpl_slot_mem = NULL;
-  // memory to store extracted data including PUSCH + DMRS
   c16_t *rxFext_slot_mem = NULL;
 
 #if T_TRACER
-  if (nb_rx_ant == 1) {
-    // Initialize memory for DMRS signals
+  if (nb_rx_ant == 1 && nb_layer == 1) {
+    // Use static thread-local buffers - no initialization needed as all writes are explicit
     if (T_ACTIVE(T_GNB_PHY_UL_FD_DMRS))
-      if (pusch_dmrs_slot_mem == NULL){
-            pusch_dmrs_slot_mem = aligned_alloc(32, nb_layer * buffer_length_slot * sizeof(c16_t));
-            memset(pusch_dmrs_slot_mem, 0, sizeof(c16_t) * nb_layer * buffer_length_slot);
-          }
+      pusch_dmrs_slot_mem = ttracer_pusch_dmrs_slot_mem;
 
-    // Initialize memory for channel estimates based on DMRS positions
     if (T_ACTIVE(T_GNB_PHY_UL_FD_CHAN_EST_DMRS_POS))
-      if (pusch_ch_est_dmrs_pos_slot_mem == NULL){
-            pusch_ch_est_dmrs_pos_slot_mem = aligned_alloc(32, buffer_length_slot * nb_layer * nb_rx_ant * sizeof(c16_t));
-            memset(pusch_ch_est_dmrs_pos_slot_mem, 0, sizeof(c16_t) * buffer_length_slot * nb_layer * nb_rx_ant);
-          }
+      pusch_ch_est_dmrs_pos_slot_mem = ttracer_pusch_ch_est_dmrs_pos_slot_mem;
 
-    // memory to store slot grid with channel coefficients based on DMRS positions after interpolation
     if (T_ACTIVE(T_GNB_PHY_UL_FD_CHAN_EST_DMRS_INTERPL))
-      if (pusch_ch_est_dmrs_interpl_slot_mem == NULL){
-        pusch_ch_est_dmrs_interpl_slot_mem = aligned_alloc(32, buffer_length_slot * nb_layer * nb_rx_ant * sizeof(c16_t));
-        memset(pusch_ch_est_dmrs_interpl_slot_mem, 0, sizeof(c16_t) * buffer_length_slot * nb_layer * nb_rx_ant);
-      }
+      pusch_ch_est_dmrs_interpl_slot_mem = ttracer_pusch_ch_est_dmrs_interpl_slot_mem;
 
-    // memory to store extracted data including PUSCH + DMRS
     if (T_ACTIVE(T_GNB_PHY_UL_FD_PUSCH_IQ))
-      if (rxFext_slot_mem == NULL){
-          rxFext_slot_mem = aligned_alloc(32, buffer_length_slot * nb_rx_ant * sizeof(c16_t));
-          memset(rxFext_slot_mem, 0, sizeof(c16_t) * buffer_length_slot * nb_rx_ant);
-        }
+      rxFext_slot_mem = ttracer_rxFext_slot_mem;
   }
   else if (T_ACTIVE(T_GNB_PHY_UL_FD_DMRS) ||
         T_ACTIVE(T_GNB_PHY_UL_FD_CHAN_EST_DMRS_POS) ||
@@ -1492,7 +1482,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
   //                      + 9 bytes timestamp = HHMMSSMMM
   // Not Ready for MIMO
   int dmrs_port = get_dmrs_port(0, rel15_ul->dmrs_ports);
-  if (T_ACTIVE(T_GNB_PHY_UL_FD_DMRS)) {
+  if (T_ACTIVE(T_GNB_PHY_UL_FD_DMRS) && pusch_dmrs_slot_mem != NULL) {
     // Log GNB_PHY_UL_FD_DMRS using T-Tracer if activated
     // FORMAT = int,frame : int,slot : int,datetime_yyyymmdd : int,datetime_hhmmssmmm :
     // int,frame_type : int,freq_range : int,subcarrier_spacing : int,cyclic_prefix : int,symbols_per_slot :
@@ -1535,7 +1525,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
       T_BUFFER((c16_t *)(&(pusch_dmrs_slot_mem[0])), rel15_ul->rb_size * NR_NB_SC_PER_RB * rel15_ul->nr_of_symbols * 4));
   }
 
-  if (T_ACTIVE(T_GNB_PHY_UL_FD_CHAN_EST_DMRS_POS)) {
+  if (T_ACTIVE(T_GNB_PHY_UL_FD_CHAN_EST_DMRS_POS) && pusch_ch_est_dmrs_pos_slot_mem != NULL) {
     // Log GNB_PHY_UL_FD_CHAN_EST_DMRS_POS using T-Tracer if activated
     // FORMAT = int,frame : int,slot : int,datetime_yyyymmdd : int,datetime_hhmmssmmm :
     // int,frame_type : int,freq_range : int,subcarrier_spacing : int,cyclic_prefix : int,symbols_per_slot :
@@ -1578,7 +1568,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
       T_BUFFER((c16_t *)(&(pusch_ch_est_dmrs_pos_slot_mem[0])), rel15_ul->rb_size * NR_NB_SC_PER_RB * rel15_ul->nr_of_symbols * 4));
   }
 
-  if (T_ACTIVE(T_GNB_PHY_UL_FD_PUSCH_IQ)) {
+  if (T_ACTIVE(T_GNB_PHY_UL_FD_PUSCH_IQ) && rxFext_slot_mem != NULL) {
     // Log GNB_PHY_UL_FD_PUSCH_IQ using T-Tracer if activated
     // FORMAT = int,frame : int,slot : int,datetime_yyyymmdd : int,datetime_hhmmssmmm :
     // int,frame_type : int,freq_range : int,subcarrier_spacing : int,cyclic_prefix : int,symbols_per_slot :
@@ -1622,7 +1612,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
       T_BUFFER((c16_t *)(&(rxFext_slot_mem[0])),
                rel15_ul->rb_size * NR_NB_SC_PER_RB * rel15_ul->nr_of_symbols * frame_parms->nb_antennas_rx * 4));
   }
-  if (T_ACTIVE(T_GNB_PHY_UL_FD_CHAN_EST_DMRS_INTERPL)) {
+  if (T_ACTIVE(T_GNB_PHY_UL_FD_CHAN_EST_DMRS_INTERPL) && pusch_ch_est_dmrs_interpl_slot_mem != NULL) {
     // Log pusch_ch_est_dmrs_interpl_slot_mem using T-Tracer if activated
     // FORMAT = int,frame : int,slot : int,datetime_yyyymmdd : int,datetime_hhmmssmmm :
     // int,frame_type : int,freq_range : int,subcarrier_spacing : int,cyclic_prefix : int,symbols_per_slot :
@@ -1669,19 +1659,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
   }
 #endif
 
-// Free the memory after T tracer logging
-#if T_TRACER
-  if (nb_rx_ant == 1) {
-    if (pusch_dmrs_slot_mem)
-      free (pusch_dmrs_slot_mem);
-    if (pusch_ch_est_dmrs_pos_slot_mem)
-      free (pusch_ch_est_dmrs_pos_slot_mem);
-    if (pusch_ch_est_dmrs_interpl_slot_mem)
-      free (pusch_ch_est_dmrs_interpl_slot_mem);
-    if (rxFext_slot_mem)
-      free (rxFext_slot_mem);
-  }
-#endif
+// No need to free static thread-local buffers
 
   join_task_ans(&ans);
   stop_meas(&gNB->rx_pusch_symbol_processing_stats);
