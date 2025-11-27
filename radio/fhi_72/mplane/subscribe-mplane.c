@@ -25,6 +25,7 @@
 
 #include <libyang/libyang.h>
 #include <nc_client.h>
+#include <signal.h>
 
 #ifdef MPLANE_V1
 static void recv_notif_v1(const struct nc_notif *notif, ru_notif_t *answer)
@@ -97,6 +98,31 @@ static void get_hardware_states(struct lyd_node_inner *op, ru_notif_t *answer)
   }
 }
 
+static void process_alarm_notif(struct lyd_node_inner *op)
+{
+  uint16_t fault_id = 0;
+  char *fault_text = NULL;
+  struct lyd_node *child = NULL;
+  LY_LIST_FOR(op->child, child) {
+    if (strcmp(child->schema->name, "fault-id") == 0) {
+      fault_id = atoi(lyd_get_value(child));
+    } else if (strcmp(child->schema->name, "fault-text") == 0) {
+      fault_text = (char *)lyd_get_value(child);
+    }
+  }
+  if (fault_id == 17) {
+    if (strcmp(fault_text, "No external sync source") == 0) {
+      free(fault_text);
+      // Stop the xran and nr-softmodem
+      MP_LOG_I("Detected external sync source loss. Stopping the xran and nr-softmodem.\n");
+      raise(SIGTERM);
+    } else {
+      MP_LOG_W("Received fault-id 17 with fault-text \"%s\" but expected \"No external sync source\"\n", fault_text);
+    }
+  }
+  free(fault_text);
+}
+
 static void recv_notif_v2(struct lyd_node_inner *op, ru_notif_t *answer)
 {
   const char *notif = op->schema->name;
@@ -130,6 +156,8 @@ static void recv_notif_v2(struct lyd_node_inner *op, ru_notif_t *answer)
   } else if (strcmp(notif, "hardware-state-oper-disabled") == 0) {
     answer->hardware.oper_state = false;
     get_hardware_states(op, answer);
+  } else if (strcmp(notif, "alarm-notif") == 0) {
+    process_alarm_notif(op);
   }
 }
 
