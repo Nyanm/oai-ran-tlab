@@ -182,7 +182,7 @@ static int compute_ph_factor(int mu, int tbs_bits, int rb, int n_layers, int n_s
     const float BPRE = (float) tbs_bits/n_re;  //TODO change for PUSCH with CSI
     const float f = pow(2, BPRE * 1.25);
     const float beta = 1.0f; //TODO change for PUSCH with CSI
-    delta_tf = (10 * log10((f - 1) * beta));
+    delta_tf = max(0, (10 * log10((f - 1) * beta)));
     LOG_D(NR_MAC,
           "PH factor delta_tf %f (n_re %d, n_rb %d, n_dmrs %d, n_symbols %d, tbs %d BPRE %f f %f)\n",
           delta_tf,
@@ -2502,6 +2502,7 @@ void post_process_ulsch(gNB_MAC_INST *nr_mac, post_process_pusch_t *pusch, NR_UE
                                                     sched_pusch->dmrs_info.N_PRB_DMRS * sched_pusch->dmrs_info.num_dmrs_symb,
                                                     deltaMCS,
                                                     deltaMCS != NULL);
+  sched_pusch->phr_txpower_calc = max(0, sched_pusch->phr_txpower_calc);
 
   LOG_I(NR_MAC,
         "ULSCH/PUSCH: %4d.%2d RNTI %04x UL sched %4d.%2d RBS %3d "
