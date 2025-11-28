@@ -2460,33 +2460,18 @@ void post_process_ulsch(gNB_MAC_INST *nr_mac, post_process_pusch_t *pusch, NR_UE
   sched_ctrl->last_ul_frame = sched_pusch->frame;
   sched_ctrl->last_ul_slot = sched_pusch->slot;
 
-  LOG_D(NR_MAC,
-        "ULSCH/PUSCH: %4d.%2d RNTI %04x UL sched %4d.%2d DCI L %d start %2d RBS %3d TDA %2d dmrs_pos %x MCS "
-        "Table %2d MCS %2d nrOfLayers %2d num_dmrs_cdm_grps_no_data %2d TBS %4d HARQ PID %2d round %d RV %d NDI %d est %6d sched "
-        "%6d est BSR %6d TPC %d\n",
+  LOG_I(NR_MAC,
+        "ULSCH/PUSCH: %4d.%2d RNTI %04x UL sched %4d.%2d RBS %3d "
+        "TBS %4d TPC %d txpower_calc %d\n",
         frame,
         slot,
         UE->rnti,
         sched_pusch->frame,
         sched_pusch->slot,
-        sched_ctrl->aggregation_level,
-        sched_pusch->rbStart,
         sched_pusch->rbSize,
-        sched_pusch->time_domain_allocation,
-        sched_pusch->dmrs_info.ul_dmrs_symb_pos,
-        current_BWP->mcs_table,
-        sched_pusch->mcs,
-        sched_pusch->nrOfLayers,
-        sched_pusch->dmrs_info.num_dmrs_cdm_grps_no_data,
         sched_pusch->tb_size,
-        harq_id,
-        cur_harq->round,
-        nr_get_rv(cur_harq->round % 4),
-        cur_harq->ndi,
-        sched_ctrl->estimated_ul_buffer,
-        sched_ctrl->sched_ul_bytes,
-        sched_ctrl->estimated_ul_buffer - sched_ctrl->sched_ul_bytes,
-        sched_ctrl->tpc0);
+        sched_ctrl->tpc0,
+	sched_pusch->phr_txpower_calc);
 
   T(T_GNB_MAC_UL, T_INT(UE->rnti), T_INT(frame), T_INT(slot), T_INT(sched_pusch->mcs), T_INT(sched_pusch->tb_size));
 
