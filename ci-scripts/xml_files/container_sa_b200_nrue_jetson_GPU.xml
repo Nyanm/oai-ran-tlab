@@ -21,7 +21,7 @@
 
 -->
 <testCaseList>
-  <htmlTabRef>LONGRUN-5G-NRUE</htmlTabRef>
+  <htmlTabRef>SHORTRUN-5G-NRUE-GPU</htmlTabRef>
   <htmlTabName>Shortrun 30 MHz TDD SA JETSON GPU</htmlTabName>
   <htmlTabIcon>tasks</htmlTabIcon>
   <TestCaseRequestedList>
