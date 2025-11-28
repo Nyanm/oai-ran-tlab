@@ -84,7 +84,7 @@ typedef struct {
 #define MIN_SNR_DB (-15)
 #define MAX_SNR_DB 10
 #define SNR_STEP_DB 1
-#define SNR_TRIALS 1000
+#define SNR_TRIALS 100
 #define SNR_STEPS ((MAX_SNR_DB - MIN_SNR_DB) / SNR_STEP_DB + 1)
 
 int snr_min = MIN_SNR_DB;
@@ -513,14 +513,14 @@ void AIOT_D2R_PHY_TX_calc_packet_sizes(const int payloadSize, NR_AIOT_UL_FRAME_P
   } else {
     frame->packet_samples += (1 + (frame->payload_size / frame->N_midamble_space)) * frame->N_preamble;
   }
-  frame->packet_samples *= frame->N_SFS * 2 * frame->N_chip;
+  frame->packet_samples *= frame->N_bit;
 
   printf("Calculated chip samples: %d, bit samples: %d, midamble spacing: %d\n", frame->N_chip, frame->N_bit, frame->N_midamble_space);
   printf("Calculated D2R packet size: %d samples\n", frame->packet_samples);
 
   // Calculate small frequency shift
   double f_sfs = 1/(2*T_chip); // in Hz
-  frame->f_min = f_sfs - 4e3;
+  frame->f_min = max(f_sfs - 4e3, 0);
   frame->f_max = f_sfs + 4e3;
   printf("Calculated SFS min: %.2f Hz, max: %.2f Hz\n", frame->f_min, frame->f_max);
 }
@@ -728,7 +728,7 @@ int *generate_preamble_ideal_sequence(NR_AIOT_UL_FRAME_PARMS *frame)
 
   // Generate ideal SIP sequence for correlation
   Preamble_ideal = malloc(frame->preamble_samples * sizeof(int));
-  int value0 = 0;
+  int value0 = -1;
   int value1 = 1;
   int samples = 0;
 
@@ -765,7 +765,7 @@ int *generate_preamble_ideal_sequence(NR_AIOT_UL_FRAME_PARMS *frame)
     Preamble_ideal[i] -= Preamble_mean;
   }*/
 
-  frame->preamble_threshold = frame->preamble_samples/2 * 6000 * 0.85;
+  frame->preamble_threshold = frame->preamble_samples/2 * 6000 * 0.75;
   printf("Calculated preamble threshold: %d\n", frame->preamble_threshold);
 
   return Preamble_ideal;
@@ -1174,6 +1174,9 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_UL_FRAME_PARMS *frame_p
         printf("Total time per packet: %f us\n", time_tx_REs + time_tx_signal + time_channel + time_envelope + time_filter + time_downsample + time_rx_packet + time_ber);
       }
     }
+
+    ber_results[snr - snr_min] /= snr_trials;
+    printf("Completed SNR %d dB: BLER = %f\n", snr, ber_results[snr - snr_min]);
   }
 
   for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
@@ -1211,7 +1214,7 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_UL_FRAME_PARMS *frame_p
   }
 
   if(!testing_mode) {
-    sprintf(filename, "%s/BLER_SIZE%d.m", foldername, payloadSize);
+    sprintf(filename, "%s/BLER_SIZE%d_RSFS%d.m", foldername, payloadSize, frame_parms->N_SFS);
     LOG_M(filename, "BLER", ber_results, MAX_SNR_DB - MIN_SNR_DB + 1, 1, 7);
   }
 }
@@ -1288,7 +1291,7 @@ int main(int argc, char **argv)
     .fc = 897500000, // Carrier frequency n8 band, #50 RB
     .DS_TDL = .03,
     .SNR = 20.0,
-    .path_loss_dB = 0.0,
+    .path_loss_dB = -15.0,
     .noise_power_dB = -120.0,
     .delay = 1290,
     .tx_pwr_dBm = 46.0
