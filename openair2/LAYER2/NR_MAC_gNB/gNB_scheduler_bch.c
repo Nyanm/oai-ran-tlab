@@ -114,6 +114,44 @@ static int encode_mib(NR_BCCH_BCH_Message_t *mib, frame_t frame, uint8_t *buffer
   return encode_size;
 }
 
+int get_max_ssbs(const NR_ServingCellConfigCommon_t *scc)
+{
+  int L_max = 0;
+  switch (scc->ssb_PositionsInBurst->present) {
+    case NR_ServingCellConfigCommon__ssb_PositionsInBurst_PR_shortBitmap:
+      L_max = 4;
+      break;
+    case NR_ServingCellConfigCommon__ssb_PositionsInBurst_PR_mediumBitmap:
+      L_max = 8;
+      break;
+    case NR_ServingCellConfigCommon__ssb_PositionsInBurst_PR_longBitmap:
+      L_max = 64;
+      break;
+    default:
+      AssertFatal(false, "Invalid SSB configuration\n");
+  }
+  return L_max;
+}
+
+bool is_ssb_configured(const NR_ServingCellConfigCommon_t *scc, int ssb_index)
+{
+  const BIT_STRING_t *shortBitmap = &scc->ssb_PositionsInBurst->choice.shortBitmap;
+  const BIT_STRING_t *mediumBitmap = &scc->ssb_PositionsInBurst->choice.mediumBitmap;
+  const BIT_STRING_t *longBitmap = &scc->ssb_PositionsInBurst->choice.longBitmap;
+
+  switch (scc->ssb_PositionsInBurst->present) {
+    case NR_ServingCellConfigCommon__ssb_PositionsInBurst_PR_shortBitmap:
+      return (shortBitmap->buf[0] >> (7 - ssb_index)) & 0x01;
+    case NR_ServingCellConfigCommon__ssb_PositionsInBurst_PR_mediumBitmap:
+      return (mediumBitmap->buf[0] >> (7 - ssb_index)) & 0x01;
+    case NR_ServingCellConfigCommon__ssb_PositionsInBurst_PR_longBitmap:
+      return (longBitmap->buf[ssb_index / 8] >> (7 - (ssb_index % 8))) & 0x01;
+    default:
+      AssertFatal(false, "Invalid SSB configuration\n");
+  }
+  return false;
+}
+
 void schedule_nr_mib(module_id_t module_idP, frame_t frameP, slot_t slotP, nfapi_nr_dl_tti_request_t *DL_req)
 {
   gNB_MAC_INST *gNB = RC.nrmac[module_idP];
@@ -165,114 +203,37 @@ void schedule_nr_mib(module_id_t module_idP, frame_t frameP, slot_t slotP, nfapi
       const int bw = scc->downlinkConfigCommon->frequencyInfoDL->scs_SpecificCarrierList.list.array[0]->carrierBandwidth;
       const uint16_t offset_pointa = gNB->ssb_OffsetPointA;
       uint8_t ssbSubcarrierOffset = gNB->ssb_SubcarrierOffset;
-
-      const BIT_STRING_t *shortBitmap = &scc->ssb_PositionsInBurst->choice.shortBitmap;
-      const BIT_STRING_t *mediumBitmap = &scc->ssb_PositionsInBurst->choice.mediumBitmap;
-      const BIT_STRING_t *longBitmap = &scc->ssb_PositionsInBurst->choice.longBitmap;
-
-      switch (scc->ssb_PositionsInBurst->present) {
-        case 1:
-          // short bitmap (<3GHz) max 4 SSBs
-          for (int i_ssb = 0; i_ssb < 4; i_ssb++) {
-            if ((shortBitmap->buf[0] >> (7 - i_ssb)) & 0x01) {
-              uint16_t ssb_start_symbol = get_ssb_start_symbol(band, scs, i_ssb);
-              // if start symbol is in current slot, schedule current SSB, fill VRB map and call get_type0_PDCCH_CSS_config_parameters
-              if ((ssb_start_symbol / 14) == rel_slot) {
-                int beam_index = get_fapi_beamforming_index(gNB, i_ssb);
-                NR_beam_alloc_t beam = beam_allocation_procedure(&gNB->beam_info, frameP, slotP, beam_index, slots_per_frame);
-                AssertFatal(beam.idx >= 0, "Cannot allocate SSB %d in any available beam\n", i_ssb);
-                const int prb_offset = offset_pointa >> scs;
-                schedule_ssb(frameP, slotP, scc, dl_req, i_ssb, beam_index, ssbSubcarrierOffset, offset_pointa, mib_pdu);
-                fill_ssb_vrb_map(cc, prb_offset, ssbSubcarrierOffset, ssb_start_symbol, CC_id, beam.idx);
-                if (IS_SA_MODE(get_softmodem_params())) {
-                  get_type0_PDCCH_CSS_config_parameters(&gNB->type0_PDCCH_CSS_config[i_ssb],
-                                                        frameP,
-                                                        mib,
-                                                        slots_per_frame,
-                                                        ssbSubcarrierOffset,
-                                                        ssb_start_symbol,
-                                                        scs,
-                                                        FR1,
-                                                        band,
-                                                        bw,
-                                                        i_ssb,
-                                                        ssb_frame_periodicity,
-                                                        prb_offset);
-                  gNB->type0_PDCCH_CSS_config[i_ssb].active = true;
-                }
-              }
+      const int L_max = get_max_ssbs(scc);
+      const frequency_range_t frequency_range = scc->ssb_PositionsInBurst->present == 3 ? FR2 : FR1;
+      const int prb_offset = frequency_range == FR1 ? offset_pointa >> scs : offset_pointa >> (scs - 2);
+      for (int i_ssb = 0; i_ssb < L_max; i_ssb++) {
+        if (is_ssb_configured(scc, i_ssb)) {
+          uint16_t ssb_start_symbol = get_ssb_start_symbol(band, scs, i_ssb);
+          // if start symbol is in current slot, schedule current SSB, fill VRB map and call get_type0_PDCCH_CSS_config_parameters
+          if ((ssb_start_symbol / 14) == rel_slot) {
+            int beam_index = get_fapi_beamforming_index(gNB, i_ssb);
+            NR_beam_alloc_t beam = beam_allocation_procedure(&gNB->beam_info, frameP, slotP, beam_index, slots_per_frame);
+            AssertFatal(beam.idx >= 0, "Cannot allocate SSB %d in any available beam\n", i_ssb);
+            schedule_ssb(frameP, slotP, scc, dl_req, i_ssb, beam_index, ssbSubcarrierOffset, offset_pointa, mib_pdu);
+            fill_ssb_vrb_map(cc, prb_offset, ssbSubcarrierOffset, ssb_start_symbol, CC_id, beam.idx);
+            if (IS_SA_MODE(get_softmodem_params())) {
+              get_type0_PDCCH_CSS_config_parameters(&gNB->type0_PDCCH_CSS_config[i_ssb],
+                                                    frameP,
+                                                    mib,
+                                                    slots_per_frame,
+                                                    ssbSubcarrierOffset,
+                                                    ssb_start_symbol,
+                                                    scs,
+                                                    frequency_range,
+                                                    band,
+                                                    bw,
+                                                    i_ssb,
+                                                    ssb_frame_periodicity,
+                                                    prb_offset);
+              gNB->type0_PDCCH_CSS_config[i_ssb].active = true;
             }
           }
-          break;
-        case 2:
-          // medium bitmap (<6GHz) max 8 SSBs
-          for (int i_ssb = 0; i_ssb < 8; i_ssb++) {
-            if ((mediumBitmap->buf[0] >> (7 - i_ssb)) & 0x01) {
-              uint16_t ssb_start_symbol = get_ssb_start_symbol(band, scs, i_ssb);
-              // if start symbol is in current slot, schedule current SSB, fill VRB map and call get_type0_PDCCH_CSS_config_parameters
-              if ((ssb_start_symbol / 14) == rel_slot) {
-                int beam_index = get_fapi_beamforming_index(gNB, i_ssb);
-                NR_beam_alloc_t beam = beam_allocation_procedure(&gNB->beam_info, frameP, slotP, beam_index, slots_per_frame);
-                AssertFatal(beam.idx >= 0, "Cannot allocate SSB %d in any available beam\n", i_ssb);
-                const int prb_offset = offset_pointa >> scs;
-                schedule_ssb(frameP, slotP, scc, dl_req, i_ssb, beam_index, ssbSubcarrierOffset, offset_pointa, mib_pdu);
-                fill_ssb_vrb_map(cc, prb_offset, ssbSubcarrierOffset, ssb_start_symbol, CC_id, beam.idx);
-                if (IS_SA_MODE(get_softmodem_params())) {
-                  get_type0_PDCCH_CSS_config_parameters(&gNB->type0_PDCCH_CSS_config[i_ssb],
-                                                        frameP,
-                                                        mib,
-                                                        slots_per_frame,
-                                                        ssbSubcarrierOffset,
-                                                        ssb_start_symbol,
-                                                        scs,
-                                                        FR1,
-                                                        band,
-                                                        bw,
-                                                        i_ssb,
-                                                        ssb_frame_periodicity,
-                                                        prb_offset);
-                  gNB->type0_PDCCH_CSS_config[i_ssb].active = true;
-                }
-              }
-            }
-          }
-          break;
-        case 3:
-          // long bitmap FR2 max 64 SSBs
-          for (int i_ssb = 0; i_ssb < 64; i_ssb++) {
-            if ((longBitmap->buf[i_ssb / 8] >> (7 - (i_ssb % 8))) & 0x01) {
-              uint16_t ssb_start_symbol = get_ssb_start_symbol(band, scs, i_ssb);
-              // if start symbol is in current slot, schedule current SSB, fill VRB map and call get_type0_PDCCH_CSS_config_parameters
-              if ((ssb_start_symbol / 14) == rel_slot) {
-                int beam_index = get_fapi_beamforming_index(gNB, i_ssb);
-                NR_beam_alloc_t beam = beam_allocation_procedure(&gNB->beam_info, frameP, slotP, beam_index, slots_per_frame);
-                AssertFatal(beam.idx >= 0, "Cannot allocate SSB %d in any available beam\n", i_ssb);
-                const int prb_offset = offset_pointa >> (scs-2); // reference 60kHz
-                schedule_ssb(frameP, slotP, scc, dl_req, i_ssb, beam_index, ssbSubcarrierOffset, offset_pointa, mib_pdu);
-                fill_ssb_vrb_map(cc, prb_offset, ssbSubcarrierOffset >> (scs - 2), ssb_start_symbol, CC_id, beam.idx);
-                if (IS_SA_MODE(get_softmodem_params())) {
-                  get_type0_PDCCH_CSS_config_parameters(&gNB->type0_PDCCH_CSS_config[i_ssb],
-                                                        frameP,
-                                                        mib,
-                                                        slots_per_frame,
-                                                        ssbSubcarrierOffset,
-                                                        ssb_start_symbol,
-                                                        scs,
-                                                        FR2,
-                                                        band,
-                                                        bw,
-                                                        i_ssb,
-                                                        ssb_frame_periodicity,
-                                                        prb_offset);
-                  gNB->type0_PDCCH_CSS_config[i_ssb].active = true;
-                }
-              }
-            }
-          }
-          break;
-        default:
-          AssertFatal(0,"SSB bitmap size value %d undefined (allowed values 1,2,3)\n",
-                      scc->ssb_PositionsInBurst->present);
+        }
       }
     }
   }
@@ -536,8 +497,8 @@ void schedule_nr_sib1(module_id_t module_idP,
       NR_pdsch_dmrs_t dmrs_parms = get_dl_dmrs_params(scc, NULL, &tda_info, 1);
 
       NR_sched_pdcch_t sched_pdcch = set_pdcch_structure(NULL,
-                                                         gNB_mac->sched_ctrlCommon->search_space,
-                                                         gNB_mac->sched_ctrlCommon->coreset,
+                                                         &gNB_mac->sched_ctrlCommon->search_space[i],
+                                                         &gNB_mac->sched_ctrlCommon->coreset,
                                                          scc,
                                                          NULL,
                                                          type0_PDCCH_CSS_config);
@@ -557,7 +518,7 @@ void schedule_nr_sib1(module_id_t module_idP,
       for (int c = 0; c < 3; c++) {
         find_aggregation_candidates(&aggregation_level,
                                     &nr_of_candidates,
-                                    gNB_mac->sched_ctrlCommon->search_space,
+                                    &gNB_mac->sched_ctrlCommon->search_space[i],
                                     4 << c);
         if (nr_of_candidates > 0)
           break; // choosing the lower value of aggregation level available
@@ -569,7 +530,7 @@ void schedule_nr_sib1(module_id_t module_idP,
                                            nr_of_candidates,
                                            beam.idx,
                                            &sched_pdcch,
-                                           gNB_mac->sched_ctrlCommon->coreset,
+                                           &gNB_mac->sched_ctrlCommon->coreset,
                                            0);
       AssertFatal(cce_index >= 0, "Could not find CCE for coreset0\n");
       allocate_sib1(gNB_mac,
@@ -588,8 +549,8 @@ void schedule_nr_sib1(module_id_t module_idP,
       nr_fill_nfapi_dl_SIB_pdu(gNB_mac,
                                &sched_pdsch,
                                &sched_pdcch,
-                               gNB_mac->sched_ctrlCommon->search_space,
-                               gNB_mac->sched_ctrlCommon->coreset,
+                               &gNB_mac->sched_ctrlCommon->search_space[i],
+                               &gNB_mac->sched_ctrlCommon->coreset,
                                aggregation_level,
                                cce_index,
                                dl_req,
