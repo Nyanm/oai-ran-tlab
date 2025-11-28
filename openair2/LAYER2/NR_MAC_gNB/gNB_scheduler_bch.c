@@ -517,7 +517,7 @@ void schedule_nr_sib1(module_id_t module_idP,
         .pm_index = 0,
         .mcs = 0, // starting from mcs 0
       };
-      uint8_t nr_of_candidates, aggregation_level;
+      int nr_of_candidates, aggregation_level;
       for (int c = 0; c < 3; c++) {
         find_aggregation_candidates(&aggregation_level,
                                     &nr_of_candidates,
@@ -634,8 +634,8 @@ static void other_sib_sched_control(module_id_t module_idP,
 
   NR_pdsch_dmrs_t dmrs_parms = get_dl_dmrs_params(scc, NULL, &tda_info, 1);
 
-  uint8_t aggregation_level = 0;
-  uint8_t nr_of_candidates = 0;
+  int aggregation_level = 0;
+  int nr_of_candidates = 0;
   for (int i = 0; i < 5; i++) {
     find_aggregation_candidates(&aggregation_level, &nr_of_candidates, ss, 16 >> i);
     if (nr_of_candidates > 0)
