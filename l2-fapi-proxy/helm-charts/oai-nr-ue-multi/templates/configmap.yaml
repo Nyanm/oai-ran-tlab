@@ -1,0 +1,56 @@
+{{- range $ueId:=.Values.ueIds }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $.Chart.Name }}-{{$ueId}}-configmap
+data:
+  nr-ue.conf: |
+    uicc0 = {
+      imsi = "{{ $.Values.config.imsiPrefix }}{{$ueId}}";
+      key = "{{ $.Values.config.fullKey }}";
+      opc= "{{ $.Values.config.opc }}";
+      dnn= "{{ $.Values.config.dnn }}";
+      nssai_sst="{{ $.Values.config.sst }}";
+      nssai_sd="{{ $.Values.config.sd }}";
+    }
+    {{- if $.Values.config.l2Fapi }}
+    
+    MACRLCs = (
+      {
+        num_cc = 1;
+        tr_n_preference = "nfapi";
+        local_n_if_name  = "eth0:";
+        remote_n_address = "@RFSIM_IP_ADDRESS@"; 
+        local_n_address  = "@UE_IP_ADDRESS@";
+        local_n_portc    = 50600;
+        remote_n_portc   = 50601;
+        local_n_portd    = 50610;
+        remote_n_portd   = 50611;
+      }
+    );
+    {{- end}} 
+  run_ue_l2proxy.sh: |
+    export NR_AWGN_RESULTS_DIR=/opt/oai-ran/openair1/SIMULATION/NR_PHY/BLER_SIMULATIONS/AWGN/AWGN_results
+    /opt/oai-ran/cmake_targets/ran_build/build/nr-uesoftmodem -O /tmp/nr-ue.conf --nfapi STANDALONE_PNF --node-number {{$ueId | atoi | add 2}} --emulate-l1 -r 106 --numerology 1 -C 3619200000
+    # echo $! > /tmp/nr-ue.pid
+    # watch -n 1 tail -n 50 /tmp/nr-ue.log
+
+  stop_ue.sh: |
+    ps -ef | grep nr-uesoftmodem | awk '{print $2}' | xargs kill
+
+  iperf.sh: |
+    #!/bin/bash
+    ip route add 12.1.2.0/24 dev oaitun_ue1
+
+    # Set server port
+    server_port=52{{$ueId}};
+
+    # Log file includes server port
+    log_file=iperf3-${server_port}.txt
+
+    # Run iperf
+    echo "iperf client connecting to 12.1.2.1 on port $server_port"
+    #iperf3 -c 12.1.2.1 -p $server_port -t 0 > /tmp/$log_file 2>&1 &
+    iperf3 -c 12.1.2.1 -p $server_port -t 0
+{{- end }}

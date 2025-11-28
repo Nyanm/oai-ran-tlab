@@ -12,14 +12,13 @@
   - [Phase 4: RAN Components Deployment](#phase-4-ran-components-deployment)
   - [Phase 5: Runtime Execution](#phase-5-runtime-execution)
   - [Phase 6: Verification and Troubleshooting](#phase-6-verification-and-troubleshooting)
-- [Build System](#build-system)
 - [Alternative Modes](#alternative-modes)
 - [Clean-up Procedures](#clean-up-procedures)
 - [Contact](#contact)
 
 ## Overview
 
-The L2 FAPI Proxy is a module that enables Layer 2 (MAC-to-MAC) communication between OAI gNB and UE instances by proxying FAPI/nFAPI messages. This allows testing L2+ protocols without physical layer processing or radio hardware.
+The L2 FAPI Proxy enables large-scale multi-UE simulation by providing Layer 2 (MAC-to-MAC) communication between OAI gNB and UE instances. By replacing PHY waveform processing with link-level abstraction models, it allows testing L2+ protocols without physical layer processing or radio hardware.
 
 ### Standard nFAPI Architecture
 
@@ -57,6 +56,25 @@ The proxy implements nFAPI P5 (configuration) and P7 (slot-based messaging) inte
 - **Kubernetes Native**: Designed for containerized deployments
 - **Independent Module**: Standalone build system, no core OAI modifications
 
+### Supported Modes
+
+The L2 FAPI Proxy supports three operational modes:
+
+#### LTE Mode
+In LTE mode, the proxy enables multi-UE simulation with LTE eNB:
+
+![LTE Mode Functional Diagram](functional_diagram.png)
+
+#### NSA (Non-Standalone) Mode
+In NSA mode, the proxy coordinates both LTE eNB and NR gNB for dual connectivity scenarios:
+
+![NSA Mode Functional Diagram](functional_diagram_nsa_mode.png)
+
+#### SA (Standalone) Mode
+In SA/NR mode, the proxy enables multi-UE simulation with 5G NR gNB only:
+
+![SA Mode Functional Diagram](SA_Mode_Open_Source_Proxy_Functional_Diagram.png)
+
 ## Architecture
 
 This is a separate module with an independent build system that does not modify core OAI gNB or UE source code. It communicates via standard nFAPI sockets.
@@ -87,13 +105,35 @@ l2-fapi-proxy/
 
 ## Quick Start Guide
 
-### High-Level Workflow
+### 🚀 Recommended Deployment Path
 
-1. **Environment Setup**: Install Docker, Kubernetes, Helm and clone repositories
-2. **Build Images**: Create gNB development container images
-3. **Deploy Core Network**: Install 5G Core Network using Helm charts
-4. **Deploy RAN**: Install gNB and UE containers
-5. **Runtime Execution**: Start L2 Proxy, gNB softmodem, and UE instances
+**For most users, follow this streamlined path:**
+
+1. **Prerequisites**: Install Docker, Kubernetes (K3s recommended), and Helm
+2. **Clone**: `git clone https://gitlab.eurecom.fr/oai/openairinterface5g.git`
+3. **Build Images**: Create Docker images for gNB/UE containers (see Phase 2)
+4. **Configure**: Set `oaiCodePath` in helm chart values to your OAI directory path
+5. **Deploy**: Install core network, gNB, and UE using helm charts
+6. **Execute**: Build and run L2 Proxy → gNB → UE softmodems inside containers
+
+**Why this approach?**
+- ✅ All 13 helm charts self-contained in `l2-fapi-proxy/helm-charts/`
+- ✅ No separate repository clones needed (except OAI RAN itself)
+- ✅ Production-tested configuration
+- ✅ Detailed troubleshooting guide available
+
+### Alternative Deployment Options
+
+This repository supports **two deployment methods**:
+
+| Option | Description | Best For | Documentation |
+|--------|-------------|----------|---------------|
+| **A: Self-Contained Helm Charts** | All dependencies included in `helm-charts/` | Production deployments, first-time users | [helm-charts/README.md](helm-charts/README.md) |
+| **B: Manual/External Charts** | Use external OAI CN5G charts | Advanced customization, integration testing | Instructions below |
+
+---
+
+> **⚠️ RECOMMENDED**: Use **Option A** for the smoothest experience. Option B below is for advanced scenarios requiring custom core network configurations.
 
 ---
 
@@ -114,20 +154,22 @@ docker ps  # Test sudoless access
 # Follow your distribution-specific instructions
 ```
 
-#### 1.2 Clone OAI Repositories
+#### 1.2 Clone OAI RAN Repository
 
 ```bash
-# Clone OAI RAN repository
+# Clone OAI RAN repository (contains L2 FAPI Proxy)
 git clone https://gitlab.eurecom.fr/oai/openairinterface5g.git
 cd openairinterface5g
 git checkout develop
-cd ..
 
-# Clone OAI 5G Core Network federation repository (for Helm charts only)
-git clone https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-fed.git
+# Remember this absolute path - you'll need it later:
+pwd
+# Example output: /home/salim/openairinterface5g
 ```
 
-**Note**: No submodule initialization is needed since we're using Helm charts that deploy pre-built Docker images from Docker Hub, not building components from source.
+**📝 Note**: Save your OAI directory path! You'll configure it in helm chart values files as `oaiCodePath`.
+
+**💡 Tip**: If using **Option A** (self-contained helm charts - RECOMMENDED), you do NOT need to clone `oai-cn5g-fed`. All required charts are included in `l2-fapi-proxy/helm-charts/` (13 charts: mysql + oai-5g-basic + 9 core network functions + oai-gnb-dev + oai-nr-ue-multi).
 
 #### 1.3 Create Kubernetes Namespace
 
@@ -192,7 +234,28 @@ sudo k3s ctr images ls | grep oai-gnb-dev
 
 ### Phase 3: Core Network Deployment
 
-#### 3.1 Deploy 5G Core Network
+#### Option A: Using Self-Contained Charts (Recommended)
+
+```bash
+cd openairinterface5g/l2-fapi-proxy/helm-charts
+
+# Verify all dependencies are present
+helm dependency list oai-5g-basic/
+# Should show 10 dependencies (mysql + 9 core network functions), all status: ok
+
+# Build dependencies (first time only)
+helm dependency build oai-5g-basic/
+
+# Install core network
+helm install core5g oai-5g-basic/ -n oai
+
+# Verify deployment (wait ~2-3 minutes for all pods to be Running)
+kubectl get pods -n oai -w
+```
+
+**What gets deployed**: MySQL database + NRF, UDR, UDM, AUSF, AMF, SMF, UPF, LMF, and Traffic Server
+
+#### Option B: Using External CN5G Charts
 
 ```bash
 cd oai-cn5g-fed/charts
@@ -207,45 +270,67 @@ helm install basic oai-5g-core/oai-5g-basic/ -n oai
 #### 3.2 Verify Core Network Deployment
 
 ```bash
-# Check pod status (should all be "Running")
+# Check pod status (wait 2-3 minutes for all to be "Running")
 kubectl get pods -n oai
 
-# Check Helm charts
-helm list -n oai
+# Expected output: 10 pods (mysql + nrf + udr + udm + ausf + amf + smf + upf + lmf + traffic-server)
+# All should show STATUS: Running, READY: 1/1
 
-# View logs for specific components if needed
-kubectl logs <POD_NAME> -n oai
+# Check Helm release
+helm list -n oai
+# Expected: NAME=core5g, STATUS=deployed
+
+# View logs if troubleshooting needed
+kubectl logs <POD_NAME> -n oai -f
 ```
 
 ---
 
 ### Phase 4: RAN Components Deployment
 
-#### 4.1 Configure and Deploy gNB
+#### Option A: Using Self-Contained Charts (Recommended)
 
 ```bash
-# Edit gNB configuration
-cd oai-cn5g-fed/charts/oai-5g-ran/oai-gnb-multi
+cd openairinterface5g/l2-fapi-proxy/helm-charts
 
-# Update values.yaml:
-# - Set start.gnb: false (for manual execution)
-# - Update oaiCodePath with your absolute path to openairinterface5g repository
-# Example: oaiCodePath: /home/username/openairinterface5g/
+# STEP 1: Configure gNB
+# Edit oai-gnb-dev/values.yaml line 87:
+#    oaiCodePath: /home/YOUR_ACTUAL_USERNAME/openairinterface5g
+#
+# Example: oaiCodePath: /home/salim/openairinterface5g
 
-# Deploy gNB
-helm install oai-gnb-multi oai-5g-ran/oai-gnb-multi --namespace oai
+# STEP 2: Configure UE
+# Edit oai-nr-ue-multi/values.yaml:
+#    Line 3:  ueIds: ["00", "01", "02"]  # Customize number of UEs (default: ["00"])
+#    Line 42: oaiCodePath: /home/YOUR_ACTUAL_USERNAME/openairinterface5g
+#
+# ⚠️ IMPORTANT: oaiCodePath MUST match between gNB and UE configurations
+
+# STEP 3: Validate configurations
+helm lint oai-gnb-dev/
+helm lint oai-nr-ue-multi/
+
+# STEP 4: Deploy gNB
+helm install gnb oai-gnb-dev/ -n oai
+
+# STEP 5: Deploy UEs
+helm install ue oai-nr-ue-multi/ -n oai
+
+# STEP 6: Verify RAN deployment (wait 30-60 seconds)
+kubectl get pods -n oai | grep -E 'gnb|ue'
+# Expected output: oai-gnb-dev-xxx (1/1 Running) and oai-nr-ue-multi-ue-XX-xxx (1/1 Running) pods
 ```
 
-#### 4.2 Deploy UEs
+**📖 For detailed configuration options and troubleshooting, see [helm-charts/README.md](helm-charts/README.md)**
+
+#### Option B: Using External Charts
 
 ```bash
-cd oai-cn5g-fed
+cd oai-cn5g-fed/charts/oai-5g-ran
 
-# Option 1: Use script to deploy multiple UEs
-./scripts/kube/start_ue_containers.sh ./charts/oai-5g-ran/oai-nr-ue-multi <NUM_UE>
-
-# Option 2: Deploy with fixed number
-helm install nr-ue-multi oai-5g-ran/oai-nr-ue-multi -n oai
+# Edit values.yaml files and deploy as per external documentation
+-
+helm install ue oai-nr-ue-multi/ -n oai
 ```
 
 ---
@@ -256,18 +341,24 @@ helm install nr-ue-multi oai-5g-ran/oai-nr-ue-multi -n oai
 
 ```bash
 # Get gNB pod name
-kubectl get pods -n oai | grep oai-gnb-dev
+GNB_POD=$(kubectl get pods -n oai | grep oai-gnb-dev | awk '{print $1}')
+echo "gNB Pod: $GNB_POD"
 
 # Enter gNB container
-kubectl exec -it <GNB_POD_NAME> -n oai -- /bin/bash
+kubectl exec -it $GNB_POD -n oai -- /bin/bash
 
 # Inside container - Build L2 Proxy
 cd /opt/oai-ran/l2-fapi-proxy
-make
+make clean && make
+
+# Verify build
+ls -lh build/proxy
 ```
 
-**Note**: The build output is located at `/opt/oai-ran/l2-fapi-proxy/build/proxy`  
-**Note**: Host directory containing OAI RAN code is mounted to `/opt/oai-ran` inside the container
+**📝 Important Notes**:
+- Host directory (configured in `oaiCodePath`) is mounted to `/opt/oai-ran` inside container
+- Build output: `/opt/oai-ran/l2-fapi-proxy/build/proxy`
+- Build is persistent on host filesystem (survives pod restarts)
 
 #### 5.2 Build gNB Softmodem
 
@@ -302,12 +393,7 @@ echo "---- ldd on shared libraries ----" && \
 ldd ran_build/build/*.so
 ```
 
-**When to use initial build**:
-  - First time building in a new environment
-  - After major code changes
-  - When you want a completely clean build
-  - After pulling significant repository updates
-  - When dependency issues occur
+**When to use**: First build, after major updates, or when troubleshooting dependency issues
 
 ##### Incremental Builds (Subsequent Builds)
 
@@ -321,16 +407,7 @@ cd /opt/oai-ran/cmake_targets/ran_build/build
 ninja nr-softmodem nr-uesoftmodem
 ```
 
-**What this does**:
-- Uses existing CMake configuration
-- Only rebuilds changed source files and their dependencies
-- Fast parallel compilation
-
-**When to use**:
-- After source code changes to specific files
-- For faster rebuilds during development
-- When iterating on code and testing changes
-- To avoid reconfiguring the entire build system
+**When to use**: Quick rebuilds during development after modifying source files
 
 #### 5.3 Start L2 Proxy Server
 
@@ -372,17 +449,15 @@ cd /opt/oai-ran/cmake_targets/ran_build/build
 
 #### 5.5 Start UE Softmodem Instances
 
+**Get UE pod names and exec into each**:
 ```bash
-# From host machine (NOT in container)
-cd oai-cn5g-fed/scripts/kube
+# List UE pods
+kubectl get pods -n oai | grep oai-nr-ue-multi
 
-# Start range of UEs
-./run_ue_oai.sh <START_UE_IDX> <END_UE_IDX>
-# Example: ./run_ue_oai.sh 0 9  (starts UE containers 0-9)
-```
+# For UE 00:
+kubectl exec -it oai-nr-ue-multi-ue-00-<pod-id> -n oai -- /bin/bash
 
-**Alternatively**, you can run UE manually (inside UE container):
-```bash
+# Inside UE container:
 /opt/oai-ran/cmake_targets/ran_build/build/nr-uesoftmodem \
   -O /tmp/nr-ue.conf \
   --nfapi STANDALONE_PNF \
@@ -393,10 +468,12 @@ cd oai-cn5g-fed/scripts/kube
   -C 3619200000
 ```
 
-**Important Notes**:
-- `--nfapi STANDALONE_PNF`: Runs UE in L2-only mode (no real PHY), designed for nFAPI L2 simulation
-- `--emulate-l1`: Enables L1 emulation mode required for L2 Proxy operation
-- `--node-number`: Should be `2 + UE_ID` (e.g., 2 for UE 0, 3 for UE 1) to uniquely identify each UE to the proxy
+**Important Parameter Explanations**:
+- `--nfapi STANDALONE_PNF`: L2-only mode (no real PHY), communicates with L2 Proxy
+- `--emulate-l1`: Enables L1 emulation required for L2 Proxy
+- `--node-number`: Must be `2 + UE_ID` (UE 00 → 2, UE 01 → 3, etc.) for unique identification
+
+**For multiple UEs**: Repeat for each UE pod, incrementing `--node-number` accordingly
 
 **Expected UE logs**:
 ```
@@ -451,41 +528,7 @@ helm uninstall <CHART_NAME> -n oai
 
 #### 6.3 Quick Rebuild Commands
 
-**L2 Proxy**:
-```bash
-cd /opt/oai-ran/l2-fapi-proxy
-make clean && make
-```
-
-**OAI Softmodems** (incremental):
-```bash
-cd /opt/oai-ran/cmake_targets/ran_build/build
-ninja nr-uesoftmodem nr-softmodem
-```
-
----
-
-## Build System
-
-### L2 Proxy Build
-
-The L2 Proxy has its own Makefile and is built independently from the OAI CMake build system.
-
-```bash
-cd l2-fapi-proxy
-make
-```
-
-**Output**: `build/proxy`
-
-**Clean build**:
-```bash
-make clean
-```
-
-### OAI Build System
-
-The OAI build system uses CMake and supports both full and incremental builds. See [Phase 5.2](#52-build-gnb-softmodem) for detailed build instructions.
+Refer to [Phase 5.1](#51-build-l2-proxy) for L2 Proxy builds and [Phase 5.2](#52-build-gnb-softmodem) for gNB/UE softmodem builds.
 
 ---
 
@@ -518,10 +561,17 @@ cd /opt/oai-ran/cmake_targets/ran_build/build
 
 ### Soft Clean-up (Restart Components)
 
+**For Option A (Self-Contained Charts)**:
 ```bash
-# Uninstall specific Helm charts
-helm uninstall nr-ue-multi -n oai
-helm uninstall oai-gnb-multi -n oai
+helm uninstall ue -n oai
+helm uninstall gnb -n oai
+helm uninstall core5g -n oai
+```
+
+**For Option B (External Charts)**:
+```bash
+helm uninstall ue -n oai
+helm uninstall gnb -n oai
 helm uninstall basic -n oai
 ```
 
@@ -586,13 +636,9 @@ docker system prune -a
 
 For questions, issues, or contributions related to the L2 FAPI Proxy:
 
+- **Salim El Ghalbzouri**: s.elghalbzo@partner.samsung.com / salim.elghalb@gmail.com
 - **Russell Ford**: russelldford@gmail.com
 - **Daoud Burghal**: d.burghal@samsung.com
 - **Pranav Madadi**: p.madadi@samsung.com
-- **Salim El Ghalbzouri**: s.elghalbzo@partner.samsung.com / salim.elghalb@gmail.com
 
 ---
-
-## License
-
-This project is part of the OpenAirInterface 5G software and follows the OAI Public License.

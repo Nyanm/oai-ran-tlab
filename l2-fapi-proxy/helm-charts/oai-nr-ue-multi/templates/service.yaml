@@ -1,0 +1,19 @@
+{{- range $ueId:=.Values.ueIds }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oai-ue-{{$ueId}}
+  labels:
+    {{- include "oai-nr-ue-multi.labels" (list $ $ueId) |  nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: fapi-pnf
+      port: {{(add 3612 (mul (atoi $ueId) 2)) | int}}
+      targetPort: {{add 3612 (mul (atoi $ueId) 2)}}
+      protocol: UDP
+  selector:
+    {{- include "oai-nr-ue-multi.selectorLabels" (list $ $ueId) |  nindent 4 }}
+{{- end }}
