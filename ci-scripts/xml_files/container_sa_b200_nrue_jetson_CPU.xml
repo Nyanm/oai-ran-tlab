@@ -22,7 +22,7 @@
 -->
 <testCaseList>
   <htmlTabRef>LONGRUN-5G-NRUE</htmlTabRef>
-  <htmlTabName>Shortrun 30 MHz TDD SA JETSON GPU</htmlTabName>
+  <htmlTabName>Shortrun 30 MHz TDD SA JETSON CPU</htmlTabName>
   <htmlTabIcon>tasks</htmlTabIcon>
   <TestCaseRequestedList>
     000001
@@ -82,7 +82,7 @@
   <testCase id="000006">
     <class>Deploy_Object</class>
     <desc>Deploy nrUE (TDD/Band78/40MHz/N310) in a container</desc>
-    <yaml_path>ci-scripts/yaml_files/5g_sa_b200_jetson_nrue</yaml_path>
+    <yaml_path>ci-scripts/yaml_files/sa_b200_jetson_nrue</yaml_path>
     <node>jetson2-oai</node>
     <num_attempts>3</num_attempts>
   </testCase>
@@ -160,7 +160,7 @@
     <always_exec>true</always_exec>
     <desc>Undeploy nr UE</desc>
     <node>jetson2-oai</node>
-    <yaml_path>ci-scripts/yaml_files/5g_sa_b200_jetson_nrue</yaml_path>
+    <yaml_path>ci-scripts/yaml_files/sa_b200_jetson_nrue</yaml_path>
   </testCase>
 
   <testCase id="000015">
