@@ -133,6 +133,7 @@ typedef struct nrLDPC_slot_decoding_parameters_s{
   int nb_TBs;
   tpool_t *threadPool;
   nrLDPC_TB_decoding_parameters_t *TBs;
+  int use_gpu;
 } nrLDPC_slot_decoding_parameters_t;
 
 /**

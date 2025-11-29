@@ -389,7 +389,7 @@ int main(int argc, char **argv)
     exit_fun("[NR_DLSIM] Error, configuration module init failed\n");
   }
 
-  randominit(0);
+  randominit(1);
 
   int print_perf = 0;
 
@@ -1224,6 +1224,7 @@ printf("%d\n", slot);
                   pdu_bit_map,
                   0x1,
                   UE->frame_parms.nb_antennas_rx);
+//	for (int i=0;i<16;i++) printf("r_re[0][%d] %f\n",i,r_re[0][slot_offset+i]);
         dl_config.sfn = frame;
         dl_config.slot = slot;
         ue_dci_configuration(UE_mac, &dl_config, frame, slot);
@@ -1334,11 +1335,14 @@ printf("%d\n", slot);
       fprintf(csv_file,"%.2f,%.4f,%.2f,%u\n", roundStats, effRate, effRate / TBS * 100, TBS);
     }
     if (print_perf==1) {
-      printf("\ngNB TX function statistics (per %d us slot, NPRB %d, mcs %d, C %d, block %d)\n",
+      printf("\ngNB TX function statistics (per %d us slot, NPRB %d, mcs %d, C %d, Z %d, F %d, K %d, block %d)\n",
              1000 >> *scc->ssbSubcarrierSpacing,
              g_rbSize,
              g_mcsIndex,
              UE->dl_harq_processes[0][slot].C,
+	     UE->dl_harq_processes[0][slot].Z,
+	     UE->dl_harq_processes[0][slot].F,
+	     UE->dl_harq_processes[0][slot].K,
              msgDataTx->dlsch[0][0].harq_process.pdsch_pdu.pdsch_pdu_rel15.TBSize[0] << 3);
       printDistribution(&gNB->phy_proc_tx,table_tx,"PHY proc tx");
       printStatIndent2(&gNB->dci_generation_stats, "DCI encoding time");

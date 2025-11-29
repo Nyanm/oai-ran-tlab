@@ -194,6 +194,7 @@ void tableNor(unsigned long seed)
 
 double __attribute__ ((no_sanitize("address", "undefined"))) gaussZiggurat(double mean, double variance)
 {
+  static cnt=0;	
   if (!tableNordDone) {
     // let's make reasonnable constant tables
     unsigned long seed;
@@ -211,7 +212,7 @@ main(int argc,char **argv)
 
   int i;
 
-  randominit();
+  randominit(1);
 
   for (i=0; i<10; i++) {
     printf("%f\n",gaussdouble(0.0,1.0));
