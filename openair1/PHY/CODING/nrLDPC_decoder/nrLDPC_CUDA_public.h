@@ -117,11 +117,6 @@ __device__ __forceinline__ void moveBricks_invget_circ(int8_t *__restrict__ dstB
 }
 
 
-__device__ __forceinline__ uint32_t __vxor4_first(const uint32_t a, uint32_t *b)
-{
-  return a ^ b[0]; // increase accuracy
-}
-
 __device__ __forceinline__ uint32_t __vxor4(const uint32_t *a, uint32_t *b)
 {
   return a[0] ^ b[0]; // increase accuracy

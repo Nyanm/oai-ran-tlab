@@ -11,7 +11,7 @@
 
 #define ZC 384 // for BG1 test only
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
-#define RECORD_GRAPH 1 // set 1 to enable graph recording, 0 to unable.
+#define RECORD_GRAPH 0 // set 1 to enable graph recording, 0 to unable.
 #define STREAM_SEQUENCE 1 // default 1, set 0 different streams will work in parellel(not recommended)
 
 #ifndef JETSON_TARGET
@@ -712,6 +712,10 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t *p_out,
       case 13: {
         for (int i = 0; i <= numMaxIter; i++) {
           nrLDPC_cnProc_BG1_R13_cuda_stream_core(cnProcBuf, bnProcBuf, Z, streams, CudaStreamIdx);
+          if(i == 0){
+            cudaDeviceSynchronize();
+            dumpAssCUDA(bnProcBuf,"First_iter_bnProc_Dump_cuda.txt");
+          }
 
           if (i == numMaxIter)
             nrLDPC_bnProc_BG1_R13_cuda_stream_core_last(bnProcBuf, cnProcBuf, llrProcBuf, llrRes, Z, streams, CudaStreamIdx);
@@ -737,6 +741,10 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t *p_out,
     }
 
     nrLDPC_OutPut_BG1_cuda_stream_core(llrRes, Z, R, outMode, p_out, numLLR, streams, CudaStreamIdx);
+    {
+            cudaDeviceSynchronize();
+            dumpAssCUDA(p_out,"Dump_p_out_cuda.txt");
+          }
 #if RECORD_GRAPH
     // stop recording
     cudaStreamEndCapture(stream, &decoderGraphs[CudaStreamIdx]);

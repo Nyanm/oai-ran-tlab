@@ -336,7 +336,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
         // printf("\nCheckpoint 6\n ");
         //dump_cnProcBufRes_to_file(cnProcBuf, "First_cnProcBuf_dump_128.txt");
         nrLDPC_cnProc_BG1_R13_128(cnProcBuf, cnProcBufRes, Z);
-        // dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBufRes_dump_128.txt");
+        dump_cnProcBufRes_to_file(cnProcBufRes, "First_iter_cnProcRes_Dump_128.txt");
 #endif
         break;
       }
@@ -416,7 +416,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   if (BG == 1) {
     nrLDPC_cn2bnProcBuf_BG1(p_lut, cnProcBufRes, bnProcBuf, Z);
     //dump_cnProcBufRes_to_file(cnProcBufRes, "Dump_cnProcBufRes_128.txt");
-    //dump_cnProcBufRes_to_file(bnProcBuf, "Dump_bnProcBuf_128.txt");
+    dump_cnProcBufRes_to_file(bnProcBuf, "First_iter_bnProc_Dump_128.txt");
   } else
     nrLDPC_cn2bnProcBuf_BG2(p_lut, cnProcBufRes, bnProcBuf, Z);
   NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->cn2bnProcBuf));
@@ -765,7 +765,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     if (BG == 1)
       nrLDPC_cn2bnProcBuf_BG1(p_lut, cnProcBufRes, bnProcBuf, Z);
     // dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_inBn.txt");
-    // dump_cnProcBufRes_to_file(bnProcBuf, "have_a_look_Bn_buffer.txt");}// for debug
+    // for debug}
     else
       nrLDPC_cn2bnProcBuf_BG2(p_lut, cnProcBufRes, bnProcBuf, Z);
 #ifdef NR_LDPC_PROFILER_DETAIL
@@ -1043,6 +1043,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   // #else
   // printf("Using CPU decoder\n");
   // #endif
+  dump_cnProcBufRes_to_file(p_out, "Dump_p_out_128.txt");
   return numIter;
 }
 #ifndef USE_CUDA
