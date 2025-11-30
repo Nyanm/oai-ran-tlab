@@ -37,6 +37,8 @@
 #include "SCHED_NR_UE/harq_nr.h"
 #include "nr-uesoftmodem.h"
 
+extern int use_gpu;
+
 void RCconfig_nrUE_prs(void *cfg)
 {
   int j = 0, k = 0, gNB_id = 0;
@@ -278,6 +280,7 @@ int init_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
   if (IS_SA_MODE(get_softmodem_params()))
     ue->received_config_request = false;
 
+  ue->use_gpu = use_gpu;
   return 0;
 }
 

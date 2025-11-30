@@ -75,7 +75,8 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
     .slot = proc->nr_slot_rx,
     .nb_TBs = nb_dlsch,
     .threadPool = &get_nrUE_params()->Tpool,
-    .TBs = TBs
+    .TBs = TBs,
+    .use_gpu = phy_vars_ue->use_gpu
   };
 
   int max_num_segments = 0;
@@ -288,7 +289,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
       int A = dlsch->dlsch_config.TBS;
       // we have regrouped the transport block
       if (!check_crc(b[DLSCH_id], lenWithCrc(1, A), crcType(1, A))) {
-        LOG_E(PHY,
+        LOG_D(PHY,
               " Frame %d.%d LDPC global CRC fails, but individual LDPC CRC succeeded. %d segs\n",
               proc->frame_rx,
               proc->nr_slot_rx,

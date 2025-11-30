@@ -734,6 +734,7 @@ int main(int argc, char *argv[])
     printf("\n");
 
     double cpu_freq = get_cpu_freq_GHz();
+    printf("CPU Freq %f\n",cpu_freq);
     time_stats_t *t_optim = &res.time_optim;
    
     printf("Encoding time mean: %15.3f us\n", (double)t_optim->diff / t_optim->trials / 1000.0 / cpu_freq);

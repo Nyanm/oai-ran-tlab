@@ -45,6 +45,7 @@
 #include <stdint.h>
 #include <syscall.h>
 #include <time.h>
+#include <stdbool.h>
 // #define gNB_DEBUG_TRACE
 
 #define OAI_LDPC_DECODER_MAX_NUM_LLR 27000 // 26112 // NR_LDPC_NCOL_BG1*NR_LDPC_ZMAX = 68*384
@@ -185,8 +186,10 @@ static void nr_process_decode_segment(void *arg)
   /// code blocks after bit selection in rate matching for LDPC code (38.212 V15.4.0 section 5.4.2.1)
   int16_t harq_e[E];
 
+  //for (int i=0;i<16;i++) printf("llr[%d] %d\n",i,ulsch_llr[i]);
   nr_deinterleaving_ldpc(E, Qm, harq_e, ulsch_llr);
 
+  //for (int i=0;i<16;i++) printf("harq_e[%d] %d\n",i,harq_e[i]);
   //////////////////////////////////////////////////////////////////////////////////////////
 
   stop_meas(rdata->p_ts_deinterleave);
@@ -245,6 +248,7 @@ static void nr_process_decode_segment(void *arg)
   for (int i = 0, j = 0; j < ((Kc * rdata->Z) >> 4) + 1; i += 2, j++) {
     pl[j] = simde_mm_packs_epi16(pv[i], pv[i + 1]);
   }
+//  for (int i=0;i<(Kc * rdata->Z);i++) printf("channel llr %d : %d\n",i,l[i]);
   //////////////////////////////////////////////////////////////////////////////////////////
 
   //////////////////////////////////////////////////////////////////////////////////////////
@@ -281,7 +285,11 @@ static void nr_process_decode_segment(void *arg)
 
 int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters,
                                int pusch_id,
-                               thread_info_tm_t *t_info)
+                               thread_info_tm_t *t_info
+#ifdef ENABLE_CUDA
+			       ,int use_gpu
+#endif
+			       )
 {
   nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
 
@@ -290,40 +298,49 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
   decParams.BG = nrLDPC_TB_decoding_parameters->BG;
   decParams.Z = nrLDPC_TB_decoding_parameters->Z;
   decParams.numMaxIter = nrLDPC_TB_decoding_parameters->max_ldpc_iterations;
-  decParams.outMode = 0;
+  decParams.outMode = nrLDPC_outMode_BIT;
 
   for (int r = 0; r < nrLDPC_TB_decoding_parameters->C; r++) {
-    nrLDPC_decoding_parameters_t *rdata = &((nrLDPC_decoding_parameters_t *)t_info->buf)[t_info->len];
-    DevAssert(t_info->len < t_info->cap);
-    rdata->ans = t_info->ans;
-    t_info->len += 1;
+#ifdef ENABLE_CUDA
+    if (use_gpu == 1 && decParams.Z == 384 && decParams.BG == 1 && r==0) {
+    // Call CUDA LDPC decoder for all segments
+      nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters);
+      break;
+    }
+    else 
+#endif
+    {
+      nrLDPC_decoding_parameters_t *rdata = &((nrLDPC_decoding_parameters_t *)t_info->buf)[t_info->len];
+      DevAssert(t_info->len < t_info->cap);
+      rdata->ans = t_info->ans;
+      t_info->len += 1;
 
-    decParams.R = nrLDPC_TB_decoding_parameters->segments[r].R;
-    rdata->decoderParms = decParams;
-    rdata->llr = nrLDPC_TB_decoding_parameters->segments[r].llr;
-    rdata->Kc = decParams.BG == 2 ? 52 : 68;
-    rdata->C = nrLDPC_TB_decoding_parameters->C;
-    rdata->E = nrLDPC_TB_decoding_parameters->segments[r].E;
-    rdata->A = nrLDPC_TB_decoding_parameters->A;
-    rdata->Qm = nrLDPC_TB_decoding_parameters->Qm;
-    rdata->K = nrLDPC_TB_decoding_parameters->K;
-    rdata->Z = nrLDPC_TB_decoding_parameters->Z;
-    rdata->F = nrLDPC_TB_decoding_parameters->F;
-    rdata->rv_index = nrLDPC_TB_decoding_parameters->rv_index;
-    rdata->tbslbrm = nrLDPC_TB_decoding_parameters->tbslbrm;
-    rdata->abort_decode = nrLDPC_TB_decoding_parameters->abort_decode;
-    rdata->d = nrLDPC_TB_decoding_parameters->segments[r].d;
-    rdata->d_to_be_cleared = nrLDPC_TB_decoding_parameters->segments[r].d_to_be_cleared;
-    rdata->c = nrLDPC_TB_decoding_parameters->segments[r].c;
-    rdata->decodeSuccess = &nrLDPC_TB_decoding_parameters->segments[r].decodeSuccess;
-    rdata->p_ts_deinterleave = &nrLDPC_TB_decoding_parameters->segments[r].ts_deinterleave;
-    rdata->p_ts_rate_unmatch = &nrLDPC_TB_decoding_parameters->segments[r].ts_rate_unmatch;
-    rdata->p_ts_ldpc_decode = &nrLDPC_TB_decoding_parameters->segments[r].ts_ldpc_decode;
+      decParams.R = nrLDPC_TB_decoding_parameters->segments[r].R;
+      rdata->decoderParms = decParams;
+      rdata->llr = nrLDPC_TB_decoding_parameters->segments[r].llr;
+      rdata->Kc = decParams.BG == 2 ? 52 : 68;
+      rdata->C = nrLDPC_TB_decoding_parameters->C;
+      rdata->E = nrLDPC_TB_decoding_parameters->segments[r].E;
+      rdata->A = nrLDPC_TB_decoding_parameters->A;
+      rdata->Qm = nrLDPC_TB_decoding_parameters->Qm;
+      rdata->K = nrLDPC_TB_decoding_parameters->K;
+      rdata->Z = nrLDPC_TB_decoding_parameters->Z;
+      rdata->F = nrLDPC_TB_decoding_parameters->F;
+      rdata->rv_index = nrLDPC_TB_decoding_parameters->rv_index;
+      rdata->tbslbrm = nrLDPC_TB_decoding_parameters->tbslbrm;
+      rdata->abort_decode = nrLDPC_TB_decoding_parameters->abort_decode;
+      rdata->d = nrLDPC_TB_decoding_parameters->segments[r].d;
+      rdata->d_to_be_cleared = nrLDPC_TB_decoding_parameters->segments[r].d_to_be_cleared;
+      rdata->c = nrLDPC_TB_decoding_parameters->segments[r].c;
+      rdata->decodeSuccess = &nrLDPC_TB_decoding_parameters->segments[r].decodeSuccess;
+      rdata->p_ts_deinterleave = &nrLDPC_TB_decoding_parameters->segments[r].ts_deinterleave;
+      rdata->p_ts_rate_unmatch = &nrLDPC_TB_decoding_parameters->segments[r].ts_rate_unmatch;
+      rdata->p_ts_ldpc_decode = &nrLDPC_TB_decoding_parameters->segments[r].ts_ldpc_decode;
+      task_t t = {.func = &nr_process_decode_segment, .args = rdata};
+      pushTpool(nrLDPC_slot_decoding_parameters->threadPool, t);
 
-    task_t t = {.func = &nr_process_decode_segment, .args = rdata};
-    pushTpool(nrLDPC_slot_decoding_parameters->threadPool, t);
-
-    LOG_D(PHY, "Added a block to decode, in pipe: %d\n", r);
+      LOG_D(PHY, "Added a block to decode, in pipe: %d\n", r);
+    }
   }
   return nrLDPC_TB_decoding_parameters->C;
 }
@@ -333,19 +350,25 @@ int32_t nrLDPC_coding_init(void)
   LOG_I(NR_PHY, "Initializing coding library\n");
 #ifdef ENABLE_CUDA
   LOG_I(NR_PHY, "Calling cuda_support_init()\n");
+  nrLDPC_coding_init_cuda();
 #endif
-  cuda_support_init();
   return 0;
 }
 
 int32_t nrLDPC_coding_shutdown(void)
 {
+#ifdef ENABLE_CUDA
+  nrLDPC_coding_shutdown_cuda();
+#endif
   return 0;
 }
 
 int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters)
 {
   int nbSegments = 0;
+#ifdef ENABLE_CUDA
+  int use_gpu = nrLDPC_slot_decoding_parameters->use_gpu;
+#endif
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
     nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
     nbSegments += nrLDPC_TB_decoding_parameters->C;
@@ -356,11 +379,27 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_dec
   thread_info_tm_t t_info = {.buf = (uint8_t *)arr, .len = 0, .cap = nbSegments, .ans = &ans};
 
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
-    (void)nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters, pusch_id, &t_info);
+    (void)nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters, pusch_id, &t_info
+#ifdef ENABLE_CUDA
+		    ,use_gpu
+#endif
+		    );
   }
 
   // Execute thread pool tasks
-  join_task_ans(t_info.ans);
+#ifdef ENABLE_CUDA
+  bool do_join=false;
+  // check if at least one PUSCH has a Zc<384 or BG=2
+  for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
+    nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
+    if ( nrLDPC_TB_decoding_parameters->Z < 384 ||  nrLDPC_TB_decoding_parameters->BG == 2) {
+	do_join=true;    
+	break;
+    }
+  }
+  if (do_join)
+#endif
+    join_task_ans(t_info.ans);
 
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
     nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
