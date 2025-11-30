@@ -407,23 +407,24 @@ int *generate_SIP_ideal_sequence(NR_AIOT_DL_FRAME_PARMS *frame_parms)
   int downsampled_chip_size = downsampled_OFDM_size / R_TAS_SIP_M;
   int downsampled_CP_size = frame_parms->nr_frame_parms.nb_prefix_samples / frame_parms->N;
   int downsampled_CP0_size = frame_parms->nr_frame_parms.nb_prefix_samples0 / frame_parms->N;
-  frame_parms->SIP_samples = downsampled_chip_size + downsampled_CP0_size + downsampled_OFDM_size + downsampled_CP_size + downsampled_OFDM_size;
+  frame_parms->SIP_samples = 2*downsampled_chip_size + downsampled_CP0_size + downsampled_OFDM_size + downsampled_CP_size + downsampled_OFDM_size;
 
   // Generate ideal SIP sequence for correlation
   SIP_ideal = malloc(frame_parms->SIP_samples * sizeof(int));
-  int value0 = -1.0;
-  int value1 = 1.0;
+  int value0dis = -2;
+  int value0 = -1;
+  int value1 = 1;
 
   int samples = 0;
 
-  // Add zero chip
-  for (samples = 0; samples < downsampled_chip_size; samples++) {
+  // Add two zero chips
+  for (samples = 0; samples < 2*downsampled_chip_size; samples++) {
     SIP_ideal[samples] = value0;
   }
 
   // Add Cyclic prefix (Longer Type 0)
   for (int i = 0; i < downsampled_CP0_size; i++) {
-    SIP_ideal[samples] = value0;
+    SIP_ideal[samples + i] = value0;
   }
   samples += downsampled_CP0_size;
 
@@ -447,6 +448,10 @@ int *generate_SIP_ideal_sequence(NR_AIOT_DL_FRAME_PARMS *frame_parms)
   // Add second symbol of R-TAS SIP
   for (int i = R_TAS_SIP_M; i < R_TAS_SIP_M + R_TAS_SIP_M; i++) {
     int16_t value = R_TAS_SIP & (1 << (7 - i)) ? value1 : value0;
+
+    if(i == R_TAS_SIP_M + 1) {
+      value = value0dis;
+    }
 
     for (int j = 0; j < downsampled_OFDM_size / R_TAS_SIP_M; j++) {
       SIP_ideal[samples + j] = value;
@@ -477,7 +482,7 @@ int AIOT_R2D_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *SI
   }
 
   if(testing_mode) {
-    printf("Detected SIP at offset %d\n", Preamble_offset);
+    printf("Detected SIP at offset %d, Corr: %d\n", Preamble_offset, max_corr);
   }
   return Preamble_offset;
 }
@@ -815,10 +820,6 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
     LOG_M(filename, "SIP_Ideal_sig", SIP_ideal, frame_parms->SIP_samples, 1, 2);
   }
 
-  if(testing_timing) {
-    start_meas(&time_stats);
-  }
-
   double time_tx_REs = 0.0;
   double time_tx_signal = 0.0;
   double time_channel = 0.0;
@@ -829,12 +830,21 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
   double time_rx_packet = 0.0;
   double time_ber = 0.0;
 
+  if(testing_timing) {
+    start_meas(&time_stats);
+  }
+
   for(int snr = snr_min; snr <= snr_max; snr += SNR_STEP_DB) {
     channel_model->SNR = snr;
 
     for(int trials = 0; trials < snr_trials; trials++) {
       for(int i = 0; i < payloadSize / 8; i++) {
         payload[i] = uniformrandom() * 256;
+      }
+
+      if(testing_timing && snr_plot == snr) {
+        reset_meas(&time_stats);
+        start_meas(&time_stats);
       }
 
       if(testing_mode) {
@@ -850,10 +860,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_tx_REs = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_tx_REs += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_tx_REs /= 2;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("TX REs generation time: %f us\n", time_tx_REs);
       }
 
       AIOT_R2D_PHY_TX_Signal(txData, txDataF, (const c16_t *) REsPacket, frame_parms);
@@ -864,10 +874,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_tx_signal = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_tx_signal += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_tx_signal /= 2;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("TX signal generation time: %f us\n", time_tx_signal);
       }
 
       SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, channel_model->SNR, frame_parms);
@@ -878,10 +888,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_channel = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_channel += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_channel /= 2;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("Channel propagation time: %f us\n", time_channel);
       }
 
       // Envelope detector (squared)
@@ -893,10 +903,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_envelope = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_envelope += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_envelope /= 2;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("Envelope detection time: %f us\n", time_envelope);
       }
 
       // Low-pass filter
@@ -908,10 +918,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_filter = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_filter += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_filter /= 2;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("Filtering time: %f us\n", time_filter);
       }
 
       // Downsample the signal by N = 16
@@ -923,10 +933,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_downsample = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_downsample += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_downsample /= 2;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("Downsampling time: %f us\n", time_downsample);
       }
 
       // Correlation for synchronization
@@ -938,20 +948,20 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_sync = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_sync += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_sync /= 2;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("Synchronization time: %f us\n", time_sync);
       }
 
       // Correlate the received signal with known SIP sequence
       AIOT_R2D_PHY_RX_GetPacket(rx_payload, (const int16_t *) downSampled, SIP_offset, frame_parms);
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_rx_packet = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_rx_packet += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_rx_packet /= 2;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("Packet extraction time: %f us\n", time_rx_packet);
       }
 
       double ber = calculate_BER(rx_payload, payload, frame_parms);
@@ -976,11 +986,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_ber = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_ber += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        time_ber /= 2;
         reset_meas(&time_stats);
         start_meas(&time_stats);
-        printf("BER calculation time: %f us\n", time_ber);
-        printf("Total time per packet: %f us\n", time_tx_REs + time_tx_signal + time_channel + time_envelope + time_filter + time_downsample + time_rx_packet + time_ber);
       }
     }
 
@@ -1017,6 +1026,26 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
   free(correlation);
   free(txDataF);
   free(rx_payload);
+
+  if(testing_timing) {
+    printf("-------------------------------\n");
+    printf("Timing results (average per packet in us):\n");
+    printf("-------------------------------\n");
+    printf("TX REs generation:       %f us\n", time_tx_REs);
+    printf("TX signal generation:    %f us\n", time_tx_signal);
+    printf("Channel propagation:     %f us\n", time_channel);
+    printf("Envelope detection:      %f us\n", time_envelope);
+    printf("Filtering:               %f us\n", time_filter);
+    printf("Downsampling:            %f us\n", time_downsample);
+    printf("Synchronization:         %f us\n", time_sync);
+    printf("RX packet extraction:    %f us\n", time_rx_packet);
+    printf("BER calculation:         %f us\n", time_ber);
+    double total_time = time_tx_REs + time_tx_signal + time_channel + time_envelope +
+                        time_filter + time_downsample + time_sync + time_rx_packet + time_ber;
+    printf("---\n");
+    printf("Total time:              %f us\n", total_time);
+  }
+
 
   printf("-------------------------------\n");
   printf("            Results\n");
@@ -1106,7 +1135,7 @@ int main(int argc, char **argv)
   };
 
   int c;
-  while ((c = getopt(argc, argv, "--:O:h:L:R:P:p:M:Z:S:N:D:t:T:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:h:L:R:P:p:M:Z:S:N:D:t:T:r:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -1128,6 +1157,7 @@ int main(int argc, char **argv)
         printf("-N Path loss in dB\n");
         printf("-D Delay in samples\n");
         printf("-t Testing mode, parameter is SNR to plot\n");
+        printf("-r SNR trials per SNR point\n");
         exit(-1);
         break;
       case 'L':
@@ -1212,6 +1242,11 @@ int main(int argc, char **argv)
       
       case 'T':
         testing_timing = true;
+        break;
+
+      case 'r':
+        snr_trials = atoi(optarg);
+        printf("Using %d trials per SNR point\n", snr_trials);
         break;
     }
   }

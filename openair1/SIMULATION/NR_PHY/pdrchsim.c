@@ -731,16 +731,16 @@ int *generate_preamble_ideal_sequence(NR_AIOT_UL_FRAME_PARMS *frame)
   Preamble_ideal = malloc(frame->preamble_samples * sizeof(int));
   int value0 = -1;
   int value1 = 1;
-  int samples = 0;
 
   // Put zero bit at the beginning
   for(int j = 0; j < frame->N_bit; j++) {
-      Preamble_ideal[samples++] = value0;
+      Preamble_ideal[j] = value0;
   }
 
   // Add D-TAS preamble (short or long)
   uint32_t D_TAS_preamble = (frame->L_preamble) ? D_TAS_31_BITS : D_TAS_7_BITS;
 
+  int samples = frame->N_bit;
   for(int i = 0; i < frame->N_preamble; i++) {
     unsigned bit = (D_TAS_preamble >> (frame->N_preamble - 1 - i)) & 0x01;
 
