@@ -505,6 +505,10 @@ void AIOT_D2R_PHY_TX_calc_packet_sizes(const int payloadSize, NR_AIOT_UL_FRAME_P
   int scale = (int) ((1.0/T_BIT_TABLE[frame->T_bit]) * 2.0);
   frame->N_midamble_space = scale * I_BIT_TABLE[frame->I_bit];
 
+  // Compute samples for preamble and midamble
+  frame->preamble_samples = (frame->N_preamble + 1) * frame->N_bit; // +1 for preceeding zero bit
+  frame->midamble_samples = frame->N_preamble * frame->N_bit;
+
   // Calculate packet size
   frame->payload_size = payloadSize;
   frame->packet_samples = frame->payload_size;
@@ -704,7 +708,7 @@ void AIOT_D2R_PHY_RX_Envelope_Detector(int16_t *envelope, const c16_t **rxData, 
     int16_t beta_min = min_val >> 2;
 
     // 4. Final Addition
-    envelope[i] = min(max_val + beta_min, 32767); // Clamp to uint16_t max
+    envelope[i] = min(max_val + beta_min, 32767); // Clamp to int16_t max
   }
 }
 
@@ -723,14 +727,16 @@ int *Preamble_ideal = NULL;
 
 int *generate_preamble_ideal_sequence(NR_AIOT_UL_FRAME_PARMS *frame)
 {
-  // Compute lengths for preamble
-  frame->preamble_samples = frame->N_preamble * frame->N_SFS * 2 * frame->N_chip;
-
   // Generate ideal SIP sequence for correlation
   Preamble_ideal = malloc(frame->preamble_samples * sizeof(int));
   int value0 = -1;
   int value1 = 1;
   int samples = 0;
+
+  // Put zero bit at the beginning
+  for(int j = 0; j < frame->N_bit; j++) {
+      Preamble_ideal[samples++] = value0;
+  }
 
   // Add D-TAS preamble (short or long)
   uint32_t D_TAS_preamble = (frame->L_preamble) ? D_TAS_31_BITS : D_TAS_7_BITS;
@@ -753,99 +759,53 @@ int *generate_preamble_ideal_sequence(NR_AIOT_UL_FRAME_PARMS *frame)
     }
   }
 
-  // Find mean of the SIP signal
-  /*double Preamble_mean = 0;
-  for (int i = 0; i < frame->preamble_samples; i++) {
-    Preamble_mean += Preamble_ideal[i];
-  }
-  Preamble_mean /= frame->preamble_samples;
-
-  // Remove DC component
-  for (int i = 0; i < frame->preamble_samples; i++) {
-    Preamble_ideal[i] -= Preamble_mean;
-  }*/
-
-  frame->preamble_threshold = frame->preamble_samples/2 * 6000 * 0.75;
-  printf("Calculated preamble threshold: %d\n", frame->preamble_threshold);
-
   return Preamble_ideal;
 }
 
-#define CORR_THRESHOLD 1000000
-
-void AIOT_D2R_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, NR_AIOT_UL_FRAME_PARMS *frame)
+int AIOT_D2R_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *Preamble_ideal, NR_AIOT_UL_FRAME_PARMS *frame)
 {
-  static int pass = MIN_SNR_DB;
-
   // Correlate received signal with ideal Preamble
   int Preamble_offset = 0;
-  int64_t max_corr = 0;
+  int max_corr = INT_MIN;
 
   for (int i = 0; i < rx_size - frame->preamble_samples; i++) {
-    int64_t sum = 0;
+    correlation[i] = 0;
     for (int j = 0; j < frame->preamble_samples; j++) {
-      sum += signal[i + j] * Preamble_ideal[j];
+      correlation[i] += signal[i + j] * Preamble_ideal[j];
     }
 
-    // Threshold to detect Preamble presence
-    if(sum > frame->preamble_threshold) {
-      if(sum > max_corr) {
-        max_corr = sum;
-        Preamble_offset = i;
-      }
-    } else {
-      if(Preamble_offset != 0) {
-        int start = Preamble_offset;
+    if(correlation[i] > max_corr) {
+      max_corr = correlation[i];
+      Preamble_offset = i;
+    }
+  }
 
-        // Check 5 shift chip positions ahead to see if they are stronger
-        for(int k = 1; k <= 5; k++) {
-          sum = 0;
-          for (int j = 0; j < frame->preamble_samples; j++) {
-            sum += signal[start + (k*frame->N_chip*2) + j] * Preamble_ideal[j];
-          }
-
-          if(sum > max_corr) {
-            max_corr = sum;
-            Preamble_offset = start + (k*frame->N_chip*2);
-          } else {
-            break;
-          }
-        }
-        break;
-      }
+  // Check if it is midamble instead of preamble
+  int diff = frame->N_bit*frame->N_midamble_space + frame->preamble_samples;
+  for(int i = Preamble_offset - diff; i >= 0; i -= diff) {
+    if(abs(correlation[i] - max_corr) < max_corr/8) {
+      max_corr = correlation[i];
+      Preamble_offset = i;
     }
   }
 
   if(testing_mode) {
     printf("Detected Preamble at offset %d\n", Preamble_offset);
-
-    if(testing_mode && pass == snr_plot) {
-      // Correlate received signal with ideal Preamble
-      double *correlation = malloc((rx_size - frame->preamble_samples) * sizeof(double));
-      memset(correlation, 0, (rx_size - frame->preamble_samples) * sizeof(double));
-
-      for (int i = 0; i < rx_size - frame->preamble_samples; i++) {
-        for (int j = 0; j < frame->preamble_samples; j++) {
-          correlation[i] += signal[i + j] * Preamble_ideal[j];
-        }
-      }
-
-      sprintf(filename, "%s/D2R_Correlation.m", foldername);
-      LOG_M(filename, "Correlation_sig", correlation, rx_size - frame->preamble_samples, 1, 7);
-
-      free(correlation);
-    }
-
-    pass++;
   }
+  return Preamble_offset;
+}
 
+#define CORR_THRESHOLD 1000000
+
+void AIOT_D2R_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int Preamble_offset, NR_AIOT_UL_FRAME_PARMS *frame)
+{
   int index = Preamble_offset + frame->preamble_samples;
   frame->packet_payload_size = frame->payload_size;
 
   for(int i = 0; i < frame->packet_payload_size; i++) {
     if(i % frame->N_midamble_space == 0 && i != 0) {
       // Insert midamble (fixed pattern 101010...)
-      index += frame->preamble_samples;
+      index += frame->midamble_samples;
     }
 
     int sum1 = 0;
@@ -966,8 +926,11 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_UL_FRAME_PARMS *frame_p
   c16_t *txData = NULL, *txFiltered = NULL;
   c16_t **rxData = NULL;
   int16_t *envelope, *filteredData;
+  int *correlation;
   uint8_t *rx_payload;
   rx_size = frame_parms->packet_samples + channel_model->delay + 200;
+
+  int Preamble_offset = 0;
 
   //generate_butter_coeffs_f64(&filter, channel_model->bw * 1e6, (double)channel_model->sampling_rate * 1e6);
   Butter3_c16 filter;
@@ -1004,6 +967,7 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_UL_FRAME_PARMS *frame_p
 
   envelope = malloc(rx_size * sizeof(int16_t));
   filteredData = malloc(rx_size * sizeof(int16_t));
+  correlation = malloc(rx_size * sizeof(int));
 
   rx_payload = malloc(MAX_AIOT_D2R_PACKET_SIZE);
   memset(rx_payload, 0, MAX_AIOT_D2R_PACKET_SIZE);
@@ -1038,9 +1002,8 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_UL_FRAME_PARMS *frame_p
   Preamble_ideal = generate_preamble_ideal_sequence(frame_parms);
 
   if(testing_mode) {
-    int preamble_samples = frame_parms->N_preamble * frame_parms->N_SFS * 2 * frame_parms->N_chip;
     sprintf(filename, "%s/D2R_Preamble_Ideal.m", foldername);
-    LOG_M(filename, "Preamble_Ideal_sig", Preamble_ideal, preamble_samples, 1, 2);
+    LOG_M(filename, "Preamble_Ideal_sig", Preamble_ideal, frame_parms->preamble_samples, 1, 2);
   }
 
   if(testing_timing) {
@@ -1052,6 +1015,7 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_UL_FRAME_PARMS *frame_p
   double time_channel = 0.0;
   double time_envelope = 0.0;
   double time_filter = 0.0;
+  double time_sync = 0.0;
   double time_downsample = 0.0;
   double time_rx_packet = 0.0;
   double time_ber = 0.0;
@@ -1135,7 +1099,21 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_UL_FRAME_PARMS *frame_p
         printf("Filtering time: %f us\n", time_filter);
       }
 
-      AIOT_D2R_PHY_RX_GetPacket(rx_payload, (const int16_t *) filteredData, frame_parms);
+      Preamble_offset = AIOT_D2R_PHY_RX_Synchronize(correlation, (const int16_t *) filteredData, Preamble_ideal, frame_parms);
+      if(testing_mode && snr == snr_plot && trials == 0) {
+        sprintf(filename, "%s/D2R_Correlation.m", foldername);
+        LOG_M(filename, "Correlation_sig", correlation, rx_size - frame_parms->preamble_samples, 1, 2);
+      }
+
+      if(testing_timing) {
+        stop_meas(&time_stats);
+        time_sync = time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&time_stats);
+        start_meas(&time_stats);
+        printf("Synchronization time: %f us\n", time_sync);
+      }
+
+      AIOT_D2R_PHY_RX_GetPacket(rx_payload, (const int16_t *) filteredData, Preamble_offset, frame_parms);
 
       if(testing_timing) {
         stop_meas(&time_stats);
@@ -1205,6 +1183,7 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_UL_FRAME_PARMS *frame_p
   free(rx_payload);
   free(envelope);
   free(filteredData);
+  free(correlation);
 
   printf("-------------------------------\n");
   printf("            Results\n");

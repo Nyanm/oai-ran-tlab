@@ -267,6 +267,7 @@ struct NR_AIOT_DL_FRAME_PARMS {
   int packet_downsampled_samples; // number of downsampled samples in R2D packet
   int packet_received_symbols;  // number of received OFDM symbols
   int packet_payload_size;    // decoded payload size in bits
+  int SIP_samples; // number of samples in R2D preamble
 };
 
 struct NR_AIOT_UL_FRAME_PARMS {
@@ -292,11 +293,11 @@ struct NR_AIOT_UL_FRAME_PARMS {
   int payload_size; // decoded payload size in bits
   int packet_samples; // number of samples in D2R packet
   int preamble_samples; // number of samples in D2R preamble
+  int midamble_samples; // number of samples in D2R midamble
 
   // rx parameters
   double f_min; // minimum frequency shift
   double f_max; // maximum frequency shift
-  int preamble_threshold; // correlation threshold for preamble detection
   int packet_payload_size; // decoded payload size in bits
 };
 
