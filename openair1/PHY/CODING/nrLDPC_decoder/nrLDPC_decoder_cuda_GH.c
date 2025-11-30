@@ -411,6 +411,9 @@ void free_graphs()
 
 extern int cuda_support_set;
 
+bool encoder_streamsCreated = false;
+cudaStream_t encoderStreams[4];
+
 int32_t LDPCinit_cuda()
 {
   printf("Calling encoder initializations\n");
@@ -428,6 +431,12 @@ int32_t LDPCinit_cuda()
     }
     streamsCreated = true;
   }
+  if (!encoder_streamsCreated) {
+    for (int s = 0; s < 4; ++s) {
+      cudaStreamCreateWithFlags(&encoderStreams[s], cudaStreamNonBlocking);
+    }
+    encoder_streamsCreated = true;
+  }
   init_decoder_graphs();
   return 0;
 }
@@ -441,9 +450,15 @@ int32_t LDPCshutdown_cuda()
     }
   }
 
+  for (int s=0; s< 4; s++) {
+    if (encoder_streamsCreated) {
+      cudaStreamDestroy(encoderStreams[s]);
+    }
+  }
   free_graphs();
 
   streamsCreated = false;
+  encoder_streamsCreated = false;
   SegmentPacked = false;
   // d_mem_exist = false;
 

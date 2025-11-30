@@ -605,10 +605,17 @@ printf("=== Host p_lut->startAddrBnProcBuf dump ===\n");
     iter_ptr_array[s] = 0;
     PC_Flag_array[s] = 1;
   }
+#if CUDART_VERSION < 13000
     cudaMemPrefetchAsync(p_lut_dev, sizeof(p_lut_dev), gpuDeviceId,0);
     cudaMemPrefetchAsync(iter_ptr_array, MAX_NUM_DLSCH_SEGMENTS_DL*sizeof(int8_t), gpuDeviceId,0);
     cudaMemPrefetchAsync(PC_Flag_array, MAX_NUM_DLSCH_SEGMENTS_DL*sizeof(int), gpuDeviceId,0);
-//printf("Flag_ptr = %p\n", PC_Flag_array);
+#else
+    struct cudaMemLocation location = {.id=gpuDeviceId,.type=cudaMemLocationTypeDevice};
+    cudaMemPrefetchAsync(p_lut_dev, sizeof(p_lut_dev), location,0,0);
+    cudaMemPrefetchAsync(iter_ptr_array, MAX_NUM_DLSCH_SEGMENTS_DL*sizeof(int8_t), location,0,0);
+    cudaMemPrefetchAsync(PC_Flag_array, MAX_NUM_DLSCH_SEGMENTS_DL*sizeof(int), location,0,0);
+#endif
+    //printf("Flag_ptr = %p\n", PC_Flag_array);
 //   printf("3.2: It works here\n");
   for (int CudaStreamIdx = 0; CudaStreamIdx < n_segments; CudaStreamIdx++) {
     int8_t* pp_llr = temp_in + CudaStreamIdx * 68 * 384 ;
