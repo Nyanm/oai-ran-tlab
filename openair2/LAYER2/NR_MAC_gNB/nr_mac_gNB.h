@@ -993,6 +993,7 @@ typedef struct gNB_MAC_INST_s {
   nr_mac_rrc_ul_if_t mac_rrc;
   f1_config_t f1_config;
   int16_t frame;
+  int hfn;
 
   /// number of UEs to exceed to disable stats
   int stats_max_ue;

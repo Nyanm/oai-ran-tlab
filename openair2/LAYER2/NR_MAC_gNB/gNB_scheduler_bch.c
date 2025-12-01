@@ -530,6 +530,14 @@ void schedule_nr_sib1(module_id_t module_idP,
                   scc->ssb_PositionsInBurst->present);
   }
 
+  NR_COMMON_channels_t *cc = &gNB_mac->common_channels[0];
+  if (gNB_mac->hfn >= 0 && frameP == 0) {
+    gNB_mac->hfn = (gNB_mac->hfn + 1) % 1024;
+    update_SIB1_NR_SI(cc->sib1, 0, 0, gNB_mac->hfn);
+    cc->sib1_bcch_length = encode_SIB_NR(cc->sib1, cc->sib1_bcch_pdu, sizeof(cc->sib1_bcch_pdu));
+    AssertFatal(cc->sib1_bcch_length > 0, "could not encode SIB1\n");
+  }
+
   for (int i = 0; i < L_max; i++) {
 
     NR_Type0_PDCCH_CSS_config_t *type0_PDCCH_CSS_config = &gNB_mac->type0_PDCCH_CSS_config[i];
@@ -565,7 +573,6 @@ void schedule_nr_sib1(module_id_t module_idP,
                                                          NULL,
                                                          type0_PDCCH_CSS_config);
 
-      NR_COMMON_channels_t *cc = &gNB_mac->common_channels[0];
       // Configure sched_ctrlCommon for SIB1
       NR_sched_pdsch_t sched_pdsch = schedule_control_sib1(gNB_mac,
                                                            CC_id,

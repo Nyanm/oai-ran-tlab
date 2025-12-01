@@ -944,6 +944,7 @@ bool nr_mac_configure_other_sib(gNB_MAC_INST *nrmac, int num_cu_sib, const f1ap_
     }
   }
 
+  nrmac->hfn = -1;
   for (int i = 0; i < num_du_sib; i++) {
     nr_SIBs_t *si = (nr_SIBs_t *)seq_arr_at(du_SIBs, i);
     int sib_idx = i + num_cu_sib;
@@ -955,6 +956,7 @@ bool nr_mac_configure_other_sib(gNB_MAC_INST *nrmac, int num_cu_sib, const f1ap_
         NR_SIB19_r17_t *sib19 = get_SIB19_NR(cc->ServingCellConfigCommon);
         type_du->choice.sib19_v1700 = sib19;
         add_sib_to_systeminformation(sysInfov17, type_du);
+        nrmac->hfn = 0;
         break;
       }
       default :
@@ -962,7 +964,7 @@ bool nr_mac_configure_other_sib(gNB_MAC_INST *nrmac, int num_cu_sib, const f1ap_
     }
   }
 
-  update_SIB1_NR_SI(cc->sib1, num_cu_sib + num_du_sib, config_sibs);
+  update_SIB1_NR_SI(cc->sib1, num_cu_sib + num_du_sib, config_sibs, nrmac->hfn);
   cc->sib1_bcch_length = encode_SIB_NR(cc->sib1, cc->sib1_bcch_pdu, sizeof(cc->sib1_bcch_pdu));
   AssertFatal(cc->sib1_bcch_length > 0, "could not encode SIB1\n");
 

@@ -2571,7 +2571,7 @@ void add_sib_to_systeminformation(NR_SystemInformation_IEs_t *si, struct NR_Syst
   asn1cSeqAdd(&si->sib_TypeAndInfo.list, type);
 }
 
-void update_SIB1_NR_SI(NR_BCCH_DL_SCH_Message_t *sib1_bcch, int num_sibs, int sibs[num_sibs])
+void update_SIB1_NR_SI(NR_BCCH_DL_SCH_Message_t *sib1_bcch, int num_sibs, int sibs[num_sibs], int hfn)
 {
   NR_SIB1_t *sib1 = sib1_bcch->message.choice.c1->choice.systemInformationBlockType1;
   //si-SchedulingInfo
@@ -2645,6 +2645,15 @@ void update_SIB1_NR_SI(NR_BCCH_DL_SCH_Message_t *sib1_bcch, int num_sibs, int si
       sib1_v1630->nonCriticalExtension = sib1_v17;
     }
     sib1_v17->si_SchedulingInfo_v1700 = si_schedulingInfo_v17;
+  }
+  if (hfn > 0) {
+    if (sib1->nonCriticalExtension
+        && sib1->nonCriticalExtension->nonCriticalExtension
+        && sib1->nonCriticalExtension->nonCriticalExtension->nonCriticalExtension) {
+      NR_SIB1_v1700_IEs_t *sib1_v17 = sib1->nonCriticalExtension->nonCriticalExtension->nonCriticalExtension;
+      INT32_TO_BIT_STRING(hfn, sib1_v17->hyperSFN_r17);
+    } else
+      LOG_E(NR_MAC, "HFN configured but no SIB1-v1700-IEs available\n");
   }
   if (LOG_DEBUGFLAG(DEBUG_ASN1)) {
     xer_fprint(stdout, &asn_DEF_NR_BCCH_DL_SCH_Message, sib1_bcch);
