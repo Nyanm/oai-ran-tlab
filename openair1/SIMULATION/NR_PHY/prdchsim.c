@@ -351,106 +351,111 @@ void AIOT_R2D_PHY_RX_Envelope_Detector(int16_t *envelope, const c16_t **rxData, 
   }
 }
 
-// --- 1st-Order Section (Floating-Point) ---
+// Q29 Fixed Point: High precision for coefficients.
+// Q29 leaves 3 bits for integer part in int32 coeffs (Range +/- 4.0), perfect for Butterworth.
+#define Q_SHIFT 29
+#define Q_HALF  (1LL << (Q_SHIFT - 1)) // For rounding
+
 typedef struct {
-    double b[2]; // b0, b1
-    double a[2]; // a0, a1 (a0 is always 1.0)
-    double s[1]; // state
-} iir_ord1_f64_t;
+  int32_t b[2];    // b0, b1
+  int32_t a1;      // a1 (a0 is 1.0)
+  int64_t s;       // State MUST be 64-bit to prevent overflow
+} iir_ord1_t;
 
-// --- 2nd-Order (Biquad) Section (Floating-Point) ---
 typedef struct {
-    double b[3]; // b0, b1, b2
-    double a[3]; // a0, a1, a2 (a0 is always 1.0)
-    double s[2]; // states s1, s2
-} iir_biquad_f64_t;
+  int32_t b[3];    // b0, b1, b2
+  int32_t a[2];    // a1, a2 (a0 is 1.0)
+  int64_t s[2];    // States MUST be 64-bit
+} iir_biquad_t;
 
-// --- 3rd-Order Filter (Cascade) ---
 typedef struct {
-    iir_ord1_f64_t   sec1; // 1st-order section
-    iir_biquad_f64_t sec2; // 2nd-order section
-} iir_butter3_f64_t;
+  iir_ord1_t   sec1;
+  iir_biquad_t sec2;
+} iir_butter3_fixed_t;
 
-iir_butter3_f64_t filter;
-
-/**
- * @brief Initializes the filter state to zero.
- */
-void iir_butter3_init(iir_butter3_f64_t* filt) {
-    filt->sec1.s[0] = 0.0;
-    filt->sec2.s[0] = 0.0;
-    filt->sec2.s[1] = 0.0;
+// --- Helper: Float to Fix ---
+static inline int32_t to_fix(double x) {
+  return (int32_t)round(x * (double)(1LL << Q_SHIFT));
 }
 
-/**
- * @brief Generates 3rd-Order Butterworth LPF coefficients.
- * (This is identical to the fixed-point generator, just simpler storage)
- */
-void generate_butter_coeffs_f64(iir_butter3_f64_t* filt, double fc, double fs) {
-    // --- 1. Pre-warp frequency ---
-    double w = 2.0 * fs * tan(M_PI * fc / fs);
-    double T = 1.0 / fs;
+// --- Initialization ---
+void generate_butter_coeffs_fixed(iir_butter3_fixed_t* filt, double fc, double fs) {
+  double w = 2.0 * fs * tan(M_PI * fc / fs);
+  double T = 1.0 / fs;
 
-    // --- 2. Calculate 1st-Order Section ---
-    // H(z) = (b0 + b1*z^-1) / (a0 + a1*z^-1)
-    filt->sec1.a[0] = 2.0 + w * T;
-    filt->sec1.b[0] = w * T;
-    filt->sec1.b[1] = w * T;
-    filt->sec1.a[1] = w * T - 2.0;
-    
-    // --- 3. Calculate 2nd-Order Section ---
-    // H(z) = (b0 + b1*z^-1 + b2*z^-2) / (a0 + a1*z^-1 + a2*z^-2)
-    filt->sec2.a[0] = 4.0 + 2.0*w*T + w*w*T*T;
-    filt->sec2.b[0] = w*w*T*T;
-    filt->sec2.b[1] = 2.0*w*w*T*T;
-    filt->sec2.b[2] = w*w*T*T;
-    filt->sec2.a[1] = -8.0 + 2.0*w*w*T*T;
-    filt->sec2.a[2] = 4.0 - 2.0*w*T + w*w*T*T;
+  // 1st Order Temp
+  double a0_1 = 2.0 + w * T;
+  double inv1 = 1.0 / a0_1;
+  
+  filt->sec1.b[0] = to_fix((w * T) * inv1);
+  filt->sec1.b[1] = to_fix((w * T) * inv1);
+  filt->sec1.a1   = to_fix((w * T - 2.0) * inv1);
+  filt->sec1.s    = 0; // Reset state
 
-    // --- 4. Normalize coefficients (so a0 is 1.0) ---
-    // This is crucial for the Direct Form II Transposed implementation.
-    double a0_inv_1 = 1.0 / filt->sec1.a[0];
-    filt->sec1.b[0] *= a0_inv_1;
-    filt->sec1.b[1] *= a0_inv_1;
-    filt->sec1.a[1] *= a0_inv_1;
-    filt->sec1.a[0] = 1.0;
+  // 2nd Order Temp
+  double a0_2 = 4.0 + 2.0*w*T + w*w*T*T;
+  double inv2 = 1.0 / a0_2;
 
-    double a0_inv_2 = 1.0 / filt->sec2.a[0];
-    filt->sec2.b[0] *= a0_inv_2;
-    filt->sec2.b[1] *= a0_inv_2;
-    filt->sec2.b[2] *= a0_inv_2;
-    filt->sec2.a[1] *= a0_inv_2;
-    filt->sec2.a[2] *= a0_inv_2;
-    filt->sec2.a[0] = 1.0;
-
-    // 5. Clear state
-    iir_butter3_init(filt);
+  filt->sec2.b[0] = to_fix((w*w*T*T) * inv2);
+  filt->sec2.b[1] = to_fix((2.0*w*w*T*T) * inv2);
+  filt->sec2.b[2] = to_fix((w*w*T*T) * inv2);
+  filt->sec2.a[0] = to_fix((-8.0 + 2.0*w*w*T*T) * inv2); // a1
+  filt->sec2.a[1] = to_fix((4.0 - 2.0*w*T + w*w*T*T) * inv2); // a2
+  filt->sec2.s[0] = 0; // Reset state
+  filt->sec2.s[1] = 0;
 }
 
-/**
- * @brief Processes one sample through the 3rd-order filter.
- * This is the high-speed, floating-point function.
- */
-double iir_butter3_filter(iir_butter3_f64_t* filt, double input) {
-    // --- Process 1st-Order Section (DF-II Transposed) ---
-    double y1 = (filt->sec1.b[0] * input) + filt->sec1.s[0];
-    filt->sec1.s[0] = (filt->sec1.b[1] * input) - (filt->sec1.a[1] * y1);
-    
-    // --- Process 2nd-Order Section (DF-II Transposed) ---
-    double y2 = (filt->sec2.b[0] * y1) + filt->sec2.s[0];
-    filt->sec2.s[0] = (filt->sec2.b[1] * y1) - (filt->sec2.a[1] * y2) + filt->sec2.s[1];
-    filt->sec2.s[1] = (filt->sec2.b[2] * y1) - (filt->sec2.a[2] * y2);
-    
-    return y2; // Final output
-}
-
-void AIOT_R2D_PHY_RX_Filter(int16_t *out, const int16_t *in, int length, iir_butter3_f64_t *filt)
+// --- Filter Implementation ---
+// Note: No intrinsics (like AVX) used because recursive filters depend on 
+// the previous sample. 64-bit Scalar math is the fastest way to do this on CPU.
+void AIOT_R2D_PHY_RX_Filter(int16_t *out, const int16_t *in, int length, iir_butter3_fixed_t *filt)
 {
-  iir_butter3_init(filt);
+  // Reset states at start of packet? 
+  // If you want continuous filtering across packets, remove these 3 lines.
+  filt->sec1.s = 0;
+  filt->sec2.s[0] = 0; 
+  filt->sec2.s[1] = 0;
+
+  // Load coeffs to registers
+  int32_t c1_b0 = filt->sec1.b[0], c1_b1 = filt->sec1.b[1], c1_a1 = filt->sec1.a1;
+  int32_t c2_b0 = filt->sec2.b[0], c2_b1 = filt->sec2.b[1], c2_b2 = filt->sec2.b[2];
+  int32_t c2_a1 = filt->sec2.a[0], c2_a2 = filt->sec2.a[1];
+  
+  // Load states to registers (int64_t is crucial!)
+  int64_t s1 = filt->sec1.s;
+  int64_t s2_0 = filt->sec2.s[0], s2_1 = filt->sec2.s[1];
 
   for (int n = 0; n < length; n++) {
-    out[n] = iir_butter3_filter(filt, in[n]);
+    int32_t x = in[n]; // Input is positive envelope (0..32767)
+
+    // --- Section 1 (DF-II Transposed) ---
+    // Calc Output y1: (b0*x + s) >> Q. 
+    // We add Q_HALF for rounding before shifting.
+    int32_t y1 = (int32_t)(( (int64_t)c1_b0 * x + s1 + Q_HALF ) >> Q_SHIFT);
+    
+    // Update State: b1*x - a1*y1
+    // Since x and y1 are positive, this subtraction keeps the state stable.
+    s1 = (int64_t)c1_b1 * x - (int64_t)c1_a1 * y1;
+
+    // --- Section 2 (DF-II Transposed) ---
+    int32_t y2 = (int32_t)(( (int64_t)c2_b0 * y1 + s2_0 + Q_HALF ) >> Q_SHIFT);
+
+    // Update States
+    s2_0 = ((int64_t)c2_b1 * y1 - (int64_t)c2_a1 * y2) + s2_1;
+    s2_1 =  (int64_t)c2_b2 * y1 - (int64_t)c2_a2 * y2;
+
+    // --- Saturation (0 to 32767) ---
+    // Since input is positive, output should be positive.
+    if (y2 > 32767) y2 = 32767;
+    else if (y2 < 0) y2 = 0; 
+    
+    out[n] = (int16_t)y2;
   }
+
+  // Save states
+  filt->sec1.s = s1;
+  filt->sec2.s[0] = s2_0;
+  filt->sec2.s[1] = s2_1;
 }
 
 void AIOT_R2D_PHY_RX_Downsample(int16_t *out, const int16_t *in, int length, NR_AIOT_DL_FRAME_PARMS *frame)
@@ -875,8 +880,8 @@ void* process_snr_range(void* arg) {
   memcpy(local_payload, data->payload, (data->payloadSize + 7) / 8);
   
   // Thread-local filter
-  iir_butter3_f64_t local_filter;
-  generate_butter_coeffs_f64(&local_filter, data->channel_model->bw * 1e6, (double)data->channel_model->sampling_rate * 1e6);
+  iir_butter3_fixed_t local_filter;
+  generate_butter_coeffs_fixed(&local_filter, data->channel_model->bw * 1e6, (double)data->channel_model->sampling_rate * 1e6);
   
   // Thread-local IQ signal buffers
   double **s_re = malloc(data->frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
@@ -895,6 +900,7 @@ void* process_snr_range(void* arg) {
   
   // Thread-local timing stats
   time_stats_t local_time_stats = {0};
+  char filename[128] = {0};
   
   // Process SNR range assigned to this thread
   for(int snr = data->snr_start; snr <= data->snr_end; snr += SNR_STEP_DB) {
@@ -919,6 +925,11 @@ void* process_snr_range(void* arg) {
       }
       
       AIOT_R2D_PHY_TX_REs(REsPacket, (const uint8_t *) local_payload, data->frame_parms);
+
+      if(testing_mode && snr == snr_plot && trials == 0) {
+        sprintf(filename, "%s/R2D_REs_Packet.m", foldername);
+        LOG_M(filename, "REs_Packet_sig", REsPacket, frame_parms->packet_symbols * frame_parms->packet_subcarriers, 1, 1);
+      }
       
       if(testing_timing && snr != snr_plot) {
         stop_meas(&local_time_stats);
@@ -928,6 +939,11 @@ void* process_snr_range(void* arg) {
       }
       
       AIOT_R2D_PHY_TX_Signal(txData, txDataF, (const c16_t *) REsPacket, data->frame_parms);
+
+      if(testing_mode && snr == snr_plot && trials == 0) {
+        sprintf(filename, "%s/R2D_TX_IQ.m", foldername);
+        LOG_M(filename, "TX_IQ_sig", txData, frame_parms->packet_samples, 1, 1);
+      }
       
       if(testing_timing && snr != snr_plot) {
         stop_meas(&local_time_stats);
@@ -938,6 +954,11 @@ void* process_snr_range(void* arg) {
       
       SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, local_channel_model.SNR, data->frame_parms,
                             s_re, s_im, r_re, r_im);
+
+      if(testing_mode && snr == snr_plot && trials == 0) {
+        sprintf(filename, "%s/R2D_RX_IQ.m", foldername);
+        LOG_M(filename, "RX_IQ_sig", rxData[0], rx_size, 1, 1);
+      }
       
       if(testing_timing && snr != snr_plot) {
         stop_meas(&local_time_stats);
@@ -947,6 +968,11 @@ void* process_snr_range(void* arg) {
       }
       
       AIOT_R2D_PHY_RX_Envelope_Detector(envelope, (const c16_t **) rxData, rx_size);
+
+      if(testing_mode && snr == snr_plot && trials == 0) {
+        sprintf(filename, "%s/R2D_Envelope.m", foldername);
+        LOG_M(filename, "Envelope_sig", envelope, rx_size, 1, 0);
+      }
       
       if(testing_timing && snr != snr_plot) {
         stop_meas(&local_time_stats);
@@ -956,6 +982,11 @@ void* process_snr_range(void* arg) {
       }
       
       AIOT_R2D_PHY_RX_Filter(filteredData, (const int16_t *) envelope, rx_size, &local_filter);
+
+      if(testing_mode && snr == snr_plot && trials == 0) {
+        sprintf(filename, "%s/R2D_Filter.m", foldername);
+        LOG_M(filename, "Filter_sig", filteredData, rx_size, 1, 0);
+      }
       
       if(testing_timing && snr != snr_plot) {
         stop_meas(&local_time_stats);
@@ -965,7 +996,12 @@ void* process_snr_range(void* arg) {
       }
       
       AIOT_R2D_PHY_RX_Downsample(downSampled, (const int16_t *) filteredData, rx_size, data->frame_parms);
-      
+
+      if(testing_mode && snr == snr_plot && trials == 0) {
+        sprintf(filename, "%s/R2D_Downsampled.m", foldername);
+        LOG_M(filename, "Downsampled_sig", downSampled, frame_parms->packet_downsampled_samples, 1, 0);
+      }
+
       if(testing_timing && snr != snr_plot) {
         stop_meas(&local_time_stats);
         data->time_downsample += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
@@ -974,7 +1010,12 @@ void* process_snr_range(void* arg) {
       }
       
       int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) downSampled, SIP_ideal, data->frame_parms);
-      
+
+      if(testing_mode && snr == snr_plot && trials == 0) {
+        sprintf(filename, "%s/R2D_Correlation.m", foldername);
+        LOG_M(filename, "Correlation_sig", correlation, frame_parms->packet_downsampled_samples - frame_parms->SIP_samples, 1, 2);
+      }
+
       if(testing_timing && snr != snr_plot) {
         stop_meas(&local_time_stats);
         data->time_sync += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
