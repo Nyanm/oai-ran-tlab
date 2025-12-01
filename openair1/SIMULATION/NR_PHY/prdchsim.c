@@ -267,7 +267,7 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
 void AIOT_R2D_PHY_RX_Envelope_Detector(int16_t *envelope, const c16_t **rxData, int rx_size)
 {
   // Envelope detector (squared)
-  for (int i = 0; i < rx_size; i++) {
+  /*for (int i = 0; i < rx_size; i++) {
     //envelope[i] = iSqrt(rxData[0][i].r * rxData[0][i].r + rxData[0][i].i * rxData[0][i].i);
 
     // 1. Calculate the absolute values (still Q1.15).
@@ -290,10 +290,64 @@ void AIOT_R2D_PHY_RX_Envelope_Detector(int16_t *envelope, const c16_t **rxData, 
     
     // Multiplication by 1/4 is a right shift by 2 (>> 2).
     // The result 'beta_min' is still in Q1.15.
-    int16_t beta_min = min_val >> 2; 
+    int16_t beta_min = min_val >> 2;
 
     // 4. Final Addition
     envelope[i] = min(max_val + beta_min, 32767); // Clamp to int16_t max
+  }*/
+
+  // Cast to linear int16 pointer for easier SIMD indexing
+  const int16_t *src = (const int16_t*)rxData[0];
+  int i = 0;
+
+#if defined(__AVX512F__) && defined(__AVX512BW__)
+  const __m512i max_val = _mm512_set1_epi32(32767);
+
+  for (; i + 15 < rx_size; i += 16) {
+    __m512i vec = _mm512_loadu_si512(&src[2 * i]);
+    
+    // 1. Calc Re^2 + Im^2 (Result: 16 x int32)
+    __m512i sq_32 = _mm512_madd_epi16(vec, vec);
+
+    // 2. Convert to Float -> Sqrt -> Back to Int32
+    __m512i root_32 = _mm512_cvtps_epi32(_mm512_sqrt_ps(_mm512_cvtepi32_ps(sq_32)));
+
+    // 3. Saturate (min), Down-convert (int32->int16), and Store
+    // Note: _mm512_cvtepi32_epi16 converts 512-bit int32 to 256-bit int16
+    __m256i result = _mm512_cvtepi32_epi16(_mm512_min_epi32(root_32, max_val));
+    _mm256_storeu_si256((__m256i*)&envelope[i], result);
+  }
+
+#elif defined(__AVX2__)
+  for (; i + 7 < rx_size; i += 8) {
+    __m256i vec = _mm256_loadu_si256((__m256i*)&src[2 * i]);
+    
+    // 1. Calc Re^2 + Im^2 (Result: 8 x int32)
+    __m256i sq_32 = _mm256_madd_epi16(vec, vec);
+
+    // 2. Convert to Float -> Sqrt -> Back to Int32
+    __m256i root_32 = _mm256_cvtps_epi32(_mm256_sqrt_ps(_mm256_cvtepi32_ps(sq_32)));
+
+    // 3. Pack 32-bit integers to 16-bit (Auto-saturates)
+    // We must split the 256-bit register to pack it into a 128-bit register
+    __m128i packed = _mm_packs_epi32(
+        _mm256_castsi256_si128(root_32),      // Low 128 bits
+        _mm256_extracti128_si256(root_32, 1)  // High 128 bits
+    );
+    _mm_storeu_si128((__m128i*)&envelope[i], packed);
+  }
+#endif
+
+  // Scalar Fallback
+  for (; i < rx_size; i++) {
+    int32_t re = src[2 * i];
+    int32_t im = src[2 * i + 1];
+    
+    // Sqrt(Re^2 + Im^2)
+    int32_t mag = (int32_t)sqrtf((float)(re * re + im * im));
+    
+    // Saturate and Store
+    envelope[i] = (mag > 32767) ? 32767 : (int16_t)mag;
   }
 }
 
@@ -484,22 +538,22 @@ int AIOT_R2D_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *SI
     int acc = 0;
 
 #if defined(__AVX512F__) && defined(__AVX512BW__)
-    /* AVX-512 (SIMDe). Use horizontal reduce to sum vector lanes. */
+    /* AVX-512 intrinsics */
     int j = 0;
     const int16_t *sig_ptr = signal + i;
     const int *sip_ptr = SIP_ideal;
 
     int j16 = (L / 16) * 16;
     for (; j < j16; j += 16) {
-      simde__m256i s16 = simde_mm256_loadu_si256((const simde__m256i *)(sig_ptr + j)); // 16 x int16 in 256
-      simde__m512i s32 = simde_mm512_cvtepi16_epi32(s16);                              // 16 x int32
+      __m256i s16 = _mm256_loadu_si256((const __m256i *)(sig_ptr + j));    // 16 x int16
+      __m512i s32 = _mm512_cvtepi16_epi32(s16);                            // widen to 16 x int32
 
-      simde__m512i p32 = simde_mm512_loadu_si512((const void *)(sip_ptr + j));         // 16 x int32
+      __m512i p32 = _mm512_loadu_si512((const void *)(sip_ptr + j));       // 16 x int32
 
-      simde__m512i prod = simde_mm512_mullo_epi32(s32, p32);
+      __m512i prod = _mm512_mullo_epi32(s32, p32);
 
-      /* horizontal add across 16 lanes */
-      int32_t sum = simde_mm512_reduce_add_epi32(prod);
+      // use the AVX-512 reduce intrinsic instead of manual summation
+      int32_t sum = _mm512_reduce_add_epi32(prod);
       acc += sum;
     }
 
@@ -509,23 +563,23 @@ int AIOT_R2D_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *SI
     }
 
 #elif defined(__AVX2__)
-    /* AVX2-only (SIMDe). Use reduce helper when available or manual horizontal sum. */
+    /* AVX2 intrinsics */
     int j = 0;
     const int16_t *sig_ptr = signal + i;
     const int *sip_ptr = SIP_ideal;
 
     int j8 = (L / 8) * 8;
     for (; j < j8; j += 8) {
-      simde__m128i s16 = simde_mm_loadu_si128((const simde__m128i *)(sig_ptr + j)); // 8 x int16
-      simde__m256i s32 = simde_mm256_cvtepi16_epi32(s16);                          // 8 x int32
+      __m128i s16 = _mm_loadu_si128((const __m128i *)(sig_ptr + j));      // 8 x int16
+      __m256i s32 = _mm256_cvtepi16_epi32(s16);                            // widen to 8 x int32
 
-      simde__m256i p32 = simde_mm256_loadu_si256((const simde__m256i *)(sip_ptr + j)); // 8 x int32
+      __m256i p32 = _mm256_loadu_si256((const __m256i *)(sip_ptr + j));    // 8 x int32
 
-      simde__m256i prod = simde_mm256_mullo_epi32(s32, p32);
+      __m256i prod = _mm256_mullo_epi32(s32, p32);
 
-      /* horizontal add across 8 lanes (manual fallback) */
       int32_t tmp[8];
-      simde_mm256_storeu_si256((simde__m256i*)tmp, prod);
+      _mm256_storeu_si256((__m256i*)tmp, prod);
+
       int32_t sum = tmp[0] + tmp[1] + tmp[2] + tmp[3] + tmp[4] + tmp[5] + tmp[6] + tmp[7];
       acc += sum;
     }
@@ -1371,13 +1425,13 @@ int main(int argc, char **argv)
   crcTableInit();
   InitSinLUT();
 
-  #ifdef defined(__AVX2__)
+  #if defined(__AVX2__)
     printf("AVX2 supported\n");
   #else
     printf("AVX2 not supported\n");
   #endif
   
-  #ifdef defined(__AVX512F__) && defined(__AVX512BW__)
+  #if defined(__AVX512F__) && defined(__AVX512BW__)
     printf("AVX512 supported\n");
   #else
     printf("AVX512 not supported\n");
