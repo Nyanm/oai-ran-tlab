@@ -39,6 +39,19 @@
 
 #include "PHY_AIOT/defs_aiot_r2d.h"
 
+/* Compile-time feature detection */
+#if defined(__AVX512F__) && defined(__AVX512BW__)
+  #define HAVE_AVX512 1
+#else
+  #define HAVE_AVX512 0
+#endif
+
+#if defined(__AVX2__)
+  #define HAVE_AVX2 1
+#else
+  #define HAVE_AVX2 0
+#endif
+
 const char *__asan_default_options()
 {
   /* don't do leak checking in nr_ulsim, not finished yet */
@@ -229,7 +242,12 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
   double sigma2 = pow(10, sigma2_dBm / 10);
   //printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dBm);
 
-  multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + channel->channel_offset + 200, 0, 1);
+  static uint8_t initialized = 0;
+  multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + channel->channel_offset + 200, initialized, 1);
+  if(initialized == 0) {
+    initialized = 1;
+  }
+
   add_noise(rxData,
             (const double **)r_re,
             (const double **)r_im,
@@ -468,18 +486,90 @@ int *generate_SIP_ideal_sequence(NR_AIOT_DL_FRAME_PARMS *frame_parms)
 
 int AIOT_R2D_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *SIP_ideal, NR_AIOT_DL_FRAME_PARMS *frame)
 {
-  // Correlate received signal with ideal Preamble
+  // Correlate received signal with ideal Preamble (vectorized with AVX2 when available)
   int Preamble_offset = 0;
   int max_corr = INT_MIN;
 
-  for (int i = 0; i < frame->packet_downsampled_samples - frame->SIP_samples; i++) {
-    correlation[i] = 0;
-    for (int j = 0; j < frame->SIP_samples; j++) {
-      correlation[i] += signal[i + j] * SIP_ideal[j];
+  int N = frame->packet_downsampled_samples - frame->SIP_samples;
+  int L = frame->SIP_samples;
+
+  for (int i = 0; i < N; i++) {
+    int acc = 0;
+
+#if HAVE_AVX512
+    /* AVX-512 implementation (compile-time selected) */
+    int j = 0;
+    const int16_t *sig_ptr = signal + i;
+    const int *sip_ptr = SIP_ideal;
+
+    int j16 = (L / 16) * 16;
+    for (; j < j16; j += 16) {
+      __m256i s16 = _mm256_loadu_si256((const __m256i *)(sig_ptr + j)); // 16 x int16
+      __m512i s32 = _mm512_cvtepi16_epi32(s16);                         // 16 x int32
+
+      __m512i p32 = _mm512_loadu_si512((const void *)(sip_ptr + j));    // 16 x int32
+
+      __m512i prod = _mm512_mullo_epi32(s32, p32);
+
+      int32_t tmp[16];
+      _mm512_storeu_si512((__m512i *)tmp, prod);
+      acc += tmp[0]  + tmp[1]  + tmp[2]  + tmp[3]
+           + tmp[4]  + tmp[5]  + tmp[6]  + tmp[7]
+           + tmp[8]  + tmp[9]  + tmp[10] + tmp[11]
+           + tmp[12] + tmp[13] + tmp[14] + tmp[15];
     }
 
-    if(correlation[i] > max_corr) {
-      max_corr = correlation[i];
+    /* Use AVX2 for remaining multiple-of-8 chunk if available at compile time */
+    int j8 = (L / 8) * 8;
+    for (; j < j8; j += 8) {
+      __m128i s16_lo = _mm_loadu_si128((const __m128i *)(sig_ptr + j)); // 8 x int16
+      __m256i s32_8   = _mm256_cvtepi16_epi32(s16_lo);                  // 8 x int32
+      __m256i p32_8   = _mm256_loadu_si256((const __m256i *)(sip_ptr + j));
+      __m256i prod8   = _mm256_mullo_epi32(s32_8, p32_8);
+      int32_t tmp8[8];
+      _mm256_storeu_si256((__m256i *)tmp8, prod8);
+      acc += tmp8[0] + tmp8[1] + tmp8[2] + tmp8[3] + tmp8[4] + tmp8[5] + tmp8[6] + tmp8[7];
+    }
+
+    for (; j < L; j++) {
+      acc += (int)sig_ptr[j] * sip_ptr[j];
+    }
+
+#elif HAVE_AVX2
+    /* AVX2-only implementation (compile-time selected) */
+    int j = 0;
+    const int16_t *sig_ptr = signal + i;
+    const int *sip_ptr = SIP_ideal;
+
+    int j8 = (L / 8) * 8;
+    for (; j < j8; j += 8) {
+      __m128i s16 = _mm_loadu_si128((const __m128i *)(sig_ptr + j)); // 8 x int16
+      __m256i s32 = _mm256_cvtepi16_epi32(s16);                      // 8 x int32
+
+      __m256i p32 = _mm256_loadu_si256((const __m256i *)(sip_ptr + j)); // 8 x int32
+
+      __m256i prod = _mm256_mullo_epi32(s32, p32);
+
+      int32_t tmp[8];
+      _mm256_storeu_si256((__m256i *)tmp, prod);
+      acc += tmp[0] + tmp[1] + tmp[2] + tmp[3] + tmp[4] + tmp[5] + tmp[6] + tmp[7];
+    }
+
+    for (; j < L; j++) {
+      acc += (int)sig_ptr[j] * sip_ptr[j];
+    }
+
+#else
+    /* Scalar fallback (no SIMD) */
+    for (int j = 0; j < L; j++) {
+      acc += (int)signal[i + j] * SIP_ideal[j];
+    }
+#endif
+
+    correlation[i] = acc;
+
+    if (acc > max_corr) {
+      max_corr = acc;
       Preamble_offset = i;
     }
   }
@@ -790,6 +880,7 @@ void* process_snr_range(void* arg) {
       
       if(testing_mode) {
         pthread_mutex_lock(data->print_mutex);
+        printf("*************************\n");
         printf("Thread %d: Testing SNR %d dB\n", data->thread_id, snr);
         pthread_mutex_unlock(data->print_mutex);
       }
