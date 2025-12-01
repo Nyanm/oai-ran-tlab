@@ -39,19 +39,6 @@
 
 #include "PHY_AIOT/defs_aiot_r2d.h"
 
-/* Compile-time feature detection */
-#if defined(__AVX512F__) && defined(__AVX512BW__)
-  #define HAVE_AVX512 1
-#else
-  #define HAVE_AVX512 0
-#endif
-
-#if defined(__AVX2__)
-  #define HAVE_AVX2 1
-#else
-  #define HAVE_AVX2 0
-#endif
-
 const char *__asan_default_options()
 {
   /* don't do leak checking in nr_ulsim, not finished yet */
@@ -496,63 +483,51 @@ int AIOT_R2D_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *SI
   for (int i = 0; i < N; i++) {
     int acc = 0;
 
-#if HAVE_AVX512
-    /* AVX-512 implementation (compile-time selected) */
+#if defined(__AVX512F__) && defined(__AVX512BW__)
+    /* AVX-512 (SIMDe). Use horizontal reduce to sum vector lanes. */
     int j = 0;
     const int16_t *sig_ptr = signal + i;
     const int *sip_ptr = SIP_ideal;
 
     int j16 = (L / 16) * 16;
     for (; j < j16; j += 16) {
-      __m256i s16 = _mm256_loadu_si256((const __m256i *)(sig_ptr + j)); // 16 x int16
-      __m512i s32 = _mm512_cvtepi16_epi32(s16);                         // 16 x int32
+      simde__m256i s16 = simde_mm256_loadu_si256((const simde__m256i *)(sig_ptr + j)); // 16 x int16 in 256
+      simde__m512i s32 = simde_mm512_cvtepi16_epi32(s16);                              // 16 x int32
 
-      __m512i p32 = _mm512_loadu_si512((const void *)(sip_ptr + j));    // 16 x int32
+      simde__m512i p32 = simde_mm512_loadu_si512((const void *)(sip_ptr + j));         // 16 x int32
 
-      __m512i prod = _mm512_mullo_epi32(s32, p32);
+      simde__m512i prod = simde_mm512_mullo_epi32(s32, p32);
 
-      int32_t tmp[16];
-      _mm512_storeu_si512((__m512i *)tmp, prod);
-      acc += tmp[0]  + tmp[1]  + tmp[2]  + tmp[3]
-           + tmp[4]  + tmp[5]  + tmp[6]  + tmp[7]
-           + tmp[8]  + tmp[9]  + tmp[10] + tmp[11]
-           + tmp[12] + tmp[13] + tmp[14] + tmp[15];
+      /* horizontal add across 16 lanes */
+      int32_t sum = simde_mm512_reduce_add_epi32(prod);
+      acc += sum;
     }
 
-    /* Use AVX2 for remaining multiple-of-8 chunk if available at compile time */
-    int j8 = (L / 8) * 8;
-    for (; j < j8; j += 8) {
-      __m128i s16_lo = _mm_loadu_si128((const __m128i *)(sig_ptr + j)); // 8 x int16
-      __m256i s32_8   = _mm256_cvtepi16_epi32(s16_lo);                  // 8 x int32
-      __m256i p32_8   = _mm256_loadu_si256((const __m256i *)(sip_ptr + j));
-      __m256i prod8   = _mm256_mullo_epi32(s32_8, p32_8);
-      int32_t tmp8[8];
-      _mm256_storeu_si256((__m256i *)tmp8, prod8);
-      acc += tmp8[0] + tmp8[1] + tmp8[2] + tmp8[3] + tmp8[4] + tmp8[5] + tmp8[6] + tmp8[7];
-    }
-
+    /* Finish remaining elements with scalar code */
     for (; j < L; j++) {
       acc += (int)sig_ptr[j] * sip_ptr[j];
     }
 
-#elif HAVE_AVX2
-    /* AVX2-only implementation (compile-time selected) */
+#elif defined(__AVX2__)
+    /* AVX2-only (SIMDe). Use reduce helper when available or manual horizontal sum. */
     int j = 0;
     const int16_t *sig_ptr = signal + i;
     const int *sip_ptr = SIP_ideal;
 
     int j8 = (L / 8) * 8;
     for (; j < j8; j += 8) {
-      __m128i s16 = _mm_loadu_si128((const __m128i *)(sig_ptr + j)); // 8 x int16
-      __m256i s32 = _mm256_cvtepi16_epi32(s16);                      // 8 x int32
+      simde__m128i s16 = simde_mm_loadu_si128((const simde__m128i *)(sig_ptr + j)); // 8 x int16
+      simde__m256i s32 = simde_mm256_cvtepi16_epi32(s16);                          // 8 x int32
 
-      __m256i p32 = _mm256_loadu_si256((const __m256i *)(sip_ptr + j)); // 8 x int32
+      simde__m256i p32 = simde_mm256_loadu_si256((const simde__m256i *)(sip_ptr + j)); // 8 x int32
 
-      __m256i prod = _mm256_mullo_epi32(s32, p32);
+      simde__m256i prod = simde_mm256_mullo_epi32(s32, p32);
 
+      /* horizontal add across 8 lanes (manual fallback) */
       int32_t tmp[8];
-      _mm256_storeu_si256((__m256i *)tmp, prod);
-      acc += tmp[0] + tmp[1] + tmp[2] + tmp[3] + tmp[4] + tmp[5] + tmp[6] + tmp[7];
+      simde_mm256_storeu_si256((simde__m256i*)tmp, prod);
+      int32_t sum = tmp[0] + tmp[1] + tmp[2] + tmp[3] + tmp[4] + tmp[5] + tmp[6] + tmp[7];
+      acc += sum;
     }
 
     for (; j < L; j++) {
@@ -1395,6 +1370,18 @@ int main(int argc, char **argv)
   load_dftslib();
   crcTableInit();
   InitSinLUT();
+
+  #ifdef defined(__AVX2__)
+    printf("AVX2 supported\n");
+  #else
+    printf("AVX2 not supported\n");
+  #endif
+  
+  #ifdef defined(__AVX512F__) && defined(__AVX512BW__)
+    printf("AVX512 supported\n");
+  #else
+    printf("AVX512 not supported\n");
+  #endif
 
   // ---------------------------------------------------------------
 
