@@ -316,8 +316,9 @@ iir_butter3_f64_t filter;
  * @brief Initializes the filter state to zero.
  */
 void iir_butter3_init(iir_butter3_f64_t* filt) {
-    memset(filt->sec1.s, 0, sizeof(filt->sec1.s));
-    memset(filt->sec2.s, 0, sizeof(filt->sec2.s));
+    filt->sec1.s[0] = 0.0;
+    filt->sec2.s[0] = 0.0;
+    filt->sec2.s[1] = 0.0;
 }
 
 /**
@@ -842,11 +843,6 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
         payload[i] = uniformrandom() * 256;
       }
 
-      if(testing_timing && snr_plot == snr) {
-        reset_meas(&time_stats);
-        start_meas(&time_stats);
-      }
-
       if(testing_mode) {
         printf("-------------------------------\n");
         printf("Testing SNR %d dB\n", snr);
@@ -858,10 +854,12 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
         LOG_M(filename, "REs_Packet_sig", REsPacket, frame_parms->packet_symbols * frame_parms->packet_subcarriers, 1, 1);
       }
 
-      if(testing_timing) {
+      if(testing_timing && (snr_plot != snr || snr_trials == 1)) {
         stop_meas(&time_stats);
-        time_tx_REs += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-        time_tx_REs /= 2;
+        if(trials != 0 || snr != snr_plot) {
+          time_tx_REs += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+          time_tx_REs /= 2;
+        }
         reset_meas(&time_stats);
         start_meas(&time_stats);
       }
@@ -874,8 +872,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_tx_signal += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-        time_tx_signal /= 2;
+        if(trials != 0 || snr != snr_plot) {
+          time_tx_signal += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+          time_tx_signal /= 2;
+        }
         reset_meas(&time_stats);
         start_meas(&time_stats);
       }
@@ -888,8 +888,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_channel += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-        time_channel /= 2;
+        if(trials != 0 || snr != snr_plot) {
+          time_channel += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+          time_channel /= 2;
+        }
         reset_meas(&time_stats);
         start_meas(&time_stats);
       }
@@ -903,8 +905,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_envelope += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-        time_envelope /= 2;
+        if(trials != 0 || snr != snr_plot) {
+          time_envelope += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+          time_envelope /= 2;
+        }
         reset_meas(&time_stats);
         start_meas(&time_stats);
       }
@@ -918,8 +922,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_filter += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-        time_filter /= 2;
+        if(trials != 0 || snr != snr_plot) {
+          time_filter += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+          time_filter /= 2;
+        }
         reset_meas(&time_stats);
         start_meas(&time_stats);
       }
@@ -933,8 +939,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_downsample += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-        time_downsample /= 2;
+        if(trials != 0 || snr != snr_plot) {
+          time_downsample += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+          time_downsample /= 2;
+        }
         reset_meas(&time_stats);
         start_meas(&time_stats);
       }
@@ -948,8 +956,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_sync += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-        time_sync /= 2;
+        if(trials != 0 || snr != snr_plot) {
+          time_sync += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+          time_sync /= 2;
+        }
         reset_meas(&time_stats);
         start_meas(&time_stats);
       }
@@ -958,8 +968,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
       AIOT_R2D_PHY_RX_GetPacket(rx_payload, (const int16_t *) downSampled, SIP_offset, frame_parms);
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_rx_packet += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-        time_rx_packet /= 2;
+        if(trials != 0 || snr != snr_plot) {
+          time_rx_packet += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+          time_rx_packet /= 2;
+        }
         reset_meas(&time_stats);
         start_meas(&time_stats);
       }
@@ -986,8 +998,10 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
 
       if(testing_timing) {
         stop_meas(&time_stats);
-        time_ber += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-        time_ber /= 2;
+        if(trials != 0 || snr != snr_plot) {
+          time_ber += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+          time_ber /= 2;
+        }
         reset_meas(&time_stats);
         start_meas(&time_stats);
       }
@@ -1045,7 +1059,6 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
     printf("---\n");
     printf("Total time:              %f us\n", total_time);
   }
-
 
   printf("-------------------------------\n");
   printf("            Results\n");
