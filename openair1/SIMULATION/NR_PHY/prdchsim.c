@@ -21,6 +21,7 @@
 
 #include <string.h>
 #include <math.h>
+#include <pthread.h>
 #include "common/config/config_userapi.h"
 #include "common/utils/load_module_shlib.h"
 #include "common/utils/LOG/log.h"
@@ -93,8 +94,8 @@ int snr_steps = SNR_STEPS;
 int snr_trials = SNR_TRIALS;
 int snr_plot = 0;
 
-double **s_re, **s_im; // TX signal
-double **r_re, **r_im; // RX signal
+// Note: s_re, s_im, r_re, r_im are now thread-local variables
+// Global channel_model is used as template, each thread gets its own copy
 channel_model_t channel_model;
 
 bool testing_mode = false;
@@ -208,7 +209,8 @@ void AIOT_R2D_PHY_TX_Signal(c16_t *txData, c16_t* txDataF, const c16_t *REsPacke
   }
 }
 
-void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *channel, double SNR, NR_AIOT_DL_FRAME_PARMS *frame)
+void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *channel, double SNR, NR_AIOT_DL_FRAME_PARMS *frame,
+                           double **s_re, double **s_im, double **r_re, double **r_im)
 {
   int rx_size = frame->packet_samples + channel->channel_offset + 200;
 
@@ -689,6 +691,239 @@ double calculate_BER(uint8_t *rx_payload, uint8_t *payload, NR_AIOT_DL_FRAME_PAR
 
 time_stats_t time_stats = {0};
 
+// Thread data structure for parallel SNR processing
+typedef struct {
+  int snr_start;
+  int snr_end;
+  int thread_id;
+  uint8_t *payload;
+  int payloadSize;
+  NR_AIOT_DL_FRAME_PARMS *frame_parms;
+  channel_model_t *channel_model;
+  double *ber_results;
+  pthread_mutex_t *print_mutex;
+  // Per-thread timing results
+  double time_tx_REs;
+  double time_tx_signal;
+  double time_channel;
+  double time_envelope;
+  double time_filter;
+  double time_downsample;
+  double time_sync;
+  double time_rx_packet;
+  double time_ber;
+} snr_thread_data_t;
+
+pthread_mutex_t print_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// Thread function for processing SNR range
+void* process_snr_range(void* arg) {
+  snr_thread_data_t *data = (snr_thread_data_t*)arg;
+  
+  // Per-thread variables to avoid conflicts
+  channel_desc_t *channel_params = new_channel_desc_scm(data->frame_parms->nr_frame_parms.nb_antennas_tx,
+                                        data->frame_parms->nr_frame_parms.nb_antennas_rx,
+                                        data->channel_model->channel_model,
+                                        data->channel_model->sampling_rate,
+                                        data->channel_model->fc,
+                                        data->channel_model->bw,
+                                        data->channel_model->DS_TDL,
+                                        0.0,
+                                        CORR_LEVEL_LOW,
+                                        0,
+                                        data->channel_model->delay,
+                                        data->channel_model->path_loss_dB,
+                                        data->channel_model->noise_power_dB);
+
+  c16_t *REsPacket = malloc(data->frame_parms->packet_symbols * data->frame_parms->packet_subcarriers * sizeof(c16_t));
+  c16_t *txData = malloc(data->frame_parms->packet_samples * sizeof(c16_t));
+  c16_t *txDataF = malloc(data->frame_parms->packet_samples * sizeof(c16_t));
+  
+  int rx_size = data->frame_parms->packet_samples + data->channel_model->delay + 200;
+  c16_t **rxData = malloc(data->frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(c16_t *));
+  for (int i = 0; i < data->frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+    rxData[i] = calloc(1, rx_size * sizeof(c16_t));
+  }
+  
+  int16_t *envelope = malloc(rx_size * sizeof(uint16_t));
+  int16_t *filteredData = malloc(rx_size * sizeof(uint16_t));
+  int16_t *downSampled = malloc((rx_size / data->frame_parms->N) * sizeof(uint16_t));
+  uint8_t *rx_payload = malloc(MAX_AIOT_R2D_PACKET_SIZE);
+  int *correlation = malloc((rx_size / data->frame_parms->N - data->frame_parms->SIP_samples) * sizeof(int));
+  
+  // Thread-local payload buffer
+  uint8_t *local_payload = malloc(MAX_AIOT_R2D_PAYLOAD_SIZE);
+  memcpy(local_payload, data->payload, (data->payloadSize + 7) / 8);
+  
+  // Thread-local filter
+  iir_butter3_f64_t local_filter;
+  generate_butter_coeffs_f64(&local_filter, data->channel_model->bw * 1e6, (double)data->channel_model->sampling_rate * 1e6);
+  
+  // Thread-local IQ signal buffers
+  double **s_re = malloc(data->frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
+  double **s_im = malloc(data->frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
+  for (int i = 0; i < data->frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
+    s_re[i] = calloc(1, rx_size * sizeof(double));
+    s_im[i] = calloc(1, rx_size * sizeof(double));
+  }
+  
+  double **r_re = malloc(data->frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
+  double **r_im = malloc(data->frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
+  for (int i = 0; i < data->frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+    r_re[i] = calloc(1, rx_size * sizeof(double));
+    r_im[i] = calloc(1, rx_size * sizeof(double));
+  }
+  
+  // Thread-local timing stats
+  time_stats_t local_time_stats = {0};
+  
+  // Process SNR range assigned to this thread
+  for(int snr = data->snr_start; snr <= data->snr_end; snr += SNR_STEP_DB) {
+    channel_model_t local_channel_model = *data->channel_model;
+    local_channel_model.SNR = snr;
+    
+    for(int trials = 0; trials < snr_trials; trials++) {
+      // Generate new payload for each trial
+      for(int i = 0; i < data->payloadSize / 8; i++) {
+        local_payload[i] = uniformrandom() * 256;
+      }
+      
+      if(testing_mode) {
+        pthread_mutex_lock(data->print_mutex);
+        printf("Thread %d: Testing SNR %d dB\n", data->thread_id, snr);
+        pthread_mutex_unlock(data->print_mutex);
+      }
+      
+      if(testing_timing && snr != snr_plot) {
+        start_meas(&local_time_stats);
+      }
+      
+      AIOT_R2D_PHY_TX_REs(REsPacket, (const uint8_t *) local_payload, data->frame_parms);
+      
+      if(testing_timing && snr != snr_plot) {
+        stop_meas(&local_time_stats);
+        data->time_tx_REs += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&local_time_stats);
+        start_meas(&local_time_stats);
+      }
+      
+      AIOT_R2D_PHY_TX_Signal(txData, txDataF, (const c16_t *) REsPacket, data->frame_parms);
+      
+      if(testing_timing && snr != snr_plot) {
+        stop_meas(&local_time_stats);
+        data->time_tx_signal += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&local_time_stats);
+        start_meas(&local_time_stats);
+      }
+      
+      SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, local_channel_model.SNR, data->frame_parms,
+                            s_re, s_im, r_re, r_im);
+      
+      if(testing_timing && snr != snr_plot) {
+        stop_meas(&local_time_stats);
+        data->time_channel += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&local_time_stats);
+        start_meas(&local_time_stats);
+      }
+      
+      AIOT_R2D_PHY_RX_Envelope_Detector(envelope, (const c16_t **) rxData, rx_size);
+      
+      if(testing_timing && snr != snr_plot) {
+        stop_meas(&local_time_stats);
+        data->time_envelope += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&local_time_stats);
+        start_meas(&local_time_stats);
+      }
+      
+      AIOT_R2D_PHY_RX_Filter(filteredData, (const int16_t *) envelope, rx_size, &local_filter);
+      
+      if(testing_timing && snr != snr_plot) {
+        stop_meas(&local_time_stats);
+        data->time_filter += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&local_time_stats);
+        start_meas(&local_time_stats);
+      }
+      
+      AIOT_R2D_PHY_RX_Downsample(downSampled, (const int16_t *) filteredData, rx_size, data->frame_parms);
+      
+      if(testing_timing && snr != snr_plot) {
+        stop_meas(&local_time_stats);
+        data->time_downsample += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&local_time_stats);
+        start_meas(&local_time_stats);
+      }
+      
+      int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) downSampled, SIP_ideal, data->frame_parms);
+      
+      if(testing_timing && snr != snr_plot) {
+        stop_meas(&local_time_stats);
+        data->time_sync += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&local_time_stats);
+        start_meas(&local_time_stats);
+      }
+      
+      memset(rx_payload, 0, MAX_AIOT_R2D_PACKET_SIZE);
+      AIOT_R2D_PHY_RX_GetPacket(rx_payload, (const int16_t *) downSampled, SIP_offset, data->frame_parms);
+      
+      if(testing_timing && snr != snr_plot) {
+        stop_meas(&local_time_stats);
+        data->time_rx_packet += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&local_time_stats);
+        start_meas(&local_time_stats);
+      }
+      
+      double ber = calculate_BER(rx_payload, local_payload, data->frame_parms);
+      if(data->frame_parms->packet_payload_size != data->payloadSize || (ber > 0.0)) {
+        data->ber_results[snr - snr_min] += 1;
+      }
+      
+      if(testing_timing && snr != snr_plot) {
+        stop_meas(&local_time_stats);
+        data->time_ber += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+      }
+    }
+    
+    data->ber_results[snr - snr_min] /= snr_trials;
+    
+    pthread_mutex_lock(data->print_mutex);
+    printf("Thread %d completed SNR %d dB: BLER = %f\n", data->thread_id, snr, data->ber_results[snr - snr_min]);
+    pthread_mutex_unlock(data->print_mutex);
+  }
+  
+  // Cleanup thread-local resources
+  free(REsPacket);
+  free(txData);
+  free(txDataF);
+  for (int i = 0; i < data->frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+    free(rxData[i]);
+  }
+  free(rxData);
+  free(envelope);
+  free(filteredData);
+  free(downSampled);
+  free(rx_payload);
+  free(correlation);
+  free(local_payload);
+  
+  for (int i = 0; i < data->frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
+    free(s_re[i]);
+    free(s_im[i]);
+  }
+  free(s_re);
+  free(s_im);
+  
+  for (int i = 0; i < data->frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+    free(r_re[i]);
+    free(r_im[i]);
+  }
+  free(r_re);
+  free(r_im);
+  
+  free_channel_desc_scm(channel_params);
+  
+  return NULL;
+}
+
 void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_model)
 {
   AIOT_R2D_PHY_TX_calc_packet_sizes((const int) payloadSize, frame_parms);
@@ -702,12 +937,6 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
   printf("  Packet slots: %d\n", frame_parms->packet_slots);
   printf("  Packet subcarriers: %d\n", frame_parms->packet_subcarriers);
   printf("  Packet samples (aligned to slots): %d\n", frame_parms->packet_samples);
-
-  printf("Original payload (%d bits):\n", payloadSize);
-  for (int i = 0; i < (payloadSize + 7) / 8; i++) {
-    printf("%02X ", payload[i]);
-  }
-  printf("\n");
 
   // Setup radio channel
   channel_model->sampling_rate = 30.72; // N_RB2sampling_rate(frame_parms->nr_frame_parms.N_RB_DL); // in MHz
@@ -728,337 +957,136 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
   printf("Starting BER test over SNR range %d dB to %d dB with step %d dB (%d trials per SNR)...\n",
          snr_min, snr_max, snr_steps, snr_trials);
 
-  channel_desc_t *channel_params = new_channel_desc_scm(frame_parms->nr_frame_parms.nb_antennas_tx,
-                                        frame_parms->nr_frame_parms.nb_antennas_rx,
-                                        channel_model->channel_model,
-                                        channel_model->sampling_rate,
-                                        channel_model->fc,
-                                        channel_model->bw,
-                                        channel_model->DS_TDL,
-                                        0.0,
-                                        CORR_LEVEL_LOW,
-                                        0,
-                                        channel_model->delay,
-                                        channel_model->path_loss_dB,
-                                        channel_model->noise_power_dB);
-
-  c16_t *REsPacket = NULL, *txData = NULL;
-  c16_t **rxData = NULL;
-  int16_t *envelope, *filteredData, *downSampled;
-  int* correlation;
-  uint32_t *energy;
-  uint8_t *rx_payload;
-  int rx_size = frame_parms->packet_samples + channel_model->delay + 200;
-
-  int SIP_offset = 0;
-
-  generate_butter_coeffs_f64(&filter, channel_model->bw * 1e6, (double)channel_model->sampling_rate * 1e6);
-  printf("Butterworth 3rd-order LPF\n");
-
-  // Allocate memory for the whole R2D packet
-  REsPacket = malloc(frame_parms->packet_symbols * frame_parms->packet_subcarriers * sizeof(c16_t));
-
-  txData = malloc(frame_parms->packet_samples * sizeof(c16_t));
-  memset(txData, 0, frame_parms->packet_samples * sizeof(c16_t));
-
-  // Allocate TX buffers
-  c16_t *txDataF = malloc(frame_parms->packet_samples * sizeof(c16_t));
-
-  rxData = malloc(frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(c16_t *));
-
-  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
-    rxData[i] = calloc(1, rx_size * sizeof(c16_t));
-    memset(rxData[i], 0, rx_size * sizeof(c16_t));
-  }
-
-  envelope = malloc(rx_size * sizeof(uint16_t));
-  filteredData = malloc(rx_size * sizeof(uint16_t));
-
-  frame_parms->packet_downsampled_samples = rx_size / frame_parms->N;
-  downSampled = malloc(frame_parms->packet_downsampled_samples * sizeof(uint16_t));
-
-  // Calculate energy of chips
-  int energy_length = R_TAS_SIP_N + (MAX_AIOT_R2D_PAYLOAD_SIZE*8 - (R_TAS_SIP_N/R_TAS_SIP_M)) * frame_parms->M;
-  energy = malloc(energy_length * sizeof(uint32_t));
-  memset(energy, 0, energy_length * sizeof(uint32_t));
-
-  rx_payload = malloc(MAX_AIOT_R2D_PACKET_SIZE);
-  memset(rx_payload, 0, MAX_AIOT_R2D_PACKET_SIZE);
-
-  double ber_results[snr_steps];
-  memset(ber_results, 0, snr_steps * sizeof(double));
-
-  // Initialization of transmit IQ signals
-  s_re = malloc(frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
-  s_im = malloc(frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
-
-  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
-    s_re[i] = calloc(1, rx_size * sizeof(double));
-    s_im[i] = calloc(1, rx_size * sizeof(double));
-  }
-
-  bzero(s_re[0], rx_size * sizeof(double));
-  bzero(s_im[0], rx_size * sizeof(double));
-
-  // Initialization of receive IQ signals
-  r_re = malloc(frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
-  r_im = malloc(frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
-
-  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
-    r_re[i] = calloc(1, rx_size * sizeof(double));
-    r_im[i] = calloc(1, rx_size * sizeof(double));
-  }
-
-  bzero(r_re[0], rx_size * sizeof(double));
-  bzero(r_im[0], rx_size * sizeof(double));
-
+  // Generate SIP ideal sequence (shared by all threads)
+  frame_parms->packet_downsampled_samples = (frame_parms->packet_samples + channel_model->delay + 200) / frame_parms->N;
   SIP_ideal = generate_SIP_ideal_sequence(frame_parms);
-
-  correlation = malloc((frame_parms->packet_downsampled_samples - frame_parms->SIP_samples) * sizeof(int));
 
   if(testing_mode) {
     sprintf(filename, "%s/R2D_SIP_Ideal.m", foldername);
     LOG_M(filename, "SIP_Ideal_sig", SIP_ideal, frame_parms->SIP_samples, 1, 2);
   }
 
-  double time_tx_REs = 0.0;
-  double time_tx_signal = 0.0;
-  double time_channel = 0.0;
-  double time_envelope = 0.0;
-  double time_filter = 0.0;
-  double time_downsample = 0.0;
-  double time_sync = 0.0;
-  double time_rx_packet = 0.0;
-  double time_ber = 0.0;
+  double ber_results[snr_steps];
+  memset(ber_results, 0, snr_steps * sizeof(double));
 
-  if(testing_timing) {
-    start_meas(&time_stats);
-  }
-
-  for(int snr = snr_min; snr <= snr_max; snr += SNR_STEP_DB) {
-    channel_model->SNR = snr;
-
-    for(int trials = 0; trials < snr_trials; trials++) {
-      for(int i = 0; i < payloadSize / 8; i++) {
-        payload[i] = uniformrandom() * 256;
-      }
-
-      if(testing_mode) {
-        printf("-------------------------------\n");
-        printf("Testing SNR %d dB\n", snr);
-      }
-
-      AIOT_R2D_PHY_TX_REs(REsPacket, (const uint8_t *) payload, frame_parms);
-      if(testing_mode && snr == snr_plot && trials == 0) {
-        sprintf(filename, "%s/R2D_REs_Packet.m", foldername);
-        LOG_M(filename, "REs_Packet_sig", REsPacket, frame_parms->packet_symbols * frame_parms->packet_subcarriers, 1, 1);
-      }
-
-      if(testing_timing && (snr_plot != snr || snr_trials == 1)) {
-        stop_meas(&time_stats);
-        if(trials != 0 || snr != snr_plot) {
-          time_tx_REs += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-          time_tx_REs /= 2;
-        }
-        reset_meas(&time_stats);
-        start_meas(&time_stats);
-      }
-
-      AIOT_R2D_PHY_TX_Signal(txData, txDataF, (const c16_t *) REsPacket, frame_parms);
-      if(testing_mode && snr == snr_plot && trials == 0) {
-        sprintf(filename, "%s/R2D_TX_IQ.m", foldername);
-        LOG_M(filename, "TX_IQ_sig", txData, frame_parms->packet_samples, 1, 1);
-      }
-
-      if(testing_timing) {
-        stop_meas(&time_stats);
-        if(trials != 0 || snr != snr_plot) {
-          time_tx_signal += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-          time_tx_signal /= 2;
-        }
-        reset_meas(&time_stats);
-        start_meas(&time_stats);
-      }
-
-      SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, channel_model->SNR, frame_parms);
-      if(testing_mode && snr == snr_plot && trials == 0) {
-        sprintf(filename, "%s/R2D_RX_IQ.m", foldername);
-        LOG_M(filename, "RX_IQ_sig", rxData[0], rx_size, 1, 1);
-      }
-
-      if(testing_timing) {
-        stop_meas(&time_stats);
-        if(trials != 0 || snr != snr_plot) {
-          time_channel += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-          time_channel /= 2;
-        }
-        reset_meas(&time_stats);
-        start_meas(&time_stats);
-      }
-
-      // Envelope detector (squared)
-      AIOT_R2D_PHY_RX_Envelope_Detector(envelope, (const c16_t **) rxData, rx_size);
-      if(testing_mode && snr == snr_plot && trials == 0) {
-        sprintf(filename, "%s/R2D_Envelope.m", foldername);
-        LOG_M(filename, "Envelope_sig", envelope, rx_size, 1, 0);
-      }
-
-      if(testing_timing) {
-        stop_meas(&time_stats);
-        if(trials != 0 || snr != snr_plot) {
-          time_envelope += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-          time_envelope /= 2;
-        }
-        reset_meas(&time_stats);
-        start_meas(&time_stats);
-      }
-
-      // Low-pass filter
-      AIOT_R2D_PHY_RX_Filter(filteredData, (const int16_t *) envelope, rx_size, &filter);
-      if(testing_mode && snr == snr_plot && trials == 0) {
-        sprintf(filename, "%s/R2D_Filter.m", foldername);
-        LOG_M(filename, "Filter_sig", filteredData, rx_size, 1, 0);
-      }
-
-      if(testing_timing) {
-        stop_meas(&time_stats);
-        if(trials != 0 || snr != snr_plot) {
-          time_filter += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-          time_filter /= 2;
-        }
-        reset_meas(&time_stats);
-        start_meas(&time_stats);
-      }
-
-      // Downsample the signal by N = 16
-      AIOT_R2D_PHY_RX_Downsample(downSampled, (const int16_t *) filteredData, rx_size, frame_parms);
-      if(testing_mode && snr == snr_plot && trials == 0) {
-        sprintf(filename, "%s/R2D_Downsampled.m", foldername);
-        LOG_M(filename, "Downsampled_sig", downSampled, frame_parms->packet_downsampled_samples, 1, 0);
-      }
-
-      if(testing_timing) {
-        stop_meas(&time_stats);
-        if(trials != 0 || snr != snr_plot) {
-          time_downsample += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-          time_downsample /= 2;
-        }
-        reset_meas(&time_stats);
-        start_meas(&time_stats);
-      }
-
-      // Correlation for synchronization
-      SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) downSampled, SIP_ideal, frame_parms);
-      if(testing_mode && snr == snr_plot && trials == 0) {
-        sprintf(filename, "%s/R2D_Correlation.m", foldername);
-        LOG_M(filename, "Correlation_sig", correlation, frame_parms->packet_downsampled_samples - frame_parms->SIP_samples, 1, 2);
-      }
-
-      if(testing_timing) {
-        stop_meas(&time_stats);
-        if(trials != 0 || snr != snr_plot) {
-          time_sync += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-          time_sync /= 2;
-        }
-        reset_meas(&time_stats);
-        start_meas(&time_stats);
-      }
-
-      // Correlate the received signal with known SIP sequence
-      AIOT_R2D_PHY_RX_GetPacket(rx_payload, (const int16_t *) downSampled, SIP_offset, frame_parms);
-      if(testing_timing) {
-        stop_meas(&time_stats);
-        if(trials != 0 || snr != snr_plot) {
-          time_rx_packet += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-          time_rx_packet /= 2;
-        }
-        reset_meas(&time_stats);
-        start_meas(&time_stats);
-      }
-
-      double ber = calculate_BER(rx_payload, payload, frame_parms);
-      if(frame_parms->packet_payload_size != payloadSize || (ber > 0.0)) {
-        ber_results[snr - snr_min] += 1;
-
-        if(testing_mode) {
-          printf("Payload: \n");
-          for(int i = 0; i < payloadSize / 8; i++) {
-            printf("%02X ", payload[i]);
-          }
-          printf("\n");
-
-          printf("Received payload (%d bits):\n", frame_parms->packet_payload_size);
-          for(int i = 0; i < (frame_parms->packet_payload_size+7)/8; i++) {
-            printf("%02X ", rx_payload[i]);
-          }
-          printf("\n");
-          printf("BER: %f, Payload size: %d\n", ber, frame_parms->packet_payload_size);
-        }
-      }
-
-      if(testing_timing) {
-        stop_meas(&time_stats);
-        if(trials != 0 || snr != snr_plot) {
-          time_ber += time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-          time_ber /= 2;
-        }
-        reset_meas(&time_stats);
-        start_meas(&time_stats);
-      }
+  if(!testing_mode) {
+    // Determine number of threads (use number of CPU cores or 4, whichever is smaller)
+    int num_threads = (int)sysconf(_SC_NPROCESSORS_ONLN);
+    if (num_threads < 1) num_threads = 1;
+    int total_snr_points = (snr_max - snr_min) / SNR_STEP_DB + 1;
+    
+    if (num_threads > total_snr_points) {
+      num_threads = total_snr_points;
     }
 
-    ber_results[snr - snr_min] /= snr_trials;
-    printf("Completed SNR %d dB: BLER = %f\n", snr, ber_results[snr - snr_min]);
+    printf("Using %d threads for parallel processing\n", num_threads);
+    
+    pthread_t *threads = malloc(num_threads * sizeof(pthread_t));
+    snr_thread_data_t *thread_data = malloc(num_threads * sizeof(snr_thread_data_t));
+    
+    // Calculate SNR range for each thread
+    int snr_per_thread = total_snr_points / num_threads;
+    int remaining_snr = total_snr_points % num_threads;
+    
+    for (int t = 0; t < num_threads; t++) {
+      thread_data[t].thread_id = t;
+      thread_data[t].payload = payload;
+      thread_data[t].payloadSize = payloadSize;
+      thread_data[t].frame_parms = frame_parms;
+      thread_data[t].channel_model = channel_model;
+      thread_data[t].ber_results = ber_results;
+      thread_data[t].print_mutex = &print_mutex;
+      
+      // Calculate SNR range for this thread
+      int start_idx = t * snr_per_thread + (t < remaining_snr ? t : remaining_snr);
+      int end_idx = start_idx + snr_per_thread + (t < remaining_snr ? 1 : 0) - 1;
+      
+      thread_data[t].snr_start = snr_min + start_idx * SNR_STEP_DB;
+      thread_data[t].snr_end = snr_min + end_idx * SNR_STEP_DB;
+      
+      printf("Thread %d will process SNR range %d to %d dB\n", t, thread_data[t].snr_start, thread_data[t].snr_end);
+    }
+    
+    // Create and start threads
+    for (int t = 0; t < num_threads; t++) {
+      if (pthread_create(&threads[t], NULL, process_snr_range, &thread_data[t]) != 0) {
+        printf("Error creating thread %d\n", t);
+        exit(1);
+      }
+    }
+    
+    // Wait for all threads to complete
+    for (int t = 0; t < num_threads; t++) {
+      pthread_join(threads[t], NULL);
+    }
+    
+    // Cleanup
+    free(threads);
+    free(thread_data);
+  
+  } else { // testing mode
+    snr_thread_data_t thread_data;
+    
+    thread_data.thread_id = 0;
+    thread_data.payload = payload;
+    thread_data.payloadSize = payloadSize;
+    thread_data.frame_parms = frame_parms;
+    thread_data.channel_model = channel_model;
+    thread_data.ber_results = ber_results;
+    thread_data.print_mutex = &print_mutex;
+    
+    if(testing_timing) {
+      // Initialize timing results
+      thread_data.time_tx_REs = 0.0;
+      thread_data.time_tx_signal = 0.0;
+      thread_data.time_channel = 0.0;
+      thread_data.time_envelope = 0.0;
+      thread_data.time_filter = 0.0;
+      thread_data.time_downsample = 0.0;
+      thread_data.time_sync = 0.0;
+      thread_data.time_rx_packet = 0.0;
+      thread_data.time_ber = 0.0;
+    }
+      
+    thread_data.snr_start = snr_min;
+    thread_data.snr_end = snr_max;
+    
+    // Create and start threads
+    process_snr_range(&thread_data);
+
+    if(testing_timing) {
+      thread_data.time_tx_REs /= snr_steps - 1;
+      thread_data.time_tx_signal /= snr_steps - 1;
+      thread_data.time_channel /= snr_steps - 1;
+      thread_data.time_envelope /= snr_steps - 1;
+      thread_data.time_filter /= snr_steps - 1;
+      thread_data.time_downsample /= snr_steps - 1;
+      thread_data.time_sync /= snr_steps - 1;
+      thread_data.time_rx_packet /= snr_steps - 1;
+      thread_data.time_ber /= snr_steps - 1;
+    }
+
+    if(testing_timing) {
+      printf("-------------------------------\n");
+      printf("Timing results (average per packet in us):\n");
+      printf("-------------------------------\n");
+      printf("TX REs generation:       %f us\n", thread_data.time_tx_REs);
+      printf("TX signal generation:    %f us\n", thread_data.time_tx_signal);
+      printf("Channel propagation:     %f us\n", thread_data.time_channel);
+      printf("Envelope detection:      %f us\n", thread_data.time_envelope);
+      printf("Filtering:               %f us\n", thread_data.time_filter);
+      printf("Downsampling:            %f us\n", thread_data.time_downsample);
+      printf("Synchronization:         %f us\n", thread_data.time_sync);
+      printf("RX packet extraction:    %f us\n", thread_data.time_rx_packet);
+      printf("BER calculation:         %f us\n", thread_data.time_ber);
+      double total_time = thread_data.time_tx_REs + thread_data.time_tx_signal + thread_data.time_channel + thread_data.time_envelope +
+                          thread_data.time_filter + thread_data.time_downsample + thread_data.time_sync + thread_data.time_rx_packet + thread_data.time_ber;
+      printf("---\n");
+      printf("Total time:              %f us\n", total_time);
+    }
   }
 
-  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
-    free(s_re[i]);
-    free(s_im[i]);
-  }
-
-  free(s_re);
-  free(s_im);
-
-  for (int i = 0; i < frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
-    free(r_re[i]);
-    free(r_im[i]);
-  }
-
-  free(r_re);
-  free(r_im);
-
-  free(REsPacket);
-  free(txData);
-  SIM_Channel_propagate_free(rxData, frame_parms->nr_frame_parms.nb_antennas_rx);
-  free(envelope);
-  free(filteredData);
-  free(downSampled);
   free(SIP_ideal);
-
-  free_channel_desc_scm(channel_params);
-
-  free(correlation);
-  free(txDataF);
-  free(rx_payload);
-
-  if(testing_timing) {
-    printf("-------------------------------\n");
-    printf("Timing results (average per packet in us):\n");
-    printf("-------------------------------\n");
-    printf("TX REs generation:       %f us\n", time_tx_REs);
-    printf("TX signal generation:    %f us\n", time_tx_signal);
-    printf("Channel propagation:     %f us\n", time_channel);
-    printf("Envelope detection:      %f us\n", time_envelope);
-    printf("Filtering:               %f us\n", time_filter);
-    printf("Downsampling:            %f us\n", time_downsample);
-    printf("Synchronization:         %f us\n", time_sync);
-    printf("RX packet extraction:    %f us\n", time_rx_packet);
-    printf("BER calculation:         %f us\n", time_ber);
-    double total_time = time_tx_REs + time_tx_signal + time_channel + time_envelope +
-                        time_filter + time_downsample + time_sync + time_rx_packet + time_ber;
-    printf("---\n");
-    printf("Total time:              %f us\n", total_time);
-  }
 
   printf("-------------------------------\n");
   printf("            Results\n");
