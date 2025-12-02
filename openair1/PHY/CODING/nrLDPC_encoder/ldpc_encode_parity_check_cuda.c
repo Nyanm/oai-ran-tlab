@@ -39,10 +39,10 @@
 
 
 
-int ldpc_BG1_Zc384_cuda32(uint32_t **c,uint32_t **d,int n_inputs);
+int ldpc_BG1_Zc384_cuda32(uint32_t **c,uint32_t **d,int n_inputs, cudaStream_t *stream);
 
 
-void encode_parity_check_part_cuda(uint32_t **c, uint32_t **d, short BG,short Zc,short Kb, int ncols, int n_inputs)
+void encode_parity_check_part_cuda(uint32_t **c, uint32_t **d, short BG,short Zc,short Kb, int ncols, int n_inputs, cudaStream_t *stream)
 {
   
   if (BG == 1) {
@@ -59,7 +59,7 @@ void encode_parity_check_part_cuda(uint32_t **c, uint32_t **d, short BG,short Zc
 	AssertFatal(1==0,"BG %d Zc %d not supported yet for CUDA\n",BG, Zc);
         break;
       case 384:
-	ldpc_BG1_Zc384_cuda32(c, d, n_inputs);
+	ldpc_BG1_Zc384_cuda32(c, d, n_inputs, stream);
         break;
       default:
         AssertFatal(false, "BG %d Zc %d is not supported yet\n", BG, Zc);
