@@ -351,111 +351,115 @@ void AIOT_R2D_PHY_RX_Envelope_Detector(int16_t *envelope, const c16_t **rxData, 
   }
 }
 
-// Q29 Fixed Point: High precision for coefficients.
-// Q29 leaves 3 bits for integer part in int32 coeffs (Range +/- 4.0), perfect for Butterworth.
-#define Q_SHIFT 29
-#define Q_HALF  (1LL << (Q_SHIFT - 1)) // For rounding
+// --- Configuration: Q22 Fixed Point ---
+// Precision: ~0.0000002 (Sufficient for audio/sensor filters)
+// Headroom: Allows intermediate multiply (a * y) to fit in 64-bit int.
+#define Q_SHIFT 22
+#define Q_VAL   (1LL << Q_SHIFT)
+#define Q_HALF  (1LL << (Q_SHIFT - 1)) 
+
+// --- Structs (Same as original) ---
+typedef struct {
+    int64_t b[2];
+    int64_t a[2];
+} iir_ord1_f64_t;
 
 typedef struct {
-  int32_t b[2];    // b0, b1
-  int32_t a1;      // a1 (a0 is 1.0)
-  int64_t s;       // State MUST be 64-bit to prevent overflow
-} iir_ord1_t;
+    int64_t b[3];
+    int64_t a[3];
+} iir_biquad_f64_t;
 
 typedef struct {
-  int32_t b[3];    // b0, b1, b2
-  int32_t a[2];    // a1, a2 (a0 is 1.0)
-  int64_t s[2];    // States MUST be 64-bit
-} iir_biquad_t;
+    iir_ord1_f64_t   sec1;
+    iir_biquad_f64_t sec2;
+} iir_butter3_t;
 
-typedef struct {
-  iir_ord1_t   sec1;
-  iir_biquad_t sec2;
-} iir_butter3_fixed_t;
-
-// --- Helper: Float to Fix ---
-static inline int32_t to_fix(double x) {
-  return (int32_t)round(x * (double)(1LL << Q_SHIFT));
+static inline int64_t to_fix(double x) {
+    return (int64_t)round(x * (double)Q_VAL);
 }
 
-// --- Initialization ---
-void generate_butter_coeffs_fixed(iir_butter3_fixed_t* filt, double fc, double fs) {
-  double w = 2.0 * fs * tan(M_PI * fc / fs);
-  double T = 1.0 / fs;
+// --- Coefficient Generation ---
+void AIOT_R2D_PHY_RX_Design_Filter(iir_butter3_t* filt, double fc, double fs) {
+    double w = 2.0 * fs * tan(M_PI * fc / fs);
+    double T = 1.0 / fs;
 
-  // 1st Order Temp
-  double a0_1 = 2.0 + w * T;
-  double inv1 = 1.0 / a0_1;
-  
-  filt->sec1.b[0] = to_fix((w * T) * inv1);
-  filt->sec1.b[1] = to_fix((w * T) * inv1);
-  filt->sec1.a1   = to_fix((w * T - 2.0) * inv1);
-  filt->sec1.s    = 0; // Reset state
-
-  // 2nd Order Temp
-  double a0_2 = 4.0 + 2.0*w*T + w*w*T*T;
-  double inv2 = 1.0 / a0_2;
-
-  filt->sec2.b[0] = to_fix((w*w*T*T) * inv2);
-  filt->sec2.b[1] = to_fix((2.0*w*w*T*T) * inv2);
-  filt->sec2.b[2] = to_fix((w*w*T*T) * inv2);
-  filt->sec2.a[0] = to_fix((-8.0 + 2.0*w*w*T*T) * inv2); // a1
-  filt->sec2.a[1] = to_fix((4.0 - 2.0*w*T + w*w*T*T) * inv2); // a2
-  filt->sec2.s[0] = 0; // Reset state
-  filt->sec2.s[1] = 0;
+    // 1st Order
+    double s1_a0 = 2.0 + w * T;
+    double inv1 = 1.0 / s1_a0;
+    filt->sec1.b[0] = to_fix((w * T) * inv1);
+    filt->sec1.b[1] = to_fix((w * T) * inv1);
+    filt->sec1.a[1] = to_fix((w * T - 2.0) * inv1);
+    
+    // 2nd Order
+    double s2_a0 = 4.0 + 2.0*w*T + w*w*T*T;
+    double inv2 = 1.0 / s2_a0;
+    filt->sec2.b[0] = to_fix((w*w*T*T) * inv2);
+    filt->sec2.b[1] = to_fix((2.0*w*w*T*T) * inv2);
+    filt->sec2.b[2] = to_fix((w*w*T*T) * inv2);
+    filt->sec2.a[1] = to_fix((-8.0 + 2.0*w*w*T*T) * inv2);
+    filt->sec2.a[2] = to_fix((4.0 - 2.0*w*T + w*w*T*T) * inv2);
 }
 
-// --- Filter Implementation ---
-// Note: No intrinsics (like AVX) used because recursive filters depend on 
-// the previous sample. 64-bit Scalar math is the fastest way to do this on CPU.
-void AIOT_R2D_PHY_RX_Filter(int16_t *out, const int16_t *in, int length, iir_butter3_fixed_t *filt)
+void AIOT_R2D_PHY_RX_Filter(int16_t *out, const int16_t *in, int length, iir_butter3_t *filt)
 {
-  // Reset states at start of packet? 
-  // If you want continuous filtering across packets, remove these 3 lines.
-  filt->sec1.s = 0;
-  filt->sec2.s[0] = 0; 
-  filt->sec2.s[1] = 0;
+  // Local States (Q22 format)
+  int64_t s1_0 = 0, s2_0 = 0, s2_1 = 0;
 
-  // Load coeffs to registers
-  int32_t c1_b0 = filt->sec1.b[0], c1_b1 = filt->sec1.b[1], c1_a1 = filt->sec1.a1;
-  int32_t c2_b0 = filt->sec2.b[0], c2_b1 = filt->sec2.b[1], c2_b2 = filt->sec2.b[2];
-  int32_t c2_a1 = filt->sec2.a[0], c2_a2 = filt->sec2.a[1];
-  
-  // Load states to registers (int64_t is crucial!)
-  int64_t s1 = filt->sec1.s;
-  int64_t s2_0 = filt->sec2.s[0], s2_1 = filt->sec2.s[1];
+  int64_t c1_b0 = filt->sec1.b[0], c1_b1 = filt->sec1.b[1], c1_a1 = filt->sec1.a[1];
+  int64_t c2_b0 = filt->sec2.b[0], c2_b1 = filt->sec2.b[1], c2_b2 = filt->sec2.b[2];
+  int64_t c2_a1 = filt->sec2.a[1], c2_a2 = filt->sec2.a[2];
 
   for (int n = 0; n < length; n++) {
-    int32_t x = in[n]; // Input is positive envelope (0..32767)
+    int64_t x = in[n]; // Input Q0
 
-    // --- Section 1 (DF-II Transposed) ---
-    // Calc Output y1: (b0*x + s) >> Q. 
-    // We add Q_HALF for rounding before shifting.
-    int32_t y1 = (int32_t)(( (int64_t)c1_b0 * x + s1 + Q_HALF ) >> Q_SHIFT);
+    // ============================================================
+    // Section 1 (DF-II Transposed)
+    // ============================================================
     
-    // Update State: b1*x - a1*y1
-    // Since x and y1 are positive, this subtraction keeps the state stable.
-    s1 = (int64_t)c1_b1 * x - (int64_t)c1_a1 * y1;
+    // 1. Calculate Output (Internal High Precision Q22)
+    //    y_high = (b0 * x) + s0
+    //    (Q22 * Q0) + Q22 = Q22
+    int64_t y1_high = (c1_b0 * x) + s1_0;
 
-    // --- Section 2 (DF-II Transposed) ---
-    int32_t y2 = (int32_t)(( (int64_t)c2_b0 * y1 + s2_0 + Q_HALF ) >> Q_SHIFT);
+    // 2. Update State (USING HIGH PRECISION y1)
+    //    s0 = (b1 * x) - (a1 * y1)
+    //    Note: (a1 * y1_high) is Q22 * Q22 = Q44. 
+    //    We must shift >> 22 to get back to Q22 for the state addition.
+    s1_0 = (c1_b1 * x) - ((c1_a1 * y1_high) >> Q_SHIFT);
 
-    // Update States
-    s2_0 = ((int64_t)c2_b1 * y1 - (int64_t)c2_a1 * y2) + s2_1;
-    s2_1 =  (int64_t)c2_b2 * y1 - (int64_t)c2_a2 * y2;
-
-    // --- Saturation (0 to 32767) ---
-    // Since input is positive, output should be positive.
-    if (y2 > 32767) y2 = 32767;
-    else if (y2 < 0) y2 = 0; 
+    // ============================================================
+    // Section 2 (DF-II Transposed)
+    // ============================================================
     
-    out[n] = (int16_t)y2;
+    // 1. Calculate Output (Internal High Precision Q22)
+    //    Note: y1_high is Q22. Coeffs are Q22.
+    //    Product is Q44. Need shift >> 22 to get back to Q22 for accumulation.
+    int64_t y2_high = ((c2_b0 * y1_high) >> Q_SHIFT) + s2_0;
+
+    // 2. Update States (USING HIGH PRECISION y2)
+    //    Everything involves Q22*Q22=Q44, so we shift >> 22 after every multiply.
+    int64_t term_b1 = (c2_b1 * y1_high) >> Q_SHIFT;
+    int64_t term_a1 = (c2_a1 * y2_high) >> Q_SHIFT;
+    s2_0 = (term_b1 - term_a1) + s2_1;
+
+    int64_t term_b2 = (c2_b2 * y1_high) >> Q_SHIFT;
+    int64_t term_a2 = (c2_a2 * y2_high) >> Q_SHIFT;
+    s2_1 = (term_b2 - term_a2);
+
+    // ============================================================
+    // Output Stage
+    // ============================================================
+    
+    // Round and shift down to integer (Q0)
+    // The filter dynamics ran entirely in Q22, we only truncate NOW at the very end.
+    int64_t y_out = (y2_high + Q_HALF) >> Q_SHIFT;
+
+    // Saturation
+    if (y_out > 32767) y_out = 32767;
+    else if (y_out < -32768) y_out = -32768;
+
+    out[n] = (int16_t)y_out;
   }
-
-  // Save states
-  filt->sec1.s = s1;
-  filt->sec2.s[0] = s2_0;
-  filt->sec2.s[1] = s2_1;
 }
 
 void AIOT_R2D_PHY_RX_Downsample(int16_t *out, const int16_t *in, int length, NR_AIOT_DL_FRAME_PARMS *frame)
@@ -880,8 +884,11 @@ void* process_snr_range(void* arg) {
   memcpy(local_payload, data->payload, (data->payloadSize + 7) / 8);
   
   // Thread-local filter
-  iir_butter3_fixed_t local_filter;
-  generate_butter_coeffs_fixed(&local_filter, data->channel_model->bw * 1e6, (double)data->channel_model->sampling_rate * 1e6);
+  /*iir_butter3_fixed_t local_filter;
+  generate_butter_coeffs_fixed(&local_filter, data->channel_model->bw * 1e6, (double)data->channel_model->sampling_rate * 1e6);*/
+
+  iir_butter3_t local_filter;
+  AIOT_R2D_PHY_RX_Design_Filter(&local_filter, data->channel_model->bw * 1e6, (double)data->channel_model->sampling_rate * 1e6);
   
   // Thread-local IQ signal buffers
   double **s_re = malloc(data->frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
