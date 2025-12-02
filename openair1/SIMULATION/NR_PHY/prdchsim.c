@@ -133,8 +133,6 @@ void AIOT_R2D_PHY_TX_calc_packet_sizes(const int payloadSize, NR_AIOT_DL_FRAME_P
 
 void AIOT_R2D_PHY_TX_REs(c16_t *REsPacket, const uint8_t *payload, NR_AIOT_DL_FRAME_PARMS *frame)
 {
-  //printf("Creating R2D packet: R-TAS-SIP, R-TAS-CAP, payload, postamble\n");
-
   // Copy R-TAS SIP preamble to the packet
   const c16_t *SIP_SCs_selection = SIP_SCs_select(frame->nr_frame_parms.N_RB_DL, frame->Zadoff_Chu);
   int SIP_length = R_TAS_SIP_N / R_TAS_SIP_M * frame->packet_subcarriers;
@@ -229,11 +227,7 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
   double sigma2 = pow(10, sigma2_dBm / 10);
   //printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dBm);
 
-  static uint8_t initialized = 0;
-  multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + channel->channel_offset + 200, initialized, 1);
-  if(initialized == 0) {
-    initialized = 1;
-  }
+  multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + channel->channel_offset + 200, 0, 1);
 
   add_noise(rxData,
             (const double **)r_re,
@@ -247,8 +241,7 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
             0x1,
             frame->nr_frame_parms.nb_antennas_rx);
 
-  static int pass = MIN_SNR_DB;
-  if(testing_mode && pass++ == snr_plot) {
+  if(testing_mode && SNR == snr_plot) {
     // Save channel output
     double *output = malloc(rx_size * 2 * sizeof(double));
 
@@ -266,36 +259,6 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
 
 void AIOT_R2D_PHY_RX_Envelope_Detector(int16_t *envelope, const c16_t **rxData, int rx_size)
 {
-  // Envelope detector (squared)
-  /*for (int i = 0; i < rx_size; i++) {
-    //envelope[i] = iSqrt(rxData[0][i].r * rxData[0][i].r + rxData[0][i].i * rxData[0][i].i);
-
-    // 1. Calculate the absolute values (still Q1.15).
-    int16_t abs_I = abs(rxData[0][i].r);
-    int16_t abs_Q = abs(rxData[0][i].i);
-
-    int16_t max_val;
-    int16_t min_val;
-
-    // 2. Determine Max and Min
-    if (abs_I > abs_Q) {
-        max_val = abs_I;
-        min_val = abs_Q;
-    } else {
-        max_val = abs_Q;
-        min_val = abs_I;
-    }
-
-    // 3. Calculate: Magnitude ≈ (1 * max_val) + (1/4 * min_val)
-    
-    // Multiplication by 1/4 is a right shift by 2 (>> 2).
-    // The result 'beta_min' is still in Q1.15.
-    int16_t beta_min = min_val >> 2;
-
-    // 4. Final Addition
-    envelope[i] = min(max_val + beta_min, 32767); // Clamp to int16_t max
-  }*/
-
   // Cast to linear int16 pointer for easier SIMD indexing
   const int16_t *src = (const int16_t*)rxData[0];
   int i = 0;
@@ -362,24 +325,24 @@ void AIOT_R2D_PHY_RX_Envelope_Detector(int16_t *envelope, const c16_t **rxData, 
 typedef struct {
     int64_t b[2];
     int64_t a[2];
-} iir_ord1_f64_t;
+} iir_ord1_t;
 
 typedef struct {
     int64_t b[3];
     int64_t a[3];
-} iir_biquad_f64_t;
+} iir_biquad_t;
 
 typedef struct {
-    iir_ord1_f64_t   sec1;
-    iir_biquad_f64_t sec2;
-} iir_butter3_t;
+    iir_ord1_t   sec1;
+    iir_biquad_t sec2;
+} iir_butter3_fixed_t;
 
 static inline int64_t to_fix(double x) {
     return (int64_t)round(x * (double)Q_VAL);
 }
 
 // --- Coefficient Generation ---
-void AIOT_R2D_PHY_RX_Design_Filter(iir_butter3_t* filt, double fc, double fs) {
+void AIOT_R2D_PHY_RX_Design_Filter(iir_butter3_fixed_t* filt, double fc, double fs) {
     double w = 2.0 * fs * tan(M_PI * fc / fs);
     double T = 1.0 / fs;
 
@@ -400,10 +363,13 @@ void AIOT_R2D_PHY_RX_Design_Filter(iir_butter3_t* filt, double fc, double fs) {
     filt->sec2.a[2] = to_fix((4.0 - 2.0*w*T + w*w*T*T) * inv2);
 }
 
-void AIOT_R2D_PHY_RX_Filter(int16_t *out, const int16_t *in, int length, iir_butter3_t *filt)
+// --- Main Filter Function ---
+void AIOT_R2D_PHY_RX_Filter(int16_t *out, const int16_t *in, int length, iir_butter3_fixed_t *filt)
 {
   // Local States (Q22 format)
-  int64_t s1_0 = 0, s2_0 = 0, s2_1 = 0;
+  int64_t s1_0 = 0;
+  int64_t s2_0 = 0;
+  int64_t s2_1 = 0;
 
   int64_t c1_b0 = filt->sec1.b[0], c1_b1 = filt->sec1.b[1], c1_a1 = filt->sec1.a[1];
   int64_t c2_b0 = filt->sec2.b[0], c2_b1 = filt->sec2.b[1], c2_b2 = filt->sec2.b[2];
@@ -626,8 +592,6 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
   int M4_chip_size = downsampled_OFDM_size / R_TAS_SIP_M;
   frame_parms->packet_payload_size = frame_parms->packet_downsampled_samples - frame_parms->SIP_samples; // Max payload size in bits
 
-  static int pass = MIN_SNR_DB;
-
   int CAP_energy[R_TAS_CAP_N] = {0};
   int SIP_bit0_energy = 0;
 
@@ -698,6 +662,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
 
   uint32_t *energy_plot = NULL, *thr_plot = NULL;
   int energy_index = 0, thr_index = 0;
+  static int pass = 0;
 
   if(testing_mode && pass == snr_plot) {
     // Energy plotting
@@ -786,8 +751,10 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
 
     sprintf(filename, "%s/R2D_Energy.m", foldername);
     LOG_M(filename, "Energy_sig", energy_plot, energy_index, 1, 2);
+    
+    free(energy_plot);
+    free(thr_plot);
   }
-
   pass++;
 }
 
@@ -824,9 +791,9 @@ typedef struct {
   int snr_start;
   int snr_end;
   int thread_id;
-  uint8_t *payload;
   int payloadSize;
-  NR_AIOT_DL_FRAME_PARMS *frame_parms;
+  NR_AIOT_DL_FRAME_PARMS *frame_parms;  // Shared (read-only)
+  NR_AIOT_DL_FRAME_PARMS thread_frame_parms;  // Thread-local copy for writes
   channel_model_t *channel_model;
   double *ber_results;
   pthread_mutex_t *print_mutex;
@@ -848,9 +815,13 @@ pthread_mutex_t print_mutex = PTHREAD_MUTEX_INITIALIZER;
 void* process_snr_range(void* arg) {
   snr_thread_data_t *data = (snr_thread_data_t*)arg;
   
+  // Create thread-local copy of frame_parms to avoid race conditions on received_M and packet_payload_size
+  NR_AIOT_DL_FRAME_PARMS *local_frame_parms = &data->thread_frame_parms;
+  memcpy(local_frame_parms, data->frame_parms, sizeof(NR_AIOT_DL_FRAME_PARMS));
+  
   // Per-thread variables to avoid conflicts
-  channel_desc_t *channel_params = new_channel_desc_scm(data->frame_parms->nr_frame_parms.nb_antennas_tx,
-                                        data->frame_parms->nr_frame_parms.nb_antennas_rx,
+  channel_desc_t *channel_params = new_channel_desc_scm(local_frame_parms->nr_frame_parms.nb_antennas_tx,
+                                        local_frame_parms->nr_frame_parms.nb_antennas_rx,
                                         data->channel_model->channel_model,
                                         data->channel_model->sampling_rate,
                                         data->channel_model->fc,
@@ -863,50 +834,47 @@ void* process_snr_range(void* arg) {
                                         data->channel_model->path_loss_dB,
                                         data->channel_model->noise_power_dB);
 
-  c16_t *REsPacket = malloc(data->frame_parms->packet_symbols * data->frame_parms->packet_subcarriers * sizeof(c16_t));
-  c16_t *txData = malloc(data->frame_parms->packet_samples * sizeof(c16_t));
-  c16_t *txDataF = malloc(data->frame_parms->packet_samples * sizeof(c16_t));
+  c16_t *REsPacket = malloc(local_frame_parms->packet_symbols * local_frame_parms->packet_subcarriers * sizeof(c16_t));
+  c16_t *txData = malloc(local_frame_parms->packet_samples * sizeof(c16_t));
+  c16_t *txDataF = malloc(local_frame_parms->packet_samples * sizeof(c16_t));
   
-  int rx_size = data->frame_parms->packet_samples + data->channel_model->delay + 200;
-  c16_t **rxData = malloc(data->frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(c16_t *));
-  for (int i = 0; i < data->frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+  int rx_size = local_frame_parms->packet_samples + data->channel_model->delay + 200;
+  c16_t **rxData = malloc(local_frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(c16_t *));
+  for (int i = 0; i < local_frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
     rxData[i] = calloc(1, rx_size * sizeof(c16_t));
   }
   
   int16_t *envelope = malloc(rx_size * sizeof(uint16_t));
   int16_t *filteredData = malloc(rx_size * sizeof(uint16_t));
-  int16_t *downSampled = malloc((rx_size / data->frame_parms->N) * sizeof(uint16_t));
+  int16_t *downSampled = malloc((rx_size / local_frame_parms->N) * sizeof(uint16_t));
   uint8_t *rx_payload = malloc(MAX_AIOT_R2D_PACKET_SIZE);
-  int *correlation = malloc((rx_size / data->frame_parms->N - data->frame_parms->SIP_samples) * sizeof(int));
+  int *correlation = malloc((rx_size / local_frame_parms->N - local_frame_parms->SIP_samples) * sizeof(int));
   
   // Thread-local payload buffer
-  uint8_t *local_payload = malloc(MAX_AIOT_R2D_PAYLOAD_SIZE);
-  memcpy(local_payload, data->payload, (data->payloadSize + 7) / 8);
+  uint8_t *local_payload = malloc(data->payloadSize / 8 + 1);
   
   // Thread-local filter
-  /*iir_butter3_fixed_t local_filter;
-  generate_butter_coeffs_fixed(&local_filter, data->channel_model->bw * 1e6, (double)data->channel_model->sampling_rate * 1e6);*/
-
-  iir_butter3_t local_filter;
+  iir_butter3_fixed_t local_filter;
   AIOT_R2D_PHY_RX_Design_Filter(&local_filter, data->channel_model->bw * 1e6, (double)data->channel_model->sampling_rate * 1e6);
   
   // Thread-local IQ signal buffers
-  double **s_re = malloc(data->frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
-  double **s_im = malloc(data->frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
-  for (int i = 0; i < data->frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
+  double **s_re = malloc(local_frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
+  double **s_im = malloc(local_frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
+  for (int i = 0; i < local_frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
     s_re[i] = calloc(1, rx_size * sizeof(double));
     s_im[i] = calloc(1, rx_size * sizeof(double));
   }
   
-  double **r_re = malloc(data->frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
-  double **r_im = malloc(data->frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
-  for (int i = 0; i < data->frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+  double **r_re = malloc(local_frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
+  double **r_im = malloc(local_frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(double *));
+  for (int i = 0; i < local_frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
     r_re[i] = calloc(1, rx_size * sizeof(double));
     r_im[i] = calloc(1, rx_size * sizeof(double));
   }
   
   // Thread-local timing stats
   time_stats_t local_time_stats = {0};
+  time_stats_t local_alltime_stats = {0};
   char filename[128] = {0};
   
   // Process SNR range assigned to this thread
@@ -915,11 +883,6 @@ void* process_snr_range(void* arg) {
     local_channel_model.SNR = snr;
     
     for(int trials = 0; trials < snr_trials; trials++) {
-      // Generate new payload for each trial
-      for(int i = 0; i < data->payloadSize / 8; i++) {
-        local_payload[i] = uniformrandom() * 256;
-      }
-      
       if(testing_mode) {
         pthread_mutex_lock(data->print_mutex);
         printf("*************************\n");
@@ -930,8 +893,13 @@ void* process_snr_range(void* arg) {
       if(testing_timing && snr != snr_plot) {
         start_meas(&local_time_stats);
       }
+
+      // Generate new payload for each trial
+      for(int i = 0; i < data->payloadSize / 8; i++) {
+        local_payload[i] = uniformrandom() * 256;
+      }
       
-      AIOT_R2D_PHY_TX_REs(REsPacket, (const uint8_t *) local_payload, data->frame_parms);
+      AIOT_R2D_PHY_TX_REs(REsPacket, (const uint8_t *) local_payload, local_frame_parms);
 
       if(testing_mode && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/R2D_REs_Packet.m", foldername);
@@ -945,7 +913,7 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      AIOT_R2D_PHY_TX_Signal(txData, txDataF, (const c16_t *) REsPacket, data->frame_parms);
+      AIOT_R2D_PHY_TX_Signal(txData, txDataF, (const c16_t *) REsPacket, local_frame_parms);
 
       if(testing_mode && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/R2D_TX_IQ.m", foldername);
@@ -959,7 +927,7 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, local_channel_model.SNR, data->frame_parms,
+      SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, local_channel_model.SNR, local_frame_parms,
                             s_re, s_im, r_re, r_im);
 
       if(testing_mode && snr == snr_plot && trials == 0) {
@@ -1002,7 +970,7 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      AIOT_R2D_PHY_RX_Downsample(downSampled, (const int16_t *) filteredData, rx_size, data->frame_parms);
+      AIOT_R2D_PHY_RX_Downsample(downSampled, (const int16_t *) filteredData, rx_size, local_frame_parms);
 
       if(testing_mode && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/R2D_Downsampled.m", foldername);
@@ -1016,7 +984,7 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) downSampled, SIP_ideal, data->frame_parms);
+      int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) downSampled, SIP_ideal, local_frame_parms);
 
       if(testing_mode && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/R2D_Correlation.m", foldername);
@@ -1031,7 +999,7 @@ void* process_snr_range(void* arg) {
       }
       
       memset(rx_payload, 0, MAX_AIOT_R2D_PACKET_SIZE);
-      AIOT_R2D_PHY_RX_GetPacket(rx_payload, (const int16_t *) downSampled, SIP_offset, data->frame_parms);
+      AIOT_R2D_PHY_RX_GetPacket(rx_payload, (const int16_t *) downSampled, SIP_offset, local_frame_parms);
       
       if(testing_timing && snr != snr_plot) {
         stop_meas(&local_time_stats);
@@ -1040,8 +1008,8 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      double ber = calculate_BER(rx_payload, local_payload, data->frame_parms);
-      if(data->frame_parms->packet_payload_size != data->payloadSize || (ber > 0.0)) {
+      double ber = calculate_BER(rx_payload, local_payload, local_frame_parms);
+      if(local_frame_parms->packet_payload_size != data->payloadSize || (ber > 0.0)) {
         data->ber_results[snr - snr_min] += 1;
       }
       
@@ -1062,7 +1030,7 @@ void* process_snr_range(void* arg) {
   free(REsPacket);
   free(txData);
   free(txDataF);
-  for (int i = 0; i < data->frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+  for (int i = 0; i < local_frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
     free(rxData[i]);
   }
   free(rxData);
@@ -1073,14 +1041,14 @@ void* process_snr_range(void* arg) {
   free(correlation);
   free(local_payload);
   
-  for (int i = 0; i < data->frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
+  for (int i = 0; i < local_frame_parms->nr_frame_parms.nb_antennas_tx; i++) {
     free(s_re[i]);
     free(s_im[i]);
   }
   free(s_re);
   free(s_im);
   
-  for (int i = 0; i < data->frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
+  for (int i = 0; i < local_frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
     free(r_re[i]);
     free(r_im[i]);
   }
@@ -1092,15 +1060,15 @@ void* process_snr_range(void* arg) {
   return NULL;
 }
 
-void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_model)
+void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_model)
 {
-  AIOT_R2D_PHY_TX_calc_packet_sizes((const int) payloadSize, frame_parms);
+  AIOT_R2D_PHY_TX_calc_packet_sizes((const int) frame_parms->payload_size, frame_parms);
 
   printf("R2D packet parameters:\n");
   printf("  RBs: %d\n", frame_parms->nr_frame_parms.N_RB_DL);
   printf("  M: %d\n", frame_parms->M);
   printf("  ZC_Ones: %s\n", frame_parms->Zadoff_Chu ? "Zadoff-Chu" : "Ones");
-  printf("  Payload size: %d bits\n", payloadSize);
+  printf("  Payload size: %d bits\n", frame_parms->payload_size);
   printf("  Packet symbols: %d\n", frame_parms->packet_symbols);
   printf("  Packet slots: %d\n", frame_parms->packet_slots);
   printf("  Packet subcarriers: %d\n", frame_parms->packet_subcarriers);
@@ -1114,13 +1082,9 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
   printf("  Channel model: %s\n", channel_model->channel_model == AWGN ? "AWGN" : "TDL");
   printf("  Sampling rate: %f MHz\n", channel_model->sampling_rate);
   printf("  Bandwidth: %f MHz\n", channel_model->bw);
-  printf("  Carrier frequency: %f MHz\n", ((double)channel_model->fc) / 1e6);
   printf("  Delay spread: %f us\n", channel_model->DS_TDL);
   printf("  SNR: %f dB\n", channel_model->SNR);
   printf("  Delay: %d samples\n", channel_model->delay);
-  printf("  Path loss: %f dB\n", channel_model->path_loss_dB);
-  printf("  Noise power: %f dB\n", channel_model->noise_power_dB);
-  printf("  Transmit power: %f dBm\n", channel_model->tx_pwr_dBm);
 
   printf("Starting BER test over SNR range %d dB to %d dB with step %d dB (%d trials per SNR)...\n",
          snr_min, snr_max, snr_steps, snr_trials);
@@ -1158,12 +1122,24 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
     
     for (int t = 0; t < num_threads; t++) {
       thread_data[t].thread_id = t;
-      thread_data[t].payload = payload;
-      thread_data[t].payloadSize = payloadSize;
+      thread_data[t].payloadSize = frame_parms->payload_size;
       thread_data[t].frame_parms = frame_parms;
+      // Initialize thread_frame_parms - will be copied in thread function
+      memcpy(&thread_data[t].thread_frame_parms, frame_parms, sizeof(NR_AIOT_DL_FRAME_PARMS));
       thread_data[t].channel_model = channel_model;
       thread_data[t].ber_results = ber_results;
       thread_data[t].print_mutex = &print_mutex;
+      
+      // Initialize timing results to zero
+      thread_data[t].time_tx_REs = 0.0;
+      thread_data[t].time_tx_signal = 0.0;
+      thread_data[t].time_channel = 0.0;
+      thread_data[t].time_envelope = 0.0;
+      thread_data[t].time_filter = 0.0;
+      thread_data[t].time_downsample = 0.0;
+      thread_data[t].time_sync = 0.0;
+      thread_data[t].time_rx_packet = 0.0;
+      thread_data[t].time_ber = 0.0;
       
       // Calculate SNR range for this thread
       int start_idx = t * snr_per_thread + (t < remaining_snr ? t : remaining_snr);
@@ -1196,8 +1172,7 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
     snr_thread_data_t thread_data;
     
     thread_data.thread_id = 0;
-    thread_data.payload = payload;
-    thread_data.payloadSize = payloadSize;
+    thread_data.payloadSize = frame_parms->payload_size;
     thread_data.frame_parms = frame_parms;
     thread_data.channel_model = channel_model;
     thread_data.ber_results = ber_results;
@@ -1264,7 +1239,7 @@ void BER_test(uint8_t *payload, int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame_p
   }
 
   if(!testing_mode) {
-    sprintf(filename, "%s/BLER_M%d_%s_SIZE%d_%dRBs.m", foldername, frame_parms->M, frame_parms->Zadoff_Chu ? "ZC" : "Ones", payloadSize, frame_parms->nr_frame_parms.N_RB_DL);
+    sprintf(filename, "%s/BLER_M%d_%s_SIZE%d_%dRBs.m", foldername, frame_parms->M, frame_parms->Zadoff_Chu ? "ZC" : "Ones", frame_parms->payload_size, frame_parms->nr_frame_parms.N_RB_DL);
     LOG_M(filename, "BLER", ber_results, MAX_SNR_DB - MIN_SNR_DB + 1, 1, 7);
   }
 }
@@ -1284,10 +1259,7 @@ int main(int argc, char **argv)
     exit_fun("[NR_AIOT_PRDCHSIM] Error, configuration module init failed\n");
   }
 
-  uint8_t payload[MAX_AIOT_R2D_PAYLOAD_SIZE] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44,
-                                                0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
-  uint16_t payloadSize = PAYLOAD_SIZE_DEFAULT; // payload size in bits
-
+  // **************************
   // Allocate memory for frame parameters
   NR_AIOT_DL_FRAME_PARMS frame_parms_storage;
   frame_parms = &frame_parms_storage;
@@ -1310,6 +1282,7 @@ int main(int argc, char **argv)
   frame_parms->nr_frame_parms.nb_prefix_samples0 = CP0_SYMBOL_SIZE_DEFAULT;
   frame_parms->nr_frame_parms.numerology_index = 0;
 
+  // Calculate number of samples
   frame_parms->nr_frame_parms.samples_per_frame_wCP = frame_parms->nr_frame_parms.slots_per_frame
                                                       * frame_parms->nr_frame_parms.symbols_per_slot
                                                       * frame_parms->nr_frame_parms.ofdm_symbol_size;
@@ -1331,6 +1304,9 @@ int main(int argc, char **argv)
   frame_parms->M = M_DEFAULT;
   frame_parms->N = 16; // Downsampling factor
 
+  // Payload size
+  frame_parms->payload_size = PAYLOAD_SIZE_DEFAULT;
+
   // Fill in channel model default parameters
   channel_model_t channel_model = {
     .channel_model = AWGN,
@@ -1344,7 +1320,7 @@ int main(int argc, char **argv)
   };
 
   int c;
-  while ((c = getopt(argc, argv, "--:O:h:L:R:P:p:M:Z:S:N:D:t:T:r:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:h:L:R:p:M:Z:S:N:D:t:T:r:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -1358,7 +1334,6 @@ int main(int argc, char **argv)
         printf("-h This message\n");
         printf("-L <log level, 0(errors), 1(warning), 2(analysis), 3(info), 4(debug), 5(trace)>\n");
         printf("-R Number of RBs (supported: 1, 6, 25, 50, 100)\n");
-        printf("-P Payload in hex string (e.g. 1234ABCD)\n");
         printf("-p Payload size in bits (max %d)\n", MAX_AIOT_R2D_PAYLOAD_SIZE * 8);
         printf("-M Chips in symbol (supported: 1, 2, 4)\n");
         printf("-Z Zadoff-Chu (1) or Ones (0)\n");
@@ -1384,25 +1359,13 @@ int main(int argc, char **argv)
         }
         break;
 
-      case 'P':
-        // Load hex string from optarg into payload array
-        int hex_len = strlen(optarg);
-        if (hex_len > 250)
-          hex_len = 250; // 2 chars per byte, max 125 bytes
-
-        for (int i = 0; i < hex_len; i++) {
-          sscanf(optarg + 2 * i, "%2hhx", &payload[i]);
-        }
-        printf("Loaded payload %s of %d bytes\n", payload, hex_len);
-        break;
-
       case 'p':
-        payloadSize = atoi(optarg);
-        if (payloadSize > MAX_AIOT_R2D_PAYLOAD_SIZE * 8) {
+        frame_parms->payload_size = atoi(optarg);
+        if (frame_parms->payload_size > MAX_AIOT_R2D_PAYLOAD_SIZE * 8) {
           printf("Error: maximum payload bit size is %d\n", MAX_AIOT_R2D_PAYLOAD_SIZE * 8);
           exit(-1);
         } else {
-          printf("Using payload size %d bits\n", payloadSize);
+          printf("Using payload size %d bits\n", frame_parms->payload_size);
         }
         break;
 
@@ -1487,7 +1450,7 @@ int main(int argc, char **argv)
 
   // ---------------------------------------------------------------
 
-  BER_test(payload, payloadSize, frame_parms, &channel_model);
+  BER_test(frame_parms, &channel_model);
 
   end_configmodule(uniqCfg);
   logTerm();
