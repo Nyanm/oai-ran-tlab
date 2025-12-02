@@ -182,7 +182,23 @@ void dump_cnProcBufRes_to_file(const int8_t* cnProcBufRes, const char* filename)
   fclose(fp);
 }
 
+void dump_llrRes_to_file(const int8_t* cnProcBufRes, const char* filename)
+{
+  FILE* fp = fopen(filename, "w");
+  if (fp == NULL) {
+    perror("Failed to open dump file");
+    exit(EXIT_FAILURE);
+  }
+  // printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
 
+  for (int i = 0; i < 68*384; i++) {
+    fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
+    if ((i + 1) % 16 == 0)
+      fprintf(fp, "\n");
+  }
+
+  fclose(fp);
+}
 
 static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            int8_t* p_out,
@@ -468,7 +484,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
         nrLDPC_bnProcPc_BG1_R13_AVX2(bnProcBuf, bnProcBufRes, llrRes, llrProcBuf, Z);
 #else
         nrLDPC_bnProcPc_BG1_R13_128(bnProcBuf, bnProcBufRes, llrRes, llrProcBuf, Z);
-        //dump_cnProcBufRes_to_file(llrProcBuf, "Dump_llrProcBuf_128.txt");
+        dump_llrRes_to_file(llrRes, "First_iter_llrRes_Dump_128.txt");
 #endif
         break;
       }
@@ -625,7 +641,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   if (BG == 1) {
     nrLDPC_bn2cnProcBuf_BG1(p_lut, bnProcBufRes, cnProcBuf, Z);
     //dump_cnProcBufRes_to_file(cnProcBuf, "Dump_cnProcBuf_de_Bn_128.txt");
-    // dump_cnProcBufRes_to_file(cnProcBufRes, "First_cnProcBufRes_dump_128.txt");
+    dump_cnProcBufRes_to_file(cnProcBuf, "Second_iter_cnProc_Dump_128.txt");
   } else
     nrLDPC_bn2cnProcBuf_BG2(p_lut, bnProcBufRes, cnProcBuf, Z);
 #ifdef NR_LDPC_PROFILER_DETAIL
@@ -684,7 +700,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
           nrLDPC_cnProc_BG1_R13_AVX2(cnProcBuf, cnProcBufRes, Z);
 #else
           nrLDPC_cnProc_BG1_R13_128(cnProcBuf, cnProcBufRes, Z);
-          // dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_128.txt");
+          //dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_128.txt");
 
 #endif
           break;
@@ -762,10 +778,14 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #ifdef NR_LDPC_PROFILER_DETAIL
     start_meas(&p_profiler->cn2bnProcBuf);
 #endif
-    if (BG == 1)
+    if (BG == 1){
       nrLDPC_cn2bnProcBuf_BG1(p_lut, cnProcBufRes, bnProcBuf, Z);
-    // dump_cnProcBufRes_to_file(cnProcBufRes, "cnProcBufRes_dump_inBn.txt");
-    // for debug}
+     if(numIter == 0)dump_cnProcBufRes_to_file(bnProcBuf, "Second_iter_bnProc_Dump_128.txt");
+     if(numIter == 1)dump_cnProcBufRes_to_file(bnProcBuf, "Third_iter_bnProc_Dump_128.txt");
+     if(numIter == 2)dump_cnProcBufRes_to_file(bnProcBuf, "Fourth_iter_bnProc_Dump_128.txt");
+     if(numIter == 3)dump_cnProcBufRes_to_file(bnProcBuf, "Fifth_iter_bnProc_Dump_128.txt");
+    // for debug
+    }
     else
       nrLDPC_cn2bnProcBuf_BG2(p_lut, cnProcBufRes, bnProcBuf, Z);
 #ifdef NR_LDPC_PROFILER_DETAIL
@@ -839,7 +859,13 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #ifdef __AVX2__
           nrLDPC_bnProcPc_BG1_R13_AVX2(bnProcBuf, bnProcBufRes, llrRes, llrProcBuf, Z);
 #else
-          nrLDPC_bnProcPc_BG1_R13_128(bnProcBuf, bnProcBufRes, llrRes, llrProcBuf, Z);
+          {nrLDPC_bnProcPc_BG1_R13_128(bnProcBuf, bnProcBufRes, llrRes, llrProcBuf, Z);
+          if(numIter == 0)dump_llrRes_to_file(llrRes, "Second_iter_llrRes_Dump_128.txt");
+          if(numIter == 1)dump_llrRes_to_file(llrRes, "Third_iter_llrRes_Dump_128.txt");
+          if(numIter == 2)dump_llrRes_to_file(llrRes, "Fourth_iter_llrRes_Dump_128.txt");
+          if(numIter == 3)dump_llrRes_to_file(llrRes, "Fifth_iter_llrRes_Dump_128.txt");
+          
+          }
 #endif
           break;
         }
@@ -982,7 +1008,9 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->bn2cnProcBuf));
     if (BG == 1) {
       nrLDPC_bn2cnProcBuf_BG1(p_lut, bnProcBufRes, cnProcBuf, Z);
-      // dump_cnProcBufRes_to_file(cnProcBuf, "First_Packed_cnProcBuf_dump_128.txt");
+      if(numIter == 0) dump_cnProcBufRes_to_file(cnProcBuf, "Third_iter_cnProc_Dump_128.txt");
+      if(numIter == 1) dump_cnProcBufRes_to_file(cnProcBuf, "Fourth_iter_cnProc_Dump_128.txt");
+      if(numIter == 2) dump_cnProcBufRes_to_file(cnProcBuf, "Fifth_iter_cnProc_Dump_128.txt");
     } else
       nrLDPC_bn2cnProcBuf_BG2(p_lut, bnProcBufRes, cnProcBuf, Z);
     NR_LDPC_PROFILER_DETAIL(stop_meas(&p_profiler->bn2cnProcBuf));
@@ -1043,6 +1071,8 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   // #else
   // printf("Using CPU decoder\n");
   // #endif
+  //dump_llrRes_to_file(llrProcBuf, "Dump_llrProcBuf_128.txt");
+  //dump_llrRes_to_file(llrRes, "Dump_llrRes_128.txt");
   dump_cnProcBufRes_to_file(p_out, "Dump_p_out_128.txt");
   return numIter;
 }
