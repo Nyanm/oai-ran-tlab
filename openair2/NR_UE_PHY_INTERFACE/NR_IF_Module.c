@@ -56,7 +56,6 @@ static eth_params_t         stub_eth_params;
 static nr_ue_if_module_t *nr_ue_if_module_inst[MAX_IF_MODULES];
 static int ue_tx_sock_descriptor = -1;
 static int ue_rx_sock_descriptor = -1;
-static int g_harq_pid;
 sem_t sfn_slot_semaphore;
 
 queue_t nr_sfn_slot_queue;
@@ -544,7 +543,7 @@ static void copy_dl_tti_req_to_dl_info(nr_downlink_indication_t *dl_info, nfapi_
                     {
                         mac->nr_ue_emul_l1.expected_sib = true;
                         mac->nr_ue_emul_l1.index_has_sib[pdu_idx] = true;
-                        LOG_I(NR_MAC, "[SIB_DEBUG] DL_TTI: Setting index_has_sib[%d] = true for SI-RNTI (DCI #%d)\n", pdu_idx, j);
+                        // LOG_I(NR_MAC, "[SIB_DEBUG] DL_TTI: Setting index_has_sib[%d] = true for SI-RNTI (DCI #%d)\n", pdu_idx, j);
                     }
                     else if (dci_pdu_list->RNTI == mac->ra.ra_rnti)
                     {
@@ -556,7 +555,7 @@ static void copy_dl_tti_req_to_dl_info(nr_downlink_indication_t *dl_info, nfapi_
                     {
                         mac->nr_ue_emul_l1.expected_dci = true;
                         mac->nr_ue_emul_l1.index_has_dci[pdu_idx] = true;
-                        LOG_I(NR_MAC, "[DCI_DEBUG] DL_TTI: Setting index_has_dci[%d] = true for RNTI=0x%x (DCI #%d)\n", pdu_idx, dci_pdu_list->RNTI, j);
+                        // LOG_I(NR_MAC, "[DCI_DEBUG] DL_TTI: Setting index_has_dci[%d] = true for RNTI=0x%x (DCI #%d)\n", pdu_idx, dci_pdu_list->RNTI, j);
                     }
                     valid_pdu_idx++;
                   }
@@ -643,17 +642,17 @@ static void copy_tx_data_req_to_dl_info(nr_downlink_indication_t *dl_info, nfapi
     rx_ind->slot = tx_data_request->Slot;
 
     int pdu_idx = 0;
-    LOG_I(NR_MAC, "[SIB_DEBUG] TX_DATA: Processing %d PDUs for sfn/slot %d.%d\n", num_pdus, tx_data_request->SFN, tx_data_request->Slot);
+    // LOG_I(NR_MAC, "[SIB_DEBUG] TX_DATA: Processing %d PDUs for sfn/slot %d.%d\n", num_pdus, tx_data_request->SFN, tx_data_request->Slot);
     for (int i = 0; i < num_pdus; i++)
     {
         nfapi_nr_pdu_t *pdu_list = &tx_data_request->pdu_list[i];
-        LOG_I(NR_MAC, "[SIB_DEBUG] TX_DATA: PDU[%d] - index_has_sib=%d, index_has_rar=%d, index_has_dci=%d\n",
-              i, mac->nr_ue_emul_l1.index_has_sib[i], mac->nr_ue_emul_l1.index_has_rar[i], mac->nr_ue_emul_l1.index_has_dci[i]);
+        // LOG_I(NR_MAC, "[SIB_DEBUG] TX_DATA: PDU[%d] - index_has_sib=%d, index_has_rar=%d, index_has_dci=%d\n",
+        //       i, mac->nr_ue_emul_l1.index_has_sib[i], mac->nr_ue_emul_l1.index_has_rar[i], mac->nr_ue_emul_l1.index_has_dci[i]);
         if (mac->nr_ue_emul_l1.index_has_sib[i])
         {
             AssertFatal(!get_softmodem_params()->nsa,
                         "Should not be processing SIB in NSA mode, something bad happened\n");
-            LOG_I(NR_MAC, "[SIB_DEBUG] TX_DATA: PDU[%d] is SIB, creating RX_IND pdu_idx=%d\n", i, pdu_idx);
+            // LOG_I(NR_MAC, "[SIB_DEBUG] TX_DATA: PDU[%d] is SIB, creating RX_IND pdu_idx=%d\n", i, pdu_idx);
             fill_rx_ind(pdu_list, rx_ind, pdu_idx, FAPI_NR_RX_PDU_TYPE_SIB);
             pdu_idx++;
         }
@@ -1057,8 +1056,8 @@ static void enqueue_nr_nfapi_msg(void *buffer, ssize_t len, nfapi_p7_message_hea
         case NFAPI_NR_PHY_MSG_TYPE_UL_TTI_REQUEST:
         {
             nfapi_nr_ul_tti_request_t *ul_tti_request = malloc16(sizeof(*ul_tti_request));
-            if (nfapi_nr_p7_message_unpack(buffer, len, ul_tti_request,
-                                           sizeof(*ul_tti_request), NULL) < 0)
+            if (!nfapi_nr_p7_message_unpack(buffer, len, ul_tti_request,
+                                            sizeof(*ul_tti_request), NULL))
             {
                 LOG_E(NR_PHY, "Message ul_tti_request failed to unpack\n");
                 break;
@@ -1282,7 +1281,7 @@ static int handle_bcch_dlsch(NR_UE_MAC_INST_t *mac,
                              int frame,
                              int slot)
 {
-  LOG_I(NR_MAC, "[SIB_DEBUG] handle_bcch_dlsch called: pdu_len=%d, frame=%d, slot=%d, mac->state=%d\n", pdu_len, frame, slot, mac->state);
+  // LOG_I(NR_MAC, "[SIB_DEBUG] handle_bcch_dlsch called: pdu_len=%d, frame=%d, slot=%d, mac->state=%d\n", pdu_len, frame, slot, mac->state);
   nr_ue_decode_BCCH_DL_SCH(mac, cc_id, gNB_index, ack_nack, pduP, pdu_len, frame, slot);
   return 0;
 }

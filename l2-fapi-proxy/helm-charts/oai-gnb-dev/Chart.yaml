@@ -21,7 +21,7 @@
 
 apiVersion: v2
 name: oai-gnb-dev
-description: A Helm chart for gnb network function (development version)
+description: A Helm chart for gNB network function (development version with L2 proxy support)
 
 # A chart can be either an 'application' or a 'library' chart.
 #
@@ -48,8 +48,6 @@ keywords:
   - gNB
   - RAN
   - 5G
-  - USRP_B2XX
-  - USRP_N3XX
 
 sources:
   - https://gitlab.eurecom.fr/oai/openairinterface5g

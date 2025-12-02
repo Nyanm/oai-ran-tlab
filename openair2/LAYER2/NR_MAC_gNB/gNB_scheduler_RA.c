@@ -65,10 +65,6 @@ static int16_t ssb_index_from_prach(module_id_t module_idP,
   uint8_t config_index = rach_ConfigCommon->rach_ConfigGeneric.prach_ConfigurationIndex;
   uint8_t fdm = cfg->prach_config.num_prach_fd_occasions.value;
   
-  uint8_t total_RApreambles = MAX_NUM_NR_PRACH_PREAMBLES;
-  if (rach_ConfigCommon->totalNumberOfRA_Preambles != NULL)
-    total_RApreambles = *rach_ConfigCommon->totalNumberOfRA_Preambles;
-  
   float  num_ssb_per_RO = ssb_per_rach_occasion[cfg->prach_config.ssb_per_rach.value];	
   uint16_t start_symbol_index = 0;
   uint8_t temp_start_symbol = 0;

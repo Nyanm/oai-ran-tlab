@@ -1,26 +1,27 @@
+{{- range $gnbId:=.Values.gnbIds }}
 ---
 #https://gitlab.eurecom.fr/oai/openairinterface5g/-/blob/develop/ci-scripts/conf_files/gnb.sa.band78.106prb.rfsim.conf
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Chart.Name }}-configmap
+  name: {{ $.Chart.Name }}-{{$gnbId}}-configmap
 data:
   gnb.conf: |
-    Active_gNBs = ( "{{ .Values.config.gnbName}}");
+    Active_gNBs = ( "{{ $.Values.config.gnbName}}-{{$gnbId}}");
     # Asn1_verbosity, choice in: none, info, annoying
     Asn1_verbosity = "none";
     gNBs =
     (
       {
         ////////// Identification parameters:
-        gNB_ID    =  0xe00;
-        gNB_name  =  "{{ .Values.config.gnbName}}";
+        gNB_ID    =  0x{{printf "%x" (add 0xe00 $gnbId)}};
+        gNB_name  =  "{{ $.Values.config.gnbName}}-{{$gnbId}}";
         // Tracking area code, 0x0000 and 0xfffe are reserved values
-        tracking_area_code  = {{ .Values.config.tac}} ;
-          {{- if .Values.config.sd }}
-          plmn_list = ({ mcc = {{ .Values.config.mcc}}; mnc = {{ .Values.config.mnc}}; mnc_length = 2; snssaiList = ({ sst = {{ .Values.config.sst}}; sd = {{ .Values.config.sd}} }) });
+        tracking_area_code  = {{ $.Values.config.tac}} ;
+          {{- if $.Values.config.sd }}
+          plmn_list = ({ mcc = {{ $.Values.config.mcc}}; mnc = {{ $.Values.config.mnc}}; mnc_length = 2; snssaiList = ({ sst = {{ $.Values.config.sst}}; sd = {{ $.Values.config.sd}} }) });
           {{- else}}
-          plmn_list = ({ mcc = {{ .Values.config.mcc}}; mnc = {{ .Values.config.mnc}}; mnc_length = 2; snssaiList = ({ sst = {{ .Values.config.sst}} }) });
+          plmn_list = ({ mcc = {{ $.Values.config.mcc}}; mnc = {{ $.Values.config.mnc}}; mnc_length = 2; snssaiList = ({ sst = {{ $.Values.config.sst}} }) });
           {{- end}}
 
         nr_cellid = 12345678L
@@ -28,16 +29,16 @@ data:
     #     tr_s_preference     = "local_mac"
 
         ////////// Physical parameters:
-
+    
         min_rxtxtime = 6;
 
-        metrics_db_url = "http://default:Jamsung665@metrics-db-clickhouse.oai.svc.cluster.local:8123/";
+        # metrics_db_url = "http://default:Jamsung665@metrics-db-clickhouse.oai.svc.cluster.local:8123/";
 
           servingCellConfigCommon = (
           {
        #spCellConfigCommon
 
-            physCellId                                                    = 0;
+            physCellId                                                    = {{$gnbId | int}};
 
       #  downlinkConfigCommon
           #frequencyInfoDL
@@ -49,7 +50,7 @@ data:
             #scs-SpecificCarrierList
               dl_offstToCarrier                                              = 0;
       # subcarrierSpacing
-      # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120
+      # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120  
               dl_subcarrierSpacing                                           = 1;
               dl_carrierBandwidth                                            = 106;
            #initialDownlinkBWP
@@ -57,19 +58,19 @@ data:
               # this is RBstart=27,L=48 (275*(L-1))+RBstart
               initialDLBWPlocationAndBandwidth                               = 28875; # 6366 12925 12956 28875 12952
       # subcarrierSpacing
-      # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120
+      # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120  
               initialDLBWPsubcarrierSpacing                                           = 1;
             #pdcch-ConfigCommon
               initialDLBWPcontrolResourceSetZero                              = 12;
               initialDLBWPsearchSpaceZero                                             = 0;
 
-        #uplinkConfigCommon
+        #uplinkConfigCommon 
            #frequencyInfoUL
             ul_frequencyBand                                                 = 78;
             #scs-SpecificCarrierList
             ul_offstToCarrier                                              = 0;
       # subcarrierSpacing
-      # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120
+      # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120  
             ul_subcarrierSpacing                                           = 1;
             ul_carrierBandwidth                                            = 106;
             pMax                                                          = 20;
@@ -77,7 +78,7 @@ data:
             #genericParameters
               initialULBWPlocationAndBandwidth                            = 28875;
       # subcarrierSpacing
-      # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120
+      # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120  
               initialULBWPsubcarrierSpacing                                           = 1;
             #rach-ConfigCommon
               #rach-ConfigGeneric
@@ -110,7 +111,7 @@ data:
               prach_RootSequenceIndex_PR                                  = 2;
               prach_RootSequenceIndex                                     = 1;
               # SCS for msg1, can only be 15 for 30 kHz < 6 GHz, takes precendence over the one derived from prach-ConfigIndex
-              #
+              #  
               msg1_SubcarrierSpacing                                      = 1,
       # restrictedSetConfig
       # 0=unrestricted, 1=restricted type A, 2=restricted type B
@@ -131,7 +132,7 @@ data:
             ssb_PositionsInBurst_Bitmap                                   = 1;
 
       # ssb_periodicityServingCell
-      # 0 = ms5, 1=ms10, 2=ms20, 3=ms40, 4=ms80, 5=ms160, 6=spare2, 7=spare1
+      # 0 = ms5, 1=ms10, 2=ms20, 3=ms40, 4=ms80, 5=ms160, 6=spare2, 7=spare1 
             ssb_periodicityServingCell                                    = 2;
 
       # dmrs_TypeA_position
@@ -139,15 +140,15 @@ data:
             dmrs_TypeA_Position                                           = 0;
 
       # subcarrierSpacing
-      # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120
+      # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120  
             subcarrierSpacing                                             = 1;
 
 
         #tdd-UL-DL-ConfigurationCommon
       # subcarrierSpacing
-      # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120
+      # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120  
             referenceSubcarrierSpacing                                    = 1;
-            # pattern1
+            # pattern1 
             # dl_UL_TransmissionPeriodicity
             # 0=ms0p5, 1=ms0p625, 2=ms1, 3=ms1p25, 4=ms2, 5=ms2p5, 6=ms5, 7=ms10
             dl_UL_TransmissionPeriodicity                                 = 6;
@@ -182,7 +183,7 @@ data:
       }
     );
 
-{{- if .Values.config.l2Fapi }}
+{{- if $.Values.config.l2Fapi }}
     MACRLCs = (
         {
         num_cc = 1;
@@ -231,7 +232,6 @@ data:
              sdr_addrs = "serial=XXXXXXX"
         }
     );
-{{- end}}
 
     L1s = (
     {
@@ -241,6 +241,9 @@ data:
     #  pucch0_dtx_threshold = 150;
     }
     );
+{{- end}}
+
+  
 
     THREAD_STRUCT = (
       {
@@ -278,8 +281,10 @@ data:
         hw_log_level                          ="info";
         phy_log_level                         ="info";
         mac_log_level                         ="info";
+        nr_mac_log_level                      ="info";
         rlc_log_level                         ="info";
         pdcp_log_level                        ="info";
         rrc_log_level                         ="info";
-        f1ap_log_level                         ="debug";
+        f1ap_log_level                        ="info";
       };
+{{- end }}

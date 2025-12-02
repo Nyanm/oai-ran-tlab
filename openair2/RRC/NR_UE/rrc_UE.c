@@ -1629,7 +1629,7 @@ static void nr_rrc_ue_decode_NR_BCCH_DL_SCH_Message(NR_UE_RRC_INST_t *rrc,
   SI_info->sib_pending = false;
   // LOG_I(NR_RRC, "[SIB_DEBUG] nr_rrc_ue_decode_NR_BCCH_DL_SCH_Message called: Sdu_len=%d, frame=%d, slot=%d\n", Sdu_len, frame, slot);
   if (Sdu_len == 0) { // decoding failed in L2
-    LOG_E(NR_RRC, "[SIB_DEBUG] Sdu_len=0, decoding failed in L2\n");
+    // LOG_E(NR_RRC, "[SIB_DEBUG] Sdu_len=0, decoding failed in L2\n");
     return;
   }
 

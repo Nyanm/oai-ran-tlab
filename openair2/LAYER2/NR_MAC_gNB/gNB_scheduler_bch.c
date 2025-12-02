@@ -85,12 +85,12 @@ static void schedule_ssb(frame_t frame,
   dl_config_pdu->ssb_pdu.ssb_pdu_rel15.precoding_and_beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = beam_index;
   dl_req->nPDUs++;
 
-  // Only log SSB scheduling every 100 frames to reduce log spam
-  static int ssb_log_counter = 0;
-  if ((++ssb_log_counter % 100) == 0 || frame < 10) {
-    LOG_I(MAC,"[gNB] Scheduling SSB %d (MIB) at frame %d slot %d, total PDUs in DL_req=%d, MIB payload=0x%x\n", 
-          i_ssb, frame, slot, dl_req->nPDUs, payload);
-  }
+  // SSB scheduling debug log commented out for production
+  // static int ssb_log_counter = 0;
+  // if ((++ssb_log_counter % 100) == 0 || frame < 10) {
+  //   LOG_I(MAC,"[gNB] Scheduling SSB %d (MIB) at frame %d slot %d, total PDUs in DL_req=%d, MIB payload=0x%x\n", 
+  //         i_ssb, frame, slot, dl_req->nPDUs, payload);
+  // }
 }
 
 static void fill_ssb_vrb_map(NR_COMMON_channels_t *cc,

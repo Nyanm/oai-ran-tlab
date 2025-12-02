@@ -1,56 +1,31 @@
+{{- range $gnbId:=.Values.gnbIds }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Chart.Name }}
+  name: {{ $.Chart.Name }}-{{$gnbId}}
   labels:
-    {{- include "oai-gnb-dev.labels" . | nindent 4 }}
+    {{- include "oai-gnb-multi.labels" (list $ $gnbId) | nindent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      {{- include "oai-gnb-dev.selectorLabels" . | nindent 6 }}
+      {{- include "oai-gnb-multi.selectorLabels" (list $ $gnbId) | nindent 6 }}
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
-        {{- include "oai-gnb-dev.selectorLabels" . | nindent 8 }}
-        app: oai-gnb-dev
-    {{- if .Values.multus.n2Interface.create }}
-      annotations:
-        k8s.v1.cni.cncf.io/networks: >-
-          [{
-                 "name": "{{ .Chart.Name }}-{{ .Values.multus.n2Interface.name }}",
-                 "interface": "{{ .Values.multus.n2Interface.name }}"
-                {{- if .Values.multus.defaultGateway }}
-                 ,"default-route": ["{{ .Values.multus.defaultGateway }}"]
-                {{- end }}
-          }
-          {{- if .Values.multus.n3Interface.create }}
-          ,{
-                 "name": "{{ .Chart.Name }}-{{ .Values.multus.n3Interface.name }}",
-                 "interface": "{{ .Values.multus.n3Interface.name }}"
-                {{- if .Values.multus.n3Interface.gateway }}
-                ,"gateway": {{ .Values.multus.n3Interface.gateway }}
-                {{- end }}
-          }
-          {{- end }}
-          {{- if .Values.multus.ruInterface.create }}
-          ,{
-                 "name": "{{ .Chart.Name }}-{{ .Values.multus.ruInterface.name }}",
-                 "interface": "{{ .Values.multus.ruInterface.name }}"
-          }
-          {{- end }}
-          ]
-    {{- end }}
+        {{- include "oai-gnb-multi.selectorLabels" (list $ $gnbId) | nindent 8 }}
+        app: oai-gnb-multi
     spec:
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
-    {{- if .Values.imagePullSecrets }}
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+    {{- if $.Values.imagePullSecrets }}
       imagePullSecrets:
-        {{ toYaml .Values.imagePullSecrets | indent 8 }}
+        {{ toYaml $.Values.imagePullSecrets | indent 8 }}
     {{- end }}
-    {{- if .Values.global }}{{ if .Values.global.waitForAMF }}
+    {{- if $.Values.global }}{{ if $.Values.global.waitForAMF }}
       initContainers:
         - name: init
           image: docker.io/oaisoftwarealliance/oai-tcpdump-init:alpine-3.20
@@ -58,7 +33,7 @@ spec:
           command:
             - /bin/sh
             - -c
-            - until ncat -zv {{ .Values.config.amfhost }} 38412 --sctp ; do echo waiting for oai-amf to start; sleep 1; done
+            - until ncat -zv {{ $.Values.config.amfhost }} 38412 --sctp ; do echo waiting for oai-amf to start; sleep 1; done
           resources:
             requests:
               memory: 50Mi
@@ -68,32 +43,25 @@ spec:
               cpu: 1m
     {{- end }}{{ end }}
       containers:
-      - name: gnb
-        image: "{{ .Values.nfimage.repository }}:{{ .Values.nfimage.version }}"
-        imagePullPolicy: {{ .Values.nfimage.pullPolicy }}
+      - name: gnb-{{$gnbId}}
+        image: "{{ $.Values.nfimage.repository }}:{{ $.Values.nfimage.version }}"
+        imagePullPolicy: {{ $.Values.nfimage.pullPolicy }}
         securityContext:
-          {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- toYaml $.Values.securityContext | nindent 12 }}
         volumeMounts:
           - mountPath: /opt/oai-gnb/etc
-            name: configuration
-          # - mountPath: /root/.ssh
-          #   name: ssh
+            name: configuration-{{$gnbId}}
           - mountPath: /opt/oai-ran
             name: source
             # subPath: gnb.conf
-          # USRP B210/B200 Mini
-        {{- if eq .Values.config.usrp "b2xx"}}
-          - mountPath: /dev/bus/usb/
-            name: usrp
-        {{- end}}
-        {{- if .Values.resources.define}}
+        {{- if $.Values.resources.define}}
         resources:
           requests:
-            memory: {{ .Values.resources.requests.nf.memory | quote }}
-            cpu: {{ .Values.resources.requests.nf.cpu | quote }}
+            memory: {{ $.Values.resources.requests.nf.memory | quote }}
+            cpu: {{ $.Values.resources.requests.nf.cpu | quote }}
           # limits:
-          #   memory: {{ .Values.resources.limits.nf.memory | quote }}
-          #   cpu: {{ .Values.resources.limits.nf.cpu | quote }}
+          #   memory: {{ $.Values.resources.limits.nf.memory | quote }}
+          #   cpu: {{ $.Values.resources.limits.nf.cpu | quote }}
         {{- end}}
         ports:
         - containerPort: 2152
@@ -111,46 +79,41 @@ spec:
             sed -e s/@N2_IP_ADDRESS@/$N2_IP_ADDRESS/g
                 -e s/@N3_IP_ADDRESS@/$N3_IP_ADDRESS/g
                 -e s/@AMF_IP_ADDRESS@/$AMF_IP_ADDRESS/g
-                /opt/oai-ran/ci-scripts/conf_files/gnb_l2proxy_vnf.conf | tee /tmp/gnb.conf;
-          {{- if eq .Values.config.usrp "b2xx"}}
-            /opt/oai-gnb/bin/uhd_images_downloader.py -t b2xx;
-          {{- else if eq .Values.config.usrp "n3xx" }}
-            /opt/oai-gnb/bin/uhd_images_downloader.py -t n3xx;
-          {{- else if eq .Values.config.usrp "x3xx" }}
-            /opt/oai-gnb/bin/uhd_images_downloader.py -t x3xx;
-          {{- end }}
-          {{- if .Values.start.gnb}}
+                /opt/oai-gnb/etc/gnb.conf | tee /tmp/gnb.conf;
+          {{- if $.Values.start.gnb}}
             exec /opt/oai-ran/cmake_targets/ran_build/build/nr-softmodem -O /tmp/gnb.conf $USE_ADDITIONAL_OPTIONS;
           {{- else}}
             exec /bin/sleep infinity
           {{- end}}
         env:
+          - name: GNB_ID
+            value: "{{ $gnbId }}"
           - name: TZ
-            value: {{ .Values.config.timeZone }}
+            value: {{ $.Values.config.timeZone }}
           - name: USE_ADDITIONAL_OPTIONS
-          {{- if .Values.config.l2Fapi }}
-            value: {{ .Values.config.l2FapiAdditionalOpts }}
+          {{- if $.Values.config.l2Fapi }}
+            value: {{ $.Values.config.l2FapiAdditionalOpts }}
           {{- else}}
-            value: {{ .Values.config.useAdditionalOptions }}
+            value: {{ $.Values.config.useAdditionalOptions }}
           {{- end}}
           - name: AMF_HOST
-            value: {{ .Values.config.amfhost }}
+            value: {{ $.Values.config.amfhost }}
           - name: N2_IF_NAME
-            value: {{ .Values.config.n2IfName }}
+            value: {{ $.Values.config.n2IfName }}
           - name: N3_IF_NAME
-            value: {{ .Values.config.n3IfName }}
-      {{- if .Values.includeTcpDumpContainer }}
+            value: {{ $.Values.config.n3IfName }}
+      {{- if $.Values.includeTcpDumpContainer }}
       - name: tcpdump
-        image: "{{ .Values.tcpdumpimage.repository }}:{{ .Values.tcpdumpimage.version }}"
-        imagePullPolicy: {{ .Values.tcpdumpimage.pullPolicy }}
-        {{- if .Values.resources.define}}
+        image: "{{ $.Values.tcpdumpimage.repository }}:{{ $.Values.tcpdumpimage.version }}"
+        imagePullPolicy: {{ $.Values.tcpdumpimage.pullPolicy }}
+        {{- if $.Values.resources.define}}
         resources:
           requests:
-            memory: {{ .Values.resources.requests.tcpdump.memory | quote }}
-            cpu: {{ .Values.resources.requests.tcpdump.cpu | quote }}
+            memory: {{ $.Values.resources.requests.tcpdump.memory | quote }}
+            cpu: {{ $.Values.resources.requests.tcpdump.cpu | quote }}
           limits:
-            memory: {{ .Values.resources.limits.tcpdump.memory | quote }}
-            cpu: {{ .Values.resources.limits.tcpdump.cpu | quote }}
+            memory: {{ $.Values.resources.limits.tcpdump.memory | quote }}
+            cpu: {{ $.Values.resources.limits.tcpdump.cpu | quote }}
         status:
           qosClass: Guaranteed
         {{- end}}
@@ -161,11 +124,11 @@ spec:
                - NET_RAW
               drop:
                - ALL
-        {{- if .Values.start.tcpdump}}
+        {{- if $.Values.start.tcpdump}}
         command:
           - /bin/sh
           - -c
-          - /usr/bin/tcpdump -i any -w /tmp/pcap/{{ .Chart.Name }}_`date +%Y-%m-%d_%H_%M-%S-%Z`.pcap
+          - /usr/bin/tcpdump -i any -w /tmp/pcap/{{ $.Chart.Name }}_`date +%Y-%m-%d_%H_%M-%S-%Z`.pcap
         {{- else}}
         command:
           - /bin/sleep
@@ -174,26 +137,22 @@ spec:
       {{- end }}
       volumes:
       - configMap:
-          name: {{ .Chart.Name }}-configmap
-        name: configuration
+          name: {{ $.Chart.Name }}-{{$gnbId}}-configmap
+        name: configuration-{{$gnbId}}
       - hostPath:
           type: Directory
           path: {{ $.Values.config.oaiCodePath }}
         name: source
-      {{- if eq .Values.config.usrp "b2xx"}}
-      - name: usrp
-        hostPath:
-          path: /dev/bus/usb/
-      {{- end}}
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
-      serviceAccountName: {{ .Values.serviceAccount.name }}
-      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
-      {{- if .Values.nodeSelector}}
+      serviceAccountName: {{ $.Values.serviceAccount.name }}
+      terminationGracePeriodSeconds: {{ $.Values.terminationGracePeriodSeconds }}
+      {{- if $.Values.nodeSelector}}
       nodeSelector: 
-         {{- toYaml .Values.nodeSelector | nindent 12 }}
+         {{- toYaml $.Values.nodeSelector | nindent 12 }}
       {{- end }}
-      {{- if .Values.nodeName}}
-      nodeName: {{ .Values.nodeName }}
+      {{- if $.Values.nodeName}}
+      nodeName: {{ $.Values.nodeName }}
       {{- end }}
+{{- end }}

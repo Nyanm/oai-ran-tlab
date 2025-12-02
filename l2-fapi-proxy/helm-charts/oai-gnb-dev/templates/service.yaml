@@ -1,9 +1,11 @@
+{{- range $gnbId:=.Values.gnbIds }}
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: oai-ran
+  name: oai-gnb-{{$gnbId}}
   labels:
-    {{- include "oai-gnb-dev.labels" . | nindent 4 }}
+    {{- include "oai-gnb-multi.labels" (list $ $gnbId) | nindent 4 }}
 spec:
   type: ClusterIP
   clusterIP: None
@@ -17,4 +19,5 @@ spec:
       targetPort: 36412
       protocol: SCTP
   selector:
-    {{- include "oai-gnb-dev.selectorLabels" . | nindent 4 }}
+    {{- include "oai-gnb-multi.selectorLabels" (list $ $gnbId) | nindent 4 }}
+{{- end }}

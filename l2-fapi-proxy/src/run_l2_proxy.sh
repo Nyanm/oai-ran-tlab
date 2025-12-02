@@ -10,7 +10,7 @@ NUM_UE=$2
 
 echo "Starting L2 Proxy for $NUM_GNB gNBs and $NUM_UE UEs"
 
-PROXY_IP=$(getent hosts oai-gnb-$GNB_ID | awk '{print $1}')
+PROXY_IP=$(hostname -i)
 echo "Proxy IP = $PROXY_IP"
 
 GNB_IP_LIST=""
