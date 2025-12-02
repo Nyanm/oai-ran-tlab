@@ -153,6 +153,7 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
       continue; // skip this segment
     }
     stop_meas(&segs->segments[0].ts_rate_unmatch);
+    start_meas(&segs->segments[0].ts_seg_prep);
     *segs->segments[r].d_to_be_cleared = false;
 
     memset(z_local,0,sizeof(int16_t)*2*Z);
@@ -167,6 +168,7 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
     for (int j=0, idx=0; j<vecCount; ++j, idx+=2) {
       pl[j] = simde_mm_packs_epi16(pv[idx], pv[idx+1]);
     }
+    stop_meas(&segs->segments[0].ts_seg_prep);
 //    for (int i=0;i<(vecCount<<4);i++) printf("channel llr %d : %d\n",i,((int8_t*)pl)[i]);
   }
 
@@ -180,11 +182,12 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
   decParams.Kprime = lenWithCrc(C, segs->A);
   decParams.n_segments = C;
   decParams.outMode=nrLDPC_outMode_BIT;
+  decParams.numMaxIter = segs->max_ldpc_iterations;
   // Phase 2: call batch GPU decoder (you must implement this API)
   int decodeIterations = LDPCdecoder_cuda(&decParams, llrBuffer, decodedBitsBig, p_procTime, segs->abort_decode);
   stop_meas(&segs->segments[0].ts_ldpc_decode);
-  dumpAssUltraInput(llrBuffer, "dlsim_decoder_input_cuda_GH.txt");
-  dumpAssUltra(decodedBitsBig, "dlsim_decoder_output_cuda_GH.txt");
+//  dumpAssUltraInput(llrBuffer, "dlsim_decoder_input_cuda_GH.txt");
+//  dumpAssUltra(decodedBitsBig, "dlsim_decoder_output_cuda_GH.txt");
   //dumpASS(decodedBitsBig, "dlsim_decoded_bits.txt");
   if (decodeIterations > segs->max_ldpc_iterations) {
     LOG_E(PHY,"LDPCdecoder_cuda_batch failed\n");

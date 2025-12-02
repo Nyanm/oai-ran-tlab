@@ -234,6 +234,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
 
       reset_meas(&segment_parameters->ts_deinterleave);
       reset_meas(&segment_parameters->ts_rate_unmatch);
+      reset_meas(&segment_parameters->ts_seg_prep);
       reset_meas(&segment_parameters->ts_ldpc_decode);
 
       r_offset += segment_parameters->E;
@@ -274,6 +275,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
       merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_DEINTERLEAVING_STATS], &segment_parameters->ts_deinterleave);
       merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_RATE_UNMATCHING_STATS], &segment_parameters->ts_rate_unmatch);
       merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_LDPC_DECODING_STATS], &segment_parameters->ts_ldpc_decode);
+      merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_SEG_PREP_STATS], &segment_parameters->ts_seg_prep);
 
     }
 

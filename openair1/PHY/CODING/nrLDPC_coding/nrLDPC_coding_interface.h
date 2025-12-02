@@ -57,6 +57,7 @@ typedef struct nrLDPC_segment_decoding_parameters_s{
   bool decodeSuccess;
   time_stats_t ts_deinterleave;
   time_stats_t ts_rate_unmatch;
+  time_stats_t ts_seg_prep;
   time_stats_t ts_ldpc_decode;
 } nrLDPC_segment_decoding_parameters_t;
 
