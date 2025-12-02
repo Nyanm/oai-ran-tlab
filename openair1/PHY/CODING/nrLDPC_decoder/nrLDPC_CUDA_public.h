@@ -51,7 +51,7 @@ __device__ __forceinline__ void moveBricks_forput_circ(int8_t *__restrict__ dstB
                                                        uint32_t Z,
                                                        uint32_t cshift)
 {
-  uint32_t pos = (dstBuf_Offset - cshift + Z) % Z;
+  uint32_t pos = (dstBuf_Offset + Z - cshift ) % Z;
 
   switch (pos + 3 - Z) {
     case 0:
@@ -117,19 +117,31 @@ __device__ __forceinline__ void moveBricks_invget_circ(int8_t *__restrict__ dstB
 }
 
 
-__device__ __forceinline__ uint32_t __vxor4_first(const uint32_t a, uint32_t *b)
-{
-  return a ^ b[0]; // increase accuracy
-}
-
 __device__ __forceinline__ uint32_t __vxor4(const uint32_t *a, uint32_t *b)
 {
   return a[0] ^ b[0]; // increase accuracy
 }
-
+/*
 __device__ __forceinline__ uint32_t __vsign4(const uint32_t *a, uint32_t *b)
 {
   uint32_t mask = __vcmples4(b[0] | 0x01010101, 0); // 0xFF / 0x00 per‑byte
   uint32_t bneg = __vneg4(a[0]);
   return (mask & bneg) | (~mask & a[0]); // Compute ±magnitude in two steps
+}
+*/
+__device__ __forceinline__ uint32_t __vsign4(const uint32_t *a, uint32_t *b)
+{
+    // 1. 正常的符号计算
+    uint32_t mask = __vcmplts4(b[0], 0); 
+    uint32_t bneg = __vneg4(a[0]); 
+    uint32_t result = (mask & bneg) | (~mask & a[0]);
+
+    // 2. 吞零 Bug 模拟 (使用 SIMD 指令，防止借位传播！)
+    // __vcmpeq4: 如果相等返回 0xFF，否则返回 0x00 (Per-Byte)
+    uint32_t is_zero_mask = __vcmpeq4(b[0], 0);
+
+    // 3. 应用掩码
+    // 如果 is_zero_mask 是 FF，取反为 00 -> 结果清零
+    // 如果 is_zero_mask 是 00，取反为 FF -> 结果保留
+    return result & (~is_zero_mask);
 }
