@@ -369,7 +369,7 @@ static void rx_nr_prach_ru_internal(prach_item_t *p,
     c16_t *prach2 = prach + Ncp;
     c16_t rxsigF_tmp[N_ZC];
     memset(rxsigF_tmp, 0, sizeof(rxsigF_tmp));
-    for (int i = 0; i < reps; i++, prach2 += dftlen) {
+    for (int i = 0; i < 4; i++, prach2 += dftlen) {
       c16_t tmp[dftlen] __attribute__((aligned(32)));
       dft(dftsize, (int16_t *)prach2, (int16_t *)tmp, 1);
       // Coherent combining of PRACH repetitions (assumes channel does not change, to be revisted for "long" PRACH)

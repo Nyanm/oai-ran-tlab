@@ -414,7 +414,7 @@ void *oru_south_read_thread(void *arg)
   int current_slot = 0;
   int current_frame = 0;
   rx_initial_sync(oru, &current_slot, &current_frame);
-  const int symbols_per_iteration = 7;
+  const int symbols_per_iteration = 4;
   notifiedFIFO_t response_fifo;
   initNotifiedFIFO(&response_fifo);
 
@@ -441,11 +441,10 @@ void *oru_south_read_thread(void *arg)
             num_symbols,
             num_samples_read);
 
-      bool is_slot_end = (symbol + num_symbols) >= fp->symbols_per_slot;
       if (rx_slot_type == NR_UPLINK_SLOT || rx_slot_type == NR_MIXED_SLOT) {
         int num_jobs = 0;
         start_meas(&oru->rx);
-        if (is_slot_end) {
+        if (symbol == 0) {
           num_jobs++;
           notifiedFIFO_elt_t *prach_task = newNotifiedFIFO_elt(sizeof(prach_task_args_t), 0, &response_fifo, prach_job);
           prach_task_args_t *job = NotifiedFifoData(prach_task);
