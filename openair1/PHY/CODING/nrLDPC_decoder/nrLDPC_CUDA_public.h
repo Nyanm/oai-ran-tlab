@@ -131,17 +131,9 @@ __device__ __forceinline__ uint32_t __vsign4(const uint32_t *a, uint32_t *b)
 */
 __device__ __forceinline__ uint32_t __vsign4(const uint32_t *a, uint32_t *b)
 {
-    // 1. 正常的符号计算
     uint32_t mask = __vcmplts4(b[0], 0); 
     uint32_t bneg = __vneg4(a[0]); 
     uint32_t result = (mask & bneg) | (~mask & a[0]);
-
-    // 2. 吞零 Bug 模拟 (使用 SIMD 指令，防止借位传播！)
-    // __vcmpeq4: 如果相等返回 0xFF，否则返回 0x00 (Per-Byte)
     uint32_t is_zero_mask = __vcmpeq4(b[0], 0);
-
-    // 3. 应用掩码
-    // 如果 is_zero_mask 是 FF，取反为 00 -> 结果清零
-    // 如果 is_zero_mask 是 00，取反为 FF -> 结果保留
     return result & (~is_zero_mask);
 }

@@ -416,8 +416,8 @@ cudaStream_t encoderStreams[4];
 
 int32_t LDPCinit_cuda()
 {
-  printf("Calling encoder initializations\n");
   if (cuda_support_set == 0) {
+    printf("Calling encoder initializations\n");
     cuda_support_init();
     printf("CUDA LDPC decoder initiating\n");
 #ifndef USE_STATIC_ALLOC
@@ -425,7 +425,7 @@ int32_t LDPCinit_cuda()
 #endif
   }
   if (!streamsCreated) {
-    for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS_DL; ++s) {
+    for (int s = 0; s < 8; ++s) {
       cudaStreamCreateWithFlags(&decoderStreams[s], cudaStreamNonBlocking);
       cudaEventCreate(&decoderDoneEvents[s]);
     }
@@ -443,7 +443,7 @@ int32_t LDPCinit_cuda()
 
 int32_t LDPCshutdown_cuda()
 {
-  for (int s = 0; s < MAX_NUM_DLSCH_SEGMENTS_DL; ++s) {
+  for (int s = 0; s < 8; ++s) {
     if (streamsCreated) {
       cudaEventDestroy(decoderDoneEvents[s]);
       cudaStreamDestroy(decoderStreams[s]);

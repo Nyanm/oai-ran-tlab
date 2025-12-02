@@ -178,7 +178,7 @@ __device__ void llr2bitPacked_Kernel_BG1_int8(uint32_t R,
   uint32_t outColIdx = tid / RowLength;
   uint32_t lane = tid % RowLength;
 
-  if (outColIdx >= 68 || tid >= (numLLR >> 3))
+  if (outColIdx >= 68 || tid >= (numLLR >> 2))
     return;
 
   const uint8_t numBn2CnG1 = (R == 13) ? d_lut_numBnInBnGroups_BG1_R13[0] : d_lut_numBnInBnGroups_BG1_R23[0];
@@ -240,17 +240,6 @@ if ((lane & 1) == 0) {
     // 'lane' steps by 4 LLRs. 'lane >> 1' steps by 8 LLRs (1 Byte).
     uint32_t outAddr = outColIdx * (Zc >> 3) + (lane >> 1);
 
-    // ================= DEBUG PRINT =================
-    // 这里加上 print，建议加上 tid 限制或者 outAddr 限制，只看开头那几行
-    // 这里的 tid 需要是你这个 Kernel 里的 thread id
-    // if (outAddr < 32) // 只打印前 32 个字节，方便和之前贴的 Hex 对比
-    {
-        //printf("OutKernel: Col %d Lane %d -> Addr %d: [%02x]\n", 
-          //     outColIdx, lane, outAddr, packed_byte);
-    }
-    // ===============================================
-
-    // Global Memory Store
     out[outAddr] = packed_byte;
 }
 }

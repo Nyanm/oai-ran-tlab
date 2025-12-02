@@ -11,7 +11,7 @@
 
 #define ZC 384 // for BG1 test only
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
-#define RECORD_GRAPH 0 // set 1 to enable graph recording, 0 to unable.
+#define RECORD_GRAPH 1 // set 1 to enable graph recording, 0 to unable.
 #define STREAM_SEQUENCE 1 // default 1, set 0 different streams will work in parellel(not recommended)
 
 #ifndef JETSON_TARGET
@@ -653,10 +653,6 @@ void nrLDPC_OutPut_BG1_cuda_stream_core(int8_t *llrRes,
       p_out,
       numLLR);
 
-  // OutPut_Kernel_BG1_int8_BIG_stream<<<Kdim_output[CudaStreamIdx].grid,
-  //                                    Kdim_output[CudaStreamIdx].block,
-  //                                    0,
-  //                                    streams[CudaStreamIdx]>>>(Z, outMode, p_out, llrOut, p_llrOut, numLLR);
   CHECK(cudaGetLastError());
 }
 //---------------------------------↑↑↑ general R ↑↑↑----------------------------------------
@@ -703,8 +699,6 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t *p_out,
     Kdim_R23[CudaStreamIdx].grid = dim3(BG1_R23_threadSize.NumBlocks, segmentPacks[CudaStreamIdx].nSeg, 1);
     Kdim_llr[CudaStreamIdx].block = dim3(R_general_threadSize.NumThreads, 1, 1);
     Kdim_llr[CudaStreamIdx].grid = dim3(R_general_threadSize.NumBlocks_llr, segmentPacks[CudaStreamIdx].nSeg, 1);
-    Kdim_output[CudaStreamIdx].block = dim3(R_general_threadSize.NumThreads, 1, 1);
-    Kdim_output[CudaStreamIdx].grid = dim3(R_general_threadSize.NumBlocks_output, segmentPacks[CudaStreamIdx].nSeg, 1);
     // decoding starts here
     nrLDPC_llrPreProc_BG1_cuda_stream_core(llr, llrProcBuf, cnProcBuf, Z, R, streams, CudaStreamIdx);
 
@@ -712,59 +706,11 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t *p_out,
       case 13: {
         for (int i = 0; i <= numMaxIter; i++) {
           nrLDPC_cnProc_BG1_R13_cuda_stream_core(cnProcBuf, bnProcBuf, Z, streams, CudaStreamIdx);
-          if(i == 0){
-            cudaDeviceSynchronize();
-            dumpAssCUDA(bnProcBuf,"First_iter_bnProc_Dump_cuda.txt");
-          }
-          if(i == 1){
-            cudaDeviceSynchronize();
-            dumpAssCUDA(bnProcBuf,"Second_iter_bnProc_Dump_cuda.txt");
-          }
-          if(i == 2){
-            cudaDeviceSynchronize();
-            dumpAssCUDA(bnProcBuf,"Third_iter_bnProc_Dump_cuda.txt");
-          }
-          if(i == 3){
-            cudaDeviceSynchronize();
-            dumpAssCUDA(bnProcBuf,"Fourth_iter_bnProc_Dump_cuda.txt");
-          }
-          if(i == 4){
-            cudaDeviceSynchronize();
-            dumpAssCUDA(bnProcBuf,"Fifth_iter_bnProc_Dump_cuda.txt");
-          }
-
           if (i == numMaxIter)
             nrLDPC_bnProc_BG1_R13_cuda_stream_core_last(bnProcBuf, cnProcBuf, llrProcBuf, llrRes, Z, streams, CudaStreamIdx);
           else
             nrLDPC_bnProc_BG1_R13_cuda_stream_core(bnProcBuf, cnProcBuf, llrProcBuf, llrRes, Z, streams, CudaStreamIdx);
-        if(i == 0){
-            cudaDeviceSynchronize();
-            dumpAssCUDA(llrRes,"First_iter_llrRes_Dump_cuda.txt");
-            dumpAssCUDA(cnProcBuf,"Second_iter_cnProc_Dump_cuda.txt");
           }
-          if(i == 1){
-            cudaDeviceSynchronize();
-            dumpAssCUDA(llrRes,"Second_iter_llrRes_Dump_cuda.txt");
-            dumpAssCUDA(cnProcBuf,"Third_iter_cnProc_Dump_cuda.txt");
-          }
-          if(i == 2){
-            cudaDeviceSynchronize();
-            dumpAssCUDA(llrRes,"Third_iter_llrRes_Dump_cuda.txt");
-            dumpAssCUDA(cnProcBuf,"Fourth_iter_cnProc_Dump_cuda.txt");
-          }
-          if(i == 3){
-            cudaDeviceSynchronize();
-            dumpAssCUDA(llrRes,"Fourth_iter_llrRes_Dump_cuda.txt");
-            dumpAssCUDA(cnProcBuf,"Fifth_iter_cnProc_Dump_cuda.txt");
-          }
-          if(i == 4){
-            cudaDeviceSynchronize();
-            dumpAssCUDA(llrRes,"Fifth_iter_llrRes_Dump_cuda.txt");
-            dumpAssCUDA(cnProcBuf,"Sixth_iter_cnProc_Dump_cuda.txt");
-          }
-        
-          }
-
       } break;
       case 23: {
         for (int i = 0; i <= numMaxIter; i++) {
@@ -774,21 +720,15 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t *p_out,
           else
             nrLDPC_bnProc_BG1_R23_cuda_stream_core(bnProcBuf, cnProcBuf, llrProcBuf, llrRes, Z, streams, CudaStreamIdx);
         }
-
       } break;
 
       default:
         printf("Format not support yet\n");
         break;
     }
-
     nrLDPC_OutPut_BG1_cuda_stream_core(llrRes, Z, R, outMode, p_out, numLLR, streams, CudaStreamIdx);
-    {
-            cudaDeviceSynchronize();
-            dumpAssCUDA(llrProcBuf,"Dump_llrProcBuf_cuda.txt");
-            dumpAssCUDA(llrRes,"Dump_llrRes_cuda.txt");
-            dumpAssCUDA(p_out,"Dump_p_out_cuda.txt");
-          }
+    
+
 #if RECORD_GRAPH
     // stop recording
     cudaStreamEndCapture(stream, &decoderGraphs[CudaStreamIdx]);
