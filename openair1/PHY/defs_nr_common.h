@@ -256,6 +256,7 @@ struct NR_AIOT_DL_FRAME_PARMS {
 
   // packet parameters
   int payload_size;        // Payload size in bits
+  int packet_size;         // Payload+CRC size in bits
   int packet_encoded_size; // Manchester encoded payload size in bits
   int packet_symbols;      // number of OFDM symbols in R2D packet
   int packet_slots;        // number of slots in R2D packet

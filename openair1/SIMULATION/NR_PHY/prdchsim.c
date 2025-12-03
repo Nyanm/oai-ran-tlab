@@ -101,9 +101,10 @@ channel_model_t channel_model;
 bool testing_mode = false;
 bool testing_timing = false;
 
-void AIOT_R2D_PHY_TX_calc_packet_sizes(const int payloadSize, NR_AIOT_DL_FRAME_PARMS *frame)
+void AIOT_R2D_PHY_TX_calc_packet_sizes(NR_AIOT_DL_FRAME_PARMS *frame)
 {
-  frame->packet_encoded_size = 2 * payloadSize;
+  frame->packet_size = frame->payload_size + ((frame->payload_size > 24) ? 16 : 6);
+  frame->packet_encoded_size = 2 * frame->packet_size;
   frame->packet_symbols = R_TAS_SIP_N / R_TAS_SIP_M
                           + ((R_TAS_CAP_N + frame->packet_encoded_size + R2D_POSTAMBLE_N) + (frame->M - 1)) / frame->M; // ceil
   frame->packet_slots = (frame->packet_symbols + (NR_NUMBER_OF_SYMBOLS_PER_SLOT - 1)) / NR_NUMBER_OF_SYMBOLS_PER_SLOT; // ceil
@@ -114,22 +115,39 @@ void AIOT_R2D_PHY_TX_calc_packet_sizes(const int payloadSize, NR_AIOT_DL_FRAME_P
   printf("Calculated R2D packet size: %d symbols, each %d SCs\n", frame->packet_symbols, frame->packet_subcarriers);
 }
 
-/*void AIOT_R2D_PHY_TX_AddCRC(uint8_t *output, const uint8_t *payload, NR_AIOT_DL_FRAME_PARMS *frame)
+void AIOT_R2D_PHY_TX_AddCRC(uint8_t *output, uint8_t *payload, NR_AIOT_DL_FRAME_PARMS *frame)
 {
-  // Copy payload
-  int payload_bytes = (frame->packet_encoded_size + 7) / 8;
-  memcpy(output, payload, payload_bytes);
+  int payloadBits = frame->payload_size;
+  int crc_bits = (frame->payload_size > 24) ? 16 : 6;
+  uint32_t crc = 0;
 
-  // Compute CRC32
-  uint32_t crc = crc32(0, NULL, 0);
-  crc = crc32(crc, payload, payload_bytes);
+  if(payloadBits > 24) {
+      crc = crc16((unsigned char *) payload, payloadBits) >> 16;
+  } else {
+      crc = crc6((unsigned char *) payload, payloadBits) >> 26;
+  }
 
-  // Append CRC32 at the end of payload
-  output[payload_bytes + 0] = (crc >> 24) & 0xFF;
-  output[payload_bytes + 1] = (crc >> 16) & 0xFF;
-  output[payload_bytes + 2] = (crc >> 8) & 0xFF;
-  output[payload_bytes + 3] = (crc >> 0) & 0xFF;
-}*/
+  if(testing_mode) {
+    if(crc_bits == 16) {
+      printf("CRC: 0x%04X, 16-bit\n", crc);
+    } else {
+      printf("CRC: 0x%02X, 6-bit\n", crc);
+    }
+  }
+
+  // Place CRC msb-first immediately after last payload bit
+  for (int i = 0; i < crc_bits; i++) {
+    int bitpos = payloadBits + i;
+    int byte_idx = bitpos / 8;
+    int bit_idx  = 7 - (bitpos & 0x7); // msb-first within byte
+    uint8_t bit = (crc >> (crc_bits - 1 - i)) & 0x1;
+
+    if (bit)
+      output[byte_idx] |= (1 << bit_idx);
+    else
+      output[byte_idx] &= ~(1 << bit_idx);
+  }
+}
 
 void AIOT_R2D_PHY_TX_REs(c16_t *REsPacket, const uint8_t *payload, NR_AIOT_DL_FRAME_PARMS *frame)
 {
@@ -715,7 +733,13 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
 
     if(energy[0] > threshold && energy[1] > threshold) {
       if(++endCounter >= 2) {
+        rx_payload[bits/8] &= ~0x01; // reset last bit (postamble 11)
         frame_parms->packet_payload_size = bits-1; // exclude the last bit (postamble)
+        
+        int remainder = frame_parms->packet_payload_size % 8;
+        int shift = 8 - remainder;
+
+        rx_payload[bits/8] <<= (shift - 1); // shift to align last byte
         break;
       }
     } else {
@@ -784,6 +808,38 @@ double calculate_BER(uint8_t *rx_payload, uint8_t *payload, NR_AIOT_DL_FRAME_PAR
   return (double)BER_errors / (double)frame_parms->packet_payload_size;
 }
 
+bool AIOT_R2D_PHY_RX_CheckCRC(uint8_t *packet, NR_AIOT_DL_FRAME_PARMS *frame)
+{
+  if (frame->packet_payload_size <= 0) return false;
+
+  int crc_bits = (frame->packet_payload_size > 30) ? 16 : 6;
+  int payloadBits = frame->packet_payload_size - crc_bits;
+  uint32_t crc_calculated = 0;
+  uint16_t crc_received = 0;
+
+  if (crc_bits == 16) {
+    crc_calculated = crc16((unsigned char *)packet, payloadBits) >> 16;
+  } else {
+    crc_calculated = crc6((unsigned char *)packet, payloadBits) >> 26;
+  }
+
+  for (int i = 0; i < crc_bits; i++) {
+    int bitpos = payloadBits + i;
+    int byte_idx = bitpos / 8;
+    int bit_idx = 7 - (bitpos & 0x7);
+    uint8_t bit = (packet[byte_idx] >> bit_idx) & 0x1;
+    crc_received = (crc_received << 1) | bit;
+  }
+
+  if(crc_calculated == crc_received) {
+    printf("CRC check passed\n");
+  } else {
+    printf("CRC mismatch: Calc: %X, RX: %X\n", crc_calculated, crc_received);
+  }
+
+  return (crc_calculated == crc_received);
+}
+
 time_stats_t time_stats = {0};
 
 // Thread data structure for parallel SNR processing
@@ -798,6 +854,7 @@ typedef struct {
   double *ber_results;
   pthread_mutex_t *print_mutex;
   // Per-thread timing results
+  double time_tx_CRC;
   double time_tx_REs;
   double time_tx_signal;
   double time_channel;
@@ -807,6 +864,7 @@ typedef struct {
   double time_sync;
   double time_rx_packet;
   double time_ber;
+  double time_total;
 } snr_thread_data_t;
 
 pthread_mutex_t print_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -851,7 +909,7 @@ void* process_snr_range(void* arg) {
   int *correlation = malloc((rx_size / local_frame_parms->N - local_frame_parms->SIP_samples) * sizeof(int));
   
   // Thread-local payload buffer
-  uint8_t *local_payload = malloc(data->payloadSize / 8 + 1);
+  uint8_t *local_payload = malloc(local_frame_parms->packet_size / 8 + 1);
   
   // Thread-local filter
   iir_butter3_fixed_t local_filter;
@@ -889,14 +947,29 @@ void* process_snr_range(void* arg) {
         printf("Thread %d: Testing SNR %d dB\n", data->thread_id, snr);
         pthread_mutex_unlock(data->print_mutex);
       }
-      
+
       if(testing_timing && snr != snr_plot) {
         start_meas(&local_time_stats);
+        start_meas(&local_alltime_stats);
       }
+
+      memset(rx_payload, 0, MAX_AIOT_R2D_PACKET_SIZE);
 
       // Generate new payload for each trial
       for(int i = 0; i < data->payloadSize / 8; i++) {
         local_payload[i] = uniformrandom() * 256;
+      }
+      for(int i = data->payloadSize / 8; i < local_frame_parms->packet_size / 8 + 1; i++) {
+        local_payload[i] = 0;
+      }
+
+      AIOT_R2D_PHY_TX_AddCRC(local_payload, local_payload, local_frame_parms);
+      
+      if(testing_timing && snr != snr_plot) {
+        stop_meas(&local_time_stats);
+        data->time_tx_CRC += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&local_time_stats);
+        start_meas(&local_time_stats);
       }
       
       AIOT_R2D_PHY_TX_REs(REsPacket, (const uint8_t *) local_payload, local_frame_parms);
@@ -998,7 +1071,6 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      memset(rx_payload, 0, MAX_AIOT_R2D_PACKET_SIZE);
       AIOT_R2D_PHY_RX_GetPacket(rx_payload, (const int16_t *) downSampled, SIP_offset, local_frame_parms);
       
       if(testing_timing && snr != snr_plot) {
@@ -1008,14 +1080,32 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      double ber = calculate_BER(rx_payload, local_payload, local_frame_parms);
-      if(local_frame_parms->packet_payload_size != data->payloadSize || (ber > 0.0)) {
-        data->ber_results[snr - snr_min] += 1;
-      }
+      //double ber = calculate_BER(rx_payload, local_payload, local_frame_parms);
+      bool crcValid = AIOT_R2D_PHY_RX_CheckCRC(rx_payload, local_frame_parms);
       
       if(testing_timing && snr != snr_plot) {
         stop_meas(&local_time_stats);
         data->time_ber += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        stop_meas(&local_alltime_stats);
+        data->time_total += local_alltime_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+      }
+
+      if(!crcValid) {
+        data->ber_results[snr - snr_min] += 1;
+
+        if(testing_mode) {
+          printf("Packet: (%d bits)\n", local_frame_parms->packet_size);
+          for(int i = 0; i < (local_frame_parms->packet_size+7) / 8; i++) {
+            printf("%02X ", local_payload[i]);
+          }
+          printf("\n");
+
+          printf("Received packet (%d bits):\n", local_frame_parms->packet_payload_size);
+          for(int i = 0; i < (local_frame_parms->packet_payload_size+7)/8; i++) {
+            printf("%02X ", rx_payload[i]);
+          }
+          printf("\n");
+        }
       }
     }
     
@@ -1062,7 +1152,7 @@ void* process_snr_range(void* arg) {
 
 void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_model)
 {
-  AIOT_R2D_PHY_TX_calc_packet_sizes((const int) frame_parms->payload_size, frame_parms);
+  AIOT_R2D_PHY_TX_calc_packet_sizes(frame_parms);
 
   printf("R2D packet parameters:\n");
   printf("  RBs: %d\n", frame_parms->nr_frame_parms.N_RB_DL);
@@ -1132,6 +1222,7 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
       
       // Initialize timing results to zero
       thread_data[t].time_tx_REs = 0.0;
+      thread_data[t].time_tx_CRC = 0.0;
       thread_data[t].time_tx_signal = 0.0;
       thread_data[t].time_channel = 0.0;
       thread_data[t].time_envelope = 0.0;
@@ -1140,6 +1231,7 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
       thread_data[t].time_sync = 0.0;
       thread_data[t].time_rx_packet = 0.0;
       thread_data[t].time_ber = 0.0;
+      thread_data[t].time_total = 0.0;
       
       // Calculate SNR range for this thread
       int start_idx = t * snr_per_thread + (t < remaining_snr ? t : remaining_snr);
@@ -1180,6 +1272,7 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
     
     if(testing_timing) {
       // Initialize timing results
+      thread_data.time_tx_CRC = 0.0;
       thread_data.time_tx_REs = 0.0;
       thread_data.time_tx_signal = 0.0;
       thread_data.time_channel = 0.0;
@@ -1189,6 +1282,7 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
       thread_data.time_sync = 0.0;
       thread_data.time_rx_packet = 0.0;
       thread_data.time_ber = 0.0;
+      thread_data.time_total = 0.0;
     }
       
     thread_data.snr_start = snr_min;
@@ -1198,6 +1292,7 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
     process_snr_range(&thread_data);
 
     if(testing_timing) {
+      thread_data.time_tx_CRC /= snr_steps - 1;
       thread_data.time_tx_REs /= snr_steps - 1;
       thread_data.time_tx_signal /= snr_steps - 1;
       thread_data.time_channel /= snr_steps - 1;
@@ -1207,12 +1302,14 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
       thread_data.time_sync /= snr_steps - 1;
       thread_data.time_rx_packet /= snr_steps - 1;
       thread_data.time_ber /= snr_steps - 1;
+      thread_data.time_total /= snr_steps - 1;
     }
 
     if(testing_timing) {
       printf("-------------------------------\n");
       printf("Timing results (average per packet in us):\n");
       printf("-------------------------------\n");
+      printf("TX CRC calculation:      %f us\n", thread_data.time_tx_CRC);
       printf("TX REs generation:       %f us\n", thread_data.time_tx_REs);
       printf("TX signal generation:    %f us\n", thread_data.time_tx_signal);
       printf("Channel propagation:     %f us\n", thread_data.time_channel);
@@ -1222,10 +1319,11 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
       printf("Synchronization:         %f us\n", thread_data.time_sync);
       printf("RX packet extraction:    %f us\n", thread_data.time_rx_packet);
       printf("BER calculation:         %f us\n", thread_data.time_ber);
-      double total_time = thread_data.time_tx_REs + thread_data.time_tx_signal + thread_data.time_channel + thread_data.time_envelope +
+      double total_time = thread_data.time_tx_CRC + thread_data.time_tx_REs + thread_data.time_tx_signal + thread_data.time_channel + thread_data.time_envelope +
                           thread_data.time_filter + thread_data.time_downsample + thread_data.time_sync + thread_data.time_rx_packet + thread_data.time_ber;
       printf("---\n");
       printf("Total time:              %f us\n", total_time);
+      printf("Total time (measured):   %f us\n", thread_data.time_total);
     }
   }
 
@@ -1413,6 +1511,8 @@ int main(int argc, char **argv)
         break;
       
       case 'T':
+        snr_trials = 1;
+        testing_mode = true;
         testing_timing = true;
         break;
 
