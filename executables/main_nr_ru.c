@@ -250,12 +250,17 @@ int main(int argc, char **argv)
   AssertFatal(ret == 0, "RU %u: trx_start_func() ret %d: cannot start vrtsim\n", ru->idx, ret);
 
   signal(SIGINT, stop_ru);
+  threadCreate(&oru.sync_thread, oru_sync_thread, (void *)&oru, "sync_thread", -1, OAI_PRIORITY_RT_MAX);
   threadCreate(&oru.north_read_thread, oru_north_read_thread, (void *)&oru, "north_read_thread", -1, OAI_PRIORITY_RT_MAX);
   threadCreate(&oru.south_read_thread, oru_south_read_thread, (void *)&oru, "south_read_thread", -1, OAI_PRIORITY_RT_MAX);
+  oru.num_sync_messages_needed = 2; // Number of threads requiring initial sync
 
   while (oai_exit == 0) {
     sleep(1);
   }
+
+  ret = pthread_join(oru.sync_thread, NULL);
+  AssertFatal(ret == 0, "pthread_join failed %d\n", ret);
   ret = pthread_join(oru.north_read_thread, NULL);
   AssertFatal(ret == 0, "pthread_join failed %d\n", ret);
   ret = pthread_join(oru.south_read_thread, NULL);

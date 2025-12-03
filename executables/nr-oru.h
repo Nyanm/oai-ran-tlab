@@ -38,6 +38,7 @@ typedef struct {
 typedef struct {
   pthread_t north_read_thread;
   pthread_t south_read_thread;
+  pthread_t sync_thread;
   RU_t *ru;
   notifiedFIFO_t sync_fifo;
   nr_prach_info_t prach_info;
@@ -45,9 +46,11 @@ typedef struct {
   time_stats_t rx;
   Actor_t prach_actor;
   Actor_t pusch_actors[NUM_PUSCH_ACTORS];
+  int num_sync_messages_needed;
 } ORU_t;
 
 void *oru_north_read_thread(void *arg);
 void *oru_south_read_thread(void *arg);
+void *oru_sync_thread(void *arg);
 
 #endif
