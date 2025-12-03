@@ -83,7 +83,7 @@ typedef struct {
 } channel_model_t;
 
 #define MIN_SNR_DB (-15)
-#define MAX_SNR_DB 10
+#define MAX_SNR_DB 5
 #define SNR_STEP_DB 1
 #define SNR_TRIALS 1000
 #define SNR_STEPS ((MAX_SNR_DB - MIN_SNR_DB) / SNR_STEP_DB + 1)
@@ -127,7 +127,7 @@ void AIOT_R2D_PHY_TX_AddCRC(uint8_t *output, uint8_t *payload, NR_AIOT_DL_FRAME_
       crc = crc6((unsigned char *) payload, payloadBits) >> 26;
   }
 
-  if(testing_mode) {
+  if(testing_mode && !testing_timing) {
     if(crc_bits == 16) {
       printf("CRC: 0x%04X, 16-bit\n", crc);
     } else {
@@ -259,7 +259,7 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
             0x1,
             frame->nr_frame_parms.nb_antennas_rx);
 
-  if(testing_mode && SNR == snr_plot) {
+  if(testing_mode && !testing_timing && SNR == snr_plot) {
     // Save channel output
     double *output = malloc(rx_size * 2 * sizeof(double));
 
@@ -596,7 +596,7 @@ int AIOT_R2D_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *SI
     }
   }
 
-  if(testing_mode) {
+  if(testing_mode && !testing_timing) {
     printf("Detected SIP at offset %d, Corr: %d\n", Preamble_offset, max_corr);
   }
   return Preamble_offset;
@@ -634,7 +634,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
   uint32_t thr_min = SIP_bit0_energy; // last bit of SIP is always 0
   uint32_t threshold = ((thr_max + thr_min) / 2); // decrease threshold to be effective for lower amplitudes
 
-  if(testing_mode) {
+  if(testing_mode && !testing_timing) {
     printf("CAP threshold: %d\n", threshold);
   }
 
@@ -649,7 +649,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
     frame_parms->received_M = 1;
   }
 
-  if(testing_mode) {
+  if(testing_mode && !testing_timing) {
     printf("Detected M=%d from R-TAS-CAP\n", frame_parms->received_M);
     printf("CAP energies: %d %d %d %d\n", CAP_energy[0], CAP_energy[1], CAP_energy[2], CAP_energy[3]);
   }
@@ -670,7 +670,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
   thr_min = (CAP_energy[1] + CAP_energy[3]) / 2;
 
   threshold = ((thr_max + thr_min) / 2); // adapt threshold
-  if(testing_mode) {
+  if(testing_mode && !testing_timing) {
     printf("Postamble detection threshold: %d\n", threshold);
   }
 
@@ -719,7 +719,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
       energy[chip%2] += signal[position + j];
     }
 
-    if(testing_mode && pass == snr_plot) {
+    if(testing_mode && !testing_timing && pass == snr_plot) {
       // Save energy for plotting
       energy_plot[energy_index++] = energy[chip%2];
     }
@@ -760,7 +760,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
 
     threshold = ((thr_max + thr_min) / 2);// - ((thr_max - thr_min) / 4); // adapt threshold
 
-    if(testing_mode && pass == snr_plot) {
+    if(testing_mode && !testing_timing && pass == snr_plot) {
       // Save threshold for plotting
       thr_plot[thr_index++] = threshold;
     }
@@ -769,7 +769,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
     energy[1] = 0;
   }
 
-  if(testing_mode && pass == snr_plot) {
+  if(testing_mode && !testing_timing && pass == snr_plot) {
     sprintf(filename, "%s/R2D_Adaptive_threshold.m", foldername);
     LOG_M(filename, "Adaptive_threshold_sig", thr_plot, thr_index, 1, 2);
 
@@ -831,10 +831,12 @@ bool AIOT_R2D_PHY_RX_CheckCRC(uint8_t *packet, NR_AIOT_DL_FRAME_PARMS *frame)
     crc_received = (crc_received << 1) | bit;
   }
 
-  if(crc_calculated == crc_received) {
-    printf("CRC check passed\n");
-  } else {
-    printf("CRC mismatch: Calc: %X, RX: %X\n", crc_calculated, crc_received);
+  if(testing_mode && !testing_timing) {
+    if(crc_calculated == crc_received) {
+      printf("CRC check passed\n");
+    } else {
+      printf("CRC mismatch: Calc: %X, RX: %X\n", crc_calculated, crc_received);
+    }
   }
 
   return (crc_calculated == crc_received);
@@ -941,14 +943,14 @@ void* process_snr_range(void* arg) {
     local_channel_model.SNR = snr;
     
     for(int trials = 0; trials < snr_trials; trials++) {
-      if(testing_mode) {
+      if(testing_mode && !testing_timing) {
         pthread_mutex_lock(data->print_mutex);
         printf("*************************\n");
         printf("Thread %d: Testing SNR %d dB\n", data->thread_id, snr);
         pthread_mutex_unlock(data->print_mutex);
       }
 
-      if(testing_timing && snr != snr_plot) {
+      if(testing_timing) {
         start_meas(&local_time_stats);
         start_meas(&local_alltime_stats);
       }
@@ -965,7 +967,7 @@ void* process_snr_range(void* arg) {
 
       AIOT_R2D_PHY_TX_AddCRC(local_payload, local_payload, local_frame_parms);
       
-      if(testing_timing && snr != snr_plot) {
+      if(testing_timing) {
         stop_meas(&local_time_stats);
         data->time_tx_CRC += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&local_time_stats);
@@ -974,12 +976,12 @@ void* process_snr_range(void* arg) {
       
       AIOT_R2D_PHY_TX_REs(REsPacket, (const uint8_t *) local_payload, local_frame_parms);
 
-      if(testing_mode && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/R2D_REs_Packet.m", foldername);
         LOG_M(filename, "REs_Packet_sig", REsPacket, frame_parms->packet_symbols * frame_parms->packet_subcarriers, 1, 1);
       }
       
-      if(testing_timing && snr != snr_plot) {
+      if(testing_timing) {
         stop_meas(&local_time_stats);
         data->time_tx_REs += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&local_time_stats);
@@ -988,12 +990,12 @@ void* process_snr_range(void* arg) {
       
       AIOT_R2D_PHY_TX_Signal(txData, txDataF, (const c16_t *) REsPacket, local_frame_parms);
 
-      if(testing_mode && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/R2D_TX_IQ.m", foldername);
         LOG_M(filename, "TX_IQ_sig", txData, frame_parms->packet_samples, 1, 1);
       }
       
-      if(testing_timing && snr != snr_plot) {
+      if(testing_timing) {
         stop_meas(&local_time_stats);
         data->time_tx_signal += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&local_time_stats);
@@ -1003,12 +1005,12 @@ void* process_snr_range(void* arg) {
       SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, local_channel_model.SNR, local_frame_parms,
                             s_re, s_im, r_re, r_im);
 
-      if(testing_mode && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/R2D_RX_IQ.m", foldername);
         LOG_M(filename, "RX_IQ_sig", rxData[0], rx_size, 1, 1);
       }
       
-      if(testing_timing && snr != snr_plot) {
+      if(testing_timing) {
         stop_meas(&local_time_stats);
         data->time_channel += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&local_time_stats);
@@ -1017,12 +1019,12 @@ void* process_snr_range(void* arg) {
       
       AIOT_R2D_PHY_RX_Envelope_Detector(envelope, (const c16_t **) rxData, rx_size);
 
-      if(testing_mode && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/R2D_Envelope.m", foldername);
         LOG_M(filename, "Envelope_sig", envelope, rx_size, 1, 0);
       }
       
-      if(testing_timing && snr != snr_plot) {
+      if(testing_timing) {
         stop_meas(&local_time_stats);
         data->time_envelope += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&local_time_stats);
@@ -1031,12 +1033,12 @@ void* process_snr_range(void* arg) {
       
       AIOT_R2D_PHY_RX_Filter(filteredData, (const int16_t *) envelope, rx_size, &local_filter);
 
-      if(testing_mode && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/R2D_Filter.m", foldername);
         LOG_M(filename, "Filter_sig", filteredData, rx_size, 1, 0);
       }
       
-      if(testing_timing && snr != snr_plot) {
+      if(testing_timing) {
         stop_meas(&local_time_stats);
         data->time_filter += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&local_time_stats);
@@ -1045,12 +1047,12 @@ void* process_snr_range(void* arg) {
       
       AIOT_R2D_PHY_RX_Downsample(downSampled, (const int16_t *) filteredData, rx_size, local_frame_parms);
 
-      if(testing_mode && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/R2D_Downsampled.m", foldername);
         LOG_M(filename, "Downsampled_sig", downSampled, frame_parms->packet_downsampled_samples, 1, 0);
       }
 
-      if(testing_timing && snr != snr_plot) {
+      if(testing_timing) {
         stop_meas(&local_time_stats);
         data->time_downsample += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&local_time_stats);
@@ -1059,12 +1061,12 @@ void* process_snr_range(void* arg) {
       
       int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) downSampled, SIP_ideal, local_frame_parms);
 
-      if(testing_mode && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/R2D_Correlation.m", foldername);
         LOG_M(filename, "Correlation_sig", correlation, frame_parms->packet_downsampled_samples - frame_parms->SIP_samples, 1, 2);
       }
 
-      if(testing_timing && snr != snr_plot) {
+      if(testing_timing) {
         stop_meas(&local_time_stats);
         data->time_sync += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&local_time_stats);
@@ -1073,7 +1075,7 @@ void* process_snr_range(void* arg) {
       
       AIOT_R2D_PHY_RX_GetPacket(rx_payload, (const int16_t *) downSampled, SIP_offset, local_frame_parms);
       
-      if(testing_timing && snr != snr_plot) {
+      if(testing_timing) {
         stop_meas(&local_time_stats);
         data->time_rx_packet += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&local_time_stats);
@@ -1083,17 +1085,20 @@ void* process_snr_range(void* arg) {
       //double ber = calculate_BER(rx_payload, local_payload, local_frame_parms);
       bool crcValid = AIOT_R2D_PHY_RX_CheckCRC(rx_payload, local_frame_parms);
       
-      if(testing_timing && snr != snr_plot) {
+      if(testing_timing) {
         stop_meas(&local_time_stats);
         data->time_ber += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&local_time_stats);
+
         stop_meas(&local_alltime_stats);
         data->time_total += local_alltime_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&local_alltime_stats);
       }
 
       if(!crcValid) {
         data->ber_results[snr - snr_min] += 1;
 
-        if(testing_mode) {
+        if(testing_mode && !testing_timing) {
           printf("Packet: (%d bits)\n", local_frame_parms->packet_size);
           for(int i = 0; i < (local_frame_parms->packet_size+7) / 8; i++) {
             printf("%02X ", local_payload[i]);
@@ -1292,17 +1297,17 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
     process_snr_range(&thread_data);
 
     if(testing_timing) {
-      thread_data.time_tx_CRC /= snr_steps - 1;
-      thread_data.time_tx_REs /= snr_steps - 1;
-      thread_data.time_tx_signal /= snr_steps - 1;
-      thread_data.time_channel /= snr_steps - 1;
-      thread_data.time_envelope /= snr_steps - 1;
-      thread_data.time_filter /= snr_steps - 1;
-      thread_data.time_downsample /= snr_steps - 1;
-      thread_data.time_sync /= snr_steps - 1;
-      thread_data.time_rx_packet /= snr_steps - 1;
-      thread_data.time_ber /= snr_steps - 1;
-      thread_data.time_total /= snr_steps - 1;
+      thread_data.time_tx_CRC /= snr_steps;
+      thread_data.time_tx_REs /= snr_steps;
+      thread_data.time_tx_signal /= snr_steps;
+      thread_data.time_channel /= snr_steps;
+      thread_data.time_envelope /= snr_steps;
+      thread_data.time_filter /= snr_steps;
+      thread_data.time_downsample /= snr_steps;
+      thread_data.time_sync /= snr_steps;
+      thread_data.time_rx_packet /= snr_steps;
+      thread_data.time_ber /= snr_steps;
+      thread_data.time_total /= snr_steps;
     }
 
     if(testing_timing) {
