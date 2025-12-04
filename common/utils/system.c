@@ -297,12 +297,8 @@ void threadCreate(pthread_t* t, void * (*func)(void*), void * param, char* name,
     AssertFatal(ret == 0, "Error in pthread_getaffinity_np(): ret: %d, errno: %d", ret, errno);
   } else {
     cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    long nprocs = sysconf(_SC_NPROCESSORS_ONLN);
-    if (nprocs < 1)
-      nprocs = 1;
-    for (int i = 0; i < (int)nprocs && i < CPU_SETSIZE; ++i)
-      CPU_SET(i, &cpuset);
+    ret = sched_getaffinity(0, sizeof(cpu_set_t), &cpuset);
+    AssertFatal(ret == 0, "Error in sched_getaffinity(): ret: %d, errno: %d", ret, errno);
     ret = pthread_setaffinity_np(*t, sizeof(cpu_set_t), &cpuset);
     AssertFatal(ret == 0, "Error in pthread_setaffinity_np(): ret: %d, errno: %d", ret, errno);
   }
