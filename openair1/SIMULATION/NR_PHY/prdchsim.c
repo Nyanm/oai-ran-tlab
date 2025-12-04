@@ -743,7 +743,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
       endCounter = 0;
     }
 
-    int bit0 = (energy[0] > energy[1]) ? 1 : 0;
+    int bit0 = (energy[0] < energy[1]) ? 1 : 0;
     rx_payload[bits/8] = (rx_payload[bits/8] << 1) | bit0;
     bits++;
 
