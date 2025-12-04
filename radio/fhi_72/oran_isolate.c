@@ -40,6 +40,7 @@
 // startup. Only relevant for printing, if it ever makes problem, remove this
 // line and the use of VERSIONX further below. It is relative to phy/fhi_lib/lib/api
 #include "../../app/src/common.h"
+#include <time.h>
 
 #ifdef OAI_MPLANE
 #include "mplane/init-mplane.h"
@@ -215,6 +216,7 @@ int trx_oran_ctlrecv(openair0_device *device, void *msg, ssize_t msg_len)
 
 void dump_nonzero_symbol(c16_t *txdataF, uint32_t ofdm_symbol_size, int frame, int slot, int symbol, const char* loc)
 {
+  return;
   float signal_energy = signal_energy_nodc(txdataF, ofdm_symbol_size);
   if (signal_energy > 1) {
     // Prepare a buffer to hold the formatted string for the symbol
@@ -236,7 +238,10 @@ void dump_nonzero_symbol(c16_t *txdataF, uint32_t ofdm_symbol_size, int frame, i
       }
     }
     symbol_buf[offset] = '\0';
-    LOG_I(HW, "Antenna 0 Frame.Slot.Symbol %d.%d.%d (%s) signal_energy %.3f samples: %s\n", frame, slot, symbol, loc, 10 * log10(signal_energy), symbol_buf);
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+
+    LOG_I(HW, "Antenna 0 Frame.Slot.Symbol %d.%d.%d (%s) signal_energy %.3f time %ld.%09ld samples: %s\n", frame, slot, symbol, loc, 10 * log10(signal_energy), ts.tv_sec, ts.tv_nsec, symbol_buf);
   }
 }
 
@@ -276,8 +281,11 @@ void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
     printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX function \n", f, sl);
   }
 
+
+  int slot_offset_rxdata = 3 & sl;
+  uint32_t slot_size = 14 * ru->nr_frame_parms->ofdm_symbol_size;
   for (int symbol = 0; symbol < 14; symbol++) {
-    dump_nonzero_symbol((c16_t *)&ru->common.rxdataF[0][ru->nr_frame_parms->ofdm_symbol_size * symbol],
+    dump_nonzero_symbol((c16_t *)&ru->common.rxdataF[0][slot_offset_rxdata * slot_size + ru->nr_frame_parms->ofdm_symbol_size * symbol],
                         ru->nr_frame_parms->ofdm_symbol_size,
                         f,
                         sl,
