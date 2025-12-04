@@ -1213,8 +1213,8 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
   double ber_results[snr_steps];
   memset(ber_results, 0, snr_steps * sizeof(double));
 
-  //if(!testing_mode) {
-    // Determine number of threads (use number of CPU cores or 4, whichever is smaller)
+  if(!testing_mode) {
+    // Determine number of threads
     int num_threads = (int)sysconf(_SC_NPROCESSORS_ONLN);
     if (num_threads < 1) num_threads = 1;
     int total_snr_points = (snr_max - snr_min) / SNR_STEP_DB + 1;
@@ -1279,6 +1279,65 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
     for (int t = 0; t < num_threads; t++) {
       pthread_join(threads[t], NULL);
     }
+
+    for (int t = 1; t < num_threads; t++) {
+      thread_data[0].time_tx_CRC += thread_data[t].time_tx_CRC;
+      thread_data[0].time_tx_REs += thread_data[t].time_tx_REs;
+      thread_data[0].time_tx_signal += thread_data[t].time_tx_signal;
+      thread_data[0].time_channel += thread_data[t].time_channel;
+      thread_data[0].time_envelope += thread_data[t].time_envelope;
+      thread_data[0].time_filter += thread_data[t].time_filter;
+      thread_data[0].time_downsample += thread_data[t].time_downsample;
+      thread_data[0].time_sync += thread_data[t].time_sync;
+      thread_data[0].time_rx_packet += thread_data[t].time_rx_packet;
+      thread_data[0].time_ber += thread_data[t].time_ber;
+      thread_data[0].time_total += thread_data[t].time_total;
+
+      thread_data[0].time_multipath += thread_data[t].time_multipath;
+      thread_data[0].time_noise += thread_data[t].time_noise;
+    }
+
+    thread_data[0].time_tx_CRC /= snr_steps * snr_trials;
+    thread_data[0].time_tx_REs /= snr_steps * snr_trials;
+    thread_data[0].time_tx_signal /= snr_steps * snr_trials;
+    thread_data[0].time_channel /= snr_steps * snr_trials;
+    thread_data[0].time_envelope /= snr_steps * snr_trials;
+    thread_data[0].time_filter /= snr_steps * snr_trials;
+    thread_data[0].time_downsample /= snr_steps * snr_trials;
+    thread_data[0].time_sync /= snr_steps * snr_trials;
+    thread_data[0].time_rx_packet /= snr_steps * snr_trials;
+    thread_data[0].time_ber /= snr_steps * snr_trials;
+    thread_data[0].time_total /= snr_steps * snr_trials;
+    thread_data[0].time_multipath /= snr_steps * snr_trials;
+    thread_data[0].time_noise /= snr_steps * snr_trials;
+
+    if(testing_timing) {
+      printf("------------------------------------------\n");
+      printf("Timing results (average per packet in us):\n");
+      printf("------------------------------------------\n");
+      printf("TX CRC calculation:      %f us\n", thread_data[0].time_tx_CRC);
+      printf("TX REs generation:       %f us\n", thread_data[0].time_tx_REs);
+      printf("TX signal generation:    %f us\n", thread_data[0].time_tx_signal);
+      printf("Channel propagation:     %f us\n", thread_data[0].time_channel);
+      printf("  of which multipath:    %f us\n", thread_data[0].time_multipath);
+      printf("  of which noise:        %f us\n", thread_data[0].time_noise);
+      printf("Envelope detection:      %f us\n", thread_data[0].time_envelope);
+      printf("Filtering:               %f us\n", thread_data[0].time_filter);
+      printf("Downsampling:            %f us\n", thread_data[0].time_downsample);
+      printf("Synchronization:         %f us\n", thread_data[0].time_sync);
+      printf("RX packet extraction:    %f us\n", thread_data[0].time_rx_packet);
+      printf("BER calculation:         %f us\n", thread_data[0].time_ber);
+      double total_time = thread_data[0].time_tx_CRC + thread_data[0].time_tx_REs + thread_data[0].time_tx_signal + thread_data[0].time_channel + thread_data[0].time_envelope +
+                          thread_data[0].time_filter + thread_data[0].time_downsample + thread_data[0].time_sync + thread_data[0].time_rx_packet + thread_data[0].time_ber;
+      printf("---\n");
+      printf("Total time:              %f us\n", total_time);
+      printf("Total time (measured):   %f us\n", thread_data[0].time_total);
+    }
+
+    // Cleanup
+    free(threads);
+    free(thread_data);
+
   } else { // testing mode
     snr_thread_data_t thread_data;
     
@@ -1289,121 +1348,12 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
     thread_data.ber_results = ber_results;
     thread_data.print_mutex = &print_mutex;
     
-    if(testing_timing) {
-      // Initialize timing results
-      thread_data.time_tx_CRC = 0.0;
-      thread_data.time_tx_REs = 0.0;
-      thread_data.time_tx_signal = 0.0;
-      thread_data.time_channel = 0.0;
-      thread_data.time_envelope = 0.0;
-      thread_data.time_filter = 0.0;
-      thread_data.time_downsample = 0.0;
-      thread_data.time_sync = 0.0;
-      thread_data.time_rx_packet = 0.0;
-      thread_data.time_ber = 0.0;
-      thread_data.time_total = 0.0;
-    }
-      
     thread_data.snr_start = snr_min;
     thread_data.snr_end = snr_max;
     
     // Create and start threads
     process_snr_range(&thread_data);
-
-    if(testing_timing) {
-      thread_data.time_tx_CRC /= snr_steps * snr_trials;
-      thread_data.time_tx_REs /= snr_steps * snr_trials;
-      thread_data.time_tx_signal /= snr_steps * snr_trials;
-      thread_data.time_channel /= snr_steps * snr_trials;
-      thread_data.time_envelope /= snr_steps * snr_trials;
-      thread_data.time_filter /= snr_steps * snr_trials;
-      thread_data.time_downsample /= snr_steps * snr_trials;
-      thread_data.time_sync /= snr_steps * snr_trials;
-      thread_data.time_rx_packet /= snr_steps * snr_trials;
-      thread_data.time_ber /= snr_steps * snr_trials;
-      thread_data.time_total /= snr_steps * snr_trials;
-    }
-
-    if(testing_timing) {
-      printf("-------------------------------\n");
-      printf("Timing results (average per packet in us):\n");
-      printf("-------------------------------\n");
-      printf("TX CRC calculation:      %f us\n", thread_data.time_tx_CRC);
-      printf("TX REs generation:       %f us\n", thread_data.time_tx_REs);
-      printf("TX signal generation:    %f us\n", thread_data.time_tx_signal);
-      printf("Channel propagation:     %f us\n", thread_data.time_channel);
-      printf("Envelope detection:      %f us\n", thread_data.time_envelope);
-      printf("Filtering:               %f us\n", thread_data.time_filter);
-      printf("Downsampling:            %f us\n", thread_data.time_downsample);
-      printf("Synchronization:         %f us\n", thread_data.time_sync);
-      printf("RX packet extraction:    %f us\n", thread_data.time_rx_packet);
-      printf("BER calculation:         %f us\n", thread_data.time_ber);
-      double total_time = thread_data.time_tx_CRC + thread_data.time_tx_REs + thread_data.time_tx_signal + thread_data.time_channel + thread_data.time_envelope +
-                          thread_data.time_filter + thread_data.time_downsample + thread_data.time_sync + thread_data.time_rx_packet + thread_data.time_ber;
-      printf("---\n");
-      printf("Total time:              %f us\n", total_time);
-      printf("Total time (measured):   %f us\n", thread_data.time_total);
-    }
-  }*/
-
-  for (int t = 1; t < num_threads; t++) {
-    thread_data[0].time_tx_CRC += thread_data[t].time_tx_CRC;
-    thread_data[0].time_tx_REs += thread_data[t].time_tx_REs;
-    thread_data[0].time_tx_signal += thread_data[t].time_tx_signal;
-    thread_data[0].time_channel += thread_data[t].time_channel;
-    thread_data[0].time_envelope += thread_data[t].time_envelope;
-    thread_data[0].time_filter += thread_data[t].time_filter;
-    thread_data[0].time_downsample += thread_data[t].time_downsample;
-    thread_data[0].time_sync += thread_data[t].time_sync;
-    thread_data[0].time_rx_packet += thread_data[t].time_rx_packet;
-    thread_data[0].time_ber += thread_data[t].time_ber;
-    thread_data[0].time_total += thread_data[t].time_total;
-
-    thread_data[0].time_multipath += thread_data[t].time_multipath;
-    thread_data[0].time_noise += thread_data[t].time_noise;
   }
-
-  thread_data[0].time_tx_CRC /= snr_steps * snr_trials * num_threads;
-  thread_data[0].time_tx_REs /= snr_steps * snr_trials * num_threads;
-  thread_data[0].time_tx_signal /= snr_steps * snr_trials * num_threads;
-  thread_data[0].time_channel /= snr_steps * snr_trials * num_threads;
-  thread_data[0].time_envelope /= snr_steps * snr_trials * num_threads;
-  thread_data[0].time_filter /= snr_steps * snr_trials * num_threads;
-  thread_data[0].time_downsample /= snr_steps * snr_trials * num_threads;
-  thread_data[0].time_sync /= snr_steps * snr_trials * num_threads;
-  thread_data[0].time_rx_packet /= snr_steps * snr_trials * num_threads;
-  thread_data[0].time_ber /= snr_steps * snr_trials * num_threads;
-  thread_data[0].time_total /= snr_steps * snr_trials * num_threads;
-
-  thread_data[0].time_multipath /= snr_steps * snr_trials * num_threads;
-  thread_data[0].time_noise /= snr_steps * snr_trials * num_threads;
-
-  if(testing_timing) {
-    printf("-------------------------------\n");
-    printf("Timing results (average per packet in us):\n");
-    printf("-------------------------------\n");
-    printf("TX CRC calculation:      %f us\n", thread_data[0].time_tx_CRC);
-    printf("TX REs generation:       %f us\n", thread_data[0].time_tx_REs);
-    printf("TX signal generation:    %f us\n", thread_data[0].time_tx_signal);
-    printf("Channel propagation:     %f us\n", thread_data[0].time_channel);
-    printf("  of which multipath:    %f us\n", thread_data[0].time_multipath);
-    printf("  of which noise:        %f us\n", thread_data[0].time_noise);
-    printf("Envelope detection:      %f us\n", thread_data[0].time_envelope);
-    printf("Filtering:               %f us\n", thread_data[0].time_filter);
-    printf("Downsampling:            %f us\n", thread_data[0].time_downsample);
-    printf("Synchronization:         %f us\n", thread_data[0].time_sync);
-    printf("RX packet extraction:    %f us\n", thread_data[0].time_rx_packet);
-    printf("BER calculation:         %f us\n", thread_data[0].time_ber);
-    double total_time = thread_data[0].time_tx_CRC + thread_data[0].time_tx_REs + thread_data[0].time_tx_signal + thread_data[0].time_channel + thread_data[0].time_envelope +
-                        thread_data[0].time_filter + thread_data[0].time_downsample + thread_data[0].time_sync + thread_data[0].time_rx_packet + thread_data[0].time_ber;
-    printf("---\n");
-    printf("Total time:              %f us\n", total_time);
-    printf("Total time (measured):   %f us\n", thread_data[0].time_total);
-  }
-
-  // Cleanup
-  free(threads);
-  free(thread_data);
 
   free(SIP_ideal);
 
@@ -1589,8 +1539,6 @@ int main(int argc, char **argv)
         break;
       
       case 'T':
-        snr_trials = 1;
-        testing_mode = true;
         testing_timing = true;
         break;
 
