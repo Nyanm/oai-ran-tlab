@@ -358,6 +358,8 @@ typedef struct {
 #define MAX_NUM_NR_UCI_PDUS MAX_MOBILES_PER_GNB
 
 /// Top-level PHY Data Structure for gNB
+#ifndef PHY_VARS_GNB_DEFINED
+#define PHY_VARS_GNB_DEFINED
 typedef struct PHY_VARS_gNB_s {
   /// Module ID indicator for this instance
   module_id_t Mod_id;
@@ -502,6 +504,7 @@ typedef struct PHY_VARS_gNB_s {
   int L1_tx_thread_core;
   void *scopeData;
 } PHY_VARS_gNB;
+#endif
 
 struct puschSymbolReqId {
   uint16_t ulsch_id;

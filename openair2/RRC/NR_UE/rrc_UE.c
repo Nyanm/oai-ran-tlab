@@ -459,7 +459,10 @@ static bool verify_NTN_access(const NR_UE_RRC_SI_INFO *SI_info, const NR_SIB1_v1
       break;
   }
   AssertFatal(!ntn_access || sib19_present, "NTN cell, but SIB19 not configured.\n");
-  return ntn_access && sib19_present;
+  bool is_ntn = ntn_access && sib19_present;
+  LOG_I(NR_RRC, "[NTN_CHECK] sib1_v1700=%p, ntn_access=%d, sib19_present=%d, is_NTN_UE=%d\n",
+        sib1_v1700, ntn_access, sib19_present, is_ntn);
+  return is_ntn;
 }
 
 static void get_sib19_schedinfo(NR_UE_RRC_SI_INFO *SI_info, NR_SI_SchedulingInfo_v1700_t *si_SchedInfo_v1700)
@@ -522,6 +525,9 @@ static void nr_rrc_process_sib1(NR_UE_RRC_INST_t *rrc, NR_UE_RRC_SI_INFO *SI_inf
   nr_mac_rrc_config_sib1_t *config_sib1 = &rrc_msg.payload.config_sib1;
   config_sib1->sib1 = sib1;
   config_sib1->can_start_ra = !rrc->is_NTN_UE;
+  LOG_I(NR_RRC, "[RA_TRIGGER] is_NTN_UE=%d, can_start_ra=%d - %s\n",
+        rrc->is_NTN_UE, config_sib1->can_start_ra,
+        config_sib1->can_start_ra ? "Will start RA" : "Waiting for SIB19");
   nr_rrc_send_msg_to_mac(rrc, &rrc_msg);
 }
 
@@ -1467,6 +1473,7 @@ static void nr_rrc_ue_decode_NR_BCCH_BCH_Message(NR_UE_RRC_INST_t *rrc,
     rrc->process_target_ntncfg = true;
   }
 
+  // LOG_I(NR_RRC, "[MIB_RRC] nr_rrc_ue_decode_NR_BCCH_BCH_Message: phycellid=%d, buffer_len=%d\n", phycellid, buffer_len);
   NR_BCCH_BCH_Message_t *bcch_message = NULL;
   rrc->phyCellID = phycellid;
   rrc->arfcn_ssb = ssb_arfcn;
@@ -1500,6 +1507,8 @@ static void nr_rrc_ue_decode_NR_BCCH_BCH_Message(NR_UE_RRC_INST_t *rrc,
   NR_UE_RRC_SI_INFO *SI_info = &rrc->perNB[gNB_index].SInfo;
   bool barred = rrc->access_barred || bcch_message->message.choice.mib->cellBarred == NR_MIB__cellBarred_barred;
   int get_sib = 0;
+  // LOG_I(NR_RRC, "[MIB_RRC] Before check: SA_MODE=%d, sib_pending=%d, sib1_validity=%d, barred=%d, rrcState=%d\n",
+  //       IS_SA_MODE(get_softmodem_params()), SI_info->sib_pending, SI_info->sib1_validity, barred, rrc->nrRrcState);
   if (IS_SA_MODE(get_softmodem_params())
       && !SI_info->sib_pending
       && bcch_message->message.present == NR_BCCH_BCH_MessageType_PR_mib
@@ -1511,12 +1520,14 @@ static void nr_rrc_ue_decode_NR_BCCH_BCH_Message(NR_UE_RRC_INST_t *rrc,
       SI_info->sib_pending = true;
   }
   if (bcch_message->message.present == NR_BCCH_BCH_MessageType_PR_mib) {
+    // LOG_I(NR_RRC, "[MIB_RRC] Decoded MIB successfully, get_sib=%d, barred=%d, sending to MAC\n", get_sib, barred);
     nr_mac_rrc_message_t rrc_msg = {0};
     rrc_msg.payload_type = NR_MAC_RRC_CONFIG_MIB;
     nr_mac_rrc_config_mib_t *config_mib = &rrc_msg.payload.config_mib;
     config_mib->bcch = bcch_message;
     config_mib->get_sib = get_sib;
     config_mib->access_barred = barred;
+    // LOG_I(NR_RRC, "[MIB_RRC] Calling nr_rrc_send_msg_to_mac with NR_MAC_RRC_CONFIG_MIB\n");
     nr_rrc_send_msg_to_mac(rrc, &rrc_msg);
   } else {
     LOG_E(NR_RRC, "RRC-received BCCH message is not a MIB\n");
@@ -1616,8 +1627,11 @@ static void nr_rrc_ue_decode_NR_BCCH_DL_SCH_Message(NR_UE_RRC_INST_t *rrc,
 {
   NR_UE_RRC_SI_INFO *SI_info = &rrc->perNB[gNB_index].SInfo;
   SI_info->sib_pending = false;
-  if (Sdu_len == 0) // decoding failed in L2
+  // LOG_I(NR_RRC, "[SIB_DEBUG] nr_rrc_ue_decode_NR_BCCH_DL_SCH_Message called: Sdu_len=%d, frame=%d, slot=%d\n", Sdu_len, frame, slot);
+  if (Sdu_len == 0) { // decoding failed in L2
+    // LOG_E(NR_RRC, "[SIB_DEBUG] Sdu_len=0, decoding failed in L2\n");
     return;
+  }
 
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_UE_DECODE_BCCH, VCD_FUNCTION_IN);
   NR_BCCH_DL_SCH_Message_t *bcch_message = NULL;
@@ -1643,6 +1657,7 @@ static void nr_rrc_ue_decode_NR_BCCH_DL_SCH_Message(NR_UE_RRC_INST_t *rrc,
   if (bcch_message->message.present == NR_BCCH_DL_SCH_MessageType_PR_c1) {
     switch (bcch_message->message.choice.c1->present) {
       case NR_BCCH_DL_SCH_MessageType__c1_PR_systemInformationBlockType1:
+        // LOG_I(NR_RRC, "[SIB_DEBUG] Decoded SIB1 successfully, calling nr_rrc_process_sib1\n");
         nr_rrc_process_sib1(rrc, SI_info, bcch_message->message.choice.c1->choice.systemInformationBlockType1);
         // mac layer will free after usage the sib1
         bcch_message->message.choice.c1->choice.systemInformationBlockType1 = NULL;

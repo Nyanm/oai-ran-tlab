@@ -68,6 +68,8 @@ void nr_mac_rrc_data_ind_ue(const module_id_t module_id,
                             const uint8_t* pduP,
                             const sdu_size_t pdu_len)
 {
+  // LOG_I(NR_MAC, "[MIB_L2IF] nr_mac_rrc_data_ind_ue: channel=%d (BCH=%d), pdu_len=%d, cellid=%d\n",
+  //       channel, NR_BCCH_BCH, pdu_len, cellid);
   sdu_size_t sdu_size = 0;
   MessageDef *message_p;
   switch(channel) {
@@ -103,6 +105,8 @@ void nr_mac_rrc_data_ind_ue(const module_id_t module_id,
       NR_RRC_MAC_BCCH_DATA_IND (message_p).phycellid = cellid;
       NR_RRC_MAC_BCCH_DATA_IND (message_p).ssb_arfcn = arfcn;
       NR_RRC_MAC_BCCH_DATA_IND (message_p).is_bch = (channel == NR_BCCH_BCH);
+      // LOG_I(NR_MAC, "[MIB_L2IF] Sending NR_RRC_MAC_BCCH_DATA_IND to TASK_RRC_NRUE, is_bch=%d, sdu_size=%d\n",
+      //       (channel == NR_BCCH_BCH), sdu_size);
       itti_send_msg_to_task(TASK_RRC_NRUE, GNB_MODULE_ID_TO_INSTANCE(module_id), message_p);
       break;
     case NR_SBCCH_SL_BCH:
@@ -134,6 +138,8 @@ void nr_mac_rrc_data_ind_ue(const module_id_t module_id,
 
 void process_msg_rcc_to_mac(nr_mac_rrc_message_t *msg, int instance_id)
 {
+  // LOG_I(NR_MAC, "[MIB_L2IF] process_msg_rcc_to_mac: payload_type=%d (CONFIG_MIB=%d)\n",
+  //       msg->payload_type, NR_MAC_RRC_CONFIG_MIB);
   switch (msg->payload_type) {
     case NR_MAC_RRC_CONFIG_RESET:
       nr_rrc_mac_config_req_reset(instance_id, msg->payload.config_reset.cause);
@@ -143,6 +149,7 @@ void process_msg_rcc_to_mac(nr_mac_rrc_message_t *msg, int instance_id)
       ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, msg->payload.config_cg.cellGroupConfig);
       break;
     case NR_MAC_RRC_CONFIG_MIB:
+      // LOG_I(NR_MAC, "[MIB_L2IF] Calling nr_rrc_mac_config_req_mib from process_msg_rcc_to_mac\n");
       nr_rrc_mac_config_req_mib(instance_id,
                                 0,
                                 msg->payload.config_mib.bcch->message.choice.mib,

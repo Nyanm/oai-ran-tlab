@@ -1,0 +1,23 @@
+{{- range $gnbId:=.Values.gnbIds }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oai-gnb-{{$gnbId}}
+  labels:
+    {{- include "oai-gnb-multi.labels" (list $ $gnbId) | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: n3
+      port: 2152
+      targetPort: 2152
+      protocol: UDP
+    - name: n2
+      port: 36412
+      targetPort: 36412
+      protocol: SCTP
+  selector:
+    {{- include "oai-gnb-multi.selectorLabels" (list $ $gnbId) | nindent 4 }}
+{{- end }}

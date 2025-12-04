@@ -1233,6 +1233,17 @@ void prepare_msg4_msgb_feedback(NR_UE_MAC_INST_t *mac, int pid, int ack_nack)
   current_harq->active = false;
   current_harq->ack_received = false;
 
+  // For emulated L1 mode, set HARQ state so UCI indication will include Msg4 ACK
+  if (get_softmodem_params()->emulate_l1) {
+    mac->nr_ue_emul_l1.harq[pid].active = true;
+    mac->nr_ue_emul_l1.harq[pid].active_dl_harq_sfn = sched_frame;
+    mac->nr_ue_emul_l1.harq[pid].active_dl_harq_slot = sched_slot;
+    mac->nr_ue_emul_l1.harq[pid].ack_received = true;
+    mac->nr_ue_emul_l1.harq[pid].ack = ack_nack;
+    LOG_D(NR_MAC, "[EMUL_L1_MSG4] Set HARQ ACK for pid %d, ack=%d for UCI at %d.%d\n", 
+          pid, ack_nack, sched_frame, sched_slot);
+  }
+
   RA_config_t *ra = &mac->ra;
   ra->ra_pucch = calloc_or_fail(1, sizeof(*ra->ra_pucch));
   ra->ra_pucch->pucch_sched = pucch;

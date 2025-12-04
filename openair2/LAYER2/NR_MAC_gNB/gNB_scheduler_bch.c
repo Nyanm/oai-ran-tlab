@@ -85,7 +85,12 @@ static void schedule_ssb(frame_t frame,
   dl_config_pdu->ssb_pdu.ssb_pdu_rel15.precoding_and_beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = beam_index;
   dl_req->nPDUs++;
 
-  LOG_D(MAC,"Scheduling ssb %d at frame %d and slot %d\n", i_ssb, frame, slot);
+  // SSB scheduling debug log commented out for production
+  // static int ssb_log_counter = 0;
+  // if ((++ssb_log_counter % 100) == 0 || frame < 10) {
+  //   LOG_I(MAC,"[gNB] Scheduling SSB %d (MIB) at frame %d slot %d, total PDUs in DL_req=%d, MIB payload=0x%x\n", 
+  //         i_ssb, frame, slot, dl_req->nPDUs, payload);
+  // }
 }
 
 static void fill_ssb_vrb_map(NR_COMMON_channels_t *cc,
@@ -508,6 +513,13 @@ void schedule_nr_sib1(module_id_t module_idP,
   const int CC_id = 0;
   uint8_t candidate_idx = 0;
 
+  // Verbose SIB1 scheduling logs commented out - SIB1 working correctly
+  // static int sib1_call_counter = 0;
+  // if ((++sib1_call_counter % 1000) == 0) {
+  //   LOG_I(NR_MAC, "[SIB1_SCHED] schedule_nr_sib1 called at frame.slot %d.%d (call #%d)\n", 
+  //         frameP, slotP, sib1_call_counter);
+  // }
+
   gNB_MAC_INST *gNB_mac = RC.nrmac[module_idP];
   NR_ServingCellConfigCommon_t *scc = gNB_mac->common_channels[CC_id].ServingCellConfigCommon;
 
@@ -533,10 +545,20 @@ void schedule_nr_sib1(module_id_t module_idP,
 
     NR_Type0_PDCCH_CSS_config_t *type0_PDCCH_CSS_config = &gNB_mac->type0_PDCCH_CSS_config[i];
 
-    if((frameP % 2 == type0_PDCCH_CSS_config->sfn_c) &&
-       (slotP == type0_PDCCH_CSS_config->n_0) &&
-       (type0_PDCCH_CSS_config->num_rbs > 0) &&
-       (type0_PDCCH_CSS_config->active == true)) {
+    bool frame_match = (frameP % 2 == type0_PDCCH_CSS_config->sfn_c);
+    bool slot_match = (slotP == type0_PDCCH_CSS_config->n_0);
+    bool rbs_ok = (type0_PDCCH_CSS_config->num_rbs > 0);
+    bool active = (type0_PDCCH_CSS_config->active == true);
+    
+    // Verbose SIB1 check logs commented out - SIB1 working correctly
+    // if ((++sib1_check_counter % 1000) == 0) {
+    //   LOG_I(NR_MAC, "[SIB1_SCHED] SSB %d: frame_match=%d (frame%%2=%d, sfn_c=%d), slot_match=%d (slot=%d, n_0=%d), rbs_ok=%d (num_rbs=%d), active=%d\n",
+    //         i, frame_match, frameP % 2, type0_PDCCH_CSS_config->sfn_c,
+    //         slot_match, slotP, type0_PDCCH_CSS_config->n_0,
+    //         rbs_ok, type0_PDCCH_CSS_config->num_rbs, active);
+    // }
+
+    if(frame_match && slot_match && rbs_ok && active) {
 
       AssertFatal(is_dl_slot(slotP, &gNB_mac->frame_structure),
                   "Trying to schedule SIB1 in slot %d which is not DL. Check searchSpaceZero configuration.\n",
@@ -616,8 +638,19 @@ void schedule_nr_sib1(module_id_t module_idP,
         T_INT(slotP),
         T_INT(0 /* harq_pid */),
         T_BUFFER(cc->sib1_bcch_pdu, cc->sib1_bcch_length));
+      
+      // Verbose SIB1 success logs commented out - SIB1 working correctly
+      // LOG_I(NR_MAC, "[SIB1_SUCCESS] (%d.%d) SIB1 scheduled successfully! SSB %d, pdu_index=%d, tb_size=%d, TX_req PDUs=%d\n",
+      //       frameP, slotP, i, pdu_index, sched_pdsch.tb_size, TX_req->Number_of_PDUs);
     }
   }
+  
+  // Verbose SIB1 exit logs commented out - SIB1 working correctly
+  // static int sib1_exit_log_counter = 0;
+  // if ((++sib1_exit_log_counter % 1000) == 0) {
+  //   LOG_I(NR_MAC, "[SIB1_EXIT] frame.slot %d.%d: schedule_nr_sib1 completed without scheduling (L_max=%d)\n",
+  //         frameP, slotP, L_max);
+  // }
 }
 
 struct NR_SchedulingInfo2_r17 *find_sib19_sched_info(const struct NR_SI_SchedulingInfo_v1700 *si_schedulinginfo2_r17)

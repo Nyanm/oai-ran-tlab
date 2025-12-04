@@ -2418,7 +2418,10 @@ void remove_nr_list(NR_list_t *listP, int id)
     prev = cur;
     cur = &listP->next[*cur];
   }
-  AssertFatal(*cur != -1, "ID %d not found in UE_list\n", id);
+  if (*cur == -1) {
+    LOG_W(NR_MAC, "ID %d not found in list, skipping removal\n", id);
+    return;
+  }
   int *next = &listP->next[*cur];
   *cur = listP->next[*cur];
   *next = -1;
@@ -3036,6 +3039,7 @@ bool add_connected_nr_ue(gNB_MAC_INST *nr_mac, NR_UE_info_t *UE)
   NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
   sched_ctrl->dl_max_mcs = 28; /* do not limit MCS for individual UEs */
   sched_ctrl->pdcch_cl_adjust = 0;
+  sched_ctrl->pending_sr_ctr = 0;  // RDF: For L2 Sim mode to prevent head-of-line blocking when many UEs have traffic
   reset_srs_stats(UE);
 
   // Initialize bler_stats

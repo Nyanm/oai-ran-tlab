@@ -322,6 +322,8 @@ typedef struct {
 } openair0_rf_map;
 
 
+#ifndef ETH_PARAMS_T_DEFINED
+#define ETH_PARAMS_T_DEFINED
 typedef struct {
   char *remote_addr;
   //! remote port number for Ethernet interface (control)
@@ -341,6 +343,7 @@ typedef struct {
   //! compression enable (0: No comp/ 1: A-LAW)
   uint8_t if_compress;
 } eth_params_t;
+#endif
 
 typedef struct {
   //! Tx buffer for if device, keep one per subframe now to allow multithreading

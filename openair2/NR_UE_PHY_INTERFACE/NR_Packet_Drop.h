@@ -33,6 +33,8 @@
 
 typedef struct NR_UL_TIME_ALIGNMENT NR_UL_TIME_ALIGNMENT_t;
 
+#ifndef NR_CHANNEL_STATUS_DEFINED
+#define NR_CHANNEL_STATUS_DEFINED
 typedef struct {
   float sinr;
   float rsrp;
@@ -50,6 +52,7 @@ typedef struct nr_phy_channel_params_t {
   uint16_t nb_of_csi;
   nr_channel_status csi[NR_NUM_LAYER];
 } nr_phy_channel_params_t;
+#endif /* NR_CHANNEL_STATUS_DEFINED */
 
 typedef struct {
   uint8_t slot;

@@ -37,6 +37,10 @@
 #include "fapi_nr_ue_interface.h"
 #include "openair2/NR_PHY_INTERFACE/NR_IF_Module.h"
 #include "nfapi/open-nFAPI/nfapi/public_inc/sidelink_nr_ue_interface.h"
+#include "NR_Packet_Drop.h"
+
+// Forward declaration for L2 proxy queue type
+typedef struct queue_t queue_t;
 
 typedef enum sl_sidelink_slot_type {
 
@@ -48,6 +52,13 @@ typedef enum sl_sidelink_slot_type {
 } sl_sidelink_slot_type_t;
 
 typedef struct NR_UL_TIME_ALIGNMENT NR_UL_TIME_ALIGNMENT_t;
+
+typedef struct {
+  bool rach;
+  bool rx_data;
+  bool crc;
+  bool uci;
+} slot_response_t;
 
 typedef struct {
     /// module id
@@ -276,6 +287,36 @@ typedef struct nr_ue_if_module_s {
    \param module_id module id*/
 nr_ue_if_module_t *nr_ue_if_module_init(uint32_t module_id);
 
+void nrue_init_standalone_socket(int tx_port, int rx_port);
+
+void *nrue_standalone_pnf_task(void *context);
+
+void RCconfig_nr_ue_macrlc(void);
+extern sem_t sfn_slot_semaphore;
+
+typedef struct nfapi_dl_tti_config_req_tx_data_req_t
+{
+    nfapi_nr_dl_tti_request_pdu_t *dl_itti_config_req;
+    nfapi_nr_tx_data_request_t *tx_data_req_pdu_list;
+} nfapi_dl_tti_config_req_tx_data_req_t;
+
+void send_slot_response(uint16_t frame, uint16_t slot);
+
+void send_nsa_standalone_msg(NR_UL_IND_t *UL_INFO, uint16_t msg_id);
+
+void save_nr_measurement_info(nfapi_nr_dl_tti_request_t *dl_tti_request);
+
+void check_and_process_dci(nfapi_nr_dl_tti_request_t *dl_tti_request,
+                           nfapi_nr_tx_data_request_t *tx_data_request,
+                           nfapi_nr_ul_dci_request_t *ul_dci_request,
+                           nfapi_nr_ul_tti_request_t *ul_tti_request);
+
+struct sfn_slot_s {
+  int sfn;
+  int slot;
+};
+bool sfn_slot_matcher(void *sfn_slot_s, void *candidate);
+
 /**\brief interface between L1/L2, indicating the downlink related information, like dci_ind and rx_req
    \param dl_info including dci_ind and rx_request messages*/
 int nr_ue_dl_indication(nr_downlink_indication_t *dl_info);
@@ -285,6 +326,18 @@ int nr_ue_ul_indication(nr_uplink_indication_t *ul_info);
 void nr_ue_sl_indication(nr_sidelink_indication_t *sl_indication);
 
 void print_ue_mac_stats(const module_id_t mod, const int frame_rx, const int slot_rx);
+
+// L2 proxy: External queue declarations for standalone mode
+extern queue_t nr_sfn_slot_queue;
+extern queue_t nr_chan_param_queue;
+extern queue_t nr_rx_ind_queue;
+extern queue_t nr_crc_ind_queue;
+extern queue_t nr_uci_ind_queue;
+extern queue_t nr_rach_ind_queue;
+extern queue_t nr_dl_tti_req_queue;
+extern queue_t nr_tx_req_queue;
+extern queue_t nr_ul_dci_req_queue;
+extern queue_t nr_ul_tti_req_queue;
 
 #endif
 

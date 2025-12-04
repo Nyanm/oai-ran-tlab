@@ -75,6 +75,7 @@ unsigned short config_frames[4] = {2,9,11,13};
 #include <openair2/NR_UE_PHY_INTERFACE/NR_IF_Module.h>
 #include <openair1/SCHED_NR_UE/fapi_nr_ue_l1.h>
 #include "nr_rlc/nr_rlc_oai_api.h"
+#include "l2-fapi-proxy/src/queue.h"
 /* Callbacks, globals and object handlers */
 
 //#include "stats.h"
@@ -113,6 +114,41 @@ uint64_t        sidelink_frequency[MAX_NUM_CCs][4];
 // UE and OAI config variables
 double            cpuf;
 
+void *emu_l1_mac_ue(void *notUsed)
+{
+  // In nFAPI mode, RRC sends messages via FIFO, not ITTI
+  // Poll the FIFO for RRC→MAC messages
+  NR_UE_MAC_INST_t *mac = get_mac_inst(0);
+  if (mac) {
+    notifiedFIFO_elt_t *elt = pollNotifiedFIFO(&mac->input_nf);
+    if (elt) {
+      // LOG_I(NR_MAC, "[FIFO_POLL] Received message from RRC via FIFO, processing...\n");
+      process_msg_rcc_to_mac(NotifiedFifoData(elt), 0);
+      delNotifiedFIFO_elt(elt);
+    }
+  }
+  
+  // Also check for any ITTI messages (for compatibility) - use non-blocking poll
+  MessageDef *msg = NULL;
+  itti_poll_msg(TASK_MAC_UE, &msg);
+  if (msg) {
+    LOG_D(NR_MAC, "Received ITTI message in emulated L1 mode (msg_id=%d)\n", ITTI_MSG_ID(msg));
+    itti_free(ITTI_MSG_ORIGIN_ID(msg), msg);
+  }
+  
+  // Small sleep to prevent busy-waiting
+  usleep(1000); // 1ms
+  return NULL;
+}
+
+void *emu_l1_mac_ue_task(void *args_p)
+{
+  itti_mark_task_ready(TASK_MAC_UE);
+  while (1) {
+    emu_l1_mac_ue(NULL);
+  }
+}
+
 int create_tasks_nrue(uint32_t ue_nb) {
   LOG_D(NR_RRC, "%s(ue_nb:%d)\n", __FUNCTION__, ue_nb);
   itti_wait_ready(1);
@@ -128,6 +164,13 @@ int create_tasks_nrue(uint32_t ue_nb) {
     if (itti_create_task(TASK_NAS_NRUE, nas_nrue_task, &parmsNAS) < 0) {
       LOG_E(NR_RRC, "Create task for NAS UE failed\n");
       return -1;
+    }
+    if(get_softmodem_params()->emulate_l1) {
+      const ittiTask_parms_t parmsEmuMacUe = {NULL, emu_l1_mac_ue};
+      if (itti_create_task(TASK_MAC_UE, emu_l1_mac_ue_task, &parmsEmuMacUe) < 0) {
+        LOG_E(NR_RRC, "Create task for Emu L1 MAC UE failed\n");
+        return -1;
+      }
     }
   }
 
@@ -222,6 +265,44 @@ void set_options(int CC_id, PHY_VARS_NR_UE *UE){
 
   LOG_I(PHY, "Set UE nb_rx_antenna %d, nb_tx_antenna %d, threequarter_fs %d, ssb_start_subcarrier %d\n", fp->nb_antennas_rx, fp->nb_antennas_tx, fp->threequarter_fs, fp->ssb_start_subcarrier);
 
+}
+
+// Forward declaration from nr-ue.c
+void init_nrUE_standalone_thread(int ue_idx);
+
+static void get_channel_model_mode(configmodule_interface_t *cfg)
+{
+  paramdef_t GNBParams[]  = GNBPARAMS_DESC;
+  config_get(cfg, GNBParams, sizeofArray(GNBParams), NULL);
+  int num_xp_antennas = *GNBParams[GNB_PDSCH_ANTENNAPORTS_XP_IDX].iptr;
+
+  if (num_xp_antennas == 2)
+    init_nr_bler_table("NR_MIMO2x2_AWGN_RESULTS_DIR");
+  else
+    init_nr_bler_table("NR_AWGN_RESULTS_DIR");
+}
+
+void start_oai_nrue_threads(int ue_id)
+{
+    LOG_I(NR_MAC, "[UE %d] Initializing nFAPI PNF queues and threads\n", ue_id);
+    init_queue(&nr_rach_ind_queue);
+    init_queue(&nr_rx_ind_queue);
+    init_queue(&nr_crc_ind_queue);
+    init_queue(&nr_uci_ind_queue);
+    init_queue(&nr_sfn_slot_queue);
+    init_queue(&nr_chan_param_queue);
+    init_queue(&nr_dl_tti_req_queue);
+    init_queue(&nr_tx_req_queue);
+    init_queue(&nr_ul_dci_req_queue);
+    init_queue(&nr_ul_tti_req_queue);
+
+    if (sem_init(&sfn_slot_semaphore, 0, 0) != 0)
+    {
+      LOG_E(MAC, "sem_init() error\n");
+      abort();
+    }
+
+    init_nrUE_standalone_thread(ue_id);
 }
 
 void init_openair0(PHY_VARS_NR_UE *ue)
@@ -379,6 +460,12 @@ int main(int argc, char **argv)
   nr_pdcp_layer_init();
   nas_init_nrue(NB_UE_INST);
 
+  // Read MACRLC config BEFORE init_NR_UE so stub_eth_params are set for socket setup
+  if (get_softmodem_params()->emulate_l1) {
+    RCconfig_nr_ue_macrlc();
+    get_channel_model_mode(uniqCfg);
+  }
+
   init_NR_UE(NB_UE_INST, get_nrUE_params()->uecap_file, get_nrUE_params()->reconfig_file, get_nrUE_params()->rbconfig_file);
 
   // start time manager with some reasonable default for the running mode
@@ -396,6 +483,20 @@ int main(int argc, char **argv)
                      IS_SOFTMODEM_RFSIM ? TIME_SOURCE_IQ_SAMPLES
                                         : TIME_SOURCE_REALTIME);
 
+  if (!get_softmodem_params()->nsa && get_softmodem_params()->emulate_l1) {
+    LOG_I(PHY, "Starting nFAPI PNF standalone mode (emulate_l1=true, nsa=false)\n");
+    uint16_t node_number = get_softmodem_params()->node_number;
+    int ue_id = (node_number == 0) ? 0 : node_number - 2;
+    LOG_I(PHY, "UE node_number=%d, ue_id=%d\n", node_number, ue_id);
+    AssertFatal(ue_id >= 0, "UE id is expected to be nonnegative.\n");
+    start_oai_nrue_threads(ue_id);
+    LOG_I(PHY, "nFAPI PNF standalone threads started successfully\n");
+  } else {
+    LOG_I(PHY, "Skipping nFAPI PNF initialization (nsa=%d, emulate_l1=%d)\n", 
+          get_softmodem_params()->nsa, get_softmodem_params()->emulate_l1);
+  }
+
+  if (!get_softmodem_params()->emulate_l1) {
   for (int inst = 0; inst < NB_UE_INST; inst++) {
     PHY_VARS_NR_UE *UE[MAX_NUM_CCs];
     for (int CC_id = 0; CC_id < MAX_NUM_CCs; CC_id++) {
@@ -459,6 +560,7 @@ int main(int argc, char **argv)
       init_openair0(UE[CC_id]);
     }
   }
+  } // end if (!get_softmodem_params()->emulate_l1)
 
   lock_memory_to_ram();
 
@@ -474,11 +576,15 @@ int main(int argc, char **argv)
     load_module_shlib("imscope_record", NULL, 0, PHY_vars_UE_g[0][0]);
   }
 
-  for (int inst = 0; inst < NB_UE_INST; inst++) {
-    LOG_I(PHY,"Intializing UE Threads for instance %d ...\n", inst);
-    init_NR_UE_threads(PHY_vars_UE_g[inst][0]);
+  if (!get_softmodem_params()->emulate_l1) {
+    for (int inst = 0; inst < NB_UE_INST; inst++) {
+      LOG_I(PHY,"Intializing UE Threads for instance %d ...\n", inst);
+      init_NR_UE_threads(PHY_vars_UE_g[inst][0]);
+    }
+    printf("UE threads created by %ld\n", gettid());
+  } else {
+    LOG_I(PHY, "Skipping UE thread initialization (emulate_l1 mode)\n");
   }
-  printf("UE threads created by %ld\n", gettid());
 
   // wait for end of program
   printf("TYPE <CTRL-C> TO TERMINATE\n");
