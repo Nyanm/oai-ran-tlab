@@ -556,11 +556,6 @@ static int vrtsim_read(openair0_device *device, openair0_timestamp *ptimestamp, 
 static void vrtsim_end(openair0_device *device)
 {
   vrtsim_state_t *vrtsim_state = (vrtsim_state_t *)device->priv;
-  if (vrtsim_state->role == ROLE_SERVER && vrtsim_state->run_timing_thread) {
-    vrtsim_state->run_timing_thread = false;
-    int ret = pthread_join(vrtsim_state->timing_thread, NULL);
-    AssertFatal(ret == 0, "pthread_join() failed: errno: %d, %s\n", errno, strerror(errno));
-  }
 
   tx_timing_t *tx_timing = vrtsim_state->tx_timing;
   if (vrtsim_state->chanmod || vrtsim_state->taps_socket) {
@@ -583,6 +578,11 @@ static void vrtsim_end(openair0_device *device)
   }
   shm_td_iq_channel_abort(vrtsim_state->channel);
   sleep(1);
+  if (vrtsim_state->role == ROLE_SERVER && vrtsim_state->run_timing_thread) {
+    vrtsim_state->run_timing_thread = false;
+    int ret = pthread_join(vrtsim_state->timing_thread, NULL);
+    AssertFatal(ret == 0, "pthread_join() failed: errno: %d, %s\n", errno, strerror(errno));
+  }
   shm_td_iq_channel_destroy(vrtsim_state->channel);
 
   LOG_I(HW,
