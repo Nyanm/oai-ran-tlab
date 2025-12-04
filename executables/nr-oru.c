@@ -24,6 +24,8 @@
 #include "log.h"
 #include "nfapi_nr_interface_scf.h"
 #include "platform_types.h"
+#include "task_ans.h"
+#include "thread-pool.h"
 #include "time_meas.h"
 #include <bits/pthreadtypes.h>
 #include <time.h>
@@ -109,19 +111,62 @@ openair0_timestamp get_timestamp(ORU_t *oru, sense_of_time_t *sense_of_time, syn
   return timestamp;
 }
 
-void oru_downlink_processing(RU_t *ru,
-                             c16_t *txDataF_ptr[ru->nb_tx],
+typedef struct {
+  RU_t *ru;
+  NR_DL_FRAME_PARMS *fp;
+  int slot;
+  int start_symbol;
+  int num_symbols;
+  int aatx;
+  c16_t *txdataF;
+  task_ans_t *task_ans;
+} dl_symbol_process_t;
+
+void dl_symbol_process(void *arg)
+{
+  dl_symbol_process_t *args = (dl_symbol_process_t *)arg;
+  apply_nr_rotation_TX(args->fp,
+                       args->txdataF,
+                       args->fp->symbol_rotation[0],
+                       args->slot,
+                       args->fp->N_RB_DL,
+                       args->start_symbol,
+                       args->num_symbols);
+  nr_feptx0(args->ru, args->slot, args->start_symbol, args->num_symbols, args->aatx);
+  completed_task_ans(args->task_ans);
+}
+
+void oru_downlink_processing(ORU_t *oru,
+                             c16_t *txDataF_ptr[oru->ru->nb_tx],
                              int frame,
                              int slot,
                              int start_symbol,
                              int num_symbols,
                              openair0_timestamp timestamp_tx)
 {
+  RU_t *ru = oru->ru;
   start_meas(&ru->tx_fhaul);
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+  int num_paralell_workers_per_antenna = num_symbols > 4 ? 2 : 1; // Ensure at least quarter slot parallelization
+  task_t tasks[ru->nb_tx][num_paralell_workers_per_antenna];
+  dl_symbol_process_t dl_process_args[ru->nb_tx][num_paralell_workers_per_antenna];
+  task_ans_t task_ans;
+  init_task_ans(&task_ans, num_paralell_workers_per_antenna * ru->nb_tx);
   for (int aatx = 0; aatx < ru->nb_tx; aatx++) {
-    apply_nr_rotation_TX(fp, txDataF_ptr[aatx], fp->symbol_rotation[0], slot, fp->N_RB_DL, start_symbol, num_symbols);
-    nr_feptx0(ru, slot, start_symbol, num_symbols, aatx);
+    for (int i = 0; i < num_paralell_workers_per_antenna; i++) {
+      tasks[aatx][i].func = dl_symbol_process;
+      tasks[aatx][i].args = (void *)&dl_process_args[aatx][i];
+      dl_process_args[aatx][i].ru = ru;
+      dl_process_args[aatx][i].fp = fp;
+      dl_process_args[aatx][i].slot = slot;
+      dl_process_args[aatx][i].start_symbol = start_symbol + num_symbols / num_paralell_workers_per_antenna * i;
+      dl_process_args[aatx][i].num_symbols =
+          min(num_symbols / num_paralell_workers_per_antenna, num_symbols - (num_symbols / num_paralell_workers_per_antenna) * i);
+      dl_process_args[aatx][i].aatx = aatx;
+      dl_process_args[aatx][i].txdataF = txDataF_ptr[aatx];
+      dl_process_args[aatx][i].task_ans = &task_ans;
+      pushTpool(&oru->tpool, tasks[aatx][i]);
+    }
   }
   LOG_D(PHY,
         "[RU_thread] transmit data: frame %d, slot %d, start_symbol %d, num_symbols %d, timestamp %ld\n",
@@ -130,6 +175,7 @@ void oru_downlink_processing(RU_t *ru,
         start_symbol,
         num_symbols,
         timestamp_tx);
+  join_task_ans(&task_ans);
   tx_rf_symbols(ru, frame, slot, timestamp_tx, start_symbol, num_symbols);
   stop_meas(&ru->tx_fhaul);
 }
@@ -211,7 +257,7 @@ void *oru_north_read_thread(void *arg)
     nfapi_nr_config_request_scf_t *cfg = &ru->config;
     int slot_type = nr_slot_select(cfg, sense_of_time.frame, sense_of_time.slot % fp->slots_per_frame);
     if (slot_type != NR_UPLINK_SLOT)
-      oru_downlink_processing(ru,
+      oru_downlink_processing(oru,
                               txDataF_ptr,
                               sense_of_time.frame,
                               sense_of_time.slot,

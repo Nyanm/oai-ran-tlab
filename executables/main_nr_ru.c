@@ -219,6 +219,18 @@ int main(int argc, char **argv)
   nr_phy_init_RU(ru);
   fill_rf_config(ru, ru->rf_config_file);
 
+  char tpool_config[10 * 16] = "";
+  for (int i = 0; i < ru->num_tpcores; i++) {
+    char core_str[16];
+    sprintf(core_str, "%d", ru->tpcores[i]);
+    strcat(tpool_config, core_str);
+    if (i < ru->num_tpcores - 1)
+      strcat(tpool_config, ",");
+  }
+  LOG_A(PHY, "RU thread-pool core string %s (size %d)\n", tpool_config, ru->num_tpcores);
+  ru->threadPool = malloc(sizeof(tpool_t));
+  initTpool(tpool_config, &oru.tpool, false);
+
   /* set PRACH configuration */
   nfapi_nr_prach_config_t *prach_config = &ru->config.prach_config;
   prach_config->prach_ConfigurationIndex.value = ru->prach_config_index;

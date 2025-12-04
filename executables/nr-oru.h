@@ -20,6 +20,7 @@
  */
 #ifndef NR_ORU_H
 #define NR_ORU_H
+#include "thread-pool.h"
 #include <executables/softmodem-common.h>
 #include "openair1/PHY/defs_RU.h"
 #include "openair1/PHY/defs_nr_common.h"
@@ -47,6 +48,7 @@ typedef struct {
   Actor_t prach_actor;
   Actor_t pusch_actors[NUM_PUSCH_ACTORS];
   int num_sync_messages_needed;
+  tpool_t tpool;
 } ORU_t;
 
 void *oru_north_read_thread(void *arg);
