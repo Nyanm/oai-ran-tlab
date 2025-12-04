@@ -173,11 +173,12 @@ void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *des
   }
 #endif
 
-  /*cd_t *cexp_doppler = malloc(length * sizeof(cd_t));
+  cd_t *cexp_doppler = NULL;
 
   if (desc->max_Doppler != 0.0) {
+    cexp_doppler = malloc(length * sizeof(cd_t));
     get_cexp_doppler(cexp_doppler, desc, length);
-  }*/
+  }
 
   for (int i=0; i<((int)length-dd); i++) {
     for (int ii=0; ii<desc->nb_rx; ii++) {
@@ -227,7 +228,9 @@ void __attribute__ ((no_sanitize_address)) multipath_channel(channel_desc_t *des
     } // ii
   } // i
 
-  //free(cexp_doppler);
+  if (cexp_doppler != NULL) {
+    free(cexp_doppler);
+  }
 }
 #endif
 

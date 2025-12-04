@@ -226,9 +226,12 @@ void AIOT_R2D_PHY_TX_Signal(c16_t *txData, c16_t* txDataF, const c16_t *REsPacke
 }
 
 void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *channel, double SNR, NR_AIOT_DL_FRAME_PARMS *frame,
-                           double **s_re, double **s_im, double **r_re, double **r_im)
+                           double **s_re, double **s_im, double **r_re, double **r_im, double *time_multipath, double *time_noise, gaussZiggurat_MT_t *gz)
 {
-  int rx_size = frame->packet_samples + channel->channel_offset + 200;
+  time_stats_t time_multipath_stats = {0};
+  time_stats_t time_noise_stats = {0};
+
+  start_meas(&time_multipath_stats);
 
   for (int i = 0; i < frame->packet_samples; i++) {
     s_re[0][i] = (double) in[i].r;
@@ -247,7 +250,12 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
 
   multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + channel->channel_offset + 200, 0, 1);
 
-  add_noise(rxData,
+  stop_meas(&time_multipath_stats);
+  *time_multipath += time_multipath_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+
+  start_meas(&time_noise_stats);
+
+  add_noise_MT(rxData,
             (const double **)r_re,
             (const double **)r_im,
             sigma2,
@@ -257,22 +265,11 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
             0,
             0x0,
             0x1,
-            frame->nr_frame_parms.nb_antennas_rx);
+            frame->nr_frame_parms.nb_antennas_rx,
+            gz);
 
-  if(testing_mode && !testing_timing && SNR == snr_plot) {
-    // Save channel output
-    double *output = malloc(rx_size * 2 * sizeof(double));
-
-    for (int i = 0; i < rx_size; i++) {
-      output[2 * i] = r_re[0][i];
-      output[2 * i + 1] = r_im[0][i];
-    }
-    
-    sprintf(filename, "%s/R2D_Channel.m", foldername);
-    LOG_M(filename, "Channel_sig", output, rx_size, 1, 8);
-
-    free(output);
-  }
+  stop_meas(&time_noise_stats);
+  *time_noise += time_noise_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
 }
 
 void AIOT_R2D_PHY_RX_Envelope_Detector(int16_t *envelope, const c16_t **rxData, int rx_size)
@@ -867,6 +864,9 @@ typedef struct {
   double time_rx_packet;
   double time_ber;
   double time_total;
+
+  double time_multipath;
+  double time_noise;
 } snr_thread_data_t;
 
 pthread_mutex_t print_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -931,6 +931,8 @@ void* process_snr_range(void* arg) {
     r_re[i] = calloc(1, rx_size * sizeof(double));
     r_im[i] = calloc(1, rx_size * sizeof(double));
   }
+
+  gaussZiggurat_MT_t gz = {0};
   
   // Thread-local timing stats
   time_stats_t local_time_stats = {0};
@@ -1003,7 +1005,22 @@ void* process_snr_range(void* arg) {
       }
       
       SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, local_channel_model.SNR, local_frame_parms,
-                            s_re, s_im, r_re, r_im);
+                            s_re, s_im, r_re, r_im, &data->time_multipath, &data->time_noise, &gz);
+
+      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
+        // Save channel output
+        double *output = malloc(rx_size * 2 * sizeof(double));
+
+        for (int i = 0; i < rx_size; i++) {
+          output[2 * i] = r_re[0][i];
+          output[2 * i + 1] = r_im[0][i];
+        }
+        
+        sprintf(filename, "%s/R2D_Channel.m", foldername);
+        LOG_M(filename, "Channel_sig", output, rx_size, 1, 8);
+
+        free(output);
+      }
 
       if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/R2D_RX_IQ.m", foldername);
@@ -1196,7 +1213,7 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
   double ber_results[snr_steps];
   memset(ber_results, 0, snr_steps * sizeof(double));
 
-  if(!testing_mode) {
+  //if(!testing_mode) {
     // Determine number of threads (use number of CPU cores or 4, whichever is smaller)
     int num_threads = (int)sysconf(_SC_NPROCESSORS_ONLN);
     if (num_threads < 1) num_threads = 1;
@@ -1237,6 +1254,8 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
       thread_data[t].time_rx_packet = 0.0;
       thread_data[t].time_ber = 0.0;
       thread_data[t].time_total = 0.0;
+      thread_data[t].time_multipath = 0.0;
+      thread_data[t].time_noise = 0.0;
       
       // Calculate SNR range for this thread
       int start_idx = t * snr_per_thread + (t < remaining_snr ? t : remaining_snr);
@@ -1260,11 +1279,6 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
     for (int t = 0; t < num_threads; t++) {
       pthread_join(threads[t], NULL);
     }
-    
-    // Cleanup
-    free(threads);
-    free(thread_data);
-  
   } else { // testing mode
     snr_thread_data_t thread_data;
     
@@ -1297,17 +1311,17 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
     process_snr_range(&thread_data);
 
     if(testing_timing) {
-      thread_data.time_tx_CRC /= snr_steps;
-      thread_data.time_tx_REs /= snr_steps;
-      thread_data.time_tx_signal /= snr_steps;
-      thread_data.time_channel /= snr_steps;
-      thread_data.time_envelope /= snr_steps;
-      thread_data.time_filter /= snr_steps;
-      thread_data.time_downsample /= snr_steps;
-      thread_data.time_sync /= snr_steps;
-      thread_data.time_rx_packet /= snr_steps;
-      thread_data.time_ber /= snr_steps;
-      thread_data.time_total /= snr_steps;
+      thread_data.time_tx_CRC /= snr_steps * snr_trials;
+      thread_data.time_tx_REs /= snr_steps * snr_trials;
+      thread_data.time_tx_signal /= snr_steps * snr_trials;
+      thread_data.time_channel /= snr_steps * snr_trials;
+      thread_data.time_envelope /= snr_steps * snr_trials;
+      thread_data.time_filter /= snr_steps * snr_trials;
+      thread_data.time_downsample /= snr_steps * snr_trials;
+      thread_data.time_sync /= snr_steps * snr_trials;
+      thread_data.time_rx_packet /= snr_steps * snr_trials;
+      thread_data.time_ber /= snr_steps * snr_trials;
+      thread_data.time_total /= snr_steps * snr_trials;
     }
 
     if(testing_timing) {
@@ -1330,7 +1344,66 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
       printf("Total time:              %f us\n", total_time);
       printf("Total time (measured):   %f us\n", thread_data.time_total);
     }
+  }*/
+
+  for (int t = 1; t < num_threads; t++) {
+    thread_data[0].time_tx_CRC += thread_data[t].time_tx_CRC;
+    thread_data[0].time_tx_REs += thread_data[t].time_tx_REs;
+    thread_data[0].time_tx_signal += thread_data[t].time_tx_signal;
+    thread_data[0].time_channel += thread_data[t].time_channel;
+    thread_data[0].time_envelope += thread_data[t].time_envelope;
+    thread_data[0].time_filter += thread_data[t].time_filter;
+    thread_data[0].time_downsample += thread_data[t].time_downsample;
+    thread_data[0].time_sync += thread_data[t].time_sync;
+    thread_data[0].time_rx_packet += thread_data[t].time_rx_packet;
+    thread_data[0].time_ber += thread_data[t].time_ber;
+    thread_data[0].time_total += thread_data[t].time_total;
+
+    thread_data[0].time_multipath += thread_data[t].time_multipath;
+    thread_data[0].time_noise += thread_data[t].time_noise;
   }
+
+  thread_data[0].time_tx_CRC /= snr_steps * snr_trials * num_threads;
+  thread_data[0].time_tx_REs /= snr_steps * snr_trials * num_threads;
+  thread_data[0].time_tx_signal /= snr_steps * snr_trials * num_threads;
+  thread_data[0].time_channel /= snr_steps * snr_trials * num_threads;
+  thread_data[0].time_envelope /= snr_steps * snr_trials * num_threads;
+  thread_data[0].time_filter /= snr_steps * snr_trials * num_threads;
+  thread_data[0].time_downsample /= snr_steps * snr_trials * num_threads;
+  thread_data[0].time_sync /= snr_steps * snr_trials * num_threads;
+  thread_data[0].time_rx_packet /= snr_steps * snr_trials * num_threads;
+  thread_data[0].time_ber /= snr_steps * snr_trials * num_threads;
+  thread_data[0].time_total /= snr_steps * snr_trials * num_threads;
+
+  thread_data[0].time_multipath /= snr_steps * snr_trials * num_threads;
+  thread_data[0].time_noise /= snr_steps * snr_trials * num_threads;
+
+  if(testing_timing) {
+    printf("-------------------------------\n");
+    printf("Timing results (average per packet in us):\n");
+    printf("-------------------------------\n");
+    printf("TX CRC calculation:      %f us\n", thread_data[0].time_tx_CRC);
+    printf("TX REs generation:       %f us\n", thread_data[0].time_tx_REs);
+    printf("TX signal generation:    %f us\n", thread_data[0].time_tx_signal);
+    printf("Channel propagation:     %f us\n", thread_data[0].time_channel);
+    printf("  of which multipath:    %f us\n", thread_data[0].time_multipath);
+    printf("  of which noise:        %f us\n", thread_data[0].time_noise);
+    printf("Envelope detection:      %f us\n", thread_data[0].time_envelope);
+    printf("Filtering:               %f us\n", thread_data[0].time_filter);
+    printf("Downsampling:            %f us\n", thread_data[0].time_downsample);
+    printf("Synchronization:         %f us\n", thread_data[0].time_sync);
+    printf("RX packet extraction:    %f us\n", thread_data[0].time_rx_packet);
+    printf("BER calculation:         %f us\n", thread_data[0].time_ber);
+    double total_time = thread_data[0].time_tx_CRC + thread_data[0].time_tx_REs + thread_data[0].time_tx_signal + thread_data[0].time_channel + thread_data[0].time_envelope +
+                        thread_data[0].time_filter + thread_data[0].time_downsample + thread_data[0].time_sync + thread_data[0].time_rx_packet + thread_data[0].time_ber;
+    printf("---\n");
+    printf("Total time:              %f us\n", total_time);
+    printf("Total time (measured):   %f us\n", thread_data[0].time_total);
+  }
+
+  // Cleanup
+  free(threads);
+  free(thread_data);
 
   free(SIP_ideal);
 

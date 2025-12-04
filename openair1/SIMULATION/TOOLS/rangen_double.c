@@ -205,6 +205,86 @@ double __attribute__ ((no_sanitize("address", "undefined"))) gaussZiggurat(doubl
   return hz != INT32_MIN && abs(hz) < kn[iz] ? hz * wn[iz] : nfix();
 }
 
+// **********************************************
+// Modified gaussZiggurat to allow multithreading
+// **********************************************
+
+#define SHR3_MT (gz->jz = gz->jsr, gz->jsr ^= (gz->jsr << 13), gz->jsr ^= (gz->jsr >> 17), gz->jsr ^= (gz->jsr << 5), gz->jz + gz->jsr)
+#define UNI_MT (0.5 + (signed)SHR3_MT * 0.2328306e-9)
+
+double nfix_MT(gaussZiggurat_MT_t *gz)
+{
+  const double r = 3.442620;
+  static double x, y;
+
+  for (;;) {
+    x = gz->hz * gz->wn[gz->iz];
+
+    if (gz->iz == 0) {
+      do {
+        x = -0.2904764 * log(UNI_MT);
+        y = -log(UNI_MT);
+      } while (y + y < x * x);
+
+      return (gz->hz > 0) ? r + x : -r - x;
+    }
+
+    if (gz->fn[gz->iz] + UNI_MT * (gz->fn[gz->iz - 1] - gz->fn[gz->iz]) < exp(-0.5 * x * x)) {
+      return x;
+    }
+
+    gz->hz = SHR3_MT;
+    gz->iz = gz->hz & 127;
+
+    if (abs(gz->hz) < gz->kn[gz->iz]) {
+      return ((gz->hz)*gz->wn[gz->iz]);
+    }
+  }
+}
+
+/*!Procedure to create tables for normal distribution kn,wn and fn. */
+void tableNor_MT(unsigned long seed, gaussZiggurat_MT_t *gz)
+{
+  gz->jsr = seed;
+  double dn = 3.442619855899;
+  const double m1 = 2147483648.0;
+  double q;
+  double tn = 3.442619855899;
+  const double vn = 9.91256303526217E-03;
+
+  q = vn / exp(-0.5 * dn * dn);
+  gz->kn[0] = ((dn / q) * m1);
+  gz->kn[1] = 0;
+  gz->wn[0] = (q / m1);
+  gz->wn[127] = (dn / m1);
+  gz->fn[0] = 1.0;
+  gz->fn[127] = (exp(-0.5 * dn * dn));
+
+  for (int i = 126; 1 <= i; i--) {
+    dn = sqrt(-2.0 * log(vn / dn + exp(-0.5 * dn * dn)));
+    gz->kn[i + 1] = ((dn / tn) * m1);
+    tn = dn;
+    gz->fn[i] = (exp(-0.5 * dn * dn));
+    gz->wn[i] = (dn / m1);
+  }
+  gz->tableNordDone=true;
+  return;
+}
+
+double __attribute__ ((no_sanitize("address", "undefined"))) gaussZiggurat_MT(double mean, double variance, gaussZiggurat_MT_t *gz)
+{
+  if (!gz->tableNordDone) {
+    gz->jsr = 123456789;
+    // let's make reasonnable constant tables
+    unsigned long seed;
+    fill_random(&seed, sizeof(seed));
+    tableNor_MT(seed, gz);
+  }
+  gz->hz = SHR3_MT;
+  gz->iz = gz->hz & 127;
+  return gz->hz != INT32_MIN && abs(gz->hz) < gz->kn[gz->iz] ? gz->hz * gz->wn[gz->iz] : nfix_MT(gz);
+}
+
 #ifdef MAIN
 main(int argc,char **argv)
 {

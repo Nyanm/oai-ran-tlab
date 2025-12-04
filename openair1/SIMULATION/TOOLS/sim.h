@@ -544,6 +544,14 @@ void multipath_tv_channel(channel_desc_t *desc,
                           uint32_t length,
                           uint8_t keep_channel);
 
+typedef struct {
+  double wn[128], fn[128];
+  uint32_t iz, jz, jsr, kn[128];
+  int32_t hz;
+  bool tableNordDone;
+} gaussZiggurat_MT_t;
+double gaussZiggurat_MT(double mean, double variance, gaussZiggurat_MT_t *gz);
+
 /**@} */
 /**@} */
 
@@ -588,6 +596,19 @@ void add_noise(c16_t **rxdata,
                const uint16_t pdu_bit_map,
                const uint16_t ptrs_bit_map,
                const uint8_t nb_antennas_rx);
+
+void add_noise_MT(c16_t **rxdata,
+                  const double **r_re,
+                  const double **r_im,
+                  const double sigma,
+                  const int length,
+                  const int slot_offset,
+                  const double ts,
+                  const int delay,
+                  const uint16_t pdu_bit_map,
+                  const uint16_t ptrs_bit_map,
+                  const uint8_t nb_antennas_rx,
+                  gaussZiggurat_MT_t *gz);
 
 void do_DL_sig(sim_t *sim,
                uint16_t subframe,
