@@ -29,3 +29,42 @@ services:
             interval: 10s
             timeout: 5s
             retries: 5
+    oai-nr-ue-78prb-gpu:
+        image: ${REGISTRY-oaisoftwarealliance/}${NRUE_IMG:-oai-nr-ue}:${TAG:-develop}
+        network_mode: host
+        runtime: nvidia
+        container_name: oai-nr-ue
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_ADMIN  # for interface bringup
+            - NET_RAW    # for ping
+            - SYS_NICE   # for performance
+            - IPC_LOCK   # for memory locking
+        devices:
+            - /dev/net/tun:/dev/net/tun
+            - /dev/bus/usb/:/dev/bus/usb/
+        ulimits:
+          core: -1 # for core dumps
+        #entrypoint: /bin/bash -c "sleep infinity"
+        environment:
+            TZ: Europe/Paris
+            USE_B2XX: 'yes'
+            USE_ADDITIONAL_OPTIONS: --usrp-args serial=8001860 -C 3350010000 -r 78 --numerology 1 --band 78 --ssb 345 --ue-fo-compensation --uicc0.imsi 001040000000001 --uicc0.dnn oai.ipv4 --A 30 --thread-pool 9,10,11 --loader.ldpc.shlibversion _cuda --ue-txgain 5 --ue-rxgain 107 --uecap_file /opt/oai-nr-ue/etc/uecap.xml -E
+        cpuset: "4,5,6,7,8,9,10,11"
+        volumes:
+            - ../../../targets/PROJECTS/GENERIC-NR-5GC/CONF/uecap_ports1.xml:/opt/oai-nr-ue/etc/uecap.xml
+            - ../../conf_files/ue.sa.conf:/opt/oai-nr-ue/etc/nr-ue.conf
+        healthcheck:
+            test: /bin/bash -c "pgrep nr-uesoftmodem"
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        deploy:
+          resources:
+            reservations:
+              devices:
+                - driver: nvidia
+                  count: all
+                  capabilities: [gpu]
+
