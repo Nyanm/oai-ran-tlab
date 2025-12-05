@@ -308,6 +308,14 @@ oai_ue_caracal:
   IF: oaitun_ue1
   MTU: 1500
 
+oai_ue_jetson2:
+  Host: jetson2-oai
+  AttachScript: 'docker start oai-nr-ue'
+  DetachScript: 'docker stop oai-nr-ue'
+  NetworkScript: ip a show dev oaitun_ue1
+  IF: oaitun_ue1
+  MTU: 1500
+
 lte_oai_ue_carabe:
   Host: carabe
   NetworkScript: docker exec lte-b200-ue-fdd-10Mhz-tm1 ip a show dev oaitun_ue1
