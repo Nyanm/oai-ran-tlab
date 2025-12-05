@@ -94,6 +94,13 @@
     <id>oai_ue_jetson2</id>
   </testCase>
 
+  <testCase id="030020">
+    <class>Custom_Command</class>
+    <desc>Setup IP route for UL traffic</desc>
+    <node>jetson2-oai</node>
+    <command>sudo ip route add 172.21.6.105 via 13.1.1.100 dev oaitun_ue1</command>
+  </testCase>
+
   <testCase id="000008">
     <class>Iperf</class>
     <desc>iperf (DL/20Mbps/UDP)(30 s)</desc>
