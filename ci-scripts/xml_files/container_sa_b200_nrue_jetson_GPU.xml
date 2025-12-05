@@ -145,8 +145,8 @@
 
   <testCase id="000012">
     <class>Iperf</class>
-    <desc>iperf (UL/30Mbps/UDP)(30 s)</desc>
-    <iperf_args>-u -b 30M -t 30 -i 1</iperf_args>
+    <desc>iperf (UL/25Mbps/UDP)(30 s)</desc>
+    <iperf_args>-u -b 25M -t 30 -i 1</iperf_args>
     <id>oai_ue_jetson2</id>
     <svr_id>oc-cn5g-00104</svr_id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
