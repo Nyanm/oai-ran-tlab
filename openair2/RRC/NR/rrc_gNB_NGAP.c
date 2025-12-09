@@ -1005,16 +1005,15 @@ static void nr_rrc_update_qos(seq_arr_t *list, const int nb_qos, const pdusessio
 }
 
 /** @brief Update stored pdusession_t in list from NGAP PDU Session Resource item */
-static void nr_rrc_update_pdusession(pdusession_t *dst, const pdusession_resource_item_t *src)
+static void nr_rrc_update_pdusession(pdusession_t *dst, const pdusession_resource_mod_item_t *src)
 {
   dst->pdusession_id = src->pdusession_id;
   dst->nas_pdu = src->nas_pdu;
-  dst->pdu_session_type = src->pdusessionTransfer.pdu_session_type;
-  dst->n3_incoming = src->pdusessionTransfer.n3_incoming;
   dst->nssai = src->nssai;
   DevAssert(dst->qos.data); // QoS list has to be initialized at this stage
   // Update QoS flow
-  nr_rrc_update_qos(&dst->qos, src->pdusessionTransfer.nb_qos, src->pdusessionTransfer.qos);
+  const pdusession_mod_req_transfer_t *transfer = &src->pdusessionTransfer;
+  nr_rrc_update_qos(&dst->qos, transfer->nb_qos_to_add_modify, transfer->qos_to_add_modify);
 }
 
 //------------------------------------------------------------------------------
@@ -1065,7 +1064,7 @@ int rrc_gNB_process_NGAP_PDUSESSION_MODIFY_REQ(const ngap_pdusession_modify_req_
   bool all_failed = true;
   DevAssert(req->nb_pdusessions_tomodify <= NR_MAX_NB_PDU_SESSIONS);
   for (int i = 0; i < req->nb_pdusessions_tomodify; i++) {
-    const pdusession_resource_item_t *sessMod = &req->pdusession[i];
+    const pdusession_resource_mod_item_t *sessMod = &req->pdusession[i];
     rrc_pdu_session_param_t *session = find_pduSession(&UE->pduSessions, sessMod->pdusession_id);
     if (!session) {
       /* 8.2.3.4 3GPP TS 38.413: If the NG-RAN node receives unrecognized PDU Session ID IEs,

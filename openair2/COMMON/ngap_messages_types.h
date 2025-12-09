@@ -845,18 +845,42 @@ typedef struct {
   uint8_t pdu_session_id[NR_MAX_NB_PDU_SESSIONS];
 } ngap_ue_release_complete_t;
 
+/* QoS Flow to Release Item (9.3.1.13 3GPP TS 38.413) */
+typedef struct qos_flow_to_release_s {
+  uint8_t qfi;
+  ngap_cause_t cause;
+} qos_flow_to_release_t;
+
+/* PDU Session Resource Modify Request Transfer (9.3.4.3 3GPP TS 38.413) */
+typedef struct {
+  // QoS Flow Add or Modify Request List (Mandatory)
+  uint8_t nb_qos_to_add_modify;
+  pdusession_level_qos_parameter_t qos_to_add_modify[MAX_QOS_FLOWS];
+  // QoS Flow to Release List (Optional)
+  uint8_t nb_qos_to_release;
+  qos_flow_to_release_t qos_to_release[MAX_QOS_FLOWS];
+} pdusession_mod_req_transfer_t;
+
+/* PDU Session Resource Setup/Modify Request Item */
+typedef struct {
+  // PDU Session ID (Mandatory)
+  int pdusession_id;
+  // NAS PDU (Optional)
+  byte_array_t nas_pdu;
+  // S-NSSAI (Optional)
+  nssai_t nssai;
+  // PDU Session Resource Modify Request Transfer (Mandatory)
+  pdusession_mod_req_transfer_t pdusessionTransfer;
+} pdusession_resource_mod_item_t;
+
 typedef struct ngap_pdusession_modify_req_s {
-  /* AMF UE id  */
+  /* AMF UE NGAP ID (Mandatory) */
   uint64_t amf_ue_ngap_id;
-
-  /* gNB ue ngap id as initialized by NGAP layer */
+  /* RAN UE NGAP ID (Mandatory) */
   uint32_t  gNB_ue_ngap_id;
-
-  /* Number of pdusession to be modify in the list */
+  /* PDU Session Resource Modify Request List (Mandatory) */
   uint16_t nb_pdusessions_tomodify;
-
-  // PDU Session Resource Modify Request List
-  pdusession_resource_item_t pdusession[NR_MAX_NB_PDU_SESSIONS];
+  pdusession_resource_mod_item_t pdusession[NR_MAX_NB_PDU_SESSIONS];
 } ngap_pdusession_modify_req_t;
 
 /* 9.2.1.6 of 3GPP TS 38.413 */
