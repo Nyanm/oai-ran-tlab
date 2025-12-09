@@ -63,6 +63,9 @@ int nr_rrc_find_suitable_drb_for_qos(gNB_RRC_UE_t *UE,
                                      const pdusession_level_qos_parameter_t *qos_params,
                                      const seq_arr_t *flows);
 
+/// @brief Find or create a DRB for a QoS flow and assign it
+bool nr_rrc_assign_drb_to_qos_flow(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const pdusession_t *session, nr_rrc_qos_t *qos);
+
 /// @brief Check if 5QI value is a standardized value (table 5.7.4-1 in 3GPP TS 23.501)
 bool is_5qi_standardized(uint16_t five_qi);
 

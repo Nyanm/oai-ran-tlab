@@ -74,6 +74,7 @@
 #include "rrc_cell_management.h"
 #include "common/utils/alg/find.h"
 #include "common/utils/nr/nr_common.h"
+#include "openair2/E1AP/lib/e1ap_bearer_context_management.h"
 
 #ifdef E2_AGENT
 #include "openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_rc_extern.h"
@@ -939,21 +940,138 @@ void rrc_gNB_process_NGAP_PDUSESSION_SETUP_REQ(MessageDef *msg_p, instance_t ins
   init_delayed_action(&UE->delayed_action);
 }
 
-/** @brief Update existing QoS Flow mapped in the UE context */
-static void nr_rrc_update_qos(seq_arr_t *list, const int nb_qos, const pdusession_level_qos_parameter_t *in_qos)
+/* Find or create pdu_session_to_mod_t entry in e1_req */
+static pdu_session_to_mod_t *find_or_add_pdu_session_mod(e1ap_bearer_mod_req_t *e1_req, int pdusession_id)
 {
-  DevAssert(nb_qos == 1);
-  DevAssert(nb_qos < MAX_QOS_FLOWS);
-  for (uint8_t i = 0; i < nb_qos; ++i) {
-    const pdusession_level_qos_parameter_t *q_in = &in_qos[i];
+  // Check if PDU session already exists in modify list
+  for (uint8_t i = 0; i < e1_req->numPDUSessionsMod; ++i) {
+    if (e1_req->pduSessionMod[i].sessionId == pdusession_id)
+      return &e1_req->pduSessionMod[i];
+  }
+  // Create new entry
+  DevAssert(e1_req->numPDUSessionsMod < NR_MAX_NB_PDU_SESSIONS);
+  pdu_session_to_mod_t *pdu_mod = &e1_req->pduSessionMod[e1_req->numPDUSessionsMod++];
+  memset(pdu_mod, 0, sizeof(*pdu_mod));
+  pdu_mod->sessionId = pdusession_id;
+  return pdu_mod;
+}
 
-    // Validate QFI range (0-63)
+/** @brief Find or create E1 DRB_nGRAN_to_mod_t entry inside a PDU session modification
+ * If creating a new entry, populates all QoS flows that map to this DRB */
+static DRB_nGRAN_to_mod_t *find_or_add_e1_drb_mod(pdu_session_to_mod_t *pdu_mod, long drb_id, const pdusession_t *session)
+{
+  // Check if DRB already exists in modify list
+  for (int i = 0; i < pdu_mod->numDRB2Modify; ++i) {
+    if (pdu_mod->DRBnGRanModList[i].id == drb_id)
+      return &pdu_mod->DRBnGRanModList[i];
+  }
+  // Create new entry and populate all QoS flows that map to this DRB
+  DevAssert(pdu_mod->numDRB2Modify < E1AP_MAX_NUM_DRBS);
+  DRB_nGRAN_to_mod_t *mod = &pdu_mod->DRBnGRanModList[pdu_mod->numDRB2Modify++];
+  memset(mod, 0, sizeof(*mod));
+  mod->id = drb_id;
+  // Populate all QoS flows that map to this DRB
+  FOR_EACH_SEQ_ARR (nr_rrc_qos_t *, q, &session->qos) {
+    if (q->drb_id != drb_id)
+      continue;
+    DevAssert(mod->numQosFlowsMod < E1AP_MAX_NUM_QOS_FLOWS);
+    qos_flow_to_setup_t *dst = &mod->qosFlows[mod->numQosFlowsMod++];
+    *dst = fill_e1_qos_flow_to_setup(&q->qos);
+  }
+  return mod;
+}
+
+/** @brief Override E1 Flow Mapping Information for a given DRB */
+static void nr_rrc_override_flow_mapping_info(DRB_nGRAN_to_mod_t *mod, long drb_id, const pdusession_t *session)
+{
+  mod->numQosFlowsMod = 0;
+  FOR_EACH_SEQ_ARR (nr_rrc_qos_t *, q, &session->qos) {
+    if (q->drb_id != drb_id)
+      continue;
+    DevAssert(mod->numQosFlowsMod < E1AP_MAX_NUM_QOS_FLOWS);
+    qos_flow_to_setup_t *dst = &mod->qosFlows[mod->numQosFlowsMod++];
+    *dst = fill_e1_qos_flow_to_setup(&q->qos);
+  }
+}
+
+/** @brief Finalize E1 DRB actions after QoS update/release processing:
+ *         - remove DRBs no longer referenced by any QoS flow
+ *         - refresh DRB-To-Modify QoS list for changed DRBs that are still used
+ * @param UE UE context
+ * @param pduSession PDU session to check
+ * @param e1_req E1AP bearer modification request
+ * @param drb_needs_e1_refresh true for DRBs touched by QoS add/modify/release in current request */
+static void nr_rrc_send_e1_after_qos_update(gNB_RRC_UE_t *UE,
+                                            rrc_pdu_session_param_t *pduSession,
+                                            e1ap_bearer_mod_req_t *e1_req,
+                                            const bool drb_needs_e1_refresh[MAX_DRBS_PER_UE + 1])
+{
+  pdusession_t *dst = &pduSession->param;
+  // Find or create PDU session entry in e1_req
+  pdu_session_to_mod_t *pdu_mod = find_or_add_pdu_session_mod(e1_req, dst->pdusession_id);
+
+  // Check if any remaining QoS for this PDU session still references the same DRB
+  FOR_EACH_SEQ_ARR (drb_t *, drb, &UE->drbs) {
+    if (drb->pdusession_id != dst->pdusession_id)
+      continue;
+    bool drb_still_used = false;
+    FOR_EACH_SEQ_ARR (nr_rrc_qos_t *, qos, &dst->qos) {
+      if (qos->drb_id == drb->drb_id) {
+        drb_still_used = true;
+        break;
+      }
+    }
+    if (!drb_still_used) {
+      if (nr_rrc_remove_drb_by_id(&UE->drbs, drb->drb_id)) {
+        LOG_I(NR_RRC,
+              "UE %d: removed DRB ID %d for PDU session %d (no remaining QoS flows mapped)\n",
+              UE->rrc_ue_id,
+              drb->drb_id,
+              dst->pdusession_id);
+      }
+      // Add DRB to remove directly to e1_req
+      DevAssert(pdu_mod->n_drb_to_remove < E1AP_MAX_NUM_DRBS);
+      drb_to_remove_t *rem = &pdu_mod->drbs_to_remove[pdu_mod->n_drb_to_remove++];
+      rem->id = drb->drb_id;
+      continue;
+    }
+
+    /** For changed DRBs that are still used, refresh Flow Mapping Information in DRB-To-Modify
+     * 3GPP TS 38.463 9.3.3.11: overrides previous mapping information. */
+    if (drb_needs_e1_refresh[drb->drb_id]) {
+      bool found = false;
+      for (int j = 0; j < pdu_mod->numDRB2Modify; ++j) {
+        if (pdu_mod->DRBnGRanModList[j].id != drb->drb_id)
+          continue;
+        nr_rrc_override_flow_mapping_info(&pdu_mod->DRBnGRanModList[j], drb->drb_id, dst);
+        found = true;
+        break;
+      }
+      if (!found)
+        find_or_add_e1_drb_mod(pdu_mod, drb->drb_id, dst);
+    }
+  }
+}
+
+static void nr_rrc_apply_qos_add_modify(gNB_RRC_INST *rrc,
+                                        gNB_RRC_UE_t *UE,
+                                        pdusession_t *dst,
+                                        const pdusession_mod_req_transfer_t *transfer,
+                                        e1ap_bearer_mod_req_t *e1_req,
+                                        bool drb_needs_e1_refresh[MAX_DRBS_PER_UE + 1])
+{
+  DevAssert(transfer->nb_qos_to_add_modify < MAX_QOS_FLOWS);
+  DevAssert(e1_req->numPDUSessionsMod < NR_MAX_NB_PDU_SESSIONS);
+  pdu_session_to_mod_t *pdu_mod = &e1_req->pduSessionMod[e1_req->numPDUSessionsMod++];
+  pdu_mod->sessionId = dst->pdusession_id;
+
+  for (uint8_t i = 0; i < transfer->nb_qos_to_add_modify; ++i) {
+    const pdusession_level_qos_parameter_t *q_in = &transfer->qos_to_add_modify[i];
     if (q_in->qfi < 0 || q_in->qfi > 63) {
       LOG_E(NR_RRC, "QoS flow QFI=%d: Invalid QFI (must be 0-63). Skipping QoS flow.\n", q_in->qfi);
       continue;
     }
 
-    // Validate 5QI value
     const non_dynamic_5qi_t *in_non_dynamic = &q_in->qos_characteristics.non_dynamic;
     const dynamic_5qi_t *in_dynamic = &q_in->qos_characteristics.dynamic;
     if (q_in->fiveQI_type == NON_DYNAMIC && !is_5qi_standardized(in_non_dynamic->fiveQI)) {
@@ -964,8 +1082,10 @@ static void nr_rrc_update_qos(seq_arr_t *list, const int nb_qos, const pdusessio
       continue;
     }
 
-    nr_rrc_qos_t *qos = find_qos(list, q_in->qfi);
+    nr_rrc_qos_t *qos = find_qos(&dst->qos, q_in->qfi);
     if (qos) {
+      // Existing QoS flow: update it and mark DRB for modification
+      const int drb_id = qos->drb_id;
       pdusession_level_qos_parameter_t *dst_qos = &qos->qos;
       AssertFatal(qos->qos.qfi == q_in->qfi, "QoS Flow to modify must match existing one");
       LOG_I(NR_RRC, "Updating QoS for QFI=%d\n", q_in->qfi);
@@ -973,7 +1093,6 @@ static void nr_rrc_update_qos(seq_arr_t *list, const int nb_qos, const pdusessio
 
       dst_qos->qfi = q_in->qfi;
       dst_qos->arp = q_in->arp;
-
       if (q_in->fiveQI_type == DYNAMIC) {
         dynamic_5qi_t *out_dyn = &dst_qos->qos_characteristics.dynamic;
         out_dyn->qos_priority = in_dynamic->qos_priority;
@@ -989,7 +1108,6 @@ static void nr_rrc_update_qos(seq_arr_t *list, const int nb_qos, const pdusessio
       } else { /* NON_DYNAMIC */
         non_dynamic_5qi_t *out_non_dyn = &dst_qos->qos_characteristics.non_dynamic;
         out_non_dyn->fiveQI = in_non_dynamic->fiveQI;
-
         if (in_non_dynamic->qos_priority == NULL) {
           free_and_zero(out_non_dyn->qos_priority);
         } else {
@@ -998,22 +1116,110 @@ static void nr_rrc_update_qos(seq_arr_t *list, const int nb_qos, const pdusessio
           *out_non_dyn->qos_priority = *in_non_dynamic->qos_priority;
         }
       }
+      LOG_I(NR_RRC, "UE %d: updating QoS for QFI=%d (DRB=%d)\n", UE->rrc_ue_id, q_in->qfi, drb_id);
+      find_or_add_e1_drb_mod(pdu_mod, drb_id, dst);
+      drb_needs_e1_refresh[drb_id] = true;
     } else {
-      LOG_E(NR_RRC, "Failed to update QoS for QFI=%d: QoS flow not found\n", q_in->qfi);
+      // New QoS flow: add it and either setup new DRB or modify existing DRB
+      qos = add_qos(&dst->qos, q_in);
+      if (!qos) {
+        LOG_E(NR_RRC, "Failed to add QoS flow for QFI=%d\n", q_in->qfi);
+        continue;
+      }
+      LOG_I(NR_RRC,
+            "UE %d: added QoS flow with QFI=%d, total number of QoS flows = %ld\n",
+            UE->rrc_ue_id,
+            q_in->qfi,
+            seq_arr_size(&dst->qos));
+      bool is_new_drb = nr_rrc_assign_drb_to_qos_flow(rrc, UE, dst, qos);
+      if (is_new_drb) {
+        // New DRB: add to setup list (DRBnGRanList) and populates QoS flows internally
+        drb_t *rrc_drb = get_drb(&UE->drbs, qos->drb_id);
+        DevAssert(rrc_drb);
+        DevAssert(pdu_mod->numDRB2Setup < E1AP_MAX_NUM_DRBS);
+        pdu_mod->DRBnGRanList[pdu_mod->numDRB2Setup++] =
+            fill_e1_drb_to_setup(rrc_drb, dst, rrc->configuration.um_on_default_drb, UE->redcap_cap);
+      } else {
+        // Existing DRB found: mark it for modification (adds to DRBnGRanModList and populates QoS flows)
+        DevAssert(qos->drb_id > 0 && qos->drb_id <= MAX_DRBS_PER_UE);
+        find_or_add_e1_drb_mod(pdu_mod, qos->drb_id, dst);
+        drb_needs_e1_refresh[qos->drb_id] = true;
+      }
     }
   }
 }
 
-/** @brief Update stored pdusession_t in list from NGAP PDU Session Resource item */
-static void nr_rrc_update_pdusession(pdusession_t *dst, const pdusession_resource_mod_item_t *src)
+static void nr_rrc_apply_qos_release(gNB_RRC_UE_t *UE,
+                                     pdusession_t *dst,
+                                     const pdusession_mod_req_transfer_t *transfer,
+                                     bool drb_needs_e1_refresh[MAX_DRBS_PER_UE + 1])
 {
-  dst->pdusession_id = src->pdusession_id;
-  dst->nas_pdu = src->nas_pdu;
-  dst->nssai = src->nssai;
-  DevAssert(dst->qos.data); // QoS list has to be initialized at this stage
-  // Update QoS flow
-  const pdusession_mod_req_transfer_t *transfer = &src->pdusessionTransfer;
-  nr_rrc_update_qos(&dst->qos, transfer->nb_qos_to_add_modify, transfer->qos_to_add_modify);
+  for (uint8_t i = 0; i < transfer->nb_qos_to_release; ++i) {
+    const int qfi = transfer->qos_to_release[i].qfi;
+    nr_rrc_qos_t *qos = find_qos(&dst->qos, qfi);
+    if (!qos) {
+      LOG_W(NR_RRC,
+            "UE %d: QoS Flow To Release with QFI=%d not found in PDU session %d, skipping release\n",
+            UE->rrc_ue_id,
+            qfi,
+            dst->pdusession_id);
+      continue;
+    }
+    const int drb_id = qos->drb_id;
+    if (!rm_qos(&dst->qos, qfi)) {
+      LOG_E(NR_RRC, "UE %d: Failed to remove QoS flow with QFI=%d\n", UE->rrc_ue_id, qfi);
+      continue;
+    }
+    LOG_I(NR_RRC, "UE %d: removed QoS flow with QFI=%d\n", UE->rrc_ue_id, qfi);
+    drb_needs_e1_refresh[drb_id] = true;
+  }
+}
+
+/** @brief Apply one NGAP PDU session modification item (add/modify, release, then E1 Bearer Context Modification). */
+static void nr_rrc_update_pdusession(gNB_RRC_INST *rrc,
+                                     gNB_RRC_UE_t *UE,
+                                     rrc_pdu_session_param_t *session,
+                                     const pdusession_resource_mod_item_t *sessMod,
+                                     e1ap_bearer_mod_req_t *e1_req)
+{
+  DevAssert(rrc);
+  DevAssert(UE);
+  DevAssert(e1_req);
+  const pdusession_mod_req_transfer_t *transfer = &sessMod->pdusessionTransfer;
+  DevAssert(transfer->nb_qos_to_add_modify < MAX_QOS_FLOWS);
+  bool drb_needs_e1_refresh[MAX_DRBS_PER_UE + 1] = {false};
+  pdusession_t *dst = &session->param;
+  dst->pdusession_id = sessMod->pdusession_id;
+  dst->nas_pdu = sessMod->nas_pdu;
+  dst->nssai = sessMod->nssai;
+  DevAssert(dst->qos.data);
+
+  nr_rrc_apply_qos_add_modify(rrc, UE, dst, transfer, e1_req, drb_needs_e1_refresh);
+  nr_rrc_apply_qos_release(UE, dst, transfer, drb_needs_e1_refresh);
+
+  // Update default DRB in SDAP configuration
+  if (!dst->sdap_config.default_drb) {
+    bool default_set = false;
+    // TS 23.501 §5.7.2.7: the QoS Flow associated with the default QoS rule
+    // should be a Non-GBR QoS Flow and the subscribed default 5QI is a
+    // Non-GBR 5QI from the standardized value range.
+    FOR_EACH_SEQ_ARR (nr_rrc_qos_t *, qos, &dst->qos) {
+      if (qos->qos.fiveQI_type == NON_DYNAMIC
+          && nr_rrc_is_non_gbr_fiveqi(qos->qos.qos_characteristics.non_dynamic.fiveQI)
+          && !default_set) {
+        dst->sdap_config.default_drb = qos->drb_id;
+        default_set = true;
+        break;
+      }
+    }
+    if (!default_set) {
+      LOG_E(NR_RRC,
+            "No standardized Non-GBR default 5QI QoS flow found in PDU session %d; cannot set SDAP default DRB\n",
+            dst->pdusession_id);
+    }
+  }
+
+  nr_rrc_send_e1_after_qos_update(UE, session, e1_req, drb_needs_e1_refresh);
 }
 
 //------------------------------------------------------------------------------
@@ -1063,6 +1269,10 @@ int rrc_gNB_process_NGAP_PDUSESSION_MODIFY_REQ(const ngap_pdusession_modify_req_
   uint8_t xid = rrc_gNB_get_next_transaction_identifier(rrc->module_id);
   bool all_failed = true;
   DevAssert(req->nb_pdusessions_tomodify <= NR_MAX_NB_PDU_SESSIONS);
+  e1ap_bearer_mod_req_t e1_req = {0};
+  if (req->nb_pdusessions_tomodify > 0) {
+    e1_req.pduSessionMod = calloc_or_fail(req->nb_pdusessions_tomodify, sizeof(*e1_req.pduSessionMod));
+  }
   for (int i = 0; i < req->nb_pdusessions_tomodify; i++) {
     const pdusession_resource_mod_item_t *sessMod = &req->pdusession[i];
     rrc_pdu_session_param_t *session = find_pduSession(&UE->pduSessions, sessMod->pdusession_id);
@@ -1078,13 +1288,22 @@ int rrc_gNB_process_NGAP_PDUSESSION_MODIFY_REQ(const ngap_pdusession_modify_req_
     } else {
       all_failed = false;
       session->status = PDU_SESSION_STATUS_TOMODIFY;
+      session->xid = xid;
       session->cause.type = NGAP_CAUSE_NOTHING;
-      nr_rrc_update_pdusession(&session->param, sessMod);
+      nr_rrc_update_pdusession(rrc, UE, session, sessMod, &e1_req);
     }
   }
 
   if (!all_failed) {
-    rrc_gNB_modify_dedicatedRRCReconfiguration(rrc, UE);
+    // If needed, send E1 Bearer Context Modification for this PDU Session Modify
+    if (e1_req.numPDUSessionsMod > 0 && ue_associated_to_cuup(UE)) {
+      e1_req.gNB_cu_cp_ue_id = UE->rrc_ue_id;
+      e1_req.gNB_cu_up_ue_id = UE->rrc_ue_id;
+      sctp_assoc_t assoc_id = get_existing_cuup_for_ue(UE);
+      rrc->cucp_cuup.bearer_context_mod(assoc_id, &e1_req);
+    }
+    // Init delayed PDU Session Modify transaction
+    init_delayed_action(&UE->delayed_action);
   } else {
     MessageDef *msg_fail_p = itti_alloc_new_message(TASK_RRC_GNB, 0, NGAP_PDUSESSION_MODIFY_RESP);
     if (msg_fail_p == NULL) {
@@ -1093,6 +1312,7 @@ int rrc_gNB_process_NGAP_PDUSESSION_MODIFY_REQ(const ngap_pdusession_modify_req_
     }
     rrc_gNB_send_NGAP_PDUSESSION_MODIFY_RESP(rrc, UE, xid);
   }
+  free_e1ap_context_mod_request(&e1_req);
   return (0);
 }
 

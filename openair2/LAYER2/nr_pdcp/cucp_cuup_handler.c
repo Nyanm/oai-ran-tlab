@@ -305,9 +305,20 @@ static void release_gtpu_tunnel(uint32_t ue_id, int pdusession_id)
   }
 }
 
-static void release_f1_drbs(uint32_t ue_id, int pdusession_id)
+/** @brief Release DRB resources (F1-U tunnel, PDCP, update SDAP mapping) */
+static void release_drb_resources(uint32_t ue_id, int drb_id)
 {
   instance_t f1inst = get_f1_gtp_instance();
+  if (f1inst >= 0) {
+    int result = newGtpuDeleteOneTunnel(f1inst, ue_id, drb_id);
+    if (result == GTPNOK)
+      LOG_E(E1AP, "UE %u: Failed to delete F1 tunnel for DRB %d\n", ue_id, drb_id);
+  }
+  nr_pdcp_release_drb(ue_id, drb_id);
+}
+
+static void release_f1_drbs(uint32_t ue_id, int pdusession_id)
+{
   // Handle F1 tunnels (1 tunnel per DRB, fetch PDCP entities and get DRB IDs)
   int drb_ids[MAX_DRBS_PER_UE];
   int n_drbs = nr_pdcp_get_drb_ids_for_pdusession(ue_id, pdusession_id, drb_ids);
@@ -315,15 +326,7 @@ static void release_f1_drbs(uint32_t ue_id, int pdusession_id)
     LOG_I(E1AP, "UE %u: Deleting %d F1 tunnels for PDU session %d\n", ue_id, n_drbs, pdusession_id);
     // Delete each F1 tunnel using the DRB IDs
     for (int i = 0; i < n_drbs; i++) {
-      int drb_id = drb_ids[i];
-      if (f1inst >= 0) {
-        int result = newGtpuDeleteOneTunnel(f1inst, ue_id, drb_id);
-        if (result == GTPNOK) {
-          LOG_E(E1AP, "UE %u: Failed to delete F1 tunnel for DRB %d\n", ue_id, drb_id);
-        }
-      }
-      // Release PDCP entity
-      nr_pdcp_release_drb(ue_id, drb_id);
+      release_drb_resources(ue_id, drb_ids[i]);
     }
   } else {
     LOG_W(E1AP, "UE %u: No DRBs found for PDU session %d\n", ue_id, pdusession_id);
@@ -352,32 +355,97 @@ void e1_bearer_context_modif(const e1ap_bearer_mod_req_t *req)
   /* PDU Session Resource To Modify List (see 9.3.3.11 of TS 38.463) */
   for (int i = 0; i < req->numPDUSessionsMod; i++) {
     DevAssert(req->pduSessionMod[i].sessionId > 0);
+    const pdu_session_to_mod_t *req_pdu_mod = &req->pduSessionMod[i];
+    pdu_session_modif_t *resp_pdu_mod = &modif.pduSessionMod[i];
     LOG_I(E1AP,
-          "UE %d: updating PDU session ID %ld (%ld bearers)\n",
+          "UE %d: updating PDU session ID %ld (%d setup, %ld modify bearers)\n",
           req->gNB_cu_up_ue_id,
-          req->pduSessionMod[i].sessionId,
-          req->pduSessionMod[i].numDRB2Modify);
-    modif.pduSessionMod[i].id = req->pduSessionMod[i].sessionId;
-    modif.pduSessionMod[i].numDRBModified = req->pduSessionMod[i].numDRB2Modify;
+          req_pdu_mod->sessionId,
+          req_pdu_mod->numDRB2Setup,
+          req_pdu_mod->numDRB2Modify);
+    resp_pdu_mod->id = req_pdu_mod->sessionId;
+    resp_pdu_mod->numDRBModified = req_pdu_mod->numDRB2Modify;
+    resp_pdu_mod->numDRBSetup = req_pdu_mod->numDRB2Setup;
     modif.numPDUSessionsMod++;
+
+    /* DRBs to setup */
+    NR_DRB_ToAddModList_t DRB_configList = {0};
+    for (int d = 0; d < req_pdu_mod->numDRB2Setup; d++) {
+      const DRB_nGRAN_to_setup_t *req_drb = &req_pdu_mod->DRBnGRanList[d];
+      DRB_nGRAN_setup_t *resp_drb = &resp_pdu_mod->DRBnGRanSetupList[d];
+      *resp_drb = fill_e1_drb_setup(req_drb);
+      LOG_I(E1AP, "DRB %ld setup completed: numUpParam=%d\n", req_drb->id, resp_pdu_mod->DRBnGRanSetupList[d].numUpParam);
+      /* Create PDCP/SDAP entities for DRB */
+      NR_DRB_ToAddMod_t *drb_to_add = get_rrc_drb_to_addmod(req_drb, req_pdu_mod->sessionId, req_pdu_mod->securityIndication);
+      ASN_SEQUENCE_ADD(&DRB_configList.list, drb_to_add);
+
+      /* F1-U tunnel setup */
+      if (f1inst >= 0) { /* we have F1(-U) */
+        teid_t dummy_teid = 0xffff; // we will update later with answer from DU
+        in_addr_t dummy_address = {0}; // IPv4, updated later with answer from DU
+        gtpv1u_gnb_create_tunnel_req_t f1_tunnel_req = {.incoming_rb_id = req_drb->id,
+                                                        .outgoing_teid = dummy_teid,
+                                                        .pdusession_id = req_drb->id,
+                                                        .ue_id = req->gNB_cu_up_ue_id,
+                                                        .dst_addr.length = 32};
+        memcpy(&f1_tunnel_req.dst_addr.buffer, &dummy_address, sizeof(uint8_t) * 4);
+        up_params_t *up = &resp_drb->UpParamList[resp_drb->numUpParam++];
+        up->tl_info = f1_drb_gtpu_create(f1inst, &f1_tunnel_req);
+        LOG_D(E1AP,
+              "Created F1-U tunnel for DRB %ld (TEID %d tlAddress %x)\n",
+              req_drb->id,
+              up->tl_info.teId,
+              up->tl_info.tlAddress);
+      }
+    }
+
+    nr_pdcp_entity_security_keys_and_algos_t security_parameters = {0};
+    if (req->secInfo) {
+      security_parameters.ciphering_algorithm = req->secInfo->cipheringAlgorithm;
+      security_parameters.integrity_algorithm = req->secInfo->integrityProtectionAlgorithm;
+      memcpy(security_parameters.ciphering_key, req->secInfo->encryptionKey, NR_K_KEY_SIZE);
+      memcpy(security_parameters.integrity_key, req->secInfo->integrityProtectionKey, NR_K_KEY_SIZE);
+    } else {
+      /* don't change security settings if not present in the Bearer Context Modification Request */
+      security_parameters.ciphering_algorithm = -1;
+      security_parameters.integrity_algorithm = -1;
+    }
+
+    /* Create PDCP/SDAP entities for each DRB to add */
+    e1_add_bearers(req->gNB_cu_up_ue_id, &DRB_configList, &security_parameters);
+    ASN_STRUCT_RESET(asn_DEF_NR_DRB_ToAddModList, &DRB_configList.list);
+
     /* DRBs to modify */
-    for (int j = 0; j < req->pduSessionMod[i].numDRB2Modify; j++) {
-      const DRB_nGRAN_to_mod_t *to_modif = &req->pduSessionMod[i].DRBnGRanModList[j];
-      DRB_nGRAN_modified_t *modified = &modif.pduSessionMod[i].DRBnGRanModList[j];
+    for (int j = 0; j < req_pdu_mod->numDRB2Modify; j++) {
+      const DRB_nGRAN_to_mod_t *to_modif = &req_pdu_mod->DRBnGRanModList[j];
+      DRB_nGRAN_modified_t *modified = &resp_pdu_mod->DRBnGRanModList[j];
       modified->id = to_modif->id;
 
-      if (to_modif->pdcp_config && to_modif->pdcp_config->pDCP_Reestablishment) {
-        nr_pdcp_entity_security_keys_and_algos_t security_parameters;
-        if (req->secInfo) {
-          security_parameters.ciphering_algorithm = req->secInfo->cipheringAlgorithm;
-          security_parameters.integrity_algorithm = req->secInfo->integrityProtectionAlgorithm;
-          memcpy(security_parameters.ciphering_key, req->secInfo->encryptionKey, NR_K_KEY_SIZE);
-          memcpy(security_parameters.integrity_key, req->secInfo->integrityProtectionKey, NR_K_KEY_SIZE);
-        } else {
-          /* don't change security settings if not present in the Bearer Context Modification Request */
-          security_parameters.ciphering_algorithm = -1;
-          security_parameters.integrity_algorithm = -1;
+      /* Collect new QFIs to add and update SDAP */
+      if (to_modif->numQosFlowsMod > 0) {
+        /* Reflect QoS flow add/modify in E1 response so CU-CP can detect QoS changes */
+        DevAssert(to_modif->numQosFlowsMod <= E1AP_MAX_NUM_QOS_FLOWS);
+        modified->numQosFlowSetup = to_modif->numQosFlowsMod;
+
+        uint8_t qfi_list[E1AP_MAX_NUM_QOS_FLOWS];
+        for (int q = 0; q < to_modif->numQosFlowsMod; q++) {
+          modified->qosFlows[q].qfi = qfi_list[q] = to_modif->qosFlows[q].qfi;
         }
+
+        LOG_D(NR_RRC,
+              "QoS flows mapping override: ue=%d pdu_session=%ld drb=%ld num_qfis=%d\n",
+              req->gNB_cu_up_ue_id,
+              req_pdu_mod->sessionId,
+              to_modif->id,
+              to_modif->numQosFlowsMod);
+        nr_sdap_entity_update_qos_flows(req->gNB_cu_up_ue_id,
+                                        req_pdu_mod->sessionId,
+                                        to_modif->id,
+                                        qfi_list,
+                                        to_modif->numQosFlowsMod);
+      }
+
+      if (to_modif->pdcp_config && to_modif->pdcp_config->pDCP_Reestablishment) {
         nr_pdcp_reestablishment(req->gNB_cu_up_ue_id,
                                 to_modif->id,
                                 false,
@@ -419,7 +487,12 @@ void e1_bearer_context_modif(const e1ap_bearer_mod_req_t *req)
         in_addr_t addr = to_modif->DlUpParamList[k].tl_info.tlAddress;
         GtpuUpdateTunnelOutgoingAddressAndTeid(f1inst, req->gNB_cu_cp_ue_id, to_modif->id, addr, to_modif->DlUpParamList[k].tl_info.teId);
       }
+    }
 
+    /* DRBs to remove: delete F1 tunnel and release PDCP, update SDAP mapping */
+    for (int j = 0; j < req_pdu_mod->n_drb_to_remove; j++) {
+      const int drb_id = req_pdu_mod->drbs_to_remove[j].id;
+      release_drb_resources(req->gNB_cu_up_ue_id, drb_id);
     }
   }
 
