@@ -103,10 +103,6 @@ mui_t rrc_gNB_mui = 0;
 static void delay_transaction(MessageDef *msg_p, int wait_us)
 {
   MessagesIds id = ITTI_MSG_ID(msg_p);
-  AssertFatal(id == NGAP_PDUSESSION_SETUP_REQ || id == NGAP_PDUSESSION_RELEASE_COMMAND,
-              "delay_transaction(): unsupported message id %d\n",
-              id);
-
   MessageDef *new = itti_alloc_new_message(TASK_RRC_GNB, 0, id);
 
   // Copy only the specific message struct, not the entire union.
@@ -116,6 +112,10 @@ static void delay_transaction(MessageDef *msg_p, int wait_us)
     NGAP_PDUSESSION_SETUP_REQ(new) = NGAP_PDUSESSION_SETUP_REQ(msg_p);
   } else if (id == NGAP_PDUSESSION_RELEASE_COMMAND) {
     NGAP_PDUSESSION_RELEASE_COMMAND(new) = NGAP_PDUSESSION_RELEASE_COMMAND(msg_p);
+  } else if (id == NGAP_PDUSESSION_MODIFY_REQ) {
+    NGAP_PDUSESSION_MODIFY_REQ(new) = NGAP_PDUSESSION_MODIFY_REQ(msg_p);
+  } else {
+    AssertFatal(0 == 1, "delay_transaction(): unsupported message id %d\n", id);
   }
 
   int instance = msg_p->ittiMsgHeader.originInstance;
@@ -162,6 +162,8 @@ static bool rrc_delay_transaction(instance_t instance, MessageDef *msg_p)
     cu_ue_id = NGAP_PDUSESSION_SETUP_REQ(msg_p).gNB_ue_ngap_id;
   } else if (ITTI_MSG_ID(msg_p) == NGAP_PDUSESSION_RELEASE_COMMAND) {
     cu_ue_id = NGAP_PDUSESSION_RELEASE_COMMAND(msg_p).gNB_ue_ngap_id;
+  } else if (ITTI_MSG_ID(msg_p) == NGAP_PDUSESSION_MODIFY_REQ) {
+    cu_ue_id = NGAP_PDUSESSION_MODIFY_REQ(msg_p).gNB_ue_ngap_id;
   }
   AssertFatal(cu_ue_id > 0, "cu_ue_id not found in message %s\n", ITTI_MSG_NAME(msg_p));
 
@@ -2084,6 +2086,7 @@ static void handle_rrcReconfigurationComplete(gNB_RRC_INST *rrc, gNB_RRC_UE_t *U
       break;
     case RRC_PDUSESSION_MODIFY:
       rrc_gNB_send_NGAP_PDUSESSION_MODIFY_RESP(rrc, UE, xid);
+      reset_delayed_action(&UE->delayed_action);
       break;
     case RRC_REESTABLISH_COMPLETE:
     case RRC_DEDICATED_RECONF:
@@ -3552,7 +3555,8 @@ void *rrc_gnb_task(void *args_p)
         break;
 
       case NGAP_PDUSESSION_MODIFY_REQ:
-        rrc_gNB_process_NGAP_PDUSESSION_MODIFY_REQ(&NGAP_PDUSESSION_MODIFY_REQ(msg_p), instance);
+        if (!rrc_delay_transaction(instance, msg_p))
+          rrc_gNB_process_NGAP_PDUSESSION_MODIFY_REQ(&NGAP_PDUSESSION_MODIFY_REQ(msg_p), instance);
         break;
 
       case NGAP_PDUSESSION_RELEASE_COMMAND:
