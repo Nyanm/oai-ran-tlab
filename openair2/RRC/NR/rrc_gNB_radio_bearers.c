@@ -75,6 +75,25 @@ static void free_rrc_qos_list(seq_arr_t *seq)
   seq_arr_free(seq, free_qos);
 }
 
+/** @brief Remove a single QoS flow identified by QFI
+ *  @return true if a QoS flow was removed, false if not found */
+bool rm_qos(seq_arr_t *flows, int qfi)
+{
+  DevAssert(flows);
+
+  nr_rrc_qos_t *qos = find_qos(flows, qfi);
+  if (!qos) {
+    LOG_W(NR_RRC,
+          "QoS Flow To Release with QFI=%d not found, skipping release\n",
+          qfi);
+    return false;
+  }
+
+  LOG_I(NR_RRC, "Removing QoS flow with QFI=%d\n", qfi);
+  seq_arr_erase_deep(flows, qos, free_qos);
+  return true;
+}
+
 static bool eq_pdu_session_id(const void *vval, const void *vit)
 {
   const int id = *(const int *)vval;
@@ -137,7 +156,7 @@ static bool eq_drb_pdu_session_id(const void *vval, const void *vit)
 
 /** @brief Finds the first DRB with the given PDU session ID.
  *  @return Pointer to matching drb_t or NULL if not found. */
-static drb_t *find_drb_by_pdusession_id(seq_arr_t *seq, int pdusession_id)
+drb_t *find_drb_by_pdusession_id(seq_arr_t *seq, int pdusession_id)
 {
   DevAssert(seq);
   DevAssert(pdusession_id > 0 && pdusession_id <= NGAP_MAX_PDU_SESSION);
@@ -156,6 +175,21 @@ static void nr_rrc_rm_drb(seq_arr_t *drbs, drb_t *drb)
   DevAssert(drb);
   LOG_I(NR_RRC, "Removing DRB ID %d (PDU Session ID=%d)\n", drb->drb_id, drb->pdusession_id);
   seq_arr_erase_deep(drbs, drb, free_drb);
+}
+
+/** @brief Remove DRB by ID from list
+ *  @return true if a DRB was removed, false if not found */
+bool nr_rrc_remove_drb_by_id(seq_arr_t *drb_ptr, const int drb_id)
+{
+  DevAssert(drb_ptr);
+  drb_t *drb = get_drb(drb_ptr, drb_id);
+  if (!drb) {
+    LOG_W(NR_RRC, "DRB ID %d not found to remove\n", drb_id);
+    return false;
+  }
+
+  nr_rrc_rm_drb(drb_ptr, drb);
+  return true;
 }
 
 /** @brief Removes a PDU Session from the list by ID
