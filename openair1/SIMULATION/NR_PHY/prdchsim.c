@@ -790,21 +790,6 @@ void SIM_Channel_propagate_free(c16_t **rxData, int nb_antennas_rx)
   }
 }
 
-double calculate_BER(uint8_t *rx_payload, uint8_t *payload, NR_AIOT_DL_FRAME_PARMS *frame_parms)
-{
-  int BER_errors = 0;
-  for (int i = 0; i < frame_parms->packet_payload_size/8; i++) {
-    int diff = payload[i] ^ rx_payload[i];
-
-    // Count ones in diff
-    for (int b = 0; b < 8; b++) {
-      BER_errors += (diff >> b) & 0x01;
-    }
-  }
-
-  return (double)BER_errors / (double)frame_parms->packet_payload_size;
-}
-
 bool AIOT_R2D_PHY_RX_CheckCRC(uint8_t *packet, NR_AIOT_DL_FRAME_PARMS *frame)
 {
   if (frame->packet_payload_size <= 0) return false;
@@ -916,7 +901,7 @@ void* process_snr_range(void* arg) {
   // Thread-local filter
   iir_butter3_fixed_t local_filter;
   AIOT_R2D_PHY_RX_Design_Filter(&local_filter, data->channel_model->bw * 1e6, (double)data->channel_model->sampling_rate * 1e6);
-  
+
   // Thread-local IQ signal buffers
   double **s_re = malloc(local_frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
   double **s_im = malloc(local_frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
@@ -1099,7 +1084,6 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      //double ber = calculate_BER(rx_payload, local_payload, local_frame_parms);
       bool crcValid = AIOT_R2D_PHY_RX_CheckCRC(rx_payload, local_frame_parms);
       
       if(testing_timing) {
@@ -1187,12 +1171,12 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
   printf("  Packet samples (aligned to slots): %d\n", frame_parms->packet_samples);
 
   // Setup radio channel
-  channel_model->sampling_rate = 30.72; // N_RB2sampling_rate(frame_parms->nr_frame_parms.N_RB_DL); // in MHz
+  channel_model->sampling_rate = 61.44; // N_RB2sampling_rate(frame_parms->nr_frame_parms.N_RB_DL); // in MHz
   channel_model->bw = frame_parms->nr_frame_parms.N_RB_DL * 0.2/2; // N_RB2channel_bandwidth(frame_parms->nr_frame_parms.N_RB_DL); // in MHz
 
   printf("Channel parameters:\n");
   printf("  Channel model: %s\n", channel_model->channel_model == AWGN ? "AWGN" : "TDL");
-  printf("  Sampling rate: %f MHz\n", channel_model->sampling_rate);
+  printf("  Sampling rate: %f Msps\n", channel_model->sampling_rate);
   printf("  Bandwidth: %f MHz\n", channel_model->bw);
   printf("  Delay spread: %f us\n", channel_model->DS_TDL);
   printf("  SNR: %f dB\n", channel_model->SNR);
@@ -1441,7 +1425,7 @@ int main(int argc, char **argv)
     .SNR = 20.0,
     .path_loss_dB = 0.0,
     .noise_power_dB = -120.0,
-    .delay = 1290,
+    .delay = 1500,
     .tx_pwr_dBm = 46.0
   };
 

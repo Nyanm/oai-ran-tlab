@@ -293,6 +293,7 @@ struct NR_AIOT_UL_FRAME_PARMS {
   int N_SFS; // value of small frequency shift
   int N_midamble_space; // number of bits in D2R midamble
   int payload_size; // decoded payload size in bits
+  int packet_size; // total size of D2R packet in bits
   int packet_samples; // number of samples in D2R packet
   int preamble_samples; // number of samples in D2R preamble
   int midamble_samples; // number of samples in D2R midamble
