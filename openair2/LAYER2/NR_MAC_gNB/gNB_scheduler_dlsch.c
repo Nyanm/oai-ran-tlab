@@ -894,17 +894,27 @@ static void pf_dl(gNB_MAC_INST *mac,
     // PDUs, we replace with 3 * numPDUs
     const int oh = 3 * 4 + (sched_ctrl->ta_apply ? 2 : 0);
     //const int oh = 3 * sched_ctrl->dl_pdus_total + (sched_ctrl->ta_apply ? 2 : 0);
-    nr_find_nb_rb(sched_pdsch.Qm,
-                  sched_pdsch.R,
-                  1, // no transform precoding for DL
-                  sched_pdsch.nrOfLayers,
-                  tda_info.nrOfSymbols,
-                  sched_pdsch.dmrs_parms.N_PRB_DMRS * sched_pdsch.dmrs_parms.N_DMRS_SLOT,
-                  sched_ctrl->num_total_bytes + oh,
-                  min_rbSize,
-                  max_rbSize,
-                  &sched_pdsch.tb_size,
-                  &sched_pdsch.rbSize);
+
+    while (true) {
+      nr_find_nb_rb(sched_pdsch.Qm,
+                    sched_pdsch.R,
+                    1, // no transform precoding for DL
+                    sched_pdsch.nrOfLayers,
+                    tda_info.nrOfSymbols,
+                    sched_pdsch.dmrs_parms.N_PRB_DMRS * sched_pdsch.dmrs_parms.N_DMRS_SLOT,
+                    sched_ctrl->num_total_bytes + oh,
+                    min_rbSize,
+                    max_rbSize,
+                    &sched_pdsch.tb_size,
+                    &sched_pdsch.rbSize);
+      if (!sched_pdsch.action || sched_ctrl->rlc_status[srb1].bytes_in_buffer <= sched_pdsch.tb_size)
+        break;
+      // if SRB1 message we want to send it all in one piece in PDSCH if possible
+      // TODO limit the MCS increase but by how much?
+      sched_pdsch.mcs++;
+      sched_pdsch.R = nr_get_code_rate_dl(sched_pdsch.mcs, dl_bwp->mcsTableIdx);
+      sched_pdsch.Qm = nr_get_Qm_dl(sched_pdsch.mcs, dl_bwp->mcsTableIdx);
+    }
 
     post_process_dlsch(mac, pp_pdsch, iterator->UE, &sched_pdsch);
 
