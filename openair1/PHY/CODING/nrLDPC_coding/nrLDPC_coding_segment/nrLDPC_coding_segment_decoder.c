@@ -36,7 +36,6 @@
 #include "PHY/NR_TRANSPORT/nr_ulsch.h"
 #include "PHY/NR_TRANSPORT/nr_dlsch.h"
 #include "SCHED_NR/sched_nr.h"
-#include "SCHED_NR/fapi_nr_l1.h"
 #include "defs.h"
 #include "common/utils/LOG/vcd_signal_dumper.h"
 #include "common/utils/LOG/log.h"
@@ -155,6 +154,7 @@ typedef struct nrLDPC_decoding_parameters_s {
 
   time_stats_t *p_ts_deinterleave;
   time_stats_t *p_ts_rate_unmatch;
+  time_stats_t *p_ts_seg_prep;
   time_stats_t *p_ts_ldpc_decode;
 } nrLDPC_decoding_parameters_t;
 
@@ -232,8 +232,8 @@ static void nr_process_decode_segment(void *arg)
 
   int16_t z[68 * 384 + 16] __attribute__((aligned(16)));
 
-  start_meas(rdata->p_ts_ldpc_decode);
 
+  start_meas(rdata->p_ts_seg_prep);
   memset(z, 0, 2 * rdata->Z * sizeof(*z));
   // set Filler bits
   memset(z + Kprime, 127, rdata->F * sizeof(*z));
@@ -248,6 +248,7 @@ static void nr_process_decode_segment(void *arg)
   for (int i = 0, j = 0; j < ((Kc * rdata->Z) >> 4) + 1; i += 2, j++) {
     pl[j] = simde_mm_packs_epi16(pv[i], pv[i + 1]);
   }
+  stop_meas(rdata->p_ts_seg_prep);
 //  for (int i=0;i<(Kc * rdata->Z);i++) printf("channel llr %d : %d\n",i,l[i]);
   //////////////////////////////////////////////////////////////////////////////////////////
 
@@ -256,6 +257,7 @@ static void nr_process_decode_segment(void *arg)
   //////////////////////////////////////////////////////////////////////////////////////////
 
   ////////////////////////////////// pl =====> llrProcBuf //////////////////////////////////
+  start_meas(rdata->p_ts_ldpc_decode);
   int decodeIterations = LDPCdecoder(p_decoderParms, l, llrProcBuf, p_procTime, rdata->abort_decode);
 /*
   if (DumpCount < 3) {
@@ -270,6 +272,7 @@ static void nr_process_decode_segment(void *arg)
     DumpCount++;
 }
 */
+  AssertFatal(rdata->c,"rdata->c is null\n");
   if (decodeIterations < p_decoderParms->numMaxIter) {
     memcpy(rdata->c, llrProcBuf, K >> 3);
     *rdata->decodeSuccess = true;
@@ -335,11 +338,12 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
       rdata->decodeSuccess = &nrLDPC_TB_decoding_parameters->segments[r].decodeSuccess;
       rdata->p_ts_deinterleave = &nrLDPC_TB_decoding_parameters->segments[r].ts_deinterleave;
       rdata->p_ts_rate_unmatch = &nrLDPC_TB_decoding_parameters->segments[r].ts_rate_unmatch;
+      rdata->p_ts_seg_prep = &nrLDPC_TB_decoding_parameters->segments[r].ts_seg_prep;
       rdata->p_ts_ldpc_decode = &nrLDPC_TB_decoding_parameters->segments[r].ts_ldpc_decode;
       task_t t = {.func = &nr_process_decode_segment, .args = rdata};
       pushTpool(nrLDPC_slot_decoding_parameters->threadPool, t);
 
-      LOG_D(PHY, "Added a block to decode, in pipe: %d\n", r);
+      LOG_I(PHY, "Added a block to decode, in pipe: %d, rdata->c %p\n", r,rdata->c);
     }
   }
   return nrLDPC_TB_decoding_parameters->C;
@@ -392,7 +396,7 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_dec
   // check if at least one PUSCH has a Zc<384 or BG=2
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
     nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
-    if ( nrLDPC_TB_decoding_parameters->Z < 384 ||  nrLDPC_TB_decoding_parameters->BG == 2) {
+    if (use_gpu == 0 || nrLDPC_TB_decoding_parameters->Z < 384 ||  nrLDPC_TB_decoding_parameters->BG == 2) {
 	do_join=true;    
 	break;
     }

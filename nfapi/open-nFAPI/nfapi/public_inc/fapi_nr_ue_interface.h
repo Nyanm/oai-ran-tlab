@@ -49,21 +49,31 @@ typedef enum {
   NFAPI_NR_FORMAT_0_1_AND_1_1,
 } nfapi_nr_dci_formats_e;
 
+typedef enum {
+  NFAPI_NR_CSI_MEAS,
+  NFAPI_NR_SS_MEAS
+} nfapi_nr_meas_type_e;
 
 typedef struct {
-  uint32_t rsrp;
+  uint32_t gNB_index;
+  uint16_t Nid_cell;
+  nfapi_nr_meas_type_e meas_type;
+  bool is_neighboring_cell;
+  int ssb_index;
   int rsrp_dBm;
+  float sinr_dB;  
   uint8_t rank_indicator;
   uint16_t i1;
   uint8_t i2;
   uint8_t cqi;
   rlm_t radiolink_monitoring;
-} fapi_nr_csirs_measurements_t;
+} fapi_nr_l1_measurements_t;
 
 typedef struct {
   /// frequency_domain_resource;
   uint8_t frequency_domain_resource[6];
   uint8_t StartSymbolIndex;
+  uint16_t StartSymbolBitmap;
   uint8_t duration;
   uint8_t CceRegMappingType; //  interleaved or noninterleaved
   uint8_t RegBundleSize;     //  valid if CCE to REG mapping type is interleaved type
@@ -126,11 +136,8 @@ typedef struct {
   uint8_t ssb_length;
   uint16_t cell_id;
   uint16_t ssb_start_subcarrier;
-  short rsrp_dBm;
   long arfcn;
   rlm_t radiolink_monitoring; // -1 no monitoring, 0 out_of_sync, 1 in_sync
-  // SINR value times 10 as reporting granularity is 0.5
-  float sinr_dB;
 } fapi_nr_ssb_pdu_t;
 
 typedef struct {
@@ -145,7 +152,7 @@ typedef struct {
     fapi_nr_pdsch_pdu_t pdsch_pdu;
     fapi_nr_ssb_pdu_t ssb_pdu;
     fapi_nr_sib_pdu_t sib_pdu;
-    fapi_nr_csirs_measurements_t csirs_measurements;
+    fapi_nr_l1_measurements_t l1_measurements;
   };
 } fapi_nr_rx_indication_body_t;
 
@@ -470,9 +477,7 @@ typedef struct {
   uint16_t start_rb;
   uint16_t number_symbols;
   uint16_t start_symbol;
-  // TODO this is a workaround to make it work
-  // implementation is also a bunch of workarounds
-  uint16_t rb_offset;
+  uint8_t refPoint;
   uint16_t dlDmrsSymbPos;  
   uint8_t dmrsConfigType;
   uint8_t prb_bundling_size_ind;

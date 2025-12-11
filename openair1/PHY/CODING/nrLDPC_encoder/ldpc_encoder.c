@@ -112,7 +112,6 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
 
     fprintf(fd,"#include \"PHY/sse_intrin.h\"\n");
 
-
     if (gen_code == 1 && (Zc&63)==0) {
       shift=6;
       mask=63;
@@ -322,12 +321,10 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
 
           for (i4 = 0; i4 < no_shift_values[temp_prime]; i4++) {
             channel_temp = channel_temp ^ c[i3 * Zc + Gen_shift_values[pointer_shift_values[temp_prime] + i4]];
-	    //if (i1==0) printf("index %d\n",i3 * Zc + Gen_shift_values[pointer_shift_values[temp_prime] + i4]);
           }
         }
 
         d[i2+i1*Zc]=channel_temp;
-	//if (i1==0) printf("reference: d[%d] %d c[%d] %d\n",i2,d[i2],i2,c[i2]);
         // output[t+i1*Zc]=channel_temp;
       }
     }

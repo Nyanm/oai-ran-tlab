@@ -236,7 +236,7 @@ void nr_csi_meas_reporting(int Mod_idP,frame_t frame, slot_t slot)
     NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
     NR_UE_UL_BWP_t *ul_bwp = &UE->current_UL_BWP;
     const int n_slots_frame = nrmac->frame_structure.numb_slots_frame;
-    if (nr_timer_is_active(&sched_ctrl->transm_interrupt) || (sched_ctrl->ul_failure && !get_softmodem_params()->phy_test)) {
+    if (!nr_mac_ue_is_active(UE) && !get_softmodem_params()->phy_test) {
       continue;
     }
     const NR_CSI_MeasConfig_t *csi_measconfig = UE->sc_info.csi_MeasConfig;
@@ -253,9 +253,10 @@ void nr_csi_meas_reporting(int Mod_idP,frame_t frame, slot_t slot)
                   "Only periodic CSI reporting is implemented currently\n");
 
       const NR_PUCCH_CSI_Resource_t *pucchcsires = csirep->reportConfigType.choice.periodic->pucch_CSI_ResourceList.list.array[0];
-      if(pucchcsires->uplinkBandwidthPartId != ul_bwp->bwp_id)
+      if(pucchcsires->uplinkBandwidthPartId > 1) {
+        LOG_E(NR_MAC, "Invalid PUCCH BWP ID %ld, we only configure BWP up to 1\n", pucchcsires->uplinkBandwidthPartId);
         continue;
-
+      }
       // we schedule CSI reporting max_fb_time slots in advance
       int period, offset;
       csi_period_offset(csirep, NULL, &period, &offset);
@@ -393,16 +394,15 @@ int get_pucch_resourceid(NR_PUCCH_Config_t *pucch_Config, int O_uci, int pucch_r
   return *resource_id;
 }
 
-static void handle_dl_harq(NR_UE_info_t * UE,
-                           int8_t harq_pid,
-                           bool success,
-                           int harq_round_max)
+static void handle_dl_harq(gNB_MAC_INST *mac, NR_UE_info_t * UE, int8_t harq_pid, bool success, int harq_round_max)
 {
   NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
   NR_UE_harq_t *harq = &sched_ctrl->harq_processes[harq_pid];
   harq->feedback_slot = -1;
   harq->is_waiting = false;
   if (success) {
+    if (harq->sched_pdsch.action)
+      harq->sched_pdsch.action(mac, UE);
     finish_nr_dl_harq(sched_ctrl, harq_pid);
   } else if (harq->round >= harq_round_max - 1) {
     abort_nr_dl_harq(UE, harq_pid);
@@ -412,6 +412,25 @@ static void handle_dl_harq(NR_UE_info_t * UE,
     add_tail_nr_list(&sched_ctrl->retrans_dl_harq, harq_pid);
     harq->round++;
   }
+}
+
+// Referred Table 10.1.16.1-1 in 38.133 V16.7.0.
+static int get_measured_sinr(int index)
+{
+  if (index < 0 || index > 127)
+    return INT_MAX;
+
+  return -235 + index * 5;
+}
+
+// Referred Table 10.1.16.1-2 in 38.133 V16.7.0.
+static int get_diff_sinr(int index, int best_SINRx10)
+{
+  if (index <= 0)
+    return best_SINRx10;
+  if (index >= 15)
+    return best_SINRx10 - 150;
+  return best_SINRx10 - index * 10;
 }
 
 //returns the measured RSRP value (upper limit)
@@ -498,22 +517,33 @@ static void evaluate_sinr_report(gNB_MAC_INST *nrmac,
   }
 
   curr_payload = pickandreverse_bits(payload, 7, *cumul_bits);
-  sinr_report->SINR_index[0] = curr_payload & 0x7f;
+  int sinr_index = curr_payload & 0x7f;
   *cumul_bits += 7;
 
   csi_report->nb_of_csi_ssb_report++;
-  if (sinr_report->SINR_index[0] < 0 || sinr_report->SINR_index[0] > 127) {
-    LOG_E(NR_MAC, "UE %04x: reported SINR index %d invalid\n", UE->rnti, sinr_report->SINR_index[0]);
+  int SINRx10 = get_measured_sinr(sinr_index);
+  if (SINRx10 == INT_MAX) {
+    LOG_E(NR_MAC, "UE %04x: reported SINR index %d invalid\n", UE->rnti, sinr_index);
     return;
   }
+  sinr_report->SINRx10[0] = SINRx10;
 
   for (int i = 1; i < sinr_report->nr_reports; i++) {
     curr_payload = pickandreverse_bits(payload, 4, *cumul_bits);
-    sinr_report->SINR_index[i] = curr_payload & 0x0f;
+    sinr_report->SINRx10[i] = get_diff_sinr(curr_payload & 0x0f, sinr_report->SINRx10[0]);
     *cumul_bits += 4;
   }
 
-  LOG_D(MAC, "Reported SSB-SINR index = %d\n", sinr_report->SINR_index[0]);
+  NR_mac_stats_t *stats = &UE->mac_stats;
+  // including ssb SINR in mac stats
+  stats->cumul_sinrx10 += sinr_report->SINRx10[0];
+  stats->num_sinr_meas++;
+
+  const int mcs_table = UE->current_DL_BWP.mcsTableIdx;
+  const int nrOfLayers = get_dl_nrOfLayers(sched_ctrl, UE->current_DL_BWP.dci_format);
+  sched_ctrl->dl_max_mcs = get_mcs_from_SINRx10(mcs_table, sinr_report->SINRx10[0], nrOfLayers);
+
+  LOG_D(MAC, "Reported SSB-SINR = %d.%d, dl_max_mcs %d\n", sinr_report->SINRx10[0] / 10, sinr_report->SINRx10[0] % 10, sched_ctrl->dl_max_mcs);
 }
 
 static void evaluate_rsrp_report(gNB_MAC_INST *nrmac,
@@ -558,29 +588,29 @@ static void evaluate_rsrp_report(gNB_MAC_INST *nrmac,
   }
 
   rsrp_report->nr_reports = csi_report->CSI_report_bitlen.nb_ssbri_cri;
-  uint16_t curr_payload;
+  int bitlen = csi_report->CSI_report_bitlen.cri_ssbri_bitlen;
   for (int i = 0; i < rsrp_report->nr_reports; i++) {
-    int bitlen = csi_report->CSI_report_bitlen.cri_ssbri_bitlen;
-    curr_payload = pickandreverse_bits(payload, bitlen, *cumul_bits);
-    rsrp_report->resource_id[i] = *(index_list[bitlen > 0 ? ((curr_payload) & ~(~1U << (bitlen - 1))) : bitlen]);
-    LOG_D(MAC,"SSB/CSI-RS index = %d\n", rsrp_report->resource_id[i]);
+    uint8_t idx_payload = pickandreverse_bits(payload, bitlen, *cumul_bits);
+    rsrp_report->resource_id[i] = *(index_list[bitlen > 0 ? ((idx_payload) & ~(~1U << (bitlen - 1))) : bitlen]);
     *cumul_bits += bitlen;
   }
 
-  curr_payload = pickandreverse_bits(payload, 7, *cumul_bits);
-  int rsrp_index = curr_payload & 0x7f;
+  uint8_t curr_payload = pickandreverse_bits(payload, 7, *cumul_bits);
+  int rsrp = curr_payload & 0x7f;
   *cumul_bits += 7;
-
   csi_report->nb_of_csi_ssb_report++;
-  bool valid = get_measured_rsrp(rsrp_index, &rsrp_report->RSRP[0]);
+  bool valid = get_measured_rsrp(rsrp, &rsrp_report->RSRP[0]);
+  LOG_D(NR_MAC, "SSB/CSI-RS index %d RSRP %d\n", rsrp_report->resource_id[0], rsrp_report->RSRP[0]);
   if (!valid) {
-    LOG_E(NR_MAC, "UE %04x: reported RSRP index %d invalid\n", UE->rnti, rsrp_index);
+    LOG_E(NR_MAC, "UE %04x: reported RSRP index %d invalid\n", UE->rnti, rsrp);
     return;
   }
 
   for (int i = 1; i < rsrp_report->nr_reports; i++) {
     curr_payload = pickandreverse_bits(payload, 4, *cumul_bits);
+    csi_report->nb_of_csi_ssb_report++;
     rsrp_report->RSRP[i] = get_diff_rsrp(curr_payload & 0x0f, rsrp_report->RSRP[0]);
+    LOG_D(NR_MAC, "SSB/CSI-RS index %d RSRP %d\n", rsrp_report->resource_id[i], rsrp_report->RSRP[i]);
     *cumul_bits += 4;
   }
 
@@ -648,6 +678,8 @@ static void evaluate_cqi_report(uint8_t *payload,
   const int cqi_idx = sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.wb_cqi_1tb;
   const int mcs_table = UE->current_DL_BWP.mcsTableIdx;
   sched_ctrl->dl_max_mcs = get_mcs_from_cqi(mcs_table, cqi_Table, cqi_idx);
+
+  LOG_D(MAC, "Reported CQI = %d, dl_max_mcs %d\n", temp_cqi, sched_ctrl->dl_max_mcs);
 }
 
 static uint8_t evaluate_pmi_report(uint8_t *payload,
@@ -717,7 +749,6 @@ static void extract_pucch_csi_report(NR_CSI_MeasConfig_t *csi_MeasConfig,
   NR_CSI_ReportConfig__ext2__reportQuantity_r16_PR reportQuantity_type_r16 =
       NR_CSI_ReportConfig__ext2__reportQuantity_r16_PR_NOTHING;
   NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
-  NR_UE_UL_BWP_t *ul_bwp = &UE->current_UL_BWP;
   NR_UE_DL_BWP_t *dl_bwp = &UE->current_DL_BWP;
   const int n_slots_frame = nrmac->frame_structure.numb_slots_frame;
   int cumul_bits = 0;
@@ -732,8 +763,10 @@ static void extract_pucch_csi_report(NR_CSI_MeasConfig_t *csi_MeasConfig,
     NR_CSI_ReportConfig_t *csirep = csi_MeasConfig->csi_ReportConfigToAddModList->list.array[csi_report_id];
     uint8_t cqi_table = (dl_bwp->dci_format == NR_DL_DCI_FORMAT_1_1 && csirep->cqi_Table) ? *csirep->cqi_Table : NR_CSI_ReportConfig__cqi_Table_table1;
     const NR_PUCCH_CSI_Resource_t *pucchcsires = csirep->reportConfigType.choice.periodic->pucch_CSI_ResourceList.list.array[0];
-    if(pucchcsires->uplinkBandwidthPartId != ul_bwp->bwp_id)
+    if(pucchcsires->uplinkBandwidthPartId > 1) {
+      LOG_E(NR_MAC, "Invalid PUCCH BWP ID %ld, we only configure BWP up to 1\n", pucchcsires->uplinkBandwidthPartId);
       continue;
+    }
     int period, offset;
     csi_period_offset(csirep, NULL, &period, &offset);
     // verify if report with current id has been scheduled for this frame and slot
@@ -841,7 +874,7 @@ static NR_UE_harq_t *find_harq(frame_t frame, slot_t slot, NR_UE_info_t * UE, in
           frame,
           slot);
     remove_front_nr_list(&sched_ctrl->feedback_dl_harq);
-    handle_dl_harq(UE, pid, 0, harq_round_max);
+    handle_dl_harq(NULL, UE, pid, false, harq_round_max);
     pid = sched_ctrl->feedback_dl_harq.head;
     if (pid < 0)
       return NULL;
@@ -898,7 +931,7 @@ void handle_nr_uci_pucch_0_1(module_id_t mod_id, frame_t frame, slot_t slot, con
       LOG_D(NR_MAC,"%4d.%2d bit %d pid %d ack/nack %d\n",frame, slot, harq_bit,pid,harq_value);
       nr_mac_update_pdcch_closed_loop_adjust(sched_ctrl, harq_confidence != 0);
       bool success = harq_value == 0 && harq_confidence == 0;
-      handle_dl_harq(UE, pid, success, nrmac->dl_bler.harq_round_max);
+      handle_dl_harq(nrmac, UE, pid, success, nrmac->dl_bler.harq_round_max);
       if (is_ra) {
         bool ue_rejected = nr_check_Msg4_MsgB_Ack(mod_id, frame, slot, UE, success);
         if (ue_rejected) {
@@ -977,7 +1010,7 @@ void handle_nr_uci_pucch_2_3_4(module_id_t mod_id, frame_t frame, slot_t slot, c
       const int8_t pid = sched_ctrl->feedback_dl_harq.head;
       remove_front_nr_list(&sched_ctrl->feedback_dl_harq);
       LOG_D(NR_MAC,"%4d.%2d bit %d pid %d ack/nack %d\n",frame, slot, harq_bit, pid, acknack);
-      handle_dl_harq(UE, pid, uci_234->harq.harq_crc != 1 && acknack, nrmac->dl_bler.harq_round_max);
+      handle_dl_harq(nrmac, UE, pid, uci_234->harq.harq_crc != 1 && acknack, nrmac->dl_bler.harq_round_max);
     }
     free(uci_234->harq.harq_payload);
   }
@@ -1250,7 +1283,7 @@ void nr_sr_reporting(gNB_MAC_INST *nrmac, frame_t SFN, slot_t slot)
     NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
     NR_UE_UL_BWP_t *ul_bwp = &UE->current_UL_BWP;
     const int n_slots_frame = nrmac->frame_structure.numb_slots_frame;
-    if (sched_ctrl->ul_failure || nr_timer_is_active(&sched_ctrl->transm_interrupt))
+    if (!nr_mac_ue_is_active(UE))
       continue;
     NR_PUCCH_Config_t *pucch_Config = ul_bwp->pucch_Config;
 

@@ -46,6 +46,7 @@ import constants as CONST
 
 import cls_module
 import cls_corenetwork
+import cls_analysis
 import cls_cmd
 from cls_ci_helper import archiveArtifact
 
@@ -232,9 +233,10 @@ def Custom_Command(HTML, node, command):
     HTML.CreateHtmlTestRowQueue(command, status, message)
     return status == 'OK' or status == 'Warning'
 
-def Custom_Script(HTML, node, script):
+def Custom_Script(HTML, node, script, args):
 	logging.info(f"Executing custom script on {node}")
-	ret = cls_cmd.runScript(node, script, 90)
+	with cls_cmd.getConnection(node) as c:
+		ret = c.exec_script(script, 90, args)
 	logging.debug(f"Custom_Script: {script} on node: {node} - return code {ret.returncode}, output:\n{ret.stdout}")
 	status = 'OK'
 	message = [ret.stdout]
@@ -248,6 +250,34 @@ def IdleSleep(HTML, idle_sleep_time):
 	time.sleep(idle_sleep_time)
 	HTML.CreateHtmlTestRow(f"{idle_sleep_time} sec", 'OK', CONST.ALL_PROCESSES_OK)
 	return True
+
+def Deploy_Physim(ctx, HTML, node, workdir, script, options):
+	logging.debug(f'Running physims on server {node} workdir {workdir}')
+	with cls_cmd.getConnection(node) as c:
+		sys_info = c.exec_script("scripts/sys-info.sh", 5)
+		ret = c.exec_script(script, 1000, options)
+	logging.debug(f'"{script}" finished with code {ret.returncode}, output:\n{ret.stdout}')
+	HTML.CreateHtmlTestRowQueue('Query system info', 'OK', [sys_info.stdout])
+	with cls_cmd.getConnection(node) as ssh:
+		details_json = archiveArtifact(ssh, ctx, f'{workdir}/desc-tests.json')
+		result_junit = archiveArtifact(ssh, ctx, f'{workdir}/results-run.xml')
+		archiveArtifact(ssh, ctx, f'{workdir}/physim_log.txt')
+		archiveArtifact(ssh, ctx, f'{workdir}/LastTestsFailed.log')
+		archiveArtifact(ssh, ctx, f'{workdir}/LastTest.log')
+	test_status, test_summary, test_result = cls_analysis.Analysis.analyze_physim(result_junit, details_json, ctx.logPath)
+	if test_summary:
+		if test_status:
+			HTML.CreateHtmlTestRow('N/A', 'OK', CONST.ALL_PROCESSES_OK)
+			HTML.CreateHtmlTestRowPhySimTestResult(test_summary, test_result)
+			logging.info('\u001B[1m Physical Simulator Pass\u001B[0m')
+		else:
+			HTML.CreateHtmlTestRowQueue('At least one physical simulator test failed!', 'KO', ["See below for details"])
+			HTML.CreateHtmlTestRowPhySimTestResult(test_summary, test_result)
+			logging.error('\u001B[1m Physical Simulator Fail\u001B[0m')
+	else:
+		HTML.CreateHtmlTestRowQueue('Physical simulator failed', 'KO', [test_result])
+		logging.error('\u001B[1m Physical Simulator Fail\u001B[0m')
+	return test_status
 
 #-----------------------------------------------------------
 # OaiCiTest Class Definition
@@ -269,18 +299,16 @@ class OaiCiTest():
 		self.iperf_packetloss_threshold = ''
 		self.iperf_bitrate_threshold = ''
 		self.iperf_profile = ''
-		self.iperf_options = ''
 		self.iperf_tcp_rate_target = ''
 		self.finalStatus = False
 		self.air_interface=''
 		self.ue_ids = []
-		self.nodes = []
 		self.svr_node = None
 		self.svr_id = None
 		self.cmd_prefix = '' # prefix before {lte,nr}-uesoftmodem
 
-	def InitializeUE(self, HTML):
-		ues = [cls_module.Module_UE(n.strip()) for n in self.ue_ids]
+	def InitializeUE(self, node, HTML):
+		ues = [cls_module.Module_UE(n.strip(), node) for n in self.ue_ids]
 		messages = []
 		with concurrent.futures.ThreadPoolExecutor(max_workers=64) as executor:
 			futures = [executor.submit(ue.initialize) for ue in ues]
@@ -291,8 +319,8 @@ class OaiCiTest():
 		HTML.CreateHtmlTestRowQueue('N/A', 'OK', messages)
 		return True
 
-	def AttachUE(self, HTML):
-		ues = [cls_module.Module_UE(ue_id, server_name) for ue_id, server_name in zip(self.ue_ids, self.nodes)]
+	def AttachUE(self, node, HTML):
+		ues = [cls_module.Module_UE(ue_id, node) for ue_id in self.ue_ids]
 		with concurrent.futures.ThreadPoolExecutor(max_workers=64) as executor:
 			futures = [executor.submit(ue.attach) for ue in ues]
 			attached = [f.result() for f in futures]
@@ -307,8 +335,8 @@ class OaiCiTest():
 			HTML.CreateHtmlTestRowQueue('N/A', 'KO', ["Could not retrieve UE IP address(es) or MTU(s) wrong!"])
 		return success
 
-	def DetachUE(self, HTML):
-		ues = [cls_module.Module_UE(ue_id, server_name) for ue_id, server_name in zip(self.ue_ids, self.nodes)]
+	def DetachUE(self, node, HTML):
+		ues = [cls_module.Module_UE(ue_id, node) for ue_id in self.ue_ids]
 		with concurrent.futures.ThreadPoolExecutor(max_workers=64) as executor:
 			futures = [executor.submit(ue.detach) for ue in ues]
 			[f.result() for f in futures]
@@ -316,8 +344,8 @@ class OaiCiTest():
 		HTML.CreateHtmlTestRowQueue('NA', 'OK', messages)
 		return True
 
-	def DataDisableUE(self, HTML):
-		ues = [cls_module.Module_UE(n.strip()) for n in self.ue_ids]
+	def DataDisableUE(self, node, HTML):
+		ues = [cls_module.Module_UE(n.strip(), node) for n in self.ue_ids]
 		with concurrent.futures.ThreadPoolExecutor(max_workers=64) as executor:
 			futures = [executor.submit(ue.dataDisable) for ue in ues]
 			status = [f.result() for f in futures]
@@ -330,8 +358,8 @@ class OaiCiTest():
 			HTML.CreateHtmlTestRowQueue('N/A', 'KO', ["Could not disable UE data!"])
 		return success
 
-	def DataEnableUE(self, HTML):
-		ues = [cls_module.Module_UE(n.strip()) for n in self.ue_ids]
+	def DataEnableUE(self, node, HTML):
+		ues = [cls_module.Module_UE(n.strip(), node) for n in self.ue_ids]
 		logging.debug(f'disabling data for UEs {ues}')
 		with concurrent.futures.ThreadPoolExecutor(max_workers=64) as executor:
 			futures = [executor.submit(ue.dataEnable) for ue in ues]
@@ -345,8 +373,8 @@ class OaiCiTest():
 			HTML.CreateHtmlTestRowQueue('N/A', 'KO', ["Could not enable UE data!"])
 		return success
 
-	def CheckStatusUE(self,HTML):
-		ues = [cls_module.Module_UE(n.strip()) for n in self.ue_ids]
+	def CheckStatusUE(self, node, HTML):
+		ues = [cls_module.Module_UE(n.strip(), node) for n in self.ue_ids]
 		logging.debug(f'checking status of UEs {ues}')
 		messages = []
 		with concurrent.futures.ThreadPoolExecutor(max_workers=64) as executor:
@@ -416,10 +444,10 @@ class OaiCiTest():
 
 		return (True, message)
 
-	def Ping(self, ctx, HTML, infra_file="ci_infra.yaml"):
+	def Ping(self, ctx, node, HTML, infra_file="ci_infra.yaml"):
 		if self.ue_ids == [] or self.svr_id == None:
 			raise Exception("no module names in self.ue_ids or/and self.svr_id provided")
-		ues = [cls_module.Module_UE(ue_id, server_name, infra_file) for ue_id, server_name in zip(self.ue_ids, self.nodes)]
+		ues = [cls_module.Module_UE(ue_id, node, infra_file) for ue_id in self.ue_ids]
 		cn = cls_corenetwork.CoreNetwork(self.svr_id, self.svr_node, filename=infra_file)
 		with concurrent.futures.ThreadPoolExecutor(max_workers=64) as executor:
 			futures = [executor.submit(self.Ping_common, ctx, cn, ue) for ue in ues]
@@ -473,6 +501,11 @@ class OaiCiTest():
 			t = iperf_time * 2.5
 			cmd_ue.run(f'rm {client_filename}', reportNonZero=False, silent=True)
 			if cn.runIperf3Server():
+				# Clean up any existing iperf3 server processes on this port.
+				ret = cmd_svr.run(f"{cn.getCmdPrefix()} pkill -f '.*iperf3.*{port}'", reportNonZero=False)
+				# If pkill succeeds, it means there was a leftover iperf3 server.
+				if ret.returncode == 0:
+					logging.warning(f'Iperf3 server on port {port} detected and terminated')
 				cmd_svr.run(f'{cn.getCmdPrefix()} timeout -vk3 {t} iperf3 -s -B {svrIP} -p {port} -1 {jsonReport} >> /dev/null &', timeout=t)
 			cmd_ue.run(f'{ue.getCmdPrefix()} timeout -vk3 {t} {iperf_ue} -B {ueIP} -c {svrIP} -p {port} {iperf_opt} {jsonReport} {serverReport} -O 5 >> {client_filename}', timeout=t)
 			dest_filename = archiveArtifact(cmd_ue, ctx, client_filename)
@@ -485,12 +518,12 @@ class OaiCiTest():
 
 		return (status, f'{ue_header}\n{msg}')
 
-	def Iperf(self, ctx, HTML, infra_file="ci_infra.yaml"):
-		logging.debug(f'Iperf: iperf_args "{self.iperf_args}" iperf_packetloss_threshold "{self.iperf_packetloss_threshold}" iperf_bitrate_threshold "{self.iperf_bitrate_threshold}" iperf_profile "{self.iperf_profile}" iperf_options "{self.iperf_options}"')
+	def Iperf(self, ctx, node, HTML, infra_file="ci_infra.yaml"):
+		logging.debug(f'Iperf: iperf_args "{self.iperf_args}" iperf_packetloss_threshold "{self.iperf_packetloss_threshold}" iperf_bitrate_threshold "{self.iperf_bitrate_threshold}" iperf_profile "{self.iperf_profile}"')
 
 		if self.ue_ids == [] or self.svr_id == None:
 			raise Exception("no module names in self.ue_ids or/and self.svr_id provided")
-		ues = [cls_module.Module_UE(ue_id, server_name, infra_file) for ue_id, server_name in zip(self.ue_ids, self.nodes)]
+		ues = [cls_module.Module_UE(ue_id, node, infra_file) for ue_id in self.ue_ids]
 		cn = cls_corenetwork.CoreNetwork(self.svr_id, self.svr_node, filename=infra_file)
 		with concurrent.futures.ThreadPoolExecutor(max_workers=64) as executor:
 			futures = [executor.submit(self.Iperf_Module, ctx, cn, ue, i, len(ues)) for i, ue in enumerate(ues)]
@@ -514,10 +547,10 @@ class OaiCiTest():
 			HTML.CreateHtmlTestRowQueue(self.iperf_args, 'KO', messages)
 		return success
 
-	def Iperf2_Unidir(self, ctx, HTML, infra_file="ci_infra.yaml"):
+	def Iperf2_Unidir(self, ctx, node, HTML, infra_file="ci_infra.yaml"):
 		if self.ue_ids == [] or self.svr_id == None or len(self.ue_ids) != 1:
 			raise Exception("no module names in self.ue_ids or/and self.svr_id provided, multi UE scenario not supported")
-		ue = cls_module.Module_UE(self.ue_ids[0].strip(),self.nodes[0].strip(), infra_file)
+		ue = cls_module.Module_UE(self.ue_ids[0].strip(), node, infra_file)
 		cn = cls_corenetwork.CoreNetwork(self.svr_id, self.svr_node, filename=infra_file)
 		ueIP = ue.getIP()
 		if not ueIP:
@@ -817,8 +850,8 @@ class OaiCiTest():
 				global_status = CONST.OAI_UE_PROCESS_COULD_NOT_SYNC
 		return global_status
 
-	def TerminateUE(self, ctx, HTML):
-		ues = [cls_module.Module_UE(n.strip()) for n in self.ue_ids]
+	def TerminateUE(self, ctx, node, HTML):
+		ues = [cls_module.Module_UE(n.strip(), node) for n in self.ue_ids]
 		with concurrent.futures.ThreadPoolExecutor(max_workers=64) as executor:
 			futures = [executor.submit(ue.terminate, ctx) for ue in ues]
 			archives = [f.result() for f in futures]

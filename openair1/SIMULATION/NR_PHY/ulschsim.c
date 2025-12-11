@@ -139,7 +139,7 @@ int main(int argc, char **argv)
   }
 
   //logInit();
-  randominit(0);
+  randominit();
 
   int c;
   while ((c = getopt(argc, argv, "--:O:hg:n:s:S:py:z:M:N:R:F:m:l:q:r:W:")) != -1) {
@@ -391,7 +391,6 @@ int main(int argc, char **argv)
   //gNB_config = &gNB->gNB_config;
 
   initTpool("n", &gNB->threadPool, true);
-  initNotifiedFIFO(&gNB->respDecode);
   frame_parms = &gNB->frame_parms; //to be initialized I suppose (maybe not necessary for PBCH)
   frame_parms->N_RB_DL = N_RB_DL;
   frame_parms->N_RB_UL = N_RB_UL;
@@ -513,6 +512,7 @@ int main(int argc, char **argv)
 
   if (input_fd == NULL) {
     uint8_t ULSCH_ids[] = {0};
+    nr_ulsch_pre_encoding(UE, ulsch_ue, 0, 0, &G, 1, ULSCH_ids);
     nr_ulsch_encoding(UE, ulsch_ue, 0, 0, &G, 1, ULSCH_ids, 0);
   }
   

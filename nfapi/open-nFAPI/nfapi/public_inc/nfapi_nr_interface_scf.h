@@ -10,6 +10,7 @@
 #define _NFAPI_NR_INTERFACE_SCF_H_
 
 #include "stddef.h"
+#include "common/platform_types.h"
 #include "nfapi_interface.h"
 #include "nfapi_nr_interface.h"
 
@@ -488,11 +489,7 @@ typedef struct {
 } nfapi_nr_dbt_tlv_ve_t;
 
 // Table 3–62 Precoding matrix (PM) PDU (v.222.10.04)
-typedef struct {
-  int16_t precoder_weight_Re;
-  int16_t precoder_weight_Im;
-} nfapi_nr_pm_weights_t;
-
+typedef c16_t nfapi_nr_pm_weights_t;
 
 typedef struct {
   uint16_t pm_idx;
@@ -707,18 +704,41 @@ typedef enum {
   NFAPI_NR_STOP_MSG_INVALID_STATE
 } nfapi_nr_stop_errors_e;
 
-//3.3.5 PHY Notifications
+// 3.3.5 PHY Notifications
+
+#define SCF_ERROR_LIST                        \
+  X(NFAPI_NR_PHY_API_MSG_OK, 0x0)             \
+  X(NFAPI_NR_PHY_API_MSG_INVALID_STATE, 0x1)  \
+  X(NFAPI_NR_PHY_API_MSG_INVALID_CONFIG, 0x2) \
+  X(NFAPI_NR_PHY_API_SFN_OUT_OF_SYNC, 0X3)    \
+  X(NFAPI_NR_PHY_API_MSG_SLOR_ERR, 0X4)       \
+  X(NFAPI_NR_PHY_API_MSG_BCH_MISSING, 0X5)    \
+  X(NFAPI_NR_PHY_API_MSG_INVALID_SFN, 0X6)    \
+  X(NFAPI_NR_PHY_API_MSG_UL_DCI_ERR, 0X7)     \
+  X(NFAPI_NR_PHY_API_MSG_TX_ERR, 0X8)
+
+#ifdef ENABLE_AERIAL
+#define AERIAL_ERROR_LIST                                \
+  X(AERIAL_ERROR_CODE_FAPI_END, 0x32)                    \
+  X(AERIAL_ERROR_CODE_L1_PROC_OBJ_UNAVAILABLE_ERR, 0x33) \
+  X(AERIAL_ERROR_CODE_MSG_LATE_SLOT_ERR, 0x34)           \
+  X(AERIAL_ERROR_CODE_PARTIAL_SRS_IND_ERR, 0x35)         \
+  X(AERIAL_ERROR_CODE_L1_DL_CPLANE_TX_ERROR, 0x36)       \
+  X(AERIAL_ERROR_CODE_L1_UL_CPLANE_TX_ERROR, 0x37)       \
+  X(AERIAL_ERROR_CODE_L1_DL_GPU_ERROR, 0x38)             \
+  X(AERIAL_ERROR_CODE_L1_DL_CPU_TASK_ERROR, 0x39)        \
+  X(AERIAL_ERROR_CODE_L1_UL_CPU_TASK_ERROR, 0x3A)        \
+  X(AERIAL_ERROR_CODE_L1_P1_EXIT_ERROR, 0x3B)            \
+  X(AERIAL_ERROR_CODE_L1_P2_EXIT_ERROR, 0x3C)            \
+  X(AERIAL_ERROR_CODE_L1_DL_CH_ERROR, 0x3D)              \
+  X(AERIAL_ERROR_CODE_L1_UL_CH_ERROR, 0x3E)
+#else
+#define AERIAL_ERROR_LIST
+#endif
 
 #define NFAPI_PHY_ERROR_LIST \
-X(NFAPI_NR_PHY_API_MSG_OK              ,0x0)\
-X(NFAPI_NR_PHY_API_MSG_INVALID_STATE   ,0x1)\
-X(NFAPI_NR_PHY_API_MSG_INVALID_CONFIG  ,0x2)\
-X(NFAPI_NR_PHY_API_SFN_OUT_OF_SYNC     ,0X3)\
-X(NFAPI_NR_PHY_API_MSG_SLOR_ERR        ,0X4)\
-X(NFAPI_NR_PHY_API_MSG_BCH_MISSING     ,0X5)\
-X(NFAPI_NR_PHY_API_MSG_INVALID_SFN     ,0X6)\
-X(NFAPI_NR_PHY_API_MSG_UL_DCI_ERR      ,0X7)\
-X(NFAPI_NR_PHY_API_MSG_TX_ERR          ,0X8)
+  SCF_ERROR_LIST             \
+  AERIAL_ERROR_LIST
 
 typedef enum {
 #define X(name, value) name = value,
@@ -1219,7 +1239,7 @@ typedef struct
 
 typedef struct
 {
-  // uint8_t trp_scheme;         // This field shall be set to 0, to identify that this table is used. Not part of FAPI 10.02, thus removed
+  uint8_t trp_scheme;         // This field shall be set to 0, to identify that this table is used.
   uint16_t num_prgs;          // Number of PRGs spanning this allocation. Value : 1->275
   uint16_t prg_size;          // Size in RBs of a precoding resource block group (PRG) – to which the same digital beamforming gets applied. Value: 1->275
   uint8_t dig_bf_interface;   // Number of logical antenna ports (parallel streams) resulting from the Rx combining. Value: 0->255
@@ -1461,7 +1481,10 @@ typedef enum {
   NFAPI_NR_UL_CONFIG_PUCCH_PDU_TYPE,
   NFAPI_NR_UL_CONFIG_SRS_PDU_TYPE,
 } nfapi_nr_ul_config_pdu_type_e;
-
+static const char* const txt_nfapi_nr_ul_config_pdu_type[] = {"NFAPI_NR_UL_CONFIG_PRACH_PDU_TYPE",
+                                                              "NFAPI_NR_UL_CONFIG_PUSCH_PDU_TYPE",
+                                                              "NFAPI_NR_UL_CONFIG_PUCCH_PDU_TYPE",
+                                                              "NFAPI_NR_UL_CONFIG_SRS_PDU_TYPE"};
 typedef struct
 {
   uint16_t pdu_type;//0: PRACH PDU, 1: PUSCH PDU, 2: PUCCH PDU, 3: SRS PDU

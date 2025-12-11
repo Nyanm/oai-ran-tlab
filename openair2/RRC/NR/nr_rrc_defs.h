@@ -56,6 +56,7 @@
 #include "intertask_interface.h"
 #include "openair2/LAYER2/nr_pdcp/nr_pdcp_configuration.h"
 #include "openair2/LAYER2/nr_rlc/nr_rlc_configuration.h"
+#include "openair2/SDAP/nr_sdap/nr_sdap_configuration.h"
 
 typedef enum {
   NR_RRC_OK=0,
@@ -96,16 +97,14 @@ typedef enum pdu_session_satus_e {
   PDU_SESSION_STATUS_TOMODIFY, // ENDC NSA
   PDU_SESSION_STATUS_FAILED,
   PDU_SESSION_STATUS_TORELEASE, // to release DRB between eNB and UE
-  PDU_SESSION_STATUS_RELEASED
 } pdu_session_status_t;
 
 typedef struct pdusession_s {
   /* Unique pdusession_id for the UE. */
   int pdusession_id;
   byte_array_t nas_pdu;
-  uint8_t nb_qos;
   /* Quality of service for this pdusession */
-  pdusession_level_qos_parameter_t qos[QOSFLOW_MAX_VALUE];
+  seq_arr_t qos;
   /* The transport layer address for the IP packets */
   pdu_session_type_t pdu_session_type;
   // NG-RAN endpoint of the NG-U (N3) transport bearer
@@ -113,6 +112,8 @@ typedef struct pdusession_s {
   // UPF endpoint of the NG-U (N3) transport bearer
   gtpu_tunnel_t n3_incoming;
   nssai_t nssai;
+  // PDU Session specific SDAP configuration
+  nr_sdap_configuration_t sdap_config;
 } pdusession_t;
 
 typedef struct pdu_session_param_s {
@@ -125,35 +126,13 @@ typedef struct pdu_session_param_s {
 typedef struct drb_s {
   int status;
   int drb_id;
-  struct cnAssociation_s {
-    int present;
-    int eps_BearerIdentity;
-    struct sdap_config_s {
-      bool defaultDRB;
-      int pdusession_id;
-      int sdap_HeaderDL;
-      int sdap_HeaderUL;
-      int mappedQoS_FlowsToAdd[QOSFLOW_MAX_VALUE];
-    } sdap_config;
-  } cnAssociation;
-  struct pdcp_config_s {
-    int discardTimer;
-    int pdcp_SN_SizeUL;
-    int pdcp_SN_SizeDL;
-    int t_Reordering;
-    int integrityProtection;
-    struct headerCompression_s {
-      int NotUsed;
-      int present;
-    } headerCompression;
-    struct ext1_s {
-      int cipheringDisabled;
-    } ext1;
-  } pdcp_config;
+  int pdusession_id;
   // F1-U Downlink Tunnel Config (on DU side)
   gtpu_tunnel_t du_tunnel_config;
   // F1-U Uplink Tunnel Config (on CU-UP side)
   gtpu_tunnel_t cuup_tunnel_config;
+  // DRB-specific PDCP configuration
+  nr_pdcp_configuration_t pdcp_config;
 } drb_t;
 
 typedef enum {
@@ -169,6 +148,12 @@ typedef enum {
   RRC_UECAPABILITY_ENQUIRY,
 } rrc_action_t;
 
+/* Small state for delaying NG-triggered actions (setup/release) */
+typedef struct {
+  int max_delays;
+  bool ongoing_transaction;
+} delayed_action_state_t;
+
 typedef struct nr_redcap_ue_cap {
   bool support_of_redcap_r17;
   bool support_of_16drb_redcap_r17;
@@ -176,14 +161,16 @@ typedef struct nr_redcap_ue_cap {
   bool rlc_am_drb_long_sn_redcap_r17;
 } nr_redcap_ue_cap_t;
 
+typedef struct {
+  int drb_id;
+  pdusession_level_qos_parameter_t qos;
+} nr_rrc_qos_t;
+
 /* forward declaration */
 typedef struct nr_handover_context_s nr_handover_context_t;
 
 typedef struct gNB_RRC_UE_s {
   time_t last_seen; // last time this UE has been accessed
-
-  drb_t                              established_drbs[MAX_DRBS_PER_UE];
-  NR_DRB_ToReleaseList_t            *DRB_ReleaseList;
 
   NR_SRB_INFO_TABLE_ENTRY Srb[NR_NUM_SRB];
   NR_MeasConfig_t                   *measConfig;
@@ -204,7 +191,6 @@ typedef struct gNB_RRC_UE_s {
 
   /* KgNB as derived from KASME received from EPC */
   uint8_t kgnb[32];
-  int8_t  kgnb_ncc;
   uint8_t nh[32];
   int8_t  nh_ncc;
 
@@ -225,6 +211,8 @@ typedef struct gNB_RRC_UE_s {
   uint64_t amf_ue_ngap_id;
   // Globally Unique AMF Identifier
   nr_guami_t ue_guami;
+  // Serving PLMN of the UE
+  plmn_id_t serving_plmn;
 
   ngap_security_capabilities_t       security_capabilities;
   //NSA block
@@ -238,8 +226,10 @@ typedef struct gNB_RRC_UE_s {
   rb_id_t                            nsa_gtp_psi[S1AP_MAX_E_RAB];
 
   //SA block
-  int nb_of_pdusessions;
-  rrc_pdu_session_param_t pduSession[NGAP_MAX_PDU_SESSION];
+  seq_arr_t pduSessions;
+  // Established DRBs
+  seq_arr_t drbs;
+
   rrc_action_t xids[NR_RRC_TRANSACTION_IDENTIFIER_NUMBER];
   uint8_t e_rab_release_command_flag;
   uint32_t ue_rrc_inactivity_timer;
@@ -257,8 +247,7 @@ typedef struct gNB_RRC_UE_s {
   byte_array_t nas_pdu;
 
   /* hack, see rrc_gNB_process_NGAP_PDUSESSION_SETUP_REQ() for more info */
-  int max_delays_pdu_session;
-  bool ongoing_pdusession_setup_request;
+  delayed_action_state_t delayed_action;
 
   nr_redcap_ue_cap_t *redcap_cap;
 } gNB_RRC_UE_t;
@@ -314,7 +303,8 @@ typedef struct {
   int physicalCellId;
   int absoluteFrequencySSB;
   int subcarrierSpacing;
-  plmn_identity_t plmn;
+  int band;
+  plmn_id_t plmn;
   uint32_t tac;
   bool isIntraFrequencyNeighbour;
 } nr_neighbour_cell_t;
@@ -399,6 +389,7 @@ typedef struct gNB_RRC_INST_s {
   RB_HEAD(rrc_cuup_tree, nr_rrc_cuup_container_t) cuups; // CU-UPs, indexed by assoc_id
   size_t num_cuups;
 
+  // PDCP configuration parameters loaded during startup
   nr_pdcp_configuration_t pdcp_config;
   nr_rlc_configuration_t rlc_config;
 } gNB_RRC_INST;

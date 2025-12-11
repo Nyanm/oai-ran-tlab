@@ -760,7 +760,7 @@ static uint8_t pack_pm_table_tlv_value(void *tlv, uint8_t **ppWritePackedMsg, ui
     for (int k = 0; k < pm_pdu->numLayers; k++) {
       for (int j = 0; j < pm_pdu->num_ant_ports; j++) {
         const nfapi_nr_pm_weights_t *pm_weight = &pm_pdu->weights[k][j];
-        if (!(push16(pm_weight->precoder_weight_Re, ppWritePackedMsg, end) && push16(pm_weight->precoder_weight_Im, ppWritePackedMsg, end))) {
+        if (!(push16(pm_weight->r, ppWritePackedMsg, end) && push16(pm_weight->i, ppWritePackedMsg, end))) {
           return 0;
         }
       }
@@ -1307,8 +1307,7 @@ static uint8_t unpack_pm_table_tlv_value(void *tlv, uint8_t **ppReadPackedMsg, u
     for (int k = 0; k < pm_pdu->numLayers; k++) {
       for (int j = 0; j < pm_pdu->num_ant_ports; j++) {
         nfapi_nr_pm_weights_t *pm_weight = &pm_pdu->weights[k][j];
-        if (!(pulls16(ppReadPackedMsg, &pm_weight->precoder_weight_Re, end)
-              && pulls16(ppReadPackedMsg, &pm_weight->precoder_weight_Im, end))) {
+        if (!(pulls16(ppReadPackedMsg, &pm_weight->r, end) && pulls16(ppReadPackedMsg, &pm_weight->i, end))) {
           return 0;
         }
       }
@@ -1866,22 +1865,23 @@ uint8_t unpack_nr_stop_indication(uint8_t **ppReadPackedMsg, uint8_t *end, void 
 uint8_t pack_nr_error_indication(void *msg, uint8_t **ppWritePackedMsg, uint8_t *end, nfapi_p4_p5_codec_config_t *config)
 {
   nfapi_nr_error_indication_scf_t *pNfapiMsg = (nfapi_nr_error_indication_scf_t *)msg;
-  uint8_t retval = push16(pNfapiMsg->sfn, ppWritePackedMsg, end) != 0;
-  retval &= push16(pNfapiMsg->slot, ppWritePackedMsg, end) != 0;
-  retval &= push8(pNfapiMsg->message_id, ppWritePackedMsg, end);
-  retval &= push8(pNfapiMsg->error_code, ppWritePackedMsg, end);
-
-  retval &= pack_vendor_extension_tlv(pNfapiMsg->vendor_extension, ppWritePackedMsg, end, config);
-  return retval;
+  if (push16(pNfapiMsg->sfn, ppWritePackedMsg, end) && push16(pNfapiMsg->slot, ppWritePackedMsg, end)
+      && push8(pNfapiMsg->message_id, ppWritePackedMsg, end) && push8(pNfapiMsg->error_code, ppWritePackedMsg, end)
+      && pack_vendor_extension_tlv(pNfapiMsg->vendor_extension, ppWritePackedMsg, end, config)) {
+    return 1;
+  } else {
+    return 0;
+  }
 }
 
 uint8_t unpack_nr_error_indication(uint8_t **ppReadPackedMsg, uint8_t *end, void *msg, nfapi_p4_p5_codec_config_t *config)
 {
   nfapi_nr_error_indication_scf_t *pNfapiMsg = (nfapi_nr_error_indication_scf_t *)msg;
-  uint8_t retval = pull16(ppReadPackedMsg, &pNfapiMsg->sfn, end);
-  retval &= pull16(ppReadPackedMsg, &pNfapiMsg->slot, end);
-  retval &= pull8(ppReadPackedMsg, &pNfapiMsg->message_id, end);
-  retval &= pull8(ppReadPackedMsg, &pNfapiMsg->error_code, end);
-  retval &= unpack_nr_tlv_list(NULL, 0, ppReadPackedMsg, end, config, &(pNfapiMsg->vendor_extension));
-  return retval;
+  if (pull16(ppReadPackedMsg, &pNfapiMsg->sfn, end) && pull16(ppReadPackedMsg, &pNfapiMsg->slot, end)
+      && pull8(ppReadPackedMsg, &pNfapiMsg->message_id, end) && pull8(ppReadPackedMsg, &pNfapiMsg->error_code, end)
+      && unpack_nr_tlv_list(NULL, 0, ppReadPackedMsg, end, config, &(pNfapiMsg->vendor_extension))) {
+    return 1;
+  } else {
+    return 0;
+  }
 }

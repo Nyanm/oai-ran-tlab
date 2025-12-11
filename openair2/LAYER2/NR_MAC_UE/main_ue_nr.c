@@ -77,6 +77,11 @@ void nr_ue_init_mac(NR_UE_MAC_INST_t *mac)
   nr_timer_stop(&mac->scheduling_info.sr_DelayTimer);
 
   memset(&mac->ssb_measurements, 0, sizeof(mac->ssb_measurements));
+  for (int i = 0; i < MAX_NB_SSB; i++) {
+    mac->ssb_measurements[i].ssb_rsrp_dBm = INT_MIN;
+    mac->ssb_measurements[i].ssb_sinr_dB = INT_MIN;
+  }
+
   memset(&mac->ul_time_alignment, 0, sizeof(mac->ul_time_alignment));
   memset(&mac->ssb_list, 0, sizeof(mac->ssb_list));
 
@@ -198,6 +203,7 @@ void reset_mac_inst(NR_UE_MAC_INST_t *nr_mac)
 
   // stop any ongoing RACH procedure
   if (nr_mac->ra.RA_active) {
+    nr_mac->msg3_C_RNTI = false;
     nr_mac->ra.ra_state = nrRA_UE_IDLE;
     nr_mac->ra.RA_active = false;
   }

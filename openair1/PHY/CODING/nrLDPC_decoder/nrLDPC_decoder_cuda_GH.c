@@ -499,10 +499,7 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
   int n_segments = p_decParams->n_segments;
   int numIter = nrLDPC_decoder_core(p_llr, p_out, n_segments, numLLR, p_lut, p_decParams, p_profiler, ab);
 
-  if (numIter >= p_decParams->numMaxIter) {
-    LOG_D(PHY, "set abort: %d, %d\n", numIter, p_decParams->numMaxIter);
-    set_abort(ab, true);
-  }
+  set_abort(ab, false);
 
   return numIter;
 }

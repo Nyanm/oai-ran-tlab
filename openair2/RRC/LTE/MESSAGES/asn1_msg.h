@@ -374,6 +374,8 @@ int is_en_dc_supported(LTE_UE_EUTRA_Capability_t *c);
 
 void allocate_en_DC_r15(LTE_UE_EUTRA_Capability_t *cap);
 
+int is_en_dc_supported(LTE_UE_EUTRA_Capability_t *c);
+
 uint8_t
 do_UECapabilityEnquiry(
   const protocol_ctxt_t *const ctxt_pP,

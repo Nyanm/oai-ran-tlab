@@ -257,6 +257,11 @@ static bool valid_du_in_neighbour_configs(const seq_arr_t *neighbour_cell_config
               nc->absoluteFrequencySSB);
         return false;
       }
+      // Check neighbour band
+      if (get_dl_band(cell) != nc->band) {
+        LOG_W(NR_RRC, "Cell %ld in neighbour config: Band mismatch (%d vs %d)\n", cell->nr_cellid, get_dl_band(cell), nc->band);
+        return false;
+      }
       if (get_ssb_scs(cell) != nc->subcarrierSpacing) {
         LOG_W(NR_RRC,
               "Cell %ld in neighbour config: SCS mismatch (%d vs %d)\n",
@@ -453,10 +458,8 @@ static int invalidate_du_connections(gNB_RRC_INST *rrc, sctp_assoc_t assoc_id)
   RB_FOREACH(ue_context_p, rrc_nr_ue_tree_s, &rrc->rrc_ue_head) {
     gNB_RRC_UE_t *UE = &ue_context_p->ue_context;
     uint32_t ue_id = UE->rrc_ue_id;
-    if (UE->ho_context != NULL) {
+    if (UE->ho_context != NULL)
       LOG_W(NR_RRC, "DU disconnected while handover for UE %d active\n", ue_id);
-      nr_rrc_finalize_ho(UE);
-    }
     f1_ue_data_t ue_data = cu_get_f1_ue_data(ue_id);
     if (ue_data.du_assoc_id != assoc_id)
       continue; /* this UE is on another DU */
@@ -619,6 +622,8 @@ void rrc_CU_process_f1_lost_connection(gNB_RRC_INST *rrc, f1ap_lost_connection_t
 
 nr_rrc_du_container_t *get_du_for_ue(gNB_RRC_INST *rrc, uint32_t ue_id)
 {
+  if (!cu_exists_f1_ue_data(ue_id))
+    return NULL;
   f1_ue_data_t ue_data = cu_get_f1_ue_data(ue_id);
   return get_du_by_assoc_id(rrc, ue_data.du_assoc_id);
 }

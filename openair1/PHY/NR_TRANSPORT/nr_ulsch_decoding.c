@@ -35,7 +35,6 @@
 #include "PHY/NR_TRANSPORT/nr_ulsch.h"
 #include "PHY/NR_TRANSPORT/nr_dlsch.h"
 #include "SCHED_NR/sched_nr.h"
-#include "SCHED_NR/fapi_nr_l1.h"
 #include "defs.h"
 #include "common/utils/LOG/vcd_signal_dumper.h"
 #include "common/utils/LOG/log.h"
@@ -126,7 +125,8 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
                                                        .slot = nr_tti_rx,
                                                        .nb_TBs = nb_pusch,
                                                        .threadPool = &phy_vars_gNB->threadPool,
-                                                       .TBs = TBs};
+                                                       .TBs = TBs,
+  						       .use_gpu = phy_vars_gNB->use_gpu};
 
   int max_num_segments = 0;
 
@@ -270,6 +270,7 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
 
       reset_meas(&segment_parameters->ts_deinterleave);
       reset_meas(&segment_parameters->ts_rate_unmatch);
+      reset_meas(&segment_parameters->ts_seg_prep);
       reset_meas(&segment_parameters->ts_ldpc_decode);
 
       r_offset += segment_parameters->E;
@@ -283,7 +284,6 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
   }
 
   int ret_decoder = phy_vars_gNB->nrLDPC_coding_interface.nrLDPC_coding_decoder(&slot_parameters);
-
   // post decode
   for (uint8_t pusch_id = 0; pusch_id < nb_pusch; pusch_id++) {
     uint8_t ULSCH_id = ULSCH_ids[pusch_id];
@@ -306,9 +306,12 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
       }
       offset += ((harq_process->K >> 3) - (harq_process->F >> 3) - ((harq_process->C > 1) ? 3 : 0));
 
-      merge_meas(&phy_vars_gNB->ts_deinterleave, &nrLDPC_segment_decoding_parameters.ts_deinterleave);
-      merge_meas(&phy_vars_gNB->ts_rate_unmatch, &nrLDPC_segment_decoding_parameters.ts_rate_unmatch);
-      merge_meas(&phy_vars_gNB->ts_ldpc_decode, &nrLDPC_segment_decoding_parameters.ts_ldpc_decode);
+      if (!(phy_vars_gNB->use_gpu == 1 && TB_parameters.Z == 384 && TB_parameters.BG == 1 && r>0)) {  
+        merge_meas(&phy_vars_gNB->ts_deinterleave, &nrLDPC_segment_decoding_parameters.ts_deinterleave);
+        merge_meas(&phy_vars_gNB->ts_rate_unmatch, &nrLDPC_segment_decoding_parameters.ts_rate_unmatch);
+        merge_meas(&phy_vars_gNB->ts_seg_prep, &nrLDPC_segment_decoding_parameters.ts_seg_prep);
+        merge_meas(&phy_vars_gNB->ts_ldpc_decode, &nrLDPC_segment_decoding_parameters.ts_ldpc_decode);
+      }
     }
   }
 

@@ -103,7 +103,7 @@ unsigned int mmapped_dma=0;
 uint64_t downlink_frequency[MAX_NUM_CCs][4];
 int32_t uplink_frequency_offset[MAX_NUM_CCs][4];
 char *uecap_file;
-uint32_t use_gpu;
+uint32_t use_gpu=0;
 
 runmode_t mode = normal_txrx;
 
@@ -424,8 +424,6 @@ int start_L1L2(module_id_t gnb_id)
   /* block threads */
   oai_exit = 0;
   sync_var = -1;
-  extern void init_sched_response(void);
-  init_sched_response();
 
   /* update config */
   gNB_MAC_INST *mac = RC.nrmac[0];
@@ -474,8 +472,9 @@ static void initialize_agent(ngran_node_t node_type, e2_agent_args_t oai_args)
 
   printf("After RCconfig_NR_E2agent %s %s \n",oai_args.sm_dir, oai_args.ip  );
 
-  fr_args_t args = { .ip = oai_args.ip }; // init_fr_args(0, NULL);
-  memcpy(args.libs_dir, oai_args.sm_dir, 128);
+  fr_args_t args = {0};
+  memcpy(args.ip, oai_args.ip, FR_IP_ADDRESS_LEN);
+  memcpy(args.libs_dir, oai_args.sm_dir, FR_CONF_FILE_LEN);
 
   sleep(1);
   const gNB_RRC_INST* rrc = RC.nrrrc[0];
@@ -548,7 +547,6 @@ int main( int argc, char **argv ) {
 #if T_TRACER
   T_Config_Init();
 #endif
-  //randominit (0);
   set_taus_seed (0);
 
   cpuf=get_cpu_freq_GHz();
@@ -714,8 +712,15 @@ int main( int argc, char **argv ) {
 
   // wait for end of program
   printf("TYPE <CTRL-C> TO TERMINATE\n");
+  // Sleep a while before checking all parameters have been used
+  // Some are used directly in external threads, asynchronously
+  sleep(2);
+  config_check_unknown_cmdlineopt(uniqCfg, CONFIG_CHECKALLSECTIONS);
+
   itti_wait_tasks_end(NULL);
   printf("Returned from ITTI signal handler\n");
+
+  nfapi_stop_l1();
 
   if (RC.nb_nr_L1_inst > 0 || RC.nb_RU > 0)
     stop_L1(0);

@@ -7,7 +7,6 @@ add_library(coding MODULE
             3gpplte_turbo_decoder.c
 )
 set_target_properties(coding PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-#ensure that the T header files are generated before targets depending on them
 target_link_libraries(coding PRIVATE log_headers)
 
 add_library(ldpc_orig MODULE
@@ -39,7 +38,6 @@ add_dependencies(nr_dlschsim ldpc ldpc_orig)
 ##############################################
 
 add_boolean_option(ENABLE_LDPC_CUDA OFF "Build support for CUDA" OFF)
-
 if (ENABLE_LDPC_CUDA)
   find_package(CUDA REQUIRED)
   if (NOT CUDA_FOUND)
@@ -122,11 +120,7 @@ if (ENABLE_LDPC_CUDA)
   add_dependencies(nr_ulschsim ldpc_cuda)
   add_dependencies(nr_dlsim ldpc_cuda)
   add_dependencies(nr_dlschsim ldpc_cuda)
-
 endif()
 
 add_subdirectory(nrLDPC_coding)
-
-if(ENABLE_PHYSIM_TESTS)
-  add_subdirectory(tests)
-endif()
+add_subdirectory(nrLDPC_decoder)

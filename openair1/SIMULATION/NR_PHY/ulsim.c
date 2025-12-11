@@ -60,7 +60,6 @@
 #include "PHY/defs_nr_common.h"
 #include "PHY/impl_defs_nr.h"
 #include "PHY/phy_vars_nr_ue.h"
-#include "SCHED_NR/fapi_nr_l1.h"
 #include "SCHED_NR/sched_nr.h"
 #include "SCHED_NR_UE/defs.h"
 #include "SCHED_NR_UE/fapi_nr_ue_l1.h"
@@ -117,9 +116,19 @@ instance_t CUuniqInstance=0;
 // NTN cellSpecificKoffset-r17, but in slots for DL SCS
 unsigned int NTN_UE_Koffset = 0;
 
+extern uint32_t use_gpu;
 void nr_derive_key_ng_ran_star(uint16_t pci, uint64_t nr_arfcn_dl, const uint8_t key[32], uint8_t *key_ng_ran_star)
 {
 }
+
+/* this is a hack, but necessary for E2 agent. We compile in all of RRC
+ * (because of CMakeLists.txt), but we don't need it (only nr_radio_config.c).
+ * however, if E2 agent is defined, the following functions are used in
+ * rrc_gNB.c, but defined in RAN functions. In order to avoid pulling this in
+ * here as well, only provide a prototype (and abort if they are ever called). */
+void signal_rrc_msg(void /*const nr_rrc_class_e nr_channel, const uint32_t rrc_msg_id, const byte_array_t rrc_ba*/ ) { abort(); }
+void signal_rrc_state_changed_to(void /* const gNB_RRC_UE_t *rrc_ue_context, const rrc_state_e2sm_rc_e rrc_state */) { abort(); }
+void signal_ue_id(void /* const gNB_RRC_UE_t *rrc_ue_context, const uint16_t class, const uint32_t msg_id */) { abort(); }
 
 extern void fix_scd(NR_ServingCellConfig_t *scd);// forward declaration
 
@@ -159,6 +168,108 @@ uint16_t n_rnti = 0x1234;
 openair0_config_t openair0_cfg[MAX_CARDS];
 
 channel_desc_t *UE2gNB[MAX_MOBILES_PER_GNB][NUMBER_OF_gNB_MAX];
+
+static void copy_bytes_to_packed_bits(const uint8_t *in, const uint32_t num_bits, const bool is_ulsch, uint8_t *out)
+{
+  if (is_ulsch) { // MATLAB computes CRC for input of MSB first
+    for (uint_fast32_t b = 0; b < num_bits; b++) {
+      out[b / 8] |= ((in[b] & 1) << (7 - (b % 8)));
+    }
+  } else {
+    for (uint_fast32_t b = 0; b < num_bits; b++) {
+      out[b / 8] |= (in[b] << (b % 8));
+    }
+  }
+}
+
+static void prepare_ue_pusch_pdu_from_matlab_vector(const bool uci_on_pusch,
+                                                    FILE *vect_file,
+                                                    nfapi_nr_ue_pusch_pdu_t *pusch_config_pdu,
+                                                    uint8_t *cw_buf)
+{
+  if (!uci_on_pusch)
+    return;
+
+  if (vect_file == NULL)
+    return;
+
+  struct vect_vars {
+    uint32_t A;
+    uint32_t oack;
+    uint32_t ocsi1;
+    uint32_t ocsi2;
+    uint32_t cwlen;
+    uint32_t cwlen_scr;
+  } __attribute__((packed));
+
+  struct vect_vars var = {0};
+  if (1 != fread(&var, sizeof(var), 1, vect_file)) {
+    printf("Error reading from matlab vector file\n");
+    exit(-1);
+  }
+
+  const uint16_t buff_len = var.A + var.oack + var.ocsi1 + var.ocsi2;
+  uint8_t vec_bits[buff_len];
+  memset(vec_bits, 0, sizeof(vect_file));
+
+  uint8_t *p_vec_bits = vec_bits;
+  if (var.A != fread(p_vec_bits, sizeof(uint8_t), var.A, vect_file)) {
+    printf("Error reading ULSCH bits from file\n");
+    exit(-1);
+  }
+  p_vec_bits += var.A;
+  if (var.oack != fread(p_vec_bits, sizeof(uint8_t), var.oack, vect_file)) {
+    printf("Error reading ACK bits from file\n");
+    exit(-1);
+  }
+  p_vec_bits += var.oack;
+  if (var.ocsi1 != fread(p_vec_bits, sizeof(uint8_t), var.ocsi1, vect_file)) {
+    printf("Error reading CSI1 bits from file\n");
+    exit(-1);
+  }
+  p_vec_bits += var.ocsi1;
+  if (var.ocsi2 != fread(p_vec_bits, sizeof(uint8_t), var.ocsi2, vect_file)) {
+    printf("Error reading CSI2 bits from file\n");
+    exit(-1);
+  }
+
+  if (var.cwlen != fread(cw_buf, sizeof(uint8_t), var.cwlen, vect_file)) {
+    printf("Error reading cw bits from file\n");
+    exit(-1);
+  }
+
+  memset(cw_buf, 0, var.cwlen_scr);
+  if (var.cwlen_scr != fread(cw_buf, sizeof(uint8_t), var.cwlen_scr, vect_file)) {
+    printf("Error reading cw bits from file\n");
+    exit(-1);
+  }
+
+  uint16_t tb_buf_size = (var.A + 7) / 8;
+  pusch_config_pdu->pusch_data.tb_size = tb_buf_size;
+  pusch_config_pdu->tx_request_body.pdu_length = tb_buf_size;
+  uint8_t *pb = pusch_config_pdu->tx_request_body.fapiTxPdu;
+  memset(pb, 0, tb_buf_size);
+  p_vec_bits = vec_bits;
+  copy_bytes_to_packed_bits(p_vec_bits, var.A, true, pb);
+
+  pusch_config_pdu->pusch_uci.harq_ack_bit_length = var.oack;
+  pb = (uint8_t *)&pusch_config_pdu->pusch_uci.harq_payload;
+  memset(pb, 0, sizeof(pusch_config_pdu->pusch_uci.harq_payload));
+  p_vec_bits += var.A;
+  copy_bytes_to_packed_bits(p_vec_bits, var.oack, false, pb);
+
+  pusch_config_pdu->pusch_uci.csi_part1_bit_length = var.ocsi1;
+  pb = (uint8_t *)&pusch_config_pdu->pusch_uci.csi_part1_payload;
+  memset(pb, 0, sizeof(pusch_config_pdu->pusch_uci.csi_part1_payload));
+  p_vec_bits += var.oack;
+  copy_bytes_to_packed_bits(p_vec_bits, var.ocsi1, false, pb);
+
+  pusch_config_pdu->pusch_uci.csi_part2_bit_length = var.ocsi2;
+  pb = (uint8_t *)&pusch_config_pdu->pusch_uci.csi_part2_payload;
+  memset(pb, 0, sizeof(pusch_config_pdu->pusch_uci.csi_part2_payload));
+  p_vec_bits += var.ocsi1;
+  copy_bytes_to_packed_bits(p_vec_bits, var.ocsi2, false, pb);
+}
 
 configmodule_interface_t *uniqCfg = NULL;
 int main(int argc, char *argv[])
@@ -204,6 +315,8 @@ int main(int argc, char *argv[])
   int print_perf = 0;
   cpuf = get_cpu_freq_GHz();
   int msg3_flag = 0;
+  bool uci_on_pusch = false;
+  bool no_phase_pre_comp = false;
   int rv_index = 0;
   float roundStats;
   double effRate;
@@ -227,6 +340,7 @@ int main(int argc, char *argv[])
 
   UE_nr_rxtx_proc_t UE_proc;
   FILE *scg_fd=NULL;
+  FILE *uci_ulsch_matlab_vec = NULL;
   int file_offset = 0;
 
   double DS_TDL = .03;
@@ -244,15 +358,16 @@ int main(int argc, char *argv[])
   }
   int ul_proc_error = 0; // uplink processing checking status flag
   //logInit();
-  randominit(1);
-  srand(1);
+  randominit();
+
   /* initialize the sin-cos table */
   InitSinLUT();
 
   int c;
   bool setAffinity=false;
   char gNBthreads[128]="n";
-  while ((c = getopt(argc, argv, "--:O:a:b:c:d:ef:g:h:i:jk:m:n:p:q:r:s:t:u:v:w:y:z:A:C:F:G:H:I:M:N:PR:S:T:U:L:ZW:E:X:Y:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:a:b:c:d:ef:g:h:i:jk:m:n:o::p:q:r:s:t:u:v:w:y:z:A:C:F:G:H:I:M:N:PQR:S:T:U:L:ZW:E:X:Y:"))
+         != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -360,6 +475,20 @@ int main(int argc, char *argv[])
       Imcs = atoi(optarg);
       break;
 
+    case 'o':
+      uci_on_pusch = true;
+      // UCI on PUSCH is not implemented in OAI gNB yet.
+      // So this flag is needed to verify in MATLAB
+      no_phase_pre_comp = true;
+      if (optarg) { // -o with file input: use matlab vector
+        uci_ulsch_matlab_vec = fopen(optarg, "rb");
+        if (uci_ulsch_matlab_vec == NULL) {
+          printf("Error opening %s\n", optarg);
+          exit(-1);
+        }
+      }
+      break;
+
     case 'W':
       precod_nbr_layers = atoi(optarg);
       break;
@@ -432,6 +561,7 @@ int main(int argc, char *argv[])
         printf("Problem with filename %s\n", optarg);
         exit(-1);
       }
+      params_from_file=1;
       break;
 
     case 'G':
@@ -466,6 +596,9 @@ int main(int argc, char *argv[])
       cpu_meas_enabled = 1;
       break;
 
+    case 'Q':
+      use_gpu=1;
+      break;
     case 'L':
       loglvl = atoi(optarg);
       break;
@@ -486,10 +619,6 @@ int main(int argc, char *argv[])
         dmrs_arg[i>>1] = atoi(&optarg[i]);
         i+=2;
       } while (optarg[i-1] == ',');
-      break;
-
-    case 'Q':
-      params_from_file = 1;
       break;
 
     case 'X' :
@@ -539,6 +668,7 @@ int main(int argc, char *argv[])
       printf("-k 3/4 sampling\n");
       printf("-m MCS value\n");
       printf("-n Number of trials to simulate\n");
+      printf("-o Enable UCI on PUSCH. Optionally accepts input file (without space). This feature is not yet available in gNB so only used to verify with MATLAB generated vector\n");
       printf("-p Use extended prefix mode\n");
       printf("-q MCS table\n");
       printf("-r Number of allocated resource blocks for PUSCH\n");
@@ -606,18 +736,6 @@ int main(int argc, char *argv[])
   else
     initNamedTpool(gNBthreads, &gNB->threadPool, true, "gNB-tpool");
 
-  initNotifiedFIFO(&gNB->respDecode);
-
-  initNotifiedFIFO(&gNB->respPuschSymb);
-  initNotifiedFIFO(&gNB->L1_tx_free);
-  initNotifiedFIFO(&gNB->L1_tx_filled);
-  initNotifiedFIFO(&gNB->L1_tx_out);
-  notifiedFIFO_elt_t *msgL1Tx = newNotifiedFIFO_elt(sizeof(processingData_L1tx_t), 0, &gNB->L1_tx_free, NULL);
-  processingData_L1tx_t *msgDataTx = (processingData_L1tx_t *)NotifiedFifoData(msgL1Tx);
-  msgDataTx->slot = -1;
-  gNB->msgDataTx = msgDataTx;
-  //gNB_config = &gNB->gNB_config;
-
   NR_UL_IND_t UL_INFO = {0};
   UL_INFO.crc_ind.crc_list = UL_INFO.crc_pdu_list;
   UL_INFO.rx_ind.pdu_list = UL_INFO.rx_pdu_list;
@@ -658,6 +776,8 @@ int main(int argc, char *argv[])
                                 .minRXTXTIME = 0,
                                 .do_CSIRS = 0,
                                 .do_SRS = 0,
+                                .num_dlharq = 16,
+                                .num_ulharq = 16,
                                 .force_256qam_off = false,
                                 .timer_config.sr_ProhibitTimer = 0,
                                 .timer_config.sr_TransMax = 64,
@@ -698,20 +818,15 @@ int main(int argc, char *argv[])
   RC.nb_nr_mac_CC = (int*)malloc(RC.nb_nr_macrlc_inst*sizeof(int));
   for (i = 0; i < RC.nb_nr_macrlc_inst; i++)
     RC.nb_nr_mac_CC[i] = 1;
-  mac_top_init_gNB(ngran_gNB, scc, NULL /* scd will be updated further below */, &conf, &rlc_config);
+  mac_top_init_gNB(ngran_gNB, scc, &conf, &rlc_config);
   nr_mac_config_scc(RC.nrmac[0], scc, &conf);
-
-  NR_ServingCellConfig_t *scd = calloc(1,sizeof(NR_ServingCellConfig_t));
-  prepare_scd(scd);
-  /* removes unnecessary BWPs, if any */
-  fix_scd(scd);
 
   NR_UE_NR_Capability_t* UE_Capability_nr = CALLOC(1,sizeof(NR_UE_NR_Capability_t));
   prepare_sim_uecap(UE_Capability_nr, scc, mu, N_RB_UL, 0, mcs_table);
   rnti_t rnti = 0x1234;
   int uid = 0;
-  NR_CellGroupConfig_t *secondaryCellGroup = get_default_secondaryCellGroup(scc, scd, UE_Capability_nr, 0, 1, &conf, uid);
-  secondaryCellGroup->spCellConfig->reconfigurationWithSync = get_reconfiguration_with_sync(rnti, uid, scc);
+  NR_CellGroupConfig_t *secondaryCellGroup = get_default_secondaryCellGroup(scc, UE_Capability_nr, 0, 1, &conf, uid);
+  secondaryCellGroup->spCellConfig->reconfigurationWithSync = get_reconfiguration_with_sync(rnti, uid, scc, frame);
 
   NR_BCCH_BCH_Message_t *mib = get_new_MIB_NR(scc);
 
@@ -789,7 +904,8 @@ int main(int argc, char *argv[])
   UE->if_inst->phy_config_request = nr_ue_phy_config_request;
   UE->if_inst->dl_indication = nr_ue_dl_indication;
   UE->if_inst->ul_indication = nr_ue_ul_indication;
-  
+  UE->no_phase_pre_comp = no_phase_pre_comp;
+
   UE_mac->if_module = nr_ue_if_module_init(0);
 
   initFloatingCoresTpool(threadCnt, &nrUE_params.Tpool, false, "UE-tpool");
@@ -893,7 +1009,6 @@ int main(int argc, char *argv[])
   for (i = 1; i < TBS/8; i++) {
     ulsch_input_buffer[i] = (uint8_t)rand();
   }
-
   uint8_t ptrs_time_density = get_L_ptrs(ptrs_mcs1, ptrs_mcs2, ptrs_mcs3, Imcs, mcs_table);
   uint8_t ptrs_freq_density = get_K_ptrs(n_rb0, n_rb1, nb_rb);
 
@@ -927,6 +1042,9 @@ int main(int argc, char *argv[])
   }
 
   unsigned int available_bits = nr_get_G(nb_rb, nb_symb_sch, nb_re_dmrs, number_dmrs_symbols, unav_res, mod_order, precod_nbr_layers);
+  uint8_t cw_buf[available_bits];
+  memset(cw_buf, 0, available_bits);
+  UE->phy_sim_test_buf = calloc(1, (available_bits + 7) / 8);
   printf("[ULSIM]: VALUE OF G: %u, TBS: %u\n", available_bits, TBS);
 
   int frame_length_complex_samples = gNB->frame_parms.samples_per_subframe * NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
@@ -1169,16 +1287,15 @@ int main(int argc, char *argv[])
           srs_pdu->beamforming.prg_size = 1;
         }
 
+        /* load FAPI into RX of L1 */
+        nr_save_ul_tti_req(gNB, &Sched_INFO->UL_tti_req);
+
         /// UE UL PDUs
 
         UE->ul_harq_processes[harq_pid].round = round;
         UE_proc.nr_slot_tx = slot;
         UE_proc.frame_tx = frame;
         UE_proc.gNB_id = 0;
-
-        // prepare ULSCH/PUSCH reception
-        pushNotifiedFIFO(&gNB->L1_tx_free, msgL1Tx); // to unblock the process in the beginning
-        nr_schedule_response(Sched_INFO);
 
         // --------- setting parameters for UE --------
         nr_scheduled_response_t scheduled_response = {.ul_config = &ul_config, .phy_data = (void *)&phy_data};
@@ -1224,6 +1341,20 @@ int main(int argc, char *argv[])
           pusch_config_pdu->dfts_ofdm.low_papr_sequence_number = 0; // V as defined in 38.211 section 6.4.1.1.1.2
           // pusch_config_pdu->pdu_bit_map |= PUSCH_PDU_BITMAP_DFTS_OFDM;
           pusch_config_pdu->num_dmrs_cdm_grps_no_data = num_dmrs_cdm_grps_no_data;
+        }
+        if (uci_on_pusch) {
+          const nfapi_nr_ue_pusch_uci_t pusch_uci = {
+              .alpha_scaling = 3,
+              .beta_offset_csi1 = 13,
+              .beta_offset_csi2 = 13,
+              .beta_offset_harq_ack = 11,
+              .harq_ack_bit_length = 3,
+              .harq_payload = 3,
+              //.csi_part1_bit_length = 4,
+              //.csi_part1_payload = 15
+          };
+          pusch_config_pdu->pusch_uci = pusch_uci;
+          prepare_ue_pusch_pdu_from_matlab_vector(uci_on_pusch, uci_ulsch_matlab_vec, pusch_config_pdu, cw_buf);
         }
 
         if (do_SRS == 1) {
@@ -1340,14 +1471,14 @@ int main(int argc, char *argv[])
         }
         int offset = (slot & 3) * gNB->frame_parms.symbols_per_slot * gNB->frame_parms.ofdm_symbol_size;
         for (int aa = 0; aa < gNB->frame_parms.nb_antennas_rx; aa++)  {
-          apply_nr_rotation_RX(&gNB->frame_parms,
-                               gNB->common_vars.rxdataF[0][aa],
-                               gNB->frame_parms.symbol_rotation[1],
-                               slot,
-                               gNB->frame_parms.N_RB_UL,
-                               offset,
-                               0,
-                               gNB->frame_parms.Ncp == EXTENDED ? 12 : 14);
+          const unsigned int max_symb = (gNB->frame_parms.Ncp == EXTENDED) ? 12 : 14;
+          for (int sym = 0; sym < max_symb; sym++)
+            apply_nr_rotation_symbol_RX(&gNB->frame_parms,
+                                        gNB->common_vars.rxdataF[0][aa] + offset + sym * gNB->frame_parms.ofdm_symbol_size,
+                                        gNB->frame_parms.symbol_rotation[1],
+                                        gNB->frame_parms.N_RB_UL,
+                                        slot,
+                                        sym);
         }
 
         ul_proc_error = phy_procedures_gNB_uespec_RX(gNB, frame, slot, &UL_INFO);
@@ -1460,7 +1591,7 @@ int main(int argc, char *argv[])
         }
 
         if ((ulsch_gNB->last_iteration_cnt >= ulsch_gNB->max_ldpc_iterations) || ul_proc_error == 1) {
-          error_flag = 1;
+          error_flag = uci_on_pusch ? 0 : 1;
           n_errors[round]++;
           crc_status = 1;
         } else
@@ -1477,15 +1608,29 @@ int main(int argc, char *argv[])
                  available_bits, (ptrsSymbPerSlot * ptrsRePerSymb * mod_order * precod_nbr_layers));
         }
 
-        for (i = 0; i < available_bits; i++) {
-          if (((UE->ul_harq_processes[harq_pid].f[i] == 0) && (pusch_vars->llr[i] <= 0))
-              || ((UE->ul_harq_processes[harq_pid].f[i] == 1) && (pusch_vars->llr[i] >= 0))) {
-            /*if(errors_scrambling == 0)
-              printf("\x1B[34m" "[frame %d][trial %d]\t1st bit in error in unscrambling = %d\n" "\x1B[0m", frame, trial, i);*/
-            errors_scrambling[round]++;
+        if (uci_on_pusch) {
+          for (i = 0; i < available_bits; i++) {
+            const uint8_t current_bit = (UE->phy_sim_test_buf[i / 8] >> (i & 7)) & 1;
+            const uint8_t test_vector_bit = cw_buf[i] & 1;
+            if (current_bit != test_vector_bit)
+              errors_scrambling[round]++;
+          }
+        } else {
+          for (i = 0; i < available_bits; i++) {
+            const uint8_t current_bit = (UE->ul_harq_processes[harq_pid].f[i / 8] >> (i & 7)) & 1;
+            if (((current_bit == 0) && (pusch_vars->llr[i] <= 0)) || ((current_bit == 1) && (pusch_vars->llr[i] >= 0))) {
+              errors_scrambling[round]++;
+            }
           }
         }
         round++;
+        if (uci_on_pusch && uci_ulsch_matlab_vec && (errors_scrambling[round] == 0)) {
+          ret = 0;
+          printf("*************\n");
+          printf("UCI on PUSCH test OK against MATLAB generated codeword\n");
+          printf("*************\n");
+          break;
+        }
       } // round
 
       if (n_trials == 1 && errors_scrambling[0] > 0) {
@@ -1583,7 +1728,12 @@ int main(int argc, char *argv[])
 
     if (print_perf==1) 
     {
-      printf("gNB RX\n");
+      printf("UE TX\n");
+      for (int i = PHY_PROC_TX; i <= OFDM_MOD_STATS; i++) {
+        printStatIndent(&UE->phy_cpu_stats.cpu_time_stats[i], UE->phy_cpu_stats.cpu_time_stats[i].meas_name);
+      }
+
+      printf("\ngNB RX\n");
       printDistribution(&gNB->phy_proc_rx,table_rx, "Total PHY proc rx");
       printStatIndent(&gNB->rx_pusch_stats, "RX PUSCH time");
       printStatIndent2(&gNB->ulsch_channel_estimation_stats, "ULSCH channel estimation time");
@@ -1594,11 +1744,6 @@ int main(int argc, char *argv[])
       printStatIndent2(&gNB->ts_deinterleave, "ULSCH segment deinterleaving time");
       printStatIndent2(&gNB->ts_rate_unmatch, "ULSCH segment rate recovery time");
       printStatIndent2(&gNB->ts_ldpc_decode, "ULSCH segments decoding time");
-
-      printf("\nUE TX\n");
-      for (int i = PHY_PROC_TX; i <= OFDM_MOD_STATS; i++) {
-        printStatIndent(&UE->phy_cpu_stats.cpu_time_stats[i], UE->phy_cpu_stats.cpu_time_stats[i].meas_name);
-      }
       printStatIndent(&gNB->rx_srs_stats,"RX SRS time");
       printStatIndent2(&gNB->generate_srs_stats,"Generate SRS sequence time");
       printStatIndent2(&gNB->get_srs_signal_stats,"Get SRS signal time");
@@ -1657,6 +1802,11 @@ int main(int argc, char *argv[])
     fclose(csv_file);
     free(filename_csv);
   }
+
+  if (uci_ulsch_matlab_vec)
+    fclose(uci_ulsch_matlab_vec);
+
+  free_and_zero(UE->phy_sim_test_buf);
 
   return ret;
 }

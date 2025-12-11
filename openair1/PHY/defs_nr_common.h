@@ -38,6 +38,8 @@
 #include "impl_defs_nr.h"
 #include "PHY/CODING/nrPolar_tools/nr_polar_defs.h"
 
+#include <pthread.h>
+
 #define MAX_NUM_SUBCARRIER_SPACING 5
 #define NR_MAX_OFDM_SYMBOL_SIZE 8192
 
@@ -113,8 +115,53 @@ typedef struct {
   uint8_t k_0_p[MAX_NUM_NR_SRS_AP][MAX_NUM_NR_SRS_SYMBOLS];
   uint8_t srs_generated_signal_bits;
   c16_t **srs_generated_signal;
-  nfapi_nr_srs_pdu_t srs_pdu;
+  bool is_signal_generated;
+  int B_SRS;
+  int C_SRS;
+  int b_hop;
+  int comb_size;
+  int K_TC_overbar;
+  int n_SRS_cs;
+  int n_ID_SRS;
+  int n_shift;
+  int n_RRC;
+  int groupOrSequenceHopping;
+  int l_offset;
+  int T_SRS;
+  int T_offset;
+  int R;
+  int N_symb_SRS;
+  int n_srs_ports;
+  int resource_type;
 } nr_srs_info_t;
+
+#define NUMBER_OF_NR_PRACH_MAX 8
+typedef struct {
+  int frame;
+  int slot;
+  int num_slots; // prach duration in slots
+  int beams[NFAPI_MAX_NUM_BG_IF];
+  nfapi_nr_prach_pdu_t pdu;
+  int rootSequenceIndex;
+  int numrootSequenceIndex;
+  int msg1_frequencystart;
+  int mu;
+  int prach_sequence_length;
+  int restricted_set;
+  int numerology_index;
+  int nb_rx;
+  c16_t rxsigF[NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX][NB_ANTENNAS_RX][NR_PRACH_SEQ_LEN_L];
+  c16_t (*Xu)[839];
+  time_stats_t *rx_prach;
+} prach_item_t;
+
+typedef struct {
+  /// prach commands
+  prach_item_t list[NUMBER_OF_NR_PRACH_MAX];
+  /// mutex for prach_list access
+  pthread_mutex_t prach_list_mutex;
+} prach_list_t;
+void init_prach_list(prach_list_t *);
 
 typedef struct NR_DL_FRAME_PARMS NR_DL_FRAME_PARMS;
 
@@ -267,7 +314,10 @@ typedef struct {
     int32_t sfn;
     int8_t  slot;
     int8_t  rxAnt_idx;
-    float dl_toa;
+    pthread_mutex_t dl_toa_mtx; // protect reading of max from write
+    // circular buffer to be able to read maximum of last estimations
+    float dl_toa[128]; // set through set_prs_dl_toa()
+    float *next_dl_toa;
     int32_t dl_aoa;
     float snr;
     float rsrp;

@@ -38,3 +38,4 @@ void reset_nr_ue_phy_cpu_stats(nr_ue_phy_cpu_stat_t *ue_phy_cpu_stats) {
     reset_meas(&ue_phy_cpu_stats->cpu_time_stats[i]);
   }
 }
+

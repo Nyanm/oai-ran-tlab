@@ -272,10 +272,12 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
       }
       offset += (harq_process->K >> 3) - (harq_process->F >> 3) - ((harq_process->C > 1) ? 3 : 0);
 
-      merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_DEINTERLEAVING_STATS], &segment_parameters->ts_deinterleave);
-      merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_RATE_UNMATCHING_STATS], &segment_parameters->ts_rate_unmatch);
-      merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_LDPC_DECODING_STATS], &segment_parameters->ts_ldpc_decode);
-      merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_SEG_PREP_STATS], &segment_parameters->ts_seg_prep);
+      if (!(phy_vars_ue->use_gpu==1 && TB_parameters->Z == 384 && TB_parameters->BG == 1 && r>0)) {
+        merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_DEINTERLEAVING_STATS], &segment_parameters->ts_deinterleave);
+        merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_RATE_UNMATCHING_STATS], &segment_parameters->ts_rate_unmatch);
+        merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_LDPC_DECODING_STATS], &segment_parameters->ts_ldpc_decode);
+        merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_SEG_PREP_STATS], &segment_parameters->ts_seg_prep);
+      }
 
     }
 

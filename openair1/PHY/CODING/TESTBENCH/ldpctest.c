@@ -476,6 +476,10 @@ one_measurement_t test_ldpc(short max_iterations,
       ret.errors++;
   }
 
+  ret.dec_iter.n_iter_mean = n_iter_mean / (double)ntrials / (double)n_segments - 1;
+  ret.dec_iter.n_iter_std =
+      sqrt(n_iter_std / (double)ntrials / (double)n_segments - pow(n_iter_mean / (double)ntrials / (double)n_segments - 1, 2));
+  ret.dec_iter.n_iter_max = n_iter_max - 1;
 
   ret.dec_iter.n_iter_mean = n_iter_mean / (double)ntrials / (double)n_segments - 1;
   ret.dec_iter.n_iter_std =
@@ -524,7 +528,6 @@ one_measurement_t test_ldpc(short max_iterations,
 configmodule_interface_t *uniqCfg = NULL;
 int main(int argc, char *argv[])
 {
-   
   short Kprime = 8448;
   // default to check output inside ldpc, the NR version checks the outer CRC defined by 3GPP
   char *ldpc_version = "";
@@ -681,7 +684,7 @@ int main(int argc, char *argv[])
           "SNR BLER BER UNCODED_BER ENCODER_MEAN ENCODER_STD ENCODER_MAX DECODER_TIME_MEAN DECODER_TIME_STD DECODER_TIME_MAX "
           "DECODER_ITER_MEAN DECODER_ITER_STD DECODER_ITER_MAX\n");
 
-  for (double SNR = SNR0; SNR < SNR0 + 0.1 /*20.0*/; SNR += SNR_step) {
+  for (double SNR = SNR0; SNR < SNR0 + 20.0; SNR += SNR_step) {
     double SNR_lin;
     if (test_uncoded == 1)
       SNR_lin = pow(10, SNR / 10.0);
@@ -752,7 +755,6 @@ int main(int argc, char *argv[])
            sqrt((double)t_decoder->diff_square / t_decoder->trials / pow(1000, 2) / pow(cpu_freq, 2)
                 - pow((double)t_decoder->diff / t_decoder->trials / 1000.0 / cpu_freq, 2)));
     printf("Decoding time max: %15.3f us\n", (double)t_decoder->max / 1000.0 / cpu_freq);
-    
     fprintf(fd,
             "%f %f %f %f %f %f %f %f %f %f %f %f %d \n",
             SNR,

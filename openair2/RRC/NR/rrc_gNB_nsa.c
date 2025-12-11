@@ -72,6 +72,7 @@
 #include "xer_encoder.h"
 #include "f1ap_common.h"
 #include "lib/f1ap_ue_context.h"
+#include "rrc_gNB_asn1.h"
 
 // In case of phy-test and do-ra mode, read UE capabilities directly from file
 // and put it into a CG-ConfigInfo field
@@ -132,6 +133,54 @@ static instance_t get_f1_gtp_instance(void)
   if (!inst)
     return -1; // means no F1
   return inst->gtpInst;
+}
+
+/* returns a default radio bearer config suitable for NSA etc */
+static NR_RadioBearerConfig_t *get_default_rbconfig(int eps_bearer_id,
+                                                    int rb_id,
+                                                    e_NR_CipheringAlgorithm ciphering_algorithm,
+                                                    e_NR_SecurityConfig__keyToUse key_to_use,
+                                                    const nr_pdcp_configuration_t *pdcp_config)
+{
+  NR_RadioBearerConfig_t *rbconfig = calloc_or_fail(1, sizeof(*rbconfig));
+  rbconfig->drb_ToAddModList = calloc_or_fail(1, sizeof(*rbconfig->drb_ToAddModList));
+  NR_DRB_ToAddMod_t *drb_ToAddMod = calloc_or_fail(1, sizeof(*drb_ToAddMod));
+  drb_ToAddMod->drb_Identity = rb_id;
+  drb_ToAddMod->pdcp_Config = nr_rrc_build_pdcp_config_ie(false, false, pdcp_config);
+  asn1cCalloc(drb_ToAddMod->cnAssociation, cn_association);
+  cn_association->present = NR_DRB_ToAddMod__cnAssociation_PR_eps_BearerIdentity;
+  cn_association->choice.eps_BearerIdentity = eps_bearer_id;
+  asn1cSeqAdd(&rbconfig->drb_ToAddModList->list, drb_ToAddMod);
+  asn1cCalloc(rbconfig->securityConfig, secConf);
+  asn1cCalloc(secConf->securityAlgorithmConfig, secConfAlgo);
+  secConfAlgo->cipheringAlgorithm = ciphering_algorithm;
+  secConfAlgo->integrityProtAlgorithm = NULL;
+  asn1cCallocOne(secConf->keyToUse, key_to_use);
+  if (LOG_DEBUGFLAG(DEBUG_ASN1))
+    xer_fprint(stdout, &asn_DEF_NR_DRB_ToAddMod, drb_ToAddMod);
+  return rbconfig;
+}
+
+static void rrc_nsa_add_drb(const int ue_id,
+                            const NR_DRB_ToAddModList_t *addMod,
+                            const nr_pdcp_entity_security_keys_and_algos_t *sp)
+{
+  for (int i = 0; i < addMod->list.count; i++) {
+    NR_DRB_ToAddMod_t *drb = addMod->list.array[i];
+    DevAssert(drb->cnAssociation);
+    DevAssert(drb->cnAssociation->present != NR_DRB_ToAddMod__cnAssociation_PR_NOTHING);
+    DevAssert(drb->cnAssociation->present == NR_DRB_ToAddMod__cnAssociation_PR_eps_BearerIdentity);
+    // get SDAP config
+    sdap_config_t sdap = {0};
+    // EPC association
+    sdap.pdusession_id = drb->cnAssociation->choice.eps_BearerIdentity;
+    sdap.drb_id = drb->drb_Identity;
+    sdap.defaultDRB = true;
+    // add SDAP entity (terminated at gNB, since it's EPC)
+    nr_sdap_addmod_entity(GNB_FLAG_YES, ue_id, &sdap);
+    // add PDCP entity
+    nr_pdcp_add_drb(GNB_FLAG_YES, ue_id, drb->pdcp_Config, &sdap, sp);
+  }
 }
 
 /* generate prototypes for the tree management functions (RB_INSERT used in rrc_add_nsa_user) */
@@ -277,10 +326,7 @@ void rrc_add_nsa_user(gNB_RRC_INST *rrc, x2ap_ENDC_sgnb_addition_req_t *m, sctp_
   }
 
   DevAssert(UE->rb_config != NULL);
-  nr_pdcp_add_drbs(GNB_FLAG_YES,
-                   UE->rrc_ue_id,
-                   UE->rb_config->drb_ToAddModList,
-                   &security_parameters);
+  rrc_nsa_add_drb(UE->rrc_ue_id, UE->rb_config->drb_ToAddModList, &security_parameters);
 
   /* assumption: only a single bearer, see above */
   NR_DRB_ToAddModList_t *rb_list = UE->rb_config->drb_ToAddModList;

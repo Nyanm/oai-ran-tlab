@@ -453,7 +453,7 @@ void nr_interleaving_ldpc32(uint32_t E, uint8_t Qm, uint32_t *e, uint32_t *f)
   switch(Qm) {
     case 2: {
       uint32_t *e0 = e;
-      uint32_t *e1 = e0 + EQm;
+      uint32_t *e1 = e + EQm;
       int i = 0;
       for (; i < EQm; i++) {
         *f++ = *e0++;
@@ -481,6 +481,7 @@ void nr_interleaving_ldpc32(uint32_t E, uint8_t Qm, uint32_t *e, uint32_t *f)
       uint32_t *e4 = e3 + EQm;
       uint32_t *e5 = e4 + EQm;
       int i = 0;
+#if 0
       simde__m128i *e0_128 = (simde__m128i *)e0;
       simde__m128i *e1_128 = (simde__m128i *)e1;
       simde__m128i *e2_128 = (simde__m128i *)e2;
@@ -518,6 +519,7 @@ void nr_interleaving_ldpc32(uint32_t E, uint8_t Qm, uint32_t *e, uint32_t *f)
       e4 = (uint32_t *)e4_128;
       e5 = (uint32_t *)e5_128;
       f  = (uint32_t *)f128;
+#endif
       for (; i < EQm; i++) {
         *f++ = *e0++;
         *f++ = *e1++;
@@ -525,6 +527,7 @@ void nr_interleaving_ldpc32(uint32_t E, uint8_t Qm, uint32_t *e, uint32_t *f)
         *f++ = *e3++;
         *f++ = *e4++;
         *f++ = *e5++;
+	i++;
       }
     } break;
     case 8: {
@@ -610,6 +613,7 @@ void nr_interleaving_ldpc32(uint32_t E, uint8_t Qm, uint32_t *e, uint32_t *f)
       simde__m128i *e7_128 = (simde__m128i *)e7;
       simde__m128i *f128   = (simde__m128i *)f;
 
+
       for (; i < (EQm & ~3); i += 4) {
         simde__m128i e0j = simde_mm_loadu_si128(e0_128++);
         simde__m128i e1j = simde_mm_loadu_si128(e1_128++);
@@ -620,24 +624,24 @@ void nr_interleaving_ldpc32(uint32_t E, uint8_t Qm, uint32_t *e, uint32_t *f)
         simde__m128i e6j = simde_mm_loadu_si128(e6_128++);
         simde__m128i e7j = simde_mm_loadu_si128(e7_128++);
 
-        simde__m128i tmp0 = simde_mm_unpacklo_epi32(e0j, e1j);   // e0(i) e1(i) e0(i+1) e1(i+1) 
-        simde__m128i tmp1 = simde_mm_unpacklo_epi32(e2j, e3j);   // e2(i) e3(i) e2(i+1) e3(i+1) 
-        simde__m128i tmp2 = simde_mm_unpacklo_epi32(e4j, e5j);   // e4(i) e5(i) e4(i+1) e5(i+1) 
+        simde__m128i tmp0 = simde_mm_unpacklo_epi32(e0j, e1j);   // e0(i) e1(i) e0(i+1) e1(i+1)
+        simde__m128i tmp1 = simde_mm_unpacklo_epi32(e2j, e3j);   // e2(i) e3(i) e2(i+1) e3(i+1)
+        simde__m128i tmp2 = simde_mm_unpacklo_epi32(e4j, e5j);   // e4(i) e5(i) e4(i+1) e5(i+1)
         simde__m128i tmp3 = simde_mm_unpacklo_epi32(e6j, e7j);   // e6(i) e7(i) e6(i+1) e7(i+1)
-								 
-        simde_mm_storeu_si128(f128++,simde_mm_unpacklo_epi64(tmp0, tmp1)); // e0(i) e1(i) e2(i) e3(i) 
+
+        simde_mm_storeu_si128(f128++,simde_mm_unpacklo_epi64(tmp0, tmp1)); // e0(i) e1(i) e2(i) e3(i)
         simde_mm_storeu_si128(f128++,simde_mm_unpacklo_epi64(tmp2, tmp3)); // e4(i) e5(i) e6(i) e7(i)
-	simde_mm_storeu_si128(f128++,simde_mm_unpackhi_epi64(tmp0, tmp1));  // e0(i+1) e1(i+1) e2(i+1) e3(i+1) 
+        simde_mm_storeu_si128(f128++,simde_mm_unpackhi_epi64(tmp0, tmp1));  // e0(i+1) e1(i+1) e2(i+1) e3(i+1)
         simde_mm_storeu_si128(f128++,simde_mm_unpackhi_epi64(tmp2, tmp3)); // e4(i+1) e5(i+1) e6(i+1) e7(i+1)
-									   //
-        tmp0 = simde_mm_unpackhi_epi32(e0j, e1j);   // e0(i+2) e1(i+2) e0(i+3) e1(i+3) 
-        tmp1 = simde_mm_unpackhi_epi32(e2j, e3j);   // e2(i+2) e3(i+2) e2(i+3) e3(i+3) 
-        tmp2 = simde_mm_unpackhi_epi32(e4j, e5j);   // e4(i+2) e5(i+2) e4(i+3) e5(i+3) 
+
+        tmp0 = simde_mm_unpackhi_epi32(e0j, e1j);   // e0(i+2) e1(i+2) e0(i+3) e1(i+3)
+        tmp1 = simde_mm_unpackhi_epi32(e2j, e3j);   // e2(i+2) e3(i+2) e2(i+3) e3(i+3)
+        tmp2 = simde_mm_unpackhi_epi32(e4j, e5j);   // e4(i+2) e5(i+2) e4(i+3) e5(i+3)
         tmp3 = simde_mm_unpackhi_epi32(e6j, e7j);   // e6(i+2) e7(i+2) e6(i+3) e7(i+3)
-								 
-        simde_mm_storeu_si128(f128++,simde_mm_unpacklo_epi64(tmp0, tmp1)); // e0(i+2) e1(i+2) e2(i+2) e3(i+2) 
+
+        simde_mm_storeu_si128(f128++,simde_mm_unpacklo_epi64(tmp0, tmp1)); // e0(i+2) e1(i+2) e2(i+2) e3(i+2)
         simde_mm_storeu_si128(f128++,simde_mm_unpacklo_epi64(tmp2, tmp3)); // e4(i+2) e5(i+2) e6(i+2) e7(i+2)
-	simde_mm_storeu_si128(f128++,simde_mm_unpackhi_epi64(tmp0, tmp1)); // e0(i+3) e1(i+3) e2(i+3) e3(i+3) 
+        simde_mm_storeu_si128(f128++,simde_mm_unpackhi_epi64(tmp0, tmp1)); // e0(i+3) e1(i+3) e2(i+3) e3(i+3)
         simde_mm_storeu_si128(f128++,simde_mm_unpackhi_epi64(tmp2, tmp3)); //e4(i+3) e5(i+3) e6(i+3) e7(i+3)
       }
       e0 = (uint32_t *)e0_128;
@@ -648,42 +652,78 @@ void nr_interleaving_ldpc32(uint32_t E, uint8_t Qm, uint32_t *e, uint32_t *f)
       e5 = (uint32_t *)e5_128;
       e6 = (uint32_t *)e6_128;
       e7 = (uint32_t *)e7_128;
-      f = (uint32_t *)f128;
-      
-      for (; i < EQm; i++) {
-        *f++ = *e0++;
-        *f++ = *e1++;
-        *f++ = *e2++;
-        *f++ = *e3++;
-        *f++ = *e4++;
-        *f++ = *e5++;
-        *f++ = *e6++;
-        *f++ = *e7++;
-      }
-    } break;
+       f = (uint32_t *)f128;
+    } 
+    break;
     default:
       AssertFatal(false, "Should be here!\n");
   }
 }
 void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
 {
+  const uint32_t EQm = E / Qm;
   switch (Qm) {
     case 2: {
       AssertFatal(E % 2 == 0, "");
-      int16_t *e1 = e + (E / 2);
-      int16_t *end = f + E - 1;
-      while (f < end) {
+      int16_t *e1 = e + EQm;
+      int i=0;	  
+#ifndef USE_SCALAR 
+      simde__m128i *e0_128 = (simde__m128i *)e;
+      simde__m128i *e1_128 = (simde__m128i *)e1;
+      simde__m128i *f128   = (simde__m128i *)f;	  
+      const uint8_t shuf4[16] = {0,1,4,5,8,9,12,13,2,3,6,7,10,11,14,15};
+      const simde__m128i *shuf4_128 = (const simde__m128i *)shuf4;
+      for (i=0; i < (EQm & ~7); i += 8) {      
+            simde__m128i f0j = simde_mm_loadu_si128(f128++); // f0(i) f0(i+1) f0(i+2) f0(i+3) f0(i+4) f0(i+5) f0(i+6) f0(i+7)
+            simde__m128i f1j = simde_mm_loadu_si128(f128++); // f1(i) f1(i+1) f1(i+2) f1(i+3) f1(i+4) f1(i+5) f1(i+6) f1(i+7)
+    	    simde__m128i tmp0 = simde_mm_shuffle_epi8(f0j,*shuf4_128); // f0(i) f0(i+2) f0(i+4) f0(i+6) f0(i+1) f0(i+3) f0(i+5) f0(i+7)
+     	    simde__m128i tmp1 = simde_mm_shuffle_epi8(f1j,*shuf4_128); // f1(i) f1(i+2) f1(i+4) f1(i+6) f1(i+1) f1(i+3) f1(i+5) f1(i+7)
+            simde_mm_storeu_si128(e0_128++,simde_mm_unpacklo_epi64(tmp0, tmp1));   // f0(i) f0(i+2) f0(i+4) f0(i+6) f1(i) f1(i+2) f1(i+4) f1(i+6)
+            simde_mm_storeu_si128(e1_128++,simde_mm_unpackhi_epi64(tmp0, tmp1));   // f0(i+1) f0(i+3) f0(i+5) f0(i+7) f1(i+1) f1(i+3) f1(i+5) f1(i+7)
+      }
+#endif
+      for (; i < EQm; i++) {
         *e++ = *f++;
         *e1++ = *f++;
       }
     } break;
     case 4: {
       AssertFatal(E % 4 == 0, "");
-      int16_t *e1 = e + (E / 4);
-      int16_t *e2 = e1 + (E / 4);
-      int16_t *e3 = e2 + (E / 4);
-      int16_t *end = f + E - 3;
-      while (f < end) {
+      int i=0;
+      int16_t *e1 = e + EQm;
+      int16_t *e2 = e1 + EQm;
+      int16_t *e3 = e2 + EQm;
+#ifndef USE_SCALAR 
+      simde__m128i *e0_128 = (simde__m128i *)e;
+      simde__m128i *e1_128 = (simde__m128i *)e1;
+      simde__m128i *e2_128 = (simde__m128i *)e2;
+      simde__m128i *e3_128 = (simde__m128i *)e3;
+      simde__m128i *f128   = (simde__m128i *)f;	  
+     
+      const uint8_t shuf16[16] = {0,1,8,9,2,3,10,11,4,5,12,13,6,7,14,15};
+      const simde__m128i *shuf16_128 = (const simde__m128i *)shuf16;
+
+      for (i=0; i < (EQm & ~7); i += 8) {      
+        simde__m128i f0j = simde_mm_loadu_si128(f128++);
+        simde__m128i f1j = simde_mm_loadu_si128(f128++);
+        simde__m128i f2j = simde_mm_loadu_si128(f128++);
+        simde__m128i f3j = simde_mm_loadu_si128(f128++);
+
+        simde__m128i tmp0 = simde_mm_shuffle_epi8(f0j,*shuf16_128); // f0(i) f0(i+4) f0(i+1) f0(i+5) f0(i+2) f0(i+6) f0(i+3) f0(i+7)
+        simde__m128i tmp1 = simde_mm_shuffle_epi8(f1j,*shuf16_128); // f1(i) f1(i+4) f1(i+1) f1(i+5) f1(i+2) f1(i+6) f1(i+3) f1(i+7)
+        simde__m128i tmp2 = simde_mm_shuffle_epi8(f2j,*shuf16_128); // f2(i) f2(i+4) f2(i+1) f2(i+5) f2(i+2) f2(i+6) f2(i+3) f2(i+7)
+	simde__m128i tmp3 = simde_mm_shuffle_epi8(f3j,*shuf16_128); // f3(i) f3(i+2) f3(i+1) f3(i+5) f3(i+2) f3(i+6) f3(i+3) f3(i+7)
+        simde__m128i tmp4 = simde_mm_unpacklo_epi32(tmp0,tmp1); // f0(i) f0(i+4) f1(i) f1(i+4) f0(i+1) f0(i+5) f1(i+1) f1(i+5)
+        simde__m128i tmp5 = simde_mm_unpacklo_epi32(tmp2,tmp3); // f2(i) f2(i+4) f3(i) f3(i+4) f2(i+1) f2(i+5) f3(i+1) f3(i+5)
+       	simde_mm_storeu_si128(e0_128++,simde_mm_unpacklo_epi64(tmp4, tmp5));   // f0(i)   f0(i+4) f1(i)   f1(i+4) f2(i)   f2(i+4) f3(i)   f3(i+4)
+        simde_mm_storeu_si128(e1_128++,simde_mm_unpackhi_epi64(tmp4, tmp5));   // f0(i+1) f0(i+5) f1(i+1) f1(i+5) f2(i+1) f2(i+5) f3(i+1) f3(i+5)
+        tmp4 = simde_mm_unpackhi_epi32(tmp0,tmp1); // f0(i+2) f0(i+6) f1(i+2) f1(i+6) f0(i+3) f0(i+7) f1(i+3) f1(i+7)
+        tmp5 = simde_mm_unpackhi_epi32(tmp2,tmp3); // f2(i+2) f2(i+6) f3(i+2) f3(i+6) f2(i+3) f2(i+7) f3(i+3) f3(i+7)
+        simde_mm_storeu_si128(e2_128++,simde_mm_unpacklo_epi64(tmp4, tmp5));   // f0(i+2) f0(i+6) f1(i+2) f1(i+6) f2(i+2) f2(i+6) f3(i+2) f3(i+6)
+  	simde_mm_storeu_si128(e3_128++,simde_mm_unpackhi_epi64(tmp4, tmp5));   // f0(i+3) f0(i+7) f1(i+3) f1(i+7) f2(i+3) f2(i+7) f3(i+3) f3(i+7)
+      } 
+#endif
+      for (; i < EQm; i++) {
         *e++ = *f++;
         *e1++ = *f++;
         *e2++ = *f++;
@@ -692,13 +732,123 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
     } break;
     case 6: {
       AssertFatal(E % 6 == 0, "");
-      int16_t *e1 = e + (E / 6);
-      int16_t *e2 = e1 + (E / 6);
-      int16_t *e3 = e2 + (E / 6);
-      int16_t *e4 = e3 + (E / 6);
-      int16_t *e5 = e4 + (E / 6);
-      int16_t *end = f + E - 5;
-      while (f < end) {
+      int16_t *e1 = e + EQm;
+      int16_t *e2 = e1 + EQm;
+      int16_t *e3 = e2 + EQm;
+      int16_t *e4 = e3 + EQm;
+      int16_t *e5 = e4 + EQm;
+      int i=0;
+#if 0
+
+      simde__m128i *e0_128 = (simde__m128i *)e;
+      simde__m128i *e1_128 = (simde__m128i *)e1;
+      simde__m128i *e2_128 = (simde__m128i *)e2;
+      simde__m128i *e3_128 = (simde__m128i *)e3;
+      simde__m128i *e4_128 = (simde__m128i *)e4;
+      simde__m128i *e5_128 = (simde__m128i *)e5;
+      simde__m128i *f128   = (simde__m128i *)f;
+      const uint8_t shuf64_0[16] = { 0, 1,12,13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      const simde__m128i *shuf64_0_128 = (const simde__m128i *)shuf64_0;
+      const uint8_t shuf64_1[16] = { 0, 0, 0, 0, 8, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      const simde__m128i *shuf64_1_128 = (const simde__m128i *)shuf64_1;
+      const uint8_t shuf64_2[16] = { 0, 0, 0, 0, 0, 0, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0};
+      const simde__m128i *shuf64_2_128 = (const simde__m128i *)shuf64_2;
+      const uint8_t shuf64_3[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,12,13, 0, 0, 0, 0};
+      const simde__m128i *shuf64_3_128 = (const simde__m128i *)shuf64_3;
+      const uint8_t shuf64_4[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 9, 0, 0};
+      const simde__m128i *shuf64_4_128 = (const simde__m128i *)shuf64_4;
+      const uint8_t shuf64_5[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 5};
+      const simde__m128i *shuf64_5_128 = (const simde__m128i *)shuf64_5;
+
+      const uint8_t shuf64_6[16]  = { 2, 3,14,15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      const simde__m128i *shuf64_6_128 = (const simde__m128i *)shuf64_6;
+      const uint8_t shuf64_7[16]  = { 0, 0, 0, 0,10,11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      const simde__m128i *shuf64_7_128 = (const simde__m128i *)shuf64_7;
+      const uint8_t shuf64_8[16]  = { 0, 0, 0, 0, 0, 0, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0};
+      const simde__m128i *shuf64_8_128 = (const simde__m128i *)shuf64_8;
+      const uint8_t shuf64_9[16]  = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,12,13, 0, 0, 0, 0};
+      const simde__m128i *shuf64_9_128 = (const simde__m128i *)shuf64_9;
+      const uint8_t shuf64_10[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      const simde__m128i *shuf64_10_128 = (const simde__m128i *)shuf64_10;
+      const uint8_t shuf64_11[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 5};
+      const simde__m128i *shuf64_11_128 = (const simde__m128i *)shuf64_11;
+
+      const uint8_t mask64_0[16] = {0   ,   0,   0,   0,0xff,0xff,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0};
+      const uint8_t mask64_1[16] = {0   ,   0,   0,   0,   0,   0,0xff,0xff,0xff,0xff,   0,   0,   0,   0,   0,   0};
+      const uint8_t mask64_2[16] = {0   ,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,0xff,0xff.   0,   0}; 
+      const uint8_t mask64_3[16] = {0   ,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,0xff,0xff}; 	  
+
+      for (i=0; i < (EQm & ~7); i += 8) {
+         simde__m128i f0j = simde_mm_loadu_si128(f128++);
+         simde__m128i f1j = simde_mm_loadu_si128(f128++);
+         simde__m128i f2j = simde_mm_loadu_si128(f128++);
+         simde__m128i f3j = simde_mm_loadu_si128(f128++);
+         simde__m128i f4j = simde_mm_loadu_si128(f128++);
+         simde__m128i f5j = simde_mm_loadu_si128(f128++);
+
+	 simde__m128i tmp0 = simde_mm_shuffle_epi8(f0j,*shuf64_0_128); // f0_0 f0_6 X    X    X    X    X    X   
+         simde__m128i tmp1 = simde_mm_shuffle_epi8(f1j,*shuf64_1_128); // X    X    f1_4 X    X    X    X    X   
+         simde__m128i tmp2 = simde_mm_shuffle_epi8(f2j,*shuf64_2_128); // X    X    X    f2_2 X    X    X    X   
+	 simde__m128i tmp3 = simde_mm_shuffle_epi8(f3j,*shuf64_3_128); // X    X    X    X    f3_0 f3_6 X    X   
+         simde__m128i tmp4 = simde_mm_shuffle_epi8(f4j,*shuf64_4_128); // X    X    X    X    X    X    f4_4 X   
+	 simde__m128i tmp5 = simde_mm_shuffle_epi8(f5j,*shuf64_5_128); // X    X    X    X    X    X    X    f5_2
+								       
+	 tmp0 = simde_mm_blendv_epi8(tmp0,tmp1,*(simde__m128i*)mask64_0); // f0_0 f0_6 f1_4 X    X    X    X    X
+	 tmp0 = simde_mm_blendv_epi8(tmp0,tmp2,*(simde__m128i*)mask64_1); // f0_0 f0_6 f1_4 f2_2 X    X    X    X
+         tmp0 = simde_mm_blendv_epi8(tmp0,tmp3,*(simde__m128i*)mask64_2); // f0_0 f0_6 f1_4 f2_2 f3_0 f3_6 X    X
+         tmp0 = simde_mm_blendv_epi8(tmp0,tmp4,*(simde__m128i*)mask64_3); // f0_0 f0_6 f1_4 f2_2 f3_0 f3_6 f4_4 X
+
+         simde_mm_storeu_si128(e0_128++,simde_mm_blendv_epi8(tmp0,tmp4,*(simde__m128i*)mask64_4);	
+		// f0(i)   f0(i+6) f1(i+4) f2(i+2) f3(i)   f3(i+6) f4(i+4) f5(i+2)
+
+         simde__m128i tmp0 = simde_mm_shuffle_epi8(f0j,*shuf64_6_128); // f0_1 f0_7 X    X    X    X    X    X
+         simde__m128i tmp1 = simde_mm_shuffle_epi8(f1j,*shuf64_7_128); // X    X    f1_5 X    X    X    X    X
+         simde__m128i tmp2 = simde_mm_shuffle_epi8(f2j,*shuf64_8_128); // X    X    X    f2_3 X .. X    X    X
+         simde__m128i tmp3 = simde_mm_shuffle_epi8(f3j,*shuf64_9_128); // X    X    X    f3_1 f3_7 X    X    X
+         simde__m128i tmp4 = simde_mm_shuffle_epi8(f4j,*shuf64_10_128);// X    X    X    X    X    X    f4_5 X
+         simde__m128i tmp5 = simde_mm_shuffle_epi8(f5j,*shuf64_11_128);// X    X    X    X    X    X    X    f5_3
+         tmp0 = simde_mm_blendv_epi8(tmp0,tmp1,*(simde__m128i*)mask64_0); 
+         // f0_1 f0_7 f1_5 X    X    X    X    X
+         tmp0 = simde_mm_blendv_epi8(tmp0,tmp2,*(simde__m128i*)mask64_1); 
+         // f0_1 f0_7 f1_5 f2_3 X    X    X    X
+         tmp0 = simde_mm_blendv_epi8(tmp0,tmp3,*(simde__m128i*)mask64_2); 
+         // f0_1 f0_7 f1_5 f2_3 f3_1 f3_7 X    X
+         tmp0 = simde_mm_blendv_epi8(tmp0,tmp4,*(simde__m128i*)mask64_3); 
+         // f0_1 f0_7 f1_5 f2_3 f3_1 f3_7 f4_4 X
+ 
+         simde_mm_storeu_si128(e1_128++,simde_mm_blendv_epi8(tmp0,tmp5,*(simde__m128i*)mask64_4); 
+         // f0(i+1) f0(i+7) f1(i+5) f2(i+3) f3(i+1) f3(i+7) f4(i+5) f5(i+3)
+         simde__m128i tmp0 = simde_mm_shuffle_epi8(f0j,); 
+	 // f0_2 X .. X
+         simde__m128i tmp1 = simde_mm_shuffle_epi8(f1j,); 
+         // X f1_6 X .. X
+         simde__m128i tmp2 = simde_mm_shuffle_epi8(f2j,); 
+         // X X X f2_3 X .. X
+         simde__m128i tmp3 = simde_mm_shuffle_epi8(f3j,); 
+         // X X X f3_1 f3_7 X X
+         simde__m128i tmp4 = simde_mm_shuffle_epi8(f4j,); 
+         // X X X X X X f4_5 X
+         simde__m128i tmp5 = simde_mm_shuffle_epi8(f5j,); 
+         // X X X X X X X f5_3
+         tmp0 = simde_mm_blendv_epi8(tmp0,tmp1,*(simde__m128i*)mask64_0); 
+         // f0_1 f0_7 f1_5 X    X    X    X    X
+         tmp0 = simde_mm_blendv_epi8(tmp0,tmp2,*(simde__m128i*)mask64_1); 
+         // f0_1 f0_7 f1_5 f2_3 X    X    X    X
+         tmp0 = simde_mm_blendv_epi8(tmp0,tmp3,*(simde__m128i*)mask64_2); 
+         // f0_1 f0_7 f1_5 f2_3 f3_1 f3_7 X    X
+         tmp0 = simde_mm_blendv_epi8(tmp0,tmp4,*(simde__m128i*)mask64_3); 
+         // f0_1 f0_7 f1_5 f2_3 f3_1 f3_7 f4_4 X
+         simde_mm_storeu_si128(e2_128++,simde_mm_blend_epi32(tmp7, tmp8,0xc0));        		                
+         // f0(i+2) f1(i)   f1(i+6) f2(i+4) f3(i+2) f4(i)  f4(i+6) f5(i+4)
+         simde_mm_storeu_si128(e3_128++,simde_mm_unpacklo_epi64(tmp0, tmp1));                        
+	 // f0(i+3) f1(i+1) f1(i+7) f2(i+5) f3(i+3) f4(i+1) f5(i+7) f5(i+5)
+         simde_mm_storeu_si128(e4_128++,simde_mm_unpacklo_epi64(tmp0, tmp1));                            
+         // f0(i+4) f1(i+2) f2(i)  f2(i+6) f3(i+4) f4(i+2)  f5(i)   f5(i+6)    
+         simde_mm_storeu_si128(e5_128++,simde_mm_unpacklo_epi64(tmp0, tmp1));    	
+         // f0(i+5) f1(i+3) f2(i+1) f2(i+7) f3(i+5) f4(i+3) f5(i+1) f5(i+7)
+      }
+#endif
+      for (; i < EQm; i++) {
         *e++ = *f++;
         *e1++ = *f++;
         *e2++ = *f++;
@@ -709,15 +859,75 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
     } break;
     case 8: {
       AssertFatal(E % 8 == 0, "");
-      int16_t *e1 = e + (E / 8);
-      int16_t *e2 = e1 + (E / 8);
-      int16_t *e3 = e2 + (E / 8);
-      int16_t *e4 = e3 + (E / 8);
-      int16_t *e5 = e4 + (E / 8);
-      int16_t *e6 = e5 + (E / 8);
-      int16_t *e7 = e6 + (E / 8);
-      int16_t *end = f + E - 7;
-      while (f < end) {
+      int16_t *e1 = e + EQm;
+      int16_t *e2 = e1 + EQm;
+      int16_t *e3 = e2 + EQm;
+      int16_t *e4 = e3 + EQm;
+      int16_t *e5 = e4 + EQm;
+      int16_t *e6 = e5 + EQm;
+      int16_t *e7 = e6 + EQm;
+      simde__m128i *e0_128 = (simde__m128i *)e;
+      simde__m128i *e1_128 = (simde__m128i *)e1;
+      simde__m128i *e2_128 = (simde__m128i *)e2;
+      simde__m128i *e3_128 = (simde__m128i *)e3;
+      simde__m128i *e4_128 = (simde__m128i *)e4;
+      simde__m128i *e5_128 = (simde__m128i *)e5;
+      simde__m128i *e6_128 = (simde__m128i *)e6;
+      simde__m128i *e7_128 = (simde__m128i *)e7;
+      simde__m128i *f128   = (simde__m128i *)f;
+
+      int i;
+      for (i=0; i < (EQm & ~7); i += 8) {
+        simde__m128i f0j = simde_mm_loadu_si128(f128++);
+        simde__m128i f1j = simde_mm_loadu_si128(f128++);
+        simde__m128i f2j = simde_mm_loadu_si128(f128++);
+        simde__m128i f3j = simde_mm_loadu_si128(f128++);
+        simde__m128i f4j = simde_mm_loadu_si128(f128++);
+        simde__m128i f5j = simde_mm_loadu_si128(f128++);
+        simde__m128i f6j = simde_mm_loadu_si128(f128++);
+        simde__m128i f7j = simde_mm_loadu_si128(f128++);
+
+        simde__m128i tmp0 = simde_mm_unpacklo_epi16(f0j, f1j);   // f0(i) f1(i) f0(i+1) f1(i+1) f0(i+2) f1(i+2) f0(i+3) f1(i+3) 
+        simde__m128i tmp1 = simde_mm_unpacklo_epi16(f2j, f3j);   // f2(i) f3(i) f2(i+1) f3(i+1) f2(i+2) f3(i+2) f2(i+3) f3(i+3) 
+        simde__m128i tmp2 = simde_mm_unpacklo_epi16(f4j, f5j);   // f4(i) f5(i) f4(i+1) f5(i+1) f4(i+2) f5(i+2) f4(i+3) f5(i+3)
+        simde__m128i tmp3 = simde_mm_unpacklo_epi16(f6j, f7j);   // f6(i) f7(i) f6(i+1) f7(i+1) f6(i+2) f7(i+2) f6(i+3) f7(i+3)
+								 //
+        simde__m128i tmp4 = simde_mm_unpacklo_epi32(tmp0, tmp1); // f0(i) f1(i) f2(i)   f3(i)   f0(i+1) f1(i+1) f2(i+1) f3(i+1) 
+        simde__m128i tmp5 = simde_mm_unpacklo_epi32(tmp2, tmp3); // f4(i) f5(i) f6(i)   f7(i)   f4(i+1) f5(i+1) f6(i+1) f7(i+1) 
+        simde_mm_storeu_si128(e0_128++,simde_mm_unpacklo_epi64(tmp4, tmp5)); // f0(i) f1(i) f2(i) f3(i) f4(i) f5(i) f7(i) f7(i)
+        simde_mm_storeu_si128(e1_128++,simde_mm_unpackhi_epi64(tmp4, tmp5));// f0(i+1) f1(i+1) f2(i+1) f3(i+1) f4(i+1) f5(i+1) f6(i+1) f7(i+1)
+									    //
+        tmp4 = simde_mm_unpackhi_epi32(tmp0, tmp1); // f0(i+2) f1(i+2) f2(i+2) f3(i+2) f0(i+3) f1(i+3) f2(i+3) f3(i+3) 
+        tmp5 = simde_mm_unpackhi_epi32(tmp2, tmp3); // f4(i+2) f5(i+2) f6(i+2) f7(i+2) f4(i+3) f5(i+3) f6(i+3) f7(i+3) 
+	simde_mm_storeu_si128(e2_128++,simde_mm_unpacklo_epi64(tmp4, tmp5));// f0(i+2) f1(i+2) f2(i+2) f3(i+2) f4(i+2) f5(i+2) f7(i+2) f7(i+2) 
+        simde_mm_storeu_si128(e3_128++,simde_mm_unpackhi_epi64(tmp4, tmp5)); // f0(i+3) f1(i+3) f2(i+3) f3(i+3) f4(i+3) f5(i+3) f7(i+3) f7(i+3)
+									     
+        tmp0 = simde_mm_unpackhi_epi16(f0j, f1j);   // f0(i+4) f1(i+4) f0(i+5) f1(i+5) f0(i+6) f1(i+6) f0(i+7) f1(i+7) 
+        tmp1 = simde_mm_unpackhi_epi16(f2j, f3j);   // f2(i+4) f3(i+4) f2(i+5) f3(i+5) f2(i+6) f3(i+6) f2(i+7) f3(i+7) 
+        tmp2 = simde_mm_unpackhi_epi16(f4j, f5j);   // f4(i+4) f5(i+4) f4(i+5) f5(i+5) f4(i+6) f5(i+6) f4(i+7) f5(i+7)
+        tmp3 = simde_mm_unpackhi_epi16(f6j, f7j);   // f6(i+4) f7(i+4) f6(i+5) f7(i+5) f6(i+6) f7(i+6) f6(i+7) f7(i+7)
+								 //
+        tmp4 = simde_mm_unpacklo_epi32(tmp0, tmp1); // f0(i+4) f1(i+4) f2(i+4)   f3(i+4)   f0(i+5) f1(i+5) f2(i+5) f3(i+5) 
+        tmp5 = simde_mm_unpacklo_epi32(tmp2, tmp3); // f4(i+4) f5(i+4) f6(i+4)   f7(i+4)   f4(i+5) f5(i+5) f6(i+5) f7(i+5) 
+								 
+        simde_mm_storeu_si128(e4_128++,simde_mm_unpacklo_epi64(tmp4, tmp5)); // f0(i+4) f1(i+4) f2(i+4) f3(i+4) f4(i+4) f5(i+4) f7(i+4) f7(i+4)
+        simde_mm_storeu_si128(e5_128++,simde_mm_unpackhi_epi64(tmp4, tmp5));// f0(i+5) f1(i+5) f2(i+5) f3(i+5) f4(i+5) f5(i+5) f6(i+5) f7(i+5)
+        tmp4 = simde_mm_unpackhi_epi32(tmp0, tmp1); // f0(i+6) f1(i+6) f2(i+6) f3(i+6) f0(i+6) f1(i+6) f2(i+6) f3(i+6) 
+        tmp5 = simde_mm_unpackhi_epi32(tmp2, tmp3); // f4(i+6) f5(i+6) f6(i+6) f7(i+6) f4(i+6) f5(i+6) f6(i+6) f7(i+6) 
+	simde_mm_storeu_si128(e6_128++,simde_mm_unpacklo_epi64(tmp4, tmp5));// f0(i+6) f1(i+6) f2(i+6) f3(i+6) f4(i+6) f5(i+6) f7(i+6) f7(i+6) 
+        simde_mm_storeu_si128(e7_128++,simde_mm_unpackhi_epi64(tmp4, tmp5)); // f0(i+7) f1(i+7) f2(i+7) f3(i+7) f4(i+7) f5(i+7) f7(i+7) f7(i+7)
+      }
+      e  = (int16_t *)e0_128;
+      e1 = (int16_t *)e1_128;
+      e2 = (int16_t *)e2_128;
+      e3 = (int16_t *)e3_128;
+      e4 = (int16_t *)e4_128;
+      e5 = (int16_t *)e5_128;
+      e6 = (int16_t *)e6_128;
+      e7 = (int16_t *)e7_128;
+      f  = (int16_t *)f128;
+     
+      while (i < EQm) {
         *e++ = *f++;
         *e1++ = *f++;
         *e2++ = *f++;
@@ -726,6 +936,7 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
         *e5++ = *f++;
         *e6++ = *f++;
         *e7++ = *f++;
+	i++;
       }
     } break;
     default:
@@ -928,6 +1139,7 @@ int nr_rate_matching_ldpc32(uint32_t Tbslbrm,
   return 0;
 }
 
+//#define USE_SCALAR 1
 int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
                              uint8_t BG,
                              uint16_t Z,
@@ -980,7 +1192,8 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
     memset(d, 0, Ncb * sizeof(int16_t));
 
   uint32_t k = 0;
-  if (ind < Foffset)
+  if (ind < Foffset) {
+#if USE_SCALAR 
     for (; (ind < Foffset) && (k < E); ind++) {
 #ifdef RM_DEBUG
       printf("RM_RX k%u Ind %u(before filler): %d (%d)=>", k, ind, d[ind], soft_input[k]);
@@ -990,9 +1203,16 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
       printf("%d\n", d[ind]);
 #endif
     }
+#else
+   int ind2 = ind + min(Foffset-ind,E);
+   for (;ind<(ind2&15);k+=16,ind+=16) 
+      simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));
+   for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
+#endif
+  }
   if (ind >= Foffset && ind < Foffset + F)
     ind = Foffset + F;
-
+#ifdef USE_SCALAR
   for (; (ind < Ncb) && (k < E); ind++) {
 #ifdef RM_DEBUG
     printf("RM_RX k%u Ind %u(after filler) %d (%d)=>", k, ind, d[ind], soft_input[k]);
@@ -1002,8 +1222,15 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
     printf("%d\n", d[ind]);
 #endif
   }
+#else
+   int ind2 = ind + min(Ncb-ind,E-k);
+   for (;ind<(ind2&15);k+=16,ind+=16) 
+      simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));
+   for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
+#endif
 
   while (k < E) {
+#ifdef USE_SCALAR
     for (ind = 0; (ind < Foffset) && (k < E); ind++) {
 #ifdef RM_DEBUG
       printf("RM_RX k%u Ind %u(before filler) %d(%d)=>", k, ind, d[ind], soft_input[k]);
@@ -1022,6 +1249,18 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
       printf("%d\n", d[ind]);
 #endif
     }
+#else
+   ind=0;
+   ind2 = min(Foffset,E-k);
+   for (;ind<(ind2&15);k+=16,ind+=16) 
+      simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));
+   for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
+   ind = Foffset+F;
+   ind2 = ind + min(Ncb-ind,E-k);
+   for (;ind<(ind2&15);k+=16,ind+=16) 
+      simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));
+   for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
+#endif
   }
   return 0;
 }

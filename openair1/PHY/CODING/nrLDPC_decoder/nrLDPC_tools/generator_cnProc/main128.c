@@ -42,7 +42,6 @@ int main(int argc, char *argv[])
   int R[NB_R]={0,1,2};
   for(int i=0; i<NB_R;i++) {
     nrLDPC_cnProc_BG1_generator_128(dir, R[i]);
-    printf("\ndir:%s\n",dir);
     nrLDPC_cnProc_BG2_generator_128(dir, R[i]);
   }
 

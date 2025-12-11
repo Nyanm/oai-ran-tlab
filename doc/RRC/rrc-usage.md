@@ -12,7 +12,7 @@ The RRC layer controls the basic connection setup of UEs as well as additional
 procedures. It is the fundamental building block of OAI's CU-CP, and interacts
 with lower layers (DU, basically MAC and RLC) through F1AP messages, and with
 the CU-UP through E1AP messages. More information can be found in the
-respective [F1AP page](../F1-design.md) and [E1AP page](../E1AP/E1-design.md).
+respective [F1AP page](../F1AP/F1-design.md) and [E1AP page](../E1AP/E1-design.md).
 
 # Periodic output and interpretation
 
@@ -57,7 +57,7 @@ As of now, it does not print information about connected CU-UPs or AMFs.
 
 ## Split-related options (when running in a CU or CU-CP)
 
-See [F1 documentation](../F1-design.md) for information about the F1 split.
+See [F1 documentation](../F1AP/F1-design.md) for information about the F1 split.
 See [E1 documentation](../E1AP/E1-design.md) for information about the E1 split.
 
 ## RRC-specific configuration options
@@ -99,6 +99,43 @@ the [MAC configuration](../MAC/mac-usage.md) as well for SIB configuration.
 
 ### Neighbor-gNB configuration
 
-    TBD
+Refer to the [handover tutorial](../handover-tutorial.md) for detailed information about gNB neighbors and handover procedures.
 
-Refer to the [handover tutorial](../handover-tutorial.md) for more information.
+#### Required configuration parameters
+
+To define a neighbor cell in the configuration file, the following parameters are required:
+
+- `gNB_ID` - identifier of the neighbor gNB (e.g., `0xe01`)
+- `nr_cellid` - cell identifier of the neighbor cell (e.g., `11111111`)
+- `physical_cellId` - physical cell ID for radio identification (e.g., `1`)
+- `absoluteFrequencySSB` - SSB frequency in ARFCN notation (e.g., `643296`)
+- `subcarrierSpacing` - numerology index: 0=15kHz, 1=30kHz, 2=60kHz, 3=120kHz
+- `band` - 3GPP frequency band number (e.g., `78` for 3.5GHz)
+- `plmn` - PLMN configuration object with:
+  - `mcc` - mobile country code (3 digits, e.g., `001`)
+  - `mnc` - mobile network code (2-3 digits, e.g., `01`)
+  - `mnc_length` - number of digits in MNC (must be `2` or `3`)
+- `tracking_area_code` - tracking area identifier (e.g., `1`)
+
+Example configuration structure:
+```
+neighbour_list = (
+  {
+    nr_cellid = 12345678;
+    neighbour_cell_configuration = (
+      {
+        gNB_ID = 0xe01;
+        nr_cellid = 11111111;
+        physical_cellId = 1;
+        absoluteFrequencySSB = 643296;
+        subcarrierSpacing = 1; # 30 kHz
+        band = 78;
+        plmn = { mcc = 001; mnc = 01; mnc_length = 2 };
+        tracking_area_code = 1;
+      }
+    );
+  }
+);
+```
+
+Refer to the [handover tutorial](../handover-tutorial.md) for complete examples and detailed setup instructions.
