@@ -13,8 +13,38 @@ if(OAI_BLADERF)
   add_subdirectory(BLADERF)
 endif()
 
+set(E_VERSION 5.1.6)
+set(F_VERSION 6.1.5)
 add_boolean_option(OAI_FHI72 OFF "Activate OAI's FHI 7.2 (xran/fhi_lib) driver" OFF)
-if(OAI_FHI72)
+if (OAI_FHI72)
+  set(XRAN_E_RELEASE_EOL 91e7030cf8adefce502f0701fb7aaa1d512379df)
+  set(XRAN_F_RELEASE_EOL 91e7030cf8adefce502f0701fb7aaa1d512379df)
+  find_package(xran REQUIRED)
+  if(xran_VERSION VERSION_EQUAL E_VERSION)
+    if(DEFINED XRAN_E_RELEASE_EOL)
+      message(WARNING "Support XRAN release E is being eclipsed. Consider upgrading to release K. Replacing radio/fhi_72 directory with contents from commit ${XRAN_E_RELEASE_EOL}.")
+      execute_process(
+        COMMAND git checkout ${XRAN_E_RELEASE_EOL} -- radio/fhi_72/
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        RESULT_VARIABLE GIT_CHECKOUT_RESULT
+      )
+      if(NOT GIT_CHECKOUT_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to checkout fhi_72 directory from git")
+      endif()
+    endif()
+  elseif(xran_VERSION VERSION_EQUAL F_VERSION)
+    if(DEFINED XRAN_F_RELEASE_EOL)
+      message(WARNING "Support XRAN release F is being eclipsed. Consider upgrading to release K. Replacing radio/fhi_72 directory with contents from commit ${XRAN_F_RELEASE_EOL}.")
+      execute_process(
+        COMMAND git checkout ${XRAN_F_RELEASE_EOL} -- radio/fhi_72/
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        RESULT_VARIABLE GIT_CHECKOUT_RESULT
+      )
+      if(NOT GIT_CHECKOUT_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to checkout fhi_72 directory from git")
+      endif()
+    endif()
+  endif()
   add_subdirectory(fhi_72)
 endif()
 
