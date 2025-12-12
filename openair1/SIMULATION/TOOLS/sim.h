@@ -143,6 +143,17 @@ typedef struct {
   float *Doppler_phase_cur;
   /// flag indicating if channel direction is UL or DL
   bool is_uplink;
+  // ––––– Externally Measured CIR Taps –––––
+  char *external_cir_file; ///< Absolute path to the binary CIR dataset file.
+                           ///< The file must contain a flat binary sequence of complex taps
+                           ///< stored as [Re_0, Re_1, ..., Re_{L-1}, Im_0, Im_1, ..., Im_{L-1}] per snapshot.
+  uint32_t external_cir_count; ///< Total number of CIR snapshots loaded from the dataset.
+  uint16_t external_cir_len; ///< Number of complex taps per snapshot before selection (i.e., raw CIR length).
+  uint8_t max_loaded_taps; ///< Number of taps to retain per snapshot after energy-based selection.
+  struct complexd *external_cir_data; ///< Flattened array of shape [external_cir_count][max_loaded_taps].
+                                      ///< Each complexd entry represents a selected tap.
+  uint32_t external_cir_idx; ///< Index of the next CIR snapshot to use (can wrap or freeze depending on replay mode).
+
 } channel_desc_t;
 
 typedef struct {
@@ -202,7 +213,7 @@ typedef struct {
 } scenario_desc_t;
 
 typedef enum {
-  custom=0,
+  custom = 0,
   SCM_A,
   SCM_B,
   SCM_C,
@@ -235,46 +246,25 @@ typedef enum {
   EPA_low,
   EPA_medium,
   EPA_high,
+  TraceDrivenCIR_SionnaRT,
   SAT_LEO_TRANS,
   SAT_LEO_REGEN,
 } SCM_t;
-#define CHANNELMOD_MAP_INIT \
-  {"custom",custom},\
-  {"SCM_A",SCM_A},\
-  {"SCM_B",SCM_B},\
-  {"SCM_C",SCM_C},\
-  {"SCM_D",SCM_D},\
-  {"EPA",EPA},\
-  {"EVA",EVA},\
-  {"ETU",ETU},\
-  {"MBSFN",MBSFN},\
-  {"TDL_A",TDL_A},\
-  {"TDL_B",TDL_B},\
-  {"TDL_C",TDL_C},\
-  {"TDL_D",TDL_D},\
-  {"TDL_E",TDL_E},\
-  {"Rayleigh8",Rayleigh8},\
-  {"Rayleigh1",Rayleigh1},\
-  {"Rayleigh1_800",Rayleigh1_800},\
-  {"Rayleigh1_corr",Rayleigh1_corr},\
-  {"Rayleigh1_anticorr",Rayleigh1_anticorr},\
-  {"Rice8",Rice8},\
-  {"Rice1",Rice1},\
-  {"Rice1_corr",Rice1_corr},\
-  {"Rice1_anticorr",Rice1_anticorr},\
-  {"AWGN",AWGN},\
-  {"Rayleigh1_orthogonal",Rayleigh1_orthogonal},\
-  {"Rayleigh1_orth_eff_ch_TM4_prec_real",Rayleigh1_orth_eff_ch_TM4_prec_real},\
-  {"Rayleigh1_orth_eff_ch_TM4_prec_imag",Rayleigh1_orth_eff_ch_TM4_prec_imag},\
-  {"Rayleigh8_orth_eff_ch_TM4_prec_real",Rayleigh8_orth_eff_ch_TM4_prec_real},\
-  {"Rayleigh8_orth_eff_ch_TM4_prec_imag",Rayleigh8_orth_eff_ch_TM4_prec_imag},\
-  {"TS_SHIFT",TS_SHIFT},\
-  {"EPA_low",EPA_low},\
-  {"EPA_medium",EPA_medium},\
-  {"EPA_high",EPA_high},\
-  {"SAT_LEO_TRANS",SAT_LEO_TRANS},\
-  {"SAT_LEO_REGEN",SAT_LEO_REGEN},\
-  {NULL, -1}
+#define CHANNELMOD_MAP_INIT                                                                                                       \
+  {"custom", custom}, {"SCM_A", SCM_A}, {"SCM_B", SCM_B}, {"SCM_C", SCM_C}, {"SCM_D", SCM_D}, {"EPA", EPA}, {"EVA", EVA},         \
+      {"ETU", ETU}, {"MBSFN", MBSFN}, {"TDL_A", TDL_A}, {"TDL_B", TDL_B}, {"TDL_C", TDL_C}, {"TDL_D", TDL_D}, {"TDL_E", TDL_E},   \
+      {"Rayleigh8", Rayleigh8}, {"Rayleigh1", Rayleigh1}, {"Rayleigh1_800", Rayleigh1_800}, {"Rayleigh1_corr", Rayleigh1_corr},   \
+      {"Rayleigh1_anticorr", Rayleigh1_anticorr}, {"Rice8", Rice8}, {"Rice1", Rice1}, {"Rice1_corr", Rice1_corr},                 \
+      {"Rice1_anticorr", Rice1_anticorr}, {"AWGN", AWGN}, {"Rayleigh1_orthogonal", Rayleigh1_orthogonal},                         \
+      {"Rayleigh1_orth_eff_ch_TM4_prec_real", Rayleigh1_orth_eff_ch_TM4_prec_real},                                               \
+      {"Rayleigh1_orth_eff_ch_TM4_prec_imag", Rayleigh1_orth_eff_ch_TM4_prec_imag},                                               \
+      {"Rayleigh8_orth_eff_ch_TM4_prec_real", Rayleigh8_orth_eff_ch_TM4_prec_real},                                               \
+      {"Rayleigh8_orth_eff_ch_TM4_prec_imag", Rayleigh8_orth_eff_ch_TM4_prec_imag}, {"TS_SHIFT", TS_SHIFT}, {"EPA_low", EPA_low}, \
+      {"EPA_medium", EPA_medium}, {"EPA_high", EPA_high}, {"TraceDrivenCIR_SionnaRT", TraceDrivenCIR_SionnaRT},                   \
+      {"SAT_LEO_TRANS", SAT_LEO_TRANS}, {"SAT_LEO_REGEN", SAT_LEO_REGEN},                                                         \
+  {                                                                                                                               \
+    NULL, -1                                                                                                                      \
+  }
 
 #define CONFIG_HLP_SNR     "Set average SNR in dB (for --siml1 option)\n"
 #define CHANNELMOD_SECTION "channelmod"

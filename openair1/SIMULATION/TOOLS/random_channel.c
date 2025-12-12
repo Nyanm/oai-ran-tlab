@@ -31,6 +31,7 @@
 #include "common/config/config_userapi.h"
 #include "common/utils/telnetsrv/telnetsrv.h"
 #include "common/utils/load_module_shlib.h"
+#include "radio/rfsimulator/taps_loader.h"
 
 
 //#define DEBUG_CH
@@ -1678,6 +1679,45 @@ channel_desc_t *new_channel_desc_scm(uint8_t nb_tx,
                         0);
       printf("%s: satellite orbit height %f km\n", map_int_to_str(channelmod_names, channel_model), chan_desc->sat_height / 1000);
       break;
+
+    case TraceDrivenCIR_SionnaRT: {
+      char cir_file[512] = {0};
+      int cir_len = 0;
+      int max_loaded_taps = 0;
+
+      paramdef_t ext_params[] = {
+          {
+            "cir_file",
+            "Path to CIR binary (.bin)",
+            0,
+            strptr : (char **)&cir_file,
+            defstrval : NULL,
+            TYPE_STRING,
+            sizeof(cir_file)
+          },
+          {"external_cir_len", "Length (number of taps) in each CIR snapshot", 0, iptr : &cir_len, defintval : 0, TYPE_INT, 0},
+          {"max_loaded_taps", "Maximum number of taps to load", 0, iptr : &max_loaded_taps, defintval : 0, TYPE_INT, 0}};
+
+      config_get(config_get_if(), ext_params, 3, "external_cir_model");
+
+      chan_desc->external_cir_file = strdup(cir_file);
+      chan_desc->external_cir_len = cir_len;
+      chan_desc->max_loaded_taps = max_loaded_taps;
+
+      chan_desc->Doppler_phase_cur = calloc(nb_rx, sizeof(double));
+      chan_desc->ch = calloc(nb_tx * nb_rx, sizeof(*chan_desc->ch));
+      chan_desc->chF = calloc(nb_tx * nb_rx, sizeof(*chan_desc->chF));
+      for (int i = 0; i < nb_tx * nb_rx; i++) {
+        chan_desc->ch[i] = NULL;
+        chan_desc->chF[i] = calloc(1200, sizeof(struct complexd));
+      }
+
+      if (load_external_taps_binary(chan_desc->external_cir_file, chan_desc) < 0) {
+        LOG_E(HW, "[CIR] Failed to load CIR binary file: %s!\n", chan_desc->external_cir_file);
+        exit(EXIT_FAILURE);
+      }
+      break;
+    }
 
     default:
       LOG_W(OCM,"channel model not yet supported\n");

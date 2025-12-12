@@ -1,0 +1,23 @@
+/*
+===================================================================================
+ SionnaRT CIR Dataset Metadata
+-----------------------------------------------------------------------------------
+ This metadata accompanies a binary Channel Impulse Response (CIR) dataset,
+ enabling trace-driven, reproducible, and configurable wireless channel emulation.
+
+ All parameters below describe the generation context, signal structure, and 
+ normalization status, enabling users and downstream systems to parse, validate,
+ and interpret the dataset correctly.
+
+ - scene                : Human-readable identifier or path of the simulated scene
+ - frequency            : Carrier frequency in Hz
+ - num_subcarriers      : Number of subcarriers used in CIR generation
+ - subcarrier_spacing   : Subcarrier spacing in Hz
+ - bandwidth_pass       : Passband bandwidth in Hz
+ - l_min                : Smallest time lag represented (in samples or seconds)
+ - l_max                : Largest time lag (number of taps)
+ - sampling_frequency   : CIR sampling rate in Hz (default: Nyquist, 1/bandwidth)
+ - normalize            : If true, CIRs are energy-normalized across all snapshots
+ - normalize_delays     : If true, time delays are normalized to align with system
+===================================================================================
+*/

@@ -27,6 +27,7 @@
 #include <openair1/SIMULATION/TOOLS/sim.h>
 #include "openair2/LAYER2/NR_MAC_gNB/mac_config.h"
 #include "rfsimulator.h"
+#include "taps_loader.h"
 
 /*
   Legacy study:
@@ -224,14 +225,64 @@ void rxAddInput(const c16_t *input_sig,
     }
   }
 
+  // ====================================================================================
+  // [OAI EXT] Deterministic Trace-Driven CIR Replay (SionnaRT or compatible binary traces)
+  // If channelDesc->external_cir_data is non-NULL, we override channel taps per TS
+  // with a deterministic, externally supplied CIR snapshot.
+  // To enable periodic tap logging for debugging, uncomment the macro below.
+  //
+  // This is currently implemented for SISO (single ch[0]); for MIMO, extend logic.
+  // ====================================================================================
+  // To enable custom CIR tap logging for debugging, uncomment:
+  // #define APPLYCHANMOD_LOG_CIR_SNAPSHOTS
+
+  if (channelDesc->external_cir_data) {
+    if (channelDesc->external_cir_count == 0) {
+      LOG_E(HW, "[CIR] Error: external_cir_data is set but external_cir_count == 0. Skipping CIR injection.\n");
+    } else {
+      // Number of time samples per CIR snapshot (rounded down)
+      uint32_t SNAPSHOT_PERIOD = CirSize / channelDesc->external_cir_count;
+      if (SNAPSHOT_PERIOD == 0)
+        SNAPSHOT_PERIOD = 1;
+
+      // Wraparound: select snapshot based on current TS
+      uint32_t idx = (TS / SNAPSHOT_PERIOD) % channelDesc->external_cir_count;
+
+      struct complexd *taps = &channelDesc->external_cir_data[idx * channelDesc->external_cir_len];
+
+      // [Logging is OFF by default to avoid confusion]
+#ifdef APPLYCHANMOD_LOG_CIR_SNAPSHOTS
+      if (idx % 100 == 0) {
+        LOG_I(HW,
+              "\n[CIR] Snapshot #%u (TS=%lu): Using %u taps from '%s'\n",
+              idx,
+              (unsigned long)TS,
+              channelDesc->external_cir_len,
+              channelDesc->external_cir_file ? channelDesc->external_cir_file : "unknown");
+        for (int m = 0; m < channelDesc->external_cir_len; m++) {
+          LOG_I(HW, "  [CIR]   Tap[%2d] = (%.6e + %.6ej)", m, taps[m].r, taps[m].i);
+        }
+      }
+#endif
+
+      channelDesc->ch[0] = taps;
+
+      // Update Tap count and length so the convolution loops use the right size
+      channelDesc->nb_taps = channelDesc->external_cir_len;
+      channelDesc->channel_length = channelDesc->external_cir_len;
+      return;
+    }
+    // [If MIMO, extend here for ch[ant]]
+  }
+
   // channelDesc->path_loss_dB should contain the total path gain
   // so, in actual RF: tx gain + path loss + rx gain (+antenna gain, ...)
   // UE and NB gain control to be added
   // Fixme: not sure when it is "volts" so dB is 20*log10(...) or "power", so dB is 10*log10(...)
-  const double pathLossLinear = pow(10,channelDesc->path_loss_dB/20.0);
+  const double pathLossLinear = pow(10, channelDesc->path_loss_dB / 20.0);
   // Energy in one sample to calibrate input noise
   // the normalized OAI value seems to be 256 as average amplitude (numerical amplification = 1)
-  const double noise_per_sample = add_noise ? pow(10,channelDesc->noise_power_dB/10.0) * 256 : 0;
+  const double noise_per_sample = add_noise ? pow(10, channelDesc->noise_power_dB / 10.0) * 256 : 0;
   const uint64_t dd = channelDesc->channel_offset;
   const int nbTx=channelDesc->nb_tx;
   double Doppler_phase_cur = channelDesc->Doppler_phase_cur[rxAnt];
