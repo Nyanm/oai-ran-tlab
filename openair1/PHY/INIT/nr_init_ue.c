@@ -37,7 +37,7 @@
 #include "SCHED_NR_UE/harq_nr.h"
 #include "nr-uesoftmodem.h"
 
-extern int use_gpu;
+extern uint32_t use_gpu;
 
 void RCconfig_nrUE_prs(void *cfg)
 {

@@ -508,7 +508,7 @@ typedef struct PHY_VARS_gNB_s {
   pthread_t L1_tx_thread;
   int L1_tx_thread_core;
   void *scopeData;
-  int use_gpu;
+  uint32_t use_gpu;
 } PHY_VARS_gNB;
 
 struct puschSymbolReqId {

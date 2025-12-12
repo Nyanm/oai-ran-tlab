@@ -112,7 +112,7 @@ extern "C"
 #define CONFIG_HLP_TADV                                                                                                      \
   "Set RF board timing_advance to compensate fix delay inside the RF board between Rx and Tx timestamps (RF board internal " \
   "issues)\n"
-
+#define CONFIG_HLP_USE_GPU       "Use GPU for processing offload"
 /*-----------------------------------------------------------------------------------------------------------------------------------------------------*/
 /*                                            command line parameters common to eNodeB and UE                                                          */
 /*   optname                 helpstr                  paramflags      XXXptr                              defXXXval              type         numelt   */
@@ -143,6 +143,7 @@ extern "C"
 #define DEFAULT_RFCONFIG_FILE    "/usr/local/etc/syriq/ue.band7.tm1.PRB100.NR40.dat";
 
 extern int usrp_tx_thread;
+extern uint32_t use_gpu;
 // clang-format off
 #define CMDLINE_PARAMS_DESC {  \
   {"rf-config-file",        CONFIG_HLP_RFCFGF,        0,              .strptr=&RF_CONFIG_FILE,                .defstrval=NULL,          TYPE_STRING, 0},  \
@@ -181,6 +182,7 @@ extern int usrp_tx_thread;
   {"imscope" ,              CONFIG_HLP_IMSCOPE,       PARAMFLAG_BOOL, .uptr=&enable_imscope,                   .defintval=0,            TYPE_UINT,   0}, \
   {"imscope-record" ,       CONFIG_HLP_IMSCOPE_RECORD,PARAMFLAG_BOOL, .uptr=&enable_imscope_record,            .defintval=0,            TYPE_UINT,   0}, \
   {"default-pdu-id",        NULL,                     0,              .iptr=&DEFAULT_PDU_ID,                   .defintval=10,           TYPE_INT,    0}, \
+  {"use_gpu",               CONFIG_HLP_USE_GPU,        0,                .uptr=&use_gpu,                      .defintval=0,                     TYPE_UINT, 0}           \
 }
 // clang-format on
 
@@ -215,6 +217,7 @@ extern int usrp_tx_thread;
                {"MONOLITHIC", "PNF", "VNF", "AERIAL","UE_STUB_PNF","UE_STUB_OFFNET","STANDALONE_PNF"}, \
                {NFAPI_MONOLITHIC, NFAPI_MODE_PNF, NFAPI_MODE_VNF, NFAPI_MODE_AERIAL,NFAPI_UE_STUB_PNF,NFAPI_UE_STUB_OFFNET,NFAPI_MODE_STANDALONE_PNF}, \
                7 } }, \
+    { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
