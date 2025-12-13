@@ -517,8 +517,8 @@ int *generate_SIP_ideal_sequence(NR_AIOT_DL_FRAME_PARMS *frame_parms)
 
 int AIOT_R2D_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *SIP_ideal, NR_AIOT_DL_FRAME_PARMS *frame)
 {
-  // Correlate received signal with ideal Preamble (vectorized with AVX2 when available)
-  int Preamble_offset = 0;
+  // Correlate received signal with ideal SIP (vectorized with AVX2 when available)
+  int SIP_offset = 0;
   int max_corr = INT_MIN;
 
   int N = frame->packet_downsampled_samples - frame->SIP_samples;
@@ -526,13 +526,13 @@ int AIOT_R2D_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *SI
 
   for (int i = 0; i < N; i++) {
     int acc = 0;
-
-#if defined(__AVX512F__) && defined(__AVX512BW__)
-    /* AVX-512 intrinsics */
     int j = 0;
+
     const int16_t *sig_ptr = signal + i;
     const int *sip_ptr = SIP_ideal;
 
+#if defined(__AVX512F__) && defined(__AVX512BW__)
+    /* AVX-512 intrinsics */
     int j16 = (L / 16) * 16;
     for (; j < j16; j += 16) {
       __m256i s16 = _mm256_loadu_si256((const __m256i *)(sig_ptr + j));    // 16 x int16
@@ -547,17 +547,8 @@ int AIOT_R2D_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *SI
       acc += sum;
     }
 
-    /* Finish remaining elements with scalar code */
-    for (; j < L; j++) {
-      acc += (int)sig_ptr[j] * sip_ptr[j];
-    }
-
 #elif defined(__AVX2__)
     /* AVX2 intrinsics */
-    int j = 0;
-    const int16_t *sig_ptr = signal + i;
-    const int *sip_ptr = SIP_ideal;
-
     int j8 = (L / 8) * 8;
     for (; j < j8; j += 8) {
       __m128i s16 = _mm_loadu_si128((const __m128i *)(sig_ptr + j));      // 8 x int16
@@ -573,30 +564,26 @@ int AIOT_R2D_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *SI
       int32_t sum = tmp[0] + tmp[1] + tmp[2] + tmp[3] + tmp[4] + tmp[5] + tmp[6] + tmp[7];
       acc += sum;
     }
+#endif
 
+    // Finish remaining elements with scalar code
+    // Or process all if no SIMD
     for (; j < L; j++) {
       acc += (int)sig_ptr[j] * sip_ptr[j];
     }
-
-#else
-    /* Scalar fallback (no SIMD) */
-    for (int j = 0; j < L; j++) {
-      acc += (int)signal[i + j] * SIP_ideal[j];
-    }
-#endif
 
     correlation[i] = acc;
 
     if (acc > max_corr) {
       max_corr = acc;
-      Preamble_offset = i;
+      SIP_offset = i;
     }
   }
 
   if(testing_mode && !testing_timing) {
-    printf("Detected SIP at offset %d, Corr: %d\n", Preamble_offset, max_corr);
+    printf("Detected SIP at offset %d, Corr: %d\n", SIP_offset, max_corr);
   }
-  return Preamble_offset;
+  return SIP_offset;
 }
 
 void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int SIP_offset, NR_AIOT_DL_FRAME_PARMS *frame_parms)
@@ -1211,6 +1198,8 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
     
     pthread_t *threads = malloc(num_threads * sizeof(pthread_t));
     snr_thread_data_t *thread_data = malloc(num_threads * sizeof(snr_thread_data_t));
+
+    memset(thread_data, 0, num_threads * sizeof(snr_thread_data_t));
     
     // Calculate SNR range for each thread
     int snr_per_thread = total_snr_points / num_threads;
@@ -1225,21 +1214,6 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
       thread_data[t].channel_model = channel_model;
       thread_data[t].ber_results = ber_results;
       thread_data[t].print_mutex = &print_mutex;
-      
-      // Initialize timing results to zero
-      thread_data[t].time_tx_REs = 0.0;
-      thread_data[t].time_tx_CRC = 0.0;
-      thread_data[t].time_tx_signal = 0.0;
-      thread_data[t].time_channel = 0.0;
-      thread_data[t].time_envelope = 0.0;
-      thread_data[t].time_filter = 0.0;
-      thread_data[t].time_downsample = 0.0;
-      thread_data[t].time_sync = 0.0;
-      thread_data[t].time_rx_packet = 0.0;
-      thread_data[t].time_ber = 0.0;
-      thread_data[t].time_total = 0.0;
-      thread_data[t].time_multipath = 0.0;
-      thread_data[t].time_noise = 0.0;
       
       // Calculate SNR range for this thread
       int start_idx = t * snr_per_thread + (t < remaining_snr ? t : remaining_snr);
@@ -1281,19 +1255,21 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
       thread_data[0].time_noise += thread_data[t].time_noise;
     }
 
-    thread_data[0].time_tx_CRC /= snr_steps * snr_trials;
-    thread_data[0].time_tx_REs /= snr_steps * snr_trials;
-    thread_data[0].time_tx_signal /= snr_steps * snr_trials;
-    thread_data[0].time_channel /= snr_steps * snr_trials;
-    thread_data[0].time_envelope /= snr_steps * snr_trials;
-    thread_data[0].time_filter /= snr_steps * snr_trials;
-    thread_data[0].time_downsample /= snr_steps * snr_trials;
-    thread_data[0].time_sync /= snr_steps * snr_trials;
-    thread_data[0].time_rx_packet /= snr_steps * snr_trials;
-    thread_data[0].time_ber /= snr_steps * snr_trials;
-    thread_data[0].time_total /= snr_steps * snr_trials;
-    thread_data[0].time_multipath /= snr_steps * snr_trials;
-    thread_data[0].time_noise /= snr_steps * snr_trials;
+    int total_measurements = snr_steps * snr_trials;
+
+    thread_data[0].time_tx_CRC /= total_measurements;
+    thread_data[0].time_tx_REs /= total_measurements;
+    thread_data[0].time_tx_signal /= total_measurements;
+    thread_data[0].time_channel /= total_measurements;
+    thread_data[0].time_envelope /= total_measurements;
+    thread_data[0].time_filter /= total_measurements;
+    thread_data[0].time_downsample /= total_measurements;
+    thread_data[0].time_sync /= total_measurements;
+    thread_data[0].time_rx_packet /= total_measurements;
+    thread_data[0].time_ber /= total_measurements;
+    thread_data[0].time_total /= total_measurements;
+    thread_data[0].time_multipath /= total_measurements;
+    thread_data[0].time_noise /= total_measurements;
 
     if(testing_timing) {
       printf("------------------------------------------\n");
