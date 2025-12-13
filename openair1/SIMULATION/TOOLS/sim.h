@@ -551,6 +551,12 @@ double channelmod_get_snr_dB(void);
 double channelmod_get_sinr_dB(void);
 void init_channelmod(void) ;
 int load_channellist(uint8_t nb_tx, uint8_t nb_rx, double sampling_rate, uint64_t center_freq, double channel_bandwidth) ;
+channel_desc_t *load_channel(uint8_t nb_tx,
+                             uint8_t nb_rx,
+                             double sampling_rate,
+                             uint64_t center_freq,
+                             double channel_bandwidth,
+                             const char *name);
 double N_RB2sampling_rate(uint16_t N_RB);
 double N_RB2channel_bandwidth(uint16_t N_RB);
 

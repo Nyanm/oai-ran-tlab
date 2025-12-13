@@ -86,7 +86,7 @@ void server(void)
 {
   int num_ant_tx = 1;
   int num_ant_rx = 1;
-  ShmTDIQChannel *channel = shm_td_iq_channel_create(SHM_CHANNEL_NAME, num_ant_tx, num_ant_rx);
+  ShmTDIQChannel *channel = shm_td_iq_channel_create(SHM_CHANNEL_NAME, num_ant_tx, num_ant_rx, false);
 
   pthread_t producer_thread;
   int ret = pthread_create(&producer_thread, NULL, produce_symbols, channel);

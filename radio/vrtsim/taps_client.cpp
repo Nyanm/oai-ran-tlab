@@ -38,16 +38,6 @@ extern "C" {
 #define MAX_TAPS_LEN 100
 #define MAX_TAPS_MSG_SIZE (sizeof(struct complexf) * MAX_TAPS_LEN * 4 * 4 + 20)
 
-static pthread_t client_thread;
-static bool should_run = true;
-typedef struct {
-  int id;
-  int sock;
-  uint32_t num_tx_antennas;
-  uint32_t num_rx_antennas;
-  channel_desc_t **channel_desc;
-} client_thread_args_t;
-
 typedef struct {
   void *taps_msg;
   channel_desc_t *channel_desc;
@@ -57,6 +47,21 @@ typedef struct {
   taps_buffer_t taps_buffers[NUM_TAPS_BUFFERS];
   int current_buffer;
 } taps_storage_t;
+
+typedef struct {
+  int id;
+  int sock;
+  uint32_t num_tx_antennas;
+  uint32_t num_rx_antennas;
+  channel_desc_t **channel_desc;
+  taps_storage_t storage;
+  bool should_run;
+} client_thread_args_t;
+
+typedef struct {
+  client_thread_args_t args;
+  pthread_t thread;
+} taps_client_handle_t;
 
 void ascii_line_plot(const float *data, size_t size, char *buffer)
 {
@@ -100,14 +105,12 @@ static void init_taps_storage(taps_storage_t *storage, int num_tx_antennas, int 
   storage->current_buffer = 0;
 }
 
-static taps_storage_t taps_storage;
-
 void *client_thread_func(void *args)
 {
   client_thread_args_t *client_thread_args = (client_thread_args_t *)args;
-  while (should_run) {
-    int next_buffer = (taps_storage.current_buffer + 1) % NUM_TAPS_BUFFERS;
-    taps_buffer_t *taps_buffer = &taps_storage.taps_buffers[next_buffer];
+  while (client_thread_args->should_run) {
+    int next_buffer = (client_thread_args->storage.current_buffer + 1) % NUM_TAPS_BUFFERS;
+    taps_buffer_t *taps_buffer = &client_thread_args->storage.taps_buffers[next_buffer];
     int ret = nn_recv(client_thread_args->sock, taps_buffer->taps_msg, MAX_TAPS_MSG_SIZE, NN_DONTWAIT);
     if (ret < 0) {
       if (errno == EAGAIN) {
@@ -143,7 +146,7 @@ void *client_thread_func(void *args)
     channel_desc->path_loss_dB = 0;
     channel_desc->channel_length = taps_len;
     *client_thread_args->channel_desc = channel_desc;
-    taps_storage.current_buffer = next_buffer;
+    client_thread_args->storage.current_buffer = next_buffer;
     LOG_A(HW, "Receved new taps message, channel_length %d, buffer %d\n", channel_desc->channel_length, next_buffer);
     for (unsigned int aarx = 0; aarx < client_thread_args->num_rx_antennas; aarx++) {
       for (unsigned int aatx = 0; aatx < client_thread_args->num_tx_antennas; aatx++) {
@@ -179,25 +182,28 @@ extern "C" void taps_client_connect(int id,
   ret = nn_setsockopt(sock, NN_SUB, NN_SUB_SUBSCRIBE, "", 0);
   AssertFatal(ret == 0, "nn_setsockopt() failed, errno %d, %s\n", errno, strerror(errno));
 
-  init_taps_storage(&taps_storage, num_tx_antennas, num_rx_antennas);
 
-  client_thread_args_t *client_thread_args = static_cast<client_thread_args_t *>(malloc(sizeof(client_thread_args_t)));
+  taps_client_handle_t *client_handle = static_cast<taps_client_handle_t *>(malloc(sizeof(taps_client_handle_t)));
+  client_thread_args_t *client_thread_args = &client_handle->args;
+  init_taps_storage(&client_thread_args->storage, num_tx_antennas, num_rx_antennas);
+  client_thread_args->should_run = true;
   client_thread_args->id = id;
   client_thread_args->sock = sock;
   client_thread_args->num_rx_antennas = num_rx_antennas;
   client_thread_args->num_tx_antennas = num_tx_antennas;
   client_thread_args->channel_desc = channel_desc;
-  ret = pthread_create(&client_thread, NULL, client_thread_func, client_thread_args);
+  ret = pthread_create(&client_handle->thread, NULL, client_thread_func, client_thread_args);
   AssertFatal(ret == 0, "pthread_create() failed: errno: %d, %s\n", errno, strerror(errno));
 }
 
-extern "C" void taps_client_stop()
+extern "C" void taps_client_stop(taps_client_handle_t *handle)
 {
-  should_run = false;
-  pthread_join(client_thread, NULL);
+  handle->args.should_run = false;
+  pthread_join(handle->thread, NULL);
   for (int i = 0; i < NUM_TAPS_BUFFERS; i++) {
-    free(taps_storage.taps_buffers[i].taps_msg);
-    free(taps_storage.taps_buffers[i].channel_desc->ch_ps);
-    free(taps_storage.taps_buffers[i].channel_desc);
+    free(handle->args.storage.taps_buffers[i].taps_msg);
+    free(handle->args.storage.taps_buffers[i].channel_desc->ch_ps);
+    free(handle->args.storage.taps_buffers[i].channel_desc);
   }
+  free(handle);
 }

@@ -60,9 +60,10 @@ typedef struct ShmTDIQChannel_s ShmTDIQChannel;
  * @param name The name of the shared memory segment.
  * @param num_tx_ant The number of TX antennas.
  * @param num_rx_ant The number of RX antennas.
+ * @param client_sync Whether to enable client synchronization.
  * @return A pointer to the created ShmTDIQChannel structure.
  */
-ShmTDIQChannel *shm_td_iq_channel_create(const char *name, int num_tx_ant, int num_rx_ant);
+ShmTDIQChannel *shm_td_iq_channel_create(const char *name, int num_tx_ant, int num_rx_ant, bool client_sync);
 
 /**
  * @brief Connects to an existing shared memory IQ channel.
@@ -97,14 +98,30 @@ IQChannelErrorType shm_td_iq_channel_tx(ShmTDIQChannel *channel,
  * @param timestamp The timestamp for which to get the RX IQ data slot.
  * @param num_samples The number of samples to read.
  * @param antenna The antenna index.
- * @param tx_iq_data pointer to the RX IQ data slot.
+ * @param rx_iq_data pointer to the RX IQ data.
  * @return CHANNEL_NO_ERROR if successful, error type otherwise
  */
 IQChannelErrorType shm_td_iq_channel_rx(ShmTDIQChannel *channel,
                                         uint64_t timestamp,
                                         uint64_t num_samples,
                                         int antenna,
-                                        sample_t *tx_iq_data);
+                                        sample_t *rx_iq_data);
+
+/**
+ * @brief Receive iq data from the channel, zero-copy interface
+ *
+ * @param channel The ShmTDIQChannel structure.
+ * @param timestamp The timestamp for which to get the RX IQ data slot.
+ * @param num_samples The number of samples to read.
+ * @param antenna The antenna index.
+ * @param rx_iq_data pointer to the RX IQ data slot.
+ * @return CHANNEL_NO_ERROR if successful, error type otherwise
+ */
+IQChannelErrorType shm_td_iq_channel_zc_rx(ShmTDIQChannel *channel,
+                                           uint64_t timestamp,
+                                           uint64_t num_samples,
+                                           int antenna,
+                                           sample_t **rx_iq_data);
 
 /**
  * @brief Advances the time in the channel by specified number of samples
@@ -125,6 +142,16 @@ void shm_td_iq_channel_produce_samples(ShmTDIQChannel *channel, uint64_t num_sam
  */
 int shm_td_iq_channel_wait(ShmTDIQChannel *channel, uint64_t timestamp, uint64_t timeout_uS);
 
+/**
+ * @brief Wait until sample at the specified timestamp is transmitted by the client
+ *
+ * @param channel The ShmTDIQChannel structure.
+ * @param timestamp The timestamp for which to wait.
+ * @param timeout_uS The timeout in microseconds to wait for the sample. 0 means wait indefinitely.
+ *
+ * @return 0 if the sample is available, 1 if timed out
+ */
+int shm_td_iq_channel_wait_for_client(ShmTDIQChannel *channel, uint64_t timestamp, uint64_t timeout_uS);
 /**
  * @brief Aborts the IQ channel causing the wait to return immediately
  *
@@ -155,5 +182,17 @@ void shm_td_iq_channel_destroy(ShmTDIQChannel *channel);
  * @return Current time as sample count since beginning of transmission
  */
 uint64_t shm_td_iq_channel_get_current_sample(const ShmTDIQChannel *channel);
+
+/**
+ * @brief Returns current sample written by the client
+ *
+ * @param channel The ShmTDIQChannel structure.
+ *
+ * @return Current time as sample count since beginning of transmission written by the client
+ */
+uint64_t shm_td_iq_channel_get_current_client_sample(const ShmTDIQChannel *channel);
+
+int shm_td_iq_channel_get_nb_antennas_tx(ShmTDIQChannel *channel);
+int shm_td_iq_channel_get_nb_antennas_rx(ShmTDIQChannel *channel);
 
 #endif
