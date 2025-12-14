@@ -249,6 +249,14 @@ void nr_dlsim_preprocessor(gNB_MAC_INST *nr_mac, post_process_pdsch_t *pp_pdsch)
                                         0 /* tb_scaling */,
                                         sched_pdsch.nrOfLayers) >> 3;
 
+  const nr_pdsch_AntennaPorts_t *p = &nr_mac->radio_config.pdsch_AntennaPorts;
+  sched_pdsch.ant_port_idx.numSpatialStreamIndices = p->XP * p->N1 * p->N2;
+  get_antenna_port_indices(0,
+                           sched_pdsch.ant_port_idx.numSpatialStreamIndices,
+                           nr_mac->radio_config.spatial_stream_index,
+                           0,
+                           sched_pdsch.ant_port_idx.spatialStreamIndices);
+
   /* the simulator assumes the HARQ PID is equal to the slot number */
   sched_pdsch.dl_harq_pid = pp_pdsch->slot;
 

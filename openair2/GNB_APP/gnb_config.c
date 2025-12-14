@@ -1503,6 +1503,20 @@ static double complex **read_dbt_from_config(const char *prefix,
   return table;
 }
 
+static void config_spatial_stream_index(const paramdef_t *param, const size_t np, nr_mac_config_t *radio_config, int num_ru_ports)
+{
+  const int n = gpd(param, np, MACRLC_SPATIAL_STREAM_IDX)->numelt;
+  if (n == 0) {
+    // No indices provided in config file. Set default indices starting from 0.
+    for (int i = 0; i < num_ru_ports; i++)
+      radio_config->spatial_stream_index[i] = i;
+  } else {
+    AssertFatal(n == num_ru_ports, "Number of spatial stream indices must match number of RU ports\n");
+    for (int i = 0; i < n; i++)
+      radio_config->spatial_stream_index[i] = gpd(param, np, MACRLC_SPATIAL_STREAM_IDX)->uptr[i];
+  }
+}
+
 void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
 {
   int j = 0;
@@ -1799,6 +1813,10 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
         config.bt.beam_weights =
             read_dbt_from_config(prefix, &config.bt.num_beams, &config.bt.num_weights_per_beam, &config.bt.beam_ids);
       }
+
+      // Read spatial stream indices
+      config_spatial_stream_index(params, np, &RC.nrmac[j]->radio_config, num_tx);
+
       // triggers also PHY initialization in case we have L1 via FAPI
       nr_mac_config_scc(RC.nrmac[j], scc, &config);
     } //  for (j=0;j<RC.nb_nr_macrlc_inst;j++)
