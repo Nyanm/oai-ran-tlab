@@ -408,7 +408,7 @@ one_measurement_t test_ldpc(short max_iterations,
       decParams[j].outMode = nrLDPC_outMode_BIT;
       decParams[j].Kprime = Kprime;
       decParams[j].n_segments = n_segments;
-      decParams[j].LastTrial = (trial == ntrials - 1) ? 1 : 0;
+      //decParams[j].LastTrial = (trial == ntrials - 1) ? 1 : 0;
 
 
 

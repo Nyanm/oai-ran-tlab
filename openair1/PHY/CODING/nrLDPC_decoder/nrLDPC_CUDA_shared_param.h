@@ -10,6 +10,10 @@ extern "C" {
 #define num_TotalThreads_llr_llrRes 6528
 #define RowLength 96 //Zc = 384/4 = 96
 
+#define num_TotalBlocks_BG1_R13 316
+#define num_TotalBlocks_BG1_R23 144
+#define num_TotalBlocks_llr_llrRes 68
+
 #define DUMPCNBN 0
 
 extern cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL];
