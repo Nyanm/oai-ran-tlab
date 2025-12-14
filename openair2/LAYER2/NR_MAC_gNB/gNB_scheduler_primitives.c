@@ -821,6 +821,7 @@ nfapi_nr_dl_dci_pdu_t *prepare_dci_pdu(nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_
                                        const NR_ServingCellConfigCommon_t *scc,
                                        const NR_SearchSpace_t *ss,
                                        const NR_ControlResourceSet_t *coreset,
+                                       const uint16_t *spatial_stream_idx,
                                        int aggregation_level,
                                        int cce_index,
                                        int beam_index,
@@ -850,6 +851,15 @@ nfapi_nr_dl_dci_pdu_t *prepare_dci_pdu(nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_
   dci_pdu->precodingAndBeamforming.dig_bf_interfaces = 1;
   dci_pdu->precodingAndBeamforming.prgs_list[0].pm_idx = 0;
   dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = beam_index;
+
+  // Spatial stream indexing for MU-MIMO
+  const int num_ant_ports_per_dci = 1; // Only one stream per DCI for now
+  pdcch_pdu->param_v4.numSpatialStreams = (pdcch_pdu->numDlDci + 1 /*count this dci too*/) * num_ant_ports_per_dci;
+  const int current_dci_mapping_idx = pdcch_pdu->numDlDci * num_ant_ports_per_dci;
+  for (uint_fast16_t i = 0; i < num_ant_ports_per_dci; i++) {
+    pdcch_pdu->param_v4.dci_spatialSteamMap[current_dci_mapping_idx + i].dci_index = pdcch_pdu->numDlDci;
+    pdcch_pdu->param_v4.dci_spatialSteamMap[current_dci_mapping_idx + i].spatial_steam_index = spatial_stream_idx[i];
+  }
   return dci_pdu;
 }
 
@@ -1323,7 +1333,8 @@ void nr_configure_pucch(nfapi_nr_pucch_pdu_t *pucch_pdu,
                         uint16_t O_ack,
                         uint8_t O_sr,
                         int r_pucch,
-                        nr_beam_mode_t beam_mode)
+                        nr_beam_mode_t beam_mode,
+                        uint16_t ant_port_idx)
 {
   NR_PUCCH_Resource_t *pucchres;
   NR_PUCCH_FormatConfig_t *pucchfmt;
@@ -1533,6 +1544,8 @@ void nr_configure_pucch(nfapi_nr_pucch_pdu_t *pucch_pdu,
   pucch_pdu->beamforming.dig_bf_interface = 1;
   const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, beam_mode);
   pucch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = fapi_beam;
+  pucch_pdu->param_v4.numSpatialStreamIndices = 1;
+  pucch_pdu->param_v4.spatialStreamIndices[0] = ant_port_idx;
 }
 
 void set_r_pucch_parms(int rsetindex,
@@ -3277,6 +3290,11 @@ void nr_csirs_scheduling(int Mod_idP, gNB_MAC_INST *mac, frame_t frame, slot_t s
           }
 
           
+          // TODO: Current state of this function does not schedule CSI-RS
+          // multiple beams in a slot. So the CSI-RS starts from first antenna
+          // port.
+          csirs_pdu_rel15->param_v4.numSpatialStreamIndices = 1;
+          csirs_pdu_rel15->param_v4.spatialStreamIndices[0] = 0;
           csirs_pdu_rel15->bwp_size = dl_bwp->BWPSize;
           csirs_pdu_rel15->bwp_start = dl_bwp->BWPStart;
           csirs_pdu_rel15->subcarrier_spacing = dl_bwp->scs;
@@ -3707,6 +3725,17 @@ void fill_beam_index_list(NR_ServingCellConfigCommon_t *scc, const nr_mac_config
 static inline int get_beam_index(const NR_beam_info_t *beam_info, int frame, int slot, int slots_per_frame)
 {
   return ((frame * slots_per_frame + slot) / beam_info->beam_duration) % beam_info->beam_allocation_size;
+}
+
+void get_antenna_port_indices(unsigned int beam_number,
+                              unsigned int num_antenna_ports,
+                              const uint16_t configured_port_indices[MAX_NUM_SPATIAL_STREAMS],
+                              uint16_t mapped_ports[MAX_NUM_SPATIAL_STREAMS])
+{
+  const unsigned int offset = beam_number * num_antenna_ports;
+  DevAssert(configured_port_indices && mapped_ports && num_antenna_ports < MAX_NUM_SPATIAL_STREAMS
+            && offset + num_antenna_ports <= MAX_NUM_SPATIAL_STREAMS);
+  memcpy(mapped_ports, configured_port_indices + offset, sizeof(uint16_t) * num_antenna_ports);
 }
 
 NR_beam_alloc_t beam_allocation_procedure(NR_beam_info_t *beam_info, int frame, int slot, int16_t beam_index, int slots_per_frame)

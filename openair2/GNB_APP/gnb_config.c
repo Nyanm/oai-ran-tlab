@@ -1397,6 +1397,21 @@ static void get_bwp_config(nr_mac_config_t *configuration, const NR_ServingCellC
   }
 }
 
+static void config_spatial_stream_index(const paramdef_t *param, struct gNB_MAC_INST_s *mac, int num_ru_ports)
+{
+  const paramdef_t *p = param + MACRLC_SPATIAL_STREAM_IDX;
+  const int n = p->numelt;
+  if (n == 0) {
+    // No indices provided in config file. Set default indices starting from 0.
+    for (int i = 0; i < num_ru_ports; i++)
+      mac->spatial_stream_index[i] = i;
+  } else {
+    AssertFatal(n == num_ru_ports, "Number of spatial stream indices must match number of RU ports\n");
+    for (int i = 0; i < n; i++)
+      mac->spatial_stream_index[i] = p->uptr[i];
+  }
+}
+
 void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
 {
   int j = 0;
@@ -1656,6 +1671,10 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
         for (int b = 0; b < n; b++)
           config.bw_list[b] = MacRLC_ParamList.paramarray[j][MACRLC_BEAMWEIGHTS_IDX].iptr[b];
       }
+
+      // Read spatial stream indices
+      config_spatial_stream_index(MacRLC_ParamList.paramarray[j], RC.nrmac[j], num_tx);
+
       // triggers also PHY initialization in case we have L1 via FAPI
       nr_mac_config_scc(RC.nrmac[j], scc, &config);
     } //  for (j=0;j<RC.nb_nr_macrlc_inst;j++)

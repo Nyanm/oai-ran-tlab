@@ -894,6 +894,13 @@ static void pf_dl(gNB_MAC_INST *mac,
       .tda_info = tda_info,
     };
 
+    // Map antenna ports for this UE
+    sched_pdsch.ant_port_idx.numSpatialStreamIndices = mac->radio_config.pdsch_AntennaPorts.XP;
+    get_antenna_port_indices(beam.idx,
+                             sched_pdsch.ant_port_idx.numSpatialStreamIndices,
+                             mac->spatial_stream_index,
+                             sched_pdsch.ant_port_idx.spatialStreamIndices);
+
     sched_pdsch.action = NULL;
     int srb1 = 1;
     /* everything that's only 3 bytes is an ack. To be safe, use a bit more. */
@@ -1048,6 +1055,9 @@ nfapi_nr_dl_tti_pdsch_pdu_rel15_t *prepare_pdsch_pdu(nfapi_nr_dl_tti_request_pdu
     pdsch_pdu->precodingAndBeamforming.dig_bf_interfaces = 1;
     pdsch_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = beam_index;
   }
+  // MU-MIMO port mapping info
+  pdsch_pdu->param_v4.numberCodewords = pdsch_pdu->NrOfCodewords;
+  memcpy(&pdsch_pdu->param_v4.spatialSteamsCw[0], &sched_pdsch->ant_port_idx, sizeof(&pdsch_pdu->param_v4.spatialSteamsCw));
   return pdsch_pdu;
 }
 
@@ -1187,6 +1197,7 @@ void post_process_dlsch(gNB_MAC_INST *nr_mac, post_process_pdsch_t *pdsch, NR_UE
                                                    scc,
                                                    sched_ctrl->search_space,
                                                    sched_ctrl->coreset,
+                                                   sched_pdsch->ant_port_idx.spatialStreamIndices,
                                                    sched_ctrl->aggregation_level,
                                                    sched_ctrl->cce_index,
                                                    fapi_beam,

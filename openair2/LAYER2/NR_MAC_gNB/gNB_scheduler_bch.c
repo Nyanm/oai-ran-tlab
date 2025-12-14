@@ -332,6 +332,7 @@ static NR_sched_pdsch_t allocate_sib1(gNB_MAC_INST *gNB_mac,
       .nrOfLayers = 1,
       .pm_index = 0,
       .mcs = 0, // starting from mcs 0
+      .ant_port_idx = {.numSpatialStreamIndices = 1, .spatialStreamIndices[0] = beam},
   };
 
   uint16_t *vrb_map = cc->vrb_map[beam];
@@ -391,8 +392,15 @@ static void nr_fill_nfapi_dl_SIB_pdu(gNB_MAC_INST *gNB_mac,
         pdsch_pdu_rel15->dlDmrsSymbPos);
 
   /* Fill PDCCH DL DCI PDU */
-  nfapi_nr_dl_dci_pdu_t *dci_pdu =
-      prepare_dci_pdu(pdcch_pdu_rel15, scc, search_space, coreset, aggregation_level, cce_index, fapi_beam, SI_RNTI);
+  nfapi_nr_dl_dci_pdu_t *dci_pdu = prepare_dci_pdu(pdcch_pdu_rel15,
+                                                   scc,
+                                                   search_space,
+                                                   coreset,
+                                                   pdsch->ant_port_idx.spatialStreamIndices,
+                                                   aggregation_level,
+                                                   cce_index,
+                                                   fapi_beam,
+                                                   SI_RNTI);
   pdcch_pdu_rel15->numDlDci++;
 
   /* DCI payload */

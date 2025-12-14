@@ -416,6 +416,7 @@ typedef struct NR_sched_pucch {
   int second_hop_prb;
   int nr_of_symb;
   int start_symb;
+  uint16_t ant_port_idx;
 } NR_sched_pucch_t;
 
 typedef struct NR_pusch_dmrs {
@@ -458,6 +459,8 @@ typedef struct NR_sched_pusch {
   NR_pusch_dmrs_t dmrs_info;
   bwp_info_t bwp_info;
   int phr_txpower_calc;
+  // Antenna ports to use
+  nfapi_nr_spatial_stream_index_t ant_port_idx;
 } NR_sched_pusch_t;
 
 typedef struct NR_pdsch_dmrs {
@@ -502,6 +505,8 @@ typedef struct NR_sched_pdsch {
   int time_domain_allocation;
   NR_tda_info_t tda_info;
   feedback_action_t action;
+  // Baseband ports to use
+  nfapi_nr_spatial_stream_index_t ant_port_idx;
 } NR_sched_pdsch_t;
 
 typedef struct NR_UE_harq {
@@ -1008,6 +1013,8 @@ typedef struct gNB_MAC_INST_s {
 
   dlul_mac_stats_t mac_stats;
   uint64_t num_scheduled_prach_rx;
+  /// Spatial stream indexing for mapping onto RU ports. Needed for MU-MIMO
+  uint16_t spatial_stream_index[MAX_NUM_SPATIAL_STREAMS];
 } gNB_MAC_INST;
 
 #endif /*__LAYER2_NR_MAC_GNB_H__ */

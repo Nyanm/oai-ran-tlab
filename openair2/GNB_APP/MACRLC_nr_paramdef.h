@@ -81,6 +81,7 @@
 #define CONFIG_STRING_MACRLC_PUSCH_RSSI_THRESHOLD          "pusch_RSSI_Threshold"
 #define CONFIG_STRING_MACRLC_PUCCH_RSSI_THRESHOLD          "pucch_RSSI_Threshold"
 #define CONFIG_STRING_MACRLC_STATS_MAX_UE                  "stats_max_ue"
+#define CONFIG_STRING_MACRLC_SPATIAL_STREAM_IDX            "spatial_stream_index"
 
 #define HLP_MACRLC_UL_PRBBLACK "SNR threshold to decide whether a PRB will be blacklisted or not"
 #define HLP_MACRLC_DL_BLER_UP "Upper threshold of BLER to decrease DL MCS"
@@ -102,6 +103,7 @@
 #define HLP_MACRLC_PUSCH_RSSI_THRESHOLD "Limits PUSCH TPC commands based on RSSI to prevent ADC railing. Value range [-1280, 0], unit 0.1 dBm/dBFS"
 #define HLP_MACRLC_PUCCH_RSSI_THRESHOLD "Limits PUCCH TPC commands based on RSSI to prevent ADC railing. Value range [-1280, 0], unit 0.1 dBm/dBFS"
 #define HLP_MACRLC_STATS_MAX_UE "Maximum number of UEs before disabling periodical output (0 to disable)"
+#define HLP_MACRLC_SPATIAL_STREAM_INDEX "Array of RU antenna ports / eAxCIDs to be used by L1. This may only be applicable for MU-MIMO. Value range [0, 15]"
 
 /*-------------------------------------------------------------------------------------------------------------------------------------------------------*/
 /*                                            MacRLC  configuration parameters                                                                           */
@@ -155,6 +157,8 @@
   {CONFIG_STRING_MACRLC_PUCCH_RSSI_THRESHOLD,        HLP_MACRLC_PUCCH_RSSI_THRESHOLD, \
                                                                                0, .iptr=NULL,   .defintval=0,               TYPE_INT,     0}, \
   {CONFIG_STRING_MACRLC_STATS_MAX_UE,                HLP_MACRLC_STATS_MAX_UE,  0, .iptr=NULL,   .defintval=8,               TYPE_INT,     0}, \
+  {CONFIG_STRING_MACRLC_SPATIAL_STREAM_IDX,          HLP_MACRLC_SPATIAL_STREAM_INDEX, \
+                                                                               0, .uptr=NULL,   .defintarrayval=0,          TYPE_INTARRAY,0}, \
 }
 // clang-format off
 
@@ -202,6 +206,7 @@
 #define MACRLC_PUSCH_RSSI_THRES_IDX                            41
 #define MACRLC_PUCCH_RSSI_THRES_IDX                            42
 #define MACRLC_STATS_MAX_UE_IDX                                43
+#define MACRLC_SPATIAL_STREAM_IDX                              44
 
 #define MACRLCPARAMS_CHECK { \
   { .s5 = { NULL } }, \
@@ -251,6 +256,7 @@
   { .s2 =  { config_check_intrange, {-1280, 0}} }, /* PUSCH RSSI threshold range */ \
   { .s2 =  { config_check_intrange, {-1280, 0}} }, /* PUCCH RSSI threshold range */ \
   { .s5 = { NULL } }, \
+  { .s2 = { NULL } }, /* Spatial stream index */ \
 }
 
 /*---------------------------------------------------------------------------------------------------------------------------------------------------------*/

@@ -176,6 +176,7 @@ nfapi_nr_dl_dci_pdu_t *prepare_dci_pdu(nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_
                                        const NR_ServingCellConfigCommon_t *scc,
                                        const NR_SearchSpace_t *ss,
                                        const NR_ControlResourceSet_t *coreset,
+                                       const uint16_t *spatial_stream_idx,
                                        int aggregation_level,
                                        int cce_index,
                                        int beam_index,
@@ -221,7 +222,8 @@ void nr_configure_pucch(nfapi_nr_pucch_pdu_t *pucch_pdu,
                         uint16_t O_ack,
                         uint8_t O_sr,
                         int r_pucch,
-                        nr_beam_mode_t mode);
+                        nr_beam_mode_t mode,
+                        uint16_t ant_port_idx);
 
 void find_search_space(int ss_type,
                        NR_BWP_Downlink_t *bwp,
@@ -458,6 +460,17 @@ int get_beam_polarization_offset(const gNB_MAC_INST *nrmac);
 NR_beam_alloc_t beam_allocation_procedure(NR_beam_info_t *beam_info, int frame, int slot, int16_t beam_index, int slots_per_frame);
 void reset_beam_status(NR_beam_info_t *beam_info, int frame, int slot, int16_t beam_index, int slots_per_frame, bool new_beam);
 void beam_selection_procedures(gNB_MAC_INST *mac, NR_UE_info_t *UE);
+
+/// @brief Get the list of RU antenna port indices to which the UE's logical ports should be mapped to
+/// @param beam_number Beam number in a concurrent beam scenario (to be replaced with number of UEs later)
+/// @param num_antenna_ports Number of antenna ports at the output of precoder
+/// @param configured_port_indices List of RU port indices to be used
+/// @param mapped_ports Output the list of ports mapped to this UE
+void get_antenna_port_indices(unsigned int beam_number,
+                              unsigned int num_antenna_ports,
+                              const uint16_t configured_port_indices[MAX_NUM_SPATIAL_STREAMS],
+                              uint16_t mapped_ports[MAX_NUM_SPATIAL_STREAMS]);
+
 void nr_sr_reporting(gNB_MAC_INST *nrmac, frame_t frameP, slot_t slotP);
 bwp_info_t get_pdsch_bwp_start_size(gNB_MAC_INST *nr_mac, NR_UE_info_t *UE);
 bwp_info_t get_pusch_bwp_start_size(NR_UE_info_t *UE);

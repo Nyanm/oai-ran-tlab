@@ -95,7 +95,8 @@ static void nr_fill_nfapi_pucch(gNB_MAC_INST *nrmac, frame_t frame, slot_t slot,
                      pucch->dai_c,
                      pucch->sr_flag,
                      pucch->r_pucch,
-                     nrmac->beam_info.beam_mode);
+                     nrmac->beam_info.beam_mode,
+                     pucch->ant_port_idx);
 }
 
 #define MIN_RSRP_VALUE -141
@@ -297,6 +298,7 @@ void nr_csi_meas_reporting(int Mod_idP,frame_t frame, slot_t slot)
       // going through the list of PUCCH resources to find the one indexed by resource_id
       NR_beam_alloc_t beam = beam_allocation_procedure(&nrmac->beam_info, sched_frame, sched_slot, UE->UE_beam_index, n_slots_frame);
       AssertFatal(beam.idx >= 0, "Cannot allocate CSI measurements on PUCCH in any available beam\n");
+      curr_pucch->ant_port_idx = beam.idx;
       const int index = ul_buffer_index(sched_frame, sched_slot, n_slots_frame, nrmac->vrb_map_UL_size);
       uint16_t *vrb_map_UL = &nrmac->common_channels[0].vrb_map_UL[beam.idx][index * MAX_BWP_SIZE];
       const int m = pucch_Config->resourceToAddModList->list.count;
@@ -1255,6 +1257,7 @@ int nr_acknack_scheduling(gNB_MAC_INST *mac,
               pucch_slot);
         continue;
       }
+      curr_pucch->ant_port_idx = beam.idx;
       const int index = ul_buffer_index(pucch_frame, pucch_slot, n_slots_frame, mac->vrb_map_UL_size);
       uint16_t *vrb_map_UL = &mac->common_channels[CC_id].vrb_map_UL[beam.idx][index * MAX_BWP_SIZE];
       bool ret = test_pucch0_vrb_occupation(curr_pucch, vrb_map_UL, bwp_start, bwp_size);
@@ -1366,6 +1369,7 @@ void nr_sr_reporting(gNB_MAC_INST *nrmac, frame_t SFN, slot_t slot)
           LOG_E(NR_MAC,"Cannot schedule SR. PRBs not available\n");
           continue;
         }
+        curr_pucch->ant_port_idx = beam.idx;
         curr_pucch->frame = SFN;
         curr_pucch->ul_slot = slot;
         curr_pucch->sr_flag = true;

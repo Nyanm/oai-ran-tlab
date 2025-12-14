@@ -515,8 +515,11 @@ void schedule_nr_prach(module_id_t module_idP, frame_t frameP, slot_t slotP)
           prach_pdu->beamforming.num_prgs = 1;
           prach_pdu->beamforming.prg_size = n_ra_rb;
           prach_pdu->beamforming.dig_bf_interface = num_td_occ;
+          const unsigned int spatial_stream_idx = num_td_occ - 1;
           const uint16_t fapi_beam = convert_to_fapi_beam(beam_index, gNB->beam_info.beam_mode);
-          prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list[num_td_occ - 1].beam_idx = fapi_beam;
+          prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list[spatial_stream_idx].beam_idx = fapi_beam;
+          prach_pdu->param_v4.numSpatialStreamIndices = num_td_occ;
+          prach_pdu->param_v4.spatialStreamIndices[spatial_stream_idx] = beam.idx;
 
           LOG_D(NR_MAC,
                 "Frame %d, Slot %d: Prach Occasion id = %u  fdm index = %u start symbol = %u slot index = %u subframe index = %u \n",
@@ -857,6 +860,13 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
     .dmrs_info = dmrs_info,
   };
 
+  // Map antenna ports for this UE
+  sched_pusch.ant_port_idx.numSpatialStreamIndices = nr_mac->radio_config.pusch_AntennaPorts;
+  get_antenna_port_indices(beam_ul.idx,
+                            sched_pusch.ant_port_idx.numSpatialStreamIndices,
+                            nr_mac->spatial_stream_index,
+                            sched_pusch.ant_port_idx.spatialStreamIndices);
+
   int rbStart = 0;
   for (int i = 0; (i < ra->msg3_nb_rb) && (rbStart <= (sched_pusch.bwp_info.bwpSize - ra->msg3_nb_rb)); i++) {
     if (vrb_map_UL[rbStart + sched_pusch.bwp_info.bwpStart + i] & SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols)) {
@@ -939,8 +949,15 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
 
   // Fill PDCCH DL DCI PDU
   const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, nr_mac->beam_info.beam_mode);
-  nfapi_nr_dl_dci_pdu_t *dci_pdu =
-      prepare_dci_pdu(pdcch_pdu_rel15, scc, ss, coreset, aggregation_level, CCEIndex, fapi_beam, UE->rnti);
+  nfapi_nr_dl_dci_pdu_t *dci_pdu = prepare_dci_pdu(pdcch_pdu_rel15,
+                                                    scc,
+                                                    ss,
+                                                    coreset,
+                                                    sched_pusch.ant_port_idx.spatialStreamIndices,
+                                                    aggregation_level,
+                                                    CCEIndex,
+                                                    fapi_beam,
+                                                    UE->rnti);
   pdcch_pdu_rel15->numDlDci++;
 
   dci_pdu_rel15_t uldci_payload = {0};
@@ -1344,8 +1361,15 @@ static void prepare_dl_pdus(gNB_MAC_INST *nr_mac,
                                                                          pduindex);
 
   /* Fill PDCCH DL DCI PDU */
-  nfapi_nr_dl_dci_pdu_t *dci_pdu =
-      prepare_dci_pdu(pdcch_pdu_rel15, scc, sched_ctrl->search_space, coreset, aggregation_level, CCEIndex, fapi_beam, rnti);
+  nfapi_nr_dl_dci_pdu_t *dci_pdu = prepare_dci_pdu(pdcch_pdu_rel15,
+                                                   scc,
+                                                   sched_ctrl->search_space,
+                                                   coreset,
+                                                   sched_pdsch->ant_port_idx.spatialStreamIndices,
+                                                   aggregation_level,
+                                                   CCEIndex,
+                                                   fapi_beam,
+                                                   rnti);
   pdcch_pdu_rel15->numDlDci++;
 
   dci_pdu_rel15_t dci_payload = prepare_dci_dl_payload(nr_mac,
@@ -1586,20 +1610,19 @@ static void nr_generate_Msg2(module_id_t module_idP,
           >> 3; // layers
   }
 
-  NR_sched_pdsch_t sched_pdsch = {
-    .R = R,
-    .Qm = Qm,
-    .mcs = mcsIndex,
-    .time_domain_allocation = time_domain_assignment,
-    .nrOfLayers = 1,
-    .dmrs_parms = dmrs_parms,
-    .tda_info = tda_info,
-    .pm_index = 0,
-    .tb_size = TBS,
-    .bwp_info = bwp_info,
-    .rbStart = rbStart,
-    .rbSize = rbSize
-  };
+  NR_sched_pdsch_t sched_pdsch = {.R = R,
+                                  .Qm = Qm,
+                                  .mcs = mcsIndex,
+                                  .time_domain_allocation = time_domain_assignment,
+                                  .nrOfLayers = 1,
+                                  .dmrs_parms = dmrs_parms,
+                                  .tda_info = tda_info,
+                                  .pm_index = 0,
+                                  .tb_size = TBS,
+                                  .bwp_info = bwp_info,
+                                  .rbStart = rbStart,
+                                  .rbSize = rbSize,
+                                  .ant_port_idx = {.numSpatialStreamIndices = 1, .spatialStreamIndices[0] = beam.idx}};
   prepare_dl_pdus(nr_mac,
                   UE,
                   &sched_pdsch,

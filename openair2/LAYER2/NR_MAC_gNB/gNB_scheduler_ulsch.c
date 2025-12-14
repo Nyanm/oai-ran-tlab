@@ -2213,6 +2213,13 @@ static int  pf_ul(gNB_MAC_INST *nrmac,
       // phr_txpower_calc below
     };
 
+    // Map antenna ports for this UE
+    sched.ant_port_idx.numSpatialStreamIndices = nrmac->radio_config.pusch_AntennaPorts;
+    get_antenna_port_indices(beam.idx,
+                             sched.ant_port_idx.numSpatialStreamIndices,
+                             nrmac->spatial_stream_index,
+                             sched.ant_port_idx.spatialStreamIndices);
+
     /* Calculate the current scheduling bytes */
     const int B = cmax(sched_ctrl->estimated_ul_buffer - sched_ctrl->sched_ul_bytes, 0);
     /* adjust rbSize and MCS according to PHR and BPRE, only if there is data */
@@ -2372,6 +2379,7 @@ nfapi_nr_pusch_pdu_t *prepare_pusch_pdu(nfapi_nr_ul_tti_request_t *future_ul_tti
     pusch_pdu->beamforming.dig_bf_interface = 1;
     pusch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = base_beam;
   }
+  memcpy(&pusch_pdu->param_v4, &sched_pusch->ant_port_idx, sizeof(pusch_pdu->param_v4));
   /* TRANSFORM PRECODING --------------------------------------------------------*/
   if (pusch_pdu->transform_precoding == NR_PUSCH_Config__transformPrecoder_enabled) {
     // U as specified in section 6.4.1.1.1.2 in 38.211, if sequence hopping and group hopping are disabled
@@ -2571,6 +2579,7 @@ void post_process_ulsch(gNB_MAC_INST *nr_mac, post_process_pusch_t *pusch, NR_UE
                                                    scc,
                                                    ss,
                                                    coreset,
+                                                   sched_pusch->ant_port_idx.spatialStreamIndices,
                                                    sched_ctrl->aggregation_level,
                                                    sched_ctrl->cce_index,
                                                    convert_to_fapi_beam(UE->UE_beam_index, nr_mac->beam_info.beam_mode),
