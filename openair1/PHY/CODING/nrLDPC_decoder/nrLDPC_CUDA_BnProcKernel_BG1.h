@@ -58,7 +58,7 @@ __device__ __forceinline__ void bnProcKernel_BG1_int8_Gn(const int8_t *__restric
     uint32_t MsgSumLo, MsgSumHi;
     unpack_and_sign_extend(packed_intrinsic, &MsgSumLo, &MsgSumHi);
 
-    uint32_t off = (GrpNum * Zc) >> 2;
+    uint32_t off = (GrpNum * NR_LDPC_ZMAX) >> 2;
     const int32_t *currPtr = bnProcBufPtr;
 
     #pragma unroll
@@ -83,7 +83,7 @@ __device__ __forceinline__ void bnProcKernel_BG1_int8_Gn(const int8_t *__restric
     } 
     else {
         
-        uint32_t prevIdxWords = (MsgIdx * GrpNum * Zc) >> 2;
+        uint32_t prevIdxWords = (MsgIdx * GrpNum * NR_LDPC_ZMAX) >> 2;
         uint32_t prev = bnProcBufPtr[prevIdxWords]; 
         
         BricksToBeGet = __vsubss4(saturated_llr, prev);
@@ -111,7 +111,7 @@ __device__ __forceinline__ void bnProcKernel_BG1_int8_Gn_last(const int8_t *__re
     uint32_t MsgSumLo, MsgSumHi;
     unpack_and_sign_extend(packed_intrinsic, &MsgSumLo, &MsgSumHi);
 
-    uint32_t off = (GrpNum * Zc) >> 2;
+    uint32_t off = (GrpNum * NR_LDPC_ZMAX) >> 2;
     const int32_t *currPtr = bnProcBufPtr;
 
     #pragma unroll

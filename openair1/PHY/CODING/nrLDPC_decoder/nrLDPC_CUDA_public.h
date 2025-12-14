@@ -137,3 +137,4 @@ __device__ __forceinline__ uint32_t __vsign4(const uint32_t *a, uint32_t *b)
     uint32_t is_zero_mask = __vcmpeq4(b[0], 0);
     return result & (~is_zero_mask);
 }
+
