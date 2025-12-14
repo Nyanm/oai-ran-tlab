@@ -846,6 +846,7 @@ nfapi_nr_dl_dci_pdu_t *prepare_dci_pdu(nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_
                                        const NR_ServingCellConfigCommon_t *scc,
                                        const NR_SearchSpace_t *ss,
                                        const NR_ControlResourceSet_t *coreset,
+                                       const uint16_t *spatial_stream_idx,
                                        int aggregation_level,
                                        int cce_index,
                                        int beam_index,
@@ -872,9 +873,22 @@ nfapi_nr_dl_dci_pdu_t *prepare_dci_pdu(nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_
   dci_pdu->powerControlOffsetSS = 1;
   dci_pdu->precodingAndBeamforming.num_prgs = 1;
   dci_pdu->precodingAndBeamforming.prg_size = N_rb;
-  dci_pdu->precodingAndBeamforming.dig_bf_interfaces = 1;
   dci_pdu->precodingAndBeamforming.prgs_list[0].pm_idx = 0;
-  dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = beam_index;
+
+  // Spatial stream indexing for MU-MIMO
+  const int num_ant_ports_per_dci = 1; // Only one stream per DCI for now
+  pdcch_pdu->param_v4.numSpatialStreams = (pdcch_pdu->numDlDci + 1 /*count this dci too*/) * num_ant_ports_per_dci;
+  for (uint_fast16_t i = 0; i < num_ant_ports_per_dci; i++) {
+    pdcch_pdu->param_v4.dci_spatialStreamMap[pdcch_pdu->numDlDci * num_ant_ports_per_dci + i].dci_index = pdcch_pdu->numDlDci;
+    // Map the spatial stream index from the corresponding PDSCH signal
+    pdcch_pdu->param_v4.dci_spatialStreamMap[pdcch_pdu->numDlDci * num_ant_ports_per_dci + i].spatial_stream_index =
+        spatial_stream_idx[i];
+  }
+  dci_pdu->precodingAndBeamforming.dig_bf_interfaces = num_ant_ports_per_dci;
+  fill_dig_bf_interface_list(beam_index,
+                             num_ant_ports_per_dci,
+                             0,
+                             dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list);
   return dci_pdu;
 }
 
@@ -1342,7 +1356,8 @@ void nr_configure_pucch(nfapi_nr_pucch_pdu_t *pucch_pdu,
                         uint16_t O_ack,
                         uint8_t O_sr,
                         int r_pucch,
-                        nr_beam_mode_t beam_mode)
+                        nr_beam_mode_t beam_mode,
+                        uint16_t ant_port_idx)
 {
   NR_PUCCH_Resource_t *pucchres;
   NR_PUCCH_FormatConfig_t *pucchfmt;
@@ -1556,6 +1571,8 @@ void nr_configure_pucch(nfapi_nr_pucch_pdu_t *pucch_pdu,
   pucch_pdu->beamforming.dig_bf_interface = 1;
   const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, beam_mode);
   pucch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = fapi_beam;
+  pucch_pdu->param_v4.numSpatialStreamIndices = 1;
+  pucch_pdu->param_v4.spatialStreamIndices[0] = ant_port_idx;
 }
 
 void set_r_pucch_parms(int rsetindex,
@@ -3280,7 +3297,13 @@ void nr_csirs_scheduling(int Mod_idP, frame_t frame, slot_t slot, nfapi_nr_dl_tt
           csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces = 1;
           csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].pm_idx = 0;
           const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, gNB_mac->beam_info.beam_mode);
+          // TODO: set correctly dig_bf_interface_list when ports of same CDM group is used and PMI if used.
           csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = fapi_beam;
+          // TODO: Current state of this function does not schedule CSI-RS
+          // multiple beams in a slot. So the CSI-RS starts from first antenna
+          // port.
+          csirs_pdu_rel15->param_v4.numSpatialStreamIndices = 1;
+          csirs_pdu_rel15->param_v4.spatialStreamIndices[0] = 0;
           csirs_pdu_rel15->bwp_size = dl_bwp->BWPSize;
           csirs_pdu_rel15->bwp_start = dl_bwp->BWPStart;
           csirs_pdu_rel15->subcarrier_spacing = dl_bwp->scs;
@@ -3712,6 +3735,33 @@ void fill_beam_index_list(NR_ServingCellConfigCommon_t *scc, const nr_mac_config
 static inline int get_beam_index(const NR_beam_info_t *beam_info, int frame, int slot, int slots_per_frame)
 {
   return ((frame * slots_per_frame + slot) / beam_info->beam_duration) % beam_info->beam_allocation_size;
+}
+
+/// @brief Fill spatial stream index based on beam number in concurrent beams scenario
+/// @param beam_number Beam index in this beam period
+/// @param num_antenna_ports Number of max logical antenna ports for a DL / UL signal
+/// @param configured_port_indices Logical port indices available to use
+/// @param mapped_ports_offset Offset for mapped_ports array
+/// @param mapped_ports Return array with logial port indices
+void get_antenna_port_indices(unsigned int beam_number,
+                              unsigned int num_antenna_ports,
+                              const uint16_t configured_port_indices[MAX_NUM_SPATIAL_STREAMS],
+                              uint16_t mapped_ports_offset,
+                              uint16_t mapped_ports[MAX_NUM_SPATIAL_STREAMS])
+{
+  const unsigned int offset = beam_number * num_antenna_ports;
+  DevAssert(configured_port_indices && mapped_ports && offset + num_antenna_ports <= MAX_NUM_SPATIAL_STREAMS
+            && mapped_ports_offset + num_antenna_ports <= MAX_NUM_SPATIAL_STREAMS);
+  memcpy(mapped_ports + mapped_ports_offset, configured_port_indices + offset, sizeof(uint16_t) * num_antenna_ports);
+}
+
+void fill_dig_bf_interface_list(const uint16_t beam_id,
+                                const uint16_t num_ports,
+                                const uint16_t offset,
+                                nfapi_nr_dig_bf_interface_t list[NFAPI_MAX_NUM_BG_IF])
+{
+  for (uint_fast16_t p = 0; p < num_ports; p++)
+    list[offset + p].beam_idx = beam_id;
 }
 
 NR_beam_alloc_t beam_allocation_procedure(NR_beam_info_t *beam_info, int frame, int slot, int16_t beam_index, int slots_per_frame)

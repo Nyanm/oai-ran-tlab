@@ -165,6 +165,14 @@ void nr_preprocessor_phytest(gNB_MAC_INST *mac, post_process_pdsch_t *pp_pdsch)
       .time_domain_allocation = tda,
       .tda_info = tda_info,
   };
+  // Map antenna ports for this UE
+  const nr_pdsch_AntennaPorts_t *p = &mac->radio_config.pdsch_AntennaPorts;
+  sched_pdsch.ant_port_idx.numSpatialStreamIndices = p->XP * p->N1 * p->N2;
+  get_antenna_port_indices(beam.idx,
+                           sched_pdsch.ant_port_idx.numSpatialStreamIndices,
+                           mac->radio_config.spatial_stream_index,
+                           0,
+                           sched_pdsch.ant_port_idx.spatialStreamIndices);
   sched_ctrl->dl_bler_stats.mcs = target_dl_mcs; /* for logging output */
   sched_pdsch.tb_size = nr_compute_tbs(sched_pdsch.Qm,
                                        sched_pdsch.R,
