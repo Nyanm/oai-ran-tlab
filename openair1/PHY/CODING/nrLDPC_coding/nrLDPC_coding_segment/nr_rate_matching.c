@@ -659,6 +659,66 @@ void nr_interleaving_ldpc32(uint32_t E, uint8_t Qm, uint32_t *e, uint32_t *f)
       AssertFatal(false, "Should be here!\n");
   }
 }
+
+#if defined(__aarch64__)
+static inline uint8x16_t tbl96_u8(uint8x16_t b0, uint8x16_t b1, uint8x16_t b2,
+                                  uint8x16_t b3, uint8x16_t b4, uint8x16_t b5,
+                                  uint8x16_t idx /* 0..95 */)
+{
+   // Table 0: bytes 0..63
+   uint8x16x4_t T0 = { b0, b1, b2, b3 };
+   uint8x16_t r0 = vqtbl4q_u8(T0, idx);
+
+   // Table 1: bytes 64..95, presented as a 64-byte table:
+   // bytes 0..31 map to original 64..95, bytes 32..63 are dummy (return 0)
+   uint8x16_t z = vdupq_n_u8(0);
+   uint8x16x4_t T1 = { b4, b5, z, z };
+
+   // idx1 = idx - 64 (wrap-safe via unsigned subtract); only valid when idx>=64
+   uint8x16_t idx1 = vsubq_u8(idx, vdupq_n_u8(64));
+   uint8x16_t r1 = vqtbl4q_u8(T1, idx1);
+
+   // Select r1 where idx >= 64, else r0
+   uint8x16_t sel = vcgeq_u8(idx, vdupq_n_u8(64));  // 0xFF where idx>=64
+   return vbslq_u8(sel, r1, r0);
+}
+
+static inline uint8x16_t tbl128_u8(uint8x16_t b0, uint8x16_t b1, uint8x16_t b2, uint8x16_t b3,
+	                           uint8x16_t b4, uint8x16_t b5, uint8x16_t b6, uint8x16_t b7,
+	                           uint8x16_t idx /* 0..127 */)
+{
+  // Table low: bytes 0..63
+     uint8x16x4_t T0 = { b0, b1, b2, b3 };
+     uint8x16_t r0 = vqtbl4q_u8(T0, idx);
+
+ // Table high: bytes 64..127, mapped to 0..63 by subtracting 64
+     uint8x16x4_t T1 = { b4, b5, b6, b7 };
+     uint8x16_t idx1 = vsubq_u8(idx, vdupq_n_u8(64));
+     uint8x16_t r1 = vqtbl4q_u8(T1, idx1);
+
+ // Select high where idx >= 64 else low
+     uint8x16_t sel = vcgeq_u8(idx, vdupq_n_u8(64));
+     return vbslq_u8(sel, r1, r0);
+}
+#elif define(__AVX512VBMI__)
+#elif defined(__AVX2__)
+static inline __m128i gather8_u16_to_xmm(const uint16_t *base_u16, const int idx_bytes[8])
+{
+    // Gather 8x 32-bit values from byte offsets; each contains desired u16 in low 16 bits.
+    const int *base_i8_as_i32 = (const int *)(const void *)((const char*)base_u16);
+    __m256i vidx = _mm256_loadu_si256((const __m256i*)idx_bytes);
+    __m256i g32  = _mm256_i32gather_epi32(base_i8_as_i32, vidx, 1);
+
+    // keep low 16 bits
+    g32 = _mm256_and_si256(g32, _mm256_set1_epi32(0xFFFF));
+
+    // pack 8x32 -> 8x16 in low 128 bits (values are unsigned <= 65535 so packus is safe)
+    __m256i packed = _mm256_packus_epi32(g32, g32);
+    // packed contains 16x16 with duplicates; take low 128 which has our 8 u16
+    return _mm256_castsi256_si128(packed);
+}
+#endif
+
 void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
 {
   const uint32_t EQm = E / Qm;
@@ -667,7 +727,18 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
       AssertFatal(E % 2 == 0, "");
       int16_t *e1 = e + EQm;
       int i=0;	  
-#ifndef USE_SCALAR 
+#if defined(__aarch64__)
+      for (; i + 8 <= EQm; i += 8) {
+        int16x8x2_t v = vld2q_s16(f);  // 8 groups
+        f += 16;
+        vst1q_s16(e, v.val[0]); e += 8;
+        vst1q_s16(e1, v.val[1]); e1 += 8;
+      }
+#elif defined(__AVX512BW__)
+
+#elif defined(__AVX2__)
+
+#else 
       simde__m128i *e0_128 = (simde__m128i *)e;
       simde__m128i *e1_128 = (simde__m128i *)e1;
       simde__m128i *f128   = (simde__m128i *)f;	  
@@ -687,13 +758,27 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
         *e1++ = *f++;
       }
     } break;
+
     case 4: {
       AssertFatal(E % 4 == 0, "");
       int i=0;
       int16_t *e1 = e + EQm;
       int16_t *e2 = e1 + EQm;
       int16_t *e3 = e2 + EQm;
-#ifndef USE_SCALAR 
+#if defined(__aarch64__)
+    for (; i + 8 <= EQm; i += 8) {
+      int16x8x4_t v = vld4q_s16(f);  // 8 groups
+      f += 32;
+      vst1q_s16(e, v.val[0]); e += 8;
+      vst1q_s16(e1, v.val[1]); e1 += 8;
+      vst1q_s16(e2, v.val[2]); e2 += 8;
+      vst1q_s16(e3, v.val[3]); e3 += 8;
+    }
+#elif defined(__AVX512BW__)
+
+#elif defined(__AVX2__)
+
+#else 
       simde__m128i *e0_128 = (simde__m128i *)e;
       simde__m128i *e1_128 = (simde__m128i *)e1;
       simde__m128i *e2_128 = (simde__m128i *)e2;
@@ -738,115 +823,129 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
       int16_t *e4 = e3 + EQm;
       int16_t *e5 = e4 + EQm;
       int i=0;
-#if 0
+#if defined(__aarch64__)
 
-      simde__m128i *e0_128 = (simde__m128i *)e;
-      simde__m128i *e1_128 = (simde__m128i *)e1;
-      simde__m128i *e2_128 = (simde__m128i *)e2;
-      simde__m128i *e3_128 = (simde__m128i *)e3;
-      simde__m128i *e4_128 = (simde__m128i *)e4;
-      simde__m128i *e5_128 = (simde__m128i *)e5;
-      simde__m128i *f128   = (simde__m128i *)f;
-      const uint8_t shuf64_0[16] = { 0, 1,12,13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-      const simde__m128i *shuf64_0_128 = (const simde__m128i *)shuf64_0;
-      const uint8_t shuf64_1[16] = { 0, 0, 0, 0, 8, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-      const simde__m128i *shuf64_1_128 = (const simde__m128i *)shuf64_1;
-      const uint8_t shuf64_2[16] = { 0, 0, 0, 0, 0, 0, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0};
-      const simde__m128i *shuf64_2_128 = (const simde__m128i *)shuf64_2;
-      const uint8_t shuf64_3[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,12,13, 0, 0, 0, 0};
-      const simde__m128i *shuf64_3_128 = (const simde__m128i *)shuf64_3;
-      const uint8_t shuf64_4[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 9, 0, 0};
-      const simde__m128i *shuf64_4_128 = (const simde__m128i *)shuf64_4;
-      const uint8_t shuf64_5[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 5};
-      const simde__m128i *shuf64_5_128 = (const simde__m128i *)shuf64_5;
+          // Byte indices for extracting each stream
+	  // Each s16 occupies 2 bytes → indices are 2*(k + 6*n)
+      const uint8x16_t idx0 = {  0,  1, 12, 13, 24, 25, 36, 37,
+                                48, 49, 60, 61, 72, 73, 84, 85 };
+      const uint8x16_t idx1 = {  2,  3, 14, 15, 26, 27, 38, 39,
+                                50, 51, 62, 63, 74, 75, 86, 87 };
+      const uint8x16_t idx2 = {  4,  5, 16, 17, 28, 29, 40, 41,
+                                52, 53, 64, 65, 76, 77, 88, 89 };
+      const uint8x16_t idx3 = {  6,  7, 18, 19, 30, 31, 42, 43,
+                                54, 55, 66, 67, 78, 79, 90, 91 };
+      const uint8x16_t idx4 = {  8,  9, 20, 21, 32, 33, 44, 45,
+                                56, 57, 68, 69, 80, 81, 92, 93 };
+      const uint8x16_t idx5 = { 10, 11, 22, 23, 34, 35, 46, 47,
+                                58, 59, 70, 71, 82, 83, 94, 95 };
 
-      const uint8_t shuf64_6[16]  = { 2, 3,14,15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-      const simde__m128i *shuf64_6_128 = (const simde__m128i *)shuf64_6;
-      const uint8_t shuf64_7[16]  = { 0, 0, 0, 0,10,11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-      const simde__m128i *shuf64_7_128 = (const simde__m128i *)shuf64_7;
-      const uint8_t shuf64_8[16]  = { 0, 0, 0, 0, 0, 0, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0};
-      const simde__m128i *shuf64_8_128 = (const simde__m128i *)shuf64_8;
-      const uint8_t shuf64_9[16]  = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,12,13, 0, 0, 0, 0};
-      const simde__m128i *shuf64_9_128 = (const simde__m128i *)shuf64_9;
-      const uint8_t shuf64_10[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-      const simde__m128i *shuf64_10_128 = (const simde__m128i *)shuf64_10;
-      const uint8_t shuf64_11[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 5};
-      const simde__m128i *shuf64_11_128 = (const simde__m128i *)shuf64_11;
+      for (; i < EQm; i += 8) {
+	// Load 96 bytes (48 u16)
+	uint8x16_t b0 = vld1q_u8((const uint8_t*)(f +  0)); // bytes  0..15
+	uint8x16_t b1 = vld1q_u8((const uint8_t*)(f +  8)); // bytes 16..31
+	uint8x16_t b2 = vld1q_u8((const uint8_t*)(f + 16)); // bytes 32..47
+	uint8x16_t b3 = vld1q_u8((const uint8_t*)(f + 24)); // bytes 48..63
+	uint8x16_t b4 = vld1q_u8((const uint8_t*)(f + 32)); // bytes 64..79
+	uint8x16_t b5 = vld1q_u8((const uint8_t*)(f + 40)); // bytes 80..95
+	f += 48;
+        uint8x16_t o0b = tbl96_u8(b0,b1,b2,b3,b4,b5, idx0);
+        uint8x16_t o1b = tbl96_u8(b0,b1,b2,b3,b4,b5, idx1);
+        uint8x16_t o2b = tbl96_u8(b0,b1,b2,b3,b4,b5, idx2);
+        uint8x16_t o3b = tbl96_u8(b0,b1,b2,b3,b4,b5, idx3);
+        uint8x16_t o4b = tbl96_u8(b0,b1,b2,b3,b4,b5, idx4);
+        uint8x16_t o5b = tbl96_u8(b0,b1,b2,b3,b4,b5, idx5);
 
-      const uint8_t mask64_0[16] = {0   ,   0,   0,   0,0xff,0xff,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0};
-      const uint8_t mask64_1[16] = {0   ,   0,   0,   0,   0,   0,0xff,0xff,0xff,0xff,   0,   0,   0,   0,   0,   0};
-      const uint8_t mask64_2[16] = {0   ,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,0xff,0xff.   0,   0}; 
-      const uint8_t mask64_3[16] = {0   ,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,0xff,0xff}; 	  
+        vst1q_s16(e, vreinterpretq_s16_u8(o0b)); e += 8;
+        vst1q_s16(e1, vreinterpretq_s16_u8(o1b)); e1 += 8;
+        vst1q_s16(e2, vreinterpretq_s16_u8(o2b)); e2 += 8;
+        vst1q_s16(e3, vreinterpretq_s16_u8(o3b)); e3 += 8;
+        vst1q_s16(e4, vreinterpretq_s16_u8(o4b)); e4 += 8;
+        vst1q_s16(e5, vreinterpretq_s16_u8(o5b)); e5 += 8;
+      }	
+#elif defined(__AVX512BW__)
 
-      for (i=0; i < (EQm & ~7); i += 8) {
-         simde__m128i f0j = simde_mm_loadu_si128(f128++);
-         simde__m128i f1j = simde_mm_loadu_si128(f128++);
-         simde__m128i f2j = simde_mm_loadu_si128(f128++);
-         simde__m128i f3j = simde_mm_loadu_si128(f128++);
-         simde__m128i f4j = simde_mm_loadu_si128(f128++);
-         simde__m128i f5j = simde_mm_loadu_si128(f128++);
+      // Precompute permute control once (all compile-time constant patterns)
+      const __m512i idx0_ab = make_idx_ab(0), idx1_ab = make_idx_ab(1);
+      const __m512i idx2_ab = make_idx_ab(2), idx3_ab = make_idx_ab(3);
+      const __m512i idx4_ab = make_idx_ab(4), idx5_ab = make_idx_ab(5);
 
-	 simde__m128i tmp0 = simde_mm_shuffle_epi8(f0j,*shuf64_0_128); // f0_0 f0_6 X    X    X    X    X    X   
-         simde__m128i tmp1 = simde_mm_shuffle_epi8(f1j,*shuf64_1_128); // X    X    f1_4 X    X    X    X    X   
-         simde__m128i tmp2 = simde_mm_shuffle_epi8(f2j,*shuf64_2_128); // X    X    X    f2_2 X    X    X    X   
-	 simde__m128i tmp3 = simde_mm_shuffle_epi8(f3j,*shuf64_3_128); // X    X    X    X    f3_0 f3_6 X    X   
-         simde__m128i tmp4 = simde_mm_shuffle_epi8(f4j,*shuf64_4_128); // X    X    X    X    X    X    f4_4 X   
-	 simde__m128i tmp5 = simde_mm_shuffle_epi8(f5j,*shuf64_5_128); // X    X    X    X    X    X    X    f5_2
-								       
-	 tmp0 = simde_mm_blendv_epi8(tmp0,tmp1,*(simde__m128i*)mask64_0); // f0_0 f0_6 f1_4 X    X    X    X    X
-	 tmp0 = simde_mm_blendv_epi8(tmp0,tmp2,*(simde__m128i*)mask64_1); // f0_0 f0_6 f1_4 f2_2 X    X    X    X
-         tmp0 = simde_mm_blendv_epi8(tmp0,tmp3,*(simde__m128i*)mask64_2); // f0_0 f0_6 f1_4 f2_2 f3_0 f3_6 X    X
-         tmp0 = simde_mm_blendv_epi8(tmp0,tmp4,*(simde__m128i*)mask64_3); // f0_0 f0_6 f1_4 f2_2 f3_0 f3_6 f4_4 X
+      const __m512i idx0_bc = make_idx_bc(0), idx1_bc = make_idx_bc(1);
+      const __m512i idx2_bc = make_idx_bc(2), idx3_bc = make_idx_bc(3);
+      const __m512i idx4_bc = make_idx_bc(4), idx5_bc = make_idx_bc(5);
 
-         simde_mm_storeu_si128(e0_128++,simde_mm_blendv_epi8(tmp0,tmp4,*(simde__m128i*)mask64_4);	
-		// f0(i)   f0(i+6) f1(i+4) f2(i+2) f3(i)   f3(i+6) f4(i+4) f5(i+2)
+      const __mmask32 m0 = make_mask_bc(0), m1 = make_mask_bc(1), m2 = make_mask_bc(2);
+      const __mmask32 m3 = make_mask_bc(3), m4 = make_mask_bc(4), m5 = make_mask_bc(5);
 
-         simde__m128i tmp0 = simde_mm_shuffle_epi8(f0j,*shuf64_6_128); // f0_1 f0_7 X    X    X    X    X    X
-         simde__m128i tmp1 = simde_mm_shuffle_epi8(f1j,*shuf64_7_128); // X    X    f1_5 X    X    X    X    X
-         simde__m128i tmp2 = simde_mm_shuffle_epi8(f2j,*shuf64_8_128); // X    X    X    f2_3 X .. X    X    X
-         simde__m128i tmp3 = simde_mm_shuffle_epi8(f3j,*shuf64_9_128); // X    X    X    f3_1 f3_7 X    X    X
-         simde__m128i tmp4 = simde_mm_shuffle_epi8(f4j,*shuf64_10_128);// X    X    X    X    X    X    f4_5 X
-         simde__m128i tmp5 = simde_mm_shuffle_epi8(f5j,*shuf64_11_128);// X    X    X    X    X    X    X    f5_3
-         tmp0 = simde_mm_blendv_epi8(tmp0,tmp1,*(simde__m128i*)mask64_0); 
-         // f0_1 f0_7 f1_5 X    X    X    X    X
-         tmp0 = simde_mm_blendv_epi8(tmp0,tmp2,*(simde__m128i*)mask64_1); 
-         // f0_1 f0_7 f1_5 f2_3 X    X    X    X
-         tmp0 = simde_mm_blendv_epi8(tmp0,tmp3,*(simde__m128i*)mask64_2); 
-         // f0_1 f0_7 f1_5 f2_3 f3_1 f3_7 X    X
-         tmp0 = simde_mm_blendv_epi8(tmp0,tmp4,*(simde__m128i*)mask64_3); 
-         // f0_1 f0_7 f1_5 f2_3 f3_1 f3_7 f4_4 X
- 
-         simde_mm_storeu_si128(e1_128++,simde_mm_blendv_epi8(tmp0,tmp5,*(simde__m128i*)mask64_4); 
-         // f0(i+1) f0(i+7) f1(i+5) f2(i+3) f3(i+1) f3(i+7) f4(i+5) f5(i+3)
-         simde__m128i tmp0 = simde_mm_shuffle_epi8(f0j,); 
-	 // f0_2 X .. X
-         simde__m128i tmp1 = simde_mm_shuffle_epi8(f1j,); 
-         // X f1_6 X .. X
-         simde__m128i tmp2 = simde_mm_shuffle_epi8(f2j,); 
-         // X X X f2_3 X .. X
-         simde__m128i tmp3 = simde_mm_shuffle_epi8(f3j,); 
-         // X X X f3_1 f3_7 X X
-         simde__m128i tmp4 = simde_mm_shuffle_epi8(f4j,); 
-         // X X X X X X f4_5 X
-         simde__m128i tmp5 = simde_mm_shuffle_epi8(f5j,); 
-         // X X X X X X X f5_3
-         tmp0 = simde_mm_blendv_epi8(tmp0,tmp1,*(simde__m128i*)mask64_0); 
-         // f0_1 f0_7 f1_5 X    X    X    X    X
-         tmp0 = simde_mm_blendv_epi8(tmp0,tmp2,*(simde__m128i*)mask64_1); 
-         // f0_1 f0_7 f1_5 f2_3 X    X    X    X
-         tmp0 = simde_mm_blendv_epi8(tmp0,tmp3,*(simde__m128i*)mask64_2); 
-         // f0_1 f0_7 f1_5 f2_3 f3_1 f3_7 X    X
-         tmp0 = simde_mm_blendv_epi8(tmp0,tmp4,*(simde__m128i*)mask64_3); 
-         // f0_1 f0_7 f1_5 f2_3 f3_1 f3_7 f4_4 X
-         simde_mm_storeu_si128(e2_128++,simde_mm_blend_epi32(tmp7, tmp8,0xc0));        		                
-         // f0(i+2) f1(i)   f1(i+6) f2(i+4) f3(i+2) f4(i)  f4(i+6) f5(i+4)
-         simde_mm_storeu_si128(e3_128++,simde_mm_unpacklo_epi64(tmp0, tmp1));                        
-	 // f0(i+3) f1(i+1) f1(i+7) f2(i+5) f3(i+3) f4(i+1) f5(i+7) f5(i+5)
-         simde_mm_storeu_si128(e4_128++,simde_mm_unpacklo_epi64(tmp0, tmp1));                            
-         // f0(i+4) f1(i+2) f2(i)  f2(i+6) f3(i+4) f4(i+2)  f5(i)   f5(i+6)    
-         simde_mm_storeu_si128(e5_128++,simde_mm_unpacklo_epi64(tmp0, tmp1));    	
-         // f0(i+5) f1(i+3) f2(i+1) f2(i+7) f3(i+5) f4(i+3) f5(i+1) f5(i+7)
-      }
+      const __mmask32 store16 = 0xFFFFu; // store only first 16 lanes (16x u16)
+      for (; i + 16 <= EQm; i += 16) {
+        // 16 groups = 16*(6 u16) = 96 u16 = 192 bytes = 3 * 64B
+        __m512i A = _mm512_loadu_si512((const void*)(f +  0)); // u16[0..31]
+        __m512i B = _mm512_loadu_si512((const void*)(f + 32)); // u16[32..63]
+        __m512i C = _mm512_loadu_si512((const void*)(f + 64)); // u16[64..95]
+        f += 96;
+
+        // Gather from AB (global 0..63) and BC (global 32..95)
+        __m512i o0_ab = _mm512_permutex2var_epi16(A, idx0_ab, B);
+        __m512i o1_ab = _mm512_permutex2var_epi16(A, idx1_ab, B);
+        __m512i o2_ab = _mm512_permutex2var_epi16(A, idx2_ab, B);
+        __m512i o3_ab = _mm512_permutex2var_epi16(A, idx3_ab, B);
+        __m512i o4_ab = _mm512_permutex2var_epi16(A, idx4_ab, B);
+        __m512i o5_ab = _mm512_permutex2var_epi16(A, idx5_ab, B);
+
+        __m512i o0_bc = _mm512_permutex2var_epi16(B, idx0_bc, C);
+        __m512i o1_bc = _mm512_permutex2var_epi16(B, idx1_bc, C);
+        __m512i o2_bc = _mm512_permutex2var_epi16(B, idx2_bc, C);
+        __m512i o3_bc = _mm512_permutex2var_epi16(B, idx3_bc, C);
+        __m512i o4_bc = _mm512_permutex2var_epi16(B, idx4_bc, C);
+        __m512i o5_bc = _mm512_permutex2var_epi16(B, idx5_bc, C);
+
+        // Select lanes that crossed the 64-element boundary
+   	__m512i o0 = _mm512_mask_mov_epi16(o0_ab, m0, o0_bc);
+        __m512i o1 = _mm512_mask_mov_epi16(o1_ab, m1, o1_bc);
+        __m512i o2 = _mm512_mask_mov_epi16(o2_ab, m2, o2_bc);
+        __m512i o3 = _mm512_mask_mov_epi16(o3_ab, m3, o3_bc);
+        __m512i o4 = _mm512_mask_mov_epi16(o4_ab, m4, o4_bc);
+        __m512i o5 = _mm512_mask_mov_epi16(o5_ab, m5, o5_bc);
+
+        // Store only the first 16 lanes (16 groups) to each plane
+        _mm512_mask_storeu_epi16((void*)e0, store16, o0); e0 += 16;
+        _mm512_mask_storeu_epi16((void*)e1, store16, o1); e1 += 16;
+        _mm512_mask_storeu_epi16((void*)e2, store16, o2); e2 += 16;
+        _mm512_mask_storeu_epi16((void*)e3, store16, o3); e3 += 16;
+        _mm512_mask_storeu_epi16((void*)e4, store16, o4); e4 += 16;
+        _mm512_mask_storeu_epi16((void*)e5, store16, o5); e5 += 16;
+     }
+			//
+#elif defined(__AVX2__)
+    // Byte offsets inside one 8-group block (96 bytes):
+    // want u16 at position (k + 6*n) => byte offset 2*(k + 6*n).
+    alignas(32) static const int idx0[8] = {  0, 12, 24, 36, 48, 60, 72, 84 };
+    alignas(32) static const int idx1[8] = {  2, 14, 26, 38, 50, 62, 74, 86 };
+    alignas(32) static const int idx2[8] = {  4, 16, 28, 40, 52, 64, 76, 88 };
+    alignas(32) static const int idx3[8] = {  6, 18, 30, 42, 54, 66, 78, 90 };
+    alignas(32) static const int idx4[8] = {  8, 20, 32, 44, 56, 68, 80, 92 };
+    alignas(32) static const int idx5[8] = { 10, 22, 34, 46, 58, 70, 82, 94 };
+    //
+    int i = 0;
+    for (; i + 8 <= EQm; i += 8) {
+    // Gather within current 96-byte block starting at f
+    __m128i o0 = gather8_u16_to_xmm(f, idx0);
+    __m128i o1 = gather8_u16_to_xmm(f, idx1);
+    __m128i o2 = gather8_u16_to_xmm(f, idx2);
+    __m128i o3 = gather8_u16_to_xmm(f, idx3);      
+    __m128i o4 = gather8_u16_to_xmm(f, idx4);
+    __m128i o5 = gather8_u16_to_xmm(f, idx5);
+
+    _mm_storeu_si128((__m128i*)e0, o0); e0 += 8;
+    _mm_storeu_si128((__m128i*)e1, o1); e1 += 8;
+    _mm_storeu_si128((__m128i*)e2, o2); e2 += 8;
+    _mm_storeu_si128((__m128i*)e3, o3); e3 += 8;
+    _mm_storeu_si128((__m128i*)e4, o4); e4 += 8;
+    _mm_storeu_si128((__m128i*)e5, o5); e5 += 8;
+
+    f += 48; // consumed 8 groups * 6 u16 = 48 u16
+}	
 #endif
       for (; i < EQm; i++) {
         *e++ = *f++;
@@ -866,6 +965,53 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
       int16_t *e5 = e4 + EQm;
       int16_t *e6 = e5 + EQm;
       int16_t *e7 = e6 + EQm;
+      int i=0;
+#if 0 //defined(__aarch64__)
+          // For 8 groups: byte indices for stream k are 2*(k + 8*n) for n=0..7.
+	  // That is: 2k + 16n (and +1 for the high byte of the u16).
+      const uint8x16_t idx0 = {  0,  1, 16, 17, 32, 33, 48, 49, 64, 65, 80, 81, 96, 97,112,113 };
+      const uint8x16_t idx1 = {  2,  3, 18, 19, 34, 35, 50, 51, 66, 67, 82, 83, 98, 99,114,115 };
+      const uint8x16_t idx2 = {  4,  5, 20, 21, 36, 37, 52, 53, 68, 69, 84, 85,100,101,116,117 };
+      const uint8x16_t idx3 = {  6,  7, 22, 23, 38, 39, 54, 55, 70, 71, 86, 87,102,103,118,119 };
+      const uint8x16_t idx4 = {  8,  9, 24, 25, 40, 41, 56, 57, 72, 73, 88, 89,104,105,120,121 };
+      const uint8x16_t idx5 = { 10, 11, 26, 27, 42, 43, 58, 59, 74, 75, 90, 91,106,107,122,123 };
+      const uint8x16_t idx6 = { 12, 13, 28, 29, 44, 45, 60, 61, 76, 77, 92, 93,108,109,124,125 };
+      const uint8x16_t idx7 = { 14, 15, 30, 31, 46, 47, 62, 63, 78, 79, 94, 95,110,111,126,127 };
+
+      for (; i + 8 <= EQm; i += 8) {
+        // Load 128 bytes = 64 u16 = 8 groups (aligned-friendly, but vld1q_u8 is fine either way)
+        uint8x16_t b0 = vld1q_u8((const uint8_t*)(f +  0)); // bytes  0..15
+        uint8x16_t b1 = vld1q_u8((const uint8_t*)(f +  8)); // bytes 16..31
+        uint8x16_t b2 = vld1q_u8((const uint8_t*)(f + 16)); // bytes 32..47
+        uint8x16_t b3 = vld1q_u8((const uint8_t*)(f + 24)); // bytes 48..63
+        uint8x16_t b4 = vld1q_u8((const uint8_t*)(f + 32)); // bytes 64..79
+        uint8x16_t b5 = vld1q_u8((const uint8_t*)(f + 40)); // bytes 80..95
+        uint8x16_t b6 = vld1q_u8((const uint8_t*)(f + 48)); // bytes 96..111
+        uint8x16_t b7 = vld1q_u8((const uint8_t*)(f + 56)); // bytes 112..127
+        f += 64; // consumed 64 u16
+	       
+        uint8x16_t o0b = tbl128_u8(b0,b1,b2,b3,b4,b5,b6,b7, idx0);
+        uint8x16_t o1b = tbl128_u8(b0,b1,b2,b3,b4,b5,b6,b7, idx1);
+        uint8x16_t o2b = tbl128_u8(b0,b1,b2,b3,b4,b5,b6,b7, idx2);
+        uint8x16_t o3b = tbl128_u8(b0,b1,b2,b3,b4,b5,b6,b7, idx3);
+        uint8x16_t o4b = tbl128_u8(b0,b1,b2,b3,b4,b5,b6,b7, idx4);
+        uint8x16_t o5b = tbl128_u8(b0,b1,b2,b3,b4,b5,b6,b7, idx5);
+        uint8x16_t o6b = tbl128_u8(b0,b1,b2,b3,b4,b5,b6,b7, idx6);
+        uint8x16_t o7b = tbl128_u8(b0,b1,b2,b3,b4,b5,b6,b7, idx7);
+
+        vst1q_s16(e, vreinterpretq_s16_u8(o0b)); e += 8;
+        vst1q_s16(e1, vreinterpretq_s16_u8(o1b)); e1 += 8;
+        vst1q_s16(e2, vreinterpretq_s16_u8(o2b)); e2 += 8;
+        vst1q_s16(e3, vreinterpretq_s16_u8(o3b)); e3 += 8;
+        vst1q_s16(e4, vreinterpretq_s16_u8(o4b)); e4 += 8;
+        vst1q_s16(e5, vreinterpretq_s16_u8(o5b)); e5 += 8;
+        vst1q_s16(e6, vreinterpretq_s16_u8(o6b)); e6 += 8;
+        vst1q_s16(e7, vreinterpretq_s16_u8(o7b)); e7 += 8;	
+      }
+#elif defined(__AVX512BW__)
+#elif defined(__AVX2__)
+
+#else
       simde__m128i *e0_128 = (simde__m128i *)e;
       simde__m128i *e1_128 = (simde__m128i *)e1;
       simde__m128i *e2_128 = (simde__m128i *)e2;
@@ -876,7 +1022,6 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
       simde__m128i *e7_128 = (simde__m128i *)e7;
       simde__m128i *f128   = (simde__m128i *)f;
 
-      int i;
       for (i=0; i < (EQm & ~7); i += 8) {
         simde__m128i f0j = simde_mm_loadu_si128(f128++);
         simde__m128i f1j = simde_mm_loadu_si128(f128++);
@@ -926,8 +1071,8 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
       e6 = (int16_t *)e6_128;
       e7 = (int16_t *)e7_128;
       f  = (int16_t *)f128;
-     
-      while (i < EQm) {
+#endif
+      for(;i < EQm ; i++) {
         *e++ = *f++;
         *e1++ = *f++;
         *e2++ = *f++;
@@ -936,13 +1081,13 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
         *e5++ = *f++;
         *e6++ = *f++;
         *e7++ = *f++;
-	i++;
       }
     } break;
     default:
       AssertFatal(1 == 0, "Should not get here : Qm %d\n", Qm);
       break;
   }
+
 }
 
 int nr_rate_matching_ldpc(uint32_t Tbslbrm,
@@ -1224,8 +1369,10 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
   }
 #else
    int ind2 = ind + min(Ncb-ind,E-k);
-   for (;ind<(ind2&15);k+=16,ind+=16) 
+   for (;ind<(ind2&15);k+=16,ind+=16)  {
       simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));
+   }
+
    for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
 #endif
 
@@ -1252,13 +1399,15 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
 #else
    ind=0;
    ind2 = min(Foffset,E-k);
-   for (;ind<(ind2&15);k+=16,ind+=16) 
+   for (;ind<(ind2&15);k+=16,ind+=16) {
       simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));
+   }
    for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
    ind = Foffset+F;
    ind2 = ind + min(Ncb-ind,E-k);
-   for (;ind<(ind2&15);k+=16,ind+=16) 
+   for (;ind<(ind2&15);k+=16,ind+=16){ 
       simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));
+   }
    for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
 #endif
   }
