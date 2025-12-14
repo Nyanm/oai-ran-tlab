@@ -1020,6 +1020,10 @@ static void copy_dl_tti_request_pdcch_pdu(const nfapi_nr_dl_tti_pdcch_pdu_rel15_
     copy_dl_tti_beamforming(&src_dci_pdu->precodingAndBeamforming, &dst_dci_pdu->precodingAndBeamforming);
     PARTIAL_COPY_RANGE(dst_dci_pdu, src_dci_pdu, nfapi_nr_dl_dci_pdu_t, beta_PDCCH_1_0, Payload);
   }
+  dst->param_v4.numSpatialStreams = src->param_v4.numSpatialStreams;
+  for (uint_fast16_t i = 0; i < dst->param_v4.numSpatialStreams; i++) {
+    dst->param_v4.dci_spatialStreamIndices[i] = src->param_v4.dci_spatialStreamIndices[i];
+  }
 }
 
 static void copy_dl_tti_request_pdsch_pdu(const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *src, nfapi_nr_dl_tti_pdsch_pdu_rel15_t *dst)
@@ -1027,18 +1031,28 @@ static void copy_dl_tti_request_pdsch_pdu(const nfapi_nr_dl_tti_pdsch_pdu_rel15_
   PARTIAL_COPY(dst, src, nfapi_nr_dl_tti_pdsch_pdu_rel15_t, nEpreRatioOfPDSCHToPTRS);
   copy_dl_tti_beamforming(&src->precodingAndBeamforming, &dst->precodingAndBeamforming);
   PARTIAL_COPY_RANGE(dst, src, nfapi_nr_dl_tti_pdsch_pdu_rel15_t, powerControlOffset, maintenance_parms_v3);
+  dst->param_v4.numberCodewords = src->param_v4.numberCodewords;
+  for (uint_fast8_t i = 0; i < dst->param_v4.numberCodewords; i++) {
+    const nfapi_nr_spatial_stream_index_t *s = src->param_v4.spatialStreamsCw + i;
+    nfapi_nr_spatial_stream_index_t *d = dst->param_v4.spatialStreamsCw + i;
+    COPY_STRUCT_ARRAY(d, s, spatialStreamIndices, numSpatialStreamIndices);
+  }
 }
 
 static void copy_dl_tti_request_csi_rs_pdu(const nfapi_nr_dl_tti_csi_rs_pdu_rel15_t *src, nfapi_nr_dl_tti_csi_rs_pdu_rel15_t *dst)
 {
   PARTIAL_COPY(dst, src, nfapi_nr_dl_tti_csi_rs_pdu_rel15_t, power_control_offset_ss);
   copy_dl_tti_beamforming(&src->precodingAndBeamforming, &dst->precodingAndBeamforming);
+  const struct nfapi_nr_csi_spatial_stream_index *s = &src->param_v4;
+  struct nfapi_nr_csi_spatial_stream_index *d = &dst->param_v4;
+  COPY_STRUCT_ARRAY(d, s, spatialStreamIndices, numSpatialStreamIndices);
 }
 
 static void copy_dl_tti_request_ssb_pdu(const nfapi_nr_dl_tti_ssb_pdu_rel15_t *src, nfapi_nr_dl_tti_ssb_pdu_rel15_t *dst)
 {
   PARTIAL_COPY(dst, src, nfapi_nr_dl_tti_ssb_pdu_rel15_t, ssbRsrp);
   copy_dl_tti_beamforming(&src->precoding_and_beamforming, &dst->precoding_and_beamforming);
+  dst->param_v4 = src->param_v4;
 }
 
 static void copy_dl_tti_request_pdu(const nfapi_nr_dl_tti_request_pdu_t *src, nfapi_nr_dl_tti_request_pdu_t *dst)
@@ -1113,6 +1127,9 @@ static void copy_ul_tti_request_prach_pdu(const nfapi_nr_prach_pdu_t *src, nfapi
 {
   PARTIAL_COPY(dst, src, nfapi_nr_prach_pdu_t, num_cs);
   copy_ul_tti_beamforming(&src->beamforming, &dst->beamforming);
+  const nfapi_nr_spatial_stream_index_t *s = &src->param_v4;
+  nfapi_nr_spatial_stream_index_t *d = &dst->param_v4;
+  COPY_STRUCT_ARRAY(d, s, spatialStreamIndices, numSpatialStreamIndices);
 }
 
 static void copy_ul_tti_request_pusch_pdu(const nfapi_nr_pusch_pdu_t *src, nfapi_nr_pusch_pdu_t *dst)
@@ -1152,12 +1169,18 @@ static void copy_ul_tti_request_pusch_pdu(const nfapi_nr_pusch_pdu_t *src, nfapi
   copy_ul_tti_beamforming(&src->beamforming, &dst->beamforming);
   dst->maintenance_parms_v3.ldpcBaseGraph = src->maintenance_parms_v3.ldpcBaseGraph;
   dst->maintenance_parms_v3.tbSizeLbrmBytes = src->maintenance_parms_v3.tbSizeLbrmBytes;
+  const nfapi_nr_spatial_stream_index_t *s = &src->param_v4;
+  nfapi_nr_spatial_stream_index_t *d = &dst->param_v4;
+  COPY_STRUCT_ARRAY(d, s, spatialStreamIndices, numSpatialStreamIndices);
 }
 
 static void copy_ul_tti_request_pucch_pdu(const nfapi_nr_pucch_pdu_t *src, nfapi_nr_pucch_pdu_t *dst)
 {
   PARTIAL_COPY(dst, src, nfapi_nr_pucch_pdu_t, bit_len_csi_part2);
   copy_ul_tti_beamforming(&src->beamforming, &dst->beamforming);
+  const nfapi_nr_spatial_stream_index_t *s = &src->param_v4;
+  nfapi_nr_spatial_stream_index_t *d = &dst->param_v4;
+  COPY_STRUCT_ARRAY(d, s, spatialStreamIndices, numSpatialStreamIndices);
 }
 
 static void copy_ul_tti_request_srs_parameters(const nfapi_v4_srs_parameters_t *src,
