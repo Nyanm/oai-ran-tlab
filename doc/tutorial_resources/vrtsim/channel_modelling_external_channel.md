@@ -26,7 +26,7 @@ flatc --python -o . taps.fbs    # generates ./Phy/Taps.py
 ### Generate CIR DB
 ```bash
 cd ~/raytracing-channel-emulator/server/external_taps
-python3 CIR_generator.py --out ./cir_db.bin
+python3 CIR_generator.py --out ./cir_db.bin --demo
 ```
 
 ### Run CIR Emitter
