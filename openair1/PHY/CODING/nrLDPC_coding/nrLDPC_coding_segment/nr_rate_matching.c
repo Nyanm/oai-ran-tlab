@@ -700,7 +700,48 @@ static inline uint8x16_t tbl128_u8(uint8x16_t b0, uint8x16_t b1, uint8x16_t b2, 
      uint8x16_t sel = vcgeq_u8(idx, vdupq_n_u8(64));
      return vbslq_u8(sel, r1, r0);
 }
-#elif define(__AVX512VBMI__)
+#elif defined(__AVX512BW__)
+
+static inline __m512i idx_stride_u16(int ways, int k)
+{
+    uint16_t idx[32] __attribute__((aligned(64)));
+    for (int n = 0; n < 32; n++) idx[n] = (uint16_t)(k + ways*n);
+      return _mm512_load_si512((const void*)idx);
+}
+
+// Build indices for k = 0..5, lanes n=0..15: p = k + 6*n
+static inline __m512i make_idx_ab(int k) {
+    uint16_t idx[32] __attribute__((aligned(64))) = { 0 };
+    for (int n = 0; n < 16; n++) {
+        idx[n] = (uint16_t)(k + 6*n); // p in [0..95]
+    }
+    return _mm512_load_si512((const void*)idx);
+}
+
+static inline __m512i make_idx_bc(int k) {
+    uint16_t idx[32] __attribute__((aligned(64))) = { 0 };
+
+    for (int n = 0; n < 16; n++) {
+        int p = k + 6*n;
+   // For (B,C) pair, global p maps to:
+   //   indices 0..31  -> B lanes 0..31 (global 32..63)
+   //   indices 32..63 -> C lanes 0..31 (global 64..95)
+   // so use (p - 32) as index into [B|C] when p >= 32.
+        idx[n] = (uint16_t)(p - 32);
+    }
+    return _mm512_load_si512((const void*)idx);
+}
+
+static inline __mmask32 make_mask_bc(int k) {
+   // lanes needing BC are those with p >= 64 (since AB covers global 0..63)
+   __mmask32 m = 0;
+   for (int n = 0; n < 16; n++) {
+       int p = k + 6*n;
+       if (p >= 64) m |= (1u << n);
+   }
+   return m;
+}
+//
 #elif defined(__AVX2__)
 static inline __m128i gather8_u16_to_xmm(const uint16_t *base_u16, const int idx_bytes[8])
 {
@@ -735,14 +776,26 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
         vst1q_s16(e1, v.val[1]); e1 += 8;
       }
 #elif defined(__AVX512BW__)
+    const __m512i idx0 = idx_stride_u16(2, 0);
+    const __m512i idx1 = idx_stride_u16(2, 1);
 
+    for (; i + 32 <= EQm; i += 32) {
+        // 32 groups * 2 u16 = 64 u16 = 2x512b
+        __m512i A = _mm512_loadu_si512((const void*)(f +  0)); // u16[0..31]
+        __m512i B = _mm512_loadu_si512((const void*)(f + 32)); // u16[32..63]
+        f += 64;
+        __m512i o0 = _mm512_permutex2var_epi16(A, idx0, B);
+        __m512i o1 = _mm512_permutex2var_epi16(A, idx1, B);
+        _mm512_storeu_si512((void*)e, o0); e += 32;
+        _mm512_storeu_si512((void*)e1, o1); e1 += 32;
+    }
 #elif defined(__AVX2__)
 
 #else 
       simde__m128i *e0_128 = (simde__m128i *)e;
       simde__m128i *e1_128 = (simde__m128i *)e1;
       simde__m128i *f128   = (simde__m128i *)f;	  
-      const uint8_t shuf4[16] = {0,1,4,5,8,9,12,13,2,3,6,7,10,11,14,15};
+      const uint8_t shuf4[16] = {0,1,4,5,8,9,12,13,2,3,6,7,10,11,14,15} __attribute__((aligned(16)));;
       const simde__m128i *shuf4_128 = (const simde__m128i *)shuf4;
       for (i=0; i < (EQm & ~7); i += 8) {      
             simde__m128i f0j = simde_mm_loadu_si128(f128++); // f0(i) f0(i+1) f0(i+2) f0(i+3) f0(i+4) f0(i+5) f0(i+6) f0(i+7)
@@ -765,18 +818,62 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
       int16_t *e1 = e + EQm;
       int16_t *e2 = e1 + EQm;
       int16_t *e3 = e2 + EQm;
-#if defined(__aarch64__)
-    for (; i + 8 <= EQm; i += 8) {
-      int16x8x4_t v = vld4q_s16(f);  // 8 groups
-      f += 32;
-      vst1q_s16(e, v.val[0]); e += 8;
-      vst1q_s16(e1, v.val[1]); e1 += 8;
-      vst1q_s16(e2, v.val[2]); e2 += 8;
-      vst1q_s16(e3, v.val[3]); e3 += 8;
-    }
-#elif defined(__AVX512BW__)
 
-#elif defined(__AVX2__)
+#if defined(__aarch64__)
+      for (; i + 8 <= EQm; i += 8) {
+        int16x8x4_t v = vld4q_s16(f);  // 8 groups
+        f += 32;
+        vst1q_s16(e, v.val[0]); e += 8;
+        vst1q_s16(e1, v.val[1]); e1 += 8;
+        vst1q_s16(e2, v.val[2]); e2 += 8;
+        vst1q_s16(e3, v.val[3]); e3 += 8;
+      }
+#elif defined(__AVX512BW__)
+      const __m512i idx0 = idx_stride_u16(4, 0);
+      const __m512i idx1 = idx_stride_u16(4, 1);
+      const __m512i idx2 = idx_stride_u16(4, 2);
+      const __m512i idx3 = idx_stride_u16(4, 3);
+
+      for (; i + 32 <= EQm; i += 32) {
+        // 32 groups * 4 u16 = 128 u16 = 4x512b
+        __m512i A = _mm512_loadu_si512((const void*)(f +  0));
+        __m512i B = _mm512_loadu_si512((const void*)(f + 32));
+        __m512i C = _mm512_loadu_si512((const void*)(f + 64));
+        __m512i D = _mm512_loadu_si512((const void*)(f + 96));
+        f += 128;
+       // Build results from (A,B) and (C,D) with masking (boundary at 64 u16)
+        __m512i o0_ab = _mm512_permutex2var_epi16(A, idx0, B);
+        __m512i o1_ab = _mm512_permutex2var_epi16(A, idx1, B);
+        __m512i o2_ab = _mm512_permutex2var_epi16(A, idx2, B);
+        __m512i o3_ab = _mm512_permutex2var_epi16(A, idx3, B);
+
+        __m512i idx0_cd = _mm512_sub_epi16(idx0, _mm512_set1_epi16(64));
+        __m512i idx1_cd = _mm512_sub_epi16(idx1, _mm512_set1_epi16(64));
+        __m512i idx2_cd = _mm512_sub_epi16(idx2, _mm512_set1_epi16(64));
+        __m512i idx3_cd = _mm512_sub_epi16(idx3, _mm512_set1_epi16(64));
+
+        __m512i o0_cd = _mm512_permutex2var_epi16(C, idx0_cd, D);
+        __m512i o1_cd = _mm512_permutex2var_epi16(C, idx1_cd, D);
+        __m512i o2_cd = _mm512_permutex2var_epi16(C, idx2_cd, D);
+        __m512i o3_cd = _mm512_permutex2var_epi16(C, idx3_cd, D);
+
+        // lanes needing CD are those where idx >= 64
+	__mmask32 m0 = _mm512_cmpge_epu16_mask(idx0, _mm512_set1_epi16(64));
+	__mmask32 m1 = _mm512_cmpge_epu16_mask(idx1, _mm512_set1_epi16(64));
+	__mmask32 m2 = _mm512_cmpge_epu16_mask(idx2, _mm512_set1_epi16(64));
+	__mmask32 m3 = _mm512_cmpge_epu16_mask(idx3, _mm512_set1_epi16(64));
+	
+	__m512i o0 = _mm512_mask_mov_epi16(o0_ab, m0, o0_cd);
+	__m512i o1 = _mm512_mask_mov_epi16(o1_ab, m1, o1_cd);
+	__m512i o2 = _mm512_mask_mov_epi16(o2_ab, m2, o2_cd);
+	__m512i o3 = _mm512_mask_mov_epi16(o3_ab, m3, o3_cd);
+	
+	_mm512_storeu_si512((void*)e, o0); e += 32;
+	_mm512_storeu_si512((void*)e1, o1); e1 += 32;
+	_mm512_storeu_si512((void*)e2, o2); e2 += 32;
+	_mm512_storeu_si512((void*)e3, o3); e3 += 32;
+      }
+#elif defined(__AVX2__
 
 #else 
       simde__m128i *e0_128 = (simde__m128i *)e;
@@ -785,7 +882,7 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
       simde__m128i *e3_128 = (simde__m128i *)e3;
       simde__m128i *f128   = (simde__m128i *)f;	  
      
-      const uint8_t shuf16[16] = {0,1,8,9,2,3,10,11,4,5,12,13,6,7,14,15};
+      const uint8_t shuf16[16] = {0,1,8,9,2,3,10,11,4,5,12,13,6,7,14,15} __attribute__((aligned(64)));
       const simde__m128i *shuf16_128 = (const simde__m128i *)shuf16;
 
       for (i=0; i < (EQm & ~7); i += 8) {      
@@ -909,7 +1006,7 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
         __m512i o5 = _mm512_mask_mov_epi16(o5_ab, m5, o5_bc);
 
         // Store only the first 16 lanes (16 groups) to each plane
-        _mm512_mask_storeu_epi16((void*)e0, store16, o0); e0 += 16;
+        _mm512_mask_storeu_epi16((void*)e, store16, o0); e += 16;
         _mm512_mask_storeu_epi16((void*)e1, store16, o1); e1 += 16;
         _mm512_mask_storeu_epi16((void*)e2, store16, o2); e2 += 16;
         _mm512_mask_storeu_epi16((void*)e3, store16, o3); e3 += 16;
@@ -917,15 +1014,15 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
         _mm512_mask_storeu_epi16((void*)e5, store16, o5); e5 += 16;
      }
 			//
-#elif defined(__AVX2__)
+#elif defined()
     // Byte offsets inside one 8-group block (96 bytes):
     // want u16 at position (k + 6*n) => byte offset 2*(k + 6*n).
-    alignas(32) static const int idx0[8] = {  0, 12, 24, 36, 48, 60, 72, 84 };
-    alignas(32) static const int idx1[8] = {  2, 14, 26, 38, 50, 62, 74, 86 };
-    alignas(32) static const int idx2[8] = {  4, 16, 28, 40, 52, 64, 76, 88 };
-    alignas(32) static const int idx3[8] = {  6, 18, 30, 42, 54, 66, 78, 90 };
-    alignas(32) static const int idx4[8] = {  8, 20, 32, 44, 56, 68, 80, 92 };
-    alignas(32) static const int idx5[8] = { 10, 22, 34, 46, 58, 70, 82, 94 };
+    static const int idx0[8] = {  0, 12, 24, 36, 48, 60, 72, 84 } __attribute__((aligned(64)));
+    static const int idx1[8] = {  2, 14, 26, 38, 50, 62, 74, 86 } __attribute__((aligned(64)));
+    static const int idx2[8] = {  4, 16, 28, 40, 52, 64, 76, 88 } __attribute__((aligned(64)));
+    static const int idx3[8] = {  6, 18, 30, 42, 54, 66, 78, 90 } __attribute__((aligned(64)));
+    static const int idx4[8] = {  8, 20, 32, 44, 56, 68, 80, 92 } __attribute__((aligned(64)));
+    static const int idx5[8] = { 10, 22, 34, 46, 58, 70, 82, 94 } __attribute__((aligned(64)));
     //
     int i = 0;
     for (; i + 8 <= EQm; i += 8) {
@@ -967,6 +1064,7 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
       int16_t *e7 = e6 + EQm;
       int i=0;
 #if 0 //defined(__aarch64__)
+      // SIMDE version below is more efficient than tbl128
           // For 8 groups: byte indices for stream k are 2*(k + 8*n) for n=0..7.
 	  // That is: 2k + 16n (and +1 for the high byte of the u16).
       const uint8x16_t idx0 = {  0,  1, 16, 17, 32, 33, 48, 49, 64, 65, 80, 81, 96, 97,112,113 };
@@ -1009,6 +1107,66 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
         vst1q_s16(e7, vreinterpretq_s16_u8(o7b)); e7 += 8;	
       }
 #elif defined(__AVX512BW__)
+
+    // Precompute indices for each stream k=0..7
+    const __m512i idx0 = idx_stride_u16(8,0);
+    const __m512i idx1 = idx_stride_u16(8,1);
+    const __m512i idx2 = idx_stride_u16(8,2);
+    const __m512i idx3 = idx_stride_u16(8,3);
+    const __m512i idx4 = idx_stride_u16(8,4);
+    const __m512i idx5 = idx_stride_u16(8,5);
+    const __m512i idx6 = idx_stride_u16(8,6);
+    const __m512i idx7 = idx_stride_u16(8,7);
+
+    const __m512i c64  = _mm512_set1_epi16(64);
+    const __m512i c128 = _mm512_set1_epi16(128);
+    const __m512i c192 = _mm512_set1_epi16(192);
+    
+    for (; i + 32 <= EQm; i += 32) {
+        // 32 groups * 8 u16 = 256 u16 = 8 * 32 u16 = 8 ZMM vectors
+	__m512i A = _mm512_loadu_si512((const void*)(f +  0));   // u16[  0.. 31]
+	__m512i B = _mm512_loadu_si512((const void*)(f + 32));   // u16[ 32.. 63]
+	__m512i C = _mm512_loadu_si512((const void*)(f + 64));   // u16[ 64.. 95]
+	__m512i D = _mm512_loadu_si512((const void*)(f + 96));   // u16[ 96..127]
+	__m512i E = _mm512_loadu_si512((const void*)(f + 128));  // u16[128..159]
+	__m512i F = _mm512_loadu_si512((const void*)(f + 160));  // u16[160..191]
+	__m512i G = _mm512_loadu_si512((const void*)(f + 192));  // u16[192..223]
+	__m512i H = _mm512_loadu_si512((const void*)(f + 224));  // u16[224..255]
+	f += 256;
+        // Helper macro: compute one stream (k) by permuting from 4 segments and blending
+	#define DO_STREAM(IDX, OUTPTR) do { \
+	   /* segment masks based on global index p = k+8*n */ \
+	   __mmask32 m1 = _mm512_cmpge_epu16_mask((IDX), c64); \
+	   __mmask32 m2 = _mm512_cmpge_epu16_mask((IDX), c128); \
+	   __mmask32 m3 = _mm512_cmpge_epu16_mask((IDX), c192); \
+	   /* indices relative to each segment base */ \
+	   __m512i i0 = (IDX); \
+	   __m512i i1 = _mm512_sub_epi16((IDX), c64); \
+	   __m512i i2 = _mm512_sub_epi16((IDX), c128); \
+	   __m512i i3 = _mm512_sub_epi16((IDX), c192); \
+	   /* permute from each 64-u16 segment (two ZMMs per segment) */ \
+	   __m512i r0 = _mm512_permutex2var_epi16(A, i0, B); \
+	   __m512i r1 = _mm512_permutex2var_epi16(C, i1, D); \
+	   __m512i r2 = _mm512_permutex2var_epi16(E, i2, F); \
+	   __m512i r3 = _mm512_permutex2var_epi16(G, i3, H); \
+           /* blend: later segments overwrite earlier where applicable */ \
+	   __m512i r = _mm512_mask_mov_epi16(r0, m1, r1); \
+	   r = _mm512_mask_mov_epi16(r,  m2, r2); \
+	   r = _mm512_mask_mov_epi16(r,  m3, r3); \
+	   _mm512_storeu_si512((void*)(OUTPTR), r); \
+	   (OUTPTR) += 32; \
+	} while(0)
+        DO_STREAM(idx0, e);
+	DO_STREAM(idx1, e1);
+	DO_STREAM(idx2, e2);
+	DO_STREAM(idx3, e3);
+	DO_STREAM(idx4, e4);
+	DO_STREAM(idx5, e5);
+	DO_STREAM(idx6, e6);
+	DO_STREAM(idx7, e7);
+
+        #undef DO_STREAM
+    }
 #elif defined(__AVX2__)
 
 #else
