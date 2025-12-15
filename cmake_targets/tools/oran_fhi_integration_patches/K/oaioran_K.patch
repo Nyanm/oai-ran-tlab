@@ -641,7 +641,7 @@ index 5956ca4..675328d 100644
  #include <rte_eal.h>
  #include <rte_ethdev.h>
 diff --git a/fhi_lib/lib/src/xran_main.c b/fhi_lib/lib/src/xran_main.c
-index 256fa1d..0498856 100644
+index 256fa1d..a9fd164 100644
 --- a/fhi_lib/lib/src/xran_main.c
 +++ b/fhi_lib/lib/src/xran_main.c
 @@ -36,7 +36,11 @@
@@ -693,7 +693,41 @@ index 256fa1d..0498856 100644
      /* Save some configs for app */
      pPRACHConfig->startSymId    = pPrachCPConfig->startSymId;
      pPRACHConfig->lastSymId     = pPrachCPConfig->startSymId + pPrachCPConfig->numSymbol * pPrachCPConfig->occassionsInPrachSlot - 1;
-@@ -2309,16 +2332,21 @@ int32_t xran_handle_rx_pkts(struct rte_mbuf* pkt_q[], uint16_t xport_id, struct
+@@ -611,6 +634,11 @@ void xran_process_nbiot_prach_cp(struct xran_device_ctx * pDevCtx, uint8_t mu)
+                         uint8_t seqid = xran_get_cp_seqid(pDevCtx, XRAN_DIR_UL, ccId, portId);
+ 
+                         uint16_t beam_id = xran_get_beamid(pDevCtx, XRAN_DIR_UL, ccId, portId, 0);
++                        uint8_t bufId = tti % XRAN_N_FE_BUF_LEN;
++                        struct xran_buffer_list *pBufList = &(pDevCtx->perMu[mu].sFrontHaulRxPrbMapBbuIoBufCtrl[bufId][ccId][antId].sBufferList);
++                        struct xran_prb_map *prbMap = pBufList->pBuffers->pData;
++                        struct xran_prb_elm *pPrbElm = &prbMap->prbMap[0]; //mjoang
++                        beam_id = pPrbElm->nBeamIndex;
+                         ret = generate_cpmsg_prach(pDevCtx, &params, sect_geninfo, mbuf, pDevCtx,
+                                 frameId, sfId, 0, tti,
+                                 beam_id, ccId, portId, 0, seqid, mu, sym_id);
+@@ -1880,6 +1908,10 @@ xran_prepare_cp_ul_slot(uint16_t xran_port_id, uint32_t nSlotIdx,  uint32_t nCcS
+                                 uint8_t seqid = xran_get_cp_seqid(pHandle, XRAN_DIR_UL, ccId, portId);
+ 
+                                 beam_id = xran_get_beamid(pHandle, XRAN_DIR_UL, ccId, portId, slotId);
++                                pBufList = &(pDevCtx->perMu[mu].sFrontHaulRxPrbMapBbuIoBufCtrl[bufId][ccId][antId].sBufferList);
++                                struct xran_prb_map *prbMap = pBufList->pBuffers->pData;
++                                struct xran_prb_elm *pPrbElm = &prbMap->prbMap[0]; //mjoang
++                                beam_id = pPrbElm->nBeamIndex;
+                                 ret = generate_cpmsg_prach(pHandle, &params, sect_geninfo, mbuf, pDevCtx,
+                                             frameId, sfId, slotId, tti,
+                                             beam_id, ccId, portId, occasionid, seqid, mu, 0);
+@@ -2128,6 +2160,10 @@ void tx_cp_ul_cb(struct rte_timer *tim, void *arg)
+                             uint8_t seqid = xran_get_cp_seqid(pHandle, XRAN_DIR_UL, ccId, portId);
+ 
+                             beam_id = xran_get_beamid(pHandle, XRAN_DIR_UL, ccId, portId, slotId);
++                            pBufList = &(pDevCtx->perMu[mu].sFrontHaulRxPrbMapBbuIoBufCtrl[bufId][ccId][antId].sBufferList);
++                            struct xran_prb_map *prbMap = pBufList->pBuffers->pData;
++                            struct xran_prb_elm *pPrbElm = &prbMap->prbMap[0]; //mjoang
++                            beam_id = pPrbElm->nBeamIndex;
+                             ret = generate_cpmsg_prach(pHandle, &params, sect_geninfo, mbuf, pDevCtx,
+                                     frameId, sfId, slotId, tti,
+                                     beam_id, ccId, portId, occasionid, seqid, mu, 0);
+@@ -2309,16 +2345,21 @@ int32_t xran_handle_rx_pkts(struct rte_mbuf* pkt_q[], uint16_t xport_id, struct
                      // ECPRI payload validation
                      if(likely(sysCfg->rru_workaround == 0))
                      {
@@ -722,7 +756,7 @@ index 256fa1d..0498856 100644
                      break;
                  // For RU emulation
                  case ECPRI_RT_CONTROL_DATA:
-@@ -3663,8 +3691,7 @@ ring_processing_func_per_port(void* args)
+@@ -3663,8 +3704,7 @@ ring_processing_func_per_port(void* args)
      for (i = 0; i < ctx->io_cfg.num_vfs && i < XRAN_VF_MAX; i = i+1) {
          if (ctx->vf2xran_port[i] == portId) {
              for(qi = 0; qi < ctx->rxq_per_port[portId]; qi++){
@@ -732,7 +766,7 @@ index 256fa1d..0498856 100644
              }
          }
      }
-@@ -3708,7 +3735,7 @@ xran_status_t xran_update_worker_info(struct xran_worker_info_s *p_worker_info,
+@@ -3708,7 +3748,7 @@ xran_status_t xran_update_worker_info(struct xran_worker_info_s *p_worker_info,
              continue;
          }
  
@@ -741,7 +775,7 @@ index 256fa1d..0498856 100644
          if(pThCtx == NULL)
          {
              print_err("pThCtx allocation error\n");
-@@ -3838,8 +3865,6 @@ int32_t xran_spawn_workers(void)
+@@ -3838,8 +3878,6 @@ int32_t xran_spawn_workers(void)
          }
      }
  
@@ -750,7 +784,7 @@ index 256fa1d..0498856 100644
      printf("ORAN operating mode: O-%s\n", (xran_get_syscfg_appmode() == ID_O_DU) ?"DU":"RU");
      printf("  Num of configured cores: %d%s\n", total_num_cores, icx_cpu?" (Xeon SP Gen3 or later)":"");
      printf("  Num of configured RUs  : %d\n", numRUs);
-@@ -5018,14 +5043,13 @@ int32_t xran_start(void *pHandle)
+@@ -5018,14 +5056,13 @@ int32_t xran_start(void *pHandle)
      return 0;
  }
  
@@ -767,7 +801,7 @@ index 256fa1d..0498856 100644
      if(pDevCtx)
      {
          rte_spinlock_lock(&pDevCtx->spinLock);
-@@ -5040,6 +5064,7 @@ int32_t xran_activate_cc(int32_t port_id, int32_t cc_id)
+@@ -5040,6 +5077,7 @@ int32_t xran_activate_cc(int32_t port_id, int32_t cc_id)
      }
      else
      {
@@ -775,7 +809,7 @@ index 256fa1d..0498856 100644
          printf("Invalid port(RU) index - %d\n", port_id);
          return(-1);
      }
-@@ -5048,14 +5073,13 @@ int32_t xran_activate_cc(int32_t port_id, int32_t cc_id)
+@@ -5048,14 +5086,13 @@ int32_t xran_activate_cc(int32_t port_id, int32_t cc_id)
      return(0);
  }
  
@@ -792,7 +826,7 @@ index 256fa1d..0498856 100644
      if(pDevCtx)
      {
          rte_spinlock_lock(&pDevCtx->spinLock);
-@@ -5070,6 +5094,7 @@ int32_t xran_deactivate_cc(int32_t port_id, int32_t cc_id)
+@@ -5070,6 +5107,7 @@ int32_t xran_deactivate_cc(int32_t port_id, int32_t cc_id)
      }
      else
      {
