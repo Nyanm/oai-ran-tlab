@@ -370,6 +370,7 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t* p_out,
                                                    int8_t* llrRes,
                                                    int8_t* llrProcBuf,
                                                    int Z,
+                                                   uint32_t Kprime,
                                                    uint8_t BG,
                                                    uint8_t R,
                                                    uint8_t numMaxIter,
@@ -474,9 +475,9 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
                          t_nrLDPC_time_stats* p_profiler,
                          decode_abort_t* ab)
 {
-  if (!((p_decParams->R == 23 || p_decParams->R == 13) && p_decParams->BG == 1 && p_decParams->Z == 384)) { // format check
+  if (!((p_decParams->R == 23 || p_decParams->R == 13) && p_decParams->BG == 1 && p_decParams->Z%4 == 0 && p_decParams->Z >= 128 && p_decParams->Z <= 384)) { // format check
     printf("Current format: BG = %d, R = %d, Zc = %d\n", p_decParams->BG, p_decParams->R, p_decParams->Z);
-    AssertFatal(false, "Format cuda not support, only support BG = 1, Zc = 384 and R = 13, 23 right now\n");
+    AssertFatal(false, "Format cuda not support, only support BG = 1, Zc >= 128 and R = 13, 23 right now\n");
     return 0;
   }
   uint32_t numLLR;
@@ -499,10 +500,7 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
   int n_segments = p_decParams->n_segments;
   int numIter = nrLDPC_decoder_core(p_llr, p_out, n_segments, numLLR, p_lut, p_decParams, p_profiler, ab);
 
-  if (numIter >= p_decParams->numMaxIter) {
-    LOG_D(PHY, "set abort: %d, %d\n", numIter, p_decParams->numMaxIter);
-    set_abort(ab, true);
-  }
+  set_abort(ab, false);
 
   return numIter;
 }
@@ -537,21 +535,12 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   uint8_t R = p_decParams->R; // Decoding rate: Format 13,23,... for code rates 1/3, 2/3,... */
   uint8_t numMaxIter = p_decParams->numMaxIter; // To match the actual iterations
   e_nrLDPC_outMode outMode = p_decParams->outMode;
-  // int Kprime = p_decParams->Kprime;
+  uint32_t Kprime = p_decParams->Kprime;
 
   // Pack setting area
   if (!SegmentPacked) {
     int segPerPack = 0;
-    int NumThreads = 384; // maximum 1024, suggesting multiples of 96:288,384,480,576,672,768,864,960
-                          // at least should be multiples of 32
-    BG1_R13_threadSize.NumThreads = NumThreads;
-    BG1_R13_threadSize.NumBlocks = (num_TotalThreads_BG1_R13 + BG1_R13_threadSize.NumThreads - 1) / BG1_R13_threadSize.NumThreads;
-    BG1_R23_threadSize.NumThreads = NumThreads;
-    BG1_R23_threadSize.NumBlocks = (num_TotalThreads_BG1_R23 + BG1_R23_threadSize.NumThreads - 1) / BG1_R23_threadSize.NumThreads;
-    R_general_threadSize.NumThreads = NumThreads;
-    R_general_threadSize.NumBlocks_llr = (num_TotalThreads_llr_llrRes + R_general_threadSize.NumThreads - 1) / R_general_threadSize.NumThreads;
-    R_general_threadSize.NumBlocks_output = ((numLLR>>3) + R_general_threadSize.NumThreads - 1) / R_general_threadSize.NumThreads;
-    switch (R) {
+  switch (R) {
       case 13:
         segPerPack = 132; // It's quite free here, GPU can handle this
         break; // And also, the best practice should be only use one stream in the whole decoding
@@ -584,14 +573,14 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     int8_t* perpack_bnProcBuf = bnProcBuf + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
     int8_t* perpack_llrProcBuf = llrProcBuf + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_llrRes = llrRes + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
-    int8_t* perpack_out = p_out + PackShiftIdx * 8448;
+    int8_t* perpack_out = p_out + PackShiftIdx * Kprime;
 #else
     int8_t* perpack_llr = p_llr + PackShiftIdx * 68 * 384;
     int8_t* perpack_cnProcBuf = cnProcBuf_dev + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     int8_t* perpack_bnProcBuf = bnProcBuf_dev + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
     int8_t* perpack_llrRes = llrRes_dev + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_llrProcBuf = llrProcBuf_dev + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
-    int8_t* perpack_out = p_out + PackShiftIdx * 8448;
+    int8_t* perpack_out = p_out + PackShiftIdx * Kprime;
 #endif
     //  Call scheduler for this segment and stream
     //  Launch decoder on stream
@@ -603,6 +592,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            perpack_llrRes,
                                            perpack_llrProcBuf,
                                            Z,
+                                           Kprime,
                                            BG,
                                            R,
                                            numMaxIter,
