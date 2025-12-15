@@ -1443,6 +1443,22 @@ int nr_rate_matching_ldpc32(uint32_t Tbslbrm,
 }
 
 //#define USE_SCALAR 1
+/*
+#if defined(__AVX512BW__) 
+#define RMLOOP for (;ind<(ind2&31);k+=32,ind+=32) \
+      simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));\
+   for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
+#elif defined(__AVX2__)
+#define RMLOOP for (;ind<(ind2&15);k+=16,ind+=16) \
+      _mm256_storeu_si256(&d[ind],_mm256_adds_epi16(_mm256_loadu_si128(&soft_input[k]),_mm256_loadu_si256(&d[ind])));\
+   for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
+
+#else */
+#define RMLOOP for (;ind<(ind2&7);k+=8,ind+=8) \
+      simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));\
+   for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
+//#endif
+  
 int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
                              uint8_t BG,
                              uint16_t Z,
@@ -1496,7 +1512,7 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
 
   uint32_t k = 0;
   if (ind < Foffset) {
-#if USE_SCALAR 
+#ifdef USE_SCALAR 
     for (; (ind < Foffset) && (k < E); ind++) {
 #ifdef RM_DEBUG
       printf("RM_RX k%u Ind %u(before filler): %d (%d)=>", k, ind, d[ind], soft_input[k]);
@@ -1508,9 +1524,7 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
     }
 #else
    int ind2 = ind + min(Foffset-ind,E);
-   for (;ind<(ind2&15);k+=16,ind+=16) 
-      simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));
-   for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
+   RMLOOP;
 #endif
   }
   if (ind >= Foffset && ind < Foffset + F)
@@ -1527,11 +1541,7 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
   }
 #else
    int ind2 = ind + min(Ncb-ind,E-k);
-   for (;ind<(ind2&15);k+=16,ind+=16)  {
-      simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));
-   }
-
-   for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
+   RMLOOP;
 #endif
 
   while (k < E) {
@@ -1557,16 +1567,10 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
 #else
    ind=0;
    ind2 = min(Foffset,E-k);
-   for (;ind<(ind2&15);k+=16,ind+=16) {
-      simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));
-   }
-   for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
+   RMLOOP;
    ind = Foffset+F;
    ind2 = ind + min(Ncb-ind,E-k);
-   for (;ind<(ind2&15);k+=16,ind+=16){ 
-      simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));
-   }
-   for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
+   RMLOOP;
 #endif
   }
   return 0;
