@@ -1,0 +1,6 @@
+add_library(wraparound_buffer wraparound_buffer.cpp)
+target_include_directories(wraparound_buffer PUBLIC ./)
+target_link_libraries(wraparound_buffer PUBLIC LOG)
+if (ENABLE_TESTS)
+  add_subdirectory(tests)
+endif()
