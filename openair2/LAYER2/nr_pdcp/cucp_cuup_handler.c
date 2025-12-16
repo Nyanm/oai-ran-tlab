@@ -30,52 +30,52 @@
 #include "openair2/SDAP/nr_sdap/nr_sdap.h"
 #include "openair3/ocp-gtpu/gtp_itf.h"
 
-static void fill_DRB_configList_e1(NR_DRB_ToAddModList_t *DRB_configList, const pdu_session_to_setup_t *pdu)
+static NR_DRB_ToAddMod_t *get_rrc_drb_to_addmod(const DRB_nGRAN_to_setup_t *drb,
+                                                const long sessionId,
+                                                const security_indication_t *sec)
 {
-  for (int i = 0; i < pdu->numDRB2Setup; i++) {
-    const DRB_nGRAN_to_setup_t *drb = pdu->DRBnGRanList + i;
-    asn1cSequenceAdd(DRB_configList->list, struct NR_DRB_ToAddMod, ie);
-    ie->drb_Identity = drb->id;
-    ie->cnAssociation = CALLOC(1, sizeof(*ie->cnAssociation));
-    ie->cnAssociation->present = NR_DRB_ToAddMod__cnAssociation_PR_sdap_Config;
+  DevAssert(drb);
+  NR_DRB_ToAddMod_t *ie = calloc_or_fail(1, sizeof(*ie));
+  ie->drb_Identity = drb->id;
+  ie->cnAssociation = calloc_or_fail(1, sizeof(*ie->cnAssociation));
+  ie->cnAssociation->present = NR_DRB_ToAddMod__cnAssociation_PR_sdap_Config;
 
-    // sdap_Config
-    asn1cCalloc(ie->cnAssociation->choice.sdap_Config, sdap_config);
-    sdap_config->pdu_Session = pdu->sessionId;
-    /* SDAP */
-    /* Convert from internal representation to ASN.1 enum:
-     * Internal: false=absent, true=present (or uninitialized=false means absent)
-     * ASN.1: 0=present, 1=absent */
-    sdap_config->sdap_HeaderDL = drb->sdap_config.sDAP_Header_DL ? NR_SDAP_Config__sdap_HeaderDL_present : NR_SDAP_Config__sdap_HeaderDL_absent;
-    sdap_config->sdap_HeaderUL = drb->sdap_config.sDAP_Header_UL ? NR_SDAP_Config__sdap_HeaderUL_present : NR_SDAP_Config__sdap_HeaderUL_absent;
-    sdap_config->defaultDRB    = drb->sdap_config.defaultDRB;
-    asn1cCalloc(sdap_config->mappedQoS_FlowsToAdd, FlowsToAdd);
-    for (int j = 0; j < drb->numQosFlow2Setup; j++) {
-      asn1cSequenceAdd(FlowsToAdd->list, NR_QFI_t, qfi);
-      *qfi = drb->qosFlows[j].qfi;
-    }
-    sdap_config->mappedQoS_FlowsToRelease = NULL;
+  // sdap_Config
+  asn1cCalloc(ie->cnAssociation->choice.sdap_Config, sdap_config);
+  sdap_config->pdu_Session = sessionId;
+  /* SDAP: convert from internal representation to ASN.1 enum:
+   * Internal: false=absent (default), true=present
+   * ASN.1: 0=present, 1=absent */
+  const bearer_context_sdap_config_t *sdap = &drb->sdap_config;
+  sdap_config->sdap_HeaderDL = sdap->sDAP_Header_DL ? NR_SDAP_Config__sdap_HeaderDL_present : NR_SDAP_Config__sdap_HeaderDL_absent;
+  sdap_config->sdap_HeaderUL = sdap->sDAP_Header_UL ? NR_SDAP_Config__sdap_HeaderUL_present : NR_SDAP_Config__sdap_HeaderUL_absent;
+  sdap_config->defaultDRB = sdap->defaultDRB;
+  asn1cCalloc(sdap_config->mappedQoS_FlowsToAdd, FlowsToAdd);
+  for (int j = 0; j < drb->numQosFlow2Setup; j++) {
+    asn1cSequenceAdd(FlowsToAdd->list, NR_QFI_t, qfi);
+    *qfi = drb->qosFlows[j].qfi;
+  }
+  sdap_config->mappedQoS_FlowsToRelease = NULL;
 
-    // pdcp_Config
-    ie->reestablishPDCP = NULL;
-    ie->recoverPDCP = NULL;
-    asn1cCalloc(ie->pdcp_Config, pdcp_config);
-    asn1cCalloc(pdcp_config->drb, drbCfg);
-    asn1cCallocOne(drbCfg->discardTimer, drb->pdcp_config.discardTimer);
-    asn1cCallocOne(drbCfg->pdcp_SN_SizeUL, drb->pdcp_config.pDCP_SN_Size_UL);
-    asn1cCallocOne(drbCfg->pdcp_SN_SizeDL, drb->pdcp_config.pDCP_SN_Size_DL);
-    drbCfg->headerCompression.present = NR_PDCP_Config__drb__headerCompression_PR_notUsed;
-    drbCfg->headerCompression.choice.notUsed = 0;
-    drbCfg->integrityProtection = NULL;
-    drbCfg->statusReportRequired = NULL;
-    drbCfg->outOfOrderDelivery = NULL;
-    pdcp_config->moreThanOneRLC = NULL;
-    pdcp_config->t_Reordering = calloc(1, sizeof(*pdcp_config->t_Reordering));
-    *pdcp_config->t_Reordering = drb->pdcp_config.reorderingTimer;
-    pdcp_config->ext1 = NULL;
-    const security_indication_t *sec = &pdu->securityIndication;
-    if (sec->integrityProtectionIndication == SECURITY_REQUIRED ||
-        sec->integrityProtectionIndication == SECURITY_PREFERRED) {
+  // pdcp_Config
+  ie->reestablishPDCP = NULL;
+  ie->recoverPDCP = NULL;
+  asn1cCalloc(ie->pdcp_Config, pdcp_config);
+  asn1cCalloc(pdcp_config->drb, drbCfg);
+  asn1cCallocOne(drbCfg->discardTimer, drb->pdcp_config.discardTimer);
+  asn1cCallocOne(drbCfg->pdcp_SN_SizeUL, drb->pdcp_config.pDCP_SN_Size_UL);
+  asn1cCallocOne(drbCfg->pdcp_SN_SizeDL, drb->pdcp_config.pDCP_SN_Size_DL);
+  drbCfg->headerCompression.present = NR_PDCP_Config__drb__headerCompression_PR_notUsed;
+  drbCfg->headerCompression.choice.notUsed = 0;
+  drbCfg->integrityProtection = NULL;
+  drbCfg->statusReportRequired = NULL;
+  drbCfg->outOfOrderDelivery = NULL;
+  pdcp_config->moreThanOneRLC = NULL;
+  pdcp_config->t_Reordering = calloc(1, sizeof(*pdcp_config->t_Reordering));
+  *pdcp_config->t_Reordering = drb->pdcp_config.reorderingTimer;
+  pdcp_config->ext1 = NULL;
+  if (sec) {
+    if (sec->integrityProtectionIndication == SECURITY_REQUIRED || sec->integrityProtectionIndication == SECURITY_PREFERRED) {
       asn1cCallocOne(drbCfg->integrityProtection, NR_PDCP_Config__drb__integrityProtection_enabled);
     }
     if (sec->confidentialityProtectionIndication == SECURITY_NOT_NEEDED) {
@@ -83,6 +83,8 @@ static void fill_DRB_configList_e1(NR_DRB_ToAddModList_t *DRB_configList, const 
       asn1cCallocOne(ext1->cipheringDisabled, NR_PDCP_Config__ext1__cipheringDisabled_true);
     }
   }
+
+  return ie;
 }
 
 /** @brief Fill and send request to create GTP-U tunnel (F1-U) */
@@ -170,6 +172,38 @@ static void e1_add_bearers(const int ue_id, const NR_DRB_ToAddModList_t *addMod,
   }
 }
 
+/** @brief Process QoS flows from E1AP request and populate DRB setup response
+ * @param resp_drb DRB setup response structure to populate
+ * @param req_drb DRB to setup request structure
+ * Processes each QoS flow from E1AP request per TS 38.463.
+ * Multiple QoS flows can be mapped to a single DRB per TS 38.331. */
+static void fill_e1_qos_flows_setup(DRB_nGRAN_setup_t *resp_drb, const DRB_nGRAN_to_setup_t *req_drb)
+{
+  DevAssert(resp_drb);
+  DevAssert(req_drb);
+  for (int k = 0; k < req_drb->numQosFlow2Setup; k++) {
+    const qos_flow_to_setup_t *qosflow2Setup = &req_drb->qosFlows[k];
+    // Populate E1AP response structure with QFI (mandatory IE per TS 38.463 §9.3.3.1)
+    qos_flow_list_t *qosflowSetup = &resp_drb->qosFlows[resp_drb->numQosFlowSetup++];
+    qosflowSetup->qfi = qosflow2Setup->qfi;
+    LOG_D(E1AP, "Setup DRB %ld with QFI %ld\n", resp_drb->id, qosflow2Setup->qfi);
+  }
+}
+
+/** @brief Fill DRB setup response structure (both for bearer setup and modification)
+ * @param req_drb DRB to setup request structure
+ * @param secInfo Security information (can be NULL)
+ * @return DRB setup response structure */
+static DRB_nGRAN_setup_t fill_e1_drb_setup(const DRB_nGRAN_to_setup_t *req_drb)
+{
+  DevAssert(req_drb);
+  DRB_nGRAN_setup_t resp_drb = {0};
+  resp_drb.id = req_drb->id;
+  // Fill QoS flows from E1AP request and populate the E1 response
+  fill_e1_qos_flows_setup(&resp_drb, req_drb);
+  return resp_drb;
+}
+
 void e1_bearer_context_setup(const e1ap_bearer_setup_req_t *req)
 {
   bool need_ue_id_mgmt = e1_used();
@@ -206,29 +240,17 @@ void e1_bearer_context_setup(const e1ap_bearer_setup_req_t *req)
     /* Loop though the number of DRB to setup
      * if required, for each DRB a F1-U GTP-U Tunnel Create Request
      * and fill the relevant item in E1 Bearer Setup Response */
+    NR_DRB_ToAddModList_t DRB_configList = {0};
     for (int d = 0; d < resp_pdu->numDRBSetup; d++) {
       const DRB_nGRAN_to_setup_t *req_drb = &req_pdu->DRBnGRanList[d];
       DRB_nGRAN_setup_t *resp_drb = &resp_pdu->DRBnGRanList[d];
-      resp_drb->id = req_drb->id;
-      resp_drb->numQosFlowSetup = req_drb->numQosFlow2Setup;
-      DevAssert(resp_drb->numQosFlowSetup == 1);
-      for (int k = 0; k < resp_drb->numQosFlowSetup; k++) {
-        const qos_flow_to_setup_t *qosflow2Setup = &req_drb->qosFlows[k];
-        qos_flow_list_t *qosflowSetup = &resp_drb->qosFlows[k];
-        qosflowSetup->qfi = qosflow2Setup->qfi;
-        LOG_D(E1AP, "DRB %ld with QFI %ld to setup\n", resp_drb->id, qosflow2Setup->qfi);
-      }
-      // create PDCP bearers. This will also create SDAP bearers
-      NR_DRB_ToAddModList_t DRB_configList = {0};
-      fill_DRB_configList_e1(&DRB_configList, req_pdu);
-      nr_pdcp_entity_security_keys_and_algos_t security_parameters;
-      security_parameters.ciphering_algorithm = req->secInfo.cipheringAlgorithm;
-      security_parameters.integrity_algorithm = req->secInfo.integrityProtectionAlgorithm;
-      memcpy(security_parameters.ciphering_key, req->secInfo.encryptionKey, NR_K_KEY_SIZE);
-      memcpy(security_parameters.integrity_key, req->secInfo.integrityProtectionKey, NR_K_KEY_SIZE);
 
-      e1_add_bearers(cu_up_ue_id, &DRB_configList, &security_parameters);
-      ASN_STRUCT_RESET(asn_DEF_NR_DRB_ToAddModList, &DRB_configList.list);
+      /* Fill DRB item in E1 Bearer Setup Response */
+      *resp_drb = fill_e1_drb_setup(req_drb);
+
+      /* Add DRB to addmod list for CUUP bearer setup */
+      NR_DRB_ToAddMod_t *drb_to_add = get_rrc_drb_to_addmod(req_drb, req_pdu->sessionId, &req_pdu->securityIndication);
+      ASN_SEQUENCE_ADD(&DRB_configList.list, drb_to_add);
 
       /* F1-U tunnel setup */
       if (f1inst >= 0) { /* we have F1(-U) */
@@ -250,6 +272,15 @@ void e1_bearer_context_setup(const e1ap_bearer_setup_req_t *req)
               up->tl_info.tlAddress);
       }
     }
+
+    /* Create PDCP/SDAP entities for each DRB */
+    nr_pdcp_entity_security_keys_and_algos_t security_parameters = {0};
+    security_parameters.ciphering_algorithm = req->secInfo.cipheringAlgorithm;
+    security_parameters.integrity_algorithm = req->secInfo.integrityProtectionAlgorithm;
+    memcpy(security_parameters.ciphering_key, req->secInfo.encryptionKey, NR_K_KEY_SIZE);
+    memcpy(security_parameters.integrity_key, req->secInfo.integrityProtectionKey, NR_K_KEY_SIZE);
+    e1_add_bearers(cu_up_ue_id, &DRB_configList, &security_parameters);
+    ASN_STRUCT_RESET(asn_DEF_NR_DRB_ToAddModList, &DRB_configList.list);
 
     /** GTP tunnel for N3/to core: one GTP-U tunnel per PDU session
      * which can contains multiple QoS Flows
