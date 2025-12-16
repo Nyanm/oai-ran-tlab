@@ -495,7 +495,6 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
 
   const struct xran_fh_init *fh_init = get_xran_fh_init();
   const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
-  int nPRBs = fh_cfg->nDLRBs;
   int fftsize = 1 << fh_cfg->ru_conf.fftSize;
   int nb_tx_per_ru = ru->nb_tx / fh_init->xran_ports;
   int nb_rx_per_ru = ru->nb_rx / fh_init->xran_ports;
@@ -570,20 +569,16 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
         pos = &ru->txdataF_BF[ant_id][sym_idx * fftsize];
 
         uint8_t *u8dptr;
-        struct xran_prb_map *pRbMap = pPrbMap;
         int32_t sym_id = sym_idx % XRAN_NUM_OF_SYMBOL_PER_SLOT;
         if (ptr && pos) {
-          uint32_t idxElm = 0;
           u8dptr = (uint8_t *)ptr;
           int16_t payload_len = 0;
 
           uint8_t *dst = (uint8_t *)u8dptr;
 
-          struct xran_prb_elm *p_prbMapElm = &pRbMap->prbMap[idxElm];
-
-          for (idxElm = 0; idxElm < pRbMap->nPrbElm; idxElm++) {
+          for (uint32_t idxElm = 0; idxElm < pPrbMap->nPrbElm; idxElm++) {
             struct xran_section_desc *p_sec_desc = NULL;
-            p_prbMapElm = &pRbMap->prbMap[idxElm];
+            struct xran_prb_elm *p_prbMapElm = &pPrbMap->prbMap[idxElm];
             if (sym_idx == 0) {
               // ant_id / no of antenna per beam gives the beam_nb
               p_prbMapElm->nBeamIndex = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT];
@@ -592,11 +587,18 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
                 p_prbMapElm->nBeamIndex = 0;
             }
 
-            // assumes one fragment per symbol
+            // radio-transport fragmentation is not supported in both E and F releases;
+            // E-bit = 1 => each ethernet frame is considered as the last fragment;
+            // a group of PRBs per each symbol is encapsulated in one ethernet frame.
+            // => seems that the RUs don't check for E-bit
 #ifdef E_RELEASE
             p_sec_desc = p_prbMapElm->p_sec_desc[sym_id][0];
+            int16_t startRB = p_prbMapElm->nRBStart;
+            int16_t numRB = p_prbMapElm->nRBSize;
 #elif F_RELEASE
             p_sec_desc = &p_prbMapElm->sec_desc[sym_id][0];
+            int16_t startRB = p_prbMapElm->UP_nRBStart;
+            int16_t numRB = p_prbMapElm->UP_nRBSize;
 #endif
 
             dst = xran_add_hdr_offset(dst, p_prbMapElm->compMethod);
@@ -610,33 +612,33 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
             int pos_len = 0;
             int neg_len = 0;
 
-            if (p_prbMapElm->nRBStart < (nPRBs >> 1)) // there are PRBs left of DC
-              neg_len = min((nPRBs * 6) - (p_prbMapElm->nRBStart * 12), p_prbMapElm->nRBSize * N_SC_PER_PRB);
-            pos_len = (p_prbMapElm->nRBSize * N_SC_PER_PRB) - neg_len;
+            if (startRB < (numRB >> 1)) // there are PRBs left of DC
+              neg_len = min((numRB * 6) - (startRB * 12), numRB * N_SC_PER_PRB);
+            pos_len = (numRB * N_SC_PER_PRB) - neg_len;
             // Calculation of the pointer for the section in the buffer.
             // start of positive frequency component
-            uint16_t *src1 = (uint16_t *)&pos[(neg_len == 0) ? ((p_prbMapElm->nRBStart * N_SC_PER_PRB) - (nPRBs * 6)) : 0];
+            uint16_t *src1 = (uint16_t *)&pos[(neg_len == 0) ? ((startRB * N_SC_PER_PRB) - (numRB * 6)) : 0];
             // start of negative frequency component
-            uint16_t *src2 = (uint16_t *)&pos[(p_prbMapElm->nRBStart * N_SC_PER_PRB) + fftsize - (nPRBs * 6)];
+            uint16_t *src2 = (uint16_t *)&pos[(startRB * N_SC_PER_PRB) + fftsize - (numRB * 6)];
 
-            uint32_t local_src[p_prbMapElm->nRBSize * N_SC_PER_PRB] __attribute__((aligned(64)));
+            uint32_t local_src[numRB * N_SC_PER_PRB] __attribute__((aligned(64)));
             memcpy((void *)local_src, (void *)src2, neg_len * 4);
             memcpy((void *)&local_src[neg_len], (void *)src1, pos_len * 4);
             if (p_prbMapElm->compMethod == XRAN_COMPMETHOD_NONE) {
-              payload_len = p_prbMapElm->nRBSize * N_SC_PER_PRB * 4L;
+              payload_len = numRB * N_SC_PER_PRB * 4L;
               /* convert to Network order */
               // NOTE: ggc 11 knows how to generate AVX2 for this!
               for (idx = 0; idx < (pos_len + neg_len) * 2; idx++)
                 ((uint16_t *)dst16)[idx] = htons(((uint16_t *)local_src)[idx]);
             } else if (p_prbMapElm->compMethod == XRAN_COMPMETHOD_BLKFLOAT) {
-              payload_len = (3 * p_prbMapElm->iqWidth + 1) * p_prbMapElm->nRBSize;
+              payload_len = (3 * p_prbMapElm->iqWidth + 1) * numRB;
 
 #if defined(__i386__) || defined(__x86_64__)
               struct xranlib_compress_request bfp_com_req = {};
               struct xranlib_compress_response bfp_com_rsp = {};
 
               bfp_com_req.data_in = (int16_t *)local_src;
-              bfp_com_req.numRBs = p_prbMapElm->nRBSize;
+              bfp_com_req.numRBs = numRB;
               bfp_com_req.len = payload_len;
               bfp_com_req.compMethod = p_prbMapElm->compMethod;
               bfp_com_req.iqWidth = p_prbMapElm->iqWidth;
@@ -646,7 +648,7 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
 
               xranlib_compress_avx512(&bfp_com_req, &bfp_com_rsp);
 #elif defined(__arm__) || defined(__aarch64__)
-              armral_bfp_compression(p_prbMapElm->iqWidth, p_prbMapElm->nRBSize, (int16_t *)local_src, (int8_t *)dst);
+              armral_bfp_compression(p_prbMapElm->iqWidth, numRB, (int16_t *)local_src, (int8_t *)dst);
 #else
               AssertFatal(1 == 0, "BFP compression not supported on this architecture");
 #endif
@@ -664,7 +666,7 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
           }
 
           // The tti should be updated as it increased.
-          pRbMap->tti_id = tti;
+          pPrbMap->tti_id = tti;
 
         } else {
           printf("ptr ==NULL\n");
