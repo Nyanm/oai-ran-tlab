@@ -370,7 +370,7 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t* p_out,
                                                    int8_t* llrRes,
                                                    int8_t* llrProcBuf,
                                                    int Z,
-                                                   uint32_t Kprime,
+                                                   uint32_t K,
                                                    uint8_t BG,
                                                    uint8_t R,
                                                    uint8_t numMaxIter,
@@ -535,7 +535,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   uint8_t R = p_decParams->R; // Decoding rate: Format 13,23,... for code rates 1/3, 2/3,... */
   uint8_t numMaxIter = p_decParams->numMaxIter; // To match the actual iterations
   e_nrLDPC_outMode outMode = p_decParams->outMode;
-  uint32_t Kprime = p_decParams->Kprime;
+  uint32_t K = Z*22;
 
   // Pack setting area
   if (!SegmentPacked) {
@@ -573,14 +573,14 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     int8_t* perpack_bnProcBuf = bnProcBuf + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
     int8_t* perpack_llrProcBuf = llrProcBuf + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_llrRes = llrRes + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
-    int8_t* perpack_out = p_out + PackShiftIdx * Kprime;
+    int8_t* perpack_out = p_out + PackShiftIdx * K;
 #else
     int8_t* perpack_llr = p_llr + PackShiftIdx * 68 * 384;
     int8_t* perpack_cnProcBuf = cnProcBuf_dev + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
     int8_t* perpack_bnProcBuf = bnProcBuf_dev + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
     int8_t* perpack_llrRes = llrRes_dev + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_llrProcBuf = llrProcBuf_dev + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
-    int8_t* perpack_out = p_out + PackShiftIdx * Kprime;
+    int8_t* perpack_out = p_out + PackShiftIdx * K;
 #endif
     //  Call scheduler for this segment and stream
     //  Launch decoder on stream
@@ -592,7 +592,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            perpack_llrRes,
                                            perpack_llrProcBuf,
                                            Z,
-                                           Kprime,
+                                           K,
                                            BG,
                                            R,
                                            numMaxIter,

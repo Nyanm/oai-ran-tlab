@@ -619,11 +619,11 @@ __global__ void llrOutPut_Kernel_BG1_int8_BIG_stream(uint32_t R,
                                                      e_nrLDPC_outMode outMode,
                                                      int8_t *d_out,
                                                      uint32_t numLLR,
-                                                    uint32_t Kprime)
+                                                    uint32_t K)
 {
   uint32_t segIdx = blockIdx.y;
 
-  int8_t *p_out = d_out + segIdx * Kprime;
+  int8_t *p_out = d_out + segIdx * K;
   int8_t *p_llrRes = (int8_t *)(d_llrRes + segIdx * NR_LDPC_MAX_NUM_LLR);
   // output
   if (outMode == nrLDPC_outMode_BIT)
@@ -639,7 +639,7 @@ void nrLDPC_OutPut_BG1_cuda_stream_core(int8_t *llrRes,
                                         e_nrLDPC_outMode outMode,
                                         int8_t *p_out,
                                         uint32_t numLLR,
-                                        uint32_t Kprime,
+                                        uint32_t K,
                                         cudaStream_t *streams,
                                         int8_t CudaStreamIdx)
 {
@@ -650,7 +650,7 @@ void nrLDPC_OutPut_BG1_cuda_stream_core(int8_t *llrRes,
       outMode,
       p_out,
       numLLR,
-    Kprime);
+    K);
 
   CHECK(cudaGetLastError());
 }
@@ -687,7 +687,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t *p_out,
                                                        int8_t *llrRes,
                                                        int8_t *llrProcBuf,
                                                        uint32_t Z,
-                                                       uint32_t Kprime,
+                                                       uint32_t K,
                                                        uint8_t BG,
                                                        uint8_t R,
                                                        uint8_t numMaxIter,
@@ -746,7 +746,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t *p_out,
         printf("Format not support yet\n");
         break;
     }
-    nrLDPC_OutPut_BG1_cuda_stream_core(llrRes, Z, R, outMode, p_out, numLLR, Kprime, streams, CudaStreamIdx);
+    nrLDPC_OutPut_BG1_cuda_stream_core(llrRes, Z, R, outMode, p_out, numLLR, K, streams, CudaStreamIdx);
     
 
 #if RECORD_GRAPH
