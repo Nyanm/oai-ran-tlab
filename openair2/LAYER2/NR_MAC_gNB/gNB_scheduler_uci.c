@@ -279,6 +279,15 @@ void nr_csi_meas_reporting(int Mod_idP,frame_t frame, slot_t slot)
       AssertFatal(res_index < n,
                   "CSI pucch resource %ld not found among PUCCH resources\n", pucchcsires->pucch_Resource);
 
+      // going through the list of PUCCH resources to find the one indexed by resource_id
+      NR_beam_alloc_t beam = beam_allocation_procedure(&nrmac->beam_info, sched_frame, sched_slot, UE->UE_beam_index, n_slots_frame);
+      //AssertFatal(beam.idx >= 0, "Cannot allocate CSI measurements on PUCCH in any available beam\n");
+      if (beam.idx < 0) {
+        LOG_I(NR_MAC, "CSI-MEA f %04d.%02d b %d:%d\n", sched_frame, sched_slot, UE->UE_beam_index, beam.idx);
+        LOG_I(NR_MAC, "Cannot allocate CSI measurements on PUCCH in any available beam\n");
+        continue;
+      }
+
       const int pucch_index = get_pucch_index(sched_frame, sched_slot, &nrmac->frame_structure, sched_ctrl->sched_pucch_size);
       NR_sched_pucch_t *curr_pucch = &sched_ctrl->sched_pucch[pucch_index];
       if (curr_pucch->active) {
@@ -294,9 +303,6 @@ void nr_csi_meas_reporting(int Mod_idP,frame_t frame, slot_t slot)
 
       int bwp_start = ul_bwp->BWPStart;
 
-      // going through the list of PUCCH resources to find the one indexed by resource_id
-      NR_beam_alloc_t beam = beam_allocation_procedure(&nrmac->beam_info, sched_frame, sched_slot, UE->UE_beam_index, n_slots_frame);
-      AssertFatal(beam.idx >= 0, "Cannot allocate CSI measurements on PUCCH in any available beam\n");
       const int index = ul_buffer_index(sched_frame, sched_slot, n_slots_frame, nrmac->vrb_map_UL_size);
       uint16_t *vrb_map_UL = &nrmac->common_channels[0].vrb_map_UL[beam.idx][index * MAX_BWP_SIZE];
       const int m = pucch_Config->resourceToAddModList->list.count;
