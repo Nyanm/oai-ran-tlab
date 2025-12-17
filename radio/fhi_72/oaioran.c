@@ -521,15 +521,17 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
         uint8_t *pPrbMapData = bufs->dstcp[ant_id % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
         struct xran_prb_map *pPrbMap = (struct xran_prb_map *)pPrbMapData;
 
-        struct xran_prb_elm *pRbElm = &pPrbMap->prbMap[0];
-
-        struct xran_prb_map *pRbMap = pPrbMap;
-        uint32_t idxElm = 0;
-
-        LOG_D(HW, "pRbMap->nPrbElm %d\n", pRbMap->nPrbElm);
-        for (idxElm = 0; idxElm < pRbMap->nPrbElm; idxElm++) {
-          LOG_D(HW, "prbMap[%d] : PRBstart %d nPRBs %d\n", idxElm, pRbMap->prbMap[idxElm].nRBStart, pRbMap->prbMap[idxElm].nRBSize);
-          pRbElm = &pRbMap->prbMap[idxElm];
+        LOG_D(HW, "pPrbMap->nPrbElm %d\n", pPrbMap->nPrbElm);
+        for (uint32_t idxElm = 0; idxElm < pPrbMap->nPrbElm; idxElm++) {
+	  struct xran_prb_elm *pRbElm = &pPrbMap->prbMap[idxElm];
+#ifdef E_RELEASE
+          int16_t startRB = pRbElm->nRBStart;
+          int16_t numRB = pRbElm->nRBSize;
+#elif F_RELEASE
+          int16_t startRB = pRbElm->UP_nRBStart;
+          int16_t numRB = pRbElm->UP_nRBSize;
+#endif
+          LOG_D(HW, "pPrbMap[%d] : PRBstart %d nPRBs %d\n", idxElm, startRB, numRB);
           if (first) {
             // ant_id / no of antenna per beam gives the beam_nb
             pRbElm->nBeamIndex =
