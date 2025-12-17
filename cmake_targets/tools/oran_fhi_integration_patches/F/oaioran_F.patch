@@ -535,7 +535,7 @@ index 08660f3..2bb5187 100644
  #include <rte_eal.h>
  #include <rte_errno.h>
 diff --git a/fhi_lib/lib/src/xran_common.c b/fhi_lib/lib/src/xran_common.c
-index dc40ad9..5968d01 100644
+index dc40ad9..936eb21 100644
 --- a/fhi_lib/lib/src/xran_common.c
 +++ b/fhi_lib/lib/src/xran_common.c
 @@ -31,7 +31,10 @@
@@ -564,7 +564,7 @@ index dc40ad9..5968d01 100644
  
      if(first_call == 0)
          return ret;
-@@ -733,9 +739,9 @@ process_mbuf(struct rte_mbuf *pkt, void* handle, struct xran_eaxc_info *p_cid)
+@@ -733,9 +739,10 @@ process_mbuf(struct rte_mbuf *pkt, void* handle, struct xran_eaxc_info *p_cid)
          return MBUF_FREE;
  
      num_bytes = xran_extract_iq_samples(pkt, &iq_samp_buf,
@@ -573,10 +573,11 @@ index dc40ad9..5968d01 100644
                                  &num_prbu, &start_prbu, &sym_inc, &rb, &sect_id,
 -                                expect_comp, staticComp, &compMeth, &iqWidth);
 +                                expect_comp, staticComp, &compMeth, &iqWidth, &is_prach);
++    printf("xran: start_prbu %d, num_prbu %d, sect_id %d symb_id %d Ant_ID %d is_prach %d (0=false)\n", start_prbu, num_prbu, sect_id, symb_id, Ant_ID, is_prach);
      if (num_bytes <= 0)
      {
          print_err("num_bytes is wrong [%d]\n", num_bytes);
-@@ -781,10 +787,9 @@ process_mbuf(struct rte_mbuf *pkt, void* handle, struct xran_eaxc_info *p_cid)
+@@ -781,10 +788,9 @@ process_mbuf(struct rte_mbuf *pkt, void* handle, struct xran_eaxc_info *p_cid)
  
      else
      {
@@ -590,7 +591,7 @@ index dc40ad9..5968d01 100644
  #ifndef FCN_ADAPT
          if(valid_res != 0)
          {
-@@ -807,8 +812,7 @@ process_mbuf(struct rte_mbuf *pkt, void* handle, struct xran_eaxc_info *p_cid)
+@@ -807,8 +813,7 @@ process_mbuf(struct rte_mbuf *pkt, void* handle, struct xran_eaxc_info *p_cid)
              PrachCfg = &(p_dev_ctx->PrachCPConfig);
          }
  
@@ -600,7 +601,7 @@ index dc40ad9..5968d01 100644
          /* PRACH packet has ruportid = num_eAxc + ant_id */
              Ant_ID -= PrachCfg->eAxC_offset;
          symbol_total_bytes[p_dev_ctx->xran_port_id][CC_ID][Ant_ID] += num_bytes;
-@@ -1412,7 +1416,7 @@ int generate_cpmsg_prach(void *pHandle, struct xran_cp_gen_params *params, struc
+@@ -1412,7 +1417,7 @@ int generate_cpmsg_prach(void *pHandle, struct xran_cp_gen_params *params, struc
      if(XRAN_FILTERINDEX_PRACH_ABC == pPrachCPConfig->filterIdx)
      {
      timeOffset = timeOffset >> nNumerology; //original number is Tc, convert to Ts based on mu
@@ -609,7 +610,7 @@ index dc40ad9..5968d01 100644
          timeOffset += 16;
      }
      else
-@@ -1547,8 +1551,7 @@ int32_t ring_processing_func(void* args)
+@@ -1547,8 +1552,7 @@ int32_t ring_processing_func(void* args)
  
      for (i = 0; i < ctx->io_cfg.num_vfs && i < XRAN_VF_MAX; i++){
          for(qi = 0; qi < ctx->rxq_per_port[i]; qi++) {
@@ -1608,7 +1609,7 @@ index 7d4a5d0..b9b44ac 100644
  #endif
  }
 diff --git a/fhi_lib/lib/src/xran_rx_proc.c b/fhi_lib/lib/src/xran_rx_proc.c
-index e7056f4..0d3d8ac 100644
+index e7056f4..ed5839b 100644
 --- a/fhi_lib/lib/src/xran_rx_proc.c
 +++ b/fhi_lib/lib/src/xran_rx_proc.c
 @@ -35,7 +35,11 @@
@@ -1623,6 +1624,14 @@ index e7056f4..0d3d8ac 100644
  
  #include <rte_common.h>
  #include <rte_eal.h>
+@@ -606,6 +610,7 @@ int32_t xran_process_rx_sym(void *arg,
+                         p_sec_desc->iq_buffer_len = size;
+                         p_sec_desc->iq_buffer_offset = RTE_PTR_DIFF(iq_data_start, mbuf);
+                     prbMapElm->nSecDesc[symb_id] += 1;
++		    printf("xran: prb_elem_id %d sec_desc_idx %d start_prbu %d, num_prbu %d symb_id %d Ant_ID %d prbMapElm->nSecDesc[symb_id] %d\n", prb_elem_id, sec_desc_idx, start_prbu, num_prbu, symb_id, Ant_ID, prbMapElm->nSecDesc[symb_id]);
+                     } else {
+                         print_err("p_sec_desc==NULL tti %u ant %d symb_id %d sec_desc_idx %d\n", tti, Ant_ID, symb_id, sec_desc_idx);
+                         *mb_free = MBUF_FREE;
 diff --git a/fhi_lib/lib/src/xran_timer.c b/fhi_lib/lib/src/xran_timer.c
 index 14a6a41..55182d8 100644
 --- a/fhi_lib/lib/src/xran_timer.c
