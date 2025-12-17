@@ -904,6 +904,53 @@ byte_array_t rrc_gNB_encode_RRCReconfiguration(gNB_RRC_UE_t *UE, nr_rrc_reconfig
 /* Forward declaration */
 static void cuup_notify_reestablishment(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue_p);
 
+#define ASSERT_PDU_ACTION_SINGLE(action, expected)                    \
+  do {                                                                \
+    DevAssert((action) != RRC_REESTABLISH_COMPLETE);                  \
+    DevAssert((action) == RRC_ACTION_NONE || (action) == (expected)); \
+  } while (0)
+
+/** @brief Set xid for all PDU sessions and derive RRC transaction action from
+ * session statuses. At most one active status (NEW, TOMODIFY, TORELEASE) or reestablishment.
+ * Status vs procedures (F1AP UE Context Setup/Modification Response only):
+ * - NEW: Initial Context Setup or PDU Session Resource Setup Request;
+ *   E1 then F1 Setup/Modification.
+ * - TORELEASE: NGAP PDU Session Release Command -> E1 Bearer Context
+ *   Modification (release) -> F1 Modification (release DRBs).
+ * - ESTABLISHED: Bystander when adding/releasing others.
+ * - TOMODIFY: TODO
+ * - FAILED: Bystander. Cleaned up in modify response */
+static rrc_action_t rrc_gNB_action_from_pdusession_status(gNB_RRC_UE_t *ue_p,
+                                                          const nr_rrc_reconfig_param_t *params,
+                                                          bool is_reestablishment)
+{
+  rrc_action_t action = is_reestablishment ? RRC_REESTABLISH_COMPLETE : RRC_ACTION_NONE;
+  FOR_EACH_SEQ_ARR (rrc_pdu_session_param_t *, item, &ue_p->pduSessions) {
+    /* Only sessions that participate in this transaction get the current xid. */
+    if (item->status != PDU_SESSION_STATUS_FAILED && item->status != PDU_SESSION_STATUS_ESTABLISHED) {
+      item->xid = params->transaction_id;
+    }
+    if (item->status == PDU_SESSION_STATUS_TOMODIFY) {
+      ASSERT_PDU_ACTION_SINGLE(action, RRC_PDUSESSION_MODIFY);
+      LOG_I(NR_RRC, "PDU Session Modify: status to TOMODIFY for PDU Session %d \n", item->param.pdusession_id);
+      action = RRC_PDUSESSION_MODIFY;
+    } else if (item->status == PDU_SESSION_STATUS_NEW) {
+      ASSERT_PDU_ACTION_SINGLE(action, RRC_PDUSESSION_ESTABLISH);
+      LOG_I(NR_RRC, "PDU Session New: status to ESTABLISH for PDU Session %d \n", item->param.pdusession_id);
+      action = RRC_PDUSESSION_ESTABLISH;
+    } else if (item->status == PDU_SESSION_STATUS_TORELEASE) {
+      DevAssert(params->n_drb_rel > 0);
+      ASSERT_PDU_ACTION_SINGLE(action, RRC_PDUSESSION_RELEASE);
+      LOG_I(NR_RRC,
+            "PDU Session Release: setting PDU Session status to TORELEASE for PDU Session %d \n",
+            item->param.pdusession_id);
+      action = RRC_PDUSESSION_RELEASE;
+    }
+    /* ESTABLISHED and FAILED do not drive transaction action */
+  }
+  return action;
+}
+
 /** @brief Generate and send RRC Reconfiguration message.
  * Handles both normal reconfiguration and first reconfiguration after re-establishment.
  * @param rrc RRC instance
@@ -919,22 +966,7 @@ static void rrc_gNB_generate_dedicatedRRCReconfiguration(gNB_RRC_INST *rrc, gNB_
   bool drb_reestablish = is_reestablishment;
   nr_rrc_reconfig_param_t params = get_RRCReconfiguration_params(rrc, ue_p, srb_reest_bitmap, drb_reestablish);
 
-  // Handle PDU session status updates
-  FOR_EACH_SEQ_ARR(rrc_pdu_session_param_t *, item, &ue_p->pduSessions) {
-    if (item->status == PDU_SESSION_STATUS_NEW) {
-      item->status = PDU_SESSION_STATUS_DONE;
-      continue;
-    }
-    // Set xid for all PDU sessions
-    item->xid = params.transaction_id;
-  }
-
-  // Set xid for RRC transaction
-  if (is_reestablishment) {
-    ue_p->xids[params.transaction_id] = RRC_REESTABLISH_COMPLETE;
-  } else {
-    ue_p->xids[params.transaction_id] = params.n_drb_rel > 0 ? RRC_PDUSESSION_RELEASE : RRC_PDUSESSION_ESTABLISH;
-  }
+  ue_p->xids[params.transaction_id] = rrc_gNB_action_from_pdusession_status(ue_p, &params, is_reestablishment);
 
   byte_array_t msg = rrc_gNB_encode_RRCReconfiguration(ue_p, params);
   if (msg.len <= 0) {
@@ -981,16 +1013,9 @@ void rrc_gNB_modify_dedicatedRRCReconfiguration(gNB_RRC_INST *rrc, gNB_RRC_UE_t 
 
   FOR_EACH_SEQ_ARR(rrc_pdu_session_param_t *, item, &ue_p->pduSessions) {
     pdusession_t *session = &item->param;
+    item->xid = params.transaction_id;
     // bypass the new and already configured pdu sessions
-    if (item->status >= PDU_SESSION_STATUS_DONE) {
-      item->xid = params.transaction_id;
-      continue;
-    }
-
-    if (item->cause.type != NGAP_CAUSE_NOTHING) {
-      // set xid of failure pdu session
-      item->xid = params.transaction_id;
-      item->status = PDU_SESSION_STATUS_FAILED;
+    if (item->status != PDU_SESSION_STATUS_TOMODIFY) {
       continue;
     }
 
@@ -1019,8 +1044,6 @@ void rrc_gNB_modify_dedicatedRRCReconfiguration(gNB_RRC_INST *rrc, gNB_RRC_UE_t 
       }
       LOG_I(NR_RRC, "PDU Session ID %d, QOS flow %d, 5QI %ld \n", session->pdusession_id, qos_flow_index, qos->qos.fiveQI);
     }
-    item->status = PDU_SESSION_STATUS_DONE;
-    item->xid = params.transaction_id;
   }
 
   byte_array_t msg = do_RRCReconfiguration(&params);
@@ -1029,7 +1052,7 @@ void rrc_gNB_modify_dedicatedRRCReconfiguration(gNB_RRC_INST *rrc, gNB_RRC_UE_t 
     return;
   }
   LOG_DUMPMSG(NR_RRC, DEBUG_RRC, msg.buf, msg.len, "[MSG] RRC Reconfiguration\n");
-  LOG_I(NR_RRC, "UE %d: Generate RRCReconfiguration (bytes %ld)\n", ue_p->rrc_ue_id, msg.len);
+  LOG_I(NR_RRC, "UE %d: Generate RRCReconfiguration (bytes %ld, xid %d)\n", ue_p->rrc_ue_id, msg.len, params.transaction_id);
   const uint32_t msg_id = NR_DL_DCCH_MessageType__c1_PR_rrcReconfiguration;
   nr_rrc_transfer_protected_rrc_message(rrc, ue_p, DL_SCH_LCID_DCCH, msg_id, msg.buf, msg.len);
   free_RRCReconfiguration_params(params);
@@ -3299,9 +3322,7 @@ static const char *get_pdusession_status_text(pdu_session_status_t status)
 {
   switch (status) {
     case PDU_SESSION_STATUS_NEW: return "new";
-    case PDU_SESSION_STATUS_DONE: return "done";
     case PDU_SESSION_STATUS_ESTABLISHED: return "established";
-    case PDU_SESSION_STATUS_REESTABLISHED: return "reestablished";
     case PDU_SESSION_STATUS_TOMODIFY: return "to-modify";
     case PDU_SESSION_STATUS_FAILED: return "failed";
     case PDU_SESSION_STATUS_TORELEASE: return "to-release";

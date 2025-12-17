@@ -585,8 +585,9 @@ void rrc_gNB_send_NGAP_INITIAL_CONTEXT_SETUP_RESP(gNB_RRC_INST *rrc, gNB_RRC_UE_
 
   // Optional: PDU Sessions to Setup
   FOR_EACH_SEQ_ARR(rrc_pdu_session_param_t *, session, &UE->pduSessions) {
-    if (session->status == PDU_SESSION_STATUS_DONE) {
+    if (session->status == PDU_SESSION_STATUS_NEW) {
       resp->pdusessions[pdu_sessions_done++] = fill_ngap_pdusession_setup(&session->param);
+      session->status = PDU_SESSION_STATUS_ESTABLISHED;
     } else if (session->status != PDU_SESSION_STATUS_ESTABLISHED) {
       session->status = PDU_SESSION_STATUS_FAILED;
       ngap_cause_t cause = {.type = NGAP_CAUSE_RADIO_NETWORK, .value = NGAP_CAUSE_RADIO_NETWORK_UNKNOWN_PDU_SESSION_ID};
@@ -772,7 +773,7 @@ void rrc_gNB_send_NGAP_PDUSESSION_SETUP_RESP(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE
   resp->gNB_ue_ngap_id = UE->rrc_ue_id;
 
   FOR_EACH_SEQ_ARR(rrc_pdu_session_param_t *, session, &UE->pduSessions) {
-    if (session->status == PDU_SESSION_STATUS_DONE) {
+    if (session->status == PDU_SESSION_STATUS_NEW) {
       resp->pdusessions[pdu_sessions_done++] = fill_ngap_pdusession_setup(&session->param);
       session->status = PDU_SESSION_STATUS_ESTABLISHED;
     } else if (session->status != PDU_SESSION_STATUS_ESTABLISHED) {
@@ -988,7 +989,7 @@ int rrc_gNB_process_NGAP_PDUSESSION_MODIFY_REQ(const ngap_pdusession_modify_req_
       added->cause = cause;
     } else {
       all_failed = false;
-      session->status = PDU_SESSION_STATUS_NEW;
+      session->status = PDU_SESSION_STATUS_TOMODIFY;
       session->cause.type = NGAP_CAUSE_NOTHING;
       nr_rrc_update_pdusession(&session->param, sessMod);
     }
@@ -1036,7 +1037,7 @@ int rrc_gNB_send_NGAP_PDUSESSION_MODIFY_RESP(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE
             session->xid);
       continue;
     }
-    if (session->status == PDU_SESSION_STATUS_DONE) {
+    if (session->status == PDU_SESSION_STATUS_TOMODIFY) {
       LOG_I(NR_RRC, "PDU Session Modify successful (pdusession_id=%d) \n", session->param.pdusession_id);
       // Update status
       session->status = PDU_SESSION_STATUS_ESTABLISHED;
@@ -1051,8 +1052,6 @@ int rrc_gNB_send_NGAP_PDUSESSION_MODIFY_RESP(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE
         q->qfi = qos_session->qos.qfi;
       }
       p->pdusession_id = session->param.pdusession_id;
-    } else if ((session->status == PDU_SESSION_STATUS_NEW) || (session->status == PDU_SESSION_STATUS_ESTABLISHED)) {
-      LOG_D(NR_RRC, "PDU SESSION is NEW or already ESTABLISHED\n");
     } else if (session->status == PDU_SESSION_STATUS_FAILED) {
       DevAssert(resp->nb_of_pdusessions_failed <= NGAP_MAX_PDU_SESSION);
       pdusession_failed_t *failed = &resp->pdusessions_failed[resp->nb_of_pdusessions_failed++];
@@ -1060,7 +1059,7 @@ int rrc_gNB_send_NGAP_PDUSESSION_MODIFY_RESP(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE
       failed->cause = session->cause;
       rm_pduSession(&UE->pduSessions, &UE->drbs, session->param.pdusession_id);
     } else
-      LOG_W(NR_RRC, "Modify pdu session %d, unknown state %d \n ", session->param.pdusession_id, session->status);
+      LOG_W(NR_RRC, "PDU Session Modify: unexpected PDU Session status %d for PDU Session %d \n ", session->status, session->param.pdusession_id);
   }
 
   // Send message to NGAP (always send: if no PDU sessions, only mandatory IEs)
@@ -1734,7 +1733,7 @@ void rrc_gNB_send_NGAP_HANDOVER_REQUIRED(gNB_RRC_INST *rrc,
      and PDU Session Resource Information List IE (O) in the Source NG-RAN
      Node to Target NG-RAN Node Transparent Container */
   FOR_EACH_SEQ_ARR(rrc_pdu_session_param_t*, pduSession, &UE->pduSessions) {
-    if (pduSession->status != PDU_SESSION_STATUS_DONE && pduSession->status != PDU_SESSION_STATUS_ESTABLISHED)
+    if (pduSession->status != PDU_SESSION_STATUS_ESTABLISHED)
       continue;
     pdusession_t *session = &pduSession->param;
     DevAssert(msg.nb_of_pdusessions < NGAP_MAX_PDU_SESSION);
