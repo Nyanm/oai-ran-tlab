@@ -83,7 +83,7 @@ sequenceDiagram
     CUCP->>CUUP: E1 Bearer Context Modification Request
     Note over CUUP: release_gtpu_tunnel (GTP tunnel, PDCP, SDAP)
     CUUP->>CUCP: E1 Bearer Context Modification Response
-    Note over CUCP: rrc_gNB_send_f1_drb_release_request
+    Note over CUCP: rrc_send_f1_ue_context_modification_request
     CUCP->>DU: F1 UE Context Modification Request
     Note over DU: handle_ue_context_drbs_release (release in MAC/RLC)
     DU->>CUCP: F1 UE Context Modification Response

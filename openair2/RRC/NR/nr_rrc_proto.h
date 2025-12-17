@@ -82,12 +82,6 @@ void rrc_f1_ue_context_setup_from_e1_response(const gNB_RRC_INST *rrc,
                                               rrc_gNB_ue_context_t *const ue_context_pP,
                                               const e1ap_bearer_setup_resp_t *resp);
 
-void rrc_gNB_generate_UeContextModificationRequest(const gNB_RRC_INST *rrc,
-                                                   rrc_gNB_ue_context_t *const ue_context_pP,
-                                                   const e1ap_bearer_setup_resp_t *resp,
-                                                   int n_rel_drbs,
-                                                   const f1ap_drb_to_release_t *rel_drbs);
-
 void free_RRCReconfiguration_params(nr_rrc_reconfig_param_t params);
 
 byte_array_t rrc_gNB_encode_RRCReconfiguration(gNB_RRC_UE_t *UE, nr_rrc_reconfig_param_t params);

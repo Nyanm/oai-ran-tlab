@@ -1036,35 +1036,6 @@ void rrc_gNB_modify_dedicatedRRCReconfiguration(gNB_RRC_INST *rrc, gNB_RRC_UE_t 
   free_byte_array(msg);
 }
 
-static void rrc_gNB_send_f1_drb_release_request(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue_p, int *drb_to_release, int n_drb_to_release)
-{
-  f1_ue_data_t ue_data = cu_get_f1_ue_data(ue_p->rrc_ue_id);
-  RETURN_IF_INVALID_ASSOC_ID(ue_data.du_assoc_id);
-  f1ap_ue_context_mod_req_t req = {
-      .gNB_CU_ue_id = ue_p->rrc_ue_id,
-      .gNB_DU_ue_id = ue_data.secondary_ue,
-      .servCellIndex = RRC_PCELL_INDEX,
-  };
-  req.plmn = malloc_or_fail(sizeof(*req.plmn));
-  *req.plmn = rrc->configuration.plmn[0];
-  nr_rrc_cell_container_t *cell = rrc_get_pcell_for_ue(rrc, ue_p);
-  DevAssert(cell != NULL);
-  req.nr_cellid = malloc_or_fail(sizeof(*req.nr_cellid));
-  *req.nr_cellid = cell->info.cell_id;
-  req.drbs_rel = malloc_or_fail(sizeof(*req.drbs_rel));
-  req.drbs_rel_len = n_drb_to_release;
-  memcpy(req.drbs_rel, drb_to_release, n_drb_to_release * sizeof(int));
-
-  // Request CellGroupConfig from DU in the response
-  req.gNB_DU_Configuration_Query = calloc_or_fail(1, sizeof(*req.gNB_DU_Configuration_Query));
-  *req.gNB_DU_Configuration_Query = true;
-
-  /* send UE Context Modification to DU without attaching any RRC container */
-  rrc->mac_rrc.ue_context_modification_request(ue_data.du_assoc_id, &req);
-  LOG_I(NR_RRC, "UE %d: send F1 UE Context Modification Request with DRB release (%d DRBs)\n", ue_p->rrc_ue_id, req.drbs_rel_len);
-  free_ue_context_mod_req(&req);
-}
-
 static void fill_security_info(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, security_information_t *secInfo)
 {
   secInfo->cipheringAlgorithm = rrc->security.do_drb_ciphering ? UE->ciphering_algorithm : 0;
@@ -3044,6 +3015,68 @@ static int fill_drb_to_be_setup_from_e1_resp(const gNB_RRC_INST *rrc,
   return nb_drb;
 }
 
+/** @brief Common helper to send F1 UE Context Modification Request with DRBs to setup
+ * This function handles the common logic for both setup and modify flows */
+static void rrc_send_f1_ue_context_modification_request(const gNB_RRC_INST *rrc,
+                                                        gNB_RRC_UE_t *ue_p,
+                                                        int n_drbs,
+                                                        f1ap_drb_to_setup_t *drbs,
+                                                        int n_rel_drbs,
+                                                        f1ap_drb_to_release_t *rel_drbs)
+{
+  DevAssert(rrc);
+  DevAssert(ue_p);
+  DevAssert(n_drbs > 0 || n_rel_drbs > 0);
+  AssertFatal(ue_p->f1_ue_context_active, "logic error: calling ue context modification when context not established\n");
+  AssertFatal(ue_p->Srb[1].Active && ue_p->Srb[2].Active, "SRBs should already be active\n");
+  AssertFatal(!NODE_IS_DU(rrc->node_type), "illegal node type DU!\n");
+
+  f1_ue_data_t ue_data = cu_get_f1_ue_data(ue_p->rrc_ue_id);
+  RETURN_IF_INVALID_ASSOC_ID(ue_data.du_assoc_id);
+
+  f1ap_ue_context_mod_req_t req = {
+      .gNB_CU_ue_id = ue_p->rrc_ue_id,
+      .gNB_DU_ue_id = ue_data.secondary_ue,
+      .servCellIndex = RRC_PCELL_INDEX,
+  };
+
+  if (n_drbs > 0) {
+    req.drbs = calloc_or_fail(n_drbs, sizeof(*req.drbs));
+    memcpy(req.drbs, drbs, n_drbs * sizeof(*req.drbs));
+    req.drbs_len = n_drbs;
+    if (ue_p->ue_cap_buffer.len > 0) {
+      req.cu_to_du_rrc_info = calloc_or_fail(1, sizeof(*req.cu_to_du_rrc_info));
+      req.cu_to_du_rrc_info->ue_cap = calloc_or_fail(1, sizeof(*req.cu_to_du_rrc_info->ue_cap));
+      *req.cu_to_du_rrc_info->ue_cap = copy_byte_array(ue_p->ue_cap_buffer);
+    }
+  }
+
+  if (n_rel_drbs > 0) {
+    req.drbs_rel = calloc_or_fail(n_rel_drbs, sizeof(*req.drbs_rel));
+    memcpy(req.drbs_rel, rel_drbs, n_rel_drbs * sizeof(*req.drbs_rel));
+    req.drbs_rel_len = n_rel_drbs;
+  }
+
+  req.plmn = malloc_or_fail(sizeof(*req.plmn));
+  *req.plmn = rrc->configuration.plmn[0];
+  nr_rrc_cell_container_t *cell = rrc_get_pcell_for_ue((gNB_RRC_INST *)rrc, ue_p);
+  DevAssert(cell != NULL);
+  req.nr_cellid = malloc_or_fail(sizeof(*req.nr_cellid));
+  *req.nr_cellid = cell->info.cell_id;
+
+  // Request CellGroupConfig from DU in the response
+  req.gNB_DU_Configuration_Query = calloc_or_fail(1, sizeof(*req.gNB_DU_Configuration_Query));
+  *req.gNB_DU_Configuration_Query = true;
+
+  rrc->mac_rrc.ue_context_modification_request(ue_data.du_assoc_id, &req);
+  free_ue_context_mod_req(&req);
+  LOG_I(NR_RRC,
+        "UE %d trigger UE Context Modification Request (DRBs to setup: %d, DRBs to release: %d)\n",
+        ue_p->rrc_ue_id,
+        n_drbs,
+        n_rel_drbs);
+}
+
 /**
  * @brief E1AP Bearer Context Setup Response processing on CU-CP
 */
@@ -3098,8 +3131,12 @@ static void rrc_gNB_process_e1_bearer_context_setup_resp(e1ap_bearer_setup_resp_
 
   if (!UE->f1_ue_context_active)
     rrc_f1_ue_context_setup_from_e1_response(rrc, ue_context_p, resp);
-  else
-    rrc_gNB_generate_UeContextModificationRequest(rrc, ue_context_p, resp, 0, NULL);
+  else {
+    /* Instruction towards the DU for DRB configuration and tunnel creation */
+    f1ap_drb_to_setup_t *drbs = calloc_or_fail(E1AP_MAX_NUM_DRBS, sizeof(*drbs));
+    int n_drbs = fill_drb_to_be_setup_from_e1_resp(rrc, UE, resp->pduSession, resp->numPDUSessions, drbs);
+    rrc_send_f1_ue_context_modification_request(rrc, UE, n_drbs, drbs, 0 /* no DRBs to release */, NULL);
+  }
 }
 
 /** @brief E1AP Bearer Context Setup Failure processing on CU-CP */
@@ -3128,8 +3165,8 @@ void rrc_gNB_process_e1_bearer_context_modif_resp(const e1ap_bearer_modif_resp_t
 
   int n_drb_mod = 0;
   int drb_ids[MAX_DRBS_PER_UE] = {0};
-  int drb_to_release[MAX_DRBS_PER_UE] = {0};
-  int n_drb_to_release = 0;
+  f1ap_drb_to_release_t f1_drbs_rel[MAX_DRBS_PER_UE] = {0};
+  int n_f1_drbs_rel = 0;
   e1_pdcp_status_info_t pdcp_status[MAX_DRBS_PER_UE] = {0};
   for (int i = 0; i < resp->numPDUSessionsMod; ++i) {
     const pdu_session_modif_t *pdu = &resp->pduSessionMod[i];
@@ -3147,11 +3184,11 @@ void rrc_gNB_process_e1_bearer_context_modif_resp(const e1ap_bearer_modif_resp_t
     if (pdu_session && pdu_session->status == PDU_SESSION_STATUS_TORELEASE) {
       FOR_EACH_SEQ_ARR(drb_t *, drb, &ue->drbs) {
         if (drb->pdusession_id == pdu->id) {
-          DevAssert(n_drb_to_release < MAX_DRBS_PER_UE);
-          drb_to_release[n_drb_to_release++] = drb->drb_id;
+          DevAssert(n_f1_drbs_rel < MAX_DRBS_PER_UE);
+          f1_drbs_rel[n_f1_drbs_rel++].id = drb->drb_id;
         }
       }
-      if (n_drb_to_release == 0) {
+      if (n_f1_drbs_rel == 0) {
         LOG_E(NR_RRC, "UE %d: no DRBs to release for PDU session %ld\n", ue->rrc_ue_id, pdu->id);
       }
     }
@@ -3163,10 +3200,14 @@ void rrc_gNB_process_e1_bearer_context_modif_resp(const e1ap_bearer_modif_resp_t
       ue->ho_context->source->ho_status_transfer(rrc, ue, n_drb_mod, drb_ids, pdcp_status);
   }
 
-  // Send F1 UE Context Modification Request with DRB release
-  if (n_drb_to_release) {
-    LOG_I(NR_RRC, "Send F1 UE Context Modification Request with DRB to release\n");
-    rrc_gNB_send_f1_drb_release_request(rrc, ue, drb_to_release, n_drb_to_release);
+  // F1 UE Context Modification Request (in case of new DRBs or DRBs to release)
+  if (n_f1_drbs_rel > 0) {
+    if (ue->f1_ue_context_active) {
+      // Send F1 UE Context Modification Request with DRBs to release
+      rrc_send_f1_ue_context_modification_request(rrc, ue, 0 /* no DRBs to setup */, NULL, n_f1_drbs_rel, f1_drbs_rel);
+    } else {
+      LOG_W(NR_RRC, "UE %d has DRB(s) to be set up or released but F1 UE context is not active\n", ue->rrc_ue_id);
+    }
   }
 }
 
@@ -3814,7 +3855,7 @@ void rrc_f1_ue_context_setup_from_e1_response(const gNB_RRC_INST *rrc,
   activate_srb(ue_p, srbs[0].id);
 
   /* Instruction towards the DU for DRB configuration and tunnel creation */
-  f1ap_drb_to_setup_t *drbs = calloc_or_fail(32, sizeof(*drbs)); // maximum DRB can be 32
+  f1ap_drb_to_setup_t *drbs = calloc_or_fail(E1AP_MAX_NUM_DRBS, sizeof(*drbs));
   int n_drbs = fill_drb_to_be_setup_from_e1_resp(rrc, ue_p, resp->pduSession, resp->numPDUSessions, drbs);
 
   /* Get gNB DU UE ID */
@@ -3833,52 +3874,4 @@ void rrc_f1_ue_context_setup_from_e1_response(const gNB_RRC_INST *rrc,
   rrc->mac_rrc.ue_context_setup_request(ue_data.du_assoc_id, &ue_context_setup_req);
   free_ue_context_setup_req(&ue_context_setup_req);
   LOG_I(RRC, "UE %d trigger UE context setup request with %d DRBs\n", ue_p->rrc_ue_id, n_drbs);
-}
-
-//-----------------------------------------------------------------------------
-void rrc_gNB_generate_UeContextModificationRequest(const gNB_RRC_INST *rrc,
-                                                   rrc_gNB_ue_context_t *const ue_context_pP,
-                                                   const e1ap_bearer_setup_resp_t *resp,
-                                                   int n_rel_drbs,
-                                                   const f1ap_drb_to_release_t *rel_drbs)
-//-----------------------------------------------------------------------------
-{
-  gNB_RRC_UE_t *ue_p = &ue_context_pP->ue_context;
-  AssertFatal(ue_p->f1_ue_context_active, "logic error: calling ue context modification when context not established\n");
-  AssertFatal(ue_p->Srb[1].Active && ue_p->Srb[2].Active, "SRBs should already be active\n");
-
-  AssertFatal(!NODE_IS_DU(rrc->node_type), "illegal node type DU!\n");
-
-  f1ap_cu_to_du_rrc_info_t *cu2du = NULL;
-  if (ue_p->ue_cap_buffer.len > 0) {
-    cu2du = calloc_or_fail(1, sizeof(*cu2du));
-    cu2du->ue_cap = calloc_or_fail(1, sizeof(*cu2du->ue_cap));
-    *cu2du->ue_cap = copy_byte_array(ue_p->ue_cap_buffer);
-  }
-
-  /* Instruction towards the DU for DRB configuration and tunnel creation */
-  f1ap_drb_to_setup_t *drbs = calloc_or_fail(32, sizeof(*drbs)); // maximum DRB can be 32
-  int n_drbs = fill_drb_to_be_setup_from_e1_resp(rrc, ue_p, resp->pduSession, resp->numPDUSessions, drbs);
-
-  f1_ue_data_t ue_data = cu_get_f1_ue_data(ue_p->rrc_ue_id);
-  RETURN_IF_INVALID_ASSOC_ID(ue_data.du_assoc_id);
-  f1ap_ue_context_mod_req_t ue_context_modif_req = {
-      .gNB_CU_ue_id = ue_p->rrc_ue_id,
-      .gNB_DU_ue_id = ue_data.secondary_ue,
-      .drbs_len = n_drbs,
-      .drbs = drbs,
-      .drbs_rel_len = n_rel_drbs,
-      .drbs_rel = (f1ap_drb_to_release_t *)rel_drbs,
-      .cu_to_du_rrc_info = cu2du,
-  };
-
-  // Request CellGroupConfig from DU in the response
-  ue_context_modif_req.gNB_DU_Configuration_Query = calloc_or_fail(1, sizeof(*ue_context_modif_req.gNB_DU_Configuration_Query));
-  *ue_context_modif_req.gNB_DU_Configuration_Query = true;
-  rrc->mac_rrc.ue_context_modification_request(ue_data.du_assoc_id, &ue_context_modif_req);
-  // avoid attempt to release rel_drbs
-  ue_context_modif_req.drbs_rel_len = 0;
-  ue_context_modif_req.drbs_rel = NULL;
-  free_ue_context_mod_req(&ue_context_modif_req);
-  LOG_I(RRC, "UE %d trigger UE context modification request with %d DRBs\n", ue_p->rrc_ue_id, n_drbs);
 }
