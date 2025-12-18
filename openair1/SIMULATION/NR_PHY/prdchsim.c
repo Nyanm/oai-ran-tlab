@@ -83,14 +83,18 @@ typedef struct {
   double tx_pwr_dBm;
 } channel_model_t;
 
-#define MIN_SNR_DB (-15)
-#define MAX_SNR_DB 5
+#define MIN_SNR_DB (-30)
+#define MAX_SNR_DB 20
+
+#define MIN_SNR_DB_DEFAULT (-10)
+#define MAX_SNR_DB_DEFAULT 10
+
 #define SNR_STEP_DB 1
 #define SNR_TRIALS 1000
-#define SNR_STEPS ((MAX_SNR_DB - MIN_SNR_DB) / SNR_STEP_DB + 1)
+#define SNR_STEPS ((MAX_SNR_DB_DEFAULT - MIN_SNR_DB_DEFAULT) / SNR_STEP_DB + 1)
 
-int snr_min = MIN_SNR_DB;
-int snr_max = MAX_SNR_DB;
+int snr_min = MIN_SNR_DB_DEFAULT;
+int snr_max = MAX_SNR_DB_DEFAULT;
 int snr_steps = SNR_STEPS;
 int snr_iters = SNR_TRIALS;
 int snr_plot = 0;
@@ -128,9 +132,9 @@ void AIOT_R2D_PHY_TX_AddCRC(uint8_t *output, uint8_t *payload, NR_AIOT_DL_FRAME_
 
   if(testing_mode && !testing_timing) {
     if(crc_bits == 16) {
-      printf("CRC: 0x%04X, 16-bit\n", crc);
+      printf("[TX CRC] CRC: 0x%04X, 16-bit\n", crc);
     } else {
-      printf("CRC: 0x%02X, 6-bit\n", crc);
+      printf("[TX CRC] CRC: 0x%02X, 6-bit\n", crc);
     }
   }
 
@@ -580,7 +584,7 @@ int AIOT_R2D_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *SI
   }
 
   if(testing_mode && !testing_timing) {
-    printf("Detected SIP at offset %d, Corr: %d\n", SIP_offset, max_corr);
+    printf("[RX Synchronize] SIP at offset %d, Corr: %d\n", SIP_offset, max_corr);
   }
   return SIP_offset;
 }
@@ -618,7 +622,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
   uint32_t threshold = ((thr_max + thr_min) / 2); // decrease threshold to be effective for lower amplitudes
 
   if(testing_mode && !testing_timing) {
-    printf("CAP threshold: %d\n", threshold);
+    printf("[RX M detector] CAP threshold: %d\n", threshold);
   }
 
   // Find parameter M from R-TAS-CAP sequence
@@ -633,8 +637,8 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
   }
 
   if(testing_mode && !testing_timing) {
-    printf("Detected M=%d from R-TAS-CAP\n", frame_parms->received_M);
-    printf("CAP energies: %d %d %d %d\n", CAP_energy[0], CAP_energy[1], CAP_energy[2], CAP_energy[3]);
+    printf("[RX M detector] CAP energies: %d %d %d %d\n", CAP_energy[0], CAP_energy[1], CAP_energy[2], CAP_energy[3]);
+    printf("[RX M detector] Detected M=%d from CAP\n", frame_parms->received_M);
   }
 
   int received_chip_size = downsampled_OFDM_size / frame_parms->received_M;
@@ -654,7 +658,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
 
   threshold = ((thr_max + thr_min) / 2); // adapt threshold
   if(testing_mode && !testing_timing) {
-    printf("Postamble detection threshold: %d\n", threshold);
+    printf("[RX Postamble detection] Postamble detection threshold: %d\n", threshold);
   }
 
   // Calculate position of the start of payload
@@ -801,9 +805,9 @@ bool AIOT_R2D_PHY_RX_CheckCRC(uint8_t *packet, NR_AIOT_DL_FRAME_PARMS *frame)
 
   if(testing_mode && !testing_timing) {
     if(crc_calculated == crc_received) {
-      printf("CRC check passed\n");
+      printf("[RX CRC] CRC check passed\n");
     } else {
-      printf("CRC mismatch: Calc: %X, RX: %X\n", crc_calculated, crc_received);
+      printf("[RX CRC] CRC error: Calculated: %X, Received: %X\n", crc_calculated, crc_received);
     }
   }
 
@@ -920,6 +924,7 @@ void* process_snr_range(void* arg) {
         pthread_mutex_lock(data->print_mutex);
         printf("*************************\n");
         printf("Thread %d: Testing SNR %d dB\n", data->thread_id, snr);
+        printf("-------------------------\n");
         pthread_mutex_unlock(data->print_mutex);
       }
 
@@ -1086,13 +1091,13 @@ void* process_snr_range(void* arg) {
         data->ber_results[snr - snr_min] += 1;
 
         if(testing_mode && !testing_timing) {
-          printf("Packet: (%d bits)\n", local_frame_parms->packet_size);
+          printf("Transmitted Packet (%d bits):\n", local_frame_parms->packet_size);
           for(int i = 0; i < (local_frame_parms->packet_size+7) / 8; i++) {
             printf("%02X ", local_payload[i]);
           }
           printf("\n");
 
-          printf("Received packet (%d bits):\n", local_frame_parms->packet_payload_size);
+          printf("Received packet    (%d bits):\n", local_frame_parms->packet_payload_size);
           for(int i = 0; i < (local_frame_parms->packet_payload_size+7)/8; i++) {
             printf("%02X ", rx_payload[i]);
           }
@@ -1104,7 +1109,7 @@ void* process_snr_range(void* arg) {
     data->ber_results[snr - snr_min] /= snr_iters;
     
     pthread_mutex_lock(data->print_mutex);
-    printf("Thread %d: Completed SNR %3d dB: BLER = %.3f\n", data->thread_id, snr, data->ber_results[snr - snr_min]);
+    printf("Thread %d: Completed SNR %3d dB: BLER = %f\n", data->thread_id, snr, data->ber_results[snr - snr_min]);
     pthread_mutex_unlock(data->print_mutex);
   }
   
@@ -1197,7 +1202,6 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
     
     pthread_t *threads = malloc(num_threads * sizeof(pthread_t));
     snr_thread_data_t *thread_data = malloc(num_threads * sizeof(snr_thread_data_t));
-
     memset(thread_data, 0, num_threads * sizeof(snr_thread_data_t));
     
     // Calculate SNR range for each thread
@@ -1221,12 +1225,12 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
       thread_data[t].snr_start = snr_min + start_idx * SNR_STEP_DB;
       thread_data[t].snr_end = snr_min + end_idx * SNR_STEP_DB;
       
-      printf("Thread %d: SNR range %3d to %3d dB\n", t, thread_data[t].snr_start, thread_data[t].snr_end);
+      printf("Thread %d: SNR range %3d to %d dB\n", t, thread_data[t].snr_start, thread_data[t].snr_end);
     }
 
-      printf("-------------------------------\n");
-      printf("         Simulation run\n");
-      printf("-------------------------------\n");
+    printf("-------------------------------\n");
+    printf("         Simulation run\n");
+    printf("-------------------------------\n");
     
     // Create and start threads
     for (int t = 0; t < num_threads; t++) {
@@ -1323,13 +1327,13 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
   printf("-------------------------------\n");
   printf("            Results\n");
   printf("-------------------------------\n");
-  for(int snr = MIN_SNR_DB; snr <= MAX_SNR_DB; snr += SNR_STEP_DB) {
-    printf("SNR %3d dB: BLER = %f\n", snr, ber_results[snr - MIN_SNR_DB]);
+  for(int snr = snr_min; snr <= snr_max; snr += SNR_STEP_DB) {
+    printf("SNR %3d dB: BLER = %f\n", snr, ber_results[snr - snr_min]);
   }
 
   if(!testing_mode) {
     sprintf(filename, "%s/BLER_M%d_%s_SIZE%d_%dRBs.m", foldername, frame_parms->M, frame_parms->Zadoff_Chu ? "ZC" : "Ones", frame_parms->payload_size, frame_parms->nr_frame_parms.N_RB_DL);
-    LOG_M(filename, "BLER", ber_results, MAX_SNR_DB - MIN_SNR_DB + 1, 1, 7);
+    LOG_M(filename, "BLER", ber_results, snr_max - snr_min + 1, 1, 7);
   }
 }
 
@@ -1353,7 +1357,7 @@ int main(int argc, char **argv)
   }
 
   printf("===========================================================\n");
-  printf("     Ambient-IoT Rel 19 R2D Physical Layer Simulator\n");
+  printf("            Ambient-IoT Rel 19 PRDCH Simulator\n");
   printf("===========================================================\n\n");
 
   // **************************
@@ -1417,7 +1421,7 @@ int main(int argc, char **argv)
   };
 
   int c;
-  while ((c = getopt(argc, argv, "--:O:h:L:R:p:M:Z:t:T:i:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:h:L:R:p:M:Z:t:T:i:s:S:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -1430,11 +1434,13 @@ int main(int argc, char **argv)
         printf("%s <options>\n", argv[0]);
         printf("-h This help page\n");
         printf("-L OAI log level <0(errors) default, 1(warning), 2(analysis), 3(info), 4(debug), 5(trace)>\n");
-        printf("-R Number of RBs (supported: 1, 6, 25, 50, 100)\n");
-        printf("-p Payload size in bits (max: %d)\n", MAX_AIOT_R2D_PAYLOAD_SIZE * 8);
-        printf("-M Number of chips in a OFDM symbol (supported: 1, 2, 4)\n");
-        printf("-Z Overlay sequence: Zadoff-Chu (1) or Ones (0)\n");
-        printf("-i Iterations per SNR point\n");
+        printf("-R Number of RBs (supported: 1, 6, 25, 50, 100) (default: %d)\n", frame_parms->nr_frame_parms.N_RB_DL);
+        printf("-p Payload size in bits (max: %d) (default: %d)\n", MAX_AIOT_R2D_PAYLOAD_SIZE * 8, frame_parms->payload_size);
+        printf("-M Number of chips in a OFDM symbol (supported: 1, 2, 4) (default: %d)\n", frame_parms->M);
+        printf("-Z Overlay sequence: Zadoff-Chu (1) or Ones (0) (default: %d)\n", frame_parms->Zadoff_Chu);
+        printf("-i Iterations per SNR point (default: %d)\n", SNR_TRIALS);
+        printf("-s SNR min in dB (default: %d)\n", MIN_SNR_DB);
+        printf("-S SNR max in dB (default: %d)\n", MAX_SNR_DB);
         printf("\n*** Testing options:\n");
         printf("-t Testing mode (the parameter specifies the SNR cut to save to plot)\n");
         printf("-T Timing mode (measure processing time per packet)\n");
@@ -1488,18 +1494,56 @@ int main(int argc, char **argv)
         break;
 
       case 't':
+        if (testing_timing) {
+          printf("Error: Timing and testing modes cannot be enabled simultaneously\n");
+          exit(-1);
+        }
+
+        printf("Enabling testing mode\n");
         snr_iters = 1;
         testing_mode = true;
         snr_plot = atoi(optarg);
+        printf("Enabling testing mode, saving results for SNR=%d dB\n", snr_plot);
         break;
       
       case 'T':
+        if (testing_mode) {
+          printf("Error: Timing and testing modes cannot be enabled simultaneously\n");
+          exit(-1);
+        }
+
+        printf("Enabling timing mode\n");
         testing_timing = true;
         break;
 
       case 'i':
+        if (testing_mode) {
+          printf("Error: Iterations per SNR point cannot be set in testing mode\n");
+          exit(-1);
+        }
+
         snr_iters = atoi(optarg);
         printf("Using %d iterations per SNR point\n", snr_iters);
+        break;
+
+      case 's':
+        if(snr_min < MIN_SNR_DB || snr_min > MAX_SNR_DB) {
+          printf("Error: SNR min must be between %d and %d dB\n", MIN_SNR_DB, MAX_SNR_DB);
+          exit(-1);
+        }
+        snr_min = atoi(optarg);
+        snr_steps = ((snr_max - snr_min) / SNR_STEP_DB + 1);
+        printf("Using SNR min: %d dB\n", snr_min);
+        break;
+
+      case 'S':
+        if(snr_max < MIN_SNR_DB || snr_max > MAX_SNR_DB) {
+          printf("Error: SNR max must be between %d and %d dB\n", MIN_SNR_DB, MAX_SNR_DB);
+          exit(-1);
+        }
+        snr_max = atoi(optarg);
+        snr_steps = ((snr_max - snr_min) / SNR_STEP_DB + 1);
+        printf("Using SNR max: %d dB\n", snr_max);
         break;
     }
   }
@@ -1518,7 +1562,6 @@ int main(int argc, char **argv)
   InitSinLUT();
 
   printf("CPU features:\n");
-
   printf("  Threads: %d\n", num_threads);
 
   #if defined(__AVX2__)
