@@ -48,6 +48,7 @@ const char *__asan_default_options()
 NR_AIOT_DL_FRAME_PARMS *frame_parms;
 
 double cpuf;
+int num_threads;
 char filename[50];
 char foldername[] = "./R2D_results";
 
@@ -91,7 +92,7 @@ typedef struct {
 int snr_min = MIN_SNR_DB;
 int snr_max = MAX_SNR_DB;
 int snr_steps = SNR_STEPS;
-int snr_trials = SNR_TRIALS;
+int snr_iters = SNR_TRIALS;
 int snr_plot = 0;
 
 // Note: s_re, s_im, r_re, r_im are now thread-local variables
@@ -111,8 +112,6 @@ void AIOT_R2D_PHY_TX_calc_packet_sizes(NR_AIOT_DL_FRAME_PARMS *frame)
   frame->packet_subcarriers = NR_NB_SC_PER_RB * frame->nr_frame_parms.N_RB_DL;
   frame->packet_samples =
       frame->nr_frame_parms.samples_per_subframe / frame->nr_frame_parms.slots_per_subframe * frame->packet_slots;
-
-  printf("Calculated R2D packet size: %d symbols, each %d SCs\n", frame->packet_symbols, frame->packet_subcarriers);
 }
 
 void AIOT_R2D_PHY_TX_AddCRC(uint8_t *output, uint8_t *payload, NR_AIOT_DL_FRAME_PARMS *frame)
@@ -916,7 +915,7 @@ void* process_snr_range(void* arg) {
     channel_model_t local_channel_model = *data->channel_model;
     local_channel_model.SNR = snr;
     
-    for(int trials = 0; trials < snr_trials; trials++) {
+    for(int iters = 0; iters < snr_iters; iters++) {
       if(testing_mode && !testing_timing) {
         pthread_mutex_lock(data->print_mutex);
         printf("*************************\n");
@@ -950,7 +949,7 @@ void* process_snr_range(void* arg) {
       
       AIOT_R2D_PHY_TX_REs(REsPacket, (const uint8_t *) local_payload, local_frame_parms);
 
-      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_REs_Packet.m", foldername);
         LOG_M(filename, "REs_Packet_sig", REsPacket, frame_parms->packet_symbols * frame_parms->packet_subcarriers, 1, 1);
       }
@@ -964,7 +963,7 @@ void* process_snr_range(void* arg) {
       
       AIOT_R2D_PHY_TX_Signal(txData, txDataF, (const c16_t *) REsPacket, local_frame_parms);
 
-      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_TX_IQ.m", foldername);
         LOG_M(filename, "TX_IQ_sig", txData, frame_parms->packet_samples, 1, 1);
       }
@@ -979,7 +978,7 @@ void* process_snr_range(void* arg) {
       SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, local_channel_model.SNR, local_frame_parms,
                             s_re, s_im, r_re, r_im, &data->time_multipath, &data->time_noise, &gz);
 
-      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         // Save channel output
         double *output = malloc(rx_size * 2 * sizeof(double));
 
@@ -994,7 +993,7 @@ void* process_snr_range(void* arg) {
         free(output);
       }
 
-      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_RX_IQ.m", foldername);
         LOG_M(filename, "RX_IQ_sig", rxData[0], rx_size, 1, 1);
       }
@@ -1008,7 +1007,7 @@ void* process_snr_range(void* arg) {
       
       AIOT_R2D_PHY_RX_Envelope_Detector(envelope, (const c16_t **) rxData, rx_size);
 
-      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_Envelope.m", foldername);
         LOG_M(filename, "Envelope_sig", envelope, rx_size, 1, 0);
       }
@@ -1022,7 +1021,7 @@ void* process_snr_range(void* arg) {
       
       AIOT_R2D_PHY_RX_Filter(filteredData, (const int16_t *) envelope, rx_size, &local_filter);
 
-      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_Filter.m", foldername);
         LOG_M(filename, "Filter_sig", filteredData, rx_size, 1, 0);
       }
@@ -1036,7 +1035,7 @@ void* process_snr_range(void* arg) {
       
       AIOT_R2D_PHY_RX_Downsample(downSampled, (const int16_t *) filteredData, rx_size, local_frame_parms);
 
-      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_Downsampled.m", foldername);
         LOG_M(filename, "Downsampled_sig", downSampled, frame_parms->packet_downsampled_samples, 1, 0);
       }
@@ -1050,7 +1049,7 @@ void* process_snr_range(void* arg) {
       
       int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) downSampled, SIP_ideal, local_frame_parms);
 
-      if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
+      if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_Correlation.m", foldername);
         LOG_M(filename, "Correlation_sig", correlation, frame_parms->packet_downsampled_samples - frame_parms->SIP_samples, 1, 2);
       }
@@ -1102,10 +1101,10 @@ void* process_snr_range(void* arg) {
       }
     }
     
-    data->ber_results[snr - snr_min] /= snr_trials;
+    data->ber_results[snr - snr_min] /= snr_iters;
     
     pthread_mutex_lock(data->print_mutex);
-    printf("Thread %d completed SNR %d dB: BLER = %f\n", data->thread_id, snr, data->ber_results[snr - snr_min]);
+    printf("Thread %d: Completed SNR %3d dB: BLER = %.3f\n", data->thread_id, snr, data->ber_results[snr - snr_min]);
     pthread_mutex_unlock(data->print_mutex);
   }
   
@@ -1147,6 +1146,7 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
 {
   AIOT_R2D_PHY_TX_calc_packet_sizes(frame_parms);
 
+  printf("*************************\n");
   printf("R2D packet parameters:\n");
   printf("  RBs: %d\n", frame_parms->nr_frame_parms.N_RB_DL);
   printf("  M: %d\n", frame_parms->M);
@@ -1158,19 +1158,21 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
   printf("  Packet samples (aligned to slots): %d\n", frame_parms->packet_samples);
 
   // Setup radio channel
-  channel_model->sampling_rate = 61.44; // N_RB2sampling_rate(frame_parms->nr_frame_parms.N_RB_DL); // in MHz
-  channel_model->bw = frame_parms->nr_frame_parms.N_RB_DL * 0.2/2; // N_RB2channel_bandwidth(frame_parms->nr_frame_parms.N_RB_DL); // in MHz
+  channel_model->sampling_rate = 30.72;// in MHz
+  channel_model->bw = frame_parms->nr_frame_parms.N_RB_DL * 0.2; // in MHz
 
   printf("Channel parameters:\n");
   printf("  Channel model: %s\n", channel_model->channel_model == AWGN ? "AWGN" : "TDL");
   printf("  Sampling rate: %f Msps\n", channel_model->sampling_rate);
   printf("  Bandwidth: %f MHz\n", channel_model->bw);
-  printf("  Delay spread: %f us\n", channel_model->DS_TDL);
-  printf("  SNR: %f dB\n", channel_model->SNR);
+  //printf("  Delay spread: %f us\n", channel_model->DS_TDL);
   printf("  Delay: %d samples\n", channel_model->delay);
 
-  printf("Starting BER test over SNR range %d dB to %d dB with step %d dB (%d trials per SNR)...\n",
-         snr_min, snr_max, snr_steps, snr_trials);
+  printf("*************************\n");
+  printf("Starting BLER vs SNR: \n");
+  printf("  SNR range: %d to %d dB\n", snr_min, snr_max);
+  printf("  Iterations per SNR point: %d\n", snr_iters);
+  printf("*************************\n");
 
   // Generate SIP ideal sequence (shared by all threads)
   frame_parms->packet_downsampled_samples = (frame_parms->packet_samples + channel_model->delay + 200) / frame_parms->N;
@@ -1185,9 +1187,6 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
   memset(ber_results, 0, snr_steps * sizeof(double));
 
   if(!testing_mode) {
-    // Determine number of threads
-    int num_threads = (int)sysconf(_SC_NPROCESSORS_ONLN);
-    if (num_threads < 1) num_threads = 1;
     int total_snr_points = (snr_max - snr_min) / SNR_STEP_DB + 1;
     
     if (num_threads > total_snr_points) {
@@ -1222,8 +1221,12 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
       thread_data[t].snr_start = snr_min + start_idx * SNR_STEP_DB;
       thread_data[t].snr_end = snr_min + end_idx * SNR_STEP_DB;
       
-      printf("Thread %d will process SNR range %d to %d dB\n", t, thread_data[t].snr_start, thread_data[t].snr_end);
+      printf("Thread %d: SNR range %3d to %3d dB\n", t, thread_data[t].snr_start, thread_data[t].snr_end);
     }
+
+      printf("-------------------------------\n");
+      printf("         Simulation run\n");
+      printf("-------------------------------\n");
     
     // Create and start threads
     for (int t = 0; t < num_threads; t++) {
@@ -1255,7 +1258,7 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
       thread_data[0].time_noise += thread_data[t].time_noise;
     }
 
-    int total_measurements = snr_steps * snr_trials;
+    int total_measurements = snr_steps * snr_iters;
 
     thread_data[0].time_tx_CRC /= total_measurements;
     thread_data[0].time_tx_REs /= total_measurements;
@@ -1291,7 +1294,7 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
                           thread_data[0].time_filter + thread_data[0].time_downsample + thread_data[0].time_sync + thread_data[0].time_rx_packet + thread_data[0].time_ber;
       printf("---\n");
       printf("Total time:              %f us\n", total_time);
-      printf("Total time (measured):   %f us\n", thread_data[0].time_total);
+      //printf("Total time (measured):   %f us\n", thread_data[0].time_total);
     }
 
     // Cleanup
@@ -1321,7 +1324,7 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
   printf("            Results\n");
   printf("-------------------------------\n");
   for(int snr = MIN_SNR_DB; snr <= MAX_SNR_DB; snr += SNR_STEP_DB) {
-    printf("SNR %d dB: BER = %f\n", snr, ber_results[snr - MIN_SNR_DB]);
+    printf("SNR %3d dB: BLER = %f\n", snr, ber_results[snr - MIN_SNR_DB]);
   }
 
   if(!testing_mode) {
@@ -1340,10 +1343,18 @@ int main(int argc, char **argv)
   int loglvl = OAILOG_ERR;
 
   cpuf = get_cpu_freq_GHz();
+  
+  // Determine number of threads
+  num_threads = (int)sysconf(_SC_NPROCESSORS_ONLN);
+  if (num_threads < 1) num_threads = 1;
 
   if ((uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY)) == 0) {
     exit_fun("[NR_AIOT_PRDCHSIM] Error, configuration module init failed\n");
   }
+
+  printf("===========================================================\n");
+  printf("     Ambient-IoT Rel 19 R2D Physical Layer Simulator\n");
+  printf("===========================================================\n\n");
 
   // **************************
   // Allocate memory for frame parameters
@@ -1406,7 +1417,7 @@ int main(int argc, char **argv)
   };
 
   int c;
-  while ((c = getopt(argc, argv, "--:O:h:L:R:p:M:Z:S:N:D:t:T:r:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:h:L:R:p:M:Z:t:T:i:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -1417,17 +1428,16 @@ int main(int argc, char **argv)
       default:
       case 'h':
         printf("%s <options>\n", argv[0]);
-        printf("-h This message\n");
-        printf("-L <log level, 0(errors), 1(warning), 2(analysis), 3(info), 4(debug), 5(trace)>\n");
+        printf("-h This help page\n");
+        printf("-L OAI log level <0(errors) default, 1(warning), 2(analysis), 3(info), 4(debug), 5(trace)>\n");
         printf("-R Number of RBs (supported: 1, 6, 25, 50, 100)\n");
-        printf("-p Payload size in bits (max %d)\n", MAX_AIOT_R2D_PAYLOAD_SIZE * 8);
-        printf("-M Chips in symbol (supported: 1, 2, 4)\n");
-        printf("-Z Zadoff-Chu (1) or Ones (0)\n");
-        printf("-S SNR in dB\n");
-        printf("-N Path loss in dB\n");
-        printf("-D Delay in samples\n");
-        printf("-t Testing mode, parameter is SNR to plot\n");
-        printf("-r SNR trials per SNR point\n");
+        printf("-p Payload size in bits (max: %d)\n", MAX_AIOT_R2D_PAYLOAD_SIZE * 8);
+        printf("-M Number of chips in a OFDM symbol (supported: 1, 2, 4)\n");
+        printf("-Z Overlay sequence: Zadoff-Chu (1) or Ones (0)\n");
+        printf("-i Iterations per SNR point\n");
+        printf("\n*** Testing options:\n");
+        printf("-t Testing mode (the parameter specifies the SNR cut to save to plot)\n");
+        printf("-T Timing mode (measure processing time per packet)\n");
         exit(-1);
         break;
       case 'L':
@@ -1439,7 +1449,7 @@ int main(int argc, char **argv)
           printf("Error: number of RBs %d not supported, use 1, 6, 25, 50 or 100\n", RBs);
           exit(-1);
         } else {
-          printf("Using %d RBs\n", RBs);
+          printf("Using: %d RBs\n", RBs);
           frame_parms->nr_frame_parms.N_RB_DL = RBs;
           frame_parms->nr_frame_parms.N_RB_UL = RBs;
         }
@@ -1451,7 +1461,7 @@ int main(int argc, char **argv)
           printf("Error: maximum payload bit size is %d\n", MAX_AIOT_R2D_PAYLOAD_SIZE * 8);
           exit(-1);
         } else {
-          printf("Using payload size %d bits\n", frame_parms->payload_size);
+          printf("Using payload size: %d bits\n", frame_parms->payload_size);
         }
         break;
 
@@ -1461,7 +1471,7 @@ int main(int argc, char **argv)
           printf("Error: M must be between 1 and 4\n");
           exit(-1);
         } else {
-          printf("Using M=%d\n", M);
+          printf("Using: M=%d\n", M);
           frame_parms->M = M;
         }
         break;
@@ -1477,23 +1487,8 @@ int main(int argc, char **argv)
         }
         break;
 
-      case 'S':
-        channel_model.SNR = atof(optarg);
-        printf("Using SNR=%f dB\n", channel_model.SNR);
-        break;
-
-      case 'N':
-        channel_model.path_loss_dB = -atof(optarg);
-        printf("Using path_loss_dB=%f dB\n", channel_model.path_loss_dB);
-        break;
-
-      case 'D':
-        channel_model.delay = atoi(optarg);
-        printf("Using delay=%d samples\n", channel_model.delay);
-        break;
-
       case 't':
-        snr_trials = 1;
+        snr_iters = 1;
         testing_mode = true;
         snr_plot = atoi(optarg);
         break;
@@ -1502,9 +1497,9 @@ int main(int argc, char **argv)
         testing_timing = true;
         break;
 
-      case 'r':
-        snr_trials = atoi(optarg);
-        printf("Using %d trials per SNR point\n", snr_trials);
+      case 'i':
+        snr_iters = atoi(optarg);
+        printf("Using %d iterations per SNR point\n", snr_iters);
         break;
     }
   }
@@ -1522,16 +1517,20 @@ int main(int argc, char **argv)
   crcTableInit();
   InitSinLUT();
 
+  printf("CPU features:\n");
+
+  printf("  Threads: %d\n", num_threads);
+
   #if defined(__AVX2__)
-    printf("AVX2 supported\n");
+    printf("  AVX2 supported\n");
   #else
-    printf("AVX2 not supported\n");
+    printf("  AVX2 not supported\n");
   #endif
   
   #if defined(__AVX512F__) && defined(__AVX512BW__)
-    printf("AVX512 supported\n");
+    printf("  AVX512 supported\n");
   #else
-    printf("AVX512 not supported\n");
+    printf("  AVX512 not supported\n");
   #endif
 
   // ---------------------------------------------------------------

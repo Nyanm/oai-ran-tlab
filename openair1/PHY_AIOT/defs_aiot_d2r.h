@@ -37,6 +37,9 @@
 #define D_TAS_7_BITS     0x4E
 #define D_TAS_31_BITS    0x242BB1F3
 
+#define POSTAMBLE_N 4
+#define POSTAMBLE   0xF
+
 const double T_BIT_TABLE[8] = { 2.0, 1.0, 1/2.0, 1/4.0, 1/8.0, 1/16.0, 1/32.0, 1/96.0 };
 const int I_BIT_TABLE[4] = { 48, 96, 168, 240 };
 

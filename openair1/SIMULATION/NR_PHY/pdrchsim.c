@@ -91,7 +91,7 @@ typedef struct {
 int snr_min = MIN_SNR_DB;
 int snr_max = MAX_SNR_DB;
 int snr_steps = SNR_STEPS;
-int snr_trials = SNR_TRIALS;
+int snr_iters = SNR_TRIALS;
 int snr_plot = 0;
 
 int rx_size;
@@ -414,6 +414,9 @@ void AIOT_D2R_PHY_TX_calc_packet_sizes(NR_AIOT_UL_FRAME_PARMS *frame)
   }
   frame->packet_samples *= frame->N_bit;
 
+  // 2x block repetition if R_block is true
+  frame->packet_samples *= frame->R_block ? 2 : 1;
+
   printf("Calculated chip samples: %d, bit samples: %d, midamble spacing: %d\n", frame->N_chip, frame->N_bit, frame->N_midamble_space);
   printf("Calculated D2R packet size: %d samples\n", frame->packet_samples);
 
@@ -497,6 +500,13 @@ void AIOT_D2R_PHY_TX_Signal(c16_t *txData, const uint8_t *payload, NR_AIOT_UL_FR
     }
   }
 
+  // Block repetition if R_block is true
+  /*if(frame->R_block) {
+    int payload_samples = dataIndex - preamble_samples;
+    memcpy(&txData[dataIndex], &txData[preamble_samples], payload_samples * sizeof(c16_t));
+    dataIndex += payload_samples;
+  }*/
+
   // Insert midamble (fixed pattern 101010...)
   if(frame->I_add) {
     for(int m = 0; m < frame->N_preamble; m++) {
@@ -523,7 +533,7 @@ void AIOT_D2R_PHY_TX_Signal(c16_t *txData, const uint8_t *payload, NR_AIOT_UL_FR
 /* 3rd Order Butterworth Filter State 
    - Coefficients are shared between Real/Imag paths.
    - State history (x, y) must be separate for Real/Imag.
-*/
+*//*
 typedef struct {
     // --- Coefficients (Q2.29) ---
     int32_t b0_1, b1_1, a1_1;             // Stage 1 (1st order)
@@ -633,7 +643,7 @@ void AIOT_D2R_PHY_TX_Filter(c16_t *output, const c16_t *input, int length, Butte
     output[i].r = final_r;
     output[i].i = final_i;
   }
-}
+}*/
 
 void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *channel, double SNR, NR_AIOT_UL_FRAME_PARMS *frame,
                            double **s_re, double **s_im, double **r_re, double **r_im, double *time_multipath, double *time_noise, gaussZiggurat_MT_t *gz)
@@ -870,7 +880,8 @@ void AIOT_D2R_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int P
   frame->packet_payload_size = frame->packet_size;
 
   int i = 0;
-  for(; i < frame->packet_payload_size; i++) {
+
+  for(; i < frame->packet_size; i++) {
     if(i % frame->N_midamble_space == 0 && i != 0) {
       // Insert midamble (fixed pattern 101010...)
       index += frame->midamble_samples;
@@ -1011,9 +1022,9 @@ void* process_snr_range(void* arg) {
   uint8_t *payload = malloc(MAX_AIOT_D2R_PAYLOAD_SIZE);
   
   // Thread-local filters
-  Butter3_c16 tx_filter;
+  /*Butter3_c16 tx_filter;
   AIOT_D2R_PHY_TX_Design_Filter(&tx_filter, data->channel_model->bw * 1e6, (double)data->channel_model->sampling_rate * 1e6);
-  
+  */
   Butter3_Q15 rx_filter;
   butter3_init(&rx_filter, 600e3, (double)data->channel_model->sampling_rate * 1e6);
   
@@ -1044,7 +1055,7 @@ void* process_snr_range(void* arg) {
     channel_model_t local_channel_model = *data->channel_model;
     local_channel_model.SNR = snr;
     
-    for(int trials = 0; trials < snr_trials; trials++) {
+    for(int trials = 0; trials < snr_iters; trials++) {
       if(testing_mode && !testing_timing) {
         pthread_mutex_lock(data->print_mutex);
         printf("*************************\n");
@@ -1091,12 +1102,12 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
 
-      AIOT_D2R_PHY_TX_Filter(txFiltered, (const c16_t *) txData, local_fp.packet_samples, &tx_filter);
+      /*AIOT_D2R_PHY_TX_Filter(txFiltered, (const c16_t *) txData, local_fp.packet_samples, &tx_filter);
 
       if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/D2R_TX_Filter.m", foldername);
         LOG_M(filename, "TX_Filter_sig", txFiltered, local_fp.packet_samples, 1, 1);
-      }
+      }*/
 
       if(testing_timing) {
         stop_meas(&local_time_stats);
@@ -1105,7 +1116,7 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      SIM_Channel_propagate(rxData, (const c16_t *) txFiltered, channel_params, local_channel_model.SNR, &local_fp,
+      SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, local_channel_model.SNR, &local_fp,
                             s_re, s_im, r_re, r_im, &data->time_multipath, &data->time_noise, &gz);
       
       if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
@@ -1149,12 +1160,12 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      AIOT_D2R_PHY_RX_Filter(filteredData, (const int16_t *) envelope, rx_size, &rx_filter);
+      /*AIOT_D2R_PHY_RX_Filter(filteredData, (const int16_t *) envelope, rx_size, &rx_filter);
       
       if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/D2R_Filter.m", foldername);
         LOG_M(filename, "Filter_sig", filteredData, rx_size, 1, 0);
-      }
+      }*/
 
       if(testing_timing) {
         stop_meas(&local_time_stats);
@@ -1163,7 +1174,7 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      int Preamble_offset = AIOT_D2R_PHY_RX_Synchronize(correlation, (const int16_t *) filteredData, Preamble_ideal, &local_fp);
+      int Preamble_offset = AIOT_D2R_PHY_RX_Synchronize(correlation, (const int16_t *) envelope, Preamble_ideal, &local_fp);
       
       if(testing_mode && !testing_timing && snr == snr_plot && trials == 0) {
         sprintf(filename, "%s/D2R_Correlation.m", foldername);
@@ -1177,7 +1188,7 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      AIOT_D2R_PHY_RX_GetPacket(rx_payload, (const int16_t *) filteredData, Preamble_offset, &local_fp);
+      AIOT_D2R_PHY_RX_GetPacket(rx_payload, (const int16_t *) envelope, Preamble_offset, &local_fp);
       
       if(testing_timing) {
         stop_meas(&local_time_stats);
@@ -1217,7 +1228,7 @@ void* process_snr_range(void* arg) {
       }
     }
     
-    data->ber_results[snr - snr_min] /= snr_trials;
+    data->ber_results[snr - snr_min] /= snr_iters;
     
     pthread_mutex_lock(data->print_mutex);
     printf("Thread %d completed SNR %d dB: BLER = %f\n", data->thread_id, snr, data->ber_results[snr - snr_min]);
@@ -1284,7 +1295,7 @@ void BER_test(NR_AIOT_UL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
   printf("  Delay: %d samples\n", channel_model->delay);
 
   printf("Starting BER test over SNR range %d dB to %d dB with step %d dB (%d trials per SNR)...\n",
-         snr_min, snr_max, snr_steps, snr_trials);
+         snr_min, snr_max, snr_steps, snr_iters);
 
   // Generate Preamble ideal sequence (shared by all threads)
   rx_size = frame_parms->packet_samples + channel_model->delay + 200;
@@ -1363,7 +1374,7 @@ void BER_test(NR_AIOT_UL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
     }
       
     // Average the timing results
-    int total_measurements = snr_steps * snr_trials;
+    int total_measurements = snr_steps * snr_iters;
 
     thread_data[0].time_tx_CRC /= total_measurements;
     thread_data[0].time_tx_packet /= total_measurements;
@@ -1449,6 +1460,10 @@ int main(int argc, char **argv)
     exit_fun("[NR_AIOT_PDRCHSIM] Error, configuration module init failed\n");
   }
 
+  printf("===========================================================\n");
+  printf("     Ambient-IoT Rel 19 D2R Physical Layer Simulator\n");
+  printf("===========================================================\n\n");
+
   // **************************
   // Allocate memory for frame parameters
   NR_AIOT_UL_FRAME_PARMS frame_parms_storage;
@@ -1513,7 +1528,7 @@ int main(int argc, char **argv)
   };
 
   int c;
-  while ((c = getopt(argc, argv, "--:O:h:L:p:S:D:t:T:R:r:s:i:l:a:b:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:h:L:p:D:t:T:R:r:s:i:l:a:b:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -1524,10 +1539,9 @@ int main(int argc, char **argv)
       default:
       case 'h':
         printf("%s <options>\n", argv[0]);
-        printf("-h This message\n");
-        printf("-L <log level, 0(errors), 1(warning), 2(analysis), 3(info), 4(debug), 5(trace)>\n");
+        printf("-h This help page\n");
+        printf("-L Log level <0(errors), 1(warning), 2(analysis), 3(info), 4(debug), 5(trace)>\n");
         printf("-p Payload size in bits (max %d)\n", MAX_AIOT_D2R_PAYLOAD_SIZE * 8);
-        printf("-S SNR in dB\n");
         printf("-D Delay in samples\n");
         printf("-t Testing mode, parameter is SNR to plot\n");
         printf("-T Testing timing mode\n");
@@ -1555,18 +1569,13 @@ int main(int argc, char **argv)
         }
         break;
 
-      case 'S':
-        channel_model.SNR = atof(optarg);
-        printf("Using SNR=%f dB\n", channel_model.SNR);
-        break;
-
       case 'D':
         channel_model.delay = atoi(optarg);
         printf("Using delay=%d samples\n", channel_model.delay);
         break;
 
       case 't':
-        snr_trials = 1;
+        snr_iters = 1;
         testing_mode = true;
         snr_plot = atoi(optarg);
         break;
