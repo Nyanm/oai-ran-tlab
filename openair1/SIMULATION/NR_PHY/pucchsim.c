@@ -441,7 +441,7 @@ int main(int argc, char **argv)
   /* RU handles rxdataF, and gNB just has a pointer. Here, we don't have an RU,
    * so we need to allocate that memory as well. */
   for (i = 0; i < n_rx; i++)
-    gNB->common_vars.rxdataF[0][i] = malloc16_clear(gNB->frame_parms.samples_per_frame_wCP * sizeof(c16_t));
+    gNB->common_vars.rxdataF[i] = malloc16_clear(gNB->frame_parms.samples_per_frame_wCP * sizeof(c16_t));
 
   double fs,txbw,rxbw;
   get_samplerate_and_bw(mu,
@@ -542,12 +542,12 @@ int main(int argc, char **argv)
 
   pucch_GroupHopping_t PUCCH_GroupHopping = pucch_tx_pdu.group_hop_flag + (pucch_tx_pdu.sequence_hop_flag<<1);
   double tx_level_fp = 100.0;
-  c16_t **rxdataF = gNB->common_vars.rxdataF[0];
+  c16_t **rxdataF = gNB->common_vars.rxdataF;
   for(SNR = snr0; SNR <= snr1 && !stop; SNR += 1) {
     ack_nack_errors=0;
     sr_errors = 0;
     n_errors = 0;
-    c16_t **txdataF = gNB->common_vars.txdataF[0];
+    c16_t **txdataF = gNB->common_vars.txdataF;
     for (trial = 0; trial < n_trials && !stop; trial++) {
       for (int aatx=0;aatx<1;aatx++)
         bzero(txdataF[aatx],frame_parms->ofdm_symbol_size*sizeof(int));
@@ -777,10 +777,8 @@ int main(int argc, char **argv)
     free(gNB->gNB_config.tdd_table.max_tdd_periodicity_list[i].max_num_of_symbol_per_slot_list);
   free(gNB->gNB_config.tdd_table.max_tdd_periodicity_list);
 
-  for (int j = 0; j < gNB->common_vars.num_beams_period; j++) {
-    for (i = 0; i < n_rx; i++)
-      free(gNB->common_vars.rxdataF[j][i]);
-  }
+  for (i = 0; i < n_rx; i++)
+    free(gNB->common_vars.rxdataF[i]);
   phy_free_nr_gNB(gNB);
   free(RC.gNB[0]);
   free(RC.gNB);

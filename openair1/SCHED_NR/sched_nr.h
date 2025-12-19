@@ -54,10 +54,11 @@ void feptx_prec(RU_t *ru,int frame_tx,int tti_tx);
 void nr_phy_init_RU(RU_t *ru);
 void nr_phy_free_RU(RU_t *ru);
 void clear_slot_beamid(PHY_VARS_gNB *gNB, int slot);
-int beam_index_allocation(bool das,
-                          int fapi_beam_index,
-                          NR_gNB_COMMON *common_vars,
-                          int slot,
-                          int symbols_per_slot,
-                          int bitmap_symbols);
+void beam_index_allocation(uint16_t fapi_beam_index,
+                           int ant,
+                           int num_ports,
+                           int symbols_per_slot,
+                           int slot,
+                           uint16_t bitmap_symbols,
+                           uint16_t **ant_beam_id_list);
 #endif

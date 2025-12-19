@@ -864,7 +864,7 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
   sched_pusch.ant_port_idx.numSpatialStreamIndices = nr_mac->radio_config.pusch_AntennaPorts;
   get_antenna_port_indices(beam_ul.idx,
                             sched_pusch.ant_port_idx.numSpatialStreamIndices,
-                            nr_mac->spatial_stream_index,
+                            nr_mac->radio_config.spatial_stream_index,
                             sched_pusch.ant_port_idx.spatialStreamIndices);
 
   int rbStart = 0;

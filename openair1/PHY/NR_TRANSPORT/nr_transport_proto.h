@@ -128,7 +128,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
                    uint32_t frame,
                    uint8_t slot,
                    unsigned char harq_pid,
-                   int beam_nb);
+                   uint16_t ant_port_start);
 
 /*!
 \brief This function implements the idft transform precoding in PUSCH

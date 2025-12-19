@@ -101,12 +101,9 @@ prach_item_t *nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_n
       int fapi_beam_idx = prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list[i].beam_idx;
       int start_symb = prach_pdu->prach_start_symbol + i * n_symb;
       int bitmap = SL_to_bitmap(start_symb, n_symb);
-      prach->beams[i] = beam_index_allocation(gNB->enable_analog_das,
-                                              fapi_beam_idx,
-                                              &gNB->common_vars,
-                                              Slot,
-                                              NR_NUMBER_OF_SYMBOLS_PER_SLOT,
-                                              bitmap);
+      const uint16_t ant_port = prach_pdu->param_v4.spatialStreamIndices[i];
+      beam_index_allocation(fapi_beam_idx, ant_port, 1, NR_NUMBER_OF_SYMBOLS_PER_SLOT, Slot, bitmap, gNB->common_vars.beam_id);
+      prach->ant_port_idx[i] = ant_port;
     }
   }
   prach->pdu = *prach_pdu;
@@ -126,7 +123,7 @@ prach_item_t *nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_n
 }
 
 static void rx_nr_prach_ru_internal(prach_item_t *p,
-                                    int beam_id,
+                                    unsigned int ant_port_idx,
                                     int prachStartSymbol,
                                     int prachOccasion,
                                     int32_t **rxdata,
@@ -360,7 +357,7 @@ static void rx_nr_prach_ru_internal(prach_item_t *p,
   for (int aa = 0; aa < p->nb_rx; aa++) {
     // Fixme: slot or slot makes no sense ???
     int slot2 = p->prach_sequence_length ? p->slot : p->slot;
-    int idx = aa + beam_id * p->nb_rx;
+    int idx = aa + ant_port_idx;
     c16_t *prach = (c16_t *)&rxdata[idx][get_samples_slot_timestamp(fp, slot2) + sample_offset_slot - N_TA_offset];
 
     // do DFT
@@ -390,11 +387,11 @@ void rx_nr_prach_ru(prach_item_t *p, int32_t **rxdata, NR_DL_FRAME_PARMS *fp, in
   LOG_D(NR_PHY_RACH, "%d.%d try to decode %d occasions \n", p->frame, p->slot, p->pdu.num_prach_ocas);
   for (int prach_oc = 0; prach_oc < p->pdu.num_prach_ocas; prach_oc++) {
     int prachStartSymbol = p->pdu.prach_start_symbol + prach_oc * N_dur;
-    int beam_id = p->beams[prach_oc];
+    unsigned int ant_port_idx = p->ant_port_idx[prach_oc];
     // comment FK: the standard 38.211 section 5.3.2 has one extra term +14*N_RA_slot. This is because there prachStartSymbol is
     // given wrt to start of the 15kHz slot or 60kHz slot. Here we work slot based, so this function is anyway only called in slots
     // where there is PRACH. Its up to the MAC to schedule another PRACH PDU in the case there are there N_RA_slot \in {0,1}.
-    rx_nr_prach_ru_internal(p, beam_id, prachStartSymbol, prach_oc, rxdata, fp, N_TA_offset);
+    rx_nr_prach_ru_internal(p, ant_port_idx, prachStartSymbol, prach_oc, rxdata, fp, N_TA_offset);
   }
 }
 

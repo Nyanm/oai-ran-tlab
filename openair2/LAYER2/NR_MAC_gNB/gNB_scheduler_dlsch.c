@@ -895,10 +895,11 @@ static void pf_dl(gNB_MAC_INST *mac,
     };
 
     // Map antenna ports for this UE
-    sched_pdsch.ant_port_idx.numSpatialStreamIndices = mac->radio_config.pdsch_AntennaPorts.XP;
+    const nr_pdsch_AntennaPorts_t *p = &mac->radio_config.pdsch_AntennaPorts;
+    sched_pdsch.ant_port_idx.numSpatialStreamIndices = p->XP * p->N1 * p->N2;
     get_antenna_port_indices(beam.idx,
                              sched_pdsch.ant_port_idx.numSpatialStreamIndices,
-                             mac->spatial_stream_index,
+                             mac->radio_config.spatial_stream_index,
                              sched_pdsch.ant_port_idx.spatialStreamIndices);
 
     sched_pdsch.action = NULL;
@@ -1057,7 +1058,7 @@ nfapi_nr_dl_tti_pdsch_pdu_rel15_t *prepare_pdsch_pdu(nfapi_nr_dl_tti_request_pdu
   }
   // MU-MIMO port mapping info
   pdsch_pdu->param_v4.numberCodewords = pdsch_pdu->NrOfCodewords;
-  memcpy(&pdsch_pdu->param_v4.spatialSteamsCw[0], &sched_pdsch->ant_port_idx, sizeof(&pdsch_pdu->param_v4.spatialSteamsCw));
+  memcpy(&pdsch_pdu->param_v4.spatialSteamsCw[0], &sched_pdsch->ant_port_idx, sizeof(*pdsch_pdu->param_v4.spatialSteamsCw));
   return pdsch_pdu;
 }
 

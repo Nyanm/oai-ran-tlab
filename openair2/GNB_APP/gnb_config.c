@@ -1397,18 +1397,18 @@ static void get_bwp_config(nr_mac_config_t *configuration, const NR_ServingCellC
   }
 }
 
-static void config_spatial_stream_index(const paramdef_t *param, struct gNB_MAC_INST_s *mac, int num_ru_ports)
+static void config_spatial_stream_index(const paramdef_t *param, nr_mac_config_t *radio_config, int num_ru_ports)
 {
   const paramdef_t *p = param + MACRLC_SPATIAL_STREAM_IDX;
   const int n = p->numelt;
   if (n == 0) {
     // No indices provided in config file. Set default indices starting from 0.
     for (int i = 0; i < num_ru_ports; i++)
-      mac->spatial_stream_index[i] = i;
+      radio_config->spatial_stream_index[i] = i;
   } else {
     AssertFatal(n == num_ru_ports, "Number of spatial stream indices must match number of RU ports\n");
     for (int i = 0; i < n; i++)
-      mac->spatial_stream_index[i] = p->uptr[i];
+      radio_config->spatial_stream_index[i] = p->uptr[i];
   }
 }
 
@@ -1440,15 +1440,19 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
   // RU
   GET_PARAMS_LIST(RUParamList, RUParams, RUPARAMS_DESC, CONFIG_STRING_RU_LIST, NULL);
   int num_tx = 0;
+  int num_logical_ports = p->XP * p->N1 * p->N2;
   if (RUParamList.numelt > 0) {
     for (int i = 0; i < RUParamList.numelt; i++)
       num_tx += *(RUParamList.paramarray[i][RU_NB_TX_IDX].uptr);
-    AssertFatal(num_tx >= config.pdsch_AntennaPorts.XP * config.pdsch_AntennaPorts.N1 * config.pdsch_AntennaPorts.N2,
-                "Number of logical antenna ports (set in config file with pdsch_AntennaPorts) cannot be larger than physical antennas (nb_tx)\n");
+    AssertFatal(num_tx >= num_logical_ports,
+                "Number of logical antenna ports (set in config file with pdsch_AntennaPorts) cannot be larger than physical "
+                "antennas (nb_tx)\n");
   } else {
     // TODO temporary solution for 3rd party RU or nFAPI, in which case we don't have RU section present in the config file
-    num_tx = config.pdsch_AntennaPorts.XP * config.pdsch_AntennaPorts.N1 * config.pdsch_AntennaPorts.N2;
-    LOG_E(GNB_APP, "RU information not present in config file. Assuming physical antenna ports equal to logical antenna ports %d\n", num_tx);
+    num_tx = num_logical_ports;
+    LOG_E(GNB_APP,
+          "RU information not present in config file. Assuming physical antenna ports equal to logical antenna ports %d\n",
+          num_tx);
   }
   config.minRXTXTIME = *GNBParamList.paramarray[0][GNB_MINRXTXTIME_IDX].iptr;
   LOG_I(GNB_APP, "minTXRXTIME %d\n", config.minRXTXTIME);
@@ -1648,6 +1652,12 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
         beam_info->beam_allocation = malloc16(beams_per_period * sizeof(beam_info->beam_allocation));
         beam_info->beam_duration = *MacRLC_ParamList.paramarray[j][MACRLC_ANALOG_BEAM_DURATION_IDX].u8ptr;
         beam_info->beams_per_period = beams_per_period;
+        // Number of logical ports increases linearly to number of concurrent beams
+        num_logical_ports *= beams_per_period;
+        AssertFatal(num_tx >= num_logical_ports,
+                    "Number of RU antenna ports %d not sufficient for configured number of logical antenna ports %d\n",
+                    num_tx,
+                    num_logical_ports);
         beam_info->beam_allocation_size = -1; // to be initialized once we have information on frame configuration
       }
       // TODO config_isparamset doesn't seem to work for array types, checking numelt instead
@@ -1673,7 +1683,7 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
       }
 
       // Read spatial stream indices
-      config_spatial_stream_index(MacRLC_ParamList.paramarray[j], RC.nrmac[j], num_tx);
+      config_spatial_stream_index(MacRLC_ParamList.paramarray[j], &config, num_tx);
 
       // triggers also PHY initialization in case we have L1 via FAPI
       nr_mac_config_scc(RC.nrmac[j], scc, &config);

@@ -354,7 +354,7 @@ int main(int argc, char *argv[])
   /* RU handles rxdataF, and gNB just has a pointer. Here, we don't have an RU,
    * so we need to allocate that memory as well. First index in rxdataF[0] index refers to beams*/
   for (i = 0; i < n_rx; i++)
-    gNB->common_vars.rxdataF[0][i] = malloc16_clear(fp->samples_per_frame_wCP * sizeof(int32_t));
+    gNB->common_vars.rxdataF[i] = malloc16_clear(fp->samples_per_frame_wCP * sizeof(int32_t));
 
   /* no RU: need to have rxdata */
   c16_t **rxdata;
@@ -454,7 +454,6 @@ int main(int argc, char *argv[])
 
   gNB->srs->srs_pdu = srs_pdu;
   gNB->srs->active = true;
-  gNB->srs->beam_nb = 0;
   gNB->srs->frame = frame;
   gNB->srs->slot = slot;
 
@@ -570,7 +569,7 @@ int main(int argc, char *argv[])
 
       //----------- OFDM Demodulation and RX rotation--------------------------
       nr_ofdm_demod_and_rx_rotation(rxdata,
-                                    gNB->common_vars.rxdataF[0],
+                                    gNB->common_vars.rxdataF,
                                     fp,
                                     n_rx,
                                     slot,
@@ -674,7 +673,7 @@ int main(int argc, char *argv[])
     free(r_re[i]);
     free(r_im[i]);
     free(rxdata[i]);
-    free(gNB->common_vars.rxdataF[0][i]);
+    free(gNB->common_vars.rxdataF[i]);
   }
 
   free(r_re);

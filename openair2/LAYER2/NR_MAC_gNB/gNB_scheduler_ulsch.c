@@ -2217,7 +2217,7 @@ static int  pf_ul(gNB_MAC_INST *nrmac,
     sched.ant_port_idx.numSpatialStreamIndices = nrmac->radio_config.pusch_AntennaPorts;
     get_antenna_port_indices(beam.idx,
                              sched.ant_port_idx.numSpatialStreamIndices,
-                             nrmac->spatial_stream_index,
+                             nrmac->radio_config.spatial_stream_index,
                              sched.ant_port_idx.spatialStreamIndices);
 
     /* Calculate the current scheduling bytes */

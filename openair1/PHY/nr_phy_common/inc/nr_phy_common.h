@@ -388,5 +388,6 @@ void nr_generate_csi_rs(const NR_DL_FRAME_PARMS *frame_parms,
                         const uint8_t power_control_offset_ss,
                         const uint8_t cdm_type,
                         c16_t **dataF);
+void get_csi_ant_ports_idx(const csi_mapping_parms_t *mapping_parms, uint16_t group_size, uint16_t *start, uint16_t *num);
 
 #endif

@@ -131,7 +131,7 @@ typedef struct {
   int frame;
   int slot;
   int num_slots; // prach duration in slots
-  int beams[NFAPI_MAX_NUM_BG_IF];
+  unsigned int ant_port_idx[NFAPI_MAX_NUM_BG_IF];
   nfapi_nr_prach_pdu_t pdu;
   int rootSequenceIndex;
   int numrootSequenceIndex;

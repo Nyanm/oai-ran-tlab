@@ -178,27 +178,22 @@ void nr_feptx_prec(RU_t *ru, int frame_tx, int slot_tx)
   int txdataF_offset = slot_tx * fp->samples_per_slot_wCP;
   start_meas(&ru->precoding_stats);
 
+  // Copy beam ID assigned to all ports in this slot
   if (gNB->common_vars.analog_bf) {
-    for (int i = 0; i < ru->num_beams_period; i++) {
-      memcpy((void*) &ru->common.beam_id[i][slot_tx * fp->symbols_per_slot],
-             (void*) &gNB->common_vars.beam_id[i][slot_tx * fp->symbols_per_slot],
-             (fp->symbols_per_slot) * sizeof(int));
+    for (int i = 0; i < fp->symbols_per_slot; i++) {
+      memcpy(ru->common.beam_id[slot_tx * fp->symbols_per_slot + i],
+             gNB->common_vars.beam_id[slot_tx * fp->symbols_per_slot + i],
+             (ru->nb_tx) * sizeof(**ru->common.beam_id));
     }
   }
 
   if (nr_slot_select(cfg,frame_tx,slot_tx) == NR_UPLINK_SLOT)
     return;
 
-  int Ptx = cfg->carrier_config.num_tx_ant.value;
   // If there is no digital beamforming we just need to copy the data to RU
   if (ru->config.dbt_config.num_dig_beams == 0 || ru->gNB_list[0]->common_vars.analog_bf) {
-    for (int b = 0; b < ru->num_beams_period; b++) {
-      for (int i = 0; i < Ptx; ++i) {
-        int tx_idx = i + b * ru->nb_tx;
-        memcpy((void*)ru->common.txdataF_BF[tx_idx],
-               (void*)&gNB->common_vars.txdataF[b][i][txdataF_offset],
-               fp->samples_per_slot_wCP * sizeof(int32_t));
-      }
+    for (int i = 0; i < ru->nb_tx; ++i) {
+      memcpy(ru->common.txdataF_BF[i], gNB->common_vars.txdataF[i] + txdataF_offset, fp->samples_per_slot_wCP * sizeof(int32_t));
     }
   }  else {
     AssertFatal(false, "This needs to be fixed by using appropriate beams from config\n");
@@ -214,7 +209,6 @@ void nr_feptx(void *arg)
   RU_t *ru = feptx->ru;
   int slot = feptx->slot;
   int aa = feptx->aid;
-  int bb = feptx->beam;
   int startSymbol = feptx->startSymbol;
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
   int numSymbols = feptx->numSymbols;
@@ -222,31 +216,24 @@ void nr_feptx(void *arg)
   int txdataF_offset = (slot * fp->samples_per_slot_wCP) + startSymbol * fp->ofdm_symbol_size;
   int txdataF_BF_offset = startSymbol * fp->ofdm_symbol_size;
 
-  int tx_idx = aa + bb * ru->nb_tx;
 
-  if (tx_idx == 0)
+  if (aa == 0)
     start_meas(&ru->precoding_stats);
-
-  if (ru->gNB_list[0]->common_vars.analog_bf) {
-    memcpy(&ru->common.beam_id[bb][slot * fp->symbols_per_slot],
-           &ru->gNB_list[0]->common_vars.beam_id[bb][slot * fp->symbols_per_slot],
-           (fp->symbols_per_slot) * sizeof(int));
-  }
 
   // If there is no digital beamforming we just need to copy the data to RU
   if (ru->config.dbt_config.num_dig_beams == 0 || ru->gNB_list[0]->common_vars.analog_bf)
-     memcpy((void*)&ru->common.txdataF_BF[tx_idx][txdataF_BF_offset],
-            (void*)&ru->gNB_list[0]->common_vars.txdataF[bb][aa][txdataF_offset],
-            numSamples * sizeof(int32_t));
+    memcpy(&ru->common.txdataF_BF[aa][txdataF_BF_offset],
+           &ru->gNB_list[0]->common_vars.txdataF[aa][txdataF_offset],
+           numSamples * sizeof(int32_t));
   else {
     AssertFatal(false, "This needs to be fixed by using appropriate beams from config\n");
   }
 
-  if (tx_idx == 0)
+  if (aa == 0)
     stop_meas(&ru->precoding_stats);
 
   ////////////FEPTX////////////
-  nr_feptx0(ru, slot, startSymbol, numSymbols, tx_idx);
+  nr_feptx0(ru, slot, startSymbol, numSymbols, aa);
 
   // Task completed in //
   completed_task_ans(feptx->ans);
@@ -260,42 +247,47 @@ void nr_feptx_tp(RU_t *ru, int frame_tx, int slot)
     return;
   start_meas(&ru->ofdm_total_stats);
 
-  int nt = ru->nb_tx * ru->num_beams_period;
+  int nt = ru->nb_tx;
   size_t const sz = nt + (ru->half_slot_parallelization > 0) * nt;
   feptx_cmd_t arr[sz];
   task_ans_t ans;
   init_task_ans(&ans, sz);
 
+  // Copy beam IDs
+  const NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+  if (ru->gNB_list[0]->common_vars.analog_bf) {
+    for (uint_fast16_t i = 0; i < fp->symbols_per_slot; i++)
+      memcpy(ru->common.beam_id[slot * fp->symbols_per_slot + i],
+             ru->gNB_list[0]->common_vars.beam_id[slot * fp->symbols_per_slot + i],
+             (ru->nb_tx) * sizeof(int));
+  }
+
   int nbfeptx = 0;
-  for (int beam = 0; beam < ru->num_beams_period; beam++) {
-    for (int aid = 0; aid < ru->nb_tx; aid++) {
+  for (int aid = 0; aid < ru->nb_tx; aid++) {
+    feptx_cmd_t *feptx_cmd = &arr[nbfeptx];
+    feptx_cmd->ans = &ans;
+    feptx_cmd->aid = aid;
+    feptx_cmd->ru = ru;
+    feptx_cmd->slot = slot;
+    feptx_cmd->startSymbol = 0;
+    feptx_cmd->numSymbols =
+        (ru->half_slot_parallelization > 0) ? ru->nr_frame_parms->symbols_per_slot >> 1 : ru->nr_frame_parms->symbols_per_slot;
+
+    task_t t = {.func = nr_feptx, .args = feptx_cmd};
+    pushTpool(ru->threadPool, t);
+    nbfeptx++;
+    if (ru->half_slot_parallelization > 0) {
       feptx_cmd_t *feptx_cmd = &arr[nbfeptx];
       feptx_cmd->ans = &ans;
-      feptx_cmd->beam = beam;
       feptx_cmd->aid = aid;
       feptx_cmd->ru = ru;
       feptx_cmd->slot = slot;
-      feptx_cmd->startSymbol = 0;
-      feptx_cmd->numSymbols =
-          (ru->half_slot_parallelization > 0) ? ru->nr_frame_parms->symbols_per_slot >> 1 : ru->nr_frame_parms->symbols_per_slot;
+      feptx_cmd->startSymbol = ru->nr_frame_parms->symbols_per_slot >> 1;
+      feptx_cmd->numSymbols = ru->nr_frame_parms->symbols_per_slot >> 1;
 
       task_t t = {.func = nr_feptx, .args = feptx_cmd};
       pushTpool(ru->threadPool, t);
       nbfeptx++;
-      if (ru->half_slot_parallelization > 0) {
-        feptx_cmd_t *feptx_cmd = &arr[nbfeptx];
-        feptx_cmd->ans = &ans;
-        feptx_cmd->beam = beam;
-        feptx_cmd->aid = aid;
-        feptx_cmd->ru = ru;
-        feptx_cmd->slot = slot;
-        feptx_cmd->startSymbol = ru->nr_frame_parms->symbols_per_slot >> 1;
-        feptx_cmd->numSymbols = ru->nr_frame_parms->symbols_per_slot >> 1;
-
-        task_t t = {.func = nr_feptx, .args = feptx_cmd};
-        pushTpool(ru->threadPool, t);
-        nbfeptx++;
-      }
     }
   }
   join_task_ans(&ans);

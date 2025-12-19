@@ -49,13 +49,13 @@ void nr_phy_init_RU(RU_t *ru)
   // (at least the parts that are needed by the RU, numerology and PRACH)
 
   AssertFatal(ru->nb_log_antennas > 0 && ru->nb_log_antennas < 13, "ru->nb_log_antennas %d ! \n",ru->nb_log_antennas);
-  int nb_tx_streams = ru->nb_tx * ru->num_beams_period;
-  int nb_rx_streams = ru->nb_rx * ru->num_beams_period;
+  int nb_tx_streams = ru->nb_tx;
+  int nb_rx_streams = ru->nb_rx;
   LOG_I(NR_PHY, "nb_tx_streams %d, nb_rx_streams %d, num_Beams_period %d\n", nb_tx_streams, nb_rx_streams, ru->num_beams_period);
-  ru->common.beam_id = malloc16_clear(ru->num_beams_period * sizeof(int*));
-  for(int i = 0; i < ru->num_beams_period; i++) {
-    ru->common.beam_id[i] = malloc16(fp->symbols_per_slot * fp->slots_per_frame * sizeof(int));
-    memset(ru->common.beam_id[i], -1, fp->symbols_per_slot * fp->slots_per_frame * sizeof(int));
+  const unsigned int num_symbols = fp->symbols_per_slot * fp->slots_per_frame;
+  ru->common.beam_id = malloc16_clear(num_symbols * sizeof(*ru->common.beam_id));
+  for (int i = 0; i < num_symbols; i++) {
+    ru->common.beam_id[i] = malloc16_clear(nb_tx_streams * sizeof(**ru->common.beam_id));
   }
 
   if (ru->if_south <= REMOTE_IF5) { // this means REMOTE_IF5 or LOCAL_RF, so allocate memory for time-domain signals 
@@ -123,8 +123,8 @@ void nr_phy_init_RU(RU_t *ru)
 void nr_phy_free_RU(RU_t *ru)
 {
   LOG_D(PHY, "Freeing RU signal buffers (if_south %s) nb_tx %d\n", ru_if_types[ru->if_south], ru->nb_tx);
-  int nb_tx_streams = ru->nb_tx * ru->num_beams_period;
-  int nb_rx_streams = ru->nb_rx * ru->num_beams_period;
+  int nb_tx_streams = ru->nb_tx;
+  int nb_rx_streams = ru->nb_rx;
 
   if (ru->if_south <= REMOTE_IF5) { // this means REMOTE_IF5 or LOCAL_RF, so free memory for time-domain signals
     // Hack: undo what is done at allocation
@@ -159,7 +159,8 @@ void nr_phy_free_RU(RU_t *ru)
       free_and_zero(ru->common.rxdataF[i]);
     free_and_zero(ru->common.rxdataF);
 
-    for(int i = 0; i < ru->num_beams_period; ++i)
+    NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+    for (int i = 0; i < fp->symbols_per_slot * fp->slots_per_frame; ++i)
       free_and_zero(ru->common.beam_id[i]);
     free_and_zero(ru->common.beam_id);
   }

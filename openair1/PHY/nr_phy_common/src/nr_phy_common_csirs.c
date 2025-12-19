@@ -21,6 +21,15 @@
 
 #include "PHY/nr_phy_common/inc/nr_phy_common.h"
 
+void get_csi_ant_ports_idx(const csi_mapping_parms_t *mapping_parms, uint16_t group_size, uint16_t *start, uint16_t *num)
+{
+  *start = mapping_parms->j[0] * group_size;
+  *num = 0;
+  for (uint_fast16_t i = 0; i < mapping_parms->size; i++) {
+    *num += group_size;
+  }
+}
+
 static void csi_rs_resource_mapping(c16_t **dataF,
                                     int csi_rs_length,
                                     int16_t mod_csi[][csi_rs_length >> 1],

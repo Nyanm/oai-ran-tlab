@@ -152,17 +152,22 @@ void nr_fill_ulsch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pusch_pdu_t 
   ulsch->harq_pid = harq_pid;
   ulsch->handled = 0;
   ulsch->active = true;
-  ulsch->beam_nb = 0;
+  ulsch->ant_port_start = 0;
   if (gNB->common_vars.beam_id) {
     // Use first dig_bf_interface for concurrent beam allocation
     int fapi_beam_idx = ulsch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
     int bitmap = SL_to_bitmap(ulsch_pdu->start_symbol_index, ulsch_pdu->nr_of_symbols);
-    ulsch->beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                           fapi_beam_idx,
-                                           &gNB->common_vars,
-                                           slot,
-                                           NR_NUMBER_OF_SYMBOLS_PER_SLOT,
-                                           bitmap);
+    const nfapi_nr_spatial_stream_index_t *p = &ulsch_pdu->param_v4;
+    // We assume the ports are ordered continuously. Hence only the start port idx is enough.
+    uint16_t ant_port_start = p->numSpatialStreamIndices > 0 ? p->spatialStreamIndices[0] : 0;
+    beam_index_allocation(fapi_beam_idx,
+                          ant_port_start,
+                          gNB->frame_parms.nb_antennas_rx,
+                          NR_NUMBER_OF_SYMBOLS_PER_SLOT,
+                          slot,
+                          bitmap,
+                          gNB->common_vars.beam_id);
+    ulsch->ant_port_start = ant_port_start;
   }
   ulsch->frame = frame;
   ulsch->slot = slot;

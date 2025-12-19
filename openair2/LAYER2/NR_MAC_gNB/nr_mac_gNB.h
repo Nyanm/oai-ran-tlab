@@ -213,6 +213,8 @@ typedef struct nr_mac_config_t {
   nr_redcap_config_t *redcap;
   nr_ptrs_config_t *ptrs;
   nr_config_report_type_t report_type;
+  /// Spatial stream indexing for mapping onto RU ports. Needed for MU-MIMO
+  uint16_t spatial_stream_index[MAX_NUM_SPATIAL_STREAMS];
 } nr_mac_config_t;
 
 typedef struct NR_preamble_ue {
@@ -1013,8 +1015,6 @@ typedef struct gNB_MAC_INST_s {
 
   dlul_mac_stats_t mac_stats;
   uint64_t num_scheduled_prach_rx;
-  /// Spatial stream indexing for mapping onto RU ports. Needed for MU-MIMO
-  uint16_t spatial_stream_index[MAX_NUM_SPATIAL_STREAMS];
 } gNB_MAC_INST;
 
 #endif /*__LAYER2_NR_MAC_GNB_H__ */

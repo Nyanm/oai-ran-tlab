@@ -261,6 +261,13 @@ void nr_dlsim_preprocessor(gNB_MAC_INST *nr_mac, post_process_pdsch_t *pp_pdsch)
                                         0 /* tb_scaling */,
                                         sched_pdsch.nrOfLayers) >> 3;
 
+  const nr_pdsch_AntennaPorts_t *p = &nr_mac->radio_config.pdsch_AntennaPorts;
+  sched_pdsch.ant_port_idx.numSpatialStreamIndices = p->XP * p->N1 * p->N2;
+  get_antenna_port_indices(0,
+                           sched_pdsch.ant_port_idx.numSpatialStreamIndices,
+                           nr_mac->radio_config.spatial_stream_index,
+                           sched_pdsch.ant_port_idx.spatialStreamIndices);
+
   /* the simulator assumes the HARQ PID is equal to the slot number */
   sched_pdsch.dl_harq_pid = pp_pdsch->slot;
 
@@ -726,7 +733,8 @@ int main(int argc, char **argv)
                                 .timer_config.t311 = 3000,
                                 .timer_config.n311 = 1,
                                 .timer_config.t319 = 400,
-                                .num_agg_level_candidates = {0, 0, 1, 1, 0}};
+                                .num_agg_level_candidates = {0, 0, 1, 1, 0},
+                                .spatial_stream_index = {0, 1, 2, 3}};
   const nr_rlc_configuration_t rlc_config = {
     .srb = {
       .t_poll_retransmit = 45,
@@ -1115,14 +1123,16 @@ int main(int argc, char **argv)
         int txdataF_offset = slot * frame_parms->samples_per_slot_wCP;
 
         if (n_trials==1) {
-          LOG_M("txsigF0.m","txsF0=",
-                &gNB->common_vars.txdataF[0][0][txdataF_offset +2 * frame_parms->ofdm_symbol_size],
+          LOG_M("txsigF0.m",
+                "txsF0=",
+                &gNB->common_vars.txdataF[0][txdataF_offset + 2 * frame_parms->ofdm_symbol_size],
                 frame_parms->ofdm_symbol_size,
                 1,
                 1);
           if (gNB->frame_parms.nb_antennas_tx>1)
-            LOG_M("txsigF1.m","txsF1=",
-                  &gNB->common_vars.txdataF[0][1][txdataF_offset + 2 * frame_parms->ofdm_symbol_size],
+            LOG_M("txsigF1.m",
+                  "txsF1=",
+                  &gNB->common_vars.txdataF[1][txdataF_offset + 2 * frame_parms->ofdm_symbol_size],
                   frame_parms->ofdm_symbol_size,
                   1,
                   1);
@@ -1134,7 +1144,7 @@ int main(int argc, char **argv)
         for (aa=0; aa<gNB->frame_parms.nb_antennas_tx; aa++) {
 
           if (cyclic_prefix_type == 1) {
-            PHY_ofdm_mod((int *)&gNB->common_vars.txdataF[0][aa][txdataF_offset],
+            PHY_ofdm_mod((int *)&gNB->common_vars.txdataF[aa][txdataF_offset],
                          (int *)&txdata[aa][slot_offset],
                          frame_parms->ofdm_symbol_size,
                          12,
@@ -1145,7 +1155,7 @@ int main(int argc, char **argv)
             for (int i = 0; i < 14; i++) {
               was_symbol_used[i] = true;
             }
-            nr_normal_prefix_mod(&gNB->common_vars.txdataF[0][aa][txdataF_offset],
+            nr_normal_prefix_mod(&gNB->common_vars.txdataF[aa][txdataF_offset],
                                  &txdata[aa][slot_offset],
                                  14,
                                  frame_parms,

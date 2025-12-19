@@ -674,17 +674,8 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   //        pmi = prgs_list[rbidx/prg_size].pm_idx, rbidx =0,...,rbSize-1
   // The Precoding matrix:
   // The Codebook Type I
-  const nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
-  // beam number in multi-beam scenario (concurrent beams)
-  int bitmap = SL_to_bitmap(rel15->StartSymbolIndex, rel15->NrOfSymbols);
-  int beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                      pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                      &gNB->common_vars,
-                                      slot,
-                                      frame_parms->symbols_per_slot,
-                                      bitmap);
-
-  c16_t **txdataF = gNB->common_vars.txdataF[beam_nb];
+  uint16_t symb_bitmap = SL_to_bitmap(rel15->StartSymbolIndex, rel15->NrOfSymbols);
+  c16_t **txdataF = gNB->common_vars.txdataF;
   stop_meas(&gNB->dlsch_layer_mapping_stats);
   // Loop Over OFDM symbols:
   for (int l_symbol = rel15->StartSymbolIndex; l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols; l_symbol++) {
@@ -757,8 +748,30 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 
     start_meas(&gNB->dlsch_precoding_stats);
     for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
+      // Antenna port mapping and beam index assignment
+      // Check if L2 provided antenna port index
+
+      int ant_to_map;
+      if (rel15->param_v4.numberCodewords > 0)
+        ant_to_map = rel15->param_v4.spatialSteamsCw[0].spatialStreamIndices[ant];
+      else
+        ant_to_map = ant;
+      const nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
+      // Copy beam id for this antenna port. Right now L2 sets only one beam id
+      // in dig_bf_interface_list. So we copy it to all antenna ports.
+
+      // TODO: Each antenna port can be assigned a beam ID and FAPI says the
+      // order in dig_bf_interface_list follows the same order as antenna ports
+      // in the output of precoder
+      beam_index_allocation(pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
+                            ant,
+                            1,
+                            frame_parms->symbols_per_slot,
+                            slot,
+                            symb_bitmap,
+                            gNB->common_vars.beam_id);
       const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz + txdataF_offset;
-      do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, ant, start_sc, txdataF_offset_per_symbol);
+      do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, ant_to_map, start_sc, txdataF_offset_per_symbol);
     }
     stop_meas(&gNB->dlsch_precoding_stats);
   }

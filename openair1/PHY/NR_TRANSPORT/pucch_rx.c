@@ -65,16 +65,14 @@ void nr_fill_pucch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pucch_pdu_t 
       pucch->frame = frame;
       pucch->slot = slot;
       pucch->active = true;
-      pucch->beam_nb = 0;
+      pucch->ant_port = 0;
       if (gNB->common_vars.beam_id) {
         int fapi_beam_idx = pucch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
         int bitmap = SL_to_bitmap(pucch_pdu->start_symbol_index, pucch_pdu->nr_of_symbols);
-        pucch->beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                               fapi_beam_idx,
-                                               &gNB->common_vars,
-                                               slot,
-                                               NR_NUMBER_OF_SYMBOLS_PER_SLOT,
-                                               bitmap);
+        const nfapi_nr_spatial_stream_index_t *p = &pucch_pdu->param_v4;
+        const uint16_t ant_port = p->numSpatialStreamIndices > 0 ? p->spatialStreamIndices[0] : 0;
+        beam_index_allocation(fapi_beam_idx, ant_port, 1, NR_NUMBER_OF_SYMBOLS_PER_SLOT, slot, bitmap, gNB->common_vars.beam_id);
+        pucch->ant_port = ant_port;
       }
       memcpy((void *)&pucch->pucch_pdu, (void *)pucch_pdu, sizeof(nfapi_nr_pucch_pdu_t));
       LOG_D(PHY,
