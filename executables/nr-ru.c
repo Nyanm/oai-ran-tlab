@@ -467,12 +467,12 @@ static radio_tx_gpio_flag_t get_gpio_flags(RU_t *ru, int slot)
 
       if (ru->common.beam_id) {
         int prev_slot = (slot - 1 + fp->slots_per_frame) % fp->slots_per_frame;
-        const int *beam_ids = ru->common.beam_id[0];
-        int prev_beam = beam_ids[prev_slot * fp->symbols_per_slot];
-        int beam = beam_ids[slot * fp->symbols_per_slot];
+        uint16_t **beam_ids = ru->common.beam_id;
+        uint16_t prev_beam = beam_ids[prev_slot * fp->symbols_per_slot][0];
+        int beam = beam_ids[slot * fp->symbols_per_slot][0];
         if (prev_beam != beam) {
           flags_gpio = beam | TX_GPIO_CHANGE; // enable change of gpio
-          LOG_I(HW, "slot %d, beam %d\n", slot, ru->common.beam_id[0][slot * fp->symbols_per_slot]);
+          LOG_I(HW, "slot %d, beam %d\n", slot, beam_ids[slot * fp->symbols_per_slot][0]);
         }
       }
       break;
@@ -481,7 +481,7 @@ static radio_tx_gpio_flag_t get_gpio_flags(RU_t *ru, int slot)
       // the beam index is written in bits 8-10 of the flags
       // bit 11 enables the gpio programming
       int beam = 0;
-      if ((slot % 10 == 0) && ru->common.beam_id && (ru->common.beam_id[0][slot * fp->symbols_per_slot] < 64)) {
+      if ((slot % 10 == 0) && ru->common.beam_id && (ru->common.beam_id[slot * fp->symbols_per_slot][0] < 64)) {
         // beam = ru->common.beam_id[0][slot*fp->symbols_per_slot] | 64;
         beam = 1024; // hardcoded now for beam32 boresight
         // beam = 127; //for the sake of trying beam63
@@ -985,7 +985,7 @@ void *ru_thread(void *param)
         prach_item_t p;
         while (get_next_nr_prach(&gNB->prach_ru_queue, &now, &p)) {
           // need to extract RACH data for later processing by rx_nr_prach()
-          rx_nr_prach_ru(&p, ru->common.rxdata, ru->nr_frame_parms, ru->N_TA_offset);
+          rx_nr_prach_ru(&p, ru->common.rxdata, ru->nr_frame_parms, ru->N_TA_offset, gNB->enable_analog_das);
           bool success = spsc_q_put(&gNB->prach_l1rx_queue, &p, sizeof(p));
           // assume prach_l1rx_queue never full: prach_ru_queue filled at
           // constant pace, but prach_l1rx_queue emptied as fast as possible,
