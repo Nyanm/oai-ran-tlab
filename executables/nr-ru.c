@@ -807,7 +807,7 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_WRITE, 0);
 }
 
-static void fill_rf_config(RU_t *ru, char *rf_config_file)
+void fill_rf_config(RU_t *ru, char *rf_config_file)
 {
   NR_DL_FRAME_PARMS *fp   = ru->nr_frame_parms;
   nfapi_nr_config_request_scf_t *config = &ru->config; //tmp index
@@ -872,7 +872,7 @@ static void fill_rf_config(RU_t *ru, char *rf_config_file)
   }
 }
 
-static void fill_split7_2_config(split7_config_t *split7, const nfapi_nr_config_request_scf_t *config, const NR_DL_FRAME_PARMS *fp)
+void fill_split7_2_config(split7_config_t *split7, const nfapi_nr_config_request_scf_t *config, const NR_DL_FRAME_PARMS *fp)
 {
   const nfapi_nr_prach_config_t *prach_config = &config->prach_config;
   const nfapi_nr_tdd_table_t *tdd_table = &config->tdd_table;
