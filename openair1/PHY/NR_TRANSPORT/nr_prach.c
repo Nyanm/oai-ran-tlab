@@ -30,7 +30,6 @@ void free_nr_prach_entry(prach_list_t *l, prach_item_t *p)
 prach_item_t *find_nr_prach(prach_list_t *l, int frame, int slot, int nb_rx, nr_find_type_t type)
 {
   pthread_mutex_lock(&l->prach_list_mutex);
-  AssertFatal(nb_rx, "Error! Number of antennas set to 0.\n");
   prach_item_t **p = l->list;
   prach_item_t **end = p + NUMBER_OF_NR_PRACH_MAX;
   for (; p < end; p++)
@@ -49,25 +48,31 @@ prach_item_t *find_nr_prach(prach_list_t *l, int frame, int slot, int nb_rx, nr_
     pthread_mutex_unlock(&l->prach_list_mutex);
     return NULL;
   }
-  // mark it used, it will be filled later
-  if (*p && (*p)->nb_rx != nb_rx) {
+  /* Number of PRACH antenna ports is depended on beamforming configuration.
+  When PRACH is beamformed in RU there is only one spatial stream. Hence nb_rx
+  is not always equal to gNB->nb_antenna_rx.
+
+  While searching for filled PRACH no need to check for nb_rx because the caller
+  doesn't know how many antennas are configured. Only when searching to fill
+  PRACH we must check if already allocated nb_rx matches. */
+  if (*p && (*p)->nb_rx != nb_rx && type == NR_SEARCH_EXIST_OR_FREE) {
     LOG_W(PHY, "rach procedure nb_rx ant changed from %d to %d\n", (*p)->nb_rx, nb_rx);
     free(*p);
     *p = NULL;
   }
+  // mark it used, it will be filled later
   if (!(*p)) {
     *p = calloc(1, sizeof(prach_item_t) + sizeof(c16_t) * nb_rx * NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX * NR_PRACH_SEQ_LEN_L);
     (*p)->prach_buf = (void *)((*p) + 1);
   }
-  (*p)->nb_rx = nb_rx;
-  (*p)->frame = frame;
   pthread_mutex_unlock(&l->prach_list_mutex);
   return (*p);
 }
 
 prach_item_t *nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_nr_prach_pdu_t *prach_pdu)
 {
-  prach_item_t *prach = find_nr_prach(&gNB->prach_list, SFN, Slot, gNB->frame_parms.nb_antennas_rx, NR_SEARCH_EXIST_OR_FREE);
+  const int num_rx_per_beam = gNB->frame_parms.nb_antennas_tx / gNB->common_vars.num_beams_period;
+  prach_item_t *prach = find_nr_prach(&gNB->prach_list, SFN, Slot, num_rx_per_beam, NR_SEARCH_EXIST_OR_FREE);
   if (!prach) {
     LOG_W(PHY, "no free space for a new detected rach, discarding\n");
     return NULL;
@@ -78,21 +83,27 @@ prach_item_t *nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_n
   prach->frame = SFN;
   prach->slot = Slot;
   prach->num_slots = fmt < 4 ? get_long_prach_dur(fmt, fp->numerology_index) : 1;
-  if (gNB->common_vars.beam_id) {
-    int n_symb = get_nr_prach_duration(prach_pdu->prach_format);
-    AssertFatal(prach_pdu->beamforming.dig_bf_interface < NFAPI_MAX_NUM_BG_IF,
-                "impossible beams size %d\n",
-                prach_pdu->beamforming.dig_bf_interface);
-    for (int i = 0; i < prach_pdu->beamforming.dig_bf_interface; i++) {
-      int fapi_beam_idx = prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list[i].beam_idx;
-      int start_symb = prach_pdu->prach_start_symbol + i * n_symb;
-      int bitmap = SL_to_bitmap(start_symb, n_symb);
-      prach->beams[i] = beam_index_allocation(gNB->enable_analog_das,
-                                              fapi_beam_idx,
-                                              &gNB->common_vars,
-                                              Slot,
-                                              gNB->frame_parms.symbols_per_slot,
-                                              bitmap);
+  int n_symb = get_nr_prach_duration(prach_pdu->prach_format);
+  const int num_beams = prach_pdu->beamforming.dig_bf_interface;
+  AssertFatal(num_beams < NFAPI_MAX_NUM_BG_IF, "impossible beams size %d\n", num_beams);
+  for (int i = 0; i < num_beams; i++) {
+    int fapi_beam_idx = prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list[i].beam_idx;
+    int start_symb = prach_pdu->prach_start_symbol + i * n_symb;
+    int bitmap = SL_to_bitmap(start_symb, n_symb);
+    if (gNB->common_vars.beam_id) {
+      // TODO: Remove assumption of contiguous ports after DAS is properly handled in beamforming
+      uint16_t ant_start = get_first_ant_idx(gNB->enable_analog_das,
+                                             num_rx_per_beam,
+                                             fapi_beam_idx,
+                                             prach_pdu->param_v4.spatialStreamIndices[i * num_rx_per_beam]);
+      beam_index_allocation(fapi_beam_idx,
+                            ant_start,
+                            num_rx_per_beam,
+                            NR_SYMBOLS_PER_SLOT,
+                            Slot,
+                            bitmap,
+                            gNB->frame_parms.nb_antennas_rx,
+                            gNB->common_vars.beam_id);
     }
   }
   prach->pdu = *prach_pdu;
@@ -105,19 +116,19 @@ prach_item_t *nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_n
   prach->prach_sequence_length = cfg->prach_sequence_length.value;
   prach->restricted_set = cfg->restricted_set_config.value;
   prach->numerology_index = fp->numerology_index;
-  prach->nb_rx = gNB->gNB_config.carrier_config.num_rx_ant.value;
+  prach->nb_rx = num_rx_per_beam;
   prach->Xu = gNB->X_u;
   prach->rx_prach = &gNB->rx_prach;
   return prach;
 }
 
 static void rx_nr_prach_ru_internal(prach_item_t *p,
-                                    int beam_id,
                                     int prachStartSymbol,
                                     int prachOccasion,
                                     int32_t **rxdata,
                                     NR_DL_FRAME_PARMS *fp,
-                                    int N_TA_offset)
+                                    int N_TA_offset,
+                                    bool das)
 {
   int sample_offset_slot;
   const int sum = fp->ofdm_symbol_size + fp->nb_prefix_samples;
@@ -343,10 +354,23 @@ static void rx_nr_prach_ru_internal(prach_item_t *p,
   k*=K;
   k+=kbar;
 
+  const uint8_t num_beams = p->pdu.beamforming.dig_bf_interface;
+  // When more than one beams, then each occasion is on one beam
+  int ant_offset = 0;
+  if (num_beams > 1) {
+    AssertFatal(prachOccasion < num_beams, "Num of PRACH Occasions must be same as number of beams in beamforming mode\n");
+    ant_offset = prachOccasion * p->nb_rx;
+  }
+  // TODO: Remove assumption of contiguous ports after DAS is properly handled in beamforming
+  uint16_t ant_start =
+      get_first_ant_idx(das,
+                        p->nb_rx,
+                        p->pdu.beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx,
+                        p->pdu.param_v4.numSpatialStreamIndices > 0 ? p->pdu.param_v4.spatialStreamIndices[ant_offset] : 0);
   for (int aa = 0; aa < p->nb_rx; aa++) {
     // Fixme: slot or slot makes no sense ???
     int slot2 = p->prach_sequence_length ? p->slot : p->slot;
-    int idx = aa + beam_id * p->nb_rx;
+    int idx = ant_start + aa;
     c16_t *prach = (c16_t *)&rxdata[idx][get_samples_slot_timestamp(fp, slot2) + sample_offset_slot - N_TA_offset];
 
     // do DFT
@@ -370,17 +394,16 @@ static void rx_nr_prach_ru_internal(prach_item_t *p,
   }
 }
 
-void rx_nr_prach_ru(prach_item_t *p, int32_t **rxdata, NR_DL_FRAME_PARMS *fp, int N_TA_offset)
+void rx_nr_prach_ru(prach_item_t *p, int32_t **rxdata, NR_DL_FRAME_PARMS *fp, int N_TA_offset, bool das)
 {
   int N_dur = get_nr_prach_duration(p->pdu.prach_format);
   LOG_D(NR_PHY_RACH, "%d.%d try to decode %d occasions \n", p->frame, p->slot, p->pdu.num_prach_ocas);
   for (int prach_oc = 0; prach_oc < p->pdu.num_prach_ocas; prach_oc++) {
     int prachStartSymbol = p->pdu.prach_start_symbol + prach_oc * N_dur;
-    int beam_id = p->beams[prach_oc];
     // comment FK: the standard 38.211 section 5.3.2 has one extra term +14*N_RA_slot. This is because there prachStartSymbol is
     // given wrt to start of the 15kHz slot or 60kHz slot. Here we work slot based, so this function is anyway only called in slots
     // where there is PRACH. Its up to the MAC to schedule another PRACH PDU in the case there are there N_RA_slot \in {0,1}.
-    rx_nr_prach_ru_internal(p, beam_id, prachStartSymbol, prach_oc, rxdata, fp, N_TA_offset);
+    rx_nr_prach_ru_internal(p, prachStartSymbol, prach_oc, rxdata, fp, N_TA_offset, das);
   }
 }
 

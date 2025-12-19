@@ -89,7 +89,7 @@ void free_gNB_dlsch(NR_gNB_DLSCH_t *dlsch, uint16_t N_RB, const NR_DL_FRAME_PARM
     @param frame Frame number
     @param slot Slot number
 */
-int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t slot, int beam_nb);
+int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t slot);
 
 /*!
 \brief This function implements the idft transform precoding in PUSCH
@@ -168,7 +168,7 @@ typedef struct rx_prach_out {
 } rx_prach_out_t;
 rx_prach_out_t rx_nr_prach(const prach_item_t *, int occasion);
 
-void rx_nr_prach_ru(prach_item_t *, int32_t **, NR_DL_FRAME_PARMS *frame_parms, int N_TA_offset);
+void rx_nr_prach_ru(prach_item_t *, int32_t **, NR_DL_FRAME_PARMS *frame_parms, int N_TA_offset, bool das);
 
 typedef enum {
   NR_SEARCH_EXIST = 0,

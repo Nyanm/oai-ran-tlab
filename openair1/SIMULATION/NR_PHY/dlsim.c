@@ -771,7 +771,8 @@ int main(int argc, char **argv)
                                 .timer_config.t311 = 3000,
                                 .timer_config.n311 = 1,
                                 .timer_config.t319 = 400,
-                                .num_agg_level_candidates = {0, 0, 1, 1, 0}};
+                                .num_agg_level_candidates = {0, 0, 1, 1, 0},
+                                .spatial_stream_index = {0, 1, 2, 3}};
   const nr_rlc_configuration_t rlc_config = {
     .srb = {
       .t_poll_retransmit = 45,
@@ -800,13 +801,10 @@ int main(int argc, char **argv)
   RC.nb_nr_macrlc_inst = 1;
   mac_top_init_gNB(ngran_gNB, scc, &conf, &rlc_config);
   gNB_mac = RC.nrmac[0];
+  gNB_mac->beam_info = (NR_beam_info_t){.beams_per_period = 1};
   nr_mac_config_scc(RC.nrmac[0], scc, &conf);
 
   gNB_mac->dl_bler.harq_round_max = num_rounds;
-
-  gNB->ap_N1 = pdsch_AntennaPorts.N1;
-  gNB->ap_N2 = pdsch_AntennaPorts.N2;
-  gNB->ap_XP = pdsch_AntennaPorts.XP;
 
   validate_input_pmi(&gNB_mac->config[0], pdsch_AntennaPorts, g_nrOfLayers, g_pmi);
 
@@ -1120,14 +1118,16 @@ int main(int argc, char **argv)
         stop_meas(&gNB->phy_proc_tx);
 
         if (n_trials==1) {
-          LOG_M("txsigF0.m","txsF0=",
-                &gNB->common_vars.txdataF[0][0][2 * frame_parms->ofdm_symbol_size],
+          LOG_M("txsigF0.m",
+                "txsF0=",
+                &gNB->common_vars.txdataF[0][2 * frame_parms->ofdm_symbol_size],
                 frame_parms->ofdm_symbol_size,
                 1,
                 1);
           if (gNB->frame_parms.nb_antennas_tx>1)
-            LOG_M("txsigF1.m","txsF1=",
-                  &gNB->common_vars.txdataF[0][1][2 * frame_parms->ofdm_symbol_size],
+            LOG_M("txsigF1.m",
+                  "txsF1=",
+                  &gNB->common_vars.txdataF[1][2 * frame_parms->ofdm_symbol_size],
                   frame_parms->ofdm_symbol_size,
                   1,
                   1);
@@ -1140,7 +1140,7 @@ int main(int argc, char **argv)
           c16_t fft_in_buff[frame_parms->ofdm_symbol_size * frame_parms->symbols_per_slot] __attribute__((aligned(64)));
           memset(fft_in_buff, 0, sizeof(fft_in_buff));
           if (cyclic_prefix_type == 1) {
-            fft_shift(gNB->common_vars.txdataF[0][aa],
+            fft_shift(gNB->common_vars.txdataF[aa],
                       frame_parms->ofdm_symbol_size,
                       frame_parms->N_RB_DL,
                       fft_in_buff,
@@ -1158,7 +1158,7 @@ int main(int argc, char **argv)
             for (int i = 0; i < 14; i++) {
               was_symbol_used[i] = true;
             }
-            fft_shift(gNB->common_vars.txdataF[0][aa],
+            fft_shift(gNB->common_vars.txdataF[aa],
                       frame_parms->ofdm_symbol_size,
                       frame_parms->N_RB_DL,
                       fft_in_buff,

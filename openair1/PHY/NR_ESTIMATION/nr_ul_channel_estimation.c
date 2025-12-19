@@ -32,7 +32,7 @@ typedef struct puschAntennaProc_s {
   unsigned char symbol;
   unsigned short bwp_start_subcarrier;
   int aarx;
-  int beam_nb;
+  uint16_t ant_port_start;
   int numAntennas;
   nfapi_nr_pusch_pdu_t *pusch_pdu;
   int *max_ch;
@@ -43,7 +43,7 @@ typedef struct puschAntennaProc_s {
   int chest_freq;
   NR_gNB_PUSCH *pusch_vars;
   NR_DL_FRAME_PARMS *frame_parms;
-  c16_t ***rxdataF;
+  c16_t **rxdataF;
   task_ans_t *ans;
   scopeData_t *scope;
   c16_t *pusch_ch_est_dmrs_pos_slot_mem;
@@ -99,11 +99,11 @@ static void nr_pusch_antenna_processing(void *arg)
   const int symbol_offset = symbolSize * symbol;
   const int k0 = bwp_start_subcarrier;
   const int nb_rb_pusch = pusch_pdu->rb_size;
-  const int beam_nb = rdata->beam_nb;
+  const int aa_start = rdata->ant_port_start;
   for (int antenna = aarx; antenna < aarx + numAntennas; antenna++) {
     c16_t ul_ls_est[symbolSize] __attribute__((aligned(32)));
     memset(ul_ls_est, 0, sizeof(c16_t) * symbolSize);
-    c16_t *rxdataF = (c16_t *)&rdata->rxdataF[beam_nb][antenna][symbol_offset + slot_offset];
+    c16_t *rxdataF = (c16_t *)&rdata->rxdataF[aa_start + antenna][symbol_offset + slot_offset];
     c16_t *ul_ch = &ul_ch_estimates[nl * frame_parms->nb_antennas_rx + antenna][symbol_offset];
     memset(ul_ch, 0, sizeof(*ul_ch) * symbolSize);
 
@@ -446,14 +446,13 @@ static void nr_pusch_antenna_processing(void *arg)
   completed_task_ans(rdata->ans);
 }
 
-
 int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
                                 unsigned char Ns,
                                 int nl,
                                 unsigned short p,
                                 unsigned char symbol,
                                 int ul_id,
-                                int beam_nb,
+                                uint16_t ant_port_start,
                                 unsigned short bwp_start_subcarrier,
                                 nfapi_nr_pusch_pdu_t *pusch_pdu,
                                 int *max_ch,
@@ -577,7 +576,7 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
     rdata->nest_count = &nest_count_arr[rdata->aarx];
     rdata->noise_amp2 = &noise_amp2_arr[rdata->aarx];
     rdata->delay = &delay_arr[rdata->aarx];
-    rdata->beam_nb = beam_nb;
+    rdata->ant_port_start = ant_port_start;
     rdata->frame_parms = fp;
     rdata->pusch_vars = &gNB->pusch_vars[ul_id];
     rdata->chest_freq = gNB->chest_freq;
