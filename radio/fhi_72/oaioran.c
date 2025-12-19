@@ -799,22 +799,10 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
 #endif
           LOG_D(HW, "pPrbMap[%d] : PRBstart %d nPRBs %d\n", idxElm, startRB, numRB);
           // For Liteon FR2 with RunSlotPrbMapBySymbolEnable xran_prb_map will have xran_prb_elm prbMap[14], each idxElm matches to sym_idx.
-          if (fh_cfg->RunSlotPrbMapBySymbolEnable) {
-            if (sym_idx >= pRbElm->nStartSymb && sym_idx < pRbElm->nStartSymb + pRbElm->numSymb) {
-              if (!p_sec_desc->pCtrl)
-                continue;
-              // ant_id / no of antenna per beam gives the beam_nb
-              pRbElm->nBeamIndex = ru->beam_id[ant_id / (ru->nb_rx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
-              // In phy-f-1.0/fhi_lib/lib/api/xran_pkt_cp.h, beamId:15 is of 15bit. -1 set extension bit ef:1 to 1 mistakenly.
-              if (pRbElm->nBeamIndex == -1)
-                pRbElm->nBeamIndex = 0;
-            }
-          } else {
-            // ant_id / no of antenna per beam gives the beam_nb
-            int16_t beam_id = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
-            if (beam_id != -1)
-              pRbElm->nBeamIndex = beam_id;
-          }
+          if (fh_cfg->RunSlotPrbMapBySymbolEnable && (sym_idx < pRbElm->nStartSymb || sym_idx >= pRbElm->nStartSymb + pRbElm->numSymb) && !p_sec_desc->pCtrl)
+            continue;
+
+          pRbElm->nBeamIndex = ru->beam_id[slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx][ant_id];
         }
       }
     }
@@ -829,31 +817,22 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
         continue;
       }
 
-      // For Liteon FR2 with RunSlotPrbMapBySymbolEnable. Set nPrbElm if beam_id = -1 for all downlink symbols
+      /* TODO: Remove this hack to set nPrbElm for mixed slot. This can be set statically during init based on TDD pattern. */
       if (fh_cfg->RunSlotPrbMapBySymbolEnable) {
-        bool beam_used = false;
         uint8_t *pPrbMapData = bufs->srccp[ant_id % nb_tx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
         struct xran_prb_map *pPrbMap = (struct xran_prb_map *)pPrbMapData;
         struct xran_prb_map *pRbMap = pPrbMap;
         int32_t dl_sym_end = 0;
         for (int32_t sym_idx = 0; sym_idx < XRAN_NUM_OF_SYMBOL_PER_SLOT; sym_idx++) {
-          if (is_tdd_dl_symbol(frame_conf, slot, sym_idx)) {
-            if (ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT+ sym_idx] != -1)
-              beam_used |= true;
-          }
-          else {
-              dl_sym_end = sym_idx;
-              break;
+          if (!is_tdd_dl_symbol(frame_conf, slot, sym_idx)) {
+            dl_sym_end = sym_idx;
+            break;
           }
         }
         if (is_tdd_guard_slot(frame_conf, slot))
           pRbMap->nPrbElm = dl_sym_end;
         else
           pRbMap->nPrbElm = XRAN_NUM_OF_SYMBOL_PER_SLOT;
-        if (!beam_used) {
-          pRbMap->nPrbElm = 0;
-          continue;
-        }
       }
 
       // This loop would better be more inner to avoid confusion and maybe also errors.
@@ -911,17 +890,8 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
                   p_sec_desc->iq_buffer_len    = 0;
                   continue;
               }
-              // ant_id / no of antenna per beam gives the beam_nb
-              p_prbMapElm->nBeamIndex = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT+ sym_idx];
-              // In phy-f-1.0/fhi_lib/lib/api/xran_pkt_cp.h, beamId:15 is of 15bit. -1 set extension bit ef:1 to 1 mistakenly.
-              if (p_prbMapElm->nBeamIndex == -1)
-                p_prbMapElm->nBeamIndex = 0;
-            } else {
-              // ant_id / no of antenna per beam gives the beam_nb
-              int16_t beam_id = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
-              if ( beam_id != -1)
-                p_prbMapElm->nBeamIndex = beam_id;
             }
+            p_prbMapElm->nBeamIndex = ru->beam_id[slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx][ant_id];
 
             dst = xran_add_hdr_offset(dst, p_prbMapElm->compMethod);
 

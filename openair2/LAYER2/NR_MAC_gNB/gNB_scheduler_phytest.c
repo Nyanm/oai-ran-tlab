@@ -297,7 +297,12 @@ void nr_ul_preprocessor_phytest(gNB_MAC_INST *nr_mac, post_process_pusch_t *pp_p
       .tda_info = tda_info,
       .dmrs_info = get_ul_dmrs_params(scc, ul_bwp, &tda_info, target_ul_Nl),
       .bwp_info = get_pusch_bwp_start_size(UE),
+      .ant_port_idx.numSpatialStreamIndices = nr_mac->radio_config.pusch_AntennaPorts,
   };
+  const uint16_t start_stream_idx = beam * nr_mac->radio_config.pusch_AntennaPorts;
+  for (int i = 0; i < sched.ant_port_idx.numSpatialStreamIndices; i++)
+    sched.ant_port_idx.spatialStreamIndices[i] = nr_mac->radio_config.spatial_stream_index[start_stream_idx + i];
+
   sched_ctrl->ul_bler_stats.mcs = sched.mcs; /* for logging output */
 
   /* Calculate TBS from MCS */
