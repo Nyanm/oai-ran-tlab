@@ -527,7 +527,6 @@ void nr_interleaving_ldpc32(uint32_t E, uint8_t Qm, uint32_t *e, uint32_t *f)
         *f++ = *e3++;
         *f++ = *e4++;
         *f++ = *e5++;
-	i++;
       }
     } break;
     case 8: {
