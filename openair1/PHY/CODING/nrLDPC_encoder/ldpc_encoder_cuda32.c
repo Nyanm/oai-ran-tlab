@@ -43,7 +43,7 @@
 
 #include <cuda_runtime.h>
 
-//#define DEBUG_LDPC 1 
+//#define DEBUG_LDPC 1
 
 #include "ldpc_encode_parity_check_cuda.c"
 uint32_t *c_dev;

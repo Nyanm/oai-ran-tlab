@@ -341,7 +341,7 @@ one_measurement_t test_ldpc(short max_iterations,
   init_abort(&dec_abort);
  
   if (use32bit)
-    ldpc_toCompare.LDPCinit_cuda();
+    ldpc_toCompare.LDPCinit_cuda(channel_output_fixed_dev, estimated_output_dev);
   else   
     ldpc_toCompare.LDPCinit();
   
@@ -490,14 +490,14 @@ one_measurement_t test_ldpc(short max_iterations,
 
   for (int j = 0; j < n_segments; j++) {
 #ifdef ENABLE_CUDA
-    cudaFree(test_input[j]);
+    cudaFreeHost(test_input[j]);
 #else
     free(test_input[j]);
 #endif
     free(channel_input[j]);
   }
 #ifdef ENABLE_CUDA
-  cudaFree(test_input);
+  cudaFreeHost(test_input);
 #endif
   free(channel_input_optim);
 

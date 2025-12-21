@@ -26,7 +26,7 @@
 /* ldpc coder/decoder API*/
 typedef struct ldpc_interface_s {
   LDPC_initfunc_t *LDPCinit;
-  LDPC_initfunc_t *LDPCinit_cuda;
+  LDPC_initfunc_cuda_t *LDPCinit_cuda;
   LDPC_shutdownfunc_t *LDPCshutdown;
   LDPC_shutdownfunc_t *LDPCshutdown_cuda;
   LDPC_decoderfunc_t *LDPCdecoder;

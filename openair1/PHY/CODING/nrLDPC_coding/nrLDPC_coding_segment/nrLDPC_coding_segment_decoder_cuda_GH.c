@@ -58,6 +58,8 @@
 #include "nfapi/open-nFAPI/nfapi/public_inc/nfapi_interface.h"
 #include "nfapi/open-nFAPI/nfapi/public_inc/nfapi_nr_interface.h"
 
+#include <cuda_runtime.h>
+
 //-------------------------Debug Function-----------------------
 void dumpAssUltra(int8_t* cnProcBufRes, const char* filename)
 {
@@ -95,6 +97,13 @@ void dumpAssUltraInput(int8_t* cnProcBufRes, const char* filename)
   fclose(fp);
 }
 
+
+static int8_t *g_llrBuffer = NULL;
+static int8_t *g_decodedBitsBig = NULL;
+
+#define MAX_LDPC_LLR_SIZE (OAI_LDPC_DECODER_MAX_NUM_LLR * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4)
+#define MAX_LDPC_OUT_SIZE (8448 * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4) // BG1 K*Z_max
+
 void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
 {
   // arg points to RDATA array (nrLDPC_decoding_parameters_t *RDATA)
@@ -110,15 +119,15 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
   t_nrLDPC_time_stats procTime = {0};
   t_nrLDPC_time_stats *p_procTime = &procTime;
   // allocate big buffers on heap
-  int8_t *llrBuffer = (int8_t*)alloca((size_t)C * OAI_LDPC_DECODER_MAX_NUM_LLR * sizeof(int8_t));
-  if (!llrBuffer) { LOG_E(PHY,"alloc llrBuffer failed\n"); return; }
+  //the big buffer is now globally declared
+  int8_t *llrBuffer = g_llrBuffer;
+  int8_t *decodedBitsBig = g_decodedBitsBig;
+  ///int8_t *llrBuffer = (int8_t*)alloca((size_t)C * OAI_LDPC_DECODER_MAX_NUM_LLR * sizeof(int8_t));
+  ///if (!llrBuffer) { LOG_E(PHY,"alloc llrBuffer failed\n"); return; }
 
-  int8_t *decodedBitsBig = (int8_t*)alloca(C * K * sizeof(int8_t));
-  if (!decodedBitsBig) { LOG_E(PHY,"alloc decodedBitsBig failed\n"); return; }
+  ///int8_t *decodedBitsBig = (int8_t*)alloca(C * K * sizeof(int8_t));
+  ///if (!decodedBitsBig) { LOG_E(PHY,"alloc decodedBitsBig failed\n"); return; }
 
-  //printf("decodedBitsBig %p, llrBuffer %p\n",decodedBitsBig,llrBuffer);
-//  int *iterUsed = (int*)calloc(C, sizeof(int));
-  //if (!iterUsed) { free(llrBuffer); free(decodedBitsBig); LOG_E(PHY,"alloc iterUsed failed\n"); return; }
 
   // Phase 1: per-segment deinterleave+rate-match and pack into llrBuffer
   // prepare int16 z (local)
@@ -224,7 +233,13 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
 int32_t nrLDPC_coding_init_cuda(void)
 {
   cuda_support_init();
-  LDPCinit_cuda();
+
+  if (g_llrBuffer == NULL) {
+      cudaMallocManaged((void**)&g_llrBuffer, MAX_LDPC_LLR_SIZE, cudaMemAttachGlobal);
+      cudaMallocManaged((void**)&g_decodedBitsBig, MAX_LDPC_OUT_SIZE, cudaMemAttachGlobal);
+  }
+
+  LDPCinit_cuda(g_llrBuffer, g_decodedBitsBig);
   return 0;
 }
 
@@ -233,32 +248,4 @@ int32_t nrLDPC_coding_shutdown_cuda(void)
   LDPCshutdown_cuda();
   return 0;
 }
-/*
-int32_t nrLDPC_coding_decoder_cuda(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters)
-{
-  int nbSegments = 0;
-  for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
-    nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
-    nbSegments += nrLDPC_TB_decoding_parameters->C;
-  }
-  nrLDPC_decoding_parameters_t arr[nbSegments];
-  task_ans_t ans;
-  init_task_ans(&ans, nbSegments);
-  thread_info_tm_t t_info = {.buf = (uint8_t *)arr, .len = 0, .cap = nbSegments, .ans = &ans};
 
-  for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
-    (void)nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters, pusch_id, &t_info);
-  }
-
-
-  for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
-    nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
-    for (int r = 0; r < nrLDPC_TB_decoding_parameters->C; r++) {
-      if (nrLDPC_TB_decoding_parameters->segments[r].decodeSuccess) {
-        *nrLDPC_TB_decoding_parameters->processedSegments = *nrLDPC_TB_decoding_parameters->processedSegments + 1;
-      }
-    }
-  }
-  return 0;
-}
-*/
