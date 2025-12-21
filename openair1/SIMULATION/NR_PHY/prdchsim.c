@@ -49,8 +49,9 @@ NR_AIOT_DL_FRAME_PARMS *frame_parms;
 
 double cpuf;
 int num_threads;
-char filename[50];
+char filename[100];
 char foldername[] = "./R2D_results";
+char folderplots[50];
 
 static softmodem_params_t softmodem_params;
 softmodem_params_t *get_softmodem_params(void)
@@ -236,20 +237,33 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
 
   start_meas(&time_multipath_stats);
 
+  const int gain = 8; // 8 x amplification to avoid precision issues
+  double txlev_sum = 0;
+
   for (int i = 0; i < frame->packet_samples; i++) {
-    s_re[0][i] = (double) in[i].r;
-    s_im[0][i] = (double) in[i].i;
+    // Copy and amplify input signal
+    s_re[0][i] = (double) (in[i].r * gain);
+    s_im[0][i] = (double) (in[i].i * gain);
+
+    // Calculate power
+    txlev_sum += s_re[0][i] * s_re[0][i] + s_im[0][i] * s_im[0][i];
   }
 
-  int txlev = signal_energy((int32_t *) in, frame->nr_frame_parms.ofdm_symbol_size + frame->nr_frame_parms.nb_prefix_samples0);
+  uint32_t txlev = txlev_sum / (double)frame->packet_samples;
   double txlev_dBm = 10 * log10((double)txlev);
-  //printf("Signal energy: %d (%f dB)\n", txlev, txlev_dBm);
+
+  if(testing_mode && !testing_timing) {
+    printf("Signal energy: %d (%f dB)\n", txlev, txlev_dBm);
+  }
 
   double ts = 1.0 / (frame->nr_frame_parms.subcarrier_spacing * frame->nr_frame_parms.ofdm_symbol_size);
   // Compute AWGN variance
-  double sigma2_dBm = txlev_dBm + channel->path_loss_dB - SNR; // *((double)frame_parms->ofdm_symbol_size / r2d_subcarriers)
+  double sigma2_dBm = txlev_dBm + channel->path_loss_dB - SNR + 10*log10((double)frame->nr_frame_parms.ofdm_symbol_size / (frame->nr_frame_parms.N_RB_DL * NR_NB_SC_PER_RB));
   double sigma2 = pow(10, sigma2_dBm / 10);
-  //printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dBm);
+
+  if(testing_mode && !testing_timing) {
+    printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dBm);
+  }
 
   multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + channel->channel_offset + 200, 0, 1);
 
@@ -757,10 +771,10 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
   }
 
   if(testing_mode && !testing_timing && pass == snr_plot) {
-    sprintf(filename, "%s/R2D_Adaptive_threshold.m", foldername);
+    sprintf(filename, "%s/R2D_Adaptive_threshold.m", folderplots);
     LOG_M(filename, "Adaptive_threshold_sig", thr_plot, thr_index, 1, 2);
 
-    sprintf(filename, "%s/R2D_Energy.m", foldername);
+    sprintf(filename, "%s/R2D_Energy.m", folderplots);
     LOG_M(filename, "Energy_sig", energy_plot, energy_index, 1, 2);
     
     free(energy_plot);
@@ -955,7 +969,7 @@ void* process_snr_range(void* arg) {
       AIOT_R2D_PHY_TX_REs(REsPacket, (const uint8_t *) local_payload, local_frame_parms);
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
-        sprintf(filename, "%s/R2D_REs_Packet.m", foldername);
+        sprintf(filename, "%s/R2D_REs_Packet.m", folderplots);
         LOG_M(filename, "REs_Packet_sig", REsPacket, frame_parms->packet_symbols * frame_parms->packet_subcarriers, 1, 1);
       }
       
@@ -969,7 +983,7 @@ void* process_snr_range(void* arg) {
       AIOT_R2D_PHY_TX_Signal(txData, txDataF, (const c16_t *) REsPacket, local_frame_parms);
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
-        sprintf(filename, "%s/R2D_TX_IQ.m", foldername);
+        sprintf(filename, "%s/R2D_TX_IQ.m", folderplots);
         LOG_M(filename, "TX_IQ_sig", txData, frame_parms->packet_samples, 1, 1);
       }
       
@@ -992,14 +1006,14 @@ void* process_snr_range(void* arg) {
           output[2 * i + 1] = r_im[0][i];
         }
         
-        sprintf(filename, "%s/R2D_Channel.m", foldername);
+        sprintf(filename, "%s/R2D_Channel.m", folderplots);
         LOG_M(filename, "Channel_sig", output, rx_size, 1, 8);
 
         free(output);
       }
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
-        sprintf(filename, "%s/R2D_RX_IQ.m", foldername);
+        sprintf(filename, "%s/R2D_RX_IQ.m", folderplots);
         LOG_M(filename, "RX_IQ_sig", rxData[0], rx_size, 1, 1);
       }
       
@@ -1013,7 +1027,7 @@ void* process_snr_range(void* arg) {
       AIOT_R2D_PHY_RX_Envelope_Detector(envelope, (const c16_t **) rxData, rx_size);
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
-        sprintf(filename, "%s/R2D_Envelope.m", foldername);
+        sprintf(filename, "%s/R2D_Envelope.m", folderplots);
         LOG_M(filename, "Envelope_sig", envelope, rx_size, 1, 0);
       }
       
@@ -1027,7 +1041,7 @@ void* process_snr_range(void* arg) {
       AIOT_R2D_PHY_RX_Filter(filteredData, (const int16_t *) envelope, rx_size, &local_filter);
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
-        sprintf(filename, "%s/R2D_Filter.m", foldername);
+        sprintf(filename, "%s/R2D_Filter.m", folderplots);
         LOG_M(filename, "Filter_sig", filteredData, rx_size, 1, 0);
       }
       
@@ -1041,7 +1055,7 @@ void* process_snr_range(void* arg) {
       AIOT_R2D_PHY_RX_Downsample(downSampled, (const int16_t *) filteredData, rx_size, local_frame_parms);
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
-        sprintf(filename, "%s/R2D_Downsampled.m", foldername);
+        sprintf(filename, "%s/R2D_Downsampled.m", folderplots);
         LOG_M(filename, "Downsampled_sig", downSampled, frame_parms->packet_downsampled_samples, 1, 0);
       }
 
@@ -1055,7 +1069,7 @@ void* process_snr_range(void* arg) {
       int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) downSampled, SIP_ideal, local_frame_parms);
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
-        sprintf(filename, "%s/R2D_Correlation.m", foldername);
+        sprintf(filename, "%s/R2D_Correlation.m", folderplots);
         LOG_M(filename, "Correlation_sig", correlation, frame_parms->packet_downsampled_samples - frame_parms->SIP_samples, 1, 2);
       }
 
@@ -1184,7 +1198,7 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
   SIP_ideal = generate_SIP_ideal_sequence(frame_parms);
 
   if(testing_mode) {
-    sprintf(filename, "%s/R2D_SIP_Ideal.m", foldername);
+    sprintf(filename, "%s/R2D_SIP_Ideal.m", folderplots);
     LOG_M(filename, "SIP_Ideal_sig", SIP_ideal, frame_parms->SIP_samples, 1, 2);
   }
 
@@ -1577,6 +1591,11 @@ int main(int argc, char **argv)
   #endif
 
   // ---------------------------------------------------------------
+
+  sprintf(folderplots, "./R2D_plots/SNR%d_RBs%d_M%d_ZC%d_SIZE%d/", snr_plot, frame_parms->nr_frame_parms.N_RB_UL, frame_parms->M, frame_parms->Zadoff_Chu, frame_parms->payload_size);
+  mkdir("./R2D_plots", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+  mkdir(folderplots, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+  mkdir(foldername, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 
   BER_test(frame_parms, &channel_model);
 

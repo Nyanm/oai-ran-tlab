@@ -51,6 +51,7 @@ double cpuf;
 int num_threads;
 char filename[50];
 char foldername[] = "./D2R_results";
+char folderplots[100];
 
 static softmodem_params_t softmodem_params;
 softmodem_params_t *get_softmodem_params(void)
@@ -86,7 +87,7 @@ typedef struct {
 #define MIN_SNR_DB (-30)
 #define MAX_SNR_DB 20
 
-#define MIN_SNR_DB_DEFAULT (-10)
+#define MIN_SNR_DB_DEFAULT (-15)
 #define MAX_SNR_DB_DEFAULT 10
 
 #define SNR_STEP_DB 1

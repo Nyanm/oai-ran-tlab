@@ -62,6 +62,13 @@ void add_noise(c16_t **rxdata,
   }
 }
 
+// Helper to clip double to int16 range
+static int16_t saturate_c16(double in) {
+    if (in > 32767.0) return 32767;
+    if (in < -32768.0) return -32768;
+    return (int16_t)in;
+}
+
 void add_noise_MT(c16_t **rxdata,
                const double **r_re,
                const double **r_im,
@@ -80,8 +87,8 @@ void add_noise_MT(c16_t **rxdata,
   for (int i = 0; i < length; i++) {
     for (int ap = 0; ap < nb_antennas_rx; ap++) {
       c16_t *rxd = &rxdata[ap][slot_offset + i + delay];
-      rxd->r = r_re[ap][i] + A * gaussZiggurat_MT(0.0, 1.0, gz); // convert to fixed point
-      rxd->i = r_im[ap][i] + A * gaussZiggurat_MT(0.0, 1.0, gz);
+      rxd->r = saturate_c16(r_re[ap][i] + A * gaussZiggurat_MT(0.0, 1.0, gz)); // convert to fixed point
+      rxd->i = saturate_c16(r_im[ap][i] + A * gaussZiggurat_MT(0.0, 1.0, gz));
       /* Add phase noise if enabled */
       if (pdu_bit_map & ptrs_bit_map) {
         phase_noise(ts, &rxdata[ap][slot_offset + i + delay].r, &rxdata[ap][slot_offset + i + delay].i);
