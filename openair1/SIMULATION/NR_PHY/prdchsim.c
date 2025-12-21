@@ -88,7 +88,7 @@ typedef struct {
 #define MAX_SNR_DB 20
 
 #define MIN_SNR_DB_DEFAULT (-10)
-#define MAX_SNR_DB_DEFAULT 10
+#define MAX_SNR_DB_DEFAULT 20
 
 #define SNR_STEP_DB 1
 #define SNR_TRIALS 1000
@@ -237,19 +237,23 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
 
   start_meas(&time_multipath_stats);
 
-  const int gain = 8; // 8 x amplification to avoid precision issues
-  double txlev_sum = 0;
+  const int gain = 8; // 8 x amplification to avoid precision issues (moves to 8k amplitude approx)
+  uint64_t txlev_sum = 0;
 
   for (int i = 0; i < frame->packet_samples; i++) {
-    // Copy and amplify input signal
-    s_re[0][i] = (double) (in[i].r * gain);
-    s_im[0][i] = (double) (in[i].i * gain);
+    // Amplify input signal
+    int16_t amplified_r = in[i].r * gain;
+    int16_t amplified_i = in[i].i * gain;
+
+    // Copy to double
+    s_re[0][i] = (double) amplified_r;
+    s_im[0][i] = (double) amplified_i;
 
     // Calculate power
-    txlev_sum += s_re[0][i] * s_re[0][i] + s_im[0][i] * s_im[0][i];
+    txlev_sum += amplified_r * amplified_r + amplified_i * amplified_i;
   }
 
-  uint32_t txlev = txlev_sum / (double)frame->packet_samples;
+  uint32_t txlev = txlev_sum / frame->packet_samples;
   double txlev_dBm = 10 * log10((double)txlev);
 
   if(testing_mode && !testing_timing) {
