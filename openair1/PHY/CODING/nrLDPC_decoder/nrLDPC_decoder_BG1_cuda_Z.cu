@@ -1,40 +1,22 @@
 #include <cuda_runtime.h>
 #include <stdint.h>
 #include <stdio.h>
-#include "nrLDPC_types.h"
-#include "openair1/PHY/CODING/coding_defs.h"
-#include "openair1/PHY/CODING/nrLDPC_extern.h"
+#include "nrLDPC_CUDA_shared_Z.h"
 
-#define BG1_ROW 46      // number of rows in base graph (BG1)
-#define BG1_COL 68      // number of cols in base graph (BG1)
+// Global variables
+struct ldpc_params *params = NULL;
 
-#define BG2_ROW 42      // number of rows in base graph (BG2)
-#define BG2_COL 52      // number of cols in base graph (BG2)
+// Create Streams and Graphs, and execute graphs
+cudaStream_t* cudaStreams = NULL;
+cudaGraph_t* cudaGraphs = NULL;
+cudaGraphExec_t* cudaGraphExecs = NULL;
 
-#define BG1_MAX_NNZ 316  // Maximum number of non-zero elements in BG1
-#define BG1_MAX_ROW_DEGREE 19  // Maximum row degree in BG1
+// Define host and device memory
+struct host_memory *host_mem = NULL;
+struct device_memory *dev_mem = NULL;
 
-#define MAX_Z 384     // Maximum lift size in 5G NR
-
-#define ALPHA 0.75f    // Scaling factor for Min-Sum algorithm
-
-// Constants for quantization
-
-#define SIMD_MAX_LLR 0x7F7F7F7FU
-#define SIMD_WIDTH 4
-
-
-#define BG1_MAX_CW_LEN 26112    // Maximum codeword length for BG1
-#define BG1_MAX_INFO_LEN 8448
-#define BG1_R13_Z384_Kb 22
-
-
-#define MAX_STREAMS 6 // Maximum number of CUDA streams
-#define GROUPS_PER_STREAM 4 // Number of groups per stream
-#define CWS_PER_STREAM (GROUPS_PER_STREAM * SIMD_WIDTH) // Number of codewords per stream
-#define CWS_PER_BATCH (MAX_STREAMS * CWS_PER_STREAM) // Number of codewords per batch
-
-
+__device__ __constant__ kernel_compH_cn d_compH_cn;
+__device__ __constant__ kernel_compH_vn d_compH_vn;
 
 int h_base_1_i1[46 * 68] = {
    307,    19,    50,   369,    -1,   181,   216,    -1,    -1,   317,   288,   109,    17,   357,    -1,   215,   106,    -1,   242,   180,   330,   346,     1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
@@ -85,151 +67,13 @@ int h_base_1_i1[46 * 68] = {
 	-1,   135,    -1,    -1,    -1,    -1,   149,    -1,    -1,    -1,    15,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0
 };
 
-// === CUDA Error Checking ===
-// Wrap any CUDA API call with CHECK(...) to automatically print error info with file and line number
-// Example usage: CHECK(cudaMalloc(&ptr, size));
-#define CUDA_CHECK(call) ErrorCheck((call), __FILE__, __LINE__)
-/**
- * @brief Checks CUDA error status and prints detailed diagnostic info if an error occurred.
- *
- * @param error_code The CUDA error code returned from a CUDA runtime API call.
- * @param filename   The name of the source file where the error occurred.
- * @param lineNumber The line number in the source file where the error occurred.
- * @return cudaError_t Returns the same error code passed in, for optional further handling.
- */
-inline cudaError_t ErrorCheck(cudaError_t error_code, const char *filename, int lineNumber)
-{
-  if (error_code != cudaSuccess) {
-    printf("[CUDA ERROR] %s (%d): %s\nOccurred in file: %s at line %d\n",
-           cudaGetErrorName(error_code),
-           error_code,
-           cudaGetErrorString(error_code),
-           filename,
-           lineNumber);
-  }
-  return error_code;
-}
-
-
-struct CompressedH_cn {
-    int* row_ptr;     
-    int* col_idx;     
-    int* shift_cn;    
-    int nnz;          
-};
-
-struct CompressedH_vn {
-    int* col_ptr;    
-    int* row_idx;     
-    int* shift_vn;    
-    int* csc2csr;     
-    int nnz; 
-};
-
-struct ldpc_params {
-    int rate;                     // Code rate
-    int bg_index;                   // Index of the 5G NR base graph (1 or 2)
-    int Z;                          // Lifting factor
-    int N;                          // Codeword length (N = nb * Z)
-    int K;                          // Number of information bits (K = (nb - mb) * Z)
-    int Kb;                         // Number of information bits in the base graph (Kb = nb - mb)
-    int mb;                         // Number of rows in the base graph (i.e., number of parity check equations)
-    int nb;                         // Number of columns in the base graph (i.e., total variable nodes in base graph)
-    int* H;                         // Pointer to the parity-check matrix H 
-    CompressedH_cn* compH_cn;       // Compressed representation of H for check-node (CN) processing (CSR)
-    CompressedH_vn* compH_vn;       // Compressed representation of H for variable-node (VN) processing (CSC)
-    int n_iterations;               // Maximum number of decoding iterations
-};
-
-struct kernel_compH_cn {
-    int row_ptr[BG1_ROW + 1];       // Row pointer array (CSR format)
-
-    int col_idx[BG1_MAX_NNZ];       // Column indices
-    int shift_cn[BG1_MAX_NNZ];      // Shift values for check nodes
-    int max_row_degree;             // Maximum row degree (max number of variable nodes connected to any check node)
-    int nnz;                        // Number of non-zero elements
-};
-
-struct kernel_compH_vn {
-    int col_ptr[BG1_COL + 1];       // Column pointer array (CSC format)
-
-    int row_idx[BG1_MAX_NNZ];       // Row indices
-    int shift_vn[BG1_MAX_NNZ];      // Shift values for variable nodes
-    int csc2csr[BG1_MAX_NNZ];       // Mapping from CSC to CSR indexing
-    int max_col_degree;             // Maximum column degree (max number of check nodes connected to any variable node)
-    int nnz;                        // Number of non-zero elements
-};
-
-
-struct host_memory {
-    // Large pinned (page-locked) host memory blocks
-    int8_t* h_big_pinned_llr;        // Pinned buffer for LLRs
-    uint8_t* h_big_hard_bits;        // Pinned buffer for hard bits
-
-    // Arrays of pointers
-    int8_t** h_pinned_llr;           // Pointers to initial LLR values in pinned memory
-    uint8_t** h_pinned_hard;         // Pointers to hard decision results in pinned memory
-};
-
-struct device_memory {
-    // Regular device memory
-    int8_t* d_big_init_llr;          // Large buffer for initial LLRs on device
-    uint32_t* d_big_app;             // Large buffer for APP values on device
-    int8_t* d_big_app_reordered;     // Large buffer for reordered APP values on device
-    uint32_t* d_big_c2v;             // Large buffer for check-to-variable messages on device
-    uint32_t* d_big_delta_c2v;       // Large buffer for delta (min-sum correction) in C2V messages on device
-    uint8_t* d_big_hard_bits;        // Large buffer for hard decision bits on device
-
-    // Arrays of device pointers
-    int8_t** d_init_llr;             // Pointers to initial LLR values on device
-    uint32_t** d_app;                // Pointers to APP values on device
-    int8_t** d_app_reordered;        // Pointers to reordered APP values on device
-    uint32_t** d_c2v;                // Pointers to check-to-variable (C2V) messages on device
-    uint32_t** d_delta_c2v;          // Pointers to delta C2V messages on device
-    uint8_t** d_hard_bits;           // Pointers to hard decision results on device
-};
-
-
-struct cuda_grid{
-    dim3 order_grid;    // Order kernel grid
-    dim3 order_block;   // Order kernel block
-    dim3 reorder_grid; // Reorder kernel grid
-    dim3 reorder_block; // Reorder kernel block
-    dim3 cnp_grid;      // CNP kernel grid
-    dim3 cnp_block;     // CNP kernel block
-    dim3 vnp_grid;      // VNP kernel grid
-    dim3 vnp_block;     // VNP kernel block
-    dim3 hard_grid;    // Hard decision kernel grid
-    dim3 hard_block;   // Hard decision kernel block
-    size_t cnp_shared_size; // Shared memory size for CNP kernel
-};
-
-
-// Global variables
-
-struct ldpc_params *params = NULL;
-
-// Create Streams and Graphs, and execute graphs
-cudaStream_t* cudaStreams = NULL;
-cudaGraph_t* cudaGraphs = NULL;
-cudaGraphExec_t* cudaGraphExecs = NULL;
-
-// Define host and device memory
-struct host_memory *host_mem = NULL;
-struct device_memory *dev_mem = NULL;
-
-__device__ __constant__ kernel_compH_cn d_compH_cn;
-__device__ __constant__ kernel_compH_vn d_compH_vn;
-
-
-
 // ===================================== Functions Declared ===================================
 struct CompressedH_cn* compress_H_matrix_cn(int *H, int mb, int nb);
 struct CompressedH_vn* compress_H_matrix_vn(int *H, int mb, int nb);
 void build_csc2csr(int nb, int *row_ptr, int *col_idx, int *col_ptr, int *row_idx, int *csc2csr);
 size_t copy_compH_cn_constant(const CompressedH_cn* compH_cn, int mb);
 size_t copy_compH_vn_constant(const CompressedH_vn* compH_vn, int nb);  
-void init_decoder_constant(int *H, int mb, int nb, CompressedH_cn *compH_cn, CompressedH_vn *compH_vn);
+void init_decoder_constant(int *H, int mb, int nb);
 template<typename T>
 T** allocate_global_memory(int size_in_bytes, T** out_big_block);
 template<typename T>
@@ -291,22 +135,12 @@ void build_ldpc_graph_per_stream(
     int Kb
 );
 void init_graph_BG1_R13_Z384(int n_iterations);
-int32_t LDPCinit_cuda();
-int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
-                         int8_t* p_llr,
-                         uint8_t* p_out,
-                         t_nrLDPC_time_stats* p_profiler,
-                         decode_abort_t* ab);
-static inline void nrLDPC_decoder_core( int8_t* p_llr,
-                                        uint8_t* p_out,
-                                        int num_cws);
 template<typename T>
 void free_global_memory(T** d_ptr, T* big_block);
 template<typename T>
 void free_pinned_memory(T** h_ptr, T* big_block);
 void free_device_mem_all();
-void free_host_mem_all() ;
-int32_t LDPCshutdown_cuda();
+void free_host_mem_all();
 
 
 // Compressed Sparse Row (CSR) format for check nodes
@@ -1159,16 +993,9 @@ void init_graph_BG1_R13_Z384(int n_iterations){
     }
 }
 
-extern int cuda_support_set;
 
-int32_t LDPCinit_cuda()
+extern "C" void ldpc_decoder_cuda_init()
 {
-    printf("Calling encoder initializations\n");
-    if (cuda_support_set == 0) {
-        cuda_support_init();
-        printf("CUDA LDPC decoder initiating\n");
-    }
-
     params = (struct ldpc_params*)malloc(sizeof(struct ldpc_params));
 
     // Decoder parameter configuration
@@ -1218,75 +1045,6 @@ int32_t LDPCinit_cuda()
     }
 }
 
-int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
-                         int8_t* p_llr,
-                         uint8_t* p_out,
-                         t_nrLDPC_time_stats* p_profiler,
-                         decode_abort_t* ab)
-{
-    e_nrLDPC_outMode outMode = p_decParams->outMode;
-    if ((p_decParams->R != 13) || (p_decParams->BG != 1) || (p_decParams->Z != 384)) { // format check
-        AssertFatal(false, "Format cuda not support, only support BG = 1, Zc = 384 and R = 13 right now\n");
-        return 0;
-    }
-    nrLDPC_decoder_core(
-        p_llr,
-        p_out,
-        p_decParams->n_segments
-    );
-
-    set_abort(ab, true);
-
-    return params->n_iterations;
-}
-
-static inline void nrLDPC_decoder_core( int8_t* p_llr,
-                                        uint8_t* p_out,
-                                        int num_cws
-                                    )
-{
-    const int num_batches = (num_cws + CWS_PER_BATCH - 1) / CWS_PER_BATCH;
-    int batch = 0;
-
-    while (batch < num_batches) {
-        printf("==================== Batch %d/%d =====================\n", batch + 1, num_batches);
-
-        int cw_start = batch * CWS_PER_BATCH;
-        int cw_in_this_batch = (batch == num_batches - 1) 
-                            ? (num_cws - cw_start) 
-                            : CWS_PER_BATCH;
-
-        // ===== Input: Host -> Pinned (整块拷贝 + padding if last batch) =====
-        size_t llr_bytes_to_copy = cw_in_this_batch * BG1_MAX_CW_LEN * sizeof(int8_t);
-        memcpy(host_mem->h_big_pinned_llr,
-            p_llr + cw_start * BG1_MAX_CW_LEN,
-            llr_bytes_to_copy);
-
-        // Padding only needed for last batch
-        if (batch == num_batches - 1 && cw_in_this_batch < CWS_PER_BATCH) {
-            size_t padding_bytes = (CWS_PER_BATCH - cw_in_this_batch) * BG1_MAX_CW_LEN * sizeof(int8_t);
-            memset((uint8_t*)host_mem->h_big_pinned_llr + llr_bytes_to_copy,
-                0,
-                padding_bytes);
-        }
-
-        // ===== GPU Execution =====
-        for (int s = 0; s < MAX_STREAMS; s++) {
-            CUDA_CHECK(cudaGraphLaunch(cudaGraphExecs[s], cudaStreams[s]));
-        }
-        CUDA_CHECK(cudaDeviceSynchronize());
-
-        // ===== Output: Pinned -> Host =====
-        size_t hard_bytes_to_copy = cw_in_this_batch * (BG1_MAX_INFO_LEN / 8) * sizeof(uint8_t);
-        memcpy(p_out + cw_start * (BG1_MAX_INFO_LEN / 8),
-            host_mem->h_big_hard_bits,
-            hard_bytes_to_copy);
-
-        batch++;
-    }
-}
-
-
 template<typename T>
 void free_global_memory(T** d_ptr, T* big_block) {
     if(d_ptr){
@@ -1334,9 +1092,9 @@ void free_host_mem_all() {
     free(host_mem);
 }
 
-// shutdown LDPC decoder and free resources
-int32_t LDPCshutdown_cuda(){
+extern "C" void ldpc_decoder_cuda_free(){
 
+    CUDA_CHECK(cudaDeviceSynchronize());
     // destroy graphs and streams
     for (int i = 0; i < MAX_STREAMS; i++) {
         CUDA_CHECK(cudaStreamDestroy(cudaStreams[i]));
@@ -1351,5 +1109,4 @@ int32_t LDPCshutdown_cuda(){
     free_device_mem_all();
     free_host_mem_all();
     free(params);
-    return 0;
 }

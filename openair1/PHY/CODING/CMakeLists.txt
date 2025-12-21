@@ -50,10 +50,10 @@ if (ENABLE_LDPC_CUDA)
   cuda_add_library(ldpc_cuda_GH MODULE
 	  #                   nrLDPC_decoder_LYC/nrLDPC_decoder_LYC.cu
     nrLDPC_decoder/kernel_test.cu  
-                   nrLDPC_decoder/nrLDPC_decoder_cuda_GH.c
+                  nrLDPC_decoder/nrLDPC_decoder_cuda_Z.c
+                  nrLDPC_decoder/nrLDPC_decoder_BG1_cuda_Z.cu
                    nrLDPC_decoder/nrLDPC_decoder.c
 		   nrLDPC_encoder/ldpc_encoder_optim8segmulti.c
-		   nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu
 		   nrLDPC_encoder/ldpc_encoder_cuda32.c
 		   nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
 		   nrLDPC_encoder/ldpc_input.cu
@@ -86,8 +86,8 @@ if (ENABLE_LDPC_CUDA)
 
   #version using HBM in general GPU
   cuda_add_library(ldpc_cuda MODULE
-    nrLDPC_decoder/nrLDPC_decoder_cuda.c
-    nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu
+    # nrLDPC_decoder/nrLDPC_decoder_cuda.c
+    nrLDPC_decoder/nrLDPC_decoder_BG1_cuda_Z.cu
     nrLDPC_encoder/ldpc_encoder_optim8segmulti.c  
     nrLDPC_decoder/kernel_test.cu  
     nrLDPC_encoder/ldpc_encoder_cuda32.c
