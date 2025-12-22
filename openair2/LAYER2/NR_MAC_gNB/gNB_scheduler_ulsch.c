@@ -38,6 +38,15 @@
 
 //#define SRS_IND_DEBUG
 
+uint16_t get_ul_bitmap(const frame_structure_t *fs, int slot)
+{
+  const int slot_period = slot % fs->numb_slots_period;
+  const tdd_bitmap_t *bm = &fs->period_cfg.tdd_slot_bitmap[slot_period];
+  /* For some reason, we only store the number of symbols if it's mixed */
+  const int num_ul_symbols = bm->slot_type == TDD_NR_MIXED_SLOT ? bm->num_ul_symbols : 14;
+  return SL_to_bitmap(14 - num_ul_symbols, num_ul_symbols);
+}
+
 /* \brief Get the number of UL TDAs that could be used in slot, reachable
  * via specific k2. The output parameter first_idx is a pointer to the first
  * suitable TDA, and the function returns the number of suitable TDAs, or 0. */
@@ -46,13 +55,7 @@ int get_num_ul_tda(gNB_MAC_INST *nrmac, int slot, int k2, const NR_tda_info_t **
   /* we assume that this function is mutex-protected from outside */
   NR_SCHED_ENSURE_LOCKED(&nrmac->sched_lock);
 
-  const frame_structure_t *fs = &nrmac->frame_structure;
-  const int slot_period = slot % fs->numb_slots_period;
-  const tdd_bitmap_t *bm = &fs->period_cfg.tdd_slot_bitmap[slot_period];
-  /* For some reason, we only store the number of symbols if it's mixed */
-  const int num_ul_symbols = bm->slot_type == TDD_NR_MIXED_SLOT ? bm->num_ul_symbols : 14;
-  const uint16_t ul_bitmap = SL_to_bitmap(14 - num_ul_symbols, num_ul_symbols);
-
+  const uint16_t ul_bitmap = get_ul_bitmap(&nrmac->frame_structure, slot);
   *first_idx = NULL;
   FOR_EACH_SEQ_ARR(NR_tda_info_t *, tda, &nrmac->ul_tda) {
     DevAssert(tda->valid_tda);
