@@ -328,6 +328,17 @@ one_measurement_t test_ldpc(short max_iterations,
     }
   }
 
+// FILE *fp1;
+//     fp1 = fopen("test_input.txt", "w");
+// for (int j = 0; j < n_segments; j++) {
+//     for (int k = 0; k < 8448/8; k++) {
+//         fprintf(fp1, "%d ", test_input[j][k]);
+//         if ((j * 8448/8 + k + 1) % 16 == 0)
+//             fprintf(fp1, "\n");
+//     }
+// }
+//   fclose(fp1);
+
   encoder_implemparams_t impp = {.Zc = Zc, .Kb = Kb, .BG = BG, .K = K};
   impp.gen_code = gen_code;
   impp.tparity = &tparity;

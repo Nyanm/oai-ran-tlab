@@ -55,12 +55,21 @@ int32_t LDPCinit_cuda()
     }
 }
 
+
+uint8_t reverse_bits_test(uint8_t b) {
+    b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+    b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+    b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+    return b;
+}
+
+
 static inline void nrLDPC_decoder_core( int8_t* p_llr,
                                         uint8_t* p_out,
                                         int num_cws
                                     )
 {
-    const int num_batches = (num_cws + CWS_PER_BATCH - 1) / CWS_PER_BATCH;
+    int num_batches = (num_cws + CWS_PER_BATCH - 1) / CWS_PER_BATCH;
     int batch = 0;
 
     while (batch < num_batches) {
@@ -71,7 +80,7 @@ static inline void nrLDPC_decoder_core( int8_t* p_llr,
                             ? (num_cws - cw_start) 
                             : CWS_PER_BATCH;
 
-        // ===== Input: Host -> Pinned (整块拷贝 + padding if last batch) =====
+        // ===== Input: Host -> Pinned  =======
         size_t llr_bytes_to_copy = cw_in_this_batch * BG1_MAX_CW_LEN * sizeof(int8_t);
         memcpy(host_mem->h_big_pinned_llr,
             p_llr + cw_start * BG1_MAX_CW_LEN,
@@ -92,10 +101,31 @@ static inline void nrLDPC_decoder_core( int8_t* p_llr,
         CUDA_CHECK(cudaDeviceSynchronize());
 
         // ===== Output: Pinned -> Host =====
-        size_t hard_bytes_to_copy = cw_in_this_batch * (BG1_MAX_INFO_LEN / 8) * sizeof(uint8_t);
-        memcpy(p_out + cw_start * (BG1_MAX_INFO_LEN / 8),
-            host_mem->h_big_hard_bits,
-            hard_bytes_to_copy);
+        // size_t hard_bytes_to_copy = cw_in_this_batch * (BG1_MAX_INFO_LEN / 8) * sizeof(uint8_t);
+        // memcpy(p_out + cw_start * (BG1_MAX_INFO_LEN / 8),
+        //     host_mem->h_big_hard_bits,
+        //     hard_bytes_to_copy);
+
+        for (int i = 0; i < cw_in_this_batch; ++i) {
+            memcpy(p_out + i * BG1_MAX_INFO_LEN,
+                host_mem->h_big_hard_bits + i * BG1_MAX_INFO_LEN / 8,
+                BG1_MAX_INFO_LEN / 8);
+        }
+
+
+        for (int i = 0; i < cw_in_this_batch*BG1_MAX_INFO_LEN; ++i) {
+            p_out[i] = reverse_bits_test(p_out[i]);
+        }
+
+        // FILE*f_in;
+        // f_in = fopen("ldpc_input.bin","wb");
+        // fwrite(p_llr + cw_start * BG1_MAX_CW_LEN,sizeof(int8_t),cw_in_this_batch * BG1_MAX_CW_LEN,f_in);
+        // fclose(f_in);
+
+        // FILE*f_out;
+        // f_out = fopen("ldpc_output.bin","wb");
+        // fwrite(p_out + cw_start * (BG1_MAX_INFO_LEN / 8),sizeof(uint8_t),cw_in_this_batch * (BG1_MAX_INFO_LEN / 8),f_out);
+        // fclose(f_out);
 
         batch++;
     }
@@ -112,6 +142,7 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
         AssertFatal(false, "Format cuda not support, only support BG = 1, Zc = 384 and R = 13 right now\n");
         return 0;
     }
+    // nrLDPC_outMode_BIT is default 
     if(outMode != nrLDPC_outMode_BIT && outMode != nrLDPC_outMode_BITINT8) {
         AssertFatal(false, "Only support output mode BIT and BITINT8 in cuda decoder\n");
         return 0;

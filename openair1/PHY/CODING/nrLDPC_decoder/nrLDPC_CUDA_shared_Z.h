@@ -52,7 +52,7 @@ inline cudaError_t ErrorCheck(cudaError_t error_code, const char *filename, int 
 #define BG1_R13_Z384_Kb 22
 
 
-#define MAX_STREAMS 6 // Maximum number of CUDA streams
+#define MAX_STREAMS 4 // Maximum number of CUDA streams
 #define GROUPS_PER_STREAM 4 // Number of groups per stream
 #define CWS_PER_STREAM (GROUPS_PER_STREAM * SIMD_WIDTH) // Number of codewords per stream
 #define CWS_PER_BATCH (MAX_STREAMS * CWS_PER_STREAM) // Number of codewords per batch
