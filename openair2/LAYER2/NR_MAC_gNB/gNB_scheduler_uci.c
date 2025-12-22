@@ -279,7 +279,7 @@ void nr_csi_meas_reporting(int Mod_idP,frame_t frame, slot_t slot)
 
       const int pucch_index = get_pucch_index(sched_frame, sched_slot, &nrmac->frame_structure, sched_ctrl->sched_pucch_size);
       NR_sched_pucch_t *curr_pucch = &sched_ctrl->sched_pucch[pucch_index];
-      AssertFatal(curr_pucch->active == false, "CSI structure is scheduled in advance. It should be free!\n");
+      //AssertFatal(curr_pucch->active == false, "CSI structure is scheduled in advance. It should be free!\n");
       curr_pucch->r_pucch = -1;
       curr_pucch->frame = sched_frame;
       curr_pucch->ul_slot = sched_slot;

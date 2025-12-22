@@ -1000,7 +1000,9 @@ static NR_ServingCellConfigCommon_t *get_scc_config(configmodule_interface_t *cf
     LOG_I(RRC, "absoluteFrequencySSB %ld corresponds to %lu Hz\n", *frequencyInfoDL->absoluteFrequencySSB, ssb_freq);
     if (IS_SA_MODE(get_softmodem_params()))
       check_ssb_raster(ssb_freq, *frequencyInfoDL->frequencyBandList.list.array[0], *scc->ssbSubcarrierSpacing);
+    LOG_I(RRC, "mjoang before ssb_bitmap 0x%" PRIX64 "\n", ssb_bitmap);  
     fix_scc(scc, ssb_bitmap);
+    LOG_I(RRC, "mjoang after ssb_bitmap 0x%" PRIX64 "\n", ssb_bitmap);  
   }
   nr_rrc_config_ul_tda(scc, minRXTXTIME, do_SRS);
 

@@ -179,6 +179,7 @@ void schedule_nr_mib(module_id_t module_idP, frame_t frameP, slot_t slotP, nfapi
               if ((ssb_start_symbol / 14) == rel_slot) {
                 int beam_index = get_fapi_beamforming_index(gNB, i_ssb);
                 NR_beam_alloc_t beam = beam_allocation_procedure(&gNB->beam_info, frameP, slotP, beam_index, slots_per_frame);
+                LOG_I(NR_MAC, "MIBa    f %04d.%02d b %d:%d i %d\n", frameP, slotP, beam_index, beam.idx, i_ssb);
                 AssertFatal(beam.idx >= 0, "Cannot allocate SSB %d in any available beam\n", i_ssb);
                 const int prb_offset = offset_pointa >> scs;
                 schedule_ssb(frameP, slotP, scc, dl_req, i_ssb, beam_index, ssbSubcarrierOffset, offset_pointa, mib_pdu);
@@ -211,6 +212,7 @@ void schedule_nr_mib(module_id_t module_idP, frame_t frameP, slot_t slotP, nfapi
               if ((ssb_start_symbol / 14) == rel_slot) {
                 int beam_index = get_fapi_beamforming_index(gNB, i_ssb);
                 NR_beam_alloc_t beam = beam_allocation_procedure(&gNB->beam_info, frameP, slotP, beam_index, slots_per_frame);
+                LOG_I(NR_MAC, "MIBb    f %04d.%02d b %d:%d i %d\n", frameP, slotP, beam_index, beam.idx, i_ssb);
                 AssertFatal(beam.idx >= 0, "Cannot allocate SSB %d in any available beam\n", i_ssb);
                 const int prb_offset = offset_pointa >> scs;
                 schedule_ssb(frameP, slotP, scc, dl_req, i_ssb, beam_index, ssbSubcarrierOffset, offset_pointa, mib_pdu);
@@ -243,6 +245,7 @@ void schedule_nr_mib(module_id_t module_idP, frame_t frameP, slot_t slotP, nfapi
               if ((ssb_start_symbol / 14) == rel_slot) {
                 int beam_index = get_fapi_beamforming_index(gNB, i_ssb);
                 NR_beam_alloc_t beam = beam_allocation_procedure(&gNB->beam_info, frameP, slotP, beam_index, slots_per_frame);
+                LOG_D(NR_MAC, "MIB     f %04d.%02d b %d:%d i %d\n", frameP, slotP, beam_index, beam.idx, i_ssb);
                 AssertFatal(beam.idx >= 0, "Cannot allocate SSB %d in any available beam\n", i_ssb);
                 const int prb_offset = offset_pointa >> (scs-2); // reference 60kHz
                 schedule_ssb(frameP, slotP, scc, dl_req, i_ssb, beam_index, ssbSubcarrierOffset, offset_pointa, mib_pdu);
@@ -556,6 +559,7 @@ void schedule_nr_sib1(module_id_t module_idP,
       const int n_slots_frame = gNB_mac->frame_structure.numb_slots_frame;
       int beam_index = get_fapi_beamforming_index(gNB_mac, i);
       NR_beam_alloc_t beam = beam_allocation_procedure(&gNB_mac->beam_info, frameP, slotP, beam_index, n_slots_frame);
+      LOG_D(NR_MAC, "SIB1    f %04d.%02d b %d:%d i %d\n", frameP, slotP, beam_index, beam.idx, type0_PDCCH_CSS_config->ssb_index);
       AssertFatal(beam.idx >= 0, "Cannot allocate SIB1 corresponding to SSB %d in any available beam\n", i);
       LOG_D(NR_MAC,"(%d.%d) SIB1 transmission: ssb_index %d\n", frameP, slotP, type0_PDCCH_CSS_config->ssb_index);
 
@@ -664,6 +668,7 @@ static void other_sib_sched_control(module_id_t module_idP,
   NR_ServingCellConfigCommon_t *scc = gNB_mac->common_channels[0].ServingCellConfigCommon;
   int n_slots_frame = gNB_mac->frame_structure.numb_slots_frame;
   NR_beam_alloc_t beam = beam_allocation_procedure(&gNB_mac->beam_info, frame, slot, beam_index, n_slots_frame);
+  LOG_I(NR_MAC, "SIBi    f %04d.%02d b %d:%d i %d\n", frame, slot, beam_index, beam.idx, payload_idx);
   AssertFatal(beam.idx >= 0, "Cannot allocate otherSIB corresponding for SSB number %d in any available beam\n", beam_index);
   LOG_D(NR_MAC, "(%d.%d) otherSIB payload %d transmission for ssb number %d\n", frame, slot, payload_idx, beam_index);
 

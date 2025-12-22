@@ -789,6 +789,7 @@ static void pf_dl(module_id_t module_id,
     while (rbStart + max_rbSize <= rbStop && !(rballoc_mask[rbStart + max_rbSize + bwp_start] & slbitmap))
       max_rbSize++;
 
+
     if (max_rbSize < min_rbSize) {
       LOG_D(NR_MAC,
             "(%d.%d) Cannot schedule RNTI %04x, rbStart %d, rbSize %d, rbStop %d\n",
@@ -1023,6 +1024,12 @@ void nr_schedule_ue_spec(module_id_t module_id,
 
   if (!is_dl_slot(slot, &gNB_mac->frame_structure))
     return;
+  
+  if (gNB_mac->type0_PDCCH_CSS_config[2].active == true)
+  {
+    LOG_D(NR_MAC,"skip %d.%d\n",frame, slot);
+    return;
+  }
 
   /* PREPROCESSOR */
   gNB_mac->pre_processor_dl(module_id, frame, slot);
