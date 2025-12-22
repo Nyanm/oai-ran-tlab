@@ -54,7 +54,7 @@ void send_srb0_rrc(int ue_id, const uint8_t *sdu, sdu_size_t sdu_len, void *data
 void nr_ue_init_mac(NR_UE_MAC_INST_t *mac)
 {
   LOG_I(NR_MAC, "[UE%d] Initializing MAC\n", mac->ue_id);
-  nr_ue_reset_sync_state(mac);
+  nr_ue_reset_sync_state(mac, false);
   mac->get_sib1 = false;
   for (int i = 0; i < MAX_SI_GROUPS; i++)
     mac->get_otherSI[i] = false;
@@ -77,6 +77,11 @@ void nr_ue_init_mac(NR_UE_MAC_INST_t *mac)
   nr_timer_stop(&mac->scheduling_info.sr_DelayTimer);
 
   memset(&mac->ssb_measurements, 0, sizeof(mac->ssb_measurements));
+  for (int i = 0; i < MAX_NB_SSB; i++) {
+    mac->ssb_measurements[i].ssb_rsrp_dBm = INT_MIN;
+    mac->ssb_measurements[i].ssb_sinr_dB = INT_MIN;
+  }
+
   memset(&mac->ul_time_alignment, 0, sizeof(mac->ul_time_alignment));
   memset(&mac->ssb_list, 0, sizeof(mac->ssb_list));
 
@@ -112,10 +117,10 @@ void nr_ue_send_synch_request(NR_UE_MAC_INST_t *mac, module_id_t module_id, int 
   mac->if_module->synch_request(&mac->synch_request);
 }
 
-void nr_ue_reset_sync_state(NR_UE_MAC_INST_t *mac)
+void nr_ue_reset_sync_state(NR_UE_MAC_INST_t *mac, bool reconf)
 {
   // reset synchornization status
-  mac->state = UE_NOT_SYNC;
+  mac->state = reconf ? UE_NOT_SYNC_RECONF : UE_NOT_SYNC;
   mac->ra.ra_state = nrRA_UE_IDLE;
 }
 
@@ -198,6 +203,7 @@ void reset_mac_inst(NR_UE_MAC_INST_t *nr_mac)
 
   // stop any ongoing RACH procedure
   if (nr_mac->ra.RA_active) {
+    nr_mac->msg3_C_RNTI = false;
     nr_mac->ra.ra_state = nrRA_UE_IDLE;
     nr_mac->ra.RA_active = false;
   }

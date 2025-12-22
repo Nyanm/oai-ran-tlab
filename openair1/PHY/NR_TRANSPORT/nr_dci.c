@@ -51,11 +51,11 @@ static void nr_pdcch_scrambling(uint32_t *in, uint32_t size, uint32_t Nid, uint3
     out[i] = in[i] ^ seq[i];
 }
 
-static void nr_generate_dci(PHY_VARS_gNB *gNB,
-                            nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_pdu_rel15,
-                            int txdataF_offset,
-                            NR_DL_FRAME_PARMS *frame_parms,
-                            int slot)
+void nr_generate_dci(PHY_VARS_gNB *gNB,
+                     const nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_pdu_rel15,
+                     int txdataF_offset,
+                     NR_DL_FRAME_PARMS *frame_parms,
+                     int slot)
 {
   // fill reg list per symbol
   int reg_list[MAX_DCI_CORESET][NR_MAX_PDCCH_AGG_LEVEL * NR_NB_REG_PER_CCE];
@@ -83,7 +83,6 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
     int bitmap = SL_to_bitmap(cset_start_symb, pdcch_pdu_rel15->DurationSymbols);
     int beam_nb = beam_index_allocation(gNB->enable_analog_das,
                                         dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                        &gNB->gNB_config.analog_beamforming_ve,
                                         &gNB->common_vars,
                                         slot,
                                         frame_parms->symbols_per_slot,
@@ -220,15 +219,6 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
 
           } else { // DCI payload
             txdataF[l * frame_parms->ofdm_symbol_size + k] = c16mulRealShift(mod_dci[dci_idx], amp, 15);
-#ifdef DEBUG_DCI
-            LOG_I(NR_PHY_DCI,
-                  "PDCCH: l %d position %d => (%d,%d)\n",
-                  l,
-                  k,
-		  		  txdataF[l * frame_parms->ofdm_symbol_size + k].r,
-		  txdataF[l * frame_parms->ofdm_symbol_size + k].i;
-#endif
-
             dci_idx++;
           }
 
@@ -246,16 +236,3 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
           *(unsigned long long *)dci_pdu->Payload);
   } // for (int d=0;d<pdcch_pdu_rel15->numDlDci;d++)
 }
-
-void nr_generate_dci_top(processingData_L1tx_t *msgTx, int slot, int txdataF_offset)
-{
-  PHY_VARS_gNB *gNB = msgTx->gNB;
-  NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
-  start_meas(&gNB->dci_generation_stats);
-  for (int i = 0; i < msgTx->num_ul_pdcch; i++)
-    nr_generate_dci(msgTx->gNB, &msgTx->ul_pdcch_pdu[i].pdcch_pdu.pdcch_pdu_rel15, txdataF_offset, frame_parms, slot);
-  for (int i = 0; i < msgTx->num_dl_pdcch; i++)
-    nr_generate_dci(msgTx->gNB, &msgTx->pdcch_pdu[i].pdcch_pdu_rel15, txdataF_offset, frame_parms, slot);
-  stop_meas(&gNB->dci_generation_stats);
-}
-

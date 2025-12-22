@@ -20,7 +20,6 @@
  */
 
 #include "nr_phy_init.h"
-#include "PHY/phy_extern_nr_ue.h"
 #include "openair1/PHY/defs_RU.h"
 #include "openair1/PHY/impl_defs_nr.h"
 #include "common/utils/LOG/vcd_signal_dumper.h"
@@ -157,6 +156,9 @@ void init_nr_prs_ue_vars(PHY_VARS_NR_UE *ue)
       for (int j=0; j<fp->nb_antennas_rx; j++) {
         prs_vars[idx]->prs_resource[k].prs_meas[j] = malloc16_clear(sizeof(prs_meas_t));
         AssertFatal((prs_vars[idx]->prs_resource[k].prs_meas[j]!=NULL), "%s: PRS measurements malloc failed for gNB_id %d, rx_ant %d\n", __FUNCTION__, idx, j);
+        prs_meas_t *m = prs_vars[idx]->prs_resource[k].prs_meas[j];
+        m->next_dl_toa = m->dl_toa;
+        pthread_mutex_init(&m->dl_toa_mtx, NULL);
       }
     }
   }
@@ -484,7 +486,6 @@ void clean_UE_harq(PHY_VARS_NR_UE *UE)
   }
   for (int harq_pid = 0; harq_pid < NR_MAX_ULSCH_HARQ_PROCESSES; harq_pid++) {
     NR_UL_UE_HARQ_t *ul_harq_process = &UE->ul_harq_processes[harq_pid];
-    ul_harq_process->tx_status = NEW_TRANSMISSION_HARQ;
     ul_harq_process->round = 0;
   }
 }
@@ -519,17 +520,6 @@ static void sl_generate_psbch_dmrs_qpsk_sequences(PHY_VARS_NR_UE *UE, struct com
     idx = (((sl_dmrs_sequence[(m << 1) >> 5]) >> ((m << 1) & 0x1f)) & 3);
     modulated_dmrs_sym[m].r = mod_table[idx].r;
     modulated_dmrs_sym[m].i = mod_table[idx].i;
-
-#ifdef SL_DEBUG_INIT_DATA
-    printf("m:%d gold seq: %d b0-b1: %d-%d DMRS Symbols: %d %d\n",
-           m,
-           sl_dmrs_sequence[(m << 1) >> 5],
-           (((sl_dmrs_sequence[(m << 1) >> 5]) >> ((m << 1) & 0x1f)) & 1),
-           (((sl_dmrs_sequence[((m << 1) + 1) >> 5]) >> (((m << 1) + 1) & 0x1f)) & 1),
-           modulated_dmrs_sym[m].r,
-           modulated_dmrs_sym[m].i);
-    printf("idx:%d, qpsk_table.r:%d, qpsk_table.i:%d\n", idx, mod_table[idx].r, mod_table[idx].i);
-#endif
   }
 
 #ifdef SL_DUMP_INIT_SAMPLES

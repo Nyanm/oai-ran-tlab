@@ -38,7 +38,7 @@ The actual scheduler implementation can be found in functions `pf_dl()` and
 [`gNB_scheduler_ulsch.c`](../../openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_ulsch.c)
 (for UL), respectively.
 
-## PDDCH aggregation level
+## PDCCH aggregation level
 
 PDCCH aggregation level is selected using closed loop controller, where DL HARQ
 feedback is the controller feedback signal. It is used to increment `pdcch_cl_adjust`
@@ -60,7 +60,7 @@ in aggregation level 2 which translates to `uess_agg_levels` set to `[0, 2, 0,
 Say we have 90% PDCCH success rate at aggregation level 1, `pdcch_cl_adjust` will stay at 0
 for most of the time. 2 consecutive PDCCH failures will not result in increasing the aggregation
 level (because (0.05 + 0.05) * 4 = 0.4 which is closer to 0 than to 1). If PDCCH fails 3 times
-in a row the aggregation level will change to 2 and hopefully back to 1 once more PDDCH successes
+in a row the aggregation level will change to 2 and hopefully back to 1 once more PDCCH successes
 happen.
 
 ### Example 2
@@ -78,7 +78,7 @@ available in the the file `nrMAC-stats.log` in the same directory in which
 Example:
 
 ```
-UE RNTI 2460 CU-UE-ID 2 in-sync PH 28 dB PCMAX 24 dBm, average RSRP -74 (8 meas)
+UE RNTI 2460 CU-UE-ID 2 in-sync PH 28 dB PCMAX 24 dBm, average RSRP -74 (8 meas), average SINR 40.0 (32 meas)
 UE 2460: CQI 15, RI 2, PMI (14,1)
 UE 2460: UL-RI 2 TPMI 0
 UE 2460: dlsch_rounds 32917/5113/1504/560, dlsch_errors 211, pucch0_DTX 1385, BLER 0.19557 MCS (1) 23 CCE fail 3
@@ -103,6 +103,8 @@ In the first line,
 * `RSRP` (`-74`): measured power of the DL reference signals at the UE. >-80dBm
   you should have full DL throughput. <-95 dBm, you are very limited in terms
   of connectivity.
+* `SINR` (`40.0`): measured signal to interference and noise ratio of the SSB
+  received at the UE. Maximum value that can be reported by the UE is 40.0 dB.
 
 The second and third line reflect channel state information (CSI) as
 reported by the UE, and only appear if CSI-RS/SRS are enabled and _received_
@@ -181,7 +183,7 @@ See [nFAPI documentation](../nfapi.md) or [Aerial
 tutorial](../Aerial_FAPI_Split_Tutorial.md) for information about the (n)FAPI
 split.
 
-See [F1 documentation](../F1-design.md) for information about the F1 split.
+See [F1 documentation](../F1AP/F1-design.md) for information about the F1 split.
 
 ## MAC scheduler-related configuration options
 
@@ -234,6 +236,9 @@ In the `MACRLCs` section of the gNB/DU configuration file:
    case RSSI reaches the threshold and prevents ADC railing. Unit depends on
    RSSI reporting config.
 * `pucch_RSSI_Threshold`: Same as above but for PUCCH
+* `stats_max_ue` (default 8): maximum number of UEs to show in periodical
+  stats; beyond this number, periodical statistics will be disabled (it can
+  still be seen in `nrMAC_stats.log`. Use `0` to disable periodical stats.
 
 In the `gNBs` section of the gNB/DU configuration file: some of the parameters
 affect RRC configuration (CellGroupConfig) of a UE, and are therefore listed
@@ -255,7 +260,7 @@ configuration](../RRC/rrc-usage.md) as well for SIB configuration.
 * `do_CSIRS` (default 0): flag whether to use channel-state information
   reference signal (CSI-RS)
 * `do_SRS` (default 0): flag whether to use sounding reference signal (SRS)
-* `do_SINR` (default 0): flag whether to enable CSI reporting of SSB-SINR (introduced in rel16)
+* `CSI_report_type` (default `ssb_rsrp`): parameter to enable different CSI reporting (options: `ssb_rsrp`, `ssb_sinr` and `cri_rsrp`)
   Default setting of CSI reporting quantity is SSB-RSRP.
 * `min_rxtxtime` (default 2): minimum feedback time for UE to respond to
   transmissions (k1 and k2 in 3GPP spec)
@@ -279,14 +284,17 @@ configuration](../RRC/rrc-usage.md) as well for SIB configuration.
 - `du_sibs` (default `[]`): list of SIBs to transmit in the cell. Currently,
   SIB19 (for NTN) is supported.
 
-| DL MIMO                      |`do_CSIRS`|`do_SINR`| CSI report Quantity                               |
-| ---------------------------- | -------- | ------- | --------------------------------------------------|
-| OFF (pdsch_AntennaPorts = 1) |   0      |  0      | SSB-RSRP                                          |
-| OFF (pdsch_AntennaPorts = 1) |   0      |  1      | SSB-SINR                                          |
-| OFF (pdsch_AntennaPorts = 1) |   1      |  0      | CSI-Reference signal  RSRP                        |
-| OFF (pdsch_AntennaPorts = 1) |   1      |  1      | CSI-Reference signal  SINR (not supported yet)    |
-| ON (pdsch_AntennaPorts > 1)  |   1      |  0      | cri-RI-PMI-CQI                                    |
+| DL MIMO                        |`do_CSIRS`|`CSI_report_type`| CSI report Quantity                               |
+| ------------------------------ | -------- | --------------- | --------------------------------------------------|
+| any                            |   any    |  `ssb_rsrp`     | SSB-RSRP                                          |
+| any                            |   0      |  `cri_rsrp`     | SSB-RSRP (no CSI-RS configured)                   |
+| any                            |   1      |  `cri_rsrp`     | CRI-RSRP                                          |
+| any                            |   any    |  `ssb_sinr`     | SSB-SINR                                          |
+| ON (`pdsch_AntennaPorts` > 1)  |   1      |  any            | cri-RI-PMI-CQI                                    |
 
+
+Note that activating `cri-RI-PMI-CQI` will result in that report to be produced
+in addition to either `SSB-SINR`, `SSB-RSRP` or `CRI-RSRP`.
 DL-MIMO is configured using following parameters:
 `pdsch_AntennaPorts_XP` , `pdsch_AntennaPorts_N1` , `pdsch_AntennaPorts_N2`, `maxMIMO_layers`
 (see also [`RUNMODEM.md`](../RUNMODEM.md))
@@ -402,3 +410,39 @@ pattern2: {
     nrofUplinkSymbols2             = 0;
 };
 ```
+
+#### UL-heavy TDD patterns
+
+"UL-heavy TDD patterns", i.e., TDD patterns that have many UL slots are
+supported. Examples for such patterns would be DSUUU or DDDSUUUUUU.
+
+Note that you should increase the aggregation level candidates as described in
+[the corresponding section above](#pdcch-aggregation-level). This is because the
+scheduler has to schedule multiple DCIs in a single DL slots for multiple UL
+slots. As a suggestion, you could try `uess_agg_levels = [4, 2, 2, 0, 0]`.
+
+## Multiple Dedicated BWPs
+
+A maximum of 4 dedicated BWPs can be configured for a UE per standard, but only
+1 BWP can be active in UL and DL direction at a given time.  In the code we
+only configure a single BWP for the UE at a given time and we would switch by
+reconfiguring this BWP. All this procedure is transparent for users and LOGs
+mark BWP switching according to the configuration file enumeration.  It is
+possible to configure multiple dedicated BWPs and 1st active BWP via
+configuration file.
+
+### Setup of the Configuration files ##
+
+In the configuration file you have the option to select the 1st active BWP, the
+BWP location and SCS of each BWP in the following way (example with 2
+additional BWPs):
+
+```
+    first_active_bwp = 1;
+    bwp_list = ({ scs = 1; bwpStart = 0; bwpSize = 106;},
+                { scs = 1; bwpStart = 0; bwpSize = 24;});
+```
+
+This example configures 3 additional BWPs, with IDs from 1 to 3. A similar
+example can be found in configuration file
+`ci-scripts/conf_files/gnb-du.sa.band78.106prb.usrpb200.conf` tested in CI.

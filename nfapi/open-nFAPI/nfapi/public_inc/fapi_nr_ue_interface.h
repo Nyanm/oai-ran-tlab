@@ -24,6 +24,7 @@
 #include "PHY/impl_defs_top.h"
 #include "PHY/impl_defs_nr.h"
 #include "common/utils/nr/nr_common.h"
+#include "executables/position_interface.h"
 
 #define NFAPI_UE_MAX_NUM_CB 8
 #define NFAPI_MAX_NUM_UL_PDU 255
@@ -49,21 +50,31 @@ typedef enum {
   NFAPI_NR_FORMAT_0_1_AND_1_1,
 } nfapi_nr_dci_formats_e;
 
+typedef enum {
+  NFAPI_NR_CSI_MEAS,
+  NFAPI_NR_SS_MEAS
+} nfapi_nr_meas_type_e;
 
 typedef struct {
-  uint32_t rsrp;
+  uint32_t gNB_index;
+  uint16_t Nid_cell;
+  nfapi_nr_meas_type_e meas_type;
+  bool is_neighboring_cell;
+  int ssb_index;
   int rsrp_dBm;
+  float sinr_dB;  
   uint8_t rank_indicator;
   uint16_t i1;
   uint8_t i2;
   uint8_t cqi;
   rlm_t radiolink_monitoring;
-} fapi_nr_csirs_measurements_t;
+} fapi_nr_l1_measurements_t;
 
 typedef struct {
   /// frequency_domain_resource;
   uint8_t frequency_domain_resource[6];
   uint8_t StartSymbolIndex;
+  uint16_t StartSymbolBitmap;
   uint8_t duration;
   uint8_t CceRegMappingType; //  interleaved or noninterleaved
   uint8_t RegBundleSize;     //  valid if CCE to REG mapping type is interleaved type
@@ -126,11 +137,8 @@ typedef struct {
   uint8_t ssb_length;
   uint16_t cell_id;
   uint16_t ssb_start_subcarrier;
-  short rsrp_dBm;
   long arfcn;
   rlm_t radiolink_monitoring; // -1 no monitoring, 0 out_of_sync, 1 in_sync
-  // SINR value times 10 as reporting granularity is 0.5
-  float sinr_dB;
 } fapi_nr_ssb_pdu_t;
 
 typedef struct {
@@ -145,7 +153,7 @@ typedef struct {
     fapi_nr_pdsch_pdu_t pdsch_pdu;
     fapi_nr_ssb_pdu_t ssb_pdu;
     fapi_nr_sib_pdu_t sib_pdu;
-    fapi_nr_csirs_measurements_t csirs_measurements;
+    fapi_nr_l1_measurements_t l1_measurements;
   };
 } fapi_nr_rx_indication_body_t;
 
@@ -470,9 +478,7 @@ typedef struct {
   uint16_t start_rb;
   uint16_t number_symbols;
   uint16_t start_symbol;
-  // TODO this is a workaround to make it work
-  // implementation is also a bunch of workarounds
-  uint16_t rb_offset;
+  uint8_t refPoint;
   uint16_t dlDmrsSymbPos;  
   uint8_t dmrsConfigType;
   uint8_t prb_bundling_size_ind;
@@ -557,18 +563,26 @@ typedef struct {
 } fapi_nr_ta_command_pdu;
 
 typedef struct {
+  int epoch_hfn;
   int epoch_sfn;
   int epoch_subframe;
 
+  // orbital angular velocity in rad/ms
+  double omega;
+  // satellite position at epoch time
+  position_t pos_sat_0;
+  // satellite position at 90° orbit
+  position_t pos_sat_90;
+
+  // N_common_ta_adj represents common round-trip-time between gNB and SAT received in SIB19 (ms)
+  double N_common_ta_adj;
+  // drift rate of common ta in µs/s
+  double N_common_ta_drift;
+  // change rate of common ta drift in µs/s²
+  double N_common_ta_drift_variant;
+
   // cell scheduling offset expressed in terms of 15kHz SCS
   long cell_specific_k_offset;
-
-  // ntn_total_time_advance_ms represents the complete round-trip-time between gNB and UE via SAT
-  double ntn_total_time_advance_ms;
-  // drift rate of ntn_total_time_advance_ms in µs/s
-  double ntn_total_time_advance_drift;
-  // change rate of ntn_total_time_advance_ms drift in µs/s²
-  double ntn_total_time_advance_drift_variant;
 } fapi_nr_dl_ntn_config_command_pdu;
 
 typedef struct {
@@ -692,7 +706,6 @@ typedef struct
   uint8_t restricted_set_config;//PRACH restricted set config Value: 0: unrestricted 1: restricted set type A 2: restricted set type B
   uint8_t num_prach_fd_occasions;//Corresponds to the parameter 𝑀 in [38.211, sec 6.3.3.2] which equals the higher layer parameter msg1FDM Value: 1,2,4,8
   fapi_nr_num_prach_fd_occasions_t* num_prach_fd_occasions_list;
-  uint8_t ssb_per_rach;//SSB-per-RACH-occasion Value: 0: 1/8 1:1/4, 2:1/2 3:1 4:2 5:4, 6:8 7:16
   uint8_t prach_multiple_carriers_in_a_band;//0 = disabled 1 = enabled
   uint8_t root_seq_computed; // flag set and used only in PHY to indicate if table is computed with this config
 

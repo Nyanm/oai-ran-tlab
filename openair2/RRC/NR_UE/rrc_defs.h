@@ -192,6 +192,20 @@ typedef enum {
 
 typedef enum { RB_NOT_PRESENT, RB_ESTABLISHED, RB_SUSPENDED } NR_RB_status_t;
 
+typedef struct l3_measurements_s {
+  float ssb_filter_coeff_rsrp;
+  float csi_RS_filter_coeff_rsrp;
+  meas_t serving_cell;
+  long trigger_to_measid;
+  long trigger_quantity;
+  long rs_type;
+  int reports_sent;
+  int max_reports;
+  long report_interval_ms;
+  NR_timer_t TA2;
+  NR_timer_t periodic_report_timer;
+} l3_measurements_t;
+
 typedef struct rrcPerNB {
   NR_MeasObjectToAddMod_t *MeasObj[MAX_MEAS_OBJ];
   NR_ReportConfigToAddMod_t *ReportConfig[MAX_MEAS_CONFIG];
@@ -201,6 +215,7 @@ typedef struct rrcPerNB {
   NR_MeasGapConfig_t *measGapConfig;
   NR_UE_RRC_SI_INFO SInfo;
   NR_RSRP_Range_t s_measure;
+  l3_measurements_t l3_measurements;
 } rrcPerNB_t;
 
 typedef struct NR_UE_RRC_INST_s {
@@ -233,6 +248,10 @@ typedef struct NR_UE_RRC_INST_s {
   e_NR_IntegrityProtAlgorithm  integrityProtAlgorithm;
   long keyToUse;
   bool as_security_activated;
+  /// Next Hop Chaining Count
+  uint8_t nh[32];
+  uint64_t nhcc;
+
   bool detach_after_release;
   NR_timer_t release_timer;
   NR_RRCRelease_t *RRCRelease;
@@ -243,12 +262,15 @@ typedef struct NR_UE_RRC_INST_s {
   // 5G-S-TMSI
   uint64_t fiveG_S_TMSI;
   // Frame timing received from MAC
+  int current_hfn;
   int current_frame;
-
+  bool sched_reconfsync_sib1;
   //Sidelink params
   NR_SL_PreconfigurationNR_r16_t *sl_preconfig;
   // NTN params
   bool is_NTN_UE;
+  NR_NTN_Config_r17_t *target_ntncfg;
+  bool process_target_ntncfg;
   notifiedFIFO_t *mac_input_nf;
 } NR_UE_RRC_INST_t;
 

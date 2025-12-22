@@ -16,8 +16,8 @@ add_library(oran_fhlib_5g MODULE
             oran-init.c
 )
 
-set(E_VERSION 5.1.5)
-set(F_VERSION 6.1.3)
+set(E_VERSION 5.1.6)
+set(F_VERSION 6.1.5)
 
 find_package(xran REQUIRED)
 if(xran_VERSION VERSION_EQUAL E_VERSION)
@@ -33,7 +33,8 @@ endif()
 add_compile_options(-Wno-packed-not-aligned)
 
 set_target_properties(oran_fhlib_5g PROPERTIES COMPILE_FLAGS "-fvisibility=hidden -march=native")
-target_link_libraries(oran_fhlib_5g PRIVATE xran::xran ${dpdk_LINK_LIBRARIES} ${T_LIB} pthread dl rt m numa)
+target_link_libraries(oran_fhlib_5g PRIVATE xran::xran ${dpdk_LINK_LIBRARIES} pthread dl rt m numa)
+target_link_libraries(oran_fhlib_5g PRIVATE log_headers)
 target_include_directories(oran_fhlib_5g PRIVATE ${dpdk_INCLUDE_DIRS})
 if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
   find_package(armral REQUIRED)

@@ -41,7 +41,6 @@
 #include "PHY/defs_nr_common.h"
 #include "PHY/defs_gNB.h"
 #include "PHY/sse_intrin.h"
-#include "PHY/NR_UE_TRANSPORT/pucch_nr.h"
 #include "PHY/CODING/nrSmallBlock/nr_small_block_defs.h"
 #include "PHY/NR_TRANSPORT/nr_transport_common_proto.h"
 #include "PHY/NR_TRANSPORT/nr_transport_proto.h"
@@ -72,7 +71,6 @@ void nr_fill_pucch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pucch_pdu_t 
         int bitmap = SL_to_bitmap(pucch_pdu->start_symbol_index, pucch_pdu->nr_of_symbols);
         pucch->beam_nb = beam_index_allocation(gNB->enable_analog_das,
                                                fapi_beam_idx,
-                                               &gNB->gNB_config.analog_beamforming_ve,
                                                &gNB->common_vars,
                                                slot,
                                                NR_NUMBER_OF_SYMBOLS_PER_SLOT,
@@ -162,7 +160,7 @@ void nr_decode_pucch0(PHY_VARS_gNB *gNB,
                       nfapi_nr_pucch_pdu_t *pucch_pdu)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
-  int soffset = (slot & 3) * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
+  int soffset = (slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
 
   AssertFatal(pucch_pdu->bit_len_harq > 0 || pucch_pdu->sr_flag > 0,
               "Either bit_len_harq (%d) or sr_flag (%d) must be > 0\n",

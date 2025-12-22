@@ -50,7 +50,9 @@
 #include "telnetsrv_ltemeasur_def.h"
 #include "telnetsrv_cpumeasur_def.h"
 #include "openair2/LAYER2/NR_MAC_UE/mac_defs.h"
-#include "openair1/PHY/phy_extern_nr_ue.h"
+#include "openair1/PHY/defs_nr_UE.h"
+
+extern PHY_VARS_NR_UE ***PHY_vars_UE_g;
 
 void measurcmd_display_macstats(telnet_printfunc_t prnt);
 void measurcmd_display_macstats_ue(telnet_printfunc_t prnt);
@@ -86,7 +88,7 @@ int get_measurgroups(telnet_measurgroupdef_t **measurgroups) {
 
 void measurcmd_display_phycpu(telnet_printfunc_t prnt) {
   PHY_VARS_NR_UE *UE = PHY_vars_UE_g[0][0];
-  telnet_cpumeasurdef_t cpumeasur[MAX_CPU_STAT_TYPE];
+  telnet_cpumeasurdef_t cpumeasur[MAX_CPU_STAT_TYPE] = {};
   for (int i = 0; i < MAX_CPU_STAT_TYPE; i++) {
     sprintf(cpumeasur[i].statname, "%s", UE->phy_cpu_stats.cpu_time_stats[i].meas_name);
     cpumeasur[i].astatptr = &UE->phy_cpu_stats.cpu_time_stats[i];

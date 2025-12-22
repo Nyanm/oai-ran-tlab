@@ -29,6 +29,7 @@ void nr_mac_rrc_sync_ind(const module_id_t module_id, const frame_t frame, const
 void nr_mac_rrc_data_ind_ue(const module_id_t module_id,
                             const int CC_id,
                             const uint8_t gNB_index,
+                            const int hfn,
                             const frame_t frame,
                             const int slot,
                             const rnti_t rnti,
@@ -37,11 +38,16 @@ void nr_mac_rrc_data_ind_ue(const module_id_t module_id,
                             const channel_t channel,
                             const uint8_t* pduP,
                             const sdu_size_t pdu_len);
+void nr_mac_rrc_meas_ind_ue(module_id_t module_id,
+                            uint32_t gNB_index,
+                            uint16_t Nid_cell,
+                            bool csi_meas,
+                            bool is_neighboring_cell,
+                            int rsrp_dBm);
 void nr_mac_rrc_inactivity_timer_ind(const module_id_t mod_id);
 void nr_mac_rrc_msg3_ind(const module_id_t mod_id, const int rnti, bool prepare_payload);
-void nr_ue_rrc_timer_trigger(int instance, int frame, int gnb_id);
+void nr_ue_rrc_timer_trigger(int instance, int hfn, int frame, int gnb_id);
 void nr_mac_rrc_ra_ind(const module_id_t mod_id, bool success);
-void nsa_sendmsg_to_lte_ue(const void *message, size_t msg_len, Rrc_Msg_Type_t msg_type);
 void process_msg_rcc_to_mac(nr_mac_rrc_message_t *msg, int instance_id);
 #endif
 

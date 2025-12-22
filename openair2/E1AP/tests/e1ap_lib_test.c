@@ -490,6 +490,13 @@ static void test_bearer_context_modification_request(void)
       .qos_params.qos_characteristics.non_dynamic.fiveqi = 9,
   };
 
+  const e1_pdcp_status_info_t dummy_pdcp_status = {
+      .dl_count.hfn = 12,
+      .dl_count.sn = 34,
+      .ul_count.hfn = 56,
+      .ul_count.sn = 78,
+  };
+
   DRB_nGRAN_to_mod_t drb_to_mod = {
     .numDlUpParam = 1,
     .DlUpParamList[0].cell_group_id = MCG,
@@ -497,10 +504,12 @@ static void test_bearer_context_modification_request(void)
     .id = 1,
     .pdcp_config = malloc_or_fail(sizeof(*drb_to_mod.pdcp_config)),
     .pdcp_sn_status_requested = true,
+    .pdcp_status = malloc_or_fail(sizeof(*drb_to_mod.pdcp_status)),
     .numQosFlow2Setup = 1,
     .qosFlows[0] = dummy_qos_flows,
   };
   *drb_to_mod.pdcp_config = dummy_pdcp_config;
+  *drb_to_mod.pdcp_status = dummy_pdcp_status;
 
   pdu_session_to_mod_t pdusession_mod_item = {
       .sessionId = 1,
@@ -529,6 +538,14 @@ static void test_bearer_context_modification_request(void)
       .DRBnGRanList[0] = drb_to_setup,
   };
 
+  // PDU Session to Remove
+  pdu_session_to_remove_t pdu_session_to_remove = {
+      .sessionId = 2,
+      // Note: cause is optional extension IE, currently encoding/decoding only handles sessionId
+      .cause.type = 0,
+      .cause.value = 0,
+  };
+
   // Initialize the Bearer Context Modification Request
   e1ap_bearer_mod_req_t orig = {
       .gNB_cu_cp_ue_id = 0x1234,
@@ -539,6 +556,8 @@ static void test_bearer_context_modification_request(void)
       .pduSession[0] = pdusession_setup_item,
       .numPDUSessionsMod = 1,
       .pduSessionMod[0] = pdusession_mod_item,
+      .numPDUSessionsRem = 1,
+      .pduSessionRem[0] = pdu_session_to_remove,
   };
   *orig.bearerContextStatus = BEARER_SUSPEND;
   *orig.inactivityTimer = 1000;
@@ -592,12 +611,21 @@ const DRB_nGRAN_failed_t dummy_drb_failed = {
  */
 static void test_bearer_context_modification_response(void)
 {
+  const e1_pdcp_status_info_t dummy_pdcp_status = {
+      .dl_count.hfn = 12,
+      .dl_count.sn = 2,
+      .ul_count.hfn = 12,
+      .ul_count.sn = 3,
+  };
+
   // DRB Modified List
   DRB_nGRAN_modified_t drb_mod = {
       .id = 1,
       .numQosFlowSetup = 1,
       .qosFlows[0].qfi = 1,
+      .pdcp_status = malloc_or_fail(sizeof(*drb_mod.pdcp_status)),
   };
+  *drb_mod.pdcp_status = dummy_pdcp_status;
 
   // DRB Setup List
   DRB_nGRAN_setup_t setup = {

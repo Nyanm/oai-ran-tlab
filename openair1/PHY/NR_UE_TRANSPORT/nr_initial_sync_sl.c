@@ -78,19 +78,6 @@ static int sl_nr_pss_correlation(PHY_VARS_NR_UE *UE, int frame_index)
 
         const c64_t r64 = {.r = result.r, .i = result.i};
         psss_corr_value += squaredMod(r64);
-
-#ifdef SL_DEBUG
-        pss_corr_debug_values[pss_index][n] = psss_corr_value;
-        printf("frame:%d n:%d, pss_index:%d, pss_for_correlation[pss_index][0]:%x, rxdata[n]:%x\n",
-               frame_index,
-               n,
-               pss_index,
-               pss_for_correlation[pss_index][0],
-               rxdata[ar][n + frame_index * sl_fp->samples_per_frame]);
-        printf("result %lld, pss_corr_values[%d][%d]:%ld\n", result, pss_index, n, pss_corr_debug_values[pss_index][n]);
-        printf("pss_index %d: n %6u peak_value %15llu\n", pss_index, n, (unsigned long long)pss_corr_debug_values[pss_index][n]);
-        printf("peak_value:%ld, peak_position:%d, pss_source:%d\n", peak_value, peak_position, pss_source);
-#endif
       }
 
       // calculate the absolute value of sync_corr[n]
@@ -99,10 +86,6 @@ static int sl_nr_pss_correlation(PHY_VARS_NR_UE *UE, int frame_index)
         peak_value = psss_corr_value;
         peak_position = n;
         pss_source = pss_index;
-
-#ifdef SL_DEBUG
-        printf("pss_index %d: n %6u peak_value %15llu\n", pss_index, n, (unsigned long long)psss_corr_value);
-#endif
       }
     }
   }
@@ -341,7 +324,7 @@ nr_initial_sync_t sl_nr_slss_search(PHY_VARS_NR_UE *UE, UE_nr_rxtx_proc_t *proc,
 
   int32_t sync_pos = -1; // sync_pos_frame = -1;
   int32_t metric_tdd_ncp = 0;
-  uint8_t phase_tdd_ncp;
+  uint8_t phase_tdd_ncp = 0;
   double im, re;
   int ret = -1;
   uint16_t rx_slss_id = 65535;
