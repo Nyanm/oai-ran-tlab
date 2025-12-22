@@ -119,7 +119,7 @@ static int16_t ssb_index_from_prach(module_id_t module_idP,
     }
   }
 
-  LOG_I(NR_MAC, "mjoang Frame %d, Slot %d: Prach Occasion id = %d ssb per RO = %f number of active SSB %u index = %d fdm %u symbol index %u freq_index %u total_RApreambles %u\n",
+  LOG_D(NR_MAC, "Frame %d, Slot %d: Prach Occasion id = %d ssb per RO = %f number of active SSB %u index = %d fdm %u symbol index %u freq_index %u total_RApreambles %u\n",
         frameP, slotP, prach_occasion_id, num_ssb_per_RO, num_active_ssb, index, fdm, start_symbol_index, freq_index, total_RApreambles);
 
   return index;
@@ -418,7 +418,6 @@ void schedule_nr_prach(module_id_t module_idP, frame_t frameP, slot_t slotP)
             beam_index = get_fapi_beamforming_index(gNB, cc->ssb_index[n_ssb]);
             // multi-beam allocation structure
             beam = beam_allocation_procedure(&gNB->beam_info, frameP, slotP, beam_index, slots_frame);
-            LOG_D(NR_MAC, "RA1a    f %04d.%02d b %d:%d i %d\n", frameP, slotP, beam_index, beam.idx, n_ssb);
             AssertFatal(beam.idx >= 0, "Cannot allocate PRACH corresponding to %d SSB transmitted in any available beam\n", n_ssb + 1);
           } else {
             int first_ssb_index = (prach_occasion_id * (int)num_ssb_per_RO) % cc->num_active_ssb;
@@ -427,7 +426,6 @@ void schedule_nr_prach(module_id_t module_idP, frame_t frameP, slot_t slotP)
               beam_index = get_fapi_beamforming_index(gNB, cc->ssb_index[j]);
               // multi-beam allocation structure
               beam = beam_allocation_procedure(&gNB->beam_info, frameP, slotP, beam_index, slots_frame);
-              LOG_D(NR_MAC, "RA1b    f %04d.%02d b %d:%d i %d\n", frameP, slotP, beam_index, beam.idx, j);
               AssertFatal(beam.idx >= 0, "Cannot allocate PRACH corresponding to SSB %d in any available beam\n", j);
             }
           }
@@ -809,11 +807,9 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
 
   if (is_dl_slot(slot, &nr_mac->frame_structure) && is_ul_slot(sched_slot, &nr_mac->frame_structure)) {
     NR_beam_alloc_t beam_ul = beam_allocation_procedure(&nr_mac->beam_info, sched_frame, sched_slot, UE->UE_beam_index, slots_frame);
-    LOG_I(NR_MAC, "RA3ul   f %04d.%02d b %d:%d %d %p\n", sched_frame, sched_slot, UE->UE_beam_index, beam_ul.idx, UE->uid, UE);
     if (beam_ul.idx < 0)
       return;
     NR_beam_alloc_t beam_dci = beam_allocation_procedure(&nr_mac->beam_info, frame, slot, UE->UE_beam_index, slots_frame);
-    LOG_I(NR_MAC, "RA4dci  f %04d.%02d b %d:%d %d %p\n", sched_frame, sched_slot, UE->UE_beam_index, beam_dci.idx, UE->uid, UE);
     if (beam_dci.idx < 0) {
       reset_beam_status(&nr_mac->beam_info, sched_frame, sched_slot, UE->UE_beam_index, slots_frame, beam_ul.new_beam);
       return;
@@ -1036,7 +1032,6 @@ static bool get_feasible_msg3_tda(const NR_ServingCellConfigCommon_t *scc,
     LOG_D(NR_MAC, "Feasible Msg3 TDA %d found for slot %d.%d\n", i, temp_frame, temp_slot);
     // check if it is possible to allocate MSG3 in a beam in this slot
     NR_beam_alloc_t beam = beam_allocation_procedure(beam_info, temp_frame, temp_slot, ue_beam_idx, slots_per_frame);
-    LOG_I(NR_MAC, "RAmsg3  f %04d.%02d b %d:%d\n", temp_frame, temp_slot, ue_beam_idx, beam.idx);
     if (beam.idx < 0)
       continue;
       
@@ -1451,7 +1446,6 @@ static void nr_generate_Msg2(module_id_t module_idP,
   }
   LOG_D(NR_MAC, "UE RA-RNTI %04x TC-RNTI %04x: Msg2 monitored by UE at %d.%d\n", ra->RA_rnti, UE->rnti, frameP, slotP);
   NR_beam_alloc_t beam = beam_allocation_procedure(&nr_mac->beam_info, frameP, slotP, UE->UE_beam_index, n_slots_frame);
-  LOG_I(NR_MAC, "RAmsg2  f %04d.%02d b %d:%d %d %p\n", frameP, slotP, UE->UE_beam_index, beam.idx, UE->uid, UE);
   if (beam.idx < 0)
     return;
   LOG_D(NR_MAC,
@@ -1715,11 +1709,9 @@ static void nr_generate_Msg4_MsgB(module_id_t module_idP,
 
     const int n_slots_frame = nr_mac->frame_structure.numb_slots_frame;
     NR_beam_alloc_t beam = beam_allocation_procedure(&nr_mac->beam_info, frameP, slotP, UE->UE_beam_index, n_slots_frame);
-    LOG_I(NR_MAC, "RAmsg4  f %04d.%02d b %d:%d %d %p\n", frameP, slotP, UE->UE_beam_index, beam.idx, UE->uid, UE);
-    if (beam.idx < 0) {
-      LOG_I(NR_MAC, "Cannot allocate Msg4 in any available beam\n");
+    if (beam.idx < 0)
       return;
-    }
+
     // get CCEindex, needed also for PUCCH and then later for PDCCH
     uint8_t aggregation_level;
     int CCEIndex = get_cce_index(nr_mac,
@@ -1956,11 +1948,9 @@ static void nr_generate_Msg4_MsgB(module_id_t module_idP,
 
     ra->ra_state = nrRA_WAIT_Msg4_MsgB_ACK;
     LOG_I(NR_MAC,
-          "UE %04x Generate %s %4d.%2d: feedback at %4d.%2d, payload %d bytes, next state nrRA_WAIT_Msg4_MsgB_ACK\n",
+          "UE %04x Generate %s: feedback at %4d.%2d, payload %d bytes, next state nrRA_WAIT_Msg4_MsgB_ACK\n",
           UE->rnti,
           ra_type_str,
-          frameP,
-          slotP,
           pucch->frame,
           pucch->ul_slot,
           harq->tb_size);
