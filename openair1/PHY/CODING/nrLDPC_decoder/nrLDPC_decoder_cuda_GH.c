@@ -274,7 +274,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
                                                    decode_abort_t* ab);
 #define MAX_GRAPH_CACHE_SIZE 16
 #define PRE_RECORDED_COUNT 6
-#define STATIC_SEG_SIZE 1 // n_segments in pre-record graphs
+#define STATIC_SEG_SIZE 1 // n_segments in pre-record graphs, should be determined in real cases
 
 typedef struct {
   uint32_t Z;
@@ -294,8 +294,6 @@ typedef struct {
 static gpu_graph_node_t gpu_graph_cache[MAX_GRAPH_CACHE_SIZE];
 static int dynamic_cache_idx = PRE_RECORDED_COUNT;
 
-// 假设这是在你的 .cu 文件中，且 ldpc_cuda_bridge_t 已经在头文件中定义
-// typedef struct { int8_t* p_llr_ptr; int8_t* p_out_ptr; } ldpc_cuda_bridge_t;
 
 void init_decoder_warmup()
 {
@@ -303,24 +301,20 @@ void init_decoder_warmup()
   uint8_t R_list[] = {13, 23};
   int node_idx = 0;
   
-  // === 1. 定义并分配 Dummy Input/Output 数组 ===
-  // 大小覆盖最大可能的配置 (Z=384, n_segments=STATIC_SEG_SIZE)
-  // Input: 68 * 384 * n_segments
-  // Output: 8448 * n_segments (22 * 384 = 8448)
+  // === allocate dummy Input/Output ===
   
   int8_t *dummy_input_llr = NULL;
   int8_t *dummy_output_bits = NULL;
   uint32_t max_z = 384;
-  uint32_t max_n_segs = STATIC_SEG_SIZE; // 确保这个宏是可见的
+  uint32_t max_n_segs = STATIC_SEG_SIZE; 
   
   size_t input_size_bytes = 68 * max_z * max_n_segs * sizeof(int8_t);
   size_t output_size_bytes = 8448 * max_n_segs * sizeof(int8_t);
 
-  // 使用 cudaHostAlloc (Pinned Memory) 以便 GPU 可以通过 Bridge 直接访问
+  // use cudaHostAlloc (Pinned Memory) so that GPU can visit via Bridge
   cudaHostAlloc((void**)&dummy_input_llr, input_size_bytes, cudaHostAllocMapped);
   cudaHostAlloc((void**)&dummy_output_bits, output_size_bytes, cudaHostAllocMapped);
 
-  // 初始化为全 0
   memset(dummy_input_llr, 0, input_size_bytes);
   memset(dummy_output_bits, 0, output_size_bytes);
 
@@ -340,13 +334,10 @@ void init_decoder_warmup()
       gpu_graph_cache[node_idx].bridge_ptr->p_llr_ptr = dummy_input_llr;
       gpu_graph_cache[node_idx].bridge_ptr->p_out_ptr = dummy_output_bits;
 
-      // === 4. 调用录制函数 (传入 Bridge) ===
-      // 注意：这里我们移除了原来的 output_bits 和 input_llr 参数，改传 bridge_ptr
-      // 下一步我们需要修改 GraphRecord 的定义来匹配这个调用
+
       nrLDPC_decoder_cuda_GraphRecord(
-                                    gpu_graph_cache[node_idx].bridge_ptr, // <--- 传入 Bridge
+                                    gpu_graph_cache[node_idx].bridge_ptr, 
                                     numLLR,
-                                    // input_llr, // 已移除，由 Bridge 承载
                                     cnProcBuf_dev,
                                     bnProcBuf_dev,
                                     llrRes_dev,
@@ -364,7 +355,6 @@ void init_decoder_warmup()
                                     &gpu_graph_cache[node_idx].exec,
                                     (uint8_t*)&gpu_graph_cache[node_idx].occupied);
       
-      // 录制后同步，确保实例化完成
       cudaDeviceSynchronize();
 
       // save parameters
@@ -386,11 +376,10 @@ void init_decoder_warmup()
   if (dynamic_cache_idx > 0) {
     printf("[CUDA] Warming up the GPU pipeline with ALL %d recorded graphs...\n", dynamic_cache_idx);
 
-    // 遍历所有 Graph 进行预热执行
+    // loop all Graph to warm up
     for (int i = 0; i < dynamic_cache_idx; i++) {
       if (gpu_graph_cache[i].occupied) {
-        // 执行时，Graph 内部会通过 bridge_ptr 访问 dummy_input_llr/dummy_output_bits
-        // 因为 dummy 内存此时有效，所以这是安全的
+
         cudaError_t err = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[i].exec, decoderStreams[0], NULL, 0);
         
         if (err != cudaSuccess) {
@@ -403,39 +392,31 @@ void init_decoder_warmup()
       }
     }
 
-    // 等待所有 Warmup 执行完毕
+
     cudaDeviceSynchronize();
     printf("[CUDA] Warm-up complete. All templates validated.\n");
   }
 
-  // === 5. 清理 Dummy Buffers ===
-  // 此时 Warmup 已结束，Bridge 指向的 Dummy 内存可以释放了
-  // 在 Runtime 阶段，我们会把 Bridge 更新指向真实的业务数据
   cudaFreeHost(dummy_input_llr);
   cudaFreeHost(dummy_output_bits);
 }
 
 void init_decoder_gpu_structures() {
     printf("[CUDA] Initializing Global GPU Structures...\n");
-
-    // === 1. 初始化 Graph Cache 的 Bridges (池化) ===
+//Bridge for graphs
     for (int i = 0; i < MAX_GRAPH_CACHE_SIZE; i++) {
-        // 只有当它是 NULL 时才分配 (防止多次 init 导致内存泄漏)
         if (gpu_graph_cache[i].bridge_ptr == NULL) {
             cudaHostAlloc((void**)&gpu_graph_cache[i].bridge_ptr, 
                           sizeof(ldpc_cuda_bridge_t), 
                           cudaHostAllocMapped);
             
-            // 安全初始化
             gpu_graph_cache[i].bridge_ptr->p_llr_ptr = NULL;
             gpu_graph_cache[i].bridge_ptr->p_out_ptr = NULL;
             gpu_graph_cache[i].occupied = false; 
         }
     }
     printf("[CUDA] Allocated %d Graph Bridges.\n", MAX_GRAPH_CACHE_SIZE);
-
-    // === 2. 初始化 Legacy Fallback 的 Stream Bridges (流式) ===
-    // 这是给 "旧版调度器" 用的
+//Bridge for normal execute
     for (int i = 0; i < 8; i++) {
          if (stream_bridges[i] == NULL) {
             cudaHostAlloc((void**)&stream_bridges[i], 
@@ -594,13 +575,49 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
                                                    t_nrLDPC_time_stats* p_profiler,
                                                    decode_abort_t* ab)
 {
+  extern int pageable_uses_host;
+  
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
   uint8_t R = p_decParams->R;
   uint8_t numMaxIter = p_decParams->numMaxIter;
   e_nrLDPC_outMode outMode = p_decParams->outMode;
   uint32_t K = Z * 22;
+  // Calculate LLR size per segment based on Rate
   uint32_t numLLR = (R == 13) ? NR_LDPC_NCOL_BG1_R13 * Z : NR_LDPC_NCOL_BG1_R23 * Z;
+
+  // =====================================================================================
+  // Discrete GPU Support (PCIe)
+  // Determine if explicit memory copy is needed based on hardware architecture.
+  // If pageable_uses_host is 0, it means we are on a PCIe device and cannot use 
+  // zero-copy direct access efficiently. We must alloc and copy.
+  // =====================================================================================
+  int8_t *p_llr_dev = p_llr; // Default to host pointer (for GH200/Zero-Copy)
+  int8_t *p_out_dev = p_out; // Default to host pointer (for GH200/Zero-Copy)
+  
+  // Calculate total buffer sizes
+  size_t total_input_size = n_segments * numLLR * sizeof(int8_t);
+  // Using K * n_segments for output safety (assuming worst-case unpacked bytes)
+  // If the kernel outputs packed bits, this will be larger than needed, which is safe.
+  size_t total_output_size = n_segments * K * sizeof(int8_t); 
+
+  // We use a local flag to track if we did a temporary allocation
+  int need_explicit_copy = (!pageable_uses_host); 
+
+  if (need_explicit_copy) {
+      // Allocate device memory for Input and Output
+      cudaError_t err_alloc_in = cudaMalloc((void**)&p_llr_dev, total_input_size);
+      cudaError_t err_alloc_out = cudaMalloc((void**)&p_out_dev, total_output_size);
+
+      if (err_alloc_in != cudaSuccess || err_alloc_out != cudaSuccess) {
+          // Fallback or error handling can be added here
+          // printf("CUDA Malloc failed for discrete GPU path\n");
+      }
+
+      // Copy Input data from Host to Device
+      cudaMemcpyAsync(p_llr_dev, p_llr, total_input_size, cudaMemcpyHostToDevice, decoderStreams[0]);
+  }
+  // =====================================================================================
 
   int found_idx = -1;
 
@@ -616,8 +633,9 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
 
   if (found_idx >= 0) {
     // === HIT: execute Graph ===
-    gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr;
-    gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = p_out;
+    // Update the bridge pointer with the correct device (or host-mapped) pointers
+    gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
+    gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = p_out_dev;
     
     nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[found_idx].exec,
                                      decoderStreams[0],
@@ -638,8 +656,9 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
     gpu_graph_cache[new_idx].n_segments = n_segments;
     gpu_graph_cache[new_idx].outMode = outMode;
 
-    gpu_graph_cache[new_idx].bridge_ptr->p_llr_ptr = p_llr;
-    gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = p_out;
+    // Use the determined pointers (Device ptrs for PCIe, Host ptrs for GH200)
+    gpu_graph_cache[new_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
+    gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = p_out_dev;
 
     nrLDPC_decoder_cuda_GraphRecord(gpu_graph_cache[new_idx].bridge_ptr,
                                     numLLR,
@@ -670,8 +689,8 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
 
     // printf("We need to use normal execution\n");
     ldpc_cuda_bridge_t* perpack_buffer = stream_bridges[0];
-    perpack_buffer->p_llr_ptr = p_llr;
-    perpack_buffer->p_out_ptr = p_out;
+    perpack_buffer->p_llr_ptr = p_llr_dev;
+    perpack_buffer->p_out_ptr = p_out_dev;
 
     nrLDPC_decoder_cuda_NormalExecute(perpack_buffer,
                                       numLLR,
@@ -690,8 +709,28 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
                                       0,
                                       NULL);
   }
-  cudaDeviceSynchronize();
-  //cudaStreamSynchronize(decoderStreams[0]);
+  
+  // =====================================================================================
+  // Copy back and Cleanup for Discrete GPU
+  // =====================================================================================
+  if (need_explicit_copy) {
+      // Copy Output from Device to Host
+      cudaMemcpyAsync(p_out, p_out_dev, total_output_size, cudaMemcpyDeviceToHost, decoderStreams[0]);
+      
+      // Ensure copy is done before freeing memory
+      // Note: cudaFree implies synchronization on the default stream, but using streams 
+      // requires explicit sync or careful ordering. 
+      cudaStreamSynchronize(decoderStreams[0]); 
+
+      cudaFree(p_llr_dev);
+      cudaFree(p_out_dev);
+  } else {
+      // For GH200/Zero-Copy, just wait for kernel completion
+      cudaDeviceSynchronize();
+      //cudaStreamSynchronize(decoderStreams[0]);
+  }
+  // =====================================================================================
+
   return numMaxIter;
 }
 

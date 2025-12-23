@@ -800,7 +800,6 @@ void nrLDPC_decoder_cuda_NormalExecute(ldpc_cuda_bridge_t* buffer,
 {
   cudaStream_t stream = streams[CudaStreamIdx];
 
-  // 1. 计算 Kernel 维度
   Kdim_R13[CudaStreamIdx].block = dim3(Z >> 2, 4, 1);
   Kdim_R13[CudaStreamIdx].grid = dim3(num_TotalBlocks_BG1_R13 >> 2, n_segments, 1);
   Kdim_R23[CudaStreamIdx].block = dim3(Z >> 2, 4, 1);
@@ -808,7 +807,6 @@ void nrLDPC_decoder_cuda_NormalExecute(ldpc_cuda_bridge_t* buffer,
   Kdim_llr[CudaStreamIdx].block = dim3(Z >> 2, 4, 1);
   Kdim_llr[CudaStreamIdx].grid = dim3(num_TotalBlocks_llr_llrRes >> 2, n_segments, 1);
 
-  // 2. 执行 Kernel 序列
   ENQUEUE_LDPC_DECODER_SEQUENCE(streams, CudaStreamIdx);
 
   //if (doneEvent) {
