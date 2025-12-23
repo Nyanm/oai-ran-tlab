@@ -1972,7 +1972,11 @@ void nr_rrc_mac_config_other_sib(module_id_t module_id, NR_SIB19_r17_t *sib19, i
   AssertFatal(!ret, "mutex failed %d\n", ret);
 }
 
-static void handle_reconfiguration_with_sync(NR_UE_MAC_INST_t *mac, int cc_idP, const NR_ReconfigurationWithSync_t *reconfWithSync)
+static void handle_reconfiguration_with_sync(NR_UE_MAC_INST_t *mac,
+	                                     int cc_idP,
+	                                     int hfn,
+	                                     int frame,
+	                                     const NR_ReconfigurationWithSync_t *reconfWithSync)
 {
   reset_mac_inst(mac);
   mac->crnti = reconfWithSync->newUE_Identity;
