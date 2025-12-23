@@ -58,6 +58,7 @@ typedef struct {
 typedef struct {
   uint16_t cb_symbol_mask;
   int num_symbols[NR_NUMBER_OF_SYMBOLS_PER_SLOT];
+  int start_symbol[NR_NUMBER_OF_SYMBOLS_PER_SLOT];
   int symbol_diff;
   int numerology;
 } oran_symbol_callback_args_t;
@@ -73,38 +74,58 @@ void symbol_callback(void *args, struct xran_sense_of_time *p_sense_of_time)
     return;
   }
 
-  uint32_t frame = p_sense_of_time->nFrameIdx;
-  uint32_t slot = p_sense_of_time->nSlotIdx + p_sense_of_time->nSubframeIdx * (1 << callback_args->numerology);
-  uint32_t subframe = p_sense_of_time->nSubframeIdx;
+  int num_symbols = callback_args->num_symbols[p_sense_of_time->nSymIdx];
+  int start_symbol = callback_args->start_symbol[p_sense_of_time->nSymIdx];
+
+  // Adjust timing by symbol_diff
+  int slot_index_increments = (p_sense_of_time->nSymIdx + callback_args->symbol_diff) / NR_NUMBER_OF_SYMBOLS_PER_SLOT;
+  int num_slots_per_subframe = 1 << callback_args->numerology;
+
+  int target_slot_in_frame = p_sense_of_time->nSlotIdx + p_sense_of_time->nSubframeIdx * num_slots_per_subframe + slot_index_increments;
+  int frame = p_sense_of_time->nFrameIdx;
+  int num_slots_per_frame = 10 << callback_args->numerology;
+  while (target_slot_in_frame >= num_slots_per_frame) {
+    target_slot_in_frame -= num_slots_per_frame;
+    frame++;
+    if (frame >= 1024) {
+      frame = 0;
+    }
+  }
 
   const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
   int mu = fh_cfg->mu_number[0];
   AssertFatal(mu == 1, "Only numerology 1 supported for RU\n");
-  const int slots_in_sf = 1 << mu;
-  uint32_t slot_in_frame = slot + subframe * slots_in_sf;
 
   LOG_D(HW,
-        "Push %d.%d (slot %d, subframe %d, symbol_diff %d)\n",
+        "Callback triggered at frame.slot.synbol %d.%d.%d targets %d.%d.%d, num_symbols %d, symbol_diff %d\n",
+        p_sense_of_time->nFrameIdx,
+        p_sense_of_time->nSlotIdx + p_sense_of_time->nSubframeIdx * num_slots_per_subframe,
+        p_sense_of_time->nSymIdx,
         frame,
-        slot_in_frame,
-        slot,
-        subframe,
+        target_slot_in_frame,
+        start_symbol,
+        num_symbols,
         callback_args->symbol_diff);
+
   notifiedFIFO_elt_t *req = newNotifiedFIFO_elt(sizeof(ru_dl_sync_info_t), 0, NULL, NULL);
   ru_dl_sync_info_t *info = NotifiedFifoData(req);
   info->frame = frame;
-  info->slot = slot;
-  info->symbol = p_sense_of_time->nSymIdx;
-  info->num_symbols = callback_args->num_symbols[p_sense_of_time->nSymIdx];
+  info->slot = target_slot_in_frame;
+  info->symbol = start_symbol;
+  info->num_symbols = num_symbols;
 
   int slot_duration_uS[] = {1000, 500, 250, 125};
   uint64_t slot_in_second_offset_nS = ((uint64_t)p_sense_of_time->tti_counter * slot_duration_uS[mu]) * 1000UL;
 
   float symbol_duration_nS = ((float)slot_duration_uS[mu] * 1000) / 14.0f;
-  uint64_t symbol_in_slot_offset_nS = (uint64_t)(p_sense_of_time->nSymIdx * symbol_duration_nS);
+  uint64_t symbol_in_slot_offset_nS = (uint64_t)((p_sense_of_time->nSymIdx + callback_args->symbol_diff) * symbol_duration_nS);
 
   info->ts.tv_sec = p_sense_of_time->nSecond;
   info->ts.tv_nsec = slot_in_second_offset_nS + symbol_in_slot_offset_nS;
+  if (info->ts.tv_nsec >= 1000000000UL) {
+    info->ts.tv_sec += 1;
+    info->ts.tv_nsec -= 1000000000UL;
+  }
 
   AssertFatal(info->ts.tv_nsec < 1000000000UL, "ORAN: Invalid tv_nsec %ld\n", info->ts.tv_nsec);
 
@@ -214,18 +235,34 @@ void install_symbol_callback(void* handle, int callbacks_per_slot, int mu)
   AssertFatal(!installed, "Cannot install callback twice\n");
   installed = true;
 
+  // Represents RX window end
+  const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
+  uint32_t T2a_min = fh_cfg->perMu[mu].T2a_min_up;
+  int slot_duration_uS[] = {1000, 500, 250, 125};
+  float symbol_duration_nS = ((float)slot_duration_uS[mu] * 1000) / 14.0f;
+  uint32_t symbol_offset = (float)(T2a_min * 1000) / symbol_duration_nS;
+  AssertFatal(symbol_offset > 0, "The amount of time after RX window end for O-RU is 0. Adjust T2a_min_up %u [uS]\n", T2a_min);
+  LOG_I(HW, "Installing %d callbacks %d symbols before OTA\n", callbacks_per_slot, symbol_offset);
+
   static oran_symbol_callback_args_t args = {0};
+  args.numerology = mu;
 
   int symbols_per_callback = NR_NUMBER_OF_SYMBOLS_PER_SLOT / callbacks_per_slot;
 
   int start_symbol = 0;
   for (int i = 0; i < callbacks_per_slot; i++) {
-    args.cb_symbol_mask |= (1U << start_symbol);
-    args.num_symbols[start_symbol] = symbols_per_callback;
+    int extra_symbols = 0;
     if (i == callbacks_per_slot - 1) {
       // Extend last callback to include leftover symbols
-      args.num_symbols[start_symbol] += NR_NUMBER_OF_SYMBOLS_PER_SLOT % callbacks_per_slot;
+      extra_symbols += NR_NUMBER_OF_SYMBOLS_PER_SLOT % callbacks_per_slot;
     }
+    int num_sybmols_this_callback = symbols_per_callback + extra_symbols;
+    int end_symbol = start_symbol + num_sybmols_this_callback - 1;
+    int callback_symbol = (end_symbol - symbol_offset + NR_NUMBER_OF_SYMBOLS_PER_SLOT) % NR_NUMBER_OF_SYMBOLS_PER_SLOT;
+    args.cb_symbol_mask |= (1U << callback_symbol);
+    args.num_symbols[callback_symbol] = num_sybmols_this_callback;
+    args.start_symbol[callback_symbol] = start_symbol;
+    args.symbol_diff = symbol_offset;
     start_symbol += symbols_per_callback;
   }
 

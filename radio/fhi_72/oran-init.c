@@ -503,8 +503,6 @@ static void oran_allocate_buffers(void *handle,
 #endif
   } else {
     xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, NULL, NULL, fh_config->nNumerology[0]);
-    const int num_callbacks_per_slot = 2; // results in callbacks at RX window end of symbol 7 and 14.
-    install_symbol_callback(gxran_handle, num_callbacks_per_slot, fh_config->nNumerology[0]);
   }
 }
 
@@ -579,6 +577,10 @@ int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_confi
   // these structs during initialization
   memcpy(&g_fh_init, xran_fh_init, sizeof(*xran_fh_init));
   memcpy(&g_fh_config, xran_fh_config, sizeof(*xran_fh_config) * xran_fh_init->xran_ports);
+  if (!is_du) {
+    const int num_callbacks_per_slot = 2; // results in callbacks at RX window end of symbol 7 and 14.
+    install_symbol_callback(gxran_handle, num_callbacks_per_slot, xran_fh_config->nNumerology[0]);
+  }
 
   return (void *)gxran_handle;
 }
