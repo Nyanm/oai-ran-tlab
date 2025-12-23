@@ -1,0 +1,276 @@
+diff --git a/fhi_lib/lib/api/xran_fh_o_ru.h b/fhi_lib/lib/api/xran_fh_o_ru.h
+index 959479f..db8ef46 100644
+--- a/fhi_lib/lib/api/xran_fh_o_ru.h
++++ b/fhi_lib/lib/api/xran_fh_o_ru.h
+@@ -28,7 +28,7 @@
+  * @author Intel Corporation
+  *
+  **/
+-
++#pragma once
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+@@ -48,6 +48,7 @@ extern "C" {
+ #include <getopt.h>
+ #include <unistd.h>
+ #include "xran_fh_o_du.h"
++#include "xran_transport.h"
+ 
+ /**
+  * @ingroup
+@@ -76,6 +77,24 @@ int32_t xran_5g_bfw_config(void * pHandle, struct xran_buffer_list *pSrcRxCpBuff
+                     xran_transport_callback_fn pCallback,
+                     void *pCallbackTag, uint8_t mu);
+ 
++enum xran_mbuf_mem_op_id {
++    MBUF_KEEP,
++    MBUF_FREE
++};
++
++typedef int (*process_uplane_fn)(struct rte_mbuf *pkt, void *handle,
++                                 struct xran_eaxc_info *p_cid,
++                                 uint16_t xport_id,
++                                 struct xran_sense_of_time *sense_of_time);
++typedef int32_t (*process_cplane_fn)(struct rte_mbuf *pkt, void *handle, uint16_t xport_id,
++                                     struct xran_sense_of_time *sense_of_time);
++
++void xran_hook_install(void *pHandle, process_uplane_fn process_uplane_fn_p,
++                       void *process_uplane_fn_args,
++                       process_cplane_fn process_cplane_fn_p,
++                       void *process_cplane_fn_args, int mu);
++void xran_hook_schedule_packet(void *pHandle, struct rte_mbuf *mbuf, int port,
++                               int slot, int symbol);
+ 
+ #ifdef __cplusplus
+ }
+diff --git a/fhi_lib/lib/ethernet/xran_ethdi.h b/fhi_lib/lib/ethernet/xran_ethdi.h
+index ddcae75..da6f344 100644
+--- a/fhi_lib/lib/ethernet/xran_ethdi.h
++++ b/fhi_lib/lib/ethernet/xran_ethdi.h
+@@ -129,11 +129,6 @@ struct xran_ethdi_ctx {
+     xran_lbm_port_info   lbm_port_info[XRAN_VF_MAX];
+ };
+ 
+-enum xran_mbuf_mem_op_id {
+-    MBUF_KEEP,
+-    MBUF_FREE
+-};
+-
+ extern enum xran_if_state xran_if_current_state;
+ 
+ inline struct xran_ethdi_ctx *xran_ethdi_get_ctx(void)
+diff --git a/fhi_lib/lib/src/xran_dev.c b/fhi_lib/lib/src/xran_dev.c
+index 675328d..2c5fe1c 100644
+--- a/fhi_lib/lib/src/xran_dev.c
++++ b/fhi_lib/lib/src/xran_dev.c
+@@ -23,6 +23,7 @@
+  * @author Intel Corporation
+  **/
+ 
++#include <rte_debug.h>
+ #define _GNU_SOURCE
+ #include <sched.h>
+ #include <assert.h>
+@@ -57,6 +58,7 @@
+ #include "xran_ethdi.h"
+ #include "xran_ethernet.h"
+ #include "xran_printf.h"
++#include "xran_common.h"
+ 
+ struct xran_device_ctx *g_xran_dev_ctx[XRAN_PORTS_NUM]={NULL};
+ struct xran_system_config gSysCfg;
+@@ -632,3 +634,86 @@ int xran_get_memstat(struct xran_memstat *stat)
+ 
+     return(0);
+ }
++
++
++#define MAX_PACKETS_SENT_PER_SYMBOL 16 // has to be power of 2
++
++// Process the scheduled packets, done once per symbol at OTA time
++void xran_hook_process_tx_packets(void* pHandle, int port, int slot, int symbol) {
++  struct xran_device_ctx *p_dev_ctx = (struct xran_device_ctx *)pHandle;
++  int ring_index = slot % XRAN_N_FE_BUF_LEN;
++  struct rte_ring *ring = p_dev_ctx->hook.tx_rings[port][ring_index][symbol];
++  void* mbufs[MAX_PACKETS_SENT_PER_SYMBOL];
++  int dequeued = rte_ring_dequeue_burst(ring, mbufs, MAX_PACKETS_SENT_PER_SYMBOL, NULL);
++  struct xran_ethdi_ctx *ctx = xran_ethdi_get_ctx();
++  struct rte_ring *tx_ring = ctx->tx_ring[port];
++  int enqueued = rte_ring_enqueue_burst(tx_ring, mbufs, dequeued, NULL);
++  if (enqueued != dequeued) {
++    rte_panic("Expected to be able to enqueue all the packets on the TX ring\n");
++  }
++}
++
++typedef struct {
++  void* pHandle;
++  int mu;
++  int port;
++} callback_args;
++
++int32_t send_packets(void* arg, struct xran_sense_of_time* p_sense_of_time) {
++  callback_args *cb_args = arg;
++  int slots_per_subframe[XRAN_MAX_NUM_MU] = {1, 2, 4, 8, 16};
++  int slots_in_frame = p_sense_of_time->nSlotIdx + p_sense_of_time->nSubframeIdx * slots_per_subframe[cb_args->mu];
++  xran_hook_process_tx_packets(cb_args->pHandle, cb_args->port, slots_in_frame, p_sense_of_time->nSymIdx);
++}
++
++void xran_hook_install(
++  void *pHandle,
++  process_uplane_fn process_uplane_fn_p,
++  void *process_uplane_fn_args,
++  process_cplane_fn process_cplane_fn_p,
++  void *process_cplane_fn_args,
++  int mu)
++{
++  static bool installed = false;
++  if (installed) rte_panic("Can only install once for one numerology\n");
++  installed = true;
++
++  struct xran_device_ctx *p_dev_ctx = (struct xran_device_ctx *)pHandle;
++  p_dev_ctx->hook.process_uplane_fn = process_uplane_fn_p;
++  p_dev_ctx->hook.process_uplane_fn_args = process_uplane_fn_args;
++  p_dev_ctx->hook.process_cplane_fn = process_cplane_fn_p;
++  p_dev_ctx->hook.process_cplane_fn_args = process_cplane_fn_args;
++
++  struct xran_ethdi_ctx *ctx = xran_ethdi_get_ctx();
++  for (int port = 0; port < ctx->io_cfg.num_vfs; port++) {
++    int ring_index = 0;
++    for (int slot = 0; slot < XRAN_N_FE_BUF_LEN; slot++) {
++      for (int symbol = 0; symbol < N_SYM_PER_SLOT; symbol++) {
++        char ring_name[RTE_RING_NAMESIZE];
++        snprintf(ring_name, RTE_DIM(ring_name), "%s_%d_%d", "hook_tx_sched_ring", port, ring_index++);
++        struct rte_ring *ring = rte_ring_create(ring_name, MAX_PACKETS_SENT_PER_SYMBOL, SOCKET_ID_ANY, RING_F_SC_DEQ);
++        if (ring == NULL) rte_panic("Cannot allocate rte_ring\n");
++        p_dev_ctx->hook.tx_rings[port][slot][symbol] = ring;
++      }
++    }
++  }
++
++  // Setup a callback each OTA symbol to send packets from per-symbol rings into the TX ring
++  static struct xran_sense_of_time xran_sense_of_time[N_SYM_PER_SLOT];
++  static callback_args cb_args;
++  cb_args.port = 0;
++  cb_args.mu = mu;
++  cb_args.pHandle = pHandle;
++  for (int i = 0; i < N_SYM_PER_SLOT; i++) {
++    xran_reg_sym_cb(pHandle, send_packets, &cb_args, &xran_sense_of_time[i], i, XRAN_CB_SYM_OTA_TIME, mu);
++  }
++}
++
++// Schedule packet for slot and symbol
++void xran_hook_schedule_packet(void *pHandle, struct rte_mbuf *mbuf, int port, int slot, int symbol)
++{
++  struct xran_device_ctx *p_dev_ctx = (struct xran_device_ctx *)pHandle;
++  struct rte_ring *ring = p_dev_ctx->hook.tx_rings[port][slot][symbol];
++  int res = rte_ring_enqueue(ring, mbuf);
++  if (res != 0) rte_panic("Cannot enqueue to ring");
++}
+diff --git a/fhi_lib/lib/src/xran_dev.h b/fhi_lib/lib/src/xran_dev.h
+index 5dad6a2..d5a455d 100644
+--- a/fhi_lib/lib/src/xran_dev.h
++++ b/fhi_lib/lib/src/xran_dev.h
+@@ -41,6 +41,7 @@ extern "C" {
+ #include <rte_spinlock.h>
+ 
+ #include "xran_fh_o_du.h"
++#include "xran_fh_o_ru.h"
+ #include "xran_prach_cfg.h"
+ #include "xran_up_api.h"
+ #include "xran_cp_api.h"
+@@ -408,6 +409,17 @@ typedef struct xran_device_virtual_mu_fields_s {
+     xran_ssb_info ssbInfo;
+ } xran_device_virtual_mu_fields;
+ 
++typedef struct {
++  // Used to replace XRAN packet processing functions
++  process_uplane_fn process_uplane_fn;
++  void *process_uplane_fn_args;
++  process_cplane_fn process_cplane_fn;
++  void *process_cplane_fn_args;
++
++  // Used to schedule TX in the future.
++  struct rte_ring *tx_rings[XRAN_VF_MAX][XRAN_N_FE_BUF_LEN][XRAN_SYMBOLNUMBER_MAX];
++} hook_cfg;
++
+ typedef struct /* TO DO __rte_cache_aligned*/ xran_device_ctx
+ {
+     uint8_t sector_id;
+@@ -537,6 +549,7 @@ typedef struct /* TO DO __rte_cache_aligned*/ xran_device_ctx
+     xran_sec_id_mu_map sectIdMUmap[2];
+     uint8_t sectIdMUmapWriteIndex; /* points to the sectIdMUmap entry that should be updated for a new packet */
+ #endif
++  hook_cfg hook;
+ } xran_device_ctx_t;
+ 
+ 
+diff --git a/fhi_lib/lib/src/xran_main.c b/fhi_lib/lib/src/xran_main.c
+index a9fd164..f838b43 100644
+--- a/fhi_lib/lib/src/xran_main.c
++++ b/fhi_lib/lib/src/xran_main.c
+@@ -2423,10 +2423,35 @@ int32_t xran_handle_rx_pkts(struct rte_mbuf* pkt_q[], uint16_t xport_id, struct
+     }
+     else
+     {
++        int numMUs = p_dev_ctx->fh_cfg.numMUs;
++        struct xran_sense_of_time sense_of_time[numMUs];
++        if (p_dev_ctx->hook.process_uplane_fn || p_dev_ctx->hook.process_cplane_fn) {
++          for (int i = 0; i < numMUs; i++) {
++            int mu = p_dev_ctx->fh_cfg.mu_number[i];
++            int32_t slots = xran_lib_ota_sym_idx_mu[mu] / XRAN_NUM_OF_SYMBOL_PER_SLOT;
++            int num_slots_per_frame = 10 << mu;
++            int num_slots_per_subframe = 1 << mu;
++            int frame = slots / num_slots_per_frame;
++            int subframe = (slots % num_slots_per_frame) % num_slots_per_subframe;
++            int slot = slots - frame * num_slots_per_frame - subframe * num_slots_per_subframe;
++            int symbol = xran_lib_ota_sym_idx_mu[mu] % XRAN_NUM_OF_SYMBOL_PER_SLOT;
++            sense_of_time[i].tti_counter = xran_lib_ota_sym_idx_mu[mu];
++            sense_of_time[i].nFrameIdx = xran_getSfnSecStart() + frame;
++            sense_of_time[i].nSymIdx = symbol;
++            sense_of_time[i].nSubframeIdx = subframe;
++            sense_of_time[i].nSlotIdx = slot;
++            sense_of_time[i].type_of_event = XRAN_CB_SYM_OTA_TIME;
++            sense_of_time[i].nSecond = xran_timingsource_get_current_second();
++          }
++        }
+         // uint64_t tt1 = MLogXRANTick();
+         for (i = 0; i < num_data; ++i)
+         {
+-            ret = process_mbuf(pkt_data[i], (void*)p_dev_ctx, p_cid);
++            if (p_dev_ctx->hook.process_uplane_fn) {
++                ret = p_dev_ctx->hook.process_uplane_fn(pkt_data[i], p_dev_ctx->hook.process_uplane_fn_args, p_cid, xport_id, sense_of_time);
++            } else {
++                ret = process_mbuf(pkt_data[i], (void*)p_dev_ctx, p_cid);
++            }
+             if (ret == MBUF_FREE)
+                 rte_pktmbuf_free(pkt_data[i]);
+         }
+@@ -2436,7 +2461,11 @@ int32_t xran_handle_rx_pkts(struct rte_mbuf* pkt_q[], uint16_t xport_id, struct
+             for (i = 0; i < num_control; ++i)
+             {
+                 t1 = MLogXRANTick();
+-                ret = process_cplane(pkt_control[i], (void*)p_dev_ctx);
++                if (p_dev_ctx->hook.process_cplane_fn) {
++                  ret = p_dev_ctx->hook.process_cplane_fn(pkt_data[i], p_dev_ctx->hook.process_cplane_fn_args, xport_id, sense_of_time);
++                } else {
++                  ret = process_cplane(pkt_control[i], (void*)p_dev_ctx);
++                }
+                 ++p_dev_ctx->fh_counters.rx_counter;
+                 if (ret == MBUF_FREE)
+                     rte_pktmbuf_free(pkt_control[i]);
+@@ -5033,9 +5062,11 @@ int32_t xran_start(void *pHandle)
+                 for(j=0;j<pDevCtx_port->fh_cfg.numMUs;j++)
+                 {
+                     mu = pDevCtx_port->fh_cfg.mu_number[j];
+-                    struct xran_prb_map * prbMap0 = (struct xran_prb_map *) pDevCtx_port->perMu[mu].sFrontHaulRxPrbMapBbuIoBufCtrl[0][0][0].sBufferList.pBuffers->pData;
+-                    for(i = 0; i < XRAN_MAX_SECTIONS_PER_SLOT && i < prbMap0->nPrbElm; i++)
+-                        pDevCtx_port->perMu[mu].numSetBFWs_arr[i] = prbMap0->prbMap[i].bf_weight.numSetBFWs;
++                    if (pDevCtx_port->perMu[mu].sFrontHaulRxPrbMapBbuIoBufCtrl[0][0][0].sBufferList.pBuffers) {
++                        struct xran_prb_map * prbMap0 = (struct xran_prb_map *) pDevCtx_port->perMu[mu].sFrontHaulRxPrbMapBbuIoBufCtrl[0][0][0].sBufferList.pBuffers->pData;
++                        for(i = 0; i < XRAN_MAX_SECTIONS_PER_SLOT && i < prbMap0->nPrbElm; i++)
++                            pDevCtx_port->perMu[mu].numSetBFWs_arr[i] = prbMap0->prbMap[i].bf_weight.numSetBFWs;
++                    }
+                 }
+             }
+         }
