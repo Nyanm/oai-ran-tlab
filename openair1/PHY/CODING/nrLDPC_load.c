@@ -66,7 +66,7 @@ int load_LDPClib(char *version, ldpc_interface_t *itf)
   AssertFatal((ret >= 0), "Error loading ldpc decoder");
   LOG_I(NR_PHY,"loading LDPC version %s\n",version);
   itf->LDPCinit = (LDPC_initfunc_t *)shlib_fdesc[0].fptr;
-  itf->LDPCinit_cuda = (LDPC_initfunc_cuda_t *)shlib_fdesc[1].fptr;
+  itf->LDPCinit_cuda = (LDPC_initfunc_t *)shlib_fdesc[1].fptr;
   itf->LDPCshutdown = (LDPC_shutdownfunc_t *)shlib_fdesc[2].fptr;
   itf->LDPCshutdown_cuda = (LDPC_shutdownfunc_t *)shlib_fdesc[3].fptr;
   itf->LDPCdecoder = (LDPC_decoderfunc_t *)shlib_fdesc[4].fptr;

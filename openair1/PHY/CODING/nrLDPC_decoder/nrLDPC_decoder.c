@@ -170,7 +170,7 @@ int32_t LDPCshutdown()
 }
 
 #ifndef USE_CUDA
-int32_t LDPCinit_cuda(int8_t * ptr1, int8_t * ptr2) {
+int32_t LDPCinit_cuda() {
 
   return 0;
 }

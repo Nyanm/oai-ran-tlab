@@ -341,7 +341,7 @@ one_measurement_t test_ldpc(short max_iterations,
   init_abort(&dec_abort);
  
   if (use32bit)
-    ldpc_toCompare.LDPCinit_cuda(channel_output_fixed_dev, estimated_output_dev);
+    ldpc_toCompare.LDPCinit_cuda();
   else   
     ldpc_toCompare.LDPCinit();
   

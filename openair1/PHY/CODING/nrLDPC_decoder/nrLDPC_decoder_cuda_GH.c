@@ -88,13 +88,14 @@ void dumpASS(int8_t* cnProcBufRes, const char* filename)
 }
 
 //--------------------------------------------------------------
-
+/*
 #ifdef USE_STATIC_ALLOC
 
 static int8_t cnProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_CN_PROC_BUF] __attribute__((aligned(64))) = {0};
 static int8_t bnProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_BN_PROC_BUF] __attribute__((aligned(64))) = {0};
 static int8_t llrRes[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
 static int8_t llrProcBuf[MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_MAX_NUM_LLR] __attribute__((aligned(64))) = {0};
+static ldpc_cuda_bridge_t* stream_bridges[8];
 #else
 
 int8_t* cnProcBuf_dev;
@@ -158,10 +159,51 @@ int cuda_support_init_decoder()
   return 0;
 }
 #endif
+*/
 
-extern void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t* p_out,
+int8_t* cnProcBuf_dev;
+int8_t* bnProcBuf_dev;
+int8_t* llrRes_dev;
+int8_t* llrProcBuf_dev;
+
+int8_t* cnProcBuf_host;
+int8_t* bnProcBuf_host;
+int8_t* llrRes_host;
+int8_t* llrProcBuf_host;
+int cuda_support_init_decoder()
+{
+  // 1. 强制使用 GPU HBM3 显存 (L2 Cache Friendly)
+  // 不管 GPU 支持不支持 Zero-Copy，中间变量都必须在 Device Memory 上！
+  
+  cudaError_t err;
+
+  err = cudaMalloc((void**)&cnProcBuf_dev, sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF);
+  AssertFatal(err == cudaSuccess, "CUDA Error (cnProcBuf_dev): %s\n", cudaGetErrorString(err));
+
+  err = cudaMalloc((void**)&bnProcBuf_dev, sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_BN_PROC_BUF);
+  AssertFatal(err == cudaSuccess, "CUDA Error (bnProcBuf_dev): %s\n", cudaGetErrorString(err));
+
+  err = cudaMalloc((void**)&llrRes_dev, sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
+  AssertFatal(err == cudaSuccess, "CUDA Error (llrRes_dev): %s\n", cudaGetErrorString(err));
+  
+  err = cudaMalloc((void**)&llrProcBuf_dev, sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
+  AssertFatal(err == cudaSuccess, "CUDA Error (llrProcBuf_dev): %s\n", cudaGetErrorString(err));
+
+  printf("[CUDA] Intermediate buffers allocated in HBM3 (Device Memory).\n");
+  
+  // 2. 这里的 Host 指针其实不需要了，除非你有一些调试代码要拷回来
+  cnProcBuf_host = NULL; 
+  bnProcBuf_host = NULL; 
+  llrRes_host = NULL; 
+  llrProcBuf_host = NULL;
+
+  return 0;
+}
+
+static ldpc_cuda_bridge_t* stream_bridges[8];
+
+extern void nrLDPC_decoder_scheduler_BG1_cuda_core(ldpc_cuda_bridge_t* buffer,
                                                    uint32_t numLLR,
-                                                   int8_t* llr,
                                                    int8_t* cnProcBuf,
                                                    int8_t* bnProcBuf,
                                                    int8_t* llrRes,
@@ -176,9 +218,8 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t* p_out,
                                                    uint8_t CudaStreamIdx,
                                                    cudaEvent_t* doneEvent);
 
-extern void nrLDPC_decoder_cuda_GraphRecord(int8_t* p_out,
+extern void nrLDPC_decoder_cuda_GraphRecord(ldpc_cuda_bridge_t* buffer,
                                             uint32_t numLLR,
-                                            int8_t* llr,
                                             int8_t* cnProcBuf,
                                             int8_t* bnProcBuf,
                                             int8_t* llrRes,
@@ -200,9 +241,9 @@ extern cudaError_t nrLDPC_decoder_cuda_GraphExecute(cudaGraphExec_t graphExec,
                                                     cudaStream_t stream,
                                                     cudaEvent_t* doneEvent,
                                                     uint8_t CudaStreamIdx);
-extern void nrLDPC_decoder_cuda_NormalExecute(int8_t* p_out,
+
+extern void nrLDPC_decoder_cuda_NormalExecute(ldpc_cuda_bridge_t* buffer,
                                               uint32_t numLLR,
-                                              int8_t* llr,
                                               int8_t* cnProcBuf,
                                               int8_t* bnProcBuf,
                                               int8_t* llrRes,
@@ -246,20 +287,46 @@ typedef struct {
   e_nrLDPC_outMode outMode;
   cudaGraph_t graph;
   cudaGraphExec_t exec;
+  ldpc_cuda_bridge_t* bridge_ptr;
   bool occupied;
 } gpu_graph_node_t;
 
 static gpu_graph_node_t gpu_graph_cache[MAX_GRAPH_CACHE_SIZE];
 static int dynamic_cache_idx = PRE_RECORDED_COUNT;
 
-void init_decoder_warmup(int8_t* input_llr, int8_t* output_bits)
+// 假设这是在你的 .cu 文件中，且 ldpc_cuda_bridge_t 已经在头文件中定义
+// typedef struct { int8_t* p_llr_ptr; int8_t* p_out_ptr; } ldpc_cuda_bridge_t;
+
+void init_decoder_warmup()
 {
   uint32_t Z_list[] = {320, 352, 384};
   uint8_t R_list[] = {13, 23};
   int node_idx = 0;
+  
+  // === 1. 定义并分配 Dummy Input/Output 数组 ===
+  // 大小覆盖最大可能的配置 (Z=384, n_segments=STATIC_SEG_SIZE)
+  // Input: 68 * 384 * n_segments
+  // Output: 8448 * n_segments (22 * 384 = 8448)
+  
+  int8_t *dummy_input_llr = NULL;
+  int8_t *dummy_output_bits = NULL;
+  uint32_t max_z = 384;
+  uint32_t max_n_segs = STATIC_SEG_SIZE; // 确保这个宏是可见的
+  
+  size_t input_size_bytes = 68 * max_z * max_n_segs * sizeof(int8_t);
+  size_t output_size_bytes = 8448 * max_n_segs * sizeof(int8_t);
+
+  // 使用 cudaHostAlloc (Pinned Memory) 以便 GPU 可以通过 Bridge 直接访问
+  cudaHostAlloc((void**)&dummy_input_llr, input_size_bytes, cudaHostAllocMapped);
+  cudaHostAlloc((void**)&dummy_output_bits, output_size_bytes, cudaHostAllocMapped);
+
+  // 初始化为全 0
+  memset(dummy_input_llr, 0, input_size_bytes);
+  memset(dummy_output_bits, 0, output_size_bytes);
 
   printf("[CUDA] Starting pre-recording for 6 standard formats...\n");
-  printf("input_llr: %p, output_bits: %p\n", input_llr, output_bits);
+  printf("  - Dummy Input: %p, Dummy Output: %p\n", dummy_input_llr, dummy_output_bits);
+
   for (int r_idx = 0; r_idx < 2; r_idx++) {
     for (int z_idx = 0; z_idx < 3; z_idx++) {
       uint32_t Z = Z_list[z_idx];
@@ -270,25 +337,35 @@ void init_decoder_warmup(int8_t* input_llr, int8_t* output_bits)
       uint8_t numMaxIter = 4;
       uint8_t n_segments = STATIC_SEG_SIZE;
 
-      nrLDPC_decoder_cuda_GraphRecord(output_bits,
-                                      numLLR,
-                                      input_llr,
-                                      cnProcBuf,
-                                      bnProcBuf,
-                                      llrRes,
-                                      llrProcBuf,
-                                      Z,
-                                      K,
-                                      BG,
-                                      R,
-                                      numMaxIter,
-                                      n_segments,
-                                      nrLDPC_outMode_BIT,
-                                      decoderStreams,
-                                      0,
-                                      &gpu_graph_cache[node_idx].graph,
-                                      &gpu_graph_cache[node_idx].exec,
-                                      (uint8_t*)&gpu_graph_cache[node_idx].occupied);
+      gpu_graph_cache[node_idx].bridge_ptr->p_llr_ptr = dummy_input_llr;
+      gpu_graph_cache[node_idx].bridge_ptr->p_out_ptr = dummy_output_bits;
+
+      // === 4. 调用录制函数 (传入 Bridge) ===
+      // 注意：这里我们移除了原来的 output_bits 和 input_llr 参数，改传 bridge_ptr
+      // 下一步我们需要修改 GraphRecord 的定义来匹配这个调用
+      nrLDPC_decoder_cuda_GraphRecord(
+                                    gpu_graph_cache[node_idx].bridge_ptr, // <--- 传入 Bridge
+                                    numLLR,
+                                    // input_llr, // 已移除，由 Bridge 承载
+                                    cnProcBuf_dev,
+                                    bnProcBuf_dev,
+                                    llrRes_dev,
+                                    llrProcBuf_dev,
+                                    Z,
+                                    K,
+                                    BG,
+                                    R,
+                                    numMaxIter,
+                                    n_segments,
+                                    nrLDPC_outMode_BIT,
+                                    decoderStreams,
+                                    0,
+                                    &gpu_graph_cache[node_idx].graph,
+                                    &gpu_graph_cache[node_idx].exec,
+                                    (uint8_t*)&gpu_graph_cache[node_idx].occupied);
+      
+      // 录制后同步，确保实例化完成
+      cudaDeviceSynchronize();
 
       // save parameters
       gpu_graph_cache[node_idx].Z = Z;
@@ -309,10 +386,13 @@ void init_decoder_warmup(int8_t* input_llr, int8_t* output_bits)
   if (dynamic_cache_idx > 0) {
     printf("[CUDA] Warming up the GPU pipeline with ALL %d recorded graphs...\n", dynamic_cache_idx);
 
+    // 遍历所有 Graph 进行预热执行
     for (int i = 0; i < dynamic_cache_idx; i++) {
       if (gpu_graph_cache[i].occupied) {
+        // 执行时，Graph 内部会通过 bridge_ptr 访问 dummy_input_llr/dummy_output_bits
+        // 因为 dummy 内存此时有效，所以这是安全的
         cudaError_t err = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[i].exec, decoderStreams[0], NULL, 0);
-        cudaDeviceSynchronize();
+        
         if (err != cudaSuccess) {
           printf("[CUDA] Warm-up failed at slot %d (Z=%d, R=%d): %s\n",
                  i,
@@ -323,10 +403,51 @@ void init_decoder_warmup(int8_t* input_llr, int8_t* output_bits)
       }
     }
 
+    // 等待所有 Warmup 执行完毕
     cudaDeviceSynchronize();
     printf("[CUDA] Warm-up complete. All templates validated.\n");
   }
+
+  // === 5. 清理 Dummy Buffers ===
+  // 此时 Warmup 已结束，Bridge 指向的 Dummy 内存可以释放了
+  // 在 Runtime 阶段，我们会把 Bridge 更新指向真实的业务数据
+  cudaFreeHost(dummy_input_llr);
+  cudaFreeHost(dummy_output_bits);
 }
+
+void init_decoder_gpu_structures() {
+    printf("[CUDA] Initializing Global GPU Structures...\n");
+
+    // === 1. 初始化 Graph Cache 的 Bridges (池化) ===
+    for (int i = 0; i < MAX_GRAPH_CACHE_SIZE; i++) {
+        // 只有当它是 NULL 时才分配 (防止多次 init 导致内存泄漏)
+        if (gpu_graph_cache[i].bridge_ptr == NULL) {
+            cudaHostAlloc((void**)&gpu_graph_cache[i].bridge_ptr, 
+                          sizeof(ldpc_cuda_bridge_t), 
+                          cudaHostAllocMapped);
+            
+            // 安全初始化
+            gpu_graph_cache[i].bridge_ptr->p_llr_ptr = NULL;
+            gpu_graph_cache[i].bridge_ptr->p_out_ptr = NULL;
+            gpu_graph_cache[i].occupied = false; 
+        }
+    }
+    printf("[CUDA] Allocated %d Graph Bridges.\n", MAX_GRAPH_CACHE_SIZE);
+
+    // === 2. 初始化 Legacy Fallback 的 Stream Bridges (流式) ===
+    // 这是给 "旧版调度器" 用的
+    for (int i = 0; i < 8; i++) {
+         if (stream_bridges[i] == NULL) {
+            cudaHostAlloc((void**)&stream_bridges[i], 
+                          sizeof(ldpc_cuda_bridge_t), 
+                          cudaHostAllocMapped);
+            stream_bridges[i]->p_llr_ptr = NULL;
+            stream_bridges[i]->p_out_ptr = NULL;
+         }
+    }
+    printf("[CUDA] Allocated %d Stream Bridges for Fallback case.\n", 8);
+}
+
 void init_decoder_graphs()
 {
   // This one should be removed
@@ -340,6 +461,7 @@ void init_decoder_graphs()
     gpu_graph_cache[i].occupied = false;
     gpu_graph_cache[i].graph = NULL;
     gpu_graph_cache[i].exec = NULL;
+    gpu_graph_cache[i].bridge_ptr = NULL;
     gpu_graph_cache[i].Z = 0;
     gpu_graph_cache[i].R = 0;
   }
@@ -377,16 +499,13 @@ extern int cuda_support_set;
 bool encoder_streamsCreated = false;
 cudaStream_t encoderStreams[4];
 
-int32_t LDPCinit_cuda(int8_t* input_llr, int8_t* output_bits)
+int32_t LDPCinit_cuda()
 {
   if (cuda_support_set == 0) {
-    // printf("Are we here in the new init function?input:%p, output:%p\n", input_llr, output_bits);
     printf("Calling encoder initializations\n");
     cuda_support_init();
-    printf("CUDA LDPC decoder initiating\n");
-#ifndef USE_STATIC_ALLOC
-    cuda_support_init_decoder();
-#endif
+//#ifndef USE_STATIC_ALLOC
+//#endif
   }
   if (!streamsCreated) {
     for (int s = 0; s < 8; ++s) {
@@ -395,14 +514,18 @@ int32_t LDPCinit_cuda(int8_t* input_llr, int8_t* output_bits)
     }
     streamsCreated = true;
   }
+
   if (!encoder_streamsCreated) {
     for (int s = 0; s < 4; ++s) {
       cudaStreamCreateWithFlags(&encoderStreams[s], cudaStreamNonBlocking);
     }
     encoder_streamsCreated = true;
   }
+  printf("CUDA LDPC decoder initiating\n");
+  cuda_support_init_decoder();
   init_decoder_graphs();
-  init_decoder_warmup(input_llr, output_bits);
+  init_decoder_gpu_structures();
+  init_decoder_warmup();
   return 0;
 }
 
@@ -448,7 +571,7 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
 
   int numIter = nrLDPC_decoder_core_dynamic(p_llr, p_out, n_segments, p_decParams, p_profiler, ab);
 
-  // int numIter = nrLDPC_decoder_core(p_llr, p_out, n_segments, p_decParams, p_profiler, ab); //old decoder module
+  //int numIter = nrLDPC_decoder_core(p_llr, p_out, n_segments, p_decParams, p_profiler, ab); //old decoder module
 
   set_abort(ab, false);
 
@@ -493,6 +616,9 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
 
   if (found_idx >= 0) {
     // === HIT: execute Graph ===
+    gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr;
+    gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = p_out;
+    
     nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[found_idx].exec,
                                      decoderStreams[0],
                                      NULL, // doneEvent
@@ -512,13 +638,15 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
     gpu_graph_cache[new_idx].n_segments = n_segments;
     gpu_graph_cache[new_idx].outMode = outMode;
 
-    nrLDPC_decoder_cuda_GraphRecord(p_out,
+    gpu_graph_cache[new_idx].bridge_ptr->p_llr_ptr = p_llr;
+    gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = p_out;
+
+    nrLDPC_decoder_cuda_GraphRecord(gpu_graph_cache[new_idx].bridge_ptr,
                                     numLLR,
-                                    p_llr,
-                                    cnProcBuf,
-                                    bnProcBuf,
-                                    llrRes,
-                                    llrProcBuf,
+                                    cnProcBuf_dev,
+                                    bnProcBuf_dev,
+                                    llrRes_dev,
+                                    llrProcBuf_dev,
                                     Z,
                                     K,
                                     BG,
@@ -541,13 +669,16 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
     // === MISS : Fallback ===
 
     // printf("We need to use normal execution\n");
-    nrLDPC_decoder_cuda_NormalExecute(p_out,
+    ldpc_cuda_bridge_t* perpack_buffer = stream_bridges[0];
+    perpack_buffer->p_llr_ptr = p_llr;
+    perpack_buffer->p_out_ptr = p_out;
+
+    nrLDPC_decoder_cuda_NormalExecute(perpack_buffer,
                                       numLLR,
-                                      p_llr,
-                                      cnProcBuf,
-                                      bnProcBuf,
-                                      llrRes,
-                                      llrProcBuf,
+                                      cnProcBuf_dev,
+                                      bnProcBuf_dev,
+                                      llrRes_dev,
+                                      llrProcBuf_dev,
                                       Z,
                                       K,
                                       BG,
@@ -560,6 +691,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
                                       NULL);
   }
   cudaDeviceSynchronize();
+  //cudaStreamSynchronize(decoderStreams[0]);
   return numMaxIter;
 }
 
@@ -592,6 +724,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
   e_nrLDPC_outMode outMode = p_decParams->outMode;
   uint32_t K = Z * 22;
   uint32_t numLLR = (R == 13) ? NR_LDPC_NCOL_BG1_R13 * Z : NR_LDPC_NCOL_BG1_R23 * Z;
+  
 
   // Pack setting area
   if (!SegmentPacked) {
@@ -625,11 +758,12 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     int PackShiftIdx = segmentPacks[SegPackIdx].startSeg;
 #ifdef USE_STATIC_ALLOC
     int8_t* perpack_llr = p_llr + PackShiftIdx * 68 * 384;
-    int8_t* perpack_cnProcBuf = cnProcBuf + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
-    int8_t* perpack_bnProcBuf = bnProcBuf + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
-    int8_t* perpack_llrProcBuf = llrProcBuf + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
-    int8_t* perpack_llrRes = llrRes + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
+    int8_t* perpack_cnProcBuf = cnProcBuf_dev + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
+    int8_t* perpack_bnProcBuf = bnProcBuf_dev + PackShiftIdx * NR_LDPC_SIZE_BN_PROC_BUF;
+    int8_t* perpack_llrProcBuf = llrProcBuf_dev + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
+    int8_t* perpack_llrRes = llrRes_dev + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_out = p_out + PackShiftIdx * K;
+
 #else
     int8_t* perpack_llr = p_llr + PackShiftIdx * 68 * 384;
     int8_t* perpack_cnProcBuf = cnProcBuf_dev + PackShiftIdx * NR_LDPC_SIZE_CN_PROC_BUF;
@@ -638,11 +772,13 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     int8_t* perpack_llrProcBuf = llrProcBuf_dev + PackShiftIdx * NR_LDPC_MAX_NUM_LLR;
     int8_t* perpack_out = p_out + PackShiftIdx * K;
 #endif
+    ldpc_cuda_bridge_t* perpack_buffer = stream_bridges[SegPackIdx];
+    perpack_buffer->p_llr_ptr = perpack_llr;
+    perpack_buffer->p_out_ptr = perpack_out;
     //  Call scheduler for this segment and stream
     //  Launch decoder on stream
-    nrLDPC_decoder_scheduler_BG1_cuda_core(perpack_out,
+    nrLDPC_decoder_scheduler_BG1_cuda_core(perpack_buffer,
                                            numLLR,
-                                           perpack_llr,
                                            perpack_cnProcBuf,
                                            perpack_bnProcBuf,
                                            perpack_llrRes,

@@ -468,7 +468,7 @@ void nrLDPC_bnProc_BG1_R23_cuda_stream_core_last(int8_t *bnProcBuf,
 }
 //-----------------------------------------↑↑↑ R23 ↑↑↑----------------------------------------
 //-------------------------------------↓↓↓ general R ↓↓↓----------------------------------------
-__global__ void llrPreProc_Kernel_BG1_int8_BIG_stream(int8_t *__restrict__ d_llr,
+__global__ void llrPreProc_Kernel_BG1_int8_BIG_stream(ldpc_cuda_bridge_t* d_buffer,
                                                       int8_t *__restrict__ d_llrProcBuf,
                                                       int8_t *__restrict__ d_cnProcBuf,
                                                       uint32_t Zc,
@@ -490,6 +490,7 @@ __global__ void llrPreProc_Kernel_BG1_int8_BIG_stream(int8_t *__restrict__ d_llr
   uint32_t idxBn = llr_cn_preProc_map_BG1_Z_R13[row][0];
   uint32_t circShift = llr_cn_preProc_map_BG1_Z_R13[row][ZcIdx];
 
+  int8_t *d_llr = d_buffer->p_llr_ptr;
   int8_t *p_cnProcBuf = (int8_t *)(d_cnProcBuf + segIdx * NR_LDPC_SIZE_CN_PROC_BUF + InnerOffset);
   int8_t *p_llr = (int8_t *)(d_llr + segIdx * 68 * Zc);
   int8_t *p_llrProcBuf = (int8_t *)(d_llrProcBuf + segIdx * NR_LDPC_MAX_NUM_LLR);
@@ -497,7 +498,7 @@ __global__ void llrPreProc_Kernel_BG1_int8_BIG_stream(int8_t *__restrict__ d_llr
   llrPreProc_Kernel_BG1_int8_Gn_stream(p_llr, p_llrProcBuf, p_cnProcBuf, MsgIdx, lane, row, idxBn, groupIdx, circShift, Zc, R);
 }
 
-void nrLDPC_llrPreProc_BG1_cuda_stream_core(int8_t *llr,
+void nrLDPC_llrPreProc_BG1_cuda_stream_core(ldpc_cuda_bridge_t* buffer,
                                             int8_t *llrProcBuf,
                                             int8_t *cnProcBuf,
                                             uint32_t Z,
@@ -507,7 +508,7 @@ void nrLDPC_llrPreProc_BG1_cuda_stream_core(int8_t *llr,
                                             int8_t CudaStreamIdx)
 {
   llrPreProc_Kernel_BG1_int8_BIG_stream<<<Kdim_R13[CudaStreamIdx].grid, Kdim_R13[CudaStreamIdx].block, 0, streams[CudaStreamIdx]>>>(
-      llr,
+      buffer,
       llrProcBuf,
       cnProcBuf,
       Z,
@@ -521,11 +522,13 @@ __global__ void llrOutPut_Kernel_BG1_int8_BIG_stream(uint32_t R,
                                                      int8_t *d_llrRes,
                                                      uint32_t Zc,
                                                      e_nrLDPC_outMode outMode,
-                                                     int8_t *d_out,
+                                                     ldpc_cuda_bridge_t* d_buffer,
                                                      uint32_t numLLR,
                                                     uint32_t K)
 {
   uint32_t segIdx = blockIdx.y;
+  
+  int8_t* d_out = d_buffer->p_out_ptr;
 
   int8_t *p_out = d_out + segIdx * K;
   int8_t *p_llrRes = (int8_t *)(d_llrRes + segIdx * NR_LDPC_MAX_NUM_LLR);
@@ -541,7 +544,7 @@ void nrLDPC_OutPut_BG1_cuda_stream_core(int8_t *llrRes,
                                         uint32_t Z,
                                         uint8_t R,
                                         e_nrLDPC_outMode outMode,
-                                        int8_t *p_out,
+                                        ldpc_cuda_bridge_t* buffer,
                                         uint32_t numLLR,
                                         uint32_t K,
                                         cudaStream_t *streams,
@@ -552,7 +555,7 @@ void nrLDPC_OutPut_BG1_cuda_stream_core(int8_t *llrRes,
       llrRes,
       Z,
       outMode,
-      p_out,
+      buffer,
       numLLR,
     K);
 
@@ -598,9 +601,8 @@ static inline uint32_t get_lut_col_index_host(uint32_t Zc)
 //------------------------------------------------------------------------
 //------------------------------------------------------------------------
 
-extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t *p_out,
+extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(ldpc_cuda_bridge_t* buffer,
                                                        uint32_t numLLR,
-                                                       int8_t *llr,
                                                        int8_t *cnProcBuf,
                                                        int8_t *bnProcBuf,
                                                        int8_t *llrRes,
@@ -639,7 +641,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t *p_out,
 
     uint8_t ZcIdx = get_lut_col_index_host(Z);
 
-    nrLDPC_llrPreProc_BG1_cuda_stream_core(llr, llrProcBuf, cnProcBuf, Z, ZcIdx, R, streams, CudaStreamIdx);
+    nrLDPC_llrPreProc_BG1_cuda_stream_core(buffer, llrProcBuf, cnProcBuf, Z, ZcIdx, R, streams, CudaStreamIdx);
 
     switch (R) {
       case 13: {
@@ -665,7 +667,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t *p_out,
         printf("Format not support yet\n");
         break;
     }
-    nrLDPC_OutPut_BG1_cuda_stream_core(llrRes, Z, R, outMode, p_out, numLLR, K, streams, CudaStreamIdx);
+    nrLDPC_OutPut_BG1_cuda_stream_core(llrRes, Z, R, outMode, buffer, numLLR, K, streams, CudaStreamIdx);
     
 
 #if RECORD_GRAPH
@@ -696,7 +698,7 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t *p_out,
 #define ENQUEUE_LDPC_DECODER_SEQUENCE(q_streams, q_idx)                                                                      \
   do {                                                                                                                       \
     uint8_t ZcIdx = get_lut_col_index_host(Z);                                                                               \
-    nrLDPC_llrPreProc_BG1_cuda_stream_core(llr, llrProcBuf, cnProcBuf, Z, ZcIdx, R, q_streams, q_idx);                       \
+    nrLDPC_llrPreProc_BG1_cuda_stream_core(buffer, llrProcBuf, cnProcBuf, Z, ZcIdx, R, q_streams, q_idx);                       \
     if (R == 13) {                                                                                                           \
       for (int i = 0; i <= numMaxIter; i++) {                                                                                \
         nrLDPC_cnProc_BG1_R13_cuda_stream_core(cnProcBuf, bnProcBuf, Z, ZcIdx, q_streams, q_idx);                            \
@@ -714,14 +716,13 @@ extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t *p_out,
           nrLDPC_bnProc_BG1_R23_cuda_stream_core(bnProcBuf, cnProcBuf, llrProcBuf, llrRes, Z, ZcIdx, q_streams, q_idx);      \
       }                                                                                                                      \
     }                                                                                                                        \
-    nrLDPC_OutPut_BG1_cuda_stream_core(llrRes, Z, R, outMode, p_out, numLLR, K, q_streams, q_idx);                      \
+    nrLDPC_OutPut_BG1_cuda_stream_core(llrRes, Z, R, outMode, buffer, numLLR, K, q_streams, q_idx);                      \
   } while (0)
 
 extern "C" {
 
-void nrLDPC_decoder_cuda_GraphRecord(int8_t *p_out,
+void nrLDPC_decoder_cuda_GraphRecord(ldpc_cuda_bridge_t* buffer,
                                      uint32_t numLLR,
-                                     int8_t *llr,
                                      int8_t *cnProcBuf,
                                      int8_t *bnProcBuf,
                                      int8_t *llrRes,
@@ -772,17 +773,16 @@ cudaError_t nrLDPC_decoder_cuda_GraphExecute(cudaGraphExec_t graphExec,
         return err; 
     }
 
-    if (doneEvent) {
-        err = cudaEventRecord(doneEvent[CudaStreamIdx], stream);
-    }
+    //if (doneEvent) {
+       // err = cudaEventRecord(doneEvent[CudaStreamIdx], stream);
+    //}
 
     return err; 
 }
 
 
-void nrLDPC_decoder_cuda_NormalExecute(int8_t *p_out,
+void nrLDPC_decoder_cuda_NormalExecute(ldpc_cuda_bridge_t* buffer,
                                        uint32_t numLLR,
-                                       int8_t *llr,
                                        int8_t *cnProcBuf,
                                        int8_t *bnProcBuf,
                                        int8_t *llrRes,
@@ -811,9 +811,9 @@ void nrLDPC_decoder_cuda_NormalExecute(int8_t *p_out,
   // 2. 执行 Kernel 序列
   ENQUEUE_LDPC_DECODER_SEQUENCE(streams, CudaStreamIdx);
 
-  if (doneEvent) {
-    cudaEventRecord(doneEvent[CudaStreamIdx], stream);
-  }
+  //if (doneEvent) {
+    //cudaEventRecord(doneEvent[CudaStreamIdx], stream);
+  //}
 }
 
 } // extern "C"

@@ -374,7 +374,7 @@ bool check_kernel_args_for_graph(const void* p_lut, // device
 }
 
 
-int32_t LDPCinit_cuda(int8_t * ptr1, int8_t * ptr2)
+int32_t LDPCinit_cuda()
 {
   printf("CUDA LDPC decoder initiating\n");
   size_t cn_bytes = MAX_NUM_DLSCH_SEGMENTS_DL * NR_LDPC_SIZE_CN_PROC_BUF * sizeof(int8_t);
@@ -460,7 +460,7 @@ if (err != cudaSuccess) {
 int32_t LDPCinit()
 {
   printf("initialling\n");
-  LDPCinit_cuda(NULL,NULL);
+  LDPCinit_cuda();
   return 0;
 }
 
