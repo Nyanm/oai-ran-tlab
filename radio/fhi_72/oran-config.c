@@ -20,6 +20,7 @@
  */
 
 #include "oran-config.h"
+#include "common/config/config_userapi.h"
 #include "oran-params.h"
 #include "common/utils/assertions.h"
 #include "common_lib.h"
@@ -1095,7 +1096,12 @@ static bool set_maxmin_pd(const paramdef_t *pd, int num, const char *name, uint1
 }
 
 #ifdef K_RELEASE
-static bool set_fh_per_mu_cfg(void *mplane_api, int ru_idx, int num_rus, const openair0_config_t *oai0, struct xran_fh_per_mu_cfg *perMu)
+static bool set_fh_per_mu_cfg(void *mplane_api,
+                              int ru_idx,
+                              int num_rus,
+                              const openair0_config_t *oai0,
+                              struct xran_fh_per_mu_cfg *perMu,
+                              bool is_du)
 {
   char aprefix[MAX_OPTNAME_SIZE] = {0};
 
@@ -1136,14 +1142,21 @@ static bool set_fh_per_mu_cfg(void *mplane_api, int ru_idx, int num_rus, const o
   perMu->nULFftSize = oai0->split7.fftSize; // UL FFT size; not used in xran
 
   /* DU delay profile */
-  if (!set_maxmin_pd(fhp, nfh, ORAN_FH_CONFIG_T1A_CP_DL, &perMu->T1a_min_cp_dl, &perMu->T1a_max_cp_dl)) // E - min not used in xran, max yes; F - both min and max are used in xran
-    return false;
-  if (!set_maxmin_pd(fhp, nfh, ORAN_FH_CONFIG_T1A_CP_UL, &perMu->T1a_min_cp_ul, &perMu->T1a_max_cp_ul)) // both E and F - min not used in xran, max yes
-    return false;
-  if (!set_maxmin_pd(fhp, nfh, ORAN_FH_CONFIG_T1A_UP, &perMu->T1a_min_up, &perMu->T1a_max_up)) // both E and F - min not used in xran, max yes
-    return false;
-  if (!set_maxmin_pd(fhp, nfh, ORAN_FH_CONFIG_TA4, &perMu->Ta4_min, &perMu->Ta4_max)) // both E and F - min not used in xran, max yes
-    return false;
+  if (is_du) {
+    if (!set_maxmin_pd(fhp, nfh, ORAN_FH_CONFIG_T1A_CP_DL, &perMu->T1a_min_cp_dl, &perMu->T1a_max_cp_dl)) // E - min not used in xran, max yes; F - both min and max are used in xran
+      return false;
+    if (!set_maxmin_pd(fhp, nfh, ORAN_FH_CONFIG_T1A_CP_UL, &perMu->T1a_min_cp_ul, &perMu->T1a_max_cp_ul)) // both E and F - min not used in xran, max yes
+      return false;
+    if (!set_maxmin_pd(fhp, nfh, ORAN_FH_CONFIG_T1A_UP, &perMu->T1a_min_up, &perMu->T1a_max_up)) // both E and F - min not used in xran, max yes
+      return false;
+    if (!set_maxmin_pd(fhp, nfh, ORAN_FH_CONFIG_TA4, &perMu->Ta4_min, &perMu->Ta4_max)) // both E and F - min not used in xran, max yes
+      return false;
+  } else {
+    if (!set_maxmin_pd(fhp, nfh, ORAN_FH_CONFIG_TA3, &perMu->Ta3_min, &perMu->Ta3_max))
+      return false;
+    if (!set_maxmin_pd(fhp, nfh, ORAN_FH_CONFIG_T2A, &perMu->T2a_min_up, &perMu->T2a_max_up))
+      return false;
+  }
 
   perMu->prachEnable = 1; // enable PRACH
   const split7_config_t *s7cfg = &oai0->split7;
@@ -1173,7 +1186,13 @@ static bool set_activeMUs(xran_active_numerologies_per_tti *p_activeMUs, uint8_t
 }
 #endif
 
-static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_category xran_cat, const openair0_config_t *oai0, struct xran_fh_config *fh_config)
+static bool set_fh_config(void *mplane_api,
+                          int ru_idx,
+                          int num_rus,
+                          enum xran_category xran_cat,
+                          const openair0_config_t *oai0,
+                          struct xran_fh_config *fh_config,
+                          bool is_du)
 {
   AssertFatal(num_rus == 1 || num_rus == 2, "only support 1 or 2 RUs as of now\n");
   AssertFatal(ru_idx < num_rus, "illegal ru_idx %d: must be < %d\n", ru_idx, num_rus);
@@ -1246,7 +1265,7 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
 
 #ifdef K_RELEASE
   uint8_t mu_number = oai0->nr_scs_for_raster;
-  if(!set_fh_per_mu_cfg(mplane_api, ru_idx, num_rus, oai0, &fh_config->perMu[mu_number]))
+  if(!set_fh_per_mu_cfg(mplane_api, ru_idx, num_rus, oai0, &fh_config->perMu[mu_number], is_du))
     return false;
 #endif
 
@@ -1358,14 +1377,15 @@ bool get_xran_config(void *mplane_api, const struct openair0_config *openair0_cf
   ru_session_list_t *ru_session_list = (ru_session_list_t *)mplane_api;
   for (int32_t o_xu_id = 0; o_xu_id < fh_init->xran_ports; o_xu_id++) {
     xran_mplane_t *xran_mplane = &ru_session_list->ru_session[o_xu_id].xran_mplane;
-    if (!set_fh_config(xran_mplane, o_xu_id, fh_init->xran_ports, xran_cat, openair0_cfg, &fh_config[o_xu_id])) {
+    if (!set_fh_config(xran_mplane, o_xu_id, fh_init->xran_ports, xran_cat, openair0_cfg, &fh_config[o_xu_id], true)) {
       MP_LOG_I("could not read FHI 7.2/RU-specific config\n");
       return false;
     }
   }
 #else
+  bool is_du = fh_init->io_cfg.id == 0;
   for (int32_t o_xu_id = 0; o_xu_id < fh_init->xran_ports; o_xu_id++) {
-    if (!set_fh_config(NULL, o_xu_id, fh_init->xran_ports, xran_cat, openair0_cfg, &fh_config[o_xu_id])) {
+    if (!set_fh_config(NULL, o_xu_id, fh_init->xran_ports, xran_cat, openair0_cfg, &fh_config[o_xu_id], is_du)) {
       printf("could not read FHI 7.2/RU-specific config\n");
       return false;
     }
