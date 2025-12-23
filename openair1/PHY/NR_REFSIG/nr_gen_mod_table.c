@@ -18,29 +18,25 @@
  * For more information about the OpenAirInterface (OAI) Software Alliance:
  *      contact@openairinterface.org
  */
-#define __STDC_WANT_IEC_60559_TYPES_EXT__
-#include <float.h>
 #include "nr_refsig.h"
 #include "nr_mod_table.h"
 c16_t nr_qpsk_mod_table[4];
-
+simde__m128i nr_qpsk_byte_mod_table[256];
 int32_t nr_16qam_mod_table[16];
 
-simde__m128i nr_qpsk_byte_mod_table[2048];
 
 int64_t nr_16qam_byte_mod_table[1024];
 
 int64_t nr_64qam_mod_table[4096];
-
-int32_t nr_256qam_mod_table[512];
+int32_t nr_256qam_mod_table[256];
 
 #ifdef FLT16_MAX
 cf16_t nr_qpsk_mod_table_fp16[4];
 int32_t nr_16qam_mod_table_fp16[16];
-simde__m128i nr_qpsk_byte_mod_table_fp16[2048];
+simde__m128i nr_qpsk_byte_mod_table_fp16[256];
 int64_t nr_16qam_byte_mod_table_fp16[1024];
 int64_t nr_64qam_mod_table_fp16[4096];
-int32_t nr_256qam_mod_table_fp16[512];
+int32_t nr_256qam_mod_table_fp16[256];
 #endif
 
 void nr_generate_modulation_table() {
@@ -59,8 +55,8 @@ void nr_generate_modulation_table() {
     nr_qpsk_mod_table[i].r = (short)(1 - 2 * (i & 1)) * val * sqrt2 * sqrt2;
     nr_qpsk_mod_table[i].i = (short)(1 - 2 * ((i >> 1) & 1)) * val * sqrt2 * sqrt2;
 #ifdef FLT16_MAX
-    nr_qpsk_mod_table_fp16[i].r = (_Float16)((1 - 2 * (i & 1)) * val * sqrt2 * sqrt2);
-    nr_qpsk_mod_table_fp16[i].i = (_Float16)((1 - 2 * ((i >> 1) & 1)) * val * sqrt2 * sqrt2);
+    nr_qpsk_mod_table_fp16[i].r = (_Float16)((1 - 2 * (i & 1)) *  sqrt2 * sqrt2);
+    nr_qpsk_mod_table_fp16[i].i = (_Float16)((1 - 2 * ((i >> 1) & 1)) * sqrt2 * sqrt2);
 #endif
     //printf("%d j%d\n",nr_qpsk_mod_table[i*2],nr_qpsk_mod_table[i*2+1]);
   }
@@ -157,7 +153,7 @@ void nr_generate_modulation_table() {
     table2[1+2*i] = (_Float16)(((1 - 2 * ((i >> 1) & 1))
                        * (8 - (1 - 2 * ((i >> 3) & 1)) * (4 - (1 - 2 * ((i >> 5) & 1)) * (2 - (1 - 2 * ((i >> 7) & 1))))))
                * sqrt170 * sqrt2);
-   printf("256QAM %d : %f,%f, (%f,%f) (%f,%f)\n",i,(float)table2[2*i],(float)table2[1+2*i],
+/*   printf("256QAM %d : %f,%f, (%f,%f) (%f,%f)\n",i,(float)table2[2*i],(float)table2[1+2*i],
 		  (float)((1 - 2 * (i & 1))
 		                         * (8 - (1 - 2 * ((i >> 2) & 1)) * (4 - (1 - 2 * ((i >> 4) & 1)) * (2 - (1 - 2 * ((i >> 6) & 1))))))
 		  * sqrt170 * sqrt2,
@@ -166,6 +162,7 @@ void nr_generate_modulation_table() {
 		  * sqrt170 * sqrt2, ((double)table[2*i])/32768.0,((double)table[1+2*i])/32768  
 		   
 		   );
+*/
 #endif
   }
 }

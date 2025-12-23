@@ -32,7 +32,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <assert.h>
-
+#include "common/platform_types.h"
 #include "PHY/sse_intrin.h"
 
 #include "common/utils/assertions.h"
@@ -55,49 +55,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define ALIGNARRAYSIZE(a, b) (((a + b - 1) / b) * b)
-#define ALNARS_16_4(a) ALIGNARRAYSIZE(a, 4)
-
-  typedef struct complexd {
-    double r;
-    double i;
-  } cd_t;
-
-  typedef struct complexf {
-    float r;
-    float i;
-  } cf_t;
-#ifdef FLT16_MAX
-  typedef struct complexf16 {
-#ifdef __aarch64__
-    __fp16 r;
-    __fp16 i;    
-#else
-    _Float16 r;
-    _Float16 i;
-#endif
-  } cf16_t;
-#endif
-  typedef struct complex8 {
-    int8_t r;
-    int8_t i;
-  } c8_t;
-
-  typedef struct complex16 {
-    int16_t r;
-    int16_t i;
-  } c16_t;
-
-  typedef struct complex32 {
-    int32_t r;
-    int32_t i;
-  } c32_t;
-
-  typedef struct complex64 {
-    int64_t r;
-    int64_t i;
-  } c64_t;
 
   typedef struct {
     int dim1;
@@ -234,6 +191,7 @@ extern "C" {
   {
     return (c16_t){.r = (int16_t)((a.r * b) >> Shift), .i = (int16_t)((a.i * b) >> Shift)};
   }
+
   __attribute__((always_inline)) inline c16_t c16MulConjShift(const c16_t a, const c16_t b, const int Shift)
   {
     return (c16_t) {
@@ -246,6 +204,14 @@ extern "C" {
     return (c16_t) {
       .r = (int16_t)(((a.r * b.r - a.i * b.i ) >> Shift) + c.r),
       .i = (int16_t)(((a.r * b.i + a.i * b.r ) >> Shift) + c.i)
+    };
+  }
+
+  __attribute__((always_inline)) inline c16_t c16maddConjShift(const c16_t a, const c16_t b, c16_t c, const int Shift)
+  {
+    return (c16_t) {
+      .r = (int16_t)(((a.r * b.r + a.i * b.i ) >> Shift) + c.r),
+      .i = (int16_t)(((a.r * b.i - a.i * b.r ) >> Shift) + c.i)
     };
   }
 
@@ -284,9 +250,9 @@ extern "C" {
   }
 
 #ifdef __aarch64__
-  __attribute__((always_inline)) inline cf16_t cf16mulReal(const cf16_t a, const __fp16 b)
+  __attribute__((always_inline)) inline cf16_t cf16mulReal(const cf16_t a, const float16_t b)
   {
-    return (cf16_t){.r = (__fp16)(a.r * b), .i = (__fp16)(a.i * b)};
+    return (cf16_t){.r = (float16_t)(a.r * b), .i = (float16_t)(a.i * b)};
   }
 #else
   __attribute__((always_inline)) inline cf16_t cf16mulReal(const cf16_t a, const _Float16 b)
@@ -1031,7 +997,7 @@ static inline void fp16_to_q15(const cf16_t *in_ri,
    const int N = n_complex * 2;
    int i = 0;
    int16_t *out_q15_2 = (int16_t *)out_q15;
-#if defined(__AVX512FP16__) && defined(__AVX512BW__)
+#if defined(__AVX512FP16__) 
    const _Float16 *in=(_Float16 *)in_ri;
    const int N = n_complex * 2;
    const __m512h k = _mm512_set1_ph((_Float16)amp);     // FP16 scale
@@ -1052,7 +1018,7 @@ static inline void fp16_to_q15(const cf16_t *in_ri,
    }
 #endif
    for (; i < N; ++i) {                           // tail
-     float f = (float)in[i] * amp;
+     float f = (float)in[i] * (float)amp;
      int   x = (int) (f > 0 ? floorf(f) : ceilf(f));  // trunc toward zero
      if (x >  32767) x =  32767;                      // saturate
      if (x < -32768) x = -32768;
@@ -1061,22 +1027,42 @@ static inline void fp16_to_q15(const cf16_t *in_ri,
 }
 static inline void rotate_cpx_vector_fp16(const cf16_t *const x, const cf16_t *const alpha, cf16_t *y, uint32_t N)
 {
+    uint32_t i=0;
 #if defined(__aarch64__)
-    const float16x8_t zeros=vdupq_n_f16(0.0f);
+    const float16x8_t zerosq=vdupq_n_f16(0.0f);
+    const float16x4_t zeros=vdup_n_f16(0.0f);
     const uint32x4_t alpha16x8=vdupq_n_u32(*(uint32_t*)alpha);
-    for (uint32_t i = 0; i < N ; i+=4) {
+    for (; i + 4 <= N ; i+=4) {
        float16x8_t x16x8 = vld1q_f16((float16_t*)(x + i));	    
-       for (int j=0;j<4;j++) printf("i+j %d %f.%f\n",(i+j),(double)*(float16_t*)&x[i+j].r,(double)*(float16_t*)&x[i+j].i); 
-       float16x8_t y16x8 = vcmlaq_f16(zeros,x16x8,*((float16x8_t*)&alpha16x8));
+       float16x8_t y16x8 = vcmlaq_f16(zerosq,x16x8,*((float16x8_t*)&alpha16x8));
+       y16x8 = vcmlaq_rot90_f16(y16x8,x16x8,*((float16x8_t*)&alpha16x8));
        vst1q_f16((float16_t*)(y + i),y16x8);
     }
-#elif defined(__AVX512FP16__) && defined(__AVX512BW__)
+    for (; i + 2 <= N ; i+=2) {
+       float16x4_t x16x4 = vld1_f16((float16_t*)(x + i));	    
+       float16x4_t y16x4 = vcmla_f16((float16x4_t)zeros,x16x4,*((float16x4_t*)&alpha16x8));
+       y16x4 = vcmla_rot90_f16(y16x4,x16x4,*((float16x4_t*)&alpha16x8));
+       vst1_f16((float16_t*)(y + i),y16x4);
+    }
+#elif defined(__AVX512FP16__) 
     const __m512i alpha512=_mm512_set1_epi32(*(uint32_t*)alpha);
-    for (uint32_t i=0; i < N; i+=16) {
+    for (; i + 16 < N; i+=16) {
        __m512h x512 = _mm512_loadu_ph(x + i);
        __m512h y512 = _mm512_cmul_pch(x512,alpha512);
        _mm512_storeu_ph((__mm512h*)(y + i),y512);
     }
+    for (; i + 8 < N; i+=8) {
+       __m256h x256 = _mm256_loadu_ph(x + i);
+       __m256h y256 = _mm256_cmul_pch(x256,(__m256h)alpha512);
+       _mm256_storeu_ph((__mm512h*)(y + i),y512);
+    }
+    for (; i + 4 < N; i+=4) {
+       __m128h x128 = _mm_loadu_ph(x + i);
+       __m128h y128 = _mm_cmul_pch(x128,(__m128h)alpha512);
+       _mm_storeu_ph((__mm128h*)(y + i),y128);
+    }
+#else
+    AssertFatal(1==0,"No support for fp16 complex multiplication and FP16 is requested\n");
 #endif
 }
 #endif

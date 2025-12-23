@@ -18,7 +18,6 @@
  * For more information about the OpenAirInterface (OAI) Software Alliance:
  *      contact@openairinterface.org
  */
-#define __STDC_WANT_IEC_60559_TYPES_EXT__
 #include "nr_modulation.h"
 #include "executables/softmodem-common.h"
 #include <simde/x86/avx512.h>
@@ -691,7 +690,7 @@ void perform_symbol_rotation(NR_DL_FRAME_PARMS *fp, double f0, c16_t *symbol_rot
     if (use_fp16) {
       (*(cf16_t*)&symbol_rotation[l]).r = (_Float16)exp_re;
       (*(cf16_t*)&symbol_rotation[l]).i = (_Float16)exp_im;
-      printf("initialize fp16 rotation  %d: %f %f\n", l, (double) (*(cf16_t*)&symbol_rotation[l]).r, (double) (*(cf16_t*)&symbol_rotation[l]).i);
+//      printf("initialize fp16 rotation  %d: %f %f\n", l, (double) (*(cf16_t*)&symbol_rotation[l]).r, (double) (*(cf16_t*)&symbol_rotation[l]).i);
     }
     else
 #endif
@@ -724,7 +723,11 @@ void init_symbol_rotation(NR_DL_FRAME_PARMS *fp
     if (f0 == 0)
       continue;
     c16_t *rot = fp->symbol_rotation[ll];
+#ifdef FLT16_MAX
+    printf("Initializing rotation %d fp16 %s\n",ll,use_fp16?"yes":"no");
+#else
     printf("Initializing rotation %d\n",ll);
+#endif
     perform_symbol_rotation(fp, f0, rot
 #ifdef FLT16_MAX
 			  ,use_fp16
@@ -925,7 +928,7 @@ void nr_layer_precoder_simd(const int n_layers,
   c16_t *out=beginning;
   printf("nr_layer_precoder_simd, use_fp16 %d\n",use_fp16);
 
-#if defined(__AVX512F__) && defined(__AVX512BW__)
+#if defined(__AVX512BW__)
   c16_t *end = out + (re_cnt & ~15);
 #ifdef FLT16_MAX && defined(__AVX512FP16__)
   cf16_t weights_fp16[n_layers];
@@ -974,6 +977,7 @@ void nr_layer_precoder_simd(const int n_layers,
   else
 #endif
   {
+    c16_t *end = out + (re_cnt & ~15);
     load_consts(__m512i, _mm512_set1_epi32, 0);
     if (n_layers == 1) {
       for (; out < end; out += sizeof(__m512i) / sizeof(*out)) {
@@ -1206,7 +1210,7 @@ void nr_layer_precoder_simd(const int n_layers,
     load_consts(int16x8_t, vdupq_n_s16, 0);
     if (n_layers == 1) {
       for (; out < end; out += sizeof(int16x8_t) / sizeof(*out)) {
-        const int16x8_t x0 = vld1q_s16((int16_t*)(in0++));
+        const int16x8_t x0 = vld1q_s16((const int16_t *)in0++);
         // Accumulate the product
         int16x8_t y = cmac0_prec128(x0, w_c0, w_s0);
         // Store the result to txdataF
@@ -1216,8 +1220,8 @@ void nr_layer_precoder_simd(const int n_layers,
     if (n_layers == 2) {
       load_consts(int16x8_t, vdupq_n_s16, 1);
       for (; out < end; out += sizeof(int16x8_t) / sizeof(*out)) {
-        const int16x8_t x0 = vld1q_s16((int16_t*)(in0++));
-        const int16x8_t x1 = vld1q_s16((int16_t*)(in1++));
+        const int16x8_t x0 = vld1q_s16((const int16_t *)in0++);
+        const int16x8_t x1 = vld1q_s16((const int16_t *)in1++);
         // Accumulate the product
         int16x8_t y = cmac0_prec128(x0, w_c0, w_s0);
         y = cmac_prec128(y, x1, w_c1, w_s1);
@@ -1229,9 +1233,9 @@ void nr_layer_precoder_simd(const int n_layers,
       load_consts(int16x8_t, vdupq_n_s16, 1);
       load_consts(int16x8_t, vdupq_n_s16, 2);
       for (; out < end; out += sizeof(int16x8_t) / sizeof(*out)) {
-        const int16x8_t x0 = vld1q_s16((int16_t*)(in0++));
-        const int16x8_t x1 = vld1q_s16((int16_t*)(in1++));
-        const int16x8_t x2 = vld1q_s16((int16_t*)(in2++));
+        const int16x8_t x0 = vld1q_s16((const int16_t *)in0++);
+        const int16x8_t x1 = vld1q_s16((const int16_t *)in1++);
+        const int16x8_t x2 = vld1q_s16((const int16_t *)in2++);
         // Accumulate the product
         int16x8_t y = cmac0_prec128(x0, w_c0, w_s0);
         y = cmac_prec128(y, x1, w_c1, w_s1);
@@ -1245,12 +1249,13 @@ void nr_layer_precoder_simd(const int n_layers,
       load_consts(int16x8_t, vdupq_n_s16, 2);
       load_consts(int16x8_t, vdupq_n_s16, 3);
       for (; out < end; out += sizeof(int16x8_t) / sizeof(*out)) {
-        const int16x8_t x0 = vld1q_s16((int16_t*)(in0++));
-        const int16x8_t x1 = vld1q_s16((int16_t*)(in1++));
-        const int16x8_t x2 = vld1q_s16((int16_t*)(in2++));
-        const int16x8_t x3 = vld1q_s16((int16_t*)(in3++));
+        const int16x8_t x0 = vld1q_s16((const int16_t *)in0++);
+        const int16x8_t x1 = vld1q_s16((const int16_t *)in1++);
+        const int16x8_t x2 = vld1q_s16((const int16_t *)in2++);
+        const int16x8_t x3 = vld1q_s16((const int16_t *)in3++);
         // Accumulate the product
         int16x8_t y = cmac0_prec128(x0, w_c0, w_s0);
+        ;
         y = cmac_prec128(y, x1, w_c1, w_s1);
         y = cmac_prec128(y, x2, w_c2, w_s2);
         y = cmac_prec128(y, x3, w_c3, w_s3);

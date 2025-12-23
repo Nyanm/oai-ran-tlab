@@ -199,20 +199,6 @@ static buffer_t *allocCirBuf(rfsimulator_state_t *bridge, int sock)
 
   if (bridge->channelmod > 0) {
     // create channel simulation model for this mode reception
-    static bool init_done = false;
-
-    if (!init_done) {
-      uint64_t rand;
-      FILE *h = fopen("/dev/random", "r");
-
-      if (1 != fread(&rand, sizeof(rand), 1, h))
-        LOG_W(HW, "Can't read /dev/random\n");
-
-      fclose(h);
-      randominit(rand);
-      tableNor(rand);
-      init_done = true;
-    }
     char modelname[30];
     snprintf(modelname,
              sizeofArray(modelname),
@@ -356,14 +342,6 @@ static void rfsimulator_readconfig(rfsimulator_state_t *rfsimulator) {
       fprintf(stderr, "unknown rfsimulator option: %s\n", rfsimu_params[p].strlistptr[i]);
       exit(-1);
     }
-  }
-
-  /* for compatibility keep environment variable usage */
-  if (getenv("RFSIMULATOR") != NULL) {
-    rfsimulator->ip = getenv("RFSIMULATOR");
-    LOG_W(HW, "The RFSIMULATOR environment variable is deprecated and support will be removed in the future. Instead, add parameter --rfsimulator.serveraddr %s to set the server address. Note: the default is \"server\"; for the gNB/eNB, you don't have to set any configuration.\n", rfsimulator->ip);
-    LOG_I(HW, "Remove RFSIMULATOR environment variable to get rid of this message and the sleep.\n");
-    sleep(10);
   }
 
   if ( strncasecmp(rfsimulator->ip,"enb",3) == 0 ||
@@ -696,6 +674,8 @@ static int rfsimulator_write_internal(rfsimulator_state_t *t,
 
     if (b->conn_sock >= 0) {
       samplesBlockHeader_t header = {nsamps, nbAnt, timestamp};
+      if (!nbAnt)
+        LOG_E(HW, "rfsimulator sending 0 tx antennas\n");
       fullwrite(b->conn_sock, &header, sizeof(header), t);
       if (nbAnt == 1) {
         fullwrite(b->conn_sock, samplesVoid[0], sampleToByte(nsamps, nbAnt), t);
@@ -804,6 +784,8 @@ static void process_recv_header(rfsimulator_state_t *t, buffer_t *b, bool first_
       // We have a transmission hole to fill, like TDD
       // we create no signal samples up to the beginning of this reception
       int nbAnt = b->th.nbAnt;
+      if (!nbAnt)
+        LOG_E(HW, "rfsimulator receive 0 rx antennas\n");
       if (b->th.timestamp - b->lastReceivedTS < CirSize) {
         // case we wrap at circular buffer end
         for (uint64_t index = b->lastReceivedTS; index < b->th.timestamp; index++) {
@@ -830,6 +812,8 @@ static void process_recv_header(rfsimulator_state_t *t, buffer_t *b, bool first_
   b->transferPtr = (char *)&b->circularBuf[(b->lastReceivedTS * b->th.nbAnt) % CirSize];
   // we now need to read the samples
   b->remainToTransfer = sampleToByte(b->th.size, b->th.nbAnt);
+  if (!b->remainToTransfer)
+    b->headerMode = true; // We got a header with 0 antennas, no I/Q to read
   return;
 }
 
@@ -1172,7 +1156,7 @@ int device_init(openair0_device *device, openair0_config_t *openair0_cfg) {
 
   AssertFatal((rfsimulator->epollfd = epoll_create1(0)) != -1, "epoll_create1() failed, errno(%d)", errno);
   // we need to call randominit() for telnet server (use gaussdouble=>uniformrand)
-  randominit(0);
+  randominit();
   set_taus_seed(0);
   /* look for telnet server, if it is loaded, add the channel modeling commands to it */
   add_telnetcmd_func_t addcmd = (add_telnetcmd_func_t)get_shlibmodule_fptr("telnetsrv", TELNET_ADDCMD_FNAME);

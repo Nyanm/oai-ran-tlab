@@ -55,11 +55,11 @@ static void nr_pdcch_scrambling(uint32_t *in, uint32_t size, uint32_t Nid, uint3
     out[i] = in[i] ^ seq[i];
 }
 
-static void nr_generate_dci(PHY_VARS_gNB *gNB,
-                            nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_pdu_rel15,
-                            int txdataF_offset,
-                            NR_DL_FRAME_PARMS *frame_parms,
-                            int slot)
+void nr_generate_dci(PHY_VARS_gNB *gNB,
+                     const nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_pdu_rel15,
+                     int txdataF_offset,
+                     NR_DL_FRAME_PARMS *frame_parms,
+                     int slot)
 {
   // fill reg list per symbol
   int reg_list[MAX_DCI_CORESET][NR_MAX_PDCCH_AGG_LEVEL * NR_NB_REG_PER_CCE];
@@ -87,7 +87,6 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
     int bitmap = SL_to_bitmap(cset_start_symb, pdcch_pdu_rel15->DurationSymbols);
     int beam_nb = beam_index_allocation(gNB->enable_analog_das,
                                         dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                        &gNB->gNB_config.analog_beamforming_ve,
                                         &gNB->common_vars,
                                         slot,
                                         frame_parms->symbols_per_slot,
@@ -188,7 +187,11 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
 #ifdef DEBUG_DCI
     
     for (int i=0; i<encoded_length>>1; i++)
-      printf("i %d mod_dci %d %d\n", i, mod_dci[i].r, mod_dci[i].i);
+#ifdef FLT16_MAX
+      if (gNB->use_fp16) printf("i %d mod_dci %f %f\n", i, ((cf16_t *)mod_dci)[i].r, ((cf16_t *)mod_dci)[i].i);
+      else 
+#endif
+        printf("i %d mod_dci %d %d\n", i, mod_dci[i].r, mod_dci[i].i);
 
 #endif
 
@@ -218,36 +221,68 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
           dmrs_idx = (reg_list[d][reg_count] + rb_offset) * 3;
 
         int k_prime = 0;
-
-        for (int m = 0; m < NR_NB_SC_PER_RB; m++) {
-          if (m == (k_prime << 2) + 1) { // DMRS if not already mapped
-            txdataF[l * frame_parms->ofdm_symbol_size + k] = c16mulRealShift(mod_dmrs[l][dmrs_idx], amp, 15);
+#ifdef FLT16_MAX
+        if (gNB->use_fp16) {
+          for (int m = 0; m < NR_NB_SC_PER_RB; m++) {
+            if (m == (k_prime << 2) + 1) { // DMRS if not already mapped
+              txdataF[l * frame_parms->ofdm_symbol_size + k] = mod_dmrs[l][dmrs_idx];
 
 #ifdef DEBUG_PDCCH_DMRS
-            LOG_I(NR_PHY_DCI,
-                  "PDCCH DMRS %d: l %d position %d => (%d,%d)\n",
-                  dmrs_idx,
-                  l,
-                  k,
-                  txdataF[l * frame_parms->ofdm_symbol_size + k].r,
-                  txdataF[l * frame_parms->ofdm_symbol_size + k].i);
+              LOG_I(NR_PHY_DCI,
+                    "PDCCH DMRS %d: l %d position %d => (%d,%d)\n",
+                    dmrs_idx,
+                    l,
+                    k,
+                    txdataF[l * frame_parms->ofdm_symbol_size + k].r,
+                    txdataF[l * frame_parms->ofdm_symbol_size + k].i);
 #endif
 
-            dmrs_idx++;
-            k_prime++;
+              dmrs_idx++;
+              k_prime++;
 
-          } else { // DCI payload
-            txdataF[l * frame_parms->ofdm_symbol_size + k] = c16mulRealShift(mod_dci[dci_idx], amp, 15);
-            dci_idx++;
-          }
+            } else { // DCI payload
+              txdataF[l * frame_parms->ofdm_symbol_size + k] = mod_dci[dci_idx];
+              dci_idx++;
+            }
 
-          k++;
+            k++;
 
-          if (k >= frame_parms->ofdm_symbol_size)
-            k -= frame_parms->ofdm_symbol_size;
-        } // m
-      } // reg_count
-    } // symbol_idx
+            if (k >= frame_parms->ofdm_symbol_size)
+              k -= frame_parms->ofdm_symbol_size;
+          } // m
+
+	}
+	else
+#endif
+          for (int m = 0; m < NR_NB_SC_PER_RB; m++) {
+            if (m == (k_prime << 2) + 1) { // DMRS if not already mapped
+              txdataF[l * frame_parms->ofdm_symbol_size + k] = c16mulRealShift(mod_dmrs[l][dmrs_idx], amp, 15);
+
+#ifdef DEBUG_PDCCH_DMRS
+              LOG_I(NR_PHY_DCI,
+                    "PDCCH DMRS %d: l %d position %d => (%d,%d)\n",
+                    dmrs_idx,
+                    l,
+                    k,
+                    txdataF[l * frame_parms->ofdm_symbol_size + k].r,
+                    txdataF[l * frame_parms->ofdm_symbol_size + k].i);
+#endif
+
+              dmrs_idx++;
+              k_prime++;
+
+            } else { // DCI payload
+              txdataF[l * frame_parms->ofdm_symbol_size + k] = c16mulRealShift(mod_dci[dci_idx], amp, 15);
+              dci_idx++;
+            }
+
+            k++;
+
+            if (k >= frame_parms->ofdm_symbol_size)
+              k -= frame_parms->ofdm_symbol_size;
+          } // m
+        } // reg_count
+      } // symbol_idx
 
     LOG_D(NR_PHY_DCI,
           "DCI: payloadSize = %d | payload = %llx\n",
@@ -255,16 +290,3 @@ static void nr_generate_dci(PHY_VARS_gNB *gNB,
           *(unsigned long long *)dci_pdu->Payload);
   } // for (int d=0;d<pdcch_pdu_rel15->numDlDci;d++)
 }
-
-void nr_generate_dci_top(processingData_L1tx_t *msgTx, int slot, int txdataF_offset)
-{
-  PHY_VARS_gNB *gNB = msgTx->gNB;
-  NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
-  start_meas(&gNB->dci_generation_stats);
-  for (int i = 0; i < msgTx->num_ul_pdcch; i++)
-    nr_generate_dci(msgTx->gNB, &msgTx->ul_pdcch_pdu[i].pdcch_pdu.pdcch_pdu_rel15, txdataF_offset, frame_parms, slot);
-  for (int i = 0; i < msgTx->num_dl_pdcch; i++)
-    nr_generate_dci(msgTx->gNB, &msgTx->pdcch_pdu[i].pdcch_pdu_rel15, txdataF_offset, frame_parms, slot);
-  stop_meas(&gNB->dci_generation_stats);
-}
-

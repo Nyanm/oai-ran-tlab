@@ -308,7 +308,7 @@ void apply_nr_rotation_TX(const NR_DL_FRAME_PARMS *fp,
     const c16_t *this_rotation = symbol_rotation + sidx;
     c16_t *this_symbol = (txdataF) + sidx * fp->ofdm_symbol_size;
 
-    LOG_D(PHY,"Rotating symbol %d, slot %d, symbol_subframe_index %d (%d,%d)\n",
+    LOG_I(PHY,"Rotating symbol %d, slot %d, symbol_subframe_index %d (%d,%d)\n",
       sidx,
       slot,
       sidx + symb_offset,
@@ -332,7 +332,6 @@ void apply_nr_rotation_TX(const NR_DL_FRAME_PARMS *fp,
       else
 #endif
       {	      
-	printf("Rotating symbol %d, use_fp16=0\n",sidx);
         rotate_cpx_vector(this_symbol, this_rotation, this_symbol,
                           (nb_rb + 1) * 6, 15);
         rotate_cpx_vector(this_symbol + fp->first_carrier_offset - 6,
@@ -343,12 +342,9 @@ void apply_nr_rotation_TX(const NR_DL_FRAME_PARMS *fp,
     } else {
 #ifdef FLT16_MAX
       if (use_fp16) {
-	for (int i=0;i<24;i++) printf("symbol %d re %d, %f.%f x %f.%f\n",sidx,i,(double)(*(__fp16*)&this_symbol[i].r),(double)(*(__fp16*)&this_symbol[i].i),(double)(*(__fp16*)&this_rotation->r),(double)(*(__fp16*)&this_rotation->i));
         rotate_cpx_vector_fp16((cf16_t*)this_symbol, (cf16_t*)this_rotation, (cf16_t*)this_symbol,
                           nb_rb * 6);
-	for (int i=0;i<24;i++) printf("symbol %d re %d, %f.%f\n",sidx,i,(double)(*(__fp16*)&this_symbol[i].r),(double)(*(__fp16*)&this_symbol[i].i));
 	fp16_to_q15((cf16_t*)this_symbol,this_symbol,nb_rb  * 6,tx_amp);
-	for (int i=0;i<24;i++) printf("symbol %d re %d, %d.%d amp %d\n",sidx,i,this_symbol[i].r,this_symbol[i].i,tx_amp);
         rotate_cpx_vector_fp16((cf16_t*)this_symbol + fp->first_carrier_offset,
                           (cf16_t*)this_rotation,
                           (cf16_t*)this_symbol + fp->first_carrier_offset,

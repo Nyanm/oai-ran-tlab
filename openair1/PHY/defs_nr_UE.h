@@ -467,7 +467,8 @@ typedef struct PHY_VARS_NR_UE_s {
 
   /// Timing Advance updates variables
   /// Timing advance update computed from the TA command signalled from gNB
-  int timing_advance;
+  int timing_advance; /// corresponds to N_TA
+  int timing_advance_ntn; /// corresponds to N_common_TA_adj + N_UE_TA_adj
   int N_TA_offset; ///timing offset used in TDD
   int ta_frame;
   int ta_slot;
@@ -499,6 +500,9 @@ typedef struct PHY_VARS_NR_UE_s {
   /// RF and Interface devices per CC
   openair0_device rfdevice;
 
+  /// Phase precompensation flag
+  bool no_phase_pre_comp;
+
   void* scopeData;
   // Pointers to hold PDSCH data only for phy simulators
   void *phy_sim_rxdataF;
@@ -508,6 +512,7 @@ typedef struct PHY_VARS_NR_UE_s {
   void *phy_sim_pdsch_dl_ch_estimates;
   void *phy_sim_pdsch_dl_ch_estimates_ext;
   uint8_t *phy_sim_dlsch_b;
+  uint8_t *phy_sim_test_buf;
 
   dynamic_barrier_t process_slot_tx_barriers[NUM_PROCESS_SLOT_TX_BARRIERS];
 
@@ -536,11 +541,14 @@ typedef struct {
   /// NR slot index within frame_rx [0 .. slots_per_frame - 1] to act upon for transmission
   int nr_slot_rx;
   int tx_slot_type;
-  //#endif
   /// frame to act upon for transmission
   int frame_tx;
   /// frame to act upon for reception
   int frame_rx;
+  /// hyper frame number to act upon for transmission
+  int hfn_tx;
+  /// hyper frame number to act upon for reception
+  int hfn_rx;
 } UE_nr_rxtx_proc_t;
 
 typedef struct {

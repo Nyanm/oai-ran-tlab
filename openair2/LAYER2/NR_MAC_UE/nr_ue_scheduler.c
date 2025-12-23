@@ -398,7 +398,7 @@ int nr_config_pusch_pdu(NR_UE_MAC_INST_t *mac,
   pusch_config_pdu->nrOfLayers = 1;
   pusch_config_pdu->Tpmi = 0;
   pusch_config_pdu->rnti = rnti;
-
+  pusch_config_pdu->dmrs_ports = 1;
   pusch_dmrs_AdditionalPosition_t add_pos = pusch_dmrs_pos2;
   int dmrslength = 1;
   NR_PUSCH_Config_t *pusch_Config = current_UL_BWP->pusch_Config;
@@ -435,7 +435,6 @@ int nr_config_pusch_pdu(NR_UE_MAC_INST_t *mac,
     pusch_config_pdu->rb_size = msgA_PUSCH_Resource->nrofPRBs_PerMsgA_PO_r16;
     pusch_config_pdu->mcs_table = 0;
     pusch_config_pdu->frequency_hopping = msgA_PUSCH_Resource->msgA_IntraSlotFrequencyHopping_r16 ? *msgA_PUSCH_Resource->msgA_IntraSlotFrequencyHopping_r16 : 0;
-    pusch_config_pdu->dmrs_ports = 1; // is in SIB1 nrofDMRS_Sequences_r16?
     pusch_config_pdu->pusch_data.new_data_indicator = 1; // new data
     pusch_config_pdu->num_dmrs_cdm_grps_no_data = 2;
     pusch_config_pdu->ul_dmrs_symb_pos = get_l_prime(3, 0, pusch_dmrs_pos2, pusch_len1, 10, mac->dmrs_TypeA_Position);
@@ -529,7 +528,6 @@ int nr_config_pusch_pdu(NR_UE_MAC_INST_t *mac,
 
     // DM-RS configuration according to 6.2.2 UE DM-RS transmission procedure in 38.214
     pusch_config_pdu->num_dmrs_cdm_grps_no_data = 2;
-    pusch_config_pdu->dmrs_ports = 1;
 
     // DMRS sequence initialization [TS 38.211, sec 6.4.1.1.1].
     // Should match what is sent in DCI 0_1, otherwise set to 0.
@@ -557,6 +555,7 @@ int nr_config_pusch_pdu(NR_UE_MAC_INST_t *mac,
     pusch_config_pdu->tbslbrm = 0;
 
   } else if (dci) {
+    pusch_config_pdu->subcarrier_spacing = scs;
     pusch_config_pdu->ulsch_indicator = dci->ulsch_indicator;
     if (dci->csi_request.nbits > 0 && dci->csi_request.val > 0) {
       AssertFatal(csi_report, "CSI report needs to be present in case of CSI request\n");
@@ -587,11 +586,10 @@ int nr_config_pusch_pdu(NR_UE_MAC_INST_t *mac,
 
     pusch_config_pdu->pusch_uci.harq_ack_bit_length = 0;
 
+    pusch_config_pdu->bwp_start = current_UL_BWP->BWPStart;
     if (dci_format == NR_UL_DCI_FORMAT_0_0 && ss_type == NR_SearchSpace__searchSpaceType_PR_common) {
-      pusch_config_pdu->bwp_start = sc_info->initial_ul_BWPStart;
       pusch_config_pdu->bwp_size = sc_info->initial_ul_BWPSize;
     } else {
-      pusch_config_pdu->bwp_start = current_UL_BWP->BWPStart;
       pusch_config_pdu->bwp_size = current_UL_BWP->BWPSize;
     }
 
@@ -1147,7 +1145,7 @@ void nr_ue_dl_scheduler(NR_UE_MAC_INST_t *mac, nr_downlink_indication_t *dl_info
   dl_config->slot = rx_slot;
   dl_config->number_pdus = 0;
 
-  if (mac->state == UE_NOT_SYNC || mac->state == UE_DETACHING)
+  if (mac->state == UE_NOT_SYNC || mac->state == UE_NOT_SYNC_RECONF || mac->state == UE_DETACHING)
     return;
 
   if (mac->state == UE_CONNECTED) {
@@ -1718,10 +1716,6 @@ static bool schedule_uci_on_pusch(NR_UE_MAC_INST_t *mac,
 static void nr_ue_pucch_scheduler(NR_UE_MAC_INST_t *mac, frame_t frame, int slot)
 {
   PUCCH_sched_t pucch[3] = {0}; // TODO the size might change in the future in case of multiple SR or multiple CSI in a slot
-
-  mac->nr_ue_emul_l1.num_srs = 0;
-  mac->nr_ue_emul_l1.num_harqs = 0;
-  mac->nr_ue_emul_l1.num_csi_reports = 0;
   int num_res = 0;
 
   if (mac->ra.ra_pucch) {
@@ -1771,9 +1765,6 @@ static void nr_ue_pucch_scheduler(NR_UE_MAC_INST_t *mac, frame_t frame, int slot
             pucch[j].n_harq,
             pucch[j].n_sr,
             pucch[j].n_csi);
-      mac->nr_ue_emul_l1.num_srs = pucch[j].n_sr;
-      mac->nr_ue_emul_l1.num_harqs = pucch[j].n_harq;
-      mac->nr_ue_emul_l1.num_csi_reports = pucch[j].n_csi;
 
       // checking if we need to schedule pucch[j] on PUSCH
       if (schedule_uci_on_pusch(mac, frame, slot, &pucch[j], mac->current_UL_BWP))
@@ -1784,9 +1775,6 @@ static void nr_ue_pucch_scheduler(NR_UE_MAC_INST_t *mac, frame_t frame, int slot
         LOG_E(NR_MAC, "Error in pucch allocation\n");
         return;
       }
-      DevAssert(mac->current_DL_BWP != NULL);
-      int mu = mac->current_DL_BWP->scs;
-      mac->nr_ue_emul_l1.active_uci_sfn_slot = NFAPI_SFNSLOT2DEC(mu, frame, slot);
       int ret = nr_ue_configure_pucch(mac,
                                       slot,
                                       frame,
@@ -1930,7 +1918,6 @@ uint8_t set_csirs_measurement_bitmap(NR_CSI_MeasConfig_t *csi_measconfig, NR_CSI
         AssertFatal(false, "Unexpected measurement report type %d\n", report_config->reportQuantity.present);
     }
   }
-  AssertFatal(meas_bitmap > 0, "Expected to have at least 1 measurement configured for CSI-RS\n");
   return meas_bitmap;
 }
 
@@ -2861,12 +2848,19 @@ static void schedule_ntn_config_command(fapi_nr_dl_config_request_t *dl_config, 
 {
   fapi_nr_dl_ntn_config_command_pdu *ntn_config_command_pdu = &dl_config->dl_config_list[dl_config->number_pdus].ntn_config_command_pdu;
 
+  ntn_config_command_pdu->epoch_hfn = mac->ntn_ta.epoch_hfn;
   ntn_config_command_pdu->epoch_sfn = mac->ntn_ta.epoch_sfn;
   ntn_config_command_pdu->epoch_subframe = mac->ntn_ta.epoch_subframe;
+
+  ntn_config_command_pdu->omega = mac->ntn_ta.omega;
+  ntn_config_command_pdu->pos_sat_0 = mac->ntn_ta.pos_sat_0;
+  ntn_config_command_pdu->pos_sat_90 = mac->ntn_ta.pos_sat_90;
+
+  ntn_config_command_pdu->N_common_ta_adj = mac->ntn_ta.N_common_ta_adj;
+  ntn_config_command_pdu->N_common_ta_drift = mac->ntn_ta.N_common_ta_drift;
+  ntn_config_command_pdu->N_common_ta_drift_variant = mac->ntn_ta.N_common_ta_drift_variant;
+
   ntn_config_command_pdu->cell_specific_k_offset = mac->ntn_ta.cell_specific_k_offset;
-  ntn_config_command_pdu->ntn_total_time_advance_ms = get_total_TA_ms(&mac->ntn_ta);
-  ntn_config_command_pdu->ntn_total_time_advance_drift = get_total_TA_drift(&mac->ntn_ta);
-  ntn_config_command_pdu->ntn_total_time_advance_drift_variant = get_total_TA_drift_variant(&mac->ntn_ta);
 
   dl_config->dl_config_list[dl_config->number_pdus].pdu_type = FAPI_NR_DL_NTN_CONFIG_PARAMS;
   dl_config->number_pdus += 1;

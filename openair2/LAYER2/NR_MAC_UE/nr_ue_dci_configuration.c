@@ -198,7 +198,6 @@ static void config_dci_pdu(NR_UE_MAC_INST_t *mac,
                                NR_UL_DCI_FORMAT_0_0,
                                rnti_type,
                                coreset,
-                               dl_bwp_id,
                                ss->searchSpaceType->present,
                                mac->type0_PDCCH_CSS_config.num_rbs,
                                0);
@@ -211,7 +210,6 @@ static void config_dci_pdu(NR_UE_MAC_INST_t *mac,
                                NR_DL_DCI_FORMAT_1_0,
                                rnti_type,
                                coreset,
-                               dl_bwp_id,
                                ss->searchSpaceType->present,
                                mac->type0_PDCCH_CSS_config.num_rbs,
                                0);
@@ -225,7 +223,6 @@ static void config_dci_pdu(NR_UE_MAC_INST_t *mac,
                                     dci_format[i],
                                     rnti_type,
                                     coreset,
-                                    dl_bwp_id,
                                     ss->searchSpaceType->present,
                                     mac->type0_PDCCH_CSS_config.num_rbs,
                                     alt_size);
@@ -307,12 +304,7 @@ static void config_dci_pdu(NR_UE_MAC_INST_t *mac,
       break;
   }
 
-  for (int i = 0; i < sps; i++) {
-    if ((monitoringSymbolsWithinSlot >> (sps - 1 - i)) & 1) {
-      rel15->coreset.StartSymbolIndex = i;
-      break;
-    }
-  }
+  rel15->coreset.StartSymbolBitmap = monitoringSymbolsWithinSlot;
   uint32_t Y = 0;
   if (ss->searchSpaceType->present == NR_SearchSpace__searchSpaceType_PR_ue_Specific)
     Y = get_Y(ss, slot, rel15->rnti);
@@ -487,6 +479,15 @@ void ue_dci_configuration(NR_UE_MAC_INST_t *mac, fapi_nr_dl_config_request_t *dl
         rnti_type = TYPE_MSGB_RNTI_;
       }
       config_dci_pdu(mac, dl_config, rnti_type, slot, ra_SS);
+    }
+    // If Msg3 has C-RNTI MAC CE, also monitor dedicated search spaces during contention resolution
+    // according to TS 38.321 section 5.1.5
+    if (ra->ra_state == nrRA_WAIT_CONTENTION_RESOLUTION && mac->msg3_C_RNTI) {
+      for (int i = 0; i < pdcch_config->list_SS.count; i++) {
+        NR_SearchSpace_t *ss = pdcch_config->list_SS.array[i];
+        if (is_ss_monitor_occasion(frame, slot, slots_per_frame, ss))
+          config_dci_pdu(mac, dl_config, TYPE_C_RNTI_, slot, ss);
+      }
     }
   } else if (mac->state == UE_CONNECTED) {
     /*

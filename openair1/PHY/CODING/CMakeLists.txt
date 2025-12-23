@@ -7,7 +7,6 @@ add_library(coding MODULE
             3gpplte_turbo_decoder.c
 )
 set_target_properties(coding PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-#ensure that the T header files are generated before targets depending on them
 target_link_libraries(coding PRIVATE log_headers)
 
 add_library(ldpc_orig MODULE
@@ -44,7 +43,7 @@ if (ENABLE_LDPC_CUDA)
   if (NOT CUDA_FOUND)
     message(FATAL_ERROR "no CUDA found")
   endif()
-  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_87;")
+  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_90;")
   SET(CUDA_VERBOSE_BUILD ON)
   cuda_add_library(ldpc_cuda MODULE
 	  #                   nrLDPC_decoder_LYC/nrLDPC_decoder_LYC.cu
@@ -76,3 +75,4 @@ if (ENABLE_LDPC_CUDA)
 endif()
 
 add_subdirectory(nrLDPC_coding)
+add_subdirectory(nrLDPC_decoder)

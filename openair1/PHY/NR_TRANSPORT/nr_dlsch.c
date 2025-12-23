@@ -51,7 +51,7 @@ static void nr_pdsch_codeword_scrambling(uint8_t *in, uint32_t size, uint8_t q, 
   nr_codeword_scrambling(in, size, q, Nid, n_RNTI, out);
 }
 
-static int do_ptrs_symbol(nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
+static int do_ptrs_symbol(const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
                           int start_sc,
                           int symbol_sz,
                           c16_t *txF,
@@ -145,7 +145,7 @@ static inline int interleave_with_0_signal_first(c16_t *output, c16_t *mod_dmrs,
 #elif defined(__aarch64__)
     uint32x4_t zeros = vdupq_n_u32(0); 
     float16x8_t amp_dmrs128 = vdupq_n_f16(*(float16_t*)amp_dmrs);
-    printf("Doing DMRS modulation for 2 CdmGrps, amp_dmrs %f, dmrs0 (%f %f)\n",*(float16_t*)amp_dmrs,((float16_t*)mod_dmrs)[0],((float16_t*)mod_dmrs)[1]);
+    //printf("Doing DMRS modulation for 2 CdmGrps, amp_dmrs %f, dmrs0 (%f %f)\n",*(float16_t*)amp_dmrs,((float16_t*)mod_dmrs)[0],((float16_t*)mod_dmrs)[1]);
     for (; i < (end & ~3); i += 4) {
       float16x8_t d0 = vmulq_f16(vld1q_f16((float16_t *)(mod_dmrs + i)), amp_dmrs128);
       float16x8_t d2 = (float16x8_t)vzip1q_u32((uint32x4_t)d0, zeros);
@@ -161,8 +161,8 @@ static inline int interleave_with_0_signal_first(c16_t *output, c16_t *mod_dmrs,
     cf16_t *out_cf16 = (cf16_t*)out;
     for (; i < end; i++) {
 #ifdef __aarch64__
-      out_cf16->r = mod_dmrs[i].r * *(__fp16*)amp_dmrs;
-      out_cf16->i = mod_dmrs[i].i * *(__fp16*)amp_dmrs;
+      out_cf16->r = mod_dmrs[i].r * *(float16_t*)amp_dmrs;
+      out_cf16->i = mod_dmrs[i].i * *(float16_t*)amp_dmrs;
       out_cf16++;
 #else
       *out_cf16++ = cf16mulReal((cf16_t)mod_dmrs[i], *(_float16*)amp_dmrs);
@@ -171,7 +171,7 @@ static inline int interleave_with_0_signal_first(c16_t *output, c16_t *mod_dmrs,
     }
   }
   else {
-    printf("interleave_with_0_signal_first : use_fp16 = 0\n");
+    //printf("interleave_with_0_signal_first : use_fp16 = 0\n");
 #if defined(__AVX512__) && defined(__AVX512BW__)
     __m512i zeros512 = _mm512_setzero_si512(), amp_dmrs512 = simde_mm512_set1_epi16(((int16_t*)amp_dmrs);
     __m512i perml = _mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
@@ -274,8 +274,8 @@ static inline int interleave_with_0_start_with_0(c16_t *output, c16_t *mod_dmrs,
     cf16_t *out_cf16 = (cf16_t*)out;
     for (; i < end; i++) {
 #ifdef __aarch64__
-      out_cf16->r = mod_dmrs[i].r * *(__fp16*)amp_dmrs;
-      out_cf16->i = mod_dmrs[i].i * *(__fp16*)amp_dmrs;
+      out_cf16->r = mod_dmrs[i].r * *(float16_t*)amp_dmrs;
+      out_cf16->i = mod_dmrs[i].i * *(float16_t*)amp_dmrs;
       out_cf16++;
 #else
       *out_cf16++ = cf16mulReal((cf16_t)mod_dmrs[i], *(_float16*)amp_dmrs);
@@ -285,7 +285,7 @@ static inline int interleave_with_0_start_with_0(c16_t *output, c16_t *mod_dmrs,
   }
   else 
   {
-    printf("interleave_with_0_start_with_0: use_fp16 = 0\n");
+    //printf("interleave_with_0_start_with_0: use_fp16 = 0\n");
 #if defined(__AVX512__) && defined(__AVX512BW__)
     simde__m512i zeros512 = simde_mm512_setzero_si512(), amp_dmrs512 = simde_mm512_set1_epi16(*(int16_t*)amp_dmrs);
     simde__m512i perml = simde_mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
@@ -340,7 +340,7 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c
   int i = 0;
   int end = sz / 2;
   if (use_fp16) {
-#if defined(__AVX512__) && defined(__AVX512FP16__) && defined(FLT16_MAX)
+#if defined(__AVX512FP16__) && defined(FLT16_MAX)
     __m512h amp2512 = _mm512_set1_ph(*(_Float16*)amp2), amp512 = _mm512_set1_ph(*(_Float16*)amp);
     __m512i perml = _mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
     __m512i permh = _mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
@@ -365,10 +365,10 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c
     }
     __m128h amp2128 = _mm_set1_ph(amp2), amp128 = _mm_set1_ph(amp);
     for (; i < (end & ~3); i += 4) {
-      __m128h d0 = _mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(signal2 + i)), amp2128);
-      __m128h d1 = _mm_mulhrs_epi16(simde_mm_loadu_si128((simde__m128i *)(signal1 + i)), amp128);
-      __m128h d2 = _mm_unpacklo_epi32(d0, d1);
-      __m128h d3 = _mm_unpackhi_epi32(d0, d1);
+      __m128h d0 = _mm_mul_ph(simde_mm_loadu_si128((simde__m128i *)(signal2 + i)), amp2128);
+      __m128h d1 = _mm_mul_ph(simde_mm_loadu_si128((simde__m128i *)(signal1 + i)), amp128);
+      __m128h d2 = (__m128h)_mm_unpacklo_epi32(d0, d1);
+      __m128h d3 = (__m128h)_mm_unpackhi_epi32(d0, d1);
       simde_mm_storeu_si128((simde__m128i *)out, d2);
       out += 4;
       simde_mm_storeu_si128((simde__m128i *)out, d3);
@@ -390,13 +390,15 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c
     AssertFatal(1==0,"Architecture doesn't support fp16\n");
 #endif
     cf16_t *out_cf16 = (cf16_t*)out;
+    printf("tail: end %d\n",end);
     for (; i < end; i++) {
 #ifdef __aarch64__
-      out_cf16->r = signal2[i].r * *(__fp16*)amp2;
-      out_cf16->i = signal2[i].i * *(__fp16*)amp2;
+      cf16_t *s1 = (cf16_t*)signal1,*s2=(cf16_t*)signal2;	    
+      out_cf16->r = (float16_t)s2[i].r * *(float16_t*)amp2;
+      out_cf16->i = (float16_t)s2[i].i * *(float16_t*)amp2;
       out_cf16++;
-      out_cf16->r = signal1[i].r * *(__fp16*)amp;
-      out_cf16->i = signal1[i].i * *(__fp16*)amp;
+      out_cf16->r = (float16_t)s1[i].r * *(float16_t*)amp;
+      out_cf16->i = (float16_t)s1[i].i * *(float16_t*)amp;
       out_cf16++;
 #else
       *out_cf16++ = cf16mulReal((cf16_t)signal2[i], *(_Float16*)amp2);
@@ -407,8 +409,8 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c
   else
   {  
 
-    printf("interleave_signals: use_fp16 = 0\n");
-#if defined(__AVX512__) && defined(__AVX512BW__)
+    //printf("interleave_signals: use_fp16 = 0\n");
+#if defined(__AVX512BW__)
   
     simde__m512i amp2512 = simde_mm512_set1_epi16(*(int16_t*)amp2), amp512 = simde_mm512_set1_epi16(*(int16_t*)amp);
     simde__m512i perml = simde_mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
@@ -487,7 +489,8 @@ static inline int dmrs_case00(c16_t *output,
 	cf16_t *output_cf16 = (cf16_t*)&output[k];
 	cf16_t *mod_dmrs_cf16 = (cf16_t*)&mod_dmrs[dmrs_idx];
 #ifdef __aarch64__
-        *output_cf16 = cf16mulReal(*mod_dmrs_cf16, Wt[l_prime] * Wf[k_prime] * *(__fp16*)amp_dmrs);
+        *output_cf16 = cf16mulReal(*mod_dmrs_cf16, Wt[l_prime] * Wf[k_prime] * *(float16_t*)amp_dmrs);
+	if (i<4) printf("dmrs %d : mod_dmrs %f+(%fj) * %f = %f+(%fj)\n",i,mod_dmrs_cf16->r,mod_dmrs_cf16->i,*(float16_t*)amp_dmrs,output_cf16->r,output_cf16->i);
 #else
         *output_cf16 = cf16mulReal((cf16_t)mod_dmrs[dmrs_idx], Wt[l_prime] * Wf[k_prime] * *(_Float16*)amp_dmrs);
 #endif
@@ -508,7 +511,7 @@ static inline int dmrs_case00(c16_t *output,
 	cf16_t *output_cf16 = (cf16_t*)&output[k];
 	cf16_t *in_cf16 = (cf16_t*)in++;
 #ifdef __aarch64__
-        *output_cf16 = cf16mulReal(*in_cf16,*(__fp16*)amp);
+        *output_cf16 = cf16mulReal(*in_cf16,*(float16_t*)amp);
 #else
         *output_cf16 = cf16mulReal(*in_cf16,*(_Float16*)amp);
 #endif
@@ -536,7 +539,7 @@ static inline int no_ptrs_dmrs_case(c16_t *output, c16_t *txl, void *amp, const 
   else
 #endif
   {
-    printf("no_ptrs_dmrs_case: use_fp16=0\n");
+    //printf("no_ptrs_dmrs_case: use_fp16=0\n");
 #if defined(__AVX512__) && defined(__AVX512BW__)
     simde__m512i amp512 = simde_mm512_set1_epi16(*(int16_t*)amp);
     for (; i < (sz & ~15); i += 16) {
@@ -582,7 +585,7 @@ static inline void neg_dmrs(c16_t *in, c16_t *out, int sz, int use_fp16)
 
 static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
                               int slot,
-                              nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
+                              const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
                               int layer,
                               c16_t *output,
                               c16_t *txl_start,
@@ -704,10 +707,12 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
     txl += no_ptrs_dmrs_case(output + start_sc, txl, amp, upper_limit,use_fp16);
     txl += no_ptrs_dmrs_case(output, txl, amp, remaining_re,use_fp16);
   } // no DMRS/PTRS in symbol
+   /* 
   if (use_fp16) 
-    for (int i=0;i<24;i++) printf("symbol %d layer %d cdmGrps %d dmrs_port %d output[%d] = (%f,%f) amp %f, amp_dmrs %f\n",l_symbol, layer, rel15->numDmrsCdmGrpsNoData, get_dmrs_port(layer, rel15->dmrsPorts), i,(double)((cf16_t*)(output+start_sc))[i].r,(double)((cf16_t*)(output+start_sc))[i].i,(double)*(__fp16*)amp,(double)*(__fp16*)amp_dmrs); 
+    for (int i=0;i<72;i++) printf("symbol %d layer %d cdmGrps %d dmrs_port %d output[%d] = (%f,%f) amp %f, amp_dmrs %f\n",l_symbol, layer, rel15->numDmrsCdmGrpsNoData, get_dmrs_port(layer, rel15->dmrsPorts), i,(double)((cf16_t*)(output+start_sc))[i].r,(double)((cf16_t*)(output+start_sc))[i].i,(double)*(float16_t*)amp,(double)*(float16_t*)amp_dmrs); 
   else
-    for (int i=0;i<24;i++) printf("symbol %d output[%d] = (%d,%d)\n",l_symbol,i,(output+start_sc)[i].r,(output+start_sc)[i].i); 
+    for (int i=0;i<72;i++) printf("symbol %d output[%d] = (%d,%d)\n",l_symbol,i,(output+start_sc)[i].r,(output+start_sc)[i].i); 
+    */
   return txl - txl_start;
 }
 
@@ -715,7 +720,7 @@ static inline void do_txdataF(c16_t **txdataF,
                               int symbol_sz,
                               c16_t txdataF_precoding[][symbol_sz],
                               PHY_VARS_gNB *gNB,
-                              nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
+                              const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
                               int ant,
                               int start_sc,
                               int txdataF_offset_per_symbol)
@@ -723,7 +728,7 @@ static inline void do_txdataF(c16_t **txdataF,
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   int rb = 0;
   uint16_t subCarrier = start_sc;
-  nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
+  const nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
   while (rb < rel15->rbSize) {
     // get pmi info
     const int pmi = (pb->prg_size > 0) ? (pb->prgs_list[(int)rb / pb->prg_size].pm_idx) : 0;
@@ -742,8 +747,10 @@ static inline void do_txdataF(c16_t **txdataF,
           memcpy(&txdataF[ant][txdataF_offset_per_symbol + subCarrier],
                  &txdataF_precoding[ant][subCarrier],
                  re_cnt * sizeof(**txdataF));
+	  /*
 	  if (gNB->use_fp16) 
-	    for (int i=0;i<re_cnt;i++) printf("txdataF[%d][%d] %f.%f\n",ant,txdataF_offset_per_symbol + subCarrier + i,(double)(*(__fp16*)&txdataF[ant][txdataF_offset_per_symbol+subCarrier+i].r),(double)(*(__fp16*)&txdataF[ant][txdataF_offset_per_symbol+subCarrier+i].i));
+	    for (int i=0;i<re_cnt;i++) printf("txdataF[%d][%d] %f.%f\n",ant,txdataF_offset_per_symbol + subCarrier + i,(double)(*(float16_t*)&txdataF[ant][txdataF_offset_per_symbol+subCarrier+i].r),(double)(*(float16_t*)&txdataF[ant][txdataF_offset_per_symbol+subCarrier+i].i));
+	    */
 	}
         else
           memset(&txdataF[ant][txdataF_offset_per_symbol + subCarrier], 0, re_cnt * sizeof(**txdataF));
@@ -755,8 +762,10 @@ static inline void do_txdataF(c16_t **txdataF,
                  &txdataF_precoding[ant][subCarrier],
                  neg_length * sizeof(**txdataF));
           memcpy(&txdataF[ant][txdataF_offset_per_symbol], &txdataF_precoding[ant], pos_length * sizeof(**txdataF));
+	  /*
 	  if (gNB->use_fp16) 
-	    for (int i=0;i<neg_length;i++) printf("**txdataF[%d][%d] %f.%f\n",ant,txdataF_offset_per_symbol + subCarrier + i,(double)(*(__fp16*)&txdataF[ant][txdataF_offset_per_symbol+subCarrier+i].r),(double)(*(__fp16*)&txdataF[ant][txdataF_offset_per_symbol+i].i));
+	    for (int i=0;i<neg_length;i++) printf("**txdataF[%d][%d] %f.%f\n",ant,txdataF_offset_per_symbol + subCarrier + i,(double)(*(float16_t*)&txdataF[ant][txdataF_offset_per_symbol+subCarrier+i].r),(double)(*(float16_t*)&txdataF[ant][txdataF_offset_per_symbol+i].i));
+	    */
         } else {
           memset(&txdataF[ant][txdataF_offset_per_symbol + subCarrier], 0, neg_length * sizeof(**txdataF));
           memset(&txdataF[ant][txdataF_offset_per_symbol], 0, pos_length * sizeof(**txdataF));
@@ -825,8 +834,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 
   time_stats_t *dlsch_scrambling_stats = &gNB->dlsch_scrambling_stats;
   time_stats_t *dlsch_modulation_stats = &gNB->dlsch_modulation_stats;
-  NR_DL_gNB_HARQ_t *harq = &dlsch->harq_process;
-  nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15 = &harq->pdsch_pdu.pdsch_pdu_rel15;
+  const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15 = &dlsch->pdsch_pdu->pdsch_pdu_rel15;
   const int layerSz = frame_parms->N_RB_DL * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB;
   const int symbol_sz=frame_parms->ofdm_symbol_size;
   const int dmrs_Type = rel15->dmrsConfigType;
@@ -836,7 +844,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   const _Float16 amp_dmrs_fp16 = (_Float16)sqrt(rel15->numDmrsCdmGrpsNoData);
 #endif
   const int16_t amp = gNB->TX_AMP;
-  const int16_t amp_dmrs = min((double)amp * sqrt(rel15->numDmrsCdmGrpsNoData), INT16_MAX); // 3GPP TS 38.214 Section 4.1: Table 4.1-1
+  const int16_t amp_dmrs = min((double)gNB->TX_AMP * sqrt(rel15->numDmrsCdmGrpsNoData), INT16_MAX); // 3GPP TS 38.214 Section 4.1: Table 4.1-1
   LOG_D(PHY,
         "pdsch: BWPStart %d, BWPSize %d, rbStart %d, rbsize %d\n",
         rel15->BWPStart,
@@ -855,7 +863,6 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   /* PTRS */
   uint16_t dlPtrsSymPos = 0;
   int n_ptrs = 0;
-  uint32_t ptrsSymbPerSlot = 0;
   if (rel15->pduBitmap & 0x1) {
     set_ptrs_symb_idx(&dlPtrsSymPos,
                       rel15->NrOfSymbols,
@@ -863,15 +870,13 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
                       1 << rel15->PTRSTimeDensity,
                       rel15->dlDmrsSymbPos);
     n_ptrs = (rel15->rbSize + rel15->PTRSFreqDensity - 1) / rel15->PTRSFreqDensity;
-    ptrsSymbPerSlot = get_ptrs_symbols_in_slot(dlPtrsSymPos, rel15->StartSymbolIndex, rel15->NrOfSymbols);
   }
-  harq->unav_res = ptrsSymbPerSlot * n_ptrs;
 
 #ifdef DEBUG_DLSCH
   printf("PDSCH encoding:\nPayload:\n");
-  for (int i = 0; i < (harq->B >> 3); i += 16) {
+  for (int i = 0; i < (dlsch->B >> 3); i += 16) {
     for (int j = 0; j < 16; j++)
-      printf("0x%02x\t", harq->pdu[i + j]);
+      printf("0x%02x\t", dlsch->pdu[i + j]);
     printf("\n");
   }
   printf("\nEncoded payload:\n");
@@ -884,7 +889,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 #endif
 
   if (IS_SOFTMODEM_DLSIM)
-    memcpy(harq->f, input_ptr, (encoded_length + 7) >> 3);
+    memcpy(dlsch->f, input_ptr, (encoded_length + 7) >> 3);
 
   c16_t mod_symbs[rel15->NrOfCodewords][encoded_length] __attribute__((aligned(64)));
   for (int codeWord = 0; codeWord < rel15->NrOfCodewords; codeWord++) {
@@ -914,10 +919,6 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 #else
     nr_modulation(scrambled_output, encoded_length, Qm, (int16_t *)mod_symbs[codeWord]);
 #endif
-    if (gNB->use_fp16)
-      for (int i=0;i<16;i++) printf("mod output %d : %f\n",i,(double)((__fp16*)mod_symbs[codeWord])[i]);
-    else
-      for (int i=0;i<16;i++) printf("mod output %d : %d\n",i,((int16_t*)mod_symbs[codeWord])[i]);
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_gNB_PDSCH_MODULATION, 0);
     stop_meas(dlsch_modulation_stats);
 #ifdef DEBUG_DLSCH
@@ -966,12 +967,11 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   //        pmi = prgs_list[rbidx/prg_size].pm_idx, rbidx =0,...,rbSize-1
   // The Precoding matrix:
   // The Codebook Type I
-  nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
+  const nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
   // beam number in multi-beam scenario (concurrent beams)
   int bitmap = SL_to_bitmap(rel15->StartSymbolIndex, rel15->NrOfSymbols);
   int beam_nb = beam_index_allocation(gNB->enable_analog_das,
                                       pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                      &gNB->gNB_config.analog_beamforming_ve,
                                       &gNB->common_vars,
                                       slot,
                                       frame_parms->symbols_per_slot,
@@ -1019,9 +1019,10 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 #endif
 #ifdef DEBUG_DLSCH_MAPPING
       printf("DMRS modulation (symbol %d, %d symbols, type %d):\n", l_symbol, n_dmrs, dmrs_Type);
-      for (int i = 0; i < n_dmrs / 2; i += 8) {
+      for (int i = 0; i < n_dmrs ; i += 8) {
+	printf("%d:",i);
         for (int j = 0; j < 8; j++) {
-          printf("%d %d\t", mod_dmrs[i + j].r, mod_dmrs[i + j].i);
+          printf("%.2f %.2f ", ((cf16_t*)mod_dmrs)[i + j].r, ((cf16_t*)mod_dmrs)[i + j].i);
         }
         printf("\n");
       }
@@ -1059,7 +1060,6 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     } // layer loop
     re_beginning_of_symbol += layer_sz;
     stop_meas(&gNB->dlsch_resource_mapping_stats);
- 
     start_meas(&gNB->dlsch_precoding_stats);
     for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
       const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz + txdataF_offset;
@@ -1075,9 +1075,8 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   return ((size_output_tb + 511) >> 9) << 6;
 }
 
-void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
+void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_array, int frame, int slot)
 {
-  PHY_VARS_gNB *gNB = msgTx->gNB;
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   time_stats_t *dlsch_encoding_stats = &gNB->dlsch_encoding_stats;
   time_stats_t *tinput = &gNB->tinput;
@@ -1092,10 +1091,9 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
 
   size_t size_output = 0;
 
-  for (int dlsch_id = 0; dlsch_id < msgTx->num_pdsch_slot; dlsch_id++) {
-    NR_gNB_DLSCH_t *dlsch = msgTx->dlsch[dlsch_id];
-    NR_DL_gNB_HARQ_t *harq = &dlsch->harq_process;
-    nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15 = &harq->pdsch_pdu.pdsch_pdu_rel15;
+  for (int i = 0; i < n_dlsch; i++) {
+    NR_gNB_DLSCH_t *dlsch = &dlsch_array[i];
+    const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15 = &dlsch->pdsch_pdu->pdsch_pdu_rel15;
 
     LOG_D(PHY,
           "pdsch: BWPStart %d, BWPSize %d, rbStart %d, rbsize %d\n",
@@ -1119,10 +1117,10 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
       n_ptrs = (rel15->rbSize + rel15->PTRSFreqDensity - 1) / rel15->PTRSFreqDensity;
       ptrsSymbPerSlot = get_ptrs_symbols_in_slot(dlPtrsSymPos, rel15->StartSymbolIndex, rel15->NrOfSymbols);
     }
-    harq->unav_res = ptrsSymbPerSlot * n_ptrs;
+    dlsch->unav_res = ptrsSymbPerSlot * n_ptrs;
 
     /// CRC, coding, interleaving and rate matching
-    AssertFatal(harq->pdu != NULL, "%4d.%2d no HARQ PDU for PDSCH generation\n", msgTx->frame, msgTx->slot);
+    AssertFatal(dlsch->pdu != NULL, "%4d.%2d no PDU for PDSCH generation\n", frame, slot);
 
     /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)
      * => size_output is a sum of parts sizes rounded up to a multiple of 8 * 64
@@ -1135,7 +1133,8 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
   start_meas(dlsch_encoding_stats);
   bzero(output, sizeof(output));
   if (nr_dlsch_encoding(gNB,
-                        msgTx,
+                        n_dlsch,
+                        dlsch_array,
                         frame,
                         slot,
                         frame_parms,
@@ -1156,8 +1155,8 @@ void nr_generate_pdsch(processingData_L1tx_t *msgTx, int frame, int slot)
   stop_meas(dlsch_encoding_stats);
 
   unsigned char *output_ptr = output;
-  for (int dlsch_id = 0; dlsch_id < msgTx->num_pdsch_slot; dlsch_id++) {
-    output_ptr += do_one_dlsch(output_ptr, gNB, msgTx->dlsch[dlsch_id], slot);
+  for (int i = 0; i < n_dlsch; i++) {
+    output_ptr += do_one_dlsch(output_ptr, gNB, &dlsch_array[i], slot);
   }
 }
 

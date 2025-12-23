@@ -34,6 +34,9 @@
 #include "openair1/PHY/defs_nr_common.h"
 #include "coding_unitary_defs.h"
 #include "common/utils/LOG/log.h"
+#ifdef ENABLE_CUDA
+#include <cuda_runtime.h>
+#endif
 
 #define MAX_BLOCK_LENGTH 8448
 
@@ -121,15 +124,22 @@ one_measurement_t test_ldpc(short max_iterations,
   double sigma;
   sigma = 1.0 / sqrt(2 * SNR);
   cpu_meas_enabled = 1;
-  uint8_t *test_input[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * NR_MAX_NB_LAYERS];
-  uint8_t estimated_output[MAX_NUM_DLSCH_SEGMENTS][Kprime];
+#ifdef ENABLE_CUDA
+  uint8_t **test_input,*test_input_p;
+#else
+  uint8_t *test_input[n_segments * NR_MAX_NB_LAYERS];
+#endif
+  uint8_t *channel_input[n_segments];
+  uint8_t estimated_output[n_segments][Kprime];
   memset(estimated_output, 0, sizeof(estimated_output));
-  uint8_t *channel_input[MAX_NUM_DLSCH_SEGMENTS];
   uint8_t *channel_input_optim;
 
   // double channel_output[68 * 384];
-  double modulated_input[MAX_NUM_DLSCH_SEGMENTS][68 * 384] = {0};
-  int8_t channel_output_fixed[MAX_NUM_DLSCH_SEGMENTS][68 * 384] = {0};
+  double modulated_input[n_segments][68 * 384];
+  memset(modulated_input,0,sizeof(modulated_input));
+  int8_t channel_output_fixed[n_segments][68 * 384];
+  memset(channel_output_fixed,0,sizeof(channel_output_fixed));
+
   short BG = 0, nrows = 0; //,ncols;
   int i1, Kb = 0;
   int R_ind = 0;
@@ -137,7 +147,7 @@ one_measurement_t test_ldpc(short max_iterations,
   int code_rate_vec[8] = {15, 13, 25, 12, 23, 34, 56, 89};
   // double code_rate_actual_vec[8] = {0.2, 0.33333, 0.4, 0.5, 0.66667, 0.73333, 0.81481, 0.88};
 
-  t_nrLDPC_dec_params decParams[MAX_NUM_DLSCH_SEGMENTS] = {0};
+  t_nrLDPC_dec_params decParams[n_segments];
 
   t_nrLDPC_time_stats decoder_profiler = {0};
 
@@ -265,9 +275,19 @@ one_measurement_t test_ldpc(short max_iterations,
 
 //  ldpc_toCompare.LDPCinit();
   // generate input block
-  for (int j = 0; j < MAX_NUM_DLSCH_SEGMENTS; j++) {
+#ifdef ENABLE_CUDA
+  cudaHostAlloc((void**)&test_input_p,n_segments*sizeof(uint8_t*),cudaHostAllocMapped);
+  test_input=(uint8_t **)test_input_p;
+  printf("test input %p\n",test_input);
+#endif
+  for (int j = 0; j < n_segments; j++) {
+#ifdef ENABLE_CUDA
+    cudaHostAlloc((void**)&test_input[j],((K + 7) & ~7) / 8,cudaHostAllocMapped);
+    printf("test input[%d] %p\n",j,test_input[j]);
+#else
     test_input[j] = malloc16(((K + 7) & ~7) / 8);
     memset(test_input[j], 0, ((K + 7) & ~7) / 8);
+#endif
     channel_input[j] = malloc16(68 * 384);
     memset(channel_input[j], 0, 68 * 384);
   }
@@ -275,7 +295,7 @@ one_measurement_t test_ldpc(short max_iterations,
   if (use32bit ==0) memset(channel_input_optim, 0, 68 * 384 * sizeof(uint32_t));
 
   // Fill input segments with random values
-  for (int j = 0; j < MAX_NUM_DLSCH_SEGMENTS; j++) {
+  for (int j = 0; j < n_segments; j++) {
     int i = 0;
     for (i = 0; i < ((Kprime + 7) & ~7) / 8; i++)
       test_input[j][i] = (uint8_t)rand();
@@ -397,8 +417,12 @@ one_measurement_t test_ldpc(short max_iterations,
 
   ret.errors_bit_uncoded = ret.errors_bit_uncoded / (double)((Kb + nrows - no_punctured_columns - 2) * Zc - removed_bit);
 
-  for (int j = 0; j < MAX_NUM_DLSCH_SEGMENTS; j++) {
+  for (int j = 0; j < n_segments; j++) {
+#ifdef ENABLE_CUDA
+    cudaFree(test_input[j]);	  
+#else
     free(test_input[j]);
+#endif
     free(channel_input[j]);
   }
   free(channel_input_optim);

@@ -42,9 +42,9 @@ extern int32_t nr_16qam_mod_table[16];
 extern int32_t nr_16qam_mod_table_fp16[16];
 #endif
 #if defined(__SSE2__) || defined(__aarch64__)
-extern simde__m128i nr_qpsk_byte_mod_table[2048];
+extern simde__m128i nr_qpsk_byte_mod_table[256];
 #ifdef FLT16_MAX
-extern simde__m128i nr_qpsk_byte_mod_table_fp16[2048];
+extern simde__m128i nr_qpsk_byte_mod_table_fp16[256];
 #endif
 #endif
 
@@ -58,8 +58,8 @@ extern int64_t nr_64qam_mod_table[4096];
 extern int64_t nr_64qam_mod_table_fp16[4096];
 #endif
 
-extern int32_t nr_256qam_mod_table[512];
+extern int32_t nr_256qam_mod_table[256];
 #ifdef FLT16_MAX
-extern int32_t nr_256qam_mod_table_fp16[512];
+extern int32_t nr_256qam_mod_table_fp16[256];
 #endif
 #endif
