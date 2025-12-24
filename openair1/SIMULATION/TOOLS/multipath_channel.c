@@ -401,7 +401,7 @@ void multipath_channel_float(channel_desc_t *desc,
 
 void multipath_channel_cf(channel_desc_t *desc,
                           cf_t **tx_sig,
-                          cf_t **rx_sig_re,
+                          cf_t **rx_sig,
                           uint32_t length,
                           uint8_t keep_channel,
                           int log_channel)
@@ -427,15 +427,21 @@ void multipath_channel_cf(channel_desc_t *desc,
     // --- Core Convolution Loop ---
     //__m512 _mm512_fmadd_ps (__m512 a, __m512 b, __m512 c)
     //
-    for (int i = 0; i < ((int)length - dd); i++) {
+    int L = (int)desc->channel_length;
+    m512 chanl512,chanr512,txs0,txs1,txs_m2,txs_m1;
+    const m512i rperm  = _mm512_set_epi32(14,12,10,8,6,4,2,0,30,28,26,24,22,20,18,16);
+    const m512i iperm  = _mm512_set_epi32(15,13,11,9,7,5,3,1,31,29,27,25,23,21,19,17);
+    const m512i shift1 = _mm512_set_epi32(16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1);
+    const m512i shift2 = _mm512_set_epi32(17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2);
+    for (int i = 0; i < ((int)length - dd)>>4; i++) {
         for (int ii = 0; ii < desc->nb_rx; ii++) {
-            mm512 rx_tmp = mm512_setzero_ps();
-
-            for (int j = 0; j < desc->nb_tx; j++) {
-                mm512 *chan = desc->ch32[ii + (j * desc->nb_rx)];
-
-                for (int l = 0; l < (int)desc->channel_length; l++) {
-                    if ((i - l) >= 0) {
+            mm512 rx_tmpr = mm512_setzero_ps();
+            mm512 rx_tmpi = mm512_setzero_ps();
+            for (j=0; j < desc->nb_tx; j++) {
+                cf_t *chan = desc->ch32[ii + (j * desc->nb_rx)];
+                int l=0
+                for (; l < L & ~15; l+=16) {
+			/*
                         // 1. Get the past transmitted signal (float)
                         struct complexf tx;
                         tx.r = tx_sig_re[j][i - l];
@@ -444,23 +450,31 @@ void multipath_channel_cf(channel_desc_t *desc,
                         // 2. Perform complex multiplication with mixed precision.
                         rx_tmp.r += (tx.r * (float)chan[l].r) - (tx.i * (float)chan[l].i);
                         rx_tmp.i += (tx.i * (float)chan[l].r) + (tx.r * (float)chan[l].i);
-                    }
+			*/
+			chanlr = _mm512_set1_ps(chan[l].r);
+			chanli = _mm512_set1_ps(chan[l].i);
+			m_chanli = _mm512_set1_ps(-chan[l].i);
+			txs0   = mm512_load_ps(txsig[j][i-l];
+			txs1   = mm512_load_ps(txsig[j][i+1-l];
+			txs_m2 = mm512_load_ps(txsig[j][i-2-l];
+			txs_m1 = mm512_load_ps(txsig[j][i-1-l];
+			txsr0  = mm512_permutex2var_ps(txs0,rperm,txs1);
+			txsi0  = mm512_permutex2var_ps(txs0,iperm,txs1);
+			txsr_m1  = mm512_permutex2var_ps(txs_m2,rperm,txs_m1);
+			txsi_m1  = mm512_permutex2var_ps(txs_m2,iperm,txs_m1);
+			rx_tmpr = _mm512_fmadd_ps(chanlr,txsr0,rx_tmpr);
+			rx_tmpr = _mm512_fmadd_ps(m_charli,txsri,rx_tmpr);
+			rx_tmpi = _mm512_fmadd_ps(chanlr,txsi0,rx_tmpr);
+			rx_tmpi = _mm512_fmadd_ps(charli,txsri,rx_tmpr);
                 } // l (channel_length)
+                for (; l < L & ~7; l+=8) {
+		}
+                for (; l < L & ~3; l+=4) {
+		}
             } // j (nb_tx)
 
-            #if 0
-            if (desc->max_Doppler != 0.0) {
-                // Perform complex multiplication: rx_tmp = rx_tmp * cexp_doppler[i]
-                struct complexf doppler_factor = {(float)cexp_doppler[i].r, (float)cexp_doppler[i].i};
-                struct complexf temp = rx_tmp;
-                rx_tmp.r = (temp.r * doppler_factor.r) - (temp.i * doppler_factor.i);
-                rx_tmp.i = (temp.i * doppler_factor.r) + (temp.r * doppler_factor.i);
-            }
-            #endif
-
             // --- Finalization and Storage ---
-            rx_sig_re[ii][i + dd] = rx_tmp.r * path_loss;
-            rx_sig_im[ii][i + dd] = rx_tmp.i * path_loss;
+            rx_sig[ii][i + dd] = mm512_mul_ps(rx_tmp,mm512_set1_ps(path_loss));
 
         } // ii (nb_rx)
     } // i (length)
