@@ -19,6 +19,9 @@
  *      contact@openairinterface.org
  */
 
+#include <netinet/in.h>
+#include <rte_ring.h>
+#include <rte_ring_core.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -43,9 +46,13 @@
 #include "oran-config.h" // for g_kbar
 
 #include "common/utils/threadPool/notified_fifo.h"
+#include "circular_buffer.h"
+#include "iq_worker.h"
 
 notifiedFIFO_t ru_dl_sync_fifo;
 extern volatile bool first_call_set;
+
+static circular_buffer_t dl_iq_buffer;
 
 typedef struct {
   int frame;
@@ -215,7 +222,13 @@ int process_ru_uplane(struct rte_mbuf *pkt, void *handle, struct xran_eaxc_info 
         iqWidth,
         is_prach);
 
-  return MBUF_FREE;
+  AssertFatal(compMeth == XRAN_COMPMETHOD_NONE, "Compression not supported\n");
+  int slot_in_frame = slot_id + subframe_id * 2;
+  uint32_t *symbol_buffer = circular_buffer_get_data(&dl_iq_buffer, Ant_ID, slot_in_frame, symb_id);
+  int16_t* target = (int16_t*)(symbol_buffer + start_prbu * 12);
+  iq_worker_enqueue(compMeth, iqWidth, num_prbu * 12, iq_data_start, target, pkt);
+
+  return MBUF_KEEP;
 }
 
 int32_t process_ru_cplane(struct rte_mbuf *pkt, void *handle, uint16_t port_id, struct xran_sense_of_time *p_sense_of_time)
@@ -265,6 +278,8 @@ void install_symbol_callback(void* handle, int callbacks_per_slot, int mu)
     args.symbol_diff = symbol_offset;
     start_symbol += symbols_per_callback;
   }
+  circular_buffer_init(&dl_iq_buffer, 4, 10 << mu, 14, 275 * 12);
+  iq_worker_init();
 
   xran_hook_install(handle, process_ru_uplane, NULL, process_ru_cplane, NULL, symbol_callback, &args, mu);
 }

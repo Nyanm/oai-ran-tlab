@@ -15,6 +15,8 @@ add_library(oran_fhlib_5g MODULE
             oaioran.c
             oran-config.c
             oran-init.c
+            circular_buffer.c
+            iq_worker.c
 )
 
 set(E_VERSION 5.1.6)
