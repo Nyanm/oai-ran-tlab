@@ -39,6 +39,7 @@ void circular_buffer_init(circular_buffer_t *cb, int num_antennas, int num_slots
       cb->data[i][j] = (uint32_t **)malloc(num_symbols * sizeof(uint32_t *));
       for (int k = 0; k < num_symbols; k++) {
         cb->data[i][j][k] = (uint32_t *)memalign(64, max_iq_samples * sizeof(uint32_t));
+        memset(cb->data[i][j][k], 0, max_iq_samples * sizeof(uint32_t));
         AssertFatal(cb->data[i][j][k] != NULL, "Failed to allocate memory for circular buffer data\n");
       }
     }

@@ -150,6 +150,25 @@ int xran_oru_tx_read_slot(uint32_t **txdataF, int nb_tx, int *frame, int *slot, 
   *num_symbols = info->num_symbols;
   *ts = info->ts;
   delNotifiedFIFO_elt(res);
+  const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
+  uint8_t mu = fh_cfg->mu_number[0];
+  int nPRBs = fh_cfg->perMu[mu].nDLRBs;
+  int fftsize = 1 << fh_cfg->ru_conf.fftSize[mu];
+
+  int first_carrier_offset = fftsize - (nPRBs * NR_NB_SC_PER_RB / 2);
+  int num_sc_first_copy = (fftsize - first_carrier_offset);
+  int num_sc_second_copy = nPRBs * NR_NB_SC_PER_RB - num_sc_first_copy;
+
+  for (int aatx = 0; aatx < nb_tx; aatx++) {
+    uint32_t* txdata_aatx = txdataF[aatx];
+    for (int sym = *symbol; sym < *symbol + *num_symbols; sym++) {
+      uint32_t* txdata_sym = &txdata_aatx[sym * fftsize];
+      uint32_t* ant_data = circular_buffer_get_data(&dl_iq_buffer, aatx, *slot, *symbol);
+      memcpy(&txdata_sym[first_carrier_offset], ant_data, num_sc_first_copy * sizeof(uint32_t));
+      memcpy(txdata_sym, &ant_data[num_sc_first_copy], num_sc_second_copy * sizeof(uint32_t));
+      memset(ant_data, 0, sizeof(uint32_t) * nPRBs * NR_NB_SC_PER_RB);
+    }
+  }
   return 0;
 }
 
@@ -202,7 +221,6 @@ int process_ru_uplane(struct rte_mbuf *pkt, void *handle, struct xran_eaxc_info 
                           &iqWidth,
                           port_id,
                           &is_prach);
-  (void)iq_data_start;
   LOG_D(HW,
         "ORAN: U-plane packet received. CC_ID %d, Ant_ID %d, frame_id %d, subframe_id %d, slot_id %d, symb_id %d, filter_id %d, "
         "num_prbu %d, start_prbu %d, sym_inc %d, rb %d, sect_id %d, compMeth %d, iqWidth %d, is_prach %d\n",
@@ -225,8 +243,8 @@ int process_ru_uplane(struct rte_mbuf *pkt, void *handle, struct xran_eaxc_info 
   AssertFatal(compMeth == XRAN_COMPMETHOD_NONE, "Compression not supported\n");
   int slot_in_frame = slot_id + subframe_id * 2;
   uint32_t *symbol_buffer = circular_buffer_get_data(&dl_iq_buffer, Ant_ID, slot_in_frame, symb_id);
-  int16_t* target = (int16_t*)(symbol_buffer + start_prbu * 12);
-  iq_worker_enqueue(compMeth, iqWidth, num_prbu * 12, iq_data_start, target, pkt);
+  int16_t* target = (int16_t*)(symbol_buffer + start_prbu * NR_NB_SC_PER_RB);
+  iq_worker_enqueue(compMeth, iqWidth, num_prbu * NR_NB_SC_PER_RB, iq_data_start, target, pkt);
 
   return MBUF_KEEP;
 }
