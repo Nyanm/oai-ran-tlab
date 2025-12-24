@@ -999,13 +999,24 @@ static inline void fp16_to_q15(const cf16_t *in_ri,
    int16_t *out_q15_2 = (int16_t *)out_q15;
 #if defined(__AVX512FP16__) 
    const _Float16 *in=(_Float16 *)in_ri;
-   const int N = n_complex * 2;
    const __m512h k = _mm512_set1_ph((_Float16)amp);     // FP16 scale
    for (; i + 32 <= N; i += 32) {                  // 32 halves per iter
       __m512h h  = _mm512_loadu_ph(in + i);    // unaligned ok
       __m512h hs = _mm512_mul_ph(h, k);           // scale
       __m512i q  = _mm512_cvtph_epi16(hs);        // trunc→i16, saturating
       _mm512_storeu_si512((__m512i*)(out_q15_2 + i), q);
+   }
+   for (; i + 16 <= N; i += 16) {                  // 16 halves per iter
+      __m256h h  = _mm256_loadu_ph(in + i);    // unaligned ok
+      __m256h hs = _mm256_mul_ph(h, *(__m256h*)&k);           // scale
+      __m256i q  = _mm256_cvtph_epi16(hs);        // trunc→i16, saturating
+      _mm256_storeu_si256((__m256i*)(out_q15_2 + i), q);
+   }
+   for (; i + 8 <= N; i += 8) {                  // 16 halves per iter
+      __m128h h  = _mm_loadu_ph(in + i);    // unaligned ok
+      __m128h hs = _mm_mul_ph(h, *(__m128h*)&k);           // scale
+      __m128i q  = _mm_cvtph_epi16(hs);        // trunc→i16, saturating
+      _mm_storeu_si128((__m128i*)(out_q15_2 + i), q);
    }
 #elif defined(__aarch64__)
    const float16_t *in=(float16_t *)in_ri;
@@ -1048,18 +1059,18 @@ static inline void rotate_cpx_vector_fp16(const cf16_t *const x, const cf16_t *c
     const __m512i alpha512=_mm512_set1_epi32(*(uint32_t*)alpha);
     for (; i + 16 < N; i+=16) {
        __m512h x512 = _mm512_loadu_ph(x + i);
-       __m512h y512 = _mm512_cmul_pch(x512,alpha512);
-       _mm512_storeu_ph((__mm512h*)(y + i),y512);
+       __m512h y512 = _mm512_cmul_pch(x512,*(__m512h*)&alpha512);
+       _mm512_storeu_ph((__m512h*)(y + i),y512);
     }
     for (; i + 8 < N; i+=8) {
        __m256h x256 = _mm256_loadu_ph(x + i);
-       __m256h y256 = _mm256_cmul_pch(x256,(__m256h)alpha512);
-       _mm256_storeu_ph((__mm512h*)(y + i),y512);
+       __m256h y256 = _mm256_cmul_pch(x256,*(__m256h*)&alpha512);
+       _mm256_storeu_ph((__m256h*)(y + i),y256);
     }
     for (; i + 4 < N; i+=4) {
        __m128h x128 = _mm_loadu_ph(x + i);
-       __m128h y128 = _mm_cmul_pch(x128,(__m128h)alpha512);
-       _mm_storeu_ph((__mm128h*)(y + i),y128);
+       __m128h y128 = _mm_cmul_pch(x128,*(__m128h*)&alpha512);
+       _mm_storeu_ph((__m128h*)(y + i),y128);
     }
 #else
     AssertFatal(1==0,"No support for fp16 complex multiplication and FP16 is requested\n");

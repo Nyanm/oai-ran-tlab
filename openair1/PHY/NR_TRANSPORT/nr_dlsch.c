@@ -163,10 +163,11 @@ static inline int interleave_with_0_signal_first(c16_t *output, c16_t *mod_dmrs,
 #ifdef __aarch64__
       out_cf16->r = mod_dmrs[i].r * *(float16_t*)amp_dmrs;
       out_cf16->i = mod_dmrs[i].i * *(float16_t*)amp_dmrs;
-      out_cf16++;
 #else
-      *out_cf16++ = cf16mulReal((cf16_t)mod_dmrs[i], *(_float16*)amp_dmrs);
+      out_cf16->r = mod_dmrs[i].r * *(_Float16*)amp_dmrs;
+      out_cf16->i = mod_dmrs[i].i * *(_Float16*)amp_dmrs;
 #endif
+      out_cf16++;
       *out_cf16++ = (cf16_t){};
     }
   }
@@ -273,14 +274,15 @@ static inline int interleave_with_0_start_with_0(c16_t *output, c16_t *mod_dmrs,
 #endif
     cf16_t *out_cf16 = (cf16_t*)out;
     for (; i < end; i++) {
+      *out_cf16++ = (cf16_t){};
 #ifdef __aarch64__
       out_cf16->r = mod_dmrs[i].r * *(float16_t*)amp_dmrs;
       out_cf16->i = mod_dmrs[i].i * *(float16_t*)amp_dmrs;
-      out_cf16++;
 #else
-      *out_cf16++ = cf16mulReal((cf16_t)mod_dmrs[i], *(_float16*)amp_dmrs);
+      out_cf16->r = mod_dmrs[i].r * *(_Float16*)amp_dmrs;
+      out_cf16->i = mod_dmrs[i].i * *(_Float16*)amp_dmrs;
 #endif
-      *out_cf16++ = (cf16_t){};
+      out_cf16++;
     }
   }
   else 
@@ -345,33 +347,33 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c
     __m512i perml = _mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
     __m512i permh = _mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
     for (; i < (end & ~15); i += 16) {
-      __m512h d0 = _mm512_mul_ph(_mm512_loadu_si512((__m512h *)(signal2 + i)), amp2512);
-      __m512h d1 = _mm512_mul_ph(_mm512_loadu_si512((__m512h *)(signal1 + i)), amp512);
-      _mm512_storeu_si512((simde__m512h *)out, simde_mm512_permutex2var_ph(d0, perml, d1));
+      __m512h d0 = _mm512_mul_ph((__m512h)_mm512_loadu_si512((__m512i *)(signal2 + i)), amp2512);
+      __m512h d1 = _mm512_mul_ph((__m512h)_mm512_loadu_si512((__m512i *)(signal1 + i)), amp512);
+      _mm512_storeu_si512((__m512h *)out, _mm512_permutex2var_epi32((__m512i)d0, perml, (__m512i)d1));
       out += 16;
-      simde_mm512_storeu_si512((simde__m512h *)out, simde_mm512_permutex2var_ph(d0, permh, d1));
+      _mm512_storeu_si512((__m512h *)out, _mm512_permutex2var_epi32((__m512i)d0, permh, (__m512i)d1));
       out += 16;
     }
     __m256h amp2256 = _mm256_set1_ph(*(_Float16*)amp2), amp256 = _mm256_set1_ph(*(_Float16*)amp);
     for (; i < (end & ~7); i += 8) {
-      __m256h d0 = _mm256_mul_ph(_mm256_loadu_si256((__m256h *)(signal2 + i)), amp2256);
-      __m256h d1 = _mm256_mul_ph(_mm256_loadu_si256((__m256h *)(signal1 + i)), amp256);
-      __m256h d2 = (__m256h)_mm256_unpacklo_epi32(d0, d1);
-      __m256h d3 = (__m256h)_mm256_unpackhi_epi32(d0, d1);
-      _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_si256(d2, d3, 32));
+      __m256h d0 = _mm256_mul_ph((__m256h)_mm256_loadu_si256((__m256i *)(signal2 + i)), amp2256);
+      __m256h d1 = _mm256_mul_ph((__m256h)_mm256_loadu_si256((__m256i *)(signal1 + i)), amp256);
+      __m256h d2 = (__m256h)_mm256_unpacklo_epi32((__m256i)d0, (__m256i)d1);
+      __m256h d3 = (__m256h)_mm256_unpackhi_epi32((__m256i)d0, (__m256i)d1);
+      _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_si256((__m256i)d2, (__m256i)d3, 32));
       out += 8;
-      _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_si256(d2, d3, 49));
+      _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_si256((__m256i)d2, (__m256i)d3, 49));
       out += 8;
     }
-    __m128h amp2128 = _mm_set1_ph(amp2), amp128 = _mm_set1_ph(amp);
+    __m128h amp2128 = _mm_set1_ph(*(_Float16*)amp2), amp128 = _mm_set1_ph(*(_Float16*)amp);
     for (; i < (end & ~3); i += 4) {
-      __m128h d0 = _mm_mul_ph(simde_mm_loadu_si128((simde__m128i *)(signal2 + i)), amp2128);
-      __m128h d1 = _mm_mul_ph(simde_mm_loadu_si128((simde__m128i *)(signal1 + i)), amp128);
-      __m128h d2 = (__m128h)_mm_unpacklo_epi32(d0, d1);
-      __m128h d3 = (__m128h)_mm_unpackhi_epi32(d0, d1);
-      simde_mm_storeu_si128((simde__m128i *)out, d2);
+      __m128h d0 = _mm_mul_ph((__m128h)_mm_loadu_si128((__m128i *)(signal2 + i)), amp2128);
+      __m128h d1 = _mm_mul_ph((__m128h)_mm_loadu_si128((__m128i *)(signal1 + i)), amp128);
+      __m128h d2 = (__m128h)_mm_unpacklo_epi32((__m128i)d0, (__m128i)d1);
+      __m128h d3 = (__m128h)_mm_unpackhi_epi32((__m128i)d0, (__m128i)d1);
+      _mm_storeu_si128((__m128i *)out, (__m128i)d2);
       out += 4;
-      simde_mm_storeu_si128((simde__m128i *)out, d3);
+      _mm_storeu_si128((__m128i *)out, (__m128i)d3);
       out += 4;
     }
 #elif defined(__aarch64__)
@@ -390,10 +392,11 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c
     AssertFatal(1==0,"Architecture doesn't support fp16\n");
 #endif
     cf16_t *out_cf16 = (cf16_t*)out;
-    printf("tail: end %d\n",end);
+    printf("tail: i%d end %d\n",i,end);
+    
     for (; i < end; i++) {
-#ifdef __aarch64__
       cf16_t *s1 = (cf16_t*)signal1,*s2=(cf16_t*)signal2;	    
+#ifdef __aarch64__
       out_cf16->r = (float16_t)s2[i].r * *(float16_t*)amp2;
       out_cf16->i = (float16_t)s2[i].i * *(float16_t*)amp2;
       out_cf16++;
@@ -401,8 +404,12 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c
       out_cf16->i = (float16_t)s1[i].i * *(float16_t*)amp;
       out_cf16++;
 #else
-      *out_cf16++ = cf16mulReal((cf16_t)signal2[i], *(_Float16*)amp2);
-      *out_cf16++ = cf16mulReal((cf16_t)signal1[i], *(_Float16*)amp);
+      out_cf16->r = (_Float16)s2[i].r * *(_Float16*)amp2;
+      out_cf16->i = (_Float16)s2[i].i * *(_Float16*)amp2;
+      out_cf16++;
+      out_cf16->r = (_Float16)s1[i].r * *(_Float16*)amp;
+      out_cf16->i = (_Float16)s1[i].i * *(_Float16*)amp;
+      out_cf16++;
 #endif
     }
   }
@@ -490,9 +497,8 @@ static inline int dmrs_case00(c16_t *output,
 	cf16_t *mod_dmrs_cf16 = (cf16_t*)&mod_dmrs[dmrs_idx];
 #ifdef __aarch64__
         *output_cf16 = cf16mulReal(*mod_dmrs_cf16, Wt[l_prime] * Wf[k_prime] * *(float16_t*)amp_dmrs);
-	if (i<4) printf("dmrs %d : mod_dmrs %f+(%fj) * %f = %f+(%fj)\n",i,mod_dmrs_cf16->r,mod_dmrs_cf16->i,*(float16_t*)amp_dmrs,output_cf16->r,output_cf16->i);
 #else
-        *output_cf16 = cf16mulReal((cf16_t)mod_dmrs[dmrs_idx], Wt[l_prime] * Wf[k_prime] * *(_Float16*)amp_dmrs);
+        *output_cf16 = cf16mulReal(*mod_dmrs_cf16, Wt[l_prime] * Wf[k_prime] * *(_Float16*)amp_dmrs);
 #endif
       }
       else
@@ -533,14 +539,14 @@ static inline int no_ptrs_dmrs_case(c16_t *output, c16_t *txl, void *amp, const 
 {
   // Loop Over SCs:
   int i = 0;
-#if (defined(__AVX512__) && defined(__AVX512BW__) && defined(__AVX512FP16__) && defined(FLT16_MAX))|| defined(__aarch64__)
+#if (defined(__AVX512FP16__) && defined(FLT16_MAX))|| (defined(__aarch64__) && defined(FLT16_MAX))
   if (use_fp16) 
     memcpy((void*)output,(void*)txl,sz*sizeof(uint32_t));
   else
 #endif
   {
     //printf("no_ptrs_dmrs_case: use_fp16=0\n");
-#if defined(__AVX512__) && defined(__AVX512BW__)
+#if defined(__AVX512BW__)
     simde__m512i amp512 = simde_mm512_set1_epi16(*(int16_t*)amp);
     for (; i < (sz & ~15); i += 16) {
       const simde__m512i txL = simde_mm512_loadu_si512((simde__m512i *)(txl + i));

@@ -928,9 +928,10 @@ void nr_layer_precoder_simd(const int n_layers,
   c16_t *out=beginning;
   printf("nr_layer_precoder_simd, use_fp16 %d\n",use_fp16);
 
+// 512-bit SIMD section
 #if defined(__AVX512BW__)
   c16_t *end = out + (re_cnt & ~15);
-#ifdef FLT16_MAX && defined(__AVX512FP16__)
+#if defined(FLT16_MAX) && defined(__AVX512FP16__)
   cf16_t weights_fp16[n_layers];
   if (use_fp16) {
     for (int l=0;l<n_layers;l++) {
@@ -940,38 +941,44 @@ void nr_layer_precoder_simd(const int n_layers,
     load_consts_fp16(__m512h, _mm512_set1_epi32,0);
     if (n_layers == 1) {
       for (; out < end; out += sizeof(__m512i) / sizeof(*out)) {
-        const __m512h x0 = _mm512_loadu_si512(in0++);
+        const __m512h x0 = (__m512h)_mm512_loadu_si512(in0++);
         // Matrix multiplication for 4 elements of the result (sizeof(simde__m256i) / sizeof(*prec_matrix) = 8)
-        __m512 y = _mm512_cmul_pch(x0, w0);
-        _mm512_storeu_si512(out, y);
+        __m512h y = _mm512_cmul_pch(x0, w0);
+        _mm512_storeu_si512(out, (__m512i)y);
       }
     } else if (n_layers == 2) {
-        const __m512h x0 = _mm512_loadu_si512(in0++);
-        const __m512h x1 = _mm512_loadu_si512(in1++);
+        load_consts_fp16(__m512h, _mm512_set1_epi32,1);
+        const __m512h x0 = (__m512h)_mm512_loadu_si512(in0++);
+        const __m512h x1 = (__m512h)_mm512_loadu_si512(in1++);
         // Matrix multiplication for 4 elements of the result (sizeof(simde__m256i) / sizeof(*prec_matrix) = 8)
-        __m512 y = _mm512_cmul_pch(x0, w0);
+        __m512h y = _mm512_cmul_pch(x0, w0);
 	y=_mm512_fmadd_pch(x1,w1,y);
-        _mm512_storeu_si512(out, y);
+        _mm512_storeu_si512(out, (__m512i)y);
     } else if (n_layers == 3) {
-        const __m512h x0 = _mm512_loadu_si512(in0++);
-        const __m512h x1 = _mm512_loadu_si512(in1++);
-        const __m512h x2 = _mm512_loadu_si512(in2++);
+        load_consts_fp16(__m512h, _mm512_set1_epi32,1);
+        load_consts_fp16(__m512h, _mm512_set1_epi32,2);
+        const __m512h x0 = (__m512h)_mm512_loadu_si512(in0++);
+        const __m512h x1 = (__m512h)_mm512_loadu_si512(in1++);
+        const __m512h x2 = (__m512h)_mm512_loadu_si512(in2++);
         // Matrix multiplication for 4 elements of the result (sizeof(simde__m256i) / sizeof(*prec_matrix) = 8)
-        __m512 y = _mm512_cmul_pch(x0, w0);
+        __m512h y = _mm512_cmul_pch(x0, w0);
 	y=_mm512_fmadd_pch(x1,w1,y);
 	y=_mm512_fmadd_pch(x2,w2,y);
-        _mm512_storeu_si512(out, y);
+        _mm512_storeu_si512(out, (__m512i)y);
     } else if (n_layers == 4) {
-        const __m512h x0 = _mm512_loadu_si512(in0++);
-        const __m512h x1 = _mm512_loadu_si512(in1++);
-        const __m512h x2 = _mm512_loadu_si512(in2++);
-        const __m512h x3 = _mm512_loadu_si512(in3++);
+        load_consts_fp16(__m512h, _mm512_set1_epi32,1);
+        load_consts_fp16(__m512h, _mm512_set1_epi32,2);
+        load_consts_fp16(__m512h, _mm512_set1_epi32,3);
+        const __m512h x0 = (__m512h)_mm512_loadu_si512(in0++);
+        const __m512h x1 = (__m512h)_mm512_loadu_si512(in1++);
+        const __m512h x2 = (__m512h)_mm512_loadu_si512(in2++);
+        const __m512h x3 = (__m512h)_mm512_loadu_si512(in3++);
         // Matrix multiplication for 4 elements of the result (sizeof(simde__m256i) / sizeof(*prec_matrix) = 8)
-        __m512 y = _mm512_cmul_pch(x0, w0);
+        __m512h y = _mm512_cmul_pch(x0, w0);
 	y=_mm512_fmadd_pch(x1,w1,y);
 	y=_mm512_fmadd_pch(x2,w2,y);
 	y=_mm512_fmadd_pch(x3,w3,y);
-        _mm512_storeu_si512(out, y);
+        _mm512_storeu_si512(out, (__m512i)y);
     }
   }
   else
@@ -1028,44 +1035,51 @@ void nr_layer_precoder_simd(const int n_layers,
     }
   }
 #endif
+  // 256-bit SIMD section
 #ifdef __AVX2__
-#ifdef FLT16_MAX && defined(__AVX512BW__) && defined(__AVX512FP16__)
+#if defined(FLT16_MAX) && defined(__AVX512FP16__)
   if (use_fp16) {
     load_consts_fp16(__m256h, _mm256_set1_epi32,0);
     if (n_layers == 1) {
       for (; out < end; out += sizeof(__m256i) / sizeof(*out)) {
-        const __m256h x0 = _mm256_loadu_si256(in0++);
+        const __m256h x0 = (__m256h)_mm256_loadu_si256((__m256i*)in0++);
         // Matrix multiplication for 4 elements of the result (sizeof(simde__m256i) / sizeof(*prec_matrix) = 8)
-        __m256 y = _mm256_cmul_pch(x0, w0);
-        _mm256_storeu_si256(out, y);
+        __m256h y = _mm256_cmul_pch(x0, w0);
+        _mm256_storeu_si256((__m256i*)out, (__m256i)y);
       }
     } else if (n_layers == 2) {
-        const __m256h x0 = _mm256_loadu_si256(in0++);
-        const __m256h x1 = _mm256_loadu_si256(in1++);
+        load_consts_fp16(__m256h, _mm256_set1_epi32,1);
+        const __m256h x0 = (__m256h)_mm256_loadu_si256((__m256i*)in0++);
+        const __m256h x1 = (__m256h)_mm256_loadu_si256((__m256i*)in1++);
         // Matrix multiplication for 4 elements of the result (sizeof(simde__m256i) / sizeof(*prec_matrix) = 8)
-        __m256 y = _mm256_cmul_pch(x0, w0);
+        __m256h y = _mm256_cmul_pch(x0, w0);
 	y=_mm256_fmadd_pch(x1,w1,y);
-        _mm256_storeu_si256(out, y);
+        _mm256_storeu_si256((__m256i*)out, (__m256i)y);
     } else if (n_layers == 3) {
-        const __m256h x0 = _mm256_loadu_si256(in0++);
-        const __m256h x1 = _mm256_loadu_si256(in1++);
-        const __m256h x2 = _mm256_loadu_si256(in2++);
+        load_consts_fp16(__m256h, _mm256_set1_epi32,1);
+        load_consts_fp16(__m256h, _mm256_set1_epi32,2);
+        const __m256h x0 = (__m256h)_mm256_loadu_si256((__m256i*)in0++);
+        const __m256h x1 = (__m256h)_mm256_loadu_si256((__m256i*)in1++);
+        const __m256h x2 = (__m256h)_mm256_loadu_si256((__m256i*)in2++);
         // Matrix multiplication for 4 elements of the result (sizeof(simde__m256i) / sizeof(*prec_matrix) = 8)
-        __m256 y = _mm256_cmul_pch(x0, w0);
+        __m256h y = _mm256_cmul_pch(x0, w0);
 	y=_mm256_fmadd_pch(x1,w1,y);
 	y=_mm256_fmadd_pch(x2,w2,y);
-        _mm256_storeu_si256(out, y);
+        _mm256_storeu_si256((__m256i*)out, (__m256i)y);
     } else if (n_layers == 4) {
-        const __m256h x0 = _mm256_loadu_si256(in0++);
-        const __m256h x1 = _mm256_loadu_si256(in1++);
-        const __m256h x2 = _mm256_loadu_si256(in2++);
-        const __m256h x3 = _mm256_loadu_si256(in3++);
+        load_consts_fp16(__m256h, _mm256_set1_epi32,1);
+        load_consts_fp16(__m256h, _mm256_set1_epi32,2);
+        load_consts_fp16(__m256h, _mm256_set1_epi32,3);
+        const __m256h x0 = (__m256h)_mm256_loadu_si256((__m256i*)in0++);
+        const __m256h x1 = (__m256h)_mm256_loadu_si256((__m256i*)in1++);
+        const __m256h x2 = (__m256h)_mm256_loadu_si256((__m256i*)in2++);
+        const __m256h x3 = (__m256h)_mm256_loadu_si256((__m256i*)in3++);
         // Matrix multiplication for 4 elements of the result (sizeof(simde__m256i) / sizeof(*prec_matrix) = 8)
-        __m256 y = _mm256_cmul_pch(x0, w0);
+        __m256h y = _mm256_cmul_pch(x0, w0);
 	y=_mm256_fmadd_pch(x1,w1,y);
 	y=_mm256_fmadd_pch(x2,w2,y);
 	y=_mm256_fmadd_pch(x3,w3,y);
-        _mm256_storeu_si256(out, y);
+        _mm256_storeu_si256((__m256i*)out, (__m256i)y);
     }
   }
   else
@@ -1124,8 +1138,8 @@ void nr_layer_precoder_simd(const int n_layers,
     }
   }
 #endif
-  c16_t *end = beginning + (re_cnt & ~3);
 #ifdef DEBUG_DLSCH_PRECODING_PRINT_WITH_TRIVIAL // Get result with trivial solution, TODO: To be removed
+  c16_t *end = beginning + (re_cnt & ~3);
   // 128 SIMD: Do 4 RE in one iteration, 3 iterations for 1 RB
   for (; out < end; out += sizeof(simde__m128i) / sizeof(*out)) {
     c16_t y_triv[4];
@@ -1150,6 +1164,7 @@ void nr_layer_precoder_simd(const int n_layers,
         const float16x8_t x0 = vld1q_f16((float16_t*)(in0++));
         // Accumulate the product
         float16x8_t y = vcmlaq_f16(zero,x0,w0);
+        y = vcmlaq_rot90_f16(y,x0,w0);
         // Store the result to txdataF
         *(float16x8_t *)out = y;
 	printf("re %ld %f.%f\n",out-beginning, ((cf16_t*)out)[0].r, ((cf16_t*)out)[0].i);
@@ -1165,7 +1180,9 @@ void nr_layer_precoder_simd(const int n_layers,
         const float16x8_t x1 = vld1q_f16((float16_t*)(in1++));
         // Accumulate the product
         float16x8_t y = vcmlaq_f16(zero,x0,w0);
+        y = vcmlaq_rot90_f16(y,x0,w0);
         y = vcmlaq_f16(y,x1,w1);
+        y = vcmlaq_rot90_f16(y,x1,w1);
         // Store the result to txdataF
         *(float16x8_t *)out = y;
       }
@@ -1179,8 +1196,11 @@ void nr_layer_precoder_simd(const int n_layers,
         const float16x8_t x2 = vld1q_f16((float16_t*)(in2++));
         // Accumulate the product
         float16x8_t y = vcmlaq_f16(zero,x0,w0);
+        y = vcmlaq_rot90_f16(y,x0,w0);
         y = vcmlaq_f16(y,x1,w1);
+        y = vcmlaq_rot90_f16(y,x1,w1);
         y = vcmlaq_f16(y,x2,w2);
+        y = vcmlaq_rot90_f16(y,x2,w2);
         // Store the result to txdataF
         *(float16x8_t *)out = y;
       }
@@ -1196,9 +1216,13 @@ void nr_layer_precoder_simd(const int n_layers,
         const float16x8_t x3 = vld1q_f16((float16_t*)(in3++));
         // Accumulate the product
         float16x8_t y = vcmlaq_f16(zero,x0,w0);
+        y = vcmlaq_rot90_f16(y,x0,w0);
         y = vcmlaq_f16(y,x1,w1);
+        y = vcmlaq_rot90_f16(y,x1,w1);
         y = vcmlaq_f16(y,x2,w2);
+        y = vcmlaq_rot90_f16(y,x2,w2);
         y = vcmlaq_f16(y,x3,w3);
+        y = vcmlaq_rot90_f16(y,x3,w3);
         // Store the result to txdataF
         *(float16x8_t *)out = y;
       }
@@ -1265,54 +1289,103 @@ void nr_layer_precoder_simd(const int n_layers,
     }
   }
 #else
-  load_consts(simde__m128i, simde_mm_set1_epi32, 0);
-  if (n_layers == 1) {
-    for (; out < end; out += sizeof(simde__m128i) / sizeof(*out)) {
-      const simde__m128i x0 = simde_mm_loadu_si128(in0++);
-      // Accumulate the product
-      simde__m128i y = cmac0_prec128(x0, w_c0, w_s0);
-      // Store the result to txdataF
-      simde_mm_storeu_si128(out, y);
+#if defined(FLT16_MAX) && defined(__AVX512FP16__)
+  if (use_fp16) {
+    load_consts_fp16(__m128h, _mm_set1_epi32,0);
+    if (n_layers == 1) {
+      for (; out < end; out += sizeof(__m128i) / sizeof(*out)) {
+        const __m128h x0 = (__m128h)_mm_loadu_si128((__m128i*)in0++);
+        // Matrix multiplication for 4 elements of the result (sizeof(simde__m256i) / sizeof(*prec_matrix) = 8)
+        __m128h y = _mm_cmul_pch(x0, w0);
+        _mm_storeu_si128((__m128i*)out, (__m128i)y);
+      }
+    } else if (n_layers == 2) {
+        load_consts_fp16(__m128h, _mm_set1_epi32,1);
+        const __m128h x0 = (__m128h)_mm_loadu_si128((__m128i*)in0++);
+        const __m128h x1 = (__m128h)_mm_loadu_si128((__m128i*)in1++);
+        // Matrix multiplication for 4 elements of the result (sizeof(simde__m256i) / sizeof(*prec_matrix) = 8)
+        __m128h y = _mm_cmul_pch(x0, w0);
+	y=_mm_fmadd_pch(x1,w1,y);
+        _mm_storeu_si128((__m128i*)out, (__m128i)y);
+    } else if (n_layers == 3) {
+        load_consts_fp16(__m128h, _mm_set1_epi32,1);
+        load_consts_fp16(__m128h, _mm_set1_epi32,2);
+        const __m128h x0 = (__m128h)_mm_loadu_si128((__m128i*)in0++);
+        const __m128h x1 = (__m128h)_mm_loadu_si128((__m128i*)in1++);
+        const __m128h x2 = (__m128h)_mm_loadu_si128((__m128i*)in2++);
+        // Matrix multiplication for 4 elements of the result (sizeof(simde__m256i) / sizeof(*prec_matrix) = 8)
+        __m128h y = _mm_cmul_pch(x0, w0);
+	y=_mm_fmadd_pch(x1,w1,y);
+	y=_mm_fmadd_pch(x2,w2,y);
+        _mm_storeu_si128((__m128i*)out, (__m128i)y);
+    } else if (n_layers == 4) {
+        load_consts_fp16(__m128h, _mm_set1_epi32,1);
+        load_consts_fp16(__m128h, _mm_set1_epi32,2);
+        load_consts_fp16(__m128h, _mm_set1_epi32,3);
+        const __m128h x0 = (__m128h)_mm_loadu_si128((__m128i*)in0++);
+        const __m128h x1 = (__m128h)_mm_loadu_si128((__m128i*)in1++);
+        const __m128h x2 = (__m128h)_mm_loadu_si128((__m128i*)in2++);
+        const __m128h x3 = (__m128h)_mm_loadu_si128((__m128i*)in3++);
+        // Matrix multiplication for 4 elements of the result (sizeof(simde__m256i) / sizeof(*prec_matrix) = 8)
+        __m128h y = _mm_cmul_pch(x0, w0);
+	y=_mm_fmadd_pch(x1,w1,y);
+	y=_mm_fmadd_pch(x2,w2,y);
+	y=_mm_fmadd_pch(x3,w3,y);
+        _mm_storeu_si128((__m128i*)out, (__m128i)y);
     }
-  } else if (n_layers == 2) {
-    load_consts(simde__m128i, simde_mm_set1_epi32, 1);
-    for (; out < end; out += sizeof(simde__m128i) / sizeof(*out)) {
-      const simde__m128i x0 = simde_mm_loadu_si128(in0++);
-      const simde__m128i x1 = simde_mm_loadu_si128(in1++);
-      // Accumulate the product
-      simde__m128i y = cmac0_prec128(x0, w_c0, w_s0);
-      y = cmac_prec128(y, x1, w_c1, w_s1);
-      // Store the result to txdataF
-      simde_mm_storeu_si128(out, y);
-    }
-  } else if (n_layers == 3) {
-    load_consts(simde__m128i, simde_mm_set1_epi32, 1);
-    load_consts(simde__m128i, simde_mm_set1_epi32, 2);
-    for (; out < end; out += sizeof(simde__m128i) / sizeof(*out)) {
-      const simde__m128i x0 = simde_mm_loadu_si128(in0++);
-      const simde__m128i x1 = simde_mm_loadu_si128(in1++);
-      const simde__m128i x2 = simde_mm_loadu_si128(in2++);
-      simde__m128i y = cmac0_prec128(x0, w_c0, w_s0);
-      y = cmac_prec128(y, x1, w_c1, w_s1);
-      y = cmac_prec128(y, x2, w_c2, w_s2);
-      // Store the result to txdataF
-      simde_mm_storeu_si128(out, y);
-    }
-  } else if (n_layers == 4) {
-    load_consts(simde__m128i, simde_mm_set1_epi32, 1);
-    load_consts(simde__m128i, simde_mm_set1_epi32, 2);
-    load_consts(simde__m128i, simde_mm_set1_epi32, 3);
-    for (; out < end; out += sizeof(simde__m128i) / sizeof(*out)) {
-      const simde__m128i x0 = simde_mm_loadu_si128(in0++);
-      const simde__m128i x1 = simde_mm_loadu_si128(in1++);
-      const simde__m128i x2 = simde_mm_loadu_si128(in2++);
-      const simde__m128i x3 = simde_mm_loadu_si128(in3++);
-      simde__m128i y = cmac0_prec128(x0, w_c0, w_s0);
-      y = cmac_prec128(y, x1, w_c1, w_s1);
-      y = cmac_prec128(y, x2, w_c2, w_s2);
-      y = cmac_prec128(y, x3, w_c3, w_s3);
-      // Store the result to txdataF
-      simde_mm_storeu_si128(out, y);
+  }
+  else
+#endif
+  {
+    load_consts(simde__m128i, simde_mm_set1_epi32, 0);
+    if (n_layers == 1) {
+      for (; out < end; out += sizeof(simde__m128i) / sizeof(*out)) {
+        const simde__m128i x0 = simde_mm_loadu_si128(in0++);
+        // Accumulate the product
+        simde__m128i y = cmac0_prec128(x0, w_c0, w_s0);
+        // Store the result to txdataF
+        simde_mm_storeu_si128(out, y);
+      }
+    } else if (n_layers == 2) {
+      load_consts(simde__m128i, simde_mm_set1_epi32, 1);
+      for (; out < end; out += sizeof(simde__m128i) / sizeof(*out)) {
+        const simde__m128i x0 = simde_mm_loadu_si128(in0++);
+        const simde__m128i x1 = simde_mm_loadu_si128(in1++);
+        // Accumulate the product
+        simde__m128i y = cmac0_prec128(x0, w_c0, w_s0);
+        y = cmac_prec128(y, x1, w_c1, w_s1);
+        // Store the result to txdataF
+        simde_mm_storeu_si128(out, y);
+      }
+    } else if (n_layers == 3) {
+      load_consts(simde__m128i, simde_mm_set1_epi32, 1);
+      load_consts(simde__m128i, simde_mm_set1_epi32, 2);
+      for (; out < end; out += sizeof(simde__m128i) / sizeof(*out)) {
+        const simde__m128i x0 = simde_mm_loadu_si128(in0++);
+        const simde__m128i x1 = simde_mm_loadu_si128(in1++);
+        const simde__m128i x2 = simde_mm_loadu_si128(in2++);
+        simde__m128i y = cmac0_prec128(x0, w_c0, w_s0);
+        y = cmac_prec128(y, x1, w_c1, w_s1);
+        y = cmac_prec128(y, x2, w_c2, w_s2);
+        // Store the result to txdataF
+        simde_mm_storeu_si128(out, y);
+      }
+    } else if (n_layers == 4) {
+      load_consts(simde__m128i, simde_mm_set1_epi32, 1);
+      load_consts(simde__m128i, simde_mm_set1_epi32, 2);
+      load_consts(simde__m128i, simde_mm_set1_epi32, 3);
+      for (; out < end; out += sizeof(simde__m128i) / sizeof(*out)) {
+        const simde__m128i x0 = simde_mm_loadu_si128(in0++);
+        const simde__m128i x1 = simde_mm_loadu_si128(in1++);
+        const simde__m128i x2 = simde_mm_loadu_si128(in2++);
+        const simde__m128i x3 = simde_mm_loadu_si128(in3++);
+        simde__m128i y = cmac0_prec128(x0, w_c0, w_s0);
+        y = cmac_prec128(y, x1, w_c1, w_s1);
+        y = cmac_prec128(y, x2, w_c2, w_s2);
+        y = cmac_prec128(y, x3, w_c3, w_s3);
+        // Store the result to txdataF
+        simde_mm_storeu_si128(out, y);
+      }
     }
   }
 #endif

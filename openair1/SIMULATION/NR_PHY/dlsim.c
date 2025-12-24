@@ -1268,7 +1268,6 @@ int main(int argc, char **argv)
             if (errors_scrambling[round] == 0) {
               LOG_D(PHY,"First bit in error in unscrambling = %d\n",i);
             }
-	    else printf("error in bit %d\n",i);
             errors_scrambling[round]++;
           }
         }

@@ -166,7 +166,7 @@ else()
 endif()
 
 if (NOT CROSS_COMPILE)
-  set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -march=armv9-a")
+  set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -march=native")
 else ()
   set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -march=armv8.2-a")
 endif()
