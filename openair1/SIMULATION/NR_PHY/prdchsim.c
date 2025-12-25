@@ -237,7 +237,7 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
 
   start_meas(&time_multipath_stats);
 
-  const int gain = 8; // 8 x amplification to avoid precision issues (moves to 8k amplitude approx)
+  const int gain = 1; // 8 x amplification to avoid precision issues (moves to 8k amplitude approx)
   uint64_t txlev_sum = 0;
 
   for (int i = 0; i < frame->packet_samples; i++) {
@@ -262,7 +262,7 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
 
   double ts = 1.0 / (frame->nr_frame_parms.subcarrier_spacing * frame->nr_frame_parms.ofdm_symbol_size);
   // Compute AWGN variance
-  double sigma2_dBm = txlev_dBm + channel->path_loss_dB - SNR + 10*log10((double)frame->nr_frame_parms.ofdm_symbol_size / (frame->nr_frame_parms.N_RB_DL * NR_NB_SC_PER_RB));
+  double sigma2_dBm = txlev_dBm + channel->path_loss_dB - SNR; //+ 10*log10((double)frame->nr_frame_parms.ofdm_symbol_size / (frame->nr_frame_parms.N_RB_DL * NR_NB_SC_PER_RB));
   double sigma2 = pow(10, sigma2_dBm / 10);
 
   if(testing_mode && !testing_timing) {
@@ -484,7 +484,7 @@ int *generate_SIP_ideal_sequence(NR_AIOT_DL_FRAME_PARMS *frame_parms)
 
   // Generate ideal SIP sequence for correlation
   SIP_ideal = malloc(frame_parms->SIP_samples * sizeof(int));
-  int value0dis = -2;
+  int value0dis = -1;
   int value0 = -1;
   int value1 = 1;
 
@@ -607,6 +607,9 @@ int AIOT_R2D_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *SI
   return SIP_offset;
 }
 
+int getpacket_snr_pass;
+#define POSTAMBLE_THRESHOLD_REDUCTION 4
+
 void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int SIP_offset, NR_AIOT_DL_FRAME_PARMS *frame_parms)
 {
   int downsampled_OFDM_size = frame_parms->nr_frame_parms.ofdm_symbol_size / frame_parms->N;
@@ -615,13 +618,17 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
   int M4_chip_size = downsampled_OFDM_size / R_TAS_SIP_M;
   frame_parms->packet_payload_size = frame_parms->packet_downsampled_samples - frame_parms->SIP_samples; // Max payload size in bits
 
+  // --------------
+  // M detection from R-TAS-CAP
+  // --------------
+
   int CAP_energy[R_TAS_CAP_N] = {0};
-  int SIP_bit0_energy = 0;
+  int Noise_energy = 0;
 
   // Get energy of last bit0 of SIP (its zero)
   for (int j = 0; j < M4_chip_size; j++)
   {
-    SIP_bit0_energy += signal[SIP_offset + (frame_parms->SIP_samples - M4_chip_size) + j];
+    Noise_energy += signal[SIP_offset + j];
   }
 
   int position = SIP_offset + frame_parms->SIP_samples + downsampled_CP_size; // Start of R-TAS-CAP (after CP)
@@ -636,10 +643,11 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
 
   // Compute initial threshold for M detection
   uint32_t thr_max = CAP_energy[0]; // first bit of CAP is always 1
-  uint32_t thr_min = SIP_bit0_energy; // last bit of SIP is always 0
-  uint32_t threshold = ((thr_max + thr_min) / 2); // decrease threshold to be effective for lower amplitudes
+  uint32_t thr_min = Noise_energy; // last bit of SIP is always 0
+  uint32_t threshold = ((thr_max + thr_min) / 2);
 
   if(testing_mode && !testing_timing) {
+    printf("[RX M detector] Noise energy before SIP: %d\n", Noise_energy);
     printf("[RX M detector] CAP threshold: %d\n", threshold);
   }
 
@@ -671,10 +679,14 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
   }
 
   // Calculate actual initial threshold for postamble detection from CAP
-  thr_max = (CAP_energy[0] + CAP_energy[2]) / 2;
-  thr_min = (CAP_energy[1] + CAP_energy[3]) / 2;
+  thr_max = ((CAP_energy[0] + CAP_energy[2]) / 2);
+  thr_min = ((CAP_energy[1] + CAP_energy[3]) / 2);
 
   threshold = ((thr_max + thr_min) / 2); // adapt threshold
+  if (frame_parms->received_M != 1) {
+    threshold -= threshold / POSTAMBLE_THRESHOLD_REDUCTION; // decrease threshold to be effective for lower amplitudes
+  }
+
   if(testing_mode && !testing_timing) {
     printf("[RX Postamble detection] Postamble detection threshold: %d\n", threshold);
   }
@@ -685,9 +697,8 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
 
   uint32_t *energy_plot = NULL, *thr_plot = NULL;
   int energy_index = 0, thr_index = 0;
-  static int pass = 0;
 
-  if(testing_mode && pass == snr_plot) {
+  if(testing_mode && !testing_timing && getpacket_snr_pass == snr_plot) {
     // Energy plotting
     energy_plot = malloc(frame_parms->packet_payload_size * sizeof(uint32_t));
     memset(energy_plot, 0, frame_parms->packet_payload_size * sizeof(uint32_t));
@@ -699,6 +710,10 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
     // Threshold for next bit
     thr_plot[thr_index++] = threshold;
   }
+
+  // --------------
+  // Decoding of bits from payload + postamble detection
+  // --------------
 
   int symbolCounter = (R_TAS_SIP_N / R_TAS_SIP_M) + (R_TAS_CAP_N / frame_parms->received_M);
   int endCounter = 0;
@@ -724,7 +739,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
       energy[chip%2] += signal[position + j];
     }
 
-    if(testing_mode && !testing_timing && pass == snr_plot) {
+    if(testing_mode && !testing_timing && getpacket_snr_pass == snr_plot) {
       // Save energy for plotting
       energy_plot[energy_index++] = energy[chip%2];
     }
@@ -763,9 +778,13 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
       thr_min = (thr_min*3 + energy[1]) / 4;
     }
 
-    threshold = ((thr_max + thr_min) / 2);// - ((thr_max - thr_min) / 4); // adapt threshold
+    threshold = ((thr_max + thr_min) / 2); // adapt threshold
+    if (frame_parms->received_M != 1) {
+      threshold -= threshold / POSTAMBLE_THRESHOLD_REDUCTION; // decrease threshold to be effective for lower amplitudes
+    }
 
-    if(testing_mode && !testing_timing && pass == snr_plot) {
+
+    if(testing_mode && !testing_timing && getpacket_snr_pass == snr_plot) {
       // Save threshold for plotting
       thr_plot[thr_index++] = threshold;
     }
@@ -774,7 +793,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
     energy[1] = 0;
   }
 
-  if(testing_mode && !testing_timing && pass == snr_plot) {
+  if(testing_mode && !testing_timing && getpacket_snr_pass == snr_plot) {
     sprintf(filename, "%s/R2D_Adaptive_threshold.m", folderplots);
     LOG_M(filename, "Adaptive_threshold_sig", thr_plot, thr_index, 1, 2);
 
@@ -784,7 +803,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
     free(energy_plot);
     free(thr_plot);
   }
-  pass++;
+  getpacket_snr_pass++;
 }
 
 void SIM_Channel_propagate_free(c16_t **rxData, int nb_antennas_rx)
@@ -1452,7 +1471,7 @@ int main(int argc, char **argv)
         printf("%s <options>\n", argv[0]);
         printf("-h This help page\n");
         printf("-L OAI log level <0(errors) default, 1(warning), 2(analysis), 3(info), 4(debug), 5(trace)>\n");
-        printf("-R Number of RBs (supported: 1, 6, 25, 50, 100) (default: %d)\n", frame_parms->nr_frame_parms.N_RB_DL);
+        printf("-R Number of RBs (supported: 1, 2, 4) (default: %d)\n", frame_parms->nr_frame_parms.N_RB_DL);
         printf("-p Payload size in bits (max: %d) (default: %d)\n", MAX_AIOT_R2D_PAYLOAD_SIZE * 8, frame_parms->payload_size);
         printf("-M Number of chips in a OFDM symbol (supported: 1, 2, 4) (default: %d)\n", frame_parms->M);
         printf("-Z Overlay sequence: Zadoff-Chu (1) or Ones (0) (default: %d)\n", frame_parms->Zadoff_Chu);
@@ -1469,8 +1488,8 @@ int main(int argc, char **argv)
         break;
       case 'R':
         int RBs = atoi(optarg);
-        if (RBs != 1 && RBs != 6 && RBs != 25 && RBs != 50 && RBs != 100) {
-          printf("Error: number of RBs %d not supported, use 1, 6, 25, 50 or 100\n", RBs);
+        if (RBs != 1 && RBs != 2 && RBs != 4) {
+          printf("Error: number of RBs %d not supported, use 1, 2, 4\n", RBs);
           exit(-1);
         } else {
           printf("Using: %d RBs\n", RBs);
@@ -1595,6 +1614,8 @@ int main(int argc, char **argv)
   #endif
 
   // ---------------------------------------------------------------
+
+  getpacket_snr_pass = snr_min;
 
   sprintf(folderplots, "./R2D_plots/SNR%d_RBs%d_M%d_ZC%d_SIZE%d/", snr_plot, frame_parms->nr_frame_parms.N_RB_UL, frame_parms->M, frame_parms->Zadoff_Chu, frame_parms->payload_size);
   mkdir("./R2D_plots", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
