@@ -684,7 +684,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
 
   threshold = ((thr_max + thr_min) / 2); // adapt threshold
   if (frame_parms->received_M != 1) {
-    threshold -= threshold / POSTAMBLE_THRESHOLD_REDUCTION; // decrease threshold to be effective for lower amplitudes
+    threshold = (threshold + thr_min) / 2.1; // decrease threshold to be 1/4 for preamble
   }
 
   if(testing_mode && !testing_timing) {
@@ -770,19 +770,20 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
     rx_payload[bits/8] = (rx_payload[bits/8] << 1) | bit0;
     bits++;
 
-    if(bit0 == 0) {
-      thr_max = (thr_max*3 + energy[1]) / 4;
-      thr_min = (thr_min*3 + energy[0]) / 4;
-    } else {
-      thr_max = (thr_max*3 + energy[0]) / 4;
-      thr_min = (thr_min*3 + energy[1]) / 4;
-    }
+    if(endCounter == 0) {
+      if(energy[0] < energy[1]) {
+        thr_max = (thr_max*3 + energy[1]) / 4;
+        thr_min = (thr_min*3 + energy[0]) / 4;
+      } else {
+        thr_max = (thr_max*3 + energy[0]) / 4;
+        thr_min = (thr_min*3 + energy[1]) / 4;
+      }
 
-    threshold = ((thr_max + thr_min) / 2); // adapt threshold
-    if (frame_parms->received_M != 1) {
-      threshold -= threshold / POSTAMBLE_THRESHOLD_REDUCTION; // decrease threshold to be effective for lower amplitudes
+      threshold = ((thr_max + thr_min) / 2); // adapt threshold
+      if (frame_parms->received_M != 1) {
+        threshold = (threshold + thr_min) / 2.1; // decrease threshold to be 1/4 for preamble
+      }
     }
-
 
     if(testing_mode && !testing_timing && getpacket_snr_pass == snr_plot) {
       // Save threshold for plotting
@@ -791,6 +792,12 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
 
     energy[0] = 0;
     energy[1] = 0;
+  }
+
+  if(position + received_chip_size > frame_parms->packet_downsampled_samples) {
+    if(testing_mode && !testing_timing) {
+      printf("[RX GetPacket] Error: Reached end of received signal without detecting postamble\n");
+    }
   }
 
   if(testing_mode && !testing_timing && getpacket_snr_pass == snr_plot) {
