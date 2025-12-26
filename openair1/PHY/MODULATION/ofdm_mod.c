@@ -308,7 +308,7 @@ void apply_nr_rotation_TX(const NR_DL_FRAME_PARMS *fp,
     const c16_t *this_rotation = symbol_rotation + sidx;
     c16_t *this_symbol = (txdataF) + sidx * fp->ofdm_symbol_size;
 
-    LOG_I(PHY,"Rotating symbol %d, slot %d, symbol_subframe_index %d (%d,%d)\n",
+    LOG_D(PHY,"Rotating symbol %d, slot %d, symbol_subframe_index %d (%d,%d)\n",
       sidx,
       slot,
       sidx + symb_offset,

@@ -392,7 +392,6 @@ static inline int interleave_signals(c16_t *output, c16_t *signal1, void *amp, c
     AssertFatal(1==0,"Architecture doesn't support fp16\n");
 #endif
     cf16_t *out_cf16 = (cf16_t*)out;
-    printf("tail: i%d end %d\n",i,end);
     
     for (; i < end; i++) {
       cf16_t *s1 = (cf16_t*)signal1,*s2=(cf16_t*)signal2;	    
@@ -1028,7 +1027,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
       for (int i = 0; i < n_dmrs ; i += 8) {
 	printf("%d:",i);
         for (int j = 0; j < 8; j++) {
-          printf("%.2f %.2f ", ((cf16_t*)mod_dmrs)[i + j].r, ((cf16_t*)mod_dmrs)[i + j].i);
+          printf("%.2f %.2f ", (double)((cf16_t*)mod_dmrs)[i + j].r, (double)((cf16_t*)mod_dmrs)[i + j].i);
         }
         printf("\n");
       }

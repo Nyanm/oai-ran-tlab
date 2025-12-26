@@ -1056,22 +1056,27 @@ static inline void rotate_cpx_vector_fp16(const cf16_t *const x, const cf16_t *c
        vst1_f16((float16_t*)(y + i),y16x4);
     }
 #elif defined(__AVX512FP16__) 
-    const __m512i alpha512=_mm512_set1_epi32(*(uint32_t*)alpha);
-    for (; i + 16 < N; i+=16) {
-       __m512h x512 = _mm512_loadu_ph(x + i);
-       __m512h y512 = _mm512_cmul_pch(x512,*(__m512h*)&alpha512);
-       _mm512_storeu_ph((__m512h*)(y + i),y512);
+    __m512h alpha512=_mm512_set1_pch(*(_Float16 _Complex*)alpha);
+    const __m512h alpha512c=_mm512_conj_pch(alpha512);
+    for (; i + 32 < N; i+=32) {
+    _mm512_storeu_ph((__m512h*)(y + i),_mm512_cmul_pch(_mm512_loadu_ph(x + i),alpha512c));
+    _mm512_storeu_ph((__m512h*)(y + i + 16),_mm512_cmul_pch(_mm512_loadu_ph(x + i + 16),alpha512c));
+	    
+//       if (i==0) { for (int j=0;j<2;j+=2) printf("%0.2f+(%0.2fj) ",(double)((_Float16*)&x512)[j],(double)((_Float16*)&x512)[j]); printf("\n");}
+       //if (i==0) { for (int j=0;j<32;j+=2) printf("%0.2f+(%0.2fj) ",(double)((_Float16*)&y512)[j],(double)((_Float16*)&y512)[j]); printf("\n");}
+//       _mm512_storeu_ph((__m512h*)(y + i),y512);
     }
-    for (; i + 8 < N; i+=8) {
-       __m256h x256 = _mm256_loadu_ph(x + i);
-       __m256h y256 = _mm256_cmul_pch(x256,*(__m256h*)&alpha512);
-       _mm256_storeu_ph((__m256h*)(y + i),y256);
-    }
-    for (; i + 4 < N; i+=4) {
-       __m128h x128 = _mm_loadu_ph(x + i);
-       __m128h y128 = _mm_cmul_pch(x128,*(__m128h*)&alpha512);
-       _mm_storeu_ph((__m128h*)(y + i),y128);
-    }
+    for (; i + 8 < N; i+=8) 
+       _mm256_storeu_ph((__m256h*)(y + i),_mm256_cmul_pch( _mm256_loadu_ph(x + i),*(__m256h*)&alpha512c));
+    
+    for (; i + 4 < N; i+=4) 
+       _mm_storeu_ph((__m128h*)(y + i),_mm_cmul_pch(_mm_loadu_ph(x + i),*(__m128h*)&alpha512c));
+    
+   /* 
+    printf("y:");
+    for (int j=0;j<32;j+=2) 
+       printf("%0.2f+(%0.2fj) ",(double)((_Float16*)y)[j],(double)((_Float16*)y)[j+1]);
+    printf("\n");*/
 #else
     AssertFatal(1==0,"No support for fp16 complex multiplication and FP16 is requested\n");
 #endif
