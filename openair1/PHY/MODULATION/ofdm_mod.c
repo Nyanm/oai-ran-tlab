@@ -342,17 +342,17 @@ void apply_nr_rotation_TX(const NR_DL_FRAME_PARMS *fp,
     } else {
 #ifdef FLT16_MAX
       if (use_fp16) {
-        rotate_cpx_vector_fp16((cf16_t*)this_symbol, (cf16_t*)this_rotation, (cf16_t*)this_symbol,
+        rotate_cpx_vector_fp16in_q15out((cf16_t*)this_symbol, (cf16_t*)this_rotation, tx_amp, (cf16_t*)this_symbol,
                           nb_rb * 6);
-	fp16_to_q15((cf16_t*)this_symbol,this_symbol,nb_rb  * 6,tx_amp);
-        rotate_cpx_vector_fp16((cf16_t*)this_symbol + fp->first_carrier_offset,
-                          (cf16_t*)this_rotation,
+	//fp16_to_q15((cf16_t*)this_symbol,this_symbol,nb_rb  * 6,tx_amp);
+        rotate_cpx_vector_fp16in_q15out((cf16_t*)this_symbol + fp->first_carrier_offset,
+                          (cf16_t*)this_rotation, tx_amp,
                           (cf16_t*)this_symbol + fp->first_carrier_offset,
                           nb_rb * 6);
-	fp16_to_q15((cf16_t*)this_symbol + fp->first_carrier_offset,
-		    this_symbol + fp->first_carrier_offset,
-		    nb_rb  * 6,
-		    tx_amp);
+	//fp16_to_q15((cf16_t*)this_symbol + fp->first_carrier_offset,
+	//	    this_symbol + fp->first_carrier_offset,
+	//	    nb_rb  * 6,
+	//	    tx_amp);
       }
       else
 #endif

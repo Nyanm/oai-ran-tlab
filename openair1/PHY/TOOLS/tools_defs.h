@@ -1081,6 +1081,55 @@ static inline void rotate_cpx_vector_fp16(const cf16_t *const x, const cf16_t *c
     AssertFatal(1==0,"No support for fp16 complex multiplication and FP16 is requested\n");
 #endif
 }
+
+static inline void rotate_cpx_vector_fp16in_q15out(const cf16_t *const x, const cf16_t *const alpha, int16_t tx_amp, c16_t *y, uint32_t N)
+{
+    uint32_t i=0;
+#if defined(__aarch64__)
+    const float16x8_t zerosq=vdupq_n_f16(0.0f);
+    const float16x4_t zeros=vdup_n_f16(0.0f);
+    cf16_t alpha2;
+    alpha2.r = alpha->r * (float16_t)tx_amp;
+    alpha2.i = alpha->i * (float16_t)tx_amp;
+    const uint32x4_t alpha16x8=vdupq_n_u32(*(uint32_t*)&alpha2);
+    for (; i + 4 <= N ; i+=4) {
+       float16x8_t x16x8 = vld1q_f16((float16_t*)(x + i));	    
+       float16x8_t y16x8 = vcmlaq_f16(zerosq,x16x8,*((float16x8_t*)&alpha16x8));
+       y16x8 = vcmlaq_rot90_f16(y16x8,x16x8,*((float16x8_t*)&alpha16x8));
+       vst1q_s16((int16_t*)(y + i),vcvtq_s16_f16(y16x8));
+    }
+    for (; i + 2 <= N ; i+=2) {
+       float16x4_t x16x4 = vld1_f16((float16_t*)(x + i));	    
+       float16x4_t y16x4 = vcmla_f16((float16x4_t)zeros,x16x4,*((float16x4_t*)&alpha16x8));
+       y16x4 = vcmla_rot90_f16(y16x4,x16x4,*((float16x4_t*)&alpha16x8));
+       vst1_s16((int16_t*)(y + i),vcvt_s16_f16(y16x4));
+    }
+#elif defined(__AVX512FP16__) 
+    __m512h alpha512=_mm512_set1_pch(*(_Float16 _Complex*)alpha);
+    const __m512h alpha512c=_mm512_conj_pch(alpha512);
+    for (; i + 32 < N; i+=32) {
+    _mm512_storeu_ph((__m512h*)(y + i),_mm512_cmul_pch(_mm512_loadu_ph(x + i),alpha512c));
+    _mm512_storeu_ph((__m512h*)(y + i + 16),_mm512_cmul_pch(_mm512_loadu_ph(x + i + 16),alpha512c));
+	    
+//       if (i==0) { for (int j=0;j<2;j+=2) printf("%0.2f+(%0.2fj) ",(double)((_Float16*)&x512)[j],(double)((_Float16*)&x512)[j]); printf("\n");}
+       //if (i==0) { for (int j=0;j<32;j+=2) printf("%0.2f+(%0.2fj) ",(double)((_Float16*)&y512)[j],(double)((_Float16*)&y512)[j]); printf("\n");}
+//       _mm512_storeu_ph((__m512h*)(y + i),y512);
+    }
+    for (; i + 8 < N; i+=8) 
+       _mm256_storeu_ph((__m256h*)(y + i),_mm256_cmul_pch( _mm256_loadu_ph(x + i),*(__m256h*)&alpha512c));
+    
+    for (; i + 4 < N; i+=4) 
+       _mm_storeu_ph((__m128h*)(y + i),_mm_cmul_pch(_mm_loadu_ph(x + i),*(__m128h*)&alpha512c));
+    
+   /* 
+    printf("y:");
+    for (int j=0;j<32;j+=2) 
+       printf("%0.2f+(%0.2fj) ",(double)((_Float16*)y)[j],(double)((_Float16*)y)[j+1]);
+    printf("\n");*/
+#else
+    AssertFatal(1==0,"No support for fp16 complex multiplication and FP16 is requested\n");
+#endif
+}
 #endif
 #ifdef __cplusplus
 }
