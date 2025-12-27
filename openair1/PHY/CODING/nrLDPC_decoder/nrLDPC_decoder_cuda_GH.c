@@ -68,26 +68,6 @@ cudaError_t Err;
 #define USE_STATIC_ALLOC
 
 //--------------------------------------------------------------
-// debug function
-void dumpASS(int8_t* cnProcBufRes, const char* filename)
-{
-  FILE* fp = fopen(filename, "w");
-  if (fp == NULL) {
-    perror("Failed to open dump file");
-    exit(EXIT_FAILURE);
-  }
-  // printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
-
-  for (int i = 0; i < MAX_NUM_DLSCH_SEGMENTS_DL * 8448; i++) {
-    fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
-    if ((i + 1) % 16 == 0)
-      fprintf(fp, "\n");
-  }
-
-  fclose(fp);
-}
-
-//--------------------------------------------------------------
 
 #ifdef USE_STATIC_ALLOC
 
@@ -101,169 +81,13 @@ int8_t* cnProcBuf_dev;
 int8_t* bnProcBuf_dev;
 int8_t* llrRes_dev;
 int8_t* llrProcBuf_dev;
-
-t_nrLDPC_lut* d_lut_R13;
-t_nrLDPC_lut* d_lut_R23;
-
 int8_t* cnProcBuf_host;
 
 int8_t* bnProcBuf_host;
 
 int8_t* llrRes_host;
 int8_t* llrProcBuf_host;
-
-t_nrLDPC_lut* h_lut_R13;
-t_nrLDPC_lut* h_lut_R23;
-
 extern int pageable, register_host;
-
-#define COPY_ARR_MEMBER(member, type, groups)                                                         \
-  do {                                                                                                \
-    for (int i = 0; i < (groups); i++) {                                                              \
-      type* tmp_dev;                                                                                  \
-      if (h_lut->member[i].d != NULL && h_lut->member[i].dim1 > 0 && h_lut->member[i].dim2 > 0) {     \
-        size_t sz = h_lut->member[i].dim1 * h_lut->member[i].dim2 * sizeof(type);                     \
-        err = cudaHostAlloc((void**)&tmp_dev, sz, cudaHostAllocMapped);                               \
-        if (err != cudaSuccess) {                                                                     \
-          fprintf(stderr, "cudaMalloc failed for " #member "[%d]: %s\n", i, cudaGetErrorString(err)); \
-          exit(EXIT_FAILURE);                                                                         \
-        }                                                                                             \
-        memcpy(tmp_dev, h_lut->member[i].d, sz);                                                      \
-        /* updtae d_lut->member[i].d pointer */                                                       \
-        memcpy(&(d_lut->member[i].d), &tmp_dev, sizeof(type*));                                       \
-        /* copy dim1 and dim2 */                                                                      \
-        memcpy(&(d_lut->member[i].dim1), &(h_lut->member[i].dim1), sizeof(int));                      \
-        memcpy(&(d_lut->member[i].dim2), &(h_lut->member[i].dim2), sizeof(int));                      \
-      }                                                                                               \
-    }                                                                                                 \
-  } while (0)
-
-#define COPY_POINTER_MEMBER(member, type, count)                                           \
-  do {                                                                                     \
-    type* tmp_dev;                                                                         \
-    printf("tmp_dev = %p\n", (void*)tmp_dev);                                              \
-    err = cudaHostAlloc((void**)&tmp_dev, (count) * sizeof(type), cudaHostAllocMapped);    \
-    printf("malloc tmp_dev = %p\n", (void*)tmp_dev);                                       \
-    if (err != cudaSuccess) {                                                              \
-      fprintf(stderr, "cudaMalloc failed for " #member ": %s\n", cudaGetErrorString(err)); \
-      exit(EXIT_FAILURE);                                                                  \
-    }                                                                                      \
-    printf("h_lut->member = %p\n", (void*)h_lut->member);                                  \
-    memcpy(tmp_dev, h_lut->member, (count) * sizeof(type));                                \
-    printf("d_lut->member");                                                               \
-    printf(" = %p, tmp_dev %p\n", (void*)d_lut->member, tmp_dev);                          \
-    d_lut->member = tmp_dev;                                                               \
-  } while (0)
-
-int numLLR_R13, numLLR_R23;
-
-void check_lut_pointers(const t_nrLDPC_lut* lut)
-{
-  if (!lut) {
-    printf("check_lut_pointers: lut is NULL\n");
-    return;
-  }
-
-  printf("Checking LUT pointers:\n");
-  printf("startAddrCnGroups       = %p\n", (void*)lut->startAddrCnGroups);
-  printf("numCnInCnGroups         = %p\n", (void*)lut->numCnInCnGroups);
-  printf("numBnInBnGroups         = %p\n", (void*)lut->numBnInBnGroups);
-  printf("startAddrBnGroups       = %p\n", (void*)lut->startAddrBnGroups);
-  printf("startAddrBnGroupsLlr    = %p\n", (void*)lut->startAddrBnGroupsLlr);
-  printf("llr2llrProcBufAddr      = %p\n", (void*)lut->llr2llrProcBufAddr);
-  printf("llr2llrProcBufBnPos     = %p\n", (void*)lut->llr2llrProcBufBnPos);
-
-  printf("circShift               = %p\n", (void*)lut->circShift);
-  printf("startAddrBnProcBuf       = %p\n", (void*)lut->startAddrBnProcBuf);
-  printf("bnPosBnProcBuf           = %p\n", (void*)lut->bnPosBnProcBuf);
-  printf("posBnInCnProcBuf         = %p\n", (void*)lut->posBnInCnProcBuf);
-}
-
-void copy_luts_to_pinned()
-{
-  cudaError_t err;
-  t_nrLDPC_dec_params params;
-  // ---------------------------
-  // copy all the member pointers
-  // ---------------------------
-  t_nrLDPC_lut* h_lut = h_lut_R13;
-  t_nrLDPC_lut* d_lut = d_lut_R13;
-  params.BG = 1;
-  params.Z = 384;
-  params.R = 13;
-  numLLR_R13 = nrLDPC_init(&params, h_lut);
-
-  COPY_POINTER_MEMBER(startAddrCnGroups, uint32_t, 9);
-  printf("Inside copy 3\n");
-  COPY_POINTER_MEMBER(numCnInCnGroups, uint8_t, 9);
-  printf("Inside copy 4\n");
-  printf("host ptr = %p\n", (void*)d_lut->numBnInBnGroups);
-  COPY_POINTER_MEMBER(numBnInBnGroups, uint8_t, 30);
-  printf("Inside copy 5\n");
-  printf("host ptr = %p\n", (void*)d_lut->startAddrBnGroups);
-  printf("Inside copy 5.1\n");
-  COPY_POINTER_MEMBER(startAddrBnGroups, uint32_t, 30);
-  printf("Inside copy 6\n");
-  COPY_POINTER_MEMBER(startAddrBnGroupsLlr, uint16_t, 30);
-  printf("Inside copy 7\n");
-  COPY_POINTER_MEMBER(llr2llrProcBufAddr, uint16_t, 26);
-  printf("Inside copy 8\n");
-  COPY_POINTER_MEMBER(llr2llrProcBufBnPos, uint8_t, 26);
-  printf("Inside copy 9\n");
-  //  COPY_POINTER_MEMBER
-  // COPY_POINTER_MEMBER(numCnInCnGroups,  uint8_t,  X);
-  // COPY_POINTER_MEMBER(numBnInBnGroups,  uint8_t,  Y);
-  // ...
-
-  // ---------------------------
-  // cope with arr8_t/16_t/32_t
-  // ---------------------------
-
-  COPY_ARR_MEMBER(circShift, uint16_t, 9);
-  COPY_ARR_MEMBER(startAddrBnProcBuf, uint32_t, 9);
-  COPY_ARR_MEMBER(bnPosBnProcBuf, uint8_t, 9);
-  COPY_ARR_MEMBER(posBnInCnProcBuf, uint8_t, 9);
-
-  // check_lut_pointers(d_lut);
-
-  h_lut = h_lut_R23;
-  d_lut = d_lut_R23;
-  params.BG = 1;
-  params.Z = 384;
-  params.R = 23;
-  numLLR_R23 = nrLDPC_init(&params, h_lut);
-
-  COPY_POINTER_MEMBER(startAddrCnGroups, uint32_t, 9);
-  printf("Inside copy 3\n");
-  COPY_POINTER_MEMBER(numCnInCnGroups, uint8_t, 9);
-  printf("Inside copy 4\n");
-  printf("host ptr = %p\n", (void*)d_lut->numBnInBnGroups);
-  COPY_POINTER_MEMBER(numBnInBnGroups, uint8_t, 30);
-  printf("Inside copy 5\n");
-  printf("host ptr = %p\n", (void*)d_lut->startAddrBnGroups);
-  printf("Inside copy 5.1\n");
-  COPY_POINTER_MEMBER(startAddrBnGroups, uint32_t, 30);
-  printf("Inside copy 6\n");
-  COPY_POINTER_MEMBER(startAddrBnGroupsLlr, uint16_t, 30);
-  printf("Inside copy 7\n");
-  COPY_POINTER_MEMBER(llr2llrProcBufAddr, uint16_t, 26);
-  printf("Inside copy 8\n");
-  COPY_POINTER_MEMBER(llr2llrProcBufBnPos, uint8_t, 26);
-  printf("Inside copy 9\n");
-  //  COPY_POINTER_MEMBER
-  // COPY_POINTER_MEMBER(numCnInCnGroups,  uint8_t,  X);
-  // COPY_POINTER_MEMBER(numBnInBnGroups,  uint8_t,  Y);
-  // ...
-
-  // ---------------------------
-  // cope with arr8_t/16_t/32_t
-  // ---------------------------
-
-  COPY_ARR_MEMBER(circShift, uint16_t, 9);
-  COPY_ARR_MEMBER(startAddrBnProcBuf, uint32_t, 9);
-  COPY_ARR_MEMBER(bnPosBnProcBuf, uint8_t, 9);
-  COPY_ARR_MEMBER(posBnInCnProcBuf, uint8_t, 9);
-}
 int cuda_support_init_decoder()
 {
   if (!pageable && !register_host) {
@@ -286,10 +110,6 @@ int cuda_support_init_decoder()
     // AssertFatal(err == cudaSuccess,"CUDA Error (iter_ptr_array_dev): %s\n", cudaGetErrorString(err));
     // err=cudaMalloc((void **)&PC_Flag_array_dev,sizeof(int)* MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4);
     // AssertFatal(err == cudaSuccess,"CUDA Error (PC_Flag_array_dev): %s\n", cudaGetErrorString(err));
-    err = cudaMalloc((void**)&d_lut_R13, sizeof(*d_lut_R13));
-    AssertFatal(err == cudaSuccess, "CUDA Error (d_lut_R13): %s\n", cudaGetErrorString(err));
-    err = cudaMalloc((void**)&d_lut_R23, sizeof(*d_lut_R23));
-    AssertFatal(err == cudaSuccess, "CUDA Error (d_lut_R13): %s\n", cudaGetErrorString(err));
   } else {
     cudaError_t err = cudaHostAlloc((void**)&cnProcBuf_host,
                                     sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF,
@@ -347,15 +167,6 @@ int cuda_support_init_decoder()
     // err = cudaHostGetDevicePointer((void**)&PC_Flag_array_dev, PC_Flag_array_host, 0);
     // AssertFatal(err == cudaSuccess,"CUDA Error (PC_Flag_array_dev): %s\n", cudaGetErrorString(err));
 
-    err = cudaHostAlloc((void**)&h_lut_R13, sizeof(*h_lut_R13), cudaHostAllocMapped);
-    AssertFatal(err == cudaSuccess, "CUDA Error (h_lut_R13): %s\n", cudaGetErrorString(err));
-    err = cudaHostAlloc((void**)&h_lut_R23, sizeof(*h_lut_R23), cudaHostAllocMapped);
-    AssertFatal(err == cudaSuccess, "CUDA Error (h_lut_R23): %s\n", cudaGetErrorString(err));
-    err = cudaHostGetDevicePointer((void**)&d_lut_R13, h_lut_R13, 0);
-    AssertFatal(err == cudaSuccess, "CUDA Error (d_lut_R13): %s\n", cudaGetErrorString(err));
-    err = cudaHostGetDevicePointer((void**)&d_lut_R23, h_lut_R23, 0);
-    AssertFatal(err == cudaSuccess, "CUDA Error (d_lut_R23): %s\n", cudaGetErrorString(err));
-    copy_luts_to_pinned();
     printf("All cudaHostAlloc done\n");
   }
   return 0;
@@ -382,8 +193,7 @@ extern void nrLDPC_decoder_scheduler_BG1_cuda_core(int8_t* p_out,
 static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            int8_t* p_out,
                                            int n_segments,
-                                           uint32_t numLLR,
-                                           t_nrLDPC_lut* p_lut,
+                                           uint32_t numLLR, 
                                            t_nrLDPC_dec_params* p_decParams,
                                            t_nrLDPC_time_stats* p_profiler,
                                            decode_abort_t* ab);
@@ -467,9 +277,6 @@ int32_t LDPCshutdown_cuda()
 }
 
 int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
-                         // uint8_t harq_pid,
-                         // uint8_t ulsch_id,
-                         // uint8_t C,
                          int8_t* p_llr,
                          uint8_t* p_out,
                          t_nrLDPC_time_stats* p_profiler,
@@ -481,24 +288,14 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
     return 0;
   }
   uint32_t numLLR;
-#ifdef USE_STATIC_ALLOC
-  t_nrLDPC_lut lut;
-  t_nrLDPC_lut* p_lut = &lut;
-  // Initialize decoder core(s) with correct LUTs
-  numLLR = nrLDPC_init(p_decParams, p_lut);
-#else
-  t_nrLDPC_lut* p_lut;
   if (p_decParams->R == 13) {
-    numLLR = numLLR_R13;
-    p_lut = d_lut_R13;
+    numLLR = NR_LDPC_NCOL_BG1_R13 * p_decParams->Z;
   } else {
-    numLLR = numLLR_R23;
-    p_lut = d_lut_R23;
+    numLLR = NR_LDPC_NCOL_BG1_R23 * p_decParams->Z;
   }
-#endif
   // Launch LDPC decoder core for one segment
   int n_segments = p_decParams->n_segments;
-  int numIter = nrLDPC_decoder_core(p_llr, p_out, n_segments, numLLR, p_lut, p_decParams, p_profiler, ab);
+  int numIter = nrLDPC_decoder_core(p_llr, (int8_t*)p_out, n_segments, numLLR, p_decParams, p_profiler, ab);
 
   set_abort(ab, false);
 
@@ -510,7 +307,6 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
    \param p_llr Input LLRs
    \param p_out Output vector
    \param numLLR Number of LLRs
-   \param p_lut Pointer to decoder LUTs
    \param p_decParamsnrLDPC decoder parameters
    \param p_profilernrLDPC profiler statistics
 */
@@ -519,7 +315,6 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
                                            int8_t* p_out,
                                            int n_segments,
                                            uint32_t numLLR,
-                                           t_nrLDPC_lut* p_lut,
                                            t_nrLDPC_dec_params* p_decParams,
                                            t_nrLDPC_time_stats* p_profiler,
                                            decode_abort_t* ab)
@@ -606,11 +401,6 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     cudaEventSynchronize(decoderDoneEvents[s]); // stop until segment decode
   }
   cudaDeviceSynchronize();
-
-  // cudaDeviceSynchronize();
-  // printf("p_out %p, temp_out %p\n",p_out,temp_out);
-
-  // dumpASS(p_out, "Dump_Output_Stream_GH.txt");
 
   return numMaxIter;
 }
