@@ -748,9 +748,9 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
       continue; // wait for two chips to form a bit
     }
 
-    if(energy[0] > threshold && energy[1] > threshold) {
-    //if(bits == frame_parms->packet_size + 1) {
-      if(++endCounter >= 2) {
+    //if(energy[0] > threshold && energy[1] > threshold) {
+    if(bits == frame_parms->packet_size + 1) {
+      //if(++endCounter >= 2) {
         rx_payload[bits/8] &= ~0x01; // reset last bit (postamble 11)
         frame_parms->packet_payload_size = bits-1; // exclude the last bit (postamble)
         
@@ -759,7 +759,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
 
         rx_payload[bits/8] <<= (shift - 1); // shift to align last byte
         break;
-      }
+      //}
     } else {
       endCounter = 0;
     }
