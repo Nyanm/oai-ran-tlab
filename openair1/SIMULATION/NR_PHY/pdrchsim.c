@@ -891,8 +891,7 @@ void AIOT_D2R_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int P
 
   if(testing_mode && !testing_timing && getpacket_snr_pass == snr_plot) {
     // Energy plotting
-    energy_plot = malloc(frame_parms->packet_payload_size * sizeof(uint32_t));
-    memset(energy_plot, 0, frame_parms->packet_payload_size * sizeof(uint32_t));
+    energy_plot = malloc(2*frame->packet_payload_size * sizeof(uint32_t));
   }
 
   int i = 0;
