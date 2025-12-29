@@ -100,8 +100,6 @@ int snr_steps = SNR_STEPS;
 int snr_iters = SNR_TRIALS;
 int snr_plot = 0;
 
-// Note: s_re, s_im, r_re, r_im are now thread-local variables
-// Global channel_model is used as template, each thread gets its own copy
 channel_model_t channel_model;
 
 bool testing_mode = false;
@@ -351,7 +349,7 @@ void AIOT_R2D_PHY_RX_Envelope_Detector(int16_t *envelope, const c16_t **rxData, 
 }
 
 // --- Configuration: Q22 Fixed Point ---
-// Precision: ~0.0000002 (Sufficient for audio/sensor filters)
+// Precision: ~0.0000002
 // Headroom: Allows intermediate multiply (a * y) to fit in 64-bit int.
 #define Q_SHIFT 22
 #define Q_VAL   (1LL << Q_SHIFT)
@@ -748,9 +746,9 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
       continue; // wait for two chips to form a bit
     }
 
-    //if(energy[0] > threshold && energy[1] > threshold) {
-    if(bits == frame_parms->packet_size + 1) {
-      //if(++endCounter >= 2) {
+    if(energy[0] > threshold && energy[1] > threshold) {
+    //if(bits == frame_parms->packet_size + 1) {
+      if(++endCounter >= 2) {
         rx_payload[bits/8] &= ~0x01; // reset last bit (postamble 11)
         frame_parms->packet_payload_size = bits-1; // exclude the last bit (postamble)
         
@@ -759,7 +757,7 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
 
         rx_payload[bits/8] <<= (shift - 1); // shift to align last byte
         break;
-      //}
+      }
     } else {
       endCounter = 0;
     }
@@ -806,17 +804,6 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
     free(thr_plot);
   }
   getpacket_snr_pass++;
-}
-
-void SIM_Channel_propagate_free(c16_t **rxData, int nb_antennas_rx)
-{
-  if (rxData != NULL) {
-    for (int i = 0; i < nb_antennas_rx; i++) {
-      if (rxData[i] != NULL)
-        free(rxData[i]);
-    }
-    free(rxData);
-  }
 }
 
 bool AIOT_R2D_PHY_RX_CheckCRC(uint8_t *packet, NR_AIOT_DL_FRAME_PARMS *frame)
@@ -866,11 +853,14 @@ typedef struct {
   channel_model_t *channel_model;
   double *ber_results;
   pthread_mutex_t *print_mutex;
+
   // Per-thread timing results
   double time_tx_CRC;
   double time_tx_REs;
   double time_tx_signal;
   double time_channel;
+  double time_multipath;
+  double time_noise;
   double time_envelope;
   double time_filter;
   double time_downsample;
@@ -878,9 +868,6 @@ typedef struct {
   double time_rx_packet;
   double time_ber;
   double time_total;
-
-  double time_multipath;
-  double time_noise;
 } snr_thread_data_t;
 
 pthread_mutex_t print_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -982,6 +969,7 @@ void* process_snr_range(void* arg) {
         local_payload[i] = 0;
       }
 
+      // Add CRC to payload
       AIOT_R2D_PHY_TX_AddCRC(local_payload, local_payload, local_frame_parms);
       
       if(testing_timing) {
@@ -1114,7 +1102,7 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      bool crcValid = AIOT_R2D_PHY_RX_CheckCRC(rx_payload, local_frame_parms);
+      bool crc_ok = AIOT_R2D_PHY_RX_CheckCRC(rx_payload, local_frame_parms);
       
       if(testing_timing) {
         stop_meas(&local_time_stats);
@@ -1126,7 +1114,7 @@ void* process_snr_range(void* arg) {
         reset_meas(&local_alltime_stats);
       }
 
-      if(!crcValid) {
+      if(!crc_ok) {
         data->ber_results[snr - snr_min] += 1;
 
         if(testing_mode && !testing_timing) {
@@ -1619,10 +1607,12 @@ int main(int argc, char **argv)
 
   getpacket_snr_pass = snr_min;
 
-  sprintf(folderplots, "./R2D_plots/SNR%d_RBs%d_M%d_ZC%d_SIZE%d/", snr_plot, frame_parms->nr_frame_parms.N_RB_UL, frame_parms->M, frame_parms->Zadoff_Chu, frame_parms->payload_size);
   mkdir("./R2D_plots", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-  mkdir(folderplots, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
   mkdir(foldername, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+  if(testing_mode) {
+    sprintf(folderplots, "./R2D_plots/SNR%d_RBs%d_M%d_ZC%d_SIZE%d/", snr_plot, frame_parms->nr_frame_parms.N_RB_UL, frame_parms->M, frame_parms->Zadoff_Chu, frame_parms->payload_size);
+    mkdir(folderplots, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+  }
 
   BER_test(frame_parms, &channel_model);
 
