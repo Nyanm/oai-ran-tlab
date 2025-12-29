@@ -340,7 +340,7 @@ simde__m256i oai_mm256_cpx_mult(simde__m256i z1, simde__m256i z2, int shift)
  * Input:  z1 = (a + bi) [ a0,  b0,  ...,  a3,  b3]
  * Input:  z2 = (c + di) [ c0,  d0,  ...,  c3,  d3]
  * Output: z3 = (e + fi) [ e0,  f0,  ...,  e3,  f3]
- * z3 =  z1 * conj(z2) =  (ac+bd) + i(bc-ad)
+ * z3 =  conj(z1) * z2 =  (ac+bd) + i(ad-bc)
  *
  * @param 256-bit SIMD vector of eight complex 16-bit integers.
  * @return a 256-bit SIMD vector.
@@ -354,10 +354,11 @@ simde__m256i oai_mm256_cpx_mult_conj(simde__m256i a, simde__m256i b, int shift)
 }
 
 #ifdef __AVX512BW__
-__attribute__((always_inline)) static inline __m512i oai_mm512_conj(__512i a)
+__attribute__((always_inline)) static inline __m512i oai_mm512_conj(__m512i a)
 {
-  const oai512_t neg_imag = {.i16 = {1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1}};
-  return _mm512_sign_epi16(a, neg_imag.v);
+  const __mmask32 odd = 0xAAAAAAAAu;
+    // For odd lanes: 0 - b (two's complement negate)
+  return(_mm512_mask_sub_epi16(a, odd, _mm512_setzero_si512(), a));
 }
 
 __attribute__((always_inline)) static inline __m512i oai_mm512_swap(__m512i a)
@@ -392,7 +393,7 @@ __m512i oai_mm512_cpx_mult_conj(__m512i a, __m512i b, int shift)
 {
   __m512i re = oai_mm512_smadd(a, b, shift);
   __m512i im = oai_mm512_smadd(oai_mm512_swap(oai_mm512_conj(a)), b, shift);
-  return oai_mm256_pack(re, im);
+  return oai_mm512_pack(re, im);
 }
 #endif
 
