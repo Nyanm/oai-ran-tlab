@@ -214,7 +214,7 @@ int main(int argc, char **argv)
   RU_t *ru = RC.ru[0];
   ORU_t oru = {0};
   oru.ru = ru;
-  oru.num_sync_messages_needed = 1;
+  oru.num_sync_messages_needed = 2;
   int ret = get_oru_options(&oru);
   AssertFatal(ret == 0, "Cannot configure oru, check your config file/cmdline");
   ru->numerology = oru.numerology;

@@ -237,14 +237,14 @@ void *oru_north_read_thread(void *arg)
 
   notifiedFIFO_elt_t * elt = pullNotifiedFIFO(&oru->sync_fifo);
   initial_sync_t *initial_sync = NotifiedFifoData(elt);
-  delNotifiedFIFO_elt(elt);
   sync_params_t sync_params;
   initialize_sync_params(fp, &sync_params, initial_sync);
   LOG_A(PHY,
-        "ORU North read thread started at frame %d, slot %d, symbol %d\n",
-        initial_sync->frame,
-        initial_sync->slot,
-        initial_sync->symbol);
+    "ORU North read thread started at frame %d, slot %d, symbol %d\n",
+    initial_sync->frame,
+    initial_sync->slot,
+    initial_sync->symbol);
+  delNotifiedFIFO_elt(elt);
 
   while (!oai_exit) {
     int num_symbols = 0;
@@ -262,10 +262,10 @@ void *oru_north_read_thread(void *arg)
   return NULL;
 }
 
-void *oru_south_read_thread(void *arg)
+void rx_initial_sync(ORU_t *oru, int *slot, int *frame)
 {
-  ORU_t *oru = arg;
   RU_t *ru = oru->ru;
+  NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
 
   const int num_samples = 3000;
   c16_t throwaway_samples[ru->nb_rx][num_samples];
@@ -274,9 +274,72 @@ void *oru_south_read_thread(void *arg)
     rxp[i] = throwaway_samples[i];
 
   openair0_timestamp timestamp;
+  initial_sync_t initial_sync;
   while (!oai_exit) {
-    ru->rfdevice.trx_read_func(&ru->rfdevice, &timestamp, rxp, num_samples, ru->nb_rx);
+    int samples_read = ru->rfdevice.trx_read_func(&ru->rfdevice, &timestamp, rxp, num_samples, ru->nb_rx);
+    AssertFatal(samples_read == num_samples, "Unexpected number of samples received\n");
+    notifiedFIFO_elt_t *elt = pollNotifiedFIFO(&oru->sync_fifo);
+    if (elt) {
+      memcpy(&initial_sync, NotifiedFifoData(elt), sizeof(initial_sync));
+      break;
+    }
   }
+
+  // Synchornize to ORAN timing
+  int next_slot = initial_sync.slot;
+  int next_frame = initial_sync.frame;
+  openair0_timestamp next_sample = timestamp + num_samples;
+  int64_t diff = next_sample - initial_sync.sample;
+  LOG_I(PHY,
+        "Sychronizing to frame slot %d.%d, sample %ld next_sample %ld diff %ld\n",
+        next_frame,
+        next_slot,
+        initial_sync.sample,
+        next_sample,
+        diff);
+
+  uint64_t samples_to_sync_by = 0;
+  if (diff < 0) {
+    samples_to_sync_by = -diff;
+  } else {
+    while (diff > 0) {
+      uint32_t samples_per_slot = get_samples_per_slot(next_slot, fp);
+      samples_to_sync_by += samples_per_slot;
+      diff -= samples_per_slot;
+      next_slot++;
+      if (next_slot == fp->slots_per_frame) {
+        next_slot = 0;
+        next_frame++;
+        if (next_frame == 1024) {
+          next_frame = 0;
+        }
+      }
+    }
+    samples_to_sync_by += diff;
+  }
+
+  LOG_I(PHY, "Thrashing %lu samples to sync to slot %d, frame %d\n", samples_to_sync_by, next_slot, next_frame);
+  while (!oai_exit && samples_to_sync_by > 0) {
+    int samples_to_read = min(num_samples, samples_to_sync_by);
+    int samples_read = ru->rfdevice.trx_read_func(&ru->rfdevice, &timestamp, rxp, samples_to_read, ru->nb_rx);
+    AssertFatal(samples_to_read == samples_read, "Unexpected number of samples received\n");
+    samples_to_sync_by -= samples_to_read;
+  }
+  *slot = next_slot;
+  *frame = next_frame;
+}
+
+void *oru_south_read_thread(void *arg)
+{
+  ORU_t *oru = arg;
+  
+  int slot;
+  int frame;
+  rx_initial_sync(oru, &slot, &frame);
+  LOG_A(PHY,
+        "ORU South read thread started at frame %d, slot %d\n",
+        frame,
+        slot);
 
   // Perform RX processing
   return NULL;
