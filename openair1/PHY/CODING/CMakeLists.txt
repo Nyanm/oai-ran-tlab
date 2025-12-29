@@ -68,6 +68,8 @@ if (ENABLE_LDPC_CUDA)
                    nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder_cuda_GH.c
                    nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder.c
                    nrLDPC_coding/nrLDPC_coding_segment/nr_rate_matching.c
+		   nrLDPC_coding/nrLDPC_coding_segment/ldpc_deinterleave.cu
+		   nrLDPC_coding/nrLDPC_coding_segment/ldpc_rate_matching.cu
   )
   
   target_link_libraries(ldpc_cuda_GH ldpc_gen_HEADERS ${T_LIB})

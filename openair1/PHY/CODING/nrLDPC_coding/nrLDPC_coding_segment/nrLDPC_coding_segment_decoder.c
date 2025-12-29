@@ -305,7 +305,7 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
 
   for (int r = 0; r < nrLDPC_TB_decoding_parameters->C; r++) {
 #ifdef ENABLE_CUDA
-    if (use_gpu == 1 && decParams.Z == 384 && decParams.BG == 1 && r==0) {
+    if (use_gpu == 1 && decParams.Z >= 128 && decParams.BG == 1 && r==0) {
     // Call CUDA LDPC decoder for all segments
       nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters);
       break;
@@ -396,7 +396,7 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_dec
   // check if at least one PUSCH has a Zc<384 or BG=2
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
     nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
-    if (use_gpu == 0 || nrLDPC_TB_decoding_parameters->Z < 384 ||  nrLDPC_TB_decoding_parameters->BG == 2) {
+    if (use_gpu == 0 || nrLDPC_TB_decoding_parameters->Z < 128 ||  nrLDPC_TB_decoding_parameters->BG == 2) {
 	do_join=true;    
 	break;
     }
