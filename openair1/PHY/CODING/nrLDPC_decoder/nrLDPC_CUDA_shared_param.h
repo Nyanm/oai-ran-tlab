@@ -29,24 +29,6 @@ typedef struct KernelLaunchConfig {
     dim3 block;
 }KernelLaunchConfig;
 
-typedef struct SegmentPack {
-    int packIdx;         // pack index 0..packCount-1
-    int startSeg;        // global start segment index
-    int nSeg;            // number of segments in this pack
-    cudaStream_t stream; // stream for this pack
-    cudaEvent_t doneEvt; // event to signal when pack finishes
-} SegmentPack;
-
-typedef struct ThreadSize {
-    int NumBlocks;
-    int NumBlocks_llr;
-    int NumBlocks_output;
-    int NumThreads;
-}ThreadSize;
-
-extern SegmentPack segmentPacks[MAX_NUM_DLSCH_SEGMENTS_DL];
-extern ThreadSize BG1_R13_threadSize, BG1_R23_threadSize, R_general_threadSize;
-
 
 typedef struct {
     int idxBn;

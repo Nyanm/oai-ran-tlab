@@ -23,17 +23,12 @@
 #define CUDA_BLOCKS_R23 108 // ceil(13824/128)
 #endif
 
-cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
-cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL] = {nullptr};
-bool graphCreated[MAX_NUM_DLSCH_SEGMENTS_DL] = {false};
 
-SegmentPack segmentPacks[MAX_NUM_DLSCH_SEGMENTS_DL];
 
 KernelLaunchConfig Kdim_R13[MAX_NUM_DLSCH_SEGMENTS_DL / 8];
 KernelLaunchConfig Kdim_R23[MAX_NUM_DLSCH_SEGMENTS_DL / 8];
 KernelLaunchConfig Kdim_llr[MAX_NUM_DLSCH_SEGMENTS_DL / 8];
 KernelLaunchConfig Kdim_output[MAX_NUM_DLSCH_SEGMENTS_DL / 8];
-ThreadSize BG1_R13_threadSize, BG1_R23_threadSize, R_general_threadSize;
 
 // debug function
 void dumpAssCUDA(const int8_t *cnProcBufRes, const char *filename)
@@ -601,99 +596,6 @@ static inline uint32_t get_lut_col_index_host(uint32_t Zc)
 //------------------------------------------------------------------------
 //------------------------------------------------------------------------
 
-extern "C" void nrLDPC_decoder_scheduler_BG1_cuda_core(ldpc_cuda_bridge_t* buffer,
-                                                       uint32_t numLLR,
-                                                       int8_t *cnProcBuf,
-                                                       int8_t *bnProcBuf,
-                                                       int8_t *llrRes,
-                                                       int8_t *llrProcBuf,
-                                                       uint32_t Z,
-                                                       uint32_t K,
-                                                       uint8_t BG,
-                                                       uint8_t R,
-                                                       uint8_t numMaxIter,
-                                                       e_nrLDPC_outMode outMode,
-                                                       cudaStream_t *streams,
-                                                       uint8_t CudaStreamIdx,
-                                                       cudaEvent_t *doneEvent)
-{
-  cudaStream_t stream = streams[CudaStreamIdx];
-
-  if (!graphCreated[CudaStreamIdx]) {
-#if RECORD_GRAPH
-    printf("Creating the graph for stream %d, format R%d\n", CudaStreamIdx, R);
-
-    if (CudaStreamIdx != 0) {
-      cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]);
-    }
-#endif
-    // Start graph recording
-#if RECORD_GRAPH
-    cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
-#endif
-    Kdim_R13[CudaStreamIdx].block = dim3(Z >> 2, 4, 1);
-    Kdim_R13[CudaStreamIdx].grid = dim3(num_TotalBlocks_BG1_R13 >> 2, segmentPacks[CudaStreamIdx].nSeg, 1);
-    Kdim_R23[CudaStreamIdx].block = dim3(Z >> 2, 4, 1);
-    Kdim_R23[CudaStreamIdx].grid = dim3(num_TotalBlocks_BG1_R23 >> 2, segmentPacks[CudaStreamIdx].nSeg, 1);
-    Kdim_llr[CudaStreamIdx].block = dim3(Z >> 2, 4, 1);
-    Kdim_llr[CudaStreamIdx].grid = dim3(num_TotalBlocks_llr_llrRes >> 2, segmentPacks[CudaStreamIdx].nSeg, 1);
-    // decoding starts here
-
-    uint8_t ZcIdx = get_lut_col_index_host(Z);
-
-    nrLDPC_llrPreProc_BG1_cuda_stream_core(buffer, llrProcBuf, cnProcBuf, Z, ZcIdx, R, streams, CudaStreamIdx);
-
-    switch (R) {
-      case 13: {
-        for (int i = 0; i <= numMaxIter; i++) {
-          nrLDPC_cnProc_BG1_R13_cuda_stream_core(cnProcBuf, bnProcBuf, Z, ZcIdx, streams, CudaStreamIdx);
-          if (i == numMaxIter)
-            nrLDPC_bnProc_BG1_R13_cuda_stream_core_last(bnProcBuf, cnProcBuf, llrProcBuf, llrRes, Z, ZcIdx, streams, CudaStreamIdx);
-          else
-            nrLDPC_bnProc_BG1_R13_cuda_stream_core(bnProcBuf, cnProcBuf, llrProcBuf, llrRes, Z, ZcIdx, streams, CudaStreamIdx);
-        }
-      } break;
-      case 23: {
-        for (int i = 0; i <= numMaxIter; i++) {
-          nrLDPC_cnProc_BG1_R23_cuda_stream_core(cnProcBuf, bnProcBuf, Z, ZcIdx, streams, CudaStreamIdx);
-          if (i == numMaxIter)
-            nrLDPC_bnProc_BG1_R23_cuda_stream_core_last(bnProcBuf, cnProcBuf, llrProcBuf, llrRes, Z, ZcIdx, streams, CudaStreamIdx);
-          else
-            nrLDPC_bnProc_BG1_R23_cuda_stream_core(bnProcBuf, cnProcBuf, llrProcBuf, llrRes, Z, ZcIdx, streams, CudaStreamIdx);
-        }
-      } break;
-
-      default:
-        printf("Format not support yet\n");
-        break;
-    }
-    nrLDPC_OutPut_BG1_cuda_stream_core(llrRes, Z, R, outMode, buffer, numLLR, K, streams, CudaStreamIdx);
-    
-
-#if RECORD_GRAPH
-    // stop recording
-    cudaStreamEndCapture(stream, &decoderGraphs[CudaStreamIdx]);
-    cudaGraphInstantiate(&decoderGraphExec[CudaStreamIdx], decoderGraphs[CudaStreamIdx], NULL, NULL, 0);
-    graphCreated[CudaStreamIdx] = true;
-
-    // Execute （make sure the first trial finish）
-    cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
-#endif
-    cudaEventRecord(doneEvent[CudaStreamIdx], stream);
-
-  } else {
-    //  reuse the graph after
-#if STREAM_SEQUENCE
-    if (CudaStreamIdx != 0) {
-      cudaStreamWaitEvent(streams[CudaStreamIdx], doneEvent[CudaStreamIdx - 1], 0);
-      cudaEventSynchronize(doneEvent[CudaStreamIdx - 1]);
-    }
-#endif
-    cudaGraphLaunch(decoderGraphExec[CudaStreamIdx], stream);
-    cudaEventRecord(doneEvent[CudaStreamIdx], stream);
-    //
-  }
-}
 
 #define ENQUEUE_LDPC_DECODER_SEQUENCE(q_streams, q_idx)                                                                      \
   do {                                                                                                                       \

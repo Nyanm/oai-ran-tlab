@@ -58,7 +58,9 @@
 #include "nfapi/open-nFAPI/nfapi/public_inc/nfapi_interface.h"
 #include "nfapi/open-nFAPI/nfapi/public_inc/nfapi_nr_interface.h"
 
-#include <cuda_runtime.h>
+#define USE_GPU_FOR_RM_DEINTER 1
+
+void launch_deinterleave_i16(int Qm, int E1, int E2, int C, int r_firstE2,int16_t** e, const int16_t** f);
 
 //-------------------------Debug Function-----------------------
 void dumpAssUltra(int8_t* cnProcBufRes, const char* filename)
@@ -112,19 +114,65 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
   const int segLen = Kc*Z; // int16 length; after packing we store int8 [segLen]
   t_nrLDPC_time_stats procTime = {0};
   t_nrLDPC_time_stats *p_procTime = &procTime;
-  // allocate big buffers on heap
-  //the big buffer is now globally declared
-  int8_t *llrBuffer = (int8_t*)alloca((size_t)C * OAI_LDPC_DECODER_MAX_NUM_LLR * sizeof(int8_t));
+  // allocate big buffers on stack
+  int8_t *llrBuffer = (int8_t*)__builtin_alloca_with_align((size_t)C * OAI_LDPC_DECODER_MAX_NUM_LLR * sizeof(int8_t),8);
   if (!llrBuffer) { LOG_E(PHY,"alloc llrBuffer failed\n"); return; }
 
-  int8_t *decodedBitsBig = (int8_t*)alloca(C * K * sizeof(int8_t));
+  int8_t *decodedBitsBig = (int8_t*)__builtin_alloca_with_align(C * K * sizeof(int8_t),8);
   if (!decodedBitsBig) { LOG_E(PHY,"alloc decodedBitsBig failed\n"); return; }
 
-
-  // Phase 1: per-segment deinterleave+rate-match and pack into llrBuffer
-  // prepare int16 z (local)
+#ifdef USE_GPU_FOR_RM_DEINTER								 
+  start_meas(&segs->segments[0].ts_deinterleave);
+  int16_t *harq_e[128];
+  int16_t *harq_f[128];
+  int r_firstE2 = C;
+  int E1 = segs->segments[0].E;
+  int E2 = E1;
+  for (int r = 0; r < C; ++r) {
+    harq_e[r] = (int16_t*)__builtin_alloca_with_align(sizeof(int16_t) * segs->segments[r].E,8);
+    harq_f[r] = segs->segments[r].llr;
+    if ((segs->segments[r].E != E1) && (r_firstE2 == C)) {
+       E2 = segs->segments[r].E;
+       r_firstE2 = r;
+    }
+  }  
+//  printf("C %d, E1 %d, E2 %d,r_firstE2 %d\n",C, E1, E2, r_firstE2);
+  launch_deinterleave_i16(segs->Qm,E1,E2,C,r_firstE2,harq_e,harq_f);
+  stop_meas(&segs->segments[0].ts_deinterleave);
+#if 0
+  for (int r=0;r<C;r++) {
+      int E = (r<r_firstE2) ? E1 : E2;
+      for (int i=0;i<E;i++) {
+        if (harq_f[r][i] != harq_e[r][(i/2)+(i&1)*(E/2)]) {
+		printf("e/f mismatch r %d i %d\n",i);
+		break;
+	}
+      }
+  }
+  exit(-1);
+#endif
+    start_meas(&segs->segments[0].ts_rate_unmatch);
+    int16_t *harq_d[128];
+    for (int r=0;r<C;r++) harq_d[r] = segs->segments[r].d;
+    nr_rate_matching_ldpc_rx_cuda(segs->tbslbrm,
+                                  segs->BG,
+                                  Z,
+                                  harq_d,
+                                  harq_e,
+				  llrBuffer,
+				  K,
+                                  C,             // TB segments count
+                                  segs->rv_index,
+                                  *segs->segments[0].d_to_be_cleared,
+                                  E1,
+				  E2,
+				  r_firstE2,
+                                  segs->F,
+                                  Kprime - 2 * Z); 
+    for (int r = 0; r < C; ++r) memset(llrBuffer + (size_t)r*segLen,0,2*Z);
+    stop_meas(&segs->segments[0].ts_rate_unmatch);
+#else //USE_GPU_FOR_RM_DEINTER
   int16_t *z_local = (int16_t*)alloca(sizeof(int16_t) * segLen); // segLen is safe small
-//  printf("Qm : %d\n",segs->Qm);								 
   for (int r = 0; r < C; ++r) {
     // deinterleave
     start_meas(&segs->segments[0].ts_deinterleave);
@@ -139,7 +187,7 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
                                  segs->BG,
                                  Z,
                                  segs->segments[r].d,
-                                 harq_e,
+				 harq_e,
                                  C,             // TB segments count
                                  segs->rv_index,
                                  *segs->segments[r].d_to_be_cleared,
@@ -169,8 +217,8 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
       pl[j] = simde_mm_packs_epi16(pv[idx], pv[idx+1]);
     }
     stop_meas(&segs->segments[0].ts_seg_prep);
-//    for (int i=0;i<(vecCount<<4);i++) printf("channel llr %d : %d\n",i,((int8_t*)pl)[i]);
   }
+#endif
 
   start_meas(&segs->segments[0].ts_ldpc_decode);
   
