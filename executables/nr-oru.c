@@ -69,6 +69,19 @@
   {CONFIG_STRING_ORU_NUM_UL_SYMBOLS,            HLP_ORU_NUM_UL_SYMBOLS,             0,    .uptr=NULL,       .defintval=3,                 TYPE_UINT,         0}, \
 }
 
+typedef struct {
+  openair0_timestamp sample;
+  int slot;
+  int frame;
+  int symbol;
+} initial_sync_t;
+
+typedef struct {
+  int frame_unwrap;
+  int last_frame;
+  int64_t sync_offset;
+} sync_params_t;
+
 extern void set_scs_parameters(NR_DL_FRAME_PARMS *fp, int mu, int N_RB_DL);
 
 static const paramdef_t *gpd(const paramdef_t *pd, int num, const char *name)
@@ -198,6 +211,15 @@ void oru_init_frame_parms(ORU_t *oru)
   }
 }
 
+void initialize_sync_params(NR_DL_FRAME_PARMS *fp, sync_params_t *sync_params, initial_sync_t *initial_sync)
+{
+  sync_params->frame_unwrap = 0;
+  sync_params->last_frame = initial_sync->frame;
+  sync_params->sync_offset = initial_sync->sample;
+  sync_params->sync_offset -=
+      (uint64_t)(initial_sync->frame) * fp->samples_per_subframe * 10 + get_samples_slot_timestamp(fp, initial_sync->slot);
+}
+
 void *oru_north_read_thread(void *arg)
 {
   ORU_t *oru = (ORU_t *)arg;
@@ -212,6 +234,18 @@ void *oru_north_read_thread(void *arg)
   for (int aatx = 0; aatx < ru->nb_tx; aatx++) {
     txDataF_ptr[aatx] = txDataF[aatx];
   }
+
+  notifiedFIFO_elt_t * elt = pullNotifiedFIFO(&oru->sync_fifo);
+  initial_sync_t *initial_sync = NotifiedFifoData(elt);
+  delNotifiedFIFO_elt(elt);
+  sync_params_t sync_params;
+  initialize_sync_params(fp, &sync_params, initial_sync);
+  LOG_A(PHY,
+        "ORU North read thread started at frame %d, slot %d, symbol %d\n",
+        initial_sync->frame,
+        initial_sync->slot,
+        initial_sync->symbol);
+
   while (!oai_exit) {
     int num_symbols = 0;
     sense_of_time_t sense_of_time;
@@ -245,5 +279,54 @@ void *oru_south_read_thread(void *arg)
   }
 
   // Perform RX processing
+  return NULL;
+}
+
+void perform_initial_sync(ORU_t *oru, sense_of_time_t *sense_of_time, initial_sync_t *initial_sync)
+{
+  initial_sync->frame = sense_of_time->frame;
+  initial_sync->slot = sense_of_time->slot;
+  initial_sync->symbol = sense_of_time->symbol;
+  initial_sync->sample = oru->ru->rfdevice.get_timestamp(&oru->ru->rfdevice, &sense_of_time->ts);
+  LOG_I(PHY,
+        "RU synchronized: frame, slot %d.%d, symbol %d, sample: %ld\n",
+        initial_sync->frame,
+        initial_sync->slot,
+        initial_sync->symbol,
+        initial_sync->sample);
+}
+
+void *oru_sync_thread(void *arg)
+{
+  ORU_t *oru = (ORU_t *)arg;
+
+  RU_t *ru = (RU_t *)oru->ru;
+  NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+
+  AssertFatal(ru->ifdevice.xran_api.north_in_func != NULL, "No fronthaul interface at north port");
+  __attribute__((aligned(32))) c16_t txDataF[ru->nb_tx][ceil_mod(fp->ofdm_symbol_size * 14, 32)];
+  c16_t *txDataF_ptr[ru->nb_tx];
+  for (int aatx = 0; aatx < ru->nb_tx; aatx++) {
+    txDataF_ptr[aatx] = txDataF[aatx];
+  }
+
+  initial_sync_t initial_sync;
+  while (!oai_exit) {
+    int num_symbols = 0;
+    sense_of_time_t sense_of_time;
+    ru->ifdevice.xran_api.north_in_func((uint32_t **)txDataF_ptr, ru->nb_tx, &sense_of_time, &num_symbols);
+    if (sense_of_time.symbol == 0) {
+      perform_initial_sync(oru, &sense_of_time, &initial_sync);
+      break;
+    }
+  }
+
+  for (int i = 0; i < oru->num_sync_messages_needed; i++) {
+    notifiedFIFO_elt_t *sync_msg = newNotifiedFIFO_elt(sizeof(initial_sync_t), 0, NULL, NULL);
+    initial_sync_t *initial_sync_p = NotifiedFifoData(sync_msg);
+    *initial_sync_p = initial_sync;
+    pushNotifiedFIFO(&oru->sync_fifo, sync_msg);
+  }
+
   return NULL;
 }
