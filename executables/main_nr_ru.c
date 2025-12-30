@@ -31,6 +31,7 @@
  */
 
 #include "PHY/INIT/nr_phy_init.h"
+#include "PHY/TOOLS/tools_defs.h"
 #include "PHY/defs_nr_common.h"
 #define _GNU_SOURCE /* See feature_test_macros(7) */
 #include <sched.h>
@@ -149,14 +150,6 @@ struct timespec timespec_sub(struct timespec, struct timespec)
   return t;
 };
 
-void perform_symbol_rotation(NR_DL_FRAME_PARMS *fp, double f0, c16_t *symbol_rotation)
-{
-  return;
-}
-void init_timeshift_rotation(NR_DL_FRAME_PARMS *fp)
-{
-  return;
-};
 int beam_index_allocation(bool das,
                           int fapi_beam_index,
                           NR_gNB_COMMON *common_vars,
@@ -205,6 +198,7 @@ int main(int argc, char **argv)
   printf("About to Init RU threads\n");
 
   lock_memory_to_ram();
+  load_dftslib();
 
   RC.nb_RU = 1;
   RC.ru = malloc(sizeof(RC.ru));
@@ -221,6 +215,8 @@ int main(int argc, char **argv)
   oru_init_frame_parms(&oru);
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
   nr_dump_frame_parms(fp);
+  init_symbol_rotation(fp);
+  ru->if_south = LOCAL_RF;
   nr_phy_init_RU(oru.ru);
   fill_rf_config(ru, ru->rf_config_file);
   fill_split7_2_config(&ru->openair0_cfg.split7, &ru->config, fp);

@@ -83,7 +83,7 @@ static void *iq_worker_thread(void *arg)
       AssertFatal(tasks[i]->comp_method == XRAN_COMPMETHOD_NONE, "Unsupported compression method: %d", tasks[i]->comp_method);
       uint16_t *source = (uint16_t *)tasks[i]->input_buffer;
       int16_t *destination = (int16_t *)tasks[i]->output_buffer;
-      for (int j = 0; j < tasks[i]->num_iq; j++) {
+      for (int j = 0; j < tasks[i]->num_iq * 2; j++) {
         destination[j] = (int16_t)ntohs(source[j]);
       }
       rte_pktmbuf_free(tasks[i]->mbuf);
@@ -127,5 +127,6 @@ void iq_worker_enqueue(int comp_method, int iq_width, int num_iq, void *input_bu
   int ret = rte_ring_enqueue(iq_worker_context.ring, task);
   if (ret == ENOBUFS) {
     LOG_W(HW, "iq_worker is too slow\n");
+    rte_pktmbuf_free(mbuf);
   }
 }

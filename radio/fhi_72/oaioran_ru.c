@@ -163,7 +163,7 @@ int xran_oru_tx_read_slot(uint32_t **txdataF, int nb_tx, int *frame, int *slot, 
     uint32_t* txdata_aatx = txdataF[aatx];
     for (int sym = *symbol; sym < *symbol + *num_symbols; sym++) {
       uint32_t* txdata_sym = &txdata_aatx[sym * fftsize];
-      uint32_t* ant_data = circular_buffer_get_data(&dl_iq_buffer, aatx, *slot, *symbol);
+      uint32_t* ant_data = circular_buffer_get_data(&dl_iq_buffer, aatx, *slot, sym);
       memcpy(&txdata_sym[first_carrier_offset], ant_data, num_sc_first_copy * sizeof(uint32_t));
       memcpy(txdata_sym, &ant_data[num_sc_first_copy], num_sc_second_copy * sizeof(uint32_t));
       memset(ant_data, 0, sizeof(uint32_t) * nPRBs * NR_NB_SC_PER_RB);
@@ -174,12 +174,6 @@ int xran_oru_tx_read_slot(uint32_t **txdataF, int nb_tx, int *frame, int *slot, 
 
 int process_ru_uplane(struct rte_mbuf *pkt, void *handle, struct xran_eaxc_info *p_cid, uint16_t port_id, struct xran_sense_of_time *p_sense_of_time)
 {
-  static uint64_t num_packets = 0;
-  num_packets++;
-  if (num_packets % 10000 == 0) {
-    LOG_I(HW, "received uplane packets %lu\n", num_packets);
-  }
-
   const struct xran_fh_config *fh_cfg = get_xran_fh_config(port_id);
   void *iq_data_start = NULL;
   uint8_t CC_ID;
@@ -251,11 +245,6 @@ int process_ru_uplane(struct rte_mbuf *pkt, void *handle, struct xran_eaxc_info 
 
 int32_t process_ru_cplane(struct rte_mbuf *pkt, void *handle, uint16_t port_id, struct xran_sense_of_time *p_sense_of_time)
 {
-  static uint64_t num_packets = 0;
-  num_packets++;
-  if (num_packets % 10000 == 0) {
-    LOG_I(HW, "received cplane packets %lu\n", num_packets);
-  }
   return MBUF_FREE;
 }
 
