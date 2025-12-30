@@ -22,7 +22,7 @@
  */
 
 /*!\file nrLDPC_decoder.c
- * \brief Defines thenrLDPC decoder
+ * \brief Defines the nrLDPC decoder
 */
 
 #include <stdint.h>

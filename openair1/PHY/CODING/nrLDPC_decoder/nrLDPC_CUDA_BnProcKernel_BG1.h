@@ -1,11 +1,38 @@
+/*
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this file
+ * except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
+ */
+  /*! \file nrLDPC_CUDA_BnProcKernel_BG1.h
+ * \brief Defines the kernels for bit node processing
+ * \author Qizhi Pan, Raymond Knopp
+ * \company EURECOM
+ * \email: qizhi.pan@eurecom.fr, raymond.knopp@eurecom.fr
+ * \date 2025-12-30
+ * \version 1.0
+ * \note 
+ * \warning
+ */
 #include <cuda_runtime.h>
 #include <stdint.h>
 #include <stdio.h>
 #include "nrLDPC_types.h"
 
-// ======================= //
-//  BN_PROC PC Kernel BG1  //
-// ======================= //
 
 __device__ __forceinline__ void unpack_and_sign_extend(uint32_t packed, uint32_t* val_lo, uint32_t* val_hi) {
 
@@ -135,82 +162,3 @@ __device__ __forceinline__ void bnProcKernel_BG1_int8_Gn_last(const int8_t *__re
 
 
 }
-
-
-
-/*
-__device__ __forceinline__ void bnProcKernel_BG1_int8_Gn(const int8_t *__restrict__ d_bnProcBuf,
-                                                              int8_t *__restrict__ d_cnProcBuf,
-                                                              const int8_t *__restrict__ d_llrProcBuf,
-                                                              int8_t *__restrict__ d_llrRes,
-                                                              uint32_t lane,
-                                                              uint32_t GrpIdx,
-                                                              uint32_t MsgIdx,
-                                                              uint32_t BnIdx,
-                                                              uint32_t GrpNum,
-                                                              uint32_t circShift,
-                                                              uint32_t Zc)
-{
-  const int32_t *bnProcBufPtr = (const int32_t *)(d_bnProcBuf) + lane;
-  uint32_t prevIdxWords = (MsgIdx * GrpNum * Zc) >> 2;
-  uint32_t prev = bnProcBufPtr[prevIdxWords];
-
-  // ---- Unrolled accumulation ----
-  uint32_t computed_llrRes = ((const int32_t *)(d_llrProcBuf))[lane];
-  uint32_t off = (GrpNum * Zc) >> 2;
-#pragma unroll
-  for (int i = 0; i < GrpIdx; ++i) {
-    bnProcBufPtr += i*off;
-    computed_llrRes = __vaddss4(computed_llrRes, *bnProcBufPtr);
-  }
-
-  // ---- Compute llrRes ----
-
-  //int32_t computed_llrRes = __vaddss4(MsgSum, );
-
-  uint32_t BricksToBeGet = __vsubss4(computed_llrRes, prev);
-  // ---- Write result ----
-    if (MsgIdx == 0) {
-    ((int32_t *)(d_llrRes))[lane] = computed_llrRes;
-  }
-  moveBricks_forput_circ(d_cnProcBuf, lane * 4, (uint8_t *)&BricksToBeGet, Zc, circShift);
-
-
-
-}
-
-__device__ __forceinline__ void bnProcKernel_BG1_int8_Gn_last(const int8_t *__restrict__ d_bnProcBuf,
-                                                              int8_t *__restrict__ d_cnProcBuf,
-                                                              const int8_t *__restrict__ d_llrProcBuf,
-                                                              int8_t *__restrict__ d_llrRes,
-                                                              uint32_t lane,
-                                                              uint32_t GrpIdx,
-                                                              uint32_t MsgIdx,
-                                                              uint32_t BnIdx,
-                                                              uint32_t GrpNum,
-                                                              uint32_t circShift,
-                                                              uint32_t Zc)
-{
-  const int32_t *bnProcBufPtr = (const int32_t *)(d_bnProcBuf) + lane;
-  uint32_t prevIdxWords = (MsgIdx * GrpNum * Zc) >> 2;
-  uint32_t prev = bnProcBufPtr[prevIdxWords];
-
-  // ---- Unrolled accumulation ----
-  uint32_t MsgSum = bnProcBufPtr[0];
-  uint32_t off = (GrpNum * Zc) >> 2;
-#pragma unroll
-  for (int i = 1; i < GrpIdx; ++i) {
-    bnProcBufPtr += off;
-    MsgSum = __vaddss4(MsgSum, *bnProcBufPtr);
-  }
-
-  // ---- Compute llrRes ----
-
-  int32_t computed_llrRes = __vaddss4(MsgSum, ((const int32_t *)(d_llrProcBuf))[lane]);
-  //  Only write to llrRes when MsgIdx == 1
-  if (MsgIdx == 0) {
-    ((int32_t *)(d_llrRes))[lane] = computed_llrRes;
-  }
-
-}
- */

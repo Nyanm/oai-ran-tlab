@@ -1,3 +1,34 @@
+/*
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this file
+ * except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
+ */
+/*! \file nrLDPC_CUDA_public.h
+ * \brief Shared functions in CUDA implementation of LDPC decoder 
+ * \author Qizhi Pan, Raymond Knopp
+ * \company EURECOM
+ * \email: qizhi.pan@eurecom.fr, raymond.knopp@eurecom.fr
+ * \date 2025-12-30
+ * \version 1.0
+ * \note 
+ * \warning
+ */
+
 #pragma once
 
 #include <cuda_runtime.h>
@@ -116,19 +147,11 @@ __device__ __forceinline__ void moveBricks_invget_circ(int8_t *__restrict__ dstB
   }
 }
 
-
 __device__ __forceinline__ uint32_t __vxor4(const uint32_t *a, uint32_t *b)
 {
-  return a[0] ^ b[0]; // increase accuracy
+  return a[0] ^ b[0]; 
 }
-/*
-__device__ __forceinline__ uint32_t __vsign4(const uint32_t *a, uint32_t *b)
-{
-  uint32_t mask = __vcmples4(b[0] | 0x01010101, 0); // 0xFF / 0x00 per‑byte
-  uint32_t bneg = __vneg4(a[0]);
-  return (mask & bneg) | (~mask & a[0]); // Compute ±magnitude in two steps
-}
-*/
+
 __device__ __forceinline__ uint32_t __vsign4(const uint32_t *a, uint32_t *b)
 {
     uint32_t mask = __vcmplts4(b[0], 0); 

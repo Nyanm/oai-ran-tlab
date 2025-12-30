@@ -1,3 +1,33 @@
+/*
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this file
+ * except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
+ */
+ /*! \file nrLDPC_CUDA_mPassKernel.h
+ * \brief Defines the kernels for message passing in CUDA version of LDPC decoder 
+ * \author Qizhi Pan, Raymond Knopp
+ * \company EURECOM
+ * \email: qizhi.pan@eurecom.fr, raymond.knopp@eurecom.fr
+ * \date 2025-12-30
+ * \version 1.0
+ * \note 
+ * \warning
+ */
 #pragma once
 
 #include <cuda_runtime.h>
@@ -6,8 +36,6 @@
 #include "nrLDPC_types.h"
 #include "nrLDPC_CUDA_public.h"
 #include "nrLDPC_CUDA_shared_param.h"
-
-//------------------------------Stream Version------------------------
 
 __device__ __forceinline__ void llrPreProc_Kernel_BG1_int8_Gn_stream(const int8_t *p_llr,
                                                                      int8_t *p_llrProcBuf,
@@ -33,9 +61,8 @@ __device__ __forceinline__ void llrPreProc_Kernel_BG1_int8_Gn_stream(const int8_
 
     *p_cnProcBufBit = *(uint32_t *)BricksToBeMoved;
   }
-  // Sencond part is llr to llrProcBuf
 
-  if (colIdx >= 68) // need to modify later
+  if (colIdx >= 68) 
     return;
 
   const uint8_t numBn2CnG1 = (R == 13) ? d_lut_numBnInBnGroups_BG1_R13[0] : d_lut_numBnInBnGroups_BG1_R23[0]; // for R13 is 42
@@ -45,18 +72,13 @@ __device__ __forceinline__ void llrPreProc_Kernel_BG1_int8_Gn_stream(const int8_
   const uint32_t *lut_llr2llrProcBufAddr = (R == 13) ? d_llr2llrProcBufAddr_BG1_R13 : d_llr2llrProcBufAddr_BG1_R23;
   const uint32_t *lut_llr2llrProcBufBnPos = (R == 13) ? d_llr2llrProcBufBnPos_BG1_R13 : d_llr2llrProcBufBnPos_BG1_R23;
 
-  // -----------------------------
-  // Part 1: Copy systematic section (0..startColParity)
-  // -----------------------------
   if (colIdx < startColParity) {
     const uint32_t idxBn = lut_llr2llrProcBufAddr[colIdx] + lut_llr2llrProcBufBnPos[colIdx] * NR_LDPC_ZMAX;
     int32_t *dst = (int32_t *)(&p_llrProcBuf[idxBn] + lane * 4);
     int32_t *src = (int32_t *)(&p_llr[colIdx * Zc] + lane * 4);
     *dst = *src;
   } else {
-    // -----------------------------
-    // Part 2: Copy parity section
-    // -----------------------------
+
     colIdx = colIdx - startColParity;
     if (numBn2CnG1 > 0 && colIdx < numBn2CnG1) {
       int32_t *dst = (int32_t *)(&p_llrProcBuf[colIdx * NR_LDPC_ZMAX] + lane * 4);
@@ -72,61 +94,46 @@ __device__ void llr2bit_Kernel_BG1_int8(uint32_t R,
                                  uint32_t numLLR,
                                  uint32_t Zc)
 {
-  uint32_t lane = threadIdx.x;
-  uint32_t outColIdx = (blockIdx.x << 2) + threadIdx.y;
+    uint32_t lane = threadIdx.x;
+    uint32_t outColIdx = (blockIdx.x << 2) + threadIdx.y;
 
-  if (outColIdx >= 68)
-    return;
+    if (outColIdx >= 68) return;
 
-  // --- LUT and Constants Setup ---
-  const uint8_t numBn2CnG1 = (R == 13) ? d_lut_numBnInBnGroups_BG1_R13[0] : d_lut_numBnInBnGroups_BG1_R23[0];
-  const uint32_t startColParity = NR_LDPC_START_COL_PARITY_BG1; // Typically 26
+    // Constants Setup
+    const uint8_t numBn2CnG1 = (R == 13) ? d_lut_numBnInBnGroups_BG1_R13[0] : d_lut_numBnInBnGroups_BG1_R23[0];
+    const uint32_t startColParity = NR_LDPC_START_COL_PARITY_BG1; 
+    const uint32_t *lut_Addr = (R == 13) ? d_llr2llrProcBufAddr_BG1_R13 : d_llr2llrProcBufAddr_BG1_R23;
+    const uint32_t *lut_Pos = (R == 13) ? d_llr2llrProcBufBnPos_BG1_R13 : d_llr2llrProcBufBnPos_BG1_R23;
 
-  const uint32_t *lut_Addr = (R == 13) ? d_llr2llrProcBufAddr_BG1_R13 : d_llr2llrProcBufAddr_BG1_R23;
-  const uint32_t *lut_Pos = (R == 13) ? d_llr2llrProcBufBnPos_BG1_R13 : d_llr2llrProcBufBnPos_BG1_R23;
+    int32_t raw_llrs;
 
-  int32_t raw_llrs; // Register to hold 4 input LLRs (4 bytes)
-
-  // ==========================================
-  // PHASE 1: Load Data (Gather or Shift)
-  // ==========================================
-  if (outColIdx < startColParity) {
-    // --- Mode A: Systematic Bits (Gather) ---
-    uint32_t idxBn = lut_Addr[outColIdx] + lut_Pos[outColIdx] * NR_LDPC_ZMAX;
-    raw_llrs = *(const int32_t *)(&llrRes[idxBn] + lane * 4);
-  } else {
-    // --- Mode B: Parity Bits (Linear Shift) ---
-    uint32_t srcParityIdx = outColIdx - startColParity;
-    if (numBn2CnG1 > 0 && outColIdx < numBn2CnG1) {
-      raw_llrs = *(const int32_t *)(llrRes + srcParityIdx * NR_LDPC_ZMAX + lane * 4);
+    // Load Data: Handle Systematic (Scatter/Gather) vs Parity (Linear) mapping
+    if (outColIdx < startColParity) {
+        uint32_t idxBn = lut_Addr[outColIdx] + lut_Pos[outColIdx] * NR_LDPC_ZMAX;
+        raw_llrs = *(const int32_t *)(&llrRes[idxBn] + lane * 4);
     } else {
-      raw_llrs = 0;
+        uint32_t srcParityIdx = outColIdx - startColParity;
+        if (numBn2CnG1 > 0 && outColIdx < numBn2CnG1) {
+            raw_llrs = *(const int32_t *)(llrRes + srcParityIdx * NR_LDPC_ZMAX + lane * 4);
+        } else {
+            raw_llrs = 0;
+        }
     }
-  }
 
-  // ==========================================
-  // PHASE 2: Hard Decision & Packing
-  // ==========================================
-  // Convert 4 int8 LLRs into 4 Bytes (0x00 or 0x01) inside a uint32 register
-  int8_t *p_val = (int8_t *)&raw_llrs;
-  uint32_t my_word = 0;
+    // Hard Decision: Convert 4 int8 LLRs -> 4 bytes (0 or 1)
+    int8_t *p_val = (int8_t *)&raw_llrs;
+    uint32_t my_word = 0;
 
-#pragma unroll
-  for (int i = 0; i < 4; i++) {
-    // If LLR < 0, byte is 1. Otherwise 0.
-    uint32_t byte_val = (p_val[i] < 0) ? 1 : 0;
-    my_word |= (byte_val << (i * 8));
-  }
+    #pragma unroll
+    for (int i = 0; i < 4; i++) {
+        // Hard decision: LLR < 0 implies bit 1
+        uint32_t byte_val = (p_val[i] < 0) ? 1 : 0; 
+        my_word |= (byte_val << (i * 8));
+    }
 
-  // ==========================================
-  // PHASE 3: Store Data
-  // ==========================================
-  // Write 4 bytes linearly.
-  uint32_t outAddr = outColIdx * Zc + lane * 4;
-
-  *(uint32_t *)(&out[outAddr]) = my_word;
+    // Store output linearly
+    *(uint32_t *)(&out[outColIdx * Zc + lane * 4]) = my_word;
 }
-
 
 __device__ void llr2bitPacked_Kernel_BG1_int8(uint32_t R,
                                        uint8_t *__restrict__ out,
@@ -134,71 +141,53 @@ __device__ void llr2bitPacked_Kernel_BG1_int8(uint32_t R,
                                        uint32_t numLLR,
                                        uint32_t Zc)
 {
-  uint32_t lane = threadIdx.x;
-  uint32_t outColIdx = (blockIdx.x << 2) + threadIdx.y;
+    uint32_t lane = threadIdx.x;
+    uint32_t outColIdx = (blockIdx.x << 2) + threadIdx.y;
 
-  if (outColIdx >= 68)
-    return;
+    if (outColIdx >= 68) return;
 
-  const uint8_t numBn2CnG1 = (R == 13) ? d_lut_numBnInBnGroups_BG1_R13[0] : d_lut_numBnInBnGroups_BG1_R23[0];
-  uint32_t startColParity = NR_LDPC_START_COL_PARITY_BG1;
+    const uint8_t numBn2CnG1 = (R == 13) ? d_lut_numBnInBnGroups_BG1_R13[0] : d_lut_numBnInBnGroups_BG1_R23[0];
+    const uint32_t startColParity = NR_LDPC_START_COL_PARITY_BG1;
+    const uint32_t *lut_Addr = (R == 13) ? d_llr2llrProcBufAddr_BG1_R13 : d_llr2llrProcBufAddr_BG1_R23;
+    const uint32_t *lut_Pos = (R == 13) ? d_llr2llrProcBufBnPos_BG1_R13 : d_llr2llrProcBufBnPos_BG1_R23;
 
-  const uint32_t *lut_Addr = (R == 13) ? d_llr2llrProcBufAddr_BG1_R13 : d_llr2llrProcBufAddr_BG1_R23;
-  const uint32_t *lut_Pos = (R == 13) ? d_llr2llrProcBufBnPos_BG1_R13 : d_llr2llrProcBufBnPos_BG1_R23;
+    int32_t raw_llrs;
 
-  int32_t raw_llrs;
-
-  // ==========================================
-  // PHASE 1: Load Data (Gather or Shift)
-  // ==========================================
-  if (outColIdx < startColParity) {
-    // Mode A: Systematic Bits
-    uint32_t idxBn = lut_Addr[outColIdx] + lut_Pos[outColIdx] * NR_LDPC_ZMAX;
-    raw_llrs = *(const int32_t *)(&llrRes[idxBn] + lane * 4);
-  } else {
-    // Mode B: Parity Bits
-    uint32_t srcParityIdx = outColIdx - startColParity;
-    if (numBn2CnG1 > 0 && outColIdx < numBn2CnG1) {
-      raw_llrs = *(const int32_t *)(llrRes + srcParityIdx * NR_LDPC_ZMAX + lane * 4);
+    // Load Data: Handle Systematic vs Parity mapping
+    if (outColIdx < startColParity) {
+        uint32_t idxBn = lut_Addr[outColIdx] + lut_Pos[outColIdx] * NR_LDPC_ZMAX;
+        raw_llrs = *(const int32_t *)(&llrRes[idxBn] + lane * 4);
     } else {
-      raw_llrs = 0;
+        uint32_t srcParityIdx = outColIdx - startColParity;
+        if (numBn2CnG1 > 0 && outColIdx < numBn2CnG1) {
+            raw_llrs = *(const int32_t *)(llrRes + srcParityIdx * NR_LDPC_ZMAX + lane * 4);
+        } else {
+            raw_llrs = 0;
+        }
     }
-  }
 
-  // ==========================================
-  // PHASE 2: Extract Sign Bits (Local Packing)
-  // ==========================================
-  // Each thread holds 4 LLRs. We need to extract 4 bits.
+    // Extract 4 bits from 4 LLRs (Local Packing)
+    // Assuming MSB order within nibble: [3][2][1][0]
+    uint32_t my_4_bits = 0;
+    int8_t *p_val = (int8_t *)&raw_llrs;
 
-  uint32_t my_4_bits = 0;
-  int8_t *p_val = (int8_t *)&raw_llrs;
-
-#pragma unroll
-  for (int i = 0; i < 4; i++) {
-    if (p_val[i] < 0) {
-      my_4_bits |= (1 << (3 - i));
+    #pragma unroll
+    for (int i = 0; i < 4; i++) {
+        if (p_val[i] < 0) {
+            my_4_bits |= (1 << (3 - i));
+        }
     }
-  }
 
-  // ==========================================
-  // PHASE 3: Thread Cooperation & Store
-  // ==========================================
+    // Thread Cooperation: Pair threads to pack 8 bits (1 byte)
+    // Even thread (0,2..) takes low nibble, Odd thread (1,3..) takes high nibble.
+    uint32_t neighbor_bits = __shfl_xor_sync(0xffffffff, my_4_bits, 1);
 
-  // Exchange data between Even (0,2..) and Odd (1,3..) threads.
-  // 'neighbor_bits' will contain 'my_4_bits' from the other thread.
-  uint32_t neighbor_bits = __shfl_xor_sync(0xffffffff, my_4_bits, 1);
-
-  // Only Even threads perform the write (reducing stores by 50%)
-if ((lane & 1) == 0) {
-    // Combine 4 bits from self (Low nibble) and 4 bits from neighbor (High nibble)
-    // Output: [Thread N+1 bits][Thread N bits]
-    uint8_t packed_byte = (neighbor_bits & 0xF) | ((my_4_bits & 0xF) << 4);
-
-    // Calculate Output Address
-    // Each column size compresses from Zc bytes to (Zc / 8) bytes.
-    // 'lane' steps by 4 LLRs. 'lane >> 1' steps by 8 LLRs (1 Byte).
-    uint32_t outAddr = outColIdx * (Zc >> 3) + (lane >> 1);
-
-    out[outAddr] = packed_byte;
-}
+    if ((lane & 1) == 0) {
+        // Combine: [Odd Thread Bits (High)] | [My Bits (Low)]
+        uint8_t packed_byte = (neighbor_bits & 0xF) | ((my_4_bits & 0xF) << 4);
+        
+        // Output addr: lane steps by 4 LLRs, but we output 1 byte per 8 LLRs -> lane >> 1
+        uint32_t outAddr = outColIdx * (Zc >> 3) + (lane >> 1);
+        out[outAddr] = packed_byte;
+    }
 }

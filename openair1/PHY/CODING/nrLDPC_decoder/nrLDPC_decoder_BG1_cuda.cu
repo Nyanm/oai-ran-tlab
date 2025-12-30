@@ -1,3 +1,34 @@
+/*
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this file
+ * except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
+ */
+/*! \file nrLDPC_decoder_BG1_cuda.cu
+ * \brief CUDA implementation of NR LDPC Decoder (BG1) with CUDA Graphs support.
+ * \author Qizhi Pan, Raymond Knopp
+ * \company EURECOM
+ * \email: qizhi.pan@eurecom.fr, raymond.knopp@eurecom.fr
+ * \date 2025-12-30
+ * \version 1.0
+ * \note 
+ * \warning
+ */
+
 #include <cuda_runtime.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -10,8 +41,6 @@
 #include "nrLDPC_CUDA_shared_param.h"
 
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
-#define RECORD_GRAPH 0 // set 1 to enable graph recording, 0 to unable.
-#define STREAM_SEQUENCE 1 // default 1, set 0 different streams will work in parellel(not recommended)
 
 #ifndef JETSON_TARGET
 #define CUDA_THREADS 1024
@@ -23,30 +52,9 @@
 #define CUDA_BLOCKS_R23 108 // ceil(13824/128)
 #endif
 
-
-
-KernelLaunchConfig Kdim_R13[MAX_NUM_DLSCH_SEGMENTS_DL / 8];
-KernelLaunchConfig Kdim_R23[MAX_NUM_DLSCH_SEGMENTS_DL / 8];
-KernelLaunchConfig Kdim_llr[MAX_NUM_DLSCH_SEGMENTS_DL / 8];
-KernelLaunchConfig Kdim_output[MAX_NUM_DLSCH_SEGMENTS_DL / 8];
-
-// debug function
-void dumpAssCUDA(const int8_t *cnProcBufRes, const char *filename)
-{
-  FILE *fp = fopen(filename, "w");
-  if (fp == NULL) {
-    perror("Failed to open dump file");
-    exit(EXIT_FAILURE);
-  }
-
-  for (int i = 0; i < NR_LDPC_SIZE_CN_PROC_BUF; i++) {
-    fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
-    if ((i + 1) % 16 == 0)
-      fprintf(fp, "\n");
-  }
-
-  fclose(fp);
-}
+KernelLaunchConfig Kdim_R13[8];//
+KernelLaunchConfig Kdim_R23[8];
+KernelLaunchConfig Kdim_llr[8];
 
 // === CUDA Error Checking ===
 // Wrap any CUDA API call with CHECK(...) to automatically print error info with file and line number
@@ -675,9 +683,9 @@ cudaError_t nrLDPC_decoder_cuda_GraphExecute(cudaGraphExec_t graphExec,
         return err; 
     }
 
-    //if (doneEvent) {
-       // err = cudaEventRecord(doneEvent[CudaStreamIdx], stream);
-    //}
+    if (doneEvent) {
+        err = cudaEventRecord(doneEvent[CudaStreamIdx], stream);
+    }
 
     return err; 
 }
@@ -711,9 +719,9 @@ void nrLDPC_decoder_cuda_NormalExecute(ldpc_cuda_bridge_t* buffer,
 
   ENQUEUE_LDPC_DECODER_SEQUENCE(streams, CudaStreamIdx);
 
-  //if (doneEvent) {
-    //cudaEventRecord(doneEvent[CudaStreamIdx], stream);
-  //}
+  if (doneEvent) {
+    cudaEventRecord(doneEvent[CudaStreamIdx], stream);
+  }
 }
 
 } // extern "C"
