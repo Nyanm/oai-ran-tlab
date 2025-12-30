@@ -340,7 +340,7 @@ simde__m256i oai_mm256_cpx_mult(simde__m256i z1, simde__m256i z2, int shift)
  * Input:  z1 = (a + bi) [ a0,  b0,  ...,  a3,  b3]
  * Input:  z2 = (c + di) [ c0,  d0,  ...,  c3,  d3]
  * Output: z3 = (e + fi) [ e0,  f0,  ...,  e3,  f3]
- * z3 =  z1 * conj(z2) =  (ac+bd) + i(bc-ad)
+ * z3 =  conj(z1) * z2 =  (ac+bd) + i(ad-bc)
  *
  * @param 256-bit SIMD vector of eight complex 16-bit integers.
  * @return a 256-bit SIMD vector.
@@ -352,6 +352,50 @@ simde__m256i oai_mm256_cpx_mult_conj(simde__m256i a, simde__m256i b, int shift)
   simde__m256i im = oai_mm256_smadd(oai_mm256_swap(oai_mm256_conj(a)), b, shift);
   return oai_mm256_pack(re, im);
 }
+
+#ifdef __AVX512BW__
+__attribute__((always_inline)) static inline __m512i oai_mm512_conj(__m512i a)
+{
+  const __mmask32 odd = 0xAAAAAAAAu;
+    // For odd lanes: 0 - b (two's complement negate)
+  return(_mm512_mask_sub_epi16(a, odd, _mm512_setzero_si512(), a));
+}
+
+__attribute__((always_inline)) static inline __m512i oai_mm512_swap(__m512i a)
+
+{
+  // Shuffle mask to swap bytes for IQ swapping
+  const oai512_t shuffle_mask_swap = {.i8 = {
+                                          2,  3,  0,  1,  6,  7,  4,  5,  10, 11, 8,  9,  14, 15, 12, 13,
+                                          18, 19, 16, 17, 22, 23, 20, 21, 26, 27, 24, 25, 30, 31, 28, 29,
+                                          34, 35, 32, 33, 38, 39, 36, 37, 42, 43, 40, 41, 46, 47, 44, 45,
+                                          50, 51, 48, 49, 54, 55, 52, 53, 58, 59, 56, 57, 62, 63, 60, 61
+                                      }};
+  return _mm512_shuffle_epi8(a, shuffle_mask_swap.v);
+}
+
+__attribute__((always_inline)) static inline
+__m512i oai_mm512_smadd(__m512i z1, __m512i z2, int shift)
+{
+  return _mm512_srai_epi32(_mm512_madd_epi16(z1, z2), shift);
+}
+
+__attribute__((always_inline)) static inline
+__m512i oai_mm512_pack(__m512i a, __m512i b)
+{
+  return _mm512_packs_epi32(
+    _mm512_unpacklo_epi32(a, b), // real
+    _mm512_unpackhi_epi32(a, b)  // imag
+  );
+}
+__attribute__((always_inline)) static inline
+__m512i oai_mm512_cpx_mult_conj(__m512i a, __m512i b, int shift)
+{
+  __m512i re = oai_mm512_smadd(a, b, shift);
+  __m512i im = oai_mm512_smadd(oai_mm512_swap(oai_mm512_conj(a)), b, shift);
+  return oai_mm512_pack(re, im);
+}
+#endif
 
 #ifdef __cplusplus
 }

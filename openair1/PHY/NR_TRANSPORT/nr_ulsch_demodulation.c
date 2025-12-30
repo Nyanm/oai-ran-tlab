@@ -17,6 +17,10 @@
 
 #define INVALID_VALUE 255
 
+#ifndef __AVX2__
+#define USE128BIT
+#endif
+
 #if T_TRACER
 static void copy_c16_data_to_slot_memory(c16_t *src, c16_t *dst_slot, int nb_re_pusch, int symbol)
 {
@@ -175,6 +179,40 @@ static int get_nb_re_pusch (NR_DL_FRAME_PARMS *frame_parms, nfapi_nr_pusch_pdu_t
   } else return(rel15_ul->rb_size * NR_NB_SC_PER_RB);
 }
 
+#ifdef __AVX512BW__
+#define s16 __m512i
+#define setzero _mm512_setzero_si512
+#define set1_s16 _mm512_set1_epi16
+#define cpx_mult_conj_s16 oai_mm512_cpx_mult_conj
+#define adds_s16 _mm512_adds_epi16
+#define smadd_s16 oai_mm512_smadd
+#define packs_s16 _mm512_packs_epi32
+#define unpacklo_s16 _mm512_unpacklo_epi16
+#define mulhrs_s16 _mm512_mulhrs_epi16
+#define COMPSHIFT 4
+#elif defined(__AVX2__)
+#define s16 simde__m256i
+#define setzero simde_mm256_setzero_si256
+#define set1_s16 simde_mm256_set1_epi16
+#define cpx_mult_conj_s16 oai_mm256_cpx_mult_conj
+#define adds_s16 simde_mm256_adds_epi16
+#define smadd_s16 oai_mm256_smadd
+#define packs_s16 simde_mm256_packs_epi32
+#define unpacklo_s16 simde_mm256_unpacklo_epi16
+#define mulhrs_s16 simde_mm256_mulhrs_epi16
+#define COMPSHIFT 3
+#else
+#define s16 simde__m128i
+#define setzero simde_mm_setzero_si128
+#define set1_s16 simde_mm_set1_epi16
+#define cpx_mult_conj_s16 oai_mm_cpx_mult_conj
+#define adds_s16 simde_mm_adds_epi16
+#define smadd_s16 oai_mm_smadd
+#define packs_s16 simde_mm_packs_epi32
+#define unpacklo_s16 simde_mm_unpacklo_epi16
+#define mulhrs_s16 simde_mm_mulhrs_epi16
+#define COMPSHIFT 2
+#endif
 static void nr_ulsch_channel_compensation(uint32_t buffer_length,
                                           int nb_rx_ant,
                                           c16_t rxFext[][buffer_length],
@@ -192,63 +230,60 @@ static void nr_ulsch_channel_compensation(uint32_t buffer_length,
   int mod_order  = rel15_ul->qam_mod_order;
   int nrOfLayers = rel15_ul->nrOfLayers;
 
-  simde__m256i QAM_ampa_256 = simde_mm256_setzero_si256();
-  simde__m256i QAM_ampb_256 = simde_mm256_setzero_si256();
-  simde__m256i QAM_ampc_256 = simde_mm256_setzero_si256();
+  s16 QAM_ampa = setzero();
+  s16 QAM_ampb = setzero();
+  s16 QAM_ampc = setzero();
 
   if (mod_order == 4) {
-    QAM_ampa_256 = simde_mm256_set1_epi16(QAM16_n1);
-    QAM_ampb_256 = simde_mm256_setzero_si256();
-    QAM_ampc_256 = simde_mm256_setzero_si256();
+    QAM_ampa = set1_s16(QAM16_n1);
   }
   else if (mod_order == 6) {
-    QAM_ampa_256 = simde_mm256_set1_epi16(QAM64_n1);
-    QAM_ampb_256 = simde_mm256_set1_epi16(QAM64_n2);
-    QAM_ampc_256 = simde_mm256_setzero_si256();
+    QAM_ampa = set1_s16(QAM64_n1);
+    QAM_ampb = set1_s16(QAM64_n2);
   }
   else if (mod_order == 8) {
-    QAM_ampa_256 = simde_mm256_set1_epi16(QAM256_n1);
-    QAM_ampb_256 = simde_mm256_set1_epi16(QAM256_n2);
-    QAM_ampc_256 = simde_mm256_set1_epi16(QAM256_n3);
+    QAM_ampa = set1_s16(QAM256_n1);
+    QAM_ampb = set1_s16(QAM256_n2);
+    QAM_ampc = set1_s16(QAM256_n3);
   }
 
   for (int aatx = 0; aatx < nrOfLayers; aatx++) {
-    simde__m256i *rxComp_256 = (simde__m256i *)&rxComp[aatx * nb_rx_ant][symbol * buffer_length];
-    simde__m256i *rxF_ch_maga_256 = (simde__m256i *)ul_ch_maga[aatx];
-    simde__m256i *rxF_ch_magb_256 = (simde__m256i *)ul_ch_magb[aatx];
-    simde__m256i *rxF_ch_magc_256 = (simde__m256i *)ul_ch_magc[aatx];
+    s16 *rxComp_s16 = (s16 *)&rxComp[aatx * nb_rx_ant][symbol * buffer_length];
+    s16 *rxF_ch_maga = (s16 *)ul_ch_maga[aatx];
+    s16 *rxF_ch_magb = (s16 *)ul_ch_magb[aatx];
+    s16 *rxF_ch_magc = (s16 *)ul_ch_magc[aatx];
     for (int aarx = 0; aarx < nb_rx_ant; aarx++) {
-      simde__m256i *rxF_256 = (simde__m256i *)rxFext[aarx];
-      simde__m256i *chF_256 = (simde__m256i *)chFext[aatx][aarx];
+      s16 *rxF = (s16 *)rxFext[aarx];
+      s16 *chF = (s16 *)chFext[aatx][aarx];
 
-      for (int i = 0; i < buffer_length >> 3; i++) 
+      for (int i = 0; i < buffer_length >> COMPSHIFT; i++) 
       {
         // MRC        
-        simde__m256i comp = oai_mm256_cpx_mult_conj(chF_256[i], rxF_256[i], output_shift);
-        rxComp_256[i] = simde_mm256_add_epi16(rxComp_256[i], comp); 
+        s16 comp = cpx_mult_conj_s16(chF[i], rxF[i], output_shift);
+        rxComp_s16[i] = adds_s16(rxComp_s16[i], comp); 
 
         if (mod_order > 2) {
-          simde__m256i mag = oai_mm256_smadd(chF_256[i], chF_256[i], output_shift); // |h|^2
+          s16 mag = smadd_s16(chF[i], chF[i], output_shift); // |h|^2
           // pack and duplicate
-          mag = simde_mm256_packs_epi32(mag, mag);
-          mag = simde_mm256_unpacklo_epi16(mag, mag);
+          mag = packs_s16(mag, mag);
+          mag = unpacklo_s16(mag, mag);
 
-          rxF_ch_maga_256[i] = simde_mm256_add_epi16(rxF_ch_maga_256[i], simde_mm256_mulhrs_epi16(mag, QAM_ampa_256));
+          rxF_ch_maga[i] = adds_s16(rxF_ch_maga[i], mulhrs_s16(mag, QAM_ampa));
 
           if (mod_order > 4)
-            rxF_ch_magb_256[i] = simde_mm256_add_epi16(rxF_ch_magb_256[i], simde_mm256_mulhrs_epi16(mag, QAM_ampb_256));
+            rxF_ch_magb[i] = adds_s16(rxF_ch_magb[i], mulhrs_s16(mag, QAM_ampb));
 
           if (mod_order > 6)
-            rxF_ch_magc_256[i] = simde_mm256_add_epi16(rxF_ch_magc_256[i], simde_mm256_mulhrs_epi16(mag, QAM_ampc_256));
+            rxF_ch_magc[i] = adds_s16(rxF_ch_magc[i], mulhrs_s16(mag, QAM_ampc));
         }        
       }
       if (nb_layers > 1) {
         for (int atx = 0; atx < nrOfLayers; atx++) {
-          simde__m256i *rho_256 = (simde__m256i *)rho[aatx][atx];
-          simde__m256i *chF_256 = (simde__m256i *)chFext[aatx][aarx];
-          simde__m256i *chF2_256 = (simde__m256i *)chFext[atx][aarx];
-          for (int i = 0; i < buffer_length >> 3; i++) {
-            rho_256[i] = simde_mm256_adds_epi16(rho_256[i], oai_mm256_cpx_mult_conj(chF_256[i], chF2_256[i], output_shift));
+          s16 *rho_s16 = (s16 *)rho[aatx][atx];
+          s16 *chF = (s16 *)chFext[aatx][aarx];
+          s16 *chF2 = (s16 *)chFext[atx][aarx];
+          for (int i = 0; i < buffer_length >> COMPSHIFT; i++) {
+            rho_s16[i] = adds_s16(rho_s16[i], cpx_mult_conj_s16(chF[i], chF2[i], output_shift));
           }
         }
       }
@@ -883,8 +918,8 @@ static void inner_rx(PHY_VARS_gNB *gNB,
   int nb_rx_ant = frame_parms->nb_antennas_rx;
   int dmrs_symbol_flag = (rel15_ul->ul_dmrs_symb_pos >> symbol) & 0x01;
   int buffer_length = ceil_mod(rel15_ul->rb_size * NR_NB_SC_PER_RB, 16);
-  c16_t rxFext[nb_rx_ant][buffer_length] __attribute__((aligned(32)));
-  c16_t chFext[nb_layer][nb_rx_ant][buffer_length] __attribute__((aligned(32)));
+  c16_t rxFext[nb_rx_ant][buffer_length] __attribute__((aligned(64)));
+  c16_t chFext[nb_layer][nb_rx_ant][buffer_length] __attribute__((aligned(64)));
 
   memset(rxFext, 0, sizeof(rxFext));
   memset(chFext, 0, sizeof(chFext));
@@ -920,10 +955,10 @@ static void inner_rx(PHY_VARS_gNB *gNB,
 #endif
     }
   }
-  c16_t rho[nb_layer][nb_layer][buffer_length] __attribute__((aligned(32)));
-  c16_t rxF_ch_maga  [nb_layer][buffer_length] __attribute__((aligned(32)));
-  c16_t rxF_ch_magb  [nb_layer][buffer_length] __attribute__((aligned(32)));
-  c16_t rxF_ch_magc  [nb_layer][buffer_length] __attribute__((aligned(32)));
+  c16_t rho[nb_layer][nb_layer][buffer_length] __attribute__((aligned(64)));
+  c16_t rxF_ch_maga  [nb_layer][buffer_length] __attribute__((aligned(64)));
+  c16_t rxF_ch_magb  [nb_layer][buffer_length] __attribute__((aligned(64)));
+  c16_t rxF_ch_magc  [nb_layer][buffer_length] __attribute__((aligned(64)));
 
   memset(rho, 0, sizeof(rho));
   memset(rxF_ch_maga, 0, sizeof(rxF_ch_maga));
@@ -1132,13 +1167,13 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
   int nb_layer = rel15_ul->nrOfLayers;
 
   // Initialize memory for DMRS signals
-  c16_t pusch_dmrs_slot_mem[nb_layer * buffer_length_slot] __attribute__((aligned(32)));
+  c16_t pusch_dmrs_slot_mem[nb_layer * buffer_length_slot] __attribute__((aligned(64)));
   // Initialize memory for channel estimates based on DMRS positions
-  c16_t pusch_ch_est_dmrs_pos_slot_mem[buffer_length_slot * nb_layer * nb_rx_ant] __attribute__((aligned(32)));
+  c16_t pusch_ch_est_dmrs_pos_slot_mem[buffer_length_slot * nb_layer * nb_rx_ant] __attribute__((aligned(64)));
   // memory to store slot grid with channel coefficients based on DMRS positions after interpolation
-  c16_t pusch_ch_est_dmrs_interpl_slot_mem[buffer_length_slot * nb_layer * nb_rx_ant] __attribute__((aligned(32)));
+  c16_t pusch_ch_est_dmrs_interpl_slot_mem[buffer_length_slot * nb_layer * nb_rx_ant] __attribute__((aligned(64)));
   // memory to store extracted data including PUSCH + DMRS
-  c16_t rxFext_slot_mem[nb_rx_ant * buffer_length_slot] __attribute__((aligned(32)));
+  c16_t rxFext_slot_mem[nb_rx_ant * buffer_length_slot] __attribute__((aligned(64)));
 
 #if T_TRACER
   // Initialize memory for DMRS signals
@@ -1285,7 +1320,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
   gNB->ulsch[ulsch_id].unav_res = unav_res;
 
   // initialize scrambling sequence //
-  int16_t scramblingSequence[G + 96] __attribute__((aligned(32)));
+  int16_t scramblingSequence[G + 96] __attribute__((aligned(64)));
 
   nr_codeword_unscrambling_init(scramblingSequence, G, 0, rel15_ul->data_scrambling_id, rel15_ul->rnti);
 
@@ -1312,10 +1347,10 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
   else // average of channel estimates stored in first symbol
     dmrs_symbol = get_next_dmrs_symbol_in_slot(rel15_ul->ul_dmrs_symb_pos, rel15_ul->start_symbol_index, end_symbol);
   int size_est = nb_re_pusch * frame_parms->symbols_per_slot;
-  __attribute__((aligned(32))) int ul_ch_estimates_ext[rel15_ul->nrOfLayers * frame_parms->nb_antennas_rx][size_est];
+  __attribute__((aligned(64))) int ul_ch_estimates_ext[rel15_ul->nrOfLayers * frame_parms->nb_antennas_rx][size_est];
   memset(ul_ch_estimates_ext, 0, sizeof(ul_ch_estimates_ext));
   int buffer_length = rel15_ul->rb_size * NR_NB_SC_PER_RB;
-  c16_t temp_rxFext[frame_parms->nb_antennas_rx][buffer_length] __attribute__((aligned(32)));
+  c16_t temp_rxFext[frame_parms->nb_antennas_rx][buffer_length] __attribute__((aligned(64)));
   for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) 
     for (int nl = 0; nl < rel15_ul->nrOfLayers; nl++)
       nr_ulsch_extract_rbs(gNB->common_vars.rxdataF[beam_nb][aarx],
