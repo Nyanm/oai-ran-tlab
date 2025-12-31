@@ -64,6 +64,25 @@ typedef struct {
 } oai512_t;
 #endif
 
+//Note that the following is not needed for gcc>=13
+#ifdef __aarch64__
+#ifdef __ARM_FEATURE_SVE2
+static inline svint16_t cast_neon_to_sve_s16(simde__m128i n) {
+    svint16_t s;
+// "w" refers to an FP/SIMD register.
+// This tells GCC: "Take the value in the Neon register and
+// just start calling it an SVE register."
+    asm ("" : "=w" (s) : "0" (n));
+    return s;
+}
+static inline simde__m128i cast_sve_to_neon_s16(svint16_t s) {
+    simde__m128i n;
+    asm ("" : "=w" (n) : "0" (s));
+    return n;
+}
+#endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -73,12 +92,16 @@ extern "C" {
 // note this fails on some x86 machines, with an error like:
 // /usr/lib/gcc/x86_64-redhat-linux/8/include/gfniintrin.h:57:1: error: inlining failed in call to always_inline ‘_mm_gf2p8affine_epi64_epi8’: target specific option mismatch
 #include <simde/x86/clmul.h>
-
+#include <arm_neon.h>
 #endif // x86_64 || i386
 
 #include <stdbool.h>
 #include "assertions.h"
 
+
+#if defined(__ARM_FEATURE_SVE2)
+#include <arm_sve.h>
+#endif
 /*
  * OAI specific SSE section
  */
@@ -177,8 +200,14 @@ __attribute__((always_inline)) static inline int32_t simde_mm_average(simde__m12
  */
 __attribute__((always_inline)) static inline simde__m128i oai_mm_conj(simde__m128i a)
 {
+#ifdef __aarch64__
+  const oai128_t neg_imag = {.i16 = {0, -1, 0, -1, 0, -1, 0, -1}};
+  int16x8_t aneg = vnegq_s16((int16x8_t)a);
+  return (simde__m128i)vbslq_s16((uint16x8_t)neg_imag.v, aneg, (int16x8_t)a);
+#else
   const oai128_t neg_imag = {.i16 = {1, -1, 1, -1, 1, -1, 1, -1}};
   return simde_mm_sign_epi16(a, neg_imag.v);
+#endif
 }
 
 /**
@@ -195,8 +224,12 @@ __attribute__((always_inline)) static inline
 simde__m128i oai_mm_swap(simde__m128i a)
 {
   // Shuffle mask to swap bytes for IQ swapping
+#ifdef __aarch64__
   const oai128_t shuffle_mask_swap = {.i8 = {2, 3, 0, 1, 6, 7, 4, 5, 10, 11, 8, 9, 14, 15, 12, 13}};
   return simde_mm_shuffle_epi8(a, shuffle_mask_swap.v);
+#else
+  return (simde__m128i)vrev32_s16((int16x8_t)a);
+#endif
 }
 
 __attribute__((always_inline)) static inline
@@ -248,12 +281,88 @@ simde__m128i oai_mm_cpx_mult(simde__m128i z1, simde__m128i z2, int shift)
  * @param 128-bit SIMD vector of four complex 16-bit integers.
  * @return a 128-bit SIMD vector.
  */
+	
 __attribute__((always_inline)) static inline
 simde__m128i oai_mm_cpx_mult_conj(simde__m128i a, simde__m128i b, int shift)
 {
+#ifdef __aarch64__
+#ifdef __ARM_FEATURE_SVE2
+
+/**
+ *  * Full-vector Complex Mul for int16_t with Dynamic Shift.
+ *   * a, b: Interleaved [R, I, R, I...]
+ *    * shift: The calculated optimal shift for the block.
+ *     */
+    svbool_t pg = svptrue_b16();
+    uint64_t shift64 = (uint64_t)shift;
+
+    svint16_t asv = cast_neon_to_sve_s16(a);// with gcc 13+ svset_neonq_s16(svundef_s16(),a);
+    svint16_t bsv = cast_neon_to_sve_s16(b);
+
+// --- 1. Process Bottom Half (Lanes 0, 2, 4...) ---
+//     // Calculates: (a.re*b.re - a.im*b.im) and (a.re*b.im + a.im*b.re)
+    svint32_t res_re_low = svqdmlalb_s32(svdup_n_s32(0), asv,  bsv, 0);
+    svint32_t res_im_low = svqdmlalb_s32(svdup_n_s32(0), asv,  bsv, 90);
+
+// --- 2. Process Top Half (Lanes 1, 3, 5...) ---
+    svint32_t res_re_high = svqdmlalt_s32(svdup_n_s32(0), asv, bsv, 0);
+    svint32_t res_im_high = svqdmlalt_s32(svdup_n_s32(0), asv, bsv, 90);
+
+// --- 3. Apply the Dynamic Shift ---
+// Use svasr (Arithmetic Shift Right) for truncation.
+// If you need to shift LEFT because inputs are small, use svlsl.
+    svint32_t re_low_s = svasr_n_s32_z(svptrue_b32(), res_re_low, shift64);
+    svint32_t im_low_s = svasr_n_s32_z(svptrue_b32(), res_im_low, shift64);
+    svint32_t re_high_s = svasr_n_s32_z(svptrue_b32(), res_re_high, shift64);
+    svint32_t im_high_s = svasr_n_s32_z(svptrue_b32(), res_im_high, shift64);
+
+// --- 4. Saturate to Q15 Range ---
+// svqxtn "Saturating Extract Narrow" clamps to [-32768, 32767]
+    svint16_t re_low_16 = svqxtn_s32(re_low_s);
+    svint16_t im_low_16 = svqxtn_s32(im_low_s);
+    svint16_t re_high_16 = svqxtn_s32(re_high_s);
+    svint16_t im_high_16 = svqxtn_s32(im_high_s);
+
+// --- 5. Re-interleave Results ---
+// Combine the low/high parts and interleave Real/Imaginary
+    svint16_t re_full = svuzp1_s16(re_low_16, re_high_16); // Reconstructs full Real vector
+    svint16_t im_full = svuzp1_s16(im_low_16, im_high_16); // Reconstructs full Imag vector
+
+    return cast_sve_to_neon_s16(svzip1_s16(re_full, im_full));
+}
+#else
+/*
+    // 1. De-interleave real and imaginary parts
+    // a_parts.val[0] = [R0, R1, R2, R3], a_parts.val[1] = [I0, I1, I2, I3]
+    int16x4_t ar = vget_low_s16(vuzp1q_s16((int16x8_t)a, (int16x8_t)a)); // This gets the lower 4 complex pairs
+    int16x4_t ai = vget_low_s16(vuzp2q_s16((int16x8_t)a, (int16x8_t)a)); // This gets the lower 4 complex pairs
+    int16x4_t br = vget_low_s16(vuzp1q_s16((int16x8_t)b, (int16x8_t)b));
+    int16x4_t bi = vget_low_s16(vuzp2q_s16((int16x8_t)b, (int16x8_t)b));
+    
+    // 2. Perform widening multiplication (16-bit * 16-bit -> 32-bit)
+    int32x4_t re_re = vmull_s16(ar, br); // a.re * b.re
+    int32x4_t im_im = vmull_s16(ai, bi); // a.im * b.im
+    int32x4_t re_im = vmull_s16(ar, bi); // a.re * b.im
+    int32x4_t im_re = vmull_s16(ai, br); // a.im * b.re
+    
+    // 3. Combine parts: Real = (re*re + im*im), Imag = (-re*im + im*re)
+    int32x4_t res_re = vaddq_s32(re_re, im_im);
+    int32x4_t res_im = vsubq_s32(im_re, re_im);
+    
+    // 4. Scale back (e.g., Q15 format) and Narrow back to 16-bit
+    // vshrn_n_s32 shifts right and narrows. Use vqshrn for saturating narrow.
+    int16x4_t out_re = vmovn_s32(vshlq_s32(res_re,vdupq_n_s32(-shift))); 
+    int16x4_t out_im = vmovn_s32(vshlq_s32(res_im,vdupq_n_s32(-shift)));
+
+    // 5. Re-interleave for the final result
+    return (simde__m128i)vcombine_s16(vzip1_s16(out_re, out_im), 
+                                      vzip2_s16(out_re, out_im));
+*/
+
   simde__m128i re = oai_mm_smadd(a, b, shift);
   simde__m128i im = oai_mm_smadd(oai_mm_swap(oai_mm_conj(a)), b, shift);
   return oai_mm_pack(re, im);
+#endif
 }
 
 /*
