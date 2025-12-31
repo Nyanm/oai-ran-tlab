@@ -434,51 +434,10 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
               numRB = num_prbu;
               startRB = start_prbu;
 #endif
-#if 0
-        // pRbElm->nSecDesc always gives zero => unknown why
-        //LOG_I(HW, "pRbElm->nSecDesc[%d] %d\n", sym_idx, pRbElm->nSecDesc[sym_idx]);
-        // I just hardcoded to 2 sections (e.g. 100MHz with 16bit) but in general definitely not good
-        for (int16_t desc_idx = 0; desc_idx < 2; desc_idx++) {
-#ifdef E_RELEASE
-          struct xran_section_desc *p_sec_desc = pRbElm->p_sec_desc[sym_idx][0];
-#elif defined F_RELEASE
-          struct xran_section_desc *p_sec_desc = &pRbElm->sec_desc[sym_idx][desc_idx];
-#endif
-          int16_t startRB = p_sec_desc->start_prbu;
-          int16_t numRB = p_sec_desc->num_prbu;
-          LOG_I(HW,
-                "sec_desc[%d] : PRBstart %d nPRBs %d sym_idx %d ant_id %d\n",
-                desc_idx,
-                startRB,
-                numRB,
-                sym_idx,
-                ant_id);
-          // I think this is for "no fragmentation"
-          //uint8_t *pData = bufs->dst[ant_id % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN]
-          //            .pBuffers[sym_idx % XRAN_NUM_OF_SYMBOL_PER_SLOT]
-          //            .pData;
-          uint8_t *pData = p_sec_desc->pData;
-#endif
               ptr = pData;
               pos = (int32_t *)(start_ptr + (4 * sym_idx * fftsize));
               if (ptr == NULL || pos == NULL)
                 continue;
-#if 0
-          int pos_len = 0;
-          int neg_len = 0;
-
-          if (startRB < (totalRB >> 1)) // there are PRBs left of DC
-            neg_len = min((totalRB * 6) - (startRB * 12), numRB * N_SC_PER_PRB);
-          pos_len = (numRB * N_SC_PER_PRB) - neg_len;
-
-          src = pData;
-          // Calculation of the pointer for the section in the buffer.
-          // positive half
-          uint8_t *dst1 = (uint8_t *)(pos + (neg_len == 0 ? ((startRB * N_SC_PER_PRB) - (totalRB * 6)) : 0));
-          // negative half
-          uint8_t *dst2 = (uint8_t *)(pos + (startRB * N_SC_PER_PRB) + fftsize - (totalRB * 6));
-          int32_t local_dst[numRB * N_SC_PER_PRB] __attribute__((aligned(64)));
-#endif
               src = pData;
               if (pRbElm->compMethod == XRAN_COMPMETHOD_NONE) {
                 // NOTE: gcc 11 knows how to generate AVX2 for this!
@@ -606,7 +565,7 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
 
         LOG_D(HW, "pPrbMap->nPrbElm %d\n", pPrbMap->nPrbElm);
         for (uint32_t idxElm = 0; idxElm < pPrbMap->nPrbElm; idxElm++) {
-	  struct xran_prb_elm *pRbElm = &pPrbMap->prbMap[idxElm];
+          struct xran_prb_elm *pRbElm = &pPrbMap->prbMap[idxElm];
 #ifdef E_RELEASE
           int16_t startRB = pRbElm->nRBStart;
           int16_t numRB = pRbElm->nRBSize;
