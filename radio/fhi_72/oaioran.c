@@ -483,7 +483,7 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
               if (pRbElm->compMethod == XRAN_COMPMETHOD_NONE) {
                 // NOTE: gcc 11 knows how to generate AVX2 for this!
                 for (idx = 0; idx < (numRB * N_SC_PER_PRB) * 2; idx++)
-                  ((int16_t *)local_dst)[idx + startRB * N_SC_PER_PRB] = ((int16_t)ntohs(((uint16_t *)src)[idx])) >> 2;
+                  ((int16_t *)local_dst)[idx + startRB * N_SC_PER_PRB * 2] = ((int16_t)ntohs(((uint16_t *)src)[idx])) >> 2;
               } else if (pRbElm->compMethod == XRAN_COMPMETHOD_BLKFLOAT) {
 #if defined(__i386__) || defined(__x86_64__)
                 struct xranlib_decompress_request bfp_decom_req = {};
