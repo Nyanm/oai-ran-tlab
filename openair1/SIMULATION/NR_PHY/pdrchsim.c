@@ -884,22 +884,25 @@ int getpacket_snr_pass;
 void AIOT_D2R_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int Preamble_offset, NR_AIOT_UL_FRAME_PARMS *frame)
 {
   int index = Preamble_offset + frame->preamble_samples;
-  frame->packet_payload_size = frame->packet_size;
 
   uint32_t *energy_plot = NULL;
   int energy_index = 0;
 
   if(testing_mode && !testing_timing && getpacket_snr_pass == snr_plot) {
     // Energy plotting
-    energy_plot = malloc(2*frame->packet_payload_size * sizeof(uint32_t));
+    energy_plot = malloc(2*frame->packet_size * sizeof(uint32_t));
   }
 
   int i = 0;
 
-  for(; i < frame->packet_size; i++) {
+  for(; i < frame->packet_size && (index + frame->N_bit) < frame->packet_payload_size; i++) {
     if(i % frame->N_midamble_space == 0 && i != 0) {
       // Insert midamble (fixed pattern 101010...)
       index += frame->midamble_samples;
+
+      if(index + frame->N_bit >= frame->packet_payload_size) {
+        break;
+      }
     }
 
     int sum1 = 0;
@@ -925,6 +928,8 @@ void AIOT_D2R_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int P
     int bit0 = (sum1 > sum2) ? 0 : 1;
     rx_payload[i/8] = (rx_payload[i/8] << 1) | bit0;
   }
+
+  frame->packet_payload_size = frame->packet_size; // actual size in bits
 
   int remainder = frame->packet_payload_size % 8;
   int shift = 8 - remainder;
@@ -1048,7 +1053,7 @@ void* process_snr_range(void* arg) {
   AIOT_D2R_PHY_TX_Design_Filter(&tx_filter, data->channel_model->bw * 1e6, (double)data->channel_model->sampling_rate * 1e6);
   */
   Butter3_Q15 rx_filter;
-  AIOT_D2R_PHY_RX_Design_Filter(&rx_filter, 600e3, (double)data->channel_model->sampling_rate * 1e6);
+  AIOT_D2R_PHY_RX_Design_Filter(&rx_filter, 15e3, (double)data->channel_model->sampling_rate * 1e6);
   
   // Thread-local IQ signal buffers
   double **s_re = malloc(local_frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
@@ -1184,12 +1189,12 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      /*AIOT_D2R_PHY_RX_Filter(filteredData, (const int16_t *) envelope, rx_size, &rx_filter);
+      AIOT_D2R_PHY_RX_Filter(filteredData, (const int16_t *) envelope, rx_size, &rx_filter);
       
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/D2R_Filter.m", folderplots);
         LOG_M(filename, "Filter_sig", filteredData, rx_size, 1, 0);
-      }*/
+      }
 
       if(testing_timing) {
         stop_meas(&local_time_stats);
@@ -1212,6 +1217,7 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
+      local_frame_parms->packet_payload_size = rx_size;
       AIOT_D2R_PHY_RX_GetPacket(rx_payload, (const int16_t *) envelope, Preamble_offset, local_frame_parms);
       
       if(testing_timing) {
@@ -1468,7 +1474,7 @@ void BER_test(NR_AIOT_UL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
   }
 
   if(!testing_mode) {
-    sprintf(filename, "%s/BLER_SIZE%d_RSFS%d_PREAMB%d_BIT%d.m", foldername, frame_parms->payload_size, frame_parms->N_SFS, frame_parms->L_preamble ? 1 : 0, frame_parms->I_bit);
+    sprintf(filename, "%s/BLER_SIZE%d_RSFS%d_PREAMB%d_BIT%d.m", foldername, frame_parms->payload_size, frame_parms->R_SFS, frame_parms->L_preamble ? 1 : 0, frame_parms->T_bit);
     LOG_M(filename, "BLER", ber_results, snr_max - snr_min + 1, 1, 7);
   }
 }
