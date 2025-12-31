@@ -40,6 +40,7 @@
 // startup. Only relevant for printing, if it ever makes problem, remove this
 // line and the use of VERSIONX further below. It is relative to phy/fhi_lib/lib/api
 #include "../../app/src/common.h"
+#include "oran_debug.h"
 
 #ifdef OAI_MPLANE
 #include "mplane/init-mplane.h"
@@ -340,7 +341,16 @@ void oran_fh_if4p5_south_out(RU_t *ru, int frame, int slot, uint64_t timestamp)
   };
 
   // printf("south_out:\tframe=%d\tslot=%d\ttimestamp=%ld\n",frame,slot,timestamp);
-
+  if (frame == 0) {
+    for (int sym = 0; sym < 14; sym++) {
+      dump_nonzero_symbol((c16_t *)&ru->common.txdataF_BF[0][sym * ru->nr_frame_parms->ofdm_symbol_size],
+                          ru->nr_frame_parms->ofdm_symbol_size,
+                          frame,
+                          slot,
+                          sym,
+                          "du_write_dl_iq");
+    }
+  }
   int ret = xran_fh_tx_send_slot(&ru_info, frame, slot, timestamp);
   if (ret != 0) {
     printf("ORAN: ORAN_fh_if4p5_south_out ERROR in TX function \n");

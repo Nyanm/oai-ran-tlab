@@ -48,6 +48,7 @@
 #include "common/utils/threadPool/notified_fifo.h"
 #include "circular_buffer.h"
 #include "iq_worker.h"
+#include "oran_debug.h"
 
 notifiedFIFO_t ru_dl_sync_fifo;
 extern volatile bool first_call_set;
@@ -167,6 +168,15 @@ int xran_oru_tx_read_slot(uint32_t **txdataF, int nb_tx, int *frame, int *slot, 
       memcpy(&txdata_sym[first_carrier_offset], ant_data, num_sc_first_copy * sizeof(uint32_t));
       memcpy(txdata_sym, &ant_data[num_sc_first_copy], num_sc_second_copy * sizeof(uint32_t));
       memset(ant_data, 0, sizeof(uint32_t) * nPRBs * NR_NB_SC_PER_RB);
+      if (*frame == 0 && aatx == 0) {
+        dump_nonzero_symbol((c16_t *)txdata_sym, fftsize, *frame, *slot, sym, "ru_read_dl_iq");
+        if (*slot == 0) {
+          struct timespec ts;
+          int ret = clock_gettime(CLOCK_REALTIME, &ts);
+          AssertFatal(ret == 0, "clock_gettime failed: %d", ret);
+          LOG_I(HW, "read data frame.slot.symbol %d.%d.%d at %ld.%ld\n", *frame, *slot, sym, ts.tv_sec, ts.tv_nsec);
+        }
+      }
     }
   }
   return 0;
