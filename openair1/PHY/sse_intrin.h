@@ -67,6 +67,7 @@ typedef struct {
 //Note that the following is not needed for gcc>=13
 #ifdef __aarch64__
 #ifdef __ARM_FEATURE_SVE2
+#define GCC_SVSET_WORKAROUND
 static inline svint16_t cast_neon_to_sve_s16(simde__m128i n) {
     svint16_t s;
 // "w" refers to an FP/SIMD register.
@@ -285,8 +286,8 @@ simde__m128i oai_mm_cpx_mult(simde__m128i z1, simde__m128i z2, int shift)
 __attribute__((always_inline)) static inline
 simde__m128i oai_mm_cpx_mult_conj(simde__m128i a, simde__m128i b, int shift)
 {
-#ifdef __aarch64__
-#ifdef __ARM_FEATURE_SVE2
+#if defined(__aarch64__)
+#if 0 //defined(__ARM_FEATURE_SVE2)
 
 /**
  *  * Full-vector Complex Mul for int16_t with Dynamic Shift.
@@ -294,44 +295,24 @@ simde__m128i oai_mm_cpx_mult_conj(simde__m128i a, simde__m128i b, int shift)
  *    * shift: The calculated optimal shift for the block.
  *     */
     svbool_t pg = svptrue_b16();
-    uint64_t shift64 = (uint64_t)shift;
-
+    uint64_t shift64 = (uint64_t)(15-shift);
+#ifdef GCC_SVSET_WORKAROUND
     svint16_t asv = cast_neon_to_sve_s16(a);// with gcc 13+ svset_neonq_s16(svundef_s16(),a);
     svint16_t bsv = cast_neon_to_sve_s16(b);
-
-// --- 1. Process Bottom Half (Lanes 0, 2, 4...) ---
-//     // Calculates: (a.re*b.re - a.im*b.im) and (a.re*b.im + a.im*b.re)
-    svint32_t res_re_low = svqdmlalb_s32(svdup_n_s32(0), asv,  bsv, 0);
-    svint32_t res_im_low = svqdmlalb_s32(svdup_n_s32(0), asv,  bsv, 90);
-
-// --- 2. Process Top Half (Lanes 1, 3, 5...) ---
-    svint32_t res_re_high = svqdmlalt_s32(svdup_n_s32(0), asv, bsv, 0);
-    svint32_t res_im_high = svqdmlalt_s32(svdup_n_s32(0), asv, bsv, 90);
-
-// --- 3. Apply the Dynamic Shift ---
-// Use svasr (Arithmetic Shift Right) for truncation.
-// If you need to shift LEFT because inputs are small, use svlsl.
-    svint32_t re_low_s = svasr_n_s32_z(svptrue_b32(), res_re_low, shift64);
-    svint32_t im_low_s = svasr_n_s32_z(svptrue_b32(), res_im_low, shift64);
-    svint32_t re_high_s = svasr_n_s32_z(svptrue_b32(), res_re_high, shift64);
-    svint32_t im_high_s = svasr_n_s32_z(svptrue_b32(), res_im_high, shift64);
-
-// --- 4. Saturate to Q15 Range ---
-// svqxtn "Saturating Extract Narrow" clamps to [-32768, 32767]
-    svint16_t re_low_16 = svqxtn_s32(re_low_s);
-    svint16_t im_low_16 = svqxtn_s32(im_low_s);
-    svint16_t re_high_16 = svqxtn_s32(re_high_s);
-    svint16_t im_high_16 = svqxtn_s32(im_high_s);
-
-// --- 5. Re-interleave Results ---
-// Combine the low/high parts and interleave Real/Imaginary
-    svint16_t re_full = svuzp1_s16(re_low_16, re_high_16); // Reconstructs full Real vector
-    svint16_t im_full = svuzp1_s16(im_low_16, im_high_16); // Reconstructs full Imag vector
-
-    return cast_sve_to_neon_s16(svzip1_s16(re_full, im_full));
-}
 #else
-/*
+    svint16_t asv = svset_neonq_s16(svundef_s16(),(int16x8_t)a);
+    svint16_t bsv = svset_neonq_s16(svundef_s16(),(int16x8_t)b);
+#endif
+    bsv = svlsl_n_s16_m(pg, bsv, shift64);
+    svint16_t csv=svdup_n_s16(0);
+    csv=svcmla_s16(csv,asv,bsv,0); // sel_a=sel_b=0 => ar*br+ai*bi*
+    csv=svcmla_s16(csv,bsv,asv,90); // sel_a=1, sel_b=0, subr=1, subi=0 => -bi*ar+br*ai
+#ifdef GCC_SVSET_WORKAROUND
+    return cast_sve_to_neon_s16(csv);
+#else
+    return (__m128i)sveget_neonq_s16(csv);
+#endif
+#else //SVE2
     // 1. De-interleave real and imaginary parts
     // a_parts.val[0] = [R0, R1, R2, R3], a_parts.val[1] = [I0, I1, I2, I3]
     int16x4_t ar = vget_low_s16(vuzp1q_s16((int16x8_t)a, (int16x8_t)a)); // This gets the lower 4 complex pairs
@@ -357,12 +338,12 @@ simde__m128i oai_mm_cpx_mult_conj(simde__m128i a, simde__m128i b, int shift)
     // 5. Re-interleave for the final result
     return (simde__m128i)vcombine_s16(vzip1_s16(out_re, out_im), 
                                       vzip2_s16(out_re, out_im));
-*/
-
+#endif
+#else //__aarch64__
   simde__m128i re = oai_mm_smadd(a, b, shift);
   simde__m128i im = oai_mm_smadd(oai_mm_swap(oai_mm_conj(a)), b, shift);
   return oai_mm_pack(re, im);
-#endif
+#endif //aarch64
 }
 
 /*

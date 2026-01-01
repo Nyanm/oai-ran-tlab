@@ -154,10 +154,10 @@ elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -gdwarf-2 -mcpu=neoverse-v1 -lgcc -lrt")
   elseif (CPUPART MATCHES "0xd4f") # Neoverse-V2
     set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -gdwarf-2 -mcpu=neoverse-v2 -ftree-vectorize -lgcc -lrt -march=armv9-a+sve2")
-  elseif (CPUPART MATCHES "0xd87") # Neoverse-V2
-    set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -gdwarf-2 -mcpu=neoverse-v2 -ftree-vectorize -lgcc -lrt -march=armv9-a+sve2")
-  elseif (CPUPART MATCHES "0xd85") # Neoverse-V2
-    set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -gdwarf-2 -mcpu=neoverse-v2 -ftree-vectorize -lgcc -lrt -march=armv9-a+sve2")
+  elseif (CPUPART MATCHES "0xd87") # Cortex-A725
+    set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -gdwarf-2 -ftree-vectorize -lgcc -lrt ")
+  elseif (CPUPART MATCHES "0xd85") # Cortex-X925 
+    set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -gdwarf-2 -ftree-vectorize -lgcc -lrt ")
   elseif (CPUPART MATCHES "0xd0c") # Neoverse-N1
     set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -gdwarf-2 -mcpu=neoverse-n1  -lgcc -lrt")
   elseif (CPUPART MATCHES "0xd49") # Neoverse-N2
@@ -170,7 +170,7 @@ else()
 endif()
 
 if (NOT CROSS_COMPILE)
-  set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -march=native")
+  set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -march=armv9.2-a+sve2+sve2-bitperm")
 else ()
   set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -march=armv8.2-a")
 endif()
@@ -1060,7 +1060,7 @@ if (ENABLE_CUDA)
   if (NOT CUDA_FOUND)
     message(FATAL_ERROR "no CUDA found")
   endif()
-  set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_90;")
+  set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_121;")
   set(CUDA_VERBOS_BUILD_ON)
   cuda_add_library(PHY_NR ${PHY_NR_SRC} ${PHY_NR_SRC_CU})
 else()
