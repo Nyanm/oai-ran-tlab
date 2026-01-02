@@ -810,7 +810,7 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
 #ifdef K_RELEASE
   uint8_t mu_number = fh_cfg->mu_number[0];
   int nPRBs = fh_cfg->perMu[mu_number].nDLRBs;
-  int fftsize = 1 << fh_cfg->ru_conf.fftSize[mu_number];
+  int fftsize = 1 << fh_cfg->perMu[mu_number].nDLFftSize;
 #elif defined(E_RELEASE) || defined(F_RELEASE)
   int nPRBs = fh_cfg->nDLRBs;
   int fftsize = 1 << fh_cfg->nDLFftSize;

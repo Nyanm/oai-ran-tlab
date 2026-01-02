@@ -154,7 +154,7 @@ int xran_oru_tx_read_slot(uint32_t **txdataF, int nb_tx, int *frame, int *slot, 
   const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
   uint8_t mu = fh_cfg->mu_number[0];
   int nPRBs = fh_cfg->perMu[mu].nDLRBs;
-  int fftsize = 1 << fh_cfg->ru_conf.fftSize[mu];
+  int fftsize = 1 << fh_cfg->perMu[mu].nDLFftSize;
 
   int first_carrier_offset = fftsize - (nPRBs * NR_NB_SC_PER_RB / 2);
   int num_sc_first_copy = (fftsize - first_carrier_offset);
