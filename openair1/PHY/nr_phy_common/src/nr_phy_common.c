@@ -23,6 +23,7 @@
 #include <complex.h>
 #ifdef __aarch64__
 #define USE_128BIT
+//#define protected_abs128 simde_mm_abs_epi16
 #endif
 
 #define PEAK_DETECT_THRESHOLD 15

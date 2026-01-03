@@ -177,8 +177,14 @@ __attribute__((always_inline)) static inline int32_t simde_mm_average(simde__m12
  */
 __attribute__((always_inline)) static inline simde__m128i oai_mm_conj(simde__m128i a)
 {
+#ifdef __aarch64__
+  const oai128_t neg_imag = {.i16 = {0, -1, 0, -1, 0, -1, 0, -1}};
+  int16x8_t aneg = vnegq_s16((int16x8_t)a);
+  return (simde__m128i)vbslq_s16((uint16x8_t)neg_imag.v, aneg, (int16x8_t)a);
+#else  
   const oai128_t neg_imag = {.i16 = {1, -1, 1, -1, 1, -1, 1, -1}};
   return simde_mm_sign_epi16(a, neg_imag.v);
+#endif
 }
 
 /**
@@ -194,9 +200,13 @@ __attribute__((always_inline)) static inline simde__m128i oai_mm_conj(simde__m12
 __attribute__((always_inline)) static inline
 simde__m128i oai_mm_swap(simde__m128i a)
 {
+#ifdef __aarch64__
+  return (simde__m128i)vrev32q_s16((int16x8_t)a);
+#else
   // Shuffle mask to swap bytes for IQ swapping
   const oai128_t shuffle_mask_swap = {.i8 = {2, 3, 0, 1, 6, 7, 4, 5, 10, 11, 8, 9, 14, 15, 12, 13}};
   return simde_mm_shuffle_epi8(a, shuffle_mask_swap.v);
+#endif
 }
 
 __attribute__((always_inline)) static inline
@@ -243,7 +253,7 @@ simde__m128i oai_mm_cpx_mult(simde__m128i z1, simde__m128i z2, int shift)
  * Input:  z1 = (a + bi) [ a0,  b0,  ...,  a3,  b3]
  * Input:  z2 = (c + di) [ c0,  d0,  ...,  c3,  d3]
  * Output: z3 = (e + fi) [ e0,  f0,  ...,  e3,  f3]
- * z3 = z1 * conj(z2) = + (ac+bd) + i(bc-ad)
+ * z3 = conj(z1) * z2 = + (ac+bd) + i(ad-bc)
  *
  * @param 128-bit SIMD vector of four complex 16-bit integers.
  * @return a 128-bit SIMD vector.
@@ -256,6 +266,43 @@ simde__m128i oai_mm_cpx_mult_conj(simde__m128i a, simde__m128i b, int shift)
   return oai_mm_pack(re, im);
 }
 
+#ifdef __aarch64__
+#define CPX_MUL_CONJ(SHIFT) \
+__attribute__((always_inline)) static inline simde__m128i oai_mm_cpx_mult_conj##SHIFT(simde__m128i a, simde__m128i b) \
+{ \
+    const oai128_t neg_imag = {.i16 = {0, -1, 0, -1, 0, -1, 0, -1}};\
+\
+    int16x8_t aneg    = vnegq_s16((int16x8_t)a);\
+    int16x8_t arevn   = vbslq_s16((uint16x8_t)neg_imag.v, aneg, (int16x8_t)a);\
+              arevn   = vrev32q_s16(arevn);\
+    int32x4_t abl     = vmull_s16(vget_low_s16((int16x8_t)a),vget_low_s16((int16x8_t)b));\
+    int32x4_t abh     = vmull_high_s16((int16x8_t)a,(int16x8_t)b);\
+    int32x4_t arevnbl = vmull_s16(vget_low_s16(arevn),vget_low_s16((int16x8_t)b));\
+    int32x4_t arevnbh = vmull_high_s16(arevn,(int16x8_t)b);\
+    int32x4_t re      = vpaddq_s32(abl,abh);\
+    int32x4_t im      = vpaddq_s32(arevnbl,arevnbh);\
+    int32x4_t outl    = vzip1q_s32(re,im);\
+    int32x4_t outh    = vzip2q_s32(re,im);\
+    int16x4_t r       = vqrshrn_n_s32(outl, (const int)SHIFT);\
+    return (simde__m128i)vqrshrn_high_n_s32(r, outh, (const int)SHIFT);	\
+}
+//CPX_MUL_CONJ(0)
+CPX_MUL_CONJ(1)
+CPX_MUL_CONJ(2)
+CPX_MUL_CONJ(3)
+CPX_MUL_CONJ(4)
+CPX_MUL_CONJ(5)
+CPX_MUL_CONJ(6)
+CPX_MUL_CONJ(7)
+CPX_MUL_CONJ(8)
+CPX_MUL_CONJ(9)
+CPX_MUL_CONJ(10)
+CPX_MUL_CONJ(11)
+CPX_MUL_CONJ(12)
+CPX_MUL_CONJ(13)
+CPX_MUL_CONJ(14)
+CPX_MUL_CONJ(15)
+#endif
 /*
  * OAI specific AVX2 section
  */
