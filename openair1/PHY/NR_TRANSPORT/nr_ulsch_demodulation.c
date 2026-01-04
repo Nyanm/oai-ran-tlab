@@ -1114,6 +1114,7 @@ static void inner_rx(PHY_VARS_gNB *gNB,
 #endif
     }
   }
+  start_meas(&gNB->pusch_channel_compensation_stats);
   c16_t rho[nb_layer][nb_layer][buffer_length] __attribute__((aligned(64)));
   c16_t rxF_ch_maga  [nb_layer][buffer_length] __attribute__((aligned(64)));
   c16_t rxF_ch_magb  [nb_layer][buffer_length] __attribute__((aligned(64)));
