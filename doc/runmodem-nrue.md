@@ -91,7 +91,7 @@ Here are some useful command line options for the NR UE:
 
 | Parameter                | Description                                                                                                   |
 |--------------------------|---------------------------------------------------------------------------------------------------------------|
-| `--ue-scan-carrier`      | Scan for cells in current bandwidth. This option can be used if the SSB position of the gNB is unknown. If multiple cells are detected, the UE will try to connect to the first cell. By default, this option is disabled and the UE attempts to only decode SSB given by `--ssb`. |
+| `--ue-scan-carrier`      | Value range: [0 - 2]. 0: Scan disabled and UE attempts to only decode SSB given be `--ssb`. This is the default behavior. 1: Scan for cells in current bandwidth. This option can be used if the SSB position of the gNB is unknown. If multiple cells are detected, the UE will try to connect to the first cell. 2: Scan for cells in NR band given by `--band`. This option can be used to scan cells in an NR band. Like option 1, the UE will try to connect to the fist cell. There is ongoing work to improve this and have a scan only mode to report all cells in the band. |
 | `--ue-fo-compensation`   | Enables the initial frequency offset compensation at the UE. Useful when running over the air and/or without an external clock/time source. |
 | `--cont-fo-comp`         | Enables the continuous frequency offset (FO) estimation and compensation.  Parameter value `1` specifies that the main FO contribution comes from the local oscillator's (LO) accuracy.  Parameter value `2` specifies that the main FO contribution comes from Doppler shift. Parameter value `3` specifies that no measured residual DL FO is considered for UL FO pre-compensation. |
 | `--initial-fo`           | Sets the known initial frequency offset. Useful especially with large Doppler frequency, e.g. LEO satellite.  |
@@ -111,6 +111,10 @@ You can view all available options by typing:
 ```shell
 ./nr-uesoftmodem --help
 ```
+
+### Cell Search Limitation
+
+The cell search feature in the UE (`--ue-scan-carrier`) works only with real RF devices and not in rfsim. It is because the NR waveform has phase pre-compensation to have different center frequencies at gNB and UE. In real RF the phase offset produced by difference in center frequencies are cancelled by the pre-compensation in OFDM signal generation and Up/Down conversion. But it is not the case in rfsim. However, `--ue-scan-carrier 1` can be used in rfsim when gNB and UE have the same center frequency.
 
 ### UE Capabilities
 
