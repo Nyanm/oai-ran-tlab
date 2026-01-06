@@ -83,14 +83,15 @@ void cuda_support_init() {
     LOG_I(NR_PHY,"Pageable memory access:          %s\n", pageable ? "YES" : "NO");
     LOG_I(NR_PHY,"Uses host page tables:           %s\n", pageable_uses_host ? "YES" : "NO");
     LOG_I(NR_PHY,"Host Register supported:         %s\n", register_host ? "YES" : "NO");
-    LOG_I(NR_PHY,"Integrated GPU:                  %s\n", prop.integrated ? "YES" : "NO");
 
   // initialize input and output memory
-  // FIX: Force separate device memory allocation for Discrete GPUs (L40S, A100) 
-  // to avoid PCIe bottlenecks and mapping errors.
-  // Integrated GPUs (GH200, Jetson) will continue to use Zero-Copy path.
-  if (!prop.integrated || (!pageable && !register_host)) {
-    LOG_I(NR_PHY,"Allocating c,d,cc arrays in Discrete VRAM\n");
+  // REVISED LOGIC:
+  // 1. GH200 has pageable=1. It MUST go to 'else' (Zero-Copy) for Encoder to work.
+  // 2. L40S has pageable=0. It MUST go to 'if' (Malloc) to avoid "Illegal Memory Access".
+  // 3. We ignore 'register_host' for the decision if 'pageable' is missing, 
+  //    because L40S has register_host=1 but fails at Zero-Copy.
+  if (!pageable) {
+    LOG_I(NR_PHY,"[L40S/Legacy Fix] No Pageable Memory Access detected. Allocating discrete VRAM.\n");
     
     cudaError_t err=cudaMalloc((void **)&c_dev,4*sizeof(uint32_t*));
     AssertFatal(err == cudaSuccess,"CUDA Error (c_dev): %s\n", cudaGetErrorString(err));
