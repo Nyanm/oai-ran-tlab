@@ -69,7 +69,6 @@ void cuda_support_init() {
     struct cudaDeviceProp prop;
     cudaGetDeviceProperties(&prop, dev);
 
-
     cudaDeviceGetAttribute(&managed, cudaDevAttrManagedMemory, dev);
     cudaDeviceGetAttribute(&concurrent, cudaDevAttrConcurrentManagedAccess, dev);
     cudaDeviceGetAttribute(&uva, cudaDevAttrUnifiedAddressing, dev);
@@ -84,9 +83,15 @@ void cuda_support_init() {
     LOG_I(NR_PHY,"Pageable memory access:          %s\n", pageable ? "YES" : "NO");
     LOG_I(NR_PHY,"Uses host page tables:           %s\n", pageable_uses_host ? "YES" : "NO");
     LOG_I(NR_PHY,"Host Register supported:         %s\n", register_host ? "YES" : "NO");
+    LOG_I(NR_PHY,"Integrated GPU:                  %s\n", prop.integrated ? "YES" : "NO");
 
   // initialize input and output memory
-  if (!pageable && !register_host) {
+  // FIX: Force separate device memory allocation for Discrete GPUs (L40S, A100) 
+  // to avoid PCIe bottlenecks and mapping errors.
+  // Integrated GPUs (GH200, Jetson) will continue to use Zero-Copy path.
+  if (!prop.integrated || (!pageable && !register_host)) {
+    LOG_I(NR_PHY,"Allocating c,d,cc arrays in Discrete VRAM\n");
+    
     cudaError_t err=cudaMalloc((void **)&c_dev,4*sizeof(uint32_t*));
     AssertFatal(err == cudaSuccess,"CUDA Error (c_dev): %s\n", cudaGetErrorString(err));
     err=cudaHostAlloc((void **)&c_host,4*sizeof(uint32_t*),cudaHostAllocDefault);
@@ -125,7 +130,7 @@ void cuda_support_init() {
     AssertFatal(err == cudaSuccess,"CUDA Error (memcpy cc_devh -> d_dev): %s\n", cudaGetErrorString(err));
   }
   else {
-    LOG_I(NR_PHY,"Allocating c,d,cc arrays for CPU/GPU shared-memory\n");
+    LOG_I(NR_PHY,"Allocating c,d,cc arrays for CPU/GPU shared-memory (Zero-Copy Path)\n");
     cudaError_t err=cudaHostAlloc((void **)&c_host,4*sizeof(uint32_t*),cudaHostAllocMapped|cudaHostAllocPortable);
     AssertFatal(err == cudaSuccess,"CUDA Error (c_host): %s\n", cudaGetErrorString(err));
     err = cudaHostGetDevicePointer((void**)&c_dev, c_host, 0);
