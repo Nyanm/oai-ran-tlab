@@ -30,7 +30,6 @@
 #include "common/utils/load_module_shlib.h"
 #include "PHY/CODING/nrLDPC_extern.h"
 // #include "openair1/SIMULATION/NR_PHY/nr_unitary_defs.h"
-#include "openair1/PHY/CODING/nrLDPC_decoder_LYC/nrLDPC_decoder_LYC.h"
 #include "openair1/PHY/defs_nr_common.h"
 #include "coding_unitary_defs.h"
 #include "common/utils/LOG/log.h"
