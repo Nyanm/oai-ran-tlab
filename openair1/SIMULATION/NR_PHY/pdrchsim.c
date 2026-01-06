@@ -143,242 +143,6 @@ void AIOT_D2R_PHY_TX_AddCRC(uint8_t *output, uint8_t *payload, NR_AIOT_UL_FRAME_
   }
 }
 
-/* 3rd Order Butterworth Filter Structure
-   Implemented as Cascaded Sections:
-   [Section 1: 1st Order] -> [Section 2: 2nd Order (Biquad)]
-*/
-typedef struct {
-  // --- Coefficients (Q2.29) ---
-  int32_t b0_1, b1_1, a1_1;             // Stage 1
-  int32_t b0_2, b1_2, b2_2, a1_2, a2_2; // Stage 2
-
-  // --- State History (Q1.15) ---
-  int16_t x1, y1;               // Stage 1 history
-  int16_t x2_1, x2_2;           // Stage 2 input history
-  int16_t y2_1, y2_2;           // Stage 2 output history
-} Butter3_Q15;
-
-void butter3_clear(Butter3_Q15 *f) {
-  f->x1 = 0;
-  f->y1 = 0;
-
-  f->x2_1 = 0;
-  f->x2_2 = 0;
-  f->y2_1 = 0;
-  f->y2_2 = 0;
-}
-
-// --- Fixed Point Configuration ---
-// Data: Q1.15 [-1, 1)
-// Coeffs: Q2.29 [-4, 4) to handle high sample rate precision
-#define SHIFT_COEFF 29
-
-// Helper: Convert float to Q2.29
-static int32_t dbl_to_fixed(double x) {
-    return (int32_t)(x * (1 << SHIFT_COEFF));
-}
-
-// Helper: Saturation (Clamp to valid int16 range)
-// Prevents wrapping if the filter overshoots 32767
-static int16_t saturate_q15(int64_t x) {
-    if (x > 32767) return 32767;
-    if (x < -32768) return -32768;
-    return (int16_t)x;
-}
-
-void AIOT_D2R_PHY_RX_Design_Filter(Butter3_Q15 *f, double Fc, double Fs) {
-  // 1. Clear State
-  butter3_clear(f);
-
-  // 2. Bilinear Transform Math (Pre-warping)
-  double omega = 2.0 * M_PI * Fc;
-  double T = 1.0 / Fs;
-  double wa = (2.0 / T) * tan(omega * T / 2.0);
-
-  // 3. Calculate Stage 1 (1st Order)
-  // H(s) = 1 / (s + 1) normalized
-  double gamma1 = wa * T / 2.0;
-  double D1 = 1.0 + gamma1;
-  
-  f->b0_1 = dbl_to_fixed(gamma1 / D1);
-  f->b1_1 = dbl_to_fixed(gamma1 / D1);
-  f->a1_1 = dbl_to_fixed((gamma1 - 1.0) / D1);
-
-  // 4. Calculate Stage 2 (2nd Order)
-  // H(s) = 1 / (s^2 + s + 1) normalized
-  double gamma2 = wa * T / 2.0;
-  double D2 = 1.0 + gamma2 + gamma2 * gamma2;
-
-  f->b0_2 = dbl_to_fixed((gamma2 * gamma2) / D2);
-  f->b1_2 = dbl_to_fixed(2.0 * (gamma2 * gamma2) / D2);
-  f->b2_2 = dbl_to_fixed((gamma2 * gamma2) / D2);
-  f->a1_2 = dbl_to_fixed((2.0 * gamma2 * gamma2 - 2.0) / D2);
-  f->a2_2 = dbl_to_fixed((1.0 - gamma2 + gamma2 * gamma2) / D2);
-}
-
-void butter3_process(Butter3_Q15 *f, const int16_t *input, int16_t *output, size_t length) {
-  for (size_t i = 0; i < length; i++) {
-    int16_t in_sample = input[i];
-
-    // --- STAGE 1: 1st Order ---
-    // Math: (Q1.15 * Q2.29) = Q3.44. Accumulator needs 64-bit.
-    int64_t acc1 = 0;
-    acc1 += (int64_t)in_sample * f->b0_1;
-    acc1 += (int64_t)f->x1     * f->b1_1;
-    acc1 -= (int64_t)f->y1     * f->a1_1;
-
-    // Rounding (add half LSB) and Shift back to Q1.15
-    // Result is technically Q3.15 now, so we must saturate before casting to int16
-    int64_t stage1_raw = (acc1 + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF;
-    int16_t stage1_out = saturate_q15(stage1_raw);
-
-    // Update Stage 1 State
-    f->x1 = in_sample;
-    f->y1 = stage1_out;
-
-    // --- STAGE 2: 2nd Order ---
-    int64_t acc2 = 0;
-    acc2 += (int64_t)stage1_out * f->b0_2;
-    acc2 += (int64_t)f->x2_1    * f->b1_2;
-    acc2 += (int64_t)f->x2_2    * f->b2_2;
-    acc2 -= (int64_t)f->y2_1    * f->a1_2;
-    acc2 -= (int64_t)f->y2_2    * f->a2_2;
-
-    // Rounding and shifting
-    int64_t stage2_raw = (acc2 + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF;
-    int16_t final_out = saturate_q15(stage2_raw);
-
-    // Update Stage 2 State
-    f->x2_2 = f->x2_1;
-    f->x2_1 = stage1_out;
-    f->y2_2 = f->y2_1;
-    f->y2_1 = final_out;
-
-    output[i] = final_out;
-  }
-}
-
-/*  ************    BANDPASS BUTTERWORTH FILTER ************    */
-
-#define Q_SHIFT 14
-#define SCALE (1 << Q_SHIFT)
-
-// Biquad section: y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2] - a1*y[n-1] - a2*y[n-2]
-typedef struct {
-  int16_t b0, b1, b2;
-  int16_t a1, a2;
-  int16_t x1, x2;
-  int16_t y1, y2;
-} Biquad;
-
-// 3rd Order Butterworth Bandpass (Total order 6)
-typedef struct {
-  Biquad sections[3];
-} ButterworthBP3;
-
-void BP_init(ButterworthBP3* filter) {
-  memset(filter, 0, sizeof(ButterworthBP3));
-}
-
-static inline int16_t biquad_process(Biquad *bq, int16_t input) {
-  int64_t accum;
-
-  accum  = (int64_t)bq->b0 * input;
-  accum += (int64_t)bq->b1 * bq->x1;
-  accum += (int64_t)bq->b2 * bq->x2;
-  accum -= (int64_t)bq->a1 * bq->y1;
-  accum -= (int64_t)bq->a2 * bq->y2;
-
-  // Rounding and scaling
-  accum = (accum + (SCALE >> 1)) >> Q_SHIFT;
-
-  bq->x2 = bq->x1;
-  bq->x1 = input;
-  bq->y2 = bq->y1;
-  
-  // Saturation
-  if (accum > 32767) accum = 32767;
-  if (accum < -32768) accum = -32768;
-  
-  bq->y1 = (int16_t)accum;
-
-  return bq->y1;
-}
-
-int16_t BP_process(ButterworthBP3* filter, int16_t input) {
-  int16_t signal = input;
-  
-  signal = biquad_process(&filter->sections[0], signal);
-  signal = biquad_process(&filter->sections[1], signal);
-  signal = biquad_process(&filter->sections[2], signal);
-  
-  return signal;
-}
-
-int16_t double_to_fixed(double val) {
-  long raw = (long)(val * SCALE);
-  if (raw > 32767) return 32767;
-  if (raw < -32768) return -32768;
-  return (int16_t)raw;
-}
-
-void BP_calculate_coefficients(double fs, double f_low, double f_high, ButterworthBP3* filter) {
-  BP_init(filter);
-
-  double w_low = 2.0 * M_PI * f_low;
-  double w_high = 2.0 * M_PI * f_high;
-  
-  // Pre-warp
-  double wa_low = tan(w_low / (2.0 * fs));
-  double wa_high = tan(w_high / (2.0 * fs));
-  
-  double w0_sq = wa_low * wa_high;
-  double bw = wa_high - wa_low;
-
-  // Section 1: Derived from Real LP Pole
-  {
-      double r = 1.0; 
-      double D = 1.0 + r * bw + w0_sq;
-      
-      double b0 = (r * bw) / D;
-      double b1 = 0.0;
-      double b2 = -(r * bw) / D;
-      double a1 = (2.0 * (w0_sq - 1.0)) / D;
-      double a2 = (1.0 - r * bw + w0_sq) / D;
-
-      filter->sections[0].b0 = double_to_fixed(b0);
-      filter->sections[0].b1 = double_to_fixed(b1);
-      filter->sections[0].b2 = double_to_fixed(b2);
-      filter->sections[0].a1 = double_to_fixed(a1);
-      filter->sections[0].a2 = double_to_fixed(a2);
-  }
-
-  // Sections 2 & 3: Approximated Synchronous Bandpass sections
-  for(int k=1; k<=2; k++) {
-        double D = 1.0 + bw + w0_sq;
-        double b0 = bw / D;
-        double b2 = -bw / D;
-        double a1 = (2.0 * (w0_sq - 1.0)) / D;
-        double a2 = (1.0 - bw + w0_sq) / D;
-        
-        filter->sections[k].b0 = double_to_fixed(b0);
-        filter->sections[k].b1 = 0;
-        filter->sections[k].b2 = double_to_fixed(b2);
-        filter->sections[k].a1 = double_to_fixed(a1);
-        filter->sections[k].a2 = double_to_fixed(a2);
-  }
-}
-
-// Clears filter history (state) to process a new signal without recalculating coefficients
-void butterworth_reset(ButterworthBP3* filter) {
-    for(int i=0; i<3; i++) {
-        filter->sections[i].x1 = 0;
-        filter->sections[i].x2 = 0;
-        filter->sections[i].y1 = 0;
-        filter->sections[i].y2 = 0;
-    }
-}
-
 /* ***************          *************************  */
 
 void AIOT_D2R_PHY_TX_calc_packet_sizes(NR_AIOT_UL_FRAME_PARMS *frame)
@@ -506,13 +270,6 @@ void AIOT_D2R_PHY_TX_Signal(c16_t *txData, const uint8_t *payload, NR_AIOT_UL_FR
     }
   }
 
-  // Block repetition if R_block is true
-  /*if(frame->R_block) {
-    int payload_samples = dataIndex - preamble_samples;
-    memcpy(&txData[dataIndex], &txData[preamble_samples], payload_samples * sizeof(c16_t));
-    dataIndex += payload_samples;
-  }*/
-
   // Insert midamble (fixed pattern 101010...)
   if(frame->I_add) {
     for(int m = 0; m < frame->N_preamble; m++) {
@@ -534,122 +291,6 @@ void AIOT_D2R_PHY_TX_Signal(c16_t *txData, const uint8_t *payload, NR_AIOT_UL_FR
     }
   }
 }
-
-
-/* 3rd Order Butterworth Filter State 
-   - Coefficients are shared between Real/Imag paths.
-   - State history (x, y) must be separate for Real/Imag.
-*//*
-typedef struct {
-    // --- Coefficients (Q2.29) ---
-    int32_t b0_1, b1_1, a1_1;             // Stage 1 (1st order)
-    int32_t b0_2, b1_2, b2_2, a1_2, a2_2; // Stage 2 (2nd order)
-} Butter3_c16;
-
-// Initialize Filter
-void AIOT_D2R_PHY_TX_Design_Filter(Butter3_c16 *f, double Fc, double Fs) {
-  // Calculate Coefficients (Bilinear Transform)
-  double omega = 2.0 * M_PI * Fc;
-  double T = 1.0 / Fs;
-  double wa = (2.0 / T) * tan(omega * T / 2.0);
-
-  // Stage 1: 1st Order Section
-  double g1 = wa * T / 2.0;
-  double D1 = 1.0 + g1;
-  
-  f->b0_1 = dbl_to_fixed(g1 / D1);
-  f->b1_1 = dbl_to_fixed(g1 / D1);
-  f->a1_1 = dbl_to_fixed((g1 - 1.0) / D1);
-
-  // Stage 2: 2nd Order Section
-  double g2 = wa * T / 2.0;
-  double D2 = 1.0 + g2 + g2 * g2;
-
-  f->b0_2 = dbl_to_fixed((g2 * g2) / D2);
-  f->b1_2 = dbl_to_fixed(2.0 * (g2 * g2) / D2);
-  f->b2_2 = dbl_to_fixed((g2 * g2) / D2);
-  f->a1_2 = dbl_to_fixed((2.0 * g2 * g2 - 2.0) / D2);
-  f->a2_2 = dbl_to_fixed((1.0 - g2 + g2 * g2) / D2);
-}
-
-// Process Block of c16_t data
-void AIOT_D2R_PHY_TX_Filter(c16_t *output, const c16_t *input, int length, Butter3_c16 *f) {
-  // --- State History: REAL Path (Q1.15) ---
-  int16_t x1_r = 0, y1_r = 0;
-  int16_t x2_1_r = 0, x2_2_r = 0;
-  int16_t y2_1_r = 0, y2_2_r = 0;
-
-  // --- State History: IMAG Path (Q1.15) ---
-  int16_t x1_i = 0, y1_i = 0;
-  int16_t x2_1_i = 0, x2_2_i = 0;
-  int16_t y2_1_i = 0, y2_2_i = 0;
-
-  for (size_t i = 0; i < length; i++) {
-    
-    // ==============================
-    // PATH 1: REAL COMPONENT
-    // ==============================
-    int16_t in_r = input[i].r;
-    
-    // Stage 1 (1st Order)
-    // Q1.15 * Q2.29 = Q3.44 (requires 64-bit accumulator)
-    int64_t acc1_r = 0;
-    acc1_r += (int64_t)in_r * f->b0_1;
-    acc1_r += (int64_t)x1_r * f->b1_1;
-    acc1_r -= (int64_t)y1_r * f->a1_1;
-    
-    // Shift back to Q15 (with rounding) and Saturate
-    int16_t st1_out_r = saturate_q15((acc1_r + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF);
-    
-    x1_r = in_r; 
-    y1_r = st1_out_r;
-
-    // Stage 2 (2nd Order)
-    int64_t acc2_r = 0;
-    acc2_r += (int64_t)st1_out_r * f->b0_2;
-    acc2_r += (int64_t)x2_1_r * f->b1_2;
-    acc2_r += (int64_t)x2_2_r * f->b2_2;
-    acc2_r -= (int64_t)y2_1_r * f->a1_2;
-    acc2_r -= (int64_t)y2_2_r * f->a2_2;
-    
-    int16_t final_r = saturate_q15((acc2_r + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF);
-
-    x2_2_r = x2_1_r; x2_1_r = st1_out_r;
-    y2_2_r = y2_1_r; y2_1_r = final_r;
-
-    // ==============================
-    // PATH 2: IMAGINARY COMPONENT
-    // ==============================
-    int16_t in_i = input[i].i;
-
-    // Stage 1 (1st Order)
-    int64_t acc1_i = 0;
-    acc1_i += (int64_t)in_i * f->b0_1;
-    acc1_i += (int64_t)x1_i * f->b1_1;
-    acc1_i -= (int64_t)y1_i * f->a1_1;
-    
-    int16_t st1_out_i = saturate_q15((acc1_i + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF);
-
-    x1_i = in_i; 
-    y1_i = st1_out_i;
-
-    // Stage 2 (2nd Order)
-    int64_t acc2_i = 0;
-    acc2_i += (int64_t)st1_out_i * f->b0_2;
-    acc2_i += (int64_t)x2_1_i * f->b1_2;
-    acc2_i += (int64_t)x2_2_i * f->b2_2;
-    acc2_i -= (int64_t)y2_1_i * f->a1_2;
-    acc2_i -= (int64_t)y2_2_i * f->a2_2;
-    
-    int16_t final_i = saturate_q15((acc2_i + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF);
-
-    x2_2_i = x2_1_i; x2_1_i = st1_out_i;
-    y2_2_i = y2_1_i; y2_1_i = final_i;
-
-    output[i].r = final_r;
-    output[i].i = final_i;
-  }
-}*/
 
 void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *channel, double SNR, NR_AIOT_UL_FRAME_PARMS *frame,
                            double **s_re, double **s_im, double **r_re, double **r_im, double *time_multipath, double *time_noise, gaussZiggurat_MT_t *gz)
@@ -755,10 +396,106 @@ void AIOT_D2R_PHY_RX_Envelope_Detector(int16_t *envelope, const c16_t **rxData, 
   }
 }
 
-void AIOT_D2R_PHY_RX_Filter(int16_t *out, const int16_t *in, int length, Butter3_Q15 *filt)
+/* 3rd Order Butterworth Filter Structure
+   Implemented as Cascaded Sections:
+   [Section 1: 1st Order] -> [Section 2: 2nd Order (Biquad)]
+*/
+typedef struct {
+  // --- Coefficients (Q2.29) ---
+  int32_t b0_1, b1_1, a1_1;             // Stage 1
+  int32_t b0_2, b1_2, b2_2, a1_2, a2_2; // Stage 2
+} Butter3_Q15;
+
+// --- Fixed Point Configuration ---
+// Data: Q1.15 [-1, 1)
+// Coeffs: Q2.29 [-4, 4) to handle high sample rate precision
+#define SHIFT_COEFF 29
+
+// Helper: Convert float to Q2.29
+static int32_t dbl_to_fixed(double x) {
+    return (int32_t)(x * (1 << SHIFT_COEFF));
+}
+
+// Helper: Saturation (Clamp to valid int16 range)
+// Prevents wrapping if the filter overshoots 32767
+static int16_t saturate_q15(int64_t x) {
+    if (x > 32767) return 32767;
+    if (x < -32768) return -32768;
+    return (int16_t)x;
+}
+
+void AIOT_D2R_PHY_RX_Design_Filter(Butter3_Q15 *f, double Fc, double Fs) {
+  // Bilinear Transform Math (Pre-warping)
+  double omega = 2.0 * M_PI * Fc;
+  double T = 1.0 / Fs;
+  double wa = (2.0 / T) * tan(omega * T / 2.0);
+
+  // Calculate Stage 1 (1st Order)
+  // H(s) = 1 / (s + 1) normalized
+  double gamma1 = wa * T / 2.0;
+  double D1 = 1.0 + gamma1;
+  
+  f->b0_1 = dbl_to_fixed(gamma1 / D1);
+  f->b1_1 = dbl_to_fixed(gamma1 / D1);
+  f->a1_1 = dbl_to_fixed((gamma1 - 1.0) / D1);
+
+  // Calculate Stage 2 (2nd Order)
+  // H(s) = 1 / (s^2 + s + 1) normalized
+  double gamma2 = wa * T / 2.0;
+  double D2 = 1.0 + gamma2 + gamma2 * gamma2;
+
+  f->b0_2 = dbl_to_fixed((gamma2 * gamma2) / D2);
+  f->b1_2 = dbl_to_fixed(2.0 * (gamma2 * gamma2) / D2);
+  f->b2_2 = dbl_to_fixed((gamma2 * gamma2) / D2);
+  f->a1_2 = dbl_to_fixed((2.0 * gamma2 * gamma2 - 2.0) / D2);
+  f->a2_2 = dbl_to_fixed((1.0 - gamma2 + gamma2 * gamma2) / D2);
+}
+
+void AIOT_D2R_PHY_RX_Filter(int16_t *output, const int16_t *input, int length, Butter3_Q15 *f)
 {
-  butter3_clear(filt);
-  butter3_process(filt, in, out, length);
+  int16_t x1 = 0, y1 = 0;     // Stage 1 history
+  int16_t x2_1 = 0, x2_2 = 0; // Stage 2 input history
+  int16_t y2_1 = 0, y2_2 = 0; // Stage 2 output history
+
+  for (size_t i = 0; i < length; i++) {
+    int16_t in_sample = input[i];
+
+    // --- STAGE 1: 1st Order ---
+    // Math: (Q1.15 * Q2.29) = Q3.44. Accumulator needs 64-bit.
+    int64_t acc1 = 0;
+    acc1 += (int64_t)in_sample * f->b0_1;
+    acc1 += (int64_t)x1        * f->b1_1;
+    acc1 -= (int64_t)y1        * f->a1_1;
+
+    // Rounding (add half LSB) and Shift back to Q1.15
+    // Result is technically Q3.15 now, so we must saturate before casting to int16
+    int64_t stage1_raw = (acc1 + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF;
+    int16_t stage1_out = saturate_q15(stage1_raw);
+
+    // Update Stage 1 State
+    x1 = in_sample;
+    y1 = stage1_out;
+
+    // --- STAGE 2: 2nd Order ---
+    int64_t acc2 = 0;
+    acc2 += (int64_t)stage1_out * f->b0_2;
+    acc2 += (int64_t)x2_1       * f->b1_2;
+    acc2 += (int64_t)x2_2       * f->b2_2;
+    acc2 -= (int64_t)y2_1       * f->a1_2;
+    acc2 -= (int64_t)y2_2       * f->a2_2;
+
+    // Rounding and shifting
+    int64_t stage2_raw = (acc2 + (1 << (SHIFT_COEFF - 1))) >> SHIFT_COEFF;
+    int16_t final_out = saturate_q15(stage2_raw);
+
+    // Update Stage 2 State
+    x2_2 = x2_1;
+    x2_1 = stage1_out;
+    y2_2 = y2_1;
+    y2_1 = final_out;
+
+    output[i] = final_out;
+  }
 }
 
 int *Preamble_ideal = NULL;
@@ -1048,12 +785,9 @@ void* process_snr_range(void* arg) {
   // Thread-local payload buffer
   uint8_t *payload = malloc(local_frame_parms->packet_size / 8 + 1);
   
-  // Thread-local filters
-  /*Butter3_c16 tx_filter;
-  AIOT_D2R_PHY_TX_Design_Filter(&tx_filter, data->channel_model->bw * 1e6, (double)data->channel_model->sampling_rate * 1e6);
-  */
+  // Thread-local RX filter
   Butter3_Q15 rx_filter;
-  AIOT_D2R_PHY_RX_Design_Filter(&rx_filter, 15e3, (double)data->channel_model->sampling_rate * 1e6);
+  AIOT_D2R_PHY_RX_Design_Filter(&rx_filter, 15e3/2 * local_frame_parms->N_SFS, (double)data->channel_model->sampling_rate * 1e6);
   
   // Thread-local IQ signal buffers
   double **s_re = malloc(local_frame_parms->nr_frame_parms.nb_antennas_tx * sizeof(double *));
@@ -1075,7 +809,6 @@ void* process_snr_range(void* arg) {
   
   // Thread-local timing stats
   time_stats_t local_time_stats = {0};
-  time_stats_t local_alltime_stats = {0};
   char filename[128] = {0};
   
   // Process SNR range assigned to this thread
@@ -1094,7 +827,6 @@ void* process_snr_range(void* arg) {
 
       if(testing_timing) {
         start_meas(&local_time_stats);
-        start_meas(&local_alltime_stats);
       }
 
       memset(rx_payload, 0, MAX_AIOT_D2R_PACKET_SIZE);
@@ -1130,13 +862,6 @@ void* process_snr_range(void* arg) {
         reset_meas(&local_time_stats);
         start_meas(&local_time_stats);
       }
-
-      /*AIOT_D2R_PHY_TX_Filter(txFiltered, (const c16_t *) txData, local_frame_parms->packet_samples, &tx_filter);
-
-      if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
-        sprintf(filename, "%s/D2R_TX_Filter.m", folderplots);
-        LOG_M(filename, "TX_Filter_sig", txFiltered, local_frame_parms->packet_samples, 1, 1);
-      }*/
 
       if(testing_timing) {
         stop_meas(&local_time_stats);
@@ -1233,10 +958,6 @@ void* process_snr_range(void* arg) {
         stop_meas(&local_time_stats);
         data->time_ber += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&local_time_stats);
-
-        stop_meas(&local_alltime_stats);
-        data->time_total += local_alltime_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-        reset_meas(&local_alltime_stats);
       }
 
       if(!crc_ok) {
@@ -1297,7 +1018,7 @@ void* process_snr_range(void* arg) {
   return NULL;
 }
 
-void BER_test(NR_AIOT_UL_FRAME_PARMS *frame_parms, channel_model_t *channel_model)
+void BLER_test(NR_AIOT_UL_FRAME_PARMS *frame_parms, channel_model_t *channel_model)
 {
   AIOT_D2R_PHY_TX_calc_packet_sizes(frame_parms);
 
@@ -1441,7 +1162,6 @@ void BER_test(NR_AIOT_UL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
                           thread_data[0].time_rx_filter + thread_data[0].time_rx_sync + thread_data[0].time_rx_packet + thread_data[0].time_ber;
       printf("---\n");
       printf("Total time:              %f us\n", total_time);
-      //printf("Total time (measured):   %f us\n", thread_data[0].time_total);
     }
 
     // Cleanup
@@ -1580,10 +1300,10 @@ int main(int argc, char **argv)
         /*printf("-R Channel coding: 0=No FEC, 1=FEC\n");
         printf("-r Block repetition: 1=1, 2=2\n");*/
         printf("-f Small frequency shift factor: 0 to 2 (default: %d)\n", frame_parms->R_SFS);
-        printf("-I Midamble interval: 0=16, 1=32, 2=64, 3=128 (default: %d)\n", frame_parms->I_bit);
-        printf("-l Preamble length: 0=short(7 bits), 1=long(31 bits) (default: %d)\n", frame_parms->L_preamble ? 1 : 0);
+        printf("-I Midamble interval: 0 (S*48), 1 (S*96), 2 (S*168), 3 (S*240 bits) (see 3GPP TS 38.391) (default: %d)\n", frame_parms->I_bit);
+        printf("-l Preamble length: 0 (short(7 bits)), 1 (long(31 bits)) (default: %d)\n", frame_parms->L_preamble ? 1 : 0);
         printf("-a Additional midamble: 0=no, 1=yes (default: %d)\n", frame_parms->I_add ? 1 : 0);
-        printf("-b Bit duration option T_bit: 0 (T_bit=2*tau), 1 (4*tau), 2 (8*tau), 3 (16*tau) (default: %d)\n", frame_parms->T_bit);
+        printf("-b Bit duration option T_bit: 0 (T_bit=2*tau), 1 (tau), 2 (1/2*tau), 3 (1/4*tau) (see 3GPP TS 38.391) (default: %d)\n", frame_parms->T_bit);
         
         printf("-i Iterations per SNR point (default: %d)\n", SNR_TRIALS);
         printf("-s SNR min in dB (default: %d)\n", MIN_SNR_DB);
@@ -1594,10 +1314,13 @@ int main(int argc, char **argv)
         printf("-T Timing mode (measure processing time per packet)\n");
         exit(-1);
         break;
+
+      // Change log level
       case 'L':
         loglvl = atoi(optarg);
         break;
 
+      // Change payload size
       case 'p':
         frame_parms->payload_size = atoi(optarg);
         if (frame_parms->payload_size > MAX_AIOT_D2R_PAYLOAD_SIZE * 8) {
@@ -1608,6 +1331,7 @@ int main(int argc, char **argv)
         }
         break;
 
+      // Testing mode
       case 't':
         if (testing_timing) {
           printf("Error: Timing and testing modes cannot be enabled simultaneously\n");
@@ -1620,6 +1344,7 @@ int main(int argc, char **argv)
         printf("Enabling testing mode, saving results for SNR=%d dB\n", snr_plot);
         break;
       
+      // Timing mode
       case 'T':
         if (testing_mode) {
           printf("Error: Timing and testing modes cannot be enabled simultaneously\n");
@@ -1630,6 +1355,7 @@ int main(int argc, char **argv)
         testing_timing = true;
         break;
 
+      // Change iterations per SNR
       case 'i':
         if (testing_mode) {
           printf("Error: Iterations per SNR point cannot be set in testing mode\n");
@@ -1640,6 +1366,7 @@ int main(int argc, char **argv)
         printf("Using %d iterations per SNR point\n", snr_iters);
         break;
 
+      // Change SNR min
       case 's':
         if(snr_min < MIN_SNR_DB || snr_min > MAX_SNR_DB) {
           printf("Error: SNR min must be between %d and %d dB\n", MIN_SNR_DB, MAX_SNR_DB);
@@ -1650,6 +1377,7 @@ int main(int argc, char **argv)
         printf("Using SNR min: %d dB\n", snr_min);
         break;
 
+      // Change SNR max
       case 'S':
         if(snr_max < MIN_SNR_DB || snr_max > MAX_SNR_DB) {
           printf("Error: SNR max must be between %d and %d dB\n", MIN_SNR_DB, MAX_SNR_DB);
@@ -1660,27 +1388,7 @@ int main(int argc, char **argv)
         printf("Using SNR max: %d dB\n", snr_max);
         break;
 
-      /*case 'R':
-        if (atoi(optarg) != 0 && atoi(optarg) != 1)
-        {
-          printf("Error: R_code must be 0 for No FEC or 1 for FEC\n");
-          exit(-1);
-        }
-        
-        frame_parms->R_code = (atoi(optarg) == 1) ? true : false;
-        printf("Using channel coding: %s\n", (frame_parms->R_code) ? "FEC" : "No FEC");
-        break;
-      
-      case 'r':
-        if(atoi(optarg) != 1 && atoi(optarg) != 2)
-        {
-          printf("Error: R_block must be 1 or 2\n");
-          exit(-1);
-        }
-        frame_parms->R_block = (atoi(optarg) == 2) ? true : false;
-        printf("Using block repetition: %s\n", (frame_parms->R_block) ? "2" : "1");
-        break;*/
-
+      // Set small frequency shift factor
       case 'f':
         if(atoi(optarg) < 0 || atoi(optarg) > 2) {
           printf("Error: R_SFS must be between 0 and 2\n");
@@ -1690,6 +1398,7 @@ int main(int argc, char **argv)
         printf("Using small frequency shift factor: %d\n", frame_parms->R_SFS);
         break;
 
+      // Set midamble interval
       case 'I':
         if(atoi(optarg) < 0 || atoi(optarg) > 3) {
           printf("Error: I_bit must be between 0 and 3\n");
@@ -1699,6 +1408,7 @@ int main(int argc, char **argv)
         printf("Using midamble interval: %d bits\n", I_BIT_TABLE[frame_parms->I_bit]);
         break;
 
+      // Set preamble length
       case 'l':
         if(atoi(optarg) != 0 && atoi(optarg) != 1) {
           printf("Error: L_preamble must be 0 for short or 1 for long\n");
@@ -1708,6 +1418,7 @@ int main(int argc, char **argv)
         printf("Using preamble length: %s\n", (frame_parms->L_preamble) ? "long (31 bits)" : "short (7 bits)");
         break;
 
+      // Set additional midamble
       case 'a':
         if(atoi(optarg) != 0 && atoi(optarg) != 1) {
           printf("Error: I_add must be 0 for no or 1 for yes\n");
@@ -1717,6 +1428,7 @@ int main(int argc, char **argv)
         printf("Using additional midamble: %s\n", (frame_parms->I_add) ? "yes" : "no");
         break;
 
+      // Set bit duration
       case 'b':
         if(atoi(optarg) < 0 || atoi(optarg) > 3) {
           printf("Error: T_bit must be between 0 and 3\n");
@@ -1768,7 +1480,8 @@ int main(int argc, char **argv)
     mkdir(folderplots, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
   }
 
-  BER_test(frame_parms, &channel_model);
+  // Start BLER test
+  BLER_test(frame_parms, &channel_model);
 
   end_configmodule(uniqCfg);
   logTerm();

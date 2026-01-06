@@ -235,20 +235,15 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
 
   start_meas(&time_multipath_stats);
 
-  const int gain = 1; // 8 x amplification to avoid precision issues (moves to 8k amplitude approx)
   uint64_t txlev_sum = 0;
 
   for (int i = 0; i < frame->packet_samples; i++) {
-    // Amplify input signal
-    int16_t amplified_r = in[i].r * gain;
-    int16_t amplified_i = in[i].i * gain;
-
     // Copy to double
-    s_re[0][i] = (double) amplified_r;
-    s_im[0][i] = (double) amplified_i;
+    s_re[0][i] = (double) in[i].r;
+    s_im[0][i] = (double) in[i].i;
 
     // Calculate power
-    txlev_sum += amplified_r * amplified_r + amplified_i * amplified_i;
+    txlev_sum += in[i].r * in[i].r + in[i].i * in[i].i;
   }
 
   uint32_t txlev = txlev_sum / frame->packet_samples;
@@ -937,7 +932,6 @@ void* process_snr_range(void* arg) {
   
   // Thread-local timing stats
   time_stats_t local_time_stats = {0};
-  time_stats_t local_alltime_stats = {0};
   char filename[128] = {0};
   
   // Process SNR range assigned to this thread
@@ -956,7 +950,6 @@ void* process_snr_range(void* arg) {
 
       if(testing_timing) {
         start_meas(&local_time_stats);
-        start_meas(&local_alltime_stats);
       }
 
       memset(rx_payload, 0, MAX_AIOT_R2D_PACKET_SIZE);
@@ -1108,10 +1101,6 @@ void* process_snr_range(void* arg) {
         stop_meas(&local_time_stats);
         data->time_ber += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
         reset_meas(&local_time_stats);
-
-        stop_meas(&local_alltime_stats);
-        data->time_total += local_alltime_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-        reset_meas(&local_alltime_stats);
       }
 
       if(!crc_ok) {
@@ -1174,7 +1163,7 @@ void* process_snr_range(void* arg) {
   return NULL;
 }
 
-void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_model)
+void BLER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_model)
 {
   AIOT_R2D_PHY_TX_calc_packet_sizes(frame_parms);
 
@@ -1197,7 +1186,6 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
   printf("  Channel model: %s\n", channel_model->channel_model == AWGN ? "AWGN" : "TDL");
   printf("  Sampling rate: %f Msps\n", channel_model->sampling_rate);
   printf("  Bandwidth: %f MHz\n", channel_model->bw);
-  //printf("  Delay spread: %f us\n", channel_model->DS_TDL);
   printf("  Delay: %d samples\n", channel_model->delay);
 
   printf("*************************\n");
@@ -1325,7 +1313,6 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
                           thread_data[0].time_filter + thread_data[0].time_downsample + thread_data[0].time_sync + thread_data[0].time_rx_packet + thread_data[0].time_ber;
       printf("---\n");
       printf("Total time:              %f us\n", total_time);
-      //printf("Total time (measured):   %f us\n", thread_data[0].time_total);
     }
 
     // Cleanup
@@ -1358,6 +1345,7 @@ void BER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mode
     printf("SNR %3d dB: BLER = %f\n", snr, ber_results[snr - snr_min]);
   }
 
+  // Save results to matlab file
   if(!testing_mode) {
     sprintf(filename, "%s/BLER_M%d_%s_SIZE%d_%dRBs.m", foldername, frame_parms->M, frame_parms->Zadoff_Chu ? "ZC" : "Ones", frame_parms->payload_size, frame_parms->nr_frame_parms.N_RB_DL);
     LOG_M(filename, "BLER", ber_results, snr_max - snr_min + 1, 1, 7);
@@ -1607,6 +1595,7 @@ int main(int argc, char **argv)
 
   getpacket_snr_pass = snr_min;
 
+  // Create folders for results
   mkdir("./R2D_plots", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
   mkdir(foldername, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
   if(testing_mode) {
@@ -1614,7 +1603,8 @@ int main(int argc, char **argv)
     mkdir(folderplots, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
   }
 
-  BER_test(frame_parms, &channel_model);
+  // Start BLER test
+  BLER_test(frame_parms, &channel_model);
 
   end_configmodule(uniqCfg);
   logTerm();
