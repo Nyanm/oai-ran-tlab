@@ -740,23 +740,6 @@ static inline __mmask32 make_mask_bc(int k) {
    }
    return m;
 }
-//
-#elif defined(__AVX2__)
-static inline __m128i gather8_u16_to_xmm(const uint16_t *base_u16, const int idx_bytes[8])
-{
-    // Gather 8x 32-bit values from byte offsets; each contains desired u16 in low 16 bits.
-    const int *base_i8_as_i32 = (const int *)(const void *)((const char*)base_u16);
-    __m256i vidx = _mm256_loadu_si256((const __m256i*)idx_bytes);
-    __m256i g32  = _mm256_i32gather_epi32(base_i8_as_i32, vidx, 1);
-
-    // keep low 16 bits
-    g32 = _mm256_and_si256(g32, _mm256_set1_epi32(0xFFFF));
-
-    // pack 8x32 -> 8x16 in low 128 bits (values are unsigned <= 65535 so packus is safe)
-    __m256i packed = _mm256_packus_epi32(g32, g32);
-    // packed contains 16x16 with duplicates; take low 128 which has our 8 u16
-    return _mm256_castsi256_si128(packed);
-}
 #endif
 
 void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
@@ -788,13 +771,12 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
         _mm512_storeu_si512((void*)e, o0); e += 32;
         _mm512_storeu_si512((void*)e1, o1); e1 += 32;
     }
-#elif defined(__AVX2__)
-
 #else 
       simde__m128i *e0_128 = (simde__m128i *)e;
       simde__m128i *e1_128 = (simde__m128i *)e1;
       simde__m128i *f128   = (simde__m128i *)f;	  
-      const uint8_t shuf4[16] = {0,1,4,5,8,9,12,13,2,3,6,7,10,11,14,15} __attribute__((aligned(16)));;
+      const uint8_t shuf4[16]  __attribute__((aligned(16))) = {0,1,4,5,8,9,12,13,2,3,6,7,10,11,14,15};
+      
       const simde__m128i *shuf4_128 = (const simde__m128i *)shuf4;
       for (i=0; i < (EQm & ~7); i += 8) {      
             simde__m128i f0j = simde_mm_loadu_si128(f128++); // f0(i) f0(i+1) f0(i+2) f0(i+3) f0(i+4) f0(i+5) f0(i+6) f0(i+7)
@@ -804,6 +786,9 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
             simde_mm_storeu_si128(e0_128++,simde_mm_unpacklo_epi64(tmp0, tmp1));   // f0(i) f0(i+2) f0(i+4) f0(i+6) f1(i) f1(i+2) f1(i+4) f1(i+6)
             simde_mm_storeu_si128(e1_128++,simde_mm_unpackhi_epi64(tmp0, tmp1));   // f0(i+1) f0(i+3) f0(i+5) f0(i+7) f1(i+1) f1(i+3) f1(i+5) f1(i+7)
       }
+      e=(int16_t *)e0_128;
+      e1=(int16_t *)e1_128;
+      f=(int16_t *)f128;      
 #endif
       for (; i < EQm; i++) {
         *e++ = *f++;
@@ -872,8 +857,6 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
 	_mm512_storeu_si512((void*)e2, o2); e2 += 32;
 	_mm512_storeu_si512((void*)e3, o3); e3 += 32;
       }
-#elif defined(__AVX2__
-
 #else 
       simde__m128i *e0_128 = (simde__m128i *)e;
       simde__m128i *e1_128 = (simde__m128i *)e1;
@@ -881,7 +864,7 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
       simde__m128i *e3_128 = (simde__m128i *)e3;
       simde__m128i *f128   = (simde__m128i *)f;	  
      
-      const uint8_t shuf16[16] = {0,1,8,9,2,3,10,11,4,5,12,13,6,7,14,15} __attribute__((aligned(64)));
+      const uint8_t shuf16[16] __attribute__((aligned(16)))= {0,1,8,9,2,3,10,11,4,5,12,13,6,7,14,15};
       const simde__m128i *shuf16_128 = (const simde__m128i *)shuf16;
 
       for (i=0; i < (EQm & ~7); i += 8) {      
@@ -903,6 +886,11 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
         simde_mm_storeu_si128(e2_128++,simde_mm_unpacklo_epi64(tmp4, tmp5));   // f0(i+2) f0(i+6) f1(i+2) f1(i+6) f2(i+2) f2(i+6) f3(i+2) f3(i+6)
   	simde_mm_storeu_si128(e3_128++,simde_mm_unpackhi_epi64(tmp4, tmp5));   // f0(i+3) f0(i+7) f1(i+3) f1(i+7) f2(i+3) f2(i+7) f3(i+3) f3(i+7)
       } 
+      e=(int16_t *)e0_128;                                   
+      e1=(int16_t *)e1_128;                                 
+      e2=(int16_t *)e2_128;                                
+      e3=(int16_t *)e3_128;                                 
+      f=(int16_t *)f128;                                      
 #endif
       for (; i < EQm; i++) {
         *e++ = *f++;
@@ -936,7 +924,7 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
       const uint8x16_t idx5 = { 10, 11, 22, 23, 34, 35, 46, 47,
                                 58, 59, 70, 71, 82, 83, 94, 95 };
 
-      for (; i < EQm; i += 8) {
+      for (; i + 8 <= EQm; i += 8) {
 	// Load 96 bytes (48 u16)
 	uint8x16_t b0 = vld1q_u8((const uint8_t*)(f +  0)); // bytes  0..15
 	uint8x16_t b1 = vld1q_u8((const uint8_t*)(f +  8)); // bytes 16..31
@@ -1013,35 +1001,6 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
         _mm512_mask_storeu_epi16((void*)e5, store16, o5); e5 += 16;
      }
 			//
-#elif defined()
-    // Byte offsets inside one 8-group block (96 bytes):
-    // want u16 at position (k + 6*n) => byte offset 2*(k + 6*n).
-    static const int idx0[8] = {  0, 12, 24, 36, 48, 60, 72, 84 } __attribute__((aligned(64)));
-    static const int idx1[8] = {  2, 14, 26, 38, 50, 62, 74, 86 } __attribute__((aligned(64)));
-    static const int idx2[8] = {  4, 16, 28, 40, 52, 64, 76, 88 } __attribute__((aligned(64)));
-    static const int idx3[8] = {  6, 18, 30, 42, 54, 66, 78, 90 } __attribute__((aligned(64)));
-    static const int idx4[8] = {  8, 20, 32, 44, 56, 68, 80, 92 } __attribute__((aligned(64)));
-    static const int idx5[8] = { 10, 22, 34, 46, 58, 70, 82, 94 } __attribute__((aligned(64)));
-    //
-    int i = 0;
-    for (; i + 8 <= EQm; i += 8) {
-    // Gather within current 96-byte block starting at f
-    __m128i o0 = gather8_u16_to_xmm(f, idx0);
-    __m128i o1 = gather8_u16_to_xmm(f, idx1);
-    __m128i o2 = gather8_u16_to_xmm(f, idx2);
-    __m128i o3 = gather8_u16_to_xmm(f, idx3);      
-    __m128i o4 = gather8_u16_to_xmm(f, idx4);
-    __m128i o5 = gather8_u16_to_xmm(f, idx5);
-
-    _mm_storeu_si128((__m128i*)e0, o0); e0 += 8;
-    _mm_storeu_si128((__m128i*)e1, o1); e1 += 8;
-    _mm_storeu_si128((__m128i*)e2, o2); e2 += 8;
-    _mm_storeu_si128((__m128i*)e3, o3); e3 += 8;
-    _mm_storeu_si128((__m128i*)e4, o4); e4 += 8;
-    _mm_storeu_si128((__m128i*)e5, o5); e5 += 8;
-
-    f += 48; // consumed 8 groups * 6 u16 = 48 u16
-}	
 #endif
       for (; i < EQm; i++) {
         *e++ = *f++;
@@ -1166,8 +1125,6 @@ void nr_deinterleaving_ldpc(uint32_t E, uint8_t Qm, int16_t *e, int16_t *f)
 
         #undef DO_STREAM
     }
-#elif defined(__AVX2__)
-
 #else
       simde__m128i *e0_128 = (simde__m128i *)e;
       simde__m128i *e1_128 = (simde__m128i *)e1;
