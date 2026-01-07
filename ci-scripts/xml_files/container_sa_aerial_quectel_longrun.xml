@@ -104,7 +104,7 @@
 
         <testCase id="000022">
                 <class>Iperf</class>
-                <desc>iperf (DL/UDP/100M)(30 sec)(single-ue profile)</desc>
+                <desc>iperf (DL/UDP/100M)(10 min)(single-ue profile)</desc>
                 <iperf_args>-u -b 100M -t 600 -R</iperf_args>
                 <svr_id>oc-cn5g-20897-aerial</svr_id>
                 <id>up2-aerial</id>
