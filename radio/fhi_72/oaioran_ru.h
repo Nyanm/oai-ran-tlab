@@ -31,6 +31,7 @@ extern notifiedFIFO_t ru_dl_sync_fifo;
 // at reception window ends for symbols 7 and 14. This in turn unblocks xran_oru_tx_read_slot and
 // can be used for timing purposes
 void install_symbol_callback(void* handle, int callbacks_per_slot, int mu);
+void stop_oru(void);
 
 // Read samples DL IQ samples for frame slot symbol for all antennas
 int xran_oru_tx_read_slot(uint32_t **txdataF, int nb_tx, int *frame, int *slot, int *symbol, int *num_symbols, struct timespec *ts);

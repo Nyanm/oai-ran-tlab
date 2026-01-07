@@ -494,3 +494,7 @@ void xran_oru_send_prach(uint32_t *prachF, int aarx, int frame, int slot, int sy
   int ret = xran_ethdi_mbuf_send(mbuf, ETHER_TYPE_ECPRI, vf_id);
   AssertFatal(ret == 1, "Error sending mbuf\n");
 }
+
+void stop_oru(void) {
+  iq_worker_destroy();
+}

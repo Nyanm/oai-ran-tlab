@@ -110,6 +110,7 @@ int trx_oran_start(openair0_device *device)
 void trx_oran_end(openair0_device *device)
 {
   printf("ORAN: %s\n", __FUNCTION__);
+  stop_oru();
   oran_eth_state_t *s = device->priv;
 #ifdef K_RELEASE
   xran_shutdown(s->oran_priv);
