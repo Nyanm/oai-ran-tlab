@@ -48,6 +48,6 @@ void dump_nonzero_symbol(c16_t *txdataF, uint32_t ofdm_symbol_size, int frame, i
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
 
-    LOG_I(HW, "dump_nonzero_symbol: Frame.Slot.Symbol %d.%d.%d (%s) signal_energy %.3f time %ld.%09ld samples: %s\n", frame, slot, symbol, loc, 10 * log10(signal_energy), ts.tv_sec, ts.tv_nsec, symbol_buf);
+    LOG_D(HW, "dump_nonzero_symbol: Frame.Slot.Symbol %d.%d.%d (%s) signal_energy %.3f time %ld.%09ld samples: %s\n", frame, slot, symbol, loc, 10 * log10(signal_energy), ts.tv_sec, ts.tv_nsec, symbol_buf);
   }
 }

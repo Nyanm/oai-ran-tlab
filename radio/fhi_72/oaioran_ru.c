@@ -29,6 +29,9 @@
 #include "xran_fh_o_ru.h"
 #include "xran_compression.h"
 #include "armral_bfp_compression.h"
+#include <xran_pkt.h>
+#include <xran_pkt_up.h>
+#include <xran_transport.h>
 
 #if defined(__arm__) || defined(__aarch64__)
 #else
@@ -49,6 +52,10 @@
 #include "circular_buffer.h"
 #include "iq_worker.h"
 #include "oran_debug.h"
+
+#define RATE_LIMIT(n) if (({ static int _counter = 0; _counter++ % (n) == 0; }))
+#define ETHER_TYPE_ECPRI 0xAEFE
+#define MAX_NUM_ANTENNAS 4
 
 notifiedFIFO_t ru_dl_sync_fifo;
 extern volatile bool first_call_set;
@@ -71,6 +78,22 @@ typedef struct {
   int numerology;
 } oran_symbol_callback_args_t;
 
+typedef struct {
+  int section_id;
+  int num_prb;
+  int start_prb;
+  int slot;
+  int frame;
+  int mu;
+  int filter_id;
+} oran_prach_cplane_config_t;
+
+oran_prach_cplane_config_t prach_config_per_antenna[MAX_NUM_ANTENNAS] = {0};
+static uint8_t prach_seq_id[MAX_NUM_ANTENNAS] = {0};
+
+extern int32_t xran_ethdi_mbuf_send(struct rte_mbuf *mb, uint16_t ethertype, uint16_t vf_id);
+extern uint16_t xran_map_ecpriPcid_to_vf(void *p_dev_ctx, int32_t dir, int32_t cc_id, int32_t ru_port_id);
+
 void symbol_callback(void *args, struct xran_sense_of_time *p_sense_of_time)
 {
   if (!first_call_set) {
@@ -89,7 +112,8 @@ void symbol_callback(void *args, struct xran_sense_of_time *p_sense_of_time)
   int slot_index_increments = (p_sense_of_time->nSymIdx + callback_args->symbol_diff) / NR_NUMBER_OF_SYMBOLS_PER_SLOT;
   int num_slots_per_subframe = 1 << callback_args->numerology;
 
-  int target_slot_in_frame = p_sense_of_time->nSlotIdx + p_sense_of_time->nSubframeIdx * num_slots_per_subframe + slot_index_increments;
+  int target_slot_in_frame =
+      p_sense_of_time->nSlotIdx + p_sense_of_time->nSubframeIdx * num_slots_per_subframe + slot_index_increments;
   int frame = p_sense_of_time->nFrameIdx;
   int num_slots_per_frame = 10 << callback_args->numerology;
   while (target_slot_in_frame >= num_slots_per_frame) {
@@ -140,7 +164,7 @@ void symbol_callback(void *args, struct xran_sense_of_time *p_sense_of_time)
   pushNotifiedFIFO(&ru_dl_sync_fifo, req);
 }
 
-int xran_oru_tx_read_slot(uint32_t **txdataF, int nb_tx, int *frame, int *slot, int *symbol, int* num_symbols, struct timespec *ts)
+int xran_oru_tx_read_slot(uint32_t **txdataF, int nb_tx, int *frame, int *slot, int *symbol, int *num_symbols, struct timespec *ts)
 {
   notifiedFIFO_elt_t *res = pullNotifiedFIFO(&ru_dl_sync_fifo);
   ru_dl_sync_info_t *info = NotifiedFifoData(res);
@@ -161,28 +185,26 @@ int xran_oru_tx_read_slot(uint32_t **txdataF, int nb_tx, int *frame, int *slot, 
   int num_sc_second_copy = nPRBs * NR_NB_SC_PER_RB - num_sc_first_copy;
 
   for (int aatx = 0; aatx < nb_tx; aatx++) {
-    uint32_t* txdata_aatx = txdataF[aatx];
+    uint32_t *txdata_aatx = txdataF[aatx];
     for (int sym = *symbol; sym < *symbol + *num_symbols; sym++) {
-      uint32_t* txdata_sym = &txdata_aatx[sym * fftsize];
-      uint32_t* ant_data = circular_buffer_get_data(&dl_iq_buffer, aatx, *slot, sym);
+      uint32_t *txdata_sym = &txdata_aatx[sym * fftsize];
+      uint32_t *ant_data = circular_buffer_get_data(&dl_iq_buffer, aatx, *slot, sym);
       memcpy(&txdata_sym[first_carrier_offset], ant_data, num_sc_first_copy * sizeof(uint32_t));
       memcpy(txdata_sym, &ant_data[num_sc_first_copy], num_sc_second_copy * sizeof(uint32_t));
       memset(ant_data, 0, sizeof(uint32_t) * nPRBs * NR_NB_SC_PER_RB);
       if (*frame == 0 && aatx == 0) {
         dump_nonzero_symbol((c16_t *)txdata_sym, fftsize, *frame, *slot, sym, "ru_read_dl_iq");
-        if (*slot == 0) {
-          struct timespec ts;
-          int ret = clock_gettime(CLOCK_REALTIME, &ts);
-          AssertFatal(ret == 0, "clock_gettime failed: %d", ret);
-          LOG_I(HW, "read data frame.slot.symbol %d.%d.%d at %ld.%ld\n", *frame, *slot, sym, ts.tv_sec, ts.tv_nsec);
-        }
       }
     }
   }
   return 0;
 }
 
-int process_ru_uplane(struct rte_mbuf *pkt, void *handle, struct xran_eaxc_info *p_cid, uint16_t port_id, struct xran_sense_of_time *p_sense_of_time)
+int process_ru_uplane(struct rte_mbuf *pkt,
+                      void *handle,
+                      struct xran_eaxc_info *p_cid,
+                      uint16_t port_id,
+                      struct xran_sense_of_time *p_sense_of_time)
 {
   const struct xran_fh_config *fh_cfg = get_xran_fh_config(port_id);
   void *iq_data_start = NULL;
@@ -199,7 +221,7 @@ int process_ru_uplane(struct rte_mbuf *pkt, void *handle, struct xran_eaxc_info 
   uint16_t sym_inc;
   uint16_t rb;
   uint16_t sect_id;
-  int expect_comp  = fh_cfg->ru_conf.compMeth != XRAN_COMPMETHOD_NONE;
+  int expect_comp = fh_cfg->ru_conf.compMeth != XRAN_COMPMETHOD_NONE;
   enum xran_comp_hdr_type staticComp = fh_cfg->ru_conf.xranCompHdrType;
   uint8_t compMeth = XRAN_COMPMETHOD_NONE;
   uint8_t iqWidth = 0;
@@ -247,7 +269,7 @@ int process_ru_uplane(struct rte_mbuf *pkt, void *handle, struct xran_eaxc_info 
   AssertFatal(compMeth == XRAN_COMPMETHOD_NONE, "Compression not supported\n");
   int slot_in_frame = slot_id + subframe_id * 2;
   uint32_t *symbol_buffer = circular_buffer_get_data(&dl_iq_buffer, Ant_ID, slot_in_frame, symb_id);
-  int16_t* target = (int16_t*)(symbol_buffer + start_prbu * NR_NB_SC_PER_RB);
+  int16_t *target = (int16_t *)(symbol_buffer + start_prbu * NR_NB_SC_PER_RB);
   iq_worker_enqueue(compMeth, iqWidth, num_prbu * NR_NB_SC_PER_RB, iq_data_start, target, pkt);
 
   return MBUF_KEEP;
@@ -255,15 +277,78 @@ int process_ru_uplane(struct rte_mbuf *pkt, void *handle, struct xran_eaxc_info 
 
 int32_t process_ru_cplane(struct rte_mbuf *pkt, void *handle, uint16_t port_id, struct xran_sense_of_time *p_sense_of_time)
 {
-  return MBUF_FREE;
+  const struct xran_fh_config *fh_cfg = get_xran_fh_config(port_id);
+  struct xran_ecpri_hdr *ecpri_hdr;
+  struct xran_recv_packet_info xran_recv_packet_info;
+  int ret = xran_parse_ecpri_hdr(port_id, pkt, &ecpri_hdr, &xran_recv_packet_info);
+  if (ret != XRAN_STATUS_SUCCESS) {
+    return MBUF_FREE;
+  }
+  struct xran_cp_radioapp_common_header *apphdr = (void *)rte_pktmbuf_adj(pkt, sizeof(struct xran_ecpri_hdr));
+  if (apphdr == NULL) {
+    LOG_W(HW, "issue extracting apphdr\n");
+    return MBUF_FREE;
+  }
+  apphdr->field.all_bits = rte_be_to_cpu_32(apphdr->field.all_bits);
+  if (apphdr->field.payloadVer != XRAN_PAYLOAD_VER) {
+    LOG_W(HW, "Invalid payloadVer field %d\n", apphdr->field.payloadVer);
+    return MBUF_FREE;
+  }
+
+  switch (apphdr->sectionType) {
+    case XRAN_CP_SECTIONTYPE_3: {
+      struct xran_cp_radioapp_section3_header *hdr = (struct xran_cp_radioapp_section3_header *)apphdr;
+      if (hdr->cmnhdr.numOfSections != 1) {
+        LOG_W(HW, "Only support one section\n");
+        return MBUF_FREE;
+      }
+
+      hdr->timeOffset = rte_be_to_cpu_16(hdr->timeOffset);
+      hdr->cpLength = rte_be_to_cpu_16(hdr->cpLength);
+
+      struct xran_cp_radioapp_section3 *section = (void *)rte_pktmbuf_adj(pkt, sizeof(struct xran_cp_radioapp_section3_header));
+      if (section == NULL) {
+        LOG_W(HW, "Issue extracting section\n");
+        return MBUF_FREE;
+      }
+      *((uint64_t *)section) = rte_be_to_cpu_64(*((uint64_t *)section));
+      int mu = hdr->frameStructure.uScs;
+      int aarx = xran_recv_packet_info.eaxc.ruPortId - fh_cfg->perMu[mu].prach_conf.prachEaxcOffset;
+      oran_prach_cplane_config_t prach_config = {
+          .frame = hdr->cmnhdr.field.frameId,
+          .slot = hdr->cmnhdr.field.slotId + hdr->cmnhdr.field.subframeId + hdr->cmnhdr.field.subframeId * hdr->frameStructure.uScs,
+          .num_prb = section->hdr.u1.common.numPrbc,
+          .start_prb = section->hdr.u1.common.startPrbc,
+          .section_id = section->hdr.u1.common.sectionId,
+          .mu = mu,
+          .filter_id = hdr->cmnhdr.field.filterIndex
+      };
+      prach_config_per_antenna[aarx] = prach_config;
+      return MBUF_FREE;
+    }
+    default:
+      return MBUF_FREE;
+  }
 }
 
-void install_symbol_callback(void* handle, int callbacks_per_slot, int mu)
+static void *g_handle;
+
+void install_symbol_callback(void *handle, int callbacks_per_slot, int mu)
 {
-  AssertFatal(callbacks_per_slot < NR_NUMBER_OF_SYMBOLS_PER_SLOT, "Can do at most %d callbacks per slot", NR_NUMBER_OF_SYMBOLS_PER_SLOT);
+  g_handle = handle;
+  AssertFatal(callbacks_per_slot < NR_NUMBER_OF_SYMBOLS_PER_SLOT,
+              "Can do at most %d callbacks per slot",
+              NR_NUMBER_OF_SYMBOLS_PER_SLOT);
   static bool installed = false;
   AssertFatal(!installed, "Cannot install callback twice\n");
   installed = true;
+  for (int aarx = 0; aarx < MAX_NUM_ANTENNAS; aarx++) {
+    prach_config_per_antenna[aarx].section_id = -1;
+    prach_config_per_antenna[aarx].num_prb = -1;
+    prach_config_per_antenna[aarx].start_prb = -1;
+    prach_config_per_antenna[aarx].slot = -1;
+    prach_config_per_antenna[aarx].frame = -1;
+  }
 
   // Represents RX window end
   const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
@@ -295,8 +380,117 @@ void install_symbol_callback(void* handle, int callbacks_per_slot, int mu)
     args.symbol_diff = symbol_offset;
     start_symbol += symbols_per_callback;
   }
-  circular_buffer_init(&dl_iq_buffer, 4, 10 << mu, 14, 275 * 12);
+  circular_buffer_init(&dl_iq_buffer, MAX_NUM_ANTENNAS, 10 << mu, 14, 275 * 12);
   iq_worker_init();
 
   xran_hook_install(handle, process_ru_uplane, NULL, process_ru_cplane, NULL, symbol_callback, &args, mu);
+}
+
+extern void *xran_ethdi_mbuf_alloc(void);
+
+void fill_ecpri_header(struct xran_ecpri_hdr *ecpri_header,
+                       uint8_t ecpri_mesg_type,
+                       size_t ecpri_payload_size,
+                       uint8_t CC_ID,
+                       uint8_t Ant_ID,
+                       uint8_t seq_id,
+                       uint8_t oxu_port_id)
+{
+  ecpri_header->cmnhdr.data.data_num_1 = 0x0;
+  ecpri_header->cmnhdr.bits.ecpri_ver = XRAN_ECPRI_VER;
+  ecpri_header->cmnhdr.bits.ecpri_mesg_type = ecpri_mesg_type;
+  ecpri_header->cmnhdr.bits.ecpri_payl_size = rte_cpu_to_be_16(ecpri_payload_size);
+  ecpri_header->ecpri_xtc_id = xran_compose_cid(oxu_port_id, 0, 0, CC_ID, Ant_ID);
+  ecpri_header->ecpri_seq_id.bits.seq_id = seq_id;
+  ecpri_header->ecpri_seq_id.bits.e_bit = 1;
+  ecpri_header->ecpri_seq_id.bits.sub_seq_id = 0;
+  /// No byteswap for ecpri_seq_id. Possibly because of inverse definition in xran
+}
+
+void fill_radio_app_header(struct radio_app_common_hdr *radio_app_header,
+                           int filter_id,
+                           int direction,
+                           int frame,
+                           int slot,
+                           int symbol,
+                           int mu)
+{
+  radio_app_header->frame_id = frame & 0xff;
+  radio_app_header->sf_slot_sym.slot_id = slot % (1 << mu);
+  radio_app_header->sf_slot_sym.subframe_id = slot / (1 << mu);
+  radio_app_header->sf_slot_sym.symb_id = symbol;
+  radio_app_header->sf_slot_sym.value = rte_cpu_to_be_16(radio_app_header->sf_slot_sym.value);
+  radio_app_header->data_feature.data_direction = direction;
+  radio_app_header->data_feature.payl_ver = 1;
+  radio_app_header->data_feature.filter_id = filter_id;
+}
+
+void fill_data_section_header(struct data_section_hdr *data_section_hdr, int num_prb, int start_prb, int section_id)
+{
+  data_section_hdr->fields.all_bits = 0;
+  data_section_hdr->fields.num_prbu = (uint8_t)XRAN_CONVERT_NUMPRBC(num_prb);
+  data_section_hdr->fields.start_prbu = (start_prb & 0x03ff);
+  data_section_hdr->fields.sect_id = section_id;
+  data_section_hdr->fields.all_bits = rte_cpu_to_be_32(data_section_hdr->fields.all_bits);
+}
+
+void xran_oru_send_prach(uint32_t *prachF, int aarx, int frame, int slot, int symbol)
+{
+  const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
+  uint8_t mu = fh_cfg->mu_number[0];
+
+  AssertFatal(fh_cfg->ru_conf.compMeth_PRACH == XRAN_COMPMETHOD_NONE, "Compression not supported\n");
+  // TODO: With compression, have to add compression header to header_len
+  size_t header_length = sizeof(struct xran_ecpri_hdr) + sizeof(struct radio_app_common_hdr) + sizeof(struct data_section_hdr);
+
+  // TODO: For compression, have to re-evaluate data size;
+  // TODO: Only support short format PRACH
+  const uint prach_length = 139;
+  size_t data_len = sizeof(int32_t) * prach_length;
+  
+  oran_prach_cplane_config_t *prach_config = &prach_config_per_antenna[aarx];
+  if (prach_config->section_id == -1) {
+    RATE_LIMIT(1000)
+      LOG_W(HW, "PRACH was not yet configured by the O-DU\n");
+    return;
+  }
+  if (prach_config->frame != (frame & 0xff) || prach_config->slot != slot) {
+    RATE_LIMIT(1000)
+      LOG_W(HW,
+            "PRACH was not configured for frame.slot %d.%d, configuration is for frame.slot %d.%d\n",
+            frame,
+            slot,
+            prach_config->frame,
+            prach_config->slot);
+    return;
+  }
+
+  struct rte_mbuf *mbuf = xran_ethdi_mbuf_alloc();
+  AssertFatal(mbuf != NULL, "out of mbufs\n");
+  char *buf = rte_pktmbuf_append(mbuf, header_length + data_len);
+  AssertFatal(buf, "incorrect mbuf size\n");
+
+  struct xran_ecpri_hdr *ecpri_header = (struct xran_ecpri_hdr *)rte_pktmbuf_mtod(mbuf, char *);
+  uint16_t ecpri_payload_size = xran_get_ecpri_hdr_size() + sizeof(struct radio_app_common_hdr) + sizeof(struct data_section_hdr) + data_len;
+  fill_ecpri_header(ecpri_header, ECPRI_IQ_DATA, ecpri_payload_size, 0, aarx + fh_cfg->perMu[mu].prach_conf.prachEaxcOffset, prach_seq_id[aarx]++, 0);
+
+  struct radio_app_common_hdr *radio_app_header = (struct radio_app_common_hdr *)(ecpri_header + 1);
+  fill_radio_app_header(radio_app_header, prach_config->filter_id, XRAN_DIR_UL, frame, slot, symbol, mu);
+
+  struct data_section_hdr *data_section_header = (struct data_section_hdr *)(radio_app_header + 1);
+  fill_data_section_header(data_section_header, prach_config->num_prb, prach_config->start_prb, prach_config->section_id);
+
+  void *iq_data_start = (void *)(data_section_header + 1);
+  int16_t *dest = (int16_t *)iq_data_start;
+  uint16_t *src = (uint16_t *)prachF;
+  for (int i = 0; i < prach_length * 2; i++) {
+    dest[i] = (int16_t)htons(src[i]);
+  }
+
+  buf = rte_pktmbuf_prepend(mbuf, sizeof(struct rte_ether_hdr));
+  AssertFatal(buf != NULL, "incorrect mbuf size\n");
+
+  int vf_id = xran_map_ecpriPcid_to_vf(g_handle, XRAN_DIR_UL, 0, aarx + fh_cfg->perMu[mu].prach_conf.prachEaxcOffset);
+  int ret = xran_ethdi_mbuf_send(mbuf, ETHER_TYPE_ECPRI, vf_id);
+  AssertFatal(ret == 1, "Error sending mbuf\n");
 }
