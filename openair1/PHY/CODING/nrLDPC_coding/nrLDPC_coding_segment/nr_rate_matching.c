@@ -527,7 +527,6 @@ void nr_interleaving_ldpc32(uint32_t E, uint8_t Qm, uint32_t *e, uint32_t *f)
         *f++ = *e3++;
         *f++ = *e4++;
         *f++ = *e5++;
-	i++;
       }
     } break;
     case 8: {
@@ -666,13 +665,13 @@ static inline uint8x16_t tbl96_u8(uint8x16_t b0, uint8x16_t b1, uint8x16_t b2,
                                   uint8x16_t idx /* 0..95 */)
 {
    // Table 0: bytes 0..63
-   uint8x16x4_t T0 = { b0, b1, b2, b3 };
+   uint8x16x4_t T0 = {{ b0, b1, b2, b3 }};
    uint8x16_t r0 = vqtbl4q_u8(T0, idx);
 
    // Table 1: bytes 64..95, presented as a 64-byte table:
    // bytes 0..31 map to original 64..95, bytes 32..63 are dummy (return 0)
    uint8x16_t z = vdupq_n_u8(0);
-   uint8x16x4_t T1 = { b4, b5, z, z };
+   uint8x16x4_t T1 = {{ b4, b5, z, z }};
 
    // idx1 = idx - 64 (wrap-safe via unsigned subtract); only valid when idx>=64
    uint8x16_t idx1 = vsubq_u8(idx, vdupq_n_u8(64));
@@ -688,11 +687,11 @@ static inline uint8x16_t tbl128_u8(uint8x16_t b0, uint8x16_t b1, uint8x16_t b2, 
 	                           uint8x16_t idx /* 0..127 */)
 {
   // Table low: bytes 0..63
-     uint8x16x4_t T0 = { b0, b1, b2, b3 };
+     uint8x16x4_t T0 = {{ b0, b1, b2, b3 }};
      uint8x16_t r0 = vqtbl4q_u8(T0, idx);
 
  // Table high: bytes 64..127, mapped to 0..63 by subtracting 64
-     uint8x16x4_t T1 = { b4, b5, b6, b7 };
+     uint8x16x4_t T1 = {{ b4, b5, b6, b7 }};
      uint8x16_t idx1 = vsubq_u8(idx, vdupq_n_u8(64));
      uint8x16_t r1 = vqtbl4q_u8(T1, idx1);
 
