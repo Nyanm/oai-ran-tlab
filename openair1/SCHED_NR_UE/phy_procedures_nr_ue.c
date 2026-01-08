@@ -628,12 +628,13 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
 
     const uint32_t rx_size_symbol = (freq_alloc.num_rbs * NR_NB_SC_PER_RB + 15) & ~15;
     fourDimArray_t *toFree2 = NULL;
-    allocCast3D(rxdataF_comp,
+    allocCast4D(rxdataF_comp,
                 int32_t,
                 toFree2,
+                NR_SYMBOLS_PER_SLOT,
                 dlsch[0].Nl,
                 ue->frame_parms.nb_antennas_rx,
-                rx_size_symbol * NR_SYMBOLS_PER_SLOT,
+                rx_size_symbol,
                 false);
 
     uint32_t nvar = 0;
