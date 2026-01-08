@@ -66,7 +66,7 @@ static inline c16_t saturating_sub(c16_t a, c16_t b)
 //----------------------------------------------------------------------------------------------
 // QPSK
 //----------------------------------------------------------------------------------------------
-void nr_qpsk_llr(int32_t *rxdataF_comp, int16_t *llr, uint32_t nb_re)
+void nr_qpsk_llr(const int32_t *rxdataF_comp, int16_t *llr, uint32_t nb_re)
 {
   c16_t *rxF   = (c16_t *)rxdataF_comp;
   c16_t *llr32 = (c16_t *)llr;
@@ -80,7 +80,7 @@ void nr_qpsk_llr(int32_t *rxdataF_comp, int16_t *llr, uint32_t nb_re)
 // 16-QAM
 //----------------------------------------------------------------------------------------------
 
-void nr_16qam_llr(int32_t *rxdataF_comp, c16_t *ch_mag_in, int16_t *llr, uint32_t nb_re)
+void nr_16qam_llr(const int32_t *rxdataF_comp, const c16_t *ch_mag_in, int16_t *llr, uint32_t nb_re)
 {
   simde__m256i *rxF_256 = (simde__m256i *)rxdataF_comp;
   simde__m256i *ch_mag256 = (simde__m256i *)ch_mag_in;
@@ -148,7 +148,7 @@ void nr_16qam_llr(int32_t *rxdataF_comp, c16_t *ch_mag_in, int16_t *llr, uint32_
 // 64-QAM
 //----------------------------------------------------------------------------------------------
 
-void nr_64qam_llr(int32_t *rxdataF_comp, c16_t *ch_mag, c16_t *ch_mag2, int16_t *llr, uint32_t nb_re)
+void nr_64qam_llr(const int32_t *rxdataF_comp, const c16_t *ch_mag, const c16_t *ch_mag2, int16_t *llr, uint32_t nb_re)
 {
   simde__m256i *rxF = (simde__m256i *)rxdataF_comp;
 
@@ -251,7 +251,7 @@ void nr_64qam_llr(int32_t *rxdataF_comp, c16_t *ch_mag, c16_t *ch_mag2, int16_t 
   }
 }
 
-void nr_256qam_llr(int32_t *rxdataF_comp, c16_t *ch_mag, c16_t *ch_mag2, c16_t *ch_mag3, int16_t *llr, uint32_t nb_re)
+void nr_256qam_llr(const int32_t *rxdataF_comp, const c16_t *ch_mag, const c16_t *ch_mag2, const c16_t *ch_mag3, int16_t *llr, uint32_t nb_re)
 {
   simde__m256i *rxF_256 = (simde__m256i *)rxdataF_comp;
   simde__m256i *llr256 = (simde__m256i *)llr;

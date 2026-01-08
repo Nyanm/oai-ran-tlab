@@ -909,80 +909,83 @@ static void nr_dlsch_mmse(uint32_t rx_size_symbol,
   }
 }
 
-static void nr_dlsch_layer_demapping(int16_t *llr_cw[2],
-                                     uint8_t Nl,
-                                     uint8_t mod_order,
-                                     uint32_t length,
-                                     int32_t codeword_TB0,
-                                     int32_t codeword_TB1,
-                                     uint sz,
-                                     int16_t llr_layers[][sz])
+static void nr_dlsch_layer_demapping(const uint8_t Nl,
+                                     const uint8_t mod_order,
+                                     const int llrLayerSize,
+                                     const int16_t llr_layers[NR_SYMBOLS_PER_SLOT][Nl][llrLayerSize],
+                                     const NR_UE_DLSCH_t *dlsch,
+                                     const uint32_t re_len[NR_SYMBOLS_PER_SLOT],
+                                     int16_t *llr)
 {
+  const int s0 = dlsch->dlsch_config.start_symbol;
+  const int s1 = dlsch->dlsch_config.number_symbols;
+
+  int k = 0;
   switch (Nl) {
     case 1:
-      if (codeword_TB1 == -1)
-        memcpy(llr_cw[0], llr_layers[0], (length)*sizeof(int16_t));
-      else if (codeword_TB0 == -1)
-        memcpy(llr_cw[1], llr_layers[0], (length)*sizeof(int16_t));
-
-    break;
+      for (int i = s0; i < (s0 + s1); i++) {
+        memcpy(llr + k, llr_layers[i][0], re_len[i] * mod_order * sizeof(int16_t));
+        k += re_len[i] * mod_order;
+      }
+      break;
 
     case 2:
     case 3:
     case 4:
-      for (int i=0; i<(length/Nl/mod_order); i++){
-        for (int l=0; l<Nl; l++) {
-          for (int m=0; m<mod_order; m++){
-            if (codeword_TB1 == -1)
-              llr_cw[0][Nl*mod_order*i+l*mod_order+m] = llr_layers[l][i*mod_order+m];//i:0 -->0 1 2 3
-            else if (codeword_TB0 == -1)
-              llr_cw[1][Nl*mod_order*i+l*mod_order+m] = llr_layers[l][i*mod_order+m];//i:0 -->0 1 2 3
-            //if (i<4) printf("length%d: llr_layers[l%d][m%d]=%d: \n",length,l,m,llr_layers[l][i*mod_order+m]);
-            }
+      for (int i = s0; i < (s0 + s1); i++) {
+        int m = 0;
+        for (int j = 0; j < re_len[i]; j++) {
+          for (int l = 0; l < Nl; l++) {
+            memcpy(llr + k, llr_layers[i][l] + m * mod_order, sizeof(int16_t) * mod_order);
+            k += mod_order;
+            // if (i<4) printf("length%d: llr_layers[l%d][m%d]=%d: \n",length,l,m,llr_layers[l][i*mod_order+m]);
           }
+          m++;
         }
-    break;
+      }
+      break;
 
-  default:
-  AssertFatal(0, "Not supported number of layers %d\n", Nl);
+    default:
+      AssertFatal(0, "Not supported number of layers %d\n", Nl);
   }
 }
 
-static void nr_dlsch_llr(uint32_t rx_size_symbol,
-                         int nbRx,
-                         uint sz,
-                         int nl,
-                         int16_t layer_llr[][sz],
-                         int32_t rxdataF_comp[][nl][nbRx][rx_size_symbol],
-                         c16_t dl_ch_mag[rx_size_symbol],
-                         c16_t dl_ch_magb[rx_size_symbol],
-                         c16_t dl_ch_magr[rx_size_symbol],
-                         NR_DL_UE_HARQ_t *dlsch0_harq,
-                         NR_DL_UE_HARQ_t *dlsch1_harq,
-                         unsigned char symbol,
-                         uint32_t len,
-                         NR_UE_DLSCH_t dlsch[2],
-                         uint32_t llr_offset_symbol)
+/* Computes LLRs from compensated PDSCH signal per OFDM symbol for all layers */
+static int nr_dlsch_llr(const NR_UE_DLSCH_t *dlsch,
+                        const int len,
+                        const int rx_size_symbol,
+                        const c16_t dl_ch_mag[rx_size_symbol],
+                        const c16_t dl_ch_magb[rx_size_symbol],
+                        const c16_t dl_ch_magr[rx_size_symbol],
+                        const int nb_antennas_rx,
+                        const int32_t rxdataF_comp[dlsch->Nl][nb_antennas_rx][rx_size_symbol],
+                        const int llrSize,
+                        int16_t layer_llr[dlsch->Nl][llrSize])
 {
-  switch (dlsch[0].dlsch_config.qamModOrder) {
+  switch (dlsch->dlsch_config.qamModOrder) {
     case 2 :
-      for(int l = 0; l < dlsch[0].Nl; l++)
-        nr_qpsk_llr(&rxdataF_comp[symbol][l][0][0], layer_llr[l] + llr_offset_symbol, len);
+      for (int l = 0; l < dlsch[0].Nl; l++)
+        nr_qpsk_llr(rxdataF_comp[l][0], layer_llr[l], len);
       break;
 
     case 4 :
-      for(int l = 0; l < dlsch[0].Nl; l++)
-        nr_16qam_llr(&rxdataF_comp[symbol][l][0][0], dl_ch_mag, layer_llr[l] + llr_offset_symbol, len);
+      for (int l = 0; l < dlsch[0].Nl; l++)
+        nr_16qam_llr(rxdataF_comp[l][0], dl_ch_mag, layer_llr[l], len);
       break;
 
     case 6 :
       for(int l=0; l < dlsch[0].Nl; l++)
-        nr_64qam_llr(&rxdataF_comp[symbol][l][0][0], dl_ch_mag, dl_ch_magb, layer_llr[l] + llr_offset_symbol, len);
+        nr_64qam_llr(rxdataF_comp[l][0], dl_ch_mag, dl_ch_magb, layer_llr[l], len);
       break;
 
     case 8:
       for(int l=0; l < dlsch[0].Nl; l++)
-        nr_256qam_llr(&rxdataF_comp[symbol][l][0][0], dl_ch_mag, dl_ch_magb, dl_ch_magr, layer_llr[l] + llr_offset_symbol, len);
+        nr_256qam_llr(rxdataF_comp[l][0],
+                      dl_ch_mag,
+                      dl_ch_magb,
+                      dl_ch_magr,
+                      layer_llr[l],
+                      len);
       break;
 
     default:
@@ -990,30 +993,7 @@ static void nr_dlsch_llr(uint32_t rx_size_symbol,
       break;
   }
 
-  //TODO: Revisited for Nl>4
-  if (dlsch1_harq) {
-    switch (dlsch[1].dlsch_config.qamModOrder) {
-      case 2 :
-        nr_qpsk_llr(&rxdataF_comp[symbol][0][0][0], layer_llr[0] + llr_offset_symbol, len);
-        break;
-
-      case 4:
-        nr_16qam_llr(&rxdataF_comp[symbol][0][0][0], dl_ch_mag, layer_llr[0] + llr_offset_symbol, len);
-        break;
-
-      case 6 :
-        nr_64qam_llr(&rxdataF_comp[symbol][0][0][0], dl_ch_mag, dl_ch_magb, layer_llr[0] + llr_offset_symbol, len);
-        break;
-
-      case 8 :
-        nr_256qam_llr(&rxdataF_comp[symbol][0][0][0], dl_ch_mag, dl_ch_magb, dl_ch_magr, layer_llr[0] + llr_offset_symbol, len);
-        break;
-
-      default:
-        AssertFatal(false, "Unknown mod_order!!!!\n");
-        break;
-    }
-  }
+  return 0;
 }
 //==============================================================================================
 
@@ -1030,7 +1010,6 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                 int16_t *llr[2],
                 uint32_t dl_valid_re[NR_SYMBOLS_PER_SLOT],
                 c16_t rxdataF[][ue->frame_parms.samples_per_slot_wCP],
-                uint32_t llr_offset[NR_SYMBOLS_PER_SLOT],
                 int32_t *log2_maxh,
                 int rx_size_symbol,
                 int nbRx,
@@ -1422,40 +1401,31 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                              dlsch);
     dl_valid_re[symbol] -= ptrs_re_per_slot[0][symbol];
   }
-  if (symbol < startSymbIdx + nbSymb - 1) // up to the penultimate symbol
-    llr_offset[symbol + 1] = dl_valid_re[symbol] * dlsch_config->qamModOrder + llr_offset[symbol];
   /* at last symbol in a slot calculate LLR's for whole slot */
   if (symbol == (startSymbIdx + nbSymb - 1)) {
-    const uint32_t rx_llr_layer_size = (G + dlsch[0].Nl - 1) / dlsch[0].Nl;
-
-    if (dlsch[0].Nl == 0 || rx_llr_layer_size == 0 || rx_llr_layer_size > 10 * 1000 * 1000) {
-      LOG_E(PHY, "rx_llr_layer_size %d, G %d, Nl, %d, discarding this pdsch\n", rx_llr_layer_size, G, dlsch[0].Nl);
-      return -1;
-    }
-    __attribute__((aligned(32))) int16_t layer_llr[dlsch[0].Nl][rx_llr_layer_size];
+    /* create LLR layer buffer */
+    int max_symb_re = 0;
+    GET_ARRAY_MAX(dl_valid_re, NR_SYMBOLS_PER_SLOT, max_symb_re);
+    const int llr_per_symbol = max_symb_re * dlsch->dlsch_config.qamModOrder;
+    __attribute__((aligned(32))) int16_t layer_llr[NR_SYMBOLS_PER_SLOT][nl][llr_per_symbol];
 
     // Generate LLR from PTRS compensated signal
     start_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
     for (int llr_sym = startSymbIdx; llr_sym < startSymbIdx + nbSymb; llr_sym++) {
-      nr_dlsch_llr(rx_size_symbol,
-                  nbRx,
-                  rx_llr_layer_size,
-                  nl,
-                  layer_llr,
-                  rxdataF_comp,
-                  dl_ch_mag[llr_sym][0][0],
-                  dl_ch_magb[llr_sym][0][0],
-                  dl_ch_magr[llr_sym][0][0],
-                  dlsch0_harq,
-                  dlsch1_harq,
-                  llr_sym,
-                  dl_valid_re[llr_sym],
-                  dlsch,
-                  llr_offset[llr_sym]);
+      nr_dlsch_llr(dlsch,
+                   dl_valid_re[llr_sym],
+                   rx_size_symbol,
+                   dl_ch_mag[llr_sym][0][0],
+                   dl_ch_magb[llr_sym][0][0],
+                   dl_ch_magr[llr_sym][0][0],
+                   n_rx,
+                   rxdataF_comp[llr_sym],
+                   llr_per_symbol,
+                   layer_llr[llr_sym]);
     }
     stop_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
     start_meas_nr_ue_phy(ue, DLSCH_LAYER_DEMAPPING);
-    nr_dlsch_layer_demapping(llr, dlsch[0].Nl, dlsch_config->qamModOrder, G, codeword_TB0, codeword_TB1, rx_llr_layer_size, layer_llr);
+    nr_dlsch_layer_demapping(nl, dlsch_config->qamModOrder, llr_per_symbol, layer_llr, dlsch, dl_valid_re, llr[0]);
     stop_meas_nr_ue_phy(ue, DLSCH_LAYER_DEMAPPING);
   /*
     for (int i=0; i < 2; i++){
