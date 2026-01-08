@@ -23,7 +23,7 @@ int main(int argc, char *argv[])
 {
   // Default simulation values (Aim for iterations = 1000000.)
   int ret = 1;
-  int decoder_int16 = 0;
+  int decoder_int16 = 1;
   int itr, iterations = 1000, arguments, polarMessageType = 0; // 0=PBCH, 1=DCI, 2=UCI
   double SNRstart = -20.0, SNRstop = 0.0, SNRinc = 0.5; // dB
   double SNR, SNR_lin;
@@ -33,13 +33,14 @@ int main(int argc, char *argv[])
   uint16_t blockErrorCumulative = 0, bitErrorCumulative = 0;
   uint8_t aggregation_level = 8, decoderListSize = 8, logFlag = 0;
   uint16_t rnti = 0;
+  int armral_mode = 1; // default: disabled
 
   if ((uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY)) == 0) {
     exit_fun("[POLARTEST] Error, configuration module init failed\n");
   }
   logInit();
 
-  while ((arguments = getopt(argc, argv, "--:O:s:d:f:m:i:l:a:p:hqgFL:k:")) != -1) {
+  while ((arguments = getopt(argc, argv, "--:O:s:d:f:m:i:l:a:p:hqgFL:k:A:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (arguments == 1 || arguments == '-' || arguments == 'O')
@@ -61,7 +62,7 @@ int main(int argc, char *argv[])
         break;
 
       case 'm':
-        polarMessageType = atoi(optarg);
+        polarMessageType = atof(optarg);
         if (polarMessageType != 0 && polarMessageType != 1 && polarMessageType != 2)
           printf("Illegal polar message type %d (should be 0,1 or 2)\n", polarMessageType);
         break;
@@ -113,6 +114,11 @@ int main(int argc, char *argv[])
             "-L aggregation level (for DCI)\n-k packet_length (bits) for DCI/UCI\n");
         exit(-1);
         break;
+
+      case 'A':
+        armral_mode = atoi(optarg);
+        break;
+
 
       default:
         perror("[polartest.c] Problem at argument parsing with getopt");
@@ -260,7 +266,7 @@ int main(int argc, char *argv[])
 
       start_meas(&timeEncoder);
       if (decoder_int16 == 1) {
-        polar_encoder_fast((uint64_t *)testInput, encoderOutput, 0, 0, polarMessageType, testLength, aggregation_level);
+        polar_encoder_fast((uint64_t *)testInput, encoderOutput, 0, 0, polarMessageType, testLength, aggregation_level,armral_mode);
         // polar_encoder_fast((uint64_t*)testInput, (uint64_t*)encoderOutput,0,0,currentPtr);
       } else { // 0 --> PBCH, 1 --> DCI, -1 --> UCI
         if (polarMessageType == 0)
@@ -305,7 +311,8 @@ int main(int argc, char *argv[])
                                            0,
                                            polarMessageType,
                                            testLength,
-                                           aggregation_level);
+                                           aggregation_level,
+                                           armral_mode);
       } else { // 0 --> PBCH, 1 --> DCI, -1 --> UCI
         if (polarMessageType == 0) {
           decoderState =

@@ -2,3 +2,6 @@
 	path = openair2/E2AP/flexric
 	url = https://gitlab.eurecom.fr/mosaic5g/flexric.git
 	branch = remotes/origin/service-models-integration
+[submodule "openair1/armRAL_PHY/ral"]
+	path = openair1/armRAL_PHY/ral
+	url = https://gitlab.arm.com/networking/ral/

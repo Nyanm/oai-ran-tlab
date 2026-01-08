@@ -146,7 +146,8 @@ void polar_encoder_fast(uint64_t *A,
                         uint8_t ones_flag,
                         int8_t messageType,
                         uint16_t messageLength,
-                        uint8_t aggregation_level);
+                        uint8_t aggregation_level,
+                        int armral_mode);
 
 int8_t polar_decoder(double *input,
                      uint32_t *output,
@@ -160,7 +161,8 @@ uint32_t polar_decoder_int16(int16_t *input,
                              uint8_t ones_flag,
                              int8_t messageType,
                              uint16_t messageLength,
-                             uint8_t aggregation_level);
+                             uint8_t aggregation_level,
+                             int armral_mode);
 
 int8_t polar_decoder_dci(double *input,
                          uint32_t *out,

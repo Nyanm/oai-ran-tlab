@@ -12,7 +12,7 @@ data storage. */
 #include<complex.h>
 #include <stdlib.h>
 #include <linux/version.h>
-#if defined RHEL_RELEASE_CODE
+#if 0
 #include <cblas/cblas.h>
 #else
 #include <cblas.h>

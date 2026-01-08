@@ -208,7 +208,8 @@ int nr_rx_psbch(PHY_VARS_NR_UE *ue,
                                      0,
                                      SL_NR_POLAR_PSBCH_MESSAGE_TYPE,
                                      SL_NR_POLAR_PSBCH_PAYLOAD_BITS,
-                                     SL_NR_POLAR_PSBCH_AGGREGATION_LEVEL);
+                                     SL_NR_POLAR_PSBCH_AGGREGATION_LEVEL,
+                                     0);
 
   uint32_t psbch_payload = tmp;
 

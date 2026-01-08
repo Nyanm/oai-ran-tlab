@@ -1047,15 +1047,37 @@ target_include_directories(PHY_UE PRIVATE ${blas_INCLUDE_DIRS} ${lapacke_INCLUDE
 add_library(PHY_NR_COMMON ${PHY_NR_SRC_COMMON})
 target_link_libraries(PHY_NR_COMMON PUBLIC UTIL)
 
+# armral :
+
+add_library(armral SHARED IMPORTED)
+set_target_properties(armral PROPERTIES
+  IMPORTED_LOCATION "${OPENAIR1_DIR}/armRAL_PHY/ral/build/libarmral.so"
+)
+
+add_library(armral_utils SHARED IMPORTED)
+set_target_properties(armral_utils PROPERTIES
+  IMPORTED_LOCATION "${OPENAIR1_DIR}/armRAL_PHY/ral/build/libarmral_utils.so"
+)
+
+##################################
+
 add_library(PHY_NR ${PHY_NR_SRC})
-target_link_libraries(PHY_NR nr_phy_common nr_common nr_fapi_p5)
+#target_link_libraries(PHY_NR nr_phy_common nr_common nr_fapi_p5)
+target_include_directories(PHY_NR PRIVATE
+  "${OPENAIR1_DIR}/armRAL_PHY/ral/include"
+)
+
+target_link_libraries(PHY_NR PRIVATE nr_phy_common nr_common nr_fapi_p5 armral armral_utils)
+
+#############################
 
 add_library(PHY_NR_NO_AVX_256 ${PHY_NR_SRC})
 target_link_libraries(PHY_NR_NO_AVX_256 nr_phy_common nr_common)
 target_compile_definitions(PHY_NR_NO_AVX_256 PUBLIC USE_128BIT)
 
 add_library(PHY_NR_UE ${PHY_NR_UE_SRC})
-target_link_libraries(PHY_NR_UE PRIVATE asn1_nr_rrc_hdrs nr_phy_common nr_common UTIL)
+target_link_libraries(PHY_NR_UE PRIVATE asn1_nr_rrc_hdrs nr_phy_common nr_common UTIL armral armral_utils)
+target_include_directories(PHY_NR_UE PRIVATE ${OPENAIR1_DIR}/armRAL_PHY/ral/include)
 
 add_library(PHY_RU ${PHY_SRC_RU})
 target_link_libraries(PHY_RU PRIVATE asn1_lte_rrc_hdrs UTIL)
@@ -1925,6 +1947,20 @@ add_executable(rftest
 target_link_libraries(rftest PRIVATE minimal_lib PHY_NR_COMMON UTIL forms pthread dl m ${T_LIB} shlib_loader)
 target_link_libraries(rftest PRIVATE asn1_lte_rrc_hdrs asn1_nr_rrc_hdrs)
 
+
+# armral:
+
+#include_directories("${OPENAIR1_DIR}/armRAL_PHY/ral/include")
+
+#add_library(armral SHARED IMPORTED)
+#set_target_properties(armral PROPERTIES
+#    IMPORTED_LOCATION "${OPENAIR1_DIR}/armRAL_PHY/ral/build/libarmral.so"
+#)
+#add_library(armral_utils SHARED IMPORTED)
+#set_target_properties(armral_utils PROPERTIES
+#    IMPORTED_LOCATION "${OPENAIR1_DIR}/armRAL_PHY/ral/build/libarmral_utils.so"
+#)
+###############################
 add_executable(polartest
   ${OPENAIR1_DIR}/PHY/CODING/TESTBENCH/polartest.c
   )

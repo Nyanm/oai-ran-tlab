@@ -295,7 +295,8 @@ void nr_generate_pbch(PHY_VARS_gNB *gNB,
                      0,
                      NR_POLAR_PBCH_MESSAGE_TYPE,
                      NR_POLAR_PBCH_PAYLOAD_BITS,
-                     NR_POLAR_PBCH_AGGREGATION_LEVEL);
+                     NR_POLAR_PBCH_AGGREGATION_LEVEL,
+                     0);
 
 #ifdef DEBUG_PBCH_ENCODING
   printf("Channel coding:\n");

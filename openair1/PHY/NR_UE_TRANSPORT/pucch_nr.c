@@ -702,7 +702,8 @@ void nr_uci_encoding(uint64_t payload, uint8_t nr_bit, uint8_t nrofPRB, bool uci
     polar_encoder_fast(&payload, b, 0,0,
                        NR_POLAR_UCI_PUCCH_MESSAGE_TYPE, 
                        A, 
-                       nrofPRB);
+                       nrofPRB,
+                       0);
   }
 
   if (uci_on_pusch) {

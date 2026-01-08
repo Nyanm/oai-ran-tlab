@@ -184,7 +184,8 @@ void sl_generate_and_map_psbch(c16_t *txF,
                      0,
                      SL_NR_POLAR_PSBCH_MESSAGE_TYPE,
                      SL_NR_POLAR_PSBCH_PAYLOAD_BITS,
-                     SL_NR_POLAR_PSBCH_AGGREGATION_LEVEL);
+                     SL_NR_POLAR_PSBCH_AGGREGATION_LEVEL,
+                     0);
 
 #ifdef SL_DEBUG
   for (int i = 0; i < SL_NR_POLAR_PSBCH_E_DWORD; i++)

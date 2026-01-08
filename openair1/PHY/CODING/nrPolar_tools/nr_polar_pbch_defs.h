@@ -43,7 +43,7 @@
 
 // Sec. 7.1.4: Channel Coding
 #define NR_POLAR_PBCH_N_MAX 9 // uint8_t
-#define NR_POLAR_PBCH_I_IL 1 // uint8_t
+#define NR_POLAR_PBCH_I_IL 0 // uint8_t
 #define NR_POLAR_PBCH_I_SEG 0 // uint8_t
 #define NR_POLAR_PBCH_N_PC 0 // uint8_t
 #define NR_POLAR_PBCH_N_PC_WM 0 // uint8_t

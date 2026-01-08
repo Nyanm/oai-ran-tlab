@@ -619,7 +619,7 @@ static void nr_dci_decoding_procedure(PHY_VARS_NR_UE *ue,
                             rel15->coreset.pdcch_dmrs_scrambling_id,
                             tmp_e);
 
-      const uint32_t crc = polar_decoder_int16(tmp_e, dci_estimation, 1, NR_POLAR_DCI_MESSAGE_TYPE, dci_length, L);
+      const uint32_t crc = polar_decoder_int16(tmp_e, dci_estimation, 1, NR_POLAR_DCI_MESSAGE_TYPE, dci_length, L,0);
 
       rnti_t n_rnti = rel15->rnti;
       if (crc == n_rnti) {
