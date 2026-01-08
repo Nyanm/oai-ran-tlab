@@ -407,13 +407,13 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
 {
   int nbTasks = 0;
 
-  nrLDPC_slot_encoding_parameters->use_gpu = 0;
+  //nrLDPC_slot_encoding_parameters->use_gpu = 0;
   uint32_t Emax = 0;
   for (int dlsch_id = 0; dlsch_id < nrLDPC_slot_encoding_parameters->nb_TBs; dlsch_id++) {
     // Compute number of tasks to encode TB
     nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_parameters = &nrLDPC_slot_encoding_parameters->TBs[dlsch_id];
 #if defined(USE_CUDA)     
-    if (nrLDPC_slot_encoding_parameters->use_gpu && nrLDPC_TB_encoding_parameters->C > 8 && nrLDPC_TB_encoding_parameters->Z == 384) {
+    if (nrLDPC_slot_encoding_parameters->use_gpu && nrLDPC_TB_encoding_parameters->BG == 1 && nrLDPC_TB_encoding_parameters->C > 8 && nrLDPC_TB_encoding_parameters->Z == 384) {
         nrLDPC_coding_encoder32(nrLDPC_slot_encoding_parameters,nrLDPC_TB_encoding_parameters);
     }
     else {

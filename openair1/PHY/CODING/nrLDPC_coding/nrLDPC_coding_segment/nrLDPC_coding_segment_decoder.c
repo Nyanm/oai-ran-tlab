@@ -305,7 +305,7 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
 
   for (int r = 0; r < nrLDPC_TB_decoding_parameters->C; r++) {
 #ifdef ENABLE_CUDA
-    if (use_gpu == 1 && decParams.Z >= 128 && decParams.BG == 1 && r==0) {
+    if (use_gpu == 1 && decParams.Z >= 128 && decParams.BG == 1 && nrLDPC_TB_decoding_parameters->segments[0].R < 89 && r==0) {
     // Call CUDA LDPC decoder for all segments
       nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters);
       break;
@@ -343,7 +343,7 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
       task_t t = {.func = &nr_process_decode_segment, .args = rdata};
       pushTpool(nrLDPC_slot_decoding_parameters->threadPool, t);
 
-      LOG_I(PHY, "Added a block to decode, in pipe: %d, rdata->c %p\n", r,rdata->c);
+      LOG_D(PHY, "Added a block to decode, in pipe: %d, rdata->c %p\n", r,rdata->c);
     }
   }
   return nrLDPC_TB_decoding_parameters->C;
