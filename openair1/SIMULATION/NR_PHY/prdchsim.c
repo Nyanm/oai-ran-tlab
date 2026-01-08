@@ -1425,7 +1425,7 @@ int main(int argc, char **argv)
 
   // Fill in channel model default parameters
   channel_model_t channel_model = {
-    .channel_model = AWGN,
+    .channel_model = TDL_A,
     .fc = 897500000, // Carrier frequency n8 band, #50 RB
     .DS_TDL = .03,
     .SNR = 20.0,
