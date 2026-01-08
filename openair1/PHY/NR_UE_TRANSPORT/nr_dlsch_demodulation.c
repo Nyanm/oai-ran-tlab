@@ -77,133 +77,6 @@ unsigned char offset_mumimo_llr_drange[29][3]={{8,8,8},{7,7,7},{7,7,7},{7,7,7},{
 #define print_ints(s,x) printf("%s = %d %d %d %d\n",s,(x)[0],(x)[1],(x)[2],(x)[3])
 #define print_shorts(s,x) printf("%s = [%d+j*%d, %d+j*%d, %d+j*%d, %d+j*%d]\n",s,(x)[0],(x)[1],(x)[2],(x)[3],(x)[4],(x)[5],(x)[6],(x)[7])
 
-/* compute the MMSE up to 4x4 matrices */
-static void nr_dlsch_mmse(uint32_t rx_size_symbol,
-                          unsigned char n_rx,
-                          unsigned char nl, // number of layer
-                          int32_t rxdataF_comp[][n_rx][rx_size_symbol * NR_SYMBOLS_PER_SLOT],
-                          c16_t dl_ch_mag[][n_rx][rx_size_symbol],
-                          c16_t dl_ch_magb[][n_rx][rx_size_symbol],
-                          c16_t dl_ch_magr[][n_rx][rx_size_symbol],
-                          int32_t dl_ch_estimates_ext[][rx_size_symbol],
-                          unsigned short nb_rb,
-                          unsigned char mod_order,
-                          int shift,
-                          unsigned char symbol,
-                          int length,
-                          uint32_t noise_var);
-
-/* Apply layer demapping */
-static void nr_dlsch_layer_demapping(int16_t *llr_cw[2],
-                                     uint8_t Nl,
-                                     uint8_t mod_order,
-                                     uint32_t length,
-                                     int32_t codeword_TB0,
-                                     int32_t codeword_TB1,
-                                     uint sz,
-                                     int16_t llr_layers[][sz]);
-
-/* compute LLR */
-static void nr_dlsch_llr(uint32_t rx_size_symbol,
-                         int nbRx,
-                         uint sz,
-                         int16_t layer_llr[][sz],
-                         int32_t rxdataF_comp[][nbRx][rx_size_symbol * NR_SYMBOLS_PER_SLOT],
-                         c16_t dl_ch_mag[rx_size_symbol],
-                         c16_t dl_ch_magb[rx_size_symbol],
-                         c16_t dl_ch_magr[rx_size_symbol],
-                         NR_DL_UE_HARQ_t *dlsch0_harq,
-                         NR_DL_UE_HARQ_t *dlsch1_harq,
-                         unsigned char symbol,
-                         uint32_t len,
-                         NR_UE_DLSCH_t dlsch[2],
-                         uint32_t llr_offset_symbol);
-
-/** \fn nr_dlsch_extract_rbs
-    \brief This function extracts the received resource blocks, both channel estimates and data symbols,    for the current
-   allocation and for multiple layer antenna gNB transmission.
-    @param rxdataF Raw FFT output of received signal
-    @param dl_ch_estimates Channel estimates of current slot
-    @param rxdataF_ext FFT output for RBs in this allocation
-    @param dl_ch_estimates_ext Channel estimates for RBs in this allocation
-    @param Nl nb of antenna layers
-    @param symbol Symbol to extract
-    @param n_dmrs_cdm_groups
-    @param frame_parms Pointer to frame descriptor
-*/
-static void nr_dlsch_extract_rbs(uint32_t rxdataF_sz,
-                                 c16_t rxdataF[][rxdataF_sz],
-                                 uint32_t rx_size_symbol,
-                                 uint32_t pdsch_est_size,
-                                 int32_t dl_ch_estimates[][pdsch_est_size],
-                                 c16_t rxdataF_ext[][rx_size_symbol],
-                                 int32_t dl_ch_estimates_ext[][rx_size_symbol],
-                                 unsigned char symbol,
-                                 uint8_t pilots,
-                                 uint8_t config_type,
-                                 int startBWP,
-                                 const freq_alloc_bitmap_t *freq_alloc,
-                                 uint8_t n_dmrs_cdm_groups,
-                                 uint8_t Nl,
-                                 NR_DL_FRAME_PARMS *fp,
-                                 uint16_t dlDmrsSymbPos,
-                                 uint32_t csi_res_bitmap,
-                                 int chest_time_type);
-
-static void nr_dlsch_channel_level_median(uint32_t rx_size_symbol,
-                                          int32_t dl_ch_estimates_ext[][rx_size_symbol],
-                                          int32_t median[MAX_ANT][MAX_ANT],
-                                          int n_tx,
-                                          int n_rx,
-                                          int length);
-
-/** \brief This function performs channel compensation (matched filtering) on the received RBs for this allocation.  In addition, it computes the squared-magnitude of the channel with weightings for
-   16QAM/64QAM detection as well as dual-stream detection (cross-correlation)
-    @param rxdataF_ext Frequency-domain received signal in RBs to be demodulated
-    @param dl_ch_estimates_ext Frequency-domain channel estimates in RBs to be demodulated
-    @param dl_ch_mag First Channel magnitudes (16QAM/64QAM)
-    @param dl_ch_magb Second weighted Channel magnitudes (64QAM)
-    @param rxdataF_comp Compensated received waveform
-    @param rho Cross-correlation between two spatial channels on each RX antenna
-    @param frame_parms Pointer to frame descriptor
-    @param symbol Symbol on which to operate
-    @param first_symbol_flag set to 1 on first DLSCH symbol
-    @param mod_order Modulation order of allocation
-    @param nb_rb Number of RBs in allocation
-    @param output_shift Rescaling for compensated output (should be energy-normalizing)
-    @param phy_measurements Pointer to UE PHY measurements
-*/
-
-static void nr_dlsch_channel_compensation(uint32_t rx_size_symbol,
-                                          int nbRx,
-                                          c16_t rxdataF_ext[][rx_size_symbol],
-                                          int32_t dl_ch_estimates_ext[][rx_size_symbol],
-                                          c16_t dl_ch_mag[][nbRx][rx_size_symbol],
-                                          c16_t dl_ch_magb[][nbRx][rx_size_symbol],
-                                          c16_t dl_ch_magr[][nbRx][rx_size_symbol],
-                                          int32_t rxdataF_comp[][nbRx][rx_size_symbol * NR_SYMBOLS_PER_SLOT],
-                                          int ***rho,
-                                          NR_DL_FRAME_PARMS *frame_parms,
-                                          uint8_t n_layers,
-                                          unsigned char symbol,
-                                          int length,
-                                          bool first_symbol_flag,
-                                          unsigned char mod_order,
-                                          unsigned short nb_rb,
-                                          unsigned char output_shift,
-                                          PHY_NR_MEASUREMENTS *measurements);
-
-static void nr_dlsch_detection_mrc(uint32_t rx_size_symbol,
-                                   short nl,
-                                   short n_rx,
-                                   int32_t rxdataF_comp[][n_rx][rx_size_symbol * NR_SYMBOLS_PER_SLOT],
-                                   int ***rho,
-                                   c16_t dl_ch_mag[][n_rx][rx_size_symbol],
-                                   c16_t dl_ch_magb[][n_rx][rx_size_symbol],
-                                   c16_t dl_ch_magr[][n_rx][rx_size_symbol],
-                                   unsigned char symbol,
-                                   int length);
-
 static bool overlap_csi_symbol(fapi_nr_dl_config_csirs_pdu_rel15_t *csi_pdu, int symbol)
 {
   int num_l0 [18] = {1, 1, 1, 1, 2, 1, 2, 2, 1, 2, 2, 2, 2, 2, 4, 2, 2, 4};
@@ -278,504 +151,6 @@ static uint32_t build_csi_overlap_bitmap(fapi_nr_dl_config_dlsch_pdu_rel15_t *dl
       csi_res_bitmap |= (temp_res_map + (temp_res_map << 16));
   }
   return csi_res_bitmap;
-}
-
-/* Main Function */
-int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
-                const UE_nr_rxtx_proc_t *proc,
-                NR_UE_DLSCH_t dlsch[2],
-                const freq_alloc_bitmap_t *freq_alloc,
-                unsigned char symbol,
-                bool first_symbol_flag,
-                unsigned char harq_pid,
-                uint32_t pdsch_est_size,
-                int32_t dl_ch_estimates[][pdsch_est_size],
-                int layer_llr_size,
-                int16_t layer_llr[][layer_llr_size],
-                int16_t *llr[2],
-                uint32_t dl_valid_re[NR_SYMBOLS_PER_SLOT],
-                c16_t rxdataF[][ue->frame_parms.samples_per_slot_wCP],
-                uint32_t llr_offset[NR_SYMBOLS_PER_SLOT],
-                int32_t *log2_maxh,
-                int rx_size_symbol,
-                int nbRx,
-                int32_t rxdataF_comp[][nbRx][rx_size_symbol * NR_SYMBOLS_PER_SLOT],
-                c16_t ptrs_phase_per_slot[][NR_SYMBOLS_PER_SLOT],
-                int32_t ptrs_re_per_slot[][NR_SYMBOLS_PER_SLOT],
-                int G,
-                uint32_t nvar,
-                pdsch_scope_req_t *scope_req)
-{
-  NR_DL_FRAME_PARMS *fp = &ue->frame_parms;
-  const int nl = dlsch[0].Nl;
-  const int n_rx = fp->nb_antennas_rx;
-  const int matrixSz = n_rx * nl;
-  __attribute__((aligned(32))) int32_t dl_ch_estimates_ext[matrixSz][rx_size_symbol];
-  memset(dl_ch_estimates_ext, 0, sizeof(dl_ch_estimates_ext));
-
-  __attribute__((aligned(32))) c16_t dl_ch_mag[nl][n_rx][rx_size_symbol];
-  memset(dl_ch_mag, 0, sizeof(dl_ch_mag));
-
-  __attribute__((aligned(32))) c16_t dl_ch_magb[nl][nbRx][rx_size_symbol];
-  memset(dl_ch_magb, 0, sizeof(dl_ch_magb));
-
-  __attribute__((aligned(32))) c16_t dl_ch_magr[nl][nbRx][rx_size_symbol];
-  memset(dl_ch_magr, 0, sizeof(dl_ch_magr));
-  NR_UE_COMMON *common_vars  = &ue->common_vars;
-  PHY_NR_MEASUREMENTS *measurements = &ue->measurements;
-  const int frame = proc->frame_rx;
-  const int nr_slot_rx = proc->nr_slot_rx;
-  const int gNB_id = proc->gNB_id;
-  uint8_t slot = 0;
-
-  int32_t codeword_TB0 = -1;
-  int32_t codeword_TB1 = -1;
-
-  uint32_t nb_re_pdsch = -1;
-
-  NR_DL_UE_HARQ_t *dlsch0_harq, *dlsch1_harq = NULL;
-  dlsch0_harq = &ue->dl_harq_processes[0][harq_pid];
-  if (NR_MAX_NB_LAYERS>4)
-    dlsch1_harq = &ue->dl_harq_processes[1][harq_pid];
-
-  if (dlsch0_harq && dlsch1_harq){
-
-    LOG_D(PHY,
-          "AbsSubframe %d.%d / Sym %d harq_pid %d, harq status %d.%d \n",
-          frame,
-          nr_slot_rx,
-          symbol,
-          harq_pid,
-          dlsch0_harq->status,
-          dlsch1_harq->status);
-
-    if ((dlsch0_harq->status == ACTIVE) && (dlsch1_harq->status == ACTIVE)){
-      codeword_TB0 = dlsch0_harq->codeword; // SV: where is this set? revisit for DL MIMO.
-      codeword_TB1 = dlsch1_harq->codeword;
-      dlsch0_harq = &ue->dl_harq_processes[codeword_TB0][harq_pid];
-      dlsch1_harq = &ue->dl_harq_processes[codeword_TB1][harq_pid];
-
-      DEBUG_HARQ("[DEMOD] I am assuming both TBs are active, in cw0 %d and cw1 %d \n", codeword_TB0, codeword_TB1);
-
-    } else if ((dlsch0_harq->status == ACTIVE) && (dlsch1_harq->status != ACTIVE) ) {
-      codeword_TB0 = dlsch0_harq->codeword;
-      dlsch0_harq = &ue->dl_harq_processes[codeword_TB0][harq_pid];
-      dlsch1_harq = NULL;
-
-      DEBUG_HARQ("[DEMOD] I am assuming only TB0 is active, in cw %d \n", codeword_TB0);
-
-    } else if ((dlsch0_harq->status != ACTIVE) && (dlsch1_harq->status == ACTIVE)){
-      codeword_TB1 = dlsch1_harq->codeword;
-      dlsch0_harq  = NULL;
-      dlsch1_harq  = &ue->dl_harq_processes[codeword_TB1][harq_pid];
-
-      DEBUG_HARQ("[DEMOD] I am assuming only TB1 is active, it is in cw %d\n", codeword_TB1);
-      LOG_E(PHY, "[DEMOD] slot %d TB0 not active and TB1 active case is not supported\n", nr_slot_rx);
-      return -1;
-
-    } else {
-      LOG_E(PHY, "[DEMOD] slot %d: no active DLSCH (2 layers case)\n", nr_slot_rx);
-      return (-1);
-    }
-  } else if (dlsch0_harq) {
-    if (dlsch0_harq->status == ACTIVE) {
-      codeword_TB0 = dlsch0_harq->codeword;
-      dlsch0_harq = &ue->dl_harq_processes[0][harq_pid];
-      DEBUG_HARQ("[DEMOD] I am assuming only TB0 is active\n");
-    } else {
-      LOG_E(PHY, "[DEMOD] slot %d nr_rx_pdsch no active DLSCH (one layer case)\n", nr_slot_rx);
-      return (-1);
-    }
-  } else {
-    LOG_E(PHY, "[DEMOD] slot %d Inconsistent call to nr_rx_pdsch (no layer 0)\n", nr_slot_rx);
-    return -1;
-  }
-
-  DEBUG_HARQ("[DEMOD] cw for TB0 = %d, cw for TB1 = %d\n", codeword_TB0, codeword_TB1);
-  fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_config = &dlsch[0].dlsch_config;
-  DevAssert(dlsch0_harq);
-
-  if (gNB_id > 2) {
-    LOG_E(PHY, "Illegal gNB_id %d\n", gNB_id);
-    return(-1);
-  }
-
-  if (!common_vars) {
-    LOG_E(PHY, "dlsch_demodulation.c: Null common_vars\n");
-    return(-1);
-  }
-
-  if(symbol > fp->symbols_per_slot >> 1)
-    slot = 1;
-
-  uint8_t pilots = (dlsch_config->dlDmrsSymbPos >> symbol) & 1;
-  uint8_t config_type = dlsch_config->dmrsConfigType;
-  //----------------------------------------------------------
-  //--------------------- RBs extraction ---------------------
-  //----------------------------------------------------------
-  const bool meas_enabled = cpumeas(CPUMEAS_GETSTATE);
-  int nb_rb_pdsch = freq_alloc->num_rbs;
-  {
-    start_meas_nr_ue_phy(ue, DLSCH_EXTRACT_RBS_STATS);
-    __attribute__((aligned(32))) c16_t rxdataF_ext[nbRx][rx_size_symbol];
-    memset(rxdataF_ext, 0, sizeof(rxdataF_ext));
-
-    uint32_t csi_res_bitmap = build_csi_overlap_bitmap(dlsch_config, symbol);
-
-    LOG_D(PHY, "%d.%d symbol %d csi overlap bitmap %d\n", frame, nr_slot_rx, symbol, csi_res_bitmap);
-
-    nr_dlsch_extract_rbs(fp->samples_per_slot_wCP,
-                         rxdataF,
-                         rx_size_symbol,
-                         pdsch_est_size,
-                         dl_ch_estimates,
-                         rxdataF_ext,
-                         dl_ch_estimates_ext,
-                         symbol,
-                         pilots,
-                         config_type,
-                         dlsch_config->BWPStart,
-                         freq_alloc,
-                         dlsch_config->n_dmrs_cdm_groups,
-                         nl,
-                         fp,
-                         dlsch_config->dlDmrsSymbPos,
-                         csi_res_bitmap,
-                         ue->chest_time);
-    stop_meas_nr_ue_phy(ue, DLSCH_EXTRACT_RBS_STATS);
-    if (scope_req->copy_chanest_to_scope) {
-      size_t size = sizeof(c16_t) * nb_rb_pdsch * NR_NB_SC_PER_RB;
-      int copy_index = symbol - dlsch_config->start_symbol;
-      int offset = copy_index * size;
-      UEscopeCopyUnsafe(ue, pdschChanEstimates, dl_ch_estimates_ext[0], size, offset, copy_index);
-    }
-    if (meas_enabled) {
-      LOG_D(PHY,
-            "[AbsSFN %u.%d] Slot%d Symbol %d: Pilot/Data extraction %5.2f \n",
-            frame,
-            nr_slot_rx,
-            slot,
-            symbol,
-            ue->phy_cpu_stats.cpu_time_stats[DLSCH_EXTRACT_RBS_STATS].p_time / (cpuf * 1000.0));
-    }
-    if (ue->phy_sim_pdsch_rxdataF_ext)
-      memcpy(ue->phy_sim_pdsch_rxdataF_ext + symbol * sizeof(rxdataF_ext), rxdataF_ext, sizeof(rxdataF_ext));
-
-    nb_re_pdsch = (pilots == 1) ? ((config_type == NFAPI_NR_DMRS_TYPE1) ? nb_rb_pdsch * (12 - 6 * dlsch_config->n_dmrs_cdm_groups)
-                                                                        : nb_rb_pdsch * (12 - 4 * dlsch_config->n_dmrs_cdm_groups))
-                                : (nb_rb_pdsch * 12);
-    // Subtract CSI-RS REs from PDSCH RE count
-    if (csi_res_bitmap != 0) {
-      uint32_t csi_re_count = 0;
-      uint32_t csi_res_even = csi_res_bitmap & 0xfff;
-      uint32_t csi_res_odd = (csi_res_bitmap >> 16) & 0xfff;
-      int start = freq_alloc->start[0] + dlsch_config->BWPStart;
-      int end = freq_alloc->end[freq_alloc->num_blocks - 1] + 1;
-      for (int rb = start; rb < end; rb++) {
-        if ((freq_alloc->bitmap[rb / 8] >> (rb % 8)) & 0x01) {
-          uint32_t rb_csi_pattern = (rb % 2 == 0) ? csi_res_even : csi_res_odd;
-          csi_re_count += __builtin_popcount(rb_csi_pattern);
-        }
-      }
-      nb_re_pdsch = (nb_re_pdsch > csi_re_count) ? (nb_re_pdsch - csi_re_count) : 0;
-      if (csi_re_count > 0) {
-        LOG_D(NR_PHY,
-              "[CSI OVERLAP] Frame/Slot %d.%d Symbol %d: CSI-RS overlapping PDSCH - %d CSI-RS REs skipped, %d data REs extracted\n",
-              frame,
-              nr_slot_rx,
-              symbol,
-              csi_re_count,
-              nb_re_pdsch);
-      }
-    }
-
-    if (scope_req->copy_rxdataF_to_scope) {
-      size_t size = sizeof(c16_t) * nb_re_pdsch;
-      int copy_index = symbol - dlsch_config->start_symbol;
-      UEscopeCopyUnsafe(ue, pdschRxdataF, rxdataF_ext[0], size, scope_req->scope_rxdataF_offset, copy_index);
-      scope_req->scope_rxdataF_offset += size;
-    }
-    //----------------------------------------------------------
-    //--------------------- Channel Scaling --------------------
-    //----------------------------------------------------------
-    start_meas_nr_ue_phy(ue, DLSCH_CHANNEL_SCALE_STATS);
-    nr_scale_channel(rx_size_symbol, dl_ch_estimates_ext, 0, nb_re_pdsch, nl, n_rx, 0);
-    stop_meas_nr_ue_phy(ue, DLSCH_CHANNEL_SCALE_STATS);
-    if (meas_enabled) {
-      LOG_D(PHY,
-            "[AbsSFN %u.%d] Slot%d Symbol %d: Channel Scale  %5.2f \n",
-            frame,
-            nr_slot_rx,
-            slot,
-            symbol,
-            ue->phy_cpu_stats.cpu_time_stats[DLSCH_CHANNEL_SCALE_STATS].p_time / (cpuf * 1000.0));
-    }
-
-    //----------------------------------------------------------
-    //--------------------- Channel Level Calc. ----------------
-    //----------------------------------------------------------
-    start_meas_nr_ue_phy(ue, DLSCH_CHANNEL_LEVEL_STATS);
-    if (first_symbol_flag) {
-      int32_t avg[nl * n_rx];
-      if (nb_re_pdsch)
-        nr_channel_level(0, rx_size_symbol, (c16_t (*)[rx_size_symbol])dl_ch_estimates_ext, n_rx, nl, avg, nb_re_pdsch);
-      else
-        LOG_E(NR_PHY, "Average channel level is 0: nb_rb_pdsch = %d, nb_re_pdsch = %d\n", nb_rb_pdsch, nb_re_pdsch);
-      int avgs = 0;
-      int32_t median[MAX_ANT][MAX_ANT];
-      for (int l = 0; l < nl; l++)
-        for (int aarx = 0; aarx < n_rx; aarx++) {
-          avgs = cmax(avgs, avg[l * n_rx + aarx]);
-          LOG_D(PHY, "nb_rb %d avg_%d_%d Power per SC is %d\n", nb_rb_pdsch, aarx, l, avg[l * n_rx + aarx]);
-          LOG_D(PHY, "avgs Power per SC is %d\n", avgs);
-          median[l][aarx] = avg[l * n_rx + aarx];
-        }
-      if (nl > 1) {
-        nr_dlsch_channel_level_median(rx_size_symbol, dl_ch_estimates_ext, median, nl, n_rx, nb_re_pdsch);
-        for (int l = 0; l < nl; l++) {
-          for (int aarx = 0; aarx < n_rx; aarx++) {
-            avgs = cmax(avgs, median[l][aarx]);
-          }
-        }
-      }
-      *log2_maxh = (log2_approx(avgs) / 2) + 1;
-      LOG_D(PHY, "[DLSCH] AbsSubframe %d.%d log2_maxh = %d (%d)\n", frame % 1024, nr_slot_rx, *log2_maxh, avgs);
-#if T_TRACER
-      T(T_UE_PHY_PDSCH_ENERGY,
-        T_INT(gNB_id),
-        T_INT(frame % 1024),
-        T_INT(nr_slot_rx),
-        T_INT(avg[0]), // layer 0, antenna 0
-        T_INT(n_rx > 1 ? avg[1] : 0), // layer 0, antenna 1
-        T_INT(nl > 1 ? avg[n_rx] : 0), // layer 1, antenna 0
-        T_INT(nl > 1 && n_rx > 1 ? avg[n_rx + 1] : 0)); // layer 1, antenna 1
-#endif
-    }
-    stop_meas_nr_ue_phy(ue, DLSCH_CHANNEL_LEVEL_STATS);
-    if (meas_enabled) {
-      LOG_D(PHY,
-            "[AbsSFN %u.%d] Slot%d Symbol %d first_symbol_flag %d: Channel Level  %5.2f \n",
-            frame,
-            nr_slot_rx,
-            slot,
-            symbol,
-            first_symbol_flag,
-            ue->phy_cpu_stats.cpu_time_stats[DLSCH_CHANNEL_LEVEL_STATS].p_time / (cpuf * 1000.0));
-    }
-
-    //----------------------------------------------------------
-    //--------------------- channel compensation ---------------
-    //----------------------------------------------------------
-    // Disable correlation measurement for optimizing UE
-    start_meas_nr_ue_phy(ue, DLSCH_CHANNEL_COMPENSATION_STATS);
-    nr_dlsch_channel_compensation(rx_size_symbol,
-                                  nbRx,
-                                  rxdataF_ext,
-                                  dl_ch_estimates_ext,
-                                  dl_ch_mag,
-                                  dl_ch_magb,
-                                  dl_ch_magr,
-                                  rxdataF_comp,
-                                  NULL,
-                                  fp,
-                                  nl,
-                                  symbol,
-                                  nb_re_pdsch,
-                                  first_symbol_flag,
-                                  dlsch_config->qamModOrder,
-                                  nb_rb_pdsch,
-                                  *log2_maxh,
-                                  measurements); // log2_maxh+I0_shift
-    stop_meas_nr_ue_phy(ue, DLSCH_CHANNEL_COMPENSATION_STATS);
-    if (meas_enabled) {
-      LOG_D(PHY,
-            "[AbsSFN %u.%d] Slot%d Symbol %d log2_maxh %d Channel Comp  %5.2f \n",
-            frame,
-            nr_slot_rx,
-            slot,
-            symbol,
-            *log2_maxh,
-            ue->phy_cpu_stats.cpu_time_stats[DLSCH_CHANNEL_COMPENSATION_STATS].p_time / (cpuf * 1000.0));
-    }
-    // Please keep it: useful for debugging
-#ifdef DEBUG_PDSCH_RX
-    char filename[50];
-
-    snprintf(filename, 50, "rxdataF0_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
-    write_output(filename, "rxdataF0", &rxdataF[0][symbol * fp->ofdm_symbol_size], fp->ofdm_symbol_size, 1, 1);
-
-    snprintf(filename, 50, "dl_ch_estimates0_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
-    write_output(filename, "dl_ch_estimates0", &dl_ch_estimates[0][symbol * fp->ofdm_symbol_size], fp->ofdm_symbol_size, 1, 1);
-
-    snprintf(filename, 50, "rxdataF_ext0_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
-    write_output(filename, "rxdataF_ext0", &rxdataF_ext[0][0], rx_size_symbol, 1, 1);
-
-    snprintf(filename, 50, "dl_ch_estimates_ext0_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
-    write_output(filename, "dl_ch_estimates_ext0", &dl_ch_estimates_ext[0][0], rx_size_symbol, 1, 1);
-
-    snprintf(filename, 50, "rxdataF_comp00_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
-    write_output(filename, "rxdataF_comp00", &rxdataF_comp[0][0][symbol * rx_size_symbol], rx_size_symbol, 1, 1);
-#endif
-  }
-
-  start_meas_nr_ue_phy(ue, DLSCH_MRC_MMSE_STATS);
-  if (n_rx > 1) {
-    nr_dlsch_detection_mrc(rx_size_symbol,
-                           nl,
-                           n_rx,
-                           rxdataF_comp,
-                           NULL,
-                           dl_ch_mag,
-                           dl_ch_magb,
-                           dl_ch_magr,
-                           symbol,
-                           nb_re_pdsch);
-    if (nl >= 2) // Apply MMSE for 2, 3, and 4 Tx layers
-      if (nb_re_pdsch)
-        nr_dlsch_mmse(rx_size_symbol,
-                      n_rx,
-                      nl,
-                      rxdataF_comp,
-                      dl_ch_mag,
-                      dl_ch_magb,
-                      dl_ch_magr,
-                      dl_ch_estimates_ext,
-                      nb_rb_pdsch,
-                      dlsch_config->qamModOrder,
-                      *log2_maxh,
-                      symbol,
-                      nb_re_pdsch,
-                      nvar);
-  }
-  stop_meas_nr_ue_phy(ue, DLSCH_MRC_MMSE_STATS);
-
-  if (meas_enabled) {
-    LOG_D(PHY,
-          "[AbsSFN %u.%d] Slot%d Symbol %d: Channel Combine and MMSE %5.2f \n",
-          frame,
-          nr_slot_rx,
-          slot,
-          symbol,
-          ue->phy_cpu_stats.cpu_time_stats[DLSCH_MRC_MMSE_STATS].p_time / (cpuf * 1000.0));
-  }
-
-
-
-  /* Store the valid DL RE's */
-  dl_valid_re[symbol] = nb_re_pdsch;
-  int startSymbIdx = 0;
-  int nbSymb = 0;
-  int pduBitmap = 0;
-
-  if(dlsch0_harq->status == ACTIVE) {
-    startSymbIdx = dlsch_config->start_symbol;
-    nbSymb = dlsch_config->number_symbols;
-    pduBitmap = dlsch_config->pduBitmap;
-  }
-
-  /* Check for PTRS bitmap and process it respectively */
-  if((pduBitmap & 0x1) && (dlsch[0].rnti_type == TYPE_C_RNTI_)) {
-    nr_pdsch_ptrs_processing(ue,
-                             nbRx,
-                             ptrs_phase_per_slot,
-                             ptrs_re_per_slot,
-                             rx_size_symbol,
-                             rxdataF_comp,
-                             fp,
-                             dlsch0_harq,
-                             dlsch1_harq,
-                             gNB_id,
-                             nr_slot_rx,
-                             symbol,
-                             dlsch[0].rnti,
-                             dlsch);
-    dl_valid_re[symbol] -= ptrs_re_per_slot[0][symbol];
-  }
-  start_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
-  nr_dlsch_llr(rx_size_symbol,
-               nbRx,
-               layer_llr_size,
-               layer_llr,
-               rxdataF_comp,
-               dl_ch_mag[0][0],
-               dl_ch_magb[0][0],
-               dl_ch_magr[0][0],
-               dlsch0_harq,
-               dlsch1_harq,
-               symbol,
-               dl_valid_re[symbol],
-               dlsch,
-               llr_offset[symbol]);
-  if (symbol < startSymbIdx + nbSymb - 1) // up to the penultimate symbol
-    llr_offset[symbol + 1] = dl_valid_re[symbol] * dlsch_config->qamModOrder + llr_offset[symbol];
-  stop_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
-  /* at last symbol in a slot calculate LLR's for whole slot */
-  if (symbol == (startSymbIdx + nbSymb - 1)) {
-    start_meas_nr_ue_phy(ue, DLSCH_LAYER_DEMAPPING);
-    nr_dlsch_layer_demapping(llr, dlsch[0].Nl, dlsch_config->qamModOrder, G, codeword_TB0, codeword_TB1, layer_llr_size, layer_llr);
-    stop_meas_nr_ue_phy(ue, DLSCH_LAYER_DEMAPPING);
-  /*
-    for (int i=0; i < 2; i++){
-      snprintf(filename, 50,  "llr%d_symb_%d_nr_slot_rx_%d.m", i, symbol, nr_slot_rx);
-      write_output(filename,"llr",  &llr[i][0], (NR_SYMBOLS_PER_SLOT*nb_rb_pdsch*NR_NB_SC_PER_RB*dlsch1_harq->Qm) - 4*(nb_rb_pdsch*4*dlsch1_harq->Qm), 1, 0);
-    }
-  */
-    if (UEScopeHasTryLock(ue)) {
-      metadata mt = {.frame = proc->frame_rx, .slot = proc->nr_slot_rx };
-      int total_valid_res = 0;
-      for (int i = startSymbIdx; i < startSymbIdx + nbSymb; i++) {
-        total_valid_res += dl_valid_re[i];
-      }
-      if (UETryLockScopeData(ue, pdschRxdataF_comp, sizeof(c16_t), 1,  total_valid_res, &mt)) {
-        size_t offset = 0;
-        for (int i = startSymbIdx; i < startSymbIdx + nbSymb; i++) {
-          size_t data_size = sizeof(c16_t) * dl_valid_re[i];
-          UEscopeCopyUnsafe(ue, pdschRxdataF_comp, &rxdataF_comp[0][0][rx_size_symbol * i], data_size, offset, i);
-          offset += data_size;
-        }
-        UEunlockScopeData(ue, pdschRxdataF_comp)
-      }
-    } else {
-      UEscopeCopy(ue, pdschRxdataF_comp, rxdataF_comp[0], sizeof(c16_t), nbRx, rx_size_symbol * NR_SYMBOLS_PER_SLOT, 0);
-    }
-  }
-
-  if (meas_enabled) {
-    LOG_D(PHY,
-          "[AbsSFN %u.%d] Slot%d Symbol %d: LLR Computation  %5.2f \n",
-          frame,
-          nr_slot_rx,
-          slot,
-          symbol,
-          ue->phy_cpu_stats.cpu_time_stats[DLSCH_LLR_STATS].p_time / (cpuf * 1000.0));
-  }
-
-#if T_TRACER
-  T(T_UE_PHY_PDSCH_IQ,
-    T_INT(gNB_id),
-    T_INT(frame % 1024),
-    T_INT(nr_slot_rx),
-    T_INT(nb_rb_pdsch),
-    T_INT(fp->N_RB_UL),
-    T_INT(fp->symbols_per_slot),
-    T_BUFFER(&rxdataF_comp[gNB_id][0], 2 * fp->N_RB_UL * 12 * fp->symbols_per_slot * 2));
-#endif
-
-  if (ue->phy_sim_pdsch_rxdataF_comp)
-    for (int a = 0; a < nbRx; a++) {
-      for (int l = 0; l < nl; l++) {
-        int offset = (void *)rxdataF_comp[l][a] - (void *)rxdataF_comp[0] + symbol * rx_size_symbol * sizeof(c16_t);
-        memcpy(ue->phy_sim_pdsch_rxdataF_comp + offset,
-               rxdataF_comp[l][a] + symbol * rx_size_symbol,
-               sizeof(c16_t) * rx_size_symbol);
-      }
-      memcpy((c16_t *)ue->phy_sim_pdsch_dl_ch_estimates + pdsch_est_size * a, dl_ch_estimates, pdsch_est_size * sizeof(c16_t));
-    }
-  if (ue->phy_sim_pdsch_dl_ch_estimates_ext)
-    memcpy(ue->phy_sim_pdsch_dl_ch_estimates_ext + symbol * sizeof(dl_ch_estimates_ext),
-           dl_ch_estimates_ext,
-           sizeof(dl_ch_estimates_ext));
-  return 0;
 }
 
 //==============================================================================================
@@ -1641,3 +1016,501 @@ static void nr_dlsch_llr(uint32_t rx_size_symbol,
   }
 }
 //==============================================================================================
+
+/* Main Function */
+int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
+                const UE_nr_rxtx_proc_t *proc,
+                NR_UE_DLSCH_t dlsch[2],
+                const freq_alloc_bitmap_t *freq_alloc,
+                unsigned char symbol,
+                bool first_symbol_flag,
+                unsigned char harq_pid,
+                uint32_t pdsch_est_size,
+                int32_t dl_ch_estimates[][pdsch_est_size],
+                int layer_llr_size,
+                int16_t layer_llr[][layer_llr_size],
+                int16_t *llr[2],
+                uint32_t dl_valid_re[NR_SYMBOLS_PER_SLOT],
+                c16_t rxdataF[][ue->frame_parms.samples_per_slot_wCP],
+                uint32_t llr_offset[NR_SYMBOLS_PER_SLOT],
+                int32_t *log2_maxh,
+                int rx_size_symbol,
+                int nbRx,
+                int32_t rxdataF_comp[][nbRx][rx_size_symbol * NR_SYMBOLS_PER_SLOT],
+                c16_t ptrs_phase_per_slot[][NR_SYMBOLS_PER_SLOT],
+                int32_t ptrs_re_per_slot[][NR_SYMBOLS_PER_SLOT],
+                int G,
+                uint32_t nvar,
+                pdsch_scope_req_t *scope_req)
+{
+  NR_DL_FRAME_PARMS *fp = &ue->frame_parms;
+  const int nl = dlsch[0].Nl;
+  const int n_rx = fp->nb_antennas_rx;
+  const int matrixSz = n_rx * nl;
+  __attribute__((aligned(32))) int32_t dl_ch_estimates_ext[matrixSz][rx_size_symbol];
+  memset(dl_ch_estimates_ext, 0, sizeof(dl_ch_estimates_ext));
+
+  __attribute__((aligned(32))) c16_t dl_ch_mag[nl][n_rx][rx_size_symbol];
+  memset(dl_ch_mag, 0, sizeof(dl_ch_mag));
+
+  __attribute__((aligned(32))) c16_t dl_ch_magb[nl][nbRx][rx_size_symbol];
+  memset(dl_ch_magb, 0, sizeof(dl_ch_magb));
+
+  __attribute__((aligned(32))) c16_t dl_ch_magr[nl][nbRx][rx_size_symbol];
+  memset(dl_ch_magr, 0, sizeof(dl_ch_magr));
+  NR_UE_COMMON *common_vars  = &ue->common_vars;
+  PHY_NR_MEASUREMENTS *measurements = &ue->measurements;
+  const int frame = proc->frame_rx;
+  const int nr_slot_rx = proc->nr_slot_rx;
+  const int gNB_id = proc->gNB_id;
+  uint8_t slot = 0;
+
+  int32_t codeword_TB0 = -1;
+  int32_t codeword_TB1 = -1;
+
+  uint32_t nb_re_pdsch = -1;
+
+  NR_DL_UE_HARQ_t *dlsch0_harq, *dlsch1_harq = NULL;
+  dlsch0_harq = &ue->dl_harq_processes[0][harq_pid];
+  if (NR_MAX_NB_LAYERS>4)
+    dlsch1_harq = &ue->dl_harq_processes[1][harq_pid];
+
+  if (dlsch0_harq && dlsch1_harq){
+
+    LOG_D(PHY,
+          "AbsSubframe %d.%d / Sym %d harq_pid %d, harq status %d.%d \n",
+          frame,
+          nr_slot_rx,
+          symbol,
+          harq_pid,
+          dlsch0_harq->status,
+          dlsch1_harq->status);
+
+    if ((dlsch0_harq->status == ACTIVE) && (dlsch1_harq->status == ACTIVE)){
+      codeword_TB0 = dlsch0_harq->codeword; // SV: where is this set? revisit for DL MIMO.
+      codeword_TB1 = dlsch1_harq->codeword;
+      dlsch0_harq = &ue->dl_harq_processes[codeword_TB0][harq_pid];
+      dlsch1_harq = &ue->dl_harq_processes[codeword_TB1][harq_pid];
+
+      DEBUG_HARQ("[DEMOD] I am assuming both TBs are active, in cw0 %d and cw1 %d \n", codeword_TB0, codeword_TB1);
+
+    } else if ((dlsch0_harq->status == ACTIVE) && (dlsch1_harq->status != ACTIVE) ) {
+      codeword_TB0 = dlsch0_harq->codeword;
+      dlsch0_harq = &ue->dl_harq_processes[codeword_TB0][harq_pid];
+      dlsch1_harq = NULL;
+
+      DEBUG_HARQ("[DEMOD] I am assuming only TB0 is active, in cw %d \n", codeword_TB0);
+
+    } else if ((dlsch0_harq->status != ACTIVE) && (dlsch1_harq->status == ACTIVE)){
+      codeword_TB1 = dlsch1_harq->codeword;
+      dlsch0_harq  = NULL;
+      dlsch1_harq  = &ue->dl_harq_processes[codeword_TB1][harq_pid];
+
+      DEBUG_HARQ("[DEMOD] I am assuming only TB1 is active, it is in cw %d\n", codeword_TB1);
+      LOG_E(PHY, "[DEMOD] slot %d TB0 not active and TB1 active case is not supported\n", nr_slot_rx);
+      return -1;
+
+    } else {
+      LOG_E(PHY, "[DEMOD] slot %d: no active DLSCH (2 layers case)\n", nr_slot_rx);
+      return (-1);
+    }
+  } else if (dlsch0_harq) {
+    if (dlsch0_harq->status == ACTIVE) {
+      codeword_TB0 = dlsch0_harq->codeword;
+      dlsch0_harq = &ue->dl_harq_processes[0][harq_pid];
+      DEBUG_HARQ("[DEMOD] I am assuming only TB0 is active\n");
+    } else {
+      LOG_E(PHY, "[DEMOD] slot %d nr_rx_pdsch no active DLSCH (one layer case)\n", nr_slot_rx);
+      return (-1);
+    }
+  } else {
+    LOG_E(PHY, "[DEMOD] slot %d Inconsistent call to nr_rx_pdsch (no layer 0)\n", nr_slot_rx);
+    return -1;
+  }
+
+  DEBUG_HARQ("[DEMOD] cw for TB0 = %d, cw for TB1 = %d\n", codeword_TB0, codeword_TB1);
+  fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_config = &dlsch[0].dlsch_config;
+  DevAssert(dlsch0_harq);
+
+  if (gNB_id > 2) {
+    LOG_E(PHY, "Illegal gNB_id %d\n", gNB_id);
+    return(-1);
+  }
+
+  if (!common_vars) {
+    LOG_E(PHY, "dlsch_demodulation.c: Null common_vars\n");
+    return(-1);
+  }
+
+  if(symbol > fp->symbols_per_slot >> 1)
+    slot = 1;
+
+  uint8_t pilots = (dlsch_config->dlDmrsSymbPos >> symbol) & 1;
+  uint8_t config_type = dlsch_config->dmrsConfigType;
+  //----------------------------------------------------------
+  //--------------------- RBs extraction ---------------------
+  //----------------------------------------------------------
+  const bool meas_enabled = cpumeas(CPUMEAS_GETSTATE);
+  int nb_rb_pdsch = freq_alloc->num_rbs;
+  {
+    start_meas_nr_ue_phy(ue, DLSCH_EXTRACT_RBS_STATS);
+    __attribute__((aligned(32))) c16_t rxdataF_ext[nbRx][rx_size_symbol];
+    memset(rxdataF_ext, 0, sizeof(rxdataF_ext));
+
+    uint32_t csi_res_bitmap = build_csi_overlap_bitmap(dlsch_config, symbol);
+
+    LOG_D(PHY, "%d.%d symbol %d csi overlap bitmap %d\n", frame, nr_slot_rx, symbol, csi_res_bitmap);
+
+    nr_dlsch_extract_rbs(fp->samples_per_slot_wCP,
+                         rxdataF,
+                         rx_size_symbol,
+                         pdsch_est_size,
+                         dl_ch_estimates,
+                         rxdataF_ext,
+                         dl_ch_estimates_ext,
+                         symbol,
+                         pilots,
+                         config_type,
+                         dlsch_config->BWPStart,
+                         freq_alloc,
+                         dlsch_config->n_dmrs_cdm_groups,
+                         nl,
+                         fp,
+                         dlsch_config->dlDmrsSymbPos,
+                         csi_res_bitmap,
+                         ue->chest_time);
+    stop_meas_nr_ue_phy(ue, DLSCH_EXTRACT_RBS_STATS);
+    if (scope_req->copy_chanest_to_scope) {
+      size_t size = sizeof(c16_t) * nb_rb_pdsch * NR_NB_SC_PER_RB;
+      int copy_index = symbol - dlsch_config->start_symbol;
+      int offset = copy_index * size;
+      UEscopeCopyUnsafe(ue, pdschChanEstimates, dl_ch_estimates_ext[0], size, offset, copy_index);
+    }
+    if (meas_enabled) {
+      LOG_D(PHY,
+            "[AbsSFN %u.%d] Slot%d Symbol %d: Pilot/Data extraction %5.2f \n",
+            frame,
+            nr_slot_rx,
+            slot,
+            symbol,
+            ue->phy_cpu_stats.cpu_time_stats[DLSCH_EXTRACT_RBS_STATS].p_time / (cpuf * 1000.0));
+    }
+    if (ue->phy_sim_pdsch_rxdataF_ext)
+      memcpy(ue->phy_sim_pdsch_rxdataF_ext + symbol * sizeof(rxdataF_ext), rxdataF_ext, sizeof(rxdataF_ext));
+
+    nb_re_pdsch = (pilots == 1) ? ((config_type == NFAPI_NR_DMRS_TYPE1) ? nb_rb_pdsch * (12 - 6 * dlsch_config->n_dmrs_cdm_groups)
+                                                                        : nb_rb_pdsch * (12 - 4 * dlsch_config->n_dmrs_cdm_groups))
+                                : (nb_rb_pdsch * 12);
+    // Subtract CSI-RS REs from PDSCH RE count
+    if (csi_res_bitmap != 0) {
+      uint32_t csi_re_count = 0;
+      uint32_t csi_res_even = csi_res_bitmap & 0xfff;
+      uint32_t csi_res_odd = (csi_res_bitmap >> 16) & 0xfff;
+      int start = freq_alloc->start[0] + dlsch_config->BWPStart;
+      int end = freq_alloc->end[freq_alloc->num_blocks - 1] + 1;
+      for (int rb = start; rb < end; rb++) {
+        if ((freq_alloc->bitmap[rb / 8] >> (rb % 8)) & 0x01) {
+          uint32_t rb_csi_pattern = (rb % 2 == 0) ? csi_res_even : csi_res_odd;
+          csi_re_count += __builtin_popcount(rb_csi_pattern);
+        }
+      }
+      nb_re_pdsch = (nb_re_pdsch > csi_re_count) ? (nb_re_pdsch - csi_re_count) : 0;
+      if (csi_re_count > 0) {
+        LOG_D(NR_PHY,
+              "[CSI OVERLAP] Frame/Slot %d.%d Symbol %d: CSI-RS overlapping PDSCH - %d CSI-RS REs skipped, %d data REs extracted\n",
+              frame,
+              nr_slot_rx,
+              symbol,
+              csi_re_count,
+              nb_re_pdsch);
+      }
+    }
+
+    if (scope_req->copy_rxdataF_to_scope) {
+      size_t size = sizeof(c16_t) * nb_re_pdsch;
+      int copy_index = symbol - dlsch_config->start_symbol;
+      UEscopeCopyUnsafe(ue, pdschRxdataF, rxdataF_ext[0], size, scope_req->scope_rxdataF_offset, copy_index);
+      scope_req->scope_rxdataF_offset += size;
+    }
+    //----------------------------------------------------------
+    //--------------------- Channel Scaling --------------------
+    //----------------------------------------------------------
+    start_meas_nr_ue_phy(ue, DLSCH_CHANNEL_SCALE_STATS);
+    nr_scale_channel(rx_size_symbol, dl_ch_estimates_ext, 0, nb_re_pdsch, nl, n_rx, 0);
+    stop_meas_nr_ue_phy(ue, DLSCH_CHANNEL_SCALE_STATS);
+    if (meas_enabled) {
+      LOG_D(PHY,
+            "[AbsSFN %u.%d] Slot%d Symbol %d: Channel Scale  %5.2f \n",
+            frame,
+            nr_slot_rx,
+            slot,
+            symbol,
+            ue->phy_cpu_stats.cpu_time_stats[DLSCH_CHANNEL_SCALE_STATS].p_time / (cpuf * 1000.0));
+    }
+
+    //----------------------------------------------------------
+    //--------------------- Channel Level Calc. ----------------
+    //----------------------------------------------------------
+    start_meas_nr_ue_phy(ue, DLSCH_CHANNEL_LEVEL_STATS);
+    if (first_symbol_flag) {
+      int32_t avg[nl * n_rx];
+      if (nb_re_pdsch)
+        nr_channel_level(0, rx_size_symbol, (c16_t (*)[rx_size_symbol])dl_ch_estimates_ext, n_rx, nl, avg, nb_re_pdsch);
+      else
+        LOG_E(NR_PHY, "Average channel level is 0: nb_rb_pdsch = %d, nb_re_pdsch = %d\n", nb_rb_pdsch, nb_re_pdsch);
+      int avgs = 0;
+      int32_t median[MAX_ANT][MAX_ANT];
+      for (int l = 0; l < nl; l++)
+        for (int aarx = 0; aarx < n_rx; aarx++) {
+          avgs = cmax(avgs, avg[l * n_rx + aarx]);
+          LOG_D(PHY, "nb_rb %d avg_%d_%d Power per SC is %d\n", nb_rb_pdsch, aarx, l, avg[l * n_rx + aarx]);
+          LOG_D(PHY, "avgs Power per SC is %d\n", avgs);
+          median[l][aarx] = avg[l * n_rx + aarx];
+        }
+      if (nl > 1) {
+        nr_dlsch_channel_level_median(rx_size_symbol, dl_ch_estimates_ext, median, nl, n_rx, nb_re_pdsch);
+        for (int l = 0; l < nl; l++) {
+          for (int aarx = 0; aarx < n_rx; aarx++) {
+            avgs = cmax(avgs, median[l][aarx]);
+          }
+        }
+      }
+      *log2_maxh = (log2_approx(avgs) / 2) + 1;
+      LOG_D(PHY, "[DLSCH] AbsSubframe %d.%d log2_maxh = %d (%d)\n", frame % 1024, nr_slot_rx, *log2_maxh, avgs);
+#if T_TRACER
+      T(T_UE_PHY_PDSCH_ENERGY,
+        T_INT(gNB_id),
+        T_INT(frame % 1024),
+        T_INT(nr_slot_rx),
+        T_INT(avg[0]), // layer 0, antenna 0
+        T_INT(n_rx > 1 ? avg[1] : 0), // layer 0, antenna 1
+        T_INT(nl > 1 ? avg[n_rx] : 0), // layer 1, antenna 0
+        T_INT(nl > 1 && n_rx > 1 ? avg[n_rx + 1] : 0)); // layer 1, antenna 1
+#endif
+    }
+    stop_meas_nr_ue_phy(ue, DLSCH_CHANNEL_LEVEL_STATS);
+    if (meas_enabled) {
+      LOG_D(PHY,
+            "[AbsSFN %u.%d] Slot%d Symbol %d first_symbol_flag %d: Channel Level  %5.2f \n",
+            frame,
+            nr_slot_rx,
+            slot,
+            symbol,
+            first_symbol_flag,
+            ue->phy_cpu_stats.cpu_time_stats[DLSCH_CHANNEL_LEVEL_STATS].p_time / (cpuf * 1000.0));
+    }
+
+    //----------------------------------------------------------
+    //--------------------- channel compensation ---------------
+    //----------------------------------------------------------
+    // Disable correlation measurement for optimizing UE
+    start_meas_nr_ue_phy(ue, DLSCH_CHANNEL_COMPENSATION_STATS);
+    nr_dlsch_channel_compensation(rx_size_symbol,
+                                  nbRx,
+                                  rxdataF_ext,
+                                  dl_ch_estimates_ext,
+                                  dl_ch_mag,
+                                  dl_ch_magb,
+                                  dl_ch_magr,
+                                  rxdataF_comp,
+                                  NULL,
+                                  fp,
+                                  nl,
+                                  symbol,
+                                  nb_re_pdsch,
+                                  first_symbol_flag,
+                                  dlsch_config->qamModOrder,
+                                  nb_rb_pdsch,
+                                  *log2_maxh,
+                                  measurements); // log2_maxh+I0_shift
+    stop_meas_nr_ue_phy(ue, DLSCH_CHANNEL_COMPENSATION_STATS);
+    if (meas_enabled) {
+      LOG_D(PHY,
+            "[AbsSFN %u.%d] Slot%d Symbol %d log2_maxh %d Channel Comp  %5.2f \n",
+            frame,
+            nr_slot_rx,
+            slot,
+            symbol,
+            *log2_maxh,
+            ue->phy_cpu_stats.cpu_time_stats[DLSCH_CHANNEL_COMPENSATION_STATS].p_time / (cpuf * 1000.0));
+    }
+    // Please keep it: useful for debugging
+#ifdef DEBUG_PDSCH_RX
+    char filename[50];
+
+    snprintf(filename, 50, "rxdataF0_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
+    write_output(filename, "rxdataF0", &rxdataF[0][symbol * fp->ofdm_symbol_size], fp->ofdm_symbol_size, 1, 1);
+
+    snprintf(filename, 50, "dl_ch_estimates0_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
+    write_output(filename, "dl_ch_estimates0", &dl_ch_estimates[0][symbol * fp->ofdm_symbol_size], fp->ofdm_symbol_size, 1, 1);
+
+    snprintf(filename, 50, "rxdataF_ext0_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
+    write_output(filename, "rxdataF_ext0", &rxdataF_ext[0][0], rx_size_symbol, 1, 1);
+
+    snprintf(filename, 50, "dl_ch_estimates_ext0_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
+    write_output(filename, "dl_ch_estimates_ext0", &dl_ch_estimates_ext[0][0], rx_size_symbol, 1, 1);
+
+    snprintf(filename, 50, "rxdataF_comp00_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
+    write_output(filename, "rxdataF_comp00", &rxdataF_comp[0][0][symbol * rx_size_symbol], rx_size_symbol, 1, 1);
+#endif
+  }
+
+  start_meas_nr_ue_phy(ue, DLSCH_MRC_MMSE_STATS);
+  if (n_rx > 1) {
+    nr_dlsch_detection_mrc(rx_size_symbol,
+                           nl,
+                           n_rx,
+                           rxdataF_comp,
+                           NULL,
+                           dl_ch_mag,
+                           dl_ch_magb,
+                           dl_ch_magr,
+                           symbol,
+                           nb_re_pdsch);
+    if (nl >= 2) // Apply MMSE for 2, 3, and 4 Tx layers
+      if (nb_re_pdsch)
+        nr_dlsch_mmse(rx_size_symbol,
+                      n_rx,
+                      nl,
+                      rxdataF_comp,
+                      dl_ch_mag,
+                      dl_ch_magb,
+                      dl_ch_magr,
+                      dl_ch_estimates_ext,
+                      nb_rb_pdsch,
+                      dlsch_config->qamModOrder,
+                      *log2_maxh,
+                      symbol,
+                      nb_re_pdsch,
+                      nvar);
+  }
+  stop_meas_nr_ue_phy(ue, DLSCH_MRC_MMSE_STATS);
+
+  if (meas_enabled) {
+    LOG_D(PHY,
+          "[AbsSFN %u.%d] Slot%d Symbol %d: Channel Combine and MMSE %5.2f \n",
+          frame,
+          nr_slot_rx,
+          slot,
+          symbol,
+          ue->phy_cpu_stats.cpu_time_stats[DLSCH_MRC_MMSE_STATS].p_time / (cpuf * 1000.0));
+  }
+
+
+
+  /* Store the valid DL RE's */
+  dl_valid_re[symbol] = nb_re_pdsch;
+  int startSymbIdx = 0;
+  int nbSymb = 0;
+  int pduBitmap = 0;
+
+  if(dlsch0_harq->status == ACTIVE) {
+    startSymbIdx = dlsch_config->start_symbol;
+    nbSymb = dlsch_config->number_symbols;
+    pduBitmap = dlsch_config->pduBitmap;
+  }
+
+  /* Check for PTRS bitmap and process it respectively */
+  if((pduBitmap & 0x1) && (dlsch[0].rnti_type == TYPE_C_RNTI_)) {
+    nr_pdsch_ptrs_processing(ue,
+                             nbRx,
+                             ptrs_phase_per_slot,
+                             ptrs_re_per_slot,
+                             rx_size_symbol,
+                             rxdataF_comp,
+                             fp,
+                             dlsch0_harq,
+                             dlsch1_harq,
+                             gNB_id,
+                             nr_slot_rx,
+                             symbol,
+                             dlsch[0].rnti,
+                             dlsch);
+    dl_valid_re[symbol] -= ptrs_re_per_slot[0][symbol];
+  }
+  start_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
+  nr_dlsch_llr(rx_size_symbol,
+               nbRx,
+               layer_llr_size,
+               layer_llr,
+               rxdataF_comp,
+               dl_ch_mag[0][0],
+               dl_ch_magb[0][0],
+               dl_ch_magr[0][0],
+               dlsch0_harq,
+               dlsch1_harq,
+               symbol,
+               dl_valid_re[symbol],
+               dlsch,
+               llr_offset[symbol]);
+  if (symbol < startSymbIdx + nbSymb - 1) // up to the penultimate symbol
+    llr_offset[symbol + 1] = dl_valid_re[symbol] * dlsch_config->qamModOrder + llr_offset[symbol];
+  stop_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
+  /* at last symbol in a slot calculate LLR's for whole slot */
+  if (symbol == (startSymbIdx + nbSymb - 1)) {
+    start_meas_nr_ue_phy(ue, DLSCH_LAYER_DEMAPPING);
+    nr_dlsch_layer_demapping(llr, dlsch[0].Nl, dlsch_config->qamModOrder, G, codeword_TB0, codeword_TB1, layer_llr_size, layer_llr);
+    stop_meas_nr_ue_phy(ue, DLSCH_LAYER_DEMAPPING);
+  /*
+    for (int i=0; i < 2; i++){
+      snprintf(filename, 50,  "llr%d_symb_%d_nr_slot_rx_%d.m", i, symbol, nr_slot_rx);
+      write_output(filename,"llr",  &llr[i][0], (NR_SYMBOLS_PER_SLOT*nb_rb_pdsch*NR_NB_SC_PER_RB*dlsch1_harq->Qm) - 4*(nb_rb_pdsch*4*dlsch1_harq->Qm), 1, 0);
+    }
+  */
+    if (UEScopeHasTryLock(ue)) {
+      metadata mt = {.frame = proc->frame_rx, .slot = proc->nr_slot_rx };
+      int total_valid_res = 0;
+      for (int i = startSymbIdx; i < startSymbIdx + nbSymb; i++) {
+        total_valid_res += dl_valid_re[i];
+      }
+      if (UETryLockScopeData(ue, pdschRxdataF_comp, sizeof(c16_t), 1,  total_valid_res, &mt)) {
+        size_t offset = 0;
+        for (int i = startSymbIdx; i < startSymbIdx + nbSymb; i++) {
+          size_t data_size = sizeof(c16_t) * dl_valid_re[i];
+          UEscopeCopyUnsafe(ue, pdschRxdataF_comp, &rxdataF_comp[0][0][rx_size_symbol * i], data_size, offset, i);
+          offset += data_size;
+        }
+        UEunlockScopeData(ue, pdschRxdataF_comp)
+      }
+    } else {
+      UEscopeCopy(ue, pdschRxdataF_comp, rxdataF_comp[0], sizeof(c16_t), nbRx, rx_size_symbol * NR_SYMBOLS_PER_SLOT, 0);
+    }
+  }
+
+  if (meas_enabled) {
+    LOG_D(PHY,
+          "[AbsSFN %u.%d] Slot%d Symbol %d: LLR Computation  %5.2f \n",
+          frame,
+          nr_slot_rx,
+          slot,
+          symbol,
+          ue->phy_cpu_stats.cpu_time_stats[DLSCH_LLR_STATS].p_time / (cpuf * 1000.0));
+  }
+
+#if T_TRACER
+  T(T_UE_PHY_PDSCH_IQ,
+    T_INT(gNB_id),
+    T_INT(frame % 1024),
+    T_INT(nr_slot_rx),
+    T_INT(nb_rb_pdsch),
+    T_INT(fp->N_RB_UL),
+    T_INT(fp->symbols_per_slot),
+    T_BUFFER(&rxdataF_comp[gNB_id][0], 2 * fp->N_RB_UL * 12 * fp->symbols_per_slot * 2));
+#endif
+
+  if (ue->phy_sim_pdsch_rxdataF_comp)
+    for (int a = 0; a < nbRx; a++) {
+      for (int l = 0; l < nl; l++) {
+        int offset = (void *)rxdataF_comp[l][a] - (void *)rxdataF_comp[0] + symbol * rx_size_symbol * sizeof(c16_t);
+        memcpy(ue->phy_sim_pdsch_rxdataF_comp + offset,
+               rxdataF_comp[l][a] + symbol * rx_size_symbol,
+               sizeof(c16_t) * rx_size_symbol);
+      }
+      memcpy((c16_t *)ue->phy_sim_pdsch_dl_ch_estimates + pdsch_est_size * a, dl_ch_estimates, pdsch_est_size * sizeof(c16_t));
+    }
+  if (ue->phy_sim_pdsch_dl_ch_estimates_ext)
+    memcpy(ue->phy_sim_pdsch_dl_ch_estimates_ext + symbol * sizeof(dl_ch_estimates_ext),
+           dl_ch_estimates_ext,
+           sizeof(dl_ch_estimates_ext));
+  return 0;
+}
