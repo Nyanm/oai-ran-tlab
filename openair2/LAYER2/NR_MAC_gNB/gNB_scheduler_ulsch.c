@@ -853,7 +853,7 @@ static void nr_rx_ra_sdu(const module_id_t mod_id,
   UE_scheduling_control->raw_rssi = rssi;
   LOG_D(NR_MAC, "[UE %04x] PUSCH TPC %d and TA %d\n", UE->rnti, UE_scheduling_control->tpc0, UE_scheduling_control->ta_update);
 
-  LOG_D(NR_MAC, "[RAPROC] Received %s:\n", ra->ra_type == RA_2_STEP ? "MsgA-PUSCH" : "Msg3");
+  LOG_I(NR_MAC, "[RAPROC] Received %s:\n", ra->ra_type == RA_2_STEP ? "MsgA-PUSCH" : "Msg3");
   for (uint32_t k = 0; k < sdu_len; k++) {
     LOG_D(NR_MAC, "(%i): 0x%x\n", k, sdu[k]);
   }

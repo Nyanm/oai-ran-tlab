@@ -3878,6 +3878,10 @@ void get_type0_PDCCH_CSS_config_parameters(NR_Type0_PDCCH_CSS_config_t *type0_PD
   AssertFatal(type0_PDCCH_CSS_config->slot != UINT_MAX, "type0_PDCCH_CSS_config slot not configured");
 
   type0_PDCCH_CSS_config->cset_start_rb = ssb_offset_point_a - type0_PDCCH_CSS_config->rb_offset;
+  LOG_D(NR_MAC, "CSET0 start PRB %d SSB offset point A %d RB offset %d\n",
+              type0_PDCCH_CSS_config->cset_start_rb,
+              ssb_offset_point_a,
+              type0_PDCCH_CSS_config->rb_offset);
   AssertFatal(type0_PDCCH_CSS_config->cset_start_rb >= 0,
               "Invalid CSET0 start PRB %d SSB offset point A %d RB offset %d\n",
               type0_PDCCH_CSS_config->cset_start_rb,
@@ -3922,7 +3926,12 @@ void fill_coresetZero(NR_ControlResourceSet_t *coreset0, NR_Type0_PDCCH_CSS_conf
   coreset0->frequencyDomainResources.buf[5] = 0;
   coreset0->frequencyDomainResources.size = 6;
   coreset0->frequencyDomainResources.bits_unused = 3;
-
+  LOG_D(NR_MAC,
+      "mjoang fill_coresetZero type0_PDCCH_CSS_config->num_rbs %d size %ld frequencyDomainResources 0x%02x:0x%02x:0x%02x:0x%02x:0x%02x:0x%02x\n",
+      type0_PDCCH_CSS_config->num_rbs,
+      coreset0->frequencyDomainResources.size,
+      coreset0->frequencyDomainResources.buf[0],coreset0->frequencyDomainResources.buf[1],coreset0->frequencyDomainResources.buf[2],coreset0->frequencyDomainResources.buf[3],
+      coreset0->frequencyDomainResources.buf[4],coreset0->frequencyDomainResources.buf[5]);
   coreset0->duration = duration;
   coreset0->cce_REG_MappingType.present = NR_ControlResourceSet__cce_REG_MappingType_PR_interleaved;
   if (!coreset0->cce_REG_MappingType.choice.interleaved)

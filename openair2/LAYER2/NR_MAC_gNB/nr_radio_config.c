@@ -306,7 +306,12 @@ static NR_ControlResourceSet_t *get_coreset_config(int bwp_id, int cset_offset, 
   coreset->duration = (curr_bwp < 48) ? 2 : 1;
   coreset->cce_REG_MappingType.present = NR_ControlResourceSet__cce_REG_MappingType_PR_nonInterleaved;
   coreset->precoderGranularity = NR_ControlResourceSet__precoderGranularity_sameAsREG_bundle;
-
+  LOG_D(NR_MAC,
+      "mjoang get_coreset_config bwp_id %d cset_offset %d curr_bwp %d cset_shift %d size %ld frequencyDomainResources 0x%02x:0x%02x:0x%02x:0x%02x:0x%02x:0x%02x\n",
+      bwp_id, cset_offset, curr_bwp, cset_shift,
+      coreset->frequencyDomainResources.size,
+      coreset->frequencyDomainResources.buf[0],coreset->frequencyDomainResources.buf[1],coreset->frequencyDomainResources.buf[2],coreset->frequencyDomainResources.buf[3],
+      coreset->frequencyDomainResources.buf[4],coreset->frequencyDomainResources.buf[5]);
   // The ID space is used across the BWPs of a Serving Cell as per 38.331
   coreset->controlResourceSetId = bwp_id + 1;
 

@@ -1363,7 +1363,11 @@ void nr_sr_reporting(gNB_MAC_INST *nrmac, frame_t SFN, slot_t slot)
       }
       else {
         NR_beam_alloc_t beam = beam_allocation_procedure(&nrmac->beam_info, SFN, slot, UE->UE_beam_index, n_slots_frame);
-        AssertFatal(beam.idx >= 0, "Cannot allocate SR in any available beam\n");
+        //AssertFatal(beam.idx >= 0, "Cannot allocate SR in any available beam\n");
+        if (beam.idx < 0) {
+          LOG_E(NR_MAC,"Cannot allocate SR in any available beam\n");
+          continue;
+        }
         const int index = ul_buffer_index(SFN, slot, n_slots_frame, nrmac->vrb_map_UL_size);
         uint16_t *vrb_map_UL = &nrmac->common_channels[CC_id].vrb_map_UL[beam.idx][index * MAX_BWP_SIZE];
         const int bwp_start = ul_bwp->BWPStart;
