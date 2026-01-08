@@ -431,12 +431,10 @@ void print_fh_config(const struct xran_fh_config *fh_config)
 #ifdef F_RELEASE
   printf("\
   RunSlotPrbMapBySymbolEnable %d\n\
-  LiteOnIgnoreUPSectionIdEnable %d\n\
   dssEnable %d\n\
   dssPeriod %d\n\
   technology[XRAN_MAX_DSS_PERIODICITY] (not filled as DSS disabled)\n",
       fh_config->RunSlotPrbMapBySymbolEnable,
-      fh_config->LiteOnIgnoreUPSectionIdEnable,
       fh_config->dssEnable,
       fh_config->dssPeriod);
 #endif
@@ -957,8 +955,8 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
   fh_config->srsEnableCp = 0; // enable SRS CP; used only if XRAN_CATEGORY_B
   fh_config->SrsDelaySym = 0; // number of SRS delay symbols; used only if XRAN_CATEGORY_B
   fh_config->RunSlotPrbMapBySymbolEnable    = *gpd(fhp, nfh, ORAN_CONFIG_RunSlotPrbMapBySymbol)->uptr;    // enable RunSlotPrbMapBySymbol
-  fh_config->LiteOnIgnoreUPSectionIdEnable  = *gpd(fhp, nfh, ORAN_CONFIG_LiteOnIgnoreUPSectionId)->uptr;  // enable LiteOnIgnoreUPSectionId
-  liteon_prach_eAxC_offset = fh_config->LiteOnIgnoreUPSectionIdEnable;
+//  fh_config->LiteOnIgnoreUPSectionIdEnable  = *gpd(fhp, nfh, ORAN_CONFIG_LiteOnIgnoreUPSectionId)->uptr;  // enable LiteOnIgnoreUPSectionId
+//  liteon_prach_eAxC_offset = fh_config->LiteOnIgnoreUPSectionIdEnable;
 #endif
   fh_config->puschMaskEnable = 0; // enable PUSCH mask; only used if id = O_RU
   fh_config->puschMaskSlot = 0; // specific which slot PUSCH channel masked; only used if id = O_RU
