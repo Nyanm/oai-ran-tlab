@@ -47,6 +47,20 @@
 #define adds_int16(a,b) simde_mm_adds_epi16(a,b)
 #define mullo_int16(a,b) simde_mm_mullo_epi16(a,b)
 
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+
+#define GET_ARRAY_MAX(arr, size, max_val)      \
+  do {                                         \
+    if ((size) > 0) {                          \
+      (max_val) = (arr)[0];                    \
+      for (size_t _i = 1; _i < (size); _i++) { \
+        if ((arr)[_i] > (max_val)) {           \
+          (max_val) = (arr)[_i];               \
+        }                                      \
+      }                                        \
+    }                                          \
+  } while (0)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
