@@ -45,6 +45,12 @@
                 000022
                 000022
                 000022
+                000022
+                000022
+                000022
+                000022
+                000022
+                000022
                 000222
                 222222
                 333333
@@ -104,8 +110,9 @@
 
         <testCase id="000022">
                 <class>Iperf</class>
-                <desc>iperf (DL/UDP/100M)(10 min)(single-ue profile)</desc>
-                <iperf_args>-u -b 100M -t 600 -R</iperf_args>
+                <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
+                <may_fail>true</may_fail>
+                <iperf_args>-u -b 800M -t 600 -R</iperf_args>
                 <svr_id>oc-cn5g-20897-aerial</svr_id>
                 <id>up2-aerial</id>
                 <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -144,4 +151,3 @@
                 <cn_id>oc-cn5g-20897-aerial</cn_id>
         </testCase>
 </testCaseList>
-
