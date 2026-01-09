@@ -398,18 +398,12 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
           struct xran_section_desc *p_sec_desc = NULL;
           pRbElm = &pRbMap->prbMap[idxElm];
 #ifdef E_RELEASE
-          if (pRbMap->nPrbElm == 1) {
-            uint32_t one_rb_size =
-                (((pRbElm->iqWidth == 0) || (pRbElm->iqWidth == 16)) ? (N_SC_PER_PRB * 2 * 2) : (3 * pRbElm->iqWidth + 1));
-            if (fh_init->mtu < pRbElm->nRBSize * one_rb_size)
-              pData = bufs->dst[ant_id % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN]
-                          .pBuffers[sym_idx % XRAN_NUM_OF_SYMBOL_PER_SLOT]
-                          .pData;
-            else {
-              p_sec_desc = pRbElm->p_sec_desc[sym_idx][0];
-              pData = p_sec_desc->pData;
-            }
-          }
+          uint32_t one_rb_size =
+              (((pRbElm->iqWidth == 0) || (pRbElm->iqWidth == 16)) ? (N_SC_PER_PRB * 2 * 2) : (3 * pRbElm->iqWidth + 1));
+          if (fh_init->mtu < pRbElm->nRBSize * one_rb_size)
+            pData = bufs->dst[ant_id % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN]
+                        .pBuffers[sym_idx % XRAN_NUM_OF_SYMBOL_PER_SLOT]
+                        .pData;
           else {
             p_sec_desc = pRbElm->p_sec_desc[sym_idx][0];
             pData = p_sec_desc->pData;
