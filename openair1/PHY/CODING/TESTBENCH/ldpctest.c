@@ -137,6 +137,7 @@ one_measurement_t test_ldpc(short max_iterations,
                             int gen_code,
                             int use32bit)
 {
+  static int init_done = 0;
   one_measurement_t ret = {0};
   reset_meas(&ret.time_optim);
   reset_meas(&ret.time_decoder);
@@ -300,12 +301,10 @@ one_measurement_t test_ldpc(short max_iterations,
 #ifdef ENABLE_CUDA
   cudaHostAlloc((void**)&test_input_p,n_segments*sizeof(uint8_t*),cudaHostAllocMapped);
   test_input=(uint8_t **)test_input_p;
-  printf("test input %p\n",test_input);
 #endif
   for (int j = 0; j < n_segments; j++) {
 #ifdef ENABLE_CUDA
     cudaHostAlloc((void**)&test_input[j],((K + 7) & ~7) / 8,cudaHostAllocMapped); 
-    printf("test input[%d] %p\n",j,test_input[j]);
 #else
     test_input[j] = malloc16(((K + 7) & ~7) / 8);
     memset(test_input[j], 0, ((K + 7) & ~7) / 8);
@@ -339,12 +338,14 @@ one_measurement_t test_ldpc(short max_iterations,
   impp.gen_code = 0;
   decode_abort_t dec_abort;
   init_abort(&dec_abort);
- 
-  if (use32bit)
-    ldpc_toCompare.LDPCinit_cuda();
-  else   
-    ldpc_toCompare.LDPCinit();
-  
+
+  if (init_done == 0) { 
+    if (use32bit)
+      ldpc_toCompare.LDPCinit_cuda();
+    else   
+      ldpc_toCompare.LDPCinit();
+    init_done = 1;
+  }
   uint32_t **output32;
   for (int trial = 0; trial < ntrials; trial++) {
     unsigned int segment_bler = 0;

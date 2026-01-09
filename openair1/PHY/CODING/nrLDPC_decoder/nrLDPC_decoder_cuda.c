@@ -85,7 +85,7 @@ int cuda_support_init_decoder()
   err = cudaMalloc((void**)&llrProcBuf_dev, sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
   AssertFatal(err == cudaSuccess, "CUDA Error (llrProcBuf_dev): %s\n", cudaGetErrorString(err));
 
-  printf("[CUDA] Intermediate buffers allocated in HBM3 (Device Memory).\n");
+  printf("[CUDA] Intermediate buffers allocated in Device Memory.\n");
 
   return 0;
 }
