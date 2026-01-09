@@ -85,8 +85,7 @@ void cuda_support_init() {
     LOG_I(NR_PHY,"Uses host page tables:           %s\n", pageable_uses_host ? "YES" : "NO");
     LOG_I(NR_PHY,"Host Register supported:         %s\n", register_host ? "YES" : "NO");
 
-  // initialize input and output memory
-  if (!pageable && !register_host) {
+  if (!pageable) {
     cudaError_t err=cudaMalloc((void **)&c_dev,4*sizeof(uint32_t*));
     AssertFatal(err == cudaSuccess,"CUDA Error (c_dev): %s\n", cudaGetErrorString(err));
     err=cudaHostAlloc((void **)&c_host,4*sizeof(uint32_t*),cudaHostAllocDefault);
