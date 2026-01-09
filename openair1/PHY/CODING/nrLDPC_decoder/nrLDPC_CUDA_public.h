@@ -38,113 +38,90 @@
 
 #define arrPos(a, b) a.d + b *a.dim2
 
-enum CircShiftDirection { FORWARD = 0, INVERSE = 1 };
-enum CircShiftOp { PUT_BRICKS = 0, GET_BRICKS = 1 };
+#include <cuda_runtime.h>
+#include <stdint.h>
+
 
 __device__ __forceinline__ void moveBricks_invput_circ(int8_t *__restrict__ dstBuf,
                                                        uint32_t dstBuf_Offset,
-                                                       uint8_t *__restrict__ Four_Bricks,
+                                                       const uint8_t *__restrict__ Four_Bricks,
                                                        uint32_t Z,
                                                        uint32_t cshift)
 {
-  uint32_t pos = (cshift + dstBuf_Offset) % Z;
+    uint32_t tmp = cshift + dstBuf_Offset;
+    uint32_t pos = (tmp >= Z) ? tmp - Z : tmp;
 
-  switch (pos + 3 - Z) {
-    case 0:
-      dstBuf[pos] = Four_Bricks[0];
-      dstBuf[pos + 1] = Four_Bricks[1];
-      dstBuf[pos + 2] = Four_Bricks[2];
-      dstBuf[0] = Four_Bricks[3];
-      break;
-    case 1:
-      dstBuf[pos] = Four_Bricks[0];
-      dstBuf[pos + 1] = Four_Bricks[1];
-      dstBuf[0] = Four_Bricks[2];
-      dstBuf[1] = Four_Bricks[3];
-      break;
-    case 2:
-      dstBuf[pos] = Four_Bricks[0];
-      dstBuf[0] = Four_Bricks[1];
-      dstBuf[1] = Four_Bricks[2];
-      dstBuf[2] = Four_Bricks[3];
-      break;
-    default:
-      dstBuf[pos] = Four_Bricks[0];
-      dstBuf[pos + 1] = Four_Bricks[1];
-      dstBuf[pos + 2] = Four_Bricks[2];
-      dstBuf[pos + 3] = Four_Bricks[3];
-      break;
-  }
+    if (pos <= Z - 4) {
+        uint32_t val = *(const uint32_t*)Four_Bricks;
+        memcpy(dstBuf + pos, &val, 4);
+    } 
+    else {
+        uint32_t bytes_at_end = Z - pos; // 1, 2, or 3
+        
+        #pragma unroll
+        for(int i=0; i<4; i++) {
+            if (i < bytes_at_end) {
+                dstBuf[pos + i] = Four_Bricks[i];
+            } else {
+                dstBuf[i - bytes_at_end] = Four_Bricks[i];
+            }
+        }
+    }
 }
+
 __device__ __forceinline__ void moveBricks_forput_circ(int8_t *__restrict__ dstBuf,
                                                        uint32_t dstBuf_Offset,
                                                        const uint8_t *__restrict__ Four_Bricks,
                                                        uint32_t Z,
                                                        uint32_t cshift)
 {
-  uint32_t pos = (dstBuf_Offset + Z - cshift ) % Z;
+    uint32_t tmp = dstBuf_Offset + Z - cshift;
+    uint32_t pos = (tmp >= Z) ? tmp - Z : tmp;
 
-  switch (pos + 3 - Z) {
-    case 0:
-      dstBuf[pos] = Four_Bricks[0];
-      dstBuf[pos + 1] = Four_Bricks[1];
-      dstBuf[pos + 2] = Four_Bricks[2];
-      dstBuf[0] = Four_Bricks[3];
-      break;
-    case 1:
-      dstBuf[pos] = Four_Bricks[0];
-      dstBuf[pos + 1] = Four_Bricks[1];
-      dstBuf[0] = Four_Bricks[2];
-      dstBuf[1] = Four_Bricks[3];
-      break;
-    case 2:
-      dstBuf[pos] = Four_Bricks[0];
-      dstBuf[0] = Four_Bricks[1];
-      dstBuf[1] = Four_Bricks[2];
-      dstBuf[2] = Four_Bricks[3];
-      break;
-    default:
-      dstBuf[pos] = Four_Bricks[0];
-      dstBuf[pos + 1] = Four_Bricks[1];
-      dstBuf[pos + 2] = Four_Bricks[2];
-      dstBuf[pos + 3] = Four_Bricks[3];
-      break;
-  }
+    if (pos <= Z - 4) {
+        uint32_t val = *(const uint32_t*)Four_Bricks;
+        memcpy(dstBuf + pos, &val, 4);
+    } 
+    else {
+        uint32_t bytes_at_end = Z - pos;
+        
+        #pragma unroll
+        for(int i=0; i<4; i++) {
+            if (i < bytes_at_end) {
+                dstBuf[pos + i] = Four_Bricks[i];
+            } else {
+                dstBuf[i - bytes_at_end] = Four_Bricks[i];
+            }
+        }
+    }
 }
-__device__ __forceinline__ void moveBricks_invget_circ(int8_t *__restrict__ dstBuf,
+
+__device__ __forceinline__ void moveBricks_invget_circ(const int8_t *__restrict__ dstBuf,
                                                        uint32_t dstBuf_Offset,
                                                        uint8_t *__restrict__ Four_Bricks,
                                                        uint32_t Z,
                                                        uint32_t cshift)
 {
-  uint32_t pos = (cshift + dstBuf_Offset) % Z;
+    uint32_t tmp = cshift + dstBuf_Offset;
+    uint32_t pos = (tmp >= Z) ? tmp - Z : tmp;
 
-  switch (pos + 3 - Z) {
-    case 0:
-      Four_Bricks[0] = dstBuf[pos];
-      Four_Bricks[1] = dstBuf[pos + 1];
-      Four_Bricks[2] = dstBuf[pos + 2];
-      Four_Bricks[3] = dstBuf[0];
-      break;
-    case 1:
-      Four_Bricks[0] = dstBuf[pos];
-      Four_Bricks[1] = dstBuf[pos + 1];
-      Four_Bricks[2] = dstBuf[0];
-      Four_Bricks[3] = dstBuf[1];
-      break;
-    case 2:
-      Four_Bricks[0] = dstBuf[pos];
-      Four_Bricks[1] = dstBuf[0];
-      Four_Bricks[2] = dstBuf[1];
-      Four_Bricks[3] = dstBuf[2];
-      break;
-    default:
-      Four_Bricks[0] = dstBuf[pos];
-      Four_Bricks[1] = dstBuf[pos + 1];
-      Four_Bricks[2] = dstBuf[pos + 2];
-      Four_Bricks[3] = dstBuf[pos + 3];
-      break;
-  }
+    if (pos <= Z - 4) {
+        uint32_t val;
+        memcpy(&val, dstBuf + pos, 4);
+        *(uint32_t*)Four_Bricks = val;
+    } 
+    else {
+        uint32_t bytes_at_end = Z - pos;
+        
+        #pragma unroll
+        for(int i=0; i<4; i++) {
+            if (i < bytes_at_end) {
+                Four_Bricks[i] = dstBuf[pos + i];
+            } else {
+                Four_Bricks[i] = dstBuf[i - bytes_at_end];
+            }
+        }
+    }
 }
 
 __device__ __forceinline__ uint32_t __vxor4(const uint32_t a, uint32_t b)
@@ -156,8 +133,8 @@ __device__ __forceinline__ uint32_t __vsign4(const uint32_t a, uint32_t b)
 {
     uint32_t mask = __vcmplts4(b, 0); 
     uint32_t bneg = __vneg4(a); 
-    uint32_t result = (mask & bneg) | (~mask & a);
-    uint32_t is_zero_mask = __vcmpeq4(b, 0);
-    return result & (~is_zero_mask);
+    return (mask & bneg) | (~mask & a);
+    //uint32_t is_zero_mask = __vcmpeq4(b, 0);
+    //return result & (~is_zero_mask);
 }
 
