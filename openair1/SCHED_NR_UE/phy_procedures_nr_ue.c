@@ -700,14 +700,6 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
 
     int32_t log2_maxh = 0;
 
-    const uint32_t rx_llr_layer_size = (G + dlsch[0].Nl - 1) / dlsch[0].Nl;
-
-    if (dlsch[0].Nl == 0 || rx_llr_layer_size == 0 || rx_llr_layer_size > 10 * 1000 * 1000) {
-      LOG_E(PHY, "rx_llr_layer_size %d, G %d, Nl, %d, discarding this pdsch\n", rx_llr_layer_size, G, dlsch[0].Nl);
-      return -1;
-    }
-    __attribute__((aligned(32))) int16_t layer_llr[dlsch[0].Nl][rx_llr_layer_size];
-
     start_meas_nr_ue_phy(ue, RX_PDSCH_STATS);
     pdsch_scope_req_t scope_req = { .copy_chanest_to_scope = false,
                                     .copy_rxdataF_to_scope = false,
@@ -727,6 +719,33 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
                                                            freq_alloc.num_rbs * NR_NB_SC_PER_RB * dlschCfg->number_symbols,
                                                            &mt);
     }
+    fourDimArray_t *toFree3 = NULL;
+    allocCast4D(dl_ch_mag,
+                c16_t,
+                toFree3,
+                NR_SYMBOLS_PER_SLOT,
+                dlsch[0].Nl,
+                ue->frame_parms.nb_antennas_rx,
+                rx_size_symbol,
+                false);
+    fourDimArray_t *toFree4 = NULL;
+    allocCast4D(dl_ch_magb,
+                c16_t,
+                toFree4,
+                NR_SYMBOLS_PER_SLOT,
+                dlsch[0].Nl,
+                ue->frame_parms.nb_antennas_rx,
+                rx_size_symbol,
+                false);
+    fourDimArray_t *toFree5 = NULL;
+    allocCast4D(dl_ch_magr,
+                c16_t,
+                toFree5,
+                NR_SYMBOLS_PER_SLOT,
+                dlsch[0].Nl,
+                ue->frame_parms.nb_antennas_rx,
+                rx_size_symbol,
+                false);
     for (int m = dlschCfg->start_symbol; m < (dlschCfg->number_symbols + dlschCfg->start_symbol); m++) {
       bool first_symbol_flag = false;
       if (m == first_symbol_with_data)
@@ -743,8 +762,6 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
                       harq_pid,
                       pdsch_est_size,
                       pdsch_dl_ch_estimates,
-                      rx_llr_layer_size,
-                      layer_llr,
                       llr,
                       dl_valid_re,
                       rxdataF,
@@ -753,6 +770,9 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
                       rx_size_symbol,
                       ue->frame_parms.nb_antennas_rx,
                       rxdataF_comp,
+                      dl_ch_mag,
+                      dl_ch_magb,
+                      dl_ch_magr,
                       ptrs_phase_per_slot,
                       ptrs_re_per_slot,
                       G,
@@ -777,6 +797,9 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
     }
     free(toFree);
     free(toFree2);
+    free(toFree3);
+    free(toFree4);
+    free(toFree5);
   }
   return 0;
 }

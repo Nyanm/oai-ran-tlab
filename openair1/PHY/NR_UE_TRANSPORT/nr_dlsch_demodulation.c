@@ -1027,8 +1027,6 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                 unsigned char harq_pid,
                 uint32_t pdsch_est_size,
                 int32_t dl_ch_estimates[][pdsch_est_size],
-                int layer_llr_size,
-                int16_t layer_llr[][layer_llr_size],
                 int16_t *llr[2],
                 uint32_t dl_valid_re[NR_SYMBOLS_PER_SLOT],
                 c16_t rxdataF[][ue->frame_parms.samples_per_slot_wCP],
@@ -1037,6 +1035,9 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                 int rx_size_symbol,
                 int nbRx,
                 int32_t rxdataF_comp[][dlsch->Nl][nbRx][rx_size_symbol],
+                c16_t dl_ch_mag[][dlsch->Nl][nbRx][rx_size_symbol],
+                c16_t dl_ch_magb[][dlsch->Nl][nbRx][rx_size_symbol],
+                c16_t dl_ch_magr[][dlsch->Nl][nbRx][rx_size_symbol],
                 c16_t ptrs_phase_per_slot[][NR_SYMBOLS_PER_SLOT],
                 int32_t ptrs_re_per_slot[][NR_SYMBOLS_PER_SLOT],
                 int G,
@@ -1050,14 +1051,6 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
   __attribute__((aligned(32))) int32_t dl_ch_estimates_ext[matrixSz][rx_size_symbol];
   memset(dl_ch_estimates_ext, 0, sizeof(dl_ch_estimates_ext));
 
-  __attribute__((aligned(32))) c16_t dl_ch_mag[nl][n_rx][rx_size_symbol];
-  memset(dl_ch_mag, 0, sizeof(dl_ch_mag));
-
-  __attribute__((aligned(32))) c16_t dl_ch_magb[nl][nbRx][rx_size_symbol];
-  memset(dl_ch_magb, 0, sizeof(dl_ch_magb));
-
-  __attribute__((aligned(32))) c16_t dl_ch_magr[nl][nbRx][rx_size_symbol];
-  memset(dl_ch_magr, 0, sizeof(dl_ch_magr));
   NR_UE_COMMON *common_vars  = &ue->common_vars;
   PHY_NR_MEASUREMENTS *measurements = &ue->measurements;
   const int frame = proc->frame_rx;
@@ -1310,9 +1303,9 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                                   nl,
                                   rxdataF_ext,
                                   dl_ch_estimates_ext,
-                                  dl_ch_mag,
-                                  dl_ch_magb,
-                                  dl_ch_magr,
+                                  dl_ch_mag[symbol],
+                                  dl_ch_magb[symbol],
+                                  dl_ch_magr[symbol],
                                   rxdataF_comp,
                                   NULL,
                                   fp,
@@ -1362,9 +1355,9 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                            n_rx,
                            rxdataF_comp,
                            NULL,
-                           dl_ch_mag,
-                           dl_ch_magb,
-                           dl_ch_magr,
+                           dl_ch_mag[symbol],
+                           dl_ch_magb[symbol],
+                           dl_ch_magr[symbol],
                            symbol,
                            nb_re_pdsch);
     if (nl >= 2) // Apply MMSE for 2, 3, and 4 Tx layers
@@ -1373,9 +1366,9 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                       n_rx,
                       nl,
                       rxdataF_comp,
-                      dl_ch_mag,
-                      dl_ch_magb,
-                      dl_ch_magr,
+                      dl_ch_mag[symbol],
+                      dl_ch_magb[symbol],
+                      dl_ch_magr[symbol],
                       dl_ch_estimates_ext,
                       nb_rb_pdsch,
                       dlsch_config->qamModOrder,
@@ -1429,29 +1422,40 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                              dlsch);
     dl_valid_re[symbol] -= ptrs_re_per_slot[0][symbol];
   }
-  start_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
-  nr_dlsch_llr(rx_size_symbol,
-               nbRx,
-               layer_llr_size,
-               nl,
-               layer_llr,
-               rxdataF_comp,
-               dl_ch_mag[0][0],
-               dl_ch_magb[0][0],
-               dl_ch_magr[0][0],
-               dlsch0_harq,
-               dlsch1_harq,
-               symbol,
-               dl_valid_re[symbol],
-               dlsch,
-               llr_offset[symbol]);
   if (symbol < startSymbIdx + nbSymb - 1) // up to the penultimate symbol
     llr_offset[symbol + 1] = dl_valid_re[symbol] * dlsch_config->qamModOrder + llr_offset[symbol];
-  stop_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
   /* at last symbol in a slot calculate LLR's for whole slot */
   if (symbol == (startSymbIdx + nbSymb - 1)) {
+    const uint32_t rx_llr_layer_size = (G + dlsch[0].Nl - 1) / dlsch[0].Nl;
+
+    if (dlsch[0].Nl == 0 || rx_llr_layer_size == 0 || rx_llr_layer_size > 10 * 1000 * 1000) {
+      LOG_E(PHY, "rx_llr_layer_size %d, G %d, Nl, %d, discarding this pdsch\n", rx_llr_layer_size, G, dlsch[0].Nl);
+      return -1;
+    }
+    __attribute__((aligned(32))) int16_t layer_llr[dlsch[0].Nl][rx_llr_layer_size];
+
+    // Generate LLR from PTRS compensated signal
+    start_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
+    for (int llr_sym = startSymbIdx; llr_sym < startSymbIdx + nbSymb; llr_sym++) {
+      nr_dlsch_llr(rx_size_symbol,
+                  nbRx,
+                  rx_llr_layer_size,
+                  nl,
+                  layer_llr,
+                  rxdataF_comp,
+                  dl_ch_mag[llr_sym][0][0],
+                  dl_ch_magb[llr_sym][0][0],
+                  dl_ch_magr[llr_sym][0][0],
+                  dlsch0_harq,
+                  dlsch1_harq,
+                  llr_sym,
+                  dl_valid_re[llr_sym],
+                  dlsch,
+                  llr_offset[llr_sym]);
+    }
+    stop_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
     start_meas_nr_ue_phy(ue, DLSCH_LAYER_DEMAPPING);
-    nr_dlsch_layer_demapping(llr, dlsch[0].Nl, dlsch_config->qamModOrder, G, codeword_TB0, codeword_TB1, layer_llr_size, layer_llr);
+    nr_dlsch_layer_demapping(llr, dlsch[0].Nl, dlsch_config->qamModOrder, G, codeword_TB0, codeword_TB1, rx_llr_layer_size, layer_llr);
     stop_meas_nr_ue_phy(ue, DLSCH_LAYER_DEMAPPING);
   /*
     for (int i=0; i < 2; i++){
