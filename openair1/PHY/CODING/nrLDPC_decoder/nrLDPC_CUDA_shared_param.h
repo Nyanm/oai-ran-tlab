@@ -68,9 +68,6 @@ typedef struct {
     int8_t dd;
 } DumpEntry;
 
-__device__ DumpEntry dumpBuf[316];
-__device__ DumpEntry dumpBn[316];
-
 typedef struct {
     int8_t* p_llr_ptr;     
     int8_t* p_out_ptr;      
