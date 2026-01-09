@@ -36,35 +36,27 @@
 
 __device__ __forceinline__ void unpack_and_sign_extend(uint32_t packed, uint32_t* val_lo, uint32_t* val_hi) {
 
-    int16_t a = (int16_t)(int8_t)(packed & 0xFF);
-    int16_t b = (int16_t)(int8_t)((packed >> 8) & 0xFF);
-    int16_t c = (int16_t)(int8_t)((packed >> 16) & 0xFF);
-    int16_t d = (int16_t)(int8_t)((packed >> 24) & 0xFF);
+    int32_t a = (int32_t)(packed << 24) >> 24; 
+    int32_t b = (int32_t)(packed << 16) >> 24; 
+    int32_t c = (int32_t)(packed << 8) >> 24; 
+    int32_t d = (int32_t)(packed) >> 24; 
 
-    *val_lo = (uint16_t)a | ((uint32_t)(uint16_t)b << 16);
-    *val_hi = (uint16_t)c | ((uint32_t)(uint16_t)d << 16);
+    *val_lo = __byte_perm(a, b, 0x5410);
+    *val_hi = __byte_perm(c, d, 0x5410);
 }
+
 
 __device__ __forceinline__ uint32_t saturate_and_pack(uint32_t val_lo, uint32_t val_hi) {
 
-    int16_t a = (int16_t)(val_lo & 0xFFFF);
-    int16_t b = (int16_t)((val_lo >> 16) & 0xFFFF);
-    int16_t c = (int16_t)(val_hi & 0xFFFF);
-    int16_t d = (int16_t)((val_hi >> 16) & 0xFFFF);
+    uint32_t lo_clamped = __vmins2(val_lo, 0x007F007F); // min(v, 127)
+    lo_clamped = __vmaxs2(lo_clamped, 0xFF80FF80);      // max(v, -128)
 
-    auto saturate_i8 = [](int16_t v) -> uint8_t {
-        if (v > 127) return 127;
-        if (v < -128) return 128; // 0x80
-        return (uint8_t)v;
-    };
+    uint32_t hi_clamped = __vmins2(val_hi, 0x007F007F);
+    hi_clamped = __vmaxs2(hi_clamped, 0xFF80FF80);
 
-    uint32_t res = 0;
-    res |= saturate_i8(a);
-    res |= (uint32_t)saturate_i8(b) << 8;
-    res |= (uint32_t)saturate_i8(c) << 16;
-    res |= (uint32_t)saturate_i8(d) << 24;
-    return res;
+    return __byte_perm(lo_clamped, hi_clamped, 0x6420);
 }
+
 
 __device__ __forceinline__ void bnProcKernel_BG1_int8_Gn(const int8_t *__restrict__ d_bnProcBuf,
                                                          int8_t *__restrict__ d_cnProcBuf,
@@ -88,31 +80,45 @@ __device__ __forceinline__ void bnProcKernel_BG1_int8_Gn(const int8_t *__restric
     uint32_t off = (GrpNum * NR_LDPC_ZMAX) >> 2;
     const int32_t *currPtr = bnProcBufPtr;
 
-    #pragma unroll
-    for (int i = 0; i < GrpIdx; ++i) {
+    int i = 0;
+    
+    // ---  2-Way Unroll ---
+
+    for (; i < (int)GrpIdx - 1; i += 2) {
+
+        uint32_t val1 = *currPtr;
+        uint32_t val2 = *(currPtr + off); 
+
+        uint32_t v1_lo, v1_hi;
+        unpack_and_sign_extend(val1, &v1_lo, &v1_hi);
+        MsgSumLo = __vaddss2(MsgSumLo, v1_lo);
+        MsgSumHi = __vaddss2(MsgSumHi, v1_hi);
+
+        uint32_t v2_lo, v2_hi;
+        unpack_and_sign_extend(val2, &v2_lo, &v2_hi);
+        MsgSumLo = __vaddss2(MsgSumLo, v2_lo);
+        MsgSumHi = __vaddss2(MsgSumHi, v2_hi);
+
+        currPtr += (off << 1); 
+    }
+
+    if (i < GrpIdx) {
         uint32_t val = *currPtr;
-        uint32_t val_lo, val_hi;
-        
-        unpack_and_sign_extend(val, &val_lo, &val_hi);
+        uint32_t v_lo, v_hi;
+        unpack_and_sign_extend(val, &v_lo, &v_hi);
+        MsgSumLo = __vaddss2(MsgSumLo, v_lo);
+        MsgSumHi = __vaddss2(MsgSumHi, v_hi);
 
-        MsgSumLo = __vaddss2(MsgSumLo, val_lo);
-        MsgSumHi = __vaddss2(MsgSumHi, val_hi);
-
-        currPtr += off; 
     }
 
     uint32_t saturated_llr = saturate_and_pack(MsgSumLo, MsgSumHi);
-
+    
     uint32_t BricksToBeGet;
-
     if (GrpIdx == 1) {
         BricksToBeGet = packed_intrinsic;
-    } 
-    else {
-        
+    } else {
         uint32_t prevIdxWords = (MsgIdx * GrpNum * NR_LDPC_ZMAX) >> 2;
         uint32_t prev = bnProcBufPtr[prevIdxWords]; 
-        
         BricksToBeGet = __vsubss4(saturated_llr, prev);
     }
 
@@ -141,24 +147,40 @@ __device__ __forceinline__ void bnProcKernel_BG1_int8_Gn_last(const int8_t *__re
     uint32_t off = (GrpNum * NR_LDPC_ZMAX) >> 2;
     const int32_t *currPtr = bnProcBufPtr;
 
-    #pragma unroll
-    for (int i = 0; i < GrpIdx; ++i) {
+    int i = 0;
+    
+    // ---  2-Way Unroll ---
+
+    for (; i < (int)GrpIdx - 1; i += 2) {
+
+        uint32_t val1 = *currPtr;
+        uint32_t val2 = *(currPtr + off); 
+
+        uint32_t v1_lo, v1_hi;
+        unpack_and_sign_extend(val1, &v1_lo, &v1_hi);
+        MsgSumLo = __vaddss2(MsgSumLo, v1_lo);
+        MsgSumHi = __vaddss2(MsgSumHi, v1_hi);
+
+        uint32_t v2_lo, v2_hi;
+        unpack_and_sign_extend(val2, &v2_lo, &v2_hi);
+        MsgSumLo = __vaddss2(MsgSumLo, v2_lo);
+        MsgSumHi = __vaddss2(MsgSumHi, v2_hi);
+
+        currPtr += (off << 1); 
+    }
+
+    if (i < GrpIdx) {
         uint32_t val = *currPtr;
-        uint32_t val_lo, val_hi;
-        
-        unpack_and_sign_extend(val, &val_lo, &val_hi);
-
-        MsgSumLo = __vaddss2(MsgSumLo, val_lo);
-        MsgSumHi = __vaddss2(MsgSumHi, val_hi);
-
-        currPtr += off; 
+        uint32_t v_lo, v_hi;
+        unpack_and_sign_extend(val, &v_lo, &v_hi);
+        MsgSumLo = __vaddss2(MsgSumLo, v_lo);
+        MsgSumHi = __vaddss2(MsgSumHi, v_hi);
     }
 
     uint32_t saturated_llr = saturate_and_pack(MsgSumLo, MsgSumHi);
-
+    
     if (MsgIdx == 0) {
         ((int32_t *)(d_llrRes))[lane] = saturated_llr;
     }
-
 
 }
