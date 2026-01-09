@@ -147,17 +147,17 @@ __device__ __forceinline__ void moveBricks_invget_circ(int8_t *__restrict__ dstB
   }
 }
 
-__device__ __forceinline__ uint32_t __vxor4(const uint32_t *a, uint32_t *b)
+__device__ __forceinline__ uint32_t __vxor4(const uint32_t a, uint32_t b)
 {
-  return a[0] ^ b[0]; 
+  return a ^ b; 
 }
 
-__device__ __forceinline__ uint32_t __vsign4(const uint32_t *a, uint32_t *b)
+__device__ __forceinline__ uint32_t __vsign4(const uint32_t a, uint32_t b)
 {
-    uint32_t mask = __vcmplts4(b[0], 0); 
-    uint32_t bneg = __vneg4(a[0]); 
-    uint32_t result = (mask & bneg) | (~mask & a[0]);
-    uint32_t is_zero_mask = __vcmpeq4(b[0], 0);
+    uint32_t mask = __vcmplts4(b, 0); 
+    uint32_t bneg = __vneg4(a); 
+    uint32_t result = (mask & bneg) | (~mask & a);
+    uint32_t is_zero_mask = __vcmpeq4(b, 0);
     return result & (~is_zero_mask);
 }
 
