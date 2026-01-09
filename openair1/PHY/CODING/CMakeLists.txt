@@ -43,7 +43,10 @@ if (ENABLE_LDPC_CUDA)
   if (NOT CUDA_FOUND)
     message(FATAL_ERROR "no CUDA found")
   endif()
-  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_90 ")
+  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_87") # Jetson
+  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_90") # GH200
+  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_121") # GB10
+
   SET(CUDA_VERBOSE_BUILD ON)
 
   # version using NVLink-C2C in Grace Hopper
@@ -70,6 +73,7 @@ if (ENABLE_LDPC_CUDA)
 		   nrLDPC_coding/nrLDPC_coding_segment/ldpc_deinterleave.cu
 		   nrLDPC_coding/nrLDPC_coding_segment/ldpc_rate_matching.cu
   )
+  set_target_properties(ldpc_cuda PROPERTIES CUDA_ARCHITECTURES "87;90;121")
   
   target_link_libraries(ldpc_cuda ldpc_gen_HEADERS ${T_LIB})
   set_target_properties(ldpc_cuda PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
