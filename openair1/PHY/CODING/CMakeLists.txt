@@ -39,17 +39,23 @@ add_dependencies(nr_dlschsim ldpc ldpc_orig)
 
 add_boolean_option(ENABLE_LDPC_CUDA OFF "Build support for CUDA" OFF)
 if (ENABLE_LDPC_CUDA)
-  find_package(CUDA REQUIRED)
-  if (NOT CUDA_FOUND)
-    message(FATAL_ERROR "no CUDA found")
-  endif()
-  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_90 ")
+  enable_language(CUDA)
+
+  # it would be possible to auto-detect compute capailities: https://stackoverflow.com/a/68223399
+  #include(FindCUDA/select_compute_arch)
+  #CUDA_DETECT_INSTALLED_GPUS(INSTALLED_GPU_CCS_1)
+
+  # Nvidia recommends to build against all targeted archs: https://forums.developer.nvidia.com/t/261162
+  # this is for cmake 3.16 (OAI minimum), starting at cmake 3.18 there is another syntax, see below
+  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_87") # Jetson
+  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_90") # GH200
+  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_121") # GB10
+
   SET(CUDA_VERBOSE_BUILD ON)
 
   # version using NVLink-C2C in Grace Hopper
-  cuda_add_library(ldpc_cuda MODULE
-	  #                   nrLDPC_decoder_LYC/nrLDPC_decoder_LYC.cu
-    nrLDPC_decoder/kernel_test.cu  
+  add_library(ldpc_cuda MODULE
+                   nrLDPC_decoder/kernel_test.cu
                    nrLDPC_decoder/nrLDPC_decoder_cuda.c
                    nrLDPC_decoder/nrLDPC_decoder.c
 		   nrLDPC_encoder/ldpc_encoder_optim8segmulti.c
@@ -71,6 +77,11 @@ if (ENABLE_LDPC_CUDA)
 		   nrLDPC_coding/nrLDPC_coding_segment/ldpc_deinterleave.cu
 		   nrLDPC_coding/nrLDPC_coding_segment/ldpc_rate_matching.cu
   )
+  set_target_properties(ldpc_cuda PROPERTIES CUDA_ARCHITECTURES "87;90;121")
+  # we need to find the right include directory, but ti seems that
+  # enable_language(CUDA) does not make this available(?), so also use the CUDA package
+  find_package(CUDA REQUIRED)
+  target_include_directories(ldpc_cuda PRIVATE ${CUDA_INCLUDE_DIRS})
   
   target_link_libraries(ldpc_cuda ldpc_gen_HEADERS ${T_LIB})
   set_target_properties(ldpc_cuda PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
