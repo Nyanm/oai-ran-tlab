@@ -69,6 +69,8 @@ int8_t* llrRes_dev = NULL;
 int8_t* llrProcBuf_dev = NULL;
 int8_t* p_llr_dev = NULL;
 int8_t* p_out_dev = NULL;
+int8_t* p_llr_pinned = NULL;
+int8_t* p_out_pinned = NULL;
 
 extern int pageable_uses_host;
 int need_explicit_copy = 0;
@@ -81,13 +83,21 @@ int cuda_support_init_decoder()
   need_explicit_copy = (!pageable_uses_host);
 
   if (need_explicit_copy) {
-    // Allocate device memory for Discrete GPU
+    // Calculate max sizes
     int max_input_size = MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * 26112;
     int max_output_size = MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * 8448;
+
     err = cudaMalloc((void**)&p_llr_dev, max_input_size);
     AssertFatal(err == cudaSuccess, "CUDA Error (p_llr_dev): %s\n", cudaGetErrorString(err));
     err = cudaMalloc((void**)&p_out_dev, max_output_size);
     AssertFatal(err == cudaSuccess, "CUDA Error (p_out_dev): %s\n", cudaGetErrorString(err));
+
+    err = cudaHostAlloc((void**)&p_llr_pinned, max_input_size, cudaHostAllocDefault);
+    AssertFatal(err == cudaSuccess, "CUDA Error (p_llr_pinned): %s\n", cudaGetErrorString(err));
+    err = cudaHostAlloc((void**)&p_out_pinned, max_output_size, cudaHostAllocDefault);
+    AssertFatal(err == cudaSuccess, "CUDA Error (p_out_pinned): %s\n", cudaGetErrorString(err));
+    
+    printf("[CUDA] Discrete GPU path: Pinned Host buffers allocated for Async transfer.\n");
   }
 
   err = cudaMalloc((void**)&cnProcBuf_dev, sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF);
@@ -475,14 +485,13 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
 
   // Flag to track if explicit allocation/copy is needed
 
-  if (need_explicit_copy) {
-    // Allocate device memory for Discrete GPU
+if (need_explicit_copy) {
+    memcpy(p_llr_pinned, p_llr, total_input_size); 
+    cudaMemcpyAsync(p_llr_dev, p_llr_pinned, total_input_size, cudaMemcpyHostToDevice, decoderStreams[0]);
+
     P_llr_ptr = p_llr_dev;
     P_out_ptr = p_out_dev;
-
-    // Copy Input data from Host to Device
-    cudaMemcpyAsync(P_llr_ptr, p_llr, total_input_size, cudaMemcpyHostToDevice, decoderStreams[0]);
-  }
+}
 
   int found_idx = -1;
 
@@ -573,15 +582,16 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
                                       NULL);
   }
 
-  // Copy back and Cleanup for Discrete GPU
+// Copy back and Cleanup for Discrete GPU
   if (need_explicit_copy) {
-    // Copy Output from Device to Host
-    cudaMemcpyAsync(p_out, P_out_ptr, total_output_size, cudaMemcpyDeviceToHost, decoderStreams[0]);
+    cudaMemcpyAsync(p_out_pinned, P_out_ptr, total_output_size, cudaMemcpyDeviceToHost, decoderStreams[0]);
 
     cudaStreamSynchronize(decoderStreams[0]);
-  } else {
-    cudaDeviceSynchronize();
-  }
 
+    memcpy(p_out, p_out_pinned, total_output_size);
+
+  } else {
+    cudaDeviceSynchronize(); 
+  }
   return numMaxIter;
 }
