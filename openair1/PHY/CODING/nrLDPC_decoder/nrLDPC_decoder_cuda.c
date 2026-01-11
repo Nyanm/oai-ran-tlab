@@ -63,15 +63,32 @@ static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
 static bool decoder_streamsCreated = false;
 cudaError_t Err;
 
-int8_t* cnProcBuf_dev;
-int8_t* bnProcBuf_dev;
-int8_t* llrRes_dev;
-int8_t* llrProcBuf_dev;
+int8_t* cnProcBuf_dev = NULL;
+int8_t* bnProcBuf_dev = NULL;
+int8_t* llrRes_dev = NULL;
+int8_t* llrProcBuf_dev = NULL;
+int8_t* p_llr_dev = NULL;
+int8_t* p_out_dev = NULL;
+
+extern int pageable_uses_host;
+int need_explicit_copy = 0;
 
 int cuda_support_init_decoder()
 {
   // use cudaMalloc for all inner buffers
   cudaError_t err;
+
+  need_explicit_copy = (!pageable_uses_host);
+
+  if (need_explicit_copy) {
+    // Allocate device memory for Discrete GPU
+    int max_input_size = MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * 26112;
+    int max_output_size = MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * 8448;
+    err = cudaMalloc((void**)&p_llr_dev, max_input_size);
+    AssertFatal(err == cudaSuccess, "CUDA Error (p_llr_dev): %s\n", cudaGetErrorString(err));
+    err = cudaMalloc((void**)&p_out_dev, max_output_size);
+    AssertFatal(err == cudaSuccess, "CUDA Error (p_out_dev): %s\n", cudaGetErrorString(err));
+  }
 
   err = cudaMalloc((void**)&cnProcBuf_dev, sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF);
   AssertFatal(err == cudaSuccess, "CUDA Error (cnProcBuf_dev): %s\n", cudaGetErrorString(err));
@@ -165,14 +182,14 @@ void init_decoder_warmup()
 {
   // =====================================================================
   // CUDA Driver Warm-up
-  // Purpose: Execute a few representative graphs to trigger CUDA context 
+  // Purpose: Execute a few representative graphs to trigger CUDA context
   // initialization and driver-level JIT/lazy loading.
-  // Note: These specific Z/R combinations might not match the actual 
+  // Note: These specific Z/R combinations might not match the actual
   // run-time traffic, but running them ensures the GPU pipeline is ready.
   // =====================================================================
-  
+
   // Sample configurations for warmup
-  uint32_t Z_list[] = {320, 352, 384}; 
+  uint32_t Z_list[] = {320, 352, 384};
   uint8_t R_list[] = {13, 23};
   int node_idx = 0;
 
@@ -184,13 +201,16 @@ void init_decoder_warmup()
   size_t input_size_bytes = 68 * max_z * max_n_segs * sizeof(int8_t);
   size_t output_size_bytes = 8448 * max_n_segs * sizeof(int8_t);
 
-  // Allocate Pinned/Mapped Memory for Zero-Copy access (GH200 friendly)
-  cudaHostAlloc((void**)&dummy_input_llr, input_size_bytes, cudaHostAllocMapped);
-  cudaHostAlloc((void**)&dummy_output_bits, output_size_bytes, cudaHostAllocMapped);
+  if (need_explicit_copy) {
+    cudaMalloc((void**)&dummy_input_llr, input_size_bytes);
+    cudaMalloc((void**)&dummy_output_bits, output_size_bytes);
+  } else {
+    cudaHostAlloc((void**)&dummy_input_llr, input_size_bytes, cudaHostAllocMapped);
+    cudaHostAlloc((void**)&dummy_output_bits, output_size_bytes, cudaHostAllocMapped);
 
-  memset(dummy_input_llr, 0, input_size_bytes);
-  memset(dummy_output_bits, 0, output_size_bytes);
-
+    memset(dummy_input_llr, 0, input_size_bytes);
+    memset(dummy_output_bits, 0, output_size_bytes);
+  }
   printf("[CUDA] Initializing & Warming up Driver Pipeline...\n");
 
   for (int r_idx = 0; r_idx < 2; r_idx++) {
@@ -207,7 +227,7 @@ void init_decoder_warmup()
       gpu_graph_cache[node_idx].bridge_ptr->p_llr_ptr = dummy_input_llr;
       gpu_graph_cache[node_idx].bridge_ptr->p_out_ptr = dummy_output_bits;
 
-      // Record graph 
+      // Record graph
       nrLDPC_decoder_cuda_GraphRecord(gpu_graph_cache[node_idx].bridge_ptr,
                                       numLLR,
                                       cnProcBuf_dev,
@@ -254,16 +274,19 @@ void init_decoder_warmup()
 
     // Mark slots as free and reset index so real traffic starts from slot 0
     for (int i = 0; i < dynamic_cache_idx; i++) {
-        gpu_graph_cache[i].occupied = false;
+      gpu_graph_cache[i].occupied = false;
     }
     dynamic_cache_idx = 0;
     printf("[CUDA] Cache cleared. Ready for dynamic recording.\n");
   }
-
-  cudaFreeHost(dummy_input_llr);
-  cudaFreeHost(dummy_output_bits);
+  if (need_explicit_copy) {
+    cudaFree(dummy_input_llr);
+    cudaFree(dummy_output_bits);
+  } else {
+    cudaFreeHost(dummy_input_llr);
+    cudaFreeHost(dummy_output_bits);
+  }
 }
-
 
 void init_decoder_gpu_structures()
 {
@@ -372,6 +395,19 @@ int32_t LDPCshutdown_cuda()
   decoder_streamsCreated = false;
   encoder_streamsCreated = false;
 
+  if (p_llr_dev)
+    cudaFree(p_llr_dev);
+  if (p_out_dev)
+    cudaFree(p_out_dev);
+  if (cnProcBuf_dev)
+    cudaFree(cnProcBuf_dev);
+  if (bnProcBuf_dev)
+    cudaFree(bnProcBuf_dev);
+  if (llrRes_dev)
+    cudaFree(llrRes_dev);
+  if (llrProcBuf_dev)
+    cudaFree(llrProcBuf_dev);
+
   return 0;
 }
 
@@ -414,8 +450,6 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
                                                    t_nrLDPC_time_stats* p_profiler,
                                                    decode_abort_t* ab)
 {
-  extern int pageable_uses_host;
-
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
   uint8_t R = p_decParams->R;
@@ -431,8 +465,8 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   // If pageable_uses_host is 1 (GH200/Jetson), we use Direct/Zero-Copy access.
   // =====================================================================================
 
-  int8_t* p_llr_dev = p_llr; // Default to host pointer (Zero-Copy path)
-  int8_t* p_out_dev = p_out; // Default to host pointer (Zero-Copy path)
+  int8_t* P_llr_ptr = p_llr; // Default to host pointer (Zero-Copy path)
+  int8_t* P_out_ptr = p_out; // Default to host pointer (Zero-Copy path)
 
   // Calculate total buffer sizes
   size_t total_input_size = n_segments * numLLR * sizeof(int8_t);
@@ -440,19 +474,14 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   size_t total_output_size = n_segments * K * sizeof(int8_t);
 
   // Flag to track if explicit allocation/copy is needed
-  int need_explicit_copy = (!pageable_uses_host);
 
   if (need_explicit_copy) {
     // Allocate device memory for Discrete GPU
-    cudaError_t err_alloc_in = cudaMalloc((void**)&p_llr_dev, total_input_size);
-    cudaError_t err_alloc_out = cudaMalloc((void**)&p_out_dev, total_output_size);
-
-    if (err_alloc_in != cudaSuccess || err_alloc_out != cudaSuccess) {
-      // TODO: Handle allocation failure gracefully (e.g., fallback to CPU or Assert)
-    }
+    P_llr_ptr = p_llr_dev;
+    P_out_ptr = p_out_dev;
 
     // Copy Input data from Host to Device
-    cudaMemcpyAsync(p_llr_dev, p_llr, total_input_size, cudaMemcpyHostToDevice, decoderStreams[0]);
+    cudaMemcpyAsync(P_llr_ptr, p_llr, total_input_size, cudaMemcpyHostToDevice, decoderStreams[0]);
   }
 
   int found_idx = -1;
@@ -469,8 +498,8 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
 
   if (found_idx >= 0) {
     // === Cache HIT: Execute Recorded Graph ===
-    gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
-    gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = p_out_dev;
+    gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = P_llr_ptr;
+    gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = P_out_ptr;
 
     nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[found_idx].exec,
                                      decoderStreams[0],
@@ -491,8 +520,8 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
     gpu_graph_cache[new_idx].outMode = outMode;
 
     // Use the determined pointers (Device ptrs for PCIe, Host ptrs for GH200)
-    gpu_graph_cache[new_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
-    gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = p_out_dev;
+    gpu_graph_cache[new_idx].bridge_ptr->p_llr_ptr = P_llr_ptr;
+    gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = P_out_ptr;
 
     nrLDPC_decoder_cuda_GraphRecord(gpu_graph_cache[new_idx].bridge_ptr,
                                     numLLR,
@@ -519,12 +548,12 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
 
   } else {
     // === Cache FULL: Fallback to Normal Execution ===
-    // If the cache is full, we cannot record new graphs. 
+    // If the cache is full, we cannot record new graphs.
     // Execute kernel directly using standard launch.
 
     ldpc_cuda_bridge_t* perpack_buffer = stream_bridges[0];
-    perpack_buffer->p_llr_ptr = p_llr_dev;
-    perpack_buffer->p_out_ptr = p_out_dev;
+    perpack_buffer->p_llr_ptr = P_llr_ptr;
+    perpack_buffer->p_out_ptr = P_out_ptr;
 
     nrLDPC_decoder_cuda_NormalExecute(perpack_buffer,
                                       numLLR,
@@ -547,14 +576,10 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   // Copy back and Cleanup for Discrete GPU
   if (need_explicit_copy) {
     // Copy Output from Device to Host
-    cudaMemcpyAsync(p_out, p_out_dev, total_output_size, cudaMemcpyDeviceToHost, decoderStreams[0]);
+    cudaMemcpyAsync(p_out, P_out_ptr, total_output_size, cudaMemcpyDeviceToHost, decoderStreams[0]);
 
     cudaStreamSynchronize(decoderStreams[0]);
-
-    cudaFree(p_llr_dev);
-    cudaFree(p_out_dev);
   } else {
-    // For GH200/Zero-Copy, just wait for kernel completion
     cudaDeviceSynchronize();
   }
 
