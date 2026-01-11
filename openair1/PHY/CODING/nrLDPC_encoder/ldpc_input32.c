@@ -41,9 +41,8 @@ void ldpc_input32(uint8_t **input, uint32_t **c, int n_inputs, int n_segments) {
     masks[i] = simde_mm256_set1_epi32(1<<i);
   }
 
-  int i;
-  for (b=0;b<8448;b+=384) {
-    for (i=0; i < 384; i += 8) {
+  for (int b=0;b<8448;b+=384) {
+    for (int i=0; i < 384; i += 8) {
       unsigned int i8 = (2*b + i) >> 3;
       for (int j0=0;j0<n_inputs;j0++) {
         c256 = simde_mm256_and_si256(simde_mm256_cmpeq_epi32(simde_mm256_andnot_si256(simde_mm256_set1_epi32(input[j0<<5][i8]),andmask),zero256),masks[0]);

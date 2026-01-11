@@ -85,7 +85,7 @@ NR_gNB_DLSCH_t new_gNB_dlsch(NR_DL_FRAME_PARMS *frame_parms, uint16_t N_RB, int 
     a_segments = a_segments / 273 + 1;
   }
 
-  LOG_D(PHY, "Allocating %d segments (MAX %d, N_PRB %d)\n", a_segments, MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER, N_RB);
+  LOG_D(PHY, "Allocating %d segments (MAX %d, N_PRB %d) use_gpumem %d\n", a_segments, MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER, N_RB, use_gpumem);
   uint32_t dlsch_bytes = a_segments * 1056; // allocated bytes per segment
   NR_gNB_DLSCH_t dlsch = {0};
 
@@ -310,7 +310,8 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
                                                        .tprep = tprep,
                                                        .tparity = tparity,
                                                        .toutput = toutput,
-                                                       .TBs = TBs};
+                                                       .TBs = TBs,
+  						       .use_gpu = gNB->use_gpu};
   gNB->nrLDPC_coding_interface.nrLDPC_coding_encoder(&slot_parameters);
 
   for (int i = 0; i < n_dlsch; i++) {

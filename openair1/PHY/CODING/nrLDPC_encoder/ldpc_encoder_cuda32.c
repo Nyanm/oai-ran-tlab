@@ -84,15 +84,8 @@ void cuda_support_init() {
     LOG_I(NR_PHY,"Uses host page tables:           %s\n", pageable_uses_host ? "YES" : "NO");
     LOG_I(NR_PHY,"Host Register supported:         %s\n", register_host ? "YES" : "NO");
 
-  // initialize input and output memory
-  // REVISED LOGIC:
-  // 1. GH200 has pageable=1. It MUST go to 'else' (Zero-Copy) for Encoder to work.
-  // 2. L40S has pageable=0. It MUST go to 'if' (Malloc) to avoid "Illegal Memory Access".
-  // 3. We ignore 'register_host' for the decision if 'pageable' is missing, 
-  //    because L40S has register_host=1 but fails at Zero-Copy.
-  if (!pageable) {
-    LOG_I(NR_PHY,"[L40S/Legacy Fix] No Pageable Memory Access detected. Allocating discrete VRAM.\n");
-    
+  if (!pageable || !pageable_uses_host) {
+    LOG_I(NR_PHY,"Allocating c,d,cc arrays for GPU \n");
     cudaError_t err=cudaMalloc((void **)&c_dev,4*sizeof(uint32_t*));
     AssertFatal(err == cudaSuccess,"CUDA Error (c_dev): %s\n", cudaGetErrorString(err));
     err=cudaHostAlloc((void **)&c_host,4*sizeof(uint32_t*),cudaHostAllocDefault);
@@ -200,12 +193,12 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
   no_punctured_columns=(int)((nrows-2)*Zc+block_length-block_length*rate)/Zc;
   removed_bit=(nrows-no_punctured_columns-2) * Zc+block_length-(int)(block_length*rate);
 #ifdef USE_GPU_FOR_INPUT
-  if (!pageable && !register_host) {
+  if (!pageable || !pageable_uses_host) {
     for (int r=0;r<impp->n_segments;r++) {
         cudaMemcpy(input_devh[r],input[r],block_length>>3,cudaMemcpyHostToDevice);
     }
   }
-  ldpc_input(pageable||register_host? input : input_dev,(uint32_t**)c_dev,impp->n_segments,&encoderStreams[encoder_stream]);
+  ldpc_input(pageable&&pageable_uses_host? input : input_dev,(uint32_t**)c_dev,impp->n_segments,&encoderStreams[encoder_stream]);
 #else 
   ldpc_input32(input,(uint32_t**)c_dev,n_inputs,block_length,impp->n_segments); 
 #endif
@@ -213,6 +206,9 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
   //parity check part
   if(impp->tparity != NULL) start_meas(impp->tparity);
   encode_parity_check_part_cuda((uint32_t**)c_dev, (uint32_t**)d_dev, BG, Zc, Kb, ncols,n_inputs,&encoderStreams[encoder_stream]);
+  if (!pageable || !pageable_uses_host) {
+     for (int r=0; r<n_inputs;r++) cudaMemcpy(d_host[r],d_devh[r],68*384*sizeof(uint32_t),cudaMemcpyDeviceToHost);  
+  }
   if(impp->tparity != NULL) stop_meas(impp->tparity);
   
   return d_host;

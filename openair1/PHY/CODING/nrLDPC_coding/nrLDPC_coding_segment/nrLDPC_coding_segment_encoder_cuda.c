@@ -679,7 +679,6 @@ int nrLDPC_coding_encoder32(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encod
       .F = nrLDPC_TB_encoding_parameters->F,
     };
 
-    LOG_D(NR_PHY,"Calling ldpcnblocks (C %d, Z %d, K %d)\n",common_segment_params.n_segments,common_segment_params.Zc,common_segment_params.K);
     ldpcnblocks(nrLDPC_TB_encoding_parameters, common_segment_params);
 
 

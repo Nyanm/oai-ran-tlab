@@ -1050,13 +1050,16 @@ target_include_directories(PHY_UE PRIVATE ${blas_INCLUDE_DIRS} ${lapacke_INCLUDE
 
 add_library(PHY_NR_COMMON ${PHY_NR_SRC_COMMON})
 target_link_libraries(PHY_NR_COMMON PUBLIC UTIL)
-
 if (ENABLE_CUDA)
   find_package(CUDA REQUIRED)
   if (NOT CUDA_FOUND)
     message(FATAL_ERROR "no CUDA found")
   endif()
-  set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_121;")
+  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_80") # A100
+  #SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_90") # GH200
+  #SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_87") # Jetson
+  #SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_89") # L40S
+  #  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_121") # GB10
   set(CUDA_VERBOS_BUILD_ON)
   cuda_add_library(PHY_NR ${PHY_NR_SRC} ${PHY_NR_SRC_CU})
 else()
@@ -1969,6 +1972,13 @@ target_link_libraries(ldpctest PRIVATE
   # --whole-archive links 'check_crc' in the executable even though it is note used, see 'man ld'
   -Wl,--whole-archive crc_byte -Wl,--no-whole-archive
 )
+if (ENABLE_CUDA)
+  # ldpctest.c uses cudaHostAlloc(), so include dir/link libr to make available
+  # TODO don't write it directly into ldpctest, but separate compilation unit?
+  find_package(CUDA REQUIRED)
+  target_link_libraries(ldpctest PRIVATE ${CUDA_LIBRARIES})
+  target_include_directories(ldpctest PRIVATE ${CUDA_INCLUDE_DIRS})
+endif()
 
 add_library(physim_common OBJECT ${OPENAIR1_DIR}/SIMULATION/NR_PHY/nr_unitary_common.c)
 target_link_libraries(physim_common PRIVATE UTIL)

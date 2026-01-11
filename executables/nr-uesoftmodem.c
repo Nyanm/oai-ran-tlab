@@ -113,7 +113,7 @@ uint64_t        sidelink_frequency[MAX_NUM_CCs][4];
 // UE and OAI config variables
 double            cpuf;
 
-uint32_t use_gpu = 0;
+extern uint32_t use_gpu;
 
 int create_tasks_nrue(uint32_t ue_nb) {
   LOG_D(NR_RRC, "%s(ue_nb:%d)\n", __FUNCTION__, ue_nb);
