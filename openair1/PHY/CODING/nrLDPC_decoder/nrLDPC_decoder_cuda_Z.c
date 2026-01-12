@@ -73,7 +73,7 @@ static inline void nrLDPC_decoder_core( int8_t* p_llr,
     int batch = 0;
 
     while (batch < num_batches) {
-        printf("==================== Batch %d/%d ====================\n", batch + 1, num_batches);
+        // printf("==================== Batch %d/%d ====================\n", batch + 1, num_batches);
 
         int cw_start = batch * CWS_PER_BATCH;
         int cw_in_this_batch = (batch == num_batches - 1) 
@@ -107,10 +107,15 @@ static inline void nrLDPC_decoder_core( int8_t* p_llr,
         //     hard_bytes_to_copy);
 
         for (int i = 0; i < cw_in_this_batch; ++i) {
-            memcpy(p_out + i * BG1_MAX_INFO_LEN,
+            memcpy(p_out + cw_start * BG1_MAX_INFO_LEN + i * BG1_MAX_INFO_LEN,
                 host_mem->h_big_hard_bits + i * BG1_MAX_INFO_LEN / 8,
                 BG1_MAX_INFO_LEN / 8);
         }
+        // for (int i = 0; i < cw_in_this_batch; ++i) {
+        //     memcpy(p_out + i * BG1_MAX_INFO_LEN,
+        //         host_mem->h_big_hard_bits + i * BG1_MAX_INFO_LEN / 8,
+        //         BG1_MAX_INFO_LEN / 8);
+        // }
 
 
         // for (int i = 0; i < cw_in_this_batch*BG1_MAX_INFO_LEN; ++i) {
