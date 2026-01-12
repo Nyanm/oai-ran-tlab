@@ -123,6 +123,14 @@ __global__ void hard_decision_kernel(
     int N,
     int Kb
 );
+// Modified hard decision kernel with bit-reversed order
+__global__ void hard_decision_bit_reverse_kernel(
+    int8_t* d_app_reordered,   // Input: reordered APP values (information bits only)
+    uint8_t* d_hard_bits,       // Output: packed hard-decision bits (1 bit per LLR sign)
+    int Z,
+    int N,
+    int Kb
+);
 void build_ldpc_graph_per_stream(
     cudaGraph_t graph,
     cuda_grid* g,
@@ -819,6 +827,44 @@ __global__ void hard_decision_kernel(
     d_hard_bits[hard_bits_addr] = val;
 }
 
+// Modified hard decision kernel with bit-reversed order
+__global__ void hard_decision_bit_reverse_kernel(
+    int8_t* d_app_reordered,   // Input: reordered APP values (information bits only)
+    uint8_t* d_hard_bits,       // Output: packed hard-decision bits (1 bit per LLR sign)
+    int Z,
+    int N,
+    int Kb
+) {
+    // --- Thread indexing ---
+    int z_idx = threadIdx.x * 8;    // Start index in Z dimension, process 8 bits per thread
+    int col = blockIdx.x;           // Column (variable node) index
+    int cw_idx = blockIdx.y;        // Codeword index within stream [0, CWS_PER_STREAM - 1]
+
+    // Boundary checks
+    if (z_idx >= Z) return;
+    if (col >= Kb) return;
+    if (cw_idx >= CWS_PER_STREAM) return;
+
+    uint8_t val = 0;
+
+    int app_addr = cw_idx * N + col * Z + z_idx; // Base address for 8 consecutive APP values
+
+    // Perform hard decision on 8 consecutive LLRs
+    for (int i = 0; i < 8; i++) {
+        int8_t app_val = d_app_reordered[app_addr + i];
+        // Hard decision: APP ≥ 0 → bit = 0, APP < 0 → bit = 1
+        int bit = (app_val >= 0) ? 0 : 1;
+        // modify to bit-reverse order
+        val |= (bit << (7 - i));
+    }
+
+    // Compute output byte address (Kb * Z total info bits, packed 8 per byte)
+    int hard_bits_addr = cw_idx * (Kb * Z / 8) + col * (Z / 8) + (z_idx / 8);
+
+    d_hard_bits[hard_bits_addr] = val;
+}
+
+
 // Build a complete CUDA Graph for the specified stream (stream_id), 
 // describing the entire LDPC decoding pipeline:
 /*
@@ -948,7 +994,8 @@ void build_ldpc_graph_per_stream(
         &Kb
     };
     cudaKernelNodeParams hardParams = {};
-    hardParams.func = (void*)hard_decision_kernel;
+    // hardParams.func = (void*)hard_decision_kernel;
+    hardParams.func = (void*)hard_decision_bit_reverse_kernel;
     hardParams.gridDim = g->hard_grid;
     hardParams.blockDim = g->hard_block;
     hardParams.sharedMemBytes = 0;

@@ -113,12 +113,12 @@ static inline void nrLDPC_decoder_core( int8_t* p_llr,
         }
 
 
-        for (int i = 0; i < cw_in_this_batch*BG1_MAX_INFO_LEN; ++i) {
-            p_out[i] = reverse_bits_test(p_out[i]);
-        }
+        // for (int i = 0; i < cw_in_this_batch*BG1_MAX_INFO_LEN; ++i) {
+        //     p_out[i] = reverse_bits_test(p_out[i]);
+        // }
 
         // FILE*f_in;
-        // f_in = fopen("ldpc_input.bin","wb");
+        // f_in = fopen("zjg_p_llr.bin","wb");
         // fwrite(p_llr + cw_start * BG1_MAX_CW_LEN,sizeof(int8_t),cw_in_this_batch * BG1_MAX_CW_LEN,f_in);
         // fclose(f_in);
 
