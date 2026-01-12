@@ -138,8 +138,12 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
                          decode_abort_t* ab)
 {
     e_nrLDPC_outMode outMode = p_decParams->outMode;
-    if ((p_decParams->R != 13) || (p_decParams->BG != 1) || (p_decParams->Z != 384)) { // format check
-        AssertFatal(false, "Format cuda not support, only support BG = 1, Zc = 384 and R = 13 right now\n");
+    if ((p_decParams->BG != 1) || (p_decParams->Z != 384)) { // format check
+        AssertFatal(false, "Format cuda not support, only support BG = 1, Zc = 384 right now\n");
+        return 0;
+    }
+    if(p_decParams->R != 13 && p_decParams->R != 23) {
+        AssertFatal(false, "Only support rate 1/3 and 2/3 in cuda decoder\n");
         return 0;
     }
     // nrLDPC_outMode_BIT is default 
