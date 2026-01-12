@@ -713,6 +713,16 @@ struct openair0_device_t {
      * \param symbol
      */
     void (*write_prach)(uint32_t *prachF, int aarx, int frame, int slot, int symbol);
+
+    /*!
+     * \brief Write data for one PUSCH symbol
+     * \param prachF Frequency domain PUSCH data
+     * \param aarx
+     * \param frame
+     * \param slot
+     * \param symbol
+     */
+    void (*write_pusch)(uint32_t *prachF, int aarx, int frame, int slot, int symbol);
   } xran_api;
 };
 

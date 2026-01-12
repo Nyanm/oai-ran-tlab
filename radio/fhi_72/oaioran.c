@@ -602,7 +602,7 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
   const struct xran_fh_init *fh_init = get_xran_fh_init();
 #ifdef K_RELEASE
   int nPRBs = fh_cfg->perMu[mu].nULRBs;
-  int fftsize = 1 << fh_cfg->ru_conf.fftSize[mu];
+  int fftsize = 1 << fh_cfg->perMu[mu].nDLFftSize;
 #elif defined(E_RELEASE) || defined(F_RELEASE)
   int nPRBs = fh_cfg->nULRBs;
   int fftsize = 1 << fh_cfg->nULFftSize;
