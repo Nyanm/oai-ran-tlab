@@ -47,10 +47,10 @@ if (ENABLE_LDPC_CUDA)
 
   # Nvidia recommends to build against all targeted archs: https://forums.developer.nvidia.com/t/261162
   # this is for cmake 3.16 (OAI minimum), starting at cmake 3.18 there is another syntax, see below
-  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_87") # Jetson
+  # SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_87") # Jetson
   SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_89") # L40S
-  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_90") # GH200
-  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_121") # GB10
+  # SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_90") # GH200
+  # SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_121") # GB10
 
   SET(CUDA_VERBOSE_BUILD ON)
 
@@ -78,7 +78,8 @@ if (ENABLE_LDPC_CUDA)
 		   nrLDPC_coding/nrLDPC_coding_segment/ldpc_deinterleave.cu
 		   nrLDPC_coding/nrLDPC_coding_segment/ldpc_rate_matching.cu
   )
-  set_target_properties(ldpc_cuda PROPERTIES CUDA_ARCHITECTURES "87;89;90;121")
+  # set_target_properties(ldpc_cuda PROPERTIES CUDA_ARCHITECTURES "87;89;90;121")
+  set_target_properties(ldpc_cuda PROPERTIES CUDA_ARCHITECTURES "87;89;90")
   # we need to find the right include directory, but ti seems that
   # enable_language(CUDA) does not make this available(?), so also use the CUDA package
   find_package(CUDA REQUIRED)
