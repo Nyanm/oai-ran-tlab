@@ -57,10 +57,12 @@ if (ENABLE_LDPC_CUDA)
   # version using NVLink-C2C in Grace Hopper
   add_library(ldpc_cuda MODULE
                    nrLDPC_decoder/kernel_test.cu
-                   nrLDPC_decoder/nrLDPC_decoder_cuda.c
+                  nrLDPC_decoder/nrLDPC_decoder_cuda_Z.c      # zhao's decoder
+                  nrLDPC_decoder/nrLDPC_decoder_BG1_cuda_Z.cu  # zhao's decoder
+                  #  nrLDPC_decoder/nrLDPC_decoder_cuda.c  # pan's decoder
+                  #  nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu   # pan's decoder
                    nrLDPC_decoder/nrLDPC_decoder.c
 		   nrLDPC_encoder/ldpc_encoder_optim8segmulti.c
-		   nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu
 		   nrLDPC_encoder/ldpc_encoder_cuda32.c
 		   nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
 		   nrLDPC_encoder/ldpc_input.cu
