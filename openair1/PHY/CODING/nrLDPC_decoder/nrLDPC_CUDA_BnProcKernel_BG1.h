@@ -18,14 +18,14 @@
  * For more information about the OpenAirInterface (OAI) Software Alliance:
  *      contact@openairinterface.org
  */
-  /*! \file nrLDPC_CUDA_BnProcKernel_BG1.h
+/*! \file nrLDPC_CUDA_BnProcKernel_BG1.h
  * \brief Defines the kernels for bit node processing
  * \author Qizhi Pan, Raymond Knopp
  * \company EURECOM
  * \email: qizhi.pan@eurecom.fr, raymond.knopp@eurecom.fr
  * \date 2025-12-30
  * \version 1.0
- * \note 
+ * \note
  * \warning
  */
 #include <cuda_runtime.h>
@@ -33,30 +33,27 @@
 #include <stdio.h>
 #include "nrLDPC_types.h"
 
+__device__ __forceinline__ void unpack_and_sign_extend(uint32_t packed, uint32_t *val_lo, uint32_t *val_hi)
+{
+  uint32_t magic_sub = 0x00800080;
 
-__device__ __forceinline__ void unpack_and_sign_extend(uint32_t packed, uint32_t* val_lo, uint32_t* val_hi) {
+  uint32_t lo_zext = __byte_perm(packed, 0, 0x5140);
+  *val_lo = __vsub2(lo_zext ^ magic_sub, magic_sub);
 
-    int32_t a = (int32_t)(packed << 24) >> 24; 
-    int32_t b = (int32_t)(packed << 16) >> 24; 
-    int32_t c = (int32_t)(packed << 8) >> 24; 
-    int32_t d = (int32_t)(packed) >> 24; 
-
-    *val_lo = __byte_perm(a, b, 0x5410);
-    *val_hi = __byte_perm(c, d, 0x5410);
+  uint32_t hi_zext = __byte_perm(packed, 0, 0x7362);
+  *val_hi = __vsub2(hi_zext ^ magic_sub, magic_sub);
 }
 
+__device__ __forceinline__ uint32_t saturate_and_pack(uint32_t val_lo, uint32_t val_hi)
+{
+  uint32_t lo_clamped = __vmins2(val_lo, 0x007F007F); // min(v, 127)
+  lo_clamped = __vmaxs2(lo_clamped, 0xFF80FF80); // max(v, -128)
 
-__device__ __forceinline__ uint32_t saturate_and_pack(uint32_t val_lo, uint32_t val_hi) {
+  uint32_t hi_clamped = __vmins2(val_hi, 0x007F007F);
+  hi_clamped = __vmaxs2(hi_clamped, 0xFF80FF80);
 
-    uint32_t lo_clamped = __vmins2(val_lo, 0x007F007F); // min(v, 127)
-    lo_clamped = __vmaxs2(lo_clamped, 0xFF80FF80);      // max(v, -128)
-
-    uint32_t hi_clamped = __vmins2(val_hi, 0x007F007F);
-    hi_clamped = __vmaxs2(hi_clamped, 0xFF80FF80);
-
-    return __byte_perm(lo_clamped, hi_clamped, 0x6420);
+  return __byte_perm(lo_clamped, hi_clamped, 0x6420);
 }
-
 
 __device__ __forceinline__ void bnProcKernel_BG1_int8_Gn(const int8_t *__restrict__ d_bnProcBuf,
                                                          int8_t *__restrict__ d_cnProcBuf,
@@ -70,117 +67,113 @@ __device__ __forceinline__ void bnProcKernel_BG1_int8_Gn(const int8_t *__restric
                                                          uint32_t circShift,
                                                          uint32_t Zc)
 {
-    const int32_t *bnProcBufPtr = (const int32_t *)(d_bnProcBuf) + lane;
-    
-    uint32_t packed_intrinsic = ((const int32_t *)(d_llrProcBuf))[lane];
-    
-    uint32_t MsgSumLo, MsgSumHi;
-    unpack_and_sign_extend(packed_intrinsic, &MsgSumLo, &MsgSumHi);
+  const int32_t *bnProcBufPtr = (const int32_t *)(d_bnProcBuf) + lane;
 
-    uint32_t off = (GrpNum * NR_LDPC_ZMAX) >> 2;
-    const int32_t *currPtr = bnProcBufPtr;
+  uint32_t packed_intrinsic = ((const int32_t *)(d_llrProcBuf))[lane];
 
-    int i = 0;
-    
-    // ---  2-Way Unroll ---
+  uint32_t MsgSumLo, MsgSumHi;
+  unpack_and_sign_extend(packed_intrinsic, &MsgSumLo, &MsgSumHi);
 
-    for (; i < (int)GrpIdx - 1; i += 2) {
+  uint32_t off = (GrpNum * NR_LDPC_ZMAX) >> 2;
+  const int32_t *currPtr = bnProcBufPtr;
 
-        uint32_t val1 = *currPtr;
-        uint32_t val2 = *(currPtr + off); 
+  int i = 0;
 
-        uint32_t v1_lo, v1_hi;
-        unpack_and_sign_extend(val1, &v1_lo, &v1_hi);
-        MsgSumLo = __vaddss2(MsgSumLo, v1_lo);
-        MsgSumHi = __vaddss2(MsgSumHi, v1_hi);
+  // ---  2-Way Unroll ---
 
-        uint32_t v2_lo, v2_hi;
-        unpack_and_sign_extend(val2, &v2_lo, &v2_hi);
-        MsgSumLo = __vaddss2(MsgSumLo, v2_lo);
-        MsgSumHi = __vaddss2(MsgSumHi, v2_hi);
+  for (; i < (int)GrpIdx - 1; i += 2) {
+    uint32_t val1 = *currPtr;
+    uint32_t val2 = *(currPtr + off);
 
-        currPtr += (off << 1); 
-    }
+    uint32_t v1_lo, v1_hi;
+    unpack_and_sign_extend(val1, &v1_lo, &v1_hi);
+    MsgSumLo = __vaddss2(MsgSumLo, v1_lo);
+    MsgSumHi = __vaddss2(MsgSumHi, v1_hi);
 
-    if (i < GrpIdx) {
-        uint32_t val = *currPtr;
-        uint32_t v_lo, v_hi;
-        unpack_and_sign_extend(val, &v_lo, &v_hi);
-        MsgSumLo = __vaddss2(MsgSumLo, v_lo);
-        MsgSumHi = __vaddss2(MsgSumHi, v_hi);
+    uint32_t v2_lo, v2_hi;
+    unpack_and_sign_extend(val2, &v2_lo, &v2_hi);
+    MsgSumLo = __vaddss2(MsgSumLo, v2_lo);
+    MsgSumHi = __vaddss2(MsgSumHi, v2_hi);
 
-    }
+    currPtr += (off << 1);
+  }
 
-    uint32_t saturated_llr = saturate_and_pack(MsgSumLo, MsgSumHi);
-    
-    uint32_t BricksToBeGet;
-    if (GrpIdx == 1) {
-        BricksToBeGet = packed_intrinsic;
-    } else {
-        uint32_t prevIdxWords = (MsgIdx * GrpNum * NR_LDPC_ZMAX) >> 2;
-        uint32_t prev = bnProcBufPtr[prevIdxWords]; 
-        BricksToBeGet = __vsubss4(saturated_llr, prev);
-    }
+  if (i < GrpIdx) {
+    uint32_t val = *currPtr;
+    uint32_t v_lo, v_hi;
+    unpack_and_sign_extend(val, &v_lo, &v_hi);
+    MsgSumLo = __vaddss2(MsgSumLo, v_lo);
+    MsgSumHi = __vaddss2(MsgSumHi, v_hi);
+  }
 
-    moveBricks_forput_circ(d_cnProcBuf, lane * 4, (uint8_t *)&BricksToBeGet, Zc, circShift);
+  uint32_t saturated_llr = saturate_and_pack(MsgSumLo, MsgSumHi);
+
+  uint32_t BricksToBeGet;
+  if (GrpIdx == 1) {
+    BricksToBeGet = packed_intrinsic;
+  } else {
+    uint32_t prevIdxWords = (MsgIdx * GrpNum * NR_LDPC_ZMAX) >> 2;
+    uint32_t prev = bnProcBufPtr[prevIdxWords];
+    BricksToBeGet = __vsubss4(saturated_llr, prev);
+  }
+
+  moveBricks_forput_circ(d_cnProcBuf, lane * 4, (uint8_t *)&BricksToBeGet, Zc, circShift);
 }
 
 __device__ __forceinline__ void bnProcKernel_BG1_int8_Gn_last(const int8_t *__restrict__ d_bnProcBuf,
-                                                         int8_t *__restrict__ d_cnProcBuf,
-                                                         const int8_t *__restrict__ d_llrProcBuf,
-                                                         int8_t *__restrict__ d_llrRes,
-                                                         uint32_t lane,
-                                                         uint32_t GrpIdx,
-                                                         uint32_t MsgIdx,
-                                                         uint32_t BnIdx,
-                                                         uint32_t GrpNum,
-                                                         uint32_t circShift,
-                                                         uint32_t Zc)
+                                                              int8_t *__restrict__ d_cnProcBuf,
+                                                              const int8_t *__restrict__ d_llrProcBuf,
+                                                              int8_t *__restrict__ d_llrRes,
+                                                              uint32_t lane,
+                                                              uint32_t GrpIdx,
+                                                              uint32_t MsgIdx,
+                                                              uint32_t BnIdx,
+                                                              uint32_t GrpNum,
+                                                              uint32_t circShift,
+                                                              uint32_t Zc)
 {
-    const int32_t *bnProcBufPtr = (const int32_t *)(d_bnProcBuf) + lane;
-    
-    uint32_t packed_intrinsic = ((const int32_t *)(d_llrProcBuf))[lane];
-    
-    uint32_t MsgSumLo, MsgSumHi;
-    unpack_and_sign_extend(packed_intrinsic, &MsgSumLo, &MsgSumHi);
+  const int32_t *bnProcBufPtr = (const int32_t *)(d_bnProcBuf) + lane;
 
-    uint32_t off = (GrpNum * NR_LDPC_ZMAX) >> 2;
-    const int32_t *currPtr = bnProcBufPtr;
+  uint32_t packed_intrinsic = ((const int32_t *)(d_llrProcBuf))[lane];
 
-    int i = 0;
-    
-    // ---  2-Way Unroll ---
+  uint32_t MsgSumLo, MsgSumHi;
+  unpack_and_sign_extend(packed_intrinsic, &MsgSumLo, &MsgSumHi);
 
-    for (; i < (int)GrpIdx - 1; i += 2) {
+  uint32_t off = (GrpNum * NR_LDPC_ZMAX) >> 2;
+  const int32_t *currPtr = bnProcBufPtr;
 
-        uint32_t val1 = *currPtr;
-        uint32_t val2 = *(currPtr + off); 
+  int i = 0;
 
-        uint32_t v1_lo, v1_hi;
-        unpack_and_sign_extend(val1, &v1_lo, &v1_hi);
-        MsgSumLo = __vaddss2(MsgSumLo, v1_lo);
-        MsgSumHi = __vaddss2(MsgSumHi, v1_hi);
+  // ---  2-Way Unroll ---
 
-        uint32_t v2_lo, v2_hi;
-        unpack_and_sign_extend(val2, &v2_lo, &v2_hi);
-        MsgSumLo = __vaddss2(MsgSumLo, v2_lo);
-        MsgSumHi = __vaddss2(MsgSumHi, v2_hi);
+  for (; i < (int)GrpIdx - 1; i += 2) {
+    uint32_t val1 = *currPtr;
+    uint32_t val2 = *(currPtr + off);
 
-        currPtr += (off << 1); 
-    }
+    uint32_t v1_lo, v1_hi;
+    unpack_and_sign_extend(val1, &v1_lo, &v1_hi);
+    MsgSumLo = __vaddss2(MsgSumLo, v1_lo);
+    MsgSumHi = __vaddss2(MsgSumHi, v1_hi);
 
-    if (i < GrpIdx) {
-        uint32_t val = *currPtr;
-        uint32_t v_lo, v_hi;
-        unpack_and_sign_extend(val, &v_lo, &v_hi);
-        MsgSumLo = __vaddss2(MsgSumLo, v_lo);
-        MsgSumHi = __vaddss2(MsgSumHi, v_hi);
-    }
+    uint32_t v2_lo, v2_hi;
+    unpack_and_sign_extend(val2, &v2_lo, &v2_hi);
+    MsgSumLo = __vaddss2(MsgSumLo, v2_lo);
+    MsgSumHi = __vaddss2(MsgSumHi, v2_hi);
 
-    uint32_t saturated_llr = saturate_and_pack(MsgSumLo, MsgSumHi);
-    
-    if (MsgIdx == 0) {
-        ((int32_t *)(d_llrRes))[lane] = saturated_llr;
-    }
+    currPtr += (off << 1);
+  }
 
+  if (i < GrpIdx) {
+    uint32_t val = *currPtr;
+    uint32_t v_lo, v_hi;
+    unpack_and_sign_extend(val, &v_lo, &v_hi);
+    MsgSumLo = __vaddss2(MsgSumLo, v_lo);
+    MsgSumHi = __vaddss2(MsgSumHi, v_hi);
+  }
+
+  uint32_t saturated_llr = saturate_and_pack(MsgSumLo, MsgSumHi);
+
+  if (MsgIdx == 0) {
+    ((int32_t *)(d_llrRes))[lane] = saturated_llr;
+  }
 }
