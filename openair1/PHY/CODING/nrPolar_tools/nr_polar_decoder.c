@@ -38,7 +38,6 @@
 
 #include "PHY/CODING/nrPolar_tools/nr_polar_defs.h"
 #include "assertions.h"
-#include <armral.h>
 
 // #define POLAR_CODING_DEBUG
 #define USE_ARMRAL_FAST 1
@@ -700,7 +699,7 @@ uint32_t polar_decoder_int16(int16_t *input,
   switch (armral_mode) {
     case 1: {
 
-      const uint32_t L = 4;       // list size
+      const uint32_t L = 1;       // list size
 
       armral_polar_ibil_type i_bil = polarParams->i_bil;
       uint8_t decoded_bytes[8];

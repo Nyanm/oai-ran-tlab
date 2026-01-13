@@ -41,7 +41,6 @@
 
 #include "PHY/CODING/nrPolar_tools/nr_polar_defs.h"
 #include "assertions.h"
-#include <armral.h>
 #include <stdint.h>
 
 // input  [a_31 a_30 ... a_0]
@@ -169,7 +168,6 @@ void polar_encoder(uint32_t *in, uint32_t *out, int8_t messageType, uint16_t mes
 
   // Encode block output (octets packés)
   uint8_t *armral_D = (uint8_t *)calloc(polarParams->N, sizeof(uint8_t));
-  uint8_t *armral_Invalid = (uint8_t *)calloc(polarParams->N, sizeof(uint8_t));
   // Rate-matched / final output
   uint8_t *armral_E = (uint8_t *)calloc(polarParams->encoderLength, sizeof(uint8_t));
 
@@ -196,7 +194,6 @@ void polar_encoder(uint32_t *in, uint32_t *out, int8_t messageType, uint16_t mes
       armral_B,
       armral_frozen_mask,
       armral_CPrime,
-      armral_Invalid,
       armral_D,
       armral_E
   );
@@ -430,7 +427,6 @@ void polar_encoder_dci(uint32_t *in,
 
   // Encode block output (octets packés)
   uint8_t *armral_D = (uint8_t *)calloc(polarParams->N, sizeof(uint8_t));
-  uint8_t *armral_Invalid = (uint8_t *)calloc(polarParams->N, sizeof(uint8_t));
   // Rate-matched / final output
   uint8_t *armral_E = (uint8_t *)calloc(polarParams->encoderLength, sizeof(uint8_t));
 
@@ -457,7 +453,6 @@ void polar_encoder_dci(uint32_t *in,
       armral_B,
       armral_frozen_mask,
       armral_CPrime,
-      armral_Invalid,
       armral_D,
       armral_E
   );
@@ -748,9 +743,7 @@ void polar_encoder_fast(uint64_t *A,
 #endif
   switch (armral_mode) {
     case 1:
-
-      
-      // Version avec allocation unique
+      {
       size_t size_in = (polarParams->payloadBits + 7)/8;
       size_t size_B = (polarParams->K + 7)/8;
       size_t size_frozen = polarParams->N;
@@ -761,17 +754,15 @@ void polar_encoder_fast(uint64_t *A,
 
       size_t total = size_in + size_B + size_frozen + size_CPrime + 
                      size_D + size_Invalid + size_E;
-
-      uint8_t *base = calloc(total, 1);
-      AssertFatal(base != NULL, "Memory allocation failed\n");
-
-      uint8_t *armral_in = base;
+      uint8_t  base[total];
+      uint8_t *armral_in=base;
       uint8_t *armral_B = armral_in + size_in;
       uint8_t *armral_frozen_mask = armral_B + size_B;
       uint8_t *armral_CPrime = armral_frozen_mask + size_frozen;
       uint8_t *armral_D = armral_CPrime + size_CPrime;
       uint8_t *armral_Invalid = armral_D + size_D;
       uint8_t *armral_E = armral_Invalid + size_Invalid;
+
 
 
       
@@ -782,7 +773,7 @@ void polar_encoder_fast(uint64_t *A,
 
 
       
-      armral_status status = ral_polar_encoder(armral_in, polarParams->K, polarParams->encoderLength, polarParams->N, polarParams->i_bil, armral_B, armral_frozen_mask, armral_CPrime, armral_Invalid, armral_D, armral_E);
+      armral_status status = ral_polar_encoder(armral_in, polarParams->K, polarParams->encoderLength, polarParams->N, polarParams->i_bil, armral_B, armral_frozen_mask, armral_CPrime, armral_D, armral_E);
 
       AssertFatal(status == ARMRAL_SUCCESS, "armRAL polar encoder failed\n");
       
@@ -790,12 +781,12 @@ void polar_encoder_fast(uint64_t *A,
       int nbytes = (polarParams->encoderLength + 7) / 8;
       memcpy(out, armral_E, nbytes);
       // tempa
-      free(base);
       
 
-
+      polarReturn(polarParams);
+      return;
       break;
-
+    }
     case 0:
       uint64_t tcrc = 0;
       uint offset = 0;
@@ -985,6 +976,8 @@ void polar_encoder_fast(uint64_t *A,
       }
       printf("\n");
     #endif
+      polarReturn(polarParams);
+      return;
       break;
 
   polarReturn(polarParams);

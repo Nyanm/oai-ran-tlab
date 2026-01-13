@@ -39,6 +39,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include "armral.h"
 
 #include "PHY/CODING/nrPolar_tools/nr_polar_dci_defs.h"
 #include "PHY/CODING/nrPolar_tools/nr_polar_uci_defs.h"
@@ -338,4 +339,100 @@ static inline void polarReturn(t_nrPolar_params *polarParams)
   pthread_mutex_unlock(&PolarListMutex);
 }
 
+#endif
+
+
+// ------------------------------------------------------
+// Polar encoder Declaration
+// ------------------------------------------------------
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * @brief Complete 5G NR Polar encoder pipeline:
+ *        CRC attachment → frozen mask → interleave → encode → rate-match.
+ *
+ * @param data_in_bits        Input raw bits (payload only, without CRC). Size = (K-L)/8 bytes.
+ * @param K                   Total number of bits after CRC attachment.
+ * @param E                   Number of bits after rate-matching.
+ * @param N                   Polar code length (power of 2, 32 ≤ N ≤ 1024).
+ * @param i_bil               Enable/disable interleaving (IBIL).
+ * @param data_crc_bits       Buffer for K bits after CRC. Size = (K+7)/8.
+ * @param frozen_mask         Buffer for frozen mask. Size = N bytes.
+ * @param data_interleaved    Buffer for interleaved bits. Size = N bits packed.
+ * @param data_encoded_bytes  Buffer for encoded bits. Size = N bits packed.
+ * @param data_out_bits       Buffer for output bits after rate-matching. Size = E bits packed.
+ * 
+ * @return armral_status      Returns ARMRAL_SUCCESS on success.
+ */
+armral_status ral_polar_encoder(
+    const uint8_t *data_in,
+    uint32_t K,
+    uint32_t E,
+    uint32_t N,
+    armral_polar_ibil_type i_bil,
+    uint8_t *data_crc,
+    uint8_t *frozen_mask,
+    uint8_t *data_interleaved,
+    uint8_t *data_encoded,
+    uint8_t *data_out
+);
+
+#ifdef __cplusplus
+}
+#endif
+
+
+// ------------------------------------------------------
+// Polar decoder declaration
+// ------------------------------------------------------
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * @brief Complete 5G NR Polar decoder pipeline:
+ *        Rate-recovery → polar decode (SCL/L) → deinterleave → CRC check.
+ *
+ * This function attempts to decode L codewords using SCL decoding.
+ * It stops early and returns ARMRAL_SUCCESS if a CRC pass is obtained
+ * for any of the L paths.
+ *
+ * @param N                   Polar code length (power of 2, 32 ≤ N ≤ 1024).
+ * @param K                   Number of information bits (including CRC).
+ * @param E                   Number of rate-matched bits (demodulated inputs).
+ * @param i_bil               IBIL flag (interleaving used during RM).
+ * @param L                   List size for SCL decoding.
+ *
+ * @param frozen_mask         Frozen bits mask. Size = N bytes.
+ *
+ * @param data_demod_soft     Input LLRs after demodulator (size: E bytes).
+ *
+ * @param data_recovered      Output buffer for rate-recovered LLRs
+ *                            (size: N bytes).
+ *
+ * @param data_decoded_bits   Output buffer for decoded bits (size: N bits × L).
+ *                            Bits are packed (N/8 per codeword).
+ *
+ * @param data_deint0         Scratch buffer for deinterleaving first path.
+ *                            Size = ceil(K/8) bytes.
+ *
+ * @param data_deint          Scratch buffer for deinterleaving paths 1..L−1.
+ *                            Size = ceil(K/8) bytes.
+ *
+ * @return armral_status      Returns ARMRAL_SUCCESS if decoding completed
+ *                            (including CRC early stop). Non-zero on failure.
+ */
+armral_status ral_polar_decoder(
+    const int16_t *input_llr16,
+    uint32_t N,
+    uint32_t E,
+    uint32_t K,
+    uint32_t L,
+    armral_polar_ibil_type i_bil,
+    uint8_t *decoded_out
+);
+#ifdef __cplusplus
+}
 #endif

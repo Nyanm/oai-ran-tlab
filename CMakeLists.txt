@@ -588,7 +588,8 @@ include_directories("${OPENAIR2_DIR}/UTIL/MATH")
 include_directories("${OPENAIR2_DIR}/UTIL/OTG")
 include_directories("${OPENAIR2_DIR}/UTIL/OPT")
 include_directories("${OPENAIR_DIR}")
-
+include_directories("${OPENAIR1_DIR}/armRAL_PHY/ral/include")
+include_directories("${OPENAIR1_DIR}/armRAL_PHY/ral")
 ###########
 # Utilities
 ###############
@@ -778,7 +779,10 @@ set(PHY_POLARSRC
   ${OPENAIR1_DIR}/PHY/CODING/nrPolar_tools/nr_polar_matrix_and_array.c
   ${OPENAIR1_DIR}/PHY/CODING/nrPolar_tools/nr_polar_procedures.c
   ${OPENAIR1_DIR}/PHY/CODING/nrPolar_tools/nr_polar_sequence_pattern.c
+  ${OPENAIR1_DIR}/PHY/CODING/nrPolar_tools/ral_polar_encoder.cpp
+  ${OPENAIR1_DIR}/PHY/CODING/nrPolar_tools/ral_polar_decoder.cpp
 )
+
 set(PHY_SMALLBLOCKSRC
   ${OPENAIR1_DIR}/PHY/CODING/nrSmallBlock/encodeSmallBlock.c
   ${OPENAIR1_DIR}/PHY/CODING/nrSmallBlock/decodeSmallBlock.c
@@ -1063,9 +1067,9 @@ set_target_properties(armral_utils PROPERTIES
 
 add_library(PHY_NR ${PHY_NR_SRC})
 #target_link_libraries(PHY_NR nr_phy_common nr_common nr_fapi_p5)
-target_include_directories(PHY_NR PRIVATE
-  "${OPENAIR1_DIR}/armRAL_PHY/ral/include"
-)
+#target_include_directories(PHY_NR PRIVATE
+#  "${OPENAIR1_DIR}/armRAL_PHY/ral/include"
+#)
 
 target_link_libraries(PHY_NR PRIVATE nr_phy_common nr_common nr_fapi_p5 armral armral_utils)
 
@@ -1077,7 +1081,7 @@ target_compile_definitions(PHY_NR_NO_AVX_256 PUBLIC USE_128BIT)
 
 add_library(PHY_NR_UE ${PHY_NR_UE_SRC})
 target_link_libraries(PHY_NR_UE PRIVATE asn1_nr_rrc_hdrs nr_phy_common nr_common UTIL armral armral_utils)
-target_include_directories(PHY_NR_UE PRIVATE ${OPENAIR1_DIR}/armRAL_PHY/ral/include)
+#target_include_directories(PHY_NR_UE PRIVATE ${OPENAIR1_DIR}/armRAL_PHY/ral/include)
 
 add_library(PHY_RU ${PHY_SRC_RU})
 target_link_libraries(PHY_RU PRIVATE asn1_lte_rrc_hdrs UTIL)
