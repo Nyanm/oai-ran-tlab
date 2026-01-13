@@ -41,8 +41,10 @@ extern "C" {
 #define num_TotalThreads_llr_llrRes 6528
 #define RowLength 96 //Zc = 384/4 = 96
 
-#define num_TotalBlocks_BG1_R13 316
-#define num_TotalBlocks_BG1_R23 144
+#define num_TotalBlocks_cn_BG1_R13 316 //based on number of Cn2Bn Msgs
+#define num_TotalBlocks_bn_BG1_R13 68 //based on number of BNs
+#define num_TotalBlocks_cn_BG1_R23 144
+#define num_TotalBlocks_bn_BG1_R23 35
 #define num_TotalBlocks_llr_llrRes 68
 
 
