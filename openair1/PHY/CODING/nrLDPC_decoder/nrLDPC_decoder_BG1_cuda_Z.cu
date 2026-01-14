@@ -8,79 +8,38 @@ struct ldpc_params *params = NULL;
 
 // Create Streams and Graphs, and execute graphs
 cudaStream_t* cudaStreams = NULL;
-cudaGraph_t* cudaGraphs = NULL;
-cudaGraphExec_t* cudaGraphExecs = NULL;
+cudaGraph_t* cudaGraphs_R13 = NULL;
+cudaGraph_t* cudaGraphs_R23 = NULL;
+cudaGraphExec_t* cudaGraphExecs_R13 = NULL;
+cudaGraphExec_t* cudaGraphExecs_R23 = NULL;
 
 // Define host and device memory
 struct host_memory *host_mem = NULL;
 struct device_memory *dev_mem = NULL;
 
-__device__ __constant__ kernel_compH_cn d_compH_cn;
-__device__ __constant__ kernel_compH_vn d_compH_vn;
+__device__ __constant__ kernel_compH_cn d_compH_cn_r13;
+__device__ __constant__ kernel_compH_vn d_compH_vn_r13;
 
-int h_base_1_i1[46 * 68] = {
-   307,    19,    50,   369,    -1,   181,   216,    -1,    -1,   317,   288,   109,    17,   357,    -1,   215,   106,    -1,   242,   180,   330,   346,     1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	76,    -1,    76,    73,   288,   144,    -1,   331,   331,   178,    -1,   295,   342,    -1,   217,    99,   354,   114,    -1,   331,    -1,   112,     0,     0,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1 ,   -1,    -1,    -1,
-   205,   250,   328,    -1,   332,   256,   161,   267,   160,    63,   129,    -1,    -1,   200,    88,    53,    -1,   131,   240,   205,    13,    -1,    -1,    -1,     0,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   276,    87,    -1,     0,   275,    -1,   199,   153,    56,    -1,   132,   305,   231,   341,   212,    -1,   304,   300,   271,    -1,    39,   357,     1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   332,   181,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   195,    14,    -1,   115,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   166,    -1,    -1,    -1,   241,    -1,    -1,    -1,    -1,    51,   157,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   278,    -1,    -1,    -1,    -1,    -1,   257,    -1,    -1,    -1,     1,   351,    -1,    92,    -1,    -1,    -1,   253,    18,    -1,   225,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	 9,    62,    -1,    -1,   316,    -1,    -1,   333,   290,    -1,    -1,    -1,    -1,    -1,   114,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   307,   179,    -1,   165,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    18,    -1,    -1,    -1,    39,    -1,    -1,   224,    -1,   368,    67,    -1,   170,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   366,   232,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   321,   133,    -1,    57,    -1,    -1,    -1,   303,    63,    -1,    82,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	-1,   101,   339,    -1,   274,    -1,    -1,   111,   383,    -1,    -1,    -1,    -1,    -1,   354,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	48,   102,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     8,    -1,    -1,    -1,    47,    -1,    -1,    -1,    -1,   188,   334,   115,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	77,   186,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   174,   232,    -1,    50,    -1,    -1,    -1,    -1,    74,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   313,    -1,    -1,   177,    -1,    -1,    -1,   266,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   115,    -1,    -1,   370,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   142,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   248,    -1,    -1,   137,    89,   347,    -1,    -1,    -1,    12,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   241,     2,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   210,    -1,    -1,   318,    -1,    -1,    -1,    -1,    55,    -1,    -1,    -1,    -1,    -1,    -1,   269,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	-1,    13,    -1,   338,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    57,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   289,    -1,    57,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   260,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   303,    -1,    81,   358,    -1,    -1,    -1,   375,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	-1,   130,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   163,   280,    -1,    -1,    -1,    -1,   132,     4,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   145,   213,    -1,    -1,    -1,    -1,    -1,   344,   242,    -1,   197,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   187,    -1,    -1,   206,    -1,    -1,    -1,    -1,    -1,   264,    -1,   341,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    59,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	-1,   205,    -1,    -1,    -1,   102,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   328,    -1,    -1,    -1,   213,    97,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	30,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    11,   233,    -1,    -1,    -1,    22,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	-1,    24,    89,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    61,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    27,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   298,    -1,    -1,   158,   235,    -1,    -1,    -1,    -1,    -1,    -1,   339,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   234,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	-1,    72,    -1,    -1,    -1,    -1,    17,   383,    -1,    -1,    -1,    -1,    -1,    -1,   312,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	71,    -1,    81,    -1,    76,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   136,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	-1,   194,    -1,    -1,    -1,    -1,   194,    -1,   101,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   222,    -1,    -1,    -1,    19,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   244,    -1,   274,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	-1,   252,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     5,    -1,    -1,    -1,   147,    -1,    -1,    -1,    -1,    -1,    -1,    78,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   159,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   229,    -1,    -1,   260,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    90,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	-1,   100,    -1,    -1,    -1,    -1,    -1,   215,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   258,    -1,    -1,   256,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   102,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   201,    -1,   175,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   287,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	-1,   323,     8,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   361,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   105,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   230,    -1,    -1,    -1,    -1,    -1,    -1,   148,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   202,    -1,   312,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	-1,   320,    -1,    -1,    -1,    -1,   335,    -1,    -1,    -1,    -1,    -1,     2,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   266,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   210,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   313,   297,    -1,    -1,    21,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	-1,   269,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    82,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   115,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-   185,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   177,   289,    -1,   214,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,    -1,
-	-1,   258,    -1,    93,    -1,    -1,    -1,   346,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   297,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,    -1,
-   175,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    37,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   312,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,    -1,
-	-1,    52,    -1,   314,    -1,    -1,    -1,    -1,    -1,   139,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   288,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,    -1,
-   113,    -1,    -1,    -1,    14,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   218,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,    -1,
-	-1,   113,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   132,    -1,   114,    -1,    -1,    -1,    -1,    -1,    -1,   168,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,    -1,
-	80,    -1,    -1,    -1,    -1,    -1,    -1,    78,    -1,   163,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,   274,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0,    -1,
-	-1,   135,    -1,    -1,    -1,    -1,   149,    -1,    -1,    -1,    15,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,    -1,     0
-};
+__device__ __constant__ kernel_compH_cn d_compH_cn_r23;
+__device__ __constant__ kernel_compH_vn d_compH_vn_r23;
+
+
+#define GET_COMPH_CN(cn) ((cn) == 46 ? &d_compH_cn_r13 : &d_compH_cn_r23)
+#define GET_COMPH_VN(vn) ((vn) == 68 ? &d_compH_vn_r13 : &d_compH_vn_r23)
 
 // ===================================== Functions Declared ===================================
-struct CompressedH_cn* compress_H_matrix_cn(int *H, int mb, int nb);
-struct CompressedH_vn* compress_H_matrix_vn(int *H, int mb, int nb);
-void build_csc2csr(int nb, int *row_ptr, int *col_idx, int *col_ptr, int *row_idx, int *csc2csr);
-size_t copy_compH_cn_constant(const CompressedH_cn* compH_cn, int mb);
-size_t copy_compH_vn_constant(const CompressedH_vn* compH_vn, int nb);  
-void init_decoder_constant(int *H, int mb, int nb);
+
+size_t copy_BG1_R13_Z384_constant();
+size_t copy_BG1_R23_Z384_constant();
+
+void init_decoder_constant();
 template<typename T>
 T** allocate_global_memory(int size_in_bytes, T** out_big_block);
 template<typename T>
 T** allocate_pinned_memory(int size_in_bytes, T** out_big_block);
 void setup_host_memory();
 void setup_device_memory();
-struct cuda_grid* setup_cuda_grid(int Z, int mb, int nb, int Kb);
+struct cuda_grid* setup_cuda_grid(int Z, int mb, int nb, int cn, int vn, int Kb);
 __device__ __forceinline__ uint32_t scale_int8x4(uint32_t packed, float scale);
 __device__ __forceinline__ uint32_t __vapply_sign4(uint32_t val, uint32_t sign_mask);
 __global__ void order_kernel(
@@ -99,7 +58,7 @@ __global__ void cnp_kernel_simd4_1st_iter(
     uint32_t* d_delta_c2v,    // Output: packed delta C2V messages
     int Z,
     int N,
-    int mb
+    int cn
 );
 __global__ void cnp_kernel_simd4(
     uint32_t* d_app,         // Input: APP values for 4 codewords in SoA format (packed)
@@ -107,22 +66,15 @@ __global__ void cnp_kernel_simd4(
     uint32_t* d_delta_c2v,    // Output: packed delta (incremental) C2V messages
     int Z,
     int N,
-    int mb
+    int cn
 );
 __global__ void vnp_kernel_simd4(
     uint32_t* d_app,         // Input: APP values for 4 codewords in SoA format (packed)
     uint32_t* d_delta_c2v,    // Input: packed delta C2V messages
     int Z,
     int N,
-    int nb
+    int vn
 ) ;
-__global__ void hard_decision_kernel(
-    int8_t* d_app_reordered,   // Input: reordered APP values (information bits only)
-    uint8_t* d_hard_bits,       // Output: packed hard-decision bits (1 bit per LLR sign)
-    int Z,
-    int N,
-    int Kb
-);
 // Modified hard decision kernel with bit-reversed order
 __global__ void hard_decision_bit_reverse_kernel(
     int8_t* d_app_reordered,   // Input: reordered APP values (information bits only)
@@ -138,11 +90,12 @@ void build_ldpc_graph_per_stream(
     int stream_id,
     int N,
     int Z,
-    int mb,
-    int nb,
+    int cn,
+    int vn,
     int Kb
 );
 void init_graph_BG1_R13_Z384(int n_iterations);
+void init_graph_BG1_R23_Z384(int n_iterations);
 template<typename T>
 void free_global_memory(T** d_ptr, T* big_block);
 template<typename T>
@@ -150,204 +103,76 @@ void free_pinned_memory(T** h_ptr, T* big_block);
 void free_device_mem_all();
 void free_host_mem_all();
 
-
-// Compressed Sparse Row (CSR) format for check nodes
-struct CompressedH_cn* compress_H_matrix_cn(int *H, int mb, int nb) {
-    struct CompressedH_cn *compH_cn = (struct CompressedH_cn*)malloc(sizeof(struct CompressedH_cn));
-    
-    // Step 1: Count total number of non-zero elements
-    compH_cn->nnz = 0;
-    for (int i = 0; i < mb; i++) {
-        for (int j = 0; j < nb; j++) {
-            if (H[i * nb + j] != -1) compH_cn->nnz++;
-        }
+// ===================================== Functions Implemented ===================================
+size_t copy_BG1_R13_Z384_constant() {
+    kernel_compH_cn h_compH_cn_r13;
+    for (int i = 0; i < BG1_R13_Z384_CN + 1; i++) {
+        h_compH_cn_r13.row_ptr[i] = bg1_r13_z384_row_ptr[i];
     }
-    
-    // Step 2: Allocate memory
-    compH_cn->row_ptr = (int*)malloc((mb + 1) * sizeof(int));
-    compH_cn->col_idx = (int*)malloc(compH_cn->nnz * sizeof(int));
-    compH_cn->shift_cn = (int*)malloc(compH_cn->nnz * sizeof(int));
-
-    // Step 3: Build CSR format (row-oriented)
-    int csr_index = 0;
-    compH_cn->row_ptr[0] = 0;
-
-    for (int i = 0; i < mb; i++) {
-        for (int j = 0; j < nb; j++) {
-            if (H[i * nb + j] != -1) {
-                compH_cn->col_idx[csr_index] = j;
-                compH_cn->shift_cn[csr_index] = H[i * nb + j];
-                csr_index++;
-            }
-        }
-        compH_cn->row_ptr[i + 1] = csr_index; // Starting index of the next row
+    for (int i = 0; i < BG1_R13_Z384_NNZ; i++) {
+        h_compH_cn_r13.col_idx[i]  = bg1_r13_z384_col_idx[i];
+        h_compH_cn_r13.shift_cn[i] = bg1_r13_z384_shift_cn[i];
     }
-    return compH_cn;
+    h_compH_cn_r13.nnz = BG1_R13_Z384_NNZ;
+    
+
+    kernel_compH_vn h_compH_vn_r13;
+    for (int j = 0; j <= BG1_R13_Z384_VN; j++) {
+        h_compH_vn_r13.col_ptr[j] = bg1_r13_z384_col_ptr[j];
+    }
+    for (int i = 0; i < BG1_R13_Z384_NNZ; i++) {
+        h_compH_vn_r13.row_idx[i]  = bg1_r13_z384_row_idx[i];
+        h_compH_vn_r13.shift_vn[i] = bg1_r13_z384_shift_vn[i];
+        h_compH_vn_r13.csc2csr[i]  = bg1_r13_z384_csc2csr[i];
+    }
+    h_compH_vn_r13.nnz = BG1_R13_Z384_NNZ;
+
+    CUDA_CHECK(cudaMemcpyToSymbol(d_compH_cn_r13, &h_compH_cn_r13, sizeof(kernel_compH_cn)));
+    CUDA_CHECK(cudaMemcpyToSymbol(d_compH_vn_r13, &h_compH_vn_r13, sizeof(kernel_compH_vn)));
+
+    return sizeof(kernel_compH_cn) + sizeof(kernel_compH_vn);
 }
 
-// Compressed Sparse Column (CSC) format for variable nodes
-struct CompressedH_vn* compress_H_matrix_vn(int *H, int mb, int nb) {
-    struct CompressedH_vn *compH_vn = (struct CompressedH_vn*)malloc(sizeof(struct CompressedH_vn));
+size_t copy_BG1_R23_Z384_constant() {
+    kernel_compH_cn h_compH_cn_r23;
+    for (int i = 0; i < BG1_R23_Z384_CN + 1; i++) {
+        h_compH_cn_r23.row_ptr[i] = bg1_r23_z384_row_ptr[i];
+    }
+    for (int i = 0; i < BG1_R23_Z384_NNZ; i++) {
+        h_compH_cn_r23.col_idx[i]  = bg1_r23_z384_col_idx[i];
+        h_compH_cn_r23.shift_cn[i] = bg1_r23_z384_shift_cn[i];
+    }
+    h_compH_cn_r23.nnz = BG1_R23_Z384_NNZ;
     
-    // Step 1: Count total number of non-zero elements
-    compH_vn->nnz = 0;
-    for (int i = 0; i < mb; i++) {
-        for (int j = 0; j < nb; j++) {
-            if (H[i * nb + j] != -1) compH_vn->nnz++;
-        }
+    kernel_compH_vn h_compH_vn_r23;
+    for (int j = 0; j <= BG1_R23_Z384_VN; j++) {
+        h_compH_vn_r23.col_ptr[j] = bg1_r23_z384_col_ptr[j];
     }
-    
-    // Step 2: Allocate memory
-    compH_vn->col_ptr = (int*)malloc((nb + 1) * sizeof(int));
-    compH_vn->row_idx = (int*)malloc(compH_vn->nnz * sizeof(int));
-    compH_vn->shift_vn = (int*)malloc(compH_vn->nnz * sizeof(int));
-
-    // Step 3: Build CSC format (column-oriented)
-    int csc_index = 0;
-    compH_vn->col_ptr[0] = 0;
-
-    for (int j = 0; j < nb; j++) {
-        for (int i = 0; i < mb; i++) {
-            if (H[i * nb + j] != -1) {
-                compH_vn->row_idx[csc_index] = i;
-                compH_vn->shift_vn[csc_index] = H[i * nb + j];
-                csc_index++;
-            }
-        }
-        compH_vn->col_ptr[j + 1] = csc_index; // Starting index of the next column
+    for (int i = 0; i < BG1_R23_Z384_NNZ; i++) {
+        h_compH_vn_r23.row_idx[i]  = bg1_r23_z384_row_idx[i];
+        h_compH_vn_r23.shift_vn[i] = bg1_r23_z384_shift_vn[i];
+        h_compH_vn_r23.csc2csr[i]  = bg1_r23_z384_csc2csr[i];
     }
+    h_compH_vn_r23.nnz = BG1_R23_Z384_NNZ;
 
-    return compH_vn;
-}
+    CUDA_CHECK(cudaMemcpyToSymbol(d_compH_cn_r23, &h_compH_cn_r23, sizeof(kernel_compH_cn)));
+    CUDA_CHECK(cudaMemcpyToSymbol(d_compH_vn_r23, &h_compH_vn_r23, sizeof(kernel_compH_vn)));
 
-
-// Build a mapping array from CSC to CSR format
-void build_csc2csr(
-    int nb,
-    int *row_ptr,
-    int *col_idx,
-    int *col_ptr,
-    int *row_idx,
-    int *csc2csr
-) {
-    for (int col = 0; col < nb; col++) {
-        for (int p = col_ptr[col]; p < col_ptr[col+1]; p++) {
-            int row = row_idx[p];
-            // Find the position of 'col' within the CSR representation of this 'row'
-            for (int q = row_ptr[row]; q < row_ptr[row+1]; q++) {
-                if (col_idx[q] == col) {
-                    csc2csr[p] = q;
-                    break;
-                }
-            }
-        }
-    }
-}
-
-
-size_t copy_compH_cn_constant(const CompressedH_cn* compH_cn, int mb) {
-    kernel_compH_cn temp;
-
-    // Fill row_ptr
-    for (int i = 0; i <= mb; i++) {
-        temp.row_ptr[i] = compH_cn->row_ptr[i];
-    }
-
-    // Fill col_idx and shift_cn
-    for (int i = 0; i < compH_cn->nnz; i++) {
-        temp.col_idx[i]  = compH_cn->col_idx[i];
-        temp.shift_cn[i] = compH_cn->shift_cn[i];
-    }
-
-    // Set nnz
-    temp.nnz = compH_cn->nnz;
-
-    // Compute maximum row degree
-    int max_row_deg = 0;
-    for (int i = 0; i < mb; i++) {
-        int deg = compH_cn->row_ptr[i+1] - compH_cn->row_ptr[i];
-        if (deg > max_row_deg) max_row_deg = deg;
-    }
-    temp.max_row_degree = max_row_deg;
-
-    // Copy to GPU constant memory
-    CUDA_CHECK(cudaMemcpyToSymbol(d_compH_cn, &temp, sizeof(kernel_compH_cn)));
-
-    return sizeof(kernel_compH_cn);
-}
-
-
-size_t copy_compH_vn_constant(const CompressedH_vn* compH_vn, int nb) {
-    kernel_compH_vn temp;
-
-    // Fill col_ptr
-    for (int j = 0; j <= nb; j++) {
-        temp.col_ptr[j] = compH_vn->col_ptr[j];
-    }
-
-    // Fill row_idx, shift_vn, and csc2csr
-    for (int i = 0; i < compH_vn->nnz; i++) {
-        temp.row_idx[i] = compH_vn->row_idx[i];
-        temp.shift_vn[i] = compH_vn->shift_vn[i];
-        temp.csc2csr[i] = compH_vn->csc2csr[i];
-    }
-
-    // Set nnz
-    temp.nnz = compH_vn->nnz;
-
-    // Compute maximum column degree
-    int max_col_deg = 0;
-    for (int j = 0; j < nb; j++) {
-        int deg = compH_vn->col_ptr[j+1] - compH_vn->col_ptr[j];
-        if (deg > max_col_deg) max_col_deg = deg;
-    }
-    temp.max_col_degree = max_col_deg;
-
-    // Copy to GPU constant memory
-    CUDA_CHECK(cudaMemcpyToSymbol(d_compH_vn, &temp, sizeof(kernel_compH_vn)));
-    return sizeof(kernel_compH_vn);
+    return sizeof(kernel_compH_cn) + sizeof(kernel_compH_vn);   
 }
 
 // init gpu decoder constant memory
-void init_decoder_constant(int *H, int mb, int nb){
+void init_decoder_constant(){
 
-    CompressedH_cn *compH_cn = compress_H_matrix_cn(H, mb, nb);
-
-    CompressedH_vn *compH_vn = compress_H_matrix_vn(H, mb, nb);
-    compH_vn->csc2csr = (int*)malloc(compH_vn->nnz * sizeof(int));
-
-    build_csc2csr(
-        nb,
-        compH_cn->row_ptr,
-        compH_cn->col_idx,
-        compH_vn->col_ptr,
-        compH_vn->row_idx,
-        compH_vn->csc2csr
-    );
-
-    size_t compH_cn_size = copy_compH_cn_constant(compH_cn, mb);
-    size_t compH_vn_size = copy_compH_vn_constant(compH_vn, nb);
+    size_t BG1_R13_Z384_size = copy_BG1_R13_Z384_constant();
+    size_t BG1_R23_Z384_size = copy_BG1_R23_Z384_constant();
 
     // size_t params_size =  copy_ldpc_params_constant(params);
 
-    size_t total_constant_memory = compH_cn_size + compH_vn_size;
+    size_t total_constant_memory = BG1_R13_Z384_size + BG1_R23_Z384_size;
 
-    printf("Total constant memory used: %zu bytes -> compH_cn: %zu bytes, compH_vn: %zu bytes\n", 
-        total_constant_memory, compH_cn_size, compH_vn_size);
-
-    // Free temporary structures
-    free(compH_cn->row_ptr);
-    free(compH_cn->col_idx);
-    free(compH_cn->shift_cn);
-    free(compH_cn);
-    free(compH_vn->col_ptr);
-    free(compH_vn->row_idx);
-    free(compH_vn->shift_vn);
-    free(compH_vn->csc2csr);
-    free(compH_vn);
-
+    printf("Total constant memory used: %zu bytes\n", total_constant_memory);
 }
-
 
 // allocate gpu global memory for multiple streams
 template<typename T>
@@ -445,16 +270,16 @@ void setup_device_memory() {
 
 
 //  grid block
-struct cuda_grid* setup_cuda_grid(int Z, int mb, int nb, int Kb){
+struct cuda_grid* setup_cuda_grid(int Z, int mb, int nb, int cn, int vn, int Kb){
 
     struct cuda_grid *g = (struct cuda_grid*)malloc(sizeof(struct cuda_grid));
     g->order_grid = dim3(nb, GROUPS_PER_STREAM, 1);      
     g->order_block = dim3(Z, 1, 1);   
 
-    g->cnp_grid = dim3(mb, GROUPS_PER_STREAM, 1);           
+    g->cnp_grid = dim3(cn, GROUPS_PER_STREAM, 1);           
     g->cnp_block = dim3(Z, 1, 1);
 
-    g->vnp_grid = dim3(nb, GROUPS_PER_STREAM, 1);
+    g->vnp_grid = dim3(vn, GROUPS_PER_STREAM, 1);
     g->vnp_block = dim3(Z, 1, 1);
 
     g->reorder_grid = dim3(nb, GROUPS_PER_STREAM, 1);
@@ -555,7 +380,7 @@ __global__ void cnp_kernel_simd4_1st_iter(
     uint32_t* d_delta_c2v,    // Output: packed delta C2V messages
     int Z,
     int N,
-    int mb
+    int cn
 ) {
     // Declare shared memory
     extern __shared__ uint32_t shared_mem[];
@@ -565,15 +390,16 @@ __global__ void cnp_kernel_simd4_1st_iter(
     int z_idx = threadIdx.x;     // Lane index within the circulant block [0, Z - 1]
     int row = blockIdx.x;        // Index of the current check node layer
 
-    const int nnz = d_compH_cn.nnz;          // Number of non-zero elements
+    const kernel_compH_cn* d_compH_cn = GET_COMPH_CN(cn);
+    const int nnz = d_compH_cn->nnz;          // Number of non-zero elements
 
     // Boundary checks
     if (z_idx >= Z) return;
-    if (row >= mb) return;
+    if (row >= cn) return;
     if (group_idx >= GROUPS_PER_STREAM) return;
 
-    int start_idx = d_compH_cn.row_ptr[row];
-    int end_idx = d_compH_cn.row_ptr[row + 1];
+    int start_idx = d_compH_cn->row_ptr[row];
+    int end_idx = d_compH_cn->row_ptr[row + 1];
     int num_edges = end_idx - start_idx;   // Number of edges (variable nodes) connected to this check node
 
     // Initialize min, second-min, and sign accumulator
@@ -586,8 +412,8 @@ __global__ void cnp_kernel_simd4_1st_iter(
     // First pass: gather V2C messages and compute min/second-min per lane
     for (int edge = 0; edge < num_edges; edge++) {
         int edge_idx = start_idx + edge;
-        int col = d_compH_cn.col_idx[edge_idx];          // Connected variable node column
-        int shift = d_compH_cn.shift_cn[edge_idx];       // Cyclic shift offset
+        int col = d_compH_cn->col_idx[edge_idx];          // Connected variable node column
+        int shift = d_compH_cn->shift_cn[edge_idx];       // Cyclic shift offset
         int shift_val = (z_idx + shift) % Z;             // Compute shifted position within circulant
 
         int app_addr = group_idx * N + col * Z + shift_val; // Address in APP array
@@ -646,7 +472,7 @@ __global__ void cnp_kernel_simd4(
     uint32_t* d_delta_c2v,    // Output: packed delta (incremental) C2V messages
     int Z,
     int N,
-    int mb
+    int cn
 ) {
     // Declare shared memory
     extern __shared__ uint32_t shared_mem[];
@@ -656,15 +482,16 @@ __global__ void cnp_kernel_simd4(
     int z_idx = threadIdx.x;     // Index within lifting size [0, Z - 1]
     int row = blockIdx.x;        // Current check node layer being processed
 
-    const int nnz = d_compH_cn.nnz;          // Number of non-zero elements
+    const kernel_compH_cn* d_compH_cn = GET_COMPH_CN(cn);
+    const int nnz = d_compH_cn->nnz;          // Number of non-zero elements
 
     // Boundary checks
     if (z_idx >= Z) return;
-    if (row >= mb) return;
+    if (row >= cn) return;
     if (group_idx >= GROUPS_PER_STREAM) return;
 
-    int start_idx = d_compH_cn.row_ptr[row];
-    int end_idx = d_compH_cn.row_ptr[row + 1];
+    int start_idx = d_compH_cn->row_ptr[row];
+    int end_idx = d_compH_cn->row_ptr[row + 1];
     int num_edges = end_idx - start_idx;   // Number of edges connected to this check node
 
     // Initialize min, second-min, and sign accumulator
@@ -678,8 +505,8 @@ __global__ void cnp_kernel_simd4(
     // First pass: compute V2C = APP - C2V, and gather min/second-min per lane
     for (int edge = 0; edge < num_edges; edge++) {
         int edge_idx = start_idx + edge;
-        int col = d_compH_cn.col_idx[edge_idx];          // Connected variable node column
-        int shift = d_compH_cn.shift_cn[edge_idx];       // Cyclic shift offset
+        int col = d_compH_cn->col_idx[edge_idx];          // Connected variable node column
+        int shift = d_compH_cn->shift_cn[edge_idx];       // Cyclic shift offset
         int shift_val = (z_idx + shift) % Z;             // Compute shifted position
 
         int app_addr = group_idx * N + col * Z + shift_val; // Address in APP array
@@ -748,22 +575,22 @@ __global__ void vnp_kernel_simd4(
     uint32_t* d_delta_c2v,    // Input: packed delta C2V messages
     int Z,
     int N,
-    int nb
+    int vn
 ) {
     int z_idx = threadIdx.x;                  // Index within lifting dimension [0, Z - 1]
     int group_idx = blockIdx.y;               // Group index within batch [0, GROUPS_PER_STREAM - 1]
     int col = blockIdx.x;                     // Current variable node column being processed
 
-
-    const int nnz = d_compH_cn.nnz;           // Number of non-zero elements
+    const kernel_compH_vn* d_compH_vn = GET_COMPH_VN(vn);
+    const int nnz = d_compH_vn->nnz;           // Number of non-zero elements
 
     // Boundary checks
     if (z_idx >= Z) return;
-    if (col >= nb) return;
+    if (col >= vn) return;
     if (group_idx >= GROUPS_PER_STREAM) return;
 
-    int start_idx = d_compH_vn.col_ptr[col];
-    int end_idx = d_compH_vn.col_ptr[col + 1];
+    int start_idx = d_compH_vn->col_ptr[col];
+    int end_idx = d_compH_vn->col_ptr[col + 1];
     int num_edges = end_idx - start_idx;      // Number of connected check nodes
 
     int app_addr = group_idx * N + col * Z + z_idx; // Address of current APP value
@@ -772,13 +599,13 @@ __global__ void vnp_kernel_simd4(
     // Accumulate all incoming delta C2V messages
     for (int edge = 0; edge < num_edges; edge++) {
         int edge_idx = start_idx + edge;
-        int shift = d_compH_vn.shift_vn[edge_idx];       // Cyclic shift for this edge
+        int shift = d_compH_vn->shift_vn[edge_idx];       // Cyclic shift for this edge
 
         // Compute reverse-shifted position (for proper alignment)
         int shift_val = (z_idx - shift + Z) % Z;
 
         // Map CSC index to CSR index for delta C2V lookup
-        int csc2csr_idx = d_compH_vn.csc2csr[edge_idx];
+        int csc2csr_idx = d_compH_vn->csc2csr[edge_idx];
 
         // Address in delta C2V buffer
         int delta_c2v_addr = group_idx * Z * nnz + csc2csr_idx * Z + shift_val;
@@ -790,41 +617,6 @@ __global__ void vnp_kernel_simd4(
 
     // Write back updated APP value
     d_app[app_addr] = app_val;
-}
-
-__global__ void hard_decision_kernel(
-    int8_t* d_app_reordered,   // Input: reordered APP values (information bits only)
-    uint8_t* d_hard_bits,       // Output: packed hard-decision bits (1 bit per LLR sign)
-    int Z,
-    int N,
-    int Kb
-) {
-    // --- Thread indexing ---
-    int z_idx = threadIdx.x * 8;    // Start index in Z dimension, process 8 bits per thread
-    int col = blockIdx.x;           // Column (variable node) index
-    int cw_idx = blockIdx.y;        // Codeword index within stream [0, CWS_PER_STREAM - 1]
-
-    // Boundary checks
-    if (z_idx >= Z) return;
-    if (col >= Kb) return;
-    if (cw_idx >= CWS_PER_STREAM) return;
-
-    uint8_t val = 0;
-
-    int app_addr = cw_idx * N + col * Z + z_idx; // Base address for 8 consecutive APP values
-
-    // Perform hard decision on 8 consecutive LLRs
-    for (int i = 0; i < 8; i++) {
-        int8_t app_val = d_app_reordered[app_addr + i];
-        // Hard decision: APP ≥ 0 → bit = 0, APP < 0 → bit = 1
-        int bit = (app_val >= 0) ? 0 : 1;
-        val |= (bit << i);
-    }
-
-    // Compute output byte address (Kb * Z total info bits, packed 8 per byte)
-    int hard_bits_addr = cw_idx * (Kb * Z / 8) + col * (Z / 8) + (z_idx / 8);
-
-    d_hard_bits[hard_bits_addr] = val;
 }
 
 // Modified hard decision kernel with bit-reversed order
@@ -878,8 +670,8 @@ void build_ldpc_graph_per_stream(
     int stream_id,
     int N,
     int Z,
-    int mb,
-    int nb,
+    int cn,
+    int vn,
     int Kb
 ) {
     // cudaGraphNode_t is the handle type for each operation (node) in a CUDA Graph
@@ -910,9 +702,9 @@ void build_ldpc_graph_per_stream(
 
     // orderArgs: list of kernel arguments (must be passed as an array of void*)
     void* orderArgs[] = {
-        &dev_mem->d_app[stream_id],
-        &dev_mem->d_init_llr[stream_id],
-        &N
+        (void*)&dev_mem->d_app[stream_id],
+        (void*)&dev_mem->d_init_llr[stream_id],
+        (void*)&N
     };
     cudaKernelNodeParams orderParams = {};
     orderParams.func = (void*)order_kernel;
@@ -935,12 +727,12 @@ void build_ldpc_graph_per_stream(
     cudaGraphNode_t prevNode = orderNode;
     for (int iter = 0; iter < n_iterations; ++iter) {
         void* cnpArgs[] = {
-            &dev_mem->d_app[stream_id],
-            &dev_mem->d_c2v[stream_id],
-            &dev_mem->d_delta_c2v[stream_id],
-            &Z,
-            &N,
-            &mb
+            (void*)&dev_mem->d_app[stream_id],
+            (void*)&dev_mem->d_c2v[stream_id],
+            (void*)&dev_mem->d_delta_c2v[stream_id],
+            (void*)&Z,
+            (void*)&N,
+            (void*)&cn
         };
         cudaKernelNodeParams cnpParams = {};
         cnpParams.func = (void*)(iter == 0 ? cnp_kernel_simd4_1st_iter : cnp_kernel_simd4);
@@ -952,11 +744,11 @@ void build_ldpc_graph_per_stream(
         CUDA_CHECK(cudaGraphAddKernelNode(&cnpNodes[iter], graph, &prevNode, 1, &cnpParams));
 
         void* vnpArgs[] = {
-            &dev_mem->d_app[stream_id],
-            &dev_mem->d_delta_c2v[stream_id],
-            &Z,
-            &N,
-            &nb
+            (void*)&dev_mem->d_app[stream_id],
+            (void*)&dev_mem->d_delta_c2v[stream_id],
+            (void*)&Z,
+            (void*)&N,
+            (void*)&vn
         };
         cudaKernelNodeParams vnpParams = {};
         vnpParams.func = (void*)vnp_kernel_simd4;
@@ -972,9 +764,9 @@ void build_ldpc_graph_per_stream(
 
     // ------------------------------------- reorder_kernel --------------------------------------------
     void* reorderArgs[] = {
-        &dev_mem->d_app[stream_id],
-        &dev_mem->d_app_reordered[stream_id],
-        &N
+        (void*)&dev_mem->d_app[stream_id],
+        (void*)&dev_mem->d_app_reordered[stream_id],
+        (void*)&N
     };
     cudaKernelNodeParams reorderParams = {};
     reorderParams.func = (void*)reorder_kernel;
@@ -987,11 +779,11 @@ void build_ldpc_graph_per_stream(
 
     // -------------------------------------- hard_decision_kernel ------------------------------------------
     void* hardArgs[] = {
-        &dev_mem->d_app_reordered[stream_id],
-        &dev_mem->d_hard_bits[stream_id],
-        &Z,
-        &N,
-        &Kb
+        (void*)&dev_mem->d_app_reordered[stream_id],
+        (void*)&dev_mem->d_hard_bits[stream_id],
+        (void*)&Z,
+        (void*)&N,
+        (void*)&Kb
     };
     cudaKernelNodeParams hardParams = {};
     // hardParams.func = (void*)hard_decision_kernel;
@@ -1022,21 +814,49 @@ void init_graph_BG1_R13_Z384(int n_iterations){
     const int mb = 46;
     const int nb = 68;
     const int Kb = 22;
-    struct cuda_grid* g = setup_cuda_grid(Z, mb, nb, Kb);
+    const int cn = 46;
+    const int vn = 68;
+    struct cuda_grid* g = setup_cuda_grid(Z, mb, nb, cn, vn, Kb);
     for (int stream_id = 0; stream_id < MAX_STREAMS; ++stream_id) {
-        CUDA_CHECK(cudaGraphCreate(&cudaGraphs[stream_id], 0));
+        CUDA_CHECK(cudaGraphCreate(&cudaGraphs_R13[stream_id], 0));
         build_ldpc_graph_per_stream(
-            cudaGraphs[stream_id],
+            cudaGraphs_R13[stream_id],
             g,
             n_iterations,
             stream_id,
             N,
             Z,
-            mb,
-            nb,
+            cn,
+            vn,
             Kb
         );
-        CUDA_CHECK(cudaGraphInstantiate(&cudaGraphExecs[stream_id], cudaGraphs[stream_id], NULL, NULL, 0));
+        CUDA_CHECK(cudaGraphInstantiate(&cudaGraphExecs_R13[stream_id], cudaGraphs_R13[stream_id], NULL, NULL, 0));
+    }
+}
+
+void init_graph_BG1_R23_Z384(int n_iterations){
+    const int N = 26112;
+    const int Z = 384;
+    const int mb = 46;
+    const int nb = 68;
+    const int Kb = 22;
+    const int cn = 13;
+    const int vn = 35;
+    struct cuda_grid* g = setup_cuda_grid(Z, mb, nb, cn, vn, Kb);
+    for (int stream_id = 0; stream_id < MAX_STREAMS; ++stream_id) {
+        CUDA_CHECK(cudaGraphCreate(&cudaGraphs_R23[stream_id], 0));
+        build_ldpc_graph_per_stream(
+            cudaGraphs_R23[stream_id],
+            g,
+            n_iterations,
+            stream_id,
+            N,
+            Z,
+            cn,
+            vn,
+            Kb
+        );
+        CUDA_CHECK(cudaGraphInstantiate(&cudaGraphExecs_R23[stream_id], cudaGraphs_R23[stream_id], NULL, NULL, 0));
     }
 }
 
@@ -1054,7 +874,7 @@ extern "C" void ldpc_decoder_cuda_init()
     params->Kb = 22;
     params->mb = BG1_ROW;
     params->nb = BG1_COL;
-    params->H = h_base_1_i1;   // Parity-check matrix H
+    params->H = NULL;   // Parity-check matrix H
     params->compH_cn = NULL;
     params->compH_vn = NULL;  // Compressed representation of H for CN and VN processing
     params->n_iterations = 5;
@@ -1066,7 +886,7 @@ extern "C" void ldpc_decoder_cuda_init()
     setup_device_memory();
 
     // Initialize GPU constant memory
-    init_decoder_constant(params->H, params->mb, params->nb);
+    init_decoder_constant();
 
     // Create CUDA streams
     cudaStreams = (cudaStream_t*)malloc(MAX_STREAMS * sizeof(cudaStream_t));
@@ -1080,16 +900,16 @@ extern "C" void ldpc_decoder_cuda_init()
         It must be instantiated via cudaGraphInstantiate() to produce a cudaGraphExec_t,
         which is the executable form of the graph.
     */
-    cudaGraphs = (cudaGraph_t*)malloc(MAX_STREAMS * sizeof(cudaGraph_t));
-    cudaGraphExecs = (cudaGraphExec_t*)malloc(MAX_STREAMS * sizeof(cudaGraphExec_t));
+    cudaGraphs_R13 = (cudaGraph_t*)malloc(MAX_STREAMS * sizeof(cudaGraph_t));
+    cudaGraphs_R23 = (cudaGraph_t*)malloc(MAX_STREAMS * sizeof(cudaGraph_t));
+    cudaGraphExecs_R13 = (cudaGraphExec_t*)malloc(MAX_STREAMS * sizeof(cudaGraphExec_t));
+    cudaGraphExecs_R23 = (cudaGraphExec_t*)malloc(MAX_STREAMS * sizeof(cudaGraphExec_t));
 
-    if(params->bg_index == 1 && params->Z == 384 && params->rate == 13){
-        init_graph_BG1_R13_Z384(params->n_iterations);
+    init_graph_BG1_R13_Z384(params->n_iterations);
 
-    }else{
-        printf("LDPC decoder for the specified BG and Z is not implemented yet.\n");
-        exit(-1);
-    }
+    init_graph_BG1_R23_Z384(params->n_iterations);
+
+    printf("Initialize BG1_R13_Z384 and BG1_R23_Z384 CUDA Graph\n");
 }
 
 template<typename T>
@@ -1145,13 +965,18 @@ extern "C" void ldpc_decoder_cuda_free(){
     // destroy graphs and streams
     for (int i = 0; i < MAX_STREAMS; i++) {
         CUDA_CHECK(cudaStreamDestroy(cudaStreams[i]));
-        CUDA_CHECK(cudaGraphExecDestroy(cudaGraphExecs[i]));
-        CUDA_CHECK(cudaGraphDestroy(cudaGraphs[i]));
+        CUDA_CHECK(cudaGraphExecDestroy(cudaGraphExecs_R13[i]));
+        CUDA_CHECK(cudaGraphDestroy(cudaGraphs_R13[i]));
+        CUDA_CHECK(cudaGraphExecDestroy(cudaGraphExecs_R23[i]));
+        CUDA_CHECK(cudaGraphDestroy(cudaGraphs_R23[i]));
     }
-    free(cudaStreams);
-    free(cudaGraphs);
-    free(cudaGraphExecs);
+    
+    free(cudaGraphs_R13);
+    free(cudaGraphExecs_R13);
+    free(cudaGraphs_R23);
+    free(cudaGraphExecs_R23);
 
+    free(cudaStreams);
     // free memory
     free_device_mem_all();
     free_host_mem_all();

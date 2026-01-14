@@ -56,17 +56,10 @@ int32_t LDPCinit_cuda()
 }
 
 
-uint8_t reverse_bits_test(uint8_t b) {
-    b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
-    b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
-    b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
-    return b;
-}
-
-
 static inline void nrLDPC_decoder_core( int8_t* p_llr,
                                         uint8_t* p_out,
-                                        int num_cws
+                                        int num_cws,
+                                        int R
                                     )
 {
     int num_batches = (num_cws + CWS_PER_BATCH - 1) / CWS_PER_BATCH;
@@ -95,9 +88,17 @@ static inline void nrLDPC_decoder_core( int8_t* p_llr,
         }
 
         // ===== GPU Execution =====
-        for (int s = 0; s < MAX_STREAMS; s++) {
-            CUDA_CHECK(cudaGraphLaunch(cudaGraphExecs[s], cudaStreams[s]));
+
+        if (R == 13) {
+            for (int s = 0; s < MAX_STREAMS; s++) {
+                CUDA_CHECK(cudaGraphLaunch(cudaGraphExecs_R13[s], cudaStreams[s]));
+            }
+        } else if (R == 23) {
+            for (int s = 0; s < MAX_STREAMS; s++) {
+                CUDA_CHECK(cudaGraphLaunch(cudaGraphExecs_R23[s], cudaStreams[s]));
+            }
         }
+        
         CUDA_CHECK(cudaDeviceSynchronize());
 
         // ===== Output: Pinned -> Host =====
@@ -111,26 +112,6 @@ static inline void nrLDPC_decoder_core( int8_t* p_llr,
                 host_mem->h_big_hard_bits + i * BG1_MAX_INFO_LEN / 8,
                 BG1_MAX_INFO_LEN / 8);
         }
-        // for (int i = 0; i < cw_in_this_batch; ++i) {
-        //     memcpy(p_out + i * BG1_MAX_INFO_LEN,
-        //         host_mem->h_big_hard_bits + i * BG1_MAX_INFO_LEN / 8,
-        //         BG1_MAX_INFO_LEN / 8);
-        // }
-
-
-        // for (int i = 0; i < cw_in_this_batch*BG1_MAX_INFO_LEN; ++i) {
-        //     p_out[i] = reverse_bits_test(p_out[i]);
-        // }
-
-        // FILE*f_in;
-        // f_in = fopen("zjg_p_llr.bin","wb");
-        // fwrite(p_llr + cw_start * BG1_MAX_CW_LEN,sizeof(int8_t),cw_in_this_batch * BG1_MAX_CW_LEN,f_in);
-        // fclose(f_in);
-
-        // FILE*f_out;
-        // f_out = fopen("ldpc_output.bin","wb");
-        // fwrite(p_out + cw_start * (BG1_MAX_INFO_LEN / 8),sizeof(uint8_t),cw_in_this_batch * (BG1_MAX_INFO_LEN / 8),f_out);
-        // fclose(f_out);
 
         batch++;
     }
@@ -159,7 +140,8 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
     nrLDPC_decoder_core(
         p_llr,
         p_out,
-        p_decParams->n_segments
+        p_decParams->n_segments,
+        p_decParams->R
     );
 
     set_abort(ab, true);
