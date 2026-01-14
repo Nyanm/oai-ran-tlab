@@ -548,12 +548,8 @@ void xran_oru_send_prach(uint32_t *prachF, int aarx, int frame, int slot, int sy
     dest[i + g_kbar] = (int16_t)htons(src[i]);
   }
 
-  buf = rte_pktmbuf_prepend(mbuf, sizeof(struct rte_ether_hdr));
-  AssertFatal(buf != NULL, "incorrect mbuf size\n");
-
-  int vf_id = xran_map_ecpriPcid_to_vf(g_handle, XRAN_DIR_UL, 0, aarx + fh_cfg->perMu[mu].prach_conf.prachEaxcOffset);
-  int ret = xran_ethdi_mbuf_send(mbuf, ETHER_TYPE_ECPRI, vf_id);
-  AssertFatal(ret == 1, "Error sending mbuf\n");
+  int ret = xran_hook_send_packet(g_handle, mbuf, 0, XRAN_DIR_UL, aarx + fh_cfg->perMu[mu].prach_conf.prachEaxcOffset);
+  AssertFatal(ret == 0, "Error sending mbuf\n");
 }
 
 
@@ -618,12 +614,8 @@ void xran_oru_send_pusch(uint32_t *puschF, int aarx, int frame, int slot, int sy
     *dest++ = (int16_t)htons(src[i]);
   }
 
-  buf = rte_pktmbuf_prepend(mbuf, sizeof(struct rte_ether_hdr));
-  AssertFatal(buf != NULL, "incorrect mbuf size\n");
-
-  int vf_id = xran_map_ecpriPcid_to_vf(g_handle, XRAN_DIR_UL, 0, aarx);
-  int ret = xran_ethdi_mbuf_send(mbuf, ETHER_TYPE_ECPRI, vf_id);
-  AssertFatal(ret == 1, "Error sending mbuf\n");
+  int ret = xran_hook_send_packet(g_handle, mbuf, 0, XRAN_DIR_UL, aarx);
+  AssertFatal(ret == 0, "Error sending mbuf\n");
 }
 
 void stop_oru(void) {
