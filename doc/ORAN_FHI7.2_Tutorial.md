@@ -1134,21 +1134,20 @@ Some caveats:
 For two RUs using a 8x8 configuration, i.e. a single antenna system, the reference DU configuration file is
 [`gnb-du.sa.band77.273prb.fhi72.8x8-benetel650_650.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.8x8-benetel650_650.conf).
 
-For two RUs each using a 4x4 configuration, i.e. a distributed antenna system (DAS),
-we use the analog beamforming implementation. More details can be found in
-[this document](./analog_beamforming.md). It is important to note that
-the configuration file should be set as a 4x4 scenario and each RU would be given a
-different beam. The reference DU configuration file is [`gnb-du.sa.band77.273prb.fhi72.4x4-das-benetel650_650.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.4x4-das-benetel650_650.conf).
+For two RUs each using a 4x4 configuration, i.e. a distributed antenna system (DAS), `enable_das` in `L1` section needs to be set to 1.
 
-DAS is enabled by setting to 1 the parameter `enable_das` in `L1` section.
-
-The following parameters shall be configured on the gNB in the `MACRLC` section:
+The current implementation relies on the **analog beamforming framework**. Therefore, when enabling DAS by setting `enable_das = 1` in the `L1` section, it is **also required** to enable analog beamforming by setting the following parameters on the gNB in the `MACRLC` section:
 - `set_analog_beamforming`
 - `beam_duration`
 - `beams_per_period`
 
-For guidance on how to set these parameters please refer to
-the [analog beamforming document](./analog_beamforming.md).
+* The `beam_weights` field in the **MACRLC** section can be **omitted**.
+* The number of beams per period is  `beams_per_period` must be set to the **number of configured SSBs**, which in turn should be equal to the **number of distributed antennas**.
+
+More details can be found in [this document](./analog_beamforming.md). 
+
+The reference DU configuration file is [`gnb-du.sa.band77.273prb.fhi72.4x4-das-benetel650_650.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.4x4-das-benetel650_650.conf).
+
 
 Next, configure the `fhi_72` section as indicated below:
 

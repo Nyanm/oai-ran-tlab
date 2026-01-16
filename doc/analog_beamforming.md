@@ -26,6 +26,20 @@ Setting analog beamforming to 1 or 2 changes the way FAPI beam index is treated.
 
 DAS is enabled by setting to 1 the parameter `enable_das` in the L1 section of the configuration file. In case of DAS enabled, the field `beam_weights` in `MACRLC` section can be omitted and the number of beams per period equals the total number of beams.
 
+# Distributed Antenna Systems (DAS)
+
+A **Distributed Antenna System (DAS)** is an antenna deployment with multiple spatially separated radio units (RUs), for example with **two RUs each configured as 4×4**. 
+
+The current implementation relies on the **analog beamforming framework**. Therefore, when enabling DAS by setting:
+`enable_das = 1` it is **also required** to enable analog beamforming `analog_beamforming = 1`
+
+In this case:
+
+* The `beam_weights` field in the **MACRLC** section can be **omitted**.
+* The number of beams per period is  `beams_per_period` must be set to the **number of configured SSBs**, which in turn should be equal to the **number of distributed antennas (or RUs)**.
+
+
+
 # Implementation in OAI scheduler
 
 A new MAC structure `NR_beam_info_t` controls the behavior of the scheduler in presence of analog beamforming. Besides the already mentioned parameters `beam_duration` and `beams_per_period`, the structure also holds a matrix `beam_allocation[i][j]`, whose indices `i` and `j` stands respectively for the number of beams in the period and the slot index (the size of the latter depends on the frame characteristics).
