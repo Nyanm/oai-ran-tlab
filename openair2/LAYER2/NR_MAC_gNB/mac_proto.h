@@ -47,7 +47,7 @@ int get_ul_slots_per_frame(const frame_structure_t *fs);
 int get_dl_slots_per_period(const frame_structure_t *fs);
 int get_full_ul_slots_per_period(const frame_structure_t *fs);
 int get_full_dl_slots_per_period(const frame_structure_t *fs);
-int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed, int beam_idx, int beams_per_period, int num_beam);
+int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed, int beam_idx, int beams_per_period, int num_beam, int ideal_period);
 uint16_t get_ul_bitmap(const frame_structure_t *fs, int slot);
 void delete_nr_ue_data(NR_UE_info_t *UE, NR_COMMON_channels_t *ccPtr, uid_allocator_t *uia);
 

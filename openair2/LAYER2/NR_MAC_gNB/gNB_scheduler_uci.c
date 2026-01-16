@@ -1236,24 +1236,6 @@ int nr_acknack_scheduling(gNB_MAC_INST *mac,
       memset(curr_pucch, 0, sizeof(*curr_pucch));
     }
     else { // unoccupied occasion
-      {
-        NR_beam_info_t *beam_info = &mac->beam_info;
-        if (beam_info->beam_mode != NO_BEAM_MODE) {
-          int num_beam = (mac->radio_config.nb_bfw[1] > 0) ? mac->radio_config.nb_bfw[1] : 1;
-          int beams_per_period = (beam_info->beams_per_period > 0) ? beam_info->beams_per_period : 1;
-          int NUM_SSB_period = (num_beam % beams_per_period > 0) ? num_beam / beams_per_period + 1 : num_beam / beams_per_period;
-          if ((pucch_slot / fs->numb_slots_period) % NUM_SSB_period != (UE->UE_beam_index / beams_per_period)) {
-            LOG_D(NR_MAC,
-                  "DL %4d.%2d, UL_ACK %4d.%2d beam %d could not be allocated for PUCCH\n",
-                  frame,
-                  slot,
-                  pucch_frame,
-                  pucch_slot,
-                  UE->UE_beam_index);
-            continue;
-          }
-        }
-      }
       // checking if in ul_slot the resources potentially to be assigned to this PUCCH are available
       set_pucch_allocation(ul_bwp, r_pucch, bwp_size, curr_pucch);
       NR_beam_alloc_t beam = beam_allocation_procedure(&mac->beam_info, pucch_frame, pucch_slot, ue_beam, n_slots_frame);

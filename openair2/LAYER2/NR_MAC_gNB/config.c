@@ -365,9 +365,10 @@ int get_ul_slots_per_frame(const frame_structure_t *fs)
  * @param beam_idx beam index
  * @param beams_per_period no of concurrent beams
  * @param num_beam no of beams
+ * @param ideal period
  * @return slot index offset
  */
-int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed, int beam_idx, int beams_per_period, int num_beam)
+int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed, int beam_idx, int beams_per_period, int num_beam, int ideal_period)
 {
   DevAssert(fs);
 
@@ -395,7 +396,7 @@ int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed, i
   int period_idx = idx / ul_slot_count; // wrap up the count of complete TDD periods spanned by the index
   int ul_slot_idx_in_period = idx % ul_slot_count; // wrap up the UL slot index within the current TDD period
 
-  return ul_slot_idxs[beam_idx / beams_per_period][ul_slot_idx_in_period] + period_idx * fs->numb_slots_period * NUM_SSB_period;
+  return ((ul_slot_idxs[beam_idx / beams_per_period][ul_slot_idx_in_period] + period_idx * fs->numb_slots_period * NUM_SSB_period) % ideal_period);
 }
 
 static void config_common(gNB_MAC_INST *nrmac, const nr_mac_config_t *config, NR_ServingCellConfigCommon_t *scc)

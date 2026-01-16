@@ -2000,23 +2000,7 @@ static int  pf_ul(gNB_MAC_INST *nrmac,
       total_rem_ues += remainUEs[i];
     if (total_rem_ues == 0)
       continue;
-/*
-    frame_structure_t *fs = &nrmac->frame_structure;
-    NR_beam_info_t *beam_info = &nrmac->beam_info;
-    if (beam_info->beam_mode != NO_BEAM_MODE) {
-      int num_beam = (nrmac->radio_config.nb_bfw[1] > 0) ? nrmac->radio_config.nb_bfw[1] : 1;
-      int beams_per_period = (beam_info->beams_per_period > 0) ? beam_info->beams_per_period : 1;
-      int NUM_SSB_period = (num_beam % beams_per_period > 0) ? num_beam / beams_per_period + 1 : num_beam / beams_per_period;
-      if ((sched_slot / fs->numb_slots_period) % NUM_SSB_period != (UE->UE_beam_index / beams_per_period)) {
-        LOG_D(NR_MAC,
-              "pf_ul [%4d.%2d] for beam %d could not be allocated for ULSCH\n",
-              sched_frame,
-              sched_slot,
-              UE->UE_beam_index);
-        continue;
-      }
-    }
-*/
+
     NR_beam_alloc_t dci_beam = beam_allocation_procedure(&nrmac->beam_info, frame, slot, UE->UE_beam_index, slots_per_frame);
     if (dci_beam.idx < 0) {
       LOG_D(NR_MAC, "[UE %04x][%4d.%2d] ULSCH DCI Beam could not be allocated\n", UE->rnti, frame, slot);
@@ -2141,23 +2125,7 @@ static int  pf_ul(gNB_MAC_INST *nrmac,
   while (iterator->UE != NULL) {
     NR_UE_UL_BWP_t *current_BWP = &iterator->UE->current_UL_BWP;
     NR_UE_sched_ctrl_t *sched_ctrl = &iterator->UE->UE_sched_ctrl;
-/*
-    frame_structure_t *fs = &nrmac->frame_structure;
-    NR_beam_info_t *beam_info = &nrmac->beam_info;
-    if (beam_info->beam_mode != NO_BEAM_MODE) {
-      int num_beam = (nrmac->radio_config.nb_bfw[1] > 0) ? RC.nrmac[0]->radio_config.nb_bfw[1] : 1;
-      int beams_per_period = (beam_info->beams_per_period > 0) ? beam_info->beams_per_period : 1;
-      int NUM_SSB_period = (num_beam % beams_per_period > 0) ? num_beam / beams_per_period + 1 : num_beam / beams_per_period;
-      if ((sched_slot / fs->numb_slots_period) % NUM_SSB_period != (iterator->UE->UE_beam_index / beams_per_period)) {
-        LOG_D(NR_MAC,
-              "pf_ul [%4d.%2d] for beam %d could not be allocated for ULSCH\n",
-              sched_frame,
-              sched_slot,
-              iterator->UE->UE_beam_index);
-        continue;
-      }
-    }
-*/
+
     NR_beam_alloc_t beam = beam_allocation_procedure(&nrmac->beam_info, sched_frame, sched_slot, iterator->UE->UE_beam_index, slots_per_frame);
     if (beam.idx < 0) {
       LOG_D(NR_MAC, "[UE %04x][%4d.%2d] ULSCH Beam could not be allocated\n", iterator->UE->rnti, sched_frame, sched_slot);
