@@ -34,10 +34,12 @@
 
 #include "openair2/RRC/NR/nr_rrc_defs.h"
 #include "openair2/LAYER2/NR_MAC_gNB/nr_mac_gNB.h"
-#include "openair2/LAYER2/NR_MAC_gNB/nr_radio_config.h"
+#include "openair2/RRC/NR/nr_rrc_config.h"
 #include "openair2/LAYER2/NR_MAC_gNB/mac_proto.h"
 #include "openair2/LAYER2/nr_rlc/nr_rlc_oai_api.c"
+#include "openair2/RRC/NR/nr_rrc_defs.h"
 #include "common/utils/nr/nr_common.h"
+#include "common/ngran_types.h"
 
 #define ERROR_MSG_RET(mSG, aRGS...) do { prnt("FAILURE: " mSG, ##aRGS); return 1; } while (0)
 
@@ -58,6 +60,17 @@
 #define MNC     "nrcelldu3gpp:mnc"
 #define SD      "nrcelldu3gpp:sd"
 #define SST     "nrcelldu3gpp:sst"
+#define SSBSCS  "nrcelldu3gpp:ssbSubCarrierSpacing"
+#define SSBPRD  "nrcelldu3gpp:ssbPeriodicity"
+#define SSBOFF  "nrcelldu3gpp:ssbOffset"
+#define SSBDUR  "nrcelldu3gpp:ssbDuration"
+
+#define PMAX "nrfreqrel3gpp:pMax"
+#define CELLLOCALID "nrcellcu3gpp:cellLocalId"
+#define CU_MCC "nrcellcu3gpp:mcc"
+#define CU_MNC "nrcellcu3gpp:mnc"
+#define CU_SST "nrcellcu3gpp:sst"
+#define CU_SD  "nrcellcu3gpp:sd"
 
 typedef struct b {
   long int dl;
@@ -77,13 +90,57 @@ typedef struct ue_stat {
     } \
   } \
 
-static int get_stats(char *buf, int debug, telnet_printfunc_t prnt)
+/* Tree management functions */
+static int du_compare(const nr_rrc_du_container_t *a, const nr_rrc_du_container_t *b)
 {
-  if (buf)
-    ERROR_MSG_RET("no parameter allowed\n");
+  if (a->assoc_id > b->assoc_id)
+    return 1;
+  if (a->assoc_id == b->assoc_id)
+    return 0;
+  return -1; /* a->assoc_id < b->assoc_id */
+}
 
-  gNB_MAC_INST *mac = RC.nrmac[0];
-  AssertFatal(mac != NULL, "need MAC\n");
+RB_GENERATE/*_STATIC*/(rrc_du_tree, nr_rrc_du_container_t, entries, du_compare);
+static void get_cu_stats(telnet_printfunc_t prnt, gNB_RRC_INST *rrc)
+{
+  /* This is not thread safe; we just read, so hope for the best */
+
+  prnt("{\n");
+    prnt("  \"o1-config\": {\n");
+    prnt("    \"NRCELLCU\": [\n"); // list?
+
+    nr_rrc_du_container_t *it = NULL;
+    bool first = true;
+    RB_FOREACH (it, rrc_du_tree, &rrc->dus) {
+
+      const f1ap_served_cell_info_t *ci = &it->setup_req->cell[0].info;
+      if (!first)
+        prnt(",\n");
+      prnt("      {\n");
+      prnt("        \""CELLLOCALID"\": %d,\n", ci->nr_cellid);
+      prnt("        \""CU_MCC"\": \"%03d\",\n", ci->plmn.mcc);
+      prnt("        \""CU_MNC"\": \"%0*d\",\n", ci->plmn.mnc_digit_length, ci->plmn.mnc);
+      prnt("        \""CU_SST"\": %d,\n", ci->nssai[0].sst);
+      prnt("        \""CU_SD "\": %d\n", ci->nssai[0].sd);
+      prnt("      }");
+      first = false;
+    }
+    prnt("\n    ],\n");
+
+    /* TODO harmonize this between DU&CU to be able to have one in monolithic */
+    prnt("    \"device\": {\n");
+    prnt("      \"gNBId\": %d,\n", rrc->node_id);
+    prnt("      \"gnbName\": \"%s\",\n", rrc->node_name);
+    prnt("      \"vendor\": \"OpenAirInterface\"\n");
+    prnt("    }\n");
+    prnt("  }\n");
+
+  prnt("}\n");
+  prnt("OK\n");
+}
+
+static void get_du_stats(telnet_printfunc_t prnt, gNB_MAC_INST *mac)
+{
   NR_SCHED_LOCK(&mac->sched_lock);
 
   const f1ap_setup_req_t *sr = mac->f1_config.setup_req;
@@ -105,10 +162,10 @@ static int get_stats(char *buf, int debug, telnet_printfunc_t prnt)
   int bw_index = get_supported_band_index(scs, fr, nrb);
   int bw_mhz = get_supported_bw_mhz(fr, bw_index);
 
-  const dlul_mac_stats_t *stat = &mac->mac_stats;
-  static dlul_mac_stats_t last = {0};
-  int diff_used = stat->dl.used_prb_aggregate - last.dl.used_prb_aggregate;
-  int diff_total = stat->dl.total_prb_aggregate - last.dl.total_prb_aggregate;
+  const mac_stats_t *stat = &mac->mac_stats;
+  static mac_stats_t last = {0};
+  int diff_used = stat->used_prb_aggregate - last.used_prb_aggregate;
+  int diff_total = stat->total_prb_aggregate - last.total_prb_aggregate;
   int load = diff_total > 0 ? 100 * diff_used / diff_total : 0;
   last = *stat;
 
@@ -123,7 +180,7 @@ static int get_stats(char *buf, int debug, telnet_printfunc_t prnt)
   static b_t last_total[MAX_MOBILES_PER_GNB] = {0}; // TODO: hash table?
   ue_stat_t ue_stat[MAX_MOBILES_PER_GNB] = {0};
   int num_ues = 0;
-  UE_iterator((NR_UE_info_t **)mac->UE_info.connected_ue_list, it) {
+  UE_iterator((NR_UE_info_t **)mac->UE_info.list, it) {
     nr_rlc_statistics_t rlc = {0};
     nr_rlc_get_statistics(it->rnti, srb_flag, rb_id, &rlc);
     b_t *lt = &last_total[num_ues];
@@ -173,7 +230,11 @@ static int get_stats(char *buf, int debug, telnet_printfunc_t prnt)
     prnt("      \"" MCC "\": \"%03d\",\n", cell_info->plmn.mcc);
     prnt("      \"" MNC "\": \"%0*d\",\n", cell_info->plmn.mnc_digit_length, cell_info->plmn.mnc);
     prnt("      \"" SD  "\": %d,\n", cell_info->nssai[0].sd);
-    prnt("      \"" SST "\": %d\n", cell_info->nssai[0].sst);
+    prnt("      \"" SST "\": %d,\n", cell_info->nssai[0].sst);
+    prnt("      \"" SSBSCS "\": %d,\n", 30);
+    prnt("      \"" SSBPRD "\": %d,\n", 20);
+    prnt("      \"" SSBOFF "\": %d,\n", 0);
+    prnt("      \"" SSBDUR "\": %d\n", 1);
     prnt("    },\n");
     prnt("    \"device\": {\n");
     prnt("      \"gnbId\": %d,\n", sr->gNB_DU_id);
@@ -194,7 +255,24 @@ static int get_stats(char *buf, int debug, telnet_printfunc_t prnt)
     prnt("  }\n");
   prnt("}\n");
   prnt("OK\n");
+
   NR_SCHED_UNLOCK(&mac->sched_lock);
+}
+
+static int get_stats(char *buf, int debug, telnet_printfunc_t prnt)
+{
+  if (buf)
+    ERROR_MSG_RET("no parameter allowed\n");
+
+  gNB_RRC_INST *rrc = RC.nrrrc[0];
+  bool is_cu = rrc != NULL && (NODE_IS_MONOLITHIC(rrc->node_type) || NODE_IS_CU(rrc->node_type));
+  gNB_MAC_INST *mac = RC.nrmac ? RC.nrmac[0] : NULL;
+  bool is_du = mac != NULL;
+  if (is_cu)
+    get_cu_stats(prnt, rrc);
+  else if (is_du)
+    get_du_stats(prnt, mac);
+
   return 0;
 }
 
@@ -369,7 +447,7 @@ static int stop_modem(char *buf, int debug, telnet_printfunc_t prnt)
    * scheduler, which has many PUCCH structures filled with expected frame/slot
    * combinations that won't happen. */
   const gNB_MAC_INST *mac = RC.nrmac[0];
-  UE_iterator((NR_UE_info_t **)mac->UE_info.connected_ue_list, it) {
+  UE_iterator((NR_UE_info_t **)mac->UE_info.list, it) {
     nr_mac_trigger_ul_failure(&it->UE_sched_ctrl, 1);
   }
   usleep(50000);
