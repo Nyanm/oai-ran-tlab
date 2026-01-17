@@ -10,9 +10,9 @@ U_VLAN=3
 C_VLAN=4
 
 MTU=9216
-IF=enp5s0f0np0
-echo 0 | sudo tee /sys/bus/pci/devices/0000\:05\:00.0/sriov_numvfs
-echo 5 | sudo tee /sys/bus/pci/devices/0000\:05\:00.0/sriov_numvfs
+IF=enp193s0f0
+echo 0 | sudo tee /sys/bus/pci/devices/0000\:c1\:00.0/sriov_numvfs
+echo 4 | sudo tee /sys/bus/pci/devices/0000\:c1\:00.0/sriov_numvfs
 
 
 # this next 2 lines is for C/U planes
@@ -26,15 +26,15 @@ sudo ip link set $IF vf 4 mac $UPLANE_CAPTURE_MAC vlan $U_VLAN qos 0 spoofchk of
 
 # bind to vfio-pci
 sleep 1
-sudo /usr/local/bin/dpdk-devbind.py --unbind 05:02.0
-sudo /usr/local/bin/dpdk-devbind.py --unbind 05:02.1
-sudo /usr/local/bin/dpdk-devbind.py --unbind 05:02.2
-sudo /usr/local/bin/dpdk-devbind.py --unbind 05:02.3
-sudo /usr/local/bin/dpdk-devbind.py --unbind 05:02.4
+sudo /usr/local/bin/dpdk-devbind.py --unbind c1:01.0
+sudo /usr/local/bin/dpdk-devbind.py --unbind c1:01.1
+sudo /usr/local/bin/dpdk-devbind.py --unbind c1:01.2
+sudo /usr/local/bin/dpdk-devbind.py --unbind c1:01.3
+# sudo /usr/local/bin/dpdk-devbind.py --unbind 05:02.4
 sudo modprobe vfio-pci
-sudo /usr/local/bin/dpdk-devbind.py --bind vfio-pci 05:02.0
-sudo /usr/local/bin/dpdk-devbind.py --bind vfio-pci 05:02.1
-sudo /usr/local/bin/dpdk-devbind.py --bind vfio-pci 05:02.2
-sudo /usr/local/bin/dpdk-devbind.py --bind vfio-pci 05:02.3
-sudo /usr/local/bin/dpdk-devbind.py --bind iavf 0000:05:02.4
+sudo /usr/local/bin/dpdk-devbind.py --bind vfio-pci c1:01.0
+sudo /usr/local/bin/dpdk-devbind.py --bind vfio-pci c1:01.1
+sudo /usr/local/bin/dpdk-devbind.py --bind vfio-pci c1:01.2
+sudo /usr/local/bin/dpdk-devbind.py --bind vfio-pci c1:01.3
+# sudo /usr/local/bin/dpdk-devbind.py --bind iavf 0000:05:02.4
 sleep 5
