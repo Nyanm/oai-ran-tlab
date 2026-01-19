@@ -170,13 +170,8 @@ Enter number of PRS respurces: <NumPRSResources>
 Enter number of active gNBs: <Active_gNBs>
 ```
 This script will read the IQ data from extracted PRS dumps(chF_gnbX_Y.raw and chT_gnbX_Y.raw) and plot them like below
-<table style="border-collapse: collapse; border: none;">
-  <tr style="border-collapse: collapse; border: none;">
-    <td style="border-collapse: collapse; border: none;">
-         <img src="./images/PRS_CFR_FR2_64PRB_8rsc.PNG" alt="" border=1 height=400 width=500>
-         <img src="./images/PRS_CIR_FR2_64PRB_8rsc.PNG" alt="" border=1 height=400 width=500>
-         </img>
-         <figcaption align = "center"><b>Fig.1 - FR2 100MHz test</b></figcaption>
-    </td>
-  </tr>
-</table>
+
+| ![PRS CFR FR2](../images/PRS_CFR_FR2_64PRB_8rsc.PNG) | ![PRS CIR FR2](../images/PRS_CIR_FR2_64PRB_8rsc.PNG) |
+|:----------------------------------------------------:|:----------------------------------------------------:|
+
+<p align="center"><b>Fig.1 - FR2 100MHz test</b></p>
