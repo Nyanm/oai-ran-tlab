@@ -575,13 +575,19 @@ void print_fh_config(const struct xran_fh_config *fh_config)
       fh_config->max_sections_per_symbol);
 
   printf("\
-  RunSlotPrbMapBySymbolEnable %d\n\
-  LiteOnIgnoreUPSectionIdEnable %d\n\
-  dssEnable %d\n\
+  RunSlotPrbMapBySymbolEnable %d\n"
+// TODO Fix K Release for LiteON FR2 RU
+#if defined F_RELEASE
+"  LiteOnIgnoreUPSectionIdEnable %d\n"
+#endif
+"  dssEnable %d\n\
   dssPeriod %d\n\
   technology[XRAN_MAX_DSS_PERIODICITY] (not filled as DSS disabled)\n",
       fh_config->RunSlotPrbMapBySymbolEnable,
+// TODO Fix K Release for LiteON FR2 RU
+#if defined F_RELEASE
       fh_config->LiteOnIgnoreUPSectionIdEnable,
+#endif
       fh_config->dssEnable,
       fh_config->dssPeriod);
 
@@ -939,8 +945,13 @@ static bool set_fh_prach_config(void *mplane_api,
                                 const uint32_t max_num_ant,
                                 const paramdef_t *prachp,
                                 int nprach,
-                                struct xran_prach_config *prach_config,
-                                bool liteon_prach_eAxC_offset)
+                                struct xran_prach_config *prach_config
+// TODO Fix K Release for LiteON FR2 RU
+#if defined F_RELEASE
+                                                                      ,
+                                bool liteon_prach_eAxC_offset
+#endif
+				                               )
 {
   const split7_config_t *s7cfg = &oai0->split7;
 
@@ -979,8 +990,9 @@ static bool set_fh_prach_config(void *mplane_api,
 #endif
 #else
   uint8_t offset = *gpd(prachp, nprach, ORAN_PRACH_CONFIG_EAXC_OFFSET)->u8ptr;
+// TODO Fix K Release for LiteON FR2 RU
 #if defined K_RELEASE
-  prach_config->prachEaxcOffset = (offset != 0 || liteon_prach_eAxC_offset) ? offset : max_num_ant;
+  prach_config->prachEaxcOffset = (offset != 0) ? offset : max_num_ant;
 #elif defined F_RELEASE
   if (liteon_prach_eAxC_offset)
     prach_config->eAxC_offset = offset;
@@ -1239,12 +1251,18 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
 #endif
   fh_config->srsEnable = 0; // enable SRS; used only if XRAN_CATEGORY_B
   // For LiteOn E release, no need to take care of prach eAxC_offset. xran lib is hacked to handle it.
+// TODO Fix K Release for LiteON FR2 RU
+#if defined F_RELEASE
   bool liteon_prach_eAxC_offset = false;
+#endif
   fh_config->srsEnableCp = 0; // enable SRS CP; used only if XRAN_CATEGORY_B
   fh_config->SrsDelaySym = 0; // number of SRS delay symbols; used only if XRAN_CATEGORY_B
+// TODO Fix K Release for LiteON FR2 RU
+#if defined F_RELEASE
   fh_config->RunSlotPrbMapBySymbolEnable    = *gpd(fhp, nfh, ORAN_CONFIG_RunSlotPrbMapBySymbol)->uptr;    // enable RunSlotPrbMapBySymbol
   fh_config->LiteOnIgnoreUPSectionIdEnable  = *gpd(fhp, nfh, ORAN_CONFIG_LiteOnIgnoreUPSectionId)->uptr;  // enable LiteOnIgnoreUPSectionId
   liteon_prach_eAxC_offset = fh_config->LiteOnIgnoreUPSectionIdEnable;
+#endif
   fh_config->puschMaskEnable = 0; // enable PUSCH mask; only used if id = O_RU
   fh_config->puschMaskSlot = 0; // specific which slot PUSCH channel masked; only used if id = O_RU
 #if defined K_RELEASE

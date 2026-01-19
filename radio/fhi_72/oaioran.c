@@ -323,11 +323,14 @@ static bool is_tdd_dl_symbol(const struct xran_frame_config *frame_conf, int slo
   return frame_conf->sSlotConfig[slot_in_period].nSymbolType[sym_idx] == 0 /* DL */;
 }
 
+// TODO Fix K Release for LiteON FR2 RU
+#if defined F_RELEASE
 /** @brief Check if current slot is guard/mixed */
 static bool is_tdd_guard_slot(const struct xran_frame_config *frame_conf, int slot)
 {
   return (is_tdd_dl_symbol(frame_conf, slot, 0) && is_tdd_ul_symbol(frame_conf, slot,  XRAN_NUM_OF_SYMBOL_PER_SLOT - 1));
 }
+#endif
 
 /** @brief Check if current slot is DL or guard/mixed without UL (i.e., current
  * slot is not UL). */
@@ -641,8 +644,13 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
           int numRB, startRB;
           numRB = pRbElm->UP_nRBSize;
           startRB = pRbElm->UP_nRBStart;
+// TODO Fix K Release for LiteON FR2 RU
+#if defined F_RELEASE
           struct xran_section_desc *p_sec_desc = &pRbElm->sec_desc[sym_idx][0];
+#endif
           LOG_D(HW, "pPrbMap[%d] : PRBstart %d nPRBs %d\n", idxElm, startRB, numRB);
+// TODO Fix K Release for LiteON FR2 RU
+#if defined F_RELEASE
           // For Liteon FR2 with RunSlotPrbMapBySymbolEnable xran_prb_map will have xran_prb_elm prbMap[14], each idxElm matches to sym_idx.
           if (fh_cfg->RunSlotPrbMapBySymbolEnable) {
             if (sym_idx >= pRbElm->nStartSymb && sym_idx < pRbElm->nStartSymb + pRbElm->numSymb) {
@@ -655,6 +663,7 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
                 pRbElm->nBeamIndex = 0;
             }
           } else {
+#endif
             if (first) {
               // ant_id / no of antenna per beam gives the beam_nb
               pRbElm->nBeamIndex =
@@ -666,7 +675,10 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
                 first = 0;
               }
             }
+// TODO Fix K Release for LiteON FR2 RU
+#if defined F_RELEASE
           }
+#endif
         }
       }
     }
@@ -681,6 +693,8 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
         continue;
       }
 
+// TODO Fix K Release for LiteON FR2 RU
+#if defined F_RELEASE
       // For Liteon FR2 with RunSlotPrbMapBySymbolEnable. Set nPrbElm if beam_id = -1 for all downlink symbols
       if (fh_cfg->RunSlotPrbMapBySymbolEnable) {
         bool beam_used = false;
@@ -707,6 +721,7 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
           continue;
         }
       }
+#endif
 
       // This loop would better be more inner to avoid confusion and maybe also errors.
       for (int32_t sym_idx = 0; sym_idx < XRAN_NUM_OF_SYMBOL_PER_SLOT; sym_idx++) {
@@ -762,6 +777,8 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
               exit(-1);
             }
 
+// TODO Fix K Release for LiteON FR2 RU
+#if defined F_RELEASE
             // For Liteon FR2 with RunSlotPrbMapBySymbolEnable xran_prb_map will have xran_prb_elm prbMap[14], each idxElm matches to sym_idx.
             if (fh_cfg->RunSlotPrbMapBySymbolEnable) {
               /* skip, if not scheduled */
@@ -776,6 +793,7 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
               if (p_prbMapElm->nBeamIndex == -1)
                 p_prbMapElm->nBeamIndex = 0;
             } else {
+#endif
               if (sym_idx == 0) {
                 // ant_id / no of antenna per beam gives the beam_nb
                 p_prbMapElm->nBeamIndex = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT];
@@ -783,7 +801,10 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
                 if (p_prbMapElm->nBeamIndex == -1)
                   p_prbMapElm->nBeamIndex = 0;
               }
+// TODO Fix K Release for LiteON FR2 RU
+#if defined F_RELEASE
             }
+#endif
 
             dst = xran_add_hdr_offset(dst, p_prbMapElm->compMethod);
 
