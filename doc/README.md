@@ -22,6 +22,7 @@ Beware if you previously pulled the `develop` branch that your repository may be
 - [sanitizers.md](./dev_tools/sanitizers.md): how to run with ASan/UBSan/MemSAN/TSan
 - [environment-variables.md](./environment-variables.md): the environment variables used by OAI
 - [tuning_and_security.md](./tuning_and_security.md): performance and security considerations
+- [doc_best_practices.md](./doc_best_practices.md): overall best practices for writing documentations
 
 There is some general information in the [OpenAirInterface Gitlab Wiki](https://gitlab.eurecom.fr/oai/openairinterface5g/-/wikis/home)
 
