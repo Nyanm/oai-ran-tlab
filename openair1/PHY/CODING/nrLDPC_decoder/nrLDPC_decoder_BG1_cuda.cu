@@ -41,7 +41,7 @@
 #include "nrLDPC_CUDA_shared_param.h"
 
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
-#define NodeEdge 1 // 1 we use node centered functuon, 0 we use egde centered.
+
 
 #ifndef JETSON_TARGET
 #define CUDA_THREADS 1024
