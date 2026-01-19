@@ -97,7 +97,7 @@ __device__ void llr2bit_Kernel_BG1_int8(uint32_t R,
     uint32_t lane = threadIdx.x;
     uint32_t outColIdx = (blockIdx.x << 2) + threadIdx.y;
 
-    if (outColIdx >= 68) return;
+    if (outColIdx >= num_TotalBlocks_llr_llrRes) return;
 
     // Constants Setup
     const uint8_t numBn2CnG1 = (R == 13) ? d_lut_numBnInBnGroups_BG1_R13[0] : d_lut_numBnInBnGroups_BG1_R23[0];
@@ -144,7 +144,7 @@ __device__ void llr2bitPacked_Kernel_BG1_int8(uint32_t R,
     uint32_t lane = threadIdx.x;
     uint32_t outColIdx = (blockIdx.x << 2) + threadIdx.y;
 
-    if (outColIdx >= 68) return;
+    if (outColIdx >= num_TotalBlocks_llr_llrRes) return;
 
     const uint8_t numBn2CnG1 = (R == 13) ? d_lut_numBnInBnGroups_BG1_R13[0] : d_lut_numBnInBnGroups_BG1_R23[0];
     const uint32_t startColParity = NR_LDPC_START_COL_PARITY_BG1;

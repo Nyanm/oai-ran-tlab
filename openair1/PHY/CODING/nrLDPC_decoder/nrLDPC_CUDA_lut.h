@@ -31,6 +31,7 @@
 #pragma once
 
 #include <cuda_runtime.h>
+__device__ __constant__ uint32_t d_lut_numBnInCnGroups_BG1_R13[NR_LDPC_NUM_CN_GROUPS_BG1] = {3, 4,  5, 6, 7, 8, 9, 10, 19};
 __device__ __constant__ uint32_t d_lut_numCnInCnGroups_BG1_R13[NR_LDPC_NUM_CN_GROUPS_BG1] = {1, 5, 18, 8, 5, 2, 2,  1,  4};
 
 __device__ __constant__ uint32_t d_lut_startAddrCnGroups_BG1[NR_LDPC_NUM_CN_GROUPS_BG1] = {0, 1152, 8832, 43392, 61824, 75264, 81408, 88320, 92160};
@@ -50,9 +51,10 @@ __device__ __constant__ uint32_t d_llr2llrProcBufBnPos_BG1_R13[26] = {0,0,0,0,0,
 // R23
 __device__ __constant__ uint32_t d_llr2llrProcBufAddr_BG1_R23[26] = {13056,12672,5760,6912,6912,3840,5760,6912,6912,3840,9600,9600,9600,9600,6912,3840,9600,6912,9600,5760,6912,9600,9600,3840,3840,3456};
 __device__ __constant__ uint32_t d_llr2llrProcBufBnPos_BG1_R23[26] = {0,0,0,0,1,0,1,2,3,1,0,1,2,3,4,2,4,5,5,2,6,6,7,3,4,0};
-
-
-__device__ __constant__ uint32_t lut_CnGrpIdx_BG1_R13[316] = {
+//------------------------------------
+//luts for Edge centered kernels
+//------------------------------------
+__device__ __constant__ uint32_t lut_CnGrpIdx_BG1_R13_Edge[316] = {
     // Group 1 (3 messages)
     1, 1, 1, 
     // Group 2 (20 messages)
@@ -109,7 +111,7 @@ __device__ __constant__ uint32_t lut_CnGrpIdx_BG1_R13[316] = {
     9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 
     9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9
 };
-__device__ __constant__ uint32_t lut_CnMsgIdx_BG1_R13[316] = {
+__device__ __constant__ uint32_t lut_CnMsgIdx_BG1_R13_Edge[316] = {
     // Group 1 (Nbn=3, Ncn=1)
     1, 2, 3, 
     // Group 2 (Nbn=4, Ncn=5)
@@ -166,7 +168,7 @@ __device__ __constant__ uint32_t lut_CnMsgIdx_BG1_R13[316] = {
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19
 };
-__device__ __constant__ uint32_t lut_CnIdx_BG1_R13[316] = {
+__device__ __constant__ uint32_t lut_CnIdx_BG1_R13_Edge[316] = {
     // Group 1 (Nbn=3, Ncn=1) -> 1 repeated 3 times
     1, 1, 1, 
     // Group 2 (Nbn=4, Ncn=5) -> 1,2,3,4,5 each repeated 4 times
@@ -224,7 +226,7 @@ __device__ __constant__ uint32_t lut_CnIdx_BG1_R13[316] = {
     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
 };
 /** LDPC CN Group Index (1-based) for each message/thread (Rate 2/3) Length: 144 */
-__device__ __constant__ uint32_t lut_CnGrpIdx_BG1_R23[144] = {
+__device__ __constant__ uint32_t lut_CnGrpIdx_BG1_R23_Edge[144] = {
     // Group 1 (3 messages)
     1, 1, 1, 
     // Group 5 (21 messages)
@@ -241,7 +243,7 @@ __device__ __constant__ uint32_t lut_CnGrpIdx_BG1_R23[144] = {
     9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 
     9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9};
 /** Message Index (1-based) within the current CN (connected BN index) (Rate 2/3) Length: 144 */
-__device__ __constant__ uint32_t lut_CnMsgIdx_BG1_R23[144] = {
+__device__ __constant__ uint32_t lut_CnMsgIdx_BG1_R23_Edge[144] = {
     1,  2,  3,  
     1,  2,  3,  4,  5,  6,  7,  
     1,  2,  3,  4,  5,  6,  7,  
@@ -257,7 +259,7 @@ __device__ __constant__ uint32_t lut_CnMsgIdx_BG1_R23[144] = {
     1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
 
 /** CN Index (1-based) within the current CN group (Rate 2/3) Length: 144 */
-__device__ __constant__ uint32_t lut_CnIdx_BG1_R23[144] = {
+__device__ __constant__ uint32_t lut_CnIdx_BG1_R23_Edge[144] = {
     1, 1, 1, 
     1, 1, 1, 1, 1, 1, 1, 
     2, 2, 2, 2, 2, 2, 2, 
@@ -272,7 +274,7 @@ __device__ __constant__ uint32_t lut_CnIdx_BG1_R23[144] = {
     3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4};
 
-__device__ __constant__ uint32_t lut_BnGrpIdx_BG1_R13[316] = {
+__device__ __constant__ uint32_t lut_BnGrpIdx_BG1_R13_Edge[316] = {
       1,  1,  1,  1,  1,  1,  1,  
       1,  1,  1,  1,  1,  1,  1,  
       1,  1,  1,  1,  1,  1,  1,  
@@ -309,7 +311,7 @@ __device__ __constant__ uint32_t lut_BnGrpIdx_BG1_R13[316] = {
       30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
   };
 
-__device__ __constant__ uint32_t lut_BnMsgIdx_BG1_R13[316] = {
+__device__ __constant__ uint32_t lut_BnMsgIdx_BG1_R13_Edge[316] = {
       1,  1,  1,  1,  1,  1,  1,  
       1,  1,  1,  1,  1,  1,  1,  
       1,  1,  1,  1,  1,  1,  1,  
@@ -346,7 +348,7 @@ __device__ __constant__ uint32_t lut_BnMsgIdx_BG1_R13[316] = {
       16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
   };
 
- __device__ __constant__ uint32_t lut_BnIdx_BG1_R13[316] = {
+ __device__ __constant__ uint32_t lut_BnIdx_BG1_R13_Edge[316] = {
       1,  2,  3,  4,  5,  6,  7,  
       8,  9,  10, 11, 12, 13, 14, 
       15, 16, 17, 18, 19, 20, 21, 
@@ -384,7 +386,7 @@ __device__ __constant__ uint32_t lut_BnMsgIdx_BG1_R13[316] = {
   };
 
   /** LDPC BN Group Index (1-based) for each message/thread (Rate 2/3) Length: 144 */
-__device__ __constant__ uint32_t lut_BnGrpIdx_BG1_R23[144] = {
+__device__ __constant__ uint32_t lut_BnGrpIdx_BG1_R23_Edge[144] = {
     // Group 1 (9 messages)
     1, 1, 1, 1, 1, 1, 1, 1, 1, 
     // Group 2 (2 messages)
@@ -407,7 +409,7 @@ __device__ __constant__ uint32_t lut_BnGrpIdx_BG1_R23[144] = {
 };
 
 /** BN Index (1-based) within the current BN group (Rate 2/3) Length: 144 */
-__device__ __constant__ uint32_t lut_BnIdx_BG1_R23[144] = {
+__device__ __constant__ uint32_t lut_BnIdx_BG1_R23_Edge[144] = {
     // Group 1 (Nbn=9, R=1) -> 1..9 each repeated 1 time
     1, 2, 3, 4, 5, 6, 7, 8, 9, 
     // Group 2 (Nbn=1, R=2) -> 1 repeated 2 times
@@ -430,7 +432,7 @@ __device__ __constant__ uint32_t lut_BnIdx_BG1_R23[144] = {
 };
 
 /** Message Index (1-based) within the current BN group (i.e., CN Index connected by this BN) (Rate 2/3) Length: 144 */
-__device__ __constant__ uint32_t lut_BnMsgIdx_BG1_R23[144] = {
+__device__ __constant__ uint32_t lut_BnMsgIdx_BG1_R23_Edge[144] = {
     // Group 1 (Nbn=9, R=1) -> {1} repeated 9 times
     1, 1, 1, 1, 1, 1, 1, 1, 1, 
     // Group 2 (Nbn=1, R=2) -> {1, 2} repeated 1 time
@@ -451,6 +453,162 @@ __device__ __constant__ uint32_t lut_BnMsgIdx_BG1_R23[144] = {
     // Group 12 (Nbn=1, R=12) -> {1..12} repeated 1 time
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
 };
+//------------------------------------
+//luts for Node centered kernels
+//------------------------------------
+__device__ __constant__ uint32_t lut_CnStartMsgIdx_BG1_R13_Node[46] = {
+    0,
+    3,   7,  11,  15,  19,
+   23,  28,  33,  38,  43,  48,
+   53,  58,  63,  68,  73,  79,
+   83,  88,  93,  98, 103, 108,
+  113, 119, 125, 131, 137, 143, 149, 155,
+  161, 168, 175, 182, 189,
+  196, 204,
+  212, 221,
+  230,
+  240, 259, 278, 297
+};
+__device__ __constant__ uint32_t lut_CnStartMsgIdx_BG1_R23_Node[13] = {
+    0,
+    3, 10, 17,
+    24, 32,
+    40, 49,
+    58, 
+    68, 87, 106, 125
+};
+__device__ __constant__ uint32_t lut_BnStartMsgIdx_BG1_R13_Node[68] = {
+    0,  1,  2,  3,  4,  5,  6,  7,  
+    8,  9,  10, 11, 12, 13, 14,
+    15, 16, 17, 18, 19, 20, 21, 
+    22, 23, 24, 25, 26, 27, 28, 
+    29, 30, 31, 32, 33, 34, 35, 
+    36, 37, 38, 39, 40, 41,  //1
+    42, //4
+    46, //5
+    51, 57,  //6
+    63, 70, 77, 84, //7
+    91, 99, 107, //8
+    115,  //9
+    124, 134, 144, 154, //10
+    164, 175, 186, //11
+    197, 209, 221, 233, //12
+    245,  //13
+    258, //28
+    286 //30
+    };
+
+__device__ __constant__ uint32_t lut_BnStartMsgIdx_BG1_R23_Node[35] = {
+    0,  1,  2,  3,  4,  5,  6,  7,  8, //1
+    9, //2
+    11, 14, 17, 20, 23, //3
+    26, 30, 34, //4
+    38, 43, 48, 53, 58, 63, 68, //5 
+    73, 79, 85, 91, 97, 103, 109, 115, //6
+    121, //11
+    132 //12
+    };
+__device__ __constant__ uint32_t lut_CnGrpIdx_BG1_R13_Node[46] = {
+    1,
+    2, 2, 2, 2, 2, 
+    3, 3, 3, 3, 3, 3,
+    3, 3, 3, 3, 3, 3,
+    3, 3, 3, 3, 3, 3,
+    4, 4, 4, 4, 4, 4, 4, 4,
+    5, 5, 5, 5, 5,
+    6, 6,
+    7, 7, 
+    8,
+    9, 9, 9, 9};
+__device__ __constant__ uint32_t lut_CnIdx_BG1_R13_Node[46] = {
+    1,
+    1,  2,  3,  4,  5,
+    1,  2,  3,  4,  5,  6,
+    7,  8,  9, 10, 11, 12,
+   13, 14, 15, 16, 17, 18,
+    1,  2,  3,  4,  5,  6,  7,  8,
+    1,  2,  3,  4,  5,
+    1,  2,
+    1,  2,
+    1,
+    1,  2,  3,  4
+};
+__device__ __constant__ uint32_t lut_CnGrpIdx_BG1_R23_Node[13] = {
+    1,
+    5, 5, 5,
+    6, 6,
+    7, 7, 
+    8,
+    9, 9, 9, 9};
+
+__device__ __constant__ uint32_t lut_CnIdx_BG1_R23_Node[13] = {
+    1,
+    1,  2,  3,
+    1,  2,
+    1,  2,
+    1,
+    1,  2,  3,  4
+};
+__device__ __constant__ uint32_t lut_BnGrpIdx_BG1_R13_Node[68] = {
+    1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1,//42
+    4,
+    5,
+    6, 6,
+    7, 7, 7, 7,
+    8, 8, 8,
+    9,
+    10, 10, 10, 10, 
+    11, 11, 11, 
+    12, 12, 12, 12,
+    13, 
+    28, 
+    30};
+
+__device__ __constant__ uint32_t lut_BnIdx_BG1_R13_Node[68] = {
+    1,  2,  3,  4,  5,  6,  7,  
+    8,  9,  10, 11, 12, 13, 14,
+    15, 16, 17, 18, 19, 20, 21, 
+    22, 23, 24, 25, 26, 27, 28, 
+    29, 30, 31, 32, 33, 34, 35, 
+    36, 37, 38, 39, 40, 41, 42, 
+    1,  
+    1,  
+    1, 2,
+    1, 2, 3, 4,  
+    1, 2, 3,  
+    1,  
+    1, 2, 3, 4,  
+    1, 2, 3,  
+    1, 2, 3, 4,  
+    1,  
+    1,  
+    1,};
+
+__device__ __constant__ uint32_t lut_BnGrpIdx_BG1_R23_Node[35] = {
+    1, 1, 1, 1, 1, 1, 1, 1, 1, //9
+    2,
+    3, 3, 3, 3, 3,
+    4, 4, 4, 
+    5, 5, 5, 5, 5, 5, 5,
+    6, 6, 6, 6, 6, 6, 6, 6,
+    11,
+    12};
+
+__device__ __constant__ uint32_t lut_BnIdx_BG1_R23_Node[35] = {
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 
+    1,  
+    1, 2, 3, 4, 5,
+    1, 2, 3,
+    1, 2, 3, 4, 5, 6, 7,
+    1, 2, 3, 4, 5, 6, 7, 8,
+    1, 
+    1};
+
   __device__ __constant__ uint8_t lut_BnPcGrpIdx_BG1_R13[68] = {
       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
       1, 1, 1, 1, 1, 1, 1, 1, 
