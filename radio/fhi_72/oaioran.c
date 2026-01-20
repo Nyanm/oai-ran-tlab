@@ -300,9 +300,7 @@ static int read_prach_data(ru_info_t *ru, int frame, int slot)
 
           bfp_decom_rsp.data_out = (int16_t *)local_dst;
           bfp_decom_rsp.len = 0;
-
           xranlib_decompress_avx512(&bfp_decom_req, &bfp_decom_rsp);
-          
 #elif defined(__arm__) || defined(__aarch64__)
           armral_bfp_decompression(ru_conf->iqWidth_PRACH, 12, (int8_t *)src, (int16_t *)local_dst);
 #else
@@ -324,11 +322,10 @@ static int read_prach_data(ru_info_t *ru, int frame, int slot)
 
 int write_prach_data(uint32_t **prachDataF, int nb_rx, int frame, int slot)
 {
+
   struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
+  int prach_sym = 1; // TODO: Use get_prach_conf_duration(0);
   struct xran_ru_config *ru_conf = &fh_cfg->ru_conf;
-
-  int prach_sym = 1; // TODO: Use get_prach_conf_duration(0)
-
   int slots_per_frame = 10 << fh_cfg->frame_conf.nNumerology;
   int slots_per_subframe = 1 << fh_cfg->frame_conf.nNumerology;
 
@@ -339,7 +336,6 @@ int write_prach_data(uint32_t **prachDataF, int nb_rx, int frame, int slot)
 
   for (int sym_idx = 0; sym_idx < prach_sym; sym_idx++) {
     for (int aa = 0; aa < nb_rx; aa++) {
-
       oran_buf_list_t *bufs = get_xran_buffers(0);
       uint8_t *dst_u8 =
           (uint8_t *)bufs->prachdst[aa][tti % XRAN_N_FE_BUF_LEN]
@@ -409,12 +405,11 @@ int write_prach_data(uint32_t **prachDataF, int nb_rx, int frame, int slot)
 int write_pusch(uint32_t* txdataF_symb, int frame, int slot, int symbol, int aarx)
 {
   AssertFatal(txdataF_symb != NULL, "txdataF_symb is NULL\n");
-
   int tti = 20 * frame + slot;
   int idx = 0;
 
   const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
-  int nPRBs   = fh_cfg->nDLRBs;
+  int nPRBs = fh_cfg->nDLRBs;
   int fftsize = 1 << fh_cfg->ru_conf.fftSize;
 
   oran_buf_list_t *bufs = get_xran_buffers(0);
@@ -425,13 +420,10 @@ int write_pusch(uint32_t* txdataF_symb, int frame, int slot, int symbol, int aar
           frame, slot, symbol);
   }
 
-  uint8_t *pData =
-      bufs->src[aarx][tti % XRAN_N_FE_BUF_LEN]
-          .pBuffers[symbol % XRAN_NUM_OF_SYMBOL_PER_SLOT].pData;
+  uint8_t *pData = bufs->src[aarx][tti % XRAN_N_FE_BUF_LEN].pBuffers[symbol % XRAN_NUM_OF_SYMBOL_PER_SLOT].pData;
   AssertFatal(pData != NULL, "pData is NULL\n");
 
-  uint8_t *pPrbMapData =
-      bufs->srccp[aarx][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
+  uint8_t *pPrbMapData = bufs->srccp[aarx][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
   struct xran_prb_map *pRbMap = (struct xran_prb_map *)pPrbMapData;
 
   uint8_t *u8dptr = pData;
@@ -529,16 +521,16 @@ int write_pusch(uint32_t* txdataF_symb, int frame, int slot, int symbol, int aar
     /* ---------- Section descriptor update ---------- */
 
     p_sec_desc->iq_buffer_offset = RTE_PTR_DIFF(dst, u8dptr);
-    p_sec_desc->iq_buffer_len    = payload_len;
+    p_sec_desc->iq_buffer_len = payload_len;
 
     dst += payload_len;
     dst = xran_add_hdr_offset(dst, p_prbMapElm->compMethod);
   }
 
+  // The tti should be updated as it increased.
   pRbMap->tti_id = tti;
-  return 0;
+  return (0);
 }
-
 
 /** @brief Check if symbol in slot is UL.
  *
