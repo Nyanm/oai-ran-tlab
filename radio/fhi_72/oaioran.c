@@ -272,7 +272,6 @@ static int read_prach_data(ru_info_t *ru, int frame, int slot)
         dst = (int16_t *)ru->prach_buf[0][aa];
         src = (int16_t *)bufs->prachdstdecomp[aa % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers[sym_idx].pData;
         /* convert Network order to host order */
-        // ru_conf->compMeth_PRACH = XRAN_COMPMETHOD_BLKFLOAT; // added by Anh to test the PRACH decompression
         if (ru_conf->compMeth_PRACH == XRAN_COMPMETHOD_NONE) {
           if (sym_idx == 0) {
             for (idx = 0; idx < 139 * 2; idx++) {
@@ -342,7 +341,6 @@ int write_prach_data(uint32_t **prachDataF, int nb_rx, int frame, int slot)
               .pBuffers[sym_idx].pData;
 
       int16_t *src = (int16_t *)prachDataF[aa];
-      // ru_conf->compMeth_PRACH = XRAN_COMPMETHOD_BLKFLOAT; // Added by Anh to test the PRACH compression
       /* ---------- NO COMPRESSION ---------- */
       if (ru_conf->compMeth_PRACH == XRAN_COMPMETHOD_NONE) {
 
@@ -451,18 +449,15 @@ int write_pusch(uint32_t* txdataF_symb, int frame, int slot, int symbol, int aar
 
     pos_len = (p_prbMapElm->nRBSize * N_SC_PER_PRB) - neg_len;
 
-    uint16_t *src1 =
-        (uint16_t *)&pos[(neg_len == 0)
-                             ? ((p_prbMapElm->nRBStart * N_SC_PER_PRB) -
-                                (nPRBs * 6))
-                             : 0];
+    uint16_t *src1 = (uint16_t *)&pos[(neg_len == 0)
+                     ? ((p_prbMapElm->nRBStart * N_SC_PER_PRB) - (nPRBs * 6))
+                     : 0];
 
     uint16_t *src2 =
         (uint16_t *)&pos[(p_prbMapElm->nRBStart * N_SC_PER_PRB) +
                           fftsize - (nPRBs * 6)];
 
-    uint32_t local_src[p_prbMapElm->nRBSize * N_SC_PER_PRB]
-        __attribute__((aligned(64)));
+    uint32_t local_src[p_prbMapElm->nRBSize * N_SC_PER_PRB] __attribute__((aligned(64)));
 
     memcpy(local_src, src2, neg_len * 4);
     memcpy(&local_src[neg_len], src1, pos_len * 4);
@@ -470,7 +465,6 @@ int write_pusch(uint32_t* txdataF_symb, int frame, int slot, int symbol, int aar
     /* ---------- Compression handling ---------- */
 
     int16_t payload_len = 0;
-    // p_prbMapElm->compMethod = XRAN_COMPMETHOD_BLKFLOAT; //Added by Anh to test the PUSCH compression
     if (p_prbMapElm->compMethod == XRAN_COMPMETHOD_NONE) {
 
       payload_len = p_prbMapElm->nRBSize * N_SC_PER_PRB * 4;
@@ -497,7 +491,6 @@ int write_pusch(uint32_t* txdataF_symb, int frame, int slot, int symbol, int aar
       req.iqWidth    = p_prbMapElm->iqWidth;
 
       rsp.data_out = (int8_t *)dst;
-      // LOG_I(HW, "________Anh_______ insert PUSCH compression here \n");
       xranlib_compress_avx512(&req, &rsp);
 
 #elif defined(__arm__) || defined(__aarch64__)
@@ -697,7 +690,6 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
           // negative half
           uint8_t *dst2 = (uint8_t *)(pos + (pRbElm->nRBStart * N_SC_PER_PRB) + fftsize - (nPRBs * 6));
           int32_t local_dst[pRbElm->nRBSize * N_SC_PER_PRB] __attribute__((aligned(64)));
-          // pRbElm->compMethod = XRAN_COMPMETHOD_BLKFLOAT; // Added by Anh to test the PUSCH decompression
           if (pRbElm->compMethod == XRAN_COMPMETHOD_NONE) {
             // NOTE: gcc 11 knows how to generate AVX2 for this!
             for (idx = 0; idx < pRbElm->nRBSize * N_SC_PER_PRB * 2; idx++)
