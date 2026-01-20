@@ -33,9 +33,9 @@
 
   <testCase>
     <class>Build_Deploy_Docker_PhySim</class>
-    <desc>Build and Deploy PhySim</desc>
+    <desc>Build and Deploy Test Channel Scalability</desc>
     <node>localhost</node>
-    <ctest-opt>-R 5g -E "nr_dlsim|nr_ulsim|ldpctest|cuda" -j32</ctest-opt>
+    <ctest-opt>-R cuda</ctest-opt>
   </testCase>
 
 </testCaseList>
