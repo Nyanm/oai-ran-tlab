@@ -33,7 +33,7 @@ JSON_RES=$?
 # run the actual tests: we don't suppy --rm as we have to copy the files
 # similar to unit tests, we can't mount the file where we write physims-5g-run.xml to
 # as it would write a file as root, but this script is run as a normal user
-docker run -a STDOUT --workdir /oai-ran/build/ --env LD_LIBRARY_PATH=/oai-ran/build/ --name ${CONTAINER} ${IMAGE} ctest ${CTEST_OPT} --output-junit results-run.xml --test-output-size-passed 100000 --test-output-size-failed 100000 &>> ${RESULT_DIR}/physim_log.txt
+docker run -a STDOUT --gpus all --workdir /oai-ran/build/ --env LD_LIBRARY_PATH=/oai-ran/build/ --name ${CONTAINER} ${IMAGE} ctest ${CTEST_OPT} --output-junit results-run.xml --test-output-size-passed 100000 --test-output-size-failed 100000 &>> ${RESULT_DIR}/physim_log.txt
 RUN_RES=$?
 docker cp ${CONTAINER}:/oai-ran/build/results-run.xml ${RESULT_DIR}/
 docker cp ${CONTAINER}:/oai-ran/build/Testing/Temporary/LastTestsFailed.log ${RESULT_DIR}/
