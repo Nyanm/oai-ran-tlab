@@ -94,6 +94,9 @@ typedef struct {
 #define SNR_TRIALS 1000
 #define SNR_STEPS ((MAX_SNR_DB_DEFAULT - MIN_SNR_DB_DEFAULT) / SNR_STEP_DB + 1)
 
+#define DELAY_MIN 1500
+#define DELAY_MAX 2500
+
 int snr_min = MIN_SNR_DB_DEFAULT;
 int snr_max = MAX_SNR_DB_DEFAULT;
 int snr_steps = SNR_STEPS;
@@ -246,6 +249,12 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
     txlev_sum += in[i].r * in[i].r + in[i].i * in[i].i;
   }
 
+  for(int i = 0; i < frame->packet_samples + DELAY_MAX + 200; i++) {
+    // Clear array
+    r_re[0][i] = 0.0;
+    r_im[0][i] = 0.0;
+  }
+
   uint32_t txlev = txlev_sum / frame->packet_samples;
   double txlev_dBm = 10 * log10((double)txlev);
 
@@ -262,7 +271,7 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
     printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dBm);
   }
 
-  multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + channel->channel_offset + 200, 0, 1);
+  multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + DELAY_MAX + 200, 0, 1);
 
   stop_meas(&time_multipath_stats);
   *time_multipath += time_multipath_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
@@ -273,7 +282,7 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
             (const double **)r_re,
             (const double **)r_im,
             sigma2,
-            frame->packet_samples + channel->channel_offset + 200,
+            frame->packet_samples + DELAY_MAX + 200,
             0,
             ts,
             0,
@@ -595,13 +604,12 @@ int AIOT_R2D_PHY_RX_Synchronize(int *correlation, const int16_t *signal, int *SI
   }
 
   if(testing_mode && !testing_timing) {
-    printf("[RX Synchronize] SIP at offset %d, Corr: %d\n", SIP_offset, max_corr);
+    printf("[RX Synchronize] SIP at offset %d (before downsampling: %d), Corr: %d\n", SIP_offset, SIP_offset*frame->N, max_corr);
   }
   return SIP_offset;
 }
 
 int getpacket_snr_pass;
-#define POSTAMBLE_THRESHOLD_REDUCTION 4
 
 void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int SIP_offset, NR_AIOT_DL_FRAME_PARMS *frame_parms)
 {
@@ -874,27 +882,12 @@ void* process_snr_range(void* arg) {
   // Create thread-local copy of frame_parms to avoid race conditions on received_M and packet_payload_size
   NR_AIOT_DL_FRAME_PARMS *local_frame_parms = &data->thread_frame_parms;
   memcpy(local_frame_parms, data->frame_parms, sizeof(NR_AIOT_DL_FRAME_PARMS));
-  
-  // Per-thread variables to avoid conflicts
-  channel_desc_t *channel_params = new_channel_desc_scm(local_frame_parms->nr_frame_parms.nb_antennas_tx,
-                                        local_frame_parms->nr_frame_parms.nb_antennas_rx,
-                                        data->channel_model->channel_model,
-                                        data->channel_model->sampling_rate,
-                                        data->channel_model->fc,
-                                        data->channel_model->bw,
-                                        data->channel_model->DS_TDL,
-                                        0.0,
-                                        CORR_LEVEL_LOW,
-                                        0,
-                                        data->channel_model->delay,
-                                        data->channel_model->path_loss_dB,
-                                        data->channel_model->noise_power_dB);
 
   c16_t *REsPacket = malloc(local_frame_parms->packet_symbols * local_frame_parms->packet_subcarriers * sizeof(c16_t));
   c16_t *txData = malloc(local_frame_parms->packet_samples * sizeof(c16_t));
   c16_t *txDataF = malloc(local_frame_parms->packet_samples * sizeof(c16_t));
   
-  int rx_size = local_frame_parms->packet_samples + data->channel_model->delay + 200;
+  int rx_size = local_frame_parms->packet_samples + DELAY_MAX + 200;
   c16_t **rxData = malloc(local_frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(c16_t *));
   for (int i = 0; i < local_frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
     rxData[i] = calloc(1, rx_size * sizeof(c16_t));
@@ -999,6 +992,26 @@ void* process_snr_range(void* arg) {
         reset_meas(&local_time_stats);
         start_meas(&local_time_stats);
       }
+
+      data->channel_model->delay = uniformrandom() * (DELAY_MAX - DELAY_MIN) + DELAY_MIN; // Random delay for each SNR
+      if(testing_mode && !testing_timing) {
+        printf("[Channel] Random delay: %d samples\n", data->channel_model->delay);
+      }
+
+      // Per-thread variables to avoid conflicts
+      channel_desc_t *channel_params = new_channel_desc_scm(local_frame_parms->nr_frame_parms.nb_antennas_tx,
+                                            local_frame_parms->nr_frame_parms.nb_antennas_rx,
+                                            data->channel_model->channel_model,
+                                            data->channel_model->sampling_rate,
+                                            data->channel_model->fc,
+                                            data->channel_model->bw,
+                                            data->channel_model->DS_TDL,
+                                            0.0,
+                                            CORR_LEVEL_LOW,
+                                            0,
+                                            data->channel_model->delay,
+                                            data->channel_model->path_loss_dB,
+                                            data->channel_model->noise_power_dB);
       
       SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, local_channel_model.SNR, local_frame_parms,
                             s_re, s_im, r_re, r_im, &data->time_multipath, &data->time_noise, &gz);
@@ -1072,7 +1085,14 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) downSampled, SIP_ideal, local_frame_parms);
+      //int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) downSampled, SIP_ideal, local_frame_parms);
+
+      // ideal synchronization adjustment
+      SIP_offset = (data->channel_model->delay - frame_parms->nr_frame_parms.ofdm_symbol_size / 2) / frame_parms->N;
+
+      if(testing_mode && !testing_timing) {
+        printf("[RX Synchronize] Using ideal SIP offset: %d (before downsampling: %d)\n", SIP_offset, SIP_offset*frame_parms->N);
+      }
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_Correlation.m", folderplots);
@@ -1120,6 +1140,8 @@ void* process_snr_range(void* arg) {
           printf("\n");
         }
       }
+
+      free_channel_desc_scm(channel_params);
     }
     
     data->ber_results[snr - snr_min] /= snr_iters;
@@ -1158,8 +1180,6 @@ void* process_snr_range(void* arg) {
   free(r_re);
   free(r_im);
   
-  free_channel_desc_scm(channel_params);
-  
   return NULL;
 }
 
@@ -1183,10 +1203,9 @@ void BLER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mod
   channel_model->bw = frame_parms->nr_frame_parms.N_RB_DL * 0.2; // in MHz
 
   printf("Channel parameters:\n");
-  printf("  Channel model: %s\n", channel_model->channel_model == AWGN ? "AWGN" : "TDL");
+  printf("  Channel model: %s\n", channel_model->channel_model == AWGN ? "AWGN" : "TDL-A");
   printf("  Sampling rate: %f Msps\n", channel_model->sampling_rate);
   printf("  Bandwidth: %f MHz\n", channel_model->bw);
-  printf("  Delay: %d samples\n", channel_model->delay);
 
   printf("*************************\n");
   printf("Starting BLER vs SNR: \n");
@@ -1195,7 +1214,7 @@ void BLER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mod
   printf("*************************\n");
 
   // Generate SIP ideal sequence (shared by all threads)
-  frame_parms->packet_downsampled_samples = (frame_parms->packet_samples + channel_model->delay + 200) / frame_parms->N;
+  frame_parms->packet_downsampled_samples = (frame_parms->packet_samples + DELAY_MAX + 200) / frame_parms->N;
   SIP_ideal = generate_SIP_ideal_sequence(frame_parms);
 
   if(testing_mode) {
@@ -1425,18 +1444,17 @@ int main(int argc, char **argv)
 
   // Fill in channel model default parameters
   channel_model_t channel_model = {
-    .channel_model = TDL_A,
+    .channel_model = AWGN,
     .fc = 897500000, // Carrier frequency n8 band, #50 RB
     .DS_TDL = .03,
     .SNR = 20.0,
     .path_loss_dB = 0.0,
     .noise_power_dB = -120.0,
-    .delay = 1500,
     .tx_pwr_dBm = 46.0
   };
 
   int c;
-  while ((c = getopt(argc, argv, "--:O:h:L:R:p:M:Z:t:T:i:s:S:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:h:L:R:p:M:Z:t:T:i:s:S:C:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -1456,6 +1474,7 @@ int main(int argc, char **argv)
         printf("-i Iterations per SNR point (default: %d)\n", SNR_TRIALS);
         printf("-s SNR min in dB (default: %d)\n", MIN_SNR_DB);
         printf("-S SNR max in dB (default: %d)\n", MAX_SNR_DB);
+        printf("-C Channel model (0-AWGN or 1-TDL_A))\n");
         printf("\n*** Testing options:\n");
         printf("-t Testing mode (the parameter specifies the SNR cut to save to plot)\n");
         printf("-T Timing mode (measure processing time per packet)\n");
@@ -1560,6 +1579,16 @@ int main(int argc, char **argv)
         snr_steps = ((snr_max - snr_min) / SNR_STEP_DB + 1);
         printf("Using SNR max: %d dB\n", snr_max);
         break;
+
+      case 'C':
+        int channel_model_type = atoi(optarg);
+        if (channel_model_type != 0 && channel_model_type != 1) {
+          printf("Error: Channel model must be 0 (AWGN) or 1 (TDL-A)\n");
+          exit(-1);
+        } else {
+          channel_model.channel_model = (channel_model_type == 0) ? AWGN : TDL_A;
+          printf("Using channel model: %s\n", channel_model.channel_model == AWGN ? "AWGN" : "TDL_A");
+        }
     }
   }
 

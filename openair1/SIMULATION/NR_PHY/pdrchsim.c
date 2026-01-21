@@ -94,6 +94,9 @@ typedef struct {
 #define SNR_TRIALS 1000
 #define SNR_STEPS ((MAX_SNR_DB_DEFAULT - MIN_SNR_DB_DEFAULT) / SNR_STEP_DB + 1)
 
+#define DELAY_MIN 1500
+#define DELAY_MAX 2500
+
 int snr_min = MIN_SNR_DB_DEFAULT;
 int snr_max = MAX_SNR_DB_DEFAULT;
 int snr_steps = SNR_STEPS;
@@ -305,6 +308,12 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
     s_im[0][i] = (double) in[i].i;
   }
 
+  for(int i = 0; i < frame->packet_samples + DELAY_MAX + 200; i++) {
+    // Clear array
+    r_re[0][i] = 0.0;
+    r_im[0][i] = 0.0;
+  }
+
   int txlev = signal_energy((int32_t *) in, frame->nr_frame_parms.ofdm_symbol_size + frame->nr_frame_parms.nb_prefix_samples0);
   double txlev_dBm = 10 * log10((double)txlev);
   //printf("Signal energy: %d (%f dB)\n", txlev, txlev_dBm);
@@ -315,7 +324,7 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
   double sigma2 = pow(10, sigma2_dBm / 10);
   //printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dBm);
 
-  multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + channel->channel_offset + 2048, 0, 1);
+  multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + DELAY_MAX + 2048, 0, 1);
 
   stop_meas(&time_multipath_stats);
   *time_multipath += time_multipath_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
@@ -326,7 +335,7 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
             (const double **)r_re,
             (const double **)r_im,
             sigma2,
-            frame->packet_samples + channel->channel_offset + 2048,
+            frame->packet_samples + DELAY_MAX + 2048,
             0,
             ts,
             0,
@@ -752,26 +761,11 @@ void* process_snr_range(void* arg) {
   // Create thread-local copy of frame_parms to avoid race conditions on received_M and packet_payload_size
   NR_AIOT_UL_FRAME_PARMS *local_frame_parms = &data->thread_frame_parms;
   memcpy(local_frame_parms, data->frame_parms, sizeof(NR_AIOT_UL_FRAME_PARMS));
-  
-  // Per-thread variables to avoid conflicts
-  channel_desc_t *channel_params = new_channel_desc_scm(local_frame_parms->nr_frame_parms.nb_antennas_tx,
-                                        local_frame_parms->nr_frame_parms.nb_antennas_rx,
-                                        data->channel_model->channel_model,
-                                        data->channel_model->sampling_rate,
-                                        data->channel_model->fc,
-                                        data->channel_model->bw,
-                                        data->channel_model->DS_TDL,
-                                        0.0,
-                                        CORR_LEVEL_LOW,
-                                        0,
-                                        data->channel_model->delay,
-                                        data->channel_model->path_loss_dB,
-                                        data->channel_model->noise_power_dB);
 
   c16_t *txData = malloc(local_frame_parms->packet_samples * sizeof(c16_t));
   c16_t *txFiltered = malloc(local_frame_parms->packet_samples * sizeof(c16_t));
   
-  int rx_size = local_frame_parms->packet_samples + data->channel_model->delay + 2048;
+  int rx_size = local_frame_parms->packet_samples + DELAY_MAX + 2048;
   c16_t **rxData = malloc(local_frame_parms->nr_frame_parms.nb_antennas_rx * sizeof(c16_t *));
   for (int i = 0; i < local_frame_parms->nr_frame_parms.nb_antennas_rx; i++) {
     rxData[i] = calloc(1, rx_size * sizeof(c16_t));
@@ -869,6 +863,26 @@ void* process_snr_range(void* arg) {
         reset_meas(&local_time_stats);
         start_meas(&local_time_stats);
       }
+
+      data->channel_model->delay = uniformrandom() * (DELAY_MAX - DELAY_MIN) + DELAY_MIN; // Random delay for each SNR
+      if(testing_mode && !testing_timing) {
+        printf("[Channel] Random delay: %d samples\n", data->channel_model->delay);
+      }
+
+      // Per-thread variables to avoid conflicts
+      channel_desc_t *channel_params = new_channel_desc_scm(local_frame_parms->nr_frame_parms.nb_antennas_tx,
+                                            local_frame_parms->nr_frame_parms.nb_antennas_rx,
+                                            data->channel_model->channel_model,
+                                            data->channel_model->sampling_rate,
+                                            data->channel_model->fc,
+                                            data->channel_model->bw,
+                                            data->channel_model->DS_TDL,
+                                            0.0,
+                                            CORR_LEVEL_LOW,
+                                            0,
+                                            data->channel_model->delay,
+                                            data->channel_model->path_loss_dB,
+                                            data->channel_model->noise_power_dB);
       
       SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, local_channel_model.SNR, local_frame_parms,
                             s_re, s_im, r_re, r_im, &data->time_multipath, &data->time_noise, &gz);
@@ -977,6 +991,8 @@ void* process_snr_range(void* arg) {
           printf("\n");
         }
       }
+
+      free_channel_desc_scm(channel_params);
     }
     
     data->ber_results[snr - snr_min] /= snr_iters;
@@ -1012,8 +1028,6 @@ void* process_snr_range(void* arg) {
   }
   free(r_re);
   free(r_im);
-  
-  free_channel_desc_scm(channel_params);
   
   return NULL;
 }
@@ -1278,12 +1292,11 @@ int main(int argc, char **argv)
     .SNR = 20.0,
     .path_loss_dB = -15.0,
     .noise_power_dB = -120.0,
-    .delay = 1500,
     .tx_pwr_dBm = 46.0
   };
 
   int c;
-  while ((c = getopt(argc, argv, "--:O:h:L:p:f:I:l:a:b:i:s:S:t:T:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:h:L:p:f:I:l:a:b:i:s:S:t:T:C:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -1308,6 +1321,7 @@ int main(int argc, char **argv)
         printf("-i Iterations per SNR point (default: %d)\n", SNR_TRIALS);
         printf("-s SNR min in dB (default: %d)\n", MIN_SNR_DB);
         printf("-S SNR max in dB (default: %d)\n", MAX_SNR_DB);
+        printf("-C Channel model (0-AWGN or 1-TDL_A))\n");
 
         printf("\n*** Testing options:\n");
         printf("-t Testing mode (the parameter specifies the SNR cut to save to plot)\n");
@@ -1437,6 +1451,16 @@ int main(int argc, char **argv)
         frame_parms->T_bit = atoi(optarg);
         printf("Using bit duration option T_bit=%d\n", frame_parms->T_bit);
         break;
+      
+      case 'C':
+        int channel_model_type = atoi(optarg);
+        if (channel_model_type != 0 && channel_model_type != 1) {
+          printf("Error: Channel model must be 0 (AWGN) or 1 (TDL_A)\n");
+          exit(-1);
+        } else {
+          channel_model.channel_model = (channel_model_type == 0) ? AWGN : TDL_A;
+          printf("Using channel model: %s\n", channel_model.channel_model == AWGN ? "AWGN" : "TDL_A");
+        }
     }
   }
 
