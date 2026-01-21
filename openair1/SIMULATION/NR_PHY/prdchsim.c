@@ -1088,7 +1088,7 @@ void* process_snr_range(void* arg) {
       //int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) downSampled, SIP_ideal, local_frame_parms);
 
       // ideal synchronization adjustment
-      SIP_offset = (data->channel_model->delay - frame_parms->nr_frame_parms.ofdm_symbol_size / 2) / frame_parms->N;
+      int SIP_offset = (data->channel_model->delay - frame_parms->nr_frame_parms.ofdm_symbol_size / 2) / frame_parms->N;
 
       if(testing_mode && !testing_timing) {
         printf("[RX Synchronize] Using ideal SIP offset: %d (before downsampling: %d)\n", SIP_offset, SIP_offset*frame_parms->N);
