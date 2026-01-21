@@ -140,7 +140,7 @@ typedef struct nrLDPC_decoding_parameters_s {
   uint32_t K;
   uint32_t Z;
   uint32_t F;
-
+  uint32_t r;
   uint32_t C;
 
   int E;
@@ -186,10 +186,8 @@ static void nr_process_decode_segment(void *arg)
   /// code blocks after bit selection in rate matching for LDPC code (38.212 V15.4.0 section 5.4.2.1)
   int16_t harq_e[E];
 
-  //for (int i=0;i<16;i++) printf("llr[%d] %d\n",i,ulsch_llr[i]);
   nr_deinterleaving_ldpc(E, Qm, harq_e, ulsch_llr);
 
-  //for (int i=0;i<16;i++) printf("harq_e[%d] %d\n",i,harq_e[i]);
   //////////////////////////////////////////////////////////////////////////////////////////
 
   stop_meas(rdata->p_ts_deinterleave);
@@ -222,7 +220,13 @@ static void nr_process_decode_segment(void *arg)
     return;
   }
   stop_meas(rdata->p_ts_rate_unmatch);
-
+#ifdef DEBUG_LDPC_DECODE
+  if (rdata->r == 0) {
+    for (int i=0;i<E;i++) printf("harq_f[%d][%d] %d\n",rdata->r,i,ulsch_llr[i]);
+    for (int i=0;i<E;i++) printf("harq_e[%d][%d] %d\n",rdata->r,i,harq_e[i]);
+    for (int i=0;i<66*rdata->Z;i++) printf("harq_d[%d][%d] %d\n",rdata->r,i,rdata->d[i]);
+  }
+#endif
   *rdata->d_to_be_cleared = false;
 
   p_decoderParms->crc_type = crcType(rdata->C, A);
@@ -323,6 +327,7 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
       rdata->llr = nrLDPC_TB_decoding_parameters->segments[r].llr;
       rdata->Kc = decParams.BG == 2 ? 52 : 68;
       rdata->C = nrLDPC_TB_decoding_parameters->C;
+      rdata->r = r;
       rdata->E = nrLDPC_TB_decoding_parameters->segments[r].E;
       rdata->A = nrLDPC_TB_decoding_parameters->A;
       rdata->Qm = nrLDPC_TB_decoding_parameters->Qm;

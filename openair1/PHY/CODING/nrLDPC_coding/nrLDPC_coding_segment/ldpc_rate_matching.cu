@@ -21,6 +21,7 @@
 
 #include "nr_rate_matching.h"
 #include "common/utils/LOG/log.h"
+//#define RM_DEBUG 
 
 __device__ __forceinline__ int clamp_i16_to_i8(int x)
 {
@@ -30,7 +31,7 @@ __device__ __forceinline__ int clamp_i16_to_i8(int x)
     return x;
 }
 
-__device__ __forceinline__ uint32_t packs_2x16_to_4x8(uint32_t a, uint32_t b)
+__device__ __forceinline__ uint32_t packs_4x16_to_4x8(uint32_t a, uint32_t b)
 {
     int a0 = (int)(int16_t)(a & 0xFFFFu);
     int a1 = (int)(int16_t)(a >> 16);
@@ -44,18 +45,30 @@ __device__ __forceinline__ uint32_t packs_2x16_to_4x8(uint32_t a, uint32_t b)
 
     return (o0) | (o1 << 8) | (o2 << 16) | (o3 << 24);
 }
+__device__ __forceinline__ uint16_t packs_2x16_to_2x8(uint32_t a)
+{
+    int a0 = (int)(int16_t)(a & 0xFFFFu);
+    int a1 = (int)(int16_t)(a >> 16);
+
+    uint16_t o0 = (uint8_t)(int8_t)clamp_i16_to_i8(a0);
+    uint16_t o1 = (uint8_t)(int8_t)clamp_i16_to_i8(a1);
+
+    return (o0) | (o1 << 8) ;
+}
 __global__ void rm(int Ncb,int ind0, int E1, int E2, int r_firstE2, int Foffset, int F, int clear, int seglen, int K, int Z, uint32_t **d, uint32_t **e, uint32_t *llr_buffer) {
 
      int ind = (int)(blockIdx.x * blockDim.x + threadIdx.x);
      int r = (int)blockIdx.y;
 
+     if (ind >= Ncb) return;
+
+     if (r==0) printf("Looking for ind %d...%d, Ncb %d\n",ind*4,3+ind*4,Ncb*4);
      if (ind>= Foffset && ind < Foffset+F) {
 	     llr_buffer[seglen*r + ind-Foffset+K-F] = 0x7f7f7f7f;
-//	     if (r==0) printf("writing 0x7f7f7f7f to position %d (ind %d, K %d, Foffset %d, F %d)\n",seglen*r + ind-Foffset+K-F,ind,K,Foffset,F);
+	     if (r==0) printf("writing 0x7f7f7f7f to position %d (ind %d, K %d, Foffset %d, F %d)\n",(seglen*r + ind-Foffset+K-F)*4,ind*4,K*4,Foffset*4,F*4);
 	     return;
      }
 
-     if (ind >= Ncb) return;
      if (clear == 1) { d[r][2*ind] = 0; d[r][(2*ind)+1]=0; }
 
      int E;
@@ -64,56 +77,141 @@ __global__ void rm(int Ncb,int ind0, int E1, int E2, int r_firstE2, int Foffset,
      int ind1=ind0,ind2;
      int k=0;
 
-//     if (r==0 && threadIdx.x == 0) printf("check 1a: ind %d ind1 %d Foffset %d\n",ind,ind1,Foffset);
+//     if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check 1a: ind %d ind1 %d Foffset %d\n",ind,ind1,Foffset);
      if (ind1 < Foffset) {
        int ind2 = ind1 + min(Foffset-ind1,E);
 
-//       if (r==0 && threadIdx.x == 0) printf("check 1b: ind %d ind1 %d ind2 %d\n",ind,ind1,ind2);
+//       if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check RM1B: ind %d ind1 %d ind2 %d k %d/E %d\n",4*ind,4*ind1,4*ind2,4*k,4*E);
        if (ind >= ind1 && ind < ind2) {
 	       d[r][2*ind] = __vaddss2(d[r][2*ind],e[r][2*(ind-ind1)]);
 	       d[r][(2*ind)+1] = __vaddss2(d[r][(2*ind)+1],e[r][2*(ind-ind1)+1]);
        }
-//       if (r==0 && threadIdx.x == 0 && ind >= ind1 && ind < ind2) printf("write 1. ind %d, ind1 %d, ind2 %d,k %d/E %d\n",ind,ind1,ind2,ind-ind1,E);
+       if (r==0 /*&& threadIdx.x == 0 && blockIdx.x == 0*/ && ind >= ind1 && ind < ind2) printf("RM1A: ind %d, ind1 %d, ind2 %d,k %d/E %d\n",4*ind,4*ind1,4*ind2,4*(ind-ind1),4*E);
        k=ind2-ind1;
        ind1 = ind2;
      }
 
-//     if (r==0 && threadIdx.x == 0) printf("check 2a: ind %d ind1 %d Foffset %d Foffset+F %d\n",ind,ind1,Foffset,Foffset+F);
+//     if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check 2a: ind %d ind1 %d Foffset %d Foffset+F %d\n",ind,ind1,Foffset,Foffset+F);
      if (ind1 >= Foffset && ind1 < Foffset + F) ind1 = Foffset + F;
      ind2 = ind1 + min(Ncb-ind1,E-k);
 
-//     if (r==0 && threadIdx.x == 0) printf("check 2b: ind %d ind1 %d ind2 %d\n",ind,ind1,ind2);
+//     if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check RM2B: ind %d ind1 %d ind2 %d k%d/E %d\n",4*ind,4*ind1,4*ind2,4*k,4*E);
      if (ind >= ind1 && ind < ind2)  { 
 	     d[r][2*ind]     = __vaddss2(d[r][2*ind],e[r][2*(k+(ind-ind1))]);
 	     d[r][(2*ind)+1] = __vaddss2(d[r][(2*ind)+1],e[r][2*(k+(ind-ind1))+1]);
      }
-//     if (r==0 && threadIdx.x == 0 && ind >= ind1 && ind < ind2) printf("write 2. ind %d, ind1 %d, ind2 %d, k %d/E %d\n",ind,ind1,ind2,k+ind-ind1,E);
+     if (r==0 /*&& threadIdx.x == 0 && blockIdx.x == 0*/ && ind >= ind1 && ind < ind2) printf("RM2A: ind %d, ind1 %d, ind2 %d, k %d/E %d\n",4*ind,4*ind1,4*ind2,4*(k+(ind-ind1)),4*E);
      k+=(ind2-ind1);
 
-//     if (r==0 && threadIdx.x == 0) printf("check k %d E %d\n",k,E);
+//     if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check k %d E %d\n",k,E);
      while (k < E) {
 	ind2 = min(Foffset,E-k);
+//        if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check RM3B: ind %d ind1 %d ind2 %d k %d/E %d\n",4*ind,0,4*ind2,4*k,4*E);
 	if (ind < ind2) {
 	 	d[r][2*ind]     = __vaddss2(d[r][2*ind],e[r][2*(k+ind)]);
 	 	d[r][(2*ind)+1] = __vaddss2(d[r][(2*ind)+1],e[r][2*(k+ind)+1]);
 	}
-//        if (r==0 && threadIdx.x == 0 && ind < ind2 && ind >= ind1) printf("3. ind %d, ind2 %d, k %d/E %d\n",ind,ind2,k+ind,E);
+        if (r==0 /*&& threadIdx.x == 0 && blockIdx.x == 0*/ && ind < ind2 ) printf("RM3A: ind %d, ind2 %d, k %d/E %d\n",4*ind,4*ind2,4*(k+ind),4*E);
 	k+=ind2;
 
 	ind1=Foffset+F;
 	ind2 = ind1 + min(Ncb-ind1,E-k);
+//        if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check RM4B: ind %d ind1 %d ind2 %d k %d/E %d\n",4*ind,0,4*ind2,4*k,4*E);
 	if (ind >= ind1 && ind < ind2 && k < E) {
 		d[r][2*ind]     = __vaddss2(d[r][2*ind],e[r][2*(k+ind-ind1)]);
 		d[r][(2*ind)+1] = __vaddss2(d[r][(2*ind)+1],e[r][2*(k+ind-ind1)+1]);
 	}
-//        if (r==0 && threadIdx.x == 0 && ind < ind && ind >= ind1) printf("4. ind %d, ind1 %d, ind2 %d, k %d/E %d\n",ind,ind1,ind2,k+ind-ind1,E);
+        if (r==0 /*&& threadIdx.x == 0 && blockIdx.x == 0*/ && ind < ind && ind >= ind1) printf("RM4A: ind %d, ind1 %d, ind2 %d, k %d/E %d\n",4*ind,4*ind1,4*ind2,4*(k+ind-ind1),4*E);
 	k+=(ind2-ind1);
+
      }
        // note the offset here is such that when ind < Foffset = Kprime - 2Z, the output is put in position r*seglen + (2Z ... Kprime) and when ind > Foffset+F, it is in potiion r*seglent + (Kprime+F = K .. 2Z+(66*Z)=seglen  
-     llr_buffer[r*seglen + 2*Z + ind] = packs_2x16_to_4x8(d[r][(2*ind)], d[r][(2*ind)+1]);
-//     if (r==0 && threadIdx.x == 0) printf("writing %x to position %d (ind %d)\n",llr_buffer[r*seglen + 2*Z + ind],r*seglen + 2*Z + ind,ind);
+     llr_buffer[r*seglen + 2*Z + ind] = packs_4x16_to_4x8(d[r][(2*ind)], d[r][(2*ind)+1]);
+//     if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("writing %x to position %d (ind %d)\n",llr_buffer[r*seglen + 2*Z + ind],r*seglen + 2*Z + ind,ind);
 }	
- 
+
+__global__ void rm2(int Ncb,int ind0, int E1, int E2, int r_firstE2, int Foffset, int F, int clear, int seglen, int K, int Z, uint32_t **d, uint32_t **e, uint16_t *llr_buffer) {
+
+     int ind = (int)(blockIdx.x * blockDim.x + threadIdx.x);
+     int r = (int)blockIdx.y;
+
+     if (ind >= Ncb) return;
+#ifdef RM_DEBUG
+     if (r==0) printf("Looking for ind %d...%d, Ncb %d\n",ind*2,1+ind*2,Ncb*2);
+#endif
+     if (ind>= Foffset && ind < Foffset+F) {
+	     llr_buffer[seglen*r + ind-Foffset+K-F] = 0x7f7f;
+#ifdef RM_DEBUG
+	     if (r==0) printf("writing 0x7f7f7f7f to position %d (ind %d, K %d, Foffset %d, F %d)\n",(seglen*r + ind-Foffset+K-F)*2,ind*2,K*2,Foffset*2,F*2);
+#endif
+	     return;
+     }
+
+     if (clear == 1) d[r][ind] = 0;  
+
+     int E;
+     if (r<r_firstE2) E=E1; else E=E2;
+
+     int ind1=ind0,ind2;
+     int k=0;
+
+//     if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check 1a: ind %d ind1 %d Foffset %d\n",ind,ind1,Foffset);
+     if (ind1 < Foffset) {
+       int ind2 = ind1 + min(Foffset-ind1,E);
+
+//       if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check RM1B: ind %d ind1 %d ind2 %d k %d/E %d\n",4*ind,4*ind1,4*ind2,4*k,4*E);
+       if (ind >= ind1 && ind < ind2) {
+	       d[r][ind] = __vaddss2(d[r][ind],e[r][ind-ind1]);
+       }
+#ifdef RM_DEBUG
+       if (r==0 /*&& threadIdx.x == 0 && blockIdx.x == 0*/ && ind >= ind1 && ind < ind2) printf("RM1A: ind %d, ind1 %d, ind2 %d,k %d/E %d\n",2*ind,2*ind1,2*ind2,2*(ind-ind1),2*E);
+#endif
+       k=ind2-ind1;
+       ind1 = ind2;
+     }
+
+//     if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check 2a: ind %d ind1 %d Foffset %d Foffset+F %d\n",ind,ind1,Foffset,Foffset+F);
+     if (ind1 >= Foffset && ind1 < Foffset + F) ind1 = Foffset + F;
+     ind2 = ind1 + min(Ncb-ind1,E-k);
+
+//     if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check RM2B: ind %d ind1 %d ind2 %d k%d/E %d\n",4*ind,4*ind1,4*ind2,4*k,4*E);
+     if (ind >= ind1 && ind < ind2)  { 
+	     d[r][ind]     = __vaddss2(d[r][ind],e[r][(k+(ind-ind1))]);
+     }
+#ifdef RM_DEBUG
+     if (r==0 /*&& threadIdx.x == 0 && blockIdx.x == 0*/ && ind >= ind1 && ind < ind2) printf("RM2A: ind %d, ind1 %d, ind2 %d, k %d/E %d\n",2*ind,2*ind1,2*ind2,2*(k+(ind-ind1)),2*E);
+#endif
+     k+=(ind2-ind1);
+
+//     if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check k %d E %d\n",k,E);
+     while (k < E) {
+	ind2 = min(Foffset,E-k);
+//        if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check RM3B: ind %d ind1 %d ind2 %d k %d/E %d\n",4*ind,0,4*ind2,4*k,4*E);
+	if (ind < ind2) {
+	 	d[r][ind]     = __vaddss2(d[r][ind],e[r][(k+ind)]);
+	}
+#ifdef RM_DEBUG
+        if (r==0 /*&& threadIdx.x == 0 && blockIdx.x == 0*/ && ind < ind2 ) printf("RM3A: ind %d, ind2 %d, k %d/E %d\n",2*ind,2*ind2,2*(k+ind),2*E);
+#endif
+	k+=ind2;
+
+	ind1=Foffset+F;
+	ind2 = ind1 + min(Ncb-ind1,E-k);
+//        if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check RM4B: ind %d ind1 %d ind2 %d k %d/E %d\n",4*ind,0,4*ind2,4*k,4*E);
+	if (ind >= ind1 && ind < ind2 && k < E) {
+		d[r][ind]     = __vaddss2(d[r][ind],e[r][(k+ind-ind1)]);
+	}
+#ifdef RM_DEBUG
+        if (r==0 /*&& threadIdx.x == 0 && blockIdx.x == 0*/ && ind < ind && ind >= ind1) printf("RM4A: ind %d, ind1 %d, ind2 %d, k %d/E %d\n",2*ind,2*ind1,2*ind2,2*(k+ind-ind1),2*E);
+#endif
+	k+=(ind2-ind1);
+
+     }
+       // note the offset here is such that when ind < Foffset = Kprime - 2Z, the output is put in position r*seglen + (2Z ... Kprime) and when ind > Foffset+F, it is in potiion r*seglent + (Kprime+F = K .. 2Z+(66*Z)=seglen  
+     llr_buffer[r*seglen + 2*Z + ind] = packs_2x16_to_2x8(d[r][ind]);
+//     if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("writing %x to position %d (ind %d)\n",llr_buffer[r*seglen + 2*Z + ind],r*seglen + 2*Z + ind,ind);
+}	
+
 static const uint8_t index_k0[2][4] = {{0, 17, 33, 56}, {0, 13, 25, 43}};
 extern "C" int nr_rate_matching_ldpc_rx_cuda(uint32_t Tbslbrm,
                                              uint8_t BG,
@@ -149,10 +247,18 @@ extern "C" int nr_rate_matching_ldpc_rx_cuda(uint32_t Tbslbrm,
   uint32_t ind = (index_k0[BG - 1][rvidx] * Ncb / N) * Z;
 
 
-  int nthreads=384;
-  dim3 nblocks(((Ncb>>2) + nthreads-1)/nthreads,C);
-//  printf("rm: Ncb %d, ind %d, E1 %d, E2 %d, Foffset %d, F %d, K %d, Z %d\n",Ncb, ind, E1, E2, Foffset, F,K,Z);
-  rm<<<nblocks, nthreads>>>(Ncb/4,ind/4,E1/4,E2/4,r_firstE2,Foffset/4,F/4,clear,68*Z/4,K/4,Z/4,(uint32_t**)d,(uint32_t**)soft_input,(uint32_t*)llr_buffer);
+  int nthreads=256;
+#ifdef RM_DEBUG
+  printf("\nrm (%d,%d): Ncb %d, ind %d, rvidx %d, E1 %d, E2 %d, Foffset %d, F %d, K %d, Z %d, clear %d\n",nblocks.x,nthreads,Ncb, ind, rvidx, E1, E2, Foffset, F,K,Z,clear);
+#endif
+  if ((E1&3) == 0 && (E2&3) == 0) {
+    dim3 nblocks(((Ncb>>2) + nthreads-1)/nthreads,C);
+    rm<<<nblocks, nthreads>>>(Ncb/4,ind/4,E1/4,E2/4,r_firstE2,Foffset/4,F/4,clear,68*Z/4,K/4,Z/4,(uint32_t**)d,(uint32_t**)soft_input,(uint32_t*)llr_buffer);
+  }
+  else {
+    dim3 nblocks2(((Ncb>>1) + nthreads-1)/nthreads,C);
+    rm2<<<nblocks2, nthreads>>>(Ncb/2,ind/2,E1/2,E2/2,r_firstE2,Foffset/2,F/2,clear,68*Z/2,K/2,Z/2,(uint32_t**)d,(uint32_t**)soft_input,(uint16_t*)llr_buffer);
+  }
   cudaDeviceSynchronize();
   return(0);
 } 

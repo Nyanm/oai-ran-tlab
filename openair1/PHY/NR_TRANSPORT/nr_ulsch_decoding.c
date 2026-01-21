@@ -177,7 +177,7 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
     }
 
     uint8_t harq_pid = ulsch->harq_pid;
-    LOG_D(PHY,
+    LOG_I(PHY,
           "ULSCH Decoding, harq_pid %d rnti %x TBS %d G %d mcs %d Nl %d nb_rb %d, Qm %d, Coderate %f RV %d round %d new RX %d\n",
           harq_pid,
           ulsch->rnti,
