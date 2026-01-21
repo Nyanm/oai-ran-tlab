@@ -8,6 +8,7 @@ target_link_libraries(vrtsim PRIVATE SIMU shm_td_iq_channel actor noise_device l
 add_boolean_option(OAI_VRTSIM_TAPS_CLIENT OFF "Enable taps client" ON)
 if (OAI_VRTSIM_TAPS_CLIENT)
   target_link_libraries(vrtsim PRIVATE taps_client)
+  target_compile_definitions(vrtsim PRIVATE ENABLE_TAPS_CLIENT)
   file(DOWNLOAD
     "https://gitlab.eurecom.fr/oai/raytracing-channel-emulator/-/raw/59589ad2a534881810b2aa7dd81e63066245bb8d/server/api/taps.fbs?inline=false"
     ${CMAKE_SOURCE_DIR}/taps.fbs
@@ -21,11 +22,12 @@ if (OAI_VRTSIM_TAPS_CLIENT)
     DEPENDS ${TAPS_IF_PATH}
     COMMENT "Generating flatbuffers API from ${TAPS_IF_PATH}"
   )
+
   add_library(taps_api INTERFACE)
   target_include_directories(taps_api INTERFACE ${CMAKE_CURRENT_BINARY_DIR})
 
   add_library(taps_client taps_client.cpp ${TAPS_API_HEADER})
   target_include_directories(taps_client PUBLIC .)
-  find_package(Flatbuffers REQUIRED)
+  find_package(FlatBuffers REQUIRED)
   target_link_libraries(taps_client PUBLIC flatbuffers taps_api SIMU nanomsg)
 endif()
