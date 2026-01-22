@@ -1,0 +1,5 @@
+add_library(adcdac_utils adcdac_utils.c)
+target_include_directories(adcdac_utils PUBLIC ./)
+if (ENABLE_TESTS)
+  add_subdirectory(tests)
+endif()

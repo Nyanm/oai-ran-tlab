@@ -26,7 +26,7 @@
 #include <random>
 #include <algorithm>
 extern "C" {
-#include "openair1/PHY/TOOLS/tools_defs.h"
+#include "common/platform_types.h"
 }
 
 constexpr bool is_power_of_two(uint64_t n)
