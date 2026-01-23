@@ -89,7 +89,11 @@ void nr_schedule_ulsch(module_id_t module_id, frame_t frame, slot_t slot, nfapi_
 /* \brief default UL preprocessor */
 void nr_ulsch_preprocessor(gNB_MAC_INST *nr_mac, post_process_pusch_t *pp_pusch);
 
-/////// Random Access MAC-PHY interface functions and primitives ///////
+void nr_mac_pcch_queue_init(NR_COMMON_channels_t *cc);
+void nr_mac_pcch_queue_free(NR_COMMON_channels_t *cc);
+void nr_mac_pcch_enqueue(module_id_t module_id, uint64_t fiveg_s_tmsi, uint16_t ue_id);
+
+////// Random Access MAC-PHY interface functions and primitives ///////
 
 void nr_schedule_RA(module_id_t module_idP,
                     frame_t frameP,
