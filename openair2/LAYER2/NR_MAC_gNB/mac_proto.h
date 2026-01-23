@@ -92,6 +92,11 @@ void nr_ulsch_preprocessor(gNB_MAC_INST *nr_mac, post_process_pusch_t *pp_pusch)
 void nr_mac_pcch_queue_init(NR_COMMON_channels_t *cc);
 void nr_mac_pcch_queue_free(NR_COMMON_channels_t *cc);
 void nr_mac_pcch_enqueue(module_id_t module_id, uint64_t fiveg_s_tmsi, uint16_t ue_id);
+void schedule_nr_pcch(gNB_MAC_INST *gNB_mac,
+                      frame_t frameP,
+                      slot_t slotP,
+                      nfapi_nr_dl_tti_request_t *DL_req,
+                      nfapi_nr_tx_data_request_t *TX_req);
 
 ////// Random Access MAC-PHY interface functions and primitives ///////
 
