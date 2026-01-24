@@ -1126,7 +1126,6 @@ static void inner_rx(PHY_VARS_gNB *gNB,
   memset(rxF_ch_magc, 0, sizeof(rxF_ch_magc));
   for (int i = 0; i < nb_layer; i++)
     memset(&pusch_vars->rxdataF_comp[i*nb_rx_ant][symbol * buffer_length], 0, sizeof(int32_t) * buffer_length);
-
   nr_ulsch_channel_compensation(buffer_length,
                                 nb_rx_ant,
                                 rxFext,

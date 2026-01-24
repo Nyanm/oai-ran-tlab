@@ -138,8 +138,6 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
 
   nr_init_fde(); // Init array for frequency equalization of transform precoding of PUSCH
 
-  int ret_loader = load_nrLDPC_coding_interface(NULL, &gNB->nrLDPC_coding_interface);
-  AssertFatal(ret_loader == 0, "error loading LDPC library\n");
 
   gNB->max_nb_pdsch = MAX_MOBILES_PER_GNB;
   init_delay_table(fp->ofdm_symbol_size, MAX_DELAY_COMP, NR_MAX_OFDM_SYMBOL_SIZE, fp->delay_table);
@@ -159,6 +157,9 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
 
   /// Transport init necessary for NR synchro
   init_nr_transport(gNB);
+
+  int ret_loader = load_nrLDPC_coding_interface(NULL, &gNB->nrLDPC_coding_interface,gNB->max_nb_pusch);
+  AssertFatal(ret_loader == 0, "error loading LDPC library\n");
 
   init_DLSCH_struct(gNB);
 
