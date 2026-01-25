@@ -18,9 +18,8 @@
  * For more information about the OpenAirInterface (OAI) Software Alliance:
  *      contact@openairinterface.org
  */
-
+#include <stdio.h>
 #include "nr_rate_matching.h"
-#include "common/utils/LOG/log.h"
 
 __device__ __forceinline__ int clamp_i16_to_i8(int x)
 {
@@ -260,8 +259,8 @@ extern "C" int nr_rate_matching_ldpc_rx_cuda(uint32_t Tbslbrm,
 					     int8_t sidx)
 {
   if (C == 0 || C>132) {
-    LOG_E(PHY, "nr_rate_matching: invalid parameter C %d\n", C);
-    return -1;
+    printf("nr_rate_matching: invalid parameter C %d\n", C);
+    exit(-1);
   }
 
   //Bit selection
@@ -290,7 +289,11 @@ extern "C" int nr_rate_matching_ldpc_rx_cuda(uint32_t Tbslbrm,
     rm2<<<nblocks2, nthreads, 0, s[sidx]>>>(Ncb/2,ind/2,E1,E2,r_firstE2,Foffset/2,F/2,clear,68*Z/2,K/2,Z/2,(uint32_t*)d,(uint32_t*)soft_input,(uint16_t*)llr_buffer);
   }
 
-  cudaDeviceSynchronize();
+  cudaError_t err = cudaDeviceSynchronize();
+  if (err!=cudaSuccess) {
+     printf("cudaDeviceSynchronize() returns %s\n",cudaGetErrorString(err));
+     exit(-1);
+  }
   return(0);
 } 
 

@@ -58,43 +58,6 @@
 #include "nfapi/open-nFAPI/nfapi/public_inc/nfapi_interface.h"
 #include "nfapi/open-nFAPI/nfapi/public_inc/nfapi_nr_interface.h"
 
-int DumpCount = 0;
-
-void dumpAssMini(int8_t *cnProcBufRes, const char *filename)
-{
-  FILE *fp = fopen(filename, "w");
-  if (fp == NULL) {
-    perror("Failed to open dump file");
-    exit(EXIT_FAILURE);
-  }
-  // printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
-
-  for (int i = 0; i < 27000; i++) { // only dump one segment
-    fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
-    if ((i + 1) % 16 == 0)
-      fprintf(fp, "\n");
-  }
-
-  fclose(fp);
-}
-
-void dumpAssMiniInput(int8_t *cnProcBufRes, const char *filename)
-{
-  FILE *fp = fopen(filename, "w");
-  if (fp == NULL) {
-    perror("Failed to open dump file");
-    exit(EXIT_FAILURE);
-  }
-  // printf("\nNR_LDPC_SIZE_CN_PROC_BUF: %d\n", NR_LDPC_SIZE_CN_PROC_BUF);
-
-  for (int i = 0; i < 68 * 384; i++) { // only dump one segment
-    fprintf(fp, "%02x ", (uint8_t)cnProcBufRes[i]);
-    if ((i + 1) % 16 == 0)
-      fprintf(fp, "\n");
-  }
-
-  fclose(fp);
-}
 /**
  * \typedef nrLDPC_decoding_parameters_t
  * \struct nrLDPC_decoding_parameters_s
@@ -269,20 +232,7 @@ static void nr_process_decode_segment(void *arg)
 
   ////////////////////////////////// pl =====> llrProcBuf //////////////////////////////////
   start_meas(rdata->p_ts_ldpc_decode);
-  int decodeIterations = LDPCdecoder(p_decoderParms, l, llrProcBuf, p_procTime, rdata->abort_decode);
-/*
-  if (DumpCount < 3) {
-    printf("K = %d\n", K);
-    char fname_in[64], fname_out[64];
-    snprintf(fname_in, sizeof(fname_in),  "dlsim_decoder_input%d.txt", DumpCount);
-    snprintf(fname_out, sizeof(fname_out), "dlsim_decoder_output%d.txt", DumpCount);
-
-    dumpAssMiniInput(l, fname_in);
-    dumpAssMini(llrProcBuf, fname_out);
-
-    DumpCount++;
-}
-*/
+  int decodeIterations = LDPCdecoder(p_decoderParms, l, (uint8_t*)llrProcBuf, p_procTime, rdata->abort_decode);
   AssertFatal(rdata->c,"rdata->c is null\n");
   if (decodeIterations < p_decoderParms->numMaxIter) {
     memcpy(rdata->c, llrProcBuf, K >> 3);
@@ -298,6 +248,9 @@ static void nr_process_decode_segment(void *arg)
   completed_task_ans(rdata->ans);
 }
 
+#ifdef ENABLE_CUDA
+void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *);
+#endif
 int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters,
                                int pusch_id,
                                thread_info_tm_t *t_info
@@ -370,6 +323,10 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
   return nrLDPC_TB_decoding_parameters->C;
 }
 
+#ifdef ENABLE_CUDA
+void nrLDPC_coding_init_cuda(int);
+#endif
+
 int32_t nrLDPC_coding_init(int max_num_pxsch)
 {
   LOG_I(NR_PHY, "Initializing coding library\n");
@@ -379,6 +336,10 @@ int32_t nrLDPC_coding_init(int max_num_pxsch)
 #endif
   return 0;
 }
+
+#ifdef ENABLE_CUDA
+void nrLDPC_coding_shutdown_cuda(void);
+#endif
 
 int32_t nrLDPC_coding_shutdown(void)
 {

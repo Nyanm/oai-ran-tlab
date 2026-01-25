@@ -63,6 +63,8 @@ int cuda_support_set = 0;
 
 extern cudaStream_t encoderStreams[4];
 
+int ldpc_input(uint32_t **input,uint32_t *cc[4],int nseg,cudaStream_t *s);
+
 void cuda_support_init() {
 
     int dev = 0;
@@ -171,9 +173,7 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
   int Kb = impp->Kb;
   short block_length = impp->K;
   short BG = impp->BG;
-  int nrows=46,ncols=22;
-  int rate=3;
-  int no_punctured_columns,removed_bit;
+  int ncols=22;
 
   int encoder_stream=0;
 
@@ -190,16 +190,13 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
   int n_inputs = (impp->n_segments/32)+(((impp->n_segments&31) > 0) ? 1: 0);
 //  uint32_t  cc[4][22*Zc]; //padded input, unpacked, max size
 
-  // calculate number of punctured bits
-  no_punctured_columns=(int)((nrows-2)*Zc+block_length-block_length*rate)/Zc;
-  removed_bit=(nrows-no_punctured_columns-2) * Zc+block_length-(int)(block_length*rate);
 #ifdef USE_GPU_FOR_INPUT
   if (!pageable || !pageable_uses_host) {
     for (int r=0;r<impp->n_segments;r++) {
-        cudaMemcpy(input_devh[r],input[r],block_length>>3,cudaMemcpyHostToDevice);
+        cudaMemcpyAsync(input_devh[r],input[r],block_length>>3,cudaMemcpyHostToDevice,encoderStreams[encoder_stream]);
     }
   }
-  ldpc_input(pageable&&pageable_uses_host? input : input_dev,(uint32_t**)c_dev,impp->n_segments,&encoderStreams[encoder_stream]);
+  ldpc_input(pageable&&pageable_uses_host? (uint32_t**)input : (uint32_t**)input_dev,(uint32_t**)c_dev,impp->n_segments,&encoderStreams[encoder_stream]);
 #else 
   ldpc_input32(input,(uint32_t**)c_dev,n_inputs,block_length,impp->n_segments); 
 #endif

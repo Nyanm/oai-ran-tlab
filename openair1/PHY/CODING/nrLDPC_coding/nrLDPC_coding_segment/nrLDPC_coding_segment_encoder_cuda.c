@@ -300,7 +300,6 @@ static void unpack_output(uint32_t *f,
   uint32x4_t vmask5  = vld1q_u32(masks5);
   uint32x4_t vmask6  = vld1q_u32(masks6);
   uint32x4_t vmask7  = vld1q_u32(masks7);
-  uint32_t output_tmp=0;
   int s2=0;
   for (s = 0; s < E2_first_segment ; s++) {
     s2 = s&31;	  

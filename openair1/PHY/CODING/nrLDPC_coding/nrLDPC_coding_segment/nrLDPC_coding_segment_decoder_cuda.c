@@ -64,7 +64,7 @@
 
 cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
 
-void launch_deinterleave_i16(int Qm, int E1, int E2, int C, int r_firstE2,int16_t** e, const int16_t** f,cudaStream_t *s,int8_t sidx);
+void launch_deinterleave_i16(int Qm, int E1, int E2, int C, int r_firstE2,int16_t* e, const int16_t* f,cudaStream_t *s,int8_t sidx);
 int nr_rate_matching_ldpc_rx_cuda(uint32_t Tbslbrm,
                                              uint8_t BG,
                                              uint16_t Z,
@@ -104,7 +104,6 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
   const int segLen = Kc*Z; // int16 length; after packing we store int8 [segLen]
   t_nrLDPC_time_stats procTime = {0};
   t_nrLDPC_time_stats *p_procTime = &procTime;
-  cudaError_t err;
 
 #ifdef USE_GPU_FOR_RM_DEINTER								 
   start_meas(&segs->ts_deinterleave);
@@ -131,6 +130,7 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
   launch_deinterleave_i16(segs->Qm,E1,E2,C,r_firstE2,harq_e_dev,pageable_uses_host ? segs->llr : harq_f_dev,decoderStreams,0);
   stop_meas(&segs->ts_deinterleave);
 #if 0
+  cudaError_t err;
   if (1/*segs->rv_index == 2*/) {
     int16_t elocal[E2];
     for (int r=0;r<C;r++) {
@@ -172,10 +172,10 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
                                 Kprime - 2 * Z,
 				decoderStreams,
 				0); 
-  int8_t llr_local[segLen];
   for (int r = 0; r < C; ++r) {
      cudaMemsetAsync(p_llr_dev + (size_t)r*segLen,0,sizeof(int8_t)*2*Z,decoderStreams[0]);
 #if 0
+     int8_t llr_local[segLen];
      if (1/*r==0*/) {
        cudaMemcpyAsync(llr_local,p_llr_dev+(size_t)r*segLen,sizeof(int8_t)*segLen,cudaMemcpyDeviceToHost,decoderStreams[0]);
        for (int i=0;i<segLen;i++) printf("llr(%d,%d,%d/%d) %d\n",segs->rv_index,r,i,segLen,llr_local[i]);
@@ -262,25 +262,28 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
 
 void LDPCint_rm_init(int max_num_pxsch) {
 
+  LOG_I(NR_PHY,"RM init for %d pxsch\n",max_num_pxsch);
   LOG_I(NR_PHY,"Allocating device array for harq_d/harq_e \n");
   cudaError_t err=cudaMalloc((void **)&harq_e_dev,MAXE*sizeof(int16_t));
   AssertFatal(err == cudaSuccess,"CUDA Error (harq_e_dev): %s\n", cudaGetErrorString(err));
   harq_d_array = malloc(sizeof(int16_t*) * max_num_pxsch);
   err = cudaMalloc((void *)&harq_d_array_dev,sizeof(int16_t*) * max_num_pxsch);
   AssertFatal(err == cudaSuccess,"CUDA Error (harq_d_array_dev): %s\n", cudaGetErrorString(err));
-  printf("Allocated %d bytes for harq_d_array_dev @ %p\n",sizeof(int16_t*)*max_num_pxsch,harq_d_array_dev);
+  LOG_I(PHY,"Allocated %ld bytes for harq_d_array_dev @ %p\n",sizeof(int16_t*)*max_num_pxsch,harq_d_array_dev);
   for (int i=0;i<max_num_pxsch;i++) {
     err=cudaMalloc((void **)&harq_d_array[i],MAX_NUM_DLSCH_SEGMENTS_DL*OAI_LDPC_DECODER_MAX_NUM_LLR*sizeof(int16_t));
-    printf("Allocating %d bytes for harq_d_array[%d] @ %p\n",MAX_NUM_DLSCH_SEGMENTS_DL*OAI_LDPC_DECODER_MAX_NUM_LLR*sizeof(int16_t),i,harq_d_array[i]);
+    LOG_I(PHY,"Allocating %ld bytes for harq_d_array[%d] @ %p\n",MAX_NUM_DLSCH_SEGMENTS_DL*OAI_LDPC_DECODER_MAX_NUM_LLR*sizeof(int16_t),i,harq_d_array[i]);
     AssertFatal(err == cudaSuccess,"CUDA Error (harq_d_dev): %s\n", cudaGetErrorString(err));
   }
   cudaMemcpy(harq_d_array_dev,harq_d_array,sizeof(int16_t*)*max_num_pxsch,cudaMemcpyHostToDevice);
   if (!pageable || !pageable_uses_host) {
-    LOG_I(NR_PHY,"Allocating device array for harq_f \n");
+    LOG_I(PHY,"Allocating device array for harq_f \n");
     err=cudaMalloc((void **)&harq_f_dev,MAXE*sizeof(int16_t));
     AssertFatal(err == cudaSuccess,"CUDA Error (harq_f_dev): %s\n", cudaGetErrorString(err));
   }
 }
+
+void LDPCinit_cuda(void);
 
 int32_t nrLDPC_coding_init_cuda(int max_num_pxsch)
 {
@@ -291,6 +294,8 @@ int32_t nrLDPC_coding_init_cuda(int max_num_pxsch)
 
   return 0;
 }
+
+void LDPCshutdown_cuda(void);
 
 int32_t nrLDPC_coding_shutdown_cuda(void)
 {

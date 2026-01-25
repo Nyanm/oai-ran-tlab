@@ -353,7 +353,7 @@ int main(int argc, char **argv)
 
   init_opt();
 
-  int ret_loader = load_nrLDPC_coding_interface(NULL, &nrLDPC_coding_interface, 2);
+  int ret_loader = load_nrLDPC_coding_interface(NULL, &nrLDPC_coding_interface, 16);
   AssertFatal(ret_loader == 0, "error loading LDPC library\n");
 
   if (ouput_vcd) {

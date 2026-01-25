@@ -158,7 +158,7 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
   /// Transport init necessary for NR synchro
   init_nr_transport(gNB);
 
-  int ret_loader = load_nrLDPC_coding_interface(NULL, &gNB->nrLDPC_coding_interface,gNB->max_nb_pusch);
+  int ret_loader = load_nrLDPC_coding_interface(NULL, &gNB->nrLDPC_coding_interface,16);
   AssertFatal(ret_loader == 0, "error loading LDPC library\n");
 
   init_DLSCH_struct(gNB);
