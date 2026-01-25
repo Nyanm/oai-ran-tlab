@@ -84,7 +84,7 @@ extern "C" int ldpc_input(uint32_t **input,uint32_t *cc[4],int nseg) {
  ldpc_input_worker<<<numblocks,384>>>(input,cc,nseg);
  cudaError_t err=cudaPeekAtLastError();
  if (err!=cudaSuccess) {
-    printf("cuda error: %s (input %p, cc %p, nseg %d, numb %d, ns %d)\n",cudaGetErrorString(err),input,cc,nseg,ns);
+    printf("cuda error: %s (input %p, cc %p, nseg %d, ns %d)\n",cudaGetErrorString(err),input,cc,nseg,ns);
     exit(-1);
  }
  cudaDeviceSynchronize();

@@ -1055,8 +1055,18 @@ add_library(PHY_NR ${PHY_NR_SRC})
 target_link_libraries(PHY_NR PUBLIC nr_phy_common nr_common nr_fapi_p5)
 if (ENABLE_CUDA)
   find_package(CUDA REQUIRED)
-  target_link_libraries(PHY_NR PUBLIC ${CUDA_LIBRARIES})
-  target_include_directories(PHY_NR PUBLIC ${CUDA_INCLUDE_DIRS})
+  if (NOT CUDA_FOUND)
+    message(FATAL_ERROR "no CUDA found")
+  endif()
+  #SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_80 -g -ggdb") # A100
+  #SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_90") # GH200
+  #SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_87") # Jetson
+  #SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_89") # L40S
+  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_121") # GB10
+  set(CUDA_VERBOS_BUILD_ON)
+  cuda_add_library(PHY_NR ${PHY_NR_SRC} ${PHY_NR_SRC_CU})
+else()
+  add_library(PHY_NR ${PHY_NR_SRC})
 endif()
 
 add_library(PHY_NR_NO_AVX_256 ${PHY_NR_SRC})

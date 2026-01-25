@@ -798,13 +798,15 @@ __global__ void llrOutPut_Kernel_BG1_int8_BIG_stream(uint32_t R,
   int8_t *d_out = d_buffer->p_out_ptr;
 
   int8_t *p_out = d_out + segIdx * K;
+
   int8_t *p_llrRes = (int8_t *)(d_llrRes + segIdx * NR_LDPC_MAX_NUM_LLR);
   // output
-  if (outMode == nrLDPC_outMode_BIT)
+  if (outMode == nrLDPC_outMode_BIT) {
     llr2bitPacked_Kernel_BG1_int8(R, (uint8_t *)p_out, p_llrRes, numLLR, Zc);
-
-  else if (outMode == nrLDPC_outMode_BITINT8)
+  }
+  else if (outMode == nrLDPC_outMode_BITINT8) {
     llr2bit_Kernel_BG1_int8(R, (uint8_t *)p_out, p_llrRes, numLLR, Zc);
+  }
 }
 
 void nrLDPC_OutPut_BG1_cuda_stream_core(int8_t *llrRes,
