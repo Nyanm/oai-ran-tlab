@@ -1051,8 +1051,6 @@ target_include_directories(PHY_UE PRIVATE ${blas_INCLUDE_DIRS} ${lapacke_INCLUDE
 add_library(PHY_NR_COMMON ${PHY_NR_SRC_COMMON})
 target_link_libraries(PHY_NR_COMMON PUBLIC UTIL)
 
-add_library(PHY_NR ${PHY_NR_SRC})
-target_link_libraries(PHY_NR PUBLIC nr_phy_common nr_common nr_fapi_p5)
 if (ENABLE_CUDA)
   find_package(CUDA REQUIRED)
   if (NOT CUDA_FOUND)
@@ -1068,6 +1066,7 @@ if (ENABLE_CUDA)
 else()
   add_library(PHY_NR ${PHY_NR_SRC})
 endif()
+target_link_libraries(PHY_NR nr_phy_common nr_common nr_fapi_p5)
 
 add_library(PHY_NR_NO_AVX_256 ${PHY_NR_SRC})
 target_link_libraries(PHY_NR_NO_AVX_256 nr_phy_common nr_common)
