@@ -442,14 +442,14 @@ one_measurement_t test_ldpc(short max_iterations,
       stop_meas(&ret.time_decoder);
 
       // count errors
-      if (memcmp(&estimated_output[j*Kprime], test_input[j], ((Kprime + 7) & ~7) / 8) != 0) {
+      if (memcmp(&estimated_output[j*(Kprime>>3)], test_input[j], ((Kprime + 7) & ~7) / 8) != 0) {
         segment_bler++;
         if(trial < 200){      
         Failure_Mask[trial][j] = 1;
         }
       }
       for (int i = 0; i < Kprime; i++) {
-        unsigned char estoutputbit = (estimated_output[j*Kprime + (i / 8)] & (1 << (i & 7))) >> (i & 7);
+        unsigned char estoutputbit = (estimated_output[j*(Kprime>>3) + (i / 8)] & (1 << (i & 7))) >> (i & 7);
         unsigned char inputbit = (test_input[j][i / 8] & (1 << (i & 7))) >> (i & 7); // Further correct for multiple segments
         if (estoutputbit != inputbit)
           ret.errors_bit++;
@@ -469,9 +469,9 @@ one_measurement_t test_ldpc(short max_iterations,
     else{
       dumpASS(estimated_output, "ldpctest_estimateOutput_128.txt",n_segments);
     }
-*/
-    //dumpASS(test_input, "ldpctest_TestInput_cuda128.txt");
 
+    dumpASS(channel_output_fixed, "ldpctest_channel_output_fixed_cuda128.txt",n_segments);
+*/
     if (segment_bler != 0)
       ret.errors++;
   }

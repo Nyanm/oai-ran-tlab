@@ -176,14 +176,14 @@ void init_decoder_warmup()
 {
   // =====================================================================
   // CUDA Driver Warm-up
-  // Purpose: Execute a few representative graphs to trigger CUDA context 
+  // Purpose: Execute a few representative graphs to trigger CUDA context
   // initialization and driver-level JIT/lazy loading.
-  // Note: These specific Z/R combinations might not match the actual 
+  // Note: These specific Z/R combinations might not match the actual
   // run-time traffic, but running them ensures the GPU pipeline is ready.
   // =====================================================================
-  
+
   // Sample configurations for warmup
-  uint32_t Z_list[] = {320, 352, 384}; 
+  uint32_t Z_list[] = {320, 352, 384};
   uint8_t R_list[] = {13, 23};
   int node_idx = 0;
 
@@ -218,7 +218,7 @@ void init_decoder_warmup()
       gpu_graph_cache[node_idx].bridge_ptr->p_llr_ptr = dummy_input_llr;
       gpu_graph_cache[node_idx].bridge_ptr->p_out_ptr = dummy_output_bits;
 
-      // Record graph 
+      // Record graph
       nrLDPC_decoder_cuda_GraphRecord(gpu_graph_cache[node_idx].bridge_ptr,
                                       numLLR,
                                       cnProcBuf_dev,
@@ -265,7 +265,7 @@ void init_decoder_warmup()
 
     // Mark slots as free and reset index so real traffic starts from slot 0
     for (int i = 0; i < dynamic_cache_idx; i++) {
-        gpu_graph_cache[i].occupied = false;
+      gpu_graph_cache[i].occupied = false;
     }
     dynamic_cache_idx = 0;
     printf("[CUDA] Cache cleared. Ready for dynamic recording.\n");
@@ -274,7 +274,6 @@ void init_decoder_warmup()
   cudaFreeHost(dummy_input_llr);
   cudaFreeHost(dummy_output_bits);
 }
-
 
 void init_decoder_gpu_structures()
 {
@@ -437,7 +436,8 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   // Calculate LLR size per segment based on Rate
   uint32_t numLLR = (R == 13) ? NR_LDPC_NCOL_BG1_R13 * Z : NR_LDPC_NCOL_BG1_R23 * Z;
 
-  if (p_llr != p_llr_dev) cudaMemcpyAsync(p_llr_dev,p_llr,n_segments*numLLR,cudaMemcpyHostToDevice,decoderStreams[0]);
+  if (p_llr != p_llr_dev)
+    cudaMemcpyAsync(p_llr_dev, p_llr, n_segments * 68 * 384, cudaMemcpyHostToDevice, decoderStreams[0]);
 
   // Output size safety: assume worst-case unpacked bytes (K * n_segments)
   size_t total_output_size = n_segments * K * sizeof(int8_t);
@@ -505,7 +505,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
 
   } else {
     // === Cache FULL: Fallback to Normal Execution ===
-    // If the cache is full, we cannot record new graphs. 
+    // If the cache is full, we cannot record new graphs.
     // Execute kernel directly using standard launch.
 
     ldpc_cuda_bridge_t* perpack_buffer = stream_bridges[0];
@@ -533,18 +533,23 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   // Copy back and Cleanup for Discrete GPU
   if (!pageable_uses_host) {
     // Copy Output from Device to Host
-    cudaMemcpyAsync(p_out, p_out_dev, total_output_size, cudaMemcpyDeviceToHost, decoderStreams[0]);
+    if (outMode == nrLDPC_outMode_BIT) {
+      cudaMemcpyAsync(p_out, p_out_dev, total_output_size >> 3, cudaMemcpyDeviceToHost, decoderStreams[0]);
+    }
+    if (outMode == nrLDPC_outMode_BITINT8) {
+      cudaMemcpyAsync(p_out, p_out_dev, total_output_size, cudaMemcpyDeviceToHost, decoderStreams[0]);
+    }
   }
 
   cudaStreamSynchronize(decoderStreams[0]);
-  if (p_decParams->check_crc) { 
-    for (int r=0;r<n_segments;r++) {
-        //for (int i=0;i<(K>>3);i++) printf("byte (%d,%d) %x\n",r,i,((uint8_t*)(p_out+r*K))[i]); 
-        if (!p_decParams->check_crc((uint8_t*)(p_out+r*K), p_decParams->Kprime, p_decParams->crc_type)) {
-                LOG_D(PHY, "Segment %d/%d CRC NOK\n",r,n_segments);
+  if (p_decParams->check_crc) {
+    for (int r = 0; r < n_segments; r++) {
+      // for (int i=0;i<(K>>3);i++) printf("byte (%d,%d) %x\n",r,i,((uint8_t*)(p_out+r*K))[i]);
+      if (!p_decParams->check_crc((uint8_t*)(p_out + r * (K >> 3)), p_decParams->Kprime, p_decParams->crc_type)) {
+        LOG_D(PHY, "Segment %d/%d CRC NOK\n", r, n_segments);
         //        printf("Segment %d/%d CRC NOK\n",r,n_segments);
-                return 1+numMaxIter;
-        }  
+        return 1 + numMaxIter;
+      }
     }
   }
   return numMaxIter;

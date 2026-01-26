@@ -287,7 +287,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
                  harq_process->c + r_offset,
                  (harq_process->K >> 3) - (harq_process->F >> 3) - ((harq_process->C > 1) ? 3 : 0));
           offset += (harq_process->K >> 3) - (harq_process->F >> 3) - ((harq_process->C > 1) ? 3 : 0);
-	  r_offset += (harq_process->K);
+	  r_offset += (harq_process->K >> 3);
       }
     } else {
         fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_config = &dlsch[DLSCH_id].dlsch_config;
