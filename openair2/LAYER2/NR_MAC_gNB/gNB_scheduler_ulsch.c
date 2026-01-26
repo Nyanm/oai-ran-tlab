@@ -504,7 +504,9 @@ static int nr_process_mac_pdu(instance_t module_idP,
         } else {
           UE->mac_stats.ul.lc_bytes[lcid] += mac_len;
 
+          start_meas(&RC.nrmac[0]->rlc_ind_perrb);
           nr_mac_rlc_data_ind(module_idP, UE->rnti, true, lcid, (char *)(pduP + mac_subheader_len), mac_len);
+          stop_meas(&RC.nrmac[0]->rlc_ind_perrb);
 
           sdus += 1;
           /* Updated estimated buffer when receiving data */

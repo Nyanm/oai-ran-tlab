@@ -38,6 +38,8 @@
 #include "common/ran_context.h"
 #include "NR_UL-CCCH-Message.h"
 
+#include "openair2/LAYER2/NR_MAC_gNB/nr_mac_gNB.h"
+
 #include "openair2/F1AP/f1ap_du_rrc_message_transfer.h"
 #include "openair2/F1AP/f1ap_ids.h"
 #include "openair3/ocp-gtpu/gtp_itf.h"
@@ -170,7 +172,10 @@ void nr_mac_rlc_data_ind(const module_id_t  module_idP,
   if (gnb_flagP)
     T(T_ENB_RLC_MAC_UL, T_INT(module_idP), T_INT(ue_id), T_INT(channel_idP), T_INT(tb_sizeP));
 
+  start_meas(&RC.nrmac[0]->rlc_ind_lock);
   nr_rlc_manager_lock(nr_rlc_ue_manager);
+  stop_meas(&RC.nrmac[0]->rlc_ind_lock);
+  start_meas(&RC.nrmac[0]->rlc_ind_work);
   nr_rlc_ue_t *ue = nr_rlc_manager_get_ue(nr_rlc_ue_manager, ue_id);
 
   if(ue == NULL)
@@ -186,6 +191,7 @@ void nr_mac_rlc_data_ind(const module_id_t  module_idP,
     LOG_E(RLC, "Fatal: no RB found (channel ID %d UE ID %d)\n", channel_idP, ue_id);
     // exit(1);
   }
+  stop_meas(&RC.nrmac[0]->rlc_ind_work);
 
   nr_rlc_manager_unlock(nr_rlc_ue_manager);
 }
@@ -227,7 +233,10 @@ mac_rlc_status_resp_t nr_mac_rlc_status_ind(const uint16_t ue_id, const frame_t 
 {
   mac_rlc_status_resp_t ret;
 
+  start_meas(&RC.nrmac[0]->rlc_status_ind_lock);
   nr_rlc_manager_lock(nr_rlc_ue_manager);
+  stop_meas(&RC.nrmac[0]->rlc_status_ind_lock);
+  start_meas(&RC.nrmac[0]->rlc_status_ind_work);
   nr_rlc_ue_t *ue = nr_rlc_manager_get_ue(nr_rlc_ue_manager, ue_id);
   nr_rlc_entity_t *rb = get_rlc_entity_from_lcid(ue, channel_idP);
 
@@ -246,6 +255,7 @@ mac_rlc_status_resp_t nr_mac_rlc_status_ind(const uint16_t ue_id, const frame_t 
       LOG_W(RLC, "Radio Bearer (channel ID %d) is NULL for UE %d\n", channel_idP, ue_id);
     ret.bytes_in_buffer = 0;
   }
+  stop_meas(&RC.nrmac[0]->rlc_status_ind_work);
 
   nr_rlc_manager_unlock(nr_rlc_ue_manager);
 

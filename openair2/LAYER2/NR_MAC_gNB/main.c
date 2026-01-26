@@ -91,7 +91,13 @@ void *nrmac_stats_thread(void *arg) {
     p += print_meas_log(&gNB->gNB_scheduler, "gNB_scheduler", NULL, NULL, p, end - p);
     p += print_meas_log(&gNB->rx_ulsch_sdu, "rx_ulsch_sdu", NULL, NULL, p, end - p);
     p += print_meas_log(&gNB->schedule_dlsch, "dlsch scheduler", NULL, NULL, p, end - p);
-    p += print_meas_log(&gNB->schedule_ulsch, "ulsch scheduler", NULL, NULL, p, end - p);
+    p += print_meas_log(&gNB->rlc_req_perue, "rlc_req_perue", NULL, NULL, p, end - p);
+    p += print_meas_log(&gNB->rlc_status_ind_perue, "rlc_status_ind_perue", NULL, NULL, p, end - p);
+    p += print_meas_log(&gNB->rlc_status_ind_lock, "rlc_status_ind_lock", NULL, NULL, p, end - p);
+    p += print_meas_log(&gNB->rlc_status_ind_work, "rlc_status_ind_work", NULL, NULL, p, end - p);
+    p += print_meas_log(&gNB->rlc_ind_perrb, "rlc_ind_perrb", NULL, NULL, p, end - p);
+    p += print_meas_log(&gNB->rlc_ind_lock, "rlc_ind_lock", NULL, NULL, p, end - p);
+    p += print_meas_log(&gNB->rlc_ind_work, "rlc_ind_work", NULL, NULL, p, end - p);
     p += print_meas_log(&gNB->schedule_ra, "RA scheduler", NULL, NULL, p, end - p);
     p += print_meas_log(&gNB->rlc_data_req, "rlc_data_req", NULL, NULL, p, end - p);
     p += print_meas_log(&gNB->nr_srs_ri_computation_timer, "UL-RI computation time", NULL, NULL, p, end - p);

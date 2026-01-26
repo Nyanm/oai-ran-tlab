@@ -328,6 +328,7 @@ static uint32_t update_dlsch_buffer(frame_t frame, slot_t slot, NR_UE_info_t *UE
   sched_ctrl->dl_pdus_total = 0;
 
   /* loop over all activated logical channels */
+  start_meas(&RC.nrmac[0]->rlc_status_ind_perue);
   for (int i = 0; i < seq_arr_size(&sched_ctrl->lc_config); ++i) {
     const nr_lc_config_t *c = seq_arr_at(&sched_ctrl->lc_config, i);
     const int lcid = c->lcid;
@@ -355,6 +356,7 @@ static uint32_t update_dlsch_buffer(frame_t frame, slot_t slot, NR_UE_info_t *UE
           sched_ctrl->num_total_bytes,
           sched_ctrl->dl_pdus_total);
   }
+  stop_meas(&RC.nrmac[0]->rlc_status_ind_perue);
   return sched_ctrl->num_total_bytes;
 }
 
@@ -1242,6 +1244,7 @@ void post_process_dlsch(gNB_MAC_INST *nr_mac, post_process_pdsch_t *pdsch, NR_UE
     int sdus = 0;
 
     if (sched_ctrl->num_total_bytes > 0) {
+      start_meas(&nr_mac->rlc_req_perue);
       /* loop over all activated logical channels */
       for (int i = 0; i < seq_arr_size(&sched_ctrl->lc_config); ++i) {
         const nr_lc_config_t *c = seq_arr_at(&sched_ctrl->lc_config, i);
@@ -1293,6 +1296,7 @@ void post_process_dlsch(gNB_MAC_INST *nr_mac, post_process_pdsch_t *pdsch, NR_UE
 
         UE->mac_stats.dl.lc_bytes[lcid] += lcid_bytes;
       }
+      stop_meas(&nr_mac->rlc_req_perue);
     } else if (get_softmodem_params()->phy_test || get_softmodem_params()->do_ra) {
       /* we will need the large header, phy-test typically allocates all
        * resources and fills to the last byte below */

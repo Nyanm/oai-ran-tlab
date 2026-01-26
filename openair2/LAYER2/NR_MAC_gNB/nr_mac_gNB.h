@@ -947,6 +947,13 @@ typedef struct gNB_MAC_INST_s {
   time_stats_t schedule_ulsch;  // include preprocessor
   /// processing time of gNB DLSCH scheduler
   time_stats_t schedule_dlsch;  // include rlc_data_req + MAC header + preprocessor
+  time_stats_t rlc_req_perue;
+  time_stats_t rlc_status_ind_perue;
+  time_stats_t rlc_status_ind_lock;
+  time_stats_t rlc_status_ind_work;
+  time_stats_t rlc_ind_perrb;
+  time_stats_t rlc_ind_lock;
+  time_stats_t rlc_ind_work;
   /// processing time of rlc_data_req
   time_stats_t rlc_data_req;
   /// processing time of nr_srs_ri_computation
