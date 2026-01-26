@@ -271,7 +271,7 @@ static void nr_rrc_process_ntnconfig(NR_UE_RRC_INST_t *rrc, NR_UE_RRC_SI_INFO *S
   // Check if Epochtime is sent or not
   int diff_frames = eval_epoch_time(SI_info, ntncfg, frame, is_targetcell);
 
-  if (ntncfg->ntn_UlSyncValidityDuration_r17) { // ulsyncvalidity duration configured
+  if (ntncfg && ntncfg->ntn_UlSyncValidityDuration_r17) { // ulsyncvalidity duration configured
     int val430_ms = 0, sib19_timer_ms = 0;
     sib19_timer_ms = get_ntn_timervalues(SI_info, ntncfg, diff_frames, &val430_ms);
     // T430 should be started only in connected mode.
@@ -1238,15 +1238,19 @@ static void update_nr_measobj(NR_MeasObjectNR_t *source, NR_MeasObjectNR_t *targ
   UPDATE_IE(target->ssbSubcarrierSpacing, source->ssbSubcarrierSpacing, NR_SubcarrierSpacing_t);
   UPDATE_IE(target->smtc1, source->smtc1, NR_SSB_MTC_t);
   if (source->smtc2) {
+    if (!target->smtc2)
+      target->smtc2 = calloc(1, sizeof(*target->smtc2));
     target->smtc2->periodicity = source->smtc2->periodicity;
     if (source->smtc2->pci_List)
       UPDATE_IE(target->smtc2->pci_List, source->smtc2->pci_List, struct NR_SSB_MTC2__pci_List);
-  }
-  else
+  } else
     asn1cFreeStruc(asn_DEF_NR_SSB_MTC2, target->smtc2);
   UPDATE_IE(target->refFreqCSI_RS, source->refFreqCSI_RS, NR_ARFCN_ValueNR_t);
-  if (source->referenceSignalConfig.ssb_ConfigMobility)
+  if (source->referenceSignalConfig.ssb_ConfigMobility) {
+    if (!target->referenceSignalConfig.ssb_ConfigMobility)
+      target->referenceSignalConfig.ssb_ConfigMobility = calloc(1, sizeof(*target->referenceSignalConfig.ssb_ConfigMobility));
     update_ssb_configmob(source->referenceSignalConfig.ssb_ConfigMobility, target->referenceSignalConfig.ssb_ConfigMobility);
+  }
   UPDATE_IE(target->absThreshSS_BlocksConsolidation, source->absThreshSS_BlocksConsolidation, NR_ThresholdNR_t);
   UPDATE_IE(target->absThreshCSI_RS_Consolidation, source->absThreshCSI_RS_Consolidation, NR_ThresholdNR_t);
   UPDATE_IE(target->nrofSS_BlocksToAverage, source->nrofSS_BlocksToAverage, long);
@@ -1278,6 +1282,8 @@ static void update_nr_measobj(NR_MeasObjectNR_t *source, NR_MeasObjectNR_t *targ
     ADDMOD_IE_FROMLIST(source->allowedCellsToAddModList, target->allowedCellsToAddModList, pci_RangeIndex, NR_PCI_RangeElement_t);
   }
   if (source->ext1) {
+    if (!target->ext1)
+      target->ext1 = calloc(1, sizeof(*target->ext1));
     UPDATE_IE(target->ext1->freqBandIndicatorNR, source->ext1->freqBandIndicatorNR, NR_FreqBandIndicatorNR_t);
     UPDATE_IE(target->ext1->measCycleSCell, source->ext1->measCycleSCell, long);
   }

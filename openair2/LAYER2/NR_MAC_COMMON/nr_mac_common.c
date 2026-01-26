@@ -4690,7 +4690,7 @@ void compute_csi_bitlen(const NR_CSI_MeasConfig_t *csi_MeasConfig, nr_csi_report
   NR_CSI_ResourceConfigId_t csi_ResourceConfigId;
   NR_CSI_ResourceConfig_t *csi_resourceconfig;
 
-  if (!csi_MeasConfig->csi_ReportConfigToAddModList) {
+  if (!csi_MeasConfig || !csi_MeasConfig->csi_ReportConfigToAddModList) {
     LOG_E(NR_MAC, "csi_ReportConfigToAddModList is NULL, not expected\n");
     return;
   }
