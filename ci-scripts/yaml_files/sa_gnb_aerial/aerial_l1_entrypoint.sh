@@ -38,6 +38,10 @@ if [ $# -eq 0 ]; then
 		argument="P5G_WNC_GH"
 		#argument="P5G_FXN_GH"
 		;;
+       "NVIDIA-P4242")
+               argument="P5G_WNC_DGX"
+               export UCX_REG_MT_THRESH=inf
+               ;;
 	*)
 		echo "Unrecognized server: $serverVendorAndModel"
 		exit
