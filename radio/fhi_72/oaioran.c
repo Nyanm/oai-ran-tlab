@@ -678,7 +678,15 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
               struct xranlib_compress_request bfp_com_req = {};
               struct xranlib_compress_response bfp_com_rsp = {};
 
-              bfp_com_req.data_in = (int16_t *)local_src + startRB * N_SC_PER_PRB;
+              if (numRB == numRB_F) {
+                bfp_com_req.data_in = (int16_t *)local_src;
+              }
+              else {
+                uint32_t src_compr[numRB_F * N_SC_PER_PRB] __attribute__((aligned(64)));
+                for (idx = 0; idx < (numRB * N_SC_PER_PRB) * 2; idx++)
+                  ((uint16_t *)src_compr)[idx] = ((uint16_t *)local_src)[idx + startRB * N_SC_PER_PRB * 2];
+                bfp_com_req.data_in = (int16_t *)src_compr; //need 64 alignment
+              }
               bfp_com_req.numRBs = numRB;
               bfp_com_req.len = payload_len;
               bfp_com_req.compMethod = p_prbMapElm->compMethod;
