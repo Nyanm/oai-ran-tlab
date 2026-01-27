@@ -756,17 +756,17 @@ static void add_drb_am(int ue_id, int drb_id, const NR_RLC_BearerConfig_t *rlc_B
   case NR_RLC_Config_PR_am: {
     struct NR_RLC_Config__am *am;
     am = r->choice.am;
-    t_reassembly       = decode_t_reassembly(am->dl_AM_RLC.t_Reassembly);
-    t_status_prohibit  = decode_t_status_prohibit(am->dl_AM_RLC.t_StatusProhibit);
-    t_poll_retransmit  = decode_t_poll_retransmit(am->ul_AM_RLC.t_PollRetransmit);
-    poll_pdu           = decode_poll_pdu(am->ul_AM_RLC.pollPDU);
-    poll_byte          = decode_poll_byte(am->ul_AM_RLC.pollByte);
+    t_reassembly = decode_t_reassembly(am->dl_AM_RLC.t_Reassembly);
+    t_status_prohibit = decode_t_status_prohibit(am->dl_AM_RLC.t_StatusProhibit);
+    t_poll_retransmit = decode_t_poll_retransmit(am->ul_AM_RLC.t_PollRetransmit);
+    poll_pdu = decode_poll_pdu(am->ul_AM_RLC.pollPDU);
+    poll_byte = decode_poll_byte(am->ul_AM_RLC.pollByte);
     max_retx_threshold = decode_max_retx_threshold(am->ul_AM_RLC.maxRetxThreshold);
-    if (*am->dl_AM_RLC.sn_FieldLength != *am->ul_AM_RLC.sn_FieldLength) {
-      LOG_E(RLC, "%s:%d:%s: fatal\n", __FILE__, __LINE__, __FUNCTION__);
-      exit(1);
-    }
-    sn_field_length    = decode_sn_field_length_am(*am->dl_AM_RLC.sn_FieldLength);
+    AssertFatal(am->dl_AM_RLC.sn_FieldLength
+                && am->ul_AM_RLC.sn_FieldLength
+                && *am->dl_AM_RLC.sn_FieldLength == *am->ul_AM_RLC.sn_FieldLength,
+                "sn_FieldLength mandatory present at setup and not handled if different between DL and UL\n");
+    sn_field_length = decode_sn_field_length_am(*am->dl_AM_RLC.sn_FieldLength);
     break;
   }
   default:
@@ -817,10 +817,10 @@ static void add_drb_um(int ue_id, int drb_id, const NR_RLC_BearerConfig_t *rlc_B
     struct NR_RLC_Config__um_Bi_Directional *um;
     um = r->choice.um_Bi_Directional;
     t_reassembly = decode_t_reassembly(um->dl_UM_RLC.t_Reassembly);
-    if (*um->dl_UM_RLC.sn_FieldLength != *um->ul_UM_RLC.sn_FieldLength) {
-      LOG_E(RLC, "%s:%d:%s: fatal\n", __FILE__, __LINE__, __FUNCTION__);
-      exit(1);
-    }
+    AssertFatal(um->dl_UM_RLC.sn_FieldLength
+                && um->ul_UM_RLC.sn_FieldLength
+                && *um->dl_UM_RLC.sn_FieldLength == *um->ul_UM_RLC.sn_FieldLength,
+                "sn_FieldLength mandatory present at setup and not handled if different between DL and UL\n");
     sn_field_length = decode_sn_field_length_um(*um->dl_UM_RLC.sn_FieldLength);
     break;
   }
