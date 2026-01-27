@@ -239,6 +239,7 @@ static void nr_process_decode_segment(void *arg)
     *rdata->decodeSuccess = true;
 //    for (int i=0;i<(K>>3);i++) printf("byte (%d,%d) %x\n",rdata->r,i,rdata->c[i]);
   } else {
+    LOG_I(PHY,"Decoding failed: K %d, Z %d, rv_index %d\n",K,rdata->Z,rdata->rv_index); 
     memset(rdata->c, 0, K >> 3);
     *rdata->decodeSuccess = false;
   }
