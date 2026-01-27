@@ -41,7 +41,7 @@
 // Simulator role
 typedef enum { ROLE_SERVER = 1, ROLE_CLIENT } role;
 
-#define MAX_NUM_ANTENNAS_TX 4
+#define MAX_NUM_ANTENNAS_TX 8
 #define SAVED_SAMPLES_LEN 256
 #define MAX_NUM_UES MAX_MOBILES_PER_GNB
 
