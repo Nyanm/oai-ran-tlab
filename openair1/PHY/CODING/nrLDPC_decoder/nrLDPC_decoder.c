@@ -876,7 +876,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
               break;
             }
 	    else {
-              LOG_I(PHY, "Segment CRC NOK, Kprime %d, BG %d, Z %d\n",p_decParams->Kprime,BG,Z);
+              LOG_D(PHY, "Segment CRC NOK, Kprime %d, BG %d, Z %d\n",p_decParams->Kprime,BG,Z);
 	    }
           }
         }

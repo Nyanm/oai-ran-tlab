@@ -1398,7 +1398,7 @@ int nr_rate_matching_ldpc32(uint32_t Tbslbrm,
   return 0;
 }
 
-//#define USE_SCALAR 1
+#define USE_SCALAR 1
 /*
 #if defined(__AVX512BW__) 
 #define RMLOOP for (;ind<(ind2&31);k+=32,ind+=32) \
@@ -1414,18 +1414,18 @@ int nr_rate_matching_ldpc32(uint32_t Tbslbrm,
       simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));\
    for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  
 //#endif
-  
-int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
-                             uint8_t BG,
-                             uint16_t Z,
-                             int16_t *d,
-                             int16_t *soft_input,
-                             uint8_t C,
-                             uint8_t rvidx,
-                             uint8_t clear,
-                             uint32_t E,
-                             uint32_t F,
-                             uint32_t Foffset)
+
+int nr_rate_matching_ldpc_rx_simd(uint32_t Tbslbrm,
+                                  uint8_t BG,
+                                  uint16_t Z,
+                                  int16_t *d,
+                                  int16_t *soft_input,
+                                  uint8_t C,
+                                  uint8_t rvidx,
+                                  uint8_t clear,
+                                  uint32_t E,
+                                  uint32_t F,
+                                  uint32_t Foffset)
 {
   if (C == 0) {
     LOG_E(PHY, "nr_rate_matching: invalid parameter C %d\n", C);
@@ -1468,7 +1468,91 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
 
   uint32_t k = 0;
   if (ind < Foffset) {
-#ifdef USE_SCALAR 
+   int ind2 = ind + min(Foffset-ind,E);
+   RMLOOP;
+  }
+  if (ind >= Foffset && ind < Foffset + F)
+    ind = Foffset + F;
+  int ind2 = ind + min(Ncb-ind,E-k);
+  RMLOOP;
+
+  while (k < E) {
+   ind=0;
+   ind2 = min(Foffset,E-k);
+   RMLOOP;
+   ind = Foffset+F;
+   ind2 = ind + min(Ncb-ind,E-k);
+   RMLOOP;
+  }
+  return 0;
+}
+
+int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
+                             uint8_t BG,
+                             uint16_t Z,
+                             int16_t *d,
+                             int16_t *soft_input,
+                             uint8_t C,
+                             uint8_t rvidx,
+                             uint8_t clear,
+                             uint32_t E,
+                             uint32_t F,
+                             uint32_t Foffset)
+{
+  if (BG == 1) 
+     nr_rate_matching_ldpc_rx_simd(Tbslbrm,
+                                   BG,
+                                   Z,
+                                   d,
+                                   soft_input,
+                                   C,
+                                   rvidx,
+                                   clear,
+                                   E,
+                                   F,
+                                   Foffset);
+
+  if (C == 0) {
+    LOG_E(PHY, "nr_rate_matching: invalid parameter C %d\n", C);
+    return -1;
+  }
+
+  //Bit selection
+  uint32_t N = (BG == 1) ? (66 * Z) : (50 * Z);
+  uint32_t Ncb;
+  if (Tbslbrm == 0)
+    Ncb = N;
+  else {
+    uint32_t Nref = (3 * Tbslbrm / (2 * C)); //R_LBRM = 2/3
+    Ncb = min(N, Nref);
+  }
+
+  uint32_t ind = (index_k0[BG - 1][rvidx] * Ncb / N) * Z;
+  if (Foffset > E) {
+    LOG_E(PHY, "nr_rate_matching: invalid parameters (Foffset %d > E %d)\n", Foffset, E);
+    return -1;
+  }
+  if (Foffset > Ncb) {
+    LOG_E(PHY, "nr_rate_matching: invalid parameters (Foffset %d > Ncb %d)\n", Foffset, Ncb);
+    return -1;
+  }
+
+#ifdef RM_DEBUG
+  printf("nr_rate_matching_ldpc_rx: Clear %d, E %u, Foffset %u, k0 %u, Ncb %u, rvidx %d, Tbslbrm %u\n",
+         clear,
+         E,
+         Foffset,
+         ind,
+         Ncb,
+         rvidx,
+         Tbslbrm);
+#endif
+
+  if (clear == 1)
+    memset(d, 0, Ncb * sizeof(int16_t));
+
+  uint32_t k = 0;
+  if (ind < Foffset) {
     for (; (ind < Foffset) && (k < E); ind++) {
 #ifdef RM_DEBUG
       printf("RM_RX k%u Ind %u(before filler): %d (%d)=>", k, ind, d[ind], soft_input[k]);
@@ -1478,14 +1562,9 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
       printf("%d\n", d[ind]);
 #endif
     }
-#else
-   int ind2 = ind + min(Foffset-ind,E);
-   RMLOOP;
-#endif
   }
   if (ind >= Foffset && ind < Foffset + F)
     ind = Foffset + F;
-#ifdef USE_SCALAR
   for (; (ind < Ncb) && (k < E); ind++) {
 #ifdef RM_DEBUG
     printf("RM_RX k%u Ind %u(after filler) %d (%d)=>", k, ind, d[ind], soft_input[k]);
@@ -1495,13 +1574,8 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
     printf("%d\n", d[ind]);
 #endif
   }
-#else
-   int ind2 = ind + min(Ncb-ind,E-k);
-   RMLOOP;
-#endif
 
   while (k < E) {
-#ifdef USE_SCALAR
     for (ind = 0; (ind < Foffset) && (k < E); ind++) {
 #ifdef RM_DEBUG
       printf("RM_RX k%u Ind %u(before filler) %d(%d)=>", k, ind, d[ind], soft_input[k]);
@@ -1520,14 +1594,6 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
       printf("%d\n", d[ind]);
 #endif
     }
-#else
-   ind=0;
-   ind2 = min(Foffset,E-k);
-   RMLOOP;
-   ind = Foffset+F;
-   ind2 = ind + min(Ncb-ind,E-k);
-   RMLOOP;
-#endif
   }
   return 0;
 }
