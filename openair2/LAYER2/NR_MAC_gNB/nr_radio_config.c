@@ -2274,6 +2274,7 @@ static long config_nrofReportedRS(const NR_UE_NR_Capability_t *uecap,
   }
   int configured_rs = max_num_reported_rs > 0 ? min(num_supported_rs, max_num_reported_rs) : num_supported_rs;
   uint32_t num_ssb = count_bits64(ssb_bitmap);
+  LOG_I(NR_MAC,"Configuring groupBasedBeamReporting for num_ssb %d, configured_rs %d (max_num_reported_rs %d, num_supported_rs %d\n",num_ssb,configured_rs,max_num_reported_rs,num_supported_rs);
   if (num_ssb == 1 || configured_rs < 2)
     return NR_CSI_ReportConfig__groupBasedBeamReporting__disabled__nrofReportedRS_n1;
   if (num_ssb == 2 || configured_rs == 2)

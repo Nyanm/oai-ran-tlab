@@ -146,7 +146,7 @@ size_t dump_mac_stats(gNB_MAC_INST *gNB, char *output, size_t strlen, bool reset
     const int avg_rsrp = stats->num_rsrp_meas > 0 ? stats->cumul_rsrp / stats->num_rsrp_meas : 0;
     const int avg_sinrx10 = stats->num_sinr_meas > 0 ? stats->cumul_sinrx10 / stats->num_sinr_meas : 0;
 
-    output = st_append(output, end, "UE RNTI %04x CU-UE-ID ", UE->rnti);
+    output = st_append(output, end, "UE %04x CU-UE-ID ", UE->rnti);
     if (du_exists_f1_ue_data(UE->rnti)) {
       f1_ue_data_t ued = du_get_f1_ue_data(UE->rnti);
       output = st_append(output, end, "%d", ued.secondary_ue);
@@ -163,13 +163,16 @@ size_t dump_mac_stats(gNB_MAC_INST *gNB, char *output, size_t strlen, bool reset
                        sched_ctrl->pcmax);
 
     if (stats->num_rsrp_meas)
-      output = st_append(output, end, ", average RSRP %d (%d meas)", avg_rsrp, stats->num_rsrp_meas);
+      output = st_append(output, end, ", average RSRP %d on best SSB %d(%d meas)\n", avg_rsrp, stats->ssb_index[0],stats->num_rsrp_meas);
 
+    for (int i=1 ; i < stats->num_ssb_index; i++) {
+      output = st_append(output, end, "UE %04x SSB %d RSRP %d\n",UE->rnti,stats->ssb_index[i],stats->abs_rsrp[i-1]);
+    }
     if (stats->num_sinr_meas) {
       output = st_append(output,
                          end,
-                         ", average SINR %d.%d (%d meas)",
-                         avg_sinrx10 / 10,
+                         "UE %04x average SINR %d.%d (%d meas)",
+                         UE->rnti, avg_sinrx10 / 10,
                          avg_sinrx10 % 10,
                          stats->num_sinr_meas);
     }

@@ -4274,7 +4274,7 @@ static void compute_rsrp_or_sinr_bitlen(const NR_CSI_ReportConfig_t *csi_reportc
                                         bool is_RSRP_configured)
 {
   if (NR_CSI_ReportConfig__groupBasedBeamReporting_PR_disabled == csi_reportconfig->groupBasedBeamReporting.present) {
-    if (csi_reportconfig->groupBasedBeamReporting.choice.disabled->nrofReportedRS)
+    if (csi_reportconfig->groupBasedBeamReporting.choice.disabled->nrofReportedRS) 
       csi_report->CSI_report_bitlen.nb_ssbri_cri = *(csi_reportconfig->groupBasedBeamReporting.choice.disabled->nrofReportedRS) + 1;
     else
       /*! From Spec 38.331

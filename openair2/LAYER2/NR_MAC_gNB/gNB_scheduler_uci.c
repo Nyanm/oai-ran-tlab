@@ -544,7 +544,6 @@ static void evaluate_sinr_report(gNB_MAC_INST *nrmac,
   // including ssb SINR in mac stats
   stats->cumul_sinrx10 += sinr_report->SINRx10[0];
   stats->num_sinr_meas++;
-
   const int mcs_table = UE->current_DL_BWP.mcsTableIdx;
   const int nrOfLayers = get_dl_nrOfLayers(sched_ctrl, UE->current_DL_BWP.dci_format);
   sched_ctrl->dl_max_mcs = get_mcs_from_SINRx10(mcs_table, sinr_report->SINRx10[0], nrOfLayers);
@@ -606,7 +605,7 @@ static void evaluate_rsrp_report(gNB_MAC_INST *nrmac,
   *cumul_bits += 7;
   csi_report->nb_of_csi_ssb_report++;
   bool valid = get_measured_rsrp(rsrp, &rsrp_report->RSRP[0]);
-  LOG_D(NR_MAC, "SSB/CSI-RS index %d RSRP %d\n", rsrp_report->resource_id[0], rsrp_report->RSRP[0]);
+  LOG_D(NR_MAC, "SSB/CSI-RS index %d RSRP %d, nr_reports %d\n", rsrp_report->resource_id[0], rsrp_report->RSRP[0],rsrp_report->nr_reports);
   if (!valid) {
     LOG_E(NR_MAC, "UE %04x: reported RSRP index %d invalid\n", UE->rnti, rsrp);
     return;
@@ -624,6 +623,15 @@ static void evaluate_rsrp_report(gNB_MAC_INST *nrmac,
   // including ssb rsrp in mac stats
   stats->cumul_rsrp += rsrp_report->RSRP[0];
   stats->num_rsrp_meas++;
+
+  stats->num_ssb_index = rsrp_report->nr_reports;
+  if (rsrp_report->nr_reports > 0) {
+    for (int i=0; i < rsrp_report->nr_reports; i++) {
+      LOG_D(NR_PHY,"Filling stats for SSB %d on UE %x\n",rsrp_report->resource_id[i],UE->rnti); 
+      stats->ssb_index[i] = rsrp_report->resource_id[i];
+      if (i>0) stats->abs_rsrp[i-1] = rsrp_report->RSRP[i];
+    }
+  }
 }
 
 static void evaluate_cri_report(uint8_t *payload, uint8_t cri_bitlen, int cumul_bits, NR_UE_sched_ctrl_t *sched_ctrl)
