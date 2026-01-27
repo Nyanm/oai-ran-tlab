@@ -757,7 +757,7 @@ static void nr_rrc_ue_process_RadioBearerConfig(NR_UE_RRC_INST_t *ue_rrc, NR_Rad
   nr_pdcp_entity_security_keys_and_algos_t security_up_parameters = {0};
 
   if (ue_rrc->as_security_activated) {
-    if (radioBearerConfig->securityConfig != NULL) {
+    if (radioBearerConfig->securityConfig) {
       // When the field is not included, continue to use the currently configured keyToUse
       if (radioBearerConfig->securityConfig->keyToUse) {
         AssertFatal(*radioBearerConfig->securityConfig->keyToUse == NR_SecurityConfig__keyToUse_master,
@@ -767,6 +767,11 @@ static void nr_rrc_ue_process_RadioBearerConfig(NR_UE_RRC_INST_t *ue_rrc, NR_Rad
       // When the field is not included, continue to use the currently configured security algorithm
       if (radioBearerConfig->securityConfig->securityAlgorithmConfig) {
         ue_rrc->cipheringAlgorithm = radioBearerConfig->securityConfig->securityAlgorithmConfig->cipheringAlgorithm;
+        if (!radioBearerConfig->securityConfig->securityAlgorithmConfig->integrityProtAlgorithm) {
+          LOG_E(NR_RRC, "integrityProtAlgorithm to be released not handled, we remove AS security and declare RLF\n");
+          ue_rrc->as_security_activated = false;
+          handle_rlf_detection(ue_rrc);
+        }
         ue_rrc->integrityProtAlgorithm = *radioBearerConfig->securityConfig->securityAlgorithmConfig->integrityProtAlgorithm;
       }
     }
@@ -2283,6 +2288,39 @@ static int8_t nr_rrc_ue_decode_ccch(NR_UE_RRC_INST_t *rrc, const NRRrcMacCcchDat
    return rval;
 }
 
+static void send_security_failure(NR_UE_RRC_INST_t *rrc, NR_RRC_TransactionIdentifier_t id)
+{
+  /* - continue using the configuration used prior to the reception of the SecurityModeCommand message, i.e.
+   *   neither apply integrity protection nor ciphering.
+   * - submit the SecurityModeFailure message to lower layers for transmission, upon which the procedure ends.
+   */
+  NR_UL_DCCH_Message_t ul_dcch_msg = {0};
+  ul_dcch_msg.message.present = NR_UL_DCCH_MessageType_PR_c1;
+  asn1cCalloc(ul_dcch_msg.message.choice.c1, c1);
+  c1->present = NR_UL_DCCH_MessageType__c1_PR_securityModeFailure;
+  asn1cCalloc(c1->choice.securityModeFailure, modeFailure);
+  modeFailure->rrc_TransactionIdentifier = id;
+  modeFailure->criticalExtensions.present = NR_SecurityModeFailure__criticalExtensions_PR_securityModeFailure;
+  asn1cCalloc(modeFailure->criticalExtensions.choice.securityModeFailure, ext);
+  ext->nonCriticalExtension = NULL;
+
+  uint8_t buffer[200];
+  asn_enc_rval_t enc_rval = uper_encode_to_buffer(&asn_DEF_NR_UL_DCCH_Message, NULL, (void *)&ul_dcch_msg, buffer, sizeof(buffer));
+  AssertFatal(enc_rval.encoded > 0, "ASN1 message encoding failed (%s, %jd)!\n", enc_rval.failed_type->name, enc_rval.encoded);
+  if (LOG_DEBUGFLAG(DEBUG_ASN1))
+    xer_fprint(stdout, &asn_DEF_NR_UL_DCCH_Message, (void *)&ul_dcch_msg);
+  ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_NR_UL_DCCH_Message, &ul_dcch_msg);
+
+  /* disable both ciphering and integrity */
+  nr_pdcp_entity_security_keys_and_algos_t null_security_parameters = {0};
+  for (int i = 1; i < NR_NUM_SRB; i++) {
+    if (rrc->Srb[i] == RB_ESTABLISHED)
+      nr_pdcp_config_set_security(rrc->ue_id, i, true, &null_security_parameters);
+  }
+  int srb_id = 1; // SecurityModeFailure in SRB1
+  nr_pdcp_data_req_srb(rrc->ue_id, srb_id, 0, (enc_rval.encoded + 7) / 8, buffer, deliver_pdu_srb_rlc, NULL);
+}
+
 static void nr_rrc_ue_process_securityModeCommand(NR_UE_RRC_INST_t *ue_rrc,
                                                   NR_SecurityModeCommand_t *const securityModeCommand,
                                                   int srb_id,
@@ -2312,19 +2350,25 @@ static void nr_rrc_ue_process_securityModeCommand(NR_UE_RRC_INST_t *ue_rrc,
   }
   ue_rrc->cipheringAlgorithm = securityConfigSMC->securityAlgorithmConfig.cipheringAlgorithm;
 
-  ue_rrc->integrityProtAlgorithm = 0;
-  if (securityConfigSMC->securityAlgorithmConfig.integrityProtAlgorithm != NULL) {
-    switch (*securityConfigSMC->securityAlgorithmConfig.integrityProtAlgorithm) {
-      case NR_IntegrityProtAlgorithm_nia0:
-      case NR_IntegrityProtAlgorithm_nia1:
-      case NR_IntegrityProtAlgorithm_nia2:
-        LOG_I(NR_RRC, "Integrity protection algorithm is set to nia%ld\n", *securityConfigSMC->securityAlgorithmConfig.integrityProtAlgorithm);
-        break;
-      default:
-        AssertFatal(0, "Integrity algorithm not known/supported\n");
-    }
-    ue_rrc->integrityProtAlgorithm = *securityConfigSMC->securityAlgorithmConfig.integrityProtAlgorithm;
+  if (!securityConfigSMC->securityAlgorithmConfig.integrityProtAlgorithm) {
+    LOG_E(NR_RRC, "received NULL integrityProtAlgorithm, can't send SecurityModeComplete, reply with SecurityModeFailure\n");
+    send_security_failure(ue_rrc, securityModeCommand->rrc_TransactionIdentifier);
+    return;
   }
+  switch (*securityConfigSMC->securityAlgorithmConfig.integrityProtAlgorithm) {
+    case NR_IntegrityProtAlgorithm_nia0:
+    case NR_IntegrityProtAlgorithm_nia1:
+    case NR_IntegrityProtAlgorithm_nia2:
+      LOG_I(NR_RRC,
+            "Integrity protection algorithm is set to nia%ld\n",
+            *securityConfigSMC->securityAlgorithmConfig.integrityProtAlgorithm);
+      break;
+    default:
+      LOG_E(NR_RRC, "Integrity algorithm not known/supported, reply with SecurityModeFailure\n");
+      send_security_failure(ue_rrc, securityModeCommand->rrc_TransactionIdentifier);
+      return;
+  }
+  ue_rrc->integrityProtAlgorithm = *securityConfigSMC->securityAlgorithmConfig.integrityProtAlgorithm;
 
   nr_pdcp_entity_security_keys_and_algos_t security_parameters;
   nr_derive_key(RRC_ENC_ALG, ue_rrc->cipheringAlgorithm, ue_rrc->kgnb, security_parameters.ciphering_key);
@@ -2341,48 +2385,18 @@ static void nr_rrc_ue_process_securityModeCommand(NR_UE_RRC_INST_t *ue_rrc,
       nr_pdcp_config_set_security(ue_rrc->ue_id, i, true, &security_parameters);
   }
 
-  NR_UL_DCCH_Message_t ul_dcch_msg = {0};
-
-  ul_dcch_msg.message.present = NR_UL_DCCH_MessageType_PR_c1;
-  asn1cCalloc(ul_dcch_msg.message.choice.c1, c1);
-
   // the SecurityModeCommand message needs to pass the integrity protection check
   // for the UE to declare AS security to be activated
   bool integrity_pass = nr_pdcp_check_integrity_srb(ue_rrc->ue_id, srb_id, msg, msg_size, msg_integrity);
   if (!integrity_pass) {
-    /* - continue using the configuration used prior to the reception of the SecurityModeCommand message, i.e.
-     *   neither apply integrity protection nor ciphering.
-     * - submit the SecurityModeFailure message to lower layers for transmission, upon which the procedure ends.
-     */
     LOG_E(NR_RRC, "integrity of SecurityModeCommand failed, reply with SecurityModeFailure\n");
-    c1->present = NR_UL_DCCH_MessageType__c1_PR_securityModeFailure;
-    asn1cCalloc(c1->choice.securityModeFailure, modeFailure);
-    modeFailure->rrc_TransactionIdentifier = securityModeCommand->rrc_TransactionIdentifier;
-    modeFailure->criticalExtensions.present = NR_SecurityModeFailure__criticalExtensions_PR_securityModeFailure;
-    asn1cCalloc(modeFailure->criticalExtensions.choice.securityModeFailure, ext);
-    ext->nonCriticalExtension = NULL;
-
-    uint8_t buffer[200];
-    asn_enc_rval_t enc_rval =
-        uper_encode_to_buffer(&asn_DEF_NR_UL_DCCH_Message, NULL, (void *)&ul_dcch_msg, buffer, sizeof(buffer));
-    AssertFatal(enc_rval.encoded > 0, "ASN1 message encoding failed (%s, %jd)!\n", enc_rval.failed_type->name, enc_rval.encoded);
-    if (LOG_DEBUGFLAG(DEBUG_ASN1))
-      xer_fprint(stdout, &asn_DEF_NR_UL_DCCH_Message, (void *)&ul_dcch_msg);
-    ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_NR_UL_DCCH_Message, &ul_dcch_msg);
-
-    /* disable both ciphering and integrity */
-    nr_pdcp_entity_security_keys_and_algos_t null_security_parameters = {0};
-    for (int i = 1; i < NR_NUM_SRB; i++) {
-      if (ue_rrc->Srb[i] == RB_ESTABLISHED)
-        nr_pdcp_config_set_security(ue_rrc->ue_id, i, true, &null_security_parameters);
-    }
-
-    srb_id = 1; // SecurityModeFailure in SRB1
-    nr_pdcp_data_req_srb(ue_rrc->ue_id, srb_id, 0, (enc_rval.encoded + 7) / 8, buffer, deliver_pdu_srb_rlc, NULL);
-
+    send_security_failure(ue_rrc, securityModeCommand->rrc_TransactionIdentifier);
     return;
   }
 
+  NR_UL_DCCH_Message_t ul_dcch_msg = {0};
+  ul_dcch_msg.message.present = NR_UL_DCCH_MessageType_PR_c1;
+  asn1cCalloc(ul_dcch_msg.message.choice.c1, c1);
   /* integrity passed, send SecurityModeComplete */
   c1->present = NR_UL_DCCH_MessageType__c1_PR_securityModeComplete;
 
