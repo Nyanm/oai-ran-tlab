@@ -64,6 +64,8 @@
 
 cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
 
+int d_array_size = 0;
+
 void launch_deinterleave_i16(int Qm, int E1, int E2, int C, int r_firstE2,int16_t* e, const int16_t* f,cudaStream_t *s,int8_t sidx);
 int nr_rate_matching_ldpc_rx_cuda(uint32_t Tbslbrm,
                                              uint8_t BG,
@@ -155,6 +157,7 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
   cudaMemsetAsync(p_llr_dev,0,C*68*Z*sizeof(int8_t),decoderStreams[0]);
   AssertFatal(err==cudaSuccess,"cudaMemsetAsync failed on p_llr_dev %p\n",p_llr_dev);
 #endif
+  AssertFatal(segs->harq_unique_pid < d_array_size,"harq_unique_pid %d > %d\n",segs->harq_unique_pid,d_array_size);
   nr_rate_matching_ldpc_rx_cuda(segs->tbslbrm,
                                 segs->BG,
                                 Z,
@@ -281,6 +284,7 @@ void LDPCint_rm_init(int max_num_pxsch) {
     err=cudaMalloc((void **)&harq_f_dev,MAXE*sizeof(int16_t));
     AssertFatal(err == cudaSuccess,"CUDA Error (harq_f_dev): %s\n", cudaGetErrorString(err));
   }
+  d_array_size = max_num_pxsch;
 }
 
 void LDPCinit_cuda(void);

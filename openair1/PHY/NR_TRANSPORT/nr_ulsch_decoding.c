@@ -142,6 +142,7 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
 
     // The harq_pid is not unique among the active HARQ processes in the instance so we use ULSCH_id instead
     TB_parameters->harq_unique_pid = (phy_vars_gNB->max_nb_pusch * harq_pid) + ULSCH_id;
+    AssertFatal(TB_parameters->harq_unique_pid < (16*phy_vars_gNB->max_nb_pusch),"harq_unique_pid >= %d, harq_pid %d, ULSCH_id %d\n",16*phy_vars_gNB->max_nb_pusch,harq_pid,ULSCH_id);
 
     // ------------------------------------------------------------------
     TB_parameters->nb_rb = pusch_pdu->rb_size;
@@ -297,6 +298,8 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
       }
     } else {
         LOG_D(PHY, "ULSCH %d in error\n", ULSCH_id);
+	nfapi_nr_pusch_pdu_t *pusch_pdu = &harq_process->ulsch_pdu;
+	if (harq_process->round == 3) LOG_I(PHY,"TBS %d, mcs %d, nb_rb %d, Qm %d. Z %d. R %d, l0 %d, NL %d\n",harq_process->TBS,TB_parameters.mcs,TB_parameters.nb_rb, TB_parameters.Qm, TB_parameters.Z, TB_parameters.R,pusch_pdu->start_symbol_index,pusch_pdu->nr_of_symbols);
     }
     merge_meas(&phy_vars_gNB->ts_deinterleave, &TB_parameters.ts_deinterleave);
     merge_meas(&phy_vars_gNB->ts_rate_unmatch, &TB_parameters.ts_rate_unmatch);

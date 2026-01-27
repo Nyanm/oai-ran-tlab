@@ -291,7 +291,7 @@ extern "C" int nr_rate_matching_ldpc_rx_cuda(uint32_t Tbslbrm,
 
   cudaError_t err = cudaDeviceSynchronize();
   if (err!=cudaSuccess) {
-     printf("cudaDeviceSynchronize() returns %s\n",cudaGetErrorString(err));
+     printf("cudaDeviceSynchronize() returns %s (soft_input %p, d %p, llr_buffer %p\n",cudaGetErrorString(err),soft_input,d,llr_buffer);
      exit(-1);
   }
   return(0);
