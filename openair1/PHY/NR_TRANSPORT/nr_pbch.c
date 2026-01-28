@@ -228,14 +228,15 @@ uint32_t nr_pbch_extra_byte_generation(int sfn, int n_hf, int ssb_index, int ssb
   return extra_byte;
 }
 
-void nr_generate_pbch(PHY_VARS_gNB *gNB,
+void nr_generate_pbch(int16_t amp,
+                      const uint8_t *interleaver,
                       const nfapi_nr_dl_tti_ssb_pdu *ssb_pdu,
                       c16_t *txdataF,
                       uint8_t ssb_start_symbol,
                       uint8_t n_hf,
                       int sfn,
-                      nfapi_nr_config_request_scf_t *config,
-                      NR_DL_FRAME_PARMS *frame_parms)
+                      const nfapi_nr_config_request_scf_t *config,
+                      const NR_DL_FRAME_PARMS *frame_parms)
 {
   LOG_D(PHY, "PBCH generation started\n");
   ///Payload generation
@@ -261,7 +262,6 @@ void nr_generate_pbch(PHY_VARS_gNB *gNB,
 
   // Payload interleaving
   uint32_t pbch_a_interleaved = 0;
-  uint8_t *interleaver = gNB->nr_pbch_interleaver;
   for (int i = 0; i < NR_POLAR_PBCH_PAYLOAD_BITS; i++) {
     pbch_a_interleaved |= ((pbch_a >> i) & 1) << (*(interleaver + i));
   }
@@ -336,7 +336,6 @@ void nr_generate_pbch(PHY_VARS_gNB *gNB,
   int k = frame_parms->first_carrier_offset + frame_parms->ssb_start_subcarrier;
   int l = ssb_start_symbol + 1;
   int m = 0;
-  int16_t amp = gNB->TX_AMP;
 
   for (int ssb_sc_idx = 0; ssb_sc_idx < 240; ssb_sc_idx++) {
     if ((ssb_sc_idx&3) == nushift) {  //skip DMRS

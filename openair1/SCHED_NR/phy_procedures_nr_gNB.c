@@ -202,7 +202,8 @@ void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, const n
   }
 #endif
 
-  nr_generate_pbch(gNB,
+  nr_generate_pbch(gNB->TX_AMP,
+                   gNB->nr_pbch_interleaver,
                    ssb_pdu,
                    &txdataF[beam_nb][0][txdataF_offset],
                    ssb_start_symbol,

@@ -88,14 +88,15 @@ void nr_generate_pbch_dmrs(uint32_t *gold_pbch_dmrs,
 \brief Generation of the PBCH
 @param
  */
-void nr_generate_pbch(PHY_VARS_gNB *gNB,
+void nr_generate_pbch(int16_t amp,
+                      const uint8_t *interleaver,
                       const nfapi_nr_dl_tti_ssb_pdu *ssb_pdu,
                       c16_t *txdataF,
                       uint8_t ssb_start_symbol,
                       uint8_t n_hf,
                       int sfn,
-                      nfapi_nr_config_request_scf_t *config,
-                      NR_DL_FRAME_PARMS *frame_parms);
+                      const nfapi_nr_config_request_scf_t *config,
+                      const NR_DL_FRAME_PARMS *frame_parms);
 
 /*!
 \fn int nr_generate_pbch
