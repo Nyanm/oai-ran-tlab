@@ -51,11 +51,11 @@ static void nr_pdcch_scrambling(uint32_t *in, uint32_t size, uint32_t Nid, uint3
     out[i] = in[i] ^ seq[i];
 }
 
-void nr_generate_dci(PHY_VARS_gNB *gNB,
-                     const nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_pdu_rel15,
-                     int txdataF_offset,
-                     NR_DL_FRAME_PARMS *frame_parms,
-                     int slot)
+void nr_generate_dci(const nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_pdu_rel15,
+                     const NR_DL_FRAME_PARMS *frame_parms,
+                     int slot,
+                     uint16_t amp,
+                     c16_t *txdataF)
 {
   // fill reg list per symbol
   int reg_list[MAX_DCI_CORESET][NR_MAX_PDCCH_AGG_LEVEL * NR_NB_REG_PER_CCE];
@@ -83,14 +83,6 @@ void nr_generate_dci(PHY_VARS_gNB *gNB,
     uint32_t cset_start_symb = pdcch_pdu_rel15->StartSymbolIndex;
     uint32_t cset_nsymb = pdcch_pdu_rel15->DurationSymbols;
     int dci_idx = 0;
-    // multi-beam number (for concurrent beams)
-    int bitmap = SL_to_bitmap(cset_start_symb, pdcch_pdu_rel15->DurationSymbols);
-    int beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                        dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                        &gNB->common_vars,
-                                        slot,
-                                        frame_parms->symbols_per_slot,
-                                        bitmap);
 
     LOG_D(NR_PHY_DCI, "pdcch: Coreset rb_offset %d, nb_rb %d BWP Start %d\n", rb_offset, n_rb, pdcch_pdu_rel15->BWPStart);
     LOG_D(NR_PHY_DCI,
@@ -178,8 +170,6 @@ void nr_generate_dci(PHY_VARS_gNB *gNB,
 #endif
 
     /// Resource mapping
-    uint16_t amp = gNB->TX_AMP;
-    c16_t *txdataF = gNB->common_vars.txdataF[beam_nb][0] + txdataF_offset;
     if (cset_start_sc >= frame_parms->ofdm_symbol_size)
       cset_start_sc -= frame_parms->ofdm_symbol_size;
 

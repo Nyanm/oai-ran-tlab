@@ -288,8 +288,24 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
     }
   }
 
-  for (int i = 0; i < UL_dci_req->numPdus; ++i)
-    nr_generate_dci(gNB, &UL_dci_req->ul_dci_pdu_list[i].pdcch_pdu.pdcch_pdu_rel15, txdataF_offset, &gNB->frame_parms, slot);
+    /* TODO: It seems to me that for multi-beam operation, we would "just"
+     * get the right beam number here. If gNB->enable_analog_das is true, then beam_nb
+     * == beam_idx in FAPI. Otherwise, we look up the first free beam. In all
+     * cases, it does not seem necessary to do this with global memory, the
+     * look up could be on the stack?!
+    int beam_nb = beam_index_allocation(gNB->enable_analog_das,
+                                        beam_idx,
+                                        &gNB->common_vars,
+                                        slot,
+                                        frame_parms->symbols_per_slot,
+                                        bitmap);
+                                        */
+  int beam_nb = 0; // see above: should be looked up
+  c16_t **txdataF = gNB->common_vars.txdataF[beam_nb];
+  for (int i = 0; i < UL_dci_req->numPdus; ++i) {
+    const nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdu = &UL_dci_req->ul_dci_pdu_list[i].pdcch_pdu.pdcch_pdu_rel15;
+    nr_generate_dci(pdu, &gNB->frame_parms, slot, gNB->TX_AMP, txdataF[0] + txdataF_offset);
+  }
 
   int num_pdsch = 0;
   for (int i = 0; i < DL_req->dl_tti_request_body.nPDUs; ++i) {
@@ -298,9 +314,10 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
       case NFAPI_NR_DL_TTI_SSB_PDU_TYPE:
         nr_common_signal_procedures(gNB, frame, slot, &dl_tti_pdu->ssb_pdu);
         break;
-      case NFAPI_NR_DL_TTI_PDCCH_PDU_TYPE:
-        nr_generate_dci(gNB, &dl_tti_pdu->pdcch_pdu.pdcch_pdu_rel15, txdataF_offset, &gNB->frame_parms, slot);
-        break;
+      case NFAPI_NR_DL_TTI_PDCCH_PDU_TYPE: {
+        const nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdu = &dl_tti_pdu->pdcch_pdu.pdcch_pdu_rel15;
+        nr_generate_dci(pdu, &gNB->frame_parms, slot, gNB->TX_AMP, txdataF[0] + txdataF_offset);
+        } break;
       case NFAPI_NR_DL_TTI_CSI_RS_PDU_TYPE:
         nr_generate_csi_rs_gNB(gNB, slot, cfg, &dl_tti_pdu->csi_rs_pdu);
         break;
