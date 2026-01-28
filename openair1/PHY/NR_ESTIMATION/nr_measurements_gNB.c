@@ -119,6 +119,7 @@ void gNB_I0_measurements(PHY_VARS_gNB *gNB, int slot, int first_symb, int num_sy
   NR_gNB_COMMON *common_vars = &gNB->common_vars;
   PHY_MEASUREMENTS_gNB *measurements = &gNB->measurements;
   int nb_symb[275]={0};
+  static int clear=1;
 
   allocCast2D(n0_subband_power,
               unsigned int,
@@ -126,7 +127,7 @@ void gNB_I0_measurements(PHY_VARS_gNB *gNB, int slot, int first_symb, int num_sy
               frame_parms->nb_antennas_rx,
               frame_parms->N_RB_UL,
               false);
-  clearArray(gNB->measurements.n0_subband_power, unsigned int);
+  if (clear==1) { clearArray(gNB->measurements.n0_subband_power, unsigned int); clear=0;}
   allocCast2D(n0_subband_power_dB,
               unsigned int,
               gNB->measurements.n0_subband_power_dB,

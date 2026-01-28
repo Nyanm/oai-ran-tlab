@@ -1565,13 +1565,19 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
   if (rel15_ul->nrOfLayers == 2 && rel15_ul->qam_mod_order > 6)
     pusch_vars->log2_maxh = (log2_approx(avgs) >> 1) - 3; // for MMSE
   else if (rel15_ul->nrOfLayers == 2)
-    pusch_vars->log2_maxh = (log2_approx(avgs) >> 1) - 2 + log2_approx(frame_parms->nb_antennas_rx >> 1);
+    pusch_vars->log2_maxh = (log2_approx(avgs) >> 1) + 2 + log2_approx(frame_parms->nb_antennas_rx >> 1);
   else 
-    pusch_vars->log2_maxh = (log2_approx(avgs) >> 1) + 1 + log2_approx(frame_parms->nb_antennas_rx >> 1);
+    pusch_vars->log2_maxh = (log2_approx(avgs) >> 1) + 2 + log2_approx(frame_parms->nb_antennas_rx >> 1);
 
+#if 1
+  if (pusch_vars->log2_maxh < 1)
+    pusch_vars->log2_maxh = 1;
+  else if (pusch_vars->log2_maxh > 14)
+    pusch_vars->log2_maxh = 14;
+#else
   if (pusch_vars->log2_maxh < 0)
     pusch_vars->log2_maxh = 0;
-
+#endif
   stop_meas(&gNB->rx_pusch_init_stats);
 
   start_meas(&gNB->rx_pusch_symbol_processing_stats);

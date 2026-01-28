@@ -299,7 +299,6 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
     } else {
         LOG_D(PHY, "ULSCH %d in error\n", ULSCH_id);
 	nfapi_nr_pusch_pdu_t *pusch_pdu = &harq_process->ulsch_pdu;
-	if (harq_process->round == 2) LOG_I(PHY,"TBS %d, mcs %d, nb_rb %d, Qm %d, E %d, E2 %d, C %d, Z %d. R %d, l0 %d, NL %d\n",harq_process->TBS,TB_parameters.mcs,TB_parameters.nb_rb, TB_parameters.Qm, TB_parameters.E, TB_parameters.E2, TB_parameters.C, TB_parameters.Z, TB_parameters.R,pusch_pdu->start_symbol_index,pusch_pdu->nr_of_symbols);
     }
     merge_meas(&phy_vars_gNB->ts_deinterleave, &TB_parameters.ts_deinterleave);
     merge_meas(&phy_vars_gNB->ts_rate_unmatch, &TB_parameters.ts_rate_unmatch);
