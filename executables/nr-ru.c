@@ -347,17 +347,28 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
   AssertFatal(*slot < fp->slots_per_frame && *slot >= 0, "slot %d is illegal (%d)\n", *slot, fp->slots_per_frame);
 
   start_meas(&ru->rx_fhaul);
-  int nb = ru->nb_rx * ru->num_beams_period;
-  void *rxp[nb];
-  for (int i = 0; i < nb; i++)
-    rxp[i] = (void *)&ru->common.rxdata[i][get_samples_slot_timestamp(fp, *slot)];
-
   openair0_timestamp_t old_ts = proc->timestamp_rx;
-  LOG_D(PHY,"Reading %d samples for slot %d (%p)\n", samples_per_slot, *slot, rxp[0]);
-
   openair0_timestamp_t ts;
   unsigned int rxs;
-  rxs = ru->rfdevice.trx_read_func(&ru->rfdevice, &ts, rxp, samples_per_slot, nb);
+  metadata mt = {.slot = *slot, .frame = *frame};
+  if (ru->num_beams_period > 1) {
+    void *rxp_flat[ru->num_beams_period * ru->nb_rx];
+    void **rxp[ru->num_beams_period];
+    for (int j = 0; j < ru->num_beams_period; j++) {
+      for (int i = 0; i < ru->nb_rx; i++)
+        rxp_flat[i + j * ru->nb_rx] = (void *)&ru->common.rxdata[i + j * ru->nb_rx][get_samples_slot_timestamp(fp, *slot)];
+      rxp[j] = &rxp_flat[j * ru->nb_rx];
+    }
+    rxs = ru->rfdevice.trx_read_beams_func(&ru->rfdevice, &ts, (void ***)rxp, samples_per_slot, ru->nb_rx, ru->num_beams_period);
+    gNBscopeCopyWithMetadata(ru, gNbTimeDomainSamples, rxp[0][0], sizeof(c16_t), 1, samples_per_slot, 0, &mt);
+  } else {
+    void *rxp[ru->nb_rx];
+    for (int i = 0; i < ru->nb_rx; i++)
+      rxp[i] = (void *)&ru->common.rxdata[i][get_samples_slot_timestamp(fp, *slot)];
+    rxs = ru->rfdevice.trx_read_func(&ru->rfdevice, &ts, rxp, samples_per_slot, ru->nb_rx);
+    gNBscopeCopyWithMetadata(ru, gNbTimeDomainSamples, rxp[0], sizeof(c16_t), 1, samples_per_slot, 0, &mt);
+  }
+
   proc->timestamp_rx = ts-ru->ts_offset;
 
   if (rxs != samples_per_slot)
@@ -422,17 +433,28 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
     proc->first_rx = 0;
     *frame = proc->frame_rx;
     *slot  = proc->tti_rx;
+    samples_per_slot = get_samples_per_slot(*slot, fp); // slot number might change depending on the timestamp
 
     // Align to slot boundary
     uint64_t samples_to_slot_boundary = 0;
     uint64_t sample_offset_within_frame = proc->timestamp_rx % fp->samples_per_frame;
     uint64_t sample_offset_within_slot = sample_offset_within_frame - get_samples_slot_timestamp(fp, *slot);
     if (sample_offset_within_slot > 0) {
-      samples_to_slot_boundary = get_samples_per_slot(*slot, fp) - sample_offset_within_slot;
+      samples_to_slot_boundary = samples_per_slot - sample_offset_within_slot;
       LOG_A(NR_PHY, "Aligning to the slot boundary %lu\n", samples_to_slot_boundary);
-
       // Read and discard the samples in the first_rx to align to the slot boundary
-      rxs = ru->rfdevice.trx_read_func(&ru->rfdevice, &ts, rxp, samples_to_slot_boundary, nb);
+      if (ru->num_beams_period > 1) {
+        void *rxp_skip_b[ru->num_beams_period][ru->nb_rx];
+        rxs = ru->rfdevice.trx_read_beams_func(&ru->rfdevice,
+                                               &ts,
+                                               (void ***)rxp_skip_b,
+                                               samples_to_slot_boundary,
+                                               ru->nb_rx,
+                                               ru->num_beams_period);
+      } else {
+        void *rxp_skip[ru->nb_rx];
+        rxs = ru->rfdevice.trx_read_func(&ru->rfdevice, &ts, rxp_skip, samples_to_slot_boundary, ru->nb_rx);
+      }
       if (rxs != samples_to_slot_boundary)
         LOG_E(PHY, "rx_rf: Asked for %ld samples, got %d from USRP\n", samples_to_slot_boundary, rxs);
 
@@ -442,10 +464,6 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
       *slot = (*slot + 1) % fp->slots_per_frame;
     }
   }
-
-  metadata mt = {.slot = *slot, .frame = *frame};
-  gNBscopeCopyWithMetadata(ru, gNbTimeDomainSamples, rxp[0], sizeof(c16_t), 1, samples_per_slot, 0, &mt);
-
   stop_meas(&ru->rx_fhaul);
 }
 
@@ -559,18 +577,39 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
   const int flags = flags_burst | (flags_gpio << 4);
   proc->first_tx = 0;
 
-  int nt = ru->nb_tx * ru->num_beams_period;
-  void *txp[nt];
-  for (int i = 0; i < nt; i++)
-    txp[i] = (void *)&ru->common.txdata[i][get_samples_slot_timestamp(fp, slot)] - sf_extension * sizeof(int32_t);
+  double sig_en = 0;
+  uint32_t txs;
+  if (ru->num_beams_period > 1) {
+    void *txp_flat[ru->num_beams_period * ru->nb_tx];
+    void **txp[ru->num_beams_period];
+    for (int b = 0; b < ru->num_beams_period; b++) {
+      for (int i = 0; i < ru->nb_tx; i++)
+        txp_flat[b * ru->nb_tx + i] = (void *)&ru->common.txdata[i + b * ru->nb_tx][get_samples_slot_timestamp(fp, slot)] - sf_extension * sizeof(int32_t);
+      txp[b] = &txp_flat[b * ru->nb_tx];
+    }
+    sig_en = (double)signal_energy(txp[0][0], siglen + sf_extension);
+    txs = ru->rfdevice.trx_write_beams_func(&ru->rfdevice,
+                                            timestamp + ru->ts_offset - sf_extension,
+                                            (void ***)txp,
+                                            siglen + sf_extension,
+                                            ru->nb_tx,
+                                            ru->num_beams_period,
+                                            flags);
+  } else {
+    void *txp[ru->nb_tx];
+    for (int i = 0; i < ru->nb_tx; i++)
+      txp[i] = (void *)&ru->common.txdata[i][get_samples_slot_timestamp(fp, slot)] - sf_extension * sizeof(int32_t);
 
-  // prepare tx buffer pointers
-  uint32_t txs = ru->rfdevice.trx_write_func(&ru->rfdevice,
-                                             timestamp + ru->ts_offset - sf_extension,
-                                             txp,
-                                             siglen + sf_extension,
-                                             nt,
-                                             flags);
+    sig_en = (double)signal_energy(txp[0], siglen + sf_extension);
+    // prepare tx buffer pointers
+    txs = ru->rfdevice.trx_write_func(&ru->rfdevice,
+                                      timestamp + ru->ts_offset - sf_extension,
+                                      txp,
+                                      siglen + sf_extension,
+                                      ru->nb_tx,
+                                      flags);
+  }
+
   LOG_D(PHY,
         "[TXPATH] RU %d tx_rf, writing to TS %lu, %d.%d, unwrapped_frame %d, slot %d, flags %d, siglen+sf_extension %d, "
         "returned %d, E %f\n",
@@ -583,7 +622,7 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
         flags,
         siglen + sf_extension,
         txs,
-        10 * log10((double)signal_energy(txp[0], siglen + sf_extension)));
+        10 * log10(sig_en));
 }
 
 static void fill_rf_config(RU_t *ru, char *rf_config_file)
