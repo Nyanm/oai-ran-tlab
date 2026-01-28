@@ -421,6 +421,8 @@ typedef struct PHY_VARS_gNB_s {
 
   /// NR LDPC coding related
   nrLDPC_coding_interface_t nrLDPC_coding_interface;
+  nrLDPC_coding_interface_t nrLDPC_coding_interface_offload;
+  bool use_offload;
   int max_ldpc_iterations;
 
   /// indicate the channel estimation technique in time domain

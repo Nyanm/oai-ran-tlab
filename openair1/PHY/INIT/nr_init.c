@@ -22,6 +22,7 @@
 #include "executables/softmodem-common.h"
 #include "executables/nr-softmodem-common.h"
 #include "common/utils/nr/nr_common.h"
+#include "common/utils/load_module_shlib.h"
 #include "common/ran_context.h"
 #include "PHY/defs_gNB.h"
 #include "PHY/NR_REFSIG/nr_refsig.h"
@@ -136,6 +137,31 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
 
   int ret_loader = load_nrLDPC_coding_interface(NULL, &gNB->nrLDPC_coding_interface);
   AssertFatal(ret_loader == 0, "error loading LDPC library\n");
+
+  // load LDPC offload library
+  // First query configmodule to know if an offload library was provided
+  char *shlibversion = NULL;
+  // clang-format off
+  paramdef_t LoaderParams[] = {
+    {"shlibversion", NULL, 0, .strptr = &shlibversion, .defstrval = NULL,   TYPE_STRING, 0, NULL}
+  };
+  // clang-format on
+  char cfgprefix[sizeof(LOADER_CONFIG_PREFIX) + 30];
+  sprintf(cfgprefix, LOADER_CONFIG_PREFIX ".ldpc.offload");
+  int ret_cfgmodule = config_get(config_get_if(), LoaderParams, sizeofArray(LoaderParams), cfgprefix);
+  if (ret_cfgmodule <0) {
+    fprintf(stderr, "[LOADER]  %s %d couldn't retrieve config from section %s\n", __FILE__, __LINE__, cfgprefix);
+  }
+  if (shlibversion != NULL) {
+    // an offload library was provided, load it
+    LOG_D(PHY, "LDPC offload library provided\n");
+    ret_loader = load_nrLDPC_coding_interface(shlibversion, &gNB->nrLDPC_coding_interface_offload);
+    gNB->use_offload = (ret_loader == 0);
+  } else {
+    // no offload library
+    LOG_D(PHY, "No LDPC offload library provided\n");
+    gNB->use_offload = false;
+  }
 
   gNB->max_nb_pdsch = MAX_MOBILES_PER_GNB;
   init_delay_table(fp->ofdm_symbol_size, MAX_DELAY_COMP, NR_MAX_OFDM_SYMBOL_SIZE, fp->delay_table);
@@ -283,6 +309,9 @@ void phy_free_nr_gNB(PHY_VARS_gNB *gNB)
   free(gNB->pusch_vars);
 
   free_nrLDPC_coding_interface(&gNB->nrLDPC_coding_interface);
+  if (gNB->use_offload) {
+    free_nrLDPC_coding_interface(&gNB->nrLDPC_coding_interface_offload);
+  }
 
 }
 

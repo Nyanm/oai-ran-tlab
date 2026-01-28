@@ -254,7 +254,19 @@ typedef struct nrLDPC_coding_interface_s {
   nrLDPC_coding_encoder_t *nrLDPC_coding_encoder;
 } nrLDPC_coding_interface_t;
 
+/**
+ * \brief LDPC coding library loading function
+ * \param specifier specifies the configmodule argument to be queried
+ *        the loader loads the library provided with argument --loader.ldpc.<specifier>.shlibversion or --loader.ldpc.<specifier>.shlibpath
+ *        if specifier is NULL then the loader loads the library provided with argument --loader.ldpc.shlibversion or --loader.ldpc.shlibpath
+ * \param version if not NULL then overrides the library version provided by configmodule
+ * \param interface pointer to the interface structure
+ */
 int load_nrLDPC_coding_interface(char *version, nrLDPC_coding_interface_t *interface);
+/**
+ * \brief LDPC coding library release function
+ * \param interface pointer to the interface structure
+ */
 int free_nrLDPC_coding_interface(nrLDPC_coding_interface_t *interface);
 
 #endif
