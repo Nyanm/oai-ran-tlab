@@ -165,12 +165,12 @@ void nr_rlc_release_entity(int ue_id, logical_chan_id_t channel_id)
 void nr_mac_rlc_data_ind(const module_id_t  module_idP,
                          const uint16_t ue_id,
                          const bool gnb_flagP,
-                         const logical_chan_id_t channel_idP,
-                         char *buffer_pP,
-                         const tb_size_t tb_sizeP)
+                         const nr_rlc_data_ind_t *data,
+                         int num_data)
 {
   if (gnb_flagP)
-    T(T_ENB_RLC_MAC_UL, T_INT(module_idP), T_INT(ue_id), T_INT(channel_idP), T_INT(tb_sizeP));
+    for (int i = 0; i < num_data; ++i)
+      T(T_ENB_RLC_MAC_UL, T_INT(module_idP), T_INT(ue_id), T_INT(data[i].ch), T_INT(data[i].len));
 
   start_meas(&RC.nrmac[0]->rlc_ind_lock);
   nr_rlc_manager_lock(nr_rlc_ue_manager);
@@ -181,15 +181,17 @@ void nr_mac_rlc_data_ind(const module_id_t  module_idP,
   if(ue == NULL)
     LOG_I(RLC, "RLC instance for the given UE was not found \n");
 
-  nr_rlc_entity_t *rb = get_rlc_entity_from_lcid(ue, channel_idP);
-
-  if (rb != NULL) {
-    LOG_D(RLC, "RB found! (channel ID %d) \n", channel_idP);
-    rb->set_time(rb, get_nr_rlc_current_time());
-    rb->recv_pdu(rb, buffer_pP, tb_sizeP);
-  } else {
-    LOG_E(RLC, "Fatal: no RB found (channel ID %d UE ID %d)\n", channel_idP, ue_id);
-    // exit(1);
+  for (int i = 0; i < num_data; ++i) {
+    logical_chan_id_t ch = data[i].ch;
+    nr_rlc_entity_t *rb = get_rlc_entity_from_lcid(ue, ch);
+    if (rb != NULL) {
+      LOG_D(RLC, "RB found! (channel ID %d) \n", ch);
+      rb->set_time(rb, get_nr_rlc_current_time());
+      rb->recv_pdu(rb, (char *)data[i].buf, data[i].len);
+    } else {
+      LOG_E(RLC, "Fatal: no RB found (channel ID %d UE ID %d)\n", ch, ue_id);
+      // exit(1);
+    }
   }
   stop_meas(&RC.nrmac[0]->rlc_ind_work);
 
