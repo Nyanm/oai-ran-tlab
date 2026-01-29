@@ -165,8 +165,8 @@ static void *rlc_data_req_thread(void *_)
     q.length--;
     q.start = (q.start + 1) % RLC_DATA_REQ_QUEUE_SIZE;
 
-    if (pthread_cond_signal(&q.c) != 0) abort();
     if (pthread_mutex_unlock(&q.m) != 0) abort();
+    if (pthread_cond_signal(&q.c) != 0) abort();
   }
 }
 
@@ -214,8 +214,8 @@ static void enqueue_rlc_data_req(const protocol_ctxt_t *const ctxt_pP,
   q.q[i].sdu_sizeP  = sdu_sizeP;
   q.q[i].sdu_pP     = sdu_pP;
 
-  if (pthread_cond_signal(&q.c) != 0) abort();
   if (pthread_mutex_unlock(&q.m) != 0) abort();
+  if (pthread_cond_signal(&q.c) != 0) abort();
 }
 
 /****************************************************************************/
