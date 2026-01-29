@@ -501,3 +501,10 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
 
   return 0;
 }
+
+void nrLDPC_coding_claim_encode(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encoding_parameters, int8_t *claims)
+{
+  for (int i = 0; i < nrLDPC_slot_encoding_parameters->nb_TBs; i++) {
+    claims[i] = 0;
+  }
+}

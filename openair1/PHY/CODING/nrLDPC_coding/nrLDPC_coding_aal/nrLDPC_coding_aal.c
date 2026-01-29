@@ -1329,6 +1329,18 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_dec
   return 0;
 }
 
+void nrLDPC_coding_claim_decode(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters, int8_t *claims)
+{
+  for (int i = 0; i < nrLDPC_slot_decoding_parameters->nb_TBs; i++) {
+    nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[i];
+    if (nrLDPC_TB_decoding_parameters->Z >= 128 && nrLDPC_TB_decoding_parameters->BG == 1 && nrLDPC_TB_decoding_parameters->segments[0].R < 89) {
+      claims[i] = 1;
+    } else {
+      claims[i] = 0;
+    }
+  }
+}
+
 int32_t nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encoding_parameters)
 {
   pthread_mutex_lock(&encode_mutex);
@@ -1366,4 +1378,16 @@ int32_t nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_enc
 
   pthread_mutex_unlock(&encode_mutex);
   return ret;
+}
+
+void nrLDPC_coding_claim_encode(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encoding_parameters, int8_t *claims)
+{
+  for (int i = 0; i < nrLDPC_slot_encoding_parameters->nb_TBs; i++) {
+    nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_parameters = &nrLDPC_slot_encoding_parameters->TBs[i];
+    if (nrLDPC_TB_encoding_parameters->BG == 1 && nrLDPC_TB_encoding_parameters->C > 8 && nrLDPC_TB_encoding_parameters->Z == 384) {
+      claims[i] = 1;
+    } else {
+      claims[i] = 0;
+    }
+  }
 }

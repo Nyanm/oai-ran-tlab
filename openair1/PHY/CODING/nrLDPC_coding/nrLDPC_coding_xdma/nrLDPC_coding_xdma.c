@@ -122,6 +122,13 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *slot_params, in
   return nbDecode;
 }
 
+void nrLDPC_coding_claim_decode(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters, int8_t *claims)
+{
+  for (int i = 0; i < nrLDPC_slot_decoding_parameters->nb_TBs; i++) {
+    claims[i] = 0;
+  }
+}
+
 /*
 int32_t nrLDPC_coding_encoder(void)
 {

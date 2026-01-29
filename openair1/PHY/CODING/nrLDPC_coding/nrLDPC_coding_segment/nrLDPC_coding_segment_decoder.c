@@ -317,3 +317,10 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_dec
   }
   return 0;
 }
+
+void nrLDPC_coding_claim_decode(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters, int8_t *claims)
+{
+  for (int i = 0; i < nrLDPC_slot_decoding_parameters->nb_TBs; i++) {
+    claims[i] = 0;
+  }
+}

@@ -236,10 +236,30 @@ typedef int32_t(nrLDPC_coding_init_t)(void);
 typedef int32_t(nrLDPC_coding_shutdown_t)(void);
 
 /**
+ * \brief slot decoding claim function interface
+ *        through the value returned by this function the LDPC coding library indicates for each Transport Block
+ *        whether it supports decoding the Transport Block and whether it is worth using this implementation
+ * \param nrLDPC_slot_decoding_parameters pointer to the structure holding the parameters necessary for decoding
+ * \param claims array of claims upon the Transport blocks of the slot:
+ *        < 0 means not supported, == 0 means supported but not recommended and > 0 means supported and recommended
+ */
+typedef void(nrLDPC_coding_claim_decode_t)(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters, int8_t *claims);
+
+/**
  * \brief slot decoding function interface
  * \param nrLDPC_slot_decoding_parameters pointer to the structure holding the parameters necessary for decoding
  */
 typedef int32_t(nrLDPC_coding_decoder_t)(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters);
+
+/**
+ * \brief slot encoding claim function interface
+ *        through the claims filled returned by this function the LDPC coding library indicates for each Transport Block
+ *        whether it supports encoding the Transport Black and whether it is worth using this implementation
+ * \param nrLDPC_slot_encoding_parameters pointer to the structure holding the parameters necessary for encoding
+ * \param claims array of claims upon the Transport blocks of the slot:
+ *        < 0 means not supported, == 0 means supported but not recommended and > 0 means supported and recommended
+ */
+typedef void(nrLDPC_coding_claim_encode_t)(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encoding_parameters, int8_t *claims);
 
 /**
  * \brief slot encoding function interface
@@ -250,7 +270,9 @@ typedef int32_t(nrLDPC_coding_encoder_t)(nrLDPC_slot_encoding_parameters_t *nrLD
 typedef struct nrLDPC_coding_interface_s {
   nrLDPC_coding_init_t *nrLDPC_coding_init;
   nrLDPC_coding_shutdown_t *nrLDPC_coding_shutdown;
+  nrLDPC_coding_claim_decode_t *nrLDPC_coding_claim_decode;
   nrLDPC_coding_decoder_t *nrLDPC_coding_decoder;
+  nrLDPC_coding_claim_encode_t *nrLDPC_coding_claim_encode;
   nrLDPC_coding_encoder_t *nrLDPC_coding_encoder;
 } nrLDPC_coding_interface_t;
 
