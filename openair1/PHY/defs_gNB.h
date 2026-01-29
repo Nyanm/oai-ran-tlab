@@ -111,6 +111,8 @@ typedef struct {
   uint8_t *f;
   /// REs unavailable for DLSCH (overlapping with PTRS, CSIRS etc.)
   uint32_t unav_res;
+  /// output of freq
+  //c16_t **txdataF; TODO
 } NR_gNB_DLSCH_t;
 
 typedef struct {
