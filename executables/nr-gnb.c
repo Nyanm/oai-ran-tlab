@@ -236,11 +236,11 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
   output += print_meas_log(&gNB->l1_tx_proc, "L1 Tx job", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->l1_rx_proc, "L1 Rx job", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->phy_proc_tx, "L1 Tx processing", NULL, NULL, output, end - output);
-  output += print_meas_log(&gNB->dlsch_encoding_stats, "DLSCH encoding", NULL, NULL, output, end - output);
-  output += print_meas_log(&gNB->dlsch_scrambling_stats, "DLSCH scrambling", NULL, NULL, output, end-output);
-  output += print_meas_log(&gNB->dlsch_modulation_stats, "DLSCH modulation", NULL, NULL, output, end - output);
-  output += print_meas_log(&gNB->dlsch_resource_mapping_stats, "DLSCH resource mapping", NULL, NULL, output,end-output);
-  output += print_meas_log(&gNB->dlsch_precoding_stats, "DLSCH precoding", NULL, NULL, output,end-output);
+  output += print_meas_log(&gNB->dlsch_stats.encoding, "DLSCH encoding", NULL, NULL, output, end - output);
+  output += print_meas_log(&gNB->dlsch_stats.scrambling, "DLSCH scrambling", NULL, NULL, output, end-output);
+  output += print_meas_log(&gNB->dlsch_stats.modulation, "DLSCH modulation", NULL, NULL, output, end - output);
+  output += print_meas_log(&gNB->dlsch_stats.resource_mapping, "DLSCH resource mapping", NULL, NULL, output,end-output);
+  output += print_meas_log(&gNB->dlsch_stats.precoding, "DLSCH precoding", NULL, NULL, output,end-output);
   output += print_meas_log(&gNB->phy_proc_rx, "L1 Rx processing", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->ts_deinterleave, "UL segment deinterleaving", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->ts_rate_unmatch, "UL segment rate recovery", NULL, NULL, output, end - output);
@@ -301,7 +301,7 @@ void *nrL1_stats_thread(void *param) {
   reset_meas(&gNB->l1_tx_proc);
   reset_meas(&gNB->l1_rx_proc);
   reset_meas(&gNB->phy_proc_tx);
-  reset_meas(&gNB->dlsch_encoding_stats);
+  reset_meas(&gNB->dlsch_stats.encoding);
   reset_meas(&gNB->phy_proc_rx);
   reset_meas(&gNB->ts_deinterleave);
   reset_meas(&gNB->ts_rate_unmatch);
@@ -309,10 +309,10 @@ void *nrL1_stats_thread(void *param) {
   reset_meas(&gNB->ul_indication_stats);
   reset_meas(&gNB->slot_indication_stats);
   reset_meas(&gNB->rx_pusch_stats);
-  reset_meas(&gNB->dlsch_scrambling_stats);
-  reset_meas(&gNB->dlsch_modulation_stats);
-  reset_meas(&gNB->dlsch_resource_mapping_stats);
-  reset_meas(&gNB->dlsch_precoding_stats);
+  reset_meas(&gNB->dlsch_stats.scrambling);
+  reset_meas(&gNB->dlsch_stats.modulation);
+  reset_meas(&gNB->dlsch_stats.resource_mapping);
+  reset_meas(&gNB->dlsch_stats.precoding);
   while (!oai_exit) {
     sleep(1);
     if (ftruncate(fileno(fd), 0) != 0 || fseek(fd, 0, SEEK_SET) != 0) {

@@ -516,7 +516,8 @@ int main(int argc, char **argv)
         unsigned char output[nb_rb * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB * NR_MAX_NB_LAYERS] __attribute__((aligned(64)));
         bzero(output, sizeof(output));
 	if (input_fd == NULL) {
-	  nr_dlsch_encoding(gNB, 1, dlsch, frame, slot, frame_parms, output, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    nr_dlsch_stats_t stats = {0};
+	  nr_dlsch_encoding(gNB, 1, dlsch, frame, slot, frame_parms, output, &stats);
 	}
 
 	for (SNR = snr0; SNR < snr1 && !stop; SNR += snr_step) {

@@ -551,8 +551,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   const int16_t amp = gNB->TX_AMP;
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
 
-  time_stats_t *dlsch_scrambling_stats = &gNB->dlsch_scrambling_stats;
-  time_stats_t *dlsch_modulation_stats = &gNB->dlsch_modulation_stats;
+  nr_dlsch_stats_t *stats = &gNB->dlsch_stats;
   const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15 = &dlsch->pdsch_pdu->pdsch_pdu_rel15;
   const int layerSz = frame_parms->N_RB_DL * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB;
   const int symbol_sz=frame_parms->ofdm_symbol_size;
@@ -608,7 +607,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   c16_t mod_symbs[rel15->NrOfCodewords][encoded_length] __attribute__((aligned(64)));
   for (int codeWord = 0; codeWord < rel15->NrOfCodewords; codeWord++) {
     /// scrambling
-    start_meas(dlsch_scrambling_stats);
+    start_meas(&stats->scrambling);
     uint32_t scrambled_output[(encoded_length >> 5) + 4]; // modulator acces by 4 bytes in some cases
     memset(scrambled_output, 0, sizeof(scrambled_output));
     nr_pdsch_codeword_scrambling(input_ptr, encoded_length, codeWord, rel15->dataScramblingId, rel15->rnti, scrambled_output);
@@ -622,12 +621,12 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     }
 #endif
 
-    stop_meas(dlsch_scrambling_stats);
+    stop_meas(&stats->scrambling);
     /// Modulation
-    start_meas(dlsch_modulation_stats);
+    start_meas(&stats->modulation);
     nr_modulation(scrambled_output, encoded_length, Qm, (int16_t *)mod_symbs[codeWord]);
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_gNB_PDSCH_MODULATION, 0);
-    stop_meas(dlsch_modulation_stats);
+    stop_meas(&stats->modulation);
 #ifdef DEBUG_DLSCH
     printf("PDSCH Modulation: Qm %d(%d)\n", Qm, nb_re);
     for (int i = 0; i < nb_re; i += 8) {
@@ -639,7 +638,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 #endif
   }
 
-  start_meas(&gNB->dlsch_pdsch_generation_stats);
+  start_meas(&stats->pdsch_generation);
   /// Resource mapping
   // Non interleaved VRB to PRB mapping
   uint16_t start_sc = frame_parms->first_carrier_offset + (rel15->rbStart + rel15->BWPStart) * NR_NB_SC_PER_RB;
@@ -661,7 +660,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   c16_t mod_dmrs[(n_dmrs+63)&~63] __attribute__((aligned(64)));
   unsigned int re_beginning_of_symbol = 0;
 
-  start_meas(&gNB->dlsch_layer_mapping_stats);
+  start_meas(&stats->layer_mapping);
   int layerSz2 = (layerSz + 63) & ~63;
   c16_t tx_layers[rel15->nrOfLayers][layerSz2] __attribute__((aligned(64)));
   memset(tx_layers, 0, sizeof(tx_layers));
@@ -685,10 +684,10 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
                                       bitmap);
 
   c16_t **txdataF = gNB->common_vars.txdataF[beam_nb];
-  stop_meas(&gNB->dlsch_layer_mapping_stats);
+  stop_meas(&stats->layer_mapping);
   // Loop Over OFDM symbols:
   for (int l_symbol = rel15->StartSymbolIndex; l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols; l_symbol++) {
-    start_meas(&gNB->dlsch_resource_mapping_stats);
+    start_meas(&stats->resource_mapping);
     int l_prime = 0; // single symbol layer 0
     int l_overline = get_l0(rel15->dlDmrsSymbPos);
 
@@ -753,16 +752,16 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
                              mod_dmrs + dmrs_idx);
     } // layer loop
     re_beginning_of_symbol += layer_sz;
-    stop_meas(&gNB->dlsch_resource_mapping_stats);
+    stop_meas(&stats->resource_mapping);
 
-    start_meas(&gNB->dlsch_precoding_stats);
+    start_meas(&stats->precoding);
     for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
       const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz + txdataF_offset;
       do_txdataF(&gNB->gNB_config, txdataF, symbol_sz, txdataF_precoding, rel15, ant, start_sc, txdataF_offset_per_symbol);
     }
-    stop_meas(&gNB->dlsch_precoding_stats);
+    stop_meas(&stats->precoding);
   }
-  stop_meas(&gNB->dlsch_pdsch_generation_stats);
+  stop_meas(&stats->pdsch_generation);
   /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)
    * should remain a multiple of 8 * 64 with enough offset to fit each dlsch
    */
@@ -773,14 +772,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_array, int frame, int slot)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
-  time_stats_t *dlsch_encoding_stats = &gNB->dlsch_encoding_stats;
-  time_stats_t *tinput = &gNB->tinput;
-  time_stats_t *tprep = &gNB->tprep;
-  time_stats_t *tparity = &gNB->tparity;
-  time_stats_t *toutput = &gNB->toutput;
-  time_stats_t *dlsch_rate_matching_stats = &gNB->dlsch_rate_matching_stats;
-  time_stats_t *dlsch_interleaving_stats = &gNB->dlsch_interleaving_stats;
-  time_stats_t *dlsch_segmentation_stats = &gNB->dlsch_segmentation_stats;
+  nr_dlsch_stats_t *stats = &gNB->dlsch_stats;
 
   size_t size_output = 0;
 
@@ -825,25 +817,11 @@ void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_arr
   unsigned char output[size_output >> 3] __attribute__((aligned(64)));
   bzero(output, sizeof(output));
 
-  start_meas(dlsch_encoding_stats);
-  if (nr_dlsch_encoding(gNB,
-                        n_dlsch,
-                        dlsch_array,
-                        frame,
-                        slot,
-                        frame_parms,
-                        output,
-                        tinput,
-                        tprep,
-                        tparity,
-                        toutput,
-                        dlsch_rate_matching_stats,
-                        dlsch_interleaving_stats,
-                        dlsch_segmentation_stats)
-      == -1) {
+  start_meas(&stats->encoding);
+  if (nr_dlsch_encoding(gNB, n_dlsch, dlsch_array, frame, slot, frame_parms, output, stats) == -1) {
     return;
   }
-  stop_meas(dlsch_encoding_stats);
+  stop_meas(&stats->encoding);
 
   unsigned char *output_ptr = output;
   for (int i = 0; i < n_dlsch; i++) {

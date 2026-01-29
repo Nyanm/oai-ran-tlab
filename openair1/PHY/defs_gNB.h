@@ -359,6 +359,23 @@ typedef struct {
 // therefore, we can have up to "number of UE" UCI PDUs
 #define MAX_NUM_NR_UCI_PDUS MAX_MOBILES_PER_GNB
 
+typedef struct {
+  time_stats_t encoding;
+  time_stats_t modulation;
+  time_stats_t scrambling;
+  time_stats_t pdsch_generation;
+  time_stats_t layer_mapping;
+  time_stats_t resource_mapping;
+  time_stats_t precoding;
+  time_stats_t rate_matching;
+  time_stats_t interleaving;
+  time_stats_t segmentation;
+  time_stats_t tinput;
+  time_stats_t tprep;
+  time_stats_t tparity;
+  time_stats_t toutput;
+} nr_dlsch_stats_t;
+
 /// Top-level PHY Data Structure for gNB
 typedef struct PHY_VARS_gNB_s {
   /// Module ID indicator for this instance
@@ -452,21 +469,7 @@ typedef struct PHY_VARS_gNB_s {
   time_stats_t phy_proc_rx;
   time_stats_t rx_prach;
 
-  time_stats_t dlsch_encoding_stats;
-  time_stats_t dlsch_modulation_stats;
-  time_stats_t dlsch_scrambling_stats;
-  time_stats_t dlsch_pdsch_generation_stats;
-  time_stats_t dlsch_layer_mapping_stats;
-  time_stats_t dlsch_resource_mapping_stats;
-  time_stats_t dlsch_precoding_stats;
-  time_stats_t tinput;
-  time_stats_t tprep;
-  time_stats_t tparity;
-  time_stats_t toutput;
-  
-  time_stats_t dlsch_rate_matching_stats;
-  time_stats_t dlsch_interleaving_stats;
-  time_stats_t dlsch_segmentation_stats;
+  nr_dlsch_stats_t dlsch_stats;
 
   time_stats_t dci_generation_stats;
   time_stats_t phase_comp_stats;
