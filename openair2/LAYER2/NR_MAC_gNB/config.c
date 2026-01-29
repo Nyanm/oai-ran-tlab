@@ -386,8 +386,8 @@ int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed, i
 
   printf("get_ul_slot_offset 0 idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d\n", idx, count_mixed, beam_idx, num_beam, ideal_period);
   if (num_beam > 0) {
-      int id = (count_mixed) ? idx : idx/2;
-      id /= num_beam;
+      int id = (count_mixed) ? idx/2 : idx;
+      id /= beams_per_period;
       printf("get_ul_slot_offset 1 id %d idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d\n", id, idx, count_mixed, beam_idx, num_beam, ideal_period);
     // SRS
     if (!count_mixed) {
