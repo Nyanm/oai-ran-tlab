@@ -337,7 +337,7 @@ static inline void neg_dmrs(c16_t *in, c16_t *out, int sz)
     *out++ = i % 2 ? (c16_t){-in[i].r, -in[i].i} : in[i];
 }
 
-static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
+static inline int do_onelayer(const NR_DL_FRAME_PARMS *frame_parms,
                               int slot,
                               const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
                               int layer,
@@ -546,12 +546,16 @@ static inline void do_txdataF(const nfapi_nr_config_request_scf_t *cfg,
     rb += rb_step;
   } // RB loop: while(rb < rel15->rbSize)
 }
-static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSCH_t *dlsch, int slot)
+static int do_one_dlsch(const NR_DL_FRAME_PARMS *frame_parms,
+                        const nfapi_nr_config_request_scf_t *cfg,
+                        const unsigned char *input_ptr,
+                        int amp,
+                        NR_gNB_DLSCH_t *dlsch,
+                        int slot,
+                        c16_t **txdataF,
+                        nr_dlsch_stats_t *stats)
 {
-  const int16_t amp = gNB->TX_AMP;
-  NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
 
-  nr_dlsch_stats_t *stats = &gNB->dlsch_stats;
   const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15 = &dlsch->pdsch_pdu->pdsch_pdu_rel15;
   const int layerSz = frame_parms->N_RB_DL * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB;
   const int symbol_sz=frame_parms->ofdm_symbol_size;
@@ -666,24 +670,6 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   memset(tx_layers, 0, sizeof(tx_layers));
   nr_layer_mapping(rel15->NrOfCodewords, encoded_length, mod_symbs, rel15->nrOfLayers, layerSz2, nb_re, tx_layers);
 
-  /// Layer Precoding and Antenna port mapping
-  // tx_layers 1-8 are mapped on antenna ports 1000-1007
-  // The precoding info is supported by nfapi such as num_prgs, prg_size, prgs_list and pm_idx
-  // The same precoding matrix is applied on prg_size RBs, Thus
-  //        pmi = prgs_list[rbidx/prg_size].pm_idx, rbidx =0,...,rbSize-1
-  // The Precoding matrix:
-  // The Codebook Type I
-  const nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
-  // beam number in multi-beam scenario (concurrent beams)
-  int bitmap = SL_to_bitmap(rel15->StartSymbolIndex, rel15->NrOfSymbols);
-  int beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                      pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                      &gNB->common_vars,
-                                      slot,
-                                      frame_parms->symbols_per_slot,
-                                      bitmap);
-
-  c16_t **txdataF = gNB->common_vars.txdataF[beam_nb];
   stop_meas(&stats->layer_mapping);
   // Loop Over OFDM symbols:
   for (int l_symbol = rel15->StartSymbolIndex; l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols; l_symbol++) {
@@ -757,7 +743,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     start_meas(&stats->precoding);
     for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
       const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz + txdataF_offset;
-      do_txdataF(&gNB->gNB_config, txdataF, symbol_sz, txdataF_precoding, rel15, ant, start_sc, txdataF_offset_per_symbol);
+      do_txdataF(cfg, txdataF, symbol_sz, txdataF_precoding, rel15, ant, start_sc, txdataF_offset_per_symbol);
     }
     stop_meas(&stats->precoding);
   }
@@ -771,7 +757,8 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 
 void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_array, int frame, int slot)
 {
-  NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
+  const NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
+  const nfapi_nr_config_request_scf_t *cfg = &gNB->gNB_config;
   nr_dlsch_stats_t *stats = &gNB->dlsch_stats;
 
   size_t size_output = 0;
@@ -825,8 +812,10 @@ void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_arr
   stop_meas(&stats->encoding);
 
   unsigned char *output_ptr = output;
+  int beam_nb = 0; // TODO
+  c16_t **txdataF = gNB->common_vars.txdataF[beam_nb];
   for (int i = 0; i < n_dlsch; i++) {
-    output_ptr += do_one_dlsch(output_ptr, gNB, &dlsch_array[i], slot);
+    output_ptr += do_one_dlsch(frame_parms, cfg, output_ptr, gNB->TX_AMP, &dlsch_array[i], slot, txdataF, stats);
   }
 }
 
