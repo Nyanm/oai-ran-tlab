@@ -453,16 +453,15 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
   return txl - txl_start;
 }
 
-static inline void do_txdataF(c16_t **txdataF,
+static inline void do_txdataF(const nfapi_nr_config_request_scf_t *cfg,
+                              c16_t **txdataF,
                               int symbol_sz,
                               c16_t txdataF_precoding[][symbol_sz],
-                              PHY_VARS_gNB *gNB,
                               const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
                               int ant,
                               int start_sc,
                               int txdataF_offset_per_symbol)
 {
-  NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   int rb = 0;
   uint16_t subCarrier = start_sc;
   const nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
@@ -504,9 +503,8 @@ static inline void do_txdataF(c16_t **txdataF,
         subCarrier -= symbol_sz;
       }
     } else { // non-unitary Precoding
-      AssertFatal(frame_parms->nb_antennas_tx > 1, "No precoding can be done with a single antenna port\n");
       // get the precoding matrix weights:
-      nfapi_nr_pm_pdu_t *pmi_pdu = &gNB->gNB_config.pmi_list.pmi_pdu[pmi - 1]; // pmi 0 is identity matrix
+      nfapi_nr_pm_pdu_t *pmi_pdu = &cfg->pmi_list.pmi_pdu[pmi - 1]; // pmi 0 is identity matrix
       AssertFatal(pmi == pmi_pdu->pm_idx, "PMI %d doesn't match to the one in precoding matrix %d\n", pmi, pmi_pdu->pm_idx);
       AssertFatal(ant < pmi_pdu->num_ant_ports,
                   "Antenna port index %d exceeds precoding matrix AP size %d\n",
@@ -760,7 +758,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     start_meas(&gNB->dlsch_precoding_stats);
     for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
       const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz + txdataF_offset;
-      do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, ant, start_sc, txdataF_offset_per_symbol);
+      do_txdataF(&gNB->gNB_config, txdataF, symbol_sz, txdataF_precoding, rel15, ant, start_sc, txdataF_offset_per_symbol);
     }
     stop_meas(&gNB->dlsch_precoding_stats);
   }
