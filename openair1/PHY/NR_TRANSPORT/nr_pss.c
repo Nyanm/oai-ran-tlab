@@ -27,8 +27,8 @@
 int nr_generate_pss(  c16_t *txdataF,
                       int16_t amp,
                       uint8_t ssb_start_symbol,
-                      nfapi_nr_config_request_scf_t* config,
-                      NR_DL_FRAME_PARMS *frame_parms)
+                      const nfapi_nr_config_request_scf_t* config,
+                      const NR_DL_FRAME_PARMS *frame_parms)
 {
   int16_t x[NR_PSS_LENGTH];
   const int x_initial[7] = {0, 1, 1 , 0, 1, 1, 1};

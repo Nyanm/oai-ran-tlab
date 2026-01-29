@@ -51,8 +51,8 @@ void nr_generate_pbch_dmrs(uint32_t *gold_pbch_dmrs,
                            c16_t *txdataF,
                            int16_t amp,
                            uint8_t ssb_start_symbol,
-                           nfapi_nr_config_request_scf_t *config,
-                           NR_DL_FRAME_PARMS *frame_parms)
+                           const nfapi_nr_config_request_scf_t *config,
+                           const NR_DL_FRAME_PARMS *frame_parms)
 {
   int k,l;
   //int16_t a;

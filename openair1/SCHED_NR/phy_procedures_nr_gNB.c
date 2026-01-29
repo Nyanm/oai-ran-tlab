@@ -115,9 +115,15 @@ static int get_beam(PHY_VARS_gNB *gNB, int slot, uint8_t start_sym, uint8_t len_
   return beam;
 }
 
-void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, const nfapi_nr_dl_tti_ssb_pdu *ssb_pdu)
+void nr_common_signal_procedures(NR_DL_FRAME_PARMS *fp, // TODO: should be const
+                                 const nfapi_nr_config_request_scf_t *cfg,
+                                 int frame,
+                                 int slot,
+                                 const nfapi_nr_dl_tti_ssb_pdu *ssb_pdu,
+                                 const uint8_t *pbch_interleaver,
+                                 int amp,
+                                 c16_t *txdataF)
 {
-  NR_DL_FRAME_PARMS *fp = &gNB->frame_parms;
   const nfapi_nr_dl_tti_ssb_pdu_rel15_t *pdu = &ssb_pdu->ssb_pdu_rel15;
   uint8_t ssb_index = pdu->SsbBlockIndex;
   LOG_D(PHY,"common_signal_procedures: frame %d, slot %d ssb index %d\n", frame, slot, ssb_index);
@@ -130,7 +136,6 @@ void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, const n
   // for FR1 offsetToPointA and k_SSB are expressed in terms of 15 kHz SCS
   // for FR2 offsetToPointA is expressed in terms of 60 kHz SCS and k_SSB expressed in terms of the subcarrier spacing provided
   // by the higher-layer parameter subCarrierSpacingCommon
-  nfapi_nr_config_request_scf_t *cfg = &gNB->gNB_config;
   const int scs = cfg->ssb_config.scs_common.value;
   const int prb_offset = (fp->freq_range == FR1) ? pdu->ssbOffsetPointA >> scs : pdu->ssbOffsetPointA >> (scs - 2);
   const int sc_offset = (fp->freq_range == FR1) ? pdu->SsbSubcarrierOffset >> scs : pdu->SsbSubcarrierOffset;
@@ -166,28 +171,16 @@ void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, const n
         fp->ssb_start_subcarrier);
 
   LOG_D(PHY,"SS TX: frame %d, slot %d, start_symbol %d\n", frame, slot, ssb_start_symbol);
-  const nfapi_nr_tx_precoding_and_beamforming_t *pb = &pdu->precoding_and_beamforming;
-  c16_t ***txdataF = gNB->common_vars.txdataF;
-  int txdataF_offset = slot * fp->samples_per_slot_wCP;
-  // beam number in a scenario with multiple concurrent beams
-  int bitmap = SL_to_bitmap(ssb_start_symbol, 4); // 4 ssb symbols
-  int beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                      pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                      &gNB->common_vars,
-                                      slot,
-                                      fp->symbols_per_slot,
-                                      bitmap);
-
-  nr_generate_pss(&txdataF[beam_nb][0][txdataF_offset], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
-  nr_generate_sss(&txdataF[beam_nb][0][txdataF_offset], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
+  nr_generate_pss(txdataF, amp, ssb_start_symbol, cfg, fp);
+  nr_generate_sss(txdataF, amp, ssb_start_symbol, cfg, fp);
 
   uint16_t slots_per_hf = (fp->slots_per_frame) >> 1;
   int n_hf = slot < slots_per_hf ? 0 : 1;
 
   int hf = fp->Lmax == 4 ? n_hf : 0;
-  nr_generate_pbch_dmrs(nr_gold_pbch(fp->Lmax, gNB->gNB_config.cell_config.phy_cell_id.value, hf, ssb_index & 7),
-                        &txdataF[beam_nb][0][txdataF_offset],
-                        gNB->TX_AMP,
+  nr_generate_pbch_dmrs(nr_gold_pbch(fp->Lmax, cfg->cell_config.phy_cell_id.value, hf, ssb_index & 7),
+                        txdataF,
+                        amp,
                         ssb_start_symbol,
                         cfg,
                         fp);
@@ -202,10 +195,10 @@ void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, const n
   }
 #endif
 
-  nr_generate_pbch(gNB->TX_AMP,
-                   gNB->nr_pbch_interleaver,
+  nr_generate_pbch(amp,
+                   pbch_interleaver,
                    ssb_pdu,
-                   &txdataF[beam_nb][0][txdataF_offset],
+                   txdataF,
                    ssb_start_symbol,
                    n_hf,
                    frame,
@@ -315,7 +308,15 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
     const nfapi_nr_dl_tti_request_pdu_t *dl_tti_pdu = &DL_req->dl_tti_request_body.dl_tti_pdu_list[i];
     switch (dl_tti_pdu->PDUType) {
       case NFAPI_NR_DL_TTI_SSB_PDU_TYPE:
-        nr_common_signal_procedures(gNB, frame, slot, &dl_tti_pdu->ssb_pdu);
+        // TODO: do beam selection
+        nr_common_signal_procedures(&gNB->frame_parms,
+                                    &gNB->gNB_config,
+                                    frame,
+                                    slot,
+                                    &dl_tti_pdu->ssb_pdu,
+                                    gNB->nr_pbch_interleaver,
+                                    gNB->TX_AMP,
+                                    txdataF[0] + txdataF_offset);
         break;
       case NFAPI_NR_DL_TTI_PDCCH_PDU_TYPE: {
         const nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdu = &dl_tti_pdu->pdcch_pdu.pdcch_pdu_rel15;
