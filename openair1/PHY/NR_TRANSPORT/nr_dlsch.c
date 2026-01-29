@@ -818,7 +818,8 @@ void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_arr
   bzero(output, sizeof(output));
 
   start_meas(&stats->encoding);
-  if (nr_dlsch_encoding(gNB, n_dlsch, dlsch_array, frame, slot, frame_parms, output, stats) == -1) {
+  nrLDPC_coding_encoder_t *enc = gNB->nrLDPC_coding_interface.nrLDPC_coding_encoder;
+  if (nr_dlsch_encoding(enc, &gNB->threadPool, n_dlsch, dlsch_array, frame, slot, frame_parms, output, stats) == -1) {
     return;
   }
   stop_meas(&stats->encoding);

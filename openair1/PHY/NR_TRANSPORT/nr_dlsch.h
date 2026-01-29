@@ -37,12 +37,13 @@
 
 void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_array, int frame, int slot);
 
-int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
+int nr_dlsch_encoding(nrLDPC_coding_encoder_t *encoder,
+                      tpool_t *threadPool,
                       int n_dlsch,
                       NR_gNB_DLSCH_t *dlsch_array,
                       int frame,
                       uint8_t slot,
-                      NR_DL_FRAME_PARMS *frame_parms,
+                      const NR_DL_FRAME_PARMS *frame_parms,
                       unsigned char *output,
                       nr_dlsch_stats_t *stats);
 

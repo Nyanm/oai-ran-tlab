@@ -103,12 +103,13 @@ NR_gNB_DLSCH_t new_gNB_dlsch(NR_DL_FRAME_PARMS *frame_parms, uint16_t N_RB)
   return (dlsch);
 }
 
-int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
+int nr_dlsch_encoding(nrLDPC_coding_encoder_t encoder,
+                      tpool_t *threadPool,
                       int n_dlsch,
                       NR_gNB_DLSCH_t *dlsch_array,
                       int frame,
                       uint8_t slot,
-                      NR_DL_FRAME_PARMS *frame_parms,
+                      const NR_DL_FRAME_PARMS *frame_parms,
                       unsigned char *output,
                       nr_dlsch_stats_t *stats)
 {
@@ -143,8 +144,10 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
     }
 
     NR_gNB_PHY_STATS_t *phy_stats = NULL;
+    /* TODO
     if (rel15->rnti != 0xFFFF)
       phy_stats = get_phy_stats(gNB, rel15->rnti);
+      */
 
     if (phy_stats) {
       phy_stats->frame = frame;
@@ -268,13 +271,13 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
   nrLDPC_slot_encoding_parameters_t slot_parameters = {.frame = frame,
                                                        .slot = slot,
                                                        .nb_TBs = n_dlsch,
-                                                       .threadPool = &gNB->threadPool,
+                                                       .threadPool = threadPool,
                                                        .tinput = &stats->tinput,
                                                        .tprep = &stats->tprep,
                                                        .tparity = &stats->tparity,
                                                        .toutput = &stats->toutput,
                                                        .TBs = TBs};
-  gNB->nrLDPC_coding_interface.nrLDPC_coding_encoder(&slot_parameters);
+  encoder(&slot_parameters);
 
   for (int i = 0; i < n_dlsch; i++) {
     nrLDPC_TB_encoding_parameters_t *TB_parameters = &TBs[i];

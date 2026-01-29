@@ -517,7 +517,8 @@ int main(int argc, char **argv)
         bzero(output, sizeof(output));
 	if (input_fd == NULL) {
     nr_dlsch_stats_t stats = {0};
-	  nr_dlsch_encoding(gNB, 1, dlsch, frame, slot, frame_parms, output, &stats);
+    nrLDPC_coding_encoder_t *enc = gNB->nrLDPC_coding_interface.nrLDPC_coding_encoder;
+	  nr_dlsch_encoding(enc, &gNB->threadPool, 1, dlsch, frame, slot, frame_parms, output, &stats);
 	}
 
 	for (SNR = snr0; SNR < snr1 && !stop; SNR += snr_step) {
