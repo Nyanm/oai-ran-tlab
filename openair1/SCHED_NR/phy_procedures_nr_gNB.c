@@ -217,10 +217,12 @@ void clear_slot_beamid(PHY_VARS_gNB *gNB, int slot)
   }
 }
 
-static void nr_generate_csi_rs_gNB(PHY_VARS_gNB *gNB,
+static void nr_generate_csi_rs_gNB(const NR_DL_FRAME_PARMS *frame_parms,
                                    int slot,
                                    const nfapi_nr_config_request_scf_t *cfg,
-                                   const nfapi_nr_dl_tti_csi_rs_pdu *csi_rs_pdu)
+                                   const nfapi_nr_dl_tti_csi_rs_pdu *csi_rs_pdu,
+                                   int amp,
+                                   c16_t **txdataF)
 {
   const nfapi_nr_dl_tti_csi_rs_pdu_rel15_t *csi_params = &csi_rs_pdu->csi_rs_pdu_rel15;
   if (csi_params->csi_type == 2) // ZP-CSI
@@ -228,21 +230,14 @@ static void nr_generate_csi_rs_gNB(PHY_VARS_gNB *gNB,
 
   csi_mapping_parms_t mapping_parms =
       get_csi_mapping_parms(csi_params->row, csi_params->freq_domain, csi_params->symb_l0, csi_params->symb_l1);
-  const nfapi_nr_tx_precoding_and_beamforming_t *pb = &csi_params->precodingAndBeamforming;
   int csi_bitmap = 0;
   int lprime_num = mapping_parms.lprime + 1;
   for (int j = 0; j < mapping_parms.size; j++)
     csi_bitmap |= ((1 << lprime_num) - 1) << mapping_parms.loverline[j];
-  int beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                      pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                      &gNB->common_vars,
-                                      slot,
-                                      gNB->frame_parms.symbols_per_slot,
-                                      csi_bitmap);
 
-  nr_generate_csi_rs(&gNB->frame_parms,
+  nr_generate_csi_rs(frame_parms,
                      &mapping_parms,
-                     gNB->TX_AMP,
+                     amp,
                      slot,
                      csi_params->freq_density,
                      csi_params->start_rb,
@@ -253,7 +248,7 @@ static void nr_generate_csi_rs_gNB(PHY_VARS_gNB *gNB,
                      csi_params->scramb_id,
                      csi_params->power_control_offset_ss,
                      csi_params->cdm_type,
-                     gNB->common_vars.txdataF[beam_nb]);
+                     txdataF);
 }
 
 void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
@@ -323,7 +318,8 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
         nr_generate_dci(pdu, &gNB->frame_parms, slot, gNB->TX_AMP, txdataF[0] + txdataF_offset);
         } break;
       case NFAPI_NR_DL_TTI_CSI_RS_PDU_TYPE:
-        nr_generate_csi_rs_gNB(gNB, slot, cfg, &dl_tti_pdu->csi_rs_pdu);
+        // TODO: do beam selection
+        nr_generate_csi_rs_gNB(&gNB->frame_parms, slot, cfg, &dl_tti_pdu->csi_rs_pdu, gNB->TX_AMP, txdataF);
         break;
       case NFAPI_NR_DL_TTI_PDSCH_PDU_TYPE: {
         int tx_data_idx = dl_tti_pdu->pdsch_pdu.pdsch_pdu_rel15.pduIndex;
