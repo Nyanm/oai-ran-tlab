@@ -24,7 +24,7 @@
 #include "common/utils/LOG/vcd_signal_dumper.h"
 #define DEBUG_SCRAMBLING(a)
 //#define DEBUG_SCRAMBLING(a) a
-void nr_codeword_scrambling(uint8_t *in,
+void nr_codeword_scrambling(const uint8_t *in,
                             uint32_t size,
                             uint8_t q,
                             uint32_t Nid,

@@ -46,7 +46,7 @@
 #include <simde/x86/avx512.h>
 #define USE128BIT
 
-static void nr_pdsch_codeword_scrambling(uint8_t *in, uint32_t size, uint8_t q, uint32_t Nid, uint32_t n_RNTI, uint32_t *out)
+static void nr_pdsch_codeword_scrambling(const uint8_t *in, uint32_t size, uint8_t q, uint32_t Nid, uint32_t n_RNTI, uint32_t *out)
 {
   nr_codeword_scrambling(in, size, q, Nid, n_RNTI, out);
 }
