@@ -279,6 +279,8 @@ void init_openair0(PHY_VARS_NR_UE *ue)
       cfg->tx_subdev = get_nrUE_params()->tx_subdev;
     if (get_nrUE_params()->rx_subdev)
       cfg->rx_subdev = get_nrUE_params()->rx_subdev;
+    if (get_nrUE_params()->oxgrf_args)
+      cfg->sdr_addrs = get_nrUE_params()->oxgrf_args;
   }
 }
 

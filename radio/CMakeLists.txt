@@ -47,3 +47,8 @@ add_boolean_option(OAI_RF_EMULATOR ON "Activate OAI's RF emulator" OFF)
 if(OAI_RF_EMULATOR)
   add_subdirectory(emulator)
 endif()
+
+add_boolean_option(OAI_OXGRF OFF "Activate OAI's OXGRF driver" OFF)
+if(OAI_OXGRF)
+  add_subdirectory(OXGRF)
+endif()

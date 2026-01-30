@@ -99,10 +99,12 @@ extern "C"
 #define CONFIG_HLP_PARALLEL_CMD  "three config for level of parallelism 'PARALLEL_SINGLE_THREAD', 'PARALLEL_RU_L1_SPLIT', or 'PARALLEL_RU_L1_TRX_SPLIT'\n"
 #define CONFIG_HLP_WORKER_CMD    "two option for worker 'WORKER_DISABLE' or 'WORKER_ENABLE'\n"
 #define CONFIG_HLP_USRP_THREAD   "having extra thead for usrp tx\n"
+#define CONFIG_HLP_OXGRF_THREAD "having extra thead for oxgrf tx\n"
 
 #define CONFIG_HLP_NOS1          "Disable s1 interface\n"
 #define CONFIG_HLP_RFSIM         "Run in rf simulator mode\n"
 #define CONFIG_HLP_DISABLNBIOT   "disable nb-iot, even if defined in config\n"
+#define CONFIG_HLP_OXGRF_THREAD "having extra thead for oxgrf tx\n"
 #define CONFIG_HLP_USRP_THREAD   "having extra thead for usrp tx\n"
 #define CONFIG_HLP_NFAPI         "Change the nFAPI mode for NR 'MONOLITHIC', 'PNF', 'VNF', 'AERIAL','UE_STUB_PNF','UE_STUB_OFFNET','STANDALONE_PNF'\n"
 #define CONFIG_HLP_CONTINUOUS_TX "perform continuous transmission, even in TDD mode (to work around USRP issues)\n"
@@ -142,6 +144,7 @@ extern "C"
 
 #define DEFAULT_RFCONFIG_FILE    "/usr/local/etc/syriq/ue.band7.tm1.PRB100.NR40.dat";
 
+extern int oxgrf_tx_thread;
 extern int usrp_tx_thread;
 // clang-format off
 #define CMDLINE_PARAMS_DESC {  \
@@ -169,6 +172,7 @@ extern int usrp_tx_thread;
   {"chest-time",            CONFIG_HLP_CHESTTIME,     0,              .iptr=&CHEST_TIME,                      .defintval=0,             TYPE_INT,    0},  \
   {"nsa",                   CONFIG_HLP_NSA,           PARAMFLAG_BOOL, .iptr=&NSA,                             .defintval=0,             TYPE_INT,    0},  \
   {"node-number",           NULL,                     0,              .u16ptr=&NODE_NUMBER,                   .defuintval=0,            TYPE_UINT16, 0},  \
+  {"sdr-tx-thread-config",  CONFIG_HLP_OXGRF_THREAD, 0,              .iptr=&oxgrf_tx_thread,                .defstrval=0,             TYPE_INT,    0},  \
   {"usrp-tx-thread-config", CONFIG_HLP_USRP_THREAD,   0,              .iptr=&usrp_tx_thread,                  .defstrval=0,             TYPE_INT,    0},  \
   {"nfapi",                 CONFIG_HLP_NFAPI,         0,              .strptr=NULL,                           .defstrval="MONOLITHIC",  TYPE_STRING, 0},  \
   {"non-stop",              CONFIG_HLP_NONSTOP,       PARAMFLAG_BOOL, .iptr=&NON_STOP,                        .defintval=0,             TYPE_INT,    0},  \
@@ -186,6 +190,7 @@ extern int usrp_tx_thread;
 
 // clang-format off
 #define CMDLINE_PARAMS_CHECK_DESC {         \
+    { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
@@ -346,6 +351,7 @@ char *get_softmodem_function(void);
 void set_softmodem_sighandler(void);
 extern uint64_t downlink_frequency[MAX_NUM_CCs][4];
 extern int32_t uplink_frequency_offset[MAX_NUM_CCs][4];
+extern int oxgrf_tx_thread;
 extern int usrp_tx_thread;
 extern int sf_ahead;
 extern int oai_exit;

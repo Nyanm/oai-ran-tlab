@@ -84,11 +84,14 @@
 
 #define CONFIG_HLP_NUMEROLOGY    "adding numerology for 5G\n"
 #define CONFIG_HLP_EMULATE_RF    "Emulated RF enabled(disable by defult)\n"
+#define CONFIG_HLP_OXGRF_THREAD "having extra thead for oxgrf tx\n"
 #define CONFIG_HLP_USRP_THREAD   "having extra thead for usrp tx\n"
 #define CONFIG_HLP_DISABLNBIOT   "disable nb-iot, even if defined in config\n"
 #define CONFIG_HLP_USRP_ARGS     "set the arguments to identify USRP (same syntax as in UHD)\n"
 #define CONFIG_HLP_TX_SUBDEV     "set the arguments to select tx_subdev (same syntax as in UHD)\n"
 #define CONFIG_HLP_RX_SUBDEV     "set the arguments to select rx_subdev (same syntax as in UHD)\n"
+
+#define CONFIG_HLP_OXGRF_ARGS   "set the arguments to identify OXGRF\n"
 
 #define CONFIG_HLP_FLOG          "Enable online log \n"
 #define CONFIG_HLP_LOGL          "Set the global log level, valid options: (4:trace, 3:debug, 2:info, 1:warn, (0:error))\n"
@@ -134,5 +137,6 @@ extern double cpuf;
 
 extern int numerology;
 extern int usrp_tx_thread;
+extern int oxgrf_tx_thread;
 void wait_gNBs(void);
 #endif

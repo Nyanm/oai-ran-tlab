@@ -46,6 +46,7 @@ extern uint16_t ue_id_g;
 // clang-format off
 #define CMDLINE_NRUEPARAMS_DESC {  \
   {"usrp-args",                CONFIG_HLP_USRP_ARGS,           0,               .strptr=&nrUE_params.usrp_args,           .defstrval="type=b200",          TYPE_STRING,   0}, \
+  {"oxgrf-args",              CONFIG_HLP_OXGRF_ARGS,         0,               .strptr=&nrUE_params.oxgrf_args,         .defstrval="dev=pciex:0",        TYPE_STRING,   0}, \
   {"tx_subdev",                CONFIG_HLP_TX_SUBDEV,           0,               .strptr=&nrUE_params.tx_subdev,           .defstrval=NULL,                 TYPE_STRING,   0}, \
   {"rx_subdev",                CONFIG_HLP_RX_SUBDEV,           0,               .strptr=&nrUE_params.rx_subdev,           .defstrval=NULL,                 TYPE_STRING,   0}, \
   {"dlsch-parallel",           CONFIG_HLP_DLSCH_PARA,          0,               .u8ptr=NULL,                              .defintval=0,                    TYPE_UINT8,    0}, \
@@ -113,6 +114,7 @@ typedef struct {
   int cont_fo_comp;
   int agc;
   char *usrp_args;
+  char *oxgrf_args;
   char *tx_subdev;
   char *rx_subdev;
   char *reconfig_file;

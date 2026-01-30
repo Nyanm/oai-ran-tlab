@@ -330,6 +330,32 @@ install_usrp_uhd_driver() {
     fi
 }
 
+check_install_oxgrf_driver() {
+    if modinfo xdma > /dev/null 2>&1
+    then
+      echo_success "OXGRF driver has loaded."
+    else
+      git clone https://github.com/openxg-prog/oxgrf_driver /tmp/oxgrf_driver
+      if [ $? -ne 0 ]; then
+        echo_fatal "OXGRF driver download failed, please check your net connection."
+      else
+        cd /tmp/oxgrf_driver/XDMA/linux-kernel/xdma
+        make && $SUDO make install
+        echo_success "OXGRF driver install success, please restart your PC later."
+      fi
+      git clone -b 2505 https://github.com/openxg-prog/liboxgrf /tmp/liboxgrf
+      if [ $? -ne 0 ]; then
+        echo_fatal "OXGRF API download failed, please check your net connection."
+      else
+        cd /tmp/liboxgrf
+        cp oxgrf_api.h /usr/local/include/
+	cp liboxgrf.so /usr/local/lib/
+        $SUDO ldconfig
+        echo_success "OXGRF API install success, please restart your PC later."
+      fi
+    fi
+}
+
 install_bladerf_driver_from_source(){
     echo_info "\nInstalling BladeRF driver from sources."
     cd /tmp

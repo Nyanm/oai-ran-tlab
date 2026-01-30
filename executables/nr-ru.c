@@ -1121,7 +1121,7 @@ void *ru_thread(void *param)
 
   LOG_I(PHY, "RU %d RF started cpu_meas_enabled %d\n", ru->idx, cpu_meas_enabled);
   // start trx write thread
-  if (usrp_tx_thread == 1) {
+  if (usrp_tx_thread == 1 || oxgrf_tx_thread == 1) {
     if (ru->start_write_thread) {
       if (ru->start_write_thread(ru) != 0) {
         LOG_E(HW, "Could not start tx write thread\n");

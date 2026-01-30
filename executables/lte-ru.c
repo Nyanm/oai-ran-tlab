@@ -765,7 +765,7 @@ void tx_rf(RU_t *ru,
    VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_WRITE, 0);
 
    //    AssertFatal(txs ==  siglen+sf_extension,"TX : Timeout (sent %d/%d)\n",txs, siglen);
-   if (usrp_tx_thread == 0 && (txs != siglen + sf_extension)
+   if (usrp_tx_thread == 0 && oxgrf_tx_thread == 0 && (txs != siglen + sf_extension)
        && (late_control == STATE_BURST_NORMAL)) { /* add fail safe for late command */
      late_control = STATE_BURST_TERMINATE;
      LOG_E(PHY, "TX : Timeout (sent %d/%d) state =%d\n", txs, siglen, late_control);
@@ -1588,7 +1588,7 @@ static void *ru_thread( void *param ) {
   pthread_cond_signal(&proc->cond_FH1);
   AssertFatal((ret=pthread_mutex_unlock(&proc->mutex_FH1))==0,"mutex_unlock returns %d\n",ret);
 
-  if(usrp_tx_thread == 1){
+  if(usrp_tx_thread == 1 || oxgrf_tx_thread == 1){
      if (ru->start_write_thread){
         if(ru->start_write_thread(ru) != 0){
             LOG_E(HW,"Could not start tx write thread\n");

@@ -925,7 +925,7 @@ void *UE_thread(void *arg)
   UE->is_synchronized = 0;
   int tmp2 = UE->rfdevice.trx_start_func(&UE->rfdevice);
   AssertFatal(tmp2 == 0, "Could not start the device\n");
-  if (usrp_tx_thread == 1)
+  if (usrp_tx_thread == 1 || oxgrf_tx_thread == 1)
     UE->rfdevice.trx_write_init(&UE->rfdevice);
 
   InitSinLUT();
