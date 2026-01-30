@@ -281,7 +281,56 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
     }
   }
 
-  int ret_decoder = phy_vars_gNB->nrLDPC_coding_interface.nrLDPC_coding_decoder(&slot_parameters);
+  int ret_decoder = 0;
+  if (phy_vars_gNB->use_offload) {
+    // get claims from default implementation
+    int8_t claims_default[nb_pusch];
+    memset(claims_default, 0xff, nb_pusch * sizeof(int8_t));
+    phy_vars_gNB->nrLDPC_coding_interface.nrLDPC_coding_claim_decode(&slot_parameters, claims_default);
+
+    // get claims from offload implementation
+    int8_t claims_offload[nb_pusch];
+    memset(claims_offload, 0xff, nb_pusch * sizeof(int8_t));
+    phy_vars_gNB->nrLDPC_coding_interface_offload.nrLDPC_coding_claim_decode(&slot_parameters, claims_offload);
+
+    // split and count TBs
+    nrLDPC_TB_decoding_parameters_t TBs_default[nb_pusch];
+    uint8_t pusch_id_default = 0;
+    nrLDPC_TB_decoding_parameters_t TBs_offload[nb_pusch];
+    uint8_t pusch_id_offload = 0;
+    for (uint8_t pusch_id = 0; pusch_id < nb_pusch; pusch_id++) {
+      if (claims_offload[pusch_id] > 0 && claims_offload[pusch_id] > claims_default[pusch_id]) {
+        TBs_offload[pusch_id_offload] = TBs[pusch_id];
+        pusch_id_offload++;
+      } else {
+        TBs_default[pusch_id_default] = TBs[pusch_id];
+        pusch_id_default++;
+      }
+    }
+
+    // TODO parallelize
+    if (pusch_id_default > 0) {
+      nrLDPC_slot_decoding_parameters_t slot_parameters_default = {.frame = frame,
+                                                                   .slot = nr_tti_rx,
+                                                                   .nb_TBs = pusch_id_default,
+                                                                   .threadPool = &phy_vars_gNB->threadPool,
+                                                                   .TBs = TBs_default};
+      int ret_default = phy_vars_gNB->nrLDPC_coding_interface.nrLDPC_coding_decoder(&slot_parameters_default);
+      ret_decoder = ret_default == 0 ? ret_decoder : ret_default;
+    }
+
+    if (pusch_id_offload > 0) {
+      nrLDPC_slot_decoding_parameters_t slot_parameters_offload = {.frame = frame,
+                                                                   .slot = nr_tti_rx,
+                                                                   .nb_TBs = pusch_id_offload,
+                                                                   .threadPool = &phy_vars_gNB->threadPool,
+                                                                   .TBs = TBs_offload};
+      int ret_offload = phy_vars_gNB->nrLDPC_coding_interface_offload.nrLDPC_coding_decoder(&slot_parameters_offload);
+      ret_decoder = ret_offload == 0 ? ret_decoder : ret_offload;
+    }
+  } else {
+    ret_decoder = phy_vars_gNB->nrLDPC_coding_interface.nrLDPC_coding_decoder(&slot_parameters);
+  }
 
   // post decode
   for (uint8_t pusch_id = 0; pusch_id < nb_pusch; pusch_id++) {
