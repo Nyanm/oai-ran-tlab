@@ -243,12 +243,14 @@ static void nr_pdcch_extract_rbs_single(uint32_t rxdataF_sz,
      */
 
     c16_t middle_prb_buffer[RE_PER_RB];
-    for (int rb_group = 0; rb_group < coreset_nbr_rb / 6; rb_group++) {
+    int start = rb_offset / 6;
+    int size = coreset_nbr_rb / 6;
+    for (int rb_group = start; rb_group < start + size; rb_group++) {
       if ((coreset_freq_dom[rb_group / 8] & (1 << (7 - (rb_group & 7)))) == 0) {
         continue;
       }
       for (int rb = 0; rb < 6; rb++) {
-        int c_rb = rb_group * 6 + rb + rb_offset;
+        int c_rb = rb_group * 6 + rb;
         c16_t *rxF = NULL;
         if ((frame_parms->N_RB_DL & 1) == 0) {
           if ((c_rb + n_BWP_start) < frame_parms->N_RB_DL / 2)
@@ -344,11 +346,11 @@ static void nr_rx_pdcch_symbol(PHY_VARS_NR_UE *ue,
   if (coreset->CoreSetType == NFAPI_NR_CSET_CONFIG_PDCCH_CONFIG)
     dmrs_ref = phy_pdcch_config->pdcch_config[ss_idx].BWPStart;
   // generate pilot
-  c16_t pilot[(n_rb + dmrs_ref) * 3] __attribute__((aligned(16)));
+  c16_t pilot[(n_rb + rb_offset + dmrs_ref) * 3] __attribute__((aligned(16)));
   // Note: pilot returned by the following function is already the complex conjugate of the transmitted DMRS
   const uint32_t *gold =
       nr_gold_pdcch(ue->frame_parms.N_RB_DL, ue->frame_parms.symbols_per_slot, scrambling_id, proc->nr_slot_rx, symbol);
-  nr_pdcch_dmrs_ref(gold, pilot, n_rb + dmrs_ref);
+  nr_pdcch_dmrs_ref(gold, pilot, n_rb + rb_offset + dmrs_ref);
   nr_pdcch_channel_estimation(ue,
                               n_rb,
                               rb_offset,
@@ -373,7 +375,7 @@ static void nr_rx_pdcch_symbol(PHY_VARS_NR_UE *ue,
                               pdcch_dl_ch_estimates_ext,
                               fp,
                               coreset->frequency_domain_resource,
-                              coreset->rb_offset,
+                              rb_offset,
                               n_rb,
                               phy_pdcch_config->pdcch_config[ss_idx].BWPStart);
 
