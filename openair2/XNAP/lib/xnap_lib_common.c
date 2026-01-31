@@ -23,7 +23,6 @@
 #include "common/utils/assertions.h"
 #include "common/utils/utils.h"
 
-
 bool eq_xnap_plmn(const plmn_id_t *a, const plmn_id_t *b)
 {
   _XN_EQ_CHECK_INT(a->mcc, b->mcc);

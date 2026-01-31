@@ -77,7 +77,5 @@ bool eq_xnap_snssai(const nssai_t *a, const nssai_t *b);
 bool eq_xnap_tai_support(const xnap_tai_support_t *a, const xnap_tai_support_t *b);
 bool eq_xnap_plmn_support(const xnap_plmn_support_t *a, const xnap_plmn_support_t *b);
 
-
-
 #endif /* XNAP_LIB_COMMON_H_ */
 
