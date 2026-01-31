@@ -88,7 +88,7 @@ typedef struct nrLDPC_TB_decoding_parameters_s{
   uint8_t *c;
   int16_t *d;
   bool d_to_be_cleared;
-  bool decodeSuccess;
+  bool decodeSuccess[132];
   time_stats_t ts_deinterleave;
   time_stats_t ts_rate_unmatch;
   time_stats_t ts_seg_prep;

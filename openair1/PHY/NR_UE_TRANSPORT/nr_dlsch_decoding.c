@@ -238,7 +238,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
     else
       d_to_be_cleared[pdsch_id] = false;
     TB_parameters->d_to_be_cleared = d_to_be_cleared[pdsch_id];
-    TB_parameters->decodeSuccess = false;
+    for (int r = 0; r<TB_parameters->C; r++) TB_parameters->decodeSuccess[r] = false;
     reset_meas(&TB_parameters->ts_deinterleave);
     reset_meas(&TB_parameters->ts_rate_unmatch);
     reset_meas(&TB_parameters->ts_seg_prep);
@@ -281,13 +281,15 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
     nrLDPC_TB_decoding_parameters_t *TB_parameters = &TBs[pdsch_id];
 
     uint32_t offset = 0,r_offset = 0;
-    if (TB_parameters->decodeSuccess) {
+    bool crcok=true;
+    for (int r = 0; r < TB_parameters->C ; r++) if (TB_parameters->decodeSuccess[r] == false) {crcok=false; break;}
+    if (crcok) {
       for (int r = 0; r < TB_parameters->C; r++) {
           memcpy(b[DLSCH_id] + offset,
                  harq_process->c + r_offset,
                  (harq_process->K >> 3) - (harq_process->F >> 3) - ((harq_process->C > 1) ? 3 : 0));
           offset += (harq_process->K >> 3) - (harq_process->F >> 3) - ((harq_process->C > 1) ? 3 : 0);
-	  r_offset += (harq_process->K >> 3);
+	  r_offset += (harq_process->K>>3);
       }
     } else {
         fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_config = &dlsch[DLSCH_id].dlsch_config;

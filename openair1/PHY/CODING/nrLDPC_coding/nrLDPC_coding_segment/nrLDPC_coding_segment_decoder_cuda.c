@@ -150,7 +150,7 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
   }
 #endif
   start_meas(&segs->ts_rate_unmatch);
-//  printf("Running RM with id %d, d_to_be_cleared %d, rv_idx %d, Z %d, C %d, E1 %d, E2 %d, r_firstE2 %d\n",segs->harq_unique_pid,segs->d_to_be_cleared,segs->rv_index,Z,C,E1,E2,r_firstE2); 
+  //printf("Running RM with id %d, d_to_be_cleared %d, rv_idx %d, Z %d, C %d, E1 %d, E2 %d, F %d,r_firstE2 %d\n",segs->harq_unique_pid,segs->d_to_be_cleared,segs->rv_index,Z,C,E1,E2,segs->F,r_firstE2); 
 #if 0
   if (segs->d_to_be_cleared == 1) err = cudaMemsetAsync(harq_d_array[segs->harq_unique_pid],0,C*68*Z*sizeof(int16_t),decoderStreams[0]);
   AssertFatal(err==cudaSuccess,"cudaMemsetAsync failed with error %s on harq_d_array[%d] %p for %d bytes\n",cudaGetErrorString(err),segs->harq_unique_pid,harq_d_array[segs->harq_unique_pid],C*68*Z*sizeof(int16_t));
@@ -179,7 +179,7 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
      cudaMemsetAsync(p_llr_dev + (size_t)r*segLen,0,sizeof(int8_t)*2*Z,decoderStreams[0]);
 #if 0
      int8_t llr_local[segLen];
-     if (1/*r==0*/) {
+     if (r<=1) {
        cudaMemcpyAsync(llr_local,p_llr_dev+(size_t)r*segLen,sizeof(int8_t)*segLen,cudaMemcpyDeviceToHost,decoderStreams[0]);
        for (int i=0;i<segLen;i++) printf("llr(%d,%d,%d/%d) %d\n",segs->rv_index,r,i,segLen,llr_local[i]);
      }
@@ -252,10 +252,10 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
   stop_meas(&segs->ts_ldpc_decode);
   
   if (decodeIterations <= segs->max_ldpc_iterations) {
-      segs->decodeSuccess = true;
+    for (int r=0; r<C; r++) segs->decodeSuccess[r] = true;
   } else {
     memset(segs->c, 0, C*(K>>3));
-    segs->decodeSuccess = false;
+    for (int r=0; r<C; r++) segs->decodeSuccess[r] = false;
   }
 }
 

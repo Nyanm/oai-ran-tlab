@@ -435,7 +435,6 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   uint32_t K = Z * 22;
   // Calculate LLR size per segment based on Rate
   uint32_t numLLR = (R == 13) ? NR_LDPC_NCOL_BG1_R13 * Z : NR_LDPC_NCOL_BG1_R23 * Z;
-
   if (p_llr != p_llr_dev)
     cudaMemcpyAsync(p_llr_dev, p_llr, n_segments * 68 * 384, cudaMemcpyHostToDevice, decoderStreams[0]);
 
@@ -544,11 +543,10 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   cudaStreamSynchronize(decoderStreams[0]);
   if (p_decParams->check_crc) {
     for (int r = 0; r < n_segments; r++) {
-      // for (int i=0;i<(K>>3);i++) printf("byte (%d,%d) %x\n",r,i,((uint8_t*)(p_out+r*K))[i]);
+      //for (int i=0;i<(K>>3);i++) printf("byte (%d,%d) %x\n",r,i,((uint8_t*)(p_out+r*(K>>3)))[i]);
       if (!p_decParams->check_crc((uint8_t*)(p_out + r * (K >> 3)), p_decParams->Kprime, p_decParams->crc_type)) {
         LOG_D(PHY, "Segment %d/%d CRC NOK\n", r, n_segments);
-        //        printf("Segment %d/%d CRC NOK\n",r,n_segments);
-        return 1 + numMaxIter;
+        return (1 + numMaxIter);
       }
     }
   }

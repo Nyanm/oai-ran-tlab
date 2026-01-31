@@ -255,7 +255,7 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
                                                TB_parameters->Z,
                                                &harq_process->llrLen,
                                                harq_process->round);
-    TB_parameters->decodeSuccess = false;
+    for (int r = 0; r < TB_parameters->C; r++) TB_parameters->decodeSuccess[r] = false;
     TB_parameters->d_to_be_cleared = harq_process->harq_to_be_cleared;
     reset_meas(&TB_parameters->ts_deinterleave);
     reset_meas(&TB_parameters->ts_rate_unmatch);
@@ -284,26 +284,36 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
     NR_gNB_ULSCH_t *ulsch = &phy_vars_gNB->ulsch[ULSCH_id];
     NR_UL_gNB_HARQ_t *harq_process = ulsch->harq_process;
 
-    nrLDPC_TB_decoding_parameters_t TB_parameters = TBs[pusch_id];
+    nrLDPC_TB_decoding_parameters_t *TB_parameters = &TBs[pusch_id];
 
     uint32_t offset = 0,r_offset=0;
-    if (TB_parameters.decodeSuccess) {
-      for (int r = 0; r < TB_parameters.C; r++) {
+    bool crcok=true;
+    LOG_D(PHY,"C = %d\n",TB_parameters->C);
+    for (int r = 0; r < TB_parameters->C; r++) {
+	LOG_D(PHY,"Segment %d %d\n",r,TB_parameters->decodeSuccess[r]);
+        if (TB_parameters->decodeSuccess[r]==false) { 
+	    LOG_D(PHY,"Segment %d/%d in error\n",r,TB_parameters->C); 
+	    crcok=false; 
+	    break; 
+	}
+    }
+    if (crcok) {
+      for (int r = 0; r < TB_parameters->C; r++) {
         // Copy c to b in case of decoding success
         memcpy(harq_process->b + offset,
                harq_process->c + r_offset,
                (harq_process->K >> 3) - (harq_process->F >> 3) - ((harq_process->C > 1) ? 3 : 0));
         offset += ((harq_process->K >> 3) - (harq_process->F >> 3) - ((harq_process->C > 1) ? 3 : 0));
-        r_offset += harq_process->K;
+        r_offset += (harq_process->K >> 3);
       }
     } else {
         LOG_D(PHY, "ULSCH %d in error\n", ULSCH_id);
 	nfapi_nr_pusch_pdu_t *pusch_pdu = &harq_process->ulsch_pdu;
     }
-    merge_meas(&phy_vars_gNB->ts_deinterleave, &TB_parameters.ts_deinterleave);
-    merge_meas(&phy_vars_gNB->ts_rate_unmatch, &TB_parameters.ts_rate_unmatch);
-    merge_meas(&phy_vars_gNB->ts_seg_prep, &TB_parameters.ts_seg_prep);
-    merge_meas(&phy_vars_gNB->ts_ldpc_decode, &TB_parameters.ts_ldpc_decode);
+    merge_meas(&phy_vars_gNB->ts_deinterleave, &TB_parameters->ts_deinterleave);
+    merge_meas(&phy_vars_gNB->ts_rate_unmatch, &TB_parameters->ts_rate_unmatch);
+    merge_meas(&phy_vars_gNB->ts_seg_prep, &TB_parameters->ts_seg_prep);
+    merge_meas(&phy_vars_gNB->ts_ldpc_decode, &TB_parameters->ts_ldpc_decode);
     harq_process->harq_to_be_cleared = false;
   }
 

@@ -175,6 +175,7 @@ static void nr_process_decode_segment(void *arg)
   ///////////////////////// ulsch_harq->e =====> ulsch_harq->d /////////////////////////
 
   LOG_D(PHY,"Rate matching : clear d %s\n",rdata->d_to_be_cleared ? "true" : "false");
+  //printf("Rate matching : Z %d, C %d, rv_index %d, E %d, F %d\n",p_decoderParms->Z,rdata->C,rv_index,E,rdata->F);
   if (nr_rate_matching_ldpc_rx(rdata->tbslbrm,
                                p_decoderParms->BG,
                                p_decoderParms->Z,
@@ -222,7 +223,7 @@ static void nr_process_decode_segment(void *arg)
   }
   stop_meas(rdata->p_ts_seg_prep);
 #if 0
-  if (1/*rdata->r==0*/) for (int i=0;i<(Kc * rdata->Z);i++) printf("llr(%d,%d,%d/%d) %d\n",rv_index,rdata->r,i,Kc*rdata->Z,l[i]);
+  if (rdata->r<=1) for (int i=0;i<(Kc * rdata->Z);i++) printf("llr(%d,%d,%d/%d) %d\n",rv_index,rdata->r,i,Kc*rdata->Z,l[i]);
 #endif
   //////////////////////////////////////////////////////////////////////////////////////////
 
@@ -308,9 +309,9 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
       rdata->abort_decode = nrLDPC_TB_decoding_parameters->abort_decode;
       rdata->d = nrLDPC_TB_decoding_parameters->d + r*rdata->Kc*rdata->Z;
       rdata->d_to_be_cleared = nrLDPC_TB_decoding_parameters->d_to_be_cleared;
-      rdata->c = nrLDPC_TB_decoding_parameters->c + r*rdata->K;
+      rdata->c = nrLDPC_TB_decoding_parameters->c + r*(rdata->K>>3);
       rdata->llr = nrLDPC_TB_decoding_parameters->llr + llr_offset; //rdata->Kc*rdata->Z;
-      rdata->decodeSuccess = &nrLDPC_TB_decoding_parameters->decodeSuccess;
+      rdata->decodeSuccess = &nrLDPC_TB_decoding_parameters->decodeSuccess[r];
       rdata->p_ts_deinterleave = &nrLDPC_TB_decoding_parameters->ts_deinterleave;
       rdata->p_ts_rate_unmatch = &nrLDPC_TB_decoding_parameters->ts_rate_unmatch;
       rdata->p_ts_seg_prep = &nrLDPC_TB_decoding_parameters->ts_seg_prep;
@@ -390,7 +391,10 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_dec
 
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
     nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
-    if (nrLDPC_TB_decoding_parameters->decodeSuccess) *nrLDPC_TB_decoding_parameters->processedSegments = nrLDPC_TB_decoding_parameters->C;
+    *nrLDPC_TB_decoding_parameters->processedSegments = 0;
+    for (int r=0; r<nrLDPC_TB_decoding_parameters->C;r++) 
+	if (nrLDPC_TB_decoding_parameters->decodeSuccess[r]==true)
+           *nrLDPC_TB_decoding_parameters->processedSegments = *nrLDPC_TB_decoding_parameters->processedSegments + 1;;
   }
   return 0;
 }
