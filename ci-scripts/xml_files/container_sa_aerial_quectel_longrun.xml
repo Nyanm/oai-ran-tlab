@@ -86,7 +86,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -97,7 +97,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -108,7 +108,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -119,7 +119,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -130,7 +130,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -141,7 +141,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -152,7 +152,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -163,7 +163,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -174,7 +174,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -185,7 +185,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -196,7 +196,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -207,7 +207,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -218,7 +218,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -229,7 +229,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -240,7 +240,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -251,7 +251,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -262,7 +262,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
@@ -273,7 +273,7 @@
     <class>Iperf</class>
     <desc>iperf (DL/UDP/800M)(10 min)(single-ue profile)</desc>
     <may_fail>true</may_fail>
-    <iperf_args>-u -b 800M -t 600 -R</iperf_args>
+    <iperf_args>-u -b 800M -t 600 -R -l 1428</iperf_args>
     <svr_id>oc-cn5g-20897-aerial</svr_id>
     <id>up2-aerial</id>
     <iperf_packetloss_threshold>25</iperf_packetloss_threshold>
