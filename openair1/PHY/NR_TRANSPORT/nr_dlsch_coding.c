@@ -104,7 +104,6 @@ NR_gNB_DLSCH_t new_gNB_dlsch(NR_DL_FRAME_PARMS *frame_parms, uint16_t N_RB, int 
     //       In section 5.3.2 in 38.212, the for loop is up to N + 2*Zc (maximum size of N is 66*Zc, therefore 68*Zc)
 #ifdef ENABLE_CUDA
     if (use_gpumem) {
-      cudaHostAlloc((void**)&dlsch.c[r], 8448/8, cudaHostAllocMapped);
       cudaError_t err=cudaHostAlloc((void**)&dlsch.c[r],(8448/8)*sizeof(uint8_t),cudaHostAllocMapped);
       AssertFatal(err == cudaSuccess,"CUDA Error (dlsch->c[%d]): %s\n", r,cudaGetErrorString(err));
       err=cudaHostGetDevicePointer((void**)&c_devh[r], dlsch.c[r], 0);

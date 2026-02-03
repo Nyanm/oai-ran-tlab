@@ -71,7 +71,7 @@ int8_t* llrProcBuf_dev;
 int8_t* p_llr_dev;
 int8_t* p_out_dev;
 
-extern int pageable_uses_host;
+extern int pageable,integrated;
 
 int cuda_support_init_decoder()
 {
@@ -455,7 +455,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   if (found_idx >= 0) {
     // === Cache HIT: Execute Recorded Graph ===
     gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
-    gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = pageable_uses_host ? p_out : p_out_dev;
+    gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = (pageable || integrated) ? p_out : p_out_dev;
 
     nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[found_idx].exec,
                                      decoderStreams[0],
@@ -477,7 +477,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
 
     // Use the determined pointers (Device ptrs for PCIe, Host ptrs for GH200)
     gpu_graph_cache[new_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
-    gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = pageable_uses_host ? p_out : p_out_dev;
+    gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = pageable || integrated ? p_out : p_out_dev;
 
     nrLDPC_decoder_cuda_GraphRecord(gpu_graph_cache[new_idx].bridge_ptr,
                                     numLLR,
@@ -509,7 +509,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
 
     ldpc_cuda_bridge_t* perpack_buffer = stream_bridges[0];
     perpack_buffer->p_llr_ptr = p_llr_dev;
-    perpack_buffer->p_out_ptr = pageable_uses_host ? p_out : p_out_dev;
+    perpack_buffer->p_out_ptr = pageable || integrated ? p_out : p_out_dev;
 
     nrLDPC_decoder_cuda_NormalExecute(perpack_buffer,
                                       numLLR,
@@ -530,7 +530,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   }
 
   // Copy back and Cleanup for Discrete GPU
-  if (!pageable_uses_host) {
+  if (!pageable && !integrated) {
     // Copy Output from Device to Host
     if (outMode == nrLDPC_outMode_BIT) {
       cudaMemcpyAsync(p_out, p_out_dev, total_output_size >> 3, cudaMemcpyDeviceToHost, decoderStreams[0]);

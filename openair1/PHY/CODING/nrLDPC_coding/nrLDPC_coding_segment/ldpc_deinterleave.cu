@@ -124,8 +124,7 @@ extern "C" void launch_deinterleave_i16(int Qm, int E1, int E2, int C, int r_fir
     cudaError_t err=cudaPeekAtLastError();
   
     if (err!=cudaSuccess) {
-      printf("cuda error: %s (e %p, f %p, E1 %d, E2 %d, Qm %d, C %d)\n",cudaGetErrorString(err),e,f,E1,E2,Qm,C);
+      printf("cuda error (deinterleave_i16): %s (e %p, f %p, E1 %d, E2 %d, Qm %d, C %d)\n",cudaGetErrorString(err),e,f,E1,E2,Qm,C);
       exit(-1);
     }
-    cudaDeviceSynchronize();
 }

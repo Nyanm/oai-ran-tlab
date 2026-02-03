@@ -85,7 +85,7 @@ int nr_rate_matching_ldpc_rx_cuda(uint32_t Tbslbrm,
                                              cudaStream_t *s,
                                              int8_t sidx);
 
-extern int pageable,pageable_uses_host;
+extern int pageable,integrated;
 extern int8_t *p_llr_dev,*p_out_dev;
 int16_t **harq_d_array;
 int16_t *harq_d_array_dev;
@@ -114,7 +114,7 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
   int r_firstE2 = segs->first_rE2;
   
   // for PCIe GPU copy llrs to device memory
-  if (!pageable_uses_host) cudaMemcpyAsync(harq_f_dev,
+  if (!pageable&&!integrated) cudaMemcpyAsync(harq_f_dev,
 		                           segs->llr,
 		                           ((r_firstE2*E1) + (C-r_firstE2)*E2)*sizeof(int16_t),
 					   cudaMemcpyHostToDevice,
@@ -129,7 +129,7 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
       }
     }
 #endif
-  launch_deinterleave_i16(segs->Qm,E1,E2,C,r_firstE2,harq_e_dev,pageable_uses_host ? segs->llr : harq_f_dev,decoderStreams,0);
+  launch_deinterleave_i16(segs->Qm,E1,E2,C,r_firstE2,harq_e_dev,pageable||integrated ? segs->llr : harq_f_dev,decoderStreams,0);
   stop_meas(&segs->ts_deinterleave);
 #if 0
   cudaError_t err;
@@ -279,7 +279,7 @@ void LDPCint_rm_init(int max_num_pxsch) {
     AssertFatal(err == cudaSuccess,"CUDA Error (harq_d_dev): %s\n", cudaGetErrorString(err));
   }
   cudaMemcpy(harq_d_array_dev,harq_d_array,sizeof(int16_t*)*max_num_pxsch,cudaMemcpyHostToDevice);
-  if (!pageable || !pageable_uses_host) {
+  if (!pageable && !integrated) {
     LOG_I(PHY,"Allocating device array for harq_f \n");
     err=cudaMalloc((void **)&harq_f_dev,MAXE*sizeof(int16_t));
     AssertFatal(err == cudaSuccess,"CUDA Error (harq_f_dev): %s\n", cudaGetErrorString(err));

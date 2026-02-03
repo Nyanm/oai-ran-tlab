@@ -527,7 +527,7 @@ one_measurement_t test_ldpc(short max_iterations,
 
 configmodule_interface_t *uniqCfg = NULL;
 #ifdef ENABLE_CUDA
-extern int pageable_uses_host;
+extern int pageable,integrated;
 #endif
 int main(int argc, char *argv[])
 {

@@ -263,9 +263,12 @@ typedef struct {
   uint32_t ulsch_noise_power[8];
   /// total noise over antennas
   uint32_t ulsch_noise_power_tot;
-  /// \brief llr values.
   /// - first index: ? [0..1179743] (hard coded)
   int16_t *llr;
+#ifdef ENABLE_CUDA
+  /// \brief llr values link to device memory
+  int16_t* llr_dev; 
+#endif
   // PTRS symbol index, to be updated every PTRS symbol within a slot.
   uint8_t ptrs_symbol_index;
   /// bit mask of PT-RS ofdm symbol indicies
@@ -542,7 +545,7 @@ typedef struct LDPCDecode_s {
   NR_UL_gNB_HARQ_t *ulsch_harq;
   t_nrLDPC_dec_params decoderParms;
   NR_gNB_ULSCH_t *ulsch;
-  short* ulsch_llr; 
+  int16_t* ulsch_llr; 
   int ulsch_id;
   int harq_pid;
   int rv_index;

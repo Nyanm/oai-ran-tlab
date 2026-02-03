@@ -288,12 +288,6 @@ extern "C" int nr_rate_matching_ldpc_rx_cuda(uint32_t Tbslbrm,
     dim3 nblocks2(((Ncb>>1) + nthreads-1)/nthreads,C);
     rm2<<<nblocks2, nthreads, 0, s[sidx]>>>(Ncb/2,ind/2,E1,E2,r_firstE2,Foffset/2,F/2,clear,68*384/2,K/2,Z/2,(uint32_t*)d,(uint32_t*)soft_input,(uint16_t*)llr_buffer);
   }
-
-  cudaError_t err = cudaDeviceSynchronize();
-  if (err!=cudaSuccess) {
-     printf("cudaDeviceSynchronize() returns %s (soft_input %p, d %p, llr_buffer %p\n",cudaGetErrorString(err),soft_input,d,llr_buffer);
-     exit(-1);
-  }
   return(0);
 } 
 

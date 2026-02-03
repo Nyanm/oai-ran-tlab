@@ -75,22 +75,17 @@ __global__ void ldpc_input_worker(uint32_t **input,uint32_t *cc[4],int nseg) {
       cc[blockIdx.x][(2*i1+1)*384 + i2]=otmp0;
   } 
 }
-extern "C" int ldpc_input(uint32_t **input,uint32_t *cc[4],int nseg) { 
+extern "C" int ldpc_input(uint32_t **input,uint32_t *cc[4],int nseg,cudaStream_t *stream) { 
 
  int ns = nseg>>5;
  if ((nseg&31)>0) ns++;
 
  dim3 numblocks(ns,22);
- ldpc_input_worker<<<numblocks,384>>>(input,cc,nseg);
+ ldpc_input_worker<<<numblocks,384,0,stream[0]>>>(input,cc,nseg);
  cudaError_t err=cudaPeekAtLastError();
  if (err!=cudaSuccess) {
     printf("cuda error: %s (input %p, cc %p, nseg %d, ns %d)\n",cudaGetErrorString(err),input,cc,nseg,ns);
     exit(-1);
  }
- cudaDeviceSynchronize();
-/* 
- for (int b=0;b<22;b++)
-   for (int i=0;i<8;i++) printf("block %d cc[0][%d] %x cc[0][%d] %x\n",b,2*b*384,cc[0][(2*b*384) + i],(2*b+1)*384,cc[0][((2*b + 1)*384) + i]);
-*/
-   return(0);
+ return(0);
 }

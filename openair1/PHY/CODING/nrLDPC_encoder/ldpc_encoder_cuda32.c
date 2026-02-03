@@ -55,7 +55,7 @@ uint32_t *d_devh[4];
 uint32_t *input_dev;
 uint32_t **input_host;
 uint32_t *input_devh[128];
-int managed = 0, concurrent = 0, uva = 0, pageable = 0, pageable_uses_host = 0, register_host = 0;
+int managed = 0, concurrent = 0, uva = 0, pageable = 0, pageable_uses_host = 0, register_host = 0, integrated = 0;
 
 #define USE_GPU_FOR_INPUT 1
 
@@ -78,6 +78,7 @@ void cuda_support_init() {
     cudaDeviceGetAttribute(&pageable, cudaDevAttrPageableMemoryAccess, dev);
     cudaDeviceGetAttribute(&pageable_uses_host, cudaDevAttrPageableMemoryAccessUsesHostPageTables, dev);
     cudaDeviceGetAttribute(&register_host, cudaDevAttrHostRegisterSupported,dev);
+    cudaDeviceGetAttribute(&integrated, cudaDevAttrIntegrated,dev);
 
     LOG_I(NR_PHY,"Device: %s (cc %d.%d)\n", prop.name, prop.major, prop.minor);
     LOG_I(NR_PHY,"Unified Virtual Addressing (UVA): %s\n", uva ? "YES" : "NO");
@@ -86,8 +87,9 @@ void cuda_support_init() {
     LOG_I(NR_PHY,"Pageable memory access:          %s\n", pageable ? "YES" : "NO");
     LOG_I(NR_PHY,"Uses host page tables:           %s\n", pageable_uses_host ? "YES" : "NO");
     LOG_I(NR_PHY,"Host Register supported:         %s\n", register_host ? "YES" : "NO");
+    LOG_I(NR_PHY,"Integrated (shared) Memory       %s\n", integrated ? "YES" : "NO");
 
-  if (!pageable || !pageable_uses_host) {
+  if (!pageable || !integrated) {
     LOG_I(NR_PHY,"Allocating c,d,cc arrays for GPU \n");
     cudaError_t err=cudaMalloc((void **)&c_dev,4*sizeof(uint32_t*));
     AssertFatal(err == cudaSuccess,"CUDA Error (c_dev): %s\n", cudaGetErrorString(err));
@@ -191,12 +193,12 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
 //  uint32_t  cc[4][22*Zc]; //padded input, unpacked, max size
 
 #ifdef USE_GPU_FOR_INPUT
-  if (!pageable || !pageable_uses_host) {
+  if (input_devh[0] != (uint32_t*)input[0]) { // this means we are not on shared memory
     for (int r=0;r<impp->n_segments;r++) {
         cudaMemcpyAsync(input_devh[r],input[r],block_length>>3,cudaMemcpyHostToDevice,encoderStreams[encoder_stream]);
     }
   }
-  ldpc_input(pageable&&pageable_uses_host? (uint32_t**)input : (uint32_t**)input_dev,(uint32_t**)c_dev,impp->n_segments,&encoderStreams[encoder_stream]);
+  ldpc_input(pageable||integrated? (uint32_t**)input : (uint32_t**)input_dev,(uint32_t**)c_dev,impp->n_segments,&encoderStreams[encoder_stream]);
 #else 
   ldpc_input32(input,(uint32_t**)c_dev,n_inputs,block_length,impp->n_segments); 
 #endif
@@ -204,8 +206,8 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
   //parity check part
   if(impp->tparity != NULL) start_meas(impp->tparity);
   encode_parity_check_part_cuda((uint32_t**)c_dev, (uint32_t**)d_dev, BG, Zc, Kb, ncols,n_inputs,&encoderStreams[encoder_stream]);
-  if (!pageable || !pageable_uses_host) {
-     for (int r=0; r<n_inputs;r++) cudaMemcpy(d_host[r],d_devh[r],68*384*sizeof(uint32_t),cudaMemcpyDeviceToHost);  
+  if (d_host[0]!=d_devh[0]) { // this means we are not on shared memory
+     for (int r=0; r<n_inputs;r++) cudaMemcpyAsync(d_host[r],d_devh[r],68*384*sizeof(uint32_t),cudaMemcpyDeviceToHost,encoderStreams[encoder_stream]);  
   }
   if(impp->tparity != NULL) stop_meas(impp->tparity);
   

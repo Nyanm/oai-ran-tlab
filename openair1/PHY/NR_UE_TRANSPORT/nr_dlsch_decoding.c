@@ -194,7 +194,6 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
   }
 
   bool d_to_be_cleared[nb_dlsch];
-  memset(d_to_be_cleared, 0, sizeof(d_to_be_cleared));
 
   for (uint8_t pdsch_id = 0; pdsch_id < nb_dlsch; pdsch_id++) {
     uint8_t DLSCH_id = DLSCH_ids[pdsch_id];

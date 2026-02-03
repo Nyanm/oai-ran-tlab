@@ -214,6 +214,5 @@ extern "C" int ldpc_BG1_Zc384_cuda32(uint32_t *c[4],uint32_t *d[4],int n_inputs,
     printf("cuda error: %s (c %p, d %p)\n",cudaGetErrorString(err),c,d);
     exit(-1);
  }
- cudaDeviceSynchronize();
  return(0);
 }
