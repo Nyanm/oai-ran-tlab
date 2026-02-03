@@ -50,9 +50,9 @@ extern "C" {
 #define num_TotalBlocks_cn_BG1_R23_Node 13
 #define num_TotalBlocks_bn_BG1_R23_Node 35
 
-#define NodeEdge_Switch_Cn_R13 24
-#define NodeEdge_Switch_Bn_R13 12
-#define NodeEdge_Switch_Cn_R23 24
+#define NodeEdge_Switch_Cn_R13 32
+#define NodeEdge_Switch_Bn_R13 10
+#define NodeEdge_Switch_Cn_R23 32
 #define NodeEdge_Switch_Bn_R23 12
 
 
