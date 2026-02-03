@@ -282,11 +282,11 @@ extern "C" int nr_rate_matching_ldpc_rx_cuda(uint32_t Tbslbrm,
 #endif
   if ((E1&3) == 0 && (E2&3) == 0) {
     dim3 nblocks(((Ncb>>2) + nthreads-1)/nthreads,C);
-    rm<<<nblocks, nthreads, 0, s[sidx]>>>(Ncb/4,ind/4,E1,E2,r_firstE2,Foffset/4,F/4,clear,68*Z/4,K/4,Z/4,(uint32_t*)d,(uint32_t*)soft_input,(uint32_t*)llr_buffer);
+    rm<<<nblocks, nthreads, 0, s[sidx]>>>(Ncb/4,ind/4,E1,E2,r_firstE2,Foffset/4,F/4,clear,68*384/4,K/4,Z/4,(uint32_t*)d,(uint32_t*)soft_input,(uint32_t*)llr_buffer);
   }
   else {
     dim3 nblocks2(((Ncb>>1) + nthreads-1)/nthreads,C);
-    rm2<<<nblocks2, nthreads, 0, s[sidx]>>>(Ncb/2,ind/2,E1,E2,r_firstE2,Foffset/2,F/2,clear,68*Z/2,K/2,Z/2,(uint32_t*)d,(uint32_t*)soft_input,(uint16_t*)llr_buffer);
+    rm2<<<nblocks2, nthreads, 0, s[sidx]>>>(Ncb/2,ind/2,E1,E2,r_firstE2,Foffset/2,F/2,clear,68*384/2,K/2,Z/2,(uint32_t*)d,(uint32_t*)soft_input,(uint16_t*)llr_buffer);
   }
 
   cudaError_t err = cudaDeviceSynchronize();
