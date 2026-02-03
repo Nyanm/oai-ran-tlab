@@ -179,7 +179,7 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
      cudaMemsetAsync(p_llr_dev + (size_t)r*segLen,0,sizeof(int8_t)*2*Z,decoderStreams[0]);
 #if 0
      int8_t llr_local[segLen];
-     if (r<=1) {
+     if (r==1 && segs->rv_index==2) {
        cudaMemcpyAsync(llr_local,p_llr_dev+(size_t)r*segLen,sizeof(int8_t)*segLen,cudaMemcpyDeviceToHost,decoderStreams[0]);
        for (int i=0;i<segLen;i++) printf("llr(%d,%d,%d/%d) %d\n",segs->rv_index,r,i,segLen,llr_local[i]);
      }

@@ -871,6 +871,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
               nrLDPC_llr2bitPacked(p_out, p_llrOut, numLLR);
             else // if (outMode == nrLDPC_outMode_BITINT8)
               nrLDPC_llr2bit(p_out, p_llrOut, numLLR);
+//	    for (int i=0;i<p_decParams->Kprime>>3;i++) printf("byte(%d) %x\n",i,p_out[i]);
             if (p_decParams->check_crc((uint8_t*)p_out, p_decParams->Kprime, p_decParams->crc_type)) {
               LOG_D(PHY, "Segment CRC OK, exiting LDPC decoder\n");
               break;

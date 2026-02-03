@@ -223,7 +223,7 @@ static void nr_process_decode_segment(void *arg)
   }
   stop_meas(rdata->p_ts_seg_prep);
 #if 0
-  if (rdata->r<=1) for (int i=0;i<(Kc * rdata->Z);i++) printf("llr(%d,%d,%d/%d) %d\n",rv_index,rdata->r,i,Kc*rdata->Z,l[i]);
+  if (rdata->r==1 && rv_index==2) for (int i=0;i<(Kc * rdata->Z);i++) printf("llr(%d,%d,%d/%d) %d\n",rv_index,rdata->r,i,Kc*rdata->Z,l[i]);
 #endif
   //////////////////////////////////////////////////////////////////////////////////////////
 

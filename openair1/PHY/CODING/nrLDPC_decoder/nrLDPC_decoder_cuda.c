@@ -543,8 +543,9 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   cudaStreamSynchronize(decoderStreams[0]);
   if (p_decParams->check_crc) {
     for (int r = 0; r < n_segments; r++) {
-      //for (int i=0;i<(K>>3);i++) printf("byte (%d,%d) %x\n",r,i,((uint8_t*)(p_out+r*(K>>3)))[i]);
-      if (!p_decParams->check_crc((uint8_t*)(p_out + r * (K >> 3)), p_decParams->Kprime, p_decParams->crc_type)) {
+//      if (r<=1) for (int i=0;i<(K>>3);i++) printf("byte (%d,%d) %x\n",r,i,((uint8_t*)(p_out+r*(K>>3)))[i]);
+
+      if (!p_decParams->check_crc((uint8_t*)(p_out + (r * (K >> 3))), p_decParams->Kprime, p_decParams->crc_type)) {
         LOG_D(PHY, "Segment %d/%d CRC NOK\n", r, n_segments);
         return (1 + numMaxIter);
       }
