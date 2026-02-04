@@ -106,8 +106,10 @@ typedef struct {
   /// Pointers to transport block segments
   uint8_t **c;
 #ifdef ENABLE_CUDA
-  /// Pointers to transport block segments
-  uint8_t **c_dev;
+  /// Pointers to transport block segments (contains pointers in c above)
+  uint8_t *c_devh;
+  /// Pointers to transport block segments (GPU mapping)
+  uint8_t *c_dev;
 #endif
   /// Interleaver outputs
   uint8_t *f;

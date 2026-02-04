@@ -95,7 +95,10 @@ NR_gNB_DLSCH_t new_gNB_dlsch(NR_DL_FRAME_PARMS *frame_parms, uint16_t N_RB, int 
 
   dlsch.c = (uint8_t **)malloc16(a_segments * sizeof(uint8_t *));
 #ifdef ENABLE_CUDA
-  uint8_t *c_devh[a_segments];
+  cudaError_t err=cudaHostAlloc((void**)&dlsch.c_devh,a_segments*sizeof(uint8_t*),cudaHostAllocMapped);
+  AssertFatal(err == cudaSuccess,"CUDA Error (dlsch->c_devh): %s\n", cudaGetErrorString(err));
+  err=cudaHostGetDevicePointer((void**)&dlsch.c_dev,(void*)dlsch.c_devh,0);
+  AssertFatal(err == cudaSuccess,"CUDA Error (dlsch->c_dev): %s\n", cudaGetErrorString(err));
 #endif
   for (int r = 0; r < a_segments; r++) {
     // account for filler in first segment and CRCs for multiple segment case
@@ -104,9 +107,11 @@ NR_gNB_DLSCH_t new_gNB_dlsch(NR_DL_FRAME_PARMS *frame_parms, uint16_t N_RB, int 
     //       In section 5.3.2 in 38.212, the for loop is up to N + 2*Zc (maximum size of N is 66*Zc, therefore 68*Zc)
 #ifdef ENABLE_CUDA
     if (use_gpumem) {
-      cudaError_t err=cudaHostAlloc((void**)&dlsch.c[r],(8448/8)*sizeof(uint8_t),cudaHostAllocMapped);
+      err=cudaHostAlloc((void**)&dlsch.c[r],(8448/8)*sizeof(uint8_t),cudaHostAllocMapped);
       AssertFatal(err == cudaSuccess,"CUDA Error (dlsch->c[%d]): %s\n", r,cudaGetErrorString(err));
-      err=cudaHostGetDevicePointer((void**)&c_devh[r], dlsch.c[r], 0);
+      uint8_t *tmpcr;
+      err=cudaHostGetDevicePointer((void**)&tmpcr, (void*)dlsch.c[r], 0);
+      ((uint8_t**)dlsch.c_devh)[r]=tmpcr;
       AssertFatal(err == cudaSuccess,"CUDA Error (cudaHostGetDevicePointer) dlsch->c_devh[%d]: %s\n", r,cudaGetErrorString(err));
     }
     else 
@@ -115,13 +120,6 @@ NR_gNB_DLSCH_t new_gNB_dlsch(NR_DL_FRAME_PARMS *frame_parms, uint16_t N_RB, int 
     AssertFatal(dlsch.c[r], "cannot allocate dlsch->c[%d]\n", r);
     bzero(dlsch.c[r], 8448/8);
   }
-#ifdef ENABLE_CUDA
-  if (use_gpumem) {
-    cudaError_t err=cudaMalloc((void**)&dlsch.c_dev,a_segments*sizeof(uint8_t*));
-    err=cudaMemcpy(dlsch.c_dev,c_devh,a_segments*sizeof(uint8_t*),cudaMemcpyHostToDevice);
-    AssertFatal(err == cudaSuccess,"CUDA Error (memcpy c_devh -> input_dev): %s\n", cudaGetErrorString(err));
-  }
-#endif
   dlsch.f = malloc16(N_RB * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB * 8 * NR_MAX_NB_LAYERS);
   AssertFatal(dlsch.f, "cannot allocate dlsch->f\n");
   bzero(dlsch.f, N_RB * NR_SYMBOLS_PER_SLOT * NR_NB_SC_PER_RB * 8 * NR_MAX_NB_LAYERS);
