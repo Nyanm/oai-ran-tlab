@@ -368,7 +368,7 @@ int get_ul_slots_per_frame(const frame_structure_t *fs)
  * @param ideal_period ideal period
  * @return slot index offset
  */
-int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed, int beam_idx, int beams_per_period, int num_beam, int ideal_period)
+int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed, int beam_idx, int beams_per_period, int num_beam, int ideal_period, int NUM_SSB_period)
 {
   DevAssert(fs);
 
@@ -388,7 +388,7 @@ int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed, i
   if (num_beam > 0) {
       int id = (count_mixed) ? idx/2 : idx;
       id /= beams_per_period;
-      printf("get_ul_slot_offset 1 id %d idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d\n", id, idx, count_mixed, beam_idx, num_beam, ideal_period);
+      //printf("get_ul_slot_offset 1 id %d idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d\n", id, idx, count_mixed, beam_idx, num_beam, ideal_period);
     // SRS
     if (!count_mixed) {
       idx = 3 * id;
@@ -403,31 +403,77 @@ int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed, i
         idx = 3 * id + 1;
       }
     }
-    printf("get_ul_slot_offset 2 id %d idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d\n", id, idx, count_mixed, beam_idx, num_beam, ideal_period);
+    //printf("get_ul_slot_offset 2 id %d idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d\n", id, idx, count_mixed, beam_idx, num_beam, ideal_period);
   }
+  idx += NUM_SSB_period;
 
   /* Populate the indices of UL slots in the TDD period from the bitmap
   count also mixed slots with UL symbols if flag count_mixed is present */
   for (int j = 0; j < fs->numb_slots_frame; j++) {
     int i = j % fs->numb_slots_period;
-    printf("get_ul_slot_offset 3 j %d ul_slot_count %d i %d %d %d\n", j, ul_slot_count, i,  is_ul_slot(i, fs), fs->period_cfg.tdd_slot_bitmap[i].slot_type);
+    //printf("get_ul_slot_offset 3 j %d ul_slot_count %d i %d %d %d\n", j, ul_slot_count, i,  is_ul_slot(i, fs), fs->period_cfg.tdd_slot_bitmap[i].slot_type);
     if (((count_mixed && is_ul_slot(i, fs)) || fs->period_cfg.tdd_slot_bitmap[i].slot_type == TDD_NR_UPLINK_SLOT) && (j % 10 != 9)) {
-      printf("get_ul_slot_offset 4 j %d ul_slot_count %d i %d %d %d\n", j, ul_slot_count, i,  is_ul_slot(i, fs), fs->period_cfg.tdd_slot_bitmap[i].slot_type);
+      //printf("get_ul_slot_offset 4 j %d ul_slot_count %d i %d %d %d\n", j, ul_slot_count, i,  is_ul_slot(i, fs), fs->period_cfg.tdd_slot_bitmap[i].slot_type);
       ul_slot_idxs[ul_slot_count++] = j;
      }
   }
-
+/*
   printf("get_ul_slot_offset SSB %d beams_per_period %d\n", num_beam, beams_per_period);
   for (int i = 0; i < fs->numb_slots_frame; i++)
     printf("%d ", ul_slot_idxs[i]);
   printf("\n");
-
+*/
   fflush(stdout);
   // Compute slot index offset
   int period_idx = idx / ul_slot_count; // wrap up the count of complete TDD periods spanned by the index
   int ul_slot_idx_in_period = idx % ul_slot_count; // wrap up the UL slot index within the current TDD period
   int ret = ul_slot_idxs[ul_slot_idx_in_period] + period_idx * fs->numb_slots_frame;
   printf("get_ul_slot_offset 1 ret %d idx %d beam_idx %d beams_period %d ul_slot_count %d %d %d\n", ret, idx, beam_idx, beams_per_period, ul_slot_idx_in_period, period_idx, fs->numb_slots_period);
+  fflush(stdout);
+  return ret;
+}
+
+int get_first_ul_slot_sr(const frame_structure_t *fs, bool count_mixed, int beam_idx, int beams_per_period, int num_beam, int ideal_period, int NUM_SSB_period)
+{
+  DevAssert(fs);
+
+  // FDD
+  if (fs->frame_type == FDD)
+    return 1;
+
+  // UL slots indexes in period
+  int ul_slot_idxs[fs->numb_slots_frame];
+  int ul_slot_count = 0;
+
+  for (int i = 0; i < fs->numb_slots_frame; i++) {
+      ul_slot_idxs[i] = 0;
+  }
+
+  printf("get_first_ul_slot_sr 0 count_mixed %d beam_idx %d num_beam %d ideal_period %d\n", count_mixed, beam_idx, num_beam, ideal_period);
+
+  /* Populate the indices of UL slots in the TDD period from the bitmap
+  count also mixed slots with UL symbols if flag count_mixed is present */
+  for (int j = 0; j < fs->numb_slots_frame; j++) {
+    int i = j % fs->numb_slots_period;
+    //printf("get_first_ul_slot_sr 3 j %d ul_slot_count %d i %d %d %d\n", j, ul_slot_count, i,  is_ul_slot(i, fs), fs->period_cfg.tdd_slot_bitmap[i].slot_type);
+    if (((count_mixed && is_ul_slot(i, fs)) || fs->period_cfg.tdd_slot_bitmap[i].slot_type == TDD_NR_UPLINK_SLOT) && (j % 10 != 9)) {
+      //printf("get_first_ul_slot_sr 4 j %d ul_slot_count %d i %d %d %d\n", j, ul_slot_count, i,  is_ul_slot(i, fs), fs->period_cfg.tdd_slot_bitmap[i].slot_type);
+      ul_slot_idxs[ul_slot_count++] = j;
+     }
+  }
+/*
+  printf("get_first_ul_slot_sr beam_idx %d\n", beam_idx);
+  for (int i = 0; i < fs->numb_slots_frame; i++)
+    printf("%d ", ul_slot_idxs[i]);
+  printf("\n");
+*/
+  fflush(stdout);
+  // Compute slot index offset
+  int period_idx = beam_idx / ul_slot_count; // wrap up the count of complete TDD periods spanned by the index
+  int ul_slot_idx_in_period = beam_idx % ul_slot_count; // wrap up the UL slot index within the current TDD period
+  int ret = ul_slot_idxs[ul_slot_idx_in_period] + period_idx * fs->numb_slots_frame;
+  printf("get_first_ul_slot_sr 1 ret %d beam_idx %d ul_slot_count %d %d %d\n",
+    ret, beam_idx, ul_slot_idx_in_period, period_idx, fs->numb_slots_period);
   fflush(stdout);
   return ret;
 }
@@ -655,7 +701,7 @@ static void config_common(gNB_MAC_INST *nrmac, const nr_mac_config_t *config, NR
 
   nrmac->ssb_SubcarrierOffset = cfg->ssb_table.ssb_subcarrier_offset.value;
   nrmac->ssb_OffsetPointA = cfg->ssb_table.ssb_offset_point_a.value;
-  LOG_D(NR_MAC,
+  LOG_I(NR_MAC,
         "ssb_OffsetPointA %d, ssb_SubcarrierOffset %d\n",
         cfg->ssb_table.ssb_offset_point_a.value,
         cfg->ssb_table.ssb_subcarrier_offset.value);
@@ -846,7 +892,8 @@ static void config_sched_ctrlCommon(gNB_MAC_INST *nr_mac)
   const int8_t numb_slots_frame = nr_mac->frame_structure.numb_slots_frame;
   frequency_range_t frequency_range = scc->ssb_PositionsInBurst->present == 3 ? FR2 : FR1;
   const int prb_offset = frequency_range == FR1 ? nr_mac->ssb_OffsetPointA >> scs : nr_mac->ssb_OffsetPointA >> (scs - 2);
-
+  LOG_I(NR_MAC, "mjoang prb_offset %d ssb_OffsetPointA %d scs %ld\n",
+        prb_offset, nr_mac->ssb_OffsetPointA, scs);
   NR_Type0_PDCCH_CSS_config_t type0_PDCCH_CSS_config = {0};
   for (int i = 0; i < get_max_ssbs(scc); i++) {
     if (is_ssb_configured(scc, i)) {
@@ -881,7 +928,7 @@ static void config_sched_ctrlCommon(gNB_MAC_INST *nr_mac)
     // The network configures the commonControlResourceSet in SIB1 so that it is contained in the bandwidth of CSET0
     int bwp_size = NRRIV2BW(scc->downlinkConfigCommon->initialDownlinkBWP->genericParameters.locationAndBandwidth,
                                     MAX_BWP_SIZE);
-    LOG_D(NR_MAC,
+    LOG_I(NR_MAC,
       "mjoang config_sched_ctrlCommon nr_mac->cset0_bwp_start %d:%d bwp_start %d:%d\n",
       nr_mac->cset0_bwp_start, nr_mac->cset0_bwp_size,
       bwp_start, bwp_size);

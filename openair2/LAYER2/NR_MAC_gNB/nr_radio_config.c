@@ -306,7 +306,7 @@ static NR_ControlResourceSet_t *get_coreset_config(int bwp_id, int cset_offset, 
   coreset->duration = (curr_bwp < 48) ? 2 : 1;
   coreset->cce_REG_MappingType.present = NR_ControlResourceSet__cce_REG_MappingType_PR_nonInterleaved;
   coreset->precoderGranularity = NR_ControlResourceSet__precoderGranularity_sameAsREG_bundle;
-  LOG_D(NR_MAC,
+  LOG_I(NR_MAC,
       "mjoang get_coreset_config bwp_id %d cset_offset %d curr_bwp %d cset_shift %d size %ld frequencyDomainResources 0x%02x:0x%02x:0x%02x:0x%02x:0x%02x:0x%02x\n",
       bwp_id, cset_offset, curr_bwp, cset_shift,
       coreset->frequencyDomainResources.size,
@@ -357,13 +357,13 @@ static bool check_periodicity(int val, int ideal_period, const frame_structure_t
   return (ideal_period < val + 1) && valid_periodicity_for_tdd_period;
 }
 
-static int set_ideal_period(bool is_csi)
+static int set_ideal_period(bool is_csi, int NUM_SSB_period)
 {
   const frame_structure_t *fs = &RC.nrmac[0]->frame_structure;
   const int nb_slots_per_period = fs->numb_slots_period;
   const int n_ul_slots_per_period = get_ul_slots_per_period(fs); // full UL + mixed with UL symbols
   // 2 reports per UE (RSRP and RI-PMI-CQI)
-  return is_csi ? MAX_MOBILES_PER_GNB * 2 * nb_slots_per_period / n_ul_slots_per_period : nb_slots_per_period * MAX_MOBILES_PER_GNB;
+  return 3 * nb_slots_per_period * MAX_MOBILES_PER_GNB + NUM_SSB_period;
 }
 
 static void set_csirs_periodicity(NR_NZP_CSI_RS_Resource_t *nzpcsi0,
@@ -488,7 +488,16 @@ static void config_csirs(const NR_ServingCellConfigCommon_t *servingcellconfigco
     *nzpcsi0->powerControlOffsetSS = NR_NZP_CSI_RS_Resource__powerControlOffsetSS_db0;
     nzpcsi0->scramblingID = *servingcellconfigcommon->physCellId;
 
-    const int ideal_period = set_ideal_period(true); // same periodicity as CSI measurement report
+    NR_beam_info_t *beam_info = &RC.nrmac[0]->beam_info;
+    int num_beam = 1;
+    int beams_per_period = 1;
+    int NUM_SSB_period = 1;
+    if (beam_info->beam_mode != NO_BEAM_MODE) {
+      num_beam = (RC.nrmac[0]->radio_config.nb_bfw[1] > 0) ? RC.nrmac[0]->radio_config.nb_bfw[1] : 1;
+      beams_per_period = (beam_info->beams_per_period > 0) ? beam_info->beams_per_period : 1;
+      NUM_SSB_period = (num_beam % beams_per_period > 0) ? num_beam / beams_per_period + 1 : num_beam / beams_per_period;
+    }
+    const int ideal_period = set_ideal_period(true, NUM_SSB_period); // same periodicity as CSI measurement report
     const frame_structure_t *fs = &(RC.nrmac[0]->frame_structure);
     set_csirs_periodicity(nzpcsi0, id, ideal_period, fs);
 
@@ -688,9 +697,10 @@ static struct NR_SRS_Resource__resourceType__periodic *configure_periodic_srs(co
   } else {
     beam_idx = 0; // set to 0 as protection
   }
-  const int ideal_period = set_ideal_period(false);
-  LOG_I(NR_MAC, "configure_periodic_srs 0 idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d\n", uid, false, beam_idx, num_beam, ideal_period);
-  int offset = get_ul_slot_offset(fs, uid, false, beam_idx, beams_per_period, num_beam, ideal_period); // only full UL slots for SRS
+  const int ideal_period = set_ideal_period(false, NUM_SSB_period);
+  int offset = get_ul_slot_offset(fs, uid, false, beam_idx, beams_per_period, num_beam, ideal_period, NUM_SSB_period); // only full UL slots for SRS
+  LOG_I(NR_MAC, "configure_periodic_srs 0 idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d srs_offset %d\n",
+    uid, false, beam_idx, num_beam, ideal_period, offset);
 
   // checked for validity in verify_radio_configuration
   AssertFatal(offset < 2560, "Cannot allocate SRS configuration for uid %d, not enough resources\n", uid);
@@ -1389,6 +1399,74 @@ static void set_SR_periodandoffset(NR_SchedulingRequestResourceConfig_t *schedul
   }
 }
 
+static void set_SR_periodandoffset_beam(NR_SchedulingRequestResourceConfig_t *schedulingRequestResourceConfig, const NR_ServingCellConfigCommon_t *scc, int scs, int beam_idx)
+{
+  const frame_structure_t *fs = &RC.nrmac[0]->frame_structure;
+  NR_beam_info_t *beam_info = &RC.nrmac[0]->beam_info;
+  int num_beam = (RC.nrmac[0]->radio_config.nb_bfw[1] > 0) ? RC.nrmac[0]->radio_config.nb_bfw[1] : 1;
+  int beams_per_period = (beam_info->beams_per_period > 0) ? beam_info->beams_per_period : 1;
+  int NUM_SSB_period = (num_beam % beams_per_period > 0) ? num_beam / beams_per_period + 1 : num_beam / beams_per_period;
+
+  int sr_slot = 1; // in FDD SR in slot 1
+  const int ideal_period = set_ideal_period(false, NUM_SSB_period);
+  sr_slot = get_first_ul_slot_sr(fs, true, beam_idx, beams_per_period, num_beam, ideal_period, NUM_SSB_period);
+
+  schedulingRequestResourceConfig->periodicityAndOffset = calloc(1,sizeof(*schedulingRequestResourceConfig->periodicityAndOffset));
+
+  LOG_I(NR_MAC, "set_SR_periodandoffset_beam beam_idx %d num_beam %d ideal_period %d sr_slot %d\n",
+    beam_idx, num_beam, ideal_period, sr_slot);
+
+  if (check_periodicity(5, ideal_period, fs)) {
+    schedulingRequestResourceConfig->periodicityAndOffset->present = NR_SchedulingRequestResourceConfig__periodicityAndOffset_PR_sl5;
+    schedulingRequestResourceConfig->periodicityAndOffset->choice.sl5 = sr_slot;
+    return;
+  }
+  else if(check_periodicity(8, ideal_period, fs)) {
+    schedulingRequestResourceConfig->periodicityAndOffset->present = NR_SchedulingRequestResourceConfig__periodicityAndOffset_PR_sl8;
+    schedulingRequestResourceConfig->periodicityAndOffset->choice.sl8 = sr_slot;
+    return;
+  }
+  else if(check_periodicity(10, ideal_period, fs)) {
+    schedulingRequestResourceConfig->periodicityAndOffset->present = NR_SchedulingRequestResourceConfig__periodicityAndOffset_PR_sl10;
+    schedulingRequestResourceConfig->periodicityAndOffset->choice.sl10 = sr_slot;
+    return;
+  }
+  else if(check_periodicity(16, ideal_period, fs)) {
+    schedulingRequestResourceConfig->periodicityAndOffset->present = NR_SchedulingRequestResourceConfig__periodicityAndOffset_PR_sl16;
+    schedulingRequestResourceConfig->periodicityAndOffset->choice.sl16 = sr_slot;
+    return;
+  }
+  else if(check_periodicity(20, ideal_period, fs)) {
+    schedulingRequestResourceConfig->periodicityAndOffset->present = NR_SchedulingRequestResourceConfig__periodicityAndOffset_PR_sl20;
+    schedulingRequestResourceConfig->periodicityAndOffset->choice.sl20 = sr_slot;
+    return;
+  }
+  else if (check_periodicity(40, ideal_period, fs)) {
+    schedulingRequestResourceConfig->periodicityAndOffset->present = NR_SchedulingRequestResourceConfig__periodicityAndOffset_PR_sl40;
+    schedulingRequestResourceConfig->periodicityAndOffset->choice.sl40 = sr_slot;
+    return;
+  }
+  else if (check_periodicity(80, ideal_period, fs)) {
+    schedulingRequestResourceConfig->periodicityAndOffset->present = NR_SchedulingRequestResourceConfig__periodicityAndOffset_PR_sl80;
+    schedulingRequestResourceConfig->periodicityAndOffset->choice.sl80 = sr_slot;
+    return;
+  }
+  else if ((check_periodicity(160, ideal_period, fs))) {
+    schedulingRequestResourceConfig->periodicityAndOffset->present = NR_SchedulingRequestResourceConfig__periodicityAndOffset_PR_sl160;
+    schedulingRequestResourceConfig->periodicityAndOffset->choice.sl160 = sr_slot;
+    return;
+  }
+  else if ((check_periodicity(320, ideal_period, fs))) {
+    schedulingRequestResourceConfig->periodicityAndOffset->present = NR_SchedulingRequestResourceConfig__periodicityAndOffset_PR_sl320;
+    schedulingRequestResourceConfig->periodicityAndOffset->choice.sl320 = sr_slot;
+    return;
+  }
+  else {
+    schedulingRequestResourceConfig->periodicityAndOffset->present = NR_SchedulingRequestResourceConfig__periodicityAndOffset_PR_sl640;
+    schedulingRequestResourceConfig->periodicityAndOffset->choice.sl640 = sr_slot;
+  }
+}
+
 static void scheduling_request_config(const NR_ServingCellConfigCommon_t *scc, NR_PUCCH_Config_t *pucch_Config, int scs, int beam_idx)
 {
   // format with <=2 bits in pucch resource set 0
@@ -1401,7 +1479,11 @@ static void scheduling_request_config(const NR_ServingCellConfigCommon_t *scc, N
   schedulingRequestResourceConfig->schedulingRequestResourceId = 1;
   schedulingRequestResourceConfig->schedulingRequestID = 0;
 
-  set_SR_periodandoffset(schedulingRequestResourceConfig, scc, scs);
+  NR_beam_info_t *beam_info = &RC.nrmac[0]->beam_info;
+  if (beam_info->beam_mode == NO_BEAM_MODE)
+    set_SR_periodandoffset(schedulingRequestResourceConfig, scc, scs);
+  else
+    set_SR_periodandoffset_beam(schedulingRequestResourceConfig, scc, scs, beam_idx);
 
   schedulingRequestResourceConfig->resource = calloc(1,sizeof(*schedulingRequestResourceConfig->resource));
   *schedulingRequestResourceConfig->resource = *pucchressetid;
@@ -1967,10 +2049,10 @@ static void set_csi_meas_periodicity(const NR_ServingCellConfigCommon_t *scc,
   } else {
     beam_idx = 0; // set to 0 as protection
   }
-  const int ideal_period = set_ideal_period(true);
+  const int ideal_period = set_ideal_period(true, NUM_SSB_period);
   LOG_I(NR_MAC, "set_csi_meas_periodicity 0 idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d\n", idx, true, beam_idx, num_beam, ideal_period);
-  int offset = get_ul_slot_offset(fs, idx, true, beam_idx, beams_per_period, num_beam, ideal_period);
-  LOG_D(NR_MAC, "set_csi_meas_periodicity: uid = %d, offset = %d, ideal_period = %d\n", uid, offset, ideal_period);
+  int offset = get_ul_slot_offset(fs, idx, true, beam_idx, beams_per_period, num_beam, ideal_period, NUM_SSB_period);
+  LOG_I(NR_MAC, "set_csi_meas_periodicity: uid = %d, offset = %d, ideal_period = %d\n", uid, offset, ideal_period);
   // checked for validity in verify_radio_configuration
   AssertFatal(offset < 320, "Not enough UL slots to accomodate all possible UEs. Need to rework the implementation\n");
   if (check_periodicity(4, ideal_period, fs)) {
@@ -3786,9 +3868,11 @@ static bool verify_radio_configuration(int uid, const NR_ServingCellConfigCommon
   } else {
     beam_idx = 0; // set to 0 as protection
   }
-  int ideal_period = set_ideal_period(false);
-  LOG_I(NR_MAC, "verify_radio_configuration 0 idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d\n", uid, false, beam_idx, num_beam, ideal_period);
-  int srs_offset = get_ul_slot_offset(fs, uid, false, beam_idx, beams_per_period, num_beam, ideal_period);
+  int ideal_period = set_ideal_period(false, NUM_SSB_period);
+  int srs_offset = get_ul_slot_offset(fs, uid, false, beam_idx, beams_per_period, num_beam, ideal_period, NUM_SSB_period);
+  LOG_I(NR_MAC, "verify_radio_configuration 0 idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d srs_offset %d\n",
+    uid, false, beam_idx, num_beam, ideal_period, srs_offset);
+
   // see configure_periodic_srs
   if (srs_offset >= 2560) {
     LOG_E(NR_RRC, "UID %d, cannot allocate resources for SRS, rejecting UE\n", uid);
@@ -3816,11 +3900,13 @@ static bool verify_radio_configuration(int uid, const NR_ServingCellConfigCommon
     LOG_E(NR_RRC, "UID %d, cannot allocate resources for PUCCH2, rejecting UE\n", uid);
     return false; // cannot allocate resources for PUCCH2
   }
-  ideal_period = set_ideal_period(true);
+  ideal_period = set_ideal_period(true, NUM_SSB_period);
   //const int idx = (uid * 2 / num_pucch2) + 1;
   const int idx = (uid * 2) + 1;
-  LOG_I(NR_MAC, "verify_radio_configuration 1 idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d\n", idx, true, beam_idx, num_beam, ideal_period);
-  int offset = get_ul_slot_offset(fs, idx, true, beam_idx, beams_per_period, num_beam, ideal_period);
+  int offset = get_ul_slot_offset(fs, idx, true, beam_idx, beams_per_period, num_beam, ideal_period, NUM_SSB_period);
+  LOG_I(NR_MAC, "verify_radio_configuration 1 idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d offset %d\n",
+    idx, true, beam_idx, num_beam, ideal_period, offset);
+
   // see set_csi_meas_periodicity
   if (offset >= 320) {
     LOG_E(NR_RRC, "UID %d, cannot allocate resources for CSI reporting, rejecting UE\n", uid);
