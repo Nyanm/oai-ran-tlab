@@ -341,32 +341,25 @@ void end_meas(void) {
 }
 
 /**
- * \brief initializes sorted list
- * if dst is already initialized then asserts
- * \param time_stats_sorted_list sorted list to be initialized
+ * \brief enables sorted list
+ * if the list is already enabled then empties it
+ * \param time_stats_sorted_list sorted list to be enabled
  * \param size size of the sorted list
  */
-void init_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list, unsigned int size)
+void enable_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list)
 {
   if (time_stats_sorted_list->size == 0) {
-    time_stats_sorted_list->list = calloc(size, sizeof(oai_cputime_t));
-    time_stats_sorted_list->size = size;
-    time_stats_sorted_list->nb_elm = 0;
-  } else {
-    AssertFatal(time_stats_sorted_list->size == 0, "Calling init_time_stats_sorted_list on initialized sorted list\n");
+    time_stats_sorted_list->size = SORTED_LIST_ALLOC_SIZE;
   }
+  time_stats_sorted_list->nb_elm = 0;
 }
 /**
- * \brief free sorted list
- * if dst is already free then does nothing
+ * \brief disable sorted list
  * \param time_stats_sorted_list sorted list to be freed
  */
-void free_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list)
+void disable_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list)
 {
-  if (time_stats_sorted_list->size > 0) {
-    free(time_stats_sorted_list->list);
-    time_stats_sorted_list->size = 0;
-  }
+  time_stats_sorted_list->size = 0;
 }
 /**
  * \brief returns true if the sorted list is enabled and false otherwise
@@ -378,7 +371,7 @@ int is_enabled_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorte
 }
 /**
  * \brief empties sorted list
- * if dst is not initialized then does nothing
+ * if dst is not enabled then does nothing
  * \param time_stats_sorted_list sorted list to be emptied
  */
 void reset_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list)
@@ -389,7 +382,7 @@ void reset_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_li
 }
 /**
  * \brief inserts value sorted list
- * if dst is not initialized then does nothing
+ * if dst is not enabled then does nothing
  * if dst is full then does nothing
  * \param time_stats_sorted_list sorted list to insert in
  * \param time time value to insert
@@ -424,25 +417,21 @@ void insert_in_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorte
 }
 /**
  * \brief copy sorted list src into dst, freeing and replacing dst
- * dst and src should be initialized, otherwise does nothing
+ * dst and src should be enabled, otherwise does nothing
  * \param dst destination sorted list
- * should be intitialized even with a dummy size 1 buffer to make sure that copying the list there is expected by the caller
+ * should be enabled to make sure that copying the list there is expected by the caller
  * \param src source sorted list
  */
 void copy_time_stats_sorted_list(time_stats_sorted_list_t *dst, const time_stats_sorted_list_t *src)
 {
   if (dst->size > 0 && src->size > 0) {
-    if (dst->size != src->size) {
-      free_time_stats_sorted_list(dst);
-      init_time_stats_sorted_list(dst, src->size);
-    }
     memcpy(dst->list, src->list, src->nb_elm * sizeof(oai_cputime_t));
     dst->nb_elm = src->nb_elm;
   }
 }
 /**
  * \brief inserts the content of sorted list src into dst
- * dst and src should be initialized, otherwise does nothing
+ * dst and src should be enabled, otherwise does nothing
  * if dst is not large enough to copy src then does nothing
  * \param dst destination sorted list
  * \param src source sorted list
@@ -480,7 +469,7 @@ void merge_time_stats_sorted_list(time_stats_sorted_list_t *dst, const time_stat
 }
 /**
  * \brief get the minimum from a sorted list
- * if the sorted list is not initialized or empty then returns -1
+ * if the sorted list is not enabled or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
  */
 oai_cputime_t get_min(time_stats_sorted_list_t *time_stats_sorted_list)
@@ -493,7 +482,7 @@ oai_cputime_t get_min(time_stats_sorted_list_t *time_stats_sorted_list)
 }
 /**
  * \brief get the median from a sorted list
- * if the sorted list is not initialized or empty then returns -1
+ * if the sorted list is not enabled or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
  */
 oai_cputime_t get_median(time_stats_sorted_list_t *time_stats_sorted_list)
@@ -506,7 +495,7 @@ oai_cputime_t get_median(time_stats_sorted_list_t *time_stats_sorted_list)
 }
 /**
  * \brief get the first quartile from a sorted list
- * if the sorted list is not initialized or empty then returns -1
+ * if the sorted list is not enabled or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
  */
 oai_cputime_t get_q1(time_stats_sorted_list_t *time_stats_sorted_list)
@@ -519,7 +508,7 @@ oai_cputime_t get_q1(time_stats_sorted_list_t *time_stats_sorted_list)
 }
 /**
  * \brief get the third quartile from a sorted list
- * if the sorted list is not initialized or empty then returns -1
+ * if the sorted list is not enabled or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
  */
 oai_cputime_t get_q3(time_stats_sorted_list_t *time_stats_sorted_list)
@@ -532,7 +521,7 @@ oai_cputime_t get_q3(time_stats_sorted_list_t *time_stats_sorted_list)
 }
 /**
  * \brief get the first decile from a sorted list
- * if the sorted list is not initialized or empty then returns -1
+ * if the sorted list is not enabled or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
  */
 oai_cputime_t get_d1(time_stats_sorted_list_t *time_stats_sorted_list)
@@ -545,7 +534,7 @@ oai_cputime_t get_d1(time_stats_sorted_list_t *time_stats_sorted_list)
 }
 /**
  * \brief get the nineth decile from a sorted list
- * if the sorted list is not initialized or empty then returns -1
+ * if the sorted list is not enabled or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
  */
 oai_cputime_t get_d9(time_stats_sorted_list_t *time_stats_sorted_list)

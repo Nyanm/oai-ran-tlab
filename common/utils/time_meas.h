@@ -55,34 +55,34 @@ typedef struct {
   meas_printfunc_t  displayFunc;            /*!< \brief function to call when DISPLAY message is received*/
 } time_stats_msg_t;
 
+#define SORTED_LIST_ALLOC_SIZE 2048
 /**
  * \typedef time_stats_sorted_list_t
  * \brief sorted list of time stats to get med, q1, q2
  * it can be left disabled by leaving size equal to 0
- * \var size allocated size of the list
+ * \var size size of the list
  * 0 is the sorted list is disabled
  * \var nb_elm number of elements in the list
- * \var list pointer to the list
+ * \var list array holding the sorted list
  */
 typedef struct {
   unsigned int size;
   unsigned int nb_elm;
-  oai_cputime_t *list;
+  oai_cputime_t list[SORTED_LIST_ALLOC_SIZE];
 } time_stats_sorted_list_t;
 
 /**
- * \brief initializes sorted list
- * if dst is already initialized then asserts
- * \param time_stats_sorted_list sorted list to be initialized
+ * \brief enables sorted list
+ * if the list is already enabled then empties it
+ * \param time_stats_sorted_list sorted list to be enabled
  * \param size size of the sorted list
  */
-void init_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list, unsigned int size);
+void enable_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list);
 /**
- * \brief free sorted list
- * if dst is already free then does nothing
+ * \brief disable sorted list
  * \param time_stats_sorted_list sorted list to be freed
  */
-void free_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list);
+void disable_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list);
 /**
  * \brief returns true if the sorted list is enabled and false otherwise
  * \param time_stats_sorted_list sorted list to be tested
@@ -90,13 +90,13 @@ void free_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_lis
 int is_enabled_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list);
 /**
  * \brief empties sorted list
- * if dst is not initialized then does nothing
+ * if the list is not enabled then does nothing
  * \param time_stats_sorted_list sorted list to be emptied
  */
 void reset_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list);
 /**
  * \brief inserts value sorted list
- * if dst is not initialized then does nothing
+ * if dst is not enabled then does nothing
  * if dst is full then does nothing
  * \param time_stats_sorted_list sorted list to insert in
  * \param time time value to insert
@@ -104,15 +104,15 @@ void reset_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_li
 void insert_in_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list, oai_cputime_t time);
 /**
  * \brief copy sorted list src into dst, freeing and replacing dst
- * dst and src should be initialized, otherwise does nothing
+ * dst and src should be enabled, otherwise does nothing
  * \param dst destination sorted list
- * should be intitialized even with a dummy size 1 buffer to make sure that copying the list there is expected by the caller
+ * should be enableed to make sure that copying the list there is expected by the caller
  * \param src source sorted list
  */
 void copy_time_stats_sorted_list(time_stats_sorted_list_t *dst, const time_stats_sorted_list_t *src);
 /**
  * \brief inserts the content of sorted list src into dst
- * dst and src should be initialized, otherwise does nothing
+ * dst and src should be enabled, otherwise does nothing
  * if dst is not large enough to copy src then does nothing
  * \param dst destination sorted list
  * \param src source sorted list
@@ -120,37 +120,37 @@ void copy_time_stats_sorted_list(time_stats_sorted_list_t *dst, const time_stats
 void merge_time_stats_sorted_list(time_stats_sorted_list_t *dst, const time_stats_sorted_list_t *src);
 /**
  * \brief get the minimum from a sorted list
- * if the sorted list is not initialized or empty then returns -1
+ * if the sorted list is not enabled or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
  */
 oai_cputime_t get_min(time_stats_sorted_list_t *time_stats_sorted_list);
 /**
  * \brief get the median from a sorted list
- * if the sorted list is not initialized or empty then returns -1
+ * if the sorted list is not enabled or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
  */
 oai_cputime_t get_median(time_stats_sorted_list_t *time_stats_sorted_list);
 /**
  * \brief get the first quartile from a sorted list
- * if the sorted list is not initialized or empty then returns -1
+ * if the sorted list is not enabled or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
  */
 oai_cputime_t get_q1(time_stats_sorted_list_t *time_stats_sorted_list);
 /**
  * \brief get the third quartile from a sorted list
- * if the sorted list is not initialized or empty then returns -1
+ * if the sorted list is not enabled or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
  */
 oai_cputime_t get_q3(time_stats_sorted_list_t *time_stats_sorted_list);
 /**
  * \brief get the first decile from a sorted list
- * if the sorted list is not initialized or empty then returns -1
+ * if the sorted list is not enabled or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
  */
 oai_cputime_t get_d1(time_stats_sorted_list_t *time_stats_sorted_list);
 /**
  * \brief get the nineth decile from a sorted list
- * if the sorted list is not initialized or empty then returns -1
+ * if the sorted list is not enabled or empty then returns -1
  * \param time_stats_sorted_list sorted list to query
  */
 oai_cputime_t get_d9(time_stats_sorted_list_t *time_stats_sorted_list);
@@ -322,14 +322,14 @@ static inline void merge_meas(time_stats_t *dst_ts, const time_stats_t *src_ts)
 
 #define TIME_STATS_ADVANCED_MODE 2
 
-static inline void init_sorted_list_meas(time_stats_t *ts, unsigned int size)
+static inline void enable_sorted_list_meas(time_stats_t *ts)
 {
-  init_time_stats_sorted_list(&ts->time_stats_sorted_list, size);
+  enable_time_stats_sorted_list(&ts->time_stats_sorted_list);
 }
 
-static inline void free_sorted_list_meas(time_stats_t *ts)
+static inline void disable_sorted_list_meas(time_stats_t *ts)
 {
-  free_time_stats_sorted_list(&ts->time_stats_sorted_list);
+  disable_time_stats_sorted_list(&ts->time_stats_sorted_list);
 }
 
 #define CPUMEASUR_SECTION "cpumeasur"
