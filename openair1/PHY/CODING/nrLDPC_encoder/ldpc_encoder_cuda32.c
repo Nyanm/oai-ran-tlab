@@ -63,7 +63,7 @@ int cuda_support_set = 0;
 
 extern cudaStream_t encoderStreams[4];
 
-int ldpc_input(uint32_t **input,uint32_t *cc[4],int nseg,cudaStream_t *s);
+int ldpc_input(uint32_t **input,uint32_t *cc[4],int nseg,cudaStream_t *s,int sidx);
 
 void cuda_support_init() {
 
@@ -153,6 +153,7 @@ void cuda_support_init() {
       AssertFatal(err == cudaSuccess,"CUDA Error (d_host[%d]): %s\n", i,cudaGetErrorString(err));
       err=cudaHostGetDevicePointer((void**)&d_devh[i], d_host[i], 0);
       AssertFatal(err == cudaSuccess,"CUDA Error (cudaHostGetDevicePointer) d_devh[%d]: %s\n", i,cudaGetErrorString(err));
+      LOG_I(NR_PHY,"d_host[%d] %p, d_devh[%d] %p\n",i,d_host[i],i,d_devh[i]);
     }
     err=cudaMemcpy(d_dev,d_devh,4*sizeof(uint32_t*),cudaMemcpyHostToDevice);
     AssertFatal(err == cudaSuccess,"CUDA Error (memcpy d_devh -> d_dev): %s\n", cudaGetErrorString(err));
@@ -193,22 +194,23 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
 //  uint32_t  cc[4][22*Zc]; //padded input, unpacked, max size
 
 #ifdef USE_GPU_FOR_INPUT
-  if (input_devh[0] != (uint32_t*)input[0]) { // this means we are not on shared memory
+  if (!pageable&&!integrated) { // this means we are not on shared memory
     for (int r=0;r<impp->n_segments;r++) {
         cudaMemcpyAsync(input_devh[r],input[r],block_length>>3,cudaMemcpyHostToDevice,encoderStreams[encoder_stream]);
     }
   }
-  ldpc_input(pageable||integrated? (uint32_t**)input : (uint32_t**)input_dev,(uint32_t**)c_dev,impp->n_segments,&encoderStreams[encoder_stream]);
+  ldpc_input(pageable||integrated? (uint32_t**)input : (uint32_t**)input_dev,(uint32_t**)c_dev,impp->n_segments,encoderStreams,encoder_stream);
 #else 
   ldpc_input32(input,(uint32_t**)c_dev,n_inputs,block_length,impp->n_segments); 
 #endif
   if(impp->tinput != NULL) stop_meas(impp->tinput);
   //parity check part
   if(impp->tparity != NULL) start_meas(impp->tparity);
-  encode_parity_check_part_cuda((uint32_t**)c_dev, (uint32_t**)d_dev, BG, Zc, Kb, ncols,n_inputs,&encoderStreams[encoder_stream]);
-  if (d_host[0]!=d_devh[0]) { // this means we are not on shared memory
+  encode_parity_check_part_cuda((uint32_t**)c_dev, (uint32_t**)d_dev, BG, Zc, Kb, ncols,n_inputs,encoderStreams,encoder_stream);
+  if (!pageable&&!integrated) { // this means we are not on shared memory
      for (int r=0; r<n_inputs;r++) cudaMemcpyAsync(d_host[r],d_devh[r],68*384*sizeof(uint32_t),cudaMemcpyDeviceToHost,encoderStreams[encoder_stream]);  
   }
+  else cudaStreamSynchronize(encoderStreams[encoder_stream]);
   if(impp->tparity != NULL) stop_meas(impp->tparity);
   
   return d_host;

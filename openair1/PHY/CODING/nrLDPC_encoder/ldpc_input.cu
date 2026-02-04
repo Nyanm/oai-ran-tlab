@@ -75,13 +75,13 @@ __global__ void ldpc_input_worker(uint32_t **input,uint32_t *cc[4],int nseg) {
       cc[blockIdx.x][(2*i1+1)*384 + i2]=otmp0;
   } 
 }
-extern "C" int ldpc_input(uint32_t **input,uint32_t *cc[4],int nseg,cudaStream_t *stream) { 
+extern "C" int ldpc_input(uint32_t **input,uint32_t *cc[4],int nseg,cudaStream_t *stream,int sidx) { 
 
  int ns = nseg>>5;
  if ((nseg&31)>0) ns++;
 
  dim3 numblocks(ns,22);
- ldpc_input_worker<<<numblocks,384,0,stream[0]>>>(input,cc,nseg);
+ ldpc_input_worker<<<numblocks,384,0,stream[sidx]>>>(input,cc,nseg);
  cudaError_t err=cudaPeekAtLastError();
  if (err!=cudaSuccess) {
     printf("cuda error: %s (input %p, cc %p, nseg %d, ns %d)\n",cudaGetErrorString(err),input,cc,nseg,ns);
