@@ -266,7 +266,6 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
 
 #ifdef ENABLE_CUDA
     if (gNB->use_gpu) TB_parameters->c_dev = (uint8_t**)dlsch->c_dev;
-    printf("TB_parameters->c_dev %p, TB_parameters->c_dev[0] %p\n",TB_parameters->c_dev,TB_parameters->c_dev[0]);
 #endif  
     int nb_re_dmrs =
         (rel15->dmrsConfigType == NFAPI_NR_DMRS_TYPE1) ? (6 * rel15->numDmrsCdmGrpsNoData) : (4 * rel15->numDmrsCdmGrpsNoData);

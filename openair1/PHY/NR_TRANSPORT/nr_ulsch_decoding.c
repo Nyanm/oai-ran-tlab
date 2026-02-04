@@ -240,7 +240,6 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
     int16_t *ulsch_llr = phy_vars_gNB->pusch_vars[ULSCH_id].llr;
 #endif
 
-    printf("ulsch_llr %d %p\n",ULSCH_id,ulsch_llr);
     if (!ulsch_llr) {
       LOG_E(PHY, "ulsch_decoding.c: NULL ulsch_llr pointer\n");
       return -1;

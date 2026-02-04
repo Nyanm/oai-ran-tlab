@@ -189,7 +189,7 @@ static void nr_process_decode_segment(void *arg)
                                K - rdata->F - 2 * (p_decoderParms->Z))
       == -1) {
     stop_meas(rdata->p_ts_rate_unmatch);
-    LOG_E(PHY, "nrLDPC_coding_segment_decoder.c: Problem in rate_matching\n");
+    LOG_E(PHY, "nrLDPC_coding_segment_decoder.c: Problem in rate_matching BG %d, Z %d, C %d, rv_index %d, E %d, F %d, K%d, K-F-2*Z %d\n",p_decoderParms->BG,p_decoderParms->Z,rdata->C,E,rdata->F,K-rdata->F - 2*(p_decoderParms->Z));
 
     // Task completed
     completed_task_ans(rdata->ans);
