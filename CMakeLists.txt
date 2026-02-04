@@ -1063,8 +1063,10 @@ if (ENABLE_CUDA)
   SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_121") # GB10
   set(CUDA_VERBOS_BUILD_ON)
   cuda_add_library(PHY_NR ${PHY_NR_SRC} ${PHY_NR_SRC_CU})
+  cuda_add_library(PHY_NR_UE ${PHY_NR_UE_SRC} ${PHY_NR_UE_SRC_CU})
 else()
   add_library(PHY_NR ${PHY_NR_SRC})
+  add_library(PHY_NR_UE ${PHY_NR_UE_SRC})
 endif()
 target_link_libraries(PHY_NR nr_phy_common nr_common nr_fapi_p5)
 
@@ -1072,8 +1074,7 @@ add_library(PHY_NR_NO_AVX_256 ${PHY_NR_SRC})
 target_link_libraries(PHY_NR_NO_AVX_256 nr_phy_common nr_common)
 target_compile_definitions(PHY_NR_NO_AVX_256 PUBLIC USE_128BIT)
 
-add_library(PHY_NR_UE ${PHY_NR_UE_SRC})
-target_link_libraries(PHY_NR_UE PRIVATE asn1_nr_rrc_hdrs nr_phy_common nr_common UTIL)
+target_link_libraries(PHY_NR_UE asn1_nr_rrc_hdrs nr_phy_common nr_common UTIL)
 
 add_library(PHY_RU ${PHY_SRC_RU})
 target_link_libraries(PHY_RU PRIVATE asn1_lte_rrc_hdrs UTIL)

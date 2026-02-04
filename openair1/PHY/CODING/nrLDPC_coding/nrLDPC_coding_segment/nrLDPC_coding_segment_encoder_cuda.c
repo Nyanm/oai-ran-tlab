@@ -504,6 +504,7 @@ static void ldpcnblocks(nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_para
       c[r] = nrLDPC_TB_encoding_parameters->segments[r].c;
     }
   start_meas(&nrLDPC_TB_encoding_parameters->segments[impp.first_seg].ts_ldpc_encode);
+  printf("LDPCencoder32: c_dev %p, c_dev[0] %p\n",nrLDPC_TB_encoding_parameters->c_dev,nrLDPC_TB_encoding_parameters->c_dev[0]);
   LDPCencoder32(nrLDPC_TB_encoding_parameters->c_dev ? nrLDPC_TB_encoding_parameters->c_dev : c, &impp);
   stop_meas(&nrLDPC_TB_encoding_parameters->segments[impp.first_seg].ts_ldpc_encode);
   // Compute where to place in output buffer that is concatenation of all segments

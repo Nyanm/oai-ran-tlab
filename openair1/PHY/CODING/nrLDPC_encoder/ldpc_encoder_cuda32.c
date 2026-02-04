@@ -57,8 +57,6 @@ uint32_t **input_host;
 uint32_t *input_devh[128];
 int managed = 0, concurrent = 0, uva = 0, pageable = 0, pageable_uses_host = 0, register_host = 0, integrated = 0;
 
-#define USE_GPU_FOR_INPUT 1
-
 int cuda_support_set = 0;
 
 extern cudaStream_t encoderStreams[4];
@@ -193,16 +191,12 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
   int n_inputs = (impp->n_segments/32)+(((impp->n_segments&31) > 0) ? 1: 0);
 //  uint32_t  cc[4][22*Zc]; //padded input, unpacked, max size
 
-#ifdef USE_GPU_FOR_INPUT
   if (!pageable&&!integrated) { // this means we are not on shared memory
     for (int r=0;r<impp->n_segments;r++) {
         cudaMemcpyAsync(input_devh[r],input[r],block_length>>3,cudaMemcpyHostToDevice,encoderStreams[encoder_stream]);
     }
   }
   ldpc_input(pageable||integrated? (uint32_t**)input : (uint32_t**)input_dev,(uint32_t**)c_dev,impp->n_segments,encoderStreams,encoder_stream);
-#else 
-  ldpc_input32(input,(uint32_t**)c_dev,n_inputs,block_length,impp->n_segments); 
-#endif
   if(impp->tinput != NULL) stop_meas(impp->tinput);
   //parity check part
   if(impp->tparity != NULL) start_meas(impp->tparity);
