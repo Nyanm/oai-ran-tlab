@@ -365,7 +365,7 @@ void disable_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_
  * \brief returns true if the sorted list is enabled and false otherwise
  * \param time_stats_sorted_list sorted list to be tested
  */
-int is_enabled_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list)
+int is_enabled_time_stats_sorted_list(const time_stats_sorted_list_t *time_stats_sorted_list)
 {
   return (time_stats_sorted_list->size > 0);
 }
@@ -387,7 +387,7 @@ void reset_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_li
  * \param time_stats_sorted_list sorted list to insert in
  * \param time time value to insert
  */
-void insert_in_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list, oai_cputime_t time)
+void insert_in_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list, const oai_cputime_t time)
 {
   if (time_stats_sorted_list->size > 0) {
     if (time_stats_sorted_list->nb_elm < time_stats_sorted_list->size) {

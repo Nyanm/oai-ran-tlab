@@ -87,7 +87,7 @@ void disable_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_
  * \brief returns true if the sorted list is enabled and false otherwise
  * \param time_stats_sorted_list sorted list to be tested
  */
-int is_enabled_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list);
+int is_enabled_time_stats_sorted_list(const time_stats_sorted_list_t *time_stats_sorted_list);
 /**
  * \brief empties sorted list
  * if the list is not enabled then does nothing
@@ -101,7 +101,7 @@ void reset_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_li
  * \param time_stats_sorted_list sorted list to insert in
  * \param time time value to insert
  */
-void insert_in_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list, oai_cputime_t time);
+void insert_in_time_stats_sorted_list(time_stats_sorted_list_t *time_stats_sorted_list, const oai_cputime_t time);
 /**
  * \brief copy sorted list src into dst, freeing and replacing dst
  * dst and src should be enabled, otherwise does nothing
@@ -317,7 +317,11 @@ static inline void merge_meas(time_stats_t *dst_ts, const time_stats_t *src_ts)
   dst_ts->diff_square += src_ts->diff_square;
   if (src_ts->max > dst_ts->max)
     dst_ts->max = src_ts->max;
-  merge_time_stats_sorted_list(&dst_ts->time_stats_sorted_list, &src_ts->time_stats_sorted_list);
+  if (is_enabled_time_stats_sorted_list(&src_ts->time_stats_sorted_list)) {
+    merge_time_stats_sorted_list(&dst_ts->time_stats_sorted_list, &src_ts->time_stats_sorted_list);
+  } else {
+    insert_in_time_stats_sorted_list(&dst_ts->time_stats_sorted_list, src_ts->diff / src_ts->trials);
+  }
 }
 
 #define TIME_STATS_ADVANCED_MODE 2

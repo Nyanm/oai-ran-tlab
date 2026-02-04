@@ -265,9 +265,6 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
       segment_parameters->c = harq_process->c[r];
       segment_parameters->decodeSuccess = false;
 
-      enable_sorted_list_meas(&segment_parameters->ts_deinterleave);
-      enable_sorted_list_meas(&segment_parameters->ts_rate_unmatch);
-      enable_sorted_list_meas(&segment_parameters->ts_ldpc_decode);
       reset_meas(&segment_parameters->ts_deinterleave);
       reset_meas(&segment_parameters->ts_rate_unmatch);
       reset_meas(&segment_parameters->ts_ldpc_decode);
@@ -318,9 +315,6 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
         merge_meas(&phy_vars_gNB->ts_rate_unmatch, &nrLDPC_segment_decoding_parameters.ts_rate_unmatch);
         merge_meas(&phy_vars_gNB->ts_ldpc_decode, &nrLDPC_segment_decoding_parameters.ts_ldpc_decode);
       }
-      disable_sorted_list_meas(&nrLDPC_segment_decoding_parameters.ts_deinterleave);
-      disable_sorted_list_meas(&nrLDPC_segment_decoding_parameters.ts_rate_unmatch);
-      disable_sorted_list_meas(&nrLDPC_segment_decoding_parameters.ts_ldpc_decode);
     }
   }
 
