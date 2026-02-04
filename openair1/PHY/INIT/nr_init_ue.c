@@ -36,7 +36,9 @@
 #include "openair2/COMMON/prs_nr_paramdef.h"
 #include "SCHED_NR_UE/harq_nr.h"
 #include "nr-uesoftmodem.h"
-
+#ifdef ENABLE_CUDA
+#include <cuda_runtime.h>
+#endif
 extern uint32_t use_gpu;
 
 void RCconfig_nrUE_prs(void *cfg)
@@ -284,6 +286,15 @@ int init_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
     ue->received_config_request = false;
 
   ue->use_gpu = use_gpu;
+#ifdef ENABLE_CUDA
+  for (int i=0;i<2;i++) {
+    cudaError_t err = cudaHostAlloc((void**)&ue->llr[i],(66 * 3 * 8448) * sizeof(int16_t),cudaHostAllocMapped);
+    AssertFatal(err == cudaSuccess,"CUDA Error (pusch_llr): %s\n",cudaGetErrorString(err));
+    err=cudaHostGetDevicePointer((void**)&ue->llr_dev[i],ue->llr[i],0);
+    AssertFatal(err == cudaSuccess,"CUDA Error (harq_f_dev): %s\n",cudaGetErrorString(err));
+
+  }
+#endif
   return 0;
 }
 
@@ -343,6 +354,11 @@ void term_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
 
   free_and_zero(ue->ntn_config_message);
   
+#ifdef ENABLE_CUDA
+  cudaFreeHost(ue->llr[0]);
+  cudaFreeHost(ue->llr[1]);
+#endif
+ 
   sl_ue_free(ue);
 }
 
@@ -360,7 +376,11 @@ void free_nr_ue_dl_harq(NR_DL_UE_HARQ_t harq_list[2][NR_MAX_DLSCH_HARQ_PROCESSES
       free_and_zero(harq_list[j][i].c);
       free_and_zero(harq_list[j][i].d);
       free_and_zero(harq_list[j][i].b);
+#ifdef ENABLE_CUDA
+      cudaFreeHost(harq_list[j][i].c);
+#else
       free_and_zero(harq_list[j][i].c);
+#endif
       free_and_zero(harq_list[j][i].d);
     }
   }
@@ -412,7 +432,14 @@ void nr_init_dl_harq_processes(NR_DL_UE_HARQ_t harq_list[2][NR_MAX_DLSCH_HARQ_PR
 
       const int sz=3*8448*sizeof(int16_t);
       harq_list[j][i].b = malloc16_clear(a_segments * 1056);
+#ifdef ENABLE_CUDA
+      cudaError_t err = cudaHostAlloc((void**)&harq_list[j][i].c,a_segments*sizeof(uint8_t *)*1056,cudaHostAllocMapped);
+      AssertFatal(err == cudaSuccess,"CUDA Error (harq.c): %s\n",cudaGetErrorString(err));
+      err = cudaHostGetDevicePointer((void**)&harq_list[j][i].cdev,(void*)harq_list[j][i].c,0);
+      AssertFatal(err == cudaSuccess,"CUDA Error (harq.cdev): %s\n",cudaGetErrorString(err));
+#else
       harq_list[j][i].c = malloc16(a_segments*sizeof(uint8_t *)*1056);
+#endif
       harq_list[j][i].d = malloc16(a_segments*sizeof(int16_t *)*sz);
       init_abort(&harq_list[j][i].abort_decode);
       /*

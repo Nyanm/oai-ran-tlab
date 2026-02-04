@@ -220,14 +220,12 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
     for (int i = 0; i < max_ul_mimo_layers; i++) {
     }
 #ifdef ENABLE_CUDA
-    cudaError_t err = cudaHostAlloc((void**)&pusch->llr,(8 * ((3 * 8 * 6144) + 12))
-                                           * sizeof(int16_t),cudaHostAllocMapped); // [hna] 6144 is LTE and (8*((3*8*6144)+12)) is not clear
+    cudaError_t err = cudaHostAlloc((void**)&pusch->llr,(132 * 3 * 8448 )*sizeof(int16_t),cudaHostAllocMapped); // 132 segments 8448*3 coded bits per segment 
     AssertFatal(err == cudaSuccess,"CUDA Error (pusch_llr): %s\n",cudaGetErrorString(err));
-    cudaHostGetDevicePointer((void**)&pusch->llr_dev,pusch->llr,0);
+    err=cudaHostGetDevicePointer((void**)&pusch->llr_dev,pusch->llr,0);
     AssertFatal(err == cudaSuccess,"CUDA Error (harq_f_dev): %s\n",cudaGetErrorString(err));
 #else
-    pusch->llr = (int16_t *)malloc16_clear((8 * ((3 * 8 * 6144) + 12))
-                                           * sizeof(int16_t)); // [hna] 6144 is LTE and (8*((3*8*6144)+12)) is not clear
+    pusch->llr = (int16_t *)malloc16_clear((132 * 3 * 8448) * sizeof(int16_t)); //132 segments 3*8448 coded bits per segment 
 #endif
     pusch->ul_valid_re_per_slot = (int16_t *)malloc16_clear(sizeof(int16_t) * fp->symbols_per_slot);
   } // ulsch_id

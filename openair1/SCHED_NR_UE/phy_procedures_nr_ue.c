@@ -77,6 +77,10 @@ fifo_dump_emos_UE emos_dump_UE;
 #include "T.h"
 #include "instrumentation.h"
 
+#ifdef ENABLE_CUDA
+#include <cuda_runtime.h>
+#endif
+
 static const unsigned int gain_table[31] = {100,  112,  126,  141,  158,  178,  200,  224,  251, 282,  316,
                                             359,  398,  447,  501,  562,  631,  708,  794,  891, 1000, 1122,
                                             1258, 1412, 1585, 1778, 1995, 2239, 2512, 2818, 3162};
@@ -1272,9 +1276,15 @@ void pdsch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr_phy_
     const uint32_t rx_llr_buf_sz = ((G + 15) / 16) * 16;
     const uint32_t nb_codewords = NR_MAX_NB_LAYERS > 4 ? 2 : 1;
     int16_t* llr[2];
+#ifdef ENABLE_CUDA
+    for (int i = 0; i < nb_codewords; i++) {
+      llr[i]=ue->llr_dev[i];
+      //memset(llr[i],0,rx_llr_buf_sz * sizeof(int16_t));
+    }
+#else
     for (int i = 0; i < nb_codewords; i++)
       llr[i] = (int16_t *)malloc16_clear(rx_llr_buf_sz * sizeof(int16_t));
-
+#endif
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_PDSCH_PROC_C, VCD_FUNCTION_IN);
     // it returns -1 in case of internal failure, or 0 in case of normal result
     int ret_pdsch = nr_ue_pdsch_procedures(ue, proc, dlsch, llr, rxdataF, G);
@@ -1315,10 +1325,11 @@ void pdsch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr_phy_
       memcpy(ue->phy_sim_pdsch_llr, llr[0], sizeof(int16_t) * rx_llr_buf_sz);
 
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_PDSCH_PROC, VCD_FUNCTION_OUT);
+#ifndef ENABLE_CUDA
     for (int i=0; i<nb_codewords; i++)
       free(llr[i]);
+#endif
   }
-
   if (nr_slot_rx==9) {
     if (frame_rx % 10 == 0) {
       if ((ue->dlsch_received[gNB_id] - ue->dlsch_received_last[gNB_id]) != 0)
