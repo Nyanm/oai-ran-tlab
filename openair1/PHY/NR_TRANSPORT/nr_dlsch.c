@@ -769,12 +769,12 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     rdata->dlPtrsSymPos = dlPtrsSymPos;
     rdata->n_ptrs = n_ptrs;
     rdata->beam_nb = beam_nb;
-    for (int s = 0; s < rdata->numSymbols; s++) {
-      rdata->re_beginning_of_symbol[l_symbol + s] = re_beginning_of_symbol;
+    for (int s = l_symbol; s < l_symbol + rdata->numSymbols; s++) {
+      rdata->re_beginning_of_symbol[s] = re_beginning_of_symbol;
       re_beginning_of_symbol += rel15->rbSize * NR_NB_SC_PER_RB;
-      if (n_ptrs > 0 && is_ptrs_symbol(l_symbol, dlPtrsSymPos)) {
+      if (n_ptrs > 0 && is_ptrs_symbol(s, dlPtrsSymPos)) {
         re_beginning_of_symbol -= n_ptrs;
-      } else if (rel15->dlDmrsSymbPos & (1 << l_symbol)) {
+      } else if (rel15->dlDmrsSymbPos & (1 << s)) {
         re_beginning_of_symbol -= n_dmrs;
       }
     }
