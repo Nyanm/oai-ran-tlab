@@ -35,8 +35,21 @@
 #include "utils.h"
 #include <openair2/UTIL/OPT/opt.h>
 #include "LAYER2/nr_rlc/nr_rlc_oai_api.h"
+#include <math.h>
 
 //#define SRS_IND_DEBUG
+
+static int tpc_to_db(int tpc_command) {
+    switch (tpc_command) {
+        case 0: return -1;
+        case 1: return 0;
+        case 2: return 1;
+        case 3: return 3;
+        default:
+            LOG_W(NR_MAC, "Invalid TPC command %d, using 0 dB\n", tpc_command);
+            return 0;
+    }
+}
 
 /* \brief Get the number of UL TDAs that could be used in slot, reachable
  * via specific k2. The output parameter first_idx is a pointer to the first
@@ -782,6 +795,8 @@ static void nr_rx_ra_sdu(const module_id_t mod_id,
   }
 
   const int target_snrx10 = mac->pusch_target_snrx10;
+  UE->UE_sched_ctrl.pusch_target_snrx10 = mac->pusch_target_snrx10;
+
   if (!sdu) { // NACK
     if (cfra)  // no Msg3 on CFRA, no problem
       return;
@@ -930,12 +945,12 @@ static void _nr_rx_sdu(const module_id_t gnb_mod_idP,
   gNB_MAC_INST *gNB_mac = RC.nrmac[gnb_mod_idP];
   const int current_rnti = rntiP;
   LOG_D(NR_MAC, "rx_sdu for rnti %04x\n", current_rnti);
-  const int target_snrx10 = gNB_mac->pusch_target_snrx10;
   const int rssi_threshold = gNB_mac->pusch_rssi_threshold;
   const int pusch_failure_thres = gNB_mac->pusch_failure_thres;
   NR_UE_info_t *UE = find_nr_UE(&gNB_mac->UE_info, current_rnti);
   if (UE) {
     NR_UE_sched_ctrl_t *UE_scheduling_control = &UE->UE_sched_ctrl;
+    const int target_snrx10 = UE_scheduling_control->pusch_target_snrx10;
     if (sduP)
       T(T_GNB_MAC_UL_PDU_WITH_DATA, T_INT(gnb_mod_idP), T_INT(CC_idP),
         T_INT(rntiP), T_INT(frameP), T_INT(slotP), T_INT(harq_pid),
@@ -953,6 +968,26 @@ static void _nr_rx_sdu(const module_id_t gnb_mod_idP,
           timing_advance,
           sduP,
           rssi);
+
+    // EWMA filtering of channel-only CQI (remove TPC effect before filtering)
+    if (ul_cqi != 0xff) {
+      double channel_only_cqi = (double)ul_cqi - (UE_scheduling_control->accumulated_tpc_db * 2);
+      if (!UE_scheduling_control->ul_cqi_initialized) {
+        UE_scheduling_control->filtered_ul_cqi = channel_only_cqi;
+        UE_scheduling_control->ul_cqi_initialized = true;
+      } else {
+        UE_scheduling_control->filtered_ul_cqi = 0.95 * UE_scheduling_control->filtered_ul_cqi
+                                                + 0.05 * channel_only_cqi;
+      }
+    }
+
+    // Compute filtered CQI: add TPC back to get actual SNR estimate
+    uint8_t filtered_cqi = ul_cqi;
+    if (UE_scheduling_control->ul_cqi_initialized) {
+      filtered_cqi = (uint8_t)round(UE_scheduling_control->filtered_ul_cqi
+                                    + (UE_scheduling_control->accumulated_tpc_db * 2));
+    }
+
     if (harq_pid < 0) {
       LOG_E(NR_MAC, "UE %04x received ULSCH when feedback UL HARQ %d (unexpected ULSCH transmission)\n", rntiP, harq_pid);
       return;
@@ -964,7 +999,7 @@ static void _nr_rx_sdu(const module_id_t gnb_mod_idP,
       UE->mac_stats.deltaMCS = txpower_calc;
       UE->mac_stats.NPRB = UE_scheduling_control->ul_harq_processes[harq_pid].sched_pusch.rbSize;
       if (ul_cqi != 0xff)
-        UE_scheduling_control->tpc0 = nr_get_tpc(target_snrx10, ul_cqi, 30, txpower_calc);
+        UE_scheduling_control->tpc0 = nr_get_tpc(target_snrx10, filtered_cqi, 30, txpower_calc);
       if (UE_scheduling_control->ph < 0 && UE_scheduling_control->tpc0 > 1)
         UE_scheduling_control->tpc0 = 1;
 
@@ -973,7 +1008,7 @@ static void _nr_rx_sdu(const module_id_t gnb_mod_idP,
       if (timing_advance != 0xffff)
         UE_scheduling_control->ta_update = timing_advance;
       UE_scheduling_control->raw_rssi = rssi;
-      UE_scheduling_control->pusch_snrx10 = ul_cqi * 5 - 640 - (txpower_calc * 10);
+      UE_scheduling_control->pusch_snrx10 = filtered_cqi * 5 - 640 - (txpower_calc * 10);
       if (UE_scheduling_control->tpc0 > 1)
         LOG_D(NR_MAC,
               "[UE %04x] %d.%d. PUSCH TPC %d and TA %d pusch_snrx10 %d rssi %d phrx_tx_power %d PHR (1PRB) %d mcs %d, nb_rb %d\n",
@@ -2593,6 +2628,8 @@ void post_process_ulsch(gNB_MAC_INST *nr_mac, post_process_pusch_t *pusch, NR_UE
                current_BWP,
                ss->searchSpaceType->present);
 
+  // Accumulate TPC command before resetting
+  UE->UE_sched_ctrl.accumulated_tpc_db += tpc_to_db(UE->UE_sched_ctrl.tpc0);
   // Reset TPC to 0 dB to not request new gain multiple times before computing new value for SNR
   UE->UE_sched_ctrl.tpc0 = 1;
 
