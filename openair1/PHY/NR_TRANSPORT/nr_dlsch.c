@@ -795,9 +795,15 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
 
   // spawn symbol threads
 
-  int nb_tasks = rel15->NrOfSymbols / gNB->num_pdsch_symbols_per_thread;
-  if ((rel15->NrOfSymbols % gNB->num_pdsch_symbols_per_thread) > 0)
-    nb_tasks++;
+  int nb_tasks = 1;
+  int num_pdsch_symbols_per_task = rel15->NrOfSymbols;
+  if (gNB->num_pdsch_symbols_per_thread > 0) {
+    // symbol processing in thread pool enabled
+    num_pdsch_symbols_per_task = gNB->num_pdsch_symbols_per_thread;
+    nb_tasks = rel15->NrOfSymbols / num_pdsch_symbols_per_task;
+    if ((rel15->NrOfSymbols % num_pdsch_symbols_per_task) > 0)
+      nb_tasks++;
+  }
   pdschSymbolProc_t arr[nb_tasks];
   task_ans_t ans;
   init_task_ans(&ans, nb_tasks);
@@ -805,7 +811,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   unsigned int re_beginning_of_symbol = 0;
   int res = 0;
   for (int l_symbol = rel15->StartSymbolIndex; l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols;
-       l_symbol += gNB->num_pdsch_symbols_per_thread) {
+       l_symbol += num_pdsch_symbols_per_task) {
     pdschSymbolProc_t *rdata = &arr[sz_arr];
     rdata->ans = &ans;
     ++sz_arr;
@@ -816,8 +822,8 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     rdata->slot = slot;
     rdata->startSymbol = l_symbol;
     res = rel15->NrOfSymbols - (l_symbol - rel15->StartSymbolIndex);
-    if (res >= gNB->num_pdsch_symbols_per_thread)
-      rdata->numSymbols = gNB->num_pdsch_symbols_per_thread;
+    if (res >= num_pdsch_symbols_per_task)
+      rdata->numSymbols = num_pdsch_symbols_per_task;
     else
       rdata->numSymbols = res;
     rdata->layerSz2 = layerSz2;
@@ -835,8 +841,12 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     }
     for (int l = 0; l < rel15->nrOfLayers; l++)
       rdata->tx_layers[l] = tx_layers[l];
-    task_t t = {.func = &nr_pdsch_symbol_processing, .args = rdata};
-    pushTpool(&gNB->threadPool, t);
+    if (l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols - num_pdsch_symbols_per_task) {
+      task_t t = {.func = &nr_pdsch_symbol_processing, .args = rdata};
+      pushTpool(&gNB->threadPool, t);
+    } else {
+      nr_pdsch_symbol_processing(rdata);
+    }
   }
   join_task_ans(&ans);
   stop_meas(&gNB->dlsch_pdsch_generation_stats);
