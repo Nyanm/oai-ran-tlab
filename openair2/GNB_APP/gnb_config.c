@@ -896,6 +896,9 @@ void RCconfig_NR_L1(void)
       gNB->L1_rx_thread_core = *(L1_ParamList.paramarray[j][L1_RX_THREAD_CORE].iptr);
       gNB->L1_tx_thread_core = *(L1_ParamList.paramarray[j][L1_TX_THREAD_CORE].iptr);
       LOG_I(NR_PHY, "L1_RX_THREAD_CORE %d (%d)\n", *(L1_ParamList.paramarray[j][L1_RX_THREAD_CORE].iptr), L1_RX_THREAD_CORE);
+      // PUSCH symbols per thread need to be calculated by how many threads we have
+      gNB->num_pusch_symbols_per_thread = *(L1_ParamList.paramarray[j][L1_NUM_RX_SYM_PER_THREAD].iptr);
+      gNB->num_pdsch_symbols_per_thread = *(L1_ParamList.paramarray[j][L1_NUM_TX_SYM_PER_THREAD].iptr);
       gNB->TX_AMP = min(32767.0 / pow(10.0, .05 * (double)(*L1_ParamList.paramarray[j][L1_TX_AMP_BACKOFF_dB].uptr)), INT16_MAX);
       gNB->phase_comp = *L1_ParamList.paramarray[j][L1_PHASE_COMP].uptr;
       gNB->dmrs_num_antennas_per_thread = *(L1_ParamList.paramarray[j][NUM_ANTENNAS_PER_THREAD].uptr);
