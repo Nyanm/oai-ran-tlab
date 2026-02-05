@@ -87,7 +87,7 @@ void cuda_support_init() {
     LOG_I(NR_PHY,"Host Register supported:         %s\n", register_host ? "YES" : "NO");
     LOG_I(NR_PHY,"Integrated (shared) Memory       %s\n", integrated ? "YES" : "NO");
 
-  if (!pageable || !integrated) {
+  if (!pageable && !integrated) {
     LOG_I(NR_PHY,"Allocating c,d,cc arrays for GPU \n");
     cudaError_t err=cudaMalloc((void **)&c_dev,4*sizeof(uint32_t*));
     AssertFatal(err == cudaSuccess,"CUDA Error (c_dev): %s\n", cudaGetErrorString(err));
@@ -204,7 +204,7 @@ uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp)
   if (!pageable&&!integrated) { // this means we are not on shared memory
      for (int r=0; r<n_inputs;r++) cudaMemcpyAsync(d_host[r],d_devh[r],68*384*sizeof(uint32_t),cudaMemcpyDeviceToHost,encoderStreams[encoder_stream]);  
   }
-  else cudaStreamSynchronize(encoderStreams[encoder_stream]);
+  cudaStreamSynchronize(encoderStreams[encoder_stream]);
   if(impp->tparity != NULL) stop_meas(impp->tparity);
   
   return d_host;
