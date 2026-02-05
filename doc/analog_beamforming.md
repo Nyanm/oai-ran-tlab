@@ -60,7 +60,7 @@ Therefore, in case of analog beamforming, L2 provides in each channel FAPI messa
 ## L1 implementation
 
 To handle multiple concurrent beams, the buffers containing Tx and Rx data in frequency domain (`txdataF` and `rxdataF`) have been extended by one dimension to contain multiple concurrent beams to be transmitted/received.
-The function `beam_index_allocation`, called by every L1 channel, is responsible to match the FAPI analog beam index to the RU beam index and to store the latter `beam_id` structure, which allocates the beams per symbol, despite L2 only supporting beam change at slot level. At the same time, the function returns the concurrent beam index, to be used to store data in frequency domain buffers. While doing so, the function also checks if there is room for current beam in the list of concurrent beams, which should always be the case, if L2 properly allocated the channels.
+The function `beam_index_allocation` TODO is responsible to match the FAPI analog beam index to the RU beam index and to store the latter `beam_id` structure, which allocates the beams per symbol, despite L2 only supporting beam change at slot level. At the same time, the function returns the concurrent beam index, to be used to store data in frequency domain buffers. While doing so, the function also checks if there is room for current beam in the list of concurrent beams, which should always be the case, if L2 properly allocated the channels.
 
 In case of DAS, since each beam corresponds to a specific antenna port, the `beam_index_allocation` function is simplified in the sense that the beam index corresponds to the antenna port index of the frequency domain buffers.
 
