@@ -125,6 +125,8 @@ typedef enum {
 #define GNB_CONFIG_STRING_CONFIG_REP                    "CSI_report_type"
 #define GNB_CONFIG_STRING_1ST_ACTIVE_BWP                "first_active_bwp"
 #define GNB_CONFIG_STRING_LIMIT_RSRP_REPORT             "max_num_RSRP_reported"
+#define GNB_CONFIG_STRING_PDCP_DISCARD_TIMER            "pdcp_discard_timer"
+#define GNB_CONFIG_HLP_PDCP_DISCARD_TIMER               "PDCP discard timer in ms (-1 = infinity/disabled)"
 
 #define GNB_CONFIG_HLP_STRING_ENABLE_SDAP               "enable the SDAP layer\n"
 #define GNB_CONFIG_HLP_FORCE256QAMOFF                   "suppress activation of 256 QAM despite UE support"
@@ -189,6 +191,7 @@ typedef enum {
 {GNB_CONFIG_STRING_CONFIG_REP, GNB_CONFIG_HLP_CONFIG_REP, 0,          .strptr=NULL, .defstrval="ssb_rsrp",        TYPE_STRING,    0},  \
 {GNB_CONFIG_STRING_1ST_ACTIVE_BWP,               NULL,   0,            .iptr=NULL,  .defintval=0,                 TYPE_INT,       0},  \
 {GNB_CONFIG_STRING_LIMIT_RSRP_REPORT,            NULL,   0,            .iptr=NULL,  .defintval=0,                 TYPE_INT,       0},  \
+{GNB_CONFIG_STRING_PDCP_DISCARD_TIMER, GNB_CONFIG_HLP_PDCP_DISCARD_TIMER, 0, .iptr=NULL, .defintval=-1,               TYPE_INT,       0},  \
 }
 // clang-format on
 
@@ -234,10 +237,12 @@ typedef enum {
 #define GNB_CONFIG_REP_IDX              38
 #define GNB_1ST_ACTIVE_BWP_IDX          39
 #define GNB_LIMIT_RSRP_REPORT_IDX       40
+#define GNB_PDCP_DISCARD_TIMER_IDX      41
 
 #define TRACKING_AREA_CODE_OKRANGE {0x0001,0xFFFD}
 #define NUM_DL_HARQ_OKVALUES {2,4,6,8,10,12,16,32}
 #define NUM_UL_HARQ_OKVALUES {16,32}
+#define PDCP_DISCARD_TIMER_OKVALUES {-1,10,20,30,40,50,60,75,100,150,200,250,300,500,750,1500}
 
 #define GNBPARAMS_CHECK {                                         \
   { .s5 = { NULL } },                                             \
@@ -284,6 +289,7 @@ typedef enum {
              3 } }, \
   { .s5 = { NULL } },                                             \
   { .s5 = { NULL } },                                             \
+  { .s1 = { config_check_intval, PDCP_DISCARD_TIMER_OKVALUES, 16 } }, \
 }
 
 /*-------------------------------------------------------------------------------------------------------------------------------------------------*/
