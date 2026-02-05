@@ -1105,21 +1105,24 @@ static inline void rotate_cpx_vector_fp16in_q15out(const cf16_t *const x, const 
        vst1_s16((int16_t*)(y + i),vcvt_s16_f16(y16x4));
     }
 #elif defined(__AVX512FP16__) 
-    __m512h alpha512=_mm512_set1_pch(*(_Float16 _Complex*)alpha);
+    cf16_t alpha2;
+    alpha2.r = alpha->r * (_Float16)tx_amp;
+    alpha2.i = alpha->i * (_Float16)tx_amp;
+    __m512h alpha512=_mm512_set1_pch(*(_Float16 _Complex*)&alpha2);
     const __m512h alpha512c=_mm512_conj_pch(alpha512);
     for (; i + 32 < N; i+=32) {
-    _mm512_storeu_ph((__m512h*)(y + i),_mm512_cmul_pch(_mm512_loadu_ph(x + i),alpha512c));
-    _mm512_storeu_ph((__m512h*)(y + i + 16),_mm512_cmul_pch(_mm512_loadu_ph(x + i + 16),alpha512c));
+    _mm512_storeu_si512((__m512i*)(y + i),_mm512_cvtph_epi16(_mm512_cmul_pch(_mm512_loadu_ph(x + i),alpha512c)));
+    _mm512_storeu_si512((__m512i*)(y + i + 16),_mm512_cvtph_epi16(_mm512_cmul_pch(_mm512_loadu_ph(x + i + 16),alpha512c)));
 	    
 //       if (i==0) { for (int j=0;j<2;j+=2) printf("%0.2f+(%0.2fj) ",(double)((_Float16*)&x512)[j],(double)((_Float16*)&x512)[j]); printf("\n");}
        //if (i==0) { for (int j=0;j<32;j+=2) printf("%0.2f+(%0.2fj) ",(double)((_Float16*)&y512)[j],(double)((_Float16*)&y512)[j]); printf("\n");}
 //       _mm512_storeu_ph((__m512h*)(y + i),y512);
     }
     for (; i + 8 < N; i+=8) 
-       _mm256_storeu_ph((__m256h*)(y + i),_mm256_cmul_pch( _mm256_loadu_ph(x + i),*(__m256h*)&alpha512c));
+       _mm256_storeu_si256((__m256i*)(y + i),_mm256_cvtph_epi16(_mm256_cmul_pch( _mm256_loadu_ph(x + i),*(__m256h*)&alpha512c)));
     
     for (; i + 4 < N; i+=4) 
-       _mm_storeu_ph((__m128h*)(y + i),_mm_cmul_pch(_mm_loadu_ph(x + i),*(__m128h*)&alpha512c));
+       _mm_storeu_si128((__m128i*)(y + i),_mm_cvtph_epi16(_mm_cmul_pch(_mm_loadu_ph(x + i),*(__m128h*)&alpha512c)));
     
    /* 
     printf("y:");

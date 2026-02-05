@@ -1138,7 +1138,6 @@ void nr_layer_precoder_simd(const int n_layers,
     }
   }
 #endif
-  c16_t *end = beginning + (re_cnt & ~3);
 #ifdef DEBUG_DLSCH_PRECODING_PRINT_WITH_TRIVIAL // Get result with trivial solution, TODO: To be removed
   // 128 SIMD: Do 4 RE in one iteration, 3 iterations for 1 RB
   for (; out < end; out += sizeof(simde__m128i) / sizeof(*out)) {
@@ -1149,6 +1148,7 @@ void nr_layer_precoder_simd(const int n_layers,
   }
 #endif
 #ifdef __aarch64__
+  c16_t *end = beginning + (re_cnt & ~3);
 #ifdef FLT16_MAX
   if (use_fp16) {
     printf("Running precoding for aarch64 fp16\n");

@@ -1,7 +1,6 @@
 /*
  * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
+ * contributor license agreements.  See the NOTICE file dis* this work for additional information regarding copyright ownership.
  * The OpenAirInterface Software Alliance licenses this file to You under
  * the OAI Public License, Version 1.1  (the "License"); you may not use this file
  * except in compliance with the License.
@@ -111,35 +110,38 @@ static inline int interleave_with_0_signal_first(c16_t *output, c16_t *mod_dmrs,
   int i = 0;
   int end = sz / 2;
   if (use_fp16) {
-#if defined(__AVX512__) && defined(__AVX512FP16__) && defined(FLT16_MAX)
-    __m512h zeros512 = _mm512_setzero_si512(), amp_dmrs512 = _mm512_set1_ph(*((int16_t*)amp_dmrs);
+#if defined(__AVX512FP16__) && defined(FLT16_MAX)
+    __m512i zeros512 = _mm512_setzero_si512();
+    __m512h amp_dmrs512 = _mm512_set1_ph(*(int16_t*)amp_dmrs);
     __m512i perml = _mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
     __m512i permh = _mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
     for (; i < (end & ~15); i += 16) {
       __m512h d0 = _mm512_mul_ph(_mm512_loadu_ph((__m512h *)(mod_dmrs + i)), amp_dmrs512);
-      _mm512_storeu_si512((simde__m512h *)out, simde_mm512_permutex2var_epi32((__mm512i)d0, perml, zeros512));
+      _mm512_storeu_si512((__m512i *)out, _mm512_permutex2var_epi32((__m512i)d0, perml, zeros512));
       out += 16;
-      _mm512_storeu_si512((__m512i *)out, _mm512_permutex2var_epi32((__mm512i)d0, permh, zeros512));
+      _mm512_storeu_si512((__m512i *)out, _mm512_permutex2var_epi32((__m512i)d0, permh, zeros512));
       out += 16;
     }
-    __m256h zeros256 = _mm256_setzero_si256(), amp_dmrs256 = _mm256_set1_ph(*(_Float16*)amp_dmrs);
+    __m256i zeros256 = _mm256_setzero_si256();
+    __m256h amp_dmrs256 = _mm256_set1_ph(*(_Float16*)amp_dmrs);
     for (; i < (end & ~7); i += 8) {
-      __m256h d0 = _mm256_mul_ph(_mm256_loadu_si256((__m256h *)(mod_dmrs + i)), amp_dmrs256);
+      __m256h d0 = _mm256_mul_ph(_mm256_loadu_ph((__m256h *)(mod_dmrs + i)), amp_dmrs256);
       __m256i d2 = _mm256_unpacklo_epi32((__m256i)d0, zeros256);
       __m256i d3 = _mm256_unpackhi_epi32((__m256i)d0, zeros256);
-      _mm256_storeu_si256((simde__m256h *)out, _mm256_permute2x128_si256(d2, d3, 32));
+      _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_si256(d2, d3, 32));
       out += 8;
-      simde_mm256_storeu_si256((__m256h *)out, _mm256_permute2x128_si256(d2, d3, 49));
+      _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_si256(d2, d3, 49));
       out += 8;
     }
-    __m128h zeros = _mm_setzero_si128(), amp_dmrs128 = _mm_set1_ph(*(_Float16*)amp_dmrs);
+    __m128i zeros = _mm_setzero_si128();
+    __m128h amp_dmrs128 = _mm_set1_ph(*(_Float16*)amp_dmrs);
     for (; i < (end & ~3); i += 4) {
-      __m128h d0 = _mm_mul_ph(_mm_loadu_si128((__m128h *)(mod_dmrs + i)), amp_dmrs128);
+      __m128h d0 = _mm_mul_ph(_mm_loadu_ph((__m128h *)(mod_dmrs + i)), amp_dmrs128);
       __m128i d2 = _mm_unpacklo_epi32((__m128i)d0, zeros);
       __m128i d3 = _mm_unpackhi_epi32((__m128i)d0, zeros);
-      _mm_storeu_si128((__m128h *)out, d2);
+      _mm_storeu_si128((__m128i *)out, d2);
       out += 4;
-      simde_mm_storeu_si128((__m128i *)out, d3);
+      _mm_storeu_si128((__m128i *)out, d3);
       out += 4;
     }
 #elif defined(__aarch64__)
@@ -226,32 +228,35 @@ static inline int interleave_with_0_start_with_0(c16_t *output, c16_t *mod_dmrs,
   int i = 0;
   int end = sz / 2;
   if (use_fp16) {
-#if defined(__AVX512__) && defined(__AVX512FP16__) && defined(FLT16_MAX)
-    __m512h zeros512 = _mm512_setzero_si512(), amp_dmrs512 = _mm512_set1_ph(*(_Float16*)amp_dmrs);
+#if defined(__AVX512FP16__) && defined(FLT16_MAX)
+    __m512i zeros512 = _mm512_setzero_si512();
+    __m512h amp_dmrs512 = _mm512_set1_ph(*(_Float16*)amp_dmrs);
     __m512i perml = _mm512_set_epi32(23, 7, 22, 6, 21, 5, 20, 4, 19, 3, 18, 2, 17, 1, 16, 0);
     __m512i permh = _mm512_set_epi32(31, 15, 30, 14, 29, 13, 28, 12, 27, 11, 26, 10, 25, 9, 24, 8);
     for (; i < (end & ~15); i += 16) {
-      __m512h d0 = _mm512_mul_ph(_mm512_loadu_si512((__m512h *)(mod_dmrs + i)), *amp_dmrs512);
-      _mm512_storeu_si512((__m512h *)out, _mm512_permutex2var_ph(zeros512, perml, d0));
+      __m512h d0 = _mm512_mul_ph(_mm512_loadu_ph((__m512h *)(mod_dmrs + i)), amp_dmrs512);
+      _mm512_storeu_si512((__m512i *)out, _mm512_permutex2var_epi32(zeros512, perml, (__m512i)d0));
       out += 16;
-      _mm512_storeu_si512((__m512h *)out, _mm512_permutex2var_ph(zeros512, permh, d0));
+      _mm512_storeu_si512((__m512i *)out, _mm512_permutex2var_epi32(zeros512, permh, (__m512i)d0));
       out += 16;
     }
-    __m256h zeros256 = _mm256_setzero_si256(), amp_dmrs256 = _mm256_set1_ph(*(_Float16*)amp_dmrs);
+    __m256i zeros256 = _mm256_setzero_si256();
+    __m256h amp_dmrs256 = _mm256_set1_ph(*(_Float16*)amp_dmrs);
     for (; i < (end & ~7); i += 8) {
-      __m256h d0 = _mm256_mul_ph(_mm256_loadu_si256((__m256h *)(mod_dmrs + i)), amp_dmrs256);
-      __m256i d2 = _mm256_unpacklo_epi32(zeros256, d0);
-      __m256i d3 = _mm256_unpackhi_epi32(zeros256, d0);
-      _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_epi16(d2, d3, 32));
+      __m256h d0 = _mm256_mul_ph(_mm256_loadu_ph((__m256h *)(mod_dmrs + i)), amp_dmrs256);
+      __m256i d2 = _mm256_unpacklo_epi32(zeros256, (__m256i)d0);
+      __m256i d3 = _mm256_unpackhi_epi32(zeros256, (__m256i)d0);
+      _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_si256(d2, d3, 32));
       out += 8;
-     _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_epi16(d2, d3, 49));
+     _mm256_storeu_si256((__m256i *)out, _mm256_permute2x128_si256(d2, d3, 49));
       out += 8;
     }
-    __m128h zeros = _mm_setzero_si128(), amp_dmrs128 = _mm_set1_ph(*(_Float16*)amp_dmrs);
+    __m128i zeros = _mm_setzero_si128();
+    __m128h amp_dmrs128 = _mm_set1_ph(*(_Float16*)amp_dmrs);
     for (; i < (end & ~3); i += 4) {
-      __m128h d0 = _mm_mul_ph(_mm_loadu_si128((__m128i *)(mod_dmrs + i)), amp_dmrs128);
-      __m128i d2 = _mm_unpacklo_epi32(zeros, d0);
-      __m128i d3 = _mm_unpackhi_epi32(zeros, d0);
+      __m128h d0 = _mm_mul_ph(_mm_loadu_ph((__m128h *)(mod_dmrs + i)), amp_dmrs128);
+      __m128i d2 = _mm_unpacklo_epi32(zeros, (__m128i)d0);
+      __m128i d3 = _mm_unpackhi_epi32(zeros, (__m128i)d0);
       _mm_storeu_si128((__m128i *)out, d2);
       out += 4;
       _mm_storeu_si128((__m128i *)out, d3);
