@@ -47,6 +47,7 @@ extern "C"
   example: -1,3 launches two working threads one floating, the second set on core 3\n\
   default 8 floating threads\n\
   use N for no pool (runs in calling thread) recommended with rfsim.\n"
+#define CONFIG_HLP_TX_SYM        "number of symbols processed per PDSCH generation thread\n"
 #define CONFIG_HLP_CALUER        "set UE RX calibration\n"
 #define CONFIG_HLP_CALUERM       ""
 #define CONFIG_HLP_CALUERB       ""
@@ -107,6 +108,7 @@ extern "C"
 /*-----------------------------------------------------------------------------------------------------------------------------------------------------*/
 #define RF_CONFIG_FILE      softmodem_params.rf_config_file
 #define TP_CONFIG           softmodem_params.threadPoolConfig
+#define TX_SYM              softmodem_params.num_pdsch_symbols_per_thread
 #define CONTINUOUS_TX       softmodem_params.continuous_tx
 #define PHY_TEST            softmodem_params.phy_test
 #define DO_RA               softmodem_params.do_ra
@@ -132,6 +134,7 @@ extern int usrp_tx_thread;
 #define CMDLINE_PARAMS_DESC {  \
   {"rf-config-file",        CONFIG_HLP_RFCFGF,        0,              .strptr=&RF_CONFIG_FILE,                .defstrval=NULL,          TYPE_STRING, 0},  \
   {"thread-pool",           CONFIG_HLP_TPOOL,         0,              .strptr=&TP_CONFIG,                     .defstrval="-1,-1,-1,-1,-1,-1,-1,-1",  TYPE_STRING, 0},     \
+  {"tx-sym",                CONFIG_HLP_TX_SYM,        0,              .iptr=&TX_SYM,                          .defintval=0,             TYPE_INT,    0},  \
   {"phy-test",              CONFIG_HLP_PHYTST,        PARAMFLAG_BOOL, .iptr=&PHY_TEST,                        .defintval=0,             TYPE_INT,    0},  \
   {"do-ra",                 CONFIG_HLP_DORA,          PARAMFLAG_BOOL, .iptr=&DO_RA,                           .defintval=0,             TYPE_INT,    0},  \
   {"sl-mode",               CONFIG_HLP_SL_MODE,       0,              .u8ptr=&SL_MODE,                        .defintval=0,             TYPE_UINT8,  0},  \
@@ -171,6 +174,7 @@ extern int usrp_tx_thread;
 
 // clang-format off
 #define CMDLINE_PARAMS_CHECK_DESC {         \
+    { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
     { .s5 = { NULL } },                     \
@@ -294,6 +298,7 @@ typedef struct {
   //THREAD_STRUCT  thread_struct;
   char           *rf_config_file;
   char *threadPoolConfig;
+  int            num_pdsch_symbols_per_thread;
   int            phy_test;
   int            do_ra;
   uint8_t        sl_mode;
