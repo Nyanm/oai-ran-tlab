@@ -79,6 +79,13 @@ hash_table_t  *pdcp_coll_p;
 static uint64_t pdcp_optmask;
 
 static ngran_node_t node_type;
+static int pdcp_discard_timer_override = -1;
+
+void nr_pdcp_set_discard_timer(int timer_ms)
+{
+  pdcp_discard_timer_override = timer_ms;
+  LOG_I(PDCP, "PDCP discard timer override set to %d ms\n", timer_ms);
+}
 
 nr_pdcp_entity_t *nr_pdcp_get_rb(nr_pdcp_ue_t *ue, int rb_id, bool srb_flag)
 {
@@ -153,12 +160,18 @@ static void *rlc_data_req_thread(void *_)
     i = q.start;
     if (pthread_mutex_unlock(&q.m) != 0) abort();
 
-    nr_rlc_data_req(&q.q[i].ctxt_pP,
-                    q.q[i].srb_flagP,
-                    q.q[i].rb_idP,
-                    q.q[i].muiP,
-                    q.q[i].sdu_sizeP,
-                    q.q[i].sdu_pP);
+    if (q.q[i].sdu_pP == NULL && q.q[i].sdu_sizeP == 0) {
+      /* discard request: sdu_pP==NULL is the sentinel */
+      nr_rlc_discard_sdu(q.q[i].ctxt_pP.rntiMaybeUEid,
+                         q.q[i].rb_idP, (int)q.q[i].muiP);
+    } else {
+      nr_rlc_data_req(&q.q[i].ctxt_pP,
+                      q.q[i].srb_flagP,
+                      q.q[i].rb_idP,
+                      q.q[i].muiP,
+                      q.q[i].sdu_sizeP,
+                      q.q[i].sdu_pP);
+    }
 
     if (pthread_mutex_lock(&q.m) != 0) abort();
 
@@ -216,6 +229,38 @@ static void enqueue_rlc_data_req(const protocol_ctxt_t *const ctxt_pP,
 
   if (pthread_cond_signal(&q.c) != 0) abort();
   if (pthread_mutex_unlock(&q.m) != 0) abort();
+}
+
+/* Non-blocking variant for use from PDCP timer thread (holds PDCP lock).
+ * Returns false if queue is full — caller should skip the discard. */
+static bool try_enqueue_rlc_data_req(const protocol_ctxt_t *const ctxt_pP,
+                                     const srb_flag_t srb_flagP,
+                                     const rb_id_t rb_idP,
+                                     const mui_t muiP,
+                                     confirm_t confirmP,
+                                     sdu_size_t sdu_sizeP,
+                                     uint8_t *sdu_pP)
+{
+  if (pthread_mutex_lock(&q.m) != 0) abort();
+  if (q.length == RLC_DATA_REQ_QUEUE_SIZE) {
+    if (pthread_mutex_unlock(&q.m) != 0) abort();
+    return false;
+  }
+
+  int i = (q.start + q.length) % RLC_DATA_REQ_QUEUE_SIZE;
+  q.length++;
+
+  q.q[i].ctxt_pP    = *ctxt_pP;
+  q.q[i].srb_flagP  = srb_flagP;
+  q.q[i].rb_idP     = rb_idP;
+  q.q[i].muiP       = muiP;
+  q.q[i].confirmP   = confirmP;
+  q.q[i].sdu_sizeP  = sdu_sizeP;
+  q.q[i].sdu_pP     = sdu_pP;
+
+  if (pthread_cond_signal(&q.c) != 0) abort();
+  if (pthread_mutex_unlock(&q.m) != 0) abort();
+  return true;
 }
 
 /****************************************************************************/
@@ -447,6 +492,34 @@ static void deliver_sdu_drb(void *_ue, nr_pdcp_entity_t *entity,
   }
 }
 
+/* Discard notification callback — called from PDCP timer thread via
+ * check_discard_timer().  We are inside the PDCP lock here, so we must
+ * NOT call RLC directly.  Instead we enqueue a discard sentinel
+ * (sdu_pP == NULL, sdu_sizeP == 0) into the async RLC queue.
+ * The consumer thread (rlc_data_req_thread) recognises the sentinel
+ * and calls nr_rlc_discard_sdu(). */
+static void pdcp_discard_callback(void *data, int sdu_id)
+{
+  nr_pdcp_entity_t *entity = (nr_pdcp_entity_t *)data;
+  ue_id_t rlc_ue_id;
+
+  if (entity->is_gnb) {
+    f1_ue_data_t ue_data = cu_get_f1_ue_data(entity->ue_id);
+    rlc_ue_id = ue_data.secondary_ue;
+  } else {
+    rlc_ue_id = entity->ue_id;
+  }
+
+  protocol_ctxt_t ctxt = { .enb_flag = entity->is_gnb ? 1 : 0,
+                           .rntiMaybeUEid = rlc_ue_id };
+  /* sdu_pP == NULL && sdu_sizeP == 0 is the discard sentinel.
+   * muiP carries the PDCP COUNT to identify the SDU in RLC. */
+  if (!try_enqueue_rlc_data_req(&ctxt, SRB_FLAG_NO, entity->rb_id,
+                                (mui_t)sdu_id, 0, 0, NULL)) {
+    LOG_D(PDCP, "discard enqueue failed (queue full) for COUNT %d, skipping\n", sdu_id);
+  }
+}
+
 static void deliver_pdu_drb_ue(void *deliver_pdu_data, ue_id_t ue_id, int rb_id,
                                char *buf, int size, int sdu_id)
 {
@@ -636,7 +709,24 @@ void nr_pdcp_add_drb(int is_gnb,
                                                     &actual_security_parameters);
     nr_pdcp_ue_add_drb_pdcp_entity(ue, sdap->drb_id, pdcp_drb);
 
-    LOG_I(PDCP, "Added DRB %d to UE ID %ld\n", sdap->drb_id, UEid);
+    /* Apply config override (monolithic mode reads from gNBs config).
+     * -1 = infinity/disabled, otherwise timer in ms. */
+    if (!NODE_IS_CU(node_type))
+      pdcp_drb->discard_timer = pdcp_discard_timer_override;
+
+    /* Allocate discard timer ring and wire callback (monolithic only).
+     * In CU mode the discard path goes via GTP-U DL Discard Blocks (future). */
+    pdcp_drb->ue_id = UEid;
+    if (!NODE_IS_CU(node_type) && pdcp_drb->discard_timer != -1) {
+      pdcp_drb->discard_ring_size = PDCP_DISCARD_RING_SIZE;
+      pdcp_drb->discard_ts = calloc(PDCP_DISCARD_RING_SIZE, sizeof(uint64_t));
+      AssertFatal(pdcp_drb->discard_ts, "OOM for PDCP discard ring\n");
+      pdcp_drb->discard_tail = 0;
+      pdcp_drb->notify_discard = pdcp_discard_callback;
+      pdcp_drb->notify_discard_data = pdcp_drb;
+    }
+
+    LOG_I(PDCP, "Added DRB %d to UE ID %ld (discard_timer=%d)\n", sdap->drb_id, UEid, pdcp_drb->discard_timer);
   }
   nr_pdcp_manager_unlock(nr_pdcp_ue_manager);
 }
@@ -966,11 +1056,14 @@ bool nr_pdcp_data_req_drb(protocol_ctxt_t *ctxt_pP,
     return 0;
   }
 
+  /* Use PDCP COUNT (tx_next - 1) as sdu_id so RLC can match individual SDUs
+   * for discard. muiP from GTP is always 0 which makes all SDUs indistinguishable. */
+  int pdcp_count = (int)(rb->tx_next - 1);
   deliver_pdu deliver_pdu_cb = rb->deliver_pdu;
 
   nr_pdcp_manager_unlock(nr_pdcp_ue_manager);
 
-  deliver_pdu_cb(NULL, ue_id, rb_id, pdu_buf, pdu_size, muiP);
+  deliver_pdu_cb(NULL, ue_id, rb_id, pdu_buf, pdu_size, pdcp_count);
 
   return 1;
 }
