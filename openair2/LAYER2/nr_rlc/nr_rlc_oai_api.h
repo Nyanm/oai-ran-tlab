@@ -91,3 +91,5 @@ bool nr_rlc_activate_srb0(int ue_id,
                           void (*send_initial_ul_rrc_message)(int rnti, const uint8_t *sdu, sdu_size_t sdu_len, void *data));
 
 bool nr_rlc_get_statistics(int ue_id, int srb_flag, int rb_id, nr_rlc_statistics_t *out);
+
+void nr_rlc_discard_sdu(int ue_id, int rb_id, int sdu_id);

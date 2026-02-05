@@ -74,7 +74,7 @@
 #define MAX_NUM_SLICES 1024
 
 // RLC Entity
-#define RLC_TX_MAXSIZE       10000000
+#define RLC_TX_MAXSIZE       5000000
 #define RLC_RX_MAXSIZE       10000000
 #define MAX_ANT 8
 // CBA constant

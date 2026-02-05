@@ -707,6 +707,10 @@ void nr_rlc_entity_um_discard_sdu(nr_rlc_entity_t *_entity, int sdu_id)
   /* update buffer status */
   entity->common.bstatus.tx_size -= compute_pdu_header_size(entity, cur)
                                     + cur->size;
+  entity->tx_size -= cur->sdu->size;
+
+  LOG_W(RLC, "discarded SDU sdu_id %d (%d bytes) from UM TX buffer\n",
+        sdu_id, cur->sdu->size);
 
   nr_rlc_free_sdu_segment(cur);
 }

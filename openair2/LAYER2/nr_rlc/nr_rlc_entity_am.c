@@ -2044,8 +2044,8 @@ void nr_rlc_entity_am_discard_sdu(nr_rlc_entity_t *_entity, int sdu_id)
 
   entity->tx_size -= cur->sdu->size;
 
-  /* Uncomment to assert if SDU are ever discarded */
-  // assert(0 != 0 && "[RLC-TRAP] SDU discard should never be reached!");
+  LOG_W(RLC, "discarded SDU sdu_id %d (%d bytes) from TX buffer\n",
+        sdu_id, cur->sdu->size);
 
   nr_rlc_free_sdu_segment(cur);
 }

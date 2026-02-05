@@ -296,6 +296,11 @@ static int nr_pdcp_entity_process_sdu(nr_pdcp_entity_t *entity,
 
   entity->tx_next++;
 
+  /* record submission timestamp for discard timer (TS 38.323 §5.2.1) */
+  if (entity->discard_ts != NULL) {
+    entity->discard_ts[count & (entity->discard_ring_size - 1)] = entity->t_current;
+  }
+
   entity->stats.txpdu_pkts++;
   entity->stats.txpdu_bytes += header_size + size + integrity_size;
   entity->stats.txpdu_sn = sn;
@@ -453,11 +458,42 @@ static void check_t_reordering(nr_pdcp_entity_t *entity)
   }
 }
 
+static void check_discard_timer(nr_pdcp_entity_t *entity)
+{
+  if (entity->discard_ts == NULL || entity->discard_timer == -1)
+    return;
+
+  int mask = entity->discard_ring_size - 1;
+  int discards = 0;
+
+  /* handle ring overflow: advance tail silently — those SDUs are old enough
+   * that RLC has already transmitted or dropped them */
+  if ((entity->tx_next - entity->discard_tail) > (uint32_t)entity->discard_ring_size)
+    entity->discard_tail = entity->tx_next - entity->discard_ring_size;
+
+  while (entity->discard_tail < entity->tx_next && discards < 64) {
+    uint64_t ts = entity->discard_ts[entity->discard_tail & mask];
+    if (ts == 0) { entity->discard_tail++; continue; }  /* already handled */
+    if (entity->t_current - ts <= (uint64_t)entity->discard_timer)
+      break;  /* timestamps are monotonic — first unexpired means all after are too */
+    entity->discard_ts[entity->discard_tail & mask] = 0;
+    if (entity->notify_discard)
+      entity->notify_discard(entity->notify_discard_data, (int)entity->discard_tail);
+    entity->discard_tail++;
+    discards++;
+  }
+
+  if (discards > 0)
+    LOG_W(PDCP, "DRB %d: discarded %d SDUs (discard_timer=%d ms, age>%d ms)\n",
+          entity->rb_id, discards, entity->discard_timer, entity->discard_timer);
+}
+
 static void nr_pdcp_entity_set_time(struct nr_pdcp_entity_t *entity, uint64_t now)
 {
   entity->t_current = now;
 
   check_t_reordering(entity);
+  check_discard_timer(entity);
 }
 
 static void deliver_all_sdus(nr_pdcp_entity_t *entity)
@@ -491,6 +527,11 @@ static void nr_pdcp_entity_suspend(nr_pdcp_entity_t *entity)
 {
   /* Transmitting PDCP entity */
   entity->tx_next = 0;
+  /* reset discard timer tracking since tx_next is reset */
+  if (entity->discard_ts != NULL) {
+    memset(entity->discard_ts, 0, entity->discard_ring_size * sizeof(uint64_t));
+    entity->discard_tail = 0;
+  }
   /* Receiving PDCP entity */
   if (entity->t_reordering_start != 0) {
     entity->t_reordering_start = 0;
@@ -541,6 +582,11 @@ static void nr_pdcp_entity_reestablish_drb_um(nr_pdcp_entity_t *entity,
 {
   /* transmitting entity procedures */
   entity->tx_next = 0;
+  /* reset discard timer tracking since tx_next is reset */
+  if (entity->discard_ts != NULL) {
+    memset(entity->discard_ts, 0, entity->discard_ring_size * sizeof(uint64_t));
+    entity->discard_tail = 0;
+  }
 
   /* receiving entity procedures */
   /* deliver all SDUs if t_reordering is running */
@@ -588,6 +634,7 @@ static void nr_pdcp_entity_release(nr_pdcp_entity_t *entity)
 static void nr_pdcp_entity_delete(nr_pdcp_entity_t *entity)
 {
   free_rx_list(entity);
+  free(entity->discard_ts);
   if (entity->free_security != NULL)
     entity->free_security(entity->security_context);
   if (entity->free_integrity != NULL)
@@ -755,6 +802,16 @@ nr_pdcp_entity_t *new_nr_pdcp_entity(
   ret->sn_size       = sn_size;
   ret->t_reordering  = t_reordering;
   ret->discard_timer = discard_timer;
+
+  /* discard timer tracking — initialized but ring not allocated yet.
+   * Ring allocation happens in nr_pdcp_oai_api.c at DRB creation time,
+   * where the deployment mode (monolithic vs CU) is known. */
+  ret->ue_id = 0;
+  ret->discard_ts = NULL;
+  ret->discard_ring_size = 0;
+  ret->discard_tail = 0;
+  ret->notify_discard = NULL;
+  ret->notify_discard_data = NULL;
 
   ret->sn_max        = (1 << sn_size) - 1;
   ret->window_size   = 1 << (sn_size - 1);
