@@ -1110,6 +1110,53 @@ static uint32_t average_u32(const uint32_t *x, uint16_t size)
   return (uint32_t)(sum_x / size);
 }
 
+// Trimmed average: exclude RBs whose noise power exceeds median by more than
+// ~6 dB. Returns the average of the remaining "clean" RBs 
+// e.g. approximates SNR instead of SINR for narrowband interferences, helps with power control stability at MAC
+// Falls back to the full average if all RBs are above the threshold.
+static uint32_t average_u32_trimmed(const uint32_t *x, uint16_t size)
+{
+  AssertFatal(size > 0 && x != NULL, "x is NULL or size is 0\n");
+
+  if (size == 1)
+    return x[0];
+
+  // Copy and sort to find median. Max 275 NR RBs.
+  uint32_t sorted[275];
+  int n = (size < 275) ? size : 275;
+  memcpy(sorted, x, n * sizeof(uint32_t));
+
+  // Insertion sort — n is small (typical PUSCH: 10-50 RBs)
+  for (int i = 1; i < n; i++) {
+    uint32_t key = sorted[i];
+    int j = i - 1;
+    while (j >= 0 && sorted[j] > key) {
+      sorted[j + 1] = sorted[j];
+      j--;
+    }
+    sorted[j + 1] = key;
+  }
+  uint32_t median = sorted[n / 2];
+
+  // threshold = median * 4 ≈ +6 dB in linear power
+  uint64_t threshold = (uint64_t)median << 2;
+
+  uint64_t sum = 0;
+  int count = 0;
+  for (int i = 0; i < size; i++) {
+    if ((uint64_t)x[i] <= threshold) {
+      sum += x[i];
+      count++;
+    }
+  }
+
+  // Fallback: if all RBs are outliers, return the full average
+  if (count == 0)
+    return average_u32(x, size);
+
+  return (uint32_t)(sum / count);
+}
+
 int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
                    uint8_t ulsch_id,
                    uint32_t frame,
@@ -1221,7 +1268,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
         pusch_vars->ulsch_power[aarx] += (symb_energy / rel15_ul->nr_of_symbols);
 
         pusch_vars->ulsch_noise_power[aarx] +=
-            average_u32(&n0_subband_power[aarx][rel15_ul->bwp_start + rel15_ul->rb_start], rel15_ul->rb_size);
+            average_u32_trimmed(&n0_subband_power[aarx][rel15_ul->bwp_start + rel15_ul->rb_start], rel15_ul->rb_size);
 
         LOG_D(PHY,
               "aa %d, bwp_start%d, rb_start %d, rb_size %d: ulsch_power %d, ulsch_noise_power %d\n",
