@@ -467,51 +467,6 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
   stop_meas(&ru->rx_fhaul);
 }
 
-static radio_tx_gpio_flag_t get_gpio_flags(RU_t *ru, int slot)
-{
-  radio_tx_gpio_flag_t flags_gpio = 0;
-  NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
-  openair0_config_t *cfg0 = &ru->openair0_cfg;
-
-  switch (cfg0->gpio_controller) {
-    case RU_GPIO_CONTROL_GENERIC:
-      // currently we switch beams at the beginning of a slot and we take the beam index of the first symbol of this slot
-      // we only send the beam to the gpio if the beam is different from the previous slot
-
-      if (ru->common.beam_id) {
-        int prev_slot = (slot - 1 + fp->slots_per_frame) % fp->slots_per_frame;
-        const int *beam_ids = ru->common.beam_id[0];
-        int prev_beam = beam_ids[prev_slot * fp->symbols_per_slot];
-        int beam = beam_ids[slot * fp->symbols_per_slot];
-        if (prev_beam != beam) {
-          flags_gpio = beam | TX_GPIO_CHANGE; // enable change of gpio
-          LOG_I(HW, "slot %d, beam %d\n", slot, ru->common.beam_id[0][slot * fp->symbols_per_slot]);
-        }
-      }
-      break;
-
-    case RU_GPIO_CONTROL_INTERDIGITAL: {
-      // the beam index is written in bits 8-10 of the flags
-      // bit 11 enables the gpio programming
-      int beam = 0;
-      if ((slot % 10 == 0) && ru->common.beam_id && (ru->common.beam_id[0][slot * fp->symbols_per_slot] < 64)) {
-        // beam = ru->common.beam_id[0][slot*fp->symbols_per_slot] | 64;
-        beam = 1024; // hardcoded now for beam32 boresight
-        // beam = 127; //for the sake of trying beam63
-        LOG_D(HW, "slot %d, beam %d\n", slot, beam);
-      }
-      flags_gpio = beam | TX_GPIO_CHANGE;
-      // flags_gpio |= beam << 8; // MSB 8 bits are used for beam
-      LOG_I(HW, "slot %d, beam %d, flags_gpio %d\n", slot, beam, flags_gpio);
-      break;
-    }
-    default:
-      AssertFatal(false, "illegal GPIO controller %d\n", cfg0->gpio_controller);
-  }
-
-  return flags_gpio;
-}
-
 static void ctrl_rf(RU_t *ru, int frame, int slot, uint64_t timestamp)
 {
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
