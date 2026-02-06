@@ -2096,6 +2096,10 @@ gNB_RRC_INST *RCconfig_NRRRC()
         nrrrc_config.um_on_default_drb = *(GNBParamList.paramarray[i][GNB_UMONDEFAULTDRB_IDX].uptr);
         LOG_I(GNB_APP, "Data Radio Bearer count %d\n", nrrrc_config.drbs);
 
+        int pdcp_discard_timer = *GNBParamList.paramarray[i][GNB_PDCP_DISCARD_TIMER_IDX].iptr;
+        nr_pdcp_set_discard_timer(pdcp_discard_timer);
+        LOG_I(GNB_APP, "PDCP discard timer set to %d ms\n", pdcp_discard_timer);
+
       }//
     }//End for (k=0; k <num_gnbs ; k++)
     openair_rrc_gNB_configuration(rrc, &nrrrc_config);

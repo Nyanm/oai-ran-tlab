@@ -1035,6 +1035,18 @@ bool nr_rlc_get_statistics(int ue_id, int srb_flag, int rb_id, nr_rlc_statistics
   return ret;
 }
 
+void nr_rlc_discard_sdu(int ue_id, int rb_id, int sdu_id)
+{
+  nr_rlc_manager_lock(nr_rlc_ue_manager);
+  nr_rlc_ue_t *ue = nr_rlc_manager_get_ue(nr_rlc_ue_manager, ue_id);
+  nr_rlc_entity_t *rb = NULL;
+  if (rb_id >= 1 && rb_id <= MAX_DRBS_PER_UE)
+    rb = ue->drb[rb_id - 1];
+  if (rb != NULL)
+    rb->discard_sdu(rb, sdu_id);
+  nr_rlc_manager_unlock(nr_rlc_ue_manager);
+}
+
 void nr_rlc_srb_recv_sdu(const int ue_id, const logical_chan_id_t channel_id, unsigned char *buf, int size)
 {
   T(T_ENB_RLC_DL, T_INT(0), T_INT(ue_id), T_INT(0), T_INT(size));

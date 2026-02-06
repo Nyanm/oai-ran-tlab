@@ -41,6 +41,8 @@
 #define PDCP_INTEGRITY_SIZE 4
 /* K keys have 128 bits length */
 #define NR_K_KEY_SIZE 16
+/* Discard timer ring buffer size — must be power of 2 (512 KB per entity) */
+#define PDCP_DISCARD_RING_SIZE 65536
 
 typedef enum {
   NR_PDCP_DRB_AM,
@@ -136,6 +138,15 @@ typedef struct nr_pdcp_entity_t {
   int sn_size;                  /* SN size, in bits */
   int t_reordering;             /* unit: ms, -1 for infinity */
   int discard_timer;            /* unit: ms, -1 for infinity */
+
+  /* discard timer enforcement (TX side, TS 38.323 §5.2.1 / §5.3) */
+  ue_id_t  ue_id;              /* PDCP-side UE ID, set at entity creation */
+  uint64_t *discard_ts;        /* ring of submit timestamps (ms), NULL if disabled */
+  int      discard_ring_size; 
+  uint32_t discard_tail;       /* oldest COUNT not yet checked */
+  /* pluggable discard notification — monolithic: enqueue to RLC, CU/DU: GTP-U */
+  void (*notify_discard)(void *notify_discard_data, int sdu_id);
+  void *notify_discard_data;
 
   int sn_max;                   /* (2^SN_size) - 1 */
   int window_size;              /* 2^(SN_size - 1) */
