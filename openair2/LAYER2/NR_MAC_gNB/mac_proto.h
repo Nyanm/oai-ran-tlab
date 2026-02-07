@@ -39,7 +39,8 @@
 void set_cset_offset(uint16_t);
 void get_K1_K2(int N1, int N2, int *K1, int *K2, int layers);
 int get_NTN_Koffset(const NR_ServingCellConfigCommon_t *scc);
-
+bool is_ssb_configured(const NR_ServingCellConfigCommon_t *scc, int ssb_index);
+int get_max_ssbs(const NR_ServingCellConfigCommon_t *scc);
 int get_first_ul_slot(const frame_structure_t *fs, bool mixed);
 int get_ul_slots_per_period(const frame_structure_t *fs);
 int get_ul_slots_per_frame(const frame_structure_t *fs);
@@ -47,7 +48,6 @@ int get_dl_slots_per_period(const frame_structure_t *fs);
 int get_full_ul_slots_per_period(const frame_structure_t *fs);
 int get_full_dl_slots_per_period(const frame_structure_t *fs);
 int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed);
-
 void delete_nr_ue_data(NR_UE_info_t *UE, NR_COMMON_channels_t *ccPtr, uid_allocator_t *uia);
 
 void mac_top_init_gNB(ngran_node_t node_type,
@@ -213,14 +213,15 @@ int nr_get_pucch_resource(NR_ControlResourceSet_t *coreset,
                           NR_PUCCH_Config_t *pucch_Config,
                           int CCEIndex);
 
-void nr_configure_pucch(nfapi_nr_pucch_pdu_t* pucch_pdu,
+void nr_configure_pucch(nfapi_nr_pucch_pdu_t *pucch_pdu,
                         NR_ServingCellConfigCommon_t *scc,
-                        NR_UE_info_t* UE,
+                        NR_UE_info_t *UE,
                         uint8_t pucch_resource,
                         uint16_t O_csi,
                         uint16_t O_ack,
                         uint8_t O_sr,
-                        int r_pucch);
+                        int r_pucch,
+                        nr_beam_mode_t mode);
 
 void find_search_space(int ss_type,
                        NR_BWP_Downlink_t *bwp,
@@ -330,7 +331,8 @@ nfapi_nr_pusch_pdu_t *prepare_pusch_pdu(nfapi_nr_ul_tti_request_t *future_ul_tti
                                         int harq_id,
                                         int harq_round,
                                         int fh,
-                                        int rnti);
+                                        int rnti,
+                                        nr_beam_mode_t beam_mode);
 nfapi_nr_dl_tti_pdsch_pdu_rel15_t *prepare_pdsch_pdu(nfapi_nr_dl_tti_request_pdu_t *dl_tti_pdsch_pdu,
                                                      const gNB_MAC_INST *mac,
                                                      const NR_UE_info_t *UE,
@@ -418,7 +420,7 @@ int get_cce_index(const gNB_MAC_INST *nrmac,
                   const int CC_id,
                   const int slot,
                   const rnti_t rnti,
-                  uint8_t *aggregation_level,
+                  int *aggregation_level,
                   int beam_idx,
                   const NR_SearchSpace_t *ss,
                   const NR_ControlResourceSet_t *coreset,
@@ -445,10 +447,14 @@ int get_mcs_from_bler(const NR_bler_options_t *bler_options,
 
 int ul_buffer_index(int frame, int slot, int slots_per_frame, int size);
 void UL_tti_req_ahead_initialization(gNB_MAC_INST *gNB, int n, int CCid, frame_t frameP, int slotP);
-void fapi_beam_index_allocation(NR_ServingCellConfigCommon_t *scc, const nr_mac_config_t *config, gNB_MAC_INST *mac);
-int get_fapi_beamforming_index(gNB_MAC_INST *mac, int ssb_idx);
-NR_beam_alloc_t beam_allocation_procedure(NR_beam_info_t *beam_info, int frame, int slot, int beam_index, int slots_per_frame);
-void reset_beam_status(NR_beam_info_t *beam_info, int frame, int slot, int beam_index, int slots_per_frame, bool new_beam);
+uint64_t get_ssb_bitmap(const NR_ServingCellConfigCommon_t *scc);
+uint64_t get_ssb_bitmap_and_len(const NR_ServingCellConfigCommon_t *scc, uint8_t *len);
+void fill_beam_index_list(NR_ServingCellConfigCommon_t *scc, const nr_mac_config_t *config, gNB_MAC_INST *mac);
+int get_beam_from_ssbidx(gNB_MAC_INST *mac, int ssb_idx);
+int16_t get_allocated_beam(const NR_beam_info_t *beam_info, int frame, int slot, int slots_per_frame, int beam_number_in_period);
+uint16_t convert_to_fapi_beam(const uint16_t beam_idx, const nr_beam_mode_t mode);
+NR_beam_alloc_t beam_allocation_procedure(NR_beam_info_t *beam_info, int frame, int slot, int16_t beam_index, int slots_per_frame);
+void reset_beam_status(NR_beam_info_t *beam_info, int frame, int slot, int16_t beam_index, int slots_per_frame, bool new_beam);
 void beam_selection_procedures(gNB_MAC_INST *mac, NR_UE_info_t *UE);
 void nr_sr_reporting(gNB_MAC_INST *nrmac, frame_t frameP, slot_t slotP);
 bwp_info_t get_pdsch_bwp_start_size(gNB_MAC_INST *nr_mac, NR_UE_info_t *UE);

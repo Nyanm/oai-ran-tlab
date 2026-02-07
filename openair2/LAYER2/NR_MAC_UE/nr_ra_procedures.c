@@ -813,7 +813,7 @@ static void setup_ra_response_window(NR_UE_MAC_INST_t *mac,
       LOG_E(NR_MAC, "RA-ResponseWindow need to be configured to a value lower than or equal to 10 ms\n");
   }
 
-  const int ntn_ue_koffset = GET_NTN_UE_K_OFFSET(&mac->ntn_ta, mac->current_UL_BWP->scs);
+  const int ntn_ue_koffset = GET_NTN_UE_K_OFFSET(&mac->phy_config.config_req.ntn_config, mac->current_UL_BWP->scs);
   ra->response_window_setup_time = respwind_value + ntn_ue_koffset;
 }
 
@@ -1027,7 +1027,7 @@ void nr_Msg3_transmitted(NR_UE_MAC_INST_t *mac, uint8_t CC_id, frame_t frameP, s
 {
   RA_config_t *ra = &mac->ra;
   NR_RACH_ConfigCommon_t *nr_rach_ConfigCommon = mac->current_UL_BWP->rach_ConfigCommon;
-  const int ntn_ue_koffset = GET_NTN_UE_K_OFFSET(&mac->ntn_ta, mac->current_UL_BWP->scs);
+  const int ntn_ue_koffset = GET_NTN_UE_K_OFFSET(&mac->phy_config.config_req.ntn_config, mac->current_UL_BWP->scs);
   const int slots_per_ms = mac->frame_structure.numb_slots_frame / 10;
 
   // start contention resolution timer
@@ -1114,9 +1114,9 @@ void nr_ra_succeeded(NR_UE_MAC_INST_t *mac, const uint8_t gNB_index, const frame
   RA_config_t *ra = &mac->ra;
 
   if (ra->cfra) {
-    LOG_I(MAC, "[UE %d][%d.%d][RAPROC] RA procedure succeeded. CFRA: RAR successfully received.\n", mac->ue_id, frame, slot);
+    LOG_A(NR_MAC, "[UE %d][%d.%d][RAPROC] RA procedure succeeded. CFRA: RAR successfully received.\n", mac->ue_id, frame, slot);
   } else {
-    LOG_A(MAC,
+    LOG_A(NR_MAC,
           "[UE %d][%d.%d][RAPROC] %d-Step RA procedure succeeded. CBRA: Contention Resolution is successful.\n",
           mac->ue_id,
           frame,
@@ -1126,6 +1126,10 @@ void nr_ra_succeeded(NR_UE_MAC_INST_t *mac, const uint8_t gNB_index, const frame
     ra->t_crnti = 0;
     nr_timer_stop(&ra->contention_resolution_timer);
   }
+
+  // rach-ConfigDedicated is one shot configuration to be used only for a specific instance of reconfiguration with sync
+  if (ra->rach_ConfigDedicated)
+    asn1cFreeStruc(asn_DEF_NR_RACH_ConfigDedicated, ra->rach_ConfigDedicated);
 
   ra->RA_active = false;
   mac->msg3_C_RNTI = false;

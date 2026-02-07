@@ -717,6 +717,7 @@ int rrc_gNB_process_NGAP_DOWNLINK_NAS(MessageDef *msg_p, instance_t instance, mu
   }
 
   gNB_RRC_UE_t *UE = &ue_context_p->ue_context;
+  UE->amf_ue_ngap_id = req->amf_ue_ngap_id;
   UE->nas_pdu = req->nas_pdu;
   rrc_forward_ue_nas_message(rrc, UE);
   return 0;
@@ -1275,13 +1276,20 @@ void rrc_gNB_process_HandoverCommand(gNB_RRC_INST *rrc, const ngap_handover_comm
   }
   gNB_RRC_UE_t *UE = &ue_context_p->ue_context;
 
-  uint8_t buffer[NR_RRC_BUF_SIZE];
-  byte_array_t ba = {.buf = buffer, .len = sizeof(buffer)};
-  int enc = doRRCReconfiguration_from_HandoverCommand(&ba, msg->handoverCommand);
-  DevAssert(enc > 0);
+  byte_array_t buffer = doRRCReconfiguration_from_HandoverCommand(msg->handoverCommand);
+  if (!buffer.buf || buffer.len == 0) {
+    LOG_E(NR_RRC, "Failed to decode/encode RRCReconfiguration from HandoverCommand\n");
+    // Notify AMF that handover was cancelled
+    DevAssert(UE->ho_context);
+    DevAssert(UE->ho_context->source);
+    DevAssert(UE->ho_context->source->ho_cancel);
+    UE->ho_context->source->ho_cancel(rrc, UE);
+    return;
+  }
 
-  rrc_gNB_trigger_reconfiguration_for_handover(rrc, UE, buffer, enc);
+  rrc_gNB_trigger_reconfiguration_for_handover(rrc, UE, buffer.buf, buffer.len);
   LOG_A(NR_RRC, "Send reconfiguration (HO Command) to UE %u/RNTI %04x\n", UE->rrc_ue_id, UE->rnti);
+  free_byte_array(buffer);
 }
 
 void rrc_gNB_free_Handover_Command(ngap_handover_command_t *msg)
@@ -1649,7 +1657,7 @@ void rrc_gNB_send_NGAP_HANDOVER_REQUIRED(gNB_RRC_INST *rrc,
   msg.source2target->ue_history_info.cause->type = NGAP_CAUSE_RADIO_NETWORK;
   msg.source2target->ue_history_info.cause->value = NGAP_CAUSE_RADIO_NETWORK_HANDOVER_DESIRABLE_FOR_RADIO_REASON;
   msg.source2target->ue_history_info.type = NGAP_CellSize_small;
-  msg.source2target->ue_history_info.time_in_cell = 500; // dummy number for now
+  msg.source2target->ue_history_info.time_in_cell = min(time(NULL) - UE->last_seen, 4095);
   msg.source2target->ue_history_info.id = target_cell;
 
   /* Fill both PDU Session Resource List IE (M) in Handover Required

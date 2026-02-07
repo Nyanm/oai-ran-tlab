@@ -38,17 +38,14 @@
 #include "executables/softmodem-common.h"
 #include <stdio.h>
 
-void fill_dci_search_candidates(const NR_SearchSpace_t *ss, fapi_nr_dl_config_dci_dl_pdu_rel15_t *rel15, const uint32_t Y)
+static void fill_dci_search_candidates(const NR_SearchSpace_t *ss, fapi_nr_dl_config_dci_dl_pdu_rel15_t *rel15, const uint32_t Y)
 {
   LOG_T(NR_MAC_DCI, "Filling search candidates for DCI\n");
 
   int i = 0;
   for (int maxL = 16; maxL > 0; maxL >>= 1) {
-    uint8_t aggregation, max_number_of_candidates;
-    find_aggregation_candidates(&aggregation,
-                                &max_number_of_candidates,
-                                ss,
-                                maxL);
+    int aggregation, max_number_of_candidates;
+    find_aggregation_candidates(&aggregation, &max_number_of_candidates, ss, maxL);
     if (max_number_of_candidates == 0)
       continue;
     LOG_T(NR_MAC_DCI, "L %d, max number of candidates %d, aggregation %d\n", maxL, max_number_of_candidates, aggregation);
@@ -89,7 +86,7 @@ void fill_dci_search_candidates(const NR_SearchSpace_t *ss, fapi_nr_dl_config_dc
   rel15->number_of_candidates = i;
 }
 
-NR_ControlResourceSet_t *ue_get_coreset(const NR_BWP_PDCCH_t *config, const int coreset_id)
+static NR_ControlResourceSet_t *ue_get_coreset(const NR_BWP_PDCCH_t *config, const int coreset_id)
 {
   if (config->commonControlResourceSet && coreset_id == config->commonControlResourceSet->controlResourceSetId)
     return config->commonControlResourceSet;
@@ -122,9 +119,18 @@ static void config_dci_pdu(NR_UE_MAC_INST_t *mac,
   if(coreset_id > 0) {
     coreset = ue_get_coreset(pdcch_config, coreset_id);
     rel15->coreset.CoreSetType = NFAPI_NR_CSET_CONFIG_PDCCH_CONFIG;
+    if (coreset->ext1 && coreset->ext1->rb_Offset_r16)
+      rel15->coreset.rb_offset = *coreset->ext1->rb_Offset_r16;
+    else {
+      // first common RB of the first group of 6 PRBs has common RB index equal to
+      // 6 * ⌈BWP_start / 6⌉ if rb-Offset is not provided
+      int start_common = (current_DL_BWP->BWPStart + 5) / 6 * 6;
+      rel15->coreset.rb_offset = start_common - current_DL_BWP->BWPStart;
+    }
   } else {
     coreset = mac->coreset0;
     rel15->coreset.CoreSetType = NFAPI_NR_CSET_CONFIG_MIB_SIB1;
+    rel15->coreset.rb_offset = 0;
   }
 
   rel15->coreset.duration = coreset->duration;
@@ -353,12 +359,12 @@ bool is_ss_monitor_occasion(const int frame, const int slot, const int slots_per
   return monitor;
 }
 
-bool search_space_monitoring_ocasion_other_si(NR_UE_MAC_INST_t *mac,
-                                              const NR_SearchSpace_t *ss,
-                                              const int abs_slot,
-                                              const int frame,
-                                              const int slot,
-                                              const int slots_per_frame)
+static bool search_space_monitoring_ocasion_other_si(NR_UE_MAC_INST_t *mac,
+                                                     const NR_SearchSpace_t *ss,
+                                                     const int abs_slot,
+                                                     const int frame,
+                                                     const int slot,
+                                                     const int slots_per_frame)
 {
   const int duration = ss->duration ? *ss->duration : 1;
   int period, offset;
@@ -421,7 +427,7 @@ void ue_dci_configuration(NR_UE_MAC_INST_t *mac, fapi_nr_dl_config_request_t *dl
   const NR_UE_DL_BWP_t *current_DL_BWP = mac->current_DL_BWP;
   NR_BWP_Id_t dl_bwp_id = current_DL_BWP ? current_DL_BWP->bwp_id : 0;
   NR_BWP_PDCCH_t *pdcch_config = &mac->config_BWP_PDCCH[dl_bwp_id];
-  int scs = current_DL_BWP ? current_DL_BWP->scs : get_softmodem_params()->numerology;
+  int scs = current_DL_BWP ? current_DL_BWP->scs : mac->numerology;
   const int slots_per_frame = get_slots_per_frame_from_scs(scs);
   if (mac->get_sib1) {
     int ssb_sc_offset_norm;
@@ -440,6 +446,7 @@ void ue_dci_configuration(NR_UE_MAC_INST_t *mac, fapi_nr_dl_config_request_t *dl
                                           scs,
                                           mac->frequency_range,
                                           mac->nr_band,
+                                          273,  // at this point UE in principle doesn't know the grid size (we assume the largest)
                                           mac->mib_ssb,
                                           1, // If the UE is not configured with a periodicity, the UE assumes a periodicity of a half frame
                                           ssb_offset_point_a);

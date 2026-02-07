@@ -168,15 +168,20 @@ void nr_ue_ulsch_procedures(PHY_VARS_NR_UE *UE,
 /** \brief This function does IFFT for PUSCH
 */
 
-uint8_t nr_ue_pusch_common_procedures(PHY_VARS_NR_UE *UE,
-                                      const uint8_t slot,
-                                      const NR_DL_FRAME_PARMS *frame_parms,
-                                      const uint8_t n_antenna_ports,
-                                      c16_t **txdataF,
-                                      c16_t **txdata,
-                                      uint32_t linktype,
-                                      bool was_symbol_used[NR_NUMBER_OF_SYMBOLS_PER_SLOT],
-                                      bool no_phase_pre_comp);
+uint8_t nr_tx_rotation_and_ofdm_mod(const uint8_t slot,
+                                    const NR_DL_FRAME_PARMS *frame_parms,
+                                    const uint8_t n_antenna_ports,
+                                    c16_t **txdataF,
+                                    c16_t **txdata,
+                                    uint32_t linktype,
+                                    bool was_symbol_used[NR_NUMBER_OF_SYMBOLS_PER_SLOT],
+                                    bool no_phase_pre_comp);
+
+bool ue_srs_procedures_nr(PHY_VARS_NR_UE *ue,
+                                 const UE_nr_rxtx_proc_t *proc,
+                                 c16_t **txdataF,
+                                 nr_phy_data_tx_t *phy_data,
+                                 bool was_symbol_used[NR_NUMBER_OF_SYMBOLS_PER_SLOT]);
 
 void clean_UE_harq(PHY_VARS_NR_UE *UE);
 
@@ -242,31 +247,26 @@ nr_initial_sync_t nr_initial_sync(UE_nr_rxtx_proc_t *proc,
                                   int numGscn);
 
 /*!
+  \brief Common SSB search function shared by initial sync and neighbor cell search
+  @param params Pointer to SSB search parameters structure
+  @return true if SSB was successfully detected, false otherwise
+*/
+bool nr_search_ssb_common(nr_ssb_search_params_t *params);
+
+/*!
   \brief This function gets the carrier frequencies either from FP or command-line-set global variables, depending on the
   availability of the latter
   @param ue
   @param dl_Carrier Pointer to DL carrier to be set
   @param ul_Carrier Pointer to UL carrier to be set
 */
-void nr_get_carrier_frequencies(PHY_VARS_NR_UE *ue,
-                                uint64_t *dl_Carrier,
-                                uint64_t *ul_Carrier);
-
-/*!
-  \brief This function gets the carrier frequencies either from FP or command-line-set global variables, depending on the availability of the latter
-  @param ue         Pointer to PHY UE
-  @param sl_Carrier Pointer to SL carrier to be set
-*/
-void nr_get_carrier_frequencies_sl(PHY_VARS_NR_UE *ue,
-                                   uint64_t *sl_Carrier);
+void nr_get_carrier_frequencies(const PHY_VARS_NR_UE *ue, uint64_t *dl_Carrier, uint64_t *ul_Carrier);
 
 /*!
   \brief This function sets the OAI RF card rx/tx params
   @param openair0_cfg   Pointer OAI config for a specific card
-  @param rx_gain_off    Rx gain offset
 */
-void nr_rf_card_config_gain(openair0_config_t *openair0_cfg,
-                            double rx_gain_off);
+void nr_rf_card_config_gain(openair0_config_t *openair0_cfg);
 
 void nr_rf_card_config_freq(openair0_config_t *openair0_cfg,
                             uint64_t ul_Carrier,
@@ -330,7 +330,17 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                 pdsch_scope_req_t *scope_req);
 
 int32_t generate_nr_prach(PHY_VARS_NR_UE *ue, uint8_t gNB_id, int frame, uint8_t slot, c16_t **txData);
-
+void apply_ntn_config(PHY_VARS_NR_UE *UE,
+                      NR_DL_FRAME_PARMS *fp,
+                      int hfn_rx,
+                      int frame_rx,
+                      int slot_rx,
+                      int *duration_rx_to_tx,
+                      int *timing_advance,
+                      int *ntn_koffset,
+                      bool *ntn_targetcell);
+void fix_ntn_epoch_hfn(PHY_VARS_NR_UE *UE, int hfn, int frame);
+void apply_ntn_timing_advance_and_doppler(PHY_VARS_NR_UE *UE, const NR_DL_FRAME_PARMS *fp, int abs_subframe_tx);
 void dump_nrdlsch(PHY_VARS_NR_UE *ue,uint8_t gNB_id,uint8_t nr_slot_rx,unsigned int *coded_bits_per_codeword,int round,  unsigned char harq_pid);
 void nr_a_sum_b(c16_t *input_x, c16_t *input_y, unsigned short nb_rb);
 

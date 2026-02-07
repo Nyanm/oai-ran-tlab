@@ -50,7 +50,7 @@ typedef struct nr_ho_source_cu {
   rnti_t old_rnti;
   /// old (source) CellGroupConfig (to send the cellGroupConfig in case of
   /// reestablishment)
-  NR_CellGroupConfig_t *old_cellGroupConfig;
+  byte_array_t old_cgc;
   /// function pointer to announce the handover cancellation, e.g.,
   /// reestablishment
   ho_cancel_t ho_cancel;
@@ -109,5 +109,7 @@ void rrc_gNB_trigger_reconfiguration_for_handover(gNB_RRC_INST *rrc, gNB_RRC_UE_
 void nr_rrc_trigger_n2_ho_target(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue);
 
 byte_array_t *get_meas_timing_config(const NR_MeasurementTimingConfiguration_t *mtc, const NR_MeasConfig_t *measConfig);
+
+void nr_rrc_apply_target_context(gNB_RRC_UE_t *UE);
 
 #endif /* RRC_GNB_MOBILITY_H_ */

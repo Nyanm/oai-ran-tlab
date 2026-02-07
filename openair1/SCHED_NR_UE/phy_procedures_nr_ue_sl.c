@@ -229,7 +229,7 @@ int psbch_pscch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr
       sym = (sym == 0) ? 5 : sym + 1;
     }
 
-    ue->adjust_rxgain = nr_sl_psbch_rsrp_measurements(sl_phy_params, fp, rxdataF, false, ue->openair0_cfg);
+    ue->adjust_rxgain = nr_sl_psbch_rsrp_measurements(ue, sl_phy_params, fp, rxdataF, false);
 
     LOG_D(NR_PHY, " ------  Decode SL-MIB: frame.slot %d.%d ------  \n", frame_rx % 1024, nr_slot_rx);
 
@@ -315,15 +315,14 @@ void phy_procedures_nrUE_SL_TX(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc
     was_symbol_used[i] = true;
   if (tx_action) {
     LOG_D(NR_PHY, "Sending Uplink data \n");
-    nr_ue_pusch_common_procedures(ue,
-                                  proc->nr_slot_tx,
-                                  fp,
-                                  fp->nb_antennas_tx,
-                                  txdataF,
-                                  txp,
-                                  link_type_sl,
-                                  was_symbol_used,
-                                  ue->no_phase_pre_comp);
+    nr_tx_rotation_and_ofdm_mod(proc->nr_slot_tx,
+                                fp,
+                                fp->nb_antennas_tx,
+                                txdataF,
+                                txp,
+                                link_type_sl,
+                                was_symbol_used,
+                                ue->no_phase_pre_comp);
   }
 
   LOG_D(NR_PHY, "****** end Sidelink TX-Chain for AbsSubframe %d.%d ******\n", frame_tx, slot_tx);

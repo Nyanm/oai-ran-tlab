@@ -29,6 +29,11 @@
 #define NFAPI_UE_MAX_NUM_CB 8
 #define NFAPI_MAX_NUM_UL_PDU 255
 #define NFAPI_MAX_NUM_CSI_RATEMATCH 4
+// Maximum number of neighboring cells that can be tracked simultaneously
+// Set to 1 due to PSS search limitation: pss_search_time_nr() returns only
+// the single strongest PSS correlation peak, making it impossible to reliably
+// detect multiple neighbor cells in the same measurement cycle
+#define NUMBER_OF_NEIGHBORING_CELLS_MAX 1
 
 /*
   typedef unsigned int	   uint32_t;
@@ -73,6 +78,7 @@ typedef struct {
 typedef struct {
   /// frequency_domain_resource;
   uint8_t frequency_domain_resource[6];
+  uint32_t rb_offset;
   uint8_t StartSymbolIndex;
   uint16_t StartSymbolBitmap;
   uint8_t duration;
@@ -254,6 +260,13 @@ typedef struct
 
 } nfapi_nr_ue_pusch_data_t;
 
+typedef struct csi_payload {
+  uint64_t part1_payload;
+  uint64_t part2_payload;
+  int p1_bits;
+  int p2_bits;
+} nfapi_nr_ue_csi_payload_t;
+
 typedef struct
 {
   // payloads with fixed array size
@@ -261,10 +274,7 @@ typedef struct
   // vector without L1 implementation
   uint16_t harq_ack_bit_length;
   uint64_t harq_payload;
-  uint16_t csi_part1_bit_length;
-  uint64_t csi_part1_payload;
-  uint16_t csi_part2_bit_length;
-  uint64_t csi_part2_payload;
+  nfapi_nr_ue_csi_payload_t csi_payload;
   uint8_t  alpha_scaling; // 0 = 0.5, 1 = 0.65, 2 = 0.8, 3 = 1
   uint8_t  beta_offset_harq_ack;
   uint8_t  beta_offset_csi1;
@@ -569,10 +579,14 @@ typedef struct {
 
   // orbital angular velocity in rad/ms
   double omega;
-  // satellite position at epoch time
+  // satellite position vector at epoch time
   position_t pos_sat_0;
-  // satellite position at 90° orbit
+  // satellite position vector at 90° orbit
   position_t pos_sat_90;
+  // satellite velocity vector at epoch time
+  position_t vel_sat_0;
+  // satellite velocity vector at 90° orbit
+  position_t vel_sat_90;
 
   // N_common_ta_adj represents common round-trip-time between gNB and SAT received in SIB19 (ms)
   double N_common_ta_adj;
@@ -583,7 +597,10 @@ typedef struct {
 
   // cell scheduling offset expressed in terms of 15kHz SCS
   long cell_specific_k_offset;
-} fapi_nr_dl_ntn_config_command_pdu;
+
+  bool is_targetcell;
+  bool params_changed;
+} fapi_nr_ntn_config_t;
 
 typedef struct {
   uint8_t pdu_type;
@@ -593,7 +610,6 @@ typedef struct {
     fapi_nr_dl_config_csirs_pdu csirs_config_pdu;
     fapi_nr_dl_config_csiim_pdu csiim_config_pdu;
     fapi_nr_ta_command_pdu ta_command_pdu;
-    fapi_nr_dl_ntn_config_command_pdu ntn_config_command_pdu;
   };
 } fapi_nr_dl_config_request_pdu_t;
 
@@ -712,6 +728,16 @@ typedef struct
 } fapi_nr_prach_config_t;
 
 typedef struct {
+  uint16_t Nid_cell;
+  uint8_t active;
+  uint32_t ssb_freq;
+} fapi_nr_neighboring_cell_t;
+
+typedef struct {
+  fapi_nr_neighboring_cell_t nr_neighboring_cell[NUMBER_OF_NEIGHBORING_CELLS_MAX];
+} fapi_nr_meas_config_t;
+
+typedef struct {
   int16_t target_Nid_cell;
   bool ssb_bw_scan;
 } fapi_nr_synch_request_t;
@@ -725,7 +751,8 @@ typedef struct {
   fapi_nr_ssb_table_t ssb_table;
   fapi_nr_tdd_table_t tdd_table;
   fapi_nr_prach_config_t prach_config;
-
+  fapi_nr_ntn_config_t ntn_config;
+  fapi_nr_meas_config_t meas_config;
 } fapi_nr_config_request_t;
 
 #endif

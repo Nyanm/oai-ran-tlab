@@ -39,6 +39,7 @@ ENV TZ=Europe/Paris
 RUN apt-get update && \
     apt-get upgrade --yes && \
     apt-get install --yes \
+        arping \
         software-properties-common \
         procps \
         libsctp1 \
@@ -65,7 +66,8 @@ RUN apt-get update && \
         iproute2 \
         iperf3 \
         iperf \
-        libyaml-cpp-dev && \
+        libyaml-cpp-dev \
+        libnanomsg5 && \
 # if the --sanitize option was used to build, additional packages are required
     /bin/bash -c 'if [[ "$BUILD_OPTION" = "--sanitize" ]]; then DEBIAN_FRONTEND=noninteractive apt-get install --yes \
         libasan8 \

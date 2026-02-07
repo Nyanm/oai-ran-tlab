@@ -94,7 +94,6 @@
 /* Defs */
 #define MAX_NUM_BWP 5
 #define MAX_NUM_CORESET 12
-#define MAX_NUM_CCE 90
 /*!\brief Maximum number of random access process */
 #define NR_NB_RA_PROC_MAX 4
 #define MAX_NUM_OF_SSB 64
@@ -186,12 +185,12 @@ typedef enum {
 } nr_config_report_type_t;
 
 typedef struct nr_mac_config_t {
-  int sib1_tda;
   nr_pdsch_AntennaPorts_t pdsch_AntennaPorts;
   int pusch_AntennaPorts;
   int minRXTXTIME;
   int do_CSIRS;
   int do_SRS;
+  int do_TCI;
   int max_num_rsrp;
   bool force_256qam_off;
   bool force_UL256qam_off;
@@ -352,13 +351,11 @@ typedef struct csi_rs_im {
   uint8_t tci_state_id [ MAX_CSI_RESOURCE_SET ];
 } csi_rs_im_t;
 
-typedef struct pdcchStateInd {
+typedef struct tciStateInd {
   bool is_scheduled;
-  uint8_t servingCellId;
-  uint8_t coresetId;
-  uint8_t tciStateId;
-  bool tci_present_inDCI;
-} pdcchStateInd_t;
+  uint32_t coresetId;
+  uint32_t tciStateId;
+} tciStateInd_t;
 
 typedef struct pucchSpatialRelation {
   bool is_scheduled;
@@ -397,7 +394,7 @@ typedef struct pdschTciStatesActDeact {
 typedef struct UE_info {
   sp_zp_csirs_t sp_zp_csi_rs;
   csi_rs_im_t csi_im;
-  pdcchStateInd_t pdcch_state_ind;
+  tciStateInd_t tci_state_ind;
   pucchSpatialRelation_t pucch_spatial_relation;
   SPCSIReportingpucch_t SP_CSI_reporting_pucch;
   aperiodicCSI_triggerStateSelection_t aperi_CSI_trigger;
@@ -517,7 +514,7 @@ typedef struct NR_UE_harq {
   /* Transport block to be sent using this HARQ process */
   byte_array_t transportBlock;
   uint32_t tb_size;  // size of currently stored TB
-
+  bool start_tci_timer;
   /// sched_pdsch keeps information on MCS etc used for the initial transmission
   NR_sched_pdsch_t sched_pdsch;
 } NR_UE_harq_t;
@@ -568,15 +565,6 @@ struct CSI_Report {
   RSRP_report_t csirs_rsrp_report;
 };
 
-#define MAX_SR_BITLEN 8
-
-/*! As per the spec 38.212 and table:  6.3.1.1.2-12 in a single UCI sequence we can have multiple CSI_report 
-  the number of CSI_report will depend on number of CSI resource sets that are configured in CSI-ResourceConfig RRC IE
-  From spec 38.331 from the IE CSI-ResourceConfig for SSB RSRP reporting we can configure only one resource set 
-  From spec 38.214 section 5.2.1.2 For periodic and semi-persistent CSI Resource Settings, the number of CSI-RS Resource Sets configured is limited to S=1
- */
-#define MAX_CSI_RESOURCE_SET_IN_CSI_RESOURCE_CONFIG 16
-
 typedef enum {
   INACTIVE = 0,
   ACTIVE_NOT_SCHED,
@@ -611,7 +599,6 @@ typedef struct nr_lc_config {
 } nr_lc_config_t;
 
 /*! \brief scheduling control information set through an API */
-#define MAX_CSI_REPORTS 48
 typedef struct {
   /// CCE index and aggregation, should be coherent with cce_list
   NR_SearchSpace_t *search_space;
@@ -621,7 +608,7 @@ typedef struct {
   /// CCE index and Aggr. Level are shared for PUSCH/PDSCH allocation decisions
   /// corresponding to the sched_pusch/sched_pdsch structures below
   int cce_index;
-  uint8_t aggregation_level;
+  int aggregation_level;
   uint32_t dl_cce_fail, ul_cce_fail;
 
   /// Array of PUCCH scheduling information
@@ -696,6 +683,7 @@ typedef struct {
 
   /// Timer for RRC processing procedures and transmission activity
   NR_timer_t transm_interrupt;
+  NR_timer_t tci_beam_switch;
 
   /// Timer for timeout before UE is set to UL failure (e.g.,
   /// "TransmissionActionIndicator" handling
@@ -788,18 +776,17 @@ typedef struct NR_UE_info {
   NR_mac_stats_t mac_stats;
   /// currently active CellGroupConfig
   NR_CellGroupConfig_t *CellGroup;
-  /// in case of reestablishment, old spCellConfig to apply after
-  /// reconfiguration
-  NR_SpCellConfig_t *reconfigSpCellConfig;
+  /// in case of reconfiguration, new CellConfig to apply
+  NR_CellGroupConfig_t *reconfigCellGroup;
   NR_UE_NR_Capability_t *capability;
   measgap_config_t measgap_config;
   // UE selected beam index
-  uint8_t UE_beam_index;
+  uint16_t UE_beam_index;
   float ul_thr_ue;
   float dl_thr_ue;
   long pdsch_HARQ_ACK_Codebook;
   bool is_redcap;
-  bool await_reconfig;
+  bool reestablish_rlc;
   NR_RA_t *ra;
   // 3GPP mandates that BWPs are enumerated consecutively, but we only send one (dedicated)
   // BWP to the UE (and modify that BWP on reconfiguration); consequently, the BWP ID for a
@@ -826,7 +813,7 @@ typedef enum {
 
 typedef struct {
   /// list of allocated beams per period
-  int **beam_allocation;
+  int16_t **beam_allocation;
   int beam_duration; // in slots
   int beams_per_period;
   int beam_allocation_size;
@@ -884,6 +871,11 @@ typedef struct dlul_mac_stats {
   mac_stats_t dl;
   mac_stats_t ul;
 } dlul_mac_stats_t;
+
+typedef struct {
+  NR_SearchSpace_t search_space[MAX_NUM_OF_SSB];
+  NR_ControlResourceSet_t coreset;
+} NR_sched_ctrl_sib1_t;
 
 /// helper type to encapsulate a frame/slot combination in a single type.
 /// Currently only used in the UL preprocessor. Note: if you use this type
@@ -981,11 +973,11 @@ typedef struct gNB_MAC_INST_s {
   nr_mac_config_t radio_config;
   nr_rlc_configuration_t rlc_config;
 
-  NR_UE_sched_ctrl_t *sched_ctrlCommon;
+  NR_sched_ctrl_sib1_t *sched_ctrlSIB1;
   NR_sched_pdcch_t *sched_pdcch_otherSI;
   uint16_t cset0_bwp_start;
   uint16_t cset0_bwp_size;
-  NR_Type0_PDCCH_CSS_config_t type0_PDCCH_CSS_config[64];
+  NR_Type0_PDCCH_CSS_config_t type0_PDCCH_CSS_config[MAX_NUM_OF_SSB];
 
   bool first_MIB;
   NR_bler_options_t dl_bler;
@@ -993,7 +985,8 @@ typedef struct gNB_MAC_INST_s {
   uint16_t min_grant_prb;
   bool identity_pm;
   int precoding_matrix_size[NR_MAX_NB_LAYERS];
-  int fapi_beam_index[MAX_NUM_OF_SSB];
+  int beam_index_list[MAX_NUM_OF_SSB];
+  NR_sched_pdsch_t sib1_pdsch[MAX_NUM_OF_SSB];
 
   /// dedicate UL TDA, common for all UEs
   seq_arr_t ul_tda;

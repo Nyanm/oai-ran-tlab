@@ -46,13 +46,7 @@ int get_num_ul_tda(gNB_MAC_INST *nrmac, int slot, int k2, const NR_tda_info_t **
   /* we assume that this function is mutex-protected from outside */
   NR_SCHED_ENSURE_LOCKED(&nrmac->sched_lock);
 
-  const frame_structure_t *fs = &nrmac->frame_structure;
-  const int slot_period = slot % fs->numb_slots_period;
-  const tdd_bitmap_t *bm = &fs->period_cfg.tdd_slot_bitmap[slot_period];
-  /* For some reason, we only store the number of symbols if it's mixed */
-  const int num_ul_symbols = bm->slot_type == TDD_NR_MIXED_SLOT ? bm->num_ul_symbols : 14;
-  const uint16_t ul_bitmap = SL_to_bitmap(14 - num_ul_symbols, num_ul_symbols);
-
+  const uint16_t ul_bitmap = get_ul_bitmap(&nrmac->frame_structure, slot);
   *first_idx = NULL;
   FOR_EACH_SEQ_ARR(NR_tda_info_t *, tda, &nrmac->ul_tda) {
     DevAssert(tda->valid_tda);
@@ -882,7 +876,7 @@ static void nr_rx_ra_sdu(const module_id_t mod_id,
 
     // Only trigger RRCReconfiguration if UE is not performing RRCReestablishment
     // The RRCReconfiguration will be triggered by the RRCReestablishmentComplete
-    if (!old_UE->reconfigSpCellConfig) {
+    if (!old_UE->reconfigCellGroup) {
       LOG_I(NR_MAC, "Received UL_SCH_LCID_C_RNTI with C-RNTI 0x%04x, triggering RRC Reconfiguration\n", crnti);
       // Trigger RRCReconfiguration
       nr_mac_trigger_reconfiguration(mac, old_UE, -1);
@@ -2314,7 +2308,8 @@ nfapi_nr_pusch_pdu_t *prepare_pusch_pdu(nfapi_nr_ul_tti_request_t *future_ul_tti
                                         int harq_id,
                                         int harq_round,
                                         int fh,
-                                        int rnti)
+                                        int rnti,
+                                        nr_beam_mode_t beam_mode)
 {
   nfapi_nr_pusch_pdu_t *pusch_pdu = &future_ul_tti_req->pdus_list[future_ul_tti_req->n_pdus].pusch_pdu;
   memset(pusch_pdu, 0, sizeof(nfapi_nr_pusch_pdu_t));
@@ -2364,7 +2359,8 @@ nfapi_nr_pusch_pdu_t *prepare_pusch_pdu(nfapi_nr_ul_tti_request_t *future_ul_tti
   pusch_pdu->beamforming.num_prgs = 1;
   pusch_pdu->beamforming.prg_size = pusch_pdu->bwp_size;
   pusch_pdu->beamforming.dig_bf_interface = 1;
-  pusch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = UE->UE_beam_index;
+  pusch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx =
+      convert_to_fapi_beam(UE->UE_beam_index, beam_mode);
   /* TRANSFORM PRECODING --------------------------------------------------------*/
   if (pusch_pdu->transform_precoding == NR_PUSCH_Config__transformPrecoder_enabled) {
     // U as specified in section 6.4.1.1.1.2 in 38.211, if sequence hopping and group hopping are disabled
@@ -2522,7 +2518,8 @@ void post_process_ulsch(gNB_MAC_INST *nr_mac, post_process_pusch_t *pusch, NR_UE
                                                       harq_id,
                                                       cur_harq->round,
                                                       current_BWP->pusch_Config && current_BWP->pusch_Config->frequencyHopping,
-                                                      UE->rnti);
+                                                      UE->rnti,
+                                                      nr_mac->beam_info.beam_mode);
   req->n_pdus += 1;
 
   // Calculate the normalized tx_power for PHR
@@ -2564,7 +2561,7 @@ void post_process_ulsch(gNB_MAC_INST *nr_mac, post_process_pusch_t *pusch, NR_UE
                                                    coreset,
                                                    sched_ctrl->aggregation_level,
                                                    sched_ctrl->cce_index,
-                                                   UE->UE_beam_index,
+                                                   convert_to_fapi_beam(UE->UE_beam_index, nr_mac->beam_info.beam_mode),
                                                    UE->rnti);
   pdcch_pdu->numDlDci++;
 

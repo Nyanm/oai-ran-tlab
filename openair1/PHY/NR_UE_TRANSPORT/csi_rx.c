@@ -35,7 +35,6 @@
 
 #include "executables/nr-softmodem-common.h"
 #include "nr_transport_proto_ue.h"
-#include "PHY/phy_extern_nr_ue.h"
 #include "PHY/NR_REFSIG/nr_refsig.h"
 #include "common/utils/nr/nr_common.h"
 #include "PHY/NR_UE_ESTIMATION/filt16a_32.h"
@@ -45,6 +44,8 @@
 
 //#define NR_CSIRS_DEBUG
 //#define NR_CSIIM_DEBUG
+
+extern openair0_config_t openair0_cfg[MAX_CARDS];
 
 void nr_det_A_MF_2x2(int32_t *a_mf_00,
                      int32_t *a_mf_01,
@@ -238,7 +239,8 @@ static int nr_get_csi_rs_signal(const PHY_VARS_NR_UE *ue,
 
   *rsrp = rsrp_sum/meas_count;
   *rsrp_dBm = dB_fixed(*rsrp) + 30 - SQ15_SQUARED_NORM_FACTOR_DB
-      - ((int)ue->openair0_cfg[0].rx_gain[0] - (int)ue->openair0_cfg[0].rx_gain_offset[0]) - dB_fixed(ue->frame_parms.ofdm_symbol_size);
+              - ((int)openair0_cfg[ue->rf_map.card].rx_gain[0] - (int)openair0_cfg[ue->rf_map.card].rx_gain_offset[0])
+              - dB_fixed(ue->frame_parms.ofdm_symbol_size);
 
 #ifdef NR_CSIRS_DEBUG
   LOG_I(NR_PHY, "RSRP = %i (%i dBm)\n", *rsrp, *rsrp_dBm);

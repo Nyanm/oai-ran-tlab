@@ -39,7 +39,6 @@
 #include <dlfcn.h>
 #include "openair1/PHY/defs_common.h"
 #include "common/oai_version.h"
-#define LOAD_MODULE_SHLIB_MAIN
 
 #include "common/config/config_userapi.h"
 #include "load_module_shlib.h"
@@ -252,7 +251,7 @@ load_module_shlib_exit:
   return ret;
 }
 
-void * get_shlibmodule_fptr(char *modname, char *fname)
+void * get_shlibmodule_fptr(const char *modname, const char *fname)
 {
     for (int i=0; i<loader_data.numshlibs && loader_data.shlibs[i].name != NULL; i++) {
         if ( strcmp(loader_data.shlibs[i].name, modname) == 0) {

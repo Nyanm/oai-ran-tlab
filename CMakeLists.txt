@@ -22,6 +22,7 @@
 cmake_minimum_required (VERSION 3.16)
 project (OpenAirInterface LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
+set(OAI_VERSION 2.4.0)
 
 #########################################################
 # Base directories, compatible with legacy OAI building #
@@ -61,6 +62,15 @@ endif()
 ###################################
 include(FindPkgConfig)
 
+
+option(PACKAGING_RPM "By default will create debian packages, with this option willl create rpm packages" OFF)
+option(PACKAGING_NR "Will produce a package containing nr target, configuration files and docs" OFF)
+option(PACKAGING_LTE "Will produce a package containing lte target, configuration files and docs" OFF)
+option(PACKAGING_COMMON "Will produce a package containing common target, configuration files and docs" OFF)
+option(PACKAGING_USRP "Will produce a package containing usrp target, configuration files and docs" OFF)
+option(PACKAGING_PHYSIM "Will produce a package containing physim target, configuration files and docs" OFF)
+
+
 # Check if asn1c is installed, and check if it supports all options we need
 # a user can provide ASN1C_EXEC to override an asn1c to use (e.g., parallel
 # installation)
@@ -87,8 +97,6 @@ set (NFAPI_USER_DIR  ${OPENAIR_DIR}/nfapi/oai_integration)
 set (OPENAIR1_DIR    ${OPENAIR_DIR}/openair1)
 set (OPENAIR2_DIR    ${OPENAIR_DIR}/openair2)
 set (OPENAIR3_DIR    ${OPENAIR_DIR}/openair3)
-set (OPENAIR3_DIR    ${OPENAIR_DIR}/openair3)
-set (OPENAIR_CMAKE   ${OPENAIR_DIR}/cmake_targets)
 
 project (OpenAirInterface)
 
@@ -226,9 +234,16 @@ endif()
 
 add_definitions("-DASN_DISABLE_OER_SUPPORT -DHAVE_CONFIG_H -DHAVE_CONFIG_H_")
 
-#########################
-set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -ggdb2 -Wl,-rpath -Wl,${CMAKE_CURRENT_BINARY_DIR}")
-#########################
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+set(CMAKE_BUILD_RPATH ${CMAKE_CURRENT_BINARY_DIR})
+set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+set(CMAKE_INSTALL_RPATH "")
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+
+if(PACKAGING_LTE OR PACKAGING_NR OR PACKAGING_COMMON OR PACKAGING_USRP OR PACKAGING_PHYSIM)
+  set(CMAKE_SKIP_INSTALL_RPATH TRUE)
+endif()
+
 # set a flag for changes in the source code
 # these changes are related to hardcoded path to include .h files
 set(debugOpt "-ggdb2 -DMALLOC_CHECK_=3 -fno-delete-null-pointer-checks")
@@ -983,6 +998,7 @@ set(PHY_SRC_UE
   ${OPENAIR1_DIR}/PHY/NR_UE_TRANSPORT/cic_filter_nr.c
   ${OPENAIR1_DIR}/PHY/NR_UE_TRANSPORT/nr_initial_sync.c
   ${OPENAIR1_DIR}/PHY/NR_UE_TRANSPORT/nr_initial_sync_sl.c
+  ${OPENAIR1_DIR}/PHY/NR_UE_TRANSPORT/nr_ntn_l1.c
   ${OPENAIR1_DIR}/PHY/NR_UE_TRANSPORT/nr_ue_rf_helpers.c
   ${OPENAIR1_DIR}/PHY/NR_UE_TRANSPORT/nr_pbch.c
   ${OPENAIR1_DIR}/PHY/NR_UE_TRANSPORT/nr_psbch_rx.c
@@ -1042,11 +1058,11 @@ pkg_check_modules(lapacke REQUIRED lapacke)
 
 add_library(PHY_UE ${PHY_SRC_UE})
 target_link_libraries(PHY_UE PRIVATE asn1_lte_rrc_hdrs asn1_nr_rrc_hdrs UTIL)
-# RHEL needs also cblas, but Ubuntu does not have it. So `cblas_LIBRARIES` will
-# be empty for Ubuntu, a no-op
+# RHEL needs also cblas, but Ubuntu does not have it. So `cblas_LIBRARIES` and
+# `cblas_INCLUDE_DIRS` will be empty for Ubuntu, a no-op
 pkg_check_modules(cblas cblas)
 target_link_libraries(PHY_UE PRIVATE ${blas_LIBRARIES} ${cblas_LIBRARIES} ${lapacke_LIBRARIES})
-target_include_directories(PHY_UE PRIVATE ${blas_INCLUDE_DIRS} ${lapacke_INCLUDE_DIRS})
+target_include_directories(PHY_UE PRIVATE ${blas_INCLUDE_DIRS} ${cblas_INCLUDE_DIRS} ${lapacke_INCLUDE_DIRS})
 
 add_library(PHY_NR_COMMON ${PHY_NR_SRC_COMMON})
 target_link_libraries(PHY_NR_COMMON PUBLIC UTIL)
@@ -1807,6 +1823,24 @@ target_link_libraries(lte-uesoftmodem PRIVATE ${blas_LIBRARIES} ${cblas_LIBRARIE
 target_link_libraries(lte-uesoftmodem PRIVATE
                       asn1_lte_rrc asn1_s1ap asn1_m2ap asn1_m3ap asn1_x2ap)
 
+# nr RRU
+add_executable(nr-oru
+  ${OPENAIR_DIR}/executables/nr-ru.c
+  ${OPENAIR_DIR}/openair1/PHY/INIT/nr_parms.c
+  ${OPENAIR_DIR}/openair1/SCHED_NR/phy_frame_config_nr.c
+  ${OPENAIR_DIR}/openair1/SCHED_NR/nr_prach_procedures.c
+  ${OPENAIR_DIR}/openair1/SCHED/phy_procedures_lte_common.c
+  ${OPENAIR_DIR}/radio/COMMON/common_lib.c
+  ${OPENAIR_DIR}/radio/COMMON/record_player.c
+  ${OPENAIR_DIR}/executables/softmodem-common.c
+  ${OPENAIR_DIR}/executables/main_nr_ru.c
+)
+target_link_libraries(nr-oru PRIVATE
+  UTIL SCHED_RU_LIB PHY_COMMON PHY_RU PHY_NR shlib_loader z dl)
+target_link_libraries(nr-oru PRIVATE pthread m CONFIG_LIB rt ${T_LIB} utils
+  barrier actor)
+target_link_libraries(nr-oru PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs nr_phy_common time_management)
+
 # nr-softmodem
 ###################################################
 
@@ -1890,6 +1924,7 @@ add_executable(nr-uesoftmodem
   ${OPENAIR_DIR}/executables/nr-uesoftmodem.c
   ${OPENAIR_DIR}/executables/position_interface.c
   ${OPENAIR_DIR}/executables/nr-ue.c
+  ${OPENAIR_DIR}/executables/nr-ue-ru.c
   ${OPENAIR_DIR}/executables/softmodem-common.c
   ${OPENAIR_DIR}/radio/COMMON/common_lib.c
   ${OPENAIR_DIR}/radio/COMMON/record_player.c
@@ -2062,6 +2097,19 @@ target_link_libraries(nr_ulsim PRIVATE
   )
 target_link_libraries(nr_ulsim PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
 
+add_executable(nr_srssim
+  ${OPENAIR1_DIR}/SIMULATION/NR_PHY/srssim.c
+  ${OPENAIR_DIR}/executables/softmodem-common.c
+  ${NFAPI_USER_DIR}/nfapi.c
+  ${NFAPI_USER_DIR}/gnb_ind_vars.c
+  ${PHY_INTERFACE_DIR}/queue_t.c
+  )
+
+target_link_libraries(nr_srssim PRIVATE
+  -Wl,--start-group UTIL SIMU PHY_COMMON PHY_NR_COMMON PHY_NR PHY_NR_UE SCHED_NR_LIB SCHED_NR_UE_LIB MAC_UE_NR MAC_NR_COMMON nr_rrc L2_NR -lz -Wl,--end-group
+  m pthread ITTI dl nr_ue_phy_meas physim_common
+  )
+
 # these simulators do not compile:
 # dlsim_tm7 pbchsim scansim mbmssim pdcchsim pucchsim prachsim syncsim
 foreach(myExe dlsim ulsim)
@@ -2110,7 +2158,7 @@ if (${T_TRACER})
         nr-uesoftmodem dlsim dlsim_tm4 dlsim_tm7
         ulsim pbchsim scansim mbmssim pdcchsim pucchsim prachsim
         syncsim nr_ulsim nr_dlsim nr_dlschsim nr_pbchsim nr_pucchsim
-        nr_ulschsim ldpctest polartest smallblocktest
+        nr_ulschsim ldpctest polartest smallblocktest nr_srssim
         #all "add_library" definitions
         ITTI lte_rrc nr_rrc s1ap x2ap m2ap m3ap f1ap
         params_libconfig
@@ -2174,3 +2222,8 @@ add_subdirectory(openair2)
 add_subdirectory(openair3)
 add_subdirectory(radio)
 add_subdirectory(tests)
+
+
+if(PACKAGING_LTE OR PACKAGING_NR OR PACKAGING_COMMON OR PACKAGING_USRP OR PACKAGING_PHYSIM)
+  include("tools/packages/packages.cmake")
+endif()

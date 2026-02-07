@@ -44,7 +44,6 @@
 #endif
 
 #define NR_LDPC_PROFILER_DETAIL
-#define NR_LDPC_ENABLE_PARITY_CHECK
 ldpc_interface_t ldpc_orig, ldpc_toCompare;
 #define MAX_NUM_DLSCH_SEGMENTS_DL_ldpctest 132
 static double modulated_input[MAX_NUM_DLSCH_SEGMENTS_DL_ldpctest][68 * 384];
@@ -134,7 +133,8 @@ one_measurement_t test_ldpc(short max_iterations,
                             unsigned int ntrials,
                             int n_segments,
                             int gen_code,
-                            int use32bit)
+                            int use32bit,
+			    int usecudadecoder)
 {
   static int init_done = 0;
   one_measurement_t ret = {0};
@@ -339,7 +339,7 @@ one_measurement_t test_ldpc(short max_iterations,
   init_abort(&dec_abort);
 
   if (init_done == 0) { 
-    if (use32bit)
+    if (usecudadecoder)
       ldpc_toCompare.LDPCinit_cuda();
     else   
       ldpc_toCompare.LDPCinit();
@@ -421,7 +421,7 @@ one_measurement_t test_ldpc(short max_iterations,
       set_abort(&dec_abort, false);
 //dumpASS(channel_output_fixed, "ldpctest_ChannelOutput_128.txt");
 #ifdef ENABLE_CUDA
-      if (use32bit) {
+      if (usecudadecoder) {
          if(j == 0) {
             n_iter = ldpc_toCompare.LDPCdecoder_cuda(&decParams[j],
                                                      channel_output_fixed_dev,
@@ -555,7 +555,7 @@ int main(int argc, char *argv[])
 
   short BG = 0, Zc;
   int use32bit = 0;
-
+  int usecudadecoder = 0;
   if ((uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY)) == 0) {
     exit_fun("[LDPCTEST] Error, configuration module init failed\n");
   }
@@ -588,6 +588,7 @@ int main(int argc, char *argv[])
       case 'G':
         ldpc_version = "_cuda";//using cuda
         use32bit = 1;
+	usecudadecoder = 1;
         break;
 
       case 'n':
@@ -655,6 +656,7 @@ int main(int argc, char *argv[])
 
   // find minimum value in all sets of lifting size
   Zc = 0;
+  if (Kprime < 8448 && use32bit == 1) use32bit=0;
 #ifdef ENABLE_CUDA
   cudaError_t err = cudaHostAlloc((void**)&estimated_output,sizeof(uint8_t)* n_segments * Kprime,cudaHostAllocMapped);
   AssertFatal(err==cudaSuccess,"estimated_output n_segments %d Kprime %d\n",n_segments,Kprime);
@@ -687,7 +689,7 @@ int main(int argc, char *argv[])
       SNR_lin = pow(10, SNR / 10.0);
     else
       SNR_lin = pow(10, SNR / 10.0) * nom_rate / denom_rate;
-    printf("Linear SNR: %f\n", SNR_lin);
+    printf("Linear SNR: %f %d, %d/%d, Kprime %d use32bit %d usecudadecoder %d\n", max_iterations, SNR_lin, nom_rate,denom_rate,Kprime,use32bit,usecudadecoder);
     one_measurement_t res = test_ldpc(max_iterations,
                                       nom_rate,
                                       denom_rate,
@@ -697,7 +699,8 @@ int main(int argc, char *argv[])
                                       n_trials,
                                       n_segments,
                                       gen_code,
-                                      use32bit);
+                                      use32bit,
+				      usecudadecoder);
 
     decoded_errors[i] = res.errors;
     dec_iter[i] = res.dec_iter;

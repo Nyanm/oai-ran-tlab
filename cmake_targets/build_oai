@@ -82,6 +82,8 @@ Options:
   Makes the NR softmodem
 --RU
   Makes the OAI RRU
+--nrRU
+  Makes the NR RRU
 --UE
    Makes the UE specific parts (usim, nvram) from the given configuration file
 --nrUE
@@ -229,6 +231,11 @@ function main() {
             TARGET_LIST="$TARGET_LIST oairu"
             echo_info "Will compile RRU"
             shift;;
+       --nrRU)
+            NRRU=1
+            TARGET_LIST="$TARGET_LIST nr-oru"
+            echo_info "Will compile NR O-RU"
+            shift;;
        --UE)
             UE=1
             TARGET_LIST="$TARGET_LIST lte-uesoftmodem conf2uedata usim nvram"
@@ -302,7 +309,7 @@ function main() {
             SIMUS_PHY=1
             CMAKE_CMD="$CMAKE_CMD -DENABLE_PHYSIM_TESTS=ON"
             # TODO: fix: dlsim_tm4 pucchsim prachsim pdcchsim pbchsim mbmssim
-            TARGET_LIST="$TARGET_LIST dlsim ulsim ldpctest polartest smallblocktest nr_pbchsim nr_dlschsim nr_ulschsim nr_dlsim nr_ulsim nr_pucchsim nr_prachsim nr_psbchsim"
+            TARGET_LIST="$TARGET_LIST dlsim ulsim ldpctest polartest smallblocktest nr_pbchsim nr_dlschsim nr_ulschsim nr_dlsim nr_ulsim nr_pucchsim nr_prachsim nr_psbchsim nr_srssim"
             echo_info "Will compile dlsim, ulsim, ..."
             shift;;
        -V | --vcd)
@@ -457,7 +464,7 @@ function main() {
   if [[ $TARGET_LIST != "" ]] && [[ -f $OPENAIR_DIR/CMakeLists.txt ]]; then
     # add some default libraries that should always be built
     # for eNB, gNB, UEs, simulators
-    if [[ $gNB == 1 || $eNB == 1 || $UE == 1 || $nrUE == 1 || $SIMUS_PHY == 1 || $RU == 1 ]]; then
+    if [[ $gNB == 1 || $eNB == 1 || $UE == 1 || $nrUE == 1 || $SIMUS_PHY == 1 || $RU == 1 || $NRRU == 1 ]]; then
       TARGET_LIST="$TARGET_LIST params_libconfig coding rfsimulator dfts params_yaml vrtsim rf_emulator"
     fi
 

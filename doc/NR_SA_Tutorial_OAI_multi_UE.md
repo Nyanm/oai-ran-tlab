@@ -1,25 +1,13 @@
-<table style="border-collapse: collapse; border: none;">
-  <tr style="border-collapse: collapse; border: none;">
-    <td style="border-collapse: collapse; border: none;">
-      <a href="http://www.openairinterface.org/">
-         <img src="./images/oai_final_logo.png" alt="" border=3 height=50 width=150>
-         </img>
-      </a>
-    </td>
-    <td style="border-collapse: collapse; border: none; vertical-align: center;">
-      <b><font size = "5">OAI 5G NR SA tutorial to deploy multiple OAI nrUE</font></b>
-    </td>
-  </tr>
-</table>
+# OAI 5G NR SA tutorial to deploy multiple OAI nrUE
 
 **Table of Contents**
 
 [[_TOC_]]
 
-# Scenario
+## Scenario
 This tutorial is about how to configure and run multiple OAI nrUE in the same end-to-end OAI 5G setup with RFsimulator.
 
-# Pre-requisites
+## Pre-requisites
 
 This tutorial is assuming that OAI CN5G and OAI RAN are already deployed. To learn how to deploy and run a basic setup with OAI nrUE, please refer to [NR_SA_Tutorial_OAI_nrUE.md](NR_SA_Tutorial_OAI_nrUE.md).
 
@@ -29,9 +17,9 @@ Also, it is suggested to get some knowledge on how the channel simulation with O
 - Channel simulation with OAI [channel_simulation.md](../openair1/SIMULATION/TOOLS/DOC/channel_simulation.md)
 - Telnet server usage [telnetusage.md](../common/utils/telnetsrv/DOC/telnetusage.md).
 
-# Run multiple UEs in RFsimulator
+## Run multiple UEs in RFsimulator
 
-## Multiple nrUEs with namespaces
+### Multiple nrUEs with namespaces
 
 Important notes:
 
@@ -51,7 +39,7 @@ Important notes:
 2. After entering the bash environment, run the following command to deploy your first UE
 
    ```bash
-   sudo ./nr-uesoftmodem -O ../../../targets/PROJECTS/GENERIC-NR-5GC/CONF/ue.conf -r 106 --numerology 1 --band 78 -C 3619200000    --rfsim --uicc0.imsi 001010000000001 --rfsimulator.options chanmod --rfsimulator.serveraddr 10.201.1.100 --telnetsrv    --telnetsrv.listenport 9095
+   sudo ./nr-uesoftmodem -O ../../../targets/PROJECTS/GENERIC-NR-5GC/CONF/ue.conf -r 106 --numerology 1 --band 78 -C 3619200000 --rfsim --uicc0.imsi 001010000000001 --rfsimulator.[0].options chanmod --rfsimulator.[0].serveraddr 10.201.1.100 --telnetsrv --telnetsrv.listenport 9095
    ```
 
 3. For the second UE, create the namespace ue2 (`-c2`), then execute shell inside (`-o2`, "open"):
@@ -64,12 +52,12 @@ Important notes:
 4. After entering the bash environment, run the following command to deploy your second UE:
 
    ```bash
-   sudo ./nr-uesoftmodem -O ../../../targets/PROJECTS/GENERIC-NR-5GC/CONF/ue.conf -r 106 --numerology 1 --band 78 -C 3619200000    --rfsim --uicc0.imsi 001010000000002 --rfsimulator.options chanmod --rfsimulator.serveraddr 10.202.1.100 --telnetsrv    --telnetsrv.listenport 9096
+   sudo ./nr-uesoftmodem -O ../../../targets/PROJECTS/GENERIC-NR-5GC/CONF/ue.conf -r 106 --numerology 1 --band 78 -C 3619200000 --rfsim --uicc0.imsi 001010000000002 --rfsimulator.[0].options chanmod --rfsimulator.[0].serveraddr 10.202.1.100 --telnetsrv --telnetsrv.listenport 9096
    ```
 
 in the command above, please note that the IMSI and the telnet port changed.
 
-## Running Multiple UEs with Docker
+### Running Multiple UEs with Docker
 
 1. Make sure OAI nrUE image is pulled:
 
@@ -110,7 +98,7 @@ in the command above, please note that the IMSI and the telnet port changed.
    docker compose down -v
    ```
 
-# Further reading
+## Further reading
 
 For more details and scenarios, refer to the following files:
 

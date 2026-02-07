@@ -37,14 +37,16 @@
 #include "openair2/LAYER2/NR_MAC_UE/mac_defs.h"
 #include "openair2/LAYER2/NR_MAC_UE/mac_proto.h"
 #include "openair2/RRC/NR_UE/rrc_proto.h"
-#include "openair1/PHY/phy_extern_nr_ue.h"
 #include "openair1/PHY/defs_nr_common.h"
+#include "openair1/PHY/defs_nr_UE.h"
 #include "openair3/NAS/NR_UE/nr_nas_msg.h"
 
 #define TELNETSERVERCODE
 #include "telnetsrv.h"
 
 #define ERROR_MSG_RET(mSG, aRGS...) do { prnt(mSG, ##aRGS); return 1; } while (0)
+
+extern PHY_VARS_NR_UE ***PHY_vars_UE_g;
 
 /* UE L2 state string */
 const char* NR_UE_L2_STATE_STR[] = {
@@ -170,7 +172,11 @@ static int add_pdu_session(char *buf, int debug, telnet_printfunc_t prnt)
   if (!nas)
     ERROR_MSG_RET("No NAS context found for UE_ID %d\n", ue_id);
 
-  request_pdusession(nas, pdusession_id);
+  DevAssert(nas->uicc);
+  nssai_t nssai = {nas->uicc->nssai_sst, nas->uicc->nssai_sd};
+  pdu_session_config_t c = {pdusession_id, 1 /* = PDU_SESSION_TYPE_IPV4 */, nssai, nas->uicc->dnnStr};
+  nas->uicc->pdu_sessions[nas->uicc->n_pdu_sessions++] = c;
+  request_pdusession(nas, &c);
   prnt("Triggered PDU session request for UE %d with ID %d\n", ue_id, pdusession_id);
   return 0;
 }

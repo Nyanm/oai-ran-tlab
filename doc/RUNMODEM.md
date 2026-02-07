@@ -1,16 +1,4 @@
-<table style="border-collapse: collapse; border: none;">
-  <tr style="border-collapse: collapse; border: none;">
-    <td style="border-collapse: collapse; border: none;">
-      <a href="http://www.openairinterface.org/">
-         <img src="./images/oai_final_logo.png" alt="" border=3 height=50 width=150>
-         </img>
-      </a>
-    </td>
-    <td style="border-collapse: collapse; border: none; vertical-align: center;">
-      <b><font size = "5">Running OAI 5G Softmodems</font></b>
-    </td>
-  </tr>
-</table>
+# Running OAI 5G Softmodems
 
 This document explains some options for running 5G executables.
 
@@ -22,9 +10,9 @@ need.
 
 [[_TOC_]]
 
-# Simulators
+## Simulators
 
-## RFsimulator
+### RFsimulator
 
 The RFsimulator is an OAI device replacing the radio heads (for example the
 USRP device). It allows connecting the oai UE (LTE or 5G) and respectively the
@@ -39,7 +27,7 @@ It is planned to enhance this simulator with the following functionalities:
 
 This is an easy use-case to setup and test, as no specific hardware is required. The [rfsimulator page](../radio/rfsimulator/README.md) contains the detailed documentation.
 
-## L2 nFAPI Simulator
+### L2 nFAPI Simulator
 
 This simulator connects an eNodeB and UEs through an nFAPI interface,
 short-cutting the L1 layer. The objective of this simulator is to allow multi
@@ -48,7 +36,7 @@ UEs simulation, with a large number of UEs (ideally up to 255).
 As for the RFsimulator, no specific hardware is required. The [L2 nfapi
 simulator page](./L2NFAPI.md) contains the detailed documentation.
 
-# Running with a true radio head
+## Running with a true radio head
 
 OAI supports different radio heads, the following are tested in the CI:
 
@@ -57,21 +45,21 @@ OAI supports different radio heads, the following are tested in the CI:
 3. Monolithic gNodeB: see next section, or the [standalone tutorial](NR_SA_Tutorial_COTS_UE.md)
 
 
-# 5G NR
+## 5G NR
 
-## NSA setup with COTS UE
+### NSA setup with COTS UE
 
 This setup requires an EPC, an OAI eNB and gNB, and a COTS Phone. A dedicated page describe the setup can be found [here](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/home/gNB-COTS-UE-testing).
 The `--nsa` flag must be used to run gNB in non-standalone mode.
 
 
-### Launch eNB
+#### Launch eNB
 
 ```bash
 sudo ./lte-softmodem -O ../../../targets/PROJECTS/GENERIC-LTE-EPC/CONF/enb.band7.tm1.50prb.usrpb210.conf
 ```
 
-### Launch gNB
+#### Launch gNB
 
 ```bash
 sudo ./nr-softmodem -O ../../../targets/PROJECTS/GENERIC-LTE-EPC/CONF/gnb.band78.tm1.106PRB.usrpn300.conf --nsa
@@ -79,7 +67,7 @@ sudo ./nr-softmodem -O ../../../targets/PROJECTS/GENERIC-LTE-EPC/CONF/gnb.band78
 
 You should see the X2 messages in Wireshark and at the eNB.
 
-## SA setup with OAI NR-UE
+### SA setup with OAI NR-UE
 
 The standalone mode is the default mode. 
 
@@ -127,7 +115,7 @@ UE capabilities can be passed according to the [UE Capabilities](#UE-Capabilitie
 
 A detailed tutorial is provided at this page [NR_SA_Tutorial_OAI_nrUE.md](./NR_SA_Tutorial_OAI_nrUE.md).
 
-## Optional NR-UE command line options
+### Optional NR-UE command line options
 
 Here are some useful command line options for the NR UE:
 
@@ -135,7 +123,7 @@ Here are some useful command line options for the NR UE:
 |--------------------------|---------------------------------------------------------------------------------------------------------------|
 | `--ue-scan-carrier`      | Scan for cells in current bandwidth. This option can be used if the SSB position of the gNB is unknown. If multiple cells are detected, the UE will try to connect to the first cell. By default, this option is disabled and the UE attempts to only decode SSB given by `--ssb`. |
 | `--ue-fo-compensation`   | Enables the initial frequency offset compensation at the UE. Useful when running over the air and/or without an external clock/time source. |
-| `--cont-fo-comp`         | Enables the continuous frequency offset (FO) estimation and compensation.  Parameter value `1` specifies that the main FO contribution comes from the local oscillator's (LO) accuracy.  Parameter value `2` specifies that the main FO contribution comes from Doppler shift. |
+| `--cont-fo-comp`         | Enables the continuous frequency offset (FO) estimation and compensation.  Parameter value `1` specifies that the main FO contribution comes from the local oscillator's (LO) accuracy.  Parameter value `2` specifies that the main FO contribution comes from Doppler shift. Parameter value `3` specifies that no measured residual DL FO is considered for UL FO pre-compensation. |
 | `--initial-fo`           | Sets the known initial frequency offset. Useful especially with large Doppler frequency, e.g. LEO satellite.  |
 | `--freq-sync-P`          | Sets the coefficient for the Proportional part of the PI-controller for the continuous frequency offset compensation. Default value 0.01. |
 | `--freq-sync-I`          | Sets the coefficient for the Integrating part of the PI-controller for the continuous frequency offset compensation. Default value 0.001. |
@@ -152,13 +140,111 @@ You can view all available options by typing:
 ```shell
 ./nr-uesoftmodem --help
 ```
-## Common gNB and NR UE command line options
 
-### Three-quarter sampling
+### NR UE: Configure multiple RF-frontends (RUs)
+
+Multiple RF-frontends (also called RUs) can be defined for the nr-uesoftmodem.
+Therefore, two sections in the NR UE configuration file are used:
+- `RUs`
+- `cells`
+
+The `RUs` section in the NR UE configuration file contains an array of elements, where each element has these properies:
+
+| Property name    | Type           | Default value | Description                          |
+| ---------------- | -------------- | ------------- | ------------------------------------ |
+| nb_tx            | integer        | 1             | Number of TX Antennas                |
+| nb_rx            | integer        | 1             | Number of RX Antennas                |
+| att_tx           | integer        | 0             | TX Attenuation in dB                 |
+| att_rx           | integer        | 0             | RX Attenuation in dB                 |
+| max_rxgain       | integer        | 120           | Maximum RX Gain at 0 dB Attenuation  |
+| sdr_addrs        | string         | type=b200     | SDR Parameter String                 |
+| tx_subdev        | string         |               | SDR TX Subdevice                     |
+| rx_subdev        | string         |               | SDR RX Subdevice                     |
+| clock_src        | string         | internal      | SDR Clock Source                     |
+| time_src         | string         | internal      | SDR Time Source                      |
+| tune_offset      | floating point | 0.0           | SDR Tune Offset in Hz                |
+| if_freq          | integer        | 0             | DL Intermediate Frequency in Hz      |
+| if_offset        | integer        | 0             | UL Intermediate Frequency Offset in Hz |
+
+The `cells` section in the NR UE configuration file contains an array of elements, where each element has these properies:
+
+| Property name    | Type    | Default value | Description                              |
+| ---------------- | ------- | ------------- | ---------------------------------------- |
+| ru_id            | integer | 0             | ID of the associated RU from the `RUs` section |
+| band             | integer | 78            | 5G NR Band                               |
+| rf_freq          | integer | 0             | DL Carrier Centre Frequency in Hz        |
+| rf_offset        | integer | 0             | DL Carrier Centre Frequency Offset in Hz |
+| numerology       | integer | 1             | 5G NR Numerology (µ)                     |
+| N_RB_DL          | integer | 106           | Number of DL Carrier Ressource Blocks    |
+| ssb_start        | integer | 516           | Ressource Element where the SSB Starts   |
+
+There are different scenarios where multiple RF-frontends (also called RUs) are beneficial for the NR UE:
+
+1. RF-Simulator Inter-Frequency Handover between multiple cells
+2. Multiple UEs in one instance, each using their own RF-frontend (RF-Simulator connection)
+3. Different Antennas connected to different RF-ports
+4. Concurrent connection to multiple carriers (carrier aggregation CA)
+
+This would be and example configuration for the 1. scenario:
+
+```
+rfsimulator = (
+    {
+        serveraddr = "127.0.0.2";
+        serverport = 4043;
+    }, {
+        serveraddr = "127.0.0.3";
+        serverport = 4044;
+    }
+);
+
+RUs = (
+    {
+        nb_tx = 1;
+        nb_rx = 1;
+    }, {
+        nb_tx = 1;
+        nb_rx = 1;
+    }
+);
+
+cells = (
+    {
+        ru_id      = 0;
+        band       = 78;
+        rf_freq    = 3619200000L;
+        numerology = 1;
+        N_RB_DL    = 106;
+        ssb_start  = 516;
+    }, {
+        ru_id      = 1;
+        band       = 78;
+        rf_freq    = 3649440000L;
+        numerology = 1;
+        N_RB_DL    = 106;
+        ssb_start  = 516;
+    }
+);
+```
+
+An example for the 2. scenario can be found in the file [ci-scripts/yaml_files/5g_rfsimulator_multiue/nrue.uicc.conf](../ci-scripts/yaml_files/5g_rfsimulator_multiue/nrue.uicc.conf).
+
+The 3. scenario is similar to 1., but instead of providing RF-Simulator parameters, actual SDR parameters have to be provided.
+
+The 4. scenario is not supported, as the NR UE does not implement CA, yet.
+
+Current Limitations:
+- Each RU can be used by only one cell.
+- Each RU and cell can be used by only one UE (no RU sharing implemented, yet).
+- The sampling rates of all RUs must be the same.
+
+### Common gNB and NR UE command line options
+
+#### Three-quarter sampling
 
 The command line option `-E` can be used to enable three-quarter sampling for split 8 sample rate. Required for certain radios (e.g., 40MHz with B210). If used on the gNB, it is a good idea to use for the UE as well (and vice versa).
 
-### UE Capabilities
+#### UE Capabilities
 
 The `--uecap_file` option can be used to pass the UE Capabilities input file (path location + filename), e.g.`--uecap_file ../../../targets/PROJECTS/GENERIC-NR-5GC/CONF/uecap_ports1.xml` for 1 layer or e.g. `--uecap_file ../../../targets/PROJECTS/GENERIC-NR-5GC/CONF/uecap_ports2.xml` for 2 layers.
 
@@ -176,9 +262,9 @@ e.g.
 sudo ./nr-uesoftmodem -r 106 --numerology 1 --band 78 -C 3319680000 --ue-nb-ant-tx 2 --ue-nb-ant-rx 2 --uecap_file /opt/oai-nr-ue/etc/uecap.xml
 ```
 
-## How to run a NTN configuration
+### How to run a NTN configuration
 
-### NTN channel
+#### NTN channel
 
 A 5G NR NTN configuration only works in a non-terrestrial setup.
 Therefore either SDR boards and a dedicated NTN channel emulator are required, or RFsimulator has to be configured to simulate a NTN channel.
@@ -186,7 +272,7 @@ Therefore either SDR boards and a dedicated NTN channel emulator are required, o
 As shown on the [rfsimulator page](../radio/rfsimulator/README.md), RFsimulator provides different possibilities.
 E.g. to perform a simple simulation of a satellite in geostationary orbit (GEO), these parameters should be added to both gNB and UE command lines:
 ```
---rfsimulator.prop_delay 238.74
+--rfsimulator.[0].prop_delay 238.74
 ```
 
 For simulation of a satellite in low earth orbit (LEO), two channel models have been added to rfsimulator:
@@ -222,10 +308,10 @@ This can be done by either providing this line in the conf file in section `rfsi
 ```
 Or by providing this the the command line parameters:
 ```
---rfsimulator.options chanmod
+--rfsimulator.[0].options chanmod
 ```
 
-### gNB
+#### gNB
 
 The main parameters to cope with the large NTN propagation delay are cellSpecificKoffset, ta-Common, ta-CommonDrift and the ephemeris data (satellite position and velocity vectors).
 
@@ -296,7 +382,6 @@ This allows to reuse HARQ processes immediately, but it breaks compatibility wit
 To enable this feature, the `disable_harq` flag has to be added to the gNB conf file in the section `gNBs.[0]`
 ```
 ...
-    sib1_tda     = 5;
     min_rxtxtime = 6;
     disable_harq = 1; // <--
 
@@ -332,7 +417,7 @@ cd cmake_targets
 sudo ./ran_build/build/nr-softmodem -O ../ci-scripts/conf_files/gnb.sa.band254.u0.25prb.rfsim.ntn-leo.conf --rfsim
 ```
 
-### NR UE
+#### NR UE
 
 At UE side, only few parameters have to be provided, as the UE receives most relevant parameters via SIB19 from the gNB.
 But to calculate the UE specific TA, the UE position has to be provided in the `ue.conf` file.
@@ -351,7 +436,7 @@ position0 = {
 So an example NR UE command for FDD, 5MHz BW, 15 kHz SCS, transparent GEO satellite 5G NR NTN is this:
 ```
 cd cmake_targets
-sudo ./ran_build/build/nr-uesoftmodem -O ../targets/PROJECTS/GENERIC-NR-5GC/CONF/ue.conf --band 254 -C 2488400000 --CO -873500000 -r 25 --numerology 0 --ssb 60 --rfsim --rfsimulator.prop_delay 238.74
+sudo ./ran_build/build/nr-uesoftmodem -O ../targets/PROJECTS/GENERIC-NR-5GC/CONF/ue.conf --band 254 -C 2488400000 --CO -873500000 -r 25 --numerology 0 --ssb 60 --rfsim --rfsimulator.[0].prop_delay 238.74
 ```
 
 For LEO satellite scenarios, the parameter `--ntn-initial-time-drift` must be provided via command line, as the UE needs this value to compensate for the time drift during initial sync, before SIB19 was received.
@@ -372,9 +457,9 @@ cd cmake_targets
 sudo ./ran_build/build/nr-uesoftmodem -O ../targets/PROJECTS/GENERIC-NR-5GC/CONF/ue.conf --band 254 -C 2488400000 --CO -873500000 -r 25 --numerology 0 --ssb 60 --rfsim --rfsimulator.prop_delay 20 --rfsimulator.options chanmod --time-sync-I 0.1 --ntn-initial-time-drift -46 --initial-fo 57340 --cont-fo-comp 2
 ```
 
-# Specific OAI modes
+## Specific OAI modes
 
-## phy-test setup with OAI UE
+### phy-test setup with OAI UE
 
 The OAI UE can also be used in front of a OAI gNB without the support of eNB or EPC and circumventing random access. In this case both gNB and eNB need to be run with the `--phy-test` flag. At the gNB this flag does the following
  - it reads the RRC configuration from the configuration file
@@ -394,14 +479,14 @@ sudo ./nr-uesoftmodem --phy-test [--reconfig-file ../../../ci-scripts/rrc-files/
 In summary:
 - If you are running on the same machine and launched the 2 executables (`nr-softmodem` and `nr-uesoftmodem`) from the same directory, nothing has to be done.
 - If you launched the 2 executables from 2 different folders, just point to the location where you launched the `nr-softmodem`:
-  * `sudo ./nr-uesoftmodem --rfsim --phy-test --reconfig-file /the/path/where/you/launched/nr-softmodem/reconfig-file --rbconfig-file /the/path/where/you/launched/nr-softmodem/rbconfig-file --rfsimulator.serveraddr <TARGET_GNB_INTERFACE_ADDRESS>`
+  * `sudo ./nr-uesoftmodem --rfsim --phy-test --reconfig-file /the/path/where/you/launched/nr-softmodem/reconfig-file --rbconfig-file /the/path/where/you/launched/nr-softmodem/rbconfig-file --rfsimulator.[0].serveraddr <TARGET_GNB_INTERFACE_ADDRESS>`
 - If you are not running on the same machine, you need to **COPY** the two raw files
   * `scp usera@machineA:/the/path/where/you/launched/nr-softmodem/r*config.raw userb@machineB:/the/path/where/you/will/launch/nr-uesoftmodem/`
   * Obviously this operation should be done before launching the `nr-uesoftmodem` executable.
 
 In phy-test mode it is possible to mimic the reception of UE Capabilities at gNB through the command line parameter `--uecap_file`. Refer to the [UE Capabilities](#UE-Capabilities) section for more details.
 
-## noS1 setup with OAI UE
+### noS1 setup with OAI UE
 
 Instead of randomly generated payload, in the phy-test mode we can also
 inject/receive user-plane traffic over a TUN interface. This is the so-called
@@ -420,7 +505,7 @@ iperf -uc 10.0.1.2 -B 10.0.1.1 -i1 -t10 -b1M
 ```
 to send data from the gNB down to the UE.
 
-Note that this does not work if both interfaces are on the same host. We
+> Note that this does not work if both interfaces are on the same host. We
 recommend to use two different hosts, or at least network namespaces, to route
 traffic through the gNB/UE tunnel.
 
@@ -429,7 +514,7 @@ which the UE does not connect to a core network. If the UE connects to a core
 network, it receives an IP address for which it automatically opens a network
 interface.
 
-## do-ra setup with OAI
+### do-ra setup with OAI
 
 The do-ra flag is used to ran the NR Random Access procedures in contention-free mode. Currently OAI implements the RACH process from Msg1 to Msg3. 
 
@@ -441,7 +526,7 @@ To run using the RFsimulator:
 
 ```bash
 sudo ./nr-softmodem -O ../../../targets/PROJECTS/GENERIC-LTE-EPC/CONF/gnb.band78.tm1.106PRB.usrpn300.conf --do-ra --rfsim
-sudo ./nr-uesoftmodem --do-ra --rfsim --rfsimulator.serveraddr 127.0.0.1
+sudo ./nr-uesoftmodem --do-ra --rfsim --rfsimulator.[0].serveraddr 127.0.0.1
 ```
 
 Using USRPs:
@@ -457,7 +542,7 @@ sudo ./nr-uesoftmodem --do-ra
 ```
 
 
-### Run OAI with SDAP & Custom DRBs
+#### Run OAI with SDAP & Custom DRBs
 
 To run OAI gNB with SDAP, simply include `--gNBs.[0].enable_sdap 1` to the binary's arguments.
 
@@ -468,7 +553,7 @@ The Non-GBR flows use a shared data radio bearer.
 To hardcode the DRBs for testing purposes, simply add `--gNBs.[0].drbs x` to the binary's arguements, where `x` is the number of DRBs, along with SDAP.
 The hardcoded DRBs will be treated like GBR Flows. Due to code limitations at this point the max. number of DRBs is 4. 
 
-## IF setup with OAI
+### IF setup with OAI
 
 OAI is also compatible with Intermediate Frequency (IF) equipment, allowing the
 use of RF front-ends operating on arbitrary frequency bands that do not conform
@@ -490,7 +575,7 @@ the configuration file:
 > `if_freq` numeric value is suffixed with "L" so it is correctly parsed as
 > 64-bit integer.
 
-### Run OAI with custom DL/UL arbitrary frequencies
+#### Run OAI with custom DL/UL arbitrary frequencies
 
 The following example uses DL frequency 2169.080 MHz and UL frequency offset
 -400 MHz, with a configuration file for band 66 (FDD) at gNB side.
@@ -502,20 +587,13 @@ sudo ./nr-softmodem -O ../../../targets/PROJECTS/GENERIC-LTE-EPC/CONF/gnb.band66
 sudo ./nr-uesoftmodem --if_freq 2169080000 --if_freq_off -400000000
 ```
 
-# 5G gNB MIMO configuration
+## 5G gNB MIMO configuration
 
 In order to enable DL-MIMO in OAI 5G softmodem, the prerequisite is to have `do_CSIRS = 1` in the configuration file. This allows the gNB to schedule CSI reference signal and to acquire from the UE CSI measurements to be able to schedule DLSCH with MIMO.
 
 The following step is to set the number of PDSCH logical antenna ports. These needs to be larger or equal to the maximum number of MIMO layers requested (for 2-layer MIMO it is necessary to have at least two logical antenna ports).
 
-<table style="border-collapse: collapse; border: none;">
-  <tr style="border-collapse: collapse; border: none;">
-    <td style="border-collapse: collapse; border: none;">
-         <img src="./images/mimo_antenna_ports.png" alt="" border=3 height=100 width=300>
-         </img>
-    </td>
-  </tr>
-</table>
+![mimo_antenna_ports](./images/mimo_antenna_ports.png)
 
 This image shows an example of gNB 5G MIMO logical antenna port configuration. It has to be noted that logical antenna ports might not directly correspond to physical antenna ports and each logical antenna port might consist of a sub-array of antennas.
 

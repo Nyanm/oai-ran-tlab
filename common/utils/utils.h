@@ -33,8 +33,8 @@ extern "C" {
                      __typeof__ (b) _b = (b); \
                      _a < _b ? _a : _b; })
 
-
-
+#define IS_BIT_SET(a, b) ((a >> b) & 1)
+#define SET_BIT(a, b) (a | (1 << b))
 
 #ifdef __cplusplus
 #ifdef min
@@ -50,8 +50,6 @@ extern "C" {
 #    define malloc16(x) memalign(64,x+64)
 #endif
 #define free16(y,x) free(y)
-#define bigmalloc malloc
-#define bigmalloc16 malloc16
 #define openair_free(y,x) free((y))
 #define PAGE_SIZE 4096
 
@@ -101,12 +99,9 @@ static inline void *malloc_or_fail(size_t size)
 #endif
 
 #define free16(y,x) free(y)
-#define bigmalloc malloc
-#define bigmalloc16 malloc16
 #define openair_free(y,x) free((y))
 #define PAGE_SIZE 4096
 
-#define PAGE_MASK 0xfffff000
 #define virt_to_phys(x) (x)
 
 // Converts an hexadecimal ASCII coded digit into its value. **

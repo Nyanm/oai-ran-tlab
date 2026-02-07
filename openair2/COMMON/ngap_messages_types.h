@@ -88,7 +88,6 @@
 #define NGAP_TRANSPORT_LAYER_ADDRESS_SIZE (160 / 8)
 
 #define NGAP_MAX_NB_AMF_IP_ADDRESS 10
-#define NGAP_IMSI_LENGTH           16
 
 #define NGAP_MAX_NO_TAI_PAGING 16 // 9.2.4.1 3GPP TS 38.413
 
@@ -473,8 +472,8 @@ typedef struct {
   cell_id_t id;
   // Cell type
   uint8_t type;
-  // Time UE Stayed in Cell
-  long time_in_cell;
+  // Time UE Stayed in Cell (seconds)
+  uint16_t time_in_cell;
   // Cause
   ngap_cause_t *cause;
 } last_visited_ngran_cell_info_t;
@@ -737,6 +736,8 @@ typedef struct ngap_ue_ctxt_modification_resp_s {
 typedef struct ngap_downlink_nas_s {
   /* UE id for initial connection to NGAP */
   uint32_t gNB_ue_ngap_id;
+  /* UE id at AMF */
+  uint64_t amf_ue_ngap_id;
   /* NAS pdu */
   byte_array_t nas_pdu;
 } ngap_downlink_nas_t;

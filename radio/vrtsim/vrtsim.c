@@ -20,6 +20,7 @@
  */
 
 #include "PHY/TOOLS/tools_defs.h"
+#include "system.h"
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -27,6 +28,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <errno.h>
@@ -54,7 +56,7 @@
 typedef enum { ROLE_SERVER = 1, ROLE_CLIENT } role;
 
 #define MAX_NUM_ANTENNAS_TX 4
-#define MAX_CHANNEL_LENGTH (1 << 20)
+#define SAVED_SAMPLES_LEN 256
 
 #define ROLE_CLIENT_STRING "client"
 #define ROLE_SERVER_STRING "server"
@@ -123,10 +125,8 @@ typedef struct {
   Actor_t *channel_modelling_actors;
   char *taps_socket;
   int client_num_rx_antennas;
+  struct timespec start_ts;
 } vrtsim_state_t;
-
-// Sample history for channel impulse response
-static c16_t saved_samples[MAX_NUM_ANTENNAS_TX][MAX_CHANNEL_LENGTH] __attribute__((aligned(32))) = {0};
 
 static void histogram_add(histogram_t *histogram, double diff)
 {
@@ -192,13 +192,13 @@ static void vrtsim_readconfig(vrtsim_state_t *vrtsim_state)
   } else {
     AssertFatal(false, "Invalid role configuration\n");
   }
-#ifdef ENABLE_TAPS_CLIENT
+#ifdef OAI_VRTSIM_TAPS_CLIENT
   if (vrtsim_state->taps_socket) {
     LOG_A(HW, "VRTSIM: will use taps socket %s\n", vrtsim_state->taps_socket);
   }
 #else
   if (vrtsim_state->taps_socket) {
-    AssertFatal(false, "Invalid configuration: Build with ENABLE_TAPS_CLIENT to use taps socket\n");
+    AssertFatal(false, "Invalid configuration: Build with OAI_VRTSIM_TAPS_CLIENT to use taps socket\n");
   }
 #endif
 }
@@ -206,30 +206,23 @@ static void vrtsim_readconfig(vrtsim_state_t *vrtsim_state)
 static void *vrtsim_timing_job(void *arg)
 {
   vrtsim_state_t *vrtsim_state = arg;
-  struct timespec timestamp;
-  if (clock_gettime(CLOCK_REALTIME, &timestamp)) {
+  if (clock_gettime(CLOCK_REALTIME, &vrtsim_state->start_ts)) {
     LOG_E(UTIL, "clock_gettime failed\n");
     exit(1);
   }
-  double leftover_samples = 0;
+  int64_t last_sample_index = 0;
   while (vrtsim_state->run_timing_thread) {
     struct timespec current_time;
     if (clock_gettime(CLOCK_REALTIME, &current_time)) {
       LOG_E(UTIL, "clock_gettime failed\n");
       exit(1);
     }
-    uint64_t diff = (current_time.tv_sec - timestamp.tv_sec) * 1000000000 + (current_time.tv_nsec - timestamp.tv_nsec);
-    timestamp = current_time;
-    double samples_to_produce = vrtsim_state->sample_rate * vrtsim_state->timescale * diff / 1e9;
-
-    // Attempt to correct compounding rounding error
-    leftover_samples += samples_to_produce - (uint64_t)samples_to_produce;
-    if (leftover_samples > 1.0f) {
-      samples_to_produce += 1;
-      leftover_samples -= 1;
-    }
-    AssertFatal(samples_to_produce >= 0, "Negative samples to produce: %f\n", samples_to_produce);
+    uint64_t diff = (current_time.tv_sec - vrtsim_state->start_ts.tv_sec) * 1000000000
+                    + (current_time.tv_nsec - vrtsim_state->start_ts.tv_nsec);
+    double sample_index = vrtsim_state->sample_rate * vrtsim_state->timescale * diff / 1e9;
+    int64_t samples_to_produce = sample_index - last_sample_index;
     shm_td_iq_channel_produce_samples(vrtsim_state->channel, samples_to_produce);
+    last_sample_index = sample_index;
     usleep(1);
   }
   return 0;
@@ -278,7 +271,7 @@ static client_info_t client_read_info(char *descriptor_file)
   return client_info;
 }
 
-static int vrtsim_connect(openair0_device *device)
+static int vrtsim_connect(openair0_device_t *device)
 {
   vrtsim_state_t *vrtsim_state = (vrtsim_state_t *)device->priv;
 
@@ -296,8 +289,7 @@ static int vrtsim_connect(openair0_device *device)
     server_publish_client_info(client_info, vrtsim_state->connection_descriptor);
 
     vrtsim_state->run_timing_thread = true;
-    int ret = pthread_create(&vrtsim_state->timing_thread, NULL, vrtsim_timing_job, vrtsim_state);
-    AssertFatal(ret == 0, "pthread_create() failed: errno: %d, %s\n", errno, strerror(errno));
+    threadCreate(&vrtsim_state->timing_thread, vrtsim_timing_job, vrtsim_state, "vrtsim_timing", -1, OAI_PRIORITY_RT_MAX);
   } else {
     client_info_t client_info = client_read_info(vrtsim_state->connection_descriptor);
     AssertFatal(client_info.server_num_rx_antennas > 0, "Server did not publish valid client info, aborting client connection\n");
@@ -340,7 +332,7 @@ static int vrtsim_connect(openair0_device *device)
 }
 
 static int vrtsim_write_internal(vrtsim_state_t *vrtsim_state,
-                                 openair0_timestamp timestamp,
+                                 openair0_timestamp_t timestamp,
                                  c16_t *samples,
                                  int nsamps,
                                  int aarx,
@@ -369,12 +361,15 @@ static int vrtsim_write_internal(vrtsim_state_t *vrtsim_state,
 
 typedef struct {
   vrtsim_state_t *vrtsim_state;
-  openair0_timestamp timestamp;
+  openair0_timestamp_t timestamp;
   c16_t *samples[MAX_NUM_ANTENNAS_TX];
   int nsamps;
   int nbAnt;
   int flags;
   int aarx;
+  int batch_size;
+  int num_batches;
+  c16_t saved_samples[MAX_NUM_ANTENNAS_TX][SAVED_SAMPLES_LEN];
 } channel_modelling_args_t;
 
 static void perform_channel_modelling(void *arg)
@@ -417,59 +412,71 @@ static void perform_channel_modelling(void *arg)
     }
   }
 
-  for (int aatx = 0; aatx < nb_tx_ant; aatx++) {
-    c16_t *previous_samples = saved_samples[aatx];
-    for (int i = 0; i < nsamps; i++) {
-      cf_t *impulse_response = channel_impulse_response_p[aatx];
-      for (int l = 0; l < channel_desc->channel_length; l++) {
-        int idx = i - l;
-        // TODO: Use AVX2 for this
-        c16_t tx_input = idx >= 0 ? input_samples[aatx][idx]
-                                  : previous_samples[(channel_modelling_args->timestamp + i + idx) % MAX_CHANNEL_LENGTH];
-        samples[i].r += tx_input.r * impulse_response[l].r - tx_input.i * impulse_response[l].i;
-        samples[i].i += tx_input.i * impulse_response[l].r + tx_input.r * impulse_response[l].i;
+  for (int batch_index = 0; batch_index < channel_modelling_args->num_batches; batch_index++) {
+    int start_sample = batch_index * channel_modelling_args->batch_size;
+    int num_samples = min(channel_modelling_args->batch_size, nsamps - start_sample);
+    if (start_sample >= nsamps) {
+      break;
+    }
+    for (int aatx = 0; aatx < nb_tx_ant; aatx++) {
+      for (int i = start_sample; i < start_sample + num_samples; i++) {
+        cf_t *impulse_response = channel_impulse_response_p[aatx];
+        for (int l = 0; l < channel_desc->channel_length; l++) {
+          int idx = i - l;
+          // TODO: Use AVX2 for this
+          c16_t tx_input = idx >= 0 ? input_samples[aatx][idx]
+                                    : channel_modelling_args->saved_samples[aatx][SAVED_SAMPLES_LEN + idx];
+          samples[i].r += tx_input.r * impulse_response[l].r - tx_input.i * impulse_response[l].i;
+          samples[i].i += tx_input.i * impulse_response[l].r + tx_input.r * impulse_response[l].i;
+        }
       }
     }
-  }
 
-  // Convert to c16_t
-  c16_t samples_out[aligned_nsamps] __attribute__((aligned(64)));
-#if defined(__AVX512F__)
-  for (int i = 0; i < aligned_nsamps / 8; i++) {
-    simde__m512 *in = (simde__m512 *)&samples[i * 8];
-    simde__m256i *out = (simde__m256i *)&samples_out[i * 8];
-    *out = simde_mm512_cvtsepi32_epi16(simde_mm512_cvtps_epi32(*in));
-  }
-#elif defined(__AVX2__)
-  for (int i = 0; i < aligned_nsamps / 4; i++) {
-    simde__m256 *in = (simde__m256 *)&samples[i * 4];
-    simde__m128i *out = (simde__m128i *)&samples_out[i * 4];
-    *out = simde_mm256_cvtsepi32_epi16(simde_mm256_cvtps_epi32(*in));
-  }
-#else
-  for (int i = 0; i < nsamps; i++) {
-    samples_out[i].r = lroundf(samples[i].r);
-    samples_out[i].i = lroundf(samples[i].i);
-  }
-#endif
+    // Convert to c16_t
+    c16_t samples_out[aligned_nsamps] __attribute__((aligned(64)));
+  #if defined(__AVX512F__)
+    for (int i = 0; i < aligned_nsamps / 8; i++) {
+      simde__m512 *in = (simde__m512 *)&samples[i * 8];
+      simde__m256i *out = (simde__m256i *)&samples_out[i * 8];
+      *out = simde_mm512_cvtsepi32_epi16(simde_mm512_cvtps_epi32(*in));
+    }
+  #elif defined(__AVX2__)
+    for (int i = 0; i < aligned_nsamps / 4; i++) {
+      simde__m256 *in = (simde__m256 *)&samples[i * 4];
+      simde__m128i *out = (simde__m128i *)&samples_out[i * 4];
+      *out = simde_mm256_cvtsepi32_epi16(simde_mm256_cvtps_epi32(*in));
+    }
+  #else
+    for (int i = 0; i < nsamps; i++) {
+      samples_out[i].r = lroundf(samples[i].r);
+      samples_out[i].i = lroundf(samples[i].i);
+    }
+  #endif
 
-  vrtsim_write_internal(channel_modelling_args->vrtsim_state,
-                        channel_modelling_args->timestamp,
-                        samples_out,
-                        channel_modelling_args->nsamps,
-                        aarx,
-                        channel_modelling_args->flags,
-                        aarx);
+    vrtsim_write_internal(channel_modelling_args->vrtsim_state,
+                          channel_modelling_args->timestamp,
+                          samples_out,
+                          channel_modelling_args->nsamps,
+                          aarx,
+                          channel_modelling_args->flags,
+                          aarx);
+  }
 }
 
 static int vrtsim_write_with_chanmod(vrtsim_state_t *vrtsim_state,
-                                     openair0_timestamp timestamp,
+                                     openair0_timestamp_t timestamp,
                                      void **samplesVoid,
                                      int nsamps,
                                      int nbAnt,
                                      int flags)
 {
-  AssertFatal(nbAnt < MAX_NUM_ANTENNAS_TX, "Number of antennas %d exceeds maximum %d\n", nbAnt, MAX_NUM_ANTENNAS_TX);
+  // Sample history for channel impulse response
+  static c16_t saved_samples[MAX_NUM_ANTENNAS_TX][SAVED_SAMPLES_LEN] __attribute__((aligned(32))) = {0};
+  // Indicates what samples are saves in saved_samples
+  static openair0_timestamp_t last_timestamp = 0;
+  const int batch_size = 4096;
+
+  AssertFatal(nbAnt <= MAX_NUM_ANTENNAS_TX, "Number of antennas %d exceeds maximum %d\n", nbAnt, MAX_NUM_ANTENNAS_TX);
   for (int aarx = 0; aarx < vrtsim_state->peer_info.num_rx_antennas; aarx++) {
     notifiedFIFO_elt_t *task = newNotifiedFIFO_elt(sizeof(channel_modelling_args_t), 0, NULL, perform_channel_modelling);
     channel_modelling_args_t *args = (channel_modelling_args_t *)NotifiedFifoData(task);
@@ -479,32 +486,54 @@ static int vrtsim_write_with_chanmod(vrtsim_state_t *vrtsim_state,
     args->nbAnt = nbAnt;
     args->flags = flags;
     args->aarx = aarx;
+    args->batch_size = batch_size;
+    args->num_batches = (nsamps + batch_size - 1) / batch_size;
     for (int i = 0; i < nbAnt; i++) {
       args->samples[i] = samplesVoid[i];
     }
+
+    // Fill in saved_samples
+    size_t gap_samples = timestamp - last_timestamp;
+    if (gap_samples > 0) {
+      size_t gap_samples_needed = min(SAVED_SAMPLES_LEN, gap_samples);
+      for (int aatx = 0; aatx < nbAnt; aatx++) {
+        memset(&args->saved_samples[aatx][SAVED_SAMPLES_LEN - gap_samples_needed], 0, sizeof(c16_t) * gap_samples_needed);
+        if (gap_samples < SAVED_SAMPLES_LEN) {
+          size_t samples_from_saved = SAVED_SAMPLES_LEN - gap_samples_needed;
+          memcpy(&args->saved_samples[aatx][0], &saved_samples[aatx][SAVED_SAMPLES_LEN - samples_from_saved], sizeof(c16_t) * samples_from_saved);
+        }
+      }
+    } else {
+      for (int aatx = 0; aatx < nbAnt; aatx++)
+        memcpy(&args->saved_samples[aatx][0], saved_samples[aatx], sizeof(c16_t) * SAVED_SAMPLES_LEN);
+    }
+    memcpy(args->saved_samples, saved_samples, sizeof(saved_samples));
     pushNotifiedFIFO(&vrtsim_state->channel_modelling_actors[aarx].fifo, task);
   }
-  int start_index = timestamp % MAX_CHANNEL_LENGTH;
-  int end_index = min(start_index + nsamps, MAX_CHANNEL_LENGTH);
-  int cp_nsamps = end_index - start_index;
-  for (int aatx = 0; aatx < nbAnt; aatx++) {
-    c16_t *samples = (c16_t *)samplesVoid[aatx];
-    memcpy(&saved_samples[aatx][start_index], &samples[0], sizeof(c16_t) * cp_nsamps);
-  }
 
-  if (end_index < start_index + nsamps) {
-    // wrap around condition, write at beginning of buffer
-    cp_nsamps = nsamps - cp_nsamps; // remaining samples
-    start_index = 0;
+  // Save samples for next round
+  if (nsamps < SAVED_SAMPLES_LEN) {
     for (int aatx = 0; aatx < nbAnt; aatx++) {
-      c16_t *samples = (c16_t *)samplesVoid[aatx];
-      memcpy(&saved_samples[aatx][start_index], &samples[0], sizeof(c16_t) * cp_nsamps);
+      memmove(&saved_samples[aatx][0], &saved_samples[aatx][nsamps], sizeof(c16_t) * (SAVED_SAMPLES_LEN - nsamps));
+      memcpy(&saved_samples[aatx][SAVED_SAMPLES_LEN - nsamps], samplesVoid[aatx], sizeof(c16_t) * nsamps);
+    }
+  } else {
+    for (int aatx = 0; aatx < nbAnt; aatx++) {
+      c16_t* samples = (c16_t*)samplesVoid[aatx];
+      memcpy(saved_samples[aatx], &samples[nsamps - SAVED_SAMPLES_LEN], sizeof(c16_t) * (SAVED_SAMPLES_LEN));
     }
   }
+
+  last_timestamp = timestamp + nsamps;
   return nsamps;
 }
 
-static int vrtsim_write(openair0_device *device, openair0_timestamp timestamp, void **samplesVoid, int nsamps, int nbAnt, int flags)
+static int vrtsim_write(openair0_device_t *device,
+                        openair0_timestamp_t timestamp,
+                        void **samplesVoid,
+                        int nsamps,
+                        int nbAnt,
+                        int flags)
 {
   AssertFatal(nsamps > 0, "Number of samples must be greater than 0\n");
   AssertFatal(nbAnt > 0 && nbAnt <= MAX_NUM_ANTENNAS_TX,
@@ -519,7 +548,19 @@ static int vrtsim_write(openair0_device *device, openair0_timestamp timestamp, v
                            : vrtsim_write_internal(vrtsim_state, timestamp, (c16_t *)samplesVoid[0], nsamps, 0, flags, 0);
 }
 
-static int vrtsim_read(openair0_device *device, openair0_timestamp *ptimestamp, void **samplesVoid, int nsamps, int nbAnt)
+static int vrtsim_write_beams(openair0_device_t *device,
+                              openair0_timestamp_t timestamp,
+                              void ***buff,
+                              int nsamps,
+                              int nb_antennas_tx,
+                              int num_beams,
+                              int flags)
+{
+  vrtsim_write(device, timestamp, (void **)buff[0], nsamps, nb_antennas_tx, flags);
+  return nsamps;
+}
+
+static int vrtsim_read(openair0_device_t *device, openair0_timestamp_t *ptimestamp, void **samplesVoid, int nsamps, int nbAnt)
 {
   vrtsim_state_t *vrtsim_state = (vrtsim_state_t *)device->priv;
   if (shm_td_iq_channel_is_aborted(vrtsim_state->channel)) {
@@ -558,7 +599,7 @@ static int vrtsim_read(openair0_device *device, openair0_timestamp *ptimestamp, 
   return nsamps;
 }
 
-static void vrtsim_end(openair0_device *device)
+static void vrtsim_end(openair0_device_t *device)
 {
   vrtsim_state_t *vrtsim_state = (vrtsim_state_t *)device->priv;
   if (vrtsim_state->role == ROLE_SERVER && vrtsim_state->run_timing_thread) {
@@ -612,24 +653,36 @@ static void vrtsim_end(openair0_device *device)
   }
 }
 
-static int vrtsim_stub(openair0_device *device)
-{
-  return 0;
-}
-static int vrtsim_stub2(openair0_device *device, openair0_config_t *openair0_cfg)
+static int vrtsim_stub(openair0_device_t *device)
 {
   return 0;
 }
 
-static int vrtsim_set_freq(openair0_device *device, openair0_config_t *openair0_cfg)
+static int vrtsim_stub2(openair0_device_t *device, openair0_config_t *openair0_cfg)
+{
+  return 0;
+}
+
+static int vrtsim_set_freq(openair0_device_t *device, openair0_config_t *openair0_cfg)
 {
   vrtsim_state_t *s = device->priv;
   s->rx_freq = openair0_cfg->rx_freq[0];
   return 0;
 }
 
-__attribute__((__visibility__("default"))) int device_init(openair0_device *device, openair0_config_t *openair0_cfg)
+static int vrtsim_set_beams(openair0_device_t *device, uint64_t beam_map, openair0_timestamp_t timestamp)
 {
+  return 0;
+}
+
+static int vrtsim_set_beams2(openair0_device_t *device, int *beam_ids, int num_beams, openair0_timestamp_t timestamp)
+{
+  return 0;
+}
+
+__attribute__((__visibility__("default"))) int device_init(openair0_device_t *device, openair0_config_t *openair0_cfg)
+{
+  randominit();
   vrtsim_state_t *vrtsim_state = calloc_or_fail(1, sizeof(vrtsim_state_t));
   vrtsim_readconfig(vrtsim_state);
   LOG_I(HW,
@@ -643,6 +696,9 @@ __attribute__((__visibility__("default"))) int device_init(openair0_device *devi
   device->trx_set_gains_func = vrtsim_stub2;
   device->trx_write_func = vrtsim_write;
   device->trx_read_func = vrtsim_read;
+  device->trx_write_beams_func = vrtsim_write_beams;
+  device->trx_set_beams = vrtsim_set_beams;
+  device->trx_set_beams2 = vrtsim_set_beams2;
 
   device->type = RFSIMULATOR;
   device->openair0_cfg = &openair0_cfg[0];

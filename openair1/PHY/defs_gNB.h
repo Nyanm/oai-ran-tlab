@@ -46,6 +46,8 @@
 
 #define MAX_NUM_RU_PER_gNB 8
 #define MAX_PUCCH0_NID 8
+#define NR_SRS_IDFT_OVERSAMP_FACTOR 2
+#define NR_SRS_DETECTION_THRESHOLD 10
 
 typedef struct {
   int nb_id;
@@ -295,7 +297,7 @@ typedef struct {
   /// Component Carrier index
   uint8_t CC_id;
   /// timestamp transmitted to HW
-  openair0_timestamp timestamp_tx;
+  openair0_timestamp_t timestamp_tx;
   /// slot to act upon for transmission
   int slot_tx;
   /// slot to act upon for reception
@@ -319,9 +321,9 @@ typedef struct gNB_L1_proc_t_s {
   /// Component Carrier index
   uint8_t CC_id;
   /// timestamp received from HW
-  openair0_timestamp timestamp_rx;
+  openair0_timestamp_t timestamp_rx;
   /// timestamp to send to "slave rru"
-  openair0_timestamp timestamp_tx;
+  openair0_timestamp_t timestamp_tx;
   /// slot to act upon for reception
   int slot_rx;
   /// frame to act upon for reception
@@ -347,16 +349,12 @@ typedef struct {
   unsigned int n0_power_tot_dB;
   //! estimated avg noise power per RB per RX ant (lin)
   fourDimArray_t *n0_subband_power;
-  //! estimated avg noise power per RB per RX ant (dB)
-  fourDimArray_t *n0_subband_power_dB;
   //! estimated avg subband noise power (dB)
   unsigned int n0_subband_power_avg_dB;
   //! estimated avg subband noise power per antenna (dB)
   unsigned int n0_subband_power_avg_perANT_dB[MAX_ANT];
   //! estimated avg noise power per RB (dB)
   int n0_subband_power_tot_dB[275];
-  //! estimated avg noise power per RB (dBm)
-  int n0_subband_power_tot_dBm[275];
   /// PRACH background noise level
   int prach_I0;
 } PHY_MEASUREMENTS_gNB;
@@ -581,7 +579,7 @@ union ldpcReqUnion {
 typedef struct processingData_L1 {
   int frame_rx;
   int slot_rx;
-  openair0_timestamp timestamp_tx;
+  openair0_timestamp_t timestamp_tx;
   PHY_VARS_gNB *gNB;
   notifiedFIFO_elt_t *elt;
 } processingData_L1_t;
@@ -591,7 +589,7 @@ typedef struct processingData_L1tx {
   int slot;
   int frame_rx;
   int slot_rx;
-  openair0_timestamp timestamp_tx;
+  openair0_timestamp_t timestamp_tx;
   PHY_VARS_gNB *gNB;
 } processingData_L1tx_t;
 

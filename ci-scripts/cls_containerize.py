@@ -209,7 +209,7 @@ def CheckLogs(self, filename, HTML, RAN):
 	elif 'nv-cubb' in name:
 		msg = 'Undeploy PNF/Nvidia CUBB'
 		HTML.CreateHtmlTestRow(msg, 'OK', CONST.ALL_PROCESSES_OK)
-	elif (any(sub in name for sub in ['enb','rru','rcc','cu','du','gnb'])):
+	elif (any(sub in name for sub in ['enb','rru','rcc','cu','du','gnb','vnf'])):
 		logging.debug(f'\u001B[1m Analyzing XnB logfile {filename}\u001B[0m')
 		logStatus = RAN.AnalyzeLogFile_eNB(filename, HTML, self.ran_checkers)
 		opt = f"xNB log analysis ({name})"
@@ -304,7 +304,7 @@ class Containerize():
 		result = re.search('gNB', self.imageKind)
 		if result is not None:
 			imageNames.append(('oai-gnb', 'gNB', 'oai-gnb', ''))
-		result = re.search('all', self.imageKind)
+		result = re.search('x86', self.imageKind)
 		if result is not None:
 			imageNames.append(('oai-enb', 'eNB', 'oai-enb', ''))
 			imageNames.append(('oai-gnb', 'gNB', 'oai-gnb', ''))
@@ -315,7 +315,6 @@ class Containerize():
 				imageNames.append(('oai-physim', 'phySim', 'oai-physim', ''))
 			if self.host == 'Ubuntu':
 				imageNames.append(('oai-lte-ru', 'lteRU', 'oai-lte-ru', ''))
-				imageNames.append(('oai-gnb-aerial', 'gNB.aerial', 'oai-gnb-aerial', ''))
 				# Building again the 5G images with Address Sanitizer
 				imageNames.append(('ran-build', 'build', 'ran-build-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
 				imageNames.append(('oai-enb', 'eNB', 'oai-enb-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
@@ -325,6 +324,7 @@ class Containerize():
 				imageNames.append(('oai-nr-cuup', 'nr-cuup', 'oai-nr-cuup-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
 				imageNames.append(('ran-build-fhi72', 'build.fhi72', 'ran-build-fhi72', ''))
 				imageNames.append(('oai-gnb', 'gNB.fhi72', 'oai-gnb-fhi72', ''))
+				imageNames.append(('oai-nr-oru', 'nrORU.fhi72', 'oai-nr-oru', ''))
 		result = re.search('build_cross_arm64', self.imageKind)
 		if result is not None:
 			self.dockerfileprefix = '.ubuntu.cross-arm64'
@@ -413,18 +413,18 @@ class Containerize():
 			# target images should use the proper ran-build image
 			if image != 'ran-build' and "-asan" in name:
 				cmd.run(f'sed -i -e "s#ran-build:latest#ran-build-asan:{imageTag}#" docker/Dockerfile.{pattern}{self.dockerfileprefix}')
-			elif "fhi72" in name:
+			elif "fhi72" in name or name == "oai-nr-oru":
 				cmd.run(f'sed -i -e "s#ran-build-fhi72:latest#ran-build-fhi72:{imageTag}#" docker/Dockerfile.{pattern}{self.dockerfileprefix}')
 			elif image != 'ran-build':
 				cmd.run(f'sed -i -e "s#ran-build:latest#ran-build:{imageTag}#" docker/Dockerfile.{pattern}{self.dockerfileprefix}')
 			if image == 'oai-gnb-aerial':
-				cmd.run('cp -f /opt/nvidia-ipc/nvipc_src.2025.10.09.tar.gz .')
+				cmd.run('cp -f /opt/nvidia-ipc/nvipc_src.2026.01.07.tar.gz .')
 			logfile = f'{lSourcePath}/cmake_targets/log/{name}.docker.log'
 			ret = cmd.run(f'{self.cli} build {self.cliBuildOptions} --target {image} --tag {name}:{imageTag} --file docker/Dockerfile.{pattern}{self.dockerfileprefix} {option} . > {logfile} 2>&1', timeout=1200)
 			t = (name, archiveArtifact(cmd, ctx, logfile))
 			log_files.append(t)
 			if image == 'oai-gnb-aerial':
-				cmd.run('rm -f nvipc_src.2025.10.09.tar.gz')
+				cmd.run('rm -f nvipc_src.2026.01.07.tar.gz')
 			# check the status of the build
 			ret = cmd.run(f"{self.cli} image inspect --format=\'Size = {{{{.Size}}}} bytes\' {name}:{imageTag}")
 			if ret.returncode != 0:
@@ -582,7 +582,7 @@ class Containerize():
 		ret = cmd.run(f"docker image inspect --format=\'Size = {{{{.Size}}}} bytes\' {baseImage}:{baseTag}")
 		if ret.returncode != 0:
 			logging.error(f'No {baseImage} image present, cannot build tests')
-			HTML.CreateHtmlTestRow(self.imageKind, 'KO', CONST.ALL_PROCESSES_OK)
+			HTML.CreateHtmlTestRow("Unit test build failed", 'KO', CONST.ALL_PROCESSES_OK)
 			return False
 
 		# build ran-unittests image

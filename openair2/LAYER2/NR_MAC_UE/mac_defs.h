@@ -310,10 +310,8 @@ typedef struct {
   NR_PUCCH_Resource_t *pucch_resource;
   uint32_t ack_payload;
   uint8_t sr_payload;
-  uint64_t csi_part1_payload;
-  uint64_t csi_part2_payload;
+  nfapi_nr_ue_csi_payload_t csi_payload;
   int n_sr;
-  int n_csi;
   int n_harq;
   int n_CCE;
   int N_CCE;
@@ -490,13 +488,6 @@ typedef struct {
   A_SEQUENCE_OF(NR_SearchSpace_t) list_SS;
 } NR_BWP_PDCCH_t;
 
-typedef struct csi_payload {
-  uint64_t part1_payload;
-  uint64_t part2_payload;
-  int p1_bits;
-  int p2_bits;
-} csi_payload_t;
-
 typedef enum {
   WIDEBAND_ON_PUCCH,
   SUBBAND_ON_PUCCH,
@@ -544,31 +535,6 @@ typedef struct {
   int si_WindowLength;
   A_SEQUENCE_OF(si_schedinfo_config_t) si_SchedInfo_list;
 } si_schedInfo_t;
-
-typedef struct ntn_timing_advance_components {
-  int epoch_hfn;
-  int epoch_sfn;
-  int epoch_subframe;
-
-  // orbital angular velocity in rad/ms
-  double omega;
-  // satellite position at epoch time
-  position_t pos_sat_0;
-  // satellite position at 90° orbit
-  position_t pos_sat_90;
-
-  // N_common_ta_adj represents common round-trip-time between gNB and SAT received in SIB19 (ms)
-  double N_common_ta_adj;
-  // drift rate of common ta in µs/s
-  double N_common_ta_drift;
-  // change rate of common ta drift in µs/s²
-  double N_common_ta_drift_variant;
-
-  // cell scheduling offset expressed in terms of 15kHz SCS
-  long cell_specific_k_offset;
-
-  bool ntn_params_changed;
-} ntn_timing_advance_componets_t;
 
 /*!\brief Top level UE MAC structure */
 typedef struct NR_UE_MAC_INST_s {
@@ -633,8 +599,6 @@ typedef struct NR_UE_MAC_INST_s {
   int p_Max;
   int p_Max_alt;
 
-  ntn_timing_advance_componets_t ntn_ta;
-
   long pdsch_HARQ_ACK_Codebook;
 
   NR_Type0_PDCCH_CSS_config_t type0_PDCCH_CSS_config;
@@ -642,6 +606,8 @@ typedef struct NR_UE_MAC_INST_s {
   uint16_t nr_band;
   uint8_t ssb_subcarrier_offset;
   int ssb_start_subcarrier;
+  uint64_t dl_frequency;
+  int numerology;
 
   NR_SSB_meas_t ssb_measurements[MAX_NB_SSB];
   NR_CSIRS_meas_t csirs_measurements;
@@ -675,12 +641,12 @@ typedef struct NR_UE_MAC_INST_s {
   notifiedFIFO_t input_nf;
 } NR_UE_MAC_INST_t;
 
-static inline int GET_NTN_UE_K_OFFSET(const ntn_timing_advance_componets_t *ntn_ta, int scs)
+static inline int GET_NTN_UE_K_OFFSET(const fapi_nr_ntn_config_t *ntn_ta, int scs)
 {
   return (int)ntn_ta->cell_specific_k_offset << scs;
 }
 
-static inline long GET_DURATION_RX_TO_TX(const ntn_timing_advance_componets_t *ntn_ta, int scs)
+static inline long GET_DURATION_RX_TO_TX(const fapi_nr_ntn_config_t *ntn_ta, int scs)
 {
   return NR_UE_CAPABILITY_SLOT_RX_TO_TX + (ntn_ta->cell_specific_k_offset << scs);
 }

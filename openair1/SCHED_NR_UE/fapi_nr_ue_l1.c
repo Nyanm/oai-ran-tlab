@@ -39,7 +39,8 @@
 #include "PHY/impl_defs_nr.h"
 #include "utils.h"
 #include "SCHED_NR_UE/phy_sch_processing_time.h"
-#include "openair1/PHY/phy_extern_nr_ue.h"
+
+extern PHY_VARS_NR_UE ***PHY_vars_UE_g;
 
 const char *const dl_pdu_type[] = {"DCI", "DLSCH", "RA_DLSCH", "SI_DLSCH", "P_DLSCH", "CSI_RS", "CSI_IM", "TA"};
 const char *const ul_pdu_type[] = {"PRACH", "PUCCH", "PUSCH", "SRS"};
@@ -87,29 +88,6 @@ static void configure_dlsch(NR_UE_DLSCH_t *dlsch0,
     LOG_W(NR_MAC, "dlsch0_harq->status not ACTIVE due to false retransmission harq pid: %d\n", current_harq_pid);
     update_harq_status(mac, current_harq_pid, dlsch0_harq->decodeResult);
   }
-}
-
-static void configure_ntn_params(PHY_VARS_NR_UE *ue, fapi_nr_dl_ntn_config_command_pdu* ntn_params_message)
-{
-  if (!ue->ntn_config_message) {
-    ue->ntn_config_message = CALLOC(1, sizeof(*ue->ntn_config_message));
-  }
-
-  ue->ntn_config_message->ntn_config_params.epoch_hfn = ntn_params_message->epoch_hfn;
-  ue->ntn_config_message->ntn_config_params.epoch_sfn = ntn_params_message->epoch_sfn;
-  ue->ntn_config_message->ntn_config_params.epoch_subframe = ntn_params_message->epoch_subframe;
-
-  ue->ntn_config_message->ntn_config_params.omega = ntn_params_message->omega;
-  ue->ntn_config_message->ntn_config_params.pos_sat_0 = ntn_params_message->pos_sat_0;
-  ue->ntn_config_message->ntn_config_params.pos_sat_90 = ntn_params_message->pos_sat_90;
-
-  ue->ntn_config_message->ntn_config_params.N_common_ta_adj = ntn_params_message->N_common_ta_adj;
-  ue->ntn_config_message->ntn_config_params.N_common_ta_drift = ntn_params_message->N_common_ta_drift;
-  ue->ntn_config_message->ntn_config_params.N_common_ta_drift_variant = ntn_params_message->N_common_ta_drift_variant;
-
-  ue->ntn_config_message->ntn_config_params.cell_specific_k_offset = ntn_params_message->cell_specific_k_offset;
-
-  ue->ntn_config_message->update = true;
 }
 
 static void configure_ta_command(PHY_VARS_NR_UE *ue, fapi_nr_ta_command_pdu *ta_command_pdu)
@@ -227,9 +205,6 @@ static void nr_ue_scheduled_response_dl(NR_UE_MAC_INST_t *mac,
       } break;
       case FAPI_NR_CONFIG_TA_COMMAND:
         configure_ta_command(phy, &pdu->ta_command_pdu);
-        break;
-      case FAPI_NR_DL_NTN_CONFIG_PARAMS:
-        configure_ntn_params(phy, &pdu->ntn_config_command_pdu);
         break;
       default:
         LOG_W(PHY, "unhandled dl pdu type %d \n", pdu->pdu_type);

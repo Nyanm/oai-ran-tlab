@@ -20,7 +20,6 @@
  */
 
 #include "nr_phy_init.h"
-#include "PHY/phy_extern_nr_ue.h"
 #include "openair1/PHY/defs_RU.h"
 #include "openair1/PHY/impl_defs_nr.h"
 #include "common/utils/LOG/vcd_signal_dumper.h"
@@ -352,7 +351,6 @@ void term_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
     free_and_zero(ue->prs_vars[idx]);
   }
 
-  free_and_zero(ue->ntn_config_message);
   
 #ifdef ENABLE_CUDA
   cudaFreeHost(ue->llr[0]);

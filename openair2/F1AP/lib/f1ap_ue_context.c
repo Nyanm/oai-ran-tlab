@@ -57,7 +57,7 @@ static F1AP_CUtoDURRCInformation_t encode_cu_to_du_rrc_info(const f1ap_cu_to_du_
   }
 
   /* optional: HandoverPreparationInformation */
-  F1AP_ProtocolExtensionContainer_10696P60_t *p = NULL;
+  F1AP_ProtocolExtensionContainer_11023P60_t *p = NULL;
   if (cu2du->ho_prep_info) {
     p = calloc_or_fail(1, sizeof(*p));
     enc.iE_Extensions = (struct F1AP_ProtocolExtensionContainer *)p;
@@ -104,7 +104,7 @@ static bool decode_cu_to_du_rrc_info(f1ap_cu_to_du_rrc_info_t *dec, const F1AP_C
     *dec->meas_config = create_byte_array(mc->size, (uint8_t*)mc->buf);
   }
   if (cu2du->iE_Extensions) {
-    const F1AP_ProtocolExtensionContainer_10696P60_t *ext = (const F1AP_ProtocolExtensionContainer_10696P60_t *)cu2du->iE_Extensions;
+    const F1AP_ProtocolExtensionContainer_11023P60_t *ext = (const F1AP_ProtocolExtensionContainer_11023P60_t *)cu2du->iE_Extensions;
     for (int i = 0; i < ext->list.count; ++i) {
       const F1AP_CUtoDURRCInformation_ExtIEs_t *cu2du_info_ext = ext->list.array[i];
       switch (cu2du_info_ext->id) {
@@ -689,7 +689,7 @@ static F1AP_DRBs_ToBeSetup_List_t encode_drbs_to_setup(int n, const f1ap_drb_to_
 
     it->rLCMode = rlc_mode_to_asn1(drb->rlc_mode);
 
-    F1AP_ProtocolExtensionContainer_10696P82_t *ext = calloc_or_fail(1, sizeof(*ext));
+    F1AP_ProtocolExtensionContainer_11023P82_t *ext = calloc_or_fail(1, sizeof(*ext));
     it->iE_Extensions = (struct F1AP_ProtocolExtensionContainer *)ext;
     asn1cSequenceAdd(ext->list, F1AP_DRBs_ToBeSetup_ItemExtIEs_t, ext_ie);
     ext_ie->id = F1AP_ProtocolIE_ID_id_DLPDCPSNLength;
@@ -746,7 +746,7 @@ static F1AP_DRBs_ToBeSetupMod_List_t encode_drbs_to_setupmod(int n, const f1ap_d
     if (!drb->dl_pdcp_sn_len && !drb->ul_pdcp_sn_len)
       continue;
 
-    F1AP_ProtocolExtensionContainer_10696P83_t *ext = calloc_or_fail(1, sizeof(*ext));
+    F1AP_ProtocolExtensionContainer_11023P82_t *ext = calloc_or_fail(1, sizeof(*ext));
     it->iE_Extensions = (struct F1AP_ProtocolExtensionContainer *)ext;
     if (drb->dl_pdcp_sn_len) {
       asn1cSequenceAdd(ext->list, F1AP_DRBs_ToBeSetupMod_ItemExtIEs_t, ext_ie);
@@ -804,7 +804,7 @@ static bool decode_drbs_to_setup(const F1AP_DRBs_ToBeSetup_List_t *f1ap, int *n,
     _F1_CHECK_EXP(rlc_mode_from_asn1(it->rLCMode, &drb->rlc_mode));
 
     _F1_CHECK_EXP(it->iE_Extensions); // PDCP SN length is under extension, is mandatory
-    const F1AP_ProtocolExtensionContainer_10696P82_t *ext = (const F1AP_ProtocolExtensionContainer_10696P82_t *)it->iE_Extensions;
+    const F1AP_ProtocolExtensionContainer_11023P82_t *ext = (const F1AP_ProtocolExtensionContainer_11023P82_t *)it->iE_Extensions;
     const F1AP_DRBs_ToBeSetup_ItemExtIEs_t *ie;
     F1AP_LIB_FIND_IE(F1AP_DRBs_ToBeSetup_ItemExtIEs_t, ie, &ext->list, F1AP_ProtocolIE_ID_id_DLPDCPSNLength, true);
 
@@ -870,7 +870,7 @@ static bool decode_drbs_to_setupmod(const F1AP_DRBs_ToBeSetupMod_List_t *f1ap, i
 
     if (!it->iE_Extensions)
       continue;
-    const F1AP_ProtocolExtensionContainer_10696P83_t *ext = (const F1AP_ProtocolExtensionContainer_10696P83_t *)it->iE_Extensions;
+    const F1AP_ProtocolExtensionContainer_11023P83_t *ext = (const F1AP_ProtocolExtensionContainer_11023P83_t *)it->iE_Extensions;
     const F1AP_DRBs_ToBeSetupMod_ItemExtIEs_t *ie;
 
     for (int j = 0; j < ext->list.count; ++j) {
@@ -1666,6 +1666,15 @@ F1AP_F1AP_PDU_t *encode_ue_context_mod_req(const f1ap_ue_context_mod_req_t *req)
     OCTET_STRING_fromBuf(&ie81->value.choice.RRCContainer, (const char *)req->rrc_container->buf, req->rrc_container->len);
   }
 
+  /* optional: gNB-DU Configuration Query */
+  if (req->gNB_DU_Configuration_Query && *req->gNB_DU_Configuration_Query) {
+    asn1cSequenceAdd(out->protocolIEs.list, F1AP_UEContextModificationRequestIEs_t, ie82);
+    ie82->id = F1AP_ProtocolIE_ID_id_GNB_DUConfigurationQuery;
+    ie82->criticality = F1AP_Criticality_ignore;
+    ie82->value.present = F1AP_UEContextModificationRequestIEs__value_PR_GNB_DUConfigurationQuery;
+    ie82->value.choice.GNB_DUConfigurationQuery = F1AP_GNB_DUConfigurationQuery_true;
+  }
+
   /* optional: SRBs_ToBeSetupMod */
   if (req->srbs_len > 0) {
     DevAssert(req->srbs);
@@ -1777,6 +1786,13 @@ bool decode_ue_context_mod_req(const F1AP_F1AP_PDU_t *pdu, f1ap_ue_context_mod_r
           *out->rrc_container = create_byte_array(os->size, os->buf);
         }
         break;
+      case F1AP_ProtocolIE_ID_id_GNB_DUConfigurationQuery:
+        _F1_EQ_CHECK_INT(ie->value.present, F1AP_UEContextModificationRequestIEs__value_PR_GNB_DUConfigurationQuery);
+        {
+          bool v = ie->value.choice.GNB_DUConfigurationQuery == F1AP_GNB_DUConfigurationQuery_true;
+          _F1_MALLOC(out->gNB_DU_Configuration_Query, v);
+        }
+        break;
       case F1AP_ProtocolIE_ID_id_SRBs_ToBeSetupMod_List:
         _F1_EQ_CHECK_INT(ie->value.present, F1AP_UEContextModificationRequestIEs__value_PR_SRBs_ToBeSetupMod_List);
         _F1_CHECK_EXP(decode_srbs_to_setupmod(&ie->value.choice.SRBs_ToBeSetupMod_List, &out->srbs_len, &out->srbs));
@@ -1862,6 +1878,8 @@ f1ap_ue_context_mod_req_t cp_ue_context_mod_req(const f1ap_ue_context_mod_req_t 
   }
   if (orig->status)
     _F1_MALLOC(cp.status, *orig->status);
+  if (orig->gNB_DU_Configuration_Query)
+    _F1_MALLOC(cp.gNB_DU_Configuration_Query, *orig->gNB_DU_Configuration_Query);
   return cp;
 }
 
@@ -1898,6 +1916,7 @@ bool eq_ue_context_mod_req(const f1ap_ue_context_mod_req_t *a, const f1ap_ue_con
     _F1_CHECK_EXP(eq_drb_to_release(&a->drbs_rel[i], &b->drbs_rel[i]));
 
   _F1_EQ_CHECK_OPTIONAL_IE(a, b, status, _F1_EQ_CHECK_INT);
+  _F1_EQ_CHECK_OPTIONAL_IE(a, b, gNB_DU_Configuration_Query, _F1_EQ_CHECK_INT);
   return true;
 }
 
@@ -1925,6 +1944,7 @@ void free_ue_context_mod_req(f1ap_ue_context_mod_req_t *req)
     free_drb_to_release(&req->drbs_rel[i]);
   free(req->drbs_rel);
   free(req->status);
+  free(req->gNB_DU_Configuration_Query);
 }
 
 /**
