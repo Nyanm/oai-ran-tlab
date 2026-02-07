@@ -102,6 +102,19 @@ int beam_index_allocation(bool das,
   return idx;
 }
 
+static int get_beam(PHY_VARS_gNB *gNB, int slot, uint8_t start_sym, uint8_t len_sym, uint16_t beam_idx)
+{
+  /* TODO is this really necessary? FAPI message should tell us precoding +
+   * digBF weight (indices), and L1 should simply process this. I don't see a
+   * reason to have common_vars->beam_id, or why something should be checked.
+   * Surely, if something does not align, we should not assert(!) */
+  int bitmap = SL_to_bitmap(start_sym, len_sym);
+  int syms = gNB->frame_parms.symbols_per_slot;
+  int beam = beam_index_allocation(gNB->enable_analog_das, beam_idx, &gNB->common_vars, slot, syms, bitmap);
+  DevAssert(beam >= 0);
+  return beam;
+}
+
 void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, const nfapi_nr_dl_tti_ssb_pdu *ssb_pdu)
 {
   NR_DL_FRAME_PARMS *fp = &gNB->frame_parms;
@@ -288,23 +301,12 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
     }
   }
 
-    /* TODO: It seems to me that for multi-beam operation, we would "just"
-     * get the right beam number here. If gNB->enable_analog_das is true, then beam_nb
-     * == beam_idx in FAPI. Otherwise, we look up the first free beam. In all
-     * cases, it does not seem necessary to do this with global memory, the
-     * look up could be on the stack?!
-    int beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                        beam_idx,
-                                        &gNB->common_vars,
-                                        slot,
-                                        frame_parms->symbols_per_slot,
-                                        bitmap);
-                                        */
-  int beam_nb = 0; // see above: should be looked up
-  c16_t **txdataF = gNB->common_vars.txdataF[beam_nb];
+  c16_t ***txdataF = gNB->common_vars.txdataF;
   for (int i = 0; i < UL_dci_req->numPdus; ++i) {
     const nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdu = &UL_dci_req->ul_dci_pdu_list[i].pdcch_pdu.pdcch_pdu_rel15;
-    nr_generate_dci(pdu, &gNB->frame_parms, slot, gNB->TX_AMP, txdataF[0] + txdataF_offset);
+    uint16_t beam_idx = pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
+    int beam_nb = get_beam(gNB, slot, pdu->StartSymbolIndex, pdu->DurationSymbols, beam_idx);
+    nr_generate_dci(pdu, &gNB->frame_parms, slot, gNB->TX_AMP, txdataF[beam_nb][0] + txdataF_offset);
   }
 
   int num_pdsch = 0;
