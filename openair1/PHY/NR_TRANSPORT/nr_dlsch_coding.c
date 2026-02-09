@@ -280,7 +280,62 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
                                                        .tparity = tparity,
                                                        .toutput = toutput,
                                                        .TBs = TBs};
-  gNB->nrLDPC_coding_interface.nrLDPC_coding_encoder(&slot_parameters);
+
+  if (gNB->use_offload) {
+    // get claims from default implementation
+    int8_t claims_default[n_dlsch];
+    memset(claims_default, 0xff, n_dlsch * sizeof(int8_t));
+    gNB->nrLDPC_coding_interface.nrLDPC_coding_claim_encode(&slot_parameters, claims_default);
+
+    // get claims from offload implementation
+    int8_t claims_offload[n_dlsch];
+    memset(claims_offload, 0xff, n_dlsch * sizeof(int8_t));
+    gNB->nrLDPC_coding_interface_offload.nrLDPC_coding_claim_encode(&slot_parameters, claims_offload);
+
+    // split and count TBs
+    nrLDPC_TB_encoding_parameters_t TBs_default[n_dlsch];
+    uint8_t pdsch_id_default = 0;
+    nrLDPC_TB_encoding_parameters_t TBs_offload[n_dlsch];
+    uint8_t pdsch_id_offload = 0;
+    for (uint8_t pdsch_id = 0; pdsch_id < n_dlsch; pdsch_id++) {
+      if (claims_offload[pdsch_id] > 0 && claims_offload[pdsch_id] > claims_default[pdsch_id]) {
+        TBs_offload[pdsch_id_offload] = TBs[pdsch_id];
+        pdsch_id_offload++;
+      } else {
+        TBs_default[pdsch_id_default] = TBs[pdsch_id];
+        pdsch_id_default++;
+      }
+    }
+
+    // TODO parallelize
+    if (pdsch_id_default > 0) {
+      nrLDPC_slot_encoding_parameters_t slot_parameters_default = {.frame = frame,
+                                                                   .slot = slot,
+                                                                   .nb_TBs = pdsch_id_default,
+                                                                   .threadPool = &gNB->threadPool,
+                                                                   .tinput = tinput,
+                                                                   .tprep = tprep,
+                                                                   .tparity = tparity,
+                                                                   .toutput = toutput,
+                                                                   .TBs = TBs_default};
+      gNB->nrLDPC_coding_interface.nrLDPC_coding_encoder(&slot_parameters_default);
+    }
+
+    if (pdsch_id_offload > 0) {
+      nrLDPC_slot_encoding_parameters_t slot_parameters_offload = {.frame = frame,
+                                                                   .slot = slot,
+                                                                   .nb_TBs = pdsch_id_offload,
+                                                                   .threadPool = &gNB->threadPool,
+                                                                   .tinput = tinput,
+                                                                   .tprep = tprep,
+                                                                   .tparity = tparity,
+                                                                   .toutput = toutput,
+                                                                   .TBs = TBs_offload};
+      gNB->nrLDPC_coding_interface_offload.nrLDPC_coding_encoder(&slot_parameters_offload);
+    }
+  } else {
+    gNB->nrLDPC_coding_interface.nrLDPC_coding_encoder(&slot_parameters);
+  }
 
   for (int i = 0; i < n_dlsch; i++) {
     nrLDPC_TB_encoding_parameters_t *TB_parameters = &TBs[i];
