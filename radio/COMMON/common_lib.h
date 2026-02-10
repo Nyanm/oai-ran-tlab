@@ -204,6 +204,8 @@ typedef struct split7_config {
   uint16_t ul_k0[5];
   uint16_t cp_prefix0;
   uint16_t cp_prefix_other;
+  // beamforming related parameters
+  uint8_t beam_id_polarization_offset;
 
 } split7_config_t;
 

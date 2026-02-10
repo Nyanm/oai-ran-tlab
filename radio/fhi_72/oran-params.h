@@ -130,11 +130,13 @@
 
 #define ORAN_RU_CONFIG_IQWIDTH "iq_width" // not needed if M-plane used
 #define ORAN_RU_CONFIG_IQWIDTH_PRACH "iq_width_prach" // not needed if M-plane used
+#define ORAN_RU_CONFIG_BEAM_POL_OFFSET "beam_id_polarization_offset" // beamID offset for dual polarization
 
 // clang-format off
 #define ORAN_RU_DESC {\
   {ORAN_RU_CONFIG_IQWIDTH,       "sample IQ width (16=uncompressed)\n",       PARAMFLAG_MANDATORY, .u8ptr=NULL, .defuintval=16, TYPE_UINT8, 0}, \
   {ORAN_RU_CONFIG_IQWIDTH_PRACH, "PRACH sample IQ width (16=uncompressed)\n", PARAMFLAG_MANDATORY, .u8ptr=NULL, .defuintval=16, TYPE_UINT8, 0}, \
+  {ORAN_RU_CONFIG_BEAM_POL_OFFSET, "beamID offset for dual polarization (0=disable, 1=consecutive IDs)\n", 0, .u8ptr=NULL, .defuintval=0, TYPE_UINT8, 0}, \
 }
 // clang-format on
 

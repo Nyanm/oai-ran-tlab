@@ -52,6 +52,9 @@ typedef struct ru_info_s {
 
   // Needed for Prach
   c16_t (*prach_buf)[NB_ANTENNAS_RX][NR_PRACH_SEQ_LEN_L];
+  
+  /// beamID offset for dual polarization
+  uint8_t beam_id_polarization_offset;
 } ru_info_t;
 
 /** @brief Reads RX data (PRACH/PUSCH) of next slot.

@@ -588,14 +588,17 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
           LOG_D(HW, "pPrbMap[%d] : PRBstart %d nPRBs %d\n", idxElm, startRB, numRB);
           if (first) {
             // ant_id / no of antenna per beam gives the beam_nb
-            pRbElm->nBeamIndex =
-                ru->beam_id[ant_id / (ru->nb_rx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
+            int base_beam_idx = ant_id / (ru->nb_rx / ru->num_beams_period);
+            int base_beam_id = ru->beam_id[base_beam_idx][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
             // In phy-f-1.0/fhi_lib/lib/api/xran_pkt_cp.h, beamId:15 is of 15bit. -1 set extension bit ef:1 to 1 mistakenly.
-            if (pRbElm->nBeamIndex == -1) {
+            if (base_beam_id == -1) {
               pRbElm->nBeamIndex = 0;
-            } else {
-              first = 0;
-            }
+              } else {
+                // For dual polarization: V antennas (odd ant_id) get beamID + offset
+                int polarization_offset = (ant_id % 2) * ru->beam_id_polarization_offset;  // 0 for H, offset for V
+                pRbElm->nBeamIndex = base_beam_id + polarization_offset;
+                first = 0;
+              }
           }
         }
       }
@@ -656,10 +659,16 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
             struct xran_prb_elm *p_prbMapElm = &pPrbMap->prbMap[idxElm];
             if (sym_idx == 0) {
               // ant_id / no of antenna per beam gives the beam_nb
-              p_prbMapElm->nBeamIndex = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT];
+              int base_beam_idx = ant_id / (ru->nb_tx / ru->num_beams_period);
+              int base_beam_id = ru->beam_id[base_beam_idx][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT];
               // In phy-f-1.0/fhi_lib/lib/api/xran_pkt_cp.h, beamId:15 is of 15bit. -1 set extension bit ef:1 to 1 mistakenly.
-              if (p_prbMapElm->nBeamIndex == -1)
+              if (base_beam_id == -1) {
                 p_prbMapElm->nBeamIndex = 0;
+              } else {
+                // For dual polarization: V antennas (odd ant_id) get beamID + offset
+                int polarization_offset = (ant_id % 2) * ru->beam_id_polarization_offset;  // 0 for H, offset for V
+                p_prbMapElm->nBeamIndex = base_beam_id + polarization_offset;
+              }
             }
 
             // radio-transport fragmentation is not supported in both E and F releases;
@@ -1047,10 +1056,16 @@ int xran_fh_tx_send_slot_BySymbol(ru_info_t *ru, int frame, int slot, uint64_t t
                 );
 
           // ant_id / no of antenna per beam gives the beam_nb
-          pRbElm->nBeamIndex = ru->beam_id[ant_id / (ru->nb_rx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
+          int base_beam_idx = ant_id / (ru->nb_rx / ru->num_beams_period);
+          int base_beam_id = ru->beam_id[base_beam_idx][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
           // In phy-f-1.0/fhi_lib/lib/api/xran_pkt_cp.h, beamId:15 is of 15bit. -1 set extension bit ef:1 to 1 mistakenly.
-          if (pRbElm->nBeamIndex == -1)
+          if (base_beam_id == -1) {
             pRbElm->nBeamIndex = 0;
+          } else {
+            // For dual polarization: V antennas (odd ant_id) get beamID + offset
+            int polarization_offset = (ant_id % 2) * ru->beam_id_polarization_offset;  // 0 for H, offset for V
+            pRbElm->nBeamIndex = base_beam_id + polarization_offset;
+          }
         }
       }
     }
@@ -1123,10 +1138,16 @@ int xran_fh_tx_send_slot_BySymbol(ru_info_t *ru, int frame, int slot, uint64_t t
             if (sym_idx != p_prbMapElm->nSectId)
               continue;
             // ant_id / no of antenna per beam gives the beam_nb
-            p_prbMapElm->nBeamIndex = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT+ sym_idx];
+            int base_beam_idx = ant_id / (ru->nb_tx / ru->num_beams_period);
+            int base_beam_id = ru->beam_id[base_beam_idx][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
             // In phy-f-1.0/fhi_lib/lib/api/xran_pkt_cp.h, beamId:15 is of 15bit. -1 set extension bit ef:1 to 1 mistakenly.
-            if (p_prbMapElm->nBeamIndex == -1)
+            if (base_beam_id == -1) {
               p_prbMapElm->nBeamIndex = 0;
+            } else {
+              // For dual polarization: V antennas (odd ant_id) get beamID + offset
+              int polarization_offset = (ant_id % 2) * ru->beam_id_polarization_offset;  // 0 for H, offset for V
+              p_prbMapElm->nBeamIndex = base_beam_id + polarization_offset;
+            }
 
             // assumes one fragment per symbol
 #ifdef E_RELEASE

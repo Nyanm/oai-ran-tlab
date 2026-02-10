@@ -468,6 +468,8 @@ typedef struct RU_t_s {
   int nb_tx;
   /// number of concurrent analog beams in period
   int num_beams_period;
+  /// beamID offset for dual polarization (0=disabled, typical value is 1)
+  int beam_id_polarization_offset;
   /// number of logical antennas at TX beamformer input
   int nb_log_antennas;
   /// maximum PDSCH RS EPRE
