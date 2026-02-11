@@ -1146,7 +1146,24 @@ uint8_t pack_nr_config_request(void *msg, uint8_t **ppWritePackedMsg, uint8_t *e
     pack_nr_tlv(NFAPI_NR_CONFIG_BEAMFORMING_TABLE_TAG, &dbt_tlv, ppWritePackedMsg, end, &pack_dbt_table_tlv_value);
     numTLVs++;
   }
+#endif
   // END Digital Beam Table (DBT) PDU
+
+#ifdef ENABLE_AERIAL
+  retval &= pack_nr_tlv(NFAPI_NR_CONFIG_NUM_TX_PORT_TAG,
+                        &(pNfapiMsg->carrier_config.num_tx_port),
+                        ppWritePackedMsg,
+                        end,
+                        &pack_uint16_tlv_value);
+  numTLVs++;
+
+  retval &= pack_nr_tlv(NFAPI_NR_CONFIG_NUM_RX_PORT_TAG,
+                        &(pNfapiMsg->carrier_config.num_rx_port),
+                        ppWritePackedMsg,
+                        end,
+                        &pack_uint16_tlv_value);
+  numTLVs++;
+#else
 
   // START Precoding Matrix (PM) PDU
   if (pNfapiMsg->pmi_list.num_pm_idx != 0) {

@@ -247,6 +247,7 @@
   { .s5 = { NULL } }, \
   { .s5 = { NULL } }, \
   { .s5 = { NULL } }, \
+  { .s5 = { NULL } }, /* beam_id_polarization_offset */ \
   { .s2 =  { config_check_intrange, {-1280, 0}} }, /* PUSCH RSSI threshold range */ \
   { .s2 =  { config_check_intrange, {-1280, 0}} }, /* PUCCH RSSI threshold range */ \
   { .s5 = { NULL } }, \

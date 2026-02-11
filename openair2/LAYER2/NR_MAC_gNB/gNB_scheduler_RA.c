@@ -904,7 +904,8 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
                                                       ra->msg3_round,
                                                       ul_bwp->pusch_Config && ul_bwp->pusch_Config->frequencyHopping,
                                                       UE->rnti,
-                                                      nr_mac->beam_info.beam_mode);
+                                                      nr_mac->beam_info.beam_mode,
+                                                      nr_mac->beam_info.beam_id_polarization_offset);
   future_ul_tti_req->n_pdus += 1;
 
   // generation of DCI 0_0 to schedule msg3 retransmission
@@ -1202,7 +1203,8 @@ static void nr_add_msg3(module_id_t module_idP, int CC_id, frame_t frameP, slot_
                                                       0,
                                                       ul_bwp->pusch_Config && ul_bwp->pusch_Config->frequencyHopping,
                                                       UE->rnti,
-                                                      mac->beam_info.beam_mode);
+                                                      mac->beam_info.beam_mode,
+                                                      mac->beam_info.beam_id_polarization_offset);
   future_ul_tti_req->n_pdus += 1;
 
   // calling function to fill rar message

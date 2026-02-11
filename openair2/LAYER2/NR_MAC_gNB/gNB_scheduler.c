@@ -226,7 +226,7 @@ void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame, slot_t slo
   }
 
   // Schedule CSI-RS transmission
-  nr_csirs_scheduling(module_idP, frame, slot, &sched_info->DL_req);
+  nr_csirs_scheduling(module_idP, gNB, frame, slot, &sched_info->DL_req);
 
   // Schedule CSI measurement reporting
   nr_csi_meas_reporting(module_idP, frame, slot);

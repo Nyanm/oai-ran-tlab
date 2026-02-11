@@ -329,7 +329,13 @@ typedef struct
 
 #define NFAPI_NR_CONFIG_RSSI_MEASUREMENT_TAG 0x1028
 #define NFAPI_NR_CONFIG_TDD_TABLE 0x1035
-#define NFAPI_NR_CONFIG_BEAMFORMING_TABLE_TAG 0x1043 // This tag was added in version 5 of the SCF222 standard ( Table 3-50 of SCF222.10.05 )
+#ifndef ENABLE_AERIAL
+  #define NFAPI_NR_CONFIG_BEAMFORMING_TABLE_TAG 0x1043 // This tag was added in version 5 of the SCF222 standard ( Table 3-50 of SCF222.10.05 )
+#else
+  #define NFAPI_NR_CONFIG_BEAMFORMING_TABLE_TAG 0xA010 // Custom TLV for Aerial. Format is the same as 0x1043
+  #define NFAPI_NR_CONFIG_NUM_TX_PORT_TAG 0xA016
+  #define NFAPI_NR_CONFIG_NUM_RX_PORT_TAG 0xA017
+#endif
 #define NFAPI_NR_CONFIG_PRECODING_TABLE_V6_TAG 0x104B // This tag was added in version 6 of the SCF222 standard ( Table 3-52 of SCF222.10.06 )
 
 //table 3-21
@@ -346,6 +352,8 @@ typedef struct
   nfapi_uint16_tlv_t ul_grid_size[5];//Grid size 𝑁𝑔𝑟𝑖𝑑 𝑠𝑖𝑧𝑒,𝜇 for each of the numerologies [38.211, sec 4.4.2]. Value: 0->275 0 = this numerology not used
   nfapi_uint16_tlv_t num_rx_ant;//
   nfapi_uint8_tlv_t  frequency_shift_7p5khz;//Indicates presence of 7.5KHz frequency shift. Value: 0 = false 1 = true
+  nfapi_uint16_tlv_t num_tx_port;//
+  nfapi_uint16_tlv_t num_rx_port;//
 
 } nfapi_nr_carrier_config_t; 
 

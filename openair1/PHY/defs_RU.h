@@ -130,8 +130,8 @@ typedef struct {
   /// - third index: frequency [0..]
   int32_t **tdd_calib_coeffs;
   /// \brief Anaglogue beam ID for each OFDM symbol (used when beamforming not done in RU)
-  /// - first index: concurrent beam index [0.. num_beams_period[
-  /// - second index: symbol index [0.. symbols_per_frame[
+  /// - first index: concurrent beam
+  /// - second index: beam_id [0.. symbols_per_frame[
   int **beam_id;
 } RU_COMMON;
 

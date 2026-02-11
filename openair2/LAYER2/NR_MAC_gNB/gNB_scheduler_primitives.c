@@ -3184,7 +3184,7 @@ int get_pdsch_to_harq_feedback(NR_PUCCH_Config_t *pucch_Config,
   }
 }
 
-void nr_csirs_scheduling(int Mod_idP, frame_t frame, slot_t slot, nfapi_nr_dl_tti_request_t *DL_req)
+void nr_csirs_scheduling(int Mod_idP, gNB_MAC_INST *mac, frame_t frame, slot_t slot, nfapi_nr_dl_tti_request_t *DL_req)
 {
   int CC_id = 0;
   NR_UEs_t *UE_info = &RC.nrmac[Mod_idP]->UE_info;
@@ -3256,10 +3256,27 @@ void nr_csirs_scheduling(int Mod_idP, frame_t frame, slot_t slot, nfapi_nr_dl_tt
           nfapi_nr_dl_tti_csi_rs_pdu_rel15_t *csirs_pdu_rel15 = &dl_tti_csirs_pdu->csi_rs_pdu.csi_rs_pdu_rel15;
           csirs_pdu_rel15->precodingAndBeamforming.num_prgs = 1;
           csirs_pdu_rel15->precodingAndBeamforming.prg_size = resourceMapping.freqBand.nrofRBs; //1 PRG of max size
-          csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces = 1;
+          const int nrofPorts_to_num[] = {1, 2, 4, 8, 12, 16, 24, 32};
+          int nports = nrofPorts_to_num[resourceMapping.nrofPorts];
+
           csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].pm_idx = 0;
-          const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, gNB_mac->beam_info.beam_mode);
-          csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = fapi_beam;
+          uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, gNB_mac->beam_info.beam_mode);
+          int pol_offset = mac->beam_info.beam_id_polarization_offset;
+          if (nports > 1 && pol_offset > 0) {
+            csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces = nports;
+            LOG_D(NR_MAC, "csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces: %d\n", csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces);
+            for (int layer = 0; layer < nports; layer++) {
+              int new_beam = UE->UE_beam_index + (layer * pol_offset);
+              fapi_beam = convert_to_fapi_beam(new_beam, gNB_mac->beam_info.beam_mode);
+              csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[layer].beam_idx = fapi_beam;
+              LOG_D(NR_MAC, "resourceMapping.nrofPorts: %d, UE->UE_beam_index %d, fapi_beam: %d\n", nports,new_beam, fapi_beam);
+            }
+          } else {
+            csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces = 1;
+            csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = fapi_beam;
+          }
+
+          
           csirs_pdu_rel15->bwp_size = dl_bwp->BWPSize;
           csirs_pdu_rel15->bwp_start = dl_bwp->BWPStart;
           csirs_pdu_rel15->subcarrier_spacing = dl_bwp->scs;
@@ -3721,7 +3738,7 @@ uint16_t convert_to_fapi_beam(const uint16_t beam_idx, const nr_beam_mode_t mode
   return (mode == LOPHY_BEAM_IDX) ? SET_BIT(beam_idx, 15) : beam_idx;
 }
 
-static inline int get_beam_polarization_offset(const gNB_MAC_INST *nrmac)
+int get_beam_polarization_offset(const gNB_MAC_INST *nrmac)
 {
   return nrmac->beam_info.beam_id_polarization_offset;
 }

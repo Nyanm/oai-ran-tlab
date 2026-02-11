@@ -2309,7 +2309,8 @@ nfapi_nr_pusch_pdu_t *prepare_pusch_pdu(nfapi_nr_ul_tti_request_t *future_ul_tti
                                         int harq_round,
                                         int fh,
                                         int rnti,
-                                        nr_beam_mode_t beam_mode)
+                                        nr_beam_mode_t beam_mode,
+                                        int beam_pol_offset)
 {
   nfapi_nr_pusch_pdu_t *pusch_pdu = &future_ul_tti_req->pdus_list[future_ul_tti_req->n_pdus].pusch_pdu;
   memset(pusch_pdu, 0, sizeof(nfapi_nr_pusch_pdu_t));
@@ -2361,12 +2362,11 @@ nfapi_nr_pusch_pdu_t *prepare_pusch_pdu(nfapi_nr_ul_tti_request_t *future_ul_tti
   
   // Populate multiple dig_bf_interfaces for dual-polarization when nLayers > 1
   uint16_t base_beam = convert_to_fapi_beam(UE->UE_beam_index, beam_mode);
-  int pol_offset = get_beam_polarization_offset(nrmac);
-  if (pusch_pdu->nrOfLayers > 1 && pol_offset > 0) {
+  if (pusch_pdu->nrOfLayers > 1 && beam_pol_offset > 0) {
     pusch_pdu->beamforming.dig_bf_interface = pusch_pdu->nrOfLayers;
     for (int layer = 0; layer < pusch_pdu->nrOfLayers; layer++) {
       pusch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[layer].beam_idx = 
-          base_beam + (layer * pol_offset);
+          base_beam + (layer * beam_pol_offset);
     }
   } else {
     pusch_pdu->beamforming.dig_bf_interface = 1;
@@ -2530,7 +2530,8 @@ void post_process_ulsch(gNB_MAC_INST *nr_mac, post_process_pusch_t *pusch, NR_UE
                                                       cur_harq->round,
                                                       current_BWP->pusch_Config && current_BWP->pusch_Config->frequencyHopping,
                                                       UE->rnti,
-                                                      nr_mac->beam_info.beam_mode);
+                                                      nr_mac->beam_info.beam_mode,
+                                                      nr_mac->beam_info.beam_id_polarization_offset);
   req->n_pdus += 1;
 
   // Calculate the normalized tx_power for PHR

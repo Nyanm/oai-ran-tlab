@@ -191,7 +191,7 @@ int get_pucch_resourceid(NR_PUCCH_Config_t *pucch_Config, int O_uci, int pucch_r
 
 void nr_schedule_srs(int module_id, frame_t frame, int slot);
 
-void nr_csirs_scheduling(int Mod_idP, frame_t frame, slot_t slot, nfapi_nr_dl_tti_request_t *DL_req);
+void nr_csirs_scheduling(int Mod_idP, gNB_MAC_INST *mac, frame_t frame, slot_t slot, nfapi_nr_dl_tti_request_t *DL_req);
 
 void nr_csi_meas_reporting(int Mod_idP, frame_t frameP, slot_t slotP);
 
@@ -332,7 +332,8 @@ nfapi_nr_pusch_pdu_t *prepare_pusch_pdu(nfapi_nr_ul_tti_request_t *future_ul_tti
                                         int harq_round,
                                         int fh,
                                         int rnti,
-                                        nr_beam_mode_t beam_mode);
+                                        nr_beam_mode_t beam_mode,
+                                        int beam_pol_offset);
 nfapi_nr_dl_tti_pdsch_pdu_rel15_t *prepare_pdsch_pdu(nfapi_nr_dl_tti_request_pdu_t *dl_tti_pdsch_pdu,
                                                      const gNB_MAC_INST *mac,
                                                      const NR_UE_info_t *UE,
@@ -453,6 +454,7 @@ void fill_beam_index_list(NR_ServingCellConfigCommon_t *scc, const nr_mac_config
 int get_beam_from_ssbidx(gNB_MAC_INST *mac, int ssb_idx);
 int16_t get_allocated_beam(const NR_beam_info_t *beam_info, int frame, int slot, int slots_per_frame, int beam_number_in_period);
 uint16_t convert_to_fapi_beam(const uint16_t beam_idx, const nr_beam_mode_t mode);
+int get_beam_polarization_offset(const gNB_MAC_INST *nrmac);
 NR_beam_alloc_t beam_allocation_procedure(NR_beam_info_t *beam_info, int frame, int slot, int16_t beam_index, int slots_per_frame);
 void reset_beam_status(NR_beam_info_t *beam_info, int frame, int slot, int16_t beam_index, int slots_per_frame, bool new_beam);
 void beam_selection_procedures(gNB_MAC_INST *mac, NR_UE_info_t *UE);

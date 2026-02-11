@@ -154,6 +154,7 @@ void nr_fill_ulsch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pusch_pdu_t 
   ulsch->active = true;
   ulsch->beam_nb = 0;
   if (gNB->common_vars.beam_id) {
+    // Use first dig_bf_interface for concurrent beam allocation
     int fapi_beam_idx = ulsch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
     int bitmap = SL_to_bitmap(ulsch_pdu->start_symbol_index, ulsch_pdu->nr_of_symbols);
     ulsch->beam_nb = beam_index_allocation(gNB->enable_analog_das,
