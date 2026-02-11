@@ -333,6 +333,11 @@ static void rx_nr_prach_ru_internal(prach_item_t *p,
     dftlen <<= 3;
     break;
 
+  case 491520:
+    Ncp <<= 4;
+    dftlen <<=4;
+    break;
+
   default:
     AssertFatal(1==0,"sample rate %f MHz not supported for numerology %d\n", fp->samples_per_subframe / 1000.0, mu);
   }

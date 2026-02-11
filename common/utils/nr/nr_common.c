@@ -1066,6 +1066,11 @@ void get_samplerate_and_bw(int mu,
     }
   } else if (mu == 3) {
     switch(n_rb) {
+      case 264:
+	  *sample_rate=491.52e6;
+	  *tx_bw = 400e6;
+	  *rx_bw = 400e6;
+      break;
       case 132:
       case 128:
         if (threequarter_fs) {

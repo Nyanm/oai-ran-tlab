@@ -1165,13 +1165,13 @@ extern "C" {
     }
 
     if (device_adds[0].get(type_str) == "x4xx") {
-      printf("Found USRP x400\n");
+      printf("Found USRP x400 custom\n");
       device->type = USRP_X400_DEV;
-      usrp_master_clock = 245.76e6;
+      usrp_master_clock = 491.52e6;
       args += boost::str(boost::format(",master_clock_rate=%f") % usrp_master_clock);
-
+      openair0_cfg[0].sample_rate = 491520000;
       // https://kb.ettus.com/USRP_Host_Performance_Tuning_Tips_and_Tricks
-      if (0 != system("sysctl -w net.core.rmem_max=62500000 net.core.wmem_max=62500000"))
+      if (0 != system("sysctl -w net.core.rmem_max=250000000 net.core.wmem_max=250000000"))
         LOG_W(HW, "Can't set kernel parameters for X4x0\n");
     }
 
@@ -1197,6 +1197,14 @@ extern "C" {
     LOG_I(HW,"%s() sample_rate:%u\n", __FUNCTION__, (int)openair0_cfg[0].sample_rate);
 
     switch ((int)openair0_cfg[0].sample_rate) {
+printf("******* BW SELECTION ********\n");
+      case 491520000:
+	printf("******* 400 ********\n");
+	openair0_cfg[0].tx_sample_advance = 15;
+	openair0_cfg[0].tx_bw = 400e6;
+	openair0_cfg[0].rx_bw = 400e6;
+	break;
+
       case 245760000:
         // from usrp_time_offset
         // openair0_cfg[0].samples_per_packet    = 2048;
@@ -1232,6 +1240,7 @@ extern "C" {
       case 61440000:
         // from usrp_time_offset
         //openair0_cfg[0].samples_per_packet    = 2048;
+	printf("sample rate of 40 \n"); 
         openair0_cfg[0].tx_sample_advance     = 15;
         openair0_cfg[0].tx_bw                 = 40e6;
         openair0_cfg[0].rx_bw                 = 40e6;
