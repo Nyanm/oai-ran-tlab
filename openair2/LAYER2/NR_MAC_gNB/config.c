@@ -688,13 +688,14 @@ static void config_common(gNB_MAC_INST *nrmac, const nr_mac_config_t *config, NR
   cfg->num_tlv++;
   cfg->num_tlv++;
 
+#ifdef ENABLE_AERIAL
   // setting tx and rx ports to the same value as num_tx_ant and num_rx_ant
   // this should be fine for CAT-A, but for CAT-B, do we actually need to set num_tx_ant to the number of antennas of RU? or is just needed for Dynamic Beamforming?
   cfg->carrier_config.num_rx_port.value = pusch_AntennaPorts;
   cfg->carrier_config.num_rx_port.tl.tag = NFAPI_NR_CONFIG_NUM_RX_PORT_TAG;
   cfg->carrier_config.num_tx_port.value = num_pdsch_antenna_ports;
   cfg->carrier_config.num_tx_port.tl.tag = NFAPI_NR_CONFIG_NUM_TX_PORT_TAG;
-  
+#endif
   // Frame structure configuration
   uint8_t mu = frequencyInfoUL->scs_SpecificCarrierList.list.array[0]->subcarrierSpacing;
   if (cfg->cell_config.frame_duplex_type.value == TDD) {
