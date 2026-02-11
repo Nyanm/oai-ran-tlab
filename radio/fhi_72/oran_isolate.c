@@ -221,7 +221,6 @@ void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
       .beam_id = ru->common.beam_id,
       .num_beams_period = ru->num_beams_period,
       .prach_buf = prach_id ? prach_id->rxsigF : NULL,
-      .beam_id_polarization_offset = ru->openair0_cfg.split7.beam_id_polarization_offset,
   };
 
   RU_proc_t *proc = &ru->proc;
@@ -286,7 +285,6 @@ void oran_fh_if4p5_south_out(RU_t *ru, int frame, int slot, uint64_t timestamp)
       .txdataF_BF = ru->common.txdataF_BF,
       .beam_id = ru->common.beam_id,
       .num_beams_period = ru->num_beams_period,
-      .beam_id_polarization_offset = ru->openair0_cfg.split7.beam_id_polarization_offset,
   };
 
   // printf("south_out:\tframe=%d\tslot=%d\ttimestamp=%ld\n",frame,slot,timestamp);

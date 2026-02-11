@@ -130,8 +130,8 @@ typedef struct {
   /// - third index: frequency [0..]
   int32_t **tdd_calib_coeffs;
   /// \brief Anaglogue beam ID for each OFDM symbol (used when beamforming not done in RU)
-  /// - first index: concurrent beam
-  /// - second index: beam_id [0.. symbols_per_frame[
+  /// - first index: concurrent beam index [0.. num_beams_period[
+  /// - second index: symbol index [0.. symbols_per_frame[
   int **beam_id;
 } RU_COMMON;
 
@@ -468,8 +468,6 @@ typedef struct RU_t_s {
   int nb_tx;
   /// number of concurrent analog beams in period
   int num_beams_period;
-  /// beamID offset for dual polarization (0=disabled, typical value is 1)
-  int beam_id_polarization_offset;
   /// number of logical antennas at TX beamformer input
   int nb_log_antennas;
   /// maximum PDSCH RS EPRE

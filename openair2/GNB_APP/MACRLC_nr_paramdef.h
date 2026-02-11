@@ -77,6 +77,7 @@
 #define CONFIG_STRING_MACRLC_BEAM_DURATION                 "beam_duration"
 #define CONFIG_STRING_MACRLC_BEAMS_PERIOD                  "beams_per_period"
 #define CONFIG_STRING_MACRLC_BEAM_WEIGHTS_LIST             "beam_weights"
+#define CONFIG_STRING_MACRLC_BEAM_POL_OFFSET               "beam_id_polarization_offset"
 #define CONFIG_STRING_MACRLC_PUSCH_RSSI_THRESHOLD          "pusch_RSSI_Threshold"
 #define CONFIG_STRING_MACRLC_PUCCH_RSSI_THRESHOLD          "pucch_RSSI_Threshold"
 #define CONFIG_STRING_MACRLC_STATS_MAX_UE                  "stats_max_ue"
@@ -97,6 +98,7 @@
 #define HLP_MACRLC_AB "Flag to enable analog beamforming"
 #define HLP_MACRLC_BEAM_DURATION "number of consecutive slots for a given set of beams"
 #define HLP_MACRLC_BEAMS_PERIOD "set of beams that can be simultaneously allocated in a period"
+#define HLP_MACRLC_BEAM_POL_OFFSET "beamID offset for dual polarization (0=disable, 1=consecutive IDs)"
 #define HLP_MACRLC_PUSCH_RSSI_THRESHOLD "Limits PUSCH TPC commands based on RSSI to prevent ADC railing. Value range [-1280, 0], unit 0.1 dBm/dBFS"
 #define HLP_MACRLC_PUCCH_RSSI_THRESHOLD "Limits PUCCH TPC commands based on RSSI to prevent ADC railing. Value range [-1280, 0], unit 0.1 dBm/dBFS"
 #define HLP_MACRLC_STATS_MAX_UE "Maximum number of UEs before disabling periodical output (0 to disable)"
@@ -147,6 +149,7 @@
   {CONFIG_STRING_MACRLC_BEAM_DURATION,               HLP_MACRLC_BEAM_DURATION, 0, .u8ptr=NULL,  .defintval=1,               TYPE_UINT8,   0}, \
   {CONFIG_STRING_MACRLC_BEAMS_PERIOD,                HLP_MACRLC_BEAMS_PERIOD,  0, .u8ptr=NULL,  .defintval=1,               TYPE_UINT8,   0}, \
   {CONFIG_STRING_MACRLC_BEAM_WEIGHTS_LIST,           NULL,                     0, .iptr=NULL,   .defintarrayval=0,          TYPE_INTARRAY,0}, \
+  {CONFIG_STRING_MACRLC_BEAM_POL_OFFSET,             HLP_MACRLC_BEAM_POL_OFFSET, 0, .u8ptr=NULL, .defintval=0,              TYPE_UINT8,   0}, \
   {CONFIG_STRING_MACRLC_PUSCH_RSSI_THRESHOLD,        HLP_MACRLC_PUSCH_RSSI_THRESHOLD, \
                                                                                0, .iptr=NULL,   .defintval=0,               TYPE_INT,     0}, \
   {CONFIG_STRING_MACRLC_PUCCH_RSSI_THRESHOLD,        HLP_MACRLC_PUCCH_RSSI_THRESHOLD, \
@@ -195,9 +198,10 @@
 #define MACRLC_ANALOG_BEAM_DURATION_IDX                        37
 #define MACRLC_ANALOG_BEAMS_PERIOD_IDX                         38
 #define MACRLC_BEAMWEIGHTS_IDX                                 39
-#define MACRLC_PUSCH_RSSI_THRES_IDX                            40
-#define MACRLC_PUCCH_RSSI_THRES_IDX                            41
-#define MACRLC_STATS_MAX_UE_IDX                                42
+#define MACRLC_BEAM_POL_OFFSET_IDX                             40
+#define MACRLC_PUSCH_RSSI_THRES_IDX                            41
+#define MACRLC_PUCCH_RSSI_THRES_IDX                            42
+#define MACRLC_STATS_MAX_UE_IDX                                43
 
 #define MACRLCPARAMS_CHECK { \
   { .s5 = { NULL } }, \

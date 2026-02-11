@@ -2358,9 +2358,20 @@ nfapi_nr_pusch_pdu_t *prepare_pusch_pdu(nfapi_nr_ul_tti_request_t *future_ul_tti
   // Beamforming
   pusch_pdu->beamforming.num_prgs = 1;
   pusch_pdu->beamforming.prg_size = pusch_pdu->bwp_size;
-  pusch_pdu->beamforming.dig_bf_interface = 1;
-  pusch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx =
-      convert_to_fapi_beam(UE->UE_beam_index, beam_mode);
+  
+  // Populate multiple dig_bf_interfaces for dual-polarization when nLayers > 1
+  uint16_t base_beam = convert_to_fapi_beam(UE->UE_beam_index, beam_mode);
+  int pol_offset = get_beam_polarization_offset(nrmac);
+  if (pusch_pdu->nrOfLayers > 1 && pol_offset > 0) {
+    pusch_pdu->beamforming.dig_bf_interface = pusch_pdu->nrOfLayers;
+    for (int layer = 0; layer < pusch_pdu->nrOfLayers; layer++) {
+      pusch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[layer].beam_idx = 
+          base_beam + (layer * pol_offset);
+    }
+  } else {
+    pusch_pdu->beamforming.dig_bf_interface = 1;
+    pusch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = base_beam;
+  }
   /* TRANSFORM PRECODING --------------------------------------------------------*/
   if (pusch_pdu->transform_precoding == NR_PUSCH_Config__transformPrecoder_enabled) {
     // U as specified in section 6.4.1.1.1.2 in 38.211, if sequence hopping and group hopping are disabled

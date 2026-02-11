@@ -3721,6 +3721,11 @@ uint16_t convert_to_fapi_beam(const uint16_t beam_idx, const nr_beam_mode_t mode
   return (mode == LOPHY_BEAM_IDX) ? SET_BIT(beam_idx, 15) : beam_idx;
 }
 
+static inline int get_beam_polarization_offset(const gNB_MAC_INST *nrmac)
+{
+  return nrmac->beam_info.beam_id_polarization_offset;
+}
+
 int16_t get_allocated_beam(const NR_beam_info_t *beam_info, int frame, int slot, int slots_per_frame, int beam_number_in_period)
 {
   int16_t beam_idx = 0;

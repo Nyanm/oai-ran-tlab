@@ -927,12 +927,6 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
     return false;
   }
   
-  // Store beam_id_polarization_offset in openair0_config split7 structure (cast away const)
-  openair0_config_t *oai0_mutable = (openair0_config_t *)oai0;
-  oai0_mutable->split7.beam_id_polarization_offset = *gpd(rup, nru, ORAN_RU_CONFIG_BEAM_POL_OFFSET)->uptr;
-  if (oai0_mutable->split7.beam_id_polarization_offset > 0)
-    printf("Dual polarization enabled with beamID offset: %d\n", oai0_mutable->split7.beam_id_polarization_offset);
-  
   paramdef_t prachp[] = ORAN_PRACH_DESC;
   int nprach = sizeofArray(prachp);
   sprintf(aprefix, "%s.%s.[%d].%s", CONFIG_STRING_ORAN, CONFIG_STRING_ORAN_FH, ru_idx, CONFIG_STRING_ORAN_PRACH);
