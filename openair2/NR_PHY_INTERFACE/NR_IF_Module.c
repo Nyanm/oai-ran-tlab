@@ -20,7 +20,9 @@
 #include "openair2/PHY_INTERFACE/queue_t.h"
 #include "utils.h"
 #include "nfapi/oai_integration/nfapi_pnf.h"
-
+#ifdef ENABLE_CUMAC
+#include "openair2/LAYER2/NR_MAC_gNB/integration/cuMAC/cumac_nvipc.h"
+#endif
 #define MAX_IF_MODULES 100
 
 static NR_IF_Module_t *nr_if_inst[MAX_IF_MODULES];
@@ -440,6 +442,33 @@ static void NR_UL_indication(NR_UL_IND_t *UL_info)
 NR_IF_Module_t *NR_IF_Module_init(int Mod_id) {
   AssertFatal(Mod_id<MAX_MODULES,"Asking for Module %d > %d\n",Mod_id,MAX_IF_MODULES);
   LOG_D(PHY, "Installing callbacks for IF_Module - UL_indication\n");
+
+#ifdef ENABLE_CUMAC
+  cumac_nvipc_init();
+  cumac_config_req_payload_t conf_req_payload;
+  conf_req_payload.harqEnabledInd = 0;
+  conf_req_payload.mcsSelCqi = 0;
+  conf_req_payload.nMaxCell = 1;
+  conf_req_payload.nMaxActUePerCell = 16;
+  conf_req_payload.nMaxSchUePerCell = 8;
+  conf_req_payload.nMaxPrg = 1;
+  conf_req_payload.nPrbPerPrg = 106;
+  conf_req_payload.nMaxBsAnt = 1;
+  conf_req_payload.nMaxUeAnt = 1;
+  conf_req_payload.scSpacing = 1;
+  conf_req_payload.allocType = 1;
+  conf_req_payload.precoderType = 0;
+  conf_req_payload.receiverType = 0;
+  conf_req_payload.colMajChanAccess = 0;
+  conf_req_payload.betaCoeff = 1;
+  conf_req_payload.sinValThr = 0.1f;
+  conf_req_payload.corrThr = 0.1f;
+  conf_req_payload.mcsSelSinrCapThr = 0;
+  conf_req_payload.mcsSelLutType = 1;
+  conf_req_payload.prioWeightStep = 1;
+  conf_req_payload.blerTarget = 0.1f; //new parameter
+  cumac_send_msg(CUMAC_CONFIG_REQUEST,l2_build_config_request, &conf_req_payload);
+#endif
 
   if (nr_if_inst[Mod_id]==NULL) {
     nr_if_inst[Mod_id] = (NR_IF_Module_t*)malloc(sizeof(NR_IF_Module_t));

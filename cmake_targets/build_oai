@@ -282,6 +282,9 @@ function main() {
                 ;;
             esac
             shift 2;;
+       "--AERIAL_CUMAC"|"--Aerial_CuMAC"|"--aerial_cumac"|"--CUMAC"|"--cuMAC"|"--cumac")
+            CMAKE_CMD="$CMAKE_CMD -DOAI_AERIAL_CUMAC=ON"
+            shift;;
        -P | --phy_simulators)
             SIMUS_PHY=1
             CMAKE_CMD="$CMAKE_CMD -DENABLE_PHYSIM_TESTS=ON"

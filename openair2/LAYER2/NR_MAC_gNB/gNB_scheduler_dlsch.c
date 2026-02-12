@@ -19,6 +19,11 @@
 /*Softmodem params*/
 #include "executables/softmodem-common.h"
 #include "../../../nfapi/oai_integration/vendor_ext.h"
+#include "PHY/defs_gNB.h"
+
+#ifdef ENABLE_CUMAC
+#include "openair2/LAYER2/NR_MAC_gNB/integration/cuMAC/cumac_nvipc.h"
+#endif
 
 ////////////////////////////////////////////////////////
 /////* DLSCH MAC PDU generation (6.1.2 TS 38.321) */////
@@ -626,6 +631,68 @@ static void pf_dl(gNB_MAC_INST *mac,
   int numUE = 0;
   int CC_id = 0;
   int slots_per_frame = mac->frame_structure.numb_slots_frame;
+
+#ifdef ENABLE_CUMAC
+  uint8_t connected_ues = 0;
+  UE_iterator (UE_list, UE) {
+    connected_ues++;
+  }
+  if (connected_ues!=0 && cumac_can_schedule()) {
+    printf("CUMAC SENDING SCH TTI_REQ with %d connected UES\n", connected_ues);
+    /* const double k = 1.38064852e-23; // Boltzmann constant
+     const double T = 290.0;           // Temperature in K
+     double thermalNoise = k * T * RC.gNB[0]->frame_parms.N_RB_DL * 12 * RC.gNB[0]->frame_parms.subcarrier_spacing;
+     double nfLinear = pow(10.0, 20 / 10.0);
+     double sigmasqrd = thermalNoise * nfLinear;
+
+    // for RFSim
+    double SNR_db = 20.0; // choose your operating SNR
+    float sigmaSqrd = pow(10.0, -SNR_db / 10.0);   */
+    cumac_tti_req_bufs_t buffers;
+    buffers.CRNTI = malloc(connected_ues * sizeof(uint16_t));
+    buffers.avgRatesActUe = malloc(connected_ues * sizeof(float));
+
+    size_t idx = 0;
+    UE_iterator (UE_list, UE) {
+      buffers.avgRatesActUe[idx] = UE->dl_thr_ue;
+      buffers.CRNTI[idx] = UE->rnti;
+      idx++;
+    }
+    const uint16_t nPrbGrp = 1;
+    buffers.prgMsk = malloc(nPrbGrp * sizeof(uint8_t));
+    memset(buffers.prgMsk, 1, nPrbGrp); // all PRBs available
+
+    buffers.wbSinr = malloc(connected_ues * sizeof(float));
+
+    for (int i = 0; i < connected_ues; i++) {
+      buffers.wbSinr[i] = 20.0f;
+    }
+
+    const uint32_t taskBitMap = TASK_BIT(CUMAC_TASK_UE_SELECTION);
+    cumac_sch_tti_req_args_t args = {.frame = frame,
+                                     .slot = slot,
+                                     .payload.cellID = 0,
+                                     .payload.taskBitMask = taskBitMap,
+                                     .payload.ULDLSch = SCH_TTI_DL,
+                                     .payload.nActiveUe = connected_ues,
+                                     .payload.nSrsUe = 0,
+                                     .payload.nPrbGrp = nPrbGrp,
+                                     .payload.nBsAnt = RC.nrmac[0]->config->carrier_config.num_tx_ant.value,
+                                     .payload.nUeAnt = RC.nrmac[0]->config->carrier_config.num_tx_ant.value,
+                                     .payload.sigmaSqrd = 1.0f, // hardcoded in cuMAC source code
+                                     .buffers = &buffers};
+    cumac_send_msg(CUMAC_SCH_TTI_REQUEST, l2_build_sch_tti_request, &args);
+    cumac_set_can_schedule(true);
+    //cumac_send_msg(CUMAC_SCH_TTI_REQUEST, l2_build_ul_sch_tti_request, &args);
+    //cumac_set_can_schedule(true);
+    cumac_sch_tti_end_args_t tti_end_args = {.frame = frame, .slot = slot};
+    cumac_send_msg(CUMAC_TTI_END, l2_build_tti_end, &tti_end_args);
+    cumac_set_can_schedule(false);
+
+  }
+#endif
+
+
 
   /* Loop UE_info->list to check retransmission */
   UE_iterator(UE_list, UE) {
