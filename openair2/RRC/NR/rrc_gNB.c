@@ -2645,6 +2645,12 @@ static void rrc_CU_process_ue_context_release_request(MessageDef *msg_p, sctp_as
 
   /* TODO: marshall types correctly */
   LOG_I(NR_RRC, "received UE Context Release Request for UE %u, forwarding to AMF\n", req->gNB_CU_ue_id);
+  /* remember radio link failure so CU skips RRC Release in the release command
+   * (per TS 38.473 8.3.3: omit RRC-Container when radio link is dead) */
+  if (req->cause == F1AP_CAUSE_RADIO_NETWORK
+      && (req->cause_value == F1AP_CauseRadioNetwork_rl_failure_rlc
+          || req->cause_value == F1AP_CauseRadioNetwork_rl_failure_others))
+    UE->rl_failure = true;
   ngap_cause_t cause = {.type = NGAP_CAUSE_RADIO_NETWORK, .value = NGAP_CAUSE_RADIO_NETWORK_RADIO_CONNECTION_WITH_UE_LOST};
   rrc_gNB_send_NGAP_UE_CONTEXT_RELEASE_REQ(instance, ue_context_p, cause);
 }

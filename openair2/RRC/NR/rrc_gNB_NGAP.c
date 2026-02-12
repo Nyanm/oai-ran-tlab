@@ -43,6 +43,7 @@
 #include "NR_HandoverCommand.h"
 #include "NR_HandoverCommand-IEs.h"
 #include "E1AP_RLC-Mode.h"
+#include "F1AP_CauseRadioNetwork.h"
 #include "NR_PDCP-Config.h"
 #include "NGAP_CauseRadioNetwork.h"
 #include "NGAP_Dynamic5QIDescriptor.h"
@@ -1338,7 +1339,22 @@ int rrc_gNB_process_NGAP_UE_CONTEXT_RELEASE_COMMAND(MessageDef *msg_p, instance_
   /* special case: the DU might be offline, in which case the f1_ue_data exists
    * but is set to 0 */
   if (cu_exists_f1_ue_data(UE->rrc_ue_id) && cu_get_f1_ue_data(UE->rrc_ue_id).du_assoc_id != 0) {
-    rrc_gNB_generate_RRCRelease(rrc, UE);
+    if (UE->rl_failure) {
+      /* Radio link is dead (DU reported rl-failure): send F1AP UE Context
+       * Release Command without RRC-Container per TS 38.473 section 8.3.3.
+       * The DU will release resources locally without signaling the UE. */
+      LOG_I(NR_RRC, "UE %u: radio link failure, sending release command without RRC Release\n", UE->rrc_ue_id);
+      f1_ue_data_t ue_data = cu_get_f1_ue_data(UE->rrc_ue_id);
+      f1ap_ue_context_rel_cmd_t cmd = {
+        .gNB_CU_ue_id = UE->rrc_ue_id,
+        .gNB_DU_ue_id = ue_data.secondary_ue,
+        .cause = F1AP_CAUSE_RADIO_NETWORK,
+        .cause_value = F1AP_CauseRadioNetwork_rl_failure_rlc,
+      };
+      rrc->mac_rrc.ue_context_release_command(ue_data.du_assoc_id, &cmd);
+    } else {
+      rrc_gNB_generate_RRCRelease(rrc, UE);
+    }
 
     /* UE will be freed after UE context release complete */
   } else {

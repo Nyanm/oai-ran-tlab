@@ -238,6 +238,7 @@ typedef struct gNB_RRC_UE_s {
   uint32_t                           ue_reconfiguration_counter;
   bool ongoing_reconfiguration;
   bool an_release; // flag if core requested UE release
+  bool rl_failure; // flag if DU reported radio link failure (skip RRC Release)
 
   /* NGUEContextSetup might come with PDU sessions, but setup needs to be
    * delayed after security (and capability); PDU sessions are stored here */
