@@ -101,6 +101,7 @@ typedef struct {
   int64_t rx_count;
   int wait_for_first_pps;
   int use_gps;
+  int prev_beam;
   //int first_tx;
   //int first_rx;
   //! timestamp of RX packet
@@ -334,6 +335,7 @@ static int trx_usrp_start(openair0_device_t *device)
   //s->first_tx = 1;
   //s->first_rx = 1;
   s->rx_timestamp = 0;
+  s->prev_beam = -1;
 
     //wait for next pps
   uhd::time_spec_t last_pps = s->usrp->get_time_last_pps();
@@ -384,11 +386,16 @@ static int trx_set_beam(openair0_device_t *device, int *beams, int num_beams, op
 {
   AssertFatal(beams, "Invalid input for beams %p, vector not present\n", beams);
   AssertFatal(num_beams == 1, "Cannot handle more than 1 concurrent beam in USRP\n");
+  usrp_state_t *s = (usrp_state_t *)device->priv;
+  if (beams[0] == s->prev_beam)
+    return 0;
+  else
+    s->prev_beam = beams[0];
   int gpio = 0;
   switch (device->openair0_cfg->gpio_controller) {
     case RU_GPIO_CONTROL_GENERIC:
       AssertFatal(beams[0] < 8, "Only 3 bits available for setting beams\n");
-      gpio = beams[0] | TX_GPIO_CHANGE;
+      gpio = s->prev_beam | TX_GPIO_CHANGE;
       break;
     case RU_GPIO_CONTROL_INTERDIGITAL:
       // TODO
@@ -398,7 +405,6 @@ static int trx_set_beam(openair0_device_t *device, int *beams, int num_beams, op
   }
   radio_tx_gpio_flag_t flags_gpio = (radio_tx_gpio_flag_t) gpio;
   // bit 13 enables gpio
-  usrp_state_t *s = (usrp_state_t *)device->priv;
   timestamp -= device->openair0_cfg->command_line_sample_advance + device->openair0_cfg->tx_sample_advance;
   s->tx_md.time_spec = uhd::time_spec_t::from_ticks(timestamp, s->sample_rate);
 
