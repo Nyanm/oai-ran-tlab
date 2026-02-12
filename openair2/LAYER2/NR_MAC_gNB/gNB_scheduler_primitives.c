@@ -63,6 +63,9 @@
 // 3GPP TS 38.331 Section 12 Table 12.1-1: UE performance requirements for RRC procedures for UEs
 #define NR_RRC_RECONFIGURATION_DELAY_MS 10
 #define NR_RRC_BWP_SWITCHING_DELAY_MS   6
+#define RLC_MAX_RETX_RELEASE_THRESHOLD  4
+
+static void gnb_rlf_handler(int rnti);
 
 // #define DEBUG_DCI
 //  CQI TABLES (10 times the value in 214 to adequately compare with R)
@@ -3055,6 +3058,9 @@ bool add_connected_nr_ue(gNB_MAC_INST *nr_mac, NR_UE_info_t *UE)
   init_bler_stats(&nr_mac->dl_bler, &sched_ctrl->dl_bler_stats, nr_mac->frame);
   init_bler_stats(&nr_mac->ul_bler, &sched_ctrl->ul_bler_stats, nr_mac->frame);
 
+  // Register gNB-side RLF handler for UE context release on persistent link failure
+  nr_rlc_set_rlf_handler(UE->rnti, gnb_rlf_handler);
+
   dump_nr_list(UE_info->connected_ue_list);
   return true;
 }
@@ -3891,6 +3897,32 @@ void nr_mac_reset_ul_failure(NR_UE_sched_ctrl_t *sched_ctrl)
   sched_ctrl->ul_failure = false;
   sched_ctrl->ul_failure_timer = 0;
   sched_ctrl->pusch_consecutive_dtx_cnt = 0;
+  sched_ctrl->rlc_max_retx_cnt = 0;
+}
+
+/* \brief RLF handler called from RLC when max retransmissions reached.
+ * Called from scheduler context (sched_lock held), do NOT take sched_lock. */
+static void gnb_rlf_handler(int rnti)
+{
+  gNB_MAC_INST *mac = RC.nrmac[0];
+  NR_UE_info_t *UE = find_nr_UE(&mac->UE_info, rnti);
+  if (!UE)
+    return;
+
+  NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
+
+  /* Already triggered UL failure, ignore further events */
+  if (sched_ctrl->rlc_max_retx_cnt >= RLC_MAX_RETX_RELEASE_THRESHOLD)
+    return;
+
+  sched_ctrl->rlc_max_retx_cnt++;
+  LOG_W(NR_MAC, "UE %04x: RLC max RETX reached (%d/%d)\n",
+        rnti, sched_ctrl->rlc_max_retx_cnt, RLC_MAX_RETX_RELEASE_THRESHOLD);
+
+  if (sched_ctrl->rlc_max_retx_cnt >= RLC_MAX_RETX_RELEASE_THRESHOLD) {
+    LOG_W(NR_MAC, "UE %04x: RLF threshold reached, triggering UL failure (context kept for re-establishment)\n", rnti);
+    nr_mac_trigger_ul_failure(&UE->UE_sched_ctrl, UE->current_UL_BWP.scs);
+  }
 }
 
 /* \brief trigger a release request towards the CU.
