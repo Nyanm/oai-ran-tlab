@@ -966,7 +966,7 @@ void nrLDPC_decoder_cuda_GraphRecord(ldpc_cuda_bridge_t *buffer,
   Kdim_bn_R23_Node[CudaStreamIdx].grid =
       dim3((num_TotalBlocks_bn_BG1_R23_Node + 3) >> 2, n_segments, 1); // 35 is not devidable with 2^n
 
-  cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
+  cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal);
 
   ENQUEUE_LDPC_DECODER_SEQUENCE(streams, CudaStreamIdx);
 
