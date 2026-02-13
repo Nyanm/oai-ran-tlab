@@ -46,8 +46,6 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_Gn_R13_node(const int8_t *
                                                                   uint32_t Zc,
                                                                   uint32_t ZcIdx)
 {
-  uint32_t ymm0, sgn, min;
-
   uint32_t min1 = 0x7F7F7F7F;
   uint32_t min2 = 0x7F7F7F7F;
   uint32_t total_xor = 0;
@@ -109,7 +107,6 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_Gn_R23_node(const int8_t *
                                                                   uint32_t Zc,
                                                                   uint32_t ZcIdx)
 {
-  uint32_t ymm0, sgn, min;
 
   uint32_t min1 = 0x7F7F7F7F;
   uint32_t min2 = 0x7F7F7F7F;
