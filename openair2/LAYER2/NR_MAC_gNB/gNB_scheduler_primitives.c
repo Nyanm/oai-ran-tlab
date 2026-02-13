@@ -63,7 +63,7 @@
 // 3GPP TS 38.331 Section 12 Table 12.1-1: UE performance requirements for RRC procedures for UEs
 #define NR_RRC_RECONFIGURATION_DELAY_MS 10
 #define NR_RRC_BWP_SWITCHING_DELAY_MS   6
-#define RLC_MAX_RETX_RELEASE_THRESHOLD  4
+#define RLC_MAX_RETX_RELEASE_THRESHOLD  32
 
 static void gnb_rlf_handler(int rnti);
 
