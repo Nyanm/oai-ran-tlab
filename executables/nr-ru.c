@@ -571,7 +571,7 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
 
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_READ, 1);
   openair0_timestamp_t old_ts = proc->timestamp_rx;
-  LOG_D(PHY,"Reading %d samples for slot %d (%p)\n", samples_per_slot, *slot, rxp[0]);
+  if (*slot == 0 && (*frame&127) == 0) LOG_I(PHY,"Reading %d samples for slot %d (%p)\n", samples_per_slot, *slot, rxp[0]);
 
   openair0_timestamp_t ts;
   unsigned int rxs;
@@ -785,12 +785,14 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
   VCD_SIGNAL_DUMPER_DUMP_VARIABLE_BY_NAME(VCD_SIGNAL_DUMPER_VARIABLES_TRX_TST, (timestamp + ru->ts_offset) & 0xffffffff);
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_WRITE, 1);
   // prepare tx buffer pointers
+  if ((frame &127) == 0 && slot == 0) LOG_I(PHY,"[TXPATH] Frame.Slot %d.%d sending %d samples\n",frame,slot,siglen + sf_extension);
   uint32_t txs = ru->rfdevice.trx_write_func(&ru->rfdevice,
                                              timestamp + ru->ts_offset - sf_extension,
                                              txp,
                                              siglen + sf_extension,
                                              nt,
                                              flags);
+  /*
   LOG_D(PHY,
         "[TXPATH] RU %d tx_rf, writing to TS %lu, %d.%d, unwrapped_frame %d, slot %d, flags %d, siglen+sf_extension %d, "
         "returned %d, E %f\n",
@@ -804,7 +806,8 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
         siglen + sf_extension,
         txs,
         10 * log10((double)signal_energy(txp[0], siglen + sf_extension)));
-  VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_WRITE, 0);
+*/
+      	VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_WRITE, 0);
 }
 
 static void fill_rf_config(RU_t *ru, char *rf_config_file)
