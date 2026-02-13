@@ -179,7 +179,7 @@ typedef struct buffer_s {
   rfsim_packet_t *packet_ptr;
   size_t payload_sz;
   size_t remainToTransferBeam;
-  std::queue<rfsim_packet_t *> received_packets;
+  std::queue<rfsim_packet_t *> *received_packets;
 } buffer_t;
 
 typedef struct {
@@ -319,13 +319,13 @@ static void clear_beam_queue(beam_state_t *beam_state, openair0_timestamp_t time
  * @param received_packets Reference to the queue of rfsim_packet_t pointers representing received packets.
  * @param threshold_timestamp The timestamp threshold used to determine which packets to remove.
  */
-static void clear_old_packets(std::queue<rfsim_packet_t *> &received_packets, uint64_t threshold_timestamp)
+static void clear_old_packets(std::queue<rfsim_packet_t *> *received_packets, uint64_t threshold_timestamp)
 {
-  while (!received_packets.empty()) {
-    rfsim_packet_t *pkt = received_packets.front();
+  while (!received_packets->empty()) {
+    rfsim_packet_t *pkt = received_packets->front();
     if (pkt->header.timestamp + pkt->header.size <= threshold_timestamp) {
       free(pkt);
-      received_packets.pop();
+      received_packets->pop();
     } else {
       break;
     }
@@ -345,7 +345,7 @@ static buffer_t *allocCirBuf(rfsimulator_state_t *bridge, int sock)
   ptr->trashingPacket = true;
   ptr->transferPtr = (char *)&ptr->th;
   ptr->remainToTransfer = sizeof(samplesBlockHeader_t);
-  ptr->received_packets = std::queue<rfsim_packet_t *>();
+  ptr->received_packets = new std::queue<rfsim_packet_t *>();
   int sendbuff = SEND_BUFF_SIZE;
   if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sendbuff, sizeof(sendbuff)) != 0) {
     LOG_E(HW, "setsockopt(SO_SNDBUF) failed\n");
@@ -396,7 +396,8 @@ static void removeCirBuf(rfsimulator_state_t *bridge, buffer_t *buf)
   // a lot of mem leaks
   // free(bridge->buf[sock].channel_model);
   clear_old_packets(buf->received_packets, INT64_MAX);
-  *buf = buffer_t{};
+  delete buf->received_packets;
+  memset(buf, 0, sizeof(*buf));
   buf->conn_sock = -1;
   bridge->nb_cnx--;
 }
@@ -1156,7 +1157,7 @@ static void process_recv_header(rfsimulator_state_t *t, buffer_t *b, bool first_
  * @return A vector of vectors containing the combined samples for each antenna.
  */
 static void combine_received_beams(rfsimulator_state_t *t,
-                                   std::queue<rfsim_packet_t *> &received_packets,
+                                   std::queue<rfsim_packet_t *> *received_packets,
                                    uint64_t start_timestamp,
                                    int num_aatx,
                                    size_t num_samples,
@@ -1164,7 +1165,7 @@ static void combine_received_beams(rfsimulator_state_t *t,
                                    c16_t **samples)
 {
   // Assume received_packets is ordered by timestamp
-  std::queue<rfsim_packet_t *> packets_copy = received_packets;
+  std::queue<rfsim_packet_t *> packets_copy = *received_packets;
   while (!packets_copy.empty()) {
     rfsim_packet_t *pkt = packets_copy.front();
     if (pkt->header.timestamp + pkt->header.size <= start_timestamp) {
@@ -1278,7 +1279,7 @@ static bool flushInput(rfsimulator_state_t *t, int timeout, bool first_time)
         if (!b->trashingPacket) {
           b->lastReceivedTS = b->th.timestamp + b->th.size;
           LOG_D(HW, "UEsock: %d Set b->lastReceivedTS %ld\n", b->conn_sock, b->lastReceivedTS);
-          b->received_packets.emplace(b->packet_ptr);
+          b->received_packets->emplace(b->packet_ptr);
         } else {
           free(b->packet_ptr);
         }
@@ -1305,7 +1306,7 @@ static void rfsimulator_read_internal(rfsimulator_state_t *t,
   for (int sock = 0; sock < MAX_FD_RFSIMU; sock++) {
     buffer_t *ptr = &t->buf[sock];
 
-    if (ptr->conn_sock != -1 && !ptr->received_packets.empty()) {
+    if (ptr->conn_sock != -1 && !ptr->received_packets->empty()) {
       AssertFatal(ptr->nbAnt != 0, "Number of antennas not set\n");
       bool reGenerateChannel = false;
 
@@ -1528,7 +1529,7 @@ static int rfsimulator_read_beams(openair0_device_t *device,
   for (int sock = 0; sock < MAX_FD_RFSIMU; sock++) {
     buffer_t *ptr = &t->buf[sock];
 
-    if (ptr->conn_sock != -1 && !ptr->received_packets.empty()) {
+    if (ptr->conn_sock != -1 && !ptr->received_packets->empty()) {
       openair0_timestamp_t timestamp_to_free = t->nextRxTstamp - 1;
       if (ptr->channel_model) {
         timestamp_to_free -=
