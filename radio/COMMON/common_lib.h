@@ -430,6 +430,8 @@ struct openair0_device {
   /*!brief Used in ECPRI split 8 to indicate the TX/RX timing offset*/
   int txrx_offset;
 
+  /*!brief specifies affinity for tx_write_thread*/
+  int tx_write_thread_affinity;
   /* Functions API, which are called by the application*/
 
   /*! \brief Called to start the transceiver. Return 0 if OK, < 0 if error

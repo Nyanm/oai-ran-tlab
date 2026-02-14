@@ -563,8 +563,9 @@ void fix_scc(NR_ServingCellConfigCommon_t *scc, uint64_t ssbmap)
   NR_RACH_ConfigCommon_t *rach_ConfigCommon = scc->uplinkConfigCommon->initialUplinkBWP->rach_ConfigCommon->choice.setup;
   long config_index = rach_ConfigCommon->rach_ConfigGeneric.prach_ConfigurationIndex;
   frequency_range_t freq_range = get_freq_range_from_arfcn(dlcc->frequencyInfoDL->absoluteFrequencyPointA);
+  int band = (int)*dlcc->frequencyInfoDL->frequencyBandList.list.array[0];
   frame_type_t frame_type = get_frame_type((int)*dlcc->frequencyInfoDL->frequencyBandList.list.array[0], *scc->ssbSubcarrierSpacing);
-  nr_prach_info_t prach_info =  get_nr_prach_occasion_info_from_index(config_index, freq_range, frame_type);
+  nr_prach_info_t prach_info =  get_nr_prach_occasion_info_from_index(config_index, band==96 ? FR2 : freq_range, frame_type);
   AssertFatal(prach_info.start_symbol + prach_info.N_t_slot * prach_info.N_dur < 14,
               "PRACH with configuration index %ld goes to the last symbol of the slot, for optimal performance pick another index. "
               "See Tables 6.3.3.2-2 to 6.3.3.2-4 in 38.211\n",

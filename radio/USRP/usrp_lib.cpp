@@ -681,7 +681,7 @@ int trx_usrp_write_init(openair0_device_t *device)
                trx_usrp_write_thread,
                (void *)device,
                (char*)"trx_usrp_write_thread",
-               -1,
+               device->tx_write_thread_affinity,
                OAI_PRIORITY_RT_MAX);
   return(0);
 }

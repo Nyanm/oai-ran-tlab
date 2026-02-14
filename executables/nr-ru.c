@@ -571,7 +571,7 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
 
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_READ, 1);
   openair0_timestamp_t old_ts = proc->timestamp_rx;
-  if (*slot == 0 && (*frame&127) == 0) LOG_I(PHY,"Reading %d samples for slot %d (%p)\n", samples_per_slot, *slot, rxp[0]);
+  //if (/**slot == 0 && */(*frame&127) == 0) LOG_I(PHY,"Reading %d samples for slot %d (%p)\n", samples_per_slot, *slot, rxp[0]);
 
   openair0_timestamp_t ts;
   unsigned int rxs;
@@ -605,7 +605,7 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
   proc->frame_rx    = (proc->timestamp_rx / (fp->samples_per_subframe*10))&1023;
   proc->tti_rx = get_slot_from_timestamp(proc->timestamp_rx, fp);
   // synchronize first reception to frame 0 subframe 0
-  LOG_D(PHY,
+  if ((proc->frame_rx&127) == 0 && proc->tti_rx == 0) LOG_I(PHY,
         "RU %d/%d TS %ld, GPS %f, SR %f, frame %d, slot %d.%d / %d\n",
         ru->idx,
         0,
@@ -785,13 +785,15 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
   VCD_SIGNAL_DUMPER_DUMP_VARIABLE_BY_NAME(VCD_SIGNAL_DUMPER_VARIABLES_TRX_TST, (timestamp + ru->ts_offset) & 0xffffffff);
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_WRITE, 1);
   // prepare tx buffer pointers
-  if ((frame &127) == 0 && slot == 0) LOG_I(PHY,"[TXPATH] Frame.Slot %d.%d sending %d samples\n",frame,slot,siglen + sf_extension);
+  if ((frame &127) == 0 && slot == 0) LOG_I(PHY,"[TXPATH] Frame.Slot %d.%d sending %d samples @ %lld\n",frame,slot,siglen + sf_extension,timestamp + ru->ts_offset - sf_extension);
+  /*
   uint32_t txs = ru->rfdevice.trx_write_func(&ru->rfdevice,
                                              timestamp + ru->ts_offset - sf_extension,
                                              txp,
                                              siglen + sf_extension,
                                              nt,
                                              flags);
+*/
   /*
   LOG_D(PHY,
         "[TXPATH] RU %d tx_rf, writing to TS %lu, %d.%d, unwrapped_frame %d, slot %d, flags %d, siglen+sf_extension %d, "
@@ -1123,6 +1125,8 @@ void *ru_thread(void *param)
   LOG_I(PHY, "RU %d RF started cpu_meas_enabled %d\n", ru->idx, cpu_meas_enabled);
   // start trx write thread
   if (usrp_tx_thread == 1) {
+    ru->rfdevice.tx_write_thread_affinity = ru->tx_write_thread_core;
+    LOG_I(HW,"Setting tx_write_thread_affinity to %d\n",ru->rfdevice.tx_write_thread_affinity);
     if (ru->start_write_thread) {
       if (ru->start_write_thread(ru) != 0) {
         LOG_E(HW, "Could not start tx write thread\n");
@@ -1195,7 +1199,8 @@ void *ru_thread(void *param)
     if (slot_type == NR_UPLINK_SLOT || slot_type == NR_MIXED_SLOT) {
       if (!wait_free_rx_tti(&gNB->L1_rx_out, rx_tti_busy, proc->frame_rx, proc->tti_rx))
         break; // nothing to wait for: we have to stop
-      if (ru->feprx) {
+ 
+    if (ru->feprx) {
         ru->feprx(ru,proc->tti_rx);
         LOG_D(NR_PHY, "Setting %d.%d (%d) to busy\n", proc->frame_rx, proc->tti_rx, proc->tti_rx % RU_RX_SLOT_DEPTH);
         //LOG_M("rxdata.m","rxs",ru->common.rxdata[0],1228800,1,1);
@@ -1813,6 +1818,7 @@ static void NRRCconfig_RU(configmodule_interface_t *cfg)
     ru->num_tpcores = *param[RU_NUM_TP_CORES].iptr;
     ru->half_slot_parallelization = *param[RU_HALF_SLOT_PARALLELIZATION].iptr;
     ru->ru_thread_core = *param[RU_RU_THREAD_CORE].iptr;
+    ru->tx_write_thread_core = *param[RU_TX_WRITE_THREAD_CORE].iptr;
     LOG_D(PHY, "[RU %d] Setting half-slot parallelization to %d\n", j, ru->half_slot_parallelization);
     AssertFatal(ru->num_tpcores <= param[RU_TP_CORES].numelt, "Number of TP cores should be <=16\n");
     for (int i = 0; i < ru->num_tpcores; i++)

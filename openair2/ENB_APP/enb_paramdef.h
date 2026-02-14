@@ -99,6 +99,7 @@ typedef enum {
 #define CONFIG_STRING_RU_NUM_INTERFACES           "num_interfaces"
 #define CONFIG_STRING_RU_HALF_SLOT_PARALLELIZATION "half_slot_parallelization"
 #define CONFIG_STRING_RU_RU_THREAD_CORE            "ru_thread_core"
+#define CONFIG_STRING_RU_TX_WRITE_THREAD_CORE      "tx_write_thread_core"
 #define CONFIG_STRING_RU_GPIO_CONTROL "gpio_controller"
 
 #define HLP_RU_SF_AHEAD "LTE TX processing advance"
@@ -112,6 +113,7 @@ typedef enum {
 #define HLP_RU_NUM_INTERFACES "Number of network interfaces for RU"
 #define HLP_RU_HALF_SLOT_PARALLELIZATION "run half slots in parallel in RU FEP"
 #define HLP_RU_RU_THREAD_CORE "id of core to pin ru_thread, -1 is default"
+#define HLP_RU_TX_WRITE_THREAD_CORE "id of core to pin tx_write_thread, -1 is default"
 #define HLP_RU_GPIO_CONTROL "set the GPIO control type for the RU"
 
 #define RU_LOCAL_IF_NAME_IDX          0
@@ -157,6 +159,7 @@ typedef enum {
 #define RU_HALF_SLOT_PARALLELIZATION  40
 #define RU_RU_THREAD_CORE             41
 #define RU_GPIO_CONTROL               42
+#define RU_TX_WRITE_THREAD_CORE       43
 /*-----------------------------------------------------------------------------------------------------------------------------------------*/
 /*                                            RU configuration parameters                                                                  */
 /*   optname                                   helpstr   paramflags    XXXptr          defXXXval                   type      numelt        */
@@ -206,6 +209,7 @@ typedef enum {
   {CONFIG_STRING_RU_HALF_SLOT_PARALLELIZATION, HLP_RU_HALF_SLOT_PARALLELIZATION,  0,       .uptr=NULL,       .defintval=1,                 TYPE_UINT,        0}, \
   {CONFIG_STRING_RU_RU_THREAD_CORE,            HLP_RU_RU_THREAD_CORE,             0,       .iptr=NULL,       .defintval=-1,                TYPE_INT,         0}, \
   {CONFIG_STRING_RU_GPIO_CONTROL,              HLP_RU_GPIO_CONTROL,               0,       .strptr=NULL,     .defstrval="generic",         TYPE_STRING,      0}, \
+  {CONFIG_STRING_RU_TX_WRITE_THREAD_CORE,      HLP_RU_TX_WRITE_THREAD_CORE,       0,       .iptr=NULL,       .defintval=-1,                TYPE_INT,         0}, \
 }
 // clang-format on
 

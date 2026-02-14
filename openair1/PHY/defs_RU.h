@@ -634,6 +634,8 @@ typedef struct RU_t_s {
   int num_fd;
   /// Core id of ru_thread
   int ru_thread_core;
+  /// Core id of tx_write_thread
+  int tx_write_thread_core;
   /// list of cores for RU ThreadPool
   int tpcores[16];
   /// number of cores for RU ThreadPool
