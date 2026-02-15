@@ -81,6 +81,7 @@ extern "C" int ldpc_input(uint32_t **input,uint32_t *cc[4],int nseg,cudaStream_t
  if ((nseg&31)>0) ns++;
 
  dim3 numblocks(ns,22);
+ //printf("input %p\n",input);
  ldpc_input_worker<<<numblocks,384,0,stream[sidx]>>>(input,cc,nseg);
  cudaError_t err=cudaPeekAtLastError();
  if (err!=cudaSuccess) {

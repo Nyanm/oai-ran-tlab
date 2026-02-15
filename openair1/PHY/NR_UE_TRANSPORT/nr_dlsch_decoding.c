@@ -90,7 +90,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
     AssertFatal(dmrs_Type == 0 || dmrs_Type == 1, "Illegal dmrs_type %d\n", dmrs_Type);
     uint8_t nb_re_dmrs;
 
-    LOG_D(PHY, "Round %d RV idx %d\n", harq_process->DLround, dlsch->dlsch_config.rv);
+    LOG_D(PHY, "Round %d RV idx %d\n", harq_process->DLround, dlsch_config->rv);
 
     if (dmrs_Type == NFAPI_NR_DMRS_TYPE1)
       nb_re_dmrs = 6 * dlsch_config->n_dmrs_cdm_groups;
@@ -124,7 +124,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
 
     TB_parameters->processedSegments = &harq_process->processedSegments;
 
-    float Coderate = (float)dlsch->dlsch_config.targetCodeRate / 10240.0f;
+    float Coderate = (float)dlsch_config->targetCodeRate / 10240.0f;
 
     LOG_D(
         PHY,
@@ -291,8 +291,8 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
       }
     } else {
         fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_config = &dlsch[DLSCH_id].dlsch_config;
-        LOG_D(PHY, "frame=%d, slot=%d, first_rx=%d, rv_index=%d\n", proc->frame_rx, proc->nr_slot_rx, harq_process->first_rx, dlsch_config->rv);
-        LOG_D(PHY, "DLSCH %d in error\n", DLSCH_id);
+        LOG_I(PHY, "frame=%d, slot=%d, first_rx=%d, rv_index=%d\n", proc->frame_rx, proc->nr_slot_rx, harq_process->first_rx, dlsch_config->rv);
+        LOG_I(PHY, "DLSCH %d in error\n", DLSCH_id);
     }
     
     merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_DEINTERLEAVING_STATS], &TB_parameters->ts_deinterleave);
@@ -309,7 +309,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
 
     if (harq_process->decodeResult && harq_process->C > 1) {
       /* check global CRC */
-      int A = dlsch->dlsch_config.TBS;
+      int A = dlsch_config->TBS;
       // we have regrouped the transport block
       if (!check_crc(b[DLSCH_id], lenWithCrc(1, A), crcType(1, A))) {
         LOG_D(PHY,
@@ -331,8 +331,8 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
           i++;
         if (i == sz) {
           LOG_E(PHY,
-                "received all 0 pdu, consider it false reception, even if the TS 38.212 7.2.1 says only we should attach the "
-                "corresponding CRC, and nothing prevents to have a all 0 packet\n");
+                "received all 0 pdu (TBS %d, mcs %d, C %d, nb_rb %d, decodedSegments %d) consider it false reception, even if the TS 38.212 7.2.1 says only we should attach the "
+                "corresponding CRC, and nothing prevents to have a all 0 packet\n",dlsch_config->TBS, dlsch_config->mcs, harq_process->C, dlsch->dlsch_config.number_rbs,harq_process->processedSegments);
           harq_process->decodeResult = false;
         }
       }
@@ -356,7 +356,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
     else
       nb_re_dmrs = 4 * dlsch_config->n_dmrs_cdm_groups;
     uint16_t dmrs_length = get_num_dmrs(dlsch_config->dlDmrsSymbPos);
-    float Coderate = (float)dlsch->dlsch_config.targetCodeRate / 10240.0f;
+    float Coderate = (float)dlsch_config->targetCodeRate / 10240.0f;
     LOG_D(PHY,
           "%d.%d DLSCH Decoded, harq_pid %d, round %d, result: %d TBS %d (%d) G %d nb_re_dmrs %d length dmrs %d mcs %d Nl %d "
           "nb_symb_sch %d "
@@ -366,12 +366,12 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
           harq_pid,
           harq_process->DLround,
           harq_process->decodeResult,
-          dlsch->dlsch_config.TBS,
-          dlsch->dlsch_config.TBS / 8,
+          dlsch_config->TBS,
+          dlsch_config->TBS / 8,
           G[DLSCH_id],
           nb_re_dmrs,
           dmrs_length,
-          dlsch->dlsch_config.mcs,
+          dlsch_config->mcs,
           dlsch->Nl,
           dlsch_config->number_symbols,
           dlsch_config->number_rbs,

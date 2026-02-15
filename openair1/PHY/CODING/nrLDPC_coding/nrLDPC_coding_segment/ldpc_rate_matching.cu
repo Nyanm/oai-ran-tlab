@@ -288,6 +288,12 @@ extern "C" int nr_rate_matching_ldpc_rx_cuda(uint32_t Tbslbrm,
     dim3 nblocks2(((Ncb>>1) + nthreads-1)/nthreads,C);
     rm2<<<nblocks2, nthreads, 0, s[sidx]>>>(Ncb/2,ind/2,E1,E2,r_firstE2,Foffset/2,F/2,clear,68*384/2,K/2,Z/2,(uint32_t*)d,(uint32_t*)soft_input,(uint16_t*)llr_buffer);
   }
+  cudaError_t err=cudaPeekAtLastError();
+  
+  if (err!=cudaSuccess) {
+    printf("cuda error (nr_rate_matching_ldpc_rx_cuda): %s  Ncb %d, ind %d, rvidx %d, E1 %d, E2 %d, Foffset %d, F %d, K %d, Z %d, clear %d\n",cudaGetErrorString(err),Ncb, ind, rvidx, E1, E2, Foffset, F,K,Z,clear);
+    exit(-1);
+  }
   return(0);
 } 
 

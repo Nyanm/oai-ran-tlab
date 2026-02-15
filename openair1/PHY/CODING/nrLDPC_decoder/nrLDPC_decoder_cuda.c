@@ -452,7 +452,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
     }
   }
 
-  if (found_idx >= 0) {
+  if (0 /*found_idx >= 0*/) {
     // === Cache HIT: Execute Recorded Graph ===
     gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
     gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = (pageable || integrated) ? p_out : p_out_dev;
@@ -461,7 +461,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
                                      decoderStreams[0],
                                      NULL, // doneEvent
                                      0); // Stream Index
-  } else if (dynamic_cache_idx < MAX_GRAPH_CACHE_SIZE) {
+  } else if (0 /*dynamic_cache_idx < MAX_GRAPH_CACHE_SIZE*/) {
     // === Cache MISS: Record New Graph and Execute ===
     int new_idx = dynamic_cache_idx;
 
@@ -548,6 +548,15 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
       if (!p_decParams->check_crc((uint8_t*)(p_out + (r * (K >> 3))), p_decParams->Kprime, p_decParams->crc_type)) {
         LOG_D(PHY, "Segment %d/%d CRC NOK\n", r, n_segments);
         return (1 + numMaxIter);
+      }
+      uint8_t *b=(uint8_t*)(p_out + (r*(K>>3)));
+      int i=0;
+      if (b[K-2] == 0 && b[K - 1] == 0) {
+            while (b[i] == 0 && i < K)
+	         i++;
+            if (i == K) {
+              LOG_E(PHY, "received all 0 pdu (K %d, r %d)\n",K,r);
+            }
       }
     }
   }

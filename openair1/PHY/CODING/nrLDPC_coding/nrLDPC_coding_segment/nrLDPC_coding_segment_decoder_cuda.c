@@ -253,9 +253,11 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
   
   if (decodeIterations <= segs->max_ldpc_iterations) {
     for (int r=0; r<C; r++) segs->decodeSuccess[r] = true;
+    LOG_I(NR_PHY,"Set all segs->decodeSuccess to true\n");
   } else {
     memset(segs->c, 0, C*(K>>3));
     for (int r=0; r<C; r++) segs->decodeSuccess[r] = false;
+    LOG_I(NR_PHY,"Set all segs->decodeSuccess to false\n");
   }
 }
 
