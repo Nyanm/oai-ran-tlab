@@ -162,16 +162,19 @@ WantedBy=multi-user.target
 
 ## Prepare the L1
 
-- Follow these
+- Follow the
   [instructions](https://github.com/NVIDIA/aerial-cuda-accelerated-ran) to
-  clone the `aerial-cuda-accelerated-ran` repository, pull and build the cuBB
-  image.
--  The CMake flags we use to compile the L1 are:
-  - `-DSCF_FAPI_10_04_SRS=ON` this flag must be used as of OAI tag `2025.w36`
+  clone the `aerial-cuda-accelerated-ran` repository and pull the cuBB image.
+- The detailed instructions on building the cuBB image can be found [here](https://docs.nvidia.com/aerial/cuda-accelerated-ran/latest/quickstart_guide/running_cubb-end-to-end.html#building-the-cubb-end-to-end). The CMake flags we use to compile the L1 are:
+    - `-DSCF_FAPI_10_04_SRS=ON` this flag must be used as of OAI tag `2025.w36`
     and this is due to the usage of the FAPI 10.04 version of the SRS PDU, and
     RX_Beamforming PDU.
-  - `-DENABLE_CONFORMANCE_TM_PDSCH_PDCCH=OFF` this option should only be
+    - `-DENABLE_CONFORMANCE_TM_PDSCH_PDCCH=OFF` this option should only be
     enabled when doing conformance testing with testmac.
+- TL;DR of the build command for the cuBB image:
+```bash
+./testBenches/phase4_test_scripts/build_aerial_sdk.sh --preset 10_02 -- -DSCF_FAPI_10_04_SRS=ON
+```
 
 ## Build OAI gNB
 
