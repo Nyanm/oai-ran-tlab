@@ -786,14 +786,14 @@ void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_TRX_WRITE, 1);
   // prepare tx buffer pointers
   if ((frame &127) == 0 && slot == 0) LOG_I(PHY,"[TXPATH] Frame.Slot %d.%d sending %d samples @ %lld\n",frame,slot,siglen + sf_extension,timestamp + ru->ts_offset - sf_extension);
-  /*
+  
   uint32_t txs = ru->rfdevice.trx_write_func(&ru->rfdevice,
                                              timestamp + ru->ts_offset - sf_extension,
                                              txp,
                                              siglen + sf_extension,
                                              nt,
                                              flags);
-*/
+
   /*
   LOG_D(PHY,
         "[TXPATH] RU %d tx_rf, writing to TS %lu, %d.%d, unwrapped_frame %d, slot %d, flags %d, siglen+sf_extension %d, "

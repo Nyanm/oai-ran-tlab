@@ -567,9 +567,9 @@ void fix_scc(NR_ServingCellConfigCommon_t *scc, uint64_t ssbmap)
   frame_type_t frame_type = get_frame_type((int)*dlcc->frequencyInfoDL->frequencyBandList.list.array[0], *scc->ssbSubcarrierSpacing);
   nr_prach_info_t prach_info =  get_nr_prach_occasion_info_from_index(config_index, band==96 ? FR2 : freq_range, frame_type);
   AssertFatal(prach_info.start_symbol + prach_info.N_t_slot * prach_info.N_dur < 14,
-              "PRACH with configuration index %ld goes to the last symbol of the slot, for optimal performance pick another index. "
+              "PRACH with configuration index %ld goes to the last symbol of the slot, for optimal performance pick another index (start_symbold %d, N_t_slot %d, N_dur %d. "
               "See Tables 6.3.3.2-2 to 6.3.3.2-4 in 38.211\n",
-              config_index);
+              config_index,prach_info.start_symbol, prach_info.N_t_slot, prach_info.N_dur);
   // default value for msg3 precoder is NULL (0 means enabled)
   if (*rach_ConfigCommon->msg3_transformPrecoder != 0) {
     free(rach_ConfigCommon->msg3_transformPrecoder);
