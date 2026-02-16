@@ -498,24 +498,23 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
         found_idx = i;
         break;
       }
-    }
+   }
+   if (found_idx >= 0) {
+        // === Cache HIT: Execute Recorded Graph ===
+	gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
+	gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = (pageable || integrated) ? p_out : p_out_dev;
 
-    if (found_idx >= 0) {
-      // === Cache HIT: Execute Recorded Graph ===
-      gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
-      gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = (pageable || integrated) ? p_out : p_out_dev;
-
-      err_core = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[found_idx].exec,
-                                                  decoderStreams[0],
-                                                  NULL, // doneEvent
-                                                  0); // Stream Index
-      if (err_core == cudaSuccess) {
-        graph_executed = true;
-      } else {
-        cuda_graph_breaker = 1;
-      }
-    } else if (dynamic_cache_idx < MAX_GRAPH_CACHE_SIZE) {
-      // === Cache MISS: Record New Graph and Execute ===
+	err_core = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[found_idx].exec,
+	                                            decoderStreams[0],
+                                                    NULL, // doneEvent
+	                                            0); // Stream Index
+	                                                                                                    if (err_core == cudaSuccess) {
+	   graph_executed = true;
+	} else {
+	   cuda_graph_breaker = 1;
+	}
+   } else if (dynamic_cache_idx < MAX_GRAPH_CACHE_SIZE) {
+          // === Cache MISS: Record New Graph and Execute ===
       int new_idx = dynamic_cache_idx;
 
       gpu_graph_cache[new_idx].occupied = true;
@@ -527,7 +526,6 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
       gpu_graph_cache[new_idx].numMaxIter = numMaxIter;
       gpu_graph_cache[new_idx].n_segments = n_segments;
       gpu_graph_cache[new_idx].outMode = outMode;
-
       // Use the determined pointers (Device ptrs for PCIe, Host ptrs for GH200)
       gpu_graph_cache[new_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
       gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = pageable || integrated ? p_out : p_out_dev;
@@ -550,73 +548,24 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
                                                  &gpu_graph_cache[new_idx].graph,
                                                  &gpu_graph_cache[new_idx].exec,
                                                  (uint8_t*)&gpu_graph_cache[new_idx].occupied);
-      if (err_core == cudaSuccess) {
-        err_core = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[new_idx].exec, decoderStreams[0], NULL, 0);
 
-        if (err_core == cudaSuccess) {
-          graph_executed = true;
-          dynamic_cache_idx++;
-        } else {
-          cuda_graph_breaker = 1; // graph execution fail
-        }
-      } else {
-        cuda_graph_breaker = 1; // graph record fail
-      }
-    }
+       if (err_core == cudaSuccess) {
+            err_core = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[new_idx].exec, decoderStreams[0], NULL, 0);
+
+            if (err_core == cudaSuccess) {
+               graph_executed = true;
+               dynamic_cache_idx++;
+            } else {
+                cuda_graph_breaker = 1; // graph execution fail
+            }
+       } else {
+            cuda_graph_breaker = 1; // graph record fail
+       }
+   }
   }
 
-  if (found_idx >= 0) {
-    // === Cache HIT: Execute Recorded Graph ===
-    gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
-    gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = (pageable || integrated) ? p_out : p_out_dev;
-
-    nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[found_idx].exec,
-                                     decoderStreams[0],
-                                     NULL, // doneEvent
-                                     0); // Stream Index
-  } else if (dynamic_cache_idx < MAX_GRAPH_CACHE_SIZE) {
-    // === Cache MISS: Record New Graph and Execute ===
-    int new_idx = dynamic_cache_idx;
-
-    gpu_graph_cache[new_idx].occupied = true;
-    gpu_graph_cache[new_idx].Z = Z;
-    gpu_graph_cache[new_idx].R = R;
-    gpu_graph_cache[new_idx].BG = BG;
-    gpu_graph_cache[new_idx].K = K;
-    gpu_graph_cache[new_idx].numLLR = numLLR;
-    gpu_graph_cache[new_idx].numMaxIter = numMaxIter;
-    gpu_graph_cache[new_idx].n_segments = n_segments;
-    gpu_graph_cache[new_idx].outMode = outMode;
-
-    // Use the determined pointers (Device ptrs for PCIe, Host ptrs for GH200)
-    gpu_graph_cache[new_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
-    gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = pageable || integrated ? p_out : p_out_dev;
-
-    nrLDPC_decoder_cuda_GraphRecord(gpu_graph_cache[new_idx].bridge_ptr,
-                                    numLLR,
-                                    cnProcBuf_dev,
-                                    bnProcBuf_dev,
-                                    llrRes_dev,
-                                    llrProcBuf_dev,
-                                    Z,
-                                    K,
-                                    BG,
-                                    R,
-                                    numMaxIter,
-                                    n_segments,
-                                    outMode,
-                                    decoderStreams,
-                                    0, // CudaStreamIdx
-                                    &gpu_graph_cache[new_idx].graph,
-                                    &gpu_graph_cache[new_idx].exec,
-                                    (uint8_t*)&gpu_graph_cache[new_idx].occupied);
-
-    nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[new_idx].exec, decoderStreams[0], NULL, 0);
-
-    dynamic_cache_idx++;
-
-  } else {
-    // === Cache FULL: Fallback to Normal Execution ===
+  if (!graph_executed) {
+    // === Fallback to Normal Execution ===
     // If the cache is full, we cannot record new graphs.
     // Or graph operation is not safe in this device or environment.
     // Execute kernel directly using standard launch.
