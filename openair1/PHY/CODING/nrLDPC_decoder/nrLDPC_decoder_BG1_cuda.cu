@@ -801,7 +801,7 @@ __global__ void llrOutPut_Kernel_BG1_int8_BIG_stream(uint32_t R,
   int8_t *p_llrRes = (int8_t *)(d_llrRes + segIdx * NR_LDPC_MAX_NUM_LLR);
   // output
   if (outMode == nrLDPC_outMode_BIT) {
-    int8_t *p_out = d_out + segIdx * (K>>3);
+    int8_t *p_out = d_out + segIdx * (K >> 3);
     llr2bitPacked_Kernel_BG1_int8(R, (uint8_t *)p_out, p_llrRes, numLLR, Zc);
   } else if (outMode == nrLDPC_outMode_BITINT8) {
     int8_t *p_out = d_out + segIdx * K;
@@ -927,27 +927,28 @@ static inline uint32_t get_lut_col_index_host(uint32_t Zc)
 
 extern "C" {
 
-void nrLDPC_decoder_cuda_GraphRecord(ldpc_cuda_bridge_t *buffer,
-                                     uint32_t numLLR,
-                                     int8_t *cnProcBuf,
-                                     int8_t *bnProcBuf,
-                                     int8_t *llrRes,
-                                     int8_t *llrProcBuf,
-                                     uint32_t Z,
-                                     uint32_t K,
-                                     uint8_t BG,
-                                     uint8_t R,
-                                     uint8_t numMaxIter,
-                                     uint8_t n_segments,
-                                     e_nrLDPC_outMode outMode,
-                                     cudaStream_t *streams,
-                                     uint8_t CudaStreamIdx,
-                                     cudaGraph_t *graphPtr,
-                                     cudaGraphExec_t *graphExecPtr,
-                                     uint8_t *isCreatedFlag)
+cudaError_t nrLDPC_decoder_cuda_GraphRecord(ldpc_cuda_bridge_t *buffer,
+                                            uint32_t numLLR,
+                                            int8_t *cnProcBuf,
+                                            int8_t *bnProcBuf,
+                                            int8_t *llrRes,
+                                            int8_t *llrProcBuf,
+                                            uint32_t Z,
+                                            uint32_t K,
+                                            uint8_t BG,
+                                            uint8_t R,
+                                            uint8_t numMaxIter,
+                                            uint8_t n_segments,
+                                            e_nrLDPC_outMode outMode,
+                                            cudaStream_t *streams,
+                                            uint8_t CudaStreamIdx,
+                                            cudaGraph_t *graphPtr,
+                                            cudaGraphExec_t *graphExecPtr,
+                                            uint8_t *isCreatedFlag)
 {
   cudaStream_t stream = streams[CudaStreamIdx];
   *isCreatedFlag = 0;
+  cudaError_t err = cudaSuccess;
 
   Kdim_R13_Edge[CudaStreamIdx].block = dim3(Z >> 2, 4, 1);
   Kdim_R13_Edge[CudaStreamIdx].grid = dim3(num_TotalBlocks_BG1_R13_Edge >> 2, n_segments, 1);
@@ -966,15 +967,27 @@ void nrLDPC_decoder_cuda_GraphRecord(ldpc_cuda_bridge_t *buffer,
   Kdim_bn_R23_Node[CudaStreamIdx].grid =
       dim3((num_TotalBlocks_bn_BG1_R23_Node + 3) >> 2, n_segments, 1); // 35 is not devidable with 2^n
 
-  cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal);
+  err = cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal);
+  if (err != cudaSuccess) {
+    return err;
+  }
 
   ENQUEUE_LDPC_DECODER_SEQUENCE(streams, CudaStreamIdx);
 
-  if (cudaStreamEndCapture(stream, graphPtr) == cudaSuccess) {
-    if (cudaGraphInstantiate(graphExecPtr, *graphPtr, NULL, NULL, 0) == cudaSuccess) {
-      *isCreatedFlag = 1; // cuda graph recorded
-    }
+  err = cudaStreamEndCapture(stream, graphPtr);
+  if (err != cudaSuccess) {
+    cudaStreamSynchronize(stream);
+    return err;
   }
+
+  err = cudaGraphInstantiate(graphExecPtr, *graphPtr, NULL, NULL, 0);
+  if (err != cudaSuccess) {
+    cudaGraphDestroy(*graphPtr);
+    return err;
+  }
+
+  *isCreatedFlag = 1;
+  return cudaSuccess;
 }
 
 cudaError_t nrLDPC_decoder_cuda_GraphExecute(cudaGraphExec_t graphExec,
@@ -1013,7 +1026,6 @@ void nrLDPC_decoder_cuda_NormalExecute(ldpc_cuda_bridge_t *buffer,
                                        cudaEvent_t *doneEvent)
 {
   cudaStream_t stream = streams[CudaStreamIdx];
-  int NodeEdgeCn, NodeEdgeBn;
 
   Kdim_R13_Edge[CudaStreamIdx].block = dim3(Z >> 2, 4, 1);
   Kdim_R13_Edge[CudaStreamIdx].grid = dim3(num_TotalBlocks_BG1_R13_Edge >> 2, n_segments, 1);

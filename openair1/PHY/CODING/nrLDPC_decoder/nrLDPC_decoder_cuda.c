@@ -61,6 +61,7 @@
 extern cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
 static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
 static bool decoder_streamsCreated = false;
+static volatile int cuda_graph_breaker = 0;
 cudaError_t Err;
 
 int8_t* cnProcBuf_dev;
@@ -71,7 +72,7 @@ int8_t* llrProcBuf_dev;
 int8_t* p_llr_dev;
 int8_t* p_out_dev;
 
-extern int pageable,integrated;
+extern int pageable, integrated;
 
 int cuda_support_init_decoder()
 {
@@ -92,7 +93,7 @@ int cuda_support_init_decoder()
 
   err = cudaMalloc((void**)&p_llr_dev, sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
   AssertFatal(err == cudaSuccess, "CUDA Error (p_llr_dev): %s\n", cudaGetErrorString(err));
-  cudaMemset(p_llr_dev,0,sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
+  cudaMemset(p_llr_dev, 0, sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
   err = cudaMalloc((void**)&p_out_dev, sizeof(int8_t) * MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
   AssertFatal(err == cudaSuccess, "CUDA Error (p_llr_dev): %s\n", cudaGetErrorString(err));
 
@@ -103,7 +104,7 @@ int cuda_support_init_decoder()
 
 static ldpc_cuda_bridge_t* stream_bridges[8];
 
-extern void nrLDPC_decoder_cuda_GraphRecord(ldpc_cuda_bridge_t* buffer,
+extern cudaError_t nrLDPC_decoder_cuda_GraphRecord(ldpc_cuda_bridge_t* buffer,
                                             uint32_t numLLR,
                                             int8_t* cnProcBuf,
                                             int8_t* bnProcBuf,
@@ -182,6 +183,8 @@ void init_decoder_warmup()
   // run-time traffic, but running them ensures the GPU pipeline is ready.
   // =====================================================================
 
+  cudaError_t err_warmup = cudaSuccess;
+
   // Sample configurations for warmup
   uint32_t Z_list[] = {320, 352, 384};
   uint8_t R_list[] = {13, 23};
@@ -203,78 +206,121 @@ void init_decoder_warmup()
   memset(dummy_output_bits, 0, output_size_bytes);
 
   printf("[CUDA] Initializing & Warming up Driver Pipeline...\n");
+  if (cuda_graph_breaker == 0) {
+    for (int r_idx = 0; r_idx < 2; r_idx++) {
+      for (int z_idx = 0; z_idx < 3; z_idx++) {
+        uint32_t Z = Z_list[z_idx];
+        uint8_t R = R_list[r_idx];
+        uint8_t BG = 1;
+        uint32_t K = 22 * Z;
+        uint32_t numLLR = (R == 13) ? NR_LDPC_NCOL_BG1_R13 * Z : NR_LDPC_NCOL_BG1_R23 * Z;
+        uint8_t numMaxIter = 2; // 2 iterations for faster warmup
+        uint8_t n_segments = STATIC_SEG_SIZE;
 
-  for (int r_idx = 0; r_idx < 2; r_idx++) {
-    for (int z_idx = 0; z_idx < 3; z_idx++) {
-      uint32_t Z = Z_list[z_idx];
-      uint8_t R = R_list[r_idx];
-      uint8_t BG = 1;
-      uint32_t K = 22 * Z;
-      uint32_t numLLR = (R == 13) ? NR_LDPC_NCOL_BG1_R13 * Z : NR_LDPC_NCOL_BG1_R23 * Z;
-      uint8_t numMaxIter = 2; // 2 iterations for faster warmup
-      uint8_t n_segments = STATIC_SEG_SIZE;
+        // Bind dummy buffers
+        gpu_graph_cache[node_idx].bridge_ptr->p_llr_ptr = dummy_input_llr;
+        gpu_graph_cache[node_idx].bridge_ptr->p_out_ptr = dummy_output_bits;
 
-      // Bind dummy buffers
-      gpu_graph_cache[node_idx].bridge_ptr->p_llr_ptr = dummy_input_llr;
-      gpu_graph_cache[node_idx].bridge_ptr->p_out_ptr = dummy_output_bits;
+        // Record graph
+        err_warmup = nrLDPC_decoder_cuda_GraphRecord(gpu_graph_cache[node_idx].bridge_ptr,
+                                                     numLLR,
+                                                     cnProcBuf_dev,
+                                                     bnProcBuf_dev,
+                                                     llrRes_dev,
+                                                     llrProcBuf_dev,
+                                                     Z,
+                                                     K,
+                                                     BG,
+                                                     R,
+                                                     numMaxIter,
+                                                     n_segments,
+                                                     nrLDPC_outMode_BIT,
+                                                     decoderStreams,
+                                                     0,
+                                                     &gpu_graph_cache[node_idx].graph,
+                                                     &gpu_graph_cache[node_idx].exec,
+                                                     (uint8_t*)&gpu_graph_cache[node_idx].occupied);
+        if (err_warmup != cudaSuccess) {
+          cuda_graph_breaker = 1; // Once a graph recording fails, forbidden the graph recording permanently
+          printf("[CUDA] Warmup Graph Record Failed (err=%s). Circuit breaker triggered\n", cudaGetErrorString(err_warmup));
+          break;
+        }
 
-      // Record graph
-      nrLDPC_decoder_cuda_GraphRecord(gpu_graph_cache[node_idx].bridge_ptr,
-                                      numLLR,
-                                      cnProcBuf_dev,
-                                      bnProcBuf_dev,
-                                      llrRes_dev,
-                                      llrProcBuf_dev,
-                                      Z,
-                                      K,
-                                      BG,
-                                      R,
-                                      numMaxIter,
-                                      n_segments,
-                                      nrLDPC_outMode_BIT,
-                                      decoderStreams,
-                                      0,
-                                      &gpu_graph_cache[node_idx].graph,
-                                      &gpu_graph_cache[node_idx].exec,
-                                      (uint8_t*)&gpu_graph_cache[node_idx].occupied);
+        // Save metadata
+        gpu_graph_cache[node_idx].Z = Z;
+        gpu_graph_cache[node_idx].R = R;
+        gpu_graph_cache[node_idx].K = K;
+        gpu_graph_cache[node_idx].numLLR = numLLR;
+        gpu_graph_cache[node_idx].BG = BG;
+        gpu_graph_cache[node_idx].numMaxIter = numMaxIter;
+        gpu_graph_cache[node_idx].n_segments = n_segments;
+        gpu_graph_cache[node_idx].outMode = nrLDPC_outMode_BIT;
 
-      // Save metadata
-      gpu_graph_cache[node_idx].Z = Z;
-      gpu_graph_cache[node_idx].R = R;
-      gpu_graph_cache[node_idx].K = K;
-      gpu_graph_cache[node_idx].numLLR = numLLR;
-      gpu_graph_cache[node_idx].BG = BG;
-      gpu_graph_cache[node_idx].numMaxIter = numMaxIter;
-      gpu_graph_cache[node_idx].n_segments = n_segments;
-      gpu_graph_cache[node_idx].outMode = nrLDPC_outMode_BIT;
+        node_idx++;
+      }
+    }
+    dynamic_cache_idx = node_idx;
 
-      node_idx++;
+    // Execute to trigger driver initialization
+    if (dynamic_cache_idx > 0) {
+      for (int i = 0; i < dynamic_cache_idx; i++) {
+        if (gpu_graph_cache[i].occupied) {
+          nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[i].exec, decoderStreams[0], NULL, 0);
+        }
+      }
+      cudaDeviceSynchronize();
+      printf("[CUDA] Driver warm-up complete. Executed %d dummy graphs.\n", dynamic_cache_idx);
+
+      // Mark slots as free and reset index so real traffic starts from slot 0
+      for (int i = 0; i < dynamic_cache_idx; i++) {
+        gpu_graph_cache[i].occupied = false;
+      }
+      printf("[CUDA] Cache cleared. Ready for dynamic recording.\n");
     }
   }
-  dynamic_cache_idx = node_idx;
+  dynamic_cache_idx = 0;
 
-  // Execute to trigger driver initialization
-  if (dynamic_cache_idx > 0) {
-    for (int i = 0; i < dynamic_cache_idx; i++) {
-      if (gpu_graph_cache[i].occupied) {
-        nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[i].exec, decoderStreams[0], NULL, 0);
+  if (cuda_graph_breaker == 1) {
+    printf("[CUDA] Using Normal Execution for Warmup (Graph Disabled).\n");
+    for (int r_idx = 0; r_idx < 2; r_idx++) {
+      for (int z_idx = 0; z_idx < 3; z_idx++) {
+        uint32_t Z = Z_list[z_idx];
+        uint8_t R = R_list[r_idx];
+        uint8_t BG = 1;
+        uint32_t K = 22 * Z;
+        uint32_t numLLR = (R == 13) ? NR_LDPC_NCOL_BG1_R13 * Z : NR_LDPC_NCOL_BG1_R23 * Z;
+        uint8_t numMaxIter = 2; // 2 iterations for faster warmup
+        uint8_t n_segments = STATIC_SEG_SIZE;
+
+        // Bind dummy buffers
+        gpu_graph_cache[0].bridge_ptr->p_llr_ptr = dummy_input_llr;
+        gpu_graph_cache[0].bridge_ptr->p_out_ptr = dummy_output_bits;
+
+        // normal execution
+        nrLDPC_decoder_cuda_NormalExecute(gpu_graph_cache[0].bridge_ptr,
+                                          numLLR,
+                                          cnProcBuf_dev,
+                                          bnProcBuf_dev,
+                                          llrRes_dev,
+                                          llrProcBuf_dev,
+                                          Z,
+                                          K,
+                                          BG,
+                                          R,
+                                          numMaxIter,
+                                          n_segments,
+                                          nrLDPC_outMode_BIT,
+                                          decoderStreams,
+                                          0,
+                                          NULL);
       }
     }
     cudaDeviceSynchronize();
-    printf("[CUDA] Driver warm-up complete. Executed %d dummy graphs.\n", dynamic_cache_idx);
-
-    // Mark slots as free and reset index so real traffic starts from slot 0
-    for (int i = 0; i < dynamic_cache_idx; i++) {
-      gpu_graph_cache[i].occupied = false;
-    }
-    dynamic_cache_idx = 0;
-    printf("[CUDA] Cache cleared. Ready for dynamic recording.\n");
+    printf("[CUDA] Driver warm-up complete with normal execution\n");
   }
-
   cudaFreeHost(dummy_input_llr);
   cudaFreeHost(dummy_output_bits);
 }
-
 void init_decoder_gpu_structures()
 {
   printf("[CUDA] Initializing Global GPU Structures...\n");
@@ -365,7 +411,6 @@ int32_t LDPCinit_cuda()
 
 int32_t LDPCshutdown_cuda()
 {
-
   cudaFree(p_llr_dev);
   cudaFree(p_out_dev);
   for (int s = 0; s < 8; ++s) {
@@ -426,6 +471,8 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
                                                    t_nrLDPC_time_stats* p_profiler,
                                                    decode_abort_t* ab)
 {
+  cudaError_t err_core = cudaSuccess;
+  bool graph_executed = false;
 
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
@@ -440,73 +487,92 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
 
   // Output size safety: assume worst-case unpacked bytes (K * n_segments)
   size_t total_output_size = n_segments * K * sizeof(int8_t);
-  int found_idx = -1;
 
-  // Search in Graph Cache
-  for (int i = 0; i < dynamic_cache_idx; i++) {
-    if (gpu_graph_cache[i].occupied && gpu_graph_cache[i].Z == Z && gpu_graph_cache[i].R == R && gpu_graph_cache[i].BG == BG
-        && gpu_graph_cache[i].K == K && gpu_graph_cache[i].numLLR == numLLR && gpu_graph_cache[i].numMaxIter == numMaxIter
-        && gpu_graph_cache[i].n_segments == n_segments && gpu_graph_cache[i].outMode == outMode) {
-      found_idx = i;
-      break;
+  if (cuda_graph_breaker == 0) {
+    int found_idx = -1;
+    // Search in Graph Cache
+    for (int i = 0; i < dynamic_cache_idx; i++) {
+      if (gpu_graph_cache[i].occupied && gpu_graph_cache[i].Z == Z && gpu_graph_cache[i].R == R && gpu_graph_cache[i].BG == BG
+          && gpu_graph_cache[i].K == K && gpu_graph_cache[i].numLLR == numLLR && gpu_graph_cache[i].numMaxIter == numMaxIter
+          && gpu_graph_cache[i].n_segments == n_segments && gpu_graph_cache[i].outMode == outMode) {
+        found_idx = i;
+        break;
+      }
+    }
+
+    if (found_idx >= 0) {
+      // === Cache HIT: Execute Recorded Graph ===
+      gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
+      gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = (pageable || integrated) ? p_out : p_out_dev;
+
+      err_core = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[found_idx].exec,
+                                                  decoderStreams[0],
+                                                  NULL, // doneEvent
+                                                  0); // Stream Index
+      if (err_core == cudaSuccess) {
+        graph_executed = true;
+      } else {
+        cuda_graph_breaker = 1;
+      }
+    } else if (dynamic_cache_idx < MAX_GRAPH_CACHE_SIZE) {
+      // === Cache MISS: Record New Graph and Execute ===
+      int new_idx = dynamic_cache_idx;
+
+      gpu_graph_cache[new_idx].occupied = true;
+      gpu_graph_cache[new_idx].Z = Z;
+      gpu_graph_cache[new_idx].R = R;
+      gpu_graph_cache[new_idx].BG = BG;
+      gpu_graph_cache[new_idx].K = K;
+      gpu_graph_cache[new_idx].numLLR = numLLR;
+      gpu_graph_cache[new_idx].numMaxIter = numMaxIter;
+      gpu_graph_cache[new_idx].n_segments = n_segments;
+      gpu_graph_cache[new_idx].outMode = outMode;
+
+      // Use the determined pointers (Device ptrs for PCIe, Host ptrs for GH200)
+      gpu_graph_cache[new_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
+      gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = pageable || integrated ? p_out : p_out_dev;
+
+      err_core = nrLDPC_decoder_cuda_GraphRecord(gpu_graph_cache[new_idx].bridge_ptr,
+                                                 numLLR,
+                                                 cnProcBuf_dev,
+                                                 bnProcBuf_dev,
+                                                 llrRes_dev,
+                                                 llrProcBuf_dev,
+                                                 Z,
+                                                 K,
+                                                 BG,
+                                                 R,
+                                                 numMaxIter,
+                                                 n_segments,
+                                                 outMode,
+                                                 decoderStreams,
+                                                 0, // CudaStreamIdx
+                                                 &gpu_graph_cache[new_idx].graph,
+                                                 &gpu_graph_cache[new_idx].exec,
+                                                 (uint8_t*)&gpu_graph_cache[new_idx].occupied);
+      if (err_core == cudaSuccess) {
+        err_core = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[new_idx].exec, decoderStreams[0], NULL, 0);
+
+        if (err_core == cudaSuccess) {
+          graph_executed = true;
+          dynamic_cache_idx++;
+        } else {
+          cuda_graph_breaker = 1; // graph execution fail
+        }
+      } else {
+        cuda_graph_breaker = 1; // graph record fail
+      }
     }
   }
 
-  if (0 /*found_idx >= 0*/) {
-    // === Cache HIT: Execute Recorded Graph ===
-    gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
-    gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = (pageable || integrated) ? p_out : p_out_dev;
-
-    nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[found_idx].exec,
-                                     decoderStreams[0],
-                                     NULL, // doneEvent
-                                     0); // Stream Index
-  } else if (0 /*dynamic_cache_idx < MAX_GRAPH_CACHE_SIZE*/) {
-    // === Cache MISS: Record New Graph and Execute ===
-    int new_idx = dynamic_cache_idx;
-
-    gpu_graph_cache[new_idx].occupied = true;
-    gpu_graph_cache[new_idx].Z = Z;
-    gpu_graph_cache[new_idx].R = R;
-    gpu_graph_cache[new_idx].BG = BG;
-    gpu_graph_cache[new_idx].K = K;
-    gpu_graph_cache[new_idx].numLLR = numLLR;
-    gpu_graph_cache[new_idx].numMaxIter = numMaxIter;
-    gpu_graph_cache[new_idx].n_segments = n_segments;
-    gpu_graph_cache[new_idx].outMode = outMode;
-
-    // Use the determined pointers (Device ptrs for PCIe, Host ptrs for GH200)
-    gpu_graph_cache[new_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
-    gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = pageable || integrated ? p_out : p_out_dev;
-
-    nrLDPC_decoder_cuda_GraphRecord(gpu_graph_cache[new_idx].bridge_ptr,
-                                    numLLR,
-                                    cnProcBuf_dev,
-                                    bnProcBuf_dev,
-                                    llrRes_dev,
-                                    llrProcBuf_dev,
-                                    Z,
-                                    K,
-                                    BG,
-                                    R,
-                                    numMaxIter,
-                                    n_segments,
-                                    outMode,
-                                    decoderStreams,
-                                    0, // CudaStreamIdx
-                                    &gpu_graph_cache[new_idx].graph,
-                                    &gpu_graph_cache[new_idx].exec,
-                                    (uint8_t*)&gpu_graph_cache[new_idx].occupied);
-
-    nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[new_idx].exec, decoderStreams[0], NULL, 0);
-
-    dynamic_cache_idx++;
-
-  } else {
+  if (!graph_executed) {
     // === Cache FULL: Fallback to Normal Execution ===
     // If the cache is full, we cannot record new graphs.
+    // Or graph operation is not safe in this device or environment.
     // Execute kernel directly using standard launch.
-
+    if (cuda_graph_breaker == 1) {
+      LOG_W(PHY, "Graph opereations failed, falling back to normal.\n");
+    }
     ldpc_cuda_bridge_t* perpack_buffer = stream_bridges[0];
     perpack_buffer->p_llr_ptr = p_llr_dev;
     perpack_buffer->p_out_ptr = pageable || integrated ? p_out : p_out_dev;
@@ -543,7 +609,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   cudaStreamSynchronize(decoderStreams[0]);
   if (p_decParams->check_crc) {
     for (int r = 0; r < n_segments; r++) {
-//      if (r<=1) for (int i=0;i<(K>>3);i++) printf("byte (%d,%d) %x\n",r,i,((uint8_t*)(p_out+r*(K>>3)))[i]);
+      //      if (r<=1) for (int i=0;i<(K>>3);i++) printf("byte (%d,%d) %x\n",r,i,((uint8_t*)(p_out+r*(K>>3)))[i]);
 
       if (!p_decParams->check_crc((uint8_t*)(p_out + (r * (K >> 3))), p_decParams->Kprime, p_decParams->crc_type)) {
         LOG_D(PHY, "Segment %d/%d CRC NOK\n", r, n_segments);
