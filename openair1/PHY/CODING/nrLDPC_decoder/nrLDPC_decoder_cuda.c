@@ -566,7 +566,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   }
 
   if (!graph_executed) {
-    // === Cache FULL: Fallback to Normal Execution ===
+    // === Fallback to Normal Execution ===
     // If the cache is full, we cannot record new graphs.
     // Or graph operation is not safe in this device or environment.
     // Execute kernel directly using standard launch.
