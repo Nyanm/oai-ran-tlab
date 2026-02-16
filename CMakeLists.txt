@@ -1074,9 +1074,9 @@ if (ENABLE_CUDA)
   endif()
   #SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_80 -g -ggdb") # A100
   #SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_90") # GH200
-  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_87") # Jetson
+  #SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_87") # Jetson
   #SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_89") # L40S
-  #  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_121") # GB10
+  SET(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-arch=sm_121") # GB10
   set(CUDA_VERBOS_BUILD_ON)
   cuda_add_library(PHY_NR ${PHY_NR_SRC} ${PHY_NR_SRC_CU})
   cuda_add_library(PHY_NR_UE ${PHY_NR_UE_SRC} ${PHY_NR_UE_SRC_CU})

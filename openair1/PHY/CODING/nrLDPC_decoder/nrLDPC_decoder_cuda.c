@@ -565,8 +565,58 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
     }
   }
 
-  if (!graph_executed) {
-    // === Fallback to Normal Execution ===
+  if (found_idx >= 0) {
+    // === Cache HIT: Execute Recorded Graph ===
+    gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
+    gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = (pageable || integrated) ? p_out : p_out_dev;
+
+    nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[found_idx].exec,
+                                     decoderStreams[0],
+                                     NULL, // doneEvent
+                                     0); // Stream Index
+  } else if (dynamic_cache_idx < MAX_GRAPH_CACHE_SIZE) {
+    // === Cache MISS: Record New Graph and Execute ===
+    int new_idx = dynamic_cache_idx;
+
+    gpu_graph_cache[new_idx].occupied = true;
+    gpu_graph_cache[new_idx].Z = Z;
+    gpu_graph_cache[new_idx].R = R;
+    gpu_graph_cache[new_idx].BG = BG;
+    gpu_graph_cache[new_idx].K = K;
+    gpu_graph_cache[new_idx].numLLR = numLLR;
+    gpu_graph_cache[new_idx].numMaxIter = numMaxIter;
+    gpu_graph_cache[new_idx].n_segments = n_segments;
+    gpu_graph_cache[new_idx].outMode = outMode;
+
+    // Use the determined pointers (Device ptrs for PCIe, Host ptrs for GH200)
+    gpu_graph_cache[new_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
+    gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = pageable || integrated ? p_out : p_out_dev;
+
+    nrLDPC_decoder_cuda_GraphRecord(gpu_graph_cache[new_idx].bridge_ptr,
+                                    numLLR,
+                                    cnProcBuf_dev,
+                                    bnProcBuf_dev,
+                                    llrRes_dev,
+                                    llrProcBuf_dev,
+                                    Z,
+                                    K,
+                                    BG,
+                                    R,
+                                    numMaxIter,
+                                    n_segments,
+                                    outMode,
+                                    decoderStreams,
+                                    0, // CudaStreamIdx
+                                    &gpu_graph_cache[new_idx].graph,
+                                    &gpu_graph_cache[new_idx].exec,
+                                    (uint8_t*)&gpu_graph_cache[new_idx].occupied);
+
+    nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[new_idx].exec, decoderStreams[0], NULL, 0);
+
+    dynamic_cache_idx++;
+
+  } else {
+    // === Cache FULL: Fallback to Normal Execution ===
     // If the cache is full, we cannot record new graphs.
     // Or graph operation is not safe in this device or environment.
     // Execute kernel directly using standard launch.
@@ -615,6 +665,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
         LOG_D(PHY, "Segment %d/%d CRC NOK\n", r, n_segments);
         return (1 + numMaxIter);
       }
+      /*
       uint8_t *b=(uint8_t*)(p_out + (r*(K>>3)));
       int i=0;
       if (b[K-2] == 0 && b[K - 1] == 0) {
@@ -624,6 +675,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
               LOG_E(PHY, "received all 0 pdu (K %d, r %d)\n",K,r);
             }
       }
+      */
     }
   }
   return numMaxIter;

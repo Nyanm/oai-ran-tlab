@@ -291,8 +291,8 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
       }
     } else {
         fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_config = &dlsch[DLSCH_id].dlsch_config;
-        LOG_I(PHY, "frame=%d, slot=%d, first_rx=%d, rv_index=%d\n", proc->frame_rx, proc->nr_slot_rx, harq_process->first_rx, dlsch_config->rv);
-        LOG_I(PHY, "DLSCH %d in error\n", DLSCH_id);
+        LOG_D(PHY, "frame=%d, slot=%d, harq_pid %d, first_rx=%d, rv_index=%d, A %d, K %d, F %d, C %d,E %d,E2 %d,Qm %d\n", proc->frame_rx, proc->nr_slot_rx, harq_pid, harq_process->first_rx, dlsch_config->rv,TB_parameters->A, harq_process->K,harq_process->F,harq_process->C,TB_parameters->E,TB_parameters->E2,TB_parameters->Qm);
+        LOG_D(PHY, "DLSCH %d in error\n", DLSCH_id);
     }
     
     merge_meas(&phy_vars_ue->phy_cpu_stats.cpu_time_stats[DLSCH_DEINTERLEAVING_STATS], &TB_parameters->ts_deinterleave);

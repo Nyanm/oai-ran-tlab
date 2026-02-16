@@ -234,7 +234,7 @@ static void nr_process_decode_segment(void *arg)
   ////////////////////////////////// pl =====> llrProcBuf //////////////////////////////////
   start_meas(rdata->p_ts_ldpc_decode);
   int decodeIterations = LDPCdecoder(p_decoderParms, l, (uint8_t*)llrProcBuf, p_procTime, rdata->abort_decode);
-  AssertFatal(rdata->c,"rdata->c is null\n");
+  AssertFatal(rdata->c,"rdata->c is null, A %d, K %d\n",rdata->A,rdata->K);
   if (decodeIterations < p_decoderParms->numMaxIter) {
     memcpy(rdata->c, llrProcBuf, K >> 3);
     *rdata->decodeSuccess = true;
@@ -310,6 +310,7 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
       rdata->d = nrLDPC_TB_decoding_parameters->d + r*rdata->Kc*rdata->Z;
       rdata->d_to_be_cleared = nrLDPC_TB_decoding_parameters->d_to_be_cleared;
       rdata->c = nrLDPC_TB_decoding_parameters->c + r*(rdata->K>>3);
+      AssertFatal(rdata->c!=NULL,"rdata->c is null, r %d, K %d, A %d, rv_index %d, TB_decoding_parameters->c %p\n",r,rdata->K,rdata->A,rdata->rv_index,nrLDPC_TB_decoding_parameters->c);
       rdata->llr = nrLDPC_TB_decoding_parameters->llr + llr_offset; //rdata->Kc*rdata->Z;
       rdata->decodeSuccess = &nrLDPC_TB_decoding_parameters->decodeSuccess[r];
       rdata->p_ts_deinterleave = &nrLDPC_TB_decoding_parameters->ts_deinterleave;
@@ -380,7 +381,7 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_dec
   // check if at least one PUSCH has a Zc<384 or BG=2
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
     nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
-    if (use_gpu == 0 || nrLDPC_TB_decoding_parameters->Z < 128 ||  nrLDPC_TB_decoding_parameters->BG == 2) {
+    if (use_gpu == 0 || nrLDPC_TB_decoding_parameters->Z < 128 ||  nrLDPC_TB_decoding_parameters->BG == 2 || nrLDPC_TB_decoding_parameters->R==89) {
 	do_join=true;    
 	break;
     }
