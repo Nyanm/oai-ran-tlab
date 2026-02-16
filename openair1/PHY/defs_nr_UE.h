@@ -359,6 +359,11 @@ typedef struct {
   int used_by_ue;
 } nrUE_cell_params_t;
 
+typedef struct {
+  Actor_t actor;
+  void *workspace_buffer;
+} dl_actor_t;
+
 /// Top-level PHY Data Structure for UE
 typedef struct PHY_VARS_NR_UE_s {
   /// \brief Module ID indicator for this instance
@@ -546,7 +551,7 @@ typedef struct PHY_VARS_NR_UE_s {
   sl_nr_sidelink_mode_t sl_mode;
   sl_nr_ue_phy_params_t SL_UE_PHY_PARAMS;
   Actor_t sync_actor;
-  Actor_t *dl_actors;
+  dl_actor_t *dl_actors;
   Actor_t *ul_actors;
   pthread_t main_thread;
   pthread_t stat_thread;
@@ -654,6 +659,7 @@ typedef struct nr_rxtx_thread_data_s {
   nr_phy_data_t phy_data;
   dynamic_barrier_t* next_barrier;
   uint64_t absolute_deadline_us;
+  void *workspace_buffer;
 } nr_rxtx_thread_data_t;
 
 typedef struct LDPCDecode_ue_s {

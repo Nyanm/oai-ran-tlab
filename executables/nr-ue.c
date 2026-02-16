@@ -511,7 +511,7 @@ static int handle_sync_req_from_mac(PHY_VARS_NR_UE *UE)
     /* Clearing UE harq while DL actors are active causes race condition.
         So we let the current execution to complete here.*/
     for (int i = 0; i < get_nrUE_params()->num_dl_actors; i++) {
-      flush_actor(UE->dl_actors + i);
+      FLUSH_ACTOR(UE->dl_actors + i);
     }
     for (int i = 0; i < get_nrUE_params()->num_ul_actors; i++) {
       flush_actor(UE->ul_actors + i);
@@ -612,6 +612,8 @@ void UE_dl_processing(void *arg) {
   UE_nr_rxtx_proc_t *proc = &rxtxD->proc;
   PHY_VARS_NR_UE    *UE   = rxtxD->UE;
   nr_phy_data_t *phy_data = &rxtxD->phy_data;
+  void *workspace_buffer = rxtxD->workspace_buffer;
+  (void)workspace_buffer;
 
   if (!UE->sl_mode)
     pdsch_processing(UE, proc, phy_data);
@@ -1025,8 +1027,11 @@ void *UE_thread(void *arg)
     if (ret != INT_MAX)
       shiftForNextFrame = ret;
     if (get_nrUE_params()->num_dl_actors > 0) {
-      pushNotifiedFIFO(&UE->dl_actors[curMsg.proc.nr_slot_rx % get_nrUE_params()->num_dl_actors].fifo, newRx);
+      int actor_index  = (curMsg.proc.nr_slot_rx % get_nrUE_params()->num_dl_actors);
+      curMsgRx->workspace_buffer = UE->dl_actors[actor_index].workspace_buffer;
+      pushNotifiedFIFO(&UE->dl_actors[actor_index].actor.fifo, newRx);
     } else {
+      curMsgRx->workspace_buffer = NULL; // This is a single threaded case, possibly just allocate the buffers
       newRx->processingFunc(curMsgRx);
     }
 

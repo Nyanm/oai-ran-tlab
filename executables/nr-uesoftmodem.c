@@ -20,6 +20,7 @@
  */
 
 
+#include "platform_types.h"
 #define _GNU_SOURCE             /* See feature_test_macros(7) */
 #include <sched.h>
 #include <stdbool.h>
@@ -404,7 +405,8 @@ int main(int argc, char **argv)
       if (get_nrUE_params()->num_dl_actors > 0) {
         UE_CC->dl_actors = calloc_or_fail(get_nrUE_params()->num_dl_actors, sizeof(*UE_CC->dl_actors));
         for (int i = 0; i < get_nrUE_params()->num_dl_actors; i++) {
-          init_actor(&UE_CC->dl_actors[i], "DL_", -1);
+          INIT_ACTOR(&UE_CC->dl_actors[i], "DL_", -1);
+          UE_CC->dl_actors[i].workspace_buffer = malloc(sizeof(c16_t) * 1000);
         }
       }
       if (get_nrUE_params()->num_ul_actors > 0) {
@@ -481,7 +483,7 @@ int main(int argc, char **argv)
           shutdown_actor(&phy_vars->ul_actors[i]);
         }
         for (int i = 0; i < get_nrUE_params()->num_dl_actors; i++) {
-          shutdown_actor(&phy_vars->dl_actors[i]);
+          SHUTDOWN_ACTOR(&phy_vars->dl_actors[i]);
         }
         int ret = pthread_join(phy_vars->main_thread, NULL);
         AssertFatal(ret == 0, "pthread_join error %d, errno %d (%s)\n", ret, errno, strerror(errno));
