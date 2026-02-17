@@ -215,29 +215,29 @@ double __attribute__ ((no_sanitize("address", "undefined"))) gaussZiggurat(doubl
 double nfix_MT(gaussZiggurat_MT_t *gz)
 {
   const double r = 3.442620;
-  static double x, y;
 
   for (;;) {
-    x = gz->hz * gz->wn[gz->iz];
+    /* use per-instance x,y stored in gz */
+    gz->x = gz->hz * gz->wn[gz->iz];
 
     if (gz->iz == 0) {
       do {
-        x = -0.2904764 * log(UNI_MT);
-        y = -log(UNI_MT);
-      } while (y + y < x * x);
+        gz->x = -0.2904764 * log(UNI_MT);
+        gz->y = -log(UNI_MT);
+      } while (gz->y + gz->y < gz->x * gz->x);
 
-      return (gz->hz > 0) ? r + x : -r - x;
+      return (gz->hz > 0) ? r + gz->x : -r - gz->x;
     }
 
-    if (gz->fn[gz->iz] + UNI_MT * (gz->fn[gz->iz - 1] - gz->fn[gz->iz]) < exp(-0.5 * x * x)) {
-      return x;
+    if (gz->fn[gz->iz] + UNI_MT * (gz->fn[gz->iz - 1] - gz->fn[gz->iz]) < exp(-0.5 * gz->x * gz->x)) {
+      return gz->x;
     }
 
     gz->hz = SHR3_MT;
     gz->iz = gz->hz & 127;
 
     if (abs(gz->hz) < gz->kn[gz->iz]) {
-      return ((gz->hz)*gz->wn[gz->iz]);
+      return ((gz->hz) * gz->wn[gz->iz]);
     }
   }
 }
@@ -275,11 +275,13 @@ double __attribute__ ((no_sanitize("address", "undefined"))) gaussZiggurat_MT(do
 {
   if (!gz->tableNordDone) {
     gz->jsr = 123456789;
-    // let's make reasonnable constant tables
+    gz->iset = 0;    /* initialize Box–Muller state */
+    /* let's make reasonable constant tables */
     unsigned long seed;
     fill_random(&seed, sizeof(seed));
     tableNor_MT(seed, gz);
   }
+
   gz->hz = SHR3_MT;
   gz->iz = gz->hz & 127;
   return gz->hz != INT32_MIN && abs(gz->hz) < gz->kn[gz->iz] ? gz->hz * gz->wn[gz->iz] : nfix_MT(gz);

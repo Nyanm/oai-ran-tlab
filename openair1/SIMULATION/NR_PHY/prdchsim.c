@@ -238,21 +238,40 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
 
   start_meas(&time_multipath_stats);
 
-  uint64_t txlev_sum = 0;
+  for(int i = frame->packet_samples; i < frame->packet_samples + DELAY_MAX + 200; i++) {
+    for (int j = 0; j < frame->nr_frame_parms.nb_antennas_tx; j++) {
+      // Clear the array
+      s_re[j][i] = 0.0;
+      s_im[j][i] = 0.0;
+    }
+  }
 
-  for (int i = 0; i < frame->packet_samples; i++) {
+  for(int i = 0; i < frame->packet_samples; i++) {
     // Copy to double
     s_re[0][i] = (double) in[i].r;
     s_im[0][i] = (double) in[i].i;
-
-    // Calculate power
-    txlev_sum += in[i].r * in[i].r + in[i].i * in[i].i;
   }
 
   for(int i = 0; i < frame->packet_samples + DELAY_MAX + 200; i++) {
-    // Clear array
-    r_re[0][i] = 0.0;
-    r_im[0][i] = 0.0;
+    for (int j = 0; j < frame->nr_frame_parms.nb_antennas_tx; j++) {
+      // Clear array
+      r_re[j][i] = 0.0;
+      r_im[j][i] = 0.0;
+    }
+  }
+
+  multipath_channel_MT(channel, s_re, s_im, r_re, r_im, frame->packet_samples + DELAY_MAX + 200, 0, 1, gz);
+
+  stop_meas(&time_multipath_stats);
+  *time_multipath += time_multipath_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+
+  start_meas(&time_noise_stats);
+
+  uint64_t txlev_sum = 0;
+
+  for (int i = channel->channel_offset; i < channel->channel_offset + frame->packet_samples; i++) {
+    // Calculate power
+    txlev_sum += r_re[0][i] * r_re[0][i] + r_im[0][i] * r_im[0][i];
   }
 
   uint32_t txlev = txlev_sum / frame->packet_samples;
@@ -271,13 +290,6 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
     printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dBm);
   }
 
-  multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + DELAY_MAX + 200, 0, 1);
-
-  stop_meas(&time_multipath_stats);
-  *time_multipath += time_multipath_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-
-  start_meas(&time_noise_stats);
-
   add_noise_MT(rxData,
             (const double **)r_re,
             (const double **)r_im,
@@ -295,10 +307,10 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
   *time_noise += time_noise_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
 }
 
-void AIOT_R2D_PHY_RX_Envelope_Detector(int16_t *envelope, const c16_t **rxData, int rx_size)
+void AIOT_R2D_PHY_RX_Envelope_Detector(int16_t *envelope, const c16_t *rxData, int rx_size)
 {
   // Cast to linear int16 pointer for easier SIMD indexing
-  const int16_t *src = (const int16_t*)rxData[0];
+  const int16_t *src = (const int16_t*)rxData;
   int i = 0;
 
 #if defined(__AVX512F__) && defined(__AVX512BW__)
@@ -466,7 +478,78 @@ void AIOT_R2D_PHY_RX_Filter(int16_t *out, const int16_t *in, int length, iir_but
   }
 }
 
-void AIOT_R2D_PHY_RX_Downsample(int16_t *out, const int16_t *in, int length, NR_AIOT_DL_FRAME_PARMS *frame)
+// Lowpass Butterworth order 3 filter for complex input/output
+void AIOT_R2D_PHY_RX_Filter_Complex(c16_t *out, const c16_t *in, int length, iir_butter3_fixed_t *filt)
+{
+  // Local States (Q22 format) for real and imaginary parts
+  int64_t s1_0_re = 0, s1_0_im = 0;
+  int64_t s2_0_re = 0, s2_1_re = 0;
+  int64_t s2_0_im = 0, s2_1_im = 0;
+
+  int64_t c1_b0 = filt->sec1.b[0], c1_b1 = filt->sec1.b[1], c1_a1 = filt->sec1.a[1];
+  int64_t c2_b0 = filt->sec2.b[0], c2_b1 = filt->sec2.b[1], c2_b2 = filt->sec2.b[2];
+  int64_t c2_a1 = filt->sec2.a[1], c2_a2 = filt->sec2.a[2];
+
+  for (int n = 0; n < length; n++) {
+    int64_t x_re = in[n].r; // Q0
+    int64_t x_im = in[n].i; // Q0
+
+    // ============================================================
+    // Section 1 (DF-II Transposed) - Real
+    // ============================================================
+    int64_t y1_high_re = (c1_b0 * x_re) + s1_0_re; // Q22
+    s1_0_re = (c1_b1 * x_re) - ((c1_a1 * y1_high_re) >> Q_SHIFT);
+
+    // Section 1 (DF-II Transposed) - Imag
+    int64_t y1_high_im = (c1_b0 * x_im) + s1_0_im; // Q22
+    s1_0_im = (c1_b1 * x_im) - ((c1_a1 * y1_high_im) >> Q_SHIFT);
+
+    // ============================================================
+    // Section 2 (DF-II Transposed) - Real
+    // ============================================================
+    int64_t y2_high_re = ((c2_b0 * y1_high_re) >> Q_SHIFT) + s2_0_re; // Q22
+    int64_t term_b1_re = (c2_b1 * y1_high_re) >> Q_SHIFT;
+    int64_t term_a1_re = (c2_a1 * y2_high_re) >> Q_SHIFT;
+    int64_t new_s2_0_re = (term_b1_re - term_a1_re) + s2_1_re;
+    int64_t term_b2_re = (c2_b2 * y1_high_re) >> Q_SHIFT;
+    int64_t term_a2_re = (c2_a2 * y2_high_re) >> Q_SHIFT;
+    int64_t new_s2_1_re = (term_b2_re - term_a2_re);
+
+    s2_0_re = new_s2_0_re;
+    s2_1_re = new_s2_1_re;
+
+    // ============================================================
+    // Section 2 (DF-II Transposed) - Imag
+    // ============================================================
+    int64_t y2_high_im = ((c2_b0 * y1_high_im) >> Q_SHIFT) + s2_0_im; // Q22
+    int64_t term_b1_im = (c2_b1 * y1_high_im) >> Q_SHIFT;
+    int64_t term_a1_im = (c2_a1 * y2_high_im) >> Q_SHIFT;
+    int64_t new_s2_0_im = (term_b1_im - term_a1_im) + s2_1_im;
+    int64_t term_b2_im = (c2_b2 * y1_high_im) >> Q_SHIFT;
+    int64_t term_a2_im = (c2_a2 * y2_high_im) >> Q_SHIFT;
+    int64_t new_s2_1_im = (term_b2_im - term_a2_im);
+
+    s2_0_im = new_s2_0_im;
+    s2_1_im = new_s2_1_im;
+
+    // ============================================================
+    // Output Stage and saturation
+    // ============================================================
+    int64_t y_out_re = (y2_high_re + Q_HALF) >> Q_SHIFT;
+    int64_t y_out_im = (y2_high_im + Q_HALF) >> Q_SHIFT;
+
+    if (y_out_re > 32767) y_out_re = 32767;
+    else if (y_out_re < -32768) y_out_re = -32768;
+
+    if (y_out_im > 32767) y_out_im = 32767;
+    else if (y_out_im < -32768) y_out_im = -32768;
+
+    out[n].r = (int16_t)y_out_re;
+    out[n].i = (int16_t)y_out_im;
+  }
+}
+
+void AIOT_R2D_PHY_RX_Downsample(c16_t *out, const c16_t *in, int length, NR_AIOT_DL_FRAME_PARMS *frame)
 {
   for (int i = 0; i < frame->packet_downsampled_samples; i++) {
     out[i] = in[i * frame->N];
@@ -629,8 +712,11 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
   // Get energy of last bit0 of SIP (its zero)
   for (int j = 0; j < M4_chip_size; j++)
   {
+    Noise_energy += signal[SIP_offset + (4+3)*M4_chip_size + j];
     Noise_energy += signal[SIP_offset + j];
   }
+
+  Noise_energy /= 2;
 
   int position = SIP_offset + frame_parms->SIP_samples + downsampled_CP_size; // Start of R-TAS-CAP (after CP)
 
@@ -662,6 +748,8 @@ void AIOT_R2D_PHY_RX_GetPacket(uint8_t *rx_payload, const int16_t *signal, int S
   } else { // default M=1
     frame_parms->received_M = 1;
   }
+
+  frame_parms->received_M = frame_parms->M; // For testing, force M to transmitted value
 
   if(testing_mode && !testing_timing) {
     printf("[RX M detector] CAP energies: %d %d %d %d\n", CAP_energy[0], CAP_energy[1], CAP_energy[2], CAP_energy[3]);
@@ -894,8 +982,8 @@ void* process_snr_range(void* arg) {
   }
   
   int16_t *envelope = malloc(rx_size * sizeof(uint16_t));
-  int16_t *filteredData = malloc(rx_size * sizeof(uint16_t));
-  int16_t *downSampled = malloc((rx_size / local_frame_parms->N) * sizeof(uint16_t));
+  c16_t *filteredData = malloc(rx_size * sizeof(c16_t));
+  c16_t *downSampled = malloc((rx_size / local_frame_parms->N) * sizeof(c16_t));
   uint8_t *rx_payload = malloc(MAX_AIOT_R2D_PACKET_SIZE);
   int *correlation = malloc((rx_size / local_frame_parms->N - local_frame_parms->SIP_samples) * sizeof(int));
   
@@ -957,7 +1045,7 @@ void* process_snr_range(void* arg) {
 
       // Add CRC to payload
       AIOT_R2D_PHY_TX_AddCRC(local_payload, local_payload, local_frame_parms);
-      
+
       if(testing_timing) {
         stop_meas(&local_time_stats);
         data->time_tx_CRC += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
@@ -999,7 +1087,7 @@ void* process_snr_range(void* arg) {
       }
 
       // Per-thread variables to avoid conflicts
-      channel_desc_t *channel_params = new_channel_desc_scm(local_frame_parms->nr_frame_parms.nb_antennas_tx,
+      channel_desc_t *channel_params = new_channel_desc_scm_MT(local_frame_parms->nr_frame_parms.nb_antennas_tx,
                                             local_frame_parms->nr_frame_parms.nb_antennas_rx,
                                             data->channel_model->channel_model,
                                             data->channel_model->sampling_rate,
@@ -1011,7 +1099,8 @@ void* process_snr_range(void* arg) {
                                             0,
                                             data->channel_model->delay,
                                             data->channel_model->path_loss_dB,
-                                            data->channel_model->noise_power_dB);
+                                            data->channel_model->noise_power_dB,
+                                            &gz);
       
       SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, local_channel_model.SNR, local_frame_parms,
                             s_re, s_im, r_re, r_im, &data->time_multipath, &data->time_noise, &gz);
@@ -1042,26 +1131,12 @@ void* process_snr_range(void* arg) {
         reset_meas(&local_time_stats);
         start_meas(&local_time_stats);
       }
-      
-      AIOT_R2D_PHY_RX_Envelope_Detector(envelope, (const c16_t **) rxData, rx_size);
 
-      if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
-        sprintf(filename, "%s/R2D_Envelope.m", folderplots);
-        LOG_M(filename, "Envelope_sig", envelope, rx_size, 1, 0);
-      }
-      
-      if(testing_timing) {
-        stop_meas(&local_time_stats);
-        data->time_envelope += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
-        reset_meas(&local_time_stats);
-        start_meas(&local_time_stats);
-      }
-      
-      AIOT_R2D_PHY_RX_Filter(filteredData, (const int16_t *) envelope, rx_size, &local_filter);
+      AIOT_R2D_PHY_RX_Filter_Complex(filteredData, rxData[0], rx_size, &local_filter);
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_Filter.m", folderplots);
-        LOG_M(filename, "Filter_sig", filteredData, rx_size, 1, 0);
+        LOG_M(filename, "Filter_sig", filteredData, rx_size, 1, 1);
       }
       
       if(testing_timing) {
@@ -1070,12 +1145,12 @@ void* process_snr_range(void* arg) {
         reset_meas(&local_time_stats);
         start_meas(&local_time_stats);
       }
-      
-      AIOT_R2D_PHY_RX_Downsample(downSampled, (const int16_t *) filteredData, rx_size, local_frame_parms);
+
+      AIOT_R2D_PHY_RX_Downsample(downSampled, (const c16_t *) filteredData, rx_size, local_frame_parms);
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_Downsampled.m", folderplots);
-        LOG_M(filename, "Downsampled_sig", downSampled, frame_parms->packet_downsampled_samples, 1, 0);
+        LOG_M(filename, "Downsampled_sig", downSampled, frame_parms->packet_downsampled_samples, 1, 1);
       }
 
       if(testing_timing) {
@@ -1085,10 +1160,24 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      //int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) downSampled, SIP_ideal, local_frame_parms);
+      AIOT_R2D_PHY_RX_Envelope_Detector(envelope, (const c16_t *) downSampled, frame_parms->packet_downsampled_samples);
+
+      if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
+        sprintf(filename, "%s/R2D_Envelope.m", folderplots);
+        LOG_M(filename, "Envelope_sig", envelope, frame_parms->packet_downsampled_samples, 1, 0);
+      }
+      
+      if(testing_timing) {
+        stop_meas(&local_time_stats);
+        data->time_envelope += local_time_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
+        reset_meas(&local_time_stats);
+        start_meas(&local_time_stats);
+      }
+
+      int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) envelope, SIP_ideal, local_frame_parms);
 
       // ideal synchronization adjustment
-      int SIP_offset = (data->channel_model->delay - frame_parms->nr_frame_parms.ofdm_symbol_size / 2) / frame_parms->N;
+      //int SIP_offset = (data->channel_model->delay - frame_parms->nr_frame_parms.ofdm_symbol_size / 2) / frame_parms->N;
 
       if(testing_mode && !testing_timing) {
         printf("[RX Synchronize] Using ideal SIP offset: %d (before downsampling: %d)\n", SIP_offset, SIP_offset*frame_parms->N);
@@ -1106,7 +1195,7 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      AIOT_R2D_PHY_RX_GetPacket(rx_payload, (const int16_t *) downSampled, SIP_offset, local_frame_parms);
+      AIOT_R2D_PHY_RX_GetPacket(rx_payload, (const int16_t *) envelope, SIP_offset, local_frame_parms);
       
       if(testing_timing) {
         stop_meas(&local_time_stats);

@@ -50,6 +50,7 @@ typedef enum {
 #define CHANMODEL_FREE_RSQRT_6     1<<1
 #define CHANMODEL_FREE_RSQRT_NTAPS 1<<2
 #define CHANMODEL_FREE_AMPS        1<<3
+#define CHANMODEL_FREE_RSQRT_CHAN  1<<4
 #define SHR3 (jz = jsr, jsr ^= (jsr << 13), jsr ^= (jsr >> 17), jsr ^= (jsr << 5), jz + jsr)
 
 typedef enum {
@@ -333,6 +334,23 @@ typedef struct {
   double ru_amp[NUMBER_OF_RU_MAX];
 } sim_t;
 
+// Ambient IoT addition (multithreaded simulation)
+typedef struct {
+  double wn[128], fn[128];
+  uint32_t iz, jz, jsr, kn[128];
+  int32_t hz;
+
+  /* Box–Muller state moved from static locals in nfix_MT */
+  int iset;          /* 0/1 toggles availability of gset */
+  double gset;       /* second normal variate from Box–Muller */
+  double x;          /* temporary used in nfix_MT */
+  double y;
+
+  bool tableNordDone;
+} gaussZiggurat_MT_t;
+
+double gaussZiggurat_MT(double mean, double variance, gaussZiggurat_MT_t *gz);
+
 channel_desc_t *new_channel_desc_scm(uint8_t nb_tx,
                                      uint8_t nb_rx,
                                      SCM_t channel_model,
@@ -346,6 +364,21 @@ channel_desc_t *new_channel_desc_scm(uint8_t nb_tx,
                                      uint64_t channel_offset,
                                      double path_loss_dB,
                                      float noise_power_dB);
+
+channel_desc_t *new_channel_desc_scm_MT(uint8_t nb_tx,
+                                     uint8_t nb_rx,
+                                     SCM_t channel_model,
+                                     double sampling_rate,
+                                     uint64_t center_freq,
+                                     double channel_bandwidth,
+                                     double DS_TDL,
+                                     double maxDoppler,
+                                     const corr_level_t corr_level,
+                                     double forgetting_factor,
+                                     uint64_t channel_offset,
+                                     double path_loss_dB,
+                                     float noise_power_dB,
+                                     gaussZiggurat_MT_t *gz);
 
 channel_desc_t *find_channel_desc_fromname( char *modelname );
 
@@ -390,6 +423,7 @@ void get_cexp_doppler(struct complexd *cexp_doppler, channel_desc_t *chan_desc, 
 \param desc Pointer to the channel descriptor
 */
 int random_channel(channel_desc_t *desc, uint8_t abstraction_flag);
+int random_channel_MT(channel_desc_t *desc, uint8_t abstraction_flag, gaussZiggurat_MT_t *gz);
 
 /**\fn void multipath_channel(channel_desc_t *desc,
            double tx_sig_re[NB_ANTENNAS_TX],
@@ -419,6 +453,16 @@ void multipath_channel(channel_desc_t *desc,
                        uint32_t length,
                        uint8_t keep_channel,
 		       int log_channel);
+
+void multipath_channel_MT(channel_desc_t *desc,
+                       double *tx_sig_re[NB_ANTENNAS_TX],
+                       double *tx_sig_im[NB_ANTENNAS_TX],
+                       double *rx_sig_re[NB_ANTENNAS_RX],
+                       double *rx_sig_im[NB_ANTENNAS_RX],
+                       uint32_t length,
+                       uint8_t keep_channel,
+		                   int log_channel,
+                       gaussZiggurat_MT_t *gz);
 /*
 \fn double compute_pbch_sinr(channel_desc_t *desc,
                              channel_desc_t *desc_i1,
@@ -543,14 +587,6 @@ void multipath_tv_channel(channel_desc_t *desc,
                           double **rx_sig_im,
                           uint32_t length,
                           uint8_t keep_channel);
-
-typedef struct {
-  double wn[128], fn[128];
-  uint32_t iz, jz, jsr, kn[128];
-  int32_t hz;
-  bool tableNordDone;
-} gaussZiggurat_MT_t;
-double gaussZiggurat_MT(double mean, double variance, gaussZiggurat_MT_t *gz);
 
 /**@} */
 /**@} */

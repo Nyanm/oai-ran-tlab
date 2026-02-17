@@ -1056,8 +1056,7 @@ void BLER_test(NR_AIOT_UL_FRAME_PARMS *frame_parms, channel_model_t *channel_mod
   printf("  Channel model: %s\n", channel_model->channel_model == AWGN ? "AWGN" : "TDL");
   printf("  Sampling rate: %f MHz\n", channel_model->sampling_rate);
   printf("  Bandwidth: %f MHz\n", channel_model->bw);
-  printf("  Delay: %d samples\n", channel_model->delay);
-
+  
   printf("*************************\n");
   printf("Starting BLER vs SNR: \n");
   printf("  SNR range: %d to %d dB\n", snr_min, snr_max);
