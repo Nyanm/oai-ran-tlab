@@ -1,0 +1,22 @@
+:root {
+    --md-primary-fg-color:        #224C98;
+    --md-primary-fg-color--light: #4C74C0;
+    --md-primary-fg-color--dark:  #183A76;
+    --md-accent-fg-color:         #224C98;
+  }
+
+
+.md-content {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.md-grid {
+    max-width: none;
+}
+
+/* Style the footer copyright text */
+.md-footer-copyright p {
+  font-size: 0.6rem; /* Increase the font size */
+  padding: 1rem; /* Add some top and bottom padding */
+}
