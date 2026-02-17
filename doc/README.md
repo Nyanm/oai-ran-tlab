@@ -13,39 +13,36 @@ Beware if you previously pulled the `develop` branch that your repository may be
 
 ## General
 
-- [FEATURE_SET.md](./FEATURE_SET.md): lists supported features
-- [GET_SOURCES.md](./GET_SOURCES.md): how to download the sources
-- [BUILD.md](./BUILD.md): how to build the sources
-- [code-style-contrib.md](./code-style-contrib.md): overall working practices, code style, and review process
-- [cross-compile.md](./cross-compile.md): how to cross-compile OAI for ARM
-- [clang-format.md](./clang-format.md): how to format the code
-- [sanitizers.md](./dev_tools/sanitizers.md): how to run with ASan/UBSan/MemSAN/TSan
-- [environment-variables.md](./environment-variables.md): the environment variables used by OAI
-- [tuning_and_security.md](./tuning_and_security.md): performance and security considerations
+- [Changelog](../CHANGELOG.md)
+- [Notice](../NOTICE.md)
+- [License](../LICENSE)
+- [Feature Set](./FEATURE_SET.md): lists supported features
+- [Get Sources](./GET_SOURCES.md): how to download the sources
+- [Build](./BUILD.md): how to build the sources
+- [Code Style & Contribution](./code-style-contrib.md): overall working practices, code style, and review process
+- [Cross Compile](./cross-compile.md): how to cross-compile OAI for ARM
+- [Clang Format](./clang-format.md): how to format the code
+- [Sanitizers](./dev_tools/sanitizers.md): how to run with ASan/UBSan/MemSAN/TSan
+- [Environment Variables](./environment-variables.md): the environment variables used by OAI
+- [Tuning and Security](./tuning_and_security.md): performance and security considerations
 
 There is some general information in the [OpenAirInterface Gitlab Wiki](https://gitlab.eurecom.fr/oai/openairinterface5g/-/wikis/home)
 
 ## Tutorials
 
-- Step-by-step tutorials to set up 5G:
-    * [OAI 5GC](./NR_SA_Tutorial_OAI_CN5G.md)
-    * [OAI gNB with COTS UE](./NR_SA_Tutorial_COTS_UE.md)
-    * [OAI NR-UE](./NR_SA_Tutorial_OAI_nrUE.md)
-    * [Multiple OAI NR-UE with RFsimulator](./NR_SA_Tutorial_OAI_multi_UE.md)
-- [RUNMODEM.md](./RUNMODEM.md): Generic information on how to
-    * Run simulators
-    * Run with hardware
-    * Specific OAI modes (phy-test, do-ra, noS1)
-    * (5G) Using SDAP and custom DRBs
-    * IF setups and arbitrary frequencies
-    * MIMO
+- [OAI 5GC](./NR_SA_Tutorial_OAI_CN5G.md): Step-by-step tutorial to set up 5G Core
+- [OAI gNB with COTS UE](./NR_SA_Tutorial_COTS_UE.md): Step-by-step tutorial for gNB with COTS-UE
+- [OAI NR-UE](./NR_SA_Tutorial_OAI_nrUE.md): Step-by-step tutorial for NR-UE
+- [Multiple OAI NR-UE with RFsimulator](./NR_SA_Tutorial_OAI_multi_UE.md): Setup for multiple UEs
+- [RUNMODEM](./RUNMODEM.md): Generic information on how to run simulators, run
+  with hardware, specific OAI modes (phy-test, do-ra, noS1), (5G) using SDAP and
+  custom DRBs, IF setups and arbitrary frequencies, and MIMO.
 - [How to run OAI with O-RAN 7.2 FHI](./ORAN_FHI7.2_Tutorial.md)
 - [How to run a 5G-NSA setup](./TESTING_OAI_NSA_COTS_UE.md)
 - [How to run a 4G setup using L1 simulator](./L1SIM.md) _Note: we recommend the RFsimulator_
 - [How to use the L2 simulator](./L2NFAPI.md)
 - [How to use the OAI channel simulator](../openair1/SIMULATION/TOOLS/DOC/channel_simulation.md)
 - [How to use GPU-accelerated channel simulation](../openair1/SIMULATION/TOOLS/DOC/gpu_acceleration.md)
-- [How to use multiple BWPs](./RUN_NR_multiple_BWPs.md)
 - [How to run OAI-VNF and OAI-PNF](./nfapi.md): how to run the FAPI/nFAPI split,
   including some general remarks on FAPI/nFAPI.
 - [How to use the positioning reference signal (PRS)](./RUN_NR_PRS.md)
@@ -60,13 +57,14 @@ There is some general information in the [OpenAirInterface Gitlab Wiki](https://
 - [How to use the RT data recording app](./data_recording.md)
 - [How to use packages](./packages.md)
 
-Legacy unmaintained files:
-- [`L2NFAPI_NOS1.md`](./L2NFAPI_NOS1.md), [`L2NFAPI_S1.md`](./L2NFAPI_S1.md):
-  old L2simulator, not valid anymore
+### Legacy unmaintained files
+
+- [L2NFAPI_NOS1](./L2NFAPI_NOS1.md): old L2simulator, not valid anymore
+- [L2NFAPI_S1](./L2NFAPI_S1.md): old L2simulator, not valid anymore
 
 ## Designs
 
-- General software architecture notes: [SW_archi.md](./SW_archi.md)
+- [Software Architecture](./SW_archi.md): General software architecture notes
 - [Information on E1](./E1AP/E1-design.md)
 - [Information on F1](./F1AP/F1-design.md)
 - [Information on how NR nFAPI works](./NR_NFAPI_archi.md)
@@ -89,14 +87,15 @@ Legacy unmaintained files:
 
 ### General
 
-- The [T tracer](../common/utils/T/DOC/T.md): a generic tracing tool (VCD, Wireshark, GUI, to save for later, ...)
+- [T tracer](../common/utils/T/DOC/T.md): a generic tracing tool (VCD, Wireshark, GUI, to save for later, ...)
 - [OPT](../openair2/UTIL/OPT/README.txt): how to trace to wireshark
-- The [configuration module](../common/config/DOC/config.md)
-- The [logging module](../common/utils/LOG/DOC/log.md)
-- The [shared object loader](../common/utils/DOC/loader.md)
-- The [threadpool](../common/utils/threadPool/thread-pool.md) used in L1
-- The [LDPC implementation](../openair1/PHY/CODING/DOC/LDPCImplementation.md) is a shared library
-- The [time management](time_management.md) module
+- [configuration module](../common/config/DOC/config.md)
+- [logging module](../common/utils/LOG/DOC/log.md)
+- [shared object loader](../common/utils/DOC/loader.md)
+- [threadpool](../common/utils/threadPool/thread-pool.md): used in L1
+- [LDPC implementation](../openair1/PHY/CODING/DOC/LDPCImplementation.md): It is a shared library
+- [NR LDPC AAL](../openair1/PHY/CODING/nrLDPC_coding/nrLDPC_coding_aal/README.md)
+- [time management](time_management.md)
 
 ### Radios
 
@@ -105,34 +104,36 @@ Some directories under `radio` contain READMEs:
 - [RFsimulator](../radio/rfsimulator/README.md)
 - [USRP](../radio/USRP/README.md)
 - [BladeRF](../radio/BLADERF/README.md)
-- [IQPlayer](../radio/iqplayer/DOC/iqrecordplayer_usage.md), and [general documentation](./iqrecordplayer_usage.md)
-- [fhi_72](../radio/fhi_72/README.md)
+- [IQPlayer](./iqrecordplayer_usage.md): general documentation for the IQ player
+- [IQ Record Playback](../radio/iqplayer/DOC/iqrecordplayer_usage.md): specific usage documentation in the `radio` directory
+- [FHI 7.2](../radio/fhi_72/README.md)
 - [vrtsim](../radio/vrtsim/README.md)
-- [rf_emulator](../radio/emulator/README.md)
+- [RF Emulator](../radio/emulator/README.md)
+- [Ethernet Drivers](../radio/ETHERNET/ethernet.md)
 
 The other SDRs (AW2S, LimeSDR, ...) have no READMEs.
 
 ### Special-purpose libraries
 
-- OAI has two scopes: one based on Xforms and one based on imgui, described in [this README](../openair1/PHY/TOOLS/readme.md)
-- OAI comes with an integrated [telnet server](../common/utils/telnetsrv/DOC/telnethelp.md) to monitor and control
-- OAI comes with an integrated [web server](../common/utils/websrv/DOC/websrv.md)
+- [OAI Scopes](../openair1/PHY/TOOLS/readme.md): OAI has two scopes (one based on Xforms and one based on imgui)
+- [Telnet Server](../common/utils/telnetsrv/DOC/telnethelp.md): OAI comes with an integrated telnet server to monitor and control
+- [Web Server](../common/utils/websrv/DOC/websrv.md): OAI comes with an integrated web server
 
 ## Testing
 
-- [UnitTests.md](./UnitTests.md) explains the unit testing setup
-- Component tests are under `tests/`. Currently, there is a simple CU-UP
-  tester, see the corresponding [README.md](../tests/nr-cuup/README.md).
-- [TESTBenches.md](./TESTBenches.md) lists the CI setup and links to pipelines
-- The CI setup uses a [custom framework](../ci-scripts/README.md) to run
-  end-to-end tests.
+- [Unit Tests](./UnitTests.md): explains the unit testing setup
+- [CU-UP Tester](../tests/nr-cuup/README.md): Component tests are under `tests/` (currently, a simple CU-UP tester)
+- [Test Benches](./TESTBenches.md): Lists the CI setup and links to pipelines
+- [CI Framework](../ci-scripts/README.md): The CI setup uses a custom framework to run end-to-end tests.
 
 ## Developer tools
 
-- [formatting](../tools/formatting/README.md) is a clang-format error detection tool
-- [iwyu](../tools/iwyu/README.md) is a tool to detect `#include` errors
-- [docker-dev-env](../tools/docker-dev-env/README.md) is a ubuntu24 docker development environment
-- [doc_best_practices.md](./doc_best_practices.md): overall best practices for writing documentations
+- [formatting](../tools/formatting/README.md): a clang-format error detection tool
+- [iwyu](../tools/iwyu/README.md): a tool to detect `#include` errors
+- [docker-dev-env](../tools/docker-dev-env/README.md): a ubuntu24 docker development environment
+- [Plotting tools](../tools/plots/README.md)
+- [Documentation Best Practices](./doc_best_practices.md): overall best practices for writing documentations
+- [Documentations using MkDocs](../tools/mkdocs/README.md)
 
 ## CI
 
