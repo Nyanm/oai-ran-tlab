@@ -133,3 +133,68 @@ The other SDRs (AW2S, LimeSDR, ...) have no READMEs.
 - [iwyu](../tools/iwyu/README.md) is a tool to detect `#include` errors
 - [docker-dev-env](../tools/docker-dev-env/README.md) is a ubuntu24 docker development environment
 - [doc_best_practices.md](./doc_best_practices.md): overall best practices for writing documentations
+
+## CI
+
+- [Configuration Files](../ci-scripts/conf_files/README.md)
+- [OAI O-RAN 7.2 Front-haul VVDN RU](../ci-scripts/yaml_files/sa_fhi_7.2_vvdn_gnb/README.md)
+- [OAI O-RAN 7.2 Front-haul Metanoia RU](../ci-scripts/yaml_files/sa_fhi_7.2_metanoia_2x2_gnb/README.md)
+- [OAI O-RAN 7.2 Front-haul Benetel RU](../ci-scripts/yaml_files/sa_fhi_7.2_benetel550_gnb/README.md)
+- [CI test for 5G F1+E1 splits with RFsimulator](../ci-scripts/yaml_files/5g_rfsimulator_e1/README.md)
+- [CI tests](../ci-scripts/tests/README.md)
+- [Colosseum Testing](../ci-scripts/colosseum_scripts/README.md)
+
+## nFAPI
+
+- [Open-nFAPI](../nfapi/open-nFAPI/README.md)
+- [Open-nFAPI License](../nfapi/open-nFAPI/LICENSE.md)
+- [Open-nFAPI Examples](../nfapi/open-nFAPI/utils/examples.md)
+- [Open-nFAPI Changelog](../nfapi/open-nFAPI/CHANGELOG.md)
+
+## Common Utilities
+
+- [Config Runtime Usage](../common/config/DOC/config/rtusage.md)
+- [Config Architecture](../common/config/DOC/config/arch.md)
+- [Config Dev Usage API](../common/config/DOC/config/devusage/api.md)
+- [Config Dev Usage Add A Param](../common/config/DOC/config/devusage/addaparam.md)
+- [Config Dev Usage Add Param Set](../common/config/DOC/config/devusage/addparamset.md)
+- [Config Dev Usage Struct](../common/config/DOC/config/devusage/struct.md)
+- [Config Dev Usage](../common/config/DOC/config/devusage.md)
+- [OCP ITTI](../common/utils/ocp_itti/itti.md)
+- [LOG Add Console Trace](../common/utils/LOG/DOC/addconsoletrace.md)
+- [LOG LTTng Logs](../common/utils/LOG/DOC/lttng_logs.md)
+- [LOG Configure Log](../common/utils/LOG/DOC/configurelog.md)
+- [LOG Runtime Usage](../common/utils/LOG/DOC/rtusage.md)
+- [LOG Architecture](../common/utils/LOG/DOC/arch.md)
+- [LOG Dev Usage](../common/utils/LOG/DOC/devusage.md)
+- [T Tracer Wireshark](../common/utils/T/DOC/T/wireshark.md)
+- [T Tracer CSV](../common/utils/T/DOC/T/csv.md)
+- [T Tracer Record](../common/utils/T/DOC/T/record.md)
+- [T Tracer ENB](../common/utils/T/DOC/T/enb.md)
+- [T Tracer Replay](../common/utils/T/DOC/T/replay.md)
+- [T Tracer Basic](../common/utils/T/DOC/T/basic.md)
+- [T Tracer How To New Trace](../common/utils/T/DOC/T/howto_new_trace.md)
+- [T Tracer Multi](../common/utils/T/DOC/T/multi.md)
+- [T Tracer To VCD](../common/utils/T/DOC/T/to_vcd.md)
+- [Loader Runtime Usage](../common/utils/DOC/loader/rtusage.md)
+- [Loader Architecture](../common/utils/DOC/loader/arch.md)
+- [Loader Dev Usage Loading](../common/utils/DOC/loader/devusage/loading.md)
+- [Loader Dev Usage API](../common/utils/DOC/loader/devusage/api.md)
+- [Loader Dev Usage Struct](../common/utils/DOC/loader/devusage/struct.md)
+- [Loader Dev Usage](../common/utils/DOC/loader/devusage.md)
+- [Actor README](../common/utils/actor/README.md)
+- [Telnet Add Command](../common/utils/telnetsrv/DOC/telnetaddcmd.md)
+- [Telnet Log](../common/utils/telnetsrv/DOC/telnetlog.md)
+- [Telnet Measurement](../common/utils/telnetsrv/DOC/telnetmeasur.md)
+- [Telnet Usage](../common/utils/telnetsrv/DOC/telnetusage.md)
+- [Telnet Loop](../common/utils/telnetsrv/DOC/telnetloop.md)
+- [Telnet Loader](../common/utils/telnetsrv/DOC/telnetloader.md)
+- [Telnet History](../common/utils/telnetsrv/DOC/telnethist.md)
+- [Telnet Get/Set](../common/utils/telnetsrv/DOC/telnetgetset.md)
+- [Telnet Architecture](../common/utils/telnetsrv/DOC/telnetarch.md)
+- [Telnet O1](../common/utils/telnetsrv/DOC/telneto1.md)
+- [Telnet Server](../common/utils/telnetsrv/DOC/telnetsrv.md)
+- [Web Server Architecture](../common/utils/websrv/DOC/websrvarch.md)
+- [Web Server Usage](../common/utils/websrv/DOC/websrvuse.md)
+- [Web Server Development](../common/utils/websrv/DOC/websrvdev.md)
+- [Web Server Frontend README](../common/utils/websrv/frontend/README.md)
