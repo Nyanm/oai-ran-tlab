@@ -119,6 +119,7 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
 		                           ((r_firstE2*E1) + (C-r_firstE2)*E2)*sizeof(int16_t),
 					   cudaMemcpyHostToDevice,
 					   decoderStreams[0]);
+  else cudaStreamSynchronize(decoderStreams[0]);
 #if 0
   if (1/*segs->rv_index==2*/)
     for (int r=0;r<C;r++) {
