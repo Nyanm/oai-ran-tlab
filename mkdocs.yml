@@ -242,6 +242,7 @@ plugins:
   - search
   - mermaid2
   - simple:
-      include: [".txt", ".mmd", ".md"]
+      include: [".txt", ".mmd", "README", ".conf", ".c", ".yaml", ".yml", ".cpp", ".md", ".png", ".h", ".json", ".patch", ".py", ".sh"]
+      merge_docs_dir: true
       ignore:
         - README.md
