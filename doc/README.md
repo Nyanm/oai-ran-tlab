@@ -13,9 +13,11 @@ Beware if you previously pulled the `develop` branch that your repository may be
 
 ## General
 
+- [Contributing](../CONTRIBUTING.md)
 - [Changelog](../CHANGELOG.md)
 - [Notice](../NOTICE.md)
 - [License](../LICENSE)
+- [System Requirements](./system_requirements.md)
 - [Feature Set](./FEATURE_SET.md): lists supported features
 - [Get Sources](./GET_SOURCES.md): how to download the sources
 - [Build](./BUILD.md): how to build the sources
@@ -66,15 +68,19 @@ There is some general information in the [OpenAirInterface Gitlab Wiki](https://
 
 - [Software Architecture](./SW_archi.md): General software architecture notes
 - [Information on E1](./E1AP/E1-design.md)
+- [E1AP Procedures](./E1AP/e1ap_procedures.md)
+- [F1AP Messages Encoding & Decoding Library](./F1AP/F1AP-lib.md)
 - [Information on F1](./F1AP/F1-design.md)
 - [Information on how NR nFAPI works](./NR_NFAPI_archi.md)
 - [Flow graph of the L1 in gNB](SW-archi-graph.md)
 - [L1 threads in NR-UE](./nr-ue-design.md)
 - [Information on gNB MAC](./MAC/mac-usage.md)
 - [Information on gNB RRC](./RRC/rrc-usage.md)
+- [5G RRC Layer](./RRC/rrc-dev.md)
 - [Information on analog beamforming implementation](./analog_beamforming.md)
 - [Information on the UE 5G NAS implementation](./5Gnas.md)
 - [Information on UL-MIMO](./UL_MIMO.md): UL-MIMO specific notes
+- [gNB RACH Processing](./rach_processing_in_gNB.md)
 
 ## Building and running from images
 
@@ -96,6 +102,7 @@ There is some general information in the [OpenAirInterface Gitlab Wiki](https://
 - [LDPC implementation](../openair1/PHY/CODING/DOC/LDPCImplementation.md): It is a shared library
 - [NR LDPC AAL](../openair1/PHY/CODING/nrLDPC_coding/nrLDPC_coding_aal/README.md)
 - [time management](time_management.md)
+- [LTE RRC Configuration (ASN.1 Based)](../openair2/RRC/LTE/MESSAGES/README.md)
 
 ### Radios
 
@@ -151,6 +158,7 @@ The other SDRs (AW2S, LimeSDR, ...) have no READMEs.
 - [Open-nFAPI License](../nfapi/open-nFAPI/LICENSE.md)
 - [Open-nFAPI Examples](../nfapi/open-nFAPI/utils/examples.md)
 - [Open-nFAPI Changelog](../nfapi/open-nFAPI/CHANGELOG.md)
+- [nFAPI Changes](../nfapi/CHANGES.md)
 
 ## Common Utilities
 
@@ -199,3 +207,8 @@ The other SDRs (AW2S, LimeSDR, ...) have no READMEs.
 - [Web Server Usage](../common/utils/websrv/DOC/websrvuse.md)
 - [Web Server Development](../common/utils/websrv/DOC/websrvdev.md)
 - [Web Server Frontend README](../common/utils/websrv/frontend/README.md)
+
+## EpiSci
+
+- [LTE Mode L2 Emulator](./episys/lte_mode_l2_emulator/README.md)
+- [NSA Mode L2 Emulator](./episys/nsa_mode_l2_emulator/README.md)

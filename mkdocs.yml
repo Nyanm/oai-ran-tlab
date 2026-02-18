@@ -55,9 +55,11 @@ nav:
 - Home: README.md
 - RAN:
   - General:
+    - Contributing: CONTRIBUTING.md
     - Changelog: CHANGELOG.md
     - Notice: NOTICE.md
     - License: LICENSE
+    - System Requirements: system_requirements.md
     - Feature Set: FEATURE_SET.md
     - Get Sources: GET_SOURCES.md
     - Build: BUILD.md
@@ -79,7 +81,6 @@ nav:
     - How to use the L2 simulator: L2NFAPI.md
     - How to use the OAI channel simulator: openair1/SIMULATION/TOOLS/DOC/channel_simulation.md
     - How to use GPU-accelerated channel simulation: openair1/SIMULATION/TOOLS/DOC/gpu_acceleration.md
-    - How to use multiple BWPs: RUN_NR_multiple_BWPs.md
     - How to run OAI-VNF and OAI-PNF: nfapi.md
     - How to use the positioning reference signal (PRS): RUN_NR_PRS.md
     - How to use device-to-device communication (D2D, 4G): d2d_emulator_setup.md
@@ -98,15 +99,19 @@ nav:
   - Designs:
     - Software Architecture: SW_archi.md
     - Information on E1: E1AP/E1-design.md
+    - E1AP Procedures: E1AP/e1ap_procedures.md
+    - F1AP Messages Encoding & Decoding Library: F1AP/F1AP-lib.md
     - Information on F1: F1AP/F1-design.md
     - Information on how NR nFAPI works: NR_NFAPI_archi.md
     - Flow graph of the L1 in gNB: SW-archi-graph.md
     - L1 threads in NR-UE: nr-ue-design.md
     - Information on gNB MAC: MAC/mac-usage.md
     - Information on gNB RRC: RRC/rrc-usage.md
+    - 5G RRC Layer: RRC/rrc-dev.md
     - Information on analog beamforming implementation: analog_beamforming.md
     - Information on the UE 5G NAS implementation: 5Gnas.md
     - Information on UL-MIMO: UL_MIMO.md
+    - gNB RACH Processing: rach_processing_in_gNB.md
   - Building and running from images:
     - How to build images: docker/README.md
     - How to run 5G with the RFsimulator from images: ci-scripts/yaml_files/5g_rfsimulator/README.md
@@ -123,6 +128,7 @@ nav:
       - LDPC implementation: openair1/PHY/CODING/DOC/LDPCImplementation.md
       - NR LDPC AAL: openair1/PHY/CODING/nrLDPC_coding/nrLDPC_coding_aal/README.md
       - time management: time_management.md
+      - LTE RRC Configuration (ASN.1 Based): openair2/RRC/LTE/MESSAGES/README.md
     - Radios:
       - RFsimulator: radio/rfsimulator/README.md
       - USRP: radio/USRP/README.md
@@ -162,6 +168,7 @@ nav:
     - Open-nFAPI License: nfapi/open-nFAPI/LICENSE.md
     - Open-nFAPI Examples: nfapi/open-nFAPI/utils/examples.md
     - Open-nFAPI Changelog: nfapi/open-nFAPI/CHANGELOG.md
+    - nFAPI Changes: nfapi/CHANGES.md
   - Common Utilities:
     - Config Runtime Usage: common/config/DOC/config/rtusage.md
     - Config Architecture: common/config/DOC/config/arch.md
@@ -208,6 +215,9 @@ nav:
     - Web Server Usage: common/utils/websrv/DOC/websrvuse.md
     - Web Server Development: common/utils/websrv/DOC/websrvdev.md
     - Web Server Frontend README: common/utils/websrv/frontend/README.md
+  - EpiSci:
+    - LTE Mode L2 Emulator: episys/lte_mode_l2_emulator/README.md
+    - NSA Mode L2 Emulator: episys/nsa_mode_l2_emulator/README.md
 
 ## Navigation Entries Block Ends
 
