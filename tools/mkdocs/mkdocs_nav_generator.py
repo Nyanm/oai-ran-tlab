@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 
 # * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
 # * contributor license agreements.  See the NOTICE file distributed with
@@ -25,15 +26,16 @@
 #     Python 3.x
 #---------------------------------------------------------------------
 
-#!/usr/bin/env python3
-
 import re
 import yaml
 import logging
 import argparse
 from pathlib import Path
-from typing import List, Dict, Any
-
+from typing import (
+    List,
+    Dict,
+    Any,
+)
 
 # -----------------------------------------------------------------------------
 # Logging
@@ -49,7 +51,6 @@ def configure_logging(debug: bool = False):
 
 logger = logging.getLogger("mkdocs-nav-generator")
 
-
 # -----------------------------------------------------------------------------
 # Repository Root Detection
 # -----------------------------------------------------------------------------
@@ -59,7 +60,6 @@ def get_repo_root() -> Path:
     Detect repository root dynamically.
     """
     return Path(__file__).resolve().parents[2]
-
 
 # -----------------------------------------------------------------------------
 # Utilities
@@ -71,7 +71,6 @@ def clean_path(path: str) -> str:
     mkdocs-simple-plugin resolves paths relative to docs_dir.
     """
     return path.replace("../", "").replace("./", "")
-
 
 # -----------------------------------------------------------------------------
 # Markdown Parser
@@ -135,7 +134,6 @@ class MarkdownParser:
         logger.info("Markdown parsing complete.")
         return root
 
-
 # -----------------------------------------------------------------------------
 # Nav Builder
 # -----------------------------------------------------------------------------
@@ -165,7 +163,6 @@ class MkDocsNavBuilder:
         )
 
         return yaml_block
-
 
 # -----------------------------------------------------------------------------
 # YAML Injection Logic
@@ -215,37 +212,3 @@ class MkDocsInjector:
         self.mkdocs_path.write_text(updated_content, encoding="utf-8")
 
         logger.info("Navigation successfully injected.")
-
-
-# -----------------------------------------------------------------------------
-# CLI
-# -----------------------------------------------------------------------------
-
-def main():
-    repo_root = get_repo_root()
-
-    default_input = repo_root / "doc" / "README.md"
-    default_mkdocs = repo_root / "mkdocs.yml"
-
-    parser = argparse.ArgumentParser(
-        description="Inject generated navigation into mkdocs.yml"
-    )
-    parser.add_argument("--input", type=Path, default=default_input)
-    parser.add_argument("--mkdocs", type=Path, default=default_mkdocs)
-    parser.add_argument("--debug", action="store_true")
-
-    args = parser.parse_args()
-
-    configure_logging(args.debug)
-
-    logger.info("Starting navigation generation + injection")
-
-    parsed_tree = MarkdownParser(args.input).parse()
-    nav_yaml = MkDocsNavBuilder(parsed_tree).build()
-
-    injector = MkDocsInjector(args.mkdocs)
-    injector.inject(nav_yaml)
-
-
-if __name__ == "__main__":
-    main()
