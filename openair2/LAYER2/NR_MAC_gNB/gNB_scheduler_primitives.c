@@ -2740,20 +2740,16 @@ void configure_UE_BWP(gNB_MAC_INST *nr_mac,
       ubwpd = ul_bwp->bwp_Dedicated;
     else
       ubwpd = servingCellConfig->uplinkConfig->initialUplinkBWP;
-
-    DL_BWP->pdsch_Config = bwpd->pdsch_Config->choice.setup;
-    UL_BWP->configuredGrantConfig = ubwpd->configuredGrantConfig ? ubwpd->configuredGrantConfig->choice.setup : NULL;
-    UL_BWP->pusch_Config = ubwpd->pusch_Config->choice.setup;
-    UL_BWP->pucch_Config = ubwpd->pucch_Config->choice.setup;
-    UL_BWP->srs_Config = ubwpd->srs_Config->choice.setup;
   } else {
     DL_BWP->bwp_id = 0;
     UL_BWP->bwp_id = 0;
-    DL_BWP->pdsch_Config = NULL;
-    UL_BWP->pusch_Config = NULL;
-    UL_BWP->pucch_Config = NULL;
-    UL_BWP->configuredGrantConfig = NULL;
   }
+
+  DL_BWP->pdsch_Config = bwpd ? bwpd->pdsch_Config->choice.setup : NULL;
+  UL_BWP->pusch_Config = ubwpd ? ubwpd->pusch_Config->choice.setup : NULL;
+  UL_BWP->pucch_Config = ubwpd ? ubwpd->pucch_Config->choice.setup : NULL;
+  UL_BWP->srs_Config = ubwpd ? ubwpd->srs_Config->choice.setup : NULL;
+  UL_BWP->configuredGrantConfig = ubwpd && ubwpd->configuredGrantConfig ? ubwpd->configuredGrantConfig->choice.setup : NULL;
 
   // TDA lists
   if (DL_BWP->bwp_id > 0)
