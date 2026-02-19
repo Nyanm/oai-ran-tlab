@@ -1057,7 +1057,7 @@ void* process_snr_range(void* arg) {
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_REs_Packet.m", folderplots);
-        LOG_M(filename, "REs_Packet_sig", REsPacket, frame_parms->packet_symbols * frame_parms->packet_subcarriers, 1, 1);
+        LOG_M(filename, "REs_Packet_sig", REsPacket, local_frame_parms->packet_symbols * local_frame_parms->packet_subcarriers, 1, 1);
       }
       
       if(testing_timing) {
@@ -1071,7 +1071,7 @@ void* process_snr_range(void* arg) {
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_TX_IQ.m", folderplots);
-        LOG_M(filename, "TX_IQ_sig", txData, frame_parms->packet_samples, 1, 1);
+        LOG_M(filename, "TX_IQ_sig", txData, local_frame_parms->packet_samples, 1, 1);
       }
       
       if(testing_timing) {
@@ -1081,9 +1081,9 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
 
-      data->channel_model->delay = uniformrandom() * (DELAY_MAX - DELAY_MIN) + DELAY_MIN; // Random delay for each SNR
+      int delay = uniformrandom() * (DELAY_MAX - DELAY_MIN) + DELAY_MIN; // Random delay for each SNR
       if(testing_mode && !testing_timing) {
-        printf("[Channel] Random delay: %d samples\n", data->channel_model->delay);
+        printf("[Channel] Random delay: %d samples\n", delay);
       }
 
       // Per-thread variables to avoid conflicts
@@ -1097,7 +1097,7 @@ void* process_snr_range(void* arg) {
                                             0.0,
                                             CORR_LEVEL_LOW,
                                             0,
-                                            data->channel_model->delay,
+                                            delay,
                                             data->channel_model->path_loss_dB,
                                             data->channel_model->noise_power_dB,
                                             &gz);
@@ -1150,7 +1150,7 @@ void* process_snr_range(void* arg) {
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_Downsampled.m", folderplots);
-        LOG_M(filename, "Downsampled_sig", downSampled, frame_parms->packet_downsampled_samples, 1, 1);
+        LOG_M(filename, "Downsampled_sig", downSampled, local_frame_parms->packet_downsampled_samples, 1, 1);
       }
 
       if(testing_timing) {
@@ -1160,11 +1160,11 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
       
-      AIOT_R2D_PHY_RX_Envelope_Detector(envelope, (const c16_t *) downSampled, frame_parms->packet_downsampled_samples);
+      AIOT_R2D_PHY_RX_Envelope_Detector(envelope, (const c16_t *) downSampled, local_frame_parms->packet_downsampled_samples);
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_Envelope.m", folderplots);
-        LOG_M(filename, "Envelope_sig", envelope, frame_parms->packet_downsampled_samples, 1, 0);
+        LOG_M(filename, "Envelope_sig", envelope, local_frame_parms->packet_downsampled_samples, 1, 0);
       }
       
       if(testing_timing) {
@@ -1174,18 +1174,18 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
 
-      int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) envelope, SIP_ideal, local_frame_parms);
+      //int SIP_offset = AIOT_R2D_PHY_RX_Synchronize(correlation, (const int16_t *) envelope, SIP_ideal, local_frame_parms);
 
       // ideal synchronization adjustment
-      //int SIP_offset = (data->channel_model->delay - frame_parms->nr_frame_parms.ofdm_symbol_size / 2) / frame_parms->N;
+      int SIP_offset = (delay - (local_frame_parms->nr_frame_parms.ofdm_symbol_size / 2)) / local_frame_parms->N;
 
       if(testing_mode && !testing_timing) {
-        printf("[RX Synchronize] Using ideal SIP offset: %d (before downsampling: %d)\n", SIP_offset, SIP_offset*frame_parms->N);
+        printf("[RX Synchronize] Using ideal SIP offset: %d (before downsampling: %d)\n", SIP_offset, SIP_offset*local_frame_parms->N);
       }
 
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/R2D_Correlation.m", folderplots);
-        LOG_M(filename, "Correlation_sig", correlation, frame_parms->packet_downsampled_samples - frame_parms->SIP_samples, 1, 2);
+        LOG_M(filename, "Correlation_sig", correlation, local_frame_parms->packet_downsampled_samples - local_frame_parms->SIP_samples, 1, 2);
       }
 
       if(testing_timing) {
@@ -1311,7 +1311,7 @@ void BLER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mod
     LOG_M(filename, "SIP_Ideal_sig", SIP_ideal, frame_parms->SIP_samples, 1, 2);
   }
 
-  double ber_results[snr_steps];
+  double *ber_results = malloc(snr_steps * sizeof(double));
   memset(ber_results, 0, snr_steps * sizeof(double));
 
   if(!testing_mode) {
@@ -1458,6 +1458,8 @@ void BLER_test(NR_AIOT_DL_FRAME_PARMS *frame_parms, channel_model_t *channel_mod
     sprintf(filename, "%s/BLER_M%d_%s_SIZE%d_%dRBs.m", foldername, frame_parms->M, frame_parms->Zadoff_Chu ? "ZC" : "Ones", frame_parms->payload_size, frame_parms->nr_frame_parms.N_RB_DL);
     LOG_M(filename, "BLER", ber_results, snr_max - snr_min + 1, 1, 7);
   }
+
+  free(ber_results);
 }
 
 configmodule_interface_t *uniqCfg = NULL;
