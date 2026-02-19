@@ -1,5 +1,14 @@
 {% extends "base.html" %}
 
+{% block content %}
+  {# Rewrite all .md links to directory URLs #}
+  {{ super()
+       | replace(".md", "/")
+       | replace("README/", "")
+  }}
+{% endblock %}
+
+
 {% block footer %}
   <footer class="md-footer">
     <div class="md-footer-meta" style="display: flex; justify-content: space-between; align-items: center; padding: 0 40px;">
