@@ -760,10 +760,10 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
       // Copy beam id for this antenna port. Right now L2 sets only one beam id
       // in dig_bf_interface_list. So we copy it to all antenna ports.
 
-      // TODO: Each antenna port can be assigned a beam ID and FAPI says the
+      // Each antenna port can be assigned a beam ID and FAPI says the
       // order in dig_bf_interface_list follows the same order as antenna ports
       // in the output of precoder
-      beam_index_allocation(pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
+      beam_index_allocation(pb->prgs_list[0].dig_bf_interface_list[ant].beam_idx,
                             ant,
                             1,
                             frame_parms->symbols_per_slot,
