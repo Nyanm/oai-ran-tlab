@@ -36,24 +36,26 @@
 extern "C" {
 #endif
 
-#define num_TotalThreads_BG1_R13 30336
-#define num_TotalThreads_BG1_R23 13824
-#define num_TotalThreads_llr_llrRes 6528
 #define RowLength 96 //Zc = 384/4 = 96
 
-#define num_TotalBlocks_BG1_R13_Edge 316
+#define num_TotalBlocks_BG1_R13_Edge 316//based on number of Cn2Bn Msgs
 #define num_TotalBlocks_BG1_R23_Edge 144
+#define num_TotalBlocks_BG1_R89_Edge 79
 #define num_TotalBlocks_llr_llrRes 22 //Only includes systematic bits
 
-#define num_TotalBlocks_cn_BG1_R13_Node 46 //based on number of Cn2Bn Msgs
+#define num_TotalBlocks_cn_BG1_R13_Node 46 //based on number of CNs
 #define num_TotalBlocks_bn_BG1_R13_Node 68 //based on number of BNs
 #define num_TotalBlocks_cn_BG1_R23_Node 13
 #define num_TotalBlocks_bn_BG1_R23_Node 35
+#define num_TotalBlocks_cn_BG1_R89_Node 5
+#define num_TotalBlocks_bn_BG1_R89_Node 27
 
 #define NodeEdge_Switch_Cn_R13 32
 #define NodeEdge_Switch_Bn_R13 10
 #define NodeEdge_Switch_Cn_R23 32
 #define NodeEdge_Switch_Bn_R23 12
+#define NodeEdge_Switch_Cn_R89 48
+#define NodeEdge_Switch_Bn_R89 24
 
 
 extern cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL];

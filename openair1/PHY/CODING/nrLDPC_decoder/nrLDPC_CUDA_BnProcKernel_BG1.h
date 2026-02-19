@@ -205,6 +205,81 @@ __device__ __forceinline__ void bnProcKernel_BG1_int8_Gn_Node_R23(const int8_t *
   }
 }
 
+__device__ __forceinline__ void bnProcKernel_BG1_int8_Gn_Node_R89(const int8_t *__restrict__ d_bnProcBuf,
+                                                             int8_t *__restrict__ d_cnProcBuf,
+                                                             const int8_t *__restrict__ d_llrProcBuf,
+                                                             int8_t *__restrict__ d_llrRes,
+                                                             uint32_t lane,
+                                                             uint32_t BnGrpIdx,
+                                                             uint32_t BnIdx,
+                                                             uint32_t GrpNum,
+                                                             uint32_t Bn2MsgStartIdx,
+                                                             uint32_t Zc,
+                                                             uint32_t ZcIdx)
+{
+  const int32_t *bnProcBufPtr = (const int32_t *)(d_bnProcBuf) + lane;
+
+  uint32_t packed_intrinsic = ((const int32_t *)(d_llrProcBuf))[lane];
+
+  uint32_t MsgSumLo, MsgSumHi;
+  unpack_and_sign_extend(packed_intrinsic, &MsgSumLo, &MsgSumHi);
+
+  uint32_t off = (GrpNum * NR_LDPC_ZMAX) >> 2;
+  const int32_t *currPtr = bnProcBufPtr;
+
+  int i = 0;
+
+  // ---  2-Way Unroll ---
+
+  for (; i < (int)BnGrpIdx - 1; i += 2) {
+    uint32_t val1 = *currPtr;
+    uint32_t val2 = *(currPtr + off);
+
+    uint32_t v1_lo, v1_hi;
+    unpack_and_sign_extend(val1, &v1_lo, &v1_hi);
+    MsgSumLo = __vaddss2(MsgSumLo, v1_lo);
+    MsgSumHi = __vaddss2(MsgSumHi, v1_hi);
+
+    uint32_t v2_lo, v2_hi;
+    unpack_and_sign_extend(val2, &v2_lo, &v2_hi);
+    MsgSumLo = __vaddss2(MsgSumLo, v2_lo);
+    MsgSumHi = __vaddss2(MsgSumHi, v2_hi);
+
+    currPtr += (off << 1);
+  }
+
+  if (i < BnGrpIdx) {
+    uint32_t val = *currPtr;
+    uint32_t v_lo, v_hi;
+    unpack_and_sign_extend(val, &v_lo, &v_hi);
+    MsgSumLo = __vaddss2(MsgSumLo, v_lo);
+    MsgSumHi = __vaddss2(MsgSumHi, v_hi);
+  }
+
+  uint32_t saturated_llr = saturate_and_pack(MsgSumLo, MsgSumHi);
+
+  uint32_t BricksToBeGet;
+  if (BnGrpIdx == 1) {
+    BricksToBeGet = packed_intrinsic;
+    uint32_t MsgIdx = Bn2MsgStartIdx;
+    uint32_t circShift = bn_cn_map_BG1_Z_R89[MsgIdx][ZcIdx];
+    int8_t *p_cnProcBuf = (int8_t *)(d_cnProcBuf + bn_cn_map_BG1_Z_R89[MsgIdx][0]);
+
+    moveBricks_forput_circ(p_cnProcBuf, lane * 4, (uint8_t *)&BricksToBeGet, Zc, circShift);
+  } else {
+    for (int temp_MsgIdx = 0; temp_MsgIdx < BnGrpIdx; temp_MsgIdx++) {
+      uint32_t prevIdxWords = (temp_MsgIdx * GrpNum * NR_LDPC_ZMAX) >> 2;
+      uint32_t prev = bnProcBufPtr[prevIdxWords];
+      BricksToBeGet = __vsubss4(saturated_llr, prev);
+      uint32_t MsgIdx = Bn2MsgStartIdx + temp_MsgIdx;
+      uint32_t circShift = bn_cn_map_BG1_Z_R89[MsgIdx][ZcIdx];
+      int8_t *p_cnProcBuf = (int8_t *)(d_cnProcBuf + bn_cn_map_BG1_Z_R89[MsgIdx][0]);
+
+      moveBricks_forput_circ(p_cnProcBuf, lane * 4, (uint8_t *)&BricksToBeGet, Zc, circShift);
+    }
+  }
+}
+
 __device__ __forceinline__ void bnProcKernel_BG1_int8_Gn_Node_last(const int8_t *__restrict__ d_bnProcBuf,
                                                               int8_t *__restrict__ d_cnProcBuf,
                                                               const int8_t *__restrict__ d_llrProcBuf,

@@ -61,6 +61,7 @@
 extern cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
 static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
 static bool decoder_streamsCreated = false;
+static bool GraphFailed = false;
 static volatile int cuda_graph_breaker = 0;
 cudaError_t Err;
 
@@ -105,23 +106,23 @@ int cuda_support_init_decoder()
 static ldpc_cuda_bridge_t* stream_bridges[8];
 
 extern cudaError_t nrLDPC_decoder_cuda_GraphRecord(ldpc_cuda_bridge_t* buffer,
-                                            uint32_t numLLR,
-                                            int8_t* cnProcBuf,
-                                            int8_t* bnProcBuf,
-                                            int8_t* llrRes,
-                                            int8_t* llrProcBuf,
-                                            uint32_t Z,
-                                            uint32_t K,
-                                            uint8_t BG,
-                                            uint8_t R,
-                                            uint8_t numMaxIter,
-                                            uint8_t n_segments,
-                                            e_nrLDPC_outMode outMode,
-                                            cudaStream_t* streams,
-                                            uint8_t CudaStreamIdx,
-                                            cudaGraph_t* graphPtr,
-                                            cudaGraphExec_t* graphExecPtr,
-                                            uint8_t* isCreatedFlag);
+                                                   uint32_t numLLR,
+                                                   int8_t* cnProcBuf,
+                                                   int8_t* bnProcBuf,
+                                                   int8_t* llrRes,
+                                                   int8_t* llrProcBuf,
+                                                   uint32_t Z,
+                                                   uint32_t K,
+                                                   uint8_t BG,
+                                                   uint8_t R,
+                                                   uint8_t numMaxIter,
+                                                   uint8_t n_segments,
+                                                   e_nrLDPC_outMode outMode,
+                                                   cudaStream_t* streams,
+                                                   uint8_t CudaStreamIdx,
+                                                   cudaGraph_t* graphPtr,
+                                                   cudaGraphExec_t* graphExecPtr,
+                                                   uint8_t* isCreatedFlag);
 
 extern cudaError_t nrLDPC_decoder_cuda_GraphExecute(cudaGraphExec_t graphExec,
                                                     cudaStream_t stream,
@@ -439,10 +440,10 @@ int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
                          t_nrLDPC_time_stats* p_profiler,
                          decode_abort_t* ab)
 {
-  if (!((p_decParams->R == 23 || p_decParams->R == 13) && p_decParams->BG == 1 && p_decParams->Z % 4 == 0 && p_decParams->Z >= 128
-        && p_decParams->Z <= 384)) { // format check
+  if (!((p_decParams->R == 89 || p_decParams->R == 23 || p_decParams->R == 13) && p_decParams->BG == 1 && p_decParams->Z % 4 == 0
+        && p_decParams->Z >= 128 && p_decParams->Z <= 384)) { // format check
     printf("Current format: BG = %d, R = %d, Zc = %d\n", p_decParams->BG, p_decParams->R, p_decParams->Z);
-    AssertFatal(false, "Format cuda not support, only support BG = 1, Zc >= 128 and R = 13, 23 right now\n");
+    AssertFatal(false, "Format cuda not support, only support BG = 1, Zc >= 128 and R = 13, 23, 89 right now\n");
     return 0;
   }
   // Launch LDPC decoder core for all segments
@@ -481,12 +482,18 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   e_nrLDPC_outMode outMode = p_decParams->outMode;
   uint32_t K = Z * 22;
   // Calculate LLR size per segment based on Rate
-  uint32_t numLLR = (R == 13) ? NR_LDPC_NCOL_BG1_R13 * Z : NR_LDPC_NCOL_BG1_R23 * Z;
+  uint32_t numLLR = (R == 13) ? NR_LDPC_NCOL_BG1_R13 * Z : ((R == 89) ? NR_LDPC_NCOL_BG1_R89 * Z : NR_LDPC_NCOL_BG1_R23 * Z);
   if (p_llr != p_llr_dev)
     cudaMemcpyAsync(p_llr_dev, p_llr, n_segments * 68 * 384, cudaMemcpyHostToDevice, decoderStreams[0]);
 
   // Output size safety: assume worst-case unpacked bytes (K * n_segments)
   size_t total_output_size = n_segments * K * sizeof(int8_t);
+
+/*
+  // for debug, remember to remove it---------
+  cuda_graph_breaker = 1; // skipping all the graph recording
+  //-----------------------------------------
+  */
 
   if (cuda_graph_breaker == 0) {
     int found_idx = -1;
@@ -498,23 +505,23 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
         found_idx = i;
         break;
       }
-   }
-   if (found_idx >= 0) {
-        // === Cache HIT: Execute Recorded Graph ===
-	gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
-	gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = (pageable || integrated) ? p_out : p_out_dev;
+    }
+    if (found_idx >= 0) {
+      // === Cache HIT: Execute Recorded Graph ===
+      gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
+      gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = (pageable || integrated) ? p_out : p_out_dev;
 
-	err_core = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[found_idx].exec,
-	                                            decoderStreams[0],
-                                                    NULL, // doneEvent
-	                                            0); // Stream Index
-	                                                                                                    if (err_core == cudaSuccess) {
-	   graph_executed = true;
-	} else {
-	   cuda_graph_breaker = 1;
-	}
-   } else if (dynamic_cache_idx < MAX_GRAPH_CACHE_SIZE) {
-          // === Cache MISS: Record New Graph and Execute ===
+      err_core = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[found_idx].exec,
+                                                  decoderStreams[0],
+                                                  NULL, // doneEvent
+                                                  0); // Stream Index
+      if (err_core == cudaSuccess) {
+        graph_executed = true;
+      } else {
+        cuda_graph_breaker = 1;
+      }
+    } else if (dynamic_cache_idx < MAX_GRAPH_CACHE_SIZE) {
+      // === Cache MISS: Record New Graph and Execute ===
       int new_idx = dynamic_cache_idx;
 
       gpu_graph_cache[new_idx].occupied = true;
@@ -549,19 +556,19 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
                                                  &gpu_graph_cache[new_idx].exec,
                                                  (uint8_t*)&gpu_graph_cache[new_idx].occupied);
 
-       if (err_core == cudaSuccess) {
-            err_core = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[new_idx].exec, decoderStreams[0], NULL, 0);
+      if (err_core == cudaSuccess) {
+        err_core = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[new_idx].exec, decoderStreams[0], NULL, 0);
 
-            if (err_core == cudaSuccess) {
-               graph_executed = true;
-               dynamic_cache_idx++;
-            } else {
-                cuda_graph_breaker = 1; // graph execution fail
-            }
-       } else {
-            cuda_graph_breaker = 1; // graph record fail
-       }
-   }
+        if (err_core == cudaSuccess) {
+          graph_executed = true;
+          dynamic_cache_idx++;
+        } else {
+          cuda_graph_breaker = 1; // graph execution fail
+        }
+      } else {
+        cuda_graph_breaker = 1; // graph record fail
+      }
+    }
   }
 
   if (!graph_executed) {
@@ -569,8 +576,9 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
     // If the cache is full, we cannot record new graphs.
     // Or graph operation is not safe in this device or environment.
     // Execute kernel directly using standard launch.
-    if (cuda_graph_breaker == 1) {
+    if (cuda_graph_breaker == 1 && !GraphFailed) {
       LOG_W(PHY, "Graph opereations failed, falling back to normal.\n");
+      GraphFailed = true;
     }
     ldpc_cuda_bridge_t* perpack_buffer = stream_bridges[0];
     perpack_buffer->p_llr_ptr = p_llr_dev;
@@ -619,7 +627,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
       int i=0;
       if (b[K-2] == 0 && b[K - 1] == 0) {
             while (b[i] == 0 && i < K)
-	         i++;
+           i++;
             if (i == K) {
               LOG_E(PHY, "received all 0 pdu (K %d, r %d)\n",K,r);
             }
