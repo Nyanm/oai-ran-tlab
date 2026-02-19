@@ -1133,14 +1133,18 @@ static DRB_nGRAN_to_mod_t get_e1_drb_mod_reestablishment(const drb_t *drb, const
  */
 static void cuup_notify_reestablishment(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue_p)
 {
+  // Quit if no CU-UP is associated
+  if (!is_cuup_associated(rrc) || !ue_associated_to_cuup(ue_p)) {
+    return;
+  }
+
   e1ap_bearer_mod_req_t req = {
       .gNB_cu_cp_ue_id = ue_p->rrc_ue_id,
       .gNB_cu_up_ue_id = ue_p->rrc_ue_id,
   };
-  // Quit re-establishment notification if no CU-UP is associated
-  if (!is_cuup_associated(rrc) || !ue_associated_to_cuup(ue_p)) {
-    return;
-  }
+  uint16_t num_pdu_sessions = seq_arr_size(&ue_p->pduSessions);
+  DevAssert(num_pdu_sessions > 0);
+  req.pduSessionMod = calloc_or_fail(num_pdu_sessions, sizeof(*req.pduSessionMod));
 
   bool um_on_default_drb = rrc->configuration.um_on_default_drb;
   /* loop through active DRBs */
@@ -2471,6 +2475,9 @@ static void e1_send_bearer_updates(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, f
     .gNB_cu_cp_ue_id = UE->rrc_ue_id,
     .gNB_cu_up_ue_id = UE->rrc_ue_id,
   };
+  uint16_t num_pdu_sessions = seq_arr_size(&UE->pduSessions);
+  DevAssert(num_pdu_sessions > 0);
+  req.pduSessionMod = calloc_or_fail(num_pdu_sessions, sizeof(*req.pduSessionMod));
 
   for (int i = 0; i < n; i++) {
     const f1ap_drb_setup_t *drb_f1 = &drbs[i];
@@ -2498,6 +2505,9 @@ static void e1_request_pdcp_status(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE)
       .gNB_cu_cp_ue_id = UE->rrc_ue_id,
       .gNB_cu_up_ue_id = UE->rrc_ue_id,
   };
+  uint16_t num_pdu_sessions = seq_arr_size(&UE->pduSessions);
+  DevAssert(num_pdu_sessions > 0);
+  req.pduSessionMod = calloc_or_fail(num_pdu_sessions, sizeof(*req.pduSessionMod));
 
   FOR_EACH_SEQ_ARR(drb_t *, drb, &UE->drbs) {
     DRB_nGRAN_to_mod_t drb_to_mod = {.id = drb->drb_id, .pdcp_sn_status_requested = true};
@@ -2521,6 +2531,9 @@ void e1_notify_pdcp_status(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const ngap_drb_s
       .gNB_cu_cp_ue_id = UE->rrc_ue_id,
       .gNB_cu_up_ue_id = UE->rrc_ue_id,
   };
+  uint16_t num_pdu_sessions = seq_arr_size(&UE->pduSessions);
+  DevAssert(num_pdu_sessions > 0);
+  req.pduSessionMod = calloc_or_fail(num_pdu_sessions, sizeof(*req.pduSessionMod));
 
   FOR_EACH_SEQ_ARR(drb_t *, drb, &UE->drbs) {
     LOG_I(NR_RRC, "Forward PDCP Status to CU-UP (drb_id=%d)\n", drb->drb_id);

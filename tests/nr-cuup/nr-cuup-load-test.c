@@ -13,6 +13,7 @@
 #include "openair3/ocp-gtpu/gtp_itf.h"
 #include "openair2/E1AP/lib/e1ap_interface_management.h"
 #include "common/config/config_userapi.h"
+#include "openair2/E1AP/lib/e1ap_bearer_context_management.h"
 
 configmodule_interface_t *uniqCfg;
 
@@ -97,6 +98,7 @@ static e1ap_bearer_setup_req_t get_breq(uint32_t ue_id, long pdu_id, long drb_id
     /* integrityProtectionKey not needed */
     .numPDUSessions = 1,
   };
+  bearer_req.pduSession = calloc_or_fail(1, sizeof(*bearer_req.pduSession));
   pdu_session_to_setup_t *pdu = &bearer_req.pduSession[0];
   pdu->sessionId = pdu_id;
   pdu->nssai = *nssai;
@@ -210,6 +212,7 @@ static up_params_t setup_cuup_ue_ng(sctp_assoc_t assoc_id, const e1ap_nssai_t *n
   DevAssert(drb->id == drb_id);
   DevAssert(drb->numUpParam == 1);
   up_params_t f1_up = drb->UpParamList[0];
+  free_e1ap_context_setup_response(bresp);
   itti_free(TASK_GNB_APP, itti_bresp);
 
   /* print diagnostics */
@@ -233,6 +236,7 @@ static e1ap_bearer_mod_req_t get_bmod(uint32_t ue_id, long pdu_id, up_params_t u
     .gNB_cu_up_ue_id = ue_id,
     .numPDUSessionsMod = 1,
   };
+  bearer_mod.pduSessionMod = calloc_or_fail(1, sizeof(*bearer_mod.pduSessionMod));
   pdu_session_to_mod_t *pdum = &bearer_mod.pduSessionMod[0];
   pdum->sessionId = pdu_id;
   pdum->numDRB2Modify = 1;
@@ -298,6 +302,8 @@ static void setup_cuup_ue_f1(sctp_assoc_t assoc_id, uint32_t ue_id, instance_t g
   MessagesIds id = ITTI_MSG_ID(itti_bmodr);
   AssertFatal(id == E1AP_BEARER_CONTEXT_MODIFICATION_RESP, "expected E1AP bearer context modification response, received %s instead\n", itti_get_message_name(id));
   //DevAssert(assoc_id == itti_bmodr->ittiMsgHeader.originInstance);
+  e1ap_bearer_modif_resp_t *bmodr = &E1AP_BEARER_CONTEXT_MODIFICATION_RESP(itti_bmodr);
+  free_e1ap_context_mod_response(bmodr);
   itti_free(TASK_GNB_APP, itti_bmodr);
 
   /* print diagnostics */

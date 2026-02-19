@@ -55,6 +55,7 @@
 #include "constr_TYPE.h"
 #include "conversions.h"
 #include "e1ap_messages_types.h"
+#include "E1AP/lib/e1ap_bearer_context_management.h"
 #include "f1ap_messages_types.h"
 #include "gtpv1_u_messages_types.h"
 #include "intertask_interface.h"
@@ -369,15 +370,32 @@ void trigger_bearer_setup(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, uint64_t ueAggMax
       .secInfo.integrityProtectionAlgorithm = rrc->security.do_drb_integrity ? UE->integrity_algorithm : 0,
       .ueDlAggMaxBitRate = ueAggMaxBitRateDownlink,
   };
+
+  // Collect PDU sessions with NEW status first - store pdusession_t directly to avoid stack overflow
+  pdusession_t to_setup[MAX_PDUS_PER_UE];
+  uint16_t n_to_setup = 0;
+  FOR_EACH_SEQ_ARR (rrc_pdu_session_param_t *, pduSession, &UE->pduSessions) {
+    if (pduSession->status == PDU_SESSION_STATUS_NEW) {
+      if (n_to_setup >= MAX_PDUS_PER_UE) {
+        LOG_E(NR_RRC, "UE %d: Maximum number of PDU sessions (%d) exceeded\n", UE->rrc_ue_id, MAX_PDUS_PER_UE);
+        break;
+      }
+      memcpy(&to_setup[n_to_setup++], &pduSession->param, sizeof(pdusession_t));
+    }
+  }
+  // Allocate only the exact size needed
+  if (n_to_setup > 0) {
+    bearer_req.pduSession = calloc_or_fail(n_to_setup, sizeof(*bearer_req.pduSession));
+  }
+
   security_information_t *secInfo = &bearer_req.secInfo;
   nr_derive_key(UP_ENC_ALG, secInfo->cipheringAlgorithm, UE->kgnb, (uint8_t *)secInfo->encryptionKey);
   nr_derive_key(UP_INT_ALG, secInfo->integrityProtectionAlgorithm, UE->kgnb, (uint8_t *)secInfo->integrityProtectionKey);
 
   e1ap_nssai_t cuup_nssai = {0};
-  FOR_EACH_SEQ_ARR(rrc_pdu_session_param_t *, pduSession, &UE->pduSessions) {
-    if (pduSession->status != PDU_SESSION_STATUS_NEW)
-      continue;
-    pdusession_t *session = &pduSession->param;
+  // Fill allocated array with collected PDU sessions
+  for (size_t i = 0; i < n_to_setup; i++) {
+    pdusession_t *session = &to_setup[i];
     // Fill E1 PDU Session to setup item
     pdu_session_to_setup_t *pdu = &bearer_req.pduSession[bearer_req.numPDUSessions++];
     *pdu = fill_e1_pdusession_to_setup(session, &rrc->security);
@@ -388,12 +406,23 @@ void trigger_bearer_setup(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, uint64_t ueAggMax
       if (drb->pdusession_id != session->pdusession_id) {
         continue;
       }
+      // Bounds check for DRB array
+      if (pdu->numDRB2Setup >= E1AP_MAX_NUM_DRBS) {
+        LOG_E(NR_RRC,
+              "UE %d: Maximum number of DRBs (%d) exceeded for PDU session %d\n",
+              UE->rrc_ue_id,
+              E1AP_MAX_NUM_DRBS,
+              session->pdusession_id);
+        break;
+      }
       pdu->DRBnGRanList[pdu->numDRB2Setup++] = fill_e1_drb_to_setup(drb, session, rrc->configuration.um_on_default_drb, UE->redcap_cap);
     }
     DevAssert(pdu->numDRB2Setup > 0);
   }
+  // Check if we have any PDU sessions to setup
   if (bearer_req.numPDUSessions == 0) {
     LOG_W(NR_RRC, "UE %d: No PDU sessions to setup, skipping bearer context setup\n", UE->rrc_ue_id);
+    free_e1ap_context_setup_request(&bearer_req);
     return;
   }
   /* Limitation: we assume one fixed CU-UP per UE. We base the selection on
@@ -403,6 +432,7 @@ void trigger_bearer_setup(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, uint64_t ueAggMax
    * CU-UPs, and send them to the different CU-UPs. */
   sctp_assoc_t assoc_id = get_new_cuup_for_ue(rrc, UE, cuup_nssai.sst, cuup_nssai.sd);
   rrc->cucp_cuup.bearer_context_setup(assoc_id, &bearer_req);
+  free_e1ap_context_setup_request(&bearer_req);
 }
 
 /**
@@ -1578,6 +1608,9 @@ int rrc_gNB_process_NGAP_PDUSESSION_RELEASE_COMMAND(ngap_pdusession_release_comm
         gNB_ue_ngap_id,
         cmd->nb_pdusessions_torelease);
   e1ap_bearer_mod_req_t req = {0};
+  if (cmd->nb_pdusessions_torelease > 0) {
+    req.pduSessionRem = calloc_or_fail(cmd->nb_pdusessions_torelease, sizeof(*req.pduSessionRem));
+  }
   for (int pdusession = 0; pdusession < cmd->nb_pdusessions_torelease; pdusession++) {
     rrc_pdu_session_param_t *pduSession = find_pduSession(&UE->pduSessions, cmd->pdusession_ids[pdusession]);
     if (!pduSession) {
@@ -1599,11 +1632,11 @@ int rrc_gNB_process_NGAP_PDUSESSION_RELEASE_COMMAND(ngap_pdusession_release_comm
 
   if (req.numPDUSessionsRem == 0) {
     LOG_E(NR_RRC, "Received NG PDU Session Release Command but no PDU Sessions to release\n");
+    free_e1ap_context_mod_request(&req);
     return -1;
   } else if (!ue_associated_to_cuup(UE)) {
     LOG_E(NR_RRC, "UE %d is not associated to CU-UP\n", UE->rrc_ue_id);
     // TODO handle, e.g., only trigger F1 release
-    return 0;
   } else {
     /* If present, store NAS-PDU in the UE context for later inclusion in RRCReconfiguration */
     if (cmd->nas_pdu.len > 0) {
@@ -1615,6 +1648,7 @@ int rrc_gNB_process_NGAP_PDUSESSION_RELEASE_COMMAND(ngap_pdusession_release_comm
     sctp_assoc_t assoc_id = get_existing_cuup_for_ue(UE);
     rrc->cucp_cuup.bearer_context_mod(assoc_id, &req);
   }
+  free_e1ap_context_mod_request(&req);
   init_delayed_action(&UE->delayed_action);
   return 0;
 }

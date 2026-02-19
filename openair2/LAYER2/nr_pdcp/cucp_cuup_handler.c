@@ -24,6 +24,7 @@
 #include "nr_pdcp_oai_api.h"
 #include "openair2/COMMON/e1ap_messages_types.h"
 #include "openair2/E1AP/e1ap_common.h"
+#include "openair2/E1AP/lib/e1ap_bearer_context_management.h"
 #include "openair2/F1AP/f1ap_common.h"
 #include "openair2/F1AP/f1ap_ids.h"
 #include "openair2/SDAP/nr_sdap/nr_sdap.h"
@@ -165,6 +166,7 @@ void e1_bearer_context_setup(const e1ap_bearer_setup_req_t *req)
     .gNB_cu_up_ue_id = cu_up_ue_id,
   };
   resp.numPDUSessions = req->numPDUSessions;
+  resp.pduSession = calloc_or_fail(req->numPDUSessions, sizeof(*resp.pduSession));
   for (int i = 0; i < resp.numPDUSessions; ++i) {
     const pdu_session_to_setup_t *req_pdu = req->pduSession + i;
     LOG_I(E1AP, "UE %d: add PDU session ID %ld (%d bearers)\n", cu_up_ue_id, req_pdu->sessionId, req_pdu->numDRB2Setup);
@@ -242,6 +244,7 @@ void e1_bearer_context_setup(const e1ap_bearer_setup_req_t *req)
   }
 
   get_e1_if()->bearer_setup_response(&resp);
+  free_e1ap_context_setup_response(&resp);
 }
 
 static void release_gtpu_tunnel(uint32_t ue_id, int pdusession_id)
@@ -297,6 +300,8 @@ void e1_bearer_context_modif(const e1ap_bearer_mod_req_t *req)
       .gNB_cu_cp_ue_id = req->gNB_cu_cp_ue_id,
       .gNB_cu_up_ue_id = req->gNB_cu_up_ue_id,
   };
+  modif.pduSessionMod = calloc_or_fail(req->numPDUSessionsMod + req->numPDUSessionsRem,
+                                      sizeof(*modif.pduSessionMod));
 
   instance_t f1inst = get_f1_gtp_instance();
 
@@ -376,7 +381,7 @@ void e1_bearer_context_modif(const e1ap_bearer_mod_req_t *req)
 
   /* PDU Session Resource To Remove List (see 9.3.3.12 of TS 38.463) */
   for (int i = 0; i < req->numPDUSessionsRem; i++) {
-    modif.pduSessionMod[i].id = req->pduSessionRem[i].sessionId;
+    modif.pduSessionMod[req->numPDUSessionsMod + i].id = req->pduSessionRem[i].sessionId;
     modif.numPDUSessionsMod++;
     release_gtpu_tunnel(req->gNB_cu_up_ue_id, req->pduSessionRem[i].sessionId);
     release_f1_drbs(req->gNB_cu_up_ue_id, req->pduSessionRem[i].sessionId);
@@ -384,6 +389,7 @@ void e1_bearer_context_modif(const e1ap_bearer_mod_req_t *req)
   }
 
   get_e1_if()->bearer_modif_response(&modif);
+  free_e1ap_context_mod_response(&modif);
 }
 
 static void remove_ue_e1(const uint32_t ue_id)

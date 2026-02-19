@@ -295,6 +295,7 @@ int e1apCUUP_handle_BEARER_CONTEXT_SETUP_REQUEST(sctp_assoc_t assoc_id, e1ap_upc
     return -1;
   }
   e1_bearer_context_setup(&bearerCxt);
+  free_e1ap_context_setup_request(&bearerCxt);
   return 0;
 }
 
