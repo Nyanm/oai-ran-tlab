@@ -1042,15 +1042,16 @@ nfapi_nr_dl_tti_pdsch_pdu_rel15_t *prepare_pdsch_pdu(nfapi_nr_dl_tti_request_pdu
   pdsch_pdu->precodingAndBeamforming.prg_size = pdsch_pdu->rbSize;
   pdsch_pdu->precodingAndBeamforming.prgs_list[0].pm_idx = sched_pdsch->pm_index;
   
+  int nPorts = mac->radio_config.pdsch_AntennaPorts.XP * mac->radio_config.pdsch_AntennaPorts.N1 * mac->radio_config.pdsch_AntennaPorts.N2;
   // Populate multiple dig_bf_interfaces for dual-polarization when nLayers > 1
-  LOG_D(NR_MAC, "pdsch_pdu->nrOfLayers: %d\n", pdsch_pdu->nrOfLayers);
   int pol_offset = mac->beam_info.beam_id_polarization_offset;
-  if (pdsch_pdu->nrOfLayers > 1 && pol_offset > 0) {
-    pdsch_pdu->precodingAndBeamforming.dig_bf_interfaces = pdsch_pdu->nrOfLayers;
+  LOG_D(NR_MAC, "nPorts: %d, pol_offset: %d\n", nPorts, pol_offset);
+  if (pol_offset > 0) {
+    pdsch_pdu->precodingAndBeamforming.dig_bf_interfaces = nPorts;
     LOG_D(NR_MAC, "pdsch_pdu->precodingAndBeamforming.dig_bf_interfaces: %d\n", pdsch_pdu->precodingAndBeamforming.dig_bf_interfaces);
-    for (int layer = 0; layer < pdsch_pdu->nrOfLayers; layer++) {
-      pdsch_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[layer].beam_idx = 
-          beam_index + (layer * pol_offset);
+    for (int portIdx = 0; portIdx < nPorts; portIdx++) {
+      pdsch_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[portIdx].beam_idx = 
+          beam_index + (portIdx * pol_offset);
     }
   } else {
     pdsch_pdu->precodingAndBeamforming.dig_bf_interfaces = 1;
