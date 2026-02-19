@@ -575,7 +575,7 @@ bool nr_sdap_delete_entity(ue_id_t ue_id, int pdusession_id)
   nr_sdap_entity_t *entityPrev = NULL;
   int upperBound = 0;
 
-  if (entityPtr == NULL && (pdusession_id) * (pdusession_id - NGAP_MAX_PDU_SESSION) > 0) {
+  if (entityPtr == NULL && (pdusession_id) * (pdusession_id - NR_MAX_NB_PDU_SESSIONS) > 0) {
     LOG_E(SDAP, "SDAP entities not established or Invalid range of pdusession_id [0, 256].\n");
     return false;
   }

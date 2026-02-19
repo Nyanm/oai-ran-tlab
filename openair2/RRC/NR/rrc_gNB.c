@@ -1100,7 +1100,7 @@ static bool append_e1_drb_mod_req(e1ap_bearer_mod_req_t *req,
 
   // Create new PDU session modification entry if not found
   if (!pdu_mod) {
-    DevAssert(req->numPDUSessionsMod < E1AP_MAX_NUM_PDU_SESSIONS);
+    DevAssert(req->numPDUSessionsMod < NR_MAX_NB_PDU_SESSIONS);
     int new_index = req->numPDUSessionsMod++;
     req->pduSessionMod[new_index].sessionId = pdu_id;
     pdu_mod = &req->pduSessionMod[new_index];

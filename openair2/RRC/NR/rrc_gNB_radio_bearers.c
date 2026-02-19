@@ -127,7 +127,7 @@ rrc_pdu_session_param_t *add_pduSession(seq_arr_t *sessions_ptr, const pdusessio
   DevAssert(sessions_ptr);
   DevAssert(in);
 
-  if (seq_arr_size(sessions_ptr) == NGAP_MAX_PDU_SESSION) {
+  if (seq_arr_size(sessions_ptr) == NR_MAX_NB_PDU_SESSIONS) {
     LOG_W(NR_RRC, "Reached maximum number of PDU Session = %ld\n", seq_arr_size(sessions_ptr));
     return NULL;
   }
@@ -159,7 +159,7 @@ static bool eq_drb_pdu_session_id(const void *vval, const void *vit)
 drb_t *find_drb_by_pdusession_id(seq_arr_t *seq, int pdusession_id)
 {
   DevAssert(seq);
-  DevAssert(pdusession_id > 0 && pdusession_id <= NGAP_MAX_PDU_SESSION);
+  DevAssert(pdusession_id > 0 && pdusession_id <= NR_MAX_NB_PDU_SESSIONS);
   elm_arr_t elm = find_if(seq, &pdusession_id, eq_drb_pdu_session_id);
   if (elm.found)
     return (drb_t *)elm.it;
@@ -223,7 +223,7 @@ drb_t *nr_rrc_add_drb(seq_arr_t *drb_ptr, int pdusession_id, nr_pdcp_configurati
 {
   DevAssert(drb_ptr);
   DevAssert(pdcp != NULL);
-  DevAssert(pdusession_id > 0 && pdusession_id <= NGAP_MAX_PDU_SESSION);
+  DevAssert(pdusession_id > 0 && pdusession_id <= NR_MAX_NB_PDU_SESSIONS);
 
   // Get next available DRB ID
   int drb_id = 0;

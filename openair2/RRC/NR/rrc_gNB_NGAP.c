@@ -471,7 +471,7 @@ int rrc_gNB_process_NGAP_INITIAL_CONTEXT_SETUP_REQ(MessageDef *msg_p, instance_t
      * According to TS 38.413, establishment of such a PDU session shall be
      * reported as failed in the response. */
     int ps_count = 0;
-    pdusession_t psessions[NGAP_MAX_PDU_SESSION] = {0};
+    pdusession_t psessions[NR_MAX_NB_PDU_SESSIONS] = {0};
 
     for (int i = 0; i < req->nb_of_pdusessions; ++i) {
       const pdusession_resource_item_t *src = &req->pdusession[i];
@@ -871,8 +871,7 @@ void rrc_gNB_process_NGAP_PDUSESSION_SETUP_REQ(MessageDef *msg_p, instance_t ins
 
   UE->amf_ue_ngap_id = msg->amf_ue_ngap_id;
 
-
-  pdusession_t to_setup[NGAP_MAX_PDU_SESSION] = {0};
+  pdusession_t to_setup[NR_MAX_NB_PDU_SESSIONS] = {0};
   for (int i = 0; i < msg->nb_pdusessions_tosetup; ++i)
     cp_pdusession_resource_item_to_pdusession(&to_setup[i], &msg->pdusession[i]);
 
@@ -974,7 +973,7 @@ int rrc_gNB_process_NGAP_PDUSESSION_MODIFY_REQ(const ngap_pdusession_modify_req_
 
   uint8_t xid = rrc_gNB_get_next_transaction_identifier(rrc->module_id);
   bool all_failed = true;
-  DevAssert(req->nb_pdusessions_tomodify <= NGAP_MAX_PDU_SESSION);
+  DevAssert(req->nb_pdusessions_tomodify <= NR_MAX_NB_PDU_SESSIONS);
   for (int i = 0; i < req->nb_pdusessions_tomodify; i++) {
     const pdusession_resource_item_t *sessMod = &req->pdusession[i];
     rrc_pdu_session_param_t *session = find_pduSession(&UE->pduSessions, sessMod->pdusession_id);
@@ -1043,7 +1042,7 @@ int rrc_gNB_send_NGAP_PDUSESSION_MODIFY_RESP(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE
       session->status = PDU_SESSION_STATUS_ESTABLISHED;
       session->cause.type = NGAP_CAUSE_NOTHING;
       // Fill response
-      DevAssert(resp->nb_of_pdusessions <= NGAP_MAX_PDU_SESSION);
+      DevAssert(resp->nb_of_pdusessions <= NR_MAX_NB_PDU_SESSIONS);
       pdusession_modify_t *p = &resp->pdusessions[resp->nb_of_pdusessions++];
       p->pdusession_id = session->param.pdusession_id;
       FOR_EACH_SEQ_ARR(nr_rrc_qos_t *, qos_session, &session->param.qos) {
@@ -1053,7 +1052,7 @@ int rrc_gNB_send_NGAP_PDUSESSION_MODIFY_RESP(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE
       }
       p->pdusession_id = session->param.pdusession_id;
     } else if (session->status == PDU_SESSION_STATUS_FAILED) {
-      DevAssert(resp->nb_of_pdusessions_failed <= NGAP_MAX_PDU_SESSION);
+      DevAssert(resp->nb_of_pdusessions_failed <= NR_MAX_NB_PDU_SESSIONS);
       pdusession_failed_t *failed = &resp->pdusessions_failed[resp->nb_of_pdusessions_failed++];
       failed->pdusession_id = session->param.pdusession_id;
       failed->cause = session->cause;
@@ -1088,7 +1087,7 @@ void rrc_gNB_send_NGAP_UE_CONTEXT_RELEASE_REQ(const module_id_t gnb_mod_idP,
     req->cause.value = causeP.value;
     // PDU Session Resource List (optional)
     FOR_EACH_SEQ_ARR(rrc_pdu_session_param_t *, session, &UE->pduSessions) {
-      DevAssert(req->nb_of_pdusessions < NGAP_MAX_PDU_SESSION);
+      DevAssert(req->nb_of_pdusessions < NR_MAX_NB_PDU_SESSIONS);
       req->pdusession_ids[req->nb_of_pdusessions] = session->param.pdusession_id;
       req->nb_of_pdusessions++;
     }
@@ -1205,8 +1204,8 @@ int rrc_gNB_process_Handover_Request(gNB_RRC_INST *rrc, ngap_handover_request_t 
   nr_rrc_pdcp_config_security(UE, true);
 
   // Process all PDU Session Resource Setup items from handover request
-  DevAssert(msg->nb_of_pdusessions <= NGAP_MAX_PDU_SESSION);
-  pdusession_t to_setup[NGAP_MAX_PDU_SESSION];
+  DevAssert(msg->nb_of_pdusessions <= NR_MAX_NB_PDU_SESSIONS);
+  pdusession_t to_setup[NR_MAX_NB_PDU_SESSIONS];
   for (int i = 0; i < msg->nb_of_pdusessions; i++) {
     ho_request_pdusession_t *ho_pdu = &msg->pduSessionResourceSetupList[i];
     pdusession_t *pdu = &to_setup[i];
@@ -1458,7 +1457,7 @@ void rrc_gNB_send_NGAP_HANDOVER_REQUEST_ACKNOWLEDGE(gNB_RRC_INST *rrc, gNB_RRC_U
   FOR_EACH_SEQ_ARR(rrc_pdu_session_param_t*, session, &UE->pduSessions) {
     session->status = PDU_SESSION_STATUS_ESTABLISHED;
     // PDU Session ID
-    DevAssert(msg->nb_of_pdusessions < NGAP_MAX_PDU_SESSION);
+    DevAssert(msg->nb_of_pdusessions < NR_MAX_NB_PDU_SESSIONS);
     pdu_session_resource_admitted_t *pdu = &msg->pdusessions[msg->nb_of_pdusessions++];
     pdu->pdu_session_id = session->param.pdusession_id;
     // Handover Request Acknowledge Transfer
@@ -1545,7 +1544,7 @@ void rrc_gNB_send_NGAP_PDUSESSION_RELEASE_RESPONSE(gNB_RRC_INST *rrc, gNB_RRC_UE
     if (xid == session->xid) {
       const pdusession_t *pdusession = &session->param;
       if (session->status == PDU_SESSION_STATUS_TORELEASE) {
-        DevAssert(resp->nb_of_pdusessions_released < NGAP_MAX_PDU_SESSION);
+        DevAssert(resp->nb_of_pdusessions_released < NR_MAX_NB_PDU_SESSIONS);
         resp->pdusession_release[resp->nb_of_pdusessions_released++].pdusession_id = pdusession->pdusession_id;
       }
     }
@@ -1736,12 +1735,12 @@ void rrc_gNB_send_NGAP_HANDOVER_REQUIRED(gNB_RRC_INST *rrc,
     if (pduSession->status != PDU_SESSION_STATUS_ESTABLISHED)
       continue;
     pdusession_t *session = &pduSession->param;
-    DevAssert(msg.nb_of_pdusessions < NGAP_MAX_PDU_SESSION);
+    DevAssert(msg.nb_of_pdusessions < NR_MAX_NB_PDU_SESSIONS);
     pdusession_resource_t *pdu = &msg.pdusessions[msg.nb_of_pdusessions++];
     // PDU Session ID
     pdu->pdusession_id = session->pdusession_id;
     // PDU Session Resource Information List (O)
-    DevAssert(msg.source2target->nb_pdu_session_resource < NGAP_MAX_PDU_SESSION);
+    DevAssert(msg.source2target->nb_pdu_session_resource < NR_MAX_NB_PDU_SESSIONS);
     pdusession_resource_info_t *pdu_info = &msg.source2target->pdu_session_resource[msg.source2target->nb_pdu_session_resource++];
     pdu_info->pdusession_id = session->pdusession_id;
     FOR_EACH_SEQ_ARR(nr_rrc_qos_t *, qos, &session->qos) {
