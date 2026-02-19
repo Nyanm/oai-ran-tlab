@@ -187,10 +187,49 @@ sudo sysctl -w net.core.rmem_default=62500000
 sudo ethtool -G enp1s0f0 tx 4096 rx 4096
 ```
 
-### 6.2 Real-time performance workarounds
+### 6.2 Real-time performance
+
+#### 6.2.1 System tuning
+In order to get an optimal real-time behavior, a few tunings can be performed on the host system:
+- The use of isolated cores for the softmodem prevents competitions on the usage of core between the softmodem and other processes.  
+Core isolation is enabled through the kernel command line. **Warning: modifying the kernel command line can harm the OS behavior. Proceed with caution.**  
+Refer to the [OAI 7.2 Fronthaul Interface Tutorial](./ORAN_FHI7.2_Tutorial.md) for examples.
 - Enable Performance Mode `sudo cpupower idle-set -D 0`
-- If you get real-time problems on heavy UL traffic, reduce the maximum UL MCS using an additional command-line switch: `--MACRLCs.[0].ul_max_mcs 14`.
-- You can also reduce the number of LDPC decoder iterations, which will make the LDPC decoder take less time: `--L1s.[0].max_ldpc_iterations 4`.
+- Read more on system tuning in the [dedicated document on performance tuning](./tuning_and_security.md).
+
+#### 6.2.2 Softmodem tuning
+The way the NR softmodem uses the computing ressource can be configured.
+It can have a significant effect on the performance and real-time behavior:
+- The L1 TX and L1 RX threads are the two main threads executing the L1 RX and L1 TX pipelines.  
+These threads are ideally assigned to two dedicated cores. To be dedicated, the cores should be isolated in the kernel parameters and not be assigned elsewhere.  
+They can be assigned to specified cores with options `--L1s.[0].L1_tx_thread_core` and `--L1s.[0].L1_rx_thread_core` followed by a core id.  
+- The thread pool is a group of processor cores over which some baseband processing worker cores execute.  
+It is configured by providing a list of core ids after option `--thread-pool`.  
+`-1` can also be passed instead of a core id in order to use a floating core.  
+By default, the thread pool is 8 floating cores.
+- PDSCH generation (i.e., layer mapping and precoding) is by default executed in the L1 TX thread but can be multithreaded using the thread pool.  
+This is enabled by option `--tx-sym` followed by the number of symbols that should be processed in each thread.
+
+#### 6.2.3 Workarounds
+If the real-time performance remains bad after tuning the system and softmodem,
+some workarounds allow to lower the computing demand at the cost of lower network performance:
+- If you get real-time problems on heavy UL traffic, reduce the maximum UL MCS using an additional command-line switch: `--MACRLCs.[0].ul_max_mcs 14`.  
+This comes at the cost of a lower spectral efficiency (i.e., less data for the same radio resource).
+- You can also reduce the number of LDPC decoder iterations, which will make the LDPC decoder take less time: `--L1s.[0].max_ldpc_iterations 4`.  
+The default number of LDPC iterations is 5. Lowering the number of iteration comes at the cost of more unsuccessful transmissions.  
+OAI offers multiple implementation of LDPC coding, including offloading to an accelerator, the number of LDPC iteration should be chosen accordingly.
+
+#### 6.2.4 List of behaviors
+Here is a **non-exhaustive** list of known behavior related to real-time performance:
+- On some AMD EPYC series processors with Zen architecture (at least every Zen4, Zen4c, Zen5 and Zen5c based processors experience this behavior),  
+the processor is made of multiple dies holding one or multiple core complexes which are groups of cores with an L3 cache.  
+This means that cores from different core complexes do not share the same L3 cache and communication between these cores implies inter L3 cache communication  
+within a die or, even worse, between dies, which has a cost in term of latency.  
+Depending on the system configuration, the NUMA topology may reflect this physical topology, which can induce even further latency for inter core complex communication.  
+The softmodem is sensitive to this latency and its performance can be harmed if it uses cores across the border of dies or core complexes,  
+especially when multithreading of PDSCH generation is enabled (argument of `--tx-sym` is superior to 0).  
+We recomend to allocate cores to the softmodem on such machine with awareness of the topology.  
+Ideally, the softmodem should use only one core complex or one die if it doesn't hold on one core complex.
 
 ### 6.3 Uplink issues related with noise on the DC carriers
 
