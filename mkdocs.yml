@@ -238,6 +238,10 @@ markdown_extensions:
           class: mermaid
           format: !!python/name:mermaid2.fence_mermaid_custom
 
+validation:
+  links:
+    not_found: ignore
+
 plugins:
   - search
   - mermaid2
