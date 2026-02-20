@@ -27,7 +27,7 @@
   <testCase>
     <class>Pull_Local_Registry</class>
     <desc>Pull Images from Local Registry</desc>
-    <node>jetson1-oai</node>
+    <node>jetson2-oai</node>
     <images>oai-nr-ue</images>
     <tag_prefix>armv8_</tag_prefix>
   </testCase>
@@ -42,7 +42,7 @@
   <testCase>
     <class>Create_Workspace</class>
     <desc>Create new Workspace</desc>
-    <node>jetson1-oai</node>
+    <node>jetson2-oai</node>
   </testCase>
 
   <testCase>
@@ -63,7 +63,7 @@
     <class>Deploy_Object</class>
     <desc>Deploy nrUE (TDD/Band77/10MHz/N310) in a container</desc>
     <yaml_path>ci-scripts/yaml_files/sa_b210_jetson_nrue</yaml_path>
-    <node>jetson1-oai</node>
+    <node>jetson2-oai</node>
     <services>oai-nr-ue-10</services>
     <num_attempts>3</num_attempts>
   </testCase>
@@ -77,7 +77,7 @@
   <testCase>
     <class>Custom_Script</class>
     <desc>Run iperf3 test</desc>
-    <node>jetson1-oai</node>
+    <node>jetson2-oai</node>
     <script>scripts/iperf3-script.sh</script>
   </testCase>
 
@@ -85,7 +85,7 @@
     <class>Undeploy_Object</class>
     <always_exec>true</always_exec>
     <desc>Undeploy nr UE</desc>
-    <node>jetson1-oai</node>
+    <node>jetson2-oai</node>
     <yaml_path>ci-scripts/yaml_files/sa_b210_jetson_nrue</yaml_path>
   </testCase>
 
@@ -109,7 +109,7 @@
     <class>Clean_Test_Server_Images</class>
     <always_exec>true</always_exec>
     <desc>Clean Test Images on Test Server</desc>
-    <node>jetson1-oai</node>
+    <node>jetson2-oai</node>
     <images>oai-nr-ue</images>
   </testCase>
 
