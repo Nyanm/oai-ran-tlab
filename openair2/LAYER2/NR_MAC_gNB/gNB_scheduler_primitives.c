@@ -3243,7 +3243,7 @@ void nr_csirs_scheduling(int Mod_idP, gNB_MAC_INST *mac, frame_t frame, slot_t s
       int period, offset;
 
       nfapi_nr_dl_tti_request_body_t *dl_req = &DL_req->dl_tti_request_body;
-
+      LOG_E(NR_MAC, "csi_measconfig->nzp_CSI_RS_ResourceToAddModList->list.count: %d\n", csi_measconfig->nzp_CSI_RS_ResourceToAddModList->list.count);
       for (int id = 0; id < csi_measconfig->nzp_CSI_RS_ResourceToAddModList->list.count; id++){
         nzpcsi = csi_measconfig->nzp_CSI_RS_ResourceToAddModList->list.array[id];
         // transmitting CSI-RS only for current BWP
@@ -3271,18 +3271,19 @@ void nr_csirs_scheduling(int Mod_idP, gNB_MAC_INST *mac, frame_t frame, slot_t s
           csirs_pdu_rel15->precodingAndBeamforming.prg_size = resourceMapping.freqBand.nrofRBs; //1 PRG of max size
           const int nrofPorts_to_num[] = {1, 2, 4, 8, 12, 16, 24, 32};
           int nports = nrofPorts_to_num[resourceMapping.nrofPorts];
-
+          int pol_offset = mac->beam_info.beam_id_polarization_offset;
+          LOG_E(NR_MAC, "id: %d, nports: %d, pol_offset: %d\n", id, nports, pol_offset);
           csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].pm_idx = 0;
           uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, gNB_mac->beam_info.beam_mode);
-          int pol_offset = mac->beam_info.beam_id_polarization_offset;
+          
           if (nports > 1 && pol_offset > 0) {
             csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces = nports;
-            LOG_D(NR_MAC, "csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces: %d\n", csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces);
+            LOG_E(NR_MAC, "csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces: %d\n", csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces);
             for (int layer = 0; layer < nports; layer++) {
               int new_beam = UE->UE_beam_index + (layer * pol_offset);
               fapi_beam = convert_to_fapi_beam(new_beam, gNB_mac->beam_info.beam_mode);
               csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[layer].beam_idx = fapi_beam;
-              LOG_D(NR_MAC, "resourceMapping.nrofPorts: %d, UE->UE_beam_index %d, fapi_beam: %d\n", nports,new_beam, fapi_beam);
+              LOG_E(NR_MAC, "resourceMapping.nrofPorts: %d, UE->UE_beam_index %d, fapi_beam: %d\n", nports,new_beam, fapi_beam);
             }
           } else {
             csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces = 1;

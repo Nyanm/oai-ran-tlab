@@ -1644,6 +1644,7 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
         memcpy(RC.nrmac[j]->ulprbbl, prbbl, MAX_BWP_SIZE * sizeof(prbbl[0]));
       }
       RC.nrmac[j]->beam_info.beam_mode = config_get_processedint(cfg, &MacRLC_ParamList.paramarray[j][MACRLC_ANALOG_BEAMFORMING_IDX]);
+      RC.nrmac[j]->beam_info.beam_id_polarization_offset = *(MacRLC_ParamList.paramarray[j][MACRLC_BEAM_POL_OFFSET_IDX].u8ptr);
       if (RC.nrmac[j]->beam_info.beam_mode != NO_BEAM_MODE) {
         if (RC.nrmac[j]->beam_info.beam_mode == PRECONFIGURED_BEAM_IDX)
           AssertFatal(NFAPI_MODE == NFAPI_MONOLITHIC, "Analog beamforming only supported for monolithic scenario\n");
