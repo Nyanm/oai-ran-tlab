@@ -95,13 +95,13 @@ There is some general information in the [OpenAirInterface Gitlab Wiki](https://
 
 - [T tracer](../common/utils/T/DOC/T.md): a generic tracing tool (VCD, Wireshark, GUI, to save for later, ...)
 - [OPT](../openair2/UTIL/OPT/README.txt): how to trace to wireshark
-- [configuration module](../common/config/DOC/config.md)
-- [logging module](../common/utils/LOG/DOC/log.md)
-- [shared object loader](../common/utils/DOC/loader.md)
-- [threadpool](../common/utils/threadPool/thread-pool.md): used in L1
-- [LDPC implementation](../openair1/PHY/CODING/DOC/LDPCImplementation.md): It is a shared library
+- [Configuration Module](../common/config/DOC/config.md)
+- [Logging Module](../common/utils/LOG/DOC/log.md)
+- [Shared Object Loader](../common/utils/DOC/loader.md)
+- [Threadpool](../common/utils/threadPool/thread-pool.md): used in L1
+- [LDPC Implementation](../openair1/PHY/CODING/DOC/LDPCImplementation.md): It is a shared library
 - [NR LDPC AAL](../openair1/PHY/CODING/nrLDPC_coding/nrLDPC_coding_aal/README.md)
-- [time management](time_management.md)
+- [Time Management](time_management.md)
 - [LTE RRC Configuration (ASN.1 Based)](../openair2/RRC/LTE/MESSAGES/README.md)
 
 ### Radios
@@ -135,9 +135,9 @@ The other SDRs (AW2S, LimeSDR, ...) have no READMEs.
 
 ## Developer tools
 
-- [formatting](../tools/formatting/README.md): a clang-format error detection tool
-- [iwyu](../tools/iwyu/README.md): a tool to detect `#include` errors
-- [docker-dev-env](../tools/docker-dev-env/README.md): a ubuntu24 docker development environment
+- [Formatting](../tools/formatting/README.md): a clang-format error detection tool
+- [IWYU](../tools/iwyu/README.md): a tool to detect `#include` errors
+- [Docker Dev Environment](../tools/docker-dev-env/README.md): a ubuntu24 docker development environment
 - [Plotting tools](../tools/plots/README.md)
 - [Documentation Best Practices](./doc_best_practices.md): overall best practices for writing documentations
 - [Documentations using MkDocs](../tools/mkdocs/README.md)
