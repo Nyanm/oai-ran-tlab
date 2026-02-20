@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SERVER=10.45.0.1
-IFACE=oai_oaitun_ue1
+IFACE=oaitun_ue1
 BITRATE=10M
 DURATION=60
 
