@@ -71,7 +71,7 @@
   <testCase>
     <class>Attach_UE</class>
     <desc>Attach OAIUE</desc>
-    <id>oai_ue_jetson1</id>
+    <id>oai_ue_jetson2</id>
   </testCase>
 
   <testCase>
