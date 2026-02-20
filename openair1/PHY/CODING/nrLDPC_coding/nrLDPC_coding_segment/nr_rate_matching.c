@@ -1499,7 +1499,7 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
                              uint32_t F,
                              uint32_t Foffset)
 {
-  if (0/*BG == 1*/) 
+  if (BG == 1) 
      nr_rate_matching_ldpc_rx_simd(Tbslbrm,
                                    BG,
                                    Z,

@@ -126,7 +126,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
 
     float Coderate = (float)dlsch_config->targetCodeRate / 10240.0f;
 
-    LOG_D(
+    LOG_I(
         PHY,
         "%d.%d DLSCH %d Decoding, harq_pid %d TBS %d G %d nb_re_dmrs %d length dmrs %d mcs %d Nl %d nb_symb_sch %d nb_rb %d Qm %d "
         "Coderate %f\n",
@@ -203,6 +203,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
     nrLDPC_TB_decoding_parameters_t *TB_parameters = &TBs[pdsch_id];
 
     TB_parameters->llr = dlsch_llr[DLSCH_id];
+    LOG_I(NR_PHY,"Decoding pdsch %d, C %d, Qm %d, TB_parameters->llr %p, DLSCH_id %d\n",pdsch_id,TB_parameters->C, TB_parameters->Qm,TB_parameters->llr,DLSCH_id);
     TB_parameters->c = harq_process->c;
     TB_parameters->d = harq_process->d;
     TB_parameters->E = nr_get_E(TB_parameters->G,
@@ -339,11 +340,11 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
     }
 
     if (harq_process->decodeResult) {
-      LOG_D(PHY, "DLSCH received ok \n");
+      LOG_I(PHY, "%d.%d DLSCH received ok \n",proc->frame_rx,proc->nr_slot_rx);
       harq_process->status = SCH_IDLE;
       dlsch->last_iteration_cnt = dlsch->max_ldpc_iterations - 1;
     } else {
-      LOG_D(PHY, "DLSCH received nok \n");
+      LOG_I(PHY, "%d.%d DLSCH received nok \n",proc->frame_rx,proc->nr_slot_rx);
       kpiStructure.nb_nack++;
       dlsch->last_iteration_cnt = dlsch->max_ldpc_iterations;
       UEdumpScopeData(phy_vars_ue, proc->nr_slot_rx, proc->frame_rx, "DLSCH_NACK");

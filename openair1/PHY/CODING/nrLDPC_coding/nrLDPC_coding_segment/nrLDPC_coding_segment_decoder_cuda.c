@@ -63,6 +63,7 @@
 #define USE_GPU_FOR_RM_DEINTER 1
 
 cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
+cudaStream_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
 
 int d_array_size = 0;
 
@@ -91,6 +92,7 @@ int16_t **harq_d_array;
 int16_t *harq_d_array_dev;
 int16_t *harq_e_dev;
 int16_t *harq_f_dev;
+pthread_mutex_t decoder_mutex=PTHREAD_MUTEX_INITIALIZER;
 
 void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
 {
@@ -113,13 +115,18 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
   int E2 = segs->E2;
   int r_firstE2 = segs->first_rE2;
   
+  LOG_I(NR_PHY,"locking decoder (llr %p)\n",segs->llr);
+  pthread_mutex_lock(&decoder_mutex);
+
   // for PCIe GPU copy llrs to device memory
-  if (!pageable&&!integrated) cudaMemcpyAsync(harq_f_dev,
+  if (!pageable&&!integrated) {
+	                   LOG_I(NR_PHY,"cudaMemcpyAsynch llr->harq_f_dev\n");
+	                   cudaMemcpyAsync(harq_f_dev,
 		                           segs->llr,
 		                           ((r_firstE2*E1) + (C-r_firstE2)*E2)*sizeof(int16_t),
 					   cudaMemcpyHostToDevice,
 					   decoderStreams[0]);
-  else cudaStreamSynchronize(decoderStreams[0]);
+  }                           
 #if 0
   if (1/*segs->rv_index==2*/)
     for (int r=0;r<C;r++) {
@@ -130,6 +137,7 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
       }
     }
 #endif
+  LOG_I(NR_PHY,"deinter: e %p llr %p\n",harq_e_dev,pageable || integrated ? segs->llr : harq_f_dev);
   launch_deinterleave_i16(segs->Qm,E1,E2,C,r_firstE2,harq_e_dev,pageable||integrated ? segs->llr : harq_f_dev,decoderStreams,0);
   stop_meas(&segs->ts_deinterleave);
 #if 0
@@ -249,6 +257,7 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
   decParams.outMode=nrLDPC_outMode_BIT;
   decParams.numMaxIter = segs->max_ldpc_iterations;
 
+  LOG_I(NR_PHY,"decoder (llr %p): %d segments, Z %d, R %d \n",segs->llr,C,Z,segs->R);
   int decodeIterations = LDPCdecoder_cuda(&decParams, p_llr_dev, segs->c, p_procTime, segs->abort_decode);
   stop_meas(&segs->ts_ldpc_decode);
   
@@ -260,6 +269,8 @@ void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
     for (int r=0; r<C; r++) segs->decodeSuccess[r] = false;
     LOG_D(NR_PHY,"Set all segs->decodeSuccess to false\n");
   }
+  LOG_I(NR_PHY,"unlocking decoder (llr %p)\n",segs->llr);
+  pthread_mutex_unlock(&decoder_mutex);
 }
 
 
@@ -298,7 +309,6 @@ int32_t nrLDPC_coding_init_cuda(int max_num_pxsch)
 
   LDPCinit_cuda();
   LDPCint_rm_init(max_num_pxsch);
-
   return 0;
 }
 

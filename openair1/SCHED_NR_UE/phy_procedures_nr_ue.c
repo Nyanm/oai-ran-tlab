@@ -1325,8 +1325,9 @@ void pdsch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr_phy_
     int16_t* llr[2];
 #ifdef ENABLE_CUDA
     for (int i = 0; i < nb_codewords; i++) {
-      llr[i]=ue->llr_dev[i];
-      //memset(llr[i],0,rx_llr_buf_sz * sizeof(int16_t));
+      llr[i]=ue->llr_dev[nr_slot_rx%10][i];
+      LOG_D(NR_PHY,"nr_slot_rx %d, llr[%d] %p\n",nr_slot_rx,i,llr[i]);
+//      memset(llr[i],0,rx_llr_buf_sz * sizeof(int16_t));
     }
 #else
     for (int i = 0; i < nb_codewords; i++)
