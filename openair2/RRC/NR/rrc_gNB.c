@@ -2968,14 +2968,6 @@ static f1ap_drb_to_setup_t fill_f1_drb_to_be_setup(const gNB_RRC_INST *rrc,
   drb.qos_choice = F1AP_QOS_CHOICE_NR;
   /* DRB Info (including QoS flows) */
   drb.nr = fill_f1_drb_info_nr(&pdu->param, qfis, num_qfis);
-
-  /* tunnel info */
-  if (rrc_drb->cuup_tunnel_config.addr.length != sizeof(in_addr_t)) {
-    LOG_W(RRC,
-          "IPv4 address expected (length == %zu), got length %d\n",
-          sizeof(in_addr_t),
-          rrc_drb->cuup_tunnel_config.addr.length);
-  }
   memcpy(&drb.up_ul_tnl[0].tl_address, rrc_drb->cuup_tunnel_config.addr.buffer, sizeof(in_addr_t));
   drb.up_ul_tnl[0].teid = rrc_drb->cuup_tunnel_config.teid;
   drb.up_ul_tnl_len = 1;
