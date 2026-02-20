@@ -32,6 +32,7 @@
 #pragma once
 #include <cuda_runtime.h>
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
+#define MAX_UE_STREAMS 8 //assuming we run maximun 8 CPU threads at the same time(can change it to 16 or 32) 
 #ifdef __cplusplus
 extern "C" {
 #endif
