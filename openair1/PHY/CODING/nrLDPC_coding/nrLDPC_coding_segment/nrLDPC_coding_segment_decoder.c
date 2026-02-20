@@ -272,7 +272,7 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
   
   for (int r = 0; r < nrLDPC_TB_decoding_parameters->C; r++) {
 #ifdef ENABLE_CUDA
-    if (use_gpu == 1 && decParams.Z >= 128 && decParams.BG == 1 && nrLDPC_TB_decoding_parameters->R < 89 && r==0) {
+    if (use_gpu == 1 && decParams.Z >= 128 && decParams.BG == 1 && r==0) {
     // Call CUDA LDPC decoder for all segments
       nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters);
       break;
