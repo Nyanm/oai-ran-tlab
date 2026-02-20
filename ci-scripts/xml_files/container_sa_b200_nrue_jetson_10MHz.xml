@@ -33,8 +33,8 @@
   </testCase>
 
   <testCase>
-    <class>Pull_Local_Registry</class>
-    <desc>Pull Images from Local Registry</desc>
+    <class>Pull_Cluster_Image</class>
+    <desc>Pull Images from Cluster</desc>
     <node>matix</node>
     <images>oai-gnb</images>
   </testCase>
