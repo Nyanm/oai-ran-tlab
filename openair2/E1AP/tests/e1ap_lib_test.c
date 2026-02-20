@@ -98,6 +98,7 @@ static void test_bearer_context_setup_request(void)
       .secInfo.cipheringAlgorithm = 0x01,
       .secInfo.integrityProtectionAlgorithm = 0x01,
       .ueDlAggMaxBitRate = 1000000000,
+      .anl = activity_notification_level_pdu_session,
       .bearerContextStatus = 0,
       .servingPLMNid.mcc = 001,
       .servingPLMNid.mnc = 01,

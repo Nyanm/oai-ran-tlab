@@ -10,6 +10,7 @@
 #include "openair2/RRC/NR/MESSAGES/asn1_msg.h"
 #include "common/openairinterface5g_limits.h"
 #include "common/utils/LOG/log.h"
+#include "common/utils/utils.h"
 #include "openair2/F1AP/f1ap_common.h"
 #include "e1ap_default_values.h"
 #include "gtp_itf.h"

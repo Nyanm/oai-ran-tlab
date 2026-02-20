@@ -120,6 +120,12 @@ typedef enum BEARER_CONTEXT_STATUS_e {
   BEARER_RESUME,
 } BEARER_CONTEXT_STATUS_t;
 
+typedef enum activity_notification_level_e {
+  activity_notification_level_drb = 0,
+  activity_notification_level_pdu_session = 1,
+  activity_notification_level_ue = 2,
+} activity_notification_level_t;
+
 typedef enum cell_group_id_e {
   MCG = 0,
   SCG,
@@ -486,6 +492,8 @@ typedef struct e1ap_bearer_setup_req_s {
   long *ueDlMaxIPBitRate;
   // Serving PLMN (M)
   PLMN_ID_t servingPLMNid;
+  // Activity Notification Level (M)
+  activity_notification_level_t anl;
   // Bearer Context Status Change (O)
   BEARER_CONTEXT_STATUS_t bearerContextStatus;
   // UE Inactivity Timer (O)

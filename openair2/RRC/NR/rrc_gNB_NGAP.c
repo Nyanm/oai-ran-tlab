@@ -369,6 +369,7 @@ void trigger_bearer_setup(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, uint64_t ueAggMax
       .secInfo.cipheringAlgorithm = rrc->security.do_drb_ciphering ? UE->ciphering_algorithm : 0,
       .secInfo.integrityProtectionAlgorithm = rrc->security.do_drb_integrity ? UE->integrity_algorithm : 0,
       .ueDlAggMaxBitRate = ueAggMaxBitRateDownlink,
+      .anl = activity_notification_level_pdu_session,
   };
 
   // Collect PDU sessions with NEW status first - store pdusession_t directly to avoid stack overflow

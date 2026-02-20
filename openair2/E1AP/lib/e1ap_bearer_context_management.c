@@ -597,7 +597,7 @@ E1AP_E1AP_PDU_t *encode_E1_bearer_context_setup_request(const e1ap_bearer_setup_
   ieC5->id = E1AP_ProtocolIE_ID_id_ActivityNotificationLevel;
   ieC5->criticality = E1AP_Criticality_reject;
   ieC5->value.present = E1AP_BearerContextSetupRequestIEs__value_PR_ActivityNotificationLevel;
-  ieC5->value.choice.ActivityNotificationLevel = E1AP_ActivityNotificationLevel_pdu_session; // TODO: Remove hard coding
+  ieC5->value.choice.ActivityNotificationLevel = (E1AP_ActivityNotificationLevel_t)msg->anl;
   // System (M)
   asn1cSequenceAdd(out->protocolIEs.list, E1AP_BearerContextSetupRequestIEs_t, ieC6);
   ieC6->id = E1AP_ProtocolIE_ID_id_System_BearerContextSetupRequest;
@@ -683,6 +683,11 @@ bool decode_E1_bearer_context_setup_request(const E1AP_E1AP_PDU_t *pdu, e1ap_bea
                           out->servingPLMNid.mnc_digit_length);
         break;
 
+      case E1AP_ProtocolIE_ID_id_ActivityNotificationLevel:
+        _EQ_CHECK_INT(ie->value.present, E1AP_BearerContextSetupRequestIEs__value_PR_ActivityNotificationLevel);
+        out->anl = ie->value.choice.ActivityNotificationLevel;
+        break;
+
       case E1AP_ProtocolIE_ID_id_System_BearerContextSetupRequest:
         _EQ_CHECK_INT(ie->value.present, E1AP_BearerContextSetupRequestIEs__value_PR_System_BearerContextSetupRequest);
         E1AP_System_BearerContextSetupRequest_t *System_BearerContextSetupRequest =
@@ -759,6 +764,7 @@ e1ap_bearer_setup_req_t cp_bearer_context_setup_request(const e1ap_bearer_setup_
   cp.secInfo = msg->secInfo;
   cp.ueDlAggMaxBitRate = msg->ueDlAggMaxBitRate;
   cp.servingPLMNid = msg->servingPLMNid;
+  cp.anl = msg->anl;
   cp.bearerContextStatus = msg->bearerContextStatus;
   cp.numPDUSessions = msg->numPDUSessions;
   strncpy(cp.secInfo.encryptionKey, msg->secInfo.encryptionKey, sizeof(cp.secInfo.encryptionKey));
@@ -785,6 +791,7 @@ bool eq_bearer_context_setup_request(const e1ap_bearer_setup_req_t *a, const e1a
   _EQ_CHECK_LONG(a->secInfo.cipheringAlgorithm, b->secInfo.cipheringAlgorithm);
   _EQ_CHECK_LONG(a->secInfo.integrityProtectionAlgorithm, b->secInfo.integrityProtectionAlgorithm);
   _EQ_CHECK_LONG(a->ueDlAggMaxBitRate, b->ueDlAggMaxBitRate);
+  _EQ_CHECK_INT(a->anl, b->anl);
   _EQ_CHECK_INT(a->numPDUSessions, b->numPDUSessions);
   // PLMN
   _EQ_CHECK_INT(a->servingPLMNid.mcc, b->servingPLMNid.mcc);
