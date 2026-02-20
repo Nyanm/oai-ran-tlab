@@ -235,7 +235,7 @@
 /* FFS_NR_TODO it defines ue capability which is the number of slots        */
 /* - between reception of pdsch and transmission of its acknowlegment  (k1) */
 /* - between reception of un uplink grant and its related transmission (k2) */
-#define NR_UE_CAPABILITY_SLOT_RX_TO_TX (6)
+#define NR_UE_CAPABILITY_SLOT_RX_TO_TX (8)
 
 #define NR_MAX_ULSCH_HARQ_PROCESSES              (NR_MAX_HARQ_PROCESSES)  /* cf 38.214 6.1 UE procedure for receiving the physical uplink shared channel */
 #define NR_MAX_DLSCH_HARQ_PROCESSES              (NR_MAX_HARQ_PROCESSES)  /* cf 38.214 5.1 UE procedure for receiving the physical downlink shared channel */

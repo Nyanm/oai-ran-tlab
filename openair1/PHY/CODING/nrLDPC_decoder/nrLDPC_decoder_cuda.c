@@ -61,8 +61,7 @@
 extern cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
 static cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
 static bool decoder_streamsCreated = false;
-static bool GraphFailed = false;
-static volatile int cuda_graph_breaker = 0;
+static volatile int cuda_graph_breaker = 1;
 cudaError_t Err;
 
 int8_t* cnProcBuf_dev;
@@ -576,10 +575,9 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
     // If the cache is full, we cannot record new graphs.
     // Or graph operation is not safe in this device or environment.
     // Execute kernel directly using standard launch.
-    if (cuda_graph_breaker == 1 && !GraphFailed) {
+/*    if (cuda_graph_breaker == 1) {
       LOG_W(PHY, "Graph opereations failed, falling back to normal.\n");
-      GraphFailed = true;
-    }
+    }*/
     ldpc_cuda_bridge_t* perpack_buffer = stream_bridges[0];
     perpack_buffer->p_llr_ptr = p_llr_dev;
     perpack_buffer->p_out_ptr = pageable || integrated ? p_out : p_out_dev;
