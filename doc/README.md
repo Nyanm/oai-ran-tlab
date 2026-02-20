@@ -162,53 +162,53 @@ The other SDRs (AW2S, LimeSDR, ...) have no READMEs.
 
 ## Common Utilities
 
-- [Config Runtime Usage](../common/config/DOC/config/rtusage.md)
-- [Config Architecture](../common/config/DOC/config/arch.md)
-- [Config Dev Usage API](../common/config/DOC/config/devusage/api.md)
-- [Config Dev Usage Add A Param](../common/config/DOC/config/devusage/addaparam.md)
-- [Config Dev Usage Add Param Set](../common/config/DOC/config/devusage/addparamset.md)
-- [Config Dev Usage Struct](../common/config/DOC/config/devusage/struct.md)
-- [Config Dev Usage](../common/config/DOC/config/devusage.md)
-- [OCP ITTI](../common/utils/ocp_itti/itti.md)
-- [LOG Add Console Trace](../common/utils/LOG/DOC/addconsoletrace.md)
-- [LOG LTTng Logs](../common/utils/LOG/DOC/lttng_logs.md)
-- [LOG Configure Log](../common/utils/LOG/DOC/configurelog.md)
-- [LOG Runtime Usage](../common/utils/LOG/DOC/rtusage.md)
-- [LOG Architecture](../common/utils/LOG/DOC/arch.md)
-- [LOG Dev Usage](../common/utils/LOG/DOC/devusage.md)
-- [T Tracer Wireshark](../common/utils/T/DOC/T/wireshark.md)
-- [T Tracer CSV](../common/utils/T/DOC/T/csv.md)
-- [T Tracer Record](../common/utils/T/DOC/T/record.md)
-- [T Tracer ENB](../common/utils/T/DOC/T/enb.md)
-- [T Tracer Replay](../common/utils/T/DOC/T/replay.md)
-- [T Tracer Basic](../common/utils/T/DOC/T/basic.md)
-- [T Tracer How To New Trace](../common/utils/T/DOC/T/howto_new_trace.md)
-- [T Tracer Multi](../common/utils/T/DOC/T/multi.md)
-- [T Tracer To VCD](../common/utils/T/DOC/T/to_vcd.md)
-- [Loader Runtime Usage](../common/utils/DOC/loader/rtusage.md)
-- [Loader Architecture](../common/utils/DOC/loader/arch.md)
-- [Loader Dev Usage Loading](../common/utils/DOC/loader/devusage/loading.md)
-- [Loader Dev Usage API](../common/utils/DOC/loader/devusage/api.md)
-- [Loader Dev Usage Struct](../common/utils/DOC/loader/devusage/struct.md)
-- [Loader Dev Usage](../common/utils/DOC/loader/devusage.md)
-- [Actor README](../common/utils/actor/README.md)
-- [Telnet Add Command](../common/utils/telnetsrv/DOC/telnetaddcmd.md)
-- [Telnet Log](../common/utils/telnetsrv/DOC/telnetlog.md)
-- [Telnet Measurement](../common/utils/telnetsrv/DOC/telnetmeasur.md)
-- [Telnet Usage](../common/utils/telnetsrv/DOC/telnetusage.md)
-- [Telnet Loop](../common/utils/telnetsrv/DOC/telnetloop.md)
-- [Telnet Loader](../common/utils/telnetsrv/DOC/telnetloader.md)
-- [Telnet History](../common/utils/telnetsrv/DOC/telnethist.md)
-- [Telnet Get/Set](../common/utils/telnetsrv/DOC/telnetgetset.md)
-- [Telnet Architecture](../common/utils/telnetsrv/DOC/telnetarch.md)
-- [Telnet O1](../common/utils/telnetsrv/DOC/telneto1.md)
-- [Telnet Server](../common/utils/telnetsrv/DOC/telnetsrv.md)
-- [Web Server Architecture](../common/utils/websrv/DOC/websrvarch.md)
-- [Web Server Usage](../common/utils/websrv/DOC/websrvuse.md)
-- [Web Server Development](../common/utils/websrv/DOC/websrvdev.md)
-- [Web Server Frontend README](../common/utils/websrv/frontend/README.md)
+- [Config Runtime Usage](../common/config/DOC/config/rtusage.md): overview of config runtime usage
+- [Config Architecture](../common/config/DOC/config/arch.md): config module source files and components
+- [Config Dev Usage API](../common/config/DOC/config/devusage/api.md): information on configuration module API
+- [Config Dev Usage Add A Param](../common/config/DOC/config/devusage/addaparam.md): add parameters in an existing section
+- [Config Dev Usage Add Param Set](../common/config/DOC/config/devusage/addparamset.md): add a parameter set in a new section
+- [Config Dev Usage Struct](../common/config/DOC/config/devusage/struct.md): configuration module public structures
+- [Config Dev Usage](../common/config/DOC/config/devusage.md): overview of config dev usage
+- [OCP ITTI](../common/utils/ocp_itti/itti.md): interthread interface (ITTI)
+- [LOG Add Console Trace](../common/utils/LOG/DOC/addconsoletrace.md): Adding console traces in oai code
+- [LOG LTTng Logs](../common/utils/LOG/DOC/lttng_logs.md): OAI gNB LTTng Tracing Setup Guide
+- [LOG Configure Log](../common/utils/LOG/DOC/configurelog.md): Initializing and configuring the logging facility
+- [LOG Runtime Usage](../common/utils/LOG/DOC/rtusage.md): details on LOG Runtime Usage
+- [LOG Architecture](../common/utils/LOG/DOC/arch.md): logging facility source files
+- [LOG Dev Usage](../common/utils/LOG/DOC/devusage.md): logging facility developer usage
+- [T Tracer Wireshark](../common/utils/T/DOC/T/wireshark.md): MAC PDUs and wireshark
+- [T Tracer CSV](../common/utils/T/DOC/T/csv.md): tracer to dump information of a single trace to a CSV.
+- [T Tracer Record](../common/utils/T/DOC/T/record.md): how to use the `record` tracer
+- [T Tracer ENB](../common/utils/T/DOC/T/enb.md): information on T Tracer eNB
+- [T Tracer Replay](../common/utils/T/DOC/T/replay.md): how to use the `replay` tracer
+- [T Tracer Basic](../common/utils/T/DOC/T/basic.md): Basic usage of the T tracer
+- [T Tracer How To New Trace](../common/utils/T/DOC/T/howto_new_trace.md): simple tutorial on T tracer
+- [T Tracer Multi](../common/utils/T/DOC/T/multi.md): Multiple tracers
+- [T Tracer To VCD](../common/utils/T/DOC/T/to_vcd.md): tracer to dump a VCD trace of the softmodem.
+- [Loader Runtime Usage](../common/utils/DOC/loader/rtusage.md): information on loader runtime usage
+- [Loader Architecture](../common/utils/DOC/loader/arch.md): details on loader source files
+- [Loader Dev Usage Loading](../common/utils/DOC/loader/devusage/loading.md): implementation of a shared library dynamic load using the oai loader
+- [Loader Dev Usage API](../common/utils/DOC/loader/devusage/api.md): information on loader API
+- [Loader Dev Usage Struct](../common/utils/DOC/loader/devusage/struct.md): `loader_shlibfunc_t` structure
+- [Loader Dev Usage](../common/utils/DOC/loader/devusage.md): overview of loader dev usage
+- [Actor README](../common/utils/actor/README.md): simple actor model implementation
+- [Telnet Add Command](../common/utils/telnetsrv/DOC/telnetaddcmd.md): example of adding a command to the telnet server
+- [Telnet Log](../common/utils/telnetsrv/DOC/telnetlog.md): telnet log command
+- [Telnet Measurement](../common/utils/telnetsrv/DOC/telnetmeasur.md): information on telnet `measur` command
+- [Telnet Usage](../common/utils/telnetsrv/DOC/telnetusage.md): Using the telnet server
+- [Telnet Loop](../common/utils/telnetsrv/DOC/telnetloop.md): information on telnet `loop` command
+- [Telnet Loader](../common/utils/telnetsrv/DOC/telnetloader.md): information on telnet `loader` command
+- [Telnet History](../common/utils/telnetsrv/DOC/telnethist.md): implementation of simple history system
+- [Telnet Get/Set](../common/utils/telnetsrv/DOC/telnetgetset.md): information on telnet `getall` command
+- [Telnet Architecture](../common/utils/telnetsrv/DOC/telnetarch.md): overview of telnet server architecture
+- [Telnet O1](../common/utils/telnetsrv/DOC/telneto1.md): telnet module to perform some O1-related actions
+- [Telnet Server](../common/utils/telnetsrv/DOC/telnetsrv.md): OAI embedded telnet server
+- [Web Server Architecture](../common/utils/websrv/DOC/websrvarch.md): web server interface implementation
+- [Web Server Usage](../common/utils/websrv/DOC/websrvuse.md): building the web server
+- [Web Server Development](../common/utils/websrv/DOC/websrvdev.md): enhancing the web server
+- [Web Server Frontend](../common/utils/websrv/frontend/README.md): information on web server frontend
 
 ## EpiSci
 
-- [LTE Mode L2 Emulator](./episys/lte_mode_l2_emulator/README.md)
-- [NSA Mode L2 Emulator](./episys/nsa_mode_l2_emulator/README.md)
+- [LTE Mode L2 Emulator](./episys/lte_mode_l2_emulator/README.md): Multi-UE Proxy for UEs to communicate with eNB (LTE mode)
+- [NSA Mode L2 Emulator](./episys/nsa_mode_l2_emulator/README.md): Multi-UE Proxy for UEs to communicate with gNB (NSA mode)
