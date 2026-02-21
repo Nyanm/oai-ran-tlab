@@ -22,7 +22,7 @@ RUN apt-get update && \
         xz-utils \
         pkg-config \
         libnuma-dev \
-        python3-pyelftools && \
+        python3-pyelftools \
         libpcre3-dev \
         libssh-dev \
         libxml2-dev \

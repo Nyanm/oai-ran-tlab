@@ -29,7 +29,7 @@ from cls_ci_helper import archiveArtifact
 # Helper functions used here and in other classes
 # (e.g., cls_cluster.py)
 #-----------------------------------------------------------
-IMAGES = ['oai-enb', 'oai-lte-ru', 'oai-lte-ue', 'oai-gnb', 'oai-nr-cuup', 'oai-gnb-aw2s', 'oai-nr-ue', 'oai-enb-asan', 'oai-gnb-asan', 'oai-lte-ue-asan', 'oai-nr-ue-asan', 'oai-nr-cuup-asan', 'oai-gnb-aerial', 'oai-gnb-fhi72']
+IMAGES = ['oai-enb', 'oai-lte-ru', 'oai-lte-ue', 'oai-gnb', 'oai-nr-cuup', 'oai-gnb-aw2s', 'oai-nr-ue', 'oai-enb-asan', 'oai-gnb-asan', 'oai-lte-ue-asan', 'oai-nr-ue-asan', 'oai-nr-cuup-asan', 'oai-gnb-aerial', 'oai-gnb-fhi72', 'oai-gnb-fhi72-mplane']
 DEFAULT_REGISTRY = "gracehopper3-oai.sboai.cs.eurecom.fr"
 
 def CreateWorkspace(host, sourcePath, ranRepository, ranCommitID, ranTargetBranch, ranAllowMerge):
@@ -226,6 +226,7 @@ class Containerize():
 			imageNames.append(('oai-nr-cuup', 'nr-cuup', 'oai-nr-cuup-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
 			imageNames.append(('ran-build-fhi72', 'build.fhi72', 'ran-build-fhi72', ''))
 			imageNames.append(('oai-gnb', 'gNB.fhi72', 'oai-gnb-fhi72', ''))
+			imageNames.append(('oai-gnb', 'gNB.fhi72.mplane', 'oai-gnb-fhi72-mplane', ''))
 			imageNames.append(('oai-nr-oru', 'nrORU.fhi72', 'oai-nr-oru', ''))
 		result = re.search('build_cross_arm64', self.imageKind)
 		if result is not None:
