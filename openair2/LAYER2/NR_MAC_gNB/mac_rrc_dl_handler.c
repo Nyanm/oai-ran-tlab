@@ -1200,3 +1200,11 @@ void positioning_activation_request(const f1ap_positioning_activation_req_t *req
   pos_act_store_ue_context(UE->rnti);
   mac->mac_rrc.positioning_activation_response(&resp);
 }
+
+void positioning_measurement_request(const f1ap_positioning_measurement_req_t *req)
+{
+  gNB_MAC_INST *mac = RC.nrmac[0];
+  positioning_measurement_info_t *pos_meas_info = &mac->pos_meas_info;
+  pos_meas_info->meas_req = *req;
+  pos_meas_info->active = true;
+}
