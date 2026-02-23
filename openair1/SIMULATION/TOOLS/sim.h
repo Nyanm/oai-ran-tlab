@@ -625,5 +625,9 @@ void do_DL_sig(sim_t *sim,
 
 void do_UL_sig(sim_t *sim, uint16_t subframe, uint8_t abstraction_flag, LTE_DL_FRAME_PARMS *frame_parms, uint32_t frame, int ru_id, uint8_t CC_id, int NB_UEs);
 int get_noise_power_dBFS(void);
+void channel_convolution(channel_desc_t *desc, c16_t **input, c16_t **output, uint32_t length);
+void channel_convolution_avx2(channel_desc_t *desc, c16_t **input, c16_t **output, uint32_t length);
+void channel_convolution_avx512(channel_desc_t *desc, c16_t **input, c16_t **output, uint32_t length);
+
 
 #endif

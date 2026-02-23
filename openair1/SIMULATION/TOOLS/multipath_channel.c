@@ -22,6 +22,8 @@
 #include <math.h>
 #include "PHY/TOOLS/tools_defs.h"
 #include "sim.h"
+#include <simde/x86/avx2.h>
+#include <simde/x86/avx512.h>
 
 //#define DEBUG_CH
 //#define DOPPLER_DEBUG
@@ -390,3 +392,270 @@ void multipath_channel_float(channel_desc_t *desc,
 }
 
 #endif
+
+void channel_convolution(channel_desc_t *desc, c16_t **input, c16_t **output, uint32_t length)
+{
+  float pathloss = powf(10.0f, (float)desc->path_loss_dB / 20.0f);
+  uint L = desc->channel_length;
+  uint64_t offset = desc->channel_offset;
+
+  // Reverse channel and bake in pathloss
+  cf_t rev_channel[desc->nb_rx][desc->nb_tx][L];
+  for (int rx = 0; rx < desc->nb_rx; rx++) {
+    for (int tx = 0; tx < desc->nb_tx; tx++) {
+      struct complexd *chan = desc->ch[rx + (tx * desc->nb_rx)];
+      for (uint i = 0U; i < L; i++) {
+        rev_channel[rx][tx][i].r = (float)chan[L - 1 - i].r * pathloss;
+        rev_channel[rx][tx][i].i = (float)chan[L - 1 - i].i * pathloss;
+      }
+    }
+  }
+
+  for (int rx = 0; rx < desc->nb_rx; rx++) {
+    for (uint i = 0U; i < length - offset; i++) {
+      cf_t rx_sum = {0, 0};
+
+      for (int tx = 0; tx < desc->nb_tx; tx++) {
+        // We look at tx_sig[i - offset] and go 'backwards' for L_eff samples.
+        // To make it a forward-crawl for speed, we start at the oldest
+        // sample in the window and move forward.
+
+        int oldest_idx = i - (L - 1);
+        int current_L = L;
+        int start_c = 0;
+
+        // Handle the "Past" boundary (nothing before index 0 exists)
+        if (oldest_idx < 0) {
+          start_c = -oldest_idx; // Skip the taps that point to negative time
+          current_L -= start_c;
+          oldest_idx = 0;
+        }
+
+        if (current_L > 0) {
+          c16_t *tx_ptr = &input[tx][oldest_idx];
+          cf_t *c_ptr = &rev_channel[rx][tx][start_c];
+
+          // Steady State inner loop: no branches, purely linear
+          for (int l = 0; l < current_L; l++) {
+            rx_sum.r += (tx_ptr->r * c_ptr->r) - (tx_ptr->i * c_ptr->i);
+            rx_sum.i += (tx_ptr->i * c_ptr->r) + (tx_ptr->r * c_ptr->i);
+            tx_ptr++;
+            c_ptr++;
+          }
+        }
+      }
+      output[rx][i + offset].r = rx_sum.r;
+      output[rx][i + offset].i = rx_sum.i;
+    }
+  }
+}
+
+void channel_convolution_avx2(channel_desc_t *desc, c16_t **input, c16_t **output, uint32_t length)
+{
+  float pathloss = powf(10.0f, (float)desc->path_loss_dB / 20.0f);
+  uint L = desc->channel_length;
+  uint64_t offset = desc->channel_offset;
+
+  cf_t rev_channel[desc->nb_rx][desc->nb_tx][L];
+
+  for (int rx = 0; rx < desc->nb_rx; rx++) {
+    for (int tx = 0; tx < desc->nb_tx; tx++) {
+      struct complexd *chan = desc->ch[rx + (tx * desc->nb_rx)];
+      for (uint i = 0U; i < L; i++) {
+        rev_channel[rx][tx][i].r = (float)chan[L - 1 - i].r * pathloss;
+        rev_channel[rx][tx][i].i = (float)chan[L - 1 - i].i * pathloss;
+      }
+    }
+  }
+
+  int end_idx = length - offset;
+
+  for (int rx = 0; rx < desc->nb_rx; rx++) {
+    int i = 0;
+
+    // 1. Transient part (scalar)
+    for (; i < (int)L - 1 && i < end_idx; i++) {
+      cf_t rx_sum = {0, 0};
+      for (int tx = 0; tx < desc->nb_tx; tx++) {
+        int oldest_idx = i - (L - 1);
+        int current_L = L;
+        int start_c = 0;
+        if (oldest_idx < 0) {
+          start_c = -oldest_idx;
+          current_L -= start_c;
+          oldest_idx = 0;
+        }
+        if (current_L > 0) {
+          c16_t *tx_ptr = &input[tx][oldest_idx];
+          cf_t *c_ptr = &rev_channel[rx][tx][start_c];
+          for (int l = 0; l < current_L; l++) {
+            rx_sum.r += (tx_ptr->r * c_ptr->r) - (tx_ptr->i * c_ptr->i);
+            rx_sum.i += (tx_ptr->i * c_ptr->r) + (tx_ptr->r * c_ptr->i);
+            tx_ptr++;
+            c_ptr++;
+          }
+        }
+      }
+      output[rx][i + offset].r = (int16_t)rx_sum.r;
+      output[rx][i + offset].i = (int16_t)rx_sum.i;
+    }
+
+    // 2. Steady state (SIMD)
+    for (; i <= end_idx - 4; i += 4) {
+      simde__m256 rx_sum_vec = simde_mm256_setzero_ps();
+
+      for (int tx = 0; tx < desc->nb_tx; tx++) {
+        int start_idx = i - (L - 1);
+        c16_t *tx_ptr = &input[tx][start_idx];
+        cf_t *c_ptr = &rev_channel[rx][tx][0];
+
+        for (int l = 0; l < (int)L; l++) {
+          simde__m128i in_128 = simde_mm_loadu_si128((simde__m128i const *)(tx_ptr + l)); // 4 complex samples
+          simde__m256i in_32 = simde_mm256_cvtepi16_epi32(in_128);
+          simde__m256 in_ps = simde_mm256_cvtepi32_ps(in_32);
+
+          float tr = c_ptr[l].r;
+          float ti = c_ptr[l].i;
+          simde__m256 tap = simde_mm256_set_ps(ti, tr, ti, tr, ti, tr, ti, tr);
+
+          simde__m256 in_re = simde_mm256_shuffle_ps(in_ps, in_ps, SIMDE_MM_SHUFFLE(2, 2, 0, 0));
+          simde__m256 in_im = simde_mm256_shuffle_ps(in_ps, in_ps, SIMDE_MM_SHUFFLE(3, 3, 1, 1));
+
+          simde__m256 term1 = simde_mm256_mul_ps(in_re, tap);
+          simde__m256 tap_swap = simde_mm256_set_ps(tr, -ti, tr, -ti, tr, -ti, tr, -ti);
+          simde__m256 term2 = simde_mm256_mul_ps(in_im, tap_swap);
+
+          rx_sum_vec = simde_mm256_add_ps(rx_sum_vec, simde_mm256_add_ps(term1, term2));
+        }
+      }
+      simde__m256i out_32 = simde_mm256_cvtps_epi32(rx_sum_vec);
+      simde__m128i out_16_low = simde_mm256_castsi256_si128(out_32);
+      simde__m128i out_16_high = simde_mm256_extracti128_si256(out_32, 1);
+      simde__m128i out_16 = simde_mm_packs_epi32(out_16_low, out_16_high);
+      simde_mm_storeu_si128((simde__m128i *)&output[rx][i + offset], out_16);
+    }
+
+    // 3. Remainder (scalar)
+    for (; i < end_idx; i++) {
+      cf_t rx_sum = {0, 0};
+      for (int tx = 0; tx < desc->nb_tx; tx++) {
+        int oldest_idx = i - (L - 1);
+        c16_t *tx_ptr = &input[tx][oldest_idx];
+        cf_t *c_ptr = &rev_channel[rx][tx][0];
+        for (int l = 0; l < (int)L; l++) {
+          rx_sum.r += (tx_ptr->r * c_ptr->r) - (tx_ptr->i * c_ptr->i);
+          rx_sum.i += (tx_ptr->i * c_ptr->r) + (tx_ptr->r * c_ptr->i);
+          tx_ptr++;
+          c_ptr++;
+        }
+      }
+      output[rx][i + offset].r = (int16_t)rx_sum.r;
+      output[rx][i + offset].i = (int16_t)rx_sum.i;
+    }
+  }
+}
+
+void channel_convolution_avx512(channel_desc_t *desc, c16_t **input, c16_t **output, uint32_t length)
+{
+  float pathloss = powf(10.0f, (float)desc->path_loss_dB / 20.0f);
+  uint L = desc->channel_length;
+  uint64_t offset = desc->channel_offset;
+
+  cf_t rev_channel[desc->nb_rx][desc->nb_tx][L];
+
+  for (int rx = 0; rx < desc->nb_rx; rx++) {
+    for (int tx = 0; tx < desc->nb_tx; tx++) {
+      struct complexd *chan = desc->ch[rx + (tx * desc->nb_rx)];
+      for (uint i = 0U; i < L; i++) {
+        rev_channel[rx][tx][i].r = (float)chan[L - 1 - i].r * pathloss;
+        rev_channel[rx][tx][i].i = (float)chan[L - 1 - i].i * pathloss;
+      }
+    }
+  }
+
+  int end_idx = length - offset;
+
+  for (int rx = 0; rx < desc->nb_rx; rx++) {
+    int i = 0;
+
+    // 1. Transient part (scalar)
+    for (; i < (int)L - 1 && i < end_idx; i++) {
+      cf_t rx_sum = {0, 0};
+      for (int tx = 0; tx < desc->nb_tx; tx++) {
+        int oldest_idx = i - (L - 1);
+        int current_L = L;
+        int start_c = 0;
+        if (oldest_idx < 0) {
+          start_c = -oldest_idx;
+          current_L -= start_c;
+          oldest_idx = 0;
+        }
+        if (current_L > 0) {
+          c16_t *tx_ptr = &input[tx][oldest_idx];
+          cf_t *c_ptr = &rev_channel[rx][tx][start_c];
+          for (int l = 0; l < current_L; l++) {
+            rx_sum.r += (tx_ptr->r * c_ptr->r) - (tx_ptr->i * c_ptr->i);
+            rx_sum.i += (tx_ptr->i * c_ptr->r) + (tx_ptr->r * c_ptr->i);
+            tx_ptr++;
+            c_ptr++;
+          }
+        }
+      }
+      output[rx][i + offset].r = (int16_t)rx_sum.r;
+      output[rx][i + offset].i = (int16_t)rx_sum.i;
+    }
+
+    // 2. Steady state (AVX512)
+    for (; i <= end_idx - 8; i += 8) {
+      simde__m512 rx_sum_vec = simde_mm512_setzero_ps();
+
+      for (int tx = 0; tx < desc->nb_tx; tx++) {
+        int start_idx = i - (L - 1);
+        c16_t *tx_ptr = &input[tx][start_idx];
+        cf_t *c_ptr = &rev_channel[rx][tx][0];
+
+        for (int l = 0; l < (int)L; l++) {
+          simde__m256i in_256i = simde_mm256_loadu_si256((simde__m256i const *)(tx_ptr + l));
+          simde__m512i in_512i = simde_mm512_cvtepi16_epi32(in_256i);
+          simde__m512 in_ps = simde_mm512_cvtepi32_ps(in_512i);
+
+          float tr = c_ptr[l].r;
+          float ti = c_ptr[l].i;
+          simde__m512 v_tr = simde_mm512_set1_ps(tr);
+          simde__m512 v_ti = simde_mm512_set1_ps(ti);
+          simde__m512 v_nti = simde_mm512_set1_ps(-ti);
+
+          simde__m512 tap = simde_mm512_mask_blend_ps(0xAAAA, v_tr, v_ti);
+          simde__m512 tap_swap = simde_mm512_mask_blend_ps(0xAAAA, v_nti, v_tr);
+
+          simde__m512 in_re = simde_mm512_shuffle_ps(in_ps, in_ps, 0xA0);
+          simde__m512 in_im = simde_mm512_shuffle_ps(in_ps, in_ps, 0xF5);
+
+          rx_sum_vec = simde_mm512_fmadd_ps(in_re, tap, rx_sum_vec);
+          rx_sum_vec = simde_mm512_fmadd_ps(in_im, tap_swap, rx_sum_vec);
+        }
+      }
+      simde__m512i out_32 = simde_mm512_cvtps_epi32(rx_sum_vec);
+      simde__m256i out_16 = simde_mm512_cvtsepi32_epi16(out_32);
+      simde_mm256_storeu_si256((simde__m256i *)&output[rx][i + offset], out_16);
+    }
+
+    // 3. Remainder (scalar)
+    for (; i < end_idx; i++) {
+      cf_t rx_sum = {0, 0};
+      for (int tx = 0; tx < desc->nb_tx; tx++) {
+        int oldest_idx = i - (L - 1);
+        c16_t *tx_ptr = &input[tx][oldest_idx];
+        cf_t *c_ptr = &rev_channel[rx][tx][0];
+        for (int l = 0; l < (int)L; l++) {
+          rx_sum.r += (tx_ptr->r * c_ptr->r) - (tx_ptr->i * c_ptr->i);
+          rx_sum.i += (tx_ptr->i * c_ptr->r) + (tx_ptr->r * c_ptr->i);
+          tx_ptr++;
+          c_ptr++;
+        }
+      }
+      output[rx][i + offset].r = (int16_t)rx_sum.r;
+      output[rx][i + offset].i = (int16_t)rx_sum.i;
+    }
+  }
+}

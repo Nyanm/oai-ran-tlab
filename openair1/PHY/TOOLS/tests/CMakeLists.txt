@@ -40,6 +40,18 @@ add_dependencies(tests test_sse_intrinsics)
 add_test(NAME test_sse_intrinsics
   COMMAND ./test_sse_intrinsics)
 
+add_executable(test_channel_convolution test_channel_convolution.cpp)
+target_link_libraries(test_channel_convolution PRIVATE GTest::gtest LOG minimal_lib SIMU shlib_loader)
+add_dependencies(tests test_channel_convolution)
+add_test(NAME test_channel_convolution
+  COMMAND ./test_channel_convolution)
+
+add_executable(benchmark_channel_convolution benchmark_channel_convolution.cpp)
+target_link_libraries(benchmark_channel_convolution PRIVATE benchmark::benchmark minimal_lib SIMU shlib_loader)
+add_dependencies(tests benchmark_channel_convolution)
+add_test(NAME benchmark_channel_convolution
+  COMMAND ./benchmark_channel_convolution)
+
 if(CUDA_ENABLE)
 add_executable(test_multipath test_multipath.c)
 target_link_libraries(test_multipath PRIVATE UTIL SIMU LOG CONFIG_LIB shlib_loader m oai_cuda_lib)
