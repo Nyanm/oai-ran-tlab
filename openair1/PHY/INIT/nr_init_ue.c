@@ -286,12 +286,14 @@ int init_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
 
   ue->use_gpu = use_gpu;
 #ifdef ENABLE_CUDA
-  for (int i=0;i<2;i++) {
-    cudaError_t err = cudaHostAlloc((void**)&ue->llr[i],(66 * 3 * 8448) * sizeof(int16_t),cudaHostAllocMapped);
-    AssertFatal(err == cudaSuccess,"CUDA Error (pusch_llr): %s\n",cudaGetErrorString(err));
-    err=cudaHostGetDevicePointer((void**)&ue->llr_dev[i],ue->llr[i],0);
-    AssertFatal(err == cudaSuccess,"CUDA Error (harq_f_dev): %s\n",cudaGetErrorString(err));
+  for (int j=0;j<10;j++) {
+    for (int i=0;i<2;i++) {
+      cudaError_t err = cudaHostAlloc((void**)&ue->llr[j][i],(66 * 3 * 8448) * sizeof(int16_t),cudaHostAllocMapped);
+      AssertFatal(err == cudaSuccess,"CUDA Error (pusch_llr): %s\n",cudaGetErrorString(err));
+      err=cudaHostGetDevicePointer((void**)&ue->llr_dev[j][i],ue->llr[j][i],0);
+      AssertFatal(err == cudaSuccess,"CUDA Error (pusch_llr_dev): %s\n",cudaGetErrorString(err));
 
+    }
   }
 #endif
   return 0;
@@ -353,8 +355,10 @@ void term_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
 
   
 #ifdef ENABLE_CUDA
-  cudaFreeHost(ue->llr[0]);
-  cudaFreeHost(ue->llr[1]);
+  for (int j=0;j<10;j++) {
+   cudaFreeHost(ue->llr[j][0]);
+   cudaFreeHost(ue->llr[j][1]);
+  }
 #endif
  
   sl_ue_free(ue);

@@ -1301,18 +1301,18 @@ do { \
   }
 
   cudaError_t nrLDPC_decoder_cuda_GraphExecute(cudaGraphExec_t graphExec,
-                                               cudaStream_t stream,
+                                               cudaStream_t* stream,
                                                cudaEvent_t *doneEvent,
                                                uint8_t CudaStreamIdx)
   {
-    cudaError_t err = cudaGraphLaunch(graphExec, stream);
-    cudaStreamSynchronize(stream);
+    cudaError_t err = cudaGraphLaunch(graphExec, stream[CudaStreamIdx]);
+    cudaStreamSynchronize(stream[CudaStreamIdx]);
     if (err != cudaSuccess) {
       return err;
     }
 
     if (doneEvent) {
-      err = cudaEventRecord(doneEvent[CudaStreamIdx], stream);
+      err = cudaEventRecord(doneEvent[CudaStreamIdx], stream[CudaStreamIdx]);
     }
 
     return err;

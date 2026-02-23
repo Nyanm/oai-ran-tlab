@@ -60,16 +60,15 @@
 
 #include <pthread.h>
 #include <stdbool.h>
-#include <emmintrin.h>
 
-static pthread_mutex_t stream_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
-static bool stream_busy[MAX_UE_STREAMS] = {false};
+//static pthread_mutex_t stream_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
+extern __thread int my_stream_id;
+bool stream_busy[MAX_CPU_THREAD_STREAMS] = {false};
 
-extern cudaStream_t decoderStreams[MAX_UE_STREAMS];
-static cudaEvent_t decoderDoneEvents[MAX_UE_STREAMS];
+extern cudaStream_t decoderStreams[MAX_CPU_THREAD_STREAMS];
+static cudaEvent_t decoderDoneEvents[MAX_CPU_THREAD_STREAMS];
 static bool decoder_streamsCreated = false;
-static bool GraphFailed = false;
-static volatile int cuda_graph_breaker = 0;
+static volatile int cuda_graph_breaker = 1;
 cudaError_t Err;
 
 int8_t* cnProcBuf_dev;
@@ -86,7 +85,7 @@ int cuda_support_init_decoder()
 {
   cudaError_t err;
 
-  size_t ue_multiplier = MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * MAX_UE_STREAMS;
+  size_t ue_multiplier = MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * MAX_CPU_THREAD_STREAMS;
 
   err = cudaMalloc((void**)&cnProcBuf_dev, sizeof(int8_t) * ue_multiplier * NR_LDPC_SIZE_CN_PROC_BUF);
   AssertFatal(err == cudaSuccess, "CUDA Error (cnProcBuf_dev): %s\n", cudaGetErrorString(err));
@@ -105,15 +104,15 @@ int cuda_support_init_decoder()
   
   cudaMemset(p_llr_dev, 0, sizeof(int8_t) * ue_multiplier * NR_LDPC_MAX_NUM_LLR);
   
-  err = cudaMalloc((void**)&p_out_dev, sizeof(int8_t) * ue_multiplier * NR_LDPC_MAX_NUM_LLR);
+  err = cudaMalloc((void**)&p_out_dev, sizeof(int8_t) * ue_multiplier * 8448);
   AssertFatal(err == cudaSuccess, "CUDA Error (p_out_dev): %s\n", cudaGetErrorString(err));
 
-  printf("[CUDA] Intermediate buffers allocated in Device Memory for %d Streams.\n", MAX_UE_STREAMS);
+  printf("[CUDA] Intermediate buffers allocated in Device Memory for %d Streams.\n", MAX_CPU_THREAD_STREAMS);
 
   return 0;
 }
 
-static ldpc_cuda_bridge_t* stream_bridges[8];
+static ldpc_cuda_bridge_t* stream_bridges[MAX_CPU_THREAD_STREAMS];
 
 extern cudaError_t nrLDPC_decoder_cuda_GraphRecord(ldpc_cuda_bridge_t* buffer,
                                                    uint32_t numLLR,
@@ -135,7 +134,7 @@ extern cudaError_t nrLDPC_decoder_cuda_GraphRecord(ldpc_cuda_bridge_t* buffer,
                                                    uint8_t* isCreatedFlag);
 
 extern cudaError_t nrLDPC_decoder_cuda_GraphExecute(cudaGraphExec_t graphExec,
-                                                    cudaStream_t stream,
+                                                    cudaStream_t* stream,
                                                     cudaEvent_t* doneEvent,
                                                     uint8_t CudaStreamIdx);
 
@@ -164,7 +163,7 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
                                                    decode_abort_t* ab);
 #define MAX_GRAPH_CACHE_SIZE 16
 #define PRE_RECORDED_COUNT 6
-#define STATIC_SEG_SIZE 1 // n_segments in pre-record graphs, should be determined for real cases
+#define STATIC_SEG_SIZE 16 // n_segments in pre-record graphs, should be determined for real cases
 
 typedef struct {
   uint32_t Z;
@@ -277,7 +276,7 @@ void init_decoder_warmup()
     if (dynamic_cache_idx > 0) {
       for (int i = 0; i < dynamic_cache_idx; i++) {
         if (gpu_graph_cache[i].occupied) {
-          nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[i].exec, decoderStreams[0], NULL, 0);
+          nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[i].exec, decoderStreams, NULL, 0);
         }
       }
       cudaDeviceSynchronize();
@@ -348,7 +347,7 @@ void init_decoder_gpu_structures()
   }
   printf("[CUDA] Allocated %d Graph Bridges.\n", MAX_GRAPH_CACHE_SIZE);
   // Bridge for normal execute
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < MAX_CPU_THREAD_STREAMS; i++) {
     if (stream_bridges[i] == NULL) {
       cudaHostAlloc((void**)&stream_bridges[i], sizeof(ldpc_cuda_bridge_t), cudaHostAllocMapped);
       stream_bridges[i]->p_llr_ptr = NULL;
@@ -400,7 +399,7 @@ int32_t LDPCinit_cuda()
     cuda_support_init();
   }
   if (!decoder_streamsCreated) {
-    for (int s = 0; s < MAX_UE_STREAMS; ++s) {
+    for (int s = 0; s < MAX_CPU_THREAD_STREAMS; ++s) {
       cudaStreamCreateWithFlags(&decoderStreams[s], cudaStreamNonBlocking);
       cudaEventCreate(&decoderDoneEvents[s]);
     }
@@ -425,7 +424,7 @@ int32_t LDPCshutdown_cuda()
 {
   cudaFree(p_llr_dev);
   cudaFree(p_out_dev);
-  for (int s = 0; s < MAX_UE_STREAMS; ++s) {
+  for (int s = 0; s < MAX_CPU_THREAD_STREAMS; ++s) {
     if (decoder_streamsCreated) {
       cudaEventDestroy(decoderDoneEvents[s]);
       cudaStreamDestroy(decoderStreams[s]);
@@ -486,29 +485,22 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(int8_t* p_llr,
   cudaError_t err_core = cudaSuccess;
   bool graph_executed = false;
 
-//CudaStream allocation for different CPU threads
-  static __thread int my_stream_id = -1;
+  if (my_stream_id == -1) {
+      printf("[CUDA ERROR] CPU Thread called decoder core without acquiring a stream ID, everything will run in the default stream.\n");
+      my_stream_id = 0;
+  }
   
-if (my_stream_id == -1) {
-        pthread_mutex_lock(&stream_pool_mutex);
-        for (int i = 0; i < MAX_UE_STREAMS; i++) {
-            if (!stream_busy[i]) {
-                stream_busy[i] = true;
-                my_stream_id = i;
-                printf("[CUDA INFO] CPU Thread mapped to permanent GPU Stream ID: %d\n", my_stream_id);
-                break;
-            }
-        }
-        pthread_mutex_unlock(&stream_pool_mutex);
-        
-        if (my_stream_id == -1) {
-            printf("[CUDA ERROR] Too many threads! Exceeded MAX_UE_STREAMS.\n");
-            return -1; 
-        }
-    }
-
   size_t cn_offset_stream = my_stream_id * (MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_SIZE_CN_PROC_BUF);
   size_t llr_offset_stream = my_stream_id * (MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * NR_LDPC_MAX_NUM_LLR);
+  size_t output_offset_stream = my_stream_id * (MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 * 8448);
+
+  int8_t* cnProcBuf_dev_stream = cnProcBuf_dev + my_stream_id * cn_offset_stream;
+  int8_t* bnProcBuf_dev_stream = bnProcBuf_dev + my_stream_id * cn_offset_stream;
+  int8_t* llrRes_dev_stream = llrRes_dev + my_stream_id * llr_offset_stream;
+  int8_t* llrProcBuf_dev_stream = llrProcBuf_dev + my_stream_id * llr_offset_stream;
+
+  int8_t* p_llr_dev_stream = p_llr_dev + my_stream_id * llr_offset_stream;
+  int8_t* p_out_dev_stream = p_out_dev + my_stream_id * output_offset_stream;
 
   uint16_t Z = p_decParams->Z;
   uint8_t BG = p_decParams->BG;
@@ -518,11 +510,13 @@ if (my_stream_id == -1) {
   uint32_t K = Z * 22;
   // Calculate LLR size per segment based on Rate
   uint32_t numLLR = (R == 13) ? NR_LDPC_NCOL_BG1_R13 * Z : ((R == 89) ? NR_LDPC_NCOL_BG1_R89 * Z : NR_LDPC_NCOL_BG1_R23 * Z);
-  if (p_llr != p_llr_dev)
-    cudaMemcpyAsync(p_llr_dev, p_llr, n_segments * 68 * 384, cudaMemcpyHostToDevice, decoderStreams[my_stream_id]);
+  if (p_llr != p_llr_dev_stream)
+    cudaMemcpyAsync(p_llr_dev_stream, p_llr, n_segments * 68 * 384, cudaMemcpyHostToDevice, decoderStreams[my_stream_id]);
 
   // Output size safety: assume worst-case unpacked bytes (K * n_segments)
   size_t total_output_size = n_segments * K * sizeof(int8_t);
+
+
 
 /*
   // for debug, remember to remove it---------
@@ -543,13 +537,13 @@ if (my_stream_id == -1) {
     }
     if (found_idx >= 0) {
       // === Cache HIT: Execute Recorded Graph ===
-      gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev;
-      gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = (pageable || integrated) ? p_out : p_out_dev;
+      gpu_graph_cache[found_idx].bridge_ptr->p_llr_ptr = p_llr_dev_stream;
+      gpu_graph_cache[found_idx].bridge_ptr->p_out_ptr = (pageable || integrated) ? p_out : p_out_dev_stream;
 
       err_core = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[found_idx].exec,
-                                                  decoderStreams[0],
+                                                  decoderStreams,
                                                   NULL, // doneEvent
-                                                  0); // Stream Index
+                                                  my_stream_id); // Stream Index
       if (err_core == cudaSuccess) {
         graph_executed = true;
       } else {
@@ -572,15 +566,15 @@ if (my_stream_id == -1) {
       gpu_graph_cache[new_idx].ThreadStreamId = my_stream_id;//thread only
 
       // Use the determined pointers (Device ptrs for PCIe, Host ptrs for GH200)
-      gpu_graph_cache[new_idx].bridge_ptr->p_llr_ptr = p_llr_dev + my_stream_id * llr_offset_stream;
-      gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = pageable || integrated ? p_out : p_out_dev;
+      gpu_graph_cache[new_idx].bridge_ptr->p_llr_ptr = p_llr_dev_stream;
+      gpu_graph_cache[new_idx].bridge_ptr->p_out_ptr = pageable || integrated ? p_out : p_out_dev_stream;
 
       err_core = nrLDPC_decoder_cuda_GraphRecord(gpu_graph_cache[new_idx].bridge_ptr,
                                                  numLLR,
-                                                 cnProcBuf_dev + my_stream_id * cn_offset_stream,
-                                                 bnProcBuf_dev + my_stream_id * cn_offset_stream,
-                                                 llrRes_dev + my_stream_id * llr_offset_stream,
-                                                 llrProcBuf_dev + my_stream_id * llr_offset_stream,
+                                                 cnProcBuf_dev_stream,
+                                                 bnProcBuf_dev_stream,
+                                                 llrRes_dev_stream,
+                                                 llrProcBuf_dev_stream,
                                                  Z,
                                                  K,
                                                  BG,
@@ -589,13 +583,13 @@ if (my_stream_id == -1) {
                                                  n_segments,
                                                  outMode,
                                                  decoderStreams,
-                                                 0, // CudaStreamIdx
+                                                 my_stream_id, // CudaStreamIdx
                                                  &gpu_graph_cache[new_idx].graph,
                                                  &gpu_graph_cache[new_idx].exec,
                                                  (uint8_t*)&gpu_graph_cache[new_idx].occupied);
 
       if (err_core == cudaSuccess) {
-        err_core = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[new_idx].exec, decoderStreams[0], NULL, 0);
+        err_core = nrLDPC_decoder_cuda_GraphExecute(gpu_graph_cache[new_idx].exec, decoderStreams, NULL, my_stream_id);
 
         if (err_core == cudaSuccess) {
           graph_executed = true;
@@ -614,20 +608,19 @@ if (my_stream_id == -1) {
     // If the cache is full, we cannot record new graphs.
     // Or graph operation is not safe in this device or environment.
     // Execute kernel directly using standard launch.
-    if (cuda_graph_breaker == 1 && !GraphFailed) {
+/*    if (cuda_graph_breaker == 1) {
       LOG_W(PHY, "Graph opereations failed, falling back to normal.\n");
-      GraphFailed = true;
-    }
-    ldpc_cuda_bridge_t* perpack_buffer = stream_bridges[0];
-    perpack_buffer->p_llr_ptr = p_llr_dev;
-    perpack_buffer->p_out_ptr = pageable || integrated ? p_out : p_out_dev;
+    }*/
+    ldpc_cuda_bridge_t* perpack_buffer = stream_bridges[my_stream_id];
+    perpack_buffer->p_llr_ptr = p_llr_dev_stream;
+    perpack_buffer->p_out_ptr = pageable || integrated ? p_out : p_out_dev_stream;
 
     nrLDPC_decoder_cuda_NormalExecute(perpack_buffer,
                                       numLLR,
-                                      cnProcBuf_dev,
-                                      bnProcBuf_dev,
-                                      llrRes_dev,
-                                      llrProcBuf_dev,
+                                      cnProcBuf_dev_stream,
+                                      bnProcBuf_dev_stream,
+                                      llrRes_dev_stream,
+                                      llrProcBuf_dev_stream,
                                       Z,
                                       K,
                                       BG,
@@ -636,7 +629,7 @@ if (my_stream_id == -1) {
                                       n_segments,
                                       outMode,
                                       decoderStreams,
-                                      0,
+                                      my_stream_id,
                                       NULL);
   }
 
@@ -644,14 +637,14 @@ if (my_stream_id == -1) {
   if (!pageable && !integrated) {
     // Copy Output from Device to Host
     if (outMode == nrLDPC_outMode_BIT) {
-      cudaMemcpyAsync(p_out, p_out_dev, total_output_size >> 3, cudaMemcpyDeviceToHost, decoderStreams[0]);
+      cudaMemcpyAsync(p_out, p_out_dev_stream, total_output_size >> 3, cudaMemcpyDeviceToHost, decoderStreams[my_stream_id]);
     }
     if (outMode == nrLDPC_outMode_BITINT8) {
-      cudaMemcpyAsync(p_out, p_out_dev, total_output_size, cudaMemcpyDeviceToHost, decoderStreams[0]);
+      cudaMemcpyAsync(p_out, p_out_dev_stream, total_output_size, cudaMemcpyDeviceToHost, decoderStreams[my_stream_id]);
     }
   }
 
-  cudaStreamSynchronize(decoderStreams[0]);
+  cudaStreamSynchronize(decoderStreams[my_stream_id]);
   if (p_decParams->check_crc) {
     for (int r = 0; r < n_segments; r++) {
       //      if (r<=1) for (int i=0;i<(K>>3);i++) printf("byte (%d,%d) %x\n",r,i,((uint8_t*)(p_out+r*(K>>3)))[i]);

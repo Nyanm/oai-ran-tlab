@@ -381,7 +381,7 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_dec
   // check if at least one PUSCH has a Zc<384 or BG=2
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
     nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
-    if (use_gpu == 0 || nrLDPC_TB_decoding_parameters->Z < 128 ||  nrLDPC_TB_decoding_parameters->BG == 2 || nrLDPC_TB_decoding_parameters->R==89) {
+    if (use_gpu == 0 || nrLDPC_TB_decoding_parameters->Z < 128 ||  nrLDPC_TB_decoding_parameters->BG == 2 ) {
 	do_join=true;    
 	break;
     }

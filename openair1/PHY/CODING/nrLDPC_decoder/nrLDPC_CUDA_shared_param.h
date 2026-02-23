@@ -32,7 +32,7 @@
 #pragma once
 #include <cuda_runtime.h>
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
-#define MAX_UE_STREAMS 8 //assuming we run maximun 8 CPU threads at the same time(can change it to 16 or 32) 
+#define MAX_CPU_THREAD_STREAMS 16 //assuming we run maximun 16 CPU threads at the same time(can change it to 32) 
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -51,13 +51,23 @@ extern "C" {
 #define num_TotalBlocks_cn_BG1_R89_Node 5
 #define num_TotalBlocks_bn_BG1_R89_Node 27
 
+#define JETSON_ORIN 1 
+
+#if defined(GH200)
 #define NodeEdge_Switch_Cn_R13 32
 #define NodeEdge_Switch_Bn_R13 10
 #define NodeEdge_Switch_Cn_R23 32
 #define NodeEdge_Switch_Bn_R23 12
 #define NodeEdge_Switch_Cn_R89 48
 #define NodeEdge_Switch_Bn_R89 24
-
+#elif defined(JETSON_ORIN)
+#define NodeEdge_Switch_Cn_R13 3
+#define NodeEdge_Switch_Bn_R13 1
+#define NodeEdge_Switch_Cn_R23 3
+#define NodeEdge_Switch_Bn_R23 1
+#define NodeEdge_Switch_Cn_R89 4
+#define NodeEdge_Switch_Bn_R89 2
+#endif
 
 extern cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL];
 extern cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL];
