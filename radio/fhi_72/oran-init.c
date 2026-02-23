@@ -315,6 +315,9 @@ static void oran_allocate_buffers(void *handle,
   };
 
 #if defined F_RELEASE
+  uint32_t numPrbElm = xran_get_num_prb_elm(&dlPm, mtu);
+  uint32_t size_of_prb_map  = sizeof(struct xran_prb_map) + sizeof(struct xran_prb_elm) * (numPrbElm);
+/*
   uint32_t size_of_prb_map;
   if (fh_config->RunSlotPrbMapBySymbolEnable) {
     // For Liteon FR2 with RunSlotPrbMapBySymbolEnable, xran_prb_map will have xran_prb_elm prbMap[14]
@@ -325,6 +328,7 @@ static void oran_allocate_buffers(void *handle,
     uint32_t numPrbElm = xran_get_num_prb_elm(&dlPm, mtu);
     size_of_prb_map  = sizeof(struct xran_prb_map) + sizeof(struct xran_prb_elm) * (numPrbElm);
   }
+*/
 #endif
 
   // PDSCH

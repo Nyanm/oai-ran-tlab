@@ -963,7 +963,6 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
 #if defined F_RELEASE
   fh_config->srsEnableCp = 0; // enable SRS CP; used only if XRAN_CATEGORY_B
   fh_config->SrsDelaySym = 0; // number of SRS delay symbols; used only if XRAN_CATEGORY_B
-  fh_config->RunSlotPrbMapBySymbolEnable    = *gpd(fhp, nfh, ORAN_CONFIG_RunSlotPrbMapBySymbol)->uptr;    // enable RunSlotPrbMapBySymbol
   fh_config->LiteOnIgnoreUPSectionIdEnable  = *gpd(fhp, nfh, ORAN_CONFIG_LiteOnIgnoreUPSectionId)->uptr;  // enable LiteOnIgnoreUPSectionId
 #endif
   fh_config->puschMaskEnable = 0; // enable PUSCH mask; only used if id = O_RU
@@ -1008,6 +1007,8 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
   fh_config->max_sections_per_symbol = 0; // not used in xran
 
 #if defined F_RELEASE
+  fh_config->RunSlotPrbMapBySymbolEnable = *gpd(fhp, nfh, ORAN_CONFIG_CP_MULTISECTION)->uptr; // enable PRB mapping by symbol with multisection
+
   fh_config->dssEnable = 0; // enable DSS (extension-9)
   fh_config->dssPeriod = 0; // DSS pattern period for LTE/NR
   // fh_config->technology[XRAN_MAX_DSS_PERIODICITY] // technology array represents slot is LTE(0)/NR(1); used only if DSS enabled

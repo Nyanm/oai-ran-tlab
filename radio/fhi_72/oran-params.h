@@ -117,7 +117,7 @@
 
 // clang-format off
 #define ORAN_FH_DESC { \
-  {ORAN_CONFIG_RunSlotPrbMapBySymbol,   "RunSlotPrbMapBySymbol\n",     PARAMFLAG_BOOL,      .uptr=NULL, .defuintval=0,     TYPE_UINT,      0}, \
+  {ORAN_CONFIG_CP_MULTISECTION,         "RunSlotPrbMapBySymbol\n",     PARAMFLAG_BOOL,      .ptr=NULL,  .defintval=0,      TYPE_INT,       0}, \
   {ORAN_CONFIG_LiteOnIgnoreUPSectionId, "Liteon Ignore Section Id\n",  PARAMFLAG_BOOL,      .uptr=NULL, .defuintval=0,     TYPE_UINT,      0}, \
   {ORAN_FH_CONFIG_T1A_CP_DL,            "T1a_cp_dl" ORAN_FH_HLP_CPLT,  PARAMFLAG_MANDATORY, .uptr=NULL, .defintarrayval=0, TYPE_UINTARRAY, 0}, \
   {ORAN_FH_CONFIG_T1A_CP_UL,            "T1a_cp_ul" ORAN_FH_HLP_CPLT,  PARAMFLAG_MANDATORY, .uptr=NULL, .defintarrayval=0, TYPE_UINTARRAY, 0}, \
