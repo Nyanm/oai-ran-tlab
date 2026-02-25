@@ -897,6 +897,7 @@ static void inner_rx(PHY_VARS_gNB *gNB,
 
   for (int aarx = 0; aarx < nb_rx_ant; aarx++) {
     for (int aatx = 0; aatx < nb_layer; aatx++) {
+      start_meas(&gNB->pusch_extraction_stats);
       nr_ulsch_extract_rbs(rxF[aarx],
                            (c16_t *)pusch_vars->ul_ch_estimates[aatx * nb_rx_ant + aarx],
                            rxFext[aarx],
@@ -907,6 +908,7 @@ static void inner_rx(PHY_VARS_gNB *gNB,
                            dmrs_symbol_flag, 
                            rel15_ul,
                            frame_parms);
+      stop_meas(&gNB->pusch_extraction_stats);
 #if T_TRACER
       int nb_re_pusch = NR_NB_SC_PER_RB * rel15_ul->rb_size;
       // Assume assume Tx and Rx = 1
@@ -919,6 +921,7 @@ static void inner_rx(PHY_VARS_gNB *gNB,
 #endif
     }
   }
+  start_meas(&gNB->pusch_channel_compensation_stats);
   c16_t rho[nb_layer][nb_layer][buffer_length] __attribute__((aligned(64)));
   c16_t rxF_ch_maga  [nb_layer][buffer_length] __attribute__((aligned(64)));
   c16_t rxF_ch_magb  [nb_layer][buffer_length] __attribute__((aligned(64)));
@@ -944,6 +947,7 @@ static void inner_rx(PHY_VARS_gNB *gNB,
                                 rel15_ul,
                                 symbol,
                                 output_shift);
+  stop_meas(&gNB->pusch_channel_compensation_stats);
 
   if (nb_layer == 1 && rel15_ul->transform_precoding == transformPrecoder_enabled && rel15_ul->qam_mod_order <= 6) {
     if (rel15_ul->qam_mod_order > 2)
@@ -966,7 +970,7 @@ static void inner_rx(PHY_VARS_gNB *gNB,
                              buffer_length);
     pusch_vars->ul_valid_re_per_slot[symbol] -= pusch_vars->ptrs_re_per_slot;
   }
-
+  start_meas(&gNB->ulsch_llr_stats);
   if (nb_layer == 2) {
     if (rel15_ul->qam_mod_order <= 6) {
       nr_ulsch_compute_ML_llr(pusch_vars,
@@ -1008,6 +1012,7 @@ static void inner_rx(PHY_VARS_gNB *gNB,
                            pusch_vars->ul_valid_re_per_slot[symbol],
                            symbol,
                            rel15_ul->qam_mod_order);
+  stop_meas(&gNB->ulsch_llr_stats);
 }
 
 typedef struct puschSymbolProc_s {
@@ -1066,6 +1071,7 @@ static void nr_pusch_symbol_processing(void *arg)
 
     int nb_re_pusch = gNB->pusch_vars[ulsch_id].ul_valid_re_per_slot[symbol];
     // layer de-mapping
+    start_meas(&gNB->ulsch_layer_demapping_stats);
     int16_t *llr_ptr = llrs[0];
     if (rel15_ul->nrOfLayers != 1) {
       llr_ptr = &rdata->llr[pusch_vars->llr_offset[symbol] * rel15_ul->nrOfLayers];
@@ -1075,12 +1081,15 @@ static void nr_pusch_symbol_processing(void *arg)
             llr_ptr[i * rel15_ul->nrOfLayers * rel15_ul->qam_mod_order + l * rel15_ul->qam_mod_order + m] =
                 llrss[l][i * rel15_ul->qam_mod_order + m];
     }
+    stop_meas(&gNB->ulsch_layer_demapping_stats);
     // unscrambling
+    start_meas(&gNB->ulsch_unscrambling_stats);
     int16_t *llr16 = (int16_t*)&rdata->llr[pusch_vars->llr_offset[symbol] * rel15_ul->nrOfLayers];
     int16_t *s = rdata->scramblingSequence + pusch_vars->llr_offset[symbol] * rel15_ul->nrOfLayers;
     const int end = nb_re_pusch * rel15_ul->qam_mod_order * rel15_ul->nrOfLayers;
     for (int i = 0; i < end; i++)
       llr16[i] = llr_ptr[i] * s[i];
+    stop_meas(&gNB->ulsch_unscrambling_stats);
   }
 
   // Task running in // completed
@@ -1313,7 +1322,8 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
   int buffer_length = rel15_ul->rb_size * NR_NB_SC_PER_RB;
   c16_t temp_rxFext[frame_parms->nb_antennas_rx][buffer_length] __attribute__((aligned(64)));
   for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) 
-    for (int nl = 0; nl < rel15_ul->nrOfLayers; nl++)
+    for (int nl = 0; nl < rel15_ul->nrOfLayers; nl++) {
+      start_meas(&gNB->pusch_extraction_stats);
       nr_ulsch_extract_rbs(gNB->common_vars.rxdataF[beam_nb][aarx],
                            (c16_t *)pusch_vars->ul_ch_estimates[nl * frame_parms->nb_antennas_rx + aarx],
                            temp_rxFext[aarx],
@@ -1324,6 +1334,8 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
                            (rel15_ul->ul_dmrs_symb_pos >> meas_symbol) & 0x01, 
                            rel15_ul,
                            frame_parms);
+      stop_meas(&gNB->pusch_extraction_stats);
+    }
 
   uint8_t shift_ch_ext = rel15_ul->nrOfLayers > 1 ? log2_approx(max_ch >> 11) : 0;
 
