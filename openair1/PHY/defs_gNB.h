@@ -131,16 +131,16 @@ typedef struct {
   uint32_t TBS;
   /// Pointer to the payload (38.212 V15.4.0 section 5.1)
   uint8_t *b;
-  /// Pointers to code blocks after code block segmentation and CRC attachment (38.212 V15.4.0 section 5.2.2)
-  uint8_t **c;
+  /// Pointer to aggregated code blocks after code block segmentation and CRC attachment (38.212 V15.4.0 section 5.2.2)
+  uint8_t *c;
   /// Number of bits in each code block (38.212 V15.4.0 section 5.2.2)
   uint32_t K;
   /// Number of "Filler" bits added in the code block segmentation (38.212 V15.4.0 section 5.2.2)
   uint32_t F;
   /// Number of code blocks after code block segmentation (38.212 V15.4.0 section 5.2.2)
   uint32_t C;
-  /// Pointers to code blocks after LDPC coding (38.212 V15.4.0 section 5.3.2)
-  int16_t **d;
+  /// Pointers to aggregated code blocks after LDPC coding (38.212 V15.4.0 section 5.3.2)
+  int16_t *d;
   /// flag used to clear d properly (together with harq_to_be_cleared above)
   /// set to true in nr_ulsch_decoding() when harq_to_be_cleared is true
   /// when true, clear d in the next call to function nr_rate_matching_ldpc_rx()
