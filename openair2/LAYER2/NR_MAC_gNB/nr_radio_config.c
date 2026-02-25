@@ -1417,7 +1417,7 @@ static void set_SR_periodandoffset_beam(NR_SchedulingRequestResourceConfig_t *sc
 
   int sr_slot = 1; // in FDD SR in slot 1
   const int ideal_period = set_ideal_period_beam(false, NUM_SSB_period);
-  sr_slot = get_first_ul_slot_beam(fs, true, beam_idx, beams_per_period, num_beam);
+  sr_slot = get_first_ul_slot_beam(fs, beam_idx, beams_per_period, num_beam);
 
   schedulingRequestResourceConfig->periodicityAndOffset = calloc(1,sizeof(*schedulingRequestResourceConfig->periodicityAndOffset));
 
@@ -2049,7 +2049,16 @@ static void set_csi_meas_periodicity(const NR_ServingCellConfigCommon_t *scc,
   NR_beam_info_t *beam_info = &RC.nrmac[0]->beam_info;
   int offset;
   if (beam_info->beam_mode != NO_BEAM_MODE) {
-    idx = uid * 2 + is_rsrp; // TBD
+    // For NO_BEAM_MODE
+    // C - CSI meas
+    // R - RSRP
+    //       UL slot
+    //      0123456789
+    // uid0 CR
+    // uid1 -CR
+    // uid2 --CR
+    // With beamforming, uid0, uid1 and uid could be of different beams. CSI meas and Report of different uid could not be shared
+    idx = uid * 2 + is_rsrp;
     int num_beam = (RC.nrmac[0]->radio_config.nb_bfw[1] > 0) ? RC.nrmac[0]->radio_config.nb_bfw[1]: 1;
     int beams_per_period = (beam_info->beams_per_period > 0) ? beam_info->beams_per_period: 1;
     int NUM_SSB_period = (num_beam % beams_per_period > 0) ? num_beam / beams_per_period + 1 : num_beam / beams_per_period;
@@ -3871,11 +3880,9 @@ static bool verify_radio_configuration(int uid, const NR_ServingCellConfigCommon
   if (beam_info->beam_mode != NO_BEAM_MODE) {
     int num_beam = (RC.nrmac[0]->radio_config.nb_bfw[1] > 0) ? RC.nrmac[0]->radio_config.nb_bfw[1] : 1;
     int beams_per_period = (beam_info->beams_per_period > 0) ? beam_info->beams_per_period : 1;
-    int NUM_SSB_period = (num_beam % beams_per_period > 0) ? num_beam / beams_per_period + 1 : num_beam / beams_per_period;
-    const int ideal_period = set_ideal_period_beam(false, NUM_SSB_period);
     srs_offset = get_ul_slot_offset_beam(fs, uid, false, beam_idx, beams_per_period, num_beam);
-    LOG_I(NR_MAC, "verify_radio_configuration 0 idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d srs_offset %d\n",
-      uid, false, beam_idx, num_beam, ideal_period, srs_offset);
+    LOG_I(NR_MAC, "verify_radio_configuration 0 idx %d count_mixed %d beam_idx %d num_beam %d srs_offset %d\n",
+      uid, false, beam_idx, num_beam, srs_offset);
   } else {
     srs_offset = get_ul_slot_offset(fs, uid, false);
   }
@@ -3912,12 +3919,19 @@ static bool verify_radio_configuration(int uid, const NR_ServingCellConfigCommon
   if (beam_info->beam_mode != NO_BEAM_MODE) {
     int num_beam = (RC.nrmac[0]->radio_config.nb_bfw[1] > 0) ? RC.nrmac[0]->radio_config.nb_bfw[1] : 1;
     int beams_per_period = (beam_info->beams_per_period > 0) ? beam_info->beams_per_period : 1;
-    int NUM_SSB_period = (num_beam % beams_per_period > 0) ? num_beam / beams_per_period + 1 : num_beam / beams_per_period;
-    const int ideal_period = set_ideal_period_beam(true, NUM_SSB_period);
-    const int idx = (uid * 2) + 1;  // TBD
+    // For NO_BEAM_MODE
+    // C - CSI meas
+    // R - RSRP
+    //       UL slot
+    //      0123456789
+    // uid0 CR
+    // uid1 -CR
+    // uid2 --CR
+    // With beamforming, uid0, uid1 and uid could be of different beams. CSI meas and Report of different uid could not be shared
+    const int idx = (uid * 2) + 1;
     offset = get_ul_slot_offset_beam(fs, idx, true, beam_idx, beams_per_period, num_beam);
-    LOG_I(NR_MAC, "verify_radio_configuration 1 idx %d count_mixed %d beam_idx %d num_beam %d ideal_period %d offset %d\n",
-      idx, true, beam_idx, num_beam, ideal_period, offset);
+    LOG_I(NR_MAC, "verify_radio_configuration 1 idx %d count_mixed %d beam_idx %d num_beam %d offset %d\n",
+      idx, true, beam_idx, num_beam, offset);
   } else {
     const int idx = (uid * 2 / num_pucch2) + 1;
     offset = get_ul_slot_offset(fs, idx, true);;
