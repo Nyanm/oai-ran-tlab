@@ -218,7 +218,7 @@ typedef struct nrLDPC_slot_encoding_parameters_s{
   nrLDPC_TB_encoding_parameters_t *TBs;
 } nrLDPC_slot_encoding_parameters_t;
 
-typedef int32_t(nrLDPC_coding_init_t)(void);
+typedef int32_t(nrLDPC_coding_init_t)(int);
 typedef int32_t(nrLDPC_coding_shutdown_t)(void);
 
 /**
@@ -240,7 +240,7 @@ typedef struct nrLDPC_coding_interface_s {
   nrLDPC_coding_encoder_t *nrLDPC_coding_encoder;
 } nrLDPC_coding_interface_t;
 
-int load_nrLDPC_coding_interface(char *version, nrLDPC_coding_interface_t *interface);
+int load_nrLDPC_coding_interface(char *version, nrLDPC_coding_interface_t *interface, int);
 int free_nrLDPC_coding_interface(nrLDPC_coding_interface_t *interface);
 
 #endif
