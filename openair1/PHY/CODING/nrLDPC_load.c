@@ -30,16 +30,25 @@ int load_LDPClib(char *version, ldpc_interface_t *itf)
   }
   /* function description array, to be used when loading the encoding/decoding shared lib */
   loader_shlibfunc_t shlib_fdesc[] = {{.fname = "LDPCinit"},
+                                      {.fname = "LDPCinit_cuda"},
                                       {.fname = "LDPCshutdown"},
+                                      {.fname = "LDPCshutdown_cuda"},
                                       {.fname = "LDPCdecoder"},
-                                      {.fname = "LDPCencoder"}};
+                                      {.fname = "LDPCencoder"},
+                                      {.fname = "LDPCencoder32"},
+                                      {.fname = "LDPCdecoder_cuda"}};
   int ret;
   ret = load_module_version_shlib(libname, version, shlib_fdesc, sizeofArray(shlib_fdesc), NULL);
   AssertFatal((ret >= 0), "Error loading ldpc decoder");
+  LOG_I(NR_PHY,"loading LDPC version %s\n",version);
   itf->LDPCinit = (LDPC_initfunc_t *)shlib_fdesc[0].fptr;
-  itf->LDPCshutdown = (LDPC_shutdownfunc_t *)shlib_fdesc[1].fptr;
-  itf->LDPCdecoder = (LDPC_decoderfunc_t *)shlib_fdesc[2].fptr;
-  itf->LDPCencoder = (LDPC_encoderfunc_t *)shlib_fdesc[3].fptr;
+  itf->LDPCinit_cuda = (LDPC_initfunc_t *)shlib_fdesc[1].fptr;
+  itf->LDPCshutdown = (LDPC_shutdownfunc_t *)shlib_fdesc[2].fptr;
+  itf->LDPCshutdown_cuda = (LDPC_shutdownfunc_t *)shlib_fdesc[3].fptr;
+  itf->LDPCdecoder = (LDPC_decoderfunc_t *)shlib_fdesc[4].fptr;
+  itf->LDPCencoder = (LDPC_encoderfunc_t *)shlib_fdesc[5].fptr;
+  itf->LDPCencoder32 = (LDPC_encoderfunc32_t *)shlib_fdesc[6].fptr;
+  itf->LDPCdecoder_cuda = (LDPC_decoderfunc_cuda_t *)shlib_fdesc[7].fptr;
 
   AssertFatal(itf->LDPCinit() == 0, "error starting LDPC library %s %s\n", libname, version);
 
@@ -48,5 +57,6 @@ int load_LDPClib(char *version, ldpc_interface_t *itf)
 
 int free_LDPClib(ldpc_interface_t *ldpc_interface)
 {
+  if (ldpc_interface->LDPCshutdown_cuda) ldpc_interface->LDPCshutdown_cuda();
   return ldpc_interface->LDPCshutdown();
 }
