@@ -303,33 +303,57 @@ void SIM_Channel_propagate(c16_t **rxData, const c16_t *in, channel_desc_t *chan
 
   start_meas(&time_multipath_stats);
 
-  for (int i = 0; i < frame->packet_samples; i++) {
+  for(int i = frame->packet_samples; i < frame->packet_samples + DELAY_MAX + 2048; i++) {
+    for (int j = 0; j < frame->nr_frame_parms.nb_antennas_tx; j++) {
+      // Clear the array
+      s_re[j][i] = 0.0;
+      s_im[j][i] = 0.0;
+    }
+  }
+
+  for(int i = 0; i < frame->packet_samples; i++) {
+    // Copy to double
     s_re[0][i] = (double) in[i].r;
     s_im[0][i] = (double) in[i].i;
   }
 
-  for(int i = 0; i < frame->packet_samples + DELAY_MAX + 200; i++) {
-    // Clear array
-    r_re[0][i] = 0.0;
-    r_im[0][i] = 0.0;
+  for(int i = 0; i < frame->packet_samples + DELAY_MAX + 2048; i++) {
+    for (int j = 0; j < frame->nr_frame_parms.nb_antennas_tx; j++) {
+      // Clear array
+      r_re[j][i] = 0.0;
+      r_im[j][i] = 0.0;
+    }
   }
 
-  int txlev = signal_energy((int32_t *) in, frame->nr_frame_parms.ofdm_symbol_size + frame->nr_frame_parms.nb_prefix_samples0);
-  double txlev_dBm = 10 * log10((double)txlev);
-  //printf("Signal energy: %d (%f dB)\n", txlev, txlev_dBm);
-
-  double ts = 1.0 / (frame->nr_frame_parms.subcarrier_spacing * frame->nr_frame_parms.ofdm_symbol_size);
-  // Compute AWGN variance
-  double sigma2_dBm = txlev_dBm + channel->path_loss_dB - SNR; // *((double)frame_parms->ofdm_symbol_size / r2d_subcarriers)
-  double sigma2 = pow(10, sigma2_dBm / 10);
-  //printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dBm);
-
-  multipath_channel(channel, s_re, s_im, r_re, r_im, frame->packet_samples + DELAY_MAX + 2048, 0, 1);
+  multipath_channel_MT(channel, s_re, s_im, r_re, r_im, frame->packet_samples + DELAY_MAX + 2048, 0, 1, gz);
 
   stop_meas(&time_multipath_stats);
   *time_multipath += time_multipath_stats.diff / (cpu_freq_GHz * 1e9) * 1e6;
 
   start_meas(&time_noise_stats);
+
+  uint64_t txlev_sum = 0;
+
+  for (int i = channel->channel_offset; i < channel->channel_offset + frame->packet_samples; i++) {
+    // Calculate power
+    txlev_sum += r_re[0][i] * r_re[0][i] + r_im[0][i] * r_im[0][i];
+  }
+
+  uint32_t txlev = txlev_sum / frame->packet_samples;
+  double txlev_dBm = 10 * log10((double)txlev);
+
+  if(testing_mode && !testing_timing) {
+    printf("Signal energy: %d (%f dB)\n", txlev, txlev_dBm);
+  }
+
+  double ts = 1.0 / (frame->nr_frame_parms.subcarrier_spacing * frame->nr_frame_parms.ofdm_symbol_size);
+  // Compute AWGN variance
+  double sigma2_dBm = txlev_dBm + channel->path_loss_dB - SNR; //+ 10*log10((double)frame->nr_frame_parms.ofdm_symbol_size / (frame->nr_frame_parms.N_RB_DL * NR_NB_SC_PER_RB));
+  double sigma2 = pow(10, sigma2_dBm / 10);
+
+  if(testing_mode && !testing_timing) {
+    printf("Noise sigma2: %f (%f dB)\n", sigma2, sigma2_dBm);
+  }
 
   add_noise_MT(rxData,
             (const double **)r_re,
@@ -864,13 +888,13 @@ void* process_snr_range(void* arg) {
         start_meas(&local_time_stats);
       }
 
-      data->channel_model->delay = uniformrandom() * (DELAY_MAX - DELAY_MIN) + DELAY_MIN; // Random delay for each SNR
+      int delay = uniformrandom() * (DELAY_MAX - DELAY_MIN) + DELAY_MIN; // Random delay for each SNR
       if(testing_mode && !testing_timing) {
-        printf("[Channel] Random delay: %d samples\n", data->channel_model->delay);
+        printf("[Channel] Random delay: %d samples\n", delay);
       }
 
       // Per-thread variables to avoid conflicts
-      channel_desc_t *channel_params = new_channel_desc_scm(local_frame_parms->nr_frame_parms.nb_antennas_tx,
+      channel_desc_t *channel_params = new_channel_desc_scm_MT(local_frame_parms->nr_frame_parms.nb_antennas_tx,
                                             local_frame_parms->nr_frame_parms.nb_antennas_rx,
                                             data->channel_model->channel_model,
                                             data->channel_model->sampling_rate,
@@ -880,9 +904,10 @@ void* process_snr_range(void* arg) {
                                             0.0,
                                             CORR_LEVEL_LOW,
                                             0,
-                                            data->channel_model->delay,
+                                            delay,
                                             data->channel_model->path_loss_dB,
-                                            data->channel_model->noise_power_dB);
+                                            data->channel_model->noise_power_dB,
+                                            &gz);
       
       SIM_Channel_propagate(rxData, (const c16_t *) txData, channel_params, local_channel_model.SNR, local_frame_parms,
                             s_re, s_im, r_re, r_im, &data->time_multipath, &data->time_noise, &gz);
@@ -943,7 +968,12 @@ void* process_snr_range(void* arg) {
       }
       
       int Preamble_offset = AIOT_D2R_PHY_RX_Synchronize(correlation, (const int16_t *) envelope, Preamble_ideal, local_frame_parms);
+      Preamble_offset = (delay - local_frame_parms->N_bit);
       
+      if(testing_mode && !testing_timing) {
+        printf("[RX Synchronize] Using ideal Preamble offset: %d\n", Preamble_offset);
+      }
+
       if(testing_mode && !testing_timing && snr == snr_plot && iters == 0) {
         sprintf(filename, "%s/D2R_Correlation.m", folderplots);
         LOG_M(filename, "Correlation_sig", correlation, rx_size - local_frame_parms->preamble_samples, 1, 2);
@@ -1288,8 +1318,8 @@ int main(int argc, char **argv)
     .channel_model = AWGN,
     .fc = 897500000, // Carrier frequency n8 band, #50 RB
     .DS_TDL = .03,
-    .SNR = 20.0,
-    .path_loss_dB = -15.0,
+    .SNR = 0.0,
+    .path_loss_dB = 0.0,
     .noise_power_dB = -120.0,
     .tx_pwr_dBm = 46.0
   };
@@ -1320,7 +1350,7 @@ int main(int argc, char **argv)
         printf("-i Iterations per SNR point (default: %d)\n", SNR_TRIALS);
         printf("-s SNR min in dB (default: %d)\n", MIN_SNR_DB);
         printf("-S SNR max in dB (default: %d)\n", MAX_SNR_DB);
-        printf("-C Channel model (0-AWGN or 1-TDL_A))\n");
+        printf("-C Channel model: 0=AWGN (default) or 1=TDL-A (30 ns))\n");
 
         printf("\n*** Testing options:\n");
         printf("-t Testing mode (the parameter specifies the SNR cut to save to plot)\n");

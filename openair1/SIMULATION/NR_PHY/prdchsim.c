@@ -1538,7 +1538,7 @@ int main(int argc, char **argv)
     .channel_model = AWGN,
     .fc = 897500000, // Carrier frequency n8 band, #50 RB
     .DS_TDL = .03,
-    .SNR = 20.0,
+    .SNR = 0.0,
     .path_loss_dB = 0.0,
     .noise_power_dB = -120.0,
     .tx_pwr_dBm = 46.0
@@ -1565,7 +1565,7 @@ int main(int argc, char **argv)
         printf("-i Iterations per SNR point (default: %d)\n", SNR_TRIALS);
         printf("-s SNR min in dB (default: %d)\n", MIN_SNR_DB);
         printf("-S SNR max in dB (default: %d)\n", MAX_SNR_DB);
-        printf("-C Channel model (0-AWGN or 1-TDL_A))\n");
+        printf("-C Channel model: 0=AWGN (default) or 1=TDL-A (30 ns))\n");
         printf("\n*** Testing options:\n");
         printf("-t Testing mode (the parameter specifies the SNR cut to save to plot)\n");
         printf("-T Timing mode (measure processing time per packet)\n");
