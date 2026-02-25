@@ -31,38 +31,6 @@
 #define __NRLDPC_CODING_INTERFACE__H__
 
 /**
- * \typedef nrLDPC_segment_decoding_parameters_t
- * \struct nrLDPC_segment_decoding_parameters_s
- * \brief decoding parameter of segments
- * \var E input llr segment size
- * \var R code rate indication
- * \var llr segment input llr array
- * \var d Pointers to code blocks before LDPC decoding (38.212 V15.4.0 section 5.3.2)
- * \var d_to_be_cleared
- * pointer to the flag used to clear d properly
- * when true, clear d after rate dematching
- * \var c Pointers to code blocks after LDPC decoding (38.212 V15.4.0 section 5.2.2)
- * \var decodeSuccess
- * flag indicating that the decoding of the segment was successful
- * IT MUST BE FILLED BY THE IMPLEMENTATION
- * \var ts_deinterleave deinterleaving time stats
- * \var ts_rate_unmatch rate unmatching time stats
- * \var ts_ldpc_decode decoding time stats
- */
-typedef struct nrLDPC_segment_decoding_parameters_s{
-  int E;
-  uint8_t R;
-  short *llr;
-  int16_t *d;
-  bool *d_to_be_cleared;
-  uint8_t *c;
-  bool decodeSuccess;
-  time_stats_t ts_deinterleave;
-  time_stats_t ts_rate_unmatch;
-  time_stats_t ts_ldpc_decode;
-} nrLDPC_segment_decoding_parameters_t;
-
-/**
  * \typedef nrLDPC_TB_decoding_parameters_t
  * \struct nrLDPC_TB_decoding_parameters_s
  * \brief decoding parameter of transport blocks
@@ -113,7 +81,20 @@ typedef struct nrLDPC_TB_decoding_parameters_s{
   uint32_t F;
 
   uint32_t C;
-  nrLDPC_segment_decoding_parameters_t *segments;
+  int E;
+  uint8_t R;
+  int E2;
+  uint8_t R2;
+  int first_rE2;
+  short *llr;
+  uint8_t *c;
+  int16_t *d;
+  bool d_to_be_cleared;
+  bool decodeSuccess[132];
+  time_stats_t ts_deinterleave;
+  time_stats_t ts_rate_unmatch;
+  time_stats_t ts_seg_prep;
+  time_stats_t ts_ldpc_decode;
 } nrLDPC_TB_decoding_parameters_t;
 
 /**
