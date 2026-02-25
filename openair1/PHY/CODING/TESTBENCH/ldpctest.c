@@ -334,7 +334,7 @@ one_measurement_t test_ldpc(short max_iterations,
 
       n_iter = ldpc_toCompare.LDPCdecoder(&decParams[j],
                                           (int8_t *)channel_output_fixed[j],
-                                          (int8_t *)estimated_output[j],
+                                          estimated_output[j],
                                           &decoder_profiler,
                                           &dec_abort);
       stop_meas(&ret.time_decoder);
