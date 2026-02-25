@@ -1062,7 +1062,7 @@ static int normalize_dpdk_dev(const char *input, char *output, size_t out_len)
 }
 
 // OAI CODE
-int32_t nrLDPC_coding_init()
+int32_t nrLDPC_coding_init(int max_num_pxsch)
 {
   pthread_mutex_init(&encode_mutex, NULL);
   pthread_mutex_init(&decode_mutex, NULL);
