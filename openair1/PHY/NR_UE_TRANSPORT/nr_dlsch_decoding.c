@@ -73,7 +73,8 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
     .slot = proc->nr_slot_rx,
     .nb_TBs = nb_dlsch,
     .threadPool = &get_nrUE_params()->Tpool,
-    .TBs = TBs
+    .TBs = TBs,
+    .use_gpu = phy_vars_ue->use_gpu
   };
 
   int max_num_segments = 0;

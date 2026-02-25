@@ -18,29 +18,35 @@
  * For more information about the OpenAirInterface (OAI) Software Alliance:
  *      contact@openairinterface.org
  */
-#ifndef _NRLDPC_EXTERN_H__
-#define _NRLDPC_EXTERN_H__
+
+/*!\file ldpc_encoder.c
+ * \brief Defines the LDPC encoder
+ * \author Florian Kaltenberger, Raymond Knopp, Kien le Trung (Eurecom)
+ * \email openair_tech@eurecom.fr
+ * \date 27-03-2018
+ * \version 1.0
+ * \note
+ * \warning
+ */
+
+
+
+#include <stdlib.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include "defs.h"
+#include "assertions.h"
 #include "openair1/PHY/CODING/nrLDPC_defs.h"
-/* ldpc coder/decoder API*/
-typedef struct ldpc_interface_s {
-  LDPC_initfunc_t *LDPCinit;
-  LDPC_initfunc_t *LDPCinit_cuda;
-  LDPC_shutdownfunc_t *LDPCshutdown;
-  LDPC_shutdownfunc_t *LDPCshutdown_cuda;
-  LDPC_decoderfunc_t *LDPCdecoder;
-  LDPC_encoderfunc_t *LDPCencoder;
-  LDPC_encoderfunc32_t *LDPCencoder32;
-  LDPC_decoderfunc_t *LDPCdecoder_cuda;
-} ldpc_interface_t;
+#include "openair1/PHY/CODING/nrLDPC_extern.h"
+#include "ldpc_generate_coefficient.c"
 
-/* functions to load the LDPC shared lib, implemented in openair1/PHY/CODING/nrLDPC_load.c */
-int load_LDPClib(char *version, ldpc_interface_t *);
-int free_LDPClib(ldpc_interface_t *ldpc_interface);
 
-LDPC_decoderfunc_t LDPCdecoder;
-LDPC_encoderfunc_t LDPCencoder;
-LDPC_encoderfunc32_t LDPCencoder32;
-LDPC_decoderfunc_t LDPCdecoder_cuda;
+void cuda_support_init() {
+   return;
+}
+uint32_t **LDPCencoder32(uint8_t **input,encoder_implemparams_t *impp)
+{
+	AssertFatal(1==0,"Should not be getting here\n");
+}
 
-// inline functions:
-#endif
