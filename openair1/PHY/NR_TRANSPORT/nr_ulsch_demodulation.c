@@ -882,8 +882,8 @@ static void inner_rx(PHY_VARS_gNB *gNB,
   int nb_rx_ant = frame_parms->nb_antennas_rx;
   int dmrs_symbol_flag = (rel15_ul->ul_dmrs_symb_pos >> symbol) & 0x01;
   int buffer_length = ceil_mod(rel15_ul->rb_size * NR_NB_SC_PER_RB, 16);
-  c16_t rxFext[nb_rx_ant][buffer_length] __attribute__((aligned(32)));
-  c16_t chFext[nb_layer][nb_rx_ant][buffer_length] __attribute__((aligned(32)));
+  c16_t rxFext[nb_rx_ant][buffer_length] __attribute__((aligned(64)));
+  c16_t chFext[nb_layer][nb_rx_ant][buffer_length] __attribute__((aligned(64)));
 
   memset(rxFext, 0, sizeof(rxFext));
   memset(chFext, 0, sizeof(chFext));
@@ -919,10 +919,10 @@ static void inner_rx(PHY_VARS_gNB *gNB,
 #endif
     }
   }
-  c16_t rho[nb_layer][nb_layer][buffer_length] __attribute__((aligned(32)));
-  c16_t rxF_ch_maga  [nb_layer][buffer_length] __attribute__((aligned(32)));
-  c16_t rxF_ch_magb  [nb_layer][buffer_length] __attribute__((aligned(32)));
-  c16_t rxF_ch_magc  [nb_layer][buffer_length] __attribute__((aligned(32)));
+  c16_t rho[nb_layer][nb_layer][buffer_length] __attribute__((aligned(64)));
+  c16_t rxF_ch_maga  [nb_layer][buffer_length] __attribute__((aligned(64)));
+  c16_t rxF_ch_magb  [nb_layer][buffer_length] __attribute__((aligned(64)));
+  c16_t rxF_ch_magc  [nb_layer][buffer_length] __attribute__((aligned(64)));
 
   memset(rho, 0, sizeof(rho));
   memset(rxF_ch_maga, 0, sizeof(rxF_ch_maga));
@@ -1131,13 +1131,13 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
   int nb_layer = rel15_ul->nrOfLayers;
 
   // Initialize memory for DMRS signals
-  c16_t pusch_dmrs_slot_mem[nb_layer * buffer_length_slot] __attribute__((aligned(32)));
+  c16_t pusch_dmrs_slot_mem[nb_layer * buffer_length_slot] __attribute__((aligned(64)));
   // Initialize memory for channel estimates based on DMRS positions
-  c16_t pusch_ch_est_dmrs_pos_slot_mem[buffer_length_slot * nb_layer * nb_rx_ant] __attribute__((aligned(32)));
+  c16_t pusch_ch_est_dmrs_pos_slot_mem[buffer_length_slot * nb_layer * nb_rx_ant] __attribute__((aligned(64)));
   // memory to store slot grid with channel coefficients based on DMRS positions after interpolation
-  c16_t pusch_ch_est_dmrs_interpl_slot_mem[buffer_length_slot * nb_layer * nb_rx_ant] __attribute__((aligned(32)));
+  c16_t pusch_ch_est_dmrs_interpl_slot_mem[buffer_length_slot * nb_layer * nb_rx_ant] __attribute__((aligned(64)));
   // memory to store extracted data including PUSCH + DMRS
-  c16_t rxFext_slot_mem[nb_rx_ant * buffer_length_slot] __attribute__((aligned(32)));
+  c16_t rxFext_slot_mem[nb_rx_ant * buffer_length_slot] __attribute__((aligned(64)));
 
 #if T_TRACER
   // Initialize memory for DMRS signals
@@ -1281,7 +1281,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
   gNB->ulsch[ulsch_id].unav_res = unav_res;
 
   // initialize scrambling sequence //
-  int16_t scramblingSequence[G + 96] __attribute__((aligned(32)));
+  int16_t scramblingSequence[G + 96] __attribute__((aligned(64)));
 
   nr_codeword_unscrambling_init(scramblingSequence, G, 0, rel15_ul->data_scrambling_id, rel15_ul->rnti);
 
@@ -1308,10 +1308,10 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
   else // average of channel estimates stored in first symbol
     dmrs_symbol = get_next_dmrs_symbol_in_slot(rel15_ul->ul_dmrs_symb_pos, rel15_ul->start_symbol_index, end_symbol);
   int size_est = nb_re_pusch * frame_parms->symbols_per_slot;
-  __attribute__((aligned(32))) int ul_ch_estimates_ext[rel15_ul->nrOfLayers * frame_parms->nb_antennas_rx][size_est];
+  __attribute__((aligned(64))) int ul_ch_estimates_ext[rel15_ul->nrOfLayers * frame_parms->nb_antennas_rx][size_est];
   memset(ul_ch_estimates_ext, 0, sizeof(ul_ch_estimates_ext));
   int buffer_length = rel15_ul->rb_size * NR_NB_SC_PER_RB;
-  c16_t temp_rxFext[frame_parms->nb_antennas_rx][buffer_length] __attribute__((aligned(32)));
+  c16_t temp_rxFext[frame_parms->nb_antennas_rx][buffer_length] __attribute__((aligned(64)));
   for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) 
     for (int nl = 0; nl < rel15_ul->nrOfLayers; nl++)
       nr_ulsch_extract_rbs(gNB->common_vars.rxdataF[beam_nb][aarx],
