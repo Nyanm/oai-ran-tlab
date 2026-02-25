@@ -121,6 +121,7 @@ instance_t CUuniqInstance=0;
 // NTN cellSpecificKoffset-r17, but in slots for DL SCS
 unsigned int NTN_UE_Koffset = 0;
 
+extern uint32_t use_gpu;
 void nr_derive_key_ng_ran_star(uint16_t pci, uint64_t nr_arfcn_dl, const uint8_t key[32], uint8_t *key_ng_ran_star)
 {
 }
@@ -380,7 +381,7 @@ int main(int argc, char *argv[])
   void *d_channel_coeffs_gpu = NULL;
 #endif
 
-  while ((c = getopt(argc, argv, "--:O:a:b:c:d:ef:g:h:i:jk:m:n:o::p:q:r:s:t:u:v:w:y:z:A:C:F:G:H:I:M:N:PR:S:T:U:L:ZW:E:X:Y:"))
+  while ((c = getopt(argc, argv, "--:O:a:b:c:d:ef:g:h:i:jk:m:n:o::p:q:r:s:t:u:v:w:y:z:A:C:F:G:H:I:M:N:PQR:S:T:U:L:ZW:E:X:Y:"))
          != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
@@ -576,6 +577,7 @@ int main(int argc, char *argv[])
         printf("Problem with filename %s\n", optarg);
         exit(-1);
       }
+      params_from_file=1;
       break;
 
     case 'G':
@@ -610,6 +612,9 @@ int main(int argc, char *argv[])
       cpu_meas_enabled = 1;
       break;
 
+    case 'Q':
+      use_gpu=1;
+      break;
     case 'L':
       loglvl = atoi(optarg);
       break;
@@ -630,10 +635,6 @@ int main(int argc, char *argv[])
         dmrs_arg[i>>1] = atoi(&optarg[i]);
         i+=2;
       } while (optarg[i-1] == ',');
-      break;
-
-    case 'Q':
-      params_from_file = 1;
       break;
 
     case 'X' :
@@ -1057,9 +1058,8 @@ int main(int argc, char *argv[])
 
   ulsch_input_buffer[0] = 0x31;
   for (i = 1; i < TBS/8; i++) {
-    ulsch_input_buffer[i] = (uint8_t)rand();
+    ulsch_input_buffer[i] = (uint8_t)(256*uniformrandom());
   }
-
   uint8_t ptrs_time_density = get_L_ptrs(ptrs_mcs1, ptrs_mcs2, ptrs_mcs3, Imcs, mcs_table);
   uint8_t ptrs_freq_density = get_K_ptrs(n_rb0, n_rb1, nb_rb);
 
@@ -1193,6 +1193,11 @@ int main(int argc, char *argv[])
     reset_meas(&gNB->rx_pusch_stats);
     reset_meas(&gNB->rx_pusch_init_stats);
     reset_meas(&gNB->rx_pusch_symbol_processing_stats);
+    reset_meas(&gNB->pusch_extraction_stats);
+    reset_meas(&gNB->pusch_channel_compensation_stats);
+    reset_meas(&gNB->ulsch_llr_stats);
+    reset_meas(&gNB->ulsch_layer_demapping_stats);
+    reset_meas(&gNB->ulsch_unscrambling_stats);
     reset_meas(&gNB->ulsch_decoding_stats);
     reset_meas(&gNB->ts_deinterleave);
     reset_meas(&gNB->ts_rate_unmatch);
@@ -1846,9 +1851,22 @@ int main(int argc, char *argv[])
       printStatIndent3(&gNB->pusch_channel_estimation_antenna_processing_stats, "Antenna Processing time");
       printStatIndent2(&gNB->rx_pusch_init_stats, "RX PUSCH Initialization time");
       printStatIndent2(&gNB->rx_pusch_symbol_processing_stats, "RX PUSCH Symbol Processing time");
+      gNB->pusch_extraction_stats.trials=gNB->rx_pusch_symbol_processing_stats.trials;
+      /*if (threadCnt!=0)*/ printStatIndent3(&gNB->pusch_extraction_stats, "RX PUSCH extraction");
+      gNB->pusch_channel_compensation_stats.trials=gNB->rx_pusch_symbol_processing_stats.trials;
+      /*if (threadCnt!=0)*/ printStatIndent3(&gNB->pusch_channel_compensation_stats, "RX PUSCH channel compensation");
+      gNB->ulsch_llr_stats.trials=gNB->rx_pusch_symbol_processing_stats.trials;
+      /*if (threadCnt!=0)*/ printStatIndent3(&gNB->ulsch_llr_stats, "RX PUSCH LLR");
+      gNB->ulsch_layer_demapping_stats.trials=gNB->rx_pusch_symbol_processing_stats.trials;
+      /*if (threadCnt!=0)*/ printStatIndent3(&gNB->ulsch_layer_demapping_stats, "RX PUSCH layer demapping");
+      gNB->ulsch_unscrambling_stats.trials=gNB->rx_pusch_symbol_processing_stats.trials;
+      /*if (threadCnt!=0)*/ printStatIndent3(&gNB->ulsch_unscrambling_stats, "RX PUSCH unscrambling");
       printStatIndent(&gNB->ulsch_decoding_stats,"ULSCH total decoding time");
+      gNB->ts_deinterleave.trials=n_trials;
       printStatIndent2(&gNB->ts_deinterleave, "ULSCH segment deinterleaving time");
+      gNB->ts_rate_unmatch.trials=n_trials;
       printStatIndent2(&gNB->ts_rate_unmatch, "ULSCH segment rate matching time");
+      gNB->ts_ldpc_decode.trials=n_trials;
       printStatIndent2(&gNB->ts_ldpc_decode, "ULSCH segments decoding time");
       printStatIndent(&gNB->rx_srs_stats,"RX SRS time");
       printStatIndent2(&gNB->generate_srs_stats,"Generate SRS sequence time");

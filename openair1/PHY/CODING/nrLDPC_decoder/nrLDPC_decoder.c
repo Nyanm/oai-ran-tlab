@@ -169,6 +169,16 @@ int32_t LDPCshutdown()
   return 0;
 }
 
+#ifndef USE_CUDA
+int32_t LDPCinit_cuda() {
+
+  return 0;
+}
+int32_t LDPCshutdown_cuda() {
+
+  return 0;
+}
+#endif
 int32_t LDPCdecoder(t_nrLDPC_dec_params* p_decParams,
                     int8_t* p_llr,
                     uint8_t* p_out,
@@ -191,6 +201,17 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params* p_decParams,
     return numIter;
 }
 
+#ifndef USE_CUDA
+int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
+                         int8_t* p_llr,
+                         uint8_t* p_out,
+                         t_nrLDPC_time_stats* p_profiler,
+                         decode_abort_t* ab)
+{
+
+     return(0);
+}
+#endif
 /**
    \brief PerformsnrLDPC decoding of one code block
    \param p_llr Input LLRs
