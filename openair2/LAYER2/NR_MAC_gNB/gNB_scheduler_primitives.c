@@ -3833,7 +3833,7 @@ bool prepare_initial_ul_rrc_message(gNB_MAC_INST *mac, NR_UE_info_t *UE)
   const NR_ServingCellConfigCommon_t *scc = mac->common_channels[CC_id].ServingCellConfigCommon;
   NR_COMMON_channels_t *cc = &mac->common_channels[CC_id];
   int ssb_index = cc->ssb_index[UE->UE_beam_index];
-  NR_CellGroupConfig_t *cellGroupConfig = get_initial_cellGroupConfig(UE->uid, scc, &mac->radio_config, &mac->rlc_config, ssb_index);
+  NR_CellGroupConfig_t *cellGroupConfig = get_initial_cellGroupConfig(UE->uid, scc, &mac->radio_config, &mac->rlc_config, ssb_index, UE->UE_beam_index);
   ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, UE->CellGroup);
   UE->CellGroup = cellGroupConfig;
   UE->local_bwp_id = mac->radio_config.first_active_bwp;
@@ -3974,7 +3974,8 @@ void nr_mac_trigger_reconfiguration(const gNB_MAC_INST *nrmac, NR_UE_info_t *UE,
                                                                nrmac->common_channels[0].ServingCellConfigCommon,
                                                                UE->uid,
                                                                UE->current_DL_BWP.bwp_id,
-                                                               ssb_index);
+                                                               ssb_index,
+                                                               UE->UE_beam_index);
   } else {
     if (new_bwp_id >= 0) {
       AssertFatal(UE->current_DL_BWP.bwp_id == UE->current_UL_BWP.bwp_id, "We only support same BWP for UL and DL\n");
@@ -3991,7 +3992,8 @@ void nr_mac_trigger_reconfiguration(const gNB_MAC_INST *nrmac, NR_UE_info_t *UE,
                                                                 UE->uid,
                                                                 UE->current_DL_BWP.bwp_id,
                                                                 new_bwp_id,
-                                                                ssb_index);
+                                                                ssb_index,
+                                                                UE->UE_beam_index);
       }
     }
   }
