@@ -521,7 +521,7 @@ typedef struct LDPCDecode_s {
   NR_UL_gNB_HARQ_t *ulsch_harq;
   t_nrLDPC_dec_params decoderParms;
   NR_gNB_ULSCH_t *ulsch;
-  short* ulsch_llr; 
+  int16_t* ulsch_llr; 
   int ulsch_id;
   int harq_pid;
   int rv_index;

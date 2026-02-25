@@ -209,8 +209,7 @@ static void nr_process_decode_segment(void *arg)
 
   ////////////////////////////////// pl =====> llrProcBuf //////////////////////////////////
   start_meas(rdata->p_ts_ldpc_decode);
-  int decodeIterations = LDPCdecoder(p_decoderParms, l, llrProcBuf, p_procTime, rdata->abort_decode);
-
+  int decodeIterations = LDPCdecoder(p_decoderParms, l, (uint8_t*)llrProcBuf, p_procTime, rdata->abort_decode);
   if (decodeIterations < p_decoderParms->numMaxIter) {
     memcpy(rdata->c, llrProcBuf, K >> 3);
     *rdata->decodeSuccess = true;
