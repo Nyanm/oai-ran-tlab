@@ -1301,6 +1301,103 @@ int nr_rate_matching_ldpc(uint32_t Tbslbrm,
   return 0;
 }
 
+int nr_rate_matching_ldpc32(uint32_t Tbslbrm,
+                            uint8_t BG,
+                            uint16_t Z,
+                            uint32_t *d,
+                            uint32_t *e,
+                            uint8_t C,
+                            uint32_t F,
+                            uint32_t Foffset,
+                            uint8_t rvidx,
+                            uint32_t E)
+{
+  if (C == 0) {
+    LOG_E(PHY, "nr_rate_matching: invalid parameter C %d\n", C);
+    return -1;
+  }
+
+  //Bit selection
+  uint32_t N = (BG == 1) ? (66 * Z) : (50 * Z);
+  uint32_t Ncb;
+  if (Tbslbrm == 0)
+    Ncb = N;
+  else {
+    uint32_t Nref = 3 * Tbslbrm / (2 * C); //R_LBRM = 2/3
+    Ncb = min(N, Nref);
+  }
+
+  uint32_t ind = (index_k0[BG - 1][rvidx] * Ncb / N) * Z;
+
+#ifdef RM_DEBUG
+  printf("nr_rate_matching_ldpc: E %u, F %u, Foffset %u, k0 %u, Ncb %u, rvidx %d, Tbslbrm %u\n",
+         E,
+         F,
+         Foffset,
+         ind,
+         Ncb,
+         rvidx,
+         Tbslbrm);
+#endif
+
+  if (Foffset > E) {
+    LOG_E(PHY,
+          "nr_rate_matching: invalid parameters (Foffset %d > E %d) F %d, k0 %d, Ncb %d, rvidx %d, Tbslbrm %d\n",
+          Foffset,
+          E,
+          F,
+          ind,
+          Ncb,
+          rvidx,
+          Tbslbrm);
+    return -1;
+  }
+  if (Foffset > Ncb) {
+    LOG_E(PHY, "nr_rate_matching: invalid parameters (Foffset %d > Ncb %d)\n", Foffset, Ncb);
+    return -1;
+  }
+
+  if (ind >= Foffset && ind < (F + Foffset))
+    ind = F + Foffset;
+
+  uint32_t k = 0;
+  if (ind < Foffset) { // case where we have some bits before the filler and the rest after
+    memcpy((void *)e, (void *)(d + ind), (Foffset - ind)<<2);
+
+    if (E + F <= Ncb - ind) { // E+F doesn't contain all coded bits
+      memcpy((void *)(e + Foffset - ind), (void *)(d + Foffset + F), (E - Foffset + ind)<<2);
+      k = E;
+    } else {
+      memcpy((void *)(e + Foffset - ind), (void *)(d + Foffset + F), (Ncb - Foffset - F)<<2);
+      k = Ncb - F - ind;
+    }
+  } else {
+    if (E <= Ncb - ind) { // E+F doesn't contain all coded bits
+      memcpy((void *)(e), (void *)(d + ind), E<<2);
+      k = E;
+    } else {
+      memcpy((void *)(e), (void *)(d + ind), (Ncb - ind)<<2);
+      k = Ncb - ind;
+    }
+  }
+
+  while (k < E) { // case where we do repetitions (low mcs)
+    for (ind = 0; (ind < Ncb) && (k < E); ind++) {
+#ifdef RM_DEBUG
+      printf("RM_TX k%u Ind: %u (%d)\n", k, ind, d[ind]);
+#endif
+
+      if (ind == Foffset)
+        ind = F + Foffset; // skip filler bits
+
+      e[k++] = d[ind];
+
+    }
+  }
+
+  return 0;
+}
+
 #define RMLOOP for (;ind<(ind2&7);k+=8,ind+=8) \
       simde_mm_storeu_si128(&d[ind],simde_mm_adds_epi16(simde_mm_loadu_si128(&soft_input[k]),simde_mm_loadu_si128(&d[ind])));\
    for (; ind<ind2 ; ind++,k++) d[ind] += soft_input[k];  

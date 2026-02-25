@@ -52,6 +52,9 @@
  * \param output nrLDPC_coding_segment_encoder with concatenated segments and packed bits
  * \param Eoffset offset in number of bits of the first segment of the segment group within output
  */
+
+ int nrLDPC_coding_encoder32(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encoding_parameters, nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_parameters);
+
 static void write_task_output(uint8_t *f,
                               uint32_t E,
                               uint8_t *f2,
