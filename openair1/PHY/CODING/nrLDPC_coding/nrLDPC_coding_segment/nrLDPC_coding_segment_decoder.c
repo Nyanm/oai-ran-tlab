@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <syscall.h>
 #include <time.h>
+#include <stdbool.h>
 // #define gNB_DEBUG_TRACE
 
 #define OAI_LDPC_DECODER_MAX_NUM_LLR 27000 // 26112 // NR_LDPC_NCOL_BG1*NR_LDPC_ZMAX = 68*384
@@ -208,9 +209,16 @@ static void nr_process_decode_segment(void *arg)
   completed_task_ans(rdata->ans);
 }
 
+#ifdef ENABLE_CUDA
+void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *);
+#endif
 int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters,
                                int pusch_id,
-                               thread_info_tm_t *t_info)
+                               thread_info_tm_t *t_info
+#ifdef ENABLE_CUDA
+			       ,int use_gpu
+#endif
+			       )
 {
   nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
 
@@ -222,6 +230,14 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
   decParams.outMode = nrLDPC_outMode_BIT;
   
   for (int r = 0; r < nrLDPC_TB_decoding_parameters->C; r++) {
+#ifdef ENABLE_CUDA
+    if (use_gpu == 1 && decParams.Z >= 128 && decParams.BG == 1 && r==0) {
+    // Call CUDA LDPC decoder for all segments
+      nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters);
+      break;
+    }
+    else 
+#endif
     {
       nrLDPC_decoding_parameters_t *rdata = &((nrLDPC_decoding_parameters_t *)t_info->buf)[t_info->len];
       DevAssert(t_info->len < t_info->cap);
@@ -269,19 +285,38 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
   return nrLDPC_TB_decoding_parameters->C;
 }
 
-int32_t nrLDPC_coding_init(void)
+#ifdef ENABLE_CUDA
+void nrLDPC_coding_init_cuda(int);
+#endif
+
+int32_t nrLDPC_coding_init(int max_num_pxsch)
 {
+  LOG_I(NR_PHY, "Initializing coding library\n");
+#ifdef ENABLE_CUDA
+  LOG_I(NR_PHY, "Calling cuda_support_init()\n");
+  nrLDPC_coding_init_cuda(max_num_pxsch);
+#endif
   return 0;
 }
 
+#ifdef ENABLE_CUDA
+void nrLDPC_coding_shutdown_cuda(void);
+#endif
+
 int32_t nrLDPC_coding_shutdown(void)
 {
+#ifdef ENABLE_CUDA
+  nrLDPC_coding_shutdown_cuda();
+#endif
   return 0;
 }
 
 int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_decoding_parameters)
 {
   int nbSegments = 0;
+#ifdef ENABLE_CUDA
+  int use_gpu = nrLDPC_slot_decoding_parameters->use_gpu;
+#endif
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
     nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
     nbSegments += nrLDPC_TB_decoding_parameters->C;
@@ -292,11 +327,27 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_dec
   thread_info_tm_t t_info = {.buf = (uint8_t *)arr, .len = 0, .cap = nbSegments, .ans = &ans};
 
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
-    (void)nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters, pusch_id, &t_info);
+    (void)nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters, pusch_id, &t_info
+#ifdef ENABLE_CUDA
+		    ,use_gpu
+#endif
+		    );
   }
 
   // Execute thread pool tasks
-  join_task_ans(t_info.ans);
+#ifdef ENABLE_CUDA
+  bool do_join=false;
+  // check if at least one PUSCH has a Zc<384 or BG=2
+  for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
+    nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
+    if (use_gpu == 0 || nrLDPC_TB_decoding_parameters->Z < 128 ||  nrLDPC_TB_decoding_parameters->BG == 2 ) {
+	do_join=true;    
+	break;
+    }
+  }
+  if (do_join)
+#endif
+    join_task_ans(t_info.ans);
 
   for (int pusch_id = 0; pusch_id < nrLDPC_slot_decoding_parameters->nb_TBs; pusch_id++) {
     nrLDPC_TB_decoding_parameters_t *nrLDPC_TB_decoding_parameters = &nrLDPC_slot_decoding_parameters->TBs[pusch_id];
