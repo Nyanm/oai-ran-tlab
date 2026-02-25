@@ -91,6 +91,7 @@ typedef struct nrLDPC_decoding_parameters_s {
 
   time_stats_t *p_ts_deinterleave;
   time_stats_t *p_ts_rate_unmatch;
+  time_stats_t *p_ts_seg_prep;
   time_stats_t *p_ts_ldpc_decode;
 } nrLDPC_decoding_parameters_t;
 
@@ -166,8 +167,8 @@ static void nr_process_decode_segment(void *arg)
 
   int16_t z[68 * 384 + 16] __attribute__((aligned(16)));
 
-  start_meas(rdata->p_ts_ldpc_decode);
 
+  start_meas(rdata->p_ts_seg_prep);
   memset(z, 0, 2 * rdata->Z * sizeof(*z));
   // set Filler bits
   memset(z + Kprime, 127, rdata->F * sizeof(*z));
@@ -182,6 +183,7 @@ static void nr_process_decode_segment(void *arg)
   for (int i = 0, j = 0; j < ((Kc * rdata->Z) >> 4) + 1; i += 2, j++) {
     pl[j] = simde_mm_packs_epi16(pv[i], pv[i + 1]);
   }
+  stop_meas(rdata->p_ts_seg_prep);
   //////////////////////////////////////////////////////////////////////////////////////////
 
   //////////////////////////////////////////////////////////////////////////////////////////
@@ -189,6 +191,7 @@ static void nr_process_decode_segment(void *arg)
   //////////////////////////////////////////////////////////////////////////////////////////
 
   ////////////////////////////////// pl =====> llrProcBuf //////////////////////////////////
+  start_meas(rdata->p_ts_ldpc_decode);
   int decodeIterations = LDPCdecoder(p_decoderParms, l, llrProcBuf, p_procTime, rdata->abort_decode);
 
   if (decodeIterations < p_decoderParms->numMaxIter) {

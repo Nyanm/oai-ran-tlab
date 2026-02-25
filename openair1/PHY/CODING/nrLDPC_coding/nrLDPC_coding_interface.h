@@ -137,6 +137,7 @@ typedef struct nrLDPC_segment_encoding_parameters_s{
   time_stats_t ts_interleave;
   time_stats_t ts_rate_match;
   time_stats_t ts_ldpc_encode;
+  time_stats_t ts_output;
 } nrLDPC_segment_encoding_parameters_t;
 
 /**
@@ -211,9 +212,11 @@ typedef struct nrLDPC_slot_encoding_parameters_s{
   int nb_TBs;
   tpool_t *threadPool;
   time_stats_t *tinput;
+  time_stats_t *tinput_memcpy;
   time_stats_t *tprep;
   time_stats_t *tparity;
   time_stats_t *toutput;
+  time_stats_t *tconcat;
   nrLDPC_TB_encoding_parameters_t *TBs;
 } nrLDPC_slot_encoding_parameters_t;
 
