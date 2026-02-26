@@ -563,6 +563,8 @@ typedef struct pdschSymbolProc_s {
   unsigned int beam_nb;
   unsigned int re_beginning_of_symbol[14];
   c16_t *tx_layers[4];
+  time_stats_t dlsch_resource_mapping_stats;
+  time_stats_t dlsch_precoding_stats;
 } pdschSymbolProc_t;
 
 static void nr_pdsch_symbol_processing(void *arg)
@@ -598,7 +600,7 @@ static void nr_pdsch_symbol_processing(void *arg)
          rel15->nrOfLayers);
 #endif
   for (int l_symbol = rdata->startSymbol; l_symbol < rdata->startSymbol + rdata->numSymbols; l_symbol++) {
-    start_meas(&gNB->dlsch_resource_mapping_stats);
+    start_meas(&rdata->dlsch_resource_mapping_stats);
     int l_prime = 0; // single symbol layer 0
     int l_overline = get_l0(rel15->dlDmrsSymbPos);
 
@@ -661,14 +663,14 @@ static void nr_pdsch_symbol_processing(void *arg)
                   rel15->dmrsConfigType,
                   mod_dmrs + dmrs_idx);
     } // layer loop
-    stop_meas(&gNB->dlsch_resource_mapping_stats);
+    stop_meas(&rdata->dlsch_resource_mapping_stats);
 
-    start_meas(&gNB->dlsch_precoding_stats);
+    start_meas(&rdata->dlsch_precoding_stats);
     for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
       const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz + txdataF_offset;
       do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, ant, start_sc, txdataF_offset_per_symbol);
     }
-    stop_meas(&gNB->dlsch_precoding_stats);
+    stop_meas(&rdata->dlsch_precoding_stats);
   }
   // Task running in // completed
   completed_task_ans(rdata->ans);
@@ -833,12 +835,18 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
         re_beginning_of_symbol -= n_dmrs;
       }
     }
+    reset_meas(&rdata->dlsch_resource_mapping_stats);
+    reset_meas(&rdata->dlsch_precoding_stats);
     for (int l = 0; l < rel15->nrOfLayers; l++)
       rdata->tx_layers[l] = tx_layers[l];
     task_t t = {.func = &nr_pdsch_symbol_processing, .args = rdata};
     pushTpool(&gNB->threadPool, t);
   }
   join_task_ans(&ans);
+  for (int i = 0; i < nb_tasks; i++) {
+    merge_meas(&gNB->dlsch_resource_mapping_stats, &arr[i].dlsch_resource_mapping_stats);
+    merge_meas(&gNB->dlsch_precoding_stats, &arr[i].dlsch_precoding_stats);
+  }
   stop_meas(&gNB->dlsch_pdsch_generation_stats);
   /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)
    * should remain a multiple of 8 * 64 with enough offset to fit each dlsch
