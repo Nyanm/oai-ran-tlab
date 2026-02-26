@@ -124,6 +124,15 @@ static void determine_aggregation_level_search_order(int agg_level_search_order[
 
 static int nr_mac_interrupt_ue_transmission(gNB_MAC_INST *mac, NR_UE_info_t *UE, int slots, int slots_per_frame);
 
+int get_ssbidx_from_beam(gNB_MAC_INST *mac, int beam_idx)
+{
+  for (int i = 0; i < MAX_NUM_OF_SSB; i++)
+    if (beam_idx == mac->beam_index_list[i])
+      return i;
+  AssertFatal(false, "beam_idx %d not found\n", beam_idx);
+  return 0;
+}
+
 uint8_t get_dl_nrOfLayers(const NR_UE_sched_ctrl_t *sched_ctrl, const nr_dci_format_t dci_format)
 {
   // TODO check this but it should be enough for now
@@ -2914,7 +2923,11 @@ void configure_UE_BWP(gNB_MAC_INST *nr_mac,
 
     sched_ctrl->coreset = get_coreset(nr_mac, scc, bwpd, *sched_ctrl->search_space->controlResourceSetId);
     NR_COMMON_channels_t *cc = &nr_mac->common_channels[0];
-    int ssb_index = cc->ssb_index[UE->UE_beam_index];
+    int ssb_index = 0;
+    if (nr_mac->beam_info.beam_mode == PRECONFIGURED_BEAM_IDX)
+      ssb_index = cc->ssb_index[UE->UE_beam_index];
+    else if (nr_mac->beam_info.beam_mode == LOPHY_BEAM_IDX)
+      ssb_index = get_ssbidx_from_beam(nr_mac, UE->UE_beam_index);
     sched_ctrl->sched_pdcch = set_pdcch_structure(nr_mac,
                                                   sched_ctrl->search_space,
                                                   sched_ctrl->coreset,
@@ -3832,7 +3845,11 @@ bool prepare_initial_ul_rrc_message(gNB_MAC_INST *mac, NR_UE_info_t *UE)
   int srb_id = 1;
   const NR_ServingCellConfigCommon_t *scc = mac->common_channels[CC_id].ServingCellConfigCommon;
   NR_COMMON_channels_t *cc = &mac->common_channels[CC_id];
-  int ssb_index = cc->ssb_index[UE->UE_beam_index];
+  int ssb_index = 0;
+  if (mac->beam_info.beam_mode == PRECONFIGURED_BEAM_IDX)
+    ssb_index = cc->ssb_index[UE->UE_beam_index];
+  else if (mac->beam_info.beam_mode == LOPHY_BEAM_IDX)
+    ssb_index = get_ssbidx_from_beam(mac, UE->UE_beam_index);
   NR_CellGroupConfig_t *cellGroupConfig = get_initial_cellGroupConfig(UE->uid, scc, &mac->radio_config, &mac->rlc_config, ssb_index, UE->UE_beam_index);
   ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, UE->CellGroup);
   UE->CellGroup = cellGroupConfig;
