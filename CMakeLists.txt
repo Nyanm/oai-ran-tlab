@@ -1080,6 +1080,34 @@ if (ENABLE_CUDA)
   set(CUDA_VERBOS_BUILD_ON)
   cuda_add_library(PHY_NR ${PHY_NR_SRC} ${PHY_NR_SRC_CU})
   cuda_add_library(PHY_NR_UE ${PHY_NR_UE_SRC} ${PHY_NR_UE_SRC_CU})
+# -----------------------
+# HIP (ROCm)
+# -----------------------
+elseif(ENABLE_HIP)
+# On many systems you need: -DCMAKE_PREFIX_PATH=/opt/rocm
+  find_package(HIP REQUIRED)
+
+# Some ROCm installs provide HIP_USE_FILE; harmless if not set
+  if(DEFINED HIP_USE_FILE)
+    include(${HIP_USE_FILE})
+  endif()
+
+# Reuse the CUDA source list for now (single-source strategy)
+  set(PHY_NR_SRC_HIP    ${PHY_NR_SRC_CU})
+  set(PHY_NR_UE_SRC_HIP ${PHY_NR_UE_SRC_CU})
+
+# Force these sources to compile as HIP even if they end with .cu
+  set_source_files_properties(${PHY_NR_SRC_HIP}    PROPERTIES LANGUAGE HIP)
+  set_source_files_properties(${PHY_NR_UE_SRC_HIP} PROPERTIES LANGUAGE HIP)
+
+  hip_add_library(PHY_NR ${PHY_NR_SRC} ${PHY_NR_SRC_HIP})
+  hip_add_library(PHY_NR_UE ${PHY_NR_UE_SRC} ${PHY_NR_UE_SRC_HIP})
+
+# Target AMD GPUs: MI210=gfx90a, Ryzen AI MAX+ 395=gfx1151
+  target_compile_options(PHY_NR PRIVATE "--offload-arch=gfx90a" "--offload-arch=gfx1151")
+  target_compile_options(PHY_NR_UE PRIVATE "--offload-arch=gfx90a" "--offload-arch=gfx1151")
+  target_compile_definitions(PHY_NR    PRIVATE USE_HIP)
+  target_compile_definitions(PHY_NR_UE PRIVATE USE_HIP)
 else()
   add_library(PHY_NR ${PHY_NR_SRC})
   add_library(PHY_NR_UE ${PHY_NR_UE_SRC})
