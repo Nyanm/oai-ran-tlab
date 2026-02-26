@@ -325,10 +325,23 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
     }
   }
  
+  c16_t *txdataF[gNB->common_vars.num_beams_period][cfg->carrier_config.num_tx_ant.value];
+  for (int i = 0; i < gNB->common_vars.num_beams_period; i++) {
+    for (int aa = 0; aa < cfg->carrier_config.num_tx_ant.value; aa++)
+      txdataF[i][aa] = (c16_t*)malloc16_clear(fp->samples_per_frame_wCP * sizeof(c16_t));
+  }
+
   if (num_pdsch > 0) {
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_GENERATE_DLSCH,1);
     LOG_D(PHY, "PDSCH generation started (%d) in frame %d.%d\n", num_pdsch, frame, slot);
-    nr_generate_pdsch(gNB, num_pdsch, gNB->dlsch, frame, slot);
+    nr_generate_pdsch(gNB,
+                      num_pdsch,
+                      gNB->dlsch,
+                      gNB->common_vars.num_beams_period,
+                      cfg->carrier_config.num_tx_ant.value,
+                      txdataF,
+                      frame,
+                      slot);
     VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_GENERATE_DLSCH,0);
   }
 
@@ -338,13 +351,14 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
     for (int aa = 0; aa < cfg->carrier_config.num_tx_ant.value; aa++) {
       if (gNB->phase_comp) {
         apply_nr_rotation_TX(fp,
-                             &gNB->common_vars.txdataF[i][aa][txdataF_offset],
+                             &txdataF[i][aa][txdataF_offset],
                              fp->symbol_rotation[0],
                              slot,
                              fp->N_RB_DL,
                              0,
                              fp->Ncp == EXTENDED ? 12 : 14);
       }
+      free_and_zero(txdataF[i][aa]);
       T(T_GNB_PHY_DL_OUTPUT_SIGNAL,
         T_INT(0),
         T_INT(frame),

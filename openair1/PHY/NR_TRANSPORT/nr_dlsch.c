@@ -504,7 +504,7 @@ static inline void do_txdataF(c16_t **txdataF,
         subCarrier -= symbol_sz;
       }
     } else { // non-unitary Precoding
-      AssertFatal(frame_parms->nb_antennas_tx > 1, "No precoding can be done with a single antenna port\n");
+      AssertFatal(frame_parms->nb_antennas_tx > 1, "No precoding can be done with a single antenna port\n"); // TODO replace by nb_tx_ant?
       // get the precoding matrix weights:
       nfapi_nr_pm_pdu_t *pmi_pdu = &gNB->gNB_config.pmi_list.pmi_pdu[pmi - 1]; // pmi 0 is identity matrix
       AssertFatal(pmi == pmi_pdu->pm_idx, "PMI %d doesn't match to the one in precoding matrix %d\n", pmi, pmi_pdu->pm_idx);
@@ -560,9 +560,10 @@ typedef struct pdschSymbolProc_s {
   unsigned int layerSz2;
   unsigned int dlPtrsSymPos;
   unsigned int n_ptrs;
-  unsigned int beam_nb;
   unsigned int re_beginning_of_symbol[14];
   c16_t *tx_layers[4];
+  int nb_tx_ant;
+  c16_t **txdataF;
   time_stats_t dlsch_resource_mapping_stats;
   time_stats_t dlsch_precoding_stats;
 } pdschSymbolProc_t;
@@ -585,7 +586,7 @@ static void nr_pdsch_symbol_processing(void *arg)
   const uint32_t txdataF_offset = slot * frame_parms->samples_per_slot_wCP;
   const int symbol_sz = frame_parms->ofdm_symbol_size;
 
-  c16_t **txdataF = gNB->common_vars.txdataF[rdata->beam_nb];
+  c16_t **txdataF = rdata->txdataF;
   uint16_t start_sc = frame_parms->first_carrier_offset + (rel15->rbStart + rel15->BWPStart) * NR_NB_SC_PER_RB;
   if (start_sc >= symbol_sz)
     start_sc -= symbol_sz;
@@ -666,7 +667,7 @@ static void nr_pdsch_symbol_processing(void *arg)
     stop_meas(&rdata->dlsch_resource_mapping_stats);
 
     start_meas(&rdata->dlsch_precoding_stats);
-    for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
+    for (int ant = 0; ant < rdata->nb_tx_ant; ant++) {
       const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz + txdataF_offset;
       do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, ant, start_sc, txdataF_offset_per_symbol);
     }
@@ -676,7 +677,13 @@ static void nr_pdsch_symbol_processing(void *arg)
   completed_task_ans(rdata->ans);
 }
 
-static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSCH_t *dlsch, int slot)
+static int do_one_dlsch(unsigned char *input_ptr,
+                        PHY_VARS_gNB *gNB,
+                        NR_gNB_DLSCH_t *dlsch,
+                        int nb_beams,
+                        int nb_tx_ant,
+                        c16_t *txdataF[nb_beams][nb_tx_ant],
+                        int slot)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
 
@@ -831,7 +838,8 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     rdata->layerSz2 = layerSz2;
     rdata->dlPtrsSymPos = dlPtrsSymPos;
     rdata->n_ptrs = n_ptrs;
-    rdata->beam_nb = beam_nb;
+    rdata->nb_tx_ant = nb_tx_ant;
+    rdata->txdataF = txdataF[beam_nb];
     for (int s = l_symbol; s < l_symbol + rdata->numSymbols; s++) {
       rdata->re_beginning_of_symbol[s] = re_beginning_of_symbol;
       re_beginning_of_symbol += rel15->rbSize * NR_NB_SC_PER_RB;
@@ -865,7 +873,14 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   return ((size_output_tb + 511) >> 9) << 6;
 }
 
-void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_array, int frame, int slot)
+void nr_generate_pdsch(PHY_VARS_gNB *gNB,
+                       int n_dlsch,
+                       NR_gNB_DLSCH_t *dlsch_array,
+                       int nb_beams,
+                       int nb_tx_ant,
+                       c16_t *txdataF[nb_beams][nb_tx_ant],
+                       int frame,
+                       int slot)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   time_stats_t *dlsch_encoding_stats = &gNB->dlsch_encoding_stats;
@@ -942,7 +957,13 @@ void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_arr
 
   unsigned char *output_ptr = output;
   for (int i = 0; i < n_dlsch; i++) {
-    output_ptr += do_one_dlsch(output_ptr, gNB, &dlsch_array[i], slot);
+    output_ptr += do_one_dlsch(output_ptr,
+                               gNB,
+                               &dlsch_array[i],
+                               nb_beams,
+                               nb_tx_ant,
+                               txdataF,
+                               slot);
   }
 }
 

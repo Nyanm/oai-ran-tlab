@@ -35,7 +35,14 @@
 
 #include "PHY/defs_gNB.h"
 
-void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_array, int frame, int slot);
+void nr_generate_pdsch(PHY_VARS_gNB *gNB,
+                       int n_dlsch,
+                       NR_gNB_DLSCH_t *dlsch_array,
+                       int nb_beams,
+                       int nb_tx_ant,
+                       c16_t *txdataF[nb_beams][nb_tx_ant],
+                       int frame,
+                       int slot);
 
 int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
                       int n_dlsch,
