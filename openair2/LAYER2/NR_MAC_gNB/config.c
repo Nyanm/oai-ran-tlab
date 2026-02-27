@@ -62,6 +62,20 @@
 bool is_prach_slot_set = false;
 bool is_prach_slot[160] = {false};
 
+int get_beamloc_from_beam(int beam_index)
+{
+  gNB_MAC_INST *mac = RC.nrmac[0];
+  if (mac->beam_info.beam_mode == LOPHY_BEAM_IDX) {
+    for (int i = 0; i < mac->radio_config.nb_bfw[1]; i++) {
+      if (mac->radio_config.bw_list[i] == beam_index)
+        return i;
+    }
+    AssertFatal(false, "beam_index %d not found\n", beam_index);
+    return 0;
+  }
+  return beam_index;
+}
+
 bool get_nr_prach_sched_from_info_beam(nr_prach_info_t info,
                                        int config_index,
                                        int slot,
@@ -392,7 +406,7 @@ int get_first_ul_slot_beam(const frame_structure_t *fs, int beam_idx, int beams_
   for (int i = 0; i < fs->numb_slots_frame; i++) {
       ul_slot_idxs[i] = 0;
   }
-  int idx = beam_idx / beams_per_period;
+  int idx = get_beamloc_from_beam(beam_idx) / beams_per_period;
   LOG_D(NR_MAC, "get_first_ul_slot_beam 0 idx %d beam_idx %d num_beam %d\n", idx, beam_idx, num_beam);
 
   /* Populate the indices of UL slots in the TDD period from the bitmap
