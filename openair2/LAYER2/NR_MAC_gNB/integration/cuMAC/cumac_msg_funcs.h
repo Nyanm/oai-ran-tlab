@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <time.h>
 #define SCH_TTI_UL 0
 #define SCH_TTI_DL 1
 
@@ -54,12 +55,24 @@ typedef struct {
   uint16_t slot     ;
 } cumac_sch_tti_end_args_t;
 
+typedef struct {
+  uint16_t nMaxSchUePerCell;
+  uint16_t allocSolSize;
+  uint8_t nActiveUe;
+  struct timespec tti_req_timestamp;
+  struct timespec tti_end_timestamp;
+} slot_data_entry_t ;
+
 #define TASK_BIT(t) (1u << (t))
+#define CUMAC_UE_RETRANSMISSION 0
+#define CUMAC_UE_INTIAL_TRANSMISSION 1
+
+
 
 typedef int (*build_cumac_msg_fn_v_t)(cumac_msg_t type,nv_ipc_msg_t *nvipc_buf,  void* args);
 int l2_build_start_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* args);
 int l2_build_config_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* args);
 int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* args);
 int l2_build_tti_end(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* args);
-void cumac_handle_sch_tti_response(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf) ;
+void cumac_handle_sch_tti_response(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, slot_data_entry_t *slot_data) ;
 #endif // OPENAIRINTERFACE_CUMAC_MSG_FUNCS_H

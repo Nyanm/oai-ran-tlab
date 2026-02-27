@@ -651,11 +651,26 @@ static void pf_dl(gNB_MAC_INST *mac,
     cumac_tti_req_bufs_t buffers;
     buffers.CRNTI = malloc(connected_ues * sizeof(uint16_t));
     buffers.avgRatesActUe = malloc(connected_ues * sizeof(float));
-
+    buffers.newDataActUe = malloc(connected_ues * sizeof(int8_t));
+    for (int i = 0; i < connected_ues; i++) {
+      buffers.newDataActUe[i] = -1;
+    }
     size_t idx = 0;
     UE_iterator (UE_list, UE) {
       buffers.avgRatesActUe[idx] = UE->dl_thr_ue;
       buffers.CRNTI[idx] = UE->rnti;
+      //check retransmissions
+      NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
+
+      if (!nr_mac_ue_is_active(UE)) {
+        idx++;
+        continue;
+      }
+      /* get the PID of a HARQ process awaiting retrnasmission, or -1 otherwise */
+      int harq_pid = sched_ctrl->retrans_dl_harq.head;
+      /* check if retransmision or not */
+      buffers.newDataActUe[idx] = harq_pid >= 0? CUMAC_UE_RETRANSMISSION: CUMAC_UE_INTIAL_TRANSMISSION;
+
       idx++;
     }
     const uint16_t nPrbGrp = 1;
@@ -668,6 +683,7 @@ static void pf_dl(gNB_MAC_INST *mac,
       buffers.wbSinr[i] = 20.0f;
     }
 
+    cumac_wait_to_send();
     const uint32_t taskBitMap = TASK_BIT(CUMAC_TASK_UE_SELECTION);
     cumac_sch_tti_req_args_t args = {.frame = frame,
                                      .slot = slot,
@@ -682,14 +698,16 @@ static void pf_dl(gNB_MAC_INST *mac,
                                      .payload.sigmaSqrd = 1.0f, // hardcoded in cuMAC source code
                                      .buffers = &buffers};
     cumac_send_msg(CUMAC_SCH_TTI_REQUEST, l2_build_sch_tti_request, &args);
-    cumac_set_can_schedule(true);
-    //cumac_send_msg(CUMAC_SCH_TTI_REQUEST, l2_build_ul_sch_tti_request, &args);
-    //cumac_set_can_schedule(true);
     cumac_sch_tti_end_args_t tti_end_args = {.frame = frame, .slot = slot};
     cumac_send_msg(CUMAC_TTI_END, l2_build_tti_end, &tti_end_args);
-    cumac_set_can_schedule(false);
+
+    // we have to wait for the response
+    cumac_wait_to_process();
 
   }
+#else
+
+
 #endif
 
 
@@ -956,6 +974,10 @@ static void pf_dl(gNB_MAC_INST *mac,
     remainUEs[beam.idx]--;
     iterator++;
   }
+
+#ifdef ENABLE_CUMAC
+cumac_allow_send();
+#endif
 }
 
 static void nr_dlsch_preprocessor(gNB_MAC_INST *mac, post_process_pdsch_t *pp_pdsch)

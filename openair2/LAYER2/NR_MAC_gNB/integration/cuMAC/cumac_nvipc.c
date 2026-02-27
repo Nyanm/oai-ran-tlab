@@ -39,7 +39,13 @@ char cpu_buf_recv[RECV_BUF_LEN];
 /* Log TAG configured in nvlog */
 static int TAG = (NVLOG_TAG_BASE_NVIPC + 0);
 static bool waiting_tti_resp = false;
+static bool has_sent_tti_end = false;
 static bool has_sent_conf_req = false;
+slot_data_entry_t *slot_data[MAX_FRAME_NUMBER];
+pthread_mutex_t cumac_can_send_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t cumac_can_process_mutex = PTHREAD_MUTEX_INITIALIZER;
+static uint16_t nMaxSchUePerCell;
+static uint8_t allocType;
 
 bool cumac_can_schedule() {
   return !waiting_tti_resp;
@@ -49,14 +55,35 @@ void cumac_set_can_schedule(bool val) {
 }
 bool cumac_send_msg(cumac_msg_t type, build_cumac_msg_fn_v_t fn, void* args)
 {
-  if (waiting_tti_resp || (type == CUMAC_CONFIG_REQUEST && has_sent_conf_req)) {
+  if ( has_sent_tti_end  || (type == CUMAC_CONFIG_REQUEST && has_sent_conf_req) || (type == CUMAC_SCH_TTI_REQUEST && waiting_tti_resp)) {
     return false;
   }
-  if (type == CUMAC_SCH_TTI_REQUEST) {
+  if (type == CUMAC_SCH_TTI_REQUEST && !waiting_tti_resp) {
     waiting_tti_resp = true;
+    cumac_sch_tti_req_args_t *sch_tti_args =  args;
+    slot_data_entry_t *slot_data_entry = &slot_data[sch_tti_args->frame][sch_tti_args->slot];
+    slot_data_entry->nActiveUe = sch_tti_args->payload.nActiveUe;
+    slot_data_entry->allocSolSize = sch_tti_args->payload.nActiveUe * 2; // for Type 1 allocation
+    slot_data_entry->nMaxSchUePerCell = nMaxSchUePerCell;
+  }
+  if (type == CUMAC_TTI_END) {
+    has_sent_tti_end = true;
   }
   if (type == CUMAC_CONFIG_REQUEST) {
     has_sent_conf_req = true;
+    printf("Got CONFIG.request, initializing slot data matrix\n");
+    // Determine number of slots per frame from SCS
+    const cumac_config_req_payload_t* conf_req_payload = args;
+    // Save nMax UE and allocation type for later
+    nMaxSchUePerCell = conf_req_payload->nMaxSchUePerCell;
+    allocType = conf_req_payload->allocType;
+    const uint8_t num_slots = 10 << conf_req_payload->scSpacing;
+    printf("Number of slots per frame: %d\n", num_slots);
+    // Init slot data structure for later use
+    for (int i = 0; i < MAX_FRAME_NUMBER; ++i) {
+      printf("Initializing frame %d\n", i);
+      slot_data[i] = calloc(num_slots, sizeof(slot_data_entry_t));
+    }
   }
 
 #ifdef CUMAC_TIMING_DEBUG
@@ -86,6 +113,18 @@ bool cumac_send_msg(cumac_msg_t type, build_cumac_msg_fn_v_t fn, void* args)
     return NULL;
   }
   ipc->tx_tti_sem_post(ipc);
+
+  if (type == CUMAC_SCH_TTI_REQUEST) {
+    const cumac_sch_tti_req_args_t *sch_tti_args =  args;
+    slot_data_entry_t *slot_data_entry = &slot_data[sch_tti_args->frame][sch_tti_args->slot];
+    clock_gettime(CLOCK_REALTIME, &slot_data_entry->tti_req_timestamp);
+  }
+  if (type == CUMAC_TTI_END) {
+    const cumac_sch_tti_end_args_t *tti_end_args =  args;
+    slot_data_entry_t *slot_data_entry = &slot_data[tti_end_args->frame][tti_end_args->slot];
+    clock_gettime(CLOCK_REALTIME, &slot_data_entry->tti_end_timestamp);
+  }
+
 #ifdef CUMAC_TIMING_DEBUG
   clock_gettime(CLOCK_REALTIME, &t4);
   printf("message 0x%02x\n", type);
@@ -169,6 +208,13 @@ bool cumac_nvipc_init() {
   printf("%s: create IPC interface successful\n", __func__);
   // setup receiver thread
   sleep(1);
+
+  mutexinit(cumac_can_send_mutex);
+  mutexinit(cumac_can_process_mutex);
+  // Set initial lock state
+  pthread_mutex_unlock(&cumac_can_send_mutex);
+  pthread_mutex_lock(&cumac_can_process_mutex);
+
   pthread_t thread_id;
   pthread_create(&thread_id, NULL, epoll_recv_task, NULL);
 return true;
@@ -216,12 +262,33 @@ void cumac_handle_rx_msg(nv_ipc_msg_t* recv_msg) {
     case CUMAC_START_RESPONSE:
       cumac_start = true;
     break;
-    case CUMAC_SCH_TTI_RESPONSE:
-     // Handle SCH_TTI.request
+    case CUMAC_SCH_TTI_RESPONSE: {
+      // Handle SCH_TTI.request
+      cumac_sch_tti_resp_t* resp = recv_msg->msg_buf;
+      cumac_handle_sch_tti_response(CUMAC_SCH_TTI_RESPONSE, recv_msg, &slot_data[resp->sfn][resp->slot]);
       waiting_tti_resp = false;
-
-    break;
+      has_sent_tti_end = false;
+      cumac_allow_send();
+      cumac_allow_process();
+      break;
+    }
     default:
     break;
   }
+}
+
+void cumac_wait_to_send() {
+  pthread_mutex_lock(&cumac_can_send_mutex);
+}
+
+void cumac_allow_send() {
+  pthread_mutex_unlock(&cumac_can_send_mutex);
+}
+
+void cumac_wait_to_process() {
+  pthread_mutex_lock(&cumac_can_process_mutex);
+}
+
+void cumac_allow_process() {
+  pthread_mutex_unlock(&cumac_can_process_mutex);
 }
