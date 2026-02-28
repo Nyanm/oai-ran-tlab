@@ -124,27 +124,34 @@ if (ENABLE_LDPC_HIP)
 # Note: hipcc can compile .cu as HIP (nvcc-style extension) *or* you can rename to .cu
 # Keep your C sources as-is; for the GPU sources, you will likely create HIP variants.
    add_library(ldpc_hip MODULE
-	      nrLDPC_decoder/nrLDPC_decoder_cuda.c
-              nrLDPC_decoder/nrLDPC_decoder.c
-              nrLDPC_encoder/ldpc_encoder_optim8segmulti.c
-												    # HIP versions of your CUDA kernels (recommended to duplicate/rename)
-												  	          nrLDPC_decoder/nrLDPC_decoder_BG1_hip.cu 
-	      nrLDPC_encoder/ldpc_BG1_Zc384_32bit_hip.cu nrLDPC_encoder/ldpc_input_hip.cu
-	      nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder_cuda.c
-	      nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c
-	      nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder_cuda.c
-	      nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder.c
-	      nrLDPC_coding/nrLDPC_coding_segment/nr_rate_matching.c
-              nrLDPC_coding/nrLDPC_coding_segment/ldpc_deinterleave_hip.cu
-	      nrLDPC_coding/nrLDPC_coding_segment/ldpc_rate_matching_hip.cu)
+               nrLDPC_decoder/nrLDPC_decoder_cuda.c
+               nrLDPC_decoder/nrLDPC_decoder.c
+	       nrLDPC_encoder/ldpc_encoder_optim8segmulti.c
+	       nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu
+	       nrLDPC_encoder/ldpc_encoder_cuda32.c
+	       nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
+	       nrLDPC_encoder/ldpc_input.cu
+               nrLDPC_encoder/ldpc_input32.c
+                   # The slot coding layer cannot be linked with
+                   # target_link_libraries like above
+                   # because of cuda_add_library
+                   # which already uses target_link_libraries
+                   #nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c
+               nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder_cuda.c
+               nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c
+               nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder_cuda.c
+               nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder.c
+               nrLDPC_coding/nrLDPC_coding_segment/nr_rate_matching.c
+	       nrLDPC_coding/nrLDPC_coding_segment/ldpc_deinterleave.cu
+	       nrLDPC_coding/nrLDPC_coding_segment/ldpc_rate_matching.cu)
 # Tell CMake to compile .cu sources with HIP
 # If you keep .cu extensions, you can still force LANGUAGE HIP.
     set_source_files_properties(
-	      nrLDPC_decoder/nrLDPC_decoder_BG1_hip.cu
-              nrLDPC_encoder/ldpc_BG1_Zc384_32bit_hip.cu
-	      nrLDPC_encoder/ldpc_input_hip.cu
-              nrLDPC_coding/nrLDPC_coding_segment/ldpc_deinterleave_hip.cu
-	      nrLDPC_coding/nrLDPC_coding_segment/ldpc_rate_matching_hip.cu
+	      nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu
+              nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
+	      nrLDPC_encoder/ldpc_input.cu
+              nrLDPC_coding/nrLDPC_coding_segment/ldpc_deinterleave.cu
+	      nrLDPC_coding/nrLDPC_coding_segment/ldpc_rate_matching.cu
               PROPERTIES LANGUAGE HIP)
 
 # Include dirs: HIP package usually provides HIP_INCLUDE_DIRS
@@ -155,10 +162,11 @@ if (ENABLE_LDPC_HIP)
          target_include_directories(ldpc_hip PRIVATE /opt/rocm/include)
     endif()
 
+    target_link_libraries(ldpc_hip ldpc_gen_HEADERS ${T_LIB})
 # HIP arch flags for CMake 3.16:
 # The portable way is to pass hipcc flags directly.
 # These are understood by hipcc/clang for AMD targets.
-    target_compile_options(ldpc_hip PRIVATE "--offload-arch=gfx90a" "--offload-arch=gfx1151")
+#    target_compile_options(ldpc_hip PRIVATE "--offload-arch=gfx90a" "--offload-arch=gfx1151")
     set_target_properties(ldpc_hip PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
     add_dependencies(ldpctest ldpc_hip)
     add_dependencies(nr-softmodem ldpc_hip)
@@ -167,7 +175,7 @@ if (ENABLE_LDPC_HIP)
     add_dependencies(nr_ulschsim ldpc_hip)
     add_dependencies(nr_dlsim ldpc_hip)
     add_dependencies(nr_dlschsim ldpc_hip)
-    target_compile_definitions(ldpc_hip PRIVATE USE_HIP)
+    target_compile_definitions(ldpc_hip PRIVATE USE_CUDA)
 endif()
 add_subdirectory(nrLDPC_coding)
 add_subdirectory(nrLDPC_decoder)

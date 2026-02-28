@@ -192,7 +192,13 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
 endif()
 
 if (ENABLE_CUDA)
+	set(commonOpts "${commonOpts} -DENABLE_CUDA")
+endif()
+
+if (ENABLE_HIP)
   set(commonOpts "${commonOpts} -DENABLE_CUDA")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__HIP_PLATFORM_AMD__ -DGPU_USE_HIP")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__HIP_PLATFORM_AMD__ -DGPU_USE_HIP")
 endif()
 
 set(CMAKE_C_FLAGS
@@ -1084,30 +1090,42 @@ if (ENABLE_CUDA)
 # HIP (ROCm)
 # -----------------------
 elseif(ENABLE_HIP)
-# On many systems you need: -DCMAKE_PREFIX_PATH=/opt/rocm
-  find_package(HIP REQUIRED)
 
-# Some ROCm installs provide HIP_USE_FILE; harmless if not set
-  if(DEFINED HIP_USE_FILE)
-    include(${HIP_USE_FILE})
-  endif()
+# Find HIP compiler + headers
+    find_package(HIP REQUIRED CONFIG)
 
-# Reuse the CUDA source list for now (single-source strategy)
-  set(PHY_NR_SRC_HIP    ${PHY_NR_SRC_CU})
-  set(PHY_NR_UE_SRC_HIP ${PHY_NR_UE_SRC_CU})
+    enable_language(HIP)
 
-# Force these sources to compile as HIP even if they end with .cu
-  set_source_files_properties(${PHY_NR_SRC_HIP}    PROPERTIES LANGUAGE HIP)
-  set_source_files_properties(${PHY_NR_UE_SRC_HIP} PROPERTIES LANGUAGE HIP)
+    # If you keep .cu extension, force HIP language
+    set(PHY_NR_SRC_HIP    ${PHY_NR_SRC_CU})
+    set(PHY_NR_UE_SRC_HIP ${PHY_NR_UE_SRC_CU})
 
-  hip_add_library(PHY_NR ${PHY_NR_SRC} ${PHY_NR_SRC_HIP})
-  hip_add_library(PHY_NR_UE ${PHY_NR_UE_SRC} ${PHY_NR_UE_SRC_HIP})
+    set_source_files_properties(${PHY_NR_SRC_HIP}    PROPERTIES LANGUAGE HIP)
+    set_source_files_properties(${PHY_NR_UE_SRC_HIP} PROPERTIES LANGUAGE HIP)
 
-# Target AMD GPUs: MI210=gfx90a, Ryzen AI MAX+ 395=gfx1151
-  target_compile_options(PHY_NR PRIVATE "--offload-arch=gfx90a" "--offload-arch=gfx1151")
-  target_compile_options(PHY_NR_UE PRIVATE "--offload-arch=gfx90a" "--offload-arch=gfx1151")
-  target_compile_definitions(PHY_NR    PRIVATE USE_HIP)
-  target_compile_definitions(PHY_NR_UE PRIVATE USE_HIP)
+    add_library(PHY_NR ${PHY_NR_SRC} ${PHY_NR_SRC_HIP})
+    add_library(PHY_NR_UE ${PHY_NR_UE_SRC} ${PHY_NR_UE_SRC_HIP})
+    # Include HIP headers (HIP_INCLUDE_DIRS varies by ROCm; /opt/rocm/include is typical)
+    if(DEFINED HIP_INCLUDE_DIRS)
+      target_include_directories(PHY_NR    PRIVATE ${HIP_INCLUDE_DIRS})
+      target_include_directories(PHY_NR_UE PRIVATE ${HIP_INCLUDE_DIRS})
+    else()
+      target_include_directories(PHY_NR    PRIVATE /opt/rocm/include)
+      target_include_directories(PHY_NR_UE PRIVATE /opt/rocm/include)
+    endif()
+
+    # Use hipcc as the HIP compiler if CMake didn't select it automatically
+    # (Optional but often helpful)
+    if(DEFINED HIP_HIPCC_EXECUTABLE)
+      set_property(TARGET PHY_NR    PROPERTY HIP_COMPILER ${HIP_HIPCC_EXECUTABLE})
+      set_property(TARGET PHY_NR_UE PROPERTY HIP_COMPILER ${HIP_HIPCC_EXECUTABLE})
+    endif()
+
+    # GPU targets: MI210=gfx90a, Ryzen AI MAX+ 395=gfx1151
+    #    target_compile_options(PHY_NR PRIVATE "--offload-arch=gfx90a" "--offload-arch=gfx1151")
+    #    target_compile_options(PHY_NR_UE PRIVATE "--offload-arch=gfx90a" "--offload-arch=gfx1151")
+    target_compile_definitions(PHY_NR    PRIVATE USE_HIP)
+    target_compile_definitions(PHY_NR_UE PRIVATE USE_HIP)
 else()
   add_library(PHY_NR ${PHY_NR_SRC})
   add_library(PHY_NR_UE ${PHY_NR_UE_SRC})
@@ -2043,6 +2061,13 @@ if (ENABLE_CUDA)
   find_package(CUDA REQUIRED)
   target_link_libraries(ldpctest PRIVATE ${CUDA_LIBRARIES})
   target_include_directories(ldpctest PRIVATE ${CUDA_INCLUDE_DIRS})
+endif()
+if (ENABLE_HIP)
+  # ldpctest.c uses cudaHostAlloc(), so include dir/link libr to make available
+  # TODO don't write it directly into ldpctest, but separate compilation unit?
+  find_package(HIP REQUIRED)
+  target_link_libraries(ldpctest PRIVATE ${HIP_LIBRARIES})
+  target_include_directories(ldpctest PRIVATE ${HIP_INCLUDE_DIRS})
 endif()
 
 add_library(physim_common OBJECT ${OPENAIR1_DIR}/SIMULATION/NR_PHY/nr_unitary_common.c)

@@ -40,7 +40,7 @@
 #include <openair2/UTIL/OPT/opt.h>
 
 #ifdef ENABLE_CUDA
-#include <cuda_runtime.h>
+#include "PHY/gpu_compat.h"
 #endif
 // #define DEBUG_DLSCH_CODING
 // #define DEBUG_DLSCH_FREE 1
@@ -58,7 +58,7 @@ void free_gNB_dlsch(NR_gNB_DLSCH_t *dlsch, uint16_t N_RB, const NR_DL_FRAME_PARM
   if (dlsch->b) {
 #ifdef ENABLE_CUDA	  
     if (use_gpumem) 
-      cudaFreeHost(dlsch->b);
+      gpuFreeHost(dlsch->b);
     else	  
 #endif  
       free16(dlsch->b, a_segments * 1056);
@@ -95,10 +95,10 @@ NR_gNB_DLSCH_t new_gNB_dlsch(NR_DL_FRAME_PARMS *frame_parms, uint16_t N_RB, int 
 
   dlsch.c = (uint8_t **)malloc16(a_segments * sizeof(uint8_t *));
 #ifdef ENABLE_CUDA
-  cudaError_t err=cudaHostAlloc((void**)&dlsch.c_devh,a_segments*sizeof(uint8_t*),cudaHostAllocMapped);
-  AssertFatal(err == cudaSuccess,"CUDA Error (dlsch->c_devh): %s\n", cudaGetErrorString(err));
-  err=cudaHostGetDevicePointer((void**)&dlsch.c_dev,(void*)dlsch.c_devh,0);
-  AssertFatal(err == cudaSuccess,"CUDA Error (dlsch->c_dev): %s\n", cudaGetErrorString(err));
+  gpuError_t err=gpuHostAlloc((void**)&dlsch.c_devh,a_segments*sizeof(uint8_t*),gpuHostAllocMapped);
+  AssertFatal(err == gpuSuccess,"CUDA Error (dlsch->c_devh): %s\n", gpuGetErrorString(err));
+  err=gpuHostGetDevicePointer((void**)&dlsch.c_dev,(void*)dlsch.c_devh,0);
+  AssertFatal(err == gpuSuccess,"CUDA Error (dlsch->c_dev): %s\n", gpuGetErrorString(err));
 #endif
   for (int r = 0; r < a_segments; r++) {
     // account for filler in first segment and CRCs for multiple segment case
@@ -107,12 +107,12 @@ NR_gNB_DLSCH_t new_gNB_dlsch(NR_DL_FRAME_PARMS *frame_parms, uint16_t N_RB, int 
     //       In section 5.3.2 in 38.212, the for loop is up to N + 2*Zc (maximum size of N is 66*Zc, therefore 68*Zc)
 #ifdef ENABLE_CUDA
     if (use_gpumem) {
-      err=cudaHostAlloc((void**)&dlsch.c[r],(8448/8)*sizeof(uint8_t),cudaHostAllocMapped);
-      AssertFatal(err == cudaSuccess,"CUDA Error (dlsch->c[%d]): %s\n", r,cudaGetErrorString(err));
+      err=gpuHostAlloc((void**)&dlsch.c[r],(8448/8)*sizeof(uint8_t),gpuHostAllocMapped);
+      AssertFatal(err == gpuSuccess,"CUDA Error (dlsch->c[%d]): %s\n", r,gpuGetErrorString(err));
       uint8_t *tmpcr;
-      err=cudaHostGetDevicePointer((void**)&tmpcr, (void*)dlsch.c[r], 0);
+      err=gpuHostGetDevicePointer((void**)&tmpcr, (void*)dlsch.c[r], 0);
       ((uint8_t**)dlsch.c_devh)[r]=tmpcr;
-      AssertFatal(err == cudaSuccess,"CUDA Error (cudaHostGetDevicePointer) dlsch->c_devh[%d]: %s\n", r,cudaGetErrorString(err));
+      AssertFatal(err == gpuSuccess,"CUDA Error (gpuHostGetDevicePointer) dlsch->c_devh[%d]: %s\n", r,gpuGetErrorString(err));
     }
     else 
 #endif

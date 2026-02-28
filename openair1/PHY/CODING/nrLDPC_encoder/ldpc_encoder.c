@@ -249,7 +249,7 @@ int LDPCencoder(unsigned char **inputArray, unsigned char *outputArray, encoder_
     FILE *fd=fopen(fname,"w");
     AssertFatal(fd!=NULL,"cannot open %s\n",fname);
     printf("Writing to %s\n",fname);
-    fprintf(fd,"#include <stdio.h>\n#include <stdint.h>\n#include <cuda_runtime.h>\n");
+    fprintf(fd,"#include <stdio.h>\n#include <stdint.h>\n#include \"gpu_compat.h\">\n");
 
     fprintf(fd,"// generated code for Zc=%d, byte encoding\n",Zc);
     fprintf(fd,"__global__ void ldpc_BG%d_Zc%d_worker(uint32_t *c[4],uint32_t *d[4]) {\n",BG,Zc);

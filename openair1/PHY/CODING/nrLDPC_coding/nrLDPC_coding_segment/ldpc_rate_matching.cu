@@ -20,6 +20,8 @@
  */
 #include <stdio.h>
 #include "nr_rate_matching.h"
+#include "PHY/gpu_compat.h"
+#include "PHY/gpu_simd_intrin_compat.h"
 
 __device__ __forceinline__ int clamp_i16_to_i8(int x)
 {
@@ -92,8 +94,8 @@ __global__ void rm(int Ncb_4,int ind0_4, int E1, int E2, int r_firstE2, int Foff
        if (r==0 && threadIdx.x == 0) printf("check 1b: ind %d ind1 %d ind2 %d\n",ind,ind1,ind2);
 #endif
        if (ind_4 >= ind1 && ind_4 < ind2) {
-	       dr[2*ind_4]     = __vaddss2(dr[2*ind_4],er[2*(ind_4-ind1)]);
-	       dr[(2*ind_4)+1] = __vaddss2(dr[(2*ind_4)+1],er[2*(ind_4-ind1)+1]);
+	       dr[2*ind_4]     = gpu_vaddss2(dr[2*ind_4],er[2*(ind_4-ind1)]);
+	       dr[(2*ind_4)+1] = gpu_vaddss2(dr[(2*ind_4)+1],er[2*(ind_4-ind1)+1]);
        }
 #ifdef DEBUG_RM
        if (r<=1 && threadIdx.x == 0 && ind_4 >= ind1 && ind_4 < ind2) printf("write 1. r %d : ind %d, ind1 %d, ind2 %d,k %d/E %d, pos %d, er %d %d\n",r,ind_4,ind1,ind2,ind_4-ind1,E_4,4*(ind_4-ind1),(int16_t)(er[2*(ind_4-ind1)]&0xffff),(int16_t)(er[2*(ind_4-ind1)]>>16));
@@ -112,8 +114,8 @@ __global__ void rm(int Ncb_4,int ind0_4, int E1, int E2, int r_firstE2, int Foff
      if (r==0 && threadIdx.x == 0) printf("check 2b: ind %d ind1 %d ind2 %d\n",ind_4,ind1,ind2);
 #endif
      if (ind_4 >= ind1 && ind_4 < ind2)  { 
-	     dr[2*ind_4]     = __vaddss2(dr[2*ind_4],er[2*(k+(ind_4-ind1))]);
-	     dr[(2*ind_4)+1] = __vaddss2(dr[(2*ind_4)+1],er[2*(k+(ind_4-ind1))+1]);
+	     dr[2*ind_4]     = gpu_vaddss2(dr[2*ind_4],er[2*(k+(ind_4-ind1))]);
+	     dr[(2*ind_4)+1] = gpu_vaddss2(dr[(2*ind_4)+1],er[2*(k+(ind_4-ind1))+1]);
      }
 #ifdef DEBUG_RM
      if (r==0 && threadIdx.x == 0 && ind >= ind1 && ind < ind2) printf("write 2. ind %d, ind1 %d, ind2 %d, k %d/E %d\n",ind,ind1,ind2,k+ind-ind1,E);
@@ -126,8 +128,8 @@ __global__ void rm(int Ncb_4,int ind0_4, int E1, int E2, int r_firstE2, int Foff
      while (k < E_4) {
 	ind2 = min(Foffset_4,E_4-k);
 	if (ind_4 < ind2) {
-	 	dr[2*ind_4]     = __vaddss2(dr[2*ind_4],er[2*(k+ind_4)]);
-	 	dr[(2*ind_4)+1] = __vaddss2(dr[(2*ind_4)+1],er[2*(k+ind_4)+1]);
+	 	dr[2*ind_4]     = gpu_vaddss2(dr[2*ind_4],er[2*(k+ind_4)]);
+	 	dr[(2*ind_4)+1] = gpu_vaddss2(dr[(2*ind_4)+1],er[2*(k+ind_4)+1]);
 	}
 #ifdef DEBUG_RM
         if (r==0 && threadIdx.x == 0 && ind < ind2 && ind >= ind1) printf("3. ind %d, ind2 %d, k %d/E %d\n",ind,ind2,k+ind,E);
@@ -137,8 +139,8 @@ __global__ void rm(int Ncb_4,int ind0_4, int E1, int E2, int r_firstE2, int Foff
 	ind1=Foffset_4+F_4;
 	ind2 = ind1 + min(Ncb_4-ind1,E_4-k);
 	if (ind_4 >= ind1 && ind_4 < ind2 && k < E_4) {
-		dr[2*ind_4]     = __vaddss2(dr[2*ind_4],er[2*(k+ind_4-ind1)]);
-		dr[(2*ind_4)+1] = __vaddss2(dr[(2*ind_4)+1],er[2*(k+ind_4-ind1)+1]);
+		dr[2*ind_4]     = gpu_vaddss2(dr[2*ind_4],er[2*(k+ind_4-ind1)]);
+		dr[(2*ind_4)+1] = gpu_vaddss2(dr[(2*ind_4)+1],er[2*(k+ind_4-ind1)+1]);
 	}
 #ifdef DEBUG_RM
         if (r==0 && threadIdx.x == 0 && ind < ind && ind >= ind1) printf("4. ind %d, ind1 %d, ind2 %d, k %d/E %d\n",ind,ind1,ind2,k+ind-ind1,E);
@@ -187,7 +189,7 @@ __global__ void rm2(int Ncb_2,int ind0_2, int E1, int E2, int r_firstE2, int Fof
 
 //       if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check RM1B: ind %d ind1 %d ind2 %d k %d/E %d\n",4*ind,4*ind1,4*ind2,4*k,4*E);
        if (ind_2 >= ind1 && ind_2 < ind2) {
-               dr[ind_2] = __vaddss2(dr[ind_2],er[ind_2-ind1]);
+               dr[ind_2] = gpu_vaddss2(dr[ind_2],er[ind_2-ind1]);
        }
 #ifdef RM_DEBUG
        if (r==0 /*&& threadIdx.x == 0 && blockIdx.x == 0*/ && ind_2 >= ind1 && ind_2 < ind2) printf("RM1A: ind_2 %d, ind1 %d, ind2 %d,k %d/E %d\n",2*ind_2,2*ind1,2*ind2,2*(ind_2-ind1),2*E_2);
@@ -202,7 +204,7 @@ __global__ void rm2(int Ncb_2,int ind0_2, int E1, int E2, int r_firstE2, int Fof
 
 //     if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check RM2B: ind %d ind1 %d ind2 %d k%d/E %d\n",4*ind,4*ind1,4*ind2,4*k,4*E);
      if (ind_2 >= ind1 && ind_2 < ind2)  {
-             dr[ind_2]     = __vaddss2(dr[ind_2],er[(k+(ind_2-ind1))]);
+             dr[ind_2]     = gpu_vaddss2(dr[ind_2],er[(k+(ind_2-ind1))]);
      }
 #ifdef RM_DEBUG
      if (r==0 /*&& threadIdx.x == 0 && blockIdx.x == 0*/ && ind_2 >= ind1 && ind_2 < ind2) printf("RM2A: ind %d, ind1 %d, ind2 %d, k %d/E %d\n",2*ind_2,2*ind1,2*ind2,2*(k+(ind-ind1)),2*E_2);
@@ -214,7 +216,7 @@ __global__ void rm2(int Ncb_2,int ind0_2, int E1, int E2, int r_firstE2, int Fof
         ind2 = min(Foffset_2,E_2-k);
 //        if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check RM3B: ind %d ind1 %d ind2 %d k %d/E %d\n",4*ind,0,4*ind2,4*k,4*E);
         if (ind_2 < ind2) {
-                dr[ind_2]     = __vaddss2(dr[ind_2],er[(k+ind_2)]);
+                dr[ind_2]     = gpu_vaddss2(dr[ind_2],er[(k+ind_2)]);
         }
 #ifdef RM_DEBUG
         if (r==0 /*&& threadIdx.x == 0 && blockIdx.x == 0*/ && ind_2 < ind2 ) printf("RM3A: ind %d, ind2 %d, k %d/E %d\n",2*ind_2,2*ind2,2*(k+ind_2),2*E_2);
@@ -225,7 +227,7 @@ __global__ void rm2(int Ncb_2,int ind0_2, int E1, int E2, int r_firstE2, int Fof
         ind2 = ind1 + min(Ncb_2-ind1,E_2-k);
 //        if (r==0 && threadIdx.x == 0 && blockIdx.x == 0) printf("check RM4B: ind %d ind1 %d ind2 %d k %d/E %d\n",4*ind,0,4*ind2,4*k,4*E);
         if (ind_2 >= ind1 && ind_2 < ind2 && k < E_2) {
-                dr[ind_2]     = __vaddss2(dr[ind_2],er[(k+ind_2-ind1)]);
+                dr[ind_2]     = gpu_vaddss2(dr[ind_2],er[(k+ind_2-ind1)]);
         }
 #ifdef RM_DEBUG
         if (r==0 /*&& threadIdx.x == 0 && blockIdx.x == 0*/ && ind_2 < ind2 && ind_2 >= ind1) printf("RM4A: ind %d, ind1 %d, ind2 %d, k %d/E %d\n",2*ind_2,2*ind1,2*ind2_2,2*(k+ind_2-ind1),2*E_2);
@@ -255,7 +257,7 @@ extern "C" int nr_rate_matching_ldpc_rx_cuda(uint32_t Tbslbrm,
 				             uint32_t r_firstE2,
                                              uint32_t F,
                                              uint32_t Foffset,
-					     cudaStream_t *s,
+					     gpuStream_t *s,
 					     int8_t sidx)
 {
   if (C == 0 || C>132) {
@@ -282,16 +284,16 @@ extern "C" int nr_rate_matching_ldpc_rx_cuda(uint32_t Tbslbrm,
 #endif
   if ((E1&3) == 0 && (E2&3) == 0) {
     dim3 nblocks(((Ncb>>2) + nthreads-1)/nthreads,C);
-    rm<<<nblocks, nthreads, 0, s[sidx]>>>(Ncb/4,ind/4,E1,E2,r_firstE2,Foffset/4,F/4,clear,68*384/4,K/4,Z/4,(uint32_t*)d,(uint32_t*)soft_input,(uint32_t*)llr_buffer);
+    gpuLaunchKernel(rm,nblocks, nthreads, 0, s[sidx],Ncb/4,ind/4,E1,E2,r_firstE2,Foffset/4,F/4,clear,68*384/4,K/4,Z/4,(uint32_t*)d,(uint32_t*)soft_input,(uint32_t*)llr_buffer);
   }
   else {
     dim3 nblocks2(((Ncb>>1) + nthreads-1)/nthreads,C);
-    rm2<<<nblocks2, nthreads, 0, s[sidx]>>>(Ncb/2,ind/2,E1,E2,r_firstE2,Foffset/2,F/2,clear,68*384/2,K/2,Z/2,(uint32_t*)d,(uint32_t*)soft_input,(uint16_t*)llr_buffer);
+    gpuLaunchKernel(rm2,nblocks2, nthreads, 0, s[sidx],Ncb/2,ind/2,E1,E2,r_firstE2,Foffset/2,F/2,clear,68*384/2,K/2,Z/2,(uint32_t*)d,(uint32_t*)soft_input,(uint16_t*)llr_buffer);
   }
-  cudaError_t err=cudaPeekAtLastError();
+  gpuError_t err=gpuPeekAtLastError();
   
-  if (err!=cudaSuccess) {
-    printf("cuda error (nr_rate_matching_ldpc_rx_cuda): %s  Ncb %d, ind %d, rvidx %d, E1 %d, E2 %d, Foffset %d, F %d, K %d, Z %d, clear %d\n",cudaGetErrorString(err),Ncb, ind, rvidx, E1, E2, Foffset, F,K,Z,clear);
+  if (err!=gpuSuccess) {
+    printf("gpu error (nr_rate_matching_ldpc_rx_cuda): %s  Ncb %d, ind %d, rvidx %d, E1 %d, E2 %d, Foffset %d, F %d, K %d, Z %d, clear %d\n",gpuGetErrorString(err),Ncb, ind, rvidx, E1, E2, Foffset, F,K,Z,clear);
     exit(-1);
   }
   return(0);

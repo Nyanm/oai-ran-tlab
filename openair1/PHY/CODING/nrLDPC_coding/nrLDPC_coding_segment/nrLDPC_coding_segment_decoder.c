@@ -326,27 +326,27 @@ int nrLDPC_prepare_TB_decoding(nrLDPC_slot_decoding_parameters_t *nrLDPC_slot_de
   return nrLDPC_TB_decoding_parameters->C;
 }
 
-#ifdef ENABLE_CUDA
+#ifdef USE_CUDA
 void nrLDPC_coding_init_cuda(int);
 #endif
 
 int32_t nrLDPC_coding_init(int max_num_pxsch)
 {
   LOG_I(NR_PHY, "Initializing coding library\n");
-#ifdef ENABLE_CUDA
+#ifdef USE_CUDA
   LOG_I(NR_PHY, "Calling cuda_support_init()\n");
   nrLDPC_coding_init_cuda(max_num_pxsch);
 #endif
   return 0;
 }
 
-#ifdef ENABLE_CUDA
+#ifdef USE_CUDA
 void nrLDPC_coding_shutdown_cuda(void);
 #endif
 
 int32_t nrLDPC_coding_shutdown(void)
 {
-#ifdef ENABLE_CUDA
+#ifdef USE_CUDA
   nrLDPC_coding_shutdown_cuda();
 #endif
   return 0;

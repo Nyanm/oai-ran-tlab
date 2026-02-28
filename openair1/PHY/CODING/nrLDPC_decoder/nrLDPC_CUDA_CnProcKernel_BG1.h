@@ -30,7 +30,8 @@
  */
 #pragma once
 
-#include <cuda_runtime.h>
+#include "PHY/gpu_compat.h"
+#include "PHY/gpu_simd_intrin_compat.h"
 #include <stdint.h>
 #include <stdio.h>
 #include "nrLDPC_types.h"
@@ -61,18 +62,18 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_Gn_R13_node(const int8_t *
     uint32_t val = *currPtr;
 
     cache_raw[MsgIdx] = val;
-    uint32_t v_abs = __vabs4(val);
+    uint32_t v_abs = gpu_vabs4(val);
     cache_abs[MsgIdx] = v_abs;
 
     total_xor = __vxor4(total_xor, val);
 
     uint32_t old_min1 = min1;
 
-    min1 = __vminu4(old_min1, v_abs);
+    min1 = gpu_vminu4(old_min1, v_abs);
 
-    uint32_t candidate = __vmaxu4(old_min1, v_abs);
+    uint32_t candidate = gpu_vmaxu4(old_min1, v_abs);
 
-    min2 = __vminu4(min2, candidate);
+    min2 = gpu_vminu4(min2, candidate);
     currPtr += offset;
   }
 
@@ -82,7 +83,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_Gn_R13_node(const int8_t *
 
     uint32_t my_abs = cache_abs[temp_MsgIdx];
 
-    uint32_t is_min_mask = __vcmpeq4(my_abs, min1);
+    uint32_t is_min_mask = gpu_vcmpeq4(my_abs, min1);
 
     uint32_t final_mag = (min2 & is_min_mask) | (min1 & ~is_min_mask);
 
@@ -123,18 +124,18 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_Gn_R23_node(const int8_t *
     uint32_t val = *currPtr;
 
     cache_raw[MsgIdx] = val;
-    uint32_t v_abs = __vabs4(val);
+    uint32_t v_abs = gpu_vabs4(val);
     cache_abs[MsgIdx] = v_abs;
 
     total_xor = __vxor4(total_xor, val);
 
     uint32_t old_min1 = min1;
 
-    min1 = __vminu4(old_min1, v_abs);
+    min1 = gpu_vminu4(old_min1, v_abs);
 
-    uint32_t candidate = __vmaxu4(old_min1, v_abs);
+    uint32_t candidate = gpu_vmaxu4(old_min1, v_abs);
 
-    min2 = __vminu4(min2, candidate);
+    min2 = gpu_vminu4(min2, candidate);
     currPtr += offset;
   }
 
@@ -144,7 +145,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_Gn_R23_node(const int8_t *
 
     uint32_t my_abs = cache_abs[temp_MsgIdx];
 
-    uint32_t is_min_mask = __vcmpeq4(my_abs, min1);
+    uint32_t is_min_mask = gpu_vcmpeq4(my_abs, min1);
 
     uint32_t final_mag = (min2 & is_min_mask) | (min1 & ~is_min_mask);
 
@@ -185,18 +186,18 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_Gn_R89_node(const int8_t *
     uint32_t val = *currPtr;
 
     cache_raw[MsgIdx] = val;
-    uint32_t v_abs = __vabs4(val);
+    uint32_t v_abs = gpu_vabs4(val);
     cache_abs[MsgIdx] = v_abs;
 
     total_xor = __vxor4(total_xor, val);
 
     uint32_t old_min1 = min1;
 
-    min1 = __vminu4(old_min1, v_abs);
+    min1 = gpu_vminu4(old_min1, v_abs);
 
-    uint32_t candidate = __vmaxu4(old_min1, v_abs);
+    uint32_t candidate = gpu_vmaxu4(old_min1, v_abs);
 
-    min2 = __vminu4(min2, candidate);
+    min2 = gpu_vminu4(min2, candidate);
     currPtr += offset;
   }
 
@@ -206,7 +207,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_Gn_R89_node(const int8_t *
 
     uint32_t my_abs = cache_abs[temp_MsgIdx];
 
-    uint32_t is_min_mask = __vcmpeq4(my_abs, min1);
+    uint32_t is_min_mask = gpu_vcmpeq4(my_abs, min1);
 
     uint32_t final_mag = (min2 & is_min_mask) | (min1 & ~is_min_mask);
 
@@ -234,12 +235,12 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G3(const int8_t *__restric
 
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][0] * 4);
   sgn = __vxor4(ones, ymm0);
-  min = __vabs4(ymm0);
+  min = gpu_vabs4(ymm0);
 
   // loop starts here
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG3[row][1] * 4);
 
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
 
   uint32_t BricksToBeMoved = __vsign4(min, sgn);
@@ -262,13 +263,13 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G4(const int8_t *__restric
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][0] * 4);
 
   sgn = __vxor4(ones, ymm0);
-  min = __vabs4(ymm0);
+  min = gpu_vabs4(ymm0);
   //-------------------------loop starts here-------------------------------
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][1] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG4[row][2] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   //-------------------------------------------------------------------------
 
@@ -290,17 +291,17 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G5(const int8_t *__restric
 
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][0] * 4);
   sgn = __vxor4(ones, ymm0);
-  min = __vabs4(ymm0);
+  min = gpu_vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][1] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][2] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG5[row][3] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   //-------------------------------------------------------------------------
   uint32_t BricksToBeMoved = __vsign4(min, sgn);
@@ -321,20 +322,20 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G6(const int8_t *__restric
 
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][0] * 4);
   sgn = __vxor4(ones, ymm0);
-  min = __vabs4(ymm0);
+  min = gpu_vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][1] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][2] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][3] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG6[row][4] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   //-------------------------------------------------------------------------
 
@@ -356,23 +357,23 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G7(const int8_t *__restric
 
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][0] * 4);
   sgn = __vxor4(ones, ymm0);
-  min = __vabs4(ymm0);
+  min = gpu_vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][1] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][2] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][3] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][4] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG7[row][5] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   //-------------------------------------------------------------------------
   uint32_t BricksToBeMoved = __vsign4(min, sgn);
@@ -393,26 +394,26 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G8(const int8_t *__restric
 
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][0] * 4);
   sgn = __vxor4(ones, ymm0);
-  min = __vabs4(ymm0);
+  min = gpu_vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][1] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][2] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][3] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][4] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][5] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG8[row][6] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   //-------------------------------------------------------------------------
   uint32_t BricksToBeMoved = __vsign4(min, sgn);
@@ -433,29 +434,29 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G9(const int8_t *__restric
 
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][0] * 4);
   sgn = __vxor4(ones, ymm0);
-  min = __vabs4(ymm0);
+  min = gpu_vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][1] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][2] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][3] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][4] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][5] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][6] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG9[row][7] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   //-------------------------------------------------------------------------
   uint32_t BricksToBeMoved = __vsign4(min, sgn);
@@ -476,32 +477,32 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G10(const int8_t *__restri
 
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][0] * 4);
   sgn = __vxor4(ones, ymm0);
-  min = __vabs4(ymm0);
+  min = gpu_vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][1] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][2] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][3] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][4] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][5] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][6] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][7] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG10[row][8] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   //-------------------------------------------------------------------------
   uint32_t BricksToBeMoved = __vsign4(min, sgn);
@@ -523,59 +524,59 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_G19(const int8_t *__restri
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][0] * 4);
 
   sgn = __vxor4(ones, ymm0);
-  min = __vabs4(ymm0);
+  min = gpu_vabs4(ymm0);
 
   //-------------------------loop starts here-------------------------------
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][1] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][2] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][3] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][4] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][5] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][6] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][7] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][8] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][9] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][10] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][11] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][12] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][13] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][14] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][15] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][16] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   ymm0 = *(const uint32_t *)(p_cnProcBuf + lane * 4 + c_lut_idxG19[row][17] * 4);
-  min = __vminu4(min, __vabs4(ymm0));
+  min = gpu_vminu4(min, gpu_vabs4(ymm0));
   sgn = __vxor4(sgn, ymm0);
   //-------------------------------------------------------------------------
   uint32_t BricksToBeMoved = __vsign4(min, sgn);
