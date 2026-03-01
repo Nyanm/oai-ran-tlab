@@ -1,0 +1,2 @@
+#!/bin/bash
+docker compose up -d mysql oai-amf oai-smf oai-upf oai-ext-dn
