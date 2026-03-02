@@ -61,7 +61,7 @@
 extern cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
 extern cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
 static bool decoder_streamsCreated = false;
-static volatile int cuda_graph_breaker = 1;
+static volatile int cuda_graph_breaker = 0;
 cudaError_t Err;
 
 int8_t* cnProcBuf_dev;
