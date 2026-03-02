@@ -7,7 +7,7 @@
 
 This document describes the architecture and parallelization strategies of the GPU-accelerated LDPC decoder implemented via CUDA. 
 
-> **Note on Algorithm Baseline:** The current CUDA implementation is strictly **bit-exact and algorithm-exact** with the existing OAI [CPU baseline](OAI/openairinterface5g/openair1/PHY/CODING/nrLDPC_decoder/doc/nrLDPC/nrLDPC.tex). It focuses purely on throughput acceleration, hardware offloading, and architectural refactoring. It does not introduce any algorithmic modifications to the underlying error correction mathematical model. Therefore, it is expected to yield the exact same BLER performance as the [CPU baseline](OAI/openairinterface5g/openair1/PHY/CODING/nrLDPC_decoder/doc/nrLDPC/nrLDPC.tex)
+> **Note on Algorithm Baseline:** The current CUDA implementation is strictly **bit-exact and algorithm-exact** with the existing OAI [CPU baseline](nrLDPC.tex). It focuses purely on throughput acceleration, hardware offloading, and architectural refactoring. It does not introduce any algorithmic modifications to the underlying error correction mathematical model. Therefore, it is expected to yield the exact same BLER performance as the [CPU baseline](nrLDPC.tex)
 
 ### Currently Supported Parameters
 
@@ -63,7 +63,7 @@ The following table summarizes the key data buffers and their read/write access 
 All buffers here follow the exact same layout as the CPU version, especially the two most critical buffers in the decoding process: `cnProcBuf_dev` and `bnProcBuf_dev`. 
 
 The OAI decoder implementation groups the Check Nodes (CNs) and Bit Nodes (BNs) based on their degree (the number of connected nodes). 
-While their layouts are rigorously described using mathematical notation in [`doc/nrLDPC/nrLDPC.tex`](OAI/openairinterface5g/openair1/PHY/CODING/nrLDPC_decoder/doc/nrLDPC/nrLDPC.tex), this section provides a more intuitive description of their structures in memory.
+While their layouts are rigorously described using mathematical notation in [`doc/nrLDPC/nrLDPC.tex`](nrLDPC.tex), this section provides a more intuitive description of their structures in memory.
 
 `cnProcBuf_dev` stores the messages that a CN needs to process, which are sent by its connected BNs. For example, a degree-4 CN needs to process 4 incoming messages. However, in the current buffer layout design, these 4 messages belonging to the same CN are **not contiguous** in memory. 
 
