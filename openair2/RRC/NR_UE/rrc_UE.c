@@ -2903,8 +2903,10 @@ void *nr_rrc_control_socket_thread_fct(void *arg)
 
 	        sl_ctrl_msg_send = calloc(1, sizeof(struct nr_sidelink_ctrl_element));
 	        sl_ctrl_msg_send->type = NR_MACReconfigurationConfirm; // send the OK back to controller
-			sl_ctrl_msg_send->nr_sidelinkPrimitive.pc5_scheduler_config.map.action = sl_ctrl_msg_recv->pc5_scheduler_config.map.action; // to be updated by 1 (release) in case of failure
-			sl_ctrl_msg_send->nr_sidelinkPrimitive.pc5_scheduler_config.map.sfid = sl_ctrl_msg_recv->pc5_scheduler_config.map.sfid;// to be updated by the real sfid, in case the expected one is not available
+          sl_ctrl_msg_send->nr_sidelinkPrimitive.pc5_scheduler_config.map.action =  sl_ctrl_msg_recv->nr_sidelinkPrimitive.pc5_scheduler_config.map.action;
+          sl_ctrl_msg_send->nr_sidelinkPrimitive.pc5_scheduler_config.map.sfid = sl_ctrl_msg_recv->nr_sidelinkPrimitive.pc5_scheduler_config.map.sfid;
+			    //sl_ctrl_msg_send->nr_sidelinkPrimitive.pc5_scheduler_config.map.action = sl_ctrl_msg_recv->pc5_scheduler_config.map.action; // to be updated by 1 (release) in case of failure
+			    //sl_ctrl_msg_send->nr_sidelinkPrimitive.pc5_scheduler_config.map.sfid = sl_ctrl_msg_recv->pc5_scheduler_config.map.sfid;// to be updated by the real sfid, in case the expected one is not available
 	        memcpy((void *)send_buf, (void *)sl_ctrl_msg_send, sizeof(struct nr_sidelink_ctrl_element));
 	        free(sl_ctrl_msg_send);
 
@@ -2942,6 +2944,12 @@ void *nr_rrc_control_socket_thread_fct(void *arg)
 	       
 		   // Setup the Radio Bearer
 	       struct NR_SL_RadioBearerConfig_r16 *sl_RadioBearerConfig_r16 = calloc(1,sizeof(*sl_RadioBearerConfig_r16)); 
+          
+         //Define received_data
+         NR_RRC_Configuration received_data;
+        memcpy(&received_data, receive_buf, sizeof(NR_RRC_Configuration));
+
+
 
 	       sl_RadioBearerConfig_r16->slrb_Uu_ConfigIndex_r16 = received_data.sl_radioBearerConfig.slrb_Uu_ConfigIndex_r16;
 	       sl_RadioBearerConfig_r16->sl_SDAP_Config_r16 = NULL;
