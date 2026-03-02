@@ -771,7 +771,7 @@ Having validated the decoding accuracy, we evaluated the hardware acceleration p
 The measurements demonstrate the seamless scalability enabled by the Dynamic Hybrid Switching policy introduced in Section 5.3. By tuning the `NodeEdge_Switch` thresholds specifically for the GH200's Streaming Multiprocessor (SM) capacity, the scheduler provides a remarkably smooth transition across different operational regimes.
 
 **Low-Latency Regime (Edge-Based Domination)**
-For ultra-small batch sizes (e.g., `n_segments = 1` to `4`), the scheduler prioritizes the Edge-Based kernels. In this regime, the massive concurrent thread deployment minimizes the absolute decoding time. The implementation achieves an exceptional single-segment decoding latency ranging from **~ 50 µs to 61 µs** (measured at 5 iterations). This strictly satisfies the stringent processing time budgets required for 5G URLLC (Ultra-Reliable Low-Latency Communication) scenarios.
+For ultra-small batch sizes (e.g., `n_segments = 1` to `4`), the scheduler prioritizes the Edge-Based kernels. In this regime, the massive concurrent thread deployment minimizes the absolute decoding time. The implementation achieves an exceptional single-segment decoding latency ranging from ~ **50 µs** to **61 µs** (measured at 5 iterations). This strictly satisfies the stringent processing time budgets required for 5G URLLC (Ultra-Reliable Low-Latency Communication) scenarios.
 
 **High-Throughput Regime (Node-Based Domination)**
 As the workload scales up to simulate heavily loaded eMBB (Enhanced Mobile Broadband) base stations, the scheduler seamlessly transitions to the Node-Based kernels. This transition effectively prevents SM saturation by reducing the algorithmic complexity from $O(N^2)$ to $O(N)$.
