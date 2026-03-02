@@ -586,8 +586,12 @@ int main(int argc, char *argv[])
         break;
 
       case 'G':
+#ifdef ENABLE_HIP
+	ldpc_version = "_hip";
+#else
         ldpc_version = "_cuda";//using cuda
-        use32bit = 1;
+#endif
+	use32bit = 1;
 	usecudadecoder = 1;
         break;
 

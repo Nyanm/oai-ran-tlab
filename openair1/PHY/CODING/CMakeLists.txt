@@ -153,7 +153,8 @@ if (ENABLE_LDPC_HIP)
               nrLDPC_coding/nrLDPC_coding_segment/ldpc_deinterleave.cu
 	      nrLDPC_coding/nrLDPC_coding_segment/ldpc_rate_matching.cu
               PROPERTIES LANGUAGE HIP)
-
+      #turn next line on for debugging
+      #      target_compile_options(ldpc_hip PRIVATE $<$<COMPILE_LANGUAGE:HIP>:-g;-O0;-fno-inline>)
 # Include dirs: HIP package usually provides HIP_INCLUDE_DIRS
 # If not, /opt/rocm/include is standard.
     if (DEFINED HIP_INCLUDE_DIRS)

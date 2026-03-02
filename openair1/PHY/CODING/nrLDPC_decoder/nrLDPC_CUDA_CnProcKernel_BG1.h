@@ -36,7 +36,7 @@
 #include <stdio.h>
 #include "nrLDPC_types.h"
 #include "nrLDPC_CUDA_public.h"
-#include "nrLDPC_CUDA_lut.h"
+//#include "nrLDPC_CUDA_lut.h"
 __device__ __forceinline__ void cnProcKernel_BG1_int8_Gn_R13_node(const int8_t *__restrict__ d_cnProcBuf,
                                                                   int8_t *__restrict__ d_bnProcBuf,
                                                                   uint32_t lane,

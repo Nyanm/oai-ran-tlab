@@ -41,6 +41,9 @@
 #include <syscall.h>
 // #define DEBUG_ULSCH_DECODING
 // #define gNB_DEBUG_TRACE
+#ifdef ENABLE_CUDA
+#include "PHY/gpu_compat.h"
+#endif
 
 #define OAI_UL_LDPC_MAX_NUM_LLR 27000 // 26112 // NR_LDPC_NCOL_BG1*NR_LDPC_ZMAX = 68*384
 // #define DEBUG_CRC
@@ -93,7 +96,11 @@ NR_gNB_ULSCH_t new_gNB_ulsch(uint8_t max_ldpc_iterations, uint16_t N_RB_UL)
   ulsch.harq_process = harq;
   harq->b = malloc16_clear(ulsch_bytes * sizeof(*harq->b));
 // Allocate one contiguous buffer fr all c/d arrays to simplify addressing for GPU LDPC offload
+#ifdef ENABLE_CUDA
+  gpuHostAlloc((void**)&harq->c,a_segments * 8448 * sizeof(*harq->c),gpuHostAllocMapped);
+#else
   harq->c = malloc16_clear(a_segments * 8448 * sizeof(*harq->c));
+#endif
   harq->d = malloc16_clear(a_segments * 64 * 384 * sizeof(*harq->d));
   harq->d_to_be_cleared = calloc(a_segments, sizeof(bool));
   AssertFatal(harq->d_to_be_cleared != NULL, "out of memory\n");

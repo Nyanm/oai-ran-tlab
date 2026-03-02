@@ -216,7 +216,7 @@ GPUHD uint32_t gpu_vmaxu4(uint32_t a, uint32_t b) {
 
   gpu_u32_u8x4 R; R.v = M8;  
 
-  R.v = __builtin_elementwise_min(A.v, B.v);
+  R.v = __builtin_elementwise_max(A.v, B.v);
   return R.u;
 #else
   gpu_u32_lanes A; A.u = a;

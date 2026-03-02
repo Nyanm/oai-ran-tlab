@@ -141,6 +141,7 @@ typedef dim3 gpuDim3;
 #define gpuMalloc              hipMalloc
 #define gpuFree                hipFree
 #define gpuMemset              hipMemset
+#define gpuMemsetAsync         hipMemsetAsync
 #define gpuHostAlloc           hipHostAlloc
 #define gpuHostAllocMapped     hipHostAllocMapped
 #define gpuHostAllocDefault    hipHostAllocDefault
@@ -203,6 +204,7 @@ typedef dim3 gpuDim3;
 #define gpuMalloc              cudaMalloc
 #define gpuFree                cudaFree
 #define gpuMemset              cudaMemset
+#define gpumemsetasync         cudamemsetasync
 #define gpuHostAlloc           cudaHostAlloc
 #define gpuHostAllocMapped     cudaHostAllocMapped
 #define gpuHostAllocDefault    cudaHostAllocDefault

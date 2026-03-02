@@ -196,7 +196,7 @@ if (ENABLE_CUDA)
 endif()
 
 if (ENABLE_HIP)
-  set(commonOpts "${commonOpts} -DENABLE_CUDA")
+  set(commonOpts "${commonOpts} -DENABLE_CUDA -DENABLE_HIP")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__HIP_PLATFORM_AMD__ -DGPU_USE_HIP")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__HIP_PLATFORM_AMD__ -DGPU_USE_HIP")
 endif()
@@ -712,8 +712,6 @@ set(SCHED_SRC_NR_UE
   ${OPENAIR1_DIR}/SCHED_NR_UE/harq_nr.c
   ${OPENAIR1_DIR}/SCHED_NR_UE/pucch_uci_ue_nr.c
 )
-add_library(SCHED_NR_UE_LIB ${SCHED_SRC_NR_UE})
-target_link_libraries(SCHED_NR_UE_LIB PRIVATE asn1_lte_rrc_hdrs asn1_nr_rrc_hdrs UTIL)
 
 # nFAPI
 #################################
@@ -1086,6 +1084,7 @@ if (ENABLE_CUDA)
   set(CUDA_VERBOS_BUILD_ON)
   cuda_add_library(PHY_NR ${PHY_NR_SRC} ${PHY_NR_SRC_CU})
   cuda_add_library(PHY_NR_UE ${PHY_NR_UE_SRC} ${PHY_NR_UE_SRC_CU})
+  cuda_add_library(SCHED_NR_UE_LIB ${SCHED_SRC_NR_UE})
 # -----------------------
 # HIP (ROCm)
 # -----------------------
@@ -1093,6 +1092,8 @@ elseif(ENABLE_HIP)
 
 # Find HIP compiler + headers
     find_package(HIP REQUIRED CONFIG)
+
+    message(STATUS "HIP includes: ${HIP_INCLUDE_DIRS}")
 
     enable_language(HIP)
 
@@ -1105,13 +1106,16 @@ elseif(ENABLE_HIP)
 
     add_library(PHY_NR ${PHY_NR_SRC} ${PHY_NR_SRC_HIP})
     add_library(PHY_NR_UE ${PHY_NR_UE_SRC} ${PHY_NR_UE_SRC_HIP})
+    add_library(SCHED_NR_UE_LIB ${SCHED_SRC_NR_UE})
     # Include HIP headers (HIP_INCLUDE_DIRS varies by ROCm; /opt/rocm/include is typical)
     if(DEFINED HIP_INCLUDE_DIRS)
       target_include_directories(PHY_NR    PRIVATE ${HIP_INCLUDE_DIRS})
       target_include_directories(PHY_NR_UE PRIVATE ${HIP_INCLUDE_DIRS})
+      target_include_directories(SCHED_NR_UE_LIB PRIVATE ${HIP_INCLUDE_DIRS})
     else()
       target_include_directories(PHY_NR    PRIVATE /opt/rocm/include)
       target_include_directories(PHY_NR_UE PRIVATE /opt/rocm/include)
+      target_include_directories(SCHED_NR_UE_LIB PRIVATE /opt/rocm/include)
     endif()
 
     # Use hipcc as the HIP compiler if CMake didn't select it automatically
@@ -1119,6 +1123,7 @@ elseif(ENABLE_HIP)
     if(DEFINED HIP_HIPCC_EXECUTABLE)
       set_property(TARGET PHY_NR    PROPERTY HIP_COMPILER ${HIP_HIPCC_EXECUTABLE})
       set_property(TARGET PHY_NR_UE PROPERTY HIP_COMPILER ${HIP_HIPCC_EXECUTABLE})
+      set_property(TARGET SCHED_NR_UE_LIB PROPERTY HIP_COMPILER ${HIP_HIPCC_EXECUTABLE})
     endif()
 
     # GPU targets: MI210=gfx90a, Ryzen AI MAX+ 395=gfx1151
@@ -1126,9 +1131,13 @@ elseif(ENABLE_HIP)
     #    target_compile_options(PHY_NR_UE PRIVATE "--offload-arch=gfx90a" "--offload-arch=gfx1151")
     target_compile_definitions(PHY_NR    PRIVATE USE_HIP)
     target_compile_definitions(PHY_NR_UE PRIVATE USE_HIP)
+    target_compile_definitions(SCHED_NR_UE_LIB PRIVATE USE_HIP)
+
+    #    target_link_libraries(PHY_NR PHY_NR_UE SCHED_NR_UE)
 else()
   add_library(PHY_NR ${PHY_NR_SRC})
   add_library(PHY_NR_UE ${PHY_NR_UE_SRC})
+  add_library(SCHED_NR_UE_LIB ${SCHED_SRC_NR_UE})
 endif()
 target_link_libraries(PHY_NR nr_phy_common nr_common nr_fapi_p5)
 
@@ -1137,6 +1146,7 @@ target_link_libraries(PHY_NR_NO_AVX_256 nr_phy_common nr_common)
 target_compile_definitions(PHY_NR_NO_AVX_256 PUBLIC USE_128BIT)
 
 target_link_libraries(PHY_NR_UE asn1_nr_rrc_hdrs nr_phy_common nr_common UTIL)
+target_link_libraries(SCHED_NR_UE_LIB PRIVATE asn1_lte_rrc_hdrs asn1_nr_rrc_hdrs UTIL)
 
 add_library(PHY_RU ${PHY_SRC_RU})
 target_link_libraries(PHY_RU PRIVATE asn1_lte_rrc_hdrs UTIL)
@@ -1935,6 +1945,12 @@ if(E2_AGENT)
   target_compile_definitions(nr-softmodem PRIVATE ${E2AP_VERSION} ${KPM_VERSION} E2_AGENT)
 endif()
 
+if (ENABLE_HIP)
+  set(ROCM_PATH "/opt/rocm-7.2.0")
+  find_package(HIP REQUIRED)
+  target_link_libraries(nr-softmodem PRIVATE ${ROCM_PATH}/lib/libamdhip64.so)
+  target_link_options(nr-softmodem PRIVATE -Wl,-rpath,${ROCM_PATH}/lib)
+endif()
 
 # force the generation of ASN.1 so that we don't need to wait during the build
 target_link_libraries(nr-softmodem PRIVATE
@@ -1981,6 +1997,7 @@ add_executable(nr-uesoftmodem
   ${PHY_INTERFACE_DIR}/queue_t.c
   )
 
+
 target_link_libraries(nr-uesoftmodem PRIVATE
   -Wl,--start-group
   nr_rrc SECURITY UTIL HASHTABLE SCHED_RU_LIB SCHED_NR_UE_LIB
@@ -1998,6 +2015,12 @@ target_link_libraries(nr-uesoftmodem PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
 target_link_libraries(nr-uesoftmodem PRIVATE
                       asn1_lte_rrc asn1_nr_rrc asn1_s1ap asn1_ngap asn1_m2ap asn1_m3ap asn1_x2ap asn1_f1ap asn1_lpp)
 
+if (ENABLE_HIP)
+  set(ROCM_PATH "/opt/rocm-7.2.0")
+  find_package(HIP REQUIRED)
+  target_link_libraries(nr-uesoftmodem PRIVATE ${ROCM_PATH}/lib/libamdhip64.so)
+  target_link_options(nr-uesoftmodem PRIVATE -Wl,-rpath,${ROCM_PATH}/lib)
+endif()
 ###################################"
 # Addexecutables for tests
 ####################################
@@ -2119,6 +2142,12 @@ target_link_libraries(nr_dlsim PRIVATE
   m pthread ${T_LIB} ITTI dl shlib_loader nr_ue_phy_meas physim_common
   )
 target_link_libraries(nr_dlsim PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
+if (ENABLE_HIP)
+  set(ROCM_PATH "/opt/rocm-7.2.0")
+  find_package(HIP REQUIRED)
+  target_link_libraries(nr_dlsim PRIVATE ${ROCM_PATH}/lib/libamdhip64.so)
+  target_link_options(nr_dlsim PRIVATE -Wl,-rpath,${ROCM_PATH}/lib)
+endif()
 
 add_executable(nr_prachsim ${OPENAIR1_DIR}/SIMULATION/NR_PHY/prachsim.c)
 target_link_libraries(nr_prachsim PRIVATE
@@ -2149,6 +2178,13 @@ target_link_libraries(nr_ulsim PRIVATE
   m pthread ${T_LIB} ITTI dl shlib_loader nr_ue_phy_meas physim_common
   )
 target_link_libraries(nr_ulsim PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
+
+if (ENABLE_HIP)
+  set(ROCM_PATH "/opt/rocm-7.2.0")
+  find_package(HIP REQUIRED)
+  target_link_libraries(nr_ulsim PRIVATE ${ROCM_PATH}/lib/libamdhip64.so)
+  target_link_options(nr_ulsim PRIVATE -Wl,-rpath,${ROCM_PATH}/lib)
+endif()
 
 add_executable(nr_srssim
   ${OPENAIR1_DIR}/SIMULATION/NR_PHY/srssim.c
