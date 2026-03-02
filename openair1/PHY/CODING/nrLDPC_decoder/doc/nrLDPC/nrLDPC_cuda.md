@@ -761,6 +761,7 @@ To guarantee that the architectural transformations—including 8-bit saturation
 
 As illustrated in the BLER vs. SNR curves, the CUDA GPU implementation is strictly bit-exact with the CPU baseline. Across all tested code rates (BG1 Rate 1/3, Rate 2/3, and Rate 8/9) under an AWGN channel, the GPU decoding trajectories perfectly overlap with the CPU reference trajectories. This confirms that the aggressive hardware acceleration strategies introduce zero degradation to the error correction capability.
 ![CPU_GPU_BLER](img/bler_performance_cpu_vs_gpu.svg)
+
 *(Tested with 5 iterations)*
 
 #### 6.2.2 Latency vs. Throughput Scalability
