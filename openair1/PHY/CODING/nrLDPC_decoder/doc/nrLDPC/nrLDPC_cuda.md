@@ -1,9 +1,8 @@
 
----
-
 # OAI nrLDPC GPU Decoder Architecture
 
 **Author:** PAN Qizhi
+
 ## 0. Scope & Supported Configurations
 
 This document describes the architecture and parallelization strategies of the GPU-accelerated LDPC decoder implemented via CUDA. 
