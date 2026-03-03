@@ -1998,6 +1998,11 @@ static int  pf_ul(gNB_MAC_INST *nrmac,
       continue;
     }
 
+    if (check_period_offset_reserve(sched_frame, sched_slot, slots_per_frame)) {
+      LOG_D(NR_MAC, "[UE %04x][%4d.%2d] ULSCH Beam could not be allocated due to periodic UL signal\n", UE->rnti, frame, slot);
+      reset_beam_status(&nrmac->beam_info, frame, slot, UE->UE_beam_index, slots_per_frame, dci_beam.new_beam);
+      continue;
+    }
     NR_beam_alloc_t beam = beam_allocation_procedure(&nrmac->beam_info, sched_frame, sched_slot, UE->UE_beam_index, slots_per_frame);
     if (beam.idx < 0) {
       LOG_D(NR_MAC, "[UE %04x][%4d.%2d] ULSCH Beam could not be allocated\n", UE->rnti, frame, slot);
@@ -2116,6 +2121,12 @@ static int  pf_ul(gNB_MAC_INST *nrmac,
   while (iterator->UE != NULL) {
     NR_UE_UL_BWP_t *current_BWP = &iterator->UE->current_UL_BWP;
     NR_UE_sched_ctrl_t *sched_ctrl = &iterator->UE->UE_sched_ctrl;
+
+    if (check_period_offset_reserve(sched_frame, sched_slot, slots_per_frame)) {
+      LOG_D(NR_MAC, "[UE %04x][%4d.%2d] ULSCH Beam could not be allocated due to periodic UL signal\n", iterator->UE->rnti, frame, slot);
+      iterator++;
+      continue;
+    }
 
     NR_beam_alloc_t beam = beam_allocation_procedure(&nrmac->beam_info, sched_frame, sched_slot, iterator->UE->UE_beam_index, slots_per_frame);
     if (beam.idx < 0) {

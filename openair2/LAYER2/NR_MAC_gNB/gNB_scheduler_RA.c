@@ -818,6 +818,10 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
       || !((msg3_mask & slot_bitmap) == msg3_mask))
     return;
 
+  if (check_period_offset_reserve(sched_frame, sched_slot, slots_frame)) {
+    LOG_I(NR_MAC, "[UE %04x][%4d.%2d] MSG3 Beam could not be allocated due to periodic UL signal\n", UE->rnti, sched_frame, sched_slot);
+    return;
+  }
   NR_beam_alloc_t beam_ul = beam_allocation_procedure(&nr_mac->beam_info, sched_frame, sched_slot, UE->UE_beam_index, slots_frame);
   if (beam_ul.idx < 0)
     return;
@@ -1034,6 +1038,10 @@ static bool get_feasible_msg3_tda(const NR_ServingCellConfigCommon_t *scc,
     if ((slot_mask & msg3_mask) != msg3_mask)
       continue;
 
+    if (check_period_offset_reserve(temp_frame, temp_frame, slots_per_frame)) {
+      LOG_I(NR_MAC, "[%4d.%2d] MSG3 Beam could not be allocated due to periodic UL signal\n", temp_frame, temp_slot);
+      continue;
+    }
     // check if it is possible to allocate MSG3 in a beam in this slot
     NR_beam_alloc_t beam = beam_allocation_procedure(beam_info, temp_frame, temp_slot, ue_beam_idx, slots_per_frame);
     if (beam.idx < 0)
