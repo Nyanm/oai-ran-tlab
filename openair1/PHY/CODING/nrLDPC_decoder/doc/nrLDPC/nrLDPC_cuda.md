@@ -575,7 +575,7 @@ __device__ __forceinline__ void cnProcKernel_BG1_int8_Gn_R13_node(/* ... paramet
 
 #### 5.2.4 bnProc_kernel
 
-The Variable Node update (`bnProc`) mirrors this $O(N)$ logic. We define specific node-based kernels for each code rate:
+The Bit Node update (`bnProc`) mirrors this $O(N)$ logic. We define specific node-based kernels for each code rate:
 
 * `bnProcKernel_BG1_R13_int8_Node`
 * `bnProcKernel_BG1_R23_int8_Node`
@@ -744,7 +744,7 @@ The core scheduling logic (`nrLDPC_decoder_core_dynamic`) bypasses standard stre
 * **Cache Miss (Graph Record):** If no matching graph exists and the cache is not full, the system records a new CUDA Graph (`nrLDPC_decoder_cuda_GraphRecord`). This operation captures the exact sequence of kernels—including the Edge/Node hybrid switching policy defined in Section 5.3—into a single executable topology. Once recorded, the graph is cached and executed.
 * **Normal Execution (Fallback):** In scenarios where graph operations fail, the cache capacity is exhausted, or the runtime environment actively breaks the graph logic (circuit breaker triggered), the scheduler safely falls back to standard, sequential CUDA kernel launches (`nrLDPC_decoder_cuda_NormalExecute`).
 
-**3. Memory Management**
+**3. Memory Management** 
 
 In a fully GPU-accelerated L1 pipeline, the input LLRs from the preceding rate-matching module typically already reside in the GPU device memory. The decoder accepts these device pointers directly, avoiding PCIe transfer overhead.
 
@@ -776,7 +776,7 @@ For ultra-small batch sizes (e.g., `n_segments = 1` to `4`), the scheduler prior
 **High-Throughput Regime (Node-Based Domination)**
 As the workload scales up to simulate heavily loaded eMBB (Enhanced Mobile Broadband) base stations, the scheduler seamlessly transitions to the Node-Based kernels. This transition effectively prevents SM saturation by reducing the algorithmic complexity from $O(N^2)$ to $O(N)$.
 
-Because the switching thresholds are optimally aligned with the hardware's capabilities, the throughput curve exhibits a smooth, near-linear ascent before plateauing at the hardware limit. Under maximum parallel segment loading (`n_segments = 128`), the GPU decoder achieves peak sustained throughputs of **~3.5 Gbps** for Rate 1/3, **~5.5 Gbps** for Rate 2/3, and an impressive **>8.0 Gbps** under Rate 8/9.
+Because the switching thresholds are optimally aligned with the hardware's capabilities, the throughput curve exhibits a smooth ascent before plateauing at the hardware limit. Under maximum parallel segment loading (`n_segments = 128`), the GPU decoder achieves peak sustained throughputs of **~3.5 Gbps** for Rate 1/3, **~5.5 Gbps** for Rate 2/3, and an impressive **>8.0 Gbps** under Rate 8/9.
 
 The table below summarizes the accurately measured throughput and latency metrics across critical segment batch sizes on the GH200:
 
@@ -803,3 +803,64 @@ The table below summarizes the accurately measured throughput and latency metric
 ![latency](img/latency_vs_segments.svg)
 ![throughput](img/throughput_vs_segments.svg)
 
+
+---
+## Appendix A: Empirical Determination of Hybrid Scheduling Thresholds (GH200)
+
+To validate the bottleneck shift from kernel launch overhead to SM computational saturation, an exhaustive profiling was conducted on the NVIDIA Grace Hopper (GH200) platform.
+
+The architectures evaluated are defined as follows:
+
+* **EE (Baseline)**: Edge-based `cnProc` + Edge-based `bnProc`.
+* **EN (Hybrid A)**: Edge-based `cnProc` + Node-based `bnProc`. 
+* **NE (Hybrid B)**: Node-based `cnProc` + Edge-based `bnProc`. 
+* **NN (Proposed)**: Node-based `cnProc` + Node-based `bnProc`.
+
+The tables below record the per-segment execution time ($\mu s$) under varying workload scales ($S$).
+
+### A.1 Performance Comparison for Rate 1/3 (BG1)
+
+| Segments ($S$) | EE (Baseline) | EN (Hybrid A) | NE (Hybrid B) | NN (All Node) | Best Arch. |
+| --- | --- | --- | --- | --- | --- |
+| **1** | 52.055 | 76.164 | 75.641 | 98.361 | **EE** |
+| **2** | 30.724 | 39.726 | 40.552 | 50.658 | **EE** |
+| **4** | 17.457 | 20.873 | 22.259 | 25.478 | **EE** |
+| **8** | 10.815 | 11.664 | 12.725 | 13.481 | **EE** |
+| **16** | 8.038 | 7.080 | 8.468 | 7.485 | **EN** |
+| **32** | 6.204 | 4.824 | 6.112 | 4.713 | **NN** |
+| **64** | 5.251 | 3.461 | 4.884 | 3.100 | **NN** |
+| **128** | 4.793 | 2.905 | 4.342 | 2.423 | **NN** |
+
+### A.2 Performance Comparison for Rate 2/3 (BG1)
+
+| Segments ($S$) | EE (Baseline) | EN (Hybrid A) | NE (Hybrid B) | NN (All Node) | Best Arch. |
+| --- | --- | --- | --- | --- | --- |
+| **1** | 46.088 | 54.576 | 67.666 | 74.247 | **EE** |
+| **2** | 23.429 | 27.522 | 35.105 | 38.476 | **EE** |
+| **4** | 12.763 | 14.673 | 18.467 | 20.560 | **EE** |
+| **8** | 7.611 | 8.030 | 9.977 | 10.521 | **EN** |
+| **16** | 4.791 | 4.721 | 5.588 | 5.491 | **EN** |
+| **32** | 3.416 | 3.115 | 3.416 | 3.073 | **NN** |
+| **64** | 2.670 | 2.267 | 2.375 | 1.953 | **NN** |
+| **128** | 2.297 | 1.867 | 2.061 | 1.597 | **NN** |
+
+### A.3 Performance Comparison for Rate 8/9 (BG1)
+
+| Segments ($S$) | EE (Baseline) | EN (Hybrid A) | NE (Hybrid B) | NN (All Node) | Best Arch. |
+| --- | --- | --- | --- | --- | --- |
+| **1** | 44.686 | 48.255 | 68.518 | 70.156 | **EE** |
+| **2** | 21.895 | 24.895 | 35.236 | 36.256 | **EE** |
+| **4** | 11.493 | 13.221 | 17.876 | 19.112 | **EE** |
+| **8** | 6.551 | 7.100 | 9.245 | 9.867 | **EE** |
+| **16** | 3.824 | 4.142 | 5.123 | 5.257 | **EE** |
+| **32** | 2.604 | 2.554 | 2.928 | 2.842 | **EN** |
+| **64** | 1.896 | 1.751 | 1.759 | 1.646 | **NN** |
+| **128** | 1.464 | 1.349 | 1.213 | 1.084 | **NN** |
+
+---
+**Analysis summary:** Compared to the baseline (EE), the EN architecture eases the computational burden of `bnProc`, and the NE architecture eases the burden of `cnProc`. As the workload ($S$) scales up, the performance improvement from EN is greater than that of NE. This indicates that the Variable Node processing (`bnProc`) acts as the main parallelization bottleneck in the traditional Edge-centric paradigm. Therefore, adopting the fully Node-centric architecture (NN) addresses both bottlenecks, providing better performance in high-load scenarios.
+
+
+![R13 Performance](img/perf_r13.svg)
+![R23 Performance](img/perf_r23.svg)
+![R89 Performance](img/perf_r89.svg)
