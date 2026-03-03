@@ -759,26 +759,28 @@ To maintain API compatibility for partial-offload testing scenarios where inputs
 
 To guarantee that the architectural transformations—including 8-bit saturation, SIMD4 vectorization, and Node-Based graph restructuring—do not compromise the mathematical integrity of the decoder, we benchmarked the Block Error Rate (BLER) against the standard OAI CPU baseline.
 
-As illustrated in the BLER vs. SNR curves, the CUDA GPU implementation is strictly bit-exact with the CPU baseline. Across all tested code rates (BG1 Rate 1/3, Rate 2/3, and Rate 8/9) under an AWGN channel, the GPU decoding trajectories perfectly overlap with the CPU reference trajectories. This confirms that the aggressive hardware acceleration strategies introduce zero degradation to the error correction capability.
+The BLER vs. SNR curves indicate that the CUDA GPU implementation performs consistently with the CPU baseline. Across the evaluated code rates (BG1 Rate 1/3, Rate 2/3, and Rate 8/9) in an AWGN channel, the decoding trajectories of the GPU and CPU implementations overlap. This demonstrates that the proposed GPU offloading strategies do not compromise the error correction performance.
 ![CPU_GPU_BLER](img/bler_performance_cpu_vs_gpu.svg)
 
 *(Tested with 5 iterations)*
 
 #### 6.2.2 Latency vs. Throughput Scalability
 
-Having validated the decoding accuracy, we evaluated the hardware acceleration performance natively on the NVIDIA GH200 architecture. The primary performance metrics are single-segment processing latency and overall decoding throughput, measured across varying workloads (number of code block segments, `n_segments`).
 
-The measurements demonstrate the seamless scalability enabled by the Dynamic Hybrid Switching policy introduced in Section 5.3. By tuning the `NodeEdge_Switch` thresholds specifically for the GH200's Streaming Multiprocessor (SM) capacity, the scheduler provides a remarkably smooth transition across different operational regimes.
+Following the validation of decoding accuracy, the hardware acceleration performance was evaluated on the NVIDIA GH200 architecture. The primary performance metrics include single-segment processing latency and overall decoding throughput, measured across varying workloads (number of code block segments, `n_segments`).
 
-**Low-Latency Regime (Edge-Based Domination)**
-For ultra-small batch sizes (e.g., `n_segments = 1` to `4`), the scheduler prioritizes the Edge-Based kernels. In this regime, the massive concurrent thread deployment minimizes the absolute decoding time. The implementation achieves an exceptional single-segment decoding latency ranging from ~ **50 µs** to **61 µs** (measured at 5 iterations). This strictly satisfies the stringent processing time budgets required for 5G URLLC (Ultra-Reliable Low-Latency Communication) scenarios.
+The measurements illustrate the scalability facilitated by the Dynamic Hybrid Switching policy detailed in Section 5.3. By calibrating the `NodeEdge_Switch` thresholds according to the Streaming Multiprocessor (SM) capacity of the GH200, the scheduler enables a transition across different operational regimes.
 
-**High-Throughput Regime (Node-Based Domination)**
-As the workload scales up to simulate heavily loaded eMBB (Enhanced Mobile Broadband) base stations, the scheduler seamlessly transitions to the Node-Based kernels. This transition effectively prevents SM saturation by reducing the algorithmic complexity from $O(N^2)$ to $O(N)$.
+**Low-Latency Regime (Edge-Based Processing)**
+For smaller batch sizes (e.g., `n_segments = 1` to `4`), the scheduler selects the Edge-Based kernels. In this regime, the concurrent thread deployment reduces the absolute decoding time. The implementation records a single-segment decoding latency ranging from approximately **50 µs** to **61 µs** (measured at 5 iterations). This processing time aligns with the latency requirements associated with 5G URLLC (Ultra-Reliable Low-Latency Communication) scenarios.
 
-Because the switching thresholds are optimally aligned with the hardware's capabilities, the throughput curve exhibits a smooth ascent before plateauing at the hardware limit. Under maximum parallel segment loading (`n_segments = 128`), the GPU decoder achieves peak sustained throughputs of **~3.5 Gbps** for Rate 1/3, **~5.5 Gbps** for Rate 2/3, and an impressive **>8.0 Gbps** under Rate 8/9.
+**High-Throughput Regime (Node-Based Processing)**
+As the workload scales to simulate higher-load eMBB (Enhanced Mobile Broadband) base station conditions, the scheduler transitions to the Node-Based kernels. This transition mitigates SM saturation by reducing the algorithmic complexity from $O(N^2)$ to $O(N)$.
 
-The table below summarizes the accurately measured throughput and latency metrics across critical segment batch sizes on the GH200:
+With the switching thresholds calibrated to the hardware characteristics, the throughput curve exhibits an initial ascent before plateauing near the hardware limit. Under maximum evaluated parallel segment loading (`n_segments = 128`), the GPU decoder reaches peak sustained throughputs of **~3.5 Gbps** for Rate 1/3, **~5.5 Gbps** for Rate 2/3, and **>8.0 Gbps** for Rate 8/9.
+
+
+The table below summarizes the measured throughput and latency metrics across different segment batch sizes on the GH200:
 
 <details>
 <summary><b>Click to expand: Raw Performance Metrics (GH200)</b></summary>
