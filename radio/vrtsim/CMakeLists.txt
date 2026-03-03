@@ -1,3 +1,6 @@
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wunused-parameter")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wunused-parameter")
+
 # Noise device static lib
 add_library(noise_device STATIC noise_device.c)
 target_link_libraries(noise_device PRIVATE log_headers)
