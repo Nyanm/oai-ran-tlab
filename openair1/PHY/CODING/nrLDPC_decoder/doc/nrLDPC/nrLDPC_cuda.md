@@ -735,7 +735,7 @@ Beyond the arithmetic optimizations at the kernel level, the overall decoder lat
 The execution lifecycle of a batch of incoming code blocks (`ldpc_decoder_cuda.c`) is governed by the following pipeline stages:
 
 **1. Driver Initialization and Warm-up**
-To prevent unpredictable latency in processing the first network packets (often caused by lazy loading or JIT compilation within the NVIDIA driver), we perform a warm-up procedure(`init_decoder_warmup`). During init, the decoder allocates dummy buffers and pre-records CUDA graphs for common 5G NR configurations (e.g., Lifting Sizes $Z \in \{320, 352, 384\}$ and Base Graph 1, Rates 1/3 and 2/3). Executing these dummy graphs forces the GPU driver to fully initialize its execution context before real network traffic arrives.
+To prevent unpredictable latency in processing the first arriving network packets (often caused by lazy loading or JIT compilation within the NVIDIA driver), we perform a warm-up procedure(`init_decoder_warmup`). During init, the decoder allocates dummy buffers and pre-records CUDA graphs for common 5G NR configurations (e.g., Lifting Sizes $Z \in \{320, 352, 384\}$ and Base Graph 1, Rates 1/3 and 2/3). Executing these dummy graphs forces the GPU driver to fully initialize its execution context before real network traffic arrives.
 
 **2. Dynamic Graph Caching and Execution**
 The core scheduling logic (`nrLDPC_decoder_core_dynamic`) bypasses standard stream-based kernel launches by utilizing a state-aware graph cache (`gpu_graph_cache`). When a decoding request arrives, the scheduler inspects the decoding parameters (e.g., $Z$, Code Rate, `n_segments`, maximum iterations) and routes the execution through one of three paths:
