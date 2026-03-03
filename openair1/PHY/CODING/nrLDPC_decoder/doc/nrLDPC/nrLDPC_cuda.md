@@ -146,7 +146,7 @@ To support other code rates or base graphs in the future (for example, a potenti
 ## 5. Parallelism Strategies
 ### 5.1 Edge-Based Parallelism
 
-To extract the absolute maximum concurrency from the GPU hardware, the most intuitive approach is to compute every single message (edge) in the bipartite graph simultaneously. We refer to this approach as **Edge-Based Parallelism**.
+To extract the maximum concurrency from the GPU hardware, the most intuitive approach is to compute every single message (edge) in the bipartite graph simultaneously. We refer to this approach as **Edge-Based Parallelism**.
 
 #### 5.1.1 Thread Organization
 
@@ -396,13 +396,13 @@ During the final decoding iteration, an alternative `_last` kernel is invoked. I
 
 #### 5.1.4 Complexity Bottleneck Analysis
 
-While Edge-Based Parallelism maximizes concurrent thread execution, it achieves this at the severe cost of massive computational redundancy. By completely isolating each message computation into an independent thread to prevent memory write collisions and expensive synchonization cost across blocks, the hardware is forced to perform highly repetitive arithmetic operations.
+While Edge-Based Parallelism maximizes concurrent thread execution, it achieves this at the cost of massive computational redundancy. By completely isolating each message computation into an independent thread to prevent memory write collisions and expensive synchonization cost across blocks, the hardware is forced to perform highly repetitive arithmetic operations.
 
 In the `bnProc` , the Bit Node(BN) must first accumulate all incoming messages from its connected Check Nodes (CNs), and subsequently subtract the specific target CN's previous message.
 
 Under the Edge-Based strategy, this logic leads to a severe performance bottleneck for high-degree nodes. For instance, consider BN30 in BG1 R13. This single node spawns 30 independent blocks to compute its 30 outgoing messages simultaneously. Because these blocks do not share intermediate accumulation results, *each* of the 30 blocks must independently perform the costly 30-message summation. 
 
-Consequently, a process that mathematically requires only $30 + 30 = 60$ operations now executes $30 \times 30 = 900$ additions. The computational complexity for processing a node effectively explodes from $O(N)$ to $O(N^2)$, where $N$ represents the node degree.
+Consequently, a process that mathematically requires only $30$ additions now executes $30 \times 30 = 900$ additions. The computational complexity for processing a node effectively explodes from $O(N)$ to $O(N^2)$, where $N$ represents the node degree.
 
 ![BN30_analysis](img/BN30_edge.svg)
 
@@ -724,7 +724,7 @@ void nrLDPC_bnProc_BG1_R13_cuda_stream_core(int8_t *bnProcBuf,
 }
 
 ```
-It should be noted that the empirical switching thresholds obtained so far (e.g., NodeEdge_Switch_Cn_R13) were derived from actual performance testing on the NVIDIA GH200. For different hardware platforms, these optimal thresholds are expected to vary depending on the available computational resources. A practical heuristic is to scale these thresholds proportionally based on the target hardware's compute resources relative to the GH200 (such as the number of Streaming Multiprocessors). Future work will explore a more precise, analytical method for determining these thresholds across diverse architectures.
+It should be noted that the empirical switching thresholds obtained so far (e.g., NodeEdge_Switch_Cn_R13) were derived from actual performance testing on the NVIDIA GH200(See [Appendix A](#Appendix-A)). For different hardware platforms, these optimal thresholds are expected to vary depending on the available computational resources. A practical heuristic is to scale these thresholds proportionally based on the target hardware's compute resources relative to the GH200 (such as the number of Streaming Multiprocessors). Future work will explore a more precise, analytical method for determining these thresholds across diverse architectures.
 
 ## 6. System Integration and Performance Evaluation
 
@@ -735,7 +735,7 @@ Beyond the arithmetic optimizations at the kernel level, the overall decoder lat
 The execution lifecycle of a batch of incoming code blocks (`ldpc_decoder_cuda.c`) is governed by the following pipeline stages:
 
 **1. Driver Initialization and Warm-up**
-To prevent unpredictable latency spikes during the arrival of the first network packets (often caused by lazy loading or JIT compilation within the NVIDIA driver), the system performs a preemptive driver warm-up (`init_decoder_warmup`). During init, the decoder allocates dummy buffers and pre-records CUDA graphs for common 5G NR configurations (e.g., Lifting Sizes $Z \in \{320, 352, 384\}$ and Base Graph 1, Rates 1/3 and 2/3). Executing these dummy graphs forces the GPU driver to fully initialize its execution context before real network traffic arrives.
+To prevent unpredictable latency in processing the first network packets (often caused by lazy loading or JIT compilation within the NVIDIA driver), we perform a warm-up procedure(`init_decoder_warmup`). During init, the decoder allocates dummy buffers and pre-records CUDA graphs for common 5G NR configurations (e.g., Lifting Sizes $Z \in \{320, 352, 384\}$ and Base Graph 1, Rates 1/3 and 2/3). Executing these dummy graphs forces the GPU driver to fully initialize its execution context before real network traffic arrives.
 
 **2. Dynamic Graph Caching and Execution**
 The core scheduling logic (`nrLDPC_decoder_core_dynamic`) bypasses standard stream-based kernel launches by utilizing a state-aware graph cache (`gpu_graph_cache`). When a decoding request arrives, the scheduler inspects the decoding parameters (e.g., $Z$, Code Rate, `n_segments`, maximum iterations) and routes the execution through one of three paths:
@@ -805,7 +805,8 @@ The table below summarizes the accurately measured throughput and latency metric
 
 
 ---
-## Appendix A: Empirical Determination of Hybrid Scheduling Thresholds (GH200)
+## Appendix A
+### Empirical Determination of Hybrid Scheduling Thresholds (GH200)
 
 To validate the bottleneck shift from kernel launch overhead to SM computational saturation, an exhaustive profiling was conducted on the NVIDIA Grace Hopper (GH200) platform.
 
