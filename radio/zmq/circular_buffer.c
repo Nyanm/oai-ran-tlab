@@ -25,18 +25,18 @@ static void unlock(circular_buffer_t *cb)
  */
 static struct timespec abs_timeout(double delay_nanosecond)
 {
-printf("abs_timeout %f\n", delay_nanosecond);
+//printf("abs_timeout %f\n", delay_nanosecond);
   struct timespec t;
 
   int ret = clock_gettime(CLOCK_REALTIME, &t);
   DevAssert(ret == 0);
 
-printf("now %ld %ld\n", t.tv_sec, t.tv_nsec);
+//printf("now %ld %ld\n", t.tv_sec, t.tv_nsec);
   uint64_t nsec = t.tv_nsec + delay_nanosecond;
   t.tv_sec += nsec / 1000000000;
   t.tv_nsec = nsec % 1000000000;
 
-printf("wait limit %ld %ld\n", t.tv_sec, t.tv_nsec);
+//printf("wait limit %ld %ld\n", t.tv_sec, t.tv_nsec);
   return t;
 }
 

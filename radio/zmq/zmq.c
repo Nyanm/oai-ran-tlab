@@ -74,6 +74,12 @@ static void trx_zmq_end(openair0_device *device)
 
 static int trx_zmq_write(openair0_device *device, openair0_timestamp timestamp, void **buff, int nsamps, int cc, int flags)
 {
+  DevAssert(cc == 1);
+  zmq_t *z = device->priv;
+  short *in = buff[0];
+//printf("writing %d samples\n", nsamps); fflush(stdout);
+  circular_buffer_write(z->rx_cb, in, nsamps, timestamp);
+//printf("writing of %d samples done\n", nsamps);
   return nsamps;
 }
 
@@ -82,10 +88,11 @@ static int trx_zmq_read(openair0_device *device, openair0_timestamp *ptimestamp,
   DevAssert(cc == 1);
   zmq_t *z = device->priv;
   short *out = buff[0];
-printf("wanting %d samples\n", nsamps); fflush(stdout);
+//printf("wanting %d samples\n", nsamps); fflush(stdout);
   circular_buffer_read(z->rx_cb, out, nsamps, z->rx_ts);
+  *ptimestamp = z->rx_ts;
   z->rx_ts += nsamps;
-printf("got %d samples\n", nsamps); fflush(stdout);
+//printf("got %d samples\n", nsamps); fflush(stdout);
   return nsamps;
 }
 

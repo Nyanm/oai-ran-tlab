@@ -53,7 +53,7 @@ static zmq_thread_t *create_zmq_struct(char *url, zmq_connection_mode_t st, circ
     rc = zmq_connect(ret->zmq_socket, url);
   else
     rc = zmq_bind(ret->zmq_socket, url);
-printf("rc %d %s\n", rc, strerror(errno)); fflush(stdout);
+//printf("rc %d %s\n", rc, strerror(errno)); fflush(stdout);
   DevAssert(!rc);
   ret->circular_buffer = cb;
   ret->max_data_buffer_size = 1024*1024;
