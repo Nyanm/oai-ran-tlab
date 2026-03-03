@@ -811,8 +811,7 @@ The table below summarizes the measured throughput and latency metrics across di
 
 ---
 <a id="Appendix-A"></a>
-## Appendix A
-### Empirical Determination of Hybrid Scheduling Thresholds (GH200)
+## Appendix A: Empirical Determination of Hybrid Scheduling Thresholds (GH200)
 
 To validate the bottleneck shift from kernel launch overhead to SM computational saturation, an exhaustive profiling was conducted on the NVIDIA Grace Hopper (GH200) platform.
 
