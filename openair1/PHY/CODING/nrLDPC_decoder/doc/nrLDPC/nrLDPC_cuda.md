@@ -18,6 +18,9 @@ This document describes the architecture and parallelization strategies of the G
 | **Code Rate (R)** | 1/3, 2/3, 8/9 |
 
 ---
+
+[[_TOC_]]
+
 ## 1. Overall Architecture
 ![Pipeline Overview](img/decoder_cuda_pipeline.svg)
 
