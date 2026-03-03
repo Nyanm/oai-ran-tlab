@@ -36,20 +36,24 @@
 #include "common/ngran_types.h"
 #include "openair2/LAYER2/nr_pdcp/nr_pdcp_configuration.h"
 
+void unset_period_offset_beam(int uid);
+bool check_period_offset_reserve(int sched_frame, int sched_slot, int n_slots_frame);
 void set_cset_offset(uint16_t);
 void get_K1_K2(int N1, int N2, int *K1, int *K2, int layers);
 int get_NTN_Koffset(const NR_ServingCellConfigCommon_t *scc);
 bool is_ssb_configured(const NR_ServingCellConfigCommon_t *scc, int ssb_index);
 int get_max_ssbs(const NR_ServingCellConfigCommon_t *scc);
 int get_first_ul_slot(const frame_structure_t *fs, bool mixed);
-int get_first_ul_slot_beam(const frame_structure_t *fs, int beam_idx, int beams_per_period, int num_beam);
+int get_first_ul_slot_beam(const frame_structure_t *fs, int beam_idx, int beams_per_period, int num_beam, int uid);
+void get_first_ul_slot_period_beam(const frame_structure_t *fs, int beam_idx, int period, int uid);
 int get_ul_slots_per_period(const frame_structure_t *fs);
 int get_ul_slots_per_frame(const frame_structure_t *fs);
 int get_dl_slots_per_period(const frame_structure_t *fs);
 int get_full_ul_slots_per_period(const frame_structure_t *fs);
 int get_full_dl_slots_per_period(const frame_structure_t *fs);
 int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed);
-int get_ul_slot_offset_beam(const frame_structure_t *fs, int idx, bool is_csi, int beam_idx, int beams_per_period, int num_beam);
+int get_ul_slot_offset_beam(const frame_structure_t *fs, int idx, bool is_csi, int beam_idx, int beams_per_period, int num_beam, bool set);
+void get_ul_slot_period_beam(const frame_structure_t *fs, int idx, bool is_csi, int beam_idx, int period, bool set);
 
 uint16_t get_ul_bitmap(const frame_structure_t *fs, int slot);
 void delete_nr_ue_data(NR_UE_info_t *UE, NR_COMMON_channels_t *ccPtr, uid_allocator_t *uia);
