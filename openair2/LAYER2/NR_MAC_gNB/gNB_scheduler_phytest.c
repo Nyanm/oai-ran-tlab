@@ -95,10 +95,9 @@ void nr_preprocessor_phytest(gNB_MAC_INST *mac, post_process_pdsch_t *pp_pdsch)
       }
     }
   }
-  int beam_idx = get_beam_from_ssbidx(mac, ssb_idx_beam);
-  NR_beam_alloc_t beam = beam_allocation_procedure(&mac->beam_info, frame, slot, beam_idx, mac->frame_structure.numb_slots_frame);
-  AssertFatal(beam.idx > -1, "Can't allocate beam %d in phytest scheduler\n", beam_idx);
-  UE->UE_beam_index = get_allocated_beam(&mac->beam_info, frame, slot, mac->frame_structure.numb_slots_frame, beam.idx);
+  UE->UE_beam_index = get_beam_from_ssbidx(mac, ssb_idx_beam);
+  NR_beam_alloc_t beam = beam_allocation_procedure(&mac->beam_info, frame, slot, UE->UE_beam_index, mac->frame_structure.numb_slots_frame);
+  AssertFatal(beam.idx > -1, "Can't allocate beam %d in phytest scheduler\n", UE->UE_beam_index);
 
   int rbStart = 0;
   int rbSize = 0;

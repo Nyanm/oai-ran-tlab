@@ -189,13 +189,13 @@ void schedule_nr_mib(module_id_t module_idP, frame_t frameP, slot_t slotP, nfapi
           uint16_t ssb_start_symbol = get_ssb_start_symbol(band, scs, i_ssb);
           // if start symbol is in current slot, schedule current SSB, fill VRB map and call get_type0_PDCCH_CSS_config_parameters
           if ((ssb_start_symbol / 14) == rel_slot) {
+            const uint16_t alloc_beam_idx = get_beam_from_ssbidx(gNB, i_ssb);
             NR_beam_alloc_t beam = beam_allocation_procedure(&gNB->beam_info,
                                                              frameP,
                                                              slotP,
-                                                             get_beam_from_ssbidx(gNB, i_ssb),
+                                                             alloc_beam_idx,
                                                              slots_per_frame);
             AssertFatal(beam.idx >= 0, "Cannot allocate SSB %d in any available beam\n", i_ssb);
-            const uint16_t alloc_beam_idx = get_allocated_beam(&gNB->beam_info, frameP, slotP, slots_per_frame, beam.idx);
             const uint16_t fapi_beam = convert_to_fapi_beam(alloc_beam_idx, gNB->beam_info.beam_mode);
             schedule_ssb(frameP, slotP, scc, dl_req, i_ssb, fapi_beam, ssbSubcarrierOffset, offset_pointa, mib_pdu);
             fill_ssb_vrb_map(cc, prb_offset, ssbSubcarrierOffset, ssb_start_symbol, CC_id, beam.idx);
