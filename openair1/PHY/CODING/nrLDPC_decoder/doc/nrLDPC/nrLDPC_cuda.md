@@ -7,7 +7,7 @@
 
 This document describes the architecture and parallelization strategies of the GPU-accelerated LDPC decoder implemented via CUDA. 
 
-> **Note on Algorithm Baseline:** The current CUDA implementation is strictly **bit-exact and algorithm-exact** with the existing OAI [CPU baseline](nrLDPC.tex). It focuses purely on throughput acceleration, hardware offloading, and architectural refactoring. It does not introduce any algorithmic modifications to the underlying error correction mathematical model. Therefore, it is expected to yield the exact same BLER performance as the [CPU baseline](nrLDPC.tex)
+> **Note on Algorithm Baseline:** The current CUDA implementation is strictly **bit-exact and algorithm-exact** with the existing OAI [CPU baseline](nrLDPC.tex). It focuses on throughput acceleration, hardware offloading, and architectural refactoring. It does not introduce any algorithmic modifications to the underlying error correction mathematical model. Therefore, it is expected to yield the exact same BLER performance as the [CPU baseline](nrLDPC.tex)
 
 ### Currently Supported Parameters
 
@@ -17,7 +17,17 @@ This document describes the architecture and parallelization strategies of the G
 | **Lifting Size (Z)** | ≥ 128 |
 | **Code Rate (R)** | 1/3, 2/3, 8/9 |
 
----
+
+### Related Work & Comparison
+
+| Implementation | Open Source | 5G NR Spec Aligned | Kernel Source Available | Bit-Exact Baseline |
+|---|---|---|---|---|
+| NVIDIA Aerial cuPHY | Partial (API only) | Yes | No (binary only) | N/A |
+| Academic GPU LDPC (e.g. cuLDPC) | Yes | No | Yes | N/A |
+| **This work (OAI GPU decoder)** | **Yes** | **Yes** | **Yes** | **Yes** |
+
+*NVIDIA Aerial distributes its PHY kernels as precompiled binaries via NGC containers. While the framework and API are open-sourced under Apache 2.0, the actual CUDA kernel implementations for LDPC decoding are not publicly available for inspection or modification.*
+
 
 [[_TOC_]]
 
