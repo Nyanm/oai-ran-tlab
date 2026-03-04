@@ -36,6 +36,7 @@
 #include "lib/f1ap_ue_context.h"
 
 #include "executables/softmodem-common.h"
+#include "openair2/LAYER2/NR_MAC_gNB/slicing/nr_slicing_common.h"
 
 #include "uper_decoder.h"
 #include "uper_encoder.h"
@@ -249,8 +250,23 @@ static int handle_ue_context_srbs_setup(NR_UE_info_t *UE,
     nr_rlc_add_srb(UE->rnti, srb->id, rlc_BearerConfig);
 
     int priority = rlc_BearerConfig->mac_LogicalChannelConfig->ul_SpecificParameters->priority;
-    nr_lc_config_t c = {.lcid = rlc_BearerConfig->logicalChannelIdentity, .priority = priority};
+    nssai_t default_nssai = {.sst = 0, .sd = 0};
+    nr_lc_config_t c = {.lcid = rlc_BearerConfig->logicalChannelIdentity, .priority = priority, .nssai = default_nssai};
+
+    /* Associate UE to the default slice*/
+    /* consider first slice as default slice and assign it for SRBs */
+    nr_pp_impl_param_dl_t *dl = &RC.nrmac[0]->pre_processor_dl;
+    if (dl->slices) {
+      c.nssai.sst = dl->slices->s[0]->nssai.sst;
+      c.nssai.sd = dl->slices->s[0]->nssai.sd;
+    }
     nr_mac_add_lcid(&UE->UE_sched_ctrl, &c);
+    LOG_I(NR_MAC, "%s(): Setting NSSAI sst: %d, sd: %d for SRB: %d\n", __func__, c.nssai.sst, c.nssai.sd, srb->id);
+
+    // associate UEs to the first slice if slice exists (there is no DRB setup in this stage, associate SRB 2 to default slice
+    if (dl->slices) {
+      dl->add_UE(dl->slices, UE); // always add UE to the default slice first
+    }
 
     (*resp_srbs)[i].id = srb->id;
     (*resp_srbs)[i].lcid = c.lcid;
@@ -340,6 +356,11 @@ static int handle_ue_context_drbs_setup(NR_UE_info_t *UE,
     }
     c.priority = prio;
     nr_mac_add_lcid(&UE->UE_sched_ctrl, &c);
+    /* Associate UE to the corresponding slice */
+    nr_pp_impl_param_dl_t *dl = &RC.nrmac[0]->pre_processor_dl;
+    if (dl->slices) {
+      dl->add_UE(dl->slices, UE); // always add UE to the default slice first
+    }
 
     resp_drb->id = drb->id;
     resp_drb->lcid = malloc_or_fail(sizeof(*resp_drb->lcid));
@@ -799,6 +820,12 @@ void ue_context_setup_request(const f1ap_ue_context_setup_req_t *req)
     resp.du_to_cu_rrc_info.meas_gap_config = mgc;
   }
 
+  /* Associate UE to the corresponding slice*/
+  nr_pp_impl_param_dl_t *dl = &mac->pre_processor_dl;
+  if (dl->slices) {
+    dl->add_UE(dl->slices, UE); // always add UE to the default slice first
+  }
+
   NR_SCHED_UNLOCK(&mac->sched_lock);
 
   mac->mac_rrc.ue_context_setup_response(&resp);
@@ -807,6 +834,16 @@ void ue_context_setup_request(const f1ap_ue_context_setup_req_t *req)
   free_ue_context_setup_resp(&resp);
   ASN_STRUCT_FREE(asn_DEF_NR_CG_ConfigInfo, cg_configinfo);
   ASN_STRUCT_FREE(asn_DEF_NR_MeasurementTimingConfiguration, mtc);
+}
+
+static bool nssai_matches(nssai_t a_nssai, uint8_t b_sst, const uint32_t *b_sd)
+{
+  AssertFatal(b_sd == NULL || *b_sd <= 0xffffff, "illegal SD %d\n", *b_sd);
+  if (b_sd == NULL) {
+    return a_nssai.sst == b_sst && a_nssai.sd == 0;
+  } else {
+    return a_nssai.sst == b_sst && a_nssai.sd == *b_sd;
+  }
 }
 
 void ue_context_modification_request(const f1ap_ue_context_mod_req_t *req)
@@ -874,6 +911,18 @@ void ue_context_modification_request(const f1ap_ue_context_mod_req_t *req)
         c->suspended = false;
         LOG_I(NR_MAC, "UE %04x: Re-establishing RLC for LCID %d\n", UE->rnti, c->lcid);
         nr_rlc_reestablish_entity(req->gNB_DU_ue_id, c->lcid);
+        // Update slice info
+        nr_pp_impl_param_dl_t *dl = &mac->pre_processor_dl;
+        if (dl->slices) {
+          for (int s = 0; s < dl->slices->num; s++) {
+            LOG_W(NR_MAC, "%s(), compare c->nssai %d.%06x with DL slice id %d nssai %d.%06x\n",
+              __func__, c->nssai.sst, c->nssai.sd, dl->slices->s[s]->id, dl->slices->s[s]->nssai.sst, dl->slices->s[s]->nssai.sd);
+            if (nssai_matches(c->nssai, dl->slices->s[s]->nssai.sst, &dl->slices->s[s]->nssai.sd)) {
+              nr_mac_slice_add_lcid(&UE->UE_sched_ctrl.sliceInfoDl[s], c, dl->slices->s[s]->id);
+              LOG_W(NR_MAC, "Add lcid %d to DL slice idx %d id %d\n", c->lcid, s, dl->slices->s[s]->id);
+            }
+          }
+        }
       }
       UE->reestablish_rlc = false;
     }
@@ -908,6 +957,11 @@ void ue_context_modification_request(const f1ap_ue_context_mod_req_t *req)
     ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, UE->reconfigCellGroup);
     UE->reconfigCellGroup = new_CellGroup;
     configure_UE_BWP(mac, scc, UE, false, NR_SearchSpace__searchSpaceType_PR_common, -1, -1);
+    /* Associate UE to the corresponding slice*/
+    nr_pp_impl_param_dl_t *dl = &mac->pre_processor_dl;
+    if (dl->slices) {
+      dl->add_UE(dl->slices, UE); // always add UE to the default slice first
+    }
   } else {
     ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, new_CellGroup); // we actually don't need it
   }
@@ -1080,6 +1134,18 @@ void dl_rrc_message_transfer(const f1ap_dl_rrc_message_t *dl_rrc)
         nr_lc_config_t new = *c;
         new.suspended = true;
         nr_mac_add_lcid(&UE->UE_sched_ctrl, &new);
+        // Update slice info
+        nr_pp_impl_param_dl_t *dl = &mac->pre_processor_dl;
+        if (dl->slices) {
+          for (int s = 0; s < dl->slices->num; s++) {
+            LOG_D(NR_MAC, "%s(), compare c->nssai %d.%06x with slice id %d nssai %d.%06x\n",
+                  __func__, c->nssai.sst, c->nssai.sd, dl->slices->s[s]->id, dl->slices->s[s]->nssai.sst, dl->slices->s[s]->nssai.sd);
+            if (nssai_matches(new.nssai, dl->slices->s[s]->nssai.sst, &dl->slices->s[s]->nssai.sd)) {
+              nr_mac_slice_add_lcid(&UE->UE_sched_ctrl.sliceInfoDl[s], &new, dl->slices->s[s]->id);
+              LOG_D(NR_MAC, "Add lcid %d to DL slice idx %d id %d\n", c->lcid, s, dl->slices->s[s]->id);
+            }
+          }
+        }
       }
       ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, UE->CellGroup);
       UE->CellGroup = oldUE->CellGroup;

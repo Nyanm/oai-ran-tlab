@@ -602,6 +602,14 @@ typedef struct nr_lc_config {
   NR_QoS_config_t qos_config[NR_MAX_NUM_QFI];
 } nr_lc_config_t;
 
+typedef struct {
+  /// LCs in this slice
+  seq_arr_t lc_config;
+  /// amount of downlink data awaiting for this UE
+  uint32_t num_total_bytes;
+  uint16_t dl_pdus_total;
+} NR_UE_slice_info_t;
+
 /*! \brief scheduling control information set through an API */
 typedef struct {
   /// CCE index and aggregation, should be coherent with cce_list
@@ -695,6 +703,11 @@ typedef struct {
 
   /// sri, ul_ri and tpmi based on SRS
   nr_srs_feedback_t srs_feedback;
+
+  /// last scheduled downlink slice index
+  int sched_dl_idx;
+  /// hold information of slices
+  NR_UE_slice_info_t sliceInfoDl[NR_MAX_NUM_SLICES];
 
   /// per-LC configuration
   seq_arr_t lc_config;
@@ -797,6 +810,8 @@ typedef struct NR_UE_info {
   // dedicated BWP is always 1 from the UE's point of view, even if the gNB has multiple BWPs.
   // The below ID is the "true" (non-consecutive) BWP ID from the gNB's point of view
   NR_BWP_Id_t local_bwp_id;
+  /// Assoc slice id
+  NR_list_t dl_id;
 } NR_UE_info_t;
 
 typedef struct {
@@ -854,6 +869,66 @@ typedef struct gNB_MAC_INST_s gNB_MAC_INST;
 
 typedef void (*nr_pp_impl_dl)(gNB_MAC_INST *nr_mac, post_process_pdsch_t *pp_pdsch);
 typedef void (*nr_pp_impl_ul)(gNB_MAC_INST *nr_mac, post_process_pusch_t *pp_pusch);
+
+/**
+ * definition of a scheduling algorithm implementation used in the
+ * default DL scheduler
+ */
+typedef struct {
+  char *name;
+  void *(*setup)(void);
+  void (*unset)(void **);
+  void (*run)(gNB_MAC_INST *, post_process_pdsch_t *, NR_UE_info_t **, int, int, int *, void *);
+  void *data;
+} nr_dl_sched_algo_t;
+
+typedef struct {
+  char *name;
+  void *(*setup)(void);
+  void (*unset)(void **);
+  int (*run)(gNB_MAC_INST *, post_process_pusch_t *, int, const NR_tda_info_t *, NR_UE_info_t **, int, int, int *, void *);
+  void *data;
+} nr_ul_sched_algo_t;
+
+struct nr_slice_info_s;
+struct nr_slice_s;
+typedef struct {
+  int algorithm;
+
+  /// inform the slice algorithm about a new UE
+  void (*add_UE)(struct nr_slice_info_s *s, NR_UE_info_t *new_ue);
+  /// inform the slice algorithm about a UE that disconnected
+  void (*remove_UE)(struct nr_slice_info_s *s, NR_UE_info_t* rm_ue, int idx);
+  /// move a UE to a slice in DL, -1 means don't move (no-op).
+  void (*move_UE)(struct nr_slice_info_s *s, NR_UE_info_t* assoc_ue, int new_idx);
+  /// get UE associated slice's index
+  int (*get_UE_slice_idx)(struct nr_slice_info_s *s, rnti_t rnti);
+  /// get the list of the slices of UE
+  seq_arr_t (*get_UE_slice_idx_list)(struct nr_slice_info_s *s, rnti_t rnti);
+  /// get UE's index from the slice
+  int (*get_UE_idx)(struct nr_slice_s *si, rnti_t rnti);
+
+  /// Adds a new slice through admission control. slice_params are
+  /// algorithm-specific parameters. sched is either a default_sched_ul_algo_t
+  /// or default_sched_dl_algo_t, depending on whether this implementation
+  /// handles UL/DL. If slice at index exists, updates existing
+  /// slice. Returns index of new slice or -1 on failure.
+  int (*addmod_slice)(struct nr_slice_info_s *s,
+                      int id,
+                      nssai_t nssai,
+                      char *label,
+                      void *sched,
+                      void *slice_params);
+  /// Returns slice through slice_idx. 1 if successful, 0 if not.
+  int (*remove_slice)(struct nr_slice_info_s *s, uint8_t slice_idx);
+
+  nr_pp_impl_dl dl;
+  nr_dl_sched_algo_t dl_algo;
+
+  void (*destroy)(struct nr_slice_info_s **s);
+
+  struct nr_slice_info_s *slices;
+} nr_pp_impl_param_dl_t;
 
 typedef struct f1_config_t {
   f1ap_setup_req_t *setup_req;
@@ -970,7 +1045,7 @@ typedef struct gNB_MAC_INST_s {
   frame_structure_t frame_structure;
 
   /// DL preprocessor for differentiated scheduling
-  nr_pp_impl_dl pre_processor_dl;
+  nr_pp_impl_param_dl_t pre_processor_dl;
   /// UL preprocessor for differentiated scheduling
   nr_pp_impl_ul pre_processor_ul;
 

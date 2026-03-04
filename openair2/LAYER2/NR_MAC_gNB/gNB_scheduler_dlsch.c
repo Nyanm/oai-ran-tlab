@@ -35,6 +35,7 @@
 #include "NR_MAC_gNB/nr_mac_gNB.h"
 #include "LAYER2/NR_MAC_gNB/mac_proto.h"
 #include "openair2/LAYER2/nr_rlc/nr_rlc_oai_api.h"
+#include "slicing/nr_slicing_common.h"
 
 /*TAG*/
 #include "NR_TAG-Id.h"
@@ -357,6 +358,50 @@ static uint32_t update_dlsch_buffer(frame_t frame, slot_t slot, NR_UE_info_t *UE
   return sched_ctrl->num_total_bytes;
 }
 
+
+static uint32_t update_dlsch_buffer_per_slices(frame_t frame, slot_t slot, nr_slice_info_t *slices, NR_UE_info_t *UE)
+{
+  NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
+  for (int s = 0; s < slices->num; s++) {
+    sched_ctrl->sliceInfoDl[s].num_total_bytes = 0;
+    sched_ctrl->sliceInfoDl[s].dl_pdus_total = 0;
+
+    /* loop over all activated logical channels */
+    for (int i = 0; i < seq_arr_size(&sched_ctrl->sliceInfoDl[s].lc_config); ++i) {
+      const nr_lc_config_t *c = seq_arr_at(&sched_ctrl->sliceInfoDl[s].lc_config, i);
+      const int lcid = c->lcid;
+      const uint16_t rnti = UE->rnti;
+      LOG_D(NR_MAC, "UE %x: LCID %d\n", rnti, lcid);
+      memset(&sched_ctrl->rlc_status[lcid], 0, sizeof(sched_ctrl->rlc_status[lcid]));
+      if (c->suspended)
+        continue;
+      if (lcid == DL_SCH_LCID_DTCH && nr_timer_is_active(&sched_ctrl->transm_interrupt))
+        continue;
+      sched_ctrl->rlc_status[lcid] = nr_mac_rlc_status_ind(rnti, frame, lcid);
+
+      if (sched_ctrl->rlc_status[lcid].bytes_in_buffer == 0)
+        continue;
+
+      // Get the data from the corresponding LCID for the current slice
+      sched_ctrl->sliceInfoDl[s].dl_pdus_total += sched_ctrl->rlc_status[lcid].pdus_in_buffer;
+      sched_ctrl->sliceInfoDl[s].num_total_bytes += sched_ctrl->rlc_status[lcid].bytes_in_buffer;
+      // Record the total bytes across slices
+      sched_ctrl->num_total_bytes += sched_ctrl->sliceInfoDl[s].num_total_bytes;
+      LOG_D(MAC,
+            "%4d.%2d UE %04x LCID %d sliceInfoDl[%d] status: %d bytes, total buffer %d bytes %d PDUs\n",
+            frame,
+            slot,
+            UE->rnti,
+            lcid,
+            s,
+            sched_ctrl->rlc_status[lcid].bytes_in_buffer,
+            sched_ctrl->sliceInfoDl[s].num_total_bytes,
+            sched_ctrl->sliceInfoDl[s].dl_pdus_total);
+    }
+  }
+  return sched_ctrl->num_total_bytes;
+}
+
 void finish_nr_dl_harq(NR_UE_sched_ctrl_t *sched_ctrl, int harq_pid)
 {
   NR_UE_harq_t *harq = &sched_ctrl->harq_processes[harq_pid];
@@ -638,12 +683,29 @@ static int comparator(const void *p, const void *q)
   return 0;
 }
 
-static void pf_dl(gNB_MAC_INST *mac,
-                  post_process_pdsch_t *pp_pdsch,
-                  NR_UE_info_t **UE_list,
-                  int max_num_ue,
-                  int num_beams,
-                  int n_rb_sched[num_beams])
+static void *nr_pf_dl_setup(void)
+{
+  void *data = malloc(MAX_MOBILES_PER_GNB * sizeof(float));
+  AssertFatal(data, "%s(): could not allocate data\n", __func__);
+  for (int i = 0; i < MAX_MOBILES_PER_GNB; i++)
+    *(float *) data = 0.0f;
+  return data;
+}
+static void nr_pf_dl_unset(void **data)
+{
+  DevAssert(data);
+  if (*data)
+    free(*data);
+  *data = NULL;
+}
+
+static void nr_pf_dl(gNB_MAC_INST *mac,
+                     post_process_pdsch_t *pp_pdsch,
+                     NR_UE_info_t **UE_list,
+                     int max_num_ue,
+                     int num_beams,
+                     int n_rb_sched[num_beams],
+                     void *data)
 {
   frame_t frame = pp_pdsch->frame;
   slot_t slot = pp_pdsch->slot;
@@ -715,7 +777,12 @@ static void pf_dl(gNB_MAC_INST *mac,
         continue;
       }
 
-      update_dlsch_buffer(pp_pdsch->frame, pp_pdsch->slot, UE);
+
+      if (mac->pre_processor_dl.slices) {
+        update_dlsch_buffer_per_slices(pp_pdsch->frame, pp_pdsch->slot, mac->pre_processor_dl.slices, UE);
+      } else {
+        update_dlsch_buffer(pp_pdsch->frame, pp_pdsch->slot, UE);
+      }
 
       if (!dlsch_to_schedule(sched_ctrl, frame))
         continue;
@@ -823,7 +890,7 @@ static void pf_dl(gNB_MAC_INST *mac,
 
     uint16_t max_rbSize = 1;
 
-    while (rbStart + max_rbSize <= rbStop && !(rballoc_mask[rbStart + max_rbSize + bwp_start] & slbitmap))
+    while (rbStart + max_rbSize <= rbStop && !(rballoc_mask[rbStart + max_rbSize + bwp_start] & slbitmap) && max_rbSize < n_rb_sched[beam.idx])
       max_rbSize++;
 
     if (max_rbSize < min_rbSize) {
@@ -906,13 +973,20 @@ static void pf_dl(gNB_MAC_INST *mac,
     // PDUs, we replace with 3 * numPDUs
     const int oh = 3 * 4 + (sched_ctrl->ta_apply ? 2 : 0);
     //const int oh = 3 * sched_ctrl->dl_pdus_total + (sched_ctrl->ta_apply ? 2 : 0);
+    int32_t num_total_bytes = 0;
+    if (mac->pre_processor_dl.slices) {
+      num_total_bytes = sched_ctrl->sliceInfoDl[sched_ctrl->sched_dl_idx].num_total_bytes;
+      LOG_D(NR_MAC, "sched_ctrl->sched_dl_idx %d, num_total_bytes %d\n", sched_ctrl->sched_dl_idx, sched_ctrl->sliceInfoDl[sched_ctrl->sched_dl_idx].num_total_bytes);
+    } else {
+      num_total_bytes = sched_ctrl->num_total_bytes;
+    }
     nr_find_nb_rb(sched_pdsch.Qm,
                   sched_pdsch.R,
                   1, // no transform precoding for DL
                   sched_pdsch.nrOfLayers,
                   tda_info.nrOfSymbols,
                   sched_pdsch.dmrs_parms.N_PRB_DMRS * sched_pdsch.dmrs_parms.N_DMRS_SLOT,
-                  sched_ctrl->num_total_bytes + oh,
+                  num_total_bytes + oh,
                   min_rbSize,
                   max_rbSize,
                   &sched_pdsch.tb_size,
@@ -923,6 +997,9 @@ static void pf_dl(gNB_MAC_INST *mac,
     /* transmissions: directly allocate */
     n_rb_sched[beam.idx] -= sched_pdsch.rbSize;
 
+    LOG_D(NR_MAC, "%d.%d PF schedule %d RBs to UE rnti %x, still have %d RBs\n",
+          frame, slot, sched_pdsch.rbSize, rnti, n_rb_sched[beam.idx]);
+
     for (int rb = bwp_start; rb < sched_pdsch.rbSize; rb++)
       rballoc_mask[rb + sched_pdsch.rbStart] |= slbitmap;
 
@@ -930,6 +1007,14 @@ static void pf_dl(gNB_MAC_INST *mac,
     iterator++;
   }
 }
+
+nr_dl_sched_algo_t nr_proportional_fair_wbcqi_dl = {
+  .name  = "nr_proportional_fair_wbcqi_dl",
+  .setup = nr_pf_dl_setup,
+  .unset = nr_pf_dl_unset,
+  .run   = nr_pf_dl,
+  .data  = NULL
+};
 
 static void nr_dlsch_preprocessor(gNB_MAC_INST *mac, post_process_pdsch_t *pp_pdsch)
 {
@@ -952,12 +1037,23 @@ static void nr_dlsch_preprocessor(gNB_MAC_INST *mac, post_process_pdsch_t *pp_pd
   max_sched_ues = min(max_sched_ues, MAX_DCI_CORESET);
 
   /* proportional fair scheduling algorithm */
-  pf_dl(mac, pp_pdsch, UE_info->connected_ue_list, max_sched_ues, num_beams, n_rb_sched);
+  mac->pre_processor_dl.dl_algo.run(mac,
+                                    pp_pdsch,
+                                    UE_info->connected_ue_list,
+                                    max_sched_ues,
+                                    num_beams,
+                                    n_rb_sched,
+                                    mac->pre_processor_dl.dl_algo.data);
 }
 
-nr_pp_impl_dl nr_init_dlsch_preprocessor(int CC_id)
+nr_pp_impl_param_dl_t nr_init_dlsch_preprocessor(int CC_id)
 {
-  return nr_dlsch_preprocessor;
+  nr_pp_impl_param_dl_t impl;
+  memset(&impl, 0, sizeof(impl));
+  impl.dl = nr_dlsch_preprocessor;
+  impl.dl_algo = nr_proportional_fair_wbcqi_dl;
+  impl.dl_algo.data = impl.dl_algo.setup();
+  return impl;
 }
 
 nfapi_nr_dl_tti_pdsch_pdu_rel15_t *prepare_pdsch_pdu(nfapi_nr_dl_tti_request_pdu_t *dl_tti_pdsch_pdu,
@@ -1280,10 +1376,62 @@ void post_process_dlsch(gNB_MAC_INST *nr_mac, post_process_pdsch_t *pdsch, NR_UE
     start_meas(&nr_mac->rlc_data_req);
     int sdus = 0;
 
-    if (sched_ctrl->num_total_bytes > 0) {
+    if (!nr_mac->pre_processor_dl.slices && sched_ctrl->num_total_bytes > 0) {
       /* loop over all activated logical channels */
       for (int i = 0; i < seq_arr_size(&sched_ctrl->lc_config); ++i) {
         const nr_lc_config_t *c = seq_arr_at(&sched_ctrl->lc_config, i);
+        const int lcid = c->lcid;
+
+        if (sched_ctrl->rlc_status[lcid].bytes_in_buffer == 0)
+          continue; // no data for this LC        tbs_size_t len = 0;
+
+        int lcid_bytes=0;
+        while (bufEnd-buf > sizeof(NR_MAC_SUBHEADER_LONG) + 1 ) {
+          // we do not know how much data we will get from RLC, i.e., whether it
+          // will be longer than 256B or not. Therefore, reserve space for long header, then
+          // fetch data, then fill real length
+          NR_MAC_SUBHEADER_LONG *header = (NR_MAC_SUBHEADER_LONG *) buf;
+          /* limit requested number of bytes to what preprocessor specified, or
+           * such that TBS is full */
+          const rlc_buffer_occupancy_t ndata = min(sched_ctrl->rlc_status[lcid].bytes_in_buffer,
+                                                   bufEnd-buf-sizeof(NR_MAC_SUBHEADER_LONG));
+          tbs_size_t len = nr_mac_rlc_data_req(module_id,
+                                               rnti,
+                                               true,
+                                               lcid,
+                                               ndata,
+                                               (char *)buf+sizeof(NR_MAC_SUBHEADER_LONG));
+          LOG_D(NR_MAC,
+                "%4d.%2d RNTI %04x: %d bytes from %s %d (ndata %d, remaining size %ld)\n",
+                frame,
+                slot,
+                rnti,
+                len,
+                lcid < 4 ? "DCCH" : "DTCH",
+                lcid,
+                ndata,
+                bufEnd-buf-sizeof(NR_MAC_SUBHEADER_LONG));
+
+          if (len == 0)
+            break;
+
+          T(T_GNB_MAC_LCID_DL, T_INT(rnti), T_INT(frame), T_INT(slot), T_INT(lcid), T_INT(len * 8), T_INT(nr_rlc_tx_list_occupancy(rnti, lcid)));
+          header->R = 0;
+          header->F = 1;
+          header->LCID = lcid;
+          header->L = htons(len);
+          buf += len+sizeof(NR_MAC_SUBHEADER_LONG);
+          dlsch_total_bytes += len;
+          lcid_bytes += len;
+          sdus += 1;
+        }
+
+        UE->mac_stats.dl.lc_bytes[lcid] += lcid_bytes;
+      }
+    } else if (nr_mac->pre_processor_dl.slices && sched_ctrl->sliceInfoDl[sched_ctrl->sched_dl_idx].num_total_bytes > 0) {
+      /* loop over all activated logical channels */
+      for (int i = 0; i < seq_arr_size(&sched_ctrl->sliceInfoDl[sched_ctrl->sched_dl_idx].lc_config); ++i) {
+        const nr_lc_config_t *c = seq_arr_at(&sched_ctrl->sliceInfoDl[sched_ctrl->sched_dl_idx].lc_config, i);
         const int lcid = c->lcid;
 
         if (sched_ctrl->rlc_status[lcid].bytes_in_buffer == 0)
@@ -1444,5 +1592,5 @@ void nr_schedule_ue_spec(module_id_t module_id,
   post_process_pdsch_t pdsch = { frame, slot, dl_req, TX_req };
 
   /* PREPROCESSOR */
-  gNB_mac->pre_processor_dl(gNB_mac, &pdsch);
+  gNB_mac->pre_processor_dl.dl(gNB_mac, &pdsch);
 }

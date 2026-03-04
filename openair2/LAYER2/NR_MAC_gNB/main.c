@@ -59,6 +59,7 @@
 #include "common/utils/T/T.h"
 #include "executables/softmodem-common.h"
 #include "linear_alloc.h"
+#include "slicing/nr_slicing_common.h"
 #include "nr_pdcp/nr_pdcp_entity.h"
 #include "nr_pdcp/nr_pdcp_oai_api.h"
 #include "nr_rlc/nr_rlc_oai_api.h"
@@ -237,16 +238,33 @@ size_t dump_mac_stats(gNB_MAC_INST *gNB, char *output, size_t strlen, bool reset
                        end,
                        "UE %04x: MAC:    TX %14"PRIu64" RX %14"PRIu64" bytes\n",
                        UE->rnti, stats->dl.total_bytes, stats->ul.total_bytes);
-
-    for (int i = 0; i < seq_arr_size(&sched_ctrl->lc_config); i++) {
-      const nr_lc_config_t *c = seq_arr_at(&sched_ctrl->lc_config, i);
-      output = st_append(output,
-                         end,
-                         "UE %04x: LCID %d: TX %14"PRIu64" RX %14"PRIu64" bytes\n",
-                         UE->rnti,
-                         c->lcid,
-                         stats->dl.lc_bytes[c->lcid],
-                         stats->ul.lc_bytes[c->lcid]);
+    if (gNB->pre_processor_dl.slices) {
+      for (int s = 0; s < gNB->pre_processor_dl.slices->num; s++) {
+        for (int i = 0; i < seq_arr_size(&sched_ctrl->sliceInfoDl[s].lc_config); i++) {
+          const nr_lc_config_t *c = seq_arr_at(&sched_ctrl->sliceInfoDl[s].lc_config, i);
+          output = st_append(output,
+                             end,
+                             "UE %04x: LCID %d (dl-slice id %d, NSSAI %d.%06x): TX %14"PRIu64" RX %14"PRIu64" bytes\n",
+                             UE->rnti,
+                             c->lcid,
+                             gNB->pre_processor_dl.slices->s[s]->id,
+                             c->nssai.sst,
+                             c->nssai.sd,
+                             stats->dl.lc_bytes[c->lcid],
+                             stats->ul.lc_bytes[c->lcid]);
+        }
+      }
+    } else {
+      for (int i = 0; i < seq_arr_size(&sched_ctrl->lc_config); i++) {
+        const nr_lc_config_t *c = seq_arr_at(&sched_ctrl->lc_config, i);
+        output = st_append(output,
+                           end,
+                           "UE %04x: LCID %d: TX %14"PRIu64" RX %14"PRIu64" bytes\n",
+                           UE->rnti,
+                           c->lcid,
+                           stats->dl.lc_bytes[c->lcid],
+                           stats->ul.lc_bytes[c->lcid]);
+      }
     }
   }
   DevAssert(output <= end);
@@ -322,7 +340,7 @@ void mac_top_init_gNB(ngran_node_t node_type,
       uid_linear_allocator_init(&RC.nrmac[i]->UE_info.uid_allocator);
 
       if (get_softmodem_params()->phy_test) {
-        RC.nrmac[i]->pre_processor_dl = nr_preprocessor_phytest;
+        RC.nrmac[i]->pre_processor_dl.dl = nr_preprocessor_phytest;
         RC.nrmac[i]->pre_processor_ul = nr_ul_preprocessor_phytest;
       } else {
         RC.nrmac[i]->pre_processor_dl = nr_init_dlsch_preprocessor(0);

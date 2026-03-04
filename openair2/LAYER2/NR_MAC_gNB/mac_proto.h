@@ -83,7 +83,7 @@ void nr_schedule_ue_spec(module_id_t module_id,
                          nfapi_nr_tx_data_request_t *TX_req);
 
 /* \brief default DL preprocessor init routine, returns preprocessor to call */
-nr_pp_impl_dl nr_init_dlsch_preprocessor(int CC_id);
+nr_pp_impl_param_dl_t nr_init_dlsch_preprocessor(int CC_id);
 
 void schedule_nr_sib1(module_id_t module_idP,
                       frame_t frameP,
@@ -306,6 +306,8 @@ void add_tail_nr_list(NR_list_t *listP, int id);
 void add_front_nr_list(NR_list_t *listP, int id);
 void remove_front_nr_list(NR_list_t *listP);
 void nr_release_ra_UE(gNB_MAC_INST *mac, rnti_t rnti);
+void reset_nr_list(NR_list_t *listP);
+bool check_nr_list(const NR_list_t *listP, int id);
 NR_UE_info_t * find_nr_UE(NR_UEs_t* UEs, rnti_t rntiP);
 NR_UE_info_t *find_ra_UE(NR_UEs_t *UEs, rnti_t rntiP);
 void delete_nr_ue_data(NR_UE_info_t *UE, NR_COMMON_channels_t *ccPtr, uid_allocator_t *uia);

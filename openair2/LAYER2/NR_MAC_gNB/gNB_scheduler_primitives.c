@@ -56,6 +56,7 @@
 
 #include "common/ran_context.h"
 #include "nfapi/oai_integration/vendor_ext.h"
+#include "NR_MAC_gNB/slicing/nr_slicing_common.h"
 
 #include "common/utils/alg/find.h"
 
@@ -2359,6 +2360,32 @@ void create_nr_list(NR_list_t *list, int len)
 }
 
 /*
+ * Reset NR_list
+ */
+void reset_nr_list(NR_list_t *list)
+{
+  list->head = -1;
+  for(int i = 0; i < list->len; ++i){
+    list->next[i] = -1;
+  }
+  list->tail = -1;
+}
+
+/*
+ * Check if id is in the list
+ */
+bool check_nr_list(const NR_list_t *listP, int id)
+{
+  const int *cur = &listP->head;
+  while (*cur >= 0) {
+    if (*cur == id)
+      return true;
+    cur = &listP->next[*cur];
+  }
+  return false;
+}
+
+/*
  * Resize an NR_list
  */
 void resize_nr_list(NR_list_t *list, int new_len)
@@ -2410,8 +2437,10 @@ void add_nr_list(NR_list_t *listP, int id)
     cur = &listP->next[*cur];
   }
   *cur = id;
-  if (listP->next[id] < 0)
+  if (listP->next[id] < 0) {
+    listP->next[id] = -1;
     listP->tail = id;
+  }
 }
 
 /*
@@ -2509,6 +2538,11 @@ void delete_nr_ue_data(NR_UE_info_t *UE, NR_COMMON_channels_t *ccPtr, uid_alloca
     free_transportBlock_buffer(&sched_ctrl->harq_processes[i].transportBlock);
   free_sched_pucch_list(sched_ctrl);
   uid_linear_allocator_free(uia, UE->uid);
+  for (int slice = 0; slice < NR_MAX_NUM_SLICES; slice++) {
+    seq_arr_free(&sched_ctrl->sliceInfoDl[slice].lc_config, NULL);
+  }
+  // Dissociate UE from all corresponding slice
+  destroy_nr_list(&UE->dl_id);
   LOG_I(NR_MAC, "Remove NR rnti 0x%04x\n", UE->rnti);
   free_and_zero(UE->ra);
   free(UE);
@@ -2988,6 +3022,10 @@ NR_UE_info_t *get_new_nr_ue_inst(uid_allocator_t *uia, rnti_t rnti, NR_CellGroup
 
   // initialize LCID structure
   seq_arr_init(&sched_ctrl->lc_config, sizeof(nr_lc_config_t));
+  for (int slice = 0; slice < NR_MAX_NUM_SLICES; slice++) {
+    seq_arr_init(&sched_ctrl->sliceInfoDl[slice].lc_config, sizeof(nr_lc_config_t));
+  }
+  create_nr_list(&UE->dl_id, NR_MAX_NUM_SLICES);
   return UE;
 }
 
@@ -3115,6 +3153,12 @@ void mac_remove_nr_ue(gNB_MAC_INST *nr_mac, rnti_t rnti)
   NR_SCHED_ENSURE_LOCKED(&nr_mac->sched_lock);
   NR_UEs_t *UE_info = &nr_mac->UE_info;
   NR_UE_info_t *UE = remove_UE_from_list(MAX_MOBILES_PER_GNB + 1, UE_info->connected_ue_list, rnti);
+  // Remove the UE from the slice->UE_list
+  nr_pp_impl_param_dl_t *dl = &nr_mac->pre_processor_dl;
+  if (dl->slices) {
+    for (int s = 0; s < dl->slices->num; s++)
+      dl->remove_UE(dl->slices, UE, s);
+  }
   if (UE)
     delete_nr_ue_data(UE, nr_mac->common_channels, &UE_info->uid_allocator);
   else
@@ -3852,8 +3896,25 @@ bool prepare_initial_ul_rrc_message(gNB_MAC_INST *mac, NR_UE_info_t *UE)
   DevAssert(bearer->servedRadioBearer->choice.srb_Identity == srb_id);
   nr_rlc_add_srb(UE->rnti, bearer->servedRadioBearer->choice.srb_Identity, bearer);
   int priority = bearer->mac_LogicalChannelConfig->ul_SpecificParameters->priority;
-  nr_lc_config_t c = {.lcid = bearer->logicalChannelIdentity, .priority = priority};
+  nssai_t default_nssai = {.sst = 0, .sd = 0};
+  nr_lc_config_t c = {.lcid = bearer->logicalChannelIdentity, .priority = priority, .nssai = default_nssai};
+
+  /* Associate UE to the default slice*/
+  /* consider first slice as default slice and assign it for SRBs */
+  nr_pp_impl_param_dl_t *dl = &RC.nrmac[0]->pre_processor_dl;
+  if (dl->slices) {
+    c.nssai.sst = dl->slices->s[0]->nssai.sst;
+    c.nssai.sd = dl->slices->s[0]->nssai.sd;
+  }
+
   nr_mac_add_lcid(&UE->UE_sched_ctrl, &c);
+  LOG_I(NR_MAC, "%s(): Setting NSSAI sst: %d, sd: %d for SRB: %ld\n", __func__, c.nssai.sst, c.nssai.sd, bearer->servedRadioBearer->choice.srb_Identity);
+
+  // associate UEs to the first slice if slice exists (there is no DRB setup in this stage, associate SRB 1 to default slice)
+  if (dl->slices) {
+    dl->add_UE(dl->slices, UE);
+  }
+
   return true;
 }
 
