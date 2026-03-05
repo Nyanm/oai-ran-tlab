@@ -345,16 +345,22 @@ int s1ap_eNB_handle_nas_downlink(sctp_assoc_t assoc_id, uint32_t stream, S1AP_S1
     s1ap_eNB_instance = mme_desc_p->s1ap_eNB_instance;
     /* Prepare the S1AP message to encode */
     container = &pdu->choice.initiatingMessage.value.choice.DownlinkNASTransport;
-    S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_DownlinkNASTransport_IEs_t, ie, container,
-                               S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID, true);
+    FIND_PROTOCOLIE_BY_ID(S1AP_DownlinkNASTransport_IEs_t,
+                          ie,
+                          &container->protocolIEs.list,
+                          S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID,
+                          true);
     if(ie == NULL)
     {
       return -1;
     }
     mme_ue_s1ap_id = ie->value.choice.MME_UE_S1AP_ID;
 
-    S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_DownlinkNASTransport_IEs_t, ie, container,
-                               S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID, true);
+    FIND_PROTOCOLIE_BY_ID(S1AP_DownlinkNASTransport_IEs_t,
+                          ie,
+                          &container->protocolIEs.list,
+                          S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID,
+                          true);
     if(ie == NULL)
     {
       return -1;
@@ -394,8 +400,7 @@ int s1ap_eNB_handle_nas_downlink(sctp_assoc_t assoc_id, uint32_t stream, S1AP_S1
         }
     }
 
-    S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_DownlinkNASTransport_IEs_t, ie, container,
-                               S1AP_ProtocolIE_ID_id_NAS_PDU, true);
+    FIND_PROTOCOLIE_BY_ID(S1AP_DownlinkNASTransport_IEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_NAS_PDU, true);
     if(ie == NULL)
     {
       return -1;

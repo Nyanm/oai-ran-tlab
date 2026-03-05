@@ -184,27 +184,35 @@ int CU_handle_UE_CONTEXT_MODIFICATION_REQUIRED(instance_t instance, sctp_assoc_t
   F1AP_UEContextModificationRequiredIEs_t *ie = NULL;
 
   /* required: GNB_CU_UE_F1AP_ID */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t, ie, container, F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
   required->gNB_CU_ue_id = ie->value.choice.GNB_CU_UE_F1AP_ID;
 
   /* required: GNB_DU_UE_F1AP_ID */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t, ie, container, F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
   required->gNB_DU_ue_id = ie->value.choice.GNB_DU_UE_F1AP_ID;
 
   /* optional: Resource Coordination Transfer Container */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
-                             ie,
-                             container,
-                             F1AP_ProtocolIE_ID_id_ResourceCoordinationTransferContainer,
-                             false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_ResourceCoordinationTransferContainer,
+                        false);
   AssertFatal(ie == NULL, "handling of Resource Coordination Transfer Container not implemented\n");
 
   /* optional: DU to CU RRC Information */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
-                             ie,
-                             container,
-                             F1AP_ProtocolIE_ID_id_DUtoCURRCInformation,
-                             false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_DUtoCURRCInformation,
+                        false);
   if (ie != NULL) {
     F1AP_DUtoCURRCInformation_t *du2cu = &ie->value.choice.DUtoCURRCInformation;
     required->du_to_cu_rrc_information = malloc(sizeof(*required->du_to_cu_rrc_information));
@@ -220,31 +228,35 @@ int CU_handle_UE_CONTEXT_MODIFICATION_REQUIRED(instance_t instance, sctp_assoc_t
   }
 
   /* optional: DRB Required to Be Modified List */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
-                             ie,
-                             container,
-                             F1AP_ProtocolIE_ID_id_DRBs_Required_ToBeModified_List,
-                             false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_DRBs_Required_ToBeModified_List,
+                        false);
   AssertFatal(ie == NULL, "handling of DRBs Required to be modified list not implemented\n");
 
   /* optional: SRB Required to be Released List */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
-                             ie,
-                             container,
-                             F1AP_ProtocolIE_ID_id_SRBs_Required_ToBeReleased_List,
-                             false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_SRBs_Required_ToBeReleased_List,
+                        false);
   AssertFatal(ie == NULL, "handling of SRBs Required to be released list not implemented\n");
 
   /* optional: DRB Required to be Released List */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
-                             ie,
-                             container,
-                             F1AP_ProtocolIE_ID_id_DRBs_Required_ToBeReleased_List,
-                             false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_DRBs_Required_ToBeReleased_List,
+                        false);
   AssertFatal(ie == NULL, "handling of DRBs Required to be released list not implemented\n");
 
   /* mandatory: Cause */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t, ie, container, F1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_Cause,
+                        true);
   switch (ie->value.choice.Cause.present) {
     case F1AP_Cause_PR_radioNetwork:
       required->cause = F1AP_CAUSE_RADIO_NETWORK;
@@ -271,35 +283,35 @@ int CU_handle_UE_CONTEXT_MODIFICATION_REQUIRED(instance_t instance, sctp_assoc_t
   }
 
   /* optional: BH RLC Channel Required to be Released List */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
-                             ie,
-                             container,
-                             F1AP_ProtocolIE_ID_id_BHChannels_Required_ToBeReleased_List,
-                             false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_BHChannels_Required_ToBeReleased_List,
+                        false);
   AssertFatal(ie == NULL, "handling of BH RLC Channel Required to be Released list not implemented\n");
 
   /* optional: SL DRB Required to Be Modified List */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
-                             ie,
-                             container,
-                             F1AP_ProtocolIE_ID_id_SLDRBs_Required_ToBeModified_List,
-                             false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_SLDRBs_Required_ToBeModified_List,
+                        false);
   AssertFatal(ie == NULL, "handling of SL DRB Required to be modified list not implemented\n");
 
   /* optional: SL DRB Required to be Released List */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
-                             ie,
-                             container,
-                             F1AP_ProtocolIE_ID_id_SLDRBs_Required_ToBeReleased_List,
-                             false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_SLDRBs_Required_ToBeReleased_List,
+                        false);
   AssertFatal(ie == NULL, "handling of SL DRBs Required to be released list not implemented\n");
 
   /* optional: Candidate Cells To Be Cancelled List */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
-                             ie,
-                             container,
-                             F1AP_ProtocolIE_ID_id_Candidate_SpCell_List,
-                             false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequiredIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_Candidate_SpCell_List,
+                        false);
   AssertFatal(ie == NULL, "handling of candidate cells to be cancelled list not implemented\n");
 
   itti_send_msg_to_task(TASK_RRC_GNB, instance, msg_p);

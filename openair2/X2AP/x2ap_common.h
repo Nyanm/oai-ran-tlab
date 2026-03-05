@@ -55,21 +55,6 @@
 #define X2AP_WARN(x, args...)  LOG_W(X2AP, x, ##args)
 #define X2AP_DEBUG(x, args...) LOG_D(X2AP, x, ##args)
 
-#define X2AP_FIND_PROTOCOLIE_BY_ID(IE_TYPE, ie, container, IE_ID, mandatory) \
-  do {\
-    IE_TYPE **ptr; \
-    ie = NULL; \
-    for (ptr = container->protocolIEs.list.array; \
-         ptr < &container->protocolIEs.list.array[container->protocolIEs.list.count]; \
-         ptr++) { \
-      if((*ptr)->id == IE_ID) { \
-        ie = *ptr; \
-        break; \
-      } \
-    } \
-    if (mandatory) DevAssert(ie != NULL); \
-  } while(0)
-
 /** \brief Function callback prototype.
  **/
 typedef int (*x2ap_message_decoded_callback)(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, X2AP_X2AP_PDU_t *pdu);

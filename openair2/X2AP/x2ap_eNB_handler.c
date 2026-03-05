@@ -359,8 +359,11 @@ int x2ap_eNB_handle_x2_setup_request(instance_t instance, sctp_assoc_t assoc_id,
 
   X2AP_DEBUG("Received a new X2 setup request\n");
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_X2SetupRequest_IEs_t, ie, x2SetupRequest,
-                             X2AP_ProtocolIE_ID_id_GlobalENB_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_X2SetupRequest_IEs_t,
+		        ie,
+			&x2SetupRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_GlobalENB_ID,
+			true);
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
     return -1;
@@ -429,8 +432,11 @@ int x2ap_eNB_handle_x2_setup_request(instance_t instance, sctp_assoc_t assoc_id,
   }
 
   /* Set proper pci */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_X2SetupRequest_IEs_t, ie, x2SetupRequest,
-                             X2AP_ProtocolIE_ID_id_ServedCells, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_X2SetupRequest_IEs_t,
+		        ie,
+			&x2SetupRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_ServedCells,
+			true);
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
     return -1;
@@ -481,8 +487,7 @@ int x2ap_eNB_handle_x2_reset_request(instance_t instance, sctp_assoc_t assoc_id,
 
   X2AP_DEBUG("Received a new X2 reset request\n");
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_ResetRequest_IEs_t, ie, ResetRequest,
-                             X2AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_ResetRequest_IEs_t, ie, &ResetRequest->protocolIEs.list, X2AP_ProtocolIE_ID_id_Cause, true);
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
     return -1;
@@ -580,8 +585,11 @@ static int x2ap_eNB_handle_x2_setup_response(instance_t instance, sctp_assoc_t a
 
   X2AP_DEBUG("Received a new X2 setup response\n");
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_X2SetupResponse_IEs_t, ie, x2SetupResponse,
-                             X2AP_ProtocolIE_ID_id_GlobalENB_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_X2SetupResponse_IEs_t,
+		        ie,
+			&x2SetupResponse->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_GlobalENB_ID,
+			true);
 
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -633,8 +641,11 @@ static int x2ap_eNB_handle_x2_setup_response(instance_t instance, sctp_assoc_t a
   }
 
   /* Set proper pci */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_X2SetupResponse_IEs_t, ie, x2SetupResponse,
-                             X2AP_ProtocolIE_ID_id_ServedCells, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_X2SetupResponse_IEs_t,
+		        ie,
+			&x2SetupResponse->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_ServedCells,
+			true);
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
     return -1;
@@ -710,8 +721,11 @@ static int x2ap_eNB_handle_x2_setup_failure(instance_t instance, sctp_assoc_t as
 
   X2AP_DEBUG("Received a new X2 setup failure\n");
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_X2SetupFailure_IEs_t, ie, x2SetupFailure,
-                             X2AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_X2SetupFailure_IEs_t,
+		        ie,
+			&x2SetupFailure->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_Cause,
+			true);
 
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -770,8 +784,11 @@ static int x2ap_eNB_handle_handover_preparation(instance_t instance, sctp_assoc_
 
   msg = itti_alloc_new_message(TASK_X2AP, 0, X2AP_HANDOVER_REQ);
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequest_IEs_t, ie, x2HandoverRequest,
-                             X2AP_ProtocolIE_ID_id_Old_eNB_UE_X2AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequest_IEs_t,
+		        ie,
+			&x2HandoverRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_Old_eNB_UE_X2AP_ID,
+			true);
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
     itti_free(ITTI_MSG_ORIGIN_ID(msg), msg);
@@ -793,8 +810,11 @@ static int x2ap_eNB_handle_handover_preparation(instance_t instance, sctp_assoc_
 
   //X2AP_HANDOVER_REQ(msg).target_physCellId = measResults2->measResultNeighCells->choice.
                                                //measResultListEUTRA.list.array[ncell_index]->physCellId;
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequest_IEs_t, ie, x2HandoverRequest,
-                             X2AP_ProtocolIE_ID_id_GUMMEI_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequest_IEs_t,
+		        ie,
+			&x2HandoverRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_GUMMEI_ID,
+			true);
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
     itti_free(ITTI_MSG_ORIGIN_ID(msg), msg);
@@ -805,8 +825,11 @@ static int x2ap_eNB_handle_handover_preparation(instance_t instance, sctp_assoc_
   OCTET_STRING_TO_INT8(&ie->value.choice.GUMMEI.mME_Code, X2AP_HANDOVER_REQ(msg).ue_gummei.mme_code);
   OCTET_STRING_TO_INT16(&ie->value.choice.GUMMEI.gU_Group_ID.mME_Group_ID, X2AP_HANDOVER_REQ(msg).ue_gummei.mme_group_id);
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequest_IEs_t, ie, x2HandoverRequest,
-                             X2AP_ProtocolIE_ID_id_UE_ContextInformation, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequest_IEs_t,
+		        ie,
+			&x2HandoverRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_UE_ContextInformation,
+			true);
 
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -913,8 +936,11 @@ static int x2ap_eNB_handle_handover_response(instance_t instance, sctp_assoc_t a
 
   msg = itti_alloc_new_message(TASK_X2AP, 0, X2AP_HANDOVER_REQ_ACK);
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequestAcknowledge_IEs_t, ie, x2HandoverRequestAck,
-                             X2AP_ProtocolIE_ID_id_Old_eNB_UE_X2AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequestAcknowledge_IEs_t,
+		        ie,
+			&x2HandoverRequestAck->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_Old_eNB_UE_X2AP_ID,
+			true);
 
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -924,8 +950,11 @@ static int x2ap_eNB_handle_handover_response(instance_t instance, sctp_assoc_t a
 
   id_source = ie->value.choice.UE_X2AP_ID;
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequestAcknowledge_IEs_t, ie, x2HandoverRequestAck,
-                             X2AP_ProtocolIE_ID_id_New_eNB_UE_X2AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequestAcknowledge_IEs_t,
+		        ie,
+			&x2HandoverRequestAck->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_New_eNB_UE_X2AP_ID,
+			true);
 
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -955,8 +984,11 @@ static int x2ap_eNB_handle_handover_response(instance_t instance, sctp_assoc_t a
   X2AP_HANDOVER_REQ_ACK(msg).rnti = rnti;
 
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequestAcknowledge_IEs_t, ie, x2HandoverRequestAck,
-                             X2AP_ProtocolIE_ID_id_E_RABs_Admitted_List, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequestAcknowledge_IEs_t,
+		        ie,
+			&x2HandoverRequestAck->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_E_RABs_Admitted_List,
+			true);
 
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n", __FILE__, __LINE__);
@@ -1005,8 +1037,11 @@ static int x2ap_eNB_handle_handover_response(instance_t instance, sctp_assoc_t a
 
     }
   
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequestAcknowledge_IEs_t, ie, x2HandoverRequestAck,
-                             X2AP_ProtocolIE_ID_id_TargeteNBtoSource_eNBTransparentContainer, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_HandoverRequestAcknowledge_IEs_t,
+		        ie,
+			&x2HandoverRequestAck->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_TargeteNBtoSource_eNBTransparentContainer,
+			true);
 
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -1057,8 +1092,11 @@ static int x2ap_eNB_handle_ue_context_release(instance_t instance, sctp_assoc_t 
 
   msg = itti_alloc_new_message(TASK_X2AP, 0, X2AP_UE_CONTEXT_RELEASE);
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_UEContextRelease_IEs_t, ie, x2UEContextRelease,
-                             X2AP_ProtocolIE_ID_id_Old_eNB_UE_X2AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_UEContextRelease_IEs_t,
+		        ie,
+			&x2UEContextRelease->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_Old_eNB_UE_X2AP_ID,
+			true);
 
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -1068,8 +1106,11 @@ static int x2ap_eNB_handle_ue_context_release(instance_t instance, sctp_assoc_t 
 
   id_source = ie->value.choice.UE_X2AP_ID;
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_UEContextRelease_IEs_t, ie, x2UEContextRelease,
-                             X2AP_ProtocolIE_ID_id_New_eNB_UE_X2AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_UEContextRelease_IEs_t,
+		        ie,
+			&x2UEContextRelease->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_New_eNB_UE_X2AP_ID,
+			true);
 
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -1135,8 +1176,11 @@ static int x2ap_eNB_handle_handover_cancel(instance_t instance, sctp_assoc_t ass
   instance_p = x2ap_eNB_get_instance(instance);
   DevAssert(instance_p != NULL);
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_HandoverCancel_IEs_t, ie, x2HandoverCancel,
-                             X2AP_ProtocolIE_ID_id_Old_eNB_UE_X2AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_HandoverCancel_IEs_t,
+		        ie,
+			&x2HandoverCancel->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_Old_eNB_UE_X2AP_ID,
+			true);
 
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -1145,8 +1189,11 @@ static int x2ap_eNB_handle_handover_cancel(instance_t instance, sctp_assoc_t ass
 
   id_source = ie->value.choice.UE_X2AP_ID;
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_HandoverCancel_IEs_t, ie, x2HandoverCancel,
-                             X2AP_ProtocolIE_ID_id_New_eNB_UE_X2AP_ID, false);
+  FIND_PROTOCOLIE_BY_ID(X2AP_HandoverCancel_IEs_t,
+		        ie,
+			&x2HandoverCancel->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_New_eNB_UE_X2AP_ID,
+			false);
 
   if (ie == NULL ) {
     X2AP_INFO("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -1154,8 +1201,11 @@ static int x2ap_eNB_handle_handover_cancel(instance_t instance, sctp_assoc_t ass
   } else
     id_target = ie->value.choice.UE_X2AP_ID_1;
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_HandoverCancel_IEs_t, ie, x2HandoverCancel,
-                             X2AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_HandoverCancel_IEs_t,
+		        ie,
+			&x2HandoverCancel->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_Cause,
+			true);
 
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -1245,8 +1295,11 @@ static int x2ap_eNB_handle_senb_addition_request(instance_t instance, sctp_assoc
   msg = itti_alloc_new_message(TASK_X2AP, 0, X2AP_SENB_ADDITION_REQ);
 
   /*MeNB_UE_X2AP_ID */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SeNBAdditionRequest_IEs_t, ie, x2SeNBAdditionRequest,
-		  X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SeNBAdditionRequest_IEs_t,
+		        ie,
+			&x2SeNBAdditionRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID,
+			true);
   if (ie == NULL ) {
 	  X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
 	  return -1;
@@ -1267,8 +1320,11 @@ static int x2ap_eNB_handle_senb_addition_request(instance_t instance, sctp_assoc
   X2AP_SENB_ADDITION_REQ(msg).x2_MeNB_UE_id = 0;
 
   /* UESecurityCapabilities is specific to SCGBearerOption.*/
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SeNBAdditionRequest_IEs_t, ie, x2SeNBAdditionRequest,
-		  X2AP_ProtocolIE_ID_id_UE_SecurityCapabilities, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SeNBAdditionRequest_IEs_t,
+		        ie,
+			&x2SeNBAdditionRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_UE_SecurityCapabilities,
+			true);
 
   if (ie == NULL ) {
     	  X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -1283,8 +1339,11 @@ static int x2ap_eNB_handle_senb_addition_request(instance_t instance, sctp_assoc
 
 
   /* SeNBSecurityKey is specific to SCGBearerOption.*/
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SeNBAdditionRequest_IEs_t, ie, x2SeNBAdditionRequest,
-		  X2AP_ProtocolIE_ID_id_SeNBSecurityKey, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SeNBAdditionRequest_IEs_t,
+		        ie,
+			&x2SeNBAdditionRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_SeNBSecurityKey,
+			true);
 
   if (ie == NULL ) {
 	  X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -1297,13 +1356,19 @@ static int x2ap_eNB_handle_senb_addition_request(instance_t instance, sctp_assoc
 
   /* SeNB to UE Aggregate Maximum Bit Rate */
   //Panos: SeNBUEAggregateMaximumBitRate: should it be added? It is not active in handover_req
-  /*X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SeNBAdditionRequest_IEs_t, ie, x2SeNBAdditionRequest,
-		  X2AP_ProtocolIE_ID_id_SeNBUEAggregateMaximumBitRate, true);*/
+  /*FIND_PROTOCOLIE_BY_ID(X2AP_SeNBAdditionRequest_IEs_t,
+                          ie, 
+			  &x2SeNBAdditionRequest->protocolIEs.list,
+			  X2AP_ProtocolIE_ID_id_SeNBUEAggregateMaximumBitRate,
+			  true);*/
 
 
   /* E-RABs_To Be Added List */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SeNBAdditionRequest_IEs_t, ie, x2SeNBAdditionRequest,
-		  X2AP_ProtocolIE_ID_id_E_RABs_ToBeAdded_List, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SeNBAdditionRequest_IEs_t,
+		        ie,
+			&x2SeNBAdditionRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_E_RABs_ToBeAdded_List,
+			true);
 
   if (ie == NULL ) {
   	  X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -1366,8 +1431,11 @@ static int x2ap_eNB_handle_senb_addition_request(instance_t instance, sctp_assoc
   }
 
   /*MeNB to SeNB Container */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SeNBAdditionRequest_IEs_t, ie, x2SeNBAdditionRequest,
-		  X2AP_ProtocolIE_ID_id_MeNBtoSeNBContainer, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SeNBAdditionRequest_IEs_t,
+		        ie,
+			&x2SeNBAdditionRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_MeNBtoSeNBContainer,
+			true);
 
   if (ie == NULL ) {
   	  X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -1442,9 +1510,11 @@ int x2ap_eNB_handle_ENDC_x2_setup_request(instance_t instance, sctp_assoc_t asso
 
   X2AP_DEBUG("Received a new X2 setup request\n");
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_ENDCX2SetupRequest_IEs_t, ie, x2_ENDC_SetupRequest,
-		  X2AP_ProtocolIE_ID_id_InitiatingNodeType_EndcX2Setup, true);
-
+  FIND_PROTOCOLIE_BY_ID(X2AP_ENDCX2SetupRequest_IEs_t,
+		        ie,
+			&x2_ENDC_SetupRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_InitiatingNodeType_EndcX2Setup,
+			true);
 
   msg = itti_alloc_new_message(TASK_X2AP, 0, X2AP_ENDC_SETUP_REQ);
 
@@ -1589,10 +1659,11 @@ int x2ap_gNB_handle_ENDC_x2_setup_response(instance_t instance, sctp_assoc_t ass
 
   X2AP_DEBUG("Received a new X2 setup request\n");
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_ENDCX2SetupResponse_IEs_t, ie, x2_ENDC_SetupResponse,
-		  X2AP_ProtocolIE_ID_id_RespondingNodeType_EndcX2Setup, true);
-
-
+  FIND_PROTOCOLIE_BY_ID(X2AP_ENDCX2SetupResponse_IEs_t,
+		        ie,
+			&x2_ENDC_SetupResponse->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_RespondingNodeType_EndcX2Setup,
+			true);
 
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -1737,8 +1808,11 @@ static int x2ap_gNB_handle_ENDC_sGNB_addition_request(instance_t instance,
   msg = itti_alloc_new_message(TASK_X2AP, 0, X2AP_ENDC_SGNB_ADDITION_REQ);
 
   /* X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequest_IEs_t, ie, x2SgNBAdditionRequest,
-		  X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequest_IEs_t,
+		        ie,
+			&x2SgNBAdditionRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID,
+			true);
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
     return -1;
@@ -1749,8 +1823,11 @@ static int x2ap_gNB_handle_ENDC_sGNB_addition_request(instance_t instance,
 
 
   /* X2AP_ProtocolIE_ID_id_NRUESecurityCapabilities */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequest_IEs_t, ie, x2SgNBAdditionRequest,
-		  X2AP_ProtocolIE_ID_id_NRUESecurityCapabilities, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequest_IEs_t,
+		        ie,
+			&x2SgNBAdditionRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_NRUESecurityCapabilities,
+			true);
 
   X2AP_ENDC_SGNB_ADDITION_REQ(msg).security_capabilities.encryption_algorithms =
 		  BIT_STRING_to_uint16(&ie->value.choice.NRUESecurityCapabilities.nRencryptionAlgorithms);
@@ -1759,8 +1836,11 @@ static int x2ap_gNB_handle_ENDC_sGNB_addition_request(instance_t instance,
   		  BIT_STRING_to_uint16(&ie->value.choice.NRUESecurityCapabilities.nRintegrityProtectionAlgorithms);
 
   /* X2AP_ProtocolIE_ID_id_SgNBSecurityKey */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequest_IEs_t, ie, x2SgNBAdditionRequest,
-		  X2AP_ProtocolIE_ID_id_SgNBSecurityKey, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequest_IEs_t,
+		        ie,
+			&x2SgNBAdditionRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_SgNBSecurityKey,
+			true);
 
   if ((ie->value.choice.SgNBSecurityKey.buf) &&
             (ie->value.choice.SgNBSecurityKey.size == 32)) {
@@ -1771,16 +1851,21 @@ static int x2ap_gNB_handle_ENDC_sGNB_addition_request(instance_t instance,
 
 
   /* X2AP_ProtocolIE_ID_id_SgNBUEAggregateMaximumBitRate */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequest_IEs_t, ie, x2SgNBAdditionRequest,
-		  X2AP_ProtocolIE_ID_id_SgNBUEAggregateMaximumBitRate, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequest_IEs_t,
+		        ie,
+			&x2SgNBAdditionRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_SgNBUEAggregateMaximumBitRate,
+			true);
 
   //X2AP_ENDC_SGNB_ADDITION_REQ(msg).ue_ambr.br_dl =ie->value.choice.UEAggregateMaximumBitRate.uEaggregateMaximumBitRateDownlink;
   //X2AP_ENDC_SGNB_ADDITION_REQ(msg).ue_ambr.br_ul = ie->value.choice.UEAggregateMaximumBitRate.uEaggregateMaximumBitRateUplink;
 
   /* X2AP_ProtocolIE_ID_id_E_RABs_ToBeAdded_SgNBAddReqList */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequest_IEs_t, ie, x2SgNBAdditionRequest,
-		  X2AP_ProtocolIE_ID_id_E_RABs_ToBeAdded_SgNBAddReqList, true);
-
+  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequest_IEs_t,
+		        ie,
+			&x2SgNBAdditionRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_E_RABs_ToBeAdded_SgNBAddReqList,
+			true);
 
   if (ie->value.choice.E_RABs_ToBeAdded_SgNBAddReqList.list.count > 0) {
 
@@ -1826,8 +1911,11 @@ LOG_I(RRC,"x2u tunnel: index %d target sgw ip %d.%d.%d.%d length %d gtp teid %u\
   }
 
   /* X2AP_ProtocolIE_ID_id_MeNBtoSgNBContainer */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequest_IEs_t, ie, x2SgNBAdditionRequest,
-		  X2AP_ProtocolIE_ID_id_MeNBtoSgNBContainer, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequest_IEs_t,
+		        ie,
+			&x2SgNBAdditionRequest->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_MeNBtoSgNBContainer,
+			true);
 
   if (ie->value.choice.MeNBtoSgNBContainer.size > 8192 ) // TODO: this is the size of rrc_buffer in struct x2ap_handover_req_s
     { printf("%s:%d: fatal: buffer too big\n", __FILE__, __LINE__); abort(); }
@@ -1885,8 +1973,11 @@ static int x2ap_eNB_handle_ENDC_sGNB_addition_response(instance_t instance,
 	  X2AP_ENDC_SGNB_ADDITION_REQ_ACK(msg).gnb_x2_assoc_id = assoc_id;
 
 	  /* X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID */
-	  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequestAcknowledge_IEs_t, ie, x2SgNBAdditionRequest_ack,
-			  X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID, true);
+	  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequestAcknowledge_IEs_t,
+			        ie,
+				&x2SgNBAdditionRequest_ack->protocolIEs.list,
+				X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID,
+				true);
 	  if (ie == NULL ) {
 	    X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
 	    return -1;
@@ -1898,8 +1989,11 @@ static int x2ap_eNB_handle_ENDC_sGNB_addition_response(instance_t instance,
 
 
 	  /* X2AP_ProtocolIE_ID_id_SgNB_UE_X2AP_ID */
-	  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequestAcknowledge_IEs_t, ie, x2SgNBAdditionRequest_ack,
-			  X2AP_ProtocolIE_ID_id_SgNB_UE_X2AP_ID, true);
+	  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequestAcknowledge_IEs_t,
+			        ie,
+				&x2SgNBAdditionRequest_ack->protocolIEs.list,
+				X2AP_ProtocolIE_ID_id_SgNB_UE_X2AP_ID,
+				true);
 	  if (ie == NULL ) {
 		  X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
 		  return -1;
@@ -1926,8 +2020,11 @@ static int x2ap_eNB_handle_ENDC_sGNB_addition_response(instance_t instance,
 	  X2AP_ENDC_SGNB_ADDITION_REQ_ACK(msg).SgNB_ue_x2_id = ie->value.choice.SgNB_UE_X2AP_ID;
 
 	  /* X2AP_ProtocolIE_ID_id_E_RABs_ToBeAdded_SgNBAddReqList */
-	  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequestAcknowledge_IEs_t, ie, x2SgNBAdditionRequest_ack,
-			  X2AP_ProtocolIE_ID_id_E_RABs_Admitted_ToBeAdded_SgNBAddReqAckList, true);
+	  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequestAcknowledge_IEs_t,
+			        ie,
+				&x2SgNBAdditionRequest_ack->protocolIEs.list,
+				X2AP_ProtocolIE_ID_id_E_RABs_Admitted_ToBeAdded_SgNBAddReqAckList,
+				true);
 
 	  if (ie == NULL ) {
 		  X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -1966,8 +2063,11 @@ static int x2ap_eNB_handle_ENDC_sGNB_addition_response(instance_t instance,
 
 	  /* X2AP_ProtocolIE_ID_id_SgNBtoMeNBContainer */
 
-	  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequestAcknowledge_IEs_t, ie, x2SgNBAdditionRequest_ack,
-			  X2AP_ProtocolIE_ID_id_SgNBtoMeNBContainer, true);
+	  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBAdditionRequestAcknowledge_IEs_t,
+			        ie,
+				&x2SgNBAdditionRequest_ack->protocolIEs.list,
+				X2AP_ProtocolIE_ID_id_SgNBtoMeNBContainer,
+				true);
 
 	  if (ie == NULL ) {
 		  X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
@@ -2028,8 +2128,11 @@ static int x2ap_gNB_handle_ENDC_sGNB_reconfiguration_complete(instance_t instanc
   msg = itti_alloc_new_message(TASK_X2AP, 0, X2AP_ENDC_SGNB_RECONF_COMPLETE);
 
   /* X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReconfigurationComplete_IEs_t, ie, x2SgNBReconfigurationComplete,
-      X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReconfigurationComplete_IEs_t,
+		        ie,
+			&x2SgNBReconfigurationComplete->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID,
+			true);
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
     return -1;
@@ -2039,8 +2142,11 @@ static int x2ap_gNB_handle_ENDC_sGNB_reconfiguration_complete(instance_t instanc
 
 
   /* X2AP_ProtocolIE_ID_id_SgNB_UE_X2AP_ID */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReconfigurationComplete_IEs_t, ie, x2SgNBReconfigurationComplete,
-      X2AP_ProtocolIE_ID_id_SgNB_UE_X2AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReconfigurationComplete_IEs_t,
+		        ie,
+			&x2SgNBReconfigurationComplete->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_SgNB_UE_X2AP_ID,
+			true);
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
     return -1;
@@ -2057,8 +2163,11 @@ static int x2ap_gNB_handle_ENDC_sGNB_reconfiguration_complete(instance_t instanc
     return 0;
   }
 
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReconfigurationComplete_IEs_t, ie, x2SgNBReconfigurationComplete,
-      X2AP_ProtocolIE_ID_id_ResponseInformationSgNBReconfComp, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReconfigurationComplete_IEs_t,
+		        ie,
+			&x2SgNBReconfigurationComplete->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_ResponseInformationSgNBReconfComp,
+			true);
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
     return -1;
@@ -2120,8 +2229,11 @@ static int x2ap_gNB_handle_ENDC_sGNB_release_request(instance_t instance,
   DevAssert(instance_p != NULL);
 
   /* X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReleaseRequest_IEs_t, ie, req,
-                             X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReleaseRequest_IEs_t,
+		        ie,
+			&req->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID,
+			true);
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
     return -1;
@@ -2130,8 +2242,11 @@ static int x2ap_gNB_handle_ENDC_sGNB_release_request(instance_t instance,
   id_source = ie->value.choice.UE_X2AP_ID;
 
   /* X2AP_ProtocolIE_ID_id_SgNB_UE_X2AP_ID */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReleaseRequest_IEs_t, ie, req,
-                             X2AP_ProtocolIE_ID_id_SgNB_UE_X2AP_ID, false);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReleaseRequest_IEs_t,
+		        ie,
+			&req->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_SgNB_UE_X2AP_ID,
+			false);
   if (ie != NULL)
     id_target = ie->value.choice.SgNB_UE_X2AP_ID;
   else
@@ -2232,8 +2347,11 @@ static int x2ap_gNB_handle_ENDC_sGNB_release_required(instance_t instance,
   DevAssert(instance_p != NULL);
 
   /* X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReleaseRequired_IEs_t, ie, req,
-                             X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReleaseRequired_IEs_t,
+		        ie,
+			&req->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_MeNB_UE_X2AP_ID,
+			true);
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
     return -1;
@@ -2242,8 +2360,11 @@ static int x2ap_gNB_handle_ENDC_sGNB_release_required(instance_t instance,
   id_source = ie->value.choice.UE_X2AP_ID;
 
   /* X2AP_ProtocolIE_ID_id_SgNB_UE_X2AP_ID */
-  X2AP_FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReleaseRequired_IEs_t, ie, req,
-                             X2AP_ProtocolIE_ID_id_SgNB_UE_X2AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(X2AP_SgNBReleaseRequired_IEs_t,
+		        ie,
+			&req->protocolIEs.list,
+			X2AP_ProtocolIE_ID_id_SgNB_UE_X2AP_ID,
+			true);
   if (ie == NULL ) {
     X2AP_ERROR("%s %d: ie is a NULL pointer \n",__FILE__,__LINE__);
     return -1;

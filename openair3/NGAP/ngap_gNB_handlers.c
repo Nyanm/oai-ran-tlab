@@ -127,8 +127,7 @@ static int ngap_gNB_handle_ng_setup_failure(sctp_assoc_t assoc_id, uint32_t stre
     return -1;
   }
 
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_NGSetupFailureIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_Cause,true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_NGSetupFailureIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_Cause, true);
 
   if ((ie->value.choice.Cause.present == NGAP_Cause_PR_misc) &&
       (ie->value.choice.Cause.choice.misc == NGAP_CauseMisc_unspecified)) {
@@ -194,8 +193,7 @@ static int ngap_gNB_handle_ng_setup_response(sctp_assoc_t assoc_id, uint32_t str
     return -1;
   }
 
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_NGSetupResponseIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_ServedGUAMIList, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_NGSetupResponseIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_ServedGUAMIList, true);
 
   /* The list of served guami can contain at most 256 elements.
    * NR related guami is the first element in the list, i.e with an id of 0.
@@ -245,14 +243,16 @@ static int ngap_gNB_handle_ng_setup_response(sctp_assoc_t assoc_id, uint32_t str
   }
 
   /* Set the capacity of this AMF */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_NGSetupResponseIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_RelativeAMFCapacity, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_NGSetupResponseIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_RelativeAMFCapacity,
+                        true);
 
   amf_desc_p->relative_amf_capacity = ie->value.choice.RelativeAMFCapacity;
 
   /* mandatory set the amf name */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_NGSetupResponseIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_AMFName, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_NGSetupResponseIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_AMFName, true);
 
   if (ie) {
     amf_desc_p->amf_name = malloc(ie->value.choice.AMFName.size + 1);
@@ -262,8 +262,7 @@ static int ngap_gNB_handle_ng_setup_response(sctp_assoc_t assoc_id, uint32_t str
   ngap_dump_served_guami(amf_desc_p);
   
   /* mandatory set the plmn supports */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_NGSetupResponseIEs_t, ie, container,
-                               NGAP_ProtocolIE_ID_id_PLMNSupportList, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_NGSetupResponseIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_PLMNSupportList, true);
 
   DevAssert(ie->value.choice.PLMNSupportList.list.count > 0);
   DevAssert(ie->value.choice.PLMNSupportList.list.count <= NGAP_maxnoofPLMNs);
@@ -345,8 +344,7 @@ static int ngap_gNB_handle_error_indication(sctp_assoc_t assoc_id, uint32_t stre
     return -1;
   }
 
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_ErrorIndicationIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_ErrorIndicationIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, false);
 
   /* optional */
   if (ie != NULL) {
@@ -354,16 +352,14 @@ static int ngap_gNB_handle_error_indication(sctp_assoc_t assoc_id, uint32_t stre
     NGAP_WARN("Received NG Error indication AMF UE NGAP ID 0x%lx\n", amf_ue_ngap_id);
   }
 
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_ErrorIndicationIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_ErrorIndicationIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID, false);
 
   /* optional */
   if (ie != NULL) {
     NGAP_WARN("Received NG Error indication gNB UE NGAP ID 0x%lx\n", ie->value.choice.RAN_UE_NGAP_ID);
   }
 
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_ErrorIndicationIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_Cause, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_ErrorIndicationIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_Cause, false);
 
   /* optional */
   if (ie) {
@@ -687,9 +683,11 @@ static int ngap_gNB_handle_error_indication(sctp_assoc_t assoc_id, uint32_t stre
     }
   }
 
-
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_ErrorIndicationIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_CriticalityDiagnostics, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_ErrorIndicationIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_CriticalityDiagnostics,
+                        false);
 
   if (ie) {
     // TODO continue
@@ -753,14 +751,20 @@ static int ngap_gNB_handle_initial_context_request(sctp_assoc_t assoc_id, uint32
   }
 
   /* id-AMF-UE-NGAP-ID */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID,
+                        true);
 
   asn_INTEGER2ulong(&(ie->value.choice.AMF_UE_NGAP_ID), &amf_ue_ngap_id);
 
   /* id-RAN-UE-NGAP-ID */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
+                        true);
 
   const NGAP_RAN_UE_NGAP_ID_t ran_ue_ngap_id = ie->value.choice.RAN_UE_NGAP_ID;
   ngap_gNB_ue_context_t *ue_desc_p = ngap_get_ue_context(ran_ue_ngap_id);
@@ -789,17 +793,25 @@ static int ngap_gNB_handle_initial_context_request(sctp_assoc_t assoc_id, uint32
   msg->gNB_ue_ngap_id = ue_desc_p->gNB_ue_ngap_id;
   msg->amf_ue_ngap_id = ue_desc_p->amf_ue_ngap_id;
   /* id-UEAggregateMaximumBitRate */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_UEAggregateMaximumBitRate, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_UEAggregateMaximumBitRate,
+                        false);
   if (ie != NULL) {
     msg->ue_ambr = decode_ngap_UEAggregateMaximumBitRate(&ie->value.choice.UEAggregateMaximumBitRate);
     msg->has_ue_ambr = true;
   }
 
   /* id-GUAMI */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_GUAMI, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_GUAMI, true);
   msg->guami = decode_ngap_guami(&ie->value.choice.GUAMI);
 
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_PDUSessionResourceSetupListCxtReq, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_PDUSessionResourceSetupListCxtReq,
+                        false);
   if (ie != NULL) {
     msg->nb_of_pdusessions = ie->value.choice.PDUSessionResourceSetupListCxtReq.list.count;
 
@@ -819,7 +831,11 @@ static int ngap_gNB_handle_initial_context_request(sctp_assoc_t assoc_id, uint32
   }
 
   /* id-AllowedNSSAI */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_AllowedNSSAI, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_AllowedNSSAI,
+                        true);
   NGAP_DEBUG("AllowedNSSAI.list.count %d\n", ie->value.choice.AllowedNSSAI.list.count);
   msg->nb_allowed_nssais = ie->value.choice.AllowedNSSAI.list.count;
   for (i = 0; i < ie->value.choice.AllowedNSSAI.list.count; i++) {
@@ -827,27 +843,38 @@ static int ngap_gNB_handle_initial_context_request(sctp_assoc_t assoc_id, uint32
   }
 
   /* id-UESecurityCapabilities */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_UESecurityCapabilities, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_UESecurityCapabilities,
+                        true);
   msg->security_capabilities = decode_ngap_security_capabilities(&ie->value.choice.UESecurityCapabilities);
 
   /* id-SecurityKey : Copy the security key */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_SecurityKey, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_SecurityKey,
+                        true);
   memcpy(&msg->security_key, ie->value.choice.SecurityKey.buf, ie->value.choice.SecurityKey.size);
 
   /* id-MobilityRestrictionList */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t,
-                             ie,
-                             container,
-                             NGAP_ProtocolIE_ID_id_MobilityRestrictionList,
-                             false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_MobilityRestrictionList,
+                        false);
   if (ie != NULL) {
     msg->mobility_restriction = decode_ngap_mobility_restriction(&ie->value.choice.MobilityRestrictionList);
     msg->mobility_restriction_flag = true;
   }
 
   /* id-NAS-PDU */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t, ie, container,
-                                 NGAP_ProtocolIE_ID_id_NAS_PDU, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_NAS_PDU,
+                        false);
 
   if (ie)
     msg->nas_pdu = create_byte_array(ie->value.choice.NAS_PDU.size, ie->value.choice.NAS_PDU.buf);
@@ -879,8 +906,11 @@ static int ngap_gNB_handle_ue_context_release_command(sctp_assoc_t assoc_id, uin
     return -1;
   }
 
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_UEContextReleaseCommand_IEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_UE_NGAP_IDs, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_UEContextReleaseCommand_IEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_UE_NGAP_IDs,
+                        true);
 
   switch (ie->value.choice.UE_NGAP_IDs.present) {
     case NGAP_UE_NGAP_IDs_PR_uE_NGAP_ID_pair:
@@ -921,8 +951,7 @@ static int ngap_gNB_handle_ue_context_release_command(sctp_assoc_t assoc_id, uin
       return -1;
   }
 
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_UEContextReleaseCommand_IEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_UEContextReleaseCommand_IEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_Cause, true);
   /* TBD */
 
   return 0;
@@ -947,11 +976,19 @@ static int ngap_gNB_handle_pdusession_setup_request(sctp_assoc_t assoc_id, uint3
   }
 
   /* id-AMF-UE-NGAP-ID */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceSetupRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID,
+                        true);
   asn_INTEGER2ulong(&(ie->value.choice.AMF_UE_NGAP_ID), &amf_ue_ngap_id);
 
   /* id-gNB-UE-NGAP-ID */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceSetupRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
+                        true);
   ran_ue_ngap_id = ie->value.choice.RAN_UE_NGAP_ID;
 
   ngap_gNB_ue_context_t *ue_desc_p = ngap_get_ue_context(ran_ue_ngap_id);
@@ -976,15 +1013,21 @@ static int ngap_gNB_handle_pdusession_setup_request(sctp_assoc_t assoc_id, uint3
   msg->amf_ue_ngap_id = ue_desc_p->amf_ue_ngap_id;
 
   /* UE Aggregated Maximum Bitrate */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceSetupRequestIEs_t, ie, container,
-                         NGAP_ProtocolIE_ID_id_UEAggregateMaximumBitRate, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_UEAggregateMaximumBitRate,
+                        false);
   if (ie != NULL) {
     msg->ueAggMaxBitRate = decode_ngap_UEAggregateMaximumBitRate(&ie->value.choice.UEAggregateMaximumBitRate);
     msg->has_ue_ambr = true;
   }
 
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceSetupRequestIEs_t, ie, container,
-                         NGAP_ProtocolIE_ID_id_PDUSessionResourceSetupListSUReq, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_PDUSessionResourceSetupListSUReq,
+                        true);
 
   msg->nb_pdusessions_tosetup = ie->value.choice.PDUSessionResourceSetupListSUReq.list.count;
 
@@ -1205,8 +1248,11 @@ static int ngap_gNB_handle_pdusession_modify_request(sctp_assoc_t assoc_id, uint
   }
 
   /* id-AMF-UE-NGAP-ID */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceModifyRequestIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceModifyRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     asn_INTEGER2ulong(&(ie->value.choice.AMF_UE_NGAP_ID), &amf_ue_ngap_id);
@@ -1215,23 +1261,30 @@ static int ngap_gNB_handle_pdusession_modify_request(sctp_assoc_t assoc_id, uint
   }
 
   /* id-RAN-UE-NGAP-ID */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceModifyRequestIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceModifyRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
+                        true);
 
-    gnb_ue_ngap_id = ie->value.choice.RAN_UE_NGAP_ID;
-    ngap_gNB_ue_context_t *ue_desc_p = ngap_get_ue_context(gnb_ue_ngap_id);
-    if (!ue_desc_p) {
-      NGAP_ERROR(
-          "[SCTP %u] Received PDUSession Resource modify request for non "
-          "existing UE context 0x%08lx\n",
-          assoc_id,
-          gnb_ue_ngap_id);
-      return -1;
-    }
+  gnb_ue_ngap_id = ie->value.choice.RAN_UE_NGAP_ID;
+  ngap_gNB_ue_context_t *ue_desc_p = ngap_get_ue_context(gnb_ue_ngap_id);
+  if (!ue_desc_p) {
+    NGAP_ERROR(
+        "[SCTP %u] Received PDUSession Resource modify request for non "
+        "existing UE context 0x%08lx\n",
+        assoc_id,
+        gnb_ue_ngap_id);
+    return -1;
+  }
 
   ue_desc_p->rx_stream = stream;
   /* id-PDUSessionResourceModifyListModReq */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceModifyRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_PDUSessionResourceModifyListModReq, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceModifyRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_PDUSessionResourceModifyListModReq,
+                        true);
 
   if (ue_desc_p->amf_ue_ngap_id != amf_ue_ngap_id) {
     NGAP_WARN("UE context amf_ue_ngap_id is different form that of the message (%lu != %lu)",
@@ -1303,8 +1356,11 @@ static int ngap_gNB_handle_pdusession_release_command(sctp_assoc_t assoc_id, uin
 
 
   /* id-AMF-UE-NGAP-ID */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceReleaseCommandIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceReleaseCommandIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     asn_INTEGER2ulong(&(ie->value.choice.AMF_UE_NGAP_ID), &amf_ue_ngap_id);
@@ -1313,8 +1369,11 @@ static int ngap_gNB_handle_pdusession_release_command(sctp_assoc_t assoc_id, uin
   }
 
   /* id-RAN-UE-NGAP-ID */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceReleaseCommandIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceReleaseCommandIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     gnb_ue_ngap_id = ie->value.choice.RAN_UE_NGAP_ID;
@@ -1345,15 +1404,21 @@ static int ngap_gNB_handle_pdusession_release_command(sctp_assoc_t assoc_id, uin
   msg->gNB_ue_ngap_id = gnb_ue_ngap_id;
   msg->amf_ue_ngap_id = amf_ue_ngap_id;
   /* id-NAS-PDU */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceReleaseCommandIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_NAS_PDU, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceReleaseCommandIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_NAS_PDU,
+                        false);
 
   if (ie)
     msg->nas_pdu = create_byte_array(ie->value.choice.NAS_PDU.size, ie->value.choice.NAS_PDU.buf);
 
   /* id-PDUSessionResourceToReleaseListRelCmd */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceReleaseCommandIEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_PDUSessionResourceToReleaseListRelCmd, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PDUSessionResourceReleaseCommandIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_PDUSessionResourceToReleaseListRelCmd,
+                        true);
 
   msg->nb_pdusessions_torelease = ie->value.choice.PDUSessionResourceToReleaseListRelCmd.list.count;
 
@@ -1414,11 +1479,19 @@ static int ngap_gNB_handle_dl_ran_status_transfer(sctp_assoc_t assoc_id, uint32_
 
   // AMF UE NGAP ID
   uint64_t amf_ue_ngap_id = 0;
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkRANStatusTransferIEs_t, ie, container, NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkRANStatusTransferIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID,
+                        true);
   asn_INTEGER2ulong(&ie->value.choice.AMF_UE_NGAP_ID, &amf_ue_ngap_id);
 
   // RAN UE NGAP ID
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkRANStatusTransferIEs_t, ie, container, NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkRANStatusTransferIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
+                        true);
   NGAP_RAN_UE_NGAP_ID_t gnb_ue_ngap_id = ie->value.choice.RAN_UE_NGAP_ID;
 
   ngap_gNB_ue_context_t *ue_desc_p = ngap_get_ue_context(gnb_ue_ngap_id);
@@ -1432,11 +1505,11 @@ static int ngap_gNB_handle_dl_ran_status_transfer(sctp_assoc_t assoc_id, uint32_
     NGAP_WARN("UE context mismatch: amf_ue_ngap_id (%lu != %lu)\n", ue_desc_p->amf_ue_ngap_id, amf_ue_ngap_id);
 
   // Transparent container
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkRANStatusTransferIEs_t,
-                             ie,
-                             container,
-                             NGAP_ProtocolIE_ID_id_RANStatusTransfer_TransparentContainer,
-                             true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkRANStatusTransferIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_RANStatusTransfer_TransparentContainer,
+                        true);
   NGAP_RANStatusTransfer_TransparentContainer_t *tcont = &ie->value.choice.RANStatusTransfer_TransparentContainer;
 
   MessageDef *message_p = itti_alloc_new_message(TASK_NGAP, 0, NGAP_DL_RAN_STATUS_TRANSFER);

@@ -668,12 +668,32 @@ bool decode_E1_bearer_context_setup_request(const E1AP_E1AP_PDU_t *pdu, e1ap_bea
   E1AP_BearerContextSetupRequestIEs_t *ie;
 
   // Check mandatory IEs first
-  E1AP_LIB_FIND_IE(E1AP_BearerContextSetupRequestIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextSetupRequestIEs_t, ie, in, E1AP_ProtocolIE_ID_id_SecurityInformation, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextSetupRequestIEs_t, ie, in, E1AP_ProtocolIE_ID_id_UEDLAggregateMaximumBitRate, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextSetupRequestIEs_t, ie, in, E1AP_ProtocolIE_ID_id_Serving_PLMN, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextSetupRequestIEs_t, ie, in, E1AP_ProtocolIE_ID_id_ActivityNotificationLevel, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextSetupRequestIEs_t, ie, in, E1AP_ProtocolIE_ID_id_System_BearerContextSetupRequest, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextSetupRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextSetupRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_SecurityInformation,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextSetupRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_UEDLAggregateMaximumBitRate,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextSetupRequestIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_Serving_PLMN, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextSetupRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_ActivityNotificationLevel,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextSetupRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_System_BearerContextSetupRequest,
+                        true);
 
   // Loop over all IEs
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
@@ -975,9 +995,21 @@ bool decode_E1_bearer_context_setup_response(const E1AP_E1AP_PDU_t *pdu, e1ap_be
   const E1AP_BearerContextSetupResponse_t *in = &pdu->choice.successfulOutcome->value.choice.BearerContextSetupResponse;
   E1AP_BearerContextSetupResponseIEs_t *ie;
   // Check mandatory IEs first
-  E1AP_LIB_FIND_IE(E1AP_BearerContextSetupResponseIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextSetupResponseIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_UP_UE_E1AP_ID, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextSetupResponseIEs_t, ie, in, E1AP_ProtocolIE_ID_id_System_BearerContextSetupResponse, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextSetupResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextSetupResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_UP_UE_E1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextSetupResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_System_BearerContextSetupResponse,
+                        true);
   // Loop over all IEs
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     ie = in->protocolIEs.list.array[i];
@@ -1170,8 +1202,12 @@ bool decode_E1_bearer_context_setup_failure(e1ap_bearer_context_setup_failure_t 
 
   // Check mandatory IEs first
   E1AP_BearerContextSetupFailureIEs_t *ie;
-  E1AP_LIB_FIND_IE(E1AP_BearerContextSetupFailureIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextSetupFailureIEs_t, ie, in, E1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextSetupFailureIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextSetupFailureIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_Cause, true);
 
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     ie = in->protocolIEs.list.array[i];
@@ -1278,9 +1314,17 @@ bool decode_e1_bearer_context_release_command(e1ap_bearer_release_cmd_t *out, co
 
   // Check mandatory IEs
   E1AP_BearerContextReleaseCommandIEs_t *ie;
-  E1AP_LIB_FIND_IE(E1AP_BearerContextReleaseCommandIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextReleaseCommandIEs_t, ie, in, E1AP_ProtocolIE_ID_id_Cause, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextReleaseCommandIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_UP_UE_E1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextReleaseCommandIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextReleaseCommandIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextReleaseCommandIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_UP_UE_E1AP_ID,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     ie = in->protocolIEs.list.array[i];
@@ -1373,8 +1417,16 @@ bool decode_e1_bearer_context_release_complete(e1ap_bearer_release_cplt_t *out, 
 
   // Check mandatory IEs
   E1AP_BearerContextReleaseCompleteIEs_t *ie;
-  E1AP_LIB_FIND_IE(E1AP_BearerContextReleaseCompleteIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextReleaseCompleteIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_UP_UE_E1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextReleaseCompleteIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextReleaseCompleteIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_UP_UE_E1AP_ID,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     ie = in->protocolIEs.list.array[i];
@@ -1783,9 +1835,17 @@ bool decode_E1_bearer_context_mod_request(const E1AP_E1AP_PDU_t *pdu, e1ap_beare
 
   // Mandatory IEs
   // gNB-CU-CP UE E1AP ID (M)
-  E1AP_LIB_FIND_IE(E1AP_BearerContextModificationRequestIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextModificationRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID,
+                        true);
   // gNB-CU-UP UE E1AP ID (M)
-  E1AP_LIB_FIND_IE(E1AP_BearerContextModificationRequestIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_UP_UE_E1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextModificationRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_UP_UE_E1AP_ID,
+                        true);
 
   // Loop through all IEs and extract
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
@@ -2330,8 +2390,16 @@ bool decode_E1_bearer_context_mod_response(e1ap_bearer_modif_resp_t *out, const 
   const E1AP_BearerContextModificationResponse_t *in = &type->value.choice.BearerContextModificationResponse;
   // Check mandatory IEs first
   E1AP_BearerContextModificationResponseIEs_t *ie;
-  E1AP_LIB_FIND_IE(E1AP_BearerContextModificationResponseIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextModificationResponseIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_UP_UE_E1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextModificationResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextModificationResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_UP_UE_E1AP_ID,
+                        true);
   // Process all IEs
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -2635,9 +2703,17 @@ bool decode_E1_bearer_context_mod_failure(e1ap_bearer_context_mod_failure_t *out
   const E1AP_BearerContextModificationFailure_t *in = &type->value.choice.BearerContextModificationFailure;
   // Check mandatory IEs first
   E1AP_BearerContextModificationFailureIEs_t *ie;
-  E1AP_LIB_FIND_IE(E1AP_BearerContextModificationFailureIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextModificationFailureIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_UP_UE_E1AP_ID, true);
-  E1AP_LIB_FIND_IE(E1AP_BearerContextModificationFailureIEs_t, ie, in, E1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextModificationFailureIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_CP_UE_E1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextModificationFailureIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        E1AP_ProtocolIE_ID_id_gNB_CU_UP_UE_E1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_BearerContextModificationFailureIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_Cause, true);
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     ie = in->protocolIEs.list.array[i];
     AssertFatal(ie != NULL, "in->protocolIEs.list.array[i] shall not be null");

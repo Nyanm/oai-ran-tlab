@@ -59,12 +59,12 @@ int DU_handle_RESET(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream,
   f1ap_reset_t *f1ap_reset = &F1AP_RESET(msg_p);
 
   /* Transaction ID */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_ResetIEs_t, ie, container, F1AP_ProtocolIE_ID_id_TransactionID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_ResetIEs_t, ie, &container->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
   f1ap_reset->transaction_id = ie->value.choice.TransactionID;
   LOG_D(F1AP, "req->transaction_id %lu \n", f1ap_reset->transaction_id);
   
   /* Cause */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_ResetIEs_t, ie, container, F1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_ResetIEs_t, ie, &container->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
   switch(ie->value.choice.Cause.present) 
   {
     case F1AP_Cause_PR_radioNetwork:
@@ -92,7 +92,7 @@ int DU_handle_RESET(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream,
   }
 
   /* ResetType */
-  F1AP_FIND_PROTOCOLIE_BY_ID(F1AP_ResetIEs_t, ie, container, F1AP_ProtocolIE_ID_id_ResetType, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_ResetIEs_t, ie, &container->protocolIEs.list, F1AP_ProtocolIE_ID_id_ResetType, true);
   switch(ie->value.choice.ResetType.present) {
     case F1AP_ResetType_PR_f1_Interface:
       LOG_D(F1AP, "ResetType: F1 Interface\n");

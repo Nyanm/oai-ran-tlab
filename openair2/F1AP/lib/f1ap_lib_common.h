@@ -42,23 +42,6 @@
     }                                      \
   } while (0)
 
-/* macro to look up IE. If mandatory and not found, macro will print
- * descriptive debug message to stderr and force exit in calling function */
-#define F1AP_LIB_FIND_IE(IE_TYPE, ie, IE_LIST, IE_ID, mandatory)                                     \
-  do {                                                                                               \
-    ie = NULL;                                                                                       \
-    for (IE_TYPE **ptr = (IE_LIST)->array; ptr < &(IE_LIST)->array[(IE_LIST)->count]; ptr++) {       \
-      if ((*ptr)->id == IE_ID) {                                                                     \
-        ie = *ptr;                                                                                   \
-        break;                                                                                       \
-      }                                                                                              \
-    }                                                                                                \
-    if (mandatory && ie == NULL) {                                                                   \
-      fprintf(stderr, "%s(): could not find element " #IE_ID " with type " #IE_TYPE "\n", __func__); \
-      return false;                                                                                  \
-    }                                                                                                \
-  } while (0)
-
 #define CP_OPT_BYTE_ARRAY(dst, src)          \
   do {                                       \
     if (src) {                               \

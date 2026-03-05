@@ -218,20 +218,20 @@ int ngap_gNB_handle_downlink_ue_associated_nrppa_transport(sctp_assoc_t assoc_id
 
   // IE: 9.3.3.1 AMF UE NGAP ID
   uint64_t amf_ue_ngap_id;
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkUEAssociatedNRPPaTransportIEs_t,
-                             ie,
-                             container,
-                             NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID,
-                             true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkUEAssociatedNRPPaTransportIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID,
+                        true);
   asn_INTEGER2ulong(&(ie->value.choice.AMF_UE_NGAP_ID), &amf_ue_ngap_id);
 
   // IE: 9.3.3.2 RAN UE NGAP ID
   NGAP_RAN_UE_NGAP_ID_t gnb_ue_ngap_id;
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkUEAssociatedNRPPaTransportIEs_t,
-                             ie,
-                             container,
-                             NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
-                             true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkUEAssociatedNRPPaTransportIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
+                        true);
   gnb_ue_ngap_id = ie->value.choice.RAN_UE_NGAP_ID;
 
   ngap_gNB_ue_context_t *ue_desc_p = NULL;
@@ -263,11 +263,19 @@ int ngap_gNB_handle_downlink_ue_associated_nrppa_transport(sctp_assoc_t assoc_id
   dl_ue_assoc_nrppa->gNB_ue_ngap_id = gnb_ue_ngap_id;
 
   // IE: 9.3.3.13 Routing ID
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkUEAssociatedNRPPaTransportIEs_t, ie, container, NGAP_ProtocolIE_ID_id_RoutingID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkUEAssociatedNRPPaTransportIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_RoutingID,
+                        true);
   dl_ue_assoc_nrppa->routing_id = create_byte_array(ie->value.choice.RoutingID.size, ie->value.choice.RoutingID.buf);
 
   // IE: 9.3.3.14 NRPPa-PDU
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkUEAssociatedNRPPaTransportIEs_t, ie, container, NGAP_ProtocolIE_ID_id_NRPPa_PDU, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkUEAssociatedNRPPaTransportIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_NRPPa_PDU,
+                        true);
   dl_ue_assoc_nrppa->nrppa_pdu = create_byte_array(ie->value.choice.NRPPa_PDU.size, ie->value.choice.NRPPa_PDU.buf);
 
   // Forward the NRPPA PDU to NRPPA
@@ -301,11 +309,19 @@ int ngap_gNB_handle_downlink_non_ue_associated_nrppa_transport(sctp_assoc_t asso
   container = &pdu->choice.initiatingMessage->value.choice.DownlinkNonUEAssociatedNRPPaTransport;
 
   // IE: 9.3.3.13 Routing ID
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkNonUEAssociatedNRPPaTransportIEs_t, ie, container, NGAP_ProtocolIE_ID_id_RoutingID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkNonUEAssociatedNRPPaTransportIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_RoutingID,
+                        true);
   dl_non_ue_assoc_nrppa->routing_id = create_byte_array(ie->value.choice.RoutingID.size, ie->value.choice.RoutingID.buf);
 
   // IE: 9.3.3.14 NRPPa-PDU
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkNonUEAssociatedNRPPaTransportIEs_t, ie, container, NGAP_ProtocolIE_ID_id_NRPPa_PDU, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkNonUEAssociatedNRPPaTransportIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_NRPPa_PDU,
+                        true);
   dl_non_ue_assoc_nrppa->nrppa_pdu = create_byte_array(ie->value.choice.NRPPa_PDU.size, ie->value.choice.NRPPa_PDU.buf);
 
   itti_send_msg_to_task(TASK_NRPPA, ngap_gNB_instance->instance, msg);

@@ -37,23 +37,6 @@
     }                                                                                   \
   } while (0)
 
-// Macro to look up IE. If mandatory and not found, macro will log an error and return false.
-#define E1AP_LIB_FIND_IE(IE_TYPE, ie, container, IE_ID, mandatory)                                           \
-  do {                                                                                                       \
-    ie = NULL;                                                                                               \
-    for (int i = 0; i < (container)->protocolIEs.list.count; ++i) {                                          \
-      IE_TYPE *current_ie = (container)->protocolIEs.list.array[i];                                          \
-      if (current_ie->id == (IE_ID)) {                                                                       \
-        ie = current_ie;                                                                                     \
-        break;                                                                                               \
-      }                                                                                                      \
-    }                                                                                                        \
-    if (mandatory && ie == NULL) {                                                                           \
-      fprintf(stderr, "%s(): Mandatory element not found: ID" #IE_ID " with type " #IE_TYPE "\n", __func__); \
-      return false;                                                                                          \
-    }                                                                                                        \
-  } while (0)
-
 /* deep copy of optional E1AP IE */
 #define _E1_CP_OPTIONAL_IE(dest, src, field)                  \
   do {                                                        \
