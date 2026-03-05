@@ -126,7 +126,7 @@ static int trx_brf_start(openair0_device_t *device)
 
   /* Configure the device's TX module for use with the sync interface.
    * SC16 Q11 samples *with* metadata are used. */
-  for (int tx = 0; tx < brf.num_tx; ++tx) {
+  for (int tx = 0; tx < brf->num_tx; ++tx) {
     status = bladerf_sync_config(brf->dev, BLADERF_CHANNEL_TX(tx), format,
                                  brf->num_buffers, brf->buffer_size, brf->num_transfers, brf->tx_timeout_ms);
     BLADERF_CHECK(status == 0,
@@ -136,7 +136,7 @@ static int trx_brf_start(openair0_device_t *device)
 
   /* Configure the device's RX module for use with the sync interface.
    * SC16 Q11 samples *with* metadata are used. */
-  for (int rx = 0; rx < brf.num_rx; ++rx) {
+  for (int rx = 0; rx < brf->num_rx; ++rx) {
     status = bladerf_sync_config(brf->dev, BLADERF_CHANNEL_RX(rx), format,
                                  brf->num_buffers, brf->buffer_size, brf->num_transfers, brf->rx_timeout_ms);
     BLADERF_CHECK(status == 0,
@@ -146,13 +146,17 @@ static int trx_brf_start(openair0_device_t *device)
 
   /* We must always enable the TX module after calling bladerf_sync_config(), and
    * before  attempting to TX samples via  bladerf_sync_tx(). */
-  status = bladerf_enable_module(brf->dev, BLADERF_CHANNEL_TX(0), true);
-  BLADERF_CHECK(status == 0, "Enable TX0 module");
+  for (int tx = 0; tx < brf->num_tx; ++tx) {
+    status = bladerf_enable_module(brf->dev, BLADERF_CHANNEL_TX(tx), true);
+    BLADERF_CHECK(status == 0, "Enable TX%d module", tx);
+  }
 
   /* We must always enable the RX module after calling bladerf_sync_config(), and
    * before  attempting to RX samples via  bladerf_sync_rx(). */
-  status = bladerf_enable_module(brf->dev, BLADERF_CHANNEL_RX(0), true);
-  BLADERF_CHECK(status == 0, "Enable RX module");
+  for (int rx = 0; rx < brf->num_rx; ++rx) {
+    status = bladerf_enable_module(brf->dev, BLADERF_CHANNEL_RX(rx), true);
+    BLADERF_CHECK(status == 0, "Enable RX%d module", rx);
+  }
 
   // in case it was set to verbosity before, disable now because otherwise the
   // terminal will be flooded
@@ -263,10 +267,10 @@ static void trx_brf_end(openair0_device_t *device)
   // Disable RX module, shutting down our underlying RX stream
 
   int status;
-  for (int rx = 0; rx < brf.num_rx; ++rx)
+  for (int rx = 0; rx < brf->num_rx; ++rx)
     if ((status = bladerf_enable_module(brf->dev, BLADERF_CHANNEL_RX(rx), false)) != 0)
       LOG_E(HW, "Failed: Disable RX%d module: %s\n", rx, bladerf_strerror(status));
-  for (int tx = 0; tx < brf.num_tx; ++tx)
+  for (int tx = 0; tx < brf->num_tx; ++tx)
     if ((status = bladerf_enable_module(brf->dev, BLADERF_CHANNEL_TX(tx), false)) != 0)
       LOG_E(HW, "Failed: Disable TX%d module: %s\n", tx, bladerf_strerror(status));
   bladerf_close(brf->dev);
