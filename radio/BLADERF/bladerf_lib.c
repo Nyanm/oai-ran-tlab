@@ -165,6 +165,20 @@ static int trx_brf_start(openair0_device_t *device)
 }
 
 
+static void interleave_2chan(const void **l, int len, int cc, void *out)
+{
+  uint32_t total_len = 2 * len * cc;
+  uint16_t *a = (uint16_t *)l[0], *b = (uint16_t *)l[1];
+  uint16_t *result = out;
+  for (uint32_t i = 0; i < total_len; i += 4) {
+    uint32_t idx = i >> 1;
+    result[i] = a[idx];
+    result[i+1] = a[idx + 1];
+    result[i+2] = b[idx];
+    result[i+3] = b[idx + 1];
+  }
+}
+
 /*! \brief Called to send samples to the BladeRF RF target
       \param device pointer to the device structure specific to the RF hardware target
       \param timestamp The timestamp at which the first sample MUST be sent
@@ -179,8 +193,15 @@ static int trx_brf_write(openair0_device_t *device, openair0_timestamp_t ptimest
   brf_state_t *brf = device->priv;
 
   /* BRF has only 1 rx/tx chaine : is it correct? TODO: now, handle also two! */
-  DevAssert(brf->num_tx == 1);
-  int16_t *samples = (int16_t *)buff[0];
+  uint32_t samp_interleaved[nsamps * cc];
+  int16_t *samples;
+  if (brf->num_tx == 1) {
+    samples = (int16_t *)buff[0];
+  } else {
+    DevAssert(brf->num_tx == 2);
+    samples = (int16_t *) samp_interleaved;
+    interleave_2chan((const void **)buff, nsamps, cc, samp_interleaved);
+  }
   ptimestamp -= device->openair0_cfg->command_line_sample_advance - device->openair0_cfg->tx_sample_advance;
 
   // When  BLADERF_META_FLAG_TX_NOW is used the timestamp is not used, so one can't schedule a tx
@@ -208,6 +229,21 @@ static int trx_brf_write(openair0_device_t *device, openair0_timestamp_t ptimest
   return nsamps; // brf->meta_tx.actual_count;
 }
 
+static void deinterleave_2chan(const void *l, int len, int cc, void **out)
+{
+  uint32_t total_len = 2 * len * cc;
+  uint16_t *a = out[0];
+  uint16_t *b = out[1];
+  const uint16_t *x = (const uint16_t *)l;
+  for (uint32_t i = 0; i < total_len; i += 4) {
+    uint32_t idx = i >> 1;
+    a[idx] = x[i];
+    a[idx + 1] = x[i + 1];
+    b[idx] = x[i + 2];
+    b[idx + 1] = x[i + 3];
+  }
+}
+
 /*! \brief Receive samples from hardware.
  * Read \ref nsamps samples from each channel to buffers. buff[0] is the array for
  * the first channel. *ptimestamp is the time at which the first sample
@@ -224,8 +260,14 @@ static int trx_brf_read(openair0_device_t *device, openair0_timestamp_t *ptimest
   brf_state_t *brf = device->priv;
 
   // BRF has only one rx/tx chain
-  DevAssert(brf->num_rx == 1);
-  int16_t *samples = (int16_t *)buff[0];
+  uint32_t samp_interleaved[nsamps * cc];
+  int16_t *samples;
+  if (brf->num_rx == 1) {
+    samples = (int16_t *)buff[0];
+  } else {
+    DevAssert(brf->num_rx == 2);
+    samples = (int16_t *) samp_interleaved;
+  }
 
   brf->meta_rx.actual_count = 0;
   brf->meta_rx.flags = BLADERF_META_FLAG_RX_NOW;
@@ -246,6 +288,10 @@ static int trx_brf_read(openair0_device_t *device, openair0_timestamp_t *ptimest
 
   if (brf->meta_rx.actual_count != nsamps) {
     LOG_E(HW, "RX bad samples count, wanted %d, got %d\n", nsamps, brf->meta_rx.actual_count);
+  }
+
+  if (brf->num_rx > 1) {
+    deinterleave_2chan(samp_interleaved, nsamps, cc, buff);
   }
 
   brf->rx_current_ts = brf->meta_rx.timestamp;
