@@ -20,13 +20,14 @@ This document describes the architecture and parallelization strategies of the G
 
 ### Related Work & Comparison
 
-| Implementation | Open Source | 5G NR Spec Aligned | Kernel Source Available | Bit-Exact Baseline |
-|---|---|---|---|---|
-| NVIDIA Aerial cuPHY | Partial (API only) | Yes | No (binary only) | N/A |
-| Academic GPU LDPC (e.g. cuLDPC) | Yes | No | Yes | N/A |
-| **This work (OAI GPU decoder)** | **Yes** | **Yes** | **Yes** | **Yes** |
+| Implementation | Open-Source Framework | 5G NR Spec Aligned | Kernel Source Available | User-Recompilable | Bit-Exact Baseline |
+|---|---|---|---|---|---|
+| NVIDIA Aerial cuPHY | Yes | Yes | Yes | No | N/A |
+| Academic GPU LDPC (e.g. cuLDPC) | Yes | No | Yes | Yes | N/A |
+| **This work (OAI GPU decoder)** | **Yes** | **Yes** | **Yes** | **Yes** | **Yes** |
 
-*NVIDIA Aerial distributes its PHY kernels as precompiled binaries via NGC containers. While the framework and API are open-sourced under Apache 2.0, the actual CUDA kernel implementations for LDPC decoding are not publicly available for inspection or modification.*
+---
+
 
 
 [[_TOC_]]
