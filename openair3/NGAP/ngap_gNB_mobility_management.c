@@ -489,7 +489,7 @@ void free_ng_handover_req_ack(ngap_handover_request_ack_t *msg)
 }
 
 /** @brief Decoder for the NG Handover Command */
-int decode_ng_handover_command(ngap_handover_command_t *msg, NGAP_NGAP_PDU_t *pdu)
+int decode_ng_handover_command(ngap_handover_command_t *msg, const NGAP_NGAP_PDU_t *pdu)
 {
   DevAssert(pdu != NULL);
   NGAP_HandoverCommandIEs_t *ie;

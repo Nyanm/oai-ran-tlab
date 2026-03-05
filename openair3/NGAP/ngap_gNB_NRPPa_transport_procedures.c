@@ -196,7 +196,7 @@ int ngap_gNB_uplink_non_ue_associated_nrppa_transport(instance_t instance, const
 }
 
 // handle DOWNLINK UE ASSOCIATED NRPPA TRANSPORT (9.2.9.1 of TS 38.413 Version 16.0.0)
-int ngap_gNB_handle_downlink_ue_associated_nrppa_transport(sctp_assoc_t assoc_id, uint32_t stream, NGAP_NGAP_PDU_t *pdu)
+int ngap_gNB_handle_downlink_ue_associated_nrppa_transport(sctp_assoc_t assoc_id, uint32_t stream, const NGAP_NGAP_PDU_t *pdu)
 {
   DevAssert(pdu != NULL);
   ngap_gNB_amf_data_t *amf_desc_p = NULL;
@@ -285,7 +285,7 @@ int ngap_gNB_handle_downlink_ue_associated_nrppa_transport(sctp_assoc_t assoc_id
 }
 
 // handle DOWNLINK NON UE ASSOCIATED NRPPA TRANSPORT (9.2.9.3 of TS 38.413 Version 16.0.0)
-int ngap_gNB_handle_downlink_non_ue_associated_nrppa_transport(sctp_assoc_t assoc_id, uint32_t stream, NGAP_NGAP_PDU_t *pdu)
+int ngap_gNB_handle_downlink_non_ue_associated_nrppa_transport(sctp_assoc_t assoc_id, uint32_t stream, const NGAP_NGAP_PDU_t *pdu)
 {
   DevAssert(pdu != NULL);
   ngap_gNB_amf_data_t *amf_desc_p = NULL;
