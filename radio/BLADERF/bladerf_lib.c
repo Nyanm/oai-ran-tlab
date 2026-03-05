@@ -32,6 +32,9 @@ typedef struct {
   //! (using the first discovered backend)
   struct bladerf *dev;
 
+  int num_rx;
+  int num_tx;
+
   //! Number of buffers
   unsigned int num_buffers;
   //! Buffer size
@@ -123,19 +126,23 @@ static int trx_brf_start(openair0_device_t *device)
 
   /* Configure the device's TX module for use with the sync interface.
    * SC16 Q11 samples *with* metadata are used. */
-  status = bladerf_sync_config(brf->dev, BLADERF_CHANNEL_TX(0), format,
-                               brf->num_buffers, brf->buffer_size, brf->num_transfers, brf->tx_timeout_ms);
-  BLADERF_CHECK(status == 0,
-                "Set TX sync interface num_buffers %u, buffer_size %u, num_transfer %u, tx_timeout_ms %u",
-                brf->num_buffers, brf->buffer_size, brf->num_transfers, brf->tx_timeout_ms);
+  for (int tx = 0; tx < brf.num_tx; ++tx) {
+    status = bladerf_sync_config(brf->dev, BLADERF_CHANNEL_TX(tx), format,
+                                 brf->num_buffers, brf->buffer_size, brf->num_transfers, brf->tx_timeout_ms);
+    BLADERF_CHECK(status == 0,
+                  "Set TX%d sync interface num_buffers %u, buffer_size %u, num_transfer %u, tx_timeout_ms %u",
+                  tx, brf->num_buffers, brf->buffer_size, brf->num_transfers, brf->tx_timeout_ms);
+  }
 
   /* Configure the device's RX module for use with the sync interface.
    * SC16 Q11 samples *with* metadata are used. */
-  status = bladerf_sync_config(brf->dev, BLADERF_CHANNEL_RX(0), format,
-                               brf->num_buffers, brf->buffer_size, brf->num_transfers, brf->rx_timeout_ms);
-  BLADERF_CHECK(status == 0,
-                "Set RX sync interface num_buffers %u, buffer_size %u, num_transfer %u, rx_timeout_ms %u",
-                brf->num_buffers, brf->buffer_size, brf->num_transfers, brf->rx_timeout_ms);
+  for (int rx = 0; rx < brf.num_rx; ++rx) {
+    status = bladerf_sync_config(brf->dev, BLADERF_CHANNEL_RX(rx), format,
+                                 brf->num_buffers, brf->buffer_size, brf->num_transfers, brf->rx_timeout_ms);
+    BLADERF_CHECK(status == 0,
+                  "Set RX%d sync interface num_buffers %u, buffer_size %u, num_transfer %u, rx_timeout_ms %u",
+                  rx, brf->num_buffers, brf->buffer_size, brf->num_transfers, brf->rx_timeout_ms);
+  }
 
   /* We must always enable the TX module after calling bladerf_sync_config(), and
    * before  attempting to TX samples via  bladerf_sync_tx(). */
@@ -168,6 +175,7 @@ static int trx_brf_write(openair0_device_t *device, openair0_timestamp_t ptimest
   brf_state_t *brf = device->priv;
 
   /* BRF has only 1 rx/tx chaine : is it correct? TODO: now, handle also two! */
+  DevAssert(brf->num_tx == 1);
   int16_t *samples = (int16_t *)buff[0];
   ptimestamp -= device->openair0_cfg->command_line_sample_advance - device->openair0_cfg->tx_sample_advance;
 
@@ -212,6 +220,7 @@ static int trx_brf_read(openair0_device_t *device, openair0_timestamp_t *ptimest
   brf_state_t *brf = device->priv;
 
   // BRF has only one rx/tx chain
+  DevAssert(brf->num_rx == 1);
   int16_t *samples = (int16_t *)buff[0];
 
   brf->meta_rx.actual_count = 0;
@@ -254,10 +263,12 @@ static void trx_brf_end(openair0_device_t *device)
   // Disable RX module, shutting down our underlying RX stream
 
   int status;
-  if ((status = bladerf_enable_module(brf->dev, BLADERF_CHANNEL_RX(0), false)) != 0)
-    LOG_E(HW, "Failed: Disable RX module: %s\n", bladerf_strerror(status));
-  if ((status = bladerf_enable_module(brf->dev, BLADERF_CHANNEL_TX(0), false)) != 0)
-    LOG_E(HW, "Failed: Disable TX module: %s\n", bladerf_strerror(status));
+  for (int rx = 0; rx < brf.num_rx; ++rx)
+    if ((status = bladerf_enable_module(brf->dev, BLADERF_CHANNEL_RX(rx), false)) != 0)
+      LOG_E(HW, "Failed: Disable RX%d module: %s\n", rx, bladerf_strerror(status));
+  for (int tx = 0; tx < brf.num_tx; ++tx)
+    if ((status = bladerf_enable_module(brf->dev, BLADERF_CHANNEL_TX(tx), false)) != 0)
+      LOG_E(HW, "Failed: Disable TX%d module: %s\n", tx, bladerf_strerror(status));
   bladerf_close(brf->dev);
 }
 
@@ -300,13 +311,17 @@ static int trx_brf_set_freq(openair0_device_t *device, openair0_config_t *openai
   brf_state_t *brf = device->priv;
   openair0_config_t *openair0_cfg = (openair0_config_t *)device->openair0_cfg;
 
-  unsigned int tx_freq = (unsigned int)openair0_cfg->tx_freq[0];
-  status = bladerf_set_frequency(brf->dev, BLADERF_CHANNEL_TX(0), tx_freq);
-  BLADERF_CHECK(status == 0, "Set TX frequency %u", tx_freq);
+  for (int tx = 0; tx < brf->num_tx; ++tx) {
+    unsigned int tx_freq = (unsigned int)openair0_cfg->tx_freq[tx];
+    status = bladerf_set_frequency(brf->dev, BLADERF_CHANNEL_TX(tx), tx_freq);
+    BLADERF_CHECK(status == 0, "Set TX%d frequency %u", tx, tx_freq);
+  }
 
-  unsigned int rx_freq = (unsigned int)openair0_cfg->rx_freq[0];
-  status = bladerf_set_frequency(brf->dev, BLADERF_CHANNEL_RX(0), rx_freq);
-  BLADERF_CHECK(status == 0, "Set RX frequency %u", rx_freq);
+  for (int rx = 0; rx < brf->num_rx; ++rx) {
+    unsigned int rx_freq = (unsigned int)openair0_cfg->rx_freq[rx];
+    status = bladerf_set_frequency(brf->dev, BLADERF_CHANNEL_RX(rx), rx_freq);
+    BLADERF_CHECK(status == 0, "Set RX%d frequency %u", rx, rx_freq);
+  }
 
   return 0;
 }
@@ -369,7 +384,10 @@ static int configure_channel(struct bladerf *dev, channel_config_t *c)
 int device_init(openair0_device_t *device, openair0_config_t *openair0_cfg)
 {
   int status;
-  brf_state_t brf = {0};
+  brf_state_t brf = {
+    .num_rx = openair0_cfg->rx_num_channels,
+    .num_tx = openair0_cfg->tx_num_channels,
+  };
 
   switch ((long) openair0_cfg->sample_rate) {
     case 46080000:
@@ -473,16 +491,7 @@ int device_init(openair0_device_t *device, openair0_config_t *openair0_cfg)
 
   status = bladerf_set_gain_mode(brf.dev, BLADERF_CHANNEL_RX(0), BLADERF_GAIN_MGC);
   BLADERF_CHECK(status == 0, "Disable AGC");
-
-  channel_config_t rx_chan = {
-    .channel = BLADERF_CHANNEL_RX(0),
-    .frequency = openair0_cfg->rx_freq[0],
-    .sample_rate = openair0_cfg->sample_rate,
-    .bandwidth = openair0_cfg->rx_bw,
-    .gain = openair0_cfg->rx_gain[0],
-  };
-  configure_channel(brf.dev, &rx_chan);
-
+  //
   // This is a hack. The USRP library currently does max_gain-tx_gain (tx_gain
   // is the attenuation, so completely illogical), but let's keep what users
   // would expect by doing the same. Existing configs can then be reused.
@@ -492,14 +501,28 @@ int device_init(openair0_device_t *device, openair0_config_t *openair0_cfg)
   const struct bladerf_range *g = NULL;
   status = bladerf_get_gain_range(brf.dev, BLADERF_CHANNEL_TX(0), &g);
   BLADERF_CHECK(status == 0 && g != NULL, "Get TX0 gain range");
+
+  for (int rx = 0; rx < brf.num_rx; ++rx) {
+  channel_config_t rx_chan = {
+    .channel = BLADERF_CHANNEL_RX(rx),
+    .frequency = openair0_cfg->rx_freq[rx],
+    .sample_rate = openair0_cfg->sample_rate,
+    .bandwidth = openair0_cfg->rx_bw,
+    .gain = openair0_cfg->rx_gain[rx],
+  };
+  configure_channel(brf.dev, &rx_chan);
+  }
+
+  for (int tx = 0; tx < brf.num_tx; ++tx) {
   channel_config_t tx_chan = {
-    .channel = BLADERF_CHANNEL_TX(0),
-    .frequency = openair0_cfg->tx_freq[0],
+    .channel = BLADERF_CHANNEL_TX(tx),
+    .frequency = openair0_cfg->tx_freq[tx],
     .sample_rate = openair0_cfg->sample_rate,
     .bandwidth = openair0_cfg->tx_bw,
-    .gain = g->max - openair0_cfg->tx_gain[0], // see comment above
+    .gain = g->max - openair0_cfg->tx_gain[tx], // see comment above
   };
   configure_channel(brf.dev, &tx_chan);
+  }
 
   LOG_I(HW, "BLADERF: Initializing device done\n");
   device->type             = BLADERF_DEV;
