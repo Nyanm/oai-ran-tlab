@@ -1115,7 +1115,7 @@ elseif(ENABLE_HIP)
     else()
       target_include_directories(PHY_NR    PRIVATE /opt/rocm/include)
       target_include_directories(PHY_NR_UE PRIVATE /opt/rocm/include)
-      target_include_directories(SCHED_NR_UE_LIB PRIVATE /opt/rocm/include)
+      target_include_directories(SCHED_NR_UE_LIB /opt/rocm/include)
     endif()
 
     # Use hipcc as the HIP compiler if CMake didn't select it automatically
@@ -1146,7 +1146,7 @@ target_link_libraries(PHY_NR_NO_AVX_256 nr_phy_common nr_common)
 target_compile_definitions(PHY_NR_NO_AVX_256 PUBLIC USE_128BIT)
 
 target_link_libraries(PHY_NR_UE asn1_nr_rrc_hdrs nr_phy_common nr_common UTIL)
-target_link_libraries(SCHED_NR_UE_LIB PRIVATE asn1_lte_rrc_hdrs asn1_nr_rrc_hdrs UTIL)
+target_link_libraries(SCHED_NR_UE_LIB asn1_lte_rrc_hdrs asn1_nr_rrc_hdrs UTIL)
 
 add_library(PHY_RU ${PHY_SRC_RU})
 target_link_libraries(PHY_RU PRIVATE asn1_lte_rrc_hdrs UTIL)
