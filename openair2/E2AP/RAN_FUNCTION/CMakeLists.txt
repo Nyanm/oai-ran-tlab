@@ -75,6 +75,10 @@ add_library(e2_ran_func_du_cucp_cuup STATIC
             ../flexric/test/rnd/fill_rnd_data_slice.c
             CUSTOMIZED/ran_func_tc.c     # currently, not implemented; therefore, filling rnd data
             ../flexric/test/rnd/fill_rnd_data_tc.c
+
+            O-RAN/ran_func_rc_ctrl_slice.c
+            ../../LAYER2/NR_MAC_gNB/slicing/nr_slicing_common.c
+            ../../LAYER2/NR_MAC_gNB/slicing/nr_slicing_nvs_rcsm.c
             )
 
 target_link_libraries(e2_ran_func_du_cucp_cuup PUBLIC asn1_nr_rrc nr_rrc asn1_nr_rrc_hdrs e2_time_obj kpm_ric_info_common_obj 3gpp_derived_ie_obj e2sm_rc_ir_obj sm_common_ie_obj ds sm_common_enc_asn_obj_rc 3gpp_derived_ie_enc_asn_obj_rc)

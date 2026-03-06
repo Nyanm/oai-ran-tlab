@@ -22,6 +22,7 @@
 #include "ran_func_rc.h"
 #include "ran_func_rc_subs.h"
 #include "ran_func_rc_extern.h"
+#include "ran_func_rc_ctrl_slice.h"
 #include "ran_e2sm_ue_id.h"
 #include "../../flexric/src/sm/rc_sm/ie/ir/lst_ran_param.h"
 #include "../../flexric/src/sm/rc_sm/ie/ir/ran_param_list.h"
@@ -898,41 +899,65 @@ sm_ag_if_ans_t write_ctrl_rc_sm(void const* data)
 
   assert(ctrl->hdr.format == FORMAT_1_E2SM_RC_CTRL_HDR && "Indication Header Format received not valid");
   assert(ctrl->msg.format == FORMAT_1_E2SM_RC_CTRL_MSG && "Indication Message Format received not valid");
-  assert(ctrl->hdr.frmt_1.ctrl_act_id == 2 && "Currently only QoS flow mapping configuration supported");
 
-  printf("QoS flow mapping configuration\n");
+  if (ctrl->hdr.frmt_1.ric_style_type == 1 && ctrl->hdr.frmt_1.ctrl_act_id == 2) {
+    printf("QoS flow mapping configuration\n");
 
-  const seq_ran_param_t* ran_param = ctrl->msg.frmt_1.ran_param;
+    const seq_ran_param_t* ran_param = ctrl->msg.frmt_1.ran_param;
 
-  // DRB ID
-  assert(ran_param[0].ran_param_id == 1 && "First RAN Parameter ID has to be DRB ID");
-  assert(ran_param[0].ran_param_val.type == ELEMENT_KEY_FLAG_TRUE_RAN_PARAMETER_VAL_TYPE);
-  printf("DRB ID %ld \n", ran_param[0].ran_param_val.flag_true->int_ran);
+    // DRB ID
+    assert(ran_param[0].ran_param_id == 1 && "First RAN Parameter ID has to be DRB ID");
+    assert(ran_param[0].ran_param_val.type == ELEMENT_KEY_FLAG_TRUE_RAN_PARAMETER_VAL_TYPE);
+    printf("DRB ID %ld \n", ran_param[0].ran_param_val.flag_true->int_ran);
 
 
-  // List of QoS Flows to be modified in DRB
-  assert(ran_param[1].ran_param_id == 2 && "Second RAN Parameter ID has to be List of QoS Flows");
-  assert(ran_param[1].ran_param_val.type == LIST_RAN_PARAMETER_VAL_TYPE);
-  printf("List of QoS Flows to be modified in DRB\n");
-  const lst_ran_param_t* lrp = ran_param[1].ran_param_val.lst->lst_ran_param;
+    // List of QoS Flows to be modified in DRB
+    assert(ran_param[1].ran_param_id == 2 && "Second RAN Parameter ID has to be List of QoS Flows");
+    assert(ran_param[1].ran_param_val.type == LIST_RAN_PARAMETER_VAL_TYPE);
+    printf("List of QoS Flows to be modified in DRB\n");
+    const lst_ran_param_t* lrp = ran_param[1].ran_param_val.lst->lst_ran_param;
 
-  // The following assertion should be true, but there is a bug in the std
-  // check src/sm/rc_sm/enc/rc_enc_asn.c:1085 and src/sm/rc_sm/enc/rc_enc_asn.c:984 
-  // assert(lrp->ran_param_struct.ran_param_struct[0].ran_param_id == 3);
+    // The following assertion should be true, but there is a bug in the std
+    // check src/sm/rc_sm/enc/rc_enc_asn.c:1085 and src/sm/rc_sm/enc/rc_enc_asn.c:984
+    // assert(lrp->ran_param_struct.ran_param_struct[0].ran_param_id == 3);
 
-  // QoS Flow Identifier
-  assert(lrp->ran_param_struct.ran_param_struct[0].ran_param_id == 4);
-  assert(lrp->ran_param_struct.ran_param_struct[0].ran_param_val.type == ELEMENT_KEY_FLAG_TRUE_RAN_PARAMETER_VAL_TYPE);
-  int64_t qfi = lrp->ran_param_struct.ran_param_struct[0].ran_param_val.flag_true->int_ran;
-  assert(qfi > -1 && qfi < 65);
+    // QoS Flow Identifier
+    assert(lrp->ran_param_struct.ran_param_struct[0].ran_param_id == 4);
+    assert(lrp->ran_param_struct.ran_param_struct[0].ran_param_val.type == ELEMENT_KEY_FLAG_TRUE_RAN_PARAMETER_VAL_TYPE);
+    int64_t qfi = lrp->ran_param_struct.ran_param_struct[0].ran_param_val.flag_true->int_ran;
+    assert(qfi > -1 && qfi < 65);
 
-  // QoS Flow Mapping Indication
-  assert(lrp->ran_param_struct.ran_param_struct[1].ran_param_id == 5);
-  assert(lrp->ran_param_struct.ran_param_struct[1].ran_param_val.type == ELEMENT_KEY_FLAG_FALSE_RAN_PARAMETER_VAL_TYPE);
-  int64_t dir = lrp->ran_param_struct.ran_param_struct[1].ran_param_val.flag_false->int_ran;
-  assert(dir == 0 || dir == 1);
+    // QoS Flow Mapping Indication
+    assert(lrp->ran_param_struct.ran_param_struct[1].ran_param_id == 5);
+    assert(lrp->ran_param_struct.ran_param_struct[1].ran_param_val.type == ELEMENT_KEY_FLAG_FALSE_RAN_PARAMETER_VAL_TYPE);
+    int64_t dir = lrp->ran_param_struct.ran_param_struct[1].ran_param_val.flag_false->int_ran;
+    assert(dir == 0 || dir == 1);
 
-  printf("qfi = %ld, dir %ld \n", qfi, dir);
+    printf("qfi = %ld, dir %ld \n", qfi, dir);
+
+#if defined (NGRAN_GNB_DU)
+  } else if (ctrl->hdr.frmt_1.ric_style_type == 2 && ctrl->hdr.frmt_1.ctrl_act_id == 6) { // Slice_level_PRB_quotal_7_6_3_1 = 6
+    /// ADD/MOD SLICE ///
+    e2sm_rc_ctrl_msg_frmt_1_t const* msg = &ctrl->msg.frmt_1;
+    assert(msg->sz_ran_param == 1 && "not support msg->sz_ran_param != 1");
+    seq_ran_param_t* RRM_Policy_Ratio_List = &msg->ran_param[0];
+    assert(RRM_Policy_Ratio_List->ran_param_id == RRM_Policy_Ratio_List_8_4_3_6 && "wrong RRM_Policy_Ratio_List id");
+    assert(RRM_Policy_Ratio_List->ran_param_val.type == LIST_RAN_PARAMETER_VAL_TYPE && "wrong RRM_Policy_Ratio_List type");
+
+    if (RRM_Policy_Ratio_List->ran_param_val.lst) {
+      size_t slices_len = RRM_Policy_Ratio_List->ran_param_val.lst->sz_lst_ran_param;
+      const int mod_id = 0;
+      bool rc = add_mod_rc_slice(mod_id, slices_len, RRM_Policy_Ratio_List->ran_param_val.lst);
+      if (!rc) {
+        LOG_E(NR_MAC, "failed add/mod slices\n");
+      }
+    } else {
+      LOG_E(NR_MAC, "RRM_Policy_Ratio_List->ran_param_val.lst is NULL\n");
+    }
+#endif
+  } else {
+    assert(0!=0 && "unknown ric_style_type and ctrl_act_id\n");
+  }
 
 
   sm_ag_if_ans_t ans = {.type = CTRL_OUTCOME_SM_AG_IF_ANS_V0};
