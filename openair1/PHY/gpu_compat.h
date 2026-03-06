@@ -12,10 +12,10 @@
 
 #if defined(__HIPCC__) || defined(__HIP_PLATFORM_AMD__) || defined(__HIP_PLATFORM_HCC__)
   #define GPU_USE_HIP 1
-#elif defined(__CUDACC__)
+#else //if defined(__CUDACC__)
   #define GPU_USE_CUDA 1
-#else
-  #error "Compile with NVCC or HIPCC."
+//#else
+//  #error "Compile with NVCC or HIPCC."
 #endif
 
 
@@ -60,7 +60,6 @@
 typedef hipError_t    gpuError_t;
 typedef hipStream_t   gpuStream_t;
 typedef hipEvent_t    gpuEvent_t;
-typedef hipMemcpyKind gpuMemcpyKind_t;
 
 #define gpuSuccess hipSuccess
 
@@ -75,7 +74,6 @@ typedef hipMemcpyKind gpuMemcpyKind_t;
 typedef cudaError_t    gpuError_t;
 typedef cudaStream_t   gpuStream_t;
 typedef cudaEvent_t    gpuEvent_t;
-typedef cudaMemcpyKind gpuMemcpyKind_t;
 
 #define gpuSuccess cudaSuccess
 
@@ -191,20 +189,20 @@ typedef dim3 gpuDim3;
 #define gpuSetDevice           cudaSetDevice
 #define gpuGetDeviceProperties cudaGetDeviceProperties
 
-#define gpuDeviceProp_t        cudaDeviceProp_t
+#define gpuDeviceProp_t        struct cudaDeviceProp
 #define gpuDeviceGetAttribute  cudaDeviceGetAttribute
 #define gpuDevAttrManagedMemory cudaDevAttrManagedMemory
 #define gpuDevAttrConcurrentManagedAccess cudaDevAttrConcurrentManagedAccess
 #define gpuDevAttrUnifiedAddressing cudaDevAttrUnifiedAddressing
 #define gpuDevAttrPageableMemoryAccess cudaDevAttrPageableMemoryAccess
 #define gpuDevAttrPageableMemoryAccessUsesHostPageTables cudaDevAttrPageableMemoryAccessUsesHostPageTables
-#define gpuDevAttrHostRegisterSupported hipDevAttrHostRegisterSupported
-#define gpuDevAttrIntegrated hipDevAttrIntegrated
+#define gpuDevAttrHostRegisterSupported cudaDevAttrHostRegisterSupported
+#define gpuDevAttrIntegrated   cudaDevAttrIntegrated
 
 #define gpuMalloc              cudaMalloc
 #define gpuFree                cudaFree
 #define gpuMemset              cudaMemset
-#define gpumemsetasync         cudamemsetasync
+#define gpuMemsetAsync         cudaMemsetAsync
 #define gpuHostAlloc           cudaHostAlloc
 #define gpuHostAllocMapped     cudaHostAllocMapped
 #define gpuHostAllocDefault    cudaHostAllocDefault
