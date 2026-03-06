@@ -280,12 +280,18 @@ void setup_ue_ipv4_route(const char* ifname, int instance_id, const char *ipv4)
                     table_id,
                     ifname,
                     table_id);
+  LOG_D(UTIL, "%s\n", command_line);
 
   if (res < 0) {
     LOG_E(UTIL, "Could not create ip rule/route commands string\n");
     return;
   }
   background_system(command_line);
+}
+
+static inline bool ue_ifname_exists(const char *ifname)
+{
+  return if_nametoindex(ifname) != 0;
 }
 
 int tun_generate_ifname(char *ifname, const char *ifprefix, int instance_id)
@@ -299,7 +305,18 @@ int tuntap_generate_ue_ifname(char *ifname, int flag, int instance_id, int pdu_s
   char pdu_session_string[10];
   snprintf(pdu_session_string, sizeof(pdu_session_string), "p%d", pdu_session_id);
   const char *basename = flag == IFF_TUN ? "oaitun_ue" : "oaitap_ue";
-  return snprintf(ifname, IFNAMSIZ, "%s%d%s", basename, instance_id + 1, pdu_session_id == -1 ? "" : pdu_session_string);
+
+  int len = snprintf(ifname, IFNAMSIZ, "%s%d%s", basename, instance_id + 1, pdu_session_id == -1 ? "" : pdu_session_string);
+  assert(len < IFNAMSIZ);
+  int tunid = instance_id + 1;
+  while (ue_ifname_exists(ifname)) {
+    tunid+=1;
+    LOG_W(UTIL, "ifname %s exists, increase ueid suffix to %d\n", ifname, tunid);
+    len = snprintf(ifname, IFNAMSIZ, "%s%d%s", "oaitun_ue", tunid, pdu_session_id == -1 ? "" : pdu_session_string);
+    assert(len < IFNAMSIZ);
+  }
+  LOG_I(UTIL, "%s(), Create ifname %s with ueid %d and pdu_session_id %d, \n", __func__, ifname, tunid, pdu_session_id);
+  return tunid;
 }
 
 void tuntap_destroy(const char *dev)

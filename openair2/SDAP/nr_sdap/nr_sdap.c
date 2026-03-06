@@ -171,7 +171,7 @@ void start_sdap_tun_gnb_first_ue_default_pdu_session(ue_id_t ue_id, int pdu_sess
   threadCreate(&entity->pdusession_thread, sdap_tun_read_thread, entity, "gnb_tun_read_thread", -1, OAI_PRIORITY_RT_LOW);
 }
 
-static void start_sdap_tun_ue(ue_id_t ue_id, int pdu_session_id, int sock, const char *ifname)
+static void start_sdap_tun_ue(ue_id_t ue_id, int pdu_session_id, int sock, int tunid, const char *ifname)
 {
   nr_sdap_entity_t *entity = nr_sdap_get_entity(ue_id, pdu_session_id);
   DevAssert(entity != NULL);
@@ -180,7 +180,7 @@ static void start_sdap_tun_ue(ue_id_t ue_id, int pdu_session_id, int sock, const
   entity->pdusession_if_name = strdup(ifname);
   entity->stop_thread = false;
   char thread_name[64];
-  snprintf(thread_name, sizeof(thread_name), "ue_tun_read_%ld_p%d", ue_id, pdu_session_id);
+  snprintf(thread_name, sizeof(thread_name), "ue_tun_read_%d_p%d", tunid, pdu_session_id);
   threadCreate(&entity->pdusession_thread, sdap_tun_read_thread, entity, thread_name, -1, OAI_PRIORITY_RT_LOW);
 }
 
@@ -188,22 +188,22 @@ static void start_sdap_tun_ue(ue_id_t ue_id, int pdu_session_id, int sock, const
 void create_ue_ip_if(const char *ipv4, const char *ipv6, int ue_id, int pdu_session_id, bool is_default)
 {
   char ifname[IFNAMSIZ];
-  tuntap_generate_ue_ifname(ifname, IFF_TUN, ue_id, is_default ? -1 : pdu_session_id);
+  int tunid = tuntap_generate_ue_ifname(ifname, IFF_TUN, ue_id, is_default ? -1 : pdu_session_id);
   const int sock = tuntap_alloc(IFF_TUN, ifname);
   tun_config(ifname, ipv4, ipv6);
   if (ipv4) {
-    setup_ue_ipv4_route(ifname, ue_id, ipv4);
+    setup_ue_ipv4_route(ifname, tunid, ipv4);
   }
-  start_sdap_tun_ue(ue_id, pdu_session_id, sock, ifname); // interface name suffix is ue_id+1
+  start_sdap_tun_ue(ue_id, pdu_session_id, sock, tunid, ifname); // interface name suffix is ue_id+1
 }
 
 void create_ue_eth_if(int ue_id, int pdu_session_id, bool is_default)
 {
   char ifname[IFNAMSIZ];
-  tuntap_generate_ue_ifname(ifname, IFF_TAP, ue_id, is_default ? -1 : pdu_session_id);
+  int tunid = tuntap_generate_ue_ifname(ifname, IFF_TAP, ue_id, is_default ? -1 : pdu_session_id);
   const int sock = tuntap_alloc(IFF_TAP, ifname);
   tap_config(ifname); // brings the interface up
-  start_sdap_tun_ue(ue_id, pdu_session_id, sock, ifname);
+  start_sdap_tun_ue(ue_id, pdu_session_id, sock, tunid, ifname);
 }
 
 void remove_ip_if(nr_sdap_entity_t *entity)
