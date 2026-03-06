@@ -35,6 +35,7 @@
 /* exe */
 #include <common/utils/nr/nr_common.h>
 #include <inttypes.h>//JIn add
+#include "mac_defs.h" 
 /* PHY */
 #include "openair1/PHY/impl_defs_top.h"
 
@@ -44,6 +45,7 @@
 #include "NR_MAC_UE/mac_proto.h"
 #include "NR_MAC_UE/mac_extern.h"
 #include "NR_MAC_UE/nr_ue_sci.h"
+
 /* utils */
 #include "assertions.h"
 #include "oai_asn1.h"
@@ -3472,23 +3474,44 @@ bool nr_ue_sl_pssch_scheduler(NR_UE_MAC_INST_t *mac,
   
   preprocess(mac, frame, slot, &feedback_frame, &feedback_slot, sl_bwp, configured_PSFCH);
  
-  /* ---------------- Jin TDMA: minimal, deterministic, slot-parity ---------------- */
+  /* ---------------- Jin TDMA: minimal, deterministic, slot-parity  2UES+syncref----- ------ */
+  /*
   uint16_t chosen_uid = 0;
 
   if (get_nrUE_params()->sync_ref) {
-    /* UE0 transmits in slots 0..9, alternate destination by slot parity */
-    chosen_uid = (slot & 1) ? 2 : 1;   /* odd->UE2, even->UE1 */
+    //UE0 transmits in slots 0..9, alternate destination by slot parity  
+    chosen_uid = (slot & 1) ? 2 : 1;   //odd->UE2, even->UE1 
   } else {
-    const uint16_t owner_uid = (slot & 1) ? 2 : 1;  /* odd->UE2, even->UE1 */
+    const uint16_t owner_uid = (slot & 1) ? 2 : 1;  //odd->UE2, even->UE1 
     if (mac->src_id != owner_uid)
-      return false;                   /* not my TX slot */
-    chosen_uid = 0;                   /* always send uplink to sync-ref */
+      return false;                   // not my TX slot 
+    chosen_uid = 0;                   //always send uplink to sync-ref 
   }
 
   LOG_D(NR_MAC, "[SL-TDMA-20] me=%u frame=%u slot=%u chosen_uid=%u\n",
         mac->src_id, frame, slot, chosen_uid);
+  */
   /* ---------------- end Jin TDMA ---------------- */
- 
+  /* ---------------- Jin TDMA: round-robin, N-UE generalised ---------------- */
+  uint16_t chosen_uid = 0;
+  const int num_peers = CUR_SL_UE_CONNECTIONS; /* peers per UE = total_UEs - 1 */
+
+  if (get_nrUE_params()->sync_ref) {
+    /* Sync-ref (uid=0) cycles through all non-zero peer UIDs round-robin */
+    /* Each peer gets one slot in a repeating window of num_peers slots    */
+    chosen_uid = (slot % num_peers) + 1;  /* gives 1..num_peers */
+  } else {
+    /* Non-sync-ref UEs: each owns one slot per window of num_peers slots.
+    * src_id is 1-based (1..num_peers), so own slot index = src_id - 1   */
+    const int own_slot_in_window = (int)mac->src_id - 1;
+    if ((slot % num_peers) != own_slot_in_window)
+      return false;             /* not my TX slot */
+    chosen_uid = 0;             /* always send uplink to sync-ref */
+  }
+
+  LOG_D(NR_MAC, "[SL-TDMA-20] me=%u frame=%u slot=%u chosen_uid=%u num_peers=%d\n",
+        mac->src_id, frame, slot, chosen_uid, num_peers);
+  /* ---------------- end Jin TDMA ---------------- */
 
 
   SL_UE_iterator(UE_info->list, UE) {

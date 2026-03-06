@@ -217,7 +217,7 @@ sudo batctl if add oaitun_ue1
 ### Start Batman on UE2 (namespace 2):
 ```
 sudo ./multi-ue.sh -o2
-ip link set oaitun_ue1 address 02:00:00:00:00:02
+ip link set oaitun_ue2 address 02:00:00:00:00:02
 sudo batctl if add oaitun_ue2
 ```
 
@@ -225,7 +225,7 @@ sudo batctl if add oaitun_ue2
 ### Start Batman on UE3 (namespace 3):
 ```
 sudo ./multi-ue.sh -o3
-ip link set oaitun_ue1 address 02:00:00:00:00:03
+ip link set oaitun_ue3 address 02:00:00:00:00:03
 sudo batctl if add oaitun_ue3
 ```
 ### Batman command
@@ -244,3 +244,67 @@ You can check the current packets exchange with wireshark, please update the nam
 wireshark -k -i oaitun_ueX -Y "eth.type == 0x4305"
 ```
 
+## HW with TAP 
+Similarly, we can start the HW with TAP with the following command 
+
+### Launch Broker (outside namespace):
+```
+cd ran_build/build/
+./broker
+```
+### Launch SYNC-REF (namespace 1):
+```
+sudo ./multi-ue.sh -o1
+cd ran_build/build/
+sudo OAI_TUNTAP_MODE=tap RFSIMULATOR=server ./nr-uesoftmodem --rfsim -O ../../../targets/PROJECTS/NR-SIDELINK/CONF/sl_sync_ref.conf --sl-mode 2 --sa --sync-ref --brokerip 10.201.1.100
+```
+
+### Launch UE2 (namespace 2):
+```
+sudo ./multi-ue.sh -o2
+cd ran_build/build/
+sudo OAI_TUNTAP_MODE=tap ./nr-uesoftmodem --rfsim -O ../../../targets/PROJECTS/NR-SIDELINK/CONF/ue1.conf --sl-mode 2 --sa --brokerip 10.202.1.100 --device_id 1 | sudo tee $HOME/sl-oai-release4/rat-selection/logs/sl.log
+```
+
+### Launch UE3 (namespace 3):
+```
+sudo ./multi-ue.sh -o3
+cd ran_build/build/
+sudo OAI_TUNTAP_MODE=tap ./nr-uesoftmodem --rfsim -O ../../../targets/PROJECTS/NR-SIDELINK/CONF/ue2.conf --sl-mode 2 --sa --brokerip 10.203.1.100 --device_id 2 | sudo tee $HOME/sl-oai-release4/rat-selection/logs/sl.log
+```
+
+## More UEs generated with TAP 
+The newest update enables to generate more than 2 UEs along with one sync-ref. The following is an example of 3 UEs.
+One would first need to create a new .conf file in openairinterface5g/targets/PROJECTS/NR-SIDELINK/, second in file /openairinterface5g/openair2/LAYER2/NR_MAC_UE/mac_defs.h, the parameter of "#define CUR_SL_UE_CONNECTIONS" in case this is set lower than expected.
+### Launch Broker (outside namespace):
+```
+cd ran_build/build/
+./broker
+```
+### Launch SYNC-REF (namespace 1):
+```
+sudo ./multi-ue.sh -o1
+cd ran_build/build/
+sudo OAI_TUNTAP_MODE=tap RFSIMULATOR=server ./nr-uesoftmodem --rfsim -O ../../../targets/PROJECTS/NR-SIDELINK/CONF/sl_sync_ref.conf --sl-mode 2 --sa --sync-ref --brokerip 10.201.1.100  --thread-pool -1,-1
+```
+
+### Launch UE2 (namespace 2):
+```
+sudo ./multi-ue.sh -o2
+cd ran_build/build/
+sudo OAI_TUNTAP_MODE=tap ./nr-uesoftmodem --rfsim -O ../../../targets/PROJECTS/NR-SIDELINK/CONF/ue1.conf --sl-mode 2 --sa --brokerip 10.202.1.100 --device_id 1  --thread-pool -1,-1 | sudo tee $HOME/sl-oai-release4/rat-selection/logs/sl.log 
+```
+
+### Launch UE3 (namespace 3):
+```
+sudo ./multi-ue.sh -o3
+cd ran_build/build/
+sudo OAI_TUNTAP_MODE=tap ./nr-uesoftmodem --rfsim -O ../../../targets/PROJECTS/NR-SIDELINK/CONF/ue2.conf --sl-mode 2 --sa --brokerip 10.203.1.100 --device_id 2  --thread-pool -1,-1 | sudo tee $HOME/sl-oai-release4/rat-selection/logs/sl.log
+```
+
+### Launch UE4 (namespace 4):
+```
+sudo ./multi-ue.sh -o4
+cd ran_build/build/
+sudo OAI_TUNTAP_MODE=tap ./nr-uesoftmodem --rfsim -O ../../../targets/PROJECTS/NR-SIDELINK/CONF/ue3.conf --sl-mode 2 --sa --brokerip 10.204.1.100 --device_id 3  --thread-pool -1,-1 | sudo tee $HOME/sl-oai-release4/rat-selection/logs/sl.log
+```

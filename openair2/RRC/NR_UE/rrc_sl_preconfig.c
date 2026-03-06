@@ -30,6 +30,7 @@
 #include "rrc_defs.h"
 #include "rrc_vars.h"
 #include "LAYER2/NR_MAC_UE/mac_proto.h"
+#include "LAYER2/NR_MAC_UE/mac_defs.h" //jin get num.UE
 #include "RRC/NAS/nas_config.h"
 #include "executables/nr-uesoftmodem.h"
 #include "LAYER2/nr_rlc/nr_rlc_oai_api.h"
@@ -665,12 +666,20 @@ void nr_UE_configure_Sidelink(uint8_t id, uint8_t is_sync_source, ueinfo_t *uein
   create_for(ueinfo->srcid);
 
   /* Provision peers deterministically */
+  /* //Comment only 2 UES
   if (ueinfo->srcid == 0) {
     create_for(1);
     create_for(2);
   } else {
     create_for(0);
+  }*/
+  //Update to more UEs
+  for (int peer = 0; peer <= CUR_SL_UE_CONNECTIONS; peer++) {
+    if (peer == (int)ueinfo->srcid)
+      continue;  /* skip self — already done above */
+    create_for(peer);
   }
+
   //Jin end
 
     
