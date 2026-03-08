@@ -931,34 +931,6 @@ def triggerCN5GSlaveJob (jobName, gitlabStatusName) {
   }
 }
 
-def triggerSlaveJobNoGitLab (jobName) {
-  if ("MERGE".equals(env.gitlabActionType)) {
-    MR_NUMBER = env.gitlabMergeRequestIid
-  } else {
-    MR_NUMBER = 'develop'
-  }
-  // Workaround for the "cancelled" GitLab pipeline notification
-  // The slave job is triggered with the propagate false so the following commands are executed
-  // Its status is now PASS/SUCCESS from a stage pipeline point of view
-  // localStatus variable MUST be analyzed to properly assess the status
-  localStatus = build job: jobName,
-    parameters: [
-      string(name: 'eNB_Repository', value: String.valueOf(GIT_URL)),
-      string(name: 'eNB_Branch', value: String.valueOf(env.gitlabSourceBranch)),
-      string(name: 'eNB_CommitID', value: String.valueOf(env.gitlabMergeRequestLastCommit)),
-      string(name: 'eNB_MR', value: String.valueOf(MR_NUMBER)),
-      booleanParam(name: 'eNB_mergeRequest', value: "MERGE".equals(env.gitlabActionType)),
-      string(name: 'eNB_TargetBranch', value: String.valueOf(env.gitlabTargetBranch))
-    ], propagate: false
-  localResult = localStatus.getResult()
-  echo "${jobName} Slave Job status is ${localResult}"
-  if (localStatus.resultIsBetterOrEqualTo('SUCCESS')) {
-     echo "${jobName} Slave Job is OK"
-  } else {
-     error "${jobName} Slave Job is KO"
-  }
-}
-
 def finalizeSlaveJob(jobName) {
   lock ('Parent-Lock') {
     // In case of any non-success, we are retrieving the HTML report of the last completed
