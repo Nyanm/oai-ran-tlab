@@ -470,40 +470,82 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
 static void ctrl_rf(RU_t *ru, int frame, int slot, uint64_t timestamp)
 {
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
-  int num_beams = 0;
-  int beams[ru->num_beams_period];
-  for (int b = 0 ; b < ru->num_beams_period; b++)
-    beams[b] = 0;
-  for (int i = 0; i < ru->num_beams_period; i++) {
-    int beam = -1;
-    for (int j = 0; j < fp->symbols_per_slot; j++) {
-      if (ru->common.beam_id[i][slot * fp->symbols_per_slot + j] == -1)
-        continue;
-      AssertFatal(beam == -1 || beam == ru->common.beam_id[i][slot * fp->symbols_per_slot + j],
-                  "Cannot handle more than 1 beam per slot");
-      beam = ru->common.beam_id[i][slot * fp->symbols_per_slot + j];
+  int num_events = 0;
+  int event_symbol[fp->symbols_per_slot];
+  int event_counts[fp->symbols_per_slot];
+  int beam_events[fp->symbols_per_slot][ru->num_beams_period];
+
+  int last_applied_beams[ru->num_beams_period];
+  for (int i = 0; i < ru->num_beams_period; i++)
+    last_applied_beams[i] = -1;
+
+  int first_available_sym = 0;
+  bool idle_beam = true;
+  for (int j = 0; j < fp->symbols_per_slot; j++) {
+    int current_beams[ru->num_beams_period];
+    int active_count = 0;
+    bool differs = false;
+
+    for (int i = 0; i < ru->num_beams_period; i++) {
+      current_beams[i] = ru->common.beam_id[i][slot * fp->symbols_per_slot + j];
+      if (current_beams[i] != last_applied_beams[i])
+        differs = true;
+      if (current_beams[i] != -1)
+        active_count++;
     }
-    if (beam != -1) {
-      beams[num_beams] = beam;
-      num_beams++;
+
+    if (active_count > 0) {
+      if (differs) {
+        event_symbol[num_events] = first_available_sym;
+        event_counts[num_events] = 0;
+        for (int i = 0; i < ru->num_beams_period; i++) {
+          if (current_beams[i] != -1) {
+            beam_events[num_events][event_counts[num_events]] = current_beams[i];
+            event_counts[num_events]++;
+          }
+          last_applied_beams[i] = current_beams[i];
+        }
+        num_events++;
+      }
+      idle_beam = false;
+      first_available_sym = j;
+    } else {
+      if (!idle_beam) {
+        first_available_sym = j;
+        idle_beam = true;
+        for (int i = 0; i < ru->num_beams_period; i++)
+          last_applied_beams[i] = -1;
+      }
     }
   }
 
-  uint64_t ts = timestamp + ru->ts_offset;
   nfapi_nr_config_request_scf_t *cfg = &ru->config;
-  int slot_type = nr_slot_select(cfg, frame, slot % fp->slots_per_frame);
-  int prevslot_type = nr_slot_select(cfg, frame, (slot + (fp->slots_per_frame-  1)) % fp->slots_per_frame);
+  uint64_t slot_base_ts = timestamp + ru->ts_offset;
   if (cfg->cell_config.frame_duplex_type.value == TDD
-      && slot_type == NR_DOWNLINK_SLOT
-      && prevslot_type == NR_UPLINK_SLOT
-      && !get_softmodem_params()->continuous_tx
-      && !IS_SOFTMODEM_RFSIM)
-    ts -= ru->sf_extension;
+      && nr_slot_select(cfg, frame, slot % fp->slots_per_frame) == NR_DOWNLINK_SLOT
+      && nr_slot_select(cfg, frame, (slot + fp->slots_per_frame - 1) % fp->slots_per_frame) == NR_UPLINK_SLOT
+      && !get_softmodem_params()->continuous_tx && !IS_SOFTMODEM_RFSIM) {
+    slot_base_ts -= ru->sf_extension;
+  }
 
-  if (num_beams != 0) {
-    for (int i = 0; i < num_beams; i++)
-      LOG_D(NR_PHY, "Frame %d Slot %d Beam %d\n", frame, slot, beams[i]);
-    ru->rfdevice.trx_set_beams2(&ru->rfdevice, beams, num_beams, ts);
+  for (int e = 0; e < num_events; e++) {
+    if (e > 0 && event_symbol[e] == event_symbol[e-1])
+      continue;
+
+    uint64_t symbol_offset = 0;
+    if (event_symbol[e] > 0)
+      symbol_offset = get_samples_symbol_duration(fp, slot, 0, event_symbol[e]);
+
+    uint64_t event_ts = slot_base_ts + symbol_offset;
+    for (int n = 0; n < event_counts[e]; n++)
+      LOG_D(NR_PHY,
+            "RU Control [%d.%d]: Trigger Sym %d, Beam %d at TS %lu\n",
+            frame,
+            slot,
+            event_symbol[e],
+            beam_events[e][n],
+            event_ts);
+    ru->rfdevice.trx_set_beams2(&ru->rfdevice, beam_events[e], event_counts[e], event_ts);
   }
 }
 
