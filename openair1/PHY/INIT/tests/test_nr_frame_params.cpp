@@ -23,7 +23,7 @@
 extern "C" {
 #include <stdlib.h>
 #include "openair1/PHY/defs_nr_common.h"
-#include "openair1/PHY/INIT/nr_phy_init.h"
+#include "openair1/PHY/INIT/nr_parms.h"
 
 static softmodem_params_t softmodem_params;
 softmodem_params_t *get_softmodem_params(void)
