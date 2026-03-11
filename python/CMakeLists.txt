@@ -29,6 +29,7 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 add_library(liboaipy MODULE
     src/oaipylib_module.c
     src/oaipylib_wrappers.c
+    src/oaipylib_top.c
 )
 
 target_include_directories(liboaipy PRIVATE
