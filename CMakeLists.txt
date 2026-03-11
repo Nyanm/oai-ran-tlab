@@ -2202,6 +2202,7 @@ add_subdirectory(openair2)
 add_subdirectory(openair3)
 add_subdirectory(radio)
 add_subdirectory(tests)
+add_subdirectory(python)
 
 if(TARGET oai_cuda_lib)
     message(STATUS "CUDA library 'oai_cuda_lib' found, linking to targets...")
@@ -2212,3 +2213,4 @@ endif()
 if(PACKAGING_LTE OR PACKAGING_NR OR PACKAGING_COMMON OR PACKAGING_USRP OR PACKAGING_PHYSIM)
   include("tools/packages/packages.cmake")
 endif()
+
