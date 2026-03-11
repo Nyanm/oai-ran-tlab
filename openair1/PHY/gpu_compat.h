@@ -18,7 +18,7 @@
 //  #error "Compile with NVCC or HIPCC."
 #endif
 /* ================= LLR Type ================= */
-#define INT16LLR 1  //0 to use int8_t llr, 1 to use int16_t llr
+#define INT16LLR 0  //0 to use int8_t llr, 1 to use int16_t llr
 
 /* ================= Backend Includes ================= */
 

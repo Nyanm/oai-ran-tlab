@@ -61,7 +61,7 @@
 extern gpuStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
 extern gpuEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
 static bool decoder_streamsCreated = false;
-static volatile int cuda_graph_breaker = 1;
+static volatile int cuda_graph_breaker = 0; //should be zero by default
 cudaError_t Err;
 #if INT16LLR
 int16_t* cnProcBuf_dev;
@@ -178,8 +178,6 @@ extern void nrLDPC_decoder_cuda_NormalExecute(ldpc_cuda_bridge_t* buffer,
                                               int8_t* llrRes,
                                               int8_t* llrProcBuf,
 #endif
-                                            
-
                                               uint32_t Z,
                                               uint32_t K,
                                               uint8_t BG,
@@ -552,7 +550,12 @@ static inline uint32_t nrLDPC_decoder_core_dynamic(
   // Calculate LLR size per segment based on Rate
   uint32_t numLLR = (R == 13) ? NR_LDPC_NCOL_BG1_R13 * Z : ((R == 89) ? NR_LDPC_NCOL_BG1_R89 * Z : NR_LDPC_NCOL_BG1_R23 * Z);
   if (p_llr != p_llr_dev)
-    gpuMemcpyAsync(p_llr_dev, p_llr, n_segments * 68 * 384, gpuMemcpyHostToDevice, decoderStreams[0]);
+  #if INT16LLR
+gpuMemcpyAsync(p_llr_dev, p_llr, sizeof(int16_t) * n_segments * 68 * 384, gpuMemcpyHostToDevice, decoderStreams[0]);
+#else
+gpuMemcpyAsync(p_llr_dev, p_llr, sizeof(int8_t) * n_segments * 68 * 384, gpuMemcpyHostToDevice, decoderStreams[0]);
+#endif
+    
 
   // Output size safety: assume worst-case unpacked bytes (K * n_segments)
   size_t total_output_size = n_segments * K * sizeof(int8_t);

@@ -493,7 +493,7 @@ one_measurement_t test_ldpc(short max_iterations,
         n_iter_max = n_iter;
 
     } // end segments
-
+/*
     if (use32bit){
       dumpASS_8(estimated_output, "ldpctest_estimateOutput_cuda.txt",n_segments);
     }
@@ -502,7 +502,7 @@ one_measurement_t test_ldpc(short max_iterations,
     }
 
     dumpASS_8(channel_output_fixed, "ldpctest_channel_output_fixed_cuda128.txt",n_segments);
-
+*/
     if (segment_bler != 0)
       ret.errors++;
   }
