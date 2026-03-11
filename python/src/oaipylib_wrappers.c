@@ -45,26 +45,18 @@ PyObject *py_oaipylib_shutdown(PyObject *self, PyObject *args) {
     Py_RETURN_NONE;
 }
 
-PyObject *py_oaipylib_add(PyObject *self, PyObject *args) {
-    (void)self;
 
-    double a;
-    double b;
-
-    if (!PyArg_ParseTuple(args, "dd", &a, &b)) {
-        return NULL;
-    }
-
-    return PyFloat_FromDouble(oai_lib_add(a, b));
-}
-
-PyObject *py_oaipylib_run_algorithm(PyObject *self, PyObject *args) {
+PyObject *py_oaipylib_nr_polar_decoder(PyObject *self, PyObject *args) {
     (void)self;
 
     PyObject *input_obj = NULL;
-    double alpha = 0.0;
+    uint64_t out; // output stored
+    uint8_t ones_flag;
+    int8_t messageType;
+    uint16_t messageLength;
+    uint8_t aggregation_level;
 
-    if (!PyArg_ParseTuple(args, "Od", &input_obj, &alpha)) {
+    if (!PyArg_ParseTuple(args, "ObcHb", &input_obj, &ones_flag,&messageType,&messageLength,&aggregation_level)) {
         return NULL;
     }
 
@@ -80,54 +72,38 @@ PyObject *py_oaipylib_run_algorithm(PyObject *self, PyObject *args) {
         return NULL;
     }
 
-    double *x = (double *)malloc((size_t)n * sizeof(double));
-    double *out = (double *)malloc((size_t)n * sizeof(double));
+    int16_t *x = (int16_t *)malloc((size_t)n * sizeof(int16_t));
+    
 
-    if (!x || !out) {
+    if (!x) {
         Py_DECREF(seq);
-        free(x);
-        free(out);
         PyErr_NoMemory();
         return NULL;
     }
 
     PyObject **items = PySequence_Fast_ITEMS(seq);
     for (Py_ssize_t i = 0; i < n; ++i) {
-        x[i] = PyFloat_AsDouble(items[i]);
+        x[i] = (int16_t)(32767.0*PyFloat_AsDouble(items[i]));
         if (PyErr_Occurred()) {
             Py_DECREF(seq);
             free(x);
-            free(out);
             return NULL;
         }
     }
-
-    int rc = oai_lib_run_algorithm(x, (int)n, alpha, out);
+    int rc = oai_lib_nr_polar_decoder(x, &out, ones_flag, messageType, messageLength,aggregation_level);
 
     Py_DECREF(seq);
     free(x);
 
     if (rc != 0) {
-        free(out);
         return oaipylib_raise_error("oai_lib_run_algorithm failed");
     }
 
-    PyObject *result = PyList_New(n);
+    PyObject *result = PyList_New(1);
     if (!result) {
-        free(out);
         return NULL;
     }
+    PyList_SET_ITEM(result, 0, out);
 
-    for (Py_ssize_t i = 0; i < n; ++i) {
-        PyObject *value = PyFloat_FromDouble(out[i]);
-        if (!value) {
-            free(out);
-            Py_DECREF(result);
-            return NULL;
-        }
-        PyList_SET_ITEM(result, i, value);
-    }
-
-    free(out);
     return result;
 }

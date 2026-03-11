@@ -9,6 +9,7 @@ ext = Extension(
     include_dirs=["src"],
     libraries=["oaipy"],
     library_dirs=["../build/python"],
+    runtime_library_dirs=["../build/python"],
     extra_compile_args=["-O2"],
 )
 

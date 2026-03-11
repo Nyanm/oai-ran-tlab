@@ -27,9 +27,12 @@ set(OAI_VERSION 2.4.0)
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 
 add_library(liboaipy MODULE
-    src/oaipylib_module.c
-    src/oaipylib_wrappers.c
+	#    src/oaipylib_module.c
+	#    src/oaipylib_wrappers.c
     src/oaipylib_top.c
+    ${NFAPI_USER_DIR}/nfapi.c
+    ${NFAPI_USER_DIR}/gnb_ind_vars.c
+    ${PHY_INTERFACE_DIR}/queue_t.c
 )
 
 target_include_directories(liboaipy PRIVATE
@@ -38,7 +41,7 @@ target_include_directories(liboaipy PRIVATE
 target_include_directories(liboaipy PRIVATE ${Python3_INCLUDE_DIRS})
 
 target_link_libraries(liboaipy PRIVATE
-  -Wl,--start-group UTIL SIMU PHY_COMMON PHY_NR_COMMON PHY_NR PHY_NR_UE SCHED_NR_LIB SCHED_NR_UE_LIB MAC_UE_NR MAC_NR_COMMON CONFIG_LIB L2_NR -Wl,--end-group
+	-Wl,--start-group UTIL SIMU PHY_COMMON PHY_NR_COMMON PHY_NR PHY_NR_UE SCHED_NR_LIB SCHED_NR_UE_LIB MAC_UE_NR MAC_NR_COMMON CONFIG_LIB L2_NR -Wl,--end-group
   m pthread ${T_LIB} ITTI dl nr_ue_phy_meas physim_common
   softmodem_common
     Python3::Module

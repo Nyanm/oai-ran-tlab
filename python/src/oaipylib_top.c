@@ -111,6 +111,7 @@ instance_t CUuniqInstance=0;
 
 // needed for some functions
 openair0_config_t openair0_cfg[MAX_CARDS];
+configmodule_interface_t *uniqCfg = NULL;
 
 int dummy_nr_ue_ul_indication(nr_uplink_indication_t *ul_info) { return(0);  }
 
@@ -737,12 +738,19 @@ void oai_lib_shutdown(void) {
 }
 
 
+int oai_lib_nr_polar_decoder(int16_t *x, 
+                             uint64_t *out, 
+                             uint8_t ones_flag, 
+                             int8_t messageType, 
+                             uint16_t messageLength, 
+                             uint8_t aggregation_level) {
+    
+   polar_decoder_int16(x, &out, ones_flag, messageType, messageLength,aggregation_level);
 
+   return 0;
+}
 
-double oai_lib_add(double a, double b);
-
-int oai_lib_nr_polar_encode(const double *x, int n, double alpha, double *out) {
-
+int oai_lib_nr_polar_encode(const double *x, int64_t *out) {
 
 }
 

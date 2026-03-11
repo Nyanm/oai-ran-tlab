@@ -6,8 +6,8 @@
 static PyMethodDef oaipylib_methods[] = {
     {"init", py_oaipylib_init, METH_NOARGS, "Initialize the underlying C library."},
     {"shutdown", py_oaipylib_shutdown, METH_NOARGS, "Shutdown the underlying C library."},
-    {"add", py_oaipylib_add, METH_VARARGS, "Add two floating-point values."},
-    {"run_algorithm", py_oaipylib_run_algorithm, METH_VARARGS, "Run an algorithm on a sequence of floats."},
+   /* {"nr_polar_encoder", py_oaipylib_add, METH_VARARGS, "Add two floating-point values."},*/
+    {"nr_polar_decoder", py_oaipylib_nr_polar_decoder, METH_VARARGS, "16-bit LLR 3GPP NR Polar Decoder"},
     {NULL, NULL, 0, NULL}
 };
 
