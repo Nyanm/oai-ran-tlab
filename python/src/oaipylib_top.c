@@ -322,7 +322,7 @@ int oai_lib_init() {
   gNB_MAC_INST *gNB_mac;
   NR_UE_MAC_INST_t *UE_mac;
   int cyclic_prefix_type = NFAPI_CP_NORMAL;
-  int loglvl=OAILOG_WARNING;
+  int loglvl=OAILOG_INFO;
 
   //float target_error_rate = 0.01;
   cpuf = get_cpu_freq_GHz();
