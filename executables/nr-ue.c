@@ -734,6 +734,8 @@ void *UE_thread(void *arg)
   UE->is_synchronized = 0;
   InitSinLUT();
 
+  nrue_ru_start();
+
   notifiedFIFO_t nf;
   initNotifiedFIFO(&nf);
 
@@ -775,6 +777,7 @@ void *UE_thread(void *arg)
     for (int i = 0; i < 50; i++)
       readFrame(UE, &tmp, duration_rx_to_tx, true);
   }
+
 
   while (!oai_exit) {
     if (syncRunning) {

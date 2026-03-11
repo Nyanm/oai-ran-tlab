@@ -44,7 +44,7 @@
 #include <string.h>
 #include "nfapi/open-nFAPI/fapi/inc/nr_fapi_p5_utils.h"
 #ifdef ENABLE_CUDA
-#include <cuda_runtime.h>
+#include "openair1/PHY/gpu_compat.h"
 #endif
 extern uint32_t use_gpu;
 
@@ -220,10 +220,10 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
     for (int i = 0; i < max_ul_mimo_layers; i++) {
     }
 #ifdef ENABLE_CUDA
-    cudaError_t err = cudaHostAlloc((void**)&pusch->llr,(132 * 3 * 8448 )*sizeof(int16_t),cudaHostAllocMapped); // 132 segments 8448*3 coded bits per segment 
-    AssertFatal(err == cudaSuccess,"CUDA Error (pusch_llr): %s\n",cudaGetErrorString(err));
-    err=cudaHostGetDevicePointer((void**)&pusch->llr_dev,pusch->llr,0);
-    AssertFatal(err == cudaSuccess,"CUDA Error (harq_f_dev): %s\n",cudaGetErrorString(err));
+    gpuError_t err = gpuHostAlloc((void**)&pusch->llr,(132 * 3 * 8448 )*sizeof(int16_t),gpuHostAllocMapped); // 132 segments 8448*3 coded bits per segment 
+    AssertFatal(err == gpuSuccess,"CUDA Error (pusch_llr): %s\n",gpuGetErrorString(err));
+    err=gpuHostGetDevicePointer((void**)&pusch->llr_dev,pusch->llr,0);
+    AssertFatal(err == gpuSuccess,"CUDA Error (harq_f_dev): %s\n",gpuGetErrorString(err));
 #else
     pusch->llr = (int16_t *)malloc16_clear((132 * 3 * 8448) * sizeof(int16_t)); //132 segments 3*8448 coded bits per segment 
 #endif
@@ -290,7 +290,7 @@ void phy_free_nr_gNB(PHY_VARS_gNB *gNB)
     free_and_zero(pusch_vars->rxdataF_comp);
 
 #ifdef ENABLE_CUDA
-    cudaFreeHost(pusch_vars->llr_dev);
+    gpuFreeHost(pusch_vars->llr_dev);
 #else
     free_and_zero(pusch_vars->llr);
 #endif

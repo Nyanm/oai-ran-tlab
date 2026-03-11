@@ -30,7 +30,7 @@
  */
 
 #pragma once
-#include <cuda_runtime.h>
+#include "PHY/gpu_compat.h"
 #define MAX_NUM_DLSCH_SEGMENTS_DL 132
 #ifdef __cplusplus
 extern "C" {
@@ -69,8 +69,8 @@ extern "C" {
 #define NodeEdge_Switch_Bn_R89 2
 #endif
 
-extern cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL];
-extern cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL];
+extern gpuGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL];
+extern gpuGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL];
 extern bool graphCreated[MAX_NUM_DLSCH_SEGMENTS_DL];
 
 #ifdef __cplusplus
@@ -92,6 +92,11 @@ typedef struct {
 } DumpEntry;
 
 typedef struct {
+#if INT16LLR
+    int16_t* p_llr_ptr;     
+#else
     int8_t* p_llr_ptr;     
+#endif
     int8_t* p_out_ptr;      
+    
 } ldpc_cuda_bridge_t;

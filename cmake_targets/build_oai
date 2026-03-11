@@ -41,7 +41,7 @@ BUILD_DIR=ran_build
 DISABLE_HARDWARE_DEPENDENCY="False"
 CMAKE_BUILD_TYPE="RelWithDebInfo"
 CMAKE_CMD="$CMAKE"
-OPTIONAL_LIBRARIES="telnetsrv enbscope uescope nrscope ldpc_cuda ldpc_aal ldpc_xdma websrv oai_iqplayer imscope imscope_record"
+OPTIONAL_LIBRARIES="telnetsrv enbscope uescope nrscope ldpc_cuda ldpc_hip ldpc_aal ldpc_xdma websrv oai_iqplayer imscope imscope_record"
 TARGET_LIST=""
 BUILD_TOOL_OPT="-j$(nproc)"
 
@@ -139,6 +139,8 @@ Options:
   Enable the thread sanitizer on all targets
 --use-cuda
   Tell build to use NVCC for appropriate .cu files and cuda_runtime functions  
+--use-hip
+  Tell build to use hipcc for appropriate .cu files and hip_runtime functions  
 -h | --help
    Print this help"
 }
@@ -393,6 +395,9 @@ function main() {
             shift;;
 	--use-cuda)
 	    CMAKE_CMD="$CMAKE_CMD -DENABLE_CUDA=True"
+	    shift;;
+	--use-hip)
+	    CMAKE_CMD="$CMAKE_CMD -DENABLE_HIP=True -DCMAKE_PREFIX_PATH=/opt/rocm"
 	    shift;;
        --trace-asn1c-enc-dec)
             CMAKE_CMD="$CMAKE_CMD -DTRACE_ASN1C_ENC_DEC=ON"

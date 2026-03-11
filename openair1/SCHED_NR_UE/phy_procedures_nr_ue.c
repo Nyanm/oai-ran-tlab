@@ -77,7 +77,7 @@ fifo_dump_emos_UE emos_dump_UE;
 #include "instrumentation.h"
 
 #ifdef ENABLE_CUDA
-#include <cuda_runtime.h>
+#include "PHY/gpu_compat.h"
 #endif
 
 static const unsigned int gain_table[31] = {100,  112,  126,  141,  158,  178,  200,  224,  251, 282,  316,

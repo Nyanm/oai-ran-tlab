@@ -1,5 +1,5 @@
 // deinterleave_u16.cu
-#include <cuda_runtime.h>
+#include "PHY/gpu_compat.h"
 #include <stdio.h>
 #include <stdint.h>
 
@@ -109,22 +109,22 @@ __global__ void deinterleave_i16_8(int16_t* __restrict__ e,
 }
 
 // Host launcher
-extern "C" void launch_deinterleave_i16(int Qm, int E1, int E2, int C, int r_firstE2,int16_t* e, const int16_t* f,cudaStream_t *s,int8_t sidx)
+extern "C" void launch_deinterleave_i16(int Qm, int E1, int E2, int C, int r_firstE2,int16_t* e, const int16_t* f,gpuStream_t *s,int8_t sidx)
 {
     const int threads = 256;
     dim3 blocks(((E2/Qm)  + threads - 1) / threads,C);
 
     switch (Qm) {
-        case 2: deinterleave_i16_2<<<blocks, threads, 0, s[sidx]>>>(e, f, E1,E2,r_firstE2); break;
-        case 4: deinterleave_i16_4<<<blocks, threads, 0, s[sidx]>>>(e, f, E1,E2,r_firstE2); break;
-        case 6: deinterleave_i16_6<<<blocks, threads, 0, s[sidx]>>>(e, f, E1,E2,r_firstE2); break;
-        case 8: deinterleave_i16_8<<<blocks, threads, 0, s[sidx]>>>(e, f, E1,E2,r_firstE2); break;
+        case 2: gpuLaunchKernel(deinterleave_i16_2,blocks, threads, 0, s[sidx],e, f, E1,E2,r_firstE2); break;
+        case 4: gpuLaunchKernel(deinterleave_i16_4,blocks, threads, 0, s[sidx],e, f, E1,E2,r_firstE2); break;
+        case 6: gpuLaunchKernel(deinterleave_i16_6,blocks, threads, 0, s[sidx],e, f, E1,E2,r_firstE2); break;
+        case 8: gpuLaunchKernel(deinterleave_i16_8,blocks, threads, 0, s[sidx],e, f, E1,E2,r_firstE2); break;
         default: /* unsupported */ break;
     }
-    cudaError_t err=cudaPeekAtLastError();
+    gpuError_t err=gpuPeekAtLastError();
   
-    if (err!=cudaSuccess) {
-      printf("cuda error (deinterleave_i16): %s (e %p, f %p, E1 %d, E2 %d, Qm %d, C %d)\n",cudaGetErrorString(err),e,f,E1,E2,Qm,C);
+    if (err!=gpuSuccess) {
+      printf("gpu error (deinterleave_i16): %s (e %p, f %p, E1 %d, E2 %d, Qm %d, C %d)\n",gpuGetErrorString(err),e,f,E1,E2,Qm,C);
       exit(-1);
     }
 
