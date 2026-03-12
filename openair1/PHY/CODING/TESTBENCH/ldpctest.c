@@ -44,10 +44,8 @@
 #endif
 
 #define NR_LDPC_PROFILER_DETAIL
-ldpc_interface_t ldpc_orig, ldpc_toCompare;
-#define MAX_NUM_DLSCH_SEGMENTS_DL_ldpctest 132
-static double modulated_input[MAX_NUM_DLSCH_SEGMENTS_DL_ldpctest][68 * 384];
-static int8_t Failure_Mask[200][(MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER*4)] = {0};
+static double modulated_input[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4][68 * 384];
+static int8_t Failure_Mask[200][(MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4)] = {0};
 
 void dumpASS(int8_t* cnProcBufRes, const char* filename,int n_segments)
 {

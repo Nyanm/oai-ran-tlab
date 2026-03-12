@@ -30,8 +30,8 @@
  */
 
 #pragma once
-#include <cuda_runtime.h>
-#define MAX_NUM_DLSCH_SEGMENTS_DL 132
+#include "PHY/gpu_compat.h"
+#define MAX_NUM_DLSCH_SEGMENTS_DL MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4
 #ifdef __cplusplus
 extern "C" {
 #endif

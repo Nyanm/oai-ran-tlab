@@ -40,8 +40,6 @@
 #include "nrLDPC_CUDA_mPassKernel_BG1.h"
 #include "nrLDPC_CUDA_shared_param.h"
 
-#define MAX_NUM_DLSCH_SEGMENTS_DL 132
-
 #ifndef JETSON_TARGET
 #define CUDA_THREADS 1024
 #define CUDA_BLOCKS_R13 30
