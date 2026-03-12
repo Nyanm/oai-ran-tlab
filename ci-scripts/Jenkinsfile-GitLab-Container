@@ -108,7 +108,7 @@ pipeline {
             echo "GitLab Usermail is ${gitCommitAuthorEmailAddr}"
             // GitLab-Jenkins plugin integration is lacking to perform the merge by itself
             // Doing it manually --> it may have merge conflicts
-            sh "./ci-scripts/doGitLabMerge.sh --src-branch ${env.gitlabSourceBranch} --src-commit ${env.gitlabMergeRequestLastCommit} --target-branch ${env.gitlabTargetBranch} --target-commit ${GIT_COMMIT}"
+            sh "./ci-scripts/doGitLabMerge.sh --src-repo ${env.gitlabSourceRepoHttpUrl} --src-branch ${env.gitlabSourceBranch} --src-commit ${env.gitlabMergeRequestLastCommit} --target-repo ${GIT_URL} --target-branch ${env.gitlabTargetBranch} --target-commit ${GIT_COMMIT}"
           } else {
             echo "Git Branch    is ${GIT_BRANCH}"
             echo "Git Commit    is ${GIT_COMMIT}"
@@ -884,6 +884,7 @@ def triggerSlaveJob (jobName, gitlabStatusName) {
   def localStatus = build job: jobName,
     parameters: [
       string(name: 'eNB_Repository', value: String.valueOf(GIT_URL)),
+      string(name: 'eNB_SourceRepo', value: String.valueOf(env.gitlabSourceRepoHttpUrl)),
       string(name: 'eNB_Branch', value: String.valueOf(env.gitlabSourceBranch)),
       string(name: 'eNB_CommitID', value: String.valueOf(env.gitlabMergeRequestLastCommit)),
       string(name: 'eNB_MR', value: String.valueOf(MR_NUMBER)),
