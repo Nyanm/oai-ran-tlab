@@ -750,8 +750,17 @@ int oai_lib_nr_polar_decoder(int16_t *x,
    return 0;
 }
 
-int oai_lib_nr_polar_encode(const double *x, int64_t *out) {
+int oai_lib_nr_polar_encoder(uint64_t *A,
+                             void *out,
+			     int32_t crcmask,
+                             uint8_t ones_flag,
+                             int8_t messageType,
+                             uint16_t messageLength,
+                             uint8_t aggregation_level) {
 
+    polar_encoder_fast(A, &out, crcmask, ones_flag, messageType, messageLength,aggregation_level);
+
+    return 0;
 }
 
 const char *oai_lib_last_error(void) {
