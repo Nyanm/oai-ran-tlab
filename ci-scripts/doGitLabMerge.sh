@@ -32,11 +32,17 @@ function usage {
     echo "Mandatory Options:"
     echo "------------------"
     echo ""
+    echo "    --src-repo"
+    echo "    Specify the source (head) repository of the pull request."
+    echo ""
     echo "    --src-branch #### OR -sb ####"
     echo "    Specify the source branch of the merge request."
     echo ""
     echo "    --src-commit #### OR -sc ####"
     echo "    Specify the source commit ID (SHA-1) of the merge request."
+    echo ""
+    echo "    --target-repo"
+    echo "    Specify the target (base) repo of the pull request (usually develop)."
     echo ""
     echo "    --target-branch #### OR -tb ####"
     echo "    Specify the target branch of the merge request (usually develop)."
@@ -51,7 +57,7 @@ function usage {
     echo ""
 }
 
-if [ $# -ne 8 ] && [ $# -ne 1 ]
+if [ $# -ne 12 ] && [ $# -ne 1 ]
 then
     echo "Syntax Error: not the correct number of arguments"
     echo ""
@@ -70,27 +76,37 @@ case $key in
     usage
     exit 0
     ;;
+    -sr|--src-repo)
+    SOURCE_REPO="$2"
+    let "checker|=0x1"
+    shift 2
+    ;;
     -sb|--src-branch)
     SOURCE_BRANCH="$2"
-    let "checker|=0x1"
+    let "checker|=0x2"
     shift
     shift
     ;;
     -sc|--src-commit)
     SOURCE_COMMIT_ID="$2"
-    let "checker|=0x2"
+    let "checker|=0x4"
     shift
     shift
     ;;
+    -tr|--target-repo)
+    TARGET_REPO="$2"
+    let "checker|=0x8"
+    shift 2
+    ;;
     -tb|--target-branch)
     TARGET_BRANCH="$2"
-    let "checker|=0x4"
+    let "checker|=0x10"
     shift
     shift
     ;;
     -tc|--target-commit)
     TARGET_COMMIT_ID="$2"
-    let "checker|=0x8"
+    let "checker|=0x20"
     shift
     shift
     ;;
@@ -108,12 +124,14 @@ then
     TARGET_COMMIT_ID=`git log -n1 --pretty=format:%H origin/$TARGET_BRANCH`
 fi
 
+echo "Source Repo is      : $SOURCE_REPO"
 echo "Source Branch is    : $SOURCE_BRANCH"
 echo "Source Commit ID is : $SOURCE_COMMIT_ID"
+echo "Target Repo is      : $TARGET_REPO"
 echo "Target Branch is    : $TARGET_BRANCH"
 echo "Target Commit ID is : $TARGET_COMMIT_ID"
 
-if [ $checker -ne 15 ]
+if [ $checker -ne 63 ]
 then
     echo ""
     echo "Syntax Error: missing option"
@@ -125,22 +143,28 @@ fi
 git config user.email "jenkins@openairinterface.org"
 git config user.name "OAI Jenkins"
 
-git checkout -f $SOURCE_COMMIT_ID > checkout.txt 2>&1
-STATUS=`grep -E -c "fatal: reference is not a tree" checkout.txt`
-rm -f checkout.txt
-if [ $STATUS -ne 0 ]
-then
-    echo "fatal: reference is not a tree --> $SOURCE_COMMIT_ID"
-    STATUS=-1
-    exit $STATUS
+WORKDIR=$(pwd)
+echo "Working directory: $WORKDIR"
+
+if ! git fetch origin "$TARGET_BRANCH" || ! git checkout -f "origin/$TARGET_BRANCH"; then
+    echo "fatal: target branch $TARGET_BRANCH does not exist in target repo"
+    exit 1
 fi
 
-git merge --ff $TARGET_COMMIT_ID -m "Temporary merge for CI"
+# Add source repo as remote and fetch branch
+git remote add src $SOURCE_REPO
+git fetch src $SOURCE_BRANCH
 
-STATUS=`git status | grep -E -c "You have unmerged paths.|fix conflicts"`
-if [ $STATUS -ne 0 ]
-then
-    echo "There are merge conflicts.. Cannot perform further build tasks"
-    STATUS=-1
+# Merge source branch tip
+echo "Merging $SOURCE_REPO/$SOURCE_BRANCH into $TARGET_REPO/$TARGET_BRANCH"
+
+if ! git merge --ff "src/$SOURCE_BRANCH" -m "Temporary merge from $SOURCE_REPO/$SOURCE_BRANCH for CI"; then
+    echo "Merge conflicts detected. Aborting."
+    exit 1
 fi
-exit $STATUS
+
+# Clean up
+git remote remove src
+
+echo "Merge successful!"
+exit 0
