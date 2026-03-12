@@ -290,7 +290,6 @@ void LDPCint_rm_init(int max_num_pxsch) {
     err=gpuMalloc((void **)&harq_d_array[i],MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 *OAI_LDPC_DECODER_MAX_NUM_LLR*sizeof(int16_t));
     LOG_I(PHY,"Allocating %ld bytes for harq_d_array[%d] @ %p\n",MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4 *OAI_LDPC_DECODER_MAX_NUM_LLR*sizeof(int16_t),i,harq_d_array[i]);
     AssertFatal(err == gpuSuccess,"CUDA Error (harq_d_dev): %s\n", gpuGetErrorString(err));
->>>>>>> Stashed changes
   }
   cudaMemcpy(harq_d_array_dev,harq_d_array,sizeof(int16_t*)*max_num_pxsch,cudaMemcpyHostToDevice);
   if (!pageable && !integrated) {
