@@ -37,9 +37,9 @@ if (params.LockResources != null && params.LockResources.trim().length() > 0)
 // Global Parameters. Normally they should be populated when the master job
 // triggers the slave job with parameters
 
-def sourceRepository = params.eNB_Repository ?: env.GIT_URL
+def sourceRepository = params.eNB_SourceRepo ?: env.GIT_URL
 def sourceBranch = params.eNB_Branch ?: env.GIT_BRANCH
-def targetRepository = params.Target_Repository ?: sourceRepository
+def targetRepository = params.eNB_Repository ?: env.GIT_URL
 def targetBranch = params.eNB_TargetBranch ?: 'develop'
 def commitID = params.eNB_CommitID ?: env.GIT_COMMIT
 def is_MR = params.eNB_mergeRequest ?: false
@@ -111,7 +111,7 @@ pipeline {
             echo '\u2705 \u001B[94m All parameters are present\u001B[0m'
             if (is_MR) {
               sh "git fetch"
-              sh "./ci-scripts/doGitLabMerge.sh --src-branch ${sourceBranch} --src-commit ${commitID} --target-branch ${targetBranch} --target-commit latest"
+              sh "./ci-scripts/doGitLabMerge.sh --src-repo ${sourceRepository} --src-branch ${sourceBranch} --src-commit ${commitID} --target-repo ${targetRepository} --target-branch ${targetBranch} --target-commit latest"
             } else {
               sh "git fetch"
               sh "git checkout -f ${commitID}"
