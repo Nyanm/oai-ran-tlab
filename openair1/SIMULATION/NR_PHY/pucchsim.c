@@ -540,7 +540,7 @@ int main(int argc, char **argv)
   }
 
   pucch_GroupHopping_t PUCCH_GroupHopping = pucch_tx_pdu.group_hop_flag + (pucch_tx_pdu.sequence_hop_flag<<1);
-  double tx_level_fp = 100.0;
+  double tx_level_fp = 1000.0;
   c16_t **rxdataF = gNB->common_vars.rxdataF[0];
   for(SNR = snr0; SNR <= snr1 && !stop; SNR += 1) {
     ack_nack_errors=0;
@@ -612,8 +612,9 @@ int main(int argc, char **argv)
             rxdataF[aarx][i].r = (int16_t)(tx_level_fp * (rxr + nr) / sqrt((double)txlev));
             rxdataF[aarx][i].i = (int16_t)(tx_level_fp * (rxi + ni) / sqrt((double)txlev));
 
-            if (n_trials==1 && fabs(txr) > 0) printf("symb %d, re %d , aarx %d : txr %f, txi %f, chr %f, chi %f, nr %f, ni %f, rxr %f, rxi %f => %d,%d\n",
-                                                    symb, re, aarx, txr,txi,
+            if (n_trials==1 && fabs(txr) > 0) printf("symb %d, re %d , aarx %d : txlev %f, txlev_fp %f : txr %f, txi %f, chr %f, chi %f, nr %f, ni %f, rxr %f, rxi %f => %d,%d\n",
+                                                    symb, re, aarx, 
+						    10*log10(txlev), 10*log10(tx_level_fp),txr,txi,
                                                     UE2gNB->chF[aarx][re].r,UE2gNB->chF[aarx][re].i,
                                                     nr,ni, rxr,rxi,
                                                     rxdataF[aarx][i].r,rxdataF[aarx][i].i);
@@ -644,8 +645,8 @@ int main(int argc, char **argv)
       gNB_I0_measurements(gNB, nr_slot_tx, 0, gNB->frame_parms.symbols_per_slot, rb_mask_ul);
       start_meas(&gNB->phy_proc_rx);
 
-      if (n_trials == 1)
-        printf("noise rxlev %d (%d dB), rxlev pucch %d dB sigma2 %f dB, SNR %f, TX %f, I0 (pucch) %d, I0 (avg) %d\n",
+      //if (n_trials == 1)
+        printf("***noise rxlev %d (%d dB), rxlev pucch %d dB sigma2 %f dB, SNR %f, TX %f, I0 (pucch) %d, I0 (avg) %d\n",
                rxlev,
                dB_fixed(rxlev),
                dB_fixed(rxlev_pucch),
@@ -737,6 +738,7 @@ int main(int argc, char **argv)
         int csi_part1_bytes=pucch_pdu.bit_len_csi_part1>>3;
         if ((pucch_pdu.bit_len_csi_part1&7) > 0) csi_part1_bytes++;
         for (int i=0;i<csi_part1_bytes;i++) {
+	  printf("uci_pdu.csi_part1.csi_part1_payload[%d] %d\n",i,uci_pdu.csi_part1.csi_part1_payload[i]);
           if (uci_pdu.csi_part1.csi_part1_payload[i] != ((uint8_t*)&actual_payload)[i]) {
             ack_nack_errors++;
             break;

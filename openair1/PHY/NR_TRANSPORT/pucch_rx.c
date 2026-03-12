@@ -54,7 +54,7 @@
 #include "T.h"
 #include "nr_phy_common.h"
 
-//#define DEBUG_NR_PUCCH_RX 1
+#define DEBUG_NR_PUCCH_RX 1
 
 void nr_fill_pucch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pucch_pdu_t *pucch_pdu)
 {
@@ -903,7 +903,7 @@ void init_pucch2_luts()
     *lut_num_i++ = (cw & 0x8) <= 0;
     *lut_num_i++ = (cw & 0x80) <= 0;
 #ifdef DEBUG_NR_PUCCH_RX
-    log_dump(PHY, pucch2_polar_llr_num_lut, 8, LOG_DUMP_C16, "lut_num %d:", i);
+    log_dump(PHY, pucch2_polar_llr_num_lut, 8, LOG_DUMP_C16, "lut_num %d:", *lut_num_i);
 #endif
   }
 }
@@ -1181,7 +1181,7 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
   int decoderState = 2;
   if (pucch2_levdB < gNB->measurements.n0_subband_power_avg_dB + (gNB->pucch0_thres / 10))
     decoderState = 1; // assuming missed detection, only attempt to decode for polar case (with CRC)
-  LOG_D(NR_PHY, "n0+thres %d decoderState %d\n", gNB->measurements.n0_subband_power_avg_dB + (gNB->pucch0_thres / 10), decoderState);
+  /*LOG_D(NR_PHY,*/printf("pucch2_levdB %d ***n0+thres %d (thres %d) decoderState %d\n", pucch2_levdB, gNB->measurements.n0_subband_power_avg_dB + (gNB->pucch0_thres / 10), gNB->pucch0_thres / 10,decoderState);
 
   if (nb_bit < 12 && decoderState == 2) { // short blocklength case
     uint64_t corr=0;
@@ -1234,7 +1234,7 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
     } // cw loop
     corr_dB = dB_fixed64(corr);
 #ifdef DEBUG_NR_PUCCH_RX
-    printf("slot %d PUCCH2 cw_ML %d, metric %d \n",slot,cw_ML,corr_dB);
+    printf("***slot %d PUCCH2 cw_ML %d, metric %d \n",slot,cw_ML,corr_dB);
 #endif
     decodedPayload[0]=(uint64_t)cw_ML;
     
@@ -1297,7 +1297,7 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
   } else
     LOG_D(PHY, "PUCCH not processed: nb_bit %d decoderState %d\n", nb_bit, decoderState);
 
-  LOG_D(PHY, "UCI decoderState %d, payload[0] %llu\n", decoderState, (unsigned long long)decodedPayload[0]);
+  /*LOG_D(PHY,*/printf( "***UCI decoderState %d, payload[0] %llu\n", decoderState, (unsigned long long)decodedPayload[0]);
 
   // estimate CQI for MAC (from antenna port 0 only)
   // TODO this computation is wrong -> to be ignored at MAC for now
@@ -1359,6 +1359,7 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
     uci_pdu->csi_part1.csi_part1_payload = (uint8_t*)malloc(csi_part1_bytes);
     uci_pdu->csi_part1.csi_part1_crc = decoderState;
     int i=0;
+    printf("***csi_part1_bytes %d, decodedPayload[0] %d\n",csi_part1_bytes,decodedPayload[0]);
     for (;i<csi_part1_bytes-1;i++) {
       uci_pdu->csi_part1.csi_part1_payload[i] = decodedPayload[0] & 255;
       decodedPayload[0]>>=8;
