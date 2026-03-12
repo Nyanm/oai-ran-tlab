@@ -58,10 +58,10 @@
 #include <cuda_runtime.h>
 #include "nrLDPC_CUDA_shared_param.h"
 
-extern cudaStream_t decoderStreams[MAX_NUM_DLSCH_SEGMENTS_DL];
-extern cudaEvent_t decoderDoneEvents[MAX_NUM_DLSCH_SEGMENTS_DL];
+extern cudaStream_t decoderStreams[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4];
+extern cudaEvent_t decoderDoneEvents[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4];
 static bool decoder_streamsCreated = false;
-static volatile int cuda_graph_breaker = 0;
+static volatile int cuda_graph_breaker = 0;//should be 0 by default
 cudaError_t Err;
 
 int8_t* cnProcBuf_dev;

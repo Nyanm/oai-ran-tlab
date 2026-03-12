@@ -30,8 +30,12 @@
  */
 
 #pragma once
-#include "PHY/gpu_compat.h"
-#define MAX_NUM_DLSCH_SEGMENTS_DL MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4
+#include <cuda_runtime.h>
+
+#ifndef MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER
+#define MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER 36
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -69,9 +73,9 @@ extern "C" {
 #define NodeEdge_Switch_Bn_R89 2
 #endif
 
-extern cudaGraph_t decoderGraphs[MAX_NUM_DLSCH_SEGMENTS_DL];
-extern cudaGraphExec_t decoderGraphExec[MAX_NUM_DLSCH_SEGMENTS_DL];
-extern bool graphCreated[MAX_NUM_DLSCH_SEGMENTS_DL];
+extern cudaGraph_t decoderGraphs[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4];
+extern cudaGraphExec_t decoderGraphExec[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4];
+extern bool graphCreated[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4];
 
 #ifdef __cplusplus
 }

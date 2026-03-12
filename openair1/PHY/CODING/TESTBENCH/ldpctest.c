@@ -44,6 +44,10 @@
 #endif
 
 #define NR_LDPC_PROFILER_DETAIL
+#define NR_LDPC_ENABLE_PARITY_CHECK
+
+ldpc_interface_t ldpc_orig, ldpc_toCompare;
+
 static double modulated_input[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4][68 * 384];
 static int8_t Failure_Mask[200][(MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4)] = {0};
 
