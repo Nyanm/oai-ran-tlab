@@ -61,9 +61,11 @@ static void paint(gui *_gui, widget *_this)
   allocated_xmax = this->xmax;
   /* adjust tic if too tight */
   LOGD("pre x ticstep %g\n", ticstep);
+  int target_ticks = 50;
+  float min_tick_pixels = allocated_plot_width / target_ticks;
   while (1) {
-    if (ticstep / (allocated_xmax - allocated_xmin)
-                * (allocated_plot_width - 1) > 40) break;
+    if (ticstep / (allocated_xmax - allocated_xmin) * (allocated_plot_width - 1) > min_tick_pixels)
+      break;
     ticstep *= 2;
   }
   LOGD("post x ticstep %g\n", ticstep);

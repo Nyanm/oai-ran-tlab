@@ -25,6 +25,8 @@
 #include <openair1/PHY/TOOLS/phy_scope_interface.h>
 #include "PHY/log_tools.h"
 
+#define RAD2DEG (180.0 / M_PI)
+
 //#define DEBUG_RXDATA
 //#define SRS_IND_DEBUG
 
@@ -775,6 +777,11 @@ nr_srs_info_t nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
 
         signal_power_avg += signal_power;
 
+        const uint64_t first_subcarrier =
+            (frame_parms->first_carrier_offset - (ofdm_symbol_size >> 1)) + srs_pdu->bwp_start * NR_NB_SC_PER_RB;
+
+        c16_t *srs_freq = &srs_estimated_channel_freq[ant_rx_ind][p_ind][first_subcarrier];
+
         T(T_GNB_PHY_UL_FREQ_CHANNEL_ESTIMATE,
           T_INT(gNB->Mod_id),
           T_INT(srs_pdu->rnti),
@@ -782,7 +789,25 @@ nr_srs_info_t nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
           T_INT(0),
           T_INT(ant_rx_ind),
           T_INT(p_ind),
-          T_BUFFER(srs_estimated_channel_freq[ant_rx_ind][p_ind], N_symb_SRS * ofdm_symbol_size * sizeof(c16_t)));
+          T_BUFFER(srs_freq, ofdm_symbol_size * sizeof(c16_t)));
+
+        int16_t srs_phase[ofdm_symbol_size];
+        memset(srs_phase, 0, sizeof(srs_phase));
+        const uint16_t m_SRS_b = get_m_srs(srs_pdu->config_index, srs_pdu->bandwidth_index);
+        for (int k = 0; k < m_SRS_b * NR_NB_SC_PER_RB; k++) {
+          if (srs_freq[k].i == 0 && srs_freq[k].r == 0)
+            continue;
+          srs_phase[k] = atan2(srs_freq[k].i, srs_freq[k].r) * RAD2DEG;
+        }
+
+        T(T_GNB_PHY_UL_FREQ_PHASE_CHANNEL_ESTIMATE,
+          T_INT(gNB->Mod_id),
+          T_INT(srs_pdu->rnti),
+          T_INT(frame_rx),
+          T_INT(0),
+          T_INT(ant_rx_ind),
+          T_INT(p_ind),
+          T_BUFFER(srs_phase, ofdm_symbol_size * sizeof(int16_t)));
 
         T(T_GNB_PHY_UL_TIME_CHANNEL_ESTIMATE,
           T_INT(gNB->Mod_id),
