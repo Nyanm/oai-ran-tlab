@@ -543,7 +543,6 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
   // Need to use --continuous-tx so that this routine will be triggered in RX slot.
   for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) { // OAI does not support multiple CC yet.
     for (uint8_t ant_id = 0; ant_id < ru->nb_rx; ant_id++) {
-      int first = 1; // The first UL symbol
       const struct xran_frame_config *frame_conf = &get_xran_fh_config(ant_id / nb_rx_per_ru)->frame_conf;
       // skip processing this slot is TX (no RX in this slot)
       if (!is_tdd_ul_guard_slot(frame_conf, slot)) {
@@ -568,17 +567,10 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
           startRB = pRbElm->UP_nRBStart;
 #endif
           LOG_D(HW, "pPrbMap[%d] : PRBstart %d nPRBs %d\n", idxElm, startRB, numRB);
-          if (first) {
-            // ant_id / no of antenna per beam gives the beam_nb
-            pRbElm->nBeamIndex =
-                ru->beam_id[ant_id / (ru->nb_rx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
-            // In phy-f-1.0/fhi_lib/lib/api/xran_pkt_cp.h, beamId:15 is of 15bit. -1 set extension bit ef:1 to 1 mistakenly.
-            if (pRbElm->nBeamIndex == -1) {
-              pRbElm->nBeamIndex = 0;
-            } else {
-              first = 0;
-            }
-          }
+          // ant_id / no of antenna per beam gives the beam_nb
+          int16_t beam_id = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
+          if (beam_id != -1)
+            pRbElm->nBeamIndex = beam_id;
         }
       }
     }
@@ -632,17 +624,13 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
           int16_t payload_len = 0;
 
           uint8_t *dst = (uint8_t *)u8dptr;
-
           for (uint32_t idxElm = 0; idxElm < pPrbMap->nPrbElm; idxElm++) {
             struct xran_section_desc *p_sec_desc = NULL;
             struct xran_prb_elm *p_prbMapElm = &pPrbMap->prbMap[idxElm];
-            if (sym_idx == 0) {
-              // ant_id / no of antenna per beam gives the beam_nb
-              p_prbMapElm->nBeamIndex = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT];
-              // In phy-f-1.0/fhi_lib/lib/api/xran_pkt_cp.h, beamId:15 is of 15bit. -1 set extension bit ef:1 to 1 mistakenly.
-              if (p_prbMapElm->nBeamIndex == -1)
-                p_prbMapElm->nBeamIndex = 0;
-            }
+            // ant_id / no of antenna per beam gives the beam_nb
+            int16_t beam_id = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
+            if ( beam_id != -1)
+              p_prbMapElm->nBeamIndex = beam_id;
 
             // radio-transport fragmentation is not supported in xran F release;
             // E-bit = 1 => each ethernet frame is considered as the last fragment;
