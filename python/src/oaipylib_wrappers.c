@@ -49,72 +49,52 @@ PyObject *py_oaipylib_shutdown(PyObject *self, PyObject *args) {
 }
 
 
+
 PyObject *py_oaipylib_nr_polar_encoder(PyObject *self, PyObject *args) {
     (void)self;
 
-    PyObject *input_obj = NULL;
-    uint32_t out[ARRAY_LENGTH]; // output stored, array of length 27 (like the PBCH output)
+    uint64_t A;
+    uint32_t **out; // output is allocated in OAI API function
+    PyObject *out_obj = NULL;
     int32_t crcmask;
     uint8_t ones_flag;
-    int8_t messageType;
+    uint8_t messageType;
     uint16_t messageLength;
     uint8_t aggregation_level;
 
-    if (!PyArg_ParseTuple(args, "OibcHb", &input_obj, &crcmask, &ones_flag,&messageType,&messageLength,&aggregation_level)) {
+    printf("Parsing input for py_oaipylib_nr_polar_encoder\n");
+    if (!PyArg_ParseTuple(args, "KibbHb", &A, &crcmask, &ones_flag,&messageType,&messageLength,&aggregation_level)) {
         return NULL;
     }
 
-    PyObject *seq = PySequence_Fast(input_obj, "input must be a sequence");
-    if (!seq) {
-        return NULL;
-    }
+    out = malloc(sizeof(uint32_t*));
+    printf("Calling oai_lib_nr_polar_encoder(%x,%p,%x,%d,%d,%d,%d\n",
+            A, out, crcmask, ones_flag, (int8_t)messageType, messageLength,aggregation_level);
+    int encodedLength = oai_lib_nr_polar_encoder(&A, (void**)out, crcmask, ones_flag, (int8_t)messageType, messageLength,aggregation_level);
+    if (encodedLength <= 0) return oaipylib_raise_error("oai_lib_nr_polar_encoder failed");
 
-    Py_ssize_t n = PySequence_Fast_GET_SIZE(seq);
-    if (n <= 0) {
-        Py_DECREF(seq);
-        PyErr_SetString(PyExc_ValueError, "input sequence must not be empty");
-        return NULL;
-    }
-
-    uint64_t *x = (uint64_t *)malloc((size_t)n * sizeof(uint64_t));
-
-
-    if (!x) {
-        Py_DECREF(seq);
-        PyErr_NoMemory();
-        return NULL;
-    }
-
-    PyObject **items = PySequence_Fast_ITEMS(seq);
-    for (Py_ssize_t i = 0; i < n; ++i) {
-	double value = PyFloat_AsDouble(items[i]);
-	// not sure about this cast
-	if (value < 0.0) value = 0.0;
-	if (value > 1.0) value = 1.0;
-        x[i] = (uint64_t)(UINT64_MAX*value);
-        if (PyErr_Occurred()) {
-            Py_DECREF(seq);
-            free(x);
-            return NULL;
-        }
-    }
-    int rc = oai_lib_nr_polar_encoder(x, out, crcmask, ones_flag, messageType, messageLength,aggregation_level);
-    if (rc != 0) return oaipylib_raise_error("oai_lib_nr_polar_encoder failed");
-    Py_DECREF(seq);
-    free(x);
-
-    PyObject *result = PyList_New(ARRAY_LENGTH);
+        
+    int encodedLength_u32 = (encodedLength>>5) + (encodedLength&31) > 0 ? 1 : 0;
+    printf("encoded Length %d (uint32 list size %d), encoded output %d(0x%x) (first 32 bits)\n",encodedLength,encodedLength_u32,(*out)[0],(*out)[0]);
+    
+    PyObject *result = PyList_New(encodedLength_u32);
     if (!result) {
+        free(out);
+        free(*out);
         return NULL;
     }
-    for (Py_ssize_t i = 0; i < ARRAY_LENGTH; ++i) {
-    PyObject *value = PyLong_FromUnsignedLong((unsigned long)out[i]);
+    for (Py_ssize_t i = 0; i < encodedLength_u32; ++i) {
+    PyObject *value = PyLong_FromUnsignedLong((unsigned long)((*out)[i]));
         if (!value) {
          Py_DECREF(result);
+         free(*out);
+         free(out);
           return NULL;
 	 }
 	 PyList_SET_ITEM(result, i, value);
     }
+    free(*out);
+    free(out);
     return result;
 }
 

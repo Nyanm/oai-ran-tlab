@@ -9,7 +9,7 @@ int oai_lib_init(void);
 void oai_lib_shutdown(void);
 
 int oai_lib_nr_polar_encoder(uint64_t *A,
-                              void *out,
+                              void **out,
                               int32_t crcmask,
                               uint8_t ones_flag,
                               int8_t messageType,

@@ -745,26 +745,50 @@ int oai_lib_nr_polar_decoder(int16_t *x,
                              uint16_t messageLength, 
                              uint8_t aggregation_level) {
     
-   polar_decoder_int16(x, &out, ones_flag, messageType, messageLength,aggregation_level);
+   polar_decoder_int16(x, out, ones_flag, messageType, messageLength,aggregation_level);
 
    return 0;
 }
 
 int oai_lib_nr_polar_encoder(uint64_t *A,
-                             void *out,
-			     int32_t crcmask,
-                             uint8_t ones_flag,
-                             int8_t messageType,
-                             uint16_t messageLength,
-                             uint8_t aggregation_level) {
+                            void **out,
+                            int32_t crcmask,
+                            uint8_t ones_flag,
+                            int8_t messageType,
+                            uint16_t messageLength,
+                            uint8_t aggregation_level) {
 
-    polar_encoder_fast(A, &out, crcmask, ones_flag, messageType, messageLength,aggregation_level);
-
-    return 0;
+// A is the input which is at most 64 bits
+// out is the rate-matched output, encoded as a bit-packed 32-bit element array. The expected length in bits depends on the messageType:
+// messageType = 0 => PBCH => output length (bits) = 864 bits (27 32-bit words)
+// messageType = 1 => DCI => output length (bits) = 108 * aggregation_level
+// messageType = 2 => PUCCH => output length (bits) = 16 * aggregation_level
+// messageType = 3 => PSBCH =? output length (bits) = 1792 bits (56 32-bit words))
+// crc is automatically computed based on the messageLength and messageType and crcmask is applied to the resultant CRC if required. Set to 0 if not required
+// ones_flag is used to append 24 1's at the beginning of a DCI message prior to computing the CRC parity
+// aggregation_level is 1,2,4,8,16
+    int encodedLength=0;
+    switch(messageType) {
+        case 0: //PBCH
+        default:
+            encodedLength = 864;
+            break;
+        case 1: //DCI
+            encodedLength = (108*aggregation_level);
+            break;
+        case 2: //UCI/PUCCH
+            encodedLength = (16*aggregation_level);
+            break;
+        case 3: //PSBCH
+            encodedLength = 1792;
+    }
+    *out = malloc(1+(encodedLength>>3));        
+    polar_encoder_fast(A,*out,crcmask,ones_flag,messageType,messageLength,aggregation_level);
+    return(encodedLength);
 }
 
 const char *oai_lib_last_error(void) {
-
+  
 
 }
 

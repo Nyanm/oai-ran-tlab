@@ -126,6 +126,7 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
   while(gNB->configured == 0)
     usleep(10000);
 
+  LOG_I(PHY,"Loading dfts shared lib\n");
   load_dftslib();
 
   crcTableInit();
