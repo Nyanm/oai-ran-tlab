@@ -43,7 +43,7 @@
 #include "openair1/PHY/NR_REFSIG/nr_refsig.h"
 
 #include "T.h"
-//#define NR_UNIT_TEST 1
+#define NR_UNIT_TEST 1
 #ifdef NR_UNIT_TEST
   #define DEBUG_PUCCH_TX
   #define DEBUG_NR_PUCCH_TX
@@ -446,7 +446,7 @@ void nr_generate_pucch1(const PHY_VARS_NR_UE *ue,
     }
 
     if ((startingPRB > (frame_parms->N_RB_DL>>1)) && ((frame_parms->N_RB_DL & 1) == 1)) { // if number RBs in bandwidth is odd  and current PRB is upper band
-      re_offset = ((l+startingSymbolIndex)*frame_parms->ofdm_symbol_size) + (12*(startingPRB-(frame_parms->N_RB_DL>>1))) + 6;
+      re_offset = ((l+startingSymbolIndex)*frame_parms->ofdm_symbol_size) + (12*(startingPRB-(frame_parms->N_RB_DL>>1))) - 6;
     }
 
     if ((startingPRB == (frame_parms->N_RB_DL>>1)) && ((frame_parms->N_RB_DL & 1) == 1)) { // if number RBs in bandwidth is odd  and current PRB contains DC
@@ -864,7 +864,7 @@ void nr_generate_pucch2(const PHY_VARS_NR_UE *ue,
         if (baseRB < halfRBs) // if number RBs in bandwidth is odd  and current PRB is lower band
           re_offset += frame_parms->first_carrier_offset;
         else if (baseRB > halfRBs) // if number RBs in bandwidth is odd  and current PRB is upper band
-          re_offset += -halfRBs + 6;
+          re_offset += -12*halfRBs - 6;
         else
           re_offset += frame_parms->first_carrier_offset;
       }
@@ -978,6 +978,10 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
   uint16_t startingPRB = pucch_pdu->prb_start + pucch_pdu->bwp_start;
   uint8_t add_dmrs = pucch_pdu->add_dmrs_flag;
 
+#ifdef DEBUG_NR_PUCCH_TX
+    printf("\t [nr_generate_pucch3_4] nrofSymbols %d, nrofPRB %d, startingPRB %d, add_dmrs %d is_pi_over_2_bpsk_enabled %d\n",nrofSymbols,nrofPRB,startingPRB,add_dmrs,is_pi_over_2_bpsk_enabled);
+#endif
+
   M_bit = nr_pucch_output_sequence_length(pucch_pdu->format_type,
                                           nrofSymbols,
                                           nrofPRB,
@@ -985,6 +989,9 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
                                           is_pi_over_2_bpsk_enabled,
                                           add_dmrs);
 
+#ifdef DEBUG_NR_PUCCH_TX
+    printf("\t [nr_generate_pucch3_4] nrofSymbols %d, nrofPRB %d, startingPRB %d, add_dmrs %d is_pi_over_2_bpsk_enabled %d, M_bit %d\n",nrofSymbols,nrofPRB,startingPRB,add_dmrs,is_pi_over_2_bpsk_enabled,M_bit);
+#endif
   nr_uci_encoding(pucch_pdu->payload, pucch_pdu->n_bit, nrofPRB, false, M_bit, 0, b);
   /*
    * Implementing TS 38.211
@@ -1169,7 +1176,8 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
       c16_t *yPtr = y_n + l * 12 * nrofPRB;
       c16_t *zPtr = z + l * 12 * nrofPRB + k;
       *zPtr = (c16_t){0};
-      for (int m = l * 12 * nrofPRB; m < (l + 1) * 12 * nrofPRB; m++) {
+//      for (int m = l * 12 * nrofPRB; m < (l + 1) * 12 * nrofPRB; m++) {
+      for (int m = 0; m < (12 * nrofPRB); m++) {
         const c16_t angle = {lround(32767 * cos(2 * M_PI * m * k / (12 * nrofPRB))),
                              lround(32767 * sin(2 * M_PI * m * k / (12 * nrofPRB)))};
         c16_t tmp = c16mulShift(yPtr[m], angle, 15);
@@ -1246,7 +1254,7 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
     nr_group_sequence_hopping(pucch_GroupHopping,pucch_pdu->hopping_id,n_hop,nr_slot_tx,&u,&v); // calculating u and v value
 
     // Next we proceed to calculate base sequence for DM-RS signal, according to TS 38.211 subclause 6.4.1.33
-    if (nrofPRB >= 3) { // TS 38.211 subclause 5.2.2.1 (Base sequences of length 36 or larger) applies
+    if (l==0 && nrofPRB >= 3) { // TS 38.211 subclause 5.2.2.1 (Base sequences of length 36 or larger) applies
       int i = 4;
 
       while (list_of_prime_numbers[i] < (12*nrofPRB)) i++;
@@ -1270,7 +1278,7 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
       }
     }
 
-    if (nrofPRB == 2) { // TS 38.211 subclause 5.2.2.2 (Base sequences of length less than 36 using table 5.2.2.2-4) applies
+    if (l==0 && nrofPRB == 2) { // TS 38.211 subclause 5.2.2.2 (Base sequences of length less than 36 using table 5.2.2.2-4) applies
       for (int n = 0; n < 12 * nrofPRB; n++) {
         c16_t table = {table_5_2_2_2_4_Re[u][n], table_5_2_2_2_4_Im[u][n]};
         r_u_v_base[n] = c16mulRealShift(table, amp, 15);
@@ -1284,7 +1292,7 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
       }
     }
 
-    if (nrofPRB == 1) { // TS 38.211 subclause 5.2.2.2 (Base sequences of length less than 36 using table 5.2.2.2-2) applies
+    if (l==0 && nrofPRB == 1) { // TS 38.211 subclause 5.2.2.2 (Base sequences of length less than 36 using table 5.2.2.2-2) applies
       for (int n = 0; n < 12 * nrofPRB; n++) {
         c16_t table = {table_5_2_2_2_2_Re[u][n], table_5_2_2_2_2_Im[u][n]};
         r_u_v_base[n] = c16mulRealShift(table, amp, 15);
@@ -1303,12 +1311,12 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
     alpha = nr_cyclic_shift_hopping(pucch_pdu->hopping_id,m0,mcs,l,startingSymbolIndex,nr_slot_tx);
 
     for (int rb=0; rb<nrofPRB; rb++) {
-      const bool nb_rb_is_even = frame_parms->N_RB_DL & 1;
+      const bool nb_rb_is_even = (frame_parms->N_RB_DL & 1)==0;
       const int halfRBs = frame_parms->N_RB_DL / 2;
-      const int baseRB = rb + startingPRB;
-      if ((intraSlotFrequencyHopping == 1) && (l<floor(nrofSymbols/2))) { // intra-slot hopping enabled, we need to calculate new offset PRB
-        startingPRB = startingPRB + pucch_pdu->second_hop_prb;
+      if ((intraSlotFrequencyHopping == 1) && (l>=floor(nrofSymbols/2))) { // intra-slot hopping enabled, we need to calculate new offset PRB
+        startingPRB = pucch_pdu->second_hop_prb;
       }
+      const int baseRB = rb + startingPRB;
       re_offset = ((l + startingSymbolIndex) * frame_parms->ofdm_symbol_size);
       //startingPRB = startingPRB + rb;
       if (nb_rb_is_even) {
@@ -1332,7 +1340,8 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
         printf("3   ");
 #endif
         } else if (baseRB > halfRBs) { // if number RBs in bandwidth is odd  and current PRB is upper band
-          re_offset += 12 * (baseRB - halfRBs) + 6;
+	  printf("baseRB %d, halfPRBs %d, N_RB_DL %d, baseRB-halfRBs %d,offset %d\n",baseRB,halfRBs,frame_parms->N_RB_DL,baseRB-halfRBs,12 * (baseRB - halfRBs) - 6);
+          re_offset += 12 * (baseRB - halfRBs) - 6;
 #ifdef DEBUG_NR_PUCCH_TX
         printf("4   ");
 #endif
@@ -1345,7 +1354,7 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
       }
 
 #ifdef DEBUG_NR_PUCCH_TX
-      printf("re_offset=%u,baseRB=%d\n", re_offset, baseRB);
+      printf("re_offset=%u,baseRB=%d\n", re_offset-((l + startingSymbolIndex) * frame_parms->ofdm_symbol_size), baseRB);
 #endif
 
       //txptr = &txdataF[0][re_offset];
@@ -1360,10 +1369,10 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
           txdataF[0][re_offset] = z[n + k];
 #ifdef DEBUG_NR_PUCCH_TX
           printf(
-              "\t [nr_generate_pucch3_4] (l=%d,rb=%d,n=%d,k=%d) mapping PUCCH to RE \t amp=%d \tofdm_symbol_size=%d \tN_RB_DL=%d "
-              "\tfirst_carrier_offset=%d \tz_pucch[%d]=txptr(%u)=(z(l=%d,n=%d)=(%d,%d))\n",
+              "\t [nr_generate_pucch3_4] (l=%d,rb=%d,n=%d,k=%d) mapping PUCCH DATA to RE \t amp=%d \tofdm_symbol_size=%d \tN_RB_DL=%d "
+              "\tfirst_carrier_offset=%d \tz_pucch[%d]=txptr(%u)=(z(l=%d,n=%d)=(%d,%d))[%d]\n",
               l,
-              rb,
+              startingPRB+rb,
               n,
               k,
               amp,
@@ -1375,7 +1384,8 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
               l,
               n,
               txdataF[0][re_offset].r,
-              txdataF[0][re_offset].i);
+              txdataF[0][re_offset].i,
+	      re_offset-(l + startingSymbolIndex) * frame_parms->ofdm_symbol_size);
 #endif
         }
         if (table_6_4_1_3_3_2_1_dmrs_positions[nrofSymbols-4][l] == 1) { // mapping DM-RS signal according to TS38.211 subclause 6.4.1.3.2
@@ -1383,12 +1393,13 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
           txdataF[0][re_offset] = c16mulShift(angle, r_u_v_base[n + j], 15);
 #ifdef DEBUG_NR_PUCCH_TX
           printf(
-              "\t [nr_generate_pucch3_4] (l=%d,rb=%d,n=%d,j=%d) mapping DM-RS to RE \t amp=%d \tofdm_symbol_size=%d \tN_RB_DL=%d "
+              "\t [nr_generate_pucch3_4] (l=%d,rb=%d,n=%d,j=%d,alpha %f) mapping PUCCH DM-RS to RE \t amp=%d \tofdm_symbol_size=%d \tN_RB_DL=%d "
               "\tfirst_carrier_offset=%d \tz_dm-rs[%d]=txptr(%u)=(r_u_v(l=%d,n=%d)=(%d,%d))\n",
               l,
-              rb,
+              rb+startingPRB,
               n,
               j,
+	      alpha,
               amp,
               frame_parms->ofdm_symbol_size,
               frame_parms->N_RB_DL,
@@ -1398,7 +1409,8 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
               l,
               n,
               txdataF[0][re_offset].r,
-              txdataF[0][re_offset].i);
+              txdataF[0][re_offset].i,
+	      re_offset-(l + startingSymbolIndex) * frame_parms->ofdm_symbol_size);
 #endif
         }
 

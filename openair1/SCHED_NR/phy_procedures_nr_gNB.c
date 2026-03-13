@@ -1034,27 +1034,33 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
     UL_INFO->uci_ind.slot = slot_rx;
     switch (pucch_pdu->format_type) {
       case 0:
+      case 1:
         uci->pdu_type = NFAPI_NR_UCI_FORMAT_0_1_PDU_TYPE;
         uci->pdu_size = sizeof(nfapi_nr_uci_pucch_pdu_format_0_1_t);
-        nfapi_nr_uci_pucch_pdu_format_0_1_t *uci_pdu_format0 = &uci->pucch_pdu_format_0_1;
+        nfapi_nr_uci_pucch_pdu_format_0_1_t *uci_pdu_format0_1 = &uci->pucch_pdu_format_0_1;
         int offset =
             pucch_pdu->start_symbol_index * ofdm_symbol_size + (frame_parms->first_carrier_offset + pucch_pdu->prb_start * 12);
         LOG_D(NR_PHY,
-              "frame %d, slot %d: PUCCH signal energy %d\n",
+              "frame %d, slot %d: PUCCH %d signal energy %d\n",
               frame_rx,
               slot_rx,
+	      pucch_pdu->format_type,
               signal_energy_nodc(&rxdataF[0][soffset + offset], 12));
-        nr_decode_pucch0(gNB, rxdataF, frame_rx, slot_rx, uci_pdu_format0, pucch_pdu);
+        if (pucch_pdu->format_type == 0)
+	  nr_decode_pucch0(gNB, rxdataF, frame_rx, slot_rx, uci_pdu_format0_1, pucch_pdu);
+	else
+	  nr_decode_pucch1(gNB, rxdataF, frame_rx, slot_rx, uci_pdu_format0_1, pucch_pdu);
         break;
       case 2:
+      case 3:
         uci->pdu_type = NFAPI_NR_UCI_FORMAT_2_3_4_PDU_TYPE;
         uci->pdu_size = sizeof(nfapi_nr_uci_pucch_pdu_format_2_3_4_t);
-        nfapi_nr_uci_pucch_pdu_format_2_3_4_t *uci_pdu_format2 = &uci->pucch_pdu_format_2_3_4;
+        nfapi_nr_uci_pucch_pdu_format_2_3_4_t *uci_pdu_format2_3_4 = &uci->pucch_pdu_format_2_3_4;
         LOG_D(PHY, "%d.%d Calling nr_decode_pucch2\n", frame_rx, slot_rx);
-        nr_decode_pucch2(gNB, rxdataF, frame_rx, slot_rx, uci_pdu_format2, pucch_pdu);
+        nr_decode_pucch2_3(gNB, rxdataF, frame_rx, slot_rx, uci_pdu_format2_3_4, pucch_pdu);
         break;
       default:
-        AssertFatal(1 == 0, "Only PUCCH formats 0 and 2 are currently supported\n");
+        AssertFatal(1 == 0, "Only PUCCH formats 0-3 are currently supported\n");
     }
     UL_INFO->uci_ind.num_ucis += 1;
     pucch->active = false;
