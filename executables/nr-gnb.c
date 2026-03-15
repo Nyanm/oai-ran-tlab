@@ -65,8 +65,6 @@ static void tx_func(processingData_L1tx_t *info)
     reset_active_ulsch(gNB, frame_rx);
   }
 
-  clear_slot_beamid(gNB, slot_tx);
-
   nfapi_nr_slot_indication_scf_t ind = {.sfn = frame_tx, .slot = slot_tx};
   start_meas(&gNB->slot_indication_stats);
   // this variable is very big (multiple MB), so we put it into static storage
@@ -80,7 +78,12 @@ static void tx_func(processingData_L1tx_t *info)
 
   // At this point, MAC scheduler just ran, including scheduling
   // PRACH/PUCCH/PUSCH, so trigger RX chain processing
-  nr_save_ul_tti_req(gNB, &sched_response.UL_tti_req);
+  struct nr_grid_slot nrg = {0};
+  nr_save_ul_tti_req(gNB, &sched_response.UL_tti_req, &nrg);
+  // Send the UL scheduling info to perform beamforming when signal is received in the RU.
+  if (sched_response.UL_tti_req.n_pdus > 0)
+    send_rx_grid_info(gNB->RU_list[0], &nrg, info->timestamp_tx);
+
   LOG_D(NR_PHY, "Trigger RX for %d.%d\n", frame_rx, slot_rx);
   notifiedFIFO_elt_t *res = newNotifiedFIFO_elt(sizeof(processingData_L1_t), 0, &gNB->resp_L1, NULL);
   processingData_L1_t *syncMsg = NotifiedFifoData(res);
@@ -226,7 +229,7 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
   bool full_slot = ru->half_slot_parallelization == 0;
   if (ru->feptx_prec) {
     output += print_meas_log(&ru->precoding_stats,
-                             full_slot ? "feptx_prec (per port)" : "feptx_prec (per port, half_slot)",
+                             "feptx_prec",
                              NULL,
                              NULL,
                              output,

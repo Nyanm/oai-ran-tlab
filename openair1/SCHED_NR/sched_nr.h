@@ -8,6 +8,7 @@
 #include "PHY/defs_gNB.h"
 #include "PHY/NR_TRANSPORT/nr_dci.h"
 #include "phy_frame_config_nr.h"
+#include "PHY/phy_digital_beamforming.h"
 
 void nr_set_ssb_first_subcarrier(nfapi_nr_config_request_scf_t *cfg, NR_DL_FRAME_PARMS *fp);
 void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
@@ -16,7 +17,7 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
                            const nfapi_nr_ul_dci_request_t *UL_dci_req,
                            int frame,
                            int slot);
-void nr_save_ul_tti_req(PHY_VARS_gNB *gNB, nfapi_nr_ul_tti_request_t *UL_tti_req);
+void nr_save_ul_tti_req(PHY_VARS_gNB *gNB, nfapi_nr_ul_tti_request_t *UL_tti_req, struct nr_grid_slot *nrg);
 int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, NR_UL_IND_t *UL_INFO);
 void L1_nr_prach_procedures(PHY_VARS_gNB *gNB, prach_item_t *prach_id, nfapi_nr_rach_indication_t *rach_ind);
 void nr_common_signal_procedures (PHY_VARS_gNB *gNB,int frame,int slot, const nfapi_nr_dl_tti_ssb_pdu *ssb_pdu);
@@ -28,14 +29,11 @@ void nr_feptx_tp(RU_t *ru, int frame_tx, int slot);
 void feptx_prec(RU_t *ru,int frame_tx,int tti_tx);
 void nr_phy_init_RU(RU_t *ru);
 void nr_phy_free_RU(RU_t *ru);
-void clear_slot_beamid(PHY_VARS_gNB *gNB, int slot);
-void beam_index_allocation(uint16_t fapi_beam_index,
-                           int ant,
-                           int num_ports,
-                           int symbols_per_slot,
-                           int slot,
-                           uint16_t bitmap_symbols,
-                           int num_ant_max,
-                           uint16_t **ant_beam_id_list);
-uint16_t get_first_ant_idx(bool das, uint16_t num_ports_beams, uint16_t beam_id, uint16_t fapi_start_port);
+void update_grid_info(struct nr_grid *grid,
+                      uint16_t port,
+                      uint16_t beam_id,
+                      uint16_t start_rb,
+                      uint16_t num_rb,
+                      uint16_t start_symb,
+                      uint16_t num_symb);
 #endif
