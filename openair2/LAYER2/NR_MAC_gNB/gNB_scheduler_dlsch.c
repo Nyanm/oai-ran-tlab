@@ -946,7 +946,8 @@ nfapi_nr_dl_tti_pdsch_pdu_rel15_t *prepare_pdsch_pdu(nfapi_nr_dl_tti_request_pdu
                                                      int rnti,
                                                      int beam_index,
                                                      int nl_tbslbrm,
-                                                     int pdu_index)
+                                                     int pdu_index,
+                                                     nr_beam_mode_t beam_mode)
 {
   const NR_UE_DL_BWP_t *dl_bwp = UE ? &UE->current_DL_BWP : NULL;
   const NR_ServingCellConfigCommon_t *scc = mac->common_channels[0].ServingCellConfigCommon;
@@ -1012,8 +1013,9 @@ nfapi_nr_dl_tti_pdsch_pdu_rel15_t *prepare_pdsch_pdu(nfapi_nr_dl_tti_request_pdu
   pdsch_pdu->precodingAndBeamforming.num_prgs = 1;
   pdsch_pdu->precodingAndBeamforming.prg_size = pdsch_pdu->rbSize;
   pdsch_pdu->precodingAndBeamforming.prgs_list[0].pm_idx = sched_pdsch->pm_index;
-  pdsch_pdu->precodingAndBeamforming.dig_bf_interfaces = pdsch_pdu->param_v4.spatialStreamsCw[0].numSpatialStreamIndices;
-  for (int i = 0; i < pdsch_pdu->param_v4.spatialStreamsCw[0].numSpatialStreamIndices; i++)
+  uint16_t num_dig_bf = (beam_mode == NO_BEAM_MODE) ? 0 : pdsch_pdu->param_v4.spatialStreamsCw[0].numSpatialStreamIndices;
+  pdsch_pdu->precodingAndBeamforming.dig_bf_interfaces = num_dig_bf;
+  for (int i = 0; i < num_dig_bf; i++)
     pdsch_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[i].beam_idx = beam_index;
   return pdsch_pdu;
 }
@@ -1144,8 +1146,8 @@ void post_process_dlsch(gNB_MAC_INST *nr_mac, post_process_pdsch_t *pdsch, NR_UE
                                                                    rnti,
                                                                    fapi_beam,
                                                                    nl_tbslbrm,
-                                                                   pduindex);
-
+                                                                   pduindex,
+                                                                   nr_mac->beam_info.beam_mode);
 
   LOG_D(NR_MAC,"Configuring DCI/PDCCH in %d.%d at CCE %d, rnti %x\n", frame,slot,sched_ctrl->cce_index,rnti);
   /* Fill PDCCH DL DCI PDU */
@@ -1157,7 +1159,8 @@ void post_process_dlsch(gNB_MAC_INST *nr_mac, post_process_pdsch_t *pdsch, NR_UE
                                                    sched_ctrl->aggregation_level,
                                                    sched_ctrl->cce_index,
                                                    fapi_beam,
-                                                   rnti);
+                                                   rnti,
+                                                   nr_mac->beam_info.beam_mode);
   pdcch_pdu->numDlDci++;
 
   /* DCI payload */
