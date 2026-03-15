@@ -71,22 +71,6 @@ void nr_generate_dci(PHY_VARS_gNB *gNB,
     uint32_t cset_start_symb = pdcch_pdu_rel15->StartSymbolIndex;
     uint32_t cset_nsymb = pdcch_pdu_rel15->DurationSymbols;
     int dci_idx = 0;
-    // multi-beam number (for concurrent beams)
-    uint16_t symb_bitmap = SL_to_bitmap(cset_start_symb, pdcch_pdu_rel15->DurationSymbols);
-    uint16_t beam_id = dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
-    uint16_t dci_spatial_stream_index = get_first_ant_idx(gNB->enable_analog_das,
-                                                          frame_parms->nb_antennas_tx / gNB->common_vars.num_beams_period,
-                                                          beam_id,
-                                                          get_dci_ant_port_indices(&pdcch_pdu_rel15->param_v4, d));
-
-    beam_index_allocation(beam_id,
-                          dci_spatial_stream_index,
-                          1, // Only one antenna port for DCI
-                          frame_parms->symbols_per_slot,
-                          slot,
-                          symb_bitmap,
-                          frame_parms->nb_antennas_tx,
-                          gNB->common_vars.beam_id);
 
     LOG_D(NR_PHY_DCI, "pdcch: Coreset rb_offset %d, nb_rb %d BWP Start %d\n", rb_offset, n_rb, pdcch_pdu_rel15->BWPStart);
     LOG_D(NR_PHY_DCI,
@@ -175,9 +159,21 @@ void nr_generate_dci(PHY_VARS_gNB *gNB,
 
     /// Resource mapping
     uint16_t amp = gNB->TX_AMP;
-    c16_t *txdataF = gNB->common_vars.txdataF[dci_spatial_stream_index];
-
     int num_regs = dci_pdu->AggregationLevel * NR_NB_REG_PER_CCE / pdcch_pdu_rel15->DurationSymbols;
+
+    // Update grid info. Create new section for each DCI. We assume REGs are contiguous and not interleaved
+    uint16_t beam_id = dci_pdu->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
+    const int port = get_dci_ant_port_indices(&pdcch_pdu_rel15->param_v4, d);
+    c16_t *txdataF = gNB->common_vars.tx_grid_info[port].dataF;
+    update_grid_info(gNB->common_vars.tx_grid_info,
+                     port,
+                     dci_pdu->precodingAndBeamforming.dig_bf_interfaces,
+                     beam_id,
+                     pdcch_pdu_rel15->BWPStart + rb_offset + reg_list[d][0],
+                     reg_list[d][num_regs - 1] - reg_list[d][0],
+                     cset_start_symb,
+                     pdcch_pdu_rel15->DurationSymbols);
+
     /*Mapping the encoded DCI along with the DMRS */
     for(int symbol_idx = 0; symbol_idx < pdcch_pdu_rel15->DurationSymbols; symbol_idx++) {
       // allocating rbs per symbol

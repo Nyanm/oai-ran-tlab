@@ -465,8 +465,11 @@ static void nr_configure_srs(gNB_MAC_INST *nrmac,
   srs_pdu->srs_parameters_v4.num_ul_spatial_streams_ports = srs_num_rx_ant_ports;
   uint16_t srs_ant_port_indices[MAX_NUM_SPATIAL_STREAMS] = {0};
   get_antenna_port_indices(beam.idx, srs_num_rx_ant_ports, nrmac->radio_config.spatial_stream_index, 0, srs_ant_port_indices);
-  srs_pdu->beamforming.dig_bf_interface = srs_num_rx_ant_ports;
-  fill_dig_bf_interface_list(fapi_beam, srs_num_rx_ant_ports, 0, srs_pdu->beamforming.prgs_list[0].dig_bf_interface_list);
+  srs_pdu->beamforming.dig_bf_interface = (nrmac->beam_info.beam_mode == NO_BEAM_MODE) ? 0 : srs_num_rx_ant_ports;
+  fill_dig_bf_interface_list(fapi_beam,
+                             srs_pdu->beamforming.dig_bf_interface,
+                             0,
+                             srs_pdu->beamforming.prgs_list[0].dig_bf_interface_list);
   DevAssert(sizeof(srs_ant_port_indices) <= sizeof(srs_pdu->srs_parameters_v4.Ul_spatial_stream_ports));
   memcpy(srs_pdu->srs_parameters_v4.Ul_spatial_stream_ports, srs_ant_port_indices, sizeof(srs_ant_port_indices));
 

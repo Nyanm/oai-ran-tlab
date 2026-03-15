@@ -2298,10 +2298,11 @@ nfapi_nr_pusch_pdu_t *prepare_pusch_pdu(nfapi_nr_ul_tti_request_t *future_ul_tti
   // Beamforming
   pusch_pdu->beamforming.num_prgs = 1;
   pusch_pdu->beamforming.prg_size = pusch_pdu->bwp_size;
-  pusch_pdu->beamforming.dig_bf_interface = sched_pusch->ant_port_idx.numSpatialStreamIndices;
+  const uint16_t num_dig_bf = (beam_mode == NO_BEAM_MODE) ? 0 : sched_pusch->ant_port_idx.numSpatialStreamIndices;
+  pusch_pdu->beamforming.dig_bf_interface = num_dig_bf;
   memcpy(&pusch_pdu->param_v4, &sched_pusch->ant_port_idx, sizeof(pusch_pdu->param_v4));
   fill_dig_bf_interface_list(convert_to_fapi_beam(UE->UE_beam_index, beam_mode),
-                             sched_pusch->ant_port_idx.numSpatialStreamIndices,
+                             num_dig_bf,
                              0,
                              pusch_pdu->beamforming.prgs_list[0].dig_bf_interface_list);
   /* TRANSFORM PRECODING --------------------------------------------------------*/
@@ -2506,7 +2507,8 @@ void post_process_ulsch(gNB_MAC_INST *nr_mac, post_process_pusch_t *pusch, NR_UE
                                                    sched_ctrl->aggregation_level,
                                                    sched_ctrl->cce_index,
                                                    convert_to_fapi_beam(UE->UE_beam_index, nr_mac->beam_info.beam_mode),
-                                                   UE->rnti);
+                                                   UE->rnti,
+                                                   nr_mac->beam_info.beam_mode);
   pdcch_pdu->numDlDci++;
 
   dci_pdu_rel15_t uldci_payload;

@@ -493,7 +493,7 @@ void schedule_nr_prach(module_id_t module_idP, frame_t frameP, slot_t slotP)
           prach_pdu->num_prach_ocas = num_td_occ;
           prach_pdu->beamforming.num_prgs = 1;
           prach_pdu->beamforming.prg_size = n_ra_rb;
-          const uint16_t num_log_ports = gNB->radio_config.pusch_AntennaPorts;
+          const uint16_t num_log_ports = 1;
           const uint8_t num_beams = beam.idx + 1;
           prach_pdu->param_v4.numSpatialStreamIndices = num_beams * num_log_ports;
           get_antenna_port_indices(beam.idx,
@@ -502,11 +502,8 @@ void schedule_nr_prach(module_id_t module_idP, frame_t frameP, slot_t slotP)
                                    beam.idx * num_log_ports,
                                    prach_pdu->param_v4.spatialStreamIndices);
           const uint16_t fapi_beam = convert_to_fapi_beam(beam_index, gNB->beam_info.beam_mode);
-          prach_pdu->beamforming.dig_bf_interface = num_beams;
-          fill_dig_bf_interface_list(fapi_beam,
-                                     1,
-                                     beam.idx,
-                                     prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list);
+          prach_pdu->beamforming.dig_bf_interface = (gNB->beam_info.beam_mode == NO_BEAM_MODE) ? 0 : num_beams;
+          fill_dig_bf_interface_list(fapi_beam, num_log_ports, beam.idx, prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list);
 
           LOG_D(NR_MAC,
                 "Frame %d, Slot %d: Prach Occasion id = %u  fdm index = %u start symbol = %u slot index = %u subframe index = %u \n",
@@ -944,7 +941,8 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
                                                    aggregation_level,
                                                    CCEIndex,
                                                    fapi_beam,
-                                                   UE->rnti);
+                                                   UE->rnti,
+                                                   nr_mac->beam_info.beam_mode);
   pdcch_pdu_rel15->numDlDci++;
 
   dci_pdu_rel15_t uldci_payload = {0};
@@ -1340,7 +1338,8 @@ static void prepare_dl_pdus(gNB_MAC_INST *nr_mac,
                                                                          rnti,
                                                                          fapi_beam,
                                                                          1,
-                                                                         pduindex);
+                                                                         pduindex,
+                                                                         nr_mac->beam_info.beam_mode);
 
   /* Fill PDCCH DL DCI PDU */
   nfapi_nr_dl_dci_pdu_t *dci_pdu = prepare_dci_pdu(pdcch_pdu_rel15,
@@ -1351,7 +1350,8 @@ static void prepare_dl_pdus(gNB_MAC_INST *nr_mac,
                                                    aggregation_level,
                                                    CCEIndex,
                                                    fapi_beam,
-                                                   rnti);
+                                                   rnti,
+                                                   nr_mac->beam_info.beam_mode);
   pdcch_pdu_rel15->numDlDci++;
 
   int tpc = 1; // 0dB change, don't know how to determine this.

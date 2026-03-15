@@ -1120,14 +1120,14 @@ int main(int argc, char **argv)
         if (n_trials==1) {
           LOG_M("txsigF0.m",
                 "txsF0=",
-                &gNB->common_vars.txdataF[0][2 * frame_parms->ofdm_symbol_size],
+                &gNB->common_vars.tx_grid_info[0].dataF[2 * frame_parms->ofdm_symbol_size],
                 frame_parms->ofdm_symbol_size,
                 1,
                 1);
           if (gNB->frame_parms.nb_antennas_tx>1)
             LOG_M("txsigF1.m",
                   "txsF1=",
-                  &gNB->common_vars.txdataF[1][2 * frame_parms->ofdm_symbol_size],
+                  &gNB->common_vars.tx_grid_info[1].dataF[2 * frame_parms->ofdm_symbol_size],
                   frame_parms->ofdm_symbol_size,
                   1,
                   1);
@@ -1140,7 +1140,7 @@ int main(int argc, char **argv)
           c16_t fft_in_buff[frame_parms->ofdm_symbol_size * frame_parms->symbols_per_slot] __attribute__((aligned(64)));
           memset(fft_in_buff, 0, sizeof(fft_in_buff));
           if (cyclic_prefix_type == 1) {
-            fft_shift(gNB->common_vars.txdataF[aa],
+            fft_shift(gNB->common_vars.tx_grid_info[aa].dataF,
                       frame_parms->ofdm_symbol_size,
                       frame_parms->N_RB_DL,
                       fft_in_buff,
@@ -1158,7 +1158,7 @@ int main(int argc, char **argv)
             for (int i = 0; i < 14; i++) {
               was_symbol_used[i] = true;
             }
-            fft_shift(gNB->common_vars.txdataF[aa],
+            fft_shift(gNB->common_vars.tx_grid_info[aa].dataF,
                       frame_parms->ofdm_symbol_size,
                       frame_parms->N_RB_DL,
                       fft_in_buff,

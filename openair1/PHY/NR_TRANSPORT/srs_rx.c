@@ -37,22 +37,6 @@ void nr_fill_srs(PHY_VARS_gNB *gNB, frame_t frame, slot_t slot, nfapi_nr_srs_pdu
       srs->frame = frame;
       srs->slot = slot;
       srs->active = true;
-      if (gNB->common_vars.beam_id) {
-        const uint8_t l0 = gNB->frame_parms.symbols_per_slot - 1 - srs_pdu->time_start_position;
-        int bitmap = SL_to_bitmap(l0, 1 << srs_pdu->num_symbols);
-        const nfapi_v4_srs_parameters_t *p = &srs_pdu->srs_parameters_v4;
-        // We assume the ports are sequential so taking the first port index here
-        const uint16_t ant_port_start = p->num_ul_spatial_streams_ports > 0 ? p->Ul_spatial_stream_ports[0] : 0;
-        int fapi_beam_idx = srs_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
-        beam_index_allocation(fapi_beam_idx,
-                              ant_port_start,
-                              gNB->frame_parms.nb_antennas_rx,
-                              NR_SYMBOLS_PER_SLOT,
-                              slot,
-                              bitmap,
-                              gNB->frame_parms.nb_antennas_rx,
-                              gNB->common_vars.beam_id);
-      }
       memcpy((void *)&srs->srs_pdu, (void *)srs_pdu, sizeof(nfapi_nr_srs_pdu_t));
       break;
     }

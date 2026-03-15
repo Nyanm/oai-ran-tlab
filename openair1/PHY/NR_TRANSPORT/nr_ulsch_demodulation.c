@@ -1104,10 +1104,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   nfapi_nr_pusch_pdu_t *rel15_ul = &gNB->ulsch[ulsch_id].harq_process->ulsch_pdu;
   const nfapi_nr_spatial_stream_index_t *p = &rel15_ul->param_v4;
-  uint16_t ant_port_start = get_first_ant_idx(gNB->enable_analog_das,
-                                              frame_parms->nb_antennas_tx / gNB->common_vars.num_beams_period,
-                                              rel15_ul->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                              p->numSpatialStreamIndices > 0 ? p->spatialStreamIndices[0] : 0);
+  uint16_t ant_port_start = p->numSpatialStreamIndices > 0 ? p->spatialStreamIndices[0] : 0;
 
   NR_gNB_PUSCH *pusch_vars = &gNB->pusch_vars[ulsch_id];
   uint32_t bwp_start_subcarrier = ((rel15_ul->rb_start + rel15_ul->bwp_start) * NR_NB_SC_PER_RB + frame_parms->first_carrier_offset) % frame_parms->ofdm_symbol_size;

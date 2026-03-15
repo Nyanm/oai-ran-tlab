@@ -388,7 +388,7 @@ static inline void do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
   return;
 }
 
-static inline void do_txdataF(c16_t **txdataF,
+static inline void do_txdataF(struct nr_grid *tx_grid,
                               int symbol_sz,
                               c16_t txdataF_precoding[][symbol_sz],
                               PHY_VARS_gNB *gNB,
@@ -415,11 +415,11 @@ static inline void do_txdataF(c16_t **txdataF,
     const int re_cnt = NR_NB_SC_PER_RB * rb_step;
     if (pmi == 0) { // unitary Precoding
       if (ant < rel15->nrOfLayers)
-        memcpy(&txdataF[ant][txdataF_offset_per_symbol + subCarrier],
+        memcpy(&tx_grid[ant].dataF[txdataF_offset_per_symbol + subCarrier],
                &txdataF_precoding[ant][subCarrier],
-               re_cnt * sizeof(**txdataF));
+               re_cnt * sizeof(c16_t));
       else
-        memset(&txdataF[ant][txdataF_offset_per_symbol + subCarrier], 0, re_cnt * sizeof(**txdataF));
+        memset(&tx_grid[ant].dataF[txdataF_offset_per_symbol + subCarrier], 0, re_cnt * sizeof(c16_t));
       subCarrier += re_cnt;
     } else { // non-unitary Precoding
       AssertFatal(frame_parms->nb_antennas_tx > 1, "No precoding can be done with a single antenna port\n");
@@ -441,7 +441,7 @@ static inline void do_txdataF(c16_t **txdataF,
                              pmi_pdu,
                              subCarrier,
                              re_cnt,
-                             &txdataF[ant][txdataF_offset_per_symbol]);
+                             &tx_grid[ant].dataF[txdataF_offset_per_symbol]);
       subCarrier += re_cnt;
     } // else { // non-unitary Precoding
 
@@ -484,7 +484,7 @@ static void nr_pdsch_symbol_processing(void *arg)
   c16_t mod_dmrs[(n_dmrs + 63) & ~63] __attribute__((aligned(64)));
   const int symbol_sz = frame_parms->ofdm_symbol_size;
 
-  c16_t **txdataF = gNB->common_vars.txdataF;
+  struct nr_grid *tx_grid = gNB->common_vars.tx_grid_info;
   uint16_t start_sc = (rel15->rbStart + rel15->BWPStart) * NR_NB_SC_PER_RB;
 
   for (int l_symbol = rdata->startSymbol; l_symbol < rdata->startSymbol + rdata->numSymbols; l_symbol++) {
@@ -543,7 +543,7 @@ static void nr_pdsch_symbol_processing(void *arg)
         rel15->param_v4.numberCodewords ? rel15->param_v4.spatialStreamsCw[0].numSpatialStreamIndices : 0;
     for (int ant = 0; ant < num_log_ports; ant++) {
       const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz;
-      do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, rdata->ant_to_map[ant], start_sc, txdataF_offset_per_symbol);
+      do_txdataF(tx_grid, symbol_sz, txdataF_precoding, gNB, rel15, rdata->ant_to_map[ant], start_sc, txdataF_offset_per_symbol);
     }
     stop_meas(&rdata->dlsch_precoding_stats);
   }
@@ -660,23 +660,19 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   // The Codebook Type I
   const nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
   // beam number in multi-beam scenario (concurrent beams)
-  const uint16_t symb_bitmap = SL_to_bitmap(rel15->StartSymbolIndex, rel15->NrOfSymbols);
   uint16_t ant_to_map[frame_parms->nb_antennas_tx];
   const uint16_t num_log_ports = rel15->param_v4.numberCodewords ? rel15->param_v4.spatialStreamsCw[0].numSpatialStreamIndices : 0;
   for (int ant = 0; ant < num_log_ports; ant++) {
     const uint16_t beam_id = pb->prgs_list[0].dig_bf_interface_list[ant].beam_idx;
-    ant_to_map[ant] = get_first_ant_idx(gNB->enable_analog_das,
-                                                  frame_parms->nb_antennas_tx / gNB->common_vars.num_beams_period,
-                                                  beam_id,
-                                                  rel15->param_v4.spatialStreamsCw[0].spatialStreamIndices[ant]);
-    beam_index_allocation(beam_id,
-                          ant_to_map[ant],
-                          1,
-                          frame_parms->symbols_per_slot,
-                          slot,
-                          symb_bitmap,
-                          frame_parms->nb_antennas_tx,
-                          gNB->common_vars.beam_id);
+    ant_to_map[ant] = rel15->param_v4.spatialStreamsCw[0].spatialStreamIndices[ant];
+    update_grid_info(gNB->common_vars.tx_grid_info,
+                     ant_to_map[ant],
+                     pb->dig_bf_interfaces,
+                     beam_id,
+                     rel15->BWPStart + rel15->rbStart,
+                     rel15->rbSize,
+                     rel15->StartSymbolIndex,
+                     rel15->NrOfSymbols);
   }
   stop_meas(&gNB->dlsch_layer_mapping_stats);
 
@@ -743,6 +739,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     merge_meas(&gNB->dlsch_precoding_stats, &arr[i].dlsch_precoding_stats);
   }
   stop_meas(&gNB->dlsch_pdsch_generation_stats);
+
   /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)
    * should remain a multiple of 8 * 64 with enough offset to fit each dlsch
    */
