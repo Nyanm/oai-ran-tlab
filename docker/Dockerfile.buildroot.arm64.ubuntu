@@ -1,0 +1,51 @@
+# syntax=docker/dockerfile:1.7
+
+FROM ubuntu:noble AS buildroot-arm64
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    git make gcc g++ gawk wget cpio rsync bc unzip file python3 \
+    libncurses-dev xz-utils bzip2 patch sed perl \
+    qemu-system-aarch64 \
+    qemu-utils \
+    openssh-client \
+    sshpass \
+    iptables \
+    binutils \
+    netcat-openbsd \
+    bridge-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /buildroot
+ARG BR_REPO=https://github.com/buildroot/buildroot.git
+ARG BR_REF=2024.08.1
+
+RUN git clone ${BR_REPO} . && git checkout ${BR_REF}
+
+COPY docker/buildroot_qemu/qemu_arm64_defconfig /configs/br_defconfig
+COPY docker/buildroot_qemu/qemu_arm64_linux.config /configs/linux.config
+COPY docker/buildroot_qemu/rootfs_overlay/ /buildroot/rootfs_overlay/
+
+RUN --mount=type=cache,id=br-dl,target=/buildroot/dl \
+    set -eux; \
+    rm -rf /buildroot/output /buildroot/.config; \
+    make -C /buildroot O=/buildroot/output defconfig BR2_DEFCONFIG=/configs/br_defconfig; \
+    make -C /buildroot O=/buildroot/output olddefconfig; \
+    make -C /buildroot O=/buildroot/output linux-dirclean; \
+    make -C /buildroot O=/buildroot/output -j"$(nproc)"; \
+    LINUX_DIR="$(echo /buildroot/output/build/linux-*)"; \
+    echo "=== requested linux.config entries ==="; \
+    ls -l /configs/linux.config; \
+    grep -nE '9P|VIRTIO' /configs/linux.config || true; \
+    echo "=== built kernel config path ==="; \
+    echo "$LINUX_DIR"; \
+    ls -l "$LINUX_DIR/.config" || true; \
+    echo "=== built kernel config entries ==="; \
+    grep -nE '9P|VIRTIO' "$LINUX_DIR/.config" || true
+
+FROM ubuntu:noble AS buildroot-arm64-export
+WORKDIR /out
+
+COPY --from=buildroot-arm64 /buildroot/output/images/  /out/images/
+COPY --from=buildroot-arm64 /buildroot/.config /out/buildroot.config
+COPY --from=buildroot-arm64 /buildroot/output/host/   /out/toolchain/

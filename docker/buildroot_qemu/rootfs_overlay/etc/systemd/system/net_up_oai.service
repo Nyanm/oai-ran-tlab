@@ -1,0 +1,12 @@
+[Unit]
+Description=Static network init
+After=network.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/net_up_oai.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

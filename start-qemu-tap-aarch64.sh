@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-cd ./qemu-rootfs/arm64
+cd ./qemu-rootfs
 
 qemu-system-aarch64 -M virt -m 8G -cpu neoverse-n1 -nographic -smp cpus=8 \
 -kernel Image -append "rootwait root=/dev/vda rw console=ttyAMA0" \

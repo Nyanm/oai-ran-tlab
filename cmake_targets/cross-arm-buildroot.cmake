@@ -1,0 +1,44 @@
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_SYSTEM_PROCESSOR aarch64)
+
+if(NOT DEFINED BUILDROOT_HOST_DIR)
+  set(BUILDROOT_HOST_DIR "/opt/br-host")
+endif()
+
+set(BUILDROOT_TARGET_TRIPLET "aarch64-buildroot-linux-gnu")
+
+# Toolchain binaries
+set(CMAKE_C_COMPILER   "${BUILDROOT_HOST_DIR}/bin/${BUILDROOT_TARGET_TRIPLET}-gcc")
+set(CMAKE_CXX_COMPILER "${BUILDROOT_HOST_DIR}/bin/${BUILDROOT_TARGET_TRIPLET}-g++")
+set(CMAKE_ASM_COMPILER "${BUILDROOT_HOST_DIR}/bin/${BUILDROOT_TARGET_TRIPLET}-gcc")
+
+# Sysroot
+set(CMAKE_SYSROOT "${BUILDROOT_HOST_DIR}/${BUILDROOT_TARGET_TRIPLET}/sysroot")
+
+# Help CMake find target headers/libs/packages in sysroot, not host
+set(CMAKE_FIND_ROOT_PATH "${CMAKE_SYSROOT}")
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+
+# Force pkg-config to use Buildroot wrapper and target sysroot
+set(PKG_CONFIG_EXECUTABLE "${BUILDROOT_HOST_DIR}/bin/pkg-config")
+
+set(ENV{PKG_CONFIG_SYSROOT_DIR} "${CMAKE_SYSROOT}")
+set(ENV{PKG_CONFIG_LIBDIR}
+    "${CMAKE_SYSROOT}/usr/lib/pkgconfig:${CMAKE_SYSROOT}/usr/share/pkgconfig")
+set(ENV{PKG_CONFIG_PATH} "")
+
+# Optional but useful for cross builds
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
+set(CROSS_COMPILE 1)
+set(bnProc_gen_128_DIR    ${CMAKE_CURRENT_BINARY_DIR}/${NATIVE_DIR})
+set(bnProc_gen_avx2_DIR   ${CMAKE_CURRENT_BINARY_DIR}/${NATIVE_DIR})
+set(bnProc_gen_avx512_DIR ${CMAKE_CURRENT_BINARY_DIR}/${NATIVE_DIR})
+set(cnProc_gen_128_DIR    ${CMAKE_CURRENT_BINARY_DIR}/${NATIVE_DIR})
+set(cnProc_gen_avx2_DIR   ${CMAKE_CURRENT_BINARY_DIR}/${NATIVE_DIR})
+set(cnProc_gen_avx512_DIR ${CMAKE_CURRENT_BINARY_DIR}/${NATIVE_DIR})
+set(genids_DIR            ${CMAKE_CURRENT_BINARY_DIR}/${NATIVE_DIR})
+set(_check_vcd_DIR        ${CMAKE_CURRENT_BINARY_DIR}/${NATIVE_DIR})

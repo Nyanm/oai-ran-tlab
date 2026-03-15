@@ -1,0 +1,64 @@
+# syntax=docker/dockerfile:1.7
+
+FROM buildroot:arm64 AS br
+FROM ran-base:develop AS ran-build
+
+ARG CLEAN_OAI=0
+
+# Copy Buildroot toolchain / sysroot
+COPY --from=br /out/toolchain /opt/br-host
+
+RUN mkdir -p /opt/br-host/aarch64-buildroot-linux-gnu/sysroot/usr/include && \
+    cp -a /usr/include/simde /opt/br-host/aarch64-buildroot-linux-gnu/sysroot/usr/include/
+
+WORKDIR /oai-ran
+COPY . .
+
+RUN set -eu; \
+    if [ "$CLEAN_OAI" = "1" ]; then rm -rf /oai-ran/cmake_targets/ran_build; fi; \
+    /bin/sh oaienv && \
+    cd cmake_targets && \
+    mkdir -p log ran_build/build ran_build/build-cross && \
+    \
+    echo "=== Native build ===" && \
+    cd ran_build/build && \
+    env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+        PKG_CONFIG=/usr/bin/pkg-config \
+        CCACHE_PROGRAM=/usr/bin/ccache \
+        /usr/bin/cmake ../../.. -GNinja && \
+    env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+        ninja ldpc_generators generate_T && \
+    \
+    echo "=== Cross build ===" && \
+    cd ../build-cross && \
+    /usr/bin/cmake ../../.. -GNinja \
+      -DENABLE_TELNETSRV=ON \
+      -DCMAKE_TOOLCHAIN_FILE=../../../cmake_targets/cross-arm-buildroot.cmake \
+      -DBUILDROOT_HOST_DIR=/opt/br-host \
+      -DNATIVE_DIR=../build \
+      -DCMAKE_C_FLAGS="-Werror" \
+      -DCMAKE_CXX_FLAGS="-Werror" && \
+    ninja -k10 \
+      dlsim \
+      ulsim \
+      ldpctest \
+      polartest \
+      smallblocktest \
+      nr_pbchsim \
+      nr_dlschsim \
+      nr_ulschsim \
+      nr_dlsim \
+      nr_ulsim \
+      nr_pucchsim \
+      nr_prachsim \
+      lte-softmodem \
+      nr-softmodem \
+      nr-cuup \
+      oairu \
+      lte-uesoftmodem \
+      nr-uesoftmodem \
+      params_libconfig \
+      params_yaml \
+      coding \
+      rfsimulator \
+      telnetsrv

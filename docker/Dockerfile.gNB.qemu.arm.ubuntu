@@ -26,9 +26,8 @@
 #---------------------------------------------------------------------
 
 FROM ran-base:develop AS gnb-base
-
+FROM buildroot:arm64 AS br
 FROM ran-build:arm64 AS gnb-build
-
 
 #start from scratch for target executable
 FROM ubuntu:noble AS oai-gnb
@@ -92,13 +91,9 @@ COPY ./docker/scripts/check-prach-io.sh ./check-prach-io.sh
 
 WORKDIR /opt/oai-gnb
 COPY ./docker/scripts/gnb_arm_qemu_entrypoint.sh ./entrypoint.sh
-COPY --from=gnb-build \
-    /oai-ran/qemu-rootfs/ \
-    ./qemu-rootfs/ 
-COPY --from=gnb-build \
-    /oai-ran/start-qemu-tap-aarch64.sh ./start-qemu-tap-aarch64.sh
-COPY --from=gnb-build \
-    /oai-ran/setup-qemu-bridge.sh ./setup-qemu-bridge.sh
+COPY --from=br /out/images/ ./qemu-rootfs/
+COPY ./start-qemu-tap-aarch64.sh ./start-qemu-tap-aarch64.sh
+COPY ./setup-qemu-bridge.sh ./setup-qemu-bridge.sh
     
 #EXPOSE 2152/udp  # S1U, GTP/UDP
 #EXPOSE 22100/tcp # ?
