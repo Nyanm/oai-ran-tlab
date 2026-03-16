@@ -125,21 +125,21 @@ Understanding the resulting segment count is crucial for evaluating GPU performa
 
 #### Execution Examples
 
-**1. Target: ~9 Segments (Rate 1/3)**
+**1. Target: ~ 9 Segments (Rate 1/3)**
 Using MCS 13 with 273 PRBs and a single layer generates a workload of approximately 9 segments per slot.
 
 ```bash
 ./nr_dlsim -n100 -s20 -e13 -R273 -b273 -x1 -y1 -z1 -P -Q --loader.ldpc.shlibversion _cuda
 ```
 
-**2. Target: ~18 Segments (Rate 2/3)**
+**2. Target: ~ 18 Segments (Rate 2/3)**
 Increasing the MCS to 22 while keeping 273 PRBs and 1 layer doubles the throughput requirement, resulting in about 18 segments.
 
 ```bash
 ./nr_dlsim -n100 -s20 -e22 -R273 -b273 -x1 -y1 -z1 -P -Q --loader.ldpc.shlibversion _cuda
 ```
 
-**3. Target: ~50 Segments (Rate 8/9, High Workload)**
+**3. Target: ~ 50 Segments (Rate 8/9, High Workload)**
 Using MCS 27 combined with 2x2 MIMO (`-x2 -y2 -z2`) forces a massive Transport Block Size, pushing the workload to approximately 50 segments. This scenario highly benefits from the Node-Based GPU architecture.
 
 ```bash
