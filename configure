@@ -129,5 +129,12 @@ cur_dir=$PWD
 mkdir -p "$BUILD_DIR" || exit
 pushd "$BUILD_DIR" || exit 
 cmake -DT_TRACER=OFF "${args[@]}" "$cur_dir"
-echo "You can now go in this directory and run compilation (example: make -j$(nproc))" 
+if [ -f build.ninja ] ; then
+    cmd=ninja
+else
+    cmd="make -j$(nproc)"
+fi
+popd
+echo "all:" > Makefile
+echo -e "\\tcd $BUILD_DIR; $cmd" >> Makefile
 
