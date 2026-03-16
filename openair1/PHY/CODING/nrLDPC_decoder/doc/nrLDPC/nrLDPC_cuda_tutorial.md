@@ -168,21 +168,21 @@ To properly observe the GPU performance, we use the `-P` flag to print the execu
 
 #### Execution Examples
 
-**1. Target: ~9 Segments (Rate 1/3)**
+**1. Target: ~ 9 Segments (Rate 1/3)**
 Using MCS 13 with 273 PRBs and a single layer.
 
 ```bash
 ./nr_ulsim -n100 -s20 -m13 -R273 -r273 -W1 -y1 -z1 -P -Q --loader.ldpc.shlibversion _cuda
 ```
 
-**2. Target: ~18 Segments (Rate 2/3)**
+**2. Target: ~ 18 Segments (Rate 2/3)**
 Increasing to MCS 22, maintaining 273 PRBs and a single layer.
 
 ```bash
 ./nr_ulsim -n100 -s20 -m22 -R273 -r273 -W1 -y1 -z1 -P -Q --loader.ldpc.shlibversion _cuda
 ```
 
-**3. Target: ~50 Segments (Rate 8/9, Large Workload)**
+**3. Target: ~ 50 Segments (Rate 8/9, Large Workload)**
 Using MCS 27 with 273 PRBs and 2x2 MIMO (`-W2 -y2 -z2`).
 ```bash
 ./nr_ulsim -n100 -s40 -m27 -R273 -r273 -W2 -y2 -z2 -P -Q --loader.ldpc.shlibversion _cuda
