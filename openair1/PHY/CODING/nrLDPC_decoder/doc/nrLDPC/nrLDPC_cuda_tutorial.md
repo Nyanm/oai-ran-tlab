@@ -98,10 +98,12 @@ Run the following commands to benchmark the maximum GPU throughput:
 ```bash
 # BG1 R13 Max Throughput
 ./ldpctest -r1 -n30 -S128 -s4 -i4 -G
-
+```
+```bash
 # BG1 R23 Max Throughput
 ./ldpctest -r2 -n30 -S128 -s4 -i4 -G
-
+```
+```bash
 # BG1 R89 Max Throughput
 ./ldpctest -r22 -d25 -n30 -S128 -s4 -i4 -G
 ```
