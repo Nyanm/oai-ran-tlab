@@ -1,8 +1,6 @@
 
 # OAI nrLDPC GPU Decoder Architecture
 
-**Author:** PAN Qizhi
-
 For hands-on instructions and execution commands of this GPU implementation, please refer to the [Tutorial Document](nrLDPC_cuda_tutorial.md).
 
 
