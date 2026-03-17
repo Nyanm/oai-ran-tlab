@@ -3,6 +3,9 @@
 
 **Author:** PAN Qizhi
 
+For hands-on instructions and execution commands of this GPU implementation, please refer to the [Tutorial Document](nrLDPC_cuda_tutorial.md).
+
+
 ## 0. Scope & Supported Configurations
 
 This document describes the architecture and parallelization strategies of the GPU-accelerated LDPC decoder implemented via CUDA. 
