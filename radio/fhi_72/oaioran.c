@@ -340,7 +340,7 @@ static int read_prach_data(ru_info_t *ru
 #if defined K_RELEASE
 #ifndef USE_POLLING
   // pull next even from oran_sync_fifo_prach if any
-  notifiedFIFO_elt_t *res = pollNotifiedFIFO(&oran_sync_fifo_prach);
+  notifiedFIFO_elt_t *res = pullNotifiedFIFO(&oran_sync_fifo_prach);
   if (res == NULL) {
     return (0);
   }
