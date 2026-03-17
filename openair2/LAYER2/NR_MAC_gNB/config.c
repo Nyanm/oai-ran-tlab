@@ -44,9 +44,11 @@
 #include "NR_BCCH-BCH-Message.h"
 #include "NR_ServingCellConfigCommon.h"
 #include "NR_MIB.h"
+#include "NR_SIB10-r16.h"
 #include "SCHED_NR/phy_frame_config_nr.h"
 #include "T.h"
 #include "asn_internal.h"
+#include "uper_decoder.h"
 #include "assertions.h"
 #include "common/ran_context.h"
 #include "common/utils/T/T.h"
@@ -964,8 +966,20 @@ bool nr_mac_configure_other_sib(gNB_MAC_INST *nrmac, int num_cu_sib, const f1ap_
         add_sib_to_systeminformation(sysInfov17, type_du);
         break;
       }
-      default :
-        AssertFatal(false, "Invalid or not supported SIB%d\n", sib_idx);
+      case 10: {
+        AssertFatal(si->SIB_buffer != NULL && si->SIB_size > 0, "SIB10 configured but empty payload\n");
+        NR_SIB10_r16_t *sib10 = NULL;
+        asn_dec_rval_t dec_rval = uper_decode_complete(NULL, &asn_DEF_NR_SIB10_r16, (void **)&sib10, si->SIB_buffer, si->SIB_size);
+        AssertFatal(dec_rval.code == RC_OK && sib10 != NULL, "Failed to decode SIB10 from payload\n");
+
+        struct NR_SystemInformation_IEs__sib_TypeAndInfo__Member *type_du = calloc(1, sizeof(*type_du));
+        type_du->present = NR_SystemInformation_IEs__sib_TypeAndInfo__Member_PR_sib10_v1610;
+        type_du->choice.sib10_v1610 = sib10;
+        add_sib_to_systeminformation(sysInfo, type_du);
+        break;
+      }
+      default:
+        AssertFatal(false, "Invalid or not supported DU SIB (index=%d, type=%u)\n", sib_idx, si->SIB_type);
     }
   }
 

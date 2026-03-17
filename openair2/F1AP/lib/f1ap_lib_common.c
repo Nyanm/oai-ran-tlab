@@ -104,6 +104,12 @@ bool eq_f1ap_sys_info(const f1ap_gnb_du_system_info_t *a, const f1ap_gnb_du_syst
   _EQ_CHECK_INT(a->sib1_length, b->sib1_length);
   for (int i = 0; i < a->sib1_length; i++)
     _EQ_CHECK_INT(a->sib1[i], b->sib1[i]);
+  /* SIB10 (optional) */
+  _EQ_CHECK_OPTIONAL_PTR(a, b, sib10);
+  if (a->sib10 && b->sib10) {
+    if (!eq_byte_array(a->sib10, b->sib10))
+      return false;
+  }
   return true;
 }
 

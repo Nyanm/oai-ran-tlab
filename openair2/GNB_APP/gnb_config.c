@@ -49,6 +49,8 @@
 #include "asn_internal.h"
 #include "NR_MAC_gNB/nr_mac_gNB.h"
 #include "NR_MAC_gNB/mac_proto.h"
+#include "openair2/RRC/NR/MESSAGES/asn1_msg.h"
+#include "NR_SIB10-r16.h"
 #include "common/5g_platform_types.h"
 #include "common/config/config_paramdesc.h"
 #include "common/config/config_userapi.h"
@@ -62,6 +64,7 @@
 #include "f1ap_common.h"
 #include "gnb_paramdef.h"
 #include "lib/f1ap_interface_management.h"
+#include "f1ap_lib_common.h"
 #include "nfapi/oai_integration/vendor_ext.h"
 #include "nfapi_pnf.h"
 #include "nfapi_vnf.h"
@@ -1084,6 +1087,48 @@ static f1ap_fdd_info_t read_fdd_config(const NR_ServingCellConfigCommon_t *scc)
   return fdd;
 }
 
+static byte_array_t encode_sib10_from_hrnn_list(paramdef_t *GNBparamarray)
+{
+  byte_array_t msg = {.buf = NULL, .len = 0};
+
+  const paramdef_t *p = &GNBparamarray[GNB_NPN_HRNN_LIST_IDX];
+  if (p->numelt == 0 || p->strlistptr == NULL) {
+    LOG_W(GNB_APP, "Failed to encode SIB10: npn_hrnn_list not configured\n");
+    return msg;
+  }
+
+  NR_SIB10_r16_t *sib10 = calloc_or_fail(1, sizeof(*sib10));
+  sib10->hrnn_List_r16 = calloc_or_fail(1, sizeof(*sib10->hrnn_List_r16));
+
+  for (int i = 0; i < p->numelt; ++i) {
+    const char *hrnn = p->strlistptr[i];
+    if (!hrnn || hrnn[0] == '\0') {
+      LOG_W(GNB_APP, "SIB10: HRNN[%d] is empty or NULL, skipping\n", i);
+      continue;
+    }
+
+    NR_HRNN_r16_t *item = calloc_or_fail(1, sizeof(*item));
+    item->hrnn_r16 = calloc_or_fail(1, sizeof(*item->hrnn_r16));
+    OCTET_STRING_fromBuf(item->hrnn_r16, hrnn, strlen(hrnn));
+    ASN_SEQUENCE_ADD(&sib10->hrnn_List_r16->list, item);
+    LOG_I(GNB_APP, "SIB10: added HRNN[%d]=\"%s\" (len=%zu)\n", i, hrnn, strlen(hrnn));
+  }
+
+  if (sib10->hrnn_List_r16->list.count == 0) {
+    LOG_W(GNB_APP, "Failed to encode SIB10: all HRNN entries empty\n");
+    ASN_STRUCT_FREE(asn_DEF_NR_SIB10_r16, sib10);
+    return msg;
+  }
+
+  msg = do_SIB10_NR(sib10);
+  ASN_STRUCT_FREE(asn_DEF_NR_SIB10_r16, sib10);
+  if (!msg.buf || msg.len <= 0) {
+    LOG_E(GNB_APP, "Failed to encode SIB10\n");
+    FREE_AND_ZERO_BYTE_ARRAY(msg);
+  }
+  return msg;
+}
+
 f1ap_gnb_du_system_info_t *get_sys_info(NR_BCCH_BCH_Message_t *mib, const NR_BCCH_DL_SCH_Message_t *sib1, seq_arr_t *du_SIBs)
 {
   int buf_len = 3;
@@ -1104,9 +1149,15 @@ f1ap_gnb_du_system_info_t *get_sys_info(NR_BCCH_BCH_Message_t *mib, const NR_BCC
   if (du_SIBs) {
     for (int i = 0; i < du_SIBs->size; i++) {
       nr_SIBs_t *si = (nr_SIBs_t *)seq_arr_at(du_SIBs, i);
-      // other SIB in gNB-DU System Information not implemented yet
-      // only DU SIB not included in this message is SIB19
-      AssertFatal(si->SIB_type == 19, "Cannot handle SIB%d in gNB-DU System Information\n", si->SIB_type);
+      if (si->SIB_type == 10) {
+        sys_info->sib10 = calloc_or_fail(1, sizeof(*sys_info->sib10));
+        *sys_info->sib10 = create_byte_array(si->SIB_size, si->SIB_buffer);
+        LOG_I(GNB_APP, "Attached SIB10 (%d bytes) to gNB-DU System Information\n", si->SIB_size);
+      } else {
+        // other SIB in gNB-DU System Information not implemented yet
+        // only DU SIB not included in this message is SIB19
+        AssertFatal(si->SIB_type == 19, "Cannot handle SIB%d in gNB-DU System Information\n", si->SIB_type);
+      }
     }
   }
   return sys_info;
@@ -1267,6 +1318,14 @@ static seq_arr_t *fill_du_sibs(paramdef_t *GNBparamarray)
     nr_SIBs_t *du_sib = calloc_or_fail(1, sizeof(nr_SIBs_t));
     du_sib->SIB_type = sib_value;
     LOG_I(GNB_APP, "activate SIB%d at DU\n", sib_value);
+    if (sib_value == 10) {
+      byte_array_t sib10 = encode_sib10_from_hrnn_list(GNBparamarray);
+      du_sib->SIB_buffer = calloc_or_fail(sib10.len, sizeof(*du_sib->SIB_buffer));
+      memcpy(du_sib->SIB_buffer, sib10.buf, sib10.len);
+      du_sib->SIB_size = sib10.len;
+      free_byte_array(sib10);
+      LOG_I(GNB_APP, "SIB10: encoded %d bytes for DU SIB list\n", du_sib->SIB_size);
+    }
     seq_arr_push_back(du_SIBs, du_sib, sizeof(nr_SIBs_t));
   }
   return du_SIBs;

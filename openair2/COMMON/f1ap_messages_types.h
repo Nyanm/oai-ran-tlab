@@ -150,6 +150,8 @@ typedef struct f1ap_gnb_du_system_info_s {
   // SIB1 message (Mandatory)
   uint8_t *sib1;
   int sib1_length;
+  // SIB10 message (optional, TS 38.473 §9.3.1.18)
+  byte_array_t *sib10;
 } f1ap_gnb_du_system_info_t;
 
 typedef struct f1ap_setup_req_s {

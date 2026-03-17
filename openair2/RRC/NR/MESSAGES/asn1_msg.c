@@ -280,6 +280,18 @@ int do_SIB2_NR(uint8_t **msg_SIB2, NR_SSB_MTC_t *ssbmtc)
   return size;
 }
 
+byte_array_t do_SIB10_NR(const NR_SIB10_r16_t *sib10)
+{
+  byte_array_t msg = {.buf = NULL, .len = 0};
+
+  msg.len = uper_encode_to_new_buffer(&asn_DEF_NR_SIB10_r16, NULL, (void *)sib10, (void **)&msg.buf);
+  if (msg.len <= 0) {
+    LOG_E(NR_RRC, "Failed to encode SIB10\n");
+    return msg;
+  }
+  return msg;
+}
+
 int do_RRCReject(uint8_t *const buffer)
 {
     asn_enc_rval_t                                   enc_rval;

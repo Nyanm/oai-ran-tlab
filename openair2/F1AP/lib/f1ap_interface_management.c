@@ -429,6 +429,7 @@ static void free_f1ap_cell(const f1ap_served_cell_info_t *info, const f1ap_gnb_d
   if (sys_info) {
     free(sys_info->mib);
     free(sys_info->sib1);
+    FREE_OPT_BYTE_ARRAY(sys_info->sib10);
     free((void *)sys_info);
   }
   free(info->measurement_timing_config);
@@ -599,6 +600,20 @@ static F1AP_GNB_DU_System_Information_t *encode_system_info(const f1ap_gnb_du_sy
   AssertFatal(sys_info->sib1 != NULL, "SIB1 must be present in DU sys info\n");
   OCTET_STRING_fromBuf(&enc_sys_info->sIB1_message, (const char *)sys_info->sib1, sys_info->sib1_length);
 
+  /* Optional: SIB10-message extension IE (TS 38.473 9.3.1.18) */
+  if (sys_info->sib10) {
+    byte_array_t *sib10 = sys_info->sib10;
+    DevAssert(sib10->buf != NULL);
+    DevAssert(sib10->len > 0);
+    F1AP_ProtocolExtensionContainer_11023P123_t *p = calloc_or_fail(1, sizeof(*p));
+    enc_sys_info->iE_Extensions = (struct F1AP_ProtocolExtensionContainer *)p;
+    asn1cSequenceAdd(p->list, F1AP_GNB_DU_System_Information_ExtIEs_t, ext);
+    ext->id = F1AP_ProtocolIE_ID_id_SIB10_message;
+    ext->criticality = F1AP_Criticality_ignore;
+    ext->extensionValue.present = F1AP_GNB_DU_System_Information_ExtIEs__extensionValue_PR_SIB10_message;
+    OCTET_STRING_fromBuf(&ext->extensionValue.choice.SIB10_message, (const char *)sib10->buf, sib10->len);
+  }
+
   return enc_sys_info;
 }
 
@@ -612,6 +627,24 @@ static void decode_system_info(struct F1AP_GNB_DU_System_Information *DUsi, f1ap
   sys_info->sib1 = calloc_or_fail(DUsi->sIB1_message.size, sizeof(*sys_info->sib1));
   memcpy(sys_info->sib1, DUsi->sIB1_message.buf, DUsi->sIB1_message.size);
   sys_info->sib1_length = DUsi->sIB1_message.size;
+
+  /* Optional: SIB10-message extension IE */
+  sys_info->sib10 = NULL;
+  if (DUsi->iE_Extensions) {
+    F1AP_ProtocolExtensionContainer_11023P123_t *p = (F1AP_ProtocolExtensionContainer_11023P123_t *)DUsi->iE_Extensions;
+    for (int i = 0; i < p->list.count; ++i) {
+      F1AP_GNB_DU_System_Information_ExtIEs_t *ext = p->list.array[i];
+      struct F1AP_GNB_DU_System_Information_ExtIEs__extensionValue *val = &ext->extensionValue;
+      if (ext->id == F1AP_ProtocolIE_ID_id_SIB10_message
+          && val->present == F1AP_GNB_DU_System_Information_ExtIEs__extensionValue_PR_SIB10_message) {
+        F1AP_SIB10_message_t *sib10_msg = &val->choice.SIB10_message;
+        if (sib10_msg->size > 0) {
+          sys_info->sib10 = calloc_or_fail(1, sizeof(*sys_info->sib10));
+          *sys_info->sib10 = create_byte_array(sib10_msg->size, sib10_msg->buf);
+        }
+      }
+    }
+  }
 }
 
 static void encode_cells_to_activate(const served_cells_to_activate_t *cell, F1AP_Cells_to_be_Activated_List_ItemIEs_t *cells_to_be_activated_ies)
@@ -934,6 +967,11 @@ static f1ap_gnb_du_system_info_t *copy_f1ap_gnb_du_system_info(const f1ap_gnb_du
     dst->sib1_length = src->sib1_length;
     dst->sib1 = calloc_or_fail(src->sib1_length, sizeof(*dst->sib1));
     memcpy(dst->sib1, src->sib1, dst->sib1_length);
+  }
+
+  if (src->sib10) {
+    dst->sib10 = calloc_or_fail(1, sizeof(*dst->sib10));
+    *(dst->sib10) = copy_byte_array(*(src->sib10));
   }
 
   return dst;

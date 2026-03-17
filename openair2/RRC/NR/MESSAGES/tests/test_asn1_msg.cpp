@@ -155,6 +155,55 @@ TEST(nr_asn1, rrc_reconfiguration)
   free_RRCReconfiguration_params(params);
 }
 
+static NR_SIB10_r16_t *build_sib10_with_hrnn(const std::vector<std::string> &hrnns)
+{
+  NR_SIB10_r16_t *sib10 = (NR_SIB10_r16_t *)calloc_or_fail(1, sizeof(*sib10));
+  sib10->hrnn_List_r16 = (NR_HRNN_List_r16_t *)calloc_or_fail(1, sizeof(*sib10->hrnn_List_r16));
+  for (size_t i = 0; i < hrnns.size(); ++i) {
+    NR_HRNN_r16_t *item = (NR_HRNN_r16_t *)calloc_or_fail(1, sizeof(*item));
+    const std::string &h = hrnns[i];
+    item->hrnn_r16 = (OCTET_STRING_t *)calloc_or_fail(1, sizeof(*item->hrnn_r16));
+    OCTET_STRING_fromBuf(item->hrnn_r16, h.c_str(), h.size());
+    ASN_SEQUENCE_ADD(&sib10->hrnn_List_r16->list, item);
+  }
+  return sib10;
+}
+
+static NR_SIB10_r16_t *encode_and_decode_sib10(NR_SIB10_r16_t *sib10, byte_array_t *ba)
+{
+  *ba = do_SIB10_NR(sib10);
+  EXPECT_GT(ba->len, 0);
+  EXPECT_NE(ba->buf, nullptr);
+
+  asn_dec_rval_t dec_rval;
+  NR_SIB10_r16_t *out = nullptr;
+  dec_rval = uper_decode_complete(nullptr, &asn_DEF_NR_SIB10_r16, (void **)&out, ba->buf, ba->len);
+  EXPECT_EQ(dec_rval.code, RC_OK);
+  return out;
+}
+
+TEST(nr_asn1, sib10_basic_encode_decode)
+{
+  std::vector<std::string> hrnns = {"OAI-NPN-1", "FactoryFloor", "CampusNet"};
+  NR_SIB10_r16_t *sib10 = build_sib10_with_hrnn(hrnns);
+
+  byte_array_t ba = {};
+  NR_SIB10_r16_t *decoded = encode_and_decode_sib10(sib10, &ba);
+
+  ASSERT_TRUE(decoded->hrnn_List_r16 != nullptr);
+  ASSERT_EQ(decoded->hrnn_List_r16->list.count, (int)hrnns.size());
+  for (size_t i = 0; i < hrnns.size(); ++i) {
+    NR_HRNN_r16_t *item = decoded->hrnn_List_r16->list.array[i];
+    ASSERT_NE(item->hrnn_r16, nullptr);
+    std::string decoded_hrnn((char *)item->hrnn_r16->buf, (size_t)item->hrnn_r16->size);
+    EXPECT_EQ(decoded_hrnn, hrnns[i]);
+  }
+
+  ASN_STRUCT_FREE(asn_DEF_NR_SIB10_r16, sib10);
+  ASN_STRUCT_FREE(asn_DEF_NR_SIB10_r16, decoded);
+  free_byte_array(ba);
+}
+
 int main(int argc, char **argv)
 {
   logInit();
