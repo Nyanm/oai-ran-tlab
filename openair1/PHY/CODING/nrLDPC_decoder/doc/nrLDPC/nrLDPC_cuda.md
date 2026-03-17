@@ -14,11 +14,11 @@ This document describes the architecture and parallelization strategies of the G
 
 ### Currently Supported Parameters
 
-| Parameter | Supported Configuration |
-| :--- | :--- |
-| **Base Graph (BG)** | 1 |
-| **Lifting Size (Z)** | ≥ 128 |
-| **Code Rate (R)** | 1/3, 2/3, 8/9 |
+| Parameter | CPU Baseline  | GPU Implementation |
+| --- | --- | --- |
+| **Base Graph (BG)** | 1, 2 | **1** |
+| **Lifting Size ($Z_c$)** | All  | **$\ge 128$** |
+| **Code Rate (R)** | BG1: 1/3, 2/3, 8/9 <br><br> BG2: 1/5, 1/3, 2/3 | **BG1: 1/3, 2/3, 8/9** |
 
 
 ### Related Work & Comparison
