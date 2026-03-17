@@ -10,30 +10,58 @@ This part test is based on ‘sl-eurecom4’ branch on openairinterface5g.
 
 ## To start
 
-* First go to the correct repository :
+First go to the correct repository :
 ```
 cd openairinterface5g/cmake_targets
 ```
-* To install zeroMQ : 
+To install zeroMQ : 
 ```
 apt-get install libzmq3-dev
 ```
-* Then start compilation : 
+Then start compilation : 
 ```
 sudo ./build_oai --nrUE -w SIMU --cmake-opt -DENABLE_T_TRACER=OFF
 ```
-* Or, to start a clean start compilation, do the clean up first then compile : 
+Or, to start a clean start compilation, do the clean up first then compile : 
 ```
 sudo ./build_oai -c -C  
 
 sudo ./build_oai -I --cmake-opt -DENABLE_T_TRACER=OFF
 ```
-* Now we need to create three UEs through namespaces: 
+ Now we need to create three UEs through namespaces: 
 ```
 cd openairinterface5g/cmake_targets
 sudo ./multi-ue.sh -c1 -c2 -c3
 ```
+* It is likely the new system would face the ASN.1 error, which is due to the wrong version of ASN.1. To fix it, please do the following: 
 
+* Remove the current wrong version :
+```
+sudo rm -rf /opt/asn1c 
+sudo rm -rf /tmp/asn1c
+```
+* Clone and checkout the exact same commit:
+```
+cd /tmp 
+git clone https://github.com/mouse07410/asn1c.git 
+cd asn1c 
+git checkout 657f5790
+```
+* Build and install the correct version : 
+```
+git submodule update --init --recursive 
+autoreconf -iv 
+./configure --prefix=/opt/asn1c 
+make -j$(nproc) 
+sudo make install
+```
+* Then recompile. Do remember to delete the wrong /ran_build files : 
+```
+cd ~/OAI-SL-Broker/openairinterface5g/cmake_targets 
+rm -rf ran_build 
+sudo ./build_oai --nrUE -w SIMU --cmake-opt -DENABLE_T_TRACER=OFF
+```
+ 
 
 
  
@@ -238,7 +266,7 @@ To check the routing table :
 batctl o
 ```
 
-###Start wireshark with filter
+### Start wireshark with filter
 You can check the current packets exchange with wireshark, please update the name 'oaitun_ueX' accordingly. 
 ```
 wireshark -k -i oaitun_ueX -Y "eth.type == 0x4305"
