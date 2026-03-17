@@ -115,11 +115,11 @@ Run the following commands to benchmark the maximum GPU throughput:
 #### Mandatory Flags for GPU Acceleration
 
 * `--loader.ldpc.shlibversion _cuda`: Directs the dynamic loader to use the CUDA-accelerated LDPC library.
-* `-Q` (or `-G`): Enables the GPU decoding path within the simulator logic.
+* `-Q` : Enables the GPU decoding path within the simulator logic.
 
 #### Workload & Segment Calculation
 
-Unlike `ldpctest` where you can manually set the number of segments, in `dlsim`, the number of segments (Code Blocks) is determined dynamically by the Transport Block Size (TBS). The TBS is defined by a combination of the MCS index (`-e`), the number of allocated PRBs (`-R`, `-b`), and the number of MIMO layers (`-x`).
+Unlike `ldpctest` where you can manually set the number of segments, in `dlsim`, the number of segments (Code Blocks) is determined dynamically by the Transport Block Size (TBS). The TBS is defined by a combination of the MCS index (`-e`), the number of allocated PRBs (`-R`, `-b`), and the number of MIMO layers (`-x`). To specify the iterations, use `-I`.
 
 Understanding the resulting segment count is crucial for evaluating GPU performance, as higher segment counts better utilize the GPU's parallel processing capabilities.
 
@@ -154,15 +154,11 @@ Using MCS 27 combined with 2x2 MIMO (`-x2 -y2 -z2`) forces a massive Transport B
 
 `nr_ulsim` is used to simulate the physical uplink shared channel (PUSCH). The GPU acceleration logic follows the same architectural pattern as `dlsim`.
 
-> **Important Parameter Mapping Notice:**
+> **Parameter Mapping Notice:**
 > When transitioning from `dlsim` to `ulsim`, the command-line arguments for identical physical layer parameters are different:
 > * **MCS Index**: Use `-m` (instead of `-e`).
 > * **Allocated PRBs**: Use `-r` (instead of `-b`).
 > * **MIMO Layers**: Use `-W` (instead of `-x`).
-
-#### Benchmarking GPU Throughput
-
-The primary objective of these configurations is to benchmark the processing speed and scalability of the GPU decoder under heavy workloads.
 
 To properly observe the GPU performance, we use the `-P` flag to print the execution statistics. After running a test, locate the `ULSCH segments decoding time` field in the `gNB RX` section of the output log. This metric isolates the time spent executing the LDPC decoding iterations.
 
