@@ -1827,13 +1827,14 @@ add_executable(nr-oru
   ${OPENAIR_DIR}/openair1/SCHED_NR/nr_prach_procedures.c
   ${OPENAIR_DIR}/openair1/SCHED/phy_procedures_lte_common.c
   ${OPENAIR_DIR}/executables/main_nr_ru.c
+  ${OPENAIR_DIR}/executables/nr-oru.c
 )
 target_link_libraries(nr-oru PRIVATE
   UTIL SCHED_RU_LIB PHY_COMMON PHY_RU PHY_NR shlib_loader z dl
   radio_common softmodem_common)
 target_link_libraries(nr-oru PRIVATE pthread m CONFIG_LIB rt ${T_LIB} utils
   barrier actor)
-target_link_libraries(nr-oru PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs nr_phy_common time_management)
+target_link_libraries(nr-oru PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs nr_phy_common time_management PHY_NR MAC_NR_COMMON)
 
 # nr-softmodem
 ###################################################

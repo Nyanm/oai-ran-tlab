@@ -38,6 +38,9 @@
 #include "nfapi/oai_integration/vendor_ext.h"
 #include <executables/softmodem-common.h>
 #include <executables/thread-common.h>
+#include "nr-oru.h"
+#include "openair1/PHY/INIT/nr_phy_init.h"
+#include "openair1/SCHED_NR/sched_nr.h"
 
 pthread_cond_t sync_cond;
 pthread_mutex_t sync_mutex;
@@ -54,6 +57,8 @@ extern void kill_NR_RU_proc(int inst);
 extern void set_function_spec_param(RU_t *ru);
 extern void start_NR_RU();
 extern void init_NR_RU(configmodule_interface_t *cfg, char *);
+void fill_rf_config(RU_t *ru, char *rf_config_file);
+void fill_split7_2_config(split7_config_t *split7, const nfapi_nr_config_request_scf_t *config, const NR_DL_FRAME_PARMS *fp);
 
 int64_t uplink_frequency_offset[MAX_NUM_CCs][4];
 
@@ -61,6 +66,7 @@ void nfapi_setmode(nfapi_mode_t nfapi_mode)
 {
   return;
 }
+
 void exit_function(const char *file, const char *function, const int line, const char *s, const int assert)
 {
   if (s != NULL) {
@@ -68,26 +74,14 @@ void exit_function(const char *file, const char *function, const int line, const
   }
   close_log_mem();
   oai_exit = 1;
-  RU_t *ru = RC.ru[0];
 
-  if (ru->rfdevice.trx_end_func) {
-    ru->rfdevice.trx_end_func(&ru->rfdevice);
-    ru->rfdevice.trx_end_func = NULL;
-  }
-
-  if (ru->ifdevice.trx_end_func) {
-    ru->ifdevice.trx_end_func(&ru->ifdevice);
-    ru->ifdevice.trx_end_func = NULL;
-  }
-
-  pthread_mutex_destroy(ru->ru_mutex);
-  pthread_cond_destroy(ru->ru_cond);
-  if (assert) {
+  if (assert)
     abort();
-  } else {
-    sleep(1); // allow lte-softmodem threads to exit first
-    exit(EXIT_SUCCESS);
-  }
+}
+
+void stop_ru(int sig)
+{
+  exit_function(__FILE__, __FUNCTION__, __LINE__, "interrupted", false);
 }
 
 static void get_options(configmodule_interface_t *cfg)
@@ -129,14 +123,6 @@ struct timespec timespec_sub(struct timespec, struct timespec)
   return t;
 };
 
-void perform_symbol_rotation(NR_DL_FRAME_PARMS *fp, double f0, c16_t *symbol_rotation)
-{
-  return;
-}
-void init_timeshift_rotation(NR_DL_FRAME_PARMS *fp)
-{
-  return;
-};
 int beam_index_allocation(bool das,
                           int fapi_beam_index,
                           NR_gNB_COMMON *common_vars,
@@ -186,6 +172,7 @@ int main(int argc, char **argv)
   printf("About to Init RU threads\n");
 
   lock_memory_to_ram();
+  load_dftslib();
 
   RC.nb_RU = 1;
   RC.ru = malloc(sizeof(RC.ru));
@@ -193,26 +180,87 @@ int main(int argc, char **argv)
   init_NR_RU(config_get_if(), NULL);
 
   RU_t *ru = RC.ru[0];
+  ORU_t oru = {0};
+  oru.ru = ru;
+  oru.num_sync_messages_needed = 2;
+  int ret = get_oru_options(&oru);
+  AssertFatal(ret == 0, "Cannot configure oru, check your config file/cmdline");
+  ru->numerology = oru.numerology;
+  oru_init_frame_parms(&oru);
+  NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+  nr_dump_frame_parms(fp);
+  init_symbol_rotation(fp);
+  init_timeshift_rotation(fp);
+  ru->if_south = LOCAL_RF;
+  nr_phy_init_RU(oru.ru);
+  fill_rf_config(ru, ru->rf_config_file);
+  fill_split7_2_config(&ru->openair0_cfg.split7, &ru->config, fp);
+  ru->N_TA_offset = set_default_nta_offset(fp->freq_range, fp->samples_per_subframe);
+
+  /* set PRACH configuration */
+  nfapi_nr_prach_config_t *prach_config = &ru->config.prach_config;
+  prach_config->prach_ConfigurationIndex.value = oru.prach_config_index;
+  prach_config->num_prach_fd_occasions_list[0].k1.value = oru.prach_msg1_freq;
+  prach_config->prach_sequence_length.value = 1;
+  prach_config->prach_sub_c_spacing.value = 1;
+  prach_config->num_prach_fd_occasions.value = 1;
+
+  reset_meas(&oru.rx_prach);
+  oru.prach_info = get_nr_prach_occasion_info_from_index(oru.prach_config_index, FR1, fp->frame_type);
+  LOG_A(PHY, "PRACH configuration index %d\n", oru.prach_config_index);
+  LOG_A(PHY,
+        "PRACH format %d start_symbol %d duration %d\n",
+        oru.prach_info.format,
+        oru.prach_info.start_symbol,
+        oru.prach_info.N_dur);
+  prepare_prach_item(&oru);
+
+  ret = openair0_transport_load(&ru->ifdevice, &ru->openair0_cfg, &ru->eth_params);
+  AssertFatal(ret == 0, "RU %u: openair0_transport_init() ret %d: cannot initialize transport potocol\n", ru->idx, ret);
+  ret = ru->nr_start_if(ru, NULL);
+  AssertFatal(ret == 0, "Could not start xran\n");
+
+  LOG_I(PHY, "starting vrtsim\n");
+  ret = openair0_load(&ru->rfdevice, "vrtsim", &ru->openair0_cfg, NULL);
+  AssertFatal(ret == 0, "RU %u: openair0_load() ret %d: cannot initialize vrtsim\n", ru->idx, ret);
+  ret = ru->rfdevice.trx_start_func(&ru->rfdevice);
+  AssertFatal(ret == 0, "RU %u: trx_start_func() ret %d: cannot start vrtsim\n", ru->idx, ret);
+
+  signal(SIGINT, stop_ru);
+  signal(SIGTERM, stop_ru);
+  threadCreate(&oru.north_read_thread, oru_north_read_thread, (void *)&oru, "north_read_thread", -1, OAI_PRIORITY_RT_MAX);
+  threadCreate(&oru.south_read_thread, oru_south_read_thread, (void *)&oru, "south_read_thread", -1, OAI_PRIORITY_RT_MAX);
+  threadCreate(&oru.oru_sync_thread, oru_sync_thread, (void *)&oru, "oru_sync_thread", -1, OAI_PRIORITY_RT_MAX);
 
   while (oai_exit == 0)
     sleep(1);
-  // stop threads
 
-  kill_NR_RU_proc(0);
+  ret = pthread_join(oru.oru_sync_thread, NULL);
+  AssertFatal(ret == 0, "pthread_join failed %d\n", ret);
+  ret = pthread_join(oru.north_read_thread, NULL);
+  AssertFatal(ret == 0, "pthread_join failed %d\n", ret);
+  ret = pthread_join(oru.south_read_thread, NULL);
+  AssertFatal(ret == 0, "pthread_join failed %d\n", ret);
+  LOG_I(PHY, "Threads joined\n");
 
-  end_configmodule(uniqCfg);
-
-  if (ru->rfdevice.trx_end_func) {
-    ru->rfdevice.trx_end_func(&ru->rfdevice);
-    ru->rfdevice.trx_end_func = NULL;
+  if (ru->ifdevice.trx_stop_func) {
+    ru->ifdevice.trx_stop_func(&ru->ifdevice);
   }
-
   if (ru->ifdevice.trx_end_func) {
     ru->ifdevice.trx_end_func(&ru->ifdevice);
-    ru->ifdevice.trx_end_func = NULL;
+  }
+
+  sleep(1);
+
+  if (ru->rfdevice.trx_stop_func) {
+    ru->rfdevice.trx_stop_func(&ru->rfdevice);
+  }
+  if (ru->rfdevice.trx_end_func) {
+    ru->rfdevice.trx_end_func(&ru->rfdevice);
   }
 
   logClean();
+  end_configmodule(uniqCfg);
   printf("Bye.\n");
   return 0;
 }

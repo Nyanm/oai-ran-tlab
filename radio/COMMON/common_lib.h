@@ -382,6 +382,14 @@ typedef struct {
   } queue[WRITE_QUEUE_SZ];
 } re_order_t;
 
+/*! \brief Provides a way to map between a symbol and a timespec */
+typedef struct {
+  int frame;
+  int slot;
+  int symbol;
+  struct timespec ts;
+} sense_of_time_t;
+
 /*!\brief structure holds the parameters to configure RF devices */
 struct openair0_device {
   /*!tx write thread*/
@@ -571,6 +579,10 @@ struct openair0_device {
    */
   int (*trx_stop_func)(openair0_device_t *device);
 
+  /*! \brief Get timestamp from timespec
+  */
+  openair0_timestamp_t (*get_timestamp)(openair0_device_t *device, struct timespec *ts);
+
   /* Functions API related to UE*/
 
   /*! \brief Set RX feaquencies
@@ -657,6 +669,38 @@ struct openair0_device {
    */
   time_stats_t tx_fhaul;
   re_order_t reOrder;
+
+  // Function pointers used for oran
+  struct {
+    /*! \brief O-RU only: reads DL FD IQ. Data is put into the beginning of txdataF buffer regardless
+     *  of the returned start_symbol. maximum number of symbols returned is 7
+     * \param txdataF An array of nb_tx buffers to write the samples to
+     * \param nb_tx number of TX antennas and number of buffer in txDataF_BF
+     * \param sense_of_time frame, slot and symbol with mapping to clock_gettime result
+     * \param num_symbols number of symbols
+     */
+    void (*north_in_func)(uint32_t **txdataF, int nb_tx, sense_of_time_t* sense_of_time, int *num_symbols);
+
+    /*!
+     * \brief Write prach data for one PRACH symbol
+     * \param prachF Frequency domain PRACH data size 139 (only short format support)
+     * \param aarx
+     * \param frame
+     * \param slot
+     * \param symbol
+     */
+    void (*write_prach)(uint32_t *prachF, int aarx, int frame, int slot, int symbol);
+
+    /*!
+     * \brief Write data for one PUSCH symbol
+     * \param prachF Frequency domain PUSCH data
+     * \param aarx
+     * \param frame
+     * \param slot
+     * \param symbol
+     */
+    void (*write_pusch)(uint32_t *prachF, int aarx, int frame, int slot, int symbol);
+  } xran_api;
 };
 
 typedef struct {
@@ -698,6 +742,7 @@ const char *get_devname(int devtype);
 int openair0_device_load(openair0_device_t *device, openair0_config_t *openair0_cfg);
 /*! \brief Initialize transport protocol . It returns 0 if OK */
 int openair0_transport_load(openair0_device_t *device, openair0_config_t *openair0_cfg, eth_params_t *eth_params);
+int openair0_load(openair0_device_t *device, char *name, openair0_config_t *openair0_cfg, eth_params_t *eth_params);
 
 /*! \brief Set RX frequencies
  * \param device the hardware to use

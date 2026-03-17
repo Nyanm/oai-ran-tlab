@@ -19,6 +19,9 @@
  *      contact@openairinterface.org
  */
 
+#define _GNU_SOURCE
+#include <sched.h>
+#include "oaioran_ru.h"
 #include "xran_fh_o_du.h"
 #include "xran_pkt.h"
 #include "xran_pkt_up.h"
@@ -398,12 +401,29 @@ int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_confi
   int32_t xret = 0;
 
   print_fh_init(xran_fh_init);
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  int ret = pthread_getaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
+  AssertFatal(ret != -1, "sched_getaffinity() failed errno %d (%s)", errno, strerror(errno));
+
   xret = xran_init(0, NULL, xran_fh_init, NULL, &gxran_handle);
   if (xret != XRAN_STATUS_SUCCESS) {
     printf("xran_init failed %d\n", xret);
     exit(-1);
   }
 
+  cpu_set_t cpuset_after;
+  CPU_ZERO(&cpuset_after);
+  ret = pthread_getaffinity_np(pthread_self(), sizeof(cpuset_after), &cpuset_after);
+  AssertFatal(ret != -1, "sched_getaffinity() failed errno %d (%s)", errno, strerror(errno));
+  if (!CPU_EQUAL(&cpuset_after, &cpuset))
+  {
+    LOG_W(HW, "XRAN modifed affinity. Correcting affinity of caller\n");
+    ret = pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
+    AssertFatal(ret == 0, "Error in pthread_setaffinity_np(): ret: %d (%s)", ret, strerror(ret));
+  }
+
+  bool is_du = xran_fh_init->io_cfg.id == 0;
   /** process all the O-RU|O-DU for use case */
   for (int32_t o_xu_id = 0; o_xu_id < xran_fh_init->xran_ports; o_xu_id++) {
     print_fh_config(&xran_fh_config[o_xu_id]);
@@ -440,6 +460,12 @@ int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_confi
   // these structs during initialization
   memcpy(&g_fh_init, xran_fh_init, sizeof(*xran_fh_init));
   memcpy(&g_fh_config, xran_fh_config, sizeof(*xran_fh_config) * xran_fh_init->xran_ports);
+
+  if (!is_du) {
+    // Use half-slot parallelization
+    const int callback_per_slot = 2;
+    init_oru_packet_processor(gxran_handle, callback_per_slot);
+  }
 
   return (void *)gxran_handle;
 }
