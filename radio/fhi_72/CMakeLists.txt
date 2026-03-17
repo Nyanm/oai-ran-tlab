@@ -16,7 +16,7 @@ add_library(oran_fhlib_5g MODULE
             oran-init.c
 )
 
-set(F_VERSION 6.1.4)
+set(F_VERSION 6.1.8)
 
 find_package(xran REQUIRED)
 if(xran_VERSION MATCHES "5.*")
