@@ -889,3 +889,10 @@ The tables below record the per-segment execution time ($\mu s$) under varying w
 ![R23 Performance](img/perf_r23.svg)
 
 ![R89 Performance](img/perf_r89.svg)
+
+
+## Acknowledgments
+
+* **Main Developer:** PAN Qizhi (GPU Architecture & CUDA Implementation & Optimization)
+* **System Integration:** Raymond Knopp (E2E Integration & Validation & Optimization)
+* **Special Thanks:** To **Jingguo Zhao (BUPT)** for the insightful discussions on node-based baseline architectures which inspired the optimizations in this work.
