@@ -39,12 +39,6 @@ gNBs =
     sib1_tda			  = 15;
     #ul_prbblacklist = "133,134,135,136"
     #force_256qam_off = 1;
-    #beam_weights = [16, 16, 20, 20, 1, 1, 5, 5];
-    #beam_weights = [1, 1, 1,  1];
-    #beam_weights = [1, 1, 16, 16];
-    #beam_weights = [1, 1];
-
-    #beam_weights = [1, 1, 13, 13, 16,16, 18,18];
     servingCellConfigCommon = (
     {
  #spCellConfigCommon
@@ -54,13 +48,10 @@ gNBs =
 #  downlinkConfigCommon
     #frequencyInfoDL
       # this is pointA +:16 PRBs@120kHz SCS (same as initial BWP)
-     absoluteFrequencySSB                                           = 2079739; # 2072539; #2072251; #2079739;
+     absoluteFrequencySSB                                           = 2079739;
       dl_frequencyBand                                                 = 257;   #257;
       # this is 27.900 GHz
-     # dl_absoluteFrequencyPointA                                       = 2070833;
-     # dl_absoluteFrequencyPointA                                       = 2072083;
-     #  dl_absoluteFrequencyPointA                                       = 2072115;
-      dl_absoluteFrequencyPointA                                       = 2078403; #2078371; #2070931;  #2078371
+      dl_absoluteFrequencyPointA                                       = 2078403;
 
       #scs-SpecificCarrierList
         dl_offstToCarrier                                              = 0;
@@ -71,7 +62,7 @@ gNBs =
      #initialDownlinkBWP
       #genericParameters
         # this is RBstart=0,L=32 (275*(L-1))+RBstart
-        initialDLBWPlocationAndBandwidth                                        = 36025 #13750 #6348;   #  17875;   #   6331;   # 12931;  # 6331; #8525;
+        initialDLBWPlocationAndBandwidth                                        = 36025;
 # subcarrierSpacing
 # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120  
         initialDLBWPsubcarrierSpacing                                           = 3;
@@ -91,13 +82,13 @@ gNBs =
       pMax                                                          = 20;
      #initialUplinkBWP
       #genericParameters
-        initialULBWPlocationAndBandwidth                                        = 36025 #13750 # 6348;   # 17875; #  6331; # 8525;
+        initialULBWPlocationAndBandwidth                                        = 36025;
 # subcarrierSpacing
 # 0=kHz15, 1=kHz30, 2=kHz60, 3=kHz120  
         initialULBWPsubcarrierSpacing                                           = 3;
       #rach-ConfigCommon
         #rach-ConfigGeneric
-          prach_ConfigurationIndex                                  = 135; #135; #135; #117; #114; #67; #67; #67; #117; #13;  #125;
+          prach_ConfigurationIndex                                  = 135;
 #prach_msg1_FDM
 #0 = one, 1=two, 2=four, 3=eight
           prach_msg1_FDM                                            = 0;
@@ -144,9 +135,7 @@ gNBs =
 # ssb_PositionsInBurs_BitmapPR
 # 1=short, 2=medium, 3=long
       ssb_PositionsInBurst_PR                                       = 3;
-     # ssb_PositionsInBurst_Bitmap                                   = 0x0001000100010001L;
-      ssb_PositionsInBurst_Bitmap                                    = 0x5454; #5; #5; #0x0000000000000001L; #0xFFFFFFFFFFFFFFFFL; #0x0F0F0F0F0F0F0F0FL#0x0000000000000001L
-     # ssb_PositionsInBurst_Bitmap                                   = 0x0000000000010000L;
+      ssb_PositionsInBurst_Bitmap                                    = 0x5454;
 
       #
 
@@ -227,10 +216,9 @@ MACRLCs = (
       #dl_max_mcs                  = 24;
       #dl_harq_round_max = 1;
       #ul_harq_round_max = 1;
-    set_analog_beamforming      = 1;
+    set_analog_beamforming      = "lophy";
     beam_duration               = 1;
     beams_per_period            = 1;
-    #beam_weights = [1, 1];
     beam_weights = [0,1,2,3,4,5];
     }
 );
