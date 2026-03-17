@@ -3964,7 +3964,7 @@ static bool verify_bwp_switch(const NR_UE_info_t *UE, const nr_mac_config_t *con
   return false;
 }
 
-void nr_mac_trigger_reconfiguration(const gNB_MAC_INST *nrmac, NR_UE_info_t *UE, int new_bwp_id, bool new_beam)
+void nr_mac_trigger_reconfiguration(gNB_MAC_INST *nrmac, NR_UE_info_t *UE, int new_bwp_id, bool new_beam)
 {
   DevAssert(UE->CellGroup != NULL);
   NR_CellGroupConfig_t *cellGroup_for_UE = NULL;
@@ -3972,7 +3972,7 @@ void nr_mac_trigger_reconfiguration(const gNB_MAC_INST *nrmac, NR_UE_info_t *UE,
       UE->sc_info.csi_MeasConfig = NULL;  // to avoid segfault when freeing csi_MeasConfig in configDedicated
       NR_UE_UL_BWP_t *current_BWP = &UE->current_UL_BWP;
       current_BWP->srs_Config = NULL;
-      int ssb_index = nrmac->common_channels[0].ssb_index[UE->UE_beam_index];
+      int ssb_index = get_ssbidx_from_beam(nrmac, UE->UE_beam_index);
       cellGroup_for_UE = update_cellGroupConfig_for_beam_switch(UE->CellGroup,
                                                                &nrmac->radio_config,
                                                                UE->capability,
@@ -3988,7 +3988,7 @@ void nr_mac_trigger_reconfiguration(const gNB_MAC_INST *nrmac, NR_UE_info_t *UE,
       else {
         UE->sc_info.csi_MeasConfig = NULL;  // to avoid segfault when freeing csi_MeasConfig in configDedicated
         UE->local_bwp_id = new_bwp_id;
-        int ssb_index = nrmac->common_channels[0].ssb_index[UE->UE_beam_index];
+        int ssb_index = get_ssbidx_from_beam(nrmac, UE->UE_beam_index);
         cellGroup_for_UE = update_cellGroupConfig_for_BWP_switch(UE->CellGroup,
                                                                 &nrmac->radio_config,
                                                                 UE->capability,
