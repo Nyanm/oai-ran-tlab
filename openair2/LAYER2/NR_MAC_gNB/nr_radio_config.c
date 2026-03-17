@@ -381,13 +381,15 @@ static int set_ideal_period(bool is_csi)
 }
 
 static void set_csirs_periodicity(NR_NZP_CSI_RS_Resource_t *nzpcsi0,
-                                  int id,
+                                  int ssb_index,
                                   int ideal_period,
                                   const frame_structure_t *fs)
 {
   nzpcsi0->periodicityAndOffset = calloc(1,sizeof(*nzpcsi0->periodicityAndOffset));
   // TODO ideal period to be set according to estimation by the gNB on how fast the channel changes
-  const int offset = id; // id = ssb_index/2, offset should be set to ssb_index/2.
+  gNB_MAC_INST *gNB_mac = RC.nrmac[0];
+  NR_Type0_PDCCH_CSS_config_t *type0_PDCCH_CSS_config = &gNB_mac->type0_PDCCH_CSS_config[ssb_index];
+  const int offset = type0_PDCCH_CSS_config->slot;
   if (check_periodicity(4, ideal_period, fs)) {
     nzpcsi0->periodicityAndOffset->present = NR_CSI_ResourcePeriodicityAndOffset_PR_slots4;
     nzpcsi0->periodicityAndOffset->choice.slots4 = offset;
@@ -428,7 +430,7 @@ static void set_csirs_periodicity(NR_NZP_CSI_RS_Resource_t *nzpcsi0,
     nzpcsi0->periodicityAndOffset->present = NR_CSI_ResourcePeriodicityAndOffset_PR_slots320;
     const int nb_dl_slots_period = get_full_dl_slots_per_period(fs); // full DL slots
     // checked for validity in verify_radio_configuration
-    AssertFatal(offset / 320 < nb_dl_slots_period, "Cannot allocate CSI-RS for BWP %d. Not enough resources for CSI-RS\n", id);
+    AssertFatal(offset / 320 < nb_dl_slots_period, "Cannot allocate CSI-RS for ssb_index %d. Not enough resources for CSI-RS\n", ssb_index);
     nzpcsi0->periodicityAndOffset->choice.slots320 = (offset % 320) + (offset / 320);
   }
 }
@@ -438,16 +440,16 @@ static void config_csirs(const NR_ServingCellConfigCommon_t *servingcellconfigco
                          int num_dl_antenna_ports,
                          int curr_bwp,
                          int do_csirs,
-                         int id)
+                         int ssb_index)
 {
   if (do_csirs) {
 
     if(!csi_MeasConfig->nzp_CSI_RS_ResourceSetToAddModList)
       csi_MeasConfig->nzp_CSI_RS_ResourceSetToAddModList  = calloc(1,sizeof(*csi_MeasConfig->nzp_CSI_RS_ResourceSetToAddModList));
     NR_NZP_CSI_RS_ResourceSet_t *nzpcsirs0 = calloc(1,sizeof(*nzpcsirs0));
-    nzpcsirs0->nzp_CSI_ResourceSetId = id;
+    nzpcsirs0->nzp_CSI_ResourceSetId = ssb_index / 2; //max value is 32
     NR_NZP_CSI_RS_ResourceId_t *nzpid0 = calloc(1,sizeof(*nzpid0));
-    *nzpid0 = id;
+    *nzpid0 = ssb_index / 2; //max value is 32
     asn1cSeqAdd(&nzpcsirs0->nzp_CSI_RS_Resources,nzpid0);
     nzpcsirs0->repetition = NULL;
     nzpcsirs0->aperiodicTriggeringOffset = NULL;
@@ -456,7 +458,7 @@ static void config_csirs(const NR_ServingCellConfigCommon_t *servingcellconfigco
     if(!csi_MeasConfig->nzp_CSI_RS_ResourceToAddModList)
       csi_MeasConfig->nzp_CSI_RS_ResourceToAddModList = calloc(1,sizeof(*csi_MeasConfig->nzp_CSI_RS_ResourceToAddModList));
     NR_NZP_CSI_RS_Resource_t *nzpcsi0 = calloc(1,sizeof(*nzpcsi0));
-    nzpcsi0->nzp_CSI_RS_ResourceId = id;
+    nzpcsi0->nzp_CSI_RS_ResourceId = ssb_index / 2; //max value is 32
     NR_CSI_RS_ResourceMapping_t resourceMapping = {0};
     switch (num_dl_antenna_ports) {
       case 1:
@@ -522,7 +524,7 @@ static void config_csirs(const NR_ServingCellConfigCommon_t *servingcellconfigco
 
     const int ideal_period = set_ideal_period(true); // same periodicity as CSI measurement report
     const frame_structure_t *fs = &(RC.nrmac[0]->frame_structure);
-    set_csirs_periodicity(nzpcsi0, id, ideal_period, fs);
+    set_csirs_periodicity(nzpcsi0, ssb_index, ideal_period, fs);
 
     nzpcsi0->qcl_InfoPeriodicCSI_RS = calloc(1,sizeof(*nzpcsi0->qcl_InfoPeriodicCSI_RS));
     *nzpcsi0->qcl_InfoPeriodicCSI_RS = 0;
@@ -589,13 +591,13 @@ static void config_csiim(int do_csirs,
                          int dl_antenna_ports,
                          int curr_bwp,
                          NR_CSI_MeasConfig_t *csi_MeasConfig,
-                         int id)
+                         int ssb_index)
 {
  if (do_csirs && dl_antenna_ports > 1) {
    if (!csi_MeasConfig->csi_IM_ResourceToAddModList)
      csi_MeasConfig->csi_IM_ResourceToAddModList = calloc(1, sizeof(*csi_MeasConfig->csi_IM_ResourceToAddModList));
    NR_CSI_IM_Resource_t *imres = calloc(1,sizeof(*imres));
-   imres->csi_IM_ResourceId = id;
+   imres->csi_IM_ResourceId = ssb_index / 2; //max value is 32
    NR_NZP_CSI_RS_Resource_t *nzpcsi = NULL;
    for (int i=0; i<csi_MeasConfig->nzp_CSI_RS_ResourceToAddModList->list.count; i++){
      nzpcsi = csi_MeasConfig->nzp_CSI_RS_ResourceToAddModList->list.array[i];
@@ -622,9 +624,9 @@ static void config_csiim(int do_csirs,
    if (!csi_MeasConfig->csi_IM_ResourceSetToAddModList)
      csi_MeasConfig->csi_IM_ResourceSetToAddModList = calloc(1, sizeof(*csi_MeasConfig->csi_IM_ResourceSetToAddModList));
    NR_CSI_IM_ResourceSet_t *imset = calloc(1,sizeof(*imset));
-   imset->csi_IM_ResourceSetId = id;
+   imset->csi_IM_ResourceSetId = ssb_index / 2; //max value is 32
    NR_CSI_IM_ResourceId_t *res = calloc(1,sizeof(*res));
-   *res = id;
+   *res = ssb_index / 2; //max value is 32
    asn1cSeqAdd(&imset->csi_IM_Resources,res);
    asn1cSeqAdd(&csi_MeasConfig->csi_IM_ResourceSetToAddModList->list,imset);
  }
@@ -3471,8 +3473,9 @@ static NR_CSI_MeasConfig_t *get_csiMeasConfig(const NR_ServingCellConfig_t *conf
 
   const int pdsch_AntennaPorts =
       configuration->pdsch_AntennaPorts.N1 * configuration->pdsch_AntennaPorts.N2 * configuration->pdsch_AntennaPorts.XP;
-  config_csirs(scc, csi_MeasConfig, pdsch_AntennaPorts, curr_bwp, configuration->do_CSIRS, ssb_index / 2);
-  config_csiim(configuration->do_CSIRS, pdsch_AntennaPorts, curr_bwp, csi_MeasConfig, ssb_index / 2);
+
+  config_csirs(scc, csi_MeasConfig, pdsch_AntennaPorts, curr_bwp, configuration->do_CSIRS, ssb_index);
+  config_csiim(configuration->do_CSIRS, pdsch_AntennaPorts, curr_bwp, csi_MeasConfig, ssb_index);
 
   NR_CSI_ResourceConfig_t *csires1 = calloc(1, sizeof(*csires1));
   csires1->csi_ResourceConfigId = bwp_id + 20;
@@ -3498,7 +3501,7 @@ static NR_CSI_MeasConfig_t *get_csiMeasConfig(const NR_ServingCellConfig_t *conf
     csires0->csi_RS_ResourceSetList.choice.nzp_CSI_RS_SSB->nzp_CSI_RS_ResourceSetList =
         calloc(1, sizeof(*csires0->csi_RS_ResourceSetList.choice.nzp_CSI_RS_SSB->nzp_CSI_RS_ResourceSetList));
     NR_NZP_CSI_RS_ResourceSetId_t *nzp0 = calloc(1, sizeof(*nzp0));
-    *nzp0 = ssb_index / 2;
+    *nzp0 = ssb_index / 2;  //max value is 32
     asn1cSeqAdd(&csires0->csi_RS_ResourceSetList.choice.nzp_CSI_RS_SSB->nzp_CSI_RS_ResourceSetList->list, nzp0);
     csires0->bwp_Id = bwp_id;
     csires0->resourceType = NR_CSI_ResourceConfig__resourceType_periodic;
@@ -3512,7 +3515,7 @@ static NR_CSI_MeasConfig_t *get_csiMeasConfig(const NR_ServingCellConfig_t *conf
     csires2->csi_RS_ResourceSetList.choice.csi_IM_ResourceSetList =
         calloc(1, sizeof(*csires2->csi_RS_ResourceSetList.choice.csi_IM_ResourceSetList));
     NR_CSI_IM_ResourceSetId_t *csiim00 = calloc(1, sizeof(*csiim00));
-    *csiim00 = ssb_index / 2;
+    *csiim00 = ssb_index / 2;  //max value is 32
     asn1cSeqAdd(&csires2->csi_RS_ResourceSetList.choice.csi_IM_ResourceSetList->list, csiim00);
     csires2->bwp_Id = bwp_id;
     csires2->resourceType = NR_CSI_ResourceConfig__resourceType_periodic;
