@@ -304,7 +304,7 @@ void nr_generate_pbch_llr(const PHY_VARS_NR_UE *ue,
                   ssb_start_subcarrier,
                   nid);
 #ifdef DEBUG_PBCH
-  LOG_I(PHY, "[PHY] PBCH Symbol %d ofdm size %d\n", symbol, frame_parms->ofdm_symbol_size);
+  LOG_I(PHY, "[PHY] PBCH Symbol %d ofdm size %d\n", symbolSSB, frame_parms->ofdm_symbol_size);
   LOG_I(PHY, "[PHY] PBCH starting channel_level\n");
 #endif
 
@@ -320,7 +320,7 @@ void nr_generate_pbch_llr(const PHY_VARS_NR_UE *ue,
   }
 
 #ifdef DEBUG_PBCH
-  LOG_I(PHY, "[PHY] PBCH log2_maxh = %d (%d)\n", log2_maxh, max_h);
+  LOG_I(PHY, "[PHY] PBCH log2_maxh = %f (%d)\n", log2_maxh, max_h);
 #endif
   __attribute__((aligned(32))) struct complex16 rxdataF_comp[frame_parms->nb_antennas_rx][PBCH_MAX_RE_PER_SYMBOL];
   nr_pbch_channel_compensation(rxdataF_ext, dl_ch_estimates_ext, nb_re, rxdataF_comp, frame_parms,
@@ -357,9 +357,8 @@ void nr_generate_pbch_llr(const PHY_VARS_NR_UE *ue,
   nr_pbch_quantize(pbch_e_rx + pbch_e_rx_idx, (short *)rxdataF_comp[0], nb);
 #ifdef DEBUG_PBCH
   char fname[50];
-  sprintf(fname, "rxdataF_comp_%d.m", symbol);
-  write_output(fname, "rxFcomp", rxdataF[symbol][0], 240, 1, 1);
-  short *p = (short *)rxdataF_comp[0];
+  sprintf(fname, "rxdataF_comp_%d.m", symbolSSB);
+  write_output(fname, "rxFcomp", rxdataF[0], 240, 1, 1);
 
   for (int cnt = 0; cnt < 864  ; cnt++)
     printf("pbch rx llr %d\n", *(pbch_e_rx + cnt));
@@ -455,7 +454,7 @@ int nr_pbch_decode(PHY_VARS_NR_UE *ue,
     *ret_symbol_offset += (frame_parms->slots_per_frame >> 1) * frame_parms->symbols_per_slot;
 
 #ifdef DEBUG_PBCH
-  printf("xtra_byte %x payload %x\n", result->xtra_byte, payload);
+  printf("xtra_byte %x payload %lx\n", result->xtra_byte, payload);
 
   for (int i=0; i<(NR_POLAR_PBCH_PAYLOAD_BITS>>3); i++) {
     //     printf("unscrambling pbch_a[%d] = %x \n", i,pbch_a[i]);
