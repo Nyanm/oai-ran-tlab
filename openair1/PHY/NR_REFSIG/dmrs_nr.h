@@ -33,12 +33,20 @@ void nr_gen_ref_conj_symbols(const uint32_t *in, uint32_t length, int16_t *outpu
 int8_t get_next_dmrs_symbol_in_slot(uint16_t  ul_dmrs_symb_pos, uint8_t counter, uint8_t end_symbol);
 int8_t get_valid_dmrs_idx_for_channel_est(uint16_t  dmrs_symb_pos, uint8_t counter);
 void nr_chest_time_domain_avg(NR_DL_FRAME_PARMS *frame_parms,
-                              int32_t **ch_estimates,
+                              int nl,
+                              int nbRx,
+                              int sz,
+                              c16_t ch_estimates[][nl][nbRx][sz],
                               uint8_t num_symbols,
                               uint8_t start_symbol,
                               uint16_t dmrs_bitmap,
                               uint16_t num_rbs);
-
+void nr_chest_time_domain_avg_ul(NR_DL_FRAME_PARMS *frame_parms,
+                                 int32_t **ch_estimates,
+                                 uint8_t num_symbols,
+                                 uint8_t start_symbol,
+                                 uint16_t dmrs_bitmap,
+                                 uint16_t num_rbs);
 int8_t get_num_dmrs_re_per_rb(const uint8_t dmrs_type, const uint8_t num_cdm_grp_no_data);
 
 static inline uint8_t is_dmrs_symbol(uint8_t l, uint16_t dmrsSymbMask)

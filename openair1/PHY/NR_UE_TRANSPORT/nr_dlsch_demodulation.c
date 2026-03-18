@@ -270,8 +270,10 @@ static void nr_dlsch_channel_level_median(uint32_t rx_size_symbol,
 static void nr_dlsch_extract_rbs(uint32_t rxdataF_sz,
                                  c16_t rxdataF[][rxdataF_sz],
                                  uint32_t rx_size_symbol,
+                                 uint8_t Nl,
+                                 int nbRx,
                                  uint32_t pdsch_est_size,
-                                 int32_t dl_ch_estimates[][pdsch_est_size],
+                                 c16_t dl_ch_estimates[][Nl][nbRx][pdsch_est_size],
                                  c16_t rxdataF_ext[][rx_size_symbol],
                                  int32_t dl_ch_estimates_ext[][rx_size_symbol],
                                  unsigned char symbol,
@@ -280,7 +282,6 @@ static void nr_dlsch_extract_rbs(uint32_t rxdataF_sz,
                                  int startBWP,
                                  const freq_alloc_bitmap_t *freq_alloc,
                                  uint8_t n_dmrs_cdm_groups,
-                                 uint8_t Nl,
                                  NR_DL_FRAME_PARMS *fp,
                                  uint16_t dlDmrsSymbPos,
                                  uint32_t csi_res_bitmap,
@@ -324,7 +325,7 @@ static void nr_dlsch_extract_rbs(uint32_t rxdataF_sz,
       c16_t *rxF_ext = rxdataF_ext[aarx];
       c16_t *rxF = &rxdataF[aarx][symbol * fp->ofdm_symbol_size];
       for (int l = 0; l < Nl; l++) {
-        int32_t *dl_ch0 = &dl_ch_estimates[(l * fp->nb_antennas_rx) + aarx][validDmrsEst * fp->ofdm_symbol_size];
+        c16_t *dl_ch0 = dl_ch_estimates[validDmrsEst][l][aarx];
         int32_t *dl_ch0_ext = dl_ch_estimates_ext[(l * fp->nb_antennas_rx) + aarx];
         if (pilots == 0 && csi_res_bitmap == 0) { // data symbol only
           if (l == 0) {
@@ -348,7 +349,7 @@ static void nr_dlsch_extract_rbs(uint32_t rxdataF_sz,
                 // DATA RE
                 if (l == 0)
                   rxF_ext[j] = rxF[k];
-                dl_ch0_ext[j] = dl_ch0[re];
+                dl_ch0_ext[j] = ((int32_t *)dl_ch0)[re];
                 j++;
               }
               k++;
@@ -940,14 +941,15 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                 unsigned char symbol,
                 bool first_symbol_flag,
                 unsigned char harq_pid,
+                uint8_t Nl,
+                int nbRx,
                 uint32_t pdsch_est_size,
-                int32_t dl_ch_estimates[][pdsch_est_size],
+                c16_t dl_ch_estimates[][Nl][nbRx][pdsch_est_size],
                 int16_t *llr[2],
                 uint32_t dl_valid_re[NR_SYMBOLS_PER_SLOT],
                 c16_t rxdataF[][ue->frame_parms.samples_per_slot_wCP],
                 int32_t *log2_maxh,
                 int rx_size_symbol,
-                int nbRx,
                 c16_t rxdataF_comp[][dlsch->Nl][nbRx][rx_size_symbol],
                 c16_t dl_ch_mag[][dlsch->Nl][nbRx][rx_size_symbol],
                 c16_t dl_ch_magb[][dlsch->Nl][nbRx][rx_size_symbol],
@@ -1066,10 +1068,11 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
     uint32_t csi_res_bitmap = build_csi_overlap_bitmap(dlsch_config, symbol);
 
     LOG_D(PHY, "%d.%d symbol %d csi overlap bitmap %d\n", frame, nr_slot_rx, symbol, csi_res_bitmap);
-
     nr_dlsch_extract_rbs(fp->samples_per_slot_wCP,
                          rxdataF,
                          rx_size_symbol,
+                         Nl,
+                         nbRx,
                          pdsch_est_size,
                          dl_ch_estimates,
                          rxdataF_ext,
@@ -1080,7 +1083,6 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                          dlsch_config->BWPStart,
                          freq_alloc,
                          dlsch_config->n_dmrs_cdm_groups,
-                         nl,
                          fp,
                          dlsch_config->dlDmrsSymbPos,
                          csi_res_bitmap,

@@ -1219,12 +1219,12 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
 
   // averaging time domain channel estimates
   if (gNB->chest_time == 1)
-    nr_chest_time_domain_avg(frame_parms,
-                             pusch_vars->ul_ch_estimates,
-                             rel15_ul->nr_of_symbols,
-                             rel15_ul->start_symbol_index,
-                             rel15_ul->ul_dmrs_symb_pos,
-                             rel15_ul->rb_size);
+    nr_chest_time_domain_avg_ul(frame_parms,
+                                pusch_vars->ul_ch_estimates,
+                                rel15_ul->nr_of_symbols,
+                                rel15_ul->start_symbol_index,
+                                rel15_ul->ul_dmrs_symb_pos,
+                                rel15_ul->rb_size);
 
   stop_meas(&gNB->ulsch_channel_estimation_stats);
 

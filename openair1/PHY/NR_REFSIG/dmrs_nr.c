@@ -236,11 +236,69 @@ int8_t get_valid_dmrs_idx_for_channel_est(uint16_t dmrs_symb_pos, uint8_t counte
 
 /* perform averaging of channel estimates and store result in first symbol buffer */
 void nr_chest_time_domain_avg(NR_DL_FRAME_PARMS *frame_parms,
-                              int32_t **ch_estimates,
+                              int nl,
+                              int nbRx,
+                              int sz,
+                              c16_t ch_estimates[][nl][nbRx][sz],
                               uint8_t num_symbols,
                               uint8_t start_symbol,
                               uint16_t dmrs_bitmap,
                               uint16_t num_rbs)
+{
+  const int total_symbols = start_symbol + num_symbols;
+  const int num_dmrs_symb = count_bits64_with_mask(dmrs_bitmap, start_symbol, total_symbols);
+  const int first_dmrs_symb = get_next_dmrs_symbol_in_slot(dmrs_bitmap, start_symbol, total_symbols);
+  AssertFatal(first_dmrs_symb > -1, "No DMRS symbol present in this slot\n");
+  AssertFatal((num_dmrs_symb < 5) && (num_dmrs_symb > 0), "Illegal number of DMRS symbols in the slot\n");
+  for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) {
+    simde__m128i *ul_ch128_0 = (simde__m128i *)ch_estimates[first_dmrs_symb][0][aarx];
+    for (int symb = first_dmrs_symb + 1; symb < total_symbols; symb++) {
+      if ((dmrs_bitmap >> symb) & 0x01) {
+        simde__m128i *toadd = (simde__m128i *)ch_estimates[symb][0][aarx];
+        simde__m128i *sumup = ul_ch128_0;
+        for (int rb = 0; rb < num_rbs; rb++) {
+          sumup[rb] = simde_mm_adds_epi16(sumup[rb], *toadd++);
+          sumup[rb] = simde_mm_adds_epi16(sumup[rb], *toadd++);
+          sumup[rb] = simde_mm_adds_epi16(sumup[rb], *toadd++);
+        }
+      }
+    }
+    switch (num_dmrs_symb) {
+      case 2: {
+        simde__m128i *todiv = ul_ch128_0;
+        for (int rb = 0; rb < num_rbs; rb++) {
+          todiv[rb] = simde_mm_srai_epi16(todiv[rb], 1);
+          todiv[rb] = simde_mm_srai_epi16(todiv[rb], 1);
+          todiv[rb] = simde_mm_srai_epi16(todiv[rb], 1);
+        }
+      } break;
+      case 4: {
+        simde__m128i *todiv = ul_ch128_0;
+        for (int rb = 0; rb < num_rbs; rb++) {
+          todiv[rb] = simde_mm_srai_epi16(todiv[rb], 2);
+          todiv[rb] = simde_mm_srai_epi16(todiv[rb], 2);
+          todiv[rb] = simde_mm_srai_epi16(todiv[rb], 2);
+        }
+      } break;
+      case 3: {
+        int16_t *todiv = (int16_t *)ul_ch128_0;
+        for (int rbIdx = 0; rbIdx < num_rbs; rbIdx++) {
+          for (int i = 0; i < 24; i++)
+            *todiv = *todiv / 3;
+          todiv++;
+        }
+      }
+    }
+  }
+}
+
+/* perform averaging of channel estimates and store result in first symbol buffer */
+void nr_chest_time_domain_avg_ul(NR_DL_FRAME_PARMS *frame_parms,
+                                 int32_t **ch_estimates,
+                                 uint8_t num_symbols,
+                                 uint8_t start_symbol,
+                                 uint16_t dmrs_bitmap,
+                                 uint16_t num_rbs)
 {
   simde__m128i *ul_ch128_0;
   simde__m128i *ul_ch128_1;
@@ -251,9 +309,9 @@ void nr_chest_time_domain_avg(NR_DL_FRAME_PARMS *frame_parms,
   AssertFatal(first_dmrs_symb > -1, "No DMRS symbol present in this slot\n");
   for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) {
     for (int symb = first_dmrs_symb+1; symb < total_symbols; symb++) {
-      ul_ch128_0 = (simde__m128i *)&ch_estimates[aarx][first_dmrs_symb*frame_parms->ofdm_symbol_size];
+      ul_ch128_0 = (simde__m128i *)&ch_estimates[aarx][first_dmrs_symb * frame_parms->ofdm_symbol_size];
       if ((dmrs_bitmap >> symb) & 0x01) {
-        ul_ch128_1 = (simde__m128i *)&ch_estimates[aarx][symb*frame_parms->ofdm_symbol_size];
+        ul_ch128_1 = (simde__m128i *)&ch_estimates[aarx][symb * frame_parms->ofdm_symbol_size];
         for (int rbIdx = 0; rbIdx < num_rbs; rbIdx++) {
           ul_ch128_0[0] = simde_mm_adds_epi16(ul_ch128_0[0], ul_ch128_1[0]);
           ul_ch128_0[1] = simde_mm_adds_epi16(ul_ch128_0[1], ul_ch128_1[1]);
@@ -263,7 +321,7 @@ void nr_chest_time_domain_avg(NR_DL_FRAME_PARMS *frame_parms,
         }
       }
     }
-    ul_ch128_0 = (simde__m128i *)&ch_estimates[aarx][first_dmrs_symb*frame_parms->ofdm_symbol_size];
+    ul_ch128_0 = (simde__m128i *)&ch_estimates[aarx][first_dmrs_symb * frame_parms->ofdm_symbol_size];
     if (num_dmrs_symb == 2) {
       for (int rbIdx = 0; rbIdx < num_rbs; rbIdx++) {
         ul_ch128_0[0] = simde_mm_srai_epi16(ul_ch128_0[0], 1);
@@ -279,7 +337,7 @@ void nr_chest_time_domain_avg(NR_DL_FRAME_PARMS *frame_parms,
         ul_ch128_0 += 3;
       }
     } else if (num_dmrs_symb == 3) {
-      ul_ch16_0 = (int16_t *)&ch_estimates[aarx][first_dmrs_symb*frame_parms->ofdm_symbol_size];
+      ul_ch16_0 = (int16_t *)&ch_estimates[aarx][first_dmrs_symb * frame_parms->ofdm_symbol_size];
       for (int rbIdx = 0; rbIdx < num_rbs; rbIdx++) {
         ul_ch16_0[0] /= 3;
         ul_ch16_0[1] /= 3;
