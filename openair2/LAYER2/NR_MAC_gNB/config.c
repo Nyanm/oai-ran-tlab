@@ -68,6 +68,7 @@ bool is_prach_slot[160] = {false};
 #define SLOT_TYPE_SR   3
 #define SLOT_TYPE_NUM  (SLOT_TYPE_SR + 1)
 
+#define MAX_SR_SLOT_PERIOD  16
 int reserve_offset[MAX_MOBILES_PER_GNB * SLOT_TYPE_NUM] = {[0 ... (MAX_MOBILES_PER_GNB * SLOT_TYPE_NUM - 1)] -1};
 int reserve_period[MAX_MOBILES_PER_GNB * SLOT_TYPE_NUM] = {[0 ... (MAX_MOBILES_PER_GNB * SLOT_TYPE_NUM - 1)] -1};
 
@@ -452,8 +453,8 @@ int get_first_ul_slot_beam(const frame_structure_t *fs, int beam_idx, int beams_
     LOG_D(NR_MAC, "ul_slot_idxs[%d] %d\n", i, ul_slot_idxs[i]);
 
   // Compute slot index offset
-  int period_idx = idx / ul_slot_count; // wrap up the count of complete TDD periods spanned by the index
-  int ul_slot_idx_in_period = idx % ul_slot_count; // wrap up the UL slot index within the current TDD period
+  int period_idx = idx / MAX_SR_SLOT_PERIOD; // wrap up the count of complete TDD periods spanned by the index
+  int ul_slot_idx_in_period = idx % MAX_SR_SLOT_PERIOD; // wrap up the UL slot index within the current TDD period
   int ret = ul_slot_idxs[ul_slot_idx_in_period] + period_idx * fs->numb_slots_frame;
 
   reserve_offset[uid * SLOT_TYPE_NUM + SLOT_TYPE_SR] = ret;
@@ -648,7 +649,7 @@ int get_ul_slot_offset_beam(const frame_structure_t *fs, int idx, bool is_csi, i
 
   // Allow the first NUM_SSB_period slot for SR. See get_first_ul_slot_beam()
   int NUM_SSB_period = (num_beam % beams_per_period > 0) ? num_beam / beams_per_period + 1 : num_beam / beams_per_period;
-  idx += NUM_SSB_period;
+  idx += (NUM_SSB_period > MAX_SR_SLOT_PERIOD) ? MAX_SR_SLOT_PERIOD: NUM_SSB_period;
 
   /* Populate the indices of UL slots in the TDD period from the bitmap
    * mixed slot is not used in multiple beams config file to avoid collision with SSB
