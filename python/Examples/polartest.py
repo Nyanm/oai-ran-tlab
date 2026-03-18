@@ -104,14 +104,14 @@ oai.init()
 # this is a 32-bit input with format 0 (PBCH) which has 864 encoded bits 
 encoded_output = oai.nr_polar_encoder(0x12345678,0,0,0,32,0)
 bpsk_out = bpsk_from_uint32_words(encoded_output,864)
-print(bpsk_out)
+#print(bpsk_out)
 SNRdB = 0;
 decoder_input = add_awgn_and_convert_q15(bpsk_out, SNRdB)
-print(decoder_input)
+#print(decoder_input)
 
 # here we pass the parameters to the OAI polar decoder, decoder_input (Q15 input), ones_flag = 0, messageType=0, messageLength = 864, aggregation_level = 0
 decoder_output = oai.nr_polar_decoder(decoder_input,0,0,864,0)
-print(len(decoder_output))
-print(decoder_output[0])
+#print(len(decoder_output))
+print(hex(decoder_output[0]))
 
 oai.shutdown()

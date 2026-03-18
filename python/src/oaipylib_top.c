@@ -258,6 +258,7 @@ void validate_input_pmi(nfapi_nr_config_request_scf_t *gNB_config,
 float **s_interleaved, **r_re, **r_im;
 uint8_t n_tx=1,n_rx=1;
 channel_desc_t *gNB2UE;
+channel_desc_t *UE2gNB;
 NR_Sched_Rsp_t *Sched_INFO;
 c16_t **txdata;
 
@@ -318,7 +319,6 @@ int oai_lib_init() {
   //int frame_length_complex_samples_no_prefix;
   NR_DL_FRAME_PARMS *frame_parms;
   UE_nr_rxtx_proc_t UE_proc;
-  channel_desc_t *gNB2UE;
   gNB_MAC_INST *gNB_mac;
   NR_UE_MAC_INST_t *UE_mac;
   int cyclic_prefix_type = NFAPI_CP_NORMAL;
@@ -698,7 +698,8 @@ void oai_lib_shutdown(void) {
 
       free(Sched_INFO);
 
-  free_channel_desc_scm(gNB2UE);
+  if (gNB2UE) free_channel_desc_scm(gNB2UE);
+  if (UE2gNB) free_channel_desc_scm(UE2gNB);
 
   for (int i = 0; i < n_tx; i++) {
     free(s_interleaved[i]);

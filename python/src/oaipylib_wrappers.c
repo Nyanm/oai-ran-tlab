@@ -154,12 +154,12 @@ PyObject *py_oaipylib_nr_polar_decoder(PyObject *self, PyObject *args) {
         return oaipylib_raise_error("oai_lib_run_algorithm failed");
     }
 
-    printf("output : %x\n",out);
+//    printf("output : %x\n",out);
     PyObject *result = PyList_New(1);
     if (!result) {
         return NULL;
     }
-    PyList_SET_ITEM(result, 0, out);
+    PyList_SET_ITEM(result, 0, PyLong_FromUnsignedLongLong((unsigned long long)out));
 
     return result;
 }
