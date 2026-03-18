@@ -121,8 +121,7 @@ t_nrPolar_params *nr_polar_params(int8_t messageType, uint16_t messageLength, ui
     newPolarInitNode->encoderLength = NR_POLAR_PBCH_E;
     newPolarInitNode->crcCorrectionBits = NR_POLAR_PBCH_CRC_ERROR_CORRECTION_BITS;
     newPolarInitNode->crc_generator_matrix = crc24c_generator_matrix(newPolarInitNode->payloadBits); // G_P
-    // printf("Initializing polar parameters for PBCH (K %d, E
-    // %d)\n",newPolarInitNode->payloadBits,newPolarInitNode->encoderLength);
+    //printf("Initializing polar parameters for PBCH (K %d, E %d)\n",newPolarInitNode->payloadBits,newPolarInitNode->encoderLength);
 
   } else if (messageType == NR_POLAR_DCI_MESSAGE_TYPE) {
     newPolarInitNode->n_max = NR_POLAR_DCI_N_MAX;

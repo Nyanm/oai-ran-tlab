@@ -68,13 +68,13 @@ PyObject *py_oaipylib_nr_polar_encoder(PyObject *self, PyObject *args) {
     }
 
     out = malloc(sizeof(uint32_t*));
-    printf("Calling oai_lib_nr_polar_encoder(%x,%p,%x,%d,%d,%d,%d\n",
+    printf("Calling oai_lib_nr_polar_encoder(0x%x,%p,%x,%d,%d,%d,%d\n",
             A, out, crcmask, ones_flag, (int8_t)messageType, messageLength,aggregation_level);
     int encodedLength = oai_lib_nr_polar_encoder(&A, (void**)out, crcmask, ones_flag, (int8_t)messageType, messageLength,aggregation_level);
     if (encodedLength <= 0) return oaipylib_raise_error("oai_lib_nr_polar_encoder failed");
 
-        
-    int encodedLength_u32 = (encodedLength>>5) + (encodedLength&31) > 0 ? 1 : 0;
+         
+    int encodedLength_u32 = (encodedLength>>5) + ((encodedLength&31) > 0 ? 1 : 0);
     printf("encoded Length %d (uint32 list size %d), encoded output %d(0x%x) (first 32 bits)\n",encodedLength,encodedLength_u32,(*out)[0],(*out)[0]);
     
     PyObject *result = PyList_New(encodedLength_u32);
@@ -108,7 +108,7 @@ PyObject *py_oaipylib_nr_polar_decoder(PyObject *self, PyObject *args) {
     uint16_t messageLength;
     uint8_t aggregation_level;
 
-    if (!PyArg_ParseTuple(args, "ObcHb", &input_obj, &ones_flag,&messageType,&messageLength,&aggregation_level)) {
+    if (!PyArg_ParseTuple(args, "ObbHb", &input_obj, &ones_flag,&messageType,&messageLength,&aggregation_level)) {
         return NULL;
     }
 
@@ -124,6 +124,7 @@ PyObject *py_oaipylib_nr_polar_decoder(PyObject *self, PyObject *args) {
         return NULL;
     }
 
+    printf("Allocating x for input of size %d\n",n);
     int16_t *x = (int16_t *)malloc((size_t)n * sizeof(int16_t));
     
 
@@ -135,13 +136,15 @@ PyObject *py_oaipylib_nr_polar_decoder(PyObject *self, PyObject *args) {
 
     PyObject **items = PySequence_Fast_ITEMS(seq);
     for (Py_ssize_t i = 0; i < n; ++i) {
-        x[i] = (int16_t)(32767.0*PyFloat_AsDouble(items[i]));
+        x[i] = (int16_t)(PyLong_AsLong(items[i]));
         if (PyErr_Occurred()) {
             Py_DECREF(seq);
             free(x);
             return NULL;
         }
     }
+    printf("Calling oai_lib_nr_polar_decoder with ones_flag %d, messageType %d, messageLength %d, aggregation_level %d\n",
+		    ones_flag,messageType,messageLength,aggregation_level);
     int rc = oai_lib_nr_polar_decoder(x, &out, ones_flag, messageType, messageLength,aggregation_level);
 
     Py_DECREF(seq);
@@ -151,6 +154,7 @@ PyObject *py_oaipylib_nr_polar_decoder(PyObject *self, PyObject *args) {
         return oaipylib_raise_error("oai_lib_run_algorithm failed");
     }
 
+    printf("output : %x\n",out);
     PyObject *result = PyList_New(1);
     if (!result) {
         return NULL;

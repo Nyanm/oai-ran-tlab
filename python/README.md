@@ -34,6 +34,7 @@ python -m pip install .
 
 ## To test
 ```bash
-python -c "import os ; import sys ; sys.setdlopenflags(os.RTLD_NOW | os.RTLD_GLOBAL) ; import oaipylib as oai ; oai.init() ; encoded_output = oai.nr_polar_encoder(0x12345678,0,0,0,32,0) ; print(encoded_output[0],hex(encoded_output[0]))"
+python Examples/polartest.py
 ```
-The printed encoder output should match what is shown in the debugging traces (which will be turned off soon)
+You should see that the output matches the input (0x12345678) at SNR=0dB. Debugging traces will be removed
+
