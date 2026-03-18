@@ -112,7 +112,7 @@ static void nr_dlsch_channel_compensation(uint32_t rx_size_symbol,
                                           int nbRx,
                                           uint8_t n_layers,
                                           c16_t rxdataF_ext[][rx_size_symbol],
-                                          int32_t dl_ch_estimates_ext[][rx_size_symbol],
+                                          c16_t dl_ch_estimates_ext[][rx_size_symbol],
                                           c16_t dl_ch_mag[][nbRx][rx_size_symbol],
                                           c16_t dl_ch_magb[][nbRx][rx_size_symbol],
                                           c16_t dl_ch_magr[][nbRx][rx_size_symbol],
@@ -230,7 +230,7 @@ static void nr_dlsch_channel_compensation(uint32_t rx_size_symbol,
 }
 
 static void nr_dlsch_channel_level_median(uint32_t rx_size_symbol,
-                                          int32_t dl_ch_estimates_ext[][rx_size_symbol],
+                                          c16_t dl_ch_estimates_ext[][rx_size_symbol],
                                           int32_t median[MAX_ANT][MAX_ANT],
                                           int n_tx,
                                           int n_rx,
@@ -275,7 +275,7 @@ static void nr_dlsch_extract_rbs(uint32_t rxdataF_sz,
                                  uint32_t pdsch_est_size,
                                  c16_t dl_ch_estimates[][Nl][nbRx][pdsch_est_size],
                                  c16_t rxdataF_ext[][rx_size_symbol],
-                                 int32_t dl_ch_estimates_ext[][rx_size_symbol],
+                                 c16_t dl_ch_estimates_ext[][rx_size_symbol],
                                  unsigned char symbol,
                                  uint8_t pilots,
                                  uint8_t config_type,
@@ -326,7 +326,7 @@ static void nr_dlsch_extract_rbs(uint32_t rxdataF_sz,
       c16_t *rxF = &rxdataF[aarx][symbol * fp->ofdm_symbol_size];
       for (int l = 0; l < Nl; l++) {
         c16_t *dl_ch0 = dl_ch_estimates[validDmrsEst][l][aarx];
-        int32_t *dl_ch0_ext = dl_ch_estimates_ext[(l * fp->nb_antennas_rx) + aarx];
+        c16_t *dl_ch0_ext = dl_ch_estimates_ext[(l * fp->nb_antennas_rx) + aarx];
         if (pilots == 0 && csi_res_bitmap == 0) { // data symbol only
           if (l == 0) {
             if (start_re + nb_rb * NR_NB_SC_PER_RB <= fp->ofdm_symbol_size) {
@@ -349,7 +349,7 @@ static void nr_dlsch_extract_rbs(uint32_t rxdataF_sz,
                 // DATA RE
                 if (l == 0)
                   rxF_ext[j] = rxF[k];
-                dl_ch0_ext[j] = ((int32_t *)dl_ch0)[re];
+                dl_ch0_ext[j] = dl_ch0[re];
                 j++;
               }
               k++;
@@ -700,7 +700,7 @@ static void nr_dlsch_mmse(uint32_t rx_size_symbol,
                           c16_t dl_ch_mag[][n_rx][rx_size_symbol],
                           c16_t dl_ch_magb[][n_rx][rx_size_symbol],
                           c16_t dl_ch_magr[][n_rx][rx_size_symbol],
-                          int32_t dl_ch_estimates_ext[][rx_size_symbol],
+                          c16_t dl_ch_estimates_ext[][rx_size_symbol],
                           unsigned char mod_order,
                           int shift,
                           unsigned char symbol,
@@ -723,8 +723,8 @@ static void nr_dlsch_mmse(uint32_t rx_size_symbol,
   for (int rtx = 0; rtx < nl; rtx++) {//row
     for (int ctx = 0; ctx < nl; ctx++) {//column
       for (int aarx = 0; aarx < n_rx; aarx++)  {
-        c16_t *ch0r = (c16_t *)dl_ch_estimates_ext[rtx * n_rx + aarx];
-        c16_t *ch0c = (c16_t *)dl_ch_estimates_ext[ctx * n_rx + aarx];
+        c16_t *ch0r = dl_ch_estimates_ext[rtx * n_rx + aarx];
+        c16_t *ch0c = dl_ch_estimates_ext[ctx * n_rx + aarx];
         nr_conjch0_mult_ch1(ch0r,
                             ch0c,
                             conjH_H_elements[aarx][ctx][rtx], // sic
@@ -964,7 +964,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
   const int nl = dlsch[0].Nl;
   const int n_rx = fp->nb_antennas_rx;
   const int matrixSz = n_rx * nl;
-  __attribute__((aligned(32))) int32_t dl_ch_estimates_ext[matrixSz][rx_size_symbol];
+  __attribute__((aligned(32))) c16_t dl_ch_estimates_ext[matrixSz][rx_size_symbol];
   memset(dl_ch_estimates_ext, 0, sizeof(dl_ch_estimates_ext));
 
   NR_UE_COMMON *common_vars  = &ue->common_vars;
