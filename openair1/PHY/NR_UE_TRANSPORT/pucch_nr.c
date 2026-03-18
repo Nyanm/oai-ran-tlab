@@ -43,7 +43,7 @@
 #include "openair1/PHY/NR_REFSIG/nr_refsig.h"
 
 #include "T.h"
-#define NR_UNIT_TEST 1
+//#define NR_UNIT_TEST 1
 #ifdef NR_UNIT_TEST
   #define DEBUG_PUCCH_TX
   #define DEBUG_NR_PUCCH_TX
@@ -52,8 +52,7 @@
 //#define ONE_OVER_SQRT2 23170 // 32767/sqrt(2) = 23170 (ONE_OVER_SQRT2)
 //#define POLAR_CODING_DEBUG
 
-void nr_generate_pucch0(const PHY_VARS_NR_UE *ue,
-                        c16_t **txdataF,
+void nr_generate_pucch0(c16_t **txdataF,
                         const NR_DL_FRAME_PARMS *frame_parms,
                         const int16_t amp16,
                         const int nr_slot_tx,
@@ -156,8 +155,7 @@ void nr_generate_pucch0(const PHY_VARS_NR_UE *ue,
   }
 }
 
-void nr_generate_pucch1(const PHY_VARS_NR_UE *ue,
-                        c16_t **txdataF,
+void nr_generate_pucch1(c16_t **txdataF,
                         const NR_DL_FRAME_PARMS *frame_parms,
                         const int16_t amp16,
                         const int nr_slot_tx,
@@ -753,8 +751,7 @@ void nr_uci_encoding(uint64_t payload, uint8_t nr_bit, uint8_t nrofPRB, bool uci
   }
 }
 //#if 0
-void nr_generate_pucch2(const PHY_VARS_NR_UE *ue,
-                        c16_t **txdataF,
+void nr_generate_pucch2(c16_t **txdataF,
                         const NR_DL_FRAME_PARMS *frame_parms,
                         const int16_t amp16,
                         const int nr_slot_tx,
@@ -938,8 +935,7 @@ void nr_generate_pucch2(const PHY_VARS_NR_UE *ue,
   }
 }
 //#if 0
-void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
-                          c16_t **txdataF,
+void nr_generate_pucch3_4(c16_t **txdataF,
                           const NR_DL_FRAME_PARMS *frame_parms,
                           const int16_t amp16,
                           const int nr_slot_tx,
@@ -1032,7 +1028,7 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
 
   if (is_pi_over_2_bpsk_enabled == 0) {
     // using QPSK if PUCCH format 3,4 and pi/2-BPSK is not configured, according to subclause 6.3.2.6.2
-    c16_t qpskSymbols[4] = {{baseVal, baseVal}, {-baseVal, baseVal}, {-baseVal, baseVal}, {-baseVal, -baseVal}};
+    c16_t qpskSymbols[4] = {{baseVal, baseVal}, {baseVal, -baseVal}, {-baseVal, baseVal}, {-baseVal, -baseVal}};
     for (int i=0; i < m_symbol; i++) { // QPSK modulation subclause 5.1.3
       int tmp = (btilde[2 * i] & 1) * 2 + (btilde[(2 * i) + 1] & 1);
       d[i] = qpskSymbols[tmp];
@@ -1179,7 +1175,7 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
 //      for (int m = l * 12 * nrofPRB; m < (l + 1) * 12 * nrofPRB; m++) {
       for (int m = 0; m < (12 * nrofPRB); m++) {
         const c16_t angle = {lround(32767 * cos(2 * M_PI * m * k / (12 * nrofPRB))),
-                             lround(32767 * sin(2 * M_PI * m * k / (12 * nrofPRB)))};
+                             lround(-32767 * sin(2 * M_PI * m * k / (12 * nrofPRB)))};
         c16_t tmp = c16mulShift(yPtr[m], angle, 15);
         csum(*zPtr, *zPtr, c16mulRealShift(tmp, base, 15));
       }
@@ -1340,7 +1336,6 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
         printf("3   ");
 #endif
         } else if (baseRB > halfRBs) { // if number RBs in bandwidth is odd  and current PRB is upper band
-	  printf("baseRB %d, halfPRBs %d, N_RB_DL %d, baseRB-halfRBs %d,offset %d\n",baseRB,halfRBs,frame_parms->N_RB_DL,baseRB-halfRBs,12 * (baseRB - halfRBs) - 6);
           re_offset += 12 * (baseRB - halfRBs) - 6;
 #ifdef DEBUG_NR_PUCCH_TX
         printf("4   ");

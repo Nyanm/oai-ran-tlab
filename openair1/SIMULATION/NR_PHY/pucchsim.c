@@ -126,7 +126,7 @@ int main(int argc, char **argv)
   // uint8_t extended_prefix_flag=0;
   FILE *input_fd = NULL;
   // uint8_t nacktoack_flag=0;
-  int16_t amp = 0x7FFF;
+  int16_t amp = 0x1000;
   int nr_slot_tx = 0;
   int nr_frame_tx = 0;
   uint64_t actual_payload = 0, payload_received = 0;
@@ -606,13 +606,13 @@ int main(int argc, char **argv)
       for (int aatx = 0; aatx < 1; aatx++)
         bzero(txdataF[aatx], frame_parms->ofdm_symbol_size * sizeof(int));
       if (format == 0 && do_DTX == 0) {
-        nr_generate_pucch0(UE, txdataF, frame_parms, amp, nr_slot_tx, &pucch_tx_pdu);
+        nr_generate_pucch0(txdataF, frame_parms, amp, nr_slot_tx, &pucch_tx_pdu);
       } else if (format == 1 && do_DTX == 0) {
-        nr_generate_pucch1(UE, txdataF, frame_parms, amp, nr_slot_tx, &pucch_tx_pdu);
+        nr_generate_pucch1(txdataF, frame_parms, amp, nr_slot_tx, &pucch_tx_pdu);
       } else if (format == 2 && do_DTX == 0) {
-        nr_generate_pucch2(UE, txdataF, frame_parms, amp, nr_slot_tx, &pucch_tx_pdu);
+        nr_generate_pucch2(txdataF, frame_parms, amp, nr_slot_tx, &pucch_tx_pdu);
       } else if (format == 3 && do_DTX == 0) {
-        nr_generate_pucch3_4(UE, txdataF, frame_parms, amp, nr_slot_tx, &pucch_tx_pdu);
+        nr_generate_pucch3_4(txdataF, frame_parms, amp, nr_slot_tx, &pucch_tx_pdu);
       }
 
       // SNR Computation
@@ -645,7 +645,7 @@ int main(int argc, char **argv)
       }
 
       random_channel(UE2gNB, 0);
-      freq_channel(UE2gNB, N_RB_DL, 2 * N_RB_DL + 1, 15 << mu);
+      freq_channel(UE2gNB, N_RB_DL, 12 * N_RB_DL + 1, 15 << mu);
       for (int symb = 0; symb < nrofSymbols; symb++) {
         int i0 = (startingSymbolIndex + symb) * gNB->frame_parms.ofdm_symbol_size;
         for (int re = 0; re < N_RB_DL * 12; re++) {
@@ -657,10 +657,10 @@ int main(int argc, char **argv)
             double txr = (double)(((int16_t *)txdataF[0])[(i << 1)]);
             double txi = (double)(((int16_t *)txdataF[0])[1 + (i << 1)]);
             double rxr = {0}, rxi = {0};
-            for (int l = 0; l < UE2gNB->channel_length; l++) {
-              rxr = txr * UE2gNB->chF[aarx][l].r - txi * UE2gNB->chF[aarx][l].i;
-              rxi = txr * UE2gNB->chF[aarx][l].i + txi * UE2gNB->chF[aarx][l].r;
-            }
+            //for (int l = 0; l < UE2gNB->channel_length; l++) {
+              rxr = txr * UE2gNB->chF[aarx][re].r - txi * UE2gNB->chF[aarx][re].i;
+              rxi = txr * UE2gNB->chF[aarx][re].i + txi * UE2gNB->chF[aarx][re].r;
+            //}
             double rxr_tmp = rxr * phasor.r - rxi * phasor.i;
             rxi = rxr * phasor.i + rxi * phasor.r;
             rxr = rxr_tmp;
@@ -669,7 +669,7 @@ int main(int argc, char **argv)
             rxdataF[aarx][i].r = (int16_t)(tx_level_fp * (rxr + nr) / sqrt((double)txlev));
             rxdataF[aarx][i].i = (int16_t)(tx_level_fp * (rxi + ni) / sqrt((double)txlev));
 
-            if (n_trials == 1 /*&& fabs(txr) > 0*/)
+            if (n_trials == 1 && fabs(txr) > 0)
               printf("symb %d, re %d , aarx %d : txr %f, txi %f, chr %f, chi %f, nr %f, ni %f, rxr %f, rxi %f => %d,%d\n",
                      symb,
                      re,
@@ -899,7 +899,7 @@ int main(int argc, char **argv)
   free(RC.gNB[0]);
   free(RC.gNB);
 
-  term_nr_ue_signal(UE, 1);
+  term_nr_ue_signal(UE);
   free(UE);
 
   for (int aatx = 0; aatx < n_tx; aatx++) {
