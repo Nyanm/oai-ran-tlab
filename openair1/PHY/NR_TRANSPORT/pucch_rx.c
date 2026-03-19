@@ -54,7 +54,7 @@
 #include "T.h"
 #include "nr_phy_common.h"
 
-#define DEBUG_NR_PUCCH_RX 1
+//#define DEBUG_NR_PUCCH_RX 1
 //#define DELAYEST
 void nr_fill_pucch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pucch_pdu_t *pucch_pdu)
 {
@@ -1460,7 +1460,7 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
       for (int n = 0; n < nb_re_dmrs; n++) { // generating low papr sequences
         const c16_t angle = {lround(32767 * cos(alpha * n)), lround(32767 * sin(alpha * n))};
         const c16_t table = {table_5_2_2_2_2_Re[u][n], table_5_2_2_2_2_Im[u][n]};
-        r_u_v_alpha_delta_dmrs[n+(d*nb_re_dmrs)] = c16mulRealShift(c16mulShift(angle, table, 15), amp, 15);
+        r_u_v_alpha_delta_dmrs[n+(d*nb_re_dmrs)] = /*c16mulRealShift(*/c16mulShift(angle, table, 15)/*, amp, 15)*/;
 	    r_u_v_alpha_delta_dmrs[n+(d*nb_re_dmrs)].i = -r_u_v_alpha_delta_dmrs[n+(d*nb_re_dmrs)].i;
 #ifdef DEBUG_NR_PUCCH_RX
         /*
@@ -1812,23 +1812,31 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
 	        log_dump(PHY,(c16_t*)rext,4,LOG_DUMP_C16,"rext0:");
 	        log_dump(PHY,(c16_t*)rext2,4,LOG_DUMP_C16,"rext20:");
 	        log_dump(PHY,(c16_t*)modcw,4,LOG_DUMP_C16,"cw0:");
+		printf("ci %d\n",ci);
 #endif
                 simde__m128i re = simde_mm_madd_epi16(modcw[ci], rext[0]);
                 simde__m128i im = simde_mm_madd_epi16(modcw[ci++], rext2[0]);
+		ci &= 3; // Note: this becomes 7 for pi4_BPSK
 #ifdef DEBUG_NR_PUCCH_RX
+		log_dump(PHY,((int32_t*)&re),2,LOG_DUMP_C32,"re:");
 	        log_dump(PHY,(c16_t*)(rext+1),4,LOG_DUMP_C16,"rext1:");
 	        log_dump(PHY,(c16_t*)(rext2+1),4,LOG_DUMP_C16,"rext21:");
 	        log_dump(PHY,(c16_t*)(modcw+1),4,LOG_DUMP_C16,"cw1:");
+		printf("ci %d\n",ci);
 #endif
                 simde__m128i re2 = simde_mm_madd_epi16(modcw[ci], rext[1]);
                 simde__m128i im2 = simde_mm_madd_epi16(modcw[ci++], rext2[1]);
+		ci &= 3; // Note: this becomes 7 for pi4_BPSK
 #ifdef DEBUG_NR_PUCCH_RX
+		log_dump(PHY,((int32_t*)&re2),2,LOG_DUMP_C32,"re2:");
 	        log_dump(PHY,(c16_t*)(rext+2),4,LOG_DUMP_C16,"rext2:");
 	        log_dump(PHY,(c16_t*)(rext2+2),4,LOG_DUMP_C16,"rext22:");
 	        log_dump(PHY,(c16_t*)(modcw+2),4,LOG_DUMP_C16,"cw2:");
+		printf("ci %d\n",ci);
 #endif
                 simde__m128i re3 = simde_mm_madd_epi16(modcw[ci], rext[2]);
                 simde__m128i im3 = simde_mm_madd_epi16(modcw[ci++], rext2[2]);
+		ci &= 3; // Note: this becomes 7 for pi4_BPSK
                 re = simde_mm_add_epi32(re, simde_mm_add_epi32(re2,re3));
                 im = simde_mm_add_epi32(im, simde_mm_add_epi32(im2,im3));
                 re = simde_mm_hadd_epi32(re, re);
@@ -1852,7 +1860,6 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
                        sum_of_prod[group][cd][aa].r,
                        sum_of_prod[group][cd][aa].i);
 #endif
-		ci &= 3; // Note: this becomes 7 for pi4_BPSK
 	      } //group
 	    } // symb loop
   	  } // aa loop
