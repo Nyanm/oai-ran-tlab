@@ -49,7 +49,7 @@ COPY . .
 RUN wget http://fast.dpdk.org/rel/dpdk-20.11.9.tar.xz && \
     tar -xvf dpdk-20.11.9.tar.xz && \
     cd dpdk-stable-20.11.9 && \
-    meson build && \
+    meson setup -Dmachine=default build && \
     ninja -C build && \
     ninja install -C build
 
