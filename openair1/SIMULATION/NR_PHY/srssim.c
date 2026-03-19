@@ -95,7 +95,7 @@ int main(int argc, char *argv[])
   double **s_re, **s_im, **r_re, **r_im;
   int trial, n_trials = 1, delay = 0;
   double maxDoppler = 0.0;
-  uint8_t n_tx = 1, n_rx = 1;
+  uint8_t n_tx = 1, n_rx = 1, n_ports = 1;
   channel_desc_t *UE2gNB;
   uint8_t extended_prefix_flag = 0;
   SCM_t channel_model = AWGN;
@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
   InitSinLUT();
 
   int c;
-  while ((c = getopt(argc, argv, "--:O:a:b:c:d:e:f:g:h:i:kl:m:n:p:s:u:y:z:A:B:C:H:PR:S:L:")) != -1) {
+  while ((c = getopt(argc, argv, "--:O:a:b:c:d:e:f:g:h:i:kl:m:n:p:q:s:u:y:z:A:B:C:H:PR:S:L:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -159,7 +159,7 @@ int main(int argc, char *argv[])
 
       case 'e':
         srs_comb_size = atoi(optarg);
-        AssertFatal(srs_comb_size >= 0 && srs_comb_size < 2, "comb_size %d is not in 0 or 1\n", srs_comb_size);
+        AssertFatal(srs_comb_size >= 0 && srs_comb_size < 3, "comb_size %d is not between 0 or 2\n", srs_comb_size);
         break;
 
       case 'f':
@@ -168,6 +168,8 @@ int main(int argc, char *argv[])
           AssertFatal(srs_comb_offset >= 0 && srs_comb_offset <= 1, "comb_offset %d is not in 0...1\n", srs_comb_offset);
         } else if (srs_comb_size == 1) {
           AssertFatal(srs_comb_offset >= 0 && srs_comb_offset <= 3, "comb_offset %d is not in 0...3\n", srs_comb_offset);
+        } else if (srs_comb_size == 2) {
+          AssertFatal(srs_comb_offset >= 0 && srs_comb_offset <= 7, "comb_offset %d is not in 0...7\n", srs_comb_offset);
         }
         break;
 
@@ -219,9 +221,11 @@ int main(int argc, char *argv[])
       case 'i':
         srs_cyclic_shift = atoi(optarg);
         if (srs_comb_size == 0) {
-          AssertFatal(srs_cyclic_shift >= 0 && srs_cyclic_shift <= 7, "comb_shift %d is not in 0...7\n", srs_cyclic_shift);
+          AssertFatal(srs_cyclic_shift >= 0 && srs_cyclic_shift <= 8, "cyclic_shift %d is not in 0...8\n", srs_cyclic_shift);
         } else if (srs_comb_size == 1) {
-          AssertFatal(srs_cyclic_shift >= 0 && srs_cyclic_shift <= 11, "comb_shift %d is not in 0...11\n", srs_cyclic_shift);
+          AssertFatal(srs_cyclic_shift >= 0 && srs_cyclic_shift <= 12, "cyclic_shift %d is not in 0...12\n", srs_cyclic_shift);
+        } else if (srs_comb_size == 2) {
+          AssertFatal(srs_cyclic_shift >= 0 && srs_cyclic_shift <= 6, "cyclic_shift %d is not in 0...6\n", srs_cyclic_shift);
         }
         break;
 
@@ -238,6 +242,14 @@ int main(int argc, char *argv[])
         extended_prefix_flag = 1;
         break;
 
+      case 'q':
+        n_ports = atoi(optarg);
+        if ((n_ports < 0) || (n_ports > 3)) {
+          printf("Unsupported number of antenna ports %d\n", n_ports);
+          exit(-1);
+        }
+        break;
+
       case 's':
         snr0 = atof(optarg);
         printf("Setting SNR0 to %f\n", snr0);
@@ -249,7 +261,7 @@ int main(int argc, char *argv[])
 
       case 'y':
         n_tx = atoi(optarg);
-        if ((n_tx == 0) || (n_tx > 4)) {
+        if ((n_tx == 0) || (n_tx > 8)) {
           printf("Unsupported number of tx antennas %d\n", n_tx);
           exit(-1);
         }
@@ -304,6 +316,7 @@ int main(int argc, char *argv[])
         printf("-k 3/4 sampling\n");
         printf("-n Number of trials to simulate\n");
         printf("-p Use extended prefix mode\n");
+        printf("-q number of antenna ports, 0 (1 port), 1 (2 ports), 2 (4 ports), 3 (8 ports)\n");
         printf("-s Starting SNR, runs from SNR0 to SNR0 + 10 dB if ending SNR isn't given\n");
         printf("-S Ending SNR, runs from SNR0 to SNR1\n");
         printf("-u Set the numerology\n");
@@ -320,6 +333,11 @@ int main(int argc, char *argv[])
 
   logInit();
   set_glog(loglvl);
+
+  if ((1 << n_ports) > min(n_tx, n_rx)) {
+    printf("Unsupported port configuration\n");
+    exit(-1);
+  }
 
   int ret = 1;
 
@@ -424,9 +442,7 @@ int main(int argc, char *argv[])
                                 .bwp_start = NRRIV2PRBOFFSET(locationAndBandwidth, 275),
                                 .subcarrier_spacing = fp->numerology_index,
                                 .cyclic_prefix = extended_prefix_flag,
-                                .num_ant_ports = n_tx == 4   ? 2
-                                                 : n_tx == 2 ? 1
-                                                             : 0,
+                                .num_ant_ports = n_ports,
                                 .num_symbols = nb_symb_srs,
                                 .num_repetitions = 0, // Value: 0 = 1, 1 = 2, 2 = 4
                                 .time_start_position = fp->symbols_per_slot - 1 - srs_start_symbol,
@@ -550,7 +566,7 @@ int main(int argc, char *argv[])
     int tao_ns_count = 0;
     for (trial = 0; trial < n_trials && !stop; trial++) {
       // Estimate noise power from the transmitter level and SNR
-      double sigma = compute_noise_variance(txlev_sum, ofdm_symbol_size, srs_pdu.bwp_size, 1, SNR, n_trials);
+      double sigma = compute_noise_variance(txlev_sum, ofdm_symbol_size, srs_pdu.bwp_size, n_ports, SNR, n_trials);
 
       //----------- Apply propagation channel ----------------------------
       multipath_channel(UE2gNB, s_re, s_im, r_re, r_im, slot_length, 0, (n_trials == 1) ? 1 : 0);

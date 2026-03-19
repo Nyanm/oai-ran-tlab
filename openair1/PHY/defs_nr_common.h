@@ -72,8 +72,7 @@
 #define MAX_NUM_NR_RE (4*14*273*12)
 
 #define MAX_NUM_NR_SRS_SYMBOLS 4
-#define MAX_NUM_NR_SRS_AP 4
-
+#define MAX_NUM_NR_SRS_AP 8
 
 #define MAX_DELAY_COMP 20
 

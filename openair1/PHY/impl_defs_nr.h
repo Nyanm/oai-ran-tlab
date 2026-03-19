@@ -48,7 +48,7 @@
 #define MAX_NR_OF_SRS_RESOURCES_PER_SET    (1)
 
 #define NR_NUMBER_OF_SUBFRAMES_PER_FRAME   (10)
-#define MAX_NROFSRS_PORTS                  (4)
+#define MAX_NROFSRS_PORTS (8)
 
 /* TS 38.211 Table 4.3.2-1: Number of OFDM symbols per slot, slots per frame, and slots per subframe for normal cyclic prefix */
 #define MU_NUMBER                          (5)
@@ -163,13 +163,9 @@ typedef struct TDD_UL_DL_SlotConfig_s {
 *
 ************************************************************************/
 
-static const int16_t SRS_antenna_port[MAX_NROFSRS_PORTS] = {1000, 1001, 1002, 1003};
+static const int16_t SRS_antenna_port[MAX_NROFSRS_PORTS] = {1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007};
 
-typedef enum {
-  port1           = 1,
-  port2           = 2,
-  port4           = 4
-} nrof_Srs_Ports_t;
+typedef enum { port1 = 1, port2 = 2, port4 = 4, port8 = 8 } nrof_Srs_Ports_t;
 
 typedef enum {
   neitherHopping  = 0,
