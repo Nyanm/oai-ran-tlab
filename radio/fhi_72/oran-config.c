@@ -443,17 +443,16 @@ void print_fh_config(const struct xran_fh_config *fh_config)
 #endif
 }
 
-static uint64_t get_u64_mask(const paramdef_t *pd)
+static void get_u128_mask(const paramdef_t *pd, uint64_t *u0t63, uint64_t *u64t127)
 {
   DevAssert(pd != NULL);
   AssertFatal(pd->numelt > 0, "no entries for creation of mask\n");
-  uint64_t mask = 0;
   for (int i = 0; i < pd->numelt; ++i) {
     int num = pd->iptr[i];
-    AssertFatal(num >= 0 && num < 64, "cannot put element of %d in 64-bit mask\n", num);
-    mask |= 1LL << num;
+    AssertFatal(num >= 0 && num < 128, "cannot put element of %d in 128-bit mask\n", num);
+    uint64_t *mask = num < 64 ? u0t63 : u64t127;
+    *mask |= 1LL << (num % 64);
   }
-  return mask;
 }
 
 #ifdef F_RELEASE
@@ -521,8 +520,7 @@ static bool set_fh_io_cfg(struct xran_io_cfg *io_cfg, const paramdef_t *fhip, in
     these parameters are machine specific */
   io_cfg->core = *gpd(fhip, nump, ORAN_CONFIG_IO_CORE)->iptr; // core used for IO; absolute CPU core ID for xran library, it should be an isolated core
   io_cfg->system_core = *gpd(fhip, nump, ORAN_CONFIG_SYSTEM_CORE)->iptr; // absolute CPU core ID for DPDK control threads, it should be an isolated core
-  io_cfg->pkt_proc_core = get_u64_mask(gpd(fhip, nump, ORAN_CONFIG_WORKER_CORES)); // worker mask 0-63
-  io_cfg->pkt_proc_core_64_127 = 0x0; // worker mask 64-127; to be used if machine supports more than 64 cores
+  get_u128_mask(gpd(fhip, nump, ORAN_CONFIG_WORKER_CORES), &io_cfg->pkt_proc_core, &io_cfg->pkt_proc_core_64_127); // worker masks 0-63 and 64-127
   io_cfg->pkt_aux_core = 0; // sample app says 0 = "do not start"
   io_cfg->timing_core = *gpd(fhip, nump, ORAN_CONFIG_IO_CORE)->iptr; // core used by xran
 
