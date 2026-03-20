@@ -57,6 +57,11 @@
 #include "LAYER2/NR_MAC_COMMON/nr_mac_extern.h"
 #include "LAYER2/RLC/rlc.h"
 
+#include "RRC/NR_UE/rrc_defs.h"
+extern NR_SL_SchedulerConfig_t nr_sl_scheduler_config;
+
+
+
 extern const int pscch_tda[2];
 extern const int pscch_rb_table[5];
 //#define SRS_DEBUG
@@ -3493,25 +3498,57 @@ bool nr_ue_sl_pssch_scheduler(NR_UE_MAC_INST_t *mac,
   */
   /* ---------------- end Jin TDMA ---------------- */
   /* ---------------- Jin TDMA: round-robin, N-UE generalised ---------------- */
+  /*
   uint16_t chosen_uid = 0;
-  const int num_peers = CUR_SL_UE_CONNECTIONS; /* peers per UE = total_UEs - 1 */
+  const int num_peers = CUR_SL_UE_CONNECTIONS; // peers per UE = total_UEs - 1 
 
   if (get_nrUE_params()->sync_ref) {
-    /* Sync-ref (uid=0) cycles through all non-zero peer UIDs round-robin */
-    /* Each peer gets one slot in a repeating window of num_peers slots    */
-    chosen_uid = (slot % num_peers) + 1;  /* gives 1..num_peers */
+    // Sync-ref (uid=0) cycles through all non-zero peer UIDs round-robin 
+    // Each peer gets one slot in a repeating window of num_peers slots    
+    chosen_uid = (slot % num_peers) + 1;  // gives 1..num_peers
   } else {
-    /* Non-sync-ref UEs: each owns one slot per window of num_peers slots.
-    * src_id is 1-based (1..num_peers), so own slot index = src_id - 1   */
+    //Non-sync-ref UEs: each owns one slot per window of num_peers slots.
+    // src_id is 1-based (1..num_peers), so own slot index = src_id - 1   
     const int own_slot_in_window = (int)mac->src_id - 1;
     if ((slot % num_peers) != own_slot_in_window)
-      return false;             /* not my TX slot */
-    chosen_uid = 0;             /* always send uplink to sync-ref */
+      return false;             //not my TX slot 
+    chosen_uid = 0;             // always send uplink to sync-ref 
   }
 
   LOG_D(NR_MAC, "[SL-TDMA-20] me=%u frame=%u slot=%u chosen_uid=%u num_peers=%d\n",
         mac->src_id, frame, slot, chosen_uid, num_peers);
+  */
   /* ---------------- end Jin TDMA ---------------- */
+  /* ---------------- Jin TDMA Hardcoded : parameters push from SLC---------------- */
+    uint16_t chosen_uid = 0;
+    const int num_peers = CUR_SL_UE_CONNECTIONS;
+
+    if (get_nrUE_params()->sync_ref) {
+        // sync-ref cycles through all peer UIDs regardless
+        chosen_uid = (slot % num_peers) + 1;
+    } else {
+        int own_slot_in_window;
+        uint8_t my_ue_id = (uint8_t)(mac->src_id - 1); // 0-based
+
+        if (nr_sl_scheduler_config.valid &&
+            nr_sl_scheduler_config.action == 1 &&
+            my_ue_id < MAX_UE_NR_CAPABILITY_SIZE) {
+            // SLC_C has assigned a slot for this UE
+            own_slot_in_window = nr_sl_scheduler_config.sfid[my_ue_id];
+            LOG_D(NR_MAC, "[SLC_C] UE%d using dynamic slot %d\n",
+                  my_ue_id, own_slot_in_window);
+        } else {
+            // fallback: UE id == slot index
+            own_slot_in_window = (int)mac->src_id - 1;
+            LOG_D(NR_MAC, "[SLC_C] UE%d using default slot %d\n",
+                  my_ue_id, own_slot_in_window);
+        }
+
+        if ((slot % num_peers) != own_slot_in_window)
+            return false;
+        chosen_uid = 0;
+    }
+/* ---------------- end Jin TDMA push from SLC---------------- */
 
 
   SL_UE_iterator(UE_info->list, UE) {

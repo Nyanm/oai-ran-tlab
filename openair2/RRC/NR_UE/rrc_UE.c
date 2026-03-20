@@ -77,14 +77,18 @@
 
 // for NR_PC5 Controller
 int ctrl_sock_fd;
-#define BUFSIZE 1024
+#define BUFSIZE 4096 //Jin enlarge bufsize 1024 origin
 struct sockaddr_in prose_ctl_addr;
 int slrb_id;
 //int send_ue_information = 0;
 NR_SL_UE_STATE_t On_Off_Net = NR_UE_STATE_OFF_NETWORK;
 // end
 
-
+NR_SL_SchedulerConfig_t nr_sl_scheduler_config = {
+    .sfid   = {0, 1, 2, 3, 4, 5, 6, 7}, //JinN: UE per slot, now it's 8 max, need to be updated for more
+    .action = 1,
+    .valid  = 0  // not yet overridden by SLC_C
+};
 
 NR_UE_RRC_INST_t *NR_UE_rrc_inst;
 /* NAS Attach request with IMSI */
@@ -2896,9 +2900,9 @@ void *nr_rrc_control_socket_thread_fct(void *arg)
      case NR_PC5_DISCOVERY_MESSAGE:
     	  LOG_I(RRC,"[NR_PC5DiscoveryMessage] NOT SUPPORTED YET\n");
          break;
-
+     /*
      case NR_MACReconfigurationRequest:
-	 		LOG_I(RRC,"[NR_MACReconfigurationRequest] Received a Scheduler Reconfiguration Request\n");
+	 		LOG_D(RRC,"[NR_MACReconfigurationRequest] !!!Received a Scheduler Reconfiguration Request\n");
 	  		memset(send_buf, 0, BUFSIZE);
 
 	        sl_ctrl_msg_send = calloc(1, sizeof(struct nr_sidelink_ctrl_element));
@@ -2917,10 +2921,56 @@ void *nr_rrc_control_socket_thread_fct(void *arg)
 	           exit(EXIT_FAILURE);
 	        }
 	  	 break;	 
+       */
+      case NR_MACReconfigurationRequest:
+      LOG_I(RRC,"[NR_MACReconfigurationRequest] sfid=%d action=%d\n",
+          sl_ctrl_msg_recv->nr_sidelinkPrimitive.pc5_scheduler_config.map.sfid,
+          sl_ctrl_msg_recv->nr_sidelinkPrimitive.pc5_scheduler_config.map.action);
+      {
+          uint8_t ue_sfid   = sl_ctrl_msg_recv->nr_sidelinkPrimitive
+                                  .pc5_scheduler_config.map.sfid;
+          uint8_t ue_action = sl_ctrl_msg_recv->nr_sidelinkPrimitive
+                                  .pc5_scheduler_config.map.action;
+
+          // sfid here encodes: upper 4 bits = ue_id, lower 4 bits = slot
+          // e.g. sfid=0x12 means UE1 gets slot 2
+          uint8_t ue_id   = (ue_sfid >> 4) & 0x0F;
+          uint8_t slot_id = (ue_sfid)      & 0x0F;
+
+          if (ue_id < MAX_UE_NR_CAPABILITY_SIZE) {
+              nr_sl_scheduler_config.sfid[ue_id] = slot_id;
+              nr_sl_scheduler_config.action       = ue_action;
+              nr_sl_scheduler_config.valid        = 1;
+              LOG_I(RRC,"[SLC_C] UE%d assigned slot %d\n", ue_id, slot_id);
+          } else {
+              LOG_E(RRC,"[SLC_C] ue_id %d out of range\n", ue_id);
+          }
+      }
+      // send Confirm back
+      memset(send_buf, 0, BUFSIZE);
+      sl_ctrl_msg_send = calloc(1, sizeof(struct nr_sidelink_ctrl_element));
+      sl_ctrl_msg_send->type = NR_MACReconfigurationConfirm;
+      sl_ctrl_msg_send->nr_sidelinkPrimitive.pc5_scheduler_config.map.sfid =
+          sl_ctrl_msg_recv->nr_sidelinkPrimitive.pc5_scheduler_config.map.sfid;
+      sl_ctrl_msg_send->nr_sidelinkPrimitive.pc5_scheduler_config.map.action =
+          sl_ctrl_msg_recv->nr_sidelinkPrimitive.pc5_scheduler_config.map.action;
+      memcpy((void *)send_buf, (void *)sl_ctrl_msg_send,
+            sizeof(struct nr_sidelink_ctrl_element));
+      free(sl_ctrl_msg_send);
+      prose_addr_len = sizeof(prose_ctl_addr);
+      n = sendto(ctrl_sock_fd, (char *)send_buf,
+                sizeof(struct nr_sidelink_ctrl_element), 0,
+                (struct sockaddr *)&prose_ctl_addr, prose_addr_len);
+      if (n < 0) {
+          LOG_E(RRC, "ERROR: Failed to send NR_MACReconfigurationConfirm\n");
+          exit(EXIT_FAILURE);
+      }
+      break;
+
 	  case NR_RRCReconfigurationRequest:
-	      LOG_I(RRC,"Received a  NR_RRCReconfigurationRequest from PC5 Controller \n");
+	      LOG_D(RRC,"!!!! Received a  NR_RRCReconfigurationRequest from PC5 Controller \n");
 		  
-	      LOG_I(RRC,"Send NR_RRCReconfigurationAccept to PC5 Controller \n");
+	      LOG_D(RRC,"!!!!  Send NR_RRCReconfigurationAccept to PC5 Controller \n");
 	      memset(send_buf, 0, BUFSIZE); 
 	      // Send the RRCReconfigurationAccept
 	      printf("[RRC] ------------------------------------------------\n");

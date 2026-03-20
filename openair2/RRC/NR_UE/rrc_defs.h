@@ -367,6 +367,15 @@ typedef struct {
     NR_RBMapping map;
 } NR_Scheduler_Configuration;
 
+//parameters for scheduler
+typedef struct {
+    uint8_t sfid[MAX_UE_NR_CAPABILITY_SIZE]; // slot index per UE (indexed by ue_id)
+    uint8_t action;                    // 1=active, 0=released
+    uint8_t valid;                     // 1=SLC_C has configured this
+} NR_SL_SchedulerConfig_t;
+
+extern NR_SL_SchedulerConfig_t nr_sl_scheduler_config;
+
 
 // 
 // Section of the E5 agent adjusting QoS
