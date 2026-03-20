@@ -56,6 +56,8 @@ PyObject *py_oaipylib_nr_polar_encoder(PyObject *self, PyObject *args) {
     uint64_t A;
     uint32_t **out; // output is allocated in OAI API function
     PyObject *out_obj = NULL;
+    PyObject *buffer_obj;
+    Py_buffer py_A;
     int32_t crcmask;
     uint8_t ones_flag;
     uint8_t messageType;
@@ -63,20 +65,34 @@ PyObject *py_oaipylib_nr_polar_encoder(PyObject *self, PyObject *args) {
     uint8_t aggregation_level;
 
     printf("Parsing input for py_oaipylib_nr_polar_encoder\n");
-    if (!PyArg_ParseTuple(args, "KibbHb", &A, &crcmask, &ones_flag,&messageType,&messageLength,&aggregation_level)) {
+    // parse the buffer object instead
+    if (!PyArg_ParseTuple(args, "OibbHb", &buffer_obj, &crcmask, &ones_flag,&messageType,&messageLength,&aggregation_level)) {
         return NULL;
     }
 
+    // extracting information from the buffer
+    if (PyObject_GetBuffer(buffer_obj, &py_A, PyBUF_ANY_CONTIGUOUS | PyBUF_FORMAT)==-1){
+	    return NULL;
+    }
+
+    if(py_A.ndim != 1) {
+	    PyErr_SetString(PyExc_TypeError, "Encoder input is expected to be 1-D array");
+            PyBuffer_Release(&py_A);
+	    return NULL;
+    }
+    //TODO: check types of the items in the array
+    // pass the raw buffer to the C function
     out = malloc(sizeof(uint32_t*));
     printf("Calling oai_lib_nr_polar_encoder(0x%x,%p,%x,%d,%d,%d,%d\n",
             A, out, crcmask, ones_flag, (int8_t)messageType, messageLength,aggregation_level);
-    int encodedLength = oai_lib_nr_polar_encoder(&A, (void**)out, crcmask, ones_flag, (int8_t)messageType, messageLength,aggregation_level);
+    int encodedLength = oai_lib_nr_polar_encoder(py_A.buf, (void**)out, crcmask, ones_flag, (int8_t)messageType, messageLength,aggregation_level);
     if (encodedLength <= 0) return oaipylib_raise_error("oai_lib_nr_polar_encoder failed");
 
          
     int encodedLength_u32 = (encodedLength>>5) + ((encodedLength&31) > 0 ? 1 : 0);
     printf("encoded Length %d (uint32 list size %d), encoded output %d(0x%x) (first 32 bits)\n",encodedLength,encodedLength_u32,(*out)[0],(*out)[0]);
-    
+    // once done working with the buffer, release it
+    PyBuffer_Release(&py_A);
     PyObject *result = PyList_New(encodedLength_u32);
     if (!result) {
         free(out);

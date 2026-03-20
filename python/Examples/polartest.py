@@ -1,3 +1,11 @@
+import math
+import random
+import os
+import sys
+sys.setdlopenflags(os.RTLD_NOW | os.RTLD_GLOBAL)
+import oaipylib as oai
+import numpy as np
+
 def nr_bit2byte_uint32_8(inp, array_size):
     array_ind = (array_size + 31) // 32
     out = [0] * array_size
@@ -93,16 +101,12 @@ def add_awgn_and_convert_q15(samples, SNRdB):
 
     return out
 
-import math
-import random
-import os
-import sys
-sys.setdlopenflags(os.RTLD_NOW | os.RTLD_GLOBAL)
-import oaipylib as oai
-oai.init()
+## Testing
 
+oai.init()
 # this is a 32-bit input with format 0 (PBCH) which has 864 encoded bits 
-encoded_output = oai.nr_polar_encoder(0x12345678,0,0,0,32,0)
+encoder_input = np.array([0x12345678], dtype=np.uint64)
+encoded_output = oai.nr_polar_encoder(encoder_input,0,0,0,32,0)
 bpsk_out = bpsk_from_uint32_words(encoded_output,864)
 #print(bpsk_out)
 SNRdB = 0;
