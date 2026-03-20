@@ -53,7 +53,6 @@ PyObject *py_oaipylib_shutdown(PyObject *self, PyObject *args) {
 PyObject *py_oaipylib_nr_polar_encoder(PyObject *self, PyObject *args) {
     (void)self;
 
-    uint64_t A;
     uint32_t **out; // output is allocated in OAI API function
     PyObject *out_obj = NULL;
     PyObject *buffer_obj;
@@ -74,17 +73,22 @@ PyObject *py_oaipylib_nr_polar_encoder(PyObject *self, PyObject *args) {
     if (PyObject_GetBuffer(buffer_obj, &py_A, PyBUF_ANY_CONTIGUOUS | PyBUF_FORMAT)==-1){
 	    return NULL;
     }
-
+    // check the array dimension
     if(py_A.ndim != 1) {
 	    PyErr_SetString(PyExc_TypeError, "Encoder input is expected to be 1-D array");
             PyBuffer_Release(&py_A);
 	    return NULL;
     }
-    //TODO: check types of the items in the array
+    // check types of the items in the array
+    // add also 'L' ?
+    if (strcmp(py_A.format,"Q") != 0) {
+       PyErr_SetString(PyExc_TypeError, "Expected an array of uint64_t");
+       PyBuffer_Release(&py_A);
+       return NULL;
+    }
     // pass the raw buffer to the C function
     out = malloc(sizeof(uint32_t*));
-    printf("Calling oai_lib_nr_polar_encoder(0x%x,%p,%x,%d,%d,%d,%d\n",
-            A, out, crcmask, ones_flag, (int8_t)messageType, messageLength,aggregation_level);
+    printf("Calling oai_lib_nr_polar_encoder(%p,%x,%d,%d,%d,%d)\n", out, crcmask, ones_flag, (int8_t)messageType, messageLength,aggregation_level);
     int encodedLength = oai_lib_nr_polar_encoder(py_A.buf, (void**)out, crcmask, ones_flag, (int8_t)messageType, messageLength,aggregation_level);
     if (encodedLength <= 0) return oaipylib_raise_error("oai_lib_nr_polar_encoder failed");
 

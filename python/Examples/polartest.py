@@ -105,7 +105,9 @@ def add_awgn_and_convert_q15(samples, SNRdB):
 
 oai.init()
 # this is a 32-bit input with format 0 (PBCH) which has 864 encoded bits 
-encoder_input = np.array([0x12345678], dtype=np.uint64)
+encoder_input = np.array([0x12345678],dtype='Q') #dtype=np.ulonglong)
+mv = memoryview(encoder_input)
+print(f"Python array format is: {mv.format}")
 encoded_output = oai.nr_polar_encoder(encoder_input,0,0,0,32,0)
 bpsk_out = bpsk_from_uint32_words(encoded_output,864)
 #print(bpsk_out)
