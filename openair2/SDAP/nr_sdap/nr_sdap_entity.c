@@ -191,13 +191,16 @@ static void nr_sdap_rx_entity(nr_sdap_entity_t *entity,
                               char *buf,
                               int size)
 {
-  /* The offset of the SDAP header, it might be 0 if has_sdap_rx is not true in the pdcp entity. */
-  int offset=0;
   bool sdap_ul_rx = false;
   bool sdap_dl_rx = false;
+  int qfi = -1;
   /* If SDAP header is disabled for this entity, bypass header parsing */
   if (entity->enable_sdap) {
-    uint8_t qfi = buf[0] & 0x3F; // QFI is always the first 6 bits in the first octet
+    /** Extract QFI from SDAP header for UL direction
+     * Per TS 37.324 §6.2.2, QFI is carried in SDAP header when SDAP header is present
+     * This QFI will be used in GTP-U extension header (PDU Session Container)
+     * for N3-U tunnel (the first 6 bits in the first octet) */
+    qfi = buf[0] & 0x3F;
     if (qfi >= SDAP_MAX_QFI) {
       LOG_E(SDAP, "Invalid QFI %d received in SDAP header\n", qfi);
       return;
@@ -209,10 +212,14 @@ static void nr_sdap_rx_entity(nr_sdap_entity_t *entity,
 
 
   if (is_gnb) { // gNB
+    /** QFI extracted from SDAP header for UL direction (N3-U tunnel)
+     * QFI range: 0..63 (6 bits) */
     if (sdap_ul_rx) { // UL Data/Control PDU with SDAP header
-      offset = SDAP_HDR_LENGTH;
+      DevAssert(qfi >= 0 && qfi < SDAP_MAX_QFI);
+      int offset = SDAP_HDR_LENGTH;
       nr_sdap_ul_hdr_t *sdap_hdr = (nr_sdap_ul_hdr_t *)buf;
-      LOG_D(SDAP, "RX Entity Received QFI:    %u\n", sdap_hdr->QFI);
+      DevAssert(sdap_hdr->QFI == qfi);
+      LOG_D(SDAP, "RX Entity Received QFI:    %u\n", qfi);
       LOG_D(SDAP, "RX Entity Received R bit:  %u\n", sdap_hdr->R);
       LOG_D(SDAP, "RX Entity Received DC bit: %u\n", sdap_hdr->DC);
 
@@ -225,22 +232,32 @@ static void nr_sdap_rx_entity(nr_sdap_entity_t *entity,
           LOG_D(SDAP, "RX Entity Received SDAP Control PDU\n");
           break;
       }
+      // Pushing SDAP SDU to GTP-U Layer
+      size_t gtp_len = size - offset;
+      uint8_t *gtp_buf = (uint8_t *)buf + offset;
+      LOG_D(SDAP,
+            "UL SDAP->GTP: ue=%lu pdu_session=%d qfi=%u payload_len=%zu\n",
+            ue_id,
+            pdusession_id,
+            qfi,
+            gtp_len);
+      /** Send to GTP-U with QFI marking for N3-U tunnel
+       * Per TS 29.281 §5.2, QFI is carried in PDU Session Container extension header
+       * For N3-U tunnels (qfi>=0), QFI is added to extension header for UL routing at UPF */
+      gtpv1uSendDirectWithQFI(*N3GTPUInst, ue_id, pdusession_id, qfi, gtp_buf, gtp_len);
+    } else {
+      /* N3-U tunnel with no SDAP header: no QFI marking */
+      DevAssert(qfi == -1);
+      LOG_D(SDAP, "UL SDAP->GTP: ue=%lu pdu_session=%d payload_len=%d\n", ue_id, pdusession_id, size);
+      gtpv1uSendDirect(*N3GTPUInst, ue_id, pdusession_id, (uint8_t *)buf, size, false, false);
     }
-
-    uint8_t *gtp_buf = (uint8_t *)(buf + offset);
-    size_t gtp_len = size - offset;
-
-    // Pushing SDAP SDU to GTP-U Layer
-    LOG_D(SDAP, "sending message to gtp size %ld\n", gtp_len);
-    // very very dirty hack gloabl var N3GTPUInst
-    instance_t inst = *N3GTPUInst;
-    gtpv1uSendDirect(inst, ue_id, pdusession_id, gtp_buf, gtp_len, false, false);
   } else { //nrUE
     /*
      * TS 37.324 5.2 Data transfer
      * 5.2.2 Downlink
      * if the DRB from which this SDAP data PDU is received is configured by RRC with the presence of SDAP header.
      */
+    int offset = 0;
     if (sdap_dl_rx) { // DL Data/Control PDU with SDAP header
       offset = SDAP_HDR_LENGTH;
       /*
@@ -461,6 +478,19 @@ static void nr_sdap_rm_qos_flows_from_drb(nr_sdap_entity_t *entity, const sdap_c
  * @param drb the DRB ID to be mapped */
 static void nr_sdap_qfi2drb_map_update(nr_sdap_entity_t *entity, const sdap_config_t *sdap)
 {
+  /* disabled SDAP: only one DRB per PDU session existing qfi2drb_table entries must match the DRB to be updated */
+  if (!entity->enable_sdap) {
+    for (int i = 0; i < SDAP_MAX_QFI; i++) {
+      int mapped = entity->qfi2drb_table[i].drb_id;
+      if (mapped != SDAP_NO_MAPPING_RULE) {
+        AssertFatal(mapped == sdap->drb_id,
+                    "PDU session %d: disabled SDAP allows only one DRB per PDU session (qfi2drb_table[%d] maps to DRB %d)\n",
+                    entity->pdusession_id,
+                    i,
+                    mapped);
+      }
+    }
+  }
   if (!entity->is_gnb) { // UE control PDU configuration
     nr_sdap_ue_control_pdu_config(entity, entity->ue_id, sdap);
   }
@@ -505,6 +535,12 @@ static void nr_sdap_add_entity(const int is_gnb, const ue_id_t ue_id, const sdap
   if (sdap->defaultDRB) {
     sdap_entity->default_drb = sdap->drb_id;
     LOG_I(SDAP, "Default DRB for the created SDAP entity: DRB %d \n", sdap_entity->default_drb);
+  }
+
+  if (!sdap_entity->enable_sdap) {
+    AssertFatal(sdap->mappedQFIs2AddCount <= 1,
+                "PDU session %d: disabled SDAP allows at most one QoS flow to add at entity creation\n",
+                sdap->pdusession_id);
   }
 
   // Add QoS flows to the DRB (initial configuration)

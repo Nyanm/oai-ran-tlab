@@ -333,7 +333,6 @@ void rrc_add_nsa_user(gNB_RRC_INST *rrc, x2ap_ENDC_sgnb_addition_req_t *m, sctp_
         .incoming_rb_id = drb_id,
         .pdusession_id = drb_id,
         .outgoing_teid = 0xffff, // will be updated later
-        .outgoing_qfi = -1, // don't put PDU session marker in F1 GTP
         .dst_addr.length = 32,
       };
       gtpv1u_gnb_create_tunnel_resp_t resp = {0};

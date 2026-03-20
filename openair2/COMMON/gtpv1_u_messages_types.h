@@ -143,11 +143,10 @@ typedef struct gtpv1u_gnb_create_tunnel_req_s {
   ue_id_t ue_id;
   // Outgoing TEID for the GTP tunnel
   teid_t outgoing_teid;
-  // Outgoing QFI
-  int outgoing_qfi;
   // PDU Session ID (1..255) identifies the PDU session
   int pdusession_id;
-  // Incoming RB
+  // Incoming TEID maps to this bearer ID:
+  // for F1-U, DRB ID; for N3-U, PDU session ID (tunnel key).
   uint16_t incoming_rb_id;
   // Destination TL address
   transport_layer_addr_t dst_addr;

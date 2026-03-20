@@ -17,6 +17,9 @@
 
 configmodule_interface_t *uniqCfg;
 
+/** QFI for NG-U GTP PDU Session Container */
+#define TEST_QOS_FLOW_ID 1
+
 #define DL 0
 #define UL 1
 
@@ -101,6 +104,7 @@ static e1ap_bearer_setup_req_t get_breq(uint32_t ue_id, long pdu_id, long drb_id
   bearer_req.pduSession = calloc_or_fail(1, sizeof(*bearer_req.pduSession));
   pdu_session_to_setup_t *pdu = &bearer_req.pduSession[0];
   pdu->sessionId = pdu_id;
+  pdu->sessionType = E1AP_PDU_Session_Type_ipv4;
   pdu->nssai = *nssai;
   pdu->securityIndication.integrityProtectionIndication = SECURITY_NOT_NEEDED;
   pdu->securityIndication.confidentialityProtectionIndication = SECURITY_NOT_NEEDED;
@@ -109,6 +113,18 @@ static e1ap_bearer_setup_req_t get_breq(uint32_t ue_id, long pdu_id, long drb_id
   DRB_nGRAN_to_setup_t *drb = &pdu->DRBnGRanList[0];
   drb->id = drb_id;
   drb->numQosFlow2Setup = 1;
+  drb->qosFlows[0] = (qos_flow_to_setup_t){
+      .qfi = TEST_QOS_FLOW_ID,
+      .qos_params.alloc_reten_priority.priority_level = E1AP_PriorityLevel_highest,
+      .qos_params.alloc_reten_priority.preemption_capability = E1AP_Pre_emptionCapability_shall_not_trigger_pre_emption,
+      .qos_params.alloc_reten_priority.preemption_vulnerability = E1AP_Pre_emptionVulnerability_not_pre_emptable,
+      .qos_params.qos_characteristics.qos_type = NON_DYNAMIC,
+      .qos_params.qos_characteristics.non_dynamic.fiveqi = 9,
+  };
+  /* Enable SDAP headers: tests QFI-aware forwarding, so UL needs SDAP QFI marking,
+   * and DL payload received on F1-U includes SDAP+PDCP headers. */
+  drb->sdap_config.sDAP_Header_UL = true;
+  drb->sdap_config.sDAP_Header_DL = true;
   drb->numCellGroups = 1;
 
   return bearer_req;
@@ -181,9 +197,10 @@ static up_params_t setup_cuup_ue_ng(sctp_assoc_t assoc_id, const e1ap_nssai_t *n
   in_addr_t addr_lo;
   inet_pton(AF_INET, ip, &addr_lo);
 
-  /* create the local tunnel (i.e., as if we were UPF) */
+  /* create the local tunnel (i.e., as if we were UPF) with N3-U bearer mappings */
   transport_layer_addr_t null_addr = {.length = 32};
-  teid_t teid_lo = newGtpuCreateTunnel(gtp_inst, ue_id, pdu_id, pdu_id, -1, -1, null_addr, NULL, recv_ng);
+  /* Intentionally disable non-SDAP callback on NG-U: this test must fail if packets arrive without QFI. */
+  teid_t teid_lo = newGtpuCreateTunnel(gtp_inst, ue_id, pdu_id, pdu_id, -1, null_addr, NULL, recv_ng);
   UP_TL_information_t tnl = {.teId = teid_lo};
   memcpy(&tnl.tlAddress, &addr_lo, 4);
 
@@ -263,9 +280,9 @@ static bool recv_f1(protocol_ctxt_t *ctxt,
                     const uint32_t *sourceL2Id,
                     const uint32_t *destinationL2Id)
 {
-  int skip_bytes = 2;
-  uint32_t payload;
-  memcpy(&payload, &buf[skip_bytes], sizeof(uint32_t));
+  /* F1-U DL payload contains PDCP (2 bytes) + SDAP (1 byte) header */
+  int skip_bytes = 3;
+  uint32_t *payload = (uint32_t *) &buf[skip_bytes];
   DevAssert((size - skip_bytes) % 4 == 0);
   int ue_id = ctxt->rntiMaybeUEid;
   struct ue_stat *s = &ue_stat[ue_id][DL];
@@ -284,7 +301,7 @@ static void setup_cuup_ue_f1(sctp_assoc_t assoc_id, uint32_t ue_id, instance_t g
   /* create tunnel (i.e., as if we were DU) */
   transport_layer_addr_t addr = {.length = 32};
   memcpy(addr.buffer, &rm.tl_info.tlAddress, 4);
-  teid_t teid_lo = newGtpuCreateTunnel(gtp_inst, ue_id, drb_id, drb_id, rm.tl_info.teId, -1, addr, recv_f1, NULL);
+  teid_t teid_lo = newGtpuCreateTunnel(gtp_inst, ue_id, drb_id, drb_id, rm.tl_info.teId, addr, recv_f1, NULL);
 
   up_params_t lo = {.tl_info.teId = teid_lo, .cell_group_id = rm.cell_group_id};
   inet_pton(AF_INET, ip, &lo.tl_info.tlAddress);
@@ -409,18 +426,19 @@ static void *sender_thread(void *v)
 {
   struct thr_data *d = v;
 
-  // Overhead: PDCP header (2 bytes) for UL packets
-  // SDAP headers are disabled, so only PDCP header is added
-  size_t oh = d->is_ul ? 2 : 0;
+  // UL F1-U payload overhead: PDCP header (2 bytes) + SDAP header (1 byte)
+  size_t oh = d->is_ul ? 3 : 0;
   size_t packet_len = d->data_len + oh;
   uint8_t buf[packet_len];
   memset(buf, 0, packet_len);
+  /* SDAP UL data PDU: bits[5:0]=QFI (TEST_QOS_FLOW_ID=1), bit6=R=0, bit7=DC=0 (data PDU) */
+  buf[2] = TEST_QOS_FLOW_ID;
   uint32_t *payload = (uint32_t *)(buf + oh);
   uint64_t to_send = (float)d->throughput / 8.0 * d->duration;
   const float pps_1ms = (float) d->throughput / 8.0 / d->data_len / 1000;
   float pps_1ms_nextwin = pps_1ms;
   int bearer = d->is_ul ? 4 : 1;
-
+  const int dl_qfi = TEST_QOS_FLOW_ID;
 
   //printf("sending %ld Mbps for %ld s => data %ld, %.3f pps\n", (float) d->throughput / 1000000.0, d->duration, to_send, pps_1ms);
 
@@ -435,9 +453,12 @@ static void *sender_thread(void *v)
     for (uint32_t i = 0; i < pps_now; ++i) {
       if (d->is_ul)
         write_pdcp_header(packet_count, PDCP_SN_LEN_12, buf);
-      memcpy(payload, &packet_count, sizeof(packet_count));
-      packet_count++;
-      gtpv1uSendDirect(d->inst, d->ue_id, bearer, (uint8_t *)buf, packet_len, false, false);
+      *payload = packet_count++;
+      if (d->is_ul) { // UL direction: F1-U tunnel
+        gtpv1uSendDirect(d->inst, d->ue_id, bearer, (uint8_t *)buf, packet_len, false, false);
+      } else { // DL direction: NG-U tunnel with SDAP enabled
+        gtpv1uSendDirectWithQFI(d->inst, d->ue_id, bearer, dl_qfi, (uint8_t *)buf, packet_len);
+      }
       d->total_data += d->data_len;
     }
 

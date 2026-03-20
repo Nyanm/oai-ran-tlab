@@ -63,12 +63,7 @@ static f1ap_up_tnl_t f1_drb_gtpu_create(const gtpv1u_gnb_create_tunnel_req_t *re
 {
   f1ap_up_tnl_t out = {0};
 
-  LOG_I(GTPU,
-        "Incoming DRB %d / PDU Session %d - UL TEID %d QFI %d\n",
-        req->incoming_rb_id,
-        req->pdusession_id,
-        req->outgoing_teid,
-        req->outgoing_qfi);
+  LOG_I(GTPU, "Incoming DRB %d / PDU Session %d - UL TEID %d\n", req->incoming_rb_id, req->pdusession_id, req->outgoing_teid);
 
   instance_t f1inst = get_f1_gtp_instance();
   DevAssert(f1inst >= 0);
@@ -335,12 +330,10 @@ static int handle_ue_context_drbs_setup(NR_UE_info_t *UE,
     // just put same number of tunnels in DL as in UL
     DevAssert(drb->up_ul_tnl_len == 1);
     resp_drb->up_dl_tnl_len = drb->up_ul_tnl_len;
-
     if (f1inst >= 0) { // we actually use F1-U
       // F1-U tunnel setup: 1 GTP-U tunnel per DRB
       gtpv1u_gnb_create_tunnel_req_t req = {.ue_id = UE->rnti,
                                             .outgoing_teid = drb->up_ul_tnl[0].teid,
-                                            .outgoing_qfi = -1, // don't put PDU session marker in F1 GTP
                                             .pdusession_id = drb->id,
                                             .incoming_rb_id = drb->id,
                                             .dst_addr.length = 32};
