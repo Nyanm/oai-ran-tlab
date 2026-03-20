@@ -34,7 +34,7 @@
     <class>Pull_Local_Registry</class>
     <desc>Pull Images from Local Registry</desc>
     <node>jetson2-oai</node>
-    <images>oai-nr-ue-cuda</images>
+    <images>oai-nr-ue</images>
     <tag_prefix>armv8_cuda_</tag_prefix>
   </testCase>
 
@@ -162,7 +162,7 @@
     <node>jetson2-oai</node>
     <yaml_path>ci-scripts/yaml_files/sa_b200_jetson_cuda_nrue</yaml_path>
     <analysis>
-      <services>oai-nr-ue-cuda</services>
+      <services>oai-nr-ue</services>
     </analysis>
   </testCase>
 
@@ -199,7 +199,7 @@
     <always_exec>true</always_exec>
     <desc>Clean Test Images on Test Server</desc>
     <node>jetson2-oai</node>
-    <images>oai-nr-ue-cuda</images>
+    <images>oai-nr-ue</images>
   </testCase>
 
   <testCase>
