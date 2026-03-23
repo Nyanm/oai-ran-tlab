@@ -177,7 +177,7 @@ index d0c238c..d20c44f 100644
  CPP_FLAGS_FULL := $(CPP_FLAGS) $(CPP_COMP) $(INC) $(DEF)
  CPP_FLAGS_FULL_SNC := $(CPP_FLAGS) $(CPP_COMP_SNC) $(INC) $(DEF)
 diff --git a/fhi_lib/lib/api/xran_fh_o_du.h b/fhi_lib/lib/api/xran_fh_o_du.h
-index 1261fa0..5d4f942 100644
+index 1261fa0..5318a86 100644
 --- a/fhi_lib/lib/api/xran_fh_o_du.h
 +++ b/fhi_lib/lib/api/xran_fh_o_du.h
 @@ -158,7 +158,7 @@ extern "C" {
@@ -185,7 +185,7 @@ index 1261fa0..5d4f942 100644
  #define XRAN_SSB_MAX_NUM_PRB         (XRAN_SSB_MAX_NUM_SC /  XRAN_NUM_OF_SC_PER_RB)
  
 -#define XRAN_MAX_FRAGMENT            (2)   /**< Max number of fragmentations in single symbol */
-+#define XRAN_MAX_FRAGMENT            (6)   /**< Max number of fragmentations in single symbol */
++#define XRAN_MAX_FRAGMENT            (7)   /**< Max number of fragmentations in single symbol */
  #define XRAN_MAX_RX_PKT_PER_SYM      (32)   /**< Max number of packets received in single symbol */
  #define XRAN_MAX_SET_BFWS            (64)  /**< Assumed 64Ant, BFP 9bit with 9K jumbo frame */
  
