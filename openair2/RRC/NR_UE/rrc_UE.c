@@ -483,7 +483,7 @@ static void get_sib19_schedinfo(NR_UE_RRC_SI_INFO *SI_info, NR_SI_SchedulingInfo
 
 static void nr_rrc_process_sib1(NR_UE_RRC_INST_t *rrc, NR_UE_RRC_SI_INFO *SI_info, NR_SIB1_t *sib1)
 {
-  if(g_log->log_component[NR_RRC].level >= OAILOG_DEBUG)
+//  if(g_log->log_component[NR_RRC].level >= OAILOG_DEBUG)
     xer_fprint(stdout, &asn_DEF_NR_SIB1, (const void *) sib1);
   LOG_A(NR_RRC, "SIB1 decoded\n");
   nr_timer_start(&SI_info->sib1_timer);
@@ -1083,9 +1083,9 @@ static bool nr_rrc_ue_process_masterCellGroup(NR_UE_RRC_INST_t *rrc,
     handle_rlf_detection(rrc);
     return false;
   }
-  if (LOG_DEBUGFLAG(DEBUG_ASN1)) {
+//  if (LOG_DEBUGFLAG(DEBUG_ASN1)) {
     xer_fprint(stdout, &asn_DEF_NR_CellGroupConfig, (const void *) cellGroupConfig);
-  }
+//  }
 
   bool ret = nr_rrc_cellgroup_configuration(rrc, cellGroupConfig, gNB_index, false);
   if (!ret)
@@ -2246,7 +2246,7 @@ static int8_t nr_rrc_ue_decode_ccch(NR_UE_RRC_INST_t *rrc, const NRRrcMacCcchDat
 
   dec_rval = uper_decode(NULL, &asn_DEF_NR_DL_CCCH_Message, (void **)&dl_ccch_msg, ind->sdu, ind->sdu_size, 0, 0);
 
-  if (LOG_DEBUGFLAG(DEBUG_ASN1))
+//  if (LOG_DEBUGFLAG(DEBUG_ASN1))
     xer_fprint(stdout, &asn_DEF_NR_DL_CCCH_Message, (void *)dl_ccch_msg);
 
   if ((dec_rval.code != RC_OK) && (dec_rval.consumed == 0)) {

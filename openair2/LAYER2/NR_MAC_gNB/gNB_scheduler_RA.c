@@ -1817,7 +1817,7 @@ static void nr_generate_Msg4_MsgB(module_id_t module_idP,
     }
 
     int r_pucch = nr_get_pucch_resource(coreset, UE->current_UL_BWP.pucch_Config, CCEIndex);
-    LOG_D(NR_MAC, "Msg4 r_pucch %d CCEIndex %d\n", r_pucch, CCEIndex);
+    LOG_I(NR_MAC, "Msg4 r_pucch %d CCEIndex %d\n", r_pucch, CCEIndex);
     int alloc = nr_acknack_scheduling(nr_mac, UE, frameP, slotP, UE->UE_beam_index, r_pucch, 1);
     if (alloc < 0) {
       LOG_D(NR_MAC,"Couldn't find a pucch allocation for ack nack (msg4) in frame %d slot %d\n", frameP, slotP);

@@ -37,6 +37,9 @@
 struct NR_MeasurementTimingConfiguration;
 struct NR_PDSCH_TimeDomainResourceAllocationList;
 
+#define PUCCH_0_2 0
+#define PUCCH_1_3 1
+
 // forward declaration of MAC configuration parameters, definition is included in C file
 typedef struct nr_mac_config_s nr_mac_config_t;
 typedef struct nr_mac_timers nr_mac_timers_t;

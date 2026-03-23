@@ -1309,6 +1309,13 @@ void nr_configure_pdcch(nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_pdu, NR_Control
   pdcch_pdu->precoderGranularity = coreset->precoderGranularity;
 }
 
+int get_pucch_formats(const NR_ServingCellConfigCommon_t *scc) {
+  struct NR_PUCCH_ConfigCommon *pucch_ConfigCommon = scc->uplinkConfigCommon->initialUplinkBWP->pucch_ConfigCommon->choice.setup;
+  if (*pucch_ConfigCommon->pucch_ResourceCommon < 3)
+    return(PUCCH_0_2);   else
+    return(PUCCH_1_3);
+}
+
 int nr_get_pucch_resource(NR_ControlResourceSet_t *coreset,
                           NR_PUCCH_Config_t *pucch_Config,
                           int CCEIndex) {
@@ -1394,9 +1401,11 @@ void nr_configure_pucch(nfapi_nr_pucch_pdu_t *pucch_pdu,
 
   NR_PUCCH_Config_t *pucch_Config = current_BWP->pucch_Config;
   if (r_pucch < 0 || pucch_Config) {
-    LOG_D(NR_MAC, "pucch_acknak: Filling dedicated configuration for PUCCH\n");
-
-    int resource_id = get_pucch_resourceid(pucch_Config, O_uci, pucch_resource);
+    LOG_D(NR_MAC, "pucch_acknak: Filling dedicated configuration for PUCCH, O_sr %d, O_uci %d, O_ack %d\n",O_sr,O_uci,O_ack);
+// below: resource_id takes SR id if O_sr > 0 and we will use PUCCH format 1, otherwise ew search in the appropriate PUCCH Resource sets
+    int resource_id = (get_pucch_formats(scc) == PUCCH_1_3 && O_sr > 0 && O_uci <= 3) ? 
+	               pucch_Config->resourceToAddModList->list.array[pucch_resource]->pucch_ResourceId : 
+		       get_pucch_resourceid(pucch_Config, O_uci, pucch_resource);
 
     AssertFatal(pucch_Config->resourceToAddModList!=NULL,
                 "PUCCH resourceToAddModList is null\n");

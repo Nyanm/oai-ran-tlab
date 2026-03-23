@@ -222,7 +222,7 @@ static int get_pucch2_size(const int num_ant_ports)
   return (num_ant_ports <= 4 ? 8 : 16);
 }
 
-static int get_nb_pucch2_per_slot(const NR_ServingCellConfigCommon_t *scc, int bwp_size, const nr_pdsch_AntennaPorts_t *ap)
+static int get_nb_pucch2_3_per_slot(const NR_ServingCellConfigCommon_t *scc, int bwp_size, const nr_pdsch_AntennaPorts_t *ap)
 {
   const NR_TDD_UL_DL_Pattern_t *tdd = scc->tdd_UL_DL_ConfigurationCommon ? &scc->tdd_UL_DL_ConfigurationCommon->pattern1 : NULL;
   const int n_slots_frame = slotsperframe[*scc->ssbSubcarrierSpacing];
@@ -231,16 +231,16 @@ static int get_nb_pucch2_per_slot(const NR_ServingCellConfigCommon_t *scc, int b
   int max_meas_report_period = 320; // slots
   int max_csi_reports = MAX_MOBILES_PER_GNB << 1; // 2 reports per UE (RSRP and RI-PMI-CQI)
   int available_report_occasions = max_meas_report_period * ul_slots_period / n_slots_period;
-  int nb_pucch2 = (max_csi_reports / (available_report_occasions + 1)) + 1;
-  int pucch2_size = get_pucch2_size(ap->N1 * ap->N2 * ap->XP);
+  int nb_pucch2_3 = (max_csi_reports / (available_report_occasions + 1)) + 1;
+  int pucch2_size = get_pucch_formats(scc) == PUCCH_0_2 ? get_pucch2_size(ap->N1 * ap->N2 * ap->XP) : 1;
   // in current implementation we need (nb_pucch2 * pucch2_size) prbs for PUCCH2
   // and MAX_MOBILES_PER_GNB prbs for PUCCH1
   // checked for validity in verify_radio_configuration
-  AssertFatal((nb_pucch2 * pucch2_size) + MAX_MOBILES_PER_GNB <= bwp_size,
+  AssertFatal((nb_pucch2_3 * pucch2_size) + MAX_MOBILES_PER_GNB <= bwp_size,
               "Cannot allocate all required PUCCH resources for max number of %d UEs in BWP with %d PRBs\n",
               MAX_MOBILES_PER_GNB,
               bwp_size);
-  return nb_pucch2;
+  return nb_pucch2_3;
 }
 
 NR_SearchSpace_t *rrc_searchspace_config(bool is_common,
@@ -1201,6 +1201,7 @@ void nr_rrc_config_ul_tda(NR_ServingCellConfigCommon_t *scc, int min_fb_delay, i
   qsort(tda_list->list.array, tda_list->list.count, sizeof(tda_list->list.array), tda_cmp);
 }
 
+
 static void set_dl_DataToUL_ACK(NR_PUCCH_Config_t *pucch_Config, int min_feedback_time, NR_SubcarrierSpacing_t subcarrierSpacing)
 {
   pucch_Config->dl_DataToUL_ACK = calloc(1,sizeof(*pucch_Config->dl_DataToUL_ACK));
@@ -1223,37 +1224,79 @@ static void config_pucch_resset0(const NR_ServingCellConfigCommon_t *scc,
 {
   NR_PUCCH_ResourceSet_t *pucchresset = calloc(1,sizeof(*pucchresset));
   pucchresset->pucch_ResourceSetId = 0;
-  NR_PUCCH_ResourceId_t *pucchid = calloc(1,sizeof(*pucchid));
-  *pucchid = 0;
-  asn1cSeqAdd(&pucchresset->resourceList.list,pucchid);
   pucchresset->maxPayloadSize = NULL;
+  int pucch_format = get_pucch_formats(scc);
 
-  if(uecap) {
-    long *pucch_F0_2WithoutFH = uecap->phy_Parameters.phy_ParametersFRX_Diff->pucch_F0_2WithoutFH;
-    AssertFatal(pucch_F0_2WithoutFH == NULL,"UE does not support PUCCH F0 without frequency hopping. Current configuration is without FH\n");
+
+  if (pucch_format == PUCCH_0_2) {
+    if(uecap) {
+      long *pucch_F0_2WithoutFH = uecap->phy_Parameters.phy_ParametersFRX_Diff->pucch_F0_2WithoutFH;
+      AssertFatal(pucch_F0_2WithoutFH == NULL,"UE does not support PUCCH F0 without frequency hopping. Current configuration is without FH\n");
+    }
+    NR_PUCCH_ResourceId_t *pucchid = calloc(1,sizeof(*pucchid));
+    *pucchid = 0;
+    asn1cSeqAdd(&pucchresset->resourceList.list,pucchid);
+    NR_PUCCH_Resource_t *pucchres0 = calloc(1,sizeof(*pucchres0));
+    pucchres0->pucch_ResourceId = *pucchid;
+    int pucch2_size = get_pucch2_size(ap->N1 * ap->N2 * ap->XP);
+    int num_pucch2 = get_nb_pucch2_3_per_slot(scc, curr_bwp, ap);
+    pucchres0->startingPRB = (pucch2_size * num_pucch2) + uid;
+    // checked for validity in verify_radio_configuration
+    AssertFatal(pucchres0->startingPRB < curr_bwp, "Not enough resources in current BWP (size %d) to allocate uid %d\n", curr_bwp, uid);
+    pucchres0->intraSlotFrequencyHopping = NULL;
+    pucchres0->secondHopPRB = NULL;
+    pucchres0->format.present = NR_PUCCH_Resource__format_PR_format0;
+    pucchres0->format.choice.format0 = calloc(1,sizeof(*pucchres0->format.choice.format0));
+    pucchres0->format.choice.format0->initialCyclicShift = 0;
+    pucchres0->format.choice.format0->nrofSymbols = 1;
+    pucchres0->format.choice.format0->startingSymbolIndex = 13;
+    asn1cSeqAdd(&pucch_Config->resourceToAddModList->list,pucchres0);
   }
+  else {
+	  // Assumptions here: for 14 symbols, frequency-hopping only, 2 Time occasions (w_i(m) orthogonal cover sequences)
+	  // don't make dependent on uid for format 1/3
+	  // create 8 PUCCH1 resources (2 PRBs + frequencyHopping, 2 TimeDomainOCC)
+    NR_PUCCH_ResourceId_t *pucchid; 
+    NR_PUCCH_Resource_t *pucchres = calloc(1,sizeof(*pucchres));
+    for (int pucch1_id=0 ; pucch1_id < 9; pucch1_id++) {
+      pucchid = calloc(1,sizeof(*pucchid));
+      pucchres = calloc(1,sizeof(*pucchres));
+      int alloc_id = pucch1_id;
+      if (pucch1_id != 8) { // 8 is for SR, so don't add to the resourceList
+        *pucchid = pucch1_id;
+        asn1cSeqAdd(&pucchresset->resourceList.list,pucchid);
+        pucchres->pucch_ResourceId = *pucchid;
+      }
+      else {
+        pucchres->pucch_ResourceId = 31;
+	alloc_id = 0;
+      } 
+      pucchres->intraSlotFrequencyHopping  = NULL;
+      pucchres->secondHopPRB = calloc(1,sizeof(*pucchres->secondHopPRB));
+      // these are CSI on PUCCH resources
+      int num_pucch3 = get_nb_pucch2_3_per_slot(scc,curr_bwp,ap);
+      if ((alloc_id&2) == 0) // startingPRB is at the bottom of the spectrum
+        pucchres->startingPRB = ((1+num_pucch3)>>1) + (alloc_id>>2); 
+      // +1 ensures this works if num_pucch3 is odd, where there is 1 more PUCCH3 resource in the lowest frequencies. We have (1+num_pucch3)>>1 positions taken by the first hop of pucch3 and num_pucch3>>1 for the second hop
+      else
+        pucchres->startingPRB = curr_bwp - ((1+num_pucch3)>>1) - (alloc_id>>2); 
 
-  int pucch2_size = get_pucch2_size(ap->N1 * ap->N2 * ap->XP);
-  NR_PUCCH_Resource_t *pucchres0 = calloc(1,sizeof(*pucchres0));
-  pucchres0->pucch_ResourceId = *pucchid;
-  int num_pucch2 = get_nb_pucch2_per_slot(scc, curr_bwp, ap);
-  pucchres0->startingPRB = (pucch2_size * num_pucch2) + uid;
-  // checked for validity in verify_radio_configuration
-  AssertFatal(pucchres0->startingPRB < curr_bwp, "Not enough resources in current BWP (size %d) to allocate uid %d\n", curr_bwp, uid);
-  pucchres0->intraSlotFrequencyHopping = NULL;
-  pucchres0->secondHopPRB = NULL;
-  pucchres0->format.present = NR_PUCCH_Resource__format_PR_format0;
-  pucchres0->format.choice.format0 = calloc(1,sizeof(*pucchres0->format.choice.format0));
-  pucchres0->format.choice.format0->initialCyclicShift = 0;
-  pucchres0->format.choice.format0->nrofSymbols = 1;
-  pucchres0->format.choice.format0->startingSymbolIndex = 13;
-  asn1cSeqAdd(&pucch_Config->resourceToAddModList->list,pucchres0);
+      *pucchres->secondHopPRB = curr_bwp - pucchres->startingPRB;
+      pucchres->format.present = NR_PUCCH_Resource__format_PR_format1;
+      pucchres->format.choice.format1 = calloc(1,sizeof(*pucchres->format.choice.format1));
+      pucchres->format.choice.format1->initialCyclicShift = (pucch1_id != 8) ? ((pucch1_id&1)<<1) : 4;
+      pucchres->format.choice.format1->nrofSymbols = 14;  // handle presence of SRS later
+      pucchres->format.choice.format1->startingSymbolIndex = 0;
+      pucchres->format.choice.format1->timeDomainOCC = 1-(alloc_id&1);
+      asn1cSeqAdd(&pucch_Config->resourceToAddModList->list,pucchres);
+    }
+  }
 
   asn1cSeqAdd(&pucch_Config->resourceSetToAddModList->list,pucchresset);
 }
 
 
-// PUCCH resource set 1 for configuration with O_uci > 2 bits (currently format2)
+// PUCCH resource set 1 for configuration with O_uci > 2 bits (currently format2/3)
 static void config_pucch_resset1(const NR_ServingCellConfigCommon_t *scc,
                                  NR_PUCCH_Config_t *pucch_Config,
                                  int uid,
@@ -1263,46 +1306,95 @@ static void config_pucch_resset1(const NR_ServingCellConfigCommon_t *scc,
 {
   NR_PUCCH_ResourceSet_t *pucchresset=calloc(1,sizeof(*pucchresset));
   pucchresset->pucch_ResourceSetId = 1;
-  NR_PUCCH_ResourceId_t *pucchressetid=calloc(1,sizeof(*pucchressetid));
-  *pucchressetid = 2;
-  asn1cSeqAdd(&pucchresset->resourceList.list,pucchressetid);
   pucchresset->maxPayloadSize = NULL;
+  int pucch_format = get_pucch_formats(scc);
 
-  if(uecap) {
-    long *pucch_F0_2WithoutFH = uecap->phy_Parameters.phy_ParametersFRX_Diff->pucch_F0_2WithoutFH;
-    AssertFatal(pucch_F0_2WithoutFH == NULL,"UE does not support PUCCH F2 without frequency hopping. Current configuration is without FH\n");
+  if (pucch_format == PUCCH_0_2 ) {
+    if(uecap) {
+      long *pucch_F0_2WithoutFH = uecap->phy_Parameters.phy_ParametersFRX_Diff->pucch_F0_2WithoutFH;
+      AssertFatal(pucch_F0_2WithoutFH == NULL,"UE does not support PUCCH F2 without frequency hopping. Current configuration is without FH\n");
+    }
+    NR_PUCCH_ResourceId_t *pucchressetid=calloc(1,sizeof(*pucchressetid));
+    *pucchressetid = 2;
+    asn1cSeqAdd(&pucchresset->resourceList.list,pucchressetid);
+    int pucch2_size = get_pucch2_size(ap->N1 * ap->N2 * ap->XP);
+    NR_PUCCH_Resource_t *pucchres2 = calloc(1,sizeof(*pucchres2));
+    pucchres2->pucch_ResourceId = *pucchressetid;
+    int num_pucch2 = get_nb_pucch2_3_per_slot(scc, curr_bwp, ap);
+    pucchres2->startingPRB = pucch2_size * (uid % num_pucch2);
+    pucchres2->intraSlotFrequencyHopping = NULL;
+    pucchres2->secondHopPRB = NULL;
+    pucchres2->format.present = NR_PUCCH_Resource__format_PR_format2;
+    pucchres2->format.choice.format2 = calloc(1,sizeof(*pucchres2->format.choice.format2));
+    pucchres2->format.choice.format2->nrofPRBs = pucch2_size;
+    pucchres2->format.choice.format2->nrofSymbols = 1;
+    pucchres2->format.choice.format2->startingSymbolIndex = 13;
+    asn1cSeqAdd(&pucch_Config->resourceToAddModList->list,pucchres2);
+
+
+    pucch_Config->format2 = calloc(1,sizeof(*pucch_Config->format2));
+    pucch_Config->format2->present = NR_SetupRelease_PUCCH_FormatConfig_PR_setup;
+    NR_PUCCH_FormatConfig_t *pucchfmt2 = calloc(1,sizeof(*pucchfmt2));
+    pucch_Config->format2->choice.setup = pucchfmt2;
+    pucchfmt2->interslotFrequencyHopping = NULL;
+    pucchfmt2->additionalDMRS = NULL;
+    pucchfmt2->maxCodeRate = calloc(1,sizeof(*pucchfmt2->maxCodeRate));
+    *pucchfmt2->maxCodeRate = NR_PUCCH_MaxCodeRate_zeroDot15;
+    pucchfmt2->nrofSlots = NULL;
+    pucchfmt2->pi2BPSK = NULL;
+
+    // to check UE capabilities for that in principle
+    pucchfmt2->simultaneousHARQ_ACK_CSI = calloc(1,sizeof(*pucchfmt2->simultaneousHARQ_ACK_CSI));
+    *pucchfmt2->simultaneousHARQ_ACK_CSI = NR_PUCCH_FormatConfig__simultaneousHARQ_ACK_CSI_true;
   }
+  else {
+    NR_PUCCH_ResourceId_t *pucchid; 
+    NR_PUCCH_Resource_t *pucchres = calloc(1,sizeof(*pucchres));
+    int num_pucch3 = get_nb_pucch2_3_per_slot(scc,curr_bwp,ap);
+    if ((num_pucch3 & 1) > 0) num_pucch3++;
 
-  int pucch2_size = get_pucch2_size(ap->N1 * ap->N2 * ap->XP);
-  NR_PUCCH_Resource_t *pucchres2 = calloc(1,sizeof(*pucchres2));
-  pucchres2->pucch_ResourceId = *pucchressetid;
-  int num_pucch2 = get_nb_pucch2_per_slot(scc, curr_bwp, ap);
-  pucchres2->startingPRB = pucch2_size * (uid % num_pucch2);
-  pucchres2->intraSlotFrequencyHopping = NULL;
-  pucchres2->secondHopPRB = NULL;
-  pucchres2->format.present = NR_PUCCH_Resource__format_PR_format2;
-  pucchres2->format.choice.format2 = calloc(1,sizeof(*pucchres2->format.choice.format2));
-  pucchres2->format.choice.format2->nrofPRBs = pucch2_size;
-  pucchres2->format.choice.format2->nrofSymbols = 1;
-  pucchres2->format.choice.format2->startingSymbolIndex = 13;
-  asn1cSeqAdd(&pucch_Config->resourceToAddModList->list,pucchres2);
+    for (int pucch3_id=0 ; pucch3_id < num_pucch3; pucch3_id++) {
+      pucchid = calloc(1,sizeof(*pucchid));
+      pucchres = calloc(1,sizeof(*pucchres));
+      *pucchid = pucch3_id+8;
+      asn1cSeqAdd(&pucchresset->resourceList.list,pucchid);
+      pucchres->pucch_ResourceId = *pucchid;
 
+      pucchres->intraSlotFrequencyHopping  = calloc(1,sizeof(*pucchres->intraSlotFrequencyHopping));
+      *pucchres->intraSlotFrequencyHopping = NR_PUCCH_Resource__intraSlotFrequencyHopping_enabled;
+      pucchres->secondHopPRB = calloc(1,sizeof(*pucchres->secondHopPRB));
+      // these are CSI on PUCCH resources
+      if ((pucch3_id&1) == 0) // startingPRB is at the bottom of the spectrum
+        pucchres->startingPRB = (pucch3_id>>1); 
+      // +1 ensures this works if num_pucch3 is odd, where there is 1 more PUCCH3 resource in the lowest frequencies. We have (1+num_pucch3)>>1 positions taken by the first hop of pucch3 and num_pucch3>>1 for the second hop
+      else
+        pucchres->startingPRB = curr_bwp  - (pucch3_id>>1); 
+
+      *pucchres->secondHopPRB = curr_bwp - pucchres->startingPRB;
+      pucchres->format.present = NR_PUCCH_Resource__format_PR_format3;
+      pucchres->format.choice.format3 = calloc(1,sizeof(*pucchres->format.choice.format3));
+      pucchres->format.choice.format3->nrofPRBs = 1;
+      pucchres->format.choice.format3->nrofSymbols = 14;  // handle presence of SRS later
+      pucchres->format.choice.format3->startingSymbolIndex = 0;
+      asn1cSeqAdd(&pucch_Config->resourceToAddModList->list,pucchres);
+      pucch_Config->format3 = calloc(1,sizeof(*pucch_Config->format3));
+      pucch_Config->format3->present = NR_SetupRelease_PUCCH_FormatConfig_PR_setup;
+      NR_PUCCH_FormatConfig_t *pucchfmt3 = calloc(1,sizeof(*pucchfmt3));
+      pucch_Config->format3->choice.setup = pucchfmt3;
+      pucchfmt3->interslotFrequencyHopping  = NULL;
+      pucchfmt3->additionalDMRS = NULL;
+      pucchfmt3->maxCodeRate = calloc(1,sizeof(*pucchfmt3->maxCodeRate));
+      *pucchfmt3->maxCodeRate = NR_PUCCH_MaxCodeRate_zeroDot08;
+      pucchfmt3->nrofSlots = NULL;
+      pucchfmt3->pi2BPSK = NULL;
+
+    // to check UE capabilities for that in principle
+      pucchfmt3->simultaneousHARQ_ACK_CSI = calloc(1,sizeof(*pucchfmt3->simultaneousHARQ_ACK_CSI));
+      *pucchfmt3->simultaneousHARQ_ACK_CSI = NR_PUCCH_FormatConfig__simultaneousHARQ_ACK_CSI_true;
+    }
+
+  }
   asn1cSeqAdd(&pucch_Config->resourceSetToAddModList->list,pucchresset);
-
-  pucch_Config->format2 = calloc(1,sizeof(*pucch_Config->format2));
-  pucch_Config->format2->present = NR_SetupRelease_PUCCH_FormatConfig_PR_setup;
-  NR_PUCCH_FormatConfig_t *pucchfmt2 = calloc(1,sizeof(*pucchfmt2));
-  pucch_Config->format2->choice.setup = pucchfmt2;
-  pucchfmt2->interslotFrequencyHopping = NULL;
-  pucchfmt2->additionalDMRS = NULL;
-  pucchfmt2->maxCodeRate = calloc(1,sizeof(*pucchfmt2->maxCodeRate));
-  *pucchfmt2->maxCodeRate = NR_PUCCH_MaxCodeRate_zeroDot15;
-  pucchfmt2->nrofSlots = NULL;
-  pucchfmt2->pi2BPSK = NULL;
-
-  // to check UE capabilities for that in principle
-  pucchfmt2->simultaneousHARQ_ACK_CSI = calloc(1,sizeof(*pucchfmt2->simultaneousHARQ_ACK_CSI));
-  *pucchfmt2->simultaneousHARQ_ACK_CSI = NR_PUCCH_FormatConfig__simultaneousHARQ_ACK_CSI_true;
 }
 
 void set_pucch_power_config(NR_PUCCH_Config_t *pucch_Config, int do_csirs) {
@@ -1348,6 +1440,10 @@ static void set_SR_periodandoffset(NR_SchedulingRequestResourceConfig_t *schedul
   int sr_slot = 1; // in FDD SR in slot 1
   if (fs->frame_type == TDD)
     sr_slot = get_first_ul_slot(fs, true);
+  if (get_pucch_formats(scc) == PUCCH_1_3) {
+    sr_slot++;
+    AssertFatal(fs->period_cfg.tdd_slot_bitmap[sr_slot].slot_type == TDD_NR_UPLINK_SLOT,"sr_slot %d is not uplink, check TDD configuration has at least one full UL for PUCCH formats 1/3",sr_slot);	  
+  }
 
   schedulingRequestResourceConfig->periodicityAndOffset = calloc(1,sizeof(*schedulingRequestResourceConfig->periodicityAndOffset));
 
@@ -1402,7 +1498,10 @@ static void scheduling_request_config(const NR_ServingCellConfigCommon_t *scc, N
   set_SR_periodandoffset(schedulingRequestResourceConfig, scc, scs);
 
   schedulingRequestResourceConfig->resource = calloc(1,sizeof(*schedulingRequestResourceConfig->resource));
-  *schedulingRequestResourceConfig->resource = *pucchressetid;
+  if (get_pucch_formats(scc) == PUCCH_0_2)
+    *schedulingRequestResourceConfig->resource = *pucchressetid;
+  else
+    *schedulingRequestResourceConfig->resource = 31;
   asn1cSeqAdd(&pucch_Config->schedulingRequestResourceToAddModList->list,schedulingRequestResourceConfig);
 }
 
@@ -1953,7 +2052,7 @@ static void set_csi_meas_periodicity(const NR_ServingCellConfigCommon_t *scc,
                                      bool is_rsrp)
 {
   const int ideal_period = set_ideal_period(true);
-  const int num_pucch2 = get_nb_pucch2_per_slot(scc, curr_bwp, antennaports);
+  const int num_pucch2 = get_nb_pucch2_3_per_slot(scc, curr_bwp, antennaports);
   const int idx = (uid * 2 / num_pucch2) + is_rsrp;
   frame_structure_t *fs = &RC.nrmac[0]->frame_structure;
   int offset = get_ul_slot_offset(fs, idx, true);
@@ -3482,7 +3581,7 @@ static NR_CSI_MeasConfig_t *get_csiMeasConfig(const NR_ServingCellConfig_t *conf
   csires1->resourceType = NR_CSI_ResourceConfig__resourceType_periodic;
   asn1cSeqAdd(&csi_MeasConfig->csi_ResourceConfigToAddModList->list, csires1);
 
-  int pucch_Resource = 2;
+  int pucch_Resource = get_pucch_formats(scc) == PUCCH_0_2 ? 2 : 8;
   if (configuration->do_CSIRS) {
     NR_CSI_ResourceConfig_t *csires0 = calloc(1, sizeof(*csires0));
     csires0->csi_ResourceConfigId = bwp_id;
@@ -3762,7 +3861,7 @@ static bool verify_radio_configuration(int uid, const NR_ServingCellConfigCommon
   const nr_pdsch_AntennaPorts_t *ap = &configuration->pdsch_AntennaPorts;
   int pucch2_size = get_pucch2_size(ap->N1 * ap->N2 * ap->XP);
   int curr_bwp = NRRIV2BW(scc->downlinkConfigCommon->initialDownlinkBWP->genericParameters.locationAndBandwidth, MAX_BWP_SIZE);
-  int num_pucch2 = get_nb_pucch2_per_slot(scc, curr_bwp, ap);
+  int num_pucch2 = get_nb_pucch2_3_per_slot(scc, curr_bwp, ap);
   int pucchres0_startingPRB = (pucch2_size * num_pucch2) + uid;
   // see config_pucch_resset0
   if (pucchres0_startingPRB >= curr_bwp) {

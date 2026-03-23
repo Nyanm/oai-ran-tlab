@@ -187,6 +187,8 @@ void nr_srs_ri_computation(const nfapi_nr_srs_normalized_channel_iq_matrix_t *nr
                            const NR_UE_UL_BWP_t *current_BWP,
                            uint8_t *ul_ri);
 
+int get_pucch_formats(const NR_ServingCellConfigCommon_t *scc);
+
 int get_pucch_resourceid(NR_PUCCH_Config_t *pucch_Config, int O_uci, int pucch_resource);
 
 void nr_schedule_srs(int module_id, frame_t frame, int slot);
