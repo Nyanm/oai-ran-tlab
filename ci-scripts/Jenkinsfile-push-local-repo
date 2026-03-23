@@ -1,0 +1,126 @@
+#!/bin/groovy
+/*
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this file
+ * except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
+ */
+// Location of the python executor node shall be in the same subnet as the others servers
+def nodeExecutor = params.nodeExecutor
+
+// Name of the resource
+def lockResources = []
+if (params.LockResources != null && params.LockResources.trim().length() > 0)
+  params.LockResources.trim().split(",").each{lockResources += [resource: it.trim()]}
+
+pipeline {
+  agent {
+    label nodeExecutor
+  }
+  options {
+    ansiColor('xterm')
+    lock(extra: lockResources)
+  }
+  stages {
+    stage('Verify parameters') {
+      steps {
+        script {
+          def missingParams = []
+          if (!params.eNB_SourceRepo?.trim())   { missingParams << 'eNB_SourceRepo' }
+          if (!params.eNB_Branch?.trim())       { missingParams << 'eNB_Branch' }
+          if (!params.eNB_CommitID?.trim())     { missingParams << 'eNB_CommitID' }
+          if (!params.eNB_TargetBranch?.trim()) { missingParams << 'eNB_TargetBranch' }
+          if (!params.eNB_Repository?.trim())   { missingParams << 'eNB_Repository' }
+
+          if (missingParams) {
+            error "Missing required parameters: ${missingParams.join(', ')}"
+          }
+
+          echo "Source Repo   : ${params.eNB_SourceRepo}"
+          echo "Source Branch : ${params.eNB_Branch}"
+          echo "Source Commit : ${params.eNB_CommitID}"
+          echo "Target Branch : ${params.eNB_TargetBranch}"
+          echo "Target Repo   : ${params.eNB_Repository}"
+        }
+      }
+    }
+    stage('Cleanup workspace') {
+      steps {
+        sh """
+          git config user.email "jenkins@openairinterface.org"
+          git config user.name "OAI Jenkins"
+          git remote remove source || true
+          git remote remove local || true
+        """
+      }
+    }
+    stage('Add source repo & fetch commit') {
+      steps {
+        sh """
+          git remote add source ${params.eNB_SourceRepo} || true
+          # Fetch ONLY the needed commit
+          git fetch source ${params.eNB_CommitID}
+        """
+      }
+    }
+    stage('Create branch name') {
+      steps {
+        script {
+          def shortCommit = params.eNB_CommitID.take(8)
+          env.NEW_BRANCH = "${params.eNB_Branch}-${shortCommit}"
+          echo "New branch: ${env.NEW_BRANCH}"
+        }
+      }
+    }
+    stage('Create branch from target') {
+      steps {
+        sh """
+          # Ensure we are on target branch from SCM checkout
+          git checkout ${params.eNB_TargetBranch}
+          # Create new branch
+          git checkout -B ${env.NEW_BRANCH}
+        """
+      }
+    }
+    stage('Merge specific commit') {
+      steps {
+        sh """
+          # Try merge
+          if ! git merge --no-ff ${params.eNB_CommitID} \
+            -m "Merge ${params.eNB_Branch}@${params.eNB_CommitID} into ${params.eNB_TargetBranch}"; then
+            echo "Merge conflicts detected. Aborting."
+            git merge --abort || true
+            exit 1
+          fi
+        """
+      }
+    }
+    stage('Push to local repo (asterix)') {
+      steps {
+        sh """
+          git remote add local git@asterix:/home/git/openairinterface5g.git || true
+          # Check if branch already exists on remote
+          if git ls-remote --heads local ${env.NEW_BRANCH} | grep -q ${env.NEW_BRANCH}; then
+            echo "Branch ${env.NEW_BRANCH} already exists on local repo. Skipping push."
+            exit 0
+          fi
+          echo "Branch ${env.NEW_BRANCH} doesn't exist on local repo. Push."
+        """
+      }
+    }
+  }
+}
