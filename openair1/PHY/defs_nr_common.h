@@ -141,14 +141,14 @@ typedef struct {
   int restricted_set;
   int numerology_index;
   int nb_rx;
+  c16_t rxsigF[NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX][NB_ANTENNAS_RX][NR_PRACH_SEQ_LEN_L];
   c16_t (*Xu)[839];
   time_stats_t *rx_prach;
-  c16_t (*prach_buf)[NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX][NR_PRACH_SEQ_LEN_L];
 } prach_item_t;
 
 typedef struct {
   /// prach commands
-  prach_item_t *list[NUMBER_OF_NR_PRACH_MAX];
+  prach_item_t list[NUMBER_OF_NR_PRACH_MAX];
   /// mutex for prach_list access
   pthread_mutex_t prach_list_mutex;
 } prach_list_t;

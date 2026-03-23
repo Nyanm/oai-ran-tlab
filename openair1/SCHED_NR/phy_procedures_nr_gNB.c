@@ -156,7 +156,7 @@ void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, const n
                                       bitmap);
 
   nr_generate_pss(txdataF[beam_nb][0], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
-  nr_generate_sss(txdataF[beam_nb][0], gNB->TX_AMP, ssb_start_symbol, cfg->cell_config.phy_cell_id.value, fp);
+  nr_generate_sss(txdataF[beam_nb][0], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
 
   uint16_t slots_per_hf = (fp->slots_per_frame) >> 1;
   int n_hf = slot < slots_per_hf ? 0 : 1;
@@ -880,49 +880,32 @@ void nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
   stop_meas(&gNB->get_srs_signal_stats);
 
   uint32_t signal_power_avg = 0;
-  c16_t srs_ls_estimated_channel[nb_antennas_rx][N_ap][ofdm_symbol_size * N_symb_SRS];
+  uint32_t noise_power_avg = 0;
+  int16_t noise_power_per_rb[srs_pdu->bwp_size];
+  memset(noise_power_per_rb, 0, srs_pdu->bwp_size * sizeof(int16_t));
 
   if (*srs_est >= 0) {
     start_meas(&gNB->srs_channel_estimation_stats);
-
-    delay_t delay = {0};
     for (int ant_rx_ind = 0; ant_rx_ind < nb_antennas_rx; ant_rx_ind++) {
-      for (int p_ind = 0; p_ind < N_ap; p_ind++) {
-        delay_t delay_aux = {0};
-        nr_srs_ls_channel_estimation(ant_rx_ind,
-                                     p_ind,
-                                     ofdm_symbol_size,
-                                     frame_parms->first_carrier_offset,
-                                     N_symb_SRS,
-                                     srs_pdu,
-                                     nr_srs_info,
-                                     nr_srs_info->srs_generated_signal[p_ind],
-                                     srs_received_signal[ant_rx_ind],
-                                     srs_ls_estimated_channel[ant_rx_ind][p_ind],
-                                     &delay_aux);
-        if (delay_aux.delay_max_val > delay.delay_max_val)
-          delay = delay_aux;
-      }
-    }
-
-    for (int ant_rx_ind = 0; ant_rx_ind < nb_antennas_rx; ant_rx_ind++) {
+      uint32_t noise_power = 0;
       for (int p_ind = 0; p_ind < N_ap; p_ind++) {
         uint32_t signal_power = 0;
-        nr_srs_channel_interpolation(ant_rx_ind,
-                                     p_ind,
-                                     ofdm_symbol_size,
-                                     frame_parms->first_carrier_offset,
-                                     N_symb_SRS,
-                                     srs_pdu,
-                                     nr_srs_info,
-                                     srs_ls_estimated_channel[ant_rx_ind][p_ind],
-                                     delay.est_delay,
-                                     srs_received_noise[ant_rx_ind],
-                                     srs_estimated_channel_freq[ant_rx_ind][p_ind],
-                                     srs_estimated_channel_time[ant_rx_ind][p_ind],
-                                     srs_estimated_channel_time_shifted[ant_rx_ind][p_ind],
-                                     &signal_power,
-                                     frame_parms->delay_table);
+        nr_srs_channel_estimation(ant_rx_ind,
+                                  p_ind,
+                                  ofdm_symbol_size,
+                                  frame_parms->first_carrier_offset,
+                                  N_symb_SRS,
+                                  srs_pdu,
+                                  nr_srs_info,
+                                  nr_srs_info->srs_generated_signal[p_ind],
+                                  srs_received_signal[ant_rx_ind],
+                                  srs_received_noise[ant_rx_ind],
+                                  srs_estimated_channel_freq[ant_rx_ind][p_ind],
+                                  srs_estimated_channel_time[ant_rx_ind][p_ind],
+                                  srs_estimated_channel_time_shifted[ant_rx_ind][p_ind],
+                                  &signal_power,
+                                  &noise_power,
+                                  noise_power_per_rb);
 
         signal_power_avg += signal_power;
 
@@ -930,7 +913,7 @@ void nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
           T_INT(gNB->Mod_id),
           T_INT(srs_pdu->rnti),
           T_INT(frame_rx),
-          T_INT(0),
+          T_INT(slot_rx),
           T_INT(ant_rx_ind),
           T_INT(p_ind),
           T_BUFFER(srs_estimated_channel_freq[ant_rx_ind][p_ind], N_symb_SRS * ofdm_symbol_size * sizeof(c16_t)));
@@ -939,35 +922,17 @@ void nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
           T_INT(gNB->Mod_id),
           T_INT(srs_pdu->rnti),
           T_INT(frame_rx),
-          T_INT(0),
+          T_INT(slot_rx),
           T_INT(ant_rx_ind),
           T_INT(p_ind),
           T_BUFFER(srs_estimated_channel_time_shifted[ant_rx_ind][p_ind],
                    NR_SRS_IDFT_OVERSAMP_FACTOR * ofdm_symbol_size * sizeof(c16_t)));
       }
+      noise_power_avg += noise_power;
     }
-
     signal_power_avg /= (nb_antennas_rx * N_ap);
-    signal_power_avg = max(signal_power_avg, 1);
-
-    uint32_t noise_power_avg = 0;
-    int16_t noise_power_per_rb[srs_pdu->bwp_size];
-    memset(noise_power_per_rb, 0, srs_pdu->bwp_size * sizeof(int16_t));
-    for (int ant_rx_ind = 0; ant_rx_ind < nb_antennas_rx; ant_rx_ind++) {
-      uint32_t noise_power_per_ant = 0;
-      nr_srs_noise_power_estimation(ofdm_symbol_size,
-                                    frame_parms->first_carrier_offset,
-                                    N_symb_SRS,
-                                    srs_pdu,
-                                    nr_srs_info,
-                                    signal_power_avg,
-                                    srs_received_noise[ant_rx_ind],
-                                    &noise_power_per_ant,
-                                    noise_power_per_rb);
-      noise_power_avg += noise_power_per_ant;
-    }
-
     noise_power_avg /= nb_antennas_rx;
+    signal_power_avg = max(signal_power_avg, 1);
     gNB->srs->snr = dB_fixed(signal_power_avg) - dB_fixed(max(noise_power_avg, 1));
 
     const uint16_t m_SRS_b = get_m_srs(srs_pdu->config_index, srs_pdu->bandwidth_index);
@@ -1054,27 +1019,33 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
     UL_INFO->uci_ind.slot = slot_rx;
     switch (pucch_pdu->format_type) {
       case 0:
+      case 1:
         uci->pdu_type = NFAPI_NR_UCI_FORMAT_0_1_PDU_TYPE;
         uci->pdu_size = sizeof(nfapi_nr_uci_pucch_pdu_format_0_1_t);
-        nfapi_nr_uci_pucch_pdu_format_0_1_t *uci_pdu_format0 = &uci->pucch_pdu_format_0_1;
+        nfapi_nr_uci_pucch_pdu_format_0_1_t *uci_pdu_format0_1 = &uci->pucch_pdu_format_0_1;
         int offset =
             pucch_pdu->start_symbol_index * ofdm_symbol_size + (frame_parms->first_carrier_offset + pucch_pdu->prb_start * 12);
         LOG_D(NR_PHY,
-              "frame %d, slot %d: PUCCH signal energy %d\n",
+              "frame %d, slot %d: PUCCH %d signal energy %d\n",
               frame_rx,
               slot_rx,
+	      pucch_pdu->format_type,
               signal_energy_nodc(&rxdataF[0][soffset + offset], 12));
-        nr_decode_pucch0(gNB, rxdataF, frame_rx, slot_rx, uci_pdu_format0, pucch_pdu);
+        if (pucch_pdu->format_type == 0)
+	  nr_decode_pucch0(gNB, rxdataF, frame_rx, slot_rx, uci_pdu_format0_1, pucch_pdu);
+	else
+	  nr_decode_pucch1(gNB, rxdataF, frame_rx, slot_rx, uci_pdu_format0_1, pucch_pdu);
         break;
       case 2:
+      case 3:
         uci->pdu_type = NFAPI_NR_UCI_FORMAT_2_3_4_PDU_TYPE;
         uci->pdu_size = sizeof(nfapi_nr_uci_pucch_pdu_format_2_3_4_t);
-        nfapi_nr_uci_pucch_pdu_format_2_3_4_t *uci_pdu_format2 = &uci->pucch_pdu_format_2_3_4;
+        nfapi_nr_uci_pucch_pdu_format_2_3_4_t *uci_pdu_format2_3_4 = &uci->pucch_pdu_format_2_3_4;
         LOG_D(PHY, "%d.%d Calling nr_decode_pucch2\n", frame_rx, slot_rx);
-        nr_decode_pucch2(gNB, rxdataF, frame_rx, slot_rx, uci_pdu_format2, pucch_pdu);
+        nr_decode_pucch2_3(gNB, rxdataF, frame_rx, slot_rx, uci_pdu_format2_3_4, pucch_pdu);
         break;
       default:
-        AssertFatal(1 == 0, "Only PUCCH formats 0 and 2 are currently supported\n");
+        AssertFatal(1 == 0, "Only PUCCH formats 0-3 are currently supported\n");
     }
     UL_INFO->uci_ind.num_ucis += 1;
     pucch->active = false;

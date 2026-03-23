@@ -39,7 +39,8 @@
 void init_prach_list(prach_list_t *l)
 {
   pthread_mutex_init(&l->prach_list_mutex, NULL);
-  memset(l->list, 0, sizeof(l->list));
+  for (prach_item_t *p = l->list; p < l->list + NUMBER_OF_NR_PRACH_MAX; p++)
+    *p = (prach_item_t){.frame = -1, .slot = -1};
 }
 
 void free_nr_prach_entry(prach_list_t *l, prach_item_t *p)
@@ -47,18 +48,17 @@ void free_nr_prach_entry(prach_list_t *l, prach_item_t *p)
   pthread_mutex_lock(&l->prach_list_mutex);
   if (p->frame == -1)
     LOG_E(NR_PHY_RACH, "Freeing a not allocated prach entry\n");
-  *p = (prach_item_t){.frame = -1, .slot = -1, .num_slots = -1, .nb_rx = p->nb_rx, .prach_buf = (void *)(p + 1)};
+  *p = (prach_item_t){.frame = -1, .slot = -1, .num_slots = -1};
   pthread_mutex_unlock(&l->prach_list_mutex);
 }
 
-prach_item_t *find_nr_prach(prach_list_t *l, int frame, int slot, int nb_rx, find_type_t type)
+prach_item_t *find_nr_prach(prach_list_t *l, int frame, int slot, find_type_t type)
 {
   pthread_mutex_lock(&l->prach_list_mutex);
-  AssertFatal(nb_rx, "Error! Number of antennas set to 0.\n");
-  prach_item_t **p = l->list;
-  prach_item_t **end = p + NUMBER_OF_NR_PRACH_MAX;
+  prach_item_t *p = l->list;
+  prach_item_t *end = p + NUMBER_OF_NR_PRACH_MAX;
   for (; p < end; p++)
-    if ((*p) && (*p)->frame == frame && ((*p)->slot + (*p)->num_slots - 1) == slot)
+    if (p->frame == frame && (p->slot + p->num_slots - 1) == slot)
       break;
   if (p == end) {
     if (type == SEARCH_EXIST) {
@@ -66,7 +66,7 @@ prach_item_t *find_nr_prach(prach_list_t *l, int frame, int slot, int nb_rx, fin
       return NULL;
     }
     for (p = l->list; p < end; p++)
-      if (!(*p) || ((*p)->frame == -1 && (*p)->slot == -1))
+      if (p->frame == -1 && p->slot == -1)
         break;
   }
   if (p == end) {
@@ -74,24 +74,14 @@ prach_item_t *find_nr_prach(prach_list_t *l, int frame, int slot, int nb_rx, fin
     return NULL;
   }
   // mark it used, it will be filled later
-  if (*p && (*p)->nb_rx != nb_rx) {
-    LOG_W(PHY, "rach procedure nb_rx ant changed from %d to %d\n", (*p)->nb_rx, nb_rx);
-    free(*p);
-    *p = NULL;
-  }
-  if (!(*p)) {
-    *p = calloc(1, sizeof(prach_item_t) + sizeof(c16_t) * nb_rx * NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX * NR_PRACH_SEQ_LEN_L);
-    (*p)->prach_buf = (void *)((*p) + 1);
-  }
-  (*p)->nb_rx = nb_rx;
-  (*p)->frame = frame;
+  p->frame = frame;
   pthread_mutex_unlock(&l->prach_list_mutex);
-  return (*p);
+  return p;
 }
 
 prach_item_t *nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_nr_prach_pdu_t *prach_pdu)
 {
-  prach_item_t *prach = find_nr_prach(&gNB->prach_list, SFN, Slot, gNB->frame_parms.nb_antennas_rx, SEARCH_EXIST_OR_FREE);
+  prach_item_t *prach = find_nr_prach(&gNB->prach_list, SFN, Slot, SEARCH_EXIST_OR_FREE);
   if (!prach) {
     LOG_W(PHY, "no free space for a new detected rach, discarding\n");
     return NULL;
@@ -390,7 +380,7 @@ static void rx_nr_prach_ru_internal(prach_item_t *p,
         rxsigF_tmp[j] = c16add(rxsigF_tmp[j], tmp[k2]);
       }
     }
-    memcpy(p->prach_buf[aa][prachOccasion], rxsigF_tmp, sizeof(rxsigF_tmp));
+    memcpy(p->rxsigF[prachOccasion][aa], rxsigF_tmp, sizeof(rxsigF_tmp));
   }
 }
 
@@ -454,7 +444,7 @@ rx_prach_out_t rx_nr_prach(const prach_item_t *in, int occasion)
   int32_t prach_ifft[dft_sz] __attribute__((aligned(32)));
   for (int preamble_index = 0; preamble_index < 64; preamble_index++) {
     if (LOG_DEBUGFLAG(DEBUG_PRACH)) {
-      int en = dB_fixed(signal_energy((int32_t *)in->prach_buf[0][occasion], N_ZC == 839 ? 840 : 140));
+      int en = dB_fixed(signal_energy((int32_t *)in->rxsigF[occasion][0], N_ZC == 839 ? 840 : 140));
       if (en > 60)
         LOG_D(PHY, "frame %d, slot %d : Trying preamble %d \n", in->frame, in->slot, preamble_index);
     }
@@ -530,7 +520,7 @@ rx_prach_out_t rx_nr_prach(const prach_item_t *in, int occasion)
 
     // Compute DFT of RX signal (conjugate in->rxsigF[occasion], results in conjugate output) for each new rootSequenceIndex
     if (LOG_DEBUGFLAG(DEBUG_PRACH)) {
-      int en = dB_fixed(signal_energy((int32_t *)in->prach_buf[0][occasion], 840));
+      int en = dB_fixed(signal_energy((int32_t *)in->rxsigF[occasion][0], 840));
       if (en>60)
         LOG_D(PHY,
               "frame %d, slot %d : preamble index %d, NCS %d, N_ZC/NCS %d: offset %d, preamble shift %d , en %d)\n",
@@ -559,14 +549,14 @@ rx_prach_out_t rx_nr_prach(const prach_item_t *in, int occasion)
 
       memset(prach_ifft, 0, sizeof(prach_ifft));
       if (LOG_DUMPFLAG(DEBUG_PRACH)) {
-        LOG_M("prach_rxF0.m", "prach_rxF0", in->prach_buf[0][occasion], N_ZC, 1, 1);
-        LOG_M("prach_rxF1.m", "prach_rxF1", in->prach_buf[1][occasion], 6144, 1, 1);
+        LOG_M("prach_rxF0.m", "prach_rxF0", in->rxsigF[occasion][0], N_ZC, 1, 1);
+        LOG_M("prach_rxF1.m", "prach_rxF1", in->rxsigF[occasion][1], 6144, 1, 1);
       }
       c16_t prachF[dft_sz] __attribute__((aligned(32)));
       for (int aa = 0; aa < nb_rx; aa++) {
         // Do componentwise product with Xu* on each antenna
         for (int offset = 0; offset < N_ZC; offset++) {
-          prachF[offset] = c16MulConjShift(Xu[offset], in->prach_buf[aa][occasion][offset], 15);
+          prachF[offset] = c16MulConjShift(Xu[offset], in->rxsigF[occasion][aa][offset], 15);
         }
         memset(prachF + N_ZC, 0, sizeof(*prachF) * (dft_sz - N_ZC));
         // Now do IFFT of size 1024 (N_ZC=839) or 256 (N_ZC=139)
