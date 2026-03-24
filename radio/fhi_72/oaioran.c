@@ -336,8 +336,8 @@ int xran_fh_rx_prach_read_slot(prach_list_t *prach_list, ru_info_t *ru, int *fra
     DevAssert(xran_queue_prach_length == 0);
   }
 
-  int slot = info->sl;
-  int frame = info->f;
+  *slot = info->sl;
+  *frame = info->f;
   uint8_t mu = info->mu;
   delNotifiedFIFO_elt(res);
 #else
@@ -347,8 +347,8 @@ int xran_fh_rx_prach_read_slot(prach_list_t *prach_list, ru_info_t *ru, int *fra
   } else {
     prach_rx_awaiting = false;
   }
-  int slot = oran_sync_info_prach.sl;
-  int frame = oran_sync_info_prach.f;
+  *slot = oran_sync_info_prach.sl;
+  *frame = oran_sync_info_prach.f;
   uint8_t mu = oran_sync_info_prach.mu;
   uint32_t tti_in = oran_sync_info_prach.tti;
 
@@ -364,6 +364,37 @@ int xran_fh_rx_prach_read_slot(prach_list_t *prach_list, ru_info_t *ru, int *fra
   last_slot = *slot;
 #endif
 #endif
+
+  prach_item_t *prach_id = find_nr_prach(prach_list, *frame, *slot, ru->nb_rx, NR_SEARCH_EXIST);
+  if (prach_id) {
+    struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
+#if defined F_RELEASE
+    uint8_t mu = fh_cfg->frame_conf.nNumerology;
+#elif defined K_RELEASE
+    uint8_t mu = fh_cfg->nNumerology[0];
+#endif
+    int slots_per_subframe = 1 << mu;
+    uint32_t subframe = *slot / slots_per_subframe; // `slot` = slot in which PRACH is received
+    // PRACH occasion in a frame if and only if SFN % x == y, TS 38.211 Table 6.3.3.2-2/3/4
+    nr_prach_info_t prach_info = get_prach_info(0);
+    bool is_prach_frame = (*frame % prach_info.x == prach_info.y);
+    int32_t check_xran_prach_slot = xran_is_prach_slot(0, subframe, (prach_id->slot % slots_per_subframe)
+#if defined K_RELEASE
+
+ , mu
+#endif
+
+     ); // `prach_id->slot` = slot in which PRACH is scheduled
+    bool is_prach_slot = is_prach_frame && check_xran_prach_slot;
+    if (is_prach_slot) {
+      ru->prach_buf = prach_id->prach_buf;
+    } else {
+      LOG_W(HW, "[%d.%d] Expected PRACH reception of scheduled slot %d\n", *frame, *slot, prach_id->slot);
+    }
+  } else {
+    return (0);
+  }
+
   /* calculate tti and subframe_id from frame, slot num */
   int sym_idx = 0;
 
@@ -391,12 +422,10 @@ int xran_fh_rx_prach_read_slot(prach_list_t *prach_list, ru_info_t *ru, int *fra
   int slots_per_frame = 10 << fh_cfg->frame_conf.nNumerology;
 #endif
 
-  int tti = slots_per_frame * (frame) + (slot);
+  int tti = slots_per_frame * (*frame) + (*slot);
 
   int nb_rx_per_ru = ru->nb_rx / fh_init->xran_ports;
 
-  /* If it is PRACH slot, copy prach IQ from XRAN PRACH buffer to OAI PRACH buffer */
-  if (ru->prach_buf) {
   for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) { // OAI does not support multiple CC yet.
     for (int aa = 0; aa < ru->nb_rx; aa++) {
       for (sym_idx = prach_start_sym; sym_idx < prach_end_sym; sym_idx++) {
@@ -477,7 +506,6 @@ int xran_fh_rx_prach_read_slot(prach_list_t *prach_list, ru_info_t *ru, int *fra
       } // sym_idx
     } // aa
   } // cc_id
-  } // ru->prach_buf
 
   return (0);
 }
@@ -609,12 +637,6 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
 #endif
 
   int tti = slots_per_frame * (*frame) + (*slot);
-
-  read_prach_data(ru
-#if defined F_RELEASE
-                    , *frame, *slot
-#endif
-                                       );
 
   const struct xran_fh_init *fh_init = get_xran_fh_init();
 #if defined K_RELEASE
