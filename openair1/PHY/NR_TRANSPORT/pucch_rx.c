@@ -1248,14 +1248,15 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
         scaling);
 
   int prb_size_ext = pucch_pdu->prb_size + (fmt==2 ? (pucch_pdu->prb_size & 1) : 0);
-  int nc_group_size = 1; // 2 PRB
-  int ngroup = prb_size_ext / nc_group_size / fmt==2 ? 2 : 1;
+  int nc_group_size = fmt == 2 ? 2 : 1; //PRB
+  int ngroup = prb_size_ext / nc_group_size;
   c32_t corr32[nb_symbols][ngroup][Prx];
   memset(corr32, 0, sizeof(corr32));
 
   int nb_re_data; 
   int nb_re_dmrs;
   int dmrspos[4];
+  for (int i=0;i<4;i++) dmrspos[i]=-1;
   int ndmrs=2;
   if (pucch_pdu->freq_hop_flag!=0) pucch_pdu->freq_hop_flag = 1;
 
@@ -1567,9 +1568,9 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
     }
 #endif
     if (fmt==2 || symb == dmrspos[0] || symb == dmrspos[1] || symb == dmrspos[2] || symb == dmrspos[3]) {
-  	for (int aa = 0; aa < Prx; aa++) {
+      for (int aa = 0; aa < Prx; aa++) {
         c16_t *pil_ptr = (fmt==2) ? pil_dmrs : r_u_v_alpha_delta_dmrs_p;
-#ifdef DEBUG_NR_PUCCH_PRX
+#ifdef DEBUG_NR_PUCCH_RX
 	printf("computing corr32 for symb %d, ngroup %d, nc_group_size %d\n",symb,ngroup,nc_group_size);
 #endif
         for (int group = 0; group < ngroup; group++) {
@@ -1588,7 +1589,7 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
             corr32[symb][group][aa].r += tmp.r;
             corr32[symb][group][aa].i += tmp.i;
 #ifdef DEBUG_NR_PUCCH_RX
-	    printf("corr32 %d+j(%d)\n",corr32[symb][group][aa].r,corr32[symb][group][aa].i);
+	    printf("aa %d, group %d: corr32 %d+j(%d)\n",aa,group,corr32[symb][group][aa].r,corr32[symb][group][aa].i);
 #endif
           }
         }
@@ -1896,10 +1897,11 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
     const simde__m128i ones = simde_mm_set1_epi16(1);
     for (int symb = 0; symb < nb_symbols; symb++) {
       for (int half_prb = 0; half_prb < (2 * pucch_pdu->prb_size); half_prb++) {
+	int group = (6*half_prb)/(12*nc_group_size);
         simde__m128i llr_num = simde_mm_set1_epi16(0);
         simde__m128i llr_den = simde_mm_set1_epi16(0);
         for (int cw = 0; cw < 256; cw++) {
-          int32_t corr_tmp = 0;
+          int64_t corr_tmp = 0;
           for (int aa = 0; aa < Prx; aa++) {
             simde__m128i part1 = simde_mm_set_epi64x(0ULL, *(int64_t *)&pucch2_3_polar_4bit[cw & 15].cw);
             simde__m128i part2 = simde_mm_set_epi64x(0ULL, *(int64_t *)&pucch2_3_polar_4bit[cw >> 4].cw);
@@ -1913,15 +1915,15 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
             prod_re = simde_mm_hadd_epi32(prod_re, prod_re);
             prod_im = simde_mm_hadd_epi32(prod_im, prod_im);
             simde__m128i prod = simde_mm_srai_epi32(simde_mm_unpacklo_epi32(prod_re, prod_im), 5);
-            c64_t corr64 = (c64_t){corr32[symb][half_prb >> 2][aa].r / (2 * nc_group_size * 4 / 2),
-                                   corr32[symb][half_prb >> 2][aa].i / (2 * nc_group_size * 4 / 2)};
+            c64_t corr64 = (c64_t){corr32[symb][group][aa].r / (2 * nc_group_size * 4 / 2),
+                                   corr32[symb][group][aa].i / (2 * nc_group_size * 4 / 2)};
             //  _mm_srai_epi64 is missing in SIMDE package, we need to update it
             c64_t prod2 = {simde_mm_extract_epi32(prod, 0), simde_mm_extract_epi32(prod, 1)};
             csum(prod2, prod2, corr64);
             corr_tmp += squaredMod(prod2) >> (Prx / 2);
             // this is for UL CQI measurement
             if (cw == 0)
-              corr += squaredMod(corr32[symb][half_prb >> 2][aa]);
+              corr += squaredMod(corr32[symb][group][aa]);
           }
           simde__m128i corr16 = simde_mm_set1_epi16((int16_t)(corr_tmp >> 8));
           simde__m128i den = simde_mm_xor_si128(pucch2_3_polar_llr_num_lut[cw], ones);

@@ -281,6 +281,9 @@ add_physim_test(physim.5g.nr_pucchsim.test44 "Format 1 (NACK,NACK) number of sym
 add_physim_test(physim.5g.nr_pucchsim.test45 "Format 1 (ACK,NACK) number of symbols = 14 273PRB"  nr_pucchsim -R 273 -z8 -i 14 -P 1 -b 2 -B 1 -s-14 -n3000)
 add_physim_test(physim.5g.nr_pucchsim.test46 "Format 1 (NACK,ACK) number of symbols = 14 273PRB with SR"  nr_pucchsim -R 273 -z8 -i 14 -P 1 -b 2 -B 2 -s-14 -c -n3000)
 add_physim_test(physim.5g.nr_pucchsim.test47 "Format 1 (ACK,ACK) number of symbols = 14 273PRB"   nr_pucchsim -R 273 -z8 -i 14 -P 1 -b 2 -B 3 -s-14 -n3000)
+add_physim_test(physim.5g.nr_pucchsim.test48 "Format 3 4-bits number of symbols = 14 273PRB"   nr_pucchsim -R 273 -z8 -i 14 -P 3 -q1 -b 3 -B 3 -s-14 -n3000)
+add_physim_test(physim.5g.nr_pucchsim.test49 "Format 3 7-bits number of symbols = 14 273PRB"   nr_pucchsim -R 273 -z8 -i 14 -P 3 -q1 -b 7 -B 3 -s-14 -n3000)
+add_physim_test(physim.5g.nr_pucchsim.test50 "Format 3 11-bits number of symbols = 14 273PRB"   nr_pucchsim -R 273 -z8 -i 14 -P 3 -q1 -b 7 -B 3 -s-10 -n3000)
 
 ####################################################################################
 ######                           nr_ulsim unit test                           ######
