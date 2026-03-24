@@ -156,6 +156,12 @@ int config_getlist(configmodule_interface_t *cfg, paramlist_def_t *ParamList, pa
   return ret;
 }
 
+bool config_is_list(configmodule_interface_t *cfg, const char *path) {
+  paramlist_def_t param_list;
+  strncpy(param_list.listname, path, MAX_OPTNAME_SIZE - 1);
+  return config_getlist(cfg, &param_list, NULL, 0, NULL) > 0;
+}
+
 int config_isparamset(paramdef_t *params,int paramidx) {
   if ((params[paramidx].paramflags & PARAMFLAG_PARAMSET) != 0) {
     return 1;
