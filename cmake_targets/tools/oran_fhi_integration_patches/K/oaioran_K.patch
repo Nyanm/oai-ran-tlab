@@ -707,7 +707,7 @@ index 5dad6a2..8048fb0 100644
      int32_t ruRxSymUpMax;
  
 diff --git a/fhi_lib/lib/src/xran_main.c b/fhi_lib/lib/src/xran_main.c
-index 256fa1d..bd67d78 100644
+index 256fa1d..350962a 100644
 --- a/fhi_lib/lib/src/xran_main.c
 +++ b/fhi_lib/lib/src/xran_main.c
 @@ -36,7 +36,11 @@
@@ -972,6 +972,51 @@ index 256fa1d..bd67d78 100644
          printf("Invalid port(RU) index - %d\n", port_id);
          return(-1);
      }
+@@ -5568,27 +5631,23 @@ int32_t xran_init_PrbMap_by_symbol_from_cfg(struct xran_prb_map* p_PrbMapIn, str
+ 
+     for(; i < XRAN_NUM_OF_SYMBOL_PER_SLOT; i++)
+     {
+-        if((nRBStart == prbMapTemp[i].nRBStart) && (nRBSize == prbMapTemp[i].nRBSize))
+-        {
+-                prbMapTemp[nPrbElm].numSymb++;
+-        }
+-        else
+-        {
+-            nPrbElm++;
+-            prbMapTemp[nPrbElm].nStartSymb = prbMapTemp[i].nStartSymb;
+-            prbMapTemp[nPrbElm].nRBStart = prbMapTemp[i].nRBStart;
+-            prbMapTemp[nPrbElm].nRBSize = prbMapTemp[i].nRBSize;
+-            prbMapTemp[nPrbElm].nBeamIndex = prbMapTemp[i].nBeamIndex;
+-            prbMapTemp[nPrbElm].bf_weight_update = prbMapTemp[i].bf_weight_update;
+-            prbMapTemp[nPrbElm].compMethod = prbMapTemp[i].compMethod;
+-            prbMapTemp[nPrbElm].iqWidth = prbMapTemp[i].iqWidth;
+-            prbMapTemp[nPrbElm].ScaleFactor = prbMapTemp[i].ScaleFactor;
+-            prbMapTemp[nPrbElm].reMask = prbMapTemp[i].reMask;
+-            prbMapTemp[nPrbElm].BeamFormingType = prbMapTemp[i].BeamFormingType;
+-
+-            nRBStart = prbMapTemp[i].nRBStart;
+-            nRBSize = prbMapTemp[i].nRBSize;
+-        }
++        /* force using a separate section for each symbol in one multisection CP (both DL and UL) message;
++         * when generating DL UP, symbol index should be within nStartSymb and (nStartSymb + numSymb);
++         * nPrbElm doesn't have any affect on UL UP */
++        nPrbElm++;
++        prbMapTemp[nPrbElm].nStartSymb = prbMapTemp[i].nStartSymb;
++        prbMapTemp[nPrbElm].nRBStart = prbMapTemp[i].nRBStart;
++        prbMapTemp[nPrbElm].nRBSize = prbMapTemp[i].nRBSize;
++        prbMapTemp[nPrbElm].nBeamIndex = prbMapTemp[i].nBeamIndex;
++        prbMapTemp[nPrbElm].bf_weight_update = prbMapTemp[i].bf_weight_update;
++        prbMapTemp[nPrbElm].compMethod = prbMapTemp[i].compMethod;
++        prbMapTemp[nPrbElm].iqWidth = prbMapTemp[i].iqWidth;
++        prbMapTemp[nPrbElm].ScaleFactor = prbMapTemp[i].ScaleFactor;
++        prbMapTemp[nPrbElm].reMask = prbMapTemp[i].reMask;
++        prbMapTemp[nPrbElm].BeamFormingType = prbMapTemp[i].BeamFormingType;
++
++        nRBStart = prbMapTemp[i].nRBStart;
++        nRBSize = prbMapTemp[i].nRBSize;
+     }
+ 
+     for(i = 0; i < nPrbElm; i++)
 diff --git a/fhi_lib/lib/src/xran_mem_mgr.c b/fhi_lib/lib/src/xran_mem_mgr.c
 index 83d43e8..ff2321d 100644
 --- a/fhi_lib/lib/src/xran_mem_mgr.c
@@ -1005,7 +1050,7 @@ index c313beb..8408a42 100644
  }
  
 diff --git a/fhi_lib/lib/src/xran_rx_proc.c b/fhi_lib/lib/src/xran_rx_proc.c
-index 4ccd00e..b3e27e8 100644
+index 4ccd00e..bdc58f6 100644
 --- a/fhi_lib/lib/src/xran_rx_proc.c
 +++ b/fhi_lib/lib/src/xran_rx_proc.c
 @@ -35,7 +35,11 @@
@@ -1020,6 +1065,16 @@ index 4ccd00e..b3e27e8 100644
  
  #include <rte_common.h>
  #include <rte_eal.h>
+@@ -532,6 +536,9 @@ int32_t xran_process_rx_sym(void *arg,
+         pRbMap = (struct xran_prb_map *) p_xran_dev_ctx->perMu[mu].sFrontHaulRxPrbMapBbuIoBufCtrl[tti % XRAN_N_FE_BUF_LEN][CC_ID][Ant_ID].sBufferList.pBuffers->pData;
+         if(likely(pRbMap))
+         {
++            if (p_xran_dev_ctx->RunSlotPrbMapBySymbolEnable) {
++              sect_id = (pRbMap->nPrbElm == XRAN_NUM_OF_SYMBOL_PER_SLOT) ? symb_id : symb_id - (XRAN_NUM_OF_SYMBOL_PER_SLOT - pRbMap->nPrbElm);
++            }
+             /** Get the prb_elem_id */
+             for(i=0 ; i < pRbMap->nPrbElm ; i++)
+             {
 diff --git a/fhi_lib/lib/src/xran_timer.c b/fhi_lib/lib/src/xran_timer.c
 index 387cef8..f4a566f 100644
 --- a/fhi_lib/lib/src/xran_timer.c
