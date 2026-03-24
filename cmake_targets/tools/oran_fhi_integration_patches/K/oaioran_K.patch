@@ -402,7 +402,7 @@ index 7b70bf2..f412868 100644
 \ No newline at end of file
 +}
 diff --git a/fhi_lib/lib/src/xran_cb_proc.c b/fhi_lib/lib/src/xran_cb_proc.c
-index 56db2bf..35010d5 100644
+index 56db2bf..9ebe16d 100644
 --- a/fhi_lib/lib/src/xran_cb_proc.c
 +++ b/fhi_lib/lib/src/xran_cb_proc.c
 @@ -25,7 +25,10 @@
@@ -416,6 +416,56 @@ index 56db2bf..35010d5 100644
  #include <rte_common.h>
  #include <rte_eal.h>
  #include <rte_errno.h>
+@@ -103,6 +106,12 @@ void xran_timer_arm_for_deadline(struct rte_timer *tim, void* arg,  void *p_dev_
+            + nSubframeIdx*SLOTNUM_PER_SUBFRAME(xran_fs_get_tti_interval(mu))
+            + nSlotIdx;
+ 
++    /* correction to rx_tti for Ta4 values larger than a TTI */
++    rx_tti -= p_xran_dev_ctx->perMu[mu].offset_num_slots_up_ul;
++    if (rx_tti < 0) {
++        rx_tti += (SUBFRAMES_PER_SYSTEMFRAME*SLOTNUM_PER_SUBFRAME(xran_fs_get_tti_interval(mu))*1024);
++    }
++
+     p_xran_dev_ctx->perMu[mu].cb_timer_ctx[p_xran_dev_ctx->perMu[mu].timer_put %  MAX_CB_TIMER_CTX].tti_to_process = rx_tti;
+     p_xran_dev_ctx->perMu[mu].timer_get = p_xran_dev_ctx->perMu[mu].timer_put;
+     p_xran_dev_ctx->perMu[mu].timer_put = (p_xran_dev_ctx->perMu[mu].timer_put + 1) %  MAX_CB_TIMER_CTX;
+@@ -241,6 +250,7 @@ int32_t xran_timing_create_cbs(void *args)
+                 max_dl_delay_offset += interval_us_local;
+                 numSlots++;
+             }
++            p_dev_ctx->perMu[mu].offset_num_slots_cp_dl = numSlots;
+ 
+             /* Delay from start of 'a' slot */
+             delay_cp_dl_max = max_dl_delay_offset - p_dev_ctx->fh_cfg.perMu[mu].T1a_max_cp_dl;
+@@ -278,7 +288,7 @@ int32_t xran_timing_create_cbs(void *args)
+                 ul_delay_offset += interval_us_local;
+                 numSlots++;
+             }
+-
++            p_dev_ctx->perMu[mu].offset_num_slots_cp_ul = numSlots;
+             delay_cp_ul = ul_delay_offset - p_dev_ctx->fh_cfg.perMu[mu].T1a_max_cp_ul;
+             sym_cp_ul = (delay_cp_ul*1000/(interval_us_local*1000/N_SYM_PER_SLOT)+1);
+             p_dev_ctx->perMu[mu].ulCpSlotOffset = numSlots;
+@@ -295,8 +305,18 @@ int32_t xran_timing_create_cbs(void *args)
+ 
+             delay_up    = p_dev_ctx->fh_cfg.perMu[mu].T1a_max_up;
+             time_diff_us = p_dev_ctx->fh_cfg.perMu[mu].Ta4_max;
++            uint32_t ul_up_delay_offset=interval_us_local;
++            numSlots=0;
++            while(time_diff_us > ul_up_delay_offset) {
++                ul_up_delay_offset += interval_us_local;
++                numSlots++;
++            }
++            p_dev_ctx->perMu[mu].offset_num_slots_up_ul = numSlots;
++
++            printf("offset_num_slots_cp_dl=%d, offset_num_slots_cp_ul=%d, offset_num_slots_up_ul=%d\n", p_dev_ctx->perMu[mu].offset_num_slots_cp_dl, p_dev_ctx->perMu[mu].offset_num_slots_cp_ul, p_dev_ctx->perMu[mu].offset_num_slots_up_ul);
++
+             lower_bound_window=(p_dev_ctx->fh_cfg.perMu[mu].Ta3_min>p_dev_ctx->fh_cfg.perMu[mu].Ta4_min?p_dev_ctx->fh_cfg.perMu[mu].Ta3_min:p_dev_ctx->fh_cfg.perMu[mu].Ta4_min);
+-            delay_cp2up = delay_up-delay_cp_dl_max;
++            delay_cp2up = p_dev_ctx->fh_cfg.perMu[mu].T1a_max_cp_dl - p_dev_ctx->fh_cfg.perMu[mu].T1a_max_up;
+ 
+             time_diff_nSymb = time_diff_us*1000/(interval_us_local*1000/N_SYM_PER_SLOT);
+             p_dev_ctx->perMu[mu].sym_up       = sym_up = -(delay_up*1000/(interval_us_local*1000/N_SYM_PER_SLOT));
 diff --git a/fhi_lib/lib/src/xran_common.c b/fhi_lib/lib/src/xran_common.c
 index 5613646..f1d0f87 100644
 --- a/fhi_lib/lib/src/xran_common.c
@@ -640,8 +690,24 @@ index 5956ca4..675328d 100644
  #include <rte_common.h>
  #include <rte_eal.h>
  #include <rte_ethdev.h>
+diff --git a/fhi_lib/lib/src/xran_dev.h b/fhi_lib/lib/src/xran_dev.h
+index 5dad6a2..8048fb0 100644
+--- a/fhi_lib/lib/src/xran_dev.h
++++ b/fhi_lib/lib/src/xran_dev.h
+@@ -264,6 +264,11 @@ typedef struct xran_device_per_mu_fields
+     int32_t sym_up_ul_ub;
+     int32_t sym_up_ul_lb;
+ 
++    /* used to support large T1a/Ta4 values */
++    int32_t offset_num_slots_cp_dl;
++    int32_t offset_num_slots_cp_ul;
++    int32_t offset_num_slots_up_ul;
++
+     int32_t ruRxSymUpMin;
+     int32_t ruRxSymUpMax;
+ 
 diff --git a/fhi_lib/lib/src/xran_main.c b/fhi_lib/lib/src/xran_main.c
-index 256fa1d..fb200b2 100644
+index 256fa1d..bd67d78 100644
 --- a/fhi_lib/lib/src/xran_main.c
 +++ b/fhi_lib/lib/src/xran_main.c
 @@ -36,7 +36,11 @@
@@ -705,7 +771,42 @@ index 256fa1d..fb200b2 100644
                          ret = generate_cpmsg_prach(pDevCtx, &params, sect_geninfo, mbuf, pDevCtx,
                                  frameId, sfId, 0, tti,
                                  beam_id, ccId, portId, 0, seqid, mu, sym_id);
-@@ -1880,6 +1908,10 @@ xran_prepare_cp_ul_slot(uint16_t xran_port_id, uint32_t nSlotIdx,  uint32_t nCcS
+@@ -1173,6 +1201,8 @@ xran_prepare_cp_dl_slot(uint16_t xran_port_id, uint32_t nSlotIdx,  uint32_t nCcS
+     return ret;
+ }
+ 
++uint32_t prev_dl_tti = -1;
++
+ void tx_cp_dl_cb(struct rte_timer *tim, void *arg)
+ {
+     long t1 = MLogXRANTick();
+@@ -1233,7 +1263,7 @@ void tx_cp_dl_cb(struct rte_timer *tim, void *arg)
+     if(first_call && pDevCtx->enableCP)
+     {
+ #ifndef POLL_EBBU_OFFLOAD
+-        tti = pTCtx[(xran_lib_ota_tti_mu[PortId][mu] & 1) ^ 1].tti_to_process;
++        tti = pTCtx[(xran_lib_ota_tti_mu[PortId][mu] & 1) ^ 1].tti_to_process + pDevCtx->perMu[mu].offset_num_slots_cp_dl;
+ #else
+         tti = pTCtx[(pCtx->ebbu_offload_ota_tti_cnt_mu[PortId][mu] & 1) ^ 1].tti_to_process;
+ #endif
+@@ -1262,6 +1292,16 @@ void tx_cp_dl_cb(struct rte_timer *tim, void *arg)
+             {
+                 /* Wrap around to next second */
+                 frameId = (frameId + NUM_OF_FRAMES_PER_SECOND) & 0x3ff;
++                prev_dl_tti = -1;
++            }
++	    else if (pDevCtx->perMu[mu].offset_num_slots_cp_dl > 0 && prev_dl_tti == xran_fs_get_max_slot(PortId) - 1 + pDevCtx->perMu[mu].offset_num_slots_cp_dl)
++            {
++                prev_dl_tti = tti;
++                tti = xran_fs_get_max_slot(PortId) + pDevCtx->perMu[mu].offset_num_slots_cp_dl;
++            }
++	    else
++            {
++                prev_dl_tti = tti;
+             }
+ 
+             ctxId      = cp_dl_tti % XRAN_MAX_SECTIONDB_CTX;
+@@ -1880,6 +1920,10 @@ xran_prepare_cp_ul_slot(uint16_t xran_port_id, uint32_t nSlotIdx,  uint32_t nCcS
                                  uint8_t seqid = xran_get_cp_seqid(pHandle, XRAN_DIR_UL, ccId, portId);
  
                                  beam_id = xran_get_beamid(pHandle, XRAN_DIR_UL, ccId, portId, slotId);
@@ -716,7 +817,44 @@ index 256fa1d..fb200b2 100644
                                  ret = generate_cpmsg_prach(pHandle, &params, sect_geninfo, mbuf, pDevCtx,
                                              frameId, sfId, slotId, tti,
                                              beam_id, ccId, portId, occasionid, seqid, mu, 0);
-@@ -2128,6 +2160,10 @@ void tx_cp_ul_cb(struct rte_timer *tim, void *arg)
+@@ -1935,6 +1979,7 @@ xran_prepare_cp_ul_slot(uint16_t xran_port_id, uint32_t nSlotIdx,  uint32_t nCcS
+     return ret;
+ }
+ 
++uint32_t prev_ul_tti = -1;
+ 
+ void tx_cp_ul_cb(struct rte_timer *tim, void *arg)
+ {
+@@ -1991,7 +2036,7 @@ void tx_cp_ul_cb(struct rte_timer *tim, void *arg)
+         interval    = xran_fs_get_tti_interval(mu);
+         PortId      = pDevCtx->xran_port_id;
+ #ifndef POLL_EBBU_OFFLOAD
+-        tti         = pTCtx[(xran_lib_ota_tti_mu[PortId][mu] & 1) ^ 1].tti_to_process;
++        tti         = pTCtx[(xran_lib_ota_tti_mu[PortId][mu] & 1) ^ 1].tti_to_process + pDevCtx->perMu[mu].offset_num_slots_cp_ul;
+ #else
+         tti         = pTCtx[(pCtx->ebbu_offload_ota_tti_cnt_mu[PortId][mu] & 1) ^ 1].tti_to_process;
+ #endif
+@@ -2038,7 +2083,19 @@ void tx_cp_ul_cb(struct rte_timer *tim, void *arg)
+ 
+         /* Wrap around to next second */
+         if(tti == 0)
++        {
+             frameId = (frameId + NUM_OF_FRAMES_PER_SECOND) & 0x3ff;
++            prev_ul_tti = tti;
++        }
++        else if (pDevCtx->perMu[mu].offset_num_slots_cp_ul > 0 && prev_ul_tti == xran_fs_get_max_slot(PortId) - 1 + pDevCtx->perMu[mu].offset_num_slots_cp_ul)
++        {
++            prev_ul_tti = tti;
++            tti = xran_fs_get_max_slot(PortId) + pDevCtx->perMu[mu].offset_num_slots_cp_ul;
++        }
++        else
++        {
++            prev_ul_tti = tti;
++        }
+ 
+         num_eAxc = xran_get_num_eAxcUl(pHandle);
+         num_CCPorts = xran_get_num_cc(pHandle);
+@@ -2128,6 +2185,10 @@ void tx_cp_ul_cb(struct rte_timer *tim, void *arg)
                              uint8_t seqid = xran_get_cp_seqid(pHandle, XRAN_DIR_UL, ccId, portId);
  
                              beam_id = xran_get_beamid(pHandle, XRAN_DIR_UL, ccId, portId, slotId);
@@ -727,7 +865,7 @@ index 256fa1d..fb200b2 100644
                              ret = generate_cpmsg_prach(pHandle, &params, sect_geninfo, mbuf, pDevCtx,
                                      frameId, sfId, slotId, tti,
                                      beam_id, ccId, portId, occasionid, seqid, mu, 0);
-@@ -2309,16 +2345,21 @@ int32_t xran_handle_rx_pkts(struct rte_mbuf* pkt_q[], uint16_t xport_id, struct
+@@ -2309,16 +2370,21 @@ int32_t xran_handle_rx_pkts(struct rte_mbuf* pkt_q[], uint16_t xport_id, struct
                      // ECPRI payload validation
                      if(likely(sysCfg->rru_workaround == 0))
                      {
@@ -756,7 +894,7 @@ index 256fa1d..fb200b2 100644
                      break;
                  // For RU emulation
                  case ECPRI_RT_CONTROL_DATA:
-@@ -3663,8 +3704,7 @@ ring_processing_func_per_port(void* args)
+@@ -3663,8 +3729,7 @@ ring_processing_func_per_port(void* args)
      for (i = 0; i < ctx->io_cfg.num_vfs && i < XRAN_VF_MAX; i = i+1) {
          if (ctx->vf2xran_port[i] == portId) {
              for(qi = 0; qi < ctx->rxq_per_port[portId]; qi++){
@@ -766,7 +904,7 @@ index 256fa1d..fb200b2 100644
              }
          }
      }
-@@ -3708,7 +3748,7 @@ xran_status_t xran_update_worker_info(struct xran_worker_info_s *p_worker_info,
+@@ -3708,7 +3773,7 @@ xran_status_t xran_update_worker_info(struct xran_worker_info_s *p_worker_info,
              continue;
          }
  
@@ -775,7 +913,7 @@ index 256fa1d..fb200b2 100644
          if(pThCtx == NULL)
          {
              print_err("pThCtx allocation error\n");
-@@ -3838,8 +3878,6 @@ int32_t xran_spawn_workers(void)
+@@ -3838,8 +3903,6 @@ int32_t xran_spawn_workers(void)
          }
      }
  
@@ -784,7 +922,7 @@ index 256fa1d..fb200b2 100644
      printf("ORAN operating mode: O-%s\n", (xran_get_syscfg_appmode() == ID_O_DU) ?"DU":"RU");
      printf("  Num of configured cores: %d%s\n", total_num_cores, icx_cpu?" (Xeon SP Gen3 or later)":"");
      printf("  Num of configured RUs  : %d\n", numRUs);
-@@ -5018,14 +5056,13 @@ int32_t xran_start(void *pHandle)
+@@ -5018,14 +5081,13 @@ int32_t xran_start(void *pHandle)
      return 0;
  }
  
@@ -801,7 +939,7 @@ index 256fa1d..fb200b2 100644
      if(pDevCtx)
      {
          rte_spinlock_lock(&pDevCtx->spinLock);
-@@ -5040,6 +5077,7 @@ int32_t xran_activate_cc(int32_t port_id, int32_t cc_id)
+@@ -5040,6 +5102,7 @@ int32_t xran_activate_cc(int32_t port_id, int32_t cc_id)
      }
      else
      {
@@ -809,7 +947,7 @@ index 256fa1d..fb200b2 100644
          printf("Invalid port(RU) index - %d\n", port_id);
          return(-1);
      }
-@@ -5048,14 +5086,13 @@ int32_t xran_activate_cc(int32_t port_id, int32_t cc_id)
+@@ -5048,14 +5111,13 @@ int32_t xran_activate_cc(int32_t port_id, int32_t cc_id)
      return(0);
  }
  
@@ -826,7 +964,7 @@ index 256fa1d..fb200b2 100644
      if(pDevCtx)
      {
          rte_spinlock_lock(&pDevCtx->spinLock);
-@@ -5070,6 +5107,7 @@ int32_t xran_deactivate_cc(int32_t port_id, int32_t cc_id)
+@@ -5070,6 +5132,7 @@ int32_t xran_deactivate_cc(int32_t port_id, int32_t cc_id)
      }
      else
      {
@@ -914,7 +1052,7 @@ index 70337d6..645b2ef 100644
  #include <rte_config.h>
  
 diff --git a/fhi_lib/lib/src/xran_tx_proc.c b/fhi_lib/lib/src/xran_tx_proc.c
-index 2d05893..08e9952 100644
+index 2d05893..399d649 100644
 --- a/fhi_lib/lib/src/xran_tx_proc.c
 +++ b/fhi_lib/lib/src/xran_tx_proc.c
 @@ -35,7 +35,11 @@
@@ -929,6 +1067,19 @@ index 2d05893..08e9952 100644
  
  #include <rte_common.h>
  #include <rte_eal.h>
+@@ -1539,6 +1543,12 @@ int32_t xran_process_tx_sym_cp_on_opt(void* pHandle, uint8_t ctx_id, uint32_t tt
+ 
+             if(0!=ptr_sect_elm->cur_index)
+             {
++                /* prevent xran from sending DL U-plane packets when it should not */
++                if(eth_ctx->io_cfg.id == O_DU && xran_fs_get_slot_type(xran_port_id, 0, tti, XRAN_SLOT_TYPE_DL, mu) != 1)
++                {
++                    return 0;
++                }
++
+                 num_sections = ptr_sect_elm->cur_index;
+                 /* iterate C-Plane configuration to generate corresponding U-Plane */
+                 // here
 diff --git a/fhi_lib/lib/src/xran_up_api.c b/fhi_lib/lib/src/xran_up_api.c
 index f3b846e..3eda2de 100644
 --- a/fhi_lib/lib/src/xran_up_api.c
