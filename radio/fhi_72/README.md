@@ -46,5 +46,5 @@ For PUSCH/PRACH, `oran_fh_if4p5_south_in()` calls `xran_fh_rx_read_slot()`/
 This is done through either a message queue, or through polling, which in both
 cases depends on xran calling the callbacks `oai_xran_fh_rx_callback()`/
 `oai_xran_fh_rx_prach_callback()` as installed during xran initialization.
-Once unblocked, it reads first PRACH data, then PUSCH data, before returning to
+Once unblocked, it reads first PUSCH data, then PRACH data, before returning to
 OAI.

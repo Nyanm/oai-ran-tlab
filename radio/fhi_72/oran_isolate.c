@@ -277,19 +277,7 @@ void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
       .prach_buf = NULL,
   };
 
-  /* Firstly, process PRACH packets */
-  int f_prach, sl_prach;
-#if defined F_RELEASE
-  // no PRACH callback (no queue) in F release so use the expected combination
-  f_prach = *frame;
-  sl_prach = *slot;
-#endif
-  ret = xran_fh_rx_prach_read_slot(&ru->gNB_list[0]->prach_list, &ru_info, &f_prach, &sl_prach);
-  if (ret != 0) {
-    printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX PRACH function \n", f_prach, sl_prach);
-  }
-
-  /* Secondly, process PUSCH packets */
+  /* Firstly, process PUSCH packets */
   RU_proc_t *proc = &ru->proc; // to check if (frame,slot) combination corresponds to the expected PUSCH one
   int f, sl;
   LOG_D(HW, "Read rxdataF %p,%p\n", ru_info.rxdataF[0], ru_info.rxdataF[1]);
@@ -299,6 +287,18 @@ void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
   LOG_D(HW, "Read %d.%d rxdataF %p,%p\n", f, sl, ru_info.rxdataF[0], ru_info.rxdataF[1]);
   if (ret != 0) {
     printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX function \n", f, sl);
+  }
+
+  /* Secondly, process PRACH packets */
+  int f_prach, sl_prach;
+#if defined F_RELEASE
+  // no PRACH callback (no queue) in F release so use the expected combination
+  f_prach = *frame;
+  sl_prach = *slot;
+#endif
+  ret = xran_fh_rx_prach_read_slot(&ru->gNB_list[0]->prach_list, &ru_info, &f_prach, &sl_prach);
+  if (ret != 0) {
+    printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX PRACH function \n", f_prach, sl_prach);
   }
 
   int slots_per_frame = 10 << (ru->openair0_cfg.nr_scs_for_raster);
