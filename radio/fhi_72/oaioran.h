@@ -21,6 +21,12 @@ typedef struct {
 /** @brief xran callback for fronthaul RX, see xran_5g_fronthault_config(). */
 void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status
 #if defined K_RELEASE
+                                                                     , uint8_t mu
+#endif
+                                                                                 );
+/** @brief xran callback for fronthaul PRACH RX, see xran_5g_prach_req(). */
+void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status
+#if defined K_RELEASE
                                                                                   , uint8_t mu
 #endif
                                                                                               );

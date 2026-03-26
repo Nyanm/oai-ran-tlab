@@ -100,6 +100,31 @@ static struct xran_prb_map get_xran_prb_map(const struct xran_fh_config *f, cons
   return prbmap;
 }
 
+#if defined K_RELEASE
+static struct xran_prb_map get_xran_prb_map_prach(const struct xran_fh_config *f)
+{
+  struct xran_prb_map prbmap = {
+      .dir = XRAN_DIR_UL,
+      .xran_port = 0,
+      .band_id = 0,
+      .cc_id = 0,
+      .ru_port_id = 0,
+      .tti_id = 0,
+      .nPrbElm = 1,
+  };
+  struct xran_prb_elm *e = &prbmap.prbMap[0];
+  e->nStartSymb = 0;
+  e->numSymb = 14;
+  e->nRBStart = 0;
+  e->nRBSize = 12;
+  e->nBeamIndex = 0;
+  e->compMethod = f->ru_conf.compMeth;
+  e->iqWidth = f->ru_conf.iqWidth;
+  memset(&prbmap.sFrontHaulRxPacketCtrl, 0, XRAN_NUM_OF_SYMBOL_PER_SLOT * sizeof(struct xran_rx_packet_ctl));
+  return prbmap;
+}
+#endif
+
 static uint32_t next_power_2(uint32_t num)
 {
   uint32_t power = 2;
@@ -244,16 +269,6 @@ static void oran_allocate_cplane_buffers(void *instHandle,
   printf("xran_bm_allocate_buffer() hInstance %p poolIdx %u count %u\n", instHandle, poolPrb, count1);
 }
 
-/* callback not actively used */
-static void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status
-#if defined K_RELEASE
-                                                                                  , uint8_t mu
-#endif
-                                                                                              )
-{
-  rte_pause();
-}
-
 static void oran_allocate_buffers(void *handle,
                                   int xran_inst,
                                   int num_sectors,
@@ -287,6 +302,9 @@ static void oran_allocate_buffers(void *handle,
   // DL/UL PRB mapping depending on the duplex mode
   struct xran_prb_map dlPm = get_xran_prb_map(fh_config, XRAN_DIR_DL, 0, 14);
   struct xran_prb_map ulPm = get_xran_prb_map(fh_config, XRAN_DIR_UL, 0, 14);
+#if defined K_RELEASE
+  struct xran_prb_map prachPm = get_xran_prb_map_prach(fh_config);
+#endif
   struct xran_prb_map dlPmMixed = {0};
   struct xran_prb_map ulPmMixed = {0};
   uint32_t idx = 0;
@@ -314,6 +332,17 @@ static void oran_allocate_buffers(void *handle,
 
   uint32_t numPrbElm = (fh_config->RunSlotPrbMapBySymbolEnable) ? XRAN_NUM_OF_SYMBOL_PER_SLOT : xran_get_num_prb_elm(&dlPm, mtu);
   uint32_t size_of_prb_map = sizeof(struct xran_prb_map) + sizeof(struct xran_prb_elm) * (numPrbElm);
+#if defined K_RELEASE
+  oran_cplane_prb_config prachConf = {
+      .nTddPeriod = fh_config->frame_conf.nTddPeriod,
+      .mixed_slot_index = idx,
+      .slotMap = prachPm,
+      .mixedSlotMap = prachPm,
+  };
+
+  uint32_t numPrbElmPrach = (fh_config->RunSlotPrbMapBySymbolEnable) ? XRAN_NUM_OF_SYMBOL_PER_SLOT : xran_get_num_prb_elm(&prachPm, mtu);
+  uint32_t size_of_prb_map_prach  = sizeof(struct xran_prb_map) + sizeof(struct xran_prb_elm) * (numPrbElmPrach);
+#endif
 
   // PDSCH
 #if defined K_RELEASE
@@ -352,41 +381,53 @@ static void oran_allocate_buffers(void *handle,
   // PRACH
   const uint32_t prachBufSize = PRACH_PLAYBACK_BUFFER_BYTES;
   oran_allocate_uplane_buffers(pi->instanceHandle, bl->prachdst, bl->bufs.prach, xran_max_antenna_nr, prachBufSize);
+#if defined K_RELEASE
+  oran_allocate_cplane_buffers(pi->instanceHandle,
+                               bl->prachdstdecomp,
+                               bl->bufs.prachdecomp,
+                               xran_max_antenna_nr,
+                               xran_max_sections_per_slot,
+                               mtu,
+                               fh_config,
+                               size_of_prb_map_prach,
+                               &prachConf);
+#elif defined F_RELEASE
   // PRACH decomp buffer does not have separate DPDK-allocated memory pool
   // bufs, it points to the same pool as the prach buffer. Unclear to me why
   for (uint32_t a = 0; a < xran_max_antenna_nr; ++a) {
     for (uint32_t j = 0; j < XRAN_N_FE_BUF_LEN; ++j) {
-      bl->prachdstdecomp[a][j].pBuffers = &bl->bufs.prachdecomp[a][j][0];
+      bl->prachdstdecomp[a][j].pBuffers = &bl->bufs.prachdecomp[a][j];
       for (uint32_t k = 0; k < XRAN_NUM_OF_SYMBOL_PER_SLOT; ++k) {
         struct xran_flat_buffer *fb = &bl->prachdstdecomp[a][j].pBuffers[k];
         fb->pData = bl->prachdst[a][j].pBuffers[k].pData;
       }
     }
   }
+#endif
 
   struct xran_buffer_list *src[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
   struct xran_buffer_list *srccp[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
   struct xran_buffer_list *dst[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
   struct xran_buffer_list *dstcp[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
-  struct xran_buffer_list *prach[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
-  struct xran_buffer_list *prachdecomp[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
+  struct xran_buffer_list *prachdst[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
+  struct xran_buffer_list *prachdstdecomp[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
   for (uint32_t a = 0; a < XRAN_MAX_ANTENNA_NR; ++a) {
     for (uint32_t j = 0; j < XRAN_N_FE_BUF_LEN; ++j) {
       src[a][j] = &bl->src[a][j];
       srccp[a][j] = &bl->srccp[a][j];
       dst[a][j] = &bl->dst[a][j];
       dstcp[a][j] = &bl->dstcp[a][j];
-      prach[a][j] = &bl->prachdst[a][j];
-      prachdecomp[a][j] = &bl->prachdstdecomp[a][j];
+      prachdst[a][j] = &bl->prachdst[a][j];
+      prachdstdecomp[a][j] = &bl->prachdstdecomp[a][j];
     }
   }
 
 #if defined K_RELEASE
   xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, oai_xran_fh_rx_callback, &portInstances->pusch_tag, fh_config->nNumerology[0]);
-  xran_5g_prach_req(pi->instanceHandle, prach, prachdecomp, oai_xran_fh_rx_prach_callback, &portInstances->prach_tag, fh_config->nNumerology[0]);
+  xran_5g_prach_req(pi->instanceHandle, prachdst, prachdstdecomp, oai_xran_fh_rx_prach_callback, &portInstances->prach_tag, fh_config->nNumerology[0]);
 #elif defined F_RELEASE
   xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, oai_xran_fh_rx_callback, &portInstances->pusch_tag);
-  xran_5g_prach_req(pi->instanceHandle, prach, prachdecomp, oai_xran_fh_rx_prach_callback, &portInstances->prach_tag);
+  xran_5g_prach_req(pi->instanceHandle, prachdst, prachdstdecomp, oai_xran_fh_rx_prach_callback, &portInstances->prach_tag);
 #endif
 }
 

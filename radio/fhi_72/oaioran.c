@@ -46,8 +46,16 @@ int xran_is_prach_slot(uint8_t PortId, uint32_t subframe_id, uint32_t slot_id
 extern notifiedFIFO_t oran_sync_fifo;
 #define MAX_QUEUE_LENGTH_NO_JUMP 3
 atomic_int xran_queue_length = 0;
+atomic_int xran_queue_prach_length = 0;
+#if defined K_RELEASE
+extern notifiedFIFO_t oran_sync_fifo_prach;
+#endif
 #else
 volatile oran_sync_info_t oran_sync_info = {0};
+#if defined K_RELEASE
+volatile oran_sync_info_t oran_sync_info_prach = {0};
+volatile bool prach_rx_awaiting = false;
+#endif
 #endif
 
 /** @details xran-specific callback, called when all packets for given CC and
@@ -182,8 +190,107 @@ void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status
   } // rx_sym == 7
 }
 
-/** @details Only used to unblock timing in oai_xran_fh_rx_callback() on first
- * call. */
+void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status
+#if defined K_RELEASE
+                                                                                  , uint8_t mu
+#endif
+                                                                                              )
+{
+#if defined K_RELEASE
+  struct xran_cb_tag *callback_tag = (struct xran_cb_tag *)pCallbackTag;
+
+  static int32_t last_slot = -1;
+  // static int32_t last_frame = -1;
+
+  const struct xran_fh_init *fh_init = get_xran_fh_init();
+  int num_ports = fh_init->xran_ports;
+
+  const int slots_in_sf = 1 << mu;
+  const int sf_in_frame = 10;
+
+  static int rx_RU[XRAN_PORTS_NUM][160] = {0};
+  uint32_t tti = callback_tag->slotiId;
+  uint32_t frame = XranGetFrameNum(tti, 0, sf_in_frame, slots_in_sf);
+  uint32_t subframe = XranGetSubFrameNum(tti, slots_in_sf, sf_in_frame);
+  uint32_t slot = XranGetSlotNum(tti, slots_in_sf);
+
+  uint32_t rx_sym = callback_tag->symbol & 0xFF;
+  uint32_t ru_id = callback_tag->oXuId;
+
+  LOG_D(HW, "prach_rx_callback at %4d.%3d (subframe %d), rx_sym %d ru_id %d\n", frame, slot, subframe, rx_sym, ru_id);
+
+  if (rx_sym == 7) { // in F release this value is defined as XRAN_FULL_CB_SYM (full slot (offset + 7))
+    // if xran did not call xran_physide_dl_tti callback, it's not ready yet.
+    // wait till first callback to advance counters, because otherwise users
+    // would see periodic output with only "0" in stats counters
+    if (!first_call_set)
+      return;
+    uint32_t slot2 = slot + (subframe * slots_in_sf);
+    rx_RU[ru_id][slot2] = 1;
+    // if (last_frame > 0 && frame > 0
+    //     && ((slot2 > 0 && last_frame != frame) || (slot2 == 0 && last_frame != ((1024 + frame - 1) & 1023))))
+    //   LOG_E(HW, "Jump in frame counter last_frame %d => %d, slot %d\n", last_frame, frame, slot2);
+    for (int i = 0; i < num_ports; i++) {
+      if (rx_RU[i][slot2] == 0)
+        return;
+    }
+    for (int i = 0; i < num_ports; i++)
+      rx_RU[i][slot2] = 0;
+  
+    if (last_slot == -1 || slot2 != last_slot) {
+#ifndef USE_POLLING
+      notifiedFIFO_elt_t *req = newNotifiedFIFO_elt(sizeof(oran_sync_info_t), 0, &oran_sync_fifo_prach, NULL);
+      oran_sync_info_t *info = NotifiedFifoData(req);
+      info->tti = tti;
+      info->sl = slot2;
+      info->f = frame;
+      info->mu = mu;
+#else
+      LOG_D(HW, "Writing PRACH slot %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, slot2, ru_id, slot, subframe, last_slot);
+      oran_sync_info_prach.tti = tti;
+      oran_sync_info_prach.sl = slot2;
+      oran_sync_info_prach.f = frame;
+      oran_sync_info_prach.mu = mu;
+#endif
+      struct xran_cb_tag *callback_tag = (struct xran_cb_tag *)pCallbackTag;
+      uint32_t tti = callback_tag->slotiId;
+      uint32_t ru_id = callback_tag->oXuId;
+      oran_buf_list_t *bufs = get_xran_buffers(ru_id);
+      struct xran_fh_config *fh_config = get_xran_fh_config(ru_id);
+      for (uint16_t cc_id = 0; cc_id < 1 /* fh_config->nCC */; cc_id++) { // OAI does not support multiple CC yet.
+        for(uint32_t ant_id = 0; ant_id < fh_config->neAxc; ant_id++) {
+          struct xran_prb_map *pRbMap = (struct xran_prb_map *)bufs->prachdstdecomp[ant_id][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
+          AssertFatal(pRbMap != NULL, "(%d:%d:%d)pRbMapPrach == NULL. Aborting.\n", cc_id, tti % XRAN_N_FE_BUF_LEN, ant_id);
+          for (uint32_t sym_id = 0; sym_id < XRAN_NUM_OF_SYMBOL_PER_SLOT; sym_id++) {
+            AssertFatal(pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt <= 1, "PRACH segmentation is not supported\n");
+#ifndef USE_POLLING
+            info->nRxPkt[cc_id][ant_id][sym_id] = pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt;
+#else
+            oran_sync_info_prach.nRxPkt[cc_id][ant_id][sym_id] = pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt;
+#endif
+            pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt = 0;
+          }
+        }
+      }
+#ifndef USE_POLLING
+      LOG_D(HW, "Push PRACH slot %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, info->sl, slot, ru_id, subframe, last_slot);
+      atomic_fetch_add(&xran_queue_prach_length, 1);
+      pushNotifiedFIFO(&oran_sync_fifo_prach, req);
+#else
+      prach_rx_awaiting = true;
+#endif
+    } else
+      LOG_E(HW, "Cannot Push PRACH slot %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, slot2, ru_id, slot, subframe, last_slot);
+    last_slot = slot2;
+    // last_frame = frame;
+  } // rx_sym == 7
+#elif defined F_RELEASE
+  rte_pause();
+#endif
+}
+
+/** @details Only used to unblock timing in oai_xran_fh_rx_callback()/oai_xran_fh_rx_prach_callback()
+ * on first call. */
 int oai_physide_dl_tti_call_back(void *param
 #if defined K_RELEASE
                                             , uint8_t mu
@@ -196,17 +303,67 @@ int oai_physide_dl_tti_call_back(void *param
   return 0;
 }
 
-/** @brief Reads PRACH data from xran buffers.
+/** @details Read PRACH data from xran buffers.
+ * If I/Q compression (bitwidth < 16 bits) is configured, decompresses the data
+ * before writing.
  *
- * @details Reads PRACH data from xran-specific buffers and, if I/Q compression
- * (bitwidth < 16 bits) is configured, uncompresses the data. Places PRACH data
- * in OAI buffer. */
-static int read_prach_data(ru_info_t *ru, int frame, int slot
-#if defined K_RELEASE
-                                                             , uint8_t mu
-#endif
-                                                             )
+ * Function is blocking and waits for next frame/slot combination. It is unblocked
+ * by oai_xran_fh_rx_prach_callback(). If K_RELEASE, it writes the current slot into parameters
+ * frame/slot. If F_RELEASE, it takes the frame/slot. */
+int xran_fh_rx_prach_read_slot(prach_list_t *prach_list, ru_info_t *ru, int *frame, int *slot)
 {
+#if defined K_RELEASE
+#ifndef USE_POLLING
+  // pull next even from oran_sync_fifo_prach if any
+  notifiedFIFO_elt_t *res = pullNotifiedFIFO(&oran_sync_fifo_prach);
+  atomic_fetch_sub(&xran_queue_prach_length, 1);
+  oran_sync_info_t *info = NotifiedFifoData(res);
+
+  if (xran_queue_prach_length > 0 && xran_queue_prach_length < MAX_QUEUE_LENGTH_NO_JUMP) {
+    LOG_D(HW, "%4d.%2d TTI processing delay detected\n", info->f, info->sl);
+  } else if (xran_queue_prach_length >= MAX_QUEUE_LENGTH_NO_JUMP) {
+    uint32_t old_f = info->f;
+    uint32_t old_sl = info->sl;
+    // set the frame/slot info to what is in the last message
+    notifiedFIFO_elt_t *f;
+    while ((f = pollNotifiedFIFO(&oran_sync_fifo_prach)) != NULL) {
+      atomic_fetch_sub(&xran_queue_prach_length, 1);
+      delNotifiedFIFO_elt(res);
+      res = f;
+    }
+    info = NotifiedFifoData(res);
+    LOG_W(HW, "PRACH TTI processing delay detected, skipping %4d.%2d => %4d.%2d\n", old_f, old_sl, info->f, info->sl);
+    DevAssert(xran_queue_prach_length == 0);
+  }
+
+  int slot = info->sl;
+  int frame = info->f;
+  uint8_t mu = info->mu;
+  delNotifiedFIFO_elt(res);
+#else
+#error "POLLING is not supported for K release unless you know how to fix the race condition on prach_rx_awaiting"
+  if (!prach_rx_awaiting) {
+    return (0);
+  } else {
+    prach_rx_awaiting = false;
+  }
+  int slot = oran_sync_info_prach.sl;
+  int frame = oran_sync_info_prach.f;
+  uint8_t mu = oran_sync_info_prach.mu;
+  uint32_t tti_in = oran_sync_info_prach.tti;
+
+  static int last_slot = -1;
+  LOG_D(HW, "oran slot %d, last_slot %d\n", *slot, last_slot);
+  int cnt = 0;
+  // while (*slot == last_slot)  {
+  while (tti_in == oran_sync_info_prach.tti) {
+    //*slot = oran_sync_info.sl;
+    cnt++;
+  }
+  LOG_D(HW, "cnt %d, Reading %d.%d\n", cnt, *frame, *slot);
+  last_slot = *slot;
+#endif
+#endif
   /* calculate tti and subframe_id from frame, slot num */
   int sym_idx = 0;
 
@@ -233,19 +390,49 @@ static int read_prach_data(ru_info_t *ru, int frame, int slot
 #elif defined F_RELEASE
   int slots_per_frame = 10 << fh_cfg->frame_conf.nNumerology;
 #endif
+
   int tti = slots_per_frame * (frame) + (slot);
 
   int nb_rx_per_ru = ru->nb_rx / fh_init->xran_ports;
+
   /* If it is PRACH slot, copy prach IQ from XRAN PRACH buffer to OAI PRACH buffer */
   if (ru->prach_buf) {
-    for (sym_idx = prach_start_sym; sym_idx < prach_end_sym; sym_idx++) {
-      for (int aa = 0; aa < ru->nb_rx; aa++) {
+  for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) { // OAI does not support multiple CC yet.
+    for (int aa = 0; aa < ru->nb_rx; aa++) {
+      for (sym_idx = prach_start_sym; sym_idx < prach_end_sym; sym_idx++) {
         int16_t *dst, *src;
         int idx = 0;
         oran_buf_list_t *bufs = get_xran_buffers(aa / nb_rx_per_ru);
         // hardcoded to use only first prach occasion
         dst = (int16_t *)ru->prach_buf[aa][0];
+#if defined K_RELEASE
+        struct xran_prb_map * pPrbMap = (struct xran_prb_map *)bufs->prachdstdecomp[aa % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
+        struct xran_rx_packet_ctl *p_rx_packet_ctl = &pPrbMap->sFrontHaulRxPacketCtrl[sym_idx];
+#ifndef USE_POLLING
+        int32_t nRxPkt = info->nRxPkt[cc_id][aa][sym_idx];
+#else
+        int32_t nRxPkt = oran_sync_info.nRxPkt[cc_id][aa][sym_idx];
+#endif
+        if (nRxPkt == 0) {
+          LOG_E(HW, "read_prach %d.%d.%d saa = %d: nRxPkt = 0!\n", *frame, *slot, sym_idx, aa);
+          memset(&dst[sym_idx], 0, N_ZC * 2 * sizeof(*dst));
+          continue;
+        } else if (nRxPkt > 1) { // protection
+          LOG_E(HW, "read_prach %d.%d.%d saa = %d: nRxPkt = %d!\n", *frame, *slot, sym_idx, aa, nRxPkt);
+          memset(&dst[sym_idx], 0, N_ZC * 2 * sizeof(*dst));
+          continue;
+        } else {
+          src = (int16_t *)p_rx_packet_ctl->pData[0];
+          if (src == NULL) { // protection
+            LOG_E(HW, "read_prach %d.%d.%d saa = %d:  src = NULL!!\n", *frame, *slot, sym_idx, aa);
+            memset(&dst[sym_idx], 0, N_ZC * 2 * sizeof(*dst));
+            continue;
+          }
+        }
+        num_prbu = p_rx_packet_ctl->nRBSize[0];
+#elif defined F_RELEASE
         src = (int16_t *)bufs->prachdstdecomp[aa % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers[sym_idx].pData;
+#endif
         /* convert Network order to host order */
         if (ru_conf->compMeth_PRACH == XRAN_COMPMETHOD_NONE) {
           if (sym_idx == prach_start_sym) {
@@ -287,9 +474,11 @@ static int read_prach_data(ru_info_t *ru, int frame, int slot
             for (idx = 0; idx < (N_ZC * 2); idx++)
               dst[idx] += (local_dst[idx + g_kbar]);
         } // COMPMETHOD_BLKFLOAT
-      } // aa
-    } // symb_indx
+      } // sym_idx
+    } // aa
+  } // cc_id
   } // ru->prach_buf
+
   return (0);
 }
 
@@ -345,8 +534,8 @@ static bool is_tdd_ul_guard_slot(const struct xran_frame_config *frame_conf, int
   return is_tdd_ul_symbol(frame_conf, slot, XRAN_NUM_OF_SYMBOL_PER_SLOT - 1);
 }
 
-/** @details Read PRACH and PUSCH data from xran buffers.  If
- * I/Q compression (bitwidth < 16 bits) is configured, deccompresses the data
+/** @details Read PUSCH data from xran buffers.
+ * If I/Q compression (bitwidth < 16 bits) is configured, decompresses the data
  * before writing. Prints ON TIME counters every 128 frames.
  *
  * Function is blocking and waits for next frame/slot combination. It is unblocked
@@ -421,9 +610,9 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
 
   int tti = slots_per_frame * (*frame) + (*slot);
 
-  read_prach_data(ru, *frame, *slot
-#if defined K_RELEASE
-                                   , mu
+  read_prach_data(ru
+#if defined F_RELEASE
+                    , *frame, *slot
 #endif
                                        );
 
