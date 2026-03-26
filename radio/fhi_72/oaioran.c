@@ -58,6 +58,60 @@ volatile bool prach_rx_awaiting = false;
 #endif
 #endif
 
+/* Prints TX_TOTAL, RX_TOTAL, RX_ON_TIME, RX_ERR_DROP counters every 128 frames. */
+void print_fhi_counters(ru_info_t *ru, const int frame, const int slot)
+{
+  static int64_t old_rx_counter[XRAN_PORTS_NUM] = {0};
+  static int64_t old_tx_counter[XRAN_PORTS_NUM] = {0};
+  struct xran_common_counters x_counters[XRAN_PORTS_NUM];
+
+  const struct xran_fh_init *fh_init = get_xran_fh_init();
+  for (int o_xu_id = 0; o_xu_id < fh_init->xran_ports; o_xu_id++) {
+#if defined F_RELEASE
+    if ((*frame & 0x7f) == 0 && *slot == 0 && xran_get_common_counters(gxran_handle, &x_counters[0]) == XRAN_STATUS_SUCCESS) {
+#elif defined K_RELEASE
+    if ((*frame & 0x7f) == 0 && *slot == 0 && xran_get_common_counters(gxran_handle[o_xu_id], &x_counters[o_xu_id]) == XRAN_STATUS_SUCCESS) {
+#endif
+      LOG_I(HW,
+            "[%s%d][rx %7ld pps %7ld kbps %7ld][tx %7ld pps %7ld kbps %7ld][Total Msgs_Rcvd %ld]\n",
+            "o-du ",
+            o_xu_id,
+            x_counters[o_xu_id].rx_counter,
+            x_counters[o_xu_id].rx_counter - old_rx_counter[o_xu_id],
+            x_counters[o_xu_id].rx_bytes_per_sec * 8 / 1000L,
+            x_counters[o_xu_id].tx_counter,
+            x_counters[o_xu_id].tx_counter - old_tx_counter[o_xu_id],
+            x_counters[o_xu_id].tx_bytes_per_sec * 8 / 1000L,
+            x_counters[o_xu_id].Total_msgs_rcvd);
+      for (int rxant = 0; rxant < ru->nb_rx / fh_init->xran_ports; rxant++)
+        LOG_I(HW,
+              "[%s%d][pusch%d %7ld prach%d %7ld]\n",
+              "o_du",
+              o_xu_id,
+              rxant,
+              x_counters[o_xu_id].rx_pusch_packets[rxant],
+              rxant,
+              x_counters[o_xu_id].rx_prach_packets[rxant]);
+#if defined K_RELEASE
+      LOG_I(HW,
+            "[%s%d][drop errors %7d ecpri errors %7d cp errors %7d up errors %7d pusch errors %7d prach errors %7d]\n",
+	    "o_du",
+            o_xu_id,
+            x_counters[o_xu_id].rx_err_drop,
+            x_counters[o_xu_id].rx_err_ecpri,
+            x_counters[o_xu_id].rx_err_cp,
+            x_counters[o_xu_id].rx_err_up,
+            x_counters[o_xu_id].rx_err_pusch,
+            x_counters[o_xu_id].rx_err_prach);
+#endif
+      if (x_counters[o_xu_id].rx_counter > old_rx_counter[o_xu_id])
+        old_rx_counter[o_xu_id] = x_counters[o_xu_id].rx_counter;
+      if (x_counters[o_xu_id].tx_counter > old_tx_counter[o_xu_id])
+        old_tx_counter[o_xu_id] = x_counters[o_xu_id].tx_counter;
+    }
+  }
+}
+
 /** @details xran-specific callback, called when all packets for given CC and
  * 1/4, 1/2, 3/4, all symbols of a slot arrived. Currently, only used to get
  * timing information and unblock another thread in xran_fh_rx_read_slot()
@@ -564,7 +618,7 @@ static bool is_tdd_ul_guard_slot(const struct xran_frame_config *frame_conf, int
 
 /** @details Read PUSCH data from xran buffers.
  * If I/Q compression (bitwidth < 16 bits) is configured, decompresses the data
- * before writing. Prints ON TIME counters every 128 frames.
+ * before writing.
  *
  * Function is blocking and waits for next frame/slot combination. It is unblocked
  * by oai_xran_fh_rx_callback(). It writes the current slot into parameters
@@ -575,9 +629,6 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
   int32_t *pos = NULL;
   int idx = 0;
 
-  static int64_t old_rx_counter[XRAN_PORTS_NUM] = {0};
-  static int64_t old_tx_counter[XRAN_PORTS_NUM] = {0};
-  struct xran_common_counters x_counters[XRAN_PORTS_NUM];
   static int outcnt = 0;
 #ifndef USE_POLLING
   // pull next event from oran_sync_fifo
@@ -782,50 +833,6 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
       } // sym_ind
     } // ant_ind
   } // vv_inf
-  for (int o_xu_id = 0; o_xu_id < fh_init->xran_ports; o_xu_id++) {
-#if defined F_RELEASE
-    if ((*frame & 0x7f) == 0 && *slot == 0 && xran_get_common_counters(gxran_handle, &x_counters[0]) == XRAN_STATUS_SUCCESS) {
-#elif defined K_RELEASE
-    if ((*frame & 0x7f) == 0 && *slot == 0 && xran_get_common_counters(gxran_handle[o_xu_id], &x_counters[o_xu_id]) == XRAN_STATUS_SUCCESS) {
-#endif
-      LOG_I(HW,
-            "[%s%d][rx %7ld pps %7ld kbps %7ld][tx %7ld pps %7ld kbps %7ld][Total Msgs_Rcvd %ld]\n",
-            "o-du ",
-            o_xu_id,
-            x_counters[o_xu_id].rx_counter,
-            x_counters[o_xu_id].rx_counter - old_rx_counter[o_xu_id],
-            x_counters[o_xu_id].rx_bytes_per_sec * 8 / 1000L,
-            x_counters[o_xu_id].tx_counter,
-            x_counters[o_xu_id].tx_counter - old_tx_counter[o_xu_id],
-            x_counters[o_xu_id].tx_bytes_per_sec * 8 / 1000L,
-            x_counters[o_xu_id].Total_msgs_rcvd);
-      for (int rxant = 0; rxant < ru->nb_rx / fh_init->xran_ports; rxant++)
-        LOG_I(HW,
-              "[%s%d][pusch%d %7ld prach%d %7ld]\n",
-              "o_du",
-              o_xu_id,
-              rxant,
-              x_counters[o_xu_id].rx_pusch_packets[rxant],
-              rxant,
-              x_counters[o_xu_id].rx_prach_packets[rxant]);
-#if defined K_RELEASE
-      LOG_I(HW,
-            "[%s%d][drop errors %7d ecpri errors %7d cp errors %7d up errors %7d pusch errors %7d prach errors %7d]\n",
-	    "o_du",
-            o_xu_id,
-            x_counters[o_xu_id].rx_err_drop,
-            x_counters[o_xu_id].rx_err_ecpri,
-            x_counters[o_xu_id].rx_err_cp,
-            x_counters[o_xu_id].rx_err_up,
-            x_counters[o_xu_id].rx_err_pusch,
-            x_counters[o_xu_id].rx_err_prach);
-#endif
-      if (x_counters[o_xu_id].rx_counter > old_rx_counter[o_xu_id])
-        old_rx_counter[o_xu_id] = x_counters[o_xu_id].rx_counter;
-      if (x_counters[o_xu_id].tx_counter > old_tx_counter[o_xu_id])
-        old_tx_counter[o_xu_id] = x_counters[o_xu_id].tx_counter;
-    }
-  }
   return (0);
 }
 

@@ -308,6 +308,7 @@ void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
   proc->frame_tx = (sl > (slots_per_frame - 1 - ru->sl_ahead)) ? (f + 1) & 1023 : f;
 
   if (proc->first_rx == 0) {
+    print_fhi_counters(&ru_info, proc->frame_rx, proc->tti_rx);
     if (proc->tti_rx != *slot) {
       LOG_E(HW,
             "Received Time doesn't correspond to the time we think it is (slot mismatch, received %d.%d, expected %d.%d)\n",
