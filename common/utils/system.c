@@ -225,7 +225,7 @@ bool has_cap_sys_nice(void)
 bool has_cap_sys_nice(void)
 {
   struct __user_cap_header_struct hdr = {.version = _LINUX_CAPABILITY_VERSION_3};
-  struct __user_cap_data_struct cap[2];
+  struct __user_cap_data_struct cap[2] = {};
   if (syscall(SYS_capget, &hdr, cap) == -1)
     return false;
   return (cap[0].effective & (1 << CAP_SYS_NICE)) != 0;
