@@ -858,6 +858,8 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
         // Discard the DCI
         return -1;
       }
+    } else if (rnti_type == TYPE_P_RNTI_) {
+      dl_conf_req->pdu_type = FAPI_NR_DL_CONFIG_TYPE_P_DLSCH;
     } else {
       dl_conf_req->pdu_type = FAPI_NR_DL_CONFIG_TYPE_DLSCH;
     }
