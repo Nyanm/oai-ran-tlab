@@ -578,7 +578,7 @@ void nr_decode_pucch1(PHY_VARS_gNB *gNB,
         re_offset += 12 * pucch_pdu->prb_start + frame_parms->first_carrier_offset;
       else if (pucch_pdu->prb_start > half_nb_rb_dl) // if number RBs in bandwidth is odd
                                                      // and current PRB is upper band
-        re_offset += 12 * (pucch_pdu->prb_start - half_nb_rb_dl) + 6;
+        re_offset += 12 * (pucch_pdu->prb_start - half_nb_rb_dl) - 6;
       else // if number RBs in bandwidth is odd  and current PRB contains DC
         re_offset += 12 * pucch_pdu->prb_start + frame_parms->first_carrier_offset;
     }
@@ -606,7 +606,7 @@ void nr_decode_pucch1(PHY_VARS_gNB *gNB,
       printf(
           "\t [nr_decode_pucch1] mapping %s to RE \t amp=%d "
           "\tofdm_symbol_size=%d \tN_RB_DL=%d \tfirst_carrier_offset=%d "
-          "\tz_pucch[%d]=rxptr(%d)=(x_n(l=%d,n=%d)=(%d,%d))\n",
+          "\tz_pucch[%d]=rxptr(%d/%d)=(x_n(l=%d,n=%d)=(%d,%d))\n",
           l % 2 ? "PUCCH" : "DM-RS",
           amp,
           frame_parms->ofdm_symbol_size,
@@ -614,6 +614,7 @@ void nr_decode_pucch1(PHY_VARS_gNB *gNB,
           frame_parms->first_carrier_offset,
           current_subcarrier,
           soffset + re_offset,
+	  re_offset - (l + pucch_pdu->start_symbol_index) * frame_parms->ofdm_symbol_size,
           l,
           n,
           rxdataF[0][soffset + re_offset].r,
@@ -1196,14 +1197,17 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
   int l2 = pucch_pdu->start_symbol_index;
   int soffset = (slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
   uint16_t starting_prb = pucch_pdu->prb_start + pucch_pdu->bwp_start;
+  uint16_t second_hop_prb=starting_prb;
   int re_offset[2];
   re_offset[0] = (12 * starting_prb + frame_parms->first_carrier_offset) % frame_parms->ofdm_symbol_size;
   if (nb_symbols >= 2) {
-    if (pucch_pdu->freq_hop_flag)
+    if (pucch_pdu->freq_hop_flag) {
+      second_hop_prb = pucch_pdu->second_hop_prb;
       re_offset[1] = (12 * (pucch_pdu->second_hop_prb + pucch_pdu->bwp_start) + frame_parms->first_carrier_offset)
                      % frame_parms->ofdm_symbol_size;
-    else
+    } else {
       re_offset[1] = re_offset[0];
+    }
   }
   AssertFatal(pucch_pdu->prb_size * nb_symbols > 1, "number of PRB*SYMB (%d,%d)< 2", pucch_pdu->prb_size, nb_symbols);
 
@@ -1247,9 +1251,10 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
         pucch2_3_levdB,
         scaling);
 
-  int prb_size_ext = pucch_pdu->prb_size + (fmt==2 ? (pucch_pdu->prb_size & 1) : 0);
   int nc_group_size = fmt == 2 ? 2 : 1; //PRB
-  int ngroup = prb_size_ext / nc_group_size;
+  int ngroup = pucch_pdu->prb_size / nc_group_size;
+  if (fmt == 2 && (pucch_pdu->prb_size&1)>0) ngroup++;
+
   c32_t corr32[nb_symbols][ngroup][Prx];
   memset(corr32, 0, sizeof(corr32));
 
@@ -1261,8 +1266,8 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
   if (pucch_pdu->freq_hop_flag!=0) pucch_pdu->freq_hop_flag = 1;
 
   if (fmt==2) {
-    nb_re_data = 8 * prb_size_ext;
-    nb_re_dmrs = 4 * prb_size_ext;
+    nb_re_data = 8 * pucch_pdu->prb_size;
+    nb_re_dmrs = 4 * pucch_pdu->prb_size;
     ndmrs=0;
   }
   else {
@@ -1298,38 +1303,6 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
   }
   c16_t r_ext[Prx][nb_symbols-ndmrs][nb_re_data] __attribute__((aligned(32)));
   c16_t r_ext2[Prx][nb_symbols-ndmrs][nb_re_data] __attribute__((aligned(32)));
-  const simde__m256i swap = simde_mm256_set_epi8(29,
-                                                 28,
-                                                 31,
-                                                 30,
-                                                 25,
-                                                 24,
-                                                 27,
-                                                 26,
-                                                 21,
-                                                 20,
-                                                 23,
-                                                 22,
-                                                 17,
-                                                 16,
-                                                 19,
-                                                 18,
-                                                 13,
-                                                 12,
-                                                 15,
-                                                 14,
-                                                 9,
-                                                 8,
-                                                 11,
-                                                 10,
-                                                 5,
-                                                 4,
-                                                 7,
-                                                 6,
-                                                 1,
-                                                 0,
-                                                 3,
-                                                 2);
   const simde__m128i swap128 = simde_mm_set_epi8(13,
                                                  12,
                                                  15,
@@ -1363,7 +1336,7 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
   }
 
   c16_t rdmrs_ext[Prx][nb_re_dmrs * ((fmt==2)?nb_symbols : ndmrs)] __attribute__((aligned(32)));
-  c16_t pil_dmrs[nb_re_dmrs] __attribute__((aligned(32)));
+  c16_t pil_dmrs[2][nb_re_dmrs] __attribute__((aligned(32)));
   c16_t r_u_v_alpha_delta_dmrs[ndmrs*nb_re_dmrs] __attribute__((aligned(32)));
   c16_t *r_u_v_alpha_delta_dmrs_p = r_u_v_alpha_delta_dmrs; 
   for (int d = 0; d < (fmt==2?nb_symbols : ndmrs); d++) {
@@ -1394,11 +1367,6 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
 	   rdmrs_ext_p+=nb_re_dmrs;
 	}
       }
-      if (fmt==2 && pucch_pdu->prb_size != prb_size_ext) {
-        // if the number of PRBs is odd
-        // we fill the unsed part of the arrays
-        memset(rdmrs_ext[aa] + pucch_pdu->prb_size * 4 , 0, 4 * sizeof(c16_t));
-      }
     }
 
 #ifdef DEBUG_NR_PUCCH_RX
@@ -1420,11 +1388,14 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
            pucch_pdu->dmrs_scrambling_id);
 #endif 
     if (fmt == 2) {
-      uint32_t *sGold = gold_cache(x2, starting_prb / 4 + ngroup / 2);
+      int prb = (d==0) ? starting_prb : second_hop_prb;
+	      
+      uint32_t *sGold = gold_cache(x2, prb / 4 + ngroup / 2);
       // Compute pilot conjugate
-      uint8_t *sGold8 = (uint8_t *)(sGold + starting_prb / 4);
-      for (int group = 0; group < nb_re_dmrs; group += 4)
-        *(simde__m128i *)(pil_dmrs + group) = oai_mm_conj(byte2m128i[*sGold8++]);
+      uint8_t *sGold8 = (uint8_t *)(sGold + prb / 4);
+      for (int re = 0; re < nb_re_dmrs; re += 4) {
+        *(simde__m128i *)(pil_dmrs[symb] + re) = oai_mm_conj(byte2m128i[*sGold8++]);
+      }
     }
     else {
       // generating transmitted sequence and dmrs
@@ -1492,7 +1463,7 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
   if (fmt==2) {
     c16_t rdmrs_gold[nb_re_dmrs] __attribute__((aligned(32)));
     for (int aa = 0; aa < Prx; aa++) {
-      mult_complex_vectors(rdmrs_ext[aa], pil_dmrs, rdmrs_gold, lendmrs, 0);
+      mult_complex_vectors(rdmrs_ext[aa], pil_dmrs[0], rdmrs_gold, lendmrs, 0);
       c16_t *ch_ls_ptr = ch_ls;
       c16_t *end = ch_ls_ptr + 128;
       for (int i = 0; i < nb_re_dmrs; i++)
@@ -1544,12 +1515,6 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
             *r_ext_p++ = *rp_base++;
           }
         }
-        if (pucch_pdu->prb_size != prb_size_ext) {
-          // if the number of PRBs is odd
-          // we fill the unsed part of the arrays
-          memset(rdmrs_ext[aa] + pucch_pdu->prb_size * 4, 0, 4 * sizeof(c16_t));
-          memset(r_ext[aa][symb] + pucch_pdu->prb_size * 8, 0, 8 * sizeof(c16_t));
-        }
       } // aa
     } // fmt==2
     else if (symb != dmrspos[0] && symb != dmrspos[1] && symb != dmrspos[2] && symb != dmrspos[3]) {
@@ -1569,31 +1534,29 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
 #endif
     if (fmt==2 || symb == dmrspos[0] || symb == dmrspos[1] || symb == dmrspos[2] || symb == dmrspos[3]) {
       for (int aa = 0; aa < Prx; aa++) {
-        c16_t *pil_ptr = (fmt==2) ? pil_dmrs : r_u_v_alpha_delta_dmrs_p;
+        c16_t *pil_ptr = (fmt==2) ? pil_dmrs[symb] : r_u_v_alpha_delta_dmrs_p;
 #ifdef DEBUG_NR_PUCCH_RX
 	printf("computing corr32 for symb %d, ngroup %d, nc_group_size %d\n",symb,ngroup,nc_group_size);
 #endif
-        for (int group = 0; group < ngroup; group++) {
-        // for fmt2 each group has 8*nc_group_size elements, compute 1 complex correlation with DMRS per group
-        // for fmt3/4 each group has 12*nc_group_size elements, compute 1 complex correlation with DMRS per group
+        for (int prb = 0; prb < pucch_pdu->prb_size; prb++) {
         // non-coherent combining across groups
-          c16_t *rdmrs_p = (fmt==2) ? &rdmrs_ext[aa][8 * group] : (rdmrs_ext[aa] + (d*nb_re_dmrs) + 12*group);
-          for (int z = 0; z < ((fmt==2) ? 8 : 12); z++) {
+          c16_t *rdmrs_p = rdmrs_ext[aa] + ((fmt==2) ? (symb*nb_re_dmrs) + (4*prb) : (d*nb_re_dmrs) + (12*prb));
+          for (int z = 0; z < ((fmt==2) ? 4 : 12); z++) {
 #ifdef DEBUG_NR_PUCCH_RX
-            printf("grp %d: %d.%d X %d.%d\n",group,rdmrs_p->r,rdmrs_p->i,pil_ptr->r,pil_ptr->i);
+            printf("prb %d, grp %d: %d.%d X %d.%d\n",prb,prb/nc_group_size,rdmrs_p->r,rdmrs_p->i,pil_ptr->r,pil_ptr->i);
 #endif
             c16_t tmp = c16mulShift(*rdmrs_p++, *pil_ptr++, fmt>=3 ? 15 : scaling);
 #ifdef DEBUG_NR_PUCCH_RX
 	    printf("tmp = %d+j(%d)\n",tmp.r,tmp.i);
 #endif
-            corr32[symb][group][aa].r += tmp.r;
-            corr32[symb][group][aa].i += tmp.i;
+            corr32[symb][prb/nc_group_size][aa].r += tmp.r;
+            corr32[symb][prb/nc_group_size][aa].i += tmp.i;
 #ifdef DEBUG_NR_PUCCH_RX
-	    printf("aa %d, group %d: corr32 %d+j(%d)\n",aa,group,corr32[symb][group][aa].r,corr32[symb][group][aa].i);
+	    printf("aa %d, group %d: corr32 %d+j(%d)\n",aa,prb/nc_group_size,corr32[symb][prb/nc_group_size][aa].r,corr32[symb][prb/nc_group_size][aa].i);
 #endif
-          }
-        }
-      }
+          } //z
+        } //prb
+      } // aa
       if (fmt>2) r_u_v_alpha_delta_dmrs_p+=nb_re_dmrs;
     }
 #ifdef DEBUG_NR_PUCCH_RX
@@ -1681,13 +1644,18 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
     // apply gold sequence on data symbols (unscrambling)
     if (fmt==2) {
       for (int aa = 0; aa < Prx; aa++) {
-        simde__m256i *c_ptr = (simde__m256i *)scramb_data;
-        simde__m256i *end = (simde__m256i *)(scramb_data + nb_re_data);
-        for (simde__m256i *ptr = (simde__m256i *)r_ext[aa][s3], *ptr2 = (simde__m256i *)r_ext2[aa][s3]; c_ptr < end;
+#ifdef DEBUG_NR_PUCCH_RX
+	printf("unscrambling symbol %d, nb_re_data %d\n",s3,nb_re_data);
+	log_dump(PHY,scramb_data + s3*nb_re_data,nb_re_data,LOG_DUMP_C16,"c:");
+	log_dump(PHY,r_ext[aa][s3],nb_re_data,LOG_DUMP_C16,"r:");
+#endif
+	simde__m128i *c_ptr = (simde__m128i *)(scramb_data + s3*nb_re_data);
+        simde__m128i *end = (simde__m128i *)(scramb_data + (s3+1)*nb_re_data);
+        for (simde__m128i *ptr = (simde__m128i *)r_ext[aa][s3], *ptr2 = (simde__m128i *)r_ext2[aa][s3]; c_ptr < end;
              ptr++, c_ptr++, ptr2++) {
-          simde__m256i tmp = simde_mm256_srai_epi16(*ptr, scaling);
-          *ptr2 = oai_mm256_conj(simde_mm256_sign_epi16(simde_mm256_shuffle_epi8(tmp, swap), *c_ptr)); // r_ext(im -re)(i) * c(i)
-          *ptr = simde_mm256_sign_epi16(tmp, *c_ptr); // r_ext(i) * c(i)
+          simde__m128i tmp = simde_mm_srai_epi16(*ptr, scaling);
+          *ptr2 = oai_mm_conj(simde_mm_sign_epi16(simde_mm_shuffle_epi8(tmp, swap128), *c_ptr)); // r_ext(im -re)(i) * c(i)
+          *ptr = simde_mm_sign_epi16(tmp, *c_ptr); // r_ext(i) * c(i)
         }
       } //aa loop
     }//fmt == 2
@@ -1740,47 +1708,80 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
     int cw_ML = 0;
     for (int cw = 0; cw < 1 << nb_bit; cw++) {
       uint64_t corr_tmp = 0;
+      c64_t sum_of_prod[ngroup][2][Prx];
       if (fmt == 2) {
-        for (int symb = 0; symb < nb_symbols; symb++) {
-          for (int group = 0; group < ngroup; group++) {
+        const simde__m128i *coeff = (simde__m256i *)&pucch2_3_lut[nb_bit - 3][cw].cw;
+        for (int aa = 0; aa < Prx; aa++) {
+	  for (int g = 0 ; g < ngroup ; g++) { 
+	     if (pucch_pdu->freq_hop_flag) { 
+	        for (int d=0; d < 2; d++) {	
+	  	   sum_of_prod[g][d][aa] = (c64_t){corr32[d][g][aa].r,corr32[d][g][aa].i};
+#ifdef DEBUG_NR_PUCCH_RX
+		   printf("sum_of_prod[%d][%d][%d] %d.%d\n",g,d,aa,corr32[d][g][aa].r,corr32[d][g][aa].i);
+#endif
+		}
+	     }
+	     else if (nb_symbols==1) {
+	       sum_of_prod[g][0][aa] = (c64_t){corr32[0][g][aa].r,corr32[0][g][aa].i};
+#ifdef DEBUG_NR_PUCCH_RX
+	       printf("sum_of_prod[%d][0][%d] %d.%d\n",g,aa,corr32[0][g][aa].r,corr32[0][g][aa].i);
+#endif
+	     }
+	     else {
+	       sum_of_prod[g][0][aa] = (c64_t){corr32[0][g][aa].r+corr32[1][g][aa].r,corr32[0][g][aa].i+corr32[1][g][aa].i};
+#ifdef DEBUG_NR_PUCCH_RX
+	       printf("sum_of_prod[%d][0][%d] %lld.%lld (%d.%d)(%d.%d)\n",g,aa,sum_of_prod[g][0][aa].r,sum_of_prod[g][0][aa].i,corr32[0][g][aa].r,corr32[0][g][aa].i,corr32[1][g][aa].r,corr32[1][g][aa].i);
+#endif
+	     }
+	     
+	  }
+          int ci=0;
+          for (int symb = 0; symb < nb_symbols; symb++) {
+            const simde__m128i *rext = (simde__m256i *)r_ext[aa][symb];
+            const simde__m128i *rext2 = (simde__m256i *)r_ext2[aa][symb];
+            for (int prb = 0; prb < pucch_pdu->prb_size; prb++) {
+	      int group = prb/nc_group_size;
             // do complex correlation
-            for (int aa = 0; aa < Prx; aa++) {
-              const simde__m256i *coeff = (simde__m256i *)&pucch2_3_lut[nb_bit - 3][cw].cw;
-              const simde__m256i *rext = (simde__m256i *)r_ext[aa][symb];
-              const simde__m256i *rext2 = (simde__m256i *)r_ext2[aa][symb];
-              simde__m256i re = simde_mm256_madd_epi16(coeff[0], rext[group<<1]);
-              simde__m256i im = simde_mm256_madd_epi16(coeff[0], rext2[group<<1]);
-              simde__m256i re2 = simde_mm256_madd_epi16(coeff[1], rext[(group<<1) + 1]);
-              simde__m256i im2 = simde_mm256_madd_epi16(coeff[1], rext2[(group<<1) + 1]);
-              re = simde_mm256_add_epi32(re, re2);
-              im = simde_mm256_add_epi32(im, im2);
-              re = simde_mm256_hadd_epi32(re, re);
-              re = simde_mm256_hadd_epi32(re, re);
-              im = simde_mm256_hadd_epi32(im, im);
-              im = simde_mm256_hadd_epi32(im, im);
+	      c64_t prods = {0};
+              simde__m128i re = simde_mm_madd_epi16(coeff[ci], rext[prb]);
+              simde__m128i im = simde_mm_madd_epi16(coeff[ci], rext2[prb]);
+              simde__m128i re2 = simde_mm_madd_epi16(coeff[ci+1], rext[prb]);
+              simde__m128i im2 = simde_mm_madd_epi16(coeff[ci+1], rext2[prb]);
+	      re = simde_mm_add_epi32(re,re2);
+	      im = simde_mm_add_epi32(im,im2);
+              re = simde_mm_hadd_epi32(re, re);
+              re = simde_mm_hadd_epi32(re, re);
+              im = simde_mm_hadd_epi32(im, im);
+              im = simde_mm_hadd_epi32(im, im);
               int32_t *re32 = (int32_t *)&re;
               int32_t *im32 = (int32_t *)&im;
-              c64_t prod = (c64_t){re32[0] + re32[5], im32[0] + im32[5]};
-              csum(prod, prod, corr32[symb][group][aa]);
-              corr_tmp += squaredMod(prod);
+              c64_t prod = (c64_t){re32[0], im32[0]};
+              if (pucch_pdu->freq_hop_flag) {
+		 csum(sum_of_prod[group][symb][aa], sum_of_prod[group][symb][aa],prod);
+	      }
+	      else {
+		 csum(sum_of_prod[group][0][aa], sum_of_prod[group][0][aa],prod);
+	      }
 #ifdef DEBUG_NR_PUCCH_RX
-              printf("pucch2 cw %d group %d aa %d: (%d,%d)+prod=(%ld,%ld)\n",
+              printf("pucch2 cw %d group %d aa %d ci %d: (%d,%d)+prod=(%ld,%ld)\n",
                      cw,
                      group,
                      aa,
-                     corr32[symb][group][aa].r,
-                     corr32[symb][group][aa].i,
+		     ci,
+                     pucch_pdu->freq_hop_flag ? sum_of_prod[group][symb][aa].r : sum_of_prod[group][0][aa].r,
+                     pucch_pdu->freq_hop_flag ? sum_of_prod[group][symb][aa].i : sum_of_prod[group][0][aa].i,
                      prod.r,
                      prod.i);
 #endif
-	    } // aa loop
-	  } // group
-	} // symb
+	      ci+=2;
+	      ci&=3;
+	    } // symb
+	  } // group 
+	} // aa
       } // fmt==2
       else {
           const simde__m128i *modcw = (simde__m128i *)&pucch2_3_lut[nb_bit - 3][cw].cw;
           AssertFatal(ngroup==1,"only 1 frequency group tested/supported for now (1 PRB)\n");
-          c64_t sum_of_prod[ngroup][ndmrs][Prx];
           for (int aa = 0; aa < Prx; aa++) {
 	    int ci=0;
 	    // compute channel references
@@ -1795,7 +1796,7 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
 #endif
 		   }
 	           else { 
-		     csum(sum_of_prod[g][d/2][aa],corr32[dmrspos[2*d]][g][aa],corr32[dmrspos[1+(2*d)]][g][aa]);
+		     csum(sum_of_prod[g][d][aa],corr32[dmrspos[2*d]][g][aa],corr32[dmrspos[1+(2*d)]][g][aa]);
 #ifdef DEBUG_PUCCH_NR_RX
                      printf("ndmrs = 4 : sum_of_prod[%d][%d][%d] %lld.%lld\n",g,d/2,aa,sum_of_prod[g][d/2][aa].r,sum_of_prod[g][d/2][aa].i);
 #endif
@@ -1864,17 +1865,21 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
 	      } //group
 	    } // symb loop
   	  } // aa loop
-// non-coherent combining
-          for (int group = 0 ; group < ngroup ; group++)
-	     for (int aa = 0 ; aa < Prx ; aa++) {
-               corr_tmp += squaredMod(sum_of_prod[group][0][aa]);
-               corr_tmp += squaredMod(sum_of_prod[group][1][aa]);
-#ifdef DEBUG_NR_PUCCH_RX
-	       printf("sum_of_prod[%d][0][%d] (%lld,%lld) sum_of_prod[%d][1][%d] (%lld,%lld)\n",group,aa,sum_of_prod[group][0][aa].r,sum_of_prod[group][0][aa].i,group,aa,sum_of_prod[group][1][aa].r,sum_of_prod[group][1][aa].i);
-	       printf("corr_tmp %lld\n",corr_tmp);
-#endif
-	     }
       } //fmt==3/4
+// non-coherent combining
+      for (int group = 0 ; group < ngroup ; group++)
+        for (int aa = 0 ; aa < Prx ; aa++) {
+            corr_tmp += squaredMod(sum_of_prod[group][0][aa]);
+            if (fmt > 2 || (fmt == 2 && pucch_pdu->freq_hop_flag > 0)) 
+	       corr_tmp += squaredMod(sum_of_prod[group][1][aa]);
+#ifdef DEBUG_NR_PUCCH_RX
+	    if (fmt == 2 && pucch_pdu->freq_hop_flag == 0)
+              printf("sum_of_prod[%d][0][%d] (%lld,%lld)\n",group,aa,sum_of_prod[group][0][aa].r,sum_of_prod[group][0][aa].i);
+	    else 
+              printf("sum_of_prod[%d][0][%d] (%lld,%lld) sum_of_prod[%d][1][%d] (%lld,%lld)\n",group,aa,sum_of_prod[group][0][aa].r,sum_of_prod[group][0][aa].i,group,aa,sum_of_prod[group][1][aa].r,sum_of_prod[group][1][aa].i);
+            printf("corr_tmp %lld\n",corr_tmp);
+#endif
+        }
       if (corr_tmp > corr) {
         corr = corr_tmp;
         cw_ML = cw;

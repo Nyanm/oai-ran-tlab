@@ -167,7 +167,8 @@ int main(int argc, char **argv)
 
   int c;
   int nrofSymbols_set = 0;
-  while ((c = getopt(argc, argv, "--:O:f:hA:f:g:i:I:P:B:b:t:T:m:n:r:o:s:S:x:y:z:N:F:GR:IL:q:cd:C")) != -1) {
+  int freq_hop_flag=0;
+  while ((c = getopt(argc, argv, "--:O:f:hA:f:g:i:I:P:B:b:t:T:m:n:r:o:s:S:x:y:z:N:F:GR:IL:q:cd:CH:")) != -1) {
     /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
     /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
     if (c == 1 || c == '-' || c == 'O')
@@ -343,6 +344,9 @@ int main(int argc, char **argv)
         if ((format == 1 || format == 3) && nrofSymbols_set == 0)
           nrofSymbols = 14;
         break;
+      case 'H':
+	freq_hop_flag = 1;
+	break;
       case 'm':
         m0 = atoi(optarg);
         break;
@@ -536,7 +540,6 @@ int main(int argc, char **argv)
     pucch_tx_pdu.hopping_id = hopping_id;
     pucch_tx_pdu.group_hop_flag = 0;
     pucch_tx_pdu.sequence_hop_flag = 0;
-    pucch_tx_pdu.freq_hop_flag = 0;
     pucch_tx_pdu.mcs = mcs;
     pucch_tx_pdu.initial_cyclic_shift = 0;
     pucch_tx_pdu.second_hop_prb = startingPRB_intraSlotHopping;
@@ -551,8 +554,6 @@ int main(int argc, char **argv)
     pucch_tx_pdu.prb_start = startingPRB;
     pucch_tx_pdu.hopping_id = hopping_id;
     pucch_tx_pdu.group_hop_flag = 0;
-    pucch_tx_pdu.sequence_hop_flag = 0;
-    pucch_tx_pdu.freq_hop_flag = 1;
     pucch_tx_pdu.initial_cyclic_shift = m0;
     pucch_tx_pdu.second_hop_prb = startingPRB_intraSlotHopping;
     pucch_tx_pdu.time_domain_occ_idx = timeDomainOCC;
@@ -570,7 +571,6 @@ int main(int argc, char **argv)
     pucch_tx_pdu.hopping_id = hopping_id;
     pucch_tx_pdu.group_hop_flag = 0;
     pucch_tx_pdu.sequence_hop_flag = 0;
-    pucch_tx_pdu.freq_hop_flag = 0;
     pucch_tx_pdu.dmrs_scrambling_id = dmrs_scrambling_id;
     pucch_tx_pdu.data_scrambling_id = data_scrambling_id;
     pucch_tx_pdu.second_hop_prb = startingPRB_intraSlotHopping;
@@ -586,13 +586,18 @@ int main(int argc, char **argv)
     pucch_tx_pdu.prb_start = startingPRB;
     pucch_tx_pdu.prb_size = nrofPRB;
     pucch_tx_pdu.hopping_id = hopping_id;
-    pucch_tx_pdu.group_hop_flag = 0;
     pucch_tx_pdu.sequence_hop_flag = 0;
     pucch_tx_pdu.freq_hop_flag = 1;
     pucch_tx_pdu.dmrs_scrambling_id = dmrs_scrambling_id;
     pucch_tx_pdu.data_scrambling_id = data_scrambling_id;
     pucch_tx_pdu.second_hop_prb = startingPRB_intraSlotHopping;
   }
+
+  if (freq_hop_flag > 0 && nrofSymbols > 1) {
+      pucch_tx_pdu.freq_hop_flag = 1;
+      pucch_tx_pdu.second_hop_prb = N_RB_DL - nrofPRB;
+  } else
+      pucch_tx_pdu.freq_hop_flag = 0;
 
   pucch_GroupHopping_t PUCCH_GroupHopping = pucch_tx_pdu.group_hop_flag + (pucch_tx_pdu.sequence_hop_flag << 1);
   double tx_level_fp = 100.0;
@@ -759,7 +764,7 @@ int main(int argc, char **argv)
         pucch_pdu.bwp_start = 0;
         pucch_pdu.bwp_size = N_RB_DL;
 
-        if (nrofSymbols > 1) {
+        if (freq_hop_flag > 0 && nrofSymbols > 1) {
           pucch_pdu.freq_hop_flag = 1;
           pucch_pdu.second_hop_prb = N_RB_DL - 1;
         } else
@@ -803,7 +808,10 @@ int main(int argc, char **argv)
         pucch_pdu.prb_size = 1;
         pucch_pdu.bwp_start = 0;
         pucch_pdu.bwp_size = N_RB_DL;
-        pucch_pdu.freq_hop_flag = 1;
+	if (freq_hop_flag > 0)
+          pucch_pdu.freq_hop_flag = 1;
+	else
+	  pucch_pdu.freq_hop_flag = 0;
         pucch_pdu.second_hop_prb = N_RB_DL - 1;
         pucch_pdu.time_domain_occ_idx = timeDomainOCC;
 
@@ -842,9 +850,9 @@ int main(int argc, char **argv)
         pucch_pdu.prb_start = startingPRB;
         pucch_pdu.dmrs_scrambling_id = dmrs_scrambling_id;
         pucch_pdu.data_scrambling_id = data_scrambling_id;
-        if (nrofSymbols > 1) {
+        if (freq_hop_flag > 0 && nrofSymbols > 1) {
           pucch_pdu.freq_hop_flag = 1;
-          pucch_pdu.second_hop_prb = N_RB_DL - 1;
+          pucch_pdu.second_hop_prb = N_RB_DL - nrofPRB;
         } else
           pucch_pdu.freq_hop_flag = 0;
         nr_decode_pucch2_3(gNB, rxdataF, nr_frame_tx, nr_slot_tx, &uci_pdu, &pucch_pdu);
