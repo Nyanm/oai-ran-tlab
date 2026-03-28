@@ -1,33 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file PHY/NR_UE_TRANSPORT/pucch_nr.c
+/*!
 * \brief Top-level routines for generating the PUCCH physical channel
-* \author A. Mico Pereperez
-* \date 2018
-* \version 0.1
-* \company Eurecom
-* \email:
-* \note
-* \warning
 */
 #ifndef __PUCCH_NR__H__
 #define __PUCCH_NR__H__
@@ -66,7 +42,7 @@ void nr_generate_pucch3_4(c16_t **txdataF,
                           const int nr_slot_tx,
                           const fapi_nr_ul_config_pucch_pdu *pucch_pdu);
 
-void nr_uci_encoding(uint64_t payload, uint8_t nr_bit, uint8_t nrofPRB, bool uci_on_pusch, uint16_t E, uint8_t Qm, uint64_t *b);
+void nr_uci_encoding(uint64_t payload, uint8_t nr_bit, bool uci_on_pusch, uint16_t E, uint8_t Qm, uint64_t *b);
 
 static const uint8_t list_of_prime_numbers[46] = {2,  3,  5,  7,  11, 13, 17, 19, 23, 29,
                                          31, 37, 41, 43, 47, 53, 59, 61, 67, 71,

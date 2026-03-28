@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # FAPI/nFAPI split in OAI
 
 This document describes the SmallCellForum (SCF) (n)FAPI split in 5G, i.e.,

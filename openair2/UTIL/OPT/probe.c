@@ -29,14 +29,6 @@
  * SUCH DAMAGE
  */
 
-/*! \file probe.c
-* \brief
-* \author navid nikaein
-* \date 2010-2012
-* \version 1.0
-* \company Eurecom
-* \email: navid.nikaein@eurecom.fr
-*/
 /** @defgroup _oai System definitions
 There is different modules:
 - OAI Address

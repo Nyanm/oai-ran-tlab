@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 add_library(e1ap_lib OBJECT
             e1ap_bearer_context_management.c
             e1ap_interface_management.c

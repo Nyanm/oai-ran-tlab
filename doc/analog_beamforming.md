@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # Implementation of Analog Beamforming
 
 This document explains the implementation of analog beamforming in OAI codebase.

@@ -1,12 +1,9 @@
-/*! \file oaiori.c
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
+/*!
  * \brief AW2S ORI API isolator 
- * \author  Raymond Knopp
- * \date 2019
- * \version 0.1
- * \company Eurecom
- * \maintainer:  raymond.knopp@eurecom.fr
- * \note
- * \warning
  */
 
 #include <arpa/inet.h>

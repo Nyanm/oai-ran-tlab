@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # OAI 7.2 Fronthaul Interface Tutorial
 
 **Table of Contents**

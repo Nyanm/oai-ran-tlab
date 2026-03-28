@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
 
 add_executable(rrc_bearers_test rrc_bearers_test.c ../rrc_gNB_radio_bearers.c ${OPENAIR2_DIR}/LAYER2/nr_pdcp/asn1_utils.c)
 add_dependencies(tests rrc_bearers_test)

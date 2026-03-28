@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # Running OAI 5G Softmodems
 
 This document explains some options for running 5G executables.

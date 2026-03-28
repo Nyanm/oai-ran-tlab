@@ -1,33 +1,11 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
-  gnb_config.c
-  -------------------
-  AUTHOR  : Lionel GAUTHIER, navid nikaein, Laurent Winckel, WEI-TAI CHEN
-  COMPANY : EURECOM, NTUST
-  EMAIL   : Lionel.Gauthier@eurecom.fr, navid.nikaein@eurecom.fr, kroempa@gmail.com
-*/
-
 #include "gnb_config.h"
+#include <ctype.h>
+#include <complex.h>
+#include <errno.h>
 #include <limits.h>
 #include <math.h>
 #include <stdbool.h>
@@ -1366,6 +1344,166 @@ static void get_bwp_config(nr_mac_config_t *configuration, const NR_ServingCellC
   }
 }
 
+static bool parse_complex_token(const char *tok, double complex *out)
+{
+  double re = 0.0;
+  double im = 0.0;
+  if (sscanf(tok, "%lf%lfi", &re, &im) == 2 || sscanf(tok, "%lf%lfj", &re, &im) == 2) {
+    *out = re + I * im;
+    return true;
+  }
+  if (sscanf(tok, "%lfi", &im) == 1 || sscanf(tok, "%lfj", &im) == 1) {
+    *out = I * im;
+    return true;
+  }
+  if (sscanf(tok, "%lf", &re) == 1) {
+    *out = re;
+    return true;
+  }
+  return false;
+}
+
+static double complex **read_dbt_from_csv(const char *filename,
+                                          int *num_beams,
+                                          int *num_weights_per_beam,
+                                          uint16_t **beam_ids)
+{
+  FILE *fp = fopen(filename, "r");
+  AssertFatal(fp != NULL, "Failed to open DBT CSV file '%s'\n", filename);
+
+  char line[16384];
+  AssertFatal(fgets(line, sizeof(line), fp) != NULL, "Failed to read DBT CSV header from '%s'\n", filename);
+
+  int weights = 1;
+  for (char *p = line; *p; ++p)
+    if (*p == ',')
+      weights++;
+  weights -= 1; // first column is beam ID
+  AssertFatal(weights > 0, "DBT CSV '%s' has no weight columns\n", filename);
+
+  int beams = 0;
+  while (fgets(line, sizeof(line), fp))
+    beams++;
+  AssertFatal(beams > 0, "No DBT beam rows found in CSV file '%s'\n", filename);
+
+  rewind(fp);
+  AssertFatal(fgets(line, sizeof(line), fp) != NULL, "Failed to reread DBT CSV header from '%s'\n", filename);
+
+  double complex **table = calloc_or_fail(beams, sizeof(*table));
+  uint16_t *ids = calloc_or_fail(beams, sizeof(*ids));
+
+  int b = 0;
+  while (fgets(line, sizeof(line), fp)) {
+    line[strcspn(line, "\r\n")] = '\0';
+    char *saveptr = NULL;
+    char *tok = strtok_r(line, ",", &saveptr);
+    AssertFatal(tok != NULL, "Malformed DBT row %d in '%s'\n", b + 1, filename);
+
+    errno = 0;
+    char *endptr = NULL;
+    long beam_id = strtol(tok, &endptr, 10);
+    AssertFatal(endptr != tok && errno != ERANGE && *endptr == '\0' && beam_id >= 0 && beam_id <= UINT16_MAX,
+                "Invalid DBT beam id '%s' in file '%s', beam row %d\n",
+                tok,
+                filename,
+                b + 1);
+    ids[b] = (uint16_t)beam_id;
+
+    table[b] = calloc_or_fail(weights, sizeof(*table[b]));
+    for (int w = 0; w < weights; ++w) {
+      tok = strtok_r(NULL, ",", &saveptr);
+      AssertFatal(tok != NULL, "Missing DBT weight in file '%s', beam row %d column %d\n", filename, b + 1, w + 1);
+      AssertFatal(parse_complex_token(tok, &table[b][w]),
+                  "Invalid DBT complex weight '%s' in file '%s', beam row %d column %d\n",
+                  tok,
+                  filename,
+                  b + 1,
+                  w + 1);
+    }
+    AssertFatal(strtok_r(NULL, ",", &saveptr) == NULL,
+                "Too many DBT columns in file '%s', beam row %d\n",
+                filename,
+                b + 1);
+    b++;
+  }
+  AssertFatal(b == beams, "Parsed %d DBT rows but counted %d in file '%s'\n", b, beams, filename);
+
+  fclose(fp);
+  *num_beams = beams;
+  *num_weights_per_beam = weights;
+  *beam_ids = ids;
+  return table;
+}
+
+#define DBT_PARAMS_DESC { \
+  {"", "beam", 0, .strlistptr=NULL, .defstrlistval=NULL, TYPE_STRINGLIST, 0}, \
+}
+
+static double complex **read_dbt_from_config(const char *prefix,
+                                             int *num_beams,
+                                             int *num_weights_per_beam,
+                                             uint16_t **beam_ids)
+{
+  paramdef_t dbt_params[] = DBT_PARAMS_DESC;
+  paramlist_def_t dbt_list = {"dbt", NULL, 0};
+  int ret = config_getlist(config_get_if(), &dbt_list, dbt_params, sizeofArray(dbt_params), prefix);
+  if (ret <= 0) {
+    *num_beams = 0;
+    *num_weights_per_beam = 0;
+    *beam_ids = NULL;
+    return NULL;
+  }
+
+  const int beams = ret;
+  int weights = 0;
+  double complex **table = calloc_or_fail(beams, sizeof(*table));
+  uint16_t *ids = calloc_or_fail(beams, sizeof(*ids));
+
+  for (int b = 0; b < beams; ++b) {
+    paramdef_t *row = &dbt_list.paramarray[b][0];
+    AssertFatal(row->strlistptr != NULL, "Invalid dbt row %d in section '%s': missing string list\n", b, prefix);
+    AssertFatal(row->numelt >= 2,
+                "Invalid dbt row %d in section '%s': expected beam_id + >=1 weights, got %d elements\n",
+                b,
+                prefix,
+                row->numelt);
+
+    const int row_weights = row->numelt - 1;
+    if (weights == 0)
+      weights = row_weights;
+    AssertFatal(weights == row_weights,
+                "Inconsistent dbt row width in section '%s': row %d has %d weights, expected %d\n",
+                prefix,
+                b,
+                row_weights,
+                weights);
+
+    errno = 0;
+    char *endptr = NULL;
+    long beam_id = strtol(row->strlistptr[0], &endptr, 10);
+    AssertFatal(endptr != row->strlistptr[0] && errno != ERANGE && *endptr == '\0' && beam_id >= 0 && beam_id <= UINT16_MAX,
+                "Invalid dbt beam id '%s' in section '%s', row %d\n",
+                row->strlistptr[0],
+                prefix,
+                b);
+    ids[b] = (uint16_t)beam_id;
+
+    table[b] = calloc_or_fail(weights, sizeof(*table[b]));
+    for (int w = 0; w < weights; ++w)
+      AssertFatal(parse_complex_token(row->strlistptr[w + 1], &table[b][w]),
+                  "Invalid dbt complex weight '%s' in section '%s', row %d col %d\n",
+                  row->strlistptr[w + 1],
+                  prefix,
+                  b,
+                  w + 1);
+  }
+
+  *num_beams = beams;
+  *num_weights_per_beam = weights;
+  *beam_ids = ids;
+  return table;
+}
+
 void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
 {
   int j = 0;
@@ -1497,30 +1635,33 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
   AssertFatal(config.first_active_bwp <= config.num_additional_bwps, "1st active BWP does not belog to the configured BWPs\n");
 
   if (MacRLC_ParamList.numelt > 0) {
+    AssertFatal(MacRLC_ParamList.numelt == 1, "only one MACRLCs section supported!\n");
+    AssertFatal(MacRLC_ParamList.numelt == RC.nb_nr_macrlc_inst, "only one MACRLCs section supported!\n");
     /* NR RLC config is needed by mac_top_init_gNB() */
     nr_rlc_configuration_t default_rlc_config;
     config_rlc(cfg, &default_rlc_config);
 
+    config.pusch.target_snrx10 = *(MacRLC_ParamList.paramarray[0][MACRLC_PUSCHTARGETSNRX10_IDX].iptr);
+    config.pusch.rssi_threshold = *(MacRLC_ParamList.paramarray[0][MACRLC_PUSCH_RSSI_THRES_IDX].iptr);
+    config.pucch.rssi_threshold = *(MacRLC_ParamList.paramarray[0][MACRLC_PUCCH_RSSI_THRES_IDX].iptr);
+    config.pucch.target_snrx10 = *(MacRLC_ParamList.paramarray[0][MACRLC_PUCCHTARGETSNRX10_IDX].iptr);
+    config.ul_prbblack_SNR_threshold = *(MacRLC_ParamList.paramarray[0][MACRLC_UL_PRBBLACK_SNR_THRESHOLD_IDX].iptr);
+    config.pucch.failure_thres = *(MacRLC_ParamList.paramarray[0][MACRLC_PUCCHFAILURETHRES_IDX].iptr);
+    config.pusch.failure_thres = *(MacRLC_ParamList.paramarray[0][MACRLC_PUSCHFAILURETHRES_IDX].iptr);
+
+    LOG_I(NR_MAC,
+          "PUSCH Target %d RSSI thresh %d Failure %d, PUCCH Target %d RSSI thresh %d Failure %d\n",
+          config.pusch.target_snrx10,
+          config.pusch.rssi_threshold,
+          config.pusch.failure_thres,
+          config.pucch.target_snrx10,
+          config.pucch.rssi_threshold,
+          config.pucch.failure_thres);
+
     ngran_node_t node_type = get_node_type();
     mac_top_init_gNB(node_type, scc, &config, &default_rlc_config);
-    RC.nb_nr_mac_CC = (int *)malloc(RC.nb_nr_macrlc_inst * sizeof(int));
 
     for (j = 0; j < RC.nb_nr_macrlc_inst; j++) {
-      RC.nb_nr_mac_CC[j] = *(MacRLC_ParamList.paramarray[j][MACRLC_CC_IDX].iptr);
-      RC.nrmac[j]->pusch_target_snrx10 = *(MacRLC_ParamList.paramarray[j][MACRLC_PUSCHTARGETSNRX10_IDX].iptr);
-      RC.nrmac[j]->pusch_rssi_threshold = *(MacRLC_ParamList.paramarray[j][MACRLC_PUSCH_RSSI_THRES_IDX].iptr);
-      RC.nrmac[j]->pucch_rssi_threshold = *(MacRLC_ParamList.paramarray[j][MACRLC_PUCCH_RSSI_THRES_IDX].iptr);
-      RC.nrmac[j]->pucch_target_snrx10 = *(MacRLC_ParamList.paramarray[j][MACRLC_PUCCHTARGETSNRX10_IDX].iptr);
-      RC.nrmac[j]->ul_prbblack_SNR_threshold = *(MacRLC_ParamList.paramarray[j][MACRLC_UL_PRBBLACK_SNR_THRESHOLD_IDX].iptr);
-      RC.nrmac[j]->pucch_failure_thres = *(MacRLC_ParamList.paramarray[j][MACRLC_PUCCHFAILURETHRES_IDX].iptr);
-      RC.nrmac[j]->pusch_failure_thres = *(MacRLC_ParamList.paramarray[j][MACRLC_PUSCHFAILURETHRES_IDX].iptr);
-
-      LOG_I(NR_MAC,
-            "PUSCH Target %d, PUCCH Target %d, PUCCH Failure %d, PUSCH Failure %d\n",
-            RC.nrmac[j]->pusch_target_snrx10,
-            RC.nrmac[j]->pucch_target_snrx10,
-            RC.nrmac[j]->pucch_failure_thres,
-            RC.nrmac[j]->pusch_failure_thres);
       if (strcmp(*(MacRLC_ParamList.paramarray[j][MACRLC_TRANSPORT_N_PREFERENCE_IDX].strptr), "local_RRC") == 0) {
         // check number of instances is same as RRC/PDCP
 
@@ -1604,13 +1745,15 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
         beam_info->beams_per_period = beams_per_period;
         beam_info->beam_allocation_size = -1; // to be initialized once we have information on frame configuration
       }
+      bool das_enabled = false;
+      if (NFAPI_MODE == NFAPI_MONOLITHIC) {
+        GET_PARAMS_LIST(L1_ParamList, L1_Params, L1PARAMS_DESC, CONFIG_STRING_L1_LIST, NULL);
+        das_enabled =  *(L1_ParamList.paramarray[j][L1_ANALOG_DAS].uptr);
+      }
       // TODO config_isparamset doesn't seem to work for array types, checking numelt instead
       int n = MacRLC_ParamList.paramarray[j][MACRLC_BEAMWEIGHTS_IDX].numelt;
       if (n > 0) {
-        if (NFAPI_MODE == NFAPI_MONOLITHIC) {
-          GET_PARAMS_LIST(L1_ParamList, L1_Params, L1PARAMS_DESC, CONFIG_STRING_L1_LIST, NULL);
-          AssertFatal(*(L1_ParamList.paramarray[j][L1_ANALOG_DAS].uptr) == 0, "No need to set beam weights in case of DAS\n");
-        }
+        AssertFatal(!das_enabled, "No need to set beam weights in case of DAS\n");
         int num_beam = n;
         if (RC.nrmac[j]->beam_info.beam_mode == PRECONFIGURED_BEAM_IDX) {
           AssertFatal(n % num_tx == 0, "Error! Number of beam input needs to be multiple of TX antennas\n");
@@ -1624,6 +1767,28 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
         config.bw_list = calloc_or_fail(n, sizeof(*config.bw_list));
         for (int b = 0; b < n; b++)
           config.bw_list[b] = MacRLC_ParamList.paramarray[j][MACRLC_BEAMWEIGHTS_IDX].iptr[b];
+      } else if (das_enabled) {
+        n = *MacRLC_ParamList.paramarray[j][MACRLC_ANALOG_BEAMS_PERIOD_IDX].u8ptr;
+        config.nb_bfw[0] = num_tx;  // number of tx antennas
+        config.nb_bfw[1] = n; // number of beams weights/indices
+        config.bw_list = calloc_or_fail(n, sizeof(*config.bw_list));
+        for (int b = 0; b < n; b++)
+          config.bw_list[b] = b;
+      }
+      config.bt.num_beams = 0;
+      config.bt.num_weights_per_beam = 0;
+      config.bt.beam_ids = NULL;
+      config.bt.beam_weights = NULL;
+      char **fptr = MacRLC_ParamList.paramarray[j][MACRLC_DBT_FILE_IDX].strptr;
+      if (fptr && *fptr && **fptr != '\0') {
+        LOG_I(GNB_APP, "loading DBT table from file %s\n", *fptr);
+        config.bt.beam_weights =
+            read_dbt_from_csv(*fptr, &config.bt.num_beams, &config.bt.num_weights_per_beam, &config.bt.beam_ids);
+      } else {
+        char prefix[MAX_OPTNAME_SIZE * 2 + 8];
+        snprintf(prefix, sizeof(prefix), CONFIG_STRING_MACRLC_LIST ".[%d]", j);
+        config.bt.beam_weights =
+            read_dbt_from_config(prefix, &config.bt.num_beams, &config.bt.num_weights_per_beam, &config.bt.beam_ids);
       }
       // triggers also PHY initialization in case we have L1 via FAPI
       nr_mac_config_scc(RC.nrmac[j], scc, &config);

@@ -1,22 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.0  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include "nr_common.h"
@@ -725,7 +708,7 @@ void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
                              *nb_rb,
                              rel15_ul->rnti,
                              frame_parms->ofdm_symbol_size,
-                             (int16_t *)&pusch_vars->rxdataF_comp[aarx][(symbol * nb_re_pusch)],
+                             &pusch_vars->rxdataF_comp[aarx][(symbol * nb_re_pusch)],
                              gold,
                              (int16_t *)&phase_per_symbol[symbol],
                              ptrs_re_symbol);
@@ -754,9 +737,9 @@ void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
 #ifdef DEBUG_UL_PTRS
           printf("[PHY][UL][PTRS]: Rotate Symbol %2d with  %d + j* %d\n", i, phase_per_symbol[i].r, phase_per_symbol[i].i);
 #endif
-          rotate_cpx_vector((c16_t *)&pusch_vars->rxdataF_comp[aarx][i * nb_re_pusch],
+          rotate_cpx_vector(&pusch_vars->rxdataF_comp[aarx][i * nb_re_pusch],
                             &phase_per_symbol[i],
-                            (c16_t *)&pusch_vars->rxdataF_comp[aarx][i * nb_re_pusch],
+                            &pusch_vars->rxdataF_comp[aarx][i * nb_re_pusch],
                             ((*nb_rb) * NR_NB_SC_PER_RB),
                             15);
         } // if not DMRS Symbol

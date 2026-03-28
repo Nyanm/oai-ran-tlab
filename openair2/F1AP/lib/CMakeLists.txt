@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 add_library(f1ap_lib OBJECT
             f1ap_lib_common.c
             f1ap_rrc_message_transfer.c

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 FROM ran-base:latest
 ARG USERNAME=root
 ARG USER_UID=1000

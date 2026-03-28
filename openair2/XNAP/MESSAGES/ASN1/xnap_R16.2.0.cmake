@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 set(XNAP_GRAMMAR ASN1/xnap_R16.2.0.asn)
 
 set(xnap_source

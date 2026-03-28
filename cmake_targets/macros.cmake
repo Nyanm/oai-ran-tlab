@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 ###########################################
 # macros to define options as there is numerous options in oai
 ################################################

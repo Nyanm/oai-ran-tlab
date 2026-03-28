@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 add_library(polar STATIC
   nr_polar_init.c
   nr_bitwise_operations.c

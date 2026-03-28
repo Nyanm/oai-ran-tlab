@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 STATUS 2020/10/15 : added External Resources section and links  
 
 **Table of Contents**

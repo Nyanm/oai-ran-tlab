@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 add_executable(nr-cu-nrppa-test nr-cu-nrppa.c
                ${OPENAIR2_DIR}/GNB_APP/gnb_config_common.c
                ${OPENAIR2_DIR}/GNB_APP/gnb_config_ng.c)

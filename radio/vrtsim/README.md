@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # Overview
 
 This implements a shared memory realtime and near-realtime radio interface.

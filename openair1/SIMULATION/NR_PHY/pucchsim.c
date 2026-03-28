@@ -1,22 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include <string.h>
@@ -103,19 +86,12 @@ int main(int argc, char **argv)
   __attribute__((unused)) struct sigaction oldaction;
   sigaction(SIGINT, &sigint_action, &oldaction);
 
-  int i; //,l;
+  int i; 
   double SNR, snr0 = -2.0, snr1 = 2.0;
   double cfo = 0;
   uint8_t snr1set = 0;
   double **s_re, **s_im, **r_re, **r_im;
-  // int sync_pos, sync_pos_slot;
-  // FILE *rx_frame_file;
   FILE *output_fd = NULL;
-  // uint8_t write_output_file=0;
-  // int result;
-  // int freq_offset;
-  // int subframe_offset;
-  // char fname[40], vname[40];
   int trial, n_trials = 100, n_errors = 0, ack_nack_errors = 0, sr_errors = 0;
   int ret = 1;
   uint8_t transmission_mode = 1, n_tx = 1, n_rx = 1;
@@ -123,9 +99,7 @@ int main(int argc, char **argv)
   uint64_t SSB_positions = 0x01;
   channel_desc_t *UE2gNB;
   int format = 0;
-  // uint8_t extended_prefix_flag=0;
   FILE *input_fd = NULL;
-  // uint8_t nacktoack_flag=0;
   int16_t amp = 0x1000;
   int nr_slot_tx = 0;
   int nr_frame_tx = 0;
@@ -134,11 +108,8 @@ int main(int argc, char **argv)
   int nr_bit = 1; // maximum value possible is 2
   uint8_t m0 = 0; // higher layer paramater initial cyclic shift
   uint8_t nrofSymbols = 1; // number of OFDM symbols can be 1-2 for format 1
-  uint8_t startingSymbolIndex =
-      0; // resource allocated see 9.2.1, 38.213 for more info.should be actually present in the resource set provided
-  uint16_t startingPRB = 0,
-           startingPRB_intraSlotHopping =
-               0; // PRB number not sure see 9.2.1, 38.213 for more info. Should be actually present in the resource set provided
+  uint8_t startingSymbolIndex = 0; 
+  uint16_t startingPRB = 0, startingPRB_intraSlotHopping = 0; 
   uint16_t nrofPRB = 2;
   uint8_t timeDomainOCC = 0;
   SCM_t channel_model = AWGN; // Rayleigh1_anticorr;
@@ -259,23 +230,7 @@ int main(int argc, char **argv)
       case 't':
         pucch_DTX_thres = atoi(optarg);
         break;
-        /*
-      case 'p':
-        extended_prefix_flag=1;
-        break;
 
-      case 'd':
-        frame_type = 1;
-        break;
-
-      case 'r':
-        ricean_factor = pow(10,-.1*atof(optarg));
-        if (ricean_factor>1) {
-          printf("Ricean factor must be between 0 and 1\n");
-          exit(-1);
-        }
-        break;
-        */
       case 'd':
         delay_us = atof(optarg);
         break;
@@ -429,7 +384,7 @@ int main(int argc, char **argv)
 
   AssertFatal(((format < 2) && (nr_bit < 3) && (actual_payload < 5)) || 
               ((format == 2) && (nr_bit > 2) && (nr_bit < 65)) || 
-	      ((format == 3) && (nr_bit > 2) && (nr_bit<12)),
+	      ((format == 3) && (nr_bit > 2) && (nr_bit < 65)),
               "illegal combination format %d, nr_bit %d\n",
               format,
               nr_bit);
@@ -513,9 +468,7 @@ int main(int argc, char **argv)
       AssertFatal(1 == 0, "Either nr_bit %d or sr_flag %d must be non-zero\n", nr_bit, sr_flag);
   }
 
-  startingPRB_intraSlotHopping =
-      N_RB_DL - 1; // FIXME: there is a problem with freq hopping when using N_RB_DL-1, if we pass txDataF to decode_pucch1, it
-                   // works (z=1), problem somewhere in simulation not decoding
+  startingPRB_intraSlotHopping = N_RB_DL - 1; 
   uint32_t hopping_id = Nid_cell;
   uint32_t dmrs_scrambling_id = 0;
   uint32_t data_scrambling_id = 0;
@@ -544,7 +497,7 @@ int main(int argc, char **argv)
     pucch_tx_pdu.initial_cyclic_shift = 0;
     pucch_tx_pdu.second_hop_prb = startingPRB_intraSlotHopping;
   }
-  if (format == 1) {
+  else if (format == 1) {
     pucch_tx_pdu.format_type = 0;
     pucch_tx_pdu.n_bit = nr_bit;
     pucch_tx_pdu.payload = actual_payload;
@@ -557,8 +510,7 @@ int main(int argc, char **argv)
     pucch_tx_pdu.initial_cyclic_shift = m0;
     pucch_tx_pdu.second_hop_prb = startingPRB_intraSlotHopping;
     pucch_tx_pdu.time_domain_occ_idx = timeDomainOCC;
-  }
-  if (format == 2) {
+  } else if (format == 2) {
     pucch_tx_pdu.format_type = 2;
     pucch_tx_pdu.rnti = 0x1234;
     pucch_tx_pdu.n_bit = nr_bit;
@@ -829,7 +781,6 @@ int main(int argc, char **argv)
           else if ((!confidence_lvl && !harq_list[0].harq_value) || (!confidence_lvl && nr_bit == 2 && !harq_list[1].harq_value))
             ack_nack_errors++;
         }
-
       } else if (format == 2 || format == 3) {
         nfapi_nr_uci_pucch_pdu_format_2_3_4_t uci_pdu = {0};
         nfapi_nr_pucch_pdu_t pucch_pdu = {0};

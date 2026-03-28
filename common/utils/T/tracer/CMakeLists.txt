@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 add_library(tracer_utils OBJECT configuration.c database.c event.c handler.c utils.c)
 target_link_libraries(tracer_utils PUBLIC m pthread)
 

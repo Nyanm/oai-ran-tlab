@@ -1,22 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 /*! \file gNB_scheduler_uci.c
@@ -637,6 +620,12 @@ static void evaluate_cqi_report(uint8_t *payload,
 
   uint8_t temp_cqi = pickandreverse_bits(payload, 4, cumul_bits);
 
+  DevAssert(temp_cqi >= 0 && temp_cqi <= 15);  // binX: value is 0-indexed, so it uses temp_cqi below
+  DevAssert(ri >= 0 && ri <= 7);               // binY: value is 0-indexed, so it used ri below
+  DevAssert(cqi_Table >= 0 && cqi_Table <= 2); // binZ: value is 0-indexed, so it uses cqi_Table below
+  NR_du_stats_t *stats = &RC.nrmac[0]->du_stats;
+  stats->wb_cqi_dist[temp_cqi][ri][cqi_Table] += 1;
+
   // NR_CSI_ReportConfig__cqi_Table_table1	= 0
   // NR_CSI_ReportConfig__cqi_Table_table2	= 1
   // NR_CSI_ReportConfig__cqi_Table_table3	= 2
@@ -879,7 +868,6 @@ static NR_UE_harq_t *find_harq(frame_t frame, slot_t slot, NR_UE_info_t * UE, in
 void handle_nr_uci_pucch_0_1(module_id_t mod_id, frame_t frame, slot_t slot, const nfapi_nr_uci_pucch_pdu_format_0_1_t *uci_01)
 {
   gNB_MAC_INST *nrmac = RC.nrmac[mod_id];
-  int rssi_threshold = nrmac->pucch_rssi_threshold;
   NR_SCHED_LOCK(&nrmac->sched_lock);
   NR_UE_info_t *UE = find_nr_UE(&nrmac->UE_info, uci_01->rnti);
   bool is_ra = false;
@@ -925,17 +913,26 @@ void handle_nr_uci_pucch_0_1(module_id_t mod_id, frame_t frame, slot_t slot, con
           return;
         }
       }
-      if (harq_confidence == 1)
+      if (harq_confidence == 1) {
         UE->mac_stats.pucch0_DTX++;
+        // DTX for each _bit_, but maybe once for PUCCH is enough? not sure
+        nr_mac_signal_dtx(&sched_ctrl->pucch_pc);
+      }
     }
 
     // tpc (power control) only if we received AckNack
     if (uci_01->harq.harq_confidence_level == 0 && uci_01->ul_cqi != 0xff) {
-      sched_ctrl->pucch_snrx10 = uci_01->ul_cqi * 5 - 640;
-      sched_ctrl->tpc1 = nr_get_tpc(nrmac->pucch_target_snrx10, uci_01->ul_cqi, 30, 0);
-    } else
-      sched_ctrl->tpc1 = 1;
-    sched_ctrl->tpc1 = nr_limit_tpc(sched_ctrl->tpc1, uci_01->rssi, rssi_threshold);
+      int pucch_snrx10 = uci_01->ul_cqi * 5 - 640;
+      nr_mac_pc_snr(&sched_ctrl->pucch_pc, pucch_snrx10, uci_01->rssi);
+
+      T(T_GNB_MAC_PUCCH_POWER_CONTROL,
+        T_INT(uci_01->rnti),
+        T_INT(frame),
+        T_INT(slot),
+        T_INT(pucch_snrx10),
+        T_INT(1),
+        T_INT(uci_01->rssi));
+    }
   }
 
   // check scheduling request result, confidence_level == 0 is good
@@ -954,7 +951,6 @@ void handle_nr_uci_pucch_2_3_4(module_id_t mod_id, frame_t frame, slot_t slot, c
 {
   gNB_MAC_INST *nrmac = RC.nrmac[mod_id];
   NR_SCHED_LOCK(&nrmac->sched_lock);
-  int rssi_threshold = nrmac->pucch_rssi_threshold;
 
   NR_UE_info_t *UE = find_nr_UE(&nrmac->UE_info, uci_234->rnti);
   if (!UE) {
@@ -968,9 +964,16 @@ void handle_nr_uci_pucch_2_3_4(module_id_t mod_id, frame_t frame, slot_t slot, c
   // tpc (power control)
   // TODO PUCCH2 SNR computation is not correct -> ignore the following
   if (uci_234->ul_cqi != 0xff) {
-    sched_ctrl->pucch_snrx10 = uci_234->ul_cqi * 5 - 640;
-    sched_ctrl->tpc1 = nr_get_tpc(nrmac->pucch_target_snrx10, uci_234->ul_cqi, 30, 0);
-    sched_ctrl->tpc1 = nr_limit_tpc(sched_ctrl->tpc1, uci_234->rssi, rssi_threshold);
+    int pucch_snrx10 = uci_234->ul_cqi * 5 - 640;
+    nr_mac_pc_snr(&sched_ctrl->pucch_pc, pucch_snrx10, uci_234->rssi);
+
+    T(T_GNB_MAC_PUCCH_POWER_CONTROL,
+      T_INT(uci_234->rnti),
+      T_INT(frame),
+      T_INT(slot),
+      T_INT(pucch_snrx10),
+      T_INT(1),
+      T_INT(uci_234->rssi));
   }
 
   // TODO: handle SR

@@ -1,33 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/* \file nr_ue_dci_configuration.c
+/*
  * \brief functions for generating dci search procedures based on RRC Serving Cell Group Configuration
- * \author R. Knopp, G. Casati
- * \date 2020
- * \version 0.2
- * \company Eurecom, Fraunhofer IIS
- * \email: knopp@eurecom.fr, guido.casati@iis.fraunhofer.de
- * \note
- * \warning
  */
 
 #include "mac_proto.h"
@@ -461,8 +437,11 @@ void ue_dci_configuration(NR_UE_MAC_INST_t *mac, fapi_nr_dl_config_request_t *dl
   NR_BWP_PDCCH_t *pdcch_config = &mac->config_BWP_PDCCH[dl_bwp_id];
   int scs = current_DL_BWP ? current_DL_BWP->scs : mac->numerology;
   const int slots_per_frame = get_slots_per_frame_from_scs(scs);
-  if (mac->get_sib1) {
+  if (mac->get_sib1 || mac->update_pdcch_config) {
     update_pdcch_config(mac);
+    mac->update_pdcch_config = false;
+  }
+  if (mac->get_sib1) {
     bool is_occasion = is_ss_monitor_occasion(frame, slot, slots_per_frame, mac->search_space_zero);
     if (is_occasion) {
       LOG_D(NR_MAC_DCI, "Monitoring DCI for SIB1 in frame %d slot %d\n", frame, slot);

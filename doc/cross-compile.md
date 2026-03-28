@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # OpenAirInterface Cross-Compiler User Guide
 
 This document explains how to build OAI for ARM64

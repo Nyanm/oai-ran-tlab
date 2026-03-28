@@ -1,33 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file nr_transport_proto_ue.h
+/*!
  * \brief Function prototypes for PHY physical/transport channel processing and generation V8.6 2009-03
- * \author R. Knopp, F. Kaltenberger
- * \date 2011
- * \version 0.1
- * \company Eurecom
- * \email: knopp@eurecom.fr
- * \note
- * \warning
  */
 #ifndef __NR_TRANSPORT_PROTO_UE__H__
 #define __NR_TRANSPORT_PROTO_UE__H__
@@ -309,16 +285,16 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                 unsigned char harq_pid,
                 uint32_t pdsch_est_size,
                 int32_t dl_ch_estimates[][pdsch_est_size],
-                int layer_llr_size,
-                int16_t layer_llr[][layer_llr_size],
                 int16_t *llr[2],
                 uint32_t dl_valid_re[NR_SYMBOLS_PER_SLOT],
                 c16_t rxdataF[][ue->frame_parms.samples_per_slot_wCP],
-                uint32_t llr_offset[NR_SYMBOLS_PER_SLOT],
                 int32_t *log2_maxh,
                 int rx_size_symbol,
                 int nbRx,
-                int32_t rxdataF_comp[][nbRx][rx_size_symbol * NR_SYMBOLS_PER_SLOT],
+                c16_t rxdataF_comp[][dlsch->Nl][nbRx][rx_size_symbol],
+                c16_t dl_ch_mag[][dlsch->Nl][nbRx][rx_size_symbol],
+                c16_t dl_ch_magb[][dlsch->Nl][nbRx][rx_size_symbol],
+                c16_t dl_ch_magr[][dlsch->Nl][nbRx][rx_size_symbol],
                 c16_t ptrs_phase_per_slot[][NR_SYMBOLS_PER_SLOT],
                 int32_t ptrs_re_per_slot[][NR_SYMBOLS_PER_SLOT],
                 int G,

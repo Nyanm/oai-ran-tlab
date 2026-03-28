@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #include <stdint.h>
 #include <openair1/PHY/impl_defs_top.h>
 #include <radio/COMMON/common_lib.h>

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # OpenAirInterface documentation overview
 
 This is the general overview page of the OpenAirInterface documentation.
@@ -124,6 +126,7 @@ The other SDRs (AW2S, LimeSDR, ...) have no READMEs.
 - Component tests are under `tests/`. Currently, the following component tests are supported
   - A simple CU-UP tester, see the corresponding [README.md](../tests/nr-cuup/README.md).
   - A CU-NRPPA tester, see the corresponding [README.md](../tests/nr-cu-nrppa/README.md).
+  - A UE NAS tester, see the corresponding [README.md](../tests/nr-ue-nas-simulator/README.md).
 - [TESTBenches.md](./TESTBenches.md) lists the CI setup and links to pipelines
 - The CI setup uses a [custom framework](../ci-scripts/README.md) to run
   end-to-end tests.

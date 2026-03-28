@@ -1,33 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file PHY/NR_TRANSPORT/pucch_rx.c
+/*!
  * \brief Top-level routines for decoding the PUCCH physical channel
- * \author A. Mico Pereperez, Padarthi Naga Prasanth, Francesco Mani, Raymond Knopp
- * \date 2020
- * \version 0.2
- * \company Eurecom
- * \email:
- * \note
- * \warning
  */
 #include <stdio.h>
 #include <string.h>
@@ -55,7 +31,6 @@
 #include "nr_phy_common.h"
 
 //#define DEBUG_NR_PUCCH_RX 1
-//#define DELAYEST
 void nr_fill_pucch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pucch_pdu_t *pucch_pdu)
 {
   bool found = false;
@@ -350,7 +325,6 @@ void nr_decode_pucch0(PHY_VARS_gNB *gNB,
       maxpos = i;
       uci_stats->current_pucch0_stat0 = 0;
       int64_t temp2 = 0, temp3 = 0;
-      ;
       for (int aa = 0; aa < frame_parms->nb_antennas_rx; aa++) {
         temp2 += squaredMod(corr[aa][0]);
         if (pucch_pdu->nr_of_symbols == 2)
@@ -498,6 +472,22 @@ void nr_decode_pucch1(PHY_VARS_gNB *gNB,
                       nfapi_nr_uci_pucch_pdu_format_0_1_t *uci_pdu,
                       nfapi_nr_pucch_pdu_t *pucch_pdu)
 {
+#ifdef DEBUG_NR_PUCCH_RX
+  printf(
+      "\t [nr_decode_pucch1] start function at slot(nr_tti_tx)=%d "
+      "payload=%lux m0=%d nrofSymbols=%d startingSymbolIndex=%d "
+      "startingPRB=%d startingPRB_intraSlotHopping=%d timeDomainOCC=%d "
+      "nr_bit=%d\n",
+      nr_tti_tx,
+      *payload,
+      m0,
+      nrofSymbols,
+      startingSymbolIndex,
+      startingPRB,
+      startingPRB_intraSlotHopping,
+      timeDomainOCC,
+      pucch_pdu->bit_len_harq);
+#endif
   /*
    * Implement TS 38.211 Subclause 6.3.2.4.1 Sequence modulation
    *
@@ -552,8 +542,8 @@ void nr_decode_pucch1(PHY_VARS_gNB *gNB,
   /*
    * Implementing TS 38.211 Subclause 6.3.2.4.2 Mapping to physical resources
    */
-#define MAX_SIZE_Z \
-  168 // this value has to be calculated from mprime*12*table_6_3_2_4_1_1_N_SF_mprime_PUCCH_1_noHop[pucch_symbol_length]+m*12+n
+// This value has to be calculated from mprime*12*table_6_3_2_4_1_1_N_SF_mprime_PUCCH_1_noHop[pucch_symbol_length]+m*12+n
+#define MAX_SIZE_Z 168 
   c16_t z_rx[16][MAX_SIZE_Z] = {0};
   c16_t z_dmrs_rx[16][MAX_SIZE_Z] = {0};
   c16_t z[16][12] = {0};
@@ -562,7 +552,7 @@ void nr_decode_pucch1(PHY_VARS_gNB *gNB,
   for (int l = 0; l < pucch_pdu->nr_of_symbols; l++) { // extracting data and dmrs from rxdataF
     if (intraSlotFrequencyHopping && (l >= floor(pucch_pdu->nr_of_symbols / 2))) { // intra-slot hopping enabled, we need
       // to calculate new offset PRB
-      pucch_pdu->prb_start = pucch_pdu->bwp_start + pucch_pdu->second_hop_prb; // FIXME: should be bwpStart instead of startingPRB
+      pucch_pdu->prb_start = pucch_pdu->bwp_start + pucch_pdu->second_hop_prb;
     }
     int re_offset = (l + pucch_pdu->start_symbol_index) * frame_parms->ofdm_symbol_size;
 
@@ -684,23 +674,6 @@ void nr_decode_pucch1(PHY_VARS_gNB *gNB,
         r_u_v_alpha_delta[n] = c16mulShift(angle, table, 15);
       else
         r_u_v_alpha_delta_dmrs[n] = c16mulRealShift(c16mulShift(angle, table, 15), amp, 15);
-#ifdef DEBUG_NR_PUCCH_RX
-        /*
-          printf(
-            "\t [nr_decode_pucch1] sequence generation \tu=%d \tv=%d "
-            "\talpha=%lf \tr_u_v_alpha_delta[n=%d]=(%d,%d) "
-            "\ty_n[n=%d]=(%f,%f)\n",
-            u,
-            v,
-            alpha,
-            n,
-            r_u_v_alpha_delta[n].r,
-            r_u_v_alpha_delta[n].i,
-            n,
-            y_n[n].r,
-            y_n[n].i);
-          */
-#endif
     }
     /*
      * The block of complex-valued symbols y(n) shall be block-wise spread with the orthogonal sequence wi(m)
@@ -737,12 +710,10 @@ void nr_decode_pucch1(PHY_VARS_gNB *gNB,
       // symbols nrofSymbols, mprime=0 and intra-slot hopping enabled/disabled)
       // mprime is 0 if no intra-slot hopping / mprime is {0,1} if intra-slot
       // hopping
-      int N_SF_mprime_PUCCH_1 = table_6_3_2_4_1_1_N_SF_mprime_PUCCH_1_noHop[pucch_pdu->nr_of_symbols
-                                                                            - 1]; // only if intra-slot hopping not enabled (PUCCH)
-      int N_SF_mprime_PUCCH_DMRS_1 =
-          table_6_4_1_3_1_1_1_N_SF_mprime_PUCCH_1_noHop[pucch_pdu->nr_of_symbols
-                                                        - 1]; // only if intra-slot hopping not enabled (DM-RS)
-
+      // only if intra-slot hopping not enabled (PUCCH)
+      int N_SF_mprime_PUCCH_1 = table_6_3_2_4_1_1_N_SF_mprime_PUCCH_1_noHop[pucch_pdu->nr_of_symbols - 1];
+      // only if intra-slot hopping not enabled (DM-RS)
+      int N_SF_mprime_PUCCH_DMRS_1 = table_6_4_1_3_1_1_1_N_SF_mprime_PUCCH_1_noHop[pucch_pdu->nr_of_symbols - 1]; 
       if (l % 2 == 1) {
         for (int m = 0; m < N_SF_mprime_PUCCH_1; m++) {
           c16_t table = {table_6_3_2_4_1_2_Wi_Re[N_SF_mprime_PUCCH_1][w_index][m],
@@ -796,18 +767,14 @@ void nr_decode_pucch1(PHY_VARS_gNB *gNB,
       // symbols nrofSymbols, mprime=0 and intra-slot hopping enabled/disabled)
       // mprime is 0 if no intra-slot hopping / mprime is {0,1} if intra-slot
       // hopping
-      int N_SF_mprime_PUCCH_1 =
-          table_6_3_2_4_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols
-                                                      - 1]; // only if intra-slot hopping enabled mprime = 0 (PUCCH)
-      int N_SF_mprime_PUCCH_DMRS_1 =
-          table_6_4_1_3_1_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols
-                                                        - 1]; // only if intra-slot hopping enabled mprime = 0 (DM-RS)
-      int N_SF_mprime0_PUCCH_1 =
-          table_6_3_2_4_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols
-                                                      - 1]; // only if intra-slot hopping enabled mprime = 0 (PUCCH)
-      int N_SF_mprime0_PUCCH_DMRS_1 =
-          table_6_4_1_3_1_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols
-                                                        - 1]; // only if intra-slot hopping enabled mprime = 0 (DM-RS)
+      // only if intra-slot hopping enabled mprime = 0 (PUCCH)
+      int N_SF_mprime_PUCCH_1 = table_6_3_2_4_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols - 1]; 
+      // only if intra-slot hopping enabled mprime = 0 (DM-RS)
+      int N_SF_mprime_PUCCH_DMRS_1 = table_6_4_1_3_1_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols - 1]; 
+      // only if intra-slot hopping enabled mprime = 0 (PUCCH)
+      int N_SF_mprime0_PUCCH_1 = table_6_3_2_4_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols - 1];
+      // only if intra-slot hopping enabled mprime = 0 (DM-RS)
+      int N_SF_mprime0_PUCCH_DMRS_1 = table_6_4_1_3_1_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols - 1]; 
 #ifdef DEBUG_NR_PUCCH_RX
       printf(
           "\t [nr_decode_pucch1] w_index = %d, N_SF_mprime_PUCCH_1 = %d, N_SF_mprime_PUCCH_DMRS_1 = %d, N_SF_mprime0_PUCCH_1 = %d, "
@@ -1179,8 +1146,6 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
   // pucch_GroupHopping_t pucch_GroupHopping = pucch_pdu->group_hop_flag + (pucch_pdu->sequence_hop_flag<<1);
   const int nb_symbols = pucch_pdu->nr_of_symbols;
   int fmt=pucch_pdu->format_type;
-
-
   AssertFatal(fmt==2 || fmt==3, "Format %d is not 2 or 3\n",fmt);
   if (fmt==2) AssertFatal(nb_symbols == 1 || nb_symbols == 2, "Illegal number of symbols  for PUCCH 2 %d\n", nb_symbols);
   if (fmt==3) AssertFatal(nb_symbols >= 4 || nb_symbols <= 14, "Illegal number of symbols  for PUCCH 2 %d\n", nb_symbols);
@@ -1894,15 +1859,16 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
 #endif
     decodedPayload[0] = (uint64_t)cw_ML;
 
-  } else if (nb_bit >= 12) { // polar coded case
+  } else if (nb_bit >= 12) { // polar coded case format 2
 
-    simde__m128i llrs[pucch_pdu->prb_size * 2 * nb_symbols];
+    simde__m128i llrs[pucch_pdu->prb_size * (fmt==2 ? 2 : 3) * (nb_symbols-ndmrs)];
     // non-coherent LLR computation on groups of 4 REs (half-PRBs)
     uint64_t corr = 0;
     const simde__m128i ones = simde_mm_set1_epi16(1);
-    for (int symb = 0; symb < nb_symbols; symb++) {
-      for (int half_prb = 0; half_prb < (2 * pucch_pdu->prb_size); half_prb++) {
-	int group = (6*half_prb)/(12*nc_group_size);
+    int dmrs_size = fmt==2 ? 4 : 12;
+    for (int symb = 0; symb < (nb_symbols-ndmrs); symb++) {
+      for (int four_res = 0; four_res < ((fmt==2 ? 2 : 3) * pucch_pdu->prb_size); four_res++) {
+	int group = ((fmt==2 ? 6 : 3)*four_res)/(12*nc_group_size);
         simde__m128i llr_num = simde_mm_set1_epi16(0);
         simde__m128i llr_den = simde_mm_set1_epi16(0);
         for (int cw = 0; cw < 256; cw++) {
@@ -1911,8 +1877,8 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
             simde__m128i part1 = simde_mm_set_epi64x(0ULL, *(int64_t *)&pucch2_3_polar_4bit[cw & 15].cw);
             simde__m128i part2 = simde_mm_set_epi64x(0ULL, *(int64_t *)&pucch2_3_polar_4bit[cw >> 4].cw);
             simde__m128i factor = simde_mm_unpacklo_epi16(part1, part2);
-            simde__m128i re = *(simde__m128i *)&r_ext[aa][symb][half_prb * 4];
-            simde__m128i im = *(simde__m128i *)&r_ext2[aa][symb][half_prb * 4];
+            simde__m128i re = *(simde__m128i *)&r_ext[aa][symb][four_res * 4];
+            simde__m128i im = *(simde__m128i *)&r_ext2[aa][symb][four_res * 4];
             simde__m128i prod_re = simde_mm_madd_epi16(re, factor);
             simde__m128i prod_im = simde_mm_madd_epi16(im, factor);
             prod_re = simde_mm_hadd_epi32(prod_re, prod_re);
@@ -1920,8 +1886,8 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
             prod_re = simde_mm_hadd_epi32(prod_re, prod_re);
             prod_im = simde_mm_hadd_epi32(prod_im, prod_im);
             simde__m128i prod = simde_mm_srai_epi32(simde_mm_unpacklo_epi32(prod_re, prod_im), 5);
-            c64_t corr64 = (c64_t){corr32[symb][group][aa].r / (2 * nc_group_size * 4 / 2),
-                                   corr32[symb][group][aa].i / (2 * nc_group_size * 4 / 2)};
+            c64_t corr64 = (c64_t){corr32[symb][group][aa].r / ( nc_group_size * dmrs_size ),
+                                   corr32[symb][group][aa].i / ( nc_group_size * dmrs_size )};
             //  _mm_srai_epi64 is missing in SIMDE package, we need to update it
             c64_t prod2 = {simde_mm_extract_epi32(prod, 0), simde_mm_extract_epi32(prod, 1)};
             csum(prod2, prod2, corr64);
@@ -1936,14 +1902,14 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
           llr_den = simde_mm_max_epi16(simde_mm_mullo_epi16(corr16, den), llr_den);
         }
         // compute llrs
-        llrs[half_prb + symb * 2 * pucch_pdu->prb_size] = simde_mm_subs_epi16(llr_num, llr_den);
-        LOG_DDUMP(PHY, llrs + half_prb + symb * 2 * pucch_pdu->prb_size, 8, LOG_DUMP_I16, "llrs:");
+        llrs[four_res + symb * (fmt==2 ? 2 : 3) * pucch_pdu->prb_size] = simde_mm_subs_epi16(llr_num, llr_den);
+        LOG_DDUMP(PHY, llrs + four_res + symb * (fmt==2 ? 2 : 3) * pucch_pdu->prb_size, 8, LOG_DUMP_I16, "llrs:");
       } // half_prb
     } // symb
 
     // run polar decoder on llrs
     decoderState =
-        polar_decoder_int16((int16_t *)llrs, decodedPayload, 0, NR_POLAR_UCI_PUCCH_MESSAGE_TYPE, nb_bit, pucch_pdu->prb_size);
+        polar_decoder_int16((int16_t *)llrs, decodedPayload, 0, NR_POLAR_UCI_PUCCH_MESSAGE_TYPE, nb_bit, fmt==2 ? pucch_pdu->prb_size*16 : pucch_pdu->prb_size*(nb_symbols-ndmrs)*(pucch_pdu->pi_2bpsk ? 12 : 24));
 
     // Decoder reversal
     decodedPayload[0] = reverse_bits(decodedPayload[0], nb_bit);
@@ -2030,4 +1996,69 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
   if (pucch_pdu->bit_len_csi_part2 > 0) {
     uci_pdu->pduBitmap |= 8;
   }
+}
+
+void nr_dump_uci_stats(FILE *fd, PHY_VARS_gNB *gNB, int frame)
+{
+  int strpos = 0;
+  char output[16384];
+
+  for (int i = 0; i < MAX_MOBILES_PER_GNB; i++) {
+    NR_gNB_PHY_STATS_t *stats = &gNB->phy_stats[i];
+    if (!stats->active)
+      return;
+    NR_gNB_UCI_STATS_t *uci_stats = &stats->uci_stats;
+    if (uci_stats->pucch0_sr_trials > 0)
+      strpos += sprintf(output + strpos,
+                        "UCI %d RNTI %x: pucch0_sr_trials %d, pucch0_n00 %d dB, pucch0_n01 %d dB, pucch0_sr_thres %d dB, current "
+                        "pucch1_stat0 %d dB, current pucch1_stat1 %d dB, positive SR count %d\n",
+                        i,
+                        stats->rnti,
+                        uci_stats->pucch0_sr_trials,
+                        uci_stats->pucch0_n00,
+                        uci_stats->pucch0_n01,
+                        uci_stats->pucch0_sr_thres,
+                        dB_fixed(uci_stats->current_pucch0_sr_stat0),
+                        dB_fixed(uci_stats->current_pucch0_sr_stat1),
+                        uci_stats->pucch0_positive_SR);
+    if (uci_stats->pucch01_trials > 0)
+      strpos += sprintf(output + strpos,
+                        "UCI %d RNTI %x: pucch01_trials %d, pucch0_n00 %d dB, pucch0_n01 %d dB, pucch0_thres %d dB, current "
+                        "pucch0_stat0 %d dB, current pucch1_stat1 %d dB, pucch01_DTX %d\n",
+                        i,
+                        stats->rnti,
+                        uci_stats->pucch01_trials,
+                        uci_stats->pucch0_n01,
+                        uci_stats->pucch0_n01,
+                        uci_stats->pucch0_thres,
+                        dB_fixed(uci_stats->current_pucch0_stat0),
+                        dB_fixed(uci_stats->current_pucch0_stat1),
+                        uci_stats->pucch01_DTX);
+
+    if (uci_stats->pucch02_trials > 0)
+      strpos += sprintf(output + strpos,
+                        "UCI %d RNTI %x: pucch01_trials %d, pucch0_n00 %d dB, pucch0_n01 %d dB, pucch0_thres %d dB, current "
+                        "pucch0_stat0 %d dB, current pucch0_stat1 %d dB, pucch01_DTX %d\n",
+                        i,
+                        stats->rnti,
+                        uci_stats->pucch02_trials,
+                        uci_stats->pucch0_n00,
+                        uci_stats->pucch0_n01,
+                        uci_stats->pucch0_thres,
+                        dB_fixed(uci_stats->current_pucch0_stat0),
+                        dB_fixed(uci_stats->current_pucch0_stat1),
+                        uci_stats->pucch02_DTX);
+
+    if (uci_stats->pucch2_trials > 0)
+      strpos += sprintf(output + strpos,
+                        "UCI %d RNTI %x: pucch2_trials %d, pucch2_DTX %d\n",
+                        i,
+                        stats->rnti,
+                        uci_stats->pucch2_trials,
+                        uci_stats->pucch2_DTX);
+  }
+  if (fd)
+    fprintf(fd, "%s", output);
+  else
+    printf("%s", output);
 }

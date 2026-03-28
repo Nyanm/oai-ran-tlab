@@ -1,4 +1,8 @@
 /*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
+/*
  * To disable the checks done by this program, see below at the beginning
  * of the function 'main'.
  */

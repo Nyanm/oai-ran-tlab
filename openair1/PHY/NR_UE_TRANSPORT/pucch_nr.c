@@ -1,33 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file PHY/NR_UE_TRANSPORT/pucch_nr.c
+/*!
 * \brief Top-level routines for generating and decoding the PUCCH physical channel
-* \author A. Mico Pereperez
-* \date 2018
-* \version 0.1
-* \company Eurecom
-* \email:
-* \note
-* \warning
 */
 //#include "PHY/defs.h"
 #include "PHY/impl_defs_nr.h"
@@ -559,7 +535,7 @@ static inline void nr_pucch2_3_4_scrambling(uint16_t M_bit, uint16_t rnti, uint1
 #endif
 }
 
-void nr_uci_encoding(uint64_t payload, uint8_t nr_bit, uint8_t nrofPRB, bool uci_on_pusch, uint16_t E, uint8_t Qm, uint64_t *b)
+void nr_uci_encoding(uint64_t payload, uint8_t nr_bit, bool uci_on_pusch, uint16_t E, uint8_t Qm, uint64_t *b)
 {
   /*
    * Implementing TS 38.212 Subclause 6.3.1.2 and 6.3.2
@@ -572,7 +548,7 @@ void nr_uci_encoding(uint64_t payload, uint8_t nr_bit, uint8_t nrofPRB, bool uci
   // E is the rate matching output sequence length as given in TS 38.212 subclause 6.3.1.4.1
   // int I_seg;
 #ifdef DEBUG_NR_PUCCH_TX
-  printf("\t\t [nr_uci_encoding] start function with encoding A=%d bits into M_bit=%d (where nrofPRB=%d)\n", A, E, nrofPRB);
+  printf("\t\t [nr_uci_encoding] start function with encoding A=%d bits into M_bit=%d (E)\n", A, E);
 #endif
 
   // For A=1 case (single bit UCI)
@@ -683,7 +659,7 @@ void nr_uci_encoding(uint64_t payload, uint8_t nr_bit, uint8_t nrofPRB, bool uci
         b[i] = 0;
       }
     } else {
-      // repetition for rate-matching up to 16 PRB
+      // repetition for rate-matching up to 256 channel bits
       b[0] = b0 | (b0<<32);
       b[1] = b[0];
       b[2] = b[0];
@@ -692,16 +668,15 @@ void nr_uci_encoding(uint64_t payload, uint8_t nr_bit, uint8_t nrofPRB, bool uci
       b[5] = b[0];
       b[6] = b[0];
       b[7] = b[0];
-      AssertFatal(nrofPRB<=16,"Number of PRB >16\n");
+      AssertFatal(E<=256,"Number of channelbits >32\n");
     }
   } else if (A >= 12) {
     // Encoder reversal
     payload = reverse_bits(payload, A);
-
     polar_encoder_fast(&payload, b, 0,0,
                        NR_POLAR_UCI_PUCCH_MESSAGE_TYPE, 
                        A, 
-                       nrofPRB);
+                       E);
   }
 
   if (uci_on_pusch) {
@@ -716,7 +691,7 @@ void nr_uci_encoding(uint64_t payload, uint8_t nr_bit, uint8_t nrofPRB, bool uci
       N = 32;
     } else {
       // For polar-coded UCI, output depends on nrofPRB
-      N = 16 * nrofPRB;
+      N = E;
     }
 
     if ((nr_bit == 1 || nr_bit == 2) && Qm > 1) {
@@ -764,7 +739,7 @@ void nr_generate_pucch2(c16_t **txdataF,
   uint64_t b[16] = {0}; // limit to 1024-bit encoded length
   // M_bit is the number of bits of block b (payload after encoding)
   uint16_t M_bit = nr_pucch_output_sequence_length(pucch_pdu->format_type, pucch_pdu->nr_of_symbols, pucch_pdu->prb_size, 0, 0, 0);
-  nr_uci_encoding(pucch_pdu->payload, pucch_pdu->n_bit, pucch_pdu->prb_size, false, M_bit, 0, &b[0]);
+  nr_uci_encoding(pucch_pdu->payload, pucch_pdu->n_bit, false, M_bit, 0, &b[0]);
   /*
    * Implementing TS 38.211
    * Subclauses 6.3.2.5.1 Scrambling (PUCCH format 2)
@@ -962,6 +937,23 @@ void nr_generate_pucch3_4(c16_t **txdataF,
   uint16_t startingPRB = pucch_pdu->prb_start + pucch_pdu->bwp_start;
   uint8_t add_dmrs = pucch_pdu->add_dmrs_flag;
 
+  int ndmrs=0;
+  uint8_t table_6_4_1_3_3_2_1_dmrs_positions[11][14] = {
+    {(intraSlotFrequencyHopping==0)?0:1,(intraSlotFrequencyHopping==0)?1:0,(intraSlotFrequencyHopping==0)?0:1,0,0,0,0,0,0,0,0,0,0,0}, // PUCCH length = 4
+    {1,0,0,1,0,0,0,0,0,0,0,0,0,0}, // PUCCH length = 5
+    {0,1,0,0,1,0,0,0,0,0,0,0,0,0}, // PUCCH length = 6
+    {0,1,0,0,1,0,0,0,0,0,0,0,0,0}, // PUCCH length = 7
+    {0,1,0,0,0,1,0,0,0,0,0,0,0,0}, // PUCCH length = 8
+    {0,1,0,0,0,0,1,0,0,0,0,0,0,0}, // PUCCH length = 9
+    {0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),(add_dmrs==0?0:1),0,0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),(add_dmrs==0?0:1),0,0,0,0,0}, // PUCCH length = 10
+    {0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),(add_dmrs==0?0:1),0,0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0,0,0}, // PUCCH length = 11
+    {0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0,0}, // PUCCH length = 12
+    {0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0,(add_dmrs==0?0:1),0,(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0}, // PUCCH length = 13
+    {0,(add_dmrs==0?0:1),0,(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0,(add_dmrs==0?0:1),0,(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0}  // PUCCH length = 14
+  };
+  for (int l=0;l<nrofSymbols;l++)  
+     if (table_6_4_1_3_3_2_1_dmrs_positions[nrofSymbols-4][l] == 1) ndmrs++;
+
 #ifdef DEBUG_NR_PUCCH_TX
     printf("\t [nr_generate_pucch3_4] nrofSymbols %d, nrofPRB %d, startingPRB %d, add_dmrs %d is_pi_over_2_bpsk_enabled %d\n",nrofSymbols,nrofPRB,startingPRB,add_dmrs,is_pi_over_2_bpsk_enabled);
 #endif
@@ -974,9 +966,9 @@ void nr_generate_pucch3_4(c16_t **txdataF,
                                           add_dmrs);
 
 #ifdef DEBUG_NR_PUCCH_TX
-    printf("\t [nr_generate_pucch3_4] nrofSymbols %d, nrofPRB %d, startingPRB %d, add_dmrs %d is_pi_over_2_bpsk_enabled %d, M_bit %d\n",nrofSymbols,nrofPRB,startingPRB,add_dmrs,is_pi_over_2_bpsk_enabled,M_bit);
+    printf("\t [nr_generate_pucch3_4] nrofSymbols %d, nrofPRB %d, startingPRB %d, add_dmrs %d, ndmrs %d, is_pi_over_2_bpsk_enabled %d, M_bit %d\n",nrofSymbols,nrofPRB,startingPRB,add_dmrs,ndmrs,is_pi_over_2_bpsk_enabled,M_bit);
 #endif
-  nr_uci_encoding(pucch_pdu->payload, pucch_pdu->n_bit, nrofPRB, false, M_bit, 0, b);
+  nr_uci_encoding(pucch_pdu->payload, pucch_pdu->n_bit, false, M_bit, 0, b);
   /*
    * Implementing TS 38.211
    * Subclauses 6.3.2.6.1 Scrambling (PUCCH formats 3 and 4)
@@ -1215,19 +1207,6 @@ void nr_generate_pucch3_4(c16_t **txdataF,
   int N_ZC = 12 * nrofPRB;
   c16_t r_u_v_base[N_ZC];
   uint32_t re_offset = 0;
-  uint8_t table_6_4_1_3_3_2_1_dmrs_positions[11][14] = {
-    {(intraSlotFrequencyHopping==0)?0:1,(intraSlotFrequencyHopping==0)?1:0,(intraSlotFrequencyHopping==0)?0:1,0,0,0,0,0,0,0,0,0,0,0}, // PUCCH length = 4
-    {1,0,0,1,0,0,0,0,0,0,0,0,0,0}, // PUCCH length = 5
-    {0,1,0,0,1,0,0,0,0,0,0,0,0,0}, // PUCCH length = 6
-    {0,1,0,0,1,0,0,0,0,0,0,0,0,0}, // PUCCH length = 7
-    {0,1,0,0,0,1,0,0,0,0,0,0,0,0}, // PUCCH length = 8
-    {0,1,0,0,0,0,1,0,0,0,0,0,0,0}, // PUCCH length = 9
-    {0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),(add_dmrs==0?0:1),0,0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),(add_dmrs==0?0:1),0,0,0,0,0}, // PUCCH length = 10
-    {0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),(add_dmrs==0?0:1),0,0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0,0,0}, // PUCCH length = 11
-    {0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0,0}, // PUCCH length = 12
-    {0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0,(add_dmrs==0?0:1),0,(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0}, // PUCCH length = 13
-    {0,(add_dmrs==0?0:1),0,(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0,(add_dmrs==0?0:1),0,(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0}  // PUCCH length = 14
-  };
   int k = 0;
 
   for (int l=0; l<nrofSymbols; l++) {

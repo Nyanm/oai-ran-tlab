@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef __GTPUNEW_ITF_H__
 #define __GTPUNEW_ITF_H__
 

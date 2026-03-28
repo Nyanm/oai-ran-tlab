@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 add_executable(test_seq_arr test_seq_array.c)
 target_link_libraries(test_seq_arr ds alg)
 add_dependencies(tests test_seq_arr)

@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #include <math.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -31,7 +35,7 @@ int main(int argc, char *argv[])
   uint32_t decoderState = 0, blockErrorState = 0; // 0 = Success, -1 = Decoding failed, 1 = Block Error.
   uint16_t testLength = NR_POLAR_PBCH_PAYLOAD_BITS, coderLength = NR_POLAR_PBCH_E;
   uint16_t blockErrorCumulative = 0, bitErrorCumulative = 0;
-  uint8_t aggregation_level = 8, decoderListSize = 8, logFlag = 0;
+  uint16_t aggregation_level = 8, decoderListSize = 8, logFlag = 0;
   uint16_t rnti = 0;
 
   if ((uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY)) == 0) {
@@ -135,7 +139,7 @@ int main(int argc, char *argv[])
   } else if (polarMessageType == 2) { // UCI
     // pucch2 parameters, 1 symbol, aggregation_level = NPRB
     AssertFatal(aggregation_level > 2, "For UCI formats, aggregation (N_RB) should be > 2\n");
-    coderLength = 16 * aggregation_level;
+    coderLength = aggregation_level;
   }
 
   // Logging

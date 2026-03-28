@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 This document outlines some information specific to system tuning for
 running all executables (`nr-softmodem`, `lte-softmodem`, `nr-uesoftmodem`,
 `lte-uesoftmodem`, `nr-cuup`, called softmodems for short in the following).

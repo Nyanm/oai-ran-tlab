@@ -1,31 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.0  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file gNB_scheduler_phytest.c
+/*!
  * \brief gNB scheduling procedures in phy_test mode
- * \author  Guy De Souza, G. Casati
- * \date 07/2018
- * \email: desouza@eurecom.fr, guido.casati@iis.fraunhofer.de
- * \version 1.0
- * @ingroup _mac
  */
 
 #include "nr_mac_gNB.h"
@@ -127,26 +105,10 @@ void nr_preprocessor_phytest(gNB_MAC_INST *mac, post_process_pdsch_t *pp_pdsch)
   if (target_dl_bw>bwpSize)
     target_dl_bw = bwpSize;
   uint16_t *vrb_map = mac->common_channels[CC_id].vrb_map[beam.idx];
-  /* loop ensures that we allocate exactly target_dl_bw, or return */
-  while (true) {
-    /* advance to first free RB */
-    while (rbStart < bwpSize &&
-           (vrb_map[rbStart + BWPStart]&SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols)))
-      rbStart++;
-    rbSize = 1;
-    /* iterate until we are at target_dl_bw or no available RBs */
-    while (rbStart + rbSize < bwpSize &&
-           !(vrb_map[rbStart + rbSize + BWPStart]&SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols)) &&
-           rbSize < target_dl_bw)
-      rbSize++;
-    /* found target_dl_bw? */
-    if (rbSize == target_dl_bw)
-      break;
-    /* at end and below target_dl_bw? */
-    if (rbStart + rbSize >= bwpSize)
-      return;
-    rbStart += rbSize;
-  }
+  const uint16_t slbitmap = SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols);
+  /* ensure that we allocate exactly target_dl_bw, or return */
+  if (!get_rb_alloc(target_dl_bw, target_dl_bw, BWPStart, bwpSize, vrb_map, slbitmap, &rbStart, &rbSize))
+    return;
 
   sched_ctrl->num_total_bytes = 0;
   DevAssert(seq_arr_size(&sched_ctrl->lc_config) == 1);
@@ -218,7 +180,7 @@ void nr_preprocessor_phytest(gNB_MAC_INST *mac, post_process_pdsch_t *pp_pdsch)
 
   /* mark the corresponding RBs as used */
   for (int rb = 0; rb < sched_pdsch.rbSize; rb++)
-    vrb_map[rb + sched_pdsch.rbStart + BWPStart] = SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols);
+    vrb_map[rb + sched_pdsch.rbStart + BWPStart] = slbitmap;
 }
 
 uint32_t target_ul_mcs = 9;

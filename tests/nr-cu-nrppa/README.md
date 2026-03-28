@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 This is a simple standalone tester for NRPPA and NGAP positioning messages. It connects to the AMF to perform NGAP and NRPPA encoding/decoding and validates the exchange of positioning data.
 
 [[_TOC_]]

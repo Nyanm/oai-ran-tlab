@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # Basic usage of the T
 
 ## Compilation
@@ -56,9 +58,7 @@ softmodem to wait for a tracer. The default port is 2021.
 The option `--T_dont_fork` allows one to use gdb to debug problems
 with the softmodem. Note that you then may have some "zombie"
 processes after crashes, in which case you can run
-`sudo killall -9 lte-softmodem` to get rid of them (`lte-softmodem`
-to be replaced by the program you trace, like `lte-softmodem-nos1`
-or `oaisim`).
+`sudo killall -9 lte-softmodem` to get rid of them.
 
 The option `--T_stdout` also accepts values 0 (to disable output
 on the terminal and only use the T tracer) and 1 (to disable

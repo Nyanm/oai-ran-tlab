@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 add_subdirectory(alg)
 add_subdirectory(ds)
 add_boolean_option(ENABLE_TELNETSRV OFF "Whether to build telnet support in modems" OFF)

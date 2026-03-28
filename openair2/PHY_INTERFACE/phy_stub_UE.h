@@ -1,8 +1,9 @@
 /*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
+/*
  * phy_stub_UE.h
- *
- *  Created on: Sep 14, 2017
- *      Author: montre
  */
 
 

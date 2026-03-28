@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 add_library(oran_fhlib_5g_mplane MODULE
             ../oran_isolate.c
             ../oaioran.c

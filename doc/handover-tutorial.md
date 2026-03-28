@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # Handover Tutorial for OAI
 
 This tutorial explains how to perform handovers. It covers both F1 handovers

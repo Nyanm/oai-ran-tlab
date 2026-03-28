@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 add_library(xnap_lib OBJECT
             xnap_lib_common.c
             xnap_gNB_interface_management.c

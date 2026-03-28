@@ -1,30 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file     gNB_scheduler_RA.c
+/*!
  * \brief     primitives used for random access
- * \author    Guido Casati
- * \date      2019
- * \email:    guido.casati@iis.fraunhofer.de
- * \version
  */
 
 #include "common/platform_types.h"
@@ -604,7 +583,7 @@ int nr_fill_successrar(const NR_UE_sched_ctrl_t *ue_sched_ctl,
   successRAR->CONT_RES_6 = ue_cont_res_id[5];
   successRAR->R = 0;
   successRAR->CH_ACESS_CPEXT = 1;
-  successRAR->TPC = ue_sched_ctl->tpc0;
+  successRAR->TPC = 1; // 0dB change, don't know how to determine this.
   successRAR->HARQ_FTI = timing_indicator;
   successRAR->PUCCH_RI = resource_indicator;
   successRAR->TA1 = (uint8_t)(timing_advance_cmd >> 8); // 4 MSBs of timing advance;
@@ -718,7 +697,7 @@ void nr_initiate_ra_proc(module_id_t module_idP,
       return;
     }
 
-    UE = get_new_nr_ue_inst(&nr_mac->UE_info.uid_allocator, rnti, NULL);
+    UE = get_new_nr_ue_inst(&nr_mac->UE_info.uid_allocator, rnti, NULL, &nr_mac->radio_config);
     if (!add_new_UE_RA(nr_mac, UE)) {
       LOG_E(NR_MAC, "FAILURE: %4d.%2d initiating RA procedure for preamble index %d: no free RA process\n", frame, slot, preamble_index);
       delete_nr_ue_data(UE, NULL, &nr_mac->UE_info.uid_allocator);
@@ -859,14 +838,11 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
     .dmrs_info = dmrs_info,
   };
 
+  const int bwpStart = sched_pusch.bwp_info.bwpStart;
+  const int bwpSize = sched_pusch.bwp_info.bwpSize;
   int rbStart = 0;
-  for (int i = 0; (i < ra->msg3_nb_rb) && (rbStart <= (sched_pusch.bwp_info.bwpSize - ra->msg3_nb_rb)); i++) {
-    if (vrb_map_UL[rbStart + sched_pusch.bwp_info.bwpStart + i] & SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols)) {
-      rbStart += i;
-      i = 0;
-    }
-  }
-  if (rbStart > (sched_pusch.bwp_info.bwpSize - ra->msg3_nb_rb)) {
+  int rbSize = 0;
+  if (!get_rb_alloc(ra->msg3_nb_rb, ra->msg3_nb_rb, bwpStart, bwpSize, vrb_map_UL, msg3_mask, &rbStart, &rbSize)) {
     // cannot find free vrb_map for msg3 retransmission in this slot
     reset_beam_status(&nr_mac->beam_info, sched_frame, sched_slot, UE->UE_beam_index, slots_frame, beam_ul.new_beam);
     reset_beam_status(&nr_mac->beam_info, frame, slot, UE->UE_beam_index, slots_frame, beam_dci.new_beam);
@@ -980,7 +956,7 @@ static void nr_generate_Msg3_retransmission(module_id_t module_idP,
                      beam_dci.idx);
 
   for (int rb = 0; rb < ra->msg3_nb_rb; rb++) {
-    vrb_map_UL[rbStart + sched_pusch.bwp_info.bwpStart + rb] |= SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols);
+    vrb_map_UL[rbStart + sched_pusch.bwp_info.bwpStart + rb] |= msg3_mask;
   }
 
   // Restart RA contention resolution timer in Msg3 retransmission slot (current slot + K2)
@@ -1064,6 +1040,7 @@ static bool nr_get_Msg3alloc(gNB_MAC_INST *mac, int CC_id, int current_slot, fra
 
   int startSymbolAndLength = pusch_TimeDomainAllocationList->list.array[ra->Msg3_tda_id]->startSymbolAndLength;
   SLIV2SL(startSymbolAndLength, &ra->msg3_startsymb, &ra->msg3_nbSymb);
+  const uint16_t msg3_mask = SL_to_bitmap(ra->msg3_startsymb, ra->msg3_nbSymb);
 
   const int buffer_index = ul_buffer_index(ra->Msg3_frame,
                                            ra->Msg3_slot,
@@ -1083,18 +1060,9 @@ static bool nr_get_Msg3alloc(gNB_MAC_INST *mac, int CC_id, int current_slot, fra
   /* search msg3_nb_rb free RBs */
   int rbSize = 0;
   int rbStart = 0;
-  while (rbSize < msg3_nb_rb) {
-    rbStart += rbSize; /* last iteration rbSize was not enough, skip it */
-    rbSize = 0;
-    while (rbStart < bwpSize && (vrb_map_UL[rbStart + bwpStart] & SL_to_bitmap(ra->msg3_startsymb, ra->msg3_nbSymb)))
-      rbStart++;
-    if (rbStart + msg3_nb_rb > bwpSize) {
-      LOG_D(NR_MAC, "No space to allocate Msg 3\n");
-      return false;
-    }
-    while (rbStart + rbSize < bwpSize
-           && !(vrb_map_UL[rbStart + bwpStart + rbSize] & SL_to_bitmap(ra->msg3_startsymb, ra->msg3_nbSymb)) && rbSize < msg3_nb_rb)
-      rbSize++;
+  if (!get_rb_alloc(msg3_nb_rb, msg3_nb_rb, bwpStart, bwpSize, vrb_map_UL, msg3_mask, &rbStart, &rbSize)) {
+    LOG_D(NR_MAC, "No space to allocate Msg 3\n");
+    return false;
   }
   ra->msg3_nb_rb = msg3_nb_rb;
   ra->msg3_first_rb = rbStart;
@@ -1348,6 +1316,7 @@ static void prepare_dl_pdus(gNB_MAC_INST *nr_mac,
       prepare_dci_pdu(pdcch_pdu_rel15, scc, sched_ctrl->search_space, coreset, aggregation_level, CCEIndex, fapi_beam, rnti);
   pdcch_pdu_rel15->numDlDci++;
 
+  int tpc = 1; // 0dB change, don't know how to determine this.
   dci_pdu_rel15_t dci_payload = prepare_dci_dl_payload(nr_mac,
                                                        UE,
                                                        rnti_type,
@@ -1355,6 +1324,7 @@ static void prepare_dl_pdus(gNB_MAC_INST *nr_mac,
                                                        pdsch_pdu_rel15,
                                                        sched_pdsch,
                                                        pucch,
+                                                       tpc,
                                                        current_harq_pid,
                                                        tb_scaling,
                                                        false);
@@ -1476,10 +1446,6 @@ static void nr_generate_Msg2(module_id_t module_idP,
     return;
   }
 
-  int mcsIndex = -1; // initialization value
-  int rbStart = 0;
-  int rbSize = 8;
-  bwp_info_t bwp_info = get_pdsch_bwp_start_size(nr_mac, UE);
   NR_ControlResourceSet_t *coreset = sched_ctrl->coreset;
   AssertFatal(coreset, "Coreset cannot be null for RA-Msg2\n");
   const int coresetid = coreset->controlResourceSetId;
@@ -1499,15 +1465,13 @@ static void nr_generate_Msg2(module_id_t module_idP,
   if (!tda_info.valid_tda)
     return;
 
+  int rbStart = 0;
+  int rbSize = 0;
+  uint16_t msg2_nb_rb = max(8, nr_mac->min_grant_prb); // RAR TBS is 9 bytes
+  const uint16_t msg2_mask = SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols);
+  bwp_info_t bwp_info = get_pdsch_bwp_start_size(nr_mac, UE);
   uint16_t *vrb_map = cc[CC_id].vrb_map[beam.idx];
-  for (int i = 0; (i < rbSize) && (rbStart <= (bwp_info.bwpSize - rbSize)); i++) {
-    if (vrb_map[bwp_info.bwpStart + rbStart + i] & SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols)) {
-      rbStart += i;
-      i = 0;
-    }
-  }
-
-  if (rbStart > (bwp_info.bwpSize - rbSize)) {
+  if (!get_rb_alloc(msg2_nb_rb, msg2_nb_rb, bwp_info.bwpStart, bwp_info.bwpSize, vrb_map, msg2_mask, &rbStart, &rbSize)) {
     LOG_W(NR_MAC, "Cannot find free vrb_map for RA RNTI %04x!\n", ra->RA_rnti);
     reset_beam_status(&nr_mac->beam_info, ra->Msg3_frame, ra->Msg3_slot, UE->UE_beam_index, n_slots_frame, ra->Msg3_beam.new_beam);
     reset_beam_status(&nr_mac->beam_info, frameP, slotP, UE->UE_beam_index, n_slots_frame, beam.new_beam);
@@ -1568,6 +1532,7 @@ static void nr_generate_Msg2(module_id_t module_idP,
 
   NR_pdsch_dmrs_t dmrs_parms = get_dl_dmrs_params(scc, dl_bwp, &tda_info, 1);
 
+  int mcsIndex = -1; // initialization value
   uint8_t tb_scaling = 0;
   int R, Qm;
   uint32_t TBS = 0;
@@ -1665,7 +1630,7 @@ static void nr_generate_Msg2(module_id_t module_idP,
   // Mark the corresponding symbols RBs as used
   fill_pdcch_vrb_map(nr_mac, CC_id, &sched_ctrl->sched_pdcch, CCEIndex, aggregation_level, beam.idx);
   for (int rb = 0; rb < rbSize; rb++) {
-    vrb_map[bwp_info.bwpStart + rb + rbStart] |= SL_to_bitmap(tda_info.startSymbolIndex, tda_info.nrOfSymbols);
+    vrb_map[bwp_info.bwpStart + rb + rbStart] |= msg2_mask;
   }
 
   // In CFRA: in Msg3 handling, will unconditionally mark succeeded
@@ -1764,14 +1729,6 @@ static void nr_generate_Msg4_MsgB(module_id_t module_idP,
       return;
     }
 
-    NR_pdsch_dmrs_t dmrs_info = get_dl_dmrs_params(scc, dl_bwp, &msg4_tda, 1);
-    bwp_info_t bwp_info = get_pdsch_bwp_start_size(nr_mac, UE);
-    uint8_t mcsTableIdx = dl_bwp->mcsTableIdx;
-    uint8_t mcsIndex = 0;
-    int rbStart = 0;
-    int rbSize = 0;
-    uint8_t tb_scaling = 0;
-    uint32_t tb_size = 0;
     uint16_t pdu_length;
     if(current_harq_pid >= 0) { // in case of retransmission
       NR_UE_harq_t *harq = &sched_ctrl->harq_processes[current_harq_pid];
@@ -1783,16 +1740,23 @@ static void nr_generate_Msg4_MsgB(module_id_t module_idP,
       // BI MAC subheader (1 Oct) + SuccessRAR MAC subheader (1 Oct) + SuccessRAR (11 Oct)
     }
 
+    NR_pdsch_dmrs_t dmrs_info = get_dl_dmrs_params(scc, dl_bwp, &msg4_tda, 1);
+    bwp_info_t bwp_info = get_pdsch_bwp_start_size(nr_mac, UE);
+    uint8_t mcsTableIdx = dl_bwp->mcsTableIdx;
+    uint8_t mcsIndex = 0;
+    uint8_t tb_scaling = 0;
+    uint32_t tb_size = 0;
+    int msg4_nr_rb = 0;
     // increase PRBs until we get to BWPSize or TBS is bigger than MAC PDU size
     do {
-      if(rbSize < bwp_info.bwpSize)
-        rbSize++;
+      if(msg4_nr_rb < bwp_info.bwpSize)
+        msg4_nr_rb++;
       else
         mcsIndex++;
       LOG_D(NR_MAC,"Calling nr_compute_tbs with N_PRB_DMRS %d, N_DMRS_SLOT %d\n",dmrs_info.N_PRB_DMRS,dmrs_info.N_DMRS_SLOT);
       tb_size = nr_compute_tbs(nr_get_Qm_dl(mcsIndex, mcsTableIdx),
                                nr_get_code_rate_dl(mcsIndex, mcsTableIdx),
-                               rbSize,
+                               msg4_nr_rb,
                                msg4_tda.nrOfSymbols,
                                dmrs_info.N_PRB_DMRS * dmrs_info.N_DMRS_SLOT,
                                0,
@@ -1801,18 +1765,11 @@ static void nr_generate_Msg4_MsgB(module_id_t module_idP,
 
     AssertFatal(tb_size >= pdu_length, "Cannot allocate %s\n", ra_type_str);
 
-    int i = 0;
+    int rbStart = 0;
+    int rbSize = 0;
+    const uint16_t msg4_mask = SL_to_bitmap(msg4_tda.startSymbolIndex, msg4_tda.nrOfSymbols);
     uint16_t *vrb_map = cc[CC_id].vrb_map[beam.idx];
-    while ((i < rbSize) && (rbStart + rbSize <= bwp_info.bwpSize)) {
-      if (vrb_map[bwp_info.bwpStart + rbStart + i]&SL_to_bitmap(msg4_tda.startSymbolIndex, msg4_tda.nrOfSymbols)) {
-        rbStart += i+1;
-        i = 0;
-      } else {
-        i++;
-      }
-    }
-
-    if (rbStart > (bwp_info.bwpSize - rbSize)) {
+    if (!get_rb_alloc(msg4_nr_rb, msg4_nr_rb, bwp_info.bwpStart, bwp_info.bwpSize, vrb_map, msg4_mask, &rbStart, &rbSize)) {
       LOG_E(NR_MAC, "Cannot find free vrb_map for RNTI %04x!\n", UE->rnti);
       reset_beam_status(&nr_mac->beam_info, frameP, slotP, UE->UE_beam_index, n_slots_frame, beam.new_beam);
       return;
@@ -1918,9 +1875,6 @@ static void nr_generate_Msg4_MsgB(module_id_t module_idP,
                     tb_scaling,
                     pduindex);
 
-    // Reset TPC to 0 dB to not request new gain multiple times before computing new value for SNR
-    sched_ctrl->tpc1 = 1;
-
     // Add padding header and zero rest out if there is space left
     if (ra->mac_pdu_length < harq->tb_size) {
       NR_MAC_SUBHEADER_FIXED *padding = (NR_MAC_SUBHEADER_FIXED *) &buf[ra->mac_pdu_length];
@@ -1953,7 +1907,7 @@ static void nr_generate_Msg4_MsgB(module_id_t module_idP,
                        aggregation_level,
                        beam.idx);
     for (int rb = 0; rb < rbSize; rb++) {
-      vrb_map[bwp_info.bwpStart + rb + rbStart] |= SL_to_bitmap(msg4_tda.startSymbolIndex, msg4_tda.nrOfSymbols);
+      vrb_map[bwp_info.bwpStart + rb + rbStart] |= msg4_mask;
     }
 
     ra->ra_state = nrRA_WAIT_Msg4_MsgB_ACK;

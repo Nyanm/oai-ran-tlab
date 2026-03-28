@@ -1,33 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file gNB_scheduler_bch.c
+/*!
  * \brief procedures related to gNB for the BCH transport channel
- * \author  Navid Nikaein and Raymond Knopp, WEI-TAI CHEN
- * \date 2010 - 2014, 2018
- * \email: navid.nikaein@eurecom.fr, kroempa@gmail.com
- * \version 1.0
- * \company Eurecom, NTUST
- * @ingroup _mac
-
  */
 
 #include "assertions.h"
@@ -257,37 +233,31 @@ static bool update_rb_mcs_tbs(NR_sched_pdsch_t *pdsch, uint32_t num_total_bytes,
   const uint16_t slbitmap = SL_to_bitmap(tda_info->startSymbolIndex, tda_info->nrOfSymbols);
   int bwpSize = pdsch->bwp_info.bwpSize;
   int bwpStart = pdsch->bwp_info.bwpStart;
-  int rbStop = bwpSize - 1;
-  while (pdsch->rbStart < rbStop) {
-    if (vrb_map[pdsch->rbStart + bwpStart] & slbitmap)
-      pdsch->rbStart++;
-    else {
-      int max_rbSize = 0;
-      while (pdsch->rbStart + max_rbSize <= rbStop && !(vrb_map[pdsch->rbStart + max_rbSize + bwpStart] & slbitmap))
-        max_rbSize++;
 
-      bool res = false;
-      while (res == false && pdsch->mcs < 10) {
-        pdsch->Qm = nr_get_Qm_dl(pdsch->mcs, mcsTableIdx);
-        pdsch->R = nr_get_code_rate_dl(pdsch->mcs, mcsTableIdx);
-        res = nr_find_nb_rb(pdsch->Qm,
-                            pdsch->R,
-                            1, // no transform precoding for DL
-                            1, // single layer
-                            tda_info->nrOfSymbols,
-                            pdsch->dmrs_parms.N_PRB_DMRS * pdsch->dmrs_parms.N_DMRS_SLOT,
-                            num_total_bytes,
-                            1, // min_rbSize
-                            max_rbSize,
-                            &pdsch->tb_size,
-                            &pdsch->rbSize);
-        if (!res)
-          pdsch->mcs++;
-      }
+  for (pdsch->mcs = 0; pdsch->mcs < 10; pdsch->mcs++) {
+    pdsch->Qm = nr_get_Qm_dl(pdsch->mcs, mcsTableIdx);
+    pdsch->R = nr_get_code_rate_dl(pdsch->mcs, mcsTableIdx);
+    if (!nr_find_nb_rb(pdsch->Qm,
+                       pdsch->R,
+                       1, // no transform precoding for DL
+                       1, // single layer
+                       tda_info->nrOfSymbols,
+                       pdsch->dmrs_parms.N_PRB_DMRS * pdsch->dmrs_parms.N_DMRS_SLOT,
+                       num_total_bytes,
+                       1, // min_rbSize
+                       bwpSize, // max_rbSize,
+                       &pdsch->tb_size,
+                       &pdsch->rbSize))
+      continue;
+    int rbStart, rbSize;
+    if (get_rb_alloc(pdsch->rbSize, pdsch->rbSize, bwpStart, bwpSize, vrb_map, slbitmap, &rbStart, &rbSize)) {
+      pdsch->rbStart = rbStart;
+      pdsch->rbSize = rbSize;
       break;
     }
   }
-  if (pdsch->tb_size < num_total_bytes) {
+
+  if (pdsch->mcs >= 10 || pdsch->tb_size < num_total_bytes) {
     LOG_D(NR_MAC,
           "Couldn't allocate enough resources for %d bytes in SIB PDSCH (rbStart %d, rbSize %d, bwpSize %d)\n",
           num_total_bytes,
@@ -405,6 +375,7 @@ static void nr_fill_nfapi_dl_SIB_pdu(gNB_MAC_INST *gNB_mac,
                                                        pdsch_pdu_rel15,
                                                        pdsch,
                                                        NULL,
+                                                       1,
                                                        0,
                                                        0,
                                                        is_sib1);

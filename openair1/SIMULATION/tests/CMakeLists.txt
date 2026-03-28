@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 # This defines a cmake file with timing thresholds to include (empty by default)
 set(PHYSIM_CHECK_FILES "" CACHE STRING "CMake files ('\;' separated) with timing thresholds to include for timed physim tests")
 

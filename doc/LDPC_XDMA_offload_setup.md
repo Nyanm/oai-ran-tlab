@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # LDPC offload with the XDMA driver
 
 [TOC]

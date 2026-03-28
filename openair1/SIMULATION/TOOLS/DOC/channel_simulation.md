@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 [[_TOC_]]
 
 This document is complementary to the [RFSIMULATOR Tutorial](../../../../radio/rfsimulator/README.md).

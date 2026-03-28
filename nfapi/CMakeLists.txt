@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 add_subdirectory(oai_integration/aerial)
 if (OAI_WLS)
     add_subdirectory(oai_integration/wls_integration)

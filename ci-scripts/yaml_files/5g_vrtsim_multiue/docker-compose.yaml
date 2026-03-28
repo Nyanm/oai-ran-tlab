@@ -1,7 +1,9 @@
+# SPDX-License-Identifier: MIT
+
 services:
     # CIR Generator service - generates CIRDB files on every CI run
     cir-generator:
-        image: oaisoftwarealliance/cir-generator:test
+        image: oaisoftwarealliance/cir-generator:v0.0.1
         environment:
             GENERATOR_ARGS: "--demo"
             OUTPUT: "--out /opt/output/cir_db.bin"

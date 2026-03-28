@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #include "openair2/COMMON/phy_messages_def.h"
 #include "openair2/COMMON/mac_messages_def.h"
 #include "openair2/COMMON/rlc_messages_def.h"

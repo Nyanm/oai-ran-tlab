@@ -1,33 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-
-/*! \file main.c
- * \brief top init of Layer 2
- * \author  Navid Nikaein and Raymond Knopp, WEI-TAI CHEN
- * \date 2010 - 2014, 2018
- * \version 1.0
- * \company Eurecom, NTUST
- * \email: navid.nikaein@eurecom.fr, kroempa@gmail.com
- * @ingroup _mac
-
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include <errno.h>
@@ -197,11 +169,15 @@ size_t dump_mac_stats(gNB_MAC_INST *gNB, char *output, size_t strlen, bool reset
     for (int i = 1; i < gNB->dl_bler.harq_round_max; i++)
       output = st_append(output, end, "/%"PRIu64, stats->dl.rounds[i]);
 
+    float pucch_snr = nr_mac_get_snr(&sched_ctrl->pucch_pc);
+    float pucch_snr_diff = (pucch_snr * 10.0f - sched_ctrl->pucch_pc.target_snrx10) / 10.0f;
     output = st_append(output,
                        end,
-                       ", dlsch_errors %"PRIu64", pucch0_DTX %d, BLER %.5f MCS (%d) %d CCE fail %d\n",
+                       ", dlsch_errors %"PRIu64", pucch0_DTX %d (SNR %.1f%+.1f dB), BLER %.5f MCS (%d) %d CCE fail %d\n",
                        stats->dl.errors,
                        stats->pucch0_DTX,
+                       pucch_snr,
+                       pucch_snr_diff,
                        sched_ctrl->dl_bler_stats.bler,
                        UE->current_DL_BWP.mcsTableIdx,
                        sched_ctrl->dl_bler_stats.mcs,
@@ -219,9 +195,11 @@ size_t dump_mac_stats(gNB_MAC_INST *gNB, char *output, size_t strlen, bool reset
     for (int i = 1; i < gNB->ul_bler.harq_round_max; i++)
       output = st_append(output, end, "/%"PRIu64, stats->ul.rounds[i]);
 
+    float snr = nr_mac_get_snr(&sched_ctrl->pusch_pc);
+    float diff_target = (snr * 10.0f - sched_ctrl->pusch_pc.target_snrx10) / 10.0f;
     output = st_append(output,
                        end,
-                       ", ulsch_errors %"PRIu64", ulsch_DTX %d, BLER %.5f MCS (%d) %d (Qm %d deltaMCS %d dB) NPRB %d  SNR %d.%d dB CCE fail %d\n",
+                       ", ulsch_errors %"PRIu64", ulsch_DTX %d, BLER %.5f MCS (%d) %d (Qm %d deltaMCS %d dB) NPRB %d SNR %.1f (%+.1f) dB CCE fail %d\n",
                        stats->ul.errors,
                        stats->ulsch_DTX,
                        sched_ctrl->ul_bler_stats.bler,
@@ -230,8 +208,8 @@ size_t dump_mac_stats(gNB_MAC_INST *gNB, char *output, size_t strlen, bool reset
                        nr_get_Qm_ul(sched_ctrl->ul_bler_stats.mcs,UE->current_UL_BWP.mcs_table),
                        UE->mac_stats.deltaMCS,
                        UE->mac_stats.NPRB,
-                       sched_ctrl->pusch_snrx10 / 10,
-                       sched_ctrl->pusch_snrx10 % 10,
+                       snr,
+                       diff_target,
                        sched_ctrl->ul_cce_fail);
    output = st_append(output,
                        end,

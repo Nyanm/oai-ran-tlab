@@ -1,36 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file mac.h
-* \brief MAC data structures, constant, and function prototype
-* \author Navid Nikaein and Raymond Knopp, WIE-TAI CHEN
-* \date 2011, 2018
-* \version 0.5
-* \company Eurecom, NTUST
-* \email navid.nikaein@eurecom.fr, kroempa@gmail.com
-
-*/
-/** @defgroup _oai2  openair2 Reference Implementation
- * @ingroup _ref_implementation_
- * @{
+/*!
+ * \brief MAC data structures, constant, and function prototype
  */
 
 /*@}*/
@@ -41,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <complex.h>
 #include <pthread.h>
 #include "common/utils/ds/seq_arr.h"
 #include "common/utils/nr/nr_common.h"
@@ -184,6 +158,22 @@ typedef enum {
   SSB_SINR,
 } nr_config_report_type_t;
 
+typedef struct nr_beam_table {
+  int num_weights_per_beam;
+  int num_beams;
+  uint16_t *beam_ids;
+  double complex **beam_weights;
+} nr_beam_table_t;
+
+typedef struct nr_power_config {
+  /// target SNR
+  int target_snrx10;
+  /// RSSI threshold for power control. Limits power control commands when RSSI reaches threshold.
+  int rssi_threshold;
+  /// Failure threshold (compared to consecutive PUSCH DTX)
+  int failure_thres;
+} nr_power_config_t;
+
 typedef struct nr_mac_config_s {
   nr_pdsch_AntennaPorts_t pdsch_AntennaPorts;
   int pusch_AntennaPorts;
@@ -197,8 +187,10 @@ typedef struct nr_mac_config_s {
   bool use_deltaMCS;
   int maxMIMO_layers;
   bool disable_harq;
-  //int pusch_TargetSNRx10;
-  //int pucch_TargetSNRx10;
+  nr_power_config_t pusch;
+  /// SNR threshold needed to put or not a PRB in the black list
+  int ul_prbblack_SNR_threshold;
+  nr_power_config_t pucch;
   nr_mac_timers_t timer_config;
   int num_dlharq;
   int num_ulharq;
@@ -213,6 +205,7 @@ typedef struct nr_mac_config_s {
   nr_redcap_config_t *redcap;
   nr_ptrs_config_t *ptrs;
   nr_config_report_type_t report_type;
+  nr_beam_table_t bt;
 } nr_mac_config_t;
 
 typedef struct NR_preamble_ue {
@@ -458,6 +451,9 @@ typedef struct NR_sched_pusch {
   NR_pusch_dmrs_t dmrs_info;
   bwp_info_t bwp_info;
   int phr_txpower_calc;
+
+  /// TPC command for this PUSCH
+  int tpc_pusch;
 } NR_sched_pusch_t;
 
 typedef struct NR_pdsch_dmrs {
@@ -602,6 +598,14 @@ typedef struct nr_lc_config {
   NR_QoS_config_t qos_config[NR_MAX_NUM_QFI];
 } nr_lc_config_t;
 
+typedef struct nr_power_control {
+  float avg_snr; /// average SNR (in dB)
+  int target_snrx10; /// UE-specific target SNR x10
+  float avg_rssi; /// average RSSI
+  int rssi_threshold; /// UE-specific RSSI threshld in 0.1dBm/dBFS, range -1280 to 0
+  float tpc_in_flight; /// TPCs applied by UE but not yet in average SNR
+} nr_power_control_t;
+
 /*! \brief scheduling control information set through an API */
 typedef struct {
   /// CCE index and aggregation, should be coherent with cce_list
@@ -628,8 +632,6 @@ typedef struct {
 
   /// PHR info: power headroom level (dB)
   int ph;
-  /// PHR info: power headroom level (dB) for 1 PRB
-  int ph0;
 
   /// PHR info: nominal UE transmit power levels (dBm)
   int pcmax;
@@ -643,7 +645,6 @@ typedef struct {
 
   /// total amount of data awaiting for this UE
   uint32_t num_total_bytes;
-  uint16_t dl_pdus_total;
   /// per-LC status data
   mac_rlc_status_resp_t rlc_status[NR_MAX_NUM_LCID];
 
@@ -654,12 +655,6 @@ typedef struct {
   uint16_t ta_frame;
   int16_t ta_update;
   bool ta_apply;
-  uint8_t tpc0;
-  uint8_t tpc1;
-  int raw_rssi;
-  int pusch_snrx10;
-  int pucch_snrx10;
-  uint16_t ul_rssi;
   int pusch_consecutive_dtx_cnt;
   int pucch_consecutive_dtx_cnt;
   bool ul_failure;
@@ -702,6 +697,9 @@ typedef struct {
   // pdcch closed loop adjust for PDCCH aggregation level, range <0, 1>
   // 0 - good channel, 1 - bad channel
   float pdcch_cl_adjust;
+
+  nr_power_control_t pusch_pc;
+  nr_power_control_t pucch_pc;
 } NR_UE_sched_ctrl_t;
 
 typedef struct NR_mac_dir_stats {
@@ -728,7 +726,6 @@ typedef struct NR_mac_stats {
   int cumul_sinrx10;
   uint8_t num_sinr_meas;
   char srs_stats[50]; // Statistics may differ depending on SRS usage
-  int pusch_snrx10;
   int deltaMCS;
   int NPRB;
 } NR_mac_stats_t;
@@ -889,6 +886,20 @@ typedef struct fsn {
   slot_t s;
 } fsn_t;
 
+typedef struct NR_du_stats {
+  /// cell-wide wide-band CQI distribution, see 28.552 5.1.1.11.1;
+  /// 0-15 CQI, 1-8 RI, 1-3 CQI table
+  uint32_t wb_cqi_dist[16][8][3];
+
+  /// cell-wide MCS distribution in PDSCH, see 28.552 5.1.1.12.1
+  /// 1-8 RI, 1-3 MCS table, 0-31 MCS value
+  uint32_t pdsch_mcs_dist[8][3][32];
+
+  /// cell-wide MCS distribution in PUSCH, see 28.552 5.1.1.12.1
+  /// 1-8 RI, 1-2 MCS table, 0-31 MCS value
+  uint32_t pusch_mcs_dist[8][2][32];
+} NR_du_stats_t;
+
 /*! \brief top level eNB MAC structure */
 typedef struct gNB_MAC_INST_s {
   /// Ethernet parameters for northbound midhaul interface
@@ -906,20 +917,6 @@ typedef struct gNB_MAC_INST_s {
   /// Pointer to IF module instance for PHY
   NR_IF_Module_t                  *if_inst;
   pthread_t                       stats_thread;
-  /// Pusch target SNR
-  int                             pusch_target_snrx10;
-  /// RSSI threshold for power control. Limits power control commands when RSSI reaches threshold.
-  int                             pusch_rssi_threshold;
-  /// Pucch target SNR
-  int                             pucch_target_snrx10;
-  /// RSSI threshold for PUCCH power control. Limits power control commands when RSSI reaches threshold.
-  int                             pucch_rssi_threshold;
-  /// SNR threshold needed to put or not a PRB in the black list
-  int                             ul_prbblack_SNR_threshold;
-  /// PUCCH Failure threshold (compared to consecutive PUCCH DTX)
-  int                             pucch_failure_thres;
-  /// PUSCH Failure threshold (compared to consecutive PUSCH DTX)
-  int                             pusch_failure_thres;
   /// Subcarrier Offset
   int                             ssb_SubcarrierOffset;
   int                             ssb_OffsetPointA;
@@ -1010,6 +1007,9 @@ typedef struct gNB_MAC_INST_s {
 
   dlul_mac_stats_t mac_stats;
   uint64_t num_scheduled_prach_rx;
+
+  NR_du_stats_t du_stats;
+
 } gNB_MAC_INST;
 
 #endif /*__LAYER2_NR_MAC_GNB_H__ */

@@ -1,10 +1,6 @@
 /*
-                                nfapi_nr_interface.h
-                             -------------------
-  AUTHOR  : Chenyu Zhang, Florian Kaltenberger
-  COMPANY : BUPT, EURECOM
-  EMAIL   : octopus@bupt.edu.cn, florian.kaltenberger@eurecom.fr
-*/
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 
 #ifndef _NFAPI_NR_INTERFACE_SCF_H_
 #define _NFAPI_NR_INTERFACE_SCF_H_
@@ -330,8 +326,14 @@ typedef struct
 
 #define NFAPI_NR_CONFIG_RSSI_MEASUREMENT_TAG 0x1028
 #define NFAPI_NR_CONFIG_TDD_TABLE 0x1035
-#define NFAPI_NR_CONFIG_BEAMFORMING_TABLE_TAG 0x1043 // This tag was added in version 5 of the SCF222 standard ( Table 3-50 of SCF222.10.05 )
 #define NFAPI_NR_CONFIG_PRECODING_TABLE_V6_TAG 0x104B // This tag was added in version 6 of the SCF222 standard ( Table 3-52 of SCF222.10.06 )
+#ifdef ENABLE_AERIAL
+  #define NFAPI_NR_CONFIG_NUM_TX_PORT_TAG 0xA016
+  #define NFAPI_NR_CONFIG_NUM_RX_PORT_TAG 0xA017
+  #define NFAPI_NR_CONFIG_BEAMFORMING_TABLE_TAG 0xA010 
+#else
+  #define NFAPI_NR_CONFIG_BEAMFORMING_TABLE_TAG 0x1043 // This tag was added in version 5 of the SCF222 standard ( Table 3-50 of SCF222.10.05 )
+#endif
 
 //table 3-21
 typedef struct 
@@ -347,6 +349,8 @@ typedef struct
   nfapi_uint16_tlv_t ul_grid_size[5];//Grid size 𝑁𝑔𝑟𝑖𝑑 𝑠𝑖𝑧𝑒,𝜇 for each of the numerologies [38.211, sec 4.4.2]. Value: 0->275 0 = this numerology not used
   nfapi_uint16_tlv_t num_rx_ant;//
   nfapi_uint8_tlv_t  frequency_shift_7p5khz;//Indicates presence of 7.5KHz frequency shift. Value: 0 = false 1 = true
+  nfapi_uint16_tlv_t num_tx_port; //used by Aerial L1 when BF mode is enabled to signal the number of logical antenna ports
+  nfapi_uint16_tlv_t num_rx_port; //used by Aerial L1 when BF mode is enabled to signal the number of logical antenna ports
 
 } nfapi_nr_carrier_config_t; 
 

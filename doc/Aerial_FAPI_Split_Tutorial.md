@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # OAI - Aerial FAPI Split Tutorial
 
 **Table of Contents**

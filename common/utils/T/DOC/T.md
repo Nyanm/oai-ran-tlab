@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # T tracer
 
 The T tracer is sort of a *framework* to debug and monitor the softmodem.

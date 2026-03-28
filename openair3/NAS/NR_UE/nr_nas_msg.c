@@ -1,32 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file nr_nas_msg.c
+/*!
  * \brief Definitions of handlers and callbacks for NR NAS UE task
- * \author Yoshio INOUE, Masayuki HARADA
- * \email yoshio.inoue@fujitsu.com,masayuki.harada@fujitsu.com
- * \date 2020
- * \version 0.1
- *
- * 2023.01.27 Vladimir Dorovskikh 16 digits IMEISV
  */
 
 #include "nr_nas_msg.h"
@@ -77,6 +54,12 @@
 #include "nr-uesoftmodem.h"
 
 static nr_ue_nas_t nr_ue_nas[MAX_NUM_NR_UE_INST] = {0};
+
+nr_ue_nas_t *get_nr_ue_nas_info(uint8_t ue_inst)
+{
+  AssertFatal(ue_inst >= 0 && ue_inst < MAX_NUM_NR_UE_INST, "Invalid UE instance\n");
+  return &nr_ue_nas[ue_inst];
+}
 
 #define FOREACH_STATE(TYPE_DEF)                  \
   TYPE_DEF(NAS_SECURITY_NO_SECURITY_CONTEXT, 0)  \
@@ -1165,6 +1148,10 @@ static void generateSecurityModeComplete(nr_ue_nas_t *nas, as_nas_info_t *initia
   initialNasMsg->length =
       security_header_len
       + mm_msg_encode(plain, (uint8_t *)(initialNasMsg->nas_data + security_header_len), size - security_header_len);
+
+  if (rr.nas_data) {
+    free(rr.nas_data);
+  }
 
   /* ciphering */
   uint8_t buf[initialNasMsg->length - 7];

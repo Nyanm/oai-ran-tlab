@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # GPU-Accelerated Channel Simulation
 
 [[_TOC_]]

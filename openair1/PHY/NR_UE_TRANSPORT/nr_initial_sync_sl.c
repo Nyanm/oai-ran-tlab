@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #include "PHY/defs_nr_UE.h"
 #include "PHY/TOOLS/tools_defs.h"
 #include "PHY/NR_REFSIG/sss_nr.h"

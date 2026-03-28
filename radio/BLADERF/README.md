@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # BladeRF 2.0 Micro Documentation
 
 [TOC]

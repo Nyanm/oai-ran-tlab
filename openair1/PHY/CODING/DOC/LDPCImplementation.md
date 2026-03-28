@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # LDPC coding implementation
 This document gives an overview of the different LDPC coding implementations (functional or not) available with Open Air Interface.
 
@@ -110,10 +112,10 @@ A mechanism to select ldpc implementation is also available in the `ldpctest` ph
 
 #### Examples of ldpc shared lib selection when running ldpctest:
 
-Loading libldpc_cuda.so, the cuda implementation of the ldpc decoder:
+Loading libldpc_orig.so, the legacy implementation of the ldpc decoder:
 
 ```
-$ ./ldpctest -v _cuda
+$ ./ldpctest -v _orig
 ```
 
 ### LDPC libraries
@@ -123,7 +125,5 @@ Libraries implementing the LDPC algorithms must be named `libldpc<_version>.so`,
 * `LDPCshutdown` implementing type `LDPC_shutdownfunc_t *`
 * `LDPCdecoder` implementing type `LDPC_decoderfunc_t *`
 * `LDPCencoder` implementing type `LDPC_encoderfunc_t *`
-
-`libldpc_cuda.so` has been tested with the `ldpctest` executable, usage from the softmodem's has to be tested.
 
 [oai Wikis home](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/home)

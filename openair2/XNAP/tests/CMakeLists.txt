@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 add_executable(xnap_lib_test xnap_lib_test.c)
 add_dependencies(tests xnap_lib_test)
 add_test(NAME xnap_lib_test COMMAND xnap_lib_test)

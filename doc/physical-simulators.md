@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # Physical Simulators ("Physims") User Guide
 
 This document provides an overview and usage guide for the **physical simulators**, also referred to as **unitary

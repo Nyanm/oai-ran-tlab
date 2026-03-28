@@ -1,31 +1,9 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*! \file mac_proto.h
+/*!
  * \brief MAC functions prototypes for gNB
- * \author Navid Nikaein and Raymond Knopp, WEI-TAI CHEN
- * \date 2010 - 2014, 2018
- * \email navid.nikaein@eurecom.fr, kroempa@gmail.com
- * \version 1.0
- * \company Eurecom, NTUST
  */
 
 #ifndef __LAYER2_NR_MAC_PROTO_H__
@@ -169,6 +147,7 @@ dci_pdu_rel15_t prepare_dci_dl_payload(const gNB_MAC_INST *gNB_mac,
                                        const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *pdsch_pdu,
                                        const NR_sched_pdsch_t *sched_pdsch,
                                        const NR_sched_pucch_t *pucch,
+                                       int tpc,
                                        int harq_pid,
                                        int tb_scaling,
                                        bool is_sib1);
@@ -285,9 +264,6 @@ NR_pusch_dmrs_t get_ul_dmrs_params(const NR_ServingCellConfigCommon_t *scc,
                                    const NR_tda_info_t *tda_info,
                                    const int Layers);
 
-uint8_t nr_get_tpc(int target, uint8_t cqi, int incr, int tx_power);
-uint8_t nr_limit_tpc(int tpc, int rssi, int rssi_threshold);
-
 int get_spf(nfapi_nr_config_request_scf_t *cfg);
 
 int to_absslot(nfapi_nr_config_request_scf_t *cfg,int frame,int slot);
@@ -321,7 +297,7 @@ bool transition_ra_connected_nr_ue(gNB_MAC_INST *nr_mac, NR_UE_info_t *UE);
 bool add_connected_nr_ue(gNB_MAC_INST *nr_mac, NR_UE_info_t *UE);
 bool nr_check_Msg4_MsgB_Ack(module_id_t module_id, frame_t frame, slot_t slot, NR_UE_info_t *UE, bool success);
 void mac_remove_nr_ue(gNB_MAC_INST *nr_mac, rnti_t rnti);
-NR_UE_info_t *get_new_nr_ue_inst(uid_allocator_t *uia, rnti_t rnti, NR_CellGroupConfig_t *CellGroup);
+NR_UE_info_t *get_new_nr_ue_inst(uid_allocator_t *uia, rnti_t rnti, NR_CellGroupConfig_t *CellGroup, const nr_mac_config_t *config);
 int nr_get_default_pucch_res(int pucch_ResourceCommon);
 nfapi_nr_pusch_pdu_t *prepare_pusch_pdu(nfapi_nr_ul_tti_request_t *future_ul_tti_req,
                                         const NR_UE_info_t *UE,
@@ -439,6 +415,27 @@ bool nr_find_nb_rb(uint16_t Qm,
                    uint32_t *tbs,
                    uint16_t *nb_rb);
 
+/**
+ * \brief Function to return a free block of RBs of a required size within an BWP
+ * \param rbSize_min Minimum size of the free block of RBs
+ * \param rbSize_max Maximum size of the free block of RBs
+ * \param bwpStart Start RB of the BWP
+ * \param bwpSize Size of the BWP in RBs
+ * \param vrb_map Pointer to the RB allocation map
+ * \param sym_mask Mask indicating the symbols to be used in the block of RBs
+ * \param rbStart_ptr Pointer returning the start RB of the found free block
+ * \param rbSize_ptr Pointer returning the size of the found free block of RBs
+ * \return Indicates if a free block of RBs of the required size could be found and *rbStart_ptr and *rbSize_ptr are set accordingly
+ */
+bool get_rb_alloc(int rbSize_min,
+                  int rbSize_max,
+                  int bwpStart,
+                  int bwpSize,
+                  const uint16_t *vrb_map,
+                  uint16_t sym_mask,
+                  int *rbStart_ptr,
+                  int *rbSize_ptr);
+
 int get_mcs_from_bler(const NR_bler_options_t *bler_options,
                       const NR_mac_dir_stats_t *stats,
                       NR_bler_stats_t *bler_stats,
@@ -502,4 +499,12 @@ void nr_mac_clean_cellgroup(NR_CellGroupConfig_t *cell_group);
 
 void post_process_dlsch(gNB_MAC_INST *nr_mac, post_process_pdsch_t *pdsch, NR_UE_info_t *UE, NR_sched_pdsch_t *sched_pdsch);
 void post_process_ulsch(gNB_MAC_INST *nr_mac, post_process_pusch_t *pusch, NR_UE_info_t *UE, NR_sched_pusch_t *sched_pusch);
+
+float nr_mac_get_snr(const nr_power_control_t *pc);
+void nr_mac_pc_snr(nr_power_control_t *pc, int snrx10, int rssi);
+void nr_mac_set_target_snrx10(nr_power_control_t *pc, int target_snrx10);
+void nr_mac_set_rssi_threshold(nr_power_control_t *pc, int rssi_threshold);
+void nr_mac_signal_dtx(nr_power_control_t *pc);
+int nr_mac_get_tpc(nr_power_control_t *pc);
+
 #endif /*__LAYER2_NR_MAC_PROTO_H__*/

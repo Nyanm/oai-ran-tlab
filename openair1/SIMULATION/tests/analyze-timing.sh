@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
 
 # This bash script builds an awk script. The awk script tries to match
 # (provided) patterns and compares them against given thresholds condition

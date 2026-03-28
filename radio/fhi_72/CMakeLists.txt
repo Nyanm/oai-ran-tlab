@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 # we need at least gcc-11 to build xran, so let's enforce it here
 # (because xran might not check it, and we have control here)
 if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 11.0

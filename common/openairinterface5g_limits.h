@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef OPENAIRINTERFACE5G_LIMITS_H_
 #define OPENAIRINTERFACE5G_LIMITS_H_
 

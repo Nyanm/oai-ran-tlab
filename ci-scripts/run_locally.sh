@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
 
 SHORT_COMMIT_SHA=$(git rev-parse --short=8 HEAD)
 COMMIT_SHA=$(git rev-parse HEAD)

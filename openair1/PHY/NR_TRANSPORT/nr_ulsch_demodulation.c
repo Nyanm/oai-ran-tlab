@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #include "PHY/defs_gNB.h"
 #include "PHY/phy_extern.h"
 #include "nr_transport_proto.h"
@@ -181,7 +185,7 @@ static void nr_ulsch_channel_compensation(uint32_t buffer_length,
                                           c16_t ul_ch_maga[][buffer_length],
                                           c16_t ul_ch_magb[][buffer_length],
                                           c16_t ul_ch_magc[][buffer_length],
-                                          int32_t **rxComp,
+                                          c16_t **rxComp,
                                           int nb_layers,
                                           c16_t rho[][nb_layers][buffer_length],
                                           nfapi_nr_pusch_pdu_t *rel15_ul,
@@ -472,7 +476,7 @@ static void nr_ulsch_construct_HhH_elements(c16_t *conjch00_ch00,
 }
 
 // MMSE Rx function: nr_ulsch_mmse_2layers()
-static uint8_t nr_ulsch_mmse_2layers(int **rxdataF_comp,
+static uint8_t nr_ulsch_mmse_2layers(c16_t **rxdataF_comp,
                                      uint32_t buffer_length,
                                      int nb_rx_ant,
                                      c16_t ul_ch_mag[][buffer_length],
@@ -948,13 +952,13 @@ static void inner_rx(PHY_VARS_gNB *gNB,
   if (nb_layer == 1 && rel15_ul->transform_precoding == transformPrecoder_enabled && rel15_ul->qam_mod_order <= 6) {
     if (rel15_ul->qam_mod_order > 2)
       nr_freq_equalization(frame_parms,
-                           (c16_t *)&pusch_vars->rxdataF_comp[0][symbol * buffer_length],
+                           &pusch_vars->rxdataF_comp[0][symbol * buffer_length],
                            rxF_ch_maga[0],
                            rxF_ch_magb[0],
                            symbol,
                            pusch_vars->ul_valid_re_per_slot[symbol],
                            rel15_ul->qam_mod_order);
-    nr_idft(&pusch_vars->rxdataF_comp[0][symbol * buffer_length], pusch_vars->ul_valid_re_per_slot[symbol]);
+    nr_idft((int32_t *)&pusch_vars->rxdataF_comp[0][symbol * buffer_length], pusch_vars->ul_valid_re_per_slot[symbol]);
   }
   if (rel15_ul->pdu_bit_map & PUSCH_PDU_BITMAP_PUSCH_PTRS) {
     nr_pusch_ptrs_processing(gNB,
@@ -971,8 +975,8 @@ static void inner_rx(PHY_VARS_gNB *gNB,
     if (rel15_ul->qam_mod_order <= 6) {
       nr_ulsch_compute_ML_llr(pusch_vars,
                               symbol,
-                              (c16_t *)&pusch_vars->rxdataF_comp[0][symbol * buffer_length],
-                              (c16_t *)&pusch_vars->rxdataF_comp[nb_rx_ant][symbol * buffer_length],
+                              &pusch_vars->rxdataF_comp[0][symbol * buffer_length],
+                              &pusch_vars->rxdataF_comp[nb_rx_ant][symbol * buffer_length],
                               rxF_ch_maga[0],
                               rxF_ch_maga[1],
                               llr[0],
@@ -983,7 +987,7 @@ static void inner_rx(PHY_VARS_gNB *gNB,
                               rel15_ul->qam_mod_order);
     }
     else {
-      nr_ulsch_mmse_2layers((int32_t **)pusch_vars->rxdataF_comp,
+      nr_ulsch_mmse_2layers(pusch_vars->rxdataF_comp,
                             buffer_length,
                             nb_rx_ant,
                             rxF_ch_maga,
@@ -1000,7 +1004,7 @@ static void inner_rx(PHY_VARS_gNB *gNB,
   }
   if (nb_layer != 2 || rel15_ul->qam_mod_order > 6)
     for (int aatx = 0; aatx < nb_layer; aatx++)
-      nr_ulsch_compute_llr((int32_t *)&pusch_vars->rxdataF_comp[aatx * nb_rx_ant][symbol * buffer_length],
+      nr_ulsch_compute_llr(&pusch_vars->rxdataF_comp[aatx * nb_rx_ant][symbol * buffer_length],
                            rxF_ch_maga[aatx],
                            rxF_ch_magb[aatx],
                            rxF_ch_magc[aatx],

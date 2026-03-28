@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 This document contains documentation for the 5G RRC layer, destined towards
 developers. It explains the basic working of the RRC, and various UE procedure
 schemes (connection, reestablishment, handover) including their interworking

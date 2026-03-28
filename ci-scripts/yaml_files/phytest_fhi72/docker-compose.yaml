@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 services:
     dpdk-init:
         image: docker.io/library/oai-dpdk-init:latest

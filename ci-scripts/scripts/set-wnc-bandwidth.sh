@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
 
 if [ -z "$1" ]; then
     echo "Usage: $0 <bandwidth> [reboot]"

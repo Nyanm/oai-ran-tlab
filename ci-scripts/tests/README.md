@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 In this directory and subdirectories are various CI code test cases and helper
 scripts.
 

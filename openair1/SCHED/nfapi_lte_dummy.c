@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 //Dummy NR defs to avoid linking errors
 
 #include "PHY/defs_gNB.h"

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 add_executable(ngap_lib_test ngap_lib_test.c)
 add_dependencies(tests ngap_lib_test)
 add_test(NAME ngap_lib_test COMMAND ngap_lib_test)

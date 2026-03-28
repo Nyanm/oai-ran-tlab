@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 # OAI LDPC offload (O-RAN AAL/DPDK BBDEV)
 
 **Table of Contents**

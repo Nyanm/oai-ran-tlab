@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef _SIDELINK_NR_UE_INTERFACE_H_
 #define _SIDELINK_NR_UE_INTERFACE_H_
 

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
 This document describes the basic functioning of the 5G RRC layer, describes
 the periodic output, and explains the various configuration options that
 influence its behavior.

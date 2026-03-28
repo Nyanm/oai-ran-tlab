@@ -1,22 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this file
- * except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 /*! \file telnetsrv_ci.c
@@ -393,6 +376,27 @@ static int trigger_bwp_switch(char *buf, int debug, telnet_printfunc_t prnt)
   }
 }
 
+static int set_pusch_target_snr(char *buf, int debug, telnet_printfunc_t prnt)
+{
+  if (!buf)
+    ERROR_MSG_RET("need an SNR to read\n");
+
+  char *end;
+  long new_snr = strtol(buf, &end, 0);
+  if (*end != 0)
+    ERROR_MSG_RET("error: could not parse number in '%s'\n", buf);
+
+  gNB_MAC_INST *nrmac = RC.nrmac[0];
+  NR_SCHED_LOCK(&nrmac->sched_lock);
+  UE_iterator(nrmac->UE_info.connected_ue_list, it) {
+    nr_mac_set_target_snrx10(&it->UE_sched_ctrl.pusch_pc, new_snr * 10);
+  }
+  NR_SCHED_UNLOCK(&nrmac->sched_lock);
+  prnt("set new PUSCH target SNR %d for all UEs\n", new_snr);
+
+  return 0;
+}
+
 static telnetshell_cmddef_t cicmds[] = {
     {"get_single_rnti", "", get_single_rnti},
     {"force_reestab", "[rnti(hex,opt)]", trigger_reestab},
@@ -404,6 +408,7 @@ static telnetshell_cmddef_t cicmds[] = {
     {"get_current_bwp", "[rnti(hex,opt)]", get_current_bwp},
     {"trigger_bwp_switch", "newBWPId [rnti(hex,opt)]", trigger_bwp_switch},
     {"trigger_n2_ho", "[neighbour_pci(uint32_t),ueId(uint32_t)]", rrc_gNB_trigger_n2_ho},
+    {"set_pusch_target_snr", "[somelongSNR(dec)]", set_pusch_target_snr},
     {"pdu_session_release", "[gNB_ue_ngap_id(int,opt)]", trigger_ngap_pdu_session_release},
     {"", "", NULL},
 };
