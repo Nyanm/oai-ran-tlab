@@ -1107,7 +1107,7 @@ index 70337d6..645b2ef 100644
  #include <rte_config.h>
  
 diff --git a/fhi_lib/lib/src/xran_tx_proc.c b/fhi_lib/lib/src/xran_tx_proc.c
-index 2d05893..399d649 100644
+index 2d05893..3b14be5 100644
 --- a/fhi_lib/lib/src/xran_tx_proc.c
 +++ b/fhi_lib/lib/src/xran_tx_proc.c
 @@ -35,7 +35,11 @@
@@ -1135,6 +1135,24 @@ index 2d05893..399d649 100644
                  num_sections = ptr_sect_elm->cur_index;
                  /* iterate C-Plane configuration to generate corresponding U-Plane */
                  // here
+@@ -1632,15 +1642,11 @@ int32_t xran_process_tx_sym_cp_on_opt(void* pHandle, uint8_t ctx_id, uint32_t tt
+                         p_share_data->free_cb = extbuf_free_callback;
+                         p_share_data->fcb_opaque = NULL;
+                         rte_mbuf_ext_refcnt_set(p_share_data, 1);
+-                        ext_buff = (char*) (xran_add_hdr_offset((uint8_t*)temp_buff, compMeth));
++                        ext_buff = temp_buff + sectinfo->sec_desc[sym_id].iq_buffer_offset;
+ 
+                         /* Create ethernet + eCPRI + radio app header */
+-                        iq_offset = xran_get_iqdata_len(sectinfo->numPrbc, iqWidth, compMeth);
+-                        ext_buff_len = iq_offset;
+-                        temp_buff = ext_buff + iq_offset;
+-
++                        ext_buff_len = sectinfo->sec_desc[sym_id].iq_buffer_len;
+                         ext_buff -= total_header_size;
+-
+                         ext_buff_len += (total_header_size + 18);
+ 
+                         if (comp_head_upd)
 diff --git a/fhi_lib/lib/src/xran_up_api.c b/fhi_lib/lib/src/xran_up_api.c
 index f3b846e..3eda2de 100644
 --- a/fhi_lib/lib/src/xran_up_api.c
