@@ -29,6 +29,7 @@
  */
 
 #include "rrc_defs.h"
+#include "rrc_proto.h"
 #include "rrc_extern.h"
 #include "RRC/L2_INTERFACE/openair_rrc_L2_interface.h"
 #include "RRC/LTE/MESSAGES/asn1_msg.h"
@@ -335,13 +336,10 @@ get_next_ue_initial_id(
   return ue_initial_id[mod_id];
 }
 
-
-
-
-/*! \fn uint8_t get_UE_index_from_s1ap_ids(uint8_t mod_id, uint16_t ue_initial_id, uint32_t eNB_ue_s1ap_id)
+/*! \fn rrc_eNB_get_ue_context_from_s1ap_ids
  *\brief retrieve UE index in the eNB from the UE initial ID if not equal to UE_INDEX_INVALID or
  *\brief from the eNB_ue_s1ap_id previously transmitted by S1AP.
- *\param mod_id Instance ID of eNB.
+ *\param instanceP Instance ID of eNB.
  *\param ue_initial_id The UE initial ID sent to S1AP.
  *\param eNB_ue_s1ap_id The value sent by S1AP.
  *\return the UE index or UE_INDEX_INVALID if not found.
@@ -399,7 +397,9 @@ static e_LTE_SecurityAlgorithmConfig__integrityProtAlgorithm rrc_eNB_select_inte
   return INTEGRITY_ALGORITHM_NONE;
 }
 
-/*! \fn int rrc_eNB_process_security (uint8_t mod_id, uint8_t ue_index, security_capabilities_t *security_capabilities)
+/*! \fn int rrc_eNB_process_security(const protocol_ctxt_t *const ctxt_pP,
+                         rrc_eNB_ue_context_t *const ue_context_pP,
+                         security_capabilities_t *security_capabilities_pP)
  *\brief save and analyze available security algorithms bit mask and select relevant ones.
  *\param mod_id Instance ID of eNB.
  *\param ue_index Instance ID of UE in the eNB.

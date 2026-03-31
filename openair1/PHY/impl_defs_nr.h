@@ -37,14 +37,6 @@
 #include <stdbool.h>
 #include "types.h"
 
-#ifdef DEFINE_VARIABLES_PHY_IMPLEMENTATION_DEFS_NR_H
-#define EXTERN
-#define INIT_VARIABLES_PHY_IMPLEMENTATION_DEFS_NR_H
-#else
-#define EXTERN  extern
-#undef INIT_VARIABLES_PHY_IMPLEMENTATION_DEFS_NR_H
-#endif
-
 #ifdef PHY_DBG_DEV_TST
   #define PHY_DBG_DEV_TST_PRINTF(...)      printf(__VA_ARGS__)
 #else
@@ -60,15 +52,12 @@
 
 /* TS 38.211 Table 4.3.2-1: Number of OFDM symbols per slot, slots per frame, and slots per subframe for normal cyclic prefix */
 #define MU_NUMBER                          (5)
-EXTERN const uint8_t N_slot_subframe[MU_NUMBER]
-#ifdef INIT_VARIABLES_PHY_IMPLEMENTATION_DEFS_NR_H
-= { 1, 2, 4, 8, 16}
-#endif
-;
-
+static const uint8_t N_slot_subframe[MU_NUMBER] = {1, 2, 4, 8, 16};
 
 #define  NB_DL_DATA_TO_UL_ACK              (8) /* size of table TS 38.213 Table 9.2.3-1 */
 
+#define NR_PRACH_SEQ_LEN_L 839
+#define NR_PRACH_SEQ_LEN_S 139
 
 /***********************************************************************
 *
@@ -98,8 +87,7 @@ SystemInformationBlockType1_nr_t;
 #define NR_DOWNLINK_SLOT                   (0x01)
 #define NR_UPLINK_SLOT                     (0x02)
 #define NR_MIXED_SLOT                      (0x03)
-#define NR_SIDELINK_SLOT                   (0x04)
-#define NON_NR_SIDELINK_SLOT               (0x05)
+#define NR_SIDELINK_SLOT NR_UPLINK_SLOT
 
 #define FRAME_DURATION_MICRO_SEC           (10000)  /* frame duration in microsecond */
 
@@ -175,11 +163,7 @@ typedef struct TDD_UL_DL_SlotConfig_s {
 *
 ************************************************************************/
 
-EXTERN const int16_t SRS_antenna_port[MAX_NROFSRS_PORTS]
-#ifdef INIT_VARIABLES_PHY_IMPLEMENTATION_DEFS_NR_H
-= { 1000, 1001, 1002, 1003 }
-#endif
-;
+static const int16_t SRS_antenna_port[MAX_NROFSRS_PORTS] = {1000, 1001, 1002, 1003};
 
 typedef enum {
   port1           = 1,
@@ -317,7 +301,7 @@ typedef struct {
   int8_t p0;          // INTEGER (-202..24)
   /// \brief A reference signal (e.g. a CSI-RS config or a SSblock) to be used for SRS path loss estimation.
   /// Corresponds to L1 parameter 'srs-pathlossReference-rs-config' (see 38.213, section 7.3)
-  pathlossReferenceRS_t pathlossReferenceRS_t;
+  pathlossReferenceRS_t pathlossReferenceRS;
   uint8_t path_loss_SSB_Index;
   uint8_t path_loss_NZP_CSI_RS_ResourceId;
   /// \brief Indicates whether hsrs,c(i) = fc(i,1) or hsrs,c(i) = fc(i,2) (if twoPUSCH-PC-AdjustmentStates are configured)
@@ -360,12 +344,6 @@ typedef enum {
 * DESCRIPTION      :  configuration for PUSCH
 *
 ************************************************************************/
-
-typedef enum {
-  pusch_dmrs_type1 = 0,
-  pusch_dmrs_type2 = 1
-} pusch_dmrs_type_t;
-
 typedef enum {
   txConfig_codebook = 1,
   txConfig_nonCodebook = 2
@@ -505,16 +483,6 @@ typedef enum {
   reserved  = 7
 } PUCCH_MaxCodeRate_t;
 
-typedef struct {
-  pucch_format_nr_t format;
-  uint8_t                startingSymbolIndex;
-  uint8_t                nrofSymbols;
-  uint16_t               PRB_offset;
-  uint8_t                nb_CS_indexes;
-  uint8_t                initial_CS_indexes[MAX_NB_CYCLIC_SHIFT];
-} initial_pucch_resource_t;
-
-
 /***********************************************************************
 *
 * FUNCTIONALITY    :  Scheduling Request Configuration (SR)
@@ -584,7 +552,4 @@ typedef struct {
   SchedulingRequestResourceConfig_t  *sr_ResourceConfig[MAX_NR_OF_SR_CONFIG_PER_CELL_GROUP];
 } scheduling_request_config_t;
 
-
-#undef EXTERN
-#undef INIT_VARIABLES_PHY_IMPLEMENTATION_DEFS_NR_H
 #endif /* PHY_IMPL_DEFS_NR_H */

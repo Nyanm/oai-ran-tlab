@@ -6,7 +6,7 @@
 #include "database.h"
 #include "utils.h"
 #include "../T_defs.h"
-#include "config.h"
+#include "configuration.h"
 
 void usage(void)
 {
@@ -123,7 +123,7 @@ int main(int n, char **v)
   if (signal(SIGINT, force_stop) == SIG_ERR) abort();
   if (signal(SIGTSTP, force_stop) == SIG_ERR) abort();
 
-  OBUF ebuf = { osize: 0, omaxsize: 0, obuf: NULL };
+  OBUF ebuf = {.osize = 0, .omaxsize = 0, .obuf = NULL};
 
   /* read messages */
   while (run) {
@@ -133,8 +133,8 @@ int main(int n, char **v)
     int vpos = 0;
 
     if (fullread(socket, &length, 4) == -1) goto read_error;
-    if (ebuf.omaxsize < length) {
-      ebuf.omaxsize = (length + 65535) & ~65535;
+    if (ebuf.omaxsize < length + 4) {
+      ebuf.omaxsize = (length + 4 + 65535) & ~65535;
       ebuf.obuf = realloc(ebuf.obuf, ebuf.omaxsize);
       if (ebuf.obuf == NULL) { printf("out of memory\n"); exit(1); }
     }
@@ -142,10 +142,12 @@ int main(int n, char **v)
     memcpy(v+vpos, &length, 4);
     vpos += 4;
 #ifdef T_SEND_TIME
+    if (length < sizeof(struct timespec)) goto read_error;
     if (fullread(socket,v+vpos,sizeof(struct timespec))==-1) goto read_error;
     vpos += sizeof(struct timespec);
     length -= sizeof(struct timespec);
 #endif
+    if (length < sizeof(int)) goto read_error;
     if (fullread(socket, &type, sizeof(int)) == -1) goto read_error;
     memcpy(v+vpos, &type, sizeof(int));
     vpos += sizeof(int);

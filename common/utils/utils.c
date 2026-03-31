@@ -7,34 +7,6 @@
 #include <errno.h>
 #include "utils.h"
 
-
-
-const char *hexdump(const void *data, size_t data_len, char *out, size_t out_len)
-{
-    char *p = out;
-    char *endp = out + out_len;
-    const uint8_t *q = data;
-    snprintf(p, endp - p, "[%zu]", data_len);
-    p += strlen(p);
-    for (size_t i = 0; i < data_len; ++i)
-    {
-        if (p >= endp)
-        {
-            static const char ellipses[] = "...";
-            char *s = endp - sizeof(ellipses);
-            if (s >= p)
-            {
-                strcpy(s, ellipses);
-            }
-            break;
-        }
-        snprintf(p, endp - p, " %02X", *q++);
-        p += strlen(p);
-    }
-    return out;
-}
-
-
 /****************************************************************************
  **                                                                        **
  ** Name:        hex_char_to_hex_value()                                   **
@@ -118,23 +90,20 @@ char *itoa(int i) {
   return strdup(buffer);
 }
 
-void *memcpy1(void *dst,const void *src,size_t n) {
-
-  void *ret=dst;
-  asm volatile("rep movsb" : "+D" (dst) : "c"(n), "S"(src) : "cc","memory");
-  return(ret);
-}
-
-void set_priority(int priority)
+/**
+ * @brief Convert a version string x.y.z into numbers.
+ *
+ * The function takes a version string of format "x.y.z" where x is the major
+ * version number, y minor, z patch. It tries to match version, and outputs the
+ * numbers in the correspondingly named variables.
+ *
+ * @return The number of version parts matched (should be three on x.y.z).
+ */
+int read_version(const char *version, uint8_t *major, uint8_t *minor, uint8_t *patch)
 {
-  struct sched_param param =
-  {
-    .sched_priority = priority,
-  };
-  fprintf(stderr, "Calling sched_setscheduler(%d)\n", priority);
-  if (sched_setscheduler(0, SCHED_RR, &param) == -1)
-  {
-    fprintf(stderr, "sched_setscheduler: %s\n", strerror(errno));
-    abort();
-  }
+  int ret = sscanf(version, "%hhu.%hhu.%hhu", major, minor, patch);
+  // EOF means "end of input reached or matching failure"
+  if (ret == EOF)
+    return 3;
+  return ret; // ret has number of items matched
 }

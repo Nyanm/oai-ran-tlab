@@ -80,10 +80,10 @@ void nr_pdcp_init_timer_thread(nr_pdcp_ue_manager_t *nr_pdcp_ue_manager)
   }
 }
 
-void nr_pdcp_wakeup_timer_thread(uint64_t time)
+void nr_pdcp_ms_tick(void)
 {
   if (pthread_mutex_lock(&timer_thread_mutex)) abort();
-  timer_thread_curtime = time;
+  timer_thread_curtime++;
   if (pthread_cond_broadcast(&timer_thread_cond)) abort();
   if (pthread_mutex_unlock(&timer_thread_mutex)) abort();
 }

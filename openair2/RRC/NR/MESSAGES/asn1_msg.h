@@ -31,19 +31,50 @@
 #ifndef __RRC_NR_MESSAGES_ASN1_MSG__H__
 #define __RRC_NR_MESSAGES_ASN1_MSG__H__
 
+#include <common/utils/assertions.h>
+#include <stdint.h>
 #include <stdio.h>
-#include <sys/types.h>
-#include <stdlib.h> /* for atoi(3) */
-#include <unistd.h> /* for getopt(3) */
-#include <string.h> /* for strerror(3) */
-#include <sysexits.h> /* for EX_* exit codes */
-#include <errno.h>  /* for errno */
+#include "NR_ARFCN-ValueNR.h"
+#include "NR_CellGroupConfig.h"
+#include "NR_CipheringAlgorithm.h"
+#include "NR_DRB-ToAddModList.h"
+#include "NR_DRB-ToReleaseList.h"
+#include "NR_IntegrityProtAlgorithm.h"
+#include "NR_LogicalChannelConfig.h"
+#include "NR_MeasConfig.h"
+#include "NR_MeasTiming.h"
+#include "NR_RLC-BearerConfig.h"
+#include "NR_RLC-Config.h"
+#include "NR_RRC-TransactionIdentifier.h"
+#include "NR_RadioBearerConfig.h"
+#include "NR_ReestablishmentCause.h"
+#include "NR_SRB-ToAddModList.h"
+#include "NR_SecurityConfig.h"
+#include "NR_MeasurementReport.h"
+#include "NR_MeasurementTimingConfiguration.h"
+#include "NR_UE-CapabilityRAT-ContainerList.h"
+#include "ds/seq_arr.h"
+#include "ds/byte_array.h"
+#include "rrc_messages_types.h"
+#include "openair2/LAYER2/nr_pdcp/nr_pdcp_configuration.h"
+#include "common/utils/nr/nr_common.h"
+struct asn_TYPE_descriptor_s;
 
-#include <asn_application.h>
-
-#include "RRC/NR/nr_rrc_defs.h"
-#include "RRC/NR/nr_rrc_config.h"
-
+typedef struct {
+  uint8_t transaction_id;
+  NR_SRB_ToAddModList_t *srb_config_list;
+  NR_DRB_ToAddModList_t *drb_config_list;
+  int *drb_rel;
+  int n_drb_rel;
+  NR_SecurityConfig_t *security_config;
+  NR_MeasConfig_t *meas_config;
+  byte_array_t dedicated_NAS_msg_list[MAX_DRBS_PER_UE];
+  int num_nas_msg;
+  NR_CellGroupConfig_t *cell_group_config;
+  bool masterKeyUpdate;
+  int nextHopChainingCount;
+  byte_array_t ue_cap;
+} nr_rrc_reconfig_param_t;
 
 /*
  * The variant of the above function which dumps the BASIC-XER (XER_F_BASIC)
@@ -55,137 +86,94 @@
  */
 int xer_sprint_NR(char *string, size_t string_size, struct asn_TYPE_descriptor_s *td, void *sptr);
 
-uint8_t do_SIB23_NR(rrc_gNB_carrier_data_t *carrier,
-                    gNB_RrcConfigurationReq *configuration);
+int do_SIB2_NR(uint8_t **msg_SIB2, NR_SSB_MTC_t *ssbmtc);
 
-void do_SpCellConfig(gNB_RRC_INST *rrc,
-                      struct NR_SpCellConfig  *spconfig);
+int do_RRCReject(uint8_t *const buffer);
 
-int do_RRCReject(uint8_t Mod_id,
-                 uint8_t *const buffer);
-
-NR_RLC_BearerConfig_t *get_SRB_RLC_BearerConfig(
-    long channelId,
-    long priority,
-    e_NR_LogicalChannelConfig__ul_SpecificParameters__bucketSizeDuration bucketSizeDuration);
-NR_RLC_BearerConfig_t *get_DRB_RLC_BearerConfig(long lcChannelId, long drbId, NR_RLC_Config_PR rlc_conf, long priority);
-
-NR_RadioBearerConfig_t *get_default_rbconfig(int eps_bearer_id,
-                                             int rb_id,
-                                             e_NR_CipheringAlgorithm ciphering_algorithm,
-                                             e_NR_SecurityConfig__keyToUse key_to_use);
-
-void fill_nr_noS1_bearer_config(NR_RadioBearerConfig_t **rbconfig,
-                                NR_RLC_BearerConfig_t **rlc_rbconfig);
-void free_nr_noS1_bearer_config(NR_RadioBearerConfig_t **rbconfig,
-                                NR_RLC_BearerConfig_t **rlc_rbconfig);
-/**
- * @brief Function to fill out the master cell group config to be used in RRCReconfiguration.
- *        If it is misused the ue_context_mastercellGroup, might lead to ASN1 encoding failure,
- *        because in ue_context_mastercellGroup the rlc_BearerConfigs are added but never removed,
- *        so the maximum number of rlc_BearerConfigs is exceeded.
- *
- * @param     cellGroupConfig             The MCG that will be used in do_RRCReconfiguration.
- * @param     ue_context_mastercellGroup  The MCG that is stored in the ue context.
- * @param[in] use_rlc_um_for_drb          Set to 1, if RLC uses 'Unacknowledged Mode' for the DRB.
- * @param[in] configure_srb               Set to 1, if SRB2 needs be added to MCG.
- * @param[in] drb_configList              The Data Radio Bearer list, to be added.
- * @param[in] priority                    The priorities set for the Data Radio Bearers.
- */
-void fill_mastercellGroupConfig(NR_CellGroupConfig_t *cellGroupConfig,
-                                NR_CellGroupConfig_t *ue_context_mastercellGroup,
-                                int use_rlc_um_for_drb,
-                                uint8_t configure_srb,
-                                NR_DRB_ToAddModList_t *drb_configList,
-                                long *priority);
-
-int do_RRCSetup(rrc_gNB_ue_context_t *const ue_context_pP,
-                uint8_t *const buffer,
+int do_RRCSetup(uint8_t *const buffer,
+                size_t buffer_size,
                 const uint8_t transaction_id,
                 const uint8_t *masterCellGroup,
                 int masterCellGroup_len,
                 const gNB_RrcConfigurationReq *configuration,
                 NR_SRB_ToAddModList_t *SRBs);
 
-uint8_t do_NR_SecurityModeCommand(
-                    const protocol_ctxt_t *const ctxt_pP,
-                    uint8_t *const buffer,
-                    const uint8_t Transaction_id,
-                    const uint8_t cipheringAlgorithm,
-                    NR_IntegrityProtAlgorithm_t integrityProtAlgorithm);
+int do_NR_SecurityModeCommand(uint8_t *const buffer,
+                              const uint8_t Transaction_id,
+                              const uint8_t cipheringAlgorithm,
+                              NR_IntegrityProtAlgorithm_t integrityProtAlgorithm);
 
-uint8_t do_NR_SA_UECapabilityEnquiry( const protocol_ctxt_t *const ctxt_pP,
-                                   uint8_t               *const buffer,
-                                   const uint8_t                Transaction_id);
+int do_NR_SA_UECapabilityEnquiry(uint8_t *const buffer, const uint8_t Transaction_id);
 
 int do_NR_RRCRelease(uint8_t *buffer, size_t buffer_size, uint8_t Transaction_id);
 
-int16_t do_RRCReconfiguration(
-    const protocol_ctxt_t        *const ctxt_pP,
-    uint8_t                      *buffer,
-    size_t                        buffer_size,
-    uint8_t                       Transaction_id,
-    NR_SRB_ToAddModList_t        *SRB_configList,
-    NR_DRB_ToAddModList_t        *DRB_configList,
-    NR_DRB_ToReleaseList_t       *DRB_releaseList,
-    NR_SecurityConfig_t          *security_config,
-    NR_SDAP_Config_t             *sdap_config,
-    NR_MeasConfig_t              *meas_config,
-    struct NR_RRCReconfiguration_v1530_IEs__dedicatedNAS_MessageList *dedicatedNAS_MessageList,
-    rrc_gNB_ue_context_t         *const ue_context_pP,
-    rrc_gNB_carrier_data_t       *carrier,
-    const gNB_RrcConfigurationReq *configuration,
-    NR_MAC_CellGroupConfig_t     *mac_CellGroupConfig,
-    NR_CellGroupConfig_t         *cellGroupConfig);
+byte_array_t do_RRCReconfiguration(const nr_rrc_reconfig_param_t *params);
 
-uint8_t do_RRCSetupComplete(uint8_t Mod_id,
-                            uint8_t *buffer,
-                            size_t buffer_size,
-                            const uint8_t Transaction_id,
-                            uint8_t sel_plmn_id,
-                            const int dedicatedInfoNASLength,
-                            const char *dedicatedInfoNAS);
-
-uint8_t do_RRCSetupRequest(uint8_t Mod_id, uint8_t *buffer, size_t buffer_size, uint8_t *rv);
-
-uint8_t do_NR_RRCReconfigurationComplete_for_nsa(uint8_t *buffer, size_t buffer_size, NR_RRC_TransactionIdentifier_t Transaction_id);
-
-uint8_t do_NR_RRCReconfigurationComplete(
-                        const protocol_ctxt_t *const ctxt_pP,
-                        uint8_t *buffer,
+int do_RRCSetupComplete(uint8_t *buffer,
                         size_t buffer_size,
-                        const uint8_t Transaction_id
-                      );
+                        const uint8_t Transaction_id,
+                        uint8_t sel_plmn_id,
+                        bool is_rrc_connection_setup,
+                        uint64_t fiveG_S_TMSI,
+                        const int dedicatedInfoNASLength,
+                        const char *dedicatedInfoNAS);
 
-uint8_t 
-do_NR_DLInformationTransfer(
-    uint8_t Mod_id,
-    uint8_t **buffer,
-    uint8_t transaction_id,
-    uint32_t pdu_length,
-    uint8_t *pdu_buffer
-);
+int do_NR_HandoverPreparationInformation(const uint8_t *uecap_buf, int uecap_buf_size, uint8_t *buf, int buf_size);
 
-uint8_t do_NR_ULInformationTransfer(uint8_t **buffer, 
-                        uint32_t pdu_length,
-                        uint8_t *pdu_buffer);
+int do_NR_MeasConfig(const NR_MeasConfig_t *measconfig, uint8_t *buf, int buf_size);
 
-uint8_t do_RRCReestablishmentRequest(uint8_t Mod_id, uint8_t *buffer, uint16_t c_rnti);
+int do_NR_MeasurementTimingConfiguration(const NR_MeasurementTimingConfiguration_t *mtc, uint8_t *buf, int buf_size);
 
-int do_RRCReestablishment(const protocol_ctxt_t *const ctxt_pP,
-                          rrc_gNB_ue_context_t *const ue_context_pP,
-                          int CC_id,
-                          uint8_t *const buffer,
-                          size_t buffer_size,
-                          const uint8_t Transaction_id,
-                          NR_SRB_ToAddModList_t *SRB_configList,
-                          const uint8_t *masterCellGroup_from_DU,
-                          NR_ServingCellConfigCommon_t *scc,
-                          rrc_gNB_carrier_data_t *carrier);
+int do_RRCSetupRequest(uint8_t *buffer, size_t buffer_size, uint8_t *rv, uint64_t fiveG_S_TMSI_part1);
+
+int do_nrMeasurementReport_SA(long trigger_to_measid,
+                              long trigger_quantity,
+                              long rs_type,
+                              uint16_t Nid_cell,
+                              int rsrp_index,
+                              uint8_t *buffer,
+                              size_t buffer_size);
+
+int do_NR_RRCReconfigurationComplete_for_nsa(uint8_t *buffer, size_t buffer_size, NR_RRC_TransactionIdentifier_t Transaction_id);
+
+int do_NR_RRCReconfigurationComplete(uint8_t *buffer, size_t buffer_size, const uint8_t Transaction_id);
+
+int do_NR_DLInformationTransfer(uint8_t *buffer,
+                                size_t buffer_len,
+                                uint8_t transaction_id,
+                                uint32_t pdu_length,
+                                uint8_t *pdu_buffer);
+
+int do_NR_ULInformationTransfer(uint8_t **buffer,
+                                uint32_t pdu_length,
+                                uint8_t *pdu_buffer);
+
+int do_RRCReestablishmentRequest(uint8_t *buffer,
+                                 NR_ReestablishmentCause_t cause,
+                                 uint32_t cell_id,
+                                 uint16_t c_rnti);
+
+int do_RRCReestablishment(int8_t nh_ncc, uint8_t *const buffer, size_t buffer_size, const uint8_t Transaction_id);
 
 int do_RRCReestablishmentComplete(uint8_t *buffer, size_t buffer_size, int64_t rrc_TransactionIdentifier);
 
-NR_MeasConfig_t *get_defaultMeasConfig(const gNB_RrcConfigurationReq *conf);
-uint8_t do_NR_Paging(uint8_t Mod_id, uint8_t *buffer, uint32_t tmsi);
+NR_MeasConfig_t *get_MeasConfig(const NR_MeasTiming_t *mt,
+                                int band,
+                                int scs,
+                                int nr_pci,
+                                NR_ReportConfigToAddMod_t *rc_PER,
+                                NR_ReportConfigToAddMod_t *rc_A2,
+                                seq_arr_t *rc_A3_seq,
+                                seq_arr_t *neigh_seq);
+void free_MeasConfig(NR_MeasConfig_t *mc);
+int do_NR_Paging(uint8_t Mod_id, uint8_t *buffer, uint32_t tmsi);
+
+byte_array_t get_HandoverPreparationInformation(nr_rrc_reconfig_param_t *params, int scell_pci);
+byte_array_t get_HandoverCommandMessage(nr_rrc_reconfig_param_t *params);
+void fill_removal_lists_from_source_measConfig(NR_MeasConfig_t *measConfig, byte_array_t prep_info);
+int doRRCReconfiguration_from_HandoverCommand(byte_array_t *ba, byte_array_t handoverCommand);
+
+struct NR_UE_NR_Capability *get_ue_nr_capability(int rnti, uint8_t *buf, uint32_t len);
+NR_UE_NR_Capability_t *decode_nr_ue_capability(int rnti, const NR_UE_CapabilityRAT_ContainerList_t *clist);
 
 #endif  /* __RRC_NR_MESSAGES_ASN1_MSG__H__ */

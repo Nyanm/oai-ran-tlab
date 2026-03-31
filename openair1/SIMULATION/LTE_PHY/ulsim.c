@@ -306,7 +306,7 @@ void fill_ulsch_dci(PHY_VARS_eNB *eNB,
 
 enum eTypes { eBool, eInt, eFloat, eText };
 static int verbose,help,disable_bundling=0,cqi_flag=0, extended_prefix_flag=0, test_perf=0, subframe=3, transmission_m=1,n_rx=1;
-
+configmodule_interface_t *uniqCfg = NULL;
 int main(int argc, char **argv) {
   int i,j,aa,u;
   PHY_VARS_eNB *eNB;
@@ -380,7 +380,6 @@ int main(int argc, char **argv) {
   int sf;
   static int threequarter_fs=0;
   int ndi;
-  opp_enabled=1; // to enable the time meas
   sched_resp.DL_req = &DL_req;
   sched_resp.UL_req = &UL_req;
   sched_resp.HI_DCI0_req = &HI_DCI0_req;
@@ -395,7 +394,8 @@ int main(int argc, char **argv) {
   cpuf = cpu_freq_GHz;
   set_parallel_conf("PARALLEL_SINGLE_THREAD");
   printf("Detected cpu_freq %f GHz\n",cpu_freq_GHz);
-  AssertFatal(load_configmodule(argc,argv,CONFIG_ENABLECMDLINEONLY) != NULL, "Cannot load configuration module, exiting\n");
+  uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY);
+  AssertFatal(uniqCfg != NULL, "Cannot load configuration module, exiting\n");
   logInit();
   set_glog(OAILOG_INFO);
   // enable these lines if you need debug info
@@ -437,7 +437,7 @@ int main(int argc, char **argv) {
     { "bundling_disable", "bundling disable",PARAMFLAG_BOOL,  .iptr=&disable_bundling, .defintval=0, TYPE_INT, 0 },
     { "Y",  "n_ch_rlz",0, .iptr=&n_ch_rlz,  .defintval=1, TYPE_INT, 0 },
     { "X",  "abstx", PARAMFLAG_BOOL,  .iptr=&abstx, .defintval=0, TYPE_INT, 0 },
-    { "Operf", "Set the percentage of effective rate to testbench the modem performance (typically 30 and 70, range 1-100)",0, .iptr=&test_perf,  .defintval=0, TYPE_INT, 0 },
+    { "Tperf", "Set the percentage of effective rate to testbench the modem performance (typically 30 and 70, range 1-100)",0, .iptr=&test_perf,  .defintval=0, TYPE_INT, 0 },
     { "verbose", "display debug text", PARAMFLAG_BOOL,  .iptr=&verbose, .defintval=0, TYPE_INT, 0 },
     { "help", "display help and exit", PARAMFLAG_BOOL,  .iptr=&help, .defintval=0, TYPE_INT, 0 },
     { "", "",0,  .iptr=NULL, .defintval=0, TYPE_INT, 0 },
@@ -446,7 +446,15 @@ int main(int argc, char **argv) {
   int option_index;
   int res;
 
-  while ((res=getopt_long_only(argc, argv, "", long_options, &option_index)) == 0) {
+  /* disable error messages from getopt_long_only */
+  opterr = 0;
+  while ((res=getopt_long_only(argc, argv, "-", long_options, &option_index)) >= 0) {
+
+    /* ignore configmodule options and their arguments*/
+    /* with these opstring and long_options getopt returns 1 for non-option arguments and '?' for unrecognized long options, refer to 'man 3 getopt' */
+    if (res == 1 || res == '?')
+      continue;
+
     if (options[option_index].voidptr != NULL ) {
       if (long_options[option_index].has_arg==no_argument)
         *(bool *)options[option_index].iptr=1;
@@ -559,7 +567,7 @@ int main(int argc, char **argv) {
 
       case 'P':
         dump_perf=1;
-        opp_enabled=1;
+        cpu_meas_enabled = 1;
         break;
 
       case 'L':
@@ -787,9 +795,7 @@ int main(int argc, char **argv) {
   proc_rxtx_ue->subframe_tx = proc_rxtx->subframe_rx;
   proc_rxtx_ue->subframe_rx = (proc_rxtx->subframe_tx+6)%10;
   proc_rxtx->threadPool = (tpool_t *)malloc(sizeof(tpool_t));
-  proc_rxtx->respDecode=(notifiedFIFO_t*) malloc(sizeof(notifiedFIFO_t));
   initTpool("n", proc_rxtx->threadPool, true);
-  initNotifiedFIFO(proc_rxtx->respDecode);
 
   printf("Init UL hopping UE\n");
   init_ul_hopping(&UE->frame_parms);
@@ -930,7 +936,7 @@ int main(int argc, char **argv) {
       ndi=0;
       phy_reset_ue(0,0,0);
       UE->UE_mode[eNB_id]=PUSCH;
-      SET_LOG_DEBUG(UE_TIMING);
+      set_log_debug("UE_TIMING", true);
 
       for (trials = 0; trials<n_frames; trials++) {
         //      printf("*");
@@ -1510,8 +1516,8 @@ int main(int argc, char **argv) {
 
   return(0);
 }
-
-/* temporary dummy implem of get_softmodem_optmask, till basic simulators implemented as device */
-uint64_t get_softmodem_optmask(void) {
-  return 0;
+static softmodem_params_t softmodem_params;
+softmodem_params_t *get_softmodem_params(void)
+{
+  return &softmodem_params;
 }

@@ -1,3 +1,25 @@
+/*
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this file
+ * except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
+ */
+
+#include "PHY/defs_common.h"
 
 double median(varArray_t *input) {
   return *(double *)((uint8_t *)(input+1)+(input->size/2)*input->atomSize);
@@ -62,18 +84,20 @@ void printDistribution(time_stats_t *ptr, varArray_t *sortedList, char *txt) {
 }
 
 void printStatIndent(time_stats_t *ptr, char *txt) {
-  printf("|__ %-38s %6.2f us (%3d trials)\n",
+  printf("|__ %-38s %6.2f us (%3d trials)\t\t(%6.2f total [ms])\n",
          txt,
          ptr->trials?inMicroS(ptr->diff/ptr->trials):0,
-         ptr->trials);
+         ptr->trials,
+         ptr->trials?inMicroS(ptr->diff)/1000:0);
 }
 
 void printStatIndent2(time_stats_t *ptr, char *txt) {
   double timeBase=1/(1000*get_cpu_freq_GHz());
-  printf("    |__ %-34s %6.2f us (%3d trials)\n",
+  printf("    |__ %-34s %6.2f us (%3d trials)\t\t(%6.2f total [ms])\n",
          txt,
          ptr->trials?((double)ptr->diff)/ptr->trials*timeBase:0,
-	 ptr->trials);
+         ptr->trials,
+         ptr->trials?inMicroS(ptr->diff)/1000:0);
 }
 
 void printStatIndent3(time_stats_t *ptr, char *txt) {

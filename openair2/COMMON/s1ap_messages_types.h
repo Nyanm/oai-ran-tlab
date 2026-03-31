@@ -22,6 +22,9 @@
 #ifndef S1AP_MESSAGES_TYPES_H_
 #define S1AP_MESSAGES_TYPES_H_
 
+#include <netinet/in.h>
+#include <netinet/sctp.h>
+#include "common/platform_types.h"
 #include "LTE_asn_constant.h"
 //-------------------------------------------------------------------------------------------//
 // Defines to access message fields.
@@ -110,13 +113,6 @@ typedef enum cn_domain_s {
   CN_DOMAIN_PS = 1,
   CN_DOMAIN_CS = 2
 } cn_domain_t;
-
-typedef struct net_ip_address_s {
-  unsigned ipv4:1;
-  unsigned ipv6:1;
-  char ipv4_address[16];
-  char ipv6_address[46];
-} net_ip_address_t;
 
 typedef uint64_t bitrate_t;
 
@@ -227,16 +223,6 @@ typedef struct nas_pdu_s {
   /* Length of the octet string */
   uint32_t  length;
 } nas_pdu_t, ue_radio_cap_t;
-
-typedef struct transport_layer_addr_s {
-  /* Length of the transport layer address buffer in bits. S1AP layer received a
-   * bit string<1..160> containing one of the following addresses: ipv4,
-   * ipv6, or ipv4 and ipv6. The layer doesn't interpret the buffer but
-   * silently forward it to S1-U.
-   */
-  uint8_t length;
-  uint8_t buffer[20]; // in network byte order
-} transport_layer_addr_t;
 
 #define TRANSPORT_LAYER_ADDR_COPY(dEST,sOURCE)        \
   do {                                                \

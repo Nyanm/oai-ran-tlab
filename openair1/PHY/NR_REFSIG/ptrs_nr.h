@@ -47,18 +47,16 @@
 
 /************** FUNCTION ******************************************/
 
-int16_t get_kRE_ref(uint8_t dmrs_antenna_port, uint8_t pusch_dmrs_type, uint8_t resourceElementOffset);
-
 void set_ptrs_symb_idx(uint16_t *ptrs_symbols,
                        uint8_t duration_in_symbols,
                        uint8_t start_symbol,
                        uint8_t L_ptrs,
-                       uint16_t ul_dmrs_symb_pos);
+                       uint16_t dmrs_symb_pos);
+
+unsigned int get_first_ptrs_re(const rnti_t rnti, const uint8_t K_ptrs, const uint16_t nRB, const uint8_t k_RE_ref);
 
 uint8_t is_ptrs_subcarrier(uint16_t k,
                            uint16_t n_rnti,
-                           uint8_t dmrs_antenna_port,
-                           uint8_t pusch_dmrs_type,
                            uint8_t K_ptrs,
                            uint16_t N_RB,
                            uint8_t k_RE_ref,
@@ -93,14 +91,13 @@ int8_t nr_ptrs_process_slot(uint16_t dmrsSymbPos,
 /*  general function to estimate common phase error based upon PTRS */
 void nr_ptrs_cpe_estimation(uint8_t K_ptrs,
                             uint8_t ptrsReOffset,
-                            uint8_t dmrsConfigType,
                             uint16_t nb_rb,
                             uint16_t rnti,
                             unsigned char Ns,
                             unsigned char symbol,
                             uint16_t ofdm_symbol_size,
                             int16_t *rxF_comp,
-                            uint32_t *gold_seq,
+                            const uint32_t *gold_seq,
                             int16_t *error_est,
                             int32_t *ptrs_sc);
 

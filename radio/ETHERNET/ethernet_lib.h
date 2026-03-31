@@ -41,7 +41,6 @@
 #include <sys/socket.h>
 #include <net/if.h>
 #include <netinet/ether.h>
-#include <common/utils/threadPool/thread-pool.h>
 
 #define MAX_INST 4
 #define DEFAULT_IF "lo"
@@ -80,14 +79,6 @@ typedef struct {
   struct sockaddr_in local_addrd;
   /*!\brief address length for both UDP and RAW socket*/
   int addr_len;
-  /*!\brief destination address (control) for RAW socket*/
-  struct sockaddr_ll dest_addrc_ll;
-  /*!\brief local address (control) for RAW socket*/
-  struct sockaddr_ll local_addrc_ll;
-  /*!\brief destination address (user) for RAW socket*/
-  struct sockaddr_ll dest_addrd_ll;
-  /*!\brief local address (user) for RAW socket*/
-  struct sockaddr_ll local_addrd_ll;
   /*!\brief inteface index for RAW socket*/
   struct ifreq if_index;
   /*!\brief timeout ms */ 
@@ -95,8 +86,8 @@ typedef struct {
   /*!\brief timeout ms */ 
   unsigned int tx_timeout_ms;
   /*!\brief runtime flags */ 
-  uint32_t flags;   
-  /*!\compression enalbe  */
+  uint32_t flags;
+  /*!\brief compression enable  */
   uint32_t compression;
   /*!\ time offset between transmiter timestamp and receiver timestamp */ 
   double tdiff;
@@ -146,7 +137,9 @@ typedef struct {
   /*!\brief precomputed ethernet header (control) */
   struct ether_header ehc; 
   /*!\brief precomputed ethernet header (data) */
-  struct ether_header ehd; 
+  struct ether_header ehd;
+  /*!\brief local address (user) for RAW socket*/
+  struct sockaddr_ll local_addrd_ll;
 } eth_state_t;
 
 
@@ -245,25 +238,23 @@ void *udp_read_thread(void *arg);
 void *udp_write_thread(void *arg);
 
 /*! \fn int ethernet_tune (openair0_device *device, unsigned int option, int value);
-* \brief this function allows you to configure certain ethernet parameters in socket or device level
-* \param[in] openair0 device which bears the socket
-* \param[in] name of parameter to configure
-* \return 0 on success, otherwise -1
-* \note
-* @ingroup  _oai
-*/
+ * \brief this function allows you to configure certain ethernet parameters in socket or device level
+ * \param[in] device device which bears the socket
+ * \param[in] option of parameter to configure
+ * \param[in] value of parameter to configure
+ * \return 0 on success, otherwise -1
+ * \note
+ * @ingroup  _oai
+ */
 int ethernet_tune(openair0_device *device, unsigned int option, int value);
 
-
-
 /*! \fn int eth_socket_init_udp(openair0_device *device)
-* \brief initialization of UDP Socket to communicate with one destination
-* \param[in] *device openair device for which the socket will be created
-* \param[out]
-* \return 0 on success, otherwise -1
-* \note
-* @ingroup  _oai
-*/
+ * \brief initialization of UDP Socket to communicate with one destination
+ * \param[in] device openair device for which the socket will be created
+ * \return 0 on success, otherwise -1
+ * \note
+ * @ingroup  _oai
+ */
 int eth_socket_init_udp(openair0_device *device);
 int trx_eth_write_udp(openair0_device *device, openair0_timestamp timestamp, void **buf, int fd_ind, int nsamps, int flags,int nant);
 int trx_eth_read_udp(openair0_device *device, openair0_timestamp *timestamp, uint32_t **buff, int nsamps);

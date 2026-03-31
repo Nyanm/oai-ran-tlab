@@ -8,7 +8,7 @@
 #include "database.h"
 #include "utils.h"
 #include "../T.h"
-#include "config.h"
+#include "configuration.h"
 
 #define DEFAULT_LOCAL_PORT 2022
 
@@ -52,7 +52,7 @@ int send_messages_txt(int s, char *T_messages_txt, int T_messages_txt_len)
     /* TODO: be careful, we use internal T stuff, to rewrite? */
     T_LOCAL_size = 0;
     T_HEADER(T_ID(-1));
-    T_PUT_buffer(1, ((T_buffer){addr:(src), length:(send_size)}));
+    T_PUT_buffer(1, ((T_buffer){.addr = src, .length = send_size}));
     if (socket_send(s, &T_LOCAL_size, 4) == -1) return -1;
     if (socket_send(s, buf, T_LOCAL_size) == -1) return -1;
     src += send_size;
@@ -114,8 +114,8 @@ int read_tracee(int s, OBUF *ebuf, int *_type, int32_t *_length)
   int vpos = 0;
 
   if (fullread(s, &length, 4) == -1) return -1;
-  if (ebuf->omaxsize < length) {
-    ebuf->omaxsize = (length + 65535) & ~65535;
+  if (ebuf->omaxsize < length + 4) {
+    ebuf->omaxsize = (length + 4 + 65535) & ~65535;
     ebuf->obuf = realloc(ebuf->obuf, ebuf->omaxsize);
     if (ebuf->obuf == NULL) { printf("out of memory\n"); exit(1); }
   }
@@ -123,10 +123,12 @@ int read_tracee(int s, OBUF *ebuf, int *_type, int32_t *_length)
   memcpy(v+vpos, &length, 4);
   vpos += 4;
 #ifdef T_SEND_TIME
+  if (length < sizeof(struct timespec)) return -1;
   if (fullread(s,v+vpos,sizeof(struct timespec))==-1) return -1;
   vpos += sizeof(struct timespec);
   length -= sizeof(struct timespec);
 #endif
+  if (length < sizeof(int)) return -1;
   if (fullread(s, &type, sizeof(int)) == -1) return -1;
   memcpy(v+vpos, &type, sizeof(int));
   vpos += sizeof(int);
@@ -242,7 +244,7 @@ int main(int n, char **v)
   /* create listener socket */
   l = create_listen_socket("0.0.0.0", local_port);
 
-  OBUF ebuf = { osize: 0, omaxsize: 0, obuf: NULL };
+  OBUF ebuf = {.osize = 0, .omaxsize = 0, .obuf = NULL};
 
   current_nfd = 0;
 

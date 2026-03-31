@@ -1449,15 +1449,7 @@ fill_nfapi_ulsch_harq_information(module_id_t                            module_
 }
 
 //------------------------------------------------------------------------------
-uint8_t
-Np[6][4] = {
-  {0, 1, 3, 5},
-  {0, 3, 8, 13},
-  {0, 5, 13, 22},
-  {0, 11, 27, 44},
-  {0, 16, 41, 66},
-  {0, 22, 55, 88}
-};
+const uint8_t Np[6][4] = {{0, 1, 3, 5}, {0, 3, 8, 13}, {0, 5, 13, 22}, {0, 11, 27, 44}, {0, 16, 41, 66}, {0, 22, 55, 88}};
 //------------------------------------------------------------------------------
 
 // This is part of the PUCCH allocation procedure (see Section 10.1 36.213)
@@ -2013,12 +2005,9 @@ find_RA_id(module_id_t mod_idP,
   RA_t *ra = (RA_t *) &RC.mac[mod_idP]->common_channels[CC_idP].ra[0];
 
   for (RA_id = 0; RA_id < NB_RA_PROC_MAX; RA_id++) {
-    LOG_D(MAC, "Checking RA_id %d for %x : state %d\n",
-          RA_id,
-          rntiP,
-          ra[RA_id].state);
+    LOG_D(MAC, "Checking RA_id %d for %x : state %s\n", RA_id, rntiP, era_text[ra[RA_id].eRA_state]);
 
-    if (ra[RA_id].state != IDLE && ra[RA_id].rnti == rntiP)
+    if (ra[RA_id].eRA_state != IDLE && ra[RA_id].rnti == rntiP)
       return RA_id;
   }
 
@@ -3482,7 +3471,7 @@ CCE_allocation_infeasible(int module_idP,
 
   if (format_flag != 2) { // DL DCI
     if (DL_req->number_pdu == MAX_NUM_DL_PDU) {
-      LOG_W(MAC, "Subframe %d: FAPI DL structure is full, skip scheduling UE %d\n", subframe, rnti);
+      LOG_W(MAC, "Subframe %d: FAPI DL structure is full, skip scheduling UE %x\n", subframe, rnti);
     } else {
       dl_config_pdu->dci_dl_pdu.dci_dl_pdu_rel8.tl.tag            = NFAPI_DL_CONFIG_REQUEST_DCI_DL_PDU_REL8_TAG;
       dl_config_pdu->pdu_type                                     = NFAPI_DL_CONFIG_DCI_DL_PDU_TYPE;
@@ -3500,7 +3489,7 @@ CCE_allocation_infeasible(int module_idP,
     }
   } else { // ue-specific UL DCI
     if (HI_DCI0_req->number_of_dci + HI_DCI0_req->number_of_hi == MAX_NUM_HI_DCI0_PDU) {
-      LOG_W(MAC, "Subframe %d: FAPI UL structure is full, skip scheduling UE %d\n", subframe, rnti);
+      LOG_W(MAC, "Subframe %d: FAPI UL structure is full, skip scheduling UE %x\n", subframe, rnti);
     } else {
       hi_dci0_pdu->pdu_type                               = NFAPI_HI_DCI0_DCI_PDU_TYPE;
       hi_dci0_pdu->dci_pdu.dci_pdu_rel8.tl.tag            = NFAPI_HI_DCI0_REQUEST_DCI_PDU_REL8_TAG;
@@ -3527,7 +3516,7 @@ int CCE_try_allocate_dlsch(int module_id,
   nfapi_dl_config_request_body_t *DL_req       = &RC.mac[module_id]->DL_req[CC_id].dl_config_request_body;
 
   if (DL_req->number_pdu >= MAX_NUM_DL_PDU) {
-    LOG_W(MAC, "Subframe %d: FAPI DL structure is full, skip scheduling UE %d\n", subframe, rnti);
+    LOG_W(MAC, "Subframe %d: FAPI DL structure is full, skip scheduling UE %x\n", subframe, rnti);
     return -1;
   }
 
@@ -3588,7 +3577,7 @@ int CCE_try_allocate_ulsch(int module_id,
   nfapi_hi_dci0_request_body_t *HI_DCI0_req = &RC.mac[module_id]->HI_DCI0_req[CC_id][subframe].hi_dci0_request_body;
 
   if (HI_DCI0_req->number_of_dci + HI_DCI0_req->number_of_hi >= MAX_NUM_HI_DCI0_PDU) {
-    LOG_W(MAC, "Subframe %d: FAPI UL structure is full, skip scheduling UE %d\n", subframe, rnti);
+    LOG_W(MAC, "Subframe %d: FAPI UL structure is full, skip scheduling UE %x\n", subframe, rnti);
     return -1;
   }
 
@@ -3978,7 +3967,7 @@ extract_harq(module_id_t mod_idP,
 
               if (sched_ctl->round[CC_idP][harq_pid] == 8) {
                 for (uint8_t ra_i = 0; ra_i < NB_RA_PROC_MAX; ra_i++) {
-                  if (ra[ra_i].rnti == rnti && ra[ra_i].state == WAITMSG4ACK) {
+                  if (ra[ra_i].rnti == rnti && ra[ra_i].eRA_state == WAITMSG4ACK) {
                     //Msg NACK num to MAC ,remove UE
                     // add UE info to freeList
                     LOG_I(RRC, "put UE %x into freeList\n",
@@ -3993,7 +3982,7 @@ extract_harq(module_id_t mod_idP,
           }
 
           for (uint8_t ra_i = 0; ra_i < NB_RA_PROC_MAX; ra_i++) {
-            if (ra[ra_i].rnti == rnti && ra[ra_i].state == MSGCRNTI_ACK && ra[ra_i].crnti_harq_pid == harq_pid) {
+            if (ra[ra_i].rnti == rnti && ra[ra_i].eRA_state == MSGCRNTI_ACK && ra[ra_i].crnti_harq_pid == harq_pid) {
               LOG_D(MAC,"CRNTI Reconfiguration: ACK %d rnti %x round %d frame %d subframe %d \n",
                     harq_indication_tdd->harq_data[0].bundling.value_0,
                     rnti,
@@ -4085,7 +4074,7 @@ extract_harq(module_id_t mod_idP,
           RA_t *ra = &eNB->common_channels[CC_idP].ra[0];
 
           for (uint8_t ra_i = 0; ra_i < NB_RA_PROC_MAX; ra_i++) {
-            if (ra[ra_i].rnti == rnti && ra[ra_i].state == MSGCRNTI_ACK && ra[ra_i].crnti_harq_pid == harq_pid) {
+            if (ra[ra_i].rnti == rnti && ra[ra_i].eRA_state == MSGCRNTI_ACK && ra[ra_i].crnti_harq_pid == harq_pid) {
               LOG_D(MAC,"CRNTI Reconfiguration: ACK %d rnti %x round %d frame %d subframe %d \n",
                     pdu[0],
                     rnti,
@@ -4130,7 +4119,7 @@ extract_harq(module_id_t mod_idP,
 
             if (sched_ctl->round[CC_idP][harq_pid] == 8) {
               for (uint8_t ra_i = 0; ra_i < NB_RA_PROC_MAX; ra_i++) {
-                if((ra[ra_i].rnti == rnti) && (ra[ra_i].state == WAITMSG4ACK)) {
+                if ((ra[ra_i].rnti == rnti) && (ra[ra_i].eRA_state == WAITMSG4ACK)) {
                   // Msg NACK num to MAC ,remove UE
                   // add UE info to freeList
                   LOG_I(RRC, "put UE %x into freeList\n",
@@ -4547,7 +4536,8 @@ extract_pucch_csi(module_id_t mod_idP,
   AssertFatal(cqi_ReportPeriodic->present != LTE_CQI_ReportPeriodic_PR_NOTHING, "cqi_ReportPeriodic->present == LTE_CQI_ReportPeriodic_PR_NOTHING!\n");
   AssertFatal(cqi_ReportPeriodic->choice.setup.cqi_FormatIndicatorPeriodic.present != LTE_CQI_ReportPeriodic__setup__cqi_FormatIndicatorPeriodic_PR_NOTHING,
               "cqi_ReportPeriodic->cqi_FormatIndicatorPeriodic.choice.setup.present == LTE_CQI_ReportPeriodic__setup__cqi_FormatIndicatorPeriodic_PR_NOTHING!\n");
-  uint16_t Npd, N_OFFSET_CQI;
+  uint16_t Npd = 0;
+  uint16_t N_OFFSET_CQI = 0;
   int H, K, bandwidth_part, L, Lmask;
   int ri = sched_ctl->periodic_ri_received[CC_idP];
   get_csi_params(cc,

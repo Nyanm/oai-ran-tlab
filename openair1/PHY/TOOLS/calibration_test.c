@@ -8,13 +8,11 @@
 
 int oai_exit=false;
 unsigned int mmapped_dma=0;
-int      single_thread_flag;
 uint32_t timing_advance;
 int8_t threequarter_fs;
 uint64_t downlink_frequency[MAX_NUM_CCs][4];
 int32_t uplink_frequency_offset[MAX_NUM_CCs][4];
-int opp_enabled;
-static double snr_dB=20;
+int cpu_meas_enabled;
 THREAD_STRUCT thread_struct;
 uint32_t target_ul_mcs = 9;
 uint32_t target_dl_mcs = 9;
@@ -30,10 +28,9 @@ char *uecap_file;
 int read_recplayconfig(recplay_conf_t **recplay_conf, recplay_state_t **recplay_state) {return 0;}
 void nfapi_setmode(nfapi_mode_t nfapi_mode) {}
 void set_taus_seed(unsigned int seed_init){};
-
 int main(int argc, char **argv) {
   ///static configuration for NR at the moment
-  if ( load_configmodule(argc,argv,CONFIG_ENABLECMDLINEONLY) == NULL) {
+  if ((uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY)) == NULL) {
     exit_fun("[SOFTMODEM] Error, configuration module init failed\n");
   }
   set_softmodem_sighandler();
@@ -43,11 +40,10 @@ int main(int argc, char **argv) {
    paramdef_t cmdline_params[] = CMDLINE_PARAMS_DESC_GNB ;
 
   CONFIG_SETRTFLAG(CONFIG_NOEXITONHELP);
-  get_common_options(SOFTMODEM_GNB_BIT );
-  config_process_cmdline( cmdline_params,sizeof(cmdline_params)/sizeof(paramdef_t),NULL);
+  get_common_options(uniqCfg);
+  config_process_cmdline(uniqCfg, cmdline_params, sizeofArray(cmdline_params), NULL);
   CONFIG_CLEARRTFLAG(CONFIG_NOEXITONHELP);
-  set_latency_target();
-
+  lock_memory_to_ram();
     
   int N_RB=50;
   int sampling_rate=30.72e6;
@@ -63,8 +59,6 @@ int main(int argc, char **argv) {
   openair0_config_t openair0_cfg= {
     //! Module ID for this configuration
     .Mod_id=0,
-    //! device log level
-    .log_level=0,
     //! duplexing mode
     .duplex_mode=0,
     //! number of downlink resource blocks
@@ -133,8 +127,6 @@ int main(int argc, char **argv) {
     .recplay_conf=NULL,
     //! number of samples per tti
     .samples_per_tti=0,
-    //! check for threequarter sampling rate
-    .threequarter_fs=0,
   };
   //-----------------------
   openair0_device rfdevice= {
@@ -322,8 +314,13 @@ int main(int argc, char **argv) {
   rfdevice.trx_start_func(&rfdevice);
   
   while(!oai_exit) {
-    for (int i=0; i<antennas; i++)
-      read(fd, samplesTx[i], DFT*sizeof(c16_t));
+    for (int i=0; i<antennas; i++) {
+      ssize_t len = read(fd, samplesTx[i], DFT*sizeof(c16_t));
+      if (len < 0) {
+        fprintf(stderr, "error during read(): errno %d, %s\n", errno, strerror(errno));
+        exit(1);
+      }
+    }
     rfdevice.trx_read_func(&rfdevice, &timestamp, samplesRx, DFT, antennas);
     rfdevice.trx_write_func(&rfdevice, timestamp + TxAdvanceInDFTSize * DFT, samplesTx, DFT, antennas, 0);
   }

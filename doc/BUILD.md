@@ -38,10 +38,11 @@ Running the  [build_oai](../cmake_targets/build_oai) script also generates some 
 
 - `conf2uedata`: a binary used to build the (4G) UE data from a configuration file. The created file emulates the sim card  of a 3GPP compliant phone.
 - `nvram`: a binary used to build (4G) UE (IMEI...) and EMM (IMSI, registered PLMN) non volatile data.
-- `rb_tool`: radio bearer utility for (4G) UE
 - `genids` T Tracer utility, used at build time to generate `T_IDs.h` include file. This binary is located in the [T Tracer source file directory](../common/utils/T) .
 
 The build system for OAI uses [cmake](https://cmake.org/) which is a  tool to generate makefiles. The `build_oai` script is a wrapper using `cmake` and `make`/`ninja` to ease the oai build and use. It logs the `cmake` and `ninja`/`make` commands it executes. The file describing how to build the executables from source files is the [CMakeLists.txt](../CMakeLists.txt), it is used as input by cmake to generate the makefiles.
+
+cmake is further extended by using [CPM](https://github.com/cpm-cmake/CPM.cmake). CPM is a cmake script that handles external code dependencies. It is setup to cache downloaded code in `~/.cache/cpm`. While most external dependencies should be handled by system package managers, CPM has the advantage of using any code that is available in a public git repository.
 
 The oai softmodem supports many use cases, and new ones are regularly added. Most of them are accessible using the configuration file or the command line options and continuous effort is done to avoid introducing build options as it makes tests and usage more complicated than run-time options. The following functionalities, originally requiring a specific build are now accessible by configuration or command line options:
 
@@ -62,6 +63,8 @@ Calling the `build_oai` script with the `-h` option gives the list of all availa
 - `--nrUE` is to build the `nr-uesoftmodem` executable and all required shared libraries
 - `--ninja` is to use the `ninja` build tool, which speeds up compilation.
 - `-c` is to clean the workspace and force a complete rebuild.
+
+`build_oai` also provides various options to enable runtime error checkers, i.e. sanitizers in order to find various types of bugs in the codebase and eventually enhance the stability of the OAI softmodems. Refer to [sanitizers.md](./dev_tools/sanitizers.md) for more details.
 
 ## Installing dependencies
 
@@ -147,7 +150,7 @@ cd openairinterface5g/cmake_targets/
 
 After completing the build, the binaries are available in the `cmake_targets/ran_build/build` directory.
 
-Detailed information about these simulators can be found [in this dedicated page](https://gitlab.eurecom.fr/oai/openairinterface5g/wikis/OpenAirLTEPhySimul)
+Detailed information about these simulators can be found [in the dedicated page](./physical-simulators.md)
 
 ## Building UEs, eNodeB and gNodeB Executables
 
@@ -165,26 +168,24 @@ After completing the build, the binaries are available in the `cmake_targets/ran
 ## Building Optional Binaries
 
 There are a number of optional libraries that can be built in support of the
-RAN, such as telnet, scopes, offloading libraries, etc.
+RAN, such as telnetsrv, scopes, offloading libraries, etc.
 
 Using the help option of the build script you can get the list of available optional libraries.
 
 ```bash
 ./build_oai --build-lib all # build all
-./build_oai --build-lib telnet  # build only telnet
-./build_oai --build-lib "telnet enbscope uescope nrscope nrqtscope"
-./build_oai --build-lib telnet --build-lib nrqtscope
+./build_oai --build-lib telnetsrv  # build only telnetsrv
+./build_oai --build-lib "telnetsrv enbscope uescope nrscope"
 ```
 
-The following libraries are build in CI and should always work: `telnet`,
-`enbscope`, `uescope`, `nrscope`, `nrqtscope`.
+The following libraries are build in CI and should always work: `telnetsrv`,
+`enbscope`, `uescope`, `nrscope`.
 
 Some libraries have further dependencies and might not build on every system:
 - `enbscope`, `uescope`, `nrscope`: libforms/X
-- `nrqtscope`: Qt5
 - `ldpc_cuda`: CUDA
-- `ldpc_t1`: DPDK and VVDN T1
 - `websrv`: npm and others
+- `ldpc_aal`: DPDK with patch
 
 # Running `cmake` directly
 
@@ -195,7 +196,7 @@ mkdir build && cd build
 cmake .. -GNinja && ninja nr-softmodem nr-uesoftmodem nr-cuup params_libconfig coding rfsimulator ldpc
 ```
 
-To build additional libraries, e.g., telnet, do the following:
+To build additional libraries, e.g., telnetsrv, do the following:
 ```bash
 cmake .. -GNinja -DENABLE_TELNETSRV=ON && ninja telnetsrv
 ```
@@ -215,3 +216,32 @@ ccmake ../../..
 cmake-gui ../../..
 ```
 You can of course use all standard cmake/ninja/make commands in this directory.
+
+## cmake presets
+
+CMake presets are common project configure options. See https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html
+
+Configure presets:
+
+ - `default`: Configure compilation with default options
+ - `tests`: Same as above but ENABLE_TESTS and SANITIZE_ADDRESS is ON
+
+Build presets:
+
+ - `5gdefault`: Build the software for NR rfsimulator test
+ - `default`: same as 5gdefault
+ - `4gdefault`: Build the software for LTE rfsimulator test
+ - `tests`: build all unit tests
+
+To configure using configuration preset:
+
+    cmake --preset <preset_name>
+
+To build using a build preset:
+
+    cmake --build --preset <preset_name>
+
+# Cross Compile
+
+If you want to use cross-compiler on x86 platform for aarch64 version, please refer the [cross-compile.md](./cross-compile.md) for more information.
+

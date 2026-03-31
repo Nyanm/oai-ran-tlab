@@ -24,6 +24,7 @@
 #include "openair2/LAYER2/NR_MAC_COMMON/nr_mac_common.h"
 #include "executables/softmodem-common.h"
 #include "executables/nr-uesoftmodem.h"
+#include "LAYER2/nr_rlc/nr_rlc_oai_api.h"
 
 #define SL_DEBUG
 
@@ -336,7 +337,8 @@ uint8_t sl_decode_sl_TDD_Config(NR_TDD_UL_DL_ConfigCommon_t *TDD_UL_DL_Config,
 /*Function used to prepare Sidelink MIB*/
 uint32_t sl_prepare_MIB(NR_TDD_UL_DL_ConfigCommon_t *TDD_UL_DL_Config,
                         uint8_t incoverage, uint8_t mu,
-                        uint8_t start_symbol, uint8_t L) {
+                        uint8_t start_symbol, uint8_t L)
+{
 
   uint8_t  sl_mib_payload[4] = {0,0,0,0};
   //int mu = UE->sl_frame_params.numerology_index, start_symbol = UE->start_symbol;
@@ -363,34 +365,37 @@ uint32_t sl_prepare_MIB(NR_TDD_UL_DL_ConfigCommon_t *TDD_UL_DL_Config,
   return sl_mib;
 }
 
-uint16_t sl_get_subchannel_size(NR_SL_ResourcePool_r16_t *rpool)
-{
-
-  uint16_t subch_size = 0;
-  const uint8_t subchsizes[8] = {10, 12, 15, 20, 25, 50, 75, 100};
-  subch_size = (rpool->sl_SubchannelSize_r16)
-                   ? subchsizes[*rpool->sl_SubchannelSize_r16] : 0;
-
-  AssertFatal(subch_size,"Subch Size cannot be 0.Resource Pool Configuration Error\n");
-
-  return subch_size;
-}
-
 uint16_t sl_get_num_subch(NR_SL_ResourcePool_r16_t *rpool)
 {
 
-  uint16_t num_subch = 0;
-  uint16_t subch_size = sl_get_subchannel_size(rpool);
+  //sl-NumSubchannel - Indicates the number of subchannels in the corresponding resource pool
+  //which consists of contiguous PRBs only.
+  uint16_t num_subch = (rpool->sl_NumSubchannel_r16) ? *rpool->sl_NumSubchannel_r16 : 0;
+
+  AssertFatal(num_subch,"NUM Subchannels cannot be 0. Resource Pool Configuration Error\n");
+
+  return num_subch;
+}
+
+uint16_t sl_get_subchannel_size(NR_SL_ResourcePool_r16_t *rpool)
+{
+
+  uint16_t num_subch = sl_get_num_subch(rpool);
+
+  //sl-RB-Number - Indicates the number of PRBs in the corresponding resource pool.
+  //which consists of contiguous PRBs only.The remaining RB cannot be used
   uint16_t num_rbs = (rpool->sl_RB_Number_r16) ? *rpool->sl_RB_Number_r16 : 0;
 
   AssertFatal(num_rbs,"NumRbs in rpool cannot be 0.Resource Pool Configuration Error\n");
 
-  num_subch = num_rbs/subch_size;
+  uint16_t subch_size = 0;
 
-  LOG_D(NR_MAC, "Subch_size:%d, numRBS:%d, num_subch:%d\n",
-                                          subch_size, num_rbs, num_subch);
+  subch_size = num_rbs/num_subch;
 
-  return (num_subch);
+  LOG_I(NR_MAC, "Subch_size:%d, numRBS:%d, num_subch:%d\n",
+                                          subch_size,num_rbs,num_subch);
+
+  return (subch_size);
 }
 
 //This function determines SCI 1A Len in bits based on the configuration in the resource pool.
@@ -488,10 +493,11 @@ uint8_t sl_determine_sci_1a_len(uint16_t *num_subchannels,
     AssertFatal(*rpool->sl_Additional_MCS_Table_r16<=2, "additional table value cannot be > 2. Resource Pool Configuration Error.\n");
   }
 
-  LOG_D(NR_MAC,"sci 1A - additional_table:%ld, sci 1a len:%d, additional table nbits:%d\n",
-                                                                rpool->sl_Additional_MCS_Table_r16 ? *rpool->sl_Additional_MCS_Table_r16 : 0,
-                                                                sci_1a_len,
-                                                                sci_1a->additional_mcs_table_indicator.nbits);
+  LOG_D(NR_MAC,
+        "sci 1A - additional_table:%ld, sci 1a len:%d, additional table nbits:%d\n",
+        rpool->sl_Additional_MCS_Table_r16 ? *rpool->sl_Additional_MCS_Table_r16 : 0,
+        sci_1a_len,
+        sci_1a->additional_mcs_table_indicator.nbits);
 
   uint8_t psfch_period = 0;
   if (rpool->sl_PSFCH_Config_r16 &&
@@ -524,13 +530,15 @@ uint8_t sl_determine_sci_1a_len(uint16_t *num_subchannels,
                           ? *pscch_config->sl_NumReservedBits_r16 : 0;
   }
 
-  AssertFatal((num_reservedbits>=2) || (num_reservedbits<=4) ,
-                      "Num Reserved bits can only be 2or3or4. Resource Pool Configuration Error.\n");
+  AssertFatal((num_reservedbits >= 2) && (num_reservedbits <= 4),
+              "Num Reserved bits can only be 2 or 3 or 4. Resource Pool Configuration Error.\n");
   sci_1a_len += num_reservedbits;
   sci_1a->reserved_bits.nbits = num_reservedbits;
-  LOG_D(NR_MAC,"sci 1A - reserved_bits:%d, sci 1a len:%d, sci_1a->reserved_bits.nbits:%d\n",
-                                                        num_reservedbits, sci_1a_len, sci_1a->reserved_bits.nbits);
-
+  LOG_D(NR_MAC,
+        "sci 1A - reserved_bits:%d, sci 1a len:%d, sci_1a->reserved_bits.nbits:%d\n",
+        num_reservedbits,
+        sci_1a_len,
+        sci_1a->reserved_bits.nbits);
 
   LOG_D(NR_MAC,"sci 1A Length in bits: %d \n",sci_1a_len);
 
@@ -606,8 +614,8 @@ void configure_psfch_params_tx(int module_idP,
                         ? psfch_periods[*sl_psfch_config->sl_PSFCH_Period_r16] : 0;
 
   int scs = get_softmodem_params()->numerology;
-  uint16_t tx_slot = (rx_ind->slot + DURATION_RX_TO_TX) % nr_slots_per_frame[scs];
-  uint16_t tx_frame = (rx_ind->sfn + (rx_ind->slot + DURATION_RX_TO_TX) / nr_slots_per_frame[scs]) % 1024;
+  uint16_t tx_slot = (rx_ind->slot + GET_DURATION_RX_TO_TX(&mac->ntn_ta, scs)) % nr_slots_per_frame[scs];
+  uint16_t tx_frame = (rx_ind->sfn + (rx_ind->slot + GET_DURATION_RX_TO_TX(&mac->ntn_ta, scs)) / nr_slots_per_frame[scs]) % 1024;
 
   uint8_t ack_nack = (rx_ind->rx_indication_body + pdu_id)->rx_slsch_pdu.ack_nack;
   LOG_D(NR_MAC, "tx_frame %4u.%2u, ack_nack %d rx: %4u.%2u\n", tx_frame, tx_slot, ack_nack, rx_ind->sfn, rx_ind->slot);
@@ -621,12 +629,12 @@ void configure_psfch_params_tx(int module_idP,
   psfch_params = NULL;
 }
 
-int get_psfch_index(int frame, int slot, int n_slots_frame, const NR_TDD_UL_DL_Pattern_t *tdd, int sched_psfch_max_size)
+int get_psfch_index(const frame_structure_t *fs, int frame, int slot, int n_slots_frame, const NR_TDD_UL_DL_Pattern_t *tdd, int sched_psfch_max_size)
 {
   // PUCCH structures are indexed by slot in the PUCCH period determined by sched_psfch_max_size number of UL slots
   // this functions return the index to the structure for slot passed to the function
 
-  const int first_ul_slot_period = tdd ? get_first_ul_slot(tdd->nrofDownlinkSlots, tdd->nrofDownlinkSymbols, tdd->nrofUplinkSymbols) : 0;
+  const int first_ul_slot_period = tdd ? get_first_ul_slot(fs, false) : 0;
   const int n_ul_slots_period = tdd ? tdd->nrofUplinkSlots + (tdd->nrofUplinkSymbols > 0 ? 1 : 0) : n_slots_frame;
   const int nr_slots_period = tdd ? n_slots_frame / get_nb_periods_per_frame(tdd->dl_UL_TransmissionPeriodicity) : n_slots_frame;
   const int n_ul_slots_frame = n_slots_frame / nr_slots_period * n_ul_slots_period;
@@ -660,7 +668,7 @@ int get_feedback_frame_slot(NR_UE_MAC_INST_t *mac, NR_TDD_UL_DL_Pattern_t *tdd,
                             long psfch_period, int *psfch_frame, int *psfch_slot) {
 
   AssertFatal(tdd != NULL, "Expecting valid tdd configurations");
-  const int first_ul_slot_period = tdd ? get_first_ul_slot(tdd->nrofDownlinkSlots, tdd->nrofDownlinkSymbols, tdd->nrofUplinkSymbols) : 0;
+  const int first_ul_slot_period = tdd ? get_first_ul_slot(&mac->frame_structure, false) : 0;
   const int nr_slots_period = tdd ? nr_slots_frame / get_nb_periods_per_frame(tdd->dl_UL_TransmissionPeriodicity) : nr_slots_frame;
   // can't schedule ACKNACK before minimum feedback time
   if(feedback_offset < psfch_min_time_gap)
@@ -764,7 +772,7 @@ int nr_ue_sl_acknack_scheduling(NR_UE_MAC_INST_t *mac, sl_nr_rx_indication_t *rx
   int n_ul_buf_max_size = n_ul_slots_period * num_subch;
 
   psfch_slot = get_feedback_slot(psfch_period, slot);
-  const int psfch_index = get_psfch_index(rx_ind->sfn, rx_ind->slot, nr_slots_frame, tdd, n_ul_buf_max_size);
+  const int psfch_index = get_psfch_index(&mac->frame_structure, rx_ind->sfn, rx_ind->slot, nr_slots_frame, tdd, n_ul_buf_max_size);
   NR_SL_UE_sched_ctrl_t  *sched_ctrl = &mac->sl_info.list[0]->UE_sched_ctrl;
   SL_sched_feedback_t  *curr_psfch = &sched_ctrl->sched_psfch[psfch_index];
   psfch_frame = frame;
@@ -962,10 +970,10 @@ void fill_psfch_params_rx(sl_nr_rx_config_request_t *rx_config, sl_nr_tx_rx_conf
     num_psfch_symbols = mac->SL_MAC_PARAMS->sl_RxPool[0]->sci_1a.psfch_overhead_indication.nbits ? 3 : 0;
   }
   psfch_pdu->nr_of_symbols = num_psfch_symbols ? num_psfch_symbols - 2 : 0; // (num_psfch_symbols - 2) excludes PSFCH AGC and Guard
-  rx_config->sl_rx_config_list[0].pdu_type = SL_NR_CONFIG_TYPE_RX_PSSCH_SLSCH_PSFCH;
+  rx_config->sl_rx_config_list[0].pdu_type = SL_NR_CONFIG_TYPE_RX_PSFCH;
   LOG_D(NR_PHY, "%s start_symbol_index %d, sl_bwp_start %d, sequence_hop_flag %d, \
         second_hop_prb %d, prb %d, nr_of_symbols %d, initial_cyclic_shift %d, hopping_id %d, \
-        group_hop_flag %d, freq_hop_flag %d, bit_len_harq %d----> Setting pdu type SL_NR_CONFIG_TYPE_RX_PSSCH_SLSCH_PSFCH  \n",
+        group_hop_flag %d, freq_hop_flag %d, bit_len_harq %d----> Setting pdu type SL_NR_CONFIG_TYPE_RX_PSFCH  \n",
         __FUNCTION__,
         psfch_pdu->start_symbol_index, psfch_pdu->sl_bwp_start,
         psfch_pdu->sequence_hop_flag, psfch_pdu->second_hop_prb, psfch_pdu->prb,
@@ -976,7 +984,7 @@ void fill_psfch_params_rx(sl_nr_rx_config_request_t *rx_config, sl_nr_tx_rx_conf
 void set_csi_report_params(NR_UE_MAC_INST_t* mac, NR_SL_UE_sched_ctrl_t *sched_ctrl) {
   SL_CSI_Report_t *csi_report = &sched_ctrl->sched_csi_report;
   csi_report->cqi = mac->csirs_measurements.cqi;
-  csi_report->ri = mac->csirs_measurements.rank_indicator;
+  csi_report->ri = mac->csirs_measurements.ri;
 }
 
 uint8_t sl_num_slsch_feedbacks(NR_UE_MAC_INST_t *mac) {
@@ -1074,8 +1082,8 @@ void nr_ue_process_mac_sl_pdu(int module_idP,
   if (mac->sci_pdu_rx.csi_req) {
     LOG_D(NR_MAC, "%4d.%2d Configuring sl_csi_report parameters\n", frame, slot);
     int scs = get_softmodem_params()->numerology;
-    uint16_t tx_slot = (rx_ind->slot + DURATION_RX_TO_TX) % nr_slots_per_frame[scs];
-    uint16_t tx_frame = (rx_ind->sfn + (rx_ind->slot + DURATION_RX_TO_TX) / nr_slots_per_frame[scs]) % 1024;
+    uint16_t tx_slot = (rx_ind->slot + GET_DURATION_RX_TO_TX(&mac->ntn_ta, scs)) % nr_slots_per_frame[scs];
+    uint16_t tx_frame = (rx_ind->sfn + (rx_ind->slot + GET_DURATION_RX_TO_TX(&mac->ntn_ta, scs)) / nr_slots_per_frame[scs]) % 1024;
     set_csi_report_params(mac, sched_ctrl);
     nr_ue_sl_csi_report_scheduling(module_idP,
                                    sched_ctrl,
@@ -1101,6 +1109,7 @@ void nr_ue_process_mac_sl_pdu(int module_idP,
           return;
         LOG_D(NR_MAC, "%4d.%2d : SLSCH -> LCID %d %d bytes with subheader %d\n", frame, slot, rx_lcid, mac_len, mac_subheader_len);
 
+        #if 0
         mac_rlc_data_ind(module_idP,
                          mac->src_id,
                          0,
@@ -1112,6 +1121,10 @@ void nr_ue_process_mac_sl_pdu(int module_idP,
                          mac_len,
                          1,
                          NULL);
+        #endif
+
+        nr_mac_rlc_data_ind(mac->ue_id, mac->ue_id, false, rx_lcid, (char *)(pduP + mac_subheader_len), mac_len);
+
 	      break;
       case SL_SCH_LCID_SL_CSI_REPORT:
         {
@@ -1226,7 +1239,7 @@ int get_csi_reporting_frame_slot(NR_UE_MAC_INST_t *mac,
                                  uint32_t *csi_report_frame,
                                  uint32_t *csi_report_slot) {
   AssertFatal(tdd != NULL, "Expecting valid tdd configurations");
-  const int first_ul_slot_period = tdd ? get_first_ul_slot(tdd->nrofDownlinkSlots, tdd->nrofDownlinkSymbols, tdd->nrofUplinkSymbols) : 0;
+  const int first_ul_slot_period = tdd ? get_first_ul_slot(&mac->frame_structure, false) : 0;
   const int nr_slots_period = tdd ? nr_slots_frame / get_nb_periods_per_frame(tdd->dl_UL_TransmissionPeriodicity) : nr_slots_frame;
 
   *csi_report_slot = (slot + csi_offset) % nr_slots_frame;

@@ -66,21 +66,19 @@ int beam_precoding(int32_t **txdataF,
   int rb_offset_neg  = (subframe*frame_parms->ofdm_symbol_size*frame_parms->symbols_per_tti) + rb_offset_neg0;
   int rb_offset_pos  = (subframe*frame_parms->ofdm_symbol_size*frame_parms->symbols_per_tti);
 
-
-  multadd_cpx_vector((int16_t*)&txdataF[p][rb_offset_neg+(symbol*frame_parms->ofdm_symbol_size)],
-		     (int16_t*)&beam_weights[l1_id][p][aa][rb_offset_neg0], 
-	             (int16_t*)&txdataF_BF[aa][rb_offset_neg0+(symbol*frame_parms->ofdm_symbol_size)], 
-		     0, 
-                     6*frame_parms->N_RB_DL, 
-		     15);
-  multadd_cpx_vector((int16_t*)&txdataF[p][rb_offset_pos+(symbol*frame_parms->ofdm_symbol_size)],
-                     (int16_t*)&beam_weights[l1_id][p][aa][0], 
-                     (int16_t*)&txdataF_BF[aa][(symbol*frame_parms->ofdm_symbol_size)], 
-                     0, 
-                     7*frame_parms->N_RB_DL, // to allow for extra RE at the end, 12 useless multipy-adds (first one at DC and 11 at end)
+  multadd_cpx_vector((c16_t *)&txdataF[p][rb_offset_neg + (symbol * frame_parms->ofdm_symbol_size)],
+                     (c16_t *)&beam_weights[l1_id][p][aa][rb_offset_neg0],
+                     (c16_t *)&txdataF_BF[aa][rb_offset_neg0 + (symbol * frame_parms->ofdm_symbol_size)],
+                     6 * frame_parms->N_RB_DL,
                      15);
+  multadd_cpx_vector(
+      (c16_t *)&txdataF[p][rb_offset_pos + (symbol * frame_parms->ofdm_symbol_size)],
+      (c16_t *)&beam_weights[l1_id][p][aa][0],
+      (c16_t *)&txdataF_BF[aa][(symbol * frame_parms->ofdm_symbol_size)],
+      7 * frame_parms->N_RB_DL, // to allow for extra RE at the end, 12 useless multipy-adds (first one at DC and 11 at end)
+      15);
 
-      return 0;
+  return 0;
 }
 
 
@@ -111,25 +109,12 @@ int beam_precoding_one_eNB(int32_t **txdataF,
     for(p=0;p<nb_antenna_ports;p++){
       if (p<nb_antenna_ports_eNB || p==5){
 	for (symbol=0; symbol<symbols_per_tti; symbol++){
-	  
-	  multadd_cpx_vector((int16_t*)&txdataF[p][symbol*ofdm_symbol_size+re_offset],
-			     (int16_t*)beam_weights[0][p][aa], 
-			     (int16_t*)&txdataF_BF[aa][symbol*ofdm_symbol_size], 
-			     0, 
-			     ofdm_symbol_size, 
-			     15);
-	  
-	  
-	  /*
-	    for (re=0; re<ofdm_symbol_size; re++){
-	    // direct
-	    ((int16_t*)&txdataF_BF[aa][re])[0] += (int16_t)((((int16_t*)&txdataF[p][re+symbol*ofdm_symbol_size+re_offset])[0]*((int16_t*)&beam_weights[p][aa][re])[0])>>15);
-	    ((int16_t*)&txdataF_BF[aa][re])[0] -= (int16_t)((((int16_t*)&txdataF[p][re+symbol*ofdm_symbol_size+re_offset])[1]*((int16_t*)&beam_weights[p][aa][re])[1])>>15);
-	    ((int16_t*)&txdataF_BF[aa][re])[1] += (int16_t)((((int16_t*)&txdataF[p][re+symbol*ofdm_symbol_size+re_offset])[0]*((int16_t*)&beam_weights[p][aa][re])[1])>>15);
-	    ((int16_t*)&txdataF_BF[aa][re])[1] += (int16_t)((((int16_t*)&txdataF[p][re+symbol*ofdm_symbol_size+re_offset])[1]*((int16_t*)&beam_weights[p][aa][re])[0])>>15);
-	    }
-	  */
-	}
+    multadd_cpx_vector((c16_t *)&txdataF[p][symbol * ofdm_symbol_size + re_offset],
+                       (c16_t *)beam_weights[0][p][aa],
+                       (c16_t *)&txdataF_BF[aa][symbol * ofdm_symbol_size],
+                       ofdm_symbol_size,
+                       15);
+  }
       }
     }
   }
@@ -137,32 +122,24 @@ int beam_precoding_one_eNB(int32_t **txdataF,
 }
 
 
-int nr_beam_precoding(c16_t **txdataF,
-	              c16_t **txdataF_BF,
-                      NR_DL_FRAME_PARMS *frame_parms,
-	              int32_t ***beam_weights,
-                      int slot,
-                      int symbol,
-                      int aa,
-                      int nb_antenna_ports,
-                      int offset)
+void nr_beam_precoding(c16_t **txdataF,
+	               c16_t **txdataF_BF,
+                       NR_DL_FRAME_PARMS *frame_parms,
+	               int32_t ***beam_weights,
+                       int slot,
+                       int symbol,
+                       int aa,
+                       int nb_antenna_ports,
+                       int offset)
 {
-
-
-  uint8_t p;
-
   // clear txdata_BF[aa][re] for each call of ue_spec_beamforming
   memset(&txdataF_BF[aa][symbol*frame_parms->ofdm_symbol_size], 0, sizeof(c16_t) *(frame_parms->ofdm_symbol_size));
 
-  for (p=0; p<nb_antenna_ports; p++) {
-    //if ((frame_parms->L_ssb >> (63-p)) & 0x01)  {
-      multadd_cpx_vector((int16_t*)&txdataF[p][(symbol*frame_parms->ofdm_symbol_size)+offset],
-			 (int16_t*)beam_weights[p][aa], 
-			 (int16_t*)&txdataF_BF[aa][symbol*frame_parms->ofdm_symbol_size], 
-			 0, 
-			 frame_parms->ofdm_symbol_size, 
-			 15);
-    //}
+  for (int p = 0; p < nb_antenna_ports; p++) {
+    multadd_cpx_vector((c16_t *)&txdataF[p][(symbol * frame_parms->ofdm_symbol_size) + offset],
+                       (c16_t *)beam_weights[p][aa],
+                       (c16_t *)&txdataF_BF[aa][symbol * frame_parms->ofdm_symbol_size],
+                       frame_parms->ofdm_symbol_size,
+                       15);
   }
-  return 0;
 }

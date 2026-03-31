@@ -19,7 +19,7 @@
  *      contact@openairinterface.org
  */
 
-
+#include "nr_common.h"
 #include <string.h>
 #include "SCHED_NR_UE/defs.h"
 #include "nr_estimation.h"
@@ -29,78 +29,115 @@
 #include "PHY/NR_REFSIG/ptrs_nr.h"
 #include "PHY/NR_REFSIG/nr_mod_table.h"
 #include "PHY/NR_TRANSPORT/nr_sch_dmrs.h"
-#include "PHY/NR_TRANSPORT/nr_transport_proto.h"
-#include "common/utils/nr/nr_common.h"
+#include "nr_phy_common.h"
 #include "filt16a_32.h"
 #include "T.h"
 #include <openair1/PHY/TOOLS/phy_scope_interface.h>
-
-//#define DEBUG_PDSCH
-//#define DEBUG_PDCCH
-//#define DEBUG_PBCH
+#include "nfapi/open-nFAPI/nfapi/public_inc/nfapi_nr_interface.h"
+#include "instrumentation.h"
+#include "executables/nr-softmodem-common.h"
+// #define DEBUG_PDSCH
+// #define DEBUG_PDCCH
+// #define DEBUG_PBCH(a...) printf(a)
+#define DEBUG_PBCH(a...)
 //#define DEBUG_PRS_CHEST   // To enable PRS Matlab dumps
 //#define DEBUG_PRS_PRINTS  // To enable PRS channel estimation debug logs
 
 #define CH_INTERP 0
 #define NO_INTERP 1
 
-// 10*log10(pow(2,30))
-#define pow_2_30_dB 90
-extern openair0_config_t openair0_cfg[];
 /* Generic function to find the peak of channel estimation buffer */
-void peak_estimator(int32_t *buffer, int32_t buf_len, int32_t *peak_idx, int32_t *peak_val)
+void peak_estimator(c16_t *buffer, int32_t buf_len, int32_t *peak_idx, int32_t *peak_val, int32_t mean_val)
 {
   int32_t max_val = 0, max_idx = 0, abs_val = 0;
   for(int k = 0; k < buf_len; k++)
   {
-    abs_val = squaredMod(((c16_t*)buffer)[k]);
+    abs_val = squaredMod(buffer[k]);
     if(abs_val > max_val)
     {
       max_val = abs_val;
       max_idx = k;
     }
   }
-  *peak_val = max_val;
-  *peak_idx = max_idx;
+
+  // Check for detection threshold
+  LOG_D(PHY, "PRS ToA estimator: max_val %d, mean_val %d, max_idx %d\n", max_val, mean_val, max_idx);
+  if ((mean_val != 0) && (max_val / mean_val > 10)) {
+    *peak_val = max_val;
+    *peak_idx = max_idx;
+  } else {
+    *peak_val = 0;
+    *peak_idx = 0;
+  }
 }
 
-int nr_prs_channel_estimation(uint8_t rsc_id,
+void set_prs_dl_toa(prs_meas_t *prs_meas, float dl_toa)
+{
+  int rc = pthread_mutex_lock(&prs_meas->dl_toa_mtx);
+  AssertFatal(rc == 0, "pthread_mutex_lock() failed: errno %d, %s\n", errno, strerror(errno));
+  *prs_meas->next_dl_toa++ = dl_toa;
+  if (prs_meas->next_dl_toa >= prs_meas->dl_toa + sizeofArray(prs_meas->dl_toa))
+    prs_meas->next_dl_toa = prs_meas->dl_toa;
+  LOG_D(NR_PHY, "next_dl_toa %p\n", prs_meas->next_dl_toa);
+  rc = pthread_mutex_unlock(&prs_meas->dl_toa_mtx);
+  AssertFatal(rc == 0, "pthread_mutex_unlock() failed: errno %d, %s\n", errno, strerror(errno));
+}
+
+float get_prs_max_dl_toa(prs_meas_t *prs_meas)
+{
+  float max = 0.0f;
+  int rc = pthread_mutex_lock(&prs_meas->dl_toa_mtx);
+  AssertFatal(rc == 0, "pthread_mutex_lock() failed: errno %d, %s\n", errno, strerror(errno));
+  for (int i = 0; i < sizeofArray(prs_meas->dl_toa); ++i) {
+    max = cmax(max, prs_meas->dl_toa[i]);
+    LOG_I(NR_PHY, "i %d dl_toa %.3f max %.3f\n", i, prs_meas->dl_toa[i], max);
+  }
+  rc = pthread_mutex_unlock(&prs_meas->dl_toa_mtx);
+  AssertFatal(rc == 0, "pthread_mutex_unlock() failed: errno %d, %s\n", errno, strerror(errno));
+  return max;
+}
+
+int nr_prs_channel_estimation(uint8_t gNB_id,
+                              uint8_t rsc_id,
                               uint8_t rep_num,
                               PHY_VARS_NR_UE *ue,
-                              UE_nr_rxtx_proc_t *proc,
+                              const UE_nr_rxtx_proc_t *proc,
                               NR_DL_FRAME_PARMS *frame_params,
                               c16_t rxdataF[][ue->frame_parms.samples_per_slot_wCP])
 {
-  int gNB_id = proc->gNB_id;
   uint8_t rxAnt = 0, idx = 0;
   prs_config_t *prs_cfg  = &ue->prs_vars[gNB_id]->prs_resource[rsc_id].prs_cfg;
   prs_meas_t **prs_meas  = ue->prs_vars[gNB_id]->prs_resource[rsc_id].prs_meas;
   c16_t ch_tmp_buf[ ue->frame_parms.ofdm_symbol_size] __attribute__((aligned(32)));
-  int32_t chF_interpol[frame_params->nb_antennas_rx][NR_PRS_IDFT_OVERSAMP_FACTOR*ue->frame_parms.ofdm_symbol_size] __attribute__((aligned(32)));
-  int32_t chT_interpol[frame_params->nb_antennas_rx][NR_PRS_IDFT_OVERSAMP_FACTOR*ue->frame_parms.ofdm_symbol_size] __attribute__((aligned(32)));
+  c16_t chF_interpol[frame_params->nb_antennas_rx][NR_PRS_IDFT_OVERSAMP_FACTOR*ue->frame_parms.ofdm_symbol_size] __attribute__((aligned(32)));
+  c16_t chT_interpol[frame_params->nb_antennas_rx][NR_PRS_IDFT_OVERSAMP_FACTOR*ue->frame_parms.ofdm_symbol_size] __attribute__((aligned(32)));
   memset(ch_tmp_buf,0,sizeof(ch_tmp_buf));
   memset(chF_interpol,0,sizeof(chF_interpol));
   memset(chT_interpol,0,sizeof(chF_interpol));
-  
-  int slot_prs           = (proc->nr_slot_rx - rep_num*prs_cfg->PRSResourceTimeGap + frame_params->slots_per_frame)%frame_params->slots_per_frame;
-  uint32_t **nr_gold_prs = ue->nr_gold_prs[gNB_id][rsc_id][slot_prs];
 
-  int16_t *rxF, *pil, mod_prs[NR_MAX_PRS_LENGTH << 1];
+  int slot_prs =
+      (proc->nr_slot_rx - rep_num * prs_cfg->PRSResourceTimeGap + frame_params->slots_per_frame) % frame_params->slots_per_frame;
+
+  c16_t mod_prs[NR_MAX_PRS_LENGTH];
   const int16_t *fl, *fm, *fmm, *fml, *fmr, *fr;
-  int16_t ch[2] = {0}, noiseFig[2] = {0};
-  int16_t k_prime = 0, k = 0, re_offset = 0, first_half = 0, second_half = 0;
-  int32_t ch_pwr = 0, snr = 0;
+  int16_t k_prime = 0, k = 0;
+  int32_t ch_pwr = 0, snr = 0,  rsrp = 0, mean_val = 0, prs_toa = 0;
+  double ch_pwr_dbm = 0.0f;
 #ifdef DEBUG_PRS_CHEST
   char filename[64] = {0}, varname[64] = {0};
 #endif
-  int16_t *ch_tmp     = (int16_t *)ch_tmp_buf; 
+  c16_t *ch_tmp = ch_tmp_buf;
   int16_t scale_factor = (1.0f/(float)(prs_cfg->NumPRSSymbols))*(1<<15);
   int16_t num_pilots   = (12/prs_cfg->CombSize)*prs_cfg->NumRB;
-  int16_t start_offset = (NR_PRS_IDFT_OVERSAMP_FACTOR-1)*frame_params->ofdm_symbol_size>>1;
+  int16_t first_half = frame_params->ofdm_symbol_size - frame_params->first_carrier_offset;
+  int16_t second_half = (prs_cfg->NumRB * 12) - first_half;
+  int16_t start_offset = NR_PRS_IDFT_OVERSAMP_FACTOR * frame_params->ofdm_symbol_size - first_half;
+  LOG_D(PHY, "start_offset %d, first_half %d, second_half %d\n", start_offset, first_half, second_half);
 
   int16_t k_prime_table[K_PRIME_TABLE_ROW_SIZE][K_PRIME_TABLE_COL_SIZE] = PRS_K_PRIME_TABLE;
   for(int l = prs_cfg->SymbolStart; l < prs_cfg->SymbolStart+prs_cfg->NumPRSSymbols; l++)
   {
+    uint32_t *gold_prs = nr_gold_prs(ue->prs_vars[gNB_id]->prs_resource[rsc_id].prs_cfg.NPRSID, slot_prs, l);
     int symInd = l-prs_cfg->SymbolStart;
     if (prs_cfg->CombSize == 2) {
       k_prime = k_prime_table[0][symInd];
@@ -119,24 +156,27 @@ int nr_prs_channel_estimation(uint8_t rsc_id,
     printf("[gNB %d][rsc %d] PRS config l %d k_prime %d:\nprs_cfg->SymbolStart %d\nprs_cfg->NumPRSSymbols %d\nprs_cfg->NumRB %d\nprs_cfg->CombSize %d\n", gNB_id, rsc_id, l, k_prime, prs_cfg->SymbolStart, prs_cfg->NumPRSSymbols, prs_cfg->NumRB, prs_cfg->CombSize);
 #endif
     // Pilots generation and modulation
+
+    AssertFatal(num_pilots > 0, "num_pilots needs to be gt 0 or mod_prs[0] UB");
     for (int m = 0; m < num_pilots; m++) 
     {
-      idx = (((nr_gold_prs[l][(m<<1)>>5])>>((m<<1)&0x1f))&3);
-      mod_prs[m<<1]     = nr_qpsk_mod_table[idx<<1];
-      mod_prs[(m<<1)+1] = nr_qpsk_mod_table[(idx<<1) + 1];
+      idx = (((gold_prs[(m << 1) >> 5]) >> ((m << 1) & 0x1f)) & 3);
+      mod_prs[m] = nr_qpsk_mod_table[idx];
     } 
      
     for (rxAnt=0; rxAnt < frame_params->nb_antennas_rx; rxAnt++)
     {
+      // reset variables
       snr = 0;
-      
+      rsrp = 0;
+
       // calculate RE offset
-      k = re_offset = (prs_cfg->REOffset+k_prime) % prs_cfg->CombSize + prs_cfg->RBOffset*12 + frame_params->first_carrier_offset;
+      k = (prs_cfg->REOffset + k_prime) % prs_cfg->CombSize + prs_cfg->RBOffset * 12 + frame_params->first_carrier_offset;
 
       // Channel estimation and interpolation
-      pil       = (int16_t *)&mod_prs[0];
-      rxF       = (int16_t *)&rxdataF[rxAnt][l*frame_params->ofdm_symbol_size + k];
-      
+      c16_t *pil = (c16_t *)mod_prs;
+      c16_t *rxF = &rxdataF[rxAnt][l * frame_params->ofdm_symbol_size + k];
+
       if(prs_cfg->CombSize == 2)
       {
         // Choose the interpolation filters
@@ -166,142 +206,131 @@ int nr_prs_channel_estimation(uint8_t rsc_id,
         }
 
         //Start pilot
-        ch[0] = (int16_t)(((int32_t)rxF[0]*pil[0] + (int32_t)rxF[1]*pil[1])>>15);
-        ch[1] = (int16_t)(((int32_t)rxF[1]*pil[0] - (int32_t)rxF[0]*pil[1])>>15);
-        multadd_real_vector_complex_scalar(fl,
-		    	       ch,
-		    	       ch_tmp,
-		    	       8);
+        c16_t ch = c16MulConjShift(*pil, *rxF, 15);
+        multadd_real_vector_complex_scalar(fl, ch, ch_tmp, 8);
 
-        //SNR estimation
-        noiseFig[0] = rxF[0] - (int16_t)(((int32_t)ch[0]*pil[0] - (int32_t)ch[1]*pil[1])>>15);
-        noiseFig[1] = rxF[1] - (int16_t)(((int32_t)ch[1]*pil[0] + (int32_t)ch[0]*pil[1])>>15);
-        snr += 10*log10(squaredMod(*(c16_t*)rxF) - squaredMod(*(c16_t*)noiseFig)) - 10*log10(squaredMod(*(c16_t*)noiseFig));
+        // SNR & RSRP estimation
+        rsrp += squaredMod(*rxF);
+        c16_t noiseFig = c16sub(*rxF, c16mulShift(ch, *pil, 15));
+        snr += 10 * log10(squaredMod(*rxF) - squaredMod(noiseFig)) - 10 * log10(squaredMod(noiseFig));
 #ifdef DEBUG_PRS_PRINTS
         printf("[Rx %d] pilot %3d, SNR %+2d dB: rxF - > (%+3d, %+3d) addr %p  ch -> (%+3d, %+3d), pil -> (%+d, %+d) \n", rxAnt, 0, snr, rxF[0],rxF[1],&rxF[0],ch[0],ch[1],pil[0],pil[1]);
 #endif
-        pil +=2;
+        pil++;
         k   = (k+prs_cfg->CombSize) % frame_params->ofdm_symbol_size;
-        rxF = (int16_t *)&rxdataF[rxAnt][l*frame_params->ofdm_symbol_size + k];
-        
-        //Middle pilots
-        for(int pIdx = 1; pIdx < num_pilots-1; pIdx+=2)
-        {
-          ch[0] = (int16_t)(((int32_t)rxF[0]*pil[0] + (int32_t)rxF[1]*pil[1])>>15);
-          ch[1] = (int16_t)(((int32_t)rxF[1]*pil[0] - (int32_t)rxF[0]*pil[1])>>15);
-          if(pIdx == 1) // 2nd pilot
-          {
-            multadd_real_vector_complex_scalar(fml,
-		        	       ch,
-		        	       ch_tmp,
-		        	       8);
-          }
-          else
-          {
-            multadd_real_vector_complex_scalar(fm,
-		        	       ch,
-		        	       ch_tmp,
-		        	       8);
-          }
-          
-          //SNR estimation
-          noiseFig[0] = rxF[0] - (int16_t)(((int32_t)ch[0]*pil[0] - (int32_t)ch[1]*pil[1])>>15);
-          noiseFig[1] = rxF[1] - (int16_t)(((int32_t)ch[1]*pil[0] + (int32_t)ch[0]*pil[1])>>15);
-          snr += 10*log10(squaredMod(*(c16_t*)rxF) - squaredMod(*(c16_t*)noiseFig)) - 10*log10(squaredMod(*(c16_t*)noiseFig));
-#ifdef DEBUG_PRS_PRINTS
-          printf("[Rx %d] pilot %3d, SNR %+2d dB: rxF - > (%+3d, %+3d) addr %p  ch -> (%+3d, %+3d), pil -> (%+d, %+d) \n", rxAnt, pIdx, snr/(pIdx+1), rxF[0],rxF[1],&rxF[0],ch[0],ch[1],pil[0],pil[1]);
-#endif
-          pil +=2;
-          k   = (k+prs_cfg->CombSize) % frame_params->ofdm_symbol_size;
-          rxF = (int16_t *)&rxdataF[rxAnt][l*frame_params->ofdm_symbol_size + k];
+        rxF = &rxdataF[rxAnt][l * frame_params->ofdm_symbol_size + k];
 
-          ch[0] = (int16_t)(((int32_t)rxF[0]*pil[0] + (int32_t)rxF[1]*pil[1])>>15);
-          ch[1] = (int16_t)(((int32_t)rxF[1]*pil[0] - (int32_t)rxF[0]*pil[1])>>15);
-          if(pIdx == (num_pilots-3)) // 2nd last pilot
-          {
-            multadd_real_vector_complex_scalar(fmr,
-		        	       ch,
-		        	       ch_tmp,
-		        	       8);
-          }
-          else
-          {
-            multadd_real_vector_complex_scalar(fmm,
-		        	       ch,
-		        	       ch_tmp,
-		        	       8);
-          }
-          
-          //SNR estimation
-          noiseFig[0] = rxF[0] - (int16_t)(((int32_t)ch[0]*pil[0] - (int32_t)ch[1]*pil[1])>>15);
-          noiseFig[1] = rxF[1] - (int16_t)(((int32_t)ch[1]*pil[0] + (int32_t)ch[0]*pil[1])>>15);
-          snr += 10*log10(squaredMod(*((c16_t*)rxF)) - squaredMod(*((c16_t*)noiseFig))) - 10*log10(squaredMod(*((c16_t*)noiseFig)));
+        //Middle pilots
+        for (int pIdx = 1; pIdx < num_pilots - 1; pIdx += 2) {
+          c16_t ch = c16MulConjShift(*pil, *rxF, 15);
+          multadd_real_vector_complex_scalar(pIdx == 1 ? fml : fm, ch, ch_tmp, 8);
+
+          // SNR & RSRP estimation
+          rsrp += squaredMod(*rxF);
+          c16_t noiseFig = c16sub(*rxF, c16mulShift(ch, *pil, 15));
+          snr += 10 * log10(squaredMod(*rxF) - squaredMod(noiseFig)) - 10 * log10(squaredMod(noiseFig));
 #ifdef DEBUG_PRS_PRINTS
-          printf("[Rx %d] pilot %3d, SNR %+2d dB: rxF - > (%+3d, %+3d) addr %p  ch -> (%+3d, %+3d), pil -> (%+d, %+d) \n", rxAnt, pIdx+1, snr/(pIdx+2), rxF[0],rxF[1],&rxF[0],ch[0],ch[1],pil[0],pil[1]);
+          printf("[Rx %d] pilot %3d, SNR %+2d dB: rxF - > (%+3d, %+3d) addr %p  ch -> (%+3d, %+3d), pil -> (%+d, %+d) \n",
+                 rxAnt,
+                 pIdx,
+                 snr / (pIdx + 1),
+                 rxF[0],
+                 rxF[1],
+                 &rxF[0],
+                 ch[0],
+                 ch[1],
+                 pil[0],
+                 pil[1]);
 #endif
-          pil +=2;
-          k   = (k+prs_cfg->CombSize) % frame_params->ofdm_symbol_size;
-          rxF = (int16_t *)&rxdataF[rxAnt][l*frame_params->ofdm_symbol_size + k];
-          ch_tmp +=8;
+          pil++;
+          k = (k + prs_cfg->CombSize) % frame_params->ofdm_symbol_size;
+          rxF = &rxdataF[rxAnt][l * frame_params->ofdm_symbol_size + k];
+          ch = c16MulConjShift(*pil, *rxF, 15);
+          multadd_real_vector_complex_scalar(pIdx == (num_pilots - 3) ? fmr : fmm, ch, ch_tmp, 8);
+
+          // SNR & RSRP estimation
+          rsrp += squaredMod(*rxF);
+          noiseFig = c16sub(*rxF, c16mulShift(ch, *pil, 15));
+          snr += 10 * log10(squaredMod(*rxF) - squaredMod(noiseFig)) - 10 * log10(squaredMod(noiseFig));
+#ifdef DEBUG_PRS_PRINTS
+          printf("[Rx %d] pilot %3d, SNR %+2d dB: rxF - > (%+3d, %+3d) addr %p  ch -> (%+3d, %+3d), pil -> (%+d, %+d) \n",
+                 rxAnt,
+                 pIdx + 1,
+                 snr / (pIdx + 2),
+                 rxF[0],
+                 rxF[1],
+                 &rxF[0],
+                 ch[0],
+                 ch[1],
+                 pil[0],
+                 pil[1]);
+#endif
+          pil++;
+          k = (k + prs_cfg->CombSize) % frame_params->ofdm_symbol_size;
+          rxF = &rxdataF[rxAnt][l * frame_params->ofdm_symbol_size + k];
+          ch_tmp += 4;
         }
 
         //End pilot
-        ch[0] = (int16_t)(((int32_t)rxF[0]*pil[0] + (int32_t)rxF[1]*pil[1])>>15);
-        ch[1] = (int16_t)(((int32_t)rxF[1]*pil[0] - (int32_t)rxF[0]*pil[1])>>15);
-        multadd_real_vector_complex_scalar(fr,
-	      	       ch,
-	      	       ch_tmp,
-	      	       8);
+        ch = c16MulConjShift(*pil, *rxF, 15);
+        multadd_real_vector_complex_scalar(fr, ch, ch_tmp, 8);
 
-          //SNR estimation
-          noiseFig[0] = rxF[0] - (int16_t)(((int32_t)ch[0]*pil[0] - (int32_t)ch[1]*pil[1])>>15);
-          noiseFig[1] = rxF[1] - (int16_t)(((int32_t)ch[1]*pil[0] + (int32_t)ch[0]*pil[1])>>15);
-          snr += 10*log10(squaredMod(*((c16_t*)rxF)) - squaredMod(*((c16_t*)noiseFig))) - 10*log10(squaredMod(*((c16_t*)noiseFig)));
+        // SNR & RSRP estimation
+        rsrp += squaredMod(*rxF);
+        noiseFig = c16sub(*rxF, c16mulShift(ch, *pil, 15));
+        snr += 10 * log10(squaredMod(*rxF) - squaredMod(noiseFig)) - 10 * log10(squaredMod(noiseFig));
 #ifdef DEBUG_PRS_PRINTS
-          printf("[Rx %d] pilot %3d, SNR %+2d dB: rxF - > (%+3d, %+3d) addr %p  ch -> (%+3d, %+3d), pil -> (%+d, %+d) \n", rxAnt, num_pilots-1, snr/num_pilots, rxF[0],rxF[1],&rxF[0],ch[0],ch[1],pil[0],pil[1]);
+        printf("[Rx %d] pilot %3d, SNR %+2d dB: rxF - > (%+3d, %+3d) addr %p  ch -> (%+3d, %+3d), pil -> (%+d, %+d) \n",
+               rxAnt,
+               num_pilots - 1,
+               snr / num_pilots,
+               rxF[0],
+               rxF[1],
+               &rxF[0],
+               ch[0],
+               ch[1],
+               pil[0],
+               pil[1]);
 #endif
-          // average out the SNR computed
-          snr = snr/num_pilots;
-          prs_meas[rxAnt]->snr = snr;
       }
       else if(prs_cfg->CombSize == 4)
       {
         // Choose the interpolation filters
         switch (k_prime) {
           case 0:
-            fl  = filt16a_l0;
+            fl = filt16a_l0;
             fml = filt16a_mm0;
             fmm = filt16a_mm0;
             fmr = filt16a_m0;
-            fm  = filt16a_m0;
-            fr  = filt16a_r0;
+            fm = filt16a_m0;
+            fr = filt16a_r0;
             break;
 
           case 1:
-            fl  = filt16a_l1;
+            fl = filt16a_l1;
             fml = filt16a_ml1;
             fmm = filt16a_mm1;
             fmr = filt16a_mr1;
-            fm  = filt16a_m1;
-            fr  = filt16a_r1;
+            fm = filt16a_m1;
+            fr = filt16a_r1;
             break;
 
           case 2:
-            fl  = filt16a_l2;
+            fl = filt16a_l2;
             fml = filt16a_ml2;
             fmm = filt16a_mm2;
             fmr = filt16a_mr2;
-            fm  = filt16a_m2;
-            fr  = filt16a_r2;
+            fm = filt16a_m2;
+            fr = filt16a_r2;
             break;
 
           case 3:
-            fl  = filt16a_l3;
+            fl = filt16a_l3;
             fml = filt16a_ml3;
             fmm = filt16a_mm3;
             fmr = filt16a_mm3;
-            fm  = filt16a_m3;
-            fr  = filt16a_r3;
+            fm = filt16a_m3;
+            fr = filt16a_r3;
             break;
 
           default:
@@ -311,121 +340,96 @@ int nr_prs_channel_estimation(uint8_t rsc_id,
         }
 
         //Start pilot
-        ch[0] = (int16_t)(((int32_t)rxF[0]*pil[0] + (int32_t)rxF[1]*pil[1])>>15);
-        ch[1] = (int16_t)(((int32_t)rxF[1]*pil[0] - (int32_t)rxF[0]*pil[1])>>15);
-        multadd_real_vector_complex_scalar(fl,
-	      	       ch,
-	      	       ch_tmp,
-	      	       16);
-        
-        //SNR estimation
-        noiseFig[0] = rxF[0] - (int16_t)(((int32_t)ch[0]*pil[0] - (int32_t)ch[1]*pil[1])>>15);
-        noiseFig[1] = rxF[1] - (int16_t)(((int32_t)ch[1]*pil[0] + (int32_t)ch[0]*pil[1])>>15);
-        snr += 10*log10(squaredMod(*((c16_t*)rxF)) - squaredMod(*((c16_t*)noiseFig))) - 10*log10(squaredMod(*((c16_t*)noiseFig)));
+        c16_t ch = c16MulConjShift(*pil, *rxF, 15);
+        multadd_real_vector_complex_scalar(fl, ch, ch_tmp, 16);
+
+        // SNR & RSRP estimation
+        rsrp += squaredMod(*rxF);
+        c16_t noiseFig = c16sub(*rxF, c16mulShift(ch, *pil, 15));
+        snr += 10 * log10(squaredMod(*rxF) - squaredMod(noiseFig)) - 10 * log10(squaredMod(noiseFig));
 #ifdef DEBUG_PRS_PRINTS
         printf("[Rx %d] pilot %3d, SNR %+2d dB: rxF - > (%+3d, %+3d) addr %p  ch -> (%+3d, %+3d), pil -> (%+d, %+d) \n", rxAnt, 0, snr, rxF[0],rxF[1],&rxF[0],ch[0],ch[1],pil[0],pil[1]);
 #endif
-        pil +=2;
+        pil++;
         k   = (k+prs_cfg->CombSize) % frame_params->ofdm_symbol_size;
-        rxF = (int16_t *)&rxdataF[rxAnt][l*frame_params->ofdm_symbol_size + k];
+        rxF = &rxdataF[rxAnt][l * frame_params->ofdm_symbol_size + k];
+        ch = c16MulConjShift(*pil, *rxF, 15);
+        multadd_real_vector_complex_scalar(fml, ch, ch_tmp, 16);
 
-        ch[0] = (int16_t)(((int32_t)rxF[0]*pil[0] + (int32_t)rxF[1]*pil[1])>>15);
-        ch[1] = (int16_t)(((int32_t)rxF[1]*pil[0] - (int32_t)rxF[0]*pil[1])>>15);
-        multadd_real_vector_complex_scalar(fml,
-	      	       ch,
-	      	       ch_tmp,
-	      	       16);
-
-        //SNR estimation
-        noiseFig[0] = rxF[0] - (int16_t)(((int32_t)ch[0]*pil[0] - (int32_t)ch[1]*pil[1])>>15);
-        noiseFig[1] = rxF[1] - (int16_t)(((int32_t)ch[1]*pil[0] + (int32_t)ch[0]*pil[1])>>15);
-        snr += 10*log10(squaredMod(*((c16_t*)rxF)) - squaredMod(*((c16_t*)noiseFig))) - 10*log10(squaredMod(*((c16_t*)noiseFig)));
+        // SNR & RSRP estimation
+        rsrp += squaredMod(*rxF);
+        noiseFig = c16sub(*rxF, c16mulShift(ch, *pil, 15));
+        snr += 10 * log10(squaredMod(*rxF) - squaredMod(noiseFig)) - 10 * log10(squaredMod(noiseFig));
 #ifdef DEBUG_PRS_PRINTS
         printf("[Rx %d] pilot %3d, SNR %+2d dB: rxF - > (%+3d, %+3d) addr %p  ch -> (%+3d, %+3d), pil -> (%+d, %+d) \n", rxAnt, 1, snr/2, rxF[0],rxF[1],&rxF[0],ch[0],ch[1],pil[0],pil[1]);
 #endif
-        pil +=2;
+        pil++;
         k   = (k+prs_cfg->CombSize) % frame_params->ofdm_symbol_size;
-        rxF = (int16_t *)&rxdataF[rxAnt][l*frame_params->ofdm_symbol_size + k];
-        ch_tmp +=8;
+        rxF = &rxdataF[rxAnt][l * frame_params->ofdm_symbol_size + k];
+        ch_tmp += 4;
 
         //Middle pilots
         for(int pIdx = 2; pIdx < num_pilots-2; pIdx++)
         {
-          ch[0] = (int16_t)(((int32_t)rxF[0]*pil[0] + (int32_t)rxF[1]*pil[1])>>15);
-          ch[1] = (int16_t)(((int32_t)rxF[1]*pil[0] - (int32_t)rxF[0]*pil[1])>>15);
-          multadd_real_vector_complex_scalar(fmm,
-	      	         ch,
-	      	         ch_tmp,
-	      	         16);
-        
-          //SNR estimation
-          noiseFig[0] = rxF[0] - (int16_t)(((int32_t)ch[0]*pil[0] - (int32_t)ch[1]*pil[1])>>15);
-          noiseFig[1] = rxF[1] - (int16_t)(((int32_t)ch[1]*pil[0] + (int32_t)ch[0]*pil[1])>>15);
-          snr += 10*log10(squaredMod(*((c16_t*)rxF)) - squaredMod(*((c16_t*)noiseFig))) - 10*log10(squaredMod(*((c16_t*)noiseFig)));
+          c16_t ch = c16MulConjShift(*pil, *rxF, 15);
+          multadd_real_vector_complex_scalar(fmm, ch, ch_tmp, 16);
+
+          // SNR & RSRP estimation
+          rsrp += squaredMod(*rxF);
+          c16_t noiseFig = c16sub(*rxF, c16mulShift(ch, *pil, 15));
+          snr += 10 * log10(squaredMod(*rxF) - squaredMod(noiseFig)) - 10 * log10(squaredMod(noiseFig));
 #ifdef DEBUG_PRS_PRINTS
           printf("[Rx %d] pilot %3d, SNR %+2d dB: rxF - > (%+3d, %+3d) addr %p  ch -> (%+3d, %+3d), pil -> (%+d, %+d) \n", rxAnt, pIdx, snr/(pIdx+1), rxF[0],rxF[1],&rxF[0],ch[0],ch[1],pil[0],pil[1]);
 #endif
-          pil +=2;
+          pil++;
           k   = (k+prs_cfg->CombSize) % frame_params->ofdm_symbol_size;
-          rxF = (int16_t *)&rxdataF[rxAnt][l*frame_params->ofdm_symbol_size + k];
-          ch_tmp +=8;
+          rxF = &rxdataF[rxAnt][l * frame_params->ofdm_symbol_size + k];
+          ch_tmp += 4;
         }
 
         //End pilot
-        ch[0] = (int16_t)(((int32_t)rxF[0]*pil[0] + (int32_t)rxF[1]*pil[1])>>15);
-        ch[1] = (int16_t)(((int32_t)rxF[1]*pil[0] - (int32_t)rxF[0]*pil[1])>>15);
-        multadd_real_vector_complex_scalar(fmr,
-	      	       ch,
-	      	       ch_tmp,
-	      	       16);
-        
-        //SNR estimation
-        noiseFig[0] = rxF[0] - (int16_t)(((int32_t)ch[0]*pil[0] - (int32_t)ch[1]*pil[1])>>15);
-        noiseFig[1] = rxF[1] - (int16_t)(((int32_t)ch[1]*pil[0] + (int32_t)ch[0]*pil[1])>>15);
-        snr += 10*log10(squaredMod(*((c16_t*)rxF)) - squaredMod(*((c16_t*)noiseFig))) - 10*log10(squaredMod(*((c16_t*)noiseFig)));
+        ch = c16MulConjShift(*pil, *rxF, 15);
+        multadd_real_vector_complex_scalar(fmr, ch, ch_tmp, 16);
+
+        // SNR & RSRP estimation
+        rsrp += squaredMod(*rxF);
+        noiseFig = c16sub(*rxF, c16mulShift(ch, *pil, 15));
+        snr += 10 * log10(squaredMod(*rxF) - squaredMod(noiseFig)) - 10 * log10(squaredMod(noiseFig));
 #ifdef DEBUG_PRS_PRINTS
         printf("[Rx %d] pilot %3d, SNR %+2d dB: rxF - > (%+3d, %+3d) addr %p  ch -> (%+3d, %+3d), pil -> (%+d, %+d) \n", rxAnt, num_pilots-2, snr/(num_pilots-1), rxF[0],rxF[1],&rxF[0],ch[0],ch[1],pil[0],pil[1]);
 #endif
-        pil +=2;
+        pil++;
         k   = (k+prs_cfg->CombSize) % frame_params->ofdm_symbol_size;
-        rxF = (int16_t *)&rxdataF[rxAnt][l*frame_params->ofdm_symbol_size + k];
+        rxF = &rxdataF[rxAnt][l * frame_params->ofdm_symbol_size + k];
+        ch = c16MulConjShift(*pil, *rxF, 15);
+        multadd_real_vector_complex_scalar(fr, ch, ch_tmp, 16);
 
-        ch[0] = (int16_t)(((int32_t)rxF[0]*pil[0] + (int32_t)rxF[1]*pil[1])>>15);
-        ch[1] = (int16_t)(((int32_t)rxF[1]*pil[0] - (int32_t)rxF[0]*pil[1])>>15);
-        multadd_real_vector_complex_scalar(fr,
-	      	       ch,
-	      	       ch_tmp,
-	      	       16);
-        
-        //SNR estimation
-        noiseFig[0] = rxF[0] - (int16_t)(((int32_t)ch[0]*pil[0] - (int32_t)ch[1]*pil[1])>>15);
-        noiseFig[1] = rxF[1] - (int16_t)(((int32_t)ch[1]*pil[0] + (int32_t)ch[0]*pil[1])>>15);
-        snr += 10*log10(squaredMod(*((c16_t*)rxF)) - squaredMod(*((c16_t*)noiseFig))) - 10*log10(squaredMod(*((c16_t*)noiseFig)));
+        // SNR & RSRP estimation
+        rsrp += squaredMod(*rxF);
+        noiseFig = c16sub(*rxF, c16mulShift(ch, *pil, 15));
+        snr += 10 * log10(squaredMod(*rxF) - squaredMod(noiseFig)) - 10 * log10(squaredMod(noiseFig));
 #ifdef DEBUG_PRS_PRINTS
         printf("[Rx %d] pilot %3d, SNR %+2d dB: rxF - > (%+3d, %+3d) addr %p  ch -> (%+3d, %+3d), pil -> (%+d, +%d) \n", rxAnt, num_pilots-1, snr/num_pilots, rxF[0],rxF[1],&rxF[0],ch[0],ch[1],pil[0],pil[1]);
 #endif
-          // average out the SNR computed
-          snr = snr/num_pilots;
-          prs_meas[rxAnt]->snr = snr;
       }
       else
       {
         AssertFatal((prs_cfg->CombSize == 2)||(prs_cfg->CombSize == 4), "[%s] DL PRS CombSize other than 2 and 4 are NOT supported currently. Exiting!!!", __FUNCTION__);
       }
 
+      // average out the SNR and RSRP computed
+      prs_meas[rxAnt]->snr = snr / (float)num_pilots;
+      prs_meas[rxAnt]->rsrp = rsrp / (float)num_pilots;
+
       //reset channel pointer
-      ch_tmp = (int16_t*)ch_tmp_buf;
+      ch_tmp = (c16_t *)ch_tmp_buf;
     } // for rxAnt
   } //for l
   
   for (rxAnt=0; rxAnt < frame_params->nb_antennas_rx; rxAnt++)
   {
     // scale by averaging factor 1/NumPrsSymbols
-    multadd_complex_vector_real_scalar(ch_tmp,
-                                       scale_factor,
-                                       ch_tmp,
-                                       1,
-                                       frame_params->ofdm_symbol_size);
+    mult_complex_vector_real_scalar(ch_tmp, scale_factor, ch_tmp, frame_params->ofdm_symbol_size);
 
 #ifdef DEBUG_PRS_PRINTS
     for (int rb = 0; rb < prs_cfg->NumRB; rb++)
@@ -441,111 +445,56 @@ int nr_prs_channel_estimation(uint8_t rsc_id,
 #endif
 
     // Place PRS channel estimates in FFT shifted format
-    first_half  = frame_params->ofdm_symbol_size - re_offset;
-    second_half = (prs_cfg->NumRB*12) - first_half;
     if(first_half > 0)
-      memcpy((int16_t *)&chF_interpol[rxAnt][start_offset+re_offset], &ch_tmp[0], first_half*sizeof(int32_t));
+      memcpy(&chF_interpol[rxAnt][start_offset], &ch_tmp[0], first_half * sizeof(c16_t));
     if(second_half > 0)
-      memcpy((int16_t *)&chF_interpol[rxAnt][start_offset], &ch_tmp[(first_half<<1)], second_half*sizeof(int32_t));
+      memcpy(&chF_interpol[rxAnt][0], &ch_tmp[first_half], second_half * sizeof(c16_t));
 
-    // Time domain IMPULSE response
-    idft_size_idx_t idftsizeidx;
-    switch (NR_PRS_IDFT_OVERSAMP_FACTOR*frame_params->ofdm_symbol_size) {
-    case 128:
-      idftsizeidx = IDFT_128;
-      break;
-
-    case 256:
-      idftsizeidx = IDFT_256;
-      break;
-
-    case 512:
-      idftsizeidx = IDFT_512;
-      break;
-
-    case 768:
-      idftsizeidx = IDFT_768;
-      break;
-
-    case 1024:
-      idftsizeidx = IDFT_1024;
-      break;
-
-    case 1536:
-      idftsizeidx = IDFT_1536;
-      break;
-
-    case 2048:
-      idftsizeidx = IDFT_2048;
-      break;
-
-    case 3072:
-      idftsizeidx = IDFT_3072;
-      break;
-
-    case 4096:
-      idftsizeidx = IDFT_4096;
-      break;
-    
-    case 6144:
-      idftsizeidx = IDFT_6144;
-      break;
- 
-    // 16x IDFT oversampling
-    case 8192:
-      idftsizeidx = IDFT_8192;
-      break;
-
-    case 12288:
-      idftsizeidx = IDFT_12288;
-      break;
-
-    case 16384:
-      idftsizeidx = IDFT_16384;
-      break;
-
-    case 24576:
-      idftsizeidx = IDFT_24576;
-      break;
-
-    case 32768:
-      idftsizeidx = IDFT_32768;
-      break;
-
-    case 49152:
-      idftsizeidx = IDFT_49152;
-      break;
-
-    case 65536:
-      idftsizeidx = IDFT_65536;
-      break;
-
-    default:
-      LOG_I(PHY, "%s: unsupported ofdm symbol size \n", __FUNCTION__);
-      assert(0);
-    }
-
-    idft(idftsizeidx,
-         (int16_t *)&chF_interpol[rxAnt][0],
-         (int16_t *)&chT_interpol[rxAnt][0],1);
+    // Convert to time domain
+    freq2time(NR_PRS_IDFT_OVERSAMP_FACTOR * frame_params->ofdm_symbol_size,
+              (int16_t *)&chF_interpol[rxAnt][0],
+              (int16_t *)&chT_interpol[rxAnt][0]);
 
     // peak estimator
-    peak_estimator(&chT_interpol[rxAnt][start_offset],
-                   frame_params->ofdm_symbol_size,
-                   &prs_meas[rxAnt]->dl_toa,
-                   &ch_pwr);
+    mean_val = squaredMod(((c16_t *)ch_tmp)[(prs_cfg->NumRB * 12) >> 1]);
+    peak_estimator(&chT_interpol[rxAnt][0], NR_PRS_IDFT_OVERSAMP_FACTOR * frame_params->ofdm_symbol_size, &prs_toa, &ch_pwr, mean_val);
 
-    //prs measurements
+    // adjusting the rx_gains for channel peak power
+    ch_pwr_dbm = 10 * log10(ch_pwr) + 30 - SQ15_SQUARED_NORM_FACTOR_DB
+                 - ((int)ue->openair0_cfg[0].rx_gain[0] - (int)ue->openair0_cfg[0].rx_gain_offset[0])
+                 - dB_fixed(frame_params->ofdm_symbol_size);
+
+    prs_meas[rxAnt]->rsrp_dBm = 10 * log10(prs_meas[rxAnt]->rsrp) + 30 - SQ15_SQUARED_NORM_FACTOR_DB
+                                - ((int)ue->openair0_cfg[0].rx_gain[0] - (int)ue->openair0_cfg[0].rx_gain_offset[0])
+                                - dB_fixed(ue->frame_parms.ofdm_symbol_size);
+
+    // prs measurements
     prs_meas[rxAnt]->gNB_id     = gNB_id;
     prs_meas[rxAnt]->sfn        = proc->frame_rx;
     prs_meas[rxAnt]->slot       = proc->nr_slot_rx;
     prs_meas[rxAnt]->rxAnt_idx  = rxAnt;
     prs_meas[rxAnt]->dl_aoa     = rsc_id;
-    LOG_I(PHY, "[gNB %d][rsc %d][Rx %d][sfn %d][slot %d] DL PRS ToA ==> %d / %d samples, peak channel power %.1f dBm, SNR %+2d dB\n", gNB_id, rsc_id, rxAnt, proc->frame_rx, proc->nr_slot_rx, prs_meas[rxAnt]->dl_toa, frame_params->ofdm_symbol_size, 10*log10(ch_pwr/frame_params->ofdm_symbol_size)-30, prs_meas[rxAnt]->snr);
+    float dl_toa = prs_toa / (float)NR_PRS_IDFT_OVERSAMP_FACTOR;
+    if ((frame_params->ofdm_symbol_size - dl_toa) < frame_params->ofdm_symbol_size / 2)
+      dl_toa -= (frame_params->ofdm_symbol_size);
+    LOG_I(PHY,
+          "[gNB %d][rsc %d][Rx %d][sfn %d][slot %d] DL PRS ToA ==> %.1f / %d samples, peak channel power %.1f dBm, SNR %+.1f dB, rsrp %+.1f dBm\n",
+          gNB_id,
+          rsc_id,
+          rxAnt,
+          proc->frame_rx,
+          proc->nr_slot_rx,
+          dl_toa,
+          frame_params->ofdm_symbol_size,
+          ch_pwr_dbm,
+          prs_meas[rxAnt]->snr,
+          prs_meas[rxAnt]->rsrp_dBm);
+
+    set_prs_dl_toa(prs_meas[rxAnt], dl_toa);
 
 #ifdef DEBUG_PRS_CHEST
     sprintf(filename, "%s%i%s", "PRSpilot_", rxAnt, ".m");
-    LOG_M(filename, "prs_loc", &mod_prs[0], num_pilots,1,1);
+    LOG_M(filename, "prs_loc", mod_prs, num_pilots, 1, 1);
     sprintf(filename, "%s%i%s", "rxSigF_", rxAnt, ".m");
     sprintf(varname, "%s%i", "rxF_", rxAnt);
     LOG_M(filename, varname, &rxdataF[rxAnt][0], prs_cfg->NumPRSSymbols*frame_params->ofdm_symbol_size,1,1);
@@ -560,267 +509,199 @@ int nr_prs_channel_estimation(uint8_t rsc_id,
     // T tracer dump
     T(T_UE_PHY_INPUT_SIGNAL, T_INT(gNB_id),
       T_INT(proc->frame_rx), T_INT(proc->nr_slot_rx),
-      T_INT(rxAnt), T_BUFFER(&rxdataF[rxAnt][0], frame_params->samples_per_slot_wCP*sizeof(int32_t)));
+      T_INT(rxAnt), T_BUFFER(&rxdataF[rxAnt][0], frame_params->samples_per_slot_wCP*sizeof(c16_t)));
 
-    T(T_UE_PHY_DL_CHANNEL_ESTIMATE_FREQ, T_INT(gNB_id), T_INT(rsc_id),
-      T_INT(proc->frame_rx), T_INT(proc->nr_slot_rx),
-      T_INT(rxAnt), T_BUFFER(&chF_interpol[rxAnt][start_offset], frame_params->ofdm_symbol_size*sizeof(int32_t)));
+    T(T_UE_PHY_DL_CHANNEL_ESTIMATE_FREQ,
+      T_INT(gNB_id),
+      T_INT(rsc_id),
+      T_INT(proc->frame_rx),
+      T_INT(proc->nr_slot_rx),
+      T_INT(rxAnt),
+      T_BUFFER(&chF_interpol[rxAnt][0], NR_PRS_IDFT_OVERSAMP_FACTOR * frame_params->ofdm_symbol_size * sizeof(c16_t)));
 
-    T(T_UE_PHY_DL_CHANNEL_ESTIMATE, T_INT(gNB_id), T_INT(rsc_id),
-      T_INT(proc->frame_rx), T_INT(proc->nr_slot_rx),
-      T_INT(rxAnt), T_BUFFER(&chT_interpol[rxAnt][start_offset], frame_params->ofdm_symbol_size*sizeof(int32_t)));
+    T(T_UE_PHY_DL_CHANNEL_ESTIMATE,
+      T_INT(gNB_id),
+      T_INT(rsc_id),
+      T_INT(proc->frame_rx),
+      T_INT(proc->nr_slot_rx),
+      T_INT(rxAnt),
+      T_BUFFER(&chT_interpol[rxAnt][0], NR_PRS_IDFT_OVERSAMP_FACTOR * frame_params->ofdm_symbol_size * sizeof(c16_t)));
   }
 
   return(0);
 }
 
-int nr_pbch_dmrs_correlation(PHY_VARS_NR_UE *ue,
-                             UE_nr_rxtx_proc_t *proc,
-                             unsigned char symbol,
-                             int dmrss,
-                             NR_UE_SSB *current_ssb,
-                             c16_t rxdataF[][ue->frame_parms.samples_per_slot_wCP])
+c32_t nr_pbch_dmrs_correlation(const NR_DL_FRAME_PARMS *fp,
+                               const UE_nr_rxtx_proc_t *proc,
+                               const int symbol,
+                               const int dmrss,
+                               const int Nid_cell,
+                               const int ssb_start_subcarrier,
+                               const uint32_t nr_gold_pbch[NR_PBCH_DMRS_LENGTH_DWORD],
+                               const c16_t rxdataF[][fp->samples_per_slot_wCP])
 {
-  int pilot[200] __attribute__((aligned(16)));
-  unsigned short k;
-  unsigned int pilot_cnt;
-  int16_t ch[2],*pil,*rxF;
-  int symbol_offset;
+  AssertFatal(dmrss >= 0 && dmrss < 3, "symbol %d is illegal for PBCH DM-RS \n", dmrss);
 
+  unsigned int ssb_offset = fp->first_carrier_offset + ssb_start_subcarrier;
+  if (ssb_offset >= fp->ofdm_symbol_size)
+    ssb_offset -= fp->ofdm_symbol_size;
 
-  uint8_t nushift;
-  uint8_t ssb_index=current_ssb->i_ssb;
-  uint8_t n_hf=current_ssb->n_hf;
+  int symbol_offset = fp->ofdm_symbol_size * symbol;
 
-  nushift =  ue->frame_parms.Nid_cell%4;
-  ue->frame_parms.nushift = nushift;
-  unsigned int  ssb_offset = ue->frame_parms.first_carrier_offset + ue->frame_parms.ssb_start_subcarrier;
-  if (ssb_offset>= ue->frame_parms.ofdm_symbol_size) ssb_offset-=ue->frame_parms.ofdm_symbol_size;
+  unsigned int k = Nid_cell % 4;
 
-  AssertFatal(dmrss >= 0 && dmrss < 3,
-	      "symbol %d is illegal for PBCH DM-RS \n",
-	      dmrss);
-
-  symbol_offset = ue->frame_parms.ofdm_symbol_size*symbol;
-
-
-  k = nushift;
-
-#ifdef DEBUG_PBCH
-  printf("PBCH DMRS Correlation : gNB_id %d , OFDM size %d, Ncp=%d, Ns=%d, k=%d symbol %d\n", proc->gNB_id, ue->frame_parms.ofdm_symbol_size, ue->frame_parms.Ncp, Ns, k, symbol);
-#endif
+  DEBUG_PBCH("PBCH DMRS Correlation : gNB_id %d , OFDM size %d, Ncp=%d, k=%u symbol %d\n",
+             proc->gNB_id,
+             fp->ofdm_symbol_size,
+             fp->Ncp,
+             k,
+             symbol);
 
   // generate pilot
-  nr_pbch_dmrs_rx(dmrss,ue->nr_gold_pbch[n_hf][ssb_index], &pilot[0],0);
-
-  for (int aarx=0; aarx<ue->frame_parms.nb_antennas_rx; aarx++) {
-
+  // Note: pilot returned by the following function is already the complex conjugate of the transmitted DMRS
+  c16_t pilot[200] __attribute__((aligned(16)));
+  nr_pbch_dmrs_rx(dmrss, (uint32_t *)nr_gold_pbch, pilot, false);
+  c32_t computed_val = {0};
+  for (int aarx = 0; aarx < fp->nb_antennas_rx; aarx++) {
     int re_offset = ssb_offset;
-    pil   = (int16_t *)&pilot[0];
-    rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
+    c16_t *pil = pilot;
+    const c16_t *rxF = &rxdataF[aarx][symbol_offset + k];
 
-#ifdef DEBUG_PBCH
-    printf("pbch ch est pilot addr %p RB_DL %d\n",&pilot[0], ue->frame_parms.N_RB_DL);
-    printf("k %d, first_carrier %d\n",k,ue->frame_parms.first_carrier_offset);
-    printf("rxF addr %p\n", rxF);
-#endif
-    //if ((ue->frame_parms.N_RB_DL&1)==0) {
+    DEBUG_PBCH("pbch ch est pilot RB_DL %d\n", fp->N_RB_DL);
+    DEBUG_PBCH("k %u, first_carrier %d\n", k, fp->first_carrier_offset);
 
     // Treat first 2 pilots specially (left edge)
-    ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-    ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
+    computed_val = c32x16maddShift(*pil, rxF[re_offset], computed_val, 15);
 
-    current_ssb->c_re += ch[0];
-    current_ssb->c_im += ch[1];
+    DEBUG_PBCH("ch 0 %d\n", pil->r * rxF[re_offset].r - pil->i * rxF[re_offset].i);
+    DEBUG_PBCH("pilot 0 : rxF - > (%d,%d)  pil -> (%d,%d) \n", rxF[re_offset].r, rxF[re_offset].i, pil->r, pil->i);
 
-#ifdef DEBUG_PBCH
-    printf("ch 0 %d\n",((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1]));
-    printf("pilot 0 : rxF - > (%d,%d) addr %p  ch -> (%d,%d), pil -> (%d,%d) \n",rxF[0],rxF[1],&rxF[0],ch[0],ch[1],pil[0],pil[1]);
-#endif
+    pil++;
+    re_offset = (re_offset + 4) % fp->ofdm_symbol_size;
+    computed_val = c32x16maddShift(*pil, rxF[re_offset], computed_val, 15);
 
-    pil += 2;
-    re_offset = (re_offset+4) % ue->frame_parms.ofdm_symbol_size;
-    rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
+    DEBUG_PBCH("pilot 1 : rxF - > (%d,%d)  pil -> (%d,%d) \n", rxF[re_offset].r, rxF[re_offset].i, pil->r, pil->i);
 
+    pil++;
+    re_offset = (re_offset + 4) % fp->ofdm_symbol_size;
+    computed_val = c32x16maddShift(*pil, rxF[re_offset], computed_val, 15);
 
-    ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-    ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
+    DEBUG_PBCH("pilot 2 : rxF - > (%d,%d), pil -> (%d,%d) \n", rxF[re_offset].r, rxF[re_offset].i, pil->r, pil->i);
 
-    current_ssb->c_re += ch[0];
-    current_ssb->c_im += ch[1];
+    pil++;
+    re_offset = (re_offset + 4) % fp->ofdm_symbol_size;
 
-#ifdef DEBUG_PBCH
-    printf("pilot 1 : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-
-    pil += 2;
-    re_offset = (re_offset+4) % ue->frame_parms.ofdm_symbol_size;
-    rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
-
-    current_ssb->c_re += ch[0];
-    current_ssb->c_im += ch[1];
-
-#ifdef DEBUG_PBCH
-    printf("pilot 2 : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-
-    pil += 2;
-    re_offset = (re_offset+4) % ue->frame_parms.ofdm_symbol_size;
-    rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
-
-    for (pilot_cnt=3; pilot_cnt<(3*20); pilot_cnt += 3) {
-
-      //	if (pilot_cnt == 30)
-      //	  rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k)];
-
+    for (int pilot_cnt = 3; pilot_cnt < (3 * 20); pilot_cnt += 3) {
       // in 2nd symbol, skip middle  REs (48 with DMRS,  144 for SSS, and another 48 with DMRS) 
       if (dmrss == 1 && pilot_cnt == 12) {
 	pilot_cnt=48;
-	re_offset = (re_offset+144) % ue->frame_parms.ofdm_symbol_size;
-	rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
+  re_offset = (re_offset + 144) % fp->ofdm_symbol_size;
       }
-      ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-      ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
-      
-      current_ssb->c_re += ch[0];
-      current_ssb->c_im += ch[1];
+      computed_val = c32x16maddShift(*pil, rxF[re_offset], computed_val, 15);
 
-#ifdef DEBUG_PBCH
-      printf("pilot %u : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",pilot_cnt,rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
+      DEBUG_PBCH("pilot %u : rxF= (%d,%d) pil= (%d,%d) \n", pilot_cnt, rxF[re_offset].r, rxF[re_offset].i, pil->r, pil->i);
 
-      pil += 2;
-      re_offset = (re_offset+4) % ue->frame_parms.ofdm_symbol_size;
-      rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
-        
-  
-      ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-      ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
+      pil++;
+      re_offset = (re_offset + 4) % fp->ofdm_symbol_size;
+      computed_val = c32x16maddShift(*pil, rxF[re_offset], computed_val, 15);
 
-      current_ssb->c_re += ch[0];
-      current_ssb->c_im += ch[1];
+      DEBUG_PBCH("pilot %u : rxF= (%d,%d) pil= (%d,%d) \n", pilot_cnt + 1, rxF[re_offset].r, rxF[re_offset].i, pil->r, pil->i);
+      pil++;
+      re_offset = (re_offset + 4) % fp->ofdm_symbol_size;
+      computed_val = c32x16maddShift(*pil, rxF[re_offset], computed_val, 15);
 
-#ifdef DEBUG_PBCH
-      printf("pilot %u : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",pilot_cnt+1,rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-      pil += 2;
-      re_offset = (re_offset+4) % ue->frame_parms.ofdm_symbol_size;
-      rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
-        
-
-      ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-      ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
-
-      current_ssb->c_re += ch[0];
-      current_ssb->c_im += ch[1];
-
-#ifdef DEBUG_PBCH
-      printf("pilot %u : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",pilot_cnt+2,rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-
-      pil += 2;
-      re_offset = (re_offset+4) % ue->frame_parms.ofdm_symbol_size;
-      rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
-
+      DEBUG_PBCH("pilot %u : rxF= (%d,%d)  pil= (%d,%d) \n", pilot_cnt + 2, rxF[re_offset].r, rxF[re_offset].i, pil->r, pil->i);
+      pil++;
+      re_offset = (re_offset + 4) % fp->ofdm_symbol_size;
     }
-
-
-    //}
-
   }
-  return(0);
+  return computed_val;
 }
 
-int nr_pbch_channel_estimation(PHY_VARS_NR_UE *ue,
-                                NR_DL_FRAME_PARMS *fp,
+int nr_pbch_channel_estimation(const NR_DL_FRAME_PARMS *fp,
+                               const sl_nr_ue_phy_params_t *sl_phy_params,
                                int estimateSz,
                                struct complex16 dl_ch_estimates[][estimateSz],
                                struct complex16 dl_ch_estimates_time[][fp->ofdm_symbol_size],
-                               UE_nr_rxtx_proc_t *proc,
+                               const UE_nr_rxtx_proc_t *proc,
                                unsigned char symbol,
                                int dmrss,
-                               uint8_t ssb_index,
-                               uint8_t n_hf,
-                               c16_t rxdataF[][fp->samples_per_slot_wCP],
+                               uint ssb_index,
+                               uint n_hf,
+                               int ssb_start_subcarrier,
+                               const c16_t rxdataF[][fp->samples_per_slot_wCP],
                                bool sidelink,
-                               uint16_t Nid)
+                               uint Nid)
 {
+  TracyCZone(ctx, true);
   int Ns = proc->nr_slot_rx;
-  int pilot[200] __attribute__((aligned(16)));
-  unsigned short k;
-  unsigned int pilot_cnt;
-  int16_t *pil, *rxF, *dl_ch;
-  const int16_t *fl, *fm, *fr;
-  int ch_offset,symbol_offset;
+  c16_t pilot[200] __attribute__((aligned(16)));
   //int slot_pbch;
 
-  uint8_t nushift = 0, lastsymbol = 0;
-
-  uint32_t *gold_seq = NULL;
+  uint8_t nushift = 0, lastsymbol = 0, num_rbs = 0;
+  const uint32_t *gold_seq = NULL;
 
   if (sidelink) {
+    AssertFatal(dmrss == 0 || (dmrss >= 5 && dmrss <= 12), "symbol %d is illegal for PSBCH DM-RS \n", dmrss);
 
-    AssertFatal(dmrss == 0 || (dmrss >= 5 && dmrss <= 12),
-	      "symbol %d is illegal for PSBCH DM-RS \n",
-	      dmrss);
-
-    sl_nr_ue_phy_params_t *sl_phy_params = &ue->SL_UE_PHY_PARAMS;
-
-    LOG_D(PHY,"PSBCH Channel Estimation SLSSID:%d\n", Nid);
+    LOG_D(PHY, "PSBCH Channel Estimation SLSSID:%d\n", Nid);
 
     gold_seq = sl_phy_params->init_params.psbch_dmrs_gold_sequences[Nid];
     lastsymbol = 12;
+    num_rbs = SL_NR_NUM_PSBCH_RBS_IN_ONE_SYMBOL;
 
   } else {
+    nushift = Nid % 4;
 
-    nushift =  fp->Nid_cell%4;
-    fp->nushift = nushift;
+    AssertFatal(dmrss >= 0 && dmrss < 3, "symbol %d is illegal for PBCH DM-RS \n", dmrss);
 
-    AssertFatal(dmrss >= 0 && dmrss < 3,
-	      "symbol %d is illegal for PBCH DM-RS \n",
-	      dmrss);
-
-    gold_seq = ue->nr_gold_pbch[n_hf][ssb_index];
+    gold_seq = nr_gold_pbch(fp->Lmax, Nid, n_hf, ssb_index);
     lastsymbol = 2;
+    num_rbs = 20;
   }
 
-  unsigned int  ssb_offset = fp->first_carrier_offset + fp->ssb_start_subcarrier;
-  if (ssb_offset>= fp->ofdm_symbol_size) ssb_offset-= fp->ofdm_symbol_size;
+  unsigned int ssb_offset = fp->first_carrier_offset + ssb_start_subcarrier;
+  if (ssb_offset >= fp->ofdm_symbol_size)
+    ssb_offset -= fp->ofdm_symbol_size;
 
-  ch_offset     = fp->ofdm_symbol_size*symbol;
+  const int ch_offset = fp->ofdm_symbol_size * symbol;
+  const int symbol_offset = fp->ofdm_symbol_size * symbol;
+  const int k = nushift;
 
-  symbol_offset = fp->ofdm_symbol_size*symbol;
+  DEBUG_PBCH("PBCH Channel Estimation : gNB_id %d ch_offset %d, OFDM size %d, Ncp=%d, Ns=%d, k=%d symbol %d\n",
+             proc->gNB_id,
+             ch_offset,
+             fp->ofdm_symbol_size,
+             fp->Ncp,
+             Ns,
+             k,
+             symbol);
 
-
-  k = nushift;
-
-#ifdef DEBUG_PBCH
-  printf("PBCH Channel Estimation : gNB_id %d ch_offset %d, OFDM size %d, Ncp=%d, Ns=%d, k=%d symbol %d\n", proc->gNB_id, ch_offset, fp->ofdm_symbol_size, fp->Ncp, Ns, k, symbol);
-#endif
+  const int16_t *fl, *fm, *fr;
 
   switch (k) {
   case 0:
-    fl = filt16a_l0;
-    fm = filt16a_m0;
-    fr = filt16a_r0;
+    fl = (int16_t *)filt16a_l0;
+    fm = (int16_t *)filt16a_m0;
+    fr = (int16_t *)filt16a_r0;
     break;
 
   case 1:
-    fl = filt16a_l1;
-    fm = filt16a_m1;
-    fr = filt16a_r1;
+    fl = (int16_t *)filt16a_l1;
+    fm = (int16_t *)filt16a_m1;
+    fr = (int16_t *)filt16a_r1;
     break;
 
   case 2:
-    fl = filt16a_l2;
-    fm = filt16a_m2;
-    fr = filt16a_r2;
+    fl = (int16_t *)filt16a_l2;
+    fm = (int16_t *)filt16a_m2;
+    fr = (int16_t *)filt16a_r2;
     break;
 
   case 3:
-    fl = filt16a_l3;
-    fm = filt16a_m3;
-    fr = filt16a_r3;
+    fl = (int16_t *)filt16a_l3;
+    fm = (int16_t *)filt16a_m3;
+    fr = (int16_t *)filt16a_r3;
     break;
 
   default:
@@ -829,263 +710,125 @@ int nr_pbch_channel_estimation(PHY_VARS_NR_UE *ue,
     break;
   }
 
-  idft_size_idx_t idftsizeidx;
-  
-  switch (fp->ofdm_symbol_size) {
-  case 128:
-    idftsizeidx = IDFT_128;
-    break;
-    
-  case 256:
-    idftsizeidx = IDFT_256;
-    break;
-    
-  case 512:
-    idftsizeidx = IDFT_512;
-    break;
-    
-  case 768:
-    idftsizeidx = IDFT_768;
-    break;
-
-  case 1024:
-    idftsizeidx = IDFT_1024;
-    break;
-    
-  case 1536:
-    idftsizeidx = IDFT_1536;
-    break;
-    
-  case 2048:
-    idftsizeidx = IDFT_2048;
-    break;
-    
-  case 3072:
-    idftsizeidx = IDFT_3072;
-    break;
-    
-  case 4096:
-    idftsizeidx = IDFT_4096;
-    break;
-  
-  case 6144:
-    idftsizeidx = IDFT_6144;
-    break;
- 
-  default:
-    printf("unsupported ofdm symbol size \n");
-    assert(0);
-  }
-  
   // generate pilot
-  nr_pbch_dmrs_rx(dmrss,gold_seq, &pilot[0], sidelink);
+  // Note: pilot returned by the following function is already the complex conjugate of the transmitted DMRS
+  nr_pbch_dmrs_rx(dmrss, gold_seq, &pilot[0], sidelink);
 
-  for (int aarx=0; aarx<fp->nb_antennas_rx; aarx++) {
-
+  for (int aarx = 0; aarx < fp->nb_antennas_rx; aarx++) {
     int re_offset = ssb_offset;
-    pil   = (int16_t *)&pilot[0];
-    rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
-    dl_ch = (int16_t *)&dl_ch_estimates[aarx][ch_offset];
+    c16_t *pil = pilot;
+    const c16_t *rxF = &rxdataF[aarx][symbol_offset + k];
+    c16_t *dl_ch = &dl_ch_estimates[aarx][ch_offset];
 
-    memset(dl_ch,0,sizeof(struct complex16)*(fp->ofdm_symbol_size));
+    memset(dl_ch, 0, sizeof(c16_t) * fp->ofdm_symbol_size);
 
-#ifdef DEBUG_PBCH
-    printf("pbch ch est pilot addr %p RB_DL %d\n",&pilot[0], fp->N_RB_DL);
-    printf("k %d, first_carrier %d\n",k,fp->first_carrier_offset);
-    printf("rxF addr %p\n", rxF);
-    printf("dl_ch addr %p\n",dl_ch);
-#endif
+    DEBUG_PBCH("pbch ch est pilot RB_DL %d\n", fp->N_RB_DL);
+    DEBUG_PBCH("k %d, first_carrier %d\n", k, fp->first_carrier_offset);
 
     // Treat first 2 pilots specially (left edge)
-    int16_t ch[2];
-    ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-    ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
+    c16_t ch;
+    ch = c16mulShift(*pil, rxF[re_offset], 15);
+    DEBUG_PBCH("pilot 0: rxF= (%d,%d), ch= (%d,%d), pil=(%d,%d)\n", rxF[re_offset].r, rxF[re_offset].i, ch.r, ch.i, pil->r, pil->i);
+    multadd_real_vector_complex_scalar(fl, ch, dl_ch, 16);
+    pil++;
+    re_offset = (re_offset + 4) % fp->ofdm_symbol_size;
 
-#ifdef DEBUG_PBCH
-    printf("ch 0 %d\n",((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1]));
-    printf("pilot 0 : rxF - > (%d,%d) addr %p  ch -> (%d,%d), pil -> (%d,%d) \n",rxF[0],rxF[1],&rxF[0],ch[0],ch[1],pil[0],pil[1]);
-#endif
-    multadd_real_vector_complex_scalar(fl,
-				       ch,
-				       dl_ch,
-				       16);
-    pil += 2;
-    re_offset = (re_offset+4) % fp->ofdm_symbol_size;
-    rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
+    ch = c16mulShift(*pil, rxF[re_offset], 15);
 
-    //for (int i= 0; i<8; i++)
-    //printf("dl_ch addr %p %d\n", dl_ch+i, *(dl_ch+i));
+    DEBUG_PBCH("pilot 1: rxF= (%d,%d), ch= (%d,%d), pil=(%d,%d)\n", rxF[re_offset].r, rxF[re_offset].i, ch.r, ch.i, pil->r, pil->i);
+    multadd_real_vector_complex_scalar(fm, ch, dl_ch, 16);
+    pil++;
+    re_offset = (re_offset + 4) % fp->ofdm_symbol_size;
 
-    ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-    ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
+    ch = c16mulShift(*pil, rxF[re_offset], 15);
 
+    DEBUG_PBCH("pilot 2: rxF= (%d,%d), ch= (%d,%d), pil=(%d,%d)\n", rxF[re_offset].r, rxF[re_offset].i, ch.r, ch.i, pil->r, pil->i);
+    multadd_real_vector_complex_scalar(fr, ch, dl_ch, 16);
+    pil++;
+    re_offset = (re_offset + 4) % fp->ofdm_symbol_size;
+    dl_ch += 12;
 
-#ifdef DEBUG_PBCH
-    printf("pilot 1 : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-    multadd_real_vector_complex_scalar(fm,
-				       ch,
-				       dl_ch,
-				       16);
-    pil += 2;
-    re_offset = (re_offset+4) % fp->ofdm_symbol_size;
-    rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
-
-    ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-    ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
-
-#ifdef DEBUG_PBCH
-    printf("pilot 2 : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-
-    multadd_real_vector_complex_scalar(fr,
-				       ch,
-				       dl_ch,
-				       16);
-    pil += 2;
-    re_offset = (re_offset+4) % fp->ofdm_symbol_size;
-    rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
-    dl_ch += 24;
-
-    for (pilot_cnt=3; pilot_cnt<(3*20); pilot_cnt += 3) {
-
+    for (int pilot_cnt = 3; pilot_cnt < (3 * num_rbs); pilot_cnt += 3) {
       //	if (pilot_cnt == 30)
       //	  rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k)];
 
       // in 2nd symbol, skip middle  REs (48 with DMRS,  144 for SSS, and another 48 with DMRS) 
       if (dmrss == 1 && pilot_cnt == 12) {
         pilot_cnt=48;
-        re_offset = (re_offset+144) % fp->ofdm_symbol_size;
-        rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
-        dl_ch += 288;
+        re_offset = (re_offset + 144) % fp->ofdm_symbol_size;
+        dl_ch += 144;
       }
-      ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-      ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
+      ch = c16mulShift(*pil, rxF[re_offset], 15);
+      DEBUG_PBCH("pilot %u: rxF= (%d,%d), ch= (%d,%d), pil=(%d,%d)\n",
+                 pilot_cnt,
+                 rxF[re_offset].r,
+                 rxF[re_offset].i,
+                 ch.r,
+                 ch.i,
+                 pil->r,
+                 pil->i);
+      multadd_real_vector_complex_scalar(fl, ch, dl_ch, 16);
 
-#ifdef DEBUG_PBCH
-      printf("pilot %u : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",pilot_cnt,rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-      multadd_real_vector_complex_scalar(fl,
-					 ch,
-					 dl_ch,
-					 16);
-
-      //for (int i= 0; i<8; i++)
-      //            printf("pilot_cnt %d dl_ch %d %d\n", pilot_cnt, dl_ch+i, *(dl_ch+i));
-
-      pil += 2;
-      re_offset = (re_offset+4) % fp->ofdm_symbol_size;
-      rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
-        
-  
-      ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-      ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
-
-#ifdef DEBUG_PBCH
-      printf("pilot %u : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",pilot_cnt+1,rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-      multadd_real_vector_complex_scalar(fm,
-					 ch,
-					 dl_ch,
-					 16);
-      pil += 2;
-      re_offset = (re_offset+4) % fp->ofdm_symbol_size;
-      rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
-
-      ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-      ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
-
-#ifdef DEBUG_PBCH
-      printf("pilot %u : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",pilot_cnt+2,rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-
-      multadd_real_vector_complex_scalar(fr,
-					 ch,
-					 dl_ch,
-					 16);
-      pil += 2;
-      re_offset = (re_offset+4) % fp->ofdm_symbol_size;
-      rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+re_offset)];
-      dl_ch += 24;
-
+      pil++;
+      re_offset = (re_offset + 4) % fp->ofdm_symbol_size;
+      ch = c16mulShift(*pil, rxF[re_offset], 15);
+      DEBUG_PBCH("pilot %u: rxF= (%d,%d), ch= (%d,%d), pil=(%d,%d)\n",
+                 pilot_cnt + 1,
+                 rxF[re_offset].r,
+                 rxF[re_offset].i,
+                 ch.r,
+                 ch.i,
+                 pil->r,
+                 pil->i);
+      multadd_real_vector_complex_scalar(fm, ch, dl_ch, 16);
+      pil++;
+      re_offset = (re_offset + 4) % fp->ofdm_symbol_size;
+      ch = c16mulShift(*pil, rxF[re_offset], 15);
+      DEBUG_PBCH("pilot %u: rxF= (%d,%d), ch= (%d,%d), pil=(%d,%d)\n",
+                 pilot_cnt + 2,
+                 rxF[re_offset].r,
+                 rxF[re_offset].i,
+                 ch.r,
+                 ch.i,
+                 pil->r,
+                 pil->i);
+      multadd_real_vector_complex_scalar(fr, ch, dl_ch, 16);
+      pil++;
+      re_offset = (re_offset + 4) % fp->ofdm_symbol_size;
+      dl_ch += 12;
     }
 
-    if( dmrss == lastsymbol) // update time statistics for last PBCH symbol
+    if (dmrss == lastsymbol) // update time statistics for last PBCH symbol
     {
       // do ifft of channel estimate
       LOG_D(PHY,"Channel Impulse Computation Slot %d Symbol %d ch_offset %d\n", Ns, symbol, ch_offset);
-      idft(idftsizeidx,
-	   (int16_t*) &dl_ch_estimates[aarx][ch_offset],
-	   (int16_t*) dl_ch_estimates_time[aarx],
-	   1);
+      freq2time(fp->ofdm_symbol_size, (int16_t *)&dl_ch_estimates[aarx][ch_offset], (int16_t *)&dl_ch_estimates_time[aarx]);
     }
   }
 
-  if (dmrss == lastsymbol) {
-
-    enum scopeDataType typ = (sidelink) ? psbchDlChEstimateTime
-                                        : pbchDlChEstimateTime;
-
-    UEscopeCopy(ue,
-                typ,
-                (void *)dl_ch_estimates_time,
-                sizeof(c16_t),
-                fp->nb_antennas_rx,
-                fp->ofdm_symbol_size,
-                0);
-  }
-
+  TracyCZoneEnd(ctx);
   return(0);
 }
 
-void nr_pdcch_channel_estimation(PHY_VARS_NR_UE *ue,
-                                 UE_nr_rxtx_proc_t *proc,
-                                 int pscch_flag,
-                                 unsigned char symbol,
-                                 fapi_nr_coreset_t *coreset,
+void nr_pdcch_channel_estimation(const PHY_VARS_NR_UE *ue,
+                                 int nb_rb_coreset,
+                                 int coreset_start_rb,
+                                 int dmrs_ref,
                                  uint16_t first_carrier_offset,
                                  uint16_t BWPStart,
                                  int32_t pdcch_est_size,
-                                 int32_t pdcch_dl_ch_estimates[][pdcch_est_size],
-                                 c16_t rxdataF[][ue->frame_parms.samples_per_slot_wCP],
-                                 int16_t *rsrp_dBm)
+                                 c16_t pdcch_dl_ch_estimates[][pdcch_est_size],
+                                 c16_t rxdataF[ue->frame_parms.nb_antennas_rx][ue->frame_parms.ofdm_symbol_size],
+                                 c16_t *pilot)
 {
-
-  int Ns = proc->nr_slot_rx;
-  int gNB_id = proc->gNB_id;
-  unsigned char aarx;
-  unsigned short k;
-  unsigned int pilot_cnt;
-  int16_t ch[2],*pil,*rxF,*dl_ch;
-  int ch_offset,symbol_offset;
-  uint16_t meas_count = 0;
-  int32_t rsrp_sum = 0;
-  int rsrp = 0;
-
-  ch_offset     = ue->frame_parms.ofdm_symbol_size*symbol;
-
-  symbol_offset = ue->frame_parms.ofdm_symbol_size*symbol;
-
-  int nb_rb_coreset=0;
-  int coreset_start_rb=0;
-  if (pscch_flag == 0) get_coreset_rballoc(coreset->frequency_domain_resource,&nb_rb_coreset,&coreset_start_rb);
-  else { 
-    coreset_start_rb = coreset->frequency_domain_resource[0];
-    nb_rb_coreset = coreset->frequency_domain_resource[1];
-  }
-  if(nb_rb_coreset==0) return;
+  const int symb_sz = ue->frame_parms.ofdm_symbol_size;
 
 #ifdef DEBUG_PDCCH
-  printf("pdcch_channel_estimation: first_carrier_offset %d, BWPStart %d, coreset_start_rb %d, coreset_nb_rb %d, symbold %d\n",
-         first_carrier_offset, BWPStart, coreset_start_rb, nb_rb_coreset,symbol);
+  printf("pdcch_channel_estimation: first_carrier_offset %d, BWPStart %d, coreset_start_rb %d, coreset_nb_rb %d\n",
+         first_carrier_offset, BWPStart, coreset_start_rb, nb_rb_coreset);
 #endif
 
   unsigned short coreset_start_subcarrier = first_carrier_offset+(BWPStart + coreset_start_rb)*12;
-
-#ifdef DEBUG_PDCCH
-  printf("PDCCH Channel Estimation : gNB_id %d ch_offset %d, OFDM size %d, Ncp=%d, Ns=%d, symbol %d\n",
-         gNB_id,ch_offset,ue->frame_parms.ofdm_symbol_size,ue->frame_parms.Ncp,Ns,symbol);
-#endif
 
 #if CH_INTERP
   int16_t *fl = filt16a_l1;
@@ -1093,31 +836,13 @@ void nr_pdcch_channel_estimation(PHY_VARS_NR_UE *ue,
   int16_t *fr = filt16a_r1;
 #endif
 
-  unsigned short scrambling_id = coreset->pdcch_dmrs_scrambling_id;
-  // checking if re-initialization of scrambling IDs is needed (should be done here but scrambling ID for PDCCH is not taken from RRC)
-  if (pscch_flag == 0 && scrambling_id != ue->scramblingID_pdcch){
-    ue->scramblingID_pdcch = scrambling_id;
-    nr_gold_pdcch(&ue->frame_parms,ue->nr_gold_pdcch[gNB_id],ue->scramblingID_pdcch);
-  }
- 
-  int dmrs_ref = 0;
-  if (coreset->CoreSetType == NFAPI_NR_CSET_CONFIG_PDCCH_CONFIG)
-    dmrs_ref = BWPStart;
-  // generate pilot
-  int pilot[(nb_rb_coreset + dmrs_ref) * 3] __attribute__((aligned(16)));
-  if (pscch_flag ==0) 
-    nr_pdcch_dmrs_rx(ue,Ns,ue->nr_gold_pdcch[gNB_id][Ns][symbol], &pilot[0],2000,(nb_rb_coreset+dmrs_ref));
-  else 
-    nr_pdcch_dmrs_rx(ue,Ns,ue->nr_gold_pscch[Ns][symbol], &pilot[0],2000,(nb_rb_coreset+dmrs_ref));
+  for (int aarx = 0; aarx < ue->frame_parms.nb_antennas_rx; aarx++) {
+    int k = coreset_start_subcarrier;
+    c16_t *pil = &pilot[dmrs_ref * 3];
+    c16_t *rxF = &rxdataF[aarx][k + 1];
+    c16_t *dl_ch = pdcch_dl_ch_estimates[aarx];
 
-  for (aarx=0; aarx<ue->frame_parms.nb_antennas_rx; aarx++) {
-
-    k = coreset_start_subcarrier;
-    pil   = (int16_t *)&pilot[dmrs_ref*3];
-    rxF   = (int16_t *)&rxdataF[aarx][(symbol_offset+k+1)];
-    dl_ch = (int16_t *)&pdcch_dl_ch_estimates[aarx][ch_offset];
-
-    memset(dl_ch,0,4*(ue->frame_parms.ofdm_symbol_size));
+    memset(dl_ch, 0, sizeof(c16_t) * symb_sz);
 
 #ifdef DEBUG_PDCCH
     printf("pdcch ch est pilot addr %p RB_DL %d\n",&pilot[dmrs_ref*3], ue->frame_parms.N_RB_DL);
@@ -1129,179 +854,67 @@ void nr_pdcch_channel_estimation(PHY_VARS_NR_UE *ue,
   #if CH_INTERP
     //    if ((ue->frame_parms.N_RB_DL&1)==0) {
     // Treat first 2 pilots specially (left edge)
-    ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-    ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
-#ifdef DEBUG_PDCCH
-    printf("ch 0 %d\n",((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1]));
-    printf("pilot 0 : rxF - > (%d,%d) addr %p  ch -> (%d,%d), pil -> (%d,%d) \n",rxF[0],rxF[1],&rxF[0],ch[0],ch[1],pil[0],pil[1]);
-#endif
-    multadd_real_vector_complex_scalar(fl,
-				       ch,
-				       dl_ch,
-				       16);
-    pil += 2;
-    rxF += 8;
-    k   += 4;
+    multadd_real_vector_complex_scalar(fl, c16mulShift(*pil++, *rxF, 15), dl_ch, 16);
+    rxF += 4;
+    k += 2;
 
-    if (k >= ue->frame_parms.ofdm_symbol_size) {
-      k  -= ue->frame_parms.ofdm_symbol_size;
-      rxF = (int16_t *)&rxdataF[aarx][(symbol_offset+k+1)];
+    if (k >= symb_sz) {
+      k -= symb_sz;
+      rxF = &rxdataF[aarx][k + 1];
     }
+    multadd_real_vector_complex_scalar(fm, c16mulShift(*pil++, *rxF, 15), dl_ch, 16);
+    k = (k + 4) % symb_sz;
+    rxF = &rxdataF[aarx][k + 1)];
 
-    ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-    ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
-#ifdef DEBUG_PDCCH
-    printf("pilot 1 : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-    multadd_real_vector_complex_scalar(fm,
-				       ch,
-				       dl_ch,
-				       16);
-    pil += 2;
-    rxF += 8;
-    k   += 4;
+    multadd_real_vector_complex_scalar(fr, c16mulShift(*pil++, *rxF, 15), dl_ch, 16);
+    dl_ch += 12;
+    k = (k + 4) % symb_sz;
+    rxF = &rxdataF[aarx][k + 1];
 
-    if (k >= ue->frame_parms.ofdm_symbol_size) {
-      k  -= ue->frame_parms.ofdm_symbol_size;
-      rxF = (int16_t *)&rxdataF[aarx][(symbol_offset+k+1)];
+    for (int pilot_cnt = 3; pilot_cnt < (3 * nb_rb_coreset); pilot_cnt += 3) {
+      multadd_real_vector_complex_scalar(fl, c16mulShift(*pil++, *rxF, 15), dl_ch, 16);
+      k = (k + 4) % symb_sz;
+      rxF = &rxdataF[aarx][k + 1];
+
+      multadd_real_vector_complex_scalar(fm, c16mulShift(*pil++, *rxF, 15), dl_ch, 16);
+      k = (k + 4) % symb_sz;
+      rxF = &rxdataF[aarx][k + 1];
+      multadd_real_vector_complex_scalar(fr, c16mulShift(*pil++, *rxF, 15), dl_ch, 16);
+      dl_ch += 12;
+      k = (k + 4) % symb_sz;
+      rxF = &rxdataF[aarx][k + 1];
     }
+#else //ELSE CH_INTERP
+    c32_t ch_sum = {0, 0};
 
-    ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-    ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
+    for (int pilot_cnt = 0; pilot_cnt < 3 * nb_rb_coreset; pilot_cnt++) {
 
-#ifdef DEBUG_PDCCH
-    printf("pilot 2 : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-
-    multadd_real_vector_complex_scalar(fr,
-				       ch,
-				       dl_ch,
-				       16);
-#ifdef DEBUG_PDCCH
-    for (int m =0; m<12; m++)
-      printf("data :  dl_ch -> (%d,%d)\n",dl_ch[0+2*m],dl_ch[1+2*m]);
-#endif
-    dl_ch += 24;
-
-    pil += 2;
-    rxF += 8;
-    k   += 4;
-
-    for (pilot_cnt=3; pilot_cnt<(3*nb_rb_coreset); pilot_cnt += 3) {
-
-      if (k >= ue->frame_parms.ofdm_symbol_size) {
-        k  -= ue->frame_parms.ofdm_symbol_size;
-        rxF = (int16_t *)&rxdataF[aarx][(symbol_offset+k+1)];
-      }
-
-      ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-      ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
-#ifdef DEBUG_PDCCH
-      printf("pilot %u : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",pilot_cnt,rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-      multadd_real_vector_complex_scalar(fl,
-					 ch,
-					 dl_ch,
-					 16);
-
-      //for (int i= 0; i<8; i++)
-      //            printf("pilot_cnt %d dl_ch %d %d\n", pilot_cnt, dl_ch+i, *(dl_ch+i));
-
-      pil += 2;
-      rxF += 8;
-      k   += 4;
-
-      if (k >= ue->frame_parms.ofdm_symbol_size) {
-        k  -= ue->frame_parms.ofdm_symbol_size;
-        rxF = (int16_t *)&rxdataF[aarx][(symbol_offset+k+1)];
-      }
-
-      ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-      ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
-#ifdef DEBUG_PDCCH
-      printf("pilot %u : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",pilot_cnt+1,rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-      multadd_real_vector_complex_scalar(fm,
-					 ch,
-					 dl_ch,
-					 16);
-      pil += 2;
-      rxF += 8;
-      k   += 4;
-
-      if (k >= ue->frame_parms.ofdm_symbol_size) {
-        k  -= ue->frame_parms.ofdm_symbol_size;
-        rxF = (int16_t *)&rxdataF[aarx][(symbol_offset+k+1)];
-      }
-
-      ch[0] = (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-      ch[1] = (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
-
-#ifdef DEBUG_PDCCH
-      printf("pilot %u : rxF - > (%d,%d) ch -> (%d,%d), pil -> (%d,%d) \n",pilot_cnt+2,rxF[0],rxF[1],ch[0],ch[1],pil[0],pil[1]);
-#endif
-
-      multadd_real_vector_complex_scalar(fr,
-					 ch,
-					 dl_ch,
-					 16);
-#ifdef DEBUG_PDCCH
-    for (int m =0; m<12; m++)
-      printf("data :  dl_ch -> (%d,%d)\n",dl_ch[0+2*m],dl_ch[1+2*m]);
-#endif
-      dl_ch += 24;
-
-      pil += 2;
-      rxF += 8;
-      k   += 4;
-    }
-  #else //ELSE CH_INTERP
-    int ch_sum[2] = {0, 0};
-
-    c16_t rx_signal = rxdataF[aarx][(symbol_offset + k + 1)];
-
-    for (pilot_cnt = 0; pilot_cnt < 3*nb_rb_coreset; pilot_cnt++) {
-      if (k >= ue->frame_parms.ofdm_symbol_size) {
-        k  -= ue->frame_parms.ofdm_symbol_size;
-        rxF = (int16_t *)&rxdataF[aarx][(symbol_offset+k+1)];
-      }
 #ifdef DEBUG_PDCCH
       printf("pilot[%u] = (%d, %d)\trxF[%d] = (%d, %d)\n", pilot_cnt, pil[0], pil[1], k+1, rxF[0], rxF[1]);
 #endif
-      rsrp_sum += (((int32_t)(rx_signal.r) * rx_signal.r) + ((int32_t)(rx_signal.i) * rx_signal.i));
-      LOG_D(NR_PHY, "r: %d, i: %d, k %d, offset %d\n", rx_signal.r, rx_signal.i, k, (symbol_offset + k + 1));
-      meas_count++;
-      ch_sum[0] += (int16_t)(((int32_t)pil[0]*rxF[0] - (int32_t)pil[1]*rxF[1])>>15);
-      ch_sum[1] += (int16_t)(((int32_t)pil[0]*rxF[1] + (int32_t)pil[1]*rxF[0])>>15);
-      pil += 2;
-      rxF += 8;
-      k   += 4;
-      rx_signal = rxdataF[aarx][(symbol_offset + k + 1)];
+      c16_t ch = c16mulShift(*pil++, *rxF, 15);
+      ch_sum.r += ch.r;
+      ch_sum.i += ch.i;
+      k = (k + 4) % symb_sz;
+      rxF = &rxdataF[aarx][k + 1];
 
       if (pilot_cnt % 3 == 2) {
-        ch[0] = ch_sum[0] / 3;
-        ch[1] = ch_sum[1] / 3;
+        ch.r = ch_sum.r / 3;
+        ch.i = ch_sum.i / 3;
         multadd_real_vector_complex_scalar(filt16a_1, ch, dl_ch, 16);
 #ifdef DEBUG_PDCCH
         for (int m =0; m<12; m++)
           printf("data :  dl_ch -> (%d,%d)\n",dl_ch[0+2*m],dl_ch[1+2*m]);
 #endif
-        dl_ch += 24;
-        ch_sum[0] = 0;
-        ch_sum[1] = 0;
+        dl_ch += 12;
+        ch_sum = (c32_t){0};
       }
     }
-  #endif //END CH_INTERP
+#endif //END CH_INTERP
 
 
     //}
-
   }
-
-  rsrp = rsrp_sum / meas_count;
-  *rsrp_dBm = dB_fixed(rsrp) + 30 - pow_2_30_dB
-    - ((int)openair0_cfg[0].rx_gain[0] - (int)openair0_cfg[0].rx_gain_offset[0]) - dB_fixed(ue->frame_parms.ofdm_symbol_size);
-  LOG_D(NR_PHY, "%4d.%2d rsrp %d, rsrp_dBm %d, rsrp_sum %d, meas_count %d\n", proc->frame_rx, proc->nr_slot_rx, rsrp, *rsrp_dBm, rsrp_sum, meas_count);
 }
 
 void NFAPI_NR_DMRS_TYPE1_linear_interp(NR_DL_FRAME_PARMS *frame_parms,
@@ -1309,104 +922,80 @@ void NFAPI_NR_DMRS_TYPE1_linear_interp(NR_DL_FRAME_PARMS *frame_parms,
                                        c16_t *pil,
                                        c16_t *dl_ch,
                                        unsigned short bwp_start_subcarrier,
-                                       unsigned short nb_rb_pdsch,
-                                       int8_t delta)
+                                       int rb_offset,
+                                       int nb_rb_pdsch,
+                                       const uint8_t bitmap[36],
+                                       delay_t *delay,
+                                       uint32_t *nvar)
 {
-  int re_offset = bwp_start_subcarrier % frame_parms->ofdm_symbol_size;
-  c16_t *pil0 = pil;
   c16_t *dl_ch0 = dl_ch;
-  c16_t ch = {0};
-
-  const int16_t *fdcl = NULL;
-  const int16_t *fdcr = NULL;
-  const int16_t *fdclh = NULL;
-  const int16_t *fdcrh = NULL;
-  switch (delta) {
-    case 0: // port 0,1
-      fdcl = filt8_dcl0; // left DC interpolation Filter (even RB)
-      fdcr = filt8_dcr0; // right DC interpolation Filter (even RB)
-      fdclh = filt8_dcl0_h; // left DC interpolation Filter (odd RB)
-      fdcrh = filt8_dcr0_h; // right DC interpolation Filter (odd RB)
-      break;
-
-    case 1: // port2,3
-      fdcl = filt8_dcl1;
-      fdcr = filt8_dcr1;
-      fdclh = filt8_dcl1_h;
-      fdcrh = filt8_dcr1_h;
-      break;
-
-    default:
-      AssertFatal(1 == 0, "pdsch_channel_estimation: Invalid delta %i\n", delta);
-      break;
-  }
-
-  for (int pilot_cnt = 0; pilot_cnt < 6 * nb_rb_pdsch; pilot_cnt++) {
-    if (pilot_cnt % 2 == 0) {
-      ch = c16mulShift(*pil, rxF[re_offset], 15);
-      pil++;
-      re_offset = (re_offset + 2) % frame_parms->ofdm_symbol_size;
-      ch = c16maddShift(*pil, rxF[re_offset], ch, 15);
-      ch = c16Shift(ch, 1);
-      pil++;
-      re_offset = (re_offset + 2) % frame_parms->ofdm_symbol_size;
-    }
-
+  int re_offset = bwp_start_subcarrier % frame_parms->ofdm_symbol_size;
+  c16_t dl_ls_est[frame_parms->ofdm_symbol_size] __attribute__((aligned(32)));
+  memset(dl_ls_est, 0, sizeof(dl_ls_est));
+  int idx = 0;
+  for (int rb = rb_offset; rb < rb_offset + nb_rb_pdsch; rb++) {
+    bool allocated_rb = (bitmap[rb / 8] >> (rb % 8)) & 0x01;
+    if (allocated_rb) {
+      for (int pilot_cnt = 0; pilot_cnt < 6; pilot_cnt += 2) {
+        c16_t ch_l = c16mulShift(*pil, rxF[re_offset], 15);
 #ifdef DEBUG_PDSCH
-    printf("pilot %3d: pil -> (%6d,%6d), rxF -> (%4d,%4d), ch -> (%4d,%4d) \n", pilot_cnt, pil->r, pil->i, rxF[re_offset].r, rxF[re_offset].i, ch.r, ch.i);
+        printf("pilot %3d: pil -> (%6d,%6d), rxF -> (%4d,%4d), ch -> (%4d,%4d) \n", pilot_cnt, pil->r, pil->i, rxF[re_offset].r, rxF[re_offset].i, ch_l.r, ch_l.i);
 #endif
+        pil++;
+        re_offset = (re_offset + 2) % frame_parms->ofdm_symbol_size;
+        c16_t ch_r = c16mulShift(*pil, rxF[re_offset], 15);
+#ifdef DEBUG_PDSCH
+        printf("pilot %3d: pil -> (%6d,%6d), rxF -> (%4d,%4d), ch -> (%4d,%4d) \n", pilot_cnt + 1, pil->r, pil->i, rxF[re_offset].r, rxF[re_offset].i, ch_r.r, ch_r.i);
+#endif
+        c16_t ch = c16addShift(ch_l, ch_r, 1);
+        pil++;
+        re_offset = (re_offset + 2) % frame_parms->ofdm_symbol_size;
+        for (int k = 0; k < 4; k++) {
+          dl_ls_est[idx] = ch;
+          idx++;
+        }
+      }
+    } else {
+      pil += 6;
+      re_offset = (re_offset + 12) % frame_parms->ofdm_symbol_size;
+    }
+  }
+  c16_t ch_estimates_time[frame_parms->ofdm_symbol_size] __attribute__((aligned(32)));
+  nr_est_delay(frame_parms->ofdm_symbol_size, dl_ls_est, ch_estimates_time, delay);
+  int delay_idx = get_delay_idx(delay->est_delay, MAX_DELAY_COMP);
+  c16_t *dl_delay_table = frame_parms->delay_table[delay_idx];
 
+  for (int pilot_cnt = 0; pilot_cnt < idx >> 1; pilot_cnt++) {
+    int k = pilot_cnt << 1;
+    c16_t ch = c16mulShift(dl_ls_est[k], dl_delay_table[k], 8);
     if (pilot_cnt == 0) { // Treat first pilot
-      c16multaddVectRealComplex(filt16_dl_first, &ch, dl_ch, 16);
-    } else if (pilot_cnt == 6 * nb_rb_pdsch - 1) { // Treat last pilot
-      c16multaddVectRealComplex(filt16_dl_last, &ch, dl_ch, 16);
+      c16multaddVectRealComplex(filt16_ul_p0, &ch, dl_ch, 16);
+    } else if (pilot_cnt == 1 || pilot_cnt == 2) {
+      c16multaddVectRealComplex(filt16_ul_p1p2, &ch, dl_ch, 16);
+    } else if (pilot_cnt == (idx >> 1) - 1) { // Treat last pilot
+      c16multaddVectRealComplex(filt16_ul_last, &ch, dl_ch, 16);
     } else { // Treat middle pilots
-      c16multaddVectRealComplex(filt16_dl_middle, &ch, dl_ch, 16);
+      c16multaddVectRealComplex(filt16_ul_middle, &ch, dl_ch, 16);
       if (pilot_cnt % 2 == 0) {
-      dl_ch += 4;
+        dl_ch += 4;
       }
     }
   }
 
-  // check if PRB crosses DC and improve estimates around DC
-  if ((bwp_start_subcarrier < frame_parms->ofdm_symbol_size) && (bwp_start_subcarrier + nb_rb_pdsch * 12 >= frame_parms->ofdm_symbol_size)) {
-    dl_ch = dl_ch0;
-    uint16_t idxDC = 2 * (frame_parms->ofdm_symbol_size - bwp_start_subcarrier);
-    uint16_t idxPil = idxDC / 4;
-    re_offset = bwp_start_subcarrier % frame_parms->ofdm_symbol_size;
-    pil = pil0;
-    pil += (idxPil - 1);
-    dl_ch += (idxDC / 2 - 2);
-    dl_ch = memset(dl_ch, 0, sizeof(c16_t) * 5);
-    re_offset = (re_offset + idxDC / 2 - 2) % frame_parms->ofdm_symbol_size;
-    ch = c16mulShift(*pil, rxF[re_offset], 15);
-    pil++;
-    re_offset = (re_offset + 2) % frame_parms->ofdm_symbol_size;
-    ch = c16maddShift(*pil, rxF[re_offset], ch, 15);
-    ch = c16Shift(ch, 1);
+  // Revert delay
+  dl_ch = dl_ch0;
+  int nest_count = 0;
+  uint64_t noise_amp2 = 0;
+  int inv_delay_idx = get_delay_idx(-delay->est_delay, MAX_DELAY_COMP);
+  c16_t *dl_inv_delay_table = frame_parms->delay_table[inv_delay_idx];
+  for (int k = 0; k < idx; k++) {
+    dl_ch[k] = c16mulShift(dl_ch[k], dl_inv_delay_table[k], 8);
+    noise_amp2 += c16amp2(c16sub(dl_ls_est[k], dl_ch[k]));
+    nest_count++;
+  }
 
-    // for proper allignment of SIMD vectors
-    if ((frame_parms->N_RB_DL & 1) == 0) {
-      c16multaddVectRealComplex(fdcl, &ch, dl_ch - 2, 8);
-      pil++;
-      re_offset = (re_offset + 2) % frame_parms->ofdm_symbol_size;
-      ch = c16mulShift(*pil, rxF[re_offset], 15);
-      pil++;
-      re_offset = (re_offset + 2) % frame_parms->ofdm_symbol_size;
-      ch = c16maddShift(*pil, rxF[re_offset], ch, 15);
-      ch = c16Shift(ch, 1);
-      c16multaddVectRealComplex(fdcr, &ch, dl_ch - 2, 8);
-    } else {
-      c16multaddVectRealComplex(fdclh, &ch, dl_ch, 8);
-      pil++;
-      re_offset = (re_offset + 2) % frame_parms->ofdm_symbol_size;
-      ch = c16mulShift(*pil, rxF[re_offset], 15);
-      pil++;
-      re_offset = (re_offset + 2) % frame_parms->ofdm_symbol_size;
-      ch = c16maddShift(*pil, rxF[re_offset], ch, 15);
-      ch = c16Shift(ch, 1);
-      c16multaddVectRealComplex(fdcrh, &ch, dl_ch, 8);
-    }
+  if (nvar && nest_count > 0) {
+    *nvar = (uint32_t)(noise_amp2 / (nest_count * frame_parms->nb_antennas_rx));
   }
 }
 
@@ -1484,7 +1073,6 @@ void NFAPI_NR_DMRS_TYPE1_average_prb(NR_DL_FRAME_PARMS *frame_parms,
   for (int i = 0; i < 2 * P_average; i++) {
     dl_ch[i] = ch;
   }
-  dl_ch += 2 * P_average;
 #else
   dl_ch[3].r += (ch.r * 1365) >> 15; // 1/12*16384
   dl_ch[3].i += (ch.i * 1365) >> 15; // 1/12*16384
@@ -1500,77 +1088,81 @@ void NFAPI_NR_DMRS_TYPE2_linear_interp(NR_DL_FRAME_PARMS *frame_parms,
                                        c16_t *pil,
                                        c16_t *dl_ch,
                                        unsigned short bwp_start_subcarrier,
-                                       unsigned short nb_rb_pdsch,
-                                       int8_t delta,
-                                       unsigned short p)
+                                       int rb_offset,
+                                       int nb_rb_pdsch,
+                                       const uint8_t bitmap[36],
+                                       delay_t *delay,
+                                       uint32_t *nvar)
 {
   int re_offset = bwp_start_subcarrier % frame_parms->ofdm_symbol_size;
   c16_t *dl_ch0 = dl_ch;
-  c16_t ch = {0};
-  c16_t ch_l = {0};
-  c16_t ch_r = {0};
-
-  for (int pilot_cnt = 0; pilot_cnt < 4 * nb_rb_pdsch; pilot_cnt += 2) {
-    ch_l = c16mulShift(*pil, rxF[re_offset], 15);
+  c16_t dl_ls_est[frame_parms->ofdm_symbol_size] __attribute__((aligned(32)));
+  memset(dl_ls_est, 0, sizeof(dl_ls_est));
+  int idx = 0;
+  for (int rb = rb_offset; rb < rb_offset + nb_rb_pdsch; rb++) {
+    bool allocated_rb = (bitmap[rb / 8] >> (rb % 8)) & 0x01;
+    if (allocated_rb) {
+      for (int pilot_cnt = 0; pilot_cnt < 4; pilot_cnt += 2) {
+        c16_t ch_l = c16mulShift(*pil, rxF[re_offset], 15);
 #ifdef DEBUG_PDSCH
-    printf("pilot %3d: pil -> (%6d,%6d), rxF -> (%4d,%4d), ch -> (%4d,%4d) \n", pilot_cnt, pil->r, pil->i, rxF[re_offset].r, rxF[re_offset].i, ch_l.r, ch_l.i);
+        printf("pilot %3d: pil -> (%6d,%6d), rxF -> (%4d,%4d), ch -> (%4d,%4d) \n", pilot_cnt, pil->r, pil->i, rxF[re_offset].r, rxF[re_offset].i, ch_l.r, ch_l.i);
 #endif
-    pil++;
-    re_offset = (re_offset + 1) % frame_parms->ofdm_symbol_size;
-    ch_r = c16mulShift(*pil, rxF[re_offset], 15);
+        pil++;
+        re_offset = (re_offset + 1) % frame_parms->ofdm_symbol_size;
+        c16_t ch_r = c16mulShift(*pil, rxF[re_offset], 15);
 #ifdef DEBUG_PDSCH
-    printf("pilot %3d: pil -> (%6d,%6d), rxF -> (%4d,%4d), ch -> (%4d,%4d) \n", pilot_cnt, pil->r, pil->i, rxF[re_offset].r, rxF[re_offset].i, ch_r.r, ch_r.i);
+        printf("pilot %3d: pil -> (%6d,%6d), rxF -> (%4d,%4d), ch -> (%4d,%4d) \n", pilot_cnt + 1, pil->r, pil->i, rxF[re_offset].r, rxF[re_offset].i, ch_r.r, ch_r.i);
 #endif
-    ch = c16addShift(ch_l, ch_r, 1);
-    if (pilot_cnt == 1) {
-      multadd_real_vector_complex_scalar(filt16_dl_first_type2, (int16_t *)&ch, (int16_t *)dl_ch, 16);
-      dl_ch += 3;
-    } else if (pilot_cnt == (4 * nb_rb_pdsch - 1)) {
-      multadd_real_vector_complex_scalar(filt16_dl_last_type2, (int16_t *)&ch, (int16_t *)dl_ch, 16);
+        c16_t ch = c16addShift(ch_l, ch_r, 1);
+        pil++;
+        re_offset = (re_offset + 5) % frame_parms->ofdm_symbol_size;
+        for (int k = 0; k < 6; k++) {
+          dl_ls_est[idx] = ch;
+          idx++;
+        }
+      }
     } else {
-      multadd_real_vector_complex_scalar(filt16_dl_middle_type2, (int16_t *)&ch, (int16_t *)dl_ch, 16);
-      dl_ch += 6;
+      pil += 4;
+      re_offset = (re_offset + 12) % frame_parms->ofdm_symbol_size;
     }
-    pil++;
-    re_offset = (re_offset + 5) % frame_parms->ofdm_symbol_size;
   }
 
-  // check if PRB crosses DC and improve estimates around DC
-  if ((bwp_start_subcarrier < frame_parms->ofdm_symbol_size) && (bwp_start_subcarrier + nb_rb_pdsch * 12 >= frame_parms->ofdm_symbol_size) && (p < 2)) {
-    dl_ch = dl_ch0;
-    uint16_t idxDC = 2 * (frame_parms->ofdm_symbol_size - bwp_start_subcarrier);
-    dl_ch += (idxDC / 2 - 4);
-    dl_ch = memset(dl_ch, 0, sizeof(c16_t) * 10);
-
-    dl_ch--;
-    ch_r = *dl_ch;
-    dl_ch += 11;
-    ch_l = *dl_ch;
-
-    // for proper allignment of SIMD vectors
-    if ((frame_parms->N_RB_DL & 1) == 0) {
-      dl_ch -= 10;
-      // Interpolate fdcrl1 with ch_r
-      c16multaddVectRealComplex(filt8_dcrl1, &ch_r, dl_ch, 8);
-      // Interpolate fdclh1 with ch_l
-      c16multaddVectRealComplex(filt8_dclh1, &ch_l, dl_ch, 8);
-      dl_ch += 8;
-      // Interpolate fdcrh1 with ch_r
-      c16multaddVectRealComplex(filt8_dcrh1, &ch_r, dl_ch, 8);
-      // Interpolate fdcll1 with ch_l
-      c16multaddVectRealComplex(filt8_dcll1, &ch_l, dl_ch, 8);
-    } else {
-      dl_ch -= 14;
-      // Interpolate fdcrl1 with ch_r
-      c16multaddVectRealComplex(filt8_dcrl2, &ch_r, dl_ch, 8);
-      // Interpolate fdclh1 with ch_l
-      c16multaddVectRealComplex(filt8_dclh2, &ch_l, dl_ch, 8);
-      dl_ch += 8;
-      // Interpolate fdcrh1 with ch_r
-      c16multaddVectRealComplex(filt8_dcrh2, &ch_r, dl_ch, 8);
-      // Interpolate fdcll1 with ch_l
-      c16multaddVectRealComplex(filt8_dcll2, &ch_l, dl_ch, 8);
+  c16_t ch_estimates_time[frame_parms->ofdm_symbol_size] __attribute__((aligned(32)));
+  nr_est_delay(frame_parms->ofdm_symbol_size, dl_ls_est, ch_estimates_time, delay);
+  int delay_idx = get_delay_idx(delay->est_delay, MAX_DELAY_COMP);
+  c16_t *dl_delay_table = frame_parms->delay_table[delay_idx];
+  // kept the same as before but unclear why  would it be nb_rb_pdsch / 2 and not / 3
+  for (int pilot_cnt = 0; pilot_cnt < idx >> 1; pilot_cnt++) {
+    int k = pilot_cnt << 1;
+    c16_t ch = c16mulShift(dl_ls_est[k], dl_delay_table[k], 8);
+    if (pilot_cnt == 0) { // Treat first pilot
+      c16multaddVectRealComplex(filt16_ul_p0, &ch, dl_ch, 16);
+    } else if (pilot_cnt == 1 || pilot_cnt == 2) {
+      c16multaddVectRealComplex(filt16_ul_p1p2, &ch, dl_ch, 16);
+    } else if (pilot_cnt == (idx >> 1) - 1) { // Treat last pilot
+      c16multaddVectRealComplex(filt16_ul_last, &ch, dl_ch, 16);
+    } else { // Treat middle pilots
+      c16multaddVectRealComplex(filt16_ul_middle, &ch, dl_ch, 16);
+      if (pilot_cnt % 2 == 0) {
+        dl_ch += 4;
+      }
     }
+  }
+
+  // Revert delay
+  dl_ch = dl_ch0;
+  int nest_count = 0;
+  uint64_t noise_amp2 = 0;
+  int inv_delay_idx = get_delay_idx(-delay->est_delay, MAX_DELAY_COMP);
+  c16_t *dl_inv_delay_table = frame_parms->delay_table[inv_delay_idx];
+  for (int k = 0; k < idx; k++) {
+    dl_ch[k] = c16mulShift(dl_ch[k], dl_inv_delay_table[k], 8);
+    noise_amp2 += c16amp2(c16sub(dl_ls_est[k], dl_ch[k]));
+    nest_count++;
+  }
+
+  if (nvar && nest_count > 0) {
+    *nvar = (uint32_t)(noise_amp2 / (nest_count * frame_parms->nb_antennas_rx));
   }
 }
 
@@ -1648,7 +1240,6 @@ void NFAPI_NR_DMRS_TYPE2_average_prb(NR_DL_FRAME_PARMS *frame_parms,
   for (int i = 0; i < 3 * P_average; i++) {
     dl_ch[i] = ch;
   }
-  dl_ch += 3 * P_average;
 #else
   dl_ch[3].r += (ch.r * 1365) >> 15; // 1/12*16384
   dl_ch[3].i += (ch.i * 1365) >> 15; // 1/12*16384
@@ -1658,112 +1249,100 @@ void NFAPI_NR_DMRS_TYPE2_average_prb(NR_DL_FRAME_PARMS *frame_parms,
   c16multaddVectRealComplex(filt8_avlip6, &ch, dl_ch, 8);
 #endif
 }
-int nr_pdsch_channel_estimation(PHY_VARS_NR_UE *ue,
-                                UE_nr_rxtx_proc_t *proc,
-                                unsigned short p,
-                                unsigned char symbol,
-                                unsigned char nscid,
-                                unsigned short scrambling_id,
-                                unsigned short BWPStart,
-                                uint8_t config_type,
-                                uint16_t rb_offset,
-                                unsigned short bwp_start_subcarrier,
-                                unsigned short nb_rb_pdsch,
-                                uint32_t pdsch_est_size,
-                                int32_t dl_ch_estimates[][pdsch_est_size],
-                                int rxdataFsize,
-                                c16_t rxdataF[][rxdataFsize])
+
+void nr_pdsch_channel_estimation(PHY_VARS_NR_UE *ue,
+                                 const UE_nr_rxtx_proc_t *proc,
+                                 const fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch,
+                                 const freq_alloc_bitmap_t *freq_alloc,
+                                 int nl,
+                                 unsigned short p,
+                                 unsigned char symbol,
+                                 uint32_t pdsch_est_size,
+                                 int32_t dl_ch_estimates[][pdsch_est_size],
+                                 int rxdataFsize,
+                                 c16_t rxdataF[][rxdataFsize],
+                                 uint32_t *nvar)
 {
-  int gNB_id = proc->gNB_id;
-  int Ns = proc->nr_slot_rx;
-  const int ch_offset = ue->frame_parms.ofdm_symbol_size * symbol;
-  const int symbol_offset = ue->frame_parms.ofdm_symbol_size * symbol;
+  // int gNB_id = proc->gNB_id;
+  int slot = proc->nr_slot_rx;
+  NR_DL_FRAME_PARMS *fp = &ue->frame_parms;
+  const int ch_offset = fp->ofdm_symbol_size * symbol;
+  const int symbol_offset = fp->ofdm_symbol_size * symbol;
+  int bwp_start_subcarrier = fp->first_carrier_offset + (dlsch->BWPStart + freq_alloc->start[0]) * 12;
 
 #ifdef DEBUG_PDSCH
-  printf("PDSCH Channel Estimation : gNB_id %d ch_offset %d, symbol_offset %d OFDM size %d, Ncp=%d, Ns=%d, bwp_start_subcarrier=%d symbol %d\n",
-         gNB_id,
-         ch_offset,
-         symbol_offset,
-         ue->frame_parms.ofdm_symbol_size,
-         ue->frame_parms.Ncp,
-         Ns,
-         bwp_start_subcarrier,
-         symbol);
+  printf(
+      "PDSCH Channel Estimation : ch_offset %d, symbol_offset %d OFDM size %d, Ncp=%d, Ns=%d, bwp_start_subcarrier=%d "
+      "symbol %d\n",
+      ch_offset,
+      symbol_offset,
+      fp->ofdm_symbol_size,
+      fp->Ncp,
+      slot,
+      bwp_start_subcarrier,
+      symbol);
 #endif
 
   // generate pilot for gNB port number 1000+p
+  int config_type = dlsch->dmrsConfigType;
+  int rb_offset = freq_alloc->start[0] + (dlsch->refPoint ? 0 : dlsch->BWPStart);
+  int nb_rb_pdsch = freq_alloc->end[freq_alloc->num_blocks - 1] - freq_alloc->start[0] + 1;
   int8_t delta = get_delta(p, config_type);
-
-  // checking if re-initialization of scrambling IDs is needed
-  if (scrambling_id != ue->scramblingID_dlsch[nscid]) {
-    ue->scramblingID_dlsch[nscid] = scrambling_id;
-    nr_gold_pdsch(ue, nscid, scrambling_id);
-  }
-
   c16_t pilot[3280] __attribute__((aligned(16)));
-  nr_pdsch_dmrs_rx(ue, Ns, ue->nr_gold_pdsch[gNB_id][Ns][symbol][0], (int32_t *)pilot, 1000 + p, 0, nb_rb_pdsch + rb_offset, config_type);
+  // Note: pilot returned by the following function is already the complex conjugate of the transmitted DMRS
+  float beta_dmrs_pdsch = get_beta_dmrs(dlsch->n_dmrs_cdm_groups, config_type == NFAPI_NR_DMRS_TYPE2);
+  int16_t dmrs_scaling = (int16_t)((1 / beta_dmrs_pdsch) * (1 << 14));
+  const uint32_t *gold = nr_gold_pdsch(fp->N_RB_DL, fp->symbols_per_slot, dlsch->dlDmrsScramblingId, dlsch->nscid, slot, symbol);
+  nr_pdsch_dmrs_rx(ue, slot, gold, pilot, 1000 + p, 0, nb_rb_pdsch + rb_offset, config_type, dmrs_scaling);
 
-  uint8_t nushift = 0;
-  if (config_type == NFAPI_NR_DMRS_TYPE1) {
-    nushift = (p >> 1) & 1;
-    if (p < 4)
-      ue->frame_parms.nushift = nushift;
-  } else { // NFAPI_NR_DMRS_TYPE2
-    nushift = delta;
-    if (p < 6)
-      ue->frame_parms.nushift = nushift;
-  }
+  delay_t delay = {0};
 
-  for (int aarx = 0; aarx < ue->frame_parms.nb_antennas_rx; aarx++) {
-
+  for (int aarx = 0; aarx < fp->nb_antennas_rx; aarx++) {
 #ifdef DEBUG_PDSCH
     printf("\n============================================\n");
     printf("==== Tx port %i, Rx antenna %i, Symbol %i ====\n", p, aarx, symbol);
     printf("============================================\n");
 #endif
 
-    c16_t *rxF = &rxdataF[aarx][symbol_offset + nushift];
-    c16_t *dl_ch = (c16_t *)&dl_ch_estimates[p * ue->frame_parms.nb_antennas_rx + aarx][ch_offset];
-    memset(dl_ch, 0, sizeof(*dl_ch) * ue->frame_parms.ofdm_symbol_size);
+    c16_t *rxF = &rxdataF[aarx][symbol_offset + delta];
+    c16_t *dl_ch = (c16_t *)&dl_ch_estimates[nl * fp->nb_antennas_rx + aarx][ch_offset];
+    memset(dl_ch, 0, sizeof(*dl_ch) * fp->ofdm_symbol_size);
 
     if (config_type == NFAPI_NR_DMRS_TYPE1 && ue->chest_freq == 0) {
-      NFAPI_NR_DMRS_TYPE1_linear_interp(&ue->frame_parms,
+      NFAPI_NR_DMRS_TYPE1_linear_interp(fp,
                                         rxF,
                                         &pilot[6 * rb_offset],
                                         dl_ch,
                                         bwp_start_subcarrier,
+                                        freq_alloc->start[0],
                                         nb_rb_pdsch,
-                                        delta);
+                                        freq_alloc->bitmap,
+                                        &delay,
+                                        nvar);
 
     } else if (config_type == NFAPI_NR_DMRS_TYPE2 && ue->chest_freq == 0) {
-      NFAPI_NR_DMRS_TYPE2_linear_interp(&ue->frame_parms,
+      NFAPI_NR_DMRS_TYPE2_linear_interp(fp,
                                         rxF,
                                         &pilot[4 * rb_offset],
                                         dl_ch,
                                         bwp_start_subcarrier,
+                                        freq_alloc->start[0],
                                         nb_rb_pdsch,
-                                        delta,
-                                        p);
+                                        freq_alloc->bitmap,
+                                        &delay,
+                                        nvar);
 
     } else if (config_type == NFAPI_NR_DMRS_TYPE1) {
-      NFAPI_NR_DMRS_TYPE1_average_prb(&ue->frame_parms,
-                                      rxF,
-                                      &pilot[6 * rb_offset],
-                                      dl_ch,
-                                      bwp_start_subcarrier,
-                                      nb_rb_pdsch);
+      AssertFatal(dlsch->resource_alloc == 1, "PRB average in channel estimation not supported for type0 DLSCH\n");
+      NFAPI_NR_DMRS_TYPE1_average_prb(fp, rxF, &pilot[6 * rb_offset], dl_ch, bwp_start_subcarrier, nb_rb_pdsch);
 
     } else {
-      NFAPI_NR_DMRS_TYPE2_average_prb(&ue->frame_parms,
-                                      rxF,
-                                      &pilot[4 * rb_offset],
-                                      dl_ch,
-                                      bwp_start_subcarrier,
-                                      nb_rb_pdsch);
+      AssertFatal(dlsch->resource_alloc == 1, "PRB average in channel estimation not supported for type0 DLSCH\n");
+      NFAPI_NR_DMRS_TYPE2_average_prb(fp, rxF, &pilot[4 * rb_offset], dl_ch, bwp_start_subcarrier, nb_rb_pdsch);
     }
 
 #ifdef DEBUG_PDSCH
-    dl_ch = (c16_t *)&dl_ch_estimates[p * ue->frame_parms.nb_antennas_rx + aarx][ch_offset];
+    dl_ch = (c16_t *)&dl_ch_estimates[nl * fp->nb_antennas_rx + aarx][ch_offset];
     for (uint16_t idxP = 0; idxP < ceil((float)nb_rb_pdsch * 12 / 8); idxP++) {
       for (uint8_t idxI = 0; idxI < 8; idxI++) {
         printf("%4d\t%4d\t", dl_ch[idxP * 8 + idxI].r, dl_ch[idxP * 8 + idxI].i);
@@ -1772,7 +1351,6 @@ int nr_pdsch_channel_estimation(PHY_VARS_NR_UE *ue,
     }
 #endif
   }
-  return 0;
 }
 
 /*******************************************************************
@@ -1790,7 +1368,6 @@ int nr_pdsch_channel_estimation(PHY_VARS_NR_UE *ue,
  *                uint8_t           : gNB_id,
  *                uint8_t           : nr_slot_rx,
  *                unsigned char     : symbol,
- *                uint32_t          : nb_re_pdsch,
  *                uint16_t          : rnti
  *                RX_type_t         : rx_type
  * RETURN : Nothing
@@ -1813,7 +1390,6 @@ void nr_pdsch_ptrs_processing(PHY_VARS_NR_UE *ue,
                               uint8_t gNB_id,
                               uint8_t nr_slot_rx,
                               unsigned char symbol,
-                              uint32_t nb_re_pdsch,
                               uint16_t rnti,
                               NR_UE_DLSCH_t dlsch[2])
 {
@@ -1830,8 +1406,8 @@ void nr_pdsch_ptrs_processing(PHY_VARS_NR_UE *ue,
   uint16_t *ptrsSymbPos     = NULL;
   uint8_t  *ptrsSymbIdx     = NULL;
   uint8_t  *ptrsReOffset    = NULL;
-  uint8_t  *dmrsConfigType  = NULL;
   uint16_t *nb_rb           = NULL;
+  int nscid = 0;
 
   if(dlsch0_harq->status == ACTIVE) {
     symbInSlot      = dlsch[0].dlsch_config.start_symbol + dlsch[0].dlsch_config.number_symbols;
@@ -1841,10 +1417,10 @@ void nr_pdsch_ptrs_processing(PHY_VARS_NR_UE *ue,
     K_ptrs          = &dlsch[0].dlsch_config.PTRSFreqDensity;
     dmrsSymbPos     = &dlsch[0].dlsch_config.dlDmrsSymbPos;
     ptrsReOffset    = &dlsch[0].dlsch_config.PTRSReOffset;
-    dmrsConfigType  = &dlsch[0].dlsch_config.dmrsConfigType;
     nb_rb           = &dlsch[0].dlsch_config.number_rbs;
     ptrsSymbPos     = &dlsch[0].ptrs_symbols;
     ptrsSymbIdx     = &dlsch[0].ptrs_symbol_index;
+    nscid = dlsch[0].dlsch_config.nscid;
   }
   if(dlsch1_harq) {
     symbInSlot      = dlsch[1].dlsch_config.start_symbol + dlsch[1].dlsch_config.number_symbols;
@@ -1854,10 +1430,10 @@ void nr_pdsch_ptrs_processing(PHY_VARS_NR_UE *ue,
     K_ptrs          = &dlsch[1].dlsch_config.PTRSFreqDensity;
     dmrsSymbPos     = &dlsch[1].dlsch_config.dlDmrsSymbPos;
     ptrsReOffset    = &dlsch[1].dlsch_config.PTRSReOffset;
-    dmrsConfigType  = &dlsch[1].dlsch_config.dmrsConfigType;
     nb_rb           = &dlsch[1].dlsch_config.number_rbs;
     ptrsSymbPos     = &dlsch[1].ptrs_symbols;
     ptrsSymbIdx     = &dlsch[1].ptrs_symbol_index;
+    nscid = dlsch[1].dlsch_config.nscid;
   }
   /* loop over antennas */
   for (int aarx=0; aarx<frame_parms->nb_antennas_rx; aarx++) {
@@ -1894,14 +1470,18 @@ void nr_pdsch_ptrs_processing(PHY_VARS_NR_UE *ue,
         /*------------------------------------------------------------------------------------------------------- */
         /* 1) Estimate common phase error per PTRS symbol                                                                */
         /*------------------------------------------------------------------------------------------------------- */
-        nr_ptrs_cpe_estimation(*K_ptrs,*ptrsReOffset,*dmrsConfigType,*nb_rb,
+        const uint32_t *gold =
+            nr_gold_pdsch(frame_parms->N_RB_DL, frame_parms->symbols_per_slot, frame_parms->Nid_cell, nscid, nr_slot_rx, symbol);
+        nr_ptrs_cpe_estimation(*K_ptrs,
+                               *ptrsReOffset,
+                               *nb_rb,
                                rnti,
                                nr_slot_rx,
                                symbol,
                                frame_parms->ofdm_symbol_size,
-                               (int16_t *)(rxdataF_comp[0][aarx] + symbol * nb_re_pdsch),
-                               ue->nr_gold_pdsch[gNB_id][nr_slot_rx][symbol][0],
-                               (int16_t*)&phase_per_symbol[symbol],
+                               (int16_t *)(rxdataF_comp[0][aarx] + symbol * rx_size_symbol),
+                               gold,
+                               (int16_t *)&phase_per_symbol[symbol],
                                &ptrs_re_symbol[symbol]);
       }
     }// HARQ 0
@@ -1920,21 +1500,21 @@ void nr_pdsch_ptrs_processing(PHY_VARS_NR_UE *ue,
       }
 #ifdef DEBUG_DL_PTRS
       LOG_M("ptrsEst.m","est",ptrs_phase_per_slot[aarx],frame_parms->symbols_per_slot,1,1 );
-      LOG_M("rxdataF_bf_ptrs_comp.m", "bf_ptrs_cmp", rxdataF_comp[0][aarx] + (*startSymbIndex) * NR_NB_SC_PER_RB * (*nb_rb), (*nb_rb) * NR_NB_SC_PER_RB * (*nbSymb), 1, 1);
+      LOG_M("rxdataF_bf_ptrs_comp.m", "bf_ptrs_cmp", rxdataF_comp[0][aarx] + (*startSymbIndex) * rx_size_symbol, rx_size_symbol * (*nbSymb), 1, 1);
 #endif
       /*------------------------------------------------------------------------------------------------------- */
       /* 3) Compensated DMRS based estimated signal with PTRS estimation                                        */
       /*--------------------------------------------------------------------------------------------------------*/
-      for(uint8_t i = *startSymbIndex; i< symbInSlot ;i++) {
+      for(uint8_t i = *startSymbIndex; i < symbInSlot; i++) {
         /* DMRS Symbol has 0 phase so no need to rotate the respective symbol */
         /* Skip rotation if the slot processing is wrong */
-        if((!is_dmrs_symbol(i,*dmrsSymbPos)) && (ret == 0)) {
+        if((!is_dmrs_symbol(i, *dmrsSymbPos)) && (ret == 0)) {
 #ifdef DEBUG_DL_PTRS
           printf("[PHY][DL][PTRS]: Rotate Symbol %2d with  %d + j* %d\n", i, phase_per_symbol[i].r,phase_per_symbol[i].i);
 #endif
-          rotate_cpx_vector((c16_t *)&rxdataF_comp[0][aarx][(i * (*nb_rb) * NR_NB_SC_PER_RB)],
+          rotate_cpx_vector((c16_t *)&rxdataF_comp[0][aarx][i * rx_size_symbol],
                             &phase_per_symbol[i],
-                            (c16_t *)&rxdataF_comp[0][aarx][(i * (*nb_rb) * NR_NB_SC_PER_RB)],
+                            (c16_t *)&rxdataF_comp[0][aarx][i * rx_size_symbol],
                             ((*nb_rb) * NR_NB_SC_PER_RB),
                             15);
         }// if not DMRS Symbol

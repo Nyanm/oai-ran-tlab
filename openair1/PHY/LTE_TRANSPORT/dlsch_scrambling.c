@@ -154,8 +154,8 @@ void dlsch_scrambling(LTE_DL_FRAME_PARMS *frame_parms,
     e[30] = (e[30]) ^ ((s>>30)&1);
     e[31] = (e[31]) ^ ((s>>31)&1);
     // This is not faster for some unknown reason
-    //    ((__m128i *)e)[0] = _mm_xor_si128(((__m128i *)e)[0],((__m128i *)scrambling_lut)[s&65535]);
-    //    ((__m128i *)e)[1] = _mm_xor_si128(((__m128i *)e)[1],((__m128i *)scrambling_lut)[s>>16]);
+    //    ((simde__m128i *)e)[0] = simde_mm_xor_si128(((simde__m128i *)e)[0],((simde__m128i *)scrambling_lut)[s&65535]);
+    //    ((simde__m128i *)e)[1] = simde_mm_xor_si128(((simde__m128i *)e)[1],((simde__m128i *)scrambling_lut)[s>>16]);
     s = lte_gold_generic(&x1, &x2, 0);
     e += 32;
   }
@@ -202,7 +202,7 @@ void dlsch_unscrambling(LTE_DL_FRAME_PARMS *frame_parms,
   for (i=0; i<(1+(G>>5)); i++) {
     for (j=0; j<32; j++,k++) {
 #ifdef DEBUG_SCRAMBLING
-      printf("unscrambling %d : %d xor %d =",k,llr[k],(s>>j)&1);
+      printf("unscrambling %d : %d xor %u =", k, llr[k], (s >> j) & 1);
 #endif
       llr[k] = ((2*((s>>j)&1))-1)*llr[k];
 #ifdef DEBUG_SCRAMBLING

@@ -24,12 +24,20 @@
 	<htmlTabRef>build-tab</htmlTabRef>
 	<htmlTabName>Build Images on Cluster</htmlTabName>
 	<htmlTabIcon>wrench</htmlTabIcon>
-	<TestCaseRequestedList>000001</TestCaseRequestedList>
+	<TestCaseRequestedList>
+	000002
+	000001
+	</TestCaseRequestedList>
 	<TestCaseExclusionList></TestCaseExclusionList>
-
+	<testCase id="000002">
+		<class>Create_Workspace</class>
+		<desc>Create new Workspace</desc>
+		<node>poseidon</node>
+	</testCase>
 	<testCase id="000001">
 		<class>Build_Cluster_Image</class>
 		<desc>Build Images on OpenShift Cluster</desc>
+		<node>poseidon</node>
 	</testCase>
 
 </testCaseList>

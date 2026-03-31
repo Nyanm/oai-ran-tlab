@@ -60,6 +60,9 @@ ForEachMacros:
   - foreach
   - Q_FOREACH
   - BOOST_FOREACH
+  - RB_FOREACH
+  - UE_iterator
+  - FOR_EACH_SEQ_ARR
 IncludeBlocks:   Preserve
 IncludeCategories:
   - Regex:           '^<ext/.*\.h>'

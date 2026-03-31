@@ -33,26 +33,19 @@
 #ifndef __NR_IF_MODULE_H__
 #define __NR_IF_MODULE_H__
 
-#include "platform_types.h"
-#include <semaphore.h>
+#include "common/platform_types.h"
 #include "fapi_nr_ue_interface.h"
-#include "openair2/PHY_INTERFACE/queue_t.h"
-#include "nfapi_nr_interface_scf.h"
 #include "openair2/NR_PHY_INTERFACE/NR_IF_Module.h"
-#include "NR_Packet_Drop.h"
 #include "nfapi/open-nFAPI/nfapi/public_inc/sidelink_nr_ue_interface.h"
 
 typedef enum sl_sidelink_slot_type {
 
-    SIDELINK_SLOT_TYPE_NONE = 0,
-    SIDELINK_SLOT_TYPE_RX,
-    SIDELINK_SLOT_TYPE_TX,
-    SIDELINK_SLOT_TYPE_BOTH
+  SIDELINK_SLOT_TYPE_NONE = 0,
+  SIDELINK_SLOT_TYPE_RX,
+  SIDELINK_SLOT_TYPE_TX,
+  SIDELINK_SLOT_TYPE_BOTH
 
 } sl_sidelink_slot_type_t;
-
-
-extern slot_rnti_mcs_s slot_rnti_mcs[NUM_NFAPI_SLOT];
 
 typedef struct NR_UL_TIME_ALIGNMENT NR_UL_TIME_ALIGNMENT_t;
 
@@ -67,22 +60,6 @@ typedef struct {
   frame_t frame;
   /// slot
   int slot;
-
-  fapi_nr_dl_config_request_t dl_config_req;
-  fapi_nr_ul_config_request_t ul_config_req;
-} nr_dcireq_t;
-
-typedef struct {
-    /// module id
-    module_id_t module_id;
-    /// gNB index
-    uint32_t gNB_index;
-    /// component carrier id
-    int cc_id;
-    /// frame 
-    frame_t frame;
-    /// slot
-    int slot;
 
     /// NR UE FAPI-like P7 message, direction: L1 to L2
     /// data reception indication structure
@@ -105,14 +82,10 @@ typedef struct {
     uint32_t gNB_index;
     /// component carrier id
     int cc_id;
-    /// frame 
-    frame_t frame_rx;
-    /// slot rx
-    uint32_t slot_rx;
     /// frame tx
-    frame_t frame_tx;
+    frame_t frame;
     /// slot tx
-    uint32_t slot_tx;
+    uint32_t slot;
 
     /// dci reception indication structure
     fapi_nr_dci_indication_t *dci_ind;
@@ -136,7 +109,7 @@ typedef struct {
     frame_t frame_tx;
     /// slot tx
     uint32_t slot_tx;
-    //slot type rx or tx
+    // slot type rx or tx
     sl_sidelink_slot_type_t slot_type;
 
     /// NR UE FAPI-like P7 message, direction: L1 to L2
@@ -154,17 +127,13 @@ typedef struct {
 
 // Downlink subframe P7
 
-
+struct PHY_VARS_NR_UE_s;
+struct NR_UE_MAC_INST_s;
 typedef struct {
     /// module id
     module_id_t module_id; 
     /// component carrier id
     int CC_id;
-    /// frame
-    frame_t frame;
-    /// slot
-    int slot;
-
     /// NR UE FAPI-like P7 message, direction: L2 to L1
     /// downlink transmission configuration request structure
     fapi_nr_dl_config_request_t *dl_config;
@@ -178,12 +147,10 @@ typedef struct {
     // Sidelink TX configuration request
     sl_nr_tx_config_request_t *sl_tx_config;
 
-    /// data transmission request structure
-    fapi_nr_tx_request_t *tx_request;
-
     /// PHY data structure initially passed on to L2 via the nr_downlink_indication_t and
     /// returned to L1 via nr_scheduled_response_t
     void *phy_data;
+    struct NR_UE_MAC_INST_s *mac;
 } nr_scheduled_response_t;
 
 typedef struct {
@@ -237,26 +204,20 @@ typedef int8_t (nr_ue_scheduled_response_f)(nr_scheduled_response_t *scheduled_r
  *  -1: Failed to consume bytes. Abort the mission.
  * Non-negative return values indicate success, and ignored.
  */
-typedef int8_t (nr_sl_ue_scheduled_response_f)(nr_scheduled_response_t *sl_scheduled_response);
+typedef void (nr_sl_ue_scheduled_response_f)(nr_scheduled_response_t *sl_scheduled_response);
 
 
 /*
  * Generic type of an application-defined callback to return various
  * types of data to the application.
- * EXPECTED RETURN VALUES:
- *  -1: Failed to consume bytes. Abort the mission.
- * Non-negative return values indicate success, and ignored.
  */
-typedef int8_t (nr_ue_phy_config_request_f)(nr_phy_config_t *phy_config);
+typedef void (nr_ue_phy_config_request_f)(nr_phy_config_t *phy_config);
 
 /*
  * Generic type of an application-defined callback to return various
  * types of data to the application.
- * EXPECTED RETURN VALUES:
- *  -1: Failed to consume bytes. Abort the mission.
- * Non-negative return values indicate success, and ignored.
  */
-typedef int8_t (nr_ue_sl_phy_config_request_f)(nr_sl_phy_config_t *sl_phy_config);
+typedef void(nr_ue_sl_phy_config_request_f)(nr_sl_phy_config_t *sl_phy_config);
 
 /*
  * Generic type of an application-defined callback to return various
@@ -283,6 +244,7 @@ typedef int (nr_ue_dl_indication_f)(nr_downlink_indication_t *dl_info);
  */
 typedef int (nr_ue_ul_indication_f)(nr_uplink_indication_t *ul_info);
 
+typedef void (nr_ue_slot_indication_f)(uint8_t mod_id, bool is_tx);
 
 /*
  * Generic type of an application-defined callback to return various
@@ -291,7 +253,7 @@ typedef int (nr_ue_ul_indication_f)(nr_uplink_indication_t *ul_info);
  *  -1: Failed to consume bytes. Abort the mission.
  * Non-negative return values indicate success, and ignored.
  */
-typedef int (nr_ue_sl_indication_f)(nr_sidelink_indication_t *sl_info);
+typedef void (nr_ue_sl_indication_f)(nr_sidelink_indication_t *sl_info);
 
 //  TODO check this stuff can be reuse of need modification
 typedef struct nr_ue_if_module_s {
@@ -302,6 +264,7 @@ typedef struct nr_ue_if_module_s {
   nr_ue_dl_indication_f      *dl_indication;
   nr_ue_ul_indication_f      *ul_indication;
   nr_ue_sl_indication_f      *sl_indication;
+  nr_ue_slot_indication_f    *slot_indication;
   uint32_t cc_mask;
   uint32_t current_frame;
   uint32_t current_slot;
@@ -313,70 +276,15 @@ typedef struct nr_ue_if_module_s {
    \param module_id module id*/
 nr_ue_if_module_t *nr_ue_if_module_init(uint32_t module_id);
 
-void nrue_init_standalone_socket(int tx_port, int rx_port);
-
-void *nrue_standalone_pnf_task(void *context);
-extern sem_t sfn_slot_semaphore;
-
-typedef struct nfapi_dl_tti_config_req_tx_data_req_t
-{
-    nfapi_nr_dl_tti_request_pdu_t *dl_itti_config_req;
-    nfapi_nr_tx_data_request_t *tx_data_req_pdu_list;
-} nfapi_dl_tti_config_req_tx_data_req_t;
-
-void send_nsa_standalone_msg(NR_UL_IND_t *UL_INFO, uint16_t msg_id);
-
-void save_nr_measurement_info(nfapi_nr_dl_tti_request_t *dl_tti_request);
-
-void check_and_process_dci(nfapi_nr_dl_tti_request_t *dl_tti_request,
-                           nfapi_nr_tx_data_request_t *tx_data_request,
-                           nfapi_nr_ul_dci_request_t *ul_dci_request,
-                           nfapi_nr_ul_tti_request_t *ul_tti_request);
-
-bool sfn_slot_matcher(void *wanted, void *candidate);
-
-/**\brief done free of memory allocation by module_id and release to pointer pool.
-   \param module_id module id*/
-int nr_ue_if_module_kill(uint32_t module_id);
-
-
 /**\brief interface between L1/L2, indicating the downlink related information, like dci_ind and rx_req
    \param dl_info including dci_ind and rx_request messages*/
 int nr_ue_dl_indication(nr_downlink_indication_t *dl_info);
 
 int nr_ue_ul_indication(nr_uplink_indication_t *ul_info);
 
-int nr_ue_sl_indication(nr_sidelink_indication_t *sl_indication);
+void nr_ue_sl_indication(nr_sidelink_indication_t *sl_indication);
 
-int nr_ue_dcireq(nr_dcireq_t *dcireq);
-
-//  TODO check
-/**\brief handle BCCH-BCH message from dl_indication
-   \param phy_data        PHY structure to be filled in by the callee in the FAPI call (L1 caller -> indication to L2 -> FAPI call to L1 callee)
-   \param pduP            pointer to bch pdu
-   \param additional_bits corresponding to 38.212 ch.7
-   \param ssb_index       SSB index within 0 - (L_ssb-1) corresponding to 38.331 ch.13 parameter i
-   \param ssb_length      corresponding to L1 parameter L_ssb 
-   \param cell_id         cell id */
-int handle_bcch_bch(module_id_t module_id,
-                    int cc_id,
-                    unsigned int gNB_index,
-                    void *phy_data,
-                    uint8_t *pduP,
-                    unsigned int additional_bits,
-                    uint32_t ssb_index,
-                    uint32_t ssb_length,
-                    uint16_t ssb_start_subcarrier,
-                    uint16_t cell_id);
-
-//  TODO check
-/**\brief handle BCCH-DL-SCH message from dl_indication
-   \param pdu_len   length(bytes) of pdu
-   \param pduP      pointer to pdu*/
-int handle_bcch_dlsch(module_id_t module_id, int cc_id, unsigned int gNB_index, uint8_t ack_nack, uint8_t *pduP, uint32_t pdu_len);
-
-int handle_dci(module_id_t module_id, int cc_id, unsigned int gNB_index, frame_t frame, int slot, fapi_nr_dci_indication_pdu_t *dci);
-
+void print_ue_mac_stats(const module_id_t mod, const int frame_rx, const int slot_rx);
 
 #endif
 

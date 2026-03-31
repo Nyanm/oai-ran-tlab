@@ -28,20 +28,21 @@
  * @ingroup _ngap
  */
 
+#include <netinet/in.h>
+#include <netinet/sctp.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
-
-#include "intertask_interface.h"
-
+#include <string.h>
 #include "assertions.h"
-#include "conversions.h"
-
-#include "ngap_common.h"
 #include "ngap_gNB_defs.h"
-#include "ngap_gNB.h"
+#include "queue.h"
+#include "tree.h"
+#include "ds/byte_array.h"
+#include "BIT_STRING.h"
+#include "common/utils/utils.h"
 
-ngap_gNB_internal_data_t ngap_gNB_internal_data;
+static ngap_gNB_internal_data_t ngap_gNB_internal_data;
 
 RB_GENERATE(ngap_amf_map, ngap_gNB_amf_data_s, entry, ngap_gNB_compare_assoc_id);
 
@@ -89,9 +90,7 @@ void ngap_gNB_insert_new_instance(ngap_gNB_instance_t *new_instance_p)
                      new_instance_p, ngap_gNB_entries);
 }
 
-struct ngap_gNB_amf_data_s *ngap_gNB_get_AMF(
-  ngap_gNB_instance_t *instance_p,
-  int32_t assoc_id, uint16_t cnx_id)
+struct ngap_gNB_amf_data_s *ngap_gNB_get_AMF(ngap_gNB_instance_t *instance_p, sctp_assoc_t assoc_id, uint16_t cnx_id)
 {
   struct ngap_gNB_amf_data_s  temp;
   struct ngap_gNB_amf_data_s *found;
@@ -190,4 +189,22 @@ void ngap_gNB_remove_amf_desc(ngap_gNB_instance_t * instance)
       }
       free(amf);
     }
+}
+
+void tnl_to_bitstring(BIT_STRING_t *out, const transport_layer_addr_t in)
+{
+  if (in.length) {
+    out->buf = malloc_or_fail(in.length);
+    memcpy(out->buf, in.buffer, in.length);
+    out->size = in.length;
+    out->bits_unused = 0;
+  }
+}
+
+void bitstring_to_tnl(transport_layer_addr_t *out, const BIT_STRING_t in)
+{
+  if (in.size) {
+    memcpy(out->buffer, in.buf, in.size);
+    out->length = in.size;
+  }
 }

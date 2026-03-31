@@ -59,15 +59,9 @@ int32_t uplink_frequency_offset[MAX_NUM_CCs][4];
 uint64_t downlink_frequency[MAX_NUM_CCs][4];
 
 double cpuf;
-//uint8_t nfapi_mode = 0;
-const int NB_UE_INST = 1;
 uint8_t const nr_rv_round_map[4] = {0, 2, 3, 1};
-const short conjugate[8]__attribute__((aligned(16))) = {-1,1,-1,1,-1,1,-1,1};
-const short conjugate2[8]__attribute__((aligned(16))) = {1,-1,1,-1,1,-1,1,-1};
 // needed for some functions
-PHY_VARS_NR_UE * PHY_vars_UE_g[1][1]={{NULL}};
-
-uint64_t get_softmodem_optmask(void) {return 0;}
+PHY_VARS_NR_UE *PHY_vars_UE_g[1][1] = {{NULL}};
 static softmodem_params_t softmodem_params;
 softmodem_params_t *get_softmodem_params(void) {
   return &softmodem_params;
@@ -94,10 +88,13 @@ nrUE_params_t *get_nrUE_params(void) {
   return &nrUE_params;
 }
 
-
+configmodule_interface_t *uniqCfg = NULL;
 int main(int argc, char **argv)
 {
-  char c;
+  stop = false;
+  __attribute__((unused)) struct sigaction oldaction;
+  sigaction(SIGINT, &sigint_action, &oldaction);
+
   int i;//,l;
   double sigma2, sigma2_dB=10,SNR,snr0=-2.0,snr1=2.0;
   double cfo=0;
@@ -112,6 +109,7 @@ int main(int argc, char **argv)
   //int subframe_offset;
   //char fname[40], vname[40];
   int trial,n_trials=100,n_errors=0,ack_nack_errors=0,sr_errors=0;
+  int ret = 1;
   uint8_t transmission_mode = 1,n_tx=1,n_rx=1;
   uint16_t Nid_cell=0;
   uint64_t SSB_positions=0x01;
@@ -145,17 +143,25 @@ int main(int argc, char **argv)
   //unsigned char frame_type = 0;
   int loglvl=OAILOG_WARNING;
   int sr_flag = 0;
-  int pucch_DTX_thres = 50;
+  int pucch_DTX_thres = 0;
   cpuf = get_cpu_freq_GHz();
+  bool print_perf = false;
 
-  if ( load_configmodule(argc,argv,CONFIG_ENABLECMDLINEONLY) == 0) {
+  if ((uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY)) == 0) {
     exit_fun("[NR_PUCCHSIM] Error, configuration module init failed\n");
   }
 
   randominit(0);
   logInit();
 
-  while ((c = getopt (argc, argv, "f:hA:f:g:i:I:P:B:b:t:T:m:n:r:o:s:S:x:y:z:N:F:GR:IL:q:cd:")) != -1) {
+  int c;
+  while ((c = getopt(argc, argv, "--:O:f:hA:f:g:i:I:P:B:b:t:T:m:n:r:o:s:S:x:y:z:N:F:GR:IL:q:cd:C")) != -1) {
+    /* ignore long options starting with '--', option '-O' and their arguments that are handled by configmodule */
+    /* with this opstring getopt returns 1 for non-option arguments, refer to 'man 3 getopt' */
+    if (c == 1 || c == '-' || c == 'O')
+      continue;
+
+    printf("handling optarg %c\n",c);
     switch (c) {
     case 'f':
       //write_output_file=1;
@@ -344,39 +350,43 @@ int main(int argc, char **argv)
       //nacktoack_flag=(uint8_t)atoi(optarg);
       target_error_rate=0.001;
       break;
+    case 'C':
+      print_perf = 1;
+      cpu_meas_enabled = 1;
+      break;
     default:
     case 'h':
       printf("%s -h(elp) -p(extended_prefix) -N cell_id -f output_filename -F input_filename -g channel_model -n n_frames -t Delayspread -s snr0 -S snr1 -x transmission_mode -y TXant -z RXant -i Intefrence0 -j Interference1 -A interpolation_file -C(alibration offset dB) -N CellId\n", argv[0]);
-      printf("-h This message\n");
-      printf("-p Use extended prefix mode\n");
+      //printf("-C Generate Calibration information for Abstraction (effective SNR adjustment to remove Pe bias w.r.t. AWGN)\n");
+      printf("-A Interpolation_filname Run with Abstraction to generate Scatter plot using interpolation polynomial in file\n");
+      printf("-b number of HARQ bits (1-2)\n");
+      printf("-B payload to be transmitted on PUCCH\n");
+      printf("-c Activate scheduling request\n");
       printf("-d Use TDD\n");
+      printf("-f Output filename (.txt format) for Pe/SNR results\n");
+      printf("-F Input filename (.txt format) for RX conformance testing\n");
+      printf("-g [A,B,C,D,E,F,G] Use 3GPP SCM (A,B,C,D) or 36-101 (E-EPA,F-EVA,G-ETU) models (ignores delay spread and Ricean factor)\n");
+      printf("-i Enter number of ofdm symbols for pucch\n");
+      printf("-I Starting symbol index for pucch\n");
+      printf("-h This message\n");
+      printf("-m initial cyclic shift m0\n");
       printf("-n Number of frames to simulate\n");
+      printf("-N Nid_cell\n");
+      printf("-o Carrier frequency offset in Hz\n");
+      printf("-O oversampling factor (1,2,4,8,16)\n");
+      printf("-p Use extended prefix mode\n");
+      printf("-P Enter the format of PUCCH\n");
+      printf("-q PUCCH number of PRB\n");
+      printf("-r PUCCH starting PRB\n");
+      printf("-R N_RB_DL\n");
       printf("-s Starting SNR, runs from SNR0 to SNR0 + 5 dB.  If n_frames is 1 then just SNR is simulated\n");
       printf("-S Ending SNR, runs from SNR0 to SNR1\n");
       printf("-t Delay spread for multipath channel\n");
-      printf("-g [A,B,C,D,E,F,G] Use 3GPP SCM (A,B,C,D) or 36-101 (E-EPA,F-EVA,G-ETU) models (ignores delay spread and Ricean factor)\n");
+      printf("-T to check nacktoack miss for format 1\n");
       printf("-x Transmission mode (1,2,6 for the moment)\n");
       printf("-y Number of TX antennas used in eNB\n");
       printf("-z Number of RX antennas used in UE\n");
-      printf("-i Relative strength of first intefering eNB (in dB) - cell_id mod 3 = 1\n");
-      printf("-j Relative strength of second intefering eNB (in dB) - cell_id mod 3 = 2\n");
-      printf("-o Carrier frequency offset in Hz\n");
-      printf("-N Nid_cell\n");
-      printf("-R N_RB_DL\n");
-      printf("-O oversampling factor (1,2,4,8,16)\n");
-      printf("-A Interpolation_filname Run with Abstraction to generate Scatter plot using interpolation polynomial in file\n");
-      //printf("-C Generate Calibration information for Abstraction (effective SNR adjustment to remove Pe bias w.r.t. AWGN)\n");
-      printf("-f Output filename (.txt format) for Pe/SNR results\n");
-      printf("-F Input filename (.txt format) for RX conformance testing\n");
-      printf("-i Enter number of ofdm symbols for pucch\n");
-      printf("-I Starting symbol index for pucch\n");
-      printf("-r PUCCH starting PRB\n");
-      printf("-q PUCCH number of PRB\n");
-      printf("-P Enter the format of PUCCH\n");
-      printf("-b number of HARQ bits (1-2)\n");
-      printf("-B payload to be transmitted on PUCCH\n");
-      printf("-m initial cyclic shift m0\n");
-      printf("-T to check nacktoack miss for format 1\n");
+      printf("-C print CPU cost\n");
       exit (-1);
       break;
     }
@@ -402,8 +412,8 @@ int main(int argc, char **argv)
   if ((format < 2) && (actual_payload == 4)) do_DTX=1;
 
   if (random_payload) {
-    srand(time(NULL));   // Initialization, should only be called once.
-    actual_payload = rand();      // Returns a pseudo-random integer between 0 and RAND_MAX.
+    double tmp = uniformrandom();
+    memcpy(&actual_payload, &tmp, sizeof(actual_payload));
   }
   actual_payload &= nr_bit < 64 ? (1UL << nr_bit) - 1: 0xffffffffffffffff;
 
@@ -424,13 +434,15 @@ int main(int argc, char **argv)
   cfg->carrier_config.num_tx_ant.value = n_tx;
   cfg->carrier_config.num_rx_ant.value = n_rx;
   nr_phy_config_request_sim(gNB,N_RB_DL,N_RB_DL,mu,Nid_cell,SSB_positions);
+  // TDD configuration
   gNB->gNB_config.tdd_table.tdd_period.value = 6;
-  set_tdd_config_nr(&gNB->gNB_config, mu, 7, 6, 2, 4);
+  do_tdd_config_sim(gNB, mu);
+
   phy_init_nr_gNB(gNB);
   /* RU handles rxdataF, and gNB just has a pointer. Here, we don't have an RU,
    * so we need to allocate that memory as well. */
   for (i = 0; i < n_rx; i++)
-    gNB->common_vars.rxdataF[i] = malloc16_clear(gNB->frame_parms.samples_per_frame_wCP*sizeof(c16_t));
+    gNB->common_vars.rxdataF[0][i] = malloc16_clear(gNB->frame_parms.samples_per_frame_wCP * sizeof(c16_t));
 
   double fs,txbw,rxbw;
   uint32_t samples;
@@ -457,7 +469,7 @@ int main(int argc, char **argv)
   s_im = malloc(n_tx*sizeof(double*));
   r_re = malloc(n_rx*sizeof(double*));
   r_im = malloc(n_rx*sizeof(double*));
-  memcpy((void*)&gNB->frame_parms,(void*)frame_parms,sizeof(frame_parms));
+  memcpy((void *)&gNB->frame_parms, (void *)frame_parms, sizeof(*frame_parms));
   for (int aatx=0; aatx<n_tx; aatx++) {
     s_re[aatx] = calloc(1,frame_length_complex_samples*sizeof(double));
     s_im[aatx] = calloc(1,frame_length_complex_samples*sizeof(double));
@@ -533,13 +545,14 @@ int main(int argc, char **argv)
   }
 
   pucch_GroupHopping_t PUCCH_GroupHopping = pucch_tx_pdu.group_hop_flag + (pucch_tx_pdu.sequence_hop_flag<<1);
-
-  for(SNR=snr0;SNR<=snr1;SNR+=1){
+  double tx_level_fp = 100.0;
+  c16_t **rxdataF = gNB->common_vars.rxdataF[0];
+  for(SNR = snr0; SNR <= snr1 && !stop; SNR += 1) {
     ack_nack_errors=0;
-    sr_errors=0;
+    sr_errors = 0;
     n_errors = 0;
-    c16_t **txdataF = gNB->common_vars.txdataF;
-    for (trial=0; trial<n_trials; trial++) {
+    c16_t **txdataF = gNB->common_vars.txdataF[0];
+    for (trial = 0; trial < n_trials && !stop; trial++) {
       for (int aatx=0;aatx<1;aatx++)
         bzero(txdataF[aatx],frame_parms->ofdm_symbol_size*sizeof(int));
       if(format==0 && do_DTX==0){
@@ -563,7 +576,6 @@ int main(int argc, char **argv)
 
       if (n_trials==1) printf("txlev %d (%f dB), offset %d, sigma2 %f ( %f dB)\n",txlev,10*log10(txlev),startingSymbolIndex*frame_parms->ofdm_symbol_size,sigma2,sigma2_dB);
 
-      c16_t **rxdataF =  gNB->common_vars.rxdataF;
       for (int symb=0; symb<gNB->frame_parms.symbols_per_slot;symb++) {
         if (symb<startingSymbolIndex || symb >= startingSymbolIndex+nrofSymbols) {
           int i0 = symb*gNB->frame_parms.ofdm_symbol_size;
@@ -572,8 +584,8 @@ int main(int argc, char **argv)
             for (int aarx=0;aarx<n_rx;aarx++) {
               double nr = sqrt(sigma2/2)*gaussdouble(0.0,1.0);
               double ni = sqrt(sigma2/2)*gaussdouble(0.0,1.0);
-              rxdataF[aarx][i].r = (int16_t)(100.0*(nr)/sqrt((double)txlev));
-              rxdataF[aarx][i].i = (int16_t)(100.0*(ni)/sqrt((double)txlev));
+              rxdataF[aarx][i].r = (int16_t)(tx_level_fp * (nr) / sqrt((double)txlev));
+              rxdataF[aarx][i].i = (int16_t)(tx_level_fp * (ni) / sqrt((double)txlev));
             }
           }
         }
@@ -601,8 +613,8 @@ int main(int argc, char **argv)
             rxr = rxr_tmp;
             double nr = sqrt(sigma2/2)*gaussdouble(0.0,1.0);
             double ni = sqrt(sigma2/2)*gaussdouble(0.0,1.0);
-            rxdataF[aarx][i].r = (int16_t)(100.0*(rxr + nr)/sqrt((double)txlev));
-            rxdataF[aarx][i].i=(int16_t)(100.0*(rxi + ni)/sqrt((double)txlev));
+            rxdataF[aarx][i].r = (int16_t)(tx_level_fp * (rxr + nr) / sqrt((double)txlev));
+            rxdataF[aarx][i].i = (int16_t)(tx_level_fp * (rxi + ni) / sqrt((double)txlev));
 
             if (n_trials==1 && fabs(txr) > 0) printf("symb %d, re %d , aarx %d : txr %f, txi %f, chr %f, chi %f, nr %f, ni %f, rxr %f, rxi %f => %d,%d\n",
                                                     symb, re, aarx, txr,txi,
@@ -623,16 +635,18 @@ int main(int argc, char **argv)
                                                            12);
 
       // set UL mask for pucch allocation
+      uint32_t rb_mask_ul[14][9] = {0};
       for (int s=0;s<frame_parms->symbols_per_slot;s++){
         if (s>=startingSymbolIndex && s<(startingSymbolIndex+nrofSymbols))
           for (int rb=0; rb<N_RB; rb++) {
             int rb2 = rb+startingPRB;
-            gNB->rb_mask_ul[s][rb2>>5] |= (1<<(rb2&31));
+            rb_mask_ul[s][rb2 >> 5] |= (1 << (rb2 & 31));
           }
       }
 
       // noise measurement (all PRBs)
-      gNB_I0_measurements(gNB, nr_slot_tx, 0, gNB->frame_parms.symbols_per_slot);
+      gNB_I0_measurements(gNB, nr_slot_tx, 0, gNB->frame_parms.symbols_per_slot, rb_mask_ul);
+      start_meas(&gNB->phy_proc_rx);
 
       if (n_trials==1) printf("noise rxlev %d (%d dB), rxlev pucch %d dB sigma2 %f dB, SNR %f, TX %f, I0 (pucch) %d, I0 (avg) %d\n",rxlev,dB_fixed(rxlev),dB_fixed(rxlev_pucch),sigma2_dB,SNR,10*log10((double)txlev*UE->frame_parms.ofdm_symbol_size/12),gNB->measurements.n0_subband_power_tot_dB[startingPRB],gNB->measurements.n0_subband_power_avg_dB);
       if(format==0){
@@ -661,16 +675,15 @@ int main(int argc, char **argv)
         }
         else pucch_pdu.freq_hop_flag = 0;
 
-        nr_decode_pucch0(gNB, nr_frame_tx, nr_slot_tx,&uci_pdu,&pucch_pdu);
+        nr_decode_pucch0(gNB, rxdataF, nr_frame_tx, nr_slot_tx,&uci_pdu,&pucch_pdu);
         if(sr_flag==1){
-          if (uci_pdu.sr->sr_indication == 0 || uci_pdu.sr->sr_confidence_level == 1)
+          if (uci_pdu.sr.sr_indication == 0 || uci_pdu.sr.sr_confidence_level == 1)
             sr_errors+=1;
-          free(uci_pdu.sr);
         }
         // harq value 0 -> pass
-        nfapi_nr_harq_t *harq_list = uci_pdu.harq->harq_list;
+        nfapi_nr_harq_t *harq_list = uci_pdu.harq.harq_list;
         // confidence value 0 -> good confidence
-        const int confidence_lvl = uci_pdu.harq->harq_confidence_level;
+        const int confidence_lvl = uci_pdu.harq.harq_confidence_level;
         if(nr_bit>0){
           if (nr_bit==1 && do_DTX == 0)
             ack_nack_errors+=(actual_payload^(!harq_list[0].harq_value));
@@ -679,9 +692,7 @@ int main(int argc, char **argv)
           else if ((!confidence_lvl && !harq_list[0].harq_value) ||
                    (!confidence_lvl && nr_bit == 2 && !harq_list[1].harq_value))
             ack_nack_errors++;
-          free(uci_pdu.harq->harq_list);
         }
-        free(uci_pdu.harq);
       }
       else if (format==1) {
         nr_decode_pucch1((c16_t **)rxdataF,PUCCH_GroupHopping,hopping_id,
@@ -717,7 +728,7 @@ int main(int argc, char **argv)
           pucch_pdu.second_hop_prb      = N_RB_DL-1;
         }
         else pucch_pdu.freq_hop_flag = 0;
-        nr_decode_pucch2(gNB,nr_frame_tx,nr_slot_tx,&uci_pdu,&pucch_pdu);
+        nr_decode_pucch2(gNB, rxdataF, nr_frame_tx, nr_slot_tx, &uci_pdu, &pucch_pdu);
         int csi_part1_bytes=pucch_pdu.bit_len_csi_part1>>3;
         if ((pucch_pdu.bit_len_csi_part1&7) > 0) csi_part1_bytes++;
         for (int i=0;i<csi_part1_bytes;i++) {
@@ -729,27 +740,41 @@ int main(int argc, char **argv)
         free(uci_pdu.csi_part1.csi_part1_payload);
 
       }
+      stop_meas(&gNB->phy_proc_rx);
+
       n_errors=((actual_payload^payload_received)&1)+(((actual_payload^payload_received)&2)>>1)+(((actual_payload^payload_received)&4)>>2)+n_errors;
     }
     if (sr_flag == 1)
       printf("SR: SNR=%f, n_trials=%d, n_bit_errors=%d\n",SNR,n_trials,sr_errors);
+    if (print_perf) {
+      time_stats_t *ts = &gNB->phy_proc_rx;
+      printf("cpu time for pucch format %d: per block %.2f us; nb blocks %d, max time %.2f;\n",
+             format,
+             ts->diff / ts->trials / cpuf / 1000.0,
+             ts->trials,
+             ts->max / cpuf / 1000.0);
+      reset_meas(ts);
+    }
     if(nr_bit > 0)
       printf("ACK/NACK: SNR=%f, n_trials=%d, n_bit_errors=%d\n",SNR,n_trials,ack_nack_errors);
     if((float)(ack_nack_errors+sr_errors)/(float)(n_trials)<=target_error_rate){
       printf("PUCCH test OK\n");
+      ret = 0;
       break;
     }
   }
   free_channel_desc_scm(UE2gNB);
   term_freq_channel();
 
-  int nb_slots_to_set = TDD_CONFIG_NB_FRAMES * (1 << mu) * NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
+  int nb_slots_to_set = (1 << mu) * NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
   for (int i = 0; i < nb_slots_to_set; ++i)
     free(gNB->gNB_config.tdd_table.max_tdd_periodicity_list[i].max_num_of_symbol_per_slot_list);
   free(gNB->gNB_config.tdd_table.max_tdd_periodicity_list);
 
-  for (i = 0; i < n_rx; i++)
-    free(gNB->common_vars.rxdataF[i]);
+  for (int j = 0; j < gNB->common_vars.num_beams_period; j++) {
+    for (i = 0; i < n_rx; i++)
+      free(gNB->common_vars.rxdataF[j][i]);
+  }
   phy_free_nr_gNB(gNB);
   free(RC.gNB[0]);
   free(RC.gNB);
@@ -776,5 +801,5 @@ int main(int argc, char **argv)
   loader_reset();
   logTerm();
 
-  return(n_errors);
+  return ret;
 }

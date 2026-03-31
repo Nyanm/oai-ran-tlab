@@ -36,6 +36,7 @@
 #include "nfapi_interface.h"
 #include "transport_common_proto.h"
 
+
 // Functions below implement 36-211 and 36-212
 
 /** @addtogroup _PHY_TRANSPORT_
@@ -306,38 +307,28 @@ int mch_modulation_khz_1dot25(int32_t **txdataF,
                    LTE_DL_FRAME_PARMS *frame_parms,
                    LTE_eNB_DLSCH_t *dlsch);
 
-
 /** \brief Top-level generation function for eNB TX of MBSFN
     @param phy_vars_eNB Pointer to eNB variables
+@param proc
     @param a Pointer to transport block
-    @param abstraction_flag
 
 */
 void generate_mch_khz_1dot25(PHY_VARS_eNB *phy_vars_eNB,L1_rxtx_proc_t *proc,uint8_t *a);
 
-
 /** \brief Top-level generation function for eNB TX of MBSFN
     @param phy_vars_eNB Pointer to eNB variables
+@param proc
     @param a Pointer to transport block
-    @param abstraction_flag
-
 */
 void generate_mch(PHY_VARS_eNB *phy_vars_eNB,L1_rxtx_proc_t *proc,uint8_t *a);
 
 /** \brief This function generates the frequency-domain pilots (cell-specific downlink reference signals)
     @param phy_vars_eNB Pointer to eNB variables
-    @param proc Pointer to RXn-TXnp4 proc information
     @param mcs MCS for MBSFN
     @param ndi new data indicator
-    @param rdvix
+    @param rvidx
 */
 void fill_eNB_dlsch_MCH(PHY_VARS_eNB *phy_vars_eNB,int mcs,int ndi,int rvidx);
-
-/** \brief This function generates the frequency-domain pilots (cell-specific downlink reference signals)
-    @param phy_vars_ue Pointer to UE variables
-    @param mcs MCS for MBSFN
-    @param eNB_id index of eNB in ue variables
-*/
 
 /** \brief This function generates the frequency-domain pilots (cell-specific downlink reference signals)
     for N subframes.
@@ -426,7 +417,7 @@ void dci_encoding(uint8_t *a,
                   uint16_t rnti);
 
 /*! \brief Top-level DCI entry point. This routine codes an set of DCI PDUs and performs PDCCH modulation, interleaving and mapping.
-  \param num_dci  Number of pdcch symbols
+  \param num_pdcch_symbols
   \param num_dci  Number of DCI pdus to encode
   \param dci_alloc Allocation vectors for each DCI pdu
   \param n_rnti n_RNTI (see )
@@ -525,18 +516,18 @@ void rx_ulsch(PHY_VARS_eNB *eNB,
   @param phy_vars_eNB Pointer to eNB top-level descriptor
   @param proc Pointer to RXTX proc variables
   @param UE_id ID of UE transmitting this PUSCH
-  @param subframe Index of subframe for PUSCH
   @param control_only_flag Receive PUSCH with control information only
   @param Nbundled Nbundled parameter for ACK/NAK scrambling from 36-212/36-213
   @param llr8_flag If 1, indicate that the 8-bit turbo decoder should be used
   @returns 0 on success
 */
-unsigned int  ulsch_decoding(PHY_VARS_eNB *phy_vars_eNB,
-                             L1_rxtx_proc_t *proc,
-                             uint8_t UE_id,
-                             uint8_t control_only_flag,
-                             uint8_t Nbundled,
-                             uint8_t llr8_flag);
+unsigned int ulsch_decoding(PHY_VARS_eNB *phy_vars_eNB,
+                            L1_rxtx_proc_t *proc,
+                            uint8_t UE_id,
+                            uint8_t control_only_flag,
+                            uint8_t Nbundled,
+                            uint8_t llr8_flag,
+                            thread_info_tm_t *t_info);
 
 void generate_phich_top(PHY_VARS_eNB *phy_vars_eNB,
                         L1_rxtx_proc_t *proc,
@@ -584,7 +575,6 @@ uint32_t rx_pucch(PHY_VARS_eNB *phy_vars_eNB,
                   int     br_flag
                  );
 
-
 /*!
   \brief Process PRACH waveform
   @param phy_vars_eNB Pointer to eNB top-level descriptor. If NULL, then this is an RRU
@@ -592,6 +582,7 @@ uint32_t rx_pucch(PHY_VARS_eNB *phy_vars_eNB,
   @param max_preamble most likely preamble
   @param max_preamble_energy Estimated Energy of most likely preamble
   @param max_preamble_delay Estimated Delay of most likely preamble
+  @param avg_preamble_energy
   @param Nf System frame number
   @param tdd_mapindex Index of PRACH resource in Table 5.7.1-4 (TDD)
   @param br_flag indicator to act on eMTC PRACH

@@ -46,7 +46,7 @@
 #include "NR_MAC_UE/nr_ue_sci.h"
 #include "NR_MAC_COMMON/nr_mac.h"
 #include "NR_MAC_UE/mac_proto.h"
-#include "NR_MAC_UE/mac_extern.h"
+//#include "NR_MAC_UE/mac_extern.h"
 #include "NR_MAC_COMMON/nr_mac_extern.h"
 #include "common/utils/nr/nr_common.h"
 #include "openair2/NR_UE_PHY_INTERFACE/NR_Packet_Drop.h"
@@ -70,6 +70,45 @@ const int pscch_rb_table[5] = {10,12,15,20,25};
 const int pscch_tda[2] = {2,3};
 
 const int subch_to_rb[8] = {10,12,15,20,25,50,75,100};
+
+/* This function converts the FRIV to a start sub-channel and length in subchannels */
+/* for sl_MaxNumPerReserve = 2, the sequence from 38.214 for Lsc = 1,2,3, ... 
+ * goes like startsc + (0,N_subch,N_subch +(N_subch-1), N_subch + (N_subch-1) + (N_subch-2), ...) 
+ * 
+ * This is only done for sl_MaxNumPerReserve = 2
+ * */
+static void convNRFRIV(int FRIV,
+                int N_subch,
+                long sl_MaxNumPerReserve,
+                uint16_t *Lsc,
+                uint16_t *startsc,
+                uint16_t *startsc2) {
+  if (sl_MaxNumPerReserve == NR_SL_UE_SelectedConfigRP_r16__sl_MaxNumPerReserve_r16_n2) {
+    *Lsc=1;
+    int prevN=0;
+    int N=N_subch;
+    while (FRIV>N) {
+      *Lsc = *Lsc+1;
+      prevN = N;
+      N += (N_subch - *Lsc + 1);
+    }
+    if (startsc) *startsc = FRIV-prevN;
+  } else if (sl_MaxNumPerReserve == NR_SL_UE_SelectedConfigRP_r16__sl_MaxNumPerReserve_r16_n3) {
+    *Lsc=1;
+    int prevN=0;
+    int N=N_subch;
+    while (FRIV>N) {
+      *Lsc = *Lsc + 1;
+      prevN = N;
+      N += ((N_subch - *Lsc + 1)*(N_subch - *Lsc + 1));
+    }
+    int tmp1 = FRIV - prevN; // This holds startsc1 + startsc2*(N_subch - *Lsc + 1)
+    if (startsc2) *startsc2 = tmp1 / (N_subch - *Lsc + 1);
+    if (startsc) *startsc = tmp1 % (N_subch - *Lsc + 1);
+  } else {
+    AssertFatal(1 == 0, "sl_MaxNumPerReserve is configured with incorrect value");
+  }
+}
 
 uint32_t nr_sci_size(const NR_SL_ResourcePool_r16_t *sl_res_pool,
 	             nr_sci_pdu_t *sci_pdu,
@@ -611,7 +650,7 @@ void extract_pscch_pdu(uint64_t *sci1_payload, int len,
   LOG_D(NR_MAC,"conflict_information (%d, %d) in pos %d, pos=%d\n",sci_pdu->conflict_information_receiver.val,sci_pdu->conflict_information_receiver.nbits,pos-fsize,pos);
 }
 
-int nr_ue_process_sci1_indication_pdu(NR_UE_MAC_INST_t *mac,module_id_t mod_id,frame_t frame, int slot, sl_nr_sci_indication_pdu_t *sci,void *phy_data) {
+int nr_ue_process_sci1_indication_pdu(NR_UE_MAC_INST_t *mac,module_id_t mod_id,int cc_id,frame_t frame, int slot, sl_nr_sci_indication_pdu_t *sci,void *phy_data) {
 
   nr_sci_pdu_t *sci_pdu = &mac->sci_pdu_rx;  //&mac->def_sci_pdu[slot][sci->sci_format_type];
   sl_nr_ue_mac_params_t *sl_mac = mac->SL_MAC_PARAMS;
@@ -682,11 +721,13 @@ int nr_ue_process_sci1_indication_pdu(NR_UE_MAC_INST_t *mac,module_id_t mod_id,f
   if (ret<0) return(ret);
   rx_config.sl_rx_config_list[0].pdu_type =  SL_NR_CONFIG_TYPE_RX_PSSCH_SCI;
 
-  nr_scheduled_response_t scheduled_response;
-  memset(&scheduled_response,0, sizeof(nr_scheduled_response_t));
+  nr_scheduled_response_t scheduled_response = {.sl_rx_config = &rx_config,
+                                                .module_id = mac->ue_id,
+                                                .CC_id = cc_id,
+                                                .phy_data = phy_data,
+                                                .mac = mac};
 
-  fill_scheduled_response(&scheduled_response,NULL,NULL,NULL,&rx_config,NULL,mod_id,0,frame,slot,phy_data);
-  LOG_D(NR_MAC, "[UE%d] TTI-%d:%d RX PSSCH_SCI REQ \n", mod_id,frame, slot);
+  LOG_D(NR_MAC, "[UE%d] TTI-%d:%d RX PSSCH_SCI REQ \n", mac->ue_id,frame, slot);
   if ((mac->if_module != NULL) && (mac->if_module->scheduled_response != NULL))
       mac->if_module->scheduled_response(&scheduled_response);
   return 1;
@@ -911,11 +952,14 @@ int nr_ue_process_sci2_indication_pdu(NR_UE_MAC_INST_t *mac, module_id_t mod_id,
                               mac,
                               &rx_config);
   }
-  nr_scheduled_response_t scheduled_response;
-  memset(&scheduled_response,0, sizeof(nr_scheduled_response_t));
 
-  fill_scheduled_response(&scheduled_response,NULL,NULL,NULL,&rx_config,NULL,mod_id,0,frame,slot,phy_data);
-  LOG_D(NR_MAC, "[UE%d] TTI-%d:%d RX PSSCH_SLSCH REQ \n", mod_id,frame, slot);
+  nr_scheduled_response_t scheduled_response = {.sl_rx_config = &rx_config,
+                                                .module_id = mac->ue_id,
+                                                .CC_id = cc_id,
+                                                .phy_data = phy_data,
+                                                .mac = mac};
+
+  LOG_D(NR_MAC, "[UE%d] TTI-%d:%d RX PSSCH_SLSCH REQ \n", mac->ue_id,frame, slot);
   if ((mac->if_module != NULL) && (mac->if_module->scheduled_response != NULL))
       mac->if_module->scheduled_response(&scheduled_response);
   return 1;

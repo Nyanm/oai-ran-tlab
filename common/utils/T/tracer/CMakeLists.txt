@@ -1,7 +1,5 @@
-add_library(tracer_utils OBJECT config.c database.c event.c handler.c utils.c)
+add_library(tracer_utils OBJECT configuration.c database.c event.c handler.c utils.c)
 target_link_libraries(tracer_utils PUBLIC m pthread)
-
-add_library(tracer_events OBJECT event_selector.c)
 
 add_executable(record record.c)
 target_link_libraries(record PRIVATE tracer_utils)
@@ -28,10 +26,19 @@ add_executable(multi multi.c)
 target_link_libraries(multi PRIVATE tracer_utils T)
 target_include_directories(multi PRIVATE ..)
 
+add_executable(textlog textlog.c)
+target_link_libraries(textlog PRIVATE tracer_utils tracer_filter
+                      tracer_logger tracer_view)
+
+add_subdirectory(filter)
+add_subdirectory(logger)
+add_subdirectory(view)
+
 add_custom_target(T_tools)
 add_dependencies(T_tools
                  record replay extract_config extract_input_subframe
-                 extract_output_subframe extract macpdu2wireshark multi)
+                 extract_output_subframe extract macpdu2wireshark multi
+                 textlog)
 add_dependencies(nr-softmodem T_tools)
 add_dependencies(nr-uesoftmodem T_tools)
 add_dependencies(lte-softmodem T_tools)
@@ -42,9 +49,7 @@ add_dependencies(lte-uesoftmodem T_tools)
 # GUI-related tools so they can be added on demand, if necessary.
 add_boolean_option(T_TRACER_GUI OFF  "Compile T tracer GUI tools" OFF)
 if(T_TRACER_GUI)
-  add_executable(textlog textlog.c)
-  target_link_libraries(textlog PRIVATE tracer_utils tracer_filter tracer_gui
-                        tracer_logger tracer_view tracer_events)
+  add_library(tracer_events OBJECT event_selector.c)
 
   find_library(png png REQUIRED)
   add_executable(enb enb.c)
@@ -57,9 +62,13 @@ if(T_TRACER_GUI)
                         tracer_logger tracer_view tracer_events)
   target_link_libraries(gnb PRIVATE png)
 
-  add_executable(ue ue.c)
-  target_link_libraries(ue PRIVATE tracer_utils tracer_filter tracer_gui
+  add_executable(gnb_mac gnb_mac.c)
+  target_link_libraries(gnb_mac PRIVATE tracer_utils tracer_filter tracer_gui
                         tracer_logger tracer_view tracer_events)
+
+  add_executable(ue ue.c)
+  target_link_libraries(ue PRIVATE tracer_utils tracer_view tracer_gui
+                        tracer_logger tracer_filter tracer_events)
   target_link_libraries(ue PRIVATE png)
 
   add_executable(vcd vcd.c)
@@ -71,9 +80,6 @@ if(T_TRACER_GUI)
                         tracer_logger tracer_view tracer_events)
 
   add_subdirectory(gui)
-  add_subdirectory(filter)
-  add_subdirectory(logger)
-  add_subdirectory(view)
 
-  add_dependencies(T_tools textlog enb gnb ue vcd to_vcd)
+  add_dependencies(T_tools enb gnb gnb_mac ue vcd to_vcd)
 endif()

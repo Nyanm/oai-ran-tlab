@@ -756,15 +756,15 @@ uint32_t calc_pucch_1x_interference(PHY_VARS_eNB *eNB,
   LTE_DL_FRAME_PARMS *frame_parms = &eNB->frame_parms;
 
   uint32_t u,v,n,aa;
-  uint32_t z[12*14];
-  int16_t *zptr;
-  int16_t rxcomp[NB_ANTENNAS_RX][2*12*14];
+  uint32_t z[12*14] = {0};
+  int16_t *zptr = NULL;
+  int16_t rxcomp[NB_ANTENNAS_RX][2*12*14] = {0};
   uint8_t ns,N_UL_symb,nsymb,n_cs_base;
   uint16_t i,j,re_offset;
   uint8_t m,l;
   uint8_t n_cs,alpha_ind;
   int16_t tmp_re,tmp_im,W_re=0,W_im=0;
-  int16_t W4_nouse[4]={32767,32767,-32768,-32768};
+  int16_t W4_nouse[4] = {32767, 32767, -32767, -32767};
   int32_t n0_IQ[2];
   double interference_power;
   int16_t *rxptr;

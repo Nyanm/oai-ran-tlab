@@ -37,7 +37,7 @@
 #include <sys/types.h>
 #include <openair1/PHY/TOOLS/tools_defs.h>
 #include "record_player.h"
-#include <common/utils/threadPool/thread-pool.h>
+#include "common/utils/threadPool/notified_fifo.h"
 
 /* default name of shared library implementing the radio front end */
 #define OAI_RF_LIBNAME        "oai_device"
@@ -174,16 +174,43 @@ typedef struct {
 } udp_ctx_t;
 
 typedef enum {
+  RU_GPIO_CONTROL_NONE,
   RU_GPIO_CONTROL_GENERIC,
   RU_GPIO_CONTROL_INTERDIGITAL,
 } gpio_control_t;
 
+/*! \brief defines the direction of each symbol. Int values intentional and
+ * analogous to FAPI/FHI 7.2 */
+typedef enum { SYMBOL_DIR_DL = 0, SYMBOL_DIR_UL = 1, SYMBOL_DIR_GU = 2 } symbol_direction_t;
+/*! \brief Contains information about PRACH and Frame structure, for
+ * initialization of split 7 radios which reuses the interface of split 8.
+ */
+typedef struct split7_config {
+  /*! PRACH index used for PRACH */
+  int prach_index;
+  /*! PRACH frequency start, from RRC's msg1-FrequencyStart */
+  int prach_freq_start;
+  /*! the TDD period length, if TDD indicated in parent struct */
+  int n_tdd_period;
+  /*! TDD frame structure, if TDD indicated */
+  struct {
+    symbol_direction_t sym_dir[14];
+  } slot_dirs[160];
+  /*! this is the exponent in 2^X for the FFT size */
+  uint16_t fftSize;
+
+  // M-plane related parameters
+  uint16_t dl_k0[5];
+  uint16_t ul_k0[5];
+  uint16_t cp_prefix0;
+  uint16_t cp_prefix_other;
+
+} split7_config_t;
+
 /*! \brief RF frontend parameters set by application */
-typedef struct {
+typedef struct openair0_config {
   //! Module ID for this configuration
   int Mod_id;
-  //! device log level
-  int log_level;
   //! duplexing mode
   duplex_mode_t duplex_mode;
   //! number of downlink resource blocks
@@ -196,42 +223,45 @@ typedef struct {
   int mmapped_dma;
   //! offset in samples between TX and RX paths
   int tx_sample_advance;
+  int command_line_sample_advance;
   //! samples per packet on the fronthaul interface
   int samples_per_packet;
   //! number of RX channels (=RX antennas)
   int rx_num_channels;
   //! number of TX channels (=TX antennas)
   int tx_num_channels;
+  //! number of distributed radio-units
+  int num_distributed_ru;
   //! rx daughter card
   char* rx_subdev;
   //! tx daughter card
   char* tx_subdev;
   //! \brief RX base addresses for mmapped_dma
-  int32_t *rxbase[4];
+  int32_t *rxbase[8];
   //! \brief RX buffer size for direct access
   int rxsize;
   //! \brief TX base addresses for mmapped_dma or direct access
-  int32_t *txbase[4];
+  int32_t *txbase[8];
   //! \brief Center frequency in Hz for RX.
   //! index: [0..rx_num_channels[
-  double rx_freq[4];
+  double rx_freq[8];
   //! \brief Center frequency in Hz for TX.
   //! index: [0..rx_num_channels[ !!! see lte-ue.c:427 FIXME iterates over rx_num_channels
-  double tx_freq[4];
+  double tx_freq[8];
   double tune_offset;
   //! \brief memory
   //! \brief Pointer to Calibration table for RX gains
   rx_gain_calib_table_t *rx_gain_calib_table;
   //! mode for rxgain (ExpressMIMO2)
-  rx_gain_t rxg_mode[4];
+  rx_gain_t rxg_mode[8];
   //! \brief Gain for RX in dB.
   //! index: [0..rx_num_channels]
-  double rx_gain[4];
+  double rx_gain[8];
   //! \brief Gain offset (for calibration) in dB
   //! index: [0..rx_num_channels]
-  double rx_gain_offset[4];
+  double rx_gain_offset[8];
   //! gain for TX in dB
-  double tx_gain[4];
+  double tx_gain[8];
   //! RX bandwidth in Hz
   double rx_bw;
   //! TX bandwidth in Hz
@@ -243,7 +273,7 @@ typedef struct {
   //! Manual SDR IP address
   char *sdr_addrs;
   //! Auto calibration flag
-  int autocal[4];
+  int autocal[8];
   //! rf devices work with x bits iqs when oai have its own iq format
   //! the two following parameters are used to convert iqs
   int iq_txshift;
@@ -267,8 +297,6 @@ typedef struct {
   double rx_sample_rate;
   //! the sample rate for transmit.
   double tx_sample_rate;
-  //! check for threequarter sampling rate
-  int8_t threequarter_fs;
   //! Flag to indicate this configuration is for NR
   int nr_flag;
   //! NR band number
@@ -276,11 +304,13 @@ typedef struct {
   //! NR scs for raster
   int nr_scs_for_raster;
   //! Core IDs for RX FH
-  int rxfh_cores[4];
+  int rxfh_cores[8];
   //! Core IDs for TX FH
-  int txfh_cores[4];
+  int txfh_cores[8];
   //! select the GPIO control method
   gpio_control_t gpio_controller;
+  //! this interface is reused for split 7, so split 7 options provided below
+  split7_config_t split7;
 } openair0_config_t;
 
 /*! \brief RF mapping */
@@ -361,6 +391,22 @@ typedef struct fhstate_s {
   int r[8];
   int active;
 } fhstate_t;
+
+#define WRITE_QUEUE_SZ 20
+typedef struct {
+  bool initDone;
+  pthread_mutex_t mutex_write;
+  pthread_mutex_t mutex_store;
+  openair0_timestamp nextTS;
+  struct {
+    bool active;
+    openair0_timestamp timestamp;
+    void *txp[NB_ANTENNAS_TX];
+    int nsamps;
+    int nbAnt;
+    int flags;
+  } queue[WRITE_QUEUE_SZ];
+} re_order_t;
 
 /*!\brief structure holds the parameters to configure USRP devices */
 struct openair0_device_t {
@@ -457,33 +503,31 @@ struct openair0_device_t {
       @param timestamp The timestamp at whicch the first sample MUST be sent
       @param buff Buffer which holds the samples (1 dimensional)
       @param nsamps number of samples to be sent
-      @param antenna_id index of the antenna if the device has multiple anteannas
       @param flags flags must be set to true if timestamp parameter needs to be applied
   */
   int (*trx_write_func2)(openair0_device *device, openair0_timestamp timestamp, void **buff, int fd_ind,int nsamps, int flags,int nant);
 
   /*! \brief Receive samples from hardware.
-   * Read \ref nsamps samples from each channel to buffers. buff[0] is the array for
+   * Read nsamps samples from each channel to buffers. buff[0] is the array for
    * the first channel. *ptimestamp is the time at which the first sample
    * was received.
    * \param device the hardware to use
    * \param[out] ptimestamp the time at which the first sample was received.
-   * \param[out] buff An array of pointers to buffers for received samples. The buffers must be large enough to hold the number of samples \ref nsamps.
-   * \param nsamps Number of samples. One sample is 2 byte I + 2 byte Q => 4 byte.
-   * \param num_antennas number of antennas from which to receive samples
-   * \returns the number of sample read
+   * \param[out] buff An array of pointers to buffers for received samples. The buffers must be large enough to hold the number of
+   * samples nsamps. \param nsamps Number of samples. One sample is 2 byte I + 2 byte Q => 4 byte. \param num_antennas number of
+   * antennas from which to receive samples \returns the number of sample read
    */
 
   int (*trx_read_func)(openair0_device *device, openair0_timestamp *ptimestamp, void **buff, int nsamps,int num_antennas);
 
   /*! \brief Receive samples from hardware, this version provides a single antenna at a time and returns.
-   * Read \ref nsamps samples from each channel to buffers. buff[0] is the array for
+   * Read nsamps samples from each channel to buffers. buff[0] is the array for
    * the first channel. *ptimestamp is the time at which the first sample
    * was received.
    * \param device the hardware to use
    * \param[out] ptimestamp the time at which the first sample was received.
-   * \param[out] buff A pointer to a buffer[ant_id][] for received samples. The buffer[ant_id] must be large enough to hold the number of samples \ref nsamps * the number of packets.
-   * \param nsamps Number of samples. One sample is 2 byte I + 2 byte Q => 4 byte.
+   * \param[out] buff A pointer to a buffer[ant_id][] for received samples. The buffer[ant_id] must be large enough to hold the
+   * number of samples nsamps * the number of packets. \param nsamps Number of samples. One sample is 2 byte I + 2 byte Q => 4 byte.
    * \param packet_idx offset into
    * \param antenna_id Index of antenna from which samples were received
    * \returns the number of sample read
@@ -531,11 +575,10 @@ struct openair0_device_t {
    * \param idx RU index
    * \param arg pointer to capabilities or configuration
    */
-  void (*configure_rru)(int idx, void *arg);
+  void (*configure_rru)(void *, void *arg);
 
-/*! \brief Pointer to generic RRU private information
+  /*! \brief Pointer to generic RRU private information
    */
-
 
   void *thirdparty_priv;
 
@@ -566,23 +609,18 @@ struct openair0_device_t {
   /* \brief timing statistics for TX fronthaul (ethernet)
    */
   time_stats_t tx_fhaul;
+  re_order_t reOrder;
 };
 
 /* type of device init function, implemented in shared lib */
 typedef int(*oai_device_initfunc_t)(openair0_device *device, openair0_config_t *openair0_cfg);
 /* type of transport init function, implemented in shared lib */
 typedef int(*oai_transport_initfunc_t)(openair0_device *device, openair0_config_t *openair0_cfg, eth_params_t *eth_params);
-#define UE_MAGICDL 0xA5A5A5A5A5A5A5A5  // UE DL FDD record
-#define UE_MAGICUL 0x5A5A5A5A5A5A5A5A  // UE UL FDD record
-
-#define ENB_MAGICDL 0xB5B5B5B5B5B5B5B5  // eNB DL FDD record
-#define ENB_MAGICUL 0x5B5B5B5B5B5B5B5B  // eNB UL FDD record
 
 #define OPTION_LZ4  0x00000001          // LZ4 compression (option_value is set to compressed size)
 
 
 typedef struct {
-  uint64_t magic;          // Magic value (see defines above)
   uint32_t size;           // Number of samples per antenna to follow this header
   uint32_t nbAnt;          // Total number of antennas following this header
   // Samples per antenna follow this header,
@@ -634,19 +672,19 @@ openair0_timestamp get_usrp_time(openair0_device *device);
  * \returns 0 in success
  */
 int openair0_set_rx_frequencies(openair0_device *device, openair0_config_t *openair0_cfg);
-/*! \brief read the iq record/player configuration */
+/*! \brief read the iq record-player configuration */
 extern int read_recplayconfig(recplay_conf_t **recplay_conf, recplay_state_t **recplay_state);
+
 /*! \brief store recorded iqs from memory to file. */
 extern void iqrecorder_end(openair0_device *device);
 
-
+int openair0_write_reorder(openair0_device *device, openair0_timestamp timestamp, void **txp, int nsamps, int nbAnt, int flags);
+void openair0_write_reorder_clear_context(openair0_device *device);
 #include <unistd.h>
 #ifndef gettid
 #define gettid() syscall(__NR_gettid)
 #endif
-/*@}*/
-
-
+/**@}*/
 
 #ifdef __cplusplus
 }

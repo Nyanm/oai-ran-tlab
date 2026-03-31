@@ -42,14 +42,6 @@
 
 #include "PHY/defs_nr_UE.h"
 
-#ifdef DEFINE_VARIABLES_PUCCH_UE_NR_H
-#define EXTERN
-#define INIT_VARIABLES_PUCCH_UE_NR_H
-#else
-#define EXTERN extern
-#undef INIT_VARIABLES_PUCCH_UE_NR_H
-#endif
-
 /************** DEFINE ********************************************/
 
 #define BITS_PER_SYMBOL_BPSK  (1)     /* 1 bit per symbol for bpsk modulation */
@@ -58,8 +50,6 @@
 
 /*************** FUNCTIONS ****************************************/
 
-void pucch_procedures_ue_nr(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr_phy_data_tx_t *phy_data, c16_t **txdataF);
-
-void set_csi_nr(int csi_status, uint32_t csi_payload);
+void pucch_procedures_ue_nr(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr_phy_data_tx_t *phy_data, c16_t **txdataF, bool was_symbol_used[14]);
 
 #endif /* PUCCH_UCI_UE_NR_H */

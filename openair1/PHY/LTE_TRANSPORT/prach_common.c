@@ -35,13 +35,14 @@
 #include "PHY/phy_extern_ue.h"
 #include "common/utils/LOG/vcd_signal_dumper.h"
 #include "common/utils/lte/prach_utils.h"
+#include "openair1/PHY/LTE_TRANSPORT/prach_extern.h"
 
 const uint16_t NCS_unrestricted[16] = {0, 13, 15, 18, 22, 26, 32, 38, 46, 59, 76, 93, 119, 167, 279, 419};
 const uint16_t NCS_restricted[15] = {15, 18, 22, 26, 32, 38, 46, 55, 68, 82, 100, 128, 158, 202, 237}; // high-speed case
 const uint16_t NCS_4[7] = {2, 4, 6, 8, 10, 12, 15};
 
-int16_t ru[2*839]; // quantized roots of unity
-uint32_t ZC_inv[839]; // multiplicative inverse for roots u
+c16_t root_unit[839]; // quantized roots of unity
+static uint32_t ZC_inv[839]; // multiplicative inverse for roots u
 uint16_t du[838];
 
 extern PRACH_TDD_PREAMBLE_MAP tdd_preamble_map[64][7];
@@ -295,18 +296,17 @@ const uint16_t prach_root_sequence_map0_3[838] = {
     404, 435, 406, 433, 235, 604, 267, 572, 302, 537, 309, 530, 265, 574, 233, 606, 367, 472, 296, 543, 336, 503, 305, 534, 373,
     466, 280, 559, 279, 560, 419, 420, 240, 599, 258, 581, 229, 610};
 
-uint16_t prach_root_sequence_map4[138] = {  1,138,2,137,3,136,4,135,5,134,6,133,7,132,8,131,9,130,10,129,
-                                            11,128,12,127,13,126,14,125,15,124,16,123,17,122,18,121,19,120,20,119,
-                                            21,118,22,117,23,116,24,115,25,114,26,113,27,112,28,111,29,110,30,109,
-                                            31,108,32,107,33,106,34,105,35,104,36,103,37,102,38,101,39,100,40,99,
-                                            41,98,42,97,43,96,44,95,45,94,46,93,47,92,48,91,49,90,50,89,
-                                            51,88,52,87,53,86,54,85,55,84,56,83,57,82,58,81,59,80,60,79,
-                                            61,78,62,77,63,76,64,75,65,74,66,73,67,72,68,71,69,70
-                                         };
+const uint16_t prach_root_sequence_map4[138] = {
+    1,  138, 2,  137, 3,  136, 4,  135, 5,  134, 6,  133, 7,  132, 8,  131, 9,  130, 10, 129, 11, 128, 12, 127, 13, 126, 14, 125,
+    15, 124, 16, 123, 17, 122, 18, 121, 19, 120, 20, 119, 21, 118, 22, 117, 23, 116, 24, 115, 25, 114, 26, 113, 27, 112, 28, 111,
+    29, 110, 30, 109, 31, 108, 32, 107, 33, 106, 34, 105, 35, 104, 36, 103, 37, 102, 38, 101, 39, 100, 40, 99,  41, 98,  42, 97,
+    43, 96,  44, 95,  45, 94,  46, 93,  47, 92,  48, 91,  49, 90,  50, 89,  51, 88,  52, 87,  53, 86,  54, 85,  55, 84,  56, 83,
+    57, 82,  58, 81,  59, 80,  60, 79,  61, 78,  62, 77,  63, 76,  64, 75,  65, 74,  66, 73,  67, 72,  68, 71,  69, 70};
 
 void dump_prach_config(LTE_DL_FRAME_PARMS *frame_parms,uint8_t subframe) {
-  FILE *fd;
-  fd = fopen("prach_config.txt","w");
+  FILE *fd = fopen("prach_config.txt", "w");
+  if (!fd)
+    return;
   fprintf(fd,"prach_config: subframe          = %d\n",subframe);
   fprintf(fd,"prach_config: N_RB_UL           = %d\n",frame_parms->N_RB_UL);
   fprintf(fd,"prach_config: frame_type        = %s\n",(frame_parms->frame_type==1) ? "TDD":"FDD");
@@ -369,13 +369,13 @@ int is_prach_subframe(LTE_DL_FRAME_PARMS *frame_parms, uint32_t frame, uint8_t s
   return(prach_mask);
 }
 
-
 void compute_prach_seq(uint16_t rootSequenceIndex,
                        uint8_t prach_ConfigIndex,
                        uint8_t zeroCorrelationZoneConfig,
                        uint8_t highSpeedFlag,
                        frame_type_t frame_type,
-                       uint32_t X_u[64][839]) {
+                       c16_t X_u[64][839])
+{
   // Compute DFT of x_u => X_u[k] = x_u(inv(u)*k)^* X_u[k] = exp(j\pi u*inv(u)*k*(inv(u)*k+1)/N_ZC)
   unsigned int k,inv_u,i,NCS=0,num_preambles;
   int N_ZC;
@@ -497,7 +497,7 @@ void compute_prach_seq(uint16_t rootSequenceIndex,
 
     for (k=0; k<N_ZC; k++) {
       // 420 is the multiplicative inverse of 2 (required since ru is exp[j 2\pi n])
-      X_u[i][k] = ((uint32_t *)ru)[(((k*(1+(inv_u*k)))%N_ZC)*420)%N_ZC];
+      X_u[i][k] = root_unit[(((k * (1 + (inv_u * k))) % N_ZC) * 420) % N_ZC];
     }
   }
 
@@ -527,8 +527,8 @@ void init_prach_tables(int N_ZC) {
 
   // Compute quantized roots of unity
   for (i=0; i<N_ZC; i++) {
-    ru[i<<1]     = (int16_t)(floor(32767.0*cos(2*M_PI*(double)i/N_ZC)));
-    ru[1+(i<<1)] = (int16_t)(floor(32767.0*sin(2*M_PI*(double)i/N_ZC)));
+    root_unit[i].r = (int16_t)(floor(32767.0 * cos(2 * M_PI * (double)i / N_ZC)));
+    root_unit[i].i = (int16_t)(floor(32767.0 * sin(2 * M_PI * (double)i / N_ZC)));
 #ifdef PRACH_DEBUG
 
     if (i<16)

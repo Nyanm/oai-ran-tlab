@@ -39,15 +39,14 @@ import constants as CONST
 
 
 import cls_oaicitest		 #main class for OAI CI test framework
-import cls_physim		 #class PhySim for physical simulators build and test
 import cls_containerize	 #class Containerize for all container-based operations on RAN/UE objects
 import cls_static_code_analysis  #class for static code analysis
-import cls_physim1		 #class PhySim for physical simulators deploy and run
 import cls_cluster		 # class for building/deploying on cluster
+import cls_native        # class for all native/source-based operations
+from cls_ci_helper import TestCaseCtx
 
-import sshconnection 
-import epc
 import ran
+import cls_cmd
 import cls_oai_html
 
 
@@ -56,16 +55,13 @@ import cls_oai_html
 #-----------------------------------------------------------
 import sys		# arg
 import re		# reg
-import pexpect	# pexpect
 import time		# sleep
 import os
 import subprocess
 import xml.etree.ElementTree as ET
 import logging
-import datetime
 import signal
-import subprocess
-from multiprocessing import Process, Lock, SimpleQueue
+import traceback
 logging.basicConfig(
 	level=logging.DEBUG,
 	stream=sys.stdout,
@@ -89,118 +85,52 @@ def CheckClassValidity(xml_class_list,action,id):
 		resp=True
 	return resp
 
-
-#assigning parameters to object instance attributes (even if the attributes do not exist !!)
-def AssignParams(params_dict):
-
-	for key,value in params_dict.items():
-		setattr(CiTestObj, key, value)
-		setattr(RAN, key, value)
-		setattr(HTML, key, value)
-		setattr(ldpc, key, value)
-
-
-
-def GetParametersFromXML(action):
-	if action == 'Build_eNB' or action == 'Build_Image' or action == 'Build_Proxy' or action == "Build_Cluster_Image":
+def ExecuteActionWithParam(action, ctx, node):
+	global RAN
+	global HTML
+	global CONTAINERS
+	global SCA
+	global CLUSTER
+	if action == 'Build_eNB' or action == 'Build_Image' or action == 'Build_Proxy' or action == "Build_Cluster_Image" or action == "Build_Run_Tests":
 		RAN.Build_eNB_args=test.findtext('Build_eNB_args')
 		CONTAINERS.imageKind=test.findtext('kind')
-		forced_workspace_cleanup = test.findtext('forced_workspace_cleanup')
-		RAN.Build_eNB_forced_workspace_cleanup=False
-		CONTAINERS.forcedWorkspaceCleanup=False
-		CLUSTER.forcedWorkspaceCleanup = False
-		if forced_workspace_cleanup is not None and re.match('true', forced_workspace_cleanup, re.IGNORECASE):
-			RAN.Build_eNB_forced_workspace_cleanup = True
-			CONTAINERS.forcedWorkspaceCleanup = True
-			CLUSTER.forcedWorkspaceCleanup = True
-		eNB_instance=test.findtext('eNB_instance')
-		if (eNB_instance is None):
-			RAN.eNB_instance=0
-			CONTAINERS.eNB_instance=0
-		else:
-			RAN.eNB_instance=int(eNB_instance)
-			CONTAINERS.eNB_instance=int(eNB_instance)
-		eNB_serverId=test.findtext('eNB_serverId')
-		if (eNB_serverId is None):
-			RAN.eNB_serverId[RAN.eNB_instance]='0'
-			CONTAINERS.eNB_serverId[RAN.eNB_instance]='0'
-		else:
-			RAN.eNB_serverId[RAN.eNB_instance]=eNB_serverId
-			CONTAINERS.eNB_serverId[CONTAINERS.eNB_instance]=eNB_serverId
-		xmlBgBuildField = test.findtext('backgroundBuild')
-		if (xmlBgBuildField is None):
-			RAN.backgroundBuild=False
-		else:
-			if re.match('true', xmlBgBuildField, re.IGNORECASE):
-				RAN.backgroundBuild=True
-			else:
-				RAN.backgroundBuild=False
 		proxy_commit = test.findtext('proxy_commit')
 		if proxy_commit is not None:
 			CONTAINERS.proxyCommit = proxy_commit
-
-	elif action == 'WaitEndBuild_eNB':
-		RAN.Build_eNB_args=test.findtext('Build_eNB_args')
-		eNB_instance=test.findtext('eNB_instance')
-		if (eNB_instance is None):
-			RAN.eNB_instance=0
-		else:
-			RAN.eNB_instance=int(eNB_instance)
-		eNB_serverId=test.findtext('eNB_serverId')
-		if (eNB_serverId is None):
-			RAN.eNB_serverId[RAN.eNB_instance]='0'
-		else:
-			RAN.eNB_serverId[RAN.eNB_instance]=eNB_serverId
+		if action == 'Build_eNB':
+			success = cls_native.Native.Build(ctx, node, HTML.testCase_id, HTML, RAN.eNBSourceCodePath, RAN.Build_eNB_args)
+		elif action == 'Build_Image':
+			success = CONTAINERS.BuildImage(ctx, node, HTML)
+		elif action == 'Build_Proxy':
+			success = CONTAINERS.BuildProxy(ctx, node, HTML)
+		elif action == 'Build_Cluster_Image':
+			success = CLUSTER.BuildClusterImage(ctx, node, HTML)
+		elif action == 'Build_Run_Tests':
+			success = CONTAINERS.BuildRunTests(ctx, node, HTML)
 
 	elif action == 'Initialize_eNB':
-		RAN.eNB_Trace=test.findtext('eNB_Trace')
-		RAN.eNB_Stats=test.findtext('eNB_Stats')
 		datalog_rt_stats_file=test.findtext('rt_stats_cfg')
 		if datalog_rt_stats_file is None:
 			RAN.datalog_rt_stats_file='datalog_rt_stats.default.yaml'
 		else:
 			RAN.datalog_rt_stats_file=datalog_rt_stats_file
 		RAN.Initialize_eNB_args=test.findtext('Initialize_eNB_args')
-		eNB_instance=test.findtext('eNB_instance')
-		USRPIPAddress=test.findtext('USRP_IPAddress')
-		if USRPIPAddress is None:
-			RAN.USRPIPAddress=''
-		else:
-			RAN.USRPIPAddress=USRPIPAddress
-		if (eNB_instance is None):
-			RAN.eNB_instance=0
-		else:
-			RAN.eNB_instance=int(eNB_instance)
-		eNB_serverId=test.findtext('eNB_serverId')
-		if (eNB_serverId is None):
-			RAN.eNB_serverId[RAN.eNB_instance]='0'
-		else:
-			RAN.eNB_serverId[RAN.eNB_instance]=eNB_serverId
-			
+		USRPIPAddress = test.findtext('USRP_IPAddress') or ''
+
 		#local variable air_interface
 		air_interface = test.findtext('air_interface')		
 		if (air_interface is None) or (air_interface.lower() not in ['nr','lte']):
-			RAN.air_interface[RAN.eNB_instance] = 'lte-softmodem'
+			RAN.air_interface = 'lte-softmodem'
 		else:
-			RAN.air_interface[RAN.eNB_instance] = air_interface.lower() +'-softmodem'
+			RAN.air_interface = air_interface.lower() +'-softmodem'
 
 		cmd_prefix = test.findtext('cmd_prefix')
 		if cmd_prefix is not None: RAN.cmd_prefix = cmd_prefix
+		success = RAN.InitializeeNB(ctx, node, HTML)
 
 	elif action == 'Terminate_eNB':
-		eNB_instance=test.findtext('eNB_instance')
-		if (eNB_instance is None):
-			RAN.eNB_instance=0
-		else:
-			RAN.eNB_instance=int(eNB_instance)
-		eNB_serverId=test.findtext('eNB_serverId')
-		if (eNB_serverId is None):
-			RAN.eNB_serverId[RAN.eNB_instance]='0'
-		else:
-			RAN.eNB_serverId[RAN.eNB_instance]=eNB_serverId
-
 		#retx checkers
-		string_field=test.findtext('d_retx_th')
+		string_field = test.findtext('d_retx_th')
 		if (string_field is not None):
 			RAN.ran_checkers['d_retx_th'] = [float(x) for x in string_field.split(',')]
 		string_field=test.findtext('u_retx_th')
@@ -210,225 +140,151 @@ def GetParametersFromXML(action):
 		#local variable air_interface
 		air_interface = test.findtext('air_interface')		
 		if (air_interface is None) or (air_interface.lower() not in ['nr','lte']):
-			RAN.air_interface[RAN.eNB_instance] = 'lte-softmodem'
+			RAN.air_interface = 'lte-softmodem'
 		else:
-			RAN.air_interface[RAN.eNB_instance] = air_interface.lower() +'-softmodem'
+			RAN.air_interface = air_interface.lower() +'-softmodem'
+		success = RAN.TerminateeNB(ctx, node, HTML)
 
 	elif action == 'Initialize_UE' or action == 'Attach_UE' or action == 'Detach_UE' or action == 'Terminate_UE' or action == 'CheckStatusUE' or action == 'DataEnable_UE' or action == 'DataDisable_UE':
 		CiTestObj.ue_ids = test.findtext('id').split(' ')
-
-	elif action == 'Build_OAI_UE':
-		CiTestObj.Build_OAI_UE_args = test.findtext('Build_OAI_UE_args')
-		CiTestObj.clean_repository = test.findtext('clean_repository')
-		if (CiTestObj.clean_repository == 'false'):
-			CiTestObj.clean_repository = False
-		else:
-			CiTestObj.clean_repository = True
-
-	elif action == 'Initialize_OAI_UE':
-		CiTestObj.Initialize_OAI_UE_args = test.findtext('Initialize_OAI_UE_args')
-		UE_instance = test.findtext('UE_instance')
-		if (UE_instance is None):
-			CiTestObj.UE_instance = 0
-		else:
-			CiTestObj.UE_instance = UE_instance
-			
-		#local variable air_interface
-		air_interface = test.findtext('air_interface')		
-		if (air_interface is None) or (air_interface.lower() not in ['nr','lte']):
-			CiTestObj.air_interface = 'lte-uesoftmodem'
-		elif (air_interface.lower() in ['nr','lte']):
-			CiTestObj.air_interface = air_interface.lower() +'-uesoftmodem'
-		else :
-			logging.error('OCP UE -- NOT SUPPORTED')
-
-		CiTestObj.cmd_prefix = test.findtext('cmd_prefix') or ""
-
-	elif action == 'Terminate_OAI_UE':
-		UE_instance=test.findtext('UE_instance')
-		if (UE_instance is None):
-			CiTestObj.UE_instance = '0'
-		else:
-			CiTestObj.UE_instance = int(UE_instance)
-		
-		#local variable air_interface
-		air_interface = test.findtext('air_interface')		
-		if (air_interface is None) or (air_interface.lower() not in ['nr','lte']):
-			CiTestObj.air_interface = 'lte-uesoftmodem'
-		else:
-			CiTestObj.air_interface = air_interface.lower() +'-uesoftmodem'
+		if action == 'Initialize_UE':
+			success = CiTestObj.InitializeUE(node, HTML)
+		elif action == 'Attach_UE':
+			success = CiTestObj.AttachUE(node, HTML)
+		elif action == 'Detach_UE':
+			success = CiTestObj.DetachUE(node, HTML)
+		elif action == 'Terminate_UE':
+			success = CiTestObj.TerminateUE(ctx, node, HTML)
+		elif action == 'CheckStatusUE':
+			success = CiTestObj.CheckStatusUE(node, HTML)
+		elif action == 'DataEnable_UE':
+			success = CiTestObj.DataEnableUE(node, HTML)
+		elif action == 'DataDisable_UE':
+			success = CiTestObj.DataDisableUE(node, HTML)
 
 	elif action == 'Ping':
 		CiTestObj.ping_args = test.findtext('ping_args')
 		CiTestObj.ping_packetloss_threshold = test.findtext('ping_packetloss_threshold')
 		CiTestObj.ue_ids = test.findtext('id').split(' ')
+		CiTestObj.svr_id = test.findtext('svr_id')
+		if test.findtext('svr_node'):
+			CiTestObj.svr_node = test.findtext('svr_node') if not force_local else 'localhost'
 		ping_rttavg_threshold = test.findtext('ping_rttavg_threshold') or ''
+		success = CiTestObj.Ping(ctx, node, HTML)
 
-	elif action == 'Iperf':
+	elif action == 'Iperf' or action == 'Iperf2_Unidir':
 		CiTestObj.iperf_args = test.findtext('iperf_args')
 		CiTestObj.ue_ids = test.findtext('id').split(' ')
-		CiTestObj.iperf_direction = test.findtext('direction')
+		CiTestObj.svr_id = test.findtext('svr_id')
+		if test.findtext('svr_node'):
+			CiTestObj.svr_node = test.findtext('svr_node') if not force_local else 'localhost'
 		CiTestObj.iperf_packetloss_threshold = test.findtext('iperf_packetloss_threshold')
 		CiTestObj.iperf_bitrate_threshold = test.findtext('iperf_bitrate_threshold') or '90'
 		CiTestObj.iperf_profile = test.findtext('iperf_profile') or 'balanced'
+		CiTestObj.iperf_tcp_rate_target = test.findtext('iperf_tcp_rate_target') or None
 		if CiTestObj.iperf_profile != 'balanced' and CiTestObj.iperf_profile != 'unbalanced' and CiTestObj.iperf_profile != 'single-ue':
 			logging.error(f'test-case has wrong profile {CiTestObj.iperf_profile}, forcing balanced')
 			CiTestObj.iperf_profile = 'balanced'
-		CiTestObj.iperf_options = test.findtext('iperf_options') or 'check'
-		if CiTestObj.iperf_options != 'check' and CiTestObj.iperf_options != 'sink':
-			logging.error('test-case has wrong option ' + CiTestObj.iperf_options)
-			CiTestObj.iperf_options = 'check'
+		if action == 'Iperf':
+			success = CiTestObj.Iperf(ctx, node, HTML)
+		elif action == 'Iperf2_Unidir':
+			success = CiTestObj.Iperf2_Unidir(ctx, node, HTML)
 
 	elif action == 'IdleSleep':
-		string_field = test.findtext('idle_sleep_time_in_sec')
-		if (string_field is None):
-			CiTestObj.idle_sleep_time = 5
-		else:
-			CiTestObj.idle_sleep_time = int(string_field)
+		st = test.findtext('idle_sleep_time_in_sec') or "5"
+		success = cls_oaicitest.IdleSleep(HTML, int(st))
 
-	elif action == 'Perform_X2_Handover':
-		string_field = test.findtext('x2_ho_options')
-		if (string_field is None):
-			CiTestObj.x2_ho_options = 'network'
-		else:
-			if string_field != 'network':
-				logging.error('ERROR: test-case has wrong option ' + string_field)
-				CiTestObj.x2_ho_options = 'network'
-			else:
-				CiTestObj.x2_ho_options = string_field
+	elif action == 'Deploy_Run_OC_PhySim':
+		oc_release = test.findtext('oc_release')
+		script = "scripts/oc-deploy-physims.sh"
+		image_tag = cls_containerize.CreateTag(CLUSTER.ranCommitID, CLUSTER.ranBranch, CLUSTER.ranAllowMerge)
+		options = f"oaicicd-core-for-ci-ran {oc_release} {image_tag} {CLUSTER.eNBSourceCodePath}"
+		workdir = CLUSTER.eNBSourceCodePath
+		success = cls_oaicitest.Deploy_Physim(ctx, HTML, node, workdir, script, options)
 
-	elif action == 'Build_PhySim':
-		ldpc.buildargs  = test.findtext('physim_build_args')
-		forced_workspace_cleanup = test.findtext('forced_workspace_cleanup')
-		if (forced_workspace_cleanup is None):
-			ldpc.forced_workspace_cleanup=False
-		else:
-			if re.match('true', forced_workspace_cleanup, re.IGNORECASE):
-				ldpc.forced_workspace_cleanup=True
-			else:
-				ldpc.forced_workspace_cleanup=False
+	elif action == 'Build_Deploy_Docker_PhySim' or action == 'Build_Deploy_Source_PhySim':
+		ctest_opt = test.findtext('ctest-opt') or ''
+		script = "scripts/docker-build-and-deploy-physims.sh" if action == 'Build_Deploy_Docker_PhySim' else 'scripts/source-deploy-physims.sh'
+		options = f"{CONTAINERS.eNBSourceCodePath} {ctest_opt}"
+		workdir = CONTAINERS.eNBSourceCodePath
+		success = cls_oaicitest.Deploy_Physim(ctx, HTML, node, workdir, script, options)
 
-	elif action == 'Initialize_MME':
-		string_field = test.findtext('option')
-		if (string_field is not None):
-			EPC.mmeConfFile = string_field
+	elif action == 'DeployCoreNetwork' or action == 'UndeployCoreNetwork':
+		cn_id = test.findtext('cn_id')
+		core_op = getattr(cls_oaicitest.OaiCiTest, action)
+		success = core_op(cn_id, ctx, HTML)
 
-	elif action == 'Initialize_HSS' or action == 'Initialize_SPGW':
-		pass
-	elif action == 'Terminate_HSS' or action == 'Terminate_MME' or action == 'Terminate_SPGW':
-		pass
-
-	elif action == 'Deploy_EPC':
-		string_field = test.findtext('parameters')
-		if (string_field is not None):
-			EPC.yamlPath = string_field
-
-	elif action == 'Initialize_5GCN':
-		string_field = test.findtext('args')
-		if (string_field is not None):
-			EPC.cfgDeploy = string_field	
-
-	elif action == 'Terminate_5GCN':
-		string_field = test.findtext('args')
-		if (string_field is not None):
-			EPC.cfgUnDeploy = string_field	
-
-	elif action == 'Deploy_Object' or action == 'Undeploy_Object':
-		eNB_instance=test.findtext('eNB_instance')
-		if (eNB_instance is None):
-			CONTAINERS.eNB_instance=0
-		else:
-			CONTAINERS.eNB_instance=int(eNB_instance)
-		eNB_serverId=test.findtext('eNB_serverId')
-		if (eNB_serverId is None):
-			CONTAINERS.eNB_serverId[CONTAINERS.eNB_instance]='0'
-		else:
-			CONTAINERS.eNB_serverId[CONTAINERS.eNB_instance]=eNB_serverId
-		string_field = test.findtext('yaml_path')
-		if (string_field is not None):
-			CONTAINERS.yamlPath[CONTAINERS.eNB_instance] = string_field
+	elif action == 'Deploy_Object' or action == 'Undeploy_Object' or action == "Create_Workspace" or action == "Stop_Object":
+		CONTAINERS.yamlPath = test.findtext('yaml_path')
 		string_field=test.findtext('d_retx_th')
 		if (string_field is not None):
 			CONTAINERS.ran_checkers['d_retx_th'] = [float(x) for x in string_field.split(',')]
 		string_field=test.findtext('u_retx_th')
 		if (string_field is not None):
 			CONTAINERS.ran_checkers['u_retx_th'] = [float(x) for x in string_field.split(',')]
-		string_field = test.findtext('services')
-		if string_field is not None:
-			CONTAINERS.services[CONTAINERS.eNB_instance] = string_field
-
-	elif action == 'DeployGenObject' or action == 'UndeployGenObject' or action == 'StatsFromGenObject':
-		string_field=test.findtext('yaml_path')
-		if (string_field is not None):
-			CONTAINERS.yamlPath[0] = string_field
-		string_field=test.findtext('services')
-		if (string_field is not None):
-			CONTAINERS.services[0] = string_field
-		string_field=test.findtext('nb_healthy')
-		if (string_field is not None):
-			CONTAINERS.nb_healthy[0] = int(string_field)
-		string_field=test.findtext('d_retx_th')
-		if (string_field is not None):
-			CONTAINERS.ran_checkers['d_retx_th'] = [float(x) for x in string_field.split(',')]
-		string_field=test.findtext('u_retx_th')
-		if (string_field is not None):
-			CONTAINERS.ran_checkers['u_retx_th'] = [float(x) for x in string_field.split(',')]
-
-	elif action == 'IperfFromContainer':
-		string_field = test.findtext('server_container_name')
-		if (string_field is not None):
-			CONTAINERS.svrContName = string_field
-		string_field = test.findtext('server_options')
-		if (string_field is not None):
-			CONTAINERS.svrOptions = string_field
-		string_field = test.findtext('client_container_name')
-		if (string_field is not None):
-			CONTAINERS.cliContName = string_field
-		string_field = test.findtext('client_options')
-		if (string_field is not None):
-			CONTAINERS.cliOptions = string_field
-
-	elif action == 'Run_LDPCTest' or action == 'Run_NRulsimTest' or action == 'Run_LDPCt1Test':
-		ldpc.runargs = test.findtext('physim_run_args')
+		CONTAINERS.services = test.findtext('services')
+		CONTAINERS.num_attempts = int(test.findtext('num_attempts') or 1)
+		CONTAINERS.deploymentTag = cls_containerize.CreateTag(CONTAINERS.ranCommitID, CONTAINERS.ranBranch, CONTAINERS.ranAllowMerge)
+		if action == 'Deploy_Object':
+			success = CONTAINERS.DeployObject(ctx, node, HTML)
+		elif action == 'Stop_Object':
+			success = CONTAINERS.StopObject(ctx, node, HTML)
+		elif action == 'Undeploy_Object':
+			success = CONTAINERS.UndeployObject(ctx, node, HTML, RAN)
+		elif action == 'Create_Workspace':
+			if force_local:
+				# Do not create a working directory when running locally. Current repo directory will be used
+				return True
+			success = CONTAINERS.Create_Workspace(node, HTML)
 
 	elif action == 'LicenceAndFormattingCheck':
-		pass
+		success = SCA.LicenceAndFormattingCheck(ctx, node, HTML)
 
 	elif action == 'Cppcheck_Analysis':
-		pass
+		success = SCA.CppCheckAnalysis(ctx, node, HTML)
 
 	elif action == 'Push_Local_Registry':
-		string_field = test.findtext('registry_svr_id')
-		if (string_field is not None):
-			CONTAINERS.registrySvrId = string_field
+		tag_prefix = test.findtext('tag_prefix') or ""
+		success = CONTAINERS.Push_Image_to_Local_Registry(node, HTML, tag_prefix)
 
-	elif action == 'Pull_Local_Registry':
-		string_field = test.findtext('test_svr_id')
-		if (string_field is not None):
-			CONTAINERS.testSvrId = string_field
-		CONTAINERS.imageToPull.clear()
-		string_field = test.findtext('images_to_pull')
-		if (string_field is not None):
-			CONTAINERS.imageToPull = string_field.split()
+	elif action == 'Pull_Local_Registry' or action == 'Clean_Test_Server_Images':
+		if force_local:
+			# Do not pull or remove images when running locally. User is supposed to handle image creation & cleanup
+			return True
+		tag_prefix = test.findtext('tag_prefix') or ""
+		images = test.findtext('images').split()
+		# hack: for FlexRIC, we need to overwrite the tag to use
+		tag = None
+		if len(images) == 1 and images[0] == "oai-flexric":
+			tag = CONTAINERS.flexricTag
+		if action == "Pull_Local_Registry":
+			success = CONTAINERS.Pull_Image_from_Registry(HTML, node, images, tag=tag, tag_prefix=tag_prefix)
+		if action == "Clean_Test_Server_Images":
+			success = CONTAINERS.Clean_Test_Server_Images(HTML, node, images, tag=tag)
 
-	elif action == 'Clean_Test_Server_Images':
-		string_field = test.findtext('test_svr_id')
-		if (string_field is not None):
-			CONTAINERS.testSvrId = string_field
 	elif action == 'Custom_Command':
-		RAN.node = test.findtext('node')
-		RAN.command = test.findtext('command')
-		RAN.command_fail = test.findtext('command_fail') in ['True', 'true', 'Yes', 'yes']
-	elif action == 'Pull_Cluster_Image':
-		string_field = test.findtext('images_to_pull')
-		if (string_field is not None):
-			CLUSTER.imageToPull = string_field.split()
-		string_field = test.findtext('test_svr_id')
-		if (string_field is not None):
-			CLUSTER.testSvrId = string_field
-	else:
-		logging.warning(f"unknown action {action} from option-parsing point-of-view")
+		command = test.findtext('command')
+		# Allow referencing repository workspace path in XML via %%workspace%%
+		command = command.replace("%%workspace%%", CONTAINERS.eNBSourceCodePath)
+		success = cls_oaicitest.Custom_Command(HTML, node, command)
 
+	elif action == 'Custom_Script':
+		script = test.findtext('script')
+		args = test.findtext('args')
+		# Allow referencing repository workspace path in XML via %%workspace%%
+		script = script.replace("%%workspace%%", CONTAINERS.eNBSourceCodePath)
+		success = cls_oaicitest.Custom_Script(HTML, node, script, args)
+
+	elif action == 'Pull_Cluster_Image':
+		tag_prefix = test.findtext('tag_prefix') or ""
+		images = test.findtext('images').split()
+		success = CLUSTER.PullClusterImage(HTML, node, images, tag_prefix=tag_prefix)
+
+	else:
+		logging.warning(f"unknown action {action}, skip step")
+		success = True # by default, we skip the step and print a warning
+
+	return success
 
 #check if given test is in list
 #it is in list if one of the strings in 'list' is at the beginning of 'test'
@@ -439,13 +295,22 @@ def test_in_list(test, list):
 			return True
 	return False
 
+test_runner_abort = False
 def receive_signal(signum, frame):
-	sys.exit(1)
+    global test_runner_abort
+    if not test_runner_abort:
+        logging.warning("received signal, canceling steps")
+        logging.info("send signal again to exit immediately")
+        test_runner_abort = True
+    else:
+        logging.warning("received signal again, exiting")
+        sys.exit(1)
 
-
-
-
-
+def ShowTestID(ctx, desc):
+    logging.info(f'\u001B[1m----------------------------------------\u001B[0m')
+    logging.info(f'\u001B[1m Test ID: {ctx.test_id} (#{ctx.count}) \u001B[0m')
+    logging.info(f'\u001B[1m {desc} \u001B[0m')
+    logging.info(f'\u001B[1m----------------------------------------\u001B[0m')
 
 #-----------------------------------------------------------
 # MAIN PART
@@ -471,33 +336,20 @@ mode = ''
 
 CiTestObj = cls_oaicitest.OaiCiTest()
  
-SSH = sshconnection.SSHConnection()
-EPC = epc.EPCManagement()
 RAN = ran.RANManagement()
 HTML = cls_oai_html.HTMLManagement()
 CONTAINERS = cls_containerize.Containerize()
 SCA = cls_static_code_analysis.StaticCodeAnalysis()
-PHYSIM = cls_physim1.PhySim()
 CLUSTER = cls_cluster.Cluster()
-
-ldpc=cls_physim.PhySim()    #create an instance for LDPC test using GPU or CPU build
-
 
 #-----------------------------------------------------------
 # Parsing Command Line Arguments
 #-----------------------------------------------------------
 
 import args_parse
-py_param_file_present, py_params, mode = args_parse.ArgsParse(sys.argv,CiTestObj,RAN,HTML,EPC,ldpc,CONTAINERS,HELP,SCA,PHYSIM,CLUSTER)
-
-
-
-#-----------------------------------------------------------
-# TEMPORARY params management (UNUSED)
-#-----------------------------------------------------------
-#temporary solution for testing:
-if py_param_file_present == True:
-	AssignParams(py_params)
+# Force local execution, move all execution targets to localhost
+force_local = False
+mode, force_local = args_parse.ArgsParse(sys.argv,CiTestObj,RAN,HTML,CONTAINERS,HELP,SCA,CLUSTER)
 
 #-----------------------------------------------------------
 # mode amd XML class (action) analysis
@@ -505,83 +357,40 @@ if py_param_file_present == True:
 cwd = os.getcwd()
 
 if re.match('^TerminateeNB$', mode, re.IGNORECASE):
-	if RAN.eNBIPAddress == '' or RAN.eNBUserName == '' or RAN.eNBPassword == '':
-		HELP.GenericHelp(CONST.Version)
-		sys.exit('Insufficient Parameter')
-	if RAN.eNBIPAddress == 'none':
-		sys.exit(0)
-	RAN.eNB_instance=0
-	RAN.eNB_serverId[0]='0'
-	RAN.eNBSourceCodePath='/tmp/'
-	RAN.TerminateeNB(HTML, EPC)
-elif re.match('^TerminateOAIUE$', mode, re.IGNORECASE):
-	if CiTestObj.UEIPAddress == '' or CiTestObj.UEUserName == '' or CiTestObj.UEPassword == '':
-		HELP.GenericHelp(CONST.Version)
-		sys.exit('Insufficient Parameter')
-	signal.signal(signal.SIGUSR1, receive_signal)
-	CiTestObj.TerminateOAIUE(HTML,RAN,EPC,CONTAINERS)
+	logging.warning("Option TerminateeNB ignored")
 elif re.match('^TerminateHSS$', mode, re.IGNORECASE):
-	if EPC.IPAddress == '' or EPC.UserName == '' or EPC.Password == '' or EPC.Type == '' or EPC.SourceCodePath == '':
-		HELP.GenericHelp(CONST.Version)
-		sys.exit('Insufficient Parameter')
-	EPC.TerminateHSS(HTML)
+	logging.warning("Option TerminateHSS ignored")
 elif re.match('^TerminateMME$', mode, re.IGNORECASE):
-	if EPC.IPAddress == '' or EPC.UserName == '' or EPC.Password == '' or EPC.Type == '' or EPC.SourceCodePath == '':
-		HELP.GenericHelp(CONST.Version)
-		sys.exit('Insufficient Parameter')
-	EPC.TerminateMME(HTML)
+	logging.warning("Option TerminateMME ignored")
 elif re.match('^TerminateSPGW$', mode, re.IGNORECASE):
-	if EPC.IPAddress == '' or EPC.UserName == '' or EPC.Password == '' or EPC.Type == '' or EPC.SourceCodePath== '':
-		HELP.GenericHelp(CONST.Version)
-		sys.exit('Insufficient Parameter')
-	EPC.TerminateSPGW(HTML)
+	logging.warning("Option TerminateSPGW ignored")
 elif re.match('^LogCollectBuild$', mode, re.IGNORECASE):
-	if (RAN.eNBIPAddress == '' or RAN.eNBUserName == '' or RAN.eNBPassword == '' or RAN.eNBSourceCodePath == '') and (CiTestObj.UEIPAddress == '' or CiTestObj.UEUserName == '' or CiTestObj.UEPassword == '' or CiTestObj.UESourceCodePath == ''):
-		HELP.GenericHelp(CONST.Version)
-		sys.exit('Insufficient Parameter')
-	if RAN.eNBIPAddress == 'none':
-		sys.exit(0)
-	CiTestObj.LogCollectBuild(RAN)
+	logging.warning("Option LogCollectBuild ignored")
 elif re.match('^LogCollecteNB$', mode, re.IGNORECASE):
-	if RAN.eNBIPAddress == '' or RAN.eNBUserName == '' or RAN.eNBPassword == '' or RAN.eNBSourceCodePath == '':
+	if RAN.eNBSourceCodePath == '':
 		HELP.GenericHelp(CONST.Version)
 		sys.exit('Insufficient Parameter')
-	if RAN.eNBIPAddress == 'none':
+	if os.path.isdir('cmake_targets/log'):
 		cmd = 'zip -r enb.log.' + RAN.BuildId + '.zip cmake_targets/log'
 		logging.info(cmd)
-		zipStatus = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, universal_newlines=True, timeout=60)
+		try:
+			zipStatus = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, universal_newlines=True, timeout=60)
+		except subprocess.CalledProcessError as e:
+			logging.error("Command '{}' returned non-zero exit status {}.".format(e.cmd, e.returncode))
+			logging.error("Error output:\n{}".format(e.output))
 		sys.exit(0)
-	RAN.LogCollecteNB()
 elif re.match('^LogCollectHSS$', mode, re.IGNORECASE):
-	if EPC.IPAddress == '' or EPC.UserName == '' or EPC.Password == '' or EPC.Type == '' or EPC.SourceCodePath == '':
-		HELP.GenericHelp(CONST.Version)
-		sys.exit('Insufficient Parameter')
-	EPC.LogCollectHSS()
+	logging.warning("Option LogCollectHSS ignored")
 elif re.match('^LogCollectMME$', mode, re.IGNORECASE):
-	if EPC.IPAddress == '' or EPC.UserName == '' or EPC.Password == '' or EPC.Type == '' or EPC.SourceCodePath == '':
-		HELP.GenericHelp(CONST.Version)
-		sys.exit('Insufficient Parameter')
-	EPC.LogCollectMME()
+	logging.warning("Option LogCollectMME ignored")
 elif re.match('^LogCollectSPGW$', mode, re.IGNORECASE):
-	if EPC.IPAddress == '' or EPC.UserName == '' or EPC.Password == '' or EPC.Type == '' or EPC.SourceCodePath == '':
-		HELP.GenericHelp(CONST.Version)
-		sys.exit('Insufficient Parameter')
-	EPC.LogCollectSPGW()
+	logging.warning("Option LogCollectSPGW ignored")
 elif re.match('^LogCollectPing$', mode, re.IGNORECASE):
-	if EPC.IPAddress == '' or EPC.UserName == '' or EPC.Password == '' or EPC.SourceCodePath == '':
-		HELP.GenericHelp(CONST.Version)
-		sys.exit('Insufficient Parameter')
-	CiTestObj.LogCollectPing(EPC)
+	logging.warning("Option LogCollectPing ignored")
 elif re.match('^LogCollectIperf$', mode, re.IGNORECASE):
-	if EPC.IPAddress == '' or EPC.UserName == '' or EPC.Password == '' or EPC.SourceCodePath == '':
-		HELP.GenericHelp(CONST.Version)
-		sys.exit('Insufficient Parameter')
-	CiTestObj.LogCollectIperf(EPC)
+	logging.warning("Option LogCollectIperf ignored")
 elif re.match('^LogCollectOAIUE$', mode, re.IGNORECASE):
-	if CiTestObj.UEIPAddress == '' or CiTestObj.UEUserName == '' or CiTestObj.UEPassword == '' or CiTestObj.UESourceCodePath == '':
-		HELP.GenericHelp(CONST.Version)
-		sys.exit('Insufficient Parameter')
-	CiTestObj.LogCollectOAIUE()
+	logging.warning("Option LogCollectOAIUE ignored")
 elif re.match('^InitiateHtml$', mode, re.IGNORECASE):
 	count = 0
 	foundCount = 0
@@ -591,8 +400,8 @@ elif re.match('^InitiateHtml$', mode, re.IGNORECASE):
 		if (os.path.isfile(xml_test_file)):
 			try:
 				xmlTree = ET.parse(xml_test_file)
-			except:
-				print("Error while parsing file: " + xml_test_file)
+			except Exception as e:
+				print(f"Error: {e} while parsing file: {xml_test_file}.")
 			xmlRoot = xmlTree.getroot()
 			HTML.htmlTabRefs.append(xmlRoot.findtext('htmlTabRef',default='test-tab-' + str(count)))
 			HTML.htmlTabNames.append(xmlRoot.findtext('htmlTabName',default='test-tab-' + str(count)))
@@ -614,21 +423,15 @@ elif re.match('^TesteNB$', mode, re.IGNORECASE) or re.match('^TestUE$', mode, re
 	logging.info('\u001B[1m  Starting Scenario: ' + CiTestObj.testXMLfiles[0] + '\u001B[0m')
 	logging.info('\u001B[1m----------------------------------------\u001B[0m')
 	if re.match('^TesteNB$', mode, re.IGNORECASE):
-		if RAN.eNBIPAddress == '' or RAN.ranRepository == '' or RAN.ranBranch == '' or RAN.eNBUserName == '' or RAN.eNBPassword == '' or RAN.eNBSourceCodePath == '' or EPC.IPAddress == '' or EPC.UserName == '' or EPC.Password == '' or EPC.Type == '' or EPC.SourceCodePath == '':
+		if RAN.ranRepository == '' or RAN.ranBranch == '' or RAN.eNBSourceCodePath == '':
 			HELP.GenericHelp(CONST.Version)
-			if EPC.IPAddress == '' or EPC.UserName == '' or EPC.Password == '' or EPC.SourceCodePath == '' or EPC.Type == '':
-				HELP.EPCSrvHelp(EPC.IPAddress, EPC.UserName, EPC.Password, EPC.SourceCodePath, EPC.Type)
 			if RAN.ranRepository == '':
 				HELP.GitSrvHelp(RAN.ranRepository, RAN.ranBranch, RAN.ranCommitID, RAN.ranAllowMerge, RAN.ranTargetBranch)
-			if RAN.eNBIPAddress == ''  or RAN.eNBUserName == '' or RAN.eNBPassword == '' or RAN.eNBSourceCodePath == '':
-				HELP.eNBSrvHelp(RAN.eNBIPAddress, RAN.eNBUserName, RAN.eNBPassword, RAN.eNBSourceCodePath)
+			if RAN.eNBSourceCodePath == '':
+				HELP.eNBSrvHelp(RAN.eNBSourceCodePath)
 			sys.exit('Insufficient Parameter')
-
-		if (EPC.IPAddress!= '') and (EPC.IPAddress != 'none'):
-			SSH.copyout(EPC.IPAddress, EPC.UserName, EPC.Password, cwd + "/tcp_iperf_stats.awk", "/tmp")
-			SSH.copyout(EPC.IPAddress, EPC.UserName, EPC.Password, cwd + "/active_net_interfaces.awk", "/tmp")
 	else:
-		if CiTestObj.UEIPAddress == '' or CiTestObj.ranRepository == '' or CiTestObj.ranBranch == '' or CiTestObj.UEUserName == '' or CiTestObj.UEPassword == '' or CiTestObj.UESourceCodePath == '':
+		if CiTestObj.ranRepository == '' or CiTestObj.ranBranch == '':
 			HELP.GenericHelp(CONST.Version)
 			sys.exit('UE: Insufficient Parameter')
 
@@ -639,6 +442,16 @@ elif re.match('^TesteNB$', mode, re.IGNORECASE) or re.match('^TestUE$', mode, re
 	else:
 		xml_test_file = cwd + "/" + CiTestObj.testXMLfiles[0]
 
+	# directory where all log artifacts will be placed
+	logPath = f"{cwd}/../cmake_targets/log/{CiTestObj.testXMLfiles[0].split('/')[-1]}.d"
+	# we run from within ci-scripts, but the logPath is absolute, so replace
+	# the ci-scripts/..; if it does not exist, nothing will happen
+	logPath = logPath.replace(r'/ci-scripts/..', '')
+	logging.info(f"placing all artifacts for this run in {logPath}/")
+	with cls_cmd.LocalCmd() as c:
+		c.run(f"rm -rf {logPath}")
+		c.run(f"mkdir -p {logPath}")
+
 	xmlTree = ET.parse(xml_test_file)
 	xmlRoot = xmlTree.getroot()
 
@@ -647,15 +460,6 @@ elif re.match('^TesteNB$', mode, re.IGNORECASE) or re.match('^TestUE$', mode, re
 	if (HTML.nbTestXMLfiles == 1):
 		HTML.htmlTabRefs.append(xmlRoot.findtext('htmlTabRef',default='test-tab-0'))
 		HTML.htmlTabNames.append(xmlRoot.findtext('htmlTabName',default='Test-0'))
-		repeatCount = xmlRoot.findtext('repeatCount',default='1')
-		testStability = xmlRoot.findtext('TestUnstable',default='False')
-		CiTestObj.repeatCounts.append(int(repeatCount))
-		if testStability == 'True':
-			CiTestObj.testUnstable = True
-			HTML.testUnstable = True
-			CiTestObj.testMinStableId = xmlRoot.findtext('TestMinId',default='999999')
-			HTML.testMinStableId = CiTestObj.testMinStableId
-			logging.warning('Test is tagged as Unstable -- starting from TestID ' + str(CiTestObj.testMinStableId))
 	all_tests=xmlRoot.findall('testCase')
 
 	exclusion_tests=exclusion_tests.split()
@@ -665,7 +469,7 @@ elif re.match('^TesteNB$', mode, re.IGNORECASE) or re.match('^TestUE$', mode, re
 	#(6 digits or less than 6 digits followed by +)
 	for test in exclusion_tests:
 		if     (not re.match('^[0-9]{6}$', test) and
-				not re.match('^[0-9]{1,5}\+$', test)):
+				not re.match('^[0-9]{1,5}\\+$', test)):
 			logging.error('exclusion test is invalidly formatted: ' + test)
 			sys.exit(1)
 		else:
@@ -676,14 +480,11 @@ elif re.match('^TesteNB$', mode, re.IGNORECASE) or re.match('^TestUE$', mode, re
 	#be verbose
 	for test in requested_tests:
 		if     (re.match('^[0-9]{6}$', test) or
-				re.match('^[0-9]{1,5}\+$', test)):
+				re.match('^[0-9]{1,5}\\+$', test)):
 			logging.info('test group/case requested: ' + test)
 		else:
 			logging.error('requested test is invalidly formatted: ' + test)
 			sys.exit(1)
-	if (EPC.IPAddress != '') and (EPC.IPAddress != 'none'):
-		EPC.SetMmeIPAddress()
-		EPC.SetAmfIPAddress()
 
 	#get the list of tests to be done
 	todo_tests=[]
@@ -694,209 +495,60 @@ elif re.match('^TesteNB$', mode, re.IGNORECASE) or re.match('^TestUE$', mode, re
 			#logging.info('test will be run: ' + test)
 			todo_tests.append(test)
 
-	signal.signal(signal.SIGUSR1, receive_signal)
+	signal.signal(signal.SIGINT, receive_signal)
 
 	HTML.CreateHtmlTabHeader()
 
-	# On CI bench w/ containers, we need to validate if IP routes are set
-	if EPC.IPAddress == '172.21.16.136':
-		CONTAINERS.CheckAndAddRoute('porcepix', EPC.IPAddress, EPC.UserName, EPC.Password)
-	if EPC.IPAddress == '172.21.16.137':
-		CONTAINERS.CheckAndAddRoute('nepes', EPC.IPAddress, EPC.UserName, EPC.Password)
-	if CONTAINERS.eNBIPAddress == '172.21.16.127':
-		CONTAINERS.CheckAndAddRoute('asterix', CONTAINERS.eNBIPAddress, CONTAINERS.eNBUserName, CONTAINERS.eNBPassword)
-	if CONTAINERS.eNB1IPAddress == '172.21.16.127':
-		CONTAINERS.CheckAndAddRoute('asterix', CONTAINERS.eNB1IPAddress, CONTAINERS.eNB1UserName, CONTAINERS.eNB1Password)
-	if CONTAINERS.eNBIPAddress == '172.21.16.128':
-		CONTAINERS.CheckAndAddRoute('obelix', CONTAINERS.eNBIPAddress, CONTAINERS.eNBUserName, CONTAINERS.eNBPassword)
-	if CONTAINERS.eNB1IPAddress == '172.21.16.128':
-		CONTAINERS.CheckAndAddRoute('obelix', CONTAINERS.eNB1IPAddress, CONTAINERS.eNB1UserName, CONTAINERS.eNB1Password)
-	if CONTAINERS.eNBIPAddress == '172.21.16.109' or CONTAINERS.eNBIPAddress == 'ofqot':
-		CONTAINERS.CheckAndAddRoute('ofqot', CONTAINERS.eNBIPAddress, CONTAINERS.eNBUserName, CONTAINERS.eNBPassword)
-	if CONTAINERS.eNBIPAddress == '172.21.16.137':
-		CONTAINERS.CheckAndAddRoute('nepes', CONTAINERS.eNBIPAddress, CONTAINERS.eNBUserName, CONTAINERS.eNBPassword)
-	if CONTAINERS.eNB1IPAddress == '172.21.16.137':
-		CONTAINERS.CheckAndAddRoute('nepes', CONTAINERS.eNB1IPAddress, CONTAINERS.eNB1UserName, CONTAINERS.eNB1Password)
-
-	CiTestObj.FailReportCnt = 0
-	RAN.prematureExit=True
+	task_set_succeeded = True
 	HTML.startTime=int(round(time.time() * 1000))
-	while CiTestObj.FailReportCnt < CiTestObj.repeatCounts[0] and RAN.prematureExit:
-		RAN.prematureExit=False
-		# At every iteration of the retry loop, a separator will be added
-		# pass CiTestObj.FailReportCnt as parameter of HTML.CreateHtmlRetrySeparator
-		HTML.CreateHtmlRetrySeparator(CiTestObj.FailReportCnt)
-		for test_case_id in todo_tests:
-			if RAN.prematureExit:
+
+	i = 0
+	for test_case_id in todo_tests:
+		for test in all_tests:
+			if test_runner_abort:
+				task_set_succeeded = False
+			id = test.get('id')
+			if test_case_id != id:
+				continue
+			i += 1
+			CiTestObj.testCase_id = id
+			ctx = TestCaseCtx(i, int(id), logPath)
+			HTML.testCase_id=CiTestObj.testCase_id
+			desc = test.findtext('desc')
+			node = test.findtext('node') if not force_local else 'localhost'
+			always_exec = test.findtext('always_exec') in ['True', 'true', 'Yes', 'yes']
+			may_fail = test.findtext('may_fail') in ['True', 'true', 'Yes', 'yes']
+			HTML.desc = desc
+			action = test.findtext('class')
+			if (CheckClassValidity(xml_class_list, action, id) == False):
+				task_set_succeeded = False
+				continue
+			ShowTestID(ctx, desc)
+			if not task_set_succeeded and not always_exec:
+				msg = f"skipping test due to prior error"
+				logging.warning(msg)
+				HTML.CreateHtmlTestRowQueue(msg, "SKIP", [])
 				break
-			for test in all_tests:
-				if RAN.prematureExit:
-					break
-				id = test.get('id')
-				if test_case_id != id:
-					continue
-				CiTestObj.testCase_id = id
-				HTML.testCase_id=CiTestObj.testCase_id
-				EPC.testCase_id=CiTestObj.testCase_id
-				CiTestObj.desc = test.findtext('desc')
-				HTML.desc=CiTestObj.desc
-				action = test.findtext('class')
-				if (CheckClassValidity(xml_class_list, action, id) == False):
-					continue
-				CiTestObj.ShowTestID()
-				GetParametersFromXML(action)
-				if action == 'Build_eNB':
-					RAN.BuildeNB(HTML)
-				elif action == 'WaitEndBuild_eNB':
-					RAN.WaitBuildeNBisFinished(HTML)
-				elif action == 'Custom_Command':
-					logging.info(f"Executing custom command")
-					RAN.CustomCommand(HTML)
-					if RAN.prematureExit:
-						CiTestObj.AutoTerminateeNB(HTML,RAN,EPC,CONTAINERS)
-				elif action == 'Initialize_eNB':
-					RAN.InitializeeNB(HTML, EPC)
-					if RAN.prematureExit:
-						CiTestObj.AutoTerminateeNB(HTML,RAN,EPC,CONTAINERS)
-				elif action == 'Terminate_eNB':
-					RAN.TerminateeNB(HTML, EPC)
-				elif action == 'Initialize_UE':
-					CiTestObj.InitializeUE(HTML)
-				elif action == 'Terminate_UE':
-					CiTestObj.TerminateUE(HTML)
-				elif action == 'Attach_UE':
-					CiTestObj.AttachUE(HTML, RAN, EPC, CONTAINERS)
-				elif action == 'Detach_UE':
-					CiTestObj.DetachUE(HTML)
-				elif action == 'DataDisable_UE':
-					CiTestObj.DataDisableUE(HTML)
-				elif action == 'DataEnable_UE':
-					CiTestObj.DataEnableUE(HTML)
-				elif action == 'CheckStatusUE':
-					CiTestObj.CheckStatusUE(HTML)
-				elif action == 'Build_OAI_UE':
-					CiTestObj.BuildOAIUE(HTML)
-				elif action == 'Initialize_OAI_UE':
-					CiTestObj.InitializeOAIUE(HTML,RAN,EPC,CONTAINERS)
-				elif action == 'Terminate_OAI_UE':
-					CiTestObj.TerminateOAIUE(HTML,RAN,EPC,CONTAINERS)
-				elif action == 'Ping':
-					CiTestObj.Ping(HTML,RAN,EPC,CONTAINERS)
-				elif action == 'Iperf':
-					CiTestObj.Iperf(HTML,RAN,EPC,CONTAINERS)
-				elif action == 'Initialize_HSS':
-					EPC.InitializeHSS(HTML)
-				elif action == 'Terminate_HSS':
-					EPC.TerminateHSS(HTML)
-				elif action == 'Initialize_MME':
-					EPC.InitializeMME(HTML)
-				elif action == 'Terminate_MME':
-					EPC.TerminateMME(HTML)
-				elif action == 'Initialize_SPGW':
-					EPC.InitializeSPGW(HTML)
-				elif action == 'Terminate_SPGW':
-					EPC.TerminateSPGW(HTML)
-				elif action == 'Initialize_5GCN':
-					EPC.Initialize5GCN(HTML)
-				elif action == 'Terminate_5GCN':
-					EPC.Terminate5GCN(HTML)
-				elif action == 'Deploy_EPC':
-					EPC.DeployEpc(HTML)
-				elif action == 'Undeploy_EPC':
-					EPC.UndeployEpc(HTML)
-				elif action == 'IdleSleep':
-					CiTestObj.IdleSleep(HTML)
-				elif action == 'Perform_X2_Handover':
-					CiTestObj.Perform_X2_Handover(HTML,RAN,EPC)
-				elif action == 'Build_PhySim':
-					HTML=ldpc.Build_PhySim(HTML,CONST)
-					if ldpc.exitStatus==1:
-						RAN.prematureExit = True
-				elif action == 'Run_LDPCTest':
-					HTML=ldpc.Run_LDPCTest(HTML,CONST,id)
-					if ldpc.exitStatus==1:
-						RAN.prematureExit = True
-				elif action == 'Run_LDPCt1Test':
-					HTML=ldpc.Run_LDPCt1Test(HTML,CONST,id)
-					if ldpc.exitStatus==1:
-						RAN.prematureExit = True
-				elif action == 'Run_NRulsimTest':
-					HTML=ldpc.Run_NRulsimTest(HTML,CONST,id)
-					if ldpc.exitStatus==1:
-						RAN.prematureExit = True
-				elif action == 'Pull_Cluster_Image':
-					if not CLUSTER.PullClusterImage(HTML,RAN):
-						RAN.prematureExit = True
-				elif action == 'Build_Cluster_Image':
-					if not CLUSTER.BuildClusterImage(HTML):
-						RAN.prematureExit = True
-				elif action == 'Build_Image':
-					CONTAINERS.BuildImage(HTML)
-				elif action == 'Build_Proxy':
-					CONTAINERS.BuildProxy(HTML)
-				elif action == 'Push_Local_Registry':
-					success = CONTAINERS.Push_Image_to_Local_Registry(HTML)
-					if not success:
-						RAN.prematureExit = True
-				elif action == 'Pull_Local_Registry':
-					success = CONTAINERS.Pull_Image_from_Local_Registry(HTML)
-					if not success:
-						RAN.prematureExit = True
-				elif action == 'Clean_Test_Server_Images':
-					success = CONTAINERS.Clean_Test_Server_Images(HTML)
-					if not success:
-						RAN.prematureExit = True
-				elif action == 'Deploy_Object':
-					CONTAINERS.DeployObject(HTML, EPC)
-					if CONTAINERS.exitStatus==1:
-						CiTestObj.AutoTerminateeNB(HTML,RAN,EPC,CONTAINERS)
-						RAN.prematureExit = True
-				elif action == 'Undeploy_Object':
-					CONTAINERS.UndeployObject(HTML, RAN)
-					if CONTAINERS.exitStatus == 1:
-						CiTestObj.AutoTerminateeNB(HTML,RAN,EPC,CONTAINERS)
-						RAN.prematureExit = True
-				elif action == 'Cppcheck_Analysis':
-					SCA.CppCheckAnalysis(HTML)
-				elif action == 'LicenceAndFormattingCheck':
-					ret = SCA.LicenceAndFormattingCheck(HTML)
-					if ret != 0:
-						RAN.prematureExit = True
-				elif action == 'Deploy_Run_PhySim':
-					PHYSIM.Deploy_PhySim(HTML, RAN)
-				elif action == 'DeployGenObject':
-					CONTAINERS.DeployGenObject(HTML, RAN, CiTestObj)
-					if CONTAINERS.exitStatus==1:
-						RAN.prematureExit = True
-				elif action == 'UndeployGenObject':
-					CONTAINERS.UndeployGenObject(HTML, RAN, CiTestObj)
-					if CONTAINERS.exitStatus==1:
-						RAN.prematureExit = True
-				elif action == 'IperfFromContainer':
-					CONTAINERS.IperfFromContainer(HTML, RAN, CiTestObj)
-					if CONTAINERS.exitStatus==1:
-						RAN.prematureExit = True
-				elif action == 'StatsFromGenObject':
-					CONTAINERS.StatsFromGenObject(HTML)
-				elif action == 'Push_Images_To_Test_Servers':
-					logging.debug('To be implemented')
-				else:
-					sys.exit('Invalid class (action) from xml')
-				if RAN.prematureExit:
-					if CiTestObj.testCase_id == CiTestObj.testMinStableId:
-						logging.warning('Scenario has reached minimal stability point')
-						CiTestObj.testStabilityPointReached = True
-						HTML.testStabilityPointReached = True
-		CiTestObj.FailReportCnt += 1
-	if CiTestObj.FailReportCnt == CiTestObj.repeatCounts[0] and RAN.prematureExit:
-		logging.error('\u001B[1;37;41mScenario failed ' + str(CiTestObj.FailReportCnt) + ' time(s)\u001B[0m')
+			try:
+				test_succeeded = ExecuteActionWithParam(action, ctx, node)
+				if not test_succeeded and may_fail:
+					logging.warning(f"test ID {test_case_id} action {action} may or may not fail, proceeding despite error")
+				elif not test_succeeded:
+					logging.error(f"test ID {test_case_id} action {action} failed ({test_succeeded}), skipping next tests")
+					task_set_succeeded = False
+			except Exception as e:
+				s = traceback.format_exc()
+				logging.error(f'while running CI, an exception occurred:\n{s}')
+				HTML.CreateHtmlTestRowQueue("N/A", 'KO', [f"CI test code encountered an exception:\n{s}"])
+				task_set_succeeded = False
+				break
+
+	if not task_set_succeeded:
+		logging.error('\u001B[1;37;41mScenario failed\u001B[0m')
 		HTML.CreateHtmlTabFooter(False)
-		if CiTestObj.testUnstable and (CiTestObj.testStabilityPointReached or CiTestObj.testMinStableId == '999999'):
-			logging.warning('\u001B[1;30;43mScenario has reached minimal stability point -- Not a Failure\u001B[0m')
-		else:
-			sys.exit('Failed Scenario')
+		sys.exit('Failed Scenario')
 	else:
-		logging.info('\u001B[1;37;42mScenario passed after ' + str(CiTestObj.FailReportCnt) + ' time(s)\u001B[0m')
+		logging.info('\u001B[1;37;42mScenario passed\u001B[0m')
 		HTML.CreateHtmlTabFooter(True)
 elif re.match('^LoadParams$', mode, re.IGNORECASE):
 	pass

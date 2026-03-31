@@ -314,6 +314,8 @@ static int trx_usrp_start(openair0_device *device) {
 #endif
 
   switch (device->openair0_cfg->gpio_controller) {
+    case RU_GPIO_CONTROL_NONE:
+      break;
     case RU_GPIO_CONTROL_GENERIC:
       trx_usrp_start_generic_gpio(device, s);
       break;
@@ -429,8 +431,7 @@ static int trx_usrp_write(openair0_device *device,
 			  int flags) {
   int ret=0;
   usrp_state_t *s = (usrp_state_t *)device->priv;
-  // TODO: Temporarily commented following line; Needs to uncomment and investigate the issue
-  // timestamp -= device->openair0_cfg->tx_sample_advance;
+  timestamp -= device->openair0_cfg->command_line_sample_advance + device->openair0_cfg->tx_sample_advance;
   int nsamps2;  // aligned to upper 32 or 16 byte boundary
 
   radio_tx_burst_flag_t flags_burst = (radio_tx_burst_flag_t) (flags & 0xf);
@@ -487,38 +488,39 @@ static int trx_usrp_write(openair0_device *device,
             buff_tx[i][j] = simde_mm256_slli_epi16(tmp, 4);
           }
         }
-    }
+      }
 
-    s->tx_md.has_time_spec  = true;
-    s->tx_md.start_of_burst = (s->tx_count==0) ? true : first_packet_state;
-    s->tx_md.end_of_burst   = last_packet_state;
-    s->tx_md.time_spec      = uhd::time_spec_t::from_ticks(timestamp, s->sample_rate);
-    s->tx_count++;
+      s->tx_md.has_time_spec = true;
+      s->tx_md.start_of_burst = (s->tx_count == 0) ? true : first_packet_state;
+      s->tx_md.end_of_burst = last_packet_state;
+      s->tx_md.time_spec = uhd::time_spec_t::from_ticks(timestamp, s->sample_rate);
+      s->tx_count++;
 
-VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_BEAM_SWITCHING_GPIO,1);
-    // bit 13 enables gpio 
-    if ((flags_gpio & TX_GPIO_CHANGE) != 0) {
-      // push GPIO bits 
-      s->usrp->set_command_time(s->tx_md.time_spec);
-      s->usrp->set_gpio_attr(s->gpio_bank, "OUT", flags_gpio, MAN_MASK);
-      s->usrp->clear_command_time();
-    }
-VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_BEAM_SWITCHING_GPIO,0);
+      VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_BEAM_SWITCHING_GPIO, 1);
+      // bit 13 enables gpio
+      if ((flags_gpio & TX_GPIO_CHANGE) != 0) {
+        // push GPIO bits
+        s->usrp->set_command_time(s->tx_md.time_spec);
+        s->usrp->set_gpio_attr(s->gpio_bank, "OUT", flags_gpio, MAN_MASK);
+        s->usrp->clear_command_time();
+      }
+      VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_BEAM_SWITCHING_GPIO, 0);
 
-    if (cc>1) {
-      std::vector<void *> buff_ptrs;
+      if (cc > 1) {
+        std::vector<void *> buff_ptrs;
 
-      for (int i=0; i<cc; i++)
-        buff_ptrs.push_back(&(((int16_t *)buff_tx[i])[0]));
+        for (int i = 0; i < cc; i++)
+          buff_ptrs.push_back(&(((int16_t *)buff_tx[i])[0]));
 
-      ret = (int)s->tx_stream->send(buff_ptrs, nsamps, s->tx_md);
-    }
-    else {
-      ret = (int)s->tx_stream->send(&(((int16_t *)buff_tx[0])[0]), nsamps, s->tx_md);
-    }
+        ret = (int)s->tx_stream->send(buff_ptrs, nsamps, s->tx_md);
+      } else {
+        ret = (int)s->tx_stream->send(&(((int16_t *)buff_tx[0])[0]), nsamps, s->tx_md);
+      }
 
-    if (ret != nsamps) LOG_E(HW,"[xmit] tx samples %d != %d\n",ret,nsamps);
-    return ret;
+      if (ret != nsamps) {
+        LOG_E(HW, "[xmit] tx samples %d != %d\n", ret, nsamps);
+      }
+      return ret;
     } else {
       pthread_mutex_lock(&write_thread->mutex_write);
 
@@ -645,9 +647,7 @@ void *trx_usrp_write_thread(void * arg){
       ret = (int)s->tx_stream->send(&(((int16_t *)buff_tx[0])[0]), nsamps, s->tx_md);
     }
 
-#ifdef T_USRP_TX_ANT0
     T(T_USRP_TX_ANT0, T_INT(timestamp), T_BUFFER(buff_tx[0], nsamps*4));
-#endif
 
     if (ret != nsamps) LOG_E(HW,"[xmit] tx samples %d != %d\n",ret,nsamps);
     VCD_SIGNAL_DUMPER_DUMP_VARIABLE_BY_NAME( VCD_SIGNAL_DUMPER_VARIABLES_USRP_SEND_RETURN, ret );
@@ -744,7 +744,7 @@ static int trx_usrp_read(openair0_device *device, openair0_timestamp *ptimestamp
       break;
 
     if ((s->wait_for_first_pps == 1) && (samples_received != nsamps)) {
-      printf("sleep...\n"); // usleep(100);
+      printf("sleep...\n"); //usleep(100);
     }
   }
   if (samples_received == nsamps) s->wait_for_first_pps=0;
@@ -774,9 +774,7 @@ static int trx_usrp_read(openair0_device *device, openair0_timestamp *ptimestamp
   s->rx_timestamp = s->rx_md.time_spec.to_ticks(s->sample_rate);
   *ptimestamp = s->rx_timestamp;
 
-#ifdef T_USRP_RX_ANT0
   T(T_USRP_RX_ANT0, T_INT(s->rx_timestamp), T_BUFFER(buff[0], samples_received*4));
-#endif
 
   recplay_state_t *recPlay=device->recplay_state;
 
@@ -1164,79 +1162,6 @@ extern "C" {
 
     s->usrp = uhd::usrp::multi_usrp::make(args);
 
-    if (args.find("clock_source")==std::string::npos) {
-	if (openair0_cfg[0].clock_source == internal) {
-	  s->usrp->set_clock_source("internal");
-	  LOG_I(HW,"Setting clock source to internal\n");
-	}
-	else if (openair0_cfg[0].clock_source == external ) {
-	  s->usrp->set_clock_source("external");
-	  LOG_I(HW,"Setting clock source to external\n");
-	}
-	else if (openair0_cfg[0].clock_source==gpsdo) {
-	  s->usrp->set_clock_source("gpsdo");
-	  LOG_I(HW,"Setting clock source to gpsdo\n");
-	}
-	else {
-	  LOG_W(HW,"Clock source set neither in usrp_args nor on command line, using default!\n");
-	}
-    }
-    else {
-	if (openair0_cfg[0].clock_source != unset) {
-	  LOG_W(HW,"Clock source set in both usrp_args and in clock_source, ingnoring the latter!\n");
-	}
-  }
-
-    if (args.find("time_source")==std::string::npos) {
-	if (openair0_cfg[0].time_source == internal) {
-	  s->usrp->set_time_source("internal");
-	  LOG_I(HW,"Setting time source to internal\n");
-	}
-	else if (openair0_cfg[0].time_source == external ) {
-	  s->usrp->set_time_source("external");
-	  LOG_I(HW,"Setting time source to external\n");
-	}
-	else if (openair0_cfg[0].time_source==gpsdo) {
-	  s->usrp->set_time_source("gpsdo");
-	  LOG_I(HW,"Setting time source to gpsdo\n");
-	}
-	else {
-	  LOG_W(HW,"Time source set neither in usrp_args nor on command line, using default!\n");
-	}
-    }
-    else {
-	if (openair0_cfg[0].clock_source != unset) {
-	  LOG_W(HW,"Time source set in both usrp_args and in time_source, ingnoring the latter!\n");
-	}
-  }
-
-
-  if (s->usrp->get_clock_source(0) == "gpsdo") {
-    s->use_gps = 1;
-
-    if (sync_to_gps(device)==EXIT_SUCCESS) {
-      LOG_I(HW,"USRP synced with GPS!\n");
-    } else {
-      LOG_I(HW,"USRP fails to sync with GPS. Exiting.\n");
-      exit(EXIT_FAILURE);
-    }
-  } else {
-    if (s->usrp->get_time_source(0) == "external") {
-      usrp_sync_pps(s);
-    } else {
-      s->usrp->set_time_next_pps(uhd::time_spec_t(0.0));
-    }
-
-    if (s->usrp->get_clock_source(0) == "external") {
-      if (check_ref_locked(s,0)) {
-	LOG_I(HW,"USRP locked to external reference!\n");
-      } else {
-	LOG_I(HW,"Failed to lock to external reference. Exiting.\n");
-	exit(EXIT_FAILURE);
-      }
-    }
-  }
-
   if (device->type==USRP_X300_DEV) {
     openair0_cfg[0].rx_gain_calib_table = calib_table_x310;
     std::cerr << "-- Using calibration table: calib_table_x310" << std::endl;
@@ -1473,8 +1398,70 @@ extern "C" {
     }
   }
 
-  //s->usrp->set_clock_source("external");
-  //s->usrp->set_time_source("external");
+  if (args.find("clock_source") == std::string::npos) {
+    if (openair0_cfg[0].clock_source == internal) {
+      s->usrp->set_clock_source("internal");
+      LOG_I(HW, "Setting clock source to internal\n");
+    } else if (openair0_cfg[0].clock_source == external) {
+      s->usrp->set_clock_source("external");
+      LOG_I(HW, "Setting clock source to external\n");
+    } else if (openair0_cfg[0].clock_source == gpsdo) {
+      s->usrp->set_clock_source("gpsdo");
+      LOG_I(HW, "Setting clock source to gpsdo\n");
+    } else {
+      LOG_W(HW, "Clock source set neither in usrp_args nor on command line, using default!\n");
+    }
+  } else {
+    if (openair0_cfg[0].clock_source != unset) {
+      LOG_W(HW, "Clock source set in both usrp_args and in clock_source, ingnoring the latter!\n");
+    }
+  }
+
+  if (args.find("time_source") == std::string::npos) {
+    if (openair0_cfg[0].time_source == internal) {
+      s->usrp->set_time_source("internal");
+      LOG_I(HW, "Setting time source to internal\n");
+    } else if (openair0_cfg[0].time_source == external) {
+      s->usrp->set_time_source("external");
+      LOG_I(HW, "Setting time source to external\n");
+    } else if (openair0_cfg[0].time_source == gpsdo) {
+      s->usrp->set_time_source("gpsdo");
+      LOG_I(HW, "Setting time source to gpsdo\n");
+    } else {
+      LOG_W(HW, "Time source set neither in usrp_args nor on command line, using default!\n");
+    }
+  } else {
+    if (openair0_cfg[0].time_source != unset) {
+      LOG_W(HW, "Time source set in both usrp_args and in openair0_cfg[0].time_source, ignoring the latter!\n");
+    }
+  }
+
+  if (s->usrp->get_clock_source(0) == "gpsdo") {
+    s->use_gps = 1;
+
+    if (sync_to_gps(device) == EXIT_SUCCESS) {
+      LOG_I(HW, "USRP synced with GPS!\n");
+    } else {
+      LOG_I(HW, "USRP fails to sync with GPS. Exiting.\n");
+      exit(EXIT_FAILURE);
+    }
+  } else {
+    if (s->usrp->get_time_source(0) == "external") {
+      usrp_sync_pps(s);
+    } else {
+      s->usrp->set_time_next_pps(uhd::time_spec_t(0.0));
+    }
+
+    if (s->usrp->get_clock_source(0) == "external") {
+      if (check_ref_locked(s, 0)) {
+        LOG_I(HW, "USRP locked to external reference!\n");
+      } else {
+        LOG_I(HW, "Failed to lock to external reference. Exiting.\n");
+        exit(EXIT_FAILURE);
+      }
+    }
+  }
+
   // display USRP settings
   LOG_I(HW,"Actual master clock: %fMHz...\n",s->usrp->get_master_clock_rate()/1e6);
   LOG_I(HW,"Actual clock source %s...\n",s->usrp->get_clock_source(0).c_str());

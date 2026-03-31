@@ -50,7 +50,6 @@
 #include "common_lib.h"
 #include "ethernet_lib.h"
 #include "openair1/PHY/sse_intrin.h"
-#include "common/utils/threadPool/thread-pool.h"
 
 //#define DEBUG 1
 
@@ -321,18 +320,10 @@ void *trx_eth_write_udp_cmd(udpTXelem_t *udpTXelem) {
   if (TS_advance < (nsamps/2)) {
      LOG_W(PHY,"Starting TX FH for TS %llu absslot %llu(%llu) last_rxTS %llu TS_advance %llu samples\n",(unsigned long long)timestamp,(unsigned long long)timestamp/nsamps,((unsigned long long)timestamp/nsamps)%20,(unsigned long long)last_rxTS,(unsigned long long)TS_advance);
   }
-     void *buff2;
-#if defined(__x86_64) || defined(__i386__)
+  void *buff2;
   int nsamps2 = 256>>3;
-  __m256i buff_tx[nsamps2+1];
-  buff2=(void*)&buff_tx[1] - APP_HEADER_SIZE_BYTES;
-#elif defined(__arm__) || defined(__aarch64__)
-  int nsamps2 = 256>>2;
-  int16x8_t buff_tx[nsamps2+2];
-  buff2=(void*)&buff_tx[2] - APP_HEADER_SIZE_BYTES;
-#else
-#error Unsupported CPU architecture, ethernet device cannot be built
-#endif
+  simde__m256i buff_tx[nsamps2 + 1];
+  buff2 = (void *)&buff_tx[1] - APP_HEADER_SIZE_BYTES;
 
   /* construct application header */
   // ECPRI Protocol revision + reserved bits (1 byte)
@@ -345,7 +336,7 @@ void *trx_eth_write_udp_cmd(udpTXelem_t *udpTXelem) {
   TS -= device->txrx_offset; 
   int TSinc = (6*256*device->sampling_rate_ratio_d)/device->sampling_rate_ratio_n;
   int len=256;
-  LOG_D(PHY,"TS %llu (%llu),txrx_offset %d,d %d, n %d, buff[0] %p buff[1] %p\n",
+  LOG_D(NR_PHY,"in eth send: TS %llu (%llu),txrx_offset %d,d %d, n %d, buff[0] %p buff[1] %p\n",
         (unsigned long long)TS,(unsigned long long)timestamp,device->txrx_offset,device->sampling_rate_ratio_d,device->sampling_rate_ratio_n,
 	buff[0],buff[1]);
   for (int offset=0;offset<nsamps;offset+=256,TS+=TSinc) {
@@ -357,12 +348,11 @@ void *trx_eth_write_udp_cmd(udpTXelem_t *udpTXelem) {
     *(uint8_t *)(buff2 + 2) = len>>8;
     *(uint8_t *)(buff2 + 3) = len&0xff;
     for (int aid = 0; aid<nant; aid++) {
-      LOG_D(PHY,"TS %llu (TS0 %llu) aa %d : offset %d, len %d\n",(unsigned long long)TS,(unsigned long long)fhstate->TS0,aid,offset,len);
+      LOG_D(NR_PHY,"TS %llu (TS0 %llu) aa %d : offset %d, len %d\n",(unsigned long long)TS,(unsigned long long)fhstate->TS0,aid,offset,len);
       // ECPRI PC_ID (2 bytes)
       *(uint16_t *)(buff2 + 4) = aid;
-      // bring TX data into 12 MSBs 
-#if defined(__x86_64__) || defined(__i386__)
-      __m256i *buff256 = (__m256i *)&(((int32_t*)buff[aid])[offset]);
+      // bring TX data into 12 MSBs
+      simde__m256i *buff256 = (simde__m256i *)&(((int32_t *)buff[aid])[offset]);
       for (int j=0; j<32; j+=8) {
         buff_tx[1+j] = simde_mm256_slli_epi16(buff256[j],4);
         buff_tx[2+j] = simde_mm256_slli_epi16(buff256[j+1],4);
@@ -373,11 +363,7 @@ void *trx_eth_write_udp_cmd(udpTXelem_t *udpTXelem) {
         buff_tx[7+j] = simde_mm256_slli_epi16(buff256[j+6],4);
         buff_tx[8+j] = simde_mm256_slli_epi16(buff256[j+7],4);
       }
-#elif defined(__arm__)
-      int16x8_t *buff128 = (__int16x8_t*)&buff[aid][offset];
-      for (int j=0; j<64; j++) buff_tx[2+j] = vshlq_n_s16(((int16x8_t *)buff128)[j],4);
-#endif
-    
+
        /* Send packet */
       bytes_sent = sendto(eth->sockfdd[0],
                           buff2, 
@@ -396,6 +382,7 @@ void *trx_eth_write_udp_cmd(udpTXelem_t *udpTXelem) {
     } // aid
   } // offset
   free(buff);  
+  LOG_D(NR_PHY,"Returning from eth send\n");
   return(NULL);
 }
 
@@ -417,8 +404,6 @@ int trx_eth_write_udp(openair0_device *device, openair0_timestamp timestamp, voi
           (unsigned long long)timestamp,nsamps,nant,udptxelem->buff[0],udptxelem->buff[1]);
     return(0);
 }
-extern int oai_exit;
-
 void *udp_write_thread(void *arg) {
 
    udp_ctx_t *utx = (udp_ctx_t *)arg;

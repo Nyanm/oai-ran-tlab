@@ -24,7 +24,6 @@
 #include <stdio.h>
 #include "PHY/TOOLS/tools_defs.h"
 #include "rf.h"
-#include "common/utils/LOG/log.h"
 
 
 void dac(double *s_re[2],
@@ -94,11 +93,9 @@ double dac_fixed_gain(double *s_re[2],
 
   int i;
   int aa;
-  double amp1_local,*amp1p;
+  double amp1_local = 0.0;
+  double *amp1p = (amp1 == NULL) ? &amp1_local : amp1;
   double amp = pow(10.0,.05*txpwr_dBm)/sqrt(nb_tx_antennas); //this is amp per tx antenna
-
-  if (amp1==NULL) amp1p = &amp1_local;
-  else            amp1p = amp1;
 
   if (do_amp_compute==1) {
     *amp1p = 0;
@@ -109,6 +106,7 @@ double dac_fixed_gain(double *s_re[2],
     *amp1p=sqrt(*amp1p);
   }
 
+  AssertFatal(amp1p != NULL && *amp1p != 0.0, "Precondition to avoid UB\n");
 
 #ifdef DEBUG_DAC
   LOG_I(OCM,"DAC: amp %f, amp1 %f dB (%d,%d), tx_power target %f (actual %f %f),length %d,pos %d\n",

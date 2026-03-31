@@ -42,6 +42,7 @@ Description Defines internal private data handled by EPS Mobility
 #include "commonDef.h"
 #include "networkDef.h"
 #include "securityDef.h"
+#include "openair3/SECU/secu_defs.h"
 
 #include "OctetString.h"
 #include "nas_timer.h"
@@ -138,6 +139,7 @@ typedef struct emm_security_context_s {
   //OctetString ksgsn;    /* SGSN security key (mapped context)      */
   OctetString knas_enc;   /* NAS cyphering key               */
   OctetString knas_int;   /* NAS integrity key               */
+  stream_security_container_t *security_container; /* container for NAS security */
   struct count_s{
     uint32_t spare:8;
     uint32_t overflow:16;
@@ -343,12 +345,12 @@ typedef struct emm_data_s {
    * ----------------------------
    * see "Non Access Stratum Configuration" in USIM API header file
    */
-  Byte_t NAS_SignallingPriority;
-  Byte_t NMO_I_Behaviour;
-  Byte_t AttachWithImsi;
-  Byte_t MinimumPeriodicSearchTimer;
-  Byte_t ExtendedAccessBarring;
-  Byte_t Timer_T3245_Behaviour;
+  uint8_t NAS_SignallingPriority;
+  uint8_t NMO_I_Behaviour;
+  uint8_t AttachWithImsi;
+  uint8_t MinimumPeriodicSearchTimer;
+  uint8_t ExtendedAccessBarring;
+  uint8_t Timer_T3245_Behaviour;
 
   /*
    * EMM data stored in the UE's memory

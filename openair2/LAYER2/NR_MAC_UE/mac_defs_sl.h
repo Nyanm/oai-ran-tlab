@@ -36,7 +36,7 @@
 #define SL_NR_MAC_NUM_TX_RESOURCE_POOLS 1
 #define SL_NUM_BYTES_TIMERESOURCEBITMAP 20
 
-//every 16 frames, SSB is repeated.
+// every 16 frames, SSB is repeated.
 #define SL_NR_SSB_REPETITION_IN_FRAMES 16
 #define SL_FRAME_NUMBER_CYCLE 1024
 
@@ -44,6 +44,7 @@
 // betaoffsetindicator(2), num dmrs ports (1), mcs (5bits)
 #define SL_SCI_FORMAT_1A_LEN_IN_BITS_FIXED_FIELDS 13
 
+#define NR_SBCCH_SL_BCH 0xFF
 
 #define sci_field_t dci_field_t
 
@@ -149,9 +150,9 @@ typedef struct sl_bch_params {
   //configured from RRC
   //Parameters used to determine PSBCH slot
   sl_ssb_timealloc_t ssb_time_alloc;
+  uint8_t  sl_mib[4] __attribute__((aligned(4)));
   uint16_t slss_id;
   bool     status;
-  uint8_t  sl_mib[4];
 
   //Parameters incremented by MAC PSBCH scheduler
   //after every SSB txn/reception
@@ -176,6 +177,13 @@ typedef struct {
                                  resources to be selected using sensing procedure.
                               */
 } nr_sl_transmission_params_t;
+
+typedef struct sl_stored_tti_req {
+  uint32_t sl_action;
+  int frame;
+  int slot;
+
+} sl_stored_tti_req_t;
 
 typedef struct sl_nr_ue_mac_params {
 
@@ -224,22 +232,27 @@ typedef struct sl_nr_ue_mac_params {
   //Holds Broadcast params incase UE receives SL-SSB
   sl_bch_params_t rx_sl_bch;
 
-  //SSB RSRP in dBm
+  // SSB RSRP in dBm
   int16_t ssb_rsrp_dBm;
 
-  //Bitmap indicating which slots belong to sidelink
-  //Right now supports 30Khz and 15Khz
+  // Bitmap indicating which slots belong to sidelink
+  // Right now supports 30Khz and 15Khz
   uint32_t sl_slot_bitmap;
 
-  //adjust timing after new timing from sync is acquired.
-  uint8_t adjust_timing;
+  // adjust timing after new timing from sync is acquired.
+  bool timing_acquired;
 
-  //Sidelink slots per frame
+  // Sidelink slots per frame
   uint16_t N_SL_SLOTS_perframe;
 
   uint16_t decoded_DFN;
   uint16_t decoded_slot;
   NR_bler_options_t sl_bler;
+
+  uint32_t N_SL_SLOTS;
+  uint16_t N_SSB_16frames;
+
+  sl_stored_tti_req_t *future_ttis;
 
 } sl_nr_ue_mac_params_t;
 

@@ -44,27 +44,16 @@
 
 #define _GNU_SOURCE
 #include <pthread.h>
-
-
-#undef MALLOC //there are two conflicting definitions, so we better make sure we don't use it at all
-
 #include "assertions.h"
 
-
 #include "PHY/types.h"
-
 #include "PHY/INIT/phy_init.h"
 
 #include "PHY/defs_eNB.h"
 #include "SCHED/sched_eNB.h"
 #include "PHY/LTE_TRANSPORT/transport_proto.h"
 #include "nfapi/oai_integration/vendor_ext.h"
-#undef MALLOC //there are two conflicting definitions, so we better make sure we don't use it at all
-//#undef FRAME_LENGTH_COMPLEX_SAMPLES //there are two conflicting definitions, so we better make sure we don't use it at all
-
 #include "radio/COMMON/common_lib.h"
-
-//#undef FRAME_LENGTH_COMPLEX_SAMPLES //there are two conflicting definitions, so we better make sure we don't use it at all
 
 #include "PHY/LTE_TRANSPORT/if4_tools.h"
 #include "PHY/LTE_ESTIMATION/lte_estimation.h"
@@ -79,14 +68,12 @@
 #include "common/utils/LOG/log.h"
 #include "UTIL/OTG/otg_tx.h"
 #include "UTIL/OTG/otg_externs.h"
-#include "UTIL/MATH/oml.h"
 #include "common/utils/LOG/vcd_signal_dumper.h"
 #include "UTIL/OPT/opt.h"
 #include "enb_config.h"
 #include "executables/lte-softmodem.h"
 
 #include "s1ap_eNB.h"
-#include "SIMULATION/ETH_TRANSPORT/proto.h"
 
 #include "T.h"
 
@@ -103,13 +90,8 @@ struct timing_info_t {
 } timing_info;
 
 // Fix per CC openair rf/if device update
-// extern openair0_device openair0;
-
-extern int oai_exit;
 
 extern int transmission_mode;
-
-extern int oaisim_flag;
 
 #include "executables/thread-common.h"
 //extern PARALLEL_CONF_t get_thread_parallel_conf(void);
@@ -136,7 +118,7 @@ static struct {
 extern double cpuf;
 
 
-void init_eNB(int,int);
+void init_eNB();
 void stop_eNB(int nb_inst);
 
 int wakeup_tx(PHY_VARS_eNB *eNB, int frame_rx, int subframe_rx, int frame_tx, int subframe_tx, uint64_t timestamp_tx);
@@ -586,7 +568,7 @@ int wakeup_rxtx(PHY_VARS_eNB *eNB,
   LTE_DL_FRAME_PARMS *fp = &eNB->frame_parms;
   int ret;
   LOG_D(PHY,"ENTERED wakeup_rxtx, %d.%d\n",ru_proc->frame_rx,ru_proc->tti_rx);
-  // wake up TX for subframe n+sl_ahead
+  // wake up TX for subframe n+sf_ahead
   // lock the TX mutex and make sure the thread is ready
   AssertFatal((ret=pthread_mutex_lock(&L1_proc->mutex)) == 0,"mutex_lock returns %d\n", ret);
 
@@ -901,8 +883,6 @@ void init_eNB_proc(int inst) {
     pthread_cond_init( &proc->cond_prach_br, NULL);
     pthread_attr_init( &proc->attr_prach_br);
 
-    LOG_I(PHY,"eNB->single_thread_flag:%d\n", eNB->single_thread_flag);
-
     if ((get_thread_parallel_conf() == PARALLEL_RU_L1_SPLIT) && NFAPI_MODE!=NFAPI_MODE_VNF) {
       pthread_create( &L1_proc->pthread, attr0, L1_thread, proc );
     } else if ((get_thread_parallel_conf() == PARALLEL_RU_L1_TRX_SPLIT) && NFAPI_MODE!=NFAPI_MODE_VNF) {
@@ -932,9 +912,9 @@ void init_eNB_proc(int inst) {
 
     AssertFatal(proc->instance_cnt_prach == -1,"instance_cnt_prach = %d\n",proc->instance_cnt_prach);
 
-    if (opp_enabled == 1)
+    if (cpu_meas_enabled)
       threadCreate(&proc->process_stats_thread, process_stats_thread, (void *)eNB, "opp stats", -1, sched_get_priority_min(SCHED_OAI));
-    if (!IS_SOFTMODEM_NOSTATS_BIT)
+    if (!IS_SOFTMODEM_NOSTATS)
       threadCreate(&proc->L1_stats_thread, L1_stats_thread, (void *)eNB, "L1 stats", -1, sched_get_priority_min(SCHED_OAI));
   }
 
@@ -1102,7 +1082,7 @@ void init_transport(PHY_VARS_eNB *eNB) {
           exit(-1);
         } else {
           eNB->dlsch[i][j]->rnti=0;
-          LOG_D(PHY,"dlsch[%d][%d] => %p rnti:%d\n",i,j,eNB->dlsch[i][j], eNB->dlsch[i][j]->rnti);
+          LOG_D(PHY, "dlsch[%d][%d] => %p rnti:%x\n", i, j, eNB->dlsch[i][j], eNB->dlsch[i][j]->rnti);
         }
       }
     }
@@ -1226,8 +1206,8 @@ void init_eNB_afterRU(void) {
 }
 
 
-void init_eNB(int single_thread_flag,
-              int wait_for_sync) {
+void init_eNB()
+{
   int CC_id;
   int inst;
   PHY_VARS_eNB *eNB;
@@ -1246,11 +1226,11 @@ void init_eNB(int single_thread_flag,
 
       eNB                     = RC.eNB[inst][CC_id];
       eNB->abstraction_flag   = 0;
-      eNB->single_thread_flag = single_thread_flag;
-      LOG_I(PHY,"Initializing eNB %d CC_id %d single_thread_flag:%d\n",inst,CC_id,single_thread_flag);
+      LOG_I(PHY,"Initializing eNB %d CC_id %d\n",inst,CC_id);
       LOG_I(PHY,"Initializing eNB %d CC_id %d\n",inst,CC_id);
       LOG_I(PHY,"Registering with MAC interface module\n");
-      AssertFatal((eNB->if_inst         = IF_Module_init(inst))!=NULL,"Cannot register interface");
+      eNB->if_inst = IF_Module_init(inst);
+      AssertFatal(eNB->if_inst, "Cannot register interface");
       eNB->if_inst->schedule_response   = schedule_response;
       eNB->if_inst->PHY_config_req      = phy_config_request;
       eNB->if_inst->PHY_config_update_sib2_req      = phy_config_update_sib2_request;

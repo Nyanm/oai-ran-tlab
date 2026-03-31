@@ -25,11 +25,9 @@
 #include <string.h>
 #include <complex.h>
 
-
 #include "PHY/TOOLS/tools_defs.h"
 #include "sim.h"
 #include "scm_corrmat.h"
-#include "common/utils/LOG/log.h"
 #include "common/config/config_userapi.h"
 #include "common/utils/telnetsrv/telnetsrv.h"
 #include "common/utils/load_module_shlib.h"
@@ -41,7 +39,7 @@
 
 #include "assertions.h"
 
-extern void print_shorts(char *s,__m128i *x);
+extern void print_shorts(char *s,simde__m128i *x);
 static mapping channelmod_names[] = {
   CHANNELMOD_MAP_INIT
 };
@@ -72,12 +70,10 @@ static telnetshell_cmddef_t channelmod_cmdarray[] = {
 
 static telnetshell_vardef_t channelmod_vardef[] = {{"", 0, 0, NULL}};
 
-static double snr_dB=25;
-static double sinr_dB=0;
 static unsigned int max_chan;
 static channel_desc_t **defined_channels;
 static char *modellist_name;
-
+static int noise_power_dBFS = INVALID_DBFS_VALUE;
 
 void fill_channel_desc(channel_desc_t *chan_desc,
                        uint8_t nb_tx,
@@ -94,9 +90,10 @@ void fill_channel_desc(channel_desc_t *chan_desc,
                        double aoa,
                        double forgetting_factor,
                        double max_Doppler,
-                       int32_t channel_offset,
+                       uint64_t channel_offset,
                        double path_loss_dB,
-                       uint8_t random_aoa) {
+                       uint8_t random_aoa)
+{
   uint16_t i,j;
   double delta_tau;
   LOG_I(OCM,"[CHANNEL] Getting new channel descriptor, nb_tx %d, nb_rx %d, nb_taps %d, channel_length %d\n",
@@ -130,6 +127,7 @@ void fill_channel_desc(channel_desc_t *chan_desc,
   chan_desc->first_run                  = 1;
   chan_desc->ip                         = 0.0;
   chan_desc->max_Doppler                = max_Doppler;
+  chan_desc->Doppler_phase_cur          = calloc(nb_rx, sizeof(double));
   chan_desc->ch                         = calloc(nb_tx*nb_rx, sizeof(struct complexd *));
   chan_desc->chF                        = calloc(nb_tx*nb_rx, sizeof(struct complexd *));
   chan_desc->a                          = calloc(nb_taps, sizeof(struct complexd *));
@@ -570,7 +568,7 @@ channel_desc_t *new_channel_desc_scm(uint8_t nb_tx,
                                      double maxDoppler,
                                      const corr_level_t corr_level,
                                      double forgetting_factor,
-                                     int32_t channel_offset,
+                                     uint64_t channel_offset,
                                      double path_loss_dB,
                                      float noise_power_dB)
 {
@@ -1655,6 +1653,37 @@ channel_desc_t *new_channel_desc_scm(uint8_t nb_tx,
                         0);
       break;
 
+    case SAT_LEO_TRANS:
+    case SAT_LEO_REGEN:
+      nb_taps = 1;
+      Td = 0;
+      channel_length = 1;
+      ricean_factor = 0.0;
+      aoa = 0.0;
+      maxDoppler = 0;
+      chan_desc->sat_height = 600e3;
+      chan_desc->enable_dynamic_delay = true;
+      chan_desc->enable_dynamic_Doppler = true;
+      fill_channel_desc(chan_desc,nb_tx,
+                        nb_rx,
+                        nb_taps,
+                        channel_length,
+                        default_amp_lin,
+                        NULL,
+                        NULL,
+                        Td,
+                        sampling_rate,
+                        channel_bandwidth,
+                        ricean_factor,
+                        aoa,
+                        forgetting_factor,
+                        maxDoppler,
+                        channel_offset,
+                        path_loss_dB,
+                        0);
+      printf("%s: satellite orbit height %f km\n", map_int_to_str(channelmod_names, channel_model), chan_desc->sat_height / 1000);
+      break;
+
     default:
       LOG_W(OCM,"channel model not yet supported\n");
       free(chan_desc);
@@ -1713,6 +1742,7 @@ void free_channel_desc_scm(channel_desc_t *ch) {
       free(ch->R_sqrt[i]);
 
   free(ch->R_sqrt);
+  free(ch->Doppler_phase_cur);
   free(ch->ch);
   free(ch->chF);
   free(ch->a);
@@ -1732,6 +1762,11 @@ void set_channeldesc_name(channel_desc_t *cdesc,char *modelname) {
   cdesc->model_name=strdup(modelname);
 }
 
+void set_channeldesc_direction(channel_desc_t *cdesc, bool is_uplink)
+{
+  cdesc->is_uplink = is_uplink;
+}
+
 #ifdef DEBUG_CH_POWER
 double accumulated_ch_power = 0;
 int ch_power_count = 0;
@@ -1745,9 +1780,9 @@ int random_channel(channel_desc_t *desc, uint8_t abstraction_flag) {
   struct complexd phase, alpha, beta;
   start_meas(&desc->random_channel);
 
-  // For AWGN channel, the received signal (Srx) is equal to transmitted signal (Stx) plus noise (N), i.e., Srx = Stx + N,
+  // For AWGN and SAT_LEO_* channels, the received signal (Srx) is equal to transmitted signal (Stx) plus noise (N), i.e., Srx = Stx + N,
   //  therefore, the channel matrix is the identity matrix.
-  if (desc->modelid == AWGN) {
+  if (desc->modelid == AWGN || desc->modelid == SAT_LEO_TRANS || desc->modelid == SAT_LEO_REGEN) {
     for (aarx=0; aarx<desc->nb_rx; aarx++) {
       for (aatx = 0; aatx < desc->nb_tx; aatx++) {
         desc->ch[aarx+(aatx*desc->nb_rx)][0].r = aarx%desc->nb_tx == aatx ? 1.0 : 0.0;
@@ -2035,8 +2070,8 @@ int get_channel_params(char *buf, int debug, void *vdata, telnet_printfunc_t prn
         }
         tdata->numlines++;
       }
+      return tdata->numlines;
     }
-    return tdata->numlines;
   } /* show */ else if (strstr(buf, "set") == buf) {
     char cmdbuf[TELNET_MAX_MSGLENGTH];
     int sst = sscanf(tdata->tblname, "%*[^=]=%i", &chanidx);
@@ -2065,10 +2100,16 @@ static void display_channelmodel(channel_desc_t *cd,int debug, telnet_printfunc_
   prnt("nb_tx: %i    nb_rx: %i    taps: %i bandwidth: %lf    sampling: %lf\n",cd->nb_tx, cd->nb_rx, cd->nb_taps, cd->channel_bandwidth, cd->sampling_rate);
   prnt("channel length: %i    Max path delay: %lf   ricean fact.: %lf    angle of arrival: %lf (randomized:%s)\n",
        cd->channel_length, cd->Td, cd->ricean_factor, cd->aoa, (cd->random_aoa?"Yes":"No"));
-  prnt("max Doppler: %lf    path loss: %lf  noise: %lf rchannel offset: %i    forget factor; %lf\n",
-       cd->max_Doppler, cd->path_loss_dB, cd->noise_power_dB, cd->channel_offset, cd->forgetting_factor);
+  prnt("max Doppler: %lf    path loss: %lf  noise: %lf rchannel offset: %lu    forget factor; %lf\n",
+       cd->max_Doppler,
+       cd->path_loss_dB,
+       cd->noise_power_dB,
+       cd->channel_offset,
+       cd->forgetting_factor);
   prnt("Initial phase: %lf   nb_path: %i \n",
        cd->ip, cd->nb_paths);
+  if (cd->modelid == SAT_LEO_TRANS || cd->modelid == SAT_LEO_REGEN)
+    prnt("satellite orbit height: %f\n", cd->sat_height);
 
   for (int i=0; i<cd->nb_taps ; i++) {
     prnt("taps: %i   lin. ampli. : %lf    delay: %lf \n",i,cd->amps[i], cd->delays[i]);
@@ -2231,11 +2272,12 @@ int get_modchannel_index(char *buf, int debug, void *vdata, telnet_printfunc_t p
   if (debug)
     LOG_I(UTIL, "%s received %s\n", __FUNCTION__, buf);
   webdatadef_t *tdata = (webdatadef_t *)vdata;
-  tdata->numlines = 0;
   if (strncmp(buf, "set", 3) == 0) {
     return get_channel_params(buf, debug, vdata, prnt);
   }
+  int numlines = 0;
   if (tdata != NULL) {
+    tdata->numlines = 0;
     for (int i = 0; i < max_chan; i++) {
       if (defined_channels[i] != NULL) {
         tdata->numlines++;
@@ -2247,8 +2289,9 @@ int get_modchannel_index(char *buf, int debug, void *vdata, telnet_printfunc_t p
     else {
       snprintf(tdata->tblname, sizeof(tdata->tblname) - 1, "No running model in the system");
     }
+    numlines = tdata->numlines;
   }
-  return tdata->numlines;
+  return numlines;
 } /* get_currentchannel_type */
 /*------------------------------------------------------------------------------------------------------------------*/
 
@@ -2261,18 +2304,10 @@ int modelid_fromstrtype(char *modeltype) {
   return modelid;
 }
 
-double channelmod_get_snr_dB(void) {
-  return snr_dB;
-}
-
-double channelmod_get_sinr_dB(void) {
-  return sinr_dB;
-}
-
 void init_channelmod(void) {
   paramdef_t channelmod_params[] = CHANNELMOD_PARAMS_DESC;
-  int numparams=sizeof(channelmod_params)/sizeof(paramdef_t);
-  int ret = config_get( channelmod_params,numparams,CHANNELMOD_SECTION);
+  int numparams = sizeofArray(channelmod_params);
+  int ret = config_get(config_get_if(), channelmod_params, numparams, CHANNELMOD_SECTION);
   AssertFatal(ret >= 0, "configuration couldn't be performed");
   defined_channels=calloc(max_chan,sizeof( channel_desc_t *));
   AssertFatal(defined_channels!=NULL, "couldn't allocate %u channel descriptors\n",max_chan);
@@ -2285,13 +2320,13 @@ void init_channelmod(void) {
 } /* init_channelmod */
 
 
-int load_channellist(uint8_t nb_tx, uint8_t nb_rx, double sampling_rate, double channel_bandwidth) {
+int load_channellist(uint8_t nb_tx, uint8_t nb_rx, double sampling_rate, uint64_t center_freq, double channel_bandwidth) {
   paramdef_t achannel_params[] = CHANNELMOD_MODEL_PARAMS_DESC;
   paramlist_def_t channel_list;
   memset(&channel_list,0,sizeof(paramlist_def_t));
   memcpy(channel_list.listname,modellist_name,sizeof(channel_list.listname)-1);
-  int numparams = sizeof(achannel_params)/sizeof(paramdef_t);
-  config_getlist( &channel_list,achannel_params,numparams, CHANNELMOD_SECTION);
+  int numparams = sizeofArray(achannel_params);
+  config_getlist(config_get_if(), &channel_list, achannel_params, numparams, CHANNELMOD_SECTION);
   AssertFatal(channel_list.numelt>0, "List %s.%s not found in config file\n",CHANNELMOD_SECTION,channel_list.listname);
   int pindex_NAME = config_paramidx_fromname(achannel_params,numparams, CHANNELMOD_MODEL_NAME_PNAME);
   int pindex_DT = config_paramidx_fromname(achannel_params,numparams, CHANNELMOD_MODEL_DT_PNAME );
@@ -2318,7 +2353,7 @@ int load_channellist(uint8_t nb_tx, uint8_t nb_rx, double sampling_rate, double 
                                                          nb_rx,
                                                          modid,
                                                          sampling_rate,
-                                                         0,
+                                                         center_freq,
                                                          channel_bandwidth,
                                                          *(channel_list.paramarray[i][pindex_DT].dblptr),
                                                          0.0,
@@ -2335,6 +2370,10 @@ int load_channellist(uint8_t nb_tx, uint8_t nb_rx, double sampling_rate, double 
 
   return channel_list.numelt;
 } /* load_channelist */
+
+int get_noise_power_dBFS(void) {
+  return noise_power_dBFS;
+}
 
 #ifdef RANDOM_CHANNEL_MAIN
 #define sampling_rate 5.0

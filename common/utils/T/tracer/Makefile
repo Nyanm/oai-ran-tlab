@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -g -pthread -DT_TRACER -I.
+CFLAGS=-Wall -g -pthread -DT_TRACER -I. -I../incgen
 
 #CFLAGS += -O3 -ffast-math -fomit-frame-pointer
 
@@ -8,9 +8,9 @@ XLIBS=-lX11 -lpng -lXft
 
 all: record replay extract_config textlog enb ue vcd macpdu2wireshark \
      extract_input_subframe extract_output_subframe to_vcd extract multi \
-     gnb
+     gnb t_tracer_app_gnb t_tracer_app_ue gnb_mac
 
-record: utils.o record.o database.o config.o
+record: utils.o record.o database.o configuration.o
 	$(CC) $(CFLAGS) -o record $^ $(LIBS)
 
 replay: utils.o replay.o
@@ -20,55 +20,66 @@ extract_config: extract_config.o
 	$(CC) $(CFLAGS) -o extract_config $^ $(LIBS)
 
 extract_input_subframe: extract_input_subframe.o database.o event.o utils.o \
-    config.o
+    configuration.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
 
 extract_output_subframe: extract_output_subframe.o database.o event.o utils.o \
-    config.o
+    configuration.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
 
-extract: extract.o database.o event.o utils.o config.o
+extract: extract.o database.o event.o utils.o configuration.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
 
-textlog: utils.o textlog.o database.o event.o handler.o config.o \
-         event_selector.o view/view.a gui/gui.a logger/logger.a \
-         filter/filter.a
-	$(CC) $(CFLAGS) -o textlog $^ $(LIBS) $(XLIBS)
+textlog: utils.o textlog.o database.o event.o handler.o configuration.o \
+         view/view.a logger/logger.a filter/filter.a
+	$(CC) $(CFLAGS) -o textlog $^ $(LIBS)
 
-enb: utils.o enb.o database.o event.o handler.o config.o \
+enb: utils.o enb.o database.o event.o handler.o configuration.o \
          event_selector.o view/view.a gui/gui.a logger/logger.a \
          filter/filter.a
 	$(CC) $(CFLAGS) -o enb $^ $(LIBS) $(XLIBS)
 
-ue: utils.o ue.o database.o event.o handler.o config.o \
+ue: utils.o ue.o database.o event.o handler.o configuration.o \
          event_selector.o view/view.a gui/gui.a logger/logger.a \
          filter/filter.a
 	$(CC) $(CFLAGS) -o ue $^ $(LIBS) $(XLIBS)
 
-vcd: utils.o vcd.o database.o event.o handler.o config.o \
+vcd: utils.o vcd.o database.o event.o handler.o configuration.o \
          event_selector.o view/view.a gui/gui.a logger/logger.a \
          filter/filter.a
 	$(CC) $(CFLAGS) -o vcd $^ $(LIBS) $(XLIBS)
 
-to_vcd: to_vcd.o database.o event.o handler.o utils.o config.o \
+to_vcd: to_vcd.o database.o event.o handler.o utils.o configuration.o \
          logger/logger.a filter/filter.a
 	$(CC) $(CFLAGS) -o to_vcd $^ $(LIBS)
 
 macpdu2wireshark: macpdu2wireshark.o database.o utils.o handler.o event.o \
-                  config.o
+                  configuration.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
 
-multi: multi.o utils.o database.o config.o
+multi: multi.o utils.o database.o configuration.o
 	$(CC) $(CFLAGS) -o multi $^ $(LIBS)
 
-gnb: utils.o gnb.o database.o event.o handler.o config.o \
+gnb: utils.o gnb.o database.o event.o handler.o configuration.o \
          view/view.a gui/gui.a logger/logger.a \
          filter/filter.a
 	$(CC) $(CFLAGS) -o gnb $^ $(LIBS) $(XLIBS)
 
-multi.o: ../T_IDs.h
+t_tracer_app_gnb: utils.o t_tracer_app_gnb.o database.o event.o handler.o \
+         configuration.o logger/logger.a filter/filter.a
+	$(CC) $(CFLAGS) -o t_tracer_app_gnb $^ $(LIBS) $(XLIBS)
 
-../T_IDs.h:
+t_tracer_app_ue: utils.o t_tracer_app_ue.o database.o event.o handler.o \
+         configuration.o logger/logger.a filter/filter.a
+	$(CC) $(CFLAGS) -o t_tracer_app_ue $^ $(LIBS) $(XLIBS)
+
+gnb_mac: gnb_mac.o gui/gui.a view/view.a logger/logger.a filter/filter.a \
+         utils.o database.o configuration.o handler.o event.o
+	$(CC) $(CFLAGS) -o gnb_mac $^ $(LIBS) $(XLIBS)
+
+multi.o: ../incgen/T_IDs.h
+
+../incgen/T_IDs.h: ../T_messages.txt
 	cd .. && $(MAKE)
 
 .PHONY: all gui/gui.a view/view.a logger/logger.a filter/filter.a
@@ -92,6 +103,7 @@ clean:
 	rm -f *.o core tracer_remote textlog enb ue vcd record replay
 	rm -f extract_config macpdu2wireshark extract_input_subframe
 	rm -f extract_output_subframe to_vcd extract multi gnb
+	rm -f t_tracer_app_gnb t_tracer_app_ue gnb_mac
 	cd gui && $(MAKE) clean
 	cd view && $(MAKE) clean
 	cd logger && $(MAKE) clean

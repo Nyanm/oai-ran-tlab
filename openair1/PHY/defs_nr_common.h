@@ -34,16 +34,14 @@
 #define __PHY_DEFS_NR_COMMON__H__
 
 #include "PHY/impl_defs_top.h"
-#include "defs_common.h"
 #include "nfapi_nr_interface_scf.h"
 #include "impl_defs_nr.h"
 #include "PHY/CODING/nrPolar_tools/nr_polar_defs.h"
 
-#define nr_subframe_t lte_subframe_t
-#define nr_slot_t lte_subframe_t
+#include <pthread.h>
 
 #define MAX_NUM_SUBCARRIER_SPACING 5
-#define NR_MAX_OFDM_SYMBOL_SIZE 4096
+#define NR_MAX_OFDM_SYMBOL_SIZE 8192
 
 #define NR_SYMBOLS_PER_SLOT NR_NUMBER_OF_SYMBOLS_PER_SLOT
 
@@ -52,7 +50,6 @@
 
 #define NR_MOD_TABLE_SIZE_SHORT 686
 #define NR_MOD_TABLE_BPSK_OFFSET 1
-#define NR_MOD_TABLE_QPSK_OFFSET 3
 #define NR_MOD_TABLE_QAM16_OFFSET 7
 #define NR_MOD_TABLE_QAM64_OFFSET 23
 #define NR_MOD_TABLE_QAM256_OFFSET 87
@@ -79,10 +76,7 @@
 
 #define NR_MAX_PDCCH_AGG_LEVEL 16 // 3GPP TS 38.211 V15.8 Section 7.3.2 Table 7.3.2.1-1: Supported PDCCH aggregation levels
 
-#define NR_MAX_NB_LAYERS 4 // 8
 #define NR_MAX_NB_PORTS 32
-
-#define NR_MAX_PDSCH_TBS 3824
 
 #define MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER 36
 
@@ -95,7 +89,11 @@
 
 #define NR_NB_NSCID 2
 
-#define MAX_UL_DELAY_COMP 20
+#define MAX_DELAY_COMP 20
+
+#define PBCH_MAX_RE_PER_SYMBOL (20 * 12)
+
+#define NR_PUCCH_DMRS_RB 4
 
 typedef enum {
   NR_MU_0=0,
@@ -116,29 +114,65 @@ typedef enum{
 typedef struct {
   uint8_t k_0_p[MAX_NUM_NR_SRS_AP][MAX_NUM_NR_SRS_SYMBOLS];
   uint8_t srs_generated_signal_bits;
-  int32_t **srs_generated_signal;
-  nfapi_nr_srs_pdu_t srs_pdu;
+  c16_t **srs_generated_signal;
+  bool is_signal_generated;
+  int B_SRS;
+  int C_SRS;
+  int b_hop;
+  int comb_size;
+  int K_TC_overbar;
+  int n_SRS_cs;
+  int n_ID_SRS;
+  int n_shift;
+  int n_RRC;
+  int groupOrSequenceHopping;
+  int l_offset;
+  int T_SRS;
+  int T_offset;
+  int R;
+  int N_symb_SRS;
+  int n_srs_ports;
+  int resource_type;
 } nr_srs_info_t;
 
+#define NUMBER_OF_NR_PRACH_MAX 8
 typedef struct {
-  uint16_t csi_gold_init;
-  uint32_t ***nr_gold_csi_rs;
-  uint8_t csi_rs_generated_signal_bits;
-  int32_t **csi_rs_generated_signal;
-  bool csi_im_meas_computed;
-  uint32_t interference_plus_noise_power;
-} nr_csi_info_t;
+  int frame;
+  int slot;
+  int num_slots; // prach duration in slots
+  int beams[NFAPI_MAX_NUM_BG_IF];
+  nfapi_nr_prach_pdu_t pdu;
+  int rootSequenceIndex;
+  int numrootSequenceIndex;
+  int msg1_frequencystart;
+  int mu;
+  int prach_sequence_length;
+  int restricted_set;
+  int numerology_index;
+  int nb_rx;
+  c16_t rxsigF[NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX][NB_ANTENNAS_RX][NR_PRACH_SEQ_LEN_L];
+  c16_t (*Xu)[839];
+  time_stats_t *rx_prach;
+} prach_item_t;
+
+typedef struct {
+  /// prach commands
+  prach_item_t list[NUMBER_OF_NR_PRACH_MAX];
+  /// mutex for prach_list access
+  pthread_mutex_t prach_list_mutex;
+} prach_list_t;
+void init_prach_list(prach_list_t *);
 
 typedef struct NR_DL_FRAME_PARMS NR_DL_FRAME_PARMS;
 
 typedef uint32_t (*get_samples_per_slot_t)(int slot, const NR_DL_FRAME_PARMS *fp);
 typedef uint32_t (*get_slot_from_timestamp_t)(openair0_timestamp timestamp_rx, const NR_DL_FRAME_PARMS *fp);
 
-typedef uint32_t (*get_samples_slot_timestamp_t)(int slot, const NR_DL_FRAME_PARMS *fp, uint8_t sl_ahead);
+typedef uint32_t (*get_samples_slot_timestamp_t)(int slot, const NR_DL_FRAME_PARMS *fp, unsigned int sl_ahead);
 
 struct NR_DL_FRAME_PARMS {
   /// frequency range
-  nr_frequency_range_e freq_range;
+  frequency_range_t freq_range;
   //  /// Placeholder to replace overlapping fields below
   //  nfapi_nr_rf_config_t rf_config;
   /// Placeholder to replace SSB overlapping fields below
@@ -174,7 +208,7 @@ struct NR_DL_FRAME_PARMS {
   /// subcarrier spacing (15,30,60,120)
   uint32_t subcarrier_spacing;
   /// 3/4 sampling
-  uint8_t threequarter_fs;
+  int threequarter_fs;
   /// Size of FFT
   uint16_t ofdm_symbol_size;
   /// Number of prefix samples in all but first symbol of slot
@@ -225,20 +259,12 @@ struct NR_DL_FRAME_PARMS {
   /// sequence used to compensate the phase rotation due to timeshifted OFDM symbols
   /// First dimenstion is for different CP lengths
   c16_t timeshift_symbol_rotation[4096*2] __attribute__ ((aligned (16)));
-  /// Table used to apply the delay compensation in UL
-  c16_t ul_delay_table[2 * MAX_UL_DELAY_COMP + 1][NR_MAX_OFDM_SYMBOL_SIZE * 2];
-  /// shift of pilot position in one RB
-  uint8_t nushift;
-  /// SRS configuration from TS 38.331 RRC
-  SRS_NR srs_nr;
+  /// Table used to apply the delay compensation in DL/UL
+  c16_t delay_table[2 * MAX_DELAY_COMP + 1][NR_MAX_OFDM_SYMBOL_SIZE];
+  /// Table used to apply the delay compensation in PUCCH2
+  c16_t delay_table128[2 * MAX_DELAY_COMP + 1][128];
   /// Power used by SSB in order to estimate signal strength and path loss
   int ss_PBCH_BlockPower;
-  /// for NR TDD management
-  TDD_UL_DL_configCommon_t  *p_tdd_UL_DL_Configuration;
-
-  TDD_UL_DL_configCommon_t  *p_tdd_UL_DL_ConfigurationCommon2;
-
-  TDD_UL_DL_SlotConfig_t *p_TDD_UL_DL_ConfigDedicated;
 
   /// TDD configuration
   uint16_t tdd_uplink_nr[2*NR_MAX_SLOTS_PER_FRAME]; /* this is a bitmap of symbol of each slot given for 2 frames */
@@ -262,6 +288,7 @@ struct NR_DL_FRAME_PARMS {
   uint32_t ofdm_offset_divisor;
   uint16_t tdd_slot_config;
   uint8_t tdd_period;
+  bool print_ue_help_cmdline_log;
 };
 
 // PRS config structures
@@ -287,9 +314,14 @@ typedef struct {
     int32_t sfn;
     int8_t  slot;
     int8_t  rxAnt_idx;
-    int32_t dl_toa;
+    pthread_mutex_t dl_toa_mtx; // protect reading of max from write
+    // circular buffer to be able to read maximum of last estimations
+    float dl_toa[128]; // set through set_prs_dl_toa()
+    float *next_dl_toa;
     int32_t dl_aoa;
-    int32_t snr;
+    float snr;
+    float rsrp;
+    float rsrp_dBm;
     int32_t reserved;
 } prs_meas_t;
 

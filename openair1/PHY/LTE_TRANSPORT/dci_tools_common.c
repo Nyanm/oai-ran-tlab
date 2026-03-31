@@ -97,8 +97,6 @@ uint16_t RIV2nb_rb_LUT100[6000];
 uint16_t RIV2first_rb_LUT100[6000];
 uint16_t RIV_max100=0;
 
-const int8_t *delta_PUCCH_lut = delta_PUSCH_acc;
-
 uint32_t check_phich_reg(LTE_DL_FRAME_PARMS *frame_parms,uint32_t kprime,uint8_t lprime,uint8_t mi)
 {
 
@@ -493,6 +491,7 @@ uint32_t get_prb(int N_RB_DL,int odd_slot,int vrb,int Ngap) {
       break;
     case 4:  // even: 4->1, odd: 4->4
       ret=  ((3*odd_slot) + 1)%6;
+      break;
     case 5:  // even: 5->4, odd: 5->1
       ret=  ((3*odd_slot) + 4)%6;
       break;

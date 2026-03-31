@@ -31,6 +31,10 @@ typedef struct {
   /* set to the latest know time by the user of the module. Unit: ms */
   uint64_t t_current;
 
+  /* deal with logging of buffer full */
+  uint64_t t_log_buffer_full;
+  int      sdu_rejected;
+
   /* tx management */
   nr_rlc_sdu_segment_t *tx_list;
   nr_rlc_sdu_segment_t *tx_end;
@@ -52,5 +56,6 @@ void nr_rlc_entity_tm_discard_sdu(nr_rlc_entity_t *_entity, int sdu_id);
 void nr_rlc_entity_tm_reestablishment(nr_rlc_entity_t *_entity);
 void nr_rlc_entity_tm_delete(nr_rlc_entity_t *entity);
 int nr_rlc_entity_tm_available_tx_space(nr_rlc_entity_t *entity);
+int nr_rlc_entity_tm_tx_list_occupancy(nr_rlc_entity_t *_entity);
 
 #endif /* _NR_RLC_ENTITY_TM_H_ */

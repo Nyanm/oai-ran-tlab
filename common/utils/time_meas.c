@@ -27,9 +27,9 @@
 #include "assertions.h"
 #include <pthread.h>
 #include "common/config/config_userapi.h"
-#include <common/utils/threadPool/thread-pool.h>
+#include "common/utils/threadPool/notified_fifo.h"
 // global var for openair performance profiler
-int opp_enabled = 0;
+int cpu_meas_enabled = 0;
 double cpu_freq_GHz  __attribute__ ((aligned(32)));
 
 double cpu_freq_GHz  __attribute__ ((aligned(32)))=0.0;
@@ -38,7 +38,7 @@ static time_stats_t  **measur_table;
 notifiedFIFO_t measur_fifo;
 double get_cpu_freq_GHz(void)
 {
-  if (cpu_freq_GHz <1 ) {
+  if (cpu_freq_GHz <0.01 ) {
     time_stats_t ts = {0};
     reset_meas(&ts);
     ts.trials++;
@@ -46,8 +46,7 @@ double get_cpu_freq_GHz(void)
     sleep(1);
     ts.diff = (rdtsc_oai()-ts.in);
     cpu_freq_GHz = (double)ts.diff/1000000000;
-    printf("CPU Freq is %f \n", cpu_freq_GHz);
-  }
+  } 
   return cpu_freq_GHz;
 }
 
@@ -57,7 +56,7 @@ void print_meas_now(time_stats_t *ts,
                     const char *name,
                     FILE *file_name)
 {
-  if (opp_enabled) {
+  if (cpu_meas_enabled) {
     //static double cpu_freq_GHz = 3.2;
 
     //if (cpu_freq_GHz == 0.0)
@@ -74,7 +73,7 @@ void print_meas(time_stats_t *ts,
                 time_stats_t *total_exec_time,
                 time_stats_t *sf_exec_time)
 {
-  if (opp_enabled) {
+  if (cpu_meas_enabled) {
     static int first_time = 0;
     static double cpu_freq_GHz = 0.0;
 
@@ -279,8 +278,8 @@ void run_cpumeasur(void) {
 void init_meas(void) {
   pthread_t thid;
   paramdef_t cpumeasur_params[] = CPUMEASUR_PARAMS_DESC;
-  int numparams=sizeof(cpumeasur_params)/sizeof(paramdef_t);
-  int rt = config_get( cpumeasur_params,numparams,CPUMEASUR_SECTION);
+  int numparams = sizeofArray(cpumeasur_params);
+  int rt = config_get(config_get_if(), cpumeasur_params, numparams, CPUMEASUR_SECTION);
   AssertFatal(rt >= 0, "cpumeasur configuration couldn't be performed");
   measur_table=calloc(max_cpumeasur,sizeof( time_stats_t *));
   AssertFatal(measur_table!=NULL, "couldn't allocate %u cpu measurements entries\n",max_cpumeasur);

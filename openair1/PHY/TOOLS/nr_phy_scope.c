@@ -193,7 +193,9 @@ void websrv_setpoint(int x, int y, websrv_scopedata_msg_t *msg)
   msg->data_xy[msg->data_xy[0]] = (int16_t)y;
 }
 #endif
-static void commonGraph(OAIgraph_t *graph, int type, FL_Coord x, FL_Coord y, FL_Coord w, FL_Coord h, const char *label, FL_COLOR pointColor) {
+static void commonGraph(OAIgraph_t *graph, int type, FL_Coord x, FL_Coord y, FL_Coord w, FL_Coord h, const char *label, FL_COLOR pointColor)
+{
+  memset(graph, 0, sizeof(*graph));
   if (type==WATERFALL) {
     graph->waterFallh=h-15;
     graph->waterFallAvg=malloc(sizeof(*graph->waterFallAvg) * graph->waterFallh);
@@ -454,9 +456,8 @@ static void timeSignal (OAIgraph_t *graph, PHY_VARS_gNB *phy_vars_gnb, RU_t *phy
 */
 
 static void timeResponse (OAIgraph_t *graph, scopeData_t *p, int nb_UEs) {
-  const int len = p->gNB->frame_parms.ofdm_symbol_size;
-  if (!len)
-    // gnb not yet initialized, many race conditions in the scope
+  scopeGraphData_t *val = p->liveData[gNBulDelay];
+  if (!val || !val->dataSize)
     return;
 #ifdef WEBSRVSCOPE
   websrv_scopedata_msg_t *msg = NULL;
@@ -464,38 +465,24 @@ static void timeResponse (OAIgraph_t *graph, scopeData_t *p, int nb_UEs) {
   float *values = (float *)msg->data_xy;
 #else
   float *values, *time;
-  oai_xygraph_getbuff(graph, &time, &values, len, 0);
+  oai_xygraph_getbuff(graph, &time, &values, val->lineSz, 0);
 #endif
 
-  const int ant = 0; // display antenna 0 for each UE
-#ifdef WEBSRVSCOPE
-  int uestart = nb_UEs - 1; // web scope shows one UE signal, that can be selected from GUI
-#else
-  int uestart = 0; // xforms scope designed to display nb_UEs signals
-#endif
-  for (int ue = uestart; ue < nb_UEs; ue++) {
-    if (p->gNB->pusch_vars &&
-        p->gNB->pusch_vars[ue].ul_ch_estimates_time &&
-        p->gNB->pusch_vars[ue].ul_ch_estimates_time[ant] ) {
-      scopeSample_t *data= (scopeSample_t *)p->gNB->pusch_vars[ue].ul_ch_estimates_time[ant];
-
-      if (data != NULL) {
-        for (int i=0; i<len; i++) {
-          values[i] = SquaredNorm(data[i]);
-        }
-#ifdef WEBSRVSCOPE
-        msg->header.msgtype = SCOPEMSG_TYPE_DATA;
-        msg->header.chartid = graph->chartid;
-        msg->header.datasetid = graph->datasetid;
-        msg->header.msgseg = 0;
-        msg->header.update = 1;
-        websrv_scope_senddata(len, 4, msg);
-#else
-        oai_xygraph(graph,time,values, len, ue, 10);
-#endif
-      }
-    }
+  // We display UEs randomly, with one buffer
+  c16_t *samples = (c16_t *)(val + 1);
+  for (int i = 0; i < val->lineSz; i++) {
+    values[i] = SquaredNorm(samples[i]);
   }
+#ifdef WEBSRVSCOPE
+  msg->header.msgtype = SCOPEMSG_TYPE_DATA;
+  msg->header.chartid = graph->chartid;
+  msg->header.datasetid = graph->datasetid;
+  msg->header.msgseg = 0;
+  msg->header.update = 1;
+  websrv_scope_senddata(val->lineSz, 4, msg);
+#else
+  oai_xygraph(graph, time, values, val->lineSz, 0, 10);
+#endif
 }
 
 static void gNBfreqWaterFall (OAIgraph_t *graph, scopeData_t *p, int nb_UEs) {
@@ -612,8 +599,8 @@ static void pucchIQ (OAIgraph_t *graph, scopeData_t *p, int nb_UEs) {
 static void puschThroughtput (OAIgraph_t *graph, scopeData_t *p, int nb_UEs) {
   // PUSCH Throughput
   /*
-  float tput_time_enb[NUMBER_OF_UE_MAX][TPUT_WINDOW_LENGTH] = {{0}};
-  float tput_enb[NUMBER_OF_UE_MAX][TPUT_WINDOW_LENGTH] = {{0}};
+  float tput_time_enb[MAX_MOBILES_PER_GNB][TPUT_WINDOW_LENGTH] = {{0}};
+  float tput_enb[MAX_MOBILES_PER_GNB][TPUT_WINDOW_LENGTH] = {{0}};
 
   memmove( tput_time_enb[UE_id], &tput_time_enb[UE_id][1], (TPUT_WINDOW_LENGTH-1)*sizeof(float) );
   memmove( tput_enb[UE_id], &tput_enb[UE_id][1], (TPUT_WINDOW_LENGTH-1)*sizeof(float) );
@@ -627,7 +614,7 @@ static void puschThroughtput (OAIgraph_t *graph, scopeData_t *p, int nb_UEs) {
 STATICFORXSCOPE OAI_phy_scope_t *create_phy_scope_gnb(void)
 {
   FL_OBJECT *obj;
-  OAI_phy_scope_t *fdui = calloc(( sizeof *fdui ),1);
+  OAI_phy_scope_t *fdui = calloc_or_fail((sizeof *fdui), 1);
   // Define form
   fdui->phy_scope = fl_bgn_form( FL_NO_BOX, 800, 800 );
   fl_set_form_dblbuffer(fdui->phy_scope, 1);
@@ -684,7 +671,7 @@ STATICFORXSCOPE OAI_phy_scope_t *create_phy_scope_gnb(void)
   fl_end_form( );
   if (fdui->phy_scope)
     fdui->phy_scope->fdui = fdui;
-  fl_show_form (fdui->phy_scope, FL_PLACE_HOTSPOT, FL_FULLBORDER, "LTE UL SCOPE gNB");
+  fl_show_form (fdui->phy_scope, FL_PLACE_HOTSPOT, FL_FULLBORDER, "NR UL SCOPE gNB");
   return fdui;
 }
 
@@ -723,7 +710,7 @@ static void *scope_thread_gNB(void *arg) {
   int fl_argc=1;
   char *name="5G-gNB-scope";
   fl_initialize (&fl_argc, &name, NULL, 0, 0);
-  int nb_ue=min(NUMBER_OF_UE_MAX, scope_enb_num_ue);
+  int nb_ue=min(MAX_MOBILES_PER_GNB, scope_enb_num_ue);
   OAI_phy_scope_t  *form_gnb = create_phy_scope_gnb();
 
   while (!oai_exit) {
@@ -738,14 +725,27 @@ static void *scope_thread_gNB(void *arg) {
 }
 #endif
 
+static void scopeUpdaterGnb(enum PlotTypeGnbIf plotType, int numElt)
+{
+  switch (plotType) {
+    case puschLLRe:
+      /* update PUSCH LLR plot */
+      break;
+    case puschIQe:
+      /* update PUSCH IQ plot */
+      break;
+  }
+}
+
 STATICFORXSCOPE void gNBinitScope(scopeParms_t *p)
 {
-  AssertFatal(p->gNB->scopeData = calloc(sizeof(scopeData_t), 1), "");
+  AssertFatal(p->gNB->scopeData = calloc_or_fail(sizeof(scopeData_t), 1), "");
   scopeData_t *scope=(scopeData_t *) p->gNB->scopeData;
   scope->argc=p->argc;
   scope->argv=p->argv;
   scope->ru=p->ru;
   scope->gNB=p->gNB;
+  scope->scopeUpdater = scopeUpdaterGnb;
   scope->copyData = copyData;
 #ifndef WEBSRVSCOPE
   pthread_t forms_thread;
@@ -771,17 +771,14 @@ static void ueTimeResponse  (OAIgraph_t *graph, PHY_VARS_NR_UE *phy_vars_ue, int
 */
 
 static void ueChannelResponse  (scopeGraphData_t **data, OAIgraph_t *graph, PHY_VARS_NR_UE *phy_vars_ue, int eNB_id, int UE_id) {
-
   enum scopeDataType typ = (phy_vars_ue->sl_mode) ? psbchDlChEstimateTime : pbchDlChEstimateTime;
 
   // Channel Impulse Response
   if (!data[typ])
     return;
 
-  const scopeSample_t *tmp=(scopeSample_t *)(data[typ]+1);
-  genericPowerPerAntena(graph, data[typ]->colSz,
-                        &tmp,
-                        data[typ]->lineSz);
+  const scopeSample_t *tmp = (scopeSample_t *)(data[typ] + 1);
+  genericPowerPerAntena(graph, data[typ]->colSz, &tmp, data[typ]->lineSz);
 }
 
 static void ueFreqWaterFall (scopeGraphData_t **data, OAIgraph_t *graph,PHY_VARS_NR_UE *phy_vars_ue, int eNB_id, int UE_id ) {
@@ -835,17 +832,16 @@ static void uePbchFrequencyResp  (OAIgraph_t *graph, PHY_VARS_NR_UE *phy_vars_ue
 }
 */
 static void uePbchLLR  (scopeGraphData_t **data, OAIgraph_t *graph, PHY_VARS_NR_UE *phy_vars_ue, int eNB_id, int UE_id) {
-
   enum scopeDataType typ = (phy_vars_ue->sl_mode) ? psbchLlr : pbchLlr;
 
   // PBCH LLRs
-  if ( !data[typ])
+  if (!data[typ])
     return;
 
-  const int sz=data[typ]->lineSz;
-  //const int antennas=data[typ]->colSz;
+  const int sz = data[typ]->lineSz;
+  // const int antennas=data[typ]->colSz;
   // We take the first antenna only for now
-  int16_t *llrs = (int16_t *) (data[typ]+1);
+  int16_t *llrs = (int16_t *)(data[typ] + 1);
   float *llr_pbch=NULL, *bit_pbch=NULL;
   int nx = sz;
 #ifdef WEBSRVSCOPE
@@ -861,15 +857,14 @@ static void uePbchLLR  (scopeGraphData_t **data, OAIgraph_t *graph, PHY_VARS_NR_
 }
 
 static void uePbchIQ  (scopeGraphData_t **data, OAIgraph_t *graph, PHY_VARS_NR_UE *phy_vars_ue, int eNB_id, int UE_id) {
-
   enum scopeDataType typ = (phy_vars_ue->sl_mode) ? psbchRxdataF_comp : pbchRxdataF_comp;
 
   // PBCH I/Q of MF Output
   if (!data[typ])
     return;
 
-  scopeSample_t *pbch_comp = (scopeSample_t *) (data[typ]+1);
-  const int sz=data[typ]->lineSz;
+  scopeSample_t *pbch_comp = (scopeSample_t *)(data[typ] + 1);
+  const int sz = data[typ]->lineSz;
   int newsz = sz;
   float *I=NULL, *Q=NULL;
 #ifdef WEBSRVSCOPE
@@ -979,9 +974,9 @@ static void uePdschIQ  (scopeGraphData_t **data, OAIgraph_t *graph, PHY_VARS_NR_
 }
 static void uePdschThroughput  (scopeGraphData_t **data, OAIgraph_t *graph, PHY_VARS_NR_UE *phy_vars_ue, int eNB_id, int UE_id) {
   /*
-  float tput_time_ue[NUMBER_OF_UE_MAX][TPUT_WINDOW_LENGTH] = {{0}};
-  float tput_ue[NUMBER_OF_UE_MAX][TPUT_WINDOW_LENGTH] = {{0}};
-  float tput_ue_max[NUMBER_OF_UE_MAX] = {0};
+  float tput_time_ue[MAX_MOBILES_PER_GNB][TPUT_WINDOW_LENGTH] = {{0}};
+  float tput_ue[MAX_MOBILES_PER_GNB][TPUT_WINDOW_LENGTH] = {{0}};
+  float tput_ue_max[MAX_MOBILES_PER_GNB] = {0};
 
 
   // PDSCH Throughput
@@ -1003,7 +998,7 @@ static void uePdschThroughput  (scopeGraphData_t **data, OAIgraph_t *graph, PHY_
 STATICFORXSCOPE OAI_phy_scope_t *create_phy_scope_nrue(int ID)
 {
   FL_OBJECT *obj;
-  OAI_phy_scope_t *fdui = calloc(( sizeof *fdui ),1);
+  OAI_phy_scope_t *fdui = calloc_or_fail((sizeof *fdui), 1);
   // Define form
   fdui->phy_scope = fl_bgn_form( FL_NO_BOX, 800, 900 );
   fl_set_form_dblbuffer(fdui->phy_scope, 1);
@@ -1144,7 +1139,7 @@ static void *nrUEscopeThread(void *arg) {
 
 STATICFORXSCOPE void nrUEinitScope(PHY_VARS_NR_UE *ue)
 {
-  AssertFatal(ue->scopeData = calloc(sizeof(scopeData_t), 1), "");
+  AssertFatal(ue->scopeData = calloc_or_fail(sizeof(scopeData_t), 1), "");
   scopeData_t *scope=(scopeData_t *) ue->scopeData;
   scope->copyData = copyData;
 #ifndef WEBSRVSCOPE
@@ -1155,9 +1150,9 @@ STATICFORXSCOPE void nrUEinitScope(PHY_VARS_NR_UE *ue)
 }
 
 void nrscope_autoinit(void *dataptr) {
-  AssertFatal( (IS_SOFTMODEM_GNB_BIT||IS_SOFTMODEM_5GUE_BIT),"Scope cannot find NRUE or GNB context");
+  AssertFatal((IS_SOFTMODEM_GNB || IS_SOFTMODEM_5GUE), "Scope cannot find NRUE or GNB context");
 
-  if (IS_SOFTMODEM_GNB_BIT)
+  if (IS_SOFTMODEM_GNB)
     gNBinitScope(dataptr);
   else
     nrUEinitScope(dataptr);
@@ -1172,7 +1167,7 @@ static void reset_stats_gNB(FL_OBJECT *button,
   int i,k;
   //PHY_VARS_gNB *phy_vars_gNB = RC.gNB[0][0];
 
-  for (i=0; i<NUMBER_OF_UE_MAX; i++) {
+  for (i=0; i<MAX_MOBILES_PER_GNB; i++) {
     for (k=0; k<8; k++) { //harq_processes
       /*      for (j=0; j<phy_vars_gNB->dlsch[i][0]->Mlimit; j++) {
               phy_vars_gNB->UE_stats[i].dlsch_NAK[k][j]=0;
@@ -1190,7 +1185,7 @@ static void reset_stats_gNB(FL_OBJECT *button,
 }
 static FD_stats_form *create_form_stats_form(int ID) {
   FL_OBJECT *obj;
-  FD_stats_form *fdui = calloc(( sizeof *fdui ),1);
+  FD_stats_form *fdui = calloc_or_fail(( sizeof *fdui ),1);
   fdui->vdata = fdui->cdata = NULL;
   fdui->ldata = 0;
   fdui->stats_form = fl_bgn_form( FL_NO_BOX, 1115, 900 );

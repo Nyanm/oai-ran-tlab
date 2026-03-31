@@ -19,7 +19,7 @@
  *      contact@openairinterface.org
  */
 
-/*! \file PHY/defs.h
+/*! \file defs_UE.h
  \brief Top-level defines and structure definitions
  \author R. Knopp, F. Kaltenberger
  \date 2011
@@ -62,7 +62,7 @@
 #include "time_meas.h"
 #include "PHY/CODING/coding_defs.h"
 #include "PHY/TOOLS/tools_defs.h"
-#include "platform_types.h"
+#include "common/platform_types.h"
 #include "PHY/LTE_UE_TRANSPORT/transport_ue.h"
 #include "PHY/LTE_TRANSPORT/transport_eNB.h" // for SIC
 #include <pthread.h>
@@ -76,34 +76,13 @@
 #define stop_UE_TIMING(a)
 #endif
 
-#ifdef MEX
-  #include "mex.h"
-  #define msg mexPrintf
-  #undef LOG_D
-  #undef LOG_E
-  #undef LOG_I
-  #undef LOG_N
-  #undef LOG_T
-  #undef LOG_W
-  #undef LOG_M
-  #define LOG_D(x, ...) mexPrintf(__VA_ARGS__)
-  #define LOG_E(x, ...) mexPrintf(__VA_ARGS__)
-  #define LOG_I(x, ...) mexPrintf(__VA_ARGS__)
-  #define LOG_N(x, ...) mexPrintf(__VA_ARGS__)
-  #define LOG_T(x, ...) mexPrintf(__VA_ARGS__)
-  #define LOG_W(x, ...) mexPrintf(__VA_ARGS__)
-  #define LOG_M(x, ...) mexPrintf(__VA_ARGS__)
-#else
-    #if ENABLE_RAL
-      #include "collection/hashtable/hashtable.h"
-      #include "COMMON/ral_messages_types.h"
-      #include "UTIL/queue.h"
-    #endif
-    #include "common/utils/LOG/log.h"
-    #define msg(aRGS...) LOG_D(PHY, ##aRGS)
+#if ENABLE_RAL
+#include "collection/hashtable/hashtable.h"
+#include "COMMON/ral_messages_types.h"
+#include "UTIL/queue.h"
 #endif
-
-
+#include "common/utils/LOG/log.h"
+#define msg(aRGS...) LOG_D(PHY, ##aRGS)
 
 /// Context data structure for RX/TX portion of subframe processing
 typedef struct {
@@ -661,7 +640,7 @@ typedef struct {
   /// mbsfn reference symbols
   uint32_t         lte_gold_mbsfn_khz_1dot25_table[10][150];
 
-  uint32_t X_u[64][839];
+  c16_t X_u[64][839];
 
   uint32_t high_speed_flag;
   uint32_t perfect_ce;
@@ -721,8 +700,7 @@ typedef struct {
   int              rx_offset; /// Timing offset
   int              rx_offset_diff; /// Timing adjustment for ofdm symbol0 on HW USRP
   int              time_sync_cell;
-  int              timing_advance; ///timing advance signalled from eNB
-  int              hw_timing_advance;
+  int timing_advance; /// timing advance signalled from eNB
   int              N_TA_offset; ///timing offset used in TDD
   /// Flag to tell if UE is secondary user (cognitive mode)
   unsigned char    is_secondary_ue;
@@ -738,10 +716,6 @@ typedef struct {
 
   /// Flag to initialize averaging of PHY measurements
   int init_averaging;
-
-  /// \brief sinr for all subcarriers of the current link (used only for abstraction).
-  /// - first index: ? [0..12*N_RB_DL[
-  double *sinr_dB;
 
   /// \brief sinr for all subcarriers of first symbol for the CQI Calculation.
   /// - first index: ? [0..12*N_RB_DL[

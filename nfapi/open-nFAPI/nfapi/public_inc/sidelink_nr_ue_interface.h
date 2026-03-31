@@ -40,7 +40,7 @@ typedef enum sl_rx_pdu_type_enum {
   SL_NR_RX_PDU_TYPE_NONE,
   SL_NR_RX_PDU_TYPE_SSB,
   SL_NR_RX_PDU_TYPE_SLSCH,
-  SL_NR_RX_PDU_TYPE_SLSCH_PSFCH,
+  SL_NR_RX_PDU_TYPE_SLSCH_PSFCH
 } sl_rx_pdu_type_enum_t;
 
 //Type of SL-RX CONFIG requests from MAC to PHY
@@ -49,7 +49,7 @@ typedef enum sl_nr_rx_config_type_enum {
   SL_NR_CONFIG_TYPE_RX_PSCCH,
   SL_NR_CONFIG_TYPE_RX_PSSCH_SCI,
   SL_NR_CONFIG_TYPE_RX_PSSCH_SLSCH,
-  SL_NR_CONFIG_TYPE_RX_PSSCH_SLSCH_PSFCH,
+  SL_NR_CONFIG_TYPE_RX_PSFCH,
   SL_NR_CONFIG_TYPE_RX_PSSCH_SLSCH_CSI_RS,
   SL_NR_CONFIG_TYPE_RX_MAXIMUM
 } sl_nr_rx_config_type_enum_t;
@@ -58,7 +58,7 @@ typedef enum sl_nr_rx_config_type_enum {
 typedef enum sl_nr_tx_config_type_enum {
   SL_NR_CONFIG_TYPE_TX_PSBCH = SL_NR_CONFIG_TYPE_RX_MAXIMUM + 1,
   SL_NR_CONFIG_TYPE_TX_PSCCH_PSSCH,
-  SL_NR_CONFIG_TYPE_TX_PSCCH_PSSCH_PSFCH,
+  SL_NR_CONFIG_TYPE_TX_PSFCH,
   SL_NR_CONFIG_TYPE_TX_PSCCH_PSSCH_CSI_RS,
   SL_NR_CONFIG_TYPE_TX_MAXIMUM
 } sl_nr_tx_config_type_enum_t;

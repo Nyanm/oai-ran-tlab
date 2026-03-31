@@ -11,19 +11,24 @@ data storage. */
 #include<math.h>
 #include<complex.h>
 #include <stdlib.h>
+#include <linux/version.h>
+#if defined RHEL_RELEASE_CODE
+#include <cblas/cblas.h>
+#else
 #include <cblas.h>
+#endif
 #include <string.h>
 #include <linux/version.h>
 #include <lapacke_utils.h>
 #include <lapacke.h>
 //#define DEBUG_PREPROC
-
+#include "common/utils/utils.h"
 
 void transpose (int N, float complex *A, float complex *Result)
 {
   // COnputes C := alpha*op(A)*op(B) + beta*C,
-  enum CBLAS_TRANSPOSE transa = CblasTrans;
-  enum CBLAS_TRANSPOSE transb = CblasNoTrans;
+  CBLAS_TRANSPOSE transa = CblasTrans;
+  CBLAS_TRANSPOSE transb = CblasNoTrans;
   int rows_opA = N; // number of rows in op(A) and in C
   int col_opB = N; //number of columns of op(B) and in C
   int col_opA = N; //number of columns in op(A) and rows in op(B)
@@ -38,14 +43,14 @@ void transpose (int N, float complex *A, float complex *Result)
   int ldb = col_opB;
 
   if (transb == CblasNoTrans) {
-    B = (float complex*)calloc(ldb*col_opB,sizeof(float complex));
+    B = calloc_or_fail(ldb * col_opB, sizeof(float complex));
     col_B= col_opB;
   }
   else {
-    B = (float complex*)calloc(ldb*col_opA, sizeof(float complex));
+    B = calloc_or_fail(ldb * col_opA, sizeof(float complex));
     col_B = col_opA;
   }
-  float complex* C = (float complex*)malloc(ldc*col_opB*sizeof(float complex));
+  float complex* C = malloc_or_fail(ldc * col_opB * sizeof(float complex));
 
   for (i=0; i<lda*col_B; i+=N+1)
     B[i]=1.0+I*0;
@@ -62,8 +67,8 @@ void transpose (int N, float complex *A, float complex *Result)
 void conjugate_transpose (int N, float complex *A, float complex *Result)
 {
   // Computes C := alpha*op(A)*op(B) + beta*C,
-  enum CBLAS_TRANSPOSE transa = CblasConjTrans;
-  enum CBLAS_TRANSPOSE transb = CblasNoTrans;
+  CBLAS_TRANSPOSE transa = CblasConjTrans;
+  CBLAS_TRANSPOSE transb = CblasNoTrans;
   int rows_opA = N; // number of rows in op(A) and in C
   int col_opB = N; //number of columns of op(B) and in C
   int col_opA = N; //number of columns in op(A) and rows in op(B)
@@ -77,14 +82,14 @@ void conjugate_transpose (int N, float complex *A, float complex *Result)
   int ldb = col_opB;
 
   if (transb == CblasNoTrans) {
-    B = (float complex*)calloc(ldb*col_opB,sizeof(float complex));
+    B = calloc_or_fail(ldb * col_opB, sizeof(float complex));
     col_B= col_opB;
   }
   else {
-    B = (float complex*)calloc(ldb*col_opA, sizeof(float complex));
+    B = calloc_or_fail(ldb * col_opA, sizeof(float complex));
     col_B = col_opA;
   }
-  float complex* C = (float complex*)malloc(ldc*col_opB*sizeof(float complex));
+  float complex* C = malloc_or_fail(ldc * col_opB * sizeof(float complex));
 
   for (i=0; i<lda*col_B; i+=N+1)
     B[i]=1.0+I*0;
@@ -100,8 +105,8 @@ void conjugate_transpose (int N, float complex *A, float complex *Result)
 void H_hermH_plus_sigma2I (int N, int M, float complex *A, float sigma2, float complex *Result)
 {
   //C := alpha*op(A)*op(B) + beta*C,
-  enum CBLAS_TRANSPOSE transa = CblasConjTrans;
-  enum CBLAS_TRANSPOSE transb = CblasNoTrans;
+  CBLAS_TRANSPOSE transa = CblasConjTrans;
+  CBLAS_TRANSPOSE transb = CblasNoTrans;
   int rows_opA = N; // number of rows in op(A) and in C
   int col_opB = N; //number of columns of op(B) and in C
   int col_opA = N; //number of columns in op(A) and rows in op(B)
@@ -112,7 +117,7 @@ void H_hermH_plus_sigma2I (int N, int M, float complex *A, float sigma2, float c
   int ldc = col_opA;
   int i;
 
-  float complex* C = (float complex*)calloc(ldc*col_opB, sizeof(float complex));
+  float complex* C = calloc_or_fail(ldc * col_opB, sizeof(float complex));
 
   for (i=0; i<lda*col_C; i+=N+1)
     C[i]=sigma2*(1.0+I*0);
@@ -127,8 +132,8 @@ void H_hermH_plus_sigma2I (int N, int M, float complex *A, float sigma2, float c
  void HH_herm_plus_sigma2I (int M, int N, float complex *A, float sigma2, float complex *Result)
 {
   //C := alpha*op(A)*op(B) + beta*C,
-  enum CBLAS_TRANSPOSE transa = CblasNoTrans;
-  enum CBLAS_TRANSPOSE transb = CblasConjTrans;
+  CBLAS_TRANSPOSE transa = CblasNoTrans;
+  CBLAS_TRANSPOSE transb = CblasConjTrans;
   int k = N; //number of columns in op(A) and rows in op(B),k
   float complex alpha = 1.0+I*0;
   int lda  = N;
@@ -136,7 +141,7 @@ void H_hermH_plus_sigma2I (int N, int M, float complex *A, float sigma2, float c
   int ldc = M;
   int i;
 
-  float complex* C = (float complex*)calloc(M*M, sizeof(float complex));
+  float complex* C = calloc_or_fail(M * M, sizeof(float complex));
 
   for (i=0; i<M*M; i+=M+1)
     C[i]=1.0+I*0;
@@ -158,7 +163,7 @@ void eigen_vectors_values (int N, float complex *A, float complex *Vectors, floa
   int order_A = N;
   int lda = N;
   int i;
-  float* Values = (float*)malloc(sizeof(float)*1*N);
+  float* Values = malloc_or_fail(sizeof(float) * 1 * N);
 
   LAPACKE_cheev(LAPACK_ROW_MAJOR, jobz, uplo, order_A, A, lda, Values);
 
@@ -178,7 +183,7 @@ void eigen_vectors_values (int N, float complex *A, float complex *Vectors, floa
   int nrhs = N;
 
   char transa = 'N';
-  int* IPIV = malloc(N*N*sizeof(int));
+  int* IPIV = malloc_or_fail(N * N * sizeof(int));
 
   // Compute LU-factorization
   LAPACKE_cgetrf(LAPACK_ROW_MAJOR, n, nrhs, A, lda, IPIV);
@@ -195,8 +200,8 @@ void eigen_vectors_values (int N, float complex *A, float complex *Vectors, floa
 }
 
 void mutl_matrix_matrix_row_based(float complex* M0, float complex* M1, int rows_M0, int col_M0, int rows_M1, int col_M1, float complex* Result ){
-  enum CBLAS_TRANSPOSE transa = CblasNoTrans;
-  enum CBLAS_TRANSPOSE transb = CblasNoTrans;
+  CBLAS_TRANSPOSE transa = CblasNoTrans;
+  CBLAS_TRANSPOSE transb = CblasNoTrans;
   int rows_opA = rows_M0; // number of rows in op(A) and in C
   int col_opB = col_M1; //number of columns of op(B) and in C
   int col_opA = col_M0; //number of columns in op(A) and rows in op(B)
@@ -226,8 +231,8 @@ void mutl_matrix_matrix_row_based(float complex* M0, float complex* M1, int rows
 
 }
 void mutl_matrix_matrix_col_based(float complex* M0, float complex* M1, int rows_M0, int col_M0, int rows_M1, int col_M1, float complex* Result ){
-  enum CBLAS_TRANSPOSE transa = CblasNoTrans;
-  enum CBLAS_TRANSPOSE transb = CblasNoTrans;
+  CBLAS_TRANSPOSE transa = CblasNoTrans;
+  CBLAS_TRANSPOSE transb = CblasNoTrans;
   int rows_opA = rows_M0; // number of rows in op(A) and in C
   int col_opB = col_M1; //number of columns of op(B) and in C
   int col_opA = col_M0; //number of columns in op(A) and rows in op(B)
@@ -262,8 +267,8 @@ void mutl_matrix_matrix_col_based(float complex* M0, float complex* M1, int rows
 void compute_MMSE(float complex* H, int order_H, float sigma2, float complex* W_MMSE)
 {
   int N = order_H;
-  float complex* H_hermH_sigmaI = malloc(N*N*sizeof(float complex));
-  float complex* H_herm =  malloc(N*N*sizeof(float complex));
+  float complex* H_hermH_sigmaI = malloc_or_fail(N * N * sizeof(float complex));
+  float complex* H_herm = malloc_or_fail(N * N * sizeof(float complex));
 
   H_hermH_plus_sigma2I(N, N, H, sigma2, H_hermH_sigmaI);
 
@@ -304,18 +309,18 @@ void compute_white_filter(float complex* H_re,
   int N = n_tx;
   int sigma2=noise_power;
 
-  float complex *H0_re = malloc(n_rx*(n_tx>>2)*sizeof(float complex));
-  float complex *H1_re = malloc(n_rx*(n_tx>>2)*sizeof(float complex));
-  float complex *R_corr_col_n_0_re = malloc(n_rx*n_tx*sizeof(float complex));
-  float complex *R_corr_col_n_1_re = malloc(n_rx*n_tx*sizeof(float complex));
-  float complex *U_0_re = malloc(n_rx*n_tx*sizeof(float complex));
-  float complex *U_1_re = malloc(n_rx*n_tx*sizeof(float complex));
-  float complex *U_0_herm_re = malloc(n_rx*n_tx*sizeof(float complex));
-  float complex *U_1_herm_re = malloc(n_rx*n_tx*sizeof(float complex));
-  float complex *D_0_re = malloc(n_rx*n_tx*sizeof(float complex));
-  float complex *D_1_re = malloc(n_rx*n_tx*sizeof(float complex));
-  float complex *W_Wh_0_re = malloc(n_rx*n_tx*sizeof(float complex));
-  float complex *W_Wh_1_re = malloc(n_rx*n_tx*sizeof(float complex));
+  float complex *H0_re = malloc_or_fail(n_rx*(n_tx>>2)*sizeof(float complex));
+  float complex *H1_re = malloc_or_fail(n_rx*(n_tx>>2)*sizeof(float complex));
+  float complex *R_corr_col_n_0_re = malloc_or_fail(n_rx*n_tx*sizeof(float complex));
+  float complex *R_corr_col_n_1_re = malloc_or_fail(n_rx*n_tx*sizeof(float complex));
+  float complex *U_0_re = malloc_or_fail(n_rx*n_tx*sizeof(float complex));
+  float complex *U_1_re = malloc_or_fail(n_rx*n_tx*sizeof(float complex));
+  float complex *U_0_herm_re = malloc_or_fail(n_rx*n_tx*sizeof(float complex));
+  float complex *U_1_herm_re = malloc_or_fail(n_rx*n_tx*sizeof(float complex));
+  float complex *D_0_re = malloc_or_fail(n_rx*n_tx*sizeof(float complex));
+  float complex *D_1_re = malloc_or_fail(n_rx*n_tx*sizeof(float complex));
+  float complex *W_Wh_0_re = malloc_or_fail(n_rx*n_tx*sizeof(float complex));
+  float complex *W_Wh_1_re = malloc_or_fail(n_rx*n_tx*sizeof(float complex));
 
   for (aatx=0; aatx<n_tx/2; aatx++){
     for (aarx=0; aarx<n_rx; aarx++) {

@@ -49,8 +49,7 @@
 
 static int                  indent = 0;
 
-
-x2ap_eNB_internal_data_t x2ap_eNB_internal_data;
+static x2ap_eNB_internal_data_t x2ap_eNB_internal_data;
 
 RB_GENERATE(x2ap_enb_map, x2ap_eNB_data_s, entry, x2ap_eNB_compare_assoc_id);
 
@@ -122,9 +121,7 @@ printf("---------------------------------------------\n");
 }
 }
 
-struct x2ap_eNB_data_s *x2ap_get_eNB(x2ap_eNB_instance_t *instance_p,
-				     int32_t assoc_id,
-				     uint16_t cnx_id)
+struct x2ap_eNB_data_s *x2ap_get_eNB(x2ap_eNB_instance_t *instance_p, sctp_assoc_t assoc_id, uint16_t cnx_id)
 {
   struct x2ap_eNB_data_s  temp;
   struct x2ap_eNB_data_s *found;

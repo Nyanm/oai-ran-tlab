@@ -32,13 +32,11 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 // global var to enable openair performance profiler
-extern int opp_enabled;
+extern int cpu_meas_enabled;
 extern double cpu_freq_GHz  __attribute__ ((aligned(32)));;
 // structure to store data to compute cpu measurment
-#if defined(__x86_64__) || defined(__i386__)
+#if defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__)
   typedef long long oai_cputime_t;
-#elif defined(__arm__) || defined(__aarch64__)
-  typedef uint32_t oai_cputime_t;
 #else
   #error "building on unsupported CPU architecture"
 #endif
@@ -74,12 +72,8 @@ typedef struct time_stats {
 } time_stats_t;
 #define MEASURE_ENABLED(X)       (X->meas_enabled)
 
-
-
-
 static inline void start_meas(time_stats_t *ts) __attribute__((always_inline));
 static inline void stop_meas(time_stats_t *ts) __attribute__((always_inline));
-
 
 void print_meas_now(time_stats_t *ts, const char *name, FILE *file_name);
 void print_meas(time_stats_t *ts, const char *name, time_stats_t *total_exec_time, time_stats_t *sf_exec_time);
@@ -106,8 +100,16 @@ static inline unsigned long long rdtsc_oai(void) {
   __asm__ volatile ("rdtsc" : "=a" (a), "=d" (d));
   return (d<<32) | a;
 }
+#elif defined(__aarch64__)
+static inline uint64_t rdtsc_oai(void) __attribute__((always_inline));
+static inline uint64_t rdtsc_oai(void)
+{
+	  uint64_t r = 0;
+	    asm volatile("mrs %0, cntvct_el0" : "=r"(r));
+	      return r;
+}
 
-#elif defined(__arm__) || defined(__aarch64__)
+#elif defined(__arm__) 
 static inline uint32_t rdtsc_oai(void) __attribute__((always_inline));
 static inline uint32_t rdtsc_oai(void) {
   uint32_t r = 0;
@@ -122,11 +124,11 @@ static inline uint32_t rdtsc_oai(void) {
 static inline int cpumeas(int action) {
   switch (action) {
     case CPUMEAS_ENABLE:
-      opp_enabled = 1;
+      cpu_meas_enabled = 1;
       break;
 
     case CPUMEAS_DISABLE:
-      opp_enabled = 0;
+      cpu_meas_enabled = 0;
       break;
 
     case CPUMEAS_GETSTATE:
@@ -134,11 +136,11 @@ static inline int cpumeas(int action) {
       break;
   }
 
-  return opp_enabled;
+  return cpu_meas_enabled;
 }
 
 static inline void start_meas(time_stats_t *ts) {
-  if (opp_enabled) {
+  if (cpu_meas_enabled) {
     if (ts->meas_flag==0) {
       ts->trials++;
       ts->in = rdtsc_oai();
@@ -151,7 +153,7 @@ static inline void start_meas(time_stats_t *ts) {
 }
 
 static inline void stop_meas(time_stats_t *ts) {
-  if (opp_enabled) {
+  if (cpu_meas_enabled) {
     long long out = rdtsc_oai();
     if (ts->in) {
       ts->diff += (out - ts->in);
@@ -178,7 +180,7 @@ static inline void reset_meas(time_stats_t *ts) {
 }
 
 static inline void copy_meas(time_stats_t *dst_ts,time_stats_t *src_ts) {
-  if (opp_enabled) {
+  if (cpu_meas_enabled) {
     dst_ts->trials=src_ts->trials;
     dst_ts->diff=src_ts->diff;
     dst_ts->max=src_ts->max;
@@ -187,10 +189,11 @@ static inline void copy_meas(time_stats_t *dst_ts,time_stats_t *src_ts) {
 
 static inline void merge_meas(time_stats_t *dst_ts, const time_stats_t *src_ts)
 {
-  if (!opp_enabled)
+  if (!cpu_meas_enabled)
     return;
   dst_ts->trials += src_ts->trials;
   dst_ts->diff += src_ts->diff;
+  dst_ts->diff_square += src_ts->diff_square;
   if (src_ts->max > dst_ts->max)
     dst_ts->max = src_ts->max;
 }
@@ -210,4 +213,10 @@ time_stats_t *register_meas(char *name);
 void send_meas(time_stats_t *ts, int msgid);
 void end_meas(void);
 
+#define timeIt(a)                                           \
+  {                                                         \
+    uint64_t deb = rdtsc_oai();                             \
+    a;                                                      \
+    LOG_W(UTIL, #a ": %llu\n", (rdtsc_oai() - deb) / 3000); \
+  }
 #endif

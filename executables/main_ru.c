@@ -41,6 +41,7 @@
 #include "PHY/types.h"
 
 #include "PHY/defs_RU.h"
+#include "common/oai_version.h"
 #include "common/config/config_userapi.h"
 #include "common/utils/load_module_shlib.h"
 
@@ -74,7 +75,7 @@ int sync_var=-1; //!< protected by mutex \ref sync_mutex.
 int config_sync_var=-1;
 
 int oai_exit = 0;
-uint16_t sf_ahead = 4;
+int sf_ahead = 4;
 RU_t ru_m;
 
 
@@ -96,11 +97,19 @@ void exit_function(const char *file, const char *function, const int line, const
   oai_exit = 1;
 
   if (ru_m.rfdevice.trx_end_func) {
+    if (ru_m.rfdevice.trx_get_stats_func) {
+      ru_m.rfdevice.trx_get_stats_func(&ru_m.rfdevice);
+      ru_m.rfdevice.trx_get_stats_func = NULL;
+    }
     ru_m.rfdevice.trx_end_func(&ru_m.rfdevice);
     ru_m.rfdevice.trx_end_func = NULL;
   }
 
   if (ru_m.ifdevice.trx_end_func) {
+    if (ru_m.ifdevice.trx_get_stats_func) {
+      ru_m.ifdevice.trx_get_stats_func(&ru_m.ifdevice);
+      ru_m.ifdevice.trx_get_stats_func = NULL;
+    }
     ru_m.ifdevice.trx_end_func(&ru_m.ifdevice);
     ru_m.ifdevice.trx_end_func = NULL;
   }
@@ -115,19 +124,15 @@ void exit_function(const char *file, const char *function, const int line, const
   }
 }
 
-
-static void get_options(void) {
+static void get_options(configmodule_interface_t *cfg)
+{
   CONFIG_SETRTFLAG(CONFIG_NOEXITONHELP);
-  get_common_options(SOFTMODEM_ENB_BIT );
+  IS_SOFTMODEM_ENB = true;
+  get_common_options(cfg);
   CONFIG_CLEARRTFLAG(CONFIG_NOEXITONHELP);
 
-  //RCConfig();
-  
+  // RCConfig();
 }
-
-
-
-
 
 extern void  phy_free_RU(RU_t *);
 
@@ -144,17 +149,17 @@ void wait_eNBs(void){ return; }
 
 uint64_t                 downlink_frequency[MAX_NUM_CCs][4];
 
+configmodule_interface_t *uniqCfg = NULL;
 
 int main ( int argc, char **argv )
 {
-
-  if ( load_configmodule(argc,argv,0) == NULL) {
+  if ((uniqCfg = load_configmodule(argc, argv, 0)) == NULL) {
     exit_fun("[SOFTMODEM] Error, configuration module init failed\n");
   }
 
   logInit();
   printf("Reading in command-line options\n");
-  get_options ();
+  get_options(uniqCfg);
 
   if (CONFIG_ISFLAGSET(CONFIG_ABORT) ) {
     fprintf(stderr,"Getting configuration failed\n");
@@ -165,22 +170,20 @@ int main ( int argc, char **argv )
   T_Config_Init();
 #endif
   printf("configuring for RRU\n");
-
-#ifndef PACKAGE_VERSION
-#  define PACKAGE_VERSION "UNKNOWN-EXPERIMENTAL"
-#endif
-  LOG_I(HW, "Version: %s\n", PACKAGE_VERSION);
+  // strdup to put the sring in the core file for post mortem identification
+  LOG_I(HW, "Version: %s\n", strdup(OAI_PACKAGE_VERSION));
 
   /* Read configuration */
 
   printf("About to Init RU threads\n");
-  
+
+  lock_memory_to_ram();
 
   RU_t *ru=&ru_m;
 
   paramdef_t RUParams[] = RUPARAMS_DESC;
   paramlist_def_t RUParamList = {CONFIG_STRING_RU_LIST,NULL,0};
-  config_getlist( &RUParamList,RUParams,sizeof(RUParams)/sizeof(paramdef_t), NULL);
+  config_getlist(config_get_if(), &RUParamList, RUParams, sizeofArray(RUParams), NULL);
 
   int j=0;
   uint64_t ru_mask=1;
@@ -335,7 +338,6 @@ int main ( int argc, char **argv )
 
   set_worker_conf("WORKER_ENABLE");
 
-  mlockall(MCL_CURRENT | MCL_FUTURE);
   pthread_cond_init(&sync_cond,NULL);
   pthread_mutex_init(&sync_mutex, NULL);
  
@@ -366,14 +368,22 @@ int main ( int argc, char **argv )
   phy_free_RU(ru);
       
   free_lte_top();
-  end_configmodule();
-      
+  end_configmodule(uniqCfg);
+
   if (ru->rfdevice.trx_end_func) {
+    if (ru->rfdevice.trx_get_stats_func) {
+      ru->rfdevice.trx_get_stats_func(&ru->rfdevice);
+      ru->rfdevice.trx_get_stats_func = NULL;
+    }
     ru->rfdevice.trx_end_func(&ru->rfdevice);
     ru->rfdevice.trx_end_func = NULL;
   }
       
   if (ru->ifdevice.trx_end_func) {
+    if (ru->ifdevice.trx_get_stats_func) {
+      ru->ifdevice.trx_get_stats_func(&ru->ifdevice);
+      ru->ifdevice.trx_get_stats_func = NULL;
+    }
     ru->ifdevice.trx_end_func(&ru->ifdevice);
     ru->ifdevice.trx_end_func = NULL;
   }

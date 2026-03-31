@@ -39,7 +39,7 @@
 #include "LAYER2/MAC/defs.h"
 #include "PHY_INTERFACE/defs.h"
 #include "LAYER2/MAC/vars.h"
-#include "UTIL/LOG/log_extern.h"
+#include "UTIL/LOG/log.h"
 
 uint16_t n_rnti = 0x1235;
 int n_users = 1;
@@ -461,9 +461,6 @@ void lte_param_init(  unsigned char transmission_mode,
 
 int main(int argc, char **argv)
 {
-
-  char c;
-
   int i,l,aa,aarx,sector;
 
   unsigned char pbch_pdu[6];
@@ -504,6 +501,7 @@ int main(int argc, char **argv)
   logInit();
   g_log->log_component[PHY].level = LOG_DEBUG;
 
+  int c;
   while ((c = getopt (argc, argv, "hpFb:n:m:x:N:R:")) != -1) {
     switch (c) {
     case 'n':

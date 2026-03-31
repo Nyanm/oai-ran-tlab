@@ -28,10 +28,9 @@
 #include "sl_preconfig_paramvalues.h"
 #include "common/config/config_userapi.h"
 #include "rrc_defs.h"
-#include "rrc_vars.h"
 #include "LAYER2/NR_MAC_UE/mac_proto.h"
-#include "RRC/NAS/nas_config.h"
-#include "executables/nr-uesoftmodem.h"
+#include "nr-uesoftmodem.h"
+#include "tun_if.h"
 #include "LAYER2/nr_rlc/nr_rlc_oai_api.h"
 #include "LAYER2/nr_pdcp/nr_pdcp_oai_api.h"
 
@@ -43,7 +42,13 @@
 #define SL_SYNC_SOURCE_SYNC_REF_UE 3 // another SYNC REF UE as sync source
 #define SL_SYNC_SOURCE_LOCAL_TIMING 4 //UE acts as sync source
 
+void free_sl_rrc(NR_UE_RRC_INST_t *rrc)
+{
 
+  if (rrc->sl_preconfig) {
+    ASN_STRUCT_FREE(asn_DEF_NR_SL_PreconfigurationNR_r16, rrc->sl_preconfig);
+  }
+}
 
 static void prepare_NR_SL_SyncConfig(NR_SL_SyncConfig_r16_t *sl_syncconfig)
 {
@@ -82,10 +87,10 @@ static void prepare_NR_SL_SyncConfig(NR_SL_SyncConfig_r16_t *sl_syncconfig)
   paramdef_t SL_SYNCCFGPARAMS[] = SL_SYNCPARAMS_DESC(sl_syncconfig);
   paramlist_def_t SL_SYNCFGParamList = {SL_CONFIG_STRING_SL_SYNCCONFIG_LIST, NULL, 0};
   sprintf(aprefix, "%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0);
-  config_getlist(&SL_SYNCFGParamList, NULL, 0, aprefix);
+  config_getlist(config_get_if(), &SL_SYNCFGParamList, NULL, 0, aprefix);
   LOG_I(RRC, "NUM SL-SYNCCFG elem in cfg file:%d\n", SL_SYNCFGParamList.numelt);
   sprintf(aprefix, "%s.[%i].%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0,SL_CONFIG_STRING_SL_SYNCCONFIG_LIST, 0);
-  config_get(SL_SYNCCFGPARAMS,sizeof(SL_SYNCCFGPARAMS)/sizeof(paramdef_t),aprefix);
+  config_get(config_get_if(), SL_SYNCCFGPARAMS, sizeofArray(SL_SYNCCFGPARAMS), aprefix);
 }
 
 static void prepare_NR_SL_ResourcePool(NR_SL_ResourcePool_r16_t *sl_res_pool,
@@ -226,11 +231,11 @@ static void prepare_NR_SL_ResourcePool(NR_SL_ResourcePool_r16_t *sl_res_pool,
   // EX: BITMAP 10101010.. indicating every alternating slot supported for sidelink
   for (int i=0;i<sl_res_pool->ext1->sl_TimeResource_r16->size;i++) {
     if (is_txpool) {
-        sl_res_pool->ext1->sl_TimeResource_r16->buf[i] = (is_sl_syncsource) ? 0xF0 //0x88;//0xAA;
-                                                                            : 0x0F;//0x11;//0x55;
+        sl_res_pool->ext1->sl_TimeResource_r16->buf[i] = (is_sl_syncsource) ? 0xAA //0x88;//0xAA;
+                                                                            : 0x55;//0x11;//0x55;
     } else {
-        sl_res_pool->ext1->sl_TimeResource_r16->buf[i] = (is_sl_syncsource) ? 0x0F //0x88;//0xAA;
-                                                                            : 0xF0;//0x11;//0x55;
+        sl_res_pool->ext1->sl_TimeResource_r16->buf[i] = (is_sl_syncsource) ? 0x55 //0x88;//0xAA;
+                                                                            : 0xAA;//0x11;//0x55;
     }
   }
 
@@ -242,9 +247,11 @@ static void prepare_NR_SL_ResourcePool(NR_SL_ResourcePool_r16_t *sl_res_pool,
   if (is_txpool)
     sprintf(aprefix, "%s.[%i].%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0,SL_CONFIG_STRING_SL_TX_RPOOL_LIST, 0);
   else
+  {
     sprintf(aprefix, "%s.[%i].%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0,SL_CONFIG_STRING_SL_RX_RPOOL_LIST, 0);
+  }
 
-  config_get(SL_POOLPARAMS,sizeof(SL_POOLPARAMS)/sizeof(paramdef_t),aprefix);
+    config_get(config_get_if(), SL_POOLPARAMS, sizeofArray(SL_POOLPARAMS), aprefix);
 
 
   sl_res_pool->sl_UE_SelectedConfigRP_r16->sl_SelectionWindowList_r16 = calloc(1, sizeof(*sl_res_pool->sl_UE_SelectedConfigRP_r16->sl_SelectionWindowList_r16));
@@ -267,7 +274,7 @@ static void prepare_NR_SL_ResourcePool(NR_SL_ResourcePool_r16_t *sl_res_pool,
   char aprefix_rsc_sel[MAX_OPTNAME_SIZE*2 + 8];
   paramdef_t SL_RSCSELECTIONPARAMS[] = SL_RSRCSELPARAMS_DESC(sl_res_pool);
   sprintf(aprefix_rsc_sel, "%s.[%i].%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0,SL_CONFIG_STRING_RSRC_SEL_PARAMS_LIST, 0);
-  config_get(SL_RSCSELECTIONPARAMS,sizeof(SL_RSCSELECTIONPARAMS)/sizeof(paramdef_t),aprefix_rsc_sel);
+  config_get(config_get_if(), SL_RSCSELECTIONPARAMS, sizeofArray(SL_RSCSELECTIONPARAMS), aprefix_rsc_sel);
   LOG_D(NR_RRC, "sl_MaxNumPerReserve %ld, sl_SensingWindow %ld, sl_Priority %ld, sl_SelectionWindow %ld, sl_ResourceReservePeriod1 %ld\n",
         *sl_res_pool->sl_UE_SelectedConfigRP_r16->sl_MaxNumPerReserve_r16,
         *sl_res_pool->sl_UE_SelectedConfigRP_r16->sl_SensingWindow_r16,
@@ -325,7 +332,7 @@ static void prepare_NR_SL_BWPConfigCommon(NR_SL_BWP_ConfigCommon_r16_t *sl_bwp,
   // Value can be between symbols 0 to 7
   sl_bwp->sl_BWP_Generic_r16->sl_StartSymbol_r16 = calloc(1, sizeof(long));
 
-  sl_bwp->sl_BWP_Generic_r16->sl_PSBCH_Config_r16 = calloc(1,sizeof(NR_SL_PSBCH_Config_r16_t));
+  sl_bwp->sl_BWP_Generic_r16->sl_PSBCH_Config_r16 = calloc(1, sizeof(*sl_bwp->sl_BWP_Generic_r16->sl_PSBCH_Config_r16));
   // PSBCH CONFIG contains PO and alpha for PSBCH powercontrol.
   sl_bwp->sl_BWP_Generic_r16->sl_PSBCH_Config_r16->present = NR_SetupRelease_SL_PSBCH_Config_r16_PR_release;
 
@@ -335,16 +342,16 @@ static void prepare_NR_SL_BWPConfigCommon(NR_SL_BWP_ConfigCommon_r16_t *sl_bwp,
   paramdef_t SL_BWPPARAMS[] = SL_BWPPARAMS_DESC(sl_bwp);
   paramlist_def_t SL_BWPParamList = {SL_CONFIG_STRING_SL_BWP_LIST, NULL, 0};
   sprintf(aprefix, "%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0);
-  config_getlist(&SL_BWPParamList, NULL, 0, aprefix);
+  config_getlist(config_get_if(), &SL_BWPParamList, NULL, 0, aprefix);
   LOG_I(RRC, "NUM SL-BWP elem in cfg file:%d\n", SL_BWPParamList.numelt);
   sprintf(aprefix, "%s.[%i].%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0, SL_CONFIG_STRING_SL_BWP_LIST, 0);
-  config_get( SL_BWPPARAMS,sizeof(SL_BWPPARAMS)/sizeof(paramdef_t),aprefix);
+  config_get(config_get_if(), SL_BWPPARAMS, sizeofArray(SL_BWPPARAMS), aprefix);
 
   sl_bwp->sl_BWP_PoolConfigCommon_r16 = calloc(1, sizeof(NR_SL_BWP_PoolConfigCommon_r16_t));
 
   paramlist_def_t SL_RxPoolParamList = {SL_CONFIG_STRING_SL_RX_RPOOL_LIST, NULL, 0};
   sprintf(aprefix, "%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0);
-  config_getlist(&SL_RxPoolParamList, NULL, 0, aprefix);
+  config_getlist(config_get_if(), &SL_RxPoolParamList, NULL, 0, aprefix);
   LOG_I(RRC, "NUM Rx RPOOLs in cfg file:%d\n", SL_RxPoolParamList.numelt);
   AssertFatal(SL_RxPoolParamList.numelt <= 1 && num_rx_pools <= 1, "Only Max 1 RX Respool Supported now\n");
 
@@ -360,7 +367,7 @@ static void prepare_NR_SL_BWPConfigCommon(NR_SL_BWP_ConfigCommon_r16_t *sl_bwp,
 
   paramlist_def_t SL_TxPoolParamList = {SL_CONFIG_STRING_SL_TX_RPOOL_LIST, NULL, 0};
   sprintf(aprefix, "%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0);
-  config_getlist(&SL_TxPoolParamList, NULL, 0, aprefix);
+  config_getlist(config_get_if(), &SL_TxPoolParamList, NULL, 0, aprefix);
   LOG_I(RRC, "NUM Tx RPOOL in cfg file:%d\n", SL_TxPoolParamList.numelt);
   AssertFatal(SL_TxPoolParamList.numelt <= 1 && num_tx_pools <= 1, "Only Max 1 TX Respool Supported now\n");
 
@@ -410,10 +417,10 @@ static void prepare_NR_SL_FreqConfigCommon(NR_SL_FreqConfigCommon_r16_t *sl_fcfg
   paramdef_t SL_FCCPARAMS[] = SL_FCCPARAMS_DESC(sl_fcfg);
   paramlist_def_t SL_FCCParamList = {SL_CONFIG_STRING_SL_FCC_LIST, NULL, 0};
   sprintf(aprefix, "%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION,0);
-  config_getlist(&SL_FCCParamList, NULL, 0, aprefix);
+  config_getlist(config_get_if(), &SL_FCCParamList, NULL, 0, aprefix);
   LOG_I(RRC, "NUM SL-FCC elem in cfg file:%d\n", SL_FCCParamList.numelt);
   sprintf(aprefix, "%s.[%i].%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION,0, SL_CONFIG_STRING_SL_FCC_LIST, 0);
-  config_get( SL_FCCPARAMS,sizeof(SL_FCCPARAMS)/sizeof(paramdef_t),aprefix);
+  config_get(config_get_if(), SL_FCCPARAMS, sizeofArray(SL_FCCPARAMS), aprefix);
 
   // Sidelink BWP configuration. 
   // In REL16, 17 SUPPORTS only 1 SIDELINK Bandwidth part
@@ -548,7 +555,7 @@ NR_SL_PreconfigurationNR_r16_t *prepare_NR_SL_PRECONFIGURATION(uint16_t num_tx_p
   char aprefix[MAX_OPTNAME_SIZE*2 + 8];
   sprintf(aprefix, "%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION,0);
   paramdef_t SLTDDCFG_PARAMS[] = SL_TDDCONFIGPARAMS_DESC(tdd_uldl_cfg);
-  config_get(SLTDDCFG_PARAMS,sizeof(SLTDDCFG_PARAMS)/sizeof(paramdef_t),aprefix);
+  config_get(config_get_if(), SLTDDCFG_PARAMS, sizeofArray(SLTDDCFG_PARAMS), aprefix);
 
   NR_SL_FreqConfigCommon_r16_t *fcc =  sl_preconfig->sl_PreconfigFreqInfoList_r16->list.array[0];
   tdd_uldl_cfg->referenceSubcarrierSpacing =
@@ -573,7 +580,7 @@ NR_SL_PreconfigurationNR_r16_t *prepare_NR_SL_PRECONFIGURATION(uint16_t num_tx_p
   return sl_preconfiguration;
 }
 
-int configure_NR_SL_Preconfig(uint8_t id,int sync_source)
+int configure_NR_SL_Preconfig(NR_UE_RRC_INST_t *rrc,int sync_source)
 {
 
   NR_SL_PreconfigurationNR_r16_t *sl_preconfig = NULL;
@@ -584,9 +591,9 @@ int configure_NR_SL_Preconfig(uint8_t id,int sync_source)
     num_txpools = 1;
     sl_preconfig = prepare_NR_SL_PRECONFIGURATION(num_txpools,num_rxpools,sync_source);
 
-    //if (LOG_DEBUGFLAG(DEBUG_ASN1)) {
+    if (LOG_DEBUGFLAG(DEBUG_ASN1)) {
       xer_fprint(stdout, &asn_DEF_NR_SL_PreconfigurationNR_r16, sl_preconfig);
-    //}
+    }
   } else {
     //SL-Preconfiguration with 0 txpool, 1 rxpool if UE is not a syncsource
     num_rxpools = 1;
@@ -597,59 +604,136 @@ int configure_NR_SL_Preconfig(uint8_t id,int sync_source)
     }
   }
 
-  NR_UE_RRC_INST_t *rrc = &NR_UE_rrc_inst[id];
   rrc->sl_preconfig = sl_preconfig;
 
   return 0;
 }
 
-/*
-* This functions configures SIdelink operation in the UE.
-* RRC configures MAC with sidelink parameters
-* In case UE is a sync source/Master UE - then sends transmit SLSS REQ
-*/
-void nr_UE_configure_Sidelink(uint8_t id, uint8_t is_sync_source, ueinfo_t *ueinfo) {
+/*decode SL-BCH (SL-MIB) message*/
+static int8_t nr_sl_rrc_ue_decode_SL_MIB(const uint8_t gNB_index,
+                                         uint8_t *const bufferP,
+                                         const uint8_t buffer_len)
+{
+  NR_MasterInformationBlockSidelink_t *sl_mib = NULL;
 
-  NR_UE_RRC_INST_t *rrc = &NR_UE_rrc_inst[id];
+  asn_dec_rval_t dec_rval = uper_decode_complete(NULL, &asn_DEF_NR_MasterInformationBlockSidelink,
+                                                 (void **)&sl_mib,
+                                                 (const void *)bufferP, buffer_len);
 
-  AssertFatal(rrc, "Check if rrc instance was created.");
+  int ret = 0;
+  if ((dec_rval.code != RC_OK) || (dec_rval.consumed == 0)) {
+    LOG_E(NR_RRC, "SL-MIB decode error\n");
+    ret = -1;
+  } else  {
 
-  NR_SL_PreconfigurationNR_r16_t *sl_preconfig = rrc->sl_preconfig;
-  AssertFatal(sl_preconfig, "Check if SL-preconfig was created.");
+    int bits_unused = sl_mib->directFrameNumber_r16.bits_unused;
+    uint16_t val_fn = sl_mib->directFrameNumber_r16.buf[0];
+    val_fn = (val_fn << (8 - bits_unused)) + (sl_mib->directFrameNumber_r16.buf[1] >> bits_unused);
 
-  uint8_t sync_source = SL_SYNC_SOURCE_NONE;
+    uint8_t val_slot = sl_mib->slotIndex_r16.buf[0];
 
-  if (is_sync_source) {
-    sync_source = (GNSS_SUPPORT) ? SL_SYNC_SOURCE_GNSS
-                                 : SL_SYNC_SOURCE_LOCAL_TIMING;
+    LOG_D(NR_RRC, "%d:%d SL-RRC - Received MIB.\n", val_fn, val_slot >> 1);
+    LOG_D(NR_RRC, "SL-MIB Contents - Incoverage:%d\n", sl_mib->inCoverage_r16);
+    LOG_D(NR_RRC, "SL-MIB Contents - sl-TDD-Config:%x\n" , *((uint16_t *)(sl_mib->sl_TDD_Config_r16.buf)));
+
+    ASN_STRUCT_FREE(asn_DEF_NR_MasterInformationBlockSidelink, sl_mib);
+
   }
 
-  LOG_D(NR_RRC, "SL L2 SRCid %x, SL ipv4 addr X.X.%d.%d\n", ueinfo->srcid, ueinfo->thirdOctet, ueinfo->fourthOctet);
-  nas_config(1 + ueinfo->srcid, ueinfo->thirdOctet, ueinfo->fourthOctet, "oai_sl_tun");
-  nr_rrc_mac_config_req_sl_preconfig(id, sl_preconfig, sync_source);
+  return ret;
+}
 
+
+void nr_rrc_ue_decode_NR_SBCCH_SL_BCH_Message(NR_UE_RRC_INST_t *rrc,
+                                              const uint8_t gNB_index,
+                                              const frame_t frame,
+                                              const int slot,
+                                              uint8_t* pduP,
+                                              const sdu_size_t pdu_len,
+                                              const uint16_t rx_slss_id)
+{
+
+  nr_sl_rrc_ue_decode_SL_MIB(gNB_index, (uint8_t*)pduP, pdu_len);
+
+  DevAssert(rrc->sl_preconfig);
+
+  NR_SL_FreqConfigCommon_r16_t *fcfg = NULL;
+  if (rrc->sl_preconfig->sidelinkPreconfigNR_r16.sl_PreconfigFreqInfoList_r16)
+    fcfg = rrc->sl_preconfig->sidelinkPreconfigNR_r16.sl_PreconfigFreqInfoList_r16->list.array[0];
+  DevAssert(fcfg);
+
+  NR_SL_SSB_TimeAllocation_r16_t *sl_SSB_TimeAllocation = NULL;
+
+  //Current implementation only supports one SSB Timeallocation
+  //Extend RRC to use multiple SSB Time allocations TBD....
+  if (fcfg->sl_SyncConfigList_r16)
+    sl_SSB_TimeAllocation = fcfg->sl_SyncConfigList_r16->list.array[0]->sl_SSB_TimeAllocation1_r16;
+  DevAssert(sl_SSB_TimeAllocation);
+
+  nr_rrc_mac_config_req_sl_mib(rrc->ue_id,
+                               sl_SSB_TimeAllocation,
+                               rx_slss_id,
+                               pduP);
+
+  return;
+}
+
+void rrc_ue_process_sidelink_Preconfiguration(NR_UE_RRC_INST_t *rrc_inst,
+                                              sl_sync_source_enum_t sync_source,
+                                              ueinfo_t *ueinfo,
+                                              nr_pdcp_entity_security_keys_and_algos_t *security_up_parameters)
+{
+
+  AssertFatal(rrc_inst, "RRC instance not created.\n");
+
+  NR_SL_PreconfigurationNR_r16_t *sl_preconfig = rrc_inst->sl_preconfig;
+  
+  AssertFatal(rrc_inst->sl_preconfig, "Check if SL-preconfig was created");
+
+  AssertFatal(sync_source != SL_SYNC_SOURCE_GNBENB, "Sync source GNB not supported\n");
+
+  LOG_D(NR_RRC, "SL L2 SRCid %x, SL ipv4 addr X.X.%d.%d\n", ueinfo->srcid, ueinfo->thirdOctet, ueinfo->fourthOctet);
+  #if 0
+  nas_config(1 + ueinfo->srcid, ueinfo->thirdOctet, ueinfo->fourthOctet, "oai_sl_tun");
+  #else
+  char ip[20];
+  snprintf(ip,
+           sizeof(ip),
+           "10.0.%d.%d",
+           ueinfo->thirdOctet, ueinfo->fourthOctet);
+           
+  char ifname[IFNAMSIZ];
+  tun_generate_ifname(ifname, "oai_sl_tun", ueinfo->srcid);
+  tun_config(ifname, ip, NULL);
+  if (ip)
+  {
+    setup_ue_ipv4_route(ifname, ueinfo->srcid, ip);
+  }
+  #endif
+  nr_rrc_mac_config_req_sl_preconfig(rrc_inst->ue_id, sl_preconfig, sync_source);
 
   // SL RadioBearers
   for (int i=0; i<sl_preconfig->sidelinkPreconfigNR_r16.sl_RadioBearerPreConfigList_r16->list.count; i++) {
-    add_drb_sl(ueinfo->srcid, (NR_SL_RadioBearerConfig_r16_t *)sl_preconfig->sidelinkPreconfigNR_r16.sl_RadioBearerPreConfigList_r16->list.array[i], 0, 0, NULL, NULL);
+    add_drb_sl(ueinfo->srcid, (NR_SL_RadioBearerConfig_r16_t *)sl_preconfig->sidelinkPreconfigNR_r16.sl_RadioBearerPreConfigList_r16->list.array[i], security_up_parameters);
   }
   // configure RLC
   for (int i=0; i<sl_preconfig->sidelinkPreconfigNR_r16.sl_RLC_BearerPreConfigList_r16->list.count; i++) {
     nr_rlc_add_drb_sl(ueinfo->srcid, 1, (NR_SL_RLC_BearerConfig_r16_t *)sl_preconfig->sidelinkPreconfigNR_r16.sl_RLC_BearerPreConfigList_r16->list.array[i]);
   }
+
   //TBD.. These should be chosen by RRC according to 3GPP 38.331 RRC specification.
   //Currently hardcoding the values to these
   uint16_t slss_id = 671, ssb_ta_index = 1;
   //12 bits -sl-TDD-config will be filled by MAC
-  //Incoverage 1bit is FALSE
+  //Incoverage 1bit is FALSE as this is mode 2
   //DFN, sfn will be filled by PHY
   uint8_t sl_mib_payload[4] = {0,0,0,0};
 
   NR_SL_SSB_TimeAllocation_r16_t *ssb_ta = NULL;
   NR_SL_FreqConfigCommon_r16_t *fcfg = NULL;
   NR_SL_SyncConfig_r16_t *synccfg = NULL;
-  if (rrc->sl_preconfig->sidelinkPreconfigNR_r16.sl_PreconfigFreqInfoList_r16)
-    fcfg = rrc->sl_preconfig->sidelinkPreconfigNR_r16.sl_PreconfigFreqInfoList_r16->list.array[0];
+  if (sl_preconfig->sidelinkPreconfigNR_r16.sl_PreconfigFreqInfoList_r16)
+    fcfg = sl_preconfig->sidelinkPreconfigNR_r16.sl_PreconfigFreqInfoList_r16->list.array[0];
   AssertFatal(fcfg, "Fcfg cannot be NULL\n");
   if (fcfg->sl_SyncConfigList_r16)
     synccfg = fcfg->sl_SyncConfigList_r16->list.array[0];
@@ -666,97 +750,18 @@ void nr_UE_configure_Sidelink(uint8_t id, uint8_t is_sync_source, ueinfo_t *uein
   AssertFatal(ssb_ta, "SSB_timeallocation cannot be NULL\n");
 
   if (sync_source == SL_SYNC_SOURCE_LOCAL_TIMING || sync_source == SL_SYNC_SOURCE_GNSS)
-    nr_rrc_mac_transmit_slss_req(id, sl_mib_payload, slss_id, ssb_ta);
+    nr_rrc_mac_transmit_slss_req(rrc_inst->ue_id,sl_mib_payload, slss_id, ssb_ta);
 
 }
 
-
-/*decode SL-BCH (SL-MIB) message*/
-static int8_t nr_sl_rrc_ue_decode_SL_MIB(const module_id_t module_id,
-                                          const uint8_t gNB_index,
-                                          uint8_t *const bufferP,
-                                          const uint8_t buffer_len)
+//For Sidelink mode 2 operation this prepares the sidelink preconfiguration
+void init_sidelink(NR_UE_RRC_INST_t *rrc)
 {
-  NR_MasterInformationBlockSidelink_t *sl_mib = NULL;
+  int sync_ref = get_softmodem_params()->sync_ref;
 
-  asn_dec_rval_t dec_rval = uper_decode_complete(NULL, &asn_DEF_NR_MasterInformationBlockSidelink,
-                                                 (void **)&sl_mib,
-                                                 (const void *)bufferP, buffer_len);
+  if (get_softmodem_params()->sl_mode == 2) {
+    //Preparation of the Sidelink PRE-Configuration message
+    configure_NR_SL_Preconfig(rrc, sync_ref);
 
-  uint16_t val_fn = sl_mib->directFrameNumber_r16.buf[0];
-  val_fn = (val_fn << 2) + (sl_mib->directFrameNumber_r16.buf[1] >> sl_mib->directFrameNumber_r16.bits_unused);
-
-  uint8_t val_slot = sl_mib->slotIndex_r16.buf[0];
-
-  LOG_D(NR_RRC, "SL-MIB Contents - DFN:%d\n" , val_fn);
-  LOG_D(NR_RRC, "SL-MIB Contents - SLOT:%d\n" , val_slot >> 1);
-  LOG_D(NR_RRC, "SL-MIB Contents - Incoverage:%d\n", sl_mib->inCoverage_r16);
-  LOG_D(NR_RRC, "SL-MIB Contents - sl-TDD-Config:%x\n" , *((uint16_t *)(sl_mib->sl_TDD_Config_r16.buf)));
-
-  int ret = 1;
-  if ((dec_rval.code != RC_OK) || (dec_rval.consumed == 0)) {
-    LOG_E(NR_RRC, "SL-MIB decode error\n");
-    ret = -1;
-  } else  {
-    ret = 0;
-    if (NR_UE_rrc_inst[module_id].sl_mib == NULL) {
-      LOG_I(NR_RRC, "Sidelink RRC first MIB reception\n");
-    } else {
-      ASN_STRUCT_FREE(asn_DEF_NR_MasterInformationBlockSidelink, NR_UE_rrc_inst[module_id].sl_mib);
-    }
-    NR_UE_rrc_inst[module_id].sl_mib = sl_mib;
-  }
-
-  return ret;
-}
-
-
-
-void nr_mac_rrc_sl_mib_ind(const module_id_t module_id,
-                              const int CC_id,
-                              const uint8_t gNB_index,
-                              const frame_t frame,
-                              const int slot,
-                              const channel_t channel,
-                              uint8_t* pduP,
-                              const sdu_size_t pdu_len,
-                              const uint16_t rx_slss_id)
-{
-
-  nr_sl_rrc_ue_decode_SL_MIB(module_id, gNB_index, (uint8_t*)pduP, pdu_len);
-
-  DevAssert(NR_UE_rrc_inst[module_id].sl_preconfig);
-
-  NR_SL_FreqConfigCommon_r16_t *fcfg = NULL;
-  if (NR_UE_rrc_inst[module_id].sl_preconfig->sidelinkPreconfigNR_r16.sl_PreconfigFreqInfoList_r16)
-    fcfg = NR_UE_rrc_inst[module_id].sl_preconfig->sidelinkPreconfigNR_r16.sl_PreconfigFreqInfoList_r16->list.array[0];
-  DevAssert(fcfg);
-
-  NR_SL_SSB_TimeAllocation_r16_t *sl_SSB_TimeAllocation = NULL;
-
-  //Current implementation only supports one SSB Timeallocation
-  //Extend RRC to use multiple SSB Time allocations TBD....
-  if (fcfg->sl_SyncConfigList_r16)
-    sl_SSB_TimeAllocation = fcfg->sl_SyncConfigList_r16->list.array[0]->sl_SSB_TimeAllocation1_r16;
-  DevAssert(sl_SSB_TimeAllocation);
-
-  nr_rrc_mac_config_req_sl_mib(module_id,
-                               sl_SSB_TimeAllocation,
-                               rx_slss_id,
-                               pduP);
-
-  return;
-}
-
-
-void free_sl_rrc(uint8_t id) {
-
-  NR_UE_RRC_INST_t *rrc = &NR_UE_rrc_inst[id];
-
-  if (rrc->sl_preconfig) {
-    ASN_STRUCT_FREE(asn_DEF_NR_SL_PreconfigurationNR_r16, rrc->sl_preconfig);
-  }
-  if (rrc->sl_mib) {
-    ASN_STRUCT_FREE(asn_DEF_NR_MasterInformationBlockSidelink, rrc->sl_mib);
   }
 }

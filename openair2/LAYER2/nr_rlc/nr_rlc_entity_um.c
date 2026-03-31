@@ -521,11 +521,11 @@ static int generate_tx_pdu(nr_rlc_entity_um_t *entity, char *buffer, int size)
   entity->common.stats.txpdu_pkts++;
   entity->common.stats.txpdu_bytes += size;
 
-  if (sdu->sdu->time_of_arrival) {
+  /* No need to 'zero' time-of-arrival; 
+  Segmented packets do need to be duplicated in time-sensitive use cases */
+  if (entity->common.avg_time_is_on) {
     uint64_t time_now = time_average_now();
     uint64_t waited_time = time_now - sdu->sdu->time_of_arrival;
-    /* set time_of_arrival to 0 so as to update stats only once */
-    sdu->sdu->time_of_arrival = 0;
     time_average_add(entity->common.txsdu_avg_time_to_tx, time_now, waited_time);
   }
 
@@ -575,9 +575,16 @@ void nr_rlc_entity_um_recv_sdu(nr_rlc_entity_t *_entity,
     exit(1);
   }
 
+  /* log SDUs rejected, at most once per second */
+  if (entity->sdu_rejected != 0
+      && entity->t_current > entity->t_log_buffer_full + 1000) {
+    LOG_E(RLC, "%d SDU rejected, SDU buffer full\n", entity->sdu_rejected);
+    entity->sdu_rejected = 0;
+    entity->t_log_buffer_full = entity->t_current;
+  }
+
   if (entity->tx_size + size > entity->tx_maxsize) {
-    LOG_W(RLC, "%s:%d:%s: warning: SDU rejected, SDU buffer full\n",
-          __FILE__, __LINE__, __FUNCTION__);
+    entity->sdu_rejected++;
 
     entity->common.stats.rxsdu_dd_pkts++;
     entity->common.stats.rxsdu_dd_bytes += size;
@@ -712,10 +719,12 @@ static void clear_entity(nr_rlc_entity_um_t *entity)
   entity->rx_next_reassembly = 0;
   entity->rx_timer_trigger   = 0;
 
-
   entity->tx_next           = 0;
 
   entity->t_current = 0;
+
+  entity->t_log_buffer_full = 0;
+  entity->sdu_rejected      = 0;
 
   entity->t_reassembly_start      = 0;
 
@@ -755,4 +764,10 @@ int nr_rlc_entity_um_available_tx_space(nr_rlc_entity_t *_entity)
 {
   nr_rlc_entity_um_t *entity = (nr_rlc_entity_um_t *)_entity;
   return entity->tx_maxsize - entity->tx_size;
+}
+
+int nr_rlc_entity_um_tx_list_occupancy(nr_rlc_entity_t *_entity)
+{
+  nr_rlc_entity_um_t *entity = (nr_rlc_entity_um_t *)_entity;
+  return entity->tx_size;
 }

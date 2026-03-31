@@ -20,13 +20,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include "radio/COMMON/common_lib.h"
-//#undef MALLOC
 #include "assertions.h"
 #include "PHY/types.h"
 #include "PHY/defs_eNB.h"
 #include "PHY/defs_UE.h"
 #include "s1ap_eNB.h"
-#include "SIMULATION/ETH_TRANSPORT/proto.h"
 #include "executables/softmodem-common.h"
 
 
@@ -74,15 +72,7 @@
 #define CONFIG_HLP_DLSHIFT       "dynamic shift for LLR compuation for TM3/4 (default 0)\n"
 #define CONFIG_HLP_USRP_ARGS     "set the arguments to identify USRP (same syntax as in UHD)\n"
 #define CONFIG_HLP_DMAMAP        "use DMA memory mapping\n"
-#define CONFIG_HLP_TDD           "Set hardware to TDD mode (default: FDD). Used only with -U (otherwise set in config file).\n"
-#define CONFIG_HLP_TADV          "Set timing_advance\n"
-
-
-
-
-
-
-
+#define CONFIG_HLP_TDD "Set hardware to TDD mode (default: FDD). Used only with -U (otherwise set in config file).\n"
 
 /*-------------------------------------------------------------------------------------------------------------------------------------------------------*/
 /*                                            command line parameters specific to UE                                                                     */
@@ -106,7 +96,6 @@
     {"usrp-args",         CONFIG_HLP_USRP_ARGS,   0,               .strptr=&usrp_args,         .defstrval="type=b200",TYPE_STRING,   0},   \
     {"mmapped-dma",       CONFIG_HLP_DMAMAP,      PARAMFLAG_BOOL,  .uptr=&mmapped_dma,                  .defintval=0,          TYPE_INT,      0},   \
     {"T" ,                CONFIG_HLP_TDD,         PARAMFLAG_BOOL,  .iptr=&tddflag,                      .defintval=0,          TYPE_INT,      0},   \
-    {"A",                 CONFIG_HLP_TADV,        0,               .iptr=&(timingadv),                  .defintval=0,          TYPE_INT,      0},   \
     {"ue-idx-standalone", NULL,                   0,               .u16ptr=&ue_idx_standalone,          .defuintval=0xFFFF,    TYPE_UINT16,   0},   \
     {"node-number",       NULL,                   0,               .u16ptr=&node_number,                .defuintval=2,         TYPE_UINT16,   0},   \
   }
@@ -131,11 +120,6 @@ extern uint64_t downlink_frequency[MAX_NUM_CCs][4];
 extern int32_t  uplink_frequency_offset[MAX_NUM_CCs][4];
 
 extern int rx_input_level_dBm;
-extern uint64_t num_missed_slots; // counter for the number of missed slots
-
-extern int oaisim_flag;
-extern int oai_exit;
-
 extern openair0_config_t openair0_cfg[MAX_CARDS];
 extern pthread_cond_t sync_cond;
 extern pthread_mutex_t sync_mutex;
@@ -143,14 +127,13 @@ extern int sync_var;
 extern int transmission_mode;
 extern double cpuf;
 
-extern int emulate_rf;
 extern int numerology;
 extern int usrp_tx_thread;
 
 // In lte-enb.c
 extern void stop_eNB(int);
 extern void kill_eNB_proc(int inst);
-extern void init_eNB(int single_thread_flag, int wait_for_sync);
+extern void init_eNB();
 
 // In lte-ru.c
 extern void stop_ru(RU_t *ru);
@@ -179,9 +162,6 @@ extern void init_UE(int nb_inst,
 
 extern void init_thread(int sched_runtime, int sched_deadline, int sched_fifo, cpu_set_t *cpuset, char *name);
 
-extern void init_ocm(void);
-extern void init_ue_devices(PHY_VARS_UE *);
-
 PHY_VARS_UE *init_ue_vars(LTE_DL_FRAME_PARMS *frame_parms, uint8_t UE_id, uint8_t abstraction_flag);
 
 void init_eNB_afterRU(void);
@@ -201,8 +181,6 @@ void kill_feptx_thread(RU_t *ru);
 void init_fep_thread(RU_t *ru, pthread_attr_t *attr_fep);
 void init_feptx_thread(RU_t *ru, pthread_attr_t *attr_feptx);
 void fep_full(RU_t *ru, int subframe);
-void configure_ru(int, void *arg);
-void configure_rru(int, void *arg);
 void ru_fep_full_2thread(RU_t *ru,int subframe);
 void feptx_ofdm(RU_t*ru, int frame_tx, int tti_tx);
 void feptx_prec(struct RU_t_s *ru, int frame_tx, int tti_tx);

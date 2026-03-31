@@ -25,82 +25,30 @@
 #define __NR_REFSIG_DEFS__H__
 
 #include "PHY/defs_nr_UE.h"
-#include "PHY/LTE_REFSIG/lte_refsig.h"
-
-typedef struct port_freq_indices {
-  uint8_t p;
-  uint16_t k;
-} port_freq_indices_t;
-
-typedef struct csi_rs_params {
-  uint8_t size;
-  uint8_t j[16];
-  uint8_t k_n[6];
-  uint8_t kprime;
-  uint8_t lprime;
-  uint8_t ports;
-  uint8_t koverline[16];
-  uint8_t loverline[16];
-  double rho;
-  double alpha;
-  uint8_t gs;
-} csi_rs_params_t;
+#include "nr_refsig_common.h"
 
 /*!\brief This function generates the NR Gold sequence (38-211, Sec 5.2.1) for the PBCH DMRS.
 @param PHY_VARS_NR_UE* ue structure provides configuration, frame parameters and the pointers to the 32 bits sequence storage tables
  */
-int nr_pbch_dmrs_rx(int dmrss,
-                    unsigned int *nr_gold_pbch,
-                    int32_t *output,
-                    bool sidelink);
+void nr_pbch_dmrs_rx(int dmrss, const unsigned int *nr_gold_pbch, c16_t *output, bool sidelink);
 
 /*!\brief This function generates the NR Gold sequence (38-211, Sec 5.2.1) for the PDCCH DMRS.
 @param PHY_VARS_NR_UE* ue structure provides configuration, frame parameters and the pointers to the 32 bits sequence storage tables
  */
-int nr_pdcch_dmrs_rx(PHY_VARS_NR_UE *ue,
-                     unsigned int Ns,
-                     unsigned int *nr_gold_pdcch,
-                     int32_t *output,
-                     unsigned short p,
-                     unsigned short nb_rb_corset);
+void nr_pdcch_dmrs_ref(const unsigned int *nr_gold_pdcch, c16_t *output, unsigned short nb_rb_corset);
 
-int nr_pdsch_dmrs_rx(PHY_VARS_NR_UE *ue,
+int nr_pdsch_dmrs_rx(const PHY_VARS_NR_UE *ue,
                      unsigned int Ns,
-                     unsigned int *nr_gold_pdsch,
-                     int32_t *output,
+                     const unsigned int *nr_gold_pdsch,
+                     c16_t *output,
                      unsigned short p,
                      unsigned char lp,
                      unsigned short nb_pdsch_rb,
-                     uint8_t config_type);
+                     uint8_t config_type,
+                     int16_t dmrs_scaling);
 
-void nr_gold_pbch(PHY_VARS_NR_UE* ue);
-
-void nr_gold_pdcch(NR_DL_FRAME_PARMS *fp, 
-                   uint32_t ***nr_gold, uint16_t nid); 
-
-void nr_gold_pdsch(PHY_VARS_NR_UE* ue,
-                   int nscid,
-                   uint32_t nid);
-
-void nr_init_pusch_dmrs(PHY_VARS_NR_UE* ue,
-                        uint16_t N_n_scid,
-                        uint8_t n_scid);
-
-void nr_init_pssch_dmrs_oneshot(NR_DL_FRAME_PARMS *fp,
-                                uint16_t N_id,
-                                uint32_t *pssch_dmrs,
-                                int slot,
-                                int symb);
-
-void nr_init_csi_rs(const NR_DL_FRAME_PARMS *fp, uint32_t ***csi_rs, uint32_t Nid);
-void init_nr_gold_prs(PHY_VARS_NR_UE* ue);
-
-void get_csi_rs_freq_ind_sl(const NR_DL_FRAME_PARMS* frame_parms,
-                            uint16_t n,
-                            nfapi_nr_dl_tti_csi_rs_pdu_rel15_t* csi_params,
-                            csi_rs_params_t* table_params,
-                            port_freq_indices_t* port_freq_indices);
-
-void get_csi_rs_params_from_table(const nfapi_nr_dl_tti_csi_rs_pdu_rel15_t *csi_params,
-                                  csi_rs_params_t* table_params);
+void sl_generate_pss(SL_NR_UE_INIT_PARAMS_t *sl_init_params, uint8_t n_sl_id2, uint16_t scaling);
+void sl_generate_pss_ifft_samples(sl_nr_ue_phy_params_t *sl_ue_params, SL_NR_UE_INIT_PARAMS_t *sl_init_params);
+void sl_generate_sss(SL_NR_UE_INIT_PARAMS_t *sl_init_params, uint16_t slss_id, uint16_t scaling);
+void sl_init_psbch_dmrs_gold_sequences(PHY_VARS_NR_UE *UE);
 #endif

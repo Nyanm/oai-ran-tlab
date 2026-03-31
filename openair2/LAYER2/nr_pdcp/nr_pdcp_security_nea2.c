@@ -29,21 +29,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-void *nr_pdcp_security_nea2_init(unsigned char *ciphering_key)
+stream_security_context_t *nr_pdcp_security_nea2_init(unsigned char *ciphering_key)
 {
   // This is a hack, IMO init, cipher and free functions should be reduced to cipher.
   // Test show a ~10% more processing time
-  return ciphering_key;
+  return (stream_security_context_t *)ciphering_key;
 }
 
-void nr_pdcp_security_nea2_cipher(void *security_context, unsigned char *buffer, int length, int bearer, int count, int direction)
+void nr_pdcp_security_nea2_cipher(stream_security_context_t *security_context, unsigned char *buffer, int length, int bearer, uint32_t count, int direction)
 {
   DevAssert(security_context != NULL);
   DevAssert(buffer != NULL);
   DevAssert(length > 0);
   DevAssert(bearer > -1 && bearer < 32);
   DevAssert(direction > -1 && direction < 2);
-  DevAssert(count > -1);
 
   aes_128_t p = {0};
   const uint8_t *ciphering_key = (uint8_t const *)security_context;
@@ -62,7 +61,7 @@ void nr_pdcp_security_nea2_cipher(void *security_context, unsigned char *buffer,
   memcpy(buffer, out, length);
 }
 
-void nr_pdcp_security_nea2_free_security(void *security_context)
+void nr_pdcp_security_nea2_free_security(stream_security_context_t *security_context)
 {
   (void)security_context;
 }

@@ -22,49 +22,67 @@
 #ifndef NR_PDCP_OAI_API_H
 #define NR_PDCP_OAI_API_H
 
-#include "pdcp.h"
+#include <assertions.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include "NR_DRB-ToAddModList.h"
+#include "NR_PDCP-Config.h"
+#include "NR_SRB-ToAddModList.h"
+#include "nr_pdcp/nr_pdcp_entity.h"
+#include "nr_pdcp/nr_pdcp_integrity_data.h"
 #include "nr_pdcp_ue_manager.h"
+struct NR_DRB_ToAddMod;
+struct NR_SRB_ToAddMod;
+struct sdap_configuration_s;
 
 void nr_pdcp_layer_init(void);
-uint64_t nr_pdcp_module_init(uint64_t _pdcp_optmask, int id);
 
-void du_rlc_data_req(const protocol_ctxt_t *const ctxt_pP,
-                     const srb_flag_t   srb_flagP,
-                     const MBMS_flag_t  MBMS_flagP,
-                     const rb_id_t      rb_idP,
-                     const mui_t        muiP,
-                     confirm_t    confirmP,
-                     sdu_size_t   sdu_sizeP,
-                     mem_block_t *sdu_pP);
+bool nr_pdcp_data_ind(const protocol_ctxt_t *const ctxt_pP,
+                      const srb_flag_t srb_flagP,
+                      const rb_id_t rb_id,
+                      const sdu_size_t sdu_buffer_size,
+                      uint8_t *const sdu_buffer);
 
-bool pdcp_data_ind(const protocol_ctxt_t *const  ctxt_pP,
-                   const srb_flag_t srb_flagP,
-                   const MBMS_flag_t MBMS_flagP,
-                   const rb_id_t rb_id,
-                   const sdu_size_t sdu_buffer_size,
-                   mem_block_t *const sdu_buffer,
-                   const uint32_t *const srcID,
-                   const uint32_t *const dstID);
+void nr_pdcp_add_srbs(eNB_flag_t enb_flag,
+                      ue_id_t UEid,
+                      NR_SRB_ToAddModList_t *const srb2add_list,
+                      const nr_pdcp_entity_security_keys_and_algos_t *security_parameters);
 
-void nr_pdcp_add_drbs(eNB_flag_t enb_flag,
-                      ue_id_t rntiMaybeUEid,
-                      ue_id_t reestablish_ue_id,
-                      NR_DRB_ToAddModList_t *const drb2add_list,
-                      const uint8_t security_modeP,
-                      uint8_t *const kUPenc,
-                      uint8_t *const kUPint,
-                      struct NR_CellGroupConfig__rlc_BearerToAddModList *rlc_bearer2add_list);
+void nr_pdcp_add_drb(int is_gnb,
+                     const ue_id_t UEid,
+                     const NR_PDCP_Config_t *pdcp,
+                     const struct sdap_configuration_s *sdap,
+                     const nr_pdcp_entity_security_keys_and_algos_t *security_parameters);
 
-void nr_DRB_preconfiguration(ue_id_t crntiMaybeUEid);
+void nr_pdcp_remove_UE(ue_id_t ue_id);
+void nr_pdcp_reestablishment(ue_id_t ue_id,
+                             int rb_id,
+                             bool srb_flag,
+                             const nr_pdcp_entity_security_keys_and_algos_t *security_parameters);
 
-bool nr_pdcp_remove_UE(ue_id_t ue_id);
+void nr_pdcp_suspend_srb(ue_id_t ue_id, int srb_id);
+void nr_pdcp_suspend_drb(ue_id_t ue_id, int drb_id);
+void nr_pdcp_reconfigure_srb(ue_id_t ue_id, int srb_id, long t_Reordering);
+void nr_pdcp_reconfigure_drb(ue_id_t ue_id, int drb_id, NR_PDCP_Config_t *pdcp_config);
+void nr_pdcp_release_srb(ue_id_t ue_id, int srb_id);
+void nr_pdcp_release_drb(ue_id_t ue_id, int drb_id);
+int nr_pdcp_get_drb_ids_for_pdusession(ue_id_t ue_id, long pdusession_id, int *drb_ids);
+
+void add_srb(int is_gnb,
+             ue_id_t UEid,
+             struct NR_SRB_ToAddMod *s,
+             const nr_pdcp_entity_security_keys_and_algos_t *security_parameters);
 
 void nr_pdcp_config_set_security(ue_id_t ue_id,
-                                 const rb_id_t rb_id,
-                                 const uint8_t security_modeP,
-                                 uint8_t *const kRRCenc_pP,
-                                 uint8_t *const kRRCint_pP,
-                                 uint8_t *const kUPenc_pP);
+                                 rb_id_t rb_id,
+                                 bool is_srb,
+                                 const nr_pdcp_entity_security_keys_and_algos_t *parameters);
+
+bool nr_pdcp_check_integrity_srb(ue_id_t ue_id,
+                                 int srb_id,
+                                 const uint8_t *msg,
+                                 int msg_size,
+                                 const nr_pdcp_integrity_data_t *msg_integrity);
 
 bool cu_f1u_data_req(protocol_ctxt_t  *ctxt_pP,
                      const srb_flag_t srb_flagP,
@@ -80,10 +98,7 @@ bool cu_f1u_data_req(protocol_ctxt_t  *ctxt_pP,
 typedef void (*deliver_pdu)(void *data, ue_id_t ue_id, int srb_id,
                             char *buf, int size, int sdu_id);
 /* default implementation of deliver_pdu */
-void deliver_pdu_srb_rlc(void *data, ue_id_t ue_id, int srb_id, char *buf,
-                         int size, int sdu_id);
-void deliver_pdu_srb_f1(void *data, ue_id_t ue_id, int srb_id, char *buf,
-                        int size, int sdu_id);
+void deliver_pdu_srb_rlc(void *data, ue_id_t ue_id, int srb_id, char *buf, int size, int sdu_id);
 bool nr_pdcp_data_req_srb(ue_id_t ue_id,
                           const rb_id_t rb_id,
                           const mui_t muiP,
@@ -102,12 +117,20 @@ bool nr_pdcp_data_req_drb(protocol_ctxt_t *ctxt_pP,
                           const uint32_t *const sourceL2Id,
                           const uint32_t *const destinationL2Id);
 
-void nr_pdcp_tick(int frame, int subframe);
-
 nr_pdcp_ue_manager_t *nr_pdcp_sdap_get_ue_manager();
 
-const bool nr_pdcp_get_statistics(ue_id_t ue_id, int srb_flag, int rb_id, nr_pdcp_statistics_t *out);
+int nr_pdcp_get_num_ues(ue_id_t *ue_list, int len);
 
-void add_drb_sl(ue_id_t srcid, NR_SL_RadioBearerConfig_r16_t *s, int ciphering_algorithm, int integrity_algorithm, unsigned char *ciphering_key, unsigned char *integrity_key);
+bool nr_pdcp_get_statistics(ue_id_t ue_id, int srb_flag, int rb_id, nr_pdcp_statistics_t *out);
+
+void nr_pdcp_count_update(ue_id_t ue_id,
+                          rb_id_t drb_id,
+                          nr_pdcp_count_t dl_count,
+                          nr_pdcp_count_t ul_count,
+                          int sn_size);
+
+void nr_pdcp_get_drb_count_values(ue_id_t ue_id, rb_id_t rb_id, nr_pdcp_count_t *ul_count, nr_pdcp_count_t *dl_count);
+
+void add_drb_sl(ue_id_t srcid, NR_SL_RadioBearerConfig_r16_t *sl_rb_config, const nr_pdcp_entity_security_keys_and_algos_t *security_parameters);
 
 #endif /* NR_PDCP_OAI_API_H */

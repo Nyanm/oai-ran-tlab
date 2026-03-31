@@ -217,29 +217,16 @@ int x2ap_eNB_init_sctp (x2ap_eNB_instance_t *instance_p,
                         net_ip_address_t    *local_ip_addr,
                         uint32_t enb_port_for_X2C) {
   // Create and alloc new message
-  MessageDef                             *message;
-  sctp_init_t                            *sctp_init  = NULL;
   DevAssert(instance_p != NULL);
   DevAssert(local_ip_addr != NULL);
-  message = itti_alloc_new_message (TASK_X2AP, 0, SCTP_INIT_MSG_MULTI_REQ);
-  sctp_init = &message->ittiMsg.sctp_init_multi;
+  size_t addr_len = strlen(local_ip_addr->ipv4_address) + 1;
+  MessageDef *message = itti_alloc_new_message_sized(TASK_X2AP, 0, SCTP_INIT_MSG_MULTI_REQ, sizeof(sctp_init_t) + addr_len);
+  sctp_init_t *sctp_init = &message->ittiMsg.sctp_init_multi;
   sctp_init->port = enb_port_for_X2C;
   sctp_init->ppid = X2AP_SCTP_PPID;
-  sctp_init->ipv4 = 1;
-  sctp_init->ipv6 = 0;
-  sctp_init->nb_ipv4_addr = 1;
-#if 0
-  memcpy(&sctp_init->ipv4_address,
-         local_ip_addr,
-         sizeof(*local_ip_addr));
-#endif
-  sctp_init->ipv4_address[0] = inet_addr(local_ip_addr->ipv4_address);
-  /*
-   * SR WARNING: ipv6 multi-homing fails sometimes for localhost.
-   * * * * Disable it for now.
-   */
-  sctp_init->nb_ipv6_addr = 0;
-  sctp_init->ipv6_address[0] = "0:0:0:0:0:0:0:1";
+  char *addr_buf = (char *) (sctp_init + 1);
+  sctp_init->bind_address = addr_buf;
+  memcpy(addr_buf, local_ip_addr->ipv4_address, addr_len);
   return itti_send_msg_to_task (TASK_SCTP, instance_p->instance, message);
 }
 
@@ -548,9 +535,10 @@ void x2ap_gNB_trigger_sgNB_add_req_ack(instance_t instance,
 }
 
 /**
- * @fn	: Function triggers sgnb reconfiguration complete
+ * @fn x2ap_eNB_trigger_sgnb_reconfiguration_complete
+ *\brief:  Function triggers sgnb reconfiguration complete
  * @param	: IN instance, IN x2ap_reconf_complete
-**/ 
+ **/
 static
 void x2ap_eNB_trigger_sgnb_reconfiguration_complete(instance_t instance,
     x2ap_ENDC_reconf_complete_t *x2ap_reconf_complete)
@@ -746,17 +734,17 @@ int is_x2ap_enabled(void)
   };
 
   /* TODO: do it per module - we check only first eNB */
-  config_get(p, sizeof(p)/sizeof(paramdef_t), "eNBs.[0]");
+  config_get(config_get_if(), p, sizeofArray(p), "eNBs.[0]");
   if (enable_x2 != NULL && strcmp(enable_x2, "yes") == 0){
 	  enabled = 1;
   }
 
   /*Consider also the case of enabling X2AP for a gNB by parsing a gNB configuration file*/
 
-  config_get(p, sizeof(p)/sizeof(paramdef_t), "gNBs.[0]");
-    if (enable_x2 != NULL && strcmp(enable_x2, "yes") == 0){
-  	  enabled = 1;
-    }
+  config_get(config_get_if(), p, sizeofArray(p), "gNBs.[0]");
+  if (enable_x2 != NULL && strcmp(enable_x2, "yes") == 0) {
+    enabled = 1;
+  }
 
   config_loaded = 1;
 
@@ -768,7 +756,7 @@ mutex_error:
   exit(1);
 }
 
-void x2ap_trigger(void)
+void x2ap_ms_tick(void)
 {
   MessageDef *msg = itti_alloc_new_message(TASK_X2AP, 0, X2AP_SUBFRAME_PROCESS);
   itti_send_msg_to_task(TASK_X2AP, 0, msg);

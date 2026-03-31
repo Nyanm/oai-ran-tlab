@@ -97,8 +97,7 @@ void mac_rlc_data_ind     (
     rb->set_time(rb, rlc_current_time);
     rb->recv_pdu(rb, buffer_pP, tb_sizeP);
   } else {
-    LOG_E(RLC, "%s:%d:%s: fatal: no RB found (rnti %d channel ID %d)\n",
-          __FILE__, __LINE__, __FUNCTION__, rnti, channel_id);
+    LOG_E(RLC, "fatal: no RB found (rnti %x channel ID %d)\n", rnti, channel_id);
     exit(1);
   }
 
@@ -265,18 +264,16 @@ rlc_buffer_occupancy_t mac_rlc_get_buffer_occupancy_ind(
   return ret;
 }
 
-
-rlc_op_status_t rlc_data_req     (const protocol_ctxt_t *const ctxt_pP,
-                                  const srb_flag_t   srb_flagP,
-                                  const MBMS_flag_t  MBMS_flagP,
-                                  const rb_id_t      rb_idP,
-                                  const mui_t        muiP,
-                                  confirm_t    confirmP,
-                                  sdu_size_t   sdu_sizeP,
-                                  mem_block_t *sdu_pP,
-                                  const uint32_t *const sourceL2Id,
-                                  const uint32_t *const destinationL2Id
-                                 )
+rlc_op_status_t rlc_data_req(const protocol_ctxt_t *const ctxt_pP,
+                             const srb_flag_t srb_flagP,
+                             const MBMS_flag_t MBMS_flagP,
+                             const rb_id_t rb_idP,
+                             const mui_t muiP,
+                             confirm_t confirmP,
+                             sdu_size_t sdu_sizeP,
+                             uint8_t *sdu_pP,
+                             const uint32_t *const sourceL2Id,
+                             const uint32_t *const destinationL2Id)
 {
   int rnti = ctxt_pP->rntiMaybeUEid;
   rlc_ue_t *ue;
@@ -312,7 +309,7 @@ rlc_op_status_t rlc_data_req     (const protocol_ctxt_t *const ctxt_pP,
 
   if (rb != NULL) {
     rb->set_time(rb, rlc_current_time);
-    rb->recv_sdu(rb, (char *)sdu_pP->data, sdu_sizeP, muiP);
+    rb->recv_sdu(rb, (char *)sdu_pP, sdu_sizeP, muiP);
   } else {
     LOG_E(RLC, "%s:%d:%s: fatal: SDU sent to unknown RB\n", __FILE__, __LINE__, __FUNCTION__);
     exit(1);
@@ -320,7 +317,7 @@ rlc_op_status_t rlc_data_req     (const protocol_ctxt_t *const ctxt_pP,
 
   rlc_manager_unlock(rlc_ue_manager);
 
-  free_mem_block(sdu_pP, __func__);
+  free(sdu_pP);
 
   return RLC_OP_STATUS_OK;
 }
@@ -359,7 +356,7 @@ static void deliver_sdu(void *_ue, rlc_entity_t *entity, char *buf, int size)
   int is_srb;
   int rb_id;
   protocol_ctxt_t ctx;
-  mem_block_t *memblock;
+  uint8_t *memblock;
   int i;
   int is_enb;
   int is_mbms;
@@ -390,9 +387,7 @@ static void deliver_sdu(void *_ue, rlc_entity_t *entity, char *buf, int size)
   exit(1);
 
 rb_found:
-  LOG_D(RLC, "%s:%d:%s: delivering SDU (rnti %d is_srb %d rb_id %d) size %d",
-        __FILE__, __LINE__, __FUNCTION__, ue->rnti, is_srb, rb_id, size);
-
+  LOG_D(RLC, "delivering SDU (rnti %x is_srb %d rb_id %d) size %d", ue->rnti, is_srb, rb_id, size);
 
   /* unused fields? */
   ctx.instance = ue->module_id;
@@ -413,17 +408,15 @@ rb_found:
       T_INT(0 /*ctxt_pP->module_id*/),
       T_INT(ue->rnti), T_INT(rb_id), T_INT(size));
   }
-  
-  memblock = get_free_mem_block(size, __func__);
+
+  memblock = malloc16(size);
   if (memblock == NULL) {
-    LOG_E(RLC, "%s:%d:%s: ERROR: get_free_mem_block failed\n", __FILE__, __LINE__, __FUNCTION__);
+    LOG_E(RLC, "%s:%d:%s: ERROR: malloc16 failed\n", __FILE__, __LINE__, __FUNCTION__);
     exit(1);
   }
-  memcpy(memblock->data, buf, size);
-  if (!get_pdcp_data_ind_func()(&ctx, is_srb, is_mbms, rb_id, size, memblock, NULL, NULL)) {
-    LOG_E(RLC, "%s:%d:%s: ERROR: pdcp_data_ind failed (is_srb %d rb_id %d rnti %d)\n",
-          __FILE__, __LINE__, __FUNCTION__,
-          is_srb, rb_id, ue->rnti);
+  memcpy(memblock, buf, size);
+  if (!pdcp_data_ind(&ctx, is_srb, is_mbms, rb_id, size, memblock, NULL, NULL)) {
+    LOG_E(RLC, "ERROR: pdcp_data_ind failed (is_srb %d rb_id %d rnti %x)\n", is_srb, rb_id, ue->rnti);
     /* what to do in case of failure? for the moment: nothing */
   }
 }
@@ -625,7 +618,7 @@ static void add_srb(int rnti, int module_id, struct LTE_SRB_ToAddMod *s)
                                poll_pdu, poll_byte, max_retx_threshold);
     rlc_ue_add_srb_rlc_entity(ue, srb_id, rlc_am);
 
-    LOG_D(RLC, "%s:%d:%s: added SRB %d to UE RNTI %x\n", __FILE__, __LINE__, __FUNCTION__, srb_id, rnti);
+    LOG_D(RLC, "added SRB %d to UE RNTI %x\n", srb_id, rnti);
   }
   rlc_manager_unlock(rlc_ue_manager);
 }
@@ -946,7 +939,7 @@ rlc_op_status_t rrc_rlc_config_req   (
     exit(1);
   }
   rlc_manager_lock(rlc_ue_manager);
-  LOG_D(RLC, "%s:%d:%s: remove rb %d (is_srb %d) for UE %ld\n", __FILE__, __LINE__, __FUNCTION__, (int)rb_idP, srb_flagP, ctxt_pP->rntiMaybeUEid);
+  LOG_D(RLC, "remove rb %d (is_srb %d) for UE %lx\n", (int)rb_idP, srb_flagP, ctxt_pP->rntiMaybeUEid);
   ue = rlc_manager_get_ue(rlc_ue_manager, ctxt_pP->rntiMaybeUEid);
   if (srb_flagP) {
     if (ue->srb[rb_idP-1] != NULL) {
@@ -978,7 +971,7 @@ rlc_op_status_t rrc_rlc_config_req   (
 
 rlc_op_status_t rrc_rlc_remove_ue (const protocol_ctxt_t* const x)
 {
-  LOG_D(RLC, "%s:%d:%s: remove UE %ld\n", __FILE__, __LINE__, __FUNCTION__, x->rntiMaybeUEid);
+  LOG_D(RLC, "remove UE %lx\n", x->rntiMaybeUEid);
   rlc_manager_lock(rlc_ue_manager);
   rlc_manager_remove_ue(rlc_ue_manager, x->rntiMaybeUEid);
   rlc_manager_unlock(rlc_ue_manager);
@@ -1008,24 +1001,6 @@ void rlc_tick(int frame, int subframe)
     rlc_current_time_last_frame = frame;
     rlc_current_time_last_subframe = subframe;
   }
-}
-
-void du_rlc_data_req(const protocol_ctxt_t *const ctxt_pP,
-                     const srb_flag_t   srb_flagP,
-                     const MBMS_flag_t  MBMS_flagP,
-                     const rb_id_t      rb_idP,
-                     const mui_t        muiP,
-                     confirm_t    confirmP,
-                     sdu_size_t   sdu_sizeP,
-                     mem_block_t *sdu_pP){
-  rlc_data_req (ctxt_pP,
-		srb_flagP,
-		MBMS_flagP,
-		rb_idP,
-		muiP,
-		confirmP,
-		sdu_sizeP,
-		sdu_pP, NULL, NULL);
 }
 
 /* HACK to be removed: nr_rlc_get_available_tx_space is needed by

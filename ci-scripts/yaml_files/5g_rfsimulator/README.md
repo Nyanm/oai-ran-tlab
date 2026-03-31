@@ -12,7 +12,7 @@
   </tr>
 </table>
 
-This page is only valid for an `Ubuntu18` host.
+This page is only valid for an `Ubuntu 22` host.
 
 **NOTE: this version (2023-01-27) has been updated  for the `v1.5.0` version of the `OAI 5G CN`.**
 
@@ -37,10 +37,9 @@ Now pull images.
 
 ```bash
 $ docker pull mysql:8.0
-$ docker pull oaisoftwarealliance/oai-amf:v1.5.0
-$ docker pull oaisoftwarealliance/oai-nrf:v1.5.0
-$ docker pull oaisoftwarealliance/oai-smf:v1.5.0
-$ docker pull oaisoftwarealliance/oai-spgwu-tiny:v1.5.0
+$ docker pull oaisoftwarealliance/oai-amf:v2.1.10
+$ docker pull oaisoftwarealliance/oai-smf:v2.1.10
+$ docker pull oaisoftwarealliance/oai-upf:v2.1.10
 $ docker pull oaisoftwarealliance/trf-gen-cn5g:focal
 
 $ docker pull oaisoftwarealliance/oai-gnb:develop
@@ -53,7 +52,7 @@ $ docker logout
 
 **CAUTION: 2023/01/27 with the release `v1.5.0` of the `CN5G`, the previous version was not compatible any-more.**
 
-**This new version is working only with the `v1.5.0` of the `CN5G`.**
+**This new version is working only with `v2.1.9` or later of the `CN5G`.**
 
 # 2. Deploy containers #
 
@@ -65,18 +64,30 @@ $ docker logout
 
 All the following commands **SHALL** be run from the `ci-scripts/yaml_files/5g_rfsimulator` folder for a deployment with monolithic gNB.
 
-For a deployment with the gNB split in CU and DU components, the following commands **SHALL** be run from the `ci-scripts/yaml_files/5g_f1_rfsimulator` folder. 
+For a deployment with the gNB split in CU and DU components, please refer to the `../5g_f1_rfsimulator` folder.
+For a deployment with the gNB split in CU-CP, CU-UP, and DU components, please refer to the `../5g_rfsimulator_e1` folder.
+
+Note: **These instructions require `docker compose` v2.36.0 or later** due to the
+use of the `interface_name` property, which is necessary for ensuring consistent
+IP address assignment to the container interface.
+
+If you're using an older version of `docker compose`, you may encounter the following
+error:
+```
+validating docker-compose.yaml: services.oai-upf.networks.public_net Additional property interface_name is not allowed
+```
+To update to the required version, you can follow the official Docker documentation:
+https://docs.docker.com/compose/install/linux/
 
 ## 2.1. Deploy OAI 5G Core Network ##
 
 ```bash
 $ cd ci-scripts/yaml_files/5g_rfsimulator
-$ docker-compose up -d mysql oai-nrf oai-amf oai-smf oai-spgwu oai-ext-dn
+$ docker-compose up -d mysql oai-amf oai-smf oai-upf oai-ext-dn
 Creating network "rfsim5g-oai-public-net" with driver "bridge"
 Creating network "rfsim5g-oai-traffic_net-net" with driver "bridge"
-Creating rfsim5g-oai-nrf ... done
 Creating rfsim5g-mysql      ... done
-Creating rfsim5g-oai-spgwu ... done
+Creating rfsim5g-oai-upf   ... done
 Creating rfsim5g-oai-amf   ... done
 Creating rfsim5g-oai-smf   ... done
 Creating rfsim5g-oai-ext-dn ... done
@@ -86,20 +97,19 @@ Wait for a bit.
 
 ```bash
 $ docker-compose ps -a
-       Name                     Command                  State                  Ports            
+       Name                     Command                  State                  Ports
 -------------------------------------------------------------------------------------------------
-rfsim5g-mysql        docker-entrypoint.sh mysqld      Up (healthy)   3306/tcp, 33060/tcp         
+rfsim5g-mysql        docker-entrypoint.sh mysqld      Up (healthy)   3306/tcp, 33060/tcp
 rfsim5g-oai-amf      /bin/bash /openair-amf/bin ...   Up (healthy)   38412/sctp, 80/tcp, 9090/tcp
-rfsim5g-oai-ext-dn   /bin/bash -c  apt update;  ...   Up (healthy)                               
-rfsim5g-oai-nrf      /bin/bash /openair-nrf/bin ...   Up (healthy)   80/tcp, 9090/tcp            
-rfsim5g-oai-smf      /bin/bash -c /openair-smf/ ...   Up (healthy)   80/tcp, 8805/udp, 9090/tcp  
-rfsim5g-oai-spgwu    /openair-spgwu-tiny/bin/en ...   Up (healthy)   2152/udp, 8805/udp          
+rfsim5g-oai-ext-dn   /bin/bash -c  apt update;  ...   Up (healthy)
+rfsim5g-oai-smf      /bin/bash -c /openair-smf/ ...   Up (healthy)   80/tcp, 8805/udp, 9090/tcp
+rfsim5g-oai-upf      /bin/bash -c /openair-upf/ ...   Up (healthy)   2152/udp, 8805/udp
 ```
 
 At this point, you can prepare a capture on the newly-created public docker bridges:
 
 ```bash
-$ ifconfig 
+$ ifconfig
 ...
 rfsim5g-public: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
         inet 192.168.71.129  netmask 255.255.255.192  broadcast 192.168.71.191
@@ -130,8 +140,7 @@ The gNB can be deployed either in monolithic mode, or in CU/DU split mode.
 
 ```bash
 $ docker-compose up -d oai-gnb
-rfsim5g-oai-nrf is up-to-date
-rfsim5g-oai-spgwu is up-to-date
+rfsim5g-oai-upf is up-to-date
 rfsim5g-oai-ext-dn is up-to-date
 Creating rfsim5g-oai-gnb ... done
 ```
@@ -149,15 +158,14 @@ Wait for a bit.
 
 ```bash
 $ docker-compose ps -a
-       Name                     Command                  State                  Ports            
+       Name                     Command                  State                  Ports
 -------------------------------------------------------------------------------------------------
-rfsim5g-mysql        docker-entrypoint.sh mysqld      Up (healthy)   3306/tcp, 33060/tcp         
+rfsim5g-mysql        docker-entrypoint.sh mysqld      Up (healthy)   3306/tcp, 33060/tcp
 rfsim5g-oai-amf      /bin/bash /openair-amf/bin ...   Up (healthy)   38412/sctp, 80/tcp, 9090/tcp
-rfsim5g-oai-ext-dn   /bin/bash -c  apt update;  ...   Up (healthy)                               
-rfsim5g-oai-gnb      /opt/oai-gnb/bin/entrypoin ...   Up (healthy)                               
-rfsim5g-oai-nrf      /bin/bash /openair-nrf/bin ...   Up (healthy)   80/tcp, 9090/tcp            
-rfsim5g-oai-smf      /bin/bash -c /openair-smf/ ...   Up (healthy)   80/tcp, 8805/udp, 9090/tcp  
-rfsim5g-oai-spgwu    /openair-spgwu-tiny/bin/en ...   Up (healthy)   2152/udp, 8805/udp          
+rfsim5g-oai-ext-dn   /bin/bash -c  apt update;  ...   Up (healthy)
+rfsim5g-oai-gnb      /opt/oai-gnb/bin/entrypoin ...   Up (healthy)
+rfsim5g-oai-smf      /bin/bash -c /openair-smf/ ...   Up (healthy)   80/tcp, 8805/udp, 9090/tcp
+rfsim5g-oai-upf      /bin/bash -c /openair-upf/ ...   Up (healthy)   2152/udp, 8805/udp
 ```
 
 You can verify that the `gNB` is connected with the `AMF`:
@@ -177,10 +185,9 @@ $ docker logs rfsim5g-oai-amf
 ```bash
 $ docker-compose up -d oai-nr-ue
 rfsim5g-mysql is up-to-date
-rfsim5g-oai-nrf is up-to-date
 rfsim5g-oai-amf is up-to-date
 rfsim5g-oai-smf is up-to-date
-rfsim5g-oai-spgwu is up-to-date
+rfsim5g-oai-upf is up-to-date
 rfsim5g-oai-ext-dn is up-to-date
 rfsim5g-oai-gnb is up-to-date
 Creating rfsim5g-oai-nr-ue ... done
@@ -190,23 +197,22 @@ Wait for a bit.
 
 ```bash
 $ docker-compose ps -a
-       Name                     Command                  State                  Ports            
+       Name                     Command                  State                  Ports
 -------------------------------------------------------------------------------------------------
-rfsim5g-mysql        docker-entrypoint.sh mysqld      Up (healthy)   3306/tcp, 33060/tcp         
+rfsim5g-mysql        docker-entrypoint.sh mysqld      Up (healthy)   3306/tcp, 33060/tcp
 rfsim5g-oai-amf      /bin/bash /openair-amf/bin ...   Up (healthy)   38412/sctp, 80/tcp, 9090/tcp
-rfsim5g-oai-ext-dn   /bin/bash -c  apt update;  ...   Up (healthy)                               
-rfsim5g-oai-gnb      /opt/oai-gnb/bin/entrypoin ...   Up (healthy)                               
-rfsim5g-oai-nr-ue    /opt/oai-nr-ue/bin/entrypo ...   Up (healthy)                               
-rfsim5g-oai-nrf      /bin/bash /openair-nrf/bin ...   Up (healthy)   80/tcp, 9090/tcp            
-rfsim5g-oai-smf      /bin/bash -c /openair-smf/ ...   Up (healthy)   80/tcp, 8805/udp, 9090/tcp  
-rfsim5g-oai-spgwu    /openair-spgwu-tiny/bin/en ...   Up (healthy)   2152/udp, 8805/udp          
+rfsim5g-oai-ext-dn   /bin/bash -c  apt update;  ...   Up (healthy)
+rfsim5g-oai-gnb      /opt/oai-gnb/bin/entrypoin ...   Up (healthy)
+rfsim5g-oai-nr-ue    /opt/oai-nr-ue/bin/entrypo ...   Up (healthy)
+rfsim5g-oai-smf      /bin/bash -c /openair-smf/ ...   Up (healthy)   80/tcp, 8805/udp, 9090/tcp
+rfsim5g-oai-upf      /bin/bash -c /openair-upf/ ...   Up (healthy)   2152/udp, 8805/udp
 ```
 
 Making sure the OAI UE is connected:
 
 ```bash
 $ docker exec -it rfsim5g-oai-nr-ue /bin/bash
-root@bb4d400a832d:/opt/oai-nr-ue# ifconfig 
+root@bb4d400a832d:/opt/oai-nr-ue# ifconfig
 eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
         inet 192.168.71.150  netmask 255.255.255.192  broadcast 192.168.71.191
         ether 02:42:c0:a8:47:89  txqueuelen 0  (Ethernet)
@@ -234,24 +240,29 @@ oaitun_ue1: flags=4305<UP,POINTOPOINT,RUNNING,NOARP,MULTICAST>  mtu 1500
 
 ## 2.4. Deploy Second OAI NR-UE in RF simulator mode and in Standalone Mode ##
 
-```bash
-Create a entry for new IMSI (208990100001101) in oai_db.sql file
-Refer Section - [Making the NR-UE connect to the core network](#51-making-the-nr-ue-connect-to-the-core-network)
+Create a entry for new IMSI (208990100001101) in oai_db.sql file.
+For this, refer to section [Making the NR-UE connect to the core
+network](#51-making-the-nr-ue-connect-to-the-core-network)
 
-Create entry for Second UE in docker-compose.yaml file as follows:
+Create the entry for the second UE in `docker-compose.yaml` file as follows:
+
+```yaml
     oai-nr-ue2:
         image: oai-nr-ue:develop
-        privileged: true
         container_name: rfsim5g-oai-nr-ue2
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_ADMIN  # for interface bringup
+            - NET_RAW    # for ping
         environment:
-            FULL_IMSI: '208990100001101'
-            FULL_KEY: 'fec86ba6eb707ed08905757b1bb44b8f'
-            OPC: 'C42449363BBAD02B66D16BC975D77CC1'
-            DNN: oai
-            NSSAI_SST: 1
-            USE_ADDITIONAL_OPTIONS: -E --sa --rfsim -r 106 --numerology 1 -C 3619200000 --rfsimulator.serveraddr 192.168.71.140 --log_config.global_log_options level,nocolor,time
+            USE_ADDITIONAL_OPTIONS: -E --rfsim -r 106 --numerology 1 -C 3619200000 --rfsimulator.serveraddr 192.168.71.140 --log_config.global_log_options level,nocolor,time
         depends_on:
             - oai-gnb
+        devices:
+             - /dev/net/tun:/dev/net/tun
+        volumes:
+            - ../../conf_files/nrue.uicc.conf:/opt/oai-nr-ue/etc/nr-ue.conf
         networks:
             public_net:
                 ipv4_address: 192.168.71.151
@@ -266,10 +277,9 @@ Create entry for Second UE in docker-compose.yaml file as follows:
 ```bash
 $ docker-compose up -d oai-nr-ue2
 rfsim5g-mysql is up-to-date
-rfsim5g-oai-nrf is up-to-date
 rfsim5g-oai-amf is up-to-date
 rfsim5g-oai-smf is up-to-date
-rfsim5g-oai-spgwu is up-to-date
+rfsim5g-oai-upf is up-to-date
 rfsim5g-oai-ext-dn is up-to-date
 rfsim5g-oai-gnb is up-to-date
 Creating rfsim5g-oai-nr-ue2 ... done
@@ -279,7 +289,7 @@ Wait for a bit.
 
 ```bash
 $ docker-compose ps -a
-       Name                     Command                  State                  Ports            
+       Name                     Command                  State                  Ports
 -------------------------------------------------------------------------------------------------
 rfsim5g-mysql        docker-entrypoint.sh mysqld      Up (healthy)   3306/tcp, 33060/tcp
 rfsim5g-oai-amf      /bin/bash /openair-amf/bin ...   Up (healthy)   38412/sctp, 80/tcp, 9090/tcp
@@ -287,16 +297,15 @@ rfsim5g-oai-ext-dn   /bin/bash -c  apt update;  ...   Up (healthy)
 rfsim5g-oai-gnb      /opt/oai-gnb/bin/entrypoin ...   Up (healthy)
 rfsim5g-oai-nr-ue    /opt/oai-nr-ue/bin/entrypo ...   Up (healthy)
 rfsim5g-oai-nr-ue2   /opt/oai-nr-ue/bin/entrypo ...   Up (healthy)
-rfsim5g-oai-nrf      /bin/bash /openair-nrf/bin ...   Up (healthy)   80/tcp, 9090/tcp
 rfsim5g-oai-smf      /bin/bash /openair-smf/bin ...   Up (healthy)   80/tcp, 8805/udp, 9090/tcp
-rfsim5g-oai-spgwu    /openair-spgwu-tiny/bin/en ...   Up (healthy)   2152/udp, 8805/udp
+rfsim5g-oai-upf      /bin/bash /openair-upf/bin ...   Up (healthy)   2152/udp, 8805/udp
 ```
 
 Making sure the Second OAI UE is connected:
 
 ```bash
 $ docker exec -it rfsim5g-oai-nr-ue2 /bin/bash
-root@bb4d400a832d:/opt/oai-nr-ue# ifconfig 
+root@bb4d400a832d:/opt/oai-nr-ue# ifconfig
 eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
         inet 192.168.71.151  netmask 255.255.255.192  broadcast 192.168.71.191
         ether 02:42:c0:a8:47:8a  txqueuelen 0  (Ethernet)
@@ -458,19 +467,17 @@ Stopping rfsim5g-oai-nr-ue2 ... done
 Stopping rfsim5g-oai-nr-ue  ... done
 Stopping rfsim5g-oai-gnb    ... done
 Stopping rfsim5g-oai-ext-dn ... done
-Stopping rfsim5g-oai-spgwu  ... done
+Stopping rfsim5g-oai-upf    ... done
 Stopping rfsim5g-oai-smf    ... done
 Stopping rfsim5g-oai-amf    ... done
-Stopping rfsim5g-oai-nrf    ... done
 Stopping rfsim5g-mysql      ... done
 Removing rfsim5g-oai-nr-ue2 ... done
 Removing rfsim5g-oai-nr-ue  ... done
 Removing rfsim5g-oai-gnb    ... done
 Removing rfsim5g-oai-ext-dn ... done
-Removing rfsim5g-oai-spgwu  ... done
+Removing rfsim5g-oai-upf    ... done
 Removing rfsim5g-oai-smf    ... done
 Removing rfsim5g-oai-amf    ... done
-Removing rfsim5g-oai-nrf    ... done
 Removing rfsim5g-mysql      ... done
 Removing network rfsim5g-oai-public-net
 Removing network rfsim5g-oai-traffic-net
@@ -496,32 +503,83 @@ INSERT INTO `users` VALUES ('208990100001101','1','55000000000000',NULL,'PURGED'
 
 As you can see, 2 other values shall match in the NR-UE section of `docker-compose.yaml`:
 
-OAI UE - 1
-* `FULL_IMSI: '208990100001100'`
-* `FULL_KEY: 'fec86ba6eb707ed08905757b1bb44b8f'`
+All the values such as IMSI and KEY are taken from the configuration file mounted into the container. For the first UE, provision as usual through the config file
 
-OAI UE - 2
-* `FULL_IMSI: '208990100001101'`
-* `FULL_KEY: 'fec86ba6eb707ed08905757b1bb44b8f'`
+```yaml
+ oai-nr-ue:
+        [...]
+        volumes:
+            - ../../conf_files/nrue.uicc.conf:/opt/oai-nr-ue/etc/nr-ue.conf
+```
 
-We are also using a dedicated `oai-smf.conf` for the `SMF` container: the `oai` DNN shall match the one in  the NR-UE section of `docker-compose.yaml` (`DNN: oai`).
+with the config having:
+```libconfig
+uicc0 = {
+  imsi = "208990100001100";
+  key = "fec86ba6eb707ed08905757b1bb44b8f";
+  opc= "C42449363BBAD02B66D16BC975D77CC1";
+  dnn= "oai";
+  nssai_sst=1;
+}
+```
+
+The second UE's IMSI might be changed by either having the second UEs
+docker-compose entry mount another config, or add `--uicc0.imsi
+208990100001101` in `USE_ADDITIONAL_OPTIONS` entry. Note that the latter is a
+feature of the configuration module to overwrite any configuration option in
+the config file on the command line.
 
 ## 5.2. Making the gNB connect to the core network ##
 
-Mainly you need to match the PLMN in `gNB`, `AMF` and `SPGWU` parameters:
+Mainly you need to match the PLMN in `gNB`, `AMF` and `UPF` parameters in the `mini_nonrf_config.yaml`:
 
-* `AMF`
-  - `MCC=208`
-  - `MNC=99`
-  - `PLMN_SUPPORT_TAC=0x0001`
-  - ...
-* `SPGWU`
-  - `MCC=208`
-  - `MNC=99`
-  - `TAC=1`
-* `gNB`
-  - `MCC: '208'`
-  - `MNC: '99'`
-  - `TAC: 1`
+```yaml
+  plmn_support_list:
+    - mcc: 208
+      mnc: 99
+      tac: 0x0001
+      nssai:
+        - *embb_slice1
+...
+snssais:
+  - &embb_slice1
+    sst: 1
+```
 
 The `ST` and `SD` values shall also match.
+
+
+# 6. Running with local changes
+
+You can run the testcase with local changes by substituting the binaries in
+execution images. `local-override.yaml` file provides a way to substitute the
+gNB and nrUE executables as well as librfsimulator.so. Refer to the `-volumes`
+section in the file for details. This includes an image build service as well as
+code compilation service. This is necessary as the executable has to be linked
+against the same libraries that are present in the executing image. This might
+take a while the first time but other that that is very fast. Here is a list of
+commands (wait between each command). Tested with `docker compose` v2.36.2.
+
+This command deploys OAI 5G Core Network
+```bash
+docker compose -f docker-compose.yaml -f local-override.yaml up -d mysql oai-amf oai-smf oai-upf oai-ext-dn
+```
+This command builds base images locally, builds local gNB & nrUE executable and
+runs the gnb service with modified gNB executable.
+```bash
+docker compose -f docker-compose.yaml -f local-override.yaml up -d oai-gnb
+```
+This command rebuilds both the gNB & nrUE and runs the oai-nr-ue container with 
+modified nrUE executable.
+```bash
+docker compose -f docker-compose.yaml -f local-override.yaml up -d oai-nr-ue
+```
+
+## 6.1 Running nrUE in gdb
+`local-override-ue-gdb.yaml` is an additional override file which can be used
+to run the UE executable in gdb. Replace the last command above with the
+following:
+
+```bash
+docker compose -f docker-compose.yaml -f local-override.yaml -f local-override-ue-gdb.yaml run oai-nr-ue
+```

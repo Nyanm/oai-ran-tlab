@@ -52,7 +52,6 @@
 
 #ifdef PHY_TX_THREAD
   extern volatile int16_t phy_tx_txdataF_end;
-  extern int oai_exit;
 #endif
 extern uint16_t sfnsf_add_subframe(uint16_t frameP, uint16_t subframeP, int offset);
 extern void add_subframe(uint16_t *frameP, uint16_t *subframeP, int offset);
@@ -1583,11 +1582,11 @@ schedule_ue_spec_fairRR(module_id_t module_idP,
             RA_t *ra = &eNB->common_channels[CC_id].ra[0];
 
             for (uint8_t ra_ii = 0; ra_ii < NB_RA_PROC_MAX; ra_ii++) {
-              if((ra[ra_ii].rnti == rnti) && (ra[ra_ii].state == MSGCRNTI)) {
+              if ((ra[ra_ii].rnti == rnti) && (ra[ra_ii].eRA_state == MSGCRNTI)) {
                 for(uint16_t mui_num = 0; mui_num < rlc_am_mui.rrc_mui_num; mui_num++) {
                   if(ra[ra_ii].crnti_rrc_mui == rlc_am_mui.rrc_mui[mui_num]) {
                     ra[ra_ii].crnti_harq_pid = harq_pid;
-                    ra[ra_ii].state = MSGCRNTI_ACK;
+                    ra[ra_ii].eRA_state = MSGCRNTI_ACK;
                     break;
                   }
                 }
@@ -1648,7 +1647,6 @@ schedule_ue_spec_fairRR(module_id_t module_idP,
             header_len_dcch += 2;
             UE_info->eNB_UE_stats[CC_id][UE_id].num_pdu_tx[DCCH1] += 1;
             UE_info->eNB_UE_stats[CC_id][UE_id].num_bytes_tx[DCCH1] += sdu_lengths[num_sdus];
-            num_sdus++;
 #ifdef DEBUG_eNB_SCHEDULER
             LOG_T(MAC,
                   "[eNB %d][DCCH1] CC_id %d Got %d bytes :",
@@ -1660,6 +1658,7 @@ schedule_ue_spec_fairRR(module_id_t module_idP,
 
             LOG_T(MAC, "\n");
 #endif
+            num_sdus++;
           }
         }
 
@@ -1910,10 +1909,16 @@ schedule_ue_spec_fairRR(module_id_t module_idP,
           for (j=0; j<(TBS-sdu_length_total-offset); j++) {
             UE_info->DLSCH_pdu[CC_id][0][UE_id].payload[0][offset+sdu_length_total+j] = (char)(taus()&0xff);
           }
-
-          trace_pdu(DIRECTION_DOWNLINK, (uint8_t *)UE_info->DLSCH_pdu[CC_id][0][UE_id].payload[0],
-                    TBS, module_idP, WS_C_RNTI, UE_RNTI(module_idP, UE_id),
-                    eNB->frame, eNB->subframe,0,0);
+          ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                            .pdu_buffer = UE_info->DLSCH_pdu[CC_id][0][UE_id].payload[0],
+                            .pdu_buffer_size = TBS,
+                            .ueid = module_idP,
+                            .rntiType = WS_C_RNTI,
+                            .rnti = UE_RNTI(module_idP, UE_id),
+                            .sysFrame = eNB->frame,
+                            .subframe = eNB->subframe,
+                            .harq_pid = harq_pid};
+          trace_pdu(&tmp);
           T(T_ENB_MAC_UE_DL_PDU_WITH_DATA, T_INT(module_idP), T_INT(CC_id), T_INT(rnti), T_INT(frameP), T_INT(subframeP),
             T_INT(harq_pid), T_BUFFER(UE_info->DLSCH_pdu[CC_id][0][UE_id].payload[0], TBS));
           UE_info->UE_template[CC_id][UE_id].nb_rb[harq_pid] = nb_rb;
@@ -2869,7 +2874,7 @@ schedule_ulsch_fairRR(module_id_t module_idP, frame_t frameP,
     // Msg3 is using 1 PRB so we need to increase first_rb accordingly
     // not sure about the break (can there be more than 1 active RA procedure?)
     for (i=0; i<NB_RA_PROC_MAX; i++) {
-      if ((cc->ra[i].state == WAITMSG3) &&(cc->ra[i].Msg3_subframe == sched_subframe)) {
+      if ((cc->ra[i].eRA_state == WAITMSG3) && (cc->ra[i].Msg3_subframe == sched_subframe)) {
         ulsch_ue_select[CC_id].list[ulsch_ue_select[CC_id].ue_num].ue_priority = SCH_UL_MSG3;
 
         if (cc->tdd_Config == NULL) {

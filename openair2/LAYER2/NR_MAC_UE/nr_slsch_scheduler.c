@@ -37,7 +37,6 @@
 #include "NR_MAC_COMMON/nr_mac.h"
 #include "NR_MAC_COMMON/nr_mac_common.h"
 #include "NR_MAC_UE/mac_proto.h"
-#include "NR_MAC_UE/mac_extern.h"
 #include "NR_MAC_UE/nr_ue_sci.h"
 #include <executables/nr-uesoftmodem.h>
 #include "NR_MAC_UE/mac_defs_sl.h"
@@ -254,7 +253,7 @@ void nr_schedule_slsch(NR_UE_MAC_INST_t *mac, int frameP, int slotP, nr_sci_pdu_
     else if (mcs_tb_ind == 2)
       cqi_Table = NR_CSI_ReportConfig__cqi_Table_table3;
 
-    sched_pssch->mcs = get_mcs_from_cqi(mcs_tb_ind, cqi_Table, cqi, get_nrUE_params()->mcs);
+    sched_pssch->mcs = get_mcs_from_cqi(mcs_tb_ind, cqi_Table, cqi);
     sched_ctrl->sl_max_mcs = sched_pssch->mcs;
     ri = sched_ctrl->rx_csi_report.RI;
   }
@@ -389,7 +388,7 @@ SL_CSI_Report_t* set_nr_ue_sl_csi_meas_periodicity(const NR_TDD_UL_DL_Pattern_t 
   const int n_ul_slots_period = tdd ? tdd->nrofUplinkSlots + (tdd->nrofUplinkSymbols > 0 ? 1 : 0) : n_slots_frame;
   const int nr_slots_period = tdd ? n_slots_frame / get_nb_periods_per_frame(tdd->dl_UL_TransmissionPeriodicity) : n_slots_frame;
   const int ideal_period = (CUR_SL_UE_CONNECTIONS * nr_slots_period) / n_ul_slots_period;
-  const int first_ul_slot_period = tdd ? get_first_ul_slot(tdd->nrofDownlinkSlots, tdd->nrofDownlinkSymbols, tdd->nrofUplinkSymbols) : 0;
+  const int first_ul_slot_period = tdd ? get_first_ul_slot(&mac->frame_structure, false) : 0;
   const int idx = (uid << 1) + is_rsrp;
   SL_CSI_Report_t *csi_report = &sched_ctrl->sched_csi_report;
   const int offset = first_ul_slot_period + idx % n_ul_slots_period + (idx / n_ul_slots_period) * nr_slots_period;

@@ -32,43 +32,58 @@ or
 phy_scope_gNB(0, phy_vars_gnb, phy_vars_ru, UE_id)
 ```
 
-# Qt-based Scope
+# ImScope
 
-## Building Instructions
-For the new qt-based scope designed for NR, please consider the following:
+ImScope is a scope based on imgui & implot. This scope uses a different concurrency model than xforms scope, with thread
+safety being priority. The goal is to never show incorrect data on the screen and be able to use the scope with real radios.
+If correctness cannot be achieved e.g. due to performance issues when using thread safe implementation user should be warned
+clearly on the screen.
 
-1. run the gNB or the UE with the option '--dqt'.
-2. make sure to install the Qt5 packages before running the scope. Otherwise, the scope will NOT be displayed! Note that Qt6 does NOT work.
-3. To build the new scope, add 'nrqtscope' after the '--build-lib' option. So, the complete command would be
+![image](./imscope/imscope_screenshot.png)
 
-   ```
-   ./build_oai --gNB -w USRP --nrUE --build-lib nrqtscope
-   ```
+## Prerequisites
 
-## New Features
+ImScope uses imgui, implot, glfw3 and opengl. imgui and implot should be downloaded automatically when configuring the project
+with `-DENABLE_IMSCOPE=ON`, using [CPM](https://github.com/cpm-cmake/CPM.cmake). CPM is used because imgui and implot do not have
+an official binary release. glfw3 and opengl should be installed with your system, on ubuntu these are contained in packages
+libglfw3-dev and libopengl-dev respectivly.
 
-1. New KPIs for both gNB and UE, e.g., BLER, MCS, throughout, and number of scheduled RBs.
-2. For each of the gNB and UE, a main widget is created with a 3x2 grid of sub-widgets, each to display one KPI.
-3. Each of the sub-widgets has a drop-down list to choose the KPI to show in that sub-widget.
-4. Both of the gNB and UE scopes can be resized using the mouse movement.
+## Building
 
-## Troubleshoot
+Add `-DENABLE_IMSCOPE=ON` to your `cmake` command. Build target `imscope`
 
-Similar as with the Xforms-based scope, you should allow root to open X
-windows:
-```
-xhost +si:localuser:root
-```
+## Running
 
-Furthermore, if you get the following error (might be followed by a
-segfault)
-```
-QStandardPaths: wrong ownership on runtime directory /run/user/1000, 1000 instead of 0
-```
-You have to set the XDG runtime directory like one of the following options
-(try in order):
-```
-sudo -E XDG_RUNTIME_DIR=/run/user/0 ./nr-softmodem ...
-sudo -E XDG_RUNTIME_DIR=/tmp/runtime-root ./nr-softmodem ...
-sudo -E XDG_RUNTIME_DIR= ./nr-softmodem ...
-```
+Run with `--imscope` flag
+
+## Usage notes
+
+ - It's experimental and might contain bugs
+ - It uses tree nodes to hide/show scopes (layout is subject to change). If a scope is not visible or is frozen it costs nearly
+ nothing in the PHY threads. If its unfrozen every time the data is displayed the PHY thread would have to perform the copy. By
+ default this can happen up to 24 times per second. User is informed on the estimated impact on PHY threads at the top of the
+ window. You can use FPS target to limit the impact on PHY threads and maintain scope functionality while minimizing the effect
+ on realtime operation.
+
+## Reporting bugs and feature requests
+
+Report bugs and feature requests on [gitlab](https://gitlab.eurecom.fr/oai/openairinterface5g/-/issues). There is two demo windows
+enabled in the scope that showcase imgui/implot, if you find something of interest it can be implemented in the scope.
+
+## Recording scope data and reviewing recorded IQ files
+
+It is possible to record scope data from the modems.
+ - To record IQ data, run a modem with `--imscope-record` flag.
+   The recording happens whenever a modem calls `dumpScopeData`, which currently is
+   done only in gNB on PUSCH DTX and PUSCH CRC NOK.
+   There is a limit of ~1GB of files written by the thread in a single run to avoid
+   accidentally exhausting disk space.
+   If a directory `imscope-dump` is available the data will be recorded there in .imscope
+   files. Otherwise files are written to the directory the modem was run. This is done so that
+   the directory can be mapped in a docker container.
+
+ - To view recorded IQ files, use the new executable `imscope_iq_file_viewer`. This can be done by running:
+      ```
+      ./imscope_iq_file_viewer <path_to_iq_file>
+      ```
+   Replace `<path_to_iq_file>` with the path to the IQ file you want to view.

@@ -33,11 +33,56 @@
 
 #include "NR_MIB.h"
 #include "NR_CellGroupConfig.h"
+#include "NR_UE-NR-Capability.h"
 #include "nr_mac.h"
+#include "nr_prach_config.h"
 #include "common/utils/nr/nr_common.h"
 
 #define NB_SRS_PERIOD         (18)
 static const uint16_t srs_period[NB_SRS_PERIOD] = { 0, 1, 2, 4, 5, 8, 10, 16, 20, 32, 40, 64, 80, 160, 320, 640, 1280, 2560};
+
+// TS 38.212
+static const uint16_t table_7_3_1_1_2_2_1layer[28] = {0,  1,  2,  3,  12, 13, 14, 15, 16, 17, 18, 19, 32, 33,
+                                                      34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47};
+static const uint16_t table_7_3_1_1_2_2_2layers[22] = {4,  5,  6,  7,  8,  9,  20, 21, 22, 23, 24,
+                                                       25, 26, 27, 48, 49, 50, 51, 52, 53, 54, 55};
+static const uint16_t table_7_3_1_1_2_2_3layers[7] = {10, 28, 29, 56, 57, 58, 59};
+static const uint16_t table_7_3_1_1_2_2_4layers[5] = {11, 30, 31, 60, 61};
+static const uint16_t table_7_3_1_1_2_2B_1layer[16] = {0, 1, 2, 3, 15, 16, 17, 18, 19, 20, 21, 22, 23, 12, 24, 25};
+static const uint16_t table_7_3_1_1_2_2B_2layers[14] = {4, 5, 6, 7, 8, 9, 13, 26, 27, 28, 29, 30, 31, 32};
+static const uint16_t table_7_3_1_1_2_2B_3layers[3] = {10, 14, 33};
+static const uint16_t table_7_3_1_1_2_2B_4layers[3] = {11, 34, 35};
+static const uint16_t table_7_3_1_1_2_2A_1layer[16] = {0, 1, 2, 3, 12, 13, 14, 15, 16, 17, 18, 19, 20, 10, 21, 22};
+static const uint16_t table_7_3_1_1_2_2A_2layers[14] = {4, 5, 6, 7, 8, 9, 11, 23, 24, 25, 26, 27, 28, 29};
+static const uint16_t table_7_3_1_1_2_3A[16] = {0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 4, 14, 15};
+static const uint16_t table_7_3_1_1_2_4_1layer_fullyAndPartialAndNonCoherent[6] = {0, 1, 3, 4, 5, 6};
+static const uint16_t table_7_3_1_1_2_4_2layers_fullyAndPartialAndNonCoherent[3] = {2, 7, 8};
+static const uint16_t table_7_3_1_1_2_4A_1layer[3] = {0, 1, 3};
+static const uint16_t table_7_3_1_1_2_28[3][15] = {
+    {0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+};
+static const uint16_t table_7_3_1_1_2_29[3][15] = {
+    {0, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 1, 2, 0, 3, 4, 0, 5, 0, 0, 0, 0, 0, 0, 0},
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0, 0, 0, 0},
+};
+static const uint16_t table_7_3_1_1_2_30[3][15] = {
+    {0, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 1, 2, 0, 3, 4, 0, 5, 0, 0, 6, 0, 0, 0, 0},
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0},
+};
+static const uint16_t table_7_3_1_1_2_31[3][15] = {
+    {0, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 1, 2, 0, 3, 4, 0, 5, 0, 0, 6, 0, 0, 0, 0},
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14},
+};
+static const uint16_t table_7_3_1_1_2_32[3][15] = {
+    {0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+};
 
 typedef enum {
   pusch_dmrs_pos0 = 0,
@@ -76,18 +121,21 @@ typedef struct NR_UE_sl_mac_stats {
 typedef struct NR_bler_options {
   double upper;
   double lower;
+  uint8_t min_mcs;
   uint8_t max_mcs;
   uint8_t harq_round_max;
 } NR_bler_options_t;
 
+typedef struct {
+  uint16_t bwpStart;
+  uint16_t bwpSize;
+} bwp_info_t;
+
 uint32_t get_Y(const NR_SearchSpace_t *ss, int slot, rnti_t rnti);
 
 uint8_t get_BG(uint32_t A, uint16_t R);
-
-uint64_t from_nrarfcn(int nr_bandP, uint8_t scs_index, uint32_t dl_nrarfcn);
-
-uint32_t to_nrarfcn(int nr_bandP, uint64_t dl_CarrierFreq, uint8_t scs_index, uint32_t bw);
-
+uint32_t get_short_bsr_value(int idx);
+uint32_t get_long_bsr_value(int idx);
 int16_t fill_dmrs_mask(const NR_PDSCH_Config_t *pdsch_Config,
                        int dci_format,
                        int dmrs_TypeA_Position,
@@ -95,36 +143,49 @@ int16_t fill_dmrs_mask(const NR_PDSCH_Config_t *pdsch_Config,
                        int startSymbol,
                        mappingType_t mappingtype,
                        int length);
+int get_slots_per_frame_from_scs(int scs);
+bool is_ul_slot(const slot_t slot, const frame_structure_t *fs);
+bool is_dl_slot(const slot_t slot, const frame_structure_t *fs);
+bool is_mixed_slot(const slot_t slot, const frame_structure_t *fs);
+int get_tdd_period_idx(NR_TDD_UL_DL_ConfigCommon_t *tdd);
+void config_frame_structure(int mu,
+                            const NR_TDD_UL_DL_ConfigCommon_t *tdd_UL_DL_ConfigurationCommon,
+                            uint8_t tdd_period,
+                            uint8_t frame_type,
+                            frame_structure_t *fs);
+int get_first_ul_slot(const frame_structure_t *fs, bool mixed);
 
-int is_nr_DL_slot(NR_TDD_UL_DL_ConfigCommon_t *tdd_UL_DL_ConfigurationCommon,slot_t slotP);
+NR_PDSCH_TimeDomainResourceAllocationList_t *get_dl_tdalist(const NR_UE_DL_BWP_t *DL_BWP,
+                                                            int controlResourceSetId,
+                                                            int ss_type,
+                                                            nr_rnti_type_t rnti_type);
 
-int is_nr_UL_slot(NR_TDD_UL_DL_ConfigCommon_t *tdd_UL_DL_ConfigurationCommon, slot_t slotP, frame_type_t frame_type);
+NR_PUSCH_TimeDomainResourceAllocationList_t *get_ul_tdalist(const NR_UE_UL_BWP_t *UL_BWP,
+                                                            int controlResourceSetId,
+                                                            int ss_type,
+                                                            nr_rnti_type_t rnti_type);
 
-uint8_t compute_srs_resource_indicator(NR_PUSCH_ServingCellConfig_t *pusch_servingcellconfig,
-                                       NR_PUSCH_Config_t *pusch_Config,
-                                       NR_SRS_Config_t *srs_config,
-                                       nr_srs_feedback_t *srs_feedback,
-                                       uint32_t *val);
+NR_tda_info_t get_ul_tda_info(const NR_UE_UL_BWP_t *ul_bwp,
+                              int controlResourceSetId,
+                              int ss_type,
+                              nr_rnti_type_t rnti_type,
+                              int tda_index);
 
-uint8_t compute_precoding_information(NR_PUSCH_Config_t *pusch_Config,
-                                      NR_SRS_Config_t *srs_config,
-                                      dci_field_t srs_resource_indicator,
-                                      nr_srs_feedback_t *srs_feedback,
-                                      const uint8_t *nrOfLayers,
-                                      uint32_t *val);
+NR_tda_info_t get_dl_tda_info(const NR_UE_DL_BWP_t *dl_BWP,
+                              int ss_type,
+                              int tda_index,
+                              int dmrs_typeA_pos,
+                              int mux_pattern,
+                              nr_rnti_type_t rnti_type,
+                              int coresetid,
+                              bool sib1);
 
-NR_PDSCH_TimeDomainResourceAllocationList_t *get_dl_tdalist(const NR_UE_DL_BWP_t *DL_BWP, int controlResourceSetId, int ss_type, nr_rnti_type_t rnti_type);
-
-NR_PUSCH_TimeDomainResourceAllocationList_t *get_ul_tdalist(const NR_UE_UL_BWP_t *UL_BWP, int controlResourceSetId, int ss_type, nr_rnti_type_t rnti_type);
-
-NR_tda_info_t get_ul_tda_info(const NR_UE_UL_BWP_t *ul_bwp, int controlResourceSetId, int ss_type, nr_rnti_type_t rnti_type, int tda_index);
-
-NR_tda_info_t get_dl_tda_info(const NR_UE_DL_BWP_t *dl_BWP, int ss_type, int tda_index, int dmrs_typeA_pos,
-                              int mux_pattern, nr_rnti_type_t rnti_type, int coresetid, bool sib1);
+uint8_t getRBGSize(uint16_t bwp_size, long rbg_size_config);
 
 uint16_t nr_dci_size(const NR_UE_DL_BWP_t *DL_BWP,
                      const NR_UE_UL_BWP_t *UL_BWP,
-                     const NR_CellGroupConfig_t *cg,
+                     const NR_UE_ServingCell_Info_t *sc_info,
+                     long pdsch_HARQ_ACK_Codebook,
                      dci_pdu_rel15_t *dci_pdu,
                      nr_dci_format_t format,
                      nr_rnti_type_t rnti_type,
@@ -147,35 +208,14 @@ void find_aggregation_candidates(uint8_t *aggregation_level,
                                  const NR_SearchSpace_t *ss,
                                  int maxL);
 
-void find_monitoring_periodicity_offset_common(NR_SearchSpace_t *ss,
-                                               uint16_t *slot_period,
-                                               uint16_t *offset);
-
-int get_nr_prach_info_from_index(uint8_t index,
-                                 int frame,
-                                 int slot,
-                                 uint32_t pointa,
-                                 uint8_t mu,
-                                 uint8_t unpaired,
-                                 uint16_t *format,
-                                 uint8_t *start_symbol,
-                                 uint8_t *N_t_slot,
-                                 uint8_t *N_dur,
-                                 uint16_t *RA_sfn_index,
-                                 uint8_t *N_RA_slot,
-                                 uint8_t *config_period);
-
-int get_nr_prach_occasion_info_from_index(uint8_t index,
-                                 uint32_t pointa,
-                                 uint8_t mu,
-                                 uint8_t unpaired,
-                                 uint16_t *format,
-                                 uint8_t *start_symbol,
-                                 uint8_t *N_t_slot,
-                                 uint8_t *N_dur,
-                                 uint8_t *N_RA_slot,
-                                 uint16_t *N_RA_sfn,
-                                 uint8_t *max_association_period);
+bool get_nr_prach_sched_from_info(nr_prach_info_t info,
+                                  int config_index,
+                                  int frame,
+                                  int slot,
+                                  int mu,
+                                  frequency_range_t freq_range,
+                                  uint16_t *RA_sfn_index,
+                                  uint8_t unpaired);
 
 uint8_t get_pusch_mcs_table(long *mcs_Table,
                             int is_tp,
@@ -189,9 +229,7 @@ uint8_t compute_nr_root_seq(NR_RACH_ConfigCommon_t *rach_config,
                             uint8_t unpaired,
                             frequency_range_t);
 
-int ul_ant_bits(NR_DMRS_UplinkConfig_t *NR_DMRS_UplinkConfig, long transformPrecoder);
-
-uint8_t get_mcs_from_cqi(int mcs_table, int cqi_table, int cqi_idx, int default_mcs);
+uint8_t get_mcs_from_cqi(int mcs_table, int cqi_table, int cqi_idx);
 
 int get_mcs_from_bler(const NR_bler_options_t *bler_options,
                       const NR_mac_dir_stats_t *stats,
@@ -199,11 +237,9 @@ int get_mcs_from_bler(const NR_bler_options_t *bler_options,
                       int max_mcs,
                       frame_t frame);
 
+int ul_ant_bits(NR_DMRS_UplinkConfig_t *NR_DMRS_UplinkConfig, long transformPrecoder);
+
 uint8_t get_pdsch_mcs_table(long *mcs_Table, int dci_format, int rnti_type, int ss_type);
-
-int get_format0(uint8_t index, uint8_t unpaired,frequency_range_t);
-
-const int64_t *get_prach_config_info(frequency_range_t freq_range, uint8_t index, uint8_t unpaired);
 
 uint16_t get_NCS(uint8_t index, uint16_t format, uint8_t restricted_set_config);
 int compute_pucch_crc_size(int O_uci);
@@ -234,14 +270,11 @@ uint32_t nr_get_code_rate_dl(uint8_t Imcs, uint8_t table_idx);
 /** \brief Computes Q based on I_MCS PDSCH and table_idx for uplink. Implements MCS Tables from 38.214. */
 uint8_t nr_get_Qm_ul(uint8_t Imcs, uint8_t table_idx);
 uint32_t nr_get_code_rate_ul(uint8_t Imcs, uint8_t table_idx);
-
+int srs_binomial_sum(int count, int Lmax);
+int srs_codebook_nb_res(NR_SRS_Config_t *srs_config);
+int srs_non_codebook_nb_res(NR_SRS_Config_t *srs_config);
 uint16_t get_nr_srs_offset(NR_SRS_PeriodicityAndOffset_t periodicityAndOffset);
-
-int get_dlbw_tbslbrm(int scc_bwpsize,
-                     NR_CellGroupConfig_t *cg);
-
-int get_ulbw_tbslbrm(int scc_bwpsize,
-                     NR_CellGroupConfig_t *cg);
+void get_monitoring_period_offset(const NR_SearchSpace_t *ss, int *period, int *offset);
 
 uint32_t nr_compute_tbslbrm(uint16_t table,
 			    uint16_t nb_rb,
@@ -249,7 +282,7 @@ uint32_t nr_compute_tbslbrm(uint16_t table,
 
 void get_type0_PDCCH_CSS_config_parameters(NR_Type0_PDCCH_CSS_config_t *type0_PDCCH_CSS_config,
                                            frame_t frameP,
-                                           NR_MIB_t *mib,
+                                           const NR_MIB_t *mib,
                                            uint8_t num_slot_per_frame,
                                            uint8_t ssb_subcarrier_offset,
                                            uint16_t ssb_start_symbol,
@@ -267,6 +300,8 @@ NR_tda_info_t get_info_from_tda_tables(default_table_type_t table_type,
                                        int dmrs_TypeA_Position,
                                        int normal_CP);
 
+NR_tda_info_t set_tda_info_from_list(NR_PDSCH_TimeDomainResourceAllocationList_t *tdalist, int tda_index);
+
 default_table_type_t get_default_table_type(int mux_pattern);
 
 void fill_coresetZero(NR_ControlResourceSet_t *coreset0, NR_Type0_PDCCH_CSS_config_t *type0_PDCCH_CSS_config);
@@ -280,21 +315,25 @@ uint8_t get_pusch_nb_antenna_ports(NR_PUSCH_Config_t *pusch_Config,
 
 uint16_t compute_pucch_prb_size(uint8_t format,
                                 uint8_t nr_prbs,
-                                uint16_t O_uci,
+                                uint16_t O_csi,
+                                uint16_t O_ack,
+                                uint8_t O_sr,
                                 NR_PUCCH_MaxCodeRate_t *maxCodeRate,
                                 uint8_t Qm,
                                 uint8_t n_symb,
                                 uint8_t n_re_ctrl);
 
-int16_t get_N_RA_RB (int delta_f_RA_PRACH,int delta_f_PUSCH);
+float get_max_code_rate(NR_PUCCH_MaxCodeRate_t *maxCodeRate);
+int get_f3_dmrs_symbols(NR_PUCCH_Resource_t *pucchres, NR_PUCCH_Config_t *pucch_Config);
+
+unsigned int get_delta_f_RA_long(const unsigned int format);
+unsigned int get_N_RA_RB(const unsigned int delta_f_RA_PRACH, const unsigned int delta_f_PUSCH);
 
 void find_period_offset_SR(const NR_SchedulingRequestResourceConfig_t *SchedulingReqRec, int *period, int *offset);
 
 void csi_period_offset(NR_CSI_ReportConfig_t *csirep,
                        struct NR_CSI_ResourcePeriodicityAndOffset *periodicityAndOffset,
                        int *period, int *offset);
-
-void reverse_n_bits(uint8_t *value, uint16_t bitlen);
 
 bool set_dl_ptrs_values(NR_PTRS_DownlinkConfig_t *ptrs_config,
                         uint16_t rbSize, uint8_t mcsIndex, uint8_t mcsTable,
@@ -315,36 +354,30 @@ bool set_ul_ptrs_values(NR_PTRS_UplinkConfig_t *ul_ptrs_config,
 @returns                   transformPrecoding value */
 long get_transformPrecoding(const NR_UE_UL_BWP_t *current_UL_BWP, nr_dci_format_t dci_format, uint8_t configuredGrant);
 
-uint8_t number_of_bits_set(uint8_t buf);
+void compute_csi_bitlen(const NR_CSI_MeasConfig_t *csi_MeasConfig, nr_csi_report_t *csi_report_template);
 
-void compute_rsrp_bitlen(struct NR_CSI_ReportConfig *csi_reportconfig,
-                         uint8_t nb_resources,
-                         nr_csi_report_t *csi_report);
+uint16_t nr_get_csi_bitlen(nr_csi_report_t *csi_report);
 
-uint8_t compute_ri_bitlen(struct NR_CSI_ReportConfig *csi_reportconfig,
-                          nr_csi_report_t *csi_report);
+uint32_t compute_PDU_length(uint32_t num_TLV, uint32_t total_length);
 
-void compute_li_bitlen(struct NR_CSI_ReportConfig *csi_reportconfig,
-                       uint8_t ri_restriction,
-                       nr_csi_report_t *csi_report);
+rnti_t nr_get_ra_rnti(uint8_t s_id, uint8_t t_id, uint8_t f_id, uint8_t ul_carrier_id);
 
-void get_n1n2_o1o2_singlepanel(int *n1, int *n2, int *o1, int *o2,
-                               struct NR_CodebookConfig__codebookType__type1__subType__typeI_SinglePanel__nrOfAntennaPorts__moreThanTwo *morethantwo);
+rnti_t nr_get_MsgB_rnti(uint8_t s_id, uint8_t t_id, uint8_t f_id, uint8_t ul_carrier_id);
 
-void get_x1x2_bitlen_singlepanel(int n1, int n2, int o1, int o2,
-                                 int *x1, int *x2, int rank, int codebook_mode);
+bool supported_bw_comparison(int bw_mhz, NR_SupportedBandwidth_t *supported_BW, long *support_90mhz);
 
-void compute_pmi_bitlen(struct NR_CSI_ReportConfig *csi_reportconfig,
-                        uint8_t ri_restriction,
-                        nr_csi_report_t *csi_report);
+int get_FeedbackDisabled(NR_DownlinkHARQ_FeedbackDisabled_r17_t *downlinkHARQ_FeedbackDisabled_r17, int harq_pid);
 
-void compute_cqi_bitlen(struct NR_CSI_ReportConfig *csi_reportconfig,
-                        uint8_t ri_restriction,
-                        nr_csi_report_t *csi_report);
+int get_nrofHARQ_ProcessesForPDSCH(const NR_UE_ServingCell_Info_t *sc_info);
 
-void compute_csi_bitlen(NR_CSI_MeasConfig_t *csi_MeasConfig, nr_csi_report_t *csi_report_template);
+int get_nrofHARQ_ProcessesForPUSCH(const NR_UE_ServingCell_Info_t *sc_info);
 
-uint16_t nr_get_csi_bitlen(nr_csi_report_t *csi_report_template, uint8_t csi_report_id);
+int nr_get_prach_or_ul_mu(const NR_MsgA_ConfigCommon_r16_t *msgacc, const NR_RACH_ConfigCommon_t *rach_ConfigCommon, const int ul_mu);
+
+int get_delta_for_k2(int mu);
+
+int get_j_for_k2(int mu);
+
 
 /* Functions to manage an NR_list_t */
 void create_nr_list(NR_list_t *listP, int len);
@@ -355,5 +388,27 @@ void remove_nr_list(NR_list_t *listP, int id);
 void add_tail_nr_list(NR_list_t *listP, int id);
 void add_front_nr_list(NR_list_t *listP, int id);
 void remove_front_nr_list(NR_list_t *listP);
+
+int get_NREsci2(const int sci2_alpha,
+                const int sci2_payload_len,
+                const int sci2_beta_offset,
+                const int pssch_numsym,
+                const int pscch_numsym,
+                const int pscch_numrbs,
+                const int l_subch,
+                const int subchannel_size,
+                const int mcs,
+                const int mcs_tb_ind);
+
+int get_NREsci2_2(const int sci2_alpha,
+                  const int sci2_payload_len,
+                  const int sci2_beta_offset,
+                  const int pssch_numsym,
+                  const int pscch_numsym,
+                  const int pscch_numrbs,
+                  const int l_subch,
+                  const int subchannel_size,
+                  const int target_coderate,
+                  const int mcs_table_index);
 
 #endif

@@ -56,6 +56,7 @@
 #include "dummy_functions.c"
 #include "executables/thread-common.h"
 #include "common/ran_context.h"
+#include "executables/softmodem-common.h"
 void feptx_ofdm(RU_t *ru, int frame, int subframe);
 void feptx_prec(RU_t *ru, int frame, int subframe);
 
@@ -89,7 +90,6 @@ static int cmpdouble(const void *p1, const void *p2) {
 }
 RAN_CONTEXT_t RC;
 
-int emulate_rf = 0;
 void handler(int sig) {
   void *array[10];
   size_t size;
@@ -492,6 +492,7 @@ int extended_prefix_flag=0;
 int verbose=0, help=0;
 double SNR,snr0=-2.0,snr1,rate = 0;
 int print_perf=0;
+configmodule_interface_t *uniqCfg = NULL;
 
 int main(int argc, char **argv) {
   int k,i,j,aa;
@@ -572,7 +573,7 @@ int main(int argc, char **argv) {
   uint32_t Nsoft;
   int sf;
   int CCE_table[800];
-  opp_enabled=1; // to enable the time meas
+  cpu_meas_enabled = 1; // to enable the time meas
   FILE *csv_fd=NULL;
   char csv_fname[FILENAME_MAX];
   int DLSCH_RB_ALLOC = 0;
@@ -588,24 +589,7 @@ int main(int argc, char **argv) {
   nfapi_tx_request_t TX_req;
   Sched_Rsp_t sched_resp;
   int pa=dB0;
-#if defined(__arm__) || defined(__aarch64__)
-  FILE    *proc_fd = NULL;
-  char buf[64];
-  memset(buf,0,sizeof(buf));
-  proc_fd = fopen("/sys/devices/system/cpu/cpu4/cpufreq/cpuinfo_cur_freq", "r");
-
-  if(!proc_fd)
-    printf("cannot open /sys/devices/system/cpu/cpu4/cpufreq/cpuinfo_cur_freq");
-  else {
-    while(fgets(buf, 63, proc_fd))
-      printf("%s", buf);
-  }
-
-  fclose(proc_fd);
-  cpu_freq_GHz = ((double)atof(buf))/1e6;
-#else
   cpu_freq_GHz = get_cpu_freq_GHz();
-#endif
   printf("Detected cpu_freq %f GHz\n",cpu_freq_GHz);
   memset((void *)&sched_resp,0,sizeof(sched_resp));
   sched_resp.DL_req = &DL_req;
@@ -646,7 +630,7 @@ int main(int argc, char **argv) {
     { "lMuMimo", "offset_mumimo_llr_drange_fix",0, .u8ptr=&offset_mumimo_llr_drange_fix,  .defintval=0, TYPE_UINT8, 0 },
     { "mcs1", "The MCS for TB 1", 0, .iptr=&mcs1,  .defintval=0, TYPE_INT, 0 },
     { "Mcs2", "The MCS for TB 2", 0, .iptr=&mcs2,  .defintval=0, TYPE_INT, 0 },
-    { "Operf", "Set the percenatge of effective rate to testbench the modem performance (typically 30 and 70, range 1-100)",0, .iptr=&test_perf,  .defintval=0, TYPE_INT, 0 },
+    { "Tperf", "Set the percenatge of effective rate to testbench the modem performance (typically 30 and 70, range 1-100)",0, .iptr=&test_perf,  .defintval=0, TYPE_INT, 0 },
     { "tmcs_i", "MCS of interfering UE",0, .iptr=NULL,  .defintval=0, TYPE_INT, 0 },
     { "nb_frame", "number of frame in a test",0, .iptr=&n_frames,  .defintval=1, TYPE_INT, 0 },
     { "offsetRxSample", "Sample offset for receiver", 0, .iptr=&rx_sample_offset,  .defintval=0, TYPE_INT, 0 },
@@ -678,7 +662,15 @@ int main(int argc, char **argv) {
   int option_index;
   int res;
 
-  while ((res=getopt_long_only(argc, argv, "", long_options, &option_index)) == 0) {
+  /* disable error messages from getopt_long_only */
+  opterr = 0;
+  while ((res=getopt_long_only(argc, argv, "-", long_options, &option_index)) >= 0) {
+
+    /* ignore configmodule options and their arguments*/
+    /* with these opstring and long_options getopt returns 1 for non-option arguments and '?' for unrecognized long options, refer to 'man 3 getopt' */
+    if (res == 1 || res == '?')
+      continue;
+
     if (options[option_index].voidptr != NULL ) {
       if (long_options[option_index].has_arg==no_argument)
         *(bool *)options[option_index].iptr=1;
@@ -893,12 +885,13 @@ int main(int argc, char **argv) {
   if (transmission_mode>1) pa=dBm3;
 
   printf("dlsim: tmode %d, pa %d\n",transmission_mode,pa);
-  AssertFatal(load_configmodule(argc,argv, CONFIG_ENABLECMDLINEONLY) != NULL, "Cannot load configuration module, exiting\n");
+  uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY);
+  AssertFatal(uniqCfg != NULL, "Cannot load configuration module, exiting\n");
   logInit();
   set_glog_onlinelog(true);
   // enable these lines if you need debug info
   set_glog(loglvl);
-  SET_LOG_DEBUG(UE_TIMING);
+  // SET_LOG_DEBUG(DEBUG_UE_TIMING);
   // moreover you need to init itti with the following line
   // however itti will catch all signals, so ctrl-c won't work anymore
   // alternatively you can disable ITTI completely in CMakeLists.txt
@@ -1270,9 +1263,7 @@ int main(int argc, char **argv) {
 
   L1_rxtx_proc_t *proc_eNB = &eNB->proc.L1_proc;
   proc_eNB->threadPool = (tpool_t *)malloc(sizeof(tpool_t));
-  proc_eNB->respDecode=(notifiedFIFO_t*) malloc(sizeof(notifiedFIFO_t));
   initTpool("n", proc_eNB->threadPool, true);
-  initNotifiedFIFO(proc_eNB->respDecode);
 
   proc_eNB->frame_tx=0;
 
@@ -2128,7 +2119,8 @@ int main(int argc, char **argv) {
   else
     return(0);
 }
-/* temporary dummy implem of get_softmodem_optmask, till basic simulators implemented as device */
-uint64_t get_softmodem_optmask(void) {
-  return 0;
+static softmodem_params_t softmodem_params;
+softmodem_params_t *get_softmodem_params(void)
+{
+  return &softmodem_params;
 }

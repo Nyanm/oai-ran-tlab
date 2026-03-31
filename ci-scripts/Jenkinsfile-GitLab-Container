@@ -27,9 +27,15 @@ def nodeExecutor = params.nodeExecutor
 def doBuild = true
 def do4Gtest = false
 def do5Gtest = false
+def do5GUeTest = false
 
 //
 def gitCommitAuthorEmailAddr
+
+// list of failing stages
+def failingStages = ""
+
+OAI_Registry = "gracehopper3-oai.sboai.cs.eurecom.fr"
 
 pipeline {
   agent {
@@ -61,17 +67,24 @@ pipeline {
               message += " - ~BUILD-ONLY (execute only build stages)\n"
               message += " - ~4G-LTE (perform 4G tests)\n"
               message += " - ~5G-NR (perform 5G tests)\n"
-              message += " - ~CI (perform both 4G and 5G tests)\n\n"
+              message += " - ~CI (perform both 4G and 5G tests)\n"
+              message += " - ~nrUE (perform only 5G-UE related tests including physims excluding LDPC tests)\n\n"
               message += "Not performing CI due to lack of labels"
               addGitLabMRComment comment: message
               error('Not performing CI due to lack of labels')
             } else if (LABEL_CHECK == 'FULL') {
               do4Gtest = true
               do5Gtest = true
+              do5GUeTest = true
             } else if (LABEL_CHECK == "SHORTEN-4G") {
               do4Gtest = true
             } else if (LABEL_CHECK == 'SHORTEN-5G') {
               do5Gtest = true
+            } else if (LABEL_CHECK == 'SHORTEN-5G-UE') {
+              do5GUeTest = true
+            } else if (LABEL_CHECK == 'SHORTEN-4G-5G-UE') {
+              do4Gtest = true
+              do5GUeTest = true
             } else if (LABEL_CHECK == 'documentation') {
               doBuild = false
             } else {
@@ -103,7 +116,6 @@ pipeline {
             gitCommitAuthorEmailAddr = sh returnStdout: true, script: 'git log -n1 --pretty=format:%ae ${GIT_COMMIT}'
             gitCommitAuthorEmailAddr = gitCommitAuthorEmailAddr.trim()
             echo "GitLab Usermail is ${gitCommitAuthorEmailAddr}"
-            sh "git log -n1 --pretty=format:\"%s\" > .git/CI_COMMIT_MSG"
           }
         }
       }
@@ -118,44 +130,93 @@ pipeline {
       }
     }
     // Build Stages are Mandatory
-    // Later we will add a Ubuntu20 build
     stage ("Image Building Processes") {
       when { expression {doBuild} }
       parallel {
-        stage ("Ubuntu18-Image-Builder") {
+        stage ("Ubuntu-Image-Builder") {
           steps {
             script {
-              triggerSlaveJob ('RAN-Ubuntu18-Image-Builder', 'Ubuntu18-Image-Builder')
+              triggerSlaveJob ('RAN-Ubuntu18-Image-Builder', 'Ubuntu-Image-Builder')
             }
           }
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-Ubuntu18-Image-Builder')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                ubuntuBuildStatus = finalizeSlaveJob('RAN-Ubuntu18-Image-Builder')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += ubuntuBuildStatus
               }
             }
           }
         }
-        stage ("RHEL8-Cluster-Image-Builder") {
+        stage ("Ubuntu-ARM-Image-Builder") {
           steps {
             script {
-              triggerSlaveJob ('RAN-RHEL8-Cluster-Image-Builder', 'RHEL8-Cluster-Image-Builder')
+              triggerSlaveJob ('RAN-Ubuntu-ARM-Image-Builder', 'Ubuntu-ARM-Image-Builder')
             }
           }
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-RHEL8-Cluster-Image-Builder')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                ubuntuArmBuildStatus = finalizeSlaveJob('RAN-Ubuntu-ARM-Image-Builder')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += ubuntuArmBuildStatus
+              }
+            }
+          }
+        }
+        stage ("Ubuntu-Jetson-Image-Builder") {
+          steps {
+            script {
+              triggerSlaveJob ('RAN-Ubuntu-Jetson-Image-Builder', 'Ubuntu-Jetson-Image-Builder')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                ubuntuJetsonBuildStatus = finalizeSlaveJob('RAN-Ubuntu-Jetson-Image-Builder')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += ubuntuJetsonBuildStatus
+              }
+            }
+          }
+        }
+        stage ("RHEL-Cluster-Image-Builder") {
+          steps {
+            script {
+              triggerSlaveJob ('RAN-RHEL8-Cluster-Image-Builder', 'RHEL-Cluster-Image-Builder')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                rhelBuildStatus = finalizeSlaveJob('RAN-RHEL8-Cluster-Image-Builder')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += rhelBuildStatus
               }
             }
           }
@@ -169,14 +230,57 @@ pipeline {
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-cppcheck')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                cppcheckStatus = finalizeSlaveJob('RAN-cppcheck')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += cppcheckStatus
               }
             }
+          }
+        }
+        stage ("ARM-Cross-Compile") {
+          steps {
+            script {
+              triggerSlaveJob ('RAN-ARM-Cross-Compile-Builder', 'ARM-Cross-Compilation')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                armBuildStatus = finalizeSlaveJob('RAN-ARM-Cross-Compile-Builder')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += armBuildStatus
+              }
+            }
+          }
+        }
+      }
+    }
+    stage ("DockerHub-Push") {
+      when { expression {doBuild && "PUSH".equals(env.gitlabActionType)} }
+      steps {
+        script {
+          catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+            triggerSlaveJob ('RAN-DockerHub-Push', 'DockerHub-Push')
+          }
+        }
+      }
+      post {
+        failure {
+          script {
+            echo "Push to Docker-Hub KO"
+            failingStages += '\n * RAN-DockerHub-Push'
           }
         }
       }
@@ -184,22 +288,71 @@ pipeline {
     stage ("Image Test Processes") {
       when { expression {doBuild} }
       parallel {
-        stage ("PhySim-Cluster") {
-          when { expression {do4Gtest || do5Gtest} }
+        stage ("PhySim-Cluster-5G") {
+          when { expression {do5Gtest || do5GUeTest} }
           steps {
             script {
-              triggerSlaveJob ('RAN-PhySim-Cluster', 'PhySim-Cluster')
+              triggerSlaveJob ('RAN-PhySim-Cluster-5G', 'PhySim-Cluster-5G')
             }
           }
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-PhySim-Cluster')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                physim5GStatus = finalizeSlaveJob('RAN-PhySim-Cluster-5G')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += physim5GStatus
+              }
+            }
+          }
+        }
+        stage ("PhySim-GraceHopper-5G") {
+          when { expression {do5Gtest || do5GUeTest} }
+          steps {
+            script {
+              triggerSlaveJob ('RAN-PhySim-GraceHopper-5G', 'PhySim-GraceHopper-5G')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                physimGH5GStatus = finalizeSlaveJob('RAN-PhySim-GraceHopper-5G')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += physimGH5GStatus
+              }
+            }
+          }
+        }
+        stage ("PhySim-Cluster-4G") {
+          when { expression {do4Gtest} }
+          steps {
+            script {
+              triggerSlaveJob ('RAN-PhySim-Cluster-4G', 'PhySim-Cluster-4G')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                physim4GStatus = finalizeSlaveJob('RAN-PhySim-Cluster-4G')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += physim4GStatus
               }
             }
           }
@@ -214,18 +367,21 @@ pipeline {
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-RF-Sim-Test-4G')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                rfSim4GStatus = finalizeSlaveJob('RAN-RF-Sim-Test-4G')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += rfSim4GStatus
               }
             }
           }
         }
         stage ("RF-Sim-Test-5G") {
-          when { expression {do5Gtest} }
+          when { expression {do5Gtest || do5GUeTest} }
           steps {
             script {
               triggerSlaveJob ('RAN-RF-Sim-Test-5G', 'RF-Sim-Test-5G')
@@ -234,12 +390,38 @@ pipeline {
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-RF-Sim-Test-5G')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                rfSim5GStatus = finalizeSlaveJob('RAN-RF-Sim-Test-5G')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += rfSim5GStatus
+              }
+            }
+          }
+        }
+        stage ("OAI-FLEXRIC-RAN-Integration-Test") {
+          when { expression {do5Gtest || do5GUeTest} }
+          steps {
+            script {
+              triggerSlaveJob ('OAI-FLEXRIC-RAN-Integration-Test', 'OAI-FLEXRIC-RAN-Integration-Test')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                flexricRAN5GStatus = finalizeSlaveJob('OAI-FLEXRIC-RAN-Integration-Test')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += flexricRAN5GStatus
               }
             }
           }
@@ -254,32 +436,15 @@ pipeline {
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-L2-Sim-Test-4G')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                l2Sim4GStatus = finalizeSlaveJob('RAN-L2-Sim-Test-4G')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
-              }
-            }
-          }
-        }
-        stage ("L2-Sim-Test-5G") {
-          when { expression {do5Gtest} }
-          steps {
-            script {
-              triggerSlaveJob ('RAN-L2-Sim-Test-5G', 'L2-Sim-Test-5G')
-            }
-          }
-          post {
-            always {
-              script {
-                finalizeSlaveJob('RAN-L2-Sim-Test-5G')
-              }
-            }
-            failure {
-              script {
-                currentBuild.result = 'FAILURE'
+                failingStages += l2Sim4GStatus
               }
             }
           }
@@ -288,18 +453,45 @@ pipeline {
           when { expression {do4Gtest} }
           steps {
             script {
-              triggerSlaveJob ('RAN-LTE-FDD-LTEBOX-Container', 'RAN-LTE-FDD-LTEBOX-Container')
+              triggerSlaveJob ('RAN-LTE-FDD-LTEBOX-Container', 'LTE-FDD-LTEBOX-Container')
             }
           }
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-LTE-FDD-LTEBOX-Container')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                lteTDDB200Status = finalizeSlaveJob('RAN-LTE-FDD-LTEBOX-Container')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += lteTDDB200Status
+              }
+            }
+          }
+        }
+        // Pipeline to test OAI LTE-UE
+        stage ("LTE-B200-FDD-OAIUE-OAICN4G-Container") {
+          when { expression {do4Gtest} }
+          steps {
+            script {
+              triggerSlaveJob ('RAN-LTE-FDD-OAIUE-OAICN4G-Container', 'LTE-FDD-OAIUE-OAICN4G-Container')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                lteFDDB200OAIUEStatus = finalizeSlaveJob('RAN-LTE-FDD-OAIUE-OAICN4G-Container')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += lteFDDB200OAIUEStatus
               }
             }
           }
@@ -308,18 +500,21 @@ pipeline {
           when { expression {do4Gtest} }
           steps {
             script {
-              triggerSlaveJob ('RAN-LTE-TDD-LTEBOX-Container', 'RAN-LTE-TDD-LTEBOX-Container')
+              triggerSlaveJob ('RAN-LTE-TDD-LTEBOX-Container', 'LTE-TDD-LTEBOX-Container')
             }
           }
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-LTE-TDD-LTEBOX-Container')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                lteFDDB200Status = finalizeSlaveJob('RAN-LTE-TDD-LTEBOX-Container')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += lteFDDB200Status
               }
             }
           }
@@ -334,12 +529,15 @@ pipeline {
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-NSA-B200-Module-LTEBOX-Container')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                nsaTDDB200Status = finalizeSlaveJob('RAN-NSA-B200-Module-LTEBOX-Container')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += nsaTDDB200Status
               }
             }
           }
@@ -354,12 +552,15 @@ pipeline {
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-SA-B200-Module-SABOX-Container')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                saTDDB200Status = finalizeSlaveJob('RAN-SA-B200-Module-SABOX-Container')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += saTDDB200Status
               }
             }
           }
@@ -374,12 +575,15 @@ pipeline {
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-gNB-N300-Timing-Phytest-LDPC')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                phytestLDPCoffloadStatus = finalizeSlaveJob('RAN-gNB-N300-Timing-Phytest-LDPC')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += phytestLDPCoffloadStatus
               }
             }
           }
@@ -394,12 +598,15 @@ pipeline {
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-LTE-TDD-2x2-Container')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                lteTDD2x2N3xxStatus = finalizeSlaveJob('RAN-LTE-TDD-2x2-Container')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += lteTDD2x2N3xxStatus
               }
             }
           }
@@ -414,32 +621,15 @@ pipeline {
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-SA-AW2S-CN5G')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                saAW2SStatus = finalizeSlaveJob('RAN-SA-AW2S-CN5G')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
-              }
-            }
-          }
-        }
-        stage ("Interop-F1") {
-          when { expression {do5Gtest} }
-          steps {
-            script {
-              triggerSlaveJob ('RAN-Interop-F1', 'Interop-F1')
-            }
-          }
-          post {
-            always {
-              script {
-                finalizeSlaveJob('RAN-Interop-F1')
-              }
-            }
-            failure {
-              script {
-                currentBuild.result = 'FAILURE'
+                failingStages += saAW2SStatus
               }
             }
           }
@@ -454,83 +644,144 @@ pipeline {
           post {
             always {
               script {
-                finalizeSlaveJob('OAI-CN5G-COTS-UE-Test')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                cn5gCOTSUESanityCheck = finalizeSlaveJob('OAI-CN5G-COTS-UE-Test')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += cn5gCOTSUESanityCheck
               }
             }
           }
         }
-        stage ("SA-OAIUE-CN5G") {
+        stage ("SA-AERIAL-CN5G") {
           when { expression {do5Gtest} }
           steps {
             script {
-              triggerSlaveJob ('RAN-SA-OAIUE-CN5G', 'RAN-SA-OAIUE-CN5G')
+              triggerSlaveJob ('RAN-SA-AERIAL-CN5G', 'SA-AERIAL-CN5G')
             }
           }
           post {
             always {
               script {
-                finalizeSlaveJob('RAN-SA-OAIUE-CN5G')
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                saAERIALStatus = finalizeSlaveJob('RAN-SA-AERIAL-CN5G')
               }
             }
             failure {
               script {
                 currentBuild.result = 'FAILURE'
+                failingStages += saAERIALStatus
               }
             }
           }
         }
-      }
-    }
-    stage ("DockerHub-Push") {
-      when { expression {doBuild && "PUSH".equals(env.gitlabActionType)} }
-      steps {
-        script {
-          triggerSlaveJob ('RAN-DockerHub-Push', 'DockerHub-Push')
+        stage ("SA-2x2-Module-CN5G") {
+          when { expression {do5Gtest} }
+          steps {
+            script {
+              triggerSlaveJob ('RAN-SA-2x2-Module-CN5G', 'SA-2x2-Module-CN5G')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                saTDD2x2Status = finalizeSlaveJob('RAN-SA-2x2-Module-CN5G')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += saTDD2x2Status
+              }
+            }
+          }
         }
-      }
-      post {
-        failure {
-          script {
-            echo "Push to Docker-Hub KO"
-            currentBuild.result = 'FAILURE'
+        stage ("SA-FHI72-CN5G") {
+          when { expression {do5Gtest} }
+          steps {
+            script {
+              triggerSlaveJob ('RAN-SA-FHI72-CN5G', 'SA-FHI72-CN5G')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                saFHI72Status = finalizeSlaveJob('RAN-SA-FHI72-CN5G')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += saFHI72Status
+              }
+            }
+          }
+        }
+        stage ("SA-Handover-CN5G") {
+          when { expression {do5Gtest} }
+          steps {
+            script {
+              triggerSlaveJob ('RAN-SA-Handover-CN5G', 'SA-Handover-CN5G')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                saHandoverStatus = finalizeSlaveJob('RAN-SA-Handover-CN5G')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += saHandoverStatus
+              }
+            }
+          }
+        }
+        stage ("SA-OAIUE-CN5G") {
+          when { expression {do5Gtest || do5GUeTest} }
+          steps {
+            script {
+              triggerSlaveJob ('RAN-SA-OAIUE-CN5G', 'SA-OAIUE-CN5G')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                saOAIUEStatus = finalizeSlaveJob('RAN-SA-OAIUE-CN5G')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += saOAIUEStatus
+              }
+            }
           }
         }
       }
     }
   }
   post {
-    always {
-      script {
-        def eSubject = JOB_NAME + ' - Build # ' + BUILD_ID + ' - ' + currentBuild.result + '!'
-        def eBody = "Hi,\n\n"
-        eBody += "Here are attached HTML report files for " + JOB_NAME + "  - Build # " + BUILD_ID + " - " + currentBuild.result + "!\n\n"
-        eBody += "Regards,\n"
-        eBody += "OAI CI Team"
-        emailext attachmentsPattern: '*results*.html',
-           body: eBody,
-           replyTo: 'no-reply@openairinterface.org',
-           subject: eSubject,
-           to: gitCommitAuthorEmailAddr
-
-        if (fileExists('.git/CI_COMMIT_MSG')) {
-          sh "rm -f .git/CI_COMMIT_MSG"
-        }
-      }
-    }
     success {
       script {
         def message = "OAI " + JOB_NAME + " build (" + BUILD_ID + "): passed (" + BUILD_URL + ")"
         if ("MERGE".equals(env.gitlabActionType)) {
           addGitLabMRComment comment: message
           def message2 = message + " -- MergeRequest #" + env.gitlabMergeRequestIid + " (" + env.gitlabMergeRequestTitle + ")"
-          sendSocialMediaMessage('ci-enb', 'good', message2)
-        } else {
-          sendSocialMediaMessage('ci-enb', 'good', message)
         }
         echo "Pipeline is SUCCESSFUL"
       }
@@ -539,11 +790,9 @@ pipeline {
       script {
         def message = "OAI " + JOB_NAME + " build (" + BUILD_ID + "): failed (" + BUILD_URL + ")"
         if ("MERGE".equals(env.gitlabActionType)) {
-          addGitLabMRComment comment: message
+          def fullMessage = message + '\n\nList of failing test stages:' + failingStages
+          addGitLabMRComment comment: fullMessage
           def message2 = message + " -- MergeRequest #" + env.gitlabMergeRequestIid + " (" + env.gitlabMergeRequestTitle + ")"
-          sendSocialMediaMessage('ci-enb', 'danger', message2)
-        } else {
-          sendSocialMediaMessage('ci-enb', 'danger', message)
         }
         echo "Pipeline FAILED"
       }
@@ -587,11 +836,12 @@ def triggerCN5GSlaveJob (jobName, gitlabStatusName) {
   if ("MERGE".equals(env.gitlabActionType)) {
     shortenShaOne = sh returnStdout: true, script: 'git log -1 --pretty=format:"%h" --abbrev=8 ' + env.gitlabMergeRequestLastCommit
     shortenShaOne = shortenShaOne.trim()
-    fullRanTag = 'porcepix.sboai.cs.eurecom.fr/oai-gnb:' + env.gitlabSourceBranch + '-' + shortenShaOne
+    branchName = env.gitlabSourceBranch.replaceAll("/", "-").trim()
+    fullRanTag = OAI_Registry + '/oai-gnb:' + env.gitlabSourceBranch + '-' + shortenShaOne
   } else {
     shortenShaOne = sh returnStdout: true, script: 'git log -1 --pretty=format:"%h" --abbrev=8 ' + env.GIT_COMMIT
     shortenShaOne = shortenShaOne.trim()
-    fullRanTag = 'porcepix.sboai.cs.eurecom.fr/oai-gnb:develop-' + shortenShaOne
+    fullRanTag = OAI_Registry + '/oai-gnb:develop-' + shortenShaOne
   }
   // Workaround for the "cancelled" GitLab pipeline notification
   // The slave job is triggered with the propagate false so the following commands are executed
@@ -641,26 +891,30 @@ def triggerSlaveJobNoGitLab (jobName) {
 }
 
 def finalizeSlaveJob(jobName) {
-  // In case of any non-success, we are retrieving the HTML report of the last completed
-  // slave job. The only drop-back is that we may retrieve the HTML report of a previous build
-  if (jobName == 'OAI-CN5G-COTS-UE-Test') {
-    fileName = "test_results_oai_cn5g_cots_ue.html"
-  } else {
-    fileName = "test_results-${jobName}.html"
-  }
-  if (!fileExists(fileName)) {
-    copyArtifacts(projectName: jobName,
-      filter: 'test_results*.html',
-      selector: lastCompleted())
-    if (fileExists(fileName)) {
-      sh "sed -i -e 's#TEMPLATE_BUILD_TIME#${JOB_TIMESTAMP}#' ${fileName}"
-      archiveArtifacts artifacts: fileName
+  lock ('Parent-Lock') {
+    // In case of any non-success, we are retrieving the HTML report of the last completed
+    // slave job. The only drop-back is that we may retrieve the HTML report of a previous build
+    if (jobName == 'OAI-CN5G-COTS-UE-Test') {
+      fileName = "test_results_oai_cn5g_cots_ue.html"
+    } else {
+      fileName = "test_results-${jobName}.html"
     }
+    artifactUrl = BUILD_URL
+    if (!fileExists(fileName)) {
+      copyArtifacts(projectName: jobName,
+        filter: 'test_results*.html',
+        selector: lastCompleted())
+      if (fileExists(fileName)) {
+        sh "sed -i -e 's#TEMPLATE_BUILD_TIME#${JOB_TIMESTAMP}#' ${fileName}"
+      } else {
+        sh "echo \"could not copy results from ${jobName}, please check pipeline ${BUILD_URL}\" > ${fileName}"
+      }
+      archiveArtifacts artifacts: fileName
+      // BUILD_URL is like  http://server:port/jenkins/job/foo/15/
+      // no need to add a prefixed '/'
+      artifactUrl += 'artifact/' + fileName
+    }
+    artifactUrl = "\n * [${jobName}](${artifactUrl})"
+    return artifactUrl
   }
-}
-
-// Abstraction function to send social media messages:
-// like on Slack or Mattermost
-def sendSocialMediaMessage(pipeChannel, pipeColor, pipeMessage) {
-  slackSend channel: pipeChannel, color: pipeColor, message: pipeMessage
 }

@@ -22,40 +22,44 @@
 #ifndef _RRC_GNB_DRBS_H_
 #define _RRC_GNB_DRBS_H_
 
+#include <stdbool.h>
+#include <stdint.h>
+#include "e1ap_messages_types.h"
 #include "nr_rrc_defs.h"
-#include "NR_SDAP-Config.h"
-#include "NR_DRB-ToAddMod.h"
-#include "NR_SRB-ToAddMod.h"
 
-#include "common/platform_constants.h"
+/// @brief retrieve the data structure representing DRB with ID drb_id of UE ue
+drb_t *get_drb(seq_arr_t *seq, int id);
 
-#define DRB_ACTIVE_NONGBR       (2)   /* DRB is used for Non-GBR Flows */
-#define DRB_ACTIVE              (1)
-#define DRB_INACTIVE            (0)
-#define GBR_FLOW                (1)
-#define NONGBR_FLOW             (0)
+/// @brief retrieve PDU session of UE ue with ID id
+rrc_pdu_session_param_t *find_pduSession(seq_arr_t *seq, int id);
 
-/// @brief Generates an ASN1 DRB-ToAddMod, from the established_drbs in gNB_RRC_UE_t.
-/// @param drb_t drb_asn1
-/// @return Returns the ASN1 DRB-ToAddMod structs.
-NR_DRB_ToAddMod_t *generateDRB_ASN1(const drb_t *drb_asn1);
-/// @brief Creates and stores a DRB in the gNB_RRC_UE_t struct, it doesn't create the actual entity,
-/// to create the actual entity use the generateDRB_ASN1.
-/// @param ue The gNB_RRC_UE_t struct that holds information for the UEs
-/// @param drb_id The Data Radio Bearer Identity to be created for the established DRB.
-/// @param pduSession The PDU Session that the DRB is created for.
-/// @param enable_sdap If true the SDAP header will be added to the packet, else it will not add or search for SDAP header.
-/// @param do_drb_integrity
-/// @param do_drb_ciphering
-void generateDRB(gNB_RRC_UE_t *ue,
-                 uint8_t drb_id,
-                 rrc_pdu_session_param_t *pduSession,
-                 bool enable_sdap,
-                 int do_drb_integrity,
-                 int do_drb_ciphering);
-uint8_t next_available_drb(gNB_RRC_UE_t *ue, rrc_pdu_session_param_t *pdusession, bool is_gbr);
-bool drb_is_active(gNB_RRC_UE_t *ue, uint8_t drb_id);
+/// @brief Add a new PDU session for UE @param ue and configuration @param in
+rrc_pdu_session_param_t *add_pduSession(seq_arr_t *sessions_ptr, const pdusession_t *in);
 
-rrc_pdu_session_param_t *find_pduSession(gNB_RRC_UE_t *ue, int id, bool create);
+/// @brief get PDU session of UE ue through the DRB drb_id
+rrc_pdu_session_param_t *find_pduSession_from_drbId(gNB_RRC_UE_t *ue, int drb_id);
+
+/// @brief Remove PDU Session from RRC list
+/// Also removes all associated DRBs for this PDU session.
+bool rm_pduSession(seq_arr_t *sessions, seq_arr_t *drbs, int pdusession_id);
+
+/// @brief set PDCP configuration in E1 Bearer Context Management message
+bearer_context_pdcp_config_t set_bearer_context_pdcp_config(const nr_pdcp_configuration_t pdcp,
+                                                            bool um_on_default_drb,
+                                                            const nr_redcap_ue_cap_t *redcap_cap);
+
+void free_pdusession(void *ptr);
+
+/// @brief Add DRB to RRC list
+drb_t *nr_rrc_add_drb(seq_arr_t *drb_ptr, int pdusession_id, nr_pdcp_configuration_t *pdcp);
+
+/// @brief Function to free DRB in RRC
+void free_drb(void *ptr);
+
+/// @brief retrieve QoS flow associated to @param qfi
+nr_rrc_qos_t *find_qos(seq_arr_t *seq, int qfi);
+
+/// @brief Add a new QoS to the list
+nr_rrc_qos_t *add_qos(seq_arr_t *qos, const pdusession_level_qos_parameter_t *in);
 
 #endif

@@ -33,7 +33,7 @@
 
 
 #include "assertions.h"
-#include "platform_types.h"
+#include "common/platform_types.h"
 
 #include "LAYER2/MAC/mac.h"
 #include "LAYER2/MAC/mac_extern.h"
@@ -108,8 +108,7 @@ add_msg3(module_id_t module_idP, int CC_id, RA_t *ra, frame_t frameP,
   uint8_t pusch_maxNumRepetitionCEmodeA_r13;
   ul_req = &mac->UL_req_tmp[CC_id][ra->Msg3_subframe];
   ul_req_body = &ul_req->ul_config_request_body;
-  AssertFatal(ra->state != IDLE, "RA is not active for RA %X\n",
-              ra->rnti);
+  AssertFatal(ra->eRA_state != IDLE, "RA is not active for RA %X\n", ra->rnti);
 
   if (ra->rach_resource_type > 0) {
     LOG_D (MAC, "[eNB %d][RAPROC] Frame %d, Subframe %d : CC_id %d CE level %d is active, Msg3 in (%d,%d)\n",
@@ -448,9 +447,9 @@ void generate_Msg2(module_id_t module_idP,
         /* Program UL processing for Msg3, same as regular LTE */
         get_Msg3alloc (&cc[CC_idP], subframeP, frameP, &ra->Msg3_frame, &ra->Msg3_subframe);
         add_msg3 (module_idP, CC_idP, ra, frameP, subframeP);
-        ra->state = WAITMSG3;
+        ra->eRA_state = WAITMSG3;
         /* DL request */
-        LOG_D(MAC, "[eNB %d][RAPROC] Frame %d, Subframe %d : In generate_Msg2, Programming TX Req\n",
+        LOG_I(MAC, "[eNB %d][RAPROC] Frame %d, Subframe %d : In generate_Msg2, Programming TX Req\n",
               module_idP,
               frameP,
               subframeP);
@@ -466,9 +465,14 @@ void generate_Msg2(module_id_t module_idP,
     }
   } else {
     if ((ra->Msg2_frame == frameP) && (ra->Msg2_subframe == subframeP)) {
-      LOG_D(MAC,
-            "[eNB %d] CC_id %d Frame %d, subframeP %d: Generating RAR DCI, state %d\n",
-            module_idP, CC_idP, frameP, subframeP, ra->state);
+      LOG_I(MAC,
+            "[eNB %d] CC_id %d Frame %d, subframeP %d: Generating RAR DCI for rnti %x, state %s\n",
+            module_idP,
+            CC_idP,
+            frameP,
+            subframeP,
+            ra->RA_rnti,
+            era_text[ra->eRA_state]);
       // Allocate 4 PRBS starting in RB 0
       first_rb = 0;
       vrb_map[first_rb] = 1;
@@ -537,7 +541,7 @@ void generate_Msg2(module_id_t module_idP,
               ra->Msg3_subframe);
         fill_rar(module_idP, CC_idP, ra, frameP, cc[CC_idP].RAR_pdu.payload, N_RB_DL, 7);
         add_msg3(module_idP, CC_idP, ra, frameP, subframeP);
-        ra->state = WAITMSG3;
+        ra->eRA_state = WAITMSG3;
         LOG_D(MAC,"[eNB %d][RAPROC] Frame %d, Subframe %d: state:WAITMSG3\n", module_idP, frameP, subframeP);
         T(T_ENB_MAC_UE_DL_RAR_PDU_WITH_DATA, T_INT(module_idP),
           T_INT(CC_idP), T_INT(ra->RA_rnti), T_INT(frameP),
@@ -819,7 +823,7 @@ generate_Msg4(module_id_t module_idP,
       dl_config_pdu->dlsch_pdu.dlsch_pdu_rel13.initial_transmission_sf_io = (10 * frameP) + subframeP;
       dl_config_pdu->dlsch_pdu.dlsch_pdu_rel13.drms_table_flag = 0;
       dl_req_body->number_pdu++;
-      ra->state = WAITMSG4ACK;
+      ra->eRA_state = WAITMSG4ACK;
       lcid = 0;
       UE_info->UE_sched_ctrl[UE_id].round[CC_idP][ra->harq_pid] = 0;
       msg4_header = 1 + 6 + 1;        // CR header, CR CE, SDU header
@@ -890,10 +894,15 @@ generate_Msg4(module_id_t module_idP,
       ul_req_body->number_of_pdus++;
       T (T_ENB_MAC_UE_DL_PDU_WITH_DATA, T_INT (module_idP), T_INT (CC_idP), T_INT (ra->rnti), T_INT (frameP), T_INT (subframeP),
          T_INT (0 /*harq_pid always 0? */ ), T_BUFFER (&mac->UE_info.DLSCH_pdu[CC_idP][0][UE_id].payload[0], ra->msg4_TBsize));
-      trace_pdu (DIRECTION_DOWNLINK, (uint8_t *) mac->UE_info.DLSCH_pdu[CC_idP][0][(unsigned char) UE_id].payload[0],
-                 ra->msg4_rrc_sdu_length,
-                 UE_id, 3, UE_RNTI (module_idP, UE_id),
-                 mac->frame, mac->subframe, 0, 0);
+      ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                        .pdu_buffer = mac->UE_info.DLSCH_pdu[CC_idP][0][(unsigned char)UE_id].payload[0],
+                        .pdu_buffer_size = ra->msg4_rrc_sdu_length,
+                        .ueid = UE_id,
+                        .rntiType = 3,
+                        .rnti = UE_RNTI(module_idP, UE_id),
+                        .sysFrame = mac->frame,
+                        .subframe = mac->subframe};
+      trace_pdu(&tmp);
     }                           // Msg4 frame/subframe
   }                             // rach_resource_type > 0
   else {
@@ -975,7 +984,7 @@ generate_Msg4(module_id_t module_idP,
                                        dl_config_pdu->dci_dl_pdu.dci_dl_pdu_rel8.aggregation_level, ra->rnti)) {
           dl_req_body->number_dci++;
           dl_req_body->number_pdu++;
-          ra->state = WAITMSG4ACK;
+          ra->eRA_state = WAITMSG4ACK;
           LOG_D(MAC,"[eNB %d][RAPROC] Frame %d, Subframe %d: state:WAITMSG4ACK\n", module_idP, frameP, subframeP);
           // increment Absolute subframe by 8 for Msg4 retransmission
           LOG_D(MAC,
@@ -1071,12 +1080,15 @@ generate_Msg4(module_id_t module_idP,
             T_INT(subframeP), T_INT(0 /*harq_pid always 0? */ ),
             T_BUFFER(&mac->UE_info.DLSCH_pdu[CC_idP][0][UE_id].
                      payload[0], ra->msg4_TBsize));
-          trace_pdu(DIRECTION_DOWNLINK,
-                    (uint8_t *) mac->
-                    UE_info.DLSCH_pdu[CC_idP][0][(unsigned char)UE_id].payload[0],
-                    rrc_sdu_length, UE_id,  WS_C_RNTI,
-                    UE_RNTI(module_idP, UE_id), mac->frame,
-                    mac->subframe, 0, 0);
+          ws_trace_t tmp = {.direction = DIRECTION_DOWNLINK,
+                            .pdu_buffer = mac->UE_info.DLSCH_pdu[CC_idP][0][(unsigned char)UE_id].payload[0],
+                            .pdu_buffer_size = rrc_sdu_length,
+                            .ueid = UE_id,
+                            .rntiType = WS_C_RNTI,
+                            .rnti = UE_RNTI(module_idP, UE_id),
+                            .sysFrame = mac->frame,
+                            .subframe = mac->subframe};
+          trace_pdu(&tmp);
 
           if(RC.mac[module_idP]->scheduler_mode == SCHED_MODE_FAIR_RR) {
             set_dl_ue_select_msg4(CC_idP, 4, UE_id, ra->rnti);
@@ -1216,10 +1228,10 @@ check_Msg4_retransmission(module_id_t module_idP, int CC_idP,
       }     // Msg4 frame/subframe
     }     // regular LTE case
   } else {
-    LOG_D(MAC,
+    LOG_I(MAC,
           "[eNB %d][RAPROC] CC_id %d Frame %d, subframeP %d : Msg4 acknowledged\n",
           module_idP, CC_idP, frameP, subframeP);
-    ra->state = IDLE;
+    ra->eRA_state = IDLE;
     LOG_D(MAC,"[eNB %d][RAPROC] Frame %d, Subframe %d: state:IDLE\n", module_idP, frameP, subframeP);
     UE_id = find_UE_id(module_idP, ra->rnti);
     DevAssert(UE_id != -1);
@@ -1246,11 +1258,11 @@ schedule_RA(module_id_t module_idP, frame_t frameP, sub_frame_t subframeP) {
     for (i = 0; i < NB_RA_PROC_MAX; i++) {
       ra = (RA_t *) & cc[CC_id].ra[i];
 
-      if (ra->state == MSG2)
+      if (ra->eRA_state == MSG2)
         generate_Msg2(module_idP, CC_id, frameP, subframeP, ra);
-      else if (ra->state == MSG4 && ra->Msg4_frame == frameP && ra->Msg4_subframe == subframeP )
+      else if (ra->eRA_state == MSG4 && ra->Msg4_frame == frameP && ra->Msg4_subframe == subframeP)
         generate_Msg4(module_idP, CC_id, frameP, subframeP, ra);
-      else if (ra->state == WAITMSG4ACK)
+      else if (ra->eRA_state == WAITMSG4ACK)
         check_Msg4_retransmission(module_idP, CC_id, frameP,
                                   subframeP, ra);
     }     // for i=0 .. N_RA_PROC-1
@@ -1273,7 +1285,7 @@ initiate_ra_proc(module_id_t module_idP,
                 ) {
   uint8_t i;
   COMMON_channels_t *cc = &RC.mac[module_idP]->common_channels[CC_id];
-  RA_t *ra = &cc->ra[0];
+  RA_t *ra = cc->ra;
   struct LTE_PRACH_ConfigSIB_v1310 *ext4_prach = NULL;
   LTE_PRACH_ParametersListCE_r13_t *prach_ParametersListCE_r13 = NULL;
 
@@ -1309,11 +1321,11 @@ initiate_ra_proc(module_id_t module_idP,
   VCD_SIGNAL_DUMPER_DUMP_FUNCTION_BY_NAME(VCD_SIGNAL_DUMPER_FUNCTIONS_INITIATE_RA_PROC, 0);
 
   for (i = 0; i < NB_RA_PROC_MAX; i++) {
-    if (ra[i].state == IDLE) {
+    if (ra[i].eRA_state == IDLE) {
       int loop = 0;
       LOG_D(MAC, "Frame %d, Subframe %d: Activating RA process %d\n",
             frameP, subframeP, i);
-      ra[i].state = MSG2;
+      ra[i].eRA_state = MSG2;
       ra[i].Msg4_delay_cnt=0;
       ra[i].timing_offset = timing_offset;
       ra[i].preamble_subframe = subframeP;
@@ -1353,7 +1365,22 @@ initiate_ra_proc(module_id_t module_idP,
       do {
         if (IS_SOFTMODEM_IQPLAYER) {  /* iq player mode, use deterministic rnti */
           static int drnti[MAX_MOBILES_PER_ENB];
-          static int drnti_def[]={ 0xbda7, 0x71da, 0x9c40, 0xc350, 0x2710, 0x4e20, 0x7530, 0x1388, 0x3a98, 0x61a8, 0x88b8, 0xafc8, 0xd6d8, 0x1b58, 0x4268, 0x6978 };
+          static const int drnti_def[] = {0xbda7,
+                                          0x71da,
+                                          0x9c40,
+                                          0xc350,
+                                          0x2710,
+                                          0x4e20,
+                                          0x7530,
+                                          0x1388,
+                                          0x3a98,
+                                          0x61a8,
+                                          0x88b8,
+                                          0xafc8,
+                                          0xd6d8,
+                                          0x1b58,
+                                          0x4268,
+                                          0x6978};
           for (int j=0; j<MAX_MOBILES_PER_ENB && j< (sizeof(drnti_def)/sizeof(int));j++)
           	  drnti[i]=drnti_def[i];
           
@@ -1395,7 +1422,8 @@ initiate_ra_proc(module_id_t module_idP,
       ra[i].preamble_index = preamble_index;
       failure_cnt = 0;
       LOG_I(MAC,
-            "[eNB %d][RAPROC] CC_id %d Frame %d Activating RAR generation in Frame %d, subframe %d for process %d, rnti %x, state %d\n",
+            "[eNB %d][RAPROC] CC_id %d Frame %d Activating RAR generation in Frame %d, subframe %d for process %d, rnti %x, state "
+            "%d\n",
             module_idP,
             CC_id,
             frameP,
@@ -1403,7 +1431,7 @@ initiate_ra_proc(module_id_t module_idP,
             ra[i].Msg2_subframe,
             i,
             ra[i].rnti,
-            ra[i].state);
+            ra[i].eRA_state);
       return;
     }
   }
@@ -1424,13 +1452,13 @@ cancel_ra_proc(module_id_t module_idP, int CC_id, frame_t frameP,
                rnti_t rnti) {
   unsigned char i;
   RA_t *ra = (RA_t *) & RC.mac[module_idP]->common_channels[CC_id].ra[0];
-  LOG_D(MAC,
+  LOG_I(MAC,
         "[eNB %d][RAPROC] CC_id %d Frame %d Cancelling RA procedure for UE rnti %x\n",
         module_idP, CC_id, frameP, rnti);
 
   for (i = 0; i < NB_RA_PROC_MAX; i++) {
     if (rnti == ra[i].rnti) {
-      ra[i].state = IDLE;
+      ra[i].eRA_state = IDLE;
       ra[i].timing_offset = 0;
       ra[i].RRC_timer = 20;
       ra[i].rnti = 0;
@@ -1445,8 +1473,8 @@ void clear_ra_proc(module_id_t module_idP, int CC_id, frame_t frameP) {
   RA_t *ra = (RA_t *) & RC.mac[module_idP]->common_channels[CC_id].ra[0];
 
   for (i = 0; i < NB_RA_PROC_MAX; i++) {
-    LOG_D(MAC,"[eNB %d][RAPROC] CC_id %d Frame %d Clear Random access information rnti %x\n", module_idP, CC_id, frameP, ra[i].rnti);
-    ra[i].state = IDLE;
+    LOG_I(MAC,"[eNB %d][RAPROC] CC_id %d Frame %d Clear Random access information rnti %x\n", module_idP, CC_id, frameP, ra[i].rnti);
+    ra[i].eRA_state = IDLE;
     ra[i].timing_offset = 0;
     ra[i].RRC_timer = 20;
     ra[i].rnti = 0;

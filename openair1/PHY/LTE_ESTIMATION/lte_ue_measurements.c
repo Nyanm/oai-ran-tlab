@@ -187,7 +187,7 @@ void ue_rrc_measurements(PHY_VARS_UE *ue,
   uint16_t off;
   uint8_t previous_thread_id = ue->current_thread_id[subframe]==0 ? (RX_NB_TH-1):(ue->current_thread_id[subframe]-1);
 
-   //uint8_t isPss; // indicate if this is a slot for extracting PSS
+  //uint8_t isPss; // indicate if this is a slot for extracting PSS
   //uint8_t isSss; // indicate if this is a slot for extracting SSS
   //int32_t pss_ext[4][72]; // contain the extracted 6*12 REs for mapping the PSS
   //int32_t sss_ext[4][72]; // contain the extracted 6*12 REs for mapping the SSS
@@ -460,81 +460,62 @@ void conjch0_mult_ch1(int *ch0,
                       unsigned char output_shift0)
 {
   //This function is used to compute multiplications in Hhermitian * H matrix
-  unsigned short rb;
-  __m128i *dl_ch0_128,*dl_ch1_128, *ch0conj_ch1_128, mmtmpD0,mmtmpD1,mmtmpD2,mmtmpD3;
+  simde__m128i *dl_ch0_128 = (simde__m128i *)ch0;
+  simde__m128i *dl_ch1_128 = (simde__m128i *)ch1;
 
-  dl_ch0_128 = (__m128i *)ch0;
-  dl_ch1_128 = (__m128i *)ch1;
+  simde__m128i *ch0conj_ch1_128 = (simde__m128i *)ch0conj_ch1;
 
-  ch0conj_ch1_128 = (__m128i *)ch0conj_ch1;
+  for (unsigned short rb=0; rb<3*nb_rb; rb++) {
 
-  for (rb=0; rb<3*nb_rb; rb++) {
-
-    mmtmpD0 = _mm_madd_epi16(dl_ch0_128[0],dl_ch1_128[0]);
-    mmtmpD1 = _mm_shufflelo_epi16(dl_ch0_128[0],_MM_SHUFFLE(2,3,0,1));
-    mmtmpD1 = _mm_shufflehi_epi16(mmtmpD1,_MM_SHUFFLE(2,3,0,1));
-    mmtmpD1 = _mm_sign_epi16(mmtmpD1,*(__m128i*)&conjugate[0]);
-    mmtmpD1 = _mm_madd_epi16(mmtmpD1,dl_ch1_128[0]);
-    mmtmpD0 = _mm_srai_epi32(mmtmpD0,output_shift0);
-    mmtmpD1 = _mm_srai_epi32(mmtmpD1,output_shift0);
-    mmtmpD2 = _mm_unpacklo_epi32(mmtmpD0,mmtmpD1);
-    mmtmpD3 = _mm_unpackhi_epi32(mmtmpD0,mmtmpD1);
-
-    ch0conj_ch1_128[0] = _mm_packs_epi32(mmtmpD2,mmtmpD3);
+    ch0conj_ch1_128[rb] = oai_mm_cpx_mult_conj(dl_ch0_128[rb], dl_ch1_128[rb], output_shift0);
 
 #ifdef DEBUG_RANK_EST
     printf("\n Computing conjugates \n");
-    print_shorts("ch0:",(int16_t*)&dl_ch0_128[0]);
-    print_shorts("ch1:",(int16_t*)&dl_ch1_128[0]);
-    print_shorts("pack:",(int16_t*)&ch0conj_ch1_128[0]);
+    print_shorts("ch0:",(int16_t*)&dl_ch0_128[rb]);
+    print_shorts("ch1:",(int16_t*)&dl_ch1_128[rb]);
+    print_shorts("pack:",(int16_t*)&ch0conj_ch1_128[rb]);
 #endif
 
-    dl_ch0_128+=1;
-    dl_ch1_128+=1;
-    ch0conj_ch1_128+=1;
   }
-  _mm_empty();
-  _m_empty();
 }
 
 void construct_HhH_elements(int *ch0conj_ch0, //00_00
-                            int *ch1conj_ch1,//01_01
-                            int *ch2conj_ch2,//11_11
-                            int *ch3conj_ch3,//10_10
-                            int *ch0conj_ch1,//00_01
-                            int *ch1conj_ch0,//01_00
-                            int *ch2conj_ch3,//10_11
-                            int *ch3conj_ch2,//11_10
+                            int *ch1conj_ch1, //01_01
+                            int *ch2conj_ch2, //11_11
+                            int *ch3conj_ch3, //10_10
+                            int *ch0conj_ch1, //00_01
+                            int *ch1conj_ch0, //01_00
+                            int *ch2conj_ch3, //10_11
+                            int *ch3conj_ch2, //11_10
                             int32_t *after_mf_00,
                             int32_t *after_mf_01,
                             int32_t *after_mf_10,
                             int32_t *after_mf_11,
                             unsigned short nb_rb)
 {
-  unsigned short rb;
-  __m128i *ch0conj_ch0_128, *ch1conj_ch1_128, *ch2conj_ch2_128, *ch3conj_ch3_128;
-  __m128i *ch0conj_ch1_128, *ch1conj_ch0_128, *ch2conj_ch3_128, *ch3conj_ch2_128;
-  __m128i *after_mf_00_128, *after_mf_01_128, *after_mf_10_128, *after_mf_11_128;
 
-  ch0conj_ch0_128 = (__m128i *)ch0conj_ch0;
-  ch1conj_ch1_128 = (__m128i *)ch1conj_ch1;
-  ch2conj_ch2_128 = (__m128i *)ch2conj_ch2;
-  ch3conj_ch3_128 = (__m128i *)ch3conj_ch3;
-  ch0conj_ch1_128 = (__m128i *)ch0conj_ch1;
-  ch1conj_ch0_128 = (__m128i *)ch1conj_ch0;
-  ch2conj_ch3_128 = (__m128i *)ch2conj_ch3;
-  ch3conj_ch2_128 = (__m128i *)ch3conj_ch2;
-  after_mf_00_128 = (__m128i *)after_mf_00;
-  after_mf_01_128 = (__m128i *)after_mf_01;
-  after_mf_10_128 = (__m128i *)after_mf_10;
-  after_mf_11_128 = (__m128i *)after_mf_11;
+  simde__m128i *ch0conj_ch0_128, *ch1conj_ch1_128, *ch2conj_ch2_128, *ch3conj_ch3_128;
+  simde__m128i *ch0conj_ch1_128, *ch1conj_ch0_128, *ch2conj_ch3_128, *ch3conj_ch2_128;
+  simde__m128i *after_mf_00_128, *after_mf_01_128, *after_mf_10_128, *after_mf_11_128;
 
-  for (rb=0; rb<3*nb_rb; rb++) {
+  ch0conj_ch0_128 = (simde__m128i *)ch0conj_ch0;
+  ch1conj_ch1_128 = (simde__m128i *)ch1conj_ch1;
+  ch2conj_ch2_128 = (simde__m128i *)ch2conj_ch2;
+  ch3conj_ch3_128 = (simde__m128i *)ch3conj_ch3;
+  ch0conj_ch1_128 = (simde__m128i *)ch0conj_ch1;
+  ch1conj_ch0_128 = (simde__m128i *)ch1conj_ch0;
+  ch2conj_ch3_128 = (simde__m128i *)ch2conj_ch3;
+  ch3conj_ch2_128 = (simde__m128i *)ch3conj_ch2;
+  after_mf_00_128 = (simde__m128i *)after_mf_00;
+  after_mf_01_128 = (simde__m128i *)after_mf_01;
+  after_mf_10_128 = (simde__m128i *)after_mf_10;
+  after_mf_11_128 = (simde__m128i *)after_mf_11;
 
-    after_mf_00_128[0] =_mm_adds_epi16(ch0conj_ch0_128[0],ch3conj_ch3_128[0]);// _mm_adds_epi32(ch0conj_ch0_128[0], ch3conj_ch3_128[0]); //00_00 + 10_10
-    after_mf_11_128[0] =_mm_adds_epi16(ch1conj_ch1_128[0], ch2conj_ch2_128[0]); //01_01 + 11_11
-    after_mf_01_128[0] =_mm_adds_epi16(ch0conj_ch1_128[0], ch2conj_ch3_128[0]);//00_01 + 10_11
-    after_mf_10_128[0] =_mm_adds_epi16(ch1conj_ch0_128[0], ch3conj_ch2_128[0]);//01_00 + 11_10
+  for (unsigned short rb=0; rb<3*nb_rb; rb++) {
+    after_mf_00_128[0] = simde_mm_adds_epi16(ch0conj_ch0_128[0], ch3conj_ch3_128[0]); //00_00 + 10_10 simde_mm_adds_epi32(ch0conj_ch0_128[0], ch3conj_ch3_128[0]);
+    after_mf_11_128[0] = simde_mm_adds_epi16(ch1conj_ch1_128[0], ch2conj_ch2_128[0]); //01_01 + 11_11
+    after_mf_01_128[0] = simde_mm_adds_epi16(ch0conj_ch1_128[0], ch2conj_ch3_128[0]); //00_01 + 10_11
+    after_mf_10_128[0] = simde_mm_adds_epi16(ch1conj_ch0_128[0], ch3conj_ch2_128[0]); //01_00 + 11_10
 
 #ifdef DEBUG_RANK_EST
     printf(" \n construct_HhH_elements \n");
@@ -566,8 +547,6 @@ void construct_HhH_elements(int *ch0conj_ch0, //00_00
     after_mf_10_128+=1;
     after_mf_11_128+=1;
   }
-  _mm_empty();
-  _m_empty();
 }
 
 
@@ -575,15 +554,15 @@ void squared_matrix_element(int32_t *Hh_h_00,
                             int32_t *Hh_h_00_sq,
                             unsigned short nb_rb)
 {
-   unsigned short rb;
-  __m128i *Hh_h_00_128,*Hh_h_00_sq_128;
 
-  Hh_h_00_128 = (__m128i *)Hh_h_00;
-  Hh_h_00_sq_128 = (__m128i *)Hh_h_00_sq;
+  simde__m128i *Hh_h_00_128,*Hh_h_00_sq_128;
 
-  for (rb=0; rb<3*nb_rb; rb++) {
+  Hh_h_00_128 = (simde__m128i *)Hh_h_00;
+  Hh_h_00_sq_128 = (simde__m128i *)Hh_h_00_sq;
 
-    Hh_h_00_sq_128[0] = _mm_madd_epi16(Hh_h_00_128[0],Hh_h_00_128[0]);
+  for (unsigned short rb=0; rb<3*nb_rb; rb++) {
+
+    Hh_h_00_sq_128[0] = simde_mm_madd_epi16(Hh_h_00_128[0],Hh_h_00_128[0]);
 
 #ifdef DEBUG_RANK_EST
     printf("\n Computing squared_matrix_element \n");
@@ -594,8 +573,6 @@ void squared_matrix_element(int32_t *Hh_h_00,
     Hh_h_00_sq_128+=1;
     Hh_h_00_128+=1;
   }
-  _mm_empty();
-  _m_empty();
 }
 
 
@@ -609,23 +586,23 @@ void det_HhH(int32_t *after_mf_00,
 
 {
   unsigned short rb;
-  __m128i *after_mf_00_128,*after_mf_01_128, *after_mf_11_128, ad_re_128, bc_re_128;
+  simde__m128i *after_mf_00_128, *after_mf_01_128, *after_mf_11_128, ad_re_128, bc_re_128;
   //__m128i *after_mf_10_128; // the variable is only written, but leave it here for "symmetry" in the algorithm
-  __m128i *det_fin_128, det_128;
+  simde__m128i *det_fin_128, det_128;
 
-  after_mf_00_128 = (__m128i *)after_mf_00;
-  after_mf_01_128 = (__m128i *)after_mf_01;
+  after_mf_00_128 = (simde__m128i *)after_mf_00;
+  after_mf_01_128 = (simde__m128i *)after_mf_01;
   //after_mf_10_128 = (__m128i *)after_mf_10;
-  after_mf_11_128 = (__m128i *)after_mf_11;
+  after_mf_11_128 = (simde__m128i *)after_mf_11;
 
-  det_fin_128 = (__m128i *)det_fin;
+  det_fin_128 = (simde__m128i *)det_fin;
 
   for (rb=0; rb<3*nb_rb; rb++) {
 
-    ad_re_128 = _mm_madd_epi16(after_mf_00_128[0],after_mf_11_128[0]);
-    bc_re_128 = _mm_madd_epi16(after_mf_01_128[0],after_mf_01_128[0]);
-    det_128 = _mm_sub_epi32(ad_re_128, bc_re_128);
-    det_fin_128[0] = _mm_abs_epi32(det_128);
+    ad_re_128 = simde_mm_madd_epi16(after_mf_00_128[0],after_mf_11_128[0]);
+    bc_re_128 = simde_mm_madd_epi16(after_mf_01_128[0],after_mf_01_128[0]);
+    det_128 = simde_mm_sub_epi32(ad_re_128, bc_re_128);
+    det_fin_128[0] = simde_mm_abs_epi32(det_128);
 
 #ifdef DEBUG_RANK_EST
     printf("\n Computing denominator \n");
@@ -636,7 +613,7 @@ void det_HhH(int32_t *after_mf_00,
     print_ints("ad_re_128:",(int32_t*)&ad_re_128);
     print_ints("bc_re_128:",(int32_t*)&bc_re_128);
     print_ints("det_fin_128:",(int32_t*)&det_fin_128[0]);
-#endif
+#endif 
 
     det_fin_128+=1;
     after_mf_00_128+=1;
@@ -644,8 +621,6 @@ void det_HhH(int32_t *after_mf_00,
     //after_mf_10_128+=1;
     after_mf_11_128+=1;
   }
-  _mm_empty();
-  _m_empty();
 }
 
 void numer(int32_t *Hh_h_00_sq,
@@ -656,22 +631,22 @@ void numer(int32_t *Hh_h_00_sq,
            unsigned short nb_rb)
 
 {
-  unsigned short rb;
-  __m128i *h_h_00_sq_128, *h_h_01_sq_128, *h_h_10_sq_128, *h_h_11_sq_128;
-  __m128i *num_fin_128, sq_a_plus_sq_d_128, sq_b_plus_sq_c_128;
 
-  h_h_00_sq_128 = (__m128i *)Hh_h_00_sq;
-  h_h_01_sq_128 = (__m128i *)Hh_h_01_sq;
-  h_h_10_sq_128 = (__m128i *)Hh_h_10_sq;
-  h_h_11_sq_128 = (__m128i *)Hh_h_11_sq;
+  simde__m128i *h_h_00_sq_128, *h_h_01_sq_128, *h_h_10_sq_128, *h_h_11_sq_128;
+  simde__m128i *num_fin_128, sq_a_plus_sq_d_128, sq_b_plus_sq_c_128;
 
-  num_fin_128 = (__m128i *)num_fin;
+  h_h_00_sq_128 = (simde__m128i *)Hh_h_00_sq;
+  h_h_01_sq_128 = (simde__m128i *)Hh_h_01_sq;
+  h_h_10_sq_128 = (simde__m128i *)Hh_h_10_sq;
+  h_h_11_sq_128 = (simde__m128i *)Hh_h_11_sq;
 
-  for (rb=0; rb<3*nb_rb; rb++) {
+  num_fin_128 = (simde__m128i *)num_fin;
 
-    sq_a_plus_sq_d_128 = _mm_add_epi32(h_h_00_sq_128[0],h_h_11_sq_128[0]);
-    sq_b_plus_sq_c_128 = _mm_add_epi32(h_h_01_sq_128[0],h_h_10_sq_128[0]);
-    num_fin_128[0] = _mm_add_epi32(sq_a_plus_sq_d_128, sq_b_plus_sq_c_128);
+  for (unsigned short rb=0; rb<3*nb_rb; rb++) {
+
+    sq_a_plus_sq_d_128 = simde_mm_add_epi32(h_h_00_sq_128[0],h_h_11_sq_128[0]);
+    sq_b_plus_sq_c_128 = simde_mm_add_epi32(h_h_01_sq_128[0],h_h_10_sq_128[0]);
+    num_fin_128[0] = simde_mm_add_epi32(sq_a_plus_sq_d_128, sq_b_plus_sq_c_128);
 
 #ifdef DEBUG_RANK_EST
     printf("\n Computing numerator \n");
@@ -690,8 +665,6 @@ void numer(int32_t *Hh_h_00_sq,
     h_h_10_sq_128+=1;
     h_h_11_sq_128+=1;
   }
-  _mm_empty();
-  _m_empty();
 }
 
 void dlsch_channel_level_TM34_meas(int *ch00,
@@ -703,39 +676,36 @@ void dlsch_channel_level_TM34_meas(int *ch00,
                                    unsigned short nb_rb)
 {
 
-#if defined(__x86_64__)||defined(__i386__)
-
-  short rb;
   unsigned char nre=12;
-  __m128i *ch00_128, *ch01_128, *ch10_128, *ch11_128;
-  __m128i avg_0_row0_128D, avg_1_row0_128D, avg_0_row1_128D, avg_1_row1_128D;
-  __m128i ch00_128_tmp, ch01_128_tmp, ch10_128_tmp, ch11_128_tmp;
+  simde__m128i *ch00_128, *ch01_128, *ch10_128, *ch11_128;
+  simde__m128i avg_0_row0_128D, avg_1_row0_128D, avg_0_row1_128D, avg_1_row1_128D;
+  simde__m128i ch00_128_tmp, ch01_128_tmp, ch10_128_tmp, ch11_128_tmp;
 
   avg_0[0] = 0;
   avg_0[1] = 0;
   avg_1[0] = 0;
   avg_1[1] = 0;
 
-  ch00_128 = (__m128i *)ch00;
-  ch01_128 = (__m128i *)ch01;
-  ch10_128 = (__m128i *)ch10;
-  ch11_128 = (__m128i *)ch11;
+  ch00_128 = (simde__m128i *)ch00;
+  ch01_128 = (simde__m128i *)ch01;
+  ch10_128 = (simde__m128i *)ch10;
+  ch11_128 = (simde__m128i *)ch11;
 
-  avg_0_row0_128D = _mm_setzero_si128();
-  avg_1_row0_128D = _mm_setzero_si128();
-  avg_0_row1_128D = _mm_setzero_si128();
-  avg_1_row1_128D = _mm_setzero_si128();
+  avg_0_row0_128D = simde_mm_setzero_si128();
+  avg_1_row0_128D = simde_mm_setzero_si128();
+  avg_0_row1_128D = simde_mm_setzero_si128();
+  avg_1_row1_128D = simde_mm_setzero_si128();
 
-  for (rb=0; rb<3*nb_rb; rb++) {
-    ch00_128_tmp = _mm_load_si128(&ch00_128[0]);
-    ch01_128_tmp = _mm_load_si128(&ch01_128[0]);
-    ch10_128_tmp = _mm_load_si128(&ch10_128[0]);
-    ch11_128_tmp = _mm_load_si128(&ch11_128[0]);
+  for (short rb=0; rb<3*nb_rb; rb++) {
+    ch00_128_tmp = simde_mm_load_si128(&ch00_128[0]);
+    ch01_128_tmp = simde_mm_load_si128(&ch01_128[0]);
+    ch10_128_tmp = simde_mm_load_si128(&ch10_128[0]);
+    ch11_128_tmp = simde_mm_load_si128(&ch11_128[0]);
 
-    avg_0_row0_128D = _mm_add_epi32(avg_0_row0_128D,_mm_madd_epi16(ch00_128_tmp,ch00_128_tmp));
-    avg_1_row0_128D = _mm_add_epi32(avg_1_row0_128D,_mm_madd_epi16(ch01_128_tmp,ch01_128_tmp));
-    avg_0_row1_128D = _mm_add_epi32(avg_0_row1_128D,_mm_madd_epi16(ch10_128_tmp,ch10_128_tmp));
-    avg_1_row1_128D = _mm_add_epi32(avg_1_row1_128D,_mm_madd_epi16(ch11_128_tmp,ch11_128_tmp));
+    avg_0_row0_128D = simde_mm_add_epi32(avg_0_row0_128D,simde_mm_madd_epi16(ch00_128_tmp,ch00_128_tmp));
+    avg_1_row0_128D = simde_mm_add_epi32(avg_1_row0_128D,simde_mm_madd_epi16(ch01_128_tmp,ch01_128_tmp));
+    avg_0_row1_128D = simde_mm_add_epi32(avg_0_row1_128D,simde_mm_madd_epi16(ch10_128_tmp,ch10_128_tmp));
+    avg_1_row1_128D = simde_mm_add_epi32(avg_1_row1_128D,simde_mm_madd_epi16(ch11_128_tmp,ch11_128_tmp));
 
     ch00_128+=1;
     ch01_128+=1;
@@ -768,12 +738,7 @@ void dlsch_channel_level_TM34_meas(int *ch00,
   avg_0[0] = min (avg_0[0], avg_1[0]);
   avg_1[0] = avg_0[0];
 
-  _mm_empty();
-  _m_empty();
 
-#elif defined(__arm__) || defined(__aarch64__)
-
-#endif
 }
 
 uint8_t rank_estimation_tm3_tm4 (int *dl_ch_estimates_00, // please respect the order of channel estimates
@@ -1019,11 +984,7 @@ void lte_ue_measurements(PHY_VARS_UE *ue,
   //int rx_power[NUMBER_OF_CONNECTED_eNB_MAX];
   int i;
   unsigned int limit,subband;
-#if defined(__x86_64__) || defined(__i386__)
-  __m128i *dl_ch0_128,*dl_ch1_128;
-#elif defined(__arm__) || defined(__aarch64__)
-  int16x8_t *dl_ch0_128, *dl_ch1_128;
-#endif
+  simde__m128i *dl_ch0_128, *dl_ch1_128;
   int *dl_ch0=NULL,*dl_ch1=NULL;
 
   LTE_DL_FRAME_PARMS *frame_parms = &ue->frame_parms;
@@ -1069,7 +1030,7 @@ void lte_ue_measurements(PHY_VARS_UE *ue,
     for (aarx=0; aarx<frame_parms->nb_antennas_rx; aarx++) {
       for (aatx=0; aatx<frame_parms->nb_antenna_ports_eNB; aatx++) {
         ue->measurements.rx_spatial_power[eNB_id][aatx][aarx] =
-          (signal_energy_nodc(&ue->common_vars.common_vars_rx_data_per_thread[ue->current_thread_id[subframe]].dl_ch_estimates[eNB_id][(aatx<<1) + aarx][0],
+          (signal_energy_nodc((c16_t*)&ue->common_vars.common_vars_rx_data_per_thread[ue->current_thread_id[subframe]].dl_ch_estimates[eNB_id][(aatx<<1) + aarx][0],
                               (N_RB_DL*12)));
         //- ue->measurements.n0_power[aarx];
 
@@ -1176,7 +1137,7 @@ void lte_ue_measurements(PHY_VARS_UE *ue,
             msg("subband %d (%d) : %d,%d\n",subband,i,((short *)dl_ch0)[2*i],((short *)dl_ch0)[1+(2*i)]);
             */
             ue->measurements.subband_cqi[eNB_id][aarx][subband] =
-              (signal_energy_nodc(dl_ch0,subband_size) + signal_energy_nodc(dl_ch1,subband_size));
+              (signal_energy_nodc((c16_t*)dl_ch0,subband_size) + signal_energy_nodc((c16_t*)dl_ch1,subband_size));
 
             if ( ue->measurements.subband_cqi[eNB_id][aarx][subband] < 0)
               ue->measurements.subband_cqi[eNB_id][aarx][subband]=0;
@@ -1192,8 +1153,8 @@ void lte_ue_measurements(PHY_VARS_UE *ue,
           } else { // this is for the last subband which is smaller in size
             //      for (i=0;i<12;i++)
             //        printf("subband %d (%d) : %d,%d\n",subband,i,((short *)dl_ch0)[2*i],((short *)dl_ch0)[1+(2*i)]);
-            ue->measurements.subband_cqi[eNB_id][aarx][subband] = (signal_energy_nodc(dl_ch0,last_subband_size) +
-                signal_energy_nodc(dl_ch1,last_subband_size)); // - ue->measurements.n0_power[aarx];
+            ue->measurements.subband_cqi[eNB_id][aarx][subband] = (signal_energy_nodc((c16_t*)dl_ch0,last_subband_size) +
+                signal_energy_nodc((c16_t*)dl_ch1,last_subband_size)); // - ue->measurements.n0_power[aarx];
             ue->measurements.subband_cqi_tot[eNB_id][subband] += ue->measurements.subband_cqi[eNB_id][aarx][subband];
             ue->measurements.subband_cqi_dB[eNB_id][aarx][subband] = dB_fixed2(ue->measurements.subband_cqi[eNB_id][aarx][subband],
                 ue->measurements.n0_power[aarx]);
@@ -1215,31 +1176,17 @@ void lte_ue_measurements(PHY_VARS_UE *ue,
         //printf("aarx=%d", aarx);
         // skip the first 4 RE due to interpolation filter length of 5 (not possible to skip 5 due to 128i alignment, must be multiple of 128bit)
 
-#if defined(__x86_64__) || defined(__i386__)
-       __m128i pmi128_re,pmi128_im,mmtmpPMI0,mmtmpPMI1 /* ,mmtmpPMI2,mmtmpPMI3 */ ;
+       simde__m128i pmi128_re,pmi128_im,mmtmpPMI0,mmtmpPMI1 /* ,mmtmpPMI2,mmtmpPMI3 */ ;
 
-        dl_ch0_128    = (__m128i *)&ue->common_vars.common_vars_rx_data_per_thread[ue->current_thread_id[subframe]].dl_ch_estimates[eNB_id][aarx][4];
-        dl_ch1_128    = (__m128i *)&ue->common_vars.common_vars_rx_data_per_thread[ue->current_thread_id[subframe]].dl_ch_estimates[eNB_id][2+aarx][4];
-#elif defined(__arm__) || defined(__aarch64__)
-        int32x4_t pmi128_re,pmi128_im,mmtmpPMI0,mmtmpPMI1,mmtmpPMI0b,mmtmpPMI1b;
-
-        dl_ch0_128    = (int16x8_t *)&ue->common_vars.common_vars_rx_data_per_thread[ue->current_thread_id[subframe]].dl_ch_estimates[eNB_id][aarx][4];
-        dl_ch1_128    = (int16x8_t *)&ue->common_vars.common_vars_rx_data_per_thread[ue->current_thread_id[subframe]].dl_ch_estimates[eNB_id][2+aarx][4];
-
-#endif
+        dl_ch0_128    = (simde__m128i *)&ue->common_vars.common_vars_rx_data_per_thread[ue->current_thread_id[subframe]].dl_ch_estimates[eNB_id][aarx][4];
+        dl_ch1_128    = (simde__m128i *)&ue->common_vars.common_vars_rx_data_per_thread[ue->current_thread_id[subframe]].dl_ch_estimates[eNB_id][2+aarx][4];
         for (subband=0; subband<nb_subbands; subband++) {
 
 
           // pmi
-#if defined(__x86_64__) || defined(__i386__)
 
-          pmi128_re = _mm_xor_si128(pmi128_re,pmi128_re);
-          pmi128_im = _mm_xor_si128(pmi128_im,pmi128_im);
-#elif defined(__arm__) || defined(__aarch64__)
-
-          pmi128_re = vdupq_n_s32(0);
-          pmi128_im = vdupq_n_s32(0);
-#endif
+          pmi128_re = simde_mm_xor_si128(pmi128_re,pmi128_re);
+          pmi128_im = simde_mm_xor_si128(pmi128_im,pmi128_im);
           // limit is the number of groups of 4 REs in a subband (12 = 4 RBs, 3 = 1 RB)
           // for 5 MHz channelization, there are 7 subbands, 6 of size 4 RBs and 1 of size 1 RB
           if ((N_RB_DL==6) || (subband<(nb_subbands-1)))
@@ -1249,61 +1196,42 @@ void lte_ue_measurements(PHY_VARS_UE *ue,
 
           for (i=0; i<limit; i++) {
 
-#if defined(__x86_64__) || defined(__i386__)
-              mmtmpPMI0 = _mm_xor_si128(mmtmpPMI0,mmtmpPMI0);
-              mmtmpPMI1 = _mm_xor_si128(mmtmpPMI1,mmtmpPMI1);
+              mmtmpPMI0 = simde_mm_xor_si128(mmtmpPMI0,mmtmpPMI0);
+              mmtmpPMI1 = simde_mm_xor_si128(mmtmpPMI1,mmtmpPMI1);
 
             // For each RE in subband perform ch0 * conj(ch1)
             // multiply by conjugated channel
                 //  print_ints("ch0",&dl_ch0_128[0]);
                 //  print_ints("ch1",&dl_ch1_128[0]);
-
-            mmtmpPMI0 = _mm_madd_epi16(dl_ch0_128[0],dl_ch1_128[0]);
+            mmtmpPMI0 = simde_mm_madd_epi16(dl_ch0_128[0],dl_ch1_128[0]);
                  //  print_ints("re",&mmtmpPMI0);
-            mmtmpPMI1 = _mm_shufflelo_epi16(dl_ch1_128[0],_MM_SHUFFLE(2,3,0,1));
-              //  print_ints("_mm_shufflelo_epi16",&mmtmpPMI1);
-            mmtmpPMI1 = _mm_shufflehi_epi16(mmtmpPMI1,_MM_SHUFFLE(2,3,0,1));
-                //  print_ints("_mm_shufflehi_epi16",&mmtmpPMI1);
-            mmtmpPMI1 = _mm_sign_epi16(mmtmpPMI1,*(__m128i*)&conjugate[0]);
-               //  print_ints("_mm_sign_epi16",&mmtmpPMI1);
-            mmtmpPMI1 = _mm_madd_epi16(mmtmpPMI1,dl_ch0_128[0]);
+            mmtmpPMI1 = simde_mm_madd_epi16(oai_mm_swap(oai_mm_conj(dl_ch1_128[0])),dl_ch0_128[0]);
                //   print_ints("mm_madd_epi16",&mmtmpPMI1);
             // mmtmpPMI1 contains imag part of 4 consecutive outputs (32-bit)
-            pmi128_re = _mm_add_epi32(pmi128_re,mmtmpPMI0);
+            pmi128_re = simde_mm_add_epi32(pmi128_re,mmtmpPMI0);
              //   print_ints(" pmi128_re 0",&pmi128_re);
-            pmi128_im = _mm_add_epi32(pmi128_im,mmtmpPMI1);
+            pmi128_im = simde_mm_add_epi32(pmi128_im,mmtmpPMI1);
                //   print_ints(" pmi128_im 0 ",&pmi128_im);
 
-          /*  mmtmpPMI0 = _mm_xor_si128(mmtmpPMI0,mmtmpPMI0);
-            mmtmpPMI1 = _mm_xor_si128(mmtmpPMI1,mmtmpPMI1);
+            /*  mmtmpPMI0 = simde_mm_xor_si128(mmtmpPMI0,mmtmpPMI0);
+              mmtmpPMI1 = simde_mm_xor_si128(mmtmpPMI1,mmtmpPMI1);
 
-            mmtmpPMI0 = _mm_madd_epi16(dl_ch0_128[1],dl_ch1_128[1]);
-                 //  print_ints("re",&mmtmpPMI0);
-            mmtmpPMI1 = _mm_shufflelo_epi16(dl_ch1_128[1],_MM_SHUFFLE(2,3,0,1));
-              //  print_ints("_mm_shufflelo_epi16",&mmtmpPMI1);
-            mmtmpPMI1 = _mm_shufflehi_epi16(mmtmpPMI1,_MM_SHUFFLE(2,3,0,1));
-                //  print_ints("_mm_shufflehi_epi16",&mmtmpPMI1);
-            mmtmpPMI1 = _mm_sign_epi16(mmtmpPMI1,*(__m128i*)&conjugate);
-               //  print_ints("_mm_sign_epi16",&mmtmpPMI1);
-            mmtmpPMI1 = _mm_madd_epi16(mmtmpPMI1,dl_ch0_128[1]);
-               //   print_ints("mm_madd_epi16",&mmtmpPMI1);
-            // mmtmpPMI1 contains imag part of 4 consecutive outputs (32-bit)
-            pmi128_re = _mm_add_epi32(pmi128_re,mmtmpPMI0);
-                //  print_ints(" pmi128_re 1",&pmi128_re);
-            pmi128_im = _mm_add_epi32(pmi128_im,mmtmpPMI1);
-            //print_ints(" pmi128_im 1 ",&pmi128_im);*/
+              mmtmpPMI0 = simde_mm_madd_epi16(dl_ch0_128[1],dl_ch1_128[1]);
+                   //  print_ints("re",&mmtmpPMI0);
+              mmtmpPMI1 = simde_mm_shufflelo_epi16(dl_ch1_128[1], SIMDE_MM_SHUFFLE(2,3,0,1));
+                //  print_ints("_mm_shufflelo_epi16",&mmtmpPMI1);
+              mmtmpPMI1 = simde_mm_shufflehi_epi16(mmtmpPMI1, SIMDE_MM_SHUFFLE(2,3,0,1));
+                  //  print_ints("_mm_shufflehi_epi16",&mmtmpPMI1);
+              mmtmpPMI1 = simde_mm_sign_epi16(mmtmpPMI1,*(simde__m128i*)&conjugate);
+                 //  print_ints("_mm_sign_epi16",&mmtmpPMI1);
+              mmtmpPMI1 = simde_mm_madd_epi16(mmtmpPMI1,dl_ch0_128[1]);
+                 //   print_ints("mm_madd_epi16",&mmtmpPMI1);
+              // mmtmpPMI1 contains imag part of 4 consecutive outputs (32-bit)
+              pmi128_re = simde_mm_add_epi32(pmi128_re,mmtmpPMI0);
+                  //  print_ints(" pmi128_re 1",&pmi128_re);
+              pmi128_im = simde_mm_add_epi32(pmi128_im,mmtmpPMI1);
+              //print_ints(" pmi128_im 1 ",&pmi128_im);*/
 
-#elif defined(__arm__) || defined(__aarch64__)
-
-            mmtmpPMI0 = vmull_s16(((int16x4_t*)dl_ch0_128)[0], ((int16x4_t*)dl_ch1_128)[0]);
-            mmtmpPMI1 = vmull_s16(((int16x4_t*)dl_ch0_128)[1], ((int16x4_t*)dl_ch1_128)[1]);
-            pmi128_re = vqaddq_s32(pmi128_re,vcombine_s32(vpadd_s32(vget_low_s32(mmtmpPMI0),vget_high_s32(mmtmpPMI0)),vpadd_s32(vget_low_s32(mmtmpPMI1),vget_high_s32(mmtmpPMI1))));
-
-            mmtmpPMI0b = vmull_s16(vrev32_s16(vmul_s16(((int16x4_t*)dl_ch0_128)[0],*(int16x4_t*)conjugate)), ((int16x4_t*)dl_ch1_128)[0]);
-            mmtmpPMI1b = vmull_s16(vrev32_s16(vmul_s16(((int16x4_t*)dl_ch0_128)[1],*(int16x4_t*)conjugate)), ((int16x4_t*)dl_ch1_128)[1]);
-            pmi128_im = vqaddq_s32(pmi128_im,vcombine_s32(vpadd_s32(vget_low_s32(mmtmpPMI0b),vget_high_s32(mmtmpPMI0b)),vpadd_s32(vget_low_s32(mmtmpPMI1b),vget_high_s32(mmtmpPMI1b))));
-
-#endif
             dl_ch0_128++;
             dl_ch1_128++;
           }
@@ -1330,7 +1258,7 @@ void lte_ue_measurements(PHY_VARS_UE *ue,
             //      for (i=0;i<48;i++)
             //        printf("subband %d (%d) : %d,%d\n",subband,i,((short *)dl_ch0)[2*i],((short *)dl_ch0)[1+(2*i)]);
             ue->measurements.subband_cqi[eNB_id][aarx][subband] =
-              (signal_energy_nodc(dl_ch0,48) ) - ue->measurements.n0_power[aarx];
+              (signal_energy_nodc((c16_t*)dl_ch0,48) ) - ue->measurements.n0_power[aarx];
 
             ue->measurements.subband_cqi_tot[eNB_id][subband] += ue->measurements.subband_cqi[eNB_id][aarx][subband];
             ue->measurements.subband_cqi_dB[eNB_id][aarx][subband] = dB_fixed2(ue->measurements.subband_cqi[eNB_id][aarx][subband],
@@ -1338,7 +1266,7 @@ void lte_ue_measurements(PHY_VARS_UE *ue,
           } else {
             //      for (i=0;i<12;i++)
             //        printf("subband %d (%d) : %d,%d\n",subband,i,((short *)dl_ch0)[2*i],((short *)dl_ch0)[1+(2*i)]);
-            ue->measurements.subband_cqi[eNB_id][aarx][subband] = (signal_energy_nodc(dl_ch0,12) ) - ue->measurements.n0_power[aarx];
+            ue->measurements.subband_cqi[eNB_id][aarx][subband] = (signal_energy_nodc((c16_t*)dl_ch0,12) ) - ue->measurements.n0_power[aarx];
             ue->measurements.subband_cqi_tot[eNB_id][subband] += ue->measurements.subband_cqi[eNB_id][aarx][subband];
             ue->measurements.subband_cqi_dB[eNB_id][aarx][subband] = dB_fixed2(ue->measurements.subband_cqi[eNB_id][aarx][subband],
                 ue->measurements.n0_power[aarx]);
@@ -1372,10 +1300,6 @@ void lte_ue_measurements(PHY_VARS_UE *ue,
     // printf("in lte_ue_measurements: selected rx_antenna[eNB_id==0]:%u\n", ue->measurements.selected_rx_antennas[eNB_id][i]);
   }  // eNB_id loop
 
-#if defined(__x86_64__) || defined(__i386__)
-  _mm_empty();
-  _m_empty();
-#endif
 }
 
 

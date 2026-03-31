@@ -50,6 +50,7 @@ typedef enum {
 #define CHANMODEL_FREE_RSQRT_6     1<<1
 #define CHANMODEL_FREE_RSQRT_NTAPS 1<<2
 #define CHANMODEL_FREE_AMPS        1<<3
+#define SHR3 (jz = jsr, jsr ^= (jsr << 13), jsr ^= (jsr >> 17), jsr ^= (jsr << 5), jz + jsr)
 
 typedef enum {
   CORR_LEVEL_LOW,
@@ -76,6 +77,8 @@ typedef struct {
   struct complexd **a;
   ///interpolated (sample-spaced) channel impulse response. size(ch) = (n_tx * n_rx) * channel_length. ATTENTION: the dimensions of ch are the transposed ones of a. This is to allow the use of BLAS when applying the correlation matrices to the state.
   struct complexd **ch;
+  ///Same as above but single precision
+  struct complexf **ch_ps;
   ///Sampled frequency response (90 kHz resolution)
   struct complexd **chF;
   ///Maximum path delay in mus.
@@ -101,7 +104,7 @@ typedef struct {
   ///path loss including shadow fading in dB
   double path_loss_dB;
   ///additional delay of channel in samples.
-  int32_t channel_offset;
+  uint64_t channel_offset;
   float noise_power_dB;
   ///This parameter (0...1) allows for simple 1st order temporal variation. 0 means a new channel every call, 1 means keep channel constant all the time
   double forgetting_factor;
@@ -126,6 +129,20 @@ typedef struct {
   char *model_name;  
   /// flags to properly trigger memory free
   unsigned int free_flags;
+  /// time stamp when the time varying channel emulation starts (when client connected)
+  uint64_t start_TS;
+  /// height of LEO satellite
+  float sat_height;
+  /// flag to enable dynamic delay simulation for LEO satellite
+  bool enable_dynamic_delay;
+  /// flag to enable dynamic Doppler simulation for LEO satellite
+  bool enable_dynamic_Doppler;
+  /// Doppler phase increment (might vary over time, e.g. for LEO satellite)
+  float Doppler_phase_inc;
+  /// current Doppler phase of each RX antenna (for continuous phase from one block to the next)
+  float *Doppler_phase_cur;
+  /// flag indicating if channel direction is UL or DL
+  bool is_uplink;
 } channel_desc_t;
 
 typedef struct {
@@ -218,6 +235,8 @@ typedef enum {
   EPA_low,
   EPA_medium,
   EPA_high,
+  SAT_LEO_TRANS,
+  SAT_LEO_REGEN,
 } SCM_t;
 #define CHANNELMOD_MAP_INIT \
   {"custom",custom},\
@@ -253,6 +272,8 @@ typedef enum {
   {"EPA_low",EPA_low},\
   {"EPA_medium",EPA_medium},\
   {"EPA_high",EPA_high},\
+  {"SAT_LEO_TRANS",SAT_LEO_TRANS},\
+  {"SAT_LEO_REGEN",SAT_LEO_REGEN},\
   {NULL, -1}
 
 #define CONFIG_HLP_SNR     "Set average SNR in dB (for --siml1 option)\n"
@@ -262,12 +283,15 @@ typedef enum {
 #define CHANNELMOD_MODELLIST_PARANAME "modellist"
 
 #define CHANNELMOD_HELP_MODELLIST "<list name> channel list name in config file describing the model type and its parameters\n"
+#define CHANNELMOD_HELP_NOISE_POWER \
+  "Noise power in dBFS. If set, noise per channel is not applied. To achieve positive SNR use values below -36dBFS\n"
+
+#define INVALID_DBFS_VALUE 100
 // clang-format off
 #define CHANNELMOD_PARAMS_DESC {  \
-  {"s"      ,                     CONFIG_HLP_SNR,                     PARAMFLAG_CMDLINE_NOPREFIXENABLED,  .dblptr=&snr_dB,              .defdblval=25,                    TYPE_DOUBLE, 0}, \
-  {"sinr_dB",                     NULL,                               0,                                  .dblptr=&sinr_dB,             .defdblval=0 ,                    TYPE_DOUBLE, 0}, \
   {"max_chan",                    "Max number of runtime models",     0,                                  .uptr=&max_chan,              .defintval=10,                    TYPE_UINT,   0}, \
   {CHANNELMOD_MODELLIST_PARANAME, CHANNELMOD_HELP_MODELLIST,          0,                                  .strptr=&modellist_name,      .defstrval="DefaultChannelList",  TYPE_STRING, 0}, \
+  {"noise_power_dBFS",            CHANNELMOD_HELP_NOISE_POWER,        0,                                  .iptr=&noise_power_dBFS,      .defintval=INVALID_DBFS_VALUE,    TYPE_INT,    0 },\
 }
 // clang-format on
 
@@ -302,20 +326,12 @@ typedef struct {
   double r_re_UL[NUMBER_OF_eNB_MAX][2][30720];
   double r_im_UL[NUMBER_OF_eNB_MAX][2][30720];
   int RU_output_mask[NUMBER_OF_UE_MAX];
-  int UE_output_mask[NUMBER_OF_RU_MAX];
   pthread_mutex_t RU_output_mutex[NUMBER_OF_UE_MAX];
   pthread_mutex_t UE_output_mutex[NUMBER_OF_RU_MAX];
-  pthread_mutex_t subframe_mutex;
-  int subframe_ru_mask;
-  int subframe_UE_mask;
   openair0_timestamp current_ru_rx_timestamp[NUMBER_OF_RU_MAX][MAX_NUM_CCs];
   openair0_timestamp current_UE_rx_timestamp[MAX_MOBILES_PER_ENB][MAX_NUM_CCs];
-  openair0_timestamp last_ru_rx_timestamp[NUMBER_OF_RU_MAX][MAX_NUM_CCs];
-  openair0_timestamp last_UE_rx_timestamp[MAX_MOBILES_PER_ENB][MAX_NUM_CCs];
   double ru_amp[NUMBER_OF_RU_MAX];
-  pthread_t rfsim_thread;
 } sim_t;
-
 
 channel_desc_t *new_channel_desc_scm(uint8_t nb_tx,
                                      uint8_t nb_rx,
@@ -327,7 +343,7 @@ channel_desc_t *new_channel_desc_scm(uint8_t nb_tx,
                                      double maxDoppler,
                                      const corr_level_t corr_level,
                                      double forgetting_factor,
-                                     int32_t channel_offset,
+                                     uint64_t channel_offset,
                                      double path_loss_dB,
                                      float noise_power_dB);
 
@@ -346,17 +362,25 @@ void free_channel_desc_scm(channel_desc_t *ch);
 \param module_id identifies the channel model. should be define as a macro in simu.h
 */
 void set_channeldesc_owner(channel_desc_t *cdesc, channelmod_moduleid_t module_id);
+
 /**
 \brief This function set a model name to a model descriptor, can be later used to identify a allocated channel model
 \param cdesc points to the model descriptor
-\param module_name is the C string to use as model name for the channel pointed by cdesc
+\param modelname is the C string to use as model name for the channel pointed by cdesc
 */
 void set_channeldesc_name(channel_desc_t *cdesc,char *modelname);
+
+/**
+\brief This function set a channel model direction to either uplink or downlink
+\param cdesc points to the model descriptor
+\param is_uplink indicates if this channel is applied in uplink (not downlink) direction
+*/
+void set_channeldesc_direction(channel_desc_t *cdesc, bool is_uplink);
 
 /** \fn void get_cexp_doppler(struct complexd *cexp_doppler, channel_desc_t *chan_desc, const uint32_t length)
 \brief This routine generates the complex exponential to apply the Doppler shift
 \param cexp_doppler Output with the complex exponential of Doppler shift
-\param desc Pointer to the channel descriptor
+\param chan_desc Pointer to the channel descriptor
 \param length Size of complex exponential of Doppler shift
 */
 void get_cexp_doppler(struct complexd *cexp_doppler, channel_desc_t *chan_desc, const uint32_t length);
@@ -366,30 +390,6 @@ void get_cexp_doppler(struct complexd *cexp_doppler, channel_desc_t *chan_desc, 
 \param desc Pointer to the channel descriptor
 */
 int random_channel(channel_desc_t *desc, uint8_t abstraction_flag);
-
-/**
-\brief Add AWGN noise and phase noise if enabled
-\param rxdata output data with noise
-\param r_re real part of input data without noise
-\param r_im imaginary part of input data without noise
-\param sigma noise power
-\param length number of samples to apply the noise
-\param slot_offset slot offset to start applying the noise
-\param ts sampling time
-\param delay introduce delay in terms of number of samples
-\param pdu_bit_map bitmap indicating presence of optional PDUs
-\param nb_antennas_rx number of receive antennas
-*/
-void add_noise(c16_t **rxdata,
-               const double **r_re,
-               const double **r_im,
-               const double sigma,
-               const int length,
-               const int slot_offset,
-               const double ts,
-               const int delay,
-               const uint16_t pdu_bit_map,
-               const uint8_t nb_antennas_rx);
 
 /**\fn void multipath_channel(channel_desc_t *desc,
            double tx_sig_re[NB_ANTENNAS_TX],
@@ -466,9 +466,8 @@ void load_pbch_desc(FILE *pbch_file_fd);
 */
 unsigned int taus(void);
 
-
 /**
-\fn void set_taus_seed(unsigned int seed_init)
+\fn set_taus_seed
 \brief Sets the seed for the Tausworthe generator.
 @param seed_init 0 means generate based on CPU time, otherwise provide the seed
 */
@@ -552,21 +551,43 @@ int modelid_fromstrtype(char *modeltype);
 double channelmod_get_snr_dB(void);
 double channelmod_get_sinr_dB(void);
 void init_channelmod(void) ;
-int load_channellist(uint8_t nb_tx, uint8_t nb_rx, double sampling_rate, double channel_bandwidth) ;
+int load_channellist(uint8_t nb_tx, uint8_t nb_rx, double sampling_rate, uint64_t center_freq, double channel_bandwidth) ;
 double N_RB2sampling_rate(uint16_t N_RB);
 double N_RB2channel_bandwidth(uint16_t N_RB);
 
 /* Linear phase noise model */
-/*!
+/**
   \brief This function produce phase noise and add to input signal
-  \param ts Sampling time 
+  \param ts Sampling time
   \param *Re *Im Real and Imag part of the signal
 */
-//look-up table for the sine (cosine) function
-#define ResolSinCos 100
-void InitSinLUT( void );
-void phase_noise(double ts, int16_t * InRe, int16_t * InIm);
+void phase_noise(double ts, int16_t *InRe, int16_t *InIm);
 
+/**
+\brief Add AWGN noise and phase noise if enabled
+\param rxdata output data with noise
+\param r_re real part of input data without noise
+\param r_im imaginary part of input data without noise
+\param sigma noise power
+\param length number of samples to apply the noise
+\param slot_offset slot offset to start applying the noise
+\param ts sampling time
+\param delay introduce delay in terms of number of samples
+\param pdu_bit_map bitmap indicating presence of optional PDUs
+\param ptrs_bit_map
+\param nb_antennas_rx number of receive antennas
+*/
+void add_noise(c16_t **rxdata,
+               const double **r_re,
+               const double **r_im,
+               const double sigma,
+               const int length,
+               const int slot_offset,
+               const double ts,
+               const int delay,
+               const uint16_t pdu_bit_map,
+               const uint16_t ptrs_bit_map,
+               const uint8_t nb_antennas_rx);
 
 void do_DL_sig(sim_t *sim,
                uint16_t subframe,
@@ -578,5 +599,6 @@ void do_DL_sig(sim_t *sim,
                int CC_id);
 
 void do_UL_sig(sim_t *sim, uint16_t subframe, uint8_t abstraction_flag, LTE_DL_FRAME_PARMS *frame_parms, uint32_t frame, int ru_id, uint8_t CC_id, int NB_UEs);
+int get_noise_power_dBFS(void);
 
 #endif

@@ -33,10 +33,8 @@
 
 #define _GNU_SOURCE             /* See feature_test_macros(7) */
 #include <sched.h>
-
-#undef MALLOC //there are two conflicting definitions, so we better make sure we don't use it at all
-
 #include "assertions.h"
+#include "common/oai_version.h"
 
 #include "PHY/types.h"
 
@@ -44,13 +42,8 @@
 #include "common/ran_context.h"
 #include "common/config/config_userapi.h"
 #include "common/utils/load_module_shlib.h"
-#undef MALLOC //there are two conflicting definitions, so we better make sure we don't use it at all
-//#undef FRAME_LENGTH_COMPLEX_SAMPLES //there are two conflicting definitions, so we better make sure we don't use it at all
-
 #include "radio/COMMON/common_lib.h"
 #include "radio/ETHERNET/if_defs.h"
-
-//#undef FRAME_LENGTH_COMPLEX_SAMPLES //there are two conflicting definitions, so we better make sure we don't use it at all
 
 #include <openair1/PHY/phy_extern_ue.h>
 
@@ -69,7 +62,7 @@ unsigned short config_frames[4] = {2,9,11,13};
 #include "common/utils/LOG/log.h"
 #include "UTIL/OTG/otg_tx.h"
 #include "UTIL/OTG/otg_externs.h"
-#include "UTIL/MATH/oml.h"
+#include "SIMULATION/TOOLS/sim.h"
 #include "common/utils/LOG/vcd_signal_dumper.h"
 #include "UTIL/OPT/opt.h"
 #include "enb_config.h"
@@ -116,13 +109,10 @@ runmode_t mode = normal_txrx;
 
 FILE *input_fd=NULL;
 
-
 #if MAX_NUM_CCs == 1
-rx_gain_t rx_gain_mode[MAX_NUM_CCs][4] = {{max_gain,max_gain,max_gain,max_gain}};
 double tx_gain[MAX_NUM_CCs][4] = {{20,0,0,0}};
 double rx_gain[MAX_NUM_CCs][4] = {{110,0,0,0}};
 #else
-rx_gain_t                rx_gain_mode[MAX_NUM_CCs][4] = {{max_gain,max_gain,max_gain,max_gain},{max_gain,max_gain,max_gain,max_gain}};
 double tx_gain[MAX_NUM_CCs][4] = {{20,0,0,0},{20,0,0,0}};
 double rx_gain[MAX_NUM_CCs][4] = {{110,0,0,0},{20,0,0,0}};
 #endif
@@ -133,7 +123,6 @@ double sample_rate=30.72e6;
 double bw = 10.0e6;
 
 uint8_t dci_Format = 0;
-uint8_t agregation_Level =0xFF;
 
 uint8_t nb_antenna_tx = 1;
 uint8_t nb_antenna_rx = 1;
@@ -144,14 +133,11 @@ char channels[128] = "0";
 int rx_input_level_dBm;
 int otg_enabled;
 
-uint64_t num_missed_slots=0; // counter for the number of missed slots
-
 RU_t **RCconfig_RU(int nb_RU,int nb_L1_inst,PHY_VARS_eNB ***eNB,uint64_t *ru_mask,pthread_mutex_t *ru_mutex,pthread_cond_t *ru_cond);
 
 RU_t **RCconfig_RU(int nb_RU,int nb_L1_inst,PHY_VARS_eNB ***eNB,uint64_t *ru_mask,pthread_mutex_t *ru_mutex,pthread_cond_t *ru_cond);
 
 int transmission_mode=1;
-int emulate_rf = 0;
 int numerology = 0;
 
 THREAD_STRUCT thread_struct;
@@ -160,13 +146,11 @@ eth_params_t *eth_params;
 
 double cpuf;
 
-int oaisim_flag=0;
 
 /* hardcoded into gtp_itf.cpp */
 bool sdap_data_req(protocol_ctxt_t *ctxt_p,
                    const ue_id_t ue_id,
                    const srb_flag_t srb_flag,
-                   const rb_id_t rb_id,
                    const mui_t mui,
                    const confirm_t confirm,
                    const sdu_size_t sdu_buffer_size,
@@ -196,57 +180,21 @@ bool nr_pdcp_data_req_drb(protocol_ctxt_t *ctxt_pP,
   abort();
 }
 
+/* hack: nfapi code is common for 4G/5G, so some function calls are hardcoded.
+ * Provide body for 5G function not used in 4G code */
+void handle_nr_srs_measurements(const module_id_t module_id,
+                                const frame_t frame,
+                                const sub_frame_t slot,
+                                nfapi_nr_srs_indication_pdu_t *srs_ind)
+{
+  return;
+}
+
 /* forward declarations */
 void set_default_frame_parms(LTE_DL_FRAME_PARMS *frame_parms[MAX_NUM_CCs]);
 
-/*---------------------BMC: timespec helpers -----------------------------*/
-
-struct timespec min_diff_time = { .tv_sec = 0, .tv_nsec = 0 };
-struct timespec max_diff_time = { .tv_sec = 0, .tv_nsec = 0 };
-
-struct timespec clock_difftime(struct timespec start, struct timespec end) {
-  struct timespec temp;
-
-  if ((end.tv_nsec-start.tv_nsec)<0) {
-    temp.tv_sec = end.tv_sec-start.tv_sec-1;
-    temp.tv_nsec = 1000000000+end.tv_nsec-start.tv_nsec;
-  } else {
-    temp.tv_sec = end.tv_sec-start.tv_sec;
-    temp.tv_nsec = end.tv_nsec-start.tv_nsec;
-  }
-
-  return temp;
-}
-
-void print_difftimes(void) {
-#ifdef DEBUG
-  printf("difftimes min = %lu ns ; max = %lu ns\n", min_diff_time.tv_nsec, max_diff_time.tv_nsec);
-#else
-  LOG_I(HW,"difftimes min = %lu ns ; max = %lu ns\n", min_diff_time.tv_nsec, max_diff_time.tv_nsec);
-#endif
-}
-
-void update_difftimes(struct timespec start, struct timespec end) {
-  struct timespec diff_time = { .tv_sec = 0, .tv_nsec = 0 };
-  int             changed = 0;
-  diff_time = clock_difftime(start, end);
-
-  if ((min_diff_time.tv_nsec == 0) || (diff_time.tv_nsec < min_diff_time.tv_nsec)) {
-    min_diff_time.tv_nsec = diff_time.tv_nsec;
-    changed = 1;
-  }
-
-  if ((max_diff_time.tv_nsec == 0) || (diff_time.tv_nsec > max_diff_time.tv_nsec)) {
-    max_diff_time.tv_nsec = diff_time.tv_nsec;
-    changed = 1;
-  }
-
-#if 1
-
-  if (changed) print_difftimes();
-
-#endif
-}
+/* TODO these declarations are to be removed */
+void nr_slot_select() {};
 
 /*------------------------------------------------------------------------*/
 
@@ -290,10 +238,11 @@ void exit_function(const char *file, const char *function, const int line, const
   }
 }
 
-
-static void get_options(void) {
+static void get_options(configmodule_interface_t *cfg)
+{
   CONFIG_SETRTFLAG(CONFIG_NOEXITONHELP);
-  get_common_options(SOFTMODEM_ENB_BIT );
+  IS_SOFTMODEM_ENB = true;
+  get_common_options(cfg);
   CONFIG_CLEARRTFLAG(CONFIG_NOEXITONHELP);
 
   if ( !(CONFIG_ISFLAGSET(CONFIG_ABORT)) ) {
@@ -313,10 +262,6 @@ static void get_options(void) {
     }
   }
 }
-
-
-
-
 
 void set_default_frame_parms(LTE_DL_FRAME_PARMS *frame_parms[MAX_NUM_CCs]) {
   int CC_id;
@@ -370,7 +315,6 @@ void wait_RUs(void) {
   }
 
   pthread_mutex_unlock(&RC.ru_mutex);
-  LOG_I(PHY,"RUs configured\n");
 }
 
 void wait_eNBs(void) {
@@ -415,18 +359,14 @@ extern void  phy_free_RU(RU_t *);
 static void init_pdcp(void)
 {
   pdcp_layer_init();
-  uint32_t pdcp_initmask = (IS_SOFTMODEM_NOS1) ?
-                           (PDCP_USE_NETLINK_BIT | LINK_ENB_PDCP_TO_IP_DRIVER_BIT) : LINK_ENB_PDCP_TO_GTPV1U_BIT;
+  uint32_t pdcp_initmask = (IS_SOFTMODEM_NOS1) ? 0 : LINK_ENB_PDCP_TO_GTPV1U_BIT;
 
   if (IS_SOFTMODEM_NOS1)
-    pdcp_initmask = pdcp_initmask | ENB_NAS_USE_TUN_BIT | SOFTMODEM_NOKRNMOD_BIT  ;
+    pdcp_initmask = pdcp_initmask | ENB_NAS_USE_TUN_BIT;
 
   pdcp_initmask = pdcp_initmask | ENB_NAS_USE_TUN_W_MBMS_BIT;
 
   pdcp_module_init(pdcp_initmask, 0);
-
-  pdcp_set_rlc_data_req_func(rlc_data_req);
-  pdcp_set_pdcp_data_ind_func(pdcp_data_ind);
 }
 
 static  void wait_nfapi_init(char *thread_name) {
@@ -439,7 +379,7 @@ static  void wait_nfapi_init(char *thread_name) {
   pthread_mutex_unlock(&nfapi_sync_mutex);
   printf( "NFAPI: got sync (%s)\n", thread_name);
 }
-
+configmodule_interface_t *uniqCfg = NULL;
 int main ( int argc, char **argv )
 {
   int CC_id = 0;
@@ -447,19 +387,17 @@ int main ( int argc, char **argv )
 
   start_background_system();
 
-  if ( load_configmodule(argc,argv,0) == NULL) {
+  if ((uniqCfg = load_configmodule(argc, argv, 0)) == NULL) {
     exit_fun("[SOFTMODEM] Error, configuration module init failed\n");
   }
 
   mode = normal_txrx;
   logInit();
-  set_latency_target();
+  lock_memory_to_ram();
   printf("Reading in command-line options\n");
-  get_options ();
+  get_options(uniqCfg);
 
-  EPC_MODE_ENABLED = !IS_SOFTMODEM_NOS1;
-
-  if (CONFIG_ISFLAGSET(CONFIG_ABORT) ) {
+  if (CONFIG_ISFLAGSET(CONFIG_ABORT)) {
     fprintf(stderr,"Getting configuration failed\n");
     exit(-1);
   }
@@ -472,16 +410,14 @@ int main ( int argc, char **argv )
   printf("configuring for RAU/RRU\n");
 
   cpuf=get_cpu_freq_GHz();
-  printf("ITTI init, useMME: %i\n",EPC_MODE_ENABLED);
+  printf("ITTI init, useMME: %i\n", !IS_SOFTMODEM_NOS1);
   itti_init(TASK_MAX, tasks_info);
 
   init_opt();
   // to make a graceful exit when ctrl-c is pressed
   set_softmodem_sighandler();
-#ifndef PACKAGE_VERSION
-#  define PACKAGE_VERSION "UNKNOWN-EXPERIMENTAL"
-#endif
-  LOG_I(HW, "Version: %s\n", PACKAGE_VERSION);
+  // strdup to put the sring in the core file for post mortem identification
+  LOG_I(HW, "Version: %s\n", strdup(OAI_PACKAGE_VERSION));
 
   /* Read configuration */
   if (RC.nb_inst > 0) {
@@ -522,7 +458,6 @@ int main ( int argc, char **argv )
   // init UE_PF_PO and mutex lock
   pthread_mutex_init(&ue_pf_po_mutex, NULL);
   memset (&UE_PF_PO[0][0], 0, sizeof(UE_PF_PO_t)*MAX_MOBILES_PER_ENB*MAX_NUM_CCs);
-  mlockall(MCL_CURRENT | MCL_FUTURE);
   pthread_cond_init(&sync_cond,NULL);
   pthread_mutex_init(&sync_mutex, NULL);
 
@@ -547,20 +482,18 @@ int main ( int argc, char **argv )
   printf("RC.nb_L1_inst:%d\n", RC.nb_L1_inst);
 
   if (RC.nb_L1_inst > 0) {
-    printf("Initializing eNB threads single_thread_flag:%d wait_for_sync:%d\n", get_softmodem_params()->single_thread_flag,get_softmodem_params()->wait_for_sync);
-    init_eNB(get_softmodem_params()->single_thread_flag,get_softmodem_params()->wait_for_sync);
+    printf("Initializing eNB threads\n");
+    init_eNB();
   }
   for (int x=0; x < RC.nb_L1_inst; x++)
     for (int CC_id=0; CC_id<RC.nb_L1_CC[x]; CC_id++) {
       L1_rxtx_proc_t *L1proc= &RC.eNB[x][CC_id]->proc.L1_proc;
       L1_rxtx_proc_t *L1proctx= &RC.eNB[x][CC_id]->proc.L1_proc_tx;
       L1proc->threadPool = (tpool_t *)malloc(sizeof(tpool_t));
-      L1proc->respDecode=(notifiedFIFO_t*) malloc(sizeof(notifiedFIFO_t));
       if ( strlen(get_softmodem_params()->threadPoolConfig) > 0 )
        initTpool(get_softmodem_params()->threadPoolConfig, L1proc->threadPool, true);
       else
         initTpool("n", L1proc->threadPool, true);
-      initNotifiedFIFO(L1proc->respDecode);
       L1proctx->threadPool = L1proc->threadPool;
   }
 
@@ -618,7 +551,7 @@ int main ( int argc, char **argv )
 
   create_tasks_mbms(1);
   sleep(1);
-  config_check_unknown_cmdlineopt(CONFIG_CHECKALLSECTIONS);
+  config_check_unknown_cmdlineopt(uniqCfg, CONFIG_CHECKALLSECTIONS);
 
   // wait for end of program
   LOG_UI(ENB_APP,"TYPE <CTRL-C> TO TERMINATE\n");

@@ -11,7 +11,7 @@
 #include "gui/gui.h"
 #include "utils.h"
 #include "event_selector.h"
-#include "config.h"
+#include "configuration.h"
 
 typedef struct {
   int socket;
@@ -187,7 +187,7 @@ int main(int n, char **v)
   /* send the first message - activate selected traces */
   is_on_changed(&vcd_data);
 
-  OBUF ebuf = { osize: 0, omaxsize: 0, obuf: NULL };
+  OBUF ebuf = {.osize = 0, .omaxsize = 0, .obuf = NULL};
 
   /* read messages */
   while (1) {

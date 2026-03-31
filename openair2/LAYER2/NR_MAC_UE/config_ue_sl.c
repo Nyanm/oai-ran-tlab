@@ -81,10 +81,8 @@ typedef struct sl_harq_info {
   uint16_t sl_Periodic_RRI;
 } sl_harq_info_t;
 
-void sl_ue_mac_free(uint8_t module_id)
+void sl_ue_mac_free(NR_UE_MAC_INST_t *mac)
 {
-
-  NR_UE_MAC_INST_t *mac = get_mac_inst(module_id);
 
   sl_nr_phy_config_request_t *sl_config =
                     &mac->SL_MAC_PARAMS->sl_phy_config.sl_config_req;
@@ -105,7 +103,7 @@ void sl_ue_mac_free(uint8_t module_id)
   // @todo: maybe this should be done by phy
   if (tdd_list) {
     int mu = sl_config->sl_bwp_config.sl_scs;
-    int nb_slots_to_set = TDD_CONFIG_NB_FRAMES*(1<<mu)*NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
+    int nb_slots_to_set = (1 << mu) * NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
     for (int i=0; i<nb_slots_to_set; i++) {
       free_and_zero(tdd_list[i].max_num_of_symbol_per_slot_list);
     }
@@ -122,86 +120,39 @@ void sl_ue_mac_free(uint8_t module_id)
   free_and_zero(mac->SL_MAC_PARAMS);
 }
 
-
-//Prepares the TDD config to be passed to PHY
-static int sl_set_tdd_config_nr_ue(sl_nr_phy_config_request_t *cfg,
-                                  int mu,
-                                  long *pNumDownlinkSlots, long *pNumDownlinkSymbols,
-                                  int nrofUplinkSlots,   int nrofUplinkSymbols)
+void sl_set_tdd_config_nr_ue(fapi_nr_tdd_table_t *tdd_table,
+                             int mu,
+                             NR_TDD_UL_DL_Pattern_t *pattern)
 {
+  const int nrofUplinkSlots = pattern->nrofUplinkSlots;
+  const int nrofUplinkSymbols = pattern->nrofUplinkSymbols;
+  const int nb_periods_per_frame = get_nb_periods_per_frame(pattern->dl_UL_TransmissionPeriodicity);
+  const int nb_slots_per_period = ((1 << mu) * NR_NUMBER_OF_SUBFRAMES_PER_FRAME) / nb_periods_per_frame;
+  tdd_table->tdd_period_in_slots = nb_slots_per_period;
 
+  LOG_I(PHY,"UL slots:%d, symbols:%d, slots_per_period:%d\n",
+                          nrofUplinkSlots, nrofUplinkSymbols, nb_slots_per_period);
 
-  int slot_number = 0;
-  int nb_periods_per_frame = get_nb_periods_per_frame(cfg->tdd_table.tdd_period);
-  int nb_slots_to_set = TDD_CONFIG_NB_FRAMES*(1<<mu)*NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
+  tdd_table->max_tdd_periodicity_list = (fapi_nr_max_tdd_periodicity_t *) malloc(nb_slots_per_period * sizeof(fapi_nr_max_tdd_periodicity_t));
 
-  int nb_slots_per_period = ((1<<mu) * NR_NUMBER_OF_SUBFRAMES_PER_FRAME)/nb_periods_per_frame;
-  cfg->tdd_table.tdd_period_in_slots = nb_slots_per_period;
+  for(int memory_alloc = 0 ; memory_alloc < nb_slots_per_period; memory_alloc++)
+    tdd_table->max_tdd_periodicity_list[memory_alloc].max_num_of_symbol_per_slot_list =
+      (fapi_nr_max_num_of_symbol_per_slot_t *) malloc(NR_NUMBER_OF_SYMBOLS_PER_SLOT*sizeof(fapi_nr_max_num_of_symbol_per_slot_t));
 
-  if ((*pNumDownlinkSlots == 0) && (*pNumDownlinkSymbols == 0)) {
-    *pNumDownlinkSymbols = (nrofUplinkSymbols) ? 14 - nrofUplinkSymbols : 0;
-    *pNumDownlinkSlots = nb_slots_per_period - nrofUplinkSlots;
-    if (*pNumDownlinkSymbols) *pNumDownlinkSlots -= 1;
-  }
-  int nrofDownlinkSlots = *pNumDownlinkSlots, nrofDownlinkSymbols = *pNumDownlinkSymbols;
-
-  LOG_D(NR_MAC,"Set Phy Sidelink TDD Config: scs:%d,dl:%d-%d, ul:%d-%d, nb_periods_per_frame:%d, nb_slots_per_period:%d\n",
-                              mu, nrofDownlinkSlots, nrofDownlinkSymbols, nrofUplinkSlots, nrofUplinkSymbols, nb_periods_per_frame, nb_slots_per_period);
-
-  if ( (nrofDownlinkSymbols + nrofUplinkSymbols) == 0 )
-    AssertFatal(nb_slots_per_period == (nrofDownlinkSlots + nrofUplinkSlots),
-                "set_tdd_configuration_nr: given period is inconsistent with current tdd configuration, nrofDownlinkSlots %d, nrofUplinkSlots %d, nb_slots_per_period %d \n",
-                nrofDownlinkSlots,nrofUplinkSlots,nb_slots_per_period);
-  else {
-    AssertFatal(nrofDownlinkSymbols + nrofUplinkSymbols <= 14,"illegal symbol configuration DL %d, UL %d\n",nrofDownlinkSymbols,nrofUplinkSymbols);
-    AssertFatal(nb_slots_per_period == (nrofDownlinkSlots + nrofUplinkSlots + 1),
-                "set_tdd_configuration_nr: given period is inconsistent with current tdd configuration, nrofDownlinkSlots %d, nrofUplinkSlots %d, nrofMixed slots 1, nb_slots_per_period %d \n",
-                nrofDownlinkSlots,nrofUplinkSlots,nb_slots_per_period);
-  }
-
-  cfg->tdd_table.max_tdd_periodicity_list = (fapi_nr_max_tdd_periodicity_t *) malloc(nb_slots_to_set*sizeof(fapi_nr_max_tdd_periodicity_t));
-
-  for(int memory_alloc =0 ; memory_alloc<nb_slots_to_set; memory_alloc++)
-    cfg->tdd_table.max_tdd_periodicity_list[memory_alloc].max_num_of_symbol_per_slot_list = (fapi_nr_max_num_of_symbol_per_slot_t *) malloc(NR_NUMBER_OF_SYMBOLS_PER_SLOT*sizeof(
-          fapi_nr_max_num_of_symbol_per_slot_t));
-
-  while(slot_number != nb_slots_to_set) {
-    if(nrofDownlinkSlots != 0) {
-      for (int number_of_symbol = 0; number_of_symbol < nrofDownlinkSlots*NR_NUMBER_OF_SYMBOLS_PER_SLOT; number_of_symbol++) {
-        cfg->tdd_table.max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol%NR_NUMBER_OF_SYMBOLS_PER_SLOT].slot_config= 0;
-
-        if((number_of_symbol+1)%NR_NUMBER_OF_SYMBOLS_PER_SLOT == 0)
-          slot_number++;
-      }
+  int slot_number = (nb_slots_per_period - nrofUplinkSlots) - (nrofUplinkSymbols ? 1 : 0);
+  if (nrofUplinkSymbols != 0) {
+    for(int number_of_symbol = NR_NUMBER_OF_SYMBOLS_PER_SLOT - nrofUplinkSymbols; number_of_symbol < NR_NUMBER_OF_SYMBOLS_PER_SLOT; number_of_symbol++) {
+      tdd_table->max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol].slot_config = 1;
     }
-
-    if (nrofDownlinkSymbols != 0 || nrofUplinkSymbols != 0) {
-      for(int number_of_symbol =0; number_of_symbol < nrofDownlinkSymbols; number_of_symbol++) {
-        cfg->tdd_table.max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol].slot_config= 0;
-      }
-
-      for(int number_of_symbol = nrofDownlinkSymbols; number_of_symbol < NR_NUMBER_OF_SYMBOLS_PER_SLOT-nrofUplinkSymbols; number_of_symbol++) {
-        cfg->tdd_table.max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol].slot_config= 2;
-      }
-
-      for(int number_of_symbol = NR_NUMBER_OF_SYMBOLS_PER_SLOT-nrofUplinkSymbols; number_of_symbol < NR_NUMBER_OF_SYMBOLS_PER_SLOT; number_of_symbol++) {
-        cfg->tdd_table.max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol].slot_config= 1;
-      }
-
-      slot_number++;
-    }
-
-    if(nrofUplinkSlots != 0) {
-      for (int number_of_symbol = 0; number_of_symbol < nrofUplinkSlots*NR_NUMBER_OF_SYMBOLS_PER_SLOT; number_of_symbol++) {
-        cfg->tdd_table.max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol%NR_NUMBER_OF_SYMBOLS_PER_SLOT].slot_config= 1;
-
-        if((number_of_symbol+1)%NR_NUMBER_OF_SYMBOLS_PER_SLOT == 0)
-          slot_number++;
-      }
+    slot_number++;
+  }
+  while(slot_number < nb_slots_per_period) {
+    for (int number_of_symbol = 0; number_of_symbol < nrofUplinkSlots * NR_NUMBER_OF_SYMBOLS_PER_SLOT; number_of_symbol++) {
+      tdd_table->max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol%NR_NUMBER_OF_SYMBOLS_PER_SLOT].slot_config = 1;
+      if((number_of_symbol + 1) % NR_NUMBER_OF_SYMBOLS_PER_SLOT == 0)
+        slot_number++;
     }
   }
-
-  return (0);
 }
 
 //Prepares the PHY config to be sent to PHY. Prepares from the Valus from MAC context.
@@ -213,6 +164,7 @@ static void  sl_prepare_phy_config(int module_id,
                                    NR_TDD_UL_DL_ConfigCommon_t *sl_TDD_config)
 {
 
+
   phycfg->sl_sync_source.sync_source = sync_source;
   LOG_I(NR_MAC, "Sidelink CFG: sync source:%d\n", phycfg->sl_sync_source.sync_source);
 
@@ -220,6 +172,8 @@ static void  sl_prepare_phy_config(int module_id,
   AssertFatal(pointA_ARFCN, "sl_AbsoluteFrequencyPointA_r16 cannot be 0\n");
 
   int sl_band = 0;
+  //REL 16 3GPP spec 38.101 section 5.2E.1 specifies 2 bands for operation on PC5 interface.
+  //Band 47, Band 38
   if (pointA_ARFCN >= 790334 && pointA_ARFCN <= 795000)
     sl_band = 47;
   else if (pointA_ARFCN >= 514000 && pointA_ARFCN <= 524000)
@@ -235,8 +189,8 @@ static void  sl_prepare_phy_config(int module_id,
   LOG_I(NR_MAC, "SIDELINK CONFIGs: AbsFreqSSB:%d, AbsFreqPointA:%d, SL band:%d\n",
                                                         SSB_ARFCN,pointA_ARFCN, sl_band);
 
-#define SL_VALUE_FREQSHIFT_7P5KHZ_DISABLED 0
-  phycfg->sl_carrier_config.sl_frequency_shift_7p5khz = SL_VALUE_FREQSHIFT_7P5KHZ_DISABLED;
+  //FREQSHIFT_7P5KHZ is DISABLED
+  phycfg->sl_carrier_config.sl_frequency_shift_7p5khz = 0;
   phycfg->sl_carrier_config.sl_value_N = freqcfg->valueN_r16;
   phycfg->sl_carrier_config.sl_num_tx_ant = 1;
   phycfg->sl_carrier_config.sl_num_rx_ant = 1;
@@ -246,13 +200,11 @@ static void  sl_prepare_phy_config(int module_id,
 
   AssertFatal(carriercfg, "SCS_SpecificCarrier cannot be NULL");
 
-  int bw_index = get_supported_band_index(carriercfg->subcarrierSpacing,
-                                          sl_band,
-                                          carriercfg->carrierBandwidth);
+  int bw_index = get_supported_band_index(carriercfg->subcarrierSpacing, FR1, carriercfg->carrierBandwidth);
   phycfg->sl_carrier_config.sl_bandwidth = get_supported_bw_mhz(FR1, bw_index);
 
   phycfg->sl_carrier_config.sl_frequency =
-              from_nrarfcn(sl_band,carriercfg->subcarrierSpacing,pointA_ARFCN)/1000; // freq in kHz
+              from_nrarfcn(sl_band,carriercfg->subcarrierSpacing,pointA_ARFCN); // freq in kHz
 
   phycfg->sl_carrier_config.sl_grid_size = carriercfg->carrierBandwidth;
   //For sidelink offset to carrier is 0. hence not used
@@ -287,7 +239,7 @@ static void  sl_prepare_phy_config(int module_id,
   phycfg->sl_bwp_config.sl_ssb_offset_point_a = diff/scs_scaling;
 
 #ifdef SL_DEBUG
-  printf("diff:%d, scaling:%d, pointa:%d, ssb:%d\n", diff, scs_scaling, pointA_ARFCN, SSB_ARFCN);
+  printf("diff:%u, scaling:%d, pointa:%u, ssb:%u\n", diff, scs_scaling, pointA_ARFCN, SSB_ARFCN);
 #endif
 
   phycfg->sl_bwp_config.sl_dc_location = (bwp_generic->sl_TxDirectCurrentLocation_r16) ?
@@ -323,28 +275,15 @@ static void  sl_prepare_phy_config(int module_id,
     phycfg->sl_sync_source.gnss_dfn_offset = sl_OffsetDFN;
 
     // TDD Table Configuration
-    if (sl_TDD_config->pattern1.ext1 == NULL)
-      phycfg->tdd_table.tdd_period = sl_TDD_config->pattern1.dl_UL_TransmissionPeriodicity;
-    else {
-      if (sl_TDD_config->pattern1.ext1->dl_UL_TransmissionPeriodicity_v1530 != NULL)
-        phycfg->tdd_table.tdd_period += (1 + *sl_TDD_config->pattern1.ext1->dl_UL_TransmissionPeriodicity_v1530);
-    }
+    sl_set_tdd_config_nr_ue(&phycfg->tdd_table,
+                            phycfg->sl_bwp_config.sl_scs,
+                            &sl_TDD_config->pattern1);
 
-    int return_tdd = sl_set_tdd_config_nr_ue(phycfg,
-                                             sl_TDD_config->referenceSubcarrierSpacing,
-                                             &sl_TDD_config->pattern1.nrofDownlinkSlots,
-                                             &sl_TDD_config->pattern1.nrofDownlinkSymbols,
-                                             sl_TDD_config->pattern1.nrofUplinkSlots,
-                                             sl_TDD_config->pattern1.nrofUplinkSymbols);
-
-    if (return_tdd !=0)
-      LOG_E(PHY,"TDD configuration can not be done\n");
-    else {
-      LOG_I(NR_MAC, "SIDELINK CONFIGs: tdd config period:%d, mu:%ld, DLslots:%ld,ULslots:%ld Mixedslotsym DL:UL %ld:%ld\n",
-                          phycfg->tdd_table.tdd_period, sl_TDD_config->referenceSubcarrierSpacing,
+    LOG_I(NR_MAC, "SIDELINK CONFIGs: tdd config period:%ld, mu:%ld, DLslots:%ld,ULslots:%ld Mixedslotsym DL:UL %ld:%ld\n",
+                          sl_TDD_config->pattern1.dl_UL_TransmissionPeriodicity, sl_TDD_config->referenceSubcarrierSpacing,
                           sl_TDD_config->pattern1.nrofDownlinkSlots, sl_TDD_config->pattern1.nrofUplinkSlots,
                           sl_TDD_config->pattern1.nrofDownlinkSymbols,sl_TDD_config->pattern1.nrofUplinkSymbols);
-    }
+
   } else if (sync_source == SL_SYNC_SOURCE_NONE) {
     //Only Carrier config, BWP config sent
     phycfg->config_mask = 0x9;//partial config is sent
@@ -393,6 +332,9 @@ int nr_rrc_mac_config_req_sl_preconfig(module_id_t module_id,
   AssertFatal(sl_preconfiguration !=NULL,"SL-Preconfig Cannot be NULL");
   AssertFatal(mac, "mac should have an instance");
 
+  if (!mac->SL_MAC_PARAMS)
+    mac->SL_MAC_PARAMS = CALLOC(1, sizeof(sl_nr_ue_mac_params_t));
+
   sl_nr_ue_mac_params_t *sl_mac = mac->SL_MAC_PARAMS;
 
   NR_SidelinkPreconfigNR_r16_t *sl_preconfig = &sl_preconfiguration->sidelinkPreconfigNR_r16;
@@ -415,6 +357,9 @@ int nr_rrc_mac_config_req_sl_preconfig(module_id_t module_id,
   //priority of SL-SSB tx and rx
   sl_mac->sl_SSB_PriorityNR = (sl_preconfig->sl_SSB_PriorityNR_r16)
                                       ? *sl_preconfig->sl_SSB_PriorityNR_r16 : 0;
+
+  //Indicates if CSI Reporting is enabled in UNICAST. is 0-ENABLED, 1-DISABLED
+  sl_mac->sl_CSI_Acquisition = (sl_preconfig->sl_CSI_Acquisition_r16) ? 0 : 1;
 
   //Used for DFN calculation in case Sync source = GNSS.
   uint32_t sl_OffsetDFN = (sl_preconfig->sl_OffsetDFN_r16)
@@ -527,8 +472,8 @@ int nr_rrc_mac_config_req_sl_preconfig(module_id_t module_id,
 
     sl_mac->sl_TDD_config = sl_preconfig->sl_PreconfigGeneral_r16->sl_TDD_Configuration_r16;
 
-    //Sync source is identified, timing needs to be adjusted.
-    sl_mac->adjust_timing = 1;
+    // Sync source is identified, timing needs to be adjusted.
+    sl_mac->timing_acquired = true;
   }
 
   //Do not copy TDD config yet as SYNC source is not yet found
@@ -550,7 +495,7 @@ int nr_rrc_mac_config_req_sl_preconfig(module_id_t module_id,
     int nr_slots_period = nr_slots_frame;
     int nr_ulstart_slot = 0;
     if (tdd) {
-      nr_ulstart_slot = get_first_ul_slot(tdd->nrofDownlinkSlots, tdd->nrofDownlinkSymbols, tdd->nrofUplinkSymbols);
+      nr_ulstart_slot = get_first_ul_slot(&mac->frame_structure, false);
       nr_slots_period /= get_nb_periods_per_frame(tdd->dl_UL_TransmissionPeriodicity);
     }
 
@@ -697,7 +642,7 @@ void nr_rrc_mac_config_req_sl_mib(module_id_t module_id,
     sl_config->sl_sync_source.sync_source = SL_SYNC_SOURCE_SYNC_REF_UE;
     sl_config->sl_sync_source.rx_slss_id = rx_slss_id;
 
-    sl_mac->adjust_timing = 1;
+    sl_mac->timing_acquired = true;
 
     sl_mac->rx_sl_bch.status = 1;
     sl_mac->rx_sl_bch.slss_id = rx_slss_id;
@@ -730,27 +675,13 @@ void nr_rrc_mac_config_req_sl_mib(module_id_t module_id,
     if (ret == 0) {
       //sl_tdd_config bytes are all 1's - no TDD config present use all slots for sidelink.
       //Spec not clear -- TBD...
-      sl_config->tdd_table.tdd_period = 7;// set it to frame period
       sl_mac->sl_TDD_config->pattern1.nrofUplinkSlots =
                         NR_NUMBER_OF_SUBFRAMES_PER_FRAME*(1<<cfg->sl_bwp_config.sl_scs);
-    } else {
-      if (sl_mac->sl_TDD_config->pattern1.ext1 == NULL)
-        sl_config->tdd_table.tdd_period = sl_mac->sl_TDD_config->pattern1.dl_UL_TransmissionPeriodicity;
-      else {
-        if (sl_mac->sl_TDD_config->pattern1.ext1->dl_UL_TransmissionPeriodicity_v1530 != NULL)
-          sl_config->tdd_table.tdd_period += (1 + *sl_mac->sl_TDD_config->pattern1.ext1->dl_UL_TransmissionPeriodicity_v1530);
-      }
     }
 
-    uint8_t return_tdd = 0;
-    return_tdd = sl_set_tdd_config_nr_ue(cfg,
-                                        cfg->sl_bwp_config.sl_scs,
-                                        &sl_mac->sl_TDD_config->pattern1.nrofDownlinkSlots,
-                                        &sl_mac->sl_TDD_config->pattern1.nrofDownlinkSymbols,
-                                        sl_mac->sl_TDD_config->pattern1.nrofUplinkSlots,
-                                        sl_mac->sl_TDD_config->pattern1.nrofUplinkSymbols);
-    if (return_tdd !=0)
-      LOG_E(PHY,"TDD configuration can not be done\n");
+    sl_set_tdd_config_nr_ue(&cfg->tdd_table,
+                            cfg->sl_bwp_config.sl_scs,
+                            &sl_mac->sl_TDD_config->pattern1);
 
     AssertFatal(get_nrUE_params()->sync_ref == 0, "Expecting Nearby UE\n");
     int scs = get_softmodem_params()->numerology;
@@ -763,15 +694,15 @@ void nr_rrc_mac_config_req_sl_mib(module_id_t module_id,
     mac->sl_info.list[0]->UE_sched_ctrl.sched_psfch->feedback_frame = -1;
     mac->sl_info.list[0]->UE_sched_ctrl.sched_psfch->feedback_slot = -1;
 
-    LOG_I(MAC, "SIDELINK CONFIGs: tdd config period:%d, mu:%ld, DLslots:%ld,ULslots:%ld Mixedslotsym DL:UL %ld:%ld\n",
-                            sl_config->tdd_table.tdd_period, sl_mac->sl_TDD_config->referenceSubcarrierSpacing,
+    LOG_I(MAC, "SIDELINK CONFIGs: tdd config period:%ld, mu:%ld, DLslots:%ld,ULslots:%ld Mixedslotsym DL:UL %ld:%ld\n",
+                            sl_mac->sl_TDD_config->pattern1.dl_UL_TransmissionPeriodicity,sl_mac->sl_TDD_config->referenceSubcarrierSpacing,
                             sl_mac->sl_TDD_config->pattern1.nrofDownlinkSlots, sl_mac->sl_TDD_config->pattern1.nrofUplinkSlots,
                             sl_mac->sl_TDD_config->pattern1.nrofDownlinkSymbols,sl_mac->sl_TDD_config->pattern1.nrofUplinkSymbols);
 
     int nr_slots_period = nr_slots_frame;
     int nr_ulstart_slot = 0;
     if (tdd) {
-      nr_ulstart_slot = get_first_ul_slot(tdd->nrofDownlinkSlots, tdd->nrofDownlinkSymbols, tdd->nrofUplinkSymbols);
+      nr_ulstart_slot = get_first_ul_slot(&mac->frame_structure, false);
       nr_slots_period /= get_nb_periods_per_frame(tdd->dl_UL_TransmissionPeriodicity);
     }
 
@@ -825,15 +756,15 @@ void nr_sl_params_read_conf(module_id_t module_id) {
   paramdef_t SL_CRI_RS_INFO[] = SL_CSI_RS_DESC(sl_csi_rs_info);
   paramlist_def_t SL_CRI_RS_List = {SL_CONFIG_STRING_SL_CSI_RS_LIST, NULL, 0};
   sprintf(aprefix, "%s.[%d]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0);
-  config_getlist(&SL_CRI_RS_List, NULL, 0, aprefix);
+  config_getlist(config_get_if(), &SL_CRI_RS_List, NULL, 0, aprefix);
   sprintf(aprefix, "%s.[%i].%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0, SL_CONFIG_STRING_SL_CSI_RS_LIST, 0);
-  config_get(SL_CRI_RS_INFO, sizeof(SL_CRI_RS_INFO)/sizeof(paramdef_t), aprefix);
+  config_get(config_get_if(), SL_CRI_RS_INFO, sizeof(SL_CRI_RS_INFO)/sizeof(paramdef_t), aprefix);
 
   char aprefix1[MAX_OPTNAME_SIZE*2 + 8];
   sl_harq_info_t *sl_harq_info = (sl_harq_info_t*)malloc16_clear(sizeof(sl_harq_info_t));
   paramdef_t SL_HARQ_INFO[] = SL_CONFIGUREDGRANT_DESC(sl_harq_info);
   sprintf(aprefix1, "%s.[%i].%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0, SL_CONFIG_STRING_SL_CONFIGUREDGRANT_LIST, 0);
-  config_get(SL_HARQ_INFO, sizeof(SL_HARQ_INFO)/sizeof(paramdef_t), aprefix1);
+  config_get(config_get_if(), SL_HARQ_INFO, sizeof(SL_HARQ_INFO)/sizeof(paramdef_t), aprefix1);
   sl_mac->sl_Num_HARQ_Processes = sl_harq_info->sl_Num_HARQ_Processes;
   sl_mac->sl_HARQ_ProcID_offset = sl_harq_info->sl_HARQ_ProcID_offset;
   sl_mac->sl_Periodic_RRI = sl_harq_info->sl_Periodic_RRI;
@@ -870,7 +801,7 @@ void nr_sl_params_read_conf(module_id_t module_id) {
 
   uint16_t* resource_selection_cfg = (uint16_t *)malloc16_clear(sizeof(*resource_selection_cfg));
   paramdef_t SL_CONFIG_RSR_INFO[] = SL_CONFIG_RESOURCE_SELECTION(resource_selection_cfg);
-  config_get(SL_CONFIG_RSR_INFO, sizeof(SL_CONFIG_RSR_INFO) / sizeof(paramdef_t), aprefix_rsc);
+  config_get(config_get_if(), SL_CONFIG_RSR_INFO, sizeof(SL_CONFIG_RSR_INFO) / sizeof(paramdef_t), aprefix_rsc);
 
   switch(*resource_selection_cfg) {
     case 0:

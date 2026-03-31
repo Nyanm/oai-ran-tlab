@@ -32,6 +32,7 @@
 #define _GNU_SOURCE
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/sysinfo.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -222,11 +223,8 @@ char aname[256];
     tdata->numlines = 0;
   }
 
-  unsigned int eax = 11, ebx = 0, ecx = 1, edx = 0;
-
-  asm volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "0"(eax), "2"(ecx) :);
-
-  prnt("System has %d cores %d threads %d Actual threads", eax, ebx, edx);
+  int nprocs = get_nprocs();
+  prnt("System has %d cores", nprocs);
 
   prnt("\n  id          name            state   USRmod    KRNmod  prio nice   vsize   proc pol \n\n");
   snprintf(aname, sizeof(aname), "/proc/%d/stat", getpid());
@@ -253,9 +251,17 @@ void print_threads(char *buf, int debug, telnet_printfunc_t prnt)
   proccmd_get_threaddata(buf, debug, prnt, NULL);
 }
 
+#define FLAG_PRINT_DEBUG_DUMP(flag)                                              \
+  logsdata->lines[i].val[0] = (char *)flag_name[i];                              \
+  logsdata->lines[i].val[1] = g_log->debug_mask.DEBUG_##flag ? "true" : "false"; \
+  logsdata->lines[i].val[1] = g_log->dump_mask.DEBUG_##flag ? "true" : "false";  \
+  i++;
+
 int proccmd_websrv_getdata(char *cmdbuff, int debug, void *data, telnet_printfunc_t prnt)
 {
   webdatadef_t *logsdata = (webdatadef_t *)data;
+  const mapping *const log_level_names = log_level_names_ptr();
+  const mapping *const log_options = log_option_names_ptr();
   if (strncmp(cmdbuff, "set", 3) == 0) {
     telnet_printfunc_t printfunc = (prnt != NULL) ? prnt : (telnet_printfunc_t)printf;
     if (strcasestr(cmdbuff, "loglvl") != NULL) {
@@ -274,7 +280,7 @@ int proccmd_websrv_getdata(char *cmdbuff, int debug, void *data, telnet_printfun
                 logsdata->lines[0].val[0],
                 logsdata->lines[0].val[1],
                 enabled ? "enabled" : "disabled",
-                loginfile ? g_log->log_component[logsdata->numlines].filelog_name : "stdout");
+                loginfile ? g_log->log_rarely_used[logsdata->numlines].filelog_name : "stdout");
     }
     if (strcasestr(cmdbuff, "logopt") != NULL) {
       int optbit = map_str_to_int(log_options, logsdata->lines[0].val[0]);
@@ -290,23 +296,16 @@ int proccmd_websrv_getdata(char *cmdbuff, int debug, void *data, telnet_printfun
       }
     }
     if (strcasestr(cmdbuff, "dbgopt") != NULL) {
-      int optbit = map_str_to_int(log_maskmap, logsdata->lines[0].val[0]);
-      if (optbit < 0) {
-        printfunc("debug option %s unknown\n", logsdata->lines[0].val[0]);
-      } else {
-        if (strcmp(logsdata->lines[0].val[1], "true") == 0)
-          SET_LOG_DEBUG(optbit);
-        else
-          CLEAR_LOG_DEBUG(optbit);
-        if (strcmp(logsdata->lines[0].val[2], "true") == 0)
-          SET_LOG_DUMP(optbit);
-        else
-          CLEAR_LOG_DUMP(optbit);
-        printfunc("%s debug %s dump %s\n",
-                  logsdata->lines[0].val[0],
-                  (strcmp(logsdata->lines[0].val[1], "true") == 0) ? "enabled" : "disabled",
-                  (strcmp(logsdata->lines[0].val[2], "true") == 0) ? "enabled" : "disabled");
-      }
+      if (strcmp(logsdata->lines[0].val[1], "true") == 0)
+        if (!set_log_debug(logsdata->lines[0].val[0], strcmp(logsdata->lines[0].val[2], "true") == 0))
+          printfunc("debug option %s unknown\n", logsdata->lines[0].val[0]);
+      if (strcmp(logsdata->lines[0].val[2], "true") == 0)
+        if (!set_log_dump(logsdata->lines[0].val[0], strcmp(logsdata->lines[0].val[2], "true") == 0))
+          printfunc("debug option %s unknown\n", logsdata->lines[0].val[0]);
+      printfunc("%s debug %s dump %s\n",
+                logsdata->lines[0].val[0],
+                (strcmp(logsdata->lines[0].val[1], "true") == 0) ? "enabled" : "disabled",
+                (strcmp(logsdata->lines[0].val[2], "true") == 0) ? "enabled" : "disabled");
     }
     if (strcasestr(cmdbuff, "threadsched") != NULL) {
       unsigned int tid = strtoll(logsdata->lines[0].val[0], NULL, 0);
@@ -329,12 +328,14 @@ int proccmd_websrv_getdata(char *cmdbuff, int debug, void *data, telnet_printfun
       snprintf(logsdata->columns[3].coltitle, TELNET_CMD_MAXSIZE, "in file");
       logsdata->columns[3].coltype = TELNET_CHECKVAL_BOOL;
 
-      for (int i = MIN_LOG_COMPONENTS; i < MAX_LOG_COMPONENTS; i++) {
+      for (int i = 0; i < MAX_LOG_COMPONENTS; i++) {
         if (g_log->log_component[i].name != NULL) {
           logsdata->numlines++;
           logsdata->lines[i].val[0] = (char *)(g_log->log_component[i].name);
 
-          logsdata->lines[i].val[1] = map_int_to_str(log_level_names, (g_log->log_component[i].level >= 0) ? g_log->log_component[i].level : g_log->log_component[i].savedlevel);
+          logsdata->lines[i].val[1] = map_int_to_str(
+              log_level_names,
+              (g_log->log_component[i].level >= 0) ? g_log->log_component[i].level : g_log->log_rarely_used[i].savedlevel);
           logsdata->lines[i].val[2] = (g_log->log_component[i].level >= 0) ? "true" : "false";
           logsdata->lines[i].val[3] = (g_log->log_component[i].filelog > 0) ? "true" : "false";
         }
@@ -351,12 +352,9 @@ int proccmd_websrv_getdata(char *cmdbuff, int debug, void *data, telnet_printfun
       snprintf(logsdata->columns[2].coltitle, TELNET_CMD_MAXSIZE, "dump");
       logsdata->columns[2].coltype = TELNET_CHECKVAL_BOOL;
 
-      for (int i = 0; log_maskmap[i].name != NULL; i++) {
-        logsdata->numlines++;
-        logsdata->lines[i].val[0] = log_maskmap[i].name;
-        logsdata->lines[i].val[1] = (g_log->debug_mask & log_maskmap[i].value) ? "true" : "false";
-        logsdata->lines[i].val[2] = (g_log->dump_mask & log_maskmap[i].value) ? "true" : "false";
-      }
+      int i = 0;
+      FOREACH_FLAG(FLAG_PRINT_DEBUG_DUMP);
+      logsdata->numlines += i;
     }
 
     if (strcasestr(cmdbuff, "logopt") != NULL) {
@@ -370,7 +368,7 @@ int proccmd_websrv_getdata(char *cmdbuff, int debug, void *data, telnet_printfun
 
       for (int i = 0; log_options[i].name != NULL; i++) {
         logsdata->numlines++;
-        logsdata->lines[i].val[0] = log_options[i].name;
+        logsdata->lines[i].val[0] = (char *)log_options[i].name;
         logsdata->lines[i].val[1] = (g_log->flag & log_options[i].value) ? "true" : "false";
       }
     }
@@ -381,6 +379,14 @@ int proccmd_websrv_getdata(char *cmdbuff, int debug, void *data, telnet_printfun
 
   return 0;
 }
+
+#define FLAG_PRINT2_DEBUG_DUMP(flag)               \
+  prnt("%02i %17.17s %5.5s   %5.5s\n",             \
+       i,                                          \
+       flag_name[i],                               \
+       g_log->debug_mask.DEBUG_##flag ? "Y" : "N", \
+       g_log->dump_mask.DEBUG_##flag ? "Y" : "N"); \
+  i++;
 
 int proccmd_show(char *buf, int debug, telnet_printfunc_t prnt)
 {
@@ -395,17 +401,23 @@ int proccmd_show(char *buf, int debug, telnet_printfunc_t prnt)
    }
    if (strcasestr(buf,"loglvl") != NULL) {
        prnt("\n               component level  enabled   output\n");
-       for (int i=MIN_LOG_COMPONENTS; i < MAX_LOG_COMPONENTS; i++) {
-            if (g_log->log_component[i].name != NULL) {
-               prnt("%02i %17.17s:%10.10s    %s      %s\n",i ,g_log->log_component[i].name, 
-	             map_int_to_str(log_level_names,(g_log->log_component[i].level>=0)?g_log->log_component[i].level:g_log->log_component[i].savedlevel),
-                     ((g_log->log_component[i].level>=0)?"Y":"N"),
-                     ((g_log->log_component[i].filelog>0)?g_log->log_component[i].filelog_name:"stdout"));
-           }
+       const mapping *const log_level_names = log_level_names_ptr();
+       for (int i = 0; i < MAX_LOG_COMPONENTS; i++) {
+         if (g_log->log_component[i].name != NULL) {
+           prnt("%02i %17.17s:%10.10s    %s      %s\n",
+                i,
+                g_log->log_component[i].name,
+                map_int_to_str(
+                    log_level_names,
+                    (g_log->log_component[i].level >= 0) ? g_log->log_component[i].level : g_log->log_rarely_used[i].savedlevel),
+                ((g_log->log_component[i].level >= 0) ? "Y" : "N"),
+                ((g_log->log_component[i].filelog > 0) ? g_log->log_rarely_used[i].filelog_name : "stdout"));
+         }
        }
    }
    if (strcasestr(buf,"logopt") != NULL) {
        prnt("\n               option      enabled\n");
+       const mapping *const log_options = log_option_names_ptr();
        for (int i=0; log_options[i].name != NULL; i++) {
                prnt("%02i %17.17s %10.10s \n",i ,log_options[i].name, 
                      ((g_log->flag & log_options[i].value)?"Y":"N") );
@@ -413,11 +425,8 @@ int proccmd_show(char *buf, int debug, telnet_printfunc_t prnt)
    }
    if (strcasestr(buf,"dbgopt") != NULL) {
        prnt("\n               module  debug dumpfile\n");
-       for (int i=0; log_maskmap[i].name != NULL ; i++) {
-               prnt("%02i %17.17s %5.5s   %5.5s\n",i ,log_maskmap[i].name, 
-	             ((g_log->debug_mask &  log_maskmap[i].value)?"Y":"N"),
-                     ((g_log->dump_mask & log_maskmap[i].value)?"Y":"N") );
-       }
+       int i = 0;
+       FOREACH_FLAG(FLAG_PRINT2_DEBUG_DUMP);
    }
    if (strcasestr(buf,"config") != NULL) {
        prnt("Command line arguments:\n");
@@ -511,9 +520,9 @@ int proccmd_exit(char *buf, int debug, telnet_printfunc_t prnt)
 int proccmd_restart(char *buf, int debug, telnet_printfunc_t prnt)
 {
   if (debug > 0)
-    prnt("process module received %s\n", buf);
-  end_configmodule();
+       prnt("process module received %s\n", buf);
   configmodule_interface_t *cfg = config_get_if();
+  end_configmodule(cfg);
   execvpe(cfg->argv[0], cfg->argv, environ);
   return 0;
 }
@@ -528,7 +537,9 @@ int s = sscanf(buf,"%ms %i-%i\n",&logsubcmd, &idx1,&idx2);
    
    if (debug > 0)
        prnt( "proccmd_log received %s\n   s=%i sub command %s\n",buf,s,((logsubcmd==NULL)?"":logsubcmd));
-
+   const mapping *const log_level_names = log_level_names_ptr();
+   const mapping *const log_options = log_option_names_ptr();
+   const mapping *log_maskmap = log_maskmap_ptr();
    if (s == 1 && logsubcmd != NULL) {
       if (strcasestr(logsubcmd,"online") != NULL) {
           if (strcasestr(buf,"noonline") != NULL) {
@@ -540,21 +551,21 @@ int s = sscanf(buf,"%ms %i-%i\n",&logsubcmd, &idx1,&idx2);
           }
       }
       else if (strcasestr(logsubcmd,"show") != NULL) {
-          prnt("Available log levels: \n   ");
-          for (int i=0; log_level_names[i].name != NULL; i++)
-             prnt("%s ",log_level_names[i].name);
-          prnt("\n\n");
-          prnt("Available display options: \n   ");
-          for (int i=0; log_options[i].name != NULL; i++)
-             prnt("%s ",log_options[i].name);
-          prnt("\n\n");
-          prnt("Available debug and dump options: \n   ");
-          for (int i=0; log_maskmap[i].name != NULL; i++)
-             prnt("%s ",log_maskmap[i].name);
-          prnt("\n\n");
-   	  proccmd_show("loglvl",debug,prnt);
-   	  proccmd_show("logopt",debug,prnt);
-   	  proccmd_show("dbgopt",debug,prnt);
+        prnt("Available log levels: \n   ");
+        for (int i = 0; log_level_names[i].name != NULL; i++)
+          prnt("%s ", log_level_names[i].name);
+        prnt("\n\n");
+        prnt("Available display options: \n   ");
+        for (int i = 0; log_options[i].name != NULL; i++)
+          prnt("%s ", log_options[i].name);
+        prnt("\n\n");
+        prnt("Available debug and dump options: \n   ");
+        for (int i = 0; log_maskmap[i].name != NULL; i++)
+          prnt("%s ", log_maskmap[i].name);
+        prnt("\n\n");
+        proccmd_show("loglvl", debug, prnt);
+        proccmd_show("logopt", debug, prnt);
+        proccmd_show("dbgopt", debug, prnt);
       }
       else if (strcasestr(logsubcmd,"help") != NULL) {
           prnt(PROCCMD_LOG_HELP_STRING);
@@ -569,40 +580,28 @@ int s = sscanf(buf,"%ms %i-%i\n",&logsubcmd, &idx1,&idx2);
 
       l=sscanf(logsubcmd,"%m[^'_']_%ms",&logparam,&opt);
       if (l == 2 && strcmp(logparam,"print") == 0){
-         optbit=map_str_to_int(log_options,opt);
-         if (optbit < 0) {
-            prnt("option %s unknown\n",opt);
-         } else {
-            if (idx1 > 0)    
-                SET_LOG_OPTION(optbit);
-            else
-                CLEAR_LOG_OPTION(optbit);
-            proccmd_show("logopt",debug,prnt);
-         }
+        optbit = map_str_to_int(log_options, opt);
+        if (optbit < 0) {
+          prnt("option %s unknown\n", opt);
+        } else {
+          if (idx1 > 0)
+            SET_LOG_OPTION(optbit);
+          else
+            CLEAR_LOG_OPTION(optbit);
+          proccmd_show("logopt", debug, prnt);
+        }
       }
       else if (l == 2 && strcmp(logparam,"debug") == 0){
-         optbit=map_str_to_int(log_maskmap,opt);
-         if (optbit < 0) {
-            prnt("module %s unknown\n",opt);
-         } else {
-            if (idx1 > 0)    
-                SET_LOG_DEBUG(optbit);
-            else
-                CLEAR_LOG_DEBUG(optbit);
-            proccmd_show("dbgopt",debug,prnt);
-         }
+        int ret = set_log_debug(opt, idx1 > 0);
+        if (!ret)
+          prnt("module %s unknown\n", opt);
+        proccmd_show("dbgopt", debug, prnt);
       }  
        else if (l == 2 && strcmp(logparam,"dump") == 0){
-         optbit=map_str_to_int(log_maskmap,opt);
-         if (optbit < 0) {
-            prnt("module %s unknown\n",opt);
-         } else {
-            if (idx1 > 0)    
-                SET_LOG_DUMP(optbit);
-            else
-                CLEAR_LOG_DUMP(optbit);
-            proccmd_show("dump", debug, prnt);
-         }
+        int ret = set_log_dump(opt, idx1 > 0);
+        if (!ret)
+          prnt("module %s unknown\n", opt);
+        proccmd_show("dump", debug, prnt);
       }       
       if (logparam != NULL) free(logparam);
       if (opt != NULL)      free(opt); 
@@ -620,11 +619,11 @@ int s = sscanf(buf,"%ms %i-%i\n",&logsubcmd, &idx1,&idx2);
           prnt("l=%i, %s %s\n",l,((logparam==NULL)?"\"\"":logparam), ((tmpstr==NULL)?"\"\"":tmpstr));
       if (l ==2 ) {
          if (strcmp(logparam,"level") == 0) {
-             level=map_str_to_int(log_level_names,tmpstr);
-             if (level < 0) {
-                 prnt("level %s unknown\n",tmpstr);
-                 level=OAILOG_DISABLE - 1;
-              }
+           level = map_str_to_int(log_level_names, tmpstr);
+           if (level < 0) {
+             prnt("level %s unknown\n", tmpstr);
+             level = OAILOG_DISABLE - 1;
+           }
          } else {
              prnt("%s%s unknown log sub command \n",logparam, tmpstr);
          }
@@ -650,7 +649,7 @@ int s = sscanf(buf,"%ms %i-%i\n",&logsubcmd, &idx1,&idx2);
         if (level >= OAILOG_DISABLE)
            set_log(i, level);
         else if ( enable == 1)
-           set_log(i,g_log->log_component[i].savedlevel);
+          set_log(i, g_log->log_rarely_used[i].savedlevel);
         else if ( filelog == 1 ) {
            set_component_filelog(i);
         } else if ( filelog == 0 ) {

@@ -30,40 +30,35 @@
 * \warning
 */
 
+#ifndef NR_ULSCH_H_
+#define NR_ULSCH_H_
+
 #include "PHY/defs_gNB.h"
-#include "PHY/defs_nr_UE.h"
 #include "common/utils/threadPool/thread-pool.h"
+
+#define NUMBER_FRAMES_PHY_UE_INACTIVE 10
 
 void free_gNB_ulsch(NR_gNB_ULSCH_t *ulsch, uint16_t N_RB_UL);
 
 NR_gNB_ULSCH_t new_gNB_ulsch(uint8_t max_ldpc_iterations, uint16_t N_RB_UL);
 
-/*! \brief Perform PUSCH decoding. TS 38.212 V15.4.0 subclause 6.2
+/*! \brief Perform PUSCH decoding for the whole current received TTI. TS 38.212 V15.4.0 subclause 6.2
   @param phy_vars_gNB, Pointer to PHY data structure for gNB
-  @param UE_id, ID of UE transmitting this PUSCH
-  @param ulsch_llr, Pointer to received llr in ulsch
   @param frame_parms, Pointer to frame descriptor structure
-  @param nb_symb_sch, number of symbols used in the uplink shared channel
-  @param nb_re_dmrs, number of DMRS resource elements in one RB
+  @param frame, current received frame
   @param nr_tti_rx, current received TTI
-  @param harq_pid, harq process id
-  @param is_crnti
+  @param G
+  @param ULSCH_ids, array of ULSCH ids
+  @param nb_pusch, number of uplink shared channels
 */
 
 int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
-                      struct PHY_VARS_NR_UE_s *UE,
-                      uint8_t UE_id,
-                      short *ulsch_llr,
                       NR_DL_FRAME_PARMS *frame_parms,
-                      nfapi_nr_pusch_pdu_t *pusch_pdu,
                       uint32_t frame,
                       uint8_t nr_tti_rx,
-                      uint8_t harq_pid,
-                      uint32_t G,
-                      UE_nr_rxtx_proc_t *proc,
-                      nr_phy_data_t *phy_data,
-                      int8_t *ack_nack_rcvd,
-                      uint8_t num_acks);
+                      uint32_t *G,
+                      uint8_t *ULSCH_ids,
+                      int nb_pusch);
 
 /*! \brief Perform PUSCH unscrambling. TS 38.211 V15.4.0 subclause 6.3.1.1
   @param llr, Pointer to llr bits
@@ -77,10 +72,10 @@ void nr_ulsch_unscrambling(int16_t* llr, uint32_t size, uint32_t Nid, uint32_t n
 
 void nr_ulsch_layer_demapping(int16_t *llr_cw, uint8_t Nl, uint8_t mod_order, uint32_t length, int16_t **llr_layers);
 
-NR_gNB_ULSCH_t *find_nr_ulsch(PHY_VARS_gNB *gNB, uint16_t rnti, int pid);
-
 void dump_pusch_stats(FILE *fd,PHY_VARS_gNB *gNB);
 
 void dump_nr_I0_stats(FILE *fd,PHY_VARS_gNB *gNB);
 
 NR_gNB_SCH_STATS_t *get_ulsch_stats(PHY_VARS_gNB *gNB,NR_gNB_ULSCH_t *ulsch);
+
+#endif /* NR_ULSCH_H_ */

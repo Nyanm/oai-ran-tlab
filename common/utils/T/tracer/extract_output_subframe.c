@@ -4,7 +4,7 @@
 #include <fcntl.h>
 #include "database.h"
 #include "event.h"
-#include "config.h"
+#include "configuration.h"
 
 void usage(void)
 {
@@ -101,7 +101,7 @@ err:
   int last_subframe = -1;
   int subframe_written = 0;
 
-  OBUF ebuf = { osize: 0, omaxsize: 0, obuf: NULL };
+  OBUF ebuf = {.osize = 0, .omaxsize = 0, .obuf = NULL};
 
   while (1) {
     event e;

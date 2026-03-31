@@ -34,13 +34,15 @@
 
 #ifdef __cplusplus
 #include <atomic>
+#ifndef _Atomic
 #define _Atomic(X) std::atomic< X >
 #endif
+#endif
 
-#include "PHY/defs_nr_common.h"
-#include "PHY/defs_gNB.h"
+#include "defs_nr_common.h"
 #include "CODING/nrPolar_tools/nr_polar_pbch_defs.h"
 #include "PHY/defs_nr_sl_UE.h"
+#include "openair1/PHY/nr_phy_common/inc/nr_ue_phy_meas.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,21 +52,19 @@
 #include "common_lib.h"
 #include "fapi_nr_ue_interface.h"
 #include "assertions.h"
-#include <stdbool.h>
+#include "barrier.h"
+#include "actor.h"
+//#include "openair1/SCHED_NR_UE/defs.h"
 
-#ifdef MEX
-  #define msg mexPrintf
-#else
-    #if ENABLE_RAL
-      #include "common/utils/hashtable/hashtable.h"
-      #include "COMMON/ral_messages_types.h"
-      #include "UTIL/queue.h"
-    #endif
-    #define msg(aRGS...) LOG_D(PHY, ##aRGS)
+#if ENABLE_RAL
+#include "common/utils/hashtable/hashtable.h"
+#include "COMMON/ral_messages_types.h"
+#include "UTIL/queue.h"
 #endif
-//use msg in the real-time thread context
+#define msg(aRGS...) LOG_D(PHY, ##aRGS)
+// use msg in the real-time thread context
 #define msg_nrt printf
-//use msg_nrt in the non real-time context (for initialization, ...)
+// use msg_nrt in the non real-time context (for initialization, ...)
 #ifndef malloc16
     #define malloc16(x) memalign(32,x)
 #endif
@@ -74,26 +74,22 @@
 #define openair_free(y,x) free((y))
 #define PAGE_SIZE 4096
 
-#ifdef NR_UNIT_TEST
-  #define FILE_NAME                " "
-  #define LINE_FILE                (0)
-  #define NR_TST_PHY_PRINTF(...)   printf(__VA_ARGS__)
-#else
-  #define FILE_NAME                (__FILE__)
-  #define LINE_FILE                (__LINE__)
-  #define NR_TST_PHY_PRINTF(...)
-#endif
-
 #define PAGE_MASK 0xfffff000
 #define virt_to_phys(x) (x)
 #define openair_sched_exit() exit(-1)
 
 #define bzero(s,n) (memset((s),0,(n)))
-#define cmax(a,b)  ((a>b) ? (a) : (b))
-#define cmin(a,b)  ((a<b) ? (a) : (b))
-#define cmax3(a,b,c) ((cmax(a,b)>c) ? (cmax(a,b)) : (c))
 /// suppress compiler warning for unused arguments
 #define UNUSED(x) (void)x;
+
+// Set the number of barriers for processSlotTX to 512. This value has to be at least 483 for NTN where
+// DL-to-UL offset is up to 483. The selected value is also half of the frame range so that
+// (slot + frame * slots_per_frame) % NUM_PROCESS_SLOT_TX_BARRIERS is contiguous between the last slot of
+// frame 1023 and first slot of frame 0
+// e.g. in numerology 1:
+//       (19 + 1023 * 20) % 512 = 511
+//       (0  + 0 * 20) % 512 = 0
+#define NUM_PROCESS_SLOT_TX_BARRIERS 512
 
 #include "impl_defs_top.h"
 #include "impl_defs_nr.h"
@@ -101,8 +97,9 @@
 #include "defs_gNB.h"
 #include "time_meas.h"
 #include "PHY/CODING/coding_defs.h"
+#include "PHY/CODING/nrLDPC_coding/nrLDPC_coding_interface.h"
 #include "PHY/TOOLS/tools_defs.h"
-#include "platform_types.h"
+#include "common/platform_types.h"
 #include "NR_UE_TRANSPORT/nr_transport_ue.h"
 
 #if defined(UPGRADE_RAT_NR)
@@ -112,14 +109,6 @@
 #include <pthread.h>
 #include "radio/COMMON/common_lib.h"
 #include "NR_IF_Module.h"
-
-#define MAX_PUCCH0_NID 8
-
-typedef struct {
-  int nb_id;
-  int Nid[MAX_PUCCH0_NID];
-  int lut[MAX_PUCCH0_NID][160][14];
-} NR_UE_PUCCH0_LUT_t;
 
 /// Context data structure for gNB subframe processing
 typedef struct {
@@ -139,6 +128,11 @@ typedef enum {
 #define debug_msg if (((mac_xface->frame%100) == 0) || (mac_xface->frame < 50)) msg
 
 typedef struct {
+  uint8_t decoded_output[3]; // PBCH paylod not larger than 3B
+  uint8_t xtra_byte;
+} fapiPbch_t;
+
+typedef struct {
 
   // RRC measurements
   uint32_t rssi;
@@ -146,6 +140,7 @@ typedef struct {
   uint32_t rsrp[7];
   short rsrp_dBm[7];
   int ssb_rsrp_dBm[64];
+  float ssb_sinr_dB[64];
   // common measurements
   //! estimated noise power (linear)
   unsigned int   n0_power[NB_ANTENNAS_RX];
@@ -244,8 +239,6 @@ typedef struct {
 
   /// estimated frequency offset (in radians) for all subcarriers
   int32_t freq_offset;
-  /// nid2 is the PSS value, the PCI (physical cell id) will be: 3*NID1 (SSS value) + NID2 (PSS value)
-  int32_t nid2;
 } NR_UE_COMMON;
 
 #define NR_PRS_IDFT_OVERSAMP_FACTOR 1  // IDFT oversampling factor for NR PRS channel estimates in time domain, ALLOWED value 16x, and 1x is default(ie. IDFT size is frame_params->ofdm_symbol_size)
@@ -267,54 +260,20 @@ typedef struct {
 
 #define MAX_NR_DCI_DECODED_SLOT     10    // This value is not specified
 
-
-
 typedef enum {
-  _format_0_0_found=0,
-  _format_0_1_found=1,
-  _format_1_0_found=2,
-  _format_1_1_found=3,
-  _format_2_0_found=4,
-  _format_2_1_found=5,
-  _format_2_2_found=6,
-  _format_2_3_found=7
+  _format_0_0_found = 0,
+  _format_0_1_found = 1,
+  _format_1_0_found = 2,
+  _format_1_1_found = 3,
+  _format_2_0_found = 4,
+  _format_2_1_found = 5,
+  _format_2_2_found = 6,
+  _format_2_3_found = 7
 } format_found_t;
-#define TOTAL_NBR_SCRAMBLED_VALUES 13
-#define _C_RNTI_           0
-#define _CS_RNTI_          1
-#define _NEW_RNTI_         2
-#define _TC_RNTI_          3
-#define _P_RNTI_           4
-#define _SI_RNTI_          5
-#define _RA_RNTI_          6
-#define _SP_CSI_RNTI_      7
-#define _SFI_RNTI_         8
-#define _INT_RNTI_         9
-#define _TPC_PUSCH_RNTI_  10
-#define _TPC_PUCCH_RNTI_  11
-#define _TPC_SRS_RNTI_    12
-typedef enum {                          /* see 38.321  Table 7.1-2  RNTI usage */
-  _c_rnti         = _C_RNTI_,         /* Cell RNTI */
-  _cs_rnti        = _CS_RNTI_,        /* Configured Scheduling RNTI */
-  _new_rnti       = _NEW_RNTI_,       /* ? */
-  _tc_rnti        = _TC_RNTI_,        /* Temporary C-RNTI */
-  _p_rnti         = _P_RNTI_,         /* Paging RNTI */
-  _si_rnti        = _SI_RNTI_,        /* System information RNTI */
-  _ra_rnti        = _RA_RNTI_,        /* Random Access RNTI */
-  _sp_csi_rnti    = _SP_CSI_RNTI_,    /* Semipersistent CSI reporting on PUSCH */
-  _sfi_rnti       = _SFI_RNTI_,       /* Slot Format Indication on the given cell */
-  _int_rnti       = _INT_RNTI_,       /* Indication pre-emption in DL */
-  _tpc_pusch_rnti = _TPC_PUSCH_RNTI_, /* PUSCH power control */
-  _tpc_pucch_rnti = _TPC_PUCCH_RNTI_, /* PUCCH power control */
-  _tpc_srs_rnti   = _TPC_SRS_RNTI_
-} crc_scrambled_t;
-
 
 #endif
 typedef struct {
   int nb_search_space;
-  uint16_t sfn;
-  uint16_t slot;
   fapi_nr_dl_config_dci_dl_pdu_rel15_t pdcch_config[FAPI_NR_MAX_SS];
 } NR_UE_PDCCH_CONFIG;
 
@@ -339,6 +298,7 @@ typedef struct {
 typedef struct {
   int16_t amp;
   bool active;
+  int num_prach_slots;
   fapi_nr_ul_config_prach_pdu prach_pdu;
 } NR_UE_PRACH;
 
@@ -353,19 +313,16 @@ typedef struct {
 } NR_UE_CSI_RS;
 
 typedef struct {
+  uint8_t csi_rs_generated_signal_bits;
+  c16_t **csi_rs_generated_signal;
+  bool csi_im_meas_computed;
+  uint32_t interference_plus_noise_power;
+} nr_csi_info_t;
+
+typedef struct {
   bool active;
   fapi_nr_ul_config_srs_pdu srs_config_pdu;
 } NR_UE_SRS;
-
-// structure used for multiple SSB detection
-typedef struct NR_UE_SSB {
-  uint8_t i_ssb;   // i_ssb between 0 and 7 (it corresponds to ssb_index only for Lmax=4,8)
-  uint8_t n_hf;    // n_hf = 0,1 for Lmax =4 or n_hf = 0 for Lmax =8,64
-  uint32_t metric; // metric to order SSB hypothesis
-  uint32_t c_re;
-  uint32_t c_im;
-  struct NR_UE_SSB *next_ssb;
-} NR_UE_SSB;
 
 typedef struct UE_NR_SCAN_INFO_s {
   /// 10 best amplitudes (linear) for each pss signals
@@ -374,8 +331,14 @@ typedef struct UE_NR_SCAN_INFO_s {
   int32_t freq_offset_Hz[3][10];
 } UE_NR_SCAN_INFO_t;
 
+typedef struct {
+  bool update;
+  fapi_nr_dl_ntn_config_command_pdu ntn_config_params;
+} ntn_config_message_t;
+
 /// Top-level PHY Data Structure for UE
 typedef struct PHY_VARS_NR_UE_s {
+  openair0_config_t openair0_cfg[MAX_CARDS];
   /// \brief Module ID indicator for this instance
   uint8_t Mod_id;
   /// \brief Component carrier ID for this PHY instance
@@ -436,14 +399,11 @@ typedef struct PHY_VARS_NR_UE_s {
   NR_UE_COMMON    common_vars;
 
   nr_ue_if_module_t *if_inst;
-
+  bool received_config_request;
   fapi_nr_config_request_t nrUE_config;
   nr_synch_request_t synch_request;
 
   NR_UE_PRACH     *prach_vars[NUMBER_OF_CONNECTED_gNB_MAX];
-  NR_UE_CSI_IM    *csiim_vars[NUMBER_OF_CONNECTED_gNB_MAX];
-  NR_UE_CSI_RS    *csirs_vars[NUMBER_OF_CONNECTED_gNB_MAX];
-  NR_UE_SRS       *srs_vars[NUMBER_OF_CONNECTED_gNB_MAX];
   NR_UE_PRS       *prs_vars[NR_MAX_PRS_COMB_SIZE];
   uint8_t          prs_active_gNBs;
   NR_DL_UE_HARQ_t  dl_harq_processes[2][NR_MAX_DLSCH_HARQ_PROCESSES];
@@ -454,38 +414,7 @@ typedef struct PHY_VARS_NR_UE_s {
   uint32_t              PF;
   uint32_t              PO;
 
-#if defined(UPGRADE_RAT_NR)
-
-  /// demodulation reference signal for NR PBCH
-  uint32_t dmrs_pbch_bitmap_nr[DMRS_PBCH_I_SSB][DMRS_PBCH_N_HF][DMRS_BITMAP_SIZE];
-
-#endif
-
-
-  /// PBCH DMRS sequence
-  uint32_t nr_gold_pbch[2][64][NR_PBCH_DMRS_LENGTH_DWORD];
-
-  /// PDSCH DMRS
-  uint32_t ****nr_gold_pdsch[NUMBER_OF_CONNECTED_eNB_MAX];
-
-  // Scrambling IDs used in PDSCH DMRS
-  uint16_t scramblingID_dlsch[2];
-
   // Scrambling IDs used in PUSCH DMRS
-  uint16_t scramblingID_ulsch[2];
-
-  /// PDCCH DMRS
-  uint32_t ***nr_gold_pdcch[NUMBER_OF_CONNECTED_eNB_MAX];
-
-  // Scrambling IDs used in PDCCH DMRS
-  uint16_t scramblingID_pdcch;
-
-  /// PUSCH DMRS sequence
-  uint32_t ****nr_gold_pusch_dmrs;
-
-  // PRS sequence per gNB, per resource
-  uint32_t *****nr_gold_prs;
-
   c16_t X_u[64][839];
 
   // flag to activate PRB based averaging of channel estimates
@@ -518,26 +447,27 @@ typedef struct PHY_VARS_NR_UE_s {
   int dlsch_ra_errors[NUMBER_OF_CONNECTED_gNB_MAX];
   int dlsch_p_received[NUMBER_OF_CONNECTED_gNB_MAX];
   int dlsch_p_errors[NUMBER_OF_CONNECTED_gNB_MAX];
-  int dlsch_mch_received_sf[MAX_MBSFN_AREA][NUMBER_OF_CONNECTED_gNB_MAX];
   int dlsch_mch_received[NUMBER_OF_CONNECTED_gNB_MAX];
+  int current_dlsch_cqi[NUMBER_OF_CONNECTED_gNB_MAX];
+  int dlsch_mch_received_sf[MAX_MBSFN_AREA][NUMBER_OF_CONNECTED_gNB_MAX];
   int dlsch_mcch_received[MAX_MBSFN_AREA][NUMBER_OF_CONNECTED_gNB_MAX];
   int dlsch_mtch_received[MAX_MBSFN_AREA][NUMBER_OF_CONNECTED_gNB_MAX];
   int dlsch_mcch_errors[MAX_MBSFN_AREA][NUMBER_OF_CONNECTED_gNB_MAX];
   int dlsch_mtch_errors[MAX_MBSFN_AREA][NUMBER_OF_CONNECTED_gNB_MAX];
   int dlsch_mcch_trials[MAX_MBSFN_AREA][NUMBER_OF_CONNECTED_gNB_MAX];
   int dlsch_mtch_trials[MAX_MBSFN_AREA][NUMBER_OF_CONNECTED_gNB_MAX];
-  int current_dlsch_cqi[NUMBER_OF_CONNECTED_gNB_MAX];
-  uint8_t               decode_SIB;
-  uint8_t               decode_MIB;
-  uint8_t               init_sync_frame;
+  uint8_t init_sync_frame;
   /// temporary offset during cell search prior to MIB decoding
-  int              ssb_offset;
-  uint16_t         symbol_offset;  /// offset in terms of symbols for detected ssb in sync
-  int              rx_offset;      /// Timing offset
-  int              rx_offset_diff; /// Timing adjustment for ofdm symbol0 on HW USRP
-  int64_t          max_pos_fil;    /// Timing offset IIR filter
-  bool             apply_timing_offset;     /// Do time sync for current frame
-  int              time_sync_cell;
+  int ssb_offset;
+  uint16_t symbol_offset; /// offset in terms of symbols for detected ssb in sync
+  int rx_offset;      /// Timing offset
+  int64_t max_pos_iir; /// Timing offset IIR filter
+  int max_pos_acc; /// Timing offset accumuluated error for PI filter
+
+  double initial_fo; /// initial frequency offset provided by the user
+  int cont_fo_comp; /// flag enabling the continuous frequency offset estimation and compensation
+  double freq_offset; /// currently compensated frequency offset
+  double freq_off_acc; /// accumulated frequency error (for PI controller)
 
   /// Timing Advance updates variables
   /// Timing advance update computed from the TA command signalled from gNB
@@ -547,21 +477,8 @@ typedef struct PHY_VARS_NR_UE_s {
   int ta_slot;
   int ta_command;
 
-  /// Flag to tell if UE is secondary user (cognitive mode)
-  unsigned char    is_secondary_ue;
-  /// Flag to tell if secondary gNB has channel estimates to create NULL-beams from.
-  unsigned char    has_valid_precoder;
-  /// hold the precoder for NULL beam to the primary gNB
-  int              **ul_precoder_S_UE;
-  /// holds the maximum channel/precoder coefficient
-  char             log2_maxp;
-
   /// Flag to initialize averaging of PHY measurements
   int init_averaging;
-
-  /// \brief sinr for all subcarriers of the current link (used only for abstraction).
-  /// - first index: ? [0..12*N_RB_DL[
-  double *sinr_dB;
 
   /// sinr_effective used for CQI calulcation
   double sinr_eff;
@@ -569,6 +486,8 @@ typedef struct PHY_VARS_NR_UE_s {
   /// N0 (used for abstraction)
   double N0;
 
+  /// NR LDPC coding related
+  nrLDPC_coding_interface_t nrLDPC_coding_interface;
   uint8_t max_ldpc_iterations;
 
   /// SRS variables
@@ -577,79 +496,16 @@ typedef struct PHY_VARS_NR_UE_s {
   /// CSI variables
   nr_csi_info_t *nr_csi_info;
 
-  //#if defined(UPGRADE_RAT_NR)
-#if 1
-  SystemInformationBlockType1_nr_t systemInformationBlockType1_nr;
-#endif
-
-  //#if defined(UPGRADE_RAT_NR)
-#if 1
-  scheduling_request_config_t scheduling_request_config_nr[NUMBER_OF_CONNECTED_gNB_MAX];
-
-#endif
-
-  time_stats_t phy_proc;
-  time_stats_t phy_proc_tx;
-  time_stats_t phy_proc_rx;
-
+  // TODO: move this out of phy
   time_stats_t ue_ul_indication_stats;
-
-  uint32_t use_ia_receiver;
-
-  time_stats_t ofdm_mod_stats;
-  time_stats_t ulsch_encoding_stats;
-  time_stats_t ulsch_ldpc_encoding_stats;
-  time_stats_t ulsch_modulation_stats;
-  time_stats_t ulsch_segmentation_stats;
-  time_stats_t ulsch_rate_matching_stats;
-  time_stats_t ulsch_interleaving_stats;
-  time_stats_t ulsch_multiplexing_stats;
-
-  time_stats_t generic_stat;
-  time_stats_t generic_stat_bis[LTE_SLOTS_PER_SUBFRAME];
-  time_stats_t ue_front_end_stat;
-  time_stats_t ue_front_end_per_slot_stat[LTE_SLOTS_PER_SUBFRAME];
-  time_stats_t pdcch_procedures_stat;
-  time_stats_t pdsch_procedures_stat;
-  time_stats_t pdsch_procedures_per_slot_stat[LTE_SLOTS_PER_SUBFRAME];
-  time_stats_t dlsch_procedures_stat;
-
-  time_stats_t rx_pdsch_stats;
-  time_stats_t ofdm_demod_stats;
-  time_stats_t dlsch_rx_pdcch_stats;
-  time_stats_t rx_dft_stats;
-  time_stats_t dlsch_channel_estimation_stats;
-  time_stats_t dlsch_freq_offset_estimation_stats;
-  time_stats_t dlsch_decoding_stats;
-  time_stats_t dlsch_demodulation_stats;
-  time_stats_t dlsch_rate_unmatching_stats;
-  time_stats_t dlsch_ldpc_decoding_stats;
-  time_stats_t dlsch_deinterleaving_stats;
-  time_stats_t dlsch_llr_stats;
-  time_stats_t dlsch_llr_stats_parallelization[LTE_SLOTS_PER_SUBFRAME];
-  time_stats_t dlsch_unscrambling_stats;
-  time_stats_t dlsch_rate_matching_stats;
-  time_stats_t dlsch_ldpc_encoding_stats;
-  time_stats_t dlsch_interleaving_stats;
-  time_stats_t dlsch_tc_init_stats;
-  time_stats_t dlsch_tc_alpha_stats;
-  time_stats_t dlsch_tc_beta_stats;
-  time_stats_t dlsch_tc_gamma_stats;
-  time_stats_t dlsch_tc_ext_stats;
-  time_stats_t dlsch_tc_intl1_stats;
-  time_stats_t dlsch_tc_intl2_stats;
-  time_stats_t tx_prach;
+  nr_ue_phy_cpu_stat_t phy_cpu_stats;
 
   /// RF and Interface devices per CC
   openair0_device rfdevice;
 
-#if ENABLE_RAL
-  hash_table_t    *ral_thresholds_timed;
-  SLIST_HEAD(ral_thresholds_gen_poll_s, ral_threshold_phy_t) ral_thresholds_gen_polled[RAL_LINK_PARAM_GEN_MAX];
-  SLIST_HEAD(ral_thresholds_lte_poll_s, ral_threshold_phy_t) ral_thresholds_lte_polled[RAL_LINK_PARAM_LTE_MAX];
-#endif
-  int dl_errors;
-  _Atomic(int) dl_stats[16];
+  /// Phase precompensation flag
+  bool no_phase_pre_comp;
+
   void* scopeData;
   // Pointers to hold PDSCH data only for phy simulators
   void *phy_sim_rxdataF;
@@ -659,18 +515,21 @@ typedef struct PHY_VARS_NR_UE_s {
   void *phy_sim_pdsch_dl_ch_estimates;
   void *phy_sim_pdsch_dl_ch_estimates_ext;
   uint8_t *phy_sim_dlsch_b;
-  notifiedFIFO_t phy_config_ind;
-  notifiedFIFO_t *tx_resume_ind_fifo[NR_MAX_SLOTS_PER_FRAME];
-  int tx_wait_for_dlsch[NR_MAX_SLOTS_PER_FRAME];
+  uint8_t *phy_sim_test_buf;
 
-  //Sidelink parameters
+  dynamic_barrier_t process_slot_tx_barriers[NUM_PROCESS_SLOT_TX_BARRIERS];
+
+  // Gain change required for automation RX gain change
+  int adjust_rxgain;
+
+  // Sidelink parameters
   sl_nr_sidelink_mode_t sl_mode;
   sl_nr_ue_phy_params_t SL_UE_PHY_PARAMS;
   struct PHY_MEASUREMENTS_gNB_s *sl_measurements;
   int max_nb_slsch;
   // we use the gNB ULSCH context for SLSCH reception
-  struct NR_gNB_ULSCH_s   *slsch; 
-  struct NR_gNB_PUSCH_s   *pssch_vars;
+  struct NR_gNB_ULSCH_t   *slsch; 
+  struct NR_gNB_PUSCH   *pssch_vars;
   bool phy_config_request_sent;
   int pscch_dmrs_gold_init;
   /// PDCCH DMRS for TX
@@ -679,8 +538,13 @@ typedef struct PHY_VARS_NR_UE_s {
   uint32_t ***nr_gold_pscch;
   /// PSSCH signal detection threshold
   int pssch_thres;
-  // PUCCH0 Look-up table for cyclic-shifts
-  NR_UE_PUCCH0_LUT_t pucch0_lut;
+  
+  Actor_t sync_actor;
+  Actor_t *dl_actors;
+  Actor_t *ul_actors;
+  ntn_config_message_t* ntn_config_message;
+  pthread_t main_thread;
+  pthread_t stat_thread;
 } PHY_VARS_NR_UE;
 
 typedef struct {
@@ -699,11 +563,40 @@ typedef struct {
   int frame_rx;
 } UE_nr_rxtx_proc_t;
 
+typedef struct {
+  bool cell_detected;
+  int rx_offset;
+  int frame_id;
+} nr_initial_sync_t;
+
+typedef struct {
+  nr_gscn_info_t gscnInfo;
+  int foFlag;
+  int targetNidCell;
+  c16_t **rxdata;
+  NR_DL_FRAME_PARMS *fp;
+  UE_nr_rxtx_proc_t *proc;
+  int nFrames;
+  int halfFrameBit;
+  int symbolOffset;
+  int ssbIndex;
+  int ssbOffset;
+  int nidCell;
+  int freqOffset;
+  nr_initial_sync_t syncRes;
+  fapiPbch_t pbchResult;
+  int pssCorrPeakPower;
+  int pssCorrAvgPower;
+  int adjust_rxgain;
+  task_ans_t *ans;
+} nr_ue_ssb_scan_t;
+
 typedef struct nr_phy_data_tx_s {
   NR_UE_ULSCH_t ulsch;
   NR_UE_PUCCH pucch_vars;
+  NR_UE_SRS srs_vars;
 
-  //Sidelink Tx action decided by MAC 
+  // Sidelink Rx action decided by MAC
   sl_nr_tx_config_type_enum_t sl_tx_action;
   sl_nr_tx_config_psbch_pdu_t psbch_vars;
   sl_nr_tx_config_pscch_pssch_pdu_t nr_sl_pssch_pscch_pdu;
@@ -711,11 +604,10 @@ typedef struct nr_phy_data_tx_s {
 } nr_phy_data_tx_t;
 
 typedef struct nr_phy_data_s {
-  bool active;
   NR_UE_PDCCH_CONFIG phy_pdcch_config;
   NR_UE_DLSCH_t dlsch[2];
 
-  //Sidelink Rx action decided by MAC 
+  // Sidelink Rx action decided by MAC
   sl_nr_rx_config_type_enum_t sl_rx_action;
   sl_nr_rx_config_pscch_pdu_t nr_sl_pscch_pdu;
   sl_nr_rx_config_pssch_sci_pdu_t nr_sl_pssch_sci_pdu;
@@ -723,7 +615,11 @@ typedef struct nr_phy_data_s {
   sl_nr_tti_csi_rs_pdu_t nr_sl_csi_rs_pdu;
   sl_nr_tx_rx_config_psfch_pdu_t *psfch_pdu_list;
   uint8_t num_psfch_pdus;
+  NR_UE_CSI_RS csirs_vars;
+  NR_UE_CSI_IM csiim_vars;
 } nr_phy_data_t;
+
+enum stream_status_e { STREAM_STATUS_UNSYNC, STREAM_STATUS_SYNCING, STREAM_STATUS_SYNCED};
 /* this structure is used to pass both UE phy vars and
  * proc to the function UE_thread_rxn_txnp4
  */
@@ -731,9 +627,9 @@ typedef struct nr_rxtx_thread_data_s {
   UE_nr_rxtx_proc_t proc;
   PHY_VARS_NR_UE    *UE;
   int writeBlockSize;
-  notifiedFIFO_t txFifo;
   nr_phy_data_t phy_data;
-  int tx_wait_for_dlsch;
+  dynamic_barrier_t* next_barrier;
+  uint64_t absolute_deadline_us;
 } nr_rxtx_thread_data_t;
 
 typedef struct LDPCDecode_ue_s {
@@ -743,14 +639,11 @@ typedef struct LDPCDecode_ue_s {
   NR_UE_DLSCH_t *dlsch;
   short* dlsch_llr;
   int dlsch_id;
-  int harq_pid;
   int rv_index;
-  int A;
   int E;
   int Kc;
   int Qm;
   int Kr_bytes;
-  int nbSegments;
   int segment_r;
   int r_offset;
   int offset;
@@ -759,8 +652,15 @@ typedef struct LDPCDecode_ue_s {
   time_stats_t ts_deinterleave;
   time_stats_t ts_rate_unmatch;
   time_stats_t ts_ldpc_decode;
-  UE_nr_rxtx_proc_t *proc;
+  task_ans_t *ans;
 } ldpcDecode_ue_t;
 
-#include "SIMULATION/ETH_TRANSPORT/defs.h"
+static inline void start_meas_nr_ue_phy(PHY_VARS_NR_UE *ue, int meas_index) {
+  start_meas(&ue->phy_cpu_stats.cpu_time_stats[meas_index]);
+}
+
+static inline void stop_meas_nr_ue_phy(PHY_VARS_NR_UE *ue, int meas_index) {
+  stop_meas(&ue->phy_cpu_stats.cpu_time_stats[meas_index]);
+}
+
 #endif

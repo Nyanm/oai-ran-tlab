@@ -43,16 +43,11 @@
 #include <getopt.h>
 #include <sys/sysinfo.h>
 
-#undef MALLOC //there are two conflicting definitions, so we better make sure we don't use it at all
-
 #include "assertions.h"
 
 #include "PHY/types.h"
 
 #include "PHY/defs_common.h"
-#undef MALLOC //there are two conflicting definitions, so we better make sure we don't use it at all
-
-
 #include "radio/COMMON/common_lib.h"
 #include "radio/ETHERNET/ethernet_lib.h"
 
@@ -62,13 +57,11 @@
 #include "SCHED/sched_eNB.h"
 #include "PHY/LTE_ESTIMATION/lte_estimation.h"
 #include "PHY/INIT/phy_init.h"
+#include "executables/softmodem-common.h"
 
 #include "common/utils/LOG/log.h"
 
-
 int attach_rru(RU_t *ru);
-void configure_ru(RU_t *ru, void *arg);
-void configure_rru(RU_t *ru, void *arg);
 void fill_rf_config(RU_t *ru, char *rf_config_file);
 void* ru_thread_control( void* param );
 
@@ -81,7 +74,6 @@ const char rru_format_options[4][20] = {"OAI_IF5_only","OAI_IF4p5_only","OAI_IF5
 const char rru_formats[3][20] = {"OAI_IF5","MBP_IF5","OAI_IF4p5"};
 const char ru_if_formats[4][20] = {"LOCAL_RF","REMOTE_OAI_IF5","REMOTE_MBP_IF5","REMOTE_OAI_IF4p5"};
 
-extern int oai_exit;
 extern void wait_eNBs(void);
 
 int send_tick(RU_t *ru)
@@ -372,9 +364,9 @@ int check_capabilities(RU_t *ru,
   return(-1);
 }
 
-void configure_ru(RU_t *ru,
-                  void *arg)
+void configure_ru(void *ruu, void *arg)
 {
+  RU_t *ru = (RU_t *)ruu;
   RRU_config_t       *config       = (RRU_config_t *)arg;
   RRU_capabilities_t *capabilities = (RRU_capabilities_t*)arg;
   int ret;
@@ -423,9 +415,9 @@ void configure_ru(RU_t *ru,
   phy_init_RU(ru);
 }
 
-void configure_rru(RU_t *ru,
-                   void *arg)
+void configure_rru(void *ruu, void *arg)
 {
+  RU_t *ru = (RU_t *)ruu;
   RRU_config_t *config = (RRU_config_t *)arg;
 
   ru->frame_parms->eutra_band                                               = config->band_list[0];

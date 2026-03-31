@@ -32,29 +32,29 @@
 
 #include "PHY/NR_REFSIG/ss_pbch_nr.h"
 #include "PHY/NR_REFSIG/dmrs_nr.h"
-
-
+#include "nfapi/open-nFAPI/nfapi/public_inc/nfapi_nr_interface.h"
 
 uint8_t allowed_xlsch_re_in_dmrs_symbol(uint16_t k,
                                         uint16_t start_sc,
                                         uint16_t ofdm_symbol_size,
                                         uint8_t numDmrsCdmGrpsNoData,
-                                        uint8_t dmrs_type) {
+                                        uint8_t dmrs_type)
+{
   uint8_t delta;
   uint16_t diff;
-  if (k>start_sc)
+  if (k > start_sc)
     diff = k-start_sc;
   else
     diff = (ofdm_symbol_size-start_sc)+k;
   for (int i = 0; i<numDmrsCdmGrpsNoData; i++){
-    if  (dmrs_type==NFAPI_NR_DMRS_TYPE1) {
+    if  (dmrs_type == NFAPI_NR_DMRS_TYPE1) {
       delta = i;
       if (((diff)%2)  == delta)
         return (0);
     }
     else {
-      delta = i<<1;
-      if (((diff%6) == delta) || ((diff%6) == (delta+1)))
+      delta = i << 1;
+      if (((diff % 6) == delta) || ((diff % 6) == (delta + 1)))
         return (0);
     }
   }
@@ -299,42 +299,36 @@ uint16_t get_dmrs_freq_idx_ul(uint16_t n, uint8_t k_prime, uint8_t delta, uint8_
 int8_t get_next_dmrs_symbol_in_slot(uint16_t  ul_dmrs_symb_pos, uint8_t counter, uint8_t end_symbol)
 {
   for(uint8_t symbol = counter; symbol < end_symbol; symbol++) {
-    if((ul_dmrs_symb_pos >> symbol) & 0x01 ) {
+    if((ul_dmrs_symb_pos >> symbol) & 0x01) {
       return symbol;
     }
   }
   return -1;
 }
 
-
-/* return the total number of dmrs symbol in a slot */
-uint8_t get_dmrs_symbols_in_slot(uint16_t l_prime_mask,  uint16_t nb_symb)
+int8_t get_num_dmrs_re_per_rb(const uint8_t dmrs_type, const uint8_t num_cdm_grp_no_data)
 {
-  uint8_t tmp = 0;
-  for (int i = 0; i < nb_symb; i++) {
-    tmp += (l_prime_mask >> i) & 0x01;
-  }
-  return tmp;
+  return (dmrs_type == NFAPI_NR_DMRS_TYPE1 ? 6 * num_cdm_grp_no_data : 4 * num_cdm_grp_no_data);
 }
 
 /* return the position of valid dmrs symbol in a slot for channel compensation */
-int8_t get_valid_dmrs_idx_for_channel_est(uint16_t  dmrs_symb_pos, uint8_t counter)
+int8_t get_valid_dmrs_idx_for_channel_est(uint16_t dmrs_symb_pos, uint8_t counter)
 {
   int8_t  symbIdx = -1;
   /* if current symbol is DMRS then return this index */
-  if(is_dmrs_symbol(counter,  dmrs_symb_pos ) ==1) {
+  if(is_dmrs_symbol(counter, dmrs_symb_pos) == 1) {
     return counter;
   }
   /* find previous DMRS symbol */
-  for(int8_t symbol = counter;symbol >=0 ; symbol--) {
-    if((1<<symbol & dmrs_symb_pos)> 0) {
+  for(int8_t symbol = counter; symbol >= 0 ; symbol--) {
+    if((1 << symbol & dmrs_symb_pos) > 0) {
       symbIdx = symbol;
       break;
     }
   }
   /* if there is no previous dmrs available then find the next possible*/
   if(symbIdx == -1) {
-    symbIdx = get_next_dmrs_symbol_in_slot(dmrs_symb_pos,counter,15);
+    symbIdx = get_next_dmrs_symbol_in_slot(dmrs_symb_pos, counter, 15);
   }
   return symbIdx;
 }
@@ -347,40 +341,40 @@ void nr_chest_time_domain_avg(NR_DL_FRAME_PARMS *frame_parms,
                               uint16_t dmrs_bitmap,
                               uint16_t num_rbs)
 {
-  __m128i *ul_ch128_0;
-  __m128i *ul_ch128_1;
+  simde__m128i *ul_ch128_0;
+  simde__m128i *ul_ch128_1;
   int16_t *ul_ch16_0;
   int total_symbols = start_symbol + num_symbols;
-  int num_dmrs_symb = get_dmrs_symbols_in_slot(dmrs_bitmap, total_symbols);
+  int num_dmrs_symb = count_bits64_with_mask(dmrs_bitmap, start_symbol, total_symbols);
   int first_dmrs_symb = get_next_dmrs_symbol_in_slot(dmrs_bitmap, start_symbol, total_symbols);
   AssertFatal(first_dmrs_symb > -1, "No DMRS symbol present in this slot\n");
   for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) {
     for (int symb = first_dmrs_symb+1; symb < total_symbols; symb++) {
-      ul_ch128_0 = (__m128i *)&ch_estimates[aarx][first_dmrs_symb*frame_parms->ofdm_symbol_size];
+      ul_ch128_0 = (simde__m128i *)&ch_estimates[aarx][first_dmrs_symb*frame_parms->ofdm_symbol_size];
       if ((dmrs_bitmap >> symb) & 0x01) {
-        ul_ch128_1 = (__m128i *)&ch_estimates[aarx][symb*frame_parms->ofdm_symbol_size];
+        ul_ch128_1 = (simde__m128i *)&ch_estimates[aarx][symb*frame_parms->ofdm_symbol_size];
         for (int rbIdx = 0; rbIdx < num_rbs; rbIdx++) {
-          ul_ch128_0[0] = _mm_adds_epi16(ul_ch128_0[0], ul_ch128_1[0]);
-          ul_ch128_0[1] = _mm_adds_epi16(ul_ch128_0[1], ul_ch128_1[1]);
-          ul_ch128_0[2] = _mm_adds_epi16(ul_ch128_0[2], ul_ch128_1[2]);
+          ul_ch128_0[0] = simde_mm_adds_epi16(ul_ch128_0[0], ul_ch128_1[0]);
+          ul_ch128_0[1] = simde_mm_adds_epi16(ul_ch128_0[1], ul_ch128_1[1]);
+          ul_ch128_0[2] = simde_mm_adds_epi16(ul_ch128_0[2], ul_ch128_1[2]);
           ul_ch128_0 += 3;
           ul_ch128_1 += 3;
         }
       }
     }
-    ul_ch128_0 = (__m128i *)&ch_estimates[aarx][first_dmrs_symb*frame_parms->ofdm_symbol_size];
+    ul_ch128_0 = (simde__m128i *)&ch_estimates[aarx][first_dmrs_symb*frame_parms->ofdm_symbol_size];
     if (num_dmrs_symb == 2) {
       for (int rbIdx = 0; rbIdx < num_rbs; rbIdx++) {
-        ul_ch128_0[0] = _mm_srai_epi16(ul_ch128_0[0], 1);
-        ul_ch128_0[1] = _mm_srai_epi16(ul_ch128_0[1], 1);
-        ul_ch128_0[2] = _mm_srai_epi16(ul_ch128_0[2], 1);
+        ul_ch128_0[0] = simde_mm_srai_epi16(ul_ch128_0[0], 1);
+        ul_ch128_0[1] = simde_mm_srai_epi16(ul_ch128_0[1], 1);
+        ul_ch128_0[2] = simde_mm_srai_epi16(ul_ch128_0[2], 1);
         ul_ch128_0 += 3;
       }
     } else if (num_dmrs_symb == 4) {
       for (int rbIdx = 0; rbIdx < num_rbs; rbIdx++) {
-        ul_ch128_0[0] = _mm_srai_epi16(ul_ch128_0[0], 2);
-        ul_ch128_0[1] = _mm_srai_epi16(ul_ch128_0[1], 2);
-        ul_ch128_0[2] = _mm_srai_epi16(ul_ch128_0[2], 2);
+        ul_ch128_0[0] = simde_mm_srai_epi16(ul_ch128_0[0], 2);
+        ul_ch128_0[1] = simde_mm_srai_epi16(ul_ch128_0[1], 2);
+        ul_ch128_0[2] = simde_mm_srai_epi16(ul_ch128_0[2], 2);
         ul_ch128_0 += 3;
       }
     } else if (num_dmrs_symb == 3) {
@@ -415,4 +409,3 @@ void nr_chest_time_domain_avg(NR_DL_FRAME_PARMS *frame_parms,
     } else AssertFatal((num_dmrs_symb < 5) && (num_dmrs_symb > 0), "Illegal number of DMRS symbols in the slot\n");
   }
 }
-

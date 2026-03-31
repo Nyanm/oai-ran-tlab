@@ -14,7 +14,7 @@
 #include "utils.h"
 #include "event_selector.h"
 #include "openair_logo.h"
-#include "config.h"
+#include "configuration.h"
 
 /****************************************************************************/
 /* conversion from rnti to "ue_id" (which does not really exists)           */
@@ -340,12 +340,12 @@ static void enb_main_gui(enb_gui *e, gui *g, event_handler *h, void *database,
   xy_plot_set_range(g, w, 0, 1024*10, -10, 80);
   l = new_ttilog(h, database,
       "ENB_PHY_PUCCH_1_ENERGY", "frame", "subframe", "threshold", 0);
-  v = new_view_tti(10, g, w, new_color(g, "#ff0000"));
+  v = new_view_tti(10, g, w, new_color(g, "#ff0000"), 10);
   logger_add_view(l, v);
   e->pucch1_energy_ue_threshold_logger = l;
   l = new_ttilog(h, database,
       "ENB_PHY_PUCCH_1_ENERGY", "frame", "subframe", "energy", 1);
-  v = new_view_tti(10, g, w, new_color(g, "#0c0c72"));
+  v = new_view_tti(10, g, w, new_color(g, "#0c0c72"), 10);
   logger_add_view(l, v);
   e->pucch1_energy_ue_energy_logger = l;
 
@@ -368,7 +368,7 @@ static void enb_main_gui(enb_gui *e, gui *g, event_handler *h, void *database,
   widget_add_child(g, line, w, -1);
   l = new_ticked_ttilog(h, database, "ENB_PHY_DL_TICK", "frame", "subframe",
       "ENB_PHY_DLSCH_UE_DCI", "mcs", 0, -1);
-  v = new_view_tti(10, g, w, new_color(g, "#0c0c72"));
+  v = new_view_tti(10, g, w, new_color(g, "#0c0c72"), 10);
   logger_add_view(l, v);
   e->dl_mcs_logger = l;
 
@@ -379,7 +379,7 @@ static void enb_main_gui(enb_gui *e, gui *g, event_handler *h, void *database,
   widget_add_child(g, line, w, -1);
   l = new_ticked_ttilog(h, database, "ENB_PHY_DL_TICK", "frame", "subframe",
       "ENB_PHY_ULSCH_UE_DCI", "mcs", 0, -1);
-  v = new_view_tti(10, g, w, new_color(g, "#0c0c72"));
+  v = new_view_tti(10, g, w, new_color(g, "#0c0c72"), 10);
   logger_add_view(l, v);
   e->ul_mcs_logger = l;
 
@@ -394,8 +394,8 @@ static void enb_main_gui(enb_gui *e, gui *g, event_handler *h, void *database,
   widget_add_child(g, col, w, -1);
   container_set_child_growable(g, col, w, 1);
   l = new_throughputlog(h, database, "ENB_PHY_DL_TICK", "frame", "subframe",
-      "ENB_PHY_DLSCH_UE_DCI", "TBS");
-  v = new_view_scrolltti(10, g, w, new_color(g, "#0c0c72"), w2);
+      "ENB_PHY_DLSCH_UE_DCI", "TBS", 10);
+  v = new_view_scrolltti(10, g, w, new_color(g, "#0c0c72"), w2, 10);
   logger_add_view(l, v);
 
   /* UE x UL PHY (truly: DCI) throughput */
@@ -409,8 +409,8 @@ static void enb_main_gui(enb_gui *e, gui *g, event_handler *h, void *database,
   widget_add_child(g, col, w, -1);
   container_set_child_growable(g, col, w, 1);
   l = new_throughputlog(h, database, "ENB_PHY_DL_TICK", "frame", "subframe",
-      "ENB_PHY_ULSCH_UE_DCI", "TBS");
-  v = new_view_scrolltti(10, g, w, new_color(g, "#0c0c72"), w2);
+      "ENB_PHY_ULSCH_UE_DCI", "TBS", 10);
+  v = new_view_scrolltti(10, g, w, new_color(g, "#0c0c72"), w2, 10);
   logger_add_view(l, v);
 
   /* downlink/uplink UE DCIs */
@@ -874,7 +874,7 @@ int main(int n, char **v)
   if (pthread_mutex_init(&enb_data.lock, NULL)) abort();
   setup_event_selector(g, database, is_on, is_on_changed, &enb_data);
 
-  OBUF ebuf = { osize: 0, omaxsize: 0, obuf: NULL };
+  OBUF ebuf = {.osize = 0, .omaxsize = 0, .obuf = NULL};
 
 restart:
   clear_remote_config();

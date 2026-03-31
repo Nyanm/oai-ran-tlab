@@ -10,6 +10,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#ifndef _STANDALONE_TESTING_
+#include "common/utils/LOG/log.h"
+#endif
+
 /*
  * GNB_AM <rx_maxsize> <tx_maxsize> <t_poll_retransmit> <t_reassembly>
  *       <t_status_prohibit> <poll_pdu> <poll_byte> <max_retx_threshold>
@@ -203,6 +207,15 @@ void max_retx_reached_ue(void *max_retx_reached_data,
   exit(1);
 }
 
+#ifdef _STANDALONE_TESTING_
+
+void exit_function(const char *file, const char *function, const int line, const char *s, const int assert)
+{
+  exit(1);
+}
+
+#endif
+
 int test_main(void)
 {
   nr_rlc_entity_t *gnb = NULL;
@@ -222,6 +235,10 @@ int test_main(void)
   int ue_recv_fails = 0;
   int gnb_pdu_size = 1000;
   int ue_pdu_size = 1000;
+
+#ifndef _STANDALONE_TESTING_
+  logInit();
+#endif
 
   printf("TEST: start\n");
 
@@ -418,8 +435,8 @@ int test_main(void)
     }
   }
 
-  gnb->delete(gnb);
-  ue->delete(ue);
+  gnb->delete_entity(gnb);
+  ue->delete_entity(ue);
 
   free(sdu);
   free(pdu);
