@@ -38,7 +38,6 @@
 #include "RRC/NR_UE/rrc_defs.h"
 #include "nfapi/open-nFAPI/nfapi/public_inc/nfapi_nr_interface.h"
 #include "executables/nr-uesoftmodem.h"
-#include "RRC/NR_UE/L2_interface_ue.h"
 
 #define NR_DL_MAX_DAI                            (4)                      /* TS 38.213 table 9.1.3-1 Value of counter DAI for DCI format 1_0 and 1_1 */
 #define NR_DL_MAX_NB_CW                          (2)                      /* number of downlink code word */
@@ -422,15 +421,6 @@ void nr_ue_sidelink_scheduler(nr_sidelink_indication_t *sl_ind, NR_UE_MAC_INST_t
 
 NR_SearchSpace_t *get_common_search_space(const NR_UE_MAC_INST_t *mac, const NR_SearchSpaceId_t ss_id);
 
-void nr_mac_rrc_sl_mib_ind(const module_id_t module_id,
-                              const int CC_id,
-                              const uint8_t gNB_index,
-                              const frame_t frame,
-                              const int slot,
-                              const channel_t channel,
-                              uint8_t* pduP,
-                              const sdu_size_t pdu_len,
-                              const uint16_t rx_slss_id);
 void nr_schedule_slsch(NR_UE_MAC_INST_t *mac, int frameP, int slotP, nr_sci_pdu_t *sci_pdu,
                        nr_sci_pdu_t *sci2_pdu,
                        nr_sci_format_t format2,
