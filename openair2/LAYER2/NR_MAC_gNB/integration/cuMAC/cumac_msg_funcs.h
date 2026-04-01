@@ -61,6 +61,14 @@ typedef struct {
   uint8_t nActiveUe;
   struct timespec tti_req_timestamp;
   struct timespec tti_end_timestamp;
+  // Response data per slot
+  // Save RNTI when creating sch_tti_req
+  uint16_t *c_rnti;
+  uint16_t *setSchdUePerCellTTI;
+  int16_t *allocSol;
+  int16_t *mcsSelSol;
+  uint8_t *layerSelSol;
+
 } slot_data_entry_t ;
 
 #define TASK_BIT(t) (1u << (t))

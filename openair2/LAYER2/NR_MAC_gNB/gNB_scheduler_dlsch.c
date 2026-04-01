@@ -637,6 +637,7 @@ static void pf_dl(gNB_MAC_INST *mac,
   UE_iterator (UE_list, UE) {
     connected_ues++;
   }
+  const slot_data_entry_t* cumac_slot_data = NULL;
   if (connected_ues!=0 && cumac_can_schedule()) {
     printf("CUMAC SENDING SCH TTI_REQ with %d connected UES\n", connected_ues);
     /* const double k = 1.38064852e-23; // Boltzmann constant
@@ -682,9 +683,8 @@ static void pf_dl(gNB_MAC_INST *mac,
     for (int i = 0; i < connected_ues; i++) {
       buffers.wbSinr[i] = 20.0f;
     }
-
     cumac_wait_to_send();
-    const uint32_t taskBitMap = TASK_BIT(CUMAC_TASK_UE_SELECTION);
+    const uint32_t taskBitMap = TASK_BIT(CUMAC_TASK_UE_SELECTION) | TASK_BIT(CUMAC_TASK_PRB_ALLOCATION);
     cumac_sch_tti_req_args_t args = {.frame = frame,
                                      .slot = slot,
                                      .payload.cellID = 0,
@@ -697,12 +697,54 @@ static void pf_dl(gNB_MAC_INST *mac,
                                      .payload.nUeAnt = RC.nrmac[0]->config->carrier_config.num_tx_ant.value,
                                      .payload.sigmaSqrd = 1.0f, // hardcoded in cuMAC source code
                                      .buffers = &buffers};
+
+    if (taskBitMap & TASK_BIT(CUMAC_TASK_PRB_ALLOCATION)) {
+
+      uint16_t numData = args.payload.nActiveUe * args.payload.nPrbGrp * args.payload.nUeAnt;
+      buffers.postEqSinr = malloc(numData * sizeof(float));
+      for (int i = 0; i < numData; i++) {
+        buffers.postEqSinr[i] = 20.0f;
+      }
+
+      numData = cumac_nMax_schUePerCell() * args.payload.nPrbGrp * args.payload.nUeAnt;
+      buffers.sinVal = malloc(numData * sizeof(float));
+      for (int i = 0; i < numData; i++) {
+        buffers.sinVal[i] = 20.0f;
+      }
+
+      const uint32_t  prdLen = cumac_nMax_schUePerCell() * args.payload.nPrbGrp * args.payload.nBsAnt * args.payload.nBsAnt;
+      const uint32_t  detLen = cumac_nMax_schUePerCell() * args.payload.nPrbGrp * args.payload.nUeAnt * args.payload.nUeAnt;
+      const uint32_t hLen = args.payload.nPrbGrp * cumac_nMax_schUePerCell() * /*nMaxCell*/ 1 * args.payload.nBsAnt * args.payload.nUeAnt;
+
+      numData = detLen;
+      buffers.detMat = malloc(numData * sizeof(cuComplex));
+      for (int i = 0; i < numData; i++) {
+        buffers.detMat[i].x = 0.5f;
+        buffers.detMat[i].y = 0.5f;
+      }
+
+      numData = hLen;
+      buffers.estH_fr = malloc(numData * sizeof(cuComplex));
+      for (int i = 0; i < numData; i++) {
+        buffers.estH_fr[i].x = 0.5f;
+        buffers.estH_fr[i].y = 0.5f;
+      }
+
+      numData = prdLen;
+      buffers.prdMat = malloc(numData * sizeof(cuComplex));
+      for (int i = 0; i < numData; i++) {
+        buffers.prdMat[i].x = 0.5f;
+        buffers.prdMat[i].y = 0.5f;
+      }
+    }
+
     cumac_send_msg(CUMAC_SCH_TTI_REQUEST, l2_build_sch_tti_request, &args);
     cumac_sch_tti_end_args_t tti_end_args = {.frame = frame, .slot = slot};
     cumac_send_msg(CUMAC_TTI_END, l2_build_tti_end, &tti_end_args);
 
     // we have to wait for the response
     cumac_wait_to_process();
+    cumac_slot_data = get_slot_data(frame, slot);
 
   }
 #else
@@ -714,6 +756,26 @@ static void pf_dl(gNB_MAC_INST *mac,
 
   /* Loop UE_info->list to check retransmission */
   UE_iterator(UE_list, UE) {
+#ifdef ENABLE_CUMAC
+    if (cumac_slot_data != NULL) {
+      int ue_id = cumac_get_UE_ID_by_RNTI(frame, slot, UE->rnti);
+      if (ue_id == -1)
+        continue; // UE not in this TTI's active list
+      if (cumac_slot_data->taskBitMask & TASK_BIT(CUMAC_TASK_UE_SELECTION)) {
+        // Check that this UE appears in the set cuMAC selected for scheduling
+        bool selected = false;
+        for (int i = 0; i < cumac_slot_data->nMaxSchUePerCell; i++) {
+          if (cumac_slot_data->setSchdUePerCellTTI[i] == (uint16_t)ue_id) {
+            selected = true;
+            break;
+          }
+        }
+        if (!selected)
+          continue;
+      }
+    }
+#endif
+
     NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
     NR_UE_DL_BWP_t *current_BWP = &UE->current_DL_BWP;
 
@@ -813,7 +875,10 @@ static void pf_dl(gNB_MAC_INST *mac,
     }
   }
 
+  //For the moment, prevent sorting so that the indexes match what comes from cumac
+#ifndef ENABLE_CUMAC
   qsort(UE_sched, numUE, sizeof(UEsched_t), comparator);
+#endif
   UEsched_t *iterator = UE_sched;
 
   const int min_rbSize = 5;
@@ -871,7 +936,14 @@ static void pf_dl(gNB_MAC_INST *mac,
     int rbStart = 0; // WRT BWP start
     int bwp_start = bwp_info.bwpStart;
     int bwp_size = bwp_info.bwpSize;
-    // Freq-demain allocation
+#ifdef ENABLE_CUMAC
+    int cumac_ue_id = (cumac_slot_data != NULL)
+                          ? cumac_get_UE_ID_by_RNTI(frame, slot, iterator->UE->rnti)
+                          : -1;
+#endif
+#ifndef ENABLE_CUMAC
+
+    // Freq-domain allocation
     int max_rbSize = 0;
     if (!get_rb_alloc(min_rbSize, bwp_size, bwp_start, bwp_size, rballoc_mask, slbitmap, &rbStart, &max_rbSize)) {
       LOG_D(NR_MAC,
@@ -885,7 +957,47 @@ static void pf_dl(gNB_MAC_INST *mac,
       iterator++;
       continue;
     }
-
+#else
+    if (cumac_ue_id < 0 || cumac_slot_data->allocSol == NULL
+        || !(cumac_slot_data->taskBitMask & TASK_BIT(CUMAC_TASK_PRB_ALLOCATION))) {
+      // PRB allocation not available for this UE; skip
+      reset_beam_status(&mac->beam_info, frame, slot, iterator->UE->UE_beam_index, slots_per_frame, beam.new_beam);
+      iterator++;
+      continue;
+    }
+    // Refresh BWP bounds at response-apply time to catch RRC reconfigurations
+    bwp_info_t cur_bwp_info = get_pdsch_bwp_start_size(mac, iterator->UE);
+    if (cur_bwp_info.bwpSize > 0) {
+      bwp_start = cur_bwp_info.bwpStart;
+      bwp_size = cur_bwp_info.bwpSize;
+    }
+    // allocSol gives [prgStart, prgEndExclusive] in PRG units; -1 means no allocation
+    if (cumac_slot_data->allocSol[cumac_ue_id * 2] < 0) {
+      LOG_D(NR_MAC, "[UE %04x][%4d.%2d] cuMAC returned no PRB allocation, skipping\n", rnti, frame, slot);
+      reset_beam_status(&mac->beam_info, frame, slot, iterator->UE->UE_beam_index, slots_per_frame, beam.new_beam);
+      iterator++;
+      continue;
+    }
+    const int prb_per_prg = cumac_nPrbPerPrg();
+    const int abs_rb_start = cumac_slot_data->allocSol[cumac_ue_id * 2] * prb_per_prg;
+    const int abs_rb_end = cumac_slot_data->allocSol[cumac_ue_id * 2 + 1] * prb_per_prg;
+    rbStart = abs_rb_start - bwp_start;
+    uint16_t max_rbSize = abs_rb_end - abs_rb_start;
+    if (rbStart < 0 || rbStart + max_rbSize > (uint16_t)bwp_size) {
+      LOG_W(NR_MAC,
+            "[UE %04x][%4d.%2d] cuMAC allocation [%d,%d) PRBs outside BWP [%d,%d), skipping\n",
+            rnti,
+            frame,
+            slot,
+            abs_rb_start,
+            abs_rb_end,
+            bwp_start,
+            bwp_start + bwp_size);
+      reset_beam_status(&mac->beam_info, frame, slot, iterator->UE->UE_beam_index, slots_per_frame, beam.new_beam);
+      iterator++;
+      continue;
+    }
+#endif
     int CCEIndex = get_cce_index(mac,
                                  CC_id,
                                  slot,

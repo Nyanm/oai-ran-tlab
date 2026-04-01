@@ -46,6 +46,31 @@ pthread_mutex_t cumac_can_send_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t cumac_can_process_mutex = PTHREAD_MUTEX_INITIALIZER;
 static uint16_t nMaxSchUePerCell;
 static uint8_t allocType;
+static uint16_t nPrbPerPrg;
+
+uint16_t cumac_nMax_schUePerCell() {
+  return nMaxSchUePerCell;
+}
+
+uint16_t cumac_nPrbPerPrg() {
+  return nPrbPerPrg;
+}
+
+int cumac_get_UE_ID_by_RNTI(const uint16_t frame, const uint16_t slot, const uint16_t rnti) {
+  const slot_data_entry_t *slot_data_entry = get_slot_data(frame,slot);
+  AssertFatal(slot_data_entry, "Entry should not be null!");
+  for (int i = 0; i < slot_data_entry->nActiveUe; ++i) {
+    if (slot_data_entry->c_rnti[i] == rnti) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+slot_data_entry_t* get_slot_data(const uint16_t frame, const uint16_t slot) {
+  return &slot_data[frame][slot];
+}
+
 
 bool cumac_can_schedule() {
   return !waiting_tti_resp;
@@ -77,6 +102,7 @@ bool cumac_send_msg(cumac_msg_t type, build_cumac_msg_fn_v_t fn, void* args)
     // Save nMax UE and allocation type for later
     nMaxSchUePerCell = conf_req_payload->nMaxSchUePerCell;
     allocType = conf_req_payload->allocType;
+    nPrbPerPrg = conf_req_payload->nPrbPerPrg;
     const uint8_t num_slots = 10 << conf_req_payload->scSpacing;
     printf("Number of slots per frame: %d\n", num_slots);
     // Init slot data structure for later use

@@ -64,7 +64,24 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
   cumac_tti_req_bufs_t *req_buf = config_args->buffers;
 
   slot_data_entry_t *slot_entry = &slot_data[frame][slot];
-
+  // ensure buffers are free
+  if (slot_entry->setSchdUePerCellTTI != NULL) {
+    free(slot_entry->setSchdUePerCellTTI);
+  }
+  if (slot_entry->allocSol != NULL) {
+    free(slot_entry->allocSol);
+  }
+  if (slot_entry->mcsSelSol != NULL) {
+    free(slot_entry->mcsSelSol);
+  }
+  if (slot_entry->layerSelSol != NULL) {
+    free(slot_entry->layerSelSol);
+  }
+  if (slot_entry->c_rnti != NULL) {
+    free(slot_entry->c_rnti);
+  }
+  slot_entry->c_rnti = calloc(nActiveUE, sizeof(*req_buf->CRNTI));
+  memcpy(slot_entry->c_rnti, req_buf->CRNTI, sizeof(*req_buf->CRNTI) * nActiveUE);
   cumac_sch_tti_req_t* req = (cumac_sch_tti_req_t*)nvipc_buf->msg_buf;
   uint8_t* data_buf = (uint8_t*)nvipc_buf->data_buf;
   nvipc_buf->msg_id = CUMAC_SCH_TTI_REQUEST;
@@ -159,7 +176,7 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
     memcpy(data_buf + offset, req_buf->sinVal, data_size);
     offset += data_size;
 
-    uint32_t prdLen, detLen, hLen;
+    uint32_t prdLen, detLen;
     if(req->payload.ULDLSch == 1)
     { // DL
       prdLen = slot_entry->nMaxSchUePerCell * nPRBGRP * nBSAnt*nBSAnt;
@@ -170,7 +187,7 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
       prdLen = slot_entry->nMaxSchUePerCell * nPRBGRP *  nUEAnt * nUEAnt;
       detLen = slot_entry->nMaxSchUePerCell * nPRBGRP * nBSAnt*nBSAnt;
     }
-    hLen = nPRBGRP * slot_entry->nMaxSchUePerCell * /*nMaxCell*/ 1 * nBSAnt * nUEAnt;
+    const uint32_t hLen = nPRBGRP * slot_entry->nMaxSchUePerCell * /*nMaxCell*/ 1 * nBSAnt * nUEAnt;
 
     offset += get_padding(offset, alignof(cuComplex));
     req->payload.offsets.detMat = offset;
@@ -257,14 +274,15 @@ void cumac_handle_sch_tti_response(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, sl
     return;
   cumac_sch_tti_resp_t *resp = nvipc_buf->msg_buf;
   uint8_t *buf_home = (nvipc_buf->data_buf);
-  uint16_t *setSchdUePerCellTTI =
-      calloc(slot_data_entry->nMaxSchUePerCell, sizeof(uint16_t)); //!< Set of IDs of the selected UEs for the cell
-  int16_t *allocSol = calloc(slot_data_entry->allocSolSize, sizeof(int16_t));
-  ; //!< PRB group allocation solution for all active UEs in the cell
-  int16_t *mcsSelSol = calloc(slot_data_entry->nActiveUe, sizeof(int16_t));
-  ; //!< MCS selection solution for all active UEs in the cell
-  uint8_t *layerSelSol = calloc(slot_data_entry->nActiveUe, sizeof(uint8_t));
-  ; //!< Layer selection solution for all active UEs in the cell
+  //!< Set of IDs of the selected UEs for the cell
+  slot_data_entry->setSchdUePerCellTTI =
+      calloc(slot_data_entry->nMaxSchUePerCell, sizeof(uint16_t));
+  //!< PRB group allocation solution for all active UEs in the cell
+  slot_data_entry->allocSol = calloc(slot_data_entry->allocSolSize, sizeof(int16_t));
+  //!< MCS selection solution for all active UEs in the cell
+  slot_data_entry->mcsSelSol = calloc(slot_data_entry->nActiveUe, sizeof(int16_t));
+  //!< Layer selection solution for all active UEs in the cell
+  slot_data_entry->layerSelSol = calloc(slot_data_entry->nActiveUe, sizeof(uint8_t));
 
   printf("Received SCH_TTI.response with data\n");
   struct timespec now;
@@ -285,39 +303,35 @@ void cumac_handle_sch_tti_response(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, sl
 
   if (resp->offsets.setSchdUePerCellTTI != 0xFFFFFFFF) {
     const uint16_t *src = (uint16_t *)(buf_home + resp->offsets.setSchdUePerCellTTI);
-    memcpy(setSchdUePerCellTTI, src, slot_data_entry->nMaxSchUePerCell * sizeof(uint16_t));
+    memcpy(slot_data_entry->setSchdUePerCellTTI, src, slot_data_entry->nMaxSchUePerCell * sizeof(uint16_t));
     printf("setSchdUePerCellTTI :\n");
     for (int i = 0; i < slot_data_entry->nMaxSchUePerCell; i++) {
-      printf("\tIDX %d = %d \n", i, setSchdUePerCellTTI[i]);
+      printf("\tIDX %d = %d \n", i, slot_data_entry->setSchdUePerCellTTI[i]);
     }
   }
   if (resp->offsets.allocSol != 0xFFFFFFFF) {
     const uint16_t *src = (uint16_t *)(buf_home + resp->offsets.allocSol);
-    memcpy(allocSol, src, slot_data_entry->allocSolSize * sizeof(int16_t));
-    printf("allocSol :\n");
+    memcpy(slot_data_entry->allocSol, src, slot_data_entry->allocSolSize * sizeof(*slot_data_entry->allocSol));
+    printf("allocSol:\n");
     for (int i = 0; i < slot_data_entry->allocSolSize; i++) {
-      printf("\tIDX %d = 0x%02x \n", i, allocSol[i]);
+      printf("\tIDX %d = 0x%02x \n", i, src[i]);
+
     }
   }
   if (resp->offsets.mcsSelSol != 0xFFFFFFFF) {
-    const uint16_t *src = (uint16_t *)(buf_home + resp->offsets.mcsSelSol);
-    memcpy(mcsSelSol, src, slot_data_entry->nActiveUe * sizeof(int16_t));
+    const int16_t *src = (int16_t *)(buf_home + resp->offsets.mcsSelSol);
+    memcpy(slot_data_entry->mcsSelSol, src, slot_data_entry->nActiveUe * sizeof(*slot_data_entry->mcsSelSol));
     printf("mcsSelSol :\n");
     for (int i = 0; i < slot_data_entry->nActiveUe; i++) {
-      printf("\tIDX %d = 0x%02x \n", i, mcsSelSol[i]);
+      printf("\tIDX %d = 0x%02x \n", i, slot_data_entry->mcsSelSol[i]);
     }
   }
   if (resp->offsets.layerSelSol != 0xFFFFFFFF) {
-    const uint16_t *src = (uint16_t *)(buf_home + resp->offsets.layerSelSol);
-    memcpy(layerSelSol, src, slot_data_entry->nActiveUe);
+    const uint8_t *src = (uint8_t *)(buf_home + resp->offsets.layerSelSol);
+    memcpy(slot_data_entry->layerSelSol, src, slot_data_entry->nActiveUe);
     printf("layerSelSol :\n");
     for (int i = 0; i < slot_data_entry->nActiveUe; i++) {
-      printf("\tIDX %d = 0x%02x \n", i, layerSelSol[i]);
+      printf("\tIDX %d = 0x%02x \n", i, slot_data_entry->layerSelSol[i]);
     }
   }
-
-  free(setSchdUePerCellTTI);
-  free(allocSol);
-  free(mcsSelSol);
-  free(layerSelSol);
 }
