@@ -41,8 +41,6 @@
 #include "executables/softmodem-common.h"
 #include "SCHED_NR/sched_nr.h"
 
-// #define DEBUG_DLSCH
-// #define DEBUG_DLSCH_MAPPING
 #include <simde/x86/avx512.h>
 #define USE128BIT
 
@@ -70,21 +68,9 @@ static int do_ptrs_symbol(const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
       /* check if cuurent RE is PTRS RE*/
       uint16_t beta_ptrs = 1;
       txF[k] = c16mulRealShift(mod_ptrs[ptrs_idx], beta_ptrs * amp, 15);
-#ifdef DEBUG_DLSCH_MAPPING
-      printf("ptrs_idx %d\t \t k %d \t \t txdataF: %d %d, mod_ptrs: %d %d\n",
-             ptrs_idx,
-             k,
-             txF[k].r,
-             txF[k].i,
-             mod_ptrs[ptrs_idx].r,
-             mod_ptrs[ptrs_idx].i);
-#endif
       ptrs_idx++;
     } else {
       txF[k] = c16mulRealShift(*in++, amp, 15);
-#ifdef DEBUG_DLSCH_MAPPING
-      printf("k %d \t txdataF: %d %d\n", k, txF[k].r, txF[k].i);
-#endif
     }
     if (++k >= symbol_sz)
       k -= symbol_sz;
@@ -99,9 +85,6 @@ typedef union {
 
 static inline int interleave_with_0_signal_first(c16_t *output, c16_t *mod_dmrs, const int16_t amp_dmrs, int sz)
 {
-#ifdef DEBUG_DLSCH_MAPPING
-  printf("doing DMRS pattern for port 0 : d0 0 d1 0 ... dNm2 0 dNm1 0 (ul %d, rr %d)\n", upper_limit, remaining_re);
-#endif
   // add filler to process all as SIMD
   c16_t *out = output;
   int i = 0;
@@ -151,9 +134,6 @@ static inline int interleave_with_0_signal_first(c16_t *output, c16_t *mod_dmrs,
 
 static inline int interleave_with_0_start_with_0(c16_t *output, c16_t *mod_dmrs, const int16_t amp_dmrs, int sz)
 {
-#ifdef DEBUG_DLSCH_MAPPING
-  printf("doing DMRS pattern for port 2 : 0 d0 0 d1 ... 0 dNm2 0 dNm1\n");
-#endif
   c16_t *out = output;
   int i = 0;
   int end = sz / 2;
@@ -202,9 +182,6 @@ static inline int interleave_with_0_start_with_0(c16_t *output, c16_t *mod_dmrs,
 
 static inline int interleave_signals(c16_t *output, c16_t *signal1, const int amp, c16_t *signal2, const int amp2, int sz)
 {
-#ifdef DEBUG_DLSCH_MAPPING
-  printf("doing DMRS pattern for port 0 : d0 X0 d1 X1 ... dNm2 XNm2 dNm1 XNm1\n");
-#endif
     // add filler to process all as SIMD
   c16_t *out = output;
   int i = 0;
@@ -590,23 +567,11 @@ static void nr_pdsch_symbol_processing(void *arg)
     start_sc -= symbol_sz;
 
   const uint32_t txdataF_offset = slot * frame_parms->samples_per_slot_wCP;
-#ifdef DEBUG_DLSCH_MAPPING
-  printf("slot %d PDSCH resource mapping started (start SC %d\tstart symbol %d\tnum symbols %d\tN_PRB %d,nb_layers %d)\n",
-         rdata->slot,
-         start_sc,
-         rdata->startSymbol,
-         rdata->numSymbols,
-         rel15->rbSize,
-         rel15->nrOfLayers);
-#endif
   for (int l_symbol = rdata->startSymbol; l_symbol < rdata->startSymbol + rdata->numSymbols; l_symbol++) {
     start_meas(&rdata->dlsch_resource_mapping_stats);
     int l_prime = 0; // single symbol layer 0
     int l_overline = get_l0(rel15->dlDmrsSymbPos);
 
-#ifdef DEBUG_DLSCH_MAPPING
-    printf("PDSCH resource mapping symbol %d\n", l_symbol);
-#endif
     /// DMRS QPSK modulation
     if ((rel15->dlDmrsSymbPos & (1 << l_symbol))) { // DMRS time occasion
       // The reference point for is subcarrier -1 of the lowest-numbered resource block in CORESET 0 if the corresponding
@@ -618,9 +583,6 @@ static void nr_pdsch_symbol_processing(void *arg)
         l_overline = l_symbol;
         l_prime = 0;
       }
-#ifdef DEBUG_DLSCH_MAPPING
-      printf("dlDmrsScramblingId %d, SCID %d slot %d l_symbol %d\n", rel15->dlDmrsScramblingId, rel15->SCID, slot, l_symbol);
-#endif
       const uint32_t *gold = nr_gold_pdsch(frame_parms->N_RB_DL,
                                            frame_parms->symbols_per_slot,
                                            rel15->dlDmrsScramblingId,
@@ -630,15 +592,6 @@ static void nr_pdsch_symbol_processing(void *arg)
       // Qm = 1 as DMRS is QPSK modulated
       nr_modulation(gold, n_dmrs * DMRS_MOD_ORDER, DMRS_MOD_ORDER, (int16_t *)mod_dmrs);
 
-#ifdef DEBUG_DLSCH_MAPPING
-      printf("DMRS modulation (symbol %d, %d symbols, type %d):\n", l_symbol, n_dmrs, dmrs_Type);
-      for (int i = 0; i < n_dmrs / 2; i += 8) {
-        for (int j = 0; j < 8; j++) {
-          printf("%d %d\t", mod_dmrs[i + j].r, mod_dmrs[i + j].i);
-        }
-        printf("\n");
-      }
-#endif
     }
     uint32_t dmrs_idx = rel15->rbStart;
     if (rel15->refPoint == 0)
