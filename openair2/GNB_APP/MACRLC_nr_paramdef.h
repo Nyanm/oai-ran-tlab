@@ -51,9 +51,11 @@
 #define MACRLC_BEAMS_PERIOD                  "beams_per_period"
 #define MACRLC_BEAM_WEIGHTS_LIST             "beam_weights"
 #define MACRLC_DBT_FILE                      "dbt_file"
+#define MACRLC_BEAM_POL_OFFSET               "beam_id_polarization_offset"
 #define MACRLC_PUSCH_RSSI_THRESHOLD          "pusch_RSSI_Threshold"
 #define MACRLC_PUCCH_RSSI_THRESHOLD          "pucch_RSSI_Threshold"
 #define MACRLC_STATS_MAX_UE                  "stats_max_ue"
+
 
 #define HLP_MACRLC_UL_PRBBLACK "SNR threshold to decide whether a PRB will be blacklisted or not"
 #define HLP_MACRLC_DL_BLER_UP "Upper threshold of BLER to decrease DL MCS"
@@ -72,6 +74,7 @@
 #define HLP_MACRLC_BEAM_DURATION "number of consecutive slots for a given set of beams"
 #define HLP_MACRLC_BEAMS_PERIOD "set of beams that can be simultaneously allocated in a period"
 #define HLP_MACRLC_DBT_FILE "File path to CSV file to read digital beamforming table"
+#define HLP_MACRLC_BEAM_POL_OFFSET "beamID offset for dual polarization (0=disable, 1=consecutive IDs)"
 #define HLP_MACRLC_PUSCH_RSSI_THRESHOLD "Limits PUSCH TPC commands based on RSSI to prevent ADC railing. Value range [-1280, 0], unit 0.1 dBm/dBFS"
 #define HLP_MACRLC_PUCCH_RSSI_THRESHOLD "Limits PUCCH TPC commands based on RSSI to prevent ADC railing. Value range [-1280, 0], unit 0.1 dBm/dBFS"
 #define HLP_MACRLC_STATS_MAX_UE "Maximum number of UEs before disabling periodical output (0 to disable)"
@@ -118,6 +121,7 @@
   {MACRLC_BEAMS_PERIOD,                HLP_MACRLC_BEAMS_PERIOD,  0, .u8ptr=NULL,  .defintval=1,               TYPE_UINT8,   0}, \
   {MACRLC_BEAM_WEIGHTS_LIST,           NULL,                     0, .iptr=NULL,   .defintarrayval=0,          TYPE_INTARRAY,0}, \
   {MACRLC_DBT_FILE,                    HLP_MACRLC_DBT_FILE,      0, .strptr=NULL, .defstrval=NULL,            TYPE_STRING,  0}, \
+  {MACRLC_BEAM_POL_OFFSET,             HLP_MACRLC_BEAM_POL_OFFSET, 0, .u8ptr=NULL, .defintval=0,              TYPE_UINT8,   0}, \
   {MACRLC_PUSCH_RSSI_THRESHOLD,        HLP_MACRLC_PUSCH_RSSI_THRESHOLD, \
                                                                                0, .iptr=NULL,   .defintval=0,               TYPE_INT,     0}, \
   {MACRLC_PUCCH_RSSI_THRESHOLD,        HLP_MACRLC_PUCCH_RSSI_THRESHOLD, \
@@ -166,6 +170,7 @@
   { .s5 = { NULL } }, \
   { .s5 = { NULL } }, \
   { .s5 = { NULL } }, \
+  { .s5 = { NULL } }, /* beam_id_polarization_offset */ \
   { .s2 =  { config_check_intrange, {-1280, 0}} }, /* PUSCH RSSI threshold range */ \
   { .s2 =  { config_check_intrange, {-1280, 0}} }, /* PUCCH RSSI threshold range */ \
   { .s5 = { NULL } }, \

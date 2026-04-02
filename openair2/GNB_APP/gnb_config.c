@@ -1747,6 +1747,7 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
         beam_info->beam_allocation = malloc16(beams_per_period * sizeof(beam_info->beam_allocation));
         beam_info->beam_duration = *gpd(params, np, MACRLC_BEAM_DURATION)->u8ptr;
         beam_info->beams_per_period = beams_per_period;
+        beam_info->beam_id_polarization_offset = *gpd(params, np, MACRLC_BEAM_POL_OFFSET)->u8ptr;
         beam_info->beam_allocation_size = -1; // to be initialized once we have information on frame configuration
       }
       bool das_enabled = false;

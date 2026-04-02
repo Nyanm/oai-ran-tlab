@@ -3287,10 +3287,27 @@ void nr_csirs_scheduling(int Mod_idP, frame_t frame, slot_t slot, nfapi_nr_dl_tt
           nfapi_nr_dl_tti_csi_rs_pdu_rel15_t *csirs_pdu_rel15 = &dl_tti_csirs_pdu->csi_rs_pdu.csi_rs_pdu_rel15;
           csirs_pdu_rel15->precodingAndBeamforming.num_prgs = 1;
           csirs_pdu_rel15->precodingAndBeamforming.prg_size = resourceMapping.freqBand.nrofRBs; //1 PRG of max size
-          csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces = 1;
           csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].pm_idx = 0;
-          const uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, gNB_mac->beam_info.beam_mode);
-          csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = fapi_beam;
+
+          uint16_t fapi_beam = convert_to_fapi_beam(UE->UE_beam_index, gNB_mac->beam_info.beam_mode);
+          const int nrofPorts_to_num[] = {1, 2, 4, 8, 12, 16, 24, 32};
+          const int numPorts = nrofPorts_to_num[resourceMapping.nrofPorts];
+          int pol_offset = gNB_mac->beam_info.beam_id_polarization_offset;
+          if (numPorts > 1 && pol_offset > 0) {
+            csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces = numPorts;
+            for (int port = 0; port < numPorts; port++) {
+              // For SISO Beam with ID n, [n+p for p in numPorts] is the set of MIMO beams associated to it
+              // MIMO beams can be spliting the array in subarrays, use different polarizations, etc
+              int new_beam = UE->UE_beam_index + 1 + (port * pol_offset);
+              fapi_beam = convert_to_fapi_beam(new_beam, gNB_mac->beam_info.beam_mode);
+              csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[port].beam_idx = fapi_beam;
+            }
+          } else {
+            csirs_pdu_rel15->precodingAndBeamforming.dig_bf_interfaces = 1;
+            csirs_pdu_rel15->precodingAndBeamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx = fapi_beam;
+          }
+
+          
           csirs_pdu_rel15->bwp_size = dl_bwp->BWPSize;
           csirs_pdu_rel15->bwp_start = dl_bwp->BWPStart;
           csirs_pdu_rel15->subcarrier_spacing = dl_bwp->scs;
