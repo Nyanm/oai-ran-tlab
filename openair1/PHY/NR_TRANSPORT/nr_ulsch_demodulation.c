@@ -922,15 +922,15 @@ static void inner_rx(PHY_VARS_gNB *gNB,
 #endif
     }
   }
-  c16_t rho[nb_layer][nb_layer][buffer_length] __attribute__((aligned(32)));
-  c16_t rxF_ch_maga  [nb_layer][buffer_length] __attribute__((aligned(32)));
-  c16_t rxF_ch_magb  [nb_layer][buffer_length] __attribute__((aligned(32)));
-  c16_t rxF_ch_magc  [nb_layer][buffer_length] __attribute__((aligned(32)));
+  c16_t(*rho)[nb_layer][buffer_length] = memalign(32, nb_layer * nb_layer * buffer_length * sizeof(c16_t));
+  c16_t(*rxF_ch_maga)[buffer_length] = memalign(32, nb_layer * buffer_length * sizeof(c16_t));
+  c16_t(*rxF_ch_magb)[buffer_length] = memalign(32, nb_layer * buffer_length * sizeof(c16_t));
+  c16_t(*rxF_ch_magc)[buffer_length] = memalign(32, nb_layer * buffer_length * sizeof(c16_t));
 
-  memset(rho, 0, sizeof(rho));
-  memset(rxF_ch_maga, 0, sizeof(rxF_ch_maga));
-  memset(rxF_ch_magb, 0, sizeof(rxF_ch_magb));
-  memset(rxF_ch_magc, 0, sizeof(rxF_ch_magc));
+  memset(rho, 0, nb_layer * nb_layer * buffer_length * sizeof(c16_t));
+  memset(rxF_ch_maga, 0, nb_layer * buffer_length * sizeof(c16_t));
+  memset(rxF_ch_magb, 0, nb_layer * buffer_length * sizeof(c16_t));
+  memset(rxF_ch_magc, 0, nb_layer * buffer_length * sizeof(c16_t));
   for (int i = 0; i < nb_layer; i++)
     memset(&pusch_vars->rxdataF_comp[i*nb_rx_ant][symbol * buffer_length], 0, sizeof(int32_t) * buffer_length);
 
@@ -1011,6 +1011,10 @@ static void inner_rx(PHY_VARS_gNB *gNB,
                            pusch_vars->ul_valid_re_per_slot[symbol],
                            symbol,
                            rel15_ul->qam_mod_order);
+  free(rho);
+  free(rxF_ch_maga);
+  free(rxF_ch_magb);
+  free(rxF_ch_magc);
 }
 
 typedef struct puschSymbolProc_s {

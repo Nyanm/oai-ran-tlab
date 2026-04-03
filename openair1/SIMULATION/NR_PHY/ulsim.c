@@ -535,7 +535,7 @@ int main(int argc, char *argv[])
 
     case 'y':
       n_tx = atoi(optarg);
-      if ((n_tx == 0) || (n_tx > 4)) {
+      if ((n_tx == 0) || (n_tx > 8)) {
         printf("Unsupported number of tx antennas %d\n", n_tx);
         exit(-1);
       }
