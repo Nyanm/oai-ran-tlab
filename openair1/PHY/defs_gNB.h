@@ -264,11 +264,6 @@ typedef struct {
   /// - first index: ? [0..7] Number of Antenna
   /// - second index: ? [0...14] smybol per slot
   int32_t **ptrs_phase_per_slot;
-  /// \brief Total RE count after DMRS/PTRS RE's are extracted from respective symbol.
-  /// - first index: ? [0...14] smybol per slot
-  int16_t *ul_valid_re_per_slot;
-  /// \brief offset for llr corresponding to each symbol
-  int llr_offset[14];
   /// flag to indicate DTX on reception
   int DTX;
 } NR_gNB_PUSCH;
