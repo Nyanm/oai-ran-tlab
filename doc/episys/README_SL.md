@@ -70,8 +70,8 @@ This implementation adds support for **5G sidelink (SL) Mode 2** features within
 &emsp; The current implementation has been tested with the following configuration:
 
 &emsp;&emsp;✅ Working Setup:<br>
-&emsp;&emsp;&emsp;&emsp; ◉ Two UE devices communicating over sidelink Mode 2 using Ettus B210 SDRs
-Basic SL transmission and reception are confirmed functional in this setup<br>
+&emsp;&emsp;&emsp;&emsp; ◉ Two UE devices communicating over sidelink Mode 2 using Ettus B210 SDRs<br>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; Basic SL transmission and reception are confirmed functional in this setup<br>
 &emsp;&emsp;&emsp;&emsp; ◉ Three node Relay scenario (remote UE, relay UE and gNB) is working only on RFSIM<br>
 &emsp;&emsp;❌ Unsupported or Non-Functional Setup:<br>
 &emsp;&emsp;&emsp;&emsp; ◉ Ettus N310 devices: SL Mode 2 does not currently work. Debugging in work.<br>
@@ -103,6 +103,24 @@ $ make nr-uesoftmodem rfsimulator nr_psbchsim nr_psschsim -j128
 &emsp;If you encounter a DEADLYSIGNAL error from AddressSanitizer (ASan) during OAI compilation on Ubuntu 24, apply the following workaround:
 ```
 $ sudo sysctl vm.mmap_rnd_bits=28
+```
+
+#### 5.1.3 **Ubuntu 24.04 Build Support:**
+
+&emsp;This branch includes Ubuntu 24.04 support with necessary build system modifications. Simply follow the standard build instructions:
+
+```bash
+$ cd ~/openairinterface5g/cmake_targets
+$ ./build_oai -C -I --install-optional-packages  # Installs all dependencies
+$ ./build_oai --nrUE --gNB -w USRP -w SIMU
+```
+
+&emsp;&emsp;**Note:** This branch includes a fix for ASN.1 compiler installation. The build system will automatically install **ASN.1 compiler v0.9.29** (commit 998e7ea2) instead of the newer vlm_master branch. This is required because the codebase is currently compatible with v0.9.29 (June 2024), while newer versions (v1.2+, v1.4+) generate incompatible pointer structures instead of structs, which would require approximately 1500 code changes throughout the codebase.
+
+&emsp;&emsp;**Verification (after running `./build_oai -I`):**
+```bash
+$ /opt/asn1c/bin/asn1c -version
+# Should output: ASN.1 Compiler, v0.9.29
 ```
 
 ### 5.2 **Running on RF Simulator:**
