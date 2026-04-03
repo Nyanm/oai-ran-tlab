@@ -32,7 +32,7 @@ COPY . .
 RUN wget --no-verbose http://fast.dpdk.org/rel/dpdk-24.11.4.tar.xz && \
     tar -xf dpdk-24.11.4.tar.xz && \
     cd dpdk-stable-24.11.4 && \
-    meson setup -Dmachine=default build && \
+    meson build && \
     ninja -C build && \
     ninja install -C build
 
