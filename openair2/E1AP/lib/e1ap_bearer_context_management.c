@@ -2248,7 +2248,7 @@ struct E1AP_E1AP_PDU *encode_E1_bearer_context_mod_response(const e1ap_bearer_mo
       if (pdu->numDRBSetup > 0) {
         iePdu->dRB_Setup_List_NG_RAN = calloc_or_fail(1, sizeof(*iePdu->dRB_Setup_List_NG_RAN));
         E1AP_DRB_Setup_List_NG_RAN_t *drb_setup = iePdu->dRB_Setup_List_NG_RAN;
-        for (int j = 0; j < pdu->numDRBModified; ++j) {
+        for (int j = 0; j < pdu->numDRBSetup; ++j) {
           const DRB_nGRAN_setup_t *drb = &pdu->DRBnGRanSetupList[j];
           asn1cSequenceAdd(drb_setup->list, E1AP_DRB_Setup_Item_NG_RAN_t, item);
           // DRB ID (M)
