@@ -74,12 +74,14 @@ NR_CellGroupConfig_t *get_initial_cellGroupConfig(int uid,
                                                   const NR_ServingCellConfigCommon_t *scc,
                                                   const nr_mac_config_t *configuration,
                                                   const nr_rlc_configuration_t *default_rlc_config,
-                                                  int ssb_index);
+                                                  int ssb_index,
+                                                  int beam_idx);
 void update_cellGroupConfig(NR_CellGroupConfig_t *cellGroupConfig,
                             const int uid,
                             const NR_UE_NR_Capability_t *uecap,
                             const nr_mac_config_t *configuration,
-                            const NR_ServingCellConfigCommon_t *scc);
+                            const NR_ServingCellConfigCommon_t *scc,
+                            int beam_idx);
 int encode_cellGroupConfig(NR_CellGroupConfig_t *cellGroupConfig, uint8_t *buffer, int max_buffer_size);
 
 /* Note: this function returns a new CellGroupConfig for a user with given
@@ -91,7 +93,8 @@ NR_CellGroupConfig_t *get_default_secondaryCellGroup(const NR_ServingCellConfigC
                                                      int servCellIndex,
                                                      const nr_mac_config_t *configuration,
                                                      int uid,
-                                                     int ssb_index);
+                                                     int ssb_index,
+                                                     int beam_idx);
 
 NR_ReconfigurationWithSync_t *get_reconfiguration_with_sync(rnti_t rnti, uid_t uid, const NR_ServingCellConfigCommon_t *scc, int frame);
 
@@ -114,14 +117,16 @@ NR_CellGroupConfig_t *update_cellGroupConfig_for_BWP_switch(NR_CellGroupConfig_t
                                                             int uid,
                                                             int old_bwp,
                                                             int new_bwp,
-                                                            int ssb_index);
+                                                            int ssb_index,
+                                                            int beam_idx);
 NR_CellGroupConfig_t *update_cellGroupConfig_for_beam_switch(NR_CellGroupConfig_t *cellGroupConfig,
                                                             const nr_mac_config_t *configuration,
                                                             const NR_UE_NR_Capability_t *uecap,
                                                             const NR_ServingCellConfigCommon_t *scc,
                                                             int uid,
                                                             int bwp,
-                                                            int ssb_index);
+                                                            int ssb_index,
+                                                            int beam_idx);
 NR_MeasurementTimingConfiguration_t *get_nr_mtc(uint8_t *buf, uint32_t len);
 measgap_config_t create_measgap_config(const NR_MeasurementTimingConfiguration_t *mtc, int scs, int min_rxtxtime);
 int encode_measgap_config(const measgap_config_t *c, uint8_t *buf);

@@ -1768,9 +1768,9 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
         // each beam is described by a set of weights (one for each antenna)
         // in case of analog beamforming an index to the RU beam identifier is provided
         // (one for each beam regardless of the number of antennas per beam)
-        config.nb_bfw[0] = num_tx;  // number of tx antennas
-        config.nb_bfw[1] = num_beam; // number of beams weights/indices
-        config.bw_list = calloc_or_fail(n, sizeof(*config.bw_list));
+        RC.nrmac[j]->radio_config.nb_bfw[0] = config.nb_bfw[0] = num_tx;  // number of tx antennas
+        RC.nrmac[j]->radio_config.nb_bfw[1] = config.nb_bfw[1] = num_beam; // number of beams weights/indices
+        RC.nrmac[j]->radio_config.bw_list = config.bw_list = calloc_or_fail(n, sizeof(*config.bw_list));
         for (int b = 0; b < n; b++)
           config.bw_list[b] = gpd(params, np, MACRLC_BEAM_WEIGHTS_LIST)->iptr[b];
       } else if (das_enabled) {

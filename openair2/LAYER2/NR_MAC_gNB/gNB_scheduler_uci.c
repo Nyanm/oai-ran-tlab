@@ -258,6 +258,12 @@ void nr_csi_meas_reporting(int Mod_idP,frame_t frame, slot_t slot)
       // going through the list of PUCCH resources to find the one indexed by resource_id
       NR_beam_alloc_t beam = beam_allocation_procedure(&nrmac->beam_info, sched_frame, sched_slot, UE->UE_beam_index, n_slots_frame);
       AssertFatal(beam.idx >= 0, "Cannot allocate CSI measurements on PUCCH in any available beam\n");
+      // Keep the following in case AssertFatal needs to comment out for testing
+      if (beam.idx < 0) {
+       LOG_I(NR_MAC, "Cannot allocate CSI measurements on PUCCH in any available beam\n");
+       continue;
+      }
+
       const int index = ul_buffer_index(sched_frame, sched_slot, n_slots_frame, nrmac->vrb_map_UL_size);
       uint16_t *vrb_map_UL = &nrmac->common_channels[0].vrb_map_UL[beam.idx][index * MAX_BWP_SIZE];
       const int m = pucch_Config->resourceToAddModList->list.count;
@@ -1221,6 +1227,15 @@ int nr_acknack_scheduling(gNB_MAC_INST *mac,
       memset(curr_pucch, 0, sizeof(*curr_pucch));
     }
     else { // unoccupied occasion
+      if (check_period_offset_reserve(pucch_frame, pucch_slot, n_slots_frame)) {
+        LOG_I(NR_MAC,
+              "DL %4d.%2d, UL_ACK %4d.%2d beam resources for this occasion to be used by periodic UL signal, move to the following occasion\n",
+              frame,
+              slot,
+              pucch_frame,
+              pucch_slot);
+        continue;
+      }
       // checking if in ul_slot the resources potentially to be assigned to this PUCCH are available
       set_pucch_allocation(ul_bwp, r_pucch, bwp_size, curr_pucch);
       NR_beam_alloc_t beam = beam_allocation_procedure(&mac->beam_info, pucch_frame, pucch_slot, ue_beam, n_slots_frame);
@@ -1331,6 +1346,11 @@ void nr_sr_reporting(gNB_MAC_INST *nrmac, frame_t SFN, slot_t slot)
       else {
         NR_beam_alloc_t beam = beam_allocation_procedure(&nrmac->beam_info, SFN, slot, UE->UE_beam_index, n_slots_frame);
         AssertFatal(beam.idx >= 0, "Cannot allocate SR in any available beam\n");
+        // Keep the following in case AssertFatal needs to comment out for testing
+        if (beam.idx < 0) {
+          LOG_E(NR_MAC,"Cannot allocate SR in any available beam\n");
+          continue;
+        }
         const int index = ul_buffer_index(SFN, slot, n_slots_frame, nrmac->vrb_map_UL_size);
         uint16_t *vrb_map_UL = &nrmac->common_channels[CC_id].vrb_map_UL[beam.idx][index * MAX_BWP_SIZE];
         const int bwp_start = ul_bwp->BWPStart;

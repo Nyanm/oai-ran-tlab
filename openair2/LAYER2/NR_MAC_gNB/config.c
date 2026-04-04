@@ -36,6 +36,125 @@
 #include "nfapi_nr_interface_scf.h"
 #include "utils.h"
 
+bool is_prach_slot_set = false;
+bool is_prach_slot[160] = {false};
+
+#define SLOT_TYPE_SRS  0
+#define SLOT_TYPE_CSIR 1
+#define SLOT_TYPE_RSRP 2
+#define SLOT_TYPE_SR   3
+#define SLOT_TYPE_NUM  (SLOT_TYPE_SR + 1)
+
+#define MAX_SR_SLOT_PERIOD  16
+int reserve_offset[MAX_MOBILES_PER_GNB * SLOT_TYPE_NUM] = {[0 ... (MAX_MOBILES_PER_GNB * SLOT_TYPE_NUM - 1)] -1};
+int reserve_period[MAX_MOBILES_PER_GNB * SLOT_TYPE_NUM] = {[0 ... (MAX_MOBILES_PER_GNB * SLOT_TYPE_NUM - 1)] -1};
+
+void unset_period_offset_beam(int uid)
+{
+  for (int i = 0; i < SLOT_TYPE_NUM; i++) {
+    reserve_offset[uid * SLOT_TYPE_NUM + i] = -1;
+    reserve_period[uid * SLOT_TYPE_NUM + i] = -1;
+  }
+}
+
+bool check_period_offset_reserve(int sched_frame, int sched_slot, int n_slots_frame) {
+  for (int i = 0; i < MAX_MOBILES_PER_GNB * SLOT_TYPE_NUM; i++) {
+    if ((reserve_period[i] == -1) || (reserve_offset[i] == -1))
+      continue;
+    if ((sched_frame * n_slots_frame + sched_slot - reserve_offset[i]) % reserve_period[i] == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+int get_beamloc_from_beam(int beam_index)
+{
+  gNB_MAC_INST *mac = RC.nrmac[0];
+  if (mac->beam_info.beam_mode == LOPHY_BEAM_IDX) {
+    for (int i = 0; i < mac->radio_config.nb_bfw[1]; i++) {
+      if (mac->radio_config.bw_list[i] == beam_index)
+        return i;
+    }
+    AssertFatal(false, "beam_index %d not found\n", beam_index);
+    return 0;
+  }
+  return beam_index;
+}
+
+bool get_nr_prach_sched_from_info_beam(nr_prach_info_t info,
+                                       int config_index,
+                                       int slot,
+                                       int mu,
+                                       frequency_range_t freq_range,
+                                       uint8_t unpaired)
+{
+  if (freq_range == FR2) {
+    //Not checking n_sfn mod x = y
+    int slot_60khz = slot >> (mu - 2); // in table slots are numbered wrt 60kHz
+    if (((info.s_map >> slot_60khz) & 0x01)) {
+      if (mu == 3) {
+        if ((info.N_RA_slot == 1) && (slot % 2 == 0))
+          return false; // no prach in even slots @ 120kHz for 1 prach per 60khz slot
+      }
+      return true;
+    } else
+      return false; // no prach in current slot
+  } else {
+    if (unpaired) { // TDD
+      //Not checking n_sfn mod x = y
+      int subframe = slot >> mu;
+      if ((info.s_map >> subframe) & 0x01) {
+        if (config_index >= 67) {
+          if ((mu == 1) && (info.N_RA_slot <= 1) && (slot % 2 == 0))
+            return false; // no prach in even slots @ 30kHz for 1 prach per subframe
+        } else {
+          if ((slot % 2) && (mu > 0))
+            return false; // slot does not contain start symbol of this prach time resource
+        }
+        return true;
+      } else
+        return false; // no prach in current slot
+    } else { // FDD
+      //Not checking n_sfn mod x = y
+      int subframe = slot >> mu;
+      if ((info.s_map >> subframe) & 0x01) {
+        if (config_index >= 87) {
+          if ((mu == 1) && (info.N_RA_slot <= 1) && (slot % 2 == 0)) {
+            return false; // no prach in even slots @ 30kHz for 1 prach per subframe
+          }
+        } else {
+          if ((slot % 2) && (mu > 0))
+            return 0; // slot does not contain start symbol of this prach time resource
+        }
+        return true;
+      } else
+        return false; // no prach in current slot
+    }
+  }
+}
+
+void set_prach_slot()
+{
+  gNB_MAC_INST *gNB = RC.nrmac[0];
+  NR_COMMON_channels_t *cc = gNB->common_channels;
+  NR_ServingCellConfigCommon_t *scc = cc->ServingCellConfigCommon;
+  NR_BWP_UplinkCommon_t *initialUplinkBWP = scc->uplinkConfigCommon->initialUplinkBWP;
+  NR_RACH_ConfigCommon_t *rach_ConfigCommon = initialUplinkBWP->rach_ConfigCommon->choice.setup;
+  NR_MsgA_ConfigCommon_r16_t *msgacc = NULL;
+  if (initialUplinkBWP->ext1 && initialUplinkBWP->ext1->msgA_ConfigCommon_r16)
+    msgacc = initialUplinkBWP->ext1->msgA_ConfigCommon_r16->choice.setup;
+  const NR_RACH_ConfigGeneric_t *rach_ConfigGeneric = &rach_ConfigCommon->rach_ConfigGeneric;
+  uint8_t config_index = rach_ConfigGeneric->prach_ConfigurationIndex;
+  const int ul_mu = scc->uplinkConfigCommon->frequencyInfoUL->scs_SpecificCarrierList.list.array[0]->subcarrierSpacing;
+  const int mu = nr_get_prach_or_ul_mu(msgacc, rach_ConfigCommon, ul_mu);
+  frequency_range_t freq_range = get_freq_range_from_arfcn(scc->downlinkConfigCommon->frequencyInfoDL->absoluteFrequencyPointA);
+  frame_structure_t *fs = &RC.nrmac[0]->frame_structure;
+  for (int j = 0; j < fs->numb_slots_frame; j++) {
+    is_prach_slot[j] = get_nr_prach_sched_from_info_beam(cc->prach_info, config_index, j, mu, freq_range, cc->frame_type);
+  }
+}
+
 c16_t convert_precoder_weight(double complex c_in)
 {
   return (c16_t) {.r = round(SHRT_MAX*creal(c_in)), .i = round(SHRT_MAX*cimag(c_in))};
@@ -302,6 +421,72 @@ int get_first_ul_slot(const frame_structure_t *fs, bool mixed)
 }
 
 /**
+ * @brief Get the first UL slot index in period
+ * @param fs frame structure
+ * @param beam_idx beam index
+ * @param beams_per_period no of concurrent beams
+ * @param num_beam no of beams
+ * @param uid UE id
+ * @return slot index
+ *
+ */
+int get_first_ul_slot_beam(const frame_structure_t *fs, int beam_idx, int beams_per_period, int num_beam, int uid)
+{
+  DevAssert(fs);
+
+  // FDD
+  if (fs->frame_type == FDD)
+    return 1;
+
+  if (!is_prach_slot_set)
+    set_prach_slot();
+
+  // UL slots indexes in period
+  int ul_slot_idxs[fs->numb_slots_frame];
+  int ul_slot_count = 0;
+
+  for (int i = 0; i < fs->numb_slots_frame; i++) {
+      ul_slot_idxs[i] = 0;
+  }
+  int idx = get_beamloc_from_beam(beam_idx) / beams_per_period;
+  LOG_D(NR_MAC, "get_first_ul_slot_beam idx %d beam_idx %d num_beam %d\n", idx, beam_idx, num_beam);
+
+  /* Populate the indices of UL slots in the TDD period from the bitmap
+   * mixed slot is not used in multiple beams config file to avoid collision with SSB
+   */
+  for (int j = 0; j < fs->numb_slots_frame; j++) {
+    int i = j % fs->numb_slots_period;
+    if ((fs->period_cfg.tdd_slot_bitmap[i].slot_type == TDD_NR_UPLINK_SLOT) && !is_prach_slot[j]) {
+       ul_slot_idxs[ul_slot_count++] = j;
+     }
+  }
+
+  for (int i = 0; i < fs->numb_slots_frame; i++)
+    LOG_D(NR_MAC, "ul_slot_idxs[%d] %d\n", i, ul_slot_idxs[i]);
+
+  // Compute slot index offset
+  int period_idx = idx / MAX_SR_SLOT_PERIOD; // wrap up the count of complete TDD periods spanned by the index
+  int ul_slot_idx_in_period = idx % MAX_SR_SLOT_PERIOD; // wrap up the UL slot index within the current TDD period
+  int ret = ul_slot_idxs[ul_slot_idx_in_period] + period_idx * fs->numb_slots_frame;
+
+  reserve_offset[uid * SLOT_TYPE_NUM + SLOT_TYPE_SR] = ret;
+  LOG_D(NR_MAC, "get_first_ul_slot_beam ret %d idx %d beam_idx %d ul_slot_count %d %d %d\n",
+    ret, idx, beam_idx, ul_slot_idx_in_period, period_idx, fs->numb_slots_period);
+  return ret;
+}
+
+void get_first_ul_slot_period_beam(const frame_structure_t *fs, int beam_idx, int period, int uid)
+{
+  DevAssert(fs);
+
+  // FDD
+  if (fs->frame_type == FDD)
+    return;
+  reserve_period[uid * SLOT_TYPE_NUM + SLOT_TYPE_SR] = period;
+  LOG_D(NR_MAC, "get_first_ul_slot_period_beam uid %d beam_idx %d period %d\n", uid, beam_idx, period);
+}
+
+/**
  * @brief Get number of DL slots per period (full DL slots + mixed slots with DL symbols)
  */
 int get_dl_slots_per_period(const frame_structure_t *fs)
@@ -401,6 +586,162 @@ int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed)
   int ul_slot_idx_in_period = idx % ul_slot_count; // wrap up the UL slot index within the current TDD period
 
   return ul_slot_idxs[ul_slot_idx_in_period] + period_idx * fs->numb_slots_period;
+}
+
+/**
+ * @brief Get the nth UL slot offset for UE index idx in a TDD period using the frame structure bitmap
+ * @param fs frame structure
+ * @param idx UE index
+ * @param is_csi indicates whether it is csi or not
+ * @param beam_idx beam index
+ * @param beams_per_period no of concurrent beams
+ * @param num_beam no of beams
+ * @return slot index offset
+ */
+int get_ul_slot_offset_beam(const frame_structure_t *fs, int idx, bool is_csi, int beam_idx, int beams_per_period, int num_beam, bool set)
+{
+  DevAssert(fs);
+
+  // FDD
+  if (fs->frame_type == FDD)
+    return idx;
+
+  if (!is_prach_slot_set)
+    set_prach_slot();
+
+  // UL slots indexes in period
+  int ul_slot_idxs[fs->numb_slots_frame];
+  int ul_slot_count = 0;
+
+  for (int i = 0; i < fs->numb_slots_frame; i++) {
+      ul_slot_idxs[i] = 0;
+  }
+
+  LOG_D(NR_MAC, "get_ul_slot_offset_beam idx %d is_csi %d beam_idx %d num_beam %d\n", idx, is_csi, beam_idx, num_beam);
+
+  int uid = (is_csi) ? idx/2 : idx;
+  int id = uid / beams_per_period;
+
+  // For NO_BEAM_MODE
+  // Assuming num_pucch2 = 2 and ignoring mixed slotset_csi_meas_periodicity() and configure_periodic_srs() will give this assignment
+  //       UL slot
+  //      0123456789
+  // uid0 S
+  //      CR
+  // uid1 -S
+  //       CR
+  // uid2 --S
+  //        CR
+  // uid3 ---S
+  //         CR
+  // With beamforming, the slot assignment is
+  //       UL slot
+  //      0123456789
+  // uid0 SCR
+  // uid1 ---SCR
+  // uid2 ------SCR
+
+  int type;
+  // SRS
+  if (!is_csi) {
+    type = SLOT_TYPE_SRS;
+  }
+  else {
+    // odd => RSRP report
+    if (idx % 2) {
+      type = SLOT_TYPE_RSRP;
+    }
+    // even => CSI report
+    else {
+      type = SLOT_TYPE_CSIR;
+    }
+  }
+  idx = 3 * id + type;
+  LOG_D(NR_MAC, "get_ul_slot_offset_beam uid %d type %d id %d idx %d is_csi %d beam_idx %d num_beam %d\n", uid, type, id, idx, is_csi, beam_idx, num_beam);
+
+  // Allow the first NUM_SSB_period slot for SR. See get_first_ul_slot_beam()
+  int NUM_SSB_period = (num_beam % beams_per_period > 0) ? num_beam / beams_per_period + 1 : num_beam / beams_per_period;
+  idx += (NUM_SSB_period > MAX_SR_SLOT_PERIOD) ? MAX_SR_SLOT_PERIOD: NUM_SSB_period;
+
+  /* Populate the indices of UL slots in the TDD period from the bitmap
+   * mixed slot is not used in multiple beams config file to avoid collision with SSB
+   */
+  for (int j = 0; j < fs->numb_slots_frame; j++) {
+    int i = j % fs->numb_slots_period;
+    if ((fs->period_cfg.tdd_slot_bitmap[i].slot_type == TDD_NR_UPLINK_SLOT) && !is_prach_slot[j]) {
+      ul_slot_idxs[ul_slot_count++] = j;
+     }
+  }
+
+  for (int i = 0; i < fs->numb_slots_frame; i++)
+    LOG_D(NR_MAC, "ul_slot_idxs[%d] %d, is_prach_slot[%d] %d\n", i, ul_slot_idxs[i], i, is_prach_slot[i]);
+
+  // Compute slot index offset
+  int period_idx = idx / ul_slot_count; // wrap up the count of complete TDD periods spanned by the index
+  int ul_slot_idx_in_period = idx % ul_slot_count; // wrap up the UL slot index within the current TDD period
+  int ret = ul_slot_idxs[ul_slot_idx_in_period] + period_idx * fs->numb_slots_frame;
+
+  if (set)
+  {
+    reserve_offset[uid * SLOT_TYPE_NUM + type] = ret;
+  }
+  LOG_D(NR_MAC, "get_ul_slot_offset_beam ret %d uid %d type %d id %d idx %d beam_idx %d beams_period %d ul_slot_count %d %d %d\n", ret, uid, type, id, idx, beam_idx, beams_per_period, ul_slot_idx_in_period, period_idx, fs->numb_slots_period);
+
+  return ret;
+}
+
+void get_ul_slot_period_beam(const frame_structure_t *fs, int idx, bool is_csi, int beam_idx, int period, bool set)
+{
+  DevAssert(fs);
+
+  // FDD
+  if (fs->frame_type == FDD)
+    return;
+
+  LOG_D(NR_MAC, "get_ul_slot_period_beam idx %d is_csi %d beam_idx %d period %d\n", idx, is_csi, beam_idx, period);
+
+  int uid = (is_csi) ? idx/2 : idx;
+
+  // For NO_BEAM_MODE
+  // Assuming num_pucch2 = 2 and ignoring mixed slotset_csi_meas_periodicity() and configure_periodic_srs() will give this assignment
+  //       UL slot
+  //      0123456789
+  // uid0 S
+  //      CR
+  // uid1 -S
+  //       CR
+  // uid2 --S
+  //        CR
+  // uid3 ---S
+  //         CR
+  // With beamforming, the slot assignment is
+  //       UL slot
+  //      0123456789
+  // uid0 SCR
+  // uid1 ---SCR
+  // uid2 ------SCR
+
+  int type;
+  // SRS
+  if (!is_csi) {
+    type = SLOT_TYPE_SRS;
+  }
+  else {
+    // odd => RSRP report
+    if (idx % 2) {
+      type = SLOT_TYPE_RSRP;
+    }
+    // even => CSI report
+    else {
+      type = SLOT_TYPE_CSIR;
+    }
+  }
+
+  if (set)
+  {
+    reserve_period[uid * SLOT_TYPE_NUM + type] = period;
+  }
+  LOG_D(NR_MAC, "get_ul_slot_period_beam uid %d type %d is_csi %d beam_idx %d period %d\n", uid, type, is_csi, beam_idx, period);
 }
 
 static void config_common(gNB_MAC_INST *nrmac, const nr_mac_config_t *config, NR_ServingCellConfigCommon_t *scc)

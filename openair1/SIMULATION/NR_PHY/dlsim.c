@@ -799,7 +799,8 @@ int main(int argc, char **argv)
   rnti_t rnti = 0x1234;
   int uid = 0;
   int ssb_index = 0;
-  NR_CellGroupConfig_t *secondaryCellGroup = get_default_secondaryCellGroup(scc, UE_Capability_nr, 0, 1, &conf, uid, ssb_index);
+  int beam_idx = 0;
+  NR_CellGroupConfig_t *secondaryCellGroup = get_default_secondaryCellGroup(scc, UE_Capability_nr, 0, 1, &conf, uid, ssb_index, beam_idx);
   secondaryCellGroup->spCellConfig->reconfigurationWithSync = get_reconfiguration_with_sync(rnti, uid, scc, frame);
 
   /* -U option modify DMRS */
