@@ -2063,6 +2063,21 @@ target_link_libraries(nr_srssim PRIVATE
   m pthread ITTI dl nr_ue_phy_meas physim_common softmodem_common
   )
 
+add_executable(nr_csirssim
+  ${OPENAIR1_DIR}/SIMULATION/NR_PHY/csirssim.c
+  ${NFAPI_USER_DIR}/nfapi.c
+  ${NFAPI_USER_DIR}/gnb_ind_vars.c
+  ${PHY_INTERFACE_DIR}/queue_t.c
+  )
+
+target_link_libraries(nr_csirssim PRIVATE
+  -Wl,--start-group UTIL SIMU PHY_COMMON PHY_NR_COMMON PHY_NR PHY_NR_UE SCHED_NR_LIB SCHED_NR_UE_LIB MAC_UE_NR MAC_NR_COMMON CONFIG_LIB L2_NR -Wl,--end-group
+  m pthread ${T_LIB} ITTI dl nr_ue_phy_meas physim_common
+  softmodem_common
+  )
+target_link_libraries(nr_csirssim PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
+#target_link_libraries(nr_csirssim PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs UTIL physim_common m L2_NR pthread ITTI dl nr_ue_phy_meas softmodem_common)
+
 if(CUDA_ENABLE)
   if (TARGET oai_cuda_lib)
       target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib)
