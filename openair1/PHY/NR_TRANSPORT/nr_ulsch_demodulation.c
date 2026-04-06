@@ -857,15 +857,19 @@ static void inner_rx(PHY_VARS_gNB *gNB,
                      NR_gNB_PUSCH *pusch_vars,
                      nfapi_nr_pusch_pdu_t *rel15_ul,
                      c16_t **rxF,
-                     c16_t **ul_ch,
                      int16_t **llr,
                      int soffset,
                      int symbol,
                      int output_shift,
                      uint32_t nvar,
                      c16_t *rxFext_slot,
-                     c16_t *chFext_slot)
+                     c16_t *chFext_slot,
+                     int nbTx,
+                     int nbRx,
+                     int sz,
+                     void *estimates)
 {
+  c16_t(*ul_ch_estimates)[nbTx][nbRx][sz] = (c16_t(*)[nbTx][nbRx][sz])estimates;
   int nb_layer = rel15_ul->nrOfLayers;
   int nb_rx_ant = frame_parms->nb_antennas_rx;
   int dmrs_symbol_flag = (rel15_ul->ul_dmrs_symb_pos >> symbol) & 0x01;
@@ -875,11 +879,18 @@ static void inner_rx(PHY_VARS_gNB *gNB,
 
   memset(rxFext, 0, sizeof(rxFext));
   memset(chFext, 0, sizeof(chFext));
+  int dmrs_symbol;
+  if (gNB->chest_time == 0)
+    dmrs_symbol = dmrs_symbol_flag ? symbol : get_valid_dmrs_idx_for_channel_est(rel15_ul->ul_dmrs_symb_pos, symbol);
+  else { // average of channel estimates stored in first symbol
+    int end_symbol = rel15_ul->start_symbol_index + rel15_ul->nr_of_symbols;
+    dmrs_symbol = get_next_dmrs_symbol_in_slot(rel15_ul->ul_dmrs_symb_pos, rel15_ul->start_symbol_index, end_symbol);
+  }
 
   for (int aarx = 0; aarx < nb_rx_ant; aarx++) {
     for (int aatx = 0; aatx < nb_layer; aatx++) {
       nr_ulsch_extract_rbs(rxF[aarx],
-                           (c16_t *)pusch_vars->ul_ch_estimates[aatx * nb_rx_ant + aarx],
+                           ul_ch_estimates[dmrs_symbol][aatx][aarx],
                            rxFext[aarx],
                            chFext[aatx][aarx],
                            soffset + (symbol * frame_parms->ofdm_symbol_size),
@@ -1035,15 +1046,17 @@ static void nr_pusch_symbol_processing(void *arg)
              pusch_vars,
              rel15_ul,
              gNB->common_vars.rxdataF[rdata->beam_nb],
-             (c16_t **)gNB->pusch_vars[ulsch_id].ul_ch_estimates,
              llrss,
              soffset,
              symbol,
              gNB->pusch_vars[ulsch_id].log2_maxh,
              rdata->nvar,
              rdata->rxFext_slot_mem,
-             rdata->pusch_ch_est_dmrs_interpl_slot_mem);
-
+             rdata->pusch_ch_est_dmrs_interpl_slot_mem,
+             rdata->nbTx,
+             rdata->nbRx,
+             rdata->sz,
+             rdata->ul_ch_estimates);
     int nb_re_pusch = gNB->pusch_vars[ulsch_id].ul_valid_re_per_slot[symbol];
     // layer de-mapping
     int16_t *llr_ptr = llrs[0];
@@ -1139,6 +1152,8 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
   int max_ch = 0;
   uint32_t nvar = 0;
   int end_symbol = rel15_ul->start_symbol_index + rel15_ul->nr_of_symbols;
+  c16_t ul_ch_estimates[rel15_ul->nr_of_symbols][nb_layer][nb_rx_ant][frame_parms->ofdm_symbol_size];
+
   for (uint8_t symbol = rel15_ul->start_symbol_index; symbol < end_symbol; symbol++) {
     uint8_t dmrs_symbol_flag = (rel15_ul->ul_dmrs_symb_pos >> symbol) & 0x01;
     LOG_D(PHY, "symbol %d, dmrs_symbol_flag :%d\n", symbol, dmrs_symbol_flag);
@@ -1158,7 +1173,9 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
                                     &max_ch,
                                     &nvar_tmp,
                                     pusch_dmrs_slot_mem,
-                                    pusch_ch_est_dmrs_pos_slot_mem);
+                                    pusch_ch_est_dmrs_pos_slot_mem,
+                                    frame_parms->ofdm_symbol_size,
+                                    ul_ch_estimates[symbol][nl]);
         nvar += nvar_tmp;
       }
     }
@@ -1211,8 +1228,11 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
 
   // averaging time domain channel estimates
   if (gNB->chest_time == 1)
-    nr_chest_time_domain_avg_ul(frame_parms,
-                                pusch_vars->ul_ch_estimates,
+    nr_chest_time_domain_avg(frame_parms,
+                             nb_layer,
+                             nb_rx_ant,
+                             frame_parms->ofdm_symbol_size,
+                             ul_ch_estimates,
                              rel15_ul->nr_of_symbols,
                              rel15_ul->start_symbol_index,
                              rel15_ul->ul_dmrs_symb_pos,
@@ -1277,6 +1297,11 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
   int soffset = (slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
 
   nb_re_pusch = ceil_mod(nb_re_pusch, 16);
+  int dmrs_symbol;
+  if (gNB->chest_time == 0)
+    dmrs_symbol = get_valid_dmrs_idx_for_channel_est(rel15_ul->ul_dmrs_symb_pos, meas_symbol);
+  else // average of channel estimates stored in first symbol
+    dmrs_symbol = get_next_dmrs_symbol_in_slot(rel15_ul->ul_dmrs_symb_pos, rel15_ul->start_symbol_index, end_symbol);
   int size_est = nb_re_pusch * frame_parms->symbols_per_slot;
   __attribute__((aligned(32))) c16_t ul_ch_estimates_ext[rel15_ul->nrOfLayers * frame_parms->nb_antennas_rx][size_est];
   memset(ul_ch_estimates_ext, 0, sizeof(ul_ch_estimates_ext));
@@ -1285,7 +1310,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
   for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) 
     for (int nl = 0; nl < rel15_ul->nrOfLayers; nl++)
       nr_ulsch_extract_rbs(gNB->common_vars.rxdataF[beam_nb][aarx],
-                           (c16_t *)pusch_vars->ul_ch_estimates[nl * frame_parms->nb_antennas_rx + aarx],
+                           ul_ch_estimates[dmrs_symbol][nl][aarx],
                            temp_rxFext[aarx],
                            &ul_ch_estimates_ext[nl * frame_parms->nb_antennas_rx + aarx][meas_symbol * nb_re_pusch],
                            soffset + meas_symbol * frame_parms->ofdm_symbol_size,
@@ -1373,8 +1398,8 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
           .rxFext_slot_mem = rxFext_slot_mem,
           .nbTx = nb_layer,
           .nbRx = nb_rx_ant,
-          .sz = frame_parms->ofdm_symbol_size
-      };
+          .sz = frame_parms->ofdm_symbol_size,
+          .ul_ch_estimates = (void *)ul_ch_estimates};
       if (rel15_ul->pdu_bit_map & PUSCH_PDU_BITMAP_PUSCH_PTRS) {
         nr_pusch_symbol_processing(rdata);
       } else {
