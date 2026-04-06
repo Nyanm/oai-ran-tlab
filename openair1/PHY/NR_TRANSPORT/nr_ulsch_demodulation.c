@@ -1118,20 +1118,20 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
   LOG_D(PHY,"pusch %d.%d : ul_dmrs_symb_pos %x\n",frame,slot,rel15_ul->ul_dmrs_symb_pos);
 
   // Memories to store data for data recording
-  int buffer_length_slot = rel15_ul->rb_size * NR_NB_SC_PER_RB * 14; // 14 OFDM Symbols per slot
   int nb_rx_ant = frame_parms->nb_antennas_rx;
   int nb_layer = rel15_ul->nrOfLayers;
 
-  // Initialize memory for DMRS signals
-  c16_t pusch_dmrs_slot_mem[nb_layer * buffer_length_slot] __attribute__((aligned(32)));
-  // Initialize memory for channel estimates based on DMRS positions
-  c16_t pusch_ch_est_dmrs_pos_slot_mem[buffer_length_slot * nb_layer * nb_rx_ant] __attribute__((aligned(32)));
-  // memory to store slot grid with channel coefficients based on DMRS positions after interpolation
-  c16_t pusch_ch_est_dmrs_interpl_slot_mem[buffer_length_slot * nb_layer * nb_rx_ant] __attribute__((aligned(32)));
-  // memory to store extracted data including PUSCH + DMRS
-  c16_t rxFext_slot_mem[nb_rx_ant * buffer_length_slot] __attribute__((aligned(32)));
-
 #if T_TRACER
+  int buffer_length_slot = rel15_ul->rb_size * NR_NB_SC_PER_RB * 14; // 14 OFDM Symbols per slot
+  // Initialize memory for DMRS signals
+  check_vla(c16_t pusch_dmrs_slot_mem[nb_layer * buffer_length_slot] __attribute__((aligned(32))));
+  // Initialize memory for channel estimates based on DMRS positions
+  check_vla(c16_t pusch_ch_est_dmrs_pos_slot_mem[buffer_length_slot * nb_layer * nb_rx_ant] __attribute__((aligned(32))));
+  // memory to store slot grid with channel coefficients based on DMRS positions after interpolation
+  check_vla(c16_t pusch_ch_est_dmrs_interpl_slot_mem[buffer_length_slot * nb_layer * nb_rx_ant] __attribute__((aligned(32))));
+  // memory to store extracted data including PUSCH + DMRS
+  check_vla(c16_t rxFext_slot_mem[nb_rx_ant * buffer_length_slot] __attribute__((aligned(32))));
+
   // Initialize memory for DMRS signals
   if (T_ACTIVE(T_GNB_PHY_UL_FD_DMRS))
     memset(pusch_dmrs_slot_mem, 0, sizeof(c16_t) * nb_layer * buffer_length_slot);
@@ -1147,6 +1147,11 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
   // memory to store extracted data including PUSCH + DMRS
   if (T_ACTIVE(T_GNB_PHY_UL_FD_PUSCH_IQ))
     memset(rxFext_slot_mem, 0, sizeof(c16_t) * buffer_length_slot * nb_rx_ant);
+#else
+  void *pusch_dmrs_slot_mem = NULL;
+  void *pusch_ch_est_dmrs_pos_slot_mem = NULL;
+  void *pusch_ch_est_dmrs_interpl_slot_mem = NULL;
+  void *rxFext_slot_mem = NULL;
 #endif
 
   //----------------------------------------------------------
@@ -1156,7 +1161,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
   int max_ch = 0;
   uint32_t nvar = 0;
   const int end_symbol = rel15_ul->start_symbol_index + rel15_ul->nr_of_symbols;
-  c16_t ul_ch_estimates[rel15_ul->nr_of_symbols][nb_layer][nb_rx_ant][frame_parms->ofdm_symbol_size];
+  check_vla(c16_t ul_ch_estimates[rel15_ul->nr_of_symbols][nb_layer][nb_rx_ant][frame_parms->ofdm_symbol_size]);
 
   for (uint8_t symbol = rel15_ul->start_symbol_index; symbol < end_symbol; symbol++) {
     uint8_t dmrs_symbol_flag = (rel15_ul->ul_dmrs_symb_pos >> symbol) & 0x01;
@@ -1307,7 +1312,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
   else // average of channel estimates stored in first symbol
     dmrs_symbol = get_next_dmrs_symbol_in_slot(rel15_ul->ul_dmrs_symb_pos, rel15_ul->start_symbol_index, end_symbol);
   int size_est = nb_re_pusch * frame_parms->symbols_per_slot;
-  __attribute__((aligned(32))) c16_t ul_ch_estimates_ext[rel15_ul->nrOfLayers * frame_parms->nb_antennas_rx][size_est];
+  check_vla(__attribute__((aligned(32))) c16_t ul_ch_estimates_ext[rel15_ul->nrOfLayers * frame_parms->nb_antennas_rx][size_est]);
   memset(ul_ch_estimates_ext, 0, sizeof(ul_ch_estimates_ext));
   int buffer_length = rel15_ul->rb_size * NR_NB_SC_PER_RB;
   c16_t temp_rxFext[frame_parms->nb_antennas_rx][buffer_length] __attribute__((aligned(32)));

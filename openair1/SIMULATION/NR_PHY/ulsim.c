@@ -264,7 +264,7 @@ int main(int argc, char *argv[])
   stop = false;
   __attribute__((unused)) struct sigaction oldaction;
   sigaction(SIGINT, &sigint_action, &oldaction);
-
+  printf("Origin stack: %lu\n", get_stack_usage());
   FILE *csv_file = NULL;
   char *filename_csv = NULL;
   int i;
@@ -288,7 +288,6 @@ int main(int argc, char *argv[])
   uint16_t N_RB_DL = 106, N_RB_UL = 106, mu = 1;
 
   // unsigned char frame_type = 0;
-  int loglvl = OAILOG_WARNING;
   uint16_t nb_symb_sch = 12;
   int start_symbol = 0;
   uint16_t nb_rb = 50;
@@ -342,7 +341,7 @@ int main(int argc, char *argv[])
     exit_fun("[NR_ULSIM] Error, configuration module init failed\n");
   }
   int ul_proc_error = 0; // uplink processing checking status flag
-  //logInit();
+  logInit();
   randominit();
 
   /* initialize the sin-cos table */
@@ -594,7 +593,7 @@ int main(int argc, char *argv[])
       break;
 
     case 'L':
-      loglvl = atoi(optarg);
+      set_glog(atoi(optarg));
       break;
 
    case 'T':
@@ -705,9 +704,6 @@ int main(int argc, char *argv[])
 
     }
   }
-
-  logInit();
-  set_glog(loglvl);
 
   get_softmodem_params()->phy_test = 1;
   get_softmodem_params()->do_ra = 0;
