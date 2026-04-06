@@ -78,8 +78,6 @@ static void nr_ulsch_extract_rbs(c16_t *const rxdataF,
                                  c16_t *rxF_ext,
                                  c16_t *ul_ch0_ext,
                                  int rxoffset,
-                                 int choffset,
-                                 int aarx,
                                  int is_dmrs_symbol,
                                  nfapi_nr_pusch_pdu_t *pusch_pdu,
                                  NR_DL_FRAME_PARMS *frame_parms)
@@ -877,13 +875,6 @@ static void inner_rx(PHY_VARS_gNB *gNB,
 
   memset(rxFext, 0, sizeof(rxFext));
   memset(chFext, 0, sizeof(chFext));
-  int dmrs_symbol;
-  if (gNB->chest_time == 0)
-    dmrs_symbol = dmrs_symbol_flag ? symbol : get_valid_dmrs_idx_for_channel_est(rel15_ul->ul_dmrs_symb_pos, symbol);
-  else { // average of channel estimates stored in first symbol
-    int end_symbol = rel15_ul->start_symbol_index + rel15_ul->nr_of_symbols;
-    dmrs_symbol = get_next_dmrs_symbol_in_slot(rel15_ul->ul_dmrs_symb_pos, rel15_ul->start_symbol_index, end_symbol);
-  }
 
   for (int aarx = 0; aarx < nb_rx_ant; aarx++) {
     for (int aatx = 0; aatx < nb_layer; aatx++) {
@@ -892,8 +883,6 @@ static void inner_rx(PHY_VARS_gNB *gNB,
                            rxFext[aarx],
                            chFext[aatx][aarx],
                            soffset + (symbol * frame_parms->ofdm_symbol_size),
-                           dmrs_symbol * frame_parms->ofdm_symbol_size,
-                           aarx,
                            dmrs_symbol_flag,
                            rel15_ul,
                            frame_parms);
@@ -1288,11 +1277,6 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
   int soffset = (slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
 
   nb_re_pusch = ceil_mod(nb_re_pusch, 16);
-  int dmrs_symbol;
-  if (gNB->chest_time == 0)
-    dmrs_symbol = get_valid_dmrs_idx_for_channel_est(rel15_ul->ul_dmrs_symb_pos, meas_symbol);
-  else // average of channel estimates stored in first symbol
-    dmrs_symbol = get_next_dmrs_symbol_in_slot(rel15_ul->ul_dmrs_symb_pos, rel15_ul->start_symbol_index, end_symbol);
   int size_est = nb_re_pusch * frame_parms->symbols_per_slot;
   __attribute__((aligned(32))) c16_t ul_ch_estimates_ext[rel15_ul->nrOfLayers * frame_parms->nb_antennas_rx][size_est];
   memset(ul_ch_estimates_ext, 0, sizeof(ul_ch_estimates_ext));
@@ -1305,8 +1289,6 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
                            temp_rxFext[aarx],
                            &ul_ch_estimates_ext[nl * frame_parms->nb_antennas_rx + aarx][meas_symbol * nb_re_pusch],
                            soffset + meas_symbol * frame_parms->ofdm_symbol_size,
-                           dmrs_symbol * frame_parms->ofdm_symbol_size,
-                           aarx,
                            (rel15_ul->ul_dmrs_symb_pos >> meas_symbol) & 0x01,
                            rel15_ul,
                            frame_parms);
