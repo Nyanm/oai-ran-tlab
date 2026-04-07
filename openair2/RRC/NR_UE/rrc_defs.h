@@ -289,6 +289,10 @@ typedef struct NR_UE_RRC_INST_s {
 #define NR_RRCReconfigurationConfirm           21
 #define NR_PC5_DISCOVERY_PAYLOAD_SIZE          29
 #define NR_PC5_SIGNALLING_PAYLOAD_SIZE         100 //should be updated with a correct value
+//Jin add for Rpool
+#define NR_ResourcePoolReconfigRequest         22
+#define NR_ResourcePoolReconfigConfirm         23
+
 
 //#define DEBUG_CTRL_SOCKET
 #define NR_CONTROL_SOCKET_PORT_NO 5555
@@ -377,6 +381,19 @@ typedef struct {
 extern NR_SL_SchedulerConfig_t nr_sl_scheduler_config;
 
 
+//Jin add for resourcepool
+#define MAX_SL_POOLS 2   /* phase 1 uses index 0 only; index 1 reserved for future slicing */
+#define MAX_SL_UE    8
+typedef struct {
+    uint8_t start_rb;
+    uint8_t rb_number;
+    uint8_t num_subchannel;
+    uint8_t valid;
+} NR_SL_RpoolConfig_t;
+extern NR_SL_RpoolConfig_t nr_sl_rpool_config[MAX_SL_POOLS];
+extern uint8_t             nr_sl_ue_pool_assignment[MAX_SL_UE];
+
+
 // 
 // Section of the E5 agent adjusting QoS
 //
@@ -439,6 +456,7 @@ struct nr_sidelink_ctrl_element {
 	NR_Scheduler_Configuration pc5_scheduler_config;
 	NR_RRC_Configuration pc5_rrc_config;
 	NR_PC5_RRCReconfiguration_Status_t pc5_rrcreconfiguration_rsp;
+  NR_SL_RpoolConfig_t rpool_config;   
   } nr_sidelinkPrimitive;
 };
 

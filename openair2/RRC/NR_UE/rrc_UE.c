@@ -90,6 +90,14 @@ NR_SL_SchedulerConfig_t nr_sl_scheduler_config = {
     .valid  = 0  // not yet overridden by SLC_C
 };
 
+//Jin add for resourcePool
+NR_SL_RpoolConfig_t nr_sl_rpool_config[MAX_SL_POOLS] = {
+    [0] = { .start_rb = 0, .rb_number = 50, .num_subchannel = 1, .valid = 0 },
+    [1] = { .start_rb = 0, .rb_number = 0,  .num_subchannel = 0, .valid = 0 },
+};
+uint8_t nr_sl_ue_pool_assignment[MAX_SL_UE] = {0}; /* all UEs on pool 0 */
+
+
 NR_UE_RRC_INST_t *NR_UE_rrc_inst;
 /* NAS Attach request with IMSI */
 static const char  nr_nas_attach_req_imsi[] = {
@@ -3064,6 +3072,43 @@ void *nr_rrc_control_socket_thread_fct(void *arg)
 	         exit(EXIT_FAILURE);
 	      }
 	     break;	  
+    //Jin add for resourcepool
+    case NR_ResourcePoolReconfigRequest:
+        LOG_I(RRC, "[NR_ResourcePoolReconfigRequest] start_rb=%u rb_number=%u nsc=%u\n",
+              sl_ctrl_msg_recv->nr_sidelinkPrimitive.rpool_config.start_rb,
+              sl_ctrl_msg_recv->nr_sidelinkPrimitive.rpool_config.rb_number,
+              sl_ctrl_msg_recv->nr_sidelinkPrimitive.rpool_config.num_subchannel);
+        {
+            uint8_t idx = 0; /* phase 1: always pool 0 */
+            nr_sl_rpool_config[idx].start_rb       = sl_ctrl_msg_recv->nr_sidelinkPrimitive.rpool_config.start_rb;
+            nr_sl_rpool_config[idx].rb_number      = sl_ctrl_msg_recv->nr_sidelinkPrimitive.rpool_config.rb_number;
+            nr_sl_rpool_config[idx].num_subchannel = sl_ctrl_msg_recv->nr_sidelinkPrimitive.rpool_config.num_subchannel;
+            nr_sl_rpool_config[idx].valid          = 1;
+            LOG_I(RRC, "[SLC] rpool[%u] updated: start=%u rb=%u nsc=%u\n",
+                  idx,
+                  nr_sl_rpool_config[idx].start_rb,
+                  nr_sl_rpool_config[idx].rb_number,
+                  nr_sl_rpool_config[idx].num_subchannel);
+        }
+        memset(send_buf, 0, BUFSIZE);
+        sl_ctrl_msg_send = calloc(1, sizeof(struct nr_sidelink_ctrl_element));
+        sl_ctrl_msg_send->type = NR_ResourcePoolReconfigConfirm;
+        sl_ctrl_msg_send->nr_sidelinkPrimitive.rpool_config =
+            sl_ctrl_msg_recv->nr_sidelinkPrimitive.rpool_config;
+        memcpy((void *)send_buf, (void *)sl_ctrl_msg_send,
+              sizeof(struct nr_sidelink_ctrl_element));
+        free(sl_ctrl_msg_send);
+        prose_addr_len = sizeof(prose_ctl_addr);
+        n = sendto(ctrl_sock_fd, (char *)send_buf,
+                  sizeof(struct nr_sidelink_ctrl_element), 0,
+                  (struct sockaddr *)&prose_ctl_addr, prose_addr_len);
+        if (n < 0) {
+            LOG_E(RRC, "ERROR: Failed to send NR_ResourcePoolReconfigConfirm\n");
+            exit(EXIT_FAILURE);
+        }
+        break;
+
+
 	  default:
          break;
       }
