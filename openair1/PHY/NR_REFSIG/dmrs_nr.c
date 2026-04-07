@@ -235,15 +235,47 @@ int8_t get_valid_dmrs_idx_for_channel_est(uint16_t dmrs_symb_pos, uint8_t counte
 }
 
 /* perform averaging of channel estimates and store result in first symbol buffer */
-void nr_chest_time_domain_avg(NR_DL_FRAME_PARMS *frame_parms,
-                              int nl,
-                              int nbRx,
-                              int sz,
-                              c16_t ch_estimates[][nl][nbRx][sz],
-                              uint8_t num_symbols,
-                              uint8_t start_symbol,
-                              uint16_t dmrs_bitmap,
-                              uint16_t num_rbs)
+void nr_chest_time_domain_avg(int nb_dmrs_symb, int nl, int nbRx, int sz, c16_t ch_estimates[nb_dmrs_symb][nl][nbRx][sz])
+
+{
+  AssertFatal((nb_dmrs_symb < 5) && (nb_dmrs_symb > 0), "Illegal number of DMRS symbols in the slot\n");
+  for (int aarx = 0; aarx < nbRx; aarx++) {
+    simde__m128i *ul_ch128_0 = (simde__m128i *)ch_estimates[0][0][aarx];
+    for (int symb = 1; symb < nb_dmrs_symb; symb++) {
+      simde__m128i *toadd = (simde__m128i *)ch_estimates[symb][0][aarx];
+      // we do 4 REs in a 128 bit vector
+      for (int re = 0; re < sz / 4; re++)
+        ul_ch128_0[re] = simde_mm_adds_epi16(ul_ch128_0[re], *toadd++);
+    }
+    switch (nb_dmrs_symb) {
+      case 2: {
+        for (int re = 0; re < sz / 4; re++)
+          ul_ch128_0[re] = simde_mm_srai_epi16(ul_ch128_0[re], 1);
+      } break;
+      case 4: {
+        for (int re = 0; re < sz / 4; re++)
+          ul_ch128_0[re] = simde_mm_srai_epi16(ul_ch128_0[re], 2);
+      } break;
+      case 3: {
+        c16_t *todiv = (c16_t *)ul_ch128_0;
+        for (int re = 0; re < sz; re++) {
+          *todiv = (c16_t){todiv->r / 3, todiv->i / 3};
+          todiv++;
+        }
+      }
+    }
+  }
+}
+
+void nr_chest_time_domain_avg_ue(NR_DL_FRAME_PARMS *frame_parms,
+                                 int nl,
+                                 int nbRx,
+                                 int sz,
+                                 c16_t ch_estimates[][nl][nbRx][sz],
+                                 uint8_t num_symbols,
+                                 uint8_t start_symbol,
+                                 uint16_t dmrs_bitmap,
+                                 uint16_t num_rbs)
 {
   const int total_symbols = start_symbol + num_symbols;
   const int num_dmrs_symb = count_bits64_with_mask(dmrs_bitmap, start_symbol, total_symbols);

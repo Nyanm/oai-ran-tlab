@@ -650,15 +650,15 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
     nr_ue_measurement_procedures(2, ue, proc, freq_alloc.num_rbs, pdsch_est_size, pdsch_dl_ch_estimates[first_dmrs][0]);
 
   if (ue->chest_time == 1) { // averaging time domain channel estimates
-    nr_chest_time_domain_avg(&ue->frame_parms,
-                             dlsch[0].Nl,
-                             ue->frame_parms.nb_antennas_rx,
-                             pdsch_est_size,
-                             pdsch_dl_ch_estimates,
-                             dlschCfg->number_symbols,
-                             dlschCfg->start_symbol,
-                             dlschCfg->dlDmrsSymbPos,
-                             freq_alloc.num_rbs);
+    nr_chest_time_domain_avg_ue(&ue->frame_parms,
+                                dlsch[0].Nl,
+                                ue->frame_parms.nb_antennas_rx,
+                                pdsch_est_size,
+                                pdsch_dl_ch_estimates,
+                                dlschCfg->number_symbols,
+                                dlschCfg->start_symbol,
+                                dlschCfg->dlDmrsSymbPos,
+                                freq_alloc.num_rbs);
   }
 
   uint16_t first_symbol_with_data = dlschCfg->start_symbol;
