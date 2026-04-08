@@ -1250,7 +1250,8 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
                              rel15_ul->nr_of_symbols,
                              rel15_ul->start_symbol_index,
                              rel15_ul->ul_dmrs_symb_pos,
-                             rel15_ul->rb_size);
+                             rel15_ul->rb_size,
+                             rel15_ul->nrOfLayers);
 
   stop_meas(&gNB->ulsch_channel_estimation_stats);
 
