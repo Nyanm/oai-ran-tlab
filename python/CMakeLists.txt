@@ -27,8 +27,8 @@ set(OAI_VERSION 2.4.0)
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 
 add_library(liboaipy MODULE
-	#    src/oaipylib_module.c
-	#    src/oaipylib_wrappers.c
+    src/oaipylib_module.c
+    src/oaipylib_wrappers.c
     src/oaipylib_top.c
     ${NFAPI_USER_DIR}/nfapi.c
     ${NFAPI_USER_DIR}/gnb_ind_vars.c

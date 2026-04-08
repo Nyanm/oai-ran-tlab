@@ -38,3 +38,5 @@ python Examples/polartest.py
 ```
 You should see that the output matches the input (0x12345678) at SNR=0dB. Debugging traces will be removed
 
+## Docker test enviroment
+There is a work in progress doocker test enviroment located in the dokcer_testenv folder. Currently there is an issue with kernel crashes of jupyter notebooks when running any testing scripts for the OAIPYLIB, these issues could be caused by the docker enviroment, thus it is not recemended to use this envroment for work on the library or any adjacent script. Until the cause of the kernel crashes is confirmed to be unrelated to the docker container setup 

@@ -33,3 +33,12 @@ nfapi_nr_interface_scf
 *.log
 *.out
 CMakeUserPresets.json
+oaipylib.egg-info
+
+#docker build
+build
+
+#other gitignores
+private_folder
+tmp_comp_results
+__pycache__

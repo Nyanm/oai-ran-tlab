@@ -1,0 +1,9 @@
+services:
+  oai-dev:
+    build: .
+    container_name: oai-dev-ubuntu24
+    volumes:
+      - .:/opt/oai
+    working_dir: /opt/oai
+    command: sleep infinity
+    restart: unless-stopped
