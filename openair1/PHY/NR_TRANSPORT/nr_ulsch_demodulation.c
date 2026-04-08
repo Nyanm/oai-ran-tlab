@@ -165,16 +165,14 @@ static int get_nb_re_pusch (NR_DL_FRAME_PARMS *frame_parms, nfapi_nr_pusch_pdu_t
 {
   uint8_t dmrs_symbol_flag = (rel15_ul->ul_dmrs_symb_pos >> symbol) & 0x01;
   if (dmrs_symbol_flag == 1) {
-    if ((rel15_ul->ul_dmrs_symb_pos >> ((symbol + 1) % frame_parms->symbols_per_slot)) & 0x01)
-      AssertFatal(1==0,"Double DMRS configuration is not yet supported\n");
-
     if (rel15_ul->dmrs_config_type == 0) {
       // if no data in dmrs cdm group is 1 only even REs have no data
       // if no data in dmrs cdm group is 2 both odd and even REs have no data
       return(rel15_ul->rb_size *(12 - (rel15_ul->num_dmrs_cdm_grps_no_data*6)));
     }
     else return(rel15_ul->rb_size *(12 - (rel15_ul->num_dmrs_cdm_grps_no_data*4)));
-  } else return(rel15_ul->rb_size * NR_NB_SC_PER_RB);
+  } else
+    return (rel15_ul->rb_size * NR_NB_SC_PER_RB);
 }
 
 static void nr_ulsch_channel_compensation(uint32_t buffer_length,
@@ -1171,6 +1169,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
   int max_ch = 0;
   uint32_t nvar = 0;
   int end_symbol = rel15_ul->start_symbol_index + rel15_ul->nr_of_symbols;
+  uint8_t dmrs_symb_idx = 0;
   for (uint8_t symbol = rel15_ul->start_symbol_index; symbol < end_symbol; symbol++) {
     uint8_t dmrs_symbol_flag = (rel15_ul->ul_dmrs_symb_pos >> symbol) & 0x01;
     LOG_D(PHY, "symbol %d, dmrs_symbol_flag :%d\n", symbol, dmrs_symbol_flag);
@@ -1182,6 +1181,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
                                     slot,
                                     nl,
                                     get_dmrs_port(nl, rel15_ul->dmrs_ports),
+                                    dmrs_symb_idx,
                                     symbol,
                                     ulsch_id,
                                     beam_nb,
@@ -1193,10 +1193,12 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
                                     pusch_ch_est_dmrs_pos_slot_mem);
         nvar += nvar_tmp;
       }
+      dmrs_symb_idx++;
     }
   }
 
-  nvar /= (rel15_ul->nr_of_symbols * rel15_ul->nrOfLayers * frame_parms->nb_antennas_rx);
+  if (dmrs_symb_idx > 0)
+    nvar /= (dmrs_symb_idx * rel15_ul->nrOfLayers);
 
   allocCast2D(n0_subband_power,
               unsigned int,
