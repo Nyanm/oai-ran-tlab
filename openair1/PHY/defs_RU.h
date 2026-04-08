@@ -435,10 +435,6 @@ typedef struct RU_t_s {
   int nb_rx;
   /// number of TX paths on device
   int nb_tx;
-  /// number of concurrent analog beams in period
-  int num_beams_period;
-  /// number of logical antennas at TX beamformer input
-  int nb_log_antennas;
   /// maximum PDSCH RS EPRE
   int max_pdschReferenceSignalPower;
   /// maximum RX gain
