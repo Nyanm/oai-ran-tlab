@@ -885,7 +885,7 @@ static bool set_fh_ru_config(void *mplane_api, const paramdef_t *rup, uint16_t f
           ru_config->compMeth = XRAN_COMPMETHOD_BLKFLOAT;
           break;
         case 2:
-          ru_config ->compMeth = XRAN_COMPMETHOD_BLKSCALE;
+          ru_config->compMeth = XRAN_COMPMETHOD_BLKSCALE;
           break;
       }
 
@@ -904,7 +904,7 @@ static bool set_fh_ru_config(void *mplane_api, const paramdef_t *rup, uint16_t f
           ru_config->compMeth_PRACH = XRAN_COMPMETHOD_BLKFLOAT;
           break;
         case 2:
-          ru_config ->compMeth_PRACH = XRAN_COMPMETHOD_BLKSCALE;
+          ru_config->compMeth_PRACH = XRAN_COMPMETHOD_BLKSCALE;
           break;
       }
 
