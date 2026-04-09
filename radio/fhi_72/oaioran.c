@@ -313,6 +313,36 @@ static int read_prach_data(ru_info_t *ru, int frame, int slot)
             for (idx = 0; idx < (139 * 2); idx++)
               dst[idx] += (local_dst[idx + g_kbar]);
         } // COMPMETHOD_BLKFLOAT
+
+        else if (ru_conf->compMeth_PRACH == XRAN_COMPMETHOD_BLKSCALE) {
+          /* 12 PRBs cover 139 REs */
+          int16_t local_dst[12 * 2 * N_SC_PER_PRB] __attribute__((aligned(64)));
+
+#if defined(__i386__) || defined(__x86_64__)
+          struct xranlib_decompress_request bs_decom_req = {};
+          struct xranlib_decompress_response bs_decom_rsp = {};
+          int payload_len = (3 * ru_conf->iqWidth_PRACH + 1) * 12; // 12 = closest number of PRBs to 139 REs
+
+          bs_decom_req.data_in = (int8_t *)src;
+          bs_decom_req.numRBs = 12; // closest number of PRBs to 139 REs
+          bs_decom_req.len = payload_len;
+          bs_decom_req.compMethod = XRAN_COMPMETHOD_BLKSCALE;
+          bs_decom_req.iqWidth = ru_conf->iqWidth_PRACH;
+
+          bs_decom_rsp.data_out = (int16_t *)local_dst;
+          bs_decom_rsp.len = 0;
+          xranlib_decompress_blkscale_avx512(&bs_decom_req, &bs_decom_rsp);
+#else
+          AssertFatal(1 == 0, "BFP decompression not supported on this architecture");
+#endif
+          // note: this is hardwired for 139 point PRACH sequence, kbar=2
+          if (sym_idx == 0) //
+            for (idx = 0; idx < (139 * 2); idx++)
+              dst[idx] = local_dst[idx + g_kbar];
+          else
+            for (idx = 0; idx < (139 * 2); idx++)
+              dst[idx] += (local_dst[idx + g_kbar]);
+        } //COMPMETHOD_BLKSCALE 
       } // aa
     } // symb_indx
   } // is_prach_slot
@@ -387,6 +417,38 @@ int write_prach_data(uint32_t **prachDataF, int nb_rx, int frame, int slot)
             local_src,
             (int8_t *)dst_u8
         );
+#else
+        AssertFatal(0, "PRACH BFP compression not supported on this architecture");
+#endif
+
+      } else if (ru_conf->compMeth_PRACH == XRAN_COMPMETHOD_BLKSCALE ) {
+
+        /* PRACH uses 139 REs → pack into 12 PRBs */
+        int nRBs = 12;
+        int payload_len = (3 * ru_conf->iqWidth_PRACH + 1) * nRBs;
+
+        /* Zero-padded local buffer for BFP input */
+        int16_t local_src[12 * 12 * 2] __attribute__((aligned(64))) = {0};
+
+        /* Copy PRACH data into RB-aligned buffer */
+        for (int idx = 0; idx < 139 * 2; idx++) {
+          local_src[idx + g_kbar] = src[idx];
+        }
+
+#if defined(__i386__) || defined(__x86_64__)
+        struct xranlib_compress_request bs_req = {};
+        struct xranlib_compress_response bs_rsp = {};
+
+        bs_req.data_in = local_src;
+        bs_req.numRBs = nRBs;
+        bs_req.len = payload_len;
+        bs_req.compMethod = XRAN_COMPMETHOD_BLKSCALE;
+        bs_req.iqWidth = ru_conf->iqWidth_PRACH;
+
+        bs_rsp.data_out = (int8_t *)dst_u8;
+        bs_rsp.len = 0;
+
+        xranlib_compress_blkscale_avx512(&bs_req, &bs_rsp);
 #else
         AssertFatal(0, "PRACH BFP compression not supported on this architecture");
 #endif
@@ -506,6 +568,34 @@ int write_pusch(uint32_t* txdataF_symb, int frame, int slot, int symbol, int aar
 #endif
 
     }
+
+     else if (p_prbMapElm->compMethod == XRAN_COMPMETHOD_BLKSCALE) {
+
+      payload_len =
+          (3 * p_prbMapElm->iqWidth + 1) * p_prbMapElm->nRBSize;
+
+#if defined(__i386__) || defined(__x86_64__)
+
+      struct xranlib_compress_request  req = {};
+      struct xranlib_compress_response rsp = {};
+
+      req.data_in    = (int16_t *)local_src;
+      req.numRBs     = p_prbMapElm->nRBSize;
+      req.len        = payload_len;
+      req.compMethod = XRAN_COMPMETHOD_BLKSCALE;
+      req.iqWidth    = p_prbMapElm->iqWidth;
+
+      rsp.data_out = (int8_t *)dst;
+      xranlib_compress_blkscale_avx512(&req, &rsp);
+
+#else
+      AssertFatal(0, "BFP compression not supported on this architecture");
+#endif
+
+    }
+
+
+
     else {
       AssertFatal(0, "Unsupported PUSCH compression method %d\n",
                   p_prbMapElm->compMethod);
@@ -721,7 +811,37 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
             memcpy((void *)dst2, (void *)local_dst, neg_len * 4);
             memcpy((void *)dst1, (void *)&local_dst[neg_len], pos_len * 4);
             outcnt++;
-          } else {
+          }
+
+          else if (pRbElm->compMethod == XRAN_COMPMETHOD_BLKSCALE) {
+#if defined(__i386__) || defined(__x86_64__)
+            struct xranlib_decompress_request bs_decom_req = {};
+            struct xranlib_decompress_response bs_decom_rsp = {};
+
+            int16_t payload_len = (3 * pRbElm->iqWidth + 1) * pRbElm->nRBSize;
+
+            bs_decom_req.data_in = (int8_t *)src;
+            bs_decom_req.numRBs = pRbElm->nRBSize;
+            bs_decom_req.len = payload_len;
+            bs_decom_req.compMethod = pRbElm->compMethod;
+            bs_decom_req.iqWidth = pRbElm->iqWidth;
+
+            bs_decom_rsp.data_out = (int16_t *)local_dst;
+            bs_decom_rsp.len = 0;
+
+            xranlib_decompress_blkscale_avx512(&bs_decom_req, &bs_decom_rsp);
+
+#else
+            AssertFatal(1 == 0, "BFP compression not supported on this architecture");
+#endif
+            memcpy((void *)dst2, (void *)local_dst, neg_len * 4);
+            memcpy((void *)dst1, (void *)&local_dst[neg_len], pos_len * 4);
+            outcnt++;
+          } 
+          
+          
+          
+          else {
             printf("pRbElm->compMethod == %d is not supported\n", pRbElm->compMethod);
             exit(-1);
           }
@@ -729,7 +849,19 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
       } // sym_ind
     } // ant_ind
   } // vv_inf
+  static FILE *stats_file = NULL;
+  static int stats_file_initialized = 0;
   if ((*frame & 0x7f) == 0 && *slot == 0 && xran_get_common_counters(gxran_handle, &x_counters[0]) == XRAN_STATUS_SUCCESS) {
+    // Initialize stats file on first run
+    if (!stats_file_initialized) {
+      stats_file = fopen("gnb_compression_stats.txt", "w");
+      if (stats_file != NULL) {
+        fprintf(stats_file, "# gNB Compression Statistics Log\n");
+        fprintf(stats_file, "# Format: [timestamp] o_xu_id rx_kbps tx_kbps\n");
+        fflush(stats_file);
+      }
+      stats_file_initialized = 1;
+    }
     for (int o_xu_id = 0; o_xu_id < fh_init->xran_ports; o_xu_id++) {
       LOG_I(HW,
             "[%s%d][rx %7ld pps %7ld kbps %7ld][tx %7ld pps %7ld kbps %7ld][Total Msgs_Rcvd %ld]\n",
@@ -742,6 +874,16 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
             x_counters[o_xu_id].tx_counter - old_tx_counter[o_xu_id],
             x_counters[o_xu_id].tx_bytes_per_sec * 8 / 1000L,
             x_counters[o_xu_id].Total_msgs_rcvd);
+      // Log to file
+      if (stats_file != NULL) {
+        time_t now = time(NULL);
+        fprintf(stats_file, "[%ld] o_xu_id=%d rx_kbps=%ld tx_kbps=%ld\n",
+                now,
+                o_xu_id,
+                x_counters[o_xu_id].rx_bytes_per_sec * 8 / 1000L,
+                x_counters[o_xu_id].tx_bytes_per_sec * 8 / 1000L);
+        fflush(stats_file);  // Ensure data is written immediately
+      }
       for (int rxant = 0; rxant < ru->nb_rx / fh_init->xran_ports; rxant++)
         LOG_I(HW,
               "[%s%d][pusch%d %7ld prach%d %7ld]\n",
@@ -837,6 +979,22 @@ int xran_fh_tx_read_slot(uint32_t **txdataF, int nb_tx, int *frame, int *slot, i
 
               xranlib_decompress_avx512(&bfp_decom_req, &bfp_decom_rsp);
             }
+              else if (prb_elm->compMethod == XRAN_COMPMETHOD_BLKSCALE) {
+              struct xranlib_decompress_request bs_decom_req = {};
+              struct xranlib_decompress_response bs_decom_rsp = {};
+
+              bs_decom_req.data_in = (int8_t *)sec_desc->pData;
+              bs_decom_req.numRBs = sec_desc->num_prbu;
+              bs_decom_req.len = (3 * prb_elm->iqWidth + 1) * sec_desc->num_prbu;
+              bs_decom_req.compMethod = prb_elm->compMethod;
+              bs_decom_req.iqWidth = prb_elm->iqWidth;
+
+              bs_decom_rsp.data_out = (int16_t *)&symbol_buffer[sec_desc->start_prbu * N_SC_PER_PRB];
+              bs_decom_rsp.len = 0;
+
+              xranlib_decompress_blkscale_avx512(&bs_decom_req, &bs_decom_rsp);
+            }
+
           }
         }
 
@@ -1066,7 +1224,32 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
               AssertFatal(1 == 0, "BFP compression not supported on this architecture");
 #endif
 
-            } else {
+            }  else if (p_prbMapElm->compMethod == XRAN_COMPMETHOD_BLKSCALE) {
+              payload_len = (3 * p_prbMapElm->iqWidth + 1) * p_prbMapElm->nRBSize;
+
+#if defined(__i386__) || defined(__x86_64__)
+              struct xranlib_compress_request bs_com_req = {};
+              struct xranlib_compress_response bs_com_rsp = {};
+
+              bs_com_req.data_in = (int16_t *)local_src;
+              bs_com_req.numRBs = p_prbMapElm->nRBSize;
+              bs_com_req.len = payload_len;
+              bs_com_req.compMethod = p_prbMapElm->compMethod;
+              bs_com_req.iqWidth = p_prbMapElm->iqWidth;
+
+              bs_com_rsp.data_out = (int8_t *)dst;
+              bs_com_rsp.len = 0;
+
+              xranlib_compress_blkscale_avx512(&bs_com_req, &bs_com_rsp);
+#else
+              AssertFatal(1 == 0, "BFP compression not supported on this architecture");
+#endif
+
+            }
+            
+            
+            
+            else {
               printf("p_prbMapElm->compMethod == %d is not supported\n", p_prbMapElm->compMethod);
               exit(-1);
             }

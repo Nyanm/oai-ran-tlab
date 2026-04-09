@@ -873,8 +873,48 @@ static bool set_fh_ru_config(void *mplane_api, const paramdef_t *rup, uint16_t f
   ru_config->iqWidth_PRACH = *gpd(rup, nru, ORAN_RU_CONFIG_IQWIDTH_PRACH)->uptr; // IQ bit width for PRACH
   AssertFatal(ru_config->iqWidth_PRACH <= 16, "IQ Width for PRACH cannot be > 16!\n");
 #endif
-  ru_config->compMeth = ru_config->iqWidth < 16 ? XRAN_COMPMETHOD_BLKFLOAT : XRAN_COMPMETHOD_NONE; // compression method
-  ru_config->compMeth_PRACH = ru_config->iqWidth_PRACH < 16 ? XRAN_COMPMETHOD_BLKFLOAT : XRAN_COMPMETHOD_NONE; // compression method for PRACH
+  ru_config->compMeth = *gpd(rup, nru, ORAN_RU_CONFIG_COMPMETH)->uptr;
+  if (ru_config->iqWidth == 16)
+      ru_config->compMeth = XRAN_COMPMETHOD_NONE;
+  else{
+      switch(ru_config->compMeth) {
+        case 0:
+          ru_config->compMeth = XRAN_COMPMETHOD_NONE;
+          break;
+        case 1:
+          ru_config->compMeth = XRAN_COMPMETHOD_BLKFLOAT;
+          break;
+        case 2:
+          ru_config ->compMeth = XRAN_COMPMETHOD_BLKSCALE;
+          break;
+      }
+
+  }
+
+   ru_config->compMeth_PRACH = *gpd(rup, nru, ORAN_RU_CONFIG_COMPMETH_PRACH)->uptr;
+
+  if (ru_config->iqWidth_PRACH == 16)
+      ru_config->compMeth_PRACH = XRAN_COMPMETHOD_NONE;
+  else{
+      switch(ru_config->compMeth_PRACH) {
+        case 0:
+          ru_config->compMeth_PRACH = XRAN_COMPMETHOD_NONE;
+          break;
+        case 1:
+          ru_config->compMeth_PRACH = XRAN_COMPMETHOD_BLKFLOAT;
+          break;
+        case 2:
+          ru_config ->compMeth_PRACH = XRAN_COMPMETHOD_BLKSCALE;
+          break;
+      }
+
+  }
+
+
+  //ru_config->compMeth = ru_config->iqWidth < 16 ? XRAN_COMPMETHOD_BLKFLOAT : XRAN_COMPMETHOD_NONE; // compression method
+  //ru_config->compMeth_PRACH = ru_config->iqWidth_PRACH < 16 ? XRAN_COMPMETHOD_BLKFLOAT : XRAN_COMPMETHOD_NONE; // compression method for PRACH
+   
+
 
   AssertFatal(fftSize > 0, "FFT size cannot be 0\n");
   ru_config->fftSize = fftSize; // FFT Size

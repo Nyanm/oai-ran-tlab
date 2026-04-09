@@ -119,11 +119,15 @@
 
 #define ORAN_RU_CONFIG_IQWIDTH "iq_width" // not needed if M-plane used
 #define ORAN_RU_CONFIG_IQWIDTH_PRACH "iq_width_prach" // not needed if M-plane used
+#define ORAN_RU_CONFIG_COMPMETH "compMeth" // not needed if M-plane used
+#define ORAN_RU_CONFIG_COMPMETH_PRACH "compMeth_prach" // not needed if M-plane used
 
 // clang-format off
 #define ORAN_RU_DESC {\
   {ORAN_RU_CONFIG_IQWIDTH,       "sample IQ width (16=uncompressed)\n",       PARAMFLAG_MANDATORY, .u8ptr=NULL, .defuintval=16, TYPE_UINT8, 0}, \
   {ORAN_RU_CONFIG_IQWIDTH_PRACH, "PRACH sample IQ width (16=uncompressed)\n", PARAMFLAG_MANDATORY, .u8ptr=NULL, .defuintval=16, TYPE_UINT8, 0}, \
+  {ORAN_RU_CONFIG_COMPMETH, "Enum representing compression method to use\n", PARAMFLAG_MANDATORY, .u8ptr=NULL, .defuintval=0, TYPE_UINT8, 0}, \
+  {ORAN_RU_CONFIG_COMPMETH_PRACH, "Enum representing compression method to use for PRACH\n", PARAMFLAG_MANDATORY, .u8ptr=NULL, .defuintval=0, TYPE_UINT8, 0}, \
 }
 // clang-format on
 
