@@ -1034,8 +1034,7 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
         uci->pdu_type = NFAPI_NR_UCI_FORMAT_0_1_PDU_TYPE;
         uci->pdu_size = sizeof(nfapi_nr_uci_pucch_pdu_format_0_1_t);
         nfapi_nr_uci_pucch_pdu_format_0_1_t *uci_pdu_format0 = &uci->pucch_pdu_format_0_1;
-        int offset =
-            pucch_pdu->start_symbol_index * ofdm_symbol_size + (frame_parms->first_carrier_offset + pucch_pdu->prb_start * 12);
+        int offset = pucch_pdu->start_symbol_index * ofdm_symbol_size + (pucch_pdu->prb_start * 12);
         LOG_D(NR_PHY,
               "frame %d, slot %d: PUCCH signal energy %d\n",
               frame_rx,
