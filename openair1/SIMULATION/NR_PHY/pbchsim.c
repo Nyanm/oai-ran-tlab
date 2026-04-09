@@ -527,7 +527,8 @@ int main(int argc, char **argv)
                       fft_in_buff,
                       frame_parms->ofdm_symbol_size,
                       0,
-                      12);
+                      12,
+                      false);
 
             PHY_ofdm_mod((int *)fft_in_buff,
                          (int *)&txdata[aa][samp],
@@ -551,7 +552,8 @@ int main(int argc, char **argv)
                       fft_in_buff,
                       frame_parms->ofdm_symbol_size,
                       0,
-                      14);
+                      14,
+                      false);
 
             PHY_ofdm_mod((int *)fft_in_buff,
                          (int *)&txdata[aa][samp],
