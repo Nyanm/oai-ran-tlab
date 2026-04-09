@@ -6,7 +6,19 @@
 #define __PHY_DIGITAL_BEAMFORMING__H__
 
 #include "defs_gNB.h"
+#include "queue.h"
 
+// Holds rx grid info for future slot
+struct grid_slot_entry {
+  struct nr_grid_slot grid;
+  SLIST_ENTRY(grid_slot_entry) next;
+};
+
+SLIST_HEAD(grid_slots_head, grid_slot_entry);
+
+struct nr_grid_slot *get_grid_slot(const uint32_t frame, const uint32_t slot);
+void remove_grid_slot(const uint32_t frame, const uint32_t slot);
+struct nr_grid_slot *add_grid_slot_entry(const uint32_t frame, const uint32_t slot);
 void fill_rx_grid_info(const RU_t *ru,
                        const uint32_t frame,
                        const uint32_t slot,

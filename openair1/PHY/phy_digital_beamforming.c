@@ -4,6 +4,77 @@
 
 #include "phy_digital_beamforming.h"
 #include "defs_gNB.h"
+#include "pthread.h"
+
+/// @brief Holds grid info for future slots for local beamforming.
+static struct grid_slots_head rx_grid_list = SLIST_HEAD_INITIALIZER(rx_grid_list);
+static pthread_mutex_t list_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* Get current Rx slot's BF info. */
+struct nr_grid_slot *get_grid_slot(const uint32_t frame, const uint32_t slot)
+{
+  pthread_mutex_lock(&list_lock);
+  struct grid_slot_entry *g = NULL;
+  struct grid_slots_head *head = &rx_grid_list;
+  SLIST_FOREACH(g, head, next)
+  {
+    if (g->grid.frame == frame && g->grid.slot == slot) {
+      // Found existing entry. Return
+      break;
+    }
+  }
+  pthread_mutex_unlock(&list_lock);
+  return &g->grid;
+}
+
+/* Remove grid entry from slot list. */
+void remove_grid_slot(const uint32_t frame, const uint32_t slot)
+{
+  pthread_mutex_lock(&list_lock);
+  struct grid_slot_entry *g = NULL;
+  struct grid_slots_head *head = &rx_grid_list;
+  SLIST_FOREACH(g, head, next)
+  {
+    if (g->grid.frame == frame && g->grid.slot == slot) {
+      SLIST_REMOVE(head, g, grid_slot_entry, next);
+      free(g);
+      break;
+    }
+  }
+  pthread_mutex_unlock(&list_lock);
+}
+
+/* Add new Rx BF info to list. */
+struct nr_grid_slot *add_grid_slot_entry(const uint32_t frame, const uint32_t slot)
+{
+  pthread_mutex_lock(&list_lock);
+  struct grid_slot_entry *g = NULL;
+  struct grid_slots_head *head = &rx_grid_list;
+  struct grid_slot_entry *prev = head->slh_first;
+  SLIST_FOREACH(g, head, next)
+  {
+    if (g->grid.frame == frame && g->grid.slot == slot) {
+      // Found existing entry. Exit with error.
+      DevAssert(0);
+    }
+  }
+
+  // No entry exists. Create one and add to it.
+  // Create one.
+  struct grid_slot_entry *new = calloc(1, sizeof(*new));
+  new->grid.frame = frame;
+  new->grid.slot = slot;
+
+  // List empty. Add to head
+  if (!prev)
+    SLIST_INSERT_HEAD(head, new, next);
+  // Add to end of list.
+  else
+    SLIST_INSERT_AFTER(prev, new, next);
+
+  pthread_mutex_unlock(&list_lock);
+  return &new->grid;
+}
 
 // #define DBF_DEBUG
 
@@ -180,14 +251,9 @@ void send_rx_grid_info(RU_t *ru, struct nr_grid_slot *nrg)
     if (ru->fh_south_out_ctrl)
       ru->fh_south_out_ctrl(ru, nrg->frame, nrg->slot, 0, nrg->grid);
   } else {
-    // No Rx beamforming implemented.
-    const NR_DL_FRAME_PARMS *fp = &ru->gNB_list[0]->frame_parms;
-    const int num_logical_ports = fp->nb_antennas_rx;
-    for (uint_fast16_t p = 0; p < num_logical_ports; p++) {
-      for (uint_fast16_t s = 0; s < nrg->grid[p].num_sections; s++) {
-        AssertFatal(nrg->grid[p].grid_info[s].is_straightwire_bf, "No Rx beamforming implemented\n");
-      }
-    }
+    // Local Rx beamforming is done when the slot is received. Store the grid info.
+    struct nr_grid_slot *new = add_grid_slot_entry(nrg->frame, nrg->slot);
+    *new = *nrg;
   }
 }
 
@@ -240,14 +306,9 @@ void apply_beamforming(const nfapi_nr_dbt_pdu_t *dbt,
           c16_t *cur_log = nrg[l].dataF + txdataF_offset;
 
           const int num_re = g->num_prb * NR_NB_SC_PER_RB;
-          const c16_t wt = *(c16_t *)(cur_wt_vec + b);
+          const c16_t wt = (g->is_straightwire_bf) ? (c16_t){.r = INT16_MAX, .i = INT16_MAX} : *(c16_t *)(cur_wt_vec + b);
           if (is_tx)
-            if (g->is_straightwire_bf)
-              memcpy(cur_bb, cur_log, sizeof(*cur_log) * num_re);
-            else
-              multadd_cpx_vector_cpx_scalar(cur_log, wt, cur_bb, num_re, MADD_SHIFT);
-          else if (g->is_straightwire_bf)
-            memcpy(cur_log, cur_bb, sizeof(*cur_log) * num_re);
+            multadd_cpx_vector_cpx_scalar(cur_log, wt, cur_bb, num_re, MADD_SHIFT);
           else
             multadd_cpx_vector_cpx_scalar(cur_bb, wt, cur_log, num_re, MADD_SHIFT);
         }

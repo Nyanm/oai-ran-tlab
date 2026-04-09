@@ -824,7 +824,8 @@ void nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
                           c16_t srs_estimated_channel_time[][N_ap][NR_SRS_IDFT_OVERSAMP_FACTOR * ofdm_symbol_size],
                           int16_t *snr_per_rb,
                           uint16_t *timing_advance_offset,
-                          int16_t *timing_advance_offset_nsec)
+                          int16_t *timing_advance_offset_nsec,
+                          c16_t **rxdataF)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   nfapi_nr_srs_pdu_t *srs_pdu = &srs->srs_pdu;
@@ -849,9 +850,9 @@ void nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
   stop_meas(&gNB->generate_srs_stats);
   const nfapi_v4_srs_parameters_t *p = &srs_pdu->srs_parameters_v4;
   const uint16_t ant_port_start = p->num_ul_spatial_streams_ports > 0 ? p->Ul_spatial_stream_ports[0] : 0;
-  c16_t **rxdataF = gNB->common_vars.rxdataF + ant_port_start;
   start_meas(&gNB->get_srs_signal_stats);
-  *srs_est = nr_get_srs_signal(gNB, rxdataF, slot_rx, srs_pdu, nr_srs_info, srs_received_signal, srs_received_noise);
+  *srs_est =
+      nr_get_srs_signal(gNB, rxdataF + ant_port_start, slot_rx, srs_pdu, nr_srs_info, srs_received_signal, srs_received_noise);
   stop_meas(&gNB->get_srs_signal_stats);
 
   uint32_t signal_power_avg = 0;
@@ -980,7 +981,7 @@ void nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
   }
 }
 
-int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, NR_UL_IND_t *UL_INFO)
+int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, NR_UL_IND_t *UL_INFO, c16_t **rxdataF)
 {
   /* those variables to log T_GNB_PHY_PUCCH_PUSCH_IQ only when we try to decode */
   int pucch_decode_done = 0;
@@ -1013,7 +1014,6 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
     gNB_I0_measurements(gNB, slot_rx, first_symb, num_symb, rb_mask_ul);
   }
 
-  const int soffset = (slot_rx & 3) * frame_parms->symbols_per_slot * ofdm_symbol_size;
   start_meas(&gNB->phy_proc_rx);
 
   for (int i = 0; i < gNB->max_nb_pucch; i++) {
@@ -1024,7 +1024,6 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
     nfapi_nr_pucch_pdu_t *pucch_pdu = &pucch->pucch_pdu;
     const nfapi_nr_spatial_stream_index_t *p = &pucch_pdu->param_v4;
     const uint16_t ant_port = p->numSpatialStreamIndices > 0 ? p->spatialStreamIndices[0] : 0;
-    c16_t **rxdataF = gNB->common_vars.rxdataF + ant_port;
     UL_INFO->uci_ind.uci_list = UL_INFO->uci_pdu_list;
     nfapi_nr_uci_t *uci = UL_INFO->uci_ind.uci_list + UL_INFO->uci_ind.num_ucis;
     UL_INFO->uci_ind.sfn = frame_rx;
@@ -1039,15 +1038,15 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
               "frame %d, slot %d: PUCCH signal energy %d\n",
               frame_rx,
               slot_rx,
-              signal_energy_nodc(&rxdataF[0][soffset + offset], 12));
-        nr_decode_pucch0(gNB, rxdataF, frame_rx, slot_rx, uci_pdu_format0, pucch_pdu);
+              signal_energy_nodc(&rxdataF[ant_port][offset], 12));
+        nr_decode_pucch0(gNB, rxdataF + ant_port, frame_rx, slot_rx, uci_pdu_format0, pucch_pdu);
         break;
       case 2:
         uci->pdu_type = NFAPI_NR_UCI_FORMAT_2_3_4_PDU_TYPE;
         uci->pdu_size = sizeof(nfapi_nr_uci_pucch_pdu_format_2_3_4_t);
         nfapi_nr_uci_pucch_pdu_format_2_3_4_t *uci_pdu_format2 = &uci->pucch_pdu_format_2_3_4;
         LOG_D(PHY, "%d.%d Calling nr_decode_pucch2\n", frame_rx, slot_rx);
-        nr_decode_pucch2(gNB, rxdataF, frame_rx, slot_rx, uci_pdu_format2, pucch_pdu);
+        nr_decode_pucch2(gNB, rxdataF + ant_port, frame_rx, slot_rx, uci_pdu_format2, pucch_pdu);
         break;
       default:
         AssertFatal(1 == 0, "Only PUCCH formats 0 and 2 are currently supported\n");
@@ -1104,7 +1103,7 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
     pusch_decode_done = 1;
 
     start_meas(&gNB->rx_pusch_stats);
-    nr_rx_pusch_tp(gNB, ULSCH_id, frame_rx, slot_rx);
+    nr_rx_pusch_tp(gNB, ULSCH_id, frame_rx, slot_rx, rxdataF);
     NR_gNB_PUSCH *pusch_vars = &gNB->pusch_vars[ULSCH_id];
     pusch_vars->ulsch_power_tot = 0;
     pusch_vars->ulsch_noise_power_tot = 0;
@@ -1206,7 +1205,8 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
                          srs_estimated_channel_time,
                          snr_per_rb,
                          &timing_advance_offset,
-                         timing_advance_offset_nsec);
+                         timing_advance_offset_nsec,
+                         rxdataF);
 
     if ((gNB->srs->snr * 10) < gNB->srs_thres) {
       srs_est = -1;
@@ -1377,7 +1377,7 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
     T(T_GNB_PHY_PUCCH_PUSCH_IQ,
       T_INT(frame_rx),
       T_INT(slot_rx),
-      T_BUFFER(&gNB->common_vars.rxdataF[0][0], frame_parms->symbols_per_slot * ofdm_symbol_size * 4));
+      T_BUFFER((void *)&rxdataF[0][0], frame_parms->symbols_per_slot * ofdm_symbol_size * 4));
   }
 
   return pusch_DTX;

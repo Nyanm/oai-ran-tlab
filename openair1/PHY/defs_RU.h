@@ -18,6 +18,7 @@
 #include "common/utils/threadPool/task_ans.h"
 #include "common/utils/threadPool/thread-pool.h"
 #include "common/utils/threadPool/notified_fifo.h"
+#include "queue.h"
 
 #define MAX_BANDS_PER_RRU 4
 #define MAX_RRU_CONFIG_SIZE 1024

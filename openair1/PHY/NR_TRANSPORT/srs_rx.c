@@ -54,9 +54,8 @@ int nr_get_srs_signal(PHY_VARS_gNB *gNB,
 {
   const NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
 
-  const uint16_t n_symbols = (slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot; // number of symbols until this slot
   const uint8_t l0 = frame_parms->symbols_per_slot - 1 - srs_pdu->time_start_position; // starting symbol in this slot
-  const uint64_t symbol_offset = (n_symbols + l0) * frame_parms->ofdm_symbol_size;
+  const uint64_t symbol_offset = l0 * frame_parms->ofdm_symbol_size;
   const uint64_t subcarrier_offset = srs_pdu->bwp_start * NR_NB_SC_PER_RB;
 
   const uint8_t N_ap = 1 << srs_pdu->num_ant_ports;

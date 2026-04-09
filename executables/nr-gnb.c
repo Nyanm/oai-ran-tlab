@@ -25,6 +25,7 @@
 #include "PHY/INIT/nr_phy_init.h"
 #include "PHY/MODULATION/nr_modulation.h"
 #include "PHY/NR_TRANSPORT/nr_transport_proto.h"
+#include "PHY/phy_digital_beamforming.h"
 #include "PHY/TOOLS/tools_defs.h"
 #include "PHY/defs_RU.h"
 #include "PHY/defs_gNB.h"
@@ -161,12 +162,12 @@ static void rx_func(processingData_L1_t *info)
     UL_INFO.rach_ind.pdu_list = UL_INFO.prach_pdu_indication_list;
     L1_nr_prach_procedures(gNB, frame_rx, slot_rx, &UL_INFO.rach_ind);
 
+    int soffset = (slot_rx % RU_RX_SLOT_DEPTH) * gNB->frame_parms.symbols_per_slot * gNB->frame_parms.ofdm_symbol_size;
+    const uint max_symb = (gNB->frame_parms.Ncp == NR_EXTENDED) ? 12 : 14;
     //WA: comment rotation in tx/rx
     if (gNB->phase_comp) {
-      //apply the rx signal rotation here
-      int soffset = (slot_rx % RU_RX_SLOT_DEPTH) * gNB->frame_parms.symbols_per_slot * gNB->frame_parms.ofdm_symbol_size;
+      // apply the rx signal rotation here
       for (int aa = 0; aa < gNB->frame_parms.nb_antennas_tx; aa++) {
-        const uint max_symb = (gNB->frame_parms.Ncp == NR_EXTENDED) ? 12 : 14;
         for (int sym = 0; sym < max_symb; sym++)
           apply_nr_rotation_symbol_RX(&gNB->frame_parms,
                                       gNB->common_vars.rxdataF[aa] + soffset + sym * gNB->frame_parms.ofdm_symbol_size,
@@ -176,7 +177,28 @@ static void rx_func(processingData_L1_t *info)
                                       sym);
       }
     }
-    phy_procedures_gNB_uespec_RX(gNB, frame_rx, slot_rx, &UL_INFO);
+
+    // Array to pass into phy_procedures_gNB_uespec_RX()
+    c16_t *rxdataF[gNB->frame_parms.nb_antennas_rx];
+    for (uint_fast8_t aa = 0; aa < gNB->frame_parms.nb_antennas_rx; aa++)
+      rxdataF[aa] = (c16_t *)gNB->common_vars.rxdataF[aa] + soffset;
+
+    // Check if current slot should be beamformed here
+    struct nr_grid_slot *nrg = get_grid_slot(frame_rx, slot_rx);
+    if (nrg) { // There is slot waiting to be beamformed.
+      for (uint_fast8_t aa = 0; aa < gNB->frame_parms.nb_antennas_rx; aa++) {
+        nrg->grid[aa].dataF = gNB->common_vars.rxdataF_BF[aa];
+        memset(nrg->grid[aa].dataF, 0, gNB->frame_parms.samples_per_slot_wCP * sizeof(c16_t));
+      }
+      // Rx beamforming. Maybe combine with signal rotation?
+      apply_beamforming(&gNB->gNB_config.dbt_config, &gNB->frame_parms, gNB->frame_parms.nb_antennas_rx, rxdataF, nrg->grid, false);
+      // Remove the slot from list
+      remove_grid_slot(frame_rx, slot_rx);
+      phy_procedures_gNB_uespec_RX(gNB, frame_rx, slot_rx, &UL_INFO, gNB->common_vars.rxdataF_BF);
+    } else {
+      // No BF here, use the baseband buffer
+      phy_procedures_gNB_uespec_RX(gNB, frame_rx, slot_rx, &UL_INFO, rxdataF);
+    }
 
     // Call the scheduler
     start_meas(&gNB->ul_indication_stats);

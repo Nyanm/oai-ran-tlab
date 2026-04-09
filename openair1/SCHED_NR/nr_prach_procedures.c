@@ -8,6 +8,7 @@
 
 #include "PHY/defs_gNB.h"
 #include "PHY/NR_TRANSPORT/nr_transport_proto.h"
+#include "PHY/phy_digital_beamforming.h"
 #include "nfapi_nr_interface_scf.h"
 #include "nfapi_pnf.h"
 #include "common/utils/LOG/log.h"
@@ -19,6 +20,36 @@ int get_nr_prach_duration(uint8_t prach_format)
   const int val[14] = {0, 0, 0, 0, 2, 4, 6, 2, 12, 2, 6, 2, 4, 6};
   AssertFatal(prach_format < sizeofArray(val), "Invalid Prach format %d\n", prach_format);
   return val[prach_format];
+}
+
+static void prach_occ_beamforming(const nfapi_nr_dbt_pdu_t *dbt,
+                                  const struct nr_grid *nrg,
+                                  int nb_rx,
+                                  int occ,
+                                  c16_t prach_in[][NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX][NR_PRACH_SEQ_LEN_L])
+{
+  DevAssert(nrg && dbt);
+
+  // Place each occasion in first log port
+  const int log_port = 0;
+  DevAssert(nrg[log_port].num_sections > 0);
+  const uint16_t beam_id = nrg[log_port].grid_info[0].beam_id & 0x7fff; // FAPI beam id is LSB 15 bits
+
+  /* Find the offset to next 32 byte aligned element to make BF output buffer
+  aligned with input buffer. multiadd_cpx_vector_cpx_scalar takes in unaligned
+  buffers with same offset. */
+  const size_t moff = (sizeof(simde__m256i) / sizeof(c16_t)) - PTR_ALIGN_OFFSET_ELEMS(prach_in[0][occ], sizeof(simde__m256i));
+  c16_t tmp[NR_PRACH_SEQ_LEN_L + moff] __attribute__((aligned(32)));
+  memset(tmp, 0, sizeof(tmp));
+  c16_t *prach_bf = tmp + moff;
+  AssertFatal(beam_id == dbt->dig_beam_list[beam_id].beam_idx, "Beam id is not consistent with DBT\n");
+  DevAssert(nb_rx == dbt->num_txrus);
+  for (int b = 0; b < nb_rx; b++) {
+    const c16_t wt = *(c16_t *)&dbt->dig_beam_list[beam_id].txru_list[b];
+    multadd_cpx_vector_cpx_scalar(prach_in[b][occ], wt, prach_bf, NR_PRACH_SEQ_LEN_L, 15);
+  }
+  // Copy to input buffer
+  memcpy(prach_in[log_port][occ], prach_bf, sizeof(*prach_bf) * NR_PRACH_SEQ_LEN_L);
 }
 
 void L1_nr_prach_procedures(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_rach_indication_t *rach_ind)
@@ -37,7 +68,14 @@ void L1_nr_prach_procedures(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_rac
   const int prach_start_slot = prach_id->slot;
   int N_dur = get_nr_prach_duration(prach_pdu->prach_format);
 
+  struct nr_grid_slot *nrg = get_grid_slot(frame, slot);
+  prach_id->is_bf = (nrg) ? (!nrg->grid[0].grid_info[0].is_straightwire_bf) : false;
+
   for (int prach_oc = 0; prach_oc < prach_pdu->num_prach_ocas; prach_oc++) {
+    // Beamforming
+    if (prach_id->is_bf) {
+      prach_occ_beamforming(&gNB->gNB_config.dbt_config, nrg->grid, gNB->frame_parms.nb_antennas_rx, prach_oc, prach_id->prach_buf);
+    }
     uint prachStartSymbol = prach_pdu->prach_start_symbol + prach_oc * N_dur;
     // comment FK: the standard 38.211 section 5.3.2 has one extra term +14*N_RA_slot. This is because there prachStartSymbol is
     // given wrt to start of the 15kHz slot or 60kHz slot. Here we work slot based, so this function is anyway only called in slots

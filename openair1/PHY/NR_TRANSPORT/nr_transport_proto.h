@@ -89,7 +89,7 @@ void free_gNB_dlsch(NR_gNB_DLSCH_t *dlsch, uint16_t N_RB, const NR_DL_FRAME_PARM
     @param frame Frame number
     @param slot Slot number
 */
-int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t slot);
+int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t slot, c16_t **rxdataF);
 
 /*!
 \brief This function implements the idft transform precoding in PUSCH
@@ -208,7 +208,8 @@ void nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
                           c16_t srs_estimated_channel_time[][N_ap][NR_SRS_IDFT_OVERSAMP_FACTOR * ofdm_symbol_size],
                           int16_t *snr_per_rb,
                           uint16_t *timing_advance_offset,
-                          int16_t *timing_advance_offset_nsec);
+                          int16_t *timing_advance_offset_nsec,
+                          c16_t **rxdataF);
 
 int get_nr_prach_duration(uint8_t prach_format);
 

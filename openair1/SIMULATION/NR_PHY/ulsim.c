@@ -844,10 +844,6 @@ int main(int argc, char *argv[])
   gNB->chest_time = chest_type[1];
 
   phy_init_nr_gNB(gNB);
-  /* RU handles rxdataF, and gNB just has a pointer. Here, we don't have an RU,
-   * so we need to allocate that memory as well. */
-  for (i = 0; i < n_rx; i++)
-    gNB->common_vars.rxdataF[i] = malloc16_clear(gNB->frame_parms.samples_per_frame_wCP * sizeof(int32_t));
   N_RB_DL = gNB->frame_parms.N_RB_DL;
 
   /* no RU: need to have rxdata */
@@ -1563,7 +1559,7 @@ int main(int argc, char *argv[])
           was_symbol_used[i] = true;
         }
         nr_ofdm_demod_and_rx_rotation(rxdata,
-                                      gNB->common_vars.rxdataF,
+                                      gNB->common_vars.rxdataF_BF,
                                       &gNB->frame_parms,
                                       gNB->frame_parms.nb_antennas_rx,
                                       slot,
@@ -1571,19 +1567,19 @@ int main(int argc, char *argv[])
                                       link_type_ul,
                                       was_symbol_used);
 
-        ul_proc_error = phy_procedures_gNB_uespec_RX(gNB, frame, slot, &UL_INFO);
+        ul_proc_error = phy_procedures_gNB_uespec_RX(gNB, frame, slot, &UL_INFO, gNB->common_vars.rxdataF_BF);
 
         if (n_trials == 1 && round == 0) {
           LOG_M("rxsig0.m", "rx0", &rxdata[0][slot_offset], slot_length, 1, 1 | log_format);
-          LOG_M("rxsigF0.m", "rxsF0", gNB->common_vars.rxdataF[0], 14 * gNB->frame_parms.ofdm_symbol_size, 1, 1 | log_format);
+          LOG_M("rxsigF0.m", "rxsF0", gNB->common_vars.rxdataF_BF[0], 14 * gNB->frame_parms.ofdm_symbol_size, 1, 1 | log_format);
           if (precod_nbr_layers > 1) {
             LOG_M("rxsig1.m", "rx1", &rxdata[1][slot_offset], slot_length, 1, 1);
-            LOG_M("rxsigF1.m", "rxsF1", gNB->common_vars.rxdataF[1], 14 * gNB->frame_parms.ofdm_symbol_size, 1, 1 | log_format);
+            LOG_M("rxsigF1.m", "rxsF1", gNB->common_vars.rxdataF_BF[1], 14 * gNB->frame_parms.ofdm_symbol_size, 1, 1 | log_format);
             if (precod_nbr_layers == 4) {
               LOG_M("rxsig2.m", "rx2", &rxdata[2][slot_offset], slot_length, 1, 1);
               LOG_M("rxsig3.m", "rx3", &rxdata[3][slot_offset], slot_length, 1, 1);
-              LOG_M("rxsigF2.m", "rxsF2", gNB->common_vars.rxdataF[2], 14 * gNB->frame_parms.ofdm_symbol_size, 1, 1 | log_format);
-              LOG_M("rxsigF3.m", "rxsF3", gNB->common_vars.rxdataF[3], 14 * gNB->frame_parms.ofdm_symbol_size, 1, 1 | log_format);
+              LOG_M("rxsigF2.m", "rxsF2", gNB->common_vars.rxdataF_BF[2], 14 * gNB->frame_parms.ofdm_symbol_size, 1, 1 | log_format);
+              LOG_M("rxsigF3.m", "rxsF3", gNB->common_vars.rxdataF_BF[3], 14 * gNB->frame_parms.ofdm_symbol_size, 1, 1 | log_format);
             }
           }
         }

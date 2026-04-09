@@ -32,7 +32,7 @@ typedef struct puschAntennaProc_s {
   unsigned char symbol;
   unsigned short bwp_start_subcarrier;
   int aarx;
-  uint16_t ant_port_start;
+  const uint16_t *ant_port_map;
   int numAntennas;
   nfapi_nr_pusch_pdu_t *pusch_pdu;
   int *max_ch;
@@ -94,23 +94,21 @@ static void nr_pusch_antenna_processing(void *arg)
   c16_t **ul_ch_estimates = (c16_t **)pusch_vars->ul_ch_estimates;
   NR_DL_FRAME_PARMS *frame_parms = rdata->frame_parms;
   const int symbolSize = frame_parms->ofdm_symbol_size;
-  const int slot_offset = (Ns % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot * symbolSize;
   const int delta = get_delta(p, pusch_pdu->dmrs_config_type);
   const int symbol_offset = symbolSize * symbol;
   const int k0 = bwp_start_subcarrier;
   const int nb_rb_pusch = pusch_pdu->rb_size;
-  const int aa_start = rdata->ant_port_start;
+  const uint16_t *aa_map = rdata->ant_port_map;
   for (int antenna = aarx; antenna < aarx + numAntennas; antenna++) {
     c16_t ul_ls_est[symbolSize] __attribute__((aligned(32)));
     memset(ul_ls_est, 0, sizeof(c16_t) * symbolSize);
-    c16_t *rxdataF = (c16_t *)&rdata->rxdataF[aa_start + antenna][symbol_offset + slot_offset];
+    c16_t *rxdataF = (c16_t *)&rdata->rxdataF[aa_map[antenna]][symbol_offset];
     c16_t *ul_ch = &ul_ch_estimates[nl * frame_parms->nb_antennas_rx + antenna][symbol_offset];
     memset(ul_ch, 0, sizeof(*ul_ch) * symbolSize);
 
     LOG_D(PHY,
-          "symbol_offset %d, slot_offset %d, OFDM size %d, Ns = %d, k0 = %d, symbol %d\n",
+          "symbol_offset %d, OFDM size %d, Ns = %d, k0 = %d, symbol %d\n",
           symbol_offset,
-          slot_offset,
           symbolSize,
           Ns,
           k0,
@@ -452,13 +450,14 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
                                 unsigned short p,
                                 unsigned char symbol,
                                 int ul_id,
-                                uint16_t ant_port_start,
+                                const uint16_t *ant_port_map,
                                 unsigned short bwp_start_subcarrier,
                                 nfapi_nr_pusch_pdu_t *pusch_pdu,
                                 int *max_ch,
                                 uint32_t *nvar,
                                 c16_t *pusch_dmrs_slot_mem,
-                                c16_t *pusch_ch_est_dmrs_pos_slot_mem)
+                                c16_t *pusch_ch_est_dmrs_pos_slot_mem,
+                                c16_t **rxdataF)
 {
   c16_t pilot[3280] __attribute__((aligned(32)));
 
@@ -576,11 +575,11 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
     rdata->nest_count = &nest_count_arr[rdata->aarx];
     rdata->noise_amp2 = &noise_amp2_arr[rdata->aarx];
     rdata->delay = &delay_arr[rdata->aarx];
-    rdata->ant_port_start = ant_port_start;
+    rdata->ant_port_map = ant_port_map;
     rdata->frame_parms = fp;
     rdata->pusch_vars = &gNB->pusch_vars[ul_id];
     rdata->chest_freq = gNB->chest_freq;
-    rdata->rxdataF = gNB->common_vars.rxdataF;
+    rdata->rxdataF = rxdataF;
     rdata->scope = gNB->scopeData;
     rdata->ans = &ans;
     rdata->pusch_ch_est_dmrs_pos_slot_mem = pusch_ch_est_dmrs_pos_slot_mem;

@@ -121,7 +121,6 @@ void nr_decode_pucch0(PHY_VARS_gNB *gNB,
                       nfapi_nr_pucch_pdu_t *pucch_pdu)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
-  int soffset = (slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
 
   AssertFatal(pucch_pdu->bit_len_harq > 0 || pucch_pdu->sr_flag > 0,
               "Either bit_len_harq (%d) or sr_flag (%d) must be > 0\n",
@@ -219,7 +218,7 @@ void nr_decode_pucch0(PHY_VARS_gNB *gNB,
     re_offset[l] = 12 * prb_offset[l];
 
     for (int aa = 0; aa < frame_parms->nb_antennas_rx; aa++) {
-      c16_t *tmp_rp = &rxdataF[aa][soffset + l2 * frame_parms->ofdm_symbol_size];
+      c16_t *tmp_rp = &rxdataF[aa][l2 * frame_parms->ofdm_symbol_size];
       c16_t *rp = tmp_rp + re_offset[l];
 
       for (int n = 0; n < nb_re_pucch; n++) {
@@ -1126,7 +1125,6 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
   // extract pucch and dmrs first
 
   int l2 = pucch_pdu->start_symbol_index;
-  int soffset = (slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
   uint16_t starting_prb = pucch_pdu->prb_start + pucch_pdu->bwp_start;
   int re_offset[nb_symbols];
   re_offset[0] = 12 * starting_prb;
@@ -1148,7 +1146,7 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
   int64_t pucch2_lev = 0;
   for (int aa = 0; aa < Prx; aa++) {
     for (int symb = 0; symb < nb_symbols; symb++) {
-      c16_t *tmp_rp = ((c16_t *)&rxdataF[aa][soffset + (l2 + symb) * frame_parms->ofdm_symbol_size]);
+      c16_t *tmp_rp = ((c16_t *)&rxdataF[aa][(l2 + symb) * frame_parms->ofdm_symbol_size]);
 
       memcpy(rp[aa][symb], &tmp_rp[re_offset[symb]], nb_re_pucch * sizeof(c16_t));
       pucch2_lev += signal_energy_nodc(rp[aa][symb], nb_re_pucch);
@@ -1508,11 +1506,10 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
   uci_pdu->pucch_format = 0;
   uci_pdu->ul_cqi = cqi;
   uci_pdu->timing_advance = 0xffff; // currently not valid
-  uci_pdu->rssi =
-      1280
-      - (10 * dB_fixed(32767 * 32767)
-         - dB_fixed_times10(signal_energy_nodc(&rxdataF[0][soffset + (l2 * frame_parms->ofdm_symbol_size) + re_offset[0]],
-                                               12 * pucch_pdu->prb_size)));
+  uci_pdu->rssi = 1280
+                  - (10 * dB_fixed(32767 * 32767)
+                     - dB_fixed_times10(signal_energy_nodc(&rxdataF[0][(l2 * frame_parms->ofdm_symbol_size) + re_offset[0]],
+                                                           12 * pucch_pdu->prb_size)));
   if (pucch_pdu->bit_len_harq > 0) {
     int harq_bytes = pucch_pdu->bit_len_harq >> 3;
     if ((pucch_pdu->bit_len_harq & 7) > 0)

@@ -71,7 +71,7 @@ prach_item_t *find_nr_prach(prach_list_t *l, int frame, int slot, int nb_rx, nr_
 
 prach_item_t *nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_nr_prach_pdu_t *prach_pdu)
 {
-  const int num_rx_port = (prach_pdu->beamforming.dig_bf_interface == 0) ? gNB->frame_parms.nb_antennas_rx : 1;
+  const int num_rx_port = gNB->frame_parms.nb_antennas_rx;
   prach_item_t *prach = find_nr_prach(&gNB->prach_list, SFN, Slot, num_rx_port, NR_SEARCH_EXIST_OR_FREE);
   if (!prach) {
     LOG_W(PHY, "no free space for a new detected rach, discarding\n");
@@ -333,9 +333,7 @@ static void rx_nr_prach_ru_internal(prach_item_t *p,
   for (int aa = 0; aa < p->nb_rx; aa++) {
     // Fixme: slot or slot makes no sense ???
     int slot2 = p->prach_sequence_length ? p->slot : p->slot;
-    // TODO L1 BF: call prach beamforming here
-    int idx = aa;
-    c16_t *prach = (c16_t *)&rxdata[idx][get_samples_slot_timestamp(fp, slot2) + sample_offset_slot - N_TA_offset];
+    c16_t *prach = (c16_t *)&rxdata[aa][get_samples_slot_timestamp(fp, slot2) + sample_offset_slot - N_TA_offset];
 
     // do DFT
     c16_t *prach2 = prach + Ncp;
@@ -380,7 +378,8 @@ rx_prach_out_t rx_nr_prach(const prach_item_t *in, int occasion)
   bool new_dft = false;
   int log2_ifft_size = 10;
 
-  const int nb_rx = in->nb_rx;
+  // After beamforming there is one log port
+  const int nb_rx = in->is_bf ? 1 : in->nb_rx;
   const int NCS = in->pdu.num_cs;
   const int prach_fmt = in->pdu.prach_format;
   const int N_ZC = in->prach_sequence_length == 0 ? 839 : 139;
@@ -527,7 +526,6 @@ rx_prach_out_t rx_nr_prach(const prach_item_t *in, int occasion)
       }
       c16_t prachF[dft_sz] __attribute__((aligned(32)));
 
-      // TODO: once DBF is implemented we have to process only one logical antenna port here
       for (int aa = 0; aa < nb_rx; aa++) {
         // Do componentwise product with Xu* on each antenna
         for (int offset = 0; offset < N_ZC; offset++) {

@@ -25,6 +25,7 @@
 #include "PHY/NR_REFSIG/ul_ref_seq_nr.h"
 #include <string.h>
 #include "nfapi/open-nFAPI/fapi/inc/nr_fapi_p5_utils.h"
+#include "PHY/phy_digital_beamforming.h"
 
 static void init_DLSCH_struct(PHY_VARS_gNB *gNB);
 static void destroy_DLSCH_struct(const PHY_VARS_gNB *gNB);
@@ -147,6 +148,11 @@ void phy_init_nr_gNB(PHY_VARS_gNB *gNB)
    * RU to copy/recover freq-domain memory from there */
   common_vars->rxdataF = malloc16_clear(Prx * sizeof(*common_vars->rxdataF));
 
+  // This buffer holds signal after beamforming
+  common_vars->rxdataF_BF = malloc16(Prx * sizeof(*common_vars->rxdataF_BF));
+  for (int j = 0; j < Prx; j++)
+    common_vars->rxdataF_BF[j] = (c16_t *)malloc16_clear(fp->samples_per_slot_wCP * sizeof(**common_vars->rxdataF_BF));
+
   common_vars->tx_grid_info = calloc(Ptx, sizeof(*common_vars->tx_grid_info));
   for (int j = 0; j < Ptx; j++)
     common_vars->tx_grid_info[j].dataF = (c16_t*)malloc16_clear(fp->samples_per_slot_wCP * sizeof(c16_t));
@@ -215,6 +221,11 @@ void phy_free_nr_gNB(PHY_VARS_gNB *gNB)
   /* Do NOT free per-antenna txdataF/rxdataF: the gNB gets a pointer to the
    * RU's txdataF/rxdataF, and the RU will free that */
   free_and_zero(common_vars->rxdataF);
+
+  for (int i = 0; i < Prx;i++){
+    free_and_zero(common_vars->rxdataF_BF[i]);
+  }
+  free_and_zero(common_vars->rxdataF_BF);
 
   for (int ULSCH_id = 0; ULSCH_id < gNB->max_nb_pusch; ULSCH_id++) {
     NR_gNB_PUSCH *pusch_vars = &gNB->pusch_vars[ULSCH_id];

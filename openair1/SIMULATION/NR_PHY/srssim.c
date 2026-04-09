@@ -334,11 +334,6 @@ int main(int argc, char *argv[])
   UE = calloc_or_fail(1, sizeof(PHY_VARS_NR_UE));
   memcpy(&UE->frame_parms, fp, sizeof(NR_DL_FRAME_PARMS)); // setting same frame parameters as gNB
 
-  /* RU handles rxdataF, and gNB just has a pointer. Here, we don't have an RU,
-   * so we need to allocate that memory as well. First index in rxdataF[0] index refers to beams*/
-  for (i = 0; i < n_rx; i++)
-    gNB->common_vars.rxdataF[i] = malloc16_clear(fp->samples_per_frame_wCP * sizeof(int32_t));
-
   /* no RU: need to have rxdata */
   c16_t **rxdata;
   rxdata = malloc_or_fail(n_rx * sizeof(*rxdata));
@@ -551,7 +546,7 @@ int main(int argc, char *argv[])
                 n_rx);
 
       //----------- OFDM Demodulation and RX rotation--------------------------
-      nr_ofdm_demod_and_rx_rotation(rxdata, gNB->common_vars.rxdataF, fp, n_rx, slot, slot_offsetF, link_type_ul, was_symbol_used);
+      nr_ofdm_demod_and_rx_rotation(rxdata, gNB->common_vars.rxdataF_BF, fp, n_rx, slot, slot_offsetF, link_type_ul, was_symbol_used);
 
       //----------- UE RX SRS procedures ---------------------
 
@@ -580,7 +575,8 @@ int main(int argc, char *argv[])
                            srs_estimated_channel_time,
                            snr_per_rb,
                            &timing_advance_offset,
-                           timing_advance_offset_nsec);
+                           timing_advance_offset_nsec,
+                           gNB->common_vars.rxdataF_BF);
 
       sum_srs_snr += pow(10, (double)gNB->srs->snr / 10.0);
 
@@ -649,7 +645,6 @@ int main(int argc, char *argv[])
     free(r_re[i]);
     free(r_im[i]);
     free(rxdata[i]);
-    free(gNB->common_vars.rxdataF[i]);
   }
 
   free(r_re);

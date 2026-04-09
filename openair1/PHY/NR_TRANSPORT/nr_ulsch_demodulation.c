@@ -817,8 +817,8 @@ static void inner_rx(PHY_VARS_gNB *gNB,
                      NR_gNB_PUSCH *pusch_vars,
                      nfapi_nr_pusch_pdu_t *rel15_ul,
                      c16_t **rxF,
+                     const uint16_t *ant_port_idx,
                      int16_t **llr,
-                     int soffset,
                      int symbol,
                      int output_shift,
                      uint32_t nvar,
@@ -826,7 +826,11 @@ static void inner_rx(PHY_VARS_gNB *gNB,
                      c16_t *chFext_slot)
 {
   int nb_layer = rel15_ul->nrOfLayers;
-  int nb_rx_ant = frame_parms->nb_antennas_rx;
+  int nb_rx_ant = rel15_ul->param_v4.numSpatialStreamIndices;
+  if (nb_rx_ant == 0) {
+    LOG_E(NR_PHY, "Number of logical ports for PUSCH is zero\n");
+    return;
+  }
   int dmrs_symbol_flag = (rel15_ul->ul_dmrs_symb_pos >> symbol) & 0x01;
   int buffer_length = ceil_mod(rel15_ul->rb_size * NR_NB_SC_PER_RB, 16);
   c16_t rxFext[nb_rx_ant][buffer_length] __attribute__((aligned(32)));
@@ -844,11 +848,11 @@ static void inner_rx(PHY_VARS_gNB *gNB,
 
   for (int aarx = 0; aarx < nb_rx_ant; aarx++) {
     for (int aatx = 0; aatx < nb_layer; aatx++) {
-      nr_ulsch_extract_rbs(rxF[aarx],
+      nr_ulsch_extract_rbs(rxF[ant_port_idx[aarx]],
                            (c16_t *)pusch_vars->ul_ch_estimates[aatx * nb_rx_ant + aarx],
                            rxFext[aarx],
                            chFext[aatx][aarx],
-                           soffset+(symbol * frame_parms->ofdm_symbol_size),
+                           (symbol * frame_parms->ofdm_symbol_size),
                            dmrs_symbol * frame_parms->ofdm_symbol_size,
                            dmrs_symbol_flag, 
                            rel15_ul,
@@ -965,11 +969,11 @@ typedef struct puschSymbolProc_s {
   int16_t *llr;
   int16_t *scramblingSequence;
   uint32_t nvar;
-  // TODO: Remove assumption of contiguous ports after DAS is properly handled in beamforming
-  uint16_t ant_port_start;
+  const uint16_t *ant_port_map;
   task_ans_t *ans;
   c16_t *pusch_ch_est_dmrs_interpl_slot_mem;
   c16_t *rxFext_slot_mem;
+  c16_t **rxdataF;
 } puschSymbolProc_t;
 
 static void nr_pusch_symbol_processing(void *arg)
@@ -985,7 +989,6 @@ static void nr_pusch_symbol_processing(void *arg)
   for (int symbol = rdata->startSymbol; symbol < rdata->startSymbol + rdata->numSymbols; symbol++) {
     if (gNB->pusch_vars[ulsch_id].ul_valid_re_per_slot[symbol] == 0) 
       continue;
-    int soffset = (slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
     int buffer_length = ceil_mod(pusch_vars->ul_valid_re_per_slot[symbol] * NR_NB_SC_PER_RB, 16);
     int16_t llrs[rel15_ul->nrOfLayers][ceil_mod(buffer_length * rel15_ul->qam_mod_order, 64)];
     int16_t *llrss[rel15_ul->nrOfLayers];
@@ -998,9 +1001,9 @@ static void nr_pusch_symbol_processing(void *arg)
              frame_parms,
              pusch_vars,
              rel15_ul,
-             gNB->common_vars.rxdataF + rdata->ant_port_start,
+             rdata->rxdataF,
+             rdata->ant_port_map,
              llrss,
-             soffset,
              symbol,
              gNB->pusch_vars[ulsch_id].log2_maxh,
              rdata->nvar,
@@ -1053,12 +1056,12 @@ static uint32_t average_u32(const uint32_t *x, uint16_t size)
   return (uint32_t)(sum_x / size);
 }
 
-int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t slot)
+int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t slot, c16_t **rxdataF)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   nfapi_nr_pusch_pdu_t *rel15_ul = &gNB->ulsch[ulsch_id].harq_process->ulsch_pdu;
   const nfapi_nr_spatial_stream_index_t *p = &rel15_ul->param_v4;
-  uint16_t ant_port_start = p->numSpatialStreamIndices > 0 ? p->spatialStreamIndices[0] : 0;
+  const uint16_t *ant_port_map = (p->numSpatialStreamIndices > 0) ? p->spatialStreamIndices : NULL;
 
   NR_gNB_PUSCH *pusch_vars = &gNB->pusch_vars[ulsch_id];
   uint32_t bwp_start_subcarrier = (rel15_ul->rb_start + rel15_ul->bwp_start) * NR_NB_SC_PER_RB;
@@ -1117,13 +1120,14 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
                                     get_dmrs_port(nl, rel15_ul->dmrs_ports),
                                     symbol,
                                     ulsch_id,
-                                    ant_port_start,
+                                    ant_port_map,
                                     bwp_start_subcarrier,
                                     rel15_ul,
                                     &max_ch,
                                     &nvar_tmp,
                                     pusch_dmrs_slot_mem,
-                                    pusch_ch_est_dmrs_pos_slot_mem);
+                                    pusch_ch_est_dmrs_pos_slot_mem,
+                                    rxdataF);
         nvar += nvar_tmp;
       }
     }
@@ -1139,15 +1143,15 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
               false);
 
   int start_sc = (rel15_ul->bwp_start + rel15_ul->rb_start) * NR_NB_SC_PER_RB;
-  for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) {
+  for (int aarx = 0; aarx < rel15_ul->param_v4.numSpatialStreamIndices; aarx++) {
     pusch_vars->ulsch_power[aarx] = 0;
     pusch_vars->ulsch_noise_power[aarx] = 0;
     int64_t symb_energy = 0;
 
     for (uint8_t symbol = rel15_ul->start_symbol_index; symbol < end_symbol; symbol++) {
-      int offset0 = ((slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot + symbol) * frame_parms->ofdm_symbol_size;
+      int offset0 = symbol * frame_parms->ofdm_symbol_size;
       int offset = offset0 + start_sc;
-      c16_t *ul_ch = &gNB->common_vars.rxdataF[ant_port_start + aarx][offset];
+      c16_t *ul_ch = &rxdataF[ant_port_map[aarx]][offset];
       symb_energy += signal_energy_nodc(ul_ch, rel15_ul->rb_size * NR_NB_SC_PER_RB);
     }
     pusch_vars->ulsch_power[aarx] += (symb_energy / rel15_ul->nr_of_symbols);
@@ -1230,7 +1234,6 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
 
   // extract the first dmrs for the channel level computation
   // extract the data in the OFDM frame, to the start of the array
-  int soffset = (slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
 
   nb_re_pusch = ceil_mod(nb_re_pusch, 16);
   int dmrs_symbol;
@@ -1245,11 +1248,11 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
   c16_t temp_rxFext[frame_parms->nb_antennas_rx][buffer_length] __attribute__((aligned(32)));
   for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) 
     for (int nl = 0; nl < rel15_ul->nrOfLayers; nl++)
-      nr_ulsch_extract_rbs(gNB->common_vars.rxdataF[ant_port_start + aarx],
+      nr_ulsch_extract_rbs(rxdataF[ant_port_map[aarx]],
                            (c16_t *)pusch_vars->ul_ch_estimates[nl * frame_parms->nb_antennas_rx + aarx],
                            temp_rxFext[aarx],
                            (c16_t *)&ul_ch_estimates_ext[nl * frame_parms->nb_antennas_rx + aarx][meas_symbol * nb_re_pusch],
-                           soffset + meas_symbol * frame_parms->ofdm_symbol_size,
+                           meas_symbol * frame_parms->ofdm_symbol_size,
                            dmrs_symbol * frame_parms->ofdm_symbol_size,
                            (rel15_ul->ul_dmrs_symb_pos >> meas_symbol) & 0x01, 
                            rel15_ul,
@@ -1330,9 +1333,10 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t 
       rdata->llr = pusch_vars->llr;
       rdata->scramblingSequence = scramblingSequence;
       rdata->nvar = nvar;
-      rdata->ant_port_start = ant_port_start;
+      rdata->ant_port_map = ant_port_map;
       rdata->rxFext_slot_mem = rxFext_slot_mem;
       rdata->pusch_ch_est_dmrs_interpl_slot_mem = pusch_ch_est_dmrs_interpl_slot_mem;
+      rdata->rxdataF = rxdataF;
 
       if (rel15_ul->pdu_bit_map & PUSCH_PDU_BITMAP_PUSCH_PTRS) {
         nr_pusch_symbol_processing(rdata);
