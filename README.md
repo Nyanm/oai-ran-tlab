@@ -146,7 +146,7 @@ First go into the correct namespace :
 sudo ./multi-ue.sh -o2
 ```
 
-UE2 will be allocated address as 'fe80::2/64'
+To make it easier to observe, UE2 will be allocated address as 'fe80::2/64' by following command : 
 ```
 sudo ip netns exec ue2 ip -6 addr add fe80::2/64 dev oaitun_ue2 nodad
 ```
@@ -274,36 +274,28 @@ wireshark -k -i oaitun_ueX -Y "eth.type == 0x4305"
 
 ## HW with TAP 
 Similarly, we can start the HW with TAP with the following command 
-
-### Launch Broker (outside namespace):
+ 
+### Launch SYNC-REF (machine 1):
 ```
 cd ran_build/build/
-./broker
-```
-### Launch SYNC-REF (namespace 1):
-```
-sudo ./multi-ue.sh -o1
-cd ran_build/build/
-sudo OAI_TUNTAP_MODE=tap RFSIMULATOR=server ./nr-uesoftmodem --rfsim -O ../../../targets/PROJECTS/NR-SIDELINK/CONF/sl_sync_ref.conf --sl-mode 2 --sa --sync-ref --brokerip 10.201.1.100
+sudo OAI_TUNTAP_MODE=tap ./nr-uesoftmodem -O ../../../targets/PROJECTS/NR-SIDELINK/CONF/sl_sync_ref.conf --sa -E --sl-mode 2 --sync-ref  --usrp-args "type=b200,master_clock_rate=46.08e6,enable_gps=true" --ue-txgain 10 --ue-rxgain 100 --thread-pool -1,-1,-1,-1 --clock-source 2 --time-source 2
 ```
 
-### Launch UE2 (namespace 2):
+### Launch UE2 (machine 2):
 ```
-sudo ./multi-ue.sh -o2
 cd ran_build/build/
-sudo OAI_TUNTAP_MODE=tap ./nr-uesoftmodem --rfsim -O ../../../targets/PROJECTS/NR-SIDELINK/CONF/ue1.conf --sl-mode 2 --sa --brokerip 10.202.1.100 --device_id 1 | sudo tee $HOME/sl-oai-release4/rat-selection/logs/sl.log
+sudo OAI_TUNTAP_MODE=tap ./nr-uesoftmodem -O ../../../targets/PROJECTS/NR-SIDELINK/CONF/ue1.conf --sa -E --sl-mode 2 --usrp-args "type=b200,master_clock_rate=46.08e6,enable_gps=true" --ue-txgain 10 --ue-rxgain 100 --thread-pool -1,-1,-1,-1 --clock-source 2 --time-source 2
 ```
 
-### Launch UE3 (namespace 3):
+### Launch UE3 (machine 3):
 ```
-sudo ./multi-ue.sh -o3
 cd ran_build/build/
-sudo OAI_TUNTAP_MODE=tap ./nr-uesoftmodem --rfsim -O ../../../targets/PROJECTS/NR-SIDELINK/CONF/ue2.conf --sl-mode 2 --sa --brokerip 10.203.1.100 --device_id 2 | sudo tee $HOME/sl-oai-release4/rat-selection/logs/sl.log
+sudo OAI_TUNTAP_MODE=tap ./nr-uesoftmodem -O ../../../targets/PROJECTS/NR-SIDELINK/CONF/ue2.conf --sa -E --sl-mode 2 --usrp-args "type=b200,master_clock_rate=46.08e6,enable_gps=true" --ue-txgain 10 --ue-rxgain 100 --thread-pool -1,-1,-1,-1 --clock-source 2 --time-source 2
 ```
 
 ## More UEs generated with TAP 
 The newest update enables to generate more than 2 UEs along with one sync-ref. The following is an example of 3 UEs.
-One would first need to create a new .conf file in openairinterface5g/targets/PROJECTS/NR-SIDELINK/, second in file /openairinterface5g/openair2/LAYER2/NR_MAC_UE/mac_defs.h, the parameter of "#define CUR_SL_UE_CONNECTIONS" in case this is set lower than expected.
+One would, first, need to create a new .conf file in openairinterface5g/targets/PROJECTS/NR-SIDELINK/, second, in file /openairinterface5g/openair2/LAYER2/NR_MAC_UE/mac_defs.h, the parameter of "#define CUR_SL_UE_CONNECTIONS" need to be updated to match the max number of UEs(Exclusive of sync-ref, this value is limited to 6 though)
 ### Launch Broker (outside namespace):
 ```
 cd ran_build/build/

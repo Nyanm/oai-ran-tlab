@@ -3004,15 +3004,15 @@ void *nr_rrc_control_socket_thread_fct(void *arg)
 	       struct NR_SL_RadioBearerConfig_r16 *sl_RadioBearerConfig_r16 = calloc(1,sizeof(*sl_RadioBearerConfig_r16)); 
           
          //Define received_data
-         NR_RRC_Configuration received_data;
-        memcpy(&received_data, receive_buf, sizeof(NR_RRC_Configuration));
-
+          struct nr_sidelink_ctrl_element *msg =  (struct nr_sidelink_ctrl_element *)receive_buf;
+          NR_RRC_Configuration received_data =   msg->nr_sidelinkPrimitive.pc5_rrc_config;
 
 
 	       sl_RadioBearerConfig_r16->slrb_Uu_ConfigIndex_r16 = received_data.sl_radioBearerConfig.slrb_Uu_ConfigIndex_r16;
 	       sl_RadioBearerConfig_r16->sl_SDAP_Config_r16 = NULL;
 	       sl_RadioBearerConfig_r16->sl_TransRange_r16 = NULL;
-	       sl_RadioBearerConfig_r16->sl_PDCP_Config_r16 = calloc(1,sizeof(*sl_RadioBearerConfig_r16));
+         sl_RadioBearerConfig_r16->sl_PDCP_Config_r16 = calloc(1, sizeof(*sl_RadioBearerConfig_r16->sl_PDCP_Config_r16));
+
 	       sl_RadioBearerConfig_r16->sl_PDCP_Config_r16->sl_DiscardTimer_r16 = calloc(1,sizeof(*sl_RadioBearerConfig_r16->sl_PDCP_Config_r16->sl_DiscardTimer_r16));
 	       *sl_RadioBearerConfig_r16->sl_PDCP_Config_r16->sl_DiscardTimer_r16 = received_data.sl_radioBearerConfig.sl_PDCP_Config_r16.sl_DiscardTimer_r16;
 	       sl_RadioBearerConfig_r16->sl_PDCP_Config_r16->sl_PDCP_SN_Size_r16 = calloc(1,sizeof(*sl_RadioBearerConfig_r16->sl_PDCP_Config_r16->sl_PDCP_SN_Size_r16));
@@ -3028,7 +3028,8 @@ void *nr_rrc_control_socket_thread_fct(void *arg)
 	       sl_RLC_BearerConfig_r16->sl_RLC_Config_r16 = calloc(1,sizeof(*sl_RLC_BearerConfig_r16->sl_RLC_Config_r16));
 	       sl_RLC_BearerConfig_r16->sl_RLC_Config_r16->present = received_data.sl_RLC_BearerConfig.sl_RLC_Config_r16.present;
 	       sl_RLC_BearerConfig_r16->sl_RLC_Config_r16->choice.sl_UM_RLC_r16 = calloc(1,sizeof(*sl_RLC_BearerConfig_r16->sl_RLC_Config_r16->choice.sl_UM_RLC_r16));
-	       sl_RLC_BearerConfig_r16->sl_RLC_Config_r16->choice.sl_UM_RLC_r16->sl_SN_FieldLengthUM_r16=calloc(1,sizeof(*sl_RLC_BearerConfig_r16->sl_MAC_LogicalChannelConfig_r16));  
+         sl_RLC_BearerConfig_r16->sl_RLC_Config_r16->choice.sl_UM_RLC_r16->sl_SN_FieldLengthUM_r16 = calloc(1, sizeof(*sl_RLC_BearerConfig_r16->sl_RLC_Config_r16->choice.sl_UM_RLC_r16->sl_SN_FieldLengthUM_r16));
+
 
 	       *sl_RLC_BearerConfig_r16->sl_RLC_Config_r16->choice.sl_UM_RLC_r16->sl_SN_FieldLengthUM_r16=received_data.sl_RLC_BearerConfig.sl_RLC_Config_r16.sl_SN_FieldLengthUM_r16;
 	       // Logical Channel Config for default link
