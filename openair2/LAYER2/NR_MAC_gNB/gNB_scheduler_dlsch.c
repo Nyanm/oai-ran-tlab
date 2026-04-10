@@ -859,7 +859,7 @@ static void pf_dl(gNB_MAC_INST *mac,
                                     0 /* tb_scaling */,
                                     l) >> 3;
       float coeff_ue = (float) tbs / UE->dl_thr_ue;
-      LOG_I(NR_MAC, "[UE %04x][%4d.%2d] b %d, thr_ue %f, tbs %d, coeff_ue %f\n",
+      LOG_D(NR_MAC, "[UE %04x][%4d.%2d] b %d, thr_ue %f, tbs %d, coeff_ue %f\n",
             UE->rnti,
             frame,
             slot,
