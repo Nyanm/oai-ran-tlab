@@ -145,23 +145,89 @@ int main()
       if (it->i == -32768)
         it->i = -32767;
     }
+
     AlignedVector512<c16_t> output;
     output.resize(vector_size);
-    mult_cpx_vector(input1.data(), input2.data(), output.data(), vector_size, shift);
-    for (int i = 0; i < vector_size; i++) {
-      c16_t res = c16mulShift(input1[i], input2[i], shift);
-      if (output[i].r != res.r || output[i].i != res.i) {
-        printf("Error at %d: (%d,%d) * (%d,%d) = (%d,%d) (should be (%d,%d))\n",
-               i,
-               input1[i].r,
-               input1[i].i,
-               input2[i].r,
-               input2[i].i,
-               output[i].r,
-               output[i].i,
-               res.r,
-               res.i);
-        return 1;
+
+    const int test_offset = 8;
+    // Test multadd_cpx_vector()
+    for (int off = 0; off < test_offset; off++) {
+      std::fill(output.begin(), output.end(), c16_t{0, 0});
+      multadd_cpx_vector(input1.data() + off, input2.data() + off, output.data() + off, vector_size - off, shift);
+      for (int i = off; i < vector_size - off; i++) {
+        const c16_t res = c16maddShift(input1[i], input2[i], (c16_t){0, 0}, shift);
+        if (output[i].r != res.r || output[i].i != res.i) {
+          printf("Error at %d, offset %d, size %d: (%d,%d) * (%d,%d) = (%d,%d) (should be (%d,%d))\n",
+                 i,
+                 off,
+                 vector_size,
+                 input1[i].r,
+                 input1[i].i,
+                 input2[i].r,
+                 input2[i].i,
+                 output[i].r,
+                 output[i].i,
+                 res.r,
+                 res.i);
+          return 1;
+        }
+      }
+    }
+
+    // Test mult_cpx_vector()
+    for (int off = 0; off < test_offset; off++) {
+      std::fill(output.begin(), output.end(), c16_t{0, 0});
+      mult_cpx_vector(input1.data() + off, input2.data() + off, output.data() + off, vector_size - off, shift);
+      for (int i = off; i < vector_size - off; i++) {
+        const c16_t res = c16mulShift(input1[i], input2[i], shift);
+        if (output[i].r != res.r || output[i].i != res.i) {
+          printf("Error at %d, offset %d, size %d: (%d,%d) * (%d,%d) = (%d,%d) (should be (%d,%d))\n",
+                 i,
+                 off,
+                 vector_size,
+                 input1[i].r,
+                 input1[i].i,
+                 input2[i].r,
+                 input2[i].i,
+                 output[i].r,
+                 output[i].i,
+                 res.r,
+                 res.i);
+          return 1;
+        }
+      }
+    }
+
+    // Test multadd_cpx_vector_cpx_scalar()
+    const c16_t alpha_cases[] = {
+        {16384, 0}, // real only (0.5 in Q15)
+        {0, 16384}, // imag only
+        {23170, 23170}, // ~1/sqrt(2) + j/sqrt(2)
+        {-16384, 8192}, // negative real
+        {32767, 32767}, // near max
+    };
+    // Buffer start offset used to test unaligned inputs
+    for (int off = 0; off < test_offset; off++) {
+      const c16_t alpha = alpha_cases[off % sizeofArray(alpha_cases)];
+      std::fill(output.begin(), output.end(), c16_t{0, 0});
+      multadd_cpx_vector_cpx_scalar(input1.data() + off, alpha, output.data() + off, vector_size - off, shift);
+      for (int i = off; i < vector_size - off; i++) {
+        const c16_t res = c16maddShift(input1[i], alpha, (c16_t){0, 0}, shift);
+        if (output[i].r != res.r || output[i].i != res.i) {
+          printf("Error at %d, offset %d, size %d: (%d,%d) * (%d,%d) = (%d,%d) (should be (%d,%d))\n",
+                 i,
+                 off,
+                 vector_size,
+                 input1[i].r,
+                 input1[i].i,
+                 alpha.r,
+                 alpha.i,
+                 output[i].r,
+                 output[i].i,
+                 res.r,
+                 res.i);
+          return 1;
+        }
       }
     }
   }
