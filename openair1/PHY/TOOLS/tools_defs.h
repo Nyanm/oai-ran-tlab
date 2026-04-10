@@ -505,6 +505,30 @@ static inline void multadd_cpx_vector(const c16_t *x1, const c16_t *x2, c16_t *y
   }
 }
 
+static inline void multadd_cpx_vector_cpx_scalar(const c16_t *x1,
+                                                         const c16_t alpha,
+                                                         c16_t *y,
+                                                         const uint32_t N,
+                                                         const int output_shift)
+{
+  const simde__m256i *x1_256 = (simde__m256i *)x1;
+  simde__m256i *y_256 = (simde__m256i *)y;
+  simde__m256i alpha_256 = simde_mm256_set1_epi32(*(int32_t *)&alpha);
+  // AVX2 compute 8 cpx multiply for each loop
+  uint_fast32_t i = 0;
+  for (; i < (N / 8); i++) {
+    simde__m256i result = oai_mm256_cpx_mult(x1_256[i], alpha_256, output_shift);
+    y_256[i] = simde_mm256_adds_epi16(y_256[i], result);
+  }
+  // Remaining elements
+  i *= 8;
+  if (N % 8) {
+    for (; i < N; i++) {
+      y[i] = c16maddShift(x1[i], alpha, y[i], output_shift);
+    }
+  }
+}
+
 static const int16_t ones_epi16[16] __attribute__((aligned(32))) = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 static inline simde__m256i protected_abs256(const simde__m256i in)
 {
