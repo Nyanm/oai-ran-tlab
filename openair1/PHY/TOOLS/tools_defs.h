@@ -468,26 +468,40 @@ static inline void mult_cpx_vector(const c16_t *x1, // Q15
                                    const uint32_t N,
                                    const int output_shift)
 {
-  const simde__m128i *x1_128 = (simde__m128i *)x1;
-  const simde__m128i *x2_128 = (simde__m128i *)x2;
-  simde__m128i *y_128 = (simde__m128i *)y;
-
-  // right shift by 13 while p_a * x0 and 15 while
-  //  SSE compute 4 cpx multiply for each loop
-  for (uint32_t i = 0; i < (N >> 2); i++) {
-    y_128[i] = oai_mm_cpx_mult(x1_128[i], x2_128[i], output_shift);
+  const simde__m256i *x1_256 = (simde__m256i *)x1;
+  const simde__m256i *x2_256 = (simde__m256i *)x2;
+  simde__m256i *y_256 = (simde__m256i *)y;
+  // AVX2 compute 8 cpx multiply for each loop
+  uint_fast32_t i = 0;
+  for (; i < (N / 8); i++) {
+    y_256[i] = oai_mm256_cpx_mult(x1_256[i], x2_256[i], output_shift);
+  }
+  // Remaining elements
+  i *= 8;
+  if (N % 8) {
+    for (; i < N; i++) {
+      y[i] = c16mulShift(x1[i], x2[i], output_shift);
+    }
   }
 }
 
 static inline void multadd_cpx_vector(const c16_t *x1, const c16_t *x2, c16_t *y, const uint32_t N, const int output_shift)
 {
-  const simde__m128i *x1_128 = (simde__m128i *)x1;
-  const simde__m128i *x2_128 = (simde__m128i *)x2;
-  simde__m128i *y_128 = (simde__m128i *)y;
-  // SSE compute 4 cpx multiply for each loop
-  for (uint32_t i = 0; i < (N >> 2); i++) {
-    simde__m128i result = oai_mm_cpx_mult(x1_128[i], x2_128[i], output_shift);
-    y_128[i] = simde_mm_adds_epi16(y_128[i], result);
+  const simde__m256i *x1_256 = (simde__m256i *)x1;
+  const simde__m256i *x2_256 = (simde__m256i *)x2;
+  simde__m256i *y_256 = (simde__m256i *)y;
+  // AVX2 compute 8 cpx multiply for each loop
+  uint_fast32_t i = 0;
+  for (; i < (N / 8); i++) {
+    simde__m256i result = oai_mm256_cpx_mult(x1_256[i], x2_256[i], output_shift);
+    y_256[i] = simde_mm256_adds_epi16(y_256[i], result);
+  }
+  // Remaining elements
+  i *= 8;
+  if (N % 8) {
+    for (; i < N; i++) {
+      y[i] = c16maddShift(x1[i], x2[i], y[i], output_shift);
+    }
   }
 }
 
