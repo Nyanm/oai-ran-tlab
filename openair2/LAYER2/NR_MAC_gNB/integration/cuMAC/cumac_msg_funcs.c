@@ -218,6 +218,14 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
     printf("\n");
     memcpy(data_buf + offset, req_buf->prdMat, data_size);
     offset += data_size;
+
+    if (req_buf->allocSolLastTxActUe != NULL) {
+      offset += get_padding(offset, alignof(int16_t));
+      req->payload.offsets.allocSolLastTxActUe = offset;
+      data_size = sizeof(*req_buf->allocSolLastTxActUe) * nActiveUE * 2;
+      memcpy(data_buf + offset, req_buf->allocSolLastTxActUe, data_size);
+      offset += data_size;
+    }
   }
 
   if (req->payload.taskBitMask & TASK_BIT(CUMAC_TASK_MCS_SELECTION)) {
@@ -230,6 +238,24 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
     printf("\n");
     memcpy(data_buf + offset, req_buf->tbErrLastActUe, data_size);
     offset += data_size;
+
+    if (req_buf->mcsSelSolLastTxActUe != NULL) {
+      offset += get_padding(offset, alignof(int16_t));
+      req->payload.offsets.mcsSelSolLastTxActUe = offset;
+      data_size = sizeof(*req_buf->mcsSelSolLastTxActUe) * nActiveUE;
+      memcpy(data_buf + offset, req_buf->mcsSelSolLastTxActUe, data_size);
+      offset += data_size;
+    }
+  }
+
+  if (req->payload.taskBitMask & TASK_BIT(CUMAC_TASK_LAYER_SELECTION)) {
+    if (req_buf->layerSelSolLastTxActUe != NULL) {
+      offset += get_padding(offset, alignof(int8_t));
+      req->payload.offsets.layerSelSolLastTxActUe = offset;
+      data_size = sizeof(*req_buf->layerSelSolLastTxActUe) * nActiveUE;
+      memcpy(data_buf + offset, req_buf->layerSelSolLastTxActUe, data_size);
+      offset += data_size;
+    }
   }
 
   offset += get_padding(offset, alignof(int8_t));

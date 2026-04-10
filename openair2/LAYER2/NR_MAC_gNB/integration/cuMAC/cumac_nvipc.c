@@ -90,6 +90,7 @@ bool cumac_send_msg(cumac_msg_t type, build_cumac_msg_fn_v_t fn, void* args)
     slot_data_entry->nActiveUe = sch_tti_args->payload.nActiveUe;
     slot_data_entry->allocSolSize = sch_tti_args->payload.nActiveUe * 2; // for Type 1 allocation
     slot_data_entry->nMaxSchUePerCell = nMaxSchUePerCell;
+    slot_data_entry->taskBitMask = sch_tti_args->payload.taskBitMask;
   }
   if (type == CUMAC_TTI_END) {
     has_sent_tti_end = true;

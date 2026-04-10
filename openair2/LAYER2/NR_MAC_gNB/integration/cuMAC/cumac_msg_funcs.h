@@ -59,6 +59,7 @@ typedef struct {
   uint16_t nMaxSchUePerCell;
   uint16_t allocSolSize;
   uint8_t nActiveUe;
+  uint32_t taskBitMask;  // task bits from the SCH_TTI.request that produced this entry
   struct timespec tti_req_timestamp;
   struct timespec tti_end_timestamp;
   // Response data per slot

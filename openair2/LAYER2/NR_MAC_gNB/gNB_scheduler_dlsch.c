@@ -653,6 +653,9 @@ static void pf_dl(gNB_MAC_INST *mac,
     buffers.CRNTI = malloc(connected_ues * sizeof(uint16_t));
     buffers.avgRatesActUe = malloc(connected_ues * sizeof(float));
     buffers.newDataActUe = malloc(connected_ues * sizeof(int8_t));
+    buffers.allocSolLastTxActUe = calloc(connected_ues * 2, sizeof(int16_t));
+    buffers.mcsSelSolLastTxActUe = calloc(connected_ues, sizeof(int16_t));
+    buffers.layerSelSolLastTxActUe = calloc(connected_ues, sizeof(int8_t));
     for (int i = 0; i < connected_ues; i++) {
       buffers.newDataActUe[i] = -1;
     }
