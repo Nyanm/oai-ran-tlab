@@ -151,6 +151,8 @@ typedef struct nr_redcap_ue_cap {
 typedef struct {
   int drb_id;
   pdusession_level_qos_parameter_t qos;
+  /** Indicate if the QoS flow is pending for NGAP modify response. */
+  bool ngap_pending;
 } nr_rrc_qos_t;
 
 typedef struct {

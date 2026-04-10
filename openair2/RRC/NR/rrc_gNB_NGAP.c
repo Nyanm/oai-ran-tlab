@@ -1146,6 +1146,7 @@ static void nr_rrc_apply_qos_add_modify(gNB_RRC_INST *rrc,
         drb_needs_e1_refresh[qos->drb_id] = true;
       }
     }
+    qos->ngap_pending = true;
   }
 }
 
@@ -1243,6 +1244,16 @@ static int rrc_gNB_ngap_pdusession_mod_failure(int module_id, const ngap_pdusess
   return 0;
 }
 
+/** Clear ngap_pending on all QoS flows before applying a new NGAP PDU Session Modify */
+static void clear_ue_ngap_modify_qos_pending(gNB_RRC_UE_t *UE)
+{
+  DevAssert(UE != NULL);
+  FOR_EACH_SEQ_ARR(rrc_pdu_session_param_t *, s, &UE->pduSessions) {
+    FOR_EACH_SEQ_ARR(nr_rrc_qos_t *, q, &s->param.qos)
+      q->ngap_pending = false;
+  }
+}
+
 int rrc_gNB_process_NGAP_PDUSESSION_MODIFY_REQ(const ngap_pdusession_modify_req_t *req, instance_t instance)
 {
   gNB_RRC_INST *rrc = RC.nrrrc[instance];
@@ -1265,6 +1276,8 @@ int rrc_gNB_process_NGAP_PDUSESSION_MODIFY_REQ(const ngap_pdusession_modify_req_
     rrc_gNB_ngap_pdusession_mod_failure(rrc->module_id, req, cause);
     return -1;
   }
+
+  clear_ue_ngap_modify_qos_pending(UE);
 
   uint8_t xid = rrc_gNB_get_next_transaction_identifier(rrc->module_id);
   bool all_failed = true;
@@ -1354,12 +1367,21 @@ int rrc_gNB_send_NGAP_PDUSESSION_MODIFY_RESP(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE
       DevAssert(resp->nb_of_pdusessions <= NR_MAX_NB_PDU_SESSIONS);
       pdusession_modify_t *p = &resp->pdusessions[resp->nb_of_pdusessions++];
       p->pdusession_id = session->param.pdusession_id;
-      FOR_EACH_SEQ_ARR(nr_rrc_qos_t *, qos_session, &session->param.qos) {
+      /* QoSFlowAddOrModifyResponseList: flows marked in during QoS flow modification. */
+      p->nb_of_qos_flow = 0;
+      FOR_EACH_SEQ_ARR(nr_rrc_qos_t *, q, &session->param.qos) {
+        if (!q->ngap_pending)
+          continue;
         DevAssert(p->nb_of_qos_flow < MAX_QOS_FLOWS);
-        qos_flow_addmod_response_item_t *q = &p->qos[p->nb_of_qos_flow++];
-        q->qfi = qos_session->qos.qfi;
+        p->qos[p->nb_of_qos_flow++].qfi = q->qos.qfi;
+        q->ngap_pending = false;
       }
-      p->pdusession_id = session->param.pdusession_id;
+      if (p->nb_of_qos_flow == 0) {
+        LOG_D(NR_RRC,
+              "UE %d: empty QoSFlowAddOrModifyResponseList (no pending QoS flows for pdu_session_id=%d)\n",
+              UE->rrc_ue_id,
+              session->param.pdusession_id);
+      }
     } else if (session->status == PDU_SESSION_STATUS_FAILED) {
       DevAssert(resp->nb_of_pdusessions_failed <= NR_MAX_NB_PDU_SESSIONS);
       pdusession_failed_t *failed = &resp->pdusessions_failed[resp->nb_of_pdusessions_failed++];
