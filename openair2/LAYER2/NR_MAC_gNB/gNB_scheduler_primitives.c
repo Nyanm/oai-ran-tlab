@@ -242,6 +242,15 @@ static const int SINRx10_MCS_mapping[29] = {
   162, 170, 178, 186, 194, 202, 212, 220, 245       // 20..28
 };
 
+int get_SINRx10_for_mcs(int mcs)
+{
+  if (mcs < 0)
+    mcs = 0;
+  if (mcs > 28)
+    mcs = 28;
+  return SINRx10_MCS_mapping[mcs];
+}
+
 int get_mcs_from_SINRx10(int mcs_table, int SINRx10, int Nl)
 {
   if (mcs_table != 0) {

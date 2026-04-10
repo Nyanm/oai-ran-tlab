@@ -647,8 +647,11 @@ static void pf_dl(gNB_MAC_INST *mac,
      double sigmasqrd = thermalNoise * nfLinear;
 
     // for RFSim
-    double SNR_db = 20.0; // choose your operating SNR
+    double SNR_db = 20.0;
     float sigmaSqrd = pow(10.0, -SNR_db / 10.0);   */
+    // Extract nUeAnt early — needed to size wbSinr before the UE iterator.
+    const uint8_t nUeAnt = RC.nrmac[0]->config->carrier_config.num_tx_ant.value;
+
     cumac_tti_req_bufs_t buffers;
     buffers.CRNTI = malloc(connected_ues * sizeof(uint16_t));
     buffers.avgRatesActUe = malloc(connected_ues * sizeof(float));
@@ -656,6 +659,9 @@ static void pf_dl(gNB_MAC_INST *mac,
     buffers.allocSolLastTxActUe = calloc(connected_ues * 2, sizeof(int16_t));
     buffers.mcsSelSolLastTxActUe = calloc(connected_ues, sizeof(int16_t));
     buffers.layerSelSolLastTxActUe = calloc(connected_ues, sizeof(int8_t));
+    // wbSinr layout: [nActiveUE × nUeAnt] in row-major order.
+    buffers.wbSinr = malloc(connected_ues * nUeAnt * sizeof(float));
+
     for (int i = 0; i < connected_ues; i++) {
       buffers.newDataActUe[i] = -1;
     }
@@ -669,6 +675,21 @@ static void pf_dl(gNB_MAC_INST *mac,
         buffers.mcsSelSolLastTxActUe[idx]         = UE->cumac_last_sol.mcs_sol;
         buffers.layerSelSolLastTxActUe[idx]       = UE->cumac_last_sol.layer_sol;
       }
+
+      const CSI_report_t *csi = &UE->UE_sched_ctrl.CSI_report;
+      int sinrx10; // 0.1 dB units
+      if (csi->csirs_rsrp_report.nb > 0)
+        sinrx10 = csi->csirs_rsrp_report.r[0].SINRx10;
+      else if (csi->ssb_rsrp_report.nb > 0)
+        sinrx10 = csi->ssb_rsrp_report.r[0].SINRx10;
+      else
+        sinrx10 = get_SINRx10_for_mcs(UE->UE_sched_ctrl.dl_max_mcs);
+
+      // sinrx10/10 = SINR in dB; divide by 10 again for the dB-to-linear exponent
+      const float sinr_lin = powf(10.0f, sinrx10 / 100.0f);
+      for (int l = 0; l < nUeAnt; l++)
+        buffers.wbSinr[idx * nUeAnt + l] = sinr_lin;
+
       //check retransmissions
       NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
 
@@ -686,12 +707,6 @@ static void pf_dl(gNB_MAC_INST *mac,
     const uint16_t nPrbGrp = 1;
     buffers.prgMsk = malloc(nPrbGrp * sizeof(uint8_t));
     memset(buffers.prgMsk, 1, nPrbGrp); // all PRBs available
-
-    buffers.wbSinr = malloc(connected_ues * sizeof(float));
-
-    for (int i = 0; i < connected_ues; i++) {
-      buffers.wbSinr[i] = 20.0f;
-    }
     cumac_wait_to_send();
     const uint32_t taskBitMap = TASK_BIT(CUMAC_TASK_UE_SELECTION) | TASK_BIT(CUMAC_TASK_PRB_ALLOCATION);
     cumac_sch_tti_req_args_t args = {.frame = frame,
@@ -702,8 +717,8 @@ static void pf_dl(gNB_MAC_INST *mac,
                                      .payload.nActiveUe = connected_ues,
                                      .payload.nSrsUe = 0,
                                      .payload.nPrbGrp = nPrbGrp,
-                                     .payload.nBsAnt = RC.nrmac[0]->config->carrier_config.num_tx_ant.value,
-                                     .payload.nUeAnt = RC.nrmac[0]->config->carrier_config.num_tx_ant.value,
+                                     .payload.nBsAnt = nUeAnt,
+                                     .payload.nUeAnt = nUeAnt,
                                      .payload.sigmaSqrd = 1.0f, // hardcoded in cuMAC source code
                                      .buffers = &buffers};
 
@@ -711,8 +726,15 @@ static void pf_dl(gNB_MAC_INST *mac,
 
       uint16_t numData = args.payload.nActiveUe * args.payload.nPrbGrp * args.payload.nUeAnt;
       buffers.postEqSinr = malloc(numData * sizeof(float));
-      for (int i = 0; i < numData; i++) {
-        buffers.postEqSinr[i] = 20.0f;
+
+      for (int ue = 0; ue < args.payload.nActiveUe; ue++) {
+        for (int prg = 0; prg < args.payload.nPrbGrp; prg++) {
+          for (int l = 0; l < args.payload.nUeAnt; l++) {
+            buffers.postEqSinr[ue * args.payload.nPrbGrp * args.payload.nUeAnt
+                               + prg * args.payload.nUeAnt + l] =
+                buffers.wbSinr[ue * args.payload.nUeAnt + l];
+          }
+        }
       }
 
       numData = cumac_nMax_schUePerCell() * args.payload.nPrbGrp * args.payload.nUeAnt;
