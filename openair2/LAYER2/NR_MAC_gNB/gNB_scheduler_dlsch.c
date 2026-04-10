@@ -639,7 +639,7 @@ static void pf_dl(gNB_MAC_INST *mac,
   }
   const slot_data_entry_t* cumac_slot_data = NULL;
   if (connected_ues!=0 && cumac_can_schedule()) {
-    printf("CUMAC SENDING SCH TTI_REQ with %d connected UES\n", connected_ues);
+    LOG_D(NR_MAC,"CUMAC SENDING SCH TTI_REQ with %d connected UES\n", connected_ues);
     /* const double k = 1.38064852e-23; // Boltzmann constant
      const double T = 290.0;           // Temperature in K
      double thermalNoise = k * T * RC.gNB[0]->frame_parms.N_RB_DL * 12 * RC.gNB[0]->frame_parms.subcarrier_spacing;

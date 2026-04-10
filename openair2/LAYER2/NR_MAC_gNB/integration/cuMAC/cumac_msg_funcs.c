@@ -112,10 +112,10 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
   req->payload.offsets.CRNTI = offset;
   num_data = nActiveUE;
   data_size = sizeof(*req_buf->CRNTI) * num_data;
-  printf("CRNTI : ");
+  LOG_D(NR_MAC,"CRNTI : ");
   for (int i = 0; i < num_data; ++i)
-    printf("%u ", req_buf->CRNTI[i]);
-  printf("\n");
+    LOG_D(NR_MAC,"%u ", req_buf->CRNTI[i]);
+  LOG_D(NR_MAC,"\n");
   memcpy(data_buf + offset, req_buf->CRNTI, data_size);
   offset += data_size;
 
@@ -123,10 +123,10 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
   req->payload.offsets.prgMsk = offset;
   num_data = nPRBGRP;
   data_size = sizeof(*req_buf->prgMsk) * num_data;
-  printf("PRG MASK : ");
+  LOG_D(NR_MAC,"PRG MASK : ");
   for (int i = 0; i < num_data; ++i)
-    printf("%u ", req_buf->prgMsk[i]);
-  printf("\n");
+    LOG_D(NR_MAC,"%u ", req_buf->prgMsk[i]);
+  LOG_D(NR_MAC,"\n");
   memcpy(data_buf + offset, req_buf->prgMsk, data_size);
   offset += data_size;
 
@@ -134,10 +134,10 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
   req->payload.offsets.wbSinr = offset;
   num_data =  nActiveUE * nUEAnt;
   data_size = sizeof(*req_buf->wbSinr) * num_data;
-  printf("wbSinr : ");
+  LOG_D(NR_MAC,"wbSinr : ");
   for (int i = 0; i < num_data; ++i)
-    printf("%f ", req_buf->wbSinr[i]);
-  printf("\n");
+    LOG_D(NR_MAC,"%f ", req_buf->wbSinr[i]);
+  LOG_D(NR_MAC,"\n");
   memcpy(data_buf + offset, req_buf->wbSinr, data_size);
   offset += data_size;
 
@@ -145,10 +145,10 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
   req->payload.offsets.avgRatesActUe = offset;
   num_data =  nActiveUE;
   data_size = sizeof(*req_buf->avgRatesActUe) * num_data;
-  printf("avgRatesActUe : ");
+  LOG_D(NR_MAC,"avgRatesActUe : ");
   for (int i = 0; i < num_data; ++i)
-    printf("%f ", req_buf->avgRatesActUe[i]);
-  printf("\n");
+    LOG_D(NR_MAC,"%f ", req_buf->avgRatesActUe[i]);
+  LOG_D(NR_MAC,"\n");
   memcpy(data_buf + offset, req_buf->avgRatesActUe, data_size);
   offset += data_size;
 
@@ -158,10 +158,10 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
     req->payload.offsets.postEqSinr = offset;
     num_data =  nActiveUE * nPRBGRP * nUEAnt;
     data_size = sizeof(*req_buf->postEqSinr) * num_data;
-    printf("postEqSinr : ");
+    LOG_D(NR_MAC,"postEqSinr : ");
     for (int i = 0; i < num_data; ++i)
-      printf("%f ", req_buf->postEqSinr[i]);
-    printf("\n");
+      LOG_D(NR_MAC,"%f ", req_buf->postEqSinr[i]);
+    LOG_D(NR_MAC,"\n");
     memcpy(data_buf + offset, req_buf->postEqSinr, data_size);
     offset += data_size;
 
@@ -169,10 +169,10 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
     req->payload.offsets.sinVal = offset;
     num_data =  slot_entry->nMaxSchUePerCell * nPRBGRP * nUEAnt;
     data_size = sizeof(*req_buf->sinVal) * num_data;
-    printf("sinVal : ");
+    LOG_D(NR_MAC,"sinVal : ");
     for (int i = 0; i < num_data; ++i)
-      printf("%f ", req_buf->sinVal[i]);
-    printf("\n");
+      LOG_D(NR_MAC,"%f ", req_buf->sinVal[i]);
+    LOG_D(NR_MAC,"\n");
     memcpy(data_buf + offset, req_buf->sinVal, data_size);
     offset += data_size;
 
@@ -192,30 +192,30 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
     offset += get_padding(offset, alignof(cuComplex));
     req->payload.offsets.detMat = offset;
     data_size = sizeof(*req_buf->detMat) * detLen;
-    printf("detMat : ");
+    LOG_D(NR_MAC,"detMat : ");
     for (int i = 0; i < detLen; ++i)
-      printf("x = %f , y= %f ", req_buf->detMat[i].x, req_buf->detMat[i].y);
-    printf("\n");
+      LOG_D(NR_MAC,"x = %f , y= %f ", req_buf->detMat[i].x, req_buf->detMat[i].y);
+    LOG_D(NR_MAC,"\n");
     memcpy(data_buf + offset, req_buf->detMat, data_size);
     offset += data_size;
 
     offset += get_padding(offset, alignof(cuComplex));
     req->payload.offsets.estH_fr = offset;
     data_size = sizeof(*req_buf->estH_fr) * hLen;
-    printf("estH_fr : ");
+    LOG_D(NR_MAC,"estH_fr : ");
     for (int i = 0; i < hLen; ++i)
-      printf("x = %f , y= %f ", req_buf->estH_fr[i].x, req_buf->estH_fr[i].y);
-    printf("\n");
+      LOG_D(NR_MAC,"x = %f , y= %f ", req_buf->estH_fr[i].x, req_buf->estH_fr[i].y);
+    LOG_D(NR_MAC,"\n");
     memcpy(data_buf + offset, req_buf->estH_fr, data_size);
     offset += data_size;
 
     offset += get_padding(offset, alignof(cuComplex));
     req->payload.offsets.prdMat = offset;
     data_size = sizeof(*req_buf->prdMat) * prdLen;
-    printf("prdMat : ");
+    LOG_D(NR_MAC,"prdMat : ");
     for (int i = 0; i < prdLen; ++i)
-      printf("x = %f , y= %f ", req_buf->prdMat[i].x, req_buf->prdMat[i].y);
-    printf("\n");
+      LOG_D(NR_MAC,"x = %f , y= %f ", req_buf->prdMat[i].x, req_buf->prdMat[i].y);
+    LOG_D(NR_MAC,"\n");
     memcpy(data_buf + offset, req_buf->prdMat, data_size);
     offset += data_size;
 
@@ -232,10 +232,10 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
     offset += get_padding(offset, alignof(int8_t));
     req->payload.offsets.tbErrLastActUe = offset;
     data_size = sizeof(*req_buf->tbErrLastActUe) * nActiveUE;
-    printf("tbErrLastActUe : ");
+    LOG_D(NR_MAC,"tbErrLastActUe : ");
     for (int i = 0; i < nActiveUE; ++i)
-      printf("%d ", req_buf->tbErrLastActUe[i]);
-    printf("\n");
+      LOG_D(NR_MAC,"%d ", req_buf->tbErrLastActUe[i]);
+    LOG_D(NR_MAC,"\n");
     memcpy(data_buf + offset, req_buf->tbErrLastActUe, data_size);
     offset += data_size;
 
@@ -262,10 +262,10 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
   req->payload.offsets.newDataActUe = offset;
   num_data =  nActiveUE;
   data_size = sizeof(*req_buf->newDataActUe) * num_data;
-  printf("newDataActUe : ");
+  LOG_D(NR_MAC,"newDataActUe : ");
   for (int i = 0; i < num_data; ++i)
-    printf("%d ", req_buf->newDataActUe[i]);
-  printf("\n");
+    LOG_D(NR_MAC,"%d ", req_buf->newDataActUe[i]);
+  LOG_D(NR_MAC,"\n");
   memcpy(data_buf + offset, req_buf->newDataActUe, data_size);
   offset += data_size;
 
@@ -310,54 +310,54 @@ void cumac_handle_sch_tti_response(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, sl
   //!< Layer selection solution for all active UEs in the cell
   slot_data_entry->layerSelSol = calloc(slot_data_entry->nActiveUe, sizeof(uint8_t));
 
-  printf("Received SCH_TTI.response with data\n");
+  LOG_D(NR_MAC,"Received SCH_TTI.response with data\n");
   struct timespec now;
   clock_gettime(CLOCK_REALTIME, &now);
-  printf("message 0x%02x\n", type);
-  printf("From TTI_REQ/TTI_END to RESPONSE %ld , %ld\n",
+  LOG_D(NR_MAC,"message 0x%02x\n", type);
+  LOG_I(NR_MAC,"From TTI_REQ/TTI_END to RESPONSE %ld , %ld\n",
          nvlog_timespec_interval(&slot_data_entry->tti_req_timestamp, &now),
          nvlog_timespec_interval(&slot_data_entry->tti_end_timestamp, &now));
-  printf("Used values in originating SCH_TTI.request:\n");
-  printf("\tnMaxSchUePerCell = %d\n", slot_data_entry->nMaxSchUePerCell);
-  printf("\tallocSolSize = %d\n", slot_data_entry->allocSolSize);
-  printf("\tnActiveUe = %d\n", slot_data_entry->nActiveUe);
+  LOG_D(NR_MAC,"Used values in originating SCH_TTI.request:\n");
+  LOG_D(NR_MAC,"\tnMaxSchUePerCell = %d\n", slot_data_entry->nMaxSchUePerCell);
+  LOG_D(NR_MAC,"\tallocSolSize = %d\n", slot_data_entry->allocSolSize);
+  LOG_D(NR_MAC,"\tnActiveUe = %d\n", slot_data_entry->nActiveUe);
 
-  printf("Offsets : \n\tsetSchdUePerCellTTI 0x%04x\n", resp->offsets.setSchdUePerCellTTI);
-  printf("\tallocSol 0x%04x\n", resp->offsets.allocSol);
-  printf("\tmcsSelSol 0x%04x\n", resp->offsets.mcsSelSol);
-  printf("\tlayerSelSol 0x%04x\n", resp->offsets.layerSelSol);
+  LOG_D(NR_MAC,"Offsets : \n\tsetSchdUePerCellTTI 0x%04x\n", resp->offsets.setSchdUePerCellTTI);
+  LOG_D(NR_MAC,"\tallocSol 0x%04x\n", resp->offsets.allocSol);
+  LOG_D(NR_MAC,"\tmcsSelSol 0x%04x\n", resp->offsets.mcsSelSol);
+  LOG_D(NR_MAC,"\tlayerSelSol 0x%04x\n", resp->offsets.layerSelSol);
 
   if (resp->offsets.setSchdUePerCellTTI != 0xFFFFFFFF) {
     const uint16_t *src = (uint16_t *)(buf_home + resp->offsets.setSchdUePerCellTTI);
     memcpy(slot_data_entry->setSchdUePerCellTTI, src, slot_data_entry->nMaxSchUePerCell * sizeof(uint16_t));
-    printf("setSchdUePerCellTTI :\n");
+    LOG_D(NR_MAC,"setSchdUePerCellTTI :\n");
     for (int i = 0; i < slot_data_entry->nMaxSchUePerCell; i++) {
-      printf("\tIDX %d = %d \n", i, slot_data_entry->setSchdUePerCellTTI[i]);
+      LOG_D(NR_MAC,"\tIDX %d = %d \n", i, slot_data_entry->setSchdUePerCellTTI[i]);
     }
   }
   if (resp->offsets.allocSol != 0xFFFFFFFF) {
     const uint16_t *src = (uint16_t *)(buf_home + resp->offsets.allocSol);
     memcpy(slot_data_entry->allocSol, src, slot_data_entry->allocSolSize * sizeof(*slot_data_entry->allocSol));
-    printf("allocSol:\n");
+    LOG_D(NR_MAC,"allocSol:\n");
     for (int i = 0; i < slot_data_entry->allocSolSize; i++) {
-      printf("\tIDX %d = 0x%02x \n", i, src[i]);
+      LOG_D(NR_MAC,"\tIDX %d = 0x%02x \n", i, src[i]);
 
     }
   }
   if (resp->offsets.mcsSelSol != 0xFFFFFFFF) {
     const int16_t *src = (int16_t *)(buf_home + resp->offsets.mcsSelSol);
     memcpy(slot_data_entry->mcsSelSol, src, slot_data_entry->nActiveUe * sizeof(*slot_data_entry->mcsSelSol));
-    printf("mcsSelSol :\n");
+    LOG_D(NR_MAC,"mcsSelSol :\n");
     for (int i = 0; i < slot_data_entry->nActiveUe; i++) {
-      printf("\tIDX %d = 0x%02x \n", i, slot_data_entry->mcsSelSol[i]);
+      LOG_D(NR_MAC,"\tIDX %d = 0x%02x \n", i, slot_data_entry->mcsSelSol[i]);
     }
   }
   if (resp->offsets.layerSelSol != 0xFFFFFFFF) {
     const uint8_t *src = (uint8_t *)(buf_home + resp->offsets.layerSelSol);
     memcpy(slot_data_entry->layerSelSol, src, slot_data_entry->nActiveUe);
-    printf("layerSelSol :\n");
+    LOG_D(NR_MAC,"layerSelSol :\n");
     for (int i = 0; i < slot_data_entry->nActiveUe; i++) {
-      printf("\tIDX %d = 0x%02x \n", i, slot_data_entry->layerSelSol[i]);
+      LOG_D(NR_MAC,"\tIDX %d = 0x%02x \n", i, slot_data_entry->layerSelSol[i]);
     }
   }
 }

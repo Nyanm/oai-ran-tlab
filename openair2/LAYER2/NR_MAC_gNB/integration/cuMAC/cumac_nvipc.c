@@ -183,9 +183,9 @@ void* epoll_recv_task(void* arg) {
   while (1) {
     if (!recv_task_running) {
       recv_task_running = true;
-      printf("%s: epoll_recv_task started\n", __func__);
+      LOG_D(NR_MAC,"%s: epoll_recv_task started\n", __func__);
     }
-    printf("%s: epoll_wait fd_rx=%d ...\n", __func__, ipc_rx_event_fd);
+    LOG_D(NR_MAC,"%s: epoll_wait fd_rx=%d ...\n", __func__, ipc_rx_event_fd);
 
     int nfds;
     do {
@@ -257,11 +257,11 @@ int cumac_recv_msg(nv_ipc_msg_t* recv_msg)
 
   // Allocate buffer for TX message
   if (ipc->rx_recv_msg(ipc, recv_msg) < 0) {
-    printf("%s: no more message available\n", __func__);
+    LOG_D(NR_MAC,"%s: no more message available\n", __func__);
     return -1;
   }
 
-  printf("recv: cell_id=%d msg_id=0x%02X msg_len=%d data_len=%d data_pool=%d\n",
+  LOG_D(NR_MAC,"recv: cell_id=%d msg_id=0x%02X msg_len=%d data_len=%d data_pool=%d\n",
          recv_msg->cell_id,
          recv_msg->msg_id,
          recv_msg->msg_len,
@@ -274,7 +274,7 @@ int cumac_recv_msg(nv_ipc_msg_t* recv_msg)
   // Release buffer of RX message
   int release_retval = ipc->rx_release(ipc, recv_msg);
   if (release_retval != 0) {
-    printf("%s error: release RX buffer failed Error: %d\n", __FUNCTION__, release_retval);
+    LOG_D(NR_MAC,"%s error: release RX buffer failed Error: %d\n", __FUNCTION__, release_retval);
     return release_retval;
   }
   return 0;
