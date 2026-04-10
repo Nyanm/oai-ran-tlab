@@ -663,6 +663,12 @@ static void pf_dl(gNB_MAC_INST *mac,
     UE_iterator (UE_list, UE) {
       buffers.avgRatesActUe[idx] = UE->dl_thr_ue;
       buffers.CRNTI[idx] = UE->rnti;
+      if (UE->cumac_last_sol.has_prev_sol) {
+        buffers.allocSolLastTxActUe[idx * 2]     = UE->cumac_last_sol.alloc_sol[0];
+        buffers.allocSolLastTxActUe[idx * 2 + 1] = UE->cumac_last_sol.alloc_sol[1];
+        buffers.mcsSelSolLastTxActUe[idx]         = UE->cumac_last_sol.mcs_sol;
+        buffers.layerSelSolLastTxActUe[idx]       = UE->cumac_last_sol.layer_sol;
+      }
       //check retransmissions
       NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
 
@@ -1079,6 +1085,17 @@ static void pf_dl(gNB_MAC_INST *mac,
                   &sched_pdsch.rbSize);
 
     post_process_dlsch(mac, pp_pdsch, iterator->UE, &sched_pdsch);
+
+#ifdef ENABLE_CUMAC
+    // Store the scheduled solutions back into per-UE state for the next TTI's request
+    if (cumac_ue_id >= 0 && cumac_slot_data != NULL) {
+      iterator->UE->cumac_last_sol.has_prev_sol = true;
+      iterator->UE->cumac_last_sol.alloc_sol[0] = (int16_t)sched_pdsch.rbStart;
+      iterator->UE->cumac_last_sol.alloc_sol[1] = (int16_t)sched_pdsch.rbSize;
+      iterator->UE->cumac_last_sol.mcs_sol      = (int16_t)sched_pdsch.mcs;
+      iterator->UE->cumac_last_sol.layer_sol    = (int8_t)sched_pdsch.nrOfLayers;
+    }
+#endif
 
     /* transmissions: directly allocate */
     n_rb_sched[beam.idx] -= sched_pdsch.rbSize;

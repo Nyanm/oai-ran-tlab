@@ -794,6 +794,15 @@ typedef struct NR_UE_info {
   // dedicated BWP is always 1 from the UE's point of view, even if the gNB has multiple BWPs.
   // The below ID is the "true" (non-consecutive) BWP ID from the gNB's point of view
   NR_BWP_Id_t local_bwp_id;
+#ifdef ENABLE_CUMAC
+  // Per-UE state carried from one SCH_TTI.response into the next SCH_TTI.request as feedback
+  struct {
+    bool    has_prev_sol;   // true once at least one SCH_TTI.response has been processed
+    int16_t alloc_sol[2];  // last [rbStart, rbSize] from allocSol
+    int16_t mcs_sol;       // last MCS from mcsSelSol
+    int8_t  layer_sol;     // last layer count from layerSelSol
+  } cumac_last_sol;
+#endif
 } NR_UE_info_t;
 
 typedef struct {
