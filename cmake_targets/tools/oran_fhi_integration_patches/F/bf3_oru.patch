@@ -1,0 +1,15 @@
+diff --git a/fhi_lib/lib/ethernet/ethdi.c b/fhi_lib/lib/ethernet/ethdi.c
+index 8fb0ec2..96ed232 100644
+--- a/fhi_lib/lib/ethernet/ethdi.c
++++ b/fhi_lib/lib/ethernet/ethdi.c
+@@ -388,8 +388,8 @@ xran_ethdi_init_dpdk_io(char *name, const struct xran_io_cfg *io_cfg,
+             snprintf(socket_mem, RTE_DIM(socket_mem), "--socket-mem=0,%d", io_cfg->dpdkMemorySize);
+             snprintf(socket_limit, RTE_DIM(socket_limit), "--socket-limit=0,%d", io_cfg->dpdkMemorySize);
+         } else {
+-            snprintf(socket_mem, RTE_DIM(socket_mem), "--socket-mem=%d,0", io_cfg->dpdkMemorySize);
+-            snprintf(socket_limit, RTE_DIM(socket_limit), "--socket-limit=%d,0", io_cfg->dpdkMemorySize);
++            snprintf(socket_mem, RTE_DIM(socket_mem), "--socket-mem=%d", io_cfg->dpdkMemorySize);
++            snprintf(socket_limit, RTE_DIM(socket_limit), "--socket-limit=%d", io_cfg->dpdkMemorySize);
+         }
+     }
+ 
