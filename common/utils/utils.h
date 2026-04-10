@@ -51,6 +51,10 @@ extern "C" {
 #define IS_BIT_SET(a, b) ((a >> b) & 1)
 #define SET_BIT(a, b) (a | (1 << b))
 
+// Gives number of bytes to next 32 byte mem boundary from an element in array
+#define PTR_ALIGN_OFFSET_BYTES(ptr, bytes) (((bytes) - ((uintptr_t)(ptr) & (bytes - 1))) & (bytes - 1))
+#define PTR_ALIGN_OFFSET_ELEMS(ptr, bytes) (PTR_ALIGN_OFFSET_BYTES(ptr, bytes) / sizeof(*(ptr)))
+
 #ifdef __cplusplus
 #ifdef min
 #undef min
