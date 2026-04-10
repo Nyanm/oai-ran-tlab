@@ -1044,12 +1044,23 @@ static void pf_dl(gNB_MAC_INST *mac,
     fill_pdcch_vrb_map(mac, CC_id, &sched_ctrl->sched_pdcch, CCEIndex, sched_ctrl->aggregation_level, beam.idx);
 
     int l = get_dl_nrOfLayers(sched_ctrl, dl_bwp->dci_format);
+    int mcs = iterator->selected_mcs;
+#ifdef ENABLE_CUMAC
+    if (cumac_ue_id >= 0 && cumac_slot_data != NULL) {
+      if ((cumac_slot_data->taskBitMask & TASK_BIT(CUMAC_TASK_MCS_SELECTION))
+          && cumac_slot_data->mcsSelSol != NULL)
+        mcs = cumac_slot_data->mcsSelSol[cumac_ue_id];
+      if ((cumac_slot_data->taskBitMask & TASK_BIT(CUMAC_TASK_LAYER_SELECTION))
+          && cumac_slot_data->layerSelSol != NULL)
+        l = cumac_slot_data->layerSelSol[cumac_ue_id];
+    }
+#endif
     NR_sched_pdsch_t sched_pdsch = {
       // rbSize below
       .rbStart = rbStart,
-      .mcs = iterator->selected_mcs,
-      .R = nr_get_code_rate_dl(iterator->selected_mcs, dl_bwp->mcsTableIdx),
-      .Qm = nr_get_Qm_dl(iterator->selected_mcs, dl_bwp->mcsTableIdx),
+      .mcs = mcs,
+      .R = nr_get_code_rate_dl(mcs, dl_bwp->mcsTableIdx),
+      .Qm = nr_get_Qm_dl(mcs, dl_bwp->mcsTableIdx),
       // tb_size below
       .dl_harq_pid = sched_ctrl->available_dl_harq.head,
       .pucch_allocation = alloc,
