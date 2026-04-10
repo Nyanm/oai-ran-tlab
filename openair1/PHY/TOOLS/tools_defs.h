@@ -451,8 +451,154 @@ static inline void mult_cpx_conj_vector(const c16_t *x1, const c16_t *x2, c16_t 
     y_128[i] = oai_mm_cpx_mult_conj(x1_128[i], x2_128[i], output_shift);
 }
 
+static inline void mult_cpx_vector_scalar(const c16_t *x1, const c16_t *x2, c16_t *y, const uint32_t N, const int output_shift)
+{
+  for (uint_fast32_t i = 0; i < N; i++)
+    y[i] = c16mulShift(x1[i], x2[i], output_shift);
+}
+
+static inline void multadd_cpx_vector_scalar(const c16_t *x1, const c16_t *x2, c16_t *y, const uint32_t N, const int output_shift)
+{
+  for (uint_fast32_t i = 0; i < N; i++)
+    y[i] = c16maddShift(x1[i], x2[i], y[i], output_shift);
+}
+
+static inline void mult_cpx_vector_128(const c16_t *x1, // Q15
+                                       const c16_t *x2, // Q13
+                                       c16_t *y,
+                                       const uint32_t N,
+                                       const int output_shift)
+{
+  // Handle unaligned memory
+  const size_t m128_sz = sizeof(simde__m128i);
+  const uintptr_t m = PTR_ALIGN_OFFSET_ELEMS(x1, m128_sz);
+  // All arrays must have same unaligned offset
+  DevAssert(PTR_ALIGN_OFFSET_ELEMS(x2, m128_sz) == m && PTR_ALIGN_OFFSET_ELEMS(y, m128_sz) == m);
+  if (m)
+    mult_cpx_vector_scalar(x1, x2, y, m, output_shift);
+
+  const simde__m128i *x1_128 = (simde__m128i *)(x1 + m);
+  const simde__m128i *x2_128 = (simde__m128i *)(x2 + m);
+  simde__m128i *y_128 = (simde__m128i *)(y + m);
+  // SSE compute 4 cpx multiply for each loop
+  uint_fast32_t i = 0;
+  for (; i < ((N - m) / 4); i++) {
+    y_128[i] = oai_mm_cpx_mult(x1_128[i], x2_128[i], output_shift);
+  }
+  // Remaining elements
+  i = i * 4 + m;
+  if (i < N) {
+    mult_cpx_vector_scalar(x1 + i, x2 + i, y + i, N - i, output_shift);
+  }
+}
+
+static inline void multadd_cpx_vector_128(const c16_t *x1, // Q15
+                                          const c16_t *x2, // Q13
+                                          c16_t *y,
+                                          const uint32_t N,
+                                          const int output_shift)
+{
+  // Handle unaligned memory
+  const size_t m128_sz = sizeof(simde__m128i);
+  const uintptr_t m = PTR_ALIGN_OFFSET_ELEMS(x1, m128_sz);
+  // All arrays must have same unaligned offset
+  DevAssert(PTR_ALIGN_OFFSET_ELEMS(x2, m128_sz) == m && PTR_ALIGN_OFFSET_ELEMS(y, m128_sz) == m);
+  if (m)
+    multadd_cpx_vector_scalar(x1, x2, y, m, output_shift);
+
+  const simde__m128i *x1_128 = (simde__m128i *)(x1 + m);
+  const simde__m128i *x2_128 = (simde__m128i *)(x2 + m);
+  simde__m128i *y_128 = (simde__m128i *)(y + m);
+  // SSE compute 4 cpx multiply for each loop
+  uint_fast32_t i = 0;
+  for (; i < ((N - m) / 4); i++) {
+    simde__m128i result = oai_mm_cpx_mult(x1_128[i], x2_128[i], output_shift);
+    y_128[i] = simde_mm_adds_epi16(y_128[i], result);
+  }
+  // Remaining elements
+  i = i * 4 + m;
+  if (i < N)
+    multadd_cpx_vector_scalar(x1 + i, x2 + i, y + i, N - i, output_shift);
+}
+
+static inline void mult_cpx_vector_256(const c16_t *x1, // Q15
+                                       const c16_t *x2, // Q13
+                                       c16_t *y,
+                                       const uint32_t N,
+                                       const int output_shift)
+{
+  // Handle unaligned memory
+  const size_t m256_sz = sizeof(simde__m256i);
+  const uintptr_t m = PTR_ALIGN_OFFSET_ELEMS(x1, m256_sz);
+  // All arrays must have same unaligned offset
+  DevAssert(PTR_ALIGN_OFFSET_ELEMS(x2, m256_sz) == m && PTR_ALIGN_OFFSET_ELEMS(y, m256_sz) == m);
+  if (m)
+    mult_cpx_vector_128(x1, x2, y, m, output_shift);
+
+  const simde__m256i *x1_256 = (simde__m256i *)(x1 + m);
+  const simde__m256i *x2_256 = (simde__m256i *)(x2 + m);
+  simde__m256i *y_256 = (simde__m256i *)(y + m);
+  // AVX2 compute 8 cpx multiply for each loop
+  uint_fast32_t i = 0;
+  for (; i < ((N - m) / 8); i++) {
+    y_256[i] = oai_mm256_cpx_mult(x1_256[i], x2_256[i], output_shift);
+  }
+  // Remaining elements
+  i = i * 8 + m;
+  if (i < N)
+    mult_cpx_vector_128(x1 + i, x2 + i, y + i, N - i, output_shift);
+}
+
+static inline void multadd_cpx_vector_256(const c16_t *x1, // Q15
+                                          const c16_t *x2, // Q13
+                                          c16_t *y,
+                                          const uint32_t N,
+                                          const int output_shift)
+{
+  // Handle unaligned memory
+  const size_t m256_sz = sizeof(simde__m256i);
+  const uintptr_t m = PTR_ALIGN_OFFSET_ELEMS(x1, m256_sz);
+  // All arrays must have same unaligned offset
+  DevAssert(PTR_ALIGN_OFFSET_ELEMS(x2, m256_sz) == m && PTR_ALIGN_OFFSET_ELEMS(y, m256_sz) == m);
+  if (m)
+    multadd_cpx_vector_128(x1, x2, y, m, output_shift);
+
+  const simde__m256i *x1_256 = (simde__m256i *)(x1 + m);
+  const simde__m256i *x2_256 = (simde__m256i *)(x2 + m);
+  simde__m256i *y_256 = (simde__m256i *)(y + m);
+  // AVX2 compute 8 cpx multiply for each loop
+  uint_fast32_t i = 0;
+  for (; i < ((N - m) / 8); i++) {
+    simde__m256i result = oai_mm256_cpx_mult(x1_256[i], x2_256[i], output_shift);
+    y_256[i] = simde_mm256_adds_epi16(y_256[i], result);
+  }
+  // Remaining elements
+  i = i * 8 + m;
+  if (i < N)
+    multadd_cpx_vector_128(x1 + i, x2 + i, y + i, N - i, output_shift);
+}
+
+#define CPX_VECTOR_DISPATCH(x1, x2, y, N, output_shift, fn256, fn128, fn_scalar) \
+  do {                                                                           \
+    const size_t m256_sz = sizeof(simde__m256i);                                 \
+    const uintptr_t mx1 = PTR_ALIGN_OFFSET_ELEMS(x1, m256_sz);                   \
+    const uintptr_t mx2 = PTR_ALIGN_OFFSET_ELEMS(x2, m256_sz);                   \
+    const uintptr_t my = PTR_ALIGN_OFFSET_ELEMS(y, m256_sz);                     \
+    if ((mx1 == mx2) && (mx2 == my)) {                                           \
+      fn256(x1, x2, y, N, output_shift);                                         \
+    } else if (((mx1 ^ mx2 ^ my) == 4) || ((mx1 ^ mx2 ^ my) == 0)) {             \
+      fn128(x1, x2, y, N, output_shift);                                         \
+    } else {                                                                     \
+      LOG_W(PHY,                                                                 \
+            "Input arrays have different memory alignments. "                    \
+            "Consider proper alignment for better performance\n");               \
+      fn_scalar(x1, x2, y, N, output_shift);                                     \
+    }                                                                            \
+  } while (0)
+
 /*!
   Element-wise multiplication and accumulation of two complex vectors x1 and x2.
+  The function checks input memory for alignment and calls the right SIMD function.
   @param x1       - input 1    in the format  |Re0 Im0 Re1 Im1|,......,|Re(N-2)  Im(N-2) Re(N-1) Im(N-1)|
               We assume x1 with a dinamic of 15 bit maximum
   @param x2       - input 2    in the format  |Re0 Im0 Re1 Im1|,......,|Re(N-2)  Im(N-2) Re(N-1) Im(N-1)|
@@ -468,65 +614,116 @@ static inline void mult_cpx_vector(const c16_t *x1, // Q15
                                    const uint32_t N,
                                    const int output_shift)
 {
-  const simde__m256i *x1_256 = (simde__m256i *)x1;
-  const simde__m256i *x2_256 = (simde__m256i *)x2;
-  simde__m256i *y_256 = (simde__m256i *)y;
-  // AVX2 compute 8 cpx multiply for each loop
-  uint_fast32_t i = 0;
-  for (; i < (N / 8); i++) {
-    y_256[i] = oai_mm256_cpx_mult(x1_256[i], x2_256[i], output_shift);
-  }
-  // Remaining elements
-  i *= 8;
-  if (N % 8) {
-    for (; i < N; i++) {
-      y[i] = c16mulShift(x1[i], x2[i], output_shift);
-    }
-  }
+  CPX_VECTOR_DISPATCH(x1, x2, y, N, output_shift, mult_cpx_vector_256, mult_cpx_vector_128, mult_cpx_vector_scalar);
 }
 
 static inline void multadd_cpx_vector(const c16_t *x1, const c16_t *x2, c16_t *y, const uint32_t N, const int output_shift)
 {
-  const simde__m256i *x1_256 = (simde__m256i *)x1;
-  const simde__m256i *x2_256 = (simde__m256i *)x2;
-  simde__m256i *y_256 = (simde__m256i *)y;
-  // AVX2 compute 8 cpx multiply for each loop
+  CPX_VECTOR_DISPATCH(x1, x2, y, N, output_shift, multadd_cpx_vector_256, multadd_cpx_vector_128, multadd_cpx_vector_scalar);
+}
+
+static inline void multadd_cpx_vector_cpx_scalar_scalar(const c16_t *x1,
+                                                        const c16_t alpha,
+                                                        c16_t *y,
+                                                        const uint32_t N,
+                                                        const int output_shift)
+{
+  for (uint_fast32_t i = 0; i < N; i++)
+    y[i] = c16maddShift(x1[i], alpha, y[i], output_shift);
+}
+
+static inline void multadd_cpx_vector_cpx_scalar_128(const c16_t *x1,
+                                                     const c16_t alpha,
+                                                     c16_t *y,
+                                                     const uint32_t N,
+                                                     const int output_shift)
+{
+  // Handle unaligned memory
+  const size_t m128_sz = sizeof(simde__m128i);
+  const uintptr_t m = PTR_ALIGN_OFFSET_ELEMS(x1, m128_sz);
+  // All arrays must have same unaligned offset
+  DevAssert(PTR_ALIGN_OFFSET_ELEMS(y, m128_sz) == m);
+  if (m)
+    multadd_cpx_vector_cpx_scalar_scalar(x1, alpha, y, m, output_shift);
+
+  const simde__m128i *x1_128 = (simde__m128i *)(x1 + m);
+  simde__m128i alpha_128 = simde_mm_set1_epi32(*(int32_t *)&alpha);
+  simde__m128i *y_128 = (simde__m128i *)(y + m);
+  // SSE compute 4 cpx multiply for each loop
   uint_fast32_t i = 0;
-  for (; i < (N / 8); i++) {
-    simde__m256i result = oai_mm256_cpx_mult(x1_256[i], x2_256[i], output_shift);
-    y_256[i] = simde_mm256_adds_epi16(y_256[i], result);
+  for (; i < ((N - m) / 4); i++) {
+    simde__m128i result = oai_mm_cpx_mult(x1_128[i], alpha_128, output_shift);
+    y_128[i] = simde_mm_adds_epi16(y_128[i], result);
   }
   // Remaining elements
-  i *= 8;
-  if (N % 8) {
-    for (; i < N; i++) {
-      y[i] = c16maddShift(x1[i], x2[i], y[i], output_shift);
-    }
+  i = i * 4 + m;
+  if (i < N) {
+    multadd_cpx_vector_cpx_scalar_scalar(x1 + i, alpha, y + i, N - i, output_shift);
   }
 }
 
-static inline void multadd_cpx_vector_cpx_scalar(const c16_t *x1,
-                                                         const c16_t alpha,
-                                                         c16_t *y,
-                                                         const uint32_t N,
-                                                         const int output_shift)
+static inline void multadd_cpx_vector_cpx_scalar_256(const c16_t *x1,
+                                                     const c16_t alpha,
+                                                     c16_t *y,
+                                                     const uint32_t N,
+                                                     const int output_shift)
 {
-  const simde__m256i *x1_256 = (simde__m256i *)x1;
-  simde__m256i *y_256 = (simde__m256i *)y;
-  simde__m256i alpha_256 = simde_mm256_set1_epi32(*(int32_t *)&alpha);
+  // Handle unaligned memory
+  const size_t m256_sz = sizeof(simde__m256i);
+  const uintptr_t m = PTR_ALIGN_OFFSET_ELEMS(x1, m256_sz);
+  // All arrays must have same unaligned offset
+  DevAssert(PTR_ALIGN_OFFSET_ELEMS(y, m256_sz) == m);
+  if (m) {
+    multadd_cpx_vector_cpx_scalar_128(x1, alpha, y, m, output_shift);
+  }
+
+  const simde__m256i *x1_256 = (simde__m256i *)(x1 + m);
+  simde__m256i *y_256 = (simde__m256i *)(y + m);
   // AVX2 compute 8 cpx multiply for each loop
   uint_fast32_t i = 0;
-  for (; i < (N / 8); i++) {
+  simde__m256i alpha_256 = simde_mm256_set1_epi32(*(int32_t *)&alpha);
+  for (; i < ((N - m) / 8); i++) {
     simde__m256i result = oai_mm256_cpx_mult(x1_256[i], alpha_256, output_shift);
     y_256[i] = simde_mm256_adds_epi16(y_256[i], result);
   }
   // Remaining elements
-  i *= 8;
-  if (N % 8) {
-    for (; i < N; i++) {
-      y[i] = c16maddShift(x1[i], alpha, y[i], output_shift);
-    }
+  i = i * 8 + m;
+  if (i < N) {
+    multadd_cpx_vector_cpx_scalar_128(x1 + i, alpha, y + i, N - i, output_shift);
   }
+}
+
+#define CPX_VECTOR_SCALAR_DISPATCH(x1, alpha, y, N, output_shift, fn256, fn128, fn_scalar) \
+  do {                                                                                     \
+    const size_t m256_sz = sizeof(simde__m256i);                                           \
+    const uintptr_t mx1 = PTR_ALIGN_OFFSET_ELEMS(x1, m256_sz);                             \
+    const uintptr_t my = PTR_ALIGN_OFFSET_ELEMS(y, m256_sz);                               \
+    if (mx1 == my) {                                                                       \
+      fn256(x1, alpha, y, N, output_shift);                                                \
+    } else if (((mx1 ^ my) == 4) || ((mx1 ^ my) == 0)) {                                   \
+      fn128(x1, alpha, y, N, output_shift);                                                \
+    } else {                                                                               \
+      LOG_W(PHY,                                                                           \
+            "Input arrays have different memory alignments. "                              \
+            "Consider proper alignment for better performance\n");                         \
+      fn_scalar(x1, alpha, y, N, output_shift);                                            \
+    }                                                                                      \
+  } while (0)
+
+static inline void multadd_cpx_vector_cpx_scalar(const c16_t *x1,
+                                                 const c16_t alpha,
+                                                 c16_t *y,
+                                                 const uint32_t N,
+                                                 const int output_shift)
+{
+  CPX_VECTOR_SCALAR_DISPATCH(x1,
+                             alpha,
+                             y,
+                             N,
+                             output_shift,
+                             multadd_cpx_vector_cpx_scalar_256,
+                             multadd_cpx_vector_cpx_scalar_128,
+                             multadd_cpx_vector_cpx_scalar_scalar);
 }
 
 static const int16_t ones_epi16[16] __attribute__((aligned(32))) = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
