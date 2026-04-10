@@ -910,6 +910,10 @@ static bool set_fh_ru_config(void *mplane_api, const paramdef_t *rup, uint16_t f
 
   }
 
+  const char *comp_method_names[] = {"NONE", "BFP", "BLOCK_SCALE"};
+  LOG_I(HW, "O-RAN compression configured: compMeth=%s (%d), compMeth_PRACH=%s (%d)\n",
+        comp_method_names[ru_config->compMeth], ru_config->compMeth,
+        comp_method_names[ru_config->compMeth_PRACH], ru_config->compMeth_PRACH);
 
   //ru_config->compMeth = ru_config->iqWidth < 16 ? XRAN_COMPMETHOD_BLKFLOAT : XRAN_COMPMETHOD_NONE; // compression method
   //ru_config->compMeth_PRACH = ru_config->iqWidth_PRACH < 16 ? XRAN_COMPMETHOD_BLKFLOAT : XRAN_COMPMETHOD_NONE; // compression method for PRACH
