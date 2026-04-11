@@ -159,38 +159,28 @@ extern "C" {
   }
 
   __attribute__((always_inline)) inline c16_t c16mulShift(const c16_t a, const c16_t b, const int Shift) {
-    return (c16_t) {
-      .r = (int16_t)((a.r * b.r - a.i * b.i) >> Shift),
-      .i = (int16_t)((a.r * b.i + a.i * b.r) >> Shift)
-    };
+    return (c16_t){.r = SATURATE_S16((a.r * b.r - a.i * b.i) >> Shift), .i = SATURATE_S16((a.r * b.i + a.i * b.r) >> Shift)};
   }
 
   __attribute__((always_inline)) inline c16_t c16mulRealShift(const c16_t a, const int32_t b, const int Shift)
   {
-    return (c16_t){.r = (int16_t)((a.r * b) >> Shift), .i = (int16_t)((a.i * b) >> Shift)};
+    return (c16_t){.r = SATURATE_S16((a.r * b) >> Shift), .i = SATURATE_S16((a.i * b) >> Shift)};
   }
 
   __attribute__((always_inline)) inline c16_t c16MulConjShift(const c16_t a, const c16_t b, const int Shift)
   {
-    return (c16_t) {
-      .r = (int16_t)((a.r * b.r + a.i * b.i) >> Shift),
-      .i = (int16_t)((a.r * b.i - a.i * b.r) >> Shift)
-    };
+    return (c16_t){.r = SATURATE_S16((a.r * b.r + a.i * b.i) >> Shift), .i = SATURATE_S16((a.r * b.i - a.i * b.r) >> Shift)};
   }
 
   __attribute__((always_inline)) inline c16_t c16maddShift(const c16_t a, const c16_t b, c16_t c, const int Shift) {
-    return (c16_t) {
-      .r = (int16_t)(((a.r * b.r - a.i * b.i ) >> Shift) + c.r),
-      .i = (int16_t)(((a.r * b.i + a.i * b.r ) >> Shift) + c.i)
-    };
+    return (c16_t){.r = SATURATE_S16(((a.r * b.r - a.i * b.i) >> Shift) + c.r),
+                   .i = SATURATE_S16(((a.r * b.i + a.i * b.r) >> Shift) + c.i)};
   }
 
   __attribute__((always_inline)) inline c16_t c16maddConjShift(const c16_t a, const c16_t b, c16_t c, const int Shift)
   {
-    return (c16_t) {
-      .r = (int16_t)(((a.r * b.r + a.i * b.i ) >> Shift) + c.r),
-      .i = (int16_t)(((a.r * b.i - a.i * b.r ) >> Shift) + c.i)
-    };
+    return (c16_t){.r = SATURATE_S16(((a.r * b.r + a.i * b.i) >> Shift) + c.r),
+                   .i = SATURATE_S16(((a.r * b.i - a.i * b.r) >> Shift) + c.i)};
   }
 
   __attribute__((always_inline)) inline c32_t c32x16mulShift(const c16_t a, const c16_t b, const int Shift) {
