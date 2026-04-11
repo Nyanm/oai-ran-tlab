@@ -147,7 +147,7 @@ int main()
     }
     AlignedVector512<c16_t> output;
     output.resize(vector_size);
-    mult_complex_vectors(input1.data(), input2.data(), output.data(), vector_size, shift);
+    mult_cpx_vector(input1.data(), input2.data(), output.data(), vector_size, shift);
     for (int i = 0; i < vector_size; i++) {
       c16_t res = c16mulShift(input1[i], input2[i], shift);
       if (output[i].r != res.r || output[i].i != res.i) {
