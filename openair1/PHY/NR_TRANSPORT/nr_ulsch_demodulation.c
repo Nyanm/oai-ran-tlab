@@ -313,43 +313,43 @@ static void inner_rx(PHY_VARS_gNB *gNB,
 
   if (nb_layer == 2) {
     if (rel15_ul->qam_mod_order <= 6) {
-      nr_ulsch_compute_ML_llr((c16_t *)&pusch_vars->rxdataF_comp[0][symbol * buffer_length],
-                              (c16_t *)&pusch_vars->rxdataF_comp[nb_rx_ant][symbol * buffer_length],
-                              rxF_ch_maga[0],
-                              rxF_ch_maga[1],
-                              llr[0],
-                              llr[1],
-                              rho[0][1],
-                              rho[1][0],
-                              pusch_vars->ul_valid_re_per_slot[symbol],
-                              rel15_ul->qam_mod_order);
+      nr_compute_ML_llr(pusch_vars->llr_offset[symbol],
+                        (c16_t *)&pusch_vars->rxdataF_comp[0][symbol * buffer_length],
+                        (c16_t *)&pusch_vars->rxdataF_comp[nb_rx_ant][symbol * buffer_length],
+                        rxF_ch_maga[0],
+                        rxF_ch_maga[1],
+                        llr[0],
+                        llr[1],
+                        rho[0][1],
+                        rho[1][0],
+                        pusch_vars->ul_valid_re_per_slot[symbol],
+                        rel15_ul->qam_mod_order);
     }
     else {
-      nr_ulsch_mmse_2layers(pusch_vars->rxdataF_comp,
-                            buffer_length,
-                            nb_rx_ant,
-                            rxF_ch_maga,
-                            rxF_ch_magb,
-                            rxF_ch_magc,
-                            chFext,
-                            rel15_ul->rb_size,
-                            rel15_ul->qam_mod_order,
-                            pusch_vars->log2_maxh,
-                            symbol,
-                            pusch_vars->ul_valid_re_per_slot[symbol],
-                            nvar);
-    }
-  }
+      nr_mmse_2layers((const c16_t **)pusch_vars->rxdataF_comp,
+                       buffer_length,
+                       nb_rx_ant,
+                       rxF_ch_maga,
+                       rxF_ch_magb,
+                       rxF_ch_magc,
+                       chFext,
+                       rel15_ul->rb_size,
+                       rel15_ul->qam_mod_order,
+                       pusch_vars->log2_maxh,
+                       symbol * buffer_length,
+                       symbol,
+                       pusch_vars->ul_valid_re_per_slot[symbol],
+                       nvar);
+    }  }
   if (nb_layer != 2 || rel15_ul->qam_mod_order > 6)
     for (int aatx = 0; aatx < nb_layer; aatx++)
-      nr_ulsch_compute_llr(&pusch_vars->rxdataF_comp[aatx * nb_rx_ant][symbol * buffer_length],
-                           rxF_ch_maga[aatx],
-                           rxF_ch_magb[aatx],
-                           rxF_ch_magc[aatx],
-                           llr[aatx],
-                           pusch_vars->ul_valid_re_per_slot[symbol],
-                           symbol,
-                           rel15_ul->qam_mod_order);
+      nr_compute_llr((const c16_t *)&pusch_vars->rxdataF_comp[aatx * nb_rx_ant][symbol * buffer_length],
+                      (const c16_t *)&rxF_ch_maga[aatx],
+                      (const c16_t *)&rxF_ch_magb[aatx],
+                      (const c16_t *)&rxF_ch_magc[aatx],
+                      llr[aatx],
+                      pusch_vars->ul_valid_re_per_slot[symbol],
+                      rel15_ul->qam_mod_order);
 }
 
 typedef struct puschSymbolProc_s {

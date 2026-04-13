@@ -755,41 +755,22 @@ static int nr_dlsch_llr(const NR_UE_DLSCH_t *dlsch,
                         const c16_t dl_ch_magb[rx_size_symbol],
                         const c16_t dl_ch_magr[rx_size_symbol],
                         const int nb_antennas_rx,
-                        const c16_t rxdataF_comp[dlsch->Nl][nb_antennas_rx][rx_size_symbol],
+                        const c16_t rxdataF_comp[dlsch->Nl * nb_antennas_rx][rx_size_symbol],
                         const int llrSize,
                         int16_t layer_llr[dlsch->Nl][llrSize])
 {
-  switch (dlsch->dlsch_config.qamModOrder) {
-    case 2 :
-      for (int l = 0; l < dlsch[0].Nl; l++)
-        nr_qpsk_llr(rxdataF_comp[l][0], layer_llr[l], len);
-      break;
 
-    case 4 :
-      for (int l = 0; l < dlsch[0].Nl; l++)
-        nr_16qam_llr(rxdataF_comp[l][0], dl_ch_mag, layer_llr[l], len);
-      break;
-
-    case 6 :
-      for(int l=0; l < dlsch[0].Nl; l++)
-        nr_64qam_llr(rxdataF_comp[l][0], dl_ch_mag, dl_ch_magb, layer_llr[l], len);
-      break;
-
-    case 8:
-      for(int l=0; l < dlsch[0].Nl; l++)
-        nr_256qam_llr(rxdataF_comp[l][0],
-                      dl_ch_mag,
-                      dl_ch_magb,
-                      dl_ch_magr,
-                      layer_llr[l],
-                      len);
-      break;
-
-    default:
-      AssertFatal(false, "Unknown mod_order!!!!\n");
-      break;
+  for (int l = 0; l < dlsch[0].Nl; l++)
+  {
+    nr_compute_llr(&rxdataF_comp[l * nb_antennas_rx][0],
+                    dl_ch_mag,
+                    dl_ch_magb,
+                    dl_ch_magr,
+                    layer_llr[l],
+                    len,
+                    dlsch->dlsch_config.qamModOrder);
   }
-
+ 
   return 0;
 }
 //==============================================================================================
@@ -1228,21 +1209,43 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
     // Generate LLR from PTRS compensated signal
     start_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
     for (int llr_sym = startSymbIdx; llr_sym < startSymbIdx + nbSymb; llr_sym++) {
-      nr_dlsch_llr(dlsch,
-                   dl_valid_re[llr_sym],
-                   rx_size_symbol,
-                   dl_ch_mag[llr_sym][0][0],
-                   dl_ch_magb[llr_sym][0][0],
-                   dl_ch_magr[llr_sym][0][0],
-                   n_rx,
-                   rxdataF_comp[llr_sym],
-                   llr_per_symbol,
-                   layer_llr[llr_sym]);
+
+      // For 2 layers and up to 64QAM, apply the exact max-log LLR computation with dual-stream interference consideration.
+      // For other cases (1, 3 and 4 layers or higher modulation), use the MRC output and apply the approximate LLR computation.
+      if ((nl == 2) && (dlsch_config->qamModOrder <= 6))
+      {
+        nr_compute_ML_llr(0,
+                          &rxdataF_comp[llr_sym][0][0],
+                          &rxdataF_comp[llr_sym][n_rx][0],
+                          dl_ch_mag[llr_sym][0],
+                          dl_ch_mag[llr_sym][1],
+                          &layer_llr[llr_sym][0][0],
+                          &layer_llr[llr_sym][1][0],
+                          rho[0][1],
+                          rho[1][0],
+                          dl_valid_re[llr_sym],
+                          dlsch_config->qamModOrder);
+      }
+      else
+      {
+        nr_dlsch_llr(dlsch,
+                     dl_valid_re[llr_sym],
+                     rx_size_symbol,
+                     dl_ch_mag[llr_sym][0],
+                     dl_ch_magb[llr_sym][0],
+                     dl_ch_magr[llr_sym][0],
+                     n_rx,
+                     rxdataF_comp[llr_sym],
+                     llr_per_symbol,
+                     layer_llr[llr_sym]);
+      }
     }
     stop_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
+
     start_meas_nr_ue_phy(ue, DLSCH_LAYER_DEMAPPING);
     nr_dlsch_layer_demapping(nl, dlsch_config->qamModOrder, llr_per_symbol, layer_llr, dlsch, dl_valid_re, llr[0]);
     stop_meas_nr_ue_phy(ue, DLSCH_LAYER_DEMAPPING);
+
   /*
     for (int i=0; i < 2; i++){
       snprintf(filename, 50,  "llr%d_symb_%d_nr_slot_rx_%d.m", i, symbol, nr_slot_rx);
