@@ -20,12 +20,12 @@ if (params.LockResources != null && params.LockResources.trim().length() > 0)
 // Global Parameters. Normally they should be populated when the master job
 // triggers the slave job with parameters
 
-def sourceRepository = params.eNB_Repository ?: env.GIT_URL
-def sourceBranch = params.eNB_Branch ?: env.GIT_BRANCH
-def targetRepository = params.Target_Repository ?: sourceRepository
-def targetBranch = params.eNB_TargetBranch ?: 'develop'
-def commitID = params.eNB_CommitID ?: env.GIT_COMMIT
-def is_MR = params.eNB_mergeRequest ?: false
+def sourceRepository = params.sourceRepo ?: env.GIT_URL
+def sourceBranch = params.sourceBranch ?: env.GIT_BRANCH
+def targetRepository = params.targetRepo ?: sourceRepository
+def targetBranch = params.targetBranch ?: 'develop'
+def commitID = params.sourceCommit ?: env.GIT_COMMIT
+def is_MR = params.isMergeRequest ?: false
 
 def flexricOption = ""
 def runWithOC = false
@@ -50,7 +50,7 @@ pipeline {
           JOB_TIMESTAMP = sh(returnStdout: true, script: 'date --utc --rfc-3339=seconds | sed -e "s#+00:00##"').trim()
         }
         // update the build name and description
-        buildName "${params.eNB_MR}"
+        buildName "${params.mrNumber}"
         buildDescription "Branch : ${sourceBranch}"
       }
     }
@@ -139,8 +139,8 @@ pipeline {
                     try {
                       timeout (time: 60, unit: 'MINUTES') {
                         sh """
-                          python3 main.py --mode=TesteNB --ranRepository=${targetRepository} \
-                                          --ranBranch=${sourceBranch} --ranCommitID=${commitID} \
+                          python3 main.py --mode=TesteNB --ranRepository=${targetRepo} \
+                                          --ranBranch=${sourceBranch} --ranCommitID=${sourceCommit} \
                                           --ranAllowMerge=${is_MR} --ranTargetBranch=${targetBranch} \
                                           --eNBSourceCodePath=${params.eNB_SourceCodePath} --XMLTestFile=${xmlFile} \
                                           --OCUserName=${OC_Username} --OCPassword=${OC_Password} --OCProjectName=${OC_ProjectName} \
@@ -160,8 +160,8 @@ pipeline {
                   try {
                     timeout (time: 60, unit: 'MINUTES') {
                       sh """
-                        python3 main.py --mode=TesteNB --ranRepository=${targetRepository} \
-                                        --ranBranch=${sourceBranch} --ranCommitID=${commitID} \
+                        python3 main.py --mode=TesteNB --ranRepository=${targetRepo} \
+                                        --ranBranch=${sourceBranch} --ranCommitID=${sourceCommit} \
                                         --ranAllowMerge=${is_MR} --ranTargetBranch=${targetBranch} \
                                         --eNBSourceCodePath=${params.eNB_SourceCodePath} --XMLTestFile=${xmlFile} \
                                         ${flexricOption}
