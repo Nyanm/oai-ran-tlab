@@ -460,7 +460,6 @@ static bool e1_decode_pdu_session_to_setup_item(pdu_session_to_setup_t *out, E1A
   E1AP_DRB_To_Setup_List_NG_RAN_t *drb2SetupList = &item->dRB_To_Setup_List_NG_RAN;
   EQ_CHECK_GENERIC(drb2SetupList->list.count > 0, "%d", drb2SetupList->list.count, 0);
   out->numDRB2Setup = drb2SetupList->list.count;
-  _EQ_CHECK_INT(out->numDRB2Setup, 1); // can only handle one DRB per PDU session
   for (int j = 0; j < drb2SetupList->list.count; j++) {
     DRB_nGRAN_to_setup_t *drb = out->DRBnGRanList + j;
     E1AP_DRB_To_Setup_Item_NG_RAN_t *drb2Setup = drb2SetupList->list.array[j];
@@ -1657,7 +1656,6 @@ static bool e1_decode_pdu_session_to_setup_mod_item(pdu_session_to_setup_t *out,
   const E1AP_DRB_To_Setup_Mod_List_NG_RAN_t *drb2SetupList = &item->dRB_To_Setup_Mod_List_NG_RAN;
   EQ_CHECK_GENERIC(drb2SetupList->list.count > 0, "%d", drb2SetupList->list.count, 0);
   out->numDRB2Setup = drb2SetupList->list.count;
-  _EQ_CHECK_INT(out->numDRB2Setup, 1); // can only handle one DRB per PDU session
   for (int j = 0; j < drb2SetupList->list.count; j++) {
     DRB_nGRAN_to_setup_t *drb = out->DRBnGRanList + j;
     const E1AP_DRB_To_Setup_Mod_Item_NG_RAN_t *drb2Setup = drb2SetupList->list.array[j];
