@@ -8,6 +8,8 @@
 #include "PHY/TOOLS/tools_defs.h"
 #include "PHY/NR_REFSIG/nr_refsig.h"
 #include "PHY/MODULATION/nr_modulation.h"
+#include "nr_channel_compensation.h"
+#include "nr_llr_common.h"
 
 void init_byte2m128i(void);
 // tables for mcs values for different payloads
@@ -377,84 +379,4 @@ int nr_get_ssb_start_sc(int scs,
                         int ssb_sco,
                         frequency_range_t freq_range);
 
-void nr_channel_compensation(uint32_t buffer_length,
-                             int nb_rx_ant,
-                             c16_t rxFext[][buffer_length],
-                             c16_t chFext[][nb_rx_ant][buffer_length],
-                             c16_t rxF_ch_maga[][buffer_length],
-                             c16_t rxF_ch_magb[][buffer_length],
-                             c16_t rxF_ch_magc[][buffer_length],
-                             c16_t **rxComp,
-                             int nb_layers,
-                             c16_t rho[][nb_layers][buffer_length],
-                             int numLoopCnt,
-                             int mod_order,
-                             uint32_t bufOffset,
-                             uint32_t output_shift);
-
-uint8_t nr_mmse_2layers(const c16_t **rxdataF_comp,
-                        uint32_t buffer_length,
-                        int nb_rx_ant,
-                        c16_t ul_ch_mag[][buffer_length],
-                        c16_t ul_ch_magb[][buffer_length],
-                        c16_t ul_ch_magc[][buffer_length],
-                        c16_t ul_ch_estimates_ext[][nb_rx_ant][buffer_length],
-                        unsigned short nb_rb,
-                        unsigned char mod_order,
-                        int shift,
-                        uint32_t bufOffset,
-                        unsigned char symbol,
-                        int length,
-                        uint32_t noise_var);
-
-void nr_qpsk_llr_2layers(c16_t *stream0_in,
-                         c16_t *stream1_in,
-                         int16_t *stream0_out,
-                         c16_t *rho01,
-                         uint32_t length);
-
-void nr_16qam_llr_2layers(c16_t *stream0_in,
-                          c16_t *stream1_in,
-                          c16_t *ch_mag,
-                          c16_t *ch_mag_i,
-                          int16_t *stream0_out,
-                          c16_t *rho01,
-                          uint32_t length);
-
-void nr_64qam_llr_2layers(c16_t *stream0_in,
-                          c16_t *stream1_in,
-                          c16_t *ch_mag,
-                          c16_t *ch_mag_i,
-                          int16_t *stream0_out,
-                          c16_t *rho01,
-                          uint32_t length);
-
-/** \brief This function computes the log-likelihood ratios for 4, 16, and 64 QAM
-    @param rxdataF_comp Compensated channel output
-    @param ul_ch_mag  uplink channel magnitude multiplied by the 1st amplitude threshold in QAM 64
-    @param ul_ch_magb uplink channel magnitude multiplied by the 2bd amplitude threshold in QAM 64
-    @param ulsch_llr llr output
-    @param nb_re number of REs for this allocation
-    @param symbol OFDM symbol index in sub-frame
-    @param mod_order modulation order
-*/
-void nr_compute_llr(const c16_t *rxdataF_comp,
-                    const c16_t *ul_ch_mag,
-                    const c16_t *ul_ch_magb,
-                    const c16_t *ul_ch_magc,
-                    int16_t *ulsch_llr,
-                    uint32_t nb_re,
-                    uint8_t mod_order);
-
-void nr_compute_ML_llr(uint32_t rxdataF_ext_offset,
-                       c16_t *rxdataF_comp0,
-                       c16_t *rxdataF_comp1,
-                       c16_t *ul_ch_mag0,
-                       c16_t *ul_ch_mag1,
-                       int16_t *llr_layers0,
-                       int16_t *llr_layers1,
-                       c16_t *rho0,
-                       c16_t *rho1,
-                       uint32_t nb_re,
-                       uint8_t mod_order);
 #endif
