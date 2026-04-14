@@ -27,7 +27,7 @@ set -x
 # docker build . -f docker/Dockerfile.base.ubuntu -t ran-base
 
 docker tag oai-nr-ue oai-ci/oai-nr-ue:develop-${SHORT_COMMIT_SHA}
-docker tag oai-gnb oai-ci/oai-gnb:develop-${SHORT_COMMIT_SHA}
+docker tag oai-gnb-fhi72 oai-ci/oai-gnb-fhi72:develop-${SHORT_COMMIT_SHA}
 docker tag oai-nr-cuup oai-ci/oai-nr-cuup:develop-${SHORT_COMMIT_SHA}
 
 python3 main.py --mode=InitiateHtml --ranRepository=NONE --ranBranch=${CURRENT_BRANCH} \
