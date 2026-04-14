@@ -94,6 +94,9 @@ static struct xran_prb_map get_xran_prb_map(const struct xran_fh_config *f, cons
   e->nBeamIndex = 0;
   e->compMethod = f->ru_conf.compMeth;
   e->iqWidth = f->ru_conf.iqWidth;
+#if defined K_RELEASE
+  memset(&prbmap.sFrontHaulRxPacketCtrl, 0, XRAN_NUM_OF_SYMBOL_PER_SLOT * sizeof(struct xran_rx_packet_ctl));
+#endif
   return prbmap;
 }
 

@@ -44,6 +44,7 @@ int xran_is_prach_slot(uint8_t PortId, uint32_t subframe_id, uint32_t slot_id
 
 #ifndef USE_POLLING
 extern notifiedFIFO_t oran_sync_fifo;
+#define MAX_QUEUE_LENGTH_NO_JUMP 3
 atomic_int xran_queue_length = 0;
 #else
 volatile oran_sync_info_t oran_sync_info = {0};
@@ -135,6 +136,19 @@ void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status
       info->f = frame;
 #if defined K_RELEASE
       info->mu = mu;
+
+      oran_buf_list_t *bufs = get_xran_buffers(ru_id);
+      struct xran_fh_config *fh_config = get_xran_fh_config(ru_id);
+      for (uint16_t cc_id = 0; cc_id < 1 /* fh_config->nCC */; cc_id++) { // OAI does not support multiple CC yet.
+        for(uint32_t ant_id = 0; ant_id < fh_config->neAxc; ant_id++) {
+          struct xran_prb_map *pRbMap = (struct xran_prb_map *)bufs->dstcp[ant_id][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
+          AssertFatal(pRbMap != NULL, "(%d:%d:%d)pRbMap == NULL. Aborting.\n", cc_id, tti % XRAN_N_FE_BUF_LEN, ant_id);
+          for (uint32_t sym_id = 0; sym_id < XRAN_NUM_OF_SYMBOL_PER_SLOT; sym_id++) {
+            info->nRxPkt[cc_id][ant_id][sym_id] = pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt;
+            pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt = 0;
+          }
+        }
+      }
 #endif
       LOG_D(HW, "Push %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, info->sl, slot, ru_id, subframe, last_slot);
       atomic_fetch_add(&xran_queue_length, 1);
@@ -146,6 +160,19 @@ void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status
       oran_sync_info.f = frame;
 #if defined K_RELEASE
       oran_sync_info.mu = mu;
+
+      oran_buf_list_t *bufs = get_xran_buffers(ru_id);
+      struct xran_fh_config *fh_config = get_xran_fh_config(ru_id);
+      for (uint16_t cc_id = 0; cc_id < 1 /* fh_config->nCC */; cc_id++) { // OAI does not support multiple CC yet.
+        for(uint32_t ant_id = 0; ant_id < fh_config->neAxc; ant_id++) {
+          struct xran_prb_map *pRbMap = (struct xran_prb_map *)bufs->dstcp[ant_id][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
+          AssertFatal(pRbMap != NULL, "(%d:%d:%d)pRbMap == NULL. Aborting.\n", cc_id, tti % XRAN_N_FE_BUF_LEN, ant_id);
+          for (uint32_t sym_id = 0; sym_id < XRAN_NUM_OF_SYMBOL_PER_SLOT; sym_id++) {
+            oran_sync_info.nRxPkt[cc_id][ant_id][sym_id] = pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt;
+            pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt = 0;
+          }
+        }
+      }
 #endif
 #endif
     } else
@@ -178,7 +205,7 @@ static int read_prach_data(ru_info_t *ru, int frame, int slot
 #if defined K_RELEASE
                                                              , uint8_t mu
 #endif
-                                                                         )
+                                                             )
 {
   /* calculate tti and subframe_id from frame, slot num */
   int sym_idx = 0;
@@ -341,7 +368,6 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
   atomic_fetch_sub(&xran_queue_length, 1);
   oran_sync_info_t *info = NotifiedFifoData(res);
 
-#define MAX_QUEUE_LENGTH_NO_JUMP 3
   if (xran_queue_length > 0 && xran_queue_length < MAX_QUEUE_LENGTH_NO_JUMP) {
     LOG_D(HW, "%4d.%2d TTI processing delay detected\n", info->f, info->sl);
   } else if (xran_queue_length >= MAX_QUEUE_LENGTH_NO_JUMP) {
@@ -440,28 +466,38 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
         int start_totalRB = pRbMap->prbMap[0].nRBStart;
         int32_t local_dst[num_totalRB * N_SC_PER_PRB] __attribute__((aligned(64)));
 
+#if defined K_RELEASE
+        struct xran_prb_elm *pRbElm = &pRbMap->prbMap[0];
+        struct xran_rx_packet_ctl *p_rx_packet_ctl = &pRbMap->sFrontHaulRxPacketCtrl[sym_idx];
+        uint32_t one_rb_size =
+            (((pRbElm->iqWidth == 0) || (pRbElm->iqWidth == 16)) ? (N_SC_PER_PRB * 2 * 2) : (3 * pRbElm->iqWidth + 1));
+#ifndef USE_POLLING
+	int32_t nRxPkt = info->nRxPkt[cc_id][ant_id][sym_idx];
+#else
+	int32_t nRxPkt = oran_sync_info.nRxPkt[cc_id][ant_id][sym_idx];
+#endif
+        LOG_D(HW, "nRxPkt %d\n", nRxPkt);
+        for (int pkt_idx = 0; pkt_idx < nRxPkt; pkt_idx++) {
+          uint8_t *pData;
+          if (fh_init->mtu < p_rx_packet_ctl->nRBSize[pkt_idx] * one_rb_size)
+            pData = bufs->dst[ant_id % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN]
+                        .pBuffers[sym_idx % XRAN_NUM_OF_SYMBOL_PER_SLOT]
+                        .pData;
+          else
+            pData = p_rx_packet_ctl->pData[pkt_idx];
+          int numRB = p_rx_packet_ctl->nRBSize[pkt_idx];
+          int startRB = p_rx_packet_ctl->nRBStart[pkt_idx];
+          // num_prbu & start_prbu are for UL U-plane only
+          LOG_D(HW, "p_rx_packet_ctl[%d] startRB[%d]:numRB[%d]\n", pkt_idx, startRB, numRB);
+          {
+            {
+#elif defined F_RELEASE
         LOG_D(HW, "[%d.%d] pRbMap->nPrbElm %d\n", *frame, *slot, pRbMap->nPrbElm);
         for (uint32_t idxElm = 0; idxElm < pRbMap->nPrbElm; idxElm++) {
           int numRB, startRB;
           uint8_t *pData;
           struct xran_section_desc *p_sec_desc = NULL;
           struct xran_prb_elm *pRbElm = &pRbMap->prbMap[idxElm];
-#if defined K_RELEASE
-          uint32_t one_rb_size =
-              (((pRbElm->iqWidth == 0) || (pRbElm->iqWidth == 16)) ? (N_SC_PER_PRB * 2 * 2) : (3 * pRbElm->iqWidth + 1));
-          if (fh_init->mtu < num_totalRB * one_rb_size)
-            pData = bufs->dst[ant_id % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN]
-                        .pBuffers[sym_idx % XRAN_NUM_OF_SYMBOL_PER_SLOT]
-                        .pData;
-          else {
-            p_sec_desc = &pRbElm->sec_desc[sym_idx];
-            pData = p_sec_desc->pData;
-          }
-          numRB = num_totalRB;
-          startRB = start_totalRB;
-          {
-            {
-#elif defined F_RELEASE
           // UP_nRBSize & UP_nRBStart are for DL U-plane only
           LOG_D(HW, "[%d.%d] idxElm[%d] startSym[%d]:numSym[%d] UP_startRB[%d]:UP_numRB[%d] sym_idx[%d] ant_id[%d] pRbElm->nRBStart[%d]:pRbElm->nRBSize[%d]\n", *frame, *slot, idxElm, pRbElm->nStartSymb, pRbElm->numSymb, pRbElm->UP_nRBStart, pRbElm->UP_nRBSize, sym_idx, ant_id, pRbElm->nRBStart, pRbElm->nRBSize);
           for (int idxDesc = 0; idxDesc < XRAN_MAX_FRAGMENT; idxDesc++) {
