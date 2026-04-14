@@ -1888,7 +1888,7 @@ typedef struct {
   uint16_t num_ue_srs_ports;            // Nu: Number of sampled UE SRS ports. Value: 07
   uint16_t prg_size;                    // Size in RBs of a precoding resource block group (PRG) – to which the same digital beamforming gets applied. Value: 1->272
   uint16_t num_prgs;                    // Number of PRGs Np to be reported for this SRS PDU. Value: 0-> 272
-  uint8_t channel_matrix[272*2*8*4];    // Array of (numPRGs*Nu*Ng) entries of the type denoted by iqRepresentation H{PRG pI} [ueAntenna uI, gNB antenna gI] = array[uI*Ng*Np + gI*Np + pI]; uI: 0…Nu-1 (UE antenna index); gI: 0…Ng-1 (gNB antenna index); pI: 0…Np-1 (PRG index)
+  uint8_t channel_matrix[272*2*64*4];    // Array of (numPRGs*Nu*Ng) entries of the type denoted by iqRepresentation H{PRG pI} [ueAntenna uI, gNB antenna gI] = array[uI*Ng*Np + gI*Np + pI]; uI: 0…Nu-1 (UE antenna index); gI: 0…Ng-1 (gNB antenna index); pI: 0…Np-1 (PRG index)
 } nfapi_nr_srs_normalized_channel_iq_matrix_t;
 
 // Beamforming report
@@ -1915,7 +1915,7 @@ typedef struct {
 typedef struct {
   uint16_t tag;                         // 0: Report is carried directly in the value field; 3: The offset from the end of the control portion of the message to the beginning of the report. Other values are reserved.
   uint32_t length;                      // Length of the actual report in bytes, without the padding bytes.
-  uint32_t value[16384];                // tag=0: Only the most significant bytes of the size indicated by ‘length’ field are valid. Remaining bytes are zero padded to the nearest 32-bit bit boundary; Tag=2 Offset from the end of the control portion of the message to the payload is in the value field. Occupies 32-bits.
+  uint32_t value[272*4*64];             // Dimensions: max_prgs=272, max_Nu=4 (UE SRS ports), max_Ng=64 (gNB antenna elements), uint32_t entries (covers max iqSize=4 bytes per complex sample)                // tag=0: Only the most significant bytes of the size indicated by ‘length’ field are valid. Remaining bytes are zero padded to the nearest 32-bit bit boundary; Tag=2 Offset from the end of the control portion of the message to the payload is in the value field. Occupies 32-bits.
 } nfapi_srs_report_tlv_t;
 
 typedef struct {

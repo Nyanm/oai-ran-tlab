@@ -4396,7 +4396,7 @@ int unpack_nr_srs_normalized_channel_iq_matrix(void *pMessageBuf,
     return -1;
   }
 
-  uint16_t channel_matrix_size = nr_srs_normalized_channel_iq_matrix->num_prgs
+  uint32_t channel_matrix_size = nr_srs_normalized_channel_iq_matrix->num_prgs
                                  * nr_srs_normalized_channel_iq_matrix->num_ue_srs_ports
                                  * nr_srs_normalized_channel_iq_matrix->num_gnb_antenna_elements;
   if (nr_srs_normalized_channel_iq_matrix->normalized_iq_representation == 0) {
