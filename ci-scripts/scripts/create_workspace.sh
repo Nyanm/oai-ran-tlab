@@ -6,22 +6,21 @@ function die() {
   exit 1
 }
 
-[ $# -ge 3 -a $# -le 4 ] || die "usage: $0 <directory> <repository> <ref> [<merge-ref>]"
+[ $# -eq 3 ] || die "usage: $0 <directory> <branch> <commit>"
 
 set -ex
 
 dir=$1
-repo=$2
-ref=$3
-merge=$4
+branch=$2
+commit=$3
+repo="git@asterix:/home/git/openairinterface5g.git"
 
-rm -rf ${dir}
-git clone --filter=blob:none -n ${repo} ${dir}
-cd ${dir}
+rm -rf "${dir}"
+git clone --filter=blob:none --branch "${branch}" "${repo}" "${dir}"
+cd "${dir}"
 git config user.email "jenkins@openairinterface.org"
 git config user.name "OAI Jenkins"
 git config advice.detachedHead false
 mkdir -p cmake_targets/log
-git checkout -f ${ref}
-[ -n "${merge}" ] && git fetch origin ${merge} && git merge --ff FETCH_HEAD -m "Temporary merge for CI"
+git checkout -f "${commit}"
 exit 0

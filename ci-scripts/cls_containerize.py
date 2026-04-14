@@ -32,17 +32,14 @@ from cls_ci_helper import archiveArtifact
 IMAGES = ['oai-enb', 'oai-lte-ru', 'oai-lte-ue', 'oai-gnb', 'oai-nr-cuup', 'oai-gnb-aw2s', 'oai-nr-ue', 'oai-enb-asan', 'oai-gnb-asan', 'oai-lte-ue-asan', 'oai-nr-ue-asan', 'oai-nr-cuup-asan', 'oai-gnb-aerial', 'oai-gnb-fhi72']
 DEFAULT_REGISTRY = "gracehopper3-oai.sboai.cs.eurecom.fr"
 
-def CreateWorkspace(host, sourcePath, ranRepository, ranCommitID, ranTargetBranch, ranAllowMerge):
+def CreateWorkspace(host, sourcePath, ranCommitID, ranBranch):
 	if ranCommitID == '':
 		logging.error('need ranCommitID in CreateWorkspace()')
 		raise ValueError('Insufficient Parameter in CreateWorkspace(): need ranCommitID')
 
 	script = "scripts/create_workspace.sh"
-	options = f"{sourcePath} {ranRepository} {ranCommitID}"
-	if ranAllowMerge:
-		if ranTargetBranch == '':
-			ranTargetBranch = 'develop'
-		options += f" {ranTargetBranch}"
+	shortCommit = ranCommitID[0:8]
+	options = f"{sourcePath} {ranBranch}-{shortCommit}"
 	logging.info(f'execute "{script}" with options "{options}" on node {host}')
 	with cls_cmd.getConnection(host) as c:
 		ret = c.exec_script(script, 90, options)
@@ -402,7 +399,7 @@ class Containerize():
 		buildProxy = ret.returncode != 0 # if no image, build new proxy
 		if buildProxy:
 			ssh.run(f'rm -Rf {lSourcePath}')
-			success = CreateWorkspace(node, lSourcePath, self.ranRepository, self.ranCommitID, self.ranTargetBranch, self.ranAllowMerge)
+			success = CreateWorkspace(node, lSourcePath, self.ranCommitID, self.ranBranch)
 			if not success:
 				raise Exception("could not clone proxy repository")
 
@@ -621,7 +618,7 @@ class Containerize():
 
 	def Create_Workspace(self, node, HTML):
 		lSourcePath = self.eNBSourceCodePath
-		success = CreateWorkspace(node, lSourcePath, self.ranRepository, self.ranCommitID, self.ranTargetBranch, self.ranAllowMerge)
+		success = CreateWorkspace(node, lSourcePath, self.ranCommitID, self.ranBranch)
 		if success:
 			HTML.CreateHtmlTestRowQueue('N/A', 'OK', [f"created workspace {lSourcePath}"])
 		else:
