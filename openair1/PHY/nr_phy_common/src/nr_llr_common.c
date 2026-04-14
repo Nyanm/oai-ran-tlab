@@ -12,25 +12,25 @@
 #endif
 
 void nr_compute_llr(const c16_t *rxdataF_comp,
-                    const c16_t *ul_ch_mag,
-                    const c16_t *ul_ch_magb,
-                    const c16_t *ul_ch_magc,
-                    int16_t *ulsch_llr,
+                    const c16_t *ch_mag,
+                    const c16_t *ch_magb,
+                    const c16_t *ch_magc,
+                    int16_t *llr,
                     uint32_t nb_re,
                     uint8_t mod_order)
 {
   switch(mod_order) {
     case 2:
-      nr_qpsk_llr(rxdataF_comp, ulsch_llr, nb_re);
+      nr_qpsk_llr(rxdataF_comp, llr, nb_re);
       break;
     case 4:
-      nr_16qam_llr(rxdataF_comp, ul_ch_mag, ulsch_llr, nb_re);
+      nr_16qam_llr(rxdataF_comp, ch_mag, llr, nb_re);
       break;
     case 6:
-    nr_64qam_llr(rxdataF_comp, ul_ch_mag, ul_ch_magb, ulsch_llr, nb_re);
+    nr_64qam_llr(rxdataF_comp, ch_mag, ch_magb, llr, nb_re);
       break;
     case 8:
-    nr_256qam_llr(rxdataF_comp, ul_ch_mag, ul_ch_magb, ul_ch_magc, ulsch_llr, nb_re);
+    nr_256qam_llr(rxdataF_comp, ch_mag, ch_magb, ch_magc, llr, nb_re);
       break;
     default:
       AssertFatal(false, "nr_compute_llr: invalid Qm value, Qm = %d\n", mod_order);
@@ -1738,11 +1738,11 @@ void nr_64qam_llr_2layers(c16_t *stream0_in,
 }
 
 static void nr_shift_llr_2layers(int16_t *llr_layer0,
-                               int16_t *llr_layer1,
-                               uint32_t nb_re,
-                               uint32_t rxdataF_ext_offset,
-                               uint8_t mod_order,
-                               int shift)
+                                 int16_t *llr_layer1,
+                                 uint32_t nb_re,
+                                 uint32_t rxdataF_ext_offset,
+                                 uint8_t mod_order,
+                                 int shift)
 {
   simde__m128i *llr_layers0 = (simde__m128i *)llr_layer0;
   simde__m128i *llr_layers1 = (simde__m128i *)llr_layer1;
@@ -1769,8 +1769,8 @@ static void nr_shift_llr_2layers(int16_t *llr_layer0,
 void nr_compute_ML_llr(uint32_t rxdataF_ext_offset,
                        c16_t *rxdataF_comp0,
                        c16_t *rxdataF_comp1,
-                       c16_t *ul_ch_mag0,
-                       c16_t *ul_ch_mag1,
+                       c16_t *ch_mag0,
+                       c16_t *ch_mag1,
                        int16_t *llr_layers0,
                        int16_t *llr_layers1,
                        c16_t *rho0,
@@ -1785,12 +1785,12 @@ void nr_compute_ML_llr(uint32_t rxdataF_ext_offset,
       nr_shift_llr_2layers((int16_t *)llr_layers0, (int16_t *)llr_layers1, nb_re, rxdataF_ext_offset >> 1, 2, 4);
       break;
     case 4:
-      nr_16qam_llr_2layers(rxdataF_comp0, rxdataF_comp1, ul_ch_mag0, ul_ch_mag1, llr_layers0, rho0, nb_re);
-      nr_16qam_llr_2layers(rxdataF_comp1, rxdataF_comp0, ul_ch_mag1, ul_ch_mag0, llr_layers1, rho1, nb_re);
+      nr_16qam_llr_2layers(rxdataF_comp0, rxdataF_comp1, ch_mag0, ch_mag1, llr_layers0, rho0, nb_re);
+      nr_16qam_llr_2layers(rxdataF_comp1, rxdataF_comp0, ch_mag1, ch_mag0, llr_layers1, rho1, nb_re);
       break;
     case 6:
-      nr_64qam_llr_2layers(rxdataF_comp0, rxdataF_comp1, ul_ch_mag0, ul_ch_mag1, llr_layers0, rho0, nb_re);
-      nr_64qam_llr_2layers(rxdataF_comp1, rxdataF_comp0, ul_ch_mag1, ul_ch_mag0, llr_layers1, rho1, nb_re);
+      nr_64qam_llr_2layers(rxdataF_comp0, rxdataF_comp1, ch_mag0, ch_mag1, llr_layers0, rho0, nb_re);
+      nr_64qam_llr_2layers(rxdataF_comp1, rxdataF_comp0, ch_mag1, ch_mag0, llr_layers1, rho1, nb_re);
       break;
     default:
       AssertFatal(1 == 0, "nr_compute_llr: invalid Qm value, Qm = %d\n", mod_order);

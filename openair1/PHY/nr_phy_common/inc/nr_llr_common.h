@@ -32,17 +32,17 @@ void nr_64qam_llr_2layers(c16_t *stream0_in,
 
 /** \brief This function computes the log-likelihood ratios for QPSK, 16, 64, and 256 QAM
     @param rxdataF_comp Compensated channel output
-    @param ul_ch_mag  channel magnitude multiplied by the 1st amplitude threshold
-    @param ul_ch_magb channel magnitude multiplied by the 2nd amplitude threshold
-    @param ul_ch_magc channel magnitude multiplied by the 3rd amplitude threshold (256QAM)
+    @param ch_mag  channel magnitude multiplied by the 1st amplitude threshold
+    @param ch_magb channel magnitude multiplied by the 2nd amplitude threshold
+    @param ch_magc channel magnitude multiplied by the 3rd amplitude threshold (256QAM)
     @param ulsch_llr llr output
     @param nb_re number of resource elements
     @param mod_order modulation order
 */
 void nr_compute_llr(const c16_t *rxdataF_comp,
-                    const c16_t *ul_ch_mag,
-                    const c16_t *ul_ch_magb,
-                    const c16_t *ul_ch_magc,
+                    const c16_t *ch_mag,
+                    const c16_t *ch_magb,
+                    const c16_t *ch_magc,
                     int16_t *ulsch_llr,
                     uint32_t nb_re,
                     uint8_t mod_order);
@@ -50,8 +50,8 @@ void nr_compute_llr(const c16_t *rxdataF_comp,
 void nr_compute_ML_llr(uint32_t rxdataF_ext_offset,
                        c16_t *rxdataF_comp0,
                        c16_t *rxdataF_comp1,
-                       c16_t *ul_ch_mag0,
-                       c16_t *ul_ch_mag1,
+                       c16_t *ch_mag0,
+                       c16_t *ch_mag1,
                        int16_t *llr_layers0,
                        int16_t *llr_layers1,
                        c16_t *rho0,

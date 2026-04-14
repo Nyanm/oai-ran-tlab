@@ -157,7 +157,7 @@ void nr_channel_compensation(uint32_t buffer_length,
  *
  * */
 // TODO: This function is just a wrapper, can be removed.
-static void nr_ulsch_conjch0_mult_ch1(c16_t *ch0, c16_t *ch1, c16_t *ch0conj_ch1, unsigned short nb_rb, unsigned char output_shift0)
+static void nr_conjch0_mult_ch1(c16_t *ch0, c16_t *ch1, c16_t *ch0conj_ch1, unsigned short nb_rb, unsigned char output_shift0)
 {
   //This function is used to compute multiplications in H_hermitian * H matrix
   mult_cpx_conj_vector(ch0, ch1, ch0conj_ch1, 12 * nb_rb, output_shift0);
@@ -167,28 +167,28 @@ static void nr_ulsch_conjch0_mult_ch1(c16_t *ch0, c16_t *ch1, c16_t *ch0conj_ch1
  *
  *
  * */
-static void nr_ulsch_construct_HhH_elements(c16_t *conjch00_ch00,
-                                            c16_t *conjch01_ch01,
-                                            c16_t *conjch11_ch11,
-                                            c16_t *conjch10_ch10, //
-                                            c16_t *conjch20_ch20,
-                                            c16_t *conjch21_ch21,
-                                            c16_t *conjch30_ch30,
-                                            c16_t *conjch31_ch31,
-                                            c16_t *conjch00_ch01, // 00_01
-                                            c16_t *conjch01_ch00, // 01_00
-                                            c16_t *conjch10_ch11, // 10_11
-                                            c16_t *conjch11_ch10, // 11_10
-                                            c16_t *conjch20_ch21,
-                                            c16_t *conjch21_ch20,
-                                            c16_t *conjch30_ch31,
-                                            c16_t *conjch31_ch30,
-                                            c16_t *after_mf_00,
-                                            c16_t *after_mf_01,
-                                            c16_t *after_mf_10,
-                                            c16_t *after_mf_11,
-                                            unsigned short nb_rb,
-                                            unsigned char symbol)
+static void nr_construct_HhH_elements(c16_t *conjch00_ch00,
+                                      c16_t *conjch01_ch01,
+                                      c16_t *conjch11_ch11,
+                                      c16_t *conjch10_ch10, //
+                                      c16_t *conjch20_ch20,
+                                      c16_t *conjch21_ch21,
+                                      c16_t *conjch30_ch30,
+                                      c16_t *conjch31_ch31,
+                                      c16_t *conjch00_ch01, // 00_01
+                                      c16_t *conjch01_ch00, // 01_00
+                                      c16_t *conjch10_ch11, // 10_11
+                                      c16_t *conjch11_ch10, // 11_10
+                                      c16_t *conjch20_ch21,
+                                      c16_t *conjch21_ch20,
+                                      c16_t *conjch30_ch31,
+                                      c16_t *conjch31_ch30,
+                                      c16_t *after_mf_00,
+                                      c16_t *after_mf_01,
+                                      c16_t *after_mf_10,
+                                      c16_t *after_mf_11,
+                                      unsigned short nb_rb,
+                                      unsigned char symbol)
 {
   //This function is used to construct the (H_hermitian * H matrix) matrix elements
   simde__m128i *conjch00_ch00_128 = (simde__m128i *)conjch00_ch00;
@@ -272,14 +272,14 @@ static void nr_ulsch_construct_HhH_elements(c16_t *conjch00_ch00,
 }
 
 // Zero Forcing Rx function: nr_det_HhH()
-static void nr_ulsch_det_HhH(c16_t *after_mf_00, // a
-                             c16_t *after_mf_01, // b
-                             c16_t *after_mf_10, // c
-                             c16_t *after_mf_11, // d
-                             uint32_t *det_fin, // 1/ad-bc
-                             unsigned short nb_rb,
-                             unsigned char symbol,
-                             int32_t shift)
+static void nr_det_HhH(c16_t *after_mf_00, // a
+                       c16_t *after_mf_01, // b
+                       c16_t *after_mf_10, // c
+                       c16_t *after_mf_11, // d
+                       uint32_t *det_fin, // 1/ad-bc
+                       unsigned short nb_rb,
+                       unsigned char symbol,
+                       int32_t shift)
 {
   simde__m128i *after_mf_00_128,*after_mf_01_128, *after_mf_10_128, *after_mf_11_128, ad_re_128, bc_re_128; //ad_im_128, bc_im_128;
   simde__m128i *det_fin_128, det_re_128; //det_im_128, tmp_det0, tmp_det1;
@@ -324,11 +324,11 @@ static void nr_ulsch_det_HhH(c16_t *after_mf_00, // a
   }
 }
 
-static simde__m128i nr_ulsch_comp_muli_sum(simde__m128i input_x,
-                                           simde__m128i input_y,
-                                           simde__m128i input_w,
-                                           simde__m128i input_z,
-                                           simde__m128i det)
+static simde__m128i nr_comp_muli_sum(simde__m128i input_x,
+                                     simde__m128i input_y,
+                                     simde__m128i input_w,
+                                     simde__m128i input_z,
+                                     simde__m128i det)
 {
 
   // complex multiplication (x_re + jx_im)*(y_re + jy_im) = (x_re*y_re - x_im*y_im) + j(x_im*y_re + x_re*y_im)
@@ -372,10 +372,10 @@ static simde__m128i nr_ulsch_comp_muli_sum(simde__m128i input_x,
 uint8_t nr_mmse_2layers(const c16_t** rxdataF_comp,
                         uint32_t buffer_length,
                         int nb_rx_ant,
-                        c16_t ul_ch_mag[][buffer_length],
-                        c16_t ul_ch_magb[][buffer_length],
-                        c16_t ul_ch_magc[][buffer_length],
-                        c16_t ul_ch_estimates_ext[][nb_rx_ant][buffer_length],
+                        c16_t ch_mag[][buffer_length],
+                        c16_t ch_magb[][buffer_length],
+                        c16_t ch_magc[][buffer_length],
+                        c16_t ch_estimates_ext[][nb_rx_ant][buffer_length],
                         unsigned short nb_rb,
                         unsigned char mod_order,
                         int shift,
@@ -416,10 +416,10 @@ uint8_t nr_mmse_2layers(const c16_t** rxdataF_comp,
   c16_t *ch20, *ch30, *ch21, *ch31;
   switch (nb_rx_ant) {
     case 2://
-      ch00 = ul_ch_estimates_ext[0][0];
-      ch01 = ul_ch_estimates_ext[1][0];
-      ch10 = ul_ch_estimates_ext[0][1];
-      ch11 = ul_ch_estimates_ext[1][1];
+      ch00 = ch_estimates_ext[0][0];
+      ch01 = ch_estimates_ext[1][0];
+      ch10 = ch_estimates_ext[0][1];
+      ch11 = ch_estimates_ext[1][1];
       ch20 = NULL;
       ch21 = NULL;
       ch30 = NULL;
@@ -427,14 +427,14 @@ uint8_t nr_mmse_2layers(const c16_t** rxdataF_comp,
       break;
 
     case 4://
-      ch00 = ul_ch_estimates_ext[0][0];
-      ch01 = ul_ch_estimates_ext[1][0];
-      ch10 = ul_ch_estimates_ext[0][1];
-      ch11 = ul_ch_estimates_ext[1][1];
-      ch20 = ul_ch_estimates_ext[0][2];
-      ch21 = ul_ch_estimates_ext[1][2];
-      ch30 = ul_ch_estimates_ext[0][3];
-      ch31 = ul_ch_estimates_ext[1][3];
+      ch00 = ch_estimates_ext[0][0];
+      ch01 = ch_estimates_ext[1][0];
+      ch10 = ch_estimates_ext[0][1];
+      ch11 = ch_estimates_ext[1][1];
+      ch20 = ch_estimates_ext[0][2];
+      ch21 = ch_estimates_ext[1][2];
+      ch30 = ch_estimates_ext[0][3];
+      ch31 = ch_estimates_ext[1][3];
       break;
 
     default:
@@ -452,49 +452,49 @@ uint8_t nr_mmse_2layers(const c16_t** rxdataF_comp,
 
   if (nb_rx_ant >= 2) {
     // (1/2^log2_maxh)*conj_H_00xH_00: (1/(64*2))conjH_00*H_00*2^15
-    nr_ulsch_conjch0_mult_ch1(ch00,
+    nr_conjch0_mult_ch1(ch00,
                         ch00,
                         conjch00_ch00,
                         nb_rb_0,
                         shift);
     // (1/2^log2_maxh)*conj_H_10xH_10: (1/(64*2))conjH_10*H_10*2^15
-    nr_ulsch_conjch0_mult_ch1(ch10,
+    nr_conjch0_mult_ch1(ch10,
                         ch10,
                         conjch10_ch10,
                         nb_rb_0,
                         shift);
     // conj_H_00xH_01
-    nr_ulsch_conjch0_mult_ch1(ch00,
+    nr_conjch0_mult_ch1(ch00,
                         ch01,
                         conjch00_ch01,
                         nb_rb_0,
                         shift); // this shift is equal to the channel level log2_maxh
     // conj_H_10xH_11
-    nr_ulsch_conjch0_mult_ch1(ch10,
+    nr_conjch0_mult_ch1(ch10,
                         ch11,
                         conjch10_ch11,
                         nb_rb_0,
                         shift);
     // conj_H_01xH_01
-    nr_ulsch_conjch0_mult_ch1(ch01,
+    nr_conjch0_mult_ch1(ch01,
                         ch01,
                         conjch01_ch01,
                         nb_rb_0,
                         shift);
     // conj_H_11xH_11
-    nr_ulsch_conjch0_mult_ch1(ch11,
+    nr_conjch0_mult_ch1(ch11,
                         ch11,
                         conjch11_ch11,
                         nb_rb_0,
                         shift);
     // conj_H_01xH_00
-    nr_ulsch_conjch0_mult_ch1(ch01,
+    nr_conjch0_mult_ch1(ch01,
                         ch00,
                         conjch01_ch00,
                         nb_rb_0,
                         shift);
     // conj_H_11xH_10
-    nr_ulsch_conjch0_mult_ch1(ch11,
+    nr_conjch0_mult_ch1(ch11,
                         ch10,
                         conjch11_ch10,
                         nb_rb_0,
@@ -502,58 +502,58 @@ uint8_t nr_mmse_2layers(const c16_t** rxdataF_comp,
   }
   if (nb_rx_ant == 4) {
     // (1/2^log2_maxh)*conj_H_20xH_20: (1/(64*2*16))conjH_20*H_20*2^15
-    nr_ulsch_conjch0_mult_ch1(ch20,
+    nr_conjch0_mult_ch1(ch20,
                         ch20,
                         conjch20_ch20,
                         nb_rb_0,
                         shift);
 
     // (1/2^log2_maxh)*conj_H_30xH_30: (1/(64*2*4))conjH_30*H_30*2^15
-    nr_ulsch_conjch0_mult_ch1(ch30,
+    nr_conjch0_mult_ch1(ch30,
                         ch30,
                         conjch30_ch30,
                         nb_rb_0,
                         shift);
 
     // (1/2^log2_maxh)*conj_H_20xH_20: (1/(64*2))conjH_20*H_20*2^15
-    nr_ulsch_conjch0_mult_ch1(ch20,
+    nr_conjch0_mult_ch1(ch20,
                         ch21,
                         conjch20_ch21,
                         nb_rb_0,
                         shift);
 
-    nr_ulsch_conjch0_mult_ch1(ch30,
+    nr_conjch0_mult_ch1(ch30,
                         ch31,
                         conjch30_ch31,
                         nb_rb_0,
                         shift);
 
-    nr_ulsch_conjch0_mult_ch1(ch21,
+    nr_conjch0_mult_ch1(ch21,
                         ch21,
                         conjch21_ch21,
                         nb_rb_0,
                         shift);
 
-    nr_ulsch_conjch0_mult_ch1(ch31,
+    nr_conjch0_mult_ch1(ch31,
                         ch31,
                         conjch31_ch31,
                         nb_rb_0,
                         shift);
 
     // (1/2^log2_maxh)*conj_H_20xH_20: (1/(64*2))conjH_20*H_20*2^15
-    nr_ulsch_conjch0_mult_ch1(ch21,
+    nr_conjch0_mult_ch1(ch21,
                         ch20,
                         conjch21_ch20,
                         nb_rb_0,
                         shift);
 
-    nr_ulsch_conjch0_mult_ch1(ch31,
+    nr_conjch0_mult_ch1(ch31,
                         ch30,
                         conjch31_ch30,
                         nb_rb_0,
                         shift);
 
-    nr_ulsch_construct_HhH_elements(conjch00_ch00,
+    nr_construct_HhH_elements(conjch00_ch00,
                               conjch01_ch01,
                               conjch11_ch11,
                               conjch10_ch10,//
@@ -577,7 +577,7 @@ uint8_t nr_mmse_2layers(const c16_t** rxdataF_comp,
                               symbol);
   }
   if (nb_rx_ant == 2) {
-    nr_ulsch_construct_HhH_elements(conjch00_ch00,
+    nr_construct_HhH_elements(conjch00_ch00,
                               conjch01_ch01,
                               conjch11_ch11,
                               conjch10_ch10,//
@@ -615,7 +615,7 @@ uint8_t nr_mmse_2layers(const c16_t** rxdataF_comp,
   }
 
   //det_HhH = ad -bc
-  nr_ulsch_det_HhH(af_mf_00,//a
+  nr_det_HhH(af_mf_00,//a
              af_mf_01,//b
              af_mf_10,//c
              af_mf_11,//d
@@ -636,8 +636,8 @@ uint8_t nr_mmse_2layers(const c16_t** rxdataF_comp,
      *
      *
      **************************************************************************/
-  simde__m128i *ul_ch_mag128_0 = NULL, *ul_ch_mag128b_0 = NULL, *ul_ch_mag128c_0 = NULL; // Layer 0
-  simde__m128i *ul_ch_mag128_1 = NULL, *ul_ch_mag128b_1 = NULL, *ul_ch_mag128c_1 = NULL; // Layer 1
+  simde__m128i *ch_mag128_0 = NULL, *ch_mag128b_0 = NULL, *ch_mag128c_0 = NULL; // Layer 0
+  simde__m128i *ch_mag128_1 = NULL, *ch_mag128b_1 = NULL, *ch_mag128c_1 = NULL; // Layer 1
   simde__m128i mmtmpD0, mmtmpD1, mmtmpD2, mmtmpD3;
   simde__m128i QAM_amp128 = {0}, QAM_amp128b = {0}, QAM_amp128c = {0};
 
@@ -665,12 +665,12 @@ uint8_t nr_mmse_2layers(const c16_t** rxdataF_comp,
       QAM_amp128b = simde_mm_set1_epi16(QAM256_n2);
       QAM_amp128c = simde_mm_set1_epi16(QAM256_n3);
     }
-    ul_ch_mag128_0 = (simde__m128i *)&ul_ch_mag[0];
-    ul_ch_mag128b_0 = (simde__m128i *)&ul_ch_magb[0];
-    ul_ch_mag128c_0 = (simde__m128i *)&ul_ch_magc[0];
-    ul_ch_mag128_1 = (simde__m128i *)&ul_ch_mag[1];
-    ul_ch_mag128b_1 = (simde__m128i *)&ul_ch_magb[1];
-    ul_ch_mag128c_1 = (simde__m128i *)&ul_ch_magc[1];
+    ch_mag128_0 = (simde__m128i *)&ch_mag[0];
+    ch_mag128b_0 = (simde__m128i *)&ch_magb[0];
+    ch_mag128c_0 = (simde__m128i *)&ch_magc[0];
+    ch_mag128_1 = (simde__m128i *)&ch_mag[1];
+    ch_mag128b_1 = (simde__m128i *)&ch_magb[1];
+    ch_mag128c_1 = (simde__m128i *)&ch_magc[1];
   }
 
   for (int rb = 0; rb < 3 * nb_rb_0; rb++) {
@@ -695,40 +695,40 @@ uint8_t nr_mmse_2layers(const c16_t** rxdataF_comp,
       mmtmpD2 = simde_mm_packs_epi32(mmtmpD3, mmtmpD2);
 
       // Layer 0
-      ul_ch_mag128_0[0] = mmtmpD2;
-      ul_ch_mag128b_0[0] = mmtmpD2;
-      ul_ch_mag128c_0[0] = mmtmpD2;
-      ul_ch_mag128_0[0] = simde_mm_mulhi_epi16(ul_ch_mag128_0[0], QAM_amp128);
-      ul_ch_mag128_0[0] = simde_mm_slli_epi16(ul_ch_mag128_0[0], 1);
-      ul_ch_mag128b_0[0] = simde_mm_mulhi_epi16(ul_ch_mag128b_0[0], QAM_amp128b);
-      ul_ch_mag128b_0[0] = simde_mm_slli_epi16(ul_ch_mag128b_0[0], 1);
-      ul_ch_mag128c_0[0] = simde_mm_mulhi_epi16(ul_ch_mag128c_0[0], QAM_amp128c);
-      ul_ch_mag128c_0[0] = simde_mm_slli_epi16(ul_ch_mag128c_0[0], 1);
+      ch_mag128_0[0] = mmtmpD2;
+      ch_mag128b_0[0] = mmtmpD2;
+      ch_mag128c_0[0] = mmtmpD2;
+      ch_mag128_0[0] = simde_mm_mulhi_epi16(ch_mag128_0[0], QAM_amp128);
+      ch_mag128_0[0] = simde_mm_slli_epi16(ch_mag128_0[0], 1);
+      ch_mag128b_0[0] = simde_mm_mulhi_epi16(ch_mag128b_0[0], QAM_amp128b);
+      ch_mag128b_0[0] = simde_mm_slli_epi16(ch_mag128b_0[0], 1);
+      ch_mag128c_0[0] = simde_mm_mulhi_epi16(ch_mag128c_0[0], QAM_amp128c);
+      ch_mag128c_0[0] = simde_mm_slli_epi16(ch_mag128c_0[0], 1);
 
       // Layer 1
-      ul_ch_mag128_1[0] = mmtmpD2;
-      ul_ch_mag128b_1[0] = mmtmpD2;
-      ul_ch_mag128c_1[0] = mmtmpD2;
-      ul_ch_mag128_1[0] = simde_mm_mulhi_epi16(ul_ch_mag128_1[0], QAM_amp128);
-      ul_ch_mag128_1[0] = simde_mm_slli_epi16(ul_ch_mag128_1[0], 1);
-      ul_ch_mag128b_1[0] = simde_mm_mulhi_epi16(ul_ch_mag128b_1[0], QAM_amp128b);
-      ul_ch_mag128b_1[0] = simde_mm_slli_epi16(ul_ch_mag128b_1[0], 1);
-      ul_ch_mag128c_1[0] = simde_mm_mulhi_epi16(ul_ch_mag128c_1[0], QAM_amp128c);
-      ul_ch_mag128c_1[0] = simde_mm_slli_epi16(ul_ch_mag128c_1[0], 1);
+      ch_mag128_1[0] = mmtmpD2;
+      ch_mag128b_1[0] = mmtmpD2;
+      ch_mag128c_1[0] = mmtmpD2;
+      ch_mag128_1[0] = simde_mm_mulhi_epi16(ch_mag128_1[0], QAM_amp128);
+      ch_mag128_1[0] = simde_mm_slli_epi16(ch_mag128_1[0], 1);
+      ch_mag128b_1[0] = simde_mm_mulhi_epi16(ch_mag128b_1[0], QAM_amp128b);
+      ch_mag128b_1[0] = simde_mm_slli_epi16(ch_mag128b_1[0], 1);
+      ch_mag128c_1[0] = simde_mm_mulhi_epi16(ch_mag128c_1[0], QAM_amp128c);
+      ch_mag128c_1[0] = simde_mm_slli_epi16(ch_mag128c_1[0], 1);
     }
 
     // multiply by channel Inv
     //rxdataF_zf128_0 = rxdataF_comp128_0*d - b*rxdataF_comp128_1
     //rxdataF_zf128_1 = rxdataF_comp128_1*a - c*rxdataF_comp128_0
     //printf("layer_1 \n");
-    mmtmpD0 = nr_ulsch_comp_muli_sum(rxdataF_comp128_0[0],
+    mmtmpD0 = nr_comp_muli_sum(rxdataF_comp128_0[0],
                                after_mf_d_128[0],
                                rxdataF_comp128_1[0],
                                after_mf_b_128[0],
                                determ_fin_128[0]);
 
     //printf("layer_2 \n");
-    mmtmpD1 = nr_ulsch_comp_muli_sum(rxdataF_comp128_1[0],
+    mmtmpD1 = nr_comp_muli_sum(rxdataF_comp128_1[0],
                                after_mf_a_128[0],
                                rxdataF_comp128_0[0],
                                after_mf_c_128[0],
@@ -743,12 +743,12 @@ uint8_t nr_mmse_2layers(const c16_t** rxdataF_comp,
     print_shorts(" Rx layer 2:",(int16_t*)&rxdataF_comp128_1[0]);
 #endif
     determ_fin_128 += 1;
-    ul_ch_mag128_0 += 1;
-    ul_ch_mag128_1 += 1;
-    ul_ch_mag128b_0 += 1;
-    ul_ch_mag128b_1 += 1;
-    ul_ch_mag128c_0 += 1;
-    ul_ch_mag128c_1 += 1;
+    ch_mag128_0 += 1;
+    ch_mag128_1 += 1;
+    ch_mag128b_0 += 1;
+    ch_mag128b_1 += 1;
+    ch_mag128c_0 += 1;
+    ch_mag128c_1 += 1;
     rxdataF_comp128_0 += 1;
     rxdataF_comp128_1 += 1;
     after_mf_a_128 += 1;
