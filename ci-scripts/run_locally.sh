@@ -28,6 +28,8 @@ set -x
 docker tag oai-nr-ue oai-ci/oai-nr-ue:develop-${SHORT_COMMIT_SHA}
 docker tag oai-gnb oai-ci/oai-gnb:develop-${SHORT_COMMIT_SHA}
 docker tag oai-nr-cuup oai-ci/oai-nr-cuup:develop-${SHORT_COMMIT_SHA}
+docker tag oai-gnb-fhi72 oai-ci/oai-gnb-fhi72:develop-${SHORT_COMMIT_SHA}
+docker tag oai-nr-oru oai-ci/oai-nr-oru:develop-${SHORT_COMMIT_SHA}
 
 python3 main.py --mode=InitiateHtml --ranRepository=NONE --ranBranch=${CURRENT_BRANCH} \
     --ranCommitID=${COMMIT_SHA} --ranAllowMerge=false \
