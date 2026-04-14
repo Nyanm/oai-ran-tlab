@@ -1,16 +1,30 @@
+# SPDX-License-Identifier: MIT
+
 include:
     - cn.yml
 services:
     mysql:
-        cpuset: "5,6,30,31"
+        cpuset: "8-11"
     oai-amf:
-        cpuset: "5,6,30,31"
+        cpuset: "8-11"
     oai-smf:
-        cpuset: "5,6,30,31"
+        cpuset: "8-11"
     oai-upf:
-        cpuset: "5,6,30,31"
+        cpuset: "8-11"
     oai-ext-dn:
-        cpuset: "5,6,30,31"
+        cpuset: "8-11"
+    dpdk-init:
+        image: docker.io/library/oai-dpdk-init:latest
+        network_mode: host
+        container_name: dpdk-init
+        entrypoint: "/tmp/setup_sriov.sh"
+        privileged: true
+        devices:
+            - /dev/vfio:/dev/vfio/
+        volumes:
+            - ./setup.sh:/tmp/setup_sriov.sh
+            - /lib/modules:/lib/modules
+            - /usr/lib/modules:/usr/lib/modules
     oai-gnb:
         image: ${REGISTRY-oaisoftwarealliance/}oai-gnb-fhi72:${TAG:-develop}
         cap_add:
@@ -25,9 +39,9 @@ services:
         devices:
             - /dev/vfio:/dev/vfio/
         volumes:
-            - ./gnb.conf:/opt/oai-gnb/etc/gnb.conf
+            - ../../conf_files/gnb.sa.band77.106prb.fhi72.1x1.conf:/opt/oai-gnb/etc/gnb.conf
             - /dev/hugepages:/dev/hugepages
-        cpuset: "7,8,9,10,11,12,13,14"
+        cpuset: "16-23"
         networks:
             oai-net:
                 ipv4_address: 172.21.18.20
@@ -53,13 +67,13 @@ services:
         devices:
             - /dev/vfio:/dev/vfio/
         volumes:
-            - ./nr-oru.conf:/opt/nr-oru/etc/nr-oru.conf
+            - ../../conf_files/ru.band77.106prb.fhi72.1x1.conf:/opt/nr-oru/etc/nr-oru.conf
             - /dev/hugepages:/dev/hugepages
             - tmp_data:/tmp/
-        cpuset: "15,16,17,18,19,20,21,22"
-        networks:
-            oai-net:
-                ipv4_address: 172.21.18.21
+        cpuset: "24-31"
+        depends_on:
+           dpdk-init:
+             condition: service_completed_successfully
         healthcheck:
            test: /bin/bash -c "ps aux | grep -v grep | grep -c nr-oru"
            start_period: 15s
@@ -83,9 +97,9 @@ services:
         devices:
              - /dev/net/tun:/dev/net/tun
         volumes:
-            - ./nr-ue.conf:/opt/oai-nr-ue/etc/nr-ue.conf
+            - ../../conf_files/nrue.uicc.conf:/opt/oai-nr-ue/etc/nr-ue.conf
             - tmp_data:/tmp/
-        cpuset: "23,24,25,26,27,28,29"
+        cpuset: "32-39"
         networks:
             public_net:
                 ipv4_address: 192.168.101.150
@@ -108,6 +122,6 @@ networks:
                   gateway: "172.21.19.254"
         driver_opts:
             com.docker.network.bridge.name: "oai-net"
-            parent: enp5s0f0np0
+            parent: ens1f0np0
 volumes:
     tmp_data:
