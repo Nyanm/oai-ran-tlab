@@ -126,6 +126,26 @@ UE 257a: ulsch_rounds 41777/2863/10/0, ulsch_errors 0, ulsch_DTX 17, BLER 0.1145
         self.assertTrue(result)
         self.assertEqual(log, expected)
 
+    def test_report_asan_error(self):
+        f = "tests/log-analysis/asan-error.log"
+        opt = None
+        result, log = cls_loganalysis.Default.run(f, opt)
+        expected = """==7==ERROR: AddressSanitizer: dynamic-stack-buffer-overflow on address 0x7f9bbda312c0 at pc 0x7f9bd87b52c0 bp 0x7f9bbda30670 sp 0x7f9bbda30660
+READ of size 16 at 0x7f9bbda312c0 thread T17
+    #0 0x7f9bd87b52bf in _mm_loadu_si128 /usr/lib/gcc/x86_64-linux-gnu/13/include/emmintrin.h:706
+    #1 0x7f9bd87b52bf in simde_mm_loadu_si128 /usr/include/simde/x86/sse2.h:4072
+    #2 0x7f9bd87b52bf in nr_rate_matching_ldpc_rx /oai-ran/openair1/PHY/CODING/nrLDPC_coding/nrLDPC_coding_segment/nr_rate_matching.c:1514
+    #3 0x7f9bd87b6249 in nr_process_decode_segment /oai-ran/openair1/PHY/CODING/nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c:156
+    #4 0x5581bf6baba8 in worker_thread /oai-ran/common/utils/threadPool/thread-pool.c:131
+    #5 0x7f9beb535a41 in asan_thread_start ../../../../src/libsanitizer/asan/asan_interceptors.cpp:234
+    #6 0x7f9bea3d4aa3 in start_thread nptl/pthread_create.c:447
+    #7 0x7f9bea461a63 in clone ../sysdeps/unix/sysv/linux/x86_64/clone.S:100
+
+Address 0x7f9bbda312c0 is located in stack of thread T17
+SUMMARY: AddressSanitizer: dynamic-stack-buffer-overflow /usr/lib/gcc/x86_64-linux-gnu/13/include/emmintrin.h:706 in _mm_loadu_si128
+"""
+        self.assertFalse(result)
+        self.assertEqual(log, expected)
 
 if __name__ == '__main__':
 	unittest.main()

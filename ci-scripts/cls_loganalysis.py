@@ -29,13 +29,28 @@ class Default:
 	def run(file, opt=None):
 		success = True
 		logs = []
+		capture_sanitizer = False
+		asan_start_pattern = re.compile(r'(==\d+==ERROR: )', re.IGNORECASE)
+		asan_end_pattern = re.compile(r'^SUMMARY:', re.IGNORECASE)
 		with open(file, "r") as f:
 			for line in f.readlines():
-				result = re.search('[Aa]ssertion', line)
-				if result:
+				# check for assertion
+				if re.search('[Aa]ssertion', line):
 					logs.append(line)
 					success = False
-		return success, "\n".join(logs)
+					continue
+				# start capturing sanitizer block
+				if asan_start_pattern.search(line):
+					capture_sanitizer = True
+					success = False
+					logs.append(line)
+					continue
+				# capture all lines in sanitizer block until SUMMARY
+				if capture_sanitizer:
+					logs.append(line)
+					if asan_end_pattern.match(line):
+						capture_sanitizer = False
+		return success, "".join(logs)
 
 class ContainsString:
 	def run(file, needle):

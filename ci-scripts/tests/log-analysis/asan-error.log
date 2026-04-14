@@ -1,0 +1,77 @@
+10191487.289081 [RLC]    I Update old UE ID 4142 context to ID 27305
+10191487.289085 [RLC]    I Re-establish RLC for SRB 1
+10191487.289113 [GTPU]   I [94] Updated tunnels from UEid 102e to UEid 6aa9
+10191487.291281 [NR_MAC] I UE 6aa9 Generate Msg4: feedback at  865.17, payload 28 bytes, next state nrRA_WAIT_Msg4_MsgB_ACK
+10191487.296729 [NR_MAC] E Unknown RNTI 102e in PUCCH UCI
+10191487.296738 [NR_MAC] E UL SDU discarded. Couldn't finde UE with RNTI 102e 
+10191487.314216 [NR_MAC] A  865.17 UE 6aa9: Received Ack of Msg4. CBRA procedure succeeded (UE Connected)
+10191487.314234 [NR_MAC] I Adding new UE context with RNTI 0x6aa9
+10191487.422653 [NR_MAC] I UE 6aa9: gNB-DU Configuration Query received, will include CellGroupConfig in response
+10191487.422668 [NR_MAC] I UE 6aa9: Re-establishment detected, setting reestablishRLC flags
+10191487.422672 [NR_MAC] I UE 6aa9: CellGroupConfig has 3 bearers:
+10191487.422675 [NR_MAC] I UE 6aa9: Re-establishing RLC for LCID 2
+10191487.422678 [NR_MAC] I UE 6aa9: Re-establishing RLC for LCID 4
+10191487.846848 [NR_MAC] I RNTI 6aa9 LCID 4: ignoring 57 bytes
+10191487.848178 [NR_MAC] I DU received confirmation of successful RRC Reconfiguration
+10191487.848190 [NR_MAC] W reconfigCellGroup still present, did we miss ACK for RRCReconfiguration?
+10191487.848217 [NR_MAC] I UE 6aa9: Re-establishing RLC for LCID 2
+10191487.848237 [NR_MAC] I UE 6aa9: Re-establishing RLC for LCID 4
+=================================================================
+==7==ERROR: AddressSanitizer: dynamic-stack-buffer-overflow on address 0x7f9bbda312c0 at pc 0x7f9bd87b52c0 bp 0x7f9bbda30670 sp 0x7f9bbda30660
+READ of size 16 at 0x7f9bbda312c0 thread T17
+    #0 0x7f9bd87b52bf in _mm_loadu_si128 /usr/lib/gcc/x86_64-linux-gnu/13/include/emmintrin.h:706
+    #1 0x7f9bd87b52bf in simde_mm_loadu_si128 /usr/include/simde/x86/sse2.h:4072
+    #2 0x7f9bd87b52bf in nr_rate_matching_ldpc_rx /oai-ran/openair1/PHY/CODING/nrLDPC_coding/nrLDPC_coding_segment/nr_rate_matching.c:1514
+    #3 0x7f9bd87b6249 in nr_process_decode_segment /oai-ran/openair1/PHY/CODING/nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c:156
+    #4 0x5581bf6baba8 in worker_thread /oai-ran/common/utils/threadPool/thread-pool.c:131
+    #5 0x7f9beb535a41 in asan_thread_start ../../../../src/libsanitizer/asan/asan_interceptors.cpp:234
+    #6 0x7f9bea3d4aa3 in start_thread nptl/pthread_create.c:447
+    #7 0x7f9bea461a63 in clone ../sysdeps/unix/sysv/linux/x86_64/clone.S:100
+
+Address 0x7f9bbda312c0 is located in stack of thread T17
+SUMMARY: AddressSanitizer: dynamic-stack-buffer-overflow /usr/lib/gcc/x86_64-linux-gnu/13/include/emmintrin.h:706 in _mm_loadu_si128
+Shadow bytes around the buggy address:
+  0x7f9bbda31000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7f9bbda31080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7f9bbda31100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7f9bbda31180: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7f9bbda31200: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x7f9bbda31280: 00 00 00 00 00 00 00 00[00]cb cb cb cb cb cb cb
+  0x7f9bbda31300: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7f9bbda31380: 00 00 00 00 f1 f1 f1 f1 00 00 f2 f2 00 00 00 00
+  0x7f9bbda31400: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7f9bbda31480: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7f9bbda31500: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+Thread T17 created by T0 here:
+    #0 0x7f9beb5cc1f9 in pthread_create ../../../../src/libsanitizer/asan/asan_interceptors.cpp:245
+    #1 0x5581bf6c0836 in threadCreate /oai-ran/common/utils/system.c:283
+    #2 0x5581bf6bca2d in initNamedTpool /oai-ran/common/utils/threadPool/thread-pool.c:188
+    #3 0x5581be01468d in init_gNB_Tpool /oai-ran/executables/nr-gnb.c:339
+    #4 0x5581be01571c in init_eNB_afterRU /oai-ran/executables/nr-gnb.c:397
+    #5 0x5581bdfb64bb in main /oai-ran/executables/nr-softmodem.c:707
+    #6 0x7f9bea3621c9 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #7 0x7f9bea36228a in __libc_start_main_impl ../csu/libc-start.c:360
+    #8 0x5581be0064a4 in _start (/opt/oai-gnb/bin/nr-softmodem+0x35304a4) (BuildId: 0e3c2015c220bb2593a7797aede13f53e80ed034)
+
+==7==ABORTING
+[INFO  tini (1)] Spawned child process '/opt/oai-gnb/bin/entrypoint.sh' with pid '7'
+[INFO  tini (1)] Main child exited normally (with status '1')
