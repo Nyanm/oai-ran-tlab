@@ -632,6 +632,29 @@ pipeline {
             }
           }
         }
+        stage ("SA-FHI72-Timing-Phytest") {
+          when { expression {do5Gtest} }
+          steps {
+            script {
+              triggerSlaveJob ('RAN-SA-FHI72-Timing-Phytest', 'SA-FHI72-Timing-Phytest')
+            }
+          }
+          post {
+            always {
+              script {
+                // Using a unique variable name for each test stage to avoid overwriting on a global variable
+                // due to parallel-time concurrency
+                phytestFHI72Status = finalizeSlaveJob('RAN-SA-FHI72-Timing-Phytest')
+              }
+            }
+            failure {
+              script {
+                currentBuild.result = 'FAILURE'
+                failingStages += phytestFHI72Status
+              }
+            }
+          }
+        }
         stage ("LTE-TDD-2x2-Container") {
           when { expression {do4Gtest} }
           steps {
