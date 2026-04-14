@@ -39,7 +39,7 @@ def CreateWorkspace(host, sourcePath, ranCommitID, ranBranch):
 
 	script = "scripts/create_workspace.sh"
 	shortCommit = ranCommitID[0:8]
-	options = f"{sourcePath} {ranBranch}-{shortCommit}"
+	options = f"{sourcePath} {ranBranch}-{shortCommit} {ranCommitID}"
 	logging.info(f'execute "{script}" with options "{options}" on node {host}')
 	with cls_cmd.getConnection(host) as c:
 		ret = c.exec_script(script, 90, options)
