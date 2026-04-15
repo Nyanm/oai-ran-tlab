@@ -22,8 +22,9 @@ void nr_phy_init_RU(RU_t *ru)
   int nb_tx_streams = ru->nb_tx;
   int nb_rx_streams = ru->nb_rx;
 
-  if ((nb_tx_streams > fp->nb_antennas_tx) || (nb_rx_streams > fp->nb_antennas_rx))
-    LOG_W(NR_PHY, "There could be unused baseband ports because of fewer logical ports.\n");
+  AssertFatal(!((nb_tx_streams > fp->nb_antennas_tx) || (nb_rx_streams > fp->nb_antennas_rx)),
+              "Current implementation only supports number of logical ports same as number of baseband ports. Increase N1, N2, Xp "
+              "to match nb_tx, nb_rx in RU\n");
 
   if (ru->if_south <= REMOTE_IF5) { // this means REMOTE_IF5 or LOCAL_RF, so allocate memory for time-domain signals 
     // Time-domain signals
