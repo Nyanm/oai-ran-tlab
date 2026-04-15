@@ -116,7 +116,7 @@ static void nr_dlsch_channel_compensation(uint32_t rx_size_symbol,
                                           c16_t dl_ch_mag[][rx_size_symbol],
                                           c16_t dl_ch_magb[][rx_size_symbol],
                                           c16_t dl_ch_magr[][rx_size_symbol],
-                                          c16_t rxdataF_comp[][n_layers * nbRx][rx_size_symbol],
+                                          c16_t **rxComp,
                                           c16_t rho[][n_layers][rx_size_symbol],
                                           unsigned char symbol,
                                           int length,
@@ -125,13 +125,7 @@ static void nr_dlsch_channel_compensation(uint32_t rx_size_symbol,
                                           unsigned char output_shift)
 {
   int numLoopCnt = length >> 3; // length = number of REs, hence numLoopCnt = nb_REs * (32/256) in SIMD loop
-
-  c16_t **rxComp = malloc(n_layers *  nbRx * sizeof(c16_t *));
-
-  for (int i = 0; i < (n_layers *  nbRx); i++)
-    rxComp[i] = rxdataF_comp[symbol][i];
-
-   nr_channel_compensation(rx_size_symbol,
+  nr_channel_compensation(rx_size_symbol,
                           nbRx,
                           rxdataF_ext,
                           chFext,
@@ -146,7 +140,6 @@ static void nr_dlsch_channel_compensation(uint32_t rx_size_symbol,
                           0, // bufOffset is 0 here since rxdataF_ext and chFext are already pointing to the right symbol
                           output_shift);
 
-  free(rxComp);
 }
 
 static void nr_dlsch_channel_level_median(uint32_t rx_size_symbol,
@@ -828,6 +821,14 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
   if (NR_MAX_NB_LAYERS>4)
     dlsch1_harq = &ue->dl_harq_processes[1][harq_pid];
 
+  int n = dlsch->Nl * nbRx;
+  c16_t *rxCompTemp[n];
+  c16_t **rxComp = rxCompTemp;
+
+  for (int i = 0; i < n; i++)
+    rxComp[i] = rxdataF_comp[symbol][i];
+
+
   if (dlsch0_harq && dlsch1_harq){
 
     LOG_D(PHY,
@@ -1070,7 +1071,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                                   dl_ch_mag[symbol],
                                   dl_ch_magb[symbol],
                                   dl_ch_magr[symbol],
-                                  rxdataF_comp,
+                                  rxComp,
                                   rho,
                                   symbol,
                                   nb_re_pdsch,
@@ -1171,12 +1172,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                       nvar);
     }
     else if ((nl == 2) && (dlsch_config->qamModOrder == 8)) // Apply MMSE for 2 Tx layers only for 256QAM, otherwise use MRC
-    {
-      c16_t **rxComp = malloc(nl *  nbRx * sizeof(c16_t *));
-
-      for (int i = 0; i < (nl * nbRx); i++)
-        rxComp[i] = (c16_t *)&rxdataF_comp[symbol][i];
-
+    {      
       nr_mmse_2layers((const c16_t **)rxComp,
                       rx_size_symbol,
                       nbRx,
@@ -1191,7 +1187,6 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                       symbol,
                       dl_valid_re[symbol],
                       nvar);
-      free(rxComp);
     }
   }
 
@@ -1212,6 +1207,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
 
       // For 2 layers and up to 64QAM, apply the exact max-log LLR computation with dual-stream interference consideration.
       // For other cases (1, 3 and 4 layers or higher modulation), use the MRC output and apply the approximate LLR computation.
+      #if 1
       if ((nl == 2) && (dlsch_config->qamModOrder <= 6))
       {
         nr_compute_ML_llr(0,
@@ -1227,6 +1223,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                           dlsch_config->qamModOrder);
       }
       else
+      #endif
       {
         nr_dlsch_llr(dlsch,
                      dl_valid_re[llr_sym],
@@ -1305,5 +1302,6 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
     memcpy(ue->phy_sim_pdsch_dl_ch_estimates_ext + symbol * sizeof(dl_ch_estimates_ext),
            dl_ch_estimates_ext,
            sizeof(dl_ch_estimates_ext));
+
   return 0;
 }
