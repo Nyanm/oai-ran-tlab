@@ -46,8 +46,6 @@ if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
   target_link_libraries(oran_fhlib_5g PRIVATE armral)
 endif()
 
-add_boolean_option(OAI_FHI72_USE_POLLING OFF "Enable polling in FHI72 driver" ON)
-
 message(STATUS "Building FHI72 CUS library")
 
 set_target_properties(oran_fhlib_5g PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})

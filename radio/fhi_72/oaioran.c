@@ -28,10 +28,6 @@
 
 #define N_SC_PER_PRB 12
 
-#if OAI_FHI72_USE_POLLING
-#define USE_POLLING
-#endif
-
 // Declare variable useful for the send buffer function
 volatile bool first_call_set = false;
 
@@ -42,20 +38,12 @@ int xran_is_prach_slot(uint8_t PortId, uint32_t subframe_id, uint32_t slot_id
                                                                                          );
 #include "common/utils/LOG/log.h"
 
-#ifndef USE_POLLING
 extern notifiedFIFO_t oran_sync_fifo;
 #define MAX_QUEUE_LENGTH_NO_JUMP 3
 atomic_int xran_queue_length = 0;
 atomic_int xran_queue_prach_length = 0;
 #if defined K_RELEASE
 extern notifiedFIFO_t oran_sync_fifo_prach;
-#endif
-#else
-volatile oran_sync_info_t oran_sync_info = {0};
-#if defined K_RELEASE
-volatile oran_sync_info_t oran_sync_info_prach = {0};
-volatile bool prach_rx_awaiting = false;
-#endif
 #endif
 
 /* Prints TX_TOTAL, RX_TOTAL, RX_ON_TIME, RX_ERR_DROP counters every 128 frames. */
@@ -115,8 +103,7 @@ void print_fhi_counters(ru_info_t *ru, const int frame, const int slot)
 /** @details xran-specific callback, called when all packets for given CC and
  * 1/4, 1/2, 3/4, all symbols of a slot arrived. Currently, only used to get
  * timing information and unblock another thread in xran_fh_rx_read_slot()
- * through either a message queue, or writing in global memory with polling, on
- * a full slot boundary. */
+ * through a message queue on a full slot boundary. */
 void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status
 #if defined K_RELEASE
                                                                      , uint8_t mu
@@ -190,7 +177,6 @@ void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status
       rx_RU[i][slot2] = 0;
 
     if (last_slot == -1 || slot2 != last_slot) {
-#ifndef USE_POLLING
       notifiedFIFO_elt_t *req = newNotifiedFIFO_elt(sizeof(oran_sync_info_t), 0, &oran_sync_fifo, NULL);
       oran_sync_info_t *info = NotifiedFifoData(req);
       info->tti = tti;
@@ -215,28 +201,6 @@ void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status
       LOG_D(HW, "Push %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, info->sl, slot, ru_id, subframe, last_slot);
       atomic_fetch_add(&xran_queue_length, 1);
       pushNotifiedFIFO(&oran_sync_fifo, req);
-#else
-      LOG_D(HW, "Writing %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, slot2, ru_id, slot, subframe, last_slot);
-      oran_sync_info.tti = tti;
-      oran_sync_info.sl = slot2;
-      oran_sync_info.f = frame;
-#if defined K_RELEASE
-      oran_sync_info.mu = mu;
-
-      oran_buf_list_t *bufs = get_xran_buffers(ru_id);
-      struct xran_fh_config *fh_config = get_xran_fh_config(ru_id);
-      for (uint16_t cc_id = 0; cc_id < 1 /* fh_config->nCC */; cc_id++) { // OAI does not support multiple CC yet.
-        for(uint32_t ant_id = 0; ant_id < fh_config->neAxc; ant_id++) {
-          struct xran_prb_map *pRbMap = (struct xran_prb_map *)bufs->dstcp[ant_id][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
-          AssertFatal(pRbMap != NULL, "(%d:%d:%d)pRbMap == NULL. Aborting.\n", cc_id, tti % XRAN_N_FE_BUF_LEN, ant_id);
-          for (uint32_t sym_id = 0; sym_id < XRAN_NUM_OF_SYMBOL_PER_SLOT; sym_id++) {
-            oran_sync_info.nRxPkt[cc_id][ant_id][sym_id] = pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt;
-            pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt = 0;
-          }
-        }
-      }
-#endif
-#endif
     } else
       LOG_E(HW, "Cannot Push %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, slot2, ru_id, slot, subframe, last_slot);
     last_slot = slot2;
@@ -292,20 +256,12 @@ void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status
       rx_RU[i][slot2] = 0;
   
     if (last_slot == -1 || slot2 != last_slot) {
-#ifndef USE_POLLING
       notifiedFIFO_elt_t *req = newNotifiedFIFO_elt(sizeof(oran_sync_info_t), 0, &oran_sync_fifo_prach, NULL);
       oran_sync_info_t *info = NotifiedFifoData(req);
       info->tti = tti;
       info->sl = slot2;
       info->f = frame;
       info->mu = mu;
-#else
-      LOG_D(HW, "Writing PRACH slot %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, slot2, ru_id, slot, subframe, last_slot);
-      oran_sync_info_prach.tti = tti;
-      oran_sync_info_prach.sl = slot2;
-      oran_sync_info_prach.f = frame;
-      oran_sync_info_prach.mu = mu;
-#endif
       struct xran_cb_tag *callback_tag = (struct xran_cb_tag *)pCallbackTag;
       uint32_t tti = callback_tag->slotiId;
       uint32_t ru_id = callback_tag->oXuId;
@@ -317,22 +273,14 @@ void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status
           AssertFatal(pRbMap != NULL, "(%d:%d:%d)pRbMapPrach == NULL. Aborting.\n", cc_id, tti % XRAN_N_FE_BUF_LEN, ant_id);
           for (uint32_t sym_id = 0; sym_id < XRAN_NUM_OF_SYMBOL_PER_SLOT; sym_id++) {
             AssertFatal(pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt <= 1, "PRACH segmentation is not supported\n");
-#ifndef USE_POLLING
             info->nRxPkt[cc_id][ant_id][sym_id] = pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt;
-#else
-            oran_sync_info_prach.nRxPkt[cc_id][ant_id][sym_id] = pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt;
-#endif
             pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt = 0;
           }
         }
       }
-#ifndef USE_POLLING
       LOG_D(HW, "Push PRACH slot %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, info->sl, slot, ru_id, subframe, last_slot);
       atomic_fetch_add(&xran_queue_prach_length, 1);
       pushNotifiedFIFO(&oran_sync_fifo_prach, req);
-#else
-      prach_rx_awaiting = true;
-#endif
     } else
       LOG_E(HW, "Cannot Push PRACH slot %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, slot2, ru_id, slot, subframe, last_slot);
     last_slot = slot2;
@@ -367,7 +315,6 @@ int oai_physide_dl_tti_call_back(void *param
 int xran_fh_rx_prach_read_slot(prach_list_t *prach_list, ru_info_t *ru, int *frame, int *slot)
 {
 #if defined K_RELEASE
-#ifndef USE_POLLING
   // pull next even from oran_sync_fifo_prach if any
   notifiedFIFO_elt_t *res = pullNotifiedFIFO(&oran_sync_fifo_prach);
   atomic_fetch_sub(&xran_queue_prach_length, 1);
@@ -394,29 +341,6 @@ int xran_fh_rx_prach_read_slot(prach_list_t *prach_list, ru_info_t *ru, int *fra
   *frame = info->f;
   uint8_t mu = info->mu;
   delNotifiedFIFO_elt(res);
-#else
-#error "POLLING is not supported for K release unless you know how to fix the race condition on prach_rx_awaiting"
-  if (!prach_rx_awaiting) {
-    return (0);
-  } else {
-    prach_rx_awaiting = false;
-  }
-  *slot = oran_sync_info_prach.sl;
-  *frame = oran_sync_info_prach.f;
-  uint8_t mu = oran_sync_info_prach.mu;
-  uint32_t tti_in = oran_sync_info_prach.tti;
-
-  static int last_slot = -1;
-  LOG_D(HW, "oran slot %d, last_slot %d\n", *slot, last_slot);
-  int cnt = 0;
-  // while (*slot == last_slot)  {
-  while (tti_in == oran_sync_info_prach.tti) {
-    //*slot = oran_sync_info.sl;
-    cnt++;
-  }
-  LOG_D(HW, "cnt %d, Reading %d.%d\n", cnt, *frame, *slot);
-  last_slot = *slot;
-#endif
 #endif
 
   prach_item_t *prach_id = find_nr_prach(prach_list, *frame, *slot, ru->nb_rx, NR_SEARCH_EXIST);
@@ -491,11 +415,7 @@ int xran_fh_rx_prach_read_slot(prach_list_t *prach_list, ru_info_t *ru, int *fra
 #if defined K_RELEASE
         struct xran_prb_map * pPrbMap = (struct xran_prb_map *)bufs->prachdstdecomp[aa % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
         struct xran_rx_packet_ctl *p_rx_packet_ctl = &pPrbMap->sFrontHaulRxPacketCtrl[sym_idx];
-#ifndef USE_POLLING
         int32_t nRxPkt = info->nRxPkt[cc_id][aa][sym_idx];
-#else
-        int32_t nRxPkt = oran_sync_info.nRxPkt[cc_id][aa][sym_idx];
-#endif
         if (nRxPkt == 0) {
           LOG_D(HW, "read_prach %d.%d.%d saa = %d: nRxPkt = 0!\n", *frame, *slot, sym_idx, aa);
           memset(&dst[sym_idx], 0, N_ZC * 2 * sizeof(*dst));
@@ -630,7 +550,6 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
   int idx = 0;
 
   static int outcnt = 0;
-#ifndef USE_POLLING
   // pull next event from oran_sync_fifo
   notifiedFIFO_elt_t *res = pullNotifiedFIFO(&oran_sync_fifo);
   atomic_fetch_sub(&xran_queue_length, 1);
@@ -659,25 +578,6 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
   uint8_t mu = info->mu;
 #endif
   delNotifiedFIFO_elt(res);
-#else
-  *slot = oran_sync_info.sl;
-  *frame = oran_sync_info.f;
-#if defined K_RELEASE
-  uint8_t mu = oran_sync_info.mu;
-#endif
-  uint32_t tti_in = oran_sync_info.tti;
-
-  static int last_slot = -1;
-  LOG_D(HW, "oran slot %d, last_slot %d\n", *slot, last_slot);
-  int cnt = 0;
-  // while (*slot == last_slot)  {
-  while (tti_in == oran_sync_info.tti) {
-    //*slot = oran_sync_info.sl;
-    cnt++;
-  }
-  LOG_D(HW, "cnt %d, Reading %d.%d\n", cnt, *frame, *slot);
-  last_slot = *slot;
-#endif
   // return(0);
 
   struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
@@ -733,11 +633,7 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
         struct xran_rx_packet_ctl *p_rx_packet_ctl = &pRbMap->sFrontHaulRxPacketCtrl[sym_idx];
         uint32_t one_rb_size =
             (((pRbElm->iqWidth == 0) || (pRbElm->iqWidth == 16)) ? (N_SC_PER_PRB * 2 * 2) : (3 * pRbElm->iqWidth + 1));
-#ifndef USE_POLLING
-	int32_t nRxPkt = info->nRxPkt[cc_id][ant_id][sym_idx];
-#else
-	int32_t nRxPkt = oran_sync_info.nRxPkt[cc_id][ant_id][sym_idx];
-#endif
+        int32_t nRxPkt = info->nRxPkt[cc_id][ant_id][sym_idx];
         LOG_D(HW, "nRxPkt %d\n", nRxPkt);
         for (int pkt_idx = 0; pkt_idx < nRxPkt; pkt_idx++) {
           uint8_t *pData;
