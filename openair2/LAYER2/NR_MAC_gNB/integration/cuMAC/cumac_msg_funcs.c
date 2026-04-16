@@ -167,7 +167,7 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
 
     offset += get_padding(offset, alignof(float));
     req->payload.offsets.sinVal = offset;
-    num_data =  slot_entry->nMaxSchUePerCell * nPRBGRP * nUEAnt;
+    num_data =  slot_entry->nMaxSchUePerCell * nPRBGRP * cumac_nPrbPerPrg() * nUEAnt;
     data_size = sizeof(*req_buf->sinVal) * num_data;
     LOG_D(NR_MAC,"sinVal : ");
     for (int i = 0; i < num_data; ++i)
@@ -179,15 +179,15 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
     uint32_t prdLen, detLen;
     if(req->payload.ULDLSch == 1)
     { // DL
-      prdLen = slot_entry->nMaxSchUePerCell * nPRBGRP * nBSAnt*nBSAnt;
-      detLen = slot_entry->nMaxSchUePerCell * nPRBGRP * nUEAnt * nUEAnt;
+      prdLen = slot_entry->nMaxSchUePerCell * nPRBGRP * cumac_nPrbPerPrg() * nBSAnt*nBSAnt;
+      detLen = slot_entry->nMaxSchUePerCell * nPRBGRP * cumac_nPrbPerPrg() * nUEAnt * nUEAnt;
     }
     else
     { // UL
-      prdLen = slot_entry->nMaxSchUePerCell * nPRBGRP *  nUEAnt * nUEAnt;
-      detLen = slot_entry->nMaxSchUePerCell * nPRBGRP * nBSAnt*nBSAnt;
+      prdLen = slot_entry->nMaxSchUePerCell * nPRBGRP * cumac_nPrbPerPrg() * nUEAnt * nUEAnt;
+      detLen = slot_entry->nMaxSchUePerCell * nPRBGRP * cumac_nPrbPerPrg() * nBSAnt*nBSAnt;
     }
-    const uint32_t hLen = nPRBGRP * slot_entry->nMaxSchUePerCell * /*nMaxCell*/ 1 * nBSAnt * nUEAnt;
+    const uint32_t hLen = nPRBGRP * cumac_nPrbPerPrg() * slot_entry->nMaxSchUePerCell * /*nMaxCell*/ 1 * nBSAnt * nUEAnt;
 
     offset += get_padding(offset, alignof(cuComplex));
     req->payload.offsets.detMat = offset;

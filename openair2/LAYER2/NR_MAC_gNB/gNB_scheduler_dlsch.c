@@ -649,7 +649,7 @@ static void pf_dl(gNB_MAC_INST *mac,
     // for RFSim
     double SNR_db = 20.0;
     float sigmaSqrd = pow(10.0, -SNR_db / 10.0);   */
-    // Extract nUeAnt early — needed to size wbSinr before the UE iterator.
+    const uint8_t nBsAnt = RC.nrmac[0]->config->carrier_config.num_tx_ant.value;
     const uint8_t nUeAnt = RC.nrmac[0]->config->carrier_config.num_tx_ant.value;
 
     // Pad nActiveUe to nMaxSchUePerCell so cuMAC UE selection fills all scheduler
@@ -741,7 +741,7 @@ static void pf_dl(gNB_MAC_INST *mac,
                                      .payload.nActiveUe = nActiveUe_padded,
                                      .payload.nSrsUe = 0,
                                      .payload.nPrbGrp = nPrbGrp,
-                                     .payload.nBsAnt = nUeAnt,
+                                     .payload.nBsAnt = nBsAnt,
                                      .payload.nUeAnt = nUeAnt,
                                      .payload.sigmaSqrd = 1.0f, // hardcoded in cuMAC source code
                                      .buffers = &buffers};
@@ -761,15 +761,15 @@ static void pf_dl(gNB_MAC_INST *mac,
         }
       }
 
-      numData = cumac_nMax_schUePerCell() * args.payload.nPrbGrp * args.payload.nUeAnt;
+      numData = cumac_nMax_schUePerCell() * args.payload.nPrbGrp * cumac_nPrbPerPrg() * args.payload.nUeAnt;
       buffers.sinVal = malloc(numData * sizeof(float));
       for (int i = 0; i < numData; i++) {
         buffers.sinVal[i] = 20.0f;
       }
 
-      const uint32_t  prdLen = cumac_nMax_schUePerCell() * args.payload.nPrbGrp * args.payload.nBsAnt * args.payload.nBsAnt;
-      const uint32_t  detLen = cumac_nMax_schUePerCell() * args.payload.nPrbGrp * args.payload.nUeAnt * args.payload.nUeAnt;
-      const uint32_t hLen = args.payload.nPrbGrp * cumac_nMax_schUePerCell() * /*nMaxCell*/ 1 * args.payload.nBsAnt * args.payload.nUeAnt;
+      const uint32_t  prdLen = cumac_nMax_schUePerCell() * args.payload.nPrbGrp * cumac_nPrbPerPrg() * args.payload.nBsAnt * args.payload.nBsAnt;
+      const uint32_t  detLen = cumac_nMax_schUePerCell() * args.payload.nPrbGrp * cumac_nPrbPerPrg() * args.payload.nUeAnt * args.payload.nUeAnt;
+      const uint32_t hLen = args.payload.nPrbGrp * cumac_nPrbPerPrg() * cumac_nMax_schUePerCell() * /*nMaxCell*/ 1 * args.payload.nBsAnt * args.payload.nUeAnt;
 
       numData = detLen;
       buffers.detMat = malloc(numData * sizeof(cuComplex));
