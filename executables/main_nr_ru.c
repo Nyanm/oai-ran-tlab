@@ -176,6 +176,8 @@ int main(int argc, char **argv)
   init_NR_RU(config_get_if(), NULL);
 
   RU_t *ru = RC.ru[0];
+  
+  start_NR_RU();
 
   while (oai_exit == 0)
     sleep(1);

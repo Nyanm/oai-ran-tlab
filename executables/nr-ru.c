@@ -84,6 +84,14 @@ void fh_if4p5_south_out(RU_t *ru, int frame, int slot, uint64_t timestamp)
     send_IF4p5(ru,frame, slot, IF4p5_PDLFFT);
 }
 
+void fh_if4p5_south_out_dma(RU_t *ru, int frame, int slot, uint64_t timestamp)
+{
+  printf("We are now in fh_if4p5_south_out_dma!\n");
+  LOG_D(PHY,"Sending IF4p5 for frame %d subframe %d\n",ru->proc.frame_tx,ru->proc.tti_tx);
+
+  if ((nr_slot_select(&ru->config, ru->proc.frame_tx, ru->proc.tti_tx) & NR_DOWNLINK_SLOT) > 0)
+    send_IF4p5(ru,frame, slot, IF4p5_PDLFFT);
+}
 /*************************************************************/
 /* Input Fronthaul from south RCC/RAU                        */
 
@@ -238,6 +246,66 @@ void fh_if4p5_south_asynch_in(RU_t *ru,int *frame,int *slot) {
   } while (symbol_mask > 0 || prach_rx > 0); // haven't received all PUSCH symbols and PRACH information
 }
 
+void fh_if4p5_south_in_dma(RU_t *ru,
+                       int *frame,
+                       int *slot) {
+
+  printf("We are now in fh_if4p5_south_in_dma!\n");
+
+  NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+  RU_proc_t *proc = &ru->proc;
+  int f,sl;
+  uint16_t packet_type;
+  uint32_t symbol_number=0;
+  uint32_t symbol_mask_full=0;
+
+  do {   // Blocking, we need a timeout on this !!!!!!!!!!!!!!!!!!!!!!!
+    recv_IF4p5(ru, &f, &sl, &packet_type, &symbol_number);
+
+    if (packet_type == IF4p5_PULFFT) proc->symbol_mask[sl] = proc->symbol_mask[sl] | (1<<symbol_number);
+    else if (packet_type == IF4p5_PULTICK) {
+      if ((proc->first_rx == 0) && (f != *frame))
+        LOG_E(PHY, "rx_fh_if4p5: PULTICK received frame %d != expected %d\n", f, *frame);
+
+      if ((proc->first_rx == 0) && (sl != *slot))
+        LOG_E(PHY, "rx_fh_if4p5: PULTICK received subframe %d != expected %d (first_rx %d)\n", sl, *slot, proc->first_rx);
+
+      break;
+    } else if (packet_type == IF4p5_PRACH) {
+      // nothing in RU for RAU
+    }
+
+    LOG_D(PHY,"rx_fh_if4p5: subframe %d symbol mask %x\n",*slot,proc->symbol_mask[sl]);
+  } while(proc->symbol_mask[sl] != symbol_mask_full);
+
+  //caculate timestamp_rx, timestamp_tx based on frame and subframe
+  proc->tti_rx   = sl;
+  proc->frame_rx = f;
+  proc->timestamp_rx = (proc->frame_rx * fp->samples_per_subframe * 10) + get_samples_slot_timestamp(fp, proc->tti_rx);
+  //  proc->timestamp_tx = proc->timestamp_rx +  (4*fp->samples_per_subframe);
+  proc->tti_tx   = (sl+ru->sl_ahead)%fp->slots_per_frame;
+  proc->frame_tx = (sl > (fp->slots_per_frame - 1 - (ru->sl_ahead))) ? (f + 1) & 1023 : f;
+
+  if (proc->first_rx == 0) {
+    if (proc->tti_rx != *slot) {
+      LOG_E(PHY,"Received Timestamp (IF4p5) doesn't correspond to the time we think it is (proc->tti_rx %d, subframe %d)\n",proc->tti_rx,*slot);
+      exit_fun("Exiting");
+    }
+
+    if (proc->frame_rx != *frame) {
+      LOG_E(PHY,"Received Timestamp (IF4p5) doesn't correspond to the time we think it is (proc->frame_rx %d frame %d)\n",proc->frame_rx,*frame);
+      exit_fun("Exiting");
+    }
+  } else {
+    proc->first_rx = 0;
+    *frame = proc->frame_rx;
+    *slot = proc->tti_rx;
+  }
+
+  proc->symbol_mask[proc->tti_rx] = 0;
+  LOG_D(PHY,"RU %d: fh_if4p5_south_in sleeping ...\n",ru->idx);
+}
+
 /*************************************************************/
 /* Input Fronthaul from North RRU                            */
 
@@ -322,6 +390,64 @@ void fh_if4p5_north_asynch_in(RU_t *ru,int *frame,int *slot) {
     ru->fh_south_out(ru, frame_tx, slot_tx, proc->timestamp_tx);
 }
 
+void fh_if4p5_north_asynch_in_dma(RU_t *ru,int *frame,int *slot) {
+  NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+  nfapi_nr_config_request_scf_t *cfg = &ru->config;
+  RU_proc_t *proc        = &ru->proc;
+  uint16_t packet_type;
+  uint32_t symbol_mask_full = 0;
+  int slot_tx,frame_tx;
+  LOG_D(PHY, "%s(ru:%p frame, subframe)\n", __FUNCTION__, ru);
+  uint32_t symbol_number = 0;
+  uint32_t symbol_mask = 0;
+
+  //  symbol_mask_full = ((subframe_select(fp,*slot) == SF_S) ? (1<<fp->dl_symbols_in_S_subframe) : (1<<fp->symbols_per_slot))-1;
+  do {
+    recv_IF4p5(ru, &frame_tx, &slot_tx, &packet_type, &symbol_number);
+
+    if (((nr_slot_select(cfg, frame_tx, slot_tx) & NR_DOWNLINK_SLOT) > 0) && (symbol_number == 0))
+      start_meas(&ru->rx_fhaul);
+
+    LOG_D(PHY,"slot %d (%d): frame %d, slot %d, symbol %d\n",
+          *slot,nr_slot_select(cfg,frame_tx,*slot),frame_tx,slot_tx,symbol_number);
+
+    if (proc->first_tx != 0) {
+      *frame         = frame_tx;
+      *slot          = slot_tx;
+      proc->first_tx = 0;
+    } else {
+      AssertFatal(frame_tx == *frame,
+                  "frame_tx %d is not what we expect %d\n",frame_tx,*frame);
+      AssertFatal(slot_tx == *slot,
+                  "slot_tx %d is not what we expect %d\n",slot_tx,*slot);
+    }
+
+    if (packet_type == IF4p5_PDLFFT) {
+      symbol_mask = symbol_mask | (1<<symbol_number);
+    } else
+      AssertFatal(false, "Illegal IF4p5 packet type (should only be IF4p5_PDLFFT%d\n", packet_type);
+  } while (symbol_mask != symbol_mask_full);
+
+  if ((nr_slot_select(cfg, frame_tx, slot_tx) & NR_DOWNLINK_SLOT) > 0)
+    stop_meas(&ru->rx_fhaul);
+
+  proc->tti_tx = slot_tx;
+  proc->frame_tx = frame_tx;
+
+  if (frame_tx == 0 && slot_tx == 0)
+    proc->frame_tx_unwrap += 1024;
+
+  proc->timestamp_tx =
+      ((uint64_t)frame_tx + proc->frame_tx_unwrap) * fp->samples_per_subframe * 10 + get_samples_slot_timestamp(fp, slot_tx);
+  LOG_D(PHY, "RU %d/%d TST %lu, frame %d, subframe %d\n", ru->idx, 0, proc->timestamp_tx, frame_tx, slot_tx);
+
+  if (ru->feptx_ofdm)
+    ru->feptx_ofdm(ru, frame_tx, slot_tx);
+
+  if (ru->fh_south_out)
+    ru->fh_south_out(ru, frame_tx, slot_tx, proc->timestamp_tx);
+}
+
 void fh_if5_north_out(RU_t *ru)
 {
   /// **** send_IF5 of rxdata to BBU **** ///
@@ -330,6 +456,14 @@ void fh_if5_north_out(RU_t *ru)
 
 // RRU IF4p5 northbound interface (RX)
 void fh_if4p5_north_out(RU_t *ru)
+{
+  RU_proc_t *proc=&ru->proc;
+  start_meas(&ru->tx_fhaul);
+  send_IF4p5(ru, proc->frame_rx, proc->tti_rx, IF4p5_PULFFT);
+  stop_meas(&ru->tx_fhaul);
+}
+
+void fh_if4p5_north_out_dma(RU_t *ru)
 {
   RU_proc_t *proc=&ru->proc;
   start_meas(&ru->tx_fhaul);
@@ -1170,6 +1304,42 @@ void set_function_spec_param(RU_t *ru)
       ru->ifdevice.eth_params    = &ru->eth_params;
       break;
 
+    case REMOTE_IF4p5_DMA:
+      ru->do_prach               = 0;
+      ru->feprx                  = NULL;                // DFTs
+      ru->feptx_prec             = nr_feptx_prec;       // Precoding operation
+      ru->feptx_ofdm             = NULL;                // no OFDM mod
+      ru->fh_south_in            = fh_if4p5_south_in_dma;   // synchronous IF4p5 reception
+      ru->fh_south_out           = fh_if4p5_south_out_dma;  // synchronous IF4p5 transmission
+      ru->fh_south_asynch_in     = (ru->if_timing == synch_to_other) ? fh_if4p5_south_in : NULL;                // asynchronous UL if synch_to_other
+      ru->fh_north_out           = NULL;
+      ru->fh_north_asynch_in     = NULL;
+      ru->start_rf               = NULL;                // no local RF
+      ru->stop_rf                = NULL;
+      ru->start_write_thread     = NULL;
+      ru->nr_start_if            = nr_start_if;         // need to start if interface for IF4p5
+      ru->ifdevice.host_type     = RAU_HOST;
+      ru->ifdevice.eth_params    = &ru->eth_params;
+      break;
+
+    case REMOTE_IF4p5_DMA_S:
+      ru->do_prach               = 0;
+      ru->feprx                  = NULL;                // DFTs
+      ru->feptx_prec             = nr_feptx_prec;       // Precoding operation
+      ru->feptx_ofdm             = NULL;                // no OFDM mod
+      ru->fh_south_in            = fh_if4p5_south_in;   // synchronous IF4p5 reception
+      ru->fh_south_out           = fh_if4p5_south_out;  // synchronous IF4p5 transmission
+      ru->fh_south_asynch_in     = (ru->if_timing == synch_to_other) ? fh_if4p5_south_in : NULL;                // asynchronous UL if synch_to_other
+      ru->fh_north_out           = fh_if4p5_north_out_dma;
+      ru->fh_north_asynch_in     = fh_if4p5_north_asynch_in_dma;
+      ru->start_rf               = NULL;                // no local RF
+      ru->stop_rf                = NULL;
+      ru->start_write_thread     = NULL;
+      ru->nr_start_if            = nr_start_if;         // need to start if interface for IF4p5
+      ru->ifdevice.host_type     = RAU_HOST;
+      ru->ifdevice.eth_params    = &ru->eth_params;
+      break;
+
     default:
       LOG_E(PHY,"RU with invalid or unknown southbound interface type %d\n",ru->if_south);
       break;
@@ -1195,6 +1365,12 @@ void init_NR_RU(configmodule_interface_t *cfg, char *rf_config_file)
     ru->ts_offset      = 0;
     // use gNB_list[0] as a reference for RU frame parameters
     // NOTE: multiple CC_id are not handled here yet!
+    
+    if (ru->if_south == REMOTE_IF4p5_DMA_S) {
+//Here we need to update gNB infomation, token, dma address in a socket
+    
+
+}
 
     if (ru->num_gNB > 0) {
       LOG_D(PHY, "%s() RC.ru[%d].num_gNB:%d ru->gNB_list[0]:%p RC.gNB[0]:%p rf_config_file:%s\n", __FUNCTION__, ru_id, ru->num_gNB, ru->gNB_list[0], RC.gNB[0], ru->rf_config_file);
@@ -1230,6 +1406,13 @@ void init_NR_RU(configmodule_interface_t *cfg, char *rf_config_file)
     }
     set_function_spec_param(ru);
     init_RU_proc(ru);
+
+    if (ru->if_south == REMOTE_IF4p5_DMA) {
+//Here we need to send gNB infomation in a socket
+
+
+    }
+
     if (ru->if_south != REMOTE_IF4p5) {
       int threadCnt = ru->num_tpcores;
       if (threadCnt < 2)
@@ -1436,6 +1619,14 @@ static void NRRCconfig_RU(configmodule_interface_t *cfg)
         ru->if_south = REMOTE_IF4p5;
         ru->function = NGFI_RAU_IF4p5;
         ru->eth_params.transp_preference = ETH_RAW_IF4p5_MODE;
+      } else if (strcmp(str, "dma_if4p5") == 0) {
+        ru->if_south = REMOTE_IF4p5_DMA;
+        ru->function = NGFI_RAU_IF4p5;
+        ru->eth_params.transp_preference = ETH_DMA_IF4p5_MODE;
+      } else if (strcmp(str, "dma_if4p5_s") == 0) {
+        ru->if_south = REMOTE_IF4p5_DMA_S;
+        ru->function = NGFI_RAU_IF4p5;
+        ru->eth_params.transp_preference = ETH_DMA_IF4p5_MODE;
       }
     } /* strcmp(local_rf, "yes") != 0 */
 
