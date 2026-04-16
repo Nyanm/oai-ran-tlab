@@ -27,7 +27,11 @@
 // structure holding allocated memory for ports (multiple DUs) and sectors
 // (multiple CCs)
 static oran_port_instance_t gPortInst[XRAN_PORTS_NUM][XRAN_MAX_SECTOR_NR];
+#if defined F_RELEASE
 void *gxran_handle;
+#elif defined K_RELEASE
+void *gxran_handle[XRAN_PORTS_NUM];
+#endif
 
 static struct xran_fh_init g_fh_init = {0};
 static struct xran_fh_config g_fh_config[XRAN_PORTS_NUM] = {0};
@@ -383,21 +387,44 @@ static void oran_allocate_buffers(void *handle,
 #endif
 }
 
-int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_config *xran_fh_config)
+void *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_config *xran_fh_config)
 {
   int32_t xret = 0;
 
+#if defined K_RELEASE
+  xran_mem_mgr_leak_detector_init();
+#endif
+
   print_fh_init(xran_fh_init);
+#if defined F_RELEASE
   xret = xran_init(0, NULL, xran_fh_init, NULL, &gxran_handle);
+#elif defined K_RELEASE
+  xret = xran_init(0, NULL, xran_fh_init, NULL, gxran_handle);
+#endif
   if (xret != XRAN_STATUS_SUCCESS) {
     printf("xran_init failed %d\n", xret);
     exit(-1);
   }
 
+#if defined K_RELEASE
+  for (int32_t o_xu_id = 0; o_xu_id < xran_fh_init->xran_ports; o_xu_id++) {
+    if (gxran_handle[o_xu_id] == NULL) {
+      printf("xran_init for RU%d failed\n", o_xu_id);
+      exit(-1);
+    } else {
+      printf("RU%d handle = %p\n", o_xu_id, gxran_handle[o_xu_id]);
+    }
+  }
+#endif
+
   /** process all the O-RU|O-DU for use case */
   for (int32_t o_xu_id = 0; o_xu_id < xran_fh_init->xran_ports; o_xu_id++) {
     print_fh_config(&xran_fh_config[o_xu_id]);
+#if defined F_RELEASE
     xret = xran_open(gxran_handle, &xran_fh_config[o_xu_id]);
+#elif defined K_RELEASE
+    xret = xran_open(gxran_handle[o_xu_id], &xran_fh_config[o_xu_id]);
+#endif
     if (xret != XRAN_STATUS_SUCCESS) {
       printf("xran_open failed %d\n", xret);
       exit(-1);
@@ -409,14 +436,15 @@ int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_confi
     struct xran_cb_tag tag = {.cellId = sector, .oXuId = o_xu_id};
     pi->prach_tag = tag;
     pi->pusch_tag = tag;
-    oran_allocate_buffers(gxran_handle, o_xu_id, 1, pi, xran_fh_init->mtu, &xran_fh_config[o_xu_id]);
 
 #if defined K_RELEASE
-    if ((xret = xran_timingsource_reg_tticb(gxran_handle, oai_physide_dl_tti_call_back, NULL, 10, XRAN_CB_TTI)) != XRAN_STATUS_SUCCESS) {
+    oran_allocate_buffers(gxran_handle[0], o_xu_id, 1, pi, xran_fh_init->mtu, &xran_fh_config[o_xu_id]);
+    if ((xret = xran_timingsource_reg_tticb(NULL, oai_physide_dl_tti_call_back, NULL, 10, XRAN_CB_TTI)) != XRAN_STATUS_SUCCESS) {
       printf("xran_timingsource_reg_tticb failed %d\n", xret);
       exit(-1);
     }
 #elif defined F_RELEASE
+    oran_allocate_buffers(gxran_handle, o_xu_id, 1, pi, xran_fh_init->mtu, &xran_fh_config[o_xu_id]);
     if ((xret = xran_reg_physide_cb(gxran_handle, oai_physide_dl_tti_call_back, NULL, 10, XRAN_CB_TTI)) != XRAN_STATUS_SUCCESS) {
       printf("xran_reg_physide_cb failed %d\n", xret);
       exit(-1);
@@ -445,7 +473,7 @@ int *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_confi
   memcpy(&g_fh_init, xran_fh_init, sizeof(*xran_fh_init));
   memcpy(&g_fh_config, xran_fh_config, sizeof(*xran_fh_config) * xran_fh_init->xran_ports);
 
-  return (void *)gxran_handle;
+  return gxran_handle;
 }
 
 oran_buf_list_t *get_xran_buffers(uint32_t port_id)

@@ -535,8 +535,12 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
       } // sym_ind
     } // ant_ind
   } // vv_inf
-  if ((*frame & 0x7f) == 0 && *slot == 0 && xran_get_common_counters(gxran_handle, &x_counters[0]) == XRAN_STATUS_SUCCESS) {
-    for (int o_xu_id = 0; o_xu_id < fh_init->xran_ports; o_xu_id++) {
+  for (int o_xu_id = 0; o_xu_id < fh_init->xran_ports; o_xu_id++) {
+#if defined F_RELEASE
+    if ((*frame & 0x7f) == 0 && *slot == 0 && xran_get_common_counters(gxran_handle, &x_counters[0]) == XRAN_STATUS_SUCCESS) {
+#elif defined K_RELEASE
+    if ((*frame & 0x7f) == 0 && *slot == 0 && xran_get_common_counters(gxran_handle[o_xu_id], &x_counters[o_xu_id]) == XRAN_STATUS_SUCCESS) {
+#endif
       LOG_I(HW,
             "[%s%d][rx %7ld pps %7ld kbps %7ld][tx %7ld pps %7ld kbps %7ld][Total Msgs_Rcvd %ld]\n",
             "o-du ",
