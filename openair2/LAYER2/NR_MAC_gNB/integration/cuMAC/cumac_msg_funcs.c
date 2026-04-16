@@ -123,10 +123,10 @@ int l2_build_sch_tti_request(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, void* ar
   req->payload.offsets.prgMsk = offset;
   num_data = nPRBGRP;
   data_size = sizeof(*req_buf->prgMsk) * num_data;
-  LOG_D(NR_MAC,"PRG MASK : ");
+  LOG_I(NR_MAC,"PRG MASK : ");
   for (int i = 0; i < num_data; ++i)
-    LOG_D(NR_MAC,"%u ", req_buf->prgMsk[i]);
-  LOG_D(NR_MAC,"\n");
+    printf("%u ", req_buf->prgMsk[i]);
+  printf("\n");
   memcpy(data_buf + offset, req_buf->prgMsk, data_size);
   offset += data_size;
 
@@ -338,9 +338,9 @@ void cumac_handle_sch_tti_response(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, sl
   if (resp->offsets.allocSol != 0xFFFFFFFF) {
     const uint16_t *src = (uint16_t *)(buf_home + resp->offsets.allocSol);
     memcpy(slot_data_entry->allocSol, src, slot_data_entry->allocSolSize * sizeof(*slot_data_entry->allocSol));
-    LOG_D(NR_MAC,"allocSol:\n");
+    LOG_I(NR_MAC,"allocSol:\n");
     for (int i = 0; i < slot_data_entry->allocSolSize; i++) {
-      LOG_D(NR_MAC,"\tIDX %d = 0x%02x \n", i, src[i]);
+      printf("\tIDX %d = 0x%02x \n", i, src[i]);
 
     }
   }
