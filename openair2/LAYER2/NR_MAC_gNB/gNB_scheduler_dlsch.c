@@ -652,18 +652,30 @@ static void pf_dl(gNB_MAC_INST *mac,
     // Extract nUeAnt early — needed to size wbSinr before the UE iterator.
     const uint8_t nUeAnt = RC.nrmac[0]->config->carrier_config.num_tx_ant.value;
 
-    cumac_tti_req_bufs_t buffers;
-    buffers.CRNTI = malloc(connected_ues * sizeof(uint16_t));
-    buffers.avgRatesActUe = malloc(connected_ues * sizeof(float));
-    buffers.newDataActUe = malloc(connected_ues * sizeof(int8_t));
-    buffers.allocSolLastTxActUe = calloc(connected_ues * 2, sizeof(int16_t));
-    buffers.mcsSelSolLastTxActUe = calloc(connected_ues, sizeof(int16_t));
-    buffers.layerSelSolLastTxActUe = calloc(connected_ues, sizeof(int8_t));
-    // wbSinr layout: [nActiveUE × nUeAnt] in row-major order.
-    buffers.wbSinr = malloc(connected_ues * nUeAnt * sizeof(float));
+    // Pad nActiveUe to nMaxSchUePerCell so cuMAC UE selection fills all scheduler
+    // slots with real indices. Without padding, unselected slots get avgRates=0 in
+    // PRB allocation, which gives Inf PF and beats the real UE for the only PRG.
+    // Dummy UEs use wbSinr=0 (lose in UE selection) and avgRatesActUe=1e38f (lose
+    // in PRB allocation PF even if selected by the cuMAC scheduler).
+    const uint16_t nMaxSchUe = cumac_nMax_schUePerCell();
+    const uint16_t nActiveUe_padded = nMaxSchUe;
 
-    for (int i = 0; i < connected_ues; i++) {
+    cumac_tti_req_bufs_t buffers;
+    // calloc zero-initialises: dummy slots get CRNTI=0 and wbSinr=0.
+    buffers.CRNTI = calloc(nActiveUe_padded, sizeof(uint16_t));
+    buffers.avgRatesActUe = malloc(nActiveUe_padded * sizeof(float));
+    buffers.newDataActUe = malloc(nActiveUe_padded * sizeof(int8_t));
+    buffers.allocSolLastTxActUe = calloc(nActiveUe_padded * 2, sizeof(int16_t));
+    buffers.mcsSelSolLastTxActUe = calloc(nActiveUe_padded, sizeof(int16_t));
+    buffers.layerSelSolLastTxActUe = calloc(nActiveUe_padded, sizeof(int8_t));
+
+    // wbSinr layout: [nActiveUE × nUeAnt] in row-major order.
+    // calloc zero-initialises so dummy slots get wbSinr=0 (lowest PF in UE selection).
+    buffers.wbSinr = calloc(nActiveUe_padded * nUeAnt, sizeof(float));
+
+    for (int i = 0; i < nActiveUe_padded; i++) {
       buffers.newDataActUe[i] = -1;
+      buffers.avgRatesActUe[i] = 1e38f; // dummy sentinel; overwritten for real UEs below
     }
     size_t idx = 0;
     UE_iterator (UE_list, UE) {
@@ -714,7 +726,7 @@ static void pf_dl(gNB_MAC_INST *mac,
                                      .payload.cellID = 0,
                                      .payload.taskBitMask = taskBitMap,
                                      .payload.ULDLSch = SCH_TTI_DL,
-                                     .payload.nActiveUe = connected_ues,
+                                     .payload.nActiveUe = nActiveUe_padded,
                                      .payload.nSrsUe = 0,
                                      .payload.nPrbGrp = nPrbGrp,
                                      .payload.nBsAnt = nUeAnt,
