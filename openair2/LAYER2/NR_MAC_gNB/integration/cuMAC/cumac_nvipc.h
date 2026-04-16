@@ -19,6 +19,7 @@ bool cumac_nvipc_init();
 int cumac_recv_msg(nv_ipc_msg_t* recv_msg);
 uint16_t cumac_nMax_schUePerCell();
 uint16_t cumac_nPrbPerPrg();
+uint16_t cumac_nMaxPrg();
 int cumac_get_UE_ID_by_RNTI(const uint16_t frame, const uint16_t slot, const uint16_t rnti);
 slot_data_entry_t* get_slot_data(const uint16_t frame, const uint16_t slot);
 bool cumac_can_schedule();

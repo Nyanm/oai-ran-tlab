@@ -451,8 +451,8 @@ NR_IF_Module_t *NR_IF_Module_init(int Mod_id) {
   conf_req_payload.nMaxCell = 1;
   conf_req_payload.nMaxActUePerCell = 16;
   conf_req_payload.nMaxSchUePerCell = 8;
-  conf_req_payload.nMaxPrg = 1;
-  conf_req_payload.nPrbPerPrg = 106;
+  conf_req_payload.nMaxPrg = 106;
+  conf_req_payload.nPrbPerPrg = 1;
   conf_req_payload.nMaxBsAnt = 1;
   conf_req_payload.nMaxUeAnt = 1;
   conf_req_payload.scSpacing = 1;

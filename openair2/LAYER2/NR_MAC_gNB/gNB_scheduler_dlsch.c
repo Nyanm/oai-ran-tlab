@@ -716,9 +716,21 @@ static void pf_dl(gNB_MAC_INST *mac,
 
       idx++;
     }
-    const uint16_t nPrbGrp = 1;
-    buffers.prgMsk = malloc(nPrbGrp * sizeof(uint8_t));
-    memset(buffers.prgMsk, 1, nPrbGrp); // all PRBs available
+    const uint16_t prb_per_prg = cumac_nPrbPerPrg();
+    const uint16_t nPrbGrp = cumac_nMaxPrg() > 0 ? cumac_nMaxPrg() : 1;
+    buffers.prgMsk = calloc(nPrbGrp, sizeof(uint8_t)); // zero-init: unavailable by default
+    if (prb_per_prg > 0) {
+      UE_iterator(UE_list, UE) {
+        bwp_info_t ue_bwp = get_pdsch_bwp_start_size(mac, UE);
+        if (ue_bwp.bwpSize == 0)
+          continue;
+        const uint16_t first_prg = ue_bwp.bwpStart / prb_per_prg;
+        const uint16_t end_prg = (ue_bwp.bwpStart + ue_bwp.bwpSize + prb_per_prg - 1) / prb_per_prg;
+        for (uint16_t i = first_prg; i < end_prg && i < nPrbGrp; i++)
+          buffers.prgMsk[i] = 1;
+      }
+    }
+
     cumac_wait_to_send();
     const uint32_t taskBitMap = TASK_BIT(CUMAC_TASK_UE_SELECTION) | TASK_BIT(CUMAC_TASK_PRB_ALLOCATION);
     cumac_sch_tti_req_args_t args = {.frame = frame,
