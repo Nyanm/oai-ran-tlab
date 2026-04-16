@@ -717,6 +717,11 @@ static void pf_dl(gNB_MAC_INST *mac,
       idx++;
     }
     const uint16_t prb_per_prg = cumac_nPrbPerPrg();
+    // nPrbGrp must equal nMaxPrg from CONFIG.request — cuMAC validates data_num == buf_num.
+    // prgMsk uses carrier-absolute PRG indices to guide cuMAC's metric computation
+    // (masking PRGs outside the BWP gives them zero SINR).  Note: the 4T4R scheduler
+    // ignores prgMsk during the allocation phase, so the allocSol will span [0, nPrbGrp)
+    // regardless; the response handler clips it to the BWP.
     const uint16_t nPrbGrp = cumac_nMaxPrg() > 0 ? cumac_nMaxPrg() : 1;
     buffers.prgMsk = calloc(nPrbGrp, sizeof(uint8_t)); // zero-init: unavailable by default
     if (prb_per_prg > 0) {
@@ -1034,24 +1039,28 @@ static void pf_dl(gNB_MAC_INST *mac,
       continue;
     }
     const int prb_per_prg = cumac_nPrbPerPrg();
-    const int abs_rb_start = cumac_slot_data->allocSol[cumac_ue_id * 2] * prb_per_prg;
-    const int abs_rb_end = cumac_slot_data->allocSol[cumac_ue_id * 2 + 1] * prb_per_prg;
-    rbStart = abs_rb_start - bwp_start;
-    uint16_t max_rbSize = abs_rb_end - abs_rb_start;
-    if (rbStart < 0 || rbStart + max_rbSize > (uint16_t)bwp_size) {
+    // allocSol gives carrier-absolute PRG indices.  The 4T4R scheduler ignores prgMsk
+    // during allocation and always returns [0, nPrbGrp); clip to the UE's current BWP.
+    const int alloc_abs_start = cumac_slot_data->allocSol[cumac_ue_id * 2] * prb_per_prg;
+    const int alloc_abs_end = cumac_slot_data->allocSol[cumac_ue_id * 2 + 1] * prb_per_prg;
+    const int clipped_abs_start = alloc_abs_start > bwp_start ? alloc_abs_start : bwp_start;
+    const int clipped_abs_end = alloc_abs_end < bwp_start + bwp_size ? alloc_abs_end : bwp_start + bwp_size;
+    if (clipped_abs_end <= clipped_abs_start) {
       LOG_W(NR_MAC,
-            "[UE %04x][%4d.%2d] cuMAC allocation [%d,%d) PRBs outside BWP [%d,%d), skipping\n",
+            "[UE %04x][%4d.%2d] cuMAC allocation [%d,%d) PRBs has no overlap with BWP [%d,%d), skipping\n",
             rnti,
             frame,
             slot,
-            abs_rb_start,
-            abs_rb_end,
+            alloc_abs_start,
+            alloc_abs_end,
             bwp_start,
             bwp_start + bwp_size);
       reset_beam_status(&mac->beam_info, frame, slot, iterator->UE->UE_beam_index, slots_per_frame, beam.new_beam);
       iterator++;
       continue;
     }
+    rbStart = clipped_abs_start - bwp_start;
+    uint16_t max_rbSize = clipped_abs_end - clipped_abs_start;
 #endif
     int CCEIndex = get_cce_index(mac,
                                  CC_id,
