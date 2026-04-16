@@ -35,7 +35,11 @@
 // Declare variable useful for the send buffer function
 volatile bool first_call_set = false;
 
-int xran_is_prach_slot(uint8_t PortId, uint32_t subframe_id, uint32_t slot_id);
+int xran_is_prach_slot(uint8_t PortId, uint32_t subframe_id, uint32_t slot_id
+#if defined K_RELEASE
+                                                                             , uint8_t mu
+#endif
+                                                                                         );
 #include "common/utils/LOG/log.h"
 
 #ifndef USE_POLLING
@@ -50,7 +54,11 @@ volatile oran_sync_info_t oran_sync_info = {0};
  * timing information and unblock another thread in xran_fh_rx_read_slot()
  * through either a message queue, or writing in global memory with polling, on
  * a full slot boundary. */
-void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status)
+void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status
+#if defined K_RELEASE
+                                                                     , uint8_t mu
+#endif
+                                                                                 )
 {
   struct xran_cb_tag *callback_tag = (struct xran_cb_tag *)pCallbackTag;
 
@@ -60,9 +68,13 @@ void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status)
   const struct xran_fh_init *fh_init = get_xran_fh_init();
   int num_ports = fh_init->xran_ports;
 
+#if defined K_RELEASE
+  const int slots_in_sf = 1 << mu;
+#elif defined F_RELEASE
   /* assuming all RUs have the same numerology */
   const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
   const int slots_in_sf = 1 << fh_cfg->frame_conf.nNumerology;
+#endif
   const int sf_in_frame = 10;
 
   static int rx_RU[XRAN_PORTS_NUM][160] = {0};
@@ -121,6 +133,9 @@ void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status)
       info->tti = tti;
       info->sl = slot2;
       info->f = frame;
+#if defined K_RELEASE
+      info->mu = mu;
+#endif
       LOG_D(HW, "Push %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, info->sl, slot, ru_id, subframe, last_slot);
       atomic_fetch_add(&xran_queue_length, 1);
       pushNotifiedFIFO(&oran_sync_fifo, req);
@@ -129,6 +144,9 @@ void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status)
       oran_sync_info.tti = tti;
       oran_sync_info.sl = slot2;
       oran_sync_info.f = frame;
+#if defined K_RELEASE
+      oran_sync_info.mu = mu;
+#endif
 #endif
     } else
       LOG_E(HW, "Cannot Push %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, slot2, ru_id, slot, subframe, last_slot);
@@ -139,7 +157,11 @@ void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status)
 
 /** @details Only used to unblock timing in oai_xran_fh_rx_callback() on first
  * call. */
-int oai_physide_dl_tti_call_back(void *param)
+int oai_physide_dl_tti_call_back(void *param
+#if defined K_RELEASE
+                                            , uint8_t mu
+#endif
+                                                        )
 {
   if (!first_call_set)
     LOG_I(HW, "first_call set from phy cb\n");
@@ -152,7 +174,11 @@ int oai_physide_dl_tti_call_back(void *param)
  * @details Reads PRACH data from xran-specific buffers and, if I/Q compression
  * (bitwidth < 16 bits) is configured, uncompresses the data. Places PRACH data
  * in OAI buffer. */
-static int read_prach_data(ru_info_t *ru, int frame, int slot)
+static int read_prach_data(ru_info_t *ru, int frame, int slot
+#if defined K_RELEASE
+                                                             , uint8_t mu
+#endif
+                                                                         )
 {
   /* calculate tti and subframe_id from frame, slot num */
   int sym_idx = 0;
@@ -174,7 +200,12 @@ static int read_prach_data(ru_info_t *ru, int frame, int slot)
   int prach_start_sym = prach_info.start_symbol;
   int prach_end_sym = prach_info.N_dur + prach_start_sym;
   struct xran_ru_config *ru_conf = &fh_cfg->ru_conf;
+
+#if defined K_RELEASE
+  int slots_per_frame = 10 << mu;
+#elif defined F_RELEASE
   int slots_per_frame = 10 << fh_cfg->frame_conf.nNumerology;
+#endif
   int tti = slots_per_frame * (frame) + (slot);
 
   int nb_rx_per_ru = ru->nb_rx / fh_init->xran_ports;
@@ -330,10 +361,16 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
 
   *slot = info->sl;
   *frame = info->f;
+#if defined K_RELEASE
+  uint8_t mu = info->mu;
+#endif
   delNotifiedFIFO_elt(res);
 #else
   *slot = oran_sync_info.sl;
   *frame = oran_sync_info.f;
+#if defined K_RELEASE
+  uint8_t mu = oran_sync_info.mu;
+#endif
   uint32_t tti_in = oran_sync_info.tti;
 
   static int last_slot = -1;
@@ -350,14 +387,26 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
   // return(0);
 
   struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
+#if defined K_RELEASE
+  int slots_per_frame = 10 << mu;
+#elif defined F_RELEASE
   int slots_per_frame = 10 << fh_cfg->frame_conf.nNumerology;
+#endif
 
   int tti = slots_per_frame * (*frame) + (*slot);
 
-  read_prach_data(ru, *frame, *slot);
+  read_prach_data(ru, *frame, *slot
+#if defined K_RELEASE
+                                   , mu
+#endif
+                                       );
 
   const struct xran_fh_init *fh_init = get_xran_fh_init();
+#if defined K_RELEASE
+  int fftsize = 1 << fh_cfg->perMu[mu].nULFftSize;
+#elif defined F_RELEASE
   int fftsize = 1 << fh_cfg->nULFftSize;
+#endif
 
   int slot_offset_rxdata = 3 & (*slot);
   uint32_t slot_size = 4 * 14 * fftsize;
@@ -397,7 +446,22 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
           uint8_t *pData;
           struct xran_section_desc *p_sec_desc = NULL;
           struct xran_prb_elm *pRbElm = &pRbMap->prbMap[idxElm];
-#if defined F_RELEASE
+#if defined K_RELEASE
+          uint32_t one_rb_size =
+              (((pRbElm->iqWidth == 0) || (pRbElm->iqWidth == 16)) ? (N_SC_PER_PRB * 2 * 2) : (3 * pRbElm->iqWidth + 1));
+          if (fh_init->mtu < num_totalRB * one_rb_size)
+            pData = bufs->dst[ant_id % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN]
+                        .pBuffers[sym_idx % XRAN_NUM_OF_SYMBOL_PER_SLOT]
+                        .pData;
+          else {
+            p_sec_desc = &pRbElm->sec_desc[sym_idx];
+            pData = p_sec_desc->pData;
+          }
+          numRB = num_totalRB;
+          startRB = start_totalRB;
+          {
+            {
+#elif defined F_RELEASE
           // UP_nRBSize & UP_nRBStart are for DL U-plane only
           LOG_D(HW, "[%d.%d] idxElm[%d] startSym[%d]:numSym[%d] UP_startRB[%d]:UP_numRB[%d] sym_idx[%d] ant_id[%d] pRbElm->nRBStart[%d]:pRbElm->nRBSize[%d]\n", *frame, *slot, idxElm, pRbElm->nStartSymb, pRbElm->numSymb, pRbElm->UP_nRBStart, pRbElm->UP_nRBSize, sym_idx, ant_id, pRbElm->nRBStart, pRbElm->nRBSize);
           for (int idxDesc = 0; idxDesc < XRAN_MAX_FRAGMENT; idxDesc++) {
@@ -516,7 +580,12 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
 
   const struct xran_fh_init *fh_init = get_xran_fh_init();
   const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
+#if defined K_RELEASE
+  uint8_t mu_number = fh_cfg->mu_number[0];
+  int fftsize = 1 << fh_cfg->perMu[mu_number].nDLFftSize;
+#elif defined F_RELEASE
   int fftsize = 1 << fh_cfg->nDLFftSize;
+#endif
   int nb_tx_per_ru = ru->nb_tx / fh_init->xran_ports;
   int nb_rx_per_ru = ru->nb_rx / fh_init->xran_ports;
 
@@ -542,12 +611,15 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
 
         LOG_D(HW, "pPrbMap->nPrbElm %d\n", pPrbMap->nPrbElm);
         for (uint32_t idxElm = 0; idxElm < pPrbMap->nPrbElm; idxElm++) {
+          struct xran_section_desc *p_sec_desc = NULL;
           struct xran_prb_elm *pRbElm = &pPrbMap->prbMap[idxElm];
           int numRB, startRB;
-#if defined F_RELEASE
           numRB = pRbElm->UP_nRBSize;
           startRB = pRbElm->UP_nRBStart;
-          struct xran_section_desc *p_sec_desc = &pRbElm->sec_desc[sym_idx][0];
+#if defined F_RELEASE
+          p_sec_desc = &pRbElm->sec_desc[sym_idx][0];
+#elif defined K_RELEASE
+          p_sec_desc = &pRbElm->sec_desc[sym_idx];
 #endif
           LOG_D(HW, "pPrbMap[%d] : PRBstart %d nPRBs %d\n", idxElm, startRB, numRB);
           // For Liteon FR2 with RunSlotPrbMapBySymbolEnable xran_prb_map will have xran_prb_elm prbMap[14], each idxElm matches to sym_idx.
@@ -644,9 +716,11 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
             // => seems that the RUs don't check for E-bit
 #if defined F_RELEASE
             p_sec_desc = &p_prbMapElm->sec_desc[sym_idx][0];
+#elif defined K_RELEASE
+            p_sec_desc = &p_prbMapElm->sec_desc[sym_idx];
+#endif
             int16_t startRB = p_prbMapElm->UP_nRBStart;
             int16_t numRB = p_prbMapElm->UP_nRBSize;
-#endif
 
             if (p_sec_desc == NULL) {
               printf("p_sec_desc == NULL\n");
