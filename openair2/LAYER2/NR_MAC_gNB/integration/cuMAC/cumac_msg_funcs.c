@@ -314,7 +314,7 @@ void cumac_handle_sch_tti_response(cumac_msg_t type, nv_ipc_msg_t *nvipc_buf, sl
   struct timespec now;
   clock_gettime(CLOCK_REALTIME, &now);
   LOG_D(NR_MAC,"message 0x%02x\n", type);
-  LOG_D(NR_MAC,"From TTI_REQ/TTI_END to RESPONSE %ld , %ld\n",
+  LOG_I(NR_MAC,"From TTI_REQ/TTI_END to RESPONSE %ld , %ld\n",
          nvlog_timespec_interval(&slot_data_entry->tti_req_timestamp, &now),
          nvlog_timespec_interval(&slot_data_entry->tti_end_timestamp, &now));
   LOG_D(NR_MAC,"Used values in originating SCH_TTI.request:\n");
