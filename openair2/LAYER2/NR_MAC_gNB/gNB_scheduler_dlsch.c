@@ -750,11 +750,20 @@ static void pf_dl(gNB_MAC_INST *mac,
     NR_UE_sched_ctrl_t *sched_ctrl = &iterator->UE->UE_sched_ctrl;
     const uint16_t rnti = iterator->UE->rnti;
 
+    NR_UE_DL_BWP_t *dl_bwp = &iterator->UE->current_DL_BWP;
     NR_UE_UL_BWP_t *ul_bwp = &iterator->UE->current_UL_BWP;
 
-    DevAssert(sched_ctrl->available_dl_harq.head >= 0);
+    if (sched_ctrl->available_dl_harq.head < 0) {
+      LOG_D(NR_MAC, "[UE %04x][%4d.%2d] UE has no free DL HARQ process, skipping\n",
+            iterator->UE->rnti,
+            frame,
+            slot);
+      iterator++;
+      continue;
+    }
 
     NR_beam_alloc_t beam = beam_allocation_procedure(&mac->beam_info, frame, slot, iterator->UE->UE_beam_index, slots_per_frame);
+
     if (beam.idx < 0) {
       // no available beam
       iterator++;
@@ -765,44 +774,6 @@ static void pf_dl(gNB_MAC_INST *mac,
       iterator++;
       continue;
     }
-
-    int CCEIndex = get_cce_index(mac,
-                                 CC_id,
-                                 slot,
-                                 iterator->UE->rnti,
-                                 &sched_ctrl->aggregation_level,
-                                 beam.idx,
-                                 sched_ctrl->search_space,
-                                 sched_ctrl->coreset,
-                                 &sched_ctrl->sched_pdcch,
-                                 sched_ctrl->pdcch_cl_adjust);
-    if (CCEIndex < 0) {
-      sched_ctrl->dl_cce_fail++;
-      LOG_D(NR_MAC, "[UE %04x][%4d.%2d] could not find free CCE for DL DCI\n", rnti, frame, slot);
-      reset_beam_status(&mac->beam_info, frame, slot, iterator->UE->UE_beam_index, slots_per_frame, beam.new_beam);
-      iterator++;
-      continue;
-    }
-
-    /* Find PUCCH occasion: if it fails, undo CCE allocation (undoing PUCCH
-    * allocation after CCE alloc fail would be more complex) */
-    int alloc = -1;
-    if (!get_FeedbackDisabled(iterator->UE->sc_info.downlinkHARQ_FeedbackDisabled_r17, sched_ctrl->available_dl_harq.head)) {
-      int r_pucch = nr_get_pucch_resource(sched_ctrl->coreset, ul_bwp->pucch_Config, CCEIndex);
-      alloc = nr_acknack_scheduling(mac, iterator->UE, frame, slot, iterator->UE->UE_beam_index, r_pucch, 0);
-      if (alloc < 0) {
-        LOG_D(NR_MAC, "[UE %04x][%4d.%2d] could not find PUCCH for DL DCI\n", rnti, frame, slot);
-        reset_beam_status(&mac->beam_info, frame, slot, iterator->UE->UE_beam_index, slots_per_frame, beam.new_beam);
-        iterator++;
-        continue;
-      }
-    }
-
-    sched_ctrl->cce_index = CCEIndex;
-    fill_pdcch_vrb_map(mac, CC_id, &sched_ctrl->sched_pdcch, CCEIndex, sched_ctrl->aggregation_level, beam.idx);
-
-    /* this UE can be allocated for sure, assuming enough PRBs! */
-    NR_UE_DL_BWP_t *dl_bwp = &iterator->UE->current_DL_BWP;
 
     /* MCS has been set above */
     int tda = get_dl_tda(mac, slot);
@@ -840,6 +811,42 @@ static void pf_dl(gNB_MAC_INST *mac,
       iterator++;
       continue;
     }
+
+    int CCEIndex = get_cce_index(mac,
+                                 CC_id,
+                                 slot,
+                                 iterator->UE->rnti,
+                                 &sched_ctrl->aggregation_level,
+                                 beam.idx,
+                                 sched_ctrl->search_space,
+                                 sched_ctrl->coreset,
+                                 &sched_ctrl->sched_pdcch,
+                                 sched_ctrl->pdcch_cl_adjust);
+    if (CCEIndex < 0) {
+      sched_ctrl->dl_cce_fail++;
+      LOG_D(NR_MAC, "[UE %04x][%4d.%2d] could not find free CCE for DL DCI\n", rnti, frame, slot);
+      reset_beam_status(&mac->beam_info, frame, slot, iterator->UE->UE_beam_index, slots_per_frame, beam.new_beam);
+      iterator++;
+      continue;
+    }
+
+    /* Find PUCCH occasion: if it fails, undo CCE allocation (undoing PUCCH
+    * allocation after CCE alloc fail would be more complex) */
+
+    int alloc = -1;
+    if (!get_FeedbackDisabled(iterator->UE->sc_info.downlinkHARQ_FeedbackDisabled_r17, sched_ctrl->available_dl_harq.head)) {
+      int r_pucch = nr_get_pucch_resource(sched_ctrl->coreset, ul_bwp->pucch_Config, CCEIndex);
+      alloc = nr_acknack_scheduling(mac, iterator->UE, frame, slot, iterator->UE->UE_beam_index, r_pucch, 0);
+      if (alloc < 0) {
+        LOG_D(NR_MAC, "[UE %04x][%4d.%2d] could not find PUCCH for DL DCI\n", rnti, frame, slot);
+        reset_beam_status(&mac->beam_info, frame, slot, iterator->UE->UE_beam_index, slots_per_frame, beam.new_beam);
+        iterator++;
+        continue;
+      }
+    }
+
+    sched_ctrl->cce_index = CCEIndex;
+    fill_pdcch_vrb_map(mac, CC_id, &sched_ctrl->sched_pdcch, CCEIndex, sched_ctrl->aggregation_level, beam.idx);
 
     int l = get_dl_nrOfLayers(sched_ctrl, dl_bwp->dci_format);
     NR_sched_pdsch_t sched_pdsch = {
