@@ -61,14 +61,18 @@ int eNB_handle_MBMS_SCHEDULING_INFORMATION(instance_t instance, sctp_assoc_t ass
   message_p  = itti_alloc_new_message (TASK_M2AP_ENB, 0, M2AP_MBMS_SCHEDULING_INFORMATION);
   //message_p2  = itti_alloc_new_message (TASK_M2AP_ENB, 0, M2AP_MBMS_SCHEDULING_INFORMATION);
 
-
-
-
-
-  M2AP_FIND_PROTOCOLIE_BY_ID(M2AP_MbmsSchedulingInformation_Ies_t, ie, container,M2AP_ProtocolIE_ID_id_MCCH_Update_Time ,true);
+  FIND_PROTOCOLIE_BY_ID(M2AP_MbmsSchedulingInformation_Ies_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        M2AP_ProtocolIE_ID_id_MCCH_Update_Time,
+                        true);
   //printf("id %d\n",ie->id);
 
-  M2AP_FIND_PROTOCOLIE_BY_ID(M2AP_MbmsSchedulingInformation_Ies_t, ie, container,M2AP_ProtocolIE_ID_id_MBSFN_Area_Configuration_List ,true);
+  FIND_PROTOCOLIE_BY_ID(M2AP_MbmsSchedulingInformation_Ies_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        M2AP_ProtocolIE_ID_id_MBSFN_Area_Configuration_List,
+                        true);
 
   if(ie){
 

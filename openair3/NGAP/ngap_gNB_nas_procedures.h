@@ -15,7 +15,7 @@
 #include "ngap_messages_types.h"
 #include "ngap_msg_includes.h"
 
-int ngap_gNB_handle_nas_downlink(sctp_assoc_t assoc_id, uint32_t stream, NGAP_NGAP_PDU_t *pdu);
+int ngap_gNB_handle_nas_downlink(sctp_assoc_t assoc_id, uint32_t stream, const NGAP_NGAP_PDU_t *pdu);
 
 int ngap_gNB_nas_uplink(instance_t instance, ngap_uplink_nas_t *ngap_uplink_nas_p);
 

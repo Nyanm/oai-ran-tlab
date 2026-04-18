@@ -178,7 +178,7 @@ int e1apCUUP_handle_SETUP_FAILURE(sctp_assoc_t assoc_id, e1ap_upcp_inst_t *inst,
   DevAssert(pdu != NULL);
   E1AP_GNB_CU_UP_E1SetupFailure_t *in = &pdu->choice.unsuccessfulOutcome->value.choice.GNB_CU_UP_E1SetupFailure;
   /* Transaction ID */
-  F1AP_FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupFailureIEs_t, ie, in, E1AP_ProtocolIE_ID_id_TransactionID, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupFailureIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_TransactionID, true);
   long transaction_id;
   long old_transaction_id = inst->cuup.setupReq.transac_id;
   transaction_id = ie->value.choice.TransactionID;
@@ -187,7 +187,7 @@ int e1apCUUP_handle_SETUP_FAILURE(sctp_assoc_t assoc_id, e1ap_upcp_inst_t *inst,
   E1AP_free_transaction_identifier(transaction_id);
 
   /* Cause */
-  F1AP_FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupFailureIEs_t, ie, in, E1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupFailureIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_Cause, true);
 
   LOG_E(E1AP, "received E1 Setup Failure, please check the CU-CP output and the CU-UP parameters\n");
   exit(1);

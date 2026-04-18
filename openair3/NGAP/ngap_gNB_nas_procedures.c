@@ -272,7 +272,7 @@ int ngap_gNB_handle_nas_first_req(instance_t instance, ngap_nas_first_req_t *UEf
 }
 
 //------------------------------------------------------------------------------
-int ngap_gNB_handle_nas_downlink(sctp_assoc_t assoc_id, uint32_t stream, NGAP_NGAP_PDU_t *pdu)
+int ngap_gNB_handle_nas_downlink(sctp_assoc_t assoc_id, uint32_t stream, const NGAP_NGAP_PDU_t *pdu)
 //------------------------------------------------------------------------------
 {
 
@@ -300,13 +300,18 @@ int ngap_gNB_handle_nas_downlink(sctp_assoc_t assoc_id, uint32_t stream, NGAP_NG
   ngap_gNB_instance = amf_desc_p->ngap_gNB_instance;
   /* Prepare the NGAP message to encode */
   container = &pdu->choice.initiatingMessage->value.choice.DownlinkNASTransport;
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkNASTransport_IEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkNASTransport_IEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID,
+                        true);
   asn_INTEGER2ulong(&(ie->value.choice.AMF_UE_NGAP_ID), &amf_ue_ngap_id);
 
-
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkNASTransport_IEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkNASTransport_IEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
+                        true);
   gnb_ue_ngap_id = ie->value.choice.RAN_UE_NGAP_ID;
 
   if ((ue_desc_p = ngap_get_ue_context(gnb_ue_ngap_id)) == NULL) {
@@ -337,8 +342,7 @@ int ngap_gNB_handle_nas_downlink(sctp_assoc_t assoc_id, uint32_t stream, NGAP_NG
     }
   }
 
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkNASTransport_IEs_t, ie, container,
-                             NGAP_ProtocolIE_ID_id_NAS_PDU, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_DownlinkNASTransport_IEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_NAS_PDU, true);
   /* Forward the NAS PDU to NR-RRC */
   ngap_gNB_itti_send_nas_downlink_ind(ngap_gNB_instance->instance,
                                       ue_desc_p->gNB_ue_ngap_id,

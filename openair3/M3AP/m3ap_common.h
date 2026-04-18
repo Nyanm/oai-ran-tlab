@@ -38,21 +38,6 @@
 #define M3AP_WARN(x, args...)  LOG_W(M3AP, x, ##args)
 #define M3AP_DEBUG(x, args...) LOG_D(M3AP, x, ##args)
 
-#define M3AP_FIND_PROTOCOLIE_BY_ID(IE_TYPE, ie, container, IE_ID, mandatory) \
-  do {\
-    IE_TYPE **ptr; \
-    ie = NULL; \
-    for (ptr = container->protocolIEs.list.array; \
-         ptr < &container->protocolIEs.list.array[container->protocolIEs.list.count]; \
-         ptr++) { \
-      if((*ptr)->id == IE_ID) { \
-        ie = *ptr; \
-        break; \
-      } \
-    } \
-    if (mandatory) DevAssert(ie != NULL); \
-  } while(0)
-
 /** \brief Function callback prototype.
  **/
 typedef int (*m3ap_message_decoded_callback)(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, M3AP_M3AP_PDU_t *pdu);

@@ -41,29 +41,6 @@
 #define S1AP_INFO(x, args...) LOG_I(S1AP, x, ##args)
 #define S1AP_DEBUG(x, args...) LOG_I(S1AP, x, ##args)
 
-
-#define S1AP_FIND_PROTOCOLIE_BY_ID(IE_TYPE, ie, container, IE_ID, mandatory) \
-  do {\
-    IE_TYPE **ptr; \
-    ie = NULL; \
-    for (ptr = container->protocolIEs.list.array; \
-         ptr < &container->protocolIEs.list.array[container->protocolIEs.list.count]; \
-         ptr++) { \
-      if((*ptr)->id == IE_ID) { \
-        ie = *ptr; \
-        break; \
-      } \
-    } \
-    if (ie == NULL ) { \
-      S1AP_ERROR("S1AP_FIND_PROTOCOLIE_BY_ID: %s %d: ie is NULL\n",__FILE__,__LINE__);\
-    } \
-    if (mandatory) { \
-      if (ie == NULL) { \
-        S1AP_ERROR("S1AP_FIND_PROTOCOLIE_BY_ID: %s %d: ie is NULL\n",__FILE__,__LINE__);\
-        return -1; \
-      } \
-    } \
-  } while(0)
 /** \brief Function callback prototype.
  **/
 typedef int (*s1ap_message_decoded_callback)(sctp_assoc_t assoc_id, uint32_t stream, S1AP_S1AP_PDU_t *pdu);

@@ -469,14 +469,20 @@ int MME_handle_M3_SETUP_REQUEST(instance_t instance, sctp_assoc_t assoc_id, uint
 //
 // /* GlobalMCE_id */
 // // this function exits if the ie is mandatory
-//  M3AP_FIND_PROTOCOLIE_BY_ID(M3AP_M3SetupRequestIEs_t, ie, container,
-//                             M3AP_ProtocolIE_ID_id_Global_MCE_ID, true);
+//  FIND_PROTOCOLIE_BY_ID(M3AP_M3SetupRequestIEs_t,
+//                        ie,
+//                        &container->protocolIEs.list,
+//                        M3AP_ProtocolIE_ID_id_Global_MCE_ID,
+//                        true);
 //  asn_INTEGER2ulong(&ie->value.choice.GlobalMCE_ID, &M3AP_SETUP_REQ(message_p).GlobalMCE_ID);
 //  LOG_W(M3AP, "M3AP_SETUP_REQ(message_p).GlobalMCE_ID %lu \n", M3AP_SETUP_REQ(message_p).GlobalMCE_ID);
 //
 //  /* MCE_name */
-//  M3AP_FIND_PROTOCOLIE_BY_ID(M3AP_M3SetupRequestIEs_t, ie, container,
-//                              M3AP_ProtocolIE_ID_id_MCEname, true);
+//  FIND_PROTOCOLIE_BY_ID(M3AP_M3SetupRequestIEs_t,
+//                        ie,
+//                        &container->protocolIEs.list,
+//                        M3AP_ProtocolIE_ID_id_MCEname,
+//                        true);
 //  M3AP_SETUP_REQ(message_p).MCEname = calloc(ie->value.choice.MCEname.size + 1, sizeof(char));
 //  memcpy(M3AP_SETUP_REQ(message_p).MCEname, ie->value.choice.MCEname.buf,
 //         ie->value.choice.MCEname.size);
@@ -485,8 +491,11 @@ int MME_handle_M3_SETUP_REQUEST(instance_t instance, sctp_assoc_t assoc_id, uint
 //  M3AP_SETUP_REQ(message_p).MCEname[ie->value.choice.MCEname.size] = '\0';
 //  LOG_W(M3AP, "M3AP_SETUP_REQ(message_p).gNB_DU_name %s \n", M3AP_SETUP_REQ(message_p).MCEname);
 //   /* MCE_MBMS_Configuration_data_List */
-//  M3AP_FIND_PROTOCOLIE_BY_ID(M3AP_M3SetupRequestIEs_t, ie, container,
-//                              M3AP_ProtocolIE_ID_id_MCE_MBMS_Configuration_data_List, true);
+//  FIND_PROTOCOLIE_BY_ID(M3AP_M3SetupRequestIEs_t,
+//                        ie,
+//                        &container->protocolIEs.list,
+//                        M3AP_ProtocolIE_ID_id_MCE_MBMS_Configuration_data_List,
+//                        true);
 //  M3AP_SETUP_REQ(message_p).num_mbms_available = ie->value.choice.MCE_MBMS_Configuration_data_List.list.count;
 //  LOG_W(M3AP, "M3AP_SETUP_REQ(message_p).num_mbms_available %d \n",
 //        M3AP_SETUP_REQ(message_p).num_mbms_available);

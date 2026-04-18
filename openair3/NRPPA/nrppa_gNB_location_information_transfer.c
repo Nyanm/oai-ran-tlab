@@ -1024,7 +1024,7 @@ int nrppa_gNB_handle_trp_information_request(nrppa_gnb_ue_info_t *nrppa_msg_info
   req->transaction_id = pdu->choice.initiatingMessage->nrppatransactionID;
 
   // IE TRP List : optional
-  NRPPA_FIND_PROTOCOLIE_BY_ID(NRPPA_TRPInformationRequest_IEs_t, ie, container, NRPPA_ProtocolIE_ID_id_TRPList, false);
+  FIND_PROTOCOLIE_BY_ID(NRPPA_TRPInformationRequest_IEs_t, ie, &container->protocolIEs.list, NRPPA_ProtocolIE_ID_id_TRPList, false);
 
   if (ie == NULL) {
     req->has_trp_list = false;
@@ -1034,11 +1034,11 @@ int nrppa_gNB_handle_trp_information_request(nrppa_gnb_ue_info_t *nrppa_msg_info
 
   // IE TRP Information Type List: mandatory
   // not implemented in oai-lmf
-  NRPPA_FIND_PROTOCOLIE_BY_ID(NRPPA_TRPInformationRequest_IEs_t,
-                              ie,
-                              container,
-                              NRPPA_ProtocolIE_ID_id_TRPInformationTypeList,
-                              false);
+  FIND_PROTOCOLIE_BY_ID(NRPPA_TRPInformationRequest_IEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NRPPA_ProtocolIE_ID_id_TRPInformationTypeList,
+                        false);
 
   if (ie == NULL) {
     LOG_W(NRPPA, "TRPInformationRequest IE TRP Information Type List is mandatory but not handled\n");
@@ -1284,7 +1284,11 @@ int nrppa_gNB_handle_positioning_activation_request(nrppa_gnb_ue_info_t *nrppa_m
   req->transaction_id = pdu->choice.initiatingMessage->nrppatransactionID;
 
   // IE SRSType : mandatory
-  NRPPA_FIND_PROTOCOLIE_BY_ID(NRPPA_PositioningActivationRequestIEs_t, ie, container, NRPPA_ProtocolIE_ID_id_SRSType, true);
+  FIND_PROTOCOLIE_BY_ID(NRPPA_PositioningActivationRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NRPPA_ProtocolIE_ID_id_SRSType,
+                        true);
   decode_nrppa_srstype(&ie->value.choice.SRSType, &req->srs_type);
 
   nrppa_store_ue_context(nrppa_msg_info, req->transaction_id);

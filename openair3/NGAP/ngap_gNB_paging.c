@@ -145,7 +145,7 @@ bool decode_ng_paging(ngap_paging_ind_t *out, const NGAP_NGAP_PDU_t *pdu)
   memset(out, 0, sizeof(*out));
 
   // UE Paging Identity (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, container, NGAP_ProtocolIE_ID_id_UEPagingIdentity, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_UEPagingIdentity, true);
 
   if (ie->value.choice.UEPagingIdentity.present == NGAP_UEPagingIdentity_PR_fiveG_S_TMSI) {
     const struct NGAP_FiveG_S_TMSI *fiveG_S_TMSI = ie->value.choice.UEPagingIdentity.choice.fiveG_S_TMSI;
@@ -158,7 +158,7 @@ bool decode_ng_paging(ngap_paging_ind_t *out, const NGAP_NGAP_PDU_t *pdu)
   }
 
   // TAI List for Paging (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, container, NGAP_ProtocolIE_ID_id_TAIListForPaging, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_TAIListForPaging, true);
 
   // Validate TAI list count
   int tai_count = ie->value.choice.TAIListForPaging.list.count;
@@ -185,7 +185,7 @@ bool decode_ng_paging(ngap_paging_ind_t *out, const NGAP_NGAP_PDU_t *pdu)
   }
 
   // Paging DRX (O)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, container, NGAP_ProtocolIE_ID_id_PagingDRX, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_PagingDRX, false);
   if (ie != NULL) {
     out->paging_drx = malloc_or_fail(sizeof(ngap_paging_drx_t));
     *out->paging_drx = ie->value.choice.PagingDRX;
@@ -194,7 +194,7 @@ bool decode_ng_paging(ngap_paging_ind_t *out, const NGAP_NGAP_PDU_t *pdu)
   }
 
   // Paging Priority (O)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, container, NGAP_ProtocolIE_ID_id_PagingPriority, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_PagingPriority, false);
   if (ie != NULL) {
     out->paging_priority = malloc_or_fail(sizeof(ngap_paging_priority_t));
     *out->paging_priority = ie->value.choice.PagingPriority;
@@ -203,7 +203,11 @@ bool decode_ng_paging(ngap_paging_ind_t *out, const NGAP_NGAP_PDU_t *pdu)
   }
 
   // UERadioCapabilityForPaging (O)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, container, NGAP_ProtocolIE_ID_id_UERadioCapabilityForPaging, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_UERadioCapabilityForPaging,
+                        false);
   if (ie != NULL) {
     const NGAP_UERadioCapabilityForPaging_t *ue_radio_cap = &ie->value.choice.UERadioCapabilityForPaging;
     const OCTET_STRING_t *nr_field = ue_radio_cap->uERadioCapabilityForPagingOfNR;
@@ -222,7 +226,7 @@ bool decode_ng_paging(ngap_paging_ind_t *out, const NGAP_NGAP_PDU_t *pdu)
   }
 
   // PagingOrigin (O)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, container, NGAP_ProtocolIE_ID_id_PagingOrigin, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_PagingOrigin, false);
   if (ie != NULL) {
     // PagingOrigin shall be transferred to UE according to TS 38.331 and TS 36.331
     out->origin = calloc_or_fail(1, sizeof(*out->origin));
@@ -230,7 +234,7 @@ bool decode_ng_paging(ngap_paging_ind_t *out, const NGAP_NGAP_PDU_t *pdu)
   }
 
   // AssistanceDataForPaging (O) - contains PagingAttemptInformation
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, container, NGAP_ProtocolIE_ID_id_AssistanceDataForPaging, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_PagingIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_AssistanceDataForPaging, false);
   if (ie != NULL) {
     const NGAP_AssistanceDataForPaging_t *assistance_data = &ie->value.choice.AssistanceDataForPaging;
 

@@ -340,22 +340,6 @@
 #define F1AP_INFO(x, args...) LOG_I(F1AP, x, ##args)
 #define F1AP_DEBUG(x, args...) LOG_I(F1AP, x, ##args)
 
-//Forward declaration
-#define F1AP_FIND_PROTOCOLIE_BY_ID(IE_TYPE, ie, container, IE_ID, mandatory) \
-  do {\
-    IE_TYPE **ptr; \
-    ie = NULL; \
-    for (ptr = container->protocolIEs.list.array; \
-         ptr < &container->protocolIEs.list.array[container->protocolIEs.list.count]; \
-         ptr++) { \
-      if((*ptr)->id == IE_ID) { \
-        ie = *ptr; \
-        break; \
-      } \
-    } \
-    if (mandatory) DevAssert(ie != NULL); \
-  } while(0)
-
 /** \brief Function array prototype.
  **/
 typedef int (*f1ap_message_processing_t)(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, F1AP_F1AP_PDU_t *message_p);

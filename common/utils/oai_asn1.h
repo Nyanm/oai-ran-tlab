@@ -214,6 +214,23 @@ static inline uint64_t BIT_STRING_to_uint64(const BIT_STRING_t *asn) {
 #define asn1cFreeSeq(ASN_DEF, LIST)                     \
   do {                                                  \
     ASN_STRUCT_FREE(ASN_DEF, LIST.array[--LIST.count]); \
-  } while (LIST.count > 0)                              \
+  } while (LIST.count > 0)
+
+/* Macro to look up IE. If mandatory and not found, macro will print
+ * descriptive debug message to stderr and force exit in calling function */
+#define FIND_PROTOCOLIE_BY_ID(IE_TYPE, ie, IE_LIST, IE_ID, mandatory)                                \
+  do {                                                                                               \
+    ie = NULL;                                                                                       \
+    for (IE_TYPE **ptr = (IE_LIST)->array; ptr < &(IE_LIST)->array[(IE_LIST)->count]; ptr++) {       \
+      if ((*ptr)->id == IE_ID) {                                                                     \
+        ie = *ptr;                                                                                   \
+        break;                                                                                       \
+      }                                                                                              \
+    }                                                                                                \
+    if (mandatory && ie == NULL) {                                                                   \
+      fprintf(stderr, "%s(): could not find element " #IE_ID " with type " #IE_TYPE "\n", __func__); \
+      DevAssert(false);                                                                              \
+    }                                                                                                \
+  } while (0)
 
 #endif

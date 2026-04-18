@@ -149,13 +149,13 @@ bool decode_e1ap_cuup_setup_request(const E1AP_E1AP_PDU_t *pdu, e1ap_setup_req_t
   E1AP_GNB_CU_UP_E1SetupRequestIEs_t *ie;
   E1AP_GNB_CU_UP_E1SetupRequest_t *in = &pdu->choice.initiatingMessage->value.choice.GNB_CU_UP_E1SetupRequest;
   // Transaction ID (M)
-  E1AP_LIB_FIND_IE(E1AP_GNB_CU_UP_E1SetupRequestIEs_t, ie, in, E1AP_ProtocolIE_ID_id_TransactionID, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupRequestIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_TransactionID, true);
   // gNB-CU-UP ID (M)
-  E1AP_LIB_FIND_IE(E1AP_GNB_CU_UP_E1SetupRequestIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_UP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupRequestIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_gNB_CU_UP_ID, true);
   // CN Support (M)
-  E1AP_LIB_FIND_IE(E1AP_GNB_CU_UP_E1SetupRequestIEs_t, ie, in, E1AP_ProtocolIE_ID_id_CNSupport, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupRequestIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_CNSupport, true);
   // Supported PLMNs (1..<maxnoofSPLMNs>)
-  E1AP_LIB_FIND_IE(E1AP_GNB_CU_UP_E1SetupRequestIEs_t, ie, in, E1AP_ProtocolIE_ID_id_SupportedPLMNs, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupRequestIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_SupportedPLMNs, true);
   // Loop over all IEs
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     ie = in->protocolIEs.list.array[i];
@@ -172,7 +172,11 @@ bool decode_e1ap_cuup_setup_request(const E1AP_E1AP_PDU_t *pdu, e1ap_setup_req_t
       case E1AP_ProtocolIE_ID_id_gNB_CU_UP_Name:
         _EQ_CHECK_INT(ie->value.present, E1AP_GNB_CU_UP_E1SetupRequestIEs__value_PR_GNB_CU_UP_Name);
         // gNB-CU-UP Name (O)
-        E1AP_LIB_FIND_IE(E1AP_GNB_CU_UP_E1SetupRequestIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_UP_Name, false);
+        FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupRequestIEs_t,
+                              ie,
+                              &in->protocolIEs.list,
+                              E1AP_ProtocolIE_ID_id_gNB_CU_UP_Name,
+                              false);
         if (ie != NULL) {
           out->gNB_cu_up_name = calloc_or_fail(ie->value.choice.GNB_CU_UP_Name.size + 1, sizeof(char));
           memcpy(out->gNB_cu_up_name, ie->value.choice.GNB_CU_UP_Name.buf, ie->value.choice.GNB_CU_UP_Name.size);
@@ -361,7 +365,7 @@ bool decode_e1ap_cuup_setup_response(const E1AP_E1AP_PDU_t *pdu, e1ap_setup_resp
   const E1AP_GNB_CU_UP_E1SetupResponse_t *in = &pdu->choice.successfulOutcome->value.choice.GNB_CU_UP_E1SetupResponse;
   E1AP_GNB_CU_UP_E1SetupResponseIEs_t *ie;
   // Transaction ID (M)
-  E1AP_LIB_FIND_IE(E1AP_GNB_CU_UP_E1SetupResponseIEs_t, ie, in, E1AP_ProtocolIE_ID_id_TransactionID, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupResponseIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_TransactionID, true);
   // Decode TNLA Info (O)
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     ie = in->protocolIEs.list.array[i];
@@ -373,7 +377,11 @@ bool decode_e1ap_cuup_setup_response(const E1AP_E1AP_PDU_t *pdu, e1ap_setup_resp
 
       case E1AP_ProtocolIE_ID_id_gNB_CU_CP_Name:
         // gNB-CU-CP Name (O)
-        E1AP_LIB_FIND_IE(E1AP_GNB_CU_UP_E1SetupResponseIEs_t, ie, in, E1AP_ProtocolIE_ID_id_gNB_CU_CP_Name, false);
+        FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupResponseIEs_t,
+                              ie,
+                              &in->protocolIEs.list,
+                              E1AP_ProtocolIE_ID_id_gNB_CU_CP_Name,
+                              false);
         _EQ_CHECK_INT(ie->value.present, E1AP_GNB_CU_UP_E1SetupResponseIEs__value_PR_GNB_CU_CP_Name);
         if (ie != NULL) {
           out->gNB_cu_cp_name = calloc_or_fail(ie->value.choice.GNB_CU_CP_Name.size + 1, sizeof(char));
@@ -382,7 +390,11 @@ bool decode_e1ap_cuup_setup_response(const E1AP_E1AP_PDU_t *pdu, e1ap_setup_resp
         break;
 
       case E1AP_ProtocolIE_ID_id_Transport_Layer_Address_Info:
-        E1AP_LIB_FIND_IE(E1AP_GNB_CU_UP_E1SetupResponseIEs_t, ie, in, E1AP_ProtocolIE_ID_id_Transport_Layer_Address_Info, false);
+        FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupResponseIEs_t,
+                              ie,
+                              &in->protocolIEs.list,
+                              E1AP_ProtocolIE_ID_id_Transport_Layer_Address_Info,
+                              false);
         out->tnla_info = calloc_or_fail(1, sizeof(*out->tnla_info));
         // Transport UP Layer Addresses Info to Add List
         const E1AP_Transport_UP_Layer_Addresses_Info_To_Add_List_t *a =
@@ -546,8 +558,8 @@ bool decode_e1ap_cuup_setup_failure(const E1AP_E1AP_PDU_t *pdu, e1ap_setup_fail_
   const E1AP_GNB_CU_UP_E1SetupFailure_t *in = &pdu->choice.unsuccessfulOutcome->value.choice.GNB_CU_UP_E1SetupFailure;
   E1AP_GNB_CU_UP_E1SetupFailureIEs_t *ie;
   // Check mandatory IEs first
-  E1AP_LIB_FIND_IE(E1AP_GNB_CU_UP_E1SetupFailureIEs_t, ie, in, E1AP_ProtocolIE_ID_id_TransactionID, true);
-  E1AP_LIB_FIND_IE(E1AP_GNB_CU_UP_E1SetupFailureIEs_t, ie, in, E1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupFailureIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_TransactionID, true);
+  FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupFailureIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_Cause, true);
   for (int i = 0; i < in->protocolIEs.list.count; i++) {
     ie = in->protocolIEs.list.array[i];
     AssertFatal(ie != NULL, "in->protocolIEs.list.array[i] shall not be null");
@@ -557,18 +569,26 @@ bool decode_e1ap_cuup_setup_failure(const E1AP_E1AP_PDU_t *pdu, e1ap_setup_fail_
         break;
       case E1AP_ProtocolIE_ID_id_Cause:
         // Cause
-        E1AP_LIB_FIND_IE(E1AP_GNB_CU_UP_E1SetupFailureIEs_t, ie, in, E1AP_ProtocolIE_ID_id_Cause, true);
+        FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupFailureIEs_t, ie, &in->protocolIEs.list, E1AP_ProtocolIE_ID_id_Cause, true);
         out->cause = e1_decode_cause_ie(&ie->value.choice.Cause);
         break;
       case E1AP_ProtocolIE_ID_id_Transport_Layer_Address_Info:
         // Time To Wait (O)
-        E1AP_LIB_FIND_IE(E1AP_GNB_CU_UP_E1SetupFailureIEs_t, ie, in, E1AP_ProtocolIE_ID_id_TimeToWait, false);
+        FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupFailureIEs_t,
+                              ie,
+                              &in->protocolIEs.list,
+                              E1AP_ProtocolIE_ID_id_TimeToWait,
+                              false);
         out->time_to_wait = calloc_or_fail(1, sizeof(*out->time_to_wait));
         *out->time_to_wait = ie->value.choice.TimeToWait;
         break;
       case E1AP_ProtocolIE_ID_id_CriticalityDiagnostics:
         // Criticality Diagnostics (O)
-        E1AP_LIB_FIND_IE(E1AP_GNB_CU_UP_E1SetupFailureIEs_t, ie, in, E1AP_ProtocolIE_ID_id_CriticalityDiagnostics, false);
+        FIND_PROTOCOLIE_BY_ID(E1AP_GNB_CU_UP_E1SetupFailureIEs_t,
+                              ie,
+                              &in->protocolIEs.list,
+                              E1AP_ProtocolIE_ID_id_CriticalityDiagnostics,
+                              false);
         out->crit_diag = calloc_or_fail(1, sizeof(*out->crit_diag));
         decode_criticality_diagnostics(&ie->value.choice.CriticalityDiagnostics, out->crit_diag);
         break;

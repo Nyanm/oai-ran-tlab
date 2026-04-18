@@ -235,8 +235,7 @@ static int s1ap_eNB_handle_s1_setup_failure(sctp_assoc_t assoc_id, uint32_t stre
     return -1;
   }
 
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_S1SetupFailureIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_Cause,true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_S1SetupFailureIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_Cause, true);
 
   if(ie == NULL) {
     return -1;
@@ -256,8 +255,7 @@ static int s1ap_eNB_handle_s1_setup_failure(sctp_assoc_t assoc_id, uint32_t stre
   instance_p = mme_desc_p->s1ap_eNB_instance;
   if( ( instance_p->s1_setupreq_count >= mme_desc_p->s1_setupreq_cnt) ||
       ( instance_p->s1_setupreq_count == 0xffff) ) {
-    S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_S1SetupFailureIEs_t, ie, container,
-                               S1AP_ProtocolIE_ID_id_TimeToWait, false);
+    FIND_PROTOCOLIE_BY_ID(S1AP_S1SetupFailureIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_TimeToWait, false);
     if( ie != NULL ) {
       switch(ie->value.choice.TimeToWait)
       {
@@ -325,15 +323,17 @@ static int s1ap_eNB_handle_s1_setup_response(sctp_assoc_t assoc_id, uint32_t str
   }
 
   /* Set the capacity of this MME */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_S1SetupResponseIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_RelativeMMECapacity, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_S1SetupResponseIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_RelativeMMECapacity,
+                        true);
   if(ie == NULL) {
     return -1;
   }
   mme_desc_p->relative_mme_capacity = ie->value.choice.RelativeMMECapacity;
 
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_S1SetupResponseIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_ServedGUMMEIs, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_S1SetupResponseIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_ServedGUMMEIs, true);
   if(ie == NULL) {
     return -1;
   }
@@ -398,8 +398,7 @@ static int s1ap_eNB_handle_s1_setup_response(sctp_assoc_t assoc_id, uint32_t str
   }
   
   /* Optionaly set the mme name */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_S1SetupResponseIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_MMEname, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_S1SetupResponseIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_MMEname, false);
 
   if (ie) {
     mme_desc_p->mme_name = calloc(ie->value.choice.MMEname.size + 1, sizeof(char));
@@ -437,24 +436,21 @@ static int s1ap_eNB_handle_error_indication(sctp_assoc_t assoc_id, uint32_t stre
     return -1;
   }
 
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_ErrorIndicationIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_ErrorIndicationIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID, false);
 
   /* optional */
   if (ie != NULL) {
     S1AP_WARN("Received S1 Error indication MME UE S1AP ID 0x%lx\n", ie->value.choice.MME_UE_S1AP_ID);
   }
 
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_ErrorIndicationIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_ErrorIndicationIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID, false);
 
   /* optional */
   if (ie != NULL) {
     S1AP_WARN("Received S1 Error indication eNB UE S1AP ID 0x%lx\n", ie->value.choice.ENB_UE_S1AP_ID);
   }
 
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_ErrorIndicationIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_Cause, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_ErrorIndicationIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_Cause, false);
 
   /* optional */
   if (ie) {
@@ -739,8 +735,11 @@ static int s1ap_eNB_handle_error_indication(sctp_assoc_t assoc_id, uint32_t stre
     }
   }
 
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_ErrorIndicationIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_CriticalityDiagnostics, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_ErrorIndicationIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_CriticalityDiagnostics,
+                        false);
 
   if (ie) {
     if( ie->value.choice.CriticalityDiagnostics.procedureCode ) {
@@ -773,8 +772,11 @@ static int s1ap_eNB_handle_initial_context_request(sctp_assoc_t assoc_id, uint32
   }
 
   /* id-MME-UE-S1AP-ID */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     mme_ue_s1ap_id = ie->value.choice.MME_UE_S1AP_ID;
@@ -783,8 +785,11 @@ static int s1ap_eNB_handle_initial_context_request(sctp_assoc_t assoc_id, uint32
   }
 
   /* id-eNB-UE-S1AP-ID */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     enb_ue_s1ap_id = ie->value.choice.ENB_UE_S1AP_ID;
@@ -815,8 +820,11 @@ static int s1ap_eNB_handle_initial_context_request(sctp_assoc_t assoc_id, uint32
   S1AP_INITIAL_CONTEXT_SETUP_REQ(message_p).eNB_ue_s1ap_id = ue_desc_p->eNB_ue_s1ap_id;
   S1AP_INITIAL_CONTEXT_SETUP_REQ(message_p).mme_ue_s1ap_id = ue_desc_p->mme_ue_s1ap_id;
   /* id-uEaggregateMaximumBitrate */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_uEaggregateMaximumBitrate, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_uEaggregateMaximumBitrate,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     asn_INTEGER2ulong(&(ie->value.choice.UEAggregateMaximumBitrate.uEaggregateMaximumBitRateUL),
@@ -829,9 +837,11 @@ static int s1ap_eNB_handle_initial_context_request(sctp_assoc_t assoc_id, uint32
     return -1;
   }
 
-
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_E_RABToBeSetupListCtxtSUReq, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_E_RABToBeSetupListCtxtSUReq,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     S1AP_INITIAL_CONTEXT_SETUP_REQ(message_p).nb_of_e_rabs =
@@ -877,8 +887,11 @@ static int s1ap_eNB_handle_initial_context_request(sctp_assoc_t assoc_id, uint32
   }
 
   /* id-UESecurityCapabilities */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_UESecurityCapabilities, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_UESecurityCapabilities,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     S1AP_INITIAL_CONTEXT_SETUP_REQ(message_p).security_capabilities.encryption_algorithms =
@@ -891,8 +904,11 @@ static int s1ap_eNB_handle_initial_context_request(sctp_assoc_t assoc_id, uint32
   }
 
   /* id-SecurityKey : Copy the security key */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_SecurityKey, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_SecurityKey,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     memcpy(&S1AP_INITIAL_CONTEXT_SETUP_REQ(message_p).security_key,
@@ -903,8 +919,11 @@ static int s1ap_eNB_handle_initial_context_request(sctp_assoc_t assoc_id, uint32
   }
   
   /* id-NRUESecurityCapabilities */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_NRUESecurityCapabilities, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_InitialContextSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_NRUESecurityCapabilities,
+                        false);
   if (ie != NULL) {
     S1AP_INITIAL_CONTEXT_SETUP_REQ(message_p).nr_security_capabilities.encryption_algorithms =
       BIT_STRING_to_uint16(&ie->value.choice.NRUESecurityCapabilities.nRencryptionAlgorithms);
@@ -938,15 +957,17 @@ static int s1ap_eNB_handle_ue_context_release_command(sctp_assoc_t assoc_id, uin
     return -1;
   }
 
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_UEContextReleaseCommand_IEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_UEContextReleaseCommand_IEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_Cause, true);
   if( ie == NULL ) {
     S1AP_ERROR( "Mandatory Element Nothing : UEContextReleaseCommand(Cause)\n" );
     return -1;
   }
 
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_UEContextReleaseCommand_IEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_UE_S1AP_IDs, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_UEContextReleaseCommand_IEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_UE_S1AP_IDs,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     switch (ie->value.choice.UE_S1AP_IDs.present) {
@@ -1030,8 +1051,7 @@ static int s1ap_eNB_handle_e_rab_setup_request(sctp_assoc_t assoc_id, uint32_t s
   }
 
   /* id-MME-UE-S1AP-ID */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_E_RABSetupRequestIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_E_RABSetupRequestIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID, true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     mme_ue_s1ap_id = ie->value.choice.MME_UE_S1AP_ID;
@@ -1040,8 +1060,7 @@ static int s1ap_eNB_handle_e_rab_setup_request(sctp_assoc_t assoc_id, uint32_t s
   }
 
   /* id-eNB-UE-S1AP-ID */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_E_RABSetupRequestIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_E_RABSetupRequestIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID, true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     enb_ue_s1ap_id = ie->value.choice.ENB_UE_S1AP_ID;
@@ -1075,8 +1094,11 @@ static int s1ap_eNB_handle_e_rab_setup_request(sctp_assoc_t assoc_id, uint32_t s
   S1AP_E_RAB_SETUP_REQ(message_p).ue_initial_id  = ue_desc_p->ue_initial_id;
   S1AP_E_RAB_SETUP_REQ(message_p).mme_ue_s1ap_id  = mme_ue_s1ap_id;
   S1AP_E_RAB_SETUP_REQ(message_p).eNB_ue_s1ap_id  = enb_ue_s1ap_id;
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_E_RABSetupRequestIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_E_RABToBeSetupListBearerSUReq, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_E_RABSetupRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_E_RABToBeSetupListBearerSUReq,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     S1AP_E_RAB_SETUP_REQ(message_p).nb_e_rabs_tosetup =
@@ -1160,8 +1182,7 @@ static int s1ap_eNB_handle_paging(sctp_assoc_t assoc_id, uint32_t stream, S1AP_S
   message_p = itti_alloc_new_message(TASK_S1AP, 0, S1AP_PAGING_IND);
   /* convert S1AP_PagingIEs_t to s1ap_paging_ind_t */
   /* id-UEIdentityIndexValue : convert UE Identity Index value */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PagingIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_UEIdentityIndexValue, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PagingIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_UEIdentityIndexValue, true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     S1AP_PAGING_IND(message_p).ue_index_value  = BIT_STRING_to_uint32(&ie->value.choice.UEIdentityIndexValue);
@@ -1175,8 +1196,7 @@ static int s1ap_eNB_handle_paging(sctp_assoc_t assoc_id, uint32_t stream, S1AP_S
   }
 
   /* id-UEPagingID */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PagingIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_UEPagingID, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PagingIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_UEPagingID, true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     /* convert UE Paging Identity */
@@ -1225,8 +1245,7 @@ static int s1ap_eNB_handle_paging(sctp_assoc_t assoc_id, uint32_t stream, S1AP_S
 
   S1AP_PAGING_IND(message_p).paging_drx = PAGING_DRX_256;
   /* id-pagingDRX */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PagingIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_pagingDRX, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PagingIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_pagingDRX, false);
 
   /* optional */
   if (ie) {
@@ -1236,8 +1255,7 @@ static int s1ap_eNB_handle_paging(sctp_assoc_t assoc_id, uint32_t stream, S1AP_S
   }
 
   /* */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PagingIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_CNDomain, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PagingIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_CNDomain, true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     /* id-CNDomain : convert cnDomain */
@@ -1260,8 +1278,7 @@ static int s1ap_eNB_handle_paging(sctp_assoc_t assoc_id, uint32_t stream, S1AP_S
   memset (&S1AP_PAGING_IND(message_p).tac[0], 0, sizeof(int16_t)*256);
   S1AP_PAGING_IND(message_p).tai_size = 0;
   /* id-TAIList */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PagingIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_TAIList, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PagingIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_TAIList, true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     S1AP_INFO("[SCTP %u] Received Paging taiList: count %d\n", assoc_id, ie->value.choice.TAIList.list.count);
@@ -1319,8 +1336,7 @@ static int s1ap_eNB_handle_e_rab_modify_request(sctp_assoc_t assoc_id, uint32_t 
   }
 
   /* id-MME-UE-S1AP-ID */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_E_RABModifyRequestIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_E_RABModifyRequestIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID, true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     mme_ue_s1ap_id = ie->value.choice.MME_UE_S1AP_ID;
@@ -1329,8 +1345,7 @@ static int s1ap_eNB_handle_e_rab_modify_request(sctp_assoc_t assoc_id, uint32_t 
   }
 
   /* id-eNB-UE-S1AP-ID */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_E_RABModifyRequestIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_E_RABModifyRequestIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID, true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     enb_ue_s1ap_id = ie->value.choice.ENB_UE_S1AP_ID;
@@ -1360,8 +1375,11 @@ static int s1ap_eNB_handle_e_rab_modify_request(sctp_assoc_t assoc_id, uint32_t 
               ue_desc_p->mme_ue_s1ap_id, mme_ue_s1ap_id);
     message_p = itti_alloc_new_message (TASK_RRC_ENB, 0, S1AP_E_RAB_MODIFY_RESP);
     S1AP_E_RAB_MODIFY_RESP (message_p).eNB_ue_s1ap_id = enb_ue_s1ap_id;
-    S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_E_RABModifyRequestIEs_t, ie, container,
-                               S1AP_ProtocolIE_ID_id_E_RABToBeModifiedListBearerModReq, true);
+    FIND_PROTOCOLIE_BY_ID(S1AP_E_RABModifyRequestIEs_t,
+                          ie,
+                          &container->protocolIEs.list,
+                          S1AP_ProtocolIE_ID_id_E_RABToBeModifiedListBearerModReq,
+                          true);
 
     if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
       for(nb_of_e_rabs_failed = 0; nb_of_e_rabs_failed < ie->value.choice.E_RABToBeModifiedListBearerModReq.list.count; nb_of_e_rabs_failed++) {
@@ -1390,8 +1408,11 @@ static int s1ap_eNB_handle_e_rab_modify_request(sctp_assoc_t assoc_id, uint32_t 
   S1AP_E_RAB_MODIFY_REQ(message_p).mme_ue_s1ap_id  = mme_ue_s1ap_id;
   S1AP_E_RAB_MODIFY_REQ(message_p).eNB_ue_s1ap_id  = enb_ue_s1ap_id;
   /* id-E-RABToBeModifiedListBearerModReq */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_E_RABModifyRequestIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_E_RABToBeModifiedListBearerModReq, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_E_RABModifyRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_E_RABToBeModifiedListBearerModReq,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     S1AP_E_RAB_MODIFY_REQ(message_p).nb_e_rabs_tomodify =
@@ -1453,8 +1474,11 @@ static int s1ap_eNB_handle_e_rab_release_command(sctp_assoc_t assoc_id, uint32_t
 
 
   /* id-MME-UE-S1AP-ID */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_E_RABReleaseCommandIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_E_RABReleaseCommandIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     mme_ue_s1ap_id = ie->value.choice.MME_UE_S1AP_ID;
@@ -1463,8 +1487,11 @@ static int s1ap_eNB_handle_e_rab_release_command(sctp_assoc_t assoc_id, uint32_t
   }
 
   /* id-eNB-UE-S1AP-ID */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_E_RABReleaseCommandIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_E_RABReleaseCommandIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     enb_ue_s1ap_id = ie->value.choice.ENB_UE_S1AP_ID;
@@ -1499,8 +1526,11 @@ static int s1ap_eNB_handle_e_rab_release_command(sctp_assoc_t assoc_id, uint32_t
   S1AP_E_RAB_RELEASE_COMMAND(message_p).eNB_ue_s1ap_id = enb_ue_s1ap_id;
   S1AP_E_RAB_RELEASE_COMMAND(message_p).mme_ue_s1ap_id = mme_ue_s1ap_id;
   /* id-E-RABToBeReleasedList */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_E_RABReleaseCommandIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_E_RABToBeReleasedList, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_E_RABReleaseCommandIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_E_RABToBeReleasedList,
+                        true);
 
   if (ie != NULL) { /* checked by macro but cppcheck doesn't see it */
     S1AP_E_RAB_RELEASE_COMMAND(message_p).nb_e_rabs_torelease = ie->value.choice.E_RABList.list.count;
@@ -1517,8 +1547,7 @@ static int s1ap_eNB_handle_e_rab_release_command(sctp_assoc_t assoc_id, uint32_t
   }
 
   /* id-NAS-PDU */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_E_RABReleaseCommandIEs_t, ie, container,
-                             S1AP_ProtocolIE_ID_id_NAS_PDU, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_E_RABReleaseCommandIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_NAS_PDU, false);
 
   if(ie && ie->value.choice.NAS_PDU.size > 0) {
     S1AP_E_RAB_RELEASE_COMMAND(message_p).nas_pdu.length = ie->value.choice.NAS_PDU.size;
@@ -1564,8 +1593,11 @@ static int s1ap_eNB_handle_s1_path_switch_request_ack(sctp_assoc_t assoc_id, uin
   // send a message to RRC
   message_p        = itti_alloc_new_message(TASK_S1AP, 0, S1AP_PATH_SWITCH_REQ_ACK);
   /* mandatory */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t, ie, pathSwitchRequestAcknowledge,
-                             S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t,
+                        ie,
+                        &pathSwitchRequestAcknowledge->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID,
+                        true);
   if (ie == NULL) {
     S1AP_ERROR("[SCTP %u] Received path switch request ack for non "
                "ie context is NULL\n", assoc_id);
@@ -1586,8 +1618,11 @@ static int s1ap_eNB_handle_s1_path_switch_request_ack(sctp_assoc_t assoc_id, uin
 
   S1AP_PATH_SWITCH_REQ_ACK(message_p).ue_initial_id  = ue_desc_p->ue_initial_id;
   /* mandatory */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t, ie, pathSwitchRequestAcknowledge,
-                             S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t,
+                        ie,
+                        &pathSwitchRequestAcknowledge->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID,
+                        true);
 
   if (ie == NULL) {
     S1AP_ERROR("[SCTP %u] Received path switch request ack for non "
@@ -1604,8 +1639,11 @@ static int s1ap_eNB_handle_s1_path_switch_request_ack(sctp_assoc_t assoc_id, uin
   }
 
   /* mandatory */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t, ie, pathSwitchRequestAcknowledge,
-                             S1AP_ProtocolIE_ID_id_SecurityContext, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t,
+                        ie,
+                        &pathSwitchRequestAcknowledge->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_SecurityContext,
+                        true);
 
   if (ie == NULL) {
     S1AP_ERROR("[SCTP %u] Received path switch request ack for non "
@@ -1620,8 +1658,11 @@ static int s1ap_eNB_handle_s1_path_switch_request_ack(sctp_assoc_t assoc_id, uin
          ie->value.choice.SecurityContext.nextHopParameter.buf,
          ie->value.choice.SecurityContext.nextHopParameter.size);
   /* optional */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t, ie, pathSwitchRequestAcknowledge,
-                             S1AP_ProtocolIE_ID_id_uEaggregateMaximumBitrate, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t,
+                        ie,
+                        &pathSwitchRequestAcknowledge->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_uEaggregateMaximumBitrate,
+                        false);
 
   if (ie) {
     asn_INTEGER2ulong(&ie->value.choice.UEAggregateMaximumBitrate.uEaggregateMaximumBitRateUL,
@@ -1635,8 +1676,11 @@ static int s1ap_eNB_handle_s1_path_switch_request_ack(sctp_assoc_t assoc_id, uin
   }
 
   /* optional */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t, ie, pathSwitchRequestAcknowledge,
-                             S1AP_ProtocolIE_ID_id_E_RABToBeSwitchedULList, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t,
+                        ie,
+                        &pathSwitchRequestAcknowledge->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_E_RABToBeSwitchedULList,
+                        false);
 
   if (ie) {
     S1AP_PATH_SWITCH_REQ_ACK(message_p).nb_e_rabs_tobeswitched = ie->value.choice.E_RABToBeSwitchedULList.list.count;
@@ -1658,8 +1702,11 @@ static int s1ap_eNB_handle_s1_path_switch_request_ack(sctp_assoc_t assoc_id, uin
   }
 
   /* optional */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t, ie, pathSwitchRequestAcknowledge,
-                             S1AP_ProtocolIE_ID_id_E_RABToBeReleasedList, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t,
+                        ie,
+                        &pathSwitchRequestAcknowledge->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_E_RABToBeReleasedList,
+                        false);
 
   if (ie) {
     S1AP_PATH_SWITCH_REQ_ACK(message_p).nb_e_rabs_tobereleased = ie->value.choice.E_RABList.list.count;
@@ -1675,16 +1722,22 @@ static int s1ap_eNB_handle_s1_path_switch_request_ack(sctp_assoc_t assoc_id, uin
   }
 
   /* optional */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t, ie, pathSwitchRequestAcknowledge,
-                             S1AP_ProtocolIE_ID_id_CriticalityDiagnostics, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t,
+                        ie,
+                        &pathSwitchRequestAcknowledge->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_CriticalityDiagnostics,
+                        false);
 
   if(!ie) {
     S1AP_WARN("Critical Diagnostic not supported\n");
   }
 
   /* optional */
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t, ie, pathSwitchRequestAcknowledge,
-                             S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID_2, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestAcknowledgeIEs_t,
+                        ie,
+                        &pathSwitchRequestAcknowledge->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID_2,
+                        false);
 
   if(!ie) {
     S1AP_WARN("MME_UE_S1AP_ID_2 flag not supported\n");
@@ -1714,8 +1767,11 @@ static int s1ap_eNB_handle_s1_path_switch_request_failure(sctp_assoc_t assoc_id,
     return -1;
   }
 
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestFailureIEs_t, ie, pathSwitchRequestFailure,
-                             S1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestFailureIEs_t,
+                        ie,
+                        &pathSwitchRequestFailure->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_Cause,
+                        true);
 
   if (ie == NULL) {
     S1AP_ERROR("[SCTP %u] Received S1 path switch request failure for non existing "
@@ -1749,8 +1805,11 @@ static int s1ap_eNB_handle_s1_path_switch_request_failure(sctp_assoc_t assoc_id,
       break;
   }
 
-  S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestFailureIEs_t, ie, pathSwitchRequestFailure,
-                             S1AP_ProtocolIE_ID_id_CriticalityDiagnostics, false);
+  FIND_PROTOCOLIE_BY_ID(S1AP_PathSwitchRequestFailureIEs_t,
+                        ie,
+                        &pathSwitchRequestFailure->protocolIEs.list,
+                        S1AP_ProtocolIE_ID_id_CriticalityDiagnostics,
+                        false);
 
   if(!ie) {
     S1AP_WARN("Critical Diagnostic not supported\n");

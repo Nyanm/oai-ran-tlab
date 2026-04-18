@@ -3486,16 +3486,16 @@ bool decode_positioning_information_req(const F1AP_F1AP_PDU_t *pdu, f1ap_positio
   F1AP_PositioningInformationRequest_t *in = &pdu->choice.initiatingMessage->value.choice.PositioningInformationRequest;
   F1AP_PositioningInformationRequestIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningInformationRequestIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningInformationRequestIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
-                   true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningInformationRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningInformationRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -3608,21 +3608,21 @@ bool decode_positioning_information_resp(const F1AP_F1AP_PDU_t *pdu, f1ap_positi
   F1AP_PositioningInformationResponse_t *in = &pdu->choice.successfulOutcome->value.choice.PositioningInformationResponse;
   F1AP_PositioningInformationResponseIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningInformationResponseIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningInformationResponseIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningInformationResponseIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_SRSConfiguration,
-                   false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningInformationResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningInformationResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningInformationResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_SRSConfiguration,
+                        false);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -3764,17 +3764,17 @@ bool decode_positioning_information_failure(const F1AP_F1AP_PDU_t *pdu, f1ap_pos
   F1AP_PositioningInformationFailure_t *in = &pdu->choice.unsuccessfulOutcome->value.choice.PositioningInformationFailure;
   F1AP_PositioningInformationFailureIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningInformationFailureIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningInformationFailureIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningInformationFailureIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningInformationFailureIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningInformationFailureIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningInformationFailureIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -3893,17 +3893,17 @@ bool decode_positioning_activation_req(const F1AP_F1AP_PDU_t *pdu, f1ap_position
   F1AP_PositioningActivationRequest_t *in = &pdu->choice.initiatingMessage->value.choice.PositioningActivationRequest;
   F1AP_PositioningActivationRequestIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningActivationRequestIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningActivationRequestIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningActivationRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_SRSType, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningActivationRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningActivationRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningActivationRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_SRSType, true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -4060,16 +4060,16 @@ bool decode_positioning_activation_resp(const F1AP_F1AP_PDU_t *pdu, f1ap_positio
   F1AP_PositioningActivationResponse_t *in = &pdu->choice.successfulOutcome->value.choice.PositioningActivationResponse;
   F1AP_PositioningActivationResponseIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningActivationResponseIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningActivationResponseIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
-                   true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningActivationResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningActivationResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -4185,17 +4185,17 @@ bool decode_positioning_activation_failure(const F1AP_F1AP_PDU_t *pdu, f1ap_posi
   F1AP_PositioningActivationFailure_t *in = &pdu->choice.unsuccessfulOutcome->value.choice.PositioningActivationFailure;
   F1AP_PositioningActivationFailureIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningActivationFailureIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningActivationFailureIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningActivationFailureIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningActivationFailureIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningActivationFailureIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningActivationFailureIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -4314,9 +4314,21 @@ bool decode_positioning_deactivation(const F1AP_F1AP_PDU_t *pdu, f1ap_positionin
   F1AP_PositioningDeactivation_t *in = &pdu->choice.initiatingMessage->value.choice.PositioningDeactivation;
   F1AP_PositioningDeactivationIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningDeactivationIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningDeactivationIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningDeactivationIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_AbortTransmission, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningDeactivationIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningDeactivationIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningDeactivationIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_AbortTransmission,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -4461,21 +4473,21 @@ bool decode_positioning_information_update(const F1AP_F1AP_PDU_t *pdu, f1ap_posi
   F1AP_PositioningInformationUpdate_t *in = &pdu->choice.initiatingMessage->value.choice.PositioningInformationUpdate;
   F1AP_PositioningInformationUpdateIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningInformationUpdateIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningInformationUpdateIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningInformationUpdateIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_SRSConfiguration,
-                   false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningInformationUpdateIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningInformationUpdateIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningInformationUpdateIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_SRSConfiguration,
+                        false);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -4628,13 +4640,13 @@ bool decode_trp_information_req(const F1AP_F1AP_PDU_t *pdu, f1ap_trp_information
   F1AP_TRPInformationRequest_t *in = &pdu->choice.initiatingMessage->value.choice.TRPInformationRequest;
   F1AP_TRPInformationRequestIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_TRPInformationRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
-  F1AP_LIB_FIND_IE(F1AP_TRPInformationRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TRPList, true);
-  F1AP_LIB_FIND_IE(F1AP_TRPInformationRequestIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_TRPInformationTypeListTRPReq,
-                   true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_TRPInformationRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_TRPInformationRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TRPList, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_TRPInformationRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_TRPInformationTypeListTRPReq,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -4814,12 +4826,12 @@ bool decode_trp_information_resp(const F1AP_F1AP_PDU_t *pdu, f1ap_trp_informatio
   F1AP_TRPInformationResponse_t *in = &pdu->choice.successfulOutcome->value.choice.TRPInformationResponse;
   F1AP_TRPInformationResponseIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_TRPInformationResponseIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
-  F1AP_LIB_FIND_IE(F1AP_TRPInformationResponseIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_TRPInformationListTRPResp,
-                   true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_TRPInformationResponseIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_TRPInformationResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_TRPInformationListTRPResp,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -5008,8 +5020,8 @@ bool decode_trp_information_failure(const F1AP_F1AP_PDU_t *pdu, f1ap_trp_informa
   F1AP_TRPInformationFailure_t *in = &pdu->choice.unsuccessfulOutcome->value.choice.TRPInformationFailure;
   F1AP_TRPInformationFailureIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_TRPInformationFailureIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
-  F1AP_LIB_FIND_IE(F1AP_TRPInformationFailureIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_TRPInformationFailureIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_TRPInformationFailureIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -5173,45 +5185,49 @@ bool decode_positioning_measurement_req(const F1AP_F1AP_PDU_t *pdu, f1ap_positio
   F1AP_PositioningMeasurementRequest_t *in = &pdu->choice.initiatingMessage->value.choice.PositioningMeasurementRequest;
   F1AP_PositioningMeasurementRequestIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementRequestIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_LMF_MeasurementID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementRequestIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_RAN_MeasurementID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementRequestIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_TRP_MeasurementRequestList,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementRequestIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_PosReportCharacteristics,
-                   true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_TransactionID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_LMF_MeasurementID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_RAN_MeasurementID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_TRP_MeasurementRequestList,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_PosReportCharacteristics,
+                        true);
   F1AP_PosReportCharacteristics_t *report_char = &ie->value.choice.PosReportCharacteristics;
   if (*report_char == F1AP_PosReportCharacteristics_periodic) {
-    F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementRequestIEs_t,
-                     ie,
-                     &in->protocolIEs.list,
-                     F1AP_ProtocolIE_ID_id_PosMeasurementPeriodicity,
-                     true);
+    FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementRequestIEs_t,
+                          ie,
+                          &in->protocolIEs.list,
+                          F1AP_ProtocolIE_ID_id_PosMeasurementPeriodicity,
+                          true);
   }
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementRequestIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_PosMeasurementQuantities,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementRequestIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_SRSConfiguration,
-                   false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_PosMeasurementQuantities,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_SRSConfiguration,
+                        false);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -5477,22 +5493,26 @@ bool decode_positioning_measurement_resp(const F1AP_F1AP_PDU_t *pdu, f1ap_positi
   F1AP_PositioningMeasurementResponse_t *in = &pdu->choice.successfulOutcome->value.choice.PositioningMeasurementResponse;
   F1AP_PositioningMeasurementResponseIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementResponseIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementResponseIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_LMF_MeasurementID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementResponseIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_RAN_MeasurementID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementResponseIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_PosMeasurementResultList,
-                   false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_TransactionID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_LMF_MeasurementID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_RAN_MeasurementID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_PosMeasurementResultList,
+                        false);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -5684,18 +5704,22 @@ bool decode_positioning_measurement_failure(const F1AP_F1AP_PDU_t *pdu, f1ap_pos
   F1AP_PositioningMeasurementFailure_t *in = &pdu->choice.unsuccessfulOutcome->value.choice.PositioningMeasurementFailure;
   F1AP_PositioningMeasurementFailureIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementFailureIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementFailureIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_LMF_MeasurementID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementFailureIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_RAN_MeasurementID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementFailureIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementFailureIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_TransactionID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementFailureIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_LMF_MeasurementID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementFailureIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_RAN_MeasurementID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementFailureIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -5838,22 +5862,26 @@ bool decode_positioning_measurement_report(const F1AP_F1AP_PDU_t *pdu, f1ap_posi
   F1AP_PositioningMeasurementReport_t *in = &pdu->choice.initiatingMessage->value.choice.PositioningMeasurementReport;
   F1AP_PositioningMeasurementReportIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementReportIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementReportIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_LMF_MeasurementID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementReportIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_RAN_MeasurementID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementReportIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_PosMeasurementResultList,
-                   true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementReportIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_TransactionID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementReportIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_LMF_MeasurementID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementReportIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_RAN_MeasurementID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementReportIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_PosMeasurementResultList,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -6029,9 +6057,21 @@ bool decode_positioning_measurement_abort(const F1AP_F1AP_PDU_t *pdu, f1ap_posit
   F1AP_PositioningMeasurementAbort_t *in = &pdu->choice.initiatingMessage->value.choice.PositioningMeasurementAbort;
   F1AP_PositioningMeasurementAbortIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementAbortIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementAbortIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_LMF_MeasurementID, true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementAbortIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_RAN_MeasurementID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementAbortIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_TransactionID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementAbortIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_LMF_MeasurementID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementAbortIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_RAN_MeasurementID,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -6153,22 +6193,26 @@ bool decode_positioning_measurement_failure_indication(const F1AP_F1AP_PDU_t *pd
       &pdu->choice.initiatingMessage->value.choice.PositioningMeasurementFailureIndication;
   F1AP_PositioningMeasurementFailureIndicationIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementFailureIndicationIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_TransactionID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementFailureIndicationIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_LMF_MeasurementID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementFailureIndicationIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_RAN_MeasurementID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementFailureIndicationIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementFailureIndicationIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_TransactionID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementFailureIndicationIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_LMF_MeasurementID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementFailureIndicationIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_RAN_MeasurementID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementFailureIndicationIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_Cause,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -6301,22 +6345,26 @@ bool decode_positioning_measurement_update(const F1AP_F1AP_PDU_t *pdu, f1ap_posi
   F1AP_PositioningMeasurementUpdate_t *in = &pdu->choice.initiatingMessage->value.choice.PositioningMeasurementUpdate;
   F1AP_PositioningMeasurementUpdateIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementUpdateIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_TransactionID, true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementUpdateIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_LMF_MeasurementID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementUpdateIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_RAN_MeasurementID,
-                   true);
-  F1AP_LIB_FIND_IE(F1AP_PositioningMeasurementUpdateIEs_t,
-                   ie,
-                   &in->protocolIEs.list,
-                   F1AP_ProtocolIE_ID_id_SRSConfiguration,
-                   false);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementUpdateIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_TransactionID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementUpdateIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_LMF_MeasurementID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementUpdateIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_RAN_MeasurementID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PositioningMeasurementUpdateIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_SRSConfiguration,
+                        false);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];

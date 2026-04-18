@@ -227,7 +227,7 @@ int decode_ng_handover_request(ngap_handover_request_t *out, const NGAP_NGAP_PDU
   NGAP_HandoverRequestIEs_t *ie;
 
   // Handover Type (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_HandoverType, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_HandoverType, true);
   out->ho_type = ie->value.choice.HandoverType;
   if (out->ho_type != HANDOVER_TYPE_INTRA5GS) {
     NGAP_ERROR("Only Intra5GS Handover is supported at the moment!\n");
@@ -235,19 +235,23 @@ int decode_ng_handover_request(ngap_handover_request_t *out, const NGAP_NGAP_PDU
   }
 
   // AMF UE NGAP ID (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, true);
   asn_INTEGER2ulong(&(ie->value.choice.AMF_UE_NGAP_ID), &out->amf_ue_ngap_id);
 
   // GUAMI (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_GUAMI, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_GUAMI, true);
   out->guami = decode_ngap_guami(&ie->value.choice.GUAMI);
 
   // UE Aggregate Maximum Bit Rate (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_UEAggregateMaximumBitRate, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_UEAggregateMaximumBitRate,
+                        true);
   out->ue_ambr = decode_ngap_UEAggregateMaximumBitRate(&ie->value.choice.UEAggregateMaximumBitRate);
 
   // Allowed NSSAI (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_AllowedNSSAI, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_AllowedNSSAI, true);
   NGAP_DEBUG("AllowedNSSAI.list.count %d\n", ie->value.choice.AllowedNSSAI.list.count);
   out->nb_allowed_nssais = ie->value.choice.AllowedNSSAI.list.count;
   for (int i = 0; i < out->nb_allowed_nssais; i++) {
@@ -255,32 +259,40 @@ int decode_ng_handover_request(ngap_handover_request_t *out, const NGAP_NGAP_PDU
   }
 
   // UE Security Capabilities (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_UESecurityCapabilities, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_UESecurityCapabilities,
+                        true);
   out->security_capabilities = decode_ngap_security_capabilities(&ie->value.choice.UESecurityCapabilities);
 
   // Security Context (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_SecurityContext, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_SecurityContext, true);
   NGAP_SecurityContext_t *sc = &ie->value.choice.SecurityContext;
   memcpy(&out->security_context.next_hop, sc->nextHopNH.buf, sc->nextHopNH.size);
   out->security_context.next_hop_chain_count = sc->nextHopChainingCount;
 
   // Mobility Restriction List (O)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_MobilityRestrictionList, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_MobilityRestrictionList,
+                        false);
   if (ie != NULL) {
     out->mobility_restriction = calloc_or_fail(1, sizeof(*out->mobility_restriction));
     *out->mobility_restriction = decode_ngap_mobility_restriction(&ie->value.choice.MobilityRestrictionList);
   }
 
   // Cause (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, container, NGAP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_Cause, true);
   out->cause = decode_ngap_cause(&ie->value.choice.Cause);
 
   // Source to Target Transparent Container
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t,
-                             ie,
-                             container,
-                             NGAP_ProtocolIE_ID_id_SourceToTarget_TransparentContainer,
-                             true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_SourceToTarget_TransparentContainer,
+                        true);
   NGAP_SourceToTarget_TransparentContainer_t *choice = &ie->value.choice.SourceToTarget_TransparentContainer;
   byte_array_t sourceToTargetTransparentContainer = create_byte_array(choice->size, choice->buf);
   NGAP_SourceNGRANNode_ToTargetNGRANNode_TransparentContainer_t *source2target = NULL;
@@ -342,11 +354,11 @@ int decode_ng_handover_request(ngap_handover_request_t *out, const NGAP_NGAP_PDU
   }
 
   // PDU Session Resource Setup List (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t,
-                             ie,
-                             container,
-                             NGAP_ProtocolIE_ID_id_PDUSessionResourceSetupListHOReq,
-                             true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverRequestIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_PDUSessionResourceSetupListHOReq,
+                        true);
   out->nb_of_pdusessions = ie->value.choice.PDUSessionResourceSetupListHOReq.list.count;
   for (int pduSesIdx = 0; pduSesIdx < out->nb_of_pdusessions; ++pduSesIdx) {
     NGAP_PDUSessionResourceSetupItemHOReq_t *item_p = ie->value.choice.PDUSessionResourceSetupListHOReq.list.array[pduSesIdx];
@@ -460,29 +472,33 @@ void free_ng_handover_req_ack(ngap_handover_request_ack_t *msg)
 }
 
 /** @brief Decoder for the NG Handover Command */
-int decode_ng_handover_command(ngap_handover_command_t *msg, NGAP_NGAP_PDU_t *pdu)
+int decode_ng_handover_command(ngap_handover_command_t *msg, const NGAP_NGAP_PDU_t *pdu)
 {
   DevAssert(pdu != NULL);
   NGAP_HandoverCommandIEs_t *ie;
   NGAP_HandoverCommand_t *container = &pdu->choice.successfulOutcome->value.choice.HandoverCommand;
 
   // AMF UE NGAP ID (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCommandIEs_t, ie, container, NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCommandIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, true);
   asn_INTEGER2ulong(&(ie->value.choice.AMF_UE_NGAP_ID), &msg->amf_ue_ngap_id);
 
   // RAN UE NGAP ID (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCommandIEs_t, ie, container, NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCommandIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID, true);
   msg->gNB_ue_ngap_id = ie->value.choice.RAN_UE_NGAP_ID;
 
   // Handover Type (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCommandIEs_t, ie, container, NGAP_ProtocolIE_ID_id_HandoverType, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCommandIEs_t, ie, &container->protocolIEs.list, NGAP_ProtocolIE_ID_id_HandoverType, true);
   if (ie->value.choice.HandoverType != HANDOVER_TYPE_INTRA5GS) {
     NGAP_ERROR("Only Intra 5GS Handover is supported at the moment!\n");
     return -1;
   }
 
   // PDU Session Resource Handover List (O)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCommandIEs_t, ie, container, NGAP_ProtocolIE_ID_id_HandoverType, false);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCommandIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_PDUSessionResourceHandoverList,
+                        false);
   if (ie != NULL) {
     msg->nb_of_pdusessions = ie->value.choice.PDUSessionResourceHandoverList.list.count;
 
@@ -519,11 +535,11 @@ int decode_ng_handover_command(ngap_handover_command_t *msg, NGAP_NGAP_PDU_t *pd
   }
 
   // Target to Source Transparent Container (M)
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCommandIEs_t,
-                             ie,
-                             container,
-                             NGAP_ProtocolIE_ID_id_TargetToSource_TransparentContainer,
-                             true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCommandIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_TargetToSource_TransparentContainer,
+                        true);
   NGAP_TargetToSource_TransparentContainer_t *target2source = &(ie->value.choice.TargetToSource_TransparentContainer);
   NGAP_TargetNGRANNode_ToSourceNGRANNode_TransparentContainer_t *transparentContainer = NULL;
   asn_dec_rval_t dec_rval = aper_decode_complete(NULL,
@@ -653,11 +669,19 @@ int decode_ng_handover_cancel_ack(ngap_handover_cancel_ack_t *out, const NGAP_NG
   NGAP_HandoverCancelAcknowledgeIEs_t *ie;
 
   /* AMF UE NGAP ID (M) */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCancelAcknowledgeIEs_t, ie, container, NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCancelAcknowledgeIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID,
+                        true);
   asn_INTEGER2ulong(&ie->value.choice.AMF_UE_NGAP_ID, &out->amf_ue_ngap_id);
 
   /* RAN UE NGAP ID (M) */
-  NGAP_FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCancelAcknowledgeIEs_t, ie, container, NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NGAP_HandoverCancelAcknowledgeIEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
+                        true);
   out->gNB_ue_ngap_id = ie->value.choice.RAN_UE_NGAP_ID;
 
   return 0;

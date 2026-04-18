@@ -19,21 +19,6 @@
 #define XNAP_PORT 38422
 #endif
 
-#define XNAP_FIND_PROTOCOLIE_BY_ID(IE_TYPE, ie, container, IE_ID, mandatory)                                                   \
-  do {                                                                                                                         \
-    IE_TYPE **ptr;                                                                                                             \
-    ie = NULL;                                                                                                                 \
-    for (ptr = container->protocolIEs.list.array; ptr < &container->protocolIEs.list.array[container->protocolIEs.list.count]; \
-         ptr++) {                                                                                                              \
-      if ((*ptr)->id == IE_ID) {                                                                                               \
-        ie = *ptr;                                                                                                             \
-        break;                                                                                                                 \
-      }                                                                                                                        \
-    }                                                                                                                          \
-    if (mandatory)                                                                                                             \
-      DevAssert(ie != NULL);                                                                                                   \
-  } while (0)
-
 ssize_t xnap_generate_initiating_message(uint8_t **buffer,
                                          uint32_t *length,
                                          XNAP_ProcedureCode_t procedureCode,

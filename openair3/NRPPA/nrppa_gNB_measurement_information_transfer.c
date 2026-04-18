@@ -895,17 +895,21 @@ int nrppa_gNB_handle_measurement_request(nrppa_gnb_ue_info_t *nrppa_msg_info, co
   // IE 9.2.4 nrppatransactionID : mandatory
   req->transaction_id = pdu->choice.initiatingMessage->nrppatransactionID;
 
-  NRPPA_FIND_PROTOCOLIE_BY_ID(NRPPA_MeasurementRequest_IEs_t, ie, container, NRPPA_ProtocolIE_ID_id_LMF_Measurement_ID, true);
+  FIND_PROTOCOLIE_BY_ID(NRPPA_MeasurementRequest_IEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NRPPA_ProtocolIE_ID_id_LMF_Measurement_ID,
+                        true);
 
   // LMF Measurement  ID : mandatory
   req->lmf_measurement_id = ie->value.choice.Measurement_ID;
 
   // IE TRP Measurement Request List : mandatory
-  NRPPA_FIND_PROTOCOLIE_BY_ID(NRPPA_MeasurementRequest_IEs_t,
-                              ie,
-                              container,
-                              NRPPA_ProtocolIE_ID_id_TRP_MeasurementRequestList,
-                              true);
+  FIND_PROTOCOLIE_BY_ID(NRPPA_MeasurementRequest_IEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NRPPA_ProtocolIE_ID_id_TRP_MeasurementRequestList,
+                        true);
   NRPPA_TRP_MeasurementRequestList_t *nrppa_trp_meas_list = &ie->value.choice.TRP_MeasurementRequestList;
   uint8_t meas_req_item_len = nrppa_trp_meas_list->list.count;
   AssertError(meas_req_item_len > 0, return false, "at least 1 TRP Measurement Request Item must be present");
@@ -918,7 +922,11 @@ int nrppa_gNB_handle_measurement_request(nrppa_gnb_ue_info_t *nrppa_msg_info, co
   }
 
   // IE Report Characteristics : mandatory
-  NRPPA_FIND_PROTOCOLIE_BY_ID(NRPPA_MeasurementRequest_IEs_t, ie, container, NRPPA_ProtocolIE_ID_id_ReportCharacteristics, true);
+  FIND_PROTOCOLIE_BY_ID(NRPPA_MeasurementRequest_IEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NRPPA_ProtocolIE_ID_id_ReportCharacteristics,
+                        true);
   switch (ie->value.choice.ReportCharacteristics) {
     case NRPPA_ReportCharacteristics_onDemand:
       req->report_characteristics = NRPPA_POSREPORTCHARACTERISTICS_ONDEMAND;
@@ -933,7 +941,11 @@ int nrppa_gNB_handle_measurement_request(nrppa_gnb_ue_info_t *nrppa_msg_info, co
 
   // IE Measurement Periodicity : C-if Report Charateristics periodic
   if (req->report_characteristics == NRPPA_POSREPORTCHARACTERISTICS_PERIODIC) {
-    NRPPA_FIND_PROTOCOLIE_BY_ID(NRPPA_MeasurementRequest_IEs_t, ie, container, NRPPA_ProtocolIE_ID_id_MeasurementPeriodicity, true);
+    FIND_PROTOCOLIE_BY_ID(NRPPA_MeasurementRequest_IEs_t,
+                          ie,
+                          &container->protocolIEs.list,
+                          NRPPA_ProtocolIE_ID_id_MeasurementPeriodicity,
+                          true);
     switch (ie->value.choice.MeasurementPeriodicity) {
       case NRPPA_MeasurementPeriodicity_ms120:
         req->measurement_periodicity = NRPPA_POSMEASUREMENTPERIODICITY_MS120;
@@ -981,7 +993,11 @@ int nrppa_gNB_handle_measurement_request(nrppa_gnb_ue_info_t *nrppa_msg_info, co
   }
 
   // IE Measurement Quantity : mandatory (but not handled in OAI-LMF)
-  NRPPA_FIND_PROTOCOLIE_BY_ID(NRPPA_MeasurementRequest_IEs_t, ie, container, NRPPA_ProtocolIE_ID_id_MeasurementQuantities, false);
+  FIND_PROTOCOLIE_BY_ID(NRPPA_MeasurementRequest_IEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NRPPA_ProtocolIE_ID_id_MeasurementQuantities,
+                        false);
   if (ie == NULL) {
     LOG_W(NRPPA, "MeasurementQuantities is madatory but not handled in OAI LMF\n");
   } else {
@@ -1014,7 +1030,11 @@ int nrppa_gNB_handle_measurement_request(nrppa_gnb_ue_info_t *nrppa_msg_info, co
   }
 
   // IE SRS Configuration : optional
-  NRPPA_FIND_PROTOCOLIE_BY_ID(NRPPA_MeasurementRequest_IEs_t, ie, container, NRPPA_ProtocolIE_ID_id_SRSConfiguration, false);
+  FIND_PROTOCOLIE_BY_ID(NRPPA_MeasurementRequest_IEs_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        NRPPA_ProtocolIE_ID_id_SRSConfiguration,
+                        false);
   if (ie != NULL) {
     NRPPA_SRSCarrier_List_t *nrppa_srs_carrier_list = &ie->value.choice.SRSConfiguration.sRSCarrier_List;
     req->srs_configuration = calloc_or_fail(1, sizeof(*req->srs_configuration));

@@ -33,8 +33,7 @@ int s1ap_eNB_handle_overload_start(sctp_assoc_t assoc_id, uint32_t stream, S1AP_
 
     container = &pdu->choice.initiatingMessage.value.choice.OverloadStart;
 
-    S1AP_FIND_PROTOCOLIE_BY_ID(S1AP_OverloadStartIEs_t, ie, container,
-                               S1AP_ProtocolIE_ID_id_OverloadResponse, true);
+    FIND_PROTOCOLIE_BY_ID(S1AP_OverloadStartIEs_t, ie, &container->protocolIEs.list, S1AP_ProtocolIE_ID_id_OverloadResponse, true);
     if (ie != NULL) {
         DevCheck(ie->value.choice.OverloadResponse.present ==
                  S1AP_OverloadResponse_PR_overloadAction,

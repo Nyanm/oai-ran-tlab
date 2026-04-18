@@ -792,7 +792,7 @@ static bool decode_drbs_to_setup(const F1AP_DRBs_ToBeSetup_List_t *f1ap, int *n,
     _F1_CHECK_EXP(it->iE_Extensions); // PDCP SN length is under extension, is mandatory
     const F1AP_ProtocolExtensionContainer_11023P82_t *ext = (const F1AP_ProtocolExtensionContainer_11023P82_t *)it->iE_Extensions;
     const F1AP_DRBs_ToBeSetup_ItemExtIEs_t *ie;
-    F1AP_LIB_FIND_IE(F1AP_DRBs_ToBeSetup_ItemExtIEs_t, ie, &ext->list, F1AP_ProtocolIE_ID_id_DLPDCPSNLength, true);
+    FIND_PROTOCOLIE_BY_ID(F1AP_DRBs_ToBeSetup_ItemExtIEs_t, ie, &ext->list, F1AP_ProtocolIE_ID_id_DLPDCPSNLength, true);
 
     for (int j = 0; j < ext->list.count; ++j) {
       ie = ext->list.array[j];
@@ -1226,10 +1226,14 @@ bool decode_ue_context_setup_req(const F1AP_F1AP_PDU_t *pdu, f1ap_ue_context_set
   F1AP_UEContextSetupRequest_t *in = &pdu->choice.initiatingMessage->value.choice.UEContextSetupRequest;
   F1AP_UEContextSetupRequestIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_UEContextSetupRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_UEContextSetupRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_SpCell_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_UEContextSetupRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_ServCellIndex, true);
-  F1AP_LIB_FIND_IE(F1AP_UEContextSetupRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_CUtoDURRCInformation, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextSetupRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextSetupRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_SpCell_ID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextSetupRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_ServCellIndex, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextSetupRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_CUtoDURRCInformation,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -1269,7 +1273,11 @@ bool decode_ue_context_setup_req(const F1AP_F1AP_PDU_t *pdu, f1ap_ue_context_set
           // setup, as required by the spec, or return false otherwise (like in
           // the beginning of the function)
           F1AP_UEContextSetupRequestIEs_t *check_ie;
-          F1AP_LIB_FIND_IE(F1AP_UEContextSetupRequestIEs_t, check_ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_GNB_DU_UE_AMBR_UL, true);
+          FIND_PROTOCOLIE_BY_ID(F1AP_UEContextSetupRequestIEs_t,
+                                check_ie,
+                                &in->protocolIEs.list,
+                                F1AP_ProtocolIE_ID_id_GNB_DU_UE_AMBR_UL,
+                                true);
         }
         _F1_CHECK_EXP(decode_drbs_to_setup(&ie->value.choice.DRBs_ToBeSetup_List, &out->drbs_len, &out->drbs));
         break;
@@ -1450,9 +1458,13 @@ bool decode_ue_context_setup_resp(const struct F1AP_F1AP_PDU *pdu, f1ap_ue_conte
   F1AP_UEContextSetupResponse_t *in = &pdu->choice.successfulOutcome->value.choice.UEContextSetupResponse;
   F1AP_UEContextSetupResponseIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_UEContextSetupResponseIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_UEContextSetupResponseIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_UEContextSetupResponseIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_DUtoCURRCInformation, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextSetupResponseIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextSetupResponseIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextSetupResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_DUtoCURRCInformation,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -1714,8 +1726,16 @@ bool decode_ue_context_mod_req(const F1AP_F1AP_PDU_t *pdu, f1ap_ue_context_mod_r
 
   F1AP_UEContextModificationRequest_t *in = &pdu->choice.initiatingMessage->value.choice.UEContextModificationRequest;
   F1AP_UEContextModificationRequestIEs_t *ie;
-  F1AP_LIB_FIND_IE(F1AP_UEContextModificationRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_UEContextModificationRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -2003,8 +2023,16 @@ bool decode_ue_context_mod_resp(const struct F1AP_F1AP_PDU *pdu, f1ap_ue_context
   F1AP_UEContextModificationResponse_t *in = &pdu->choice.successfulOutcome->value.choice.UEContextModificationResponse;
   F1AP_UEContextModificationResponseIEs_t *ie;
 
-  F1AP_LIB_FIND_IE(F1AP_UEContextModificationResponseIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_UEContextModificationResponseIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextModificationResponseIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -2167,9 +2195,17 @@ bool decode_ue_context_rel_req(const struct F1AP_F1AP_PDU *pdu, f1ap_ue_context_
 
   F1AP_UEContextReleaseRequest_t *in = &pdu->choice.initiatingMessage->value.choice.UEContextReleaseRequest;
   F1AP_UEContextReleaseRequestIEs_t *ie;
-  F1AP_LIB_FIND_IE(F1AP_UEContextReleaseRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_UEContextReleaseRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_UEContextReleaseRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextReleaseRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextReleaseRequestIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextReleaseRequestIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -2306,9 +2342,17 @@ bool decode_ue_context_rel_cmd(const struct F1AP_F1AP_PDU *pdu, f1ap_ue_context_
 
   F1AP_UEContextReleaseCommand_t *in = &pdu->choice.initiatingMessage->value.choice.UEContextReleaseCommand;
   F1AP_UEContextReleaseCommandIEs_t *ie;
-  F1AP_LIB_FIND_IE(F1AP_UEContextReleaseCommandIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_UEContextReleaseCommandIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_UEContextReleaseCommandIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextReleaseCommandIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextReleaseCommandIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextReleaseCommandIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_Cause, true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];
@@ -2339,7 +2383,11 @@ bool decode_ue_context_rel_cmd(const struct F1AP_F1AP_PDU *pdu, f1ap_ue_context_
         {
           // SRB-ID
           F1AP_UEContextReleaseCommandIEs_t *check_ie;
-          F1AP_LIB_FIND_IE(F1AP_UEContextReleaseCommandIEs_t, check_ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_RRCContainer, true);
+          FIND_PROTOCOLIE_BY_ID(F1AP_UEContextReleaseCommandIEs_t,
+                                check_ie,
+                                &in->protocolIEs.list,
+                                F1AP_ProtocolIE_ID_id_RRCContainer,
+                                true);
         }
         _F1_MALLOC(out->srb_id, ie->value.choice.SRBID);
         break;
@@ -2444,8 +2492,16 @@ bool decode_ue_context_rel_cplt(const struct F1AP_F1AP_PDU *pdu, f1ap_ue_context
 
   F1AP_UEContextReleaseComplete_t *in = &pdu->choice.successfulOutcome->value.choice.UEContextReleaseComplete;
   F1AP_UEContextReleaseCompleteIEs_t *ie;
-  F1AP_LIB_FIND_IE(F1AP_UEContextReleaseCompleteIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID, true);
-  F1AP_LIB_FIND_IE(F1AP_UEContextReleaseCompleteIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextReleaseCompleteIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_CU_UE_F1AP_ID,
+                        true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_UEContextReleaseCompleteIEs_t,
+                        ie,
+                        &in->protocolIEs.list,
+                        F1AP_ProtocolIE_ID_id_gNB_DU_UE_F1AP_ID,
+                        true);
 
   for (int i = 0; i < in->protocolIEs.list.count; ++i) {
     ie = in->protocolIEs.list.array[i];

@@ -177,9 +177,9 @@ bool decode_f1ap_paging(f1ap_paging_t *out, const F1AP_F1AP_PDU_t *pdu)
   /* Check presence of mandatory IEs */
   const F1AP_Paging_t *in = &pdu->choice.initiatingMessage->value.choice.Paging;
   F1AP_PagingIEs_t *ie;
-  F1AP_LIB_FIND_IE(F1AP_PagingIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_UEIdentityIndexValue, true);
-  F1AP_LIB_FIND_IE(F1AP_PagingIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_PagingIdentity, true);
-  F1AP_LIB_FIND_IE(F1AP_PagingIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_PagingCell_List, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PagingIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_UEIdentityIndexValue, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PagingIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_PagingIdentity, true);
+  FIND_PROTOCOLIE_BY_ID(F1AP_PagingIEs_t, ie, &in->protocolIEs.list, F1AP_ProtocolIE_ID_id_PagingCell_List, true);
 
   /* Loop over all IEs */
   for (int i = 0; i < in->protocolIEs.list.count; i++) {

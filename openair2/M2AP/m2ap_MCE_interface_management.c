@@ -655,8 +655,7 @@ int MCE_handle_M2_SETUP_REQUEST(instance_t instance, sctp_assoc_t assoc_id, uint
 
  /* GlobalENB_id */
  // this function exits if the ie is mandatory
-  M2AP_FIND_PROTOCOLIE_BY_ID(M2AP_M2SetupRequest_Ies_t, ie, container,
-                             M2AP_ProtocolIE_ID_id_GlobalENB_ID, true);
+  FIND_PROTOCOLIE_BY_ID(M2AP_M2SetupRequest_Ies_t, ie, &container->protocolIEs.list, M2AP_ProtocolIE_ID_id_GlobalENB_ID, true);
   //asn_INTEGER2ulong(&ie->value.choice.GlobalENB_ID.eNB_ID, &M2AP_SETUP_REQ(message_p).GlobalENB_ID);
   if(ie!=NULL){
   if(ie->value.choice.GlobalENB_ID.eNB_ID.present == M2AP_ENB_ID_PR_macro_eNB_ID){
@@ -668,8 +667,7 @@ int MCE_handle_M2_SETUP_REQUEST(instance_t instance, sctp_assoc_t assoc_id, uint
   LOG_D(M2AP, "M2AP_SETUP_REQ(message_p).GlobalENB_ID %lu \n", M2AP_SETUP_REQ(message_p).GlobalENB_ID);
 
   /* ENB_name */
-  M2AP_FIND_PROTOCOLIE_BY_ID(M2AP_M2SetupRequest_Ies_t, ie, container,
-                              M2AP_ProtocolIE_ID_id_ENBname, false);
+  FIND_PROTOCOLIE_BY_ID(M2AP_M2SetupRequest_Ies_t, ie, &container->protocolIEs.list, M2AP_ProtocolIE_ID_id_ENBname, false);
   if(ie!=NULL){
 	  M2AP_SETUP_REQ(message_p).ENBname = calloc(ie->value.choice.ENBname.size + 1, sizeof(char));
 	  memcpy(M2AP_SETUP_REQ(message_p).ENBname, ie->value.choice.ENBname.buf,
@@ -681,9 +679,11 @@ int MCE_handle_M2_SETUP_REQUEST(instance_t instance, sctp_assoc_t assoc_id, uint
   }
    /* ENB_MBMS_Configuration_data_List */
 
-
-  M2AP_FIND_PROTOCOLIE_BY_ID(M2AP_M2SetupRequest_Ies_t, ie, container,
-                              M2AP_ProtocolIE_ID_id_ENB_MBMS_Configuration_data_List, true);
+  FIND_PROTOCOLIE_BY_ID(M2AP_M2SetupRequest_Ies_t,
+                        ie,
+                        &container->protocolIEs.list,
+                        M2AP_ProtocolIE_ID_id_ENB_MBMS_Configuration_data_List,
+                        true);
 
   if(ie!=NULL){
 	  M2AP_SETUP_REQ(message_p).num_mbms_available = ie->value.choice.ENB_MBMS_Configuration_data_List.list.count;
