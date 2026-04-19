@@ -75,6 +75,11 @@
 
 #include "nr_nas_msg_sim.h"
 
+#include "openair2/SDAP/nr_sdap/nr_sdap.h"
+#include "openair2/SDAP/nr_sdap/nr_sdap_entity.h"
+
+
+
 // for NR_PC5 Controller
 int ctrl_sock_fd;
 #define BUFSIZE 4096 //Jin enlarge bufsize 1024 origin
@@ -3006,7 +3011,7 @@ void *nr_rrc_control_socket_thread_fct(void *arg)
          //Define received_data
           struct nr_sidelink_ctrl_element *msg =  (struct nr_sidelink_ctrl_element *)receive_buf;
           NR_RRC_Configuration received_data =   msg->nr_sidelinkPrimitive.pc5_rrc_config;
-
+          uint8_t qfi = sl_ctrl_msg_recv->nr_sidelinkPrimitive.pc5_rrc_config.sl_radioBearerConfig.slrb_Uu_ConfigIndex_r16; //define QFI
 
 	       sl_RadioBearerConfig_r16->slrb_Uu_ConfigIndex_r16 = received_data.sl_radioBearerConfig.slrb_Uu_ConfigIndex_r16;
 	       sl_RadioBearerConfig_r16->sl_SDAP_Config_r16 = NULL;
@@ -3049,6 +3054,19 @@ void *nr_rrc_control_socket_thread_fct(void *arg)
 
 	       // SL RadioBearers
 	       add_drb_sl(0, (NR_SL_RadioBearerConfig_r16_t *)sl_RadioBearerConfig_r16, 0, 0, NULL, NULL);
+         //Jin add to update SDAP
+         nr_sdap_entity_t *sdap_entity = nr_sdap_get_entity(module_id, 0);
+         if (sdap_entity) {
+            sdap_entity->qfi2drb_map_update(sdap_entity,
+                                            qfi,    // QFI value (e.g. 2 or 3)
+                                            qfi,    // DRB id = same as QFI
+                                            true,   // has_sdap_rx
+                                            true);  // has_sdap_tx
+            LOG_I(RRC,"[SLC_C] SDAP: QFI=%d mapped to DRB=%d\n", qfi, qfi);
+         } else {
+            LOG_E(RRC,"[S LC_C] SDAP entity not found\n");
+         }
+
 
 	       // Configure RLC
 	       nr_rlc_add_drb_sl(0, received_data.sl_radioBearerConfig.slrb_Uu_ConfigIndex_r16, (NR_SL_RLC_BearerConfig_r16_t *)sl_RLC_BearerConfig_r16);	  
