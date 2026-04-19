@@ -722,7 +722,6 @@ int main(int argc, char **argv)
 
   AssertFatal((gNB->if_inst = NR_IF_Module_init(0)) != NULL, "Cannot register interface");
   gNB->if_inst->NR_PHY_config_req = nr_phy_config_request;
-  gNB->num_pdsch_symbols_per_thread = num_pdsch_symbols_per_thread;
 
   NR_ServingCellConfigCommon_t *scc = calloc(1,sizeof(*scc));;
   prepare_scc(scc);
@@ -828,6 +827,7 @@ int main(int argc, char **argv)
   // nr_mac_config_scc()
   gNB_mac->pre_processor_dl = nr_dlsim_preprocessor;
   phy_init_nr_gNB(gNB);
+  gNB->num_pdsch_symbols_per_thread = num_pdsch_symbols_per_thread;
   N_RB_DL = gNB->frame_parms.N_RB_DL;
   NR_UE_info_t *UE_info = RC.nrmac[0]->UE_info.connected_ue_list[0];
 

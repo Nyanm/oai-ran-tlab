@@ -461,11 +461,20 @@ typedef struct pdschSymbolProc_s {
   unsigned int dlPtrsSymPos;
   unsigned int n_ptrs;
   unsigned int beam_nb;
+  uint64_t *pdsch_phase_comp_prb_mask;
+  int prb_mask_words;
   unsigned int re_beginning_of_symbol[14];
   c16_t *tx_layers[4];
   time_stats_t dlsch_resource_mapping_stats;
   time_stats_t dlsch_precoding_stats;
 } pdschSymbolProc_t;
+
+static inline void mark_prb_range(uint64_t *prb_mask, int prb_mask_words, int symbol, int start_prb, int nb_prb)
+{
+  uint64_t *symbol_mask = prb_mask + symbol * prb_mask_words;
+  for (int prb = start_prb; prb < start_prb + nb_prb; prb++)
+    symbol_mask[prb >> 6] |= UINT64_C(1) << (prb & 63);
+}
 
 static void nr_pdsch_symbol_processing(void *arg)
 {
@@ -486,6 +495,8 @@ static void nr_pdsch_symbol_processing(void *arg)
 
   c16_t **txdataF = gNB->common_vars.txdataF[rdata->beam_nb];
   uint16_t start_sc = (rel15->rbStart + rel15->BWPStart) * NR_NB_SC_PER_RB;
+  const int start_prb = rel15->rbStart + rel15->BWPStart;
+  const int symb_offset = (slot % frame_parms->slots_per_subframe) * frame_parms->symbols_per_slot;
 
   for (int l_symbol = rdata->startSymbol; l_symbol < rdata->startSymbol + rdata->numSymbols; l_symbol++) {
     start_meas(&rdata->dlsch_resource_mapping_stats);
@@ -542,14 +553,26 @@ static void nr_pdsch_symbol_processing(void *arg)
     for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
       const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz;
       do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, ant, start_sc, txdataF_offset_per_symbol);
+      if (gNB->phase_comp) {
+        c16_t *pdsch_sc = &txdataF[ant][txdataF_offset_per_symbol + start_sc];
+        const c16_t *rot = &frame_parms->symbol_rotation[0][symb_offset + l_symbol];
+        rotate_cpx_vector(pdsch_sc, rot, pdsch_sc, rel15->rbSize * NR_NB_SC_PER_RB, 15);
+      }
     }
+    if (gNB->phase_comp)
+      mark_prb_range(rdata->pdsch_phase_comp_prb_mask, rdata->prb_mask_words, l_symbol, start_prb, rel15->rbSize);
     stop_meas(&rdata->dlsch_precoding_stats);
   }
   // Task running in // completed
   completed_task_ans(rdata->ans);
 }
 
-static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSCH_t *dlsch, int slot)
+static int do_one_dlsch(unsigned char *input_ptr,
+                        PHY_VARS_gNB *gNB,
+                        NR_gNB_DLSCH_t *dlsch,
+                        int slot,
+                        uint64_t *pdsch_phase_comp_prb_mask,
+                        int prb_mask_words)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
 
@@ -704,6 +727,8 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     rdata->dlPtrsSymPos = dlPtrsSymPos;
     rdata->n_ptrs = n_ptrs;
     rdata->beam_nb = beam_nb;
+    rdata->pdsch_phase_comp_prb_mask = pdsch_phase_comp_prb_mask + beam_nb * frame_parms->symbols_per_slot * prb_mask_words;
+    rdata->prb_mask_words = prb_mask_words;
     for (int s = l_symbol; s < l_symbol + rdata->numSymbols; s++) {
       rdata->re_beginning_of_symbol[s] = re_beginning_of_symbol;
       re_beginning_of_symbol += rel15->rbSize * NR_NB_SC_PER_RB;
@@ -737,7 +762,13 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   return ((size_output_tb + 511) >> 9) << 6;
 }
 
-void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_array, int frame, int slot)
+void nr_generate_pdsch(PHY_VARS_gNB *gNB,
+                       int n_dlsch,
+                       NR_gNB_DLSCH_t *dlsch_array,
+                       int frame,
+                       int slot,
+                       uint64_t *pdsch_phase_comp_prb_mask,
+                       int prb_mask_words)
 {
   time_stats_t *dlsch_encoding_stats = &gNB->dlsch_encoding_stats;
   time_stats_t *tinput = &gNB->tinput;
@@ -812,7 +843,7 @@ void nr_generate_pdsch(PHY_VARS_gNB *gNB, int n_dlsch, NR_gNB_DLSCH_t *dlsch_arr
 
   unsigned char *output_ptr = output;
   for (int i = 0; i < n_dlsch; i++) {
-    output_ptr += do_one_dlsch(output_ptr, gNB, &dlsch_array[i], slot);
+    output_ptr += do_one_dlsch(output_ptr, gNB, &dlsch_array[i], slot, pdsch_phase_comp_prb_mask, prb_mask_words);
   }
 }
 

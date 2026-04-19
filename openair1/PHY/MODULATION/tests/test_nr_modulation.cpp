@@ -132,55 +132,48 @@ TEST(NrLayerPrecoderTest, SIMD)
 
 TEST(NrLayerPrecoderTest, Compare_CM_SIMD)
 {
-  constexpr int n_layers = 1;
   constexpr int symbol_size = 24;
   constexpr int n_ants = 2;
   constexpr int re_cnt = 24;
 
-  // Initialize the 2D input data buffer
-  std::vector<c16_t> buffer_in(n_layers * symbol_size);
-  std::vector<c16_t> buffer_out_cm(n_ants * symbol_size);
-  std::vector<c16_t> buffer_out_simd(n_ants * symbol_size);
+  for (int n_layers = 1; n_layers <= 4; n_layers++) {
+    std::vector<c16_t> buffer_in(n_layers * symbol_size);
+    std::vector<c16_t> buffer_out_cm(n_ants * symbol_size);
+    std::vector<c16_t> buffer_out_simd(n_ants * symbol_size);
 
-  for (int i = 0; i < n_layers * symbol_size; ++i) {
-	buffer_in[i] = {static_cast<int16_t>((rand() % (2 * SHRT_MAX + 1)) - SHRT_MAX), static_cast<int16_t>((rand() % (2 * SHRT_MAX + 1)) - SHRT_MAX)};
-  }
-  for (int i = 0; i < n_ants * symbol_size; ++i) {
-    buffer_out_cm[i] = {static_cast<int16_t>(0), static_cast<int16_t>(0)};
-    buffer_out_simd[i] = {static_cast<int16_t>(0), static_cast<int16_t>(0)};
-  }
+    for (int i = 0; i < n_layers * symbol_size; ++i) {
+      buffer_in[i] = {static_cast<int16_t>((rand() % (2 * SHRT_MAX + 1)) - SHRT_MAX),
+                      static_cast<int16_t>((rand() % (2 * SHRT_MAX + 1)) - SHRT_MAX)};
+    }
+    for (int i = 0; i < n_ants * symbol_size; ++i) {
+      buffer_out_cm[i] = {static_cast<int16_t>(0), static_cast<int16_t>(0)};
+      buffer_out_simd[i] = {static_cast<int16_t>(0), static_cast<int16_t>(0)};
+    }
 
-  // Cast flat buffer to the required 2D Variable-Length Array (VLA) style pointer
-  c16_t(*dataF_in)[symbol_size] = reinterpret_cast<c16_t(*)[symbol_size]>(buffer_in.data());
-  c16_t(*dataF_out_cm)[symbol_size] = reinterpret_cast<c16_t(*)[symbol_size]>(buffer_out_cm.data());
-  c16_t(*dataF_out_simd)[symbol_size] = reinterpret_cast<c16_t(*)[symbol_size]>(buffer_out_simd.data());
+    c16_t(*dataF_in)[symbol_size] = reinterpret_cast<c16_t(*)[symbol_size]>(buffer_in.data());
+    c16_t(*dataF_out_cm)[symbol_size] = reinterpret_cast<c16_t(*)[symbol_size]>(buffer_out_cm.data());
+    c16_t(*dataF_out_simd)[symbol_size] = reinterpret_cast<c16_t(*)[symbol_size]>(buffer_out_simd.data());
 
-  // Create and populate the weights
-  c16_t weights[NR_MAX_NB_LAYERS][NR_MAX_CSI_PORTS];
-  for (int layer = 0; layer < n_layers; ++layer) {
-    // Could not use convert_precoder_weight() as complex.h could not be used in googletest
-    // Use the logic in convert_precoder_weight()
-    // precoder [−1,−j]
-    weights[layer][0] = (c16_t){-SHRT_MAX, 0};
-    weights[layer][1] = (c16_t){0, -SHRT_MAX};
-  }
+    c16_t weights[NR_MAX_NB_LAYERS][NR_MAX_CSI_PORTS] = {};
+    for (int layer = 0; layer < n_layers; ++layer) {
+      weights[layer][0] = (c16_t){-SHRT_MAX, 0};
+      weights[layer][1] = (c16_t){0, -SHRT_MAX};
+    }
 
-  // Get the results for all the antenna 
-  for (int ant = 0; ant < n_ants; ant++) {
+    for (int ant = 0; ant < n_ants; ant++) {
+      for (int symbol = 0; symbol < re_cnt; symbol++)
+        dataF_out_cm[ant][symbol] = nr_layer_precoder_cm(n_layers, symbol_size, dataF_in, ant, weights, symbol);
 
-    // Call the C function
-    for (int symbol = 0; symbol < re_cnt; symbol++)
-      dataF_out_cm[ant][symbol] = nr_layer_precoder_cm(n_layers, symbol_size, dataF_in, ant, weights, symbol);
+      nr_layer_precoder_simd(n_layers, symbol_size, dataF_in, ant, weights, 0, re_cnt, dataF_out_simd[ant]);
 
-    // Call the C function
-    nr_layer_precoder_simd(n_layers, symbol_size, dataF_in, ant, weights, 0, re_cnt, dataF_out_simd[ant]);
-
-    // Compare the result from both C function
-    for (int symbol = 0; symbol < re_cnt; symbol++) {
-      EXPECT_EQ(dataF_out_cm[ant][symbol].r, dataF_out_simd[ant][symbol].r)
-          << " at [" << ant << "][" << symbol << "] got real part: " << dataF_out_cm[ant][symbol].r << " result " << dataF_out_simd[ant][symbol].r;
-      EXPECT_EQ(dataF_out_cm[ant][symbol].i, dataF_out_simd[ant][symbol].i)
-          << " at [" << ant << "][" << symbol << "] got imag part: " << dataF_out_cm[ant][symbol].i << " result " << dataF_out_simd[ant][symbol].i;
+      for (int symbol = 0; symbol < re_cnt; symbol++) {
+        EXPECT_EQ(dataF_out_cm[ant][symbol].r, dataF_out_simd[ant][symbol].r)
+            << " n_layers=" << n_layers << " at [" << ant << "][" << symbol << "] got real part: "
+            << dataF_out_cm[ant][symbol].r << " result " << dataF_out_simd[ant][symbol].r;
+        EXPECT_EQ(dataF_out_cm[ant][symbol].i, dataF_out_simd[ant][symbol].i)
+            << " n_layers=" << n_layers << " at [" << ant << "][" << symbol << "] got imag part: "
+            << dataF_out_cm[ant][symbol].i << " result " << dataF_out_simd[ant][symbol].i;
+      }
     }
   }
 }

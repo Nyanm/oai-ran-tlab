@@ -39,6 +39,47 @@ static void nr_fill_indication(const PHY_VARS_gNB *gNB,
                                nfapi_nr_crc_t *crc,
                                nfapi_nr_rx_data_pdu_t *pdu);
 
+static inline bool prb_is_rotated(const uint64_t *prb_mask, int prb)
+{
+  return (prb_mask[prb >> 6] >> (prb & 63)) & 0x1;
+}
+
+static inline void apply_nr_rotation_TX_segment(const NR_DL_FRAME_PARMS *fp,
+                                                c16_t *txdataF,
+                                                const c16_t *symbol_rotation,
+                                                int slot,
+                                                int symbol,
+                                                int first_prb,
+                                                int nb_prb)
+{
+  const int symb_offset = (slot % fp->slots_per_subframe) * fp->symbols_per_slot;
+  const c16_t *rot = &symbol_rotation[symb_offset + symbol];
+  c16_t *this_symbol = txdataF + symbol * fp->ofdm_symbol_size + first_prb * NR_NB_SC_PER_RB;
+  rotate_cpx_vector(this_symbol, rot, this_symbol, nb_prb * NR_NB_SC_PER_RB, 15);
+}
+
+static void apply_nr_rotation_TX_residual(const NR_DL_FRAME_PARMS *fp,
+                                          c16_t *txdataF,
+                                          const c16_t *symbol_rotation,
+                                          int slot,
+                                          const uint64_t *pdsch_phase_comp_prb_mask,
+                                          int prb_mask_words)
+{
+  for (int symbol = 0; symbol < fp->symbols_per_slot; symbol++) {
+    const uint64_t *symbol_mask = pdsch_phase_comp_prb_mask + symbol * prb_mask_words;
+    int prb = 0;
+    while (prb < fp->N_RB_DL) {
+      while (prb < fp->N_RB_DL && prb_is_rotated(symbol_mask, prb))
+        prb++;
+      const int start_prb = prb;
+      while (prb < fp->N_RB_DL && !prb_is_rotated(symbol_mask, prb))
+        prb++;
+      if (prb > start_prb)
+        apply_nr_rotation_TX_segment(fp, txdataF, symbol_rotation, slot, symbol, start_prb, prb - start_prb);
+    }
+  }
+}
+
 int beam_index_allocation(bool das,
                           int fapi_beam_index,
                           NR_gNB_COMMON *common_vars,
@@ -286,33 +327,57 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
   }
  
   if (num_pdsch > 0) {
+    const int prb_mask_words = (fp->N_RB_DL + 63) >> 6;
+    uint64_t pdsch_phase_comp_prb_mask[gNB->common_vars.num_beams_period][fp->symbols_per_slot][prb_mask_words];
+    memset(pdsch_phase_comp_prb_mask, 0, sizeof(pdsch_phase_comp_prb_mask));
     LOG_D(PHY, "PDSCH generation started (%d) in frame %d.%d\n", num_pdsch, frame, slot);
-    nr_generate_pdsch(gNB, num_pdsch, gNB->dlsch, frame, slot);
-  }
+    nr_generate_pdsch(gNB, num_pdsch, gNB->dlsch, frame, slot, &pdsch_phase_comp_prb_mask[0][0][0], prb_mask_words);
 
-  //apply the OFDM symbol rotation here
-  start_meas(&gNB->phase_comp_stats);
-  for (int i = 0; i < gNB->common_vars.num_beams_period; ++i) {
-    for (int aa = 0; aa < cfg->carrier_config.num_tx_ant.value; aa++) {
-      if (gNB->phase_comp) {
-        apply_nr_rotation_TX(fp,
-                             gNB->common_vars.txdataF[i][aa],
-                             true,
-                             fp->symbol_rotation[0],
-                             slot,
-                             fp->N_RB_DL,
-                             0,
-                             fp->Ncp == NR_EXTENDED ? 12 : 14);
+    start_meas(&gNB->phase_comp_stats);
+    for (int i = 0; i < gNB->common_vars.num_beams_period; ++i) {
+      for (int aa = 0; aa < cfg->carrier_config.num_tx_ant.value; aa++) {
+        if (gNB->phase_comp) {
+          apply_nr_rotation_TX_residual(fp,
+                                        gNB->common_vars.txdataF[i][aa],
+                                        fp->symbol_rotation[0],
+                                        slot,
+                                        &pdsch_phase_comp_prb_mask[i][0][0],
+                                        prb_mask_words);
+        }
+        T(T_GNB_PHY_DL_OUTPUT_SIGNAL,
+          T_INT(0),
+          T_INT(frame),
+          T_INT(slot),
+          T_INT(aa),
+          T_BUFFER(gNB->common_vars.txdataF[i][aa], fp->samples_per_slot_wCP * sizeof(int32_t)));
       }
-      T(T_GNB_PHY_DL_OUTPUT_SIGNAL,
-        T_INT(0),
-        T_INT(frame),
-        T_INT(slot),
-        T_INT(aa),
-        T_BUFFER(gNB->common_vars.txdataF[i][aa], fp->samples_per_slot_wCP * sizeof(int32_t)));
     }
+    stop_meas(&gNB->phase_comp_stats);
+  } else {
+    //apply the OFDM symbol rotation here
+    start_meas(&gNB->phase_comp_stats);
+    for (int i = 0; i < gNB->common_vars.num_beams_period; ++i) {
+      for (int aa = 0; aa < cfg->carrier_config.num_tx_ant.value; aa++) {
+        if (gNB->phase_comp) {
+          apply_nr_rotation_TX(fp,
+                               gNB->common_vars.txdataF[i][aa],
+                               true,
+                               fp->symbol_rotation[0],
+                               slot,
+                               fp->N_RB_DL,
+                               0,
+                               fp->Ncp == NR_EXTENDED ? 12 : 14);
+        }
+        T(T_GNB_PHY_DL_OUTPUT_SIGNAL,
+          T_INT(0),
+          T_INT(frame),
+          T_INT(slot),
+          T_INT(aa),
+          T_BUFFER(gNB->common_vars.txdataF[i][aa], fp->samples_per_slot_wCP * sizeof(int32_t)));
+      }
+    }
+    stop_meas(&gNB->phase_comp_stats);
   }
-  stop_meas(&gNB->phase_comp_stats);
 }
 
 static int nr_ulsch_procedures(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, int *ulsch_to_decode, int nb_pusch, NR_UL_IND_t *UL_INFO)
