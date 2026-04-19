@@ -170,7 +170,6 @@ class Containerize():
 
 	def __init__(self):
 		
-		self.ranRepository = ''
 		self.ranBranch = ''
 		self.ranAllowMerge = False
 		self.ranCommitID = ''

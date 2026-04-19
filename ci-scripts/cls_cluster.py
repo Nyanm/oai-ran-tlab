@@ -56,7 +56,6 @@ class Cluster:
 		self.OCProjectName = ""
 		self.OCUrl = OCUrl
 		self.OCRegistry = OCRegistry
-		self.ranRepository = ""
 		self.ranBranch = ""
 		self.ranCommitID = ""
 		self.ranAllowMerge = False
@@ -174,9 +173,9 @@ class Cluster:
 		return (image, archiveArtifact(self.cmd, ctx, fn))
 
 	def BuildClusterImage(self, ctx, node, HTML):
-		if self.ranRepository == '' or self.ranBranch == '' or self.ranCommitID == '':
+		if self.ranBranch == '' or self.ranCommitID == '':
 			HELP.GenericHelp(CONST.Version)
-			raise ValueError(f'Insufficient Parameter: ranRepository {self.ranRepository} ranBranch {ranBranch} ranCommitID {self.ranCommitID}')
+			raise ValueError(f'Insufficient Parameter: ranBranch {ranBranch} ranCommitID {self.ranCommitID}')
 		lSourcePath = self.eNBSourceCodePath
 		if node == '' or lSourcePath == '':
 			raise ValueError('Insufficient Parameter: eNBSourceCodePath missing')

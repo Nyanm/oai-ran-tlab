@@ -265,7 +265,6 @@ def Deploy_Physim(ctx, HTML, node, workdir, script, options):
 class OaiCiTest():
 	
 	def __init__(self):
-		self.ranRepository = ''
 		self.ranBranch = ''
 		self.ranCommitID = ''
 		self.ranAllowMerge = False

@@ -370,15 +370,13 @@ elif re.match('^TesteNB$', mode, re.IGNORECASE) or re.match('^TestUE$', mode, re
 	logging.info('\u001B[1m  Starting Scenario: ' + CiTestObj.testXMLfiles[0] + '\u001B[0m')
 	logging.info('\u001B[1m----------------------------------------\u001B[0m')
 	if re.match('^TesteNB$', mode, re.IGNORECASE):
-		if RAN.ranRepository == '' or RAN.ranBranch == '' or RAN.eNBSourceCodePath == '':
+		if RAN.ranBranch == '' or RAN.eNBSourceCodePath == '':
 			HELP.GenericHelp(CONST.Version)
-			if RAN.ranRepository == '':
-				HELP.GitSrvHelp(RAN.ranRepository, RAN.ranBranch, RAN.ranCommitID, RAN.ranAllowMerge, RAN.ranTargetBranch)
 			if RAN.eNBSourceCodePath == '':
 				HELP.eNBSrvHelp(RAN.eNBSourceCodePath)
 			sys.exit('Insufficient Parameter')
 	else:
-		if CiTestObj.ranRepository == '' or CiTestObj.ranBranch == '':
+		if CiTestObj.ranBranch == '':
 			HELP.GenericHelp(CONST.Version)
 			sys.exit('UE: Insufficient Parameter')
 
