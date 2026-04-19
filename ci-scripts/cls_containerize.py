@@ -31,6 +31,7 @@ from cls_ci_helper import archiveArtifact
 #-----------------------------------------------------------
 IMAGES = ['oai-enb', 'oai-lte-ru', 'oai-lte-ue', 'oai-gnb', 'oai-nr-cuup', 'oai-gnb-aw2s', 'oai-nr-ue', 'oai-enb-asan', 'oai-gnb-asan', 'oai-lte-ue-asan', 'oai-nr-ue-asan', 'oai-nr-cuup-asan', 'oai-gnb-aerial', 'oai-gnb-fhi72']
 DEFAULT_REGISTRY = "gracehopper3-oai.sboai.cs.eurecom.fr"
+INTERNAL_REPO = "git@asterix:/home/git/openairinterface5g.git"
 
 def CreateWorkspace(host, sourcePath, ranCommitID, ranBranch):
 	if ranCommitID == '':
@@ -39,7 +40,7 @@ def CreateWorkspace(host, sourcePath, ranCommitID, ranBranch):
 
 	script = "scripts/create_workspace.sh"
 	shortCommit = ranCommitID[0:8]
-	options = f"{sourcePath} {ranBranch}-{shortCommit} {ranCommitID}"
+	options = f"{sourcePath} {INTERNAL_REPO} {ranBranch}-{shortCommit}"
 	logging.info(f'execute "{script}" with options "{options}" on node {host}')
 	with cls_cmd.getConnection(host) as c:
 		ret = c.exec_script(script, 90, options)
