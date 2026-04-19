@@ -391,6 +391,7 @@ int nr_rx_pbch(PHY_VARS_NR_UE *ue,
   uint64_t tmp=0;
   const uint32_t decoderState = polar_decoder_int16(pbch_e_rx,
                                                     (uint64_t *)&tmp,
+						    (uint16_t*)NULL,
                                                     0,
                                                     NR_POLAR_PBCH_MESSAGE_TYPE,
                                                     NR_POLAR_PBCH_PAYLOAD_BITS,

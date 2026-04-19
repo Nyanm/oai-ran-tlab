@@ -17,6 +17,8 @@
 #define NR_PUSCH_x 2 // UCI placeholder bit TS 38.212 V15.4.0 subclause 5.3.3.1
 #define NR_PUSCH_y 3 // UCI placeholder bit
 
+#define FILTER_MARGIN 32
+
 typedef enum {
   BIT_TYPE_ULSCH = 0, // Default: UL-SCH data
   BIT_TYPE_ACK = 1, // HARQ-ACK bit
@@ -87,6 +89,8 @@ int nr_ulsch_pre_encoding(PHY_VARS_NR_UE *ue,
     Transport Block.
     @param[in] phy_vars_ue pointer to ue variables
     @param[in] ulsch Pointer to ULSCH descriptor
+    @param[in] pscch_pssch_pdu Pointer to PSSCH descriptor. Non-null means PSSCH is used here
+    @param[in] sl_harq_pid Index of harq_pid for PSSCH
     @param[in] frame frame index
     @param[in] slot slot index
     @param[in] G array of Gs
@@ -96,6 +100,8 @@ int nr_ulsch_pre_encoding(PHY_VARS_NR_UE *ue,
 */
 int nr_ulsch_encoding(PHY_VARS_NR_UE *ue,
                       NR_UE_ULSCH_t *ulsch,
+                      sl_nr_tx_config_pscch_pssch_pdu_t *pscch_pssch_pdu,
+                      uint8_t sl_harq_pid,		      
                       const uint32_t frame,
                       const uint8_t slot,
                       unsigned int *G,
@@ -346,6 +352,87 @@ void nr_pbch_unscrambling(int16_t *demod_pbch_e,
                           uint32_t pbch_a_prime,
                           uint32_t *pbch_a_interleaved);
 void nr_pbch_quantize(int16_t *pbch_llr8, int16_t *pbch_llr, uint16_t len);
+
+void nr_rx_pssch(PHY_VARS_NR_UE *ue,
+                 const UE_nr_rxtx_proc_t *proc,
+                 nr_phy_data_t *phy_data,
+                 int rxFSz,
+                 c16_t rxdataF[][rxFSz],
+		 int16_t *llrs,
+                 uint8_t ulsch_id,
+                 uint32_t frame,
+                 uint8_t slot,
+                 unsigned char harq_pid,
+                 bool *is_csi_rs_slot);
+void nr_pscch_scrambling(uint32_t *in,
+                         uint32_t size,
+                         uint32_t Nid,
+                         uint32_t scrambling_RNTI,
+                         uint32_t *out,
+                         int sci_flag);
+
+void nr_pdcch_unscrambling(c16_t *e_rx,
+                           uint16_t scrambling_RNTI,
+                           uint32_t length,
+                           uint16_t pdcch_DMRS_scrambling_id,
+                           int16_t *z2);
+
+void nr_sci_scrambling(uint32_t *in, uint32_t size, uint32_t Nid, uint32_t scrambling_RNTI, uint32_t *out,int sci2_flag);
+
+uint32_t nr_generate_sci(PHY_VARS_NR_UE *ue,
+                         nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_pdu_rel15,
+                         c16_t *txdataF,
+                         int16_t amp,
+                         NR_DL_FRAME_PARMS *frame_parms,
+                         int slot);
+
+uint32_t nr_generate_sci1(const PHY_VARS_NR_UE *ue,
+                          c16_t *txdataF,
+                          const NR_DL_FRAME_PARMS *frame_parms,
+                          const int16_t amp,
+                          const int nr_slot_tx,
+                          const sl_nr_tx_config_pscch_pssch_pdu_t *pscch_pssch_pdu);
+
+void nr_generate_psfch0(const PHY_VARS_NR_UE *ue,
+                        c16_t **txdataF,
+                        const NR_DL_FRAME_PARMS *frame_parms,
+                        const int16_t amp,
+                        const int nr_slot_tx,
+                        const sl_nr_tx_rx_config_psfch_pdu_t *psfch_pdu);
+
+int8_t nr_ue_decode_pucch0(PHY_VARS_NR_UE *ue,
+                         int frame,
+                         int slot,
+                         c16_t rxdataF[][ue->SL_UE_PHY_PARAMS.sl_frame_params.samples_per_slot_wCP],
+                         nfapi_nr_uci_pucch_pdu_format_0_1_t *uci_pdu,
+                         nfapi_nr_pucch_pdu_t *pucch_pdu);
+
+int8_t nr_ue_decode_psfch0(PHY_VARS_NR_UE *ue,
+                         int frame,
+                         int slot,
+                         c16_t rxdataF[][ue->SL_UE_PHY_PARAMS.sl_frame_params.samples_per_slot_wCP],
+                         const sl_nr_tx_rx_config_psfch_pdu_t *psfch_pdu);
+
+int nr_csi_rs_sinr_estimation(const PHY_VARS_NR_UE *ue,
+                              const fapi_nr_dl_config_csirs_pdu_rel15_t *csirs_config_pdu,
+                              const uint8_t N_ports,
+                              uint8_t mem_offset,
+                              const c16_t csi_rs_estimated_channel_freq[][N_ports][ue->frame_parms.ofdm_symbol_size + FILTER_MARGIN],
+                              const uint32_t interference_plus_noise_power,
+                              const int16_t log2_re,
+                              int32_t *precoded_sinr_dB);
+
+int nr_pssch_channel_estimation(PHY_VARS_NR_UE *ue,
+                                int rxFSz,
+                                c16_t rxdataF[][rxFSz],
+                                unsigned char Ns,
+                                unsigned short p,
+                                unsigned char symbol,
+                                int ul_id,
+                                unsigned short bwp_start_subcarrier,
+                                sl_nr_rx_config_pssch_sci_pdu_t *pssch_pdu,
+                                int *max_ch,
+                                uint32_t *nvar);
 /**@}*/
 #endif
 

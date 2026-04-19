@@ -76,6 +76,14 @@
 #include "radio/COMMON/common_lib.h"
 #include "NR_IF_Module.h"
 
+#define MAX_PUCCH0_NID 8
+
+typedef struct {
+  int nb_id;
+  int Nid[MAX_PUCCH0_NID];
+  int lut[MAX_PUCCH0_NID][160][14];
+} NR_UE_PUCCH0_LUT_t;
+
 /// Context data structure for gNB subframe processing
 typedef struct {
   /// Component Carrier index
@@ -204,6 +212,7 @@ typedef struct {
 #define NR_PSBCH_DMRS_LENGTH 297 // in mod symbols
 #define NR_PSBCH_DMRS_LENGTH_DWORD 20 // ceil(2(QPSK)*NR_PBCH_DMRS_LENGTH/32)
 #define PBCH_A 24
+#define NR_SLSCH_RX_MAX 2
 
 typedef struct {
   int16_t amp;
@@ -340,6 +349,7 @@ typedef struct PHY_VARS_NR_UE_s {
   uint8_t prs_active_gNBs;
   NR_DL_UE_HARQ_t  dl_harq_processes[2][NR_MAX_DLSCH_HARQ_PROCESSES];
   NR_UL_UE_HARQ_t  ul_harq_processes[NR_MAX_ULSCH_HARQ_PROCESSES];
+  NR_UL_UE_HARQ_t  sl_harq_processes[NR_MAX_SLSCH_HARQ_PROCESSES];
 
   // Scrambling IDs used in PUSCH DMRS
   c16_t X_u[64][839];
@@ -436,6 +446,22 @@ typedef struct PHY_VARS_NR_UE_s {
   // Sidelink parameters
   sl_nr_sidelink_mode_t sl_mode;
   sl_nr_ue_phy_params_t SL_UE_PHY_PARAMS;
+  struct PHY_MEASUREMENTS_gNB_s *sl_measurements;
+  int max_nb_slsch;
+  // we use the gNB ULSCH context for SLSCH reception
+  struct NR_gNB_ULSCH_s   *slsch; 
+  struct NR_gNB_PUSCH_s   *pssch_vars;
+  bool phy_config_request_sent;
+  int pscch_dmrs_gold_init;
+  /// PDCCH DMRS for TX
+  uint32_t ***nr_gold_pscch_dmrs;  
+  /// PSCCH DMRS for RX
+  uint32_t ***nr_gold_pscch;
+  /// PSSCH signal detection threshold
+  int pssch_thres;
+  // PUCCH0 Look-up table for cyclic-shifts
+  NR_UE_PUCCH0_LUT_t pucch0_lut;
+  // Threading
   Actor_t sync_actor;
   Actor_t *dl_actors;
   Actor_t *ul_actors;
@@ -522,6 +548,8 @@ typedef struct nr_phy_data_tx_s {
   // Sidelink Rx action decided by MAC
   sl_nr_tx_config_type_enum_t sl_tx_action;
   sl_nr_tx_config_psbch_pdu_t psbch_vars;
+  sl_nr_tx_config_pscch_pssch_pdu_t nr_sl_pssch_pscch_pdu;
+  uint32_t pscch_Nid;  
 } nr_phy_data_tx_t;
 
 typedef struct nr_phy_data_s {
@@ -530,6 +558,13 @@ typedef struct nr_phy_data_s {
 
   // Sidelink Rx action decided by MAC
   sl_nr_rx_config_type_enum_t sl_rx_action;
+  sl_nr_rx_config_pscch_pdu_t nr_sl_pscch_pdu;
+  sl_nr_rx_config_pssch_sci_pdu_t nr_sl_pssch_sci_pdu;
+  sl_nr_rx_config_pssch_pdu_t nr_sl_pssch_pdu;
+  sl_nr_tti_csi_rs_pdu_t nr_sl_csi_rs_pdu;
+  sl_nr_tx_rx_config_psfch_pdu_t *psfch_pdu_list;
+  uint8_t num_psfch_pdus;
+
   NR_UE_CSI_RS csirs_vars;
   NR_UE_CSI_IM csiim_vars;
 } nr_phy_data_t;

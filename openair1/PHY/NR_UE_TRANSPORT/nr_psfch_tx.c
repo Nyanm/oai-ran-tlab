@@ -66,5 +66,5 @@ void nr_generate_psfch0(const PHY_VARS_NR_UE *ue,
   pucch_pdu.group_hop_flag       = psfch_pdu->group_hop_flag;
   pucch_pdu.second_hop_prb       = psfch_pdu->second_hop_prb;
   pucch_pdu.sequence_hop_flag    = psfch_pdu->sequence_hop_flag;
-  nr_generate_pucch0(ue, txdataF, frame_parms, amp, nr_slot_tx, &pucch_pdu);
+  nr_generate_pucch0(txdataF, frame_parms, amp, nr_slot_tx, &pucch_pdu);
 }

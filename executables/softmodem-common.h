@@ -321,6 +321,13 @@ extern char *parallel_config;
 extern char *worker_config;
 extern double cpuf;
 
+
+#define KNRM  "\x1B[0m"
+#define KRED  "\x1B[31m"
+#define KGRN  "\x1B[32m"
+#define KBLU  "\x1B[34m"
+#define RESET "\033[0m"
+
 #ifdef __cplusplus
 }
 #endif

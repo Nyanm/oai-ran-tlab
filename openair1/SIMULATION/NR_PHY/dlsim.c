@@ -1286,7 +1286,7 @@ int main(int argc, char **argv)
         nr_ue_scheduled_response(&scheduled_response);
 
         pbch_processing(UE, &UE_proc, &phy_data);
-        pdcch_processing(UE, &UE_proc, &phy_data);
+        pdcch_processing(UE, &UE_proc, &phy_data,0);
         pdsch_processing(UE,
                          &UE_proc,
                          &phy_data);

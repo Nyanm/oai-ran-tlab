@@ -50,8 +50,7 @@ NR_gNB_ULSCH_t new_gNB_ulsch(uint8_t max_ldpc_iterations, uint16_t N_RB_UL);
   @param is_crnti
 */
 
-int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
-                      struct PHY_VARS_NR_UE_s *UE,
+int nr_slsch_decoding(struct PHY_VARS_NR_UE_s *UE,
                       uint8_t UE_id,
                       short *ulsch_llr,
                       NR_DL_FRAME_PARMS *frame_parms,
@@ -60,7 +59,7 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
                       uint8_t nr_tti_rx,
                       uint8_t harq_pid,
                       uint32_t G,
-                      UE_nr_rxtx_proc_t *proc,
+                      const UE_nr_rxtx_proc_t *proc,
                       nr_phy_data_t *phy_data,
                       int8_t *ack_nack_rcvd,
                       uint8_t num_acks);
