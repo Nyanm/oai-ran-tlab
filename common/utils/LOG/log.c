@@ -519,13 +519,7 @@ void logTerm(void)
 }
 
 #include <sys/syscall.h>
-static inline int log_header(log_component_t *c,
-			     char *log_buffer,
-			     int buffsize,
-			     const char *file,
-			     const char *func,
-			     int line,
-			     int level)
+static inline int log_header(log_component_t *c, char *log_buffer, int buffsize, const char *func, int line, int level)
 {
   int flag = g_log->flag;
 
@@ -666,7 +660,7 @@ void log_dump(int component,
 
   if (wbuf != NULL) {
     va_start(args, format);
-    int pos=log_header(c, wbuf,MAX_LOG_TOTAL,"noFile","noFunc",0, OAILOG_INFO);
+    int pos = log_header(c, wbuf, MAX_LOG_TOTAL, "noFunc", 0, OAILOG_INFO);
     pos+=vsprintf(wbuf+pos,format, args);
     va_end(args);
 
@@ -875,6 +869,8 @@ void flush_mem_to_file(void)
 
 static void log_output_memory(log_component_t *c, const char *file, const char *func, int line, int comp, int level, const char* format,va_list args)
 {
+  UNUSED(comp);
+  UNUSED(file);
   //logRecord_mt(file,func,line, pthread_self(), comp, level, format, ##args)
   int len = 0;
   /* The main difference with the version above is the use of this local log_buffer.
@@ -887,7 +883,7 @@ static void log_output_memory(log_component_t *c, const char *file, const char *
 
   // make sure that for log trace the extra info is only printed once, reset when the level changes
   if (level < OAILOG_TRACE) {
-    int n = log_header(c, log_buffer+len, sizeof(log_buffer), file, func, line, level);
+    int n = log_header(c, log_buffer+len, sizeof(log_buffer), func, line, level);
     if (n > 0) {
       len += n;
       if (len > sizeof(log_buffer)) {

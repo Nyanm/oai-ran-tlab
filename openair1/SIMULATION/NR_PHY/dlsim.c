@@ -382,6 +382,8 @@ int main(int argc, char **argv)
   uint8_t  dlsch_threads = 0;
   int chest_type[2] = {0};
   uint8_t  max_ldpc_iterations = 5;
+  // number of PDSCH symbols per thread = 0 means do not use thread pool
+  int num_pdsch_symbols_per_thread = 0;
   if ((uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY)) == 0) {
     exit_fun("[NR_DLSIM] Error, configuration module init failed\n");
   }
@@ -583,6 +585,10 @@ int main(int argc, char **argv)
       gNBthreads[sizeof(gNBthreads)-1]=0;
       break;
 
+    case 'Y':
+      num_pdsch_symbols_per_thread = atoi(optarg);
+      break;
+
     case 'Z' :
       filename_csv = strdup(optarg);
       AssertFatal(filename_csv != NULL, "strdup() error: errno %d\n", errno);
@@ -657,6 +663,7 @@ int main(int argc, char **argv)
       printf("-T Enable PTRS, arguments list L_PTRS{0,1,2} K_PTRS{2,4}, e.g. -T 2 0 2 \n");
       printf("-U Change DMRS Config, arguments list DMRS TYPE{0=A,1=B} DMRS AddPos{0:2} DMRS ConfType{1:2}, e.g. -U 3 0 2 1 \n");
       printf("-X gNB thread pool configuration, n => no threads\n");
+      printf("-Y Number of symbols processed per PDSCH generation thread\n");
       printf("-Z Output filename (.csv format) for stats\n");
       exit (-1);
       break;
@@ -715,6 +722,7 @@ int main(int argc, char **argv)
 
   AssertFatal((gNB->if_inst = NR_IF_Module_init(0)) != NULL, "Cannot register interface");
   gNB->if_inst->NR_PHY_config_req = nr_phy_config_request;
+  gNB->num_pdsch_symbols_per_thread = num_pdsch_symbols_per_thread;
 
   NR_ServingCellConfigCommon_t *scc = calloc(1,sizeof(*scc));;
   prepare_scc(scc);

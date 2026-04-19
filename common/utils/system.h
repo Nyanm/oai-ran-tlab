@@ -36,11 +36,7 @@ void threadCreate(pthread_t *t, void *(*func)(void *), void *param, char *name, 
 #define OAI_PRIORITY_RT ((sched_get_priority_min(SCHED_OAI)+sched_get_priority_max(SCHED_OAI))/2)
 #define OAI_PRIORITY_RT_MAX sched_get_priority_max(SCHED_OAI)-2
 
-void thread_top_init(char *thread_name,
-                     int affinity,
-                     uint64_t runtime,
-                     uint64_t deadline,
-                     uint64_t period);
+void thread_top_init(char *thread_name);
 
 /****************************************************
  * Functions to check system at runtime.

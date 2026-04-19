@@ -152,12 +152,7 @@ int lte_dl_channel_estimation(PHY_VARS_UE *ue,
   }
 
   // generate pilot
-  lte_dl_cell_spec_rx(ue,
-                      eNB_offset,
-                      &pilot[p][0],
-                      Ns,
-                      (l==0)?0:1,
-                      p);
+  lte_dl_cell_spec_rx(ue, eNB_offset, &pilot[p][0], Ns, (l == 0) ? 0 : 1);
 
   for (aarx=0; aarx<ue->frame_parms.nb_antennas_rx; aarx++) {
     c16_t *pil = (c16_t *)&pilot[p][0];

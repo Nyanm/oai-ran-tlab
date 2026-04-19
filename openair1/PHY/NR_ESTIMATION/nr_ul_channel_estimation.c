@@ -34,7 +34,7 @@ typedef struct puschAntennaProc_s {
   int aarx;
   int beam_nb;
   int numAntennas;
-  nfapi_nr_pusch_pdu_t *pusch_pdu;
+  const nfapi_nr_pusch_pdu_t *pusch_pdu;
   int *max_ch;
   c16_t *pilot;
   int *nest_count;
@@ -82,7 +82,7 @@ static void nr_pusch_antenna_processing(void *arg)
   int aarx = rdata->aarx;
   int numAntennas = rdata->numAntennas;
   unsigned short bwp_start_subcarrier = rdata->bwp_start_subcarrier;
-  nfapi_nr_pusch_pdu_t *pusch_pdu = rdata->pusch_pdu;
+  const nfapi_nr_pusch_pdu_t *pusch_pdu = rdata->pusch_pdu;
   int *max_ch = rdata->max_ch;
   c16_t *pilot = rdata->pilot;
   uint64_t noise_amp2 = *(rdata->noise_amp2);
@@ -452,10 +452,10 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
                                 int nl,
                                 unsigned short p,
                                 unsigned char symbol,
-                                int ul_id,
+                                NR_gNB_PUSCH *pusch_vars,
                                 int beam_nb,
                                 unsigned short bwp_start_subcarrier,
-                                nfapi_nr_pusch_pdu_t *pusch_pdu,
+                                const nfapi_nr_pusch_pdu_t *pusch_pdu,
                                 int *max_ch,
                                 uint32_t *nvar,
                                 c16_t *pusch_dmrs_slot_mem,
@@ -534,7 +534,7 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
 
   int nest_count = 0;
   uint64_t noise_amp2 = 0;
-  delay_t *delay = &gNB->ulsch[ul_id].delay;
+  delay_t *delay = &pusch_vars->delay;
   memset(delay, 0, sizeof(*delay));
 
   int nb_antennas_rx = fp->nb_antennas_rx;
@@ -579,7 +579,7 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
     rdata->delay = &delay_arr[rdata->aarx];
     rdata->beam_nb = beam_nb;
     rdata->frame_parms = fp;
-    rdata->pusch_vars = &gNB->pusch_vars[ul_id];
+    rdata->pusch_vars = pusch_vars;
     rdata->chest_freq = gNB->chest_freq;
     rdata->rxdataF = gNB->common_vars.rxdataF;
     rdata->scope = gNB->scopeData;
@@ -628,7 +628,7 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
  *
  * PARAMETERS :   gNB         : gNB data structure
  *                rel15_ul    : UL parameters
- *                UE_id       : UE ID
+ *                pusch_vars  : PUSCH data
  *                nr_tti_rx   : slot rx TTI
  *            dmrs_symbol_flag: DMRS Symbol Flag
  *                symbol      : OFDM Symbol
@@ -646,25 +646,22 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
 // #define DEBUG_UL_PTRS
 void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
                               NR_DL_FRAME_PARMS *frame_parms,
-                              nfapi_nr_pusch_pdu_t *rel15_ul,
-                              uint8_t ulsch_id,
+                              const nfapi_nr_pusch_pdu_t *rel15_ul,
+                              NR_gNB_PUSCH *pusch_vars,
                               uint8_t nr_tti_rx,
                               unsigned char symbol,
                               uint32_t nb_re_pusch)
 {
-  NR_gNB_PUSCH *pusch_vars = &gNB->pusch_vars[ulsch_id];
   int32_t *ptrs_re_symbol = NULL;
   int8_t ret = 0;
   uint8_t symbInSlot = rel15_ul->start_symbol_index + rel15_ul->nr_of_symbols;
-  uint8_t *startSymbIndex = &rel15_ul->start_symbol_index;
-  uint8_t *nbSymb = &rel15_ul->nr_of_symbols;
-  uint8_t *L_ptrs = &rel15_ul->pusch_ptrs.ptrs_time_density;
-  uint8_t *K_ptrs = &rel15_ul->pusch_ptrs.ptrs_freq_density;
-  uint16_t *dmrsSymbPos = &rel15_ul->ul_dmrs_symb_pos;
-  uint16_t *ptrsSymbPos = &pusch_vars->ptrs_symbols;
-  uint8_t *ptrsSymbIdx = &pusch_vars->ptrs_symbol_index;
-  uint16_t *nb_rb = &rel15_ul->rb_size;
-  uint8_t *ptrsReOffset = &rel15_ul->pusch_ptrs.ptrs_ports_list[0].ptrs_re_offset;
+  uint8_t startSymbIndex = rel15_ul->start_symbol_index;
+  uint8_t nbSymb = rel15_ul->nr_of_symbols;
+  uint8_t L_ptrs = rel15_ul->pusch_ptrs.ptrs_time_density;
+  uint8_t K_ptrs = rel15_ul->pusch_ptrs.ptrs_freq_density;
+  uint16_t dmrsSymbPos = rel15_ul->ul_dmrs_symb_pos;
+  uint16_t nb_rb = rel15_ul->rb_size;
+  uint8_t ptrsReOffset = rel15_ul->pusch_ptrs.ptrs_ports_list[0].ptrs_re_offset;
 
   /* loop over antennas */
   for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) {
@@ -673,7 +670,7 @@ void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
     *ptrs_re_symbol = 0;
     phase_per_symbol[symbol].i = 0;
     /* set DMRS estimates to 0 angle with magnitude 1 */
-    if (is_dmrs_symbol(symbol, *dmrsSymbPos)) {
+    if (is_dmrs_symbol(symbol, dmrsSymbPos)) {
       /* set DMRS real estimation to 32767 */
       phase_per_symbol[symbol].r = INT16_MAX; // 32767
 #ifdef DEBUG_UL_PTRS
@@ -683,17 +680,13 @@ void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
       phase_per_symbol[symbol].r = 0;
     }
 
-    if (symbol == *startSymbIndex) {
-      *ptrsSymbPos = 0;
-      set_ptrs_symb_idx(ptrsSymbPos, *nbSymb, *startSymbIndex, 1 << *L_ptrs, *dmrsSymbPos);
+    if (symbol == startSymbIndex) {
+      pusch_vars->ptrs_symbols = 0;
+      set_ptrs_symb_idx(&pusch_vars->ptrs_symbols, nbSymb, startSymbIndex, 1 << L_ptrs, dmrsSymbPos);
     }
 
-    /* if not PTRS symbol set current ptrs symbol index to zero*/
-    *ptrsSymbIdx = 0;
-
     /* Check if current symbol contains PTRS */
-    if (is_ptrs_symbol(symbol, *ptrsSymbPos)) {
-      *ptrsSymbIdx = symbol;
+    if (is_ptrs_symbol(symbol, pusch_vars->ptrs_symbols)) {
       /*------------------------------------------------------------------------------------------------------- */
       /* 1) Estimate common phase error per PTRS symbol                                                                */
       /*------------------------------------------------------------------------------------------------------- */
@@ -703,9 +696,9 @@ void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
                                            rel15_ul->scid,
                                            nr_tti_rx,
                                            symbol);
-      nr_ptrs_cpe_estimation(*K_ptrs,
-                             *ptrsReOffset,
-                             *nb_rb,
+      nr_ptrs_cpe_estimation(K_ptrs,
+                             ptrsReOffset,
+                             nb_rb,
                              rel15_ul->rnti,
                              frame_parms->ofdm_symbol_size,
                              &pusch_vars->rxdataF_comp[aarx][(symbol * nb_re_pusch)],
@@ -720,8 +713,8 @@ void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
       /* 2) Interpolate PTRS estimated value in TD */
       /*------------------------------------------------------------------------------------------------------- */
       /* If L-PTRS is > 0 then we need interpolation */
-      if (*L_ptrs > 0) {
-        ret = nr_ptrs_process_slot(*dmrsSymbPos, *ptrsSymbPos, (int16_t *)phase_per_symbol, *startSymbIndex, *nbSymb);
+      if (L_ptrs > 0) {
+        ret = nr_ptrs_process_slot(dmrsSymbPos, pusch_vars->ptrs_symbols, (int16_t *)phase_per_symbol, startSymbIndex, nbSymb);
         if (ret != 0) {
           LOG_W(PHY, "[PTRS] Compensation is skipped due to error in PTRS slot processing !!\n");
         }
@@ -730,17 +723,17 @@ void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
       /*------------------------------------------------------------------------------------------------------- */
       /* 3) Compensated DMRS based estimated signal with PTRS estimation                                        */
       /*--------------------------------------------------------------------------------------------------------*/
-      for (uint8_t i = *startSymbIndex; i < symbInSlot; i++) {
+      for (uint8_t i = startSymbIndex; i < symbInSlot; i++) {
         /* DMRS Symbol has 0 phase so no need to rotate the respective symbol */
         /* Skip rotation if the slot processing is wrong */
-        if ((!is_dmrs_symbol(i, *dmrsSymbPos)) && (ret == 0)) {
+        if ((!is_dmrs_symbol(i, dmrsSymbPos)) && (ret == 0)) {
 #ifdef DEBUG_UL_PTRS
           printf("[PHY][UL][PTRS]: Rotate Symbol %2d with  %d + j* %d\n", i, phase_per_symbol[i].r, phase_per_symbol[i].i);
 #endif
           rotate_cpx_vector(&pusch_vars->rxdataF_comp[aarx][i * nb_re_pusch],
                             &phase_per_symbol[i],
                             &pusch_vars->rxdataF_comp[aarx][i * nb_re_pusch],
-                            ((*nb_rb) * NR_NB_SC_PER_RB),
+                            (nb_rb * NR_NB_SC_PER_RB),
                             15);
         } // if not DMRS Symbol
       } // symbol loop
@@ -783,6 +776,8 @@ int nr_srs_ls_channel_estimation(int ant,
 #ifdef SRS_DEBUG
     LOG_I(NR_PHY, "====================== UE port %d --> gNB Rx antenna %i ======================\n", p_index, ant);
     LOG_I(NR_PHY, "============================== SRS symbol index %d ===========================\n", srs_symb);
+#else
+    UNUSED(ant);
 #endif
 
     uint16_t subcarrier = CIRCULAR_INC(subcarrier_offset + nr_srs_info->k_0_p[p_index][srs_symb], 0, ofdm_symbol_size);

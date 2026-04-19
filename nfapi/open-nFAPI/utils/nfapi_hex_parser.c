@@ -15,6 +15,7 @@
 
 void exit_function(const char *file, const char *function, const int line, const char *s, const int assert)
 {
+  UNUSED(assert);
   if (s != NULL) {
     printf("%s:%d %s() Exiting OAI (n)FAPI Hex Parser: %s\n", file, line, function, s);
   }

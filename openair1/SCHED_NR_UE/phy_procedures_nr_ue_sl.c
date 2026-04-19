@@ -275,7 +275,7 @@ int nr_slsch_procedures(PHY_VARS_NR_UE *ue, int frame_rx, int slot_rx, int SLSCH
   ue->slsch[SLSCH_id].active = false;
   NR_UL_gNB_HARQ_t *harq_process = &ue->slsch[SLSCH_id].harq_process[harq_pid]; 
   slsch_status.b = harq_process->b;
-  slsch_status.TBS = harq_process->TBS;
+  slsch_status.TBS = slsch_pdu->tb_size;
   slsch_status.harq_pid =  harq_pid;
   slsch_status.rxok = nbDecode>0 ? true : false;
   LOG_D(NR_PHY, "%4d.%2d SLSCH %s received ok \n", proc->frame_rx, proc->nr_slot_rx,nbDecode>0 ? "" : "not");

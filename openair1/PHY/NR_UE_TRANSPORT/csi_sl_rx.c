@@ -775,7 +775,7 @@ int nr_csi_rs_cqi_estimation(const uint32_t precoded_sinr,
 
   return 0;
 }
-
+/*
 static int nr_csi_im_power_estimation(const PHY_VARS_NR_UE *ue,
                                const fapi_nr_dl_config_csiim_pdu_rel15_t *csiim_config_pdu,
                                uint32_t *interference_plus_noise_power,
@@ -851,7 +851,7 @@ static int nr_csi_im_power_estimation(const PHY_VARS_NR_UE *ue,
 
   return 0;
 }
-
+*/
 int nr_csi_rs_cqi_estimation_sl(const int32_t precoded_sinr,
                                 uint8_t *cqi) {
 
@@ -891,7 +891,7 @@ int nr_csi_rs_cqi_estimation_sl(const int32_t precoded_sinr,
 
   return 0;
 }
-
+/*
 void nr_ue_csi_im_procedures(PHY_VARS_NR_UE *ue,
                              const UE_nr_rxtx_proc_t *proc,
                              const c16_t rxdataF[][ue->frame_parms.samples_per_slot_wCP],
@@ -910,6 +910,7 @@ void nr_ue_csi_im_procedures(PHY_VARS_NR_UE *ue,
   nr_csi_im_power_estimation(ue, csiim_config_pdu, &ue->nr_csi_info->interference_plus_noise_power, rxdataF);
   ue->nr_csi_info->csi_im_meas_computed = true;
 }
+*/
 
 void nr_ue_csi_rs_procedures(PHY_VARS_NR_UE *ue,
                              const UE_nr_rxtx_proc_t *proc,

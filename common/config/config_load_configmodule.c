@@ -123,6 +123,10 @@ int config_cmdlineonly_getlist(configmodule_interface_t *cfg,
                                int numparams,
                                const char *prefix)
 {
+  UNUSED(cfg);
+  UNUSED(params);
+  UNUSED(numparams);
+  UNUSED(prefix);
   ParamList->numelt = 0;
   return 0;
 }
@@ -162,15 +166,15 @@ int config_cmdlineonly_get(configmodule_interface_t *cfg, paramdef_t *cfgoptions
 
       case TYPE_UINTARRAY:
       case TYPE_INTARRAY:
-        defval = config_setdefault_intlist(cfg, &cfgoptions[i], prefix);
+        defval = config_setdefault_intlist(cfg, &cfgoptions[i]);
         break;
 
       case TYPE_DOUBLE:
-        defval = config_setdefault_double(cfg, &cfgoptions[i], prefix);
+        defval = config_setdefault_double(cfg, &cfgoptions[i]);
         break;
 
       case TYPE_IPV4ADDR:
-        defval = config_setdefault_ipv4addr(cfg, &cfgoptions[i], prefix);
+        defval = config_setdefault_ipv4addr(cfg, &cfgoptions[i]);
         break;
 
       default:

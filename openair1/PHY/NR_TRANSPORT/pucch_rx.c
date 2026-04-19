@@ -33,40 +33,32 @@
 //#define DEBUG_NR_PUCCH_RX 1
 void nr_fill_pucch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pucch_pdu_t *pucch_pdu)
 {
-  for (int i = 0; i < gNB->max_nb_pucch; i++) {
-    NR_gNB_PUCCH_t *pucch = &gNB->pucch[i];
-    if (pucch->active == false) {
-      pucch->frame = frame;
-      pucch->slot = slot;
-      pucch->active = true;
-      pucch->beam_nb = 0;
-      if (gNB->common_vars.beam_id) {
-        int fapi_beam_idx = pucch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
-        int bitmap = SL_to_bitmap(pucch_pdu->start_symbol_index, pucch_pdu->nr_of_symbols);
-        pucch->beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                               fapi_beam_idx,
-                                               &gNB->common_vars,
-                                               slot,
-                                               gNB->frame_parms.symbols_per_slot,
-                                               bitmap);
-      }
-      memcpy((void *)&pucch->pucch_pdu, (void *)pucch_pdu, sizeof(nfapi_nr_pucch_pdu_t));
-      LOG_D(PHY,
-            "Programming PUCCH[%d] for %d.%d, format %d, nb_harq %d, nb_sr %d, nb_csi %d\n",
-            i,
-            pucch->frame,
-            pucch->slot,
-            pucch->pucch_pdu.format_type,
-            pucch->pucch_pdu.bit_len_harq,
-            pucch->pucch_pdu.sr_flag,
-            pucch->pucch_pdu.bit_len_csi_part1);
-      return;
-    }
+  LOG_D(PHY,
+        "%4d.%2d UE %04x Programming PUCCH format %d, nb_harq %d, nb_sr %d, nb_csi %d\n",
+        frame,
+        slot,
+        pucch_pdu->rnti,
+        pucch_pdu->format_type,
+        pucch_pdu->bit_len_harq,
+        pucch_pdu->sr_flag,
+        pucch_pdu->bit_len_csi_part1);
+  NR_gNB_PUCCH_job_t pucch = {.frame = frame, .slot = slot, .pucch_pdu = *pucch_pdu};
+  if (gNB->common_vars.beam_id) {
+    int fapi_beam_idx = pucch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
+    int bitmap = SL_to_bitmap(pucch_pdu->start_symbol_index, pucch_pdu->nr_of_symbols);
+    pucch.beam_nb = beam_index_allocation(gNB->enable_analog_das,
+                                           fapi_beam_idx,
+                                           &gNB->common_vars,
+                                           slot,
+                                           gNB->frame_parms.symbols_per_slot,
+                                           bitmap);
   }
-  LOG_W(PHY, "PUCCH list is full\n");
+  bool found = spsc_q_put(&gNB->pucch_queue, &pucch, sizeof(pucch));
+  if (!found)
+    LOG_W(NR_PHY, "PUCCH list is full: dropping PUCCH UE %04x\n", pucch_pdu->rnti);
 }
 
-int get_pucch0_cs_lut_index(PHY_VARS_gNB *gNB, nfapi_nr_pucch_pdu_t *pucch_pdu)
+int get_pucch0_cs_lut_index(PHY_VARS_gNB *gNB, const nfapi_nr_pucch_pdu_t *pucch_pdu)
 {
   int i = 0;
 
@@ -129,7 +121,7 @@ void nr_decode_pucch0(PHY_VARS_gNB *gNB,
                       int frame,
                       int slot,
                       nfapi_nr_uci_pucch_pdu_format_0_1_t *uci_pdu,
-                      nfapi_nr_pucch_pdu_t *pucch_pdu)
+                      const nfapi_nr_pucch_pdu_t *pucch_pdu)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   int soffset = (slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
@@ -1132,7 +1124,7 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
                       int frame,
                       int slot,
                       nfapi_nr_uci_pucch_pdu_format_2_3_4_t *uci_pdu,
-                      nfapi_nr_pucch_pdu_t *pucch_pdu)
+                      const nfapi_nr_pucch_pdu_t *pucch_pdu)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   // pucch_GroupHopping_t pucch_GroupHopping = pucch_pdu->group_hop_flag + (pucch_pdu->sequence_hop_flag<<1);

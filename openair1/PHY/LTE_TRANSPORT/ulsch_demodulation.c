@@ -384,7 +384,6 @@ void ulsch_channel_compensation(int32_t **rxdataF_ext,
                                 int32_t **rxdataF_comp,
                                 LTE_DL_FRAME_PARMS *frame_parms,
                                 uint8_t symbol,
-                                uint8_t Qm,
                                 uint16_t nb_rb,
                                 uint8_t output_shift) {
 
@@ -518,7 +517,6 @@ void rx_ulsch(PHY_VARS_eNB *eNB,
                               (c16_t **)eNB->pusch_vars[UE_id]->drs_ch_estimates,
                               (c16_t **)eNB->pusch_vars[UE_id]->drs_ch_estimates_time,
                               (c16_t **)eNB->pusch_vars[UE_id]->rxdataF_ext,
-                              UE_id,
                               l % (frame_parms->symbols_per_tti / 2),
                               l / (frame_parms->symbols_per_tti / 2));
   }
@@ -599,7 +597,6 @@ void rx_ulsch(PHY_VARS_eNB *eNB,
       pusch_vars->rxdataF_comp,
       frame_parms,
       l,
-      Qm,
       ulsch[UE_id]->harq_processes[harq_pid]->nb_rb,
       log2_maxh); // log2_maxh+I0_shift
 

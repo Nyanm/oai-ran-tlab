@@ -143,7 +143,6 @@ int nr_slsch_decoding(struct PHY_VARS_NR_UE_s *UE,
   int max_num_segments = 0;
 
   NR_gNB_ULSCH_t *slsch = &UE->slsch[SLSCH_id];
-  NR_gNB_PUSCH *pssch = &UE->pssch_vars[SLSCH_id];
   NR_UL_gNB_HARQ_t *harq_process = slsch->harq_process;
 
   if (!harq_process) {
@@ -164,10 +163,10 @@ int nr_slsch_decoding(struct PHY_VARS_NR_UE_s *UE,
   // ------------------------------------------------------------------
 
   TB.processedSegments = &harq_process->processedSegments;
-  harq_process->TBS = pssch_pdu->pusch_data.tb_size;
+  int TBS = pssch_pdu->pusch_data.tb_size;
 
   TB.BG = pssch_pdu->maintenance_parms_v3.ldpcBaseGraph;
-  TB.A = (harq_process->TBS) << 3;
+  TB.A = TBS << 3;
   /*
   NR_gNB_PHY_STATS_t *stats = UE->slsch_stats;
   if (stats) {
@@ -180,7 +179,7 @@ int nr_slsch_decoding(struct PHY_VARS_NR_UE_s *UE,
     if (!harq_process->harq_to_be_cleared) {
       stats->ulsch_stats.current_Qm = TB.Qm;
       stats->ulsch_stats.current_RI = TB.nb_layers;
-      stats->ulsch_stats.total_bytes_tx += harq_process->TBS;
+      stats->ulsch_stats.total_bytes_tx += TBS;
     }
   }
 */

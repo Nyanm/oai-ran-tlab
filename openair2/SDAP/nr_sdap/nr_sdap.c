@@ -63,18 +63,13 @@ bool sdap_data_req(protocol_ctxt_t *ctxt_p,
   return ret;
 }
 
-void sdap_data_ind(int pdcp_entity,
-                   int is_gnb,
-                   bool has_sdap_rx,
-                   int pdusession_id,
-                   ue_id_t ue_id,
-                   char *buf,
-                   int size) {
+void sdap_data_ind(int pdcp_entity, int is_gnb, int pdusession_id, ue_id_t ue_id, char *buf, int size)
+{
   nr_sdap_entity_t *sdap_entity;
   sdap_entity = nr_sdap_get_entity(ue_id, pdusession_id);
 
   if (sdap_entity == NULL) {
-    LOG_E(SDAP, "%s:%d:%s: Entity not found for ue rnti/ue_id: %lx and pdusession id: %d\n", __FILE__, __LINE__, __FUNCTION__, ue_id, pdusession_id);
+    LOG_E(SDAP, "Entity not found for ue rnti/ue_id: %lx and pdusession id: %d\n", ue_id, pdusession_id);
     return;
   }
 

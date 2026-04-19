@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "PHY/sse_intrin.h"
+#include "PHY/defs_gNB.h"
 #include "PHY/NR_REFSIG/nr_refsig.h"
 #include "PHY/NR_REFSIG/sl_refsig_defs.h"
 #include "PHY/NR_REFSIG/dmrs_nr.h"
@@ -124,8 +125,8 @@ int nr_pssch_channel_estimation(PHY_VARS_NR_UE *ue,
   uint64_t noise_amp2 = 0;
   c16_t ul_ls_est[symbolSize] __attribute__((aligned(32)));
   memset(ul_ls_est, 0, sizeof(c16_t) * symbolSize);
-  delay_t *delay = &ue->slsch[ul_id].delay;
-  memset(delay, 0, sizeof(*delay));
+  delay_t delay;
+  memset(&delay, 0, sizeof(delay));
   NR_DL_FRAME_PARMS *fp = &ue->SL_UE_PHY_PARAMS.sl_frame_params;
   int nrx = fp->nb_antennas_rx;
   c16_t ch_estimates_time[symbolSize] __attribute__((aligned(32)));
@@ -170,8 +171,8 @@ int nr_pssch_channel_estimation(PHY_VARS_NR_UE *ue,
 
       freq2time(symbolSize, (int16_t *)ul_ls_est, (int16_t*)ch_estimates_time);
 
-      nr_est_delay(symbolSize, ul_ls_est, ch_estimates_time, delay);
-      int pusch_delay = delay->est_delay;
+      nr_est_delay(symbolSize, ul_ls_est, ch_estimates_time, &delay);
+      int pusch_delay = delay.est_delay;
       int delay_idx = get_delay_idx(pusch_delay, MAX_DELAY_COMP);
       c16_t *ul_delay_table = fp->delay_table[delay_idx];
 

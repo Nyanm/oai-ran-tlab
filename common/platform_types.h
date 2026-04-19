@@ -241,6 +241,9 @@ typedef struct protocol_ctxt_s {
   bool brOption;
 } protocol_ctxt_t;
 
+/// suppress compiler warning for unused arguments
+#define UNUSED(x) (void)x;
+
 #define UE_MODULE_ID_TO_INSTANCE(mODULE_iD) mODULE_iD + RC.nb_inst
 #define ENB_MODULE_ID_TO_INSTANCE(mODULE_iD) mODULE_iD
 #define UE_INSTANCE_TO_MODULE_ID(iNSTANCE) iNSTANCE - RC.nb_inst

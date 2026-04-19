@@ -15,6 +15,8 @@
 #include "common/utils/nr/nr_common.h"
 #include "executables/softmodem-common.h"
 #include "SCHED_NR/phy_frame_config_nr.h"
+#include "RRC/NR_UE/verify_RRC.h"
+#include "RRC/NR_UE/L2_interface_ue.h"
 #include "oai_asn1.h"
 
 #define ASIGN_P_VAL(dst, src) \
@@ -2552,7 +2554,9 @@ static void modify_csi_measconfig(NR_CSI_MeasConfig_t *source, NR_CSI_MeasConfig
   }
 }
 
-static void configure_csiconfig(NR_UE_ServingCell_Info_t *sc_info, struct NR_SetupRelease_CSI_MeasConfig *csi_MeasConfig_sr)
+static void configure_csiconfig(NR_UE_ServingCell_Info_t *sc_info,
+                                struct NR_SetupRelease_CSI_MeasConfig *csi_MeasConfig_sr,
+                                module_id_t ue_id)
 {
   switch (csi_MeasConfig_sr->present) {
     case NR_SetupRelease_CSI_MeasConfig_PR_NOTHING:
@@ -2574,6 +2578,8 @@ static void configure_csiconfig(NR_UE_ServingCell_Info_t *sc_info, struct NR_Set
       } else { // modification
         modify_csi_measconfig(csi_MeasConfig_sr->choice.setup, sc_info->csi_MeasConfig);
       }
+      if (!check_csi_report_consistency(sc_info->csi_MeasConfig))
+        nr_mac_rrc_verification_failed(ue_id);
       break;
     }
     default:
@@ -2585,7 +2591,7 @@ static void configure_servingcell_info(NR_UE_MAC_INST_t *mac, NR_ServingCellConf
 {
   NR_UE_ServingCell_Info_t *sc_info = &mac->sc_info;
   if (scd->csi_MeasConfig) {
-    configure_csiconfig(sc_info, scd->csi_MeasConfig);
+    configure_csiconfig(sc_info, scd->csi_MeasConfig, mac->ue_id);
     compute_csi_bitlen(sc_info->csi_MeasConfig, mac->csi_report_template);
   }
 

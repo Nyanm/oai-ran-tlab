@@ -7,9 +7,7 @@
  */
 #include "PHY/sse_intrin.h"
 #include "PHY/defs_eNB.h"
-//#include "PHY/phy_extern.h"
-//#include "prach.h"
-#include "PHY/LTE_TRANSPORT/if4_tools.h"
+#include "PHY/if4_tools.h"
 
 #include "SCHED/sched_eNB.h"
 #include "common/utils/LOG/vcd_signal_dumper.h"

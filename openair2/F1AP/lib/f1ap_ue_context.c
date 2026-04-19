@@ -287,6 +287,7 @@ static bool eq_srb_to_setup(const f1ap_srb_to_setup_t *a, const f1ap_srb_to_setu
 static void free_srb_to_setup(f1ap_srb_to_setup_t *srbs)
 {
   // nothing to free
+  UNUSED(srbs);
 }
 
 static F1AP_SRBs_Setup_List_t encode_srbs_setup(int n, const f1ap_srb_setup_t *srbs)
@@ -375,6 +376,7 @@ static bool eq_srb_setup(const f1ap_srb_setup_t *a, const f1ap_srb_setup_t *b)
 static void free_srb_setup(f1ap_srb_setup_t *srbs)
 {
   // nothing to free
+  UNUSED(srbs);
 }
 
 static F1AP_QoSFlowLevelQoSParameters_t encode_qos_flow_param(const f1ap_qos_flow_param_t *p)
@@ -639,6 +641,7 @@ static bool eq_up_tnl(const f1ap_up_tnl_t *a, const f1ap_up_tnl_t *b)
 static void free_up_tnl(const f1ap_up_tnl_t *tnl)
 {
   // nothing to free
+  UNUSED(tnl);
 }
 
 /* Encode a DRBs_ToSetup list for UE Context Setup Request, from f1ap_drb_to_setup_t. */
@@ -1115,6 +1118,7 @@ static bool eq_drb_to_release(const f1ap_drb_to_release_t *a, const f1ap_drb_to_
 static void free_drb_to_release(f1ap_drb_to_release_t *drb)
 {
   // nothing to free
+  UNUSED(drb);
 }
 
 /**
@@ -2224,6 +2228,7 @@ bool eq_ue_context_rel_req(const f1ap_ue_context_rel_req_t *a, const f1ap_ue_con
 void free_ue_context_rel_req(f1ap_ue_context_rel_req_t *req)
 {
   // nothing to free
+  UNUSED(req);
 }
 
 /*
@@ -2491,4 +2496,5 @@ bool eq_ue_context_rel_cplt(const f1ap_ue_context_rel_cplt_t *a, const f1ap_ue_c
 void free_ue_context_rel_cplt(f1ap_ue_context_rel_cplt_t *cplt)
 {
   // nothing to free
+  UNUSED(cplt);
 }

@@ -213,12 +213,7 @@ void update_channel_model(channel_desc_t *channelDesc, int nbSamples, uint64_t T
   either we regenerate the channel (call again random_channel(desc,0)), or we keep it over subframes
   legacy: we regenerate each sub frame in UL, and each frame only in DL
 */
-void rxAddInput(c16_t **input_sig,
-                cf_t *after_channel_sig,
-                int rxAnt,
-                channel_desc_t *channelDesc,
-                int nbSamples,
-                uint64_t TS)
+void rxAddInput(c16_t **input_sig, cf_t *after_channel_sig, int rxAnt, channel_desc_t *channelDesc, int nbSamples)
 {
   // channelDesc->path_loss_dB should contain the total path gain
   // so, in actual RF: tx gain + path loss + rx gain (+antenna gain, ...)

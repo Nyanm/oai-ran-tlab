@@ -63,7 +63,7 @@ static uint16_t old_sfn = 0;
 static uint16_t old_slot = 0;
 ////////////////////////////////////////////////////////////////////////
 // Handle an RX message
-static int ipc_handle_rx_msg(nv_ipc_t *ipc, nv_ipc_msg_t *msg)
+static int ipc_handle_rx_msg(nv_ipc_msg_t *msg)
 {
   if (msg == NULL) {
     LOG_E(NFAPI_VNF, "%s: ERROR: buffer is empty\n", __func__);
@@ -121,12 +121,7 @@ static int ipc_handle_rx_msg(nv_ipc_t *ipc, nv_ipc_msg_t *msg)
         int dataBufLen = msg->data_len;
         uint8_t *data_end = msg->data_buf + dataBufLen;
         nfapi_nr_srs_indication_t ind;
-        aerial_unpack_nr_srs_indication(&pReadPackedMessage,
-                                        end,
-                                        &pReadData,
-                                        data_end,
-                                        &ind,
-                                        &vnf_p7_config->_public.codec_config);
+        aerial_unpack_nr_srs_indication(&pReadPackedMessage, end, &pReadData, data_end, &ind);
         if (vnf_p7_config->_public.nr_srs_indication) {
           (vnf_p7_config->_public.nr_srs_indication)(&ind);
         }
@@ -285,7 +280,7 @@ bool aerial_nr_send_p5_message(vnf_t *vnf, uint16_t p5_idx, nfapi_nr_p4_p5_messa
 }
 
 // Always allocate message buffer, but allocate data buffer only when data_len > 0
-static int aerial_recv_msg(nv_ipc_t *ipc, nv_ipc_msg_t *recv_msg)
+static int aerial_recv_msg(nv_ipc_msg_t *recv_msg)
 {
   if (ipc == NULL) {
     return -1;
@@ -305,7 +300,7 @@ static int aerial_recv_msg(nv_ipc_t *ipc, nv_ipc_msg_t *recv_msg)
          recv_msg->msg_len,
          recv_msg->data_len,
          recv_msg->data_pool);
-  ipc_handle_rx_msg(ipc, recv_msg);
+  ipc_handle_rx_msg(recv_msg);
 
   // Release buffer of RX message
   int release_retval = ipc->rx_release(ipc, recv_msg);
@@ -318,6 +313,7 @@ static int aerial_recv_msg(nv_ipc_t *ipc, nv_ipc_msg_t *recv_msg)
 
 void *epoll_recv_task(void *arg)
 {
+  UNUSED(arg);
   struct epoll_event ev, events[MAX_EVENTS];
 
   LOG_D(NFAPI_VNF,"Aerial recv task start \n");
@@ -356,7 +352,7 @@ void *epoll_recv_task(void *arg)
       if (events[n].data.fd == ipc_rx_event_fd) {
         ipc->get_value(ipc);
         nv_ipc_msg_t recv_msg;
-        while (aerial_recv_msg(ipc, &recv_msg) == 0);
+        while (aerial_recv_msg(&recv_msg) == 0);
       }
     }
   }
@@ -482,7 +478,8 @@ int oai_fapi_dl_tti_req(nfapi_nr_dl_tti_request_t *dl_config_req)
   return retval;
 }
 
-int oai_fapi_send_end_request(int cell, uint32_t frame, uint32_t slot){
+int oai_fapi_send_end_request(uint32_t frame, uint32_t slot)
+{
   nfapi_vnf_p7_config_t *p7_config = get_p7_vnf_config();
   nfapi_nr_slot_indication_scf_t nr_slot_resp = {.header.message_id = 0x8F, .sfn = frame, .slot = slot};
 

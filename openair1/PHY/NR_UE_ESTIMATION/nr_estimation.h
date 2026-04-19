@@ -39,7 +39,6 @@ void nr_pdcch_channel_estimation(const PHY_VARS_NR_UE *ue,
                                  c16_t *pilot);
 
 c32_t nr_pbch_dmrs_correlation(const NR_DL_FRAME_PARMS *fp,
-                               const UE_nr_rxtx_proc_t *proc,
                                const int symbol,
                                const int dmrss,
                                const int Nid_cell,

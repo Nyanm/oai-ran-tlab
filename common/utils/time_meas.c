@@ -35,10 +35,9 @@ double get_cpu_freq_GHz(void)
 
 
 
-void print_meas_now(time_stats_t *ts,
-                    const char *name,
-                    FILE *file_name)
+void print_meas_now(time_stats_t *ts, const char *name, FILE *file_name)
 {
+  UNUSED(name);
   if (cpu_meas_enabled) {
     //static double cpu_freq_GHz = 3.2;
 

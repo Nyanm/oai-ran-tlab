@@ -455,6 +455,8 @@ int usim_api_authenticate(usim_data_t *usim_data, const OctetString* rand_pP, co
 static int _usim_api_check_sqn(uint32_t seq, uint8_t ind)
 {
   /* TODO */
+  UNUSED(seq);
+  UNUSED(ind);
   return (RETURNok);
 }
 

@@ -33,12 +33,10 @@ void nr_mac_rrc_sync_ind(const module_id_t module_id, const frame_t frame, const
 }
 
 void nr_mac_rrc_data_ind_ue(const module_id_t module_id,
-                            const int CC_id,
                             const uint8_t gNB_index,
                             const int hfn,
                             const frame_t frame,
                             const int slot,
-                            const rnti_t rnti,
                             const uint32_t cellid,
                             const long arfcn,
                             const channel_t channel,
@@ -155,6 +153,13 @@ void process_msg_rcc_to_mac(nr_mac_rrc_message_t *msg, int instance_id)
     default:
       LOG_E(NR_MAC, "Unexpected msg from RRC: %d\n", msg->payload_type);
   }
+}
+
+void nr_mac_rrc_verification_failed(const module_id_t mod_id)
+{
+  MessageDef *message_p = itti_alloc_new_message(TASK_MAC_UE, 0, NR_RRC_MAC_VERIFY);
+  NR_RRC_MAC_VERIFY (message_p).L2_RRC_verification_failed = true;
+  itti_send_msg_to_task(TASK_RRC_NRUE, GNB_MODULE_ID_TO_INSTANCE(mod_id), message_p);
 }
 
 void nr_mac_rrc_inactivity_timer_ind(const module_id_t mod_id)

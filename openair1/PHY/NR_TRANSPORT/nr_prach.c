@@ -12,72 +12,73 @@
 #include "PHY/NR_TRANSPORT/nr_transport_common_proto.h"
 #include "openair1/PHY/NR_TRANSPORT/nr_prach.h"
 
-void init_prach_list(prach_list_t *l)
+void init_nr_prach(PHY_VARS_gNB *gNB)
 {
-  pthread_mutex_init(&l->prach_list_mutex, NULL);
-  memset(l->list, 0, sizeof(l->list));
+  int num_prach = 8;
+  gNB->prach_ru_queue = spsc_q_alloc(num_prach, sizeof(prach_item_t));
+  gNB->prach_l1rx_queue = spsc_q_alloc(num_prach, sizeof(prach_item_t));
 }
 
-void free_nr_prach_entry(prach_list_t *l, prach_item_t *p)
+void reset_nr_prach(PHY_VARS_gNB *gNB)
 {
-  pthread_mutex_lock(&l->prach_list_mutex);
-  if (p->frame == -1)
-    LOG_E(NR_PHY_RACH, "Freeing a not allocated prach entry\n");
-  *p = (prach_item_t){.frame = -1, .slot = -1, .num_slots = -1, .nb_rx = p->nb_rx, .prach_buf = (void *)(p + 1)};
-  pthread_mutex_unlock(&l->prach_list_mutex);
+  spsc_q_free(&gNB->prach_ru_queue);
+  spsc_q_free(&gNB->prach_l1rx_queue);
 }
 
-prach_item_t *find_nr_prach(prach_list_t *l, int frame, int slot, int nb_rx, find_type_t type)
+void free_nr_prach_entry(prach_item_t *p)
 {
-  pthread_mutex_lock(&l->prach_list_mutex);
-  AssertFatal(nb_rx, "Error! Number of antennas set to 0.\n");
-  prach_item_t **p = l->list;
-  prach_item_t **end = p + NUMBER_OF_NR_PRACH_MAX;
-  for (; p < end; p++)
-    if ((*p) && (*p)->frame == frame && ((*p)->slot + (*p)->num_slots - 1) == slot)
-      break;
-  if (p == end) {
-    if (type == SEARCH_EXIST) {
-      pthread_mutex_unlock(&l->prach_list_mutex);
-      return NULL;
-    }
-    for (p = l->list; p < end; p++)
-      if (!(*p) || ((*p)->frame == -1 && (*p)->slot == -1))
-        break;
-  }
-  if (p == end) {
-    pthread_mutex_unlock(&l->prach_list_mutex);
-    return NULL;
-  }
-  // mark it used, it will be filled later
-  if (*p && (*p)->nb_rx != nb_rx) {
-    LOG_W(PHY, "rach procedure nb_rx ant changed from %d to %d\n", (*p)->nb_rx, nb_rx);
-    free(*p);
-    *p = NULL;
-  }
-  if (!(*p)) {
-    *p = calloc(1, sizeof(prach_item_t) + sizeof(c16_t) * nb_rx * NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX * NR_PRACH_SEQ_LEN_L);
-    (*p)->prach_buf = (void *)((*p) + 1);
-  }
-  (*p)->nb_rx = nb_rx;
-  (*p)->frame = frame;
-  pthread_mutex_unlock(&l->prach_list_mutex);
-  return (*p);
+  free(p->prach_buf);
 }
 
-prach_item_t *nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_nr_prach_pdu_t *prach_pdu)
+static bool drop_old_prach(const void *data, void *user)
 {
-  prach_item_t *prach = find_nr_prach(&gNB->prach_list, SFN, Slot, gNB->frame_parms.nb_antennas_rx, SEARCH_EXIST_OR_FREE);
-  if (!prach) {
-    LOG_W(PHY, "no free space for a new detected rach, discarding\n");
-    return NULL;
-  }
+  const prach_item_t *p = data;
+  const fsn_t *now = user;
+  const fsn_t t = {p->frame, p->slot, now->mu};
+  bool drop = fsn_in_the_past(t, *now);
+  if (drop)
+    LOG_E(NR_PHY, "%4d.%2d PRACH job is in the past (%4d.%2d)\n", now->f, now->s, t.f, t.s);
+  return drop;
+}
+
+static bool get_current_prach(const void *data, void *user)
+{
+  const prach_item_t *p = data;
+  const fsn_t *now = user;
+  const fsn_t t = {p->frame, p->slot, now->mu};
+  return fsn_equal(t, *now);
+}
+
+bool get_next_nr_prach(spsc_q_t *q, const fsn_t *now, prach_item_t *p)
+{
+  spsc_q_drop_while(q, drop_old_prach, (void *)now);
+  return spsc_q_get_if(q, get_current_prach, (void *)now, p, sizeof(*p));
+}
+
+void nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_nr_prach_pdu_t *prach_pdu)
+{
   const int fmt = prach_pdu->prach_format;
-  NR_DL_FRAME_PARMS *fp = &gNB->frame_parms;
-  // we set only elements as the whole structure has been cleaned when we release it
-  prach->frame = SFN;
-  prach->slot = Slot;
-  prach->num_slots = fmt < 4 ? get_long_prach_dur(fmt, fp->numerology_index) : 1;
+  const NR_DL_FRAME_PARMS *fp = &gNB->frame_parms;
+  const nfapi_nr_prach_config_t *cfg = &gNB->gNB_config.prach_config;
+  const nfapi_nr_num_prach_fd_occasions_t *occ = &cfg->num_prach_fd_occasions_list[prach_pdu->num_ra];
+  prach_item_t prach = {
+      .frame = SFN,
+      .slot = Slot,
+      .num_slots = fmt < 4 ? get_long_prach_dur(fmt, fp->numerology_index) : 1,
+      .pdu = *prach_pdu,
+      .rootSequenceIndex = occ->prach_root_sequence_index.value,
+      .numrootSequenceIndex = occ->num_root_sequences.value,
+      .msg1_frequencystart = occ->k1.value,
+      .mu = cfg->prach_sub_c_spacing.value,
+      .prach_sequence_length = cfg->prach_sequence_length.value,
+      .restricted_set = cfg->restricted_set_config.value,
+      .numerology_index = fp->numerology_index,
+      .nb_rx = gNB->gNB_config.carrier_config.num_rx_ant.value,
+      .Xu = gNB->X_u,
+      .rx_prach = &gNB->rx_prach,
+      // TODO can be made permanently allocated?
+      .prach_buf = calloc_or_fail(1, sizeof(c16_t) * prach.nb_rx * NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX * NR_PRACH_SEQ_LEN_L),
+  };
   if (gNB->common_vars.beam_id) {
     int n_symb = get_nr_prach_duration(prach_pdu->prach_format);
     AssertFatal(prach_pdu->beamforming.dig_bf_interface < NFAPI_MAX_NUM_BG_IF,
@@ -87,7 +88,7 @@ prach_item_t *nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_n
       int fapi_beam_idx = prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list[i].beam_idx;
       int start_symb = prach_pdu->prach_start_symbol + i * n_symb;
       int bitmap = SL_to_bitmap(start_symb, n_symb);
-      prach->beams[i] = beam_index_allocation(gNB->enable_analog_das,
+      prach.beams[i] = beam_index_allocation(gNB->enable_analog_das,
                                               fapi_beam_idx,
                                               &gNB->common_vars,
                                               Slot,
@@ -95,20 +96,9 @@ prach_item_t *nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_n
                                               bitmap);
     }
   }
-  prach->pdu = *prach_pdu;
-  nfapi_nr_prach_config_t *cfg = &gNB->gNB_config.prach_config;
-  nfapi_nr_num_prach_fd_occasions_t *occ = &cfg->num_prach_fd_occasions_list[prach_pdu->num_ra];
-  prach->rootSequenceIndex = occ->prach_root_sequence_index.value;
-  prach->numrootSequenceIndex = occ->num_root_sequences.value;
-  prach->msg1_frequencystart = occ->k1.value;
-  prach->mu = cfg->prach_sub_c_spacing.value;
-  prach->prach_sequence_length = cfg->prach_sequence_length.value;
-  prach->restricted_set = cfg->restricted_set_config.value;
-  prach->numerology_index = fp->numerology_index;
-  prach->nb_rx = gNB->gNB_config.carrier_config.num_rx_ant.value;
-  prach->Xu = gNB->X_u;
-  prach->rx_prach = &gNB->rx_prach;
-  return prach;
+  bool found = spsc_q_put(&gNB->prach_ru_queue, &prach, sizeof(prach));
+  if (!found)
+    LOG_W(NR_PHY, "%4d.%2d PRACH occ queue is full: dropping PRACH request\n", SFN, Slot);
 }
 
 static void rx_nr_prach_ru_internal(prach_item_t *p,

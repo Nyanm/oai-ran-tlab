@@ -26,7 +26,7 @@ int get_dl_slots_per_period(const frame_structure_t *fs);
 int get_full_ul_slots_per_period(const frame_structure_t *fs);
 int get_full_dl_slots_per_period(const frame_structure_t *fs);
 int get_ul_slot_offset(const frame_structure_t *fs, int idx, bool count_mixed);
-void delete_nr_ue_data(NR_UE_info_t *UE, NR_COMMON_channels_t *ccPtr, uid_allocator_t *uia);
+void delete_nr_ue_data(NR_UE_info_t *UE, uid_allocator_t *uia);
 
 void mac_top_init_gNB(ngran_node_t node_type,
                       NR_ServingCellConfigCommon_t *scc,
@@ -47,7 +47,7 @@ int nr_transmission_action_indicator_stop(gNB_MAC_INST *mac, NR_UE_info_t *UE_in
 
 void clear_nr_nfapi_information(gNB_MAC_INST *gNB, int CC_idP, frame_t frameP, slot_t slotP);
 
-void nr_mac_update_timers(module_id_t module_id, frame_t frame, slot_t slot);
+void nr_mac_update_timers(module_id_t module_id);
 
 void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame_rxP, slot_t slot_rxP, NR_Sched_Rsp_t *sched_info);
 
@@ -61,7 +61,7 @@ void nr_schedule_ue_spec(module_id_t module_id,
                          nfapi_nr_tx_data_request_t *TX_req);
 
 /* \brief default DL preprocessor init routine, returns preprocessor to call */
-nr_pp_impl_dl nr_init_dlsch_preprocessor(int CC_id);
+nr_pp_impl_dl nr_init_dlsch_preprocessor();
 
 void schedule_nr_sib1(module_id_t module_idP,
                       frame_t frameP,
@@ -85,7 +85,7 @@ void schedule_nr_mib(module_id_t module_idP, frame_t frameP, slot_t slotP, nfapi
 void nr_schedule_ulsch(module_id_t module_id, frame_t frame, slot_t slot, nfapi_nr_ul_dci_request_t *ul_dci_req);
 
 /* \brief default UL preprocessor init routine, returns preprocessor to call */
-nr_pp_impl_ul nr_init_ulsch_preprocessor(int CC_id);
+nr_pp_impl_ul nr_init_ulsch_preprocessor();
 
 /////// Random Access MAC-PHY interface functions and primitives ///////
 
@@ -284,7 +284,6 @@ void remove_front_nr_list(NR_list_t *listP);
 void nr_release_ra_UE(gNB_MAC_INST *mac, rnti_t rnti);
 NR_UE_info_t * find_nr_UE(NR_UEs_t* UEs, rnti_t rntiP);
 NR_UE_info_t *find_ra_UE(NR_UEs_t *UEs, rnti_t rntiP);
-void delete_nr_ue_data(NR_UE_info_t *UE, NR_COMMON_channels_t *ccPtr, uid_allocator_t *uia);
 void configure_UE_BWP(gNB_MAC_INST *nr_mac,
                       NR_ServingCellConfigCommon_t *scc,
                       NR_UE_info_t *UE,
@@ -298,7 +297,6 @@ bool add_connected_nr_ue(gNB_MAC_INST *nr_mac, NR_UE_info_t *UE);
 bool nr_check_Msg4_MsgB_Ack(module_id_t module_id, frame_t frame, slot_t slot, NR_UE_info_t *UE, bool success);
 void mac_remove_nr_ue(gNB_MAC_INST *nr_mac, rnti_t rnti);
 NR_UE_info_t *get_new_nr_ue_inst(uid_allocator_t *uia, rnti_t rnti, NR_CellGroupConfig_t *CellGroup, const nr_mac_config_t *config);
-int nr_get_default_pucch_res(int pucch_ResourceCommon);
 nfapi_nr_pusch_pdu_t *prepare_pusch_pdu(nfapi_nr_ul_tti_request_t *future_ul_tti_req,
                                         const NR_UE_info_t *UE,
                                         const NR_ServingCellConfigCommon_t *scc,
@@ -469,7 +467,7 @@ void finish_nr_dl_harq(NR_UE_sched_ctrl_t *sched_ctrl, int harq_pid);
 void abort_nr_dl_harq(NR_UE_info_t* UE, int8_t harq_pid);
 
 void nr_mac_trigger_release_timer(NR_UE_sched_ctrl_t *sched_ctrl, NR_SubcarrierSpacing_t subcarrier_spacing);
-bool nr_mac_check_release(NR_UE_sched_ctrl_t *sched_ctrl, int rnti);
+bool nr_mac_check_release(NR_UE_sched_ctrl_t *sched_ctrl);
 void nr_mac_trigger_release_complete(gNB_MAC_INST *mac, int rnti);
 void nr_mac_release_ue(gNB_MAC_INST *mac, int rnti);
 bool nr_mac_request_release_ue(const gNB_MAC_INST *nrmac, int rnti);
@@ -502,6 +500,7 @@ void post_process_ulsch(gNB_MAC_INST *nr_mac, post_process_pusch_t *pusch, NR_UE
 
 float nr_mac_get_snr(const nr_power_control_t *pc);
 void nr_mac_pc_snr(nr_power_control_t *pc, int snrx10, int rssi);
+void nr_mac_pc_reset_snr(nr_power_control_t *pc, int snrx10, int rssi);
 void nr_mac_set_target_snrx10(nr_power_control_t *pc, int target_snrx10);
 void nr_mac_set_rssi_threshold(nr_power_control_t *pc, int rssi_threshold);
 void nr_mac_signal_dtx(nr_power_control_t *pc);

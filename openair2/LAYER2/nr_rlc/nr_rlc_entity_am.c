@@ -185,6 +185,12 @@ static void reassemble_and_deliver(nr_rlc_entity_am_t *entity, int sn)
 
   /* reassemble - free 'data' of each segment after processing */
   while (pdu != NULL) {
+    if (pdu->so > so && !bad_sdu) {
+      /* pdu->so > so is possible when the other end sends bogus data */
+      LOG_E(RLC, "%s:%d:%s: inconsistent SDU, discarding\n",
+            __FILE__, __LINE__, __FUNCTION__);
+      bad_sdu = 1;
+    }
     int len = pdu->size - (so - pdu->so);
     if (so + len > NR_SDU_MAX && !bad_sdu) {
       LOG_E(RLC, "%s:%d:%s: bad SDU, too big, discarding\n",

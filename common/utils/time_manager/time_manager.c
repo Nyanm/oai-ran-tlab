@@ -26,6 +26,7 @@ static int tick_functions_count;
  */
 static void tick(void *unused)
 {
+  UNUSED(unused);
   for (int i = 0; i < tick_functions_count; i++)
     tick_functions[i]();
 }

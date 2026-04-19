@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "common/platform_types.h"
+#include "common/utils/threadPool/notified_fifo.h"
 
 /* IF */
 #include "NR_IF_Module.h"
@@ -292,6 +293,7 @@ typedef struct {
   int n_CCE;
   int N_CCE;
   int initial_pucch_id;
+  int pucch_ResourceCommon;
 } PUCCH_sched_t;
 
 typedef struct {
@@ -405,7 +407,7 @@ typedef struct {
 typedef struct {
   /// SSB RSRP in dBm
   int ssb_rsrp_dBm;
-  float_t ssb_sinr_dB;
+  float ssb_sinr_dB;
 } NR_SSB_meas_t;
 
 typedef struct {

@@ -82,11 +82,11 @@ uint32_t gNB_app_register_x2(uint32_t gnb_id_start, uint32_t gnb_id_end) {
 
 void *gNB_app_task(void *args_p)
 {
-
-  MessageDef                      *msg_p           = NULL;
-  const char                      *msg_name        = NULL;
-  instance_t                      instance;
-  int                             result;
+  UNUSED(args_p);
+  MessageDef *msg_p = NULL;
+  const char *msg_name = NULL;
+  instance_t instance;
+  int result;
   /* for no gcc warnings */
   (void)instance;
 

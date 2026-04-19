@@ -52,6 +52,7 @@ static int get_default_ue_id(void)
  */
 int get_sync_state(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   int ue_id = -1;
   if (!buf) {
     ERROR_MSG_RET("no UE ID provided to telnet command\n");
@@ -71,6 +72,9 @@ int get_sync_state(char *buf, int debug, telnet_printfunc_t prnt)
  */
 int force_rlf(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
+  UNUSED(buf);
+  UNUSED(prnt);
   NR_UE_RRC_INST_t *rrc = get_NR_UE_rrc_inst(0);
   handle_rlf_detection(rrc);
   return 0;
@@ -81,6 +85,9 @@ int force_rlf(char *buf, int debug, telnet_printfunc_t prnt)
  */
 int force_RRC_IDLE(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
+  UNUSED(buf);
+  UNUSED(prnt);
   NR_UE_RRC_INST_t *rrc = get_NR_UE_rrc_inst(0);
   nr_rrc_going_to_IDLE(rrc, OTHER, NULL);
   return 0;
@@ -89,6 +96,9 @@ int force_RRC_IDLE(char *buf, int debug, telnet_printfunc_t prnt)
 /** @brief Trigger RA with Msg3 C-RNTI */
 int force_crnti_ra(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
+  UNUSED(buf);
+  UNUSED(prnt);
   NR_UE_MAC_INST_t *mac = get_mac_inst(0);
   trigger_MAC_UE_RA(mac, NULL);
   return 0;
@@ -96,6 +106,9 @@ int force_crnti_ra(char *buf, int debug, telnet_printfunc_t prnt)
 
 static int force_deregistration(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
+  UNUSED(buf);
+  UNUSED(prnt);
   MessageDef *msg = itti_alloc_new_message(TASK_NAS_NRUE, 0, NAS_DEREGISTRATION_REQ);
   NAS_DEREGISTRATION_REQ(msg).cause = AS_DETACH;
   itti_send_msg_to_task(TASK_NAS_NRUE, 0, msg);
@@ -105,6 +118,8 @@ static int force_deregistration(char *buf, int debug, telnet_printfunc_t prnt)
 extern float get_prs_max_dl_toa(prs_meas_t *prs_meas);
 static int get_dl_toa(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
+  UNUSED(buf);
   // TODO multiple antennas, resources, gNBs?
   int gNB_id = 0;
   int rsc_id = 0;
@@ -124,6 +139,7 @@ static int get_dl_toa(char *buf, int debug, telnet_printfunc_t prnt)
 
 static int add_pdu_session(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   int ue_id = -1;
   int pdusession_id = -1;
 

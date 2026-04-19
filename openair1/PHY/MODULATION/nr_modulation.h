@@ -7,7 +7,6 @@
 
 #include <stdint.h>
 #include "PHY/defs_nr_common.h"
-#include "PHY/defs_gNB.h"
 
 #define DMRS_MOD_ORDER 2
 /*Precoding matices: W[pmi][antenna_port][layer]*/
@@ -80,7 +79,6 @@ void nr_beam_precoding(c16_t **txdataF,
                        c16_t **txdataF_BF,
                        NR_DL_FRAME_PARMS *frame_parms,
                        int32_t ***beam_weights,
-                       int slot,
                        int symbol,
                        int aa,
                        int nb_antenna_ports,
@@ -128,7 +126,7 @@ c16_t nr_layer_precoder_cm(int n_layers,
                            int symSz,
                            c16_t datatx_F_precoding[n_layers][symSz],
                            int ap,
-                           nfapi_nr_pm_pdu_t *pmi_pdu,
+                           c16_t weights[NR_MAX_NB_LAYERS][NR_MAX_CSI_PORTS],
                            int offset);
 
 /*! \brief Precoding with SIMDe, txdataF_precoded[] = prec_matrix[] * txdataF_res_mapped[]
@@ -141,7 +139,7 @@ void nr_layer_precoder_simd(const int n_layers,
                             const int symSz,
                             const c16_t txdataF_res_mapped[n_layers][symSz],
                             const int ant,
-                            const nfapi_nr_pm_pdu_t *pmi_pdu,
+                            c16_t weights[NR_MAX_NB_LAYERS][NR_MAX_CSI_PORTS],
                             const int sc_offset,
                             const int re_cnt,
                             c16_t *txdataF_precoded);

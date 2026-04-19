@@ -52,8 +52,7 @@ event_handler *new_handler(void *database)
   return ret;
 }
 
-unsigned long register_handler_function(event_handler *_h, int event_id,
-    void (*f)(void *, event), void *p)
+unsigned long register_handler_function(event_handler *_h, int event_id, void (*f)(void *, event), void *p)
 {
   struct _event_handler *h = _h;
   unsigned long ret = h->next_id;
@@ -78,9 +77,11 @@ unsigned long register_handler_function(event_handler *_h, int event_id,
   return ret;
 }
 
-void remove_handler_function(event_handler *h, int event_id,
-    unsigned long handler_id)
+void remove_handler_function(event_handler *h, int event_id, unsigned long handler_id)
 {
+  UNUSED(h);
+  UNUSED(event_id);
+  UNUSED(handler_id);
   printf("%s:%d: TODO\n", __FILE__, __LINE__);
   abort();
 }

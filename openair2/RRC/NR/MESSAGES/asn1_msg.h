@@ -33,6 +33,9 @@
 #include "NR_MeasurementTimingConfiguration.h"
 #include "NR_UE-NR-Capability.h"
 #include "NR_UE-CapabilityRAT-ContainerList.h"
+#include "NR_SIB2.h"
+#include "NR_SIB3.h"
+#include "NR_SIB4.h"
 #include "ds/seq_arr.h"
 #include "ds/byte_array.h"
 #include "openair2/LAYER2/nr_pdcp/nr_pdcp_configuration.h"
@@ -65,7 +68,9 @@ typedef struct {
  */
 int xer_sprint_NR(char *string, size_t string_size, struct asn_TYPE_descriptor_s *td, void *sptr);
 
-int do_SIB2_NR(uint8_t **msg_SIB2, NR_SSB_MTC_t *ssbmtc);
+byte_array_t do_SIB2_NR(const NR_SIB2_t *sib2);
+byte_array_t do_SIB3_NR(const NR_SIB3_t *sib3);
+byte_array_t do_SIB4_NR(NR_SIB4_t *sib4);
 
 int do_RRCReject(uint8_t *const buffer);
 
@@ -140,7 +145,6 @@ int do_RRCReestablishmentComplete(uint8_t *buffer, size_t buffer_size, int64_t r
 
 NR_MeasConfig_t *get_MeasConfig(const NR_MeasTiming_t *mt,
                                 int band,
-                                int scs,
                                 int nr_pci,
                                 NR_ReportConfigToAddMod_t *rc_PER,
                                 NR_ReportConfigToAddMod_t *rc_A2,
@@ -150,7 +154,7 @@ NR_MeasConfig_t *get_MeasConfig(const NR_MeasTiming_t *mt,
 void free_MeasConfig(NR_MeasConfig_t *mc);
 int do_NR_Paging(uint8_t Mod_id, uint8_t *buffer, uint32_t tmsi);
 
-byte_array_t get_HandoverPreparationInformation(nr_rrc_reconfig_param_t *params, int scell_pci);
+byte_array_t get_HandoverPreparationInformation(nr_rrc_reconfig_param_t *params);
 byte_array_t get_HandoverCommandMessage(nr_rrc_reconfig_param_t *params);
 void fill_removal_lists_from_source_measConfig(NR_MeasConfig_t *measConfig, byte_array_t prep_info);
 byte_array_t doRRCReconfiguration_from_HandoverCommand(byte_array_t handoverCommand);

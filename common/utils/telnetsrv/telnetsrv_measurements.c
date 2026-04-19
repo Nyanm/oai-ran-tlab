@@ -206,6 +206,7 @@ int measurcmd_cpustats(char *buf, int debug, telnet_printfunc_t prnt) {
 }
 
 void measurcmd_async_help(telnet_printfunc_t prnt) {
+  UNUSED(prnt);
 }
 
 int measurcmd_async(char *buf, int debug, telnet_printfunc_t prnt) {

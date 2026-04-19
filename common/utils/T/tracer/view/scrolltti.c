@@ -70,6 +70,7 @@ static void *scrolltti_thread(void *_this)
 static void clear(view *this)
 {
   /* TODO */
+  UNUSED(this);
 }
 
 static void insert(struct scrolltti *this, double value)

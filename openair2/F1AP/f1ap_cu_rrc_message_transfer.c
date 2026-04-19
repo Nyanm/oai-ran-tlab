@@ -19,6 +19,7 @@
 
 int CU_handle_INITIAL_UL_RRC_MESSAGE_TRANSFER(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, F1AP_F1AP_PDU_t *pdu)
 {
+  UNUSED(stream);
   f1ap_initial_ul_rrc_message_t msg;
   if (!decode_initial_ul_rrc_message_transfer(pdu, &msg)) {
     LOG_E(F1AP, "cannot decode F1 initial UL RRC message Transfer\n");

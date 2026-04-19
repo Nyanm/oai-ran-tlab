@@ -20,7 +20,7 @@
 #include "nfapi/oai_integration/vendor_ext.h"
 #include "radio/COMMON/common_lib.h"
 
-#include "PHY/LTE_TRANSPORT/if4_tools.h"
+#include "PHY/if4_tools.h"
 #include "PHY/LTE_ESTIMATION/lte_estimation.h"
 
 #include "PHY/phy_extern.h"
@@ -259,7 +259,7 @@ static void *L1_thread_tx(void *param) {
   PHY_VARS_eNB *eNB = eNB_proc->eNB;
   char thread_name[100];
   sprintf(thread_name,"TXnp4_%d\n",&eNB->proc.L1_proc == proc ? 0 : 1);
-  thread_top_init(thread_name,1,470000,500000,500000);
+  thread_top_init(thread_name);
   int ret;
 
   //wait_sync("tx_thread");
@@ -342,7 +342,7 @@ static void *L1_thread( void *param ) {
     }
   }
 #else
-  thread_top_init(thread_name,1,470000,500000,500000);
+  thread_top_init(thread_name);
 #endif
   LOG_I(PHY,"thread rxtx created id=%ld\n", syscall(__NR_gettid));
 
@@ -699,7 +699,7 @@ static void *eNB_thread_prach( void *param ) {
   L1_proc_t *proc = &eNB->proc;
   // set default return value
   eNB_thread_prach_status = 0;
-  thread_top_init("eNB_thread_prach",1,500000,1000000,20000000);
+  thread_top_init("eNB_thread_prach");
 
   //wait_sync("eNB_thread_prach");
 
@@ -732,7 +732,7 @@ static void *eNB_thread_prach_br( void *param ) {
   L1_proc_t *proc = &eNB->proc;
   // set default return value
   eNB_thread_prach_status = 0;
-  thread_top_init("eNB_thread_prach_br",1,500000,1000000,20000000);
+  thread_top_init("eNB_thread_prach_br");
 
   while (!oai_exit) {
     if (wait_on_condition(&proc->mutex_prach_br,&proc->cond_prach_br,&proc->instance_cnt_prach_br,"eNB_prach_thread_br") < 0) break;

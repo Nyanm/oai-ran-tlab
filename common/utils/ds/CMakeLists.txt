@@ -6,6 +6,7 @@ add_library(ds OBJECT
             seq_arr.c
             hashtable.c
             obj_hashtable.c
+            spsc_q.c
 )
 
 target_include_directories(ds PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

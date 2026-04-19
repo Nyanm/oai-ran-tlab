@@ -140,8 +140,9 @@ static bool pdcp_config_req_asn1(const protocol_ctxt_t *const ctxt_pP,
                                  uint8_t *const kRRCint_pP,
                                  uint8_t *const kUPenc_pP);
 
-void *pdcp_stats_thread(void *param) {
-
+void *pdcp_stats_thread(void *param)
+{
+   UNUSED(param);
    FILE *fd;
    int old_byte_cnt[MAX_MOBILES_PER_ENB][NB_RB_MAX],old_byte_cnt_rx[MAX_MOBILES_PER_ENB][NB_RB_MAX];
    for (int i=0;i<MAX_MOBILES_PER_ENB;i++)
@@ -554,9 +555,7 @@ bool pdcp_data_ind(const protocol_ctxt_t *const ctxt_pP,
                    const MBMS_flag_t MBMS_flagP,
                    const rb_id_t rb_idP,
                    const sdu_size_t sdu_buffer_sizeP,
-                   uint8_t *const sdu_buffer_pP,
-                   const uint32_t *const srcID,
-                   const uint32_t *const dstID)
+                   uint8_t *const sdu_buffer_pP)
 //-----------------------------------------------------------------------------
 {
   pdcp_t      *pdcp_p          = NULL;
@@ -1857,8 +1856,6 @@ static bool pdcp_config_req_asn1(const protocol_ctxt_t *const ctxt_pP,
         pdcp_config_set_security(
           ctxt_pP,
           pdcp_pP,
-          rb_idP,
-          lc_idP,
           security_modeP,
           kRRCenc_pP,
           kRRCint_pP,
@@ -1878,8 +1875,6 @@ static bool pdcp_config_req_asn1(const protocol_ctxt_t *const ctxt_pP,
         pdcp_config_set_security(
           ctxt_pP,
           pdcp_pP,
-          rb_idP,
-          lc_idP,
           security_modeP,
           kRRCenc_pP,
           kRRCint_pP,
@@ -1942,8 +1937,6 @@ static bool pdcp_config_req_asn1(const protocol_ctxt_t *const ctxt_pP,
       pdcp_config_set_security(
         ctxt_pP,
         pdcp_pP,
-        rb_idP,
-        lc_idP,
         security_modeP,
         kRRCenc_pP,
         kRRCint_pP,
@@ -1963,8 +1956,6 @@ void
 pdcp_config_set_security(
   const protocol_ctxt_t *const  ctxt_pP,
   pdcp_t          *const pdcp_pP,
-  const rb_id_t         rb_idP,
-  const uint16_t        lc_idP,
   const uint8_t         security_modeP,
   uint8_t         *const kRRCenc,
   uint8_t         *const kRRCint,

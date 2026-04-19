@@ -7,7 +7,7 @@
 #include "handler.h"
 #include "database.h"
 #include "view/view.h"
-#include "utils.h"
+#include "../utils.h"
 #include "filter/filter.h"
 #include <stdlib.h>
 #include <string.h>

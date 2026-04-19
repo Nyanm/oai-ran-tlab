@@ -4,7 +4,7 @@
 
 #ifndef __IF4_TOOLS_H__
 #define __IF4_TOOLS_H__
-#include "PHY/defs_eNB.h"
+#include "openair1/PHY/defs_RU.h"
 
 /// Macro for IF4 packet type
 #define IF4p5_PACKET_TYPE 0x080A 

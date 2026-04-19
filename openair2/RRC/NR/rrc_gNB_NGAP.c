@@ -354,7 +354,9 @@ bool trigger_bearer_setup(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession
     return false;
   }
   AssertFatal(UE->as_security_active, "logic bug: security should be active when activating DRBs\n");
-  e1ap_bearer_setup_req_t bearer_req = {0};
+  e1ap_bearer_setup_req_t bearer_req = {
+    .gNB_cu_cp_ue_id = UE->rrc_ue_id,
+  };
 
   // Reject bearers setup if there's no CU-UP associated
   if (!is_cuup_associated(rrc)) {
@@ -412,6 +414,10 @@ bool trigger_bearer_setup(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession
       pdu->DRBnGRanList[0] = fill_e1_drb_to_setup(rrc_drb, session, rrc->configuration.um_on_default_drb, UE->redcap_cap);
     }
   }
+  if (bearer_req.numPDUSessions == 0) {
+    LOG_W(NR_RRC, "UE %d: No PDU sessions to setup, skipping bearer context setup\n", UE->rrc_ue_id);
+    return false;
+  }
   /* Limitation: we assume one fixed CU-UP per UE. We base the selection on
    * NSSAI, but the UE might have multiple PDU sessions with differing slices,
    * in which we might need to select different CU-UPs. In this case, we would
@@ -466,9 +472,7 @@ int rrc_gNB_process_NGAP_INITIAL_CONTEXT_SETUP_REQ(MessageDef *msg_p, instance_t
     /* Can not associate this message to an UE index, send a failure to NGAP and discard it! */
     LOG_W(NR_RRC, "[gNB %ld] In NGAP_INITIAL_CONTEXT_SETUP_REQ: unknown UE from NGAP ids (%u)\n", instance, req->gNB_ue_ngap_id);
     ngap_cause_t cause = { .type = NGAP_CAUSE_RADIO_NETWORK, .value = NGAP_CAUSE_RADIO_NETWORK_UNKNOWN_LOCAL_UE_NGAP_ID};
-    rrc_gNB_send_NGAP_INITIAL_CONTEXT_SETUP_FAIL(req->gNB_ue_ngap_id,
-                                                 NULL,
-                                                 cause);
+    rrc_gNB_send_NGAP_INITIAL_CONTEXT_SETUP_FAIL(req->gNB_ue_ngap_id, cause);
     return (-1);
   }
   gNB_RRC_UE_t *UE = &ue_context_p->ue_context;
@@ -618,9 +622,7 @@ void rrc_gNB_send_NGAP_INITIAL_CONTEXT_SETUP_RESP(gNB_RRC_INST *rrc, gNB_RRC_UE_
   itti_send_msg_to_task (TASK_NGAP, rrc->module_id, msg_p);
 }
 
-void rrc_gNB_send_NGAP_INITIAL_CONTEXT_SETUP_FAIL(uint32_t gnb,
-                                                  const rrc_gNB_ue_context_t *const ue_context_pP,
-                                                  const ngap_cause_t causeP)
+void rrc_gNB_send_NGAP_INITIAL_CONTEXT_SETUP_FAIL(uint32_t gnb, const ngap_cause_t causeP)
 {
   MessageDef *msg_p = itti_alloc_new_message(TASK_RRC_GNB, 0, NGAP_INITIAL_CONTEXT_SETUP_FAIL);
   ngap_initial_context_setup_fail_t *fail = &NGAP_INITIAL_CONTEXT_SETUP_FAIL(msg_p);
@@ -721,7 +723,7 @@ static void set_UE_security_algos(const gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, con
 }
 
 //------------------------------------------------------------------------------
-int rrc_gNB_process_NGAP_DOWNLINK_NAS(MessageDef *msg_p, instance_t instance, mui_t *rrc_gNB_mui)
+int rrc_gNB_process_NGAP_DOWNLINK_NAS(MessageDef *msg_p, instance_t instance)
 //------------------------------------------------------------------------------
 {
   ngap_downlink_nas_t *req = &NGAP_DOWNLINK_NAS(msg_p);
@@ -779,7 +781,7 @@ void rrc_gNB_send_NGAP_UPLINK_NAS(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const NR_
   itti_send_msg_to_task(TASK_NGAP, rrc->module_id, msg_p);
 }
 
-void rrc_gNB_send_NGAP_PDUSESSION_SETUP_RESP(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, uint8_t xid)
+void rrc_gNB_send_NGAP_PDUSESSION_SETUP_RESP(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE)
 {
   MessageDef *msg_p;
   int pdu_sessions_done = 0;
@@ -1121,7 +1123,7 @@ void rrc_gNB_send_NGAP_HANDOVER_FAILURE(gNB_RRC_INST *rrc, ngap_handover_failure
 }
 
 /** @brief Process NG Handover Request message (8.4.2.2 3GPP TS 38.413) */
-int rrc_gNB_process_Handover_Request(gNB_RRC_INST *rrc, instance_t instance, ngap_handover_request_t *msg)
+int rrc_gNB_process_Handover_Request(gNB_RRC_INST *rrc, ngap_handover_request_t *msg)
 {
   // Check if UE context already exists for this AMF UE NGAP ID
   rrc_gNB_ue_context_t *existing_ue_context = rrc_gNB_get_ue_context_by_amf_ue_ngap_id(rrc, msg->amf_ue_ngap_id);
@@ -1374,8 +1376,8 @@ int rrc_gNB_process_NGAP_UE_CONTEXT_RELEASE_COMMAND(MessageDef *msg_p, instance_
 
   /* a UE might not be associated to a CU-UP if it never requested a PDU
    * session (intentionally, or because of erros) */
-  if (ue_associated_to_cuup(rrc, UE)) {
-    sctp_assoc_t assoc_id = get_existing_cuup_for_ue(rrc, UE);
+  if (ue_associated_to_cuup(UE)) {
+    sctp_assoc_t assoc_id = get_existing_cuup_for_ue(UE);
     e1ap_cause_t cause = {.type = E1AP_CAUSE_RADIO_NETWORK, .value = E1AP_RADIO_CAUSE_NORMAL_RELEASE};
     e1ap_bearer_release_cmd_t cmd = {
       .gNB_cu_cp_ue_id = UE->rrc_ue_id,
@@ -1613,7 +1615,7 @@ int rrc_gNB_process_NGAP_PDUSESSION_RELEASE_COMMAND(ngap_pdusession_release_comm
   if (req.numPDUSessionsRem == 0) {
     LOG_E(NR_RRC, "Received NG PDU Session Release Command but no PDU Sessions to release\n");
     return -1;
-  } else if (!ue_associated_to_cuup(rrc, UE)) {
+  } else if (!ue_associated_to_cuup(UE)) {
     LOG_E(NR_RRC, "UE %d is not associated to CU-UP\n", UE->rrc_ue_id);
     // TODO handle, e.g., only trigger F1 release
     return 0;
@@ -1625,7 +1627,7 @@ int rrc_gNB_process_NGAP_PDUSESSION_RELEASE_COMMAND(ngap_pdusession_release_comm
     LOG_I(NR_RRC, "Send F1 Bearer Context Modification Request with PDU Session release \n");
     req.gNB_cu_cp_ue_id = UE->rrc_ue_id;
     req.gNB_cu_up_ue_id = UE->rrc_ue_id;
-    sctp_assoc_t assoc_id = get_existing_cuup_for_ue(rrc, UE);
+    sctp_assoc_t assoc_id = get_existing_cuup_for_ue(UE);
     rrc->cucp_cuup.bearer_context_mod(assoc_id, &req);
   }
   init_delayed_action(&UE->delayed_action);

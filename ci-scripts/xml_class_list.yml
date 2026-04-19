@@ -23,7 +23,6 @@
   - Deploy_Object
   - Stop_Object
   - Undeploy_Object
-  - Cppcheck_Analysis
   - Deploy_Run_OC_PhySim
   - Build_Deploy_PhySim
   - LicenceAndFormattingCheck

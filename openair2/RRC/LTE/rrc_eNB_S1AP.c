@@ -502,8 +502,6 @@ rrc_pdcp_config_security(
     pdcp_config_set_security(
       ctxt_pP,
       pdcp_p,
-      DCCH,
-      DCCH+2,
       (send_security_mode_command == true)  ?
       0 | (ue_context_pP->ue_context.integrity_algorithm << 4) :
       (ue_context_pP->ue_context.ciphering_algorithm )         |

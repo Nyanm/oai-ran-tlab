@@ -154,6 +154,9 @@ typedef struct {
 
 static void rrc_deliver_ue_ctxt_modif_req(void *deliver_pdu_data, ue_id_t ue_id, int srb_id, char *buf, int size, int sdu_id)
 {
+  UNUSED(ue_id);
+  UNUSED(srb_id);
+  UNUSED(sdu_id);
   DevAssert(deliver_pdu_data != NULL);
   deliver_ue_ctxt_modification_data_t *data = deliver_pdu_data;
   byte_array_t ba = {.buf = (uint8_t *) buf, .len = size};
@@ -199,7 +202,7 @@ static void nr_rrc_f1_ho_acknowledge(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE)
    * in NR, do not re-establish PDCP */
   nr_rrc_reconfig_param_t params = get_RRCReconfiguration_params(rrc, UE, (1 << SRB2), true);
   UE->xids[params.transaction_id] = RRC_DEDICATED_RECONF;
-  byte_array_t buffer = rrc_gNB_encode_RRCReconfiguration(rrc, UE, params);
+  byte_array_t buffer = rrc_gNB_encode_RRCReconfiguration(UE, params);
   free_RRCReconfiguration_params(params);
   if (!buffer.len) {
     LOG_E(NR_RRC, "UE %d: Failed to generate RRCReconfiguration\n", UE->rrc_ue_id);
@@ -345,12 +348,12 @@ void nr_HO_F1_trigger_telnet(gNB_RRC_INST *rrc, uint32_t rrc_ue_id)
 /** @brief Generate the HandoverPreparationInformation to be carried
  * in the RRC Container (9.3.1.29 of 3GPP TS 38.413) of the Source
  * NG-RAN Node to Target NG-RAN Node Transparent Container IE */
-static byte_array_t rrc_gNB_generate_HandoverPreparationInformation(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, int serving_pci)
+static byte_array_t rrc_gNB_generate_HandoverPreparationInformation(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue)
 {
   nr_rrc_reconfig_param_t params = get_RRCReconfiguration_params(rrc, ue, 0, false);
   params.ue_cap = ue->ue_cap_buffer;
 
-  byte_array_t hoPrepInfo = get_HandoverPreparationInformation(&params, serving_pci);
+  byte_array_t hoPrepInfo = get_HandoverPreparationInformation(&params);
   free_RRCReconfiguration_params(params);
 
   if (hoPrepInfo.len < 0) {
@@ -415,7 +418,7 @@ static byte_array_t rrc_gNB_encode_HandoverCommand(gNB_RRC_UE_t *UE, gNB_RRC_INS
  * - Source absent (inter-CU): N2 or Xn handover (target CU created new UE
  *   on Handover Request). This UE context has no serving cells yet; add
  *   target cell as first PCell. */
-bool nr_rrc_update_cell_assoc_after_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE)
+bool nr_rrc_update_cell_assoc_after_ho(gNB_RRC_UE_t *UE)
 {
   DevAssert(UE->ho_context);
   DevAssert(UE->ho_context->target);
@@ -471,7 +474,7 @@ static void nr_rrc_n2_ho_acknowledge(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE)
 
   /* Update cell association after handover */
   nr_ho_target_cu_t *target = UE->ho_context->target;
-  if (!nr_rrc_update_cell_assoc_after_ho(rrc, UE)) {
+  if (!nr_rrc_update_cell_assoc_after_ho(UE)) {
     ngap_handover_failure_t fail = {.amf_ue_ngap_id = UE->amf_ue_ngap_id,
                                     .cause.type = NGAP_CAUSE_RADIO_NETWORK,
                                     .cause.value = NGAP_CAUSE_RADIO_NETWORK_HO_FAILURE_IN_TARGET_5GC_NGRAN_NODE_OR_TARGET_SYSTEM};
@@ -547,12 +550,9 @@ void nr_rrc_trigger_n2_ho_target(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue)
 /** @brief Trigger N2 handover on source gNB:
  *         1) Prepare RRC Container with HandoverPreparationInformation message
  *         2) send NGAP Handover Required message */
-void nr_rrc_trigger_n2_ho(gNB_RRC_INST *rrc,
-                          gNB_RRC_UE_t *ue,
-                          int serving_pci,
-                          const nr_neighbour_cell_t *neighbour_config)
+void nr_rrc_trigger_n2_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, const nr_neighbour_cell_t *neighbour_config)
 {
-  byte_array_t hoPrepInfo = rrc_gNB_generate_HandoverPreparationInformation(rrc, ue, serving_pci);
+  byte_array_t hoPrepInfo = rrc_gNB_generate_HandoverPreparationInformation(rrc, ue);
   if (hoPrepInfo.len < 0) {
     free_byte_array(hoPrepInfo);
     LOG_E(NR_RRC, "Failed to trigger N2 handover on source gNB for UE %x\n", ue->rrc_ue_id);
@@ -607,14 +607,13 @@ void nr_HO_N2_trigger_telnet(gNB_RRC_INST *rrc, uint32_t neighbour_pci, uint32_t
   if (neighbour_pci == scell_pci) {
     LOG_I(NR_RRC, "UE %d: trigger handover on the same cell PCI=%d\n", rrc_ue_id, neighbour_pci);
     nr_neighbour_cell_t neighbourConfig = {
-        .isIntraFrequencyNeighbour = true,
         .gNB_ID = du->gNB_DU_id,
         .nrcell_id = pcell->info.cell_id,
         .physicalCellId = pcell->info.pci,
         .plmn = pcell->info.plmn,
         .subcarrierSpacing = pcell->info.mode == NR_MODE_TDD ? pcell->info.tdd.dlul.scs : pcell->info.fdd.dl.scs,
     };
-    nr_rrc_trigger_n2_ho(rrc, UE, neighbour_pci, &neighbourConfig);
+    nr_rrc_trigger_n2_ho(rrc, UE, &neighbourConfig);
     return;
   }
 
@@ -635,7 +634,7 @@ void nr_HO_N2_trigger_telnet(gNB_RRC_INST *rrc, uint32_t neighbour_pci, uint32_t
     return;
   }
 
-  nr_rrc_trigger_n2_ho(rrc, UE, pcell->info.pci, neighbour);
+  nr_rrc_trigger_n2_ho(rrc, UE, neighbour);
 }
 
 // This function detects if there are at least two different ssbFrequency values, and if so, returns meas_timing_config;

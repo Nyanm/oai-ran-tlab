@@ -153,6 +153,7 @@ bool fapi_nr_p7_message_header_unpack(void *pMessageBuf,
                                      uint32_t unpackedBufLen,
                                      nfapi_p7_codec_config_t *config)
 {
+  UNUSED(config);
   return fapi_nr_message_header_unpack(pMessageBuf,
                                        messageBufLen,
                                        pUnpackedBuf,
@@ -166,6 +167,7 @@ bool fapi_nr_message_header_unpack(void *pMessageBuf,
                                   uint32_t unpackedBufLen,
                                   nfapi_p4_p5_codec_config_t *config)
 {
+  UNUSED(config);
   uint8_t *pReadPackedMessage = pMessageBuf;
   nfapi_nr_p4_p5_message_header_t *header = pUnpackedBuf;
   fapi_message_header_t fapi_msg = {0};

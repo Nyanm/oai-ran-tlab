@@ -17,8 +17,6 @@
 #include "executables/softmodem-common.h"
 #include "SCHED_NR/sched_nr.h"
 
-// #define DEBUG_DLSCH
-// #define DEBUG_DLSCH_MAPPING
 #include <simde/x86/avx512.h>
 #define USE128BIT
 
@@ -46,21 +44,9 @@ static int do_ptrs_symbol(const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
       /* check if cuurent RE is PTRS RE*/
       uint16_t beta_ptrs = 1;
       txF[k] = c16mulRealShift(mod_ptrs[ptrs_idx], beta_ptrs * amp, 15);
-#ifdef DEBUG_DLSCH_MAPPING
-      printf("ptrs_idx %d\t \t k %d \t \t txdataF: %d %d, mod_ptrs: %d %d\n",
-             ptrs_idx,
-             k,
-             txF[k].r,
-             txF[k].i,
-             mod_ptrs[ptrs_idx].r,
-             mod_ptrs[ptrs_idx].i);
-#endif
       ptrs_idx++;
     } else {
       txF[k] = c16mulRealShift(*in++, amp, 15);
-#ifdef DEBUG_DLSCH_MAPPING
-      printf("k %d \t txdataF: %d %d\n", k, txF[k].r, txF[k].i);
-#endif
     }
     k++;
   }
@@ -74,9 +60,6 @@ typedef union {
 
 static inline int interleave_with_0_signal_first(c16_t *output, c16_t *mod_dmrs, const int16_t amp_dmrs, int sz)
 {
-#ifdef DEBUG_DLSCH_MAPPING
-  printf("doing DMRS pattern for port 0 : d0 0 d1 0 ... dNm2 0 dNm1 0 (ul %d, rr %d)\n", upper_limit, remaining_re);
-#endif
   // add filler to process all as SIMD
   c16_t *out = output;
   int i = 0;
@@ -126,9 +109,6 @@ static inline int interleave_with_0_signal_first(c16_t *output, c16_t *mod_dmrs,
 
 static inline int interleave_with_0_start_with_0(c16_t *output, c16_t *mod_dmrs, const int16_t amp_dmrs, int sz)
 {
-#ifdef DEBUG_DLSCH_MAPPING
-  printf("doing DMRS pattern for port 2 : 0 d0 0 d1 ... 0 dNm2 0 dNm1\n");
-#endif
   c16_t *out = output;
   int i = 0;
   int end = sz / 2;
@@ -177,9 +157,6 @@ static inline int interleave_with_0_start_with_0(c16_t *output, c16_t *mod_dmrs,
 
 static inline int interleave_signals(c16_t *output, c16_t *signal1, const int amp, c16_t *signal2, const int amp2, int sz)
 {
-#ifdef DEBUG_DLSCH_MAPPING
-  printf("doing DMRS pattern for port 0 : d0 X0 d1 X1 ... dNm2 XNm2 dNm1 XNm1\n");
-#endif
     // add filler to process all as SIMD
   c16_t *out = output;
   int i = 0;
@@ -311,22 +288,22 @@ static inline void neg_dmrs(c16_t *in, c16_t *out, int sz)
     *out++ = i % 2 ? (c16_t){-in[i].r, -in[i].i} : in[i];
 }
 
-static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
-                              int slot,
-                              const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
-                              int layer,
-                              c16_t *output,
-                              c16_t *txl_start,
-                              int start_sc,
-                              int symbol_sz,
-                              int l_symbol,
-                              uint16_t dlPtrsSymPos,
-                              int n_ptrs,
-                              int amp,
-                              int16_t amp_dmrs,
-                              int l_prime,
-                              nfapi_nr_dmrs_type_e dmrs_Type,
-                              c16_t *dmrs_start)
+static inline void do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
+                               int slot,
+                               const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
+                               int layer,
+                               c16_t *output,
+                               c16_t *txl_start,
+                               int start_sc,
+                               int symbol_sz,
+                               int l_symbol,
+                               uint16_t dlPtrsSymPos,
+                               int n_ptrs,
+                               int amp,
+                               int16_t amp_dmrs,
+                               int l_prime,
+                               nfapi_nr_dmrs_type_e dmrs_Type,
+                               c16_t *dmrs_start)
 {
   c16_t *txl = txl_start;
   const uint sz = rel15->rbSize * NR_NB_SC_PER_RB;
@@ -408,7 +385,7 @@ static inline int do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
   } else { // no PTRS or DMRS in this symbol
     txl += no_ptrs_dmrs_case(output + start_sc, txl, amp, sz);
   } // no DMRS/PTRS in symbol
-  return txl - txl_start;
+  return;
 }
 
 static inline void do_txdataF(c16_t **txdataF,
@@ -461,7 +438,7 @@ static inline void do_txdataF(c16_t **txdataF,
                              symbol_sz,
                              txdataF_precoding,
                              ant,
-                             pmi_pdu,
+                             pmi_pdu->weights,
                              subCarrier,
                              re_cnt,
                              &txdataF[ant][txdataF_offset_per_symbol]);
@@ -472,28 +449,123 @@ static inline void do_txdataF(c16_t **txdataF,
   } // RB loop: while(rb < rel15->rbSize)
 }
 
+typedef struct pdschSymbolProc_s {
+  PHY_VARS_gNB *gNB;
+  NR_DL_FRAME_PARMS *frame_parms;
+  const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15;
+  unsigned int slot;
+  unsigned int startSymbol;
+  unsigned int numSymbols;
+  task_ans_t *ans;
+  unsigned int layerSz2;
+  unsigned int dlPtrsSymPos;
+  unsigned int n_ptrs;
+  unsigned int beam_nb;
+  unsigned int re_beginning_of_symbol[14];
+  c16_t *tx_layers[4];
+  time_stats_t dlsch_resource_mapping_stats;
+  time_stats_t dlsch_precoding_stats;
+} pdschSymbolProc_t;
+
+static void nr_pdsch_symbol_processing(void *arg)
+{
+  pdschSymbolProc_t *rdata = (pdschSymbolProc_t *)arg;
+
+  PHY_VARS_gNB *gNB = rdata->gNB;
+  NR_DL_FRAME_PARMS *frame_parms = rdata->frame_parms;
+  const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15 = rdata->rel15;
+  int slot = rdata->slot;
+  c16_t *tx_layers[rel15->nrOfLayers];
+  for (int l = 0; l < rel15->nrOfLayers; l++)
+    tx_layers[l] = rdata->tx_layers[l];
+  const int nb_re_dmrs = rel15->numDmrsCdmGrpsNoData * (rel15->dmrsConfigType == NFAPI_NR_DMRS_TYPE1 ? 6 : 4);
+  const int n_dmrs = (rel15->BWPStart + rel15->rbStart + rel15->rbSize) * nb_re_dmrs;
+  // Loop Over OFDM symbols:
+  c16_t mod_dmrs[(n_dmrs + 63) & ~63] __attribute__((aligned(64)));
+  const int symbol_sz = frame_parms->ofdm_symbol_size;
+
+  c16_t **txdataF = gNB->common_vars.txdataF[rdata->beam_nb];
+  uint16_t start_sc = (rel15->rbStart + rel15->BWPStart) * NR_NB_SC_PER_RB;
+
+  for (int l_symbol = rdata->startSymbol; l_symbol < rdata->startSymbol + rdata->numSymbols; l_symbol++) {
+    start_meas(&rdata->dlsch_resource_mapping_stats);
+    int l_prime = 0; // single symbol layer 0
+    int l_overline = get_l0(rel15->dlDmrsSymbPos);
+
+    /// DMRS QPSK modulation
+    if ((rel15->dlDmrsSymbPos & (1 << l_symbol))) { // DMRS time occasion
+      // The reference point for is subcarrier -1 of the lowest-numbered resource block in CORESET 0 if the corresponding
+      // PDCCH is associated with CORESET -1 and Type0-PDCCH common search space and is addressed to SI-RNTI
+      // 2GPP TS 38.211 V15.8.0 Section 7.4.1.1.2 Mapping to physical resources
+      if (l_symbol == (l_overline + 1)) // take into account the double DMRS symbols
+        l_prime = 1;
+      else if (l_symbol > (l_overline + 1)) { // new DMRS pair
+        l_overline = l_symbol;
+        l_prime = 0;
+      }
+      const uint32_t *gold = nr_gold_pdsch(frame_parms->N_RB_DL,
+                                           frame_parms->symbols_per_slot,
+                                           rel15->dlDmrsScramblingId,
+                                           rel15->SCID,
+                                           slot,
+                                           l_symbol);
+      // Qm = 1 as DMRS is QPSK modulated
+      nr_modulation(gold, n_dmrs * DMRS_MOD_ORDER, DMRS_MOD_ORDER, (int16_t *)mod_dmrs);
+
+    }
+    uint32_t dmrs_idx = rel15->rbStart;
+    if (rel15->refPoint == 0)
+      dmrs_idx += rel15->BWPStart;
+    dmrs_idx *= rel15->dmrsConfigType == NFAPI_NR_DMRS_TYPE1 ? 6 : 4;
+    c16_t txdataF_precoding[rel15->nrOfLayers][symbol_sz] __attribute__((aligned(64)));
+    for (int layer = 0; layer < rel15->nrOfLayers; layer++) {
+      do_onelayer(frame_parms,
+                  slot,
+                  rel15,
+                  layer,
+                  txdataF_precoding[layer],
+                  tx_layers[layer] + rdata->re_beginning_of_symbol[l_symbol],
+                  start_sc,
+                  symbol_sz,
+                  l_symbol,
+                  rdata->dlPtrsSymPos,
+                  rdata->n_ptrs,
+                  gNB->TX_AMP,
+                  min((double)gNB->TX_AMP * sqrt(rel15->numDmrsCdmGrpsNoData), INT16_MAX),
+                  l_prime,
+                  rel15->dmrsConfigType,
+                  mod_dmrs + dmrs_idx);
+    } // layer loop
+    stop_meas(&rdata->dlsch_resource_mapping_stats);
+
+    start_meas(&rdata->dlsch_precoding_stats);
+    for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
+      const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz;
+      do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, ant, start_sc, txdataF_offset_per_symbol);
+    }
+    stop_meas(&rdata->dlsch_precoding_stats);
+  }
+  // Task running in // completed
+  completed_task_ans(rdata->ans);
+}
+
 static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSCH_t *dlsch, int slot)
 {
-  const int16_t amp = gNB->TX_AMP;
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
 
   time_stats_t *dlsch_scrambling_stats = &gNB->dlsch_scrambling_stats;
   time_stats_t *dlsch_modulation_stats = &gNB->dlsch_modulation_stats;
   const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15 = &dlsch->pdsch_pdu->pdsch_pdu_rel15;
   const int layerSz = frame_parms->N_RB_DL * frame_parms->symbols_per_slot * NR_NB_SC_PER_RB;
-  const int symbol_sz=frame_parms->ofdm_symbol_size;
-  const int dmrs_Type = rel15->dmrsConfigType;
   const int nb_re_dmrs = rel15->numDmrsCdmGrpsNoData * (rel15->dmrsConfigType == NFAPI_NR_DMRS_TYPE1 ? 6 : 4);
-  const int16_t amp_dmrs = min((double)amp * sqrt(rel15->numDmrsCdmGrpsNoData), INT16_MAX); // 3GPP TS 38.214 Section 4.1: Table 4.1-1
   LOG_D(PHY,
         "pdsch: BWPStart %d, BWPSize %d, rbStart %d, rbsize %d\n",
         rel15->BWPStart,
         rel15->BWPSize,
         rel15->rbStart,
         rel15->rbSize);
-  const int n_dmrs = (rel15->BWPStart + rel15->rbStart + rel15->rbSize) * nb_re_dmrs;
+  const int n_dmrs = rel15->rbSize * nb_re_dmrs;
 
-  const int dmrs_symbol_map = rel15->dlDmrsSymbPos; // single DMRS: 010000100 Double DMRS 110001100
   const int xOverhead = 0;
   const int nb_re =
       (12 * rel15->NrOfSymbols - nb_re_dmrs * get_num_dmrs(rel15->dlDmrsSymbPos) - xOverhead) * rel15->rbSize * rel15->nrOfLayers;
@@ -567,21 +639,9 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   start_meas(&gNB->dlsch_pdsch_generation_stats);
   /// Resource mapping
   // Non interleaved VRB to PRB mapping
-  uint16_t start_sc = (rel15->rbStart + rel15->BWPStart) * NR_NB_SC_PER_RB;
-
-#ifdef DEBUG_DLSCH_MAPPING
-  printf("PDSCH resource mapping started (start SC %d\tstart symbol %d\tN_PRB %d\tnb_re %d,nb_layers %d)\n",
-         start_sc,
-         rel15->StartSymbolIndex,
-         rel15->rbSize,
-         nb_re,
-         rel15->nrOfLayers);
-#endif
 
   AssertFatal(n_dmrs, "n_dmrs can't be 0\n");
   // make a large enough tail to process all re with SIMD regardless a garbadge filler
-  c16_t mod_dmrs[(n_dmrs+63)&~63] __attribute__((aligned(64)));
-  unsigned int re_beginning_of_symbol = 0;
 
   start_meas(&gNB->dlsch_layer_mapping_stats);
   int layerSz2 = (layerSz + 63) & ~63;
@@ -605,84 +665,69 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
                                       slot,
                                       frame_parms->symbols_per_slot,
                                       bitmap);
-
-  c16_t **txdataF = gNB->common_vars.txdataF[beam_nb];
   stop_meas(&gNB->dlsch_layer_mapping_stats);
-  // Loop Over OFDM symbols:
-  for (int l_symbol = rel15->StartSymbolIndex; l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols; l_symbol++) {
-    start_meas(&gNB->dlsch_resource_mapping_stats);
-    int l_prime = 0; // single symbol layer 0
-    int l_overline = get_l0(rel15->dlDmrsSymbPos);
 
-#ifdef DEBUG_DLSCH_MAPPING
-    printf("PDSCH resource mapping symbol %d\n", l_symbol);
-#endif
-    /// DMRS QPSK modulation
-    if ((dmrs_symbol_map & (1 << l_symbol))) { // DMRS time occasion
-      // The reference point for is subcarrier -1 of the lowest-numbered resource block in CORESET 0 if the corresponding
-      // PDCCH is associated with CORESET -1 and Type0-PDCCH common search space and is addressed to SI-RNTI
-      // 2GPP TS 38.211 V15.8.0 Section 7.4.1.1.2 Mapping to physical resources
-      if (l_symbol == (l_overline + 1)) // take into account the double DMRS symbols
-        l_prime = 1;
-      else if (l_symbol > (l_overline + 1)) { // new DMRS pair
-        l_overline = l_symbol;
-        l_prime = 0;
+  // spawn symbol threads
+
+  int nb_tasks = 1;
+  int num_pdsch_symbols_per_task = rel15->NrOfSymbols;
+  if (gNB->num_pdsch_symbols_per_thread > 0) {
+    // symbol processing in thread pool enabled
+    num_pdsch_symbols_per_task = gNB->num_pdsch_symbols_per_thread;
+    nb_tasks = rel15->NrOfSymbols / num_pdsch_symbols_per_task;
+    if ((rel15->NrOfSymbols % num_pdsch_symbols_per_task) > 0)
+      nb_tasks++;
+  }
+  pdschSymbolProc_t arr[nb_tasks];
+  task_ans_t ans;
+  init_task_ans(&ans, nb_tasks);
+  int sz_arr = 0;
+  unsigned int re_beginning_of_symbol = 0;
+  int res = 0;
+  for (int l_symbol = rel15->StartSymbolIndex; l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols;
+       l_symbol += num_pdsch_symbols_per_task) {
+    pdschSymbolProc_t *rdata = &arr[sz_arr];
+    rdata->ans = &ans;
+    ++sz_arr;
+
+    rdata->gNB = gNB;
+    rdata->frame_parms = frame_parms;
+    rdata->rel15 = rel15;
+    rdata->slot = slot;
+    rdata->startSymbol = l_symbol;
+    res = rel15->NrOfSymbols - (l_symbol - rel15->StartSymbolIndex);
+    if (res >= num_pdsch_symbols_per_task)
+      rdata->numSymbols = num_pdsch_symbols_per_task;
+    else
+      rdata->numSymbols = res;
+    rdata->layerSz2 = layerSz2;
+    rdata->dlPtrsSymPos = dlPtrsSymPos;
+    rdata->n_ptrs = n_ptrs;
+    rdata->beam_nb = beam_nb;
+    for (int s = l_symbol; s < l_symbol + rdata->numSymbols; s++) {
+      rdata->re_beginning_of_symbol[s] = re_beginning_of_symbol;
+      re_beginning_of_symbol += rel15->rbSize * NR_NB_SC_PER_RB;
+      if (n_ptrs > 0 && is_ptrs_symbol(s, dlPtrsSymPos)) {
+        re_beginning_of_symbol -= n_ptrs;
+      } else if (rel15->dlDmrsSymbPos & (1 << s)) {
+        re_beginning_of_symbol -= n_dmrs;
       }
-#ifdef DEBUG_DLSCH_MAPPING
-      printf("dlDmrsScramblingId %d, SCID %d slot %d l_symbol %d\n", rel15->dlDmrsScramblingId, rel15->SCID, slot, l_symbol);
-#endif
-      const uint32_t *gold = nr_gold_pdsch(frame_parms->N_RB_DL,
-                                           frame_parms->symbols_per_slot,
-                                           rel15->dlDmrsScramblingId,
-                                           rel15->SCID,
-                                           slot,
-                                           l_symbol);
-      // Qm = 1 as DMRS is QPSK modulated
-      nr_modulation(gold, n_dmrs * DMRS_MOD_ORDER, DMRS_MOD_ORDER, (int16_t *)mod_dmrs);
-
-#ifdef DEBUG_DLSCH_MAPPING
-      printf("DMRS modulation (symbol %d, %d symbols, type %d):\n", l_symbol, n_dmrs, dmrs_Type);
-      for (int i = 0; i < n_dmrs / 2; i += 8) {
-        for (int j = 0; j < 8; j++) {
-          printf("%d %d\t", mod_dmrs[i + j].r, mod_dmrs[i + j].i);
-        }
-        printf("\n");
-      }
-#endif
     }
-    uint32_t dmrs_idx = rel15->rbStart;
-    if (rel15->refPoint == 0)
-      dmrs_idx += rel15->BWPStart;
-    dmrs_idx *= dmrs_Type == NFAPI_NR_DMRS_TYPE1 ? 6 : 4;
-    c16_t txdataF_precoding[rel15->nrOfLayers][symbol_sz] __attribute__((aligned(64)));
-    int layer_sz = 0;
-    for (int layer = 0; layer < rel15->nrOfLayers; layer++) {
-      layer_sz = do_onelayer(frame_parms,
-                             slot,
-                             rel15,
-                             layer,
-                             txdataF_precoding[layer],
-                             tx_layers[layer] + re_beginning_of_symbol,
-                             start_sc,
-                             symbol_sz,
-                             l_symbol,
-                             dlPtrsSymPos,
-                             n_ptrs,
-                             amp,
-                             amp_dmrs,
-                             l_prime,
-                             dmrs_Type,
-                             mod_dmrs + dmrs_idx);
-    } // layer loop
-    re_beginning_of_symbol += layer_sz;
-    stop_meas(&gNB->dlsch_resource_mapping_stats);
-
-    start_meas(&gNB->dlsch_precoding_stats);
-    for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
-      const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz;
-      do_txdataF(txdataF, symbol_sz, txdataF_precoding, gNB, rel15, ant, start_sc, txdataF_offset_per_symbol);
+    reset_meas(&rdata->dlsch_resource_mapping_stats);
+    reset_meas(&rdata->dlsch_precoding_stats);
+    for (int l = 0; l < rel15->nrOfLayers; l++)
+      rdata->tx_layers[l] = tx_layers[l];
+    if (l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols - num_pdsch_symbols_per_task) {
+      task_t t = {.func = &nr_pdsch_symbol_processing, .args = rdata};
+      pushTpool(&gNB->threadPool, t);
+    } else {
+      nr_pdsch_symbol_processing(rdata);
     }
-    stop_meas(&gNB->dlsch_precoding_stats);
+  }
+  join_task_ans(&ans);
+  for (int i = 0; i < nb_tasks; i++) {
+    merge_meas(&gNB->dlsch_resource_mapping_stats, &arr[i].dlsch_resource_mapping_stats);
+    merge_meas(&gNB->dlsch_precoding_stats, &arr[i].dlsch_precoding_stats);
   }
   stop_meas(&gNB->dlsch_pdsch_generation_stats);
   /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)

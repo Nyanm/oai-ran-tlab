@@ -1208,6 +1208,7 @@ int main(int argc, char *argv[])
       uint8_t round = 0;
       crc_status = 1;
       errors_decoding = 0;
+      NR_gNB_PUSCH *pusch_vars = &gNB->pusch_vars[UE_id];
 
       while (round < max_rounds && crc_status && !stop) {
 
@@ -1307,7 +1308,7 @@ int main(int argc, char *argv[])
           srs_pdu->resource_type = NR_SRS_Resource__resourceType_PR_periodic;
           srs_pdu->t_srs = 1;
           srs_pdu->srs_parameters_v4.srs_bandwidth_size = m_SRS[srs_pdu->config_index];
-          srs_pdu->srs_parameters_v4.usage = 1 << NR_SRS_ResourceSet__usage_codebook;
+          srs_pdu->srs_parameters_v4.usage = 1 << NFAPI_NR_SRS_BEAMMANAGEMENT; // to get SNR
           srs_pdu->srs_parameters_v4.report_type[0] = 1;
           srs_pdu->srs_parameters_v4.iq_representation = 1;
           srs_pdu->srs_parameters_v4.prg_size = 1;
@@ -1594,7 +1595,6 @@ int main(int argc, char *argv[])
           }
         }
 
-        NR_gNB_PUSCH *pusch_vars = &gNB->pusch_vars[UE_id];
         if (n_trials == 1 && round == 0) {
           __attribute__((unused)) int off = ((nb_rb & 1) == 1) ? 4 : 0;
 
@@ -1742,13 +1742,20 @@ int main(int argc, char *argv[])
       if (!crc_status)
         effRate += ((double)TBS) / (double)round;
 
-      sum_pusch_delay += ulsch_gNB->delay.est_delay;
-      min_pusch_delay = min(ulsch_gNB->delay.est_delay, min_pusch_delay);
-      max_pusch_delay = max(ulsch_gNB->delay.est_delay, max_pusch_delay);
+      sum_pusch_delay += pusch_vars->delay.est_delay;
+      min_pusch_delay = min(pusch_vars->delay.est_delay, min_pusch_delay);
+      max_pusch_delay = max(pusch_vars->delay.est_delay, max_pusch_delay);
       delay_pusch_est_count++;
 
       if (do_SRS == 1) {
-        sum_srs_snr += gNB->srs->snr;
+        DevAssert(UL_INFO.srs_ind.number_of_pdus == 1); // there must be SRS indication
+        const nfapi_nr_srs_indication_pdu_t *srs_ind = &UL_INFO.srs_ind.pdu_list[0];
+        DevAssert(srs_ind->srs_usage == NFAPI_NR_SRS_BEAMMANAGEMENT);
+        nfapi_nr_srs_beamforming_report_t bf_rep;
+        unpack_nr_srs_beamforming_report((void *)srs_ind->report_tlv.value, srs_ind->report_tlv.length, &bf_rep, sizeof(bf_rep));
+        DevAssert(bf_rep.wide_band_snr != 0xff);
+        int8_t snr = (bf_rep.wide_band_snr >> 1) - 64;
+        sum_srs_snr += snr;
         srs_snr_count++;
       }
     } // trial loop

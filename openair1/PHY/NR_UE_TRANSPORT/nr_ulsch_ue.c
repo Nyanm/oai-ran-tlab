@@ -141,6 +141,7 @@ There is no data in DMRS symbol for other scenarios in type 1.
 */
 static void map_data_dmrs_type1_cdm1_rb(const unsigned int num_cdm_no_data, const c16_t *data, c16_t *out)
 {
+  UNUSED(num_cdm_no_data);
   *(out + 1) = *data++;
   *(out + 3) = *data++;
   *(out + 5) = *data++;
@@ -1075,7 +1076,7 @@ void nr_ue_ulsch_procedures(PHY_VARS_NR_UE *UE,
 
   int harq_pid = phy_data->ulsch.pusch_pdu.pusch_data.harq_process_id;
 
-  if (phy_data->ulsch.status != ACTIVE)
+  if (phy_data->ulsch.status != NR_ACTIVE)
     return;
 
   start_meas_nr_ue_phy(UE, PUSCH_PROC_STATS);

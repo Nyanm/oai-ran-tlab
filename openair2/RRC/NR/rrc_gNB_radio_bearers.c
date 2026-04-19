@@ -63,7 +63,11 @@ nr_rrc_qos_t *add_qos(seq_arr_t *qos, const pdusession_level_qos_parameter_t *in
 }
 
 /** @brief Free QoS flows list items */
-static void free_qos(void *ptr) { /*nothing to do*/ }
+static void free_qos(void *ptr)
+{
+  /*nothing to do*/
+  UNUSED(ptr);
+}
 
 /** @brief Free QoS flows list */
 static void free_rrc_qos_list(seq_arr_t *seq)
@@ -233,6 +237,7 @@ drb_t *get_drb(seq_arr_t *seq, int id)
 void free_drb(void *ptr)
 {
   // do nothing
+  UNUSED(ptr);
 }
 
 rrc_pdu_session_param_t *find_pduSession_from_drbId(gNB_RRC_UE_t *ue, int drb_id)

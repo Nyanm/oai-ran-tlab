@@ -161,8 +161,7 @@ typedef struct f1ap_du_register_req_s {
 
 typedef struct f1ap_sib_msg_s {
   /// RRC container with system information owned by gNB-CU
-  uint8_t *SI_container;
-  int SI_container_length;
+  byte_array_t SI_container;
   /// SIB block type, e.g. 2 for sibType2
   int SI_type;
 } f1ap_sib_msg_t;

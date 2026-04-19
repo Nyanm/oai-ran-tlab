@@ -188,7 +188,7 @@ static bool check_csi_resourceMapping_consistency(NR_CSI_RS_ResourceMapping_t re
   return true;
 }
 
-static bool check_csi_report_consistency(const NR_CSI_MeasConfig_t *meas)
+bool check_csi_report_consistency(const NR_CSI_MeasConfig_t *meas)
 {
   if (!meas || !meas->csi_ReportConfigToAddModList)
     return true;
@@ -223,8 +223,6 @@ static bool check_csi_resource_consistency(const NR_CSI_MeasConfig_t *meas)
 static bool check_csi_MeasConfig(struct NR_SetupRelease_CSI_MeasConfig *csi_MeasConfig)
 {
   const NR_CSI_MeasConfig_t *meas = csi_MeasConfig->choice.setup;
-  if (!check_csi_report_consistency(meas))
-    return false;
   if (!check_csi_resource_consistency(meas))
     return false;
   return true;

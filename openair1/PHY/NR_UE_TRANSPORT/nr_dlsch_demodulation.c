@@ -123,8 +123,7 @@ static void nr_dlsch_channel_compensation(uint32_t rx_size_symbol,
                                           int length,
                                           unsigned char mod_order,
                                           unsigned short nb_rb,
-                                          unsigned char output_shift,
-                                          PHY_NR_MEASUREMENTS *measurements)
+                                          unsigned char output_shift)
 {
   simde__m128i *dl_ch128, *dl_ch128_2, *dl_ch_mag128, *dl_ch_mag128b, *dl_ch_mag128r, *rxdataF128, *rxdataF_comp128, *rho128;
   simde__m128i QAM_amp128 = {0}, QAM_amp128b = {0}, QAM_amp128r = {0};
@@ -967,7 +966,6 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
   memset(dl_ch_estimates_ext, 0, sizeof(dl_ch_estimates_ext));
 
   NR_UE_COMMON *common_vars  = &ue->common_vars;
-  PHY_NR_MEASUREMENTS *measurements = &ue->measurements;
   const int frame = proc->frame_rx;
   const int nr_slot_rx = proc->nr_slot_rx;
   const int gNB_id = proc->gNB_id;
@@ -994,7 +992,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
           dlsch0_harq->status,
           dlsch1_harq->status);
 
-    if ((dlsch0_harq->status == ACTIVE) && (dlsch1_harq->status == ACTIVE)){
+    if ((dlsch0_harq->status == NR_ACTIVE) && (dlsch1_harq->status == NR_ACTIVE)){
       codeword_TB0 = dlsch0_harq->codeword; // SV: where is this set? revisit for DL MIMO.
       codeword_TB1 = dlsch1_harq->codeword;
       dlsch0_harq = &ue->dl_harq_processes[codeword_TB0][harq_pid];
@@ -1002,14 +1000,14 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
 
       DEBUG_HARQ("[DEMOD] I am assuming both TBs are active, in cw0 %d and cw1 %d \n", codeword_TB0, codeword_TB1);
 
-    } else if ((dlsch0_harq->status == ACTIVE) && (dlsch1_harq->status != ACTIVE) ) {
+    } else if ((dlsch0_harq->status == NR_ACTIVE) && (dlsch1_harq->status != NR_ACTIVE) ) {
       codeword_TB0 = dlsch0_harq->codeword;
       dlsch0_harq = &ue->dl_harq_processes[codeword_TB0][harq_pid];
       dlsch1_harq = NULL;
 
       DEBUG_HARQ("[DEMOD] I am assuming only TB0 is active, in cw %d \n", codeword_TB0);
 
-    } else if ((dlsch0_harq->status != ACTIVE) && (dlsch1_harq->status == ACTIVE)){
+    } else if ((dlsch0_harq->status != NR_ACTIVE) && (dlsch1_harq->status == NR_ACTIVE)){
       codeword_TB1 = dlsch1_harq->codeword;
       dlsch0_harq  = NULL;
       dlsch1_harq  = &ue->dl_harq_processes[codeword_TB1][harq_pid];
@@ -1023,7 +1021,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
       return (-1);
     }
   } else if (dlsch0_harq) {
-    if (dlsch0_harq->status == ACTIVE) {
+    if (dlsch0_harq->status == NR_ACTIVE) {
       codeword_TB0 = dlsch0_harq->codeword;
       dlsch0_harq = &ue->dl_harq_processes[0][harq_pid];
       DEBUG_HARQ("[DEMOD] I am assuming only TB0 is active\n");
@@ -1228,8 +1226,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                                   nb_re_pdsch,
                                   dlsch_config->qamModOrder,
                                   nb_rb_pdsch,
-                                  *log2_maxh,
-                                  measurements); // log2_maxh+I0_shift
+                                  *log2_maxh); // log2_maxh+I0_shift
     stop_meas_nr_ue_phy(ue, DLSCH_CHANNEL_COMPENSATION_STATS);
     if (meas_enabled) {
       LOG_D(PHY,
@@ -1310,7 +1307,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
   int nbSymb = 0;
   int pduBitmap = 0;
 
-  if(dlsch0_harq->status == ACTIVE) {
+  if(dlsch0_harq->status == NR_ACTIVE) {
     startSymbIdx = dlsch_config->start_symbol;
     nbSymb = dlsch_config->number_symbols;
     pduBitmap = dlsch_config->pduBitmap;

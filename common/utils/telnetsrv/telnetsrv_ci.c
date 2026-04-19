@@ -47,6 +47,7 @@ static int get_single_ue_rnti_mac(void)
 
 int get_single_rnti(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   if (buf)
     ERROR_MSG_RET("no parameter allowed\n");
 
@@ -81,6 +82,7 @@ rrc_gNB_ue_context_t *get_single_rrc_ue(void)
 
 int get_reestab_count(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   if (!RC.nrrrc)
     ERROR_MSG_RET("no RRC present, cannot list counts\n");
   rrc_gNB_ue_context_t *ue = NULL;
@@ -119,6 +121,7 @@ int fetch_rnti(char *buf, telnet_printfunc_t prnt)
 
 int trigger_reestab(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   if (!RC.nrmac)
     ERROR_MSG_RET("no MAC/RLC present, cannot trigger reestablishment\n");
   int rnti = fetch_rnti(buf, prnt);
@@ -134,6 +137,7 @@ extern nr_rrc_du_container_t *get_du_for_ue(gNB_RRC_INST *rrc, uint32_t ue_id);
 /** @brief Get connected DU by the UE ID */
 int fetch_du_by_ue_id(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   if (!RC.nrrrc)
     ERROR_MSG_RET("no RRC present, cannot list counts\n");
 
@@ -169,6 +173,7 @@ extern void nr_HO_F1_trigger_telnet(gNB_RRC_INST *rrc, uint32_t rrc_ue_id);
  */
 int rrc_gNB_trigger_f1_ho(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   if (!RC.nrrrc)
     ERROR_MSG_RET("no RRC present, cannot list counts\n");
   rrc_gNB_ue_context_t *ue = NULL;
@@ -198,6 +203,7 @@ extern void nr_HO_N2_trigger_telnet(gNB_RRC_INST *rrc, uint32_t neighbour_pci, u
  *  @return 0 on success, -1 on failure */
 int rrc_gNB_trigger_n2_ho(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   if (!RC.nrrrc)
     ERROR_MSG_RET("no RRC present, cannot list counts\n");
 
@@ -238,6 +244,7 @@ int rrc_gNB_trigger_n2_ho(char *buf, int debug, telnet_printfunc_t prnt)
 
 int force_ul_failure(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   if (!RC.nrmac)
     ERROR_MSG_RET("no MAC/RLC present, force_ul_failure failed\n");
   int rnti = fetch_rnti(buf, prnt);
@@ -263,6 +270,7 @@ int force_ue_release(char *buf, int debug, telnet_printfunc_t prnt)
 
 static int get_current_bwp(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   int rnti = fetch_rnti(buf, prnt);
   if (rnti < 0)
     ERROR_MSG_RET("could not identify UE (no UE, no such RNTI, or multiple UEs)\n");
@@ -288,6 +296,7 @@ static int get_current_bwp(char *buf, int debug, telnet_printfunc_t prnt)
  * @return 0 on success; negative value on error. */
 static int trigger_ngap_pdu_session_release(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   if (buf == NULL) {
     ERROR_MSG_RET("Missing input. Usage: trigger_pdu_session_release [ue_id=gNB_ue_ngap_id(int,opt)],pdusession_id(int)[,pdusession_id(int)...]\n");
   }
@@ -360,6 +369,7 @@ static int trigger_ngap_pdu_session_release(char *buf, int debug, telnet_printfu
 
 static int trigger_bwp_switch(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   char *sbwpId = strtok(buf, " ");
   int bwpId = atoi(sbwpId);
   char *srnti = strtok(NULL, " ");

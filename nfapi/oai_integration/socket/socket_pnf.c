@@ -61,6 +61,7 @@ static int send_p7_msg(pnf_p7_t *pnf_p7, uint8_t *msg, uint32_t len)
 
 bool pnf_nr_send_p7_message(pnf_p7_t *pnf_p7, nfapi_nr_p7_message_header_t *header, uint32_t msg_len)
 {
+  UNUSED(msg_len);
   if (pnf_p7->terminate) {
     //don't send any further P7 messages after terminating
     return false;

@@ -6,6 +6,7 @@
  * \brief Top-level routines for transmission of the PSSCH TS 38.211 v 16.3.0
  */
 #include <stdint.h>
+#include "PHY/gold.h"
 #include "PHY/NR_REFSIG/dmrs_nr.h"
 #include "PHY/NR_REFSIG/ptrs_nr.h"
 #include "PHY/NR_REFSIG/sl_refsig_defs.h"
@@ -47,7 +48,7 @@ void nr_pssch_codeword_scrambling_sci(uint32_t *in,
   for (int i=0; i<size; i++) {
     b_idx = i&0x1f;
     if (b_idx==0) {
-      s = lte_gold_generic(&x1, &x2, reset);
+      s = gold_generic(&x1, &x2, reset);
       reset = 0;
       if (i)
         out++;
@@ -70,7 +71,7 @@ void nr_pssch_codeword_scrambling_sci_2layer(uint32_t *in,
   for (int i=0; i<size; i+=4) {
     b_idx = i&0x1f;
     if (b_idx==0) {
-      s = lte_gold_generic(&x1, &x2, reset);
+      s = gold_generic(&x1, &x2, reset);
       reset = 0;
       if (i)
         out++;

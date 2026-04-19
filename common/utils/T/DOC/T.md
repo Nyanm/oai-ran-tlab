@@ -14,6 +14,7 @@ It is made of two main parts:
 
 * [Basic usage](./T/basic.md)
 * [Record](./T/record.md)
+* [Record to ClickHouse](./T/record_db.md)
 * [Replay](./T/replay.md)
 * [Multiple tracers](./T/multi.md)
 * [MAC PDUs and wireshark](./T/wireshark.md)

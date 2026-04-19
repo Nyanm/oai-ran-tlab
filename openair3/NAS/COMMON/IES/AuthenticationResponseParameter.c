@@ -32,7 +32,7 @@ int decode_authentication_response_parameter(AuthenticationResponseParameter *au
     decoded += decode_result;
 
 #if defined (NAS_DEBUG)
-  dump_authentication_response_parameter_xml(authenticationresponseparameter, iei);
+  dump_authentication_response_parameter_xml(authenticationresponseparameter);
 #endif
   return decoded;
 }
@@ -47,7 +47,7 @@ int encode_authentication_response_parameter(const AuthenticationResponseParamet
   /* Checking IEI and pointer */
   CHECK_PDU_POINTER_AND_LENGTH_ENCODER(buffer, AUTHENTICATION_RESPONSE_PARAMETER_MINIMUM_LENGTH, len);
 #if defined (NAS_DEBUG)
-  dump_authentication_response_parameter_xml(authenticationresponseparameter, iei);
+  dump_authentication_response_parameter_xml(authenticationresponseparameter);
 #endif
 
   if (iei > 0) {
@@ -67,7 +67,7 @@ int encode_authentication_response_parameter(const AuthenticationResponseParamet
   return encoded;
 }
 
-void dump_authentication_response_parameter_xml(AuthenticationResponseParameter *authenticationresponseparameter, uint8_t iei)
+void dump_authentication_response_parameter_xml(AuthenticationResponseParameter *authenticationresponseparameter)
 {
   printf("<Authentication Response Parameter>\n");
   dump_octet_string_xml(&authenticationresponseparameter->res);

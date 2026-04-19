@@ -3,7 +3,6 @@
  */
 
 #include <stdio.h>
-//#include "PHY/defs_eNB.h"
 #include "PHY/defs_RU.h"
 #include "PHY/TOOLS/alaw_lut.h"
 //#include "PHY/phy_extern.h"

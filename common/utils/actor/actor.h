@@ -4,7 +4,7 @@
 
 #ifndef ACTOR_H
 #define ACTOR_H
-#include "notified_fifo.h"
+#include "common/utils/threadPool/notified_fifo.h"
 
 #define INIT_ACTOR(ptr, name, core_affinity) init_actor((Actor_t *)ptr, name, core_affinity);
 

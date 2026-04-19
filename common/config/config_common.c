@@ -133,7 +133,7 @@ int config_setdefault_int64(configmodule_interface_t *cfg, paramdef_t *cfgoption
   return status;
 }
 
-int config_setdefault_intlist(configmodule_interface_t *cfg, paramdef_t *cfgoptions, const char *prefix)
+int config_setdefault_intlist(configmodule_interface_t *cfg, paramdef_t *cfgoptions)
 {
   int status = 0;
 
@@ -193,7 +193,7 @@ int config_setdefault_stringlist(configmodule_interface_t *cfg, paramdef_t *cfgo
   return status;
 }
 
-int config_setdefault_double(configmodule_interface_t *cfg, paramdef_t *cfgoptions, const char *prefix)
+int config_setdefault_double(configmodule_interface_t *cfg, paramdef_t *cfgoptions)
 {
   int status = 0;
   config_check_valptr(cfg, cfgoptions, sizeof(*cfgoptions->dblptr), 1);
@@ -229,7 +229,7 @@ int config_assign_ipv4addr(configmodule_interface_t *cfg, paramdef_t *cfgoptions
   return 0;
 }
 
-int config_setdefault_ipv4addr(configmodule_interface_t *cfg, paramdef_t *cfgoptions, const char *prefix)
+int config_setdefault_ipv4addr(configmodule_interface_t *cfg, paramdef_t *cfgoptions)
 {
   int status = 0;
 
@@ -333,13 +333,13 @@ int config_common_getdefault(configmodule_interface_t *cfg, paramdef_t *cfgoptio
 
     case TYPE_UINTARRAY:
     case TYPE_INTARRAY:
-      return config_setdefault_intlist(cfg, cfgoption, prefix);
+      return config_setdefault_intlist(cfg, cfgoption);
 
     case TYPE_DOUBLE:
-      return config_setdefault_double(cfg, cfgoption, prefix);
+      return config_setdefault_double(cfg, cfgoption);
 
     case TYPE_IPV4ADDR:
-      return config_setdefault_ipv4addr(cfg, cfgoption, prefix);
+      return config_setdefault_ipv4addr(cfg, cfgoption);
 
     case TYPE_LIST:
       // No default value for list type

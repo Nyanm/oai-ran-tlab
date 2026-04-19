@@ -29,6 +29,7 @@ static void f1_reset_cu_initiated_f1ap(sctp_assoc_t assoc_id, const f1ap_reset_t
 
 static void f1_reset_acknowledge_du_initiated_f1ap(sctp_assoc_t assoc_id, const f1ap_reset_ack_t *ack)
 {
+  UNUSED(assoc_id);
   (void)ack;
   AssertFatal(false, "%s() not implemented yet\n", __func__);
 }

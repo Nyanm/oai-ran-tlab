@@ -29,37 +29,27 @@
 
 void nr_fill_srs(PHY_VARS_gNB *gNB, frame_t frame, slot_t slot, nfapi_nr_srs_pdu_t *srs_pdu)
 {
-  bool found = false;
-  for (int i = 0; i < gNB->max_nb_srs; i++) {
-    NR_gNB_SRS_t *srs = &gNB->srs[i];
-    if (srs->active == false) {
-      found = true;
-      srs->frame = frame;
-      srs->slot = slot;
-      srs->active = true;
-      srs->beam_nb = 0;
-      if (gNB->common_vars.beam_id) {
-        const uint8_t l0 = gNB->frame_parms.symbols_per_slot - 1 - srs_pdu->time_start_position;
-        int bitmap = SL_to_bitmap(l0, 1 << srs_pdu->num_symbols);
-        int fapi_beam_idx = srs_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
-        srs->beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                             fapi_beam_idx,
-                                             &gNB->common_vars,
-                                             slot,
-                                             gNB->frame_parms.symbols_per_slot,
-                                             bitmap);
-      }
-      memcpy((void *)&srs->srs_pdu, (void *)srs_pdu, sizeof(nfapi_nr_srs_pdu_t));
-      break;
-    }
+  NR_gNB_SRS_job_t srs = {.frame = frame, .slot = slot, .srs_pdu = *srs_pdu};
+  if (gNB->common_vars.beam_id) {
+    const uint8_t l0 = gNB->frame_parms.symbols_per_slot - 1 - srs_pdu->time_start_position;
+    int bitmap = SL_to_bitmap(l0, 1 << srs_pdu->num_symbols);
+    int fapi_beam_idx = srs_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
+    srs.beam_nb = beam_index_allocation(gNB->enable_analog_das,
+                                        fapi_beam_idx,
+                                        &gNB->common_vars,
+                                        slot,
+                                        gNB->frame_parms.symbols_per_slot,
+                                        bitmap);
   }
-  AssertFatal(found, "SRS list is full\n");
+  bool found = spsc_q_put(&gNB->srs_queue, &srs, sizeof(srs));
+  if (!found)
+    LOG_W(NR_PHY, "SRS list is full: dropping SRS UE %04x\n", srs_pdu->rnti);
 }
 
 int nr_get_srs_signal(PHY_VARS_gNB *gNB,
                       c16_t **rxdataF,
                       slot_t slot,
-                      nfapi_nr_srs_pdu_t *srs_pdu,
+                      const nfapi_nr_srs_pdu_t *srs_pdu,
                       nr_srs_info_t *nr_srs_info,
                       c16_t srs_received_signal[][gNB->frame_parms.ofdm_symbol_size * (1 << srs_pdu->num_symbols)],
                       c16_t srs_received_noise[][gNB->frame_parms.ofdm_symbol_size * (1 << srs_pdu->num_symbols)])

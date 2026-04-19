@@ -169,7 +169,7 @@ void gNB_dlsch_ulsch_scheduler(module_id_t module_idP, frame_t frame, slot_t slo
   }
 
   nr_measgap_scheduling(gNB, frame, slot);
-  nr_mac_update_timers(module_idP, frame, slot);
+  nr_mac_update_timers(module_idP);
 
   if (wait_prach_completed || get_softmodem_params()->phy_test) {
     // This schedules MIB

@@ -2,8 +2,9 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
+#include "openair1/PHY/gold.h"
 #include "sl_refsig_defs.h"
-#include "openair1/PHY/LTE_TRANSPORT/transport_proto.h" // for lte_gold_generic()
+#include "openair1/PHY/LTE_TRANSPORT/transport_proto.h" 
 #include "common/utils/LOG/log.h"
 
 void nr_init_pscch_dmrs(NR_DL_FRAME_PARMS *fp, uint32_t ***nr_gold, uint16_t nid)
@@ -19,7 +20,7 @@ void nr_init_pscch_dmrs(NR_DL_FRAME_PARMS *fp, uint32_t ***nr_gold, uint16_t nid
       x2tmp0 <<= 17;
       x2 = (x2tmp0 + (nid << 1)) % (1U << 31);  //cinit
       for (n=0; n<pdcch_dmrs_init_length; n++) {
-        nr_gold[ns][l][n] = lte_gold_generic(&x1, &x2, reset);
+        nr_gold[ns][l][n] = gold_generic(&x1, &x2, reset);
         reset = 0;
       }
     }
@@ -39,7 +40,7 @@ void nr_init_pssch_dmrs_oneshot(NR_DL_FRAME_PARMS *fp,
   x2 = ((1U << 17) * (fp->symbols_per_slot*slot + symb + 1) * ((N_id << 1) + 1) + (N_id << 1));
   LOG_D(PHY,"PSSCH DMRS slot %d, symb %d x2 %x\n", slot, symb, x2);
   for (n=0; n<pusch_dmrs_init_length; n++) {
-    pssch_dmrs[n] = lte_gold_generic(&x1, &x2, reset);
+    pssch_dmrs[n] = gold_generic(&x1, &x2, reset);
     reset = 0;
   }
 }
@@ -59,7 +60,7 @@ void sl_init_psbch_dmrs_gold_sequences(PHY_VARS_NR_UE *UE)
 #endif
 
     for (uint8_t n = 0; n < SL_NR_NUM_PSBCH_DMRS_RE_DWORD; n++) {
-      UE->SL_UE_PHY_PARAMS.init_params.psbch_dmrs_gold_sequences[slss_id][n] = lte_gold_generic(&x1, &x2, reset);
+      UE->SL_UE_PHY_PARAMS.init_params.psbch_dmrs_gold_sequences[slss_id][n] = gold_generic(&x1, &x2, reset);
       reset = 0;
 
 #ifdef SL_DEBUG_INIT_DATA

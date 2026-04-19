@@ -16,16 +16,12 @@
 #include "UTIL/OPT/opt.h"
 
 #include "openair2/LAYER2/nr_rlc/nr_rlc_oai_api.h"
-#include "F1AP_CauseRadioNetwork.h"
-
 #include "intertask_interface.h"
 #include "openair2/F1AP/f1ap_ids.h"
 #include "F1AP_CauseRadioNetwork.h"
 
 #include "T.h"
-
 #include "uper_encoder.h"
-#include "uper_decoder.h"
 
 #include "SIMULATION/TOOLS/sim.h" // for taus
 
@@ -95,11 +91,6 @@ static const uint16_t cqi_table3[16][2] = {{0, 0},
                                            {6, 5670},
                                            {6, 6660},
                                            {6, 7720}};
-
-static void determine_aggregation_level_search_order(int agg_level_search_order[NUM_PDCCH_AGG_LEVELS],
-                                                     float pdcch_cl_adjust);
-
-static int nr_mac_interrupt_ue_transmission(gNB_MAC_INST *mac, NR_UE_info_t *UE, int slots, int slots_per_frame);
 
 int get_ssbidx_from_beam(gNB_MAC_INST *mac, int beam_idx)
 {
@@ -570,6 +561,21 @@ int find_pdcch_candidate(const gNB_MAC_INST *mac,
   return -1;
 }
 
+/// @brief Orders PDCCH aggregation levels so that we first check desired aggregation level according to
+///        pdcch_cl_adjust
+/// @param agg_level_search_order in/out 5-element array of aggregation levels from 0 to 4
+/// @param pdcch_cl_adjust value from 0 to 1 indication channel impariments (0 - good channel, 1 - bad channel)
+static void determine_aggregation_level_search_order(int agg_level_search_order[NUM_PDCCH_AGG_LEVELS], float pdcch_cl_adjust)
+{
+  int desired_agg_level_index = round(4 * pdcch_cl_adjust);
+  int agg_level_search_index = 0;
+  for (int i = desired_agg_level_index; i < NUM_PDCCH_AGG_LEVELS; i++) {
+    agg_level_search_order[agg_level_search_index++] = i;
+  }
+  for (int i = desired_agg_level_index - 1; i >= 0; i--) {
+    agg_level_search_order[agg_level_search_index++] = i;
+  }
+}
 
 int get_cce_index(const gNB_MAC_INST *nrmac,
                   const int CC_id,
@@ -1287,13 +1293,6 @@ const int default_pucch_numbsymb[]  = {2,2,2,2,4,4,4,4,10,10,10,10,14,14,14,14,1
 const int default_pucch_prboffset[] = {0,0,3,0,0,2,4,0,0,2,4,0,0,2,4,-1};
 const int default_pucch_csset[]     = {2,3,3,2,4,4,4,2,4,4,4,2,4,4,4,4};
 
-int nr_get_default_pucch_res(int pucch_ResourceCommon) {
-
-  AssertFatal(pucch_ResourceCommon>=0 && pucch_ResourceCommon < 16, "illegal pucch_ResourceCommon %d\n",pucch_ResourceCommon);
-
-  return(default_pucch_csset[pucch_ResourceCommon]);
-}
-
 void nr_configure_pdcch(nfapi_nr_dl_tti_pdcch_pdu_rel15_t *pdcch_pdu, NR_ControlResourceSet_t *coreset, NR_sched_pdcch_t *pdcch)
 {
   pdcch_pdu->BWPSize = pdcch->BWPSize;
@@ -1543,13 +1542,17 @@ void nr_configure_pucch(nfapi_nr_pucch_pdu_t *pucch_pdu,
     pucch_pdu->freq_hop_flag = 1;
     pucch_pdu->second_hop_prb = second_hop_prb;
     pucch_pdu->format_type = default_pucch_fmt[rsetindex];
-    pucch_pdu->initial_cyclic_shift = r_pucch%default_pucch_csset[rsetindex];
-    if (rsetindex==3||rsetindex==7||rsetindex==11) pucch_pdu->initial_cyclic_shift*=6;
-    else if (rsetindex==1||rsetindex==2) pucch_pdu->initial_cyclic_shift*=4;
-    else pucch_pdu->initial_cyclic_shift*=3;
+    int initial_cyclic_shift_idx = (r_pucch % 8) % default_pucch_csset[rsetindex];
+    if (rsetindex == 3 || rsetindex == 7 || rsetindex == 11)
+      pucch_pdu->initial_cyclic_shift = initial_cyclic_shift_idx * 6;
+    else if (rsetindex == 1 || rsetindex == 2)
+      pucch_pdu->initial_cyclic_shift = initial_cyclic_shift_idx * 4;
+    else
+      pucch_pdu->initial_cyclic_shift = initial_cyclic_shift_idx * 3;
     pucch_pdu->nr_of_symbols = nr_of_symb;
     pucch_pdu->start_symbol_index = start_symb;
-    if (pucch_pdu->format_type == 1) pucch_pdu->time_domain_occ_idx = 0; // check this!!
+    if (pucch_pdu->format_type == 1)
+      pucch_pdu->time_domain_occ_idx = 0; // check this!!
     pucch_pdu->sr_flag = O_sr;
     pucch_pdu->prb_size=1;
   }
@@ -1567,21 +1570,14 @@ void set_r_pucch_parms(int rsetindex,
                        int *prb_start,
                        int *second_hop_prb,
                        int *nr_of_symbols,
-                       int *start_symbol_index) {
-
+                       int *start_symbol_index)
+{
   // procedure described in 38.213 section 9.2.1
-
-  int prboffset = r_pucch/default_pucch_csset[rsetindex];
-  int prboffsetm8 = (r_pucch-8)/default_pucch_csset[rsetindex];
-
-  *prb_start = (r_pucch>>3)==0 ?
-              default_pucch_prboffset[rsetindex] + prboffset:
-              bwp_size-1-default_pucch_prboffset[rsetindex]-prboffsetm8;
-
-  *second_hop_prb = (r_pucch>>3)==0?
-                   bwp_size-1-default_pucch_prboffset[rsetindex]-prboffset:
-                   default_pucch_prboffset[rsetindex] + prboffsetm8;
-
+  int prboffset = (r_pucch % 8) / default_pucch_csset[rsetindex];
+  int offset1 = default_pucch_prboffset[rsetindex] + prboffset;
+  int offset2 = bwp_size - 1 - default_pucch_prboffset[rsetindex] - prboffset;
+  *prb_start = (r_pucch >> 3) == 0 ? offset1 : offset2;
+  *second_hop_prb = (r_pucch >> 3) == 0 ? offset2 : offset1;
   *nr_of_symbols = default_pucch_numbsymb[rsetindex];
   *start_symbol_index = default_pucch_firstsymb[rsetindex];
 }
@@ -2509,7 +2505,7 @@ NR_UE_info_t *find_ra_UE(NR_UEs_t *UEs, rnti_t rntiP)
   return NULL;
 }
 
-void delete_nr_ue_data(NR_UE_info_t *UE, NR_COMMON_channels_t *ccPtr, uid_allocator_t *uia)
+void delete_nr_ue_data(NR_UE_info_t *UE, uid_allocator_t *uia)
 {
   ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, UE->CellGroup);
   ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, UE->reconfigCellGroup);
@@ -2553,7 +2549,7 @@ void free_transportBlock_buffer(byte_array_t *tb)
   free_byte_array(*tb);
 }
 
-void set_max_fb_time(NR_UE_UL_BWP_t *UL_BWP, const NR_UE_DL_BWP_t *DL_BWP)
+static void set_max_fb_time(NR_UE_UL_BWP_t *UL_BWP)
 {
   UL_BWP->max_fb_time = 8; // default value
   // take the maximum in dl_DataToUL_ACK list
@@ -2955,7 +2951,7 @@ void configure_UE_BWP(gNB_MAC_INST *nr_mac,
   create_dl_harq_list(sched_ctrl, sc_info, format_00_10);
   create_ul_harq_list(sched_ctrl, sc_info, format_00_10);
 
-  set_max_fb_time(UL_BWP, DL_BWP);
+  set_max_fb_time(UL_BWP);
   set_sched_pucch_list(sched_ctrl, UL_BWP, scc, &nr_mac->frame_structure);
 
   // Set MCS tables
@@ -3073,7 +3069,7 @@ bool add_connected_nr_ue(gNB_MAC_INST *nr_mac, NR_UE_info_t *UE)
   bool success = add_UE_to_list(MAX_MOBILES_PER_GNB, UE_info->connected_ue_list, UE);
   if (!success) {
     LOG_E(NR_MAC,"Try to add UE %04x but the list is full\n", UE->rnti);
-    delete_nr_ue_data(UE, NULL, &UE_info->uid_allocator);
+    delete_nr_ue_data(UE, &UE_info->uid_allocator);
     return false;
   }
 
@@ -3140,7 +3136,7 @@ void mac_remove_nr_ue(gNB_MAC_INST *nr_mac, rnti_t rnti)
   NR_UEs_t *UE_info = &nr_mac->UE_info;
   NR_UE_info_t *UE = remove_UE_from_list(MAX_MOBILES_PER_GNB + 1, UE_info->connected_ue_list, rnti);
   if (UE)
-    delete_nr_ue_data(UE, nr_mac->common_channels, &UE_info->uid_allocator);
+    delete_nr_ue_data(UE, &UE_info->uid_allocator);
   else
     nr_release_ra_UE(nr_mac, rnti);
 }
@@ -3458,6 +3454,25 @@ void nr_csirs_scheduling(int Mod_idP, frame_t frame, slot_t slot, nfapi_nr_dl_tt
   }
 }
 
+static void nr_mac_interrupt_ue_transmission(gNB_MAC_INST *mac, NR_UE_info_t *UE, int slots, int slots_per_frame)
+{
+  DevAssert(mac != NULL);
+  DevAssert(UE != NULL);
+  NR_SCHED_ENSURE_LOCKED(&mac->sched_lock);
+
+  nr_timer_setup(&UE->UE_sched_ctrl.transm_interrupt, slots, 1);
+  nr_timer_start(&UE->UE_sched_ctrl.transm_interrupt);
+
+  // it might happen that timing advance command should be sent during the UE inactivity time.
+  // To prevent this, delay next TA command just after the UE inactivity time.
+  const int inactive_frames = slots / slots_per_frame + 1;
+  if ((UE->UE_sched_ctrl.ta_frame - mac->frame + MAX_FRAME_NUMBER) % MAX_FRAME_NUMBER < inactive_frames)
+    UE->UE_sched_ctrl.ta_frame = (mac->frame + inactive_frames) % MAX_FRAME_NUMBER;
+
+  LOG_D(NR_MAC, "UE %04x: Interrupt UE transmission (%d slots)\n", UE->rnti, slots);
+}
+
+
 void nr_measgap_scheduling(gNB_MAC_INST *nr_mac, frame_t frame, sub_frame_t slot)
 {
   NR_SCHED_ENSURE_LOCKED(&nr_mac->sched_lock);
@@ -3527,25 +3542,6 @@ int nr_mac_get_reconfig_delay_slots(NR_SubcarrierSpacing_t scs)
   return (delay_ms << scs) + sl_ahead;
 }
 
-static int nr_mac_interrupt_ue_transmission(gNB_MAC_INST *mac, NR_UE_info_t *UE, int slots, int slots_per_frame)
-{
-  DevAssert(mac != NULL);
-  DevAssert(UE != NULL);
-  NR_SCHED_ENSURE_LOCKED(&mac->sched_lock);
-
-  nr_timer_setup(&UE->UE_sched_ctrl.transm_interrupt, slots, 1);
-  nr_timer_start(&UE->UE_sched_ctrl.transm_interrupt);
-
-  // it might happen that timing advance command should be sent during the UE inactivity time.
-  // To prevent this, delay next TA command just after the UE inactivity time.
-  const int inactive_frames = slots / slots_per_frame + 1;
-  if ((UE->UE_sched_ctrl.ta_frame - mac->frame + MAX_FRAME_NUMBER) % MAX_FRAME_NUMBER < inactive_frames)
-    UE->UE_sched_ctrl.ta_frame = (mac->frame + inactive_frames) % MAX_FRAME_NUMBER;
-
-  LOG_D(NR_MAC, "UE %04x: Interrupt UE transmission (%d slots)\n", UE->rnti, slots);
-  return 0;
-}
-
 static void nr_mac_ue_transmission_timeout(gNB_MAC_INST *mac, NR_UE_info_t *UE, int slots)
 {
   DevAssert(mac != NULL);
@@ -3606,7 +3602,7 @@ void beam_switching_procedure(gNB_MAC_INST *mac, NR_UE_info_t *UE, int new_beam_
   nr_mac_trigger_reconfiguration(mac, UE, -1, true);
 }
 
-void nr_mac_update_timers(module_id_t module_id, frame_t frame, slot_t slot)
+void nr_mac_update_timers(module_id_t module_id)
 {
   gNB_MAC_INST *mac = RC.nrmac[module_id];
 
@@ -3617,7 +3613,7 @@ void nr_mac_update_timers(module_id_t module_id, frame_t frame, slot_t slot)
   UE_iterator(UE_info->connected_ue_list, UE) {
     NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
 
-    if (nr_mac_check_release(sched_ctrl, UE->rnti)) {
+    if (nr_mac_check_release(sched_ctrl)) {
       // trigger release first as nr_mac_release_ue() invalidates UE ptr
       nr_mac_trigger_release_complete(mac, UE->rnti);
       nr_mac_release_ue(mac, UE->rnti);
@@ -3886,7 +3882,7 @@ void nr_mac_trigger_release_timer(NR_UE_sched_ctrl_t *sched_ctrl, NR_SubcarrierS
   sched_ctrl->release_timer = 100 << subcarrier_spacing;
 }
 
-bool nr_mac_check_release(NR_UE_sched_ctrl_t *sched_ctrl, int rnti)
+bool nr_mac_check_release(NR_UE_sched_ctrl_t *sched_ctrl)
 {
   if (sched_ctrl->release_timer == 0)
     return false;
@@ -4130,22 +4126,6 @@ bool nr_mac_get_new_rnti(NR_UEs_t *UEs, rnti_t *rnti)
   return loop < 100; // nothing found: loop count 100
 }
 
-/// @brief Orders PDCCH aggregation levels so that we first check desired aggregation level according to
-///        pdcch_cl_adjust
-/// @param agg_level_search_order in/out 5-element array of aggregation levels from 0 to 4
-/// @param pdcch_cl_adjust value from 0 to 1 indication channel impariments (0 - good channel, 1 - bad channel)
-static void determine_aggregation_level_search_order(int agg_level_search_order[NUM_PDCCH_AGG_LEVELS], float pdcch_cl_adjust)
-{
-  int desired_agg_level_index = round(4 * pdcch_cl_adjust);
-  int agg_level_search_index = 0;
-  for (int i = desired_agg_level_index; i < NUM_PDCCH_AGG_LEVELS; i++) {
-    agg_level_search_order[agg_level_search_index++] = i;
-  }
-  for (int i = desired_agg_level_index - 1; i >= 0; i--) {
-    agg_level_search_order[agg_level_search_index++] = i;
-  }
-}
-
 /// @brief Update PDCCH closed loop adjust for UE depending on detection of feedback.
 /// @param sched_ctrl UE scheduling control info
 /// @param feedback_not_detected Whether feedback (PUSCH or HARQ) was detected
@@ -4208,6 +4188,21 @@ void nr_mac_pc_snr(nr_power_control_t *pc, int snrx10, int rssi)
   // this will ensure that on TPC change, avg_snr approximates real SNR as
   // fast as tpc_in_flight returns to 0.
   pc->tpc_in_flight = PC_AVG_CNST * pc->tpc_in_flight; // + (1 - PC_AVG_CNST) * 0.0f
+}
+
+/**
+ * @brief Enter new SNR and RSSI value for the latest UL transmission as new
+ * fixed averages. Reset "TPC in flight" to zero.
+ *
+ * @param pc the power control loop
+ * @param snrx10 the current SNR measurement multiplied by 10
+ * @param rssi the current RSSI measurement
+ */
+void nr_mac_pc_reset_snr(nr_power_control_t *pc, int snrx10, int rssi)
+{
+  pc->avg_snr = 0.1f * snrx10;
+  pc->avg_rssi = rssi;
+  pc->tpc_in_flight = 0.0f;
 }
 
 /**

@@ -3552,6 +3552,7 @@ bool eq_positioning_information_req(const f1ap_positioning_information_req_t *a,
 void free_positioning_information_req(f1ap_positioning_information_req_t *msg)
 {
   // nothing to free
+  UNUSED(msg);
 }
 
 /**
@@ -3839,6 +3840,7 @@ bool eq_positioning_information_failure(const f1ap_positioning_information_failu
 void free_positioning_information_failure(f1ap_positioning_information_failure_t *msg)
 {
   // nothing to free
+  UNUSED(msg);
 }
 
 /**
@@ -4130,6 +4132,7 @@ bool eq_positioning_activation_resp(const f1ap_positioning_activation_resp_t *a,
 void free_positioning_activation_resp(f1ap_positioning_activation_resp_t *msg)
 {
   // nothing to free
+  UNUSED(msg);
 }
 
 /**
@@ -4258,6 +4261,7 @@ bool eq_positioning_activation_failure(const f1ap_positioning_activation_failure
 void free_positioning_activation_failure(f1ap_positioning_activation_failure_t *msg)
 {
   // nothing to free
+  UNUSED(msg);
 }
 
 /**
@@ -4401,6 +4405,7 @@ bool eq_positioning_deactivation(const f1ap_positioning_deactivation_t *a, const
 void free_positioning_deactivation(f1ap_positioning_deactivation_t *msg)
 {
   // nothing to free
+  UNUSED(msg);
 }
 
 /**
@@ -5063,6 +5068,7 @@ bool eq_trp_information_failure(const f1ap_trp_information_failure_t *a, const f
 void free_trp_information_failure(f1ap_trp_information_failure_t *msg)
 {
   // nothing to free
+  UNUSED(msg);
 }
 
 /**
@@ -5761,6 +5767,7 @@ bool eq_positioning_measurement_failure(const f1ap_positioning_measurement_failu
 void free_positioning_measurement_failure(f1ap_positioning_measurement_failure_t *msg)
 {
   // nothing to free
+  UNUSED(msg);
 }
 
 /**
@@ -6084,6 +6091,7 @@ bool eq_positioning_measurement_abort(const f1ap_positioning_measurement_abort_t
 void free_positioning_measurement_abort(f1ap_positioning_measurement_abort_t *msg)
 {
   // nothing to free
+  UNUSED(msg);
 }
 
 /**
@@ -6230,6 +6238,7 @@ bool eq_positioning_measurement_failure_indication(const f1ap_positioning_measur
 void free_positioning_measurement_failure_indication(f1ap_positioning_measurement_failure_indication_t *msg)
 {
   // nothing to free
+  UNUSED(msg);
 }
 
 /**

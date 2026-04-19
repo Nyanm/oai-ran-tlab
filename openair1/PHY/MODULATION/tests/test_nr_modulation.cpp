@@ -15,7 +15,6 @@ extern "C" {
 #endif
 
 #include "openair1/PHY/TOOLS/tools_defs.h" // c16_t
-#include "nfapi/open-nFAPI/nfapi/public_inc/nfapi_nr_interface_scf.h" // nfapi_nr_pm_pdu_t
 #include "nfapi/open-nFAPI/nfapi/public_inc/fapi_nr_ue_interface.h" // fapi_nr_dl_config_dci_dl_pdu_rel15_t
 
 //#include "openair1/PHY/MODULATION/nr_modulation.h" // nr_layer_precoder_simd_[cm, simd]
@@ -25,7 +24,7 @@ c16_t nr_layer_precoder_cm(int n_layers,
                            int symbol_size,
                            c16_t (*dataF_in)[/*symbol_size*/], // c16_t dataF_in[n_layers][symbol_size]
                            int ant,
-                           nfapi_nr_pm_pdu_t *pmi_pdu,
+                           c16_t weights[NR_MAX_NB_LAYERS][NR_MAX_CSI_PORTS],
                            int offset);
 
 // Forward declare the function but hide the Variable-Length Array (VLA) feature from C not available in C++
@@ -33,7 +32,7 @@ void nr_layer_precoder_simd(int n_layers,
                             int symbol_size,
                             const c16_t (*dataF_in)[/*symbol_size*/], // c16_t dataF_in[n_layers][symbol_size]
                             int ant,
-                            const nfapi_nr_pm_pdu_t *pmi_pdu,
+                            c16_t weights[NR_MAX_NB_LAYERS][NR_MAX_CSI_PORTS],
                             int offset,
                             int re_cnt,
                             c16_t *dataF_out);
@@ -65,15 +64,15 @@ TEST(NrLayerPrecoderTest, Basic)
   c16_t(*dataF_in)[symbol_size] = reinterpret_cast<c16_t(*)[symbol_size]>(buffer_in.data());
   c16_t(*dataF_out)[symbol_size] = reinterpret_cast<c16_t(*)[symbol_size]>(buffer_out.data());
 
-  // Create and populate the pmi_pdu structure
-  nfapi_nr_pm_pdu_t pmi_pdu = {0};
+  // Create and populate the weights
+  c16_t weights[NR_MAX_NB_LAYERS][NR_MAX_CSI_PORTS];
   for (int layer = 0; layer < n_layers; ++layer) {
-    pmi_pdu.weights[layer][ant] = (c16_t){-SHRT_MAX, 0};
+    weights[layer][ant] = (c16_t){-SHRT_MAX, 0};
   }
 
   // Call the C function
   for (int symbol = 0; symbol < re_cnt; symbol++)
-    dataF_out[ant][symbol] = nr_layer_precoder_cm(n_layers, symbol_size, dataF_in, ant, &pmi_pdu, symbol);
+    dataF_out[ant][symbol] = nr_layer_precoder_cm(n_layers, symbol_size, dataF_in, ant, weights, symbol);
 
   // You can calculate the expected value manually or test rough correctness
   for (int symbol = 0; symbol < re_cnt; symbol++) {
@@ -110,14 +109,14 @@ TEST(NrLayerPrecoderTest, SIMD)
   c16_t(*dataF_in)[symbol_size] = reinterpret_cast<c16_t(*)[symbol_size]>(buffer_in.data());
   c16_t(*dataF_out)[symbol_size] = reinterpret_cast<c16_t(*)[symbol_size]>(buffer_out.data());
 
-  // Create and populate the pmi_pdu structure
-  nfapi_nr_pm_pdu_t pmi_pdu = {0};
+  // Create and populate the weights
+  c16_t weights[NR_MAX_NB_LAYERS][NR_MAX_CSI_PORTS];
   for (int layer = 0; layer < n_layers; ++layer) {
-    pmi_pdu.weights[layer][ant] = (c16_t){-SHRT_MAX, 0};
+    weights[layer][ant] = (c16_t){-SHRT_MAX, 0};
   }
 
   // Call the C function
-  nr_layer_precoder_simd(n_layers, symbol_size, dataF_in, ant, &pmi_pdu, 0, re_cnt, dataF_out[ant]);
+  nr_layer_precoder_simd(n_layers, symbol_size, dataF_in, ant, weights, 0, re_cnt, dataF_out[ant]);
 
   // You can calculate the expected value manually or test rough correctness
   for (int symbol = 0; symbol < re_cnt; symbol++) {
@@ -156,15 +155,14 @@ TEST(NrLayerPrecoderTest, Compare_CM_SIMD)
   c16_t(*dataF_out_cm)[symbol_size] = reinterpret_cast<c16_t(*)[symbol_size]>(buffer_out_cm.data());
   c16_t(*dataF_out_simd)[symbol_size] = reinterpret_cast<c16_t(*)[symbol_size]>(buffer_out_simd.data());
 
-  // Create and populate the pmi_pdu structure
-  nfapi_nr_pm_pdu_t pmi_pdu = {0};
-  pmi_pdu.pm_idx = 4;
+  // Create and populate the weights
+  c16_t weights[NR_MAX_NB_LAYERS][NR_MAX_CSI_PORTS];
   for (int layer = 0; layer < n_layers; ++layer) {
     // Could not use convert_precoder_weight() as complex.h could not be used in googletest
     // Use the logic in convert_precoder_weight()
     // precoder [−1,−j]
-    pmi_pdu.weights[layer][0] = (c16_t){-SHRT_MAX, 0};
-    pmi_pdu.weights[layer][1] = (c16_t){0, -SHRT_MAX};
+    weights[layer][0] = (c16_t){-SHRT_MAX, 0};
+    weights[layer][1] = (c16_t){0, -SHRT_MAX};
   }
 
   // Get the results for all the antenna 
@@ -172,10 +170,10 @@ TEST(NrLayerPrecoderTest, Compare_CM_SIMD)
 
     // Call the C function
     for (int symbol = 0; symbol < re_cnt; symbol++)
-      dataF_out_cm[ant][symbol] = nr_layer_precoder_cm(n_layers, symbol_size, dataF_in, ant, &pmi_pdu, symbol);
+      dataF_out_cm[ant][symbol] = nr_layer_precoder_cm(n_layers, symbol_size, dataF_in, ant, weights, symbol);
 
     // Call the C function
-    nr_layer_precoder_simd(n_layers, symbol_size, dataF_in, ant, &pmi_pdu, 0, re_cnt, dataF_out_simd[ant]);
+    nr_layer_precoder_simd(n_layers, symbol_size, dataF_in, ant, weights, 0, re_cnt, dataF_out_simd[ant]);
 
     // Compare the result from both C function
     for (int symbol = 0; symbol < re_cnt; symbol++) {

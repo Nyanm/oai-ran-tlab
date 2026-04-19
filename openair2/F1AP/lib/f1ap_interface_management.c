@@ -627,10 +627,10 @@ static void encode_cells_to_activate(const served_cells_to_activate_t *cell, F1A
     F1AP_GNB_CUSystemInformation_t *gNB_CUSystemInformation =
         &cells_to_be_activated_itemExtIEs->extensionValue.choice.GNB_CUSystemInformation;
     const f1ap_sib_msg_t *SI_msg = &cell->SI_msg[n];
-    if (SI_msg->SI_container != NULL) {
+    if (SI_msg->SI_container.buf != NULL) {
       asn1cSequenceAdd(gNB_CUSystemInformation->sibtypetobeupdatedlist.list, F1AP_SibtypetobeupdatedListItem_t, sib_item);
       sib_item->sIBtype = SI_msg->SI_type;
-      OCTET_STRING_fromBuf(&sib_item->sIBmessage, (const char *)SI_msg->SI_container, SI_msg->SI_container_length);
+      OCTET_STRING_fromBuf(&sib_item->sIBmessage, (const char *)SI_msg->SI_container.buf, SI_msg->SI_container.len);
     }
   }
 }
@@ -670,7 +670,7 @@ static bool decode_cells_to_activate(served_cells_to_activate_t *out, const F1AP
             F1AP_SibtypetobeupdatedListItem_t *sib_item = gNB_CUSystemInformation->sibtypetobeupdatedlist.list.array[s];
             /* SI container */
             f1ap_sib_msg_t *SI_msg = &out->SI_msg[s];
-            SI_msg->SI_container = cp_octet_string(&sib_item->sIBmessage, &SI_msg->SI_container_length);
+            SI_msg->SI_container.buf = cp_octet_string(&sib_item->sIBmessage, (int *)&SI_msg->SI_container.len);
             /* SIB type */
             SI_msg->SI_type = sib_item->sIBtype;
           }
@@ -1163,8 +1163,8 @@ bool eq_f1ap_setup_response(const f1ap_setup_resp_t *a, const f1ap_setup_resp_t 
       for (int j = 0; j < b->cells_to_activate[i].num_SI; j++) {
         const f1ap_sib_msg_t *a_SI_msg = &a->cells_to_activate[i].SI_msg[j];
         const f1ap_sib_msg_t *b_SI_msg = &b->cells_to_activate[i].SI_msg[j];
-        _EQ_CHECK_INT(*a_SI_msg->SI_container, *b_SI_msg->SI_container);
-        _EQ_CHECK_INT(a_SI_msg->SI_container_length, b_SI_msg->SI_container_length);
+        if (!eq_byte_array(&a_SI_msg->SI_container, &b_SI_msg->SI_container))
+          return false;
         _EQ_CHECK_INT(a_SI_msg->SI_type, b_SI_msg->SI_type);
       }
     }
@@ -1201,9 +1201,7 @@ f1ap_setup_resp_t cp_f1ap_setup_response(const f1ap_setup_resp_t *msg)
     for (int j = 0; j < cp_cell->num_SI; j++) {
       f1ap_sib_msg_t *cp_SI_msg = &cp_cell->SI_msg[j];
       const f1ap_sib_msg_t *b_SI_msg = &msg_cell->SI_msg[j];
-      cp_SI_msg->SI_container_length = b_SI_msg->SI_container_length;
-      cp_SI_msg->SI_container = malloc_or_fail(cp_SI_msg->SI_container_length);
-      memcpy(cp_SI_msg->SI_container, b_SI_msg->SI_container, b_SI_msg->SI_container_length);
+      cp_SI_msg->SI_container = copy_byte_array(b_SI_msg->SI_container);
       cp_SI_msg->SI_type = b_SI_msg->SI_type;
     }
   }
@@ -1221,8 +1219,7 @@ void free_f1ap_setup_response(const f1ap_setup_resp_t *msg)
   free(msg->gNB_CU_name);
   for (int i = 0; i < msg->num_cells_to_activate; i++)
     for (int j = 0; j < msg->cells_to_activate[i].num_SI; j++)
-      if (msg->cells_to_activate[i].SI_msg[j].SI_container_length > 0)
-        free(msg->cells_to_activate[i].SI_msg[j].SI_container);
+      free_byte_array(msg->cells_to_activate[i].SI_msg[j].SI_container);
   free(msg->cells_to_activate);
 }
 
@@ -1798,7 +1795,7 @@ void free_f1ap_cu_configuration_update(const f1ap_gnb_cu_configuration_update_t 
 {
   for (int i = 0; i < msg->num_cells_to_activate; i++)
     for (int j = 0; j < msg->cells_to_activate[i].num_SI; j++)
-      free(msg->cells_to_activate[i].SI_msg[j].SI_container);
+      free_byte_array(msg->cells_to_activate[i].SI_msg[j].SI_container);
   free(msg->cells_to_activate);
 }
 
@@ -1819,8 +1816,8 @@ bool eq_f1ap_cu_configuration_update(const f1ap_gnb_cu_configuration_update_t *a
     for (int s = 0; s < a->cells_to_activate[i].num_SI; s++) {
       f1ap_sib_msg_t *a_sib_msg = &a->cells_to_activate[i].SI_msg[s];
       f1ap_sib_msg_t *b_sib_msg = &b->cells_to_activate[i].SI_msg[s];
-      _EQ_CHECK_INT(*a_sib_msg->SI_container, *b_sib_msg->SI_container);
-      _EQ_CHECK_INT(a_sib_msg->SI_container_length, b_sib_msg->SI_container_length);
+      if (!eq_byte_array(&a_sib_msg->SI_container, &b_sib_msg->SI_container))
+        return false;
       _EQ_CHECK_INT(a_sib_msg->SI_type, b_sib_msg->SI_type);
     }
   }
@@ -1842,9 +1839,7 @@ f1ap_gnb_cu_configuration_update_t cp_f1ap_cu_configuration_update(const f1ap_gn
     for (int s = 0; s < cp.cells_to_activate[i].num_SI; s++) {
       cp.cells_to_activate[i].SI_msg[s] = msg->cells_to_activate[i].SI_msg[s];
       f1ap_sib_msg_t *SI_msg = &cp.cells_to_activate[i].SI_msg[s];
-      SI_msg->SI_container = calloc_or_fail(SI_msg->SI_container_length, sizeof(*SI_msg->SI_container));
-      for (int j = 0; j < SI_msg->SI_container_length; j++)
-        SI_msg->SI_container[j] = msg->cells_to_activate[i].SI_msg[s].SI_container[j];
+      SI_msg->SI_container = copy_byte_array(msg->cells_to_activate[i].SI_msg[s].SI_container);
     }
   }
   return cp;
@@ -2153,8 +2148,8 @@ bool eq_f1ap_du_configuration_update_acknowledge(const f1ap_gnb_du_configuration
       return false;
     _EQ_CHECK_INT(a->cells_to_activate[i].num_SI, b->cells_to_activate[i].num_SI);
     for (int s = 0; s < a->cells_to_activate[i].num_SI; s++) {
-      _EQ_CHECK_INT(*a->cells_to_activate[i].SI_msg[s].SI_container, *b->cells_to_activate[i].SI_msg[s].SI_container);
-      _EQ_CHECK_INT(a->cells_to_activate[i].SI_msg[s].SI_container_length, b->cells_to_activate[i].SI_msg[s].SI_container_length);
+      if (!eq_byte_array(&a->cells_to_activate[i].SI_msg[s].SI_container, &b->cells_to_activate[i].SI_msg[s].SI_container))
+        return false;
       _EQ_CHECK_INT(a->cells_to_activate[i].SI_msg[s].SI_type, b->cells_to_activate[i].SI_msg[s].SI_type);
     }
   }
@@ -2180,9 +2175,7 @@ f1ap_gnb_du_configuration_update_acknowledge_t cp_f1ap_du_configuration_update_a
       f1ap_sib_msg_t *cp_sib = &cp.cells_to_activate[i].SI_msg[s];
       const f1ap_sib_msg_t *msg_sib = &msg->cells_to_activate[i].SI_msg[s];
       cp_sib->SI_type = msg_sib->SI_type;
-      cp_sib->SI_container_length = msg_sib->SI_container_length;
-      cp_sib->SI_container = calloc_or_fail(cp_sib->SI_container_length, sizeof(*cp_sib->SI_container));
-      memcpy(cp_sib->SI_container, msg_sib->SI_container, cp_sib->SI_container_length);
+      cp_sib->SI_container = copy_byte_array(msg_sib->SI_container);
     }
   }
   return cp;
@@ -2196,9 +2189,7 @@ void free_f1ap_du_configuration_update_acknowledge(const f1ap_gnb_du_configurati
   // SI_container
   for (int i = 0; i < msg->num_cells_to_activate; i++) {
     for (int j = 0; j < msg->cells_to_activate[i].num_SI; j++) {
-      if (msg->cells_to_activate[i].SI_msg[j].SI_container) {
-        free(msg->cells_to_activate[i].SI_msg[j].SI_container);
-      }
+      free_byte_array(msg->cells_to_activate[i].SI_msg[j].SI_container);
     }
   }
   free(msg->cells_to_activate);

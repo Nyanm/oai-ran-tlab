@@ -53,6 +53,7 @@ static int get_single_ue_id(void)
 */
 int rrc_gNB_trigger_release(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   ue_id_t ue_id = -1;
 
   if (!buf) {
@@ -91,6 +92,8 @@ int rrc_gNB_trigger_release(char *buf, int debug, telnet_printfunc_t prnt)
 */
 int rrc_gNB_trigger_release_all(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
+  UNUSED(buf);
   rrc_gNB_ue_context_t *ue_context_p = NULL;
 
   gNB_RRC_INST *rrc = RC.nrrrc[0];

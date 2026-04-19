@@ -13,16 +13,38 @@
 #include "defs_nr_common.h"
 #include "CODING/nrPolar_tools/nr_polar_pbch_defs.h"
 #include "openair2/NR_PHY_INTERFACE/NR_IF_Module.h"
-#include "PHY/impl_defs_top.h"
 #include "PHY/CODING/nrLDPC_coding/nrLDPC_coding_interface.h"
 #include "PHY/CODING/nrLDPC_extern.h"
 #include "PHY/CODING/nrLDPC_decoder/nrLDPC_types.h"
 #include "nfapi_nr_interface_scf.h"
+#include "common/utils/threadPool/task_ans.h"
+#include "openair1/PHY/defs_RU.h"
+#include "common/utils/ds/spsc_q.h"
 
 #define MAX_NUM_RU_PER_gNB 8
 #define MAX_PUCCH0_NID 8
 #define NR_SRS_IDFT_OVERSAMP_FACTOR 2
 #define NR_SRS_DETECTION_THRESHOLD 10
+
+#define NUMBER_OF_NR_PRACH_MAX 8
+typedef struct {
+  int frame;
+  int slot;
+  int num_slots; // prach duration in slots
+  int beams[NFAPI_MAX_NUM_BG_IF];
+  nfapi_nr_prach_pdu_t pdu;
+  int rootSequenceIndex;
+  int numrootSequenceIndex;
+  int msg1_frequencystart;
+  int mu;
+  int prach_sequence_length;
+  int restricted_set;
+  int numerology_index;
+  int nb_rx;
+  c16_t (*Xu)[839];
+  time_stats_t *rx_prach;
+  c16_t (*prach_buf)[NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX][NR_PRACH_SEQ_LEN_L];
+} prach_item_t;
 
 typedef struct {
   int nb_id;
@@ -111,8 +133,6 @@ typedef struct {
   /// flag used to clear d properly (together with d_to_be_cleared below)
   /// set to true in nr_fill_ulsch() when new_data_indicator is received
   bool harq_to_be_cleared;
-  /// Transport block size (This is A from 38.212 V15.4.0 section 5.1)
-  uint32_t TBS;
   /// Pointer to the payload (38.212 V15.4.0 section 5.1)
   uint8_t *b;
   /// Pointers to code blocks after code block segmentation and CRC attachment (38.212 V15.4.0 section 5.2.2)
@@ -160,13 +180,20 @@ typedef struct NR_gNB_ULSCH_s {
   int8_t last_iteration_cnt;
   /// Status Flag indicating for this ULSCH
   bool active;
-  /// Flag to indicate that the UL configuration has been handled. Used to remove a stale ULSCH when frame wraps around
-  uint8_t handled;
-  delay_t delay;
 } NR_gNB_ULSCH_t;
 
 typedef struct {
-  bool active;
+  // identifier for concurrent beams
+  int beam_nb;
+  /// Frame where current PUSCH pdu was sent
+  uint32_t frame;
+  /// Slot where current PUSCH pdu was sent
+  uint32_t slot;
+  /// ULSCH PDU
+  nfapi_nr_pusch_pdu_t pusch_pdu;
+} NR_gNB_PUSCH_job_t;
+
+typedef struct {
   // identifier for concurrent beams
   int beam_nb;
   /// Frame where current PUCCH pdu was sent
@@ -175,21 +202,18 @@ typedef struct {
   uint32_t slot;
   /// ULSCH PDU
   nfapi_nr_pucch_pdu_t pucch_pdu;
-} NR_gNB_PUCCH_t;
+} NR_gNB_PUCCH_job_t;
 
 typedef struct {
-  bool active;
   // identifier for concurrent beams
   int beam_nb;
   /// Frame where current SRS pdu was received
   uint32_t frame;
   /// Slot where current SRS pdu was received
   uint32_t slot;
-  /// Measured SNR
-  int8_t snr;
   /// ULSCH PDU
   nfapi_nr_srs_pdu_t srs_pdu;
-} NR_gNB_SRS_t;
+} NR_gNB_SRS_job_t;
 
 typedef struct {
   /// \brief Pointers (dynamic) to the received data in the frequency domain.
@@ -251,6 +275,8 @@ typedef struct NR_gNB_PUSCH_s {
   int llr_offset[14];
   /// flag to indicate DTX on reception
   int DTX;
+  /// delay estimation
+  delay_t delay;
 } NR_gNB_PUSCH;
 
 /// Context data structure for RX/TX portion of slot processing
@@ -334,8 +360,6 @@ typedef struct PHY_VARS_gNB_s {
   gNB_L1_proc_t proc;
   int num_RU;
   RU_t *RU_list[MAX_NUM_RU_PER_gNB];
-  /// Ethernet parameters for northbound midhaul interface
-  eth_params_t eth_params_n;
   /// Ethernet parameters for fronthaul interface
   eth_params_t eth_params;
   int rx_total_gain_dB;
@@ -347,25 +371,22 @@ typedef struct PHY_VARS_gNB_s {
 
   nfapi_nr_ul_tti_request_t UL_tti_req;
 
-  int max_nb_pucch;
-  int max_nb_srs;
   int max_nb_pdsch;
   int max_nb_pusch;
 
   NR_gNB_COMMON common_vars;
-  prach_list_t prach_list;
+  spsc_q_t prach_ru_queue;
+  spsc_q_t prach_l1rx_queue;
   // TODO: can we remove c from NR_gNB_DLSCH_t and put it on the stack?
   NR_gNB_DLSCH_t *dlsch;
   NR_gNB_PRS prs_vars;
   NR_gNB_PUSCH *pusch_vars;
-  NR_gNB_PUCCH_t *pucch;
-  NR_gNB_SRS_t *srs;
+  spsc_q_t pucch_queue;
+  spsc_q_t pusch_queue;
+  spsc_q_t srs_queue;
   NR_gNB_ULSCH_t *ulsch;
   NR_gNB_PHY_STATS_t phy_stats[MAX_MOBILES_PER_GNB];
   t_nrPolar_params **polarParams;
-
-  /// SRS variables
-  nr_srs_info_t **nr_srs_info;
 
   // reference amplitude for TX
   int16_t TX_AMP;
@@ -463,6 +484,7 @@ typedef struct PHY_VARS_gNB_s {
   notifiedFIFO_t L1_rx_out;
   tpool_t threadPool;
   int num_pusch_symbols_per_thread;
+  int num_pdsch_symbols_per_thread;
   int dmrs_num_antennas_per_thread;
   pthread_t L1_rx_thread;
   int L1_rx_thread_core;

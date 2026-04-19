@@ -85,10 +85,7 @@ void nr_rrc_trigger_f1_ho(gNB_RRC_INST *rrc,
 void nr_rrc_finalize_ho(gNB_RRC_UE_t *ue);
 void nr_rrc_n2_ho_failure(gNB_RRC_INST *rrc, uint32_t gnb_ue_id, ngap_handover_failure_t *msg);
 
-void nr_rrc_trigger_n2_ho(gNB_RRC_INST *rrc,
-                          gNB_RRC_UE_t *ue,
-                          int serving_pci,
-                          const nr_neighbour_cell_t *neighbour_config);
+void nr_rrc_trigger_n2_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, const nr_neighbour_cell_t *neighbour_config);
 
 void rrc_gNB_trigger_reconfiguration_for_handover(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, uint8_t *rrc_reconf, int rrc_reconf_len);
 
@@ -98,6 +95,6 @@ byte_array_t *get_meas_timing_config(const NR_MeasurementTimingConfiguration_t *
 
 void nr_rrc_apply_target_context(gNB_RRC_UE_t *UE);
 
-bool nr_rrc_update_cell_assoc_after_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE);
+bool nr_rrc_update_cell_assoc_after_ho(gNB_RRC_UE_t *UE);
 
 #endif /* RRC_GNB_MOBILITY_H_ */

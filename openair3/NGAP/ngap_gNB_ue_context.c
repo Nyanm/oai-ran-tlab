@@ -94,7 +94,7 @@ void ngap_release_ues_for_amf(ngap_gNB_amf_data_t *amf_desc_p)
                        0,
                        TASK_NGAP,
                        amf_desc_p->ngap_gNB_instance->instance,
-                       TIMER_ONE_SHOT,
+                       TIMER_PERIODIC,
                        amf_desc_p,
                        &tid);
   if (rc == 0) {

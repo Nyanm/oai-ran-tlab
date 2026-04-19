@@ -80,7 +80,6 @@ void print_ue_mac_stats(const module_id_t mod, const int frame_rx, const int slo
 
 //  L2 Abstraction Layer
 static int handle_bcch_bch(NR_UE_MAC_INST_t *mac,
-                           int cc_id,
                            unsigned int gNB_index,
                            uint8_t *pduP,
                            unsigned int additional_bits,
@@ -104,13 +103,12 @@ static int handle_bcch_bch(NR_UE_MAC_INST_t *mac,
   else
     mac->frequency_range = FR1;
   //  fixed 3 bytes MIB PDU
-  nr_mac_rrc_data_ind_ue(mac->ue_id, cc_id, gNB_index, 0, 0, 0, 0, cell_id, ssb_arfcn, NR_BCCH_BCH, (uint8_t *) pduP, 3);
+  nr_mac_rrc_data_ind_ue(mac->ue_id, gNB_index, 0, 0, 0, cell_id, ssb_arfcn, NR_BCCH_BCH, (uint8_t *) pduP, 3);
   return 0;
 }
 
 //  L2 Abstraction Layer
 static int handle_bcch_dlsch(NR_UE_MAC_INST_t *mac,
-                             int cc_id,
                              unsigned int gNB_index,
                              uint8_t ack_nack,
                              uint8_t *pduP,
@@ -119,7 +117,7 @@ static int handle_bcch_dlsch(NR_UE_MAC_INST_t *mac,
                              int frame,
                              int slot)
 {
-  nr_ue_decode_BCCH_DL_SCH(mac, cc_id, gNB_index, ack_nack, pduP, pdu_len, hfn, frame, slot);
+  nr_ue_decode_BCCH_DL_SCH(mac, gNB_index, ack_nack, pduP, pdu_len, hfn, frame, slot);
   return 0;
 }
 
@@ -256,7 +254,6 @@ static uint32_t nr_ue_dl_processing(NR_UE_MAC_INST_t *mac, nr_downlink_indicatio
                      mac);
           if(rx_indication_body.ssb_pdu.decoded_pdu) {
             ret_mask |= (handle_bcch_bch(mac,
-                                         dl_info->cc_id,
                                          dl_info->gNB_index,
                                          rx_indication_body.ssb_pdu.pdu,
                                          rx_indication_body.ssb_pdu.additional_bits,
@@ -269,7 +266,6 @@ static uint32_t nr_ue_dl_processing(NR_UE_MAC_INST_t *mac, nr_downlink_indicatio
           break;
         case FAPI_NR_RX_PDU_TYPE_SIB:
           ret_mask |= (handle_bcch_dlsch(mac,
-                                         dl_info->cc_id,
                                          dl_info->gNB_index,
                                          rx_indication_body.pdsch_pdu.ack_nack,
                                          rx_indication_body.pdsch_pdu.pdu,
@@ -396,7 +392,7 @@ static void handle_sl_bch(int ue_id,
   sl_mac->decoded_DFN = frame;
   sl_mac->decoded_slot = slot;
 
-  nr_mac_rrc_data_ind_ue(ue_id, 0, 0, hfn_rx, frame_rx, slot_rx, 0, rx_slss_id, 0, NR_SBCCH_SL_BCH, (uint8_t *)sl_mib, len);
+  nr_mac_rrc_data_ind_ue(ue_id, 0, hfn_rx, frame_rx, slot_rx, rx_slss_id, 0, NR_SBCCH_SL_BCH, (uint8_t *)sl_mib, len);
 
   return;
 }

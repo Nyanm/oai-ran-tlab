@@ -517,7 +517,6 @@ int nr_prs_channel_estimation(uint8_t gNB_id,
 }
 
 c32_t nr_pbch_dmrs_correlation(const NR_DL_FRAME_PARMS *fp,
-                               const UE_nr_rxtx_proc_t *proc,
                                const int symbol,
                                const int dmrss,
                                const int Nid_cell,
@@ -535,8 +534,7 @@ c32_t nr_pbch_dmrs_correlation(const NR_DL_FRAME_PARMS *fp,
 
   unsigned int k = Nid_cell % 4;
 
-  DEBUG_PBCH("PBCH DMRS Correlation : gNB_id %d , OFDM size %d, Ncp=%d, k=%u symbol %d\n",
-             proc->gNB_id,
+  DEBUG_PBCH("PBCH DMRS Correlation : OFDM size %d, Ncp=%d, k=%u symbol %d\n",
              fp->ofdm_symbol_size,
              fp->Ncp,
              k,
@@ -1393,7 +1391,7 @@ void nr_pdsch_ptrs_processing(int nbRx,
   uint16_t *nb_rb           = NULL;
   int nscid = 0;
 
-  if(dlsch0_harq->status == ACTIVE) {
+  if(dlsch0_harq->status == NR_ACTIVE) {
     symbInSlot      = dlsch[0].dlsch_config.start_symbol + dlsch[0].dlsch_config.number_symbols;
     startSymbIndex  = &dlsch[0].dlsch_config.start_symbol;
     nbSymb          = &dlsch[0].dlsch_config.number_symbols;
@@ -1437,7 +1435,7 @@ void nr_pdsch_ptrs_processing(int nbRx,
       phase_per_symbol[symbol].r = 0; // Real
     }
 
-    if(dlsch0_harq->status == ACTIVE) {
+    if(dlsch0_harq->status == NR_ACTIVE) {
       if(symbol == *startSymbIndex) {
         *ptrsSymbPos = 0;
         set_ptrs_symb_idx(ptrsSymbPos,

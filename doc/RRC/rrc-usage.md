@@ -94,7 +94,81 @@ the [MAC configuration](../MAC/mac-usage.md) as well for SIB configuration.
   deactivated, a transparent SDAP header is prepended to packets, but no
   further processing is being done.
 - `cu_sibs` (default: `[]`) list of SIBs to give to the DU for transmission.
-  Currently, SIB2 is supported.
+  Currently supported:
+  - SIB2: serving-cell reselection parameters (configured in `sib2_config`)
+  - SIB3: intra-frequency neighbour cell list (neighbours on the same SSB ARFCN as the serving cell)
+  - SIB4: inter-frequency carriers + neighbour lists, grouped per `(absoluteFrequencySSB, subcarrierSpacing)`. Per-frequency fields (e.g. `cellReselectionPriority`, `threshX_HighP`, `threshX_LowP`, `q_OffsetFreq`) come from `frequency_list`
+
+Example activation:
+```
+cu_sibs = ( 2, 3, 4 );
+```
+SIB2 is configured per-gNB in `sib2_config` (see below). SIB3/SIB4 are derived from the neighbour configuration:
+- `neighbour_list` / `neighbour_cell_configuration`: neighbour identity + per-neighbour offsets (`q_OffsetCell`, etc.)
+- `frequency_list`: per-frequency SIB4 reselection parameters (priority/thresholds/`q_OffsetFreq`)
+
+Example `gNBs.[0].sib2_config`:
+```
+cu_sibs = ( 2 );
+
+sib2_config : {
+  q_Hyst                   = 0;
+  cellReselectionPriority  = 0;
+  threshServingLowP        = 0;
+  threshServingLowQ        = 4;
+  s_NonIntraSearchP        = 10;
+  s_NonIntraSearchQ        = 8;
+  q_RxLevMin               = -56;
+  q_QualMin                = -18;
+  s_IntraSearchP           = 22;
+  s_IntraSearchQ           = 20;
+  t_ReselectionNR          = 1;
+  deriveSSB_IndexFromCell  = 1;
+
+  speed_t_Evaluation       = 0;
+  speed_t_HystNormal       = 0;
+  speed_n_CellChangeMedium = 1;
+  speed_n_CellChangeHigh   = 2;
+  speed_sf_Medium          = 1;
+  speed_sf_High            = 0;
+};
+```
+
+#### SIB3/SIB4 and measurement gaps
+
+This section summarizes how SIB3/SIB4 and measurement gaps relate in NR and how OAI currently implements them.
+
+From 3GPP TS 38.331:
+
+- `SIB3` carries intra-frequency reselection information (`intraFreqNeighCellList`).
+- `SIB4` carries inter-frequency reselection information (`interFreqCarrierFreqList`
+  and per-carrier neighbour lists).
+- `MeasGapConfig` is part of dedicated `MeasConfig` (typically sent in
+  `RRCReconfiguration`) and controls measurement gaps in connected mode.
+
+In other words:
+
+- SIB3/SIB4 are broadcast SI for idle/inactive (`RRC_IDLE` / `RRC_INACTIVE`)
+  reselection behavior: UE performs autonomous cell reselection using broadcast
+  SI (SIB3 for intra-frequency, SIB4 for inter-frequency).
+- `MeasGapConfig` is a dedicated UE measurement behavior and applies to
+  connected mode (`RRC_CONNECTED`): the network configures what the UE
+  measures and reports (periodic and event-based, e.g., A3), and those reports
+  are used by CU-CP mobility logic (including handover decisions).
+
+MeasGap does not depend on SIB3/SIB4, however they share the same underlying
+neighbour/frequency data model, which is the common source of serving +
+neighbour frequency information (see also [Neighbor-gNB configuration](#neighbour-gnb-configuration)):
+
+- SIB3/SIB4 generation is done on the CU-CP side (inside `rrc_gNB_du.c`) from
+  neighbour/frequency configuration and serving-cell MTC-derived ARFCN.
+- Measurement-gap configuration also starts from the same neighbour/frequency
+  model: CU uses neighbour fields (frequency/PCI/band) to build UE
+  `MeasConfig` measurement objects, then DU derives/encodes gap parameters
+  from CU-provided timing (`meas_timing_config`) and returns `meas_gap_config`
+  for CU forwarding in dedicated `RRCReconfiguration`.
+
+Detailed implementation flow and sequence diagrams are documented in [`rrc-dev.md`](./rrc-dev.md).
 
 #### UE-specific configuration
 
@@ -105,12 +179,64 @@ the [MAC configuration](../MAC/mac-usage.md) as well for SIB configuration.
 
 Refer to the [handover tutorial](../handover-tutorial.md) for detailed information about gNB neighbors and handover procedures.
 
+##### Configuration structure and key semantics
+
+The neighbour configuration is a 2-level structure:
+
+- Outer list: `neighbour_list`
+  - Key: `nr_cellid` of the serving cell
+  - One entry per serving cell
+- Inner list: `neighbour_cell_configuration`
+  - Actual neighbour cells for that serving cell
+  - Contains neighbour fields such as `gNB_ID`, neighbour `nr_cellid`, `physical_cellId`, frequency, PLMN, etc.
+
+This same core configuration model is reused by multiple RRC procedures.
+
+- SIB3/SIB4 generation: uses neighbour identity/frequency/offset fields to derive
+  intra/inter-frequency SI.
+- Connected-mode measurement config: uses neighbour frequency/PCI/band fields to build
+  UE `MeasConfig` measurement objects.
+- Handover-related procedures: reuse neighbour identity fields (e.g., cell ID/PCI/PLMN
+  TAC, gNB ID) for target selection and for populating target-cell information carried
+  in NGAP handover messages.
+
+Conceptually, for each serving cell the RRC keeps:
+
+- A per-frequency table (`inter_freqs`): one entry per `(absoluteFrequencySSB,
+  subcarrierSpacing)` used for SIB4, containing the SIB4 per-frequency fields
+  (priority, thresholds, `q_OffsetFreq`, `q_RxLevMin`, `t_ReselectionNR`).
+- A per-neighbour list (`neighbour_cells`): one entry per neighbour, with
+  identity (cell ID, PCI, PLMN, TAC), frequency (`absoluteFrequencySSB`,
+  `subcarrierSpacing`, `band`), and SIB3/SIB4 per-neighbour offsets
+  (`q_OffsetCell`, `q_RxLevMinOffsetCell`, `q_QualMinOffsetCell`).
+- A link from neighbours to frequencies: each neighbour implicitly points to
+  the matching `inter_freqs` entry via its `(absoluteFrequencySSB,
+  subcarrierSpacing)`; if no such frequency exists, it is treated as having no
+  SIB4 per-frequency configuration.
+
+Notes:
+
+- In `neighbour_list`, only `nr_cellid` is used as the key for lookup.
+- `physical_cellId` belongs to neighbour-cell entries in `neighbour_cell_configuration` (inner list).
+- `nr_cellid` entries in `neighbour_list` should be unique to avoid ambiguous lookup.
+- Intra-frequency neighbours (SIB3) are derived only from the per-cell
+  `neighbour_cell_configuration` on the serving carrier.
+
+At configuration time (`gnb_config.c`), neighbours are parsed into `neighbour_cells`,
+per-neighbour SIB3/SIB4 offsets are validated, and a per-frequency array `inter_freqs`
+is built by grouping neighbours by `(absoluteFrequencySSB, subcarrierSpacing)` and
+in-range SIB4 per-frequency fields (`cellReselectionPriority`, `threshX_HighP/L`,
+`q_OffsetFreq`) across neighbours on the same ARFCN. At SIB4 build time, the RRC uses
+`inter_freqs` to create one `InterFreqCarrierFreqInfo` per ARFCN for inter-frequency
+carriers (ARFCN different from the serving SSB ARFCN) and attaches all neighbours whose
+`inter_freq_idx` points to that frequency entry.
+
 ##### Required configuration parameters
 
-To define a neighbor cell in the configuration file, the following parameters are required:
+To define a neighbour cell in the configuration file, the following parameters are required:
 
-- `gNB_ID` - identifier of the neighbor gNB (e.g., `0xe01`)
-- `nr_cellid` - cell identifier of the neighbor cell (e.g., `11111111`)
+- `gNB_ID` - identifier of the neighbour gNB (e.g., `0xe01`)
+- `nr_cellid` - cell identifier of the neighbour cell (e.g., `11111111`)
 - `physical_cellId` - physical cell ID for radio identification (e.g., `1`)
 - `absoluteFrequencySSB` - SSB frequency in ARFCN notation (e.g., `643296`)
 - `subcarrierSpacing` - numerology index: 0=15kHz, 1=30kHz, 2=60kHz, 3=120kHz
@@ -123,19 +249,45 @@ To define a neighbor cell in the configuration file, the following parameters ar
 
 Example configuration structure:
 ```
+# Per-frequency SIB4 configuration (one entry per ARFCN), shared by all cells
+frequency_list = (
+  {
+    absoluteFrequencySSB = 643296;
+    subcarrierSpacing    = 1;    # 30 kHz
+    band                 = 78;
+
+    frequency_config = (
+      {
+        cellReselectionPriority = 5;
+        threshX_HighP = 10;
+        threshX_LowP = 6;
+        q_OffsetFreq = 0;
+        # Optional: threshX_HighQ, threshX_LowQ, etc.
+      }
+    );
+  }
+);
+
+# Per-cell neighbour configuration; neighbours reference frequency_list via ARFCN/SCS
 neighbour_list = (
   {
     nr_cellid = 12345678;
+
     neighbour_cell_configuration = (
       {
         gNB_ID = 0xe01;
         nr_cellid = 11111111;
         physical_cellId = 1;
-        absoluteFrequencySSB = 643296;
-        subcarrierSpacing = 1; # 30 kHz
+        absoluteFrequencySSB = 643296;   # ARFCN used to look up matching entry in frequency_list
+        subcarrierSpacing = 1;           # 30 kHz
         band = 78;
         plmn = { mcc = 001; mnc = 01; mnc_length = 2 };
         tracking_area_code = 1;
+
+        # Example per-neighbour offsets (SIB3/SIB4)
+        q_OffsetCell = 0;
+        q_RxLevMinOffsetCell = -1;
+        q_QualMinOffsetCell = -1;
       }
     );
   }

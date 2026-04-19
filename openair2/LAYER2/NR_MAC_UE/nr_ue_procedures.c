@@ -270,7 +270,6 @@ static void configure_ratematching_csi(fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsc
 }
 
 void nr_ue_decode_BCCH_DL_SCH(NR_UE_MAC_INST_t *mac,
-                              int cc_id,
                               unsigned int gNB_index,
                               uint8_t ack_nack,
                               uint8_t *pduP,
@@ -281,7 +280,7 @@ void nr_ue_decode_BCCH_DL_SCH(NR_UE_MAC_INST_t *mac,
 {
   if(ack_nack) {
     LOG_D(NR_MAC, "Decoding NR-BCCH-DL-SCH-Message (SIB1 or SI)\n");
-    nr_mac_rrc_data_ind_ue(mac->ue_id, cc_id, gNB_index, hfn, frame, slot, 0, mac->physCellId, 0, NR_BCCH_DL_SCH, (uint8_t *) pduP, pdu_len);
+    nr_mac_rrc_data_ind_ue(mac->ue_id, gNB_index, hfn, frame, slot, mac->physCellId, 0, NR_BCCH_DL_SCH, (uint8_t *) pduP, pdu_len);
     if (mac->get_sib1)
       mac->get_sib1 = false;
     for (int i = 0; i < MAX_SI_GROUPS; i++) {
@@ -298,7 +297,7 @@ void nr_ue_decode_BCCH_DL_SCH(NR_UE_MAC_INST_t *mac,
   }
   else {
     LOG_E(NR_MAC, "Got NACK on NR-BCCH-DL-SCH-Message (%s)\n", mac->get_sib1 ? "SIB1" : "other SI");
-    nr_mac_rrc_data_ind_ue(mac->ue_id, cc_id, gNB_index, hfn, frame, slot, 0, mac->physCellId, 0, NR_BCCH_DL_SCH, NULL, 0);
+    nr_mac_rrc_data_ind_ue(mac->ue_id, gNB_index, hfn, frame, slot, mac->physCellId, 0, NR_BCCH_DL_SCH, NULL, 0);
   }
 }
 
@@ -1540,8 +1539,7 @@ int nr_ue_configure_pucch(NR_UE_MAC_INST_t *mac,
   // configure pucch from Table 9.2.1-1
   // only for ack/nack
   if (pucch->initial_pucch_id > -1 && pucch->pucch_resource == NULL) {
-    const int idx = *current_UL_BWP->pucch_ConfigCommon->pucch_ResourceCommon;
-    const initial_pucch_resource_t pucch_resourcecommon = get_initial_pucch_resource(idx);
+    const initial_pucch_resource_t pucch_resourcecommon = get_initial_pucch_resource(pucch->pucch_ResourceCommon);
     pucch_pdu->format_type = pucch_resourcecommon.format;
     pucch_pdu->start_symbol_index = pucch_resourcecommon.startingSymbolIndex;
     pucch_pdu->nr_of_symbols = pucch_resourcecommon.nrofSymbols;
@@ -1551,7 +1549,7 @@ int nr_ue_configure_pucch(NR_UE_MAC_INST_t *mac,
 
     pucch_pdu->prb_size = 1; // format 0 or 1
     int RB_BWP_offset;
-    if (pucch->initial_pucch_id == 15)
+    if (pucch->pucch_ResourceCommon == 15)
       RB_BWP_offset = pucch_pdu->bwp_size >> 2;
     else
       RB_BWP_offset = pucch_resourcecommon.PRB_offset;
@@ -2269,7 +2267,7 @@ void multiplex_pucch_resource(NR_UE_MAC_INST_t *mac, PUCCH_sched_t *pucch, int n
   }
 }
 
-void configure_initial_pucch(PUCCH_sched_t *pucch, int res_ind)
+void configure_initial_pucch(PUCCH_sched_t *pucch, int res_ind, long *pucch_ResourceCommon)
 {
   /* see TS 38.213 9.2.1  PUCCH Resource Sets */
   int delta_PRI = res_ind;
@@ -2280,6 +2278,8 @@ void configure_initial_pucch(PUCCH_sched_t *pucch, int res_ind)
   int r_PUCCH = ((2 * n_CCE_0) / N_CCE_0) + (2 * delta_PRI);
   pucch->initial_pucch_id = r_PUCCH;
   pucch->pucch_resource = NULL;
+  AssertFatal(pucch_ResourceCommon, "pucch_ResourceCommon NULL\n");
+  pucch->pucch_ResourceCommon = *pucch_ResourceCommon;
 }
 
 /*******************************************************************
@@ -2468,7 +2468,7 @@ bool get_downlink_ack(NR_UE_MAC_INST_t *mac, frame_t frame, int slot, PUCCH_sche
 
   NR_PUCCH_Config_t *pucch_Config = current_UL_BWP ? current_UL_BWP->pucch_Config : NULL;
   if (!(pucch_Config && pucch_Config->resourceSetToAddModList && pucch_Config->resourceSetToAddModList->list.array[0]))
-    configure_initial_pucch(pucch, res_ind);
+    configure_initial_pucch(pucch, res_ind, current_UL_BWP->pucch_ConfigCommon->pucch_ResourceCommon);
   else {
     int resource_set_id = find_pucch_resource_set(pucch_Config, O_ACK);
     int n_list = pucch_Config->resourceSetToAddModList->list.count;

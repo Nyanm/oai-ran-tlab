@@ -15,7 +15,7 @@ static NR_UE_MAC_INST_t *nr_ue_mac_inst[MAX_NUM_NR_UE_INST] = {0};
 void send_srb0_rrc(int ue_id, const uint8_t *sdu, sdu_size_t sdu_len, void *data)
 {
   AssertFatal(sdu_len > 0 && sdu_len < CCCH_SDU_SIZE, "invalid CCCH SDU size %d\n", sdu_len);
-
+  UNUSED(data);
   MessageDef *message_p = itti_alloc_new_message(TASK_MAC_UE, 0, NR_RRC_MAC_CCCH_DATA_IND);
   memset(NR_RRC_MAC_CCCH_DATA_IND(message_p).sdu, 0, sdu_len);
   memcpy(NR_RRC_MAC_CCCH_DATA_IND(message_p).sdu, sdu, sdu_len);

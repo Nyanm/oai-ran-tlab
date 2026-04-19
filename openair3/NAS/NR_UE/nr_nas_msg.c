@@ -9,6 +9,7 @@
 #include "nr_nas_msg.h"
 #include <netinet/in.h>
 #include "NR_NAS_defs.h"
+#include <openssl/opensslv.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,6 +53,18 @@
 #include "ds/byte_array.h"
 #include "key_nas_deriver.h"
 #include "nr-uesoftmodem.h"
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include "curve_25519.h"
+#include "aes_128_ctr.h"
+#include "x963_kdf.h"
+#include "sha_256_hmac.h"
+static const char hex[] = "0123456789abcdef";
+#elif OPENSSL_VERSION_NUMBER >= 0x10100000L
+#define MY_OPENSSL_VERSION_STR OpenSSL_version(OPENSSL_VERSION)
+#else
+#define MY_OPENSSL_VERSION_STR SSLeay_version(SSLEAY_VERSION)
+#endif
 
 static nr_ue_nas_t nr_ue_nas[MAX_NUM_NR_UE_INST] = {0};
 
@@ -222,11 +235,10 @@ static void nas_security_compute_mac(nr_ue_nas_t *nas,
  * @brief: Decrypt the payload of a NAS message. The buffer is modified in place
  * @param[in] nas The NAS context
  * @param[in] pdu_buffer The buffer containing the full (header + payload) NAS message
- * @param[in] is_uplink True if the message is uplink, false Downlink
  * @param[in] is3gpp_access True if the message is 3GPP access, false otherwise
  * @param[in] pdu_length The length of the NAS message
  */
-static void nas_security_decrypt_payload(nr_ue_nas_t *nas, byte_array_t buffer, const bool is_uplink, const bool is3gpp_access)
+static void nas_security_decrypt_payload(nr_ue_nas_t *nas, byte_array_t buffer, const bool is3gpp_access)
 {
   Security_header_t sec_hdr;
 
@@ -380,12 +392,89 @@ static security_state_t nas_security_rx_process(nr_ue_nas_t *nas, byte_array_t b
     return NAS_SECURITY_INTEGRITY_FAILED;
 
   /* decipher */
-  nas_security_decrypt_payload(nas, buffer, false, true);
+  nas_security_decrypt_payload(nas, buffer, true);
 
   /* update estimated DL Counter */
   nas->security.nas_count_dl++;
 
   return NAS_SECURITY_INTEGRITY_PASSED;
+}
+
+static void suci_profile_scheme_a_generate_output(const uint8_t home_network_public_key[32],
+                                                  const char *msin,
+                                                  const size_t msin_len,
+                                                  char *schemeoutput)
+{
+  /* 1> Eph. key pair generation */
+  uint8_t eph_priv[32] = {0};
+  uint8_t eph_pub[32] = {0};
+  x25519_generate_keypair(eph_priv, eph_pub);
+
+  /* 2> Key agreement */
+  uint8_t eph_shared_key[32] = {0};
+  x25519_shared_secret(eph_priv, home_network_public_key, eph_shared_key);
+
+  explicit_bzero(eph_priv, 32);
+
+  /* 3> Key derivation */
+  uint8_t kdf_output[64] = {0};
+  byte_array_t kdf_secret = {.buf = eph_shared_key, .len = 32};
+  byte_array_t kdf_info = {.buf = eph_pub, .len = 32};
+  x963_kdf(kdf_secret, kdf_info, 64, kdf_output);
+
+  explicit_bzero(eph_shared_key, 32);
+
+  aes_128_t aes_ctx;
+  aes_ctx.type = AES_INITIALIZATION_VECTOR_16;
+  memcpy(aes_ctx.key, kdf_output, 16);
+  memcpy(aes_ctx.iv16.iv, kdf_output + 16, 16);
+
+  uint8_t eph_mac_key[32] = {0};
+  memcpy(eph_mac_key, kdf_output + 32, 32);
+
+  explicit_bzero(kdf_output, 64);
+
+  /* 4> Symmetric encryption */
+  size_t msin_bcd_len = (msin_len + 1) / 2;
+  uint8_t msin_bcd[msin_bcd_len];
+  memset(msin_bcd, 0, msin_bcd_len);
+
+  int rc = digit_string_to_bcd_value(msin_bcd, msin, msin_bcd_len);
+  AssertFatal(rc == 0, "Encoding MSIN failed (rc=%d, input=\"%s\", len=%zu, out_len=%zu)", rc, msin, msin_len, msin_bcd_len);
+
+  byte_array_t payload = {.buf = msin_bcd, .len = msin_bcd_len};
+  uint8_t ciphertext[msin_bcd_len];
+  aes_128_ctr(&aes_ctx, payload, msin_bcd_len, ciphertext);
+
+  explicit_bzero(aes_ctx.key, 16);
+  explicit_bzero(aes_ctx.iv16.iv, 16);
+  explicit_bzero(msin_bcd, msin_bcd_len);
+
+  /* 5> MAC function */
+  uint8_t mac_full[32] = {0};
+  byte_array_t mac_input = {.buf = ciphertext, .len = msin_bcd_len};
+  sha_256_hmac(eph_mac_key, mac_input, 32, mac_full);
+
+  explicit_bzero(eph_mac_key, 32);
+
+  /* Build SUCI scheme output --- */
+  /* eph_pub (32 bytes -> 64 hex chars) */
+  for (int i = 0; i < 32; i++) {
+    *schemeoutput++ = hex[eph_pub[i] >> 4];
+    *schemeoutput++ = hex[eph_pub[i] & 0x0F];
+  }
+
+  /* ciphertext (~45 bytes -> ~90 hex chars) */
+  for (int i = 0; i < msin_bcd_len; i++) {
+    *schemeoutput++ = hex[ciphertext[i] >> 4];
+    *schemeoutput++ = hex[ciphertext[i] & 0x0F];
+  }
+
+  /* MAC (8 bytes -> 16 hex chars) */
+  for (int i = 0; i < 8; i++) {
+    *schemeoutput++ = hex[mac_full[i] >> 4];
+    *schemeoutput++ = hex[mac_full[i] & 0x0F];
+  }
 }
 
 static int fill_suci(FGSMobileIdentity *mi, const uicc_t *uicc)
@@ -397,7 +486,50 @@ static int fill_suci(FGSMobileIdentity *mi, const uicc_t *uicc)
   mi->suci.mccdigit1 = uicc->imsiStr[0] - '0';
   mi->suci.mccdigit2 = uicc->imsiStr[1] - '0';
   mi->suci.mccdigit3 = uicc->imsiStr[2] - '0';
-  memcpy(mi->suci.schemeoutput, uicc->imsiStr + 3 + uicc->nmc_size, strlen(uicc->imsiStr) - (3 + uicc->nmc_size));
+
+  mi->suci.routingindicatordigit1 = uicc->routing_indicatorStr[0] - '0';
+  mi->suci.routingindicatordigit2 = uicc->routing_indicatorStr[1] - '0';
+  mi->suci.routingindicatordigit3 = uicc->routing_indicatorStr[2] - '0';
+  mi->suci.routingindicatordigit4 = uicc->routing_indicatorStr[3] - '0';
+
+  char *msin = uicc->imsiStr + 3 + uicc->nmc_size;
+  uint8_t msin_len = strlen(msin);
+
+  mi->suci.protectionschemeId = uicc->protection_scheme;
+  switch (uicc->protection_scheme) {
+    case 0: /* Null scheme (TS 33.501 C.2) */
+    {
+      mi->suci.homenetworkpki = 0;
+      memcpy(mi->suci.schemeoutput, msin, msin_len);
+      break;
+    }
+    case 1: /* Profile A (TS 33.501 C.3.4.1) */
+    {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+      mi->suci.homenetworkpki = uicc->home_network_public_key_id;
+      suci_profile_scheme_a_generate_output(uicc->home_network_public_key, msin, msin_len, mi->suci.schemeoutput);
+#else
+      AssertFatal(false,
+                  "Protection Scheme not supported when using a version below OpenSSL 3.0 %d  (OpenSSL version: %s)\n",
+                  uicc->protection_scheme,
+                  MY_OPENSSL_VERSION_STR);
+#endif
+      break;
+    }
+    case 2: /* Profile B (TS 33.501 C.3.4.2) */
+    {
+      mi->suci.homenetworkpki = uicc->home_network_public_key_id;
+
+      AssertFatal(false, "Unsupported Protection Scheme in UICC %d\n", uicc->protection_scheme);
+
+      break;
+    }
+    default: // Unknown schemes
+    {
+      AssertFatal(false, "Unknown Protection Scheme in UICC %d\n", uicc->protection_scheme);
+    }
+  }
+
   LOG_D(NAS,
         "SUCI in registration request: SUPI type: %d Type of Identity: %u MCC: %u%u%u, MNC: %u%u%u, \
      Routing Indicator %d%d%d%d Protection Scheme ID: %u, Home Network PKI: %u, Scheme Output: %s\n",
@@ -669,7 +801,7 @@ static FGSRegistrationType set_fgs_ksi(nr_ue_nas_t *nas)
  * @brief Set contents of 5GMM capability
  * @note  Currently hardcoded, sending min length only (1 octet)
  */
-static FGMMCapability set_fgmm_capability(nr_ue_nas_t *nas)
+static FGMMCapability set_fgmm_capability()
 {
   FGMMCapability cap = {0};
   cap.iei = REGISTRATION_REQUEST_5GMM_CAPABILITY_IEI;
@@ -794,7 +926,7 @@ void generateRegistrationRequest(as_nas_info_t *initialNasMsg, nr_ue_nas_t *nas,
   if (full_rr->fgsregistrationtype != PERIODIC_REGISTRATION_UPDATING) {
     cleartext_only = false; // The UE needs to send non-cleartext IE
     full_rr->presencemask |= REGISTRATION_REQUEST_5GMM_CAPABILITY_PRESENT;
-    full_rr->fgmmcapability = set_fgmm_capability(nas);
+    full_rr->fgmmcapability = set_fgmm_capability();
     FGMMCapability *cap = &full_rr->fgmmcapability;
     size_nct += sizeof(cap->length) + sizeof(cap->iei) + cap->length;
   }
@@ -1022,7 +1154,7 @@ static void generateAuthenticationResp(nr_ue_nas_t *nas, as_nas_info_t *initialN
 
 /** @brief Send Authentication Failure message from the UE to the AMF to
  * indicate that authentication of the network has failed */
-static void generateAuthenticationFailure(nr_ue_nas_t *nas, as_nas_info_t *initialNasMsg, cause_id_t cause)
+static void generateAuthenticationFailure(as_nas_info_t *initialNasMsg, cause_id_t cause)
 {
   int size = sizeof(fgmm_msg_header_t);
   fgmm_nas_message_plain_t plain = {0};
@@ -1066,7 +1198,7 @@ static void handle_fgmm_authentication_request(nr_ue_nas_t *nas, as_nas_info_t *
     /* If the ngKSI value received is already associated with one
     of the 5G security contexts stored in the UE, send failure message */
     LOG_E(NAS, "Invalid NAS Key Set Identifier: send Authentication Failure\n");
-    generateAuthenticationFailure(nas, initialNasMsg, ngKSI_already_in_use);
+    generateAuthenticationFailure(initialNasMsg, ngKSI_already_in_use);
     return;
   }
   generateAuthenticationResp(nas, initialNasMsg, buffer->buf);
@@ -1078,7 +1210,7 @@ static void handle_fgmm_authentication_request(nr_ue_nas_t *nas, as_nas_info_t *
  * @todo The UE shall performs actions as per 5.4.1.3.5 of 3GPP TS 24.501, including
  * (1) Abort any ongoing 5GMM procedure (2) Stop all active timers: T3510, T3516, T3517,
  * T3519, T3520, T3521 (3) Delete stored SUCI. (4) handle EAP-failure message. */
-static void handle_authentication_reject(nr_ue_nas_t *nas, as_nas_info_t *initialNasMsg, uint8_t *pdu, int pdu_length)
+static void handle_authentication_reject(nr_ue_nas_t *nas, uint8_t *pdu, int pdu_length)
 {
   LOG_E(NAS, "Received Authentication Reject message from the network\n");
   uint8_t eap_msg[MAX_EAP_CONTENTS_LEN] = {0};
@@ -1574,7 +1706,7 @@ void handleDownlinkNASTransport(const nr_ue_nas_t *nas, uint8_t * pdu_buffer, in
   }
 }
 
-static void generateDeregistrationRequest(nr_ue_nas_t *nas, as_nas_info_t *initialNasMsg, const nas_deregistration_req_t *req)
+static void generateDeregistrationRequest(nr_ue_nas_t *nas, as_nas_info_t *initialNasMsg)
 {
   fgmm_nas_msg_security_protected_t sp_msg = {0};
   fgs_nas_message_security_header_t *sp_header = &sp_msg.header;
@@ -1802,6 +1934,7 @@ static int get_user_nssai_idx(nssai_t ch_nssai, const nr_nas_msg_snssai_t allowe
 
 void *nas_nrue_task(void *args_p)
 {
+  UNUSED(args_p);
   while (1) {
     nas_nrue(NULL);
   }
@@ -1942,6 +2075,7 @@ static void handle_service_reject(nr_ue_nas_t *nas, const byte_array_t *buffer)
 
 void *nas_nrue(void *args_p)
 {
+  UNUSED(args_p);
   // Wait for a message or an event
   MessageDef *msg_p;
   itti_receive_msg(TASK_NAS_NRUE, &msg_p);
@@ -2072,7 +2206,7 @@ void *nas_nrue(void *args_p)
             send_nas_detach_req(nas, true);
           }
           as_nas_info_t initialNasMsg = {0};
-          generateDeregistrationRequest(nas, &initialNasMsg, req);
+          generateDeregistrationRequest(nas, &initialNasMsg);
           send_nas_uplink_data_req(nas, &initialNasMsg);
         } else {
           LOG_W(NAS, "No GUTI, cannot trigger deregistration request.\n");
@@ -2108,7 +2242,7 @@ void *nas_nrue(void *args_p)
             handle_fgmm_authentication_request(nas, &initialNasMsg, &buffer);
             break;
           case FGS_AUTHENTICATION_REJECT:
-            handle_authentication_reject(nas, &initialNasMsg, pdu_buffer, pdu_length);
+            handle_authentication_reject(nas, pdu_buffer, pdu_length);
             break;
           case FGS_SECURITY_MODE_COMMAND:
             handle_security_mode_command(nas, &initialNasMsg, pdu_buffer, pdu_length);

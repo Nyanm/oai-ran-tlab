@@ -163,7 +163,7 @@ void nr_mac_rlc_data_ind(const module_id_t  module_idP,
     logical_chan_id_t ch = data[i].ch;
     nr_rlc_entity_t *rb = get_rlc_entity_from_lcid(ue, ch);
     if (rb != NULL) {
-      LOG_D(RLC, "RB found! (channel ID %d) \n", ch);
+      LOG_D(RLC, "RB found! (instance %d channel ID %d) \n", module_idP, ch);
       rb->set_time(rb, get_nr_rlc_current_time());
       rb->recv_pdu(rb, (char *)data[i].buf, data[i].len);
     } else {
@@ -196,7 +196,7 @@ int nr_mac_rlc_multi_data_req(const module_id_t module_idP,
       pdu_siz[0] = rb->generate_pdu(rb, buffer_pP + 3, tb_sizeP - 3);
       if (pdu_siz[0] == 0)
         break;
-      LOG_D(RLC, "MAC PDU created: channel_idP %d len %d\n", channel_idP, pdu_siz[0]);
+      LOG_D(RLC, "MAC PDU created: instance %d channel_idP %d len %d\n", module_idP, channel_idP, pdu_siz[0]);
       // reserve header
       tb_sizeP -= 3 + pdu_siz[0];
       buffer_pP += 3 + pdu_siz[0];
@@ -233,7 +233,7 @@ tbs_size_t nr_mac_rlc_data_req(const module_id_t  module_idP,
   nr_rlc_entity_t *rb = get_rlc_entity_from_lcid(ue, channel_idP);
 
   if (rb != NULL) {
-    LOG_D(RLC, "MAC PDU to get created for channel_idP:%d \n", channel_idP);
+    LOG_D(RLC, "MAC PDU to get created for channel_idP:%d instance %d\n", channel_idP, module_idP);
     rb->set_time(rb, get_nr_rlc_current_time());
     maxsize = tb_sizeP;
     ret = rb->generate_pdu(rb, buffer_pP, maxsize);
@@ -245,8 +245,7 @@ tbs_size_t nr_mac_rlc_data_req(const module_id_t  module_idP,
   nr_rlc_manager_unlock(nr_rlc_ue_manager);
 
   if (gnb_flagP)
-    T(T_ENB_RLC_MAC_DL, T_INT(module_idP), T_INT(ue_id),
-      T_INT(channel_idP), T_INT(ret));
+    T(T_ENB_RLC_MAC_DL, T_INT(module_idP), T_INT(ue_id), T_INT(channel_idP), T_INT(ret));
 
   return ret;
 }
@@ -911,6 +910,7 @@ struct srb0_data {
 
 void deliver_sdu_srb0(void *deliver_sdu_data, nr_rlc_entity_t *entity, char *buf, int size)
 {
+  UNUSED(entity);
   struct srb0_data *s0 = (struct srb0_data *)deliver_sdu_data;
   s0->send_initial_ul_rrc_message(s0->ue_id, (unsigned char *)buf, size, s0->data);
 }
@@ -933,8 +933,7 @@ bool nr_rlc_activate_srb0(int ue_id,
   srb0_data->data = data;
   srb0_data->send_initial_ul_rrc_message = send_initial_ul_rrc_message;
 
-  nr_rlc_entity_t *nr_rlc_tm = new_nr_rlc_entity_tm(10000,
-                                  deliver_sdu_srb0, srb0_data);
+  nr_rlc_entity_t *nr_rlc_tm = new_nr_rlc_entity_tm(10000, deliver_sdu_srb0, srb0_data);
   nr_rlc_ue_add_srb_rlc_entity(ue, 0, nr_rlc_tm);
 
   LOG_I(RLC, "Activated srb0 for UE %d\n", ue_id);

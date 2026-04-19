@@ -11,8 +11,6 @@
 #include "SCHED_NR_UE/defs.h"
 #include "PHY/NR_TRANSPORT/nr_transport_common_proto.h"
 #include <math.h>
-#include "nfapi_interface.h"
-#include <openair1/PHY/LTE_TRANSPORT/transport_proto.h>
 
 #define NR_PUSCH_x 2 // UCI placeholder bit TS 38.212 V15.4.0 subclause 5.3.3.1
 #define NR_PUSCH_y 3 // UCI placeholder bit
@@ -156,11 +154,11 @@ void nr_tx_rotation_and_ofdm_mod(const uint8_t slot,
                                  bool was_symbol_used[NR_SYMBOLS_PER_SLOT],
                                  bool no_phase_pre_comp);
 
-bool ue_srs_procedures_nr(PHY_VARS_NR_UE *ue,
-                                 const UE_nr_rxtx_proc_t *proc,
-                                 c16_t **txdataF,
-                                 nr_phy_data_tx_t *phy_data,
-                                 bool was_symbol_used[NR_SYMBOLS_PER_SLOT]);
+void ue_srs_procedures_nr(PHY_VARS_NR_UE *ue,
+                          const UE_nr_rxtx_proc_t *proc,
+                          c16_t **txdataF,
+                          const fapi_nr_ul_config_srs_pdu *srs_config_pdu,
+                          bool was_symbol_used[NR_SYMBOLS_PER_SLOT]);
 
 void clean_UE_harq(PHY_VARS_NR_UE *UE);
 

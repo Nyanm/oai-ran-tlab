@@ -834,13 +834,6 @@ void generate_RIV_tables(void)
 //       n_tilde_PRB(2,3) = (3,5)
 //       n_tilde_PRB(0,1) = (0,2)
 
-uint32_t get_rballoc(vrb_t vrb_type,uint16_t rb_alloc_dci)
-{
-
-  return(localRIV2alloc_LUT25[rb_alloc_dci]);
-
-}
-
 uint8_t subframe2harq_pid(LTE_DL_FRAME_PARMS *frame_parms,uint32_t frame,uint8_t subframe)
 {
   uint8_t ret = 255;

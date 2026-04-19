@@ -14,6 +14,9 @@
 
 int DU_handle_UE_CONTEXT_SETUP_REQUEST(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, F1AP_F1AP_PDU_t *pdu)
 {
+  UNUSED(instance);
+  UNUSED(assoc_id);
+  UNUSED(stream);
   f1ap_ue_context_setup_req_t req = {0};
   if (!decode_ue_context_setup_req(pdu, &req)) {
     LOG_E(F1AP, "cannot decode F1 UE Context Setup Request\n");
@@ -45,6 +48,7 @@ int DU_send_UE_CONTEXT_SETUP_RESPONSE(sctp_assoc_t assoc_id, f1ap_ue_context_set
 
 int DU_send_UE_CONTEXT_SETUP_FAILURE(sctp_assoc_t assoc_id)
 {
+  UNUSED(assoc_id);
   AssertFatal(1==0,"Not implemented yet\n");
 }
 
@@ -66,6 +70,9 @@ int DU_send_UE_CONTEXT_RELEASE_REQUEST(sctp_assoc_t assoc_id, f1ap_ue_context_re
 
 int DU_handle_UE_CONTEXT_RELEASE_COMMAND(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, F1AP_F1AP_PDU_t *pdu)
 {
+  UNUSED(instance);
+  UNUSED(assoc_id);
+  UNUSED(stream);
   f1ap_ue_context_rel_cmd_t cmd = {0};
   if (!decode_ue_context_rel_cmd(pdu, &cmd)) {
     LOG_E(F1AP, "cannot decode F1 UE Context Release Command\n");
@@ -96,6 +103,9 @@ int DU_send_UE_CONTEXT_RELEASE_COMPLETE(sctp_assoc_t assoc_id, f1ap_ue_context_r
 
 int DU_handle_UE_CONTEXT_MODIFICATION_REQUEST(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, F1AP_F1AP_PDU_t *pdu)
 {
+  UNUSED(instance);
+  UNUSED(assoc_id);
+  UNUSED(stream);
   f1ap_ue_context_mod_req_t req = {0};
   if (!decode_ue_context_mod_req(pdu, &req)) {
     LOG_E(F1AP, "cannot decode F1 UE Context Modification Request\n");
@@ -124,7 +134,9 @@ int DU_send_UE_CONTEXT_MODIFICATION_RESPONSE(sctp_assoc_t assoc_id, f1ap_ue_cont
   return 0;
 }
 
-int DU_send_UE_CONTEXT_MODIFICATION_FAILURE(sctp_assoc_t assoc_id) {
+int DU_send_UE_CONTEXT_MODIFICATION_FAILURE(sctp_assoc_t assoc_id)
+{
+  UNUSED(assoc_id);
   AssertFatal(1==0,"Not implemented yet\n");
 }
 
@@ -250,6 +262,9 @@ int DU_send_UE_CONTEXT_MODIFICATION_REQUIRED(sctp_assoc_t assoc_id, f1ap_ue_cont
 
 int DU_handle_UE_CONTEXT_MODIFICATION_CONFIRM(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, F1AP_F1AP_PDU_t *pdu)
 {
+  UNUSED(instance);
+  UNUSED(assoc_id);
+  UNUSED(stream);
   F1AP_UEContextModificationConfirm_t *container = &pdu->choice.successfulOutcome->value.choice.UEContextModificationConfirm;
   f1ap_ue_context_modif_confirm_t confirm = {0};
   F1AP_UEContextModificationConfirmIEs_t *ie = NULL;
@@ -326,6 +341,9 @@ int DU_handle_UE_CONTEXT_MODIFICATION_CONFIRM(instance_t instance, sctp_assoc_t 
 
 int DU_handle_UE_CONTEXT_MODIFICATION_REFUSE(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, F1AP_F1AP_PDU_t *pdu)
 {
+  UNUSED(instance);
+  UNUSED(assoc_id);
+  UNUSED(stream);
   F1AP_UEContextModificationRefuse_t *container = &pdu->choice.unsuccessfulOutcome->value.choice.UEContextModificationRefuse;
   f1ap_ue_context_modif_refuse_t refuse = {0};
   F1AP_UEContextModificationRefuseIEs_t *ie = NULL;
