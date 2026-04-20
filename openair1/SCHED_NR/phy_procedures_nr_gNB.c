@@ -14,6 +14,7 @@
 #include "common/utils/LOG/log.h"
 #include "PHY/INIT/nr_phy_init.h"
 #include "PHY/MODULATION/nr_modulation.h"
+#include "PHY/NR_REFSIG/ss_pbch_nr.h"
 #include "T.h"
 #include "executables/nr-softmodem.h"
 #include "executables/softmodem-common.h"
@@ -44,6 +45,18 @@ static inline bool prb_is_rotated(const uint64_t *prb_mask, int prb)
   return (prb_mask[prb >> 6] >> (prb & 63)) & 0x1;
 }
 
+static inline void mark_prb(uint64_t *prb_mask, int prb_mask_words, int symbol, int prb)
+{
+  uint64_t *symbol_mask = prb_mask + symbol * prb_mask_words;
+  symbol_mask[prb >> 6] |= UINT64_C(1) << (prb & 63);
+}
+
+static inline void mark_prb_range(uint64_t *prb_mask, int prb_mask_words, int symbol, int first_prb, int nb_prb)
+{
+  for (int prb = first_prb; prb < first_prb + nb_prb; prb++)
+    mark_prb(prb_mask, prb_mask_words, symbol, prb);
+}
+
 static inline void apply_nr_rotation_TX_segment(const NR_DL_FRAME_PARMS *fp,
                                                 c16_t *txdataF,
                                                 const c16_t *symbol_rotation,
@@ -58,26 +71,57 @@ static inline void apply_nr_rotation_TX_segment(const NR_DL_FRAME_PARMS *fp,
   rotate_cpx_vector(this_symbol, rot, this_symbol, nb_prb * NR_NB_SC_PER_RB, 15);
 }
 
-static void apply_nr_rotation_TX_residual(const NR_DL_FRAME_PARMS *fp,
-                                          c16_t *txdataF,
-                                          const c16_t *symbol_rotation,
-                                          int slot,
-                                          const uint64_t *pdsch_phase_comp_prb_mask,
-                                          int prb_mask_words)
+static void merge_prb_mask(const NR_DL_FRAME_PARMS *fp,
+                           const uint64_t *local_prb_mask,
+                           uint64_t *global_prb_mask,
+                           int prb_mask_words)
 {
   for (int symbol = 0; symbol < fp->symbols_per_slot; symbol++) {
-    const uint64_t *symbol_mask = pdsch_phase_comp_prb_mask + symbol * prb_mask_words;
+    const uint64_t *local_symbol_mask = local_prb_mask + symbol * prb_mask_words;
+    uint64_t *global_symbol_mask = global_prb_mask + symbol * prb_mask_words;
     int prb = 0;
     while (prb < fp->N_RB_DL) {
-      while (prb < fp->N_RB_DL && prb_is_rotated(symbol_mask, prb))
+      while (prb < fp->N_RB_DL && !prb_is_rotated(local_symbol_mask, prb))
         prb++;
       const int start_prb = prb;
-      while (prb < fp->N_RB_DL && !prb_is_rotated(symbol_mask, prb))
+      while (prb < fp->N_RB_DL && prb_is_rotated(local_symbol_mask, prb))
         prb++;
-      if (prb > start_prb)
-        apply_nr_rotation_TX_segment(fp, txdataF, symbol_rotation, slot, symbol, start_prb, prb - start_prb);
+      if (prb > start_prb) {
+        for (int rr = start_prb; rr < prb; rr++)
+          global_symbol_mask[rr >> 6] |= UINT64_C(1) << (rr & 63);
+      }
     }
   }
+}
+
+static void apply_nr_rotation_TX_masked(const NR_DL_FRAME_PARMS *fp,
+                                        c16_t **txdataF,
+                                        int num_tx_buffers,
+                                        const c16_t *symbol_rotation,
+                                        int slot,
+                                        const uint64_t *local_prb_mask,
+                                        uint64_t *global_prb_mask,
+                                        int prb_mask_words)
+{
+  for (int aa = 0; aa < num_tx_buffers; aa++) {
+    if (!txdataF[aa])
+      continue;
+    for (int symbol = 0; symbol < fp->symbols_per_slot; symbol++) {
+      const uint64_t *local_symbol_mask = local_prb_mask + symbol * prb_mask_words;
+      int prb = 0;
+      while (prb < fp->N_RB_DL) {
+        while (prb < fp->N_RB_DL && !prb_is_rotated(local_symbol_mask, prb))
+          prb++;
+        const int start_prb = prb;
+        while (prb < fp->N_RB_DL && prb_is_rotated(local_symbol_mask, prb))
+          prb++;
+        if (prb > start_prb)
+          apply_nr_rotation_TX_segment(fp, txdataF[aa], symbol_rotation, slot, symbol, start_prb, prb - start_prb);
+      }
+    }
+  }
+
+  merge_prb_mask(fp, local_prb_mask, global_prb_mask, prb_mask_words);
 }
 
 int beam_index_allocation(bool das,
@@ -119,7 +163,12 @@ int beam_index_allocation(bool das,
   return idx;
 }
 
-void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, const nfapi_nr_dl_tti_ssb_pdu *ssb_pdu)
+void nr_common_signal_procedures(PHY_VARS_gNB *gNB,
+                                 int frame,
+                                 int slot,
+                                 const nfapi_nr_dl_tti_ssb_pdu *ssb_pdu,
+                                 uint64_t *phase_comp_prb_mask,
+                                 int prb_mask_words)
 {
   NR_DL_FRAME_PARMS *fp = &gNB->frame_parms;
   const nfapi_nr_dl_tti_ssb_pdu_rel15_t *pdu = &ssb_pdu->ssb_pdu_rel15;
@@ -205,6 +254,26 @@ void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, const n
                    frame,
                    cfg,
                    fp);
+
+  if (!gNB->phase_comp)
+    return;
+
+  uint64_t local_phase_comp_prb_mask[fp->symbols_per_slot][prb_mask_words];
+  memset(local_phase_comp_prb_mask, 0, sizeof(local_phase_comp_prb_mask));
+  const int ssb_start_prb = fp->ssb_start_subcarrier / NR_NB_SC_PER_RB;
+  const int ssb_nb_prb = (fp->ssb_start_subcarrier % NR_NB_SC_PER_RB + 240 + NR_NB_SC_PER_RB - 1) / NR_NB_SC_PER_RB;
+  for (int symbol = ssb_start_symbol; symbol < ssb_start_symbol + NR_N_SYMBOLS_SSB; symbol++)
+    mark_prb_range(&local_phase_comp_prb_mask[0][0], prb_mask_words, symbol, ssb_start_prb, ssb_nb_prb);
+
+  c16_t *ssb_txdataF[] = {txdataF[beam_nb][0]};
+  apply_nr_rotation_TX_masked(fp,
+                              ssb_txdataF,
+                              1,
+                              fp->symbol_rotation[0],
+                              slot,
+                              &local_phase_comp_prb_mask[0][0],
+                              phase_comp_prb_mask + beam_nb * fp->symbols_per_slot * prb_mask_words,
+                              prb_mask_words);
 }
 
 // clearing beam information to be provided to RU for all slots (DL and UL)
@@ -218,7 +287,11 @@ void clear_slot_beamid(PHY_VARS_gNB *gNB, int slot)
   }
 }
 
-static void nr_generate_csi_rs_gNB(PHY_VARS_gNB *gNB, int slot, const nfapi_nr_dl_tti_csi_rs_pdu *csi_rs_pdu)
+static void nr_generate_csi_rs_gNB(PHY_VARS_gNB *gNB,
+                                   int slot,
+                                   const nfapi_nr_dl_tti_csi_rs_pdu *csi_rs_pdu,
+                                   uint64_t *phase_comp_prb_mask,
+                                   int prb_mask_words)
 {
   const nfapi_nr_dl_tti_csi_rs_pdu_rel15_t *csi_params = &csi_rs_pdu->csi_rs_pdu_rel15;
   if (csi_params->csi_type == 2) // ZP-CSI
@@ -252,6 +325,60 @@ static void nr_generate_csi_rs_gNB(PHY_VARS_gNB *gNB, int slot, const nfapi_nr_d
                      csi_params->power_control_offset_ss,
                      csi_params->cdm_type,
                      gNB->common_vars.txdataF[beam_nb]);
+
+  if (!gNB->phase_comp)
+    return;
+
+  uint64_t local_phase_comp_prb_mask[gNB->frame_parms.symbols_per_slot][prb_mask_words];
+  memset(local_phase_comp_prb_mask, 0, sizeof(local_phase_comp_prb_mask));
+  for (int rb = csi_params->start_rb; rb < csi_params->start_rb + csi_params->nr_of_rbs; rb++) {
+    if ((csi_params->freq_density <= 1) && (csi_params->freq_density != (rb % 2)))
+      continue;
+    for (int j = 0; j < mapping_parms.size; j++) {
+      for (int lp = 0; lp <= mapping_parms.lprime; lp++) {
+        const int symbol = mapping_parms.loverline[j] + lp;
+        mark_prb(&local_phase_comp_prb_mask[0][0], prb_mask_words, symbol, rb);
+      }
+    }
+  }
+
+  apply_nr_rotation_TX_masked(&gNB->frame_parms,
+                              gNB->common_vars.txdataF[beam_nb],
+                              min(mapping_parms.ports, gNB->gNB_config.carrier_config.num_tx_ant.value),
+                              gNB->frame_parms.symbol_rotation[0],
+                              slot,
+                              &local_phase_comp_prb_mask[0][0],
+                              phase_comp_prb_mask + beam_nb * gNB->frame_parms.symbols_per_slot * prb_mask_words,
+                              prb_mask_words);
+}
+
+static void nr_generate_prs_gNB(PHY_VARS_gNB *gNB,
+                                int slot,
+                                int slot_prs,
+                                prs_config_t *prs_config,
+                                uint64_t *phase_comp_prb_mask,
+                                int prb_mask_words)
+{
+  const NR_DL_FRAME_PARMS *fp = &gNB->frame_parms;
+  nr_generate_prs(slot_prs, gNB->common_vars.txdataF[0][0], AMP, prs_config, fp);
+
+  if (!gNB->phase_comp)
+    return;
+
+  uint64_t local_phase_comp_prb_mask[fp->symbols_per_slot][prb_mask_words];
+  memset(local_phase_comp_prb_mask, 0, sizeof(local_phase_comp_prb_mask));
+  for (int symbol = prs_config->SymbolStart; symbol < prs_config->SymbolStart + prs_config->NumPRSSymbols; symbol++)
+    mark_prb_range(&local_phase_comp_prb_mask[0][0], prb_mask_words, symbol, prs_config->RBOffset, prs_config->NumRB);
+
+  c16_t *prs_txdataF[] = {gNB->common_vars.txdataF[0][0]};
+  apply_nr_rotation_TX_masked(fp,
+                              prs_txdataF,
+                              1,
+                              fp->symbol_rotation[0],
+                              slot,
+                              &local_phase_comp_prb_mask[0][0],
+                              phase_comp_prb_mask,
+                              prb_mask_words);
 }
 
 void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
@@ -266,6 +393,10 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
 
   if ((cfg->cell_config.frame_duplex_type.value == TDD) && (nr_slot_select(cfg,frame,slot) == NR_UPLINK_SLOT))
     return;
+
+  const int prb_mask_words = (fp->N_RB_DL + 63) >> 6;
+  uint64_t phase_comp_prb_mask[gNB->common_vars.num_beams_period][fp->symbols_per_slot][prb_mask_words];
+  memset(phase_comp_prb_mask, 0, sizeof(phase_comp_prb_mask));
 
   // clear the transmit data array and beam index for the current slot
   for (int i = 0; i < gNB->common_vars.num_beams_period; i++) {
@@ -284,14 +415,10 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
       {
         int slot_prs = (slot - i * prs_config->PRSResourceTimeGap + fp->slots_per_frame) % fp->slots_per_frame;
         LOG_D(PHY,"gNB_TX: frame %d, slot %d, slot_prs %d, PRS Resource ID %d\n",frame, slot, slot_prs, rsc_id);
-        nr_generate_prs(slot_prs, gNB->common_vars.txdataF[0][0], AMP, prs_config, fp);
+        nr_generate_prs_gNB(gNB, slot, slot_prs, prs_config, &phase_comp_prb_mask[0][0][0], prb_mask_words);
       }
     }
   }
-
-  const int prb_mask_words = (fp->N_RB_DL + 63) >> 6;
-  uint64_t phase_comp_prb_mask[gNB->common_vars.num_beams_period][fp->symbols_per_slot][prb_mask_words];
-  memset(phase_comp_prb_mask, 0, sizeof(phase_comp_prb_mask));
 
   for (int i = 0; i < UL_dci_req->numPdus; ++i)
     nr_generate_dci(gNB,
@@ -306,7 +433,12 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
     const nfapi_nr_dl_tti_request_pdu_t *dl_tti_pdu = &DL_req->dl_tti_request_body.dl_tti_pdu_list[i];
     switch (dl_tti_pdu->PDUType) {
       case NFAPI_NR_DL_TTI_SSB_PDU_TYPE:
-        nr_common_signal_procedures(gNB, frame, slot, &dl_tti_pdu->ssb_pdu);
+        nr_common_signal_procedures(gNB,
+                                    frame,
+                                    slot,
+                                    &dl_tti_pdu->ssb_pdu,
+                                    &phase_comp_prb_mask[0][0][0],
+                                    prb_mask_words);
         break;
       case NFAPI_NR_DL_TTI_PDCCH_PDU_TYPE:
         nr_generate_dci(gNB,
@@ -317,7 +449,7 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
                         prb_mask_words);
         break;
       case NFAPI_NR_DL_TTI_CSI_RS_PDU_TYPE:
-        nr_generate_csi_rs_gNB(gNB, slot, &dl_tti_pdu->csi_rs_pdu);
+        nr_generate_csi_rs_gNB(gNB, slot, &dl_tti_pdu->csi_rs_pdu, &phase_comp_prb_mask[0][0][0], prb_mask_words);
         break;
       case NFAPI_NR_DL_TTI_PDSCH_PDU_TYPE: {
         int tx_data_idx = dl_tti_pdu->pdsch_pdu.pdsch_pdu_rel15.pduIndex;
@@ -348,14 +480,6 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
   start_meas(&gNB->phase_comp_stats);
   for (int i = 0; i < gNB->common_vars.num_beams_period; ++i) {
     for (int aa = 0; aa < cfg->carrier_config.num_tx_ant.value; aa++) {
-      if (gNB->phase_comp) {
-        apply_nr_rotation_TX_residual(fp,
-                                      gNB->common_vars.txdataF[i][aa],
-                                      fp->symbol_rotation[0],
-                                      slot,
-                                      &phase_comp_prb_mask[i][0][0],
-                                      prb_mask_words);
-      }
       T(T_GNB_PHY_DL_OUTPUT_SIGNAL,
         T_INT(0),
         T_INT(frame),
