@@ -793,14 +793,14 @@ static inline void rotate_cpx_vector(const c16_t *const x, const c16_t *const al
 
       const int16x4_t ar4 = vdup_n_s16(alpha->r);
       const int16x4_t ai4 = vdup_n_s16(alpha->i);
-      const int16x8_t ar = vcombine_s16(ar4, ar4);
-      const int16x8_t ai = vcombine_s16(ai4, ai4);
       for (uint32_t i = 0; i < (N >> 2); i++) {
         // Load/deinterleave [re0 im0 re1 im1 ...] into separate real/imag vectors.
         const int16x8x2_t xb = vld2q_s16((const int16_t *)&x[i << 2]);
         const int16x8_t br = xb.val[0];
         const int16x8_t bi = xb.val[1];
 #ifdef __ARM_FEATURE_QRDMX
+        const int16x8_t ar = vcombine_s16(ar4, ar4);
+        const int16x8_t ai = vcombine_s16(ai4, ai4);
         // ARMv8.1-A: Use RDM instructions (rounding doubling multiply)
         // Start with the two “diagonal” products using high-half, doubling, sat:
         // x = round( (2*ar*br) / 2^16 ), y = round( (2*ar*bi) / 2^16 )
