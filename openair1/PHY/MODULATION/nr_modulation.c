@@ -227,6 +227,18 @@ static inline uint8_t get_packed_symbol(const uint8_t *in_bytes, uint32_t length
   return (packed >> bit_shift) & ((1U << mod_order) - 1);
 }
 
+static inline uint64_t get_packed_bits(const uint8_t *in_bytes, uint32_t length, uint32_t bit_offset, uint8_t width)
+{
+  const uint32_t byte_offset = bit_offset >> 3;
+  const uint32_t bit_shift = bit_offset & 0x7;
+  const uint32_t num_bytes = (length + 7) >> 3;
+  const uint32_t bytes_needed = (bit_shift + width + 7) >> 3;
+  uint64_t packed = 0;
+  for (uint32_t i = 0; i < bytes_needed && byte_offset + i < num_bytes; i++)
+    packed |= (uint64_t)in_bytes[byte_offset + i] << (i << 3);
+  return (packed >> bit_shift) & ((UINT64_C(1) << width) - 1);
+}
+
 bool nr_modulation_layer_mapping(const uint32_t *in,
                                  uint32_t length,
                                  uint16_t mod_order,
@@ -274,6 +286,80 @@ bool nr_modulation_layer_mapping(const uint32_t *in,
         }
       }
       return true;
+    }
+
+    case 6: {
+      const c16_t *nr_mod_table = (const c16_t *)nr_64qam_mod_table;
+      if (n_layers == 1) {
+        c16_t *tx0 = tx_layers[0];
+        uint32_t sym = 0;
+        for (; sym + 2 <= n_symbs; sym += 2) {
+          const uint16_t idx = get_packed_bits(in_bytes, length, sym * mod_order, 12);
+          tx0[sym] = nr_mod_table[idx * 2];
+          tx0[sym + 1] = nr_mod_table[idx * 2 + 1];
+        }
+        if (sym < n_symbs) {
+          const uint8_t idx = get_packed_symbol(in_bytes, length, mod_order, sym);
+          tx0[sym] = nr_mod_table[idx * 2];
+        }
+        return true;
+      }
+
+      if (n_layers == 2) {
+        c16_t *tx0 = tx_layers[0];
+        c16_t *tx1 = tx_layers[1];
+        for (uint32_t sym = 0, layer_sym = 0; sym < n_symbs; sym += 2, layer_sym++) {
+          const uint16_t idx = get_packed_bits(in_bytes, length, sym * mod_order, 12);
+          tx0[layer_sym] = nr_mod_table[idx * 2];
+          tx1[layer_sym] = nr_mod_table[idx * 2 + 1];
+        }
+        return true;
+      }
+
+      if (n_layers == 3) {
+        c16_t *tx0 = tx_layers[0];
+        c16_t *tx1 = tx_layers[1];
+        c16_t *tx2 = tx_layers[2];
+        uint32_t sym = 0;
+        uint32_t layer_sym = 0;
+        for (; sym + 6 <= n_symbs; sym += 6, layer_sym += 2) {
+          const uint64_t bits = get_packed_bits(in_bytes, length, sym * mod_order, 36);
+          const uint16_t idx0 = bits & 0xfff;
+          const uint16_t idx1 = (bits >> 12) & 0xfff;
+          const uint16_t idx2 = (bits >> 24) & 0xfff;
+          tx0[layer_sym] = nr_mod_table[idx0 * 2];
+          tx1[layer_sym] = nr_mod_table[idx0 * 2 + 1];
+          tx2[layer_sym] = nr_mod_table[idx1 * 2];
+          tx0[layer_sym + 1] = nr_mod_table[idx1 * 2 + 1];
+          tx1[layer_sym + 1] = nr_mod_table[idx2 * 2];
+          tx2[layer_sym + 1] = nr_mod_table[idx2 * 2 + 1];
+        }
+        if (sym < n_symbs) {
+          for (uint8_t layer = 0; layer < 3; layer++) {
+            const uint8_t idx = get_packed_symbol(in_bytes, length, mod_order, sym + layer);
+            tx_layers[layer][layer_sym] = nr_mod_table[idx * 2];
+          }
+        }
+        return true;
+      }
+
+      if (n_layers == 4) {
+        c16_t *tx0 = tx_layers[0];
+        c16_t *tx1 = tx_layers[1];
+        c16_t *tx2 = tx_layers[2];
+        c16_t *tx3 = tx_layers[3];
+        for (uint32_t sym = 0, layer_sym = 0; sym < n_symbs; sym += 4, layer_sym++) {
+          const uint32_t bits = get_packed_bits(in_bytes, length, sym * mod_order, 24);
+          const uint16_t idx0 = bits & 0xfff;
+          const uint16_t idx1 = (bits >> 12) & 0xfff;
+          tx0[layer_sym] = nr_mod_table[idx0 * 2];
+          tx1[layer_sym] = nr_mod_table[idx0 * 2 + 1];
+          tx2[layer_sym] = nr_mod_table[idx1 * 2];
+          tx3[layer_sym] = nr_mod_table[idx1 * 2 + 1];
+        }
+        return true;
+      }
+      return false;
     }
 
     case 8: {
