@@ -427,7 +427,7 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
     completed_many_task_ans(&ans, nbTasks - nbEncode);
   }
   // Execute thread pool tasks
-  join_task_ans(&ans);
+  if (nbTasks > 0)  join_task_ans(&ans);
 
   // Write output
   time_stats_t *tconcat = nrLDPC_slot_encoding_parameters->tconcat;

@@ -1073,8 +1073,11 @@ static void nr_pusch_symbol_processing(void *arg)
     int16_t *s = rdata->scramblingSequence + pusch_vars->llr_offset[symbol] * rel15_ul->nrOfLayers;
     const int end = nb_re_pusch * rel15_ul->qam_mod_order * rel15_ul->nrOfLayers;
     int i=0;
-    for (; (i+8) <= end; i+=8)
-      simde_mm_storeu_si128(llr16+i, simde_mm_mullo_epi16(*(simde__m128i*)&llr_ptr[i],*(simde__m128i*)&s[i]));
+    for (; (i+8) <= end; i+=8) {
+      simde__m128i llr128 = simde_mm_loadu_si128((simde__m128i *)&llr_ptr[i]);
+      simde__m128i s128 = simde_mm_loadu_si128((simde__m128i *)&s[i]);
+      simde_mm_storeu_si128(llr16+i, simde_mm_mullo_epi16(llr128, s128));
+    }
     for (;i<end;i++)
       llr16[i]=llr_ptr[i] * s[i];
     stop_meas(&gNB->ulsch_unscrambling_stats);
