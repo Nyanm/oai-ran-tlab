@@ -215,6 +215,88 @@ void nr_modulation(const uint32_t *in, uint32_t length, uint16_t mod_order, int1
   AssertFatal(false, "Invalid or unsupported modulation order %d\n", mod_order);
 }
 
+static inline uint8_t get_packed_symbol(const uint8_t *in_bytes, uint32_t length, uint16_t mod_order, uint32_t symbol_idx)
+{
+  const uint32_t bit_offset = symbol_idx * mod_order;
+  const uint32_t byte_offset = bit_offset >> 3;
+  const uint32_t bit_shift = bit_offset & 0x7;
+  const uint32_t num_bytes = (length + 7) >> 3;
+  uint16_t packed = in_bytes[byte_offset];
+  if (bit_shift > 8 - mod_order && byte_offset + 1 < num_bytes)
+    packed |= (uint16_t)in_bytes[byte_offset + 1] << 8;
+  return (packed >> bit_shift) & ((1U << mod_order) - 1);
+}
+
+bool nr_modulation_layer_mapping(const uint32_t *in,
+                                 uint32_t length,
+                                 uint16_t mod_order,
+                                 uint8_t n_layers,
+                                 int layerSz,
+                                 c16_t tx_layers[][layerSz])
+{
+  if (n_layers < 1 || n_layers > 4)
+    return false;
+
+  const uint32_t n_symbs = length / mod_order;
+  if ((n_symbs % n_layers) != 0)
+    return false;
+
+  const uint8_t *in_bytes = (const uint8_t *)in;
+
+  switch (mod_order) {
+    case 2: {
+      const c16_t *nr_mod_table = nr_qpsk_mod_table;
+      if (n_layers == 1) {
+        nr_modulation(in, length, mod_order, (int16_t *)tx_layers[0]);
+        return true;
+      }
+
+      for (uint32_t sym = 0, layer_sym = 0; sym < n_symbs; sym += n_layers, layer_sym++) {
+        for (uint8_t layer = 0; layer < n_layers; layer++) {
+          const uint8_t idx = get_packed_symbol(in_bytes, length, mod_order, sym + layer);
+          tx_layers[layer][layer_sym] = nr_mod_table[idx];
+        }
+      }
+      return true;
+    }
+
+    case 4: {
+      const int32_t *nr_mod_table = nr_16qam_mod_table;
+      if (n_layers == 1) {
+        nr_modulation(in, length, mod_order, (int16_t *)tx_layers[0]);
+        return true;
+      }
+
+      for (uint32_t sym = 0, layer_sym = 0; sym < n_symbs; sym += n_layers, layer_sym++) {
+        for (uint8_t layer = 0; layer < n_layers; layer++) {
+          const uint8_t idx = get_packed_symbol(in_bytes, length, mod_order, sym + layer);
+          ((int32_t *)tx_layers[layer])[layer_sym] = nr_mod_table[idx];
+        }
+      }
+      return true;
+    }
+
+    case 8: {
+      const int32_t *nr_mod_table = nr_256qam_mod_table;
+      if (n_layers == 1) {
+        nr_modulation(in, length, mod_order, (int16_t *)tx_layers[0]);
+        return true;
+      }
+
+      for (uint32_t sym = 0, layer_sym = 0; sym < n_symbs; sym += n_layers, layer_sym++) {
+        for (uint8_t layer = 0; layer < n_layers; layer++) {
+          const uint8_t idx = get_packed_symbol(in_bytes, length, mod_order, sym + layer);
+          ((int32_t *)tx_layers[layer])[layer_sym] = nr_mod_table[idx];
+        }
+      }
+      return true;
+    }
+
+    default:
+      return false;
+  }
+}
+
 void nr_layer_mapping(int nbCodes,
                       int encoded_len,
                       c16_t mod_symbs[nbCodes][encoded_len],
