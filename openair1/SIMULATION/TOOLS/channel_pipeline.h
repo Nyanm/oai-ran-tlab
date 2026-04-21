@@ -4,6 +4,7 @@
 
 #ifndef _CHANNEL_CONVOLUTION_H_
 #define _CHANNEL_CONVOLUTION_H_
+#define THRES 0.03
 
 #ifdef __cplusplus
 extern "C" {

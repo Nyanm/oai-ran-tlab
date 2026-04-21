@@ -46,17 +46,35 @@ void do_convolution_and_noise(int nb_tx,
 {
   const int batch_size = 4000;
   cf_t work_buffer[batch_size] __attribute__((aligned(64)));
+
+  // Pre-scan: build strong tap indices for each TX antenna
+  int strong_tap_indices[nb_tx][channel_length] __attribute__((aligned(32)));
+  int num_strong_taps[nb_tx] __attribute__((aligned(32)));
+
+  for (int tx_ant = 0; tx_ant < nb_tx; tx_ant++) {
+      num_strong_taps[tx_ant] = 0;
+      for (int l = 0; l < channel_length; l++) {
+          if (squaredMod(channel[tx_ant][l]) >= THRES) {  // Strong tap
+            strong_tap_indices[tx_ant][num_strong_taps[tx_ant]] = l;
+            num_strong_taps[tx_ant]++;
+          }
+      }
+    }
+
   for (int batch_start = job_index * batch_size; batch_start < num_samples; batch_start += batch_size * num_jobs) {
     int batch_end = min(batch_start + batch_size, num_samples);
     if (noise_power > 0.0f) {
       get_noise_vector((float *)work_buffer, batch_size * 2);
     }
+
     for (int i = batch_start; i < batch_end; i++) {
       float rx_r = 0.0f;
       float rx_i = 0.0f;
 
       for (int tx_ant = 0; tx_ant < nb_tx; tx_ant++) {
-        for (int l = 0; l < channel_length; l++) {
+        // Iterate only over strong taps
+        for (int tap_idx = 0; tap_idx < num_strong_taps[tx_ant]; tap_idx++) {
+          int l = strong_tap_indices[tx_ant][tap_idx];  // Get actual tap delay index
           int idx = i + (channel_length - 1) - l;
           c16_t in_sample;
           if (idx < num_samples_tx_sig0) {
