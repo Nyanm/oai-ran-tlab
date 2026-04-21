@@ -627,7 +627,6 @@ static int do_one_dlsch(unsigned char *input_ptr,
     memcpy(dlsch->f, input_ptr, (encoded_length + 7) >> 3);
 
   start_meas(&gNB->dlsch_pdsch_generation_stats);
-  start_meas(&gNB->dlsch_layer_mapping_stats);
   int layerSz2 = (layerSz + 63) & ~63;
   c16_t tx_layers[rel15->nrOfLayers][layerSz2] __attribute__((aligned(64)));
   memset(tx_layers, 0, sizeof(tx_layers));
@@ -641,10 +640,8 @@ static int do_one_dlsch(unsigned char *input_ptr,
     nr_pdsch_codeword_scrambling(input_ptr, encoded_length, 0, rel15->dataScramblingId, rel15->rnti, scrambled_output);
     stop_meas(dlsch_scrambling_stats);
 
-    start_meas(dlsch_modulation_stats);
     const bool fused_ok =
         nr_modulation_layer_mapping(scrambled_output, encoded_length, Qm, rel15->nrOfLayers, layerSz2, tx_layers);
-    stop_meas(dlsch_modulation_stats);
     AssertFatal(fused_ok,
                 "Unsupported fused modulation/layer mapping for Qm %d, %d layers, %d codewords\n",
                 Qm,
@@ -684,7 +681,9 @@ static int do_one_dlsch(unsigned char *input_ptr,
 #endif
     }
 
+    start_meas(&gNB->dlsch_layer_mapping_stats);
     nr_layer_mapping(rel15->NrOfCodewords, encoded_length, mod_symbs, rel15->nrOfLayers, layerSz2, nb_re, tx_layers);
+    stop_meas(&gNB->dlsch_layer_mapping_stats);
   }
 
   /// Layer Precoding and Antenna port mapping
@@ -703,7 +702,6 @@ static int do_one_dlsch(unsigned char *input_ptr,
                                       slot,
                                       frame_parms->symbols_per_slot,
                                       bitmap);
-  stop_meas(&gNB->dlsch_layer_mapping_stats);
   /// Resource mapping
   // Non interleaved VRB to PRB mapping
 
