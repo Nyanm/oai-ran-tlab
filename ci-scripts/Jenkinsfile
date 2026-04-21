@@ -92,6 +92,7 @@ pipeline {
             if (is_MR) {
               def shortCommit = params.sourceCommit.take(8)
               sh "git checkout ${params.sourceBranch}-${shortCommit}"
+              sh "git reset --hard origin/${params.sourceBranch}-${shortCommit}"
             } else {
               sh "git checkout -f ${commitID}"
             }
