@@ -1406,11 +1406,14 @@ printf("%d\n", slot);
       fprintf(csv_file,"%.2f,%.4f,%.2f,%u\n", roundStats, effRate, effRate / (8 * pdsch_pdu_rel15->TBSize[0]) * 100, 8 * pdsch_pdu_rel15->TBSize[0]);
     }
     if (print_perf==1) {
-      printf("\ngNB TX function statistics (per %d us slot, NPRB %d, mcs %d, C %d, block %d)\n",
+      printf("\ngNB TX function statistics (per %d us slot, NPRB %d, mcs %d, C %d, Z %d, F %d, K %d, block %d)\n",
              1000 >> *scc->ssbSubcarrierSpacing,
              g_rbSize,
              g_mcsIndex,
              UE->dl_harq_processes[0][slot].C,
+             UE->dl_harq_processes[0][slot].Z,
+             UE->dl_harq_processes[0][slot].F,
+             UE->dl_harq_processes[0][slot].K,
              8 * pdsch_pdu_rel15->TBSize[0]);
       printDistribution(&gNB->phy_proc_tx,table_tx,"PHY proc tx");
       printStatIndent2(&gNB->dci_generation_stats, "DCI encoding time");
@@ -1446,71 +1449,6 @@ printf("%d\n", slot);
       }
     }
 
-    effRate /= n_trials;
-    printf("*****************************************\n");
-    printf("SNR %f: n_errors (%d/%d", SNR, n_errors[0], round_trials[0]);
-    for (int r = 1; r < num_rounds; r++)
-      printf(",%d/%d", n_errors[r], round_trials[r]);
-    printf(") (negative CRC), false_positive %d/%d, errors_scrambling (%u/%u", n_false_positive, n_trials, errors_scrambling[0], available_bits * round_trials[0]);
-    for (int r = 1; r < num_rounds; r++)
-      printf(",%u/%u", errors_scrambling[r], available_bits * round_trials[r]);
-    printf(")\n\n");
-    dump_pdsch_stats(stdout,gNB);
-    printf("SNR %f: Channel BLER (%e", SNR, blerStats[0]);
-    for (int r = 1; r < num_rounds; r++)
-      printf(",%e", blerStats[r]);
-    printf("), Channel BER (%e", berStats[0]);
-    for (int r = 1; r < num_rounds; r++)
-      printf(",%e", berStats[r]);
-    printf(") Avg round %.2f, Eff Rate %.4f bits/slot, Eff Throughput %.2f, TBS %u bits/slot\n", roundStats, effRate, effRate / TBS * 100, TBS);
-    printf("*****************************************\n");
-    printf("\n");
-    // writing to csv file
-    if (filename_csv != NULL) { // means we are asked to print stats to CSV
-      fprintf(csv_file,"%f,%d/%d,",SNR,n_false_positive,n_trials);
-      for (int r = 0; r < num_rounds; r++)
-        fprintf(csv_file,"%d/%d,%u/%u,%f,%e,",n_errors[r], round_trials[r], errors_scrambling[r], available_bits * round_trials[r],blerStats[r],berStats[r]);
-      fprintf(csv_file,"%.2f,%.4f,%.2f,%u\n", roundStats, effRate, effRate / TBS * 100, TBS);
-    }
-    if (print_perf==1) {
-      printf("\ngNB TX function statistics (per %d us slot, NPRB %d, mcs %d, C %d, Z %d, F %d, K %d, block %d)\n",
-             1000 >> *scc->ssbSubcarrierSpacing,
-             g_rbSize,
-             g_mcsIndex,
-             UE->dl_harq_processes[0][slot].C,
-	     UE->dl_harq_processes[0][slot].Z,
-	     UE->dl_harq_processes[0][slot].F,
-	     UE->dl_harq_processes[0][slot].K,
-             TBS << 3);
-      printDistribution(&gNB->phy_proc_tx,table_tx,"PHY proc tx");
-      printStatIndent2(&gNB->dci_generation_stats, "DCI encoding time");
-      printStatIndent2(&gNB->dlsch_encoding_stats,"DLSCH encoding time");
-      printStatIndent3(&gNB->dlsch_segmentation_stats,"DLSCH segmentation time");
-      gNB->tinput.trials = gNB->dlsch_encoding_stats.trials;
-      printStatIndent3(&gNB->tinput,"DLSCH LDPC input processing time");
-      gNB->tinput_memcpy.trials = gNB->dlsch_encoding_stats.trials;
-      printStatIndent3(&gNB->tinput_memcpy,"DLSCH LDPC input memcpy time");
-      gNB->tparity.trials = gNB->dlsch_encoding_stats.trials;
-      printStatIndent3(&gNB->tparity,"DLSCH LDPC parity generation time");
-      gNB->toutput.trials = gNB->dlsch_encoding_stats.trials;
-      printStatIndent3(&gNB->toutput,"DLSCH LDPC output generation time");
-      gNB->dlsch_rate_matching_stats.trials = gNB->dlsch_encoding_stats.trials;
-      printStatIndent3(&gNB->dlsch_rate_matching_stats,"DLSCH Rate Matching time");
-      gNB->dlsch_interleaving_stats.trials = gNB->dlsch_encoding_stats.trials;
-      printStatIndent3(&gNB->dlsch_interleaving_stats,  "DLSCH Interleaving time");
-      printStatIndent3(&gNB->tconcat,  "DLSCH Segment Concatenation time");
-      printStatIndent2(&gNB->dlsch_modulation_stats,"DLSCH modulation time");
-      printStatIndent2(&gNB->dlsch_scrambling_stats, "DLSCH scrambling time");
-      printStatIndent2(&gNB->dlsch_precoding_stats,"DLSCH Mapping/Precoding time");
-      if (gNB->phase_comp)
-        printStatIndent2(&gNB->phase_comp_stats, "Phase Compensation");
-
-      printf("\nUE function statistics (per %d us slot)\n", 1000 >> *scc->ssbSubcarrierSpacing);
-      for (int i = RX_PDSCH_STATS; i <= DLSCH_PROCEDURES_STATS; i++) {
-        printStatIndent(&UE->phy_cpu_stats.cpu_time_stats[i], UE->phy_cpu_stats.cpu_time_stats[i].meas_name);
-      }
-    }
-//printf("1111\n");
     if (n_trials == 1) {
       unsigned int op_format = 1;
       unsigned int dec = 1;
