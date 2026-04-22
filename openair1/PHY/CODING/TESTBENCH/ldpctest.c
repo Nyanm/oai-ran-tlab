@@ -30,7 +30,10 @@
 ldpc_interface_t ldpc_orig, ldpc_toCompare;
 #define MAX_NUM_DLSCH_SEGMENTS_DL_ldpctest 132
 static double modulated_input[MAX_NUM_DLSCH_SEGMENTS_DL_ldpctest][68 * 384];
-static int8_t Failure_Mask[200][(MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER*4)] = {0};
+#define MAX_TRIALS 20000
+static int8_t Failure_Mask[MAX_TRIALS][(MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER*4)] = {0};
+
+uint32_t use_gpu=0;
 
 int PARALLEL_PATH = 0;//control decoder path
 
@@ -548,6 +551,7 @@ int main(int argc, char *argv[])
 
       case 'n':
         n_trials = atoi(optarg);
+        AssertFatal(n_trials < MAX_TRIALS, "max trials %d, please increase MAX_TRIALS\n", MAX_TRIALS);
         break;
 
       case 's':
