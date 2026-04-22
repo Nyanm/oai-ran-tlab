@@ -439,7 +439,7 @@ endif()
 ######                           cuda-specific tests                       ######
 ####################################################################################
 
-if (CUDA_ENABLE)
+if (ENABLE_CHANNEL_SIM_CUDA)
 
 # --- Test Suite 1: 61440 samples, 2/4/8/32 TX - 2/4/8/32 RX  ---
 add_physim_test(cuda.5g.channelsim.test_channel_scalability.test1  "16 channels 61440 samples 2T2R Batch"  test_channel_scalability -c 16 -t 2 -r 2 -s 61440 -l 32 -m batch  -n 12)

@@ -5,8 +5,8 @@ project (OpenAirInterface LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(OAI_VERSION 2.4.0)
 
-option(CUDA_ENABLE "Enable CUDA accelerated channel simulation" OFF)
-if(CUDA_ENABLE)
+option(ENABLE_CHANNEL_SIM_CUDA "Enable CUDA accelerated channel simulation" OFF)
+if(ENABLE_CHANNEL_SIM_CUDA)
     find_package(CUDA REQUIRED)
     find_package(CUDAToolkit REQUIRED)
     message(STATUS "CUDA explicitly enabled, building with GPU acceleration support.")
@@ -34,7 +34,7 @@ if(CUDA_ENABLE)
         message(STATUS "CUDA Explicit Copy path enabled (default ATS was overridden).")
     endif()
 
-    add_compile_definitions(ENABLE_CUDA)
+    add_compile_definitions(CHANNEL_SIM_CUDA)
 endif()
 
 #########################################################
@@ -2076,14 +2076,12 @@ target_link_libraries(nr_srssim PRIVATE
   m pthread ITTI dl nr_ue_phy_meas physim_common softmodem_common
   )
 
-if(CUDA_ENABLE)
-  if (TARGET oai_cuda_lib)
-      target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib)
-      target_link_libraries(nr_ulsim PRIVATE oai_cuda_lib)
+if(ENABLE_CHANNEL_SIM_CUDA)
+  target_link_libraries(nr_dlsim PRIVATE oai_cuda_lib)
+  target_link_libraries(nr_ulsim PRIVATE oai_cuda_lib)
 
-      target_compile_definitions(nr_dlsim PRIVATE ENABLE_CUDA)
-      target_compile_definitions(nr_ulsim PRIVATE ENABLE_CUDA)
-  endif()
+  target_compile_definitions(nr_dlsim PRIVATE CHANNEL_SIM_CUDA)
+  target_compile_definitions(nr_ulsim PRIVATE CHANNEL_SIM_CUDA)
 endif()
 
 # these simulators do not compile:
