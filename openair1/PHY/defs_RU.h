@@ -19,6 +19,8 @@
 #include "common/utils/threadPool/thread-pool.h"
 #include "common/utils/threadPool/notified_fifo.h"
 
+#include "defs_nr_dma.h"
+
 #define MAX_BANDS_PER_RRU 4
 #define MAX_RRU_CONFIG_SIZE 1024
 
@@ -348,12 +350,14 @@ typedef struct RU_proc_t_s {
 } RU_proc_t;
 
 typedef enum {
-  LOCAL_RF        =0,
-  REMOTE_IF5      =1,
-  REMOTE_MBP_IF5  =2,
-  REMOTE_IF4p5    =3,
-  REMOTE_IF1pp    =4,
-  MAX_RU_IF_TYPES =5
+  LOCAL_RF            =0,
+  REMOTE_IF5          =1,
+  REMOTE_MBP_IF5      =2,
+  REMOTE_IF4p5        =3,
+  REMOTE_IF1pp        =4,
+  REMOTE_IF4p5_DMA_HOST    =5,
+  REMOTE_IF4p5_DMA_DEVICE  =6,
+  MAX_RU_IF_TYPES     =7
 } RU_if_south_t;
 
 
@@ -608,6 +612,11 @@ typedef struct RU_t_s {
   /// number of cores for RU ThreadPool
   int num_tpcores;
   void* scopeData;
+
+  char     *dma_ctrl_ip;   
+  //dma CP ip
+  uint16_t  dma_ctrl_port; 
+  //dma CP port 
 } RU_t;
 
 

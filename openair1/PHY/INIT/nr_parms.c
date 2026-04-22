@@ -316,6 +316,22 @@ void nr_init_frame_parms(nfapi_nr_config_request_scf_t* cfg, NR_DL_FRAME_PARMS *
                                                     : fp->nb_prefix_samples0 + ((fp->symbols_per_slot - 1) * fp->nb_prefix_samples)
                                                           + (fp->symbols_per_slot * fp->ofdm_symbol_size);
   fp->samples_per_frame = 10 * fp->samples_per_subframe;
+//reconfigure for nr-oru 
+  if(fp->dl_CarrierFreq == 0){
+      uint64_t dl_bw_khz = (12*cfg->carrier_config.dl_grid_size[cfg->ssb_config.scs_common.value].value)*(15<<cfg->ssb_config.scs_common.value);
+  fp->dl_CarrierFreq = ((dl_bw_khz >> 1) + cfg->carrier_config.dl_frequency.value) * 1000;
+}
+  if(fp->ul_CarrierFreq == 0){
+      uint64_t ul_bw_khz = (12*cfg->carrier_config.ul_grid_size[cfg->ssb_config.scs_common.value].value)*(15<<cfg->ssb_config.scs_common.value);
+  fp->ul_CarrierFreq = ((ul_bw_khz >> 1) + cfg->carrier_config.uplink_frequency.value) * 1000;
+
+  if(fp->ofdm_offset_divisor == 0){
+  fp->ofdm_offset_divisor = 8;
+}
+}
+
+  
+
   fp->freq_range = get_freq_range_from_freq(fp->dl_CarrierFreq);
 
   fp->Ncp = Ncp;

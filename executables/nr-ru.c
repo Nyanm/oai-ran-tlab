@@ -12,6 +12,12 @@
 #include <sys/sysinfo.h>
 #include <math.h>
 
+//socket handshake
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+
 #include "common/utils/nr/nr_common.h"
 #include "common/utils/assertions.h"
 #include "common/utils/system.h"
@@ -50,6 +56,8 @@ static int DEFRUTPCORES[] = {-1,-1,-1,-1};
 #include "executables/nr-softmodem-common.h"
 
 static void NRRCconfig_RU(configmodule_interface_t *cfg);
+
+void print_shadow_gnb_config(nfapi_nr_config_request_scf_t *cfg);
 
 /*************************************************************/
 /* Southbound Fronthaul functions, RCC/RAU                   */
@@ -1123,16 +1131,16 @@ void *ru_thread(void *param)
       } // end if (ru->feprx)
     } // end if (slot_type == NR_UPLINK_SLOT || slot_type == NR_MIXED_SLOT) {
 
-    notifiedFIFO_elt_t *resTx = newNotifiedFIFO_elt(sizeof(processingData_L1tx_t), 0, &gNB->L1_tx_out, NULL);
-    resTx->key = proc->tti_tx;
-    processingData_L1tx_t *syncMsgTx = NotifiedFifoData(resTx);
-    *syncMsgTx = (processingData_L1tx_t){.gNB = gNB,
-                                         .frame = proc->frame_tx,
-                                         .slot = proc->tti_tx,
-                                         .frame_rx = proc->frame_rx,
-                                         .slot_rx = proc->tti_rx,
-                                         .timestamp_tx = proc->timestamp_tx};
-    pushNotifiedFIFO(&gNB->L1_tx_out, resTx);
+    // notifiedFIFO_elt_t *resTx = newNotifiedFIFO_elt(sizeof(processingData_L1tx_t), 0, &gNB->L1_tx_out, NULL);
+    // resTx->key = proc->tti_tx;
+    // processingData_L1tx_t *syncMsgTx = NotifiedFifoData(resTx);
+    // *syncMsgTx = (processingData_L1tx_t){.gNB = gNB,
+    //                                      .frame = proc->frame_tx,
+    //                                      .slot = proc->tti_tx,
+    //                                      .frame_rx = proc->frame_rx,
+    //                                      .slot_rx = proc->tti_rx,
+    //                                      .timestamp_tx = proc->timestamp_tx};
+    // pushNotifiedFIFO(&gNB->L1_tx_out, resTx);
   }
 
   ru_thread_status = 0;
@@ -1304,7 +1312,7 @@ void set_function_spec_param(RU_t *ru)
       ru->ifdevice.eth_params    = &ru->eth_params;
       break;
 
-    case REMOTE_IF4p5_DMA:
+    case REMOTE_IF4p5_DMA_HOST:
       ru->do_prach               = 0;
       ru->feprx                  = NULL;                // DFTs
       ru->feptx_prec             = nr_feptx_prec;       // Precoding operation
@@ -1322,7 +1330,7 @@ void set_function_spec_param(RU_t *ru)
       ru->ifdevice.eth_params    = &ru->eth_params;
       break;
 
-    case REMOTE_IF4p5_DMA_S:
+    case REMOTE_IF4p5_DMA_DEVICE:
       ru->do_prach               = 0;
       ru->feprx                  = NULL;                // DFTs
       ru->feptx_prec             = nr_feptx_prec;       // Precoding operation
@@ -1366,10 +1374,133 @@ void init_NR_RU(configmodule_interface_t *cfg, char *rf_config_file)
     // use gNB_list[0] as a reference for RU frame parameters
     // NOTE: multiple CC_id are not handled here yet!
     
-    if (ru->if_south == REMOTE_IF4p5_DMA_S) {
-//Here we need to update gNB infomation, token, dma address in a socket
-    
+    if (ru->if_south == REMOTE_IF4p5_DMA_DEVICE) {
+    LOG_I(PHY, "DMA [Device]: Initializing Control Plane handshake with Host at %s:%d\n", 
+          ru->dma_ctrl_ip, ru->dma_ctrl_port);
 
+    int sock = 0;
+    struct sockaddr_in serv_addr;
+    dma_sync_config_t sync_cfg;
+
+    // 1. 创建 Socket
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        AssertFatal(0, "DMA: Socket creation error \n");
+    }
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(ru->dma_ctrl_port);
+
+    // 2. 转换 IP 地址
+    if (inet_pton(AF_INET, ru->dma_ctrl_ip, &serv_addr.sin_addr) <= 0) {
+        AssertFatal(0, "DMA: Invalid address/ Address not supported \n");
+    }
+
+    // 3. 阻塞式连接 Host (等待 Master 就绪)
+    LOG_I(PHY, "DMA: Waiting for Host to come online...\n");
+    while (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        LOG_D(PHY, "DMA: Connection failed, retrying in 1s...\n");
+        sleep(1); 
+    }
+
+    // 4. 接收同步配置包
+    int valread = read(sock, &sync_cfg, sizeof(dma_sync_config_t));
+
+    if (valread == sizeof(dma_sync_config_t) && sync_cfg.magic == 0x0A1D3A00) {
+        LOG_I(PHY, "✅ DMA: Handshake SUCCESS! Received Config \n");
+
+        // --- 核心步骤：重建影子 gNB 内存树 ---
+        
+        // A. 确保全局容器 RC.gNB 已初始化
+        if (RC.gNB == NULL) {
+            RC.gNB = (PHY_VARS_gNB **)malloc(sizeof(PHY_VARS_gNB *));
+            RC.gNB[0] = (PHY_VARS_gNB *)calloc(1, sizeof(PHY_VARS_gNB));
+        }
+        
+        // B. 建立 RU 与影子 gNB 的逻辑关联
+        ru->gNB_list[0] = RC.gNB[0];
+        ru->num_gNB = 1;
+        // C. 开始反向映射参数到影子 gNB
+        nfapi_nr_config_request_scf_t *gNB_cfg_dma_d = &RC.gNB[0]->gNB_config;
+
+        // --- 1. 基础配置映射 ---
+        gNB_cfg_dma_d->cell_config.frame_duplex_type.value = sync_cfg.config__cell_config__frame_duplex_type__value;
+        gNB_cfg_dma_d->cell_config.frame_duplex_type.tl.tag = 0x100D;
+
+        // --- 2. SSB 配置 ---
+        gNB_cfg_dma_d->ssb_table.ssb_mask_list[0].ssb_mask.value = sync_cfg.config__ssb_table__ssb_mask_list_0__ssb_mask__value;
+        gNB_cfg_dma_d->ssb_table.ssb_mask_list[1].ssb_mask.value = sync_cfg.config__ssb_table__ssb_mask_list_1__ssb_mask__value;
+        gNB_cfg_dma_d->ssb_table.case_v3.value = sync_cfg.config__ssb_table__case_v3__value;
+        gNB_cfg_dma_d->ssb_config.scs_common.value = sync_cfg.config__ssb_config__scs_common__value;
+
+        // --- 3. PRACH 配置 ---
+        gNB_cfg_dma_d->prach_config.prach_ConfigurationIndex.value = sync_cfg.config__prach_config__prach_ConfigurationIndex__value;
+        gNB_cfg_dma_d->prach_config.num_prach_fd_occasions.value = sync_cfg.config__prach_config__num_prach_fd_occasions__value;
+        gNB_cfg_dma_d->prach_config.prach_sequence_length.value = sync_cfg.config__prach_config__prach_sequence_length__value;
+        gNB_cfg_dma_d->prach_config.prach_ConfigurationIndex.tl.tag = 0x1029; // 或者使用宏 NFAPI_NR_CONFIG_PRACH_CONFIGURATION_INDEX_TAG
+        gNB_cfg_dma_d->prach_config.num_prach_fd_occasions.tl.tag = 0x102C;
+        gNB_cfg_dma_d->prach_config.prach_sequence_length.tl.tag = 0x102E;
+        
+        // ⚠️ 危险警告：OAI 中 num_prach_fd_occasions_list 通常是一个指针/动态数组，需要先分配内存！
+        gNB_cfg_dma_d->prach_config.num_prach_fd_occasions_list = 
+            (nfapi_nr_num_prach_fd_occasions_t *)calloc(1, sizeof(nfapi_nr_num_prach_fd_occasions_t));
+        gNB_cfg_dma_d->prach_config.num_prach_fd_occasions_list[0].k1.value = sync_cfg.config__prach_config__num_prach_fd_occasions_list_0__k1__value;
+
+        // --- 4. Carrier 配置 ---
+        int scs = gNB_cfg_dma_d->ssb_config.scs_common.value; // 用于数组索引
+        gNB_cfg_dma_d->carrier_config.dl_grid_size[scs].value = sync_cfg.config__carrier_config__dl_grid_size__value;
+        gNB_cfg_dma_d->carrier_config.ul_grid_size[scs].value = sync_cfg.config__carrier_config__ul_grid_size__value;
+        gNB_cfg_dma_d->carrier_config.num_rx_ant.value = sync_cfg.config__carrier_config__num_rx_ant__value;
+        gNB_cfg_dma_d->carrier_config.num_tx_ant.value = sync_cfg.config__carrier_config__num_tx_ant__value;
+        gNB_cfg_dma_d->carrier_config.dl_frequency.value = sync_cfg.config__carrier_config__dl_frequency__value;
+        gNB_cfg_dma_d->carrier_config.uplink_frequency.value = sync_cfg.config__carrier_config__ul_frequency__value;
+        gNB_cfg_dma_d->carrier_config.dl_frequency.tl.tag = NFAPI_NR_CONFIG_DL_FREQUENCY_TAG;
+        gNB_cfg_dma_d->carrier_config.uplink_frequency.tl.tag = NFAPI_NR_CONFIG_UPLINK_FREQUENCY_TAG;
+
+        for(int i = 0; i < 5; i++){
+            gNB_cfg_dma_d->carrier_config.dl_k0[i].value = sync_cfg.config__carrier_config__dl_k0__value[i];
+            gNB_cfg_dma_d->carrier_config.ul_k0[i].value = sync_cfg.config__carrier_config__ul_k0__value[i];
+        }
+
+        // --- 5. TDD Table (核心反序列化：重建套娃指针) ---
+        gNB_cfg_dma_d->tdd_table.tdd_period.value = sync_cfg.config__tdd_table__tdd_period__value;
+        gNB_cfg_dma_d->tdd_table.tdd_period.tl.tag = sync_cfg.config__tdd_table__tdd_period__tl__tag;
+
+        //
+        //RC.gNB[0]->ofdm_offset_divisor = sync_cfg.ofdm_offset_divisor;
+
+        int max_slots_to_map = 10 * (1 << gNB_cfg_dma_d->ssb_config.scs_common.value);
+        // 第一层：分配 Slot 列表
+        gNB_cfg_dma_d->tdd_table.max_tdd_periodicity_list = 
+            (nfapi_nr_max_tdd_periodicity_t *)calloc(max_slots_to_map, sizeof(nfapi_nr_max_tdd_periodicity_t));
+
+        for (int slot = 0; slot < max_slots_to_map; slot++) {
+            // 第二层：为每个 Slot 分配 14 个 Symbol 的列表
+            gNB_cfg_dma_d->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list = 
+                (nfapi_nr_max_num_of_symbol_per_slot_t *)calloc(14, sizeof(nfapi_nr_max_num_of_symbol_per_slot_t));
+
+            for (int sym = 0; sym < 14; sym++) {
+                int flat_idx = slot * 14 + sym;
+                gNB_cfg_dma_d->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list[sym].slot_config.value = 
+                    sync_cfg.config__tdd_table__max_tdd_periodicity_list__max_num_of_symbol_per_slot_list__slot_config__value[flat_idx];
+                
+                // 建议把 Tag 也补上，防止 OAI 内部的其他断言 (DevAssert) 失败
+                gNB_cfg_dma_d->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list[sym].slot_config.tl.tag = 
+                    NFAPI_NR_CONFIG_SLOT_CONFIG_TAG; 
+            }
+        }
+
+        LOG_I(PHY, "✅ DMA: Shadow gNB configuration tree successfully rebuilt!\n");
+
+        print_shadow_gnb_config(&RC.gNB[0]->gNB_config);
+
+        
+
+    } else {
+        AssertFatal(0, "❌ DMA: Handshake Failed or Config size mismatch (read: %d)\n", valread);
+    }
+
+    close(sock);
+    LOG_I(PHY, "DMA: Control Plane handshake completed. Shadow gNB is ready.\n");
 }
 
     if (ru->num_gNB > 0) {
@@ -1407,11 +1538,139 @@ void init_NR_RU(configmodule_interface_t *cfg, char *rf_config_file)
     set_function_spec_param(ru);
     init_RU_proc(ru);
 
-    if (ru->if_south == REMOTE_IF4p5_DMA) {
-//Here we need to send gNB infomation in a socket
+    if (ru->if_south == REMOTE_IF4p5_DMA_HOST) {
+    LOG_I(PHY, "Host [Master]: Initializing Control Plane server at %s:%d\n", 
+          ru->dma_ctrl_ip, ru->dma_ctrl_port);
 
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int opt = 1;
+    int addrlen = sizeof(address);
+
+    // 1. 创建 Socket
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        AssertFatal(0, "Host: Socket failed\n");
+    }
+
+    // 2. 端口复用 (防止频繁重启导致 Address already in use)
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+        AssertFatal(0, "Host: setsockopt failed\n");
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_port = htons(ru->dma_ctrl_port);
+    
+    // 绑定到配置的 IP
+    if (inet_pton(AF_INET, ru->dma_ctrl_ip, &address.sin_addr) <= 0) {
+        address.sin_addr.s_addr = INADDR_ANY; // 备选方案
+    }
+
+    // 3. Bind & Listen
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        AssertFatal(0, "Host: Bind failed at %s:%d\n", ru->dma_ctrl_ip, ru->dma_ctrl_port);
+    }
+    if (listen(server_fd, 3) < 0) {
+        AssertFatal(0, "Host: Listen failed\n");
+    }
+
+    LOG_I(PHY, "Host: Waiting for DPU (Device) to connect...\n");
+
+    // 4. Accept (阻塞直到 DPU 连上来)
+    if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+        AssertFatal(0, "Host: Accept failed\n");
+    }
+
+    LOG_I(PHY, "✅ Host: DPU Connected! Synchronizing physical layer parameters...\n");
+// 5. 准备并发送参数
+    LOG_I(PHY, "Host: Packing configuration for DPU...\n");
+
+    dma_sync_config_t sync_pkt;
+    // 务必清零，防止 padding 区域产生随机垃圾数据
+    memset(&sync_pkt, 0, sizeof(dma_sync_config_t)); 
+
+    sync_pkt.magic = 0x0A1D3A00; // 魔法字符 (OAI_DMA)，DPU 收到后先校验这个
+
+    // 为了代码简洁，定义一个指针指向 RU 的高层配置
+    nfapi_nr_config_request_scf_t *gNB_cfg_dma_h = &RC.gNB[0]->gNB_config;//
+
+    // --- 1. config->ssb_table ---
+    sync_pkt.config__ssb_table__ssb_mask_list_0__ssb_mask__value = gNB_cfg_dma_h->ssb_table.ssb_mask_list[0].ssb_mask.value;
+    sync_pkt.config__ssb_table__ssb_mask_list_1__ssb_mask__value = gNB_cfg_dma_h->ssb_table.ssb_mask_list[1].ssb_mask.value;
+    sync_pkt.config__ssb_table__case_v3__value = gNB_cfg_dma_h->ssb_table.case_v3.value;
+    // 注意：如果有 case_v3 的配置，也填进来
+
+    // --- 2. config->ssb_config ---
+    sync_pkt.config__ssb_config__scs_common__value = gNB_cfg_dma_h->ssb_config.scs_common.value;
+
+    // --- 4. config->prach_config ---
+    sync_pkt.config__prach_config__prach_ConfigurationIndex__value = gNB_cfg_dma_h->prach_config.prach_ConfigurationIndex.value;
+    sync_pkt.config__prach_config__num_prach_fd_occasions__value = gNB_cfg_dma_h->prach_config.num_prach_fd_occasions.value;
+    sync_pkt.config__prach_config__num_prach_fd_occasions_list_0__k1__value = gNB_cfg_dma_h->prach_config.num_prach_fd_occasions_list[0].k1.value;
+    sync_pkt.config__prach_config__prach_sequence_length__value = gNB_cfg_dma_h->prach_config.prach_sequence_length.value;
+
+    // --- 6. config->cell_config ---
+    sync_pkt.config__cell_config__frame_duplex_type__value = gNB_cfg_dma_h->cell_config.frame_duplex_type.value;
+
+    // --- 7. config->carrier_config ---
+    sync_pkt.config__carrier_config__dl_grid_size__value = gNB_cfg_dma_h->carrier_config.dl_grid_size[gNB_cfg_dma_h->ssb_config.scs_common.value].value;
+    sync_pkt.config__carrier_config__ul_grid_size__value = gNB_cfg_dma_h->carrier_config.ul_grid_size[gNB_cfg_dma_h->ssb_config.scs_common.value].value;
+    sync_pkt.config__carrier_config__num_rx_ant__value = gNB_cfg_dma_h->carrier_config.num_rx_ant.value;
+    sync_pkt.config__carrier_config__num_tx_ant__value = gNB_cfg_dma_h->carrier_config.num_tx_ant.value;
+    sync_pkt.config__carrier_config__dl_frequency__value = gNB_cfg_dma_h->carrier_config.dl_frequency.value;
+    sync_pkt.config__carrier_config__ul_frequency__value = gNB_cfg_dma_h->carrier_config.uplink_frequency.value;
+
+    for(int i = 0; i < 5; i++){
+      sync_pkt.config__carrier_config__dl_k0__value[i] = gNB_cfg_dma_h->carrier_config.dl_k0[i].value;
+      sync_pkt.config__carrier_config__ul_k0__value[i] = gNB_cfg_dma_h->carrier_config.ul_k0[i].value;
 
     }
+    // --- 8.ofdm_offset_divisor
+    sync_pkt.ofdm_offset_divisor = RC.gNB[0]->ofdm_offset_divisor;
+    // --- 5. config->tdd_table 【核心：拍扁多级指针】 ---
+    sync_pkt.config__tdd_table__tdd_period__value = gNB_cfg_dma_h->tdd_table.tdd_period.value;
+    sync_pkt.config__tdd_table__tdd_period__tl__tag = gNB_cfg_dma_h->tdd_table.tdd_period.tl.tag;
+    
+    if (gNB_cfg_dma_h->tdd_table.max_tdd_periodicity_list != NULL) {
+        // 计算当前帧的实际 slots 数量 (安全边界保护)
+        // 根据 OAI 规范，这里最大不会超过 160 (对应 240kHz SCS)
+        int max_slots_to_map = 10 * (1 << gNB_cfg_dma_h->ssb_config.scs_common.value);
+        
+        for (int slot = 0; slot < max_slots_to_map; slot++) {
+            // 安全检查：防止 OAI 没有分配满 160 个 Slot 的内存
+            if (gNB_cfg_dma_h->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list != NULL) {
+                for (int sym = 0; sym < 14; sym++) {
+                    int flat_idx = slot * 14 + sym;
+                    sync_pkt.config__tdd_table__max_tdd_periodicity_list__max_num_of_symbol_per_slot_list__slot_config__value[flat_idx] = 
+                        gNB_cfg_dma_h->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list[sym].slot_config.value;
+                }
+            } else {
+                // 如果指针为空，提前退出循环，防止段错误
+                break; 
+            }
+        }
+    }
+
+    // --- 发送给 DPU ---
+    // 注意：这里我们直接发 sizeof(sync_pkt)，不再用字符串 magic_token
+    LOG_I(PHY, "Host: Sending %lu bytes of sync configuration to DPU...\n", sizeof(dma_sync_config_t));
+    
+    ssize_t sent_bytes = send(new_socket, &sync_pkt, sizeof(dma_sync_config_t), 0);
+    if (sent_bytes != sizeof(dma_sync_config_t)) {
+        LOG_E(PHY, "Host: Failed to send full configuration! Sent %zd bytes.\n", sent_bytes);
+    } else {
+        LOG_I(PHY, "Host: Configuration successfully sent to DPU.\n");
+    }
+
+    // 可选：等待 DPU 发回一个简单的 ACK
+    // char ack_buf[4];
+    // recv(new_socket, ack_buf, sizeof(ack_buf), 0);
+    // LOG_I(PHY, "Host: Received ACK from DPU.\n");
+
+    close(new_socket);
+    close(server_fd);
+
+    LOG_I(PHY, "Host: Control Plane handshake completed. Releasing RU init.\n");
+}
 
     if (ru->if_south != REMOTE_IF4p5) {
       int threadCnt = ru->num_tpcores;
@@ -1619,16 +1878,28 @@ static void NRRCconfig_RU(configmodule_interface_t *cfg)
         ru->if_south = REMOTE_IF4p5;
         ru->function = NGFI_RAU_IF4p5;
         ru->eth_params.transp_preference = ETH_RAW_IF4p5_MODE;
-      } else if (strcmp(str, "dma_if4p5") == 0) {
-        ru->if_south = REMOTE_IF4p5_DMA;
+      } else if (strcmp(str, "dma_if4p5_host") == 0) {
+        ru->if_south = REMOTE_IF4p5_DMA_HOST;
         ru->function = NGFI_RAU_IF4p5;
         ru->eth_params.transp_preference = ETH_DMA_IF4p5_MODE;
-      } else if (strcmp(str, "dma_if4p5_s") == 0) {
-        ru->if_south = REMOTE_IF4p5_DMA_S;
+      } else if (strcmp(str, "dma_if4p5_device") == 0) {
+        ru->if_south = REMOTE_IF4p5_DMA_DEVICE;
         ru->function = NGFI_RAU_IF4p5;
         ru->eth_params.transp_preference = ETH_DMA_IF4p5_MODE;
       }
     } /* strcmp(local_rf, "yes") != 0 */
+
+    if (config_isparamset(param, RU_DMA_CTRL_IP_IDX)) {
+    ru->dma_ctrl_ip = strdup(*param[RU_DMA_CTRL_IP_IDX].strptr);
+} else {
+    ru->dma_ctrl_ip = strdup("127.0.0.1"); // default value
+}
+
+if (config_isparamset(param, RU_DMA_CTRL_PORT_IDX)) {
+    ru->dma_ctrl_port = (uint16_t)*param[RU_DMA_CTRL_PORT_IDX].uptr;
+} else {
+    ru->dma_ctrl_port = 8888; // default value
+}
 
     ru->nb_tx = *param[RU_NB_TX_IDX].uptr;
     ru->nb_rx = *param[RU_NB_RX_IDX].uptr;
@@ -1661,3 +1932,66 @@ static void NRRCconfig_RU(configmodule_interface_t *cfg)
   return;
 }
 
+void print_shadow_gnb_config(nfapi_nr_config_request_scf_t *cfg) {
+    LOG_I(PHY, "========================================================\n");
+    LOG_I(PHY, "          [DMA Device] SHADOW gNB CONFIG DUMP           \n");
+    LOG_I(PHY, "========================================================\n");
+
+    // 1. 基础与小区配置
+    LOG_I(PHY, "[Cell] PCI: %d, Duplex Type: %d (0:FDD, 1:TDD)\n", 
+          cfg->cell_config.phy_cell_id.value, 
+          cfg->cell_config.frame_duplex_type.value);
+
+    // 2. SSB 配置
+    LOG_I(PHY, "[SSB] SCS Common: %d, Mask0: 0x%08x, Mask1: 0x%08x\n", 
+          cfg->ssb_config.scs_common.value,
+          cfg->ssb_table.ssb_mask_list[0].ssb_mask.value,
+          cfg->ssb_table.ssb_mask_list[1].ssb_mask.value);
+
+    // 3. PRACH 配置
+    LOG_I(PHY, "[PRACH] Config Index: %d, FD Occasions: %d, Seq Length: %d\n",
+          cfg->prach_config.prach_ConfigurationIndex.value,
+          cfg->prach_config.num_prach_fd_occasions.value,
+          cfg->prach_config.prach_sequence_length.value);
+
+    // 4. 载波/频域配置
+    int scs = cfg->ssb_config.scs_common.value;
+    LOG_I(PHY, "[Carrier] DL Grid Size (PRBs): %d, UL Grid Size: %d\n", 
+          cfg->carrier_config.dl_grid_size[scs].value,
+          cfg->carrier_config.ul_grid_size[scs].value);
+    LOG_I(PHY, "[Antenna] RX: %d, TX: %d\n", 
+          cfg->carrier_config.num_rx_ant.value,
+          cfg->carrier_config.num_tx_ant.value);
+
+    // 5. TDD 周期表 (最核心部分)
+    LOG_I(PHY, "[TDD] Periodicity: %d\n", cfg->tdd_table.tdd_period.value);
+    
+    if (cfg->tdd_table.max_tdd_periodicity_list != NULL) {
+        // 根据 SCS 计算当前 numerology 下的一帧有多少个 slot
+        int slots_per_frame = 10 * (1 << scs); 
+        LOG_I(PHY, "[TDD] Frame layout for SCS=%d (Printing first %d slots):\n", scs, slots_per_frame);
+
+        for (int slot = 0; slot < slots_per_frame && slot < 160; slot++) {
+            if (cfg->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list != NULL) {
+                char slot_pattern[15]; // 14 个符号 + 1 个字符串结束符 \0
+                
+                for (int sym = 0; sym < 14; sym++) {
+                    uint8_t val = cfg->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list[sym].slot_config.value;
+                    // 将 0, 1, 2 转换为直观的字符
+                    if (val == 0) slot_pattern[sym] = 'D';
+                    else if (val == 1) slot_pattern[sym] = 'U';
+                    else if (val == 2) slot_pattern[sym] = 'F';
+                    else slot_pattern[sym] = '?'; // 未知或异常值
+                }
+                slot_pattern[14] = '\0';
+                
+                LOG_I(PHY, "      Slot %2d: [%s]\n", slot, slot_pattern);
+            } else {
+                LOG_I(PHY, "      Slot %2d: [NULL Pointer - Unconfigured]\n", slot);
+            }
+        }
+    } else {
+        LOG_E(PHY, "[TDD] Error: max_tdd_periodicity_list is NULL!\n");
+    }
+    LOG_I(PHY, "========================================================\n");
+}

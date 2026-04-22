@@ -75,7 +75,9 @@ typedef enum {
 #define CONFIG_STRING_RU_NUM_INTERFACES           "num_interfaces"
 #define CONFIG_STRING_RU_HALF_SLOT_PARALLELIZATION "half_slot_parallelization"
 #define CONFIG_STRING_RU_RU_THREAD_CORE            "ru_thread_core"
-#define CONFIG_STRING_RU_GPIO_CONTROL "gpio_controller"
+#define CONFIG_STRING_RU_GPIO_CONTROL              "gpio_controller"
+#define CONFIG_STRING_DMA_CTRL_PLANE_IP            "dma_ctrl_ip"
+#define CONFIG_STRING_DMA_CTRL_PLANE_PORT          "dma_ctrl_port"
 
 #define HLP_RU_SF_AHEAD "LTE TX processing advance"
 #define HLP_RU_SL_AHEAD "NR TX processing advance"
@@ -133,6 +135,9 @@ typedef enum {
 #define RU_HALF_SLOT_PARALLELIZATION  40
 #define RU_RU_THREAD_CORE             41
 #define RU_GPIO_CONTROL               42
+#define RU_DMA_CTRL_IP_IDX            43
+#define RU_DMA_CTRL_PORT_IDX          44
+
 /*-----------------------------------------------------------------------------------------------------------------------------------------*/
 /*                                            RU configuration parameters                                                                  */
 /*   optname                                   helpstr   paramflags    XXXptr          defXXXval                   type      numelt        */
@@ -182,6 +187,8 @@ typedef enum {
   {CONFIG_STRING_RU_HALF_SLOT_PARALLELIZATION, HLP_RU_HALF_SLOT_PARALLELIZATION,  0,       .uptr=NULL,       .defintval=1,                 TYPE_UINT,        0}, \
   {CONFIG_STRING_RU_RU_THREAD_CORE,            HLP_RU_RU_THREAD_CORE,             0,       .iptr=NULL,       .defintval=-1,                TYPE_INT,         0}, \
   {CONFIG_STRING_RU_GPIO_CONTROL,              HLP_RU_GPIO_CONTROL,               0,       .strptr=NULL,     .defstrval="generic",         TYPE_STRING,      0}, \
+  {CONFIG_STRING_DMA_CTRL_PLANE_IP,            NULL,                              0,       .strptr=NULL,     .defstrval="127.0.0.1",       TYPE_STRING,      0}, \
+  {CONFIG_STRING_DMA_CTRL_PLANE_PORT,          NULL,                              0,       .uptr=NULL,       .defuintval=8888,             TYPE_UINT,        0}, \
 }
 // clang-format on
 
