@@ -78,6 +78,13 @@ int16_t *harq_e_dev;
 int16_t *harq_f_dev;
 pthread_mutex_t decoder_mutex=PTHREAD_MUTEX_INITIALIZER;
 
+extern
+int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
+                         int8_t* p_llr,
+                         uint8_t* p_out,
+                         t_nrLDPC_time_stats* p_profiler,
+                         decode_abort_t* ab);
+
 void nr_process_decode_segment_cuda(nrLDPC_TB_decoding_parameters_t *segs)
 {
   // arg points to RDATA array (nrLDPC_decoding_parameters_t *RDATA)
@@ -285,7 +292,8 @@ void LDPCint_rm_init(int max_num_pxsch) {
   d_array_size = max_num_pxsch;
 }
 
-void LDPCinit_cuda(void);
+extern void LDPCinit_cuda(void);
+extern void cuda_support_init();
 
 int32_t nrLDPC_coding_init_cuda(int max_num_pxsch)
 {

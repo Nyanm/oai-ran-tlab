@@ -95,8 +95,7 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
                                                        .slot = nr_tti_rx,
                                                        .nb_TBs = nb_pusch,
                                                        .threadPool = &phy_vars_gNB->threadPool,
-                                                       .TBs = TBs,
-  						       .use_gpu = phy_vars_gNB->use_gpu};
+                                                       .TBs = TBs};
 
   int max_num_segments = 0;
 

@@ -7,13 +7,9 @@
 /* ldpc coder/decoder API*/
 typedef struct ldpc_interface_s {
   LDPC_initfunc_t *LDPCinit;
-  LDPC_initfunc_t *LDPCinit_cuda;
   LDPC_shutdownfunc_t *LDPCshutdown;
-  LDPC_shutdownfunc_t *LDPCshutdown_cuda;
   LDPC_decoderfunc_t *LDPCdecoder;
   LDPC_encoderfunc_t *LDPCencoder;
-  LDPC_encoderfunc32_t *LDPCencoder32;
-  LDPC_decoderfunc_t *LDPCdecoder_cuda;
 } ldpc_interface_t;
 
 /* functions to load the LDPC shared lib, implemented in openair1/PHY/CODING/nrLDPC_load.c */
@@ -22,8 +18,6 @@ int free_LDPClib(ldpc_interface_t *ldpc_interface);
 
 LDPC_decoderfunc_t LDPCdecoder;
 LDPC_encoderfunc_t LDPCencoder;
-LDPC_encoderfunc32_t LDPCencoder32;
-LDPC_decoderfunc_t LDPCdecoder_cuda;
 
 // inline functions:
 #endif

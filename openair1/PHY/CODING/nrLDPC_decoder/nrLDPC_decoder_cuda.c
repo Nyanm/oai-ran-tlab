@@ -364,6 +364,7 @@ extern int cuda_support_set;
 
 bool encoder_streamsCreated = false;
 cudaStream_t encoderStreams[4];
+void cuda_support_init();
 
 int32_t LDPCinit_cuda()
 {

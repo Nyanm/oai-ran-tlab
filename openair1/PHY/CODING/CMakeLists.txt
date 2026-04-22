@@ -52,26 +52,22 @@ if (ENABLE_LDPC_CUDA)
 
   # version using NVLink-C2C in Grace Hopper
   add_library(ldpc_cuda MODULE
-                   nrLDPC_decoder/nrLDPC_decoder_cuda.c
-                   nrLDPC_decoder/nrLDPC_decoder.c
-		   nrLDPC_encoder/ldpc_encoder_optim8segmulti.c
-		   nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu
-		   nrLDPC_encoder/ldpc_encoder_cuda32.c
-		   nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
-		   nrLDPC_encoder/ldpc_input.cu
-		   nrLDPC_encoder/ldpc_input32.c
-                   # The slot coding layer cannot be linked with
-                   # target_link_libraries like above
-                   # because of cuda_add_library
-                   # which already uses target_link_libraries
-                   #nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c
-                   nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder_cuda.c
-                   nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder.c
-                   nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder_cuda.c
-                   nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder.c
-                   nrLDPC_coding/nrLDPC_coding_segment/nr_rate_matching.c
-		   nrLDPC_coding/nrLDPC_coding_segment/ldpc_deinterleave.cu
-		   nrLDPC_coding/nrLDPC_coding_segment/ldpc_rate_matching.cu
+              # main entry
+              nrLDPC_coding/nrLDPC_coding_cuda.c
+
+              nrLDPC_decoder/nrLDPC_decoder_cuda.c
+              nrLDPC_encoder/ldpc_encoder_cuda32.c
+              nrLDPC_encoder/ldpc_input32.c
+
+              nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_encoder_cuda.c
+              nrLDPC_coding/nrLDPC_coding_segment/nrLDPC_coding_segment_decoder_cuda.c
+
+              # .cu files
+              nrLDPC_decoder/nrLDPC_decoder_BG1_cuda.cu
+              nrLDPC_encoder/ldpc_BG1_Zc384_32bit.cu
+              nrLDPC_encoder/ldpc_input.cu
+              nrLDPC_coding/nrLDPC_coding_segment/ldpc_deinterleave.cu
+              nrLDPC_coding/nrLDPC_coding_segment/ldpc_rate_matching.cu
   )
   set_target_properties(ldpc_cuda PROPERTIES CUDA_ARCHITECTURES "80;87;90")
   # we need to find the right include directory, but ti seems that

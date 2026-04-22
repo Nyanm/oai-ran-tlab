@@ -100,9 +100,7 @@ one_measurement_t test_ldpc(short max_iterations,
                             short Kprime,
                             unsigned int ntrials,
                             int n_segments,
-                            int gen_code,
-                            int use32bit,
-			    int usecudadecoder)
+                            int gen_code)
 {
   static int init_done = 0;
   one_measurement_t ret = {0};
@@ -280,7 +278,6 @@ one_measurement_t test_ldpc(short max_iterations,
     memset(channel_input[j], 0, 68 * 384);
   }
   channel_input_optim = malloc16(68 * 384 * sizeof(uint32_t));
-  if (use32bit ==0) memset(channel_input_optim, 0, 68 * 384 * sizeof(uint32_t));
 
   // Fill input segments with random values
   for (int j = 0; j < n_segments; j++) {
@@ -307,13 +304,9 @@ one_measurement_t test_ldpc(short max_iterations,
   init_abort(&dec_abort);
 
   if (init_done == 0) { 
-    if (usecudadecoder)
-      ldpc_toCompare.LDPCinit_cuda();
-    else   
-      ldpc_toCompare.LDPCinit();
+    ldpc_toCompare.LDPCinit();
     init_done = 1;
   }
-  uint32_t **output32 = NULL;
   for (int trial = 0; trial < ntrials; trial++) {
     unsigned int segment_bler = 0;
     //// encoder
@@ -327,15 +320,14 @@ one_measurement_t test_ldpc(short max_iterations,
     
     start_meas(&ret.time_optim);
     impp.first_seg = 0;
-    if (use32bit==0) ldpc_toCompare.LDPCencoder(test_input, channel_input_optim, &impp);
-    else output32=ldpc_toCompare.LDPCencoder32(test_input, &impp);
+    ldpc_toCompare.LDPCencoder(test_input, channel_input_optim, &impp);
     
     stop_meas(&ret.time_optim);
 
     if (ntrials == 1)
       for (int j = 0; j < n_segments; j++)
         for (int i = 0; i < K + (nrows - no_punctured_columns) * Zc - removed_bit; i++) {
-          if (((use32bit == 0) && (channel_input[j][i] != ((channel_input_optim[i] >> j) & 0x1))) ||                 ((use32bit == 1) && (channel_input[j][i] != (((output32[j>>5][i] >> (j&31)) & 0x1))))) {
+          if (((channel_input[j][i] != ((channel_input_optim[i] >> j) & 0x1)))) {
                printf("differ in seg %d pos %d (%u,%u)\n", j, i, channel_input[j][i], (((uint32_t*)channel_input_optim)[i] >> j) & 0x1);
                return ret;
             }
@@ -348,7 +340,7 @@ one_measurement_t test_ldpc(short max_iterations,
         if ((i & 0xf) == 0)
           printf("\ne %d..%d:    ", i, i + 15);
 #endif
-        bit = (use32bit==0) ? ((channel_input_optim[i - 2 * Zc] >> j) & 0x1) : ((output32[j>>5][i - 2 * Zc] >> (j&31)) & 0x1);
+        bit = ((channel_input_optim[i - 2 * Zc] >> j) & 0x1);
 
 	if (bit == 0)
           modulated_input[j][i] = 1.0; /// sqrt(2);  //QPSK
@@ -387,18 +379,6 @@ one_measurement_t test_ldpc(short max_iterations,
     for (int j = 0; j < n_segments; j++) {
       start_meas(&ret.time_decoder);
       set_abort(&dec_abort, false);
-#ifdef ENABLE_CUDA
-      if (usecudadecoder) {
-         if(j == 0) {
-            n_iter = ldpc_toCompare.LDPCdecoder_cuda(&decParams[j],
-                                                     channel_output_fixed_dev,
-                                                     estimated_output_dev,
-                                                     &decoder_profiler,
-                                                     &dec_abort);
-	 }
-      }
-      else
-#endif
 	 { 
             n_iter = ldpc_toCompare.LDPCdecoder(&decParams[j],
                                                 &channel_output_fixed[j*384*68],
@@ -512,8 +492,6 @@ int main(int argc, char *argv[])
   n_iter_stats_t dec_iter[400] = {0};
 
   short BG = 0, Zc;
-  int use32bit = 0;
-  int usecudadecoder = 0;
   if ((uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY)) == 0) {
     exit_fun("[LDPCTEST] Error, configuration module init failed\n");
   }
@@ -541,12 +519,6 @@ int main(int argc, char *argv[])
 
       case 'l':
         Kprime = atoi(optarg);
-        break;
-
-      case 'G':
-        ldpc_version = "_cuda";//using cuda
-        use32bit = 1;
-	usecudadecoder = 1;
         break;
 
       case 'n':
@@ -591,7 +563,6 @@ int main(int argc, char *argv[])
         printf("-r Nominator rate, (1, 2, 22), Default: 1\n");
         printf("-d Denominator rate, (3, 5, 25), Default: 1\n");
         printf("-l Length of payload bits in a segment (K' in 38.212-5.2.2), [1, 8448], Default: 8448\n");
-        printf("-G give 1 to run cuda for LDPC, Default: 0\n");
         printf("-P give 1 to run cuda stream parallel for LDPC, Default: 0\n");
         printf("-n Number of simulation trials, Default: 1\n");
         // printf("-M MCS2 for TB 2\n");
@@ -615,19 +586,16 @@ int main(int argc, char *argv[])
 
   // find minimum value in all sets of lifting size
   Zc = 0;
-  if (Kprime < 8448 && use32bit == 1) use32bit=0;
 #ifdef ENABLE_CUDA
   cudaError_t err = cudaHostAlloc((void**)&estimated_output,sizeof(uint8_t)* n_segments * Kprime,cudaHostAllocMapped);
   AssertFatal(err==cudaSuccess,"estimated_output n_segments %d Kprime %d\n",n_segments,Kprime);
   err = cudaHostAlloc((void**)&channel_output_fixed,sizeof(int8_t)* n_segments * 68 * 384,cudaHostAllocMapped);
   AssertFatal(err==cudaSuccess,"channel_output_fixed n_segments %d\n",n_segments);
-  if (use32bit==1) {
      err = cudaHostGetDevicePointer((void**)&estimated_output_dev,estimated_output,0);
      AssertFatal(err==cudaSuccess,"estimated_output_dev\n");
      err = cudaHostGetDevicePointer((void**)&channel_output_fixed_dev,channel_output_fixed,0);
      AssertFatal(err==cudaSuccess,"channel_output_fixed_dev\n");
      printf("estimated_output_dev %p, channel_output_fixed_dev %p\n",estimated_output_dev,channel_output_fixed_dev);
-  }
 #else
   estimated_output = malloc(n_segments * Kprime);
   channel_output_fixed=malloc(n_segments * 68 * 384);
@@ -648,7 +616,7 @@ int main(int argc, char *argv[])
       SNR_lin = pow(10, SNR / 10.0);
     else
       SNR_lin = pow(10, SNR / 10.0) * nom_rate / denom_rate;
-    printf("Linear SNR: %d %f, %d/%d, Kprime %d use32bit %d usecudadecoder %d\n", max_iterations, SNR_lin, nom_rate,denom_rate,Kprime,use32bit,usecudadecoder);
+    printf("Linear SNR: %d %f, %d/%d, Kprime %d\n", max_iterations, SNR_lin, nom_rate,denom_rate,Kprime);
     one_measurement_t res = test_ldpc(max_iterations,
                                       nom_rate,
                                       denom_rate,
@@ -657,9 +625,7 @@ int main(int argc, char *argv[])
                                       Kprime, // block length bytes
                                       n_trials,
                                       n_segments,
-                                      gen_code,
-                                      use32bit,
-				      usecudadecoder);
+                                      gen_code);
 
     decoded_errors[i] = res.errors;
     dec_iter[i] = res.dec_iter;
@@ -707,8 +673,7 @@ int main(int argc, char *argv[])
     printf("\n");
 
     time_stats_t *t_decoder = &res.time_decoder;
-    if (use32bit) printf("Decoding time mean (per segment in average)");
-    else printf("Decoding time mean (per segment)");
+    printf("Decoding time mean (per segment)");
     printf(": %15.3f us\n", (double)t_decoder->diff / t_decoder->trials / 1000.0 / cpu_freq);
     printf("Decoding time std: %15.3f us\n",
            sqrt((double)t_decoder->diff_square / t_decoder->trials / pow(1000, 2) / pow(cpu_freq, 2)
