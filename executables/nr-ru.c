@@ -1403,10 +1403,26 @@ void init_NR_RU(configmodule_interface_t *cfg, char *rf_config_file)
     }
 
     // 4. 接收同步配置包
-    int valread = read(sock, &sync_cfg, sizeof(dma_sync_config_t));
+int expected_size = sizeof(dma_sync_config_t);
+int total_read = 0;
+char *ptr = (char *)&sync_cfg;
 
-    if (valread == sizeof(dma_sync_config_t) && sync_cfg.magic == 0x0A1D3A00) {
-        LOG_I(PHY, "✅ DMA: Handshake SUCCESS! Received Config \n");
+LOG_I(PHY, "DMA: Waiting for config from Host (Expected: %d bytes)...\n", expected_size);
+
+// 2. 循环读取，直到读满 2336 字节
+while (total_read < expected_size) {
+    int n = read(sock, ptr + total_read, expected_size - total_read);
+    if (n <= 0) {
+        perror("read");
+        break; 
+    }
+    total_read += n;
+    LOG_I(PHY, "DMA: Received %d bytes chunk (Total: %d/%d)\n", n, total_read, expected_size);
+}
+
+// 3. 校验最终结果
+if (total_read == expected_size && sync_cfg.magic == 0x0A1D3A00) {
+    LOG_I(PHY, "✅ DMA: Handshake SUCCESS! All %d bytes received.\n", total_read);
 
         // --- 核心步骤：重建影子 gNB 内存树 ---
         
@@ -1496,7 +1512,7 @@ void init_NR_RU(configmodule_interface_t *cfg, char *rf_config_file)
         
 
     } else {
-        AssertFatal(0, "❌ DMA: Handshake Failed or Config size mismatch (read: %d)\n", valread);
+        AssertFatal(0, "❌ DMA: Handshake Failed! \n [Detail]: Read: %d bytes, Expected: %d bytes\n[Magic]:  Received: 0x%08X, Expected: 0x0A1D3A00\n", total_read, sizeof(dma_sync_config_t), sync_cfg.magic);
     }
 
     close(sock);
