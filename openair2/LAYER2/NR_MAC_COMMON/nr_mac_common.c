@@ -4942,3 +4942,27 @@ int get_j_for_k2(int mu)
   AssertFatal(mu >= 0 && mu < sizeofArray(j_table), "Invalid numerology %d\n", mu);
   return j_table[mu];
 }
+
+// TODO: Only supports dmrs-Type 1 and one codeword
+uint16_t get_dmrs_ports_from_dci(const uint8_t table_idx)
+{
+  DevAssert(table_idx < 11);
+  // TODO: This table already in mac_tables.c need to move it here
+  const uint8_t table_7_3_2_3_3_1[12][5] = {
+    {1,1,0,0,0},
+    {1,0,1,0,0},
+    {1,1,1,0,0},
+    {2,1,0,0,0},
+    {2,0,1,0,0},
+    {2,0,0,1,0},
+    {2,0,0,0,1},
+    {2,1,1,0,0},
+    {2,0,0,1,1},
+    {2,1,1,1,0},
+    {2,1,1,1,1},
+    {2,1,0,1,0}
+  };
+
+  const uint8_t *t = table_7_3_2_3_3_1[table_idx];
+  return (t[1] | t[2] << 1 | t[3] << 2 | t[4] << 3);
+}

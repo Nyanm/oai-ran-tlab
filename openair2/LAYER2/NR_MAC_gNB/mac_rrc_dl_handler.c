@@ -530,14 +530,28 @@ NR_CellGroupConfig_t *clone_CellGroupConfig(const NR_CellGroupConfig_t *orig)
   return cloned;
 }
 
+static int nth_set_bit_from_msb(uint64_t bm, int n)
+{
+  while (bm) {
+    int idx = __builtin_clzll(bm); // index of highest set bit
+    if (n-- == 0)
+      return idx;
+    bm &= ~(1ULL << (63 - idx)); // clear highest set bit
+  }
+  return -1;
+}
+
 static NR_UE_info_t *create_new_UE(gNB_MAC_INST *mac, uint32_t cu_id, const NR_CG_ConfigInfo_t *cgci)
 {
   const bool is_SA = IS_SA_MODE(get_softmodem_params());
   int CC_id = 0;
   rnti_t rnti;
   if (get_softmodem_params()->phy_test) {
-    AssertFatal(mac->UE_info.connected_ue_list[0] == NULL, "phytest: UE already present\n");
-    rnti = 0x1234;
+    NR_UE_info_t *prev_UE = NULL;
+    UE_iterator (mac->UE_info.connected_ue_list, UE) {
+      prev_UE = UE;
+    }
+    rnti = (prev_UE) ? prev_UE->rnti + 1 : 0x1234;
   } else {
     bool found = nr_mac_get_new_rnti(&mac->UE_info, &rnti);
     if (!found)
@@ -555,6 +569,15 @@ static NR_UE_info_t *create_new_UE(gNB_MAC_INST *mac, uint32_t cu_id, const NR_C
   NR_COMMON_channels_t *cc = &mac->common_channels[CC_id];
   const NR_ServingCellConfigCommon_t *scc = cc->ServingCellConfigCommon;
   const nr_mac_config_t *configuration = &mac->radio_config;
+  // Assigne UEs to separate beams in phytest
+  if (get_softmodem_params()->phy_test) {
+    uint8_t num_ssb = 0;
+    const uint64_t ssbBitmap = get_ssb_bitmap_and_len(scc, &num_ssb);
+    const int ue_idx = rnti - 0x1234;
+    const int ssb_idx = nth_set_bit_from_msb(ssbBitmap, ue_idx);
+    DevAssert(ssb_idx > -1);
+    UE->UE_beam_index = get_beam_from_ssbidx(mac, ssb_idx);
+  }
   int ssb_index = get_ssbidx_from_beam(mac, UE->UE_beam_index);
   if (is_SA) {
     cellGroupConfig = get_initial_cellGroupConfig(UE->uid, scc, &mac->radio_config, &mac->rlc_config, ssb_index);

@@ -977,7 +977,7 @@ nfapi_nr_dl_tti_pdsch_pdu_rel15_t *prepare_pdsch_pdu(nfapi_nr_dl_tti_request_pdu
   pdsch_pdu->SCID = dmrs_parms->n_scid;
   pdsch_pdu->dlDmrsScramblingId = dmrs_parms->scrambling_id;
   pdsch_pdu->numDmrsCdmGrpsNoData = dmrs_parms->numDmrsCdmGrpsNoData;
-  pdsch_pdu->dmrsPorts = (1 << sched_pdsch->nrOfLayers) - 1;  // FIXME with a better implementation
+  pdsch_pdu->dmrsPorts = get_dmrs_ports_from_dci(dmrs_parms->dmrs_ports_id);
   // Pdsch Allocation in frequency domain
   pdsch_pdu->resourceAlloc = 1;
   pdsch_pdu->rbStart = sched_pdsch->rbStart;
