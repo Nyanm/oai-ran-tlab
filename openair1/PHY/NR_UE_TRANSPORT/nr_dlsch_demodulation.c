@@ -1029,7 +1029,8 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
           }
         }
       }
-      *log2_maxh = (log2_approx(avgs) / 2) + 1;
+      if (nl==1) *log2_maxh = (log2_approx(avgs) / 2) + 1 + log2_approx(n_rx >> 1);
+      else *log2_maxh = (log2_approx(avgs) >> 1) - 2 + log2_approx(n_rx >> 1);
       LOG_D(PHY, "[DLSCH] AbsSubframe %d.%d log2_maxh = %d (%d)\n", frame % 1024, nr_slot_rx, *log2_maxh, avgs);
 #if T_TRACER
       T(T_UE_PHY_PDSCH_ENERGY,
@@ -1221,6 +1222,15 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                           rho[1][0],
                           dl_valid_re[llr_sym],
                           dlsch_config->qamModOrder);
+#ifdef DEBUG_PDSCH_RX
+        char filename[50],vname[50];
+        snprintf(filename, 50, "rxdataF_llr_symb_%d_layer0__nr_slot_rx_%d.m", llr_sym, nr_slot_rx);
+        snprintf(vname, 50, "rxllr_%d_0_%d", llr_sym, nr_slot_rx);
+        write_output(filename, vname, &layer_llr[llr_sym][0][0], dl_valid_re[llr_sym], 1, 1);
+        snprintf(filename, 50, "rxdataF_llr_symb_%d_layer1__nr_slot_rx_%d.m", llr_sym, nr_slot_rx);
+        snprintf(vname, 50, "rxllr_%d_1_%d", llr_sym, nr_slot_rx);
+        write_output(filename, vname, &layer_llr[llr_sym][1][0], dl_valid_re[llr_sym], 1, 1);
+#endif
       }
       else
       #endif
@@ -1235,6 +1245,12 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                      rxdataF_comp[llr_sym],
                      llr_per_symbol,
                      layer_llr[llr_sym]);
+#ifdef DEBUG_PDSCH_RX
+        char filename[50],vname[50];
+        snprintf(filename, 50, "rxdataF_llr_symb_%d_nr_slot_rx_%d.m", llr_sym, nr_slot_rx);
+        snprintf(vname, 50, "rxllr_%d_0_%d", llr_sym, nr_slot_rx);
+        write_output(filename, vname, &layer_llr[llr_sym][0][0], dl_valid_re[llr_sym], 1, 1);
+#endif
       }
     }
     stop_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
