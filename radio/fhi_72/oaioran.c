@@ -369,6 +369,7 @@ int xran_fh_rx_prach_read_slot(PHY_VARS_gNB *gNB, ru_info_t *ru, int *frame, int
                                                                                                              ); // `p.slot` = slot in which PRACH is scheduled
     if (is_prach_slot) {
       ru->prach_buf = p.prach_buf;
+      ru->nb_prach_rx = p.nb_rx;
     } else {
       LOG_W(HW, "[%d.%d] Expected PRACH reception of scheduled slot %d\n", *frame, *slot, p.slot);
     }
@@ -408,7 +409,7 @@ int xran_fh_rx_prach_read_slot(PHY_VARS_gNB *gNB, ru_info_t *ru, int *frame, int
   int nb_rx_per_ru = ru->nb_rx / fh_init->xran_ports;
 
   for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) { // OAI does not support multiple CC yet.
-    for (int aa = 0; aa < ru->nb_rx; aa++) {
+    for (int aa = 0; aa < ru->nb_prach_rx; aa++) {
       for (sym_idx = prach_start_sym; sym_idx < prach_end_sym; sym_idx++) {
         int16_t *dst, *src;
         int idx = 0;

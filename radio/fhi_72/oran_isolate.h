@@ -35,6 +35,7 @@ typedef struct ru_info_s {
 
   // Needed for Prach
   c16_t (*prach_buf)[NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX][NR_PRACH_SEQ_LEN_L];
+  int nb_prach_rx;
 } ru_info_t;
 
 void print_fhi_counters(ru_info_t *ru, const int frame, const int slot);
