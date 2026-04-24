@@ -369,6 +369,8 @@ int xran_fh_rx_prach_read_slot(PHY_VARS_gNB *gNB, ru_info_t *ru, int *frame, int
                                                                                                              ); // `p.slot` = slot in which PRACH is scheduled
     if (is_prach_slot) {
       ru->prach_buf = p.prach_buf;
+      ru->nb_prach_rx = p.nb_rx;
+      ru->start_prach_rx = p.ant_start;
     } else {
       LOG_W(HW, "[%d.%d] Expected PRACH reception of scheduled slot %d\n", *frame, *slot, p.slot);
     }
@@ -408,13 +410,13 @@ int xran_fh_rx_prach_read_slot(PHY_VARS_gNB *gNB, ru_info_t *ru, int *frame, int
   int nb_rx_per_ru = ru->nb_rx / fh_init->xran_ports;
 
   for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) { // OAI does not support multiple CC yet.
-    for (int aa = 0; aa < ru->nb_rx; aa++) {
+    for (int aa = ru->start_prach_rx; aa < ru->start_prach_rx + ru->nb_prach_rx; aa++) {
       for (sym_idx = prach_start_sym; sym_idx < prach_end_sym; sym_idx++) {
         int16_t *dst, *src;
         int idx = 0;
         oran_buf_list_t *bufs = get_xran_buffers(aa / nb_rx_per_ru);
         // hardcoded to use only first prach occasion
-        dst = (int16_t *)ru->prach_buf[aa][0];
+        dst = (int16_t *)ru->prach_buf[aa - ru->start_prach_rx][0];
 #if defined K_RELEASE
         struct xran_prb_map * pPrbMap = (struct xran_prb_map *)bufs->prachdstdecomp[aa % nb_rx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
         struct xran_rx_packet_ctl *p_rx_packet_ctl = &pPrbMap->sFrontHaulRxPacketCtrl[sym_idx];

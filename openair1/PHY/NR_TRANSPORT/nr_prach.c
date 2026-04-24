@@ -103,6 +103,7 @@ void nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_nr_prach_p
                             bitmap,
                             gNB->frame_parms.nb_antennas_rx,
                             gNB->common_vars.beam_id);
+      prach.ant_start = ant_start;
     }
   }
   bool found = spsc_q_put(&gNB->prach_ru_queue, &prach, sizeof(prach));
