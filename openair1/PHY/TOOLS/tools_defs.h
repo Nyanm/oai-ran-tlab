@@ -791,16 +791,15 @@ static inline void rotate_cpx_vector(const c16_t *const x, const c16_t *const al
 #ifdef __aarch64__
     if (output_shift == 15) { // allows specific NEON instruction
 
-      const int16x4_t ar4 = vdup_n_s16(alpha->r);
-      const int16x4_t ai4 = vdup_n_s16(alpha->i);
+      int16x8_t ar = (int16x8_t)vdupq_n_s16(alpha->r);
+      int16x8_t ai = (int16x8_t)vdupq_n_s16(alpha->i);
+      int16x8_t *y_128 = (int16x8_t *)y;
+      int16x8_t *x_128 = (int16x8_t *)x;
       for (uint32_t i = 0; i < (N >> 2); i++) {
-        // Load/deinterleave [re0 im0 re1 im1 ...] into separate real/imag vectors.
-        const int16x8x2_t xb = vld2q_s16((const int16_t *)&x[i << 2]);
-        const int16x8_t br = xb.val[0];
-        const int16x8_t bi = xb.val[1];
+        // Split interleaved -> separate real/imag
+        int16x8_t br = vuzp1q_s16(x_128[i], x_128[i]);
+        int16x8_t bi = vuzp2q_s16(x_128[i], x_128[i]);
 #ifdef __ARM_FEATURE_QRDMX
-        const int16x8_t ar = vcombine_s16(ar4, ar4);
-        const int16x8_t ai = vcombine_s16(ai4, ai4);
         // ARMv8.1-A: Use RDM instructions (rounding doubling multiply)
         // Start with the two “diagonal” products using high-half, doubling, sat:
         // x = round( (2*ar*br) / 2^16 ), y = round( (2*ar*bi) / 2^16 )
@@ -814,32 +813,33 @@ static inline void rotate_cpx_vector(const c16_t *const x, const c16_t *const al
         imag = vqrdmlahq_s16(imag, ai, br);
 #else
         // ARMv8.0-A fallback: Use standard 32-bit multiply
-        int32x4_t real_lo = vmull_s16(ar4, vget_low_s16(br));
-        int32x4_t real_hi = vmull_s16(ar4, vget_high_s16(br));
-        real_lo = vmlsl_s16(real_lo, ai4, vget_low_s16(bi));
-        real_hi = vmlsl_s16(real_hi, ai4, vget_high_s16(bi));
+        int32x4_t real_lo = vmull_s16(vget_low_s16(ar), vget_low_s16(br));
+        int32x4_t real_hi = vmull_s16(vget_high_s16(ar), vget_high_s16(br));
+        real_lo = vmlsl_s16(real_lo, vget_low_s16(ai), vget_low_s16(bi));
+        real_hi = vmlsl_s16(real_hi, vget_high_s16(ai), vget_high_s16(bi));
 
-        int32x4_t imag_lo = vmull_s16(ar4, vget_low_s16(bi));
-        int32x4_t imag_hi = vmull_s16(ar4, vget_high_s16(bi));
-        imag_lo = vmlal_s16(imag_lo, ai4, vget_low_s16(br));
-        imag_hi = vmlal_s16(imag_hi, ai4, vget_high_s16(br));
+        int32x4_t imag_lo = vmull_s16(vget_low_s16(ar), vget_low_s16(bi));
+        int32x4_t imag_hi = vmull_s16(vget_high_s16(ar), vget_high_s16(bi));
+        imag_lo = vmlal_s16(imag_lo, vget_low_s16(ai), vget_low_s16(br));
+        imag_hi = vmlal_s16(imag_hi, vget_high_s16(ai), vget_high_s16(br));
 
         int16x8_t real = vcombine_s16(vqrshrn_n_s32(real_lo, 15), vqrshrn_n_s32(real_hi, 15));
         int16x8_t imag = vcombine_s16(vqrshrn_n_s32(imag_lo, 15), vqrshrn_n_s32(imag_hi, 15));
 #endif
-        // Store back as interleaved complex samples.
-        const int16x8x2_t yb = {.val = {real, imag}};
-        vst2q_s16((int16_t *)&y[i << 2], yb);
+        // Re-interleave [real, imag]
+        int16x8x2_t z = vzipq_s16(real, imag);
+
+        y_128[i] = z.val[0];
         /*
         printf("y : (%d %d) (%d %d) (%d %d) (%d %d)\n",
-                 y[i << 2].r,
-                 y[i << 2].i,
-                 y[(i << 2) + 1].r,
-                 y[(i << 2) + 1].i,
-                 y[(i << 2) + 2].r,
-                 y[(i << 2) + 2].i,
-                 y[(i << 2) + 3].r,
-                 y[(i << 2) + 3].i);*/
+                 vgetq_lane_s16(y_128[i],0),
+                 vgetq_lane_s16(y_128[i],1),
+                 vgetq_lane_s16(y_128[i],2),
+                 vgetq_lane_s16(y_128[i],3),
+                 vgetq_lane_s16(y_128[i],4),
+                 vgetq_lane_s16(y_128[i],5),
+                 vgetq_lane_s16(y_128[i],6),
+                 vgetq_lane_s16(y_128[i],7));*/
       }
     } else {
 #endif
