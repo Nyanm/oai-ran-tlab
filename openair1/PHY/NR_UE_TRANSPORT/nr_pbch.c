@@ -295,6 +295,7 @@ int nr_rx_pbch(PHY_VARS_NR_UE *ue,
 {
   TracyCZone(ctx, true);
   int symbol;
+
   uint8_t Lmax=frame_parms->Lmax;
   int M = NR_POLAR_PBCH_E;
   int nushift = (Lmax == 4) ? i_ssb & 3 : i_ssb & 7;

@@ -31,7 +31,6 @@ void normal_prefix_mod(int32_t *txdataF,int32_t *txdata,uint8_t nsymb,LTE_DL_FRA
 {
 
 
-  
   PHY_ofdm_mod((int *)txdataF,        // input
                (int *)txdata,         // output
                frame_parms->ofdm_symbol_size,
@@ -58,6 +57,7 @@ void nr_normal_prefix_mod(c16_t *txdataF,
                           bool was_symbol_used[NR_SYMBOLS_PER_SLOT])
 {
   // This function works only slot wise. For more generic symbol generation refer nr_feptx0()
+  LOG_D(NR_PHY,"normal_prefix_mod: prefix0 %d, prefix %d, nsymb %d\n",frame_parms->nb_prefix_samples0,frame_parms->nb_prefix_samples,nsymb); 
   if (frame_parms->numerology_index != 0) { // case where numerology != 0
     if (!(slot%(frame_parms->slots_per_subframe/2))) {
       if (was_symbol_used[0]) {

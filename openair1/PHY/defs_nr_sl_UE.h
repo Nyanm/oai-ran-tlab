@@ -127,7 +127,6 @@ typedef struct SL_NR_UE_PSCCH {
 
 } SL_NR_UE_PSCCH_t;
 
-
 typedef struct SL_NR_UE_PSBCH {
   // AVG POWER OF PSBCH DMRS in dB/RE
   int16_t rsrp_dB_per_RE;
