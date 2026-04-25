@@ -914,22 +914,39 @@ static inline __attribute__((always_inline)) __m256i cmac_prec256(__m256i y, __m
 }
 #endif
 #ifdef __aarch64__
+#define NEWOPTIM
+#ifdef NEWOPTIM
 static inline __attribute__((always_inline)) int16x4x2_t cmac0_prec4(int16x8_t x, int16x4_t wr, int16x4_t wi) {
     const int16x4_t x_lo = vget_low_s16(x);
     const int16x4_t x_hi = vget_high_s16(x);
     const int16x4_t xr = vuzp1_s16(x_lo, x_hi);
     const int16x4_t xi = vuzp2_s16(x_lo, x_hi);
+#else
+static inline __attribute__((always_inline)) int16x8_t cmac0_prec128(int16x8_t x, int16x8_t wr, int16x8_t wi) {
+    //
+    int16x8_t xr = vuzp1q_s16(x, x);  // even lanes
+    int16x8_t xi = vuzp2q_s16(x, x);  // odd  lanes
+#endif
 #ifdef __ARM_FEATURE_QRDMX
     // ARMv8.1-A: Use RDM instructions
+#ifdef NEWOPTIM
     // real = ar*br - ai*bi  (Q15 scaling via high-half doubling muls)
     int16x4_t real = vqdmulh_s16(xr, wr);      // ≈ round((2*xr*wr)/2^16)
     real = vqrdmlsh_s16(real, xi, wi);         // real -= round((2*xi*wi)/2^16)
-    //
     // imag = ar*bi + ai*br
     int16x4_t imag = vqdmulh_s16(xr, wi);
     imag = vqrdmlah_s16(imag, xi, wr);         // imag += round((2*xi*wr)/2^16)
 #else
+    // real = ar*br - ai*bi  (Q15 scaling via high-half doubling muls)
+    int16x8_t real = vqdmulhq_s16(xr, wr);      // ≈ round((2*xr*wr)/2^16)
+    real = vqrdmlshq_s16(real, xi, wi);         // real -= round((2*xi*wi)/2^16)
+    // imag = ar*bi + ai*br
+    int16x8_t imag = vqdmulhq_s16(xr, wi);
+    imag = vqrdmlahq_s16(imag, xi, wr);         // imag += round((2*xi*wr)/2^16)
+#endif
+#else
     // ARMv8.0-A fallback: Use standard 32-bit multiply
+#ifdef NEWOPTIM 
     int32x4_t real_prod = vmull_s16(xr, wr);
     real_prod = vmlsl_s16(real_prod, xi, wi);
 
@@ -938,12 +955,33 @@ static inline __attribute__((always_inline)) int16x4x2_t cmac0_prec4(int16x8_t x
 
     int16x4_t real = vqrshrn_n_s32(real_prod, 15);
     int16x4_t imag = vqrshrn_n_s32(imag_prod, 15);
+#else
+    int32x4_t real_lo = vmull_s16(vget_low_s16(xr), vget_low_s16(wr));
+    int32x4_t real_hi = vmull_s16(vget_high_s16(xr), vget_high_s16(wr));
+    real_lo = vmlsl_s16(real_lo, vget_low_s16(xi), vget_low_s16(wi));
+    real_hi = vmlsl_s16(real_hi, vget_high_s16(xi), vget_high_s16(wi));
+
+    int32x4_t imag_lo = vmull_s16(vget_low_s16(xr), vget_low_s16(wi));
+    int32x4_t imag_hi = vmull_s16(vget_high_s16(xr), vget_high_s16(wi));
+    imag_lo = vmlal_s16(imag_lo, vget_low_s16(xi), vget_low_s16(wr));
+    imag_hi = vmlal_s16(imag_hi, vget_high_s16(xi), vget_high_s16(wr));
+
+    int16x8_t real = vcombine_s16(vqrshrn_n_s32(real_lo, 15), vqrshrn_n_s32(real_hi, 15));
+    int16x8_t imag = vcombine_s16(vqrshrn_n_s32(imag_lo, 15), vqrshrn_n_s32(imag_hi, 15));
 #endif
+#endif
+#ifdef NEWOPTIM
     int16x4x2_t produ;
     produ.val[0] = real;
     produ.val[1] = imag;
     return produ;
+#else
+    // Re-interleave [real, imag]
+    int16x8x2_t produ = vzipq_s16(real, imag);
+    return produ.val[0];
+#endif    
 }
+#ifdef NEWOPTIM
 static inline __attribute__((always_inline)) int16x4x2_t cmac_prec4(int16x4x2_t y, int16x8_t x, int16x4_t wr, int16x4_t wi) {
   const int16x4x2_t produ = cmac0_prec4(x, wr, wi);
   y.val[0] = vadd_s16(y.val[0], produ.val[0]);
@@ -951,6 +989,13 @@ static inline __attribute__((always_inline)) int16x4x2_t cmac_prec4(int16x4x2_t 
   return y;
 }
 #else
+static inline __attribute__((always_inline)) int16x8_t cmac_prec128(int16x8_t y, int16x8_t x, int16x8_t wr, int16x8_t wi) {
+  int16x8_t produ = cmac0_prec128(x, wr, wi);
+  return vaddq_s16(y, produ);
+}
+#endif
+
+#else // __x86 128-bit
 static inline __attribute__((always_inline)) simde__m128i cmac0_prec128(simde__m128i x, simde__m128i w_c, simde__m128i w_s)
 {
   // Multiplication and shift
@@ -981,7 +1026,7 @@ static inline __attribute__((always_inline)) __m128i cmac_prec128(__m128i y, __m
   const Type w_c##Rank = Instruct(c16toI32(c16conj(weights[Rank][ant]))); \
   const Type w_s##Rank = Instruct(c16toI32(c16swap(weights[Rank][ant]))); \
   const Type *in##Rank = (Type *)(txdataF_res_mapped[Rank] + sc_offset + (out-beginning));
-#ifdef __aarch64__
+#if defined(NEWOPTIM) && defined(__aarch64__)
 #define load_consts_arm(Rank) \
   const int16x4_t wr##Rank = vdup_n_s16(weights[Rank][ant].r); \
   const int16x4_t wi##Rank = vdup_n_s16(weights[Rank][ant].i); \
@@ -1123,41 +1168,104 @@ void nr_layer_precoder_simd(const int n_layers,
   }
 #endif
 #ifdef __aarch64__
+#ifdef NEWOPTIM
   load_consts_arm(0);
+#else
+  load_consts(int16x8_t, vdupq_n_s16, 0);  
+#endif
   if (n_layers == 1) {
     for (; out < end; out += sizeof(int16x8_t) / sizeof(*out)) {
+#ifdef NEWOPTIM
       const int16x4x2_t y = cmac0_prec4(vld1q_s16((const int16_t *)in0++), wr0, wi0);
       vst2_s16((int16_t *)out, y);
+#else
+      const int16x8_t x0 = vld1q_s16((const int16_t *)in0++);
+      // Accumulate the product
+      int16x8_t y = cmac0_prec128(x0, w_c0, w_s0);
+      // Store the result to txdataF
+      *(int16x8_t *)out = y;
+#endif
     }
   }
   if (n_layers == 2) {
+#ifdef NEWOPTIM
     load_consts_arm(1);
+#else
+    load_consts(int16x8_t, vdupq_n_s16, 1);  
+#endif
     for (; out < end; out += sizeof(int16x8_t) / sizeof(*out)) {
+#ifdef NEWOPTIM
       int16x4x2_t y = cmac0_prec4(vld1q_s16((const int16_t *)in0++), wr0, wi0);
       y = cmac_prec4(y, vld1q_s16((const int16_t *)in1++), wr1, wi1);
       vst2_s16((int16_t *)out, y);
+#else
+      const int16x8_t x0 = vld1q_s16((const int16_t *)in0++);
+      const int16x8_t x1 = vld1q_s16((const int16_t *)in1++);
+      // Accumulate the product
+      int16x8_t y = cmac0_prec128(x0, w_c0, w_s0);
+      y = cmac_prec128(y, x1, w_c1, w_s1);
+      // Store the result to txdataF
+      *(int16x8_t *)out = y;
+#endif
     }
   }
   if (n_layers == 3) {
+#ifdef NEWOPTIM
     load_consts_arm(1);
     load_consts_arm(2);
+#else
+    load_consts(int16x8_t, vdupq_n_s16, 1);
+    load_consts(int16x8_t, vdupq_n_s16, 2);
+#endif
     for (; out < end; out += sizeof(int16x8_t) / sizeof(*out)) {
+#ifdef NEWOPTIM
       int16x4x2_t y = cmac0_prec4(vld1q_s16((const int16_t *)in0++), wr0, wi0);
       y = cmac_prec4(y, vld1q_s16((const int16_t *)in1++), wr1, wi1);
       y = cmac_prec4(y, vld1q_s16((const int16_t *)in2++), wr2, wi2);
       vst2_s16((int16_t *)out, y);
+#else
+      const int16x8_t x0 = vld1q_s16((const int16_t *)in0++);
+      const int16x8_t x1 = vld1q_s16((const int16_t *)in1++);
+      const int16x8_t x2 = vld1q_s16((const int16_t *)in2++);
+      // Accumulate the product
+      int16x8_t y = cmac0_prec128(x0, w_c0, w_s0);
+      y = cmac_prec128(y, x1, w_c1, w_s1);
+      y = cmac_prec128(y, x2, w_c2, w_s2);
+      // Store the result to txdataF
+      *(int16x8_t *)out = y;
+#endif
     }
   }
   if (n_layers == 4) {
+#ifdef NEWOPTIM
     load_consts_arm(1);
     load_consts_arm(2);
     load_consts_arm(3);
+#else
+    load_consts(int16x8_t, vdupq_n_s16, 1);
+    load_consts(int16x8_t, vdupq_n_s16, 2);
+    load_consts(int16x8_t, vdupq_n_s16, 3);
+#endif
     for (; out < end; out += sizeof(int16x8_t) / sizeof(*out)) {
+#ifdef NEWOPTIM
       int16x4x2_t y = cmac0_prec4(vld1q_s16((const int16_t *)in0++), wr0, wi0);
       y = cmac_prec4(y, vld1q_s16((const int16_t *)in1++), wr1, wi1);
       y = cmac_prec4(y, vld1q_s16((const int16_t *)in2++), wr2, wi2);
       y = cmac_prec4(y, vld1q_s16((const int16_t *)in3++), wr3, wi3);
       vst2_s16((int16_t *)out, y);
+#else
+      const int16x8_t x0 = vld1q_s16((const int16_t *)in0++);
+      const int16x8_t x1 = vld1q_s16((const int16_t *)in1++);
+      const int16x8_t x2 = vld1q_s16((const int16_t *)in2++);
+      const int16x8_t x3 = vld1q_s16((const int16_t *)in3++);
+      // Accumulate the product
+      int16x8_t y = cmac0_prec128(x0, w_c0, w_s0);
+      y = cmac_prec128(y, x1, w_c1, w_s1);
+      y = cmac_prec128(y, x2, w_c2, w_s2);
+      y = cmac_prec128(y, x3, w_c3, w_s3);
+      // Store the result to txdataF
+      *(int16x8_t *)out = y;      
+#endif
     }
   }
 #else

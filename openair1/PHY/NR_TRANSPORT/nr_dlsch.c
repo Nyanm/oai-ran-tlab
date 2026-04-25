@@ -675,7 +675,7 @@ static int do_one_dlsch(unsigned char *input_ptr,
   int layerSz2 = (layerSz + 63) & ~63;
   c16_t tx_layers[rel15->nrOfLayers][layerSz2] __attribute__((aligned(64)));
   memset(tx_layers, 0, sizeof(tx_layers));
-  const bool use_fused_mod_layer =
+  const bool use_fused_mod_layer = false; //
       rel15->NrOfCodewords == 1 && (rel15->nrOfLayers == 3 || rel15->nrOfLayers == 4) && (Qm == 2 || Qm == 4 || Qm == 6 || Qm == 8);
 
   if (use_fused_mod_layer) {
