@@ -13,6 +13,7 @@
 extern int NB_UE_INST;
 extern uint16_t ue_id_g;
 
+/* TODO: to RRC! */
 typedef struct ueinfo {
   int srcid;
   int thirdOctet;
@@ -36,6 +37,9 @@ typedef struct ueinfo {
 #define  CONFIG_HLP_NUM_UL_ACTORS          "Number of UL actors to use. Set to 0 to disable UL actor framework and do processing inline\n"
 #define  CONFIG_HLP_NUM_DL_ACTORS          "Number of DL actors to use. Set to 0 to disable DL actor framework and do processing inline\n"
 #define  CONFIG_HLP_EXTRA_PDU_ID           "ID of an additional PDU session to configure alongside default PDU session\n"
+#define  CONFIG_HLP_SL_SYNCSOURCEUE        "Sidelink UE acts as SYNC REF UE"
+#define  CONFIG_HLP_SL_MAX_MCS             "Sidelink initial max mcs value"
+#define  CONFIG_HLP_SL_SNR                 "Sets sidelink SNR value"
 
 /***************************************************************************************************************************************/
 /* command line options definitions, CMDLINE_XXXX_DESC macros are used to initialize paramdef_t arrays which are then used as argument
@@ -85,6 +89,9 @@ typedef struct ueinfo {
   {"num-ul-actors",                CONFIG_HLP_NUM_UL_ACTORS,   0,               .iptr=&nrUE_params.num_ul_actors,            .defintval=2,      TYPE_INT,      0}, \
   {"num-dl-actors",                CONFIG_HLP_NUM_DL_ACTORS,  0,                .iptr=&nrUE_params.num_dl_actors,            .defintval=4,      TYPE_INT,      0}, \
   {"extra-pdu-id",                 CONFIG_HLP_EXTRA_PDU_ID,   0,                .iptr=&nrUE_params.extra_pdu_id,             .defintval=-1,     TYPE_INT,      0}, \
+  {"sync-ref",                     CONFIG_HLP_SL_SYNCSOURCEUE, PARAMFLAG_BOOL,  .uptr=&(nrUE_params.sync_ref),               .defuintval=0,     TYPE_UINT32,   0}, \
+  {"mcs",                          CONFIG_HLP_SL_MAX_MCS,      0,               .u8ptr=&(nrUE_params.mcs),                   .defintval=9,      TYPE_UINT8,    0}, \
+  {"snr",                          CONFIG_HLP_SL_SNR,          0,               .dblptr=&(nrUE_params.snr),                  .defdblval=0.0,                TYPE_DOUBLE,   0}, \
 }
 // clang-format on
 
@@ -126,6 +133,9 @@ typedef struct {
   int num_ul_actors;
   int num_dl_actors;
   int extra_pdu_id;
+  uint32_t sync_ref;
+  uint8_t mcs;
+  double snr;
 } nrUE_params_t;
 extern uint64_t get_nrUE_optmask(void);
 extern uint64_t set_nrUE_optmask(uint64_t bitmask);

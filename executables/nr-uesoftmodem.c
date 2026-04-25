@@ -62,6 +62,7 @@ unsigned short config_frames[4] = {2,9,11,13};
 #include "executables/thread-common.h"
 
 #include "nr_nas_msg.h"
+#include "openair2/RRC/NR_UE/sl_preconfig_paramvalues.h"
 #include "actor.h"
 
 THREAD_STRUCT thread_struct;
@@ -298,6 +299,16 @@ int main(int argc, char **argv)
   nr_pdcp_layer_init();
   nas_init_nrue(NB_UE_INST);
 
+  /* TODO: to RRC! */
+  ueinfo_t ueinfo;
+  char aprefix[MAX_OPTNAME_SIZE * 2 + 8];
+  paramdef_t SL_UEINFO[] = SL_UEINFO_DESC(ueinfo);
+  paramlist_def_t SL_UEINFOList = {SL_CONFIG_STRING_UEINFO, NULL, 0};
+  sprintf(aprefix, "%s.[%d]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0);
+  config_getlist(config_get_if(), &SL_UEINFOList, NULL, 0, aprefix);
+  sprintf(aprefix, "%s.[%i].%s.[%i]", SL_CONFIG_STRING_SL_PRECONFIGURATION, 0, SL_CONFIG_STRING_UEINFO, 0);
+  config_get(config_get_if(), SL_UEINFO, sizeof(SL_UEINFO) / sizeof(paramdef_t), aprefix);
+
   nrue_set_ru_params(uniqCfg);
   nrue_set_cell_params(uniqCfg);
 
@@ -411,6 +422,11 @@ int main(int argc, char **argv)
 
       if (UE_CC->sl_mode) {
         AssertFatal(UE_CC->sl_mode == 2, "Only Sidelink mode 2 supported. Mode 1 not yet supported\n");
+        // TODO do in/after RRC load?
+        nr_pdcp_entity_security_keys_and_algos_t security_up_parameters = {0};
+        NR_UE_RRC_INST_t *rrc = get_NR_UE_rrc_inst(inst);
+        DevAssert(rrc != NULL);
+        rrc_ue_process_sidelink_Preconfiguration(rrc, get_nrUE_params()->sync_ref, &ueinfo, &security_up_parameters);
         DevAssert(mac->if_module != NULL && mac->if_module->sl_phy_config_request != NULL);
         nr_sl_phy_config_t *phycfg = &mac->SL_MAC_PARAMS->sl_phy_config;
         phycfg->sl_config_req.sl_carrier_config.sl_num_rx_ant = get_nrUE_params()->nb_antennas_rx;
