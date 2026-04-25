@@ -13,6 +13,12 @@
 extern int NB_UE_INST;
 extern uint16_t ue_id_g;
 
+typedef struct ueinfo {
+  int srcid;
+  int thirdOctet;
+  int fourthOctet;
+} ueinfo_t;
+
 #define  CONFIG_HLP_IF_FREQ                "IF frequency for RF, if needed\n"
 #define  CONFIG_HLP_IF_FREQ_OFF            "UL IF frequency offset for RF, if needed\n"
 #define  CONFIG_HLP_DLSCH_PARA             "number of threads for dlsch processing 0 for no parallelization\n"
