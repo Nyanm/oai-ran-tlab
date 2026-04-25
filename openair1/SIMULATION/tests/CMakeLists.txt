@@ -39,7 +39,7 @@ function(add_physim_test test_name test_description test_exec)
     # pass test description also through environment variable: for cmake < 3.30,
     # in JSON export, we cannot recover the description otherwise
     # see also https://gitlab.kitware.com/cmake/cmake/-/issues/21490
-    ENVIRONMENT "LD_LIBRARY_PATH=.;TEST_DESCRIPTION=${test_description}"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR};TEST_DESCRIPTION=${test_description}"
   )
   set_tests_properties(${test_name} PROPERTIES CHECK_COUNT 0)
   add_dependencies(tests ${test_exec})

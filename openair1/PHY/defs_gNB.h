@@ -11,6 +11,7 @@
 
 #include "common/platform_constants.h"
 #include "defs_nr_common.h"
+#include "PHY/nr_phy_common/inc/nr_phy_common.h"
 #include "CODING/nrPolar_tools/nr_polar_pbch_defs.h"
 #include "openair2/NR_PHY_INTERFACE/NR_IF_Module.h"
 #include "PHY/CODING/nrLDPC_coding/nrLDPC_coding_interface.h"
@@ -101,6 +102,8 @@ typedef struct {
 typedef struct {
   /// Nfapi DLSCH PDU
   const nfapi_nr_dl_tti_pdsch_pdu *pdsch_pdu;
+  /// freq allocation information
+  freq_alloc_bitmap_t freq_alloc;
   /// pointer to pdu from MAC interface (this is "a" in 36.212)
   uint8_t *pdu;
   /// Pointer to the payload

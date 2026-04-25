@@ -459,6 +459,7 @@ void nr_ue_meas_neighboring_cell(void *arg)
   do_neighboring_cell_measurements(&args->proc, args->ue, args->rxdata, args->rxdata_size);
 
   args->ue->measurements.meas_request_pending = false;
+  free(args->rxdata);
   free(args);
 }
 

@@ -83,25 +83,40 @@ option(PACKAGING_COMMON "Will produce a package containing common target, config
 option(PACKAGING_USRP "Will produce a package containing usrp target, configuration files and docs" OFF)
 option(PACKAGING_PHYSIM "Will produce a package containing physim target, configuration files and docs" OFF)
 
-
 # Check if asn1c is installed, and check if it supports all options we need
 # a user can provide ASN1C_EXEC to override an asn1c to use (e.g., parallel
 # installation)
 find_program(ASN1C_EXEC_PATH asn1c HINTS /opt/asn1c/bin)
 set(ASN1C_EXEC ${ASN1C_EXEC_PATH} CACHE FILEPATH "path to asn1c executable")
-if(NOT ASN1C_EXEC)
-    message(FATAL_ERROR "No asn1c found!
-You might want to re-run ./build_oai -I
-Or provide a path to asn1c using
-./build_oai ... --cmake-opt -DASN1C_EXEC=/path/to/asn1c
-")
+option(AUTO_DOWNLOAD_ASN1C "Automatically download asn1c if not found" OFF)
+if (ASN1C_EXEC)
+  check_option(${ASN1C_EXEC} -gen-APER ASN1C_EXEC)
+  check_option(${ASN1C_EXEC} -no-gen-UPER ASN1C_EXEC)
+  check_option(${ASN1C_EXEC} -no-gen-JER ASN1C_EXEC)
+  check_option(${ASN1C_EXEC} -no-gen-BER ASN1C_EXEC)
+  check_option(${ASN1C_EXEC} -no-gen-OER ASN1C_EXEC)
+  add_custom_target(asn1c DEPENDS ${ASN1C_EXEC})
+else ()
+  if (NOT AUTO_DOWNLOAD_ASN1C)
+    message(FATAL_ERROR "asn1c not found. Install it globally or activate AUTO_DOWNLOAD_ASN1C")
+  endif()
+  message(STATUS "Downloading and compile asn1c local in this build tree")
+  include(ExternalProject)
+  ExternalProject_Add(
+    asn1c_gen
+    GIT_REPOSITORY https://github.com/mouse07410/asn1c
+    GIT_TAG 940dd5fa9f3917913fd487b13dfddfacd0ded06e
+    GIT_REMOTE_UPDATE_STRATEGY CHECKOUT
+    BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/bin/asn1c
+    BUILD_IN_SOURCE True
+    CONFIGURE_COMMAND autoreconf -i
+    BUILD_COMMAND ./configure --prefix ${CMAKE_BINARY_DIR}
+    COMMAND make -j8 CFLAGS=-fno-strict-aliasing -Wmisleading-indentation
+    STEP_TARGETS build
+  )
+  set(ASN1C_EXEC ${CMAKE_BINARY_DIR}/bin/asn1c)
+  add_custom_target(asn1c DEPENDS asn1c_gen)
 endif()
-check_option(${ASN1C_EXEC} -gen-APER ASN1C_EXEC)
-check_option(${ASN1C_EXEC} -no-gen-UPER ASN1C_EXEC)
-check_option(${ASN1C_EXEC} -no-gen-JER ASN1C_EXEC)
-check_option(${ASN1C_EXEC} -no-gen-BER ASN1C_EXEC)
-check_option(${ASN1C_EXEC} -no-gen-OER ASN1C_EXEC)
-
 #########################################################
 # Base directories, compatible with legacy OAI building #
 #########################################################
@@ -420,7 +435,6 @@ add_library(ngap
   ${NGAP_DIR}/ngap_gNB_pdu_session_management.c
   ${NGAP_DIR}/ngap_gNB_nnsf.c
   ${NGAP_DIR}/ngap_gNB_overload.c
-  ${NGAP_DIR}/ngap_gNB_trace.c
   ${NGAP_DIR}/ngap_gNB_ue_context.c
   ${NGAP_DIR}/ngap_gNB_NRPPa_transport_procedures.c
   )
@@ -868,7 +882,6 @@ set(PHY_SRC_COMMON
   ${OPENAIR1_DIR}/PHY/TOOLS/sqrt.c
   ${OPENAIR1_DIR}/PHY/TOOLS/get_sin_cos.c
   ${OPENAIR1_DIR}/PHY/TOOLS/oai_arith_operations.c
-  ${OPENAIR1_DIR}/PHY/log_tools.c
   )
 
 set(PHY_SRC

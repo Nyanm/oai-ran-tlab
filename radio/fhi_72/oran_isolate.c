@@ -12,9 +12,7 @@
 #include "xran_sync_api.h"
 
 #include "common/utils/LOG/log.h"
-#include "common/utils/fsn.h"
 #include "openair1/PHY/defs_gNB.h"
-#include "openair1/PHY/NR_TRANSPORT/nr_transport_proto.h"
 #include "oaioran.h"
 #include "oran-config.h"
 
@@ -34,9 +32,14 @@ typedef struct {
   int capabilities_sent;
   void *oran_priv;
   void *mplane_priv;
+  uint32_t nCC;
+  uint32_t num_ports;
 } oran_eth_state_t;
 
 notifiedFIFO_t oran_sync_fifo;
+#if defined K_RELEASE
+notifiedFIFO_t oran_sync_fifo_prach;
+#endif
 
 int trx_oran_start(openair0_device_t *device)
 {
@@ -45,12 +48,53 @@ int trx_oran_start(openair0_device_t *device)
   oran_eth_state_t *s = device->priv;
 
   // Start ORAN
+#if defined K_RELEASE
+  if (xran_timingsource_start() != 0) {
+    printf("%s:%d:%s: Start timing source failed ... Exit\n", __FILE__, __LINE__, __FUNCTION__);
+    exit(1);
+  } else {
+    printf("Start timing source. Done\n");
+  }
+
+  if (xran_start_worker_threads() != 0) {
+    printf("%s:%d:%s: Start worker thread failed ... Exit\n", __FILE__, __LINE__, __FUNCTION__);
+    exit(1);
+  } else {
+    printf("Start worker thread. Done\n");
+  }
+
+  xran_mem_mgr_leak_detector_display(0);
+#endif
+
+#if defined F_RELEASE
   if (xran_start(s->oran_priv) != 0) {
     printf("%s:%d:%s: Start ORAN failed ... Exit\n", __FILE__, __LINE__, __FUNCTION__);
     exit(1);
-  } else {
-    printf("Start ORAN. Done\n");
   }
+#elif defined K_RELEASE
+  for (int32_t port_id = 0; port_id < s->num_ports; port_id++) {
+    if (xran_start(((void **)s->oran_priv)[port_id]) != 0) {
+      printf("%s:%d:%s: Start ORAN port ID %d failed ... Exit\n", __FILE__, __LINE__, __FUNCTION__, port_id);
+      exit(1);
+    }
+  }
+#endif
+
+  printf("Start ORAN. Done\n");
+
+#if defined K_RELEASE
+  for (int32_t cc_id = 0; cc_id < s->nCC; cc_id++) {
+    for (int32_t port_id = 0; port_id < s->num_ports; port_id++) {
+      if (xran_activate_cc(port_id, cc_id) != 0) {
+        printf("%s:%d:%s: Activate CC failed ... Exit\n", __FILE__, __LINE__, __FUNCTION__);
+        exit(1);
+      } else {
+        printf("Activate CC. Done\n");
+      }
+    }
+  }
+#endif
+
   return 0;
 }
 
@@ -58,14 +102,39 @@ void trx_oran_end(openair0_device_t *device)
 {
   printf("ORAN: %s\n", __FUNCTION__);
   oran_eth_state_t *s = device->priv;
+#if defined K_RELEASE
+  xran_shutdown(s->oran_priv);
+#endif
   xran_close(s->oran_priv);
+#if defined K_RELEASE
+  xran_cleanup();
+  xran_mem_mgr_leak_detector_destroy();
+#endif
 }
 
 int trx_oran_stop(openair0_device_t *device)
 {
   printf("ORAN: %s\n", __FUNCTION__);
   oran_eth_state_t *s = device->priv;
+
+#if defined K_RELEASE
+  for (int32_t cc_id = 0; cc_id < s->nCC; cc_id++) {
+    for (int32_t port_id = 0; port_id < s->num_ports; port_id++) {
+      xran_deactivate_cc(port_id, cc_id);
+    }
+  }
+
+  xran_timingsource_stop();
+#endif
+
+#if defined F_RELEASE
   xran_stop(s->oran_priv);
+#elif defined K_RELEASE
+  for (int32_t port_id = 0; port_id < s->num_ports; port_id++) {
+    xran_stop(((void **)s->oran_priv)[port_id]);
+  }
+#endif
+
 #ifdef OAI_MPLANE
   printf("[MPLANE] Stopping M-plane.\n");
   disconnect_mplane(s->mplane_priv);
@@ -197,6 +266,8 @@ int trx_oran_ctlrecv(openair0_device_t *device, void *msg, ssize_t msg_len)
 
 void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
 {
+  int ret = 0; // return code for PUSCH/PRACH processing
+
   ru_info_t ru_info = {
       .nb_rx = ru->nb_rx * ru->num_beams_period,
       .nb_tx = ru->nb_tx * ru->num_beams_period,
@@ -206,42 +277,28 @@ void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
       .prach_buf = NULL,
   };
 
-  prach_item_t p;
-  PHY_VARS_gNB *gNB = ru->gNB_list[0];
-  fsn_t now = {.f = *frame, .s = *slot, .mu = gNB->frame_parms.numerology_index};
-  if (get_next_nr_prach(&gNB->prach_ru_queue, &now, &p)) {
-    struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
-    int slots_per_subframe = 1 << fh_cfg->frame_conf.nNumerology;
-    uint32_t subframe = *slot / slots_per_subframe; // `slot` = slot in which PRACH is received
-    // PRACH occasion in a frame if and only if SFN % x == y, TS 38.211 Table 6.3.3.2-2/3/4
-    nr_prach_info_t prach_info = get_prach_info(0);
-    bool is_prach_frame = (*frame % prach_info.x == prach_info.y);
-    bool is_prach_slot = is_prach_frame && xran_is_prach_slot(0, subframe, (p.slot % slots_per_subframe)); // `p.slot` = slot in which PRACH is scheduled
-    if (is_prach_slot) {
-      ru_info.prach_buf = p.prach_buf;
-    } else {
-      LOG_W(HW, "[%d.%d] Expected PRACH reception of scheduled slot %d\n", *frame, *slot, p.slot);
-    }
-  }
-
-  RU_proc_t *proc = &ru->proc;
+  /* Firstly, process PUSCH packets */
+  RU_proc_t *proc = &ru->proc; // to check if (frame,slot) combination corresponds to the expected PUSCH one
   int f, sl;
   LOG_D(HW, "Read rxdataF %p,%p\n", ru_info.rxdataF[0], ru_info.rxdataF[1]);
   start_meas(&ru->rx_fhaul);
-  int ret = xran_fh_rx_read_slot(&ru_info, &f, &sl);
+  ret = xran_fh_rx_read_slot(&ru_info, &f, &sl);
   stop_meas(&ru->rx_fhaul);
   LOG_D(HW, "Read %d.%d rxdataF %p,%p\n", f, sl, ru_info.rxdataF[0], ru_info.rxdataF[1]);
   if (ret != 0) {
     printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX function \n", f, sl);
   }
 
-  if (ru_info.prach_buf) {
-    // xran_fh_rx_read_slot() should have read PRACH, write back to queue
-    bool success = spsc_q_put(&gNB->prach_l1rx_queue, &p, sizeof(p));
-    // assume prach_l1rx_queue never full: prach_ru_queue filled at
-    // constant pace, but prach_l1rx_queue emptied as fast as possible,
-    // see rx_func()
-    DevAssert(success);
+  /* Secondly, process PRACH packets */
+  int f_prach, sl_prach;
+#if defined F_RELEASE
+  // no PRACH callback (no queue) in F release so use the expected combination
+  f_prach = *frame;
+  sl_prach = *slot;
+#endif
+  ret = xran_fh_rx_prach_read_slot(ru->gNB_list[0], &ru_info, &f_prach, &sl_prach);
+  if (ret != 0) {
+    printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX PRACH function \n", f_prach, sl_prach);
   }
 
   int slots_per_frame = 10 << (ru->openair0_cfg.nr_scs_for_raster);
@@ -251,6 +308,7 @@ void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
   proc->frame_tx = (sl > (slots_per_frame - 1 - ru->sl_ahead)) ? (f + 1) & 1023 : f;
 
   if (proc->first_rx == 0) {
+    print_fhi_counters(&ru_info, proc->frame_rx, proc->tti_rx);
     if (proc->tti_rx != *slot) {
       LOG_E(HW,
             "Received Time doesn't correspond to the time we think it is (slot mismatch, received %d.%d, expected %d.%d)\n",
@@ -390,11 +448,16 @@ __attribute__((__visibility__("default"))) int transport_init(openair0_device_t 
   // create message queues for ORAN sync
 
   initNotifiedFIFO(&oran_sync_fifo);
+#if defined K_RELEASE
+  initNotifiedFIFO(&oran_sync_fifo_prach);
+#endif
 
   eth->e.flags = ETH_RAW_IF4p5_MODE;
   eth->e.compression = NO_COMPRESS;
   eth->e.if_name = eth_params->local_if_name;
   eth->last_msg = (rru_config_msg_type_t)-1;
+  eth->nCC = fh_config->nCC;
+  eth->num_ports = fh_init.xran_ports;
 
   device->transp_type = ETHERNET_TP;
   device->trx_start_func = trx_oran_start;

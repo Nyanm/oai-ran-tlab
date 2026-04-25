@@ -19,6 +19,7 @@
 #include "PHY/NR_TRANSPORT/nr_dlsch.h"
 #include "SCHED_NR/sched_nr.h"
 #include "defs.h"
+#include "bits.h"
 #include "common/utils/LOG/log.h"
 #include <syscall.h>
 // #define DEBUG_ULSCH_DECODING

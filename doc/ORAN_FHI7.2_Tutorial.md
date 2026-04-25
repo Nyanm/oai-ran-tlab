@@ -72,9 +72,9 @@ Tested libxran releases:
 | Vendor                                  |
 |-----------------------------------------|
 | `oran_f_release_v1.0`                   |
+| `oran_k_release_v1.0`                   |
 
-
-**Note**: The libxran driver of OAI identifies the above F release version as "6.1.0" (F is the sixth letter, then 1.0).
+**Note**: The libxran driver of OAI identifies the above F release version as "6.1.0" (F is the sixth letter, then 1.0), and the above K release as "11.1.0".
 
 ### Configure your server
 
@@ -274,7 +274,7 @@ timedatectl set-ntp false
 
 ### DPDK (Data Plane Development Kit)
 
-Download DPDK version 20.11.9.
+Download DPDK version 20.11.9 (F release) or 24.11.4 (K release).
 
 ```bash
 # on debian
@@ -282,7 +282,8 @@ sudo apt install wget xz-utils libnuma-dev
 # on Fedora/RHEL
 sudo dnf install wget xz numactl-devel
 cd
-wget http://fast.dpdk.org/rel/dpdk-20.11.9.tar.xz
+wget http://fast.dpdk.org/rel/dpdk-20.11.9.tar.xz # F release
+wget http://fast.dpdk.org/rel/dpdk-24.11.4.tar.xz # K release
 ```
 
 #### DPDK Compilation and Installation
@@ -290,10 +291,11 @@ wget http://fast.dpdk.org/rel/dpdk-20.11.9.tar.xz
 ```bash
 # Installing meson : it should pull ninja-build and compiler packages
 # on debian
-sudo apt install meson
+sudo apt install python3-pyelftools meson
 # on Fedora/RHEL
-sudo dnf install meson
-tar xvf dpdk-20.11.9.tar.xz && cd dpdk-stable-20.11.9
+sudo dnf install python3-pyelftools meson
+tar xvf dpdk-20.11.9.tar.xz && cd dpdk-stable-20.11.9 # F release
+tar xvf dpdk-24.11.4.tar.xz && cd dpdk-stable-24.11.4 # K release
 
 meson build
 ninja -C build
@@ -359,7 +361,8 @@ pkg-config --libs libdpdk --static
 Go back to the version folder you used to build and install
 
 ```
-cd ~/dpdk-stable-20.11.9
+cd ~/dpdk-stable-20.11.9 # F release
+cd ~/dpdk-stable-24.11.4 # K release
 sudo ninja deinstall -C build
 ```
 
@@ -384,6 +387,13 @@ git checkout oran_f_release_v1.0
 git apply ~/openairinterface5g/cmake_targets/tools/oran_fhi_integration_patches/F/oaioran_F.patch
 ```
 
+#### K release
+```bash
+git clone https://github.com/openairinterface/o-du-phy.git ~/phy
+cd ~/phy
+git checkout <desired-tag> # shall match a variable `K_VERSION`
+```
+
 Compile the fronthaul interface library by calling `make` and the option
 `XRAN_LIB_SO=1` to have it build a shared object. Note that we provide two
 environment variables `RTE_SDK` for the path to the source tree of DPDK, and
@@ -398,6 +408,7 @@ This feature is intended to enable experiments and future improvements on Arm sy
 cd ~/phy/fhi_lib/lib
 make clean
 WIRELESS_SDK_TOOLCHAIN=gcc RTE_SDK=~/dpdk-stable-20.11.9/ XRAN_DIR=~/phy/fhi_lib make XRAN_LIB_SO=1 # F release
+WIRELESS_SDK_TOOLCHAIN=gcc RTE_SDK=~/dpdk-stable-24.11.4/ XRAN_DIR=~/phy/fhi_lib make XRAN_LIB_SO=1 # K release
 ...
 [AR] build/libxran.so
 ./build/libxran.so
@@ -483,22 +494,12 @@ Note that you might also call cmake directly instead of using `build_oai`:
 ```
 cd ~/openairinterface5g
 mkdir build && cd build
+# build RAN after manually building xran F or K release
 cmake .. -GNinja -DOAI_FHI72=ON -Dxran_LOCATION=$HOME/phy/fhi_lib/lib
+# build RAN and xran K release automatically
+cmake .. -GNinja -DOAI_FHI72=ON -Dxran_DOWNLOAD=ON
 ninja nr-softmodem oran_fhlib_5g params_libconfig
 ```
-
-Note that in tags 2025.w06 and prior, the FHI72 driver used polling to wait for
-the next slot. This is inefficient as it burns CPU time, and has been replaced
-with a more efficient mechanism. Nevertheless, if you experience problems that
-did not occur previously, it is possible to re-enable polling, either with
-`build_oai` like this
-
-    ./build_oai --gNB --ninja -t oran_fhlib_5g --cmake-opt -Dxran_LOCATION=$HOME/phy/fhi_lib/lib --cmake-opt -DOAI_FHI72_USE_POLLING=ON
-
-or with `cmake` like so
-
-    cmake .. -GNinja -DOAI_FHI72=ON -Dxran_LOCATION=$HOME/phy/fhi_lib/lib -DOAI_FHI72_USE_POLLING=ON
-    ninja oran_fhlib_5g
 
 ## Configuration
 
@@ -1635,6 +1636,8 @@ cmake .. -GNinja -DOAI_FHI72=ON -DOAI_FHI72_MPLANE=ON -Dxran_LOCATION=$HOME/phy/
 PKG_CONFIG_PATH=/opt/mplane-v2/lib/pkgconfig cmake .. -GNinja -DOAI_FHI72=ON -DOAI_FHI72_MPLANE=ON -Dxran_LOCATION=$HOME/phy/fhi_lib/lib
 ninja nr-softmodem oran_fhlib_5g_mplane params_libconfig
 ```
+
+Note: instead of setting `xran_LOCATION`, feel free to use `xran_DOWNLOAD` option for automatic xran K release build.
 
 ### Start the gNB
 Run the `nr-softmodem` from the build directory:

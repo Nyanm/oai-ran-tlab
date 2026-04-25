@@ -14,7 +14,7 @@
 
 void init_nr_prach(PHY_VARS_gNB *gNB)
 {
-  int num_prach = 8;
+  int num_prach = 16;
   gNB->prach_ru_queue = spsc_q_alloc(num_prach, sizeof(prach_item_t));
   gNB->prach_l1rx_queue = spsc_q_alloc(num_prach, sizeof(prach_item_t));
 }
@@ -34,7 +34,8 @@ static bool drop_old_prach(const void *data, void *user)
 {
   const prach_item_t *p = data;
   const fsn_t *now = user;
-  const fsn_t t = {p->frame, p->slot, now->mu};
+  // account for long PRACH over more than 1 slot
+  const fsn_t t = {p->frame, p->slot + p->num_slots - 1, now->mu};
   bool drop = fsn_in_the_past(t, *now);
   if (drop)
     LOG_E(NR_PHY, "%4d.%2d PRACH job is in the past (%4d.%2d)\n", now->f, now->s, t.f, t.s);
@@ -45,7 +46,8 @@ static bool get_current_prach(const void *data, void *user)
 {
   const prach_item_t *p = data;
   const fsn_t *now = user;
-  const fsn_t t = {p->frame, p->slot, now->mu};
+  // account for long PRACH over more than 1 slot
+  const fsn_t t = {p->frame, p->slot + p->num_slots - 1, now->mu};
   return fsn_equal(t, *now);
 }
 

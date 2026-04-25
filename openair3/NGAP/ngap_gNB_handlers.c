@@ -30,7 +30,6 @@
 #include "ngap_gNB_nas_procedures.h"
 #include "ngap_gNB_paging.h"
 #include "ngap_gNB_NRPPa_transport_procedures.h"
-#include "ngap_gNB_trace.h"
 #include "ngap_gNB_ue_context.h"
 #include "ngap_messages_types.h"
 #include "oai_asn1.h"
@@ -691,6 +690,7 @@ static int ngap_gNB_handle_error_indication(sctp_assoc_t assoc_id, uint32_t stre
  *        Decode the NGAP message and transfer to RRC */
 static int ngap_gNB_handle_handover_request(sctp_assoc_t assoc_id, uint32_t stream, NGAP_NGAP_PDU_t *pdu)
 {
+  UNUSED(stream);
   DevAssert(pdu != NULL);
 
   ngap_gNB_amf_data_t *amf_desc_p = ngap_gNB_get_AMF(NULL, assoc_id, 0);
@@ -851,6 +851,7 @@ static int ngap_gNB_handle_initial_context_request(sctp_assoc_t assoc_id, uint32
 
 static int ngap_gNB_handle_ue_context_release_command(sctp_assoc_t assoc_id, uint32_t stream, NGAP_NGAP_PDU_t *pdu)
 {
+  UNUSED(stream);
   ngap_gNB_amf_data_t *amf_desc_p = NULL;
   MessageDef            *message_p        = NULL;
   uint64_t                            amf_ue_ngap_id;
@@ -1368,24 +1369,6 @@ static int ngap_gNB_handle_pdusession_release_command(sctp_assoc_t assoc_id, uin
   return 0;
 }
 
-static int ngap_gNB_handle_ng_path_switch_request_ack(sctp_assoc_t assoc_id, uint32_t stream, NGAP_NGAP_PDU_t *pdu)
-{
-  // TODO
-  return 0;
-}
-
-static int ngap_gNB_handle_ng_path_switch_request_failure(sctp_assoc_t assoc_id, uint32_t stream, NGAP_NGAP_PDU_t *pdu)
-{
-  // TODO
-  return 0;
-}
-
-static int ngap_gNB_handle_ng_ENDC_pdusession_modification_confirm(sctp_assoc_t assoc_id, uint32_t stream, NGAP_NGAP_PDU_t *pdu)
-{
-  LOG_W(NGAP, "Implementation of NGAP Pdusession Modification confirm handler is pending...\n");
-	return 0;
-}
-
 static int ngap_gNB_handle_dl_ran_status_transfer(sctp_assoc_t assoc_id, uint32_t stream, NGAP_NGAP_PDU_t *pdu)
 {
   DevAssert(pdu != NULL);
@@ -1487,7 +1470,7 @@ const ngap_message_decoded_callback ngap_messages_callback[][3] = {
     {0, 0, 0}, /* AMFConfigurationUpdate */
     {0, 0, 0}, /* AMFStatusIndication */
     {0, 0, 0}, /* CellTrafficTrace */
-    {ngap_gNB_handle_deactivate_trace, 0, 0}, /* DeactivateTrace */
+    {0, 0, 0}, /* DeactivateTrace */
     {ngap_gNB_handle_nas_downlink, 0, 0}, /* DownlinkNASTransport */
     {ngap_gNB_handle_downlink_non_ue_associated_nrppa_transport, 0, 0}, /* DownlinkNonUEAssociatedNRPPaTransport */
     {0, 0, 0}, /* DownlinkRANConfigurationTransfer */
@@ -1509,9 +1492,9 @@ const ngap_message_decoded_callback ngap_messages_callback[][3] = {
     {0, 0, 0}, /* OverloadStart */
     {0, 0, 0}, /* OverloadStop */
     {ngap_gNB_handle_paging, 0, 0}, /* Paging */
-    {0, ngap_gNB_handle_ng_path_switch_request_ack, ngap_gNB_handle_ng_path_switch_request_failure}, /* PathSwitchRequest */
+    {0, 0, 0}, /* PathSwitchRequest */
     {ngap_gNB_handle_pdusession_modify_request, 0, 0}, /* PDUSessionResourceModify */
-    {0, ngap_gNB_handle_ng_ENDC_pdusession_modification_confirm, 0}, /* PDUSessionResourceModifyIndication */
+    {0, 0, 0}, /* PDUSessionResourceModifyIndication */
     {ngap_gNB_handle_pdusession_release_command, 0, 0}, /* PDUSessionResourceRelease */
     {ngap_gNB_handle_pdusession_setup_request, 0, 0}, /* PDUSessionResourceSetup */
     {0, 0, 0}, /* PDUSessionResourceNotify */
@@ -1523,7 +1506,7 @@ const ngap_message_decoded_callback ngap_messages_callback[][3] = {
     {0, 0, 0}, /* RerouteNASRequest */
     {0, 0, 0}, /* RRCInactiveTransitionReport */
     {0, 0, 0}, /* TraceFailureIndication */
-    {ngap_gNB_handle_trace_start, 0, 0}, /* TraceStart */
+    {0, 0, 0}, /* TraceStart */
     {0, 0, 0}, /* UEContextModification */
     {ngap_gNB_handle_ue_context_release_command, 0, 0}, /* UEContextRelease */
     {0, 0, 0}, /* UEContextReleaseRequest */
@@ -1553,7 +1536,7 @@ int ngap_gNB_handle_message(sctp_assoc_t assoc_id, int32_t stream, const uint8_t
   }
 
   /* Checking procedure Code and direction of message */
-  if (pdu.choice.initiatingMessage->procedureCode >= sizeof(ngap_messages_callback) / (3 * sizeof(ngap_message_decoded_callback)) || (pdu.present > NGAP_NGAP_PDU_PR_unsuccessfulOutcome)) {
+  if (pdu.choice.initiatingMessage->procedureCode >= (long)(sizeof(ngap_messages_callback) / (3 * sizeof(ngap_message_decoded_callback))) || (pdu.present > NGAP_NGAP_PDU_PR_unsuccessfulOutcome)) {
     NGAP_ERROR("[SCTP %u] Either procedureCode %ld or direction %d exceed expected\n", assoc_id, pdu.choice.initiatingMessage->procedureCode, pdu.present);
     ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_NGAP_NGAP_PDU, &pdu);
     return -1;

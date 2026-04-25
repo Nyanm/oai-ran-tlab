@@ -47,6 +47,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
                        uint8_t **b,
                        int *G,
                        int nb_dlsch,
+                       int number_rbs,
                        uint8_t *DLSCH_ids)
 {
   nrLDPC_TB_decoding_parameters_t TBs[nb_dlsch];
@@ -95,7 +96,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
 
     // ------------------------------------------------------------------
     TB_parameters->G = G[DLSCH_id];
-    TB_parameters->nb_rb = dlsch_config->number_rbs;
+    TB_parameters->nb_rb = number_rbs;
     TB_parameters->Qm = dlsch_config->qamModOrder;
     TB_parameters->mcs = dlsch_config->mcs;
     TB_parameters->nb_layers = dlsch[DLSCH_id].Nl;
@@ -256,7 +257,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
     kpiStructure.nb_total++;
     kpiStructure.blockSize = dlsch_config->TBS;
     kpiStructure.dl_mcs = dlsch_config->mcs;
-    kpiStructure.nofRBs = dlsch_config->number_rbs;
+    kpiStructure.nofRBs = number_rbs;
 
     harq_process->decodeResult = harq_process->processedSegments == harq_process->C;
 
@@ -327,7 +328,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
           dlsch->dlsch_config.mcs,
           dlsch->Nl,
           dlsch_config->number_symbols,
-          dlsch_config->number_rbs,
+          number_rbs,
           dlsch_config->qamModOrder,
           Coderate);
 

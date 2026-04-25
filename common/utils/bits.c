@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-#include "reverse_bits.h"
+#include "bits.h"
 // we avoid assertions.h as it necessitates othe dependencies (e.g., exit_function)
 #include <assert.h>
 #include <simde/x86/gfni.h>

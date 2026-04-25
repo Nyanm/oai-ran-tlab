@@ -112,6 +112,7 @@ void exit_function(const char *file, const char *function, const int line, const
 
   oai_exit = 1;
 
+  nrue_ru_stop();
   nrue_ru_end();
 
   if (assert) {
@@ -456,6 +457,8 @@ int main(int argc, char **argv)
   itti_wait_tasks_end(trigger_deregistration);
   LOG_W(NR_PHY, "Returned from ITTI signal handler\n");
   oai_exit = 1;
+
+  nrue_ru_stop();
 
   if (PHY_vars_UE_g && PHY_vars_UE_g[0]) {
     for (int CC_id = 0; CC_id < MAX_NUM_CCs; CC_id++) {

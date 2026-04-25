@@ -171,9 +171,11 @@ TEST(test_init_ra, four_step_cfra)
 int main(int argc, char **argv)
 {
   logInit();
-  load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY);
+  configmodule_interface_t *uniqCfg = load_configmodule(argc, argv, CONFIG_ENABLECMDLINEONLY);
   g_log->log_component[MAC].level = OAILOG_DEBUG;
   g_log->log_component[NR_MAC].level = OAILOG_DEBUG;
   testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  int ret = RUN_ALL_TESTS();
+  end_configmodule(uniqCfg);
+  return ret;
 }

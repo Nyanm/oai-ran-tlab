@@ -552,6 +552,21 @@ void nr_rrc_trigger_n2_ho_target(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue)
  *         2) send NGAP Handover Required message */
 void nr_rrc_trigger_n2_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, const nr_neighbour_cell_t *neighbour_config)
 {
+  bool has_active_pdu_session = false;
+  FOR_EACH_SEQ_ARR (rrc_pdu_session_param_t *, pduSession, &ue->pduSessions) {
+    if (pduSession->status == PDU_SESSION_STATUS_DONE || pduSession->status == PDU_SESSION_STATUS_ESTABLISHED) {
+      has_active_pdu_session = true;
+      break;
+    }
+  }
+  /* If there are no active PDU sessions, we can't send the Handover Preparation information
+   * message to the source gNB (3GPP TS 38.413 §9.2.3.1): Handover Required must carry a PDU
+   * Session Resource List with at least one PDU Session Resource Item */
+  if (!has_active_pdu_session) {
+    LOG_W(NR_RRC, "N2 HO not triggered for UE %u: no active PDU sessions\n", ue->rrc_ue_id);
+    return;
+  }
+
   byte_array_t hoPrepInfo = rrc_gNB_generate_HandoverPreparationInformation(rrc, ue);
   if (hoPrepInfo.len < 0) {
     free_byte_array(hoPrepInfo);

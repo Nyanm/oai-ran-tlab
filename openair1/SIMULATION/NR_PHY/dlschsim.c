@@ -410,8 +410,9 @@ int main(int argc, char **argv)
     dlsch_ue[0].rnti = n_rnti;
   nr_init_dl_harq_processes(UE->dl_harq_processes, 8, nb_rb);
 
-	unsigned char harq_pid = 0; //dlsch->harq_ids[subframe];
+  unsigned char harq_pid = 0; //dlsch->harq_ids[subframe];
   NR_gNB_DLSCH_t *dlsch = &gNB->dlsch[0];
+  dlsch->freq_alloc = set_bitmap_from_start_size(0, nb_rb);
 	//time_stats_t *rm_stats, *te_stats, *i_stats;
 	unsigned int TBS = 8424;
 	uint8_t nb_re_dmrs = 6;  // No data in dmrs symbol
@@ -554,6 +555,7 @@ int main(int argc, char **argv)
                         &p_b,
                         available_bits_array,
                         1,
+                        num_rb,
                         DLSCH_ids);
 
       if (dlsch0_ue->last_iteration_cnt > dlsch0_ue->max_ldpc_iterations)

@@ -15,7 +15,7 @@
 
 /* Utils */
 #include "common/utils/LOG/log.h"
-#include "common/utils/nr/nr_common.h"
+#include "common/utils/bits.h"
 #include "UTIL/OPT/opt.h"
 
 /* rlc */

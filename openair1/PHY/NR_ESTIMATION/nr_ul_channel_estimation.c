@@ -154,7 +154,7 @@ static void nr_pusch_antenna_processing(void *arg)
         }
 //------------------Write channel parameters to Memory  for data recording ------------------//
 #if T_TRACER
-        if (T_ACTIVE(T_GNB_PHY_UL_FD_CHAN_EST_DMRS_POS)) {
+        if (T_ACTIVE(T_GNB_PHY_UL_FD_CHAN_EST_DMRS_POS) && nl == 0) {
           // Trace channel coefficients
           c16_t *pusch_ch_est_dmrs_pos_slot_mem = rdata->pusch_ch_est_dmrs_pos_slot_mem;
           int dmrs_symbol_start_idx = rdata->dmrs_symbol_start_idx;
@@ -521,7 +521,7 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
   //------------------Write DMRS to Memory for Data Recording ------------------//
   int dmrs_symbol_start_idx = symbol * pusch_pdu->nrOfLayers * nb_rb_pusch * NR_NB_SC_PER_RB + nl * nb_rb_pusch * NR_NB_SC_PER_RB;
 #if T_TRACER
-  if (T_ACTIVE(T_GNB_PHY_UL_FD_DMRS)) {
+  if (T_ACTIVE(T_GNB_PHY_UL_FD_DMRS) && nl == 0) {
     // used by T-Tracer to trace DMRS slot grid
     int dmrs_delta = 0; // intialize it to zero currently, derive it later from above functions
     for (int i = 0; i < (6 * nb_rb_pusch); i++) {

@@ -7,11 +7,13 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <stdatomic.h>
 
 #if defined(__cplusplus)
+#include <atomic>
 // use atomic_size_t to help interworking with C++
 using std::atomic_size_t;
+#else
+#include <stdatomic.h>
 #endif
 
 typedef struct spsc_q {

@@ -11,6 +11,7 @@
 #include "SCHED_NR_UE/defs.h"
 #include "PHY/NR_TRANSPORT/nr_transport_common_proto.h"
 #include <math.h>
+#include "PHY/nr_phy_common/inc/nr_phy_common.h"
 
 #define NR_PUSCH_x 2 // UCI placeholder bit TS 38.212 V15.4.0 subclause 5.3.3.1
 #define NR_PUSCH_y 3 // UCI placeholder bit
@@ -70,6 +71,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
                        uint8_t **b,
                        int *G,
                        int nb_dlsch,
+                       int number_rbs,
                        uint8_t *DLSCH_ids);
 
 int nr_ulsch_pre_encoding(PHY_VARS_NR_UE *ue,

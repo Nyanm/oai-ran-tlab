@@ -262,28 +262,7 @@ static inline int get_num_dmrs(uint16_t dmrs_mask )
   return(num_dmrs);
 }
 
-static inline int count_bits(uint8_t *arr, int sz)
-{
-  AssertFatal(sz % sizeof(int) == 0, "to implement if needed\n");
-  int ret = 0;
-  for (uint *ptr = (uint *)arr; (uint8_t *)ptr < arr + sz; ptr++)
-    ret += __builtin_popcount(*ptr);
-  return ret;
-}
-
-static __attribute__((always_inline)) inline int count_bits64(uint64_t v)
-{
-  return __builtin_popcountll(v);
-}
-
-static __attribute__((always_inline)) inline int count_bits64_with_mask(uint64_t v, int start, int num)
-{
-  uint64_t mask = ((1LL << num) - 1) << start;
-  return count_bits64(v & mask);
-}
-
 void warn_higher_threequarter_fs(const int n_rb, const int mu);
-
 uint64_t from_nrarfcn(int nr_bandP, uint8_t scs_index, uint32_t dl_nrarfcn);
 uint32_t to_nrarfcn(uint64_t dl_CarrierFreq);
 uint8_t set_ssb_case(int scs, int nr_band);

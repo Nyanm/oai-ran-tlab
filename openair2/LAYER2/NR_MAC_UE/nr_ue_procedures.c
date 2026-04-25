@@ -27,7 +27,7 @@
 
 /* utils */
 #include "assertions.h"
-#include "reverse_bits.h"
+#include "bits.h"
 #include "oai_asn1.h"
 #include "common/utils/LOG/log.h"
 #include "LAYER2/nr_rlc/nr_rlc_oai_api.h"
@@ -380,14 +380,14 @@ int8_t nr_ue_process_dci_freq_dom_resource_assignment(nfapi_nr_ue_pusch_pdu_t *p
         currentBit += writeBit(rb_bitmap, currentBit, bit_rbg, P);
       }
 
-      // write last bit
-      int last_bit_rbg = frequency_domain_assignment.val & 0x01;
-      const int tmp=(start_DLBWP + n_RB_DLBWP) % P;
-      int last_RBG = tmp ? tmp : P;
-      writeBit(rb_bitmap, currentBit, last_bit_rbg, last_RBG);
-    }
-    else if (pdsch_Config &&
-             pdsch_Config->resourceAllocation == NR_PDSCH_Config__resourceAllocation_dynamicSwitch)
+      // write last bit (only if more than 1 RBG)
+      if (n_RBG > 1) {
+        int last_bit_rbg = frequency_domain_assignment.val & 0x01;
+        const int tmp = (start_DLBWP + n_RB_DLBWP) % P;
+        int last_RBG = tmp ? tmp : P;
+        writeBit(rb_bitmap, currentBit, last_bit_rbg, last_RBG);
+      }
+    } else if (pdsch_Config && pdsch_Config->resourceAllocation == NR_PDSCH_Config__resourceAllocation_dynamicSwitch)
       AssertFatal(false, "DLSCH dynamic switch allocation not yet supported\n");
     else {
       // TS 38.214 subclause 5.1.2.2.2 Downlink resource allocation type 1
@@ -408,7 +408,7 @@ int8_t nr_ue_process_dci_freq_dom_resource_assignment(nfapi_nr_ue_pusch_pdu_t *p
       LOG_D(MAC,"DLSCH start_rb = %i\n", dlsch_config_pdu->start_rb);
     }
   }
-  if(pusch_config_pdu != NULL){
+  if(pusch_config_pdu != NULL) {
     /*
      * TS 38.214 subclause 6.1.2.2 Resource allocation in frequency domain (uplink)
      */
@@ -428,10 +428,6 @@ int8_t nr_ue_process_dci_freq_dom_resource_assignment(nfapi_nr_ue_pusch_pdu_t *p
       LOG_W(MAC, "Frequency domain assignment values are invalid! #RBs: %d, Start RB: %d, n_RB_ULBWP: %d \n",pusch_config_pdu->rb_size, pusch_config_pdu->rb_start, n_RB_ULBWP);
       return -1;
     }
-    LOG_D(MAC,"ULSCH riv = %i\n", riv);
-    LOG_D(MAC,"ULSCH n_RB_DLBWP = %i\n", n_RB_ULBWP);
-    LOG_D(MAC,"ULSCH number_rbs = %i\n", pusch_config_pdu->rb_size);
-    LOG_D(MAC,"ULSCH start_rb = %i\n", pusch_config_pdu->rb_start);
   }
   return 0;
 }
@@ -1376,12 +1372,20 @@ static int nr_ue_process_dci_dl_11(NR_UE_MAC_INST_t *mac,
     nb_rb_oh = 0;
   int nb_re_dmrs = ((dmrs_type == NULL) ? 6 : 4) * dlsch_pdu->n_dmrs_cdm_groups;
 
+  int number_rbs;
+  if (dlsch_pdu->resource_alloc == 1) {
+    number_rbs = dlsch_pdu->number_rbs;
+  } else {
+    uint32_t temp_bitmap[9];
+    memcpy(temp_bitmap, dlsch_pdu->rb_bitmap, 36);
+    number_rbs = count_bits(temp_bitmap, 9);
+  }
   int R = nr_get_code_rate_dl(dlsch_pdu->mcs, dlsch_pdu->mcs_table);
   if (R > 0) {
     dlsch_pdu->targetCodeRate = R;
     dlsch_pdu->TBS = nr_compute_tbs(dlsch_pdu->qamModOrder,
                                     R,
-                                    dlsch_pdu->number_rbs,
+                                    number_rbs,
                                     dlsch_pdu->number_symbols,
                                     nb_re_dmrs * get_num_dmrs(dlsch_pdu->dlDmrsSymbPos),
                                     nb_rb_oh,
@@ -1422,7 +1426,7 @@ static int nr_ue_process_dci_dl_11(NR_UE_MAC_INST_t *mac,
   if (dl_dmrs_config->phaseTrackingRS != NULL) {
     bool valid_ptrs_setup =
         set_dl_ptrs_values(dl_dmrs_config->phaseTrackingRS->choice.setup,
-                           dlsch_pdu->number_rbs,
+                           number_rbs,
                            dlsch_pdu->mcs,
                            dlsch_pdu->mcs_table,
                            &dlsch_pdu->PTRSFreqDensity,
