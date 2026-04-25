@@ -914,7 +914,6 @@ static inline __attribute__((always_inline)) __m256i cmac_prec256(__m256i y, __m
 }
 #endif
 #ifdef __aarch64__
-#define NEWOPTIM
 #ifdef NEWOPTIM
 static inline __attribute__((always_inline)) int16x4x2_t cmac0_prec4(int16x8_t x, int16x4_t wr, int16x4_t wi) {
     const int16x4_t x_lo = vget_low_s16(x);
