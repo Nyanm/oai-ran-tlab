@@ -1800,7 +1800,7 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
             read_dbt_from_config(prefix, &config.bt.num_beams, &config.bt.num_weights_per_beam, &config.bt.beam_ids);
       }
       // triggers also PHY initialization in case we have L1 via FAPI
-      nr_mac_config_scc(RC.nrmac[j], scc, &config);
+      nr_mac_config_scc(RC.nrmac[j], 0, scc, &config);
     } //  for (j=0;j<RC.nb_nr_macrlc_inst;j++)
 
     uint64_t gnb_du_id = 0;
