@@ -16,7 +16,7 @@ void nr_codeword_scrambling(uint8_t *in,
   const int roundedSz = (size + 31) / 32;
   uint32_t *seq = gold_cache((n_RNTI << 15) + (q << 14) + Nid, roundedSz);
   unsigned int i_32 = 0;
-#if defined(__AVX512F__) && defined(__AVX512VL__)
+#if defined(__AVX2__)
   for (; i_32 < ((roundedSz >> 3) << 3); i_32 += 8) {
     __m256i in_256 = _mm256_load_epi32(&((uint32_t *)in)[i_32]);
     __m256i seq_256 = _mm256_load_epi32(&seq[i_32]);

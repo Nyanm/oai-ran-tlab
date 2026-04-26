@@ -682,6 +682,7 @@ static int do_one_dlsch(unsigned char *input_ptr,
     start_meas(dlsch_scrambling_stats);
     uint32_t scrambled_output[(encoded_length >> 5) + 4]; // modulator access by 4 bytes in some cases
     memset(scrambled_output, 0, sizeof(scrambled_output));
+    start_meas(dlsch_modulation_stats);
     nr_pdsch_codeword_scrambling(input_ptr, encoded_length, 0, rel15->dataScramblingId, rel15->rnti, scrambled_output);
     stop_meas(dlsch_scrambling_stats);
 
@@ -692,6 +693,7 @@ static int do_one_dlsch(unsigned char *input_ptr,
                 Qm,
                 rel15->nrOfLayers,
                 rel15->NrOfCodewords);
+    stop_meas(dlsch_modulation_stats);
   } else {
     c16_t mod_symbs[rel15->NrOfCodewords][encoded_length] __attribute__((aligned(64)));
     for (int codeWord = 0; codeWord < rel15->NrOfCodewords; codeWord++) {
