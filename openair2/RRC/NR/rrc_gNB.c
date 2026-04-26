@@ -938,7 +938,10 @@ static rrc_action_t rrc_gNB_action_from_pdusession_status(gNB_RRC_UE_t *ue_p,
     }
     if (item->status == PDU_SESSION_STATUS_TOMODIFY) {
       ASSERT_PDU_ACTION_SINGLE(action, RRC_PDUSESSION_MODIFY);
-      LOG_I(NR_RRC, "PDU Session Modify: status to TOMODIFY for PDU Session %d \n", item->param.pdusession_id);
+      LOG_I(NR_RRC,
+            "UE %d: PDU Session Modify: status to TOMODIFY for PDU Session %d\n",
+            ue_p->rrc_ue_id,
+            item->param.pdusession_id);
       action = RRC_PDUSESSION_MODIFY;
     } else if (item->status == PDU_SESSION_STATUS_NEW) {
       ASSERT_PDU_ACTION_SINGLE(action, RRC_PDUSESSION_ESTABLISH);

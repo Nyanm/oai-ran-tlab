@@ -111,8 +111,6 @@ nr_rrc_qos_t *add_qos(seq_arr_t *qos, const pdusession_level_qos_parameter_t *in
   // Double check successful add
   nr_rrc_qos_t *added = find_qos(qos, in->qfi);
   DevAssert(added);
-  LOG_I(NR_RRC, "Added QoS flow with qfi=%d, total number of QoS flows = %ld\n", in->qfi, seq_arr_size(qos));
-
   return added;
 }
 
@@ -152,7 +150,6 @@ bool rm_qos(seq_arr_t *flows, int qfi)
     return false;
   }
 
-  LOG_I(NR_RRC, "Removing QoS flow with QFI=%d\n", qfi);
   seq_arr_erase_deep(flows, qos, free_qos);
   return true;
 }
@@ -588,7 +585,8 @@ int nr_rrc_find_suitable_drb_for_qos(gNB_RRC_UE_t *UE,
 
     if (has_capacity && total_flows_on_drb < MAX_QOS_FLOWS_PER_DRB_TOTAL) {
       LOG_I(NR_RRC,
-            "Found suitable DRB %d to multiplex 5QI %d (QFI %d) - current flows: GBR=%d, Non-GBR=%d\n",
+            "UE %d: found suitable DRB %d to multiplex 5QI %d (QFI %d) - current flows: GBR=%d, Non-GBR=%d\n",
+            UE->rrc_ue_id,
             drb->drb_id,
             five_qi,
             qos_params->qfi,

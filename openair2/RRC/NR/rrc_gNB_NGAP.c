@@ -174,7 +174,7 @@ static nr_guami_t get_guami(const uint32_t amf_Id, const plmn_id_t plmn)
 }
 
 /** @brief Copy NGAP PDU Session Transfer item to RRC pdusession_t struct */
-static void cp_pdusession_transfer_to_pdusession(pdusession_t *dst, const pdusession_transfer_t *src)
+static void cp_pdusession_transfer_to_pdusession(pdusession_t *dst, const pdusession_transfer_t *src, int ue_id)
 {
   dst->pdu_session_type = src->pdu_session_type;
   dst->n3_incoming = src->n3_incoming;
@@ -189,18 +189,23 @@ static void cp_pdusession_transfer_to_pdusession(pdusession_t *dst, const pduses
       LOG_E(NR_RRC, "Failed to add QoS flow %d for PDU session %d\n", src->qos[i].qfi, dst->pdusession_id);
       continue;
     }
+    LOG_I(NR_RRC,
+          "UE %d: added QoS flow with QFI=%d, total number of QoS flows = %ld\n",
+          ue_id,
+          src->qos[i].qfi,
+          seq_arr_size(&dst->qos));
   }
 }
 
 /** @brief Copy NGAP PDU Session Resource item to RRC pdusession_t struct to setup */
-static void cp_pdusession_resource_item_to_pdusession(pdusession_t *dst, const pdusession_resource_item_t *src)
+static void cp_pdusession_resource_item_to_pdusession(pdusession_t *dst, const pdusession_resource_item_t *src, int ue_id)
 {
   dst->pdusession_id = src->pdusession_id;
   dst->nas_pdu = src->nas_pdu;
   dst->nssai = src->nssai;
 
   // Use the PDU session transfer function to handle QoS and other PDU session transfer-specific fields
-  cp_pdusession_transfer_to_pdusession(dst, &src->pdusessionTransfer);
+  cp_pdusession_transfer_to_pdusession(dst, &src->pdusessionTransfer, ue_id);
 }
 
 /**
@@ -527,7 +532,7 @@ int rrc_gNB_process_NGAP_INITIAL_CONTEXT_SETUP_REQ(MessageDef *msg_p, instance_t
 
       /* This is a PDU session that is not yet active for this UE: add it to the list */
       DevAssert(ps_count < req->nb_of_pdusessions);
-      cp_pdusession_resource_item_to_pdusession(&psessions[ps_count++], src);
+      cp_pdusession_resource_item_to_pdusession(&psessions[ps_count++], src, UE->rrc_ue_id);
     }
 
     UE->n_initial_pdu = 0;
@@ -916,7 +921,7 @@ void rrc_gNB_process_NGAP_PDUSESSION_SETUP_REQ(MessageDef *msg_p, instance_t ins
 
   pdusession_t to_setup[NR_MAX_NB_PDU_SESSIONS] = {0};
   for (int i = 0; i < msg->nb_pdusessions_tosetup; ++i)
-    cp_pdusession_resource_item_to_pdusession(&to_setup[i], &msg->pdusession[i]);
+    cp_pdusession_resource_item_to_pdusession(&to_setup[i], &msg->pdusession[i], UE->rrc_ue_id);
 
   /** Set AMBR if provided (optional) */
   if (msg->has_ue_ambr) {
@@ -1350,7 +1355,7 @@ int rrc_gNB_send_NGAP_PDUSESSION_MODIFY_RESP(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE
 
   FOR_EACH_SEQ_ARR(rrc_pdu_session_param_t *, session, &UE->pduSessions) {
     if (xid != session->xid) {
-      LOG_W(NR_RRC,
+      LOG_D(NR_RRC,
             "xid does not correspond (PDU Session %d, status %d, xid %d/%d) \n ",
             session->param.pdusession_id,
             session->status,
@@ -1543,7 +1548,7 @@ int rrc_gNB_process_Handover_Request(gNB_RRC_INST *rrc, ngap_handover_request_t 
     pdu->nssai = ho_pdu->nssai;
     pdu->pdu_session_type = ho_pdu->pdu_session_type;
     pdu->pdusession_id = ho_pdu->pdusession_id;
-    cp_pdusession_transfer_to_pdusession(pdu, &ho_pdu->pdusessionTransfer);
+    cp_pdusession_transfer_to_pdusession(pdu, &ho_pdu->pdusessionTransfer, UE->rrc_ue_id);
   }
 
   // Store UE aggregate maximum bitrate
