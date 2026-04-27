@@ -452,12 +452,9 @@ static inline void do_txdataF(c16_t **txdataF,
     const int rb_step = rb_step0 == 2 && pmi3 == pmi && pmi4 == pmi ? 4 : rb_step0;
     const int re_cnt = NR_NB_SC_PER_RB * rb_step;
     if (pmi == 0) { // unitary Precoding
-      if (ant < rel15->nrOfLayers)
-        memcpy(&txdataF[ant][txdataF_offset_per_symbol + subCarrier],
-               &txdataF_precoding[ant][subCarrier],
-               re_cnt * sizeof(**txdataF));
-      else
-        memset(&txdataF[ant][txdataF_offset_per_symbol + subCarrier], 0, re_cnt * sizeof(**txdataF));
+      memcpy(&txdataF[ant][txdataF_offset_per_symbol + subCarrier],
+              &txdataF_precoding[ant][subCarrier],
+              re_cnt * sizeof(**txdataF));
       subCarrier += re_cnt;
     } else { // non-unitary Precoding
       AssertFatal(frame_parms->nb_antennas_tx > 1, "No precoding can be done with a single antenna port\n");
