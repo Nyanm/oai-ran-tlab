@@ -1030,7 +1030,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
         }
       }
       if (nl==1) *log2_maxh = (log2_approx(avgs) / 2) + 1 + log2_approx(n_rx >> 1);
-      else *log2_maxh = (log2_approx(avgs) >> 1) - 2 + log2_approx(n_rx >> 1);
+      else *log2_maxh = (log2_approx(avgs) >> 1) - 0 + log2_approx(n_rx >> 1);
       LOG_D(PHY, "[DLSCH] AbsSubframe %d.%d log2_maxh = %d (%d)\n", frame % 1024, nr_slot_rx, *log2_maxh, avgs);
 #if T_TRACER
       T(T_UE_PHY_PDSCH_ENERGY,
@@ -1103,11 +1103,27 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
     snprintf(filename, 50, "rxdataF_ext0_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
     write_output(filename, "rxdataF_ext0", &rxdataF_ext[0][0], rx_size_symbol, 1, 1);
 
-    snprintf(filename, 50, "dl_ch_estimates_ext0_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
-    write_output(filename, "dl_ch_estimates_ext0", &dl_ch_estimates_ext[0][0], rx_size_symbol, 1, 1);
 
-    snprintf(filename, 50, "rxdataF_comp00_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
-    write_output(filename, "rxdataF_comp00", &rxdataF_comp[0][0][symbol * rx_size_symbol], rx_size_symbol, 1, 1);
+    snprintf(filename, 50, "rxdataF_comp0_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
+    write_output(filename, "rxdataF_comp0", rxComp[0], rx_size_symbol, 1, 1);
+    snprintf(filename, 50, "rxdataF_comp1_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
+    write_output(filename, "rxdataF_comp1", rxComp[n_rx], rx_size_symbol, 1, 1);
+    if (nl > 1) {
+      snprintf(filename, 50, "rho01_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
+      write_output(filename, "rho01", &rho[0][1][symbol * rx_size_symbol], rx_size_symbol, 1, 1);
+      snprintf(filename, 50, "dl_ch_estimates_ext00_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
+      write_output(filename, "dl_ch_estimates_ext00", &dl_ch_estimates_ext[0][0], rx_size_symbol, 1, 1);
+      snprintf(filename, 50, "dl_ch_estimates_ext01_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
+      write_output(filename, "dl_ch_estimates_ext01", &dl_ch_estimates_ext[1][0], rx_size_symbol, 1, 1);
+      snprintf(filename, 50, "dl_ch_estimates_ext10_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
+      write_output(filename, "dl_ch_estimates_ext10", &dl_ch_estimates_ext[2][0], rx_size_symbol, 1, 1);
+      snprintf(filename, 50, "dl_ch_estimates_ext11_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
+      write_output(filename, "dl_ch_estimates_ext11", &dl_ch_estimates_ext[3][0], rx_size_symbol, 1, 1);
+    }
+    else {
+      snprintf(filename, 50, "dl_ch_estimates_ext0_symb_%d_nr_slot_rx_%d.m", symbol, nr_slot_rx);
+      write_output(filename, "dl_ch_estimates_ext0", &dl_ch_estimates_ext[0][0], rx_size_symbol, 1, 1);
+    }
 #endif
   }
 

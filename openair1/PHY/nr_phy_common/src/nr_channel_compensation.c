@@ -84,7 +84,10 @@ void nr_channel_compensation(uint32_t buffer_length,
           simde__m128i *chF_128 = (simde__m128i *)chFext[aatx][aarx];
           simde__m128i *chF2_128 = (simde__m128i *)chFext[atx][aarx];
           for (int i = 0; i < numLoopCnt128; i++) {
+	    if (i<12) printf("chF %d :  %d.%d.%d.%d.%d.%d.%d.%d\n",i,((int16_t*)chF_128)[0],((int16_t*)chF_128)[1],((int16_t*)chF_128)[2],((int16_t*)chF_128)[3],((int16_t*)chF_128)[4],((int16_t*)chF_128)[5],((int16_t*)chF_128)[6],((int16_t*)chF_128)[7]);
+	    if (i<12) printf("chF2 %d :  %d.%d.%d.%d.%d.%d.%d.%d\n",i,((int16_t*)chF2_128)[0],((int16_t*)chF2_128)[1],((int16_t*)chF2_128)[2],((int16_t*)chF2_128)[3],((int16_t*)chF2_128)[4],((int16_t*)chF2_128)[5],((int16_t*)chF2_128)[6],((int16_t*)chF2_128)[7]);
             rho_128[i] = simde_mm_adds_epi16(rho_128[i], oai_mm_cpx_mult_conj(chF_128[i], chF2_128[i], output_shift));
+	    if (i<12) printf("rho %d :  %d.%d.%d.%d.%d.%d.%d.%d\n",i,((int16_t*)rho_128)[0],((int16_t*)rho_128)[1],((int16_t*)rho_128)[2],((int16_t*)rho_128)[3],((int16_t*)rho_128)[4],((int16_t*)rho_128)[5],((int16_t*)rho_128)[6],((int16_t*)rho_128)[7]);
           }
         }
       }
@@ -143,6 +146,13 @@ void nr_channel_compensation(uint32_t buffer_length,
           simde__m256i *chF2_256 = (simde__m256i *)chFext[atx][aarx];
           for (int i = 0; i < numLoopCnt; i++) {
             rho_256[i] = simde_mm256_adds_epi16(rho_256[i], oai_mm256_cpx_mult_conj(chF_256[i], chF2_256[i], output_shift));
+	    /*
+	    if (i<1) printf("shift %d\n",output_shift);
+	    if (i<1) printf("chF_%d%d :  %d.%d.%d.%d.%d.%d.%d.%d\n",aatx,aarx,((int16_t*)chF_256)[0],((int16_t*)chF_256)[1],((int16_t*)chF_256)[2],((int16_t*)chF_256)[3],((int16_t*)chF_256)[4],((int16_t*)chF_256)[5],((int16_t*)chF_256)[6],((int16_t*)chF_256)[7]);
+	    if (i<1) printf("chF2_%d%d :  %d.%d.%d.%d.%d.%d.%d.%d\n",atx,aarx,((int16_t*)chF2_256)[0],((int16_t*)chF2_256)[1],((int16_t*)chF2_256)[2],((int16_t*)chF2_256)[3],((int16_t*)chF2_256)[4],((int16_t*)chF2_256)[5],((int16_t*)chF2_256)[6],((int16_t*)chF2_256)[7]);
+	    if (i<1) printf("rho_%d%d :  %d.%d.%d.%d.%d.%d.%d.%d\n",aatx,atx,((int16_t*)rho_256)[0],((int16_t*)rho_256)[1],((int16_t*)rho_256)[2],((int16_t*)rho_256)[3],((int16_t*)rho_256)[4],((int16_t*)rho_256)[5],((int16_t*)rho_256)[6],((int16_t*)rho_256)[7]);
+	    if (i<1) printf("rxcomp_%d%d : %d.%d.%d.%d.%d.%d.%d.%d\n",aatx,aarx,((int16_t*)rxComp_256)[0],((int16_t*)rxComp_256)[1],((int16_t*)rxComp_256)[2],((int16_t*)rxComp_256)[3],((int16_t*)rxComp_256)[4],((int16_t*)rxComp_256)[5],((int16_t*)rxComp_256)[6],((int16_t*)rxComp_256)[7]);
+	    */
           }
         }
       }
