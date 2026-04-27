@@ -1495,7 +1495,9 @@ sudo ldconfig
 If you would like to install these libraries in the custom path, please replace `/usr/local` default path to e.g. `/opt/mplane-v2`.
 
 ## Benetel O-RU
-Note: RAN550/650 v1.2.2 and v1.4.1 have been successfully tested.
+Note: RAN550/650 v1.2.2/v1.4.1, and RAN550 v2.1.0 have been successfully tested.
+
+We added a [CI M-plane pipeline](https://jenkins-oai.eurecom.fr/job/RAN-SA-FHI72-MPLANE-CN5G/) showcasing the M-plane integration.
 
 #### One time steps
 Connect to the RU as user `root`, enable the mplane service, and reboot:
