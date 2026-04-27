@@ -274,6 +274,55 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
     output += print_meas_log(&ru->compression,"compression",NULL,NULL, output, end - output);
     output += print_meas_log(&ru->transport,"transport",NULL,NULL, output, end - output);
   }
+  reset_meas(&gNB->l1_tx_proc);
+  reset_meas(&gNB->l1_rx_proc);
+  reset_meas(&gNB->phy_proc_tx);
+  reset_meas(&gNB->dlsch_encoding_stats);
+  reset_meas(&gNB->dlsch_segmentation_stats);
+  reset_meas(&gNB->tinput);
+  reset_meas(&gNB->tprep);
+  reset_meas(&gNB->tparity);
+  reset_meas(&gNB->toutput);
+  reset_meas(&gNB->dlsch_rate_matching_stats);
+  reset_meas(&gNB->dlsch_interleaving_stats);
+  reset_meas(&gNB->dlsch_scrambling_stats);
+  reset_meas(&gNB->dlsch_modulation_stats);
+  reset_meas(&gNB->dlsch_resource_mapping_stats);
+  reset_meas(&gNB->dlsch_pdsch_generation_stats);
+  reset_meas(&gNB->phy_proc_rx);
+  reset_meas(&gNB->ulsch_decoding_stats);
+  reset_meas(&gNB->ts_deinterleave);
+  reset_meas(&gNB->ts_rate_unmatch);
+  reset_meas(&gNB->ts_ldpc_decode);
+  reset_meas(&gNB->ul_indication_stats);
+  reset_meas(&gNB->slot_indication_stats);
+  reset_meas(&gNB->rx_pusch_stats);
+  reset_meas(&gNB->rx_prach);
+  if (ru->feprx) {
+    reset_meas(&ru->ofdm_demod_stats);
+  }
+
+  if (ru->feptx_prec) {
+    reset_meas(&ru->precoding_stats);
+  }
+
+  if (ru->feptx_ofdm) {
+    reset_meas(&ru->txdataF_copy_stats);
+    reset_meas(&ru->ofdm_mod_stats);
+    reset_meas(&ru->ofdm_total_stats);
+    reset_meas(&ru->txdataF_copy_stats);
+  }
+
+  if (ru->fh_north_asynch_in) {
+    reset_meas(&ru->rx_fhaul);
+  }
+
+  reset_meas(&ru->tx_fhaul);
+
+  if (ru->fh_north_out) {
+    reset_meas(&ru->compression);
+    reset_meas(&ru->transport);
+  }
   return output - begin;
 }
 
