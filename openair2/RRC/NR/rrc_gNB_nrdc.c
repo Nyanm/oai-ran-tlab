@@ -27,6 +27,8 @@ typedef enum {
   NRDC_ACTIVE,
   DEACTIVATE_NRDC_WAIT_FOR_F1_CONTEXT_MODIFICATION_RESPONSE,
   DEACTIVATE_NRDC_WAIT_FOR_PDU_SESSION_RELEASE_RECONFIGURATION_COMPLETE,
+  NRDC_DU_CONTEXT_TO_RELEASE,
+  NRDC_DEACTIVATED
 } nrdc_state_t;
 
 typedef struct {
@@ -39,6 +41,7 @@ typedef struct {
   int meas_object_id;
   int report_config_id;
   int measurement_id;
+  int du_assoc_id;
   uint32_t secondary_du_ue_id;
   int drb_id;
   int pdu_session_to_release;
@@ -400,6 +403,22 @@ void rrc_gnb_nrdc_start(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue)
                                   (uint64_t []){ ue->rrc_ue_id, xid, nrdc->state }, 3);
 }
 
+void rrc_gnb_free_nrdc(gNB_RRC_UE_t *ue)
+{
+  if (!ue->nrdc)
+    return;
+  nrdc_ue_state_t *nrdc = ue->nrdc;
+  if (nrdc->timer) {
+    tick_timeout_stop(nrdc->timer);
+    nrdc->timer = NULL;
+  }
+  free(nrdc->uecap.buf);
+  nrdc->uecap.buf = NULL;
+  nrdc->uecap.size = 0;
+  free(ue->nrdc);
+  ue->nrdc = NULL;
+}
+
 static OCTET_STRING_t *extract_nr_capabilities(const NR_UECapabilityInformation_t *ue_cap)
 {
   if (ue_cap == NULL
@@ -449,8 +468,7 @@ void rrc_gnb_nrdc_ue_capabilities_received(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, 
   if (nr_uecap == NULL) {
     /* capabilities have to be there */
     LOG_E(NR_RRC, "NR-DC: no NR capabilities found, cancelling NR-DC activation procedure for UE %d\n", ue->rrc_ue_id);
-    free(ue->nrdc);
-    ue->nrdc = NULL;
+    rrc_gnb_free_nrdc(ue);
     return;
   }
   DevAssert(nrdc->uecap.buf == NULL);
@@ -468,8 +486,7 @@ void rrc_gnb_nrdc_ue_capabilities_received(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, 
   if (!cell) {
     /* no cell found, cancel the process */
     LOG_E(NR_RRC, "no cell found for SCG band %d, cancelling NR-DC activation procedure for UE %d\n", nrdc->scg_band, ue->rrc_ue_id);
-    free(ue->nrdc);
-    ue->nrdc = NULL;
+    rrc_gnb_free_nrdc(ue);
     return;
   }
   NR_MeasTimingList_t *mtlist = cell->mtc->criticalExtensions.choice.c1->choice.measTimingConf->measTiming;
@@ -553,8 +570,7 @@ void rrc_gnb_nrdc_rrc_reconfiguration_complete_received(gNB_RRC_INST *rrc, gNB_R
     }
     rrc_gNB_send_NGAP_PDUSESSION_RELEASE_RESPONSE(rrc, ue, xid);
     LOG_I(NR_RRC, "ue %d: NR-DC PDU session is removed\n", ue->rrc_ue_id);
-    free(ue->nrdc);
-    ue->nrdc = NULL;
+    nrdc->state = NRDC_DU_CONTEXT_TO_RELEASE;
     return;
   }
 
@@ -592,8 +608,7 @@ void rrc_gnb_nrdc_measurement_received(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, NR_M
   if (!cell) {
     /* no cell found, cancel the process */
     LOG_E(NR_RRC, "no cell found for SCG band %d, cancelling NR-DC activation procedure for UE %d\n", nrdc->scg_band, ue->rrc_ue_id);
-    free(ue->nrdc);
-    ue->nrdc = NULL;
+    rrc_gnb_free_nrdc(ue);
     return;
   }
 
@@ -688,6 +703,8 @@ void rrc_gnb_nrdc_measurement_received(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, NR_M
   *cg_configinfo = create_byte_array(cgbuf.size, cgbuf.buf);
   free(cgbuf.buf);
 
+  nrdc->du_assoc_id = cell->assoc_id;
+
   f1ap_ue_context_setup_req_t ue_context_setup_req = {
     .gNB_CU_ue_id = ue->rrc_ue_id,
     .plmn.mcc = cell->info.plmn.mcc,
@@ -765,8 +782,7 @@ void rrc_gnb_nrdc_timeout(gNB_RRC_INST *rrc, nr_rrc_nrdc_timeout_t *timeout)
 
   /* cancel the NR-DC activation procedure */
   LOG_E(NR_RRC, "timeout, cancelling NR-DC activation procedure for UE %d\n", ue->rrc_ue_id);
-  free(ue->nrdc);
-  ue->nrdc = NULL;
+  rrc_gnb_free_nrdc(ue);
 }
 
 int get_scg_measurement_id(gNB_RRC_UE_t *ue)
@@ -1132,4 +1148,41 @@ void nrdc_rrc_CU_process_ue_context_modification_response(gNB_RRC_UE_t *ue, gNB_
 
   nrdc->state = DEACTIVATE_NRDC_WAIT_FOR_PDU_SESSION_RELEASE_RECONFIGURATION_COMPLETE;
   nrdc->drb_id = -1;
+}
+
+/* return true if the message is handled here */
+bool nrdc_handle_f1_context_release_complete(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, f1ap_ue_context_rel_cplt_t *complete)
+{
+  if (ue->nrdc == NULL)
+    return false;
+  nrdc_ue_state_t *nrdc = ue->nrdc;
+
+  if (complete->gNB_DU_ue_id != nrdc->secondary_du_ue_id)
+    return false;
+
+  /* nothing to do for the moment, to be changed if needed */
+
+  LOG_I(NR_RRC, "NR-DC: UE %d received F1 UE Context Release Complete\n", ue->rrc_ue_id);
+
+  return true;
+}
+
+void nrdc_scg_ue_release(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue)
+{
+  if (ue->nrdc == NULL)
+    return;
+  nrdc_ue_state_t *nrdc = ue->nrdc;
+
+  LOG_I(NR_RRC, "NR-DC: release/deactivate SCG for UE %d\n", ue->rrc_ue_id);
+
+  f1ap_ue_context_rel_cmd_t cmd = {
+    .gNB_CU_ue_id = ue->rrc_ue_id,
+    .gNB_DU_ue_id = nrdc->secondary_du_ue_id,
+    .cause = F1AP_CAUSE_RADIO_NETWORK,
+    .cause_value = 10, // 10 = F1AP_CauseRadioNetwork_normal_release
+  };
+  rrc->mac_rrc.ue_context_release_command(nrdc->du_assoc_id, &cmd);
+
+  /* NR-DC is put to deactivated mode, release will happen when the UE is removed from the CU */
+  nrdc->state = NRDC_DEACTIVATED;
 }
