@@ -936,8 +936,9 @@ void nr_generate_pucch3_4(c16_t **txdataF,
   uint16_t nrofPRB = pucch_pdu->prb_size;
   uint16_t startingPRB = pucch_pdu->prb_start + pucch_pdu->bwp_start;
   uint8_t add_dmrs = pucch_pdu->add_dmrs_flag;
-
+#ifdef DEBUG_NR_PUCCH_TX
   int ndmrs=0;
+#endif
   uint8_t table_6_4_1_3_3_2_1_dmrs_positions[11][14] = {
     {(intraSlotFrequencyHopping==0)?0:1,(intraSlotFrequencyHopping==0)?1:0,(intraSlotFrequencyHopping==0)?0:1,0,0,0,0,0,0,0,0,0,0,0}, // PUCCH length = 4
     {1,0,0,1,0,0,0,0,0,0,0,0,0,0}, // PUCCH length = 5
@@ -951,10 +952,10 @@ void nr_generate_pucch3_4(c16_t **txdataF,
     {0,(add_dmrs==0?0:1),(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0,(add_dmrs==0?0:1),0,(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0}, // PUCCH length = 13
     {0,(add_dmrs==0?0:1),0,(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0,0,(add_dmrs==0?0:1),0,(add_dmrs==0?1:0),0,(add_dmrs==0?0:1),0}  // PUCCH length = 14
   };
+#ifdef DEBUG_NR_PUCCH_TX
   for (int l=0;l<nrofSymbols;l++)  
      if (table_6_4_1_3_3_2_1_dmrs_positions[nrofSymbols-4][l] == 1) ndmrs++;
 
-#ifdef DEBUG_NR_PUCCH_TX
     printf("\t [nr_generate_pucch3_4] nrofSymbols %d, nrofPRB %d, startingPRB %d, add_dmrs %d is_pi_over_2_bpsk_enabled %d\n",nrofSymbols,nrofPRB,startingPRB,add_dmrs,is_pi_over_2_bpsk_enabled);
 #endif
 
