@@ -1368,7 +1368,6 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
       if (fmt==4) AssertFatal(nb_re_dmrs==12,"PUCCH4 nb_re_dmrs %d not supported (should be 12)\n",nb_re_dmrs); 
       const bool intraSlotFrequencyHopping = pucch_pdu->prb_start != pucch_pdu->second_hop_prb;
       pucch_GroupHopping_t pucch_GroupHopping = pucch_pdu->group_hop_flag + (pucch_pdu->sequence_hop_flag << 1);
-      int16_t amp = 0x7FFF;
       int l = dmrspos[d]; 
 #ifdef DEBUG_NR_PUCCH_RX
       printf("\t [nr_decode_pucch2_3] dmrs symbol l=%d (ndmrs %d)\n", l, ndmrs);
@@ -1445,7 +1444,7 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
 
   // Formate 3/4 Allocate memory for IFDT input buffers
   simde__m128i *fmt3_4_idft_in[Prx];
-  simde__m128i *fmt3_4_idft_out;
+  simde__m128i *fmt3_4_idft_out=(simde__m128i*)NULL;
   int datacnt = 0;
   if (fmt >= 3) {
     for (int aa = 0 ; aa < Prx ; aa++)
@@ -1675,7 +1674,7 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
       uint64_t corr_tmp = 0;
       c64_t sum_of_prod[ngroup][2][Prx];
       if (fmt == 2) {
-        const simde__m128i *coeff = (simde__m256i *)&pucch2_3_lut[nb_bit - 3][cw].cw;
+        const simde__m128i *coeff = (const simde__m128i *)&pucch2_3_lut[nb_bit - 3][cw].cw;
         for (int aa = 0; aa < Prx; aa++) {
 	  for (int g = 0 ; g < ngroup ; g++) { 
 	     if (pucch_pdu->freq_hop_flag) { 
@@ -1702,12 +1701,11 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
 	  }
           int ci=0;
           for (int symb = 0; symb < nb_symbols; symb++) {
-            const simde__m128i *rext = (simde__m256i *)r_ext[aa][symb];
-            const simde__m128i *rext2 = (simde__m256i *)r_ext2[aa][symb];
+            const simde__m128i *rext = (simde__m128i *)r_ext[aa][symb];
+            const simde__m128i *rext2 = (simde__m128i *)r_ext2[aa][symb];
             for (int prb = 0; prb < pucch_pdu->prb_size; prb++) {
 	      int group = prb/nc_group_size;
             // do complex correlation
-	      c64_t prods = {0};
               simde__m128i re = simde_mm_madd_epi16(coeff[ci], rext[prb]);
               simde__m128i im = simde_mm_madd_epi16(coeff[ci], rext2[prb]);
               simde__m128i re2 = simde_mm_madd_epi16(coeff[ci+1], rext[prb]);
