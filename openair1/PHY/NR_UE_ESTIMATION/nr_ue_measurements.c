@@ -123,37 +123,25 @@ uint32_t nr_ue_calculate_ssb_rsrp(const NR_DL_FRAME_PARMS *fp,
                                   int symbol_offset,
                                   int ssb_start_subcarrier)
 {
-  int k_start = 56;
-  int k_end   = 183;
-  unsigned int ssb_offset = fp->first_carrier_offset + ssb_start_subcarrier;
-
-  uint8_t l_sss = (symbol_offset + 2) % fp->symbols_per_slot;
-
+  const int k_start = 56;
+  const int k_end = 183;
+  const unsigned int ssb_offset = fp->first_carrier_offset + ssb_start_subcarrier;
+  const uint8_t l_sss = (symbol_offset + 2) % fp->symbols_per_slot;
   uint32_t rsrp = 0;
 
   LOG_D(PHY, "In %s: l_sss %d ssb_offset %d\n", __FUNCTION__, l_sss, ssb_offset);
   int nb_re = 0;
-
   for (int aarx = 0; aarx < fp->nb_antennas_rx; aarx++) {
-    int16_t *rxF_sss = (int16_t *)&rxdataF[aarx][l_sss * fp->ofdm_symbol_size];
-
+    const c16_t *rxF_sss = &rxdataF[aarx][l_sss * fp->ofdm_symbol_size];
     for(int k = k_start; k < k_end; k++){
       int re = (ssb_offset + k) % fp->ofdm_symbol_size;
-
-#ifdef DEBUG_MEAS_UE
-      LOG_I(PHY, "In %s rxF_sss[%d] %d %d\n", __FUNCTION__, re, rxF_sss[re * 2], rxF_sss[re * 2 + 1]);
-#endif
-
-      rsrp += (((int32_t)rxF_sss[re*2]*rxF_sss[re*2]) + ((int32_t)rxF_sss[re*2 + 1]*rxF_sss[re*2 + 1]));
+      rsrp += squaredMod(rxF_sss[re]);
       nb_re++;
-
     }
   }
 
   rsrp /= nb_re;
-
   LOG_D(PHY, "In %s: RSRP/nb_re: %d nb_re :%d\n", __FUNCTION__, rsrp, nb_re);
-
   return rsrp;
 }
 

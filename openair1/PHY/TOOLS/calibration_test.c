@@ -28,6 +28,8 @@ uint32_t target_dl_bw = 50;
 uint32_t target_dl_Nl;
 uint32_t target_ul_Nl;
 char *uecap_file;
+uint32_t dlsch_slot_modval;
+uint32_t ulsch_slot_modval;
 #include <executables/nr-softmodem.h>
 
 int read_recplayconfig(recplay_conf_t **recplay_conf, recplay_state_t **recplay_state) {return 0;}

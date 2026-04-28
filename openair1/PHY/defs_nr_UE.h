@@ -15,7 +15,6 @@
 #endif
 #endif
 
-#include "common/cmake_defs.h"
 #include "defs_nr_common.h"
 #include "CODING/nrPolar_tools/nr_polar_pbch_defs.h"
 #include "PHY/defs_nr_sl_UE.h"

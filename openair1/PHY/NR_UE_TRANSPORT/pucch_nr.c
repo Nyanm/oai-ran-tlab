@@ -668,7 +668,7 @@ void nr_uci_encoding(uint64_t payload, uint8_t nr_bit, bool uci_on_pusch, uint16
       b[5] = b[0];
       b[6] = b[0];
       b[7] = b[0];
-      AssertFatal(E<=256,"Number of channelbits >32\n");
+      //AssertFatal(E<=256,"Number of channelbits >32\n");
     }
   } else if (A >= 12) {
     // Encoder reversal

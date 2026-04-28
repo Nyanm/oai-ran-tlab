@@ -741,29 +741,23 @@ void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
   } // Antenna loop
 }
 
-int nr_srs_channel_estimation(int ant,
-                              int p_index,
-                              uint16_t ofdm_symbol_size,
-                              uint16_t first_carrier_offset,
-                              uint8_t N_symb_SRS,
-                              const nfapi_nr_srs_pdu_t *srs_pdu,
-                              const nr_srs_info_t *nr_srs_info,
-                              const c16_t *srs_generated_signal,
-                              c16_t srs_received_signal[ofdm_symbol_size * N_symb_SRS],
-                              c16_t srs_received_noise[ofdm_symbol_size * N_symb_SRS],
-                              c16_t srs_estimated_channel_freq[ofdm_symbol_size * N_symb_SRS],
-                              c16_t srs_estimated_channel_time[NR_SRS_IDFT_OVERSAMP_FACTOR * ofdm_symbol_size],
-                              c16_t srs_estimated_channel_time_shifted[NR_SRS_IDFT_OVERSAMP_FACTOR * ofdm_symbol_size],
-                              uint32_t *signal_power,
-                              uint32_t *noise_power,
-                              int16_t *noise_power_per_rb)
+int nr_srs_ls_channel_estimation(int ant,
+                                 int p_index,
+                                 uint16_t ofdm_symbol_size,
+                                 uint16_t first_carrier_offset,
+                                 uint8_t N_symb_SRS,
+                                 const nfapi_nr_srs_pdu_t *srs_pdu,
+                                 const nr_srs_info_t *nr_srs_info,
+                                 const c16_t *srs_generated_signal,
+                                 c16_t srs_received_signal[ofdm_symbol_size * N_symb_SRS],
+                                 c16_t srs_ls_estimated_channel[ofdm_symbol_size * N_symb_SRS],
+                                 delay_t *delay)
 {
 #ifdef SRS_DEBUG
   LOG_I(NR_PHY, "Calling %s function\n", __FUNCTION__);
 #endif
 
   const uint64_t subcarrier_offset = first_carrier_offset + srs_pdu->bwp_start * NR_NB_SC_PER_RB;
-  const uint64_t first_subcarrier = (first_carrier_offset - (ofdm_symbol_size >> 1)) + srs_pdu->bwp_start * NR_NB_SC_PER_RB;
 
   const uint8_t N_ap = 1 << srs_pdu->num_ant_ports;
   const uint8_t K_TC = 2 << srs_pdu->comb_size;
@@ -773,26 +767,11 @@ int nr_srs_channel_estimation(int ant,
   if (N_ap == 4 && ((K_TC == 2 && srs_pdu->cyclic_shift >= 4) || (K_TC == 4 && srs_pdu->cyclic_shift >= 6))) {
     fd_cdm = 2;
   }
-  uint16_t subcarrier;
 
-  c16_t srs_ls_estimated_channel[ofdm_symbol_size * N_symb_SRS];
-  c16_t srs_estimated_channel_freq_avg[ofdm_symbol_size];
   memset(srs_ls_estimated_channel, 0, ofdm_symbol_size * N_symb_SRS * sizeof(c16_t));
-  memset(srs_estimated_channel_freq_avg, 0, ofdm_symbol_size * sizeof(c16_t));
 
   for (int srs_symb = 0; srs_symb < N_symb_SRS; srs_symb++) {
     uint16_t srs_symbol_offset = srs_symb * ofdm_symbol_size;
-
-    // Additional 4 in the array size is needed to maintain 16 byte memory alignment required for AVX2 instructions in channel
-    // interpolation
-    c16_t srs_est[ofdm_symbol_size + 4] __attribute__((aligned(32)));
-    memset(srs_est, 0, (ofdm_symbol_size + 4) * sizeof(c16_t));
-
-    // Estimate 16 byte memory alignment offset for the first SRS subcarrier to use AVX2 instructions in channel interpolation
-    uint8_t mem_offset = (16 - (((intptr_t)&srs_est[first_subcarrier + nr_srs_info->k_0_p[p_index][srs_symb]]) & 0xF))
-                         >> 2; // >> 2 <=> /sizeof(int32_t)
-
-    c16_t ls_estimated = {0};
 
 #ifdef SRS_DEBUG
     LOG_I(NR_PHY, "====================== UE port %d --> gNB Rx antenna %i ======================\n", p_index, ant);
@@ -801,14 +780,9 @@ int nr_srs_channel_estimation(int ant,
     UNUSED(ant);
 #endif
 
-    subcarrier = subcarrier_offset + nr_srs_info->k_0_p[p_index][srs_symb];
-    if (subcarrier >= ofdm_symbol_size) {
-      subcarrier -= ofdm_symbol_size;
-    }
+    uint16_t subcarrier = CIRCULAR_INC(subcarrier_offset + nr_srs_info->k_0_p[p_index][srs_symb], 0, ofdm_symbol_size);
 
-    uint16_t subcarrier_abs = mem_offset + first_subcarrier + nr_srs_info->k_0_p[p_index][srs_symb];
-    c16_t *srs_estimated_channel16 = &srs_est[subcarrier_abs];
-
+    c16_t ls_estimated = {0};
     for (int k = 0; k < M_sc_b_SRS; k++) {
       if (k % fd_cdm == 0) {
         ls_estimated = (c16_t){0, 0};
@@ -823,14 +797,13 @@ int nr_srs_channel_estimation(int ant,
           ls_estimated = c16maddConjShift(generated_srs, received_srs, ls_estimated, nr_srs_info->srs_generated_signal_bits);
 
           // Subcarrier increment
-          subcarrier_cdm += K_TC;
-          if (subcarrier_cdm >= ofdm_symbol_size) {
-            subcarrier_cdm = subcarrier_cdm - ofdm_symbol_size;
-          }
+          subcarrier_cdm = CIRCULAR_INC(subcarrier_cdm, K_TC, ofdm_symbol_size);
         }
       }
 
-      srs_ls_estimated_channel[srs_symbol_offset + subcarrier] = ls_estimated;
+      for (int ktc = 0; ktc < K_TC && srs_symbol_offset + subcarrier + ktc < ofdm_symbol_size * N_symb_SRS; ktc++) {
+        srs_ls_estimated_channel[srs_symbol_offset + subcarrier + ktc] = ls_estimated;
+      }
 
 #ifdef SRS_DEBUG
       int subcarrier_log = subcarrier - subcarrier_offset;
@@ -851,6 +824,140 @@ int nr_srs_channel_estimation(int ant,
             ls_estimated.r,
             ls_estimated.i);
 #endif
+
+      // Subcarrier increment
+      subcarrier = CIRCULAR_INC(subcarrier, K_TC, ofdm_symbol_size);
+    } // for (int k = 0; k < M_sc_b_SRS; k++)
+
+    // Delay estimation
+    if (srs_symb == 0) {
+      c16_t ch_estimates_time[ofdm_symbol_size] __attribute__((aligned(32)));
+      nr_est_delay(ofdm_symbol_size, srs_ls_estimated_channel, ch_estimates_time, delay);
+    }
+  } // for (int srs_symb = 0; srs_symb < N_symb_SRS; srs_symb++)
+
+  return 0;
+}
+
+void nr_srs_noise_power_estimation(uint16_t ofdm_symbol_size,
+                                   uint16_t first_carrier_offset,
+                                   uint8_t N_symb_SRS,
+                                   const nfapi_nr_srs_pdu_t *srs_pdu,
+                                   const nr_srs_info_t *nr_srs_info,
+                                   uint32_t signal_power,
+                                   const c16_t srs_received_noise[ofdm_symbol_size * N_symb_SRS],
+                                   uint32_t *noise_power,
+                                   int16_t *noise_power_per_rb)
+{
+  const uint64_t subcarrier_offset = first_carrier_offset + srs_pdu->bwp_start * NR_NB_SC_PER_RB;
+  const uint16_t m_SRS_b = get_m_srs(srs_pdu->config_index, srs_pdu->bandwidth_index);
+  int tot_subcarriers = m_SRS_b * NR_NB_SC_PER_RB;
+
+  uint16_t subcarrier = CIRCULAR_INC(subcarrier_offset + nr_srs_info->k_0_p[0][0], 0, ofdm_symbol_size);
+
+  if (subcarrier + tot_subcarriers < ofdm_symbol_size) {
+    *noise_power = signal_energy_nodc(&srs_received_noise[subcarrier], tot_subcarriers) / tot_subcarriers;
+  } else {
+    int size1 = ofdm_symbol_size - subcarrier;
+    int size2 = tot_subcarriers - size1;
+    uint64_t noise_power_p1 = signal_energy_nodc(&srs_received_noise[subcarrier], size1) * size1;
+    uint64_t noise_power_p2 = signal_energy_nodc(&srs_received_noise[0], size2) * size2;
+    *noise_power = (noise_power_p1 + noise_power_p2) / tot_subcarriers;
+  }
+
+  // Compute SNR per RB on symbol 0
+  subcarrier = CIRCULAR_INC(subcarrier_offset + nr_srs_info->k_0_p[0][0], 0, ofdm_symbol_size);
+  for (int rb = 0; rb < m_SRS_b; rb++) {
+    if (subcarrier + NR_NB_SC_PER_RB < ofdm_symbol_size) {
+      noise_power_per_rb[rb] += signal_energy_nodc(&srs_received_noise[subcarrier], NR_NB_SC_PER_RB);
+    } else {
+      int size1 = ofdm_symbol_size - subcarrier;
+      int size2 = NR_NB_SC_PER_RB - size1;
+      uint32_t noise_power_per_rb1 = signal_energy_nodc(&srs_received_noise[subcarrier], size1) * size1;
+      uint32_t noise_power_per_rb2 = signal_energy_nodc(&srs_received_noise[0], size2) * size2;
+      noise_power_per_rb[rb] += (noise_power_per_rb1 + noise_power_per_rb2) / NR_NB_SC_PER_RB;
+    }
+    noise_power_per_rb[rb] = max(noise_power_per_rb[rb], 1);
+    subcarrier = CIRCULAR_INC(subcarrier, NR_NB_SC_PER_RB, ofdm_symbol_size);
+
+#ifdef SRS_DEBUG
+    LOG_I(NR_PHY,
+          "[RB %3i] noise_power_per_rb = %i, SNR_per_rb = %i dB\n",
+          rb,
+          noise_power_per_rb[rb],
+          dB_fixed(signal_power) - dB_fixed(noise_power_per_rb[rb]));
+#endif
+  }
+
+#ifdef SRS_DEBUG
+  int32_t signal_power_dB = dB_fixed(signal_power);
+  int32_t noise_power_dB = dB_fixed(*noise_power);
+  LOG_I(NR_PHY,
+        "signal_power = %i dB, noise_power = %i dB, SNR = %i dB\n",
+        signal_power_dB,
+        noise_power_dB,
+        signal_power_dB - noise_power_dB);
+#endif
+}
+
+int nr_srs_channel_interpolation(int ant,
+                                 int p_index,
+                                 uint16_t ofdm_symbol_size,
+                                 uint16_t first_carrier_offset,
+                                 uint8_t N_symb_SRS,
+                                 const nfapi_nr_srs_pdu_t *srs_pdu,
+                                 const nr_srs_info_t *nr_srs_info,
+                                 const c16_t srs_ls_estimated_channel[ofdm_symbol_size * N_symb_SRS],
+                                 int est_delay,
+                                 c16_t srs_received_noise[ofdm_symbol_size * N_symb_SRS],
+                                 c16_t srs_estimated_channel_freq[ofdm_symbol_size * N_symb_SRS],
+                                 c16_t srs_estimated_channel_time[NR_SRS_IDFT_OVERSAMP_FACTOR * ofdm_symbol_size],
+                                 c16_t srs_estimated_channel_time_shifted[NR_SRS_IDFT_OVERSAMP_FACTOR * ofdm_symbol_size],
+                                 uint32_t *signal_power,
+                                 c16_t delay_table[2 * MAX_DELAY_COMP + 1][NR_MAX_OFDM_SYMBOL_SIZE])
+{
+#ifdef SRS_DEBUG
+  LOG_I(NR_PHY, "Calling %s function\n", __FUNCTION__);
+#endif
+
+  const uint64_t subcarrier_offset = first_carrier_offset + srs_pdu->bwp_start * NR_NB_SC_PER_RB;
+  const uint64_t first_subcarrier = (first_carrier_offset - (ofdm_symbol_size >> 1)) + srs_pdu->bwp_start * NR_NB_SC_PER_RB;
+  const uint8_t K_TC = 2 << srs_pdu->comb_size;
+  const uint16_t m_SRS_b = get_m_srs(srs_pdu->config_index, srs_pdu->bandwidth_index);
+  const uint16_t M_sc_b_SRS = m_SRS_b * NR_NB_SC_PER_RB / K_TC;
+
+  c16_t srs_estimated_channel_freq_avg[ofdm_symbol_size];
+  memset(srs_estimated_channel_freq_avg, 0, ofdm_symbol_size * sizeof(c16_t));
+
+  for (int srs_symb = 0; srs_symb < N_symb_SRS; srs_symb++) {
+    uint16_t srs_symbol_offset = srs_symb * ofdm_symbol_size;
+
+#ifdef SRS_DEBUG
+    LOG_I(NR_PHY, "====================== UE port %d --> gNB Rx antenna %i ======================\n", p_index, ant);
+    LOG_I(NR_PHY, "============================== SRS symbol index %d ===========================\n", srs_symb);
+#endif
+
+    // Additional 4 in the array size is needed to maintain 16 byte memory alignment required for AVX2 instructions in channel
+    // interpolation
+    c16_t srs_est[ofdm_symbol_size + 4] __attribute__((aligned(32)));
+    memset(srs_est, 0, (ofdm_symbol_size + 4) * sizeof(c16_t));
+
+    // Estimate 16 byte memory alignment offset for the first SRS subcarrier to use AVX2 instructions in channel interpolation
+    uint8_t mem_offset =
+        (16 - (((intptr_t)&srs_est[first_subcarrier + nr_srs_info->k_0_p[p_index][srs_symb]]) & 0xF)) / sizeof(c16_t);
+
+    uint16_t subcarrier_abs = mem_offset + first_subcarrier + nr_srs_info->k_0_p[p_index][srs_symb];
+    c16_t *srs_estimated_channel16 = &srs_est[subcarrier_abs];
+
+    uint16_t subcarrier = CIRCULAR_INC(subcarrier_offset + nr_srs_info->k_0_p[p_index][srs_symb], 0, ofdm_symbol_size);
+
+    int delay_idx = get_delay_idx(est_delay, MAX_DELAY_COMP);
+    const c16_t *srs_delay_table = delay_table[delay_idx];
+
+    for (int k = 0; k < M_sc_b_SRS; k++) {
+
+      // Apply delay
+      c16_t ls_estimated = c16mulShift(srs_ls_estimated_channel[srs_symbol_offset + subcarrier], srs_delay_table[subcarrier], 8);
 
       // Channel interpolation
       if (srs_pdu->comb_size == 0) {
@@ -883,14 +990,22 @@ int nr_srs_channel_estimation(int ant,
       }
 
       // Subcarrier increment
-      subcarrier += K_TC;
-      if (subcarrier >= ofdm_symbol_size) {
-        subcarrier -= ofdm_symbol_size;
-      }
-
+      subcarrier = CIRCULAR_INC(subcarrier, K_TC, ofdm_symbol_size);
       subcarrier_abs += K_TC;
-
     } // for (int k = 0; k < M_sc_b_SRS; k++)
+
+    // Revert delay
+    int inv_delay_idx = get_delay_idx(-est_delay, MAX_DELAY_COMP);
+    const c16_t *srs_inv_delay_table = delay_table[inv_delay_idx];
+    subcarrier_abs = mem_offset + first_subcarrier + nr_srs_info->k_0_p[p_index][srs_symb];
+    subcarrier = CIRCULAR_INC(subcarrier_offset + nr_srs_info->k_0_p[p_index][0], 0, ofdm_symbol_size);
+
+    for (int k = 0; k < K_TC * M_sc_b_SRS; k++) {
+      srs_est[subcarrier_abs] = c16mulShift(srs_est[subcarrier_abs], srs_inv_delay_table[subcarrier], 8);
+      // Subcarrier increment
+      subcarrier = CIRCULAR_INC(subcarrier, 1, ofdm_symbol_size);
+      subcarrier_abs++;
+    }
 
     memcpy(&srs_estimated_channel_freq[srs_symbol_offset], &srs_est[mem_offset], ofdm_symbol_size * sizeof(c16_t));
 
@@ -902,11 +1017,7 @@ int nr_srs_channel_estimation(int ant,
                                        ofdm_symbol_size);
 
 #ifdef SRS_DEBUG
-    subcarrier = subcarrier_offset + nr_srs_info->k_0_p[p_index][srs_symb];
-    if (subcarrier >= ofdm_symbol_size) {
-      subcarrier -= ofdm_symbol_size;
-    }
-
+    subcarrier = CIRCULAR_INC(subcarrier_offset + nr_srs_info->k_0_p[p_index][srs_symb], 0, ofdm_symbol_size);
     subcarrier_abs = first_subcarrier + nr_srs_info->k_0_p[p_index][srs_symb];
 
     for (int k = 0; k < K_TC * M_sc_b_SRS; k++) {
@@ -934,10 +1045,7 @@ int nr_srs_channel_estimation(int ant,
             srs_received_noise[srs_symbol_offset + subcarrier].i);
 
       // Subcarrier increment
-      subcarrier++;
-      if (subcarrier >= ofdm_symbol_size) {
-        subcarrier -= ofdm_symbol_size;
-      }
+      subcarrier = CIRCULAR_INC(subcarrier, 1, ofdm_symbol_size);
       subcarrier_abs++;
     }
 #endif
@@ -973,62 +1081,6 @@ int nr_srs_channel_estimation(int ant,
     LOG_W(NR_PHY, "Received SRS signal power is 0\n");
     return -1;
   }
-
-  subcarrier = subcarrier_offset + nr_srs_info->k_0_p[p_index][0];
-  if (subcarrier >= ofdm_symbol_size) {
-    subcarrier -= ofdm_symbol_size;
-  }
-
-  if (p_index == 0) {
-    if (subcarrier + tot_subcarriers < ofdm_symbol_size) {
-      *noise_power = signal_energy_nodc(&srs_received_noise[subcarrier], tot_subcarriers) / tot_subcarriers;
-    } else {
-      int size1 = ofdm_symbol_size - subcarrier;
-      int size2 = tot_subcarriers - size1;
-      uint64_t noise_power_p1 = signal_energy_nodc(&srs_received_noise[subcarrier], size1) * size1;
-      uint64_t noise_power_p2 = signal_energy_nodc(&srs_received_noise[0], size2) * size2;
-      *noise_power = (noise_power_p1 + noise_power_p2) / tot_subcarriers;
-    }
-  }
-
-  // Compute SNR per RB for port 0 and symbol 0
-  if (p_index == 0) {
-    subcarrier = subcarrier_offset + nr_srs_info->k_0_p[p_index][0];
-    for (int rb = 0; rb < m_SRS_b; rb++) {
-      if (subcarrier >= ofdm_symbol_size) {
-        subcarrier -= ofdm_symbol_size;
-      }
-      if (subcarrier + NR_NB_SC_PER_RB < ofdm_symbol_size) {
-        noise_power_per_rb[rb] += signal_energy_nodc(&srs_received_noise[subcarrier], NR_NB_SC_PER_RB);
-      } else {
-        int size1 = ofdm_symbol_size - subcarrier;
-        int size2 = NR_NB_SC_PER_RB - size1;
-        uint32_t noise_power_per_rb1 = signal_energy_nodc(&srs_received_noise[subcarrier], size1) * size1;
-        uint32_t noise_power_per_rb2 = signal_energy_nodc(&srs_received_noise[0], size2) * size2;
-        noise_power_per_rb[rb] += (noise_power_per_rb1 + noise_power_per_rb2) / NR_NB_SC_PER_RB;
-      }
-      noise_power_per_rb[rb] = max(noise_power_per_rb[rb], 1);
-      subcarrier += NR_NB_SC_PER_RB;
-
-#ifdef SRS_DEBUG
-      LOG_I(NR_PHY,
-            "[RB %3i] noise_power_per_rb = %i, SNR_per_rb = %i dB\n",
-            rb,
-            noise_power_per_rb[rb],
-            dB_fixed(*signal_power) - dB_fixed(noise_power_per_rb[rb]));
-#endif
-    }
-  }
-
-#ifdef SRS_DEBUG
-  int32_t signal_power_dB = dB_fixed(*signal_power);
-  int32_t noise_power_dB = dB_fixed(*noise_power);
-  LOG_I(NR_PHY,
-        "signal_power = %i dB, noise_power = %i dB, SNR = %i dB\n",
-        signal_power_dB,
-        noise_power_dB,
-        signal_power_dB - noise_power_dB);
-#endif
 
   return 0;
 }

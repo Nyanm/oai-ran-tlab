@@ -1130,7 +1130,7 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
                         int frame,
                         int slot,
                         nfapi_nr_uci_pucch_pdu_format_2_3_4_t *uci_pdu,
-                        nfapi_nr_pucch_pdu_t *pucch_pdu)
+                        const nfapi_nr_pucch_pdu_t *pucch_pdu)
 {
   NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
   // pucch_GroupHopping_t pucch_GroupHopping = pucch_pdu->group_hop_flag + (pucch_pdu->sequence_hop_flag<<1);
@@ -1218,7 +1218,6 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
   int dmrspos[4];
   for (int i=0;i<4;i++) dmrspos[i]=-1;
   int ndmrs=2;
-  if (pucch_pdu->freq_hop_flag!=0) pucch_pdu->freq_hop_flag = 1;
 
   if (fmt==2) {
     nb_re_data = 8 * pucch_pdu->prb_size;

@@ -133,7 +133,7 @@ void nr_common_signal_procedures(PHY_VARS_gNB *gNB, int frame, int slot, const n
                                       bitmap);
 
   nr_generate_pss(txdataF[beam_nb][0], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
-  nr_generate_sss(txdataF[beam_nb][0], gNB->TX_AMP, ssb_start_symbol, cfg, fp);
+  nr_generate_sss(txdataF[beam_nb][0], gNB->TX_AMP, ssb_start_symbol, cfg->cell_config.phy_cell_id.value, fp);  
 
   uint16_t slots_per_hf = (fp->slots_per_frame) >> 1;
   int n_hf = slot < slots_per_hf ? 0 : 1;
@@ -681,6 +681,7 @@ nr_srs_info_t nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
   *srs_est = nr_get_srs_signal(gNB, rxdataF, slot_rx, srs_pdu, &nr_srs_info, srs_received_signal, srs_received_noise);
   stop_meas(&gNB->get_srs_signal_stats);
 
+  c16_t srs_ls_estimated_channel[nb_antennas_rx][N_ap][ofdm_symbol_size * N_symb_SRS];
   uint32_t signal_power_avg = 0;
   uint32_t noise_power_avg = 0;
   int16_t noise_power_per_rb[srs_pdu->bwp_size];
@@ -710,7 +711,6 @@ nr_srs_info_t nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
     }
 
     for (int ant_rx_ind = 0; ant_rx_ind < nb_antennas_rx; ant_rx_ind++) {
-      uint32_t noise_power = 0;
       for (int p_ind = 0; p_ind < N_ap; p_ind++) {
         uint32_t signal_power = 0;
         nr_srs_channel_interpolation(ant_rx_ind,
@@ -750,7 +750,6 @@ nr_srs_info_t nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
           T_BUFFER(srs_estimated_channel_time_shifted[ant_rx_ind][p_ind],
                    NR_SRS_IDFT_OVERSAMP_FACTOR * ofdm_symbol_size * sizeof(c16_t)));
       }
-      noise_power_avg += noise_power;
     }
     signal_power_avg /= (nb_antennas_rx * N_ap);
     signal_power_avg = max(signal_power_avg, 1);
@@ -938,8 +937,7 @@ static void handle_pucch(PHY_VARS_gNB *gNB, c16_t **rxdataF, const NR_gNB_PUCCH_
       uci->pdu_type = NFAPI_NR_UCI_FORMAT_2_3_4_PDU_TYPE;
       uci->pdu_size = sizeof(nfapi_nr_uci_pucch_pdu_format_2_3_4_t);
       nfapi_nr_uci_pucch_pdu_format_2_3_4_t *uci_pdu_format2_3_4 = &uci->pucch_pdu_format_2_3_4;
-      LOG_D(PHY, "%d.%d Calling nr_decode_pucch2\n", frame_rx, slot_rx);
-      nr_decode_pucch2_3(gNB, rxdataF, frame_rx, slot_rx, uci_pdu_format2_3_4, pucch_pdu);
+      nr_decode_pucch2_3(gNB, rxdataF, pucch->frame, pucch->slot, uci_pdu_format2_3_4, pucch_pdu);
       break;
     default:
       AssertFatal(1 == 0, "Only PUCCH formats 0 and 2 are currently supported\n");
