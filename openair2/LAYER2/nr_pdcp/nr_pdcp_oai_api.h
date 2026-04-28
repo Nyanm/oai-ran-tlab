@@ -28,6 +28,8 @@
 void nr_pdcp_layer_init(void);
 uint64_t nr_pdcp_module_init(uint64_t _pdcp_optmask, int id);
 
+void sl_add_qos_map(uint8_t tos, uint8_t qfi); //Jin add
+
 void du_rlc_data_req(const protocol_ctxt_t *const ctxt_pP,
                      const srb_flag_t   srb_flagP,
                      const MBMS_flag_t  MBMS_flagP,

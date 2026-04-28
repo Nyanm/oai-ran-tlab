@@ -538,7 +538,7 @@ typedef struct {
 
 #define MAX_SL_UE_CONNECTIONS 8
 //#define CUR_SL_UE_CONNECTIONS 1
-#define CUR_SL_UE_CONNECTIONS 4 //jin : increase for X No.of.UEs
+#define CUR_SL_UE_CONNECTIONS 2 //jin : increase for X No.of.UEs
 
 #define MAX_SL_CSI_REPORTCONFIG MAX_SL_UE_CONNECTIONS
 

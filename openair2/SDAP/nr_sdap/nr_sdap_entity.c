@@ -191,7 +191,7 @@ static void nr_sdap_rx_entity(nr_sdap_entity_t *entity,
                               int size) {
   /* The offset of the SDAP header, it might be 0 if has_sdap_rx is not true in the pdcp entity. */
   int offset=0;
-
+  LOG_I(SDAP, "[JIN-SDAP-RX] !!!!!!!!! ue_id=%lu is_gnb=%d pdcp_entity=%ld\n",  ue_id, is_gnb, pdcp_entity);
   if (is_gnb) { // gNB
     if (has_sdap_rx) { // Handling the SDAP Header
       offset = SDAP_HDR_LENGTH;
@@ -236,34 +236,46 @@ static void nr_sdap_rx_entity(nr_sdap_entity_t *entity,
      * if the DRB from which this SDAP data PDU is received is configured by RRC with the presence of SDAP header.
      */
     if (has_sdap_rx) { // Handling the SDAP Header
-      offset = SDAP_HDR_LENGTH;
+      unsigned char first = (unsigned char)buf[0];
+      if (first == 0x45 || first == 0x60) {
+          // no SDAP header present despite has_sdap_rx=true
+          offset = 0;
+          LOG_I(SDAP, "[SDAP-RX] No SDAP header detected, offset=0\n");
+      } else {
+          offset = SDAP_HDR_LENGTH;
+          nr_sdap_ul_hdr_t *sdap_hdr = (nr_sdap_ul_hdr_t *)buf;
+          LOG_I(SDAP, "RX Entity Received QFI : %u\n", sdap_hdr->QFI);
+      }
+      // //offset = SDAP_HDR_LENGTH;
       /*
        * TS 37.324 5.2 Data transfer
        * 5.2.2 Downlink
        * retrieve the SDAP SDU from the DL SDAP data PDU as specified in the subclause 6.2.2.2.
        */
-      nr_sdap_dl_hdr_t *sdap_hdr = (nr_sdap_dl_hdr_t *)buf;
-      LOG_I(SDAP, "RX Entity Received QFI : %u\n", sdap_hdr->QFI);
-      LOG_I(SDAP, "RX Entity Received RQI : %u\n", sdap_hdr->RQI);
-      LOG_I(SDAP, "RX Entity Received RDI : %u\n", sdap_hdr->RDI);
+      //nr_sdap_dl_hdr_t *sdap_hdr = (nr_sdap_dl_hdr_t *)buf;
+      // // nr_sdap_ul_hdr_t *sdap_hdr = (nr_sdap_ul_hdr_t *)buf; // sidelink: always parse as UL header since both peers use UL format
+      //  //LOG_I(SDAP, "RX Entity Received QFI : %u\n", sdap_hdr->QFI);
+      //LOG_I(SDAP, "RX Entity Received RQI : %u\n", sdap_hdr->RQI); //Jin skip RQI
+      //LOG_I(SDAP, "RX Entity Received RDI : %u\n", sdap_hdr->RDI); //Jin skip RQI
 
       /*
        * TS 37.324 5.2 Data transfer
        * 5.2.2 Downlink
        * Perform reflective QoS flow to DRB mapping as specified in the subclause 5.3.2.
        */
-      if(sdap_hdr->RDI == SDAP_REFLECTIVE_MAPPING) {
-        LOG_I(SDAP, "RX - Performing Reflective Mapping\n");
+      //Jin : skip RDI
+      //if(sdap_hdr->RDI == SDAP_REFLECTIVE_MAPPING) {
+      //  LOG_I(SDAP, "RX - Performing Reflective Mapping\n");
         /*
          * TS 37.324 5.3 QoS flow to DRB Mapping 
          * 5.3.2 Reflective mapping
          * If there is no stored QoS flow to DRB mapping rule for the QoS flow and a default DRB is configured.
          */
-        if(!entity->qfi2drb_table[sdap_hdr->QFI].drb_id && entity->default_drb){
-          nr_sdap_ul_hdr_t sdap_ctrl_pdu = entity->sdap_construct_ctrl_pdu(sdap_hdr->QFI);
-          rb_id_t sdap_ctrl_pdu_drb = entity->sdap_map_ctrl_pdu(entity, pdcp_entity, SDAP_CTRL_PDU_MAP_DEF_DRB, sdap_hdr->QFI);
-          entity->sdap_submit_ctrl_pdu(ue_id, sdap_ctrl_pdu_drb, sdap_ctrl_pdu);
-        }
+      //  if(!entity->qfi2drb_table[sdap_hdr->QFI].drb_id && entity->default_drb){
+      //    nr_sdap_ul_hdr_t sdap_ctrl_pdu = entity->sdap_construct_ctrl_pdu(sdap_hdr->QFI);
+      //    rb_id_t sdap_ctrl_pdu_drb = entity->sdap_map_ctrl_pdu(entity, pdcp_entity, SDAP_CTRL_PDU_MAP_DEF_DRB, sdap_hdr->QFI);
+      //    entity->sdap_submit_ctrl_pdu(ue_id, sdap_ctrl_pdu_drb, sdap_ctrl_pdu);
+      //  }
 
         /*
          * TS 37.324 5.3 QoS flow to DRB mapping 
@@ -274,28 +286,29 @@ static void nr_sdap_rx_entity(nr_sdap_entity_t *entity,
          * the DRB according to the stored QoS flow to DRB mapping rule is configured by RRC
          * with the presence of UL SDAP header
          */
-        if (pdcp_entity != entity->qfi2drb_table[sdap_hdr->QFI].drb_id) {
-          nr_sdap_ul_hdr_t sdap_ctrl_pdu = entity->sdap_construct_ctrl_pdu(sdap_hdr->QFI);
-          rb_id_t sdap_ctrl_pdu_drb = entity->sdap_map_ctrl_pdu(entity, pdcp_entity, SDAP_CTRL_PDU_MAP_RULE_DRB, sdap_hdr->QFI);
-          entity->sdap_submit_ctrl_pdu(ue_id, sdap_ctrl_pdu_drb, sdap_ctrl_pdu);
-        }
+        //if (pdcp_entity != entity->qfi2drb_table[sdap_hdr->QFI].drb_id) {
+        //  nr_sdap_ul_hdr_t sdap_ctrl_pdu = entity->sdap_construct_ctrl_pdu(sdap_hdr->QFI);
+        //  rb_id_t sdap_ctrl_pdu_drb = entity->sdap_map_ctrl_pdu(entity, pdcp_entity, SDAP_CTRL_PDU_MAP_RULE_DRB, sdap_hdr->QFI);
+        //  entity->sdap_submit_ctrl_pdu(ue_id, sdap_ctrl_pdu_drb, sdap_ctrl_pdu);
+        //}
 
         /*
          * TS 37.324 5.3 QoS flow to DRB Mapping 
          * 5.3.2 Reflective mapping
          * store the QoS flow to DRB mapping of the DL SDAP data PDU as the QoS flow to DRB mapping rule for the UL. 
          */ 
-        entity->qfi2drb_table[sdap_hdr->QFI].drb_id = pdcp_entity;
-      }
+        //entity->qfi2drb_table[sdap_hdr->QFI].drb_id = pdcp_entity;
+      //} //Jin comment end 
 
       /*
        * TS 37.324 5.2 Data transfer
        * 5.2.2 Downlink
        * perform RQI handling as specified in the subclause 5.4
        */
-      if(sdap_hdr->RQI == SDAP_RQI_HANDLING) {
-        LOG_W(SDAP, "UE - TODD 5.4\n");
-      }
+      //Jin : skip RQI  
+      //if(sdap_hdr->RQI == SDAP_RQI_HANDLING) {
+      //  LOG_W(SDAP, "UE - TODD 5.4\n");
+      //}
     } /*  else - retrieve the SDAP SDU from the DL SDAP data PDU as specified in the subclause 6.2.2.1 */
 
     /*
@@ -306,21 +319,24 @@ static void nr_sdap_rx_entity(nr_sdap_entity_t *entity,
     extern int nas_sock_fd[];
  
     //int len = write(nas_sock_fd[0], &buf[offset], size-offset); //Jin origin replace by below for MultiUES
-    // Find the valid TUN file descriptor for this UE
+    // Find the valid TUN file descriptor for this UE 
     int ue_index = -1;
-    for (int i = 0; i < NUMBER_OF_UE_MAX; i++) {
-      if (nas_sock_fd[i] > 0) {
-        ue_index = i;
-        break;
-      }
+    for (int i = 0; i < NUMBER_OF_UE_MAX * 2; i++) {
+        if (nas_sock_fd[i] > 0) {
+            ue_index = i;
+            break;  
+        }
     }
+        
+
     if (ue_index < 0) {
       LOG_E(SDAP, "No valid TUN interface found!\n");
       return;
     }
-    LOG_D(SDAP, "[JIN DEBUG -------- TUN-WRITE] Using nas_sock_fd[%d]=%d for write\n", 
-          ue_index, nas_sock_fd[ue_index]);
+    LOG_D(SDAP, "[JIN DEBUG -------- TUN-WRITE][FD-DEBUG] ue_id=%lu ue_index=%d nas_sock_fd[%d]=%d\n", ue_id, ue_index, ue_index, nas_sock_fd[ue_index]);
+    LOG_I(SDAP, "[BUF] first_byte=0x%02x size-offset=%d\n",   (unsigned char)buf[offset], size-offset);
     int len = write(nas_sock_fd[ue_index], &buf[offset], size-offset);
+     LOG_I(SDAP, "[JIN DEBUG   -------- FD-DEBUG] ue_index=%d fd_value=%d write=%d errno=%d\n",   ue_index, nas_sock_fd[ue_index], len, errno);
     //Jin end
 
 
@@ -460,7 +476,7 @@ nr_sdap_entity_t *new_nr_sdap_entity(int is_gnb, bool has_sdap_rx, bool has_sdap
   sdap_entity->qfi2drb_map_update = nr_sdap_qfi2drb_map_update;
   sdap_entity->qfi2drb_map_delete = nr_sdap_qfi2drb_map_del;
   sdap_entity->qfi2drb_map = nr_sdap_qfi2drb_map;
-
+ 
   if(is_defaultDRB) {
     sdap_entity->default_drb = drb_identity;
     LOG_I(SDAP, "Default DRB for the created SDAP entity: %ld \n", sdap_entity->default_drb);
@@ -472,7 +488,7 @@ nr_sdap_entity_t *new_nr_sdap_entity(int is_gnb, bool has_sdap_rx, bool has_sdap
       sdap_entity->qfi2drb_map_update(sdap_entity, qfi, sdap_entity->default_drb, has_sdap_rx, has_sdap_tx);
     }
   }
-
+ 
   sdap_entity->next_entity = sdap_info.sdap_entity_llist;
   sdap_info.sdap_entity_llist = sdap_entity;
   return sdap_entity;

@@ -42,6 +42,9 @@
 #include "gnb_config.h"
 #include "executables/softmodem-common.h"
 
+#include <netinet/ip.h>   
+
+
 #define TODO do { \
     printf("%s:%d:%s: todo\n", __FILE__, __LINE__, __FUNCTION__); \
     exit(1); \
@@ -53,7 +56,58 @@ int pdcp_pc5_sockfd;
 struct sockaddr_in prose_pdcp_addr;
 struct sockaddr_in pdcp_sin; 
 // end
-  
+
+//Jin add to support bearer creation : SL QoS mapping table - populated by SLC_C via bearer creation
+#define SL_QOS_MAX_MAPS 16
+
+typedef struct {
+    uint8_t tos;
+    uint8_t qfi;
+    bool    valid;
+} sl_qos_entry_t;
+
+static sl_qos_entry_t sl_qos_table[SL_QOS_MAX_MAPS] = {0};
+static pthread_mutex_t sl_qos_mutex = PTHREAD_MUTEX_INITIALIZER;
+void sl_add_qos_map(uint8_t tos, uint8_t qfi) {
+    pthread_mutex_lock(&sl_qos_mutex);
+    // check if already exists - update it
+    for (int i = 0; i < SL_QOS_MAX_MAPS; i++) {
+        if (sl_qos_table[i].valid && sl_qos_table[i].tos == tos) {
+            sl_qos_table[i].qfi = qfi;
+            LOG_I(PDCP, "[SL-QOS-MAP] Updated TOS=0x%02x → QFI=%d\n", tos, qfi);
+            pthread_mutex_unlock(&sl_qos_mutex);
+            return;
+        }
+    }
+    // add new entry
+    for (int i = 0; i < SL_QOS_MAX_MAPS; i++) {
+        if (!sl_qos_table[i].valid) {
+            sl_qos_table[i].tos   = tos;
+            sl_qos_table[i].qfi   = qfi;
+            sl_qos_table[i].valid = true;
+            LOG_I(PDCP, "[SL-QOS-MAP] Added TOS=0x%02x → QFI=%d\n", tos, qfi);
+            pthread_mutex_unlock(&sl_qos_mutex);
+            return;
+        }
+    }
+    LOG_E(PDCP, "[SL-QOS-MAP] Table full, cannot add TOS=0x%02x\n", tos);
+    pthread_mutex_unlock(&sl_qos_mutex);
+}
+static uint8_t sl_lookup_qfi(uint8_t tos) {
+    pthread_mutex_lock(&sl_qos_mutex);
+    for (int i = 0; i < SL_QOS_MAX_MAPS; i++) {
+        if (sl_qos_table[i].valid && sl_qos_table[i].tos == tos) {
+            uint8_t qfi = sl_qos_table[i].qfi;
+            pthread_mutex_unlock(&sl_qos_mutex);
+            return qfi;
+        }
+    }
+    pthread_mutex_unlock(&sl_qos_mutex);
+    return 1;  // default bearer
+}
+//Jin bearer adding end
+
+
 static nr_pdcp_ue_manager_t *nr_pdcp_ue_manager;
 
 /* TODO: handle time a bit more properly */
@@ -316,8 +370,7 @@ static void do_pdcp_data_ind(
         if (template != NULL) {
           LOG_I(PDCP, "[SL-AUTO-CREATE] Creating peer PDCP entity: local_ue=0x%lx peer=0x%lx rb_id=%ld\n",
                 local_ue_id, peer_ue_id, rb_id);
-          
-          // Create new entity with same configuration as template
+           // Create new entity with same configuration as template
           nr_pdcp_entity_t *new_entity = new_nr_pdcp_entity(
             template->type,
             template->is_gnb,
@@ -663,14 +716,29 @@ static void *ue_tun_read_thread(void *_)
       ctxt.rntiMaybeUEid = rntiMaybeUEid;
 
       bool dc = SDAP_HDR_UL_DATA_PDU;
-      extern uint8_t nas_qfi;
-      extern uint8_t nas_pduid;
-
+      
+      uint8_t pkt_qfi   = 1;  // default
+      /*
+      uint8_t pkt_pduid = 0;
+      if (len >= 20) {  // has IP header
+          struct iphdr *iph = (struct iphdr *)rx_buf;
+          uint8_t slcu_hdr = iph->tos >> 2;
+          pkt_qfi   = (slcu_hdr >> 3) & 0x07;
+          if (pkt_qfi == 0) pkt_qfi = 1;  // fallback to default bearer
+           LOG_I(PDCP, "JIN CHECK TOS TOS !!!!!!!! [TOS-QFI] tos=0x%02x extracted_qfi=%d\n", iph->tos, pkt_qfi);
+      }*/
+      if (len >= 20) {
+          struct iphdr *iph = (struct iphdr *)rx_buf;
+          uint8_t raw_tos = iph->tos;
+          pkt_qfi = sl_lookup_qfi(raw_tos);
+          LOG_I(PDCP, "[TOS-QFI] raw_tos=0x%02x → pkt_qfi=%d\n", raw_tos, pkt_qfi);
+      }
+      
       sdap_data_req(&ctxt, rntiMaybeUEid, SRB_FLAG_NO, rb_id,
                     RLC_MUI_UNDEFINED, RLC_SDU_CONFIRM_NO,
                     len, (unsigned char *)rx_buf,
                     PDCP_TRANSMISSION_MODE_DATA,
-                    NULL, NULL, nas_qfi, dc, nas_pduid);
+                    NULL, NULL, pkt_qfi, dc, 0);
     }
     //Jin end
 
@@ -790,7 +858,7 @@ uint64_t nr_pdcp_module_init(uint64_t _pdcp_optmask, int id)
       //Add --nr-ip-over-lte option check for next line
       if (IS_SOFTMODEM_NOS1){
         nas_config(1, 1, !get_softmodem_params()->nsa ? 2 : 3, ifsuffix_ue);
-        set_qfi_pduid(7, 10);
+        set_qfi_pduid(7, 10); 
       }
       LOG_I(PDCP, "UE pdcp will use tun interface\n");
       start_pdcp_tun_ue();
@@ -812,6 +880,7 @@ uint64_t nr_pdcp_module_init(uint64_t _pdcp_optmask, int id)
 static void deliver_sdu_drb(void *_ue, nr_pdcp_entity_t *entity,
                             char *buf, int size)
 {
+  LOG_I(PDCP, "[JIN-RX-DELIVER]!!!!! size=%d rb_id=%d ue=%lu\n",  size, (int)entity->rb_id, ((nr_pdcp_ue_t*)_ue)->rntiMaybeUEid);
   nr_pdcp_ue_t *ue = _ue;
   int rb_id;
   int i;
@@ -1077,6 +1146,7 @@ void add_drb_sl(ue_id_t srcid, NR_SL_RadioBearerConfig_r16_t *s, int ciphering_a
   AssertFatal(s->sl_PDCP_Config_r16 != NULL, "SL PDCP config is not there!\n");
   int slrb_id = s->slrb_Uu_ConfigIndex_r16;
   int sn_size = decode_sn_size_ul(*s->sl_PDCP_Config_r16->sl_PDCP_SN_Size_r16);
+  LOG_I(PDCP, "JIN CHECK !!!!   !!!  !!! Sn-size    [SL-DRB] srcid=%lu slrb_id=%d sn_size=%d\n", srcid, slrb_id, sn_size);
   int discard_timer = decode_discard_timer_sl(*s->sl_PDCP_Config_r16->sl_DiscardTimer_r16);
 
   // these 3 are configured differently in Sidelink 

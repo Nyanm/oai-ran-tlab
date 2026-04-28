@@ -435,8 +435,9 @@ rb_found:
 
   /* used fields? */
   ctx.module_id = 0;
-  ctx.rntiMaybeUEid = ue->rnti;
-
+  //ctx.rntiMaybeUEid = ue->rnti; 
+  ctx.rntiMaybeUEid = ue->sl_rx_src_l2id;
+  
   is_enb = nr_rlc_manager_get_enb_flag(nr_rlc_ue_manager);
   ctx.enb_flag = is_enb;
 

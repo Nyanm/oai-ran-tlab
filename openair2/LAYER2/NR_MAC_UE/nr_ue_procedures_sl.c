@@ -1272,8 +1272,8 @@ void nr_ue_process_mac_sl_pdu(int module_idP,
 
 
         mac_rlc_data_ind(module_idP,
-                         //mac->src_id, //Jin origin 
-                         sl_sch_subheader->SRC, //Jin replace support multiple UEs
+                         mac->src_id, //Jin origin 
+                         // sl_sch_subheader->SRC, //Jin replace support multiple UEs
                          0,
                          frame,
                          ENB_FLAG_NO,

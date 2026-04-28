@@ -3013,6 +3013,14 @@ void *nr_rrc_control_socket_thread_fct(void *arg)
           NR_RRC_Configuration received_data =   msg->nr_sidelinkPrimitive.pc5_rrc_config;
           uint8_t qfi = sl_ctrl_msg_recv->nr_sidelinkPrimitive.pc5_rrc_config.sl_radioBearerConfig.slrb_Uu_ConfigIndex_r16; //define QFI
 
+          //Jin update TOS for multi bearer
+          uint8_t bearer_tos = 0x00;  // default
+          if (qfi == 3) bearer_tos = 0x10;
+          if (qfi == 5) bearer_tos = 0x20;
+          // add more as needed
+          sl_add_qos_map(bearer_tos, qfi);
+
+
 	       sl_RadioBearerConfig_r16->slrb_Uu_ConfigIndex_r16 = received_data.sl_radioBearerConfig.slrb_Uu_ConfigIndex_r16;
 	       sl_RadioBearerConfig_r16->sl_SDAP_Config_r16 = NULL;
 	       sl_RadioBearerConfig_r16->sl_TransRange_r16 = NULL;
@@ -3054,7 +3062,7 @@ void *nr_rrc_control_socket_thread_fct(void *arg)
 
 	       // SL RadioBearers
 	       add_drb_sl(0, (NR_SL_RadioBearerConfig_r16_t *)sl_RadioBearerConfig_r16, 0, 0, NULL, NULL);
-         //Jin add to update SDAP
+          //Jin add to update SDAP
          nr_sdap_entity_t *sdap_entity = nr_sdap_get_entity(module_id, 0);
          if (sdap_entity) {
             sdap_entity->qfi2drb_map_update(sdap_entity,
