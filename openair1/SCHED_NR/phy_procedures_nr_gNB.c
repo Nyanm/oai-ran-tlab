@@ -683,7 +683,6 @@ nr_srs_info_t nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
 
   c16_t srs_ls_estimated_channel[nb_antennas_rx][N_ap][ofdm_symbol_size * N_symb_SRS];
   uint32_t signal_power_avg = 0;
-  uint32_t noise_power_avg = 0;
   int16_t noise_power_per_rb[srs_pdu->bwp_size];
   memset(noise_power_per_rb, 0, srs_pdu->bwp_size * sizeof(int16_t));
 
