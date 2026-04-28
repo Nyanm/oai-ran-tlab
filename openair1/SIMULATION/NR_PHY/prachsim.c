@@ -546,18 +546,11 @@ int main(int argc, char **argv){
 
   phy_init_nr_gNB(gNB);
   nr_phy_init_RU(ru);
-<<<<<<< HEAD
-  nfapi_nr_prach_pdu_t *prach_pdu = &gNB->prach_list.list[0].pdu;
-  prach_pdu->num_cs                                                                      = get_NCS(NCS_config, format0, restrictedSetConfig);
-  prach_config->num_prach_fd_occasions_list[fd_occasion].num_root_sequences.value        = 1+(64/(N_ZC/prach_pdu->num_cs));
-  prach_pdu->prach_format                                                                = prach_format;
-=======
 
   nfapi_nr_prach_pdu_t prach_pdu = {0};
   prach_pdu.num_cs                                                                      = get_NCS(NCS_config, format0, restrictedSetConfig);
   prach_config->num_prach_fd_occasions_list[fd_occasion].num_root_sequences.value        = 1+(64/(N_ZC/prach_pdu.num_cs));
   prach_pdu.prach_format                                                                = prach_format;
->>>>>>> origin/develop
 
   // Configure UE
   UE = malloc(sizeof(PHY_VARS_NR_UE));
@@ -754,24 +747,6 @@ int main(int argc, char **argv){
         }
 
         nfapi_nr_prach_config_t *cfg = &gNB->gNB_config.prach_config;
-<<<<<<< HEAD
-        nfapi_nr_num_prach_fd_occasions_t *occ = &cfg->num_prach_fd_occasions_list[prach_pdu->num_ra];
-        prach_pdu->num_prach_ocas=1;
-        prach_item_t in = {.frame = frame,
-                           .slot = slot,
-                           .pdu = *prach_pdu,
-                           .rootSequenceIndex = occ->prach_root_sequence_index.value,
-                           .numrootSequenceIndex = occ->num_root_sequences.value,
-                           .msg1_frequencystart = occ->k1.value,
-                           .mu = cfg->prach_sub_c_spacing.value,
-                           .prach_sequence_length = cfg->prach_sequence_length.value,
-                           .restricted_set = cfg->restricted_set_config.value,
-                           .numerology_index = gNB->frame_parms.numerology_index,
-                           .nb_rx = gNB->gNB_config.carrier_config.num_rx_ant.value,
-                           .Xu = gNB->X_u,
-                           .rx_prach = &gNB->rx_prach};
-        rx_nr_prach_ru(&in, ru->common.rxdata, ru->nr_frame_parms, ru->N_TA_offset);
-=======
         nfapi_nr_num_prach_fd_occasions_t *occ = &cfg->num_prach_fd_occasions_list[prach_pdu.num_ra];
         prach_pdu.num_prach_ocas=1;
         prach_item_t *in = malloc(sizeof(prach_item_t)
@@ -792,13 +767,12 @@ int main(int argc, char **argv){
                              .rx_prach = &gNB->rx_prach,
                              .prach_buf = (void *)(in + 1)};
         rx_nr_prach_ru(in, ru->common.rxdata, ru->nr_frame_parms, ru->N_TA_offset);
->>>>>>> origin/develop
         if (n_frames == 1)
           LOG_I(PHY,
                 "ncs %d,num_seq %d\n",
                 prach_pdu.num_cs,
                 prach_config->num_prach_fd_occasions_list[fd_occasion].num_root_sequences.value);
-        rx_prach_out_t out = rx_nr_prach(&in, prachOccasion);
+        rx_prach_out_t out = rx_nr_prach(in, prachOccasion);
 
         //        printf(" preamble_energy %d preamble_rx %d preamble_tx %d \n", out.max_preamble_energy, out.max_preamble,
         //        preamble_tx);
@@ -821,13 +795,13 @@ int main(int argc, char **argv){
           LOG_M("rxsig0.m","rxs0", &ru->common.rxdata[0][subframe*frame_parms->samples_per_subframe], frame_parms->samples_per_subframe, 1, 1);
           LOG_M("ru_rxsig0.m","rxs0", &ru->common.rxdata[0][subframe*frame_parms->samples_per_subframe], frame_parms->samples_per_subframe, 1, 1);
           LOG_M("ru_rxsigF0.m","rxsF0", ru->common.rxdataF[0], frame_parms->ofdm_symbol_size*frame_parms->symbols_per_slot, 1, 1);
-          LOG_M("ru_prach_rxsigF0.m", "rxsF0", in.rxsigF[0][0], N_ZC, 1, 1);
+          LOG_M("ru_prach_rxsigF0.m", "rxsF0", in->prach_buf[0][0], N_ZC, 1, 1);
           LOG_M("prach_preamble.m","prachp", &gNB->X_u[0], N_ZC, 1, 1);
           LOG_M("ue_prach_preamble.m","prachp", &UE->X_u[0], N_ZC, 1, 1);
 #endif
         }
+        free(in);
       }
-
       printf("SNR %f dB, UE Speed %f km/h: errors %u/%d (delay %f)\n", SNR, ue_speed, prach_errors, n_frames, delay_avg/(double)(n_frames-prach_errors));
       if (input_fd)
         break;
@@ -847,10 +821,6 @@ int main(int argc, char **argv){
   nr_phy_free_RU(ru);
   free(RC.ru[0]);
   free(RC.ru);
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/develop
   phy_free_nr_gNB(gNB);
   // allocated in set_tdd_config_nr()
   int nb_slots_to_set = (1<<mu)*NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
