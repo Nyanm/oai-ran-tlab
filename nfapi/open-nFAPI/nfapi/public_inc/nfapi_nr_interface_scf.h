@@ -11,19 +11,13 @@
 #include "nfapi_interface.h"
 #include "nfapi_nr_interface.h"
 
-#define NFAPI_NR_MAX_NB_CCE_AGGREGATION_LEVELS 5
-#define NFAPI_NR_MAX_NB_TCI_STATES_PDCCH 64
 #define NFAPI_NR_MAX_NB_CORESETS 12
-#define NFAPI_NR_MAX_NB_SEARCH_SPACES 40
-
 #define NFAPI_MAX_NUM_UL_UE_PER_GROUP 6
 #define NFAPI_MAX_NUM_UL_PDU 255
-#define NFAPI_MAX_NUM_UCI_INDICATION 8
 #define NFAPI_MAX_NUM_GROUPS 8
 #define NFAPI_MAX_NUM_CB 8
 #define NFAPI_MAX_NUM_PRGS 1
 #define NFAPI_MAX_NUM_BG_IF 6
-#define NFAPI_MAX_NUM_PERIODS 8
 
 // Extension to the generic structures for single tlv values
 

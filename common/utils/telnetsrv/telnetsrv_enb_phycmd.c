@@ -46,11 +46,15 @@ void dump_uestats(int debug, telnet_printfunc_t prnt, uint8_t prntflag) {
 }
 
 void display_uestats(int debug, telnet_printfunc_t prnt, int ue) {
+  UNUSED(debug);
+  UNUSED(prnt);
+  UNUSED(ue);
   for (int cc=0; cc<1 ; cc++) {
   }
 }
 
 void display_phycounters(char *buf, int debug, telnet_printfunc_t prnt) {
+  UNUSED(buf);
   prnt("  DLSCH kb      DLSCH kb/s\n");
   dump_uestats(debug, prnt,0);
 }

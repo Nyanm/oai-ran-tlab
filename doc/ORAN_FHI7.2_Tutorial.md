@@ -72,9 +72,9 @@ Tested libxran releases:
 | Vendor                                  |
 |-----------------------------------------|
 | `oran_f_release_v1.0`                   |
+| `oran_k_release_v1.0`                   |
 
-
-**Note**: The libxran driver of OAI identifies the above F release version as "6.1.0" (F is the sixth letter, then 1.0).
+**Note**: The libxran driver of OAI identifies the above F release version as "6.1.0" (F is the sixth letter, then 1.0), and the above K release as "11.1.0".
 
 ### Configure your server
 
@@ -274,7 +274,7 @@ timedatectl set-ntp false
 
 ### DPDK (Data Plane Development Kit)
 
-Download DPDK version 20.11.9.
+Download DPDK version 20.11.9 (F release) or 24.11.4 (K release).
 
 ```bash
 # on debian
@@ -282,7 +282,8 @@ sudo apt install wget xz-utils libnuma-dev
 # on Fedora/RHEL
 sudo dnf install wget xz numactl-devel
 cd
-wget http://fast.dpdk.org/rel/dpdk-20.11.9.tar.xz
+wget http://fast.dpdk.org/rel/dpdk-20.11.9.tar.xz # F release
+wget http://fast.dpdk.org/rel/dpdk-24.11.4.tar.xz # K release
 ```
 
 #### DPDK Compilation and Installation
@@ -290,10 +291,11 @@ wget http://fast.dpdk.org/rel/dpdk-20.11.9.tar.xz
 ```bash
 # Installing meson : it should pull ninja-build and compiler packages
 # on debian
-sudo apt install meson
+sudo apt install python3-pyelftools meson
 # on Fedora/RHEL
-sudo dnf install meson
-tar xvf dpdk-20.11.9.tar.xz && cd dpdk-stable-20.11.9
+sudo dnf install python3-pyelftools meson
+tar xvf dpdk-20.11.9.tar.xz && cd dpdk-stable-20.11.9 # F release
+tar xvf dpdk-24.11.4.tar.xz && cd dpdk-stable-24.11.4 # K release
 
 meson build
 ninja -C build
@@ -359,7 +361,8 @@ pkg-config --libs libdpdk --static
 Go back to the version folder you used to build and install
 
 ```
-cd ~/dpdk-stable-20.11.9
+cd ~/dpdk-stable-20.11.9 # F release
+cd ~/dpdk-stable-24.11.4 # K release
 sudo ninja deinstall -C build
 ```
 
@@ -378,10 +381,17 @@ Download ORAN FHI DU library, checkout the correct version, and apply the correc
 
 #### F release
 ```bash
-git clone https://gerrit.o-ran-sc.org/r/o-du/phy.git ~/phy
+git clone https://github.com/openairinterface/o-du-phy.git ~/phy
 cd ~/phy
 git checkout oran_f_release_v1.0
 git apply ~/openairinterface5g/cmake_targets/tools/oran_fhi_integration_patches/F/oaioran_F.patch
+```
+
+#### K release
+```bash
+git clone https://github.com/openairinterface/o-du-phy.git ~/phy
+cd ~/phy
+git checkout <desired-tag> # shall match a variable `K_VERSION`
 ```
 
 Compile the fronthaul interface library by calling `make` and the option
@@ -398,6 +408,7 @@ This feature is intended to enable experiments and future improvements on Arm sy
 cd ~/phy/fhi_lib/lib
 make clean
 WIRELESS_SDK_TOOLCHAIN=gcc RTE_SDK=~/dpdk-stable-20.11.9/ XRAN_DIR=~/phy/fhi_lib make XRAN_LIB_SO=1 # F release
+WIRELESS_SDK_TOOLCHAIN=gcc RTE_SDK=~/dpdk-stable-24.11.4/ XRAN_DIR=~/phy/fhi_lib make XRAN_LIB_SO=1 # K release
 ...
 [AR] build/libxran.so
 ./build/libxran.so
@@ -483,22 +494,12 @@ Note that you might also call cmake directly instead of using `build_oai`:
 ```
 cd ~/openairinterface5g
 mkdir build && cd build
+# build RAN after manually building xran F or K release
 cmake .. -GNinja -DOAI_FHI72=ON -Dxran_LOCATION=$HOME/phy/fhi_lib/lib
+# build RAN and xran K release automatically
+cmake .. -GNinja -DOAI_FHI72=ON -Dxran_DOWNLOAD=ON
 ninja nr-softmodem oran_fhlib_5g params_libconfig
 ```
-
-Note that in tags 2025.w06 and prior, the FHI72 driver used polling to wait for
-the next slot. This is inefficient as it burns CPU time, and has been replaced
-with a more efficient mechanism. Nevertheless, if you experience problems that
-did not occur previously, it is possible to re-enable polling, either with
-`build_oai` like this
-
-    ./build_oai --gNB --ninja -t oran_fhlib_5g --cmake-opt -Dxran_LOCATION=$HOME/phy/fhi_lib/lib --cmake-opt -DOAI_FHI72_USE_POLLING=ON
-
-or with `cmake` like so
-
-    cmake .. -GNinja -DOAI_FHI72=ON -Dxran_LOCATION=$HOME/phy/fhi_lib/lib -DOAI_FHI72_USE_POLLING=ON
-    ninja oran_fhlib_5g
 
 ## Configuration
 
@@ -628,6 +629,82 @@ compression-bit 8 # set IQ bitwidth for PxSCH/PRACH
 eAXC_id 0 1 # set PRACH eAxC IDs
 ...
 ```
+
+#### MICROAMP FR2
+
+
+Interaction with RU is performed using `rucfg` utility provided by Microamp.
+
+To check PTP status, you can use `rucfg ptp`. the output should be similar to:
+```bash
+[INFO] Check if RU is available
+[INFO] RU available
+[INFO] Check SSH to RU available
+[INFO] SSH to RU available
+[INFO] Getting PTP status
+[INFO] ptp4l status = 
+{
+Feb 12 16:26:02 bbv1 ptp4l[23822]: ptp4l[6280.658]: rms    0 max    1 freq     +2 +/-   7 delay  1184 +/-   0
+Feb 12 16:26:00 bbv1 ptp4l[23822]: ptp4l[6279.535]: rms    0 max    1 freq     -8 +/-  13 delay  1184 +/-   0
+Feb 12 16:25:59 bbv1 ptp4l[23822]: ptp4l[6278.413]: rms    1 max    1 freq    -35 +/-  13 delay  1184 +/-   0
+Feb 12 16:25:58 bbv1 ptp4l[23822]: ptp4l[6277.290]: rms    0 max    1 freq    -68 +/-   9 delay  1184 +/-   0
+Feb 12 16:25:57 bbv1 ptp4l[23822]: ptp4l[6276.167]: rms    1 max    1 freq    -69 +/-  10 delay  1184 +/-   0
+Feb 12 16:25:56 bbv1 ptp4l[23822]: ptp4l[6275.044]: rms    0 max    1 freq    -46 +/-   9 delay  1184 +/-   0
+Feb 12 16:25:55 bbv1 ptp4l[23822]: ptp4l[6273.921]: rms    1 max    1 freq    -65 +/-  10 delay  1184 +/-   0
+Feb 12 16:25:54 bbv1 ptp4l[23822]: ptp4l[6272.800]: rms    0 max    1 freq    -91 +/-   6 delay  1184 +/-   0
+Feb 12 16:25:53 bbv1 ptp4l[23822]: ptp4l[6271.677]: rms    4 max   17 freq   -107 +/-  48 delay  1184 +/-   0
+Feb 12 16:25:52 bbv1 ptp4l[23822]: ptp4l[6270.554]: rms    6 max   17 freq   +179 +/- 106 delay  1184 +/-   0
+Feb 12 16:25:50 bbv1 ptp4l[23822]: ptp4l[6269.431]: rms    1 max    2 freq   +191 +/-  12 delay  1184 +/-   0
+Feb 12 16:25:49 bbv1 ptp4l[23822]: ptp4l[6268.308]: rms    1 max    1 freq   +119 +/-  21 delay  1184 +/-   0
+Feb 12 16:25:48 bbv1 ptp4l[23822]: ptp4l[6267.186]: rms    1 max    1 freq   +103 +/-  13 delay  1184 +/-   0
+Feb 12 16:25:47 bbv1 ptp4l[23822]: ptp4l[6266.063]: rms    7 max   17 freq   -101 +/- 160 delay  1184 +/-   0
+Feb 12 16:25:46 bbv1 ptp4l[23822]: ptp4l[6264.940]: rms    7 max   17 freq    -65 +/- 154 delay  1184 +/-   0
+Feb 12 16:25:45 bbv1 ptp4l[23822]: ptp4l[6263.817]: rms    1 max    2 freq   +176 +/-  33 delay  1183 +/-   0
+Feb 12 16:25:44 bbv1 ptp4l[23822]: ptp4l[6262.695]: rms    0 max    1 freq   +100 +/-   7 delay  1184 +/-   0
+Feb 12 16:25:43 bbv1 ptp4l[23822]: ptp4l[6261.572]: rms    1 max    2 freq    +56 +/-  34 delay  1184 +/-   0
+Feb 12 16:25:41 bbv1 ptp4l[23822]: ptp4l[6260.449]: rms    1 max    1 freq    -37 +/-  14 delay  1184 +/-   0
+Feb 12 16:25:40 bbv1 ptp4l[23822]: ptp4l[6259.326]: rms    7 max   16 freq   +114 +/- 149 delay  1183 +/-   0
+}
+
+```
+
+##### RU configuration
+
+You can use `rucfg show` to display the current RU configuration. 
+
+The OAI configuration file [`gnb.sa.band257.132prb.fhi72.2x2-microamp.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band257.132prb.fhi72.2x2-microamp.conf) corresponds to the following RU configuration:
+
+```bash
+[INFO] Check if RU is available
+[INFO] RU available
+[INFO] Check SSH to RU available
+[INFO] SSH to RU available
+[INFO] Downloading oran_autostart
+[INFO] Downloading ructl_config.sh
+[INFO] Downloading udc_pll_configurator_startup
+[INFO] Downloaded Cellbox config = 
+{
+	eCPRI Compression: True
+	RF Bandwidth: 200MHz
+	CC Bandwidth: 200MHz
+	CCs: 1
+	LO frequency: 7.91642667e9
+	UL compensation frequency: 28.04928e9
+	DL compensation frequency: -28.04928e9
+	RU MAC: 10:70:FD:B8:86:02
+	DU MAC: 50:7C:6F:31:00:61
+	TDD config: dddsu
+	RF Power level: -5 dB - relative to maximum
+	VLAN ORAN: Enabled, tag: 600
+	VLAN PTP: Enabled, tag: 1
+	VLAN MGMT: False
+	Beamforming: dynamic-mirrored-beam
+}
+```
+
+Execute `rucfg config -h` to check how to configure the RU.
+
+You can also execute `rucfg stats` to show fronthaul statistics including on-time/late packet' counters.
 
 #### VVDN LPRU
 
@@ -1559,6 +1636,8 @@ cmake .. -GNinja -DOAI_FHI72=ON -DOAI_FHI72_MPLANE=ON -Dxran_LOCATION=$HOME/phy/
 PKG_CONFIG_PATH=/opt/mplane-v2/lib/pkgconfig cmake .. -GNinja -DOAI_FHI72=ON -DOAI_FHI72_MPLANE=ON -Dxran_LOCATION=$HOME/phy/fhi_lib/lib
 ninja nr-softmodem oran_fhlib_5g_mplane params_libconfig
 ```
+
+Note: instead of setting `xran_LOCATION`, feel free to use `xran_DOWNLOAD` option for automatic xran K release build.
 
 ### Start the gNB
 Run the `nr-softmodem` from the build directory:

@@ -14,7 +14,7 @@
 #include <openair1/PHY/TOOLS/phy_scope_interface.h>
 #include "PHY/nr_phy_common/inc/nr_phy_common.h"
 #include "openair1/PHY/NR_REFSIG/nr_refsig.h"
-#include "reverse_bits.h"
+#include "bits.h"
 #include "instrumentation.h"
 //#define DEBUG_PBCH
 //#define DEBUG_PBCH_ENCODING

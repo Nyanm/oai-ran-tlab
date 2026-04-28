@@ -24,6 +24,7 @@
 
 #include "rrc_defs.h"
 #include "rrc_proto.h"
+#include "verify_RRC.h"
 #include "L2_interface_ue.h"
 #include "LAYER2/NR_MAC_UE/mac_proto.h"
 
@@ -2014,8 +2015,6 @@ static void nr_rrc_ue_decode_NR_BCCH_DL_SCH_Message(NR_UE_RRC_INST_t *rrc,
                                                     const uint8_t gNB_index,
                                                     uint8_t *const Sdu,
                                                     const uint8_t Sdu_len,
-                                                    const uint8_t rsrq,
-                                                    const uint8_t rsrp,
                                                     int hfn,
                                                     int frame,
                                                     int slot)
@@ -3067,6 +3066,7 @@ static void nr_rrc_handle_meas_indication(NR_UE_RRC_INST_t *rrc, NRRrcMacMeasDat
 
 void *rrc_nrue_task(void *args_p)
 {
+  UNUSED(args_p);
   itti_mark_task_ready(TASK_RRC_NRUE);
   while (1) {
     rrc_nrue(NULL);
@@ -3075,6 +3075,7 @@ void *rrc_nrue_task(void *args_p)
 
 void *rrc_nrue(void *notUsed)
 {
+  UNUSED(notUsed);
   MessageDef *msg_p = NULL;
   itti_receive_msg(TASK_RRC_NRUE, &msg_p);
   instance_t instance = ITTI_MSG_DESTINATION_INSTANCE(msg_p);
@@ -3115,6 +3116,11 @@ void *rrc_nrue(void *notUsed)
     }
     break;
 
+  case NR_RRC_MAC_VERIFY:
+    LOG_W(NR_RRC, "L2 verification of RRC consistency failed\n");
+    handle_rlf_detection(rrc);
+    break;
+
   case NR_RRC_MAC_INAC_IND:
     LOG_D(NR_RRC, "Received data inactivity indication from lower layers\n");
     NR_Release_Cause_t release_cause = RRC_CONNECTION_FAILURE;
@@ -3152,24 +3158,15 @@ void *rrc_nrue(void *notUsed)
     if (bcch->is_bch)
       nr_rrc_ue_decode_NR_BCCH_BCH_Message(rrc, bcch->gnb_index, bcch->phycellid, bcch->ssb_arfcn, bcch->sdu, bcch->sdu_size);
     else
-      nr_rrc_ue_decode_NR_BCCH_DL_SCH_Message(rrc,
-                                              bcch->gnb_index,
-                                              bcch->sdu,
-                                              bcch->sdu_size,
-                                              bcch->rsrq,
-                                              bcch->rsrp,
-                                              bcch->hfn,
-                                              bcch->frame,
-                                              bcch->slot);
+      nr_rrc_ue_decode_NR_BCCH_DL_SCH_Message(rrc, bcch->gnb_index, bcch->sdu, bcch->sdu_size, bcch->hfn, bcch->frame, bcch->slot);
     break;
 
   case NR_RRC_MAC_SBCCH_DATA_IND:
     LOG_D(NR_RRC, "[UE %ld] Received %s: gNB %d\n", instance, ITTI_MSG_NAME(msg_p), NR_RRC_MAC_SBCCH_DATA_IND(msg_p).gnb_index);
     NRRrcMacSBcchDataInd *sbcch = &NR_RRC_MAC_SBCCH_DATA_IND(msg_p);
-
-    nr_rrc_ue_decode_NR_SBCCH_SL_BCH_Message(rrc, sbcch->gnb_index,sbcch->frame, sbcch->slot, sbcch->sdu,
-                                             sbcch->sdu_size, sbcch->rx_slss_id);
+    nr_rrc_ue_decode_NR_SBCCH_SL_BCH_Message(rrc, sbcch->sdu, sbcch->sdu_size, sbcch->rx_slss_id);
     break;
+
   case NR_RRC_MAC_MEAS_DATA_IND:
     nr_rrc_handle_meas_indication(rrc, &NR_RRC_MAC_MEAS_DATA_IND(msg_p));
     break;

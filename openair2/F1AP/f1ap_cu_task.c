@@ -26,9 +26,7 @@ static instance_t cu_task_create_gtpu_instance(eth_params_t *IPaddrs) {
   return gtpv1Init(tmp);
 }
 
-static void cu_task_handle_sctp_association_ind(instance_t instance,
-                                                sctp_new_association_ind_t *sctp_new_association_ind,
-                                                eth_params_t *IPaddrs)
+static void cu_task_handle_sctp_association_ind(instance_t instance, sctp_new_association_ind_t *sctp_new_association_ind)
 {
   // save the assoc id
   f1ap_cudu_inst_t *f1ap_cu_data = getCxt(instance);
@@ -80,7 +78,9 @@ static void cu_task_send_sctp_init_req(instance_t instance, char *my_addr)
   itti_send_msg_to_task(TASK_SCTP, instance, message_p);
 }
 
-void *F1AP_CU_task(void *arg) {
+void *F1AP_CU_task(void *arg)
+{
+  UNUSED(arg);
   MessageDef *received_msg = NULL;
   int         result;
   LOG_I(F1AP, "Starting F1AP at CU\n");
@@ -113,8 +113,7 @@ void *F1AP_CU_task(void *arg) {
     switch (ITTI_MSG_ID(received_msg)) {
       case SCTP_NEW_ASSOCIATION_IND:
         cu_task_handle_sctp_association_ind(ITTI_MSG_ORIGIN_INSTANCE(received_msg),
-                                            &received_msg->ittiMsg.sctp_new_association_ind,
-                                            IPaddrs);
+                                            &received_msg->ittiMsg.sctp_new_association_ind);
         break;
 
       case SCTP_NEW_ASSOCIATION_RESP:

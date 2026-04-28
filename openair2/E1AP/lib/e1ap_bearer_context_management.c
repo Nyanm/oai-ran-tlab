@@ -1086,6 +1086,7 @@ bool eq_bearer_context_setup_response(const e1ap_bearer_setup_resp_t *a, const e
  */
 void free_e1ap_context_setup_response(const e1ap_bearer_setup_resp_t *msg)
 {
+  UNUSED(msg);
   // Do nothing (no dynamic allocation)
 }
 
@@ -1305,6 +1306,7 @@ e1ap_bearer_release_cmd_t cp_bearer_context_release_command(const e1ap_bearer_re
 /** @brief Bearer Context Release Command equality check */
 void free_e1_bearer_context_release_command(const e1ap_bearer_release_cmd_t *msg)
 {
+  UNUSED(msg);
   // do nothing
 }
 
@@ -1392,6 +1394,7 @@ e1ap_bearer_release_cplt_t cp_bearer_context_release_complete(const e1ap_bearer_
 /** @brief Bearer Context Release Complete equality check */
 void free_e1_bearer_context_release_complete(const e1ap_bearer_release_cplt_t *msg)
 {
+  UNUSED(msg);
   // No dynamic memory, do nothing
 }
 
@@ -2662,5 +2665,6 @@ bool eq_E1_bearer_context_mod_failure(const e1ap_bearer_context_mod_failure_t *a
 /** @brief E1AP Bearer Context Modification Failure: free */
 void free_E1_bearer_context_mod_failure(const e1ap_bearer_context_mod_failure_t *msg)
 {
+  UNUSED(msg);
   // do nothing
 }

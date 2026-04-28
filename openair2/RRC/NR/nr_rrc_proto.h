@@ -23,7 +23,7 @@
 #define SRB2 2
 
 void rrc_add_nsa_user(gNB_RRC_INST *rrc, x2ap_ENDC_sgnb_addition_req_t *m, sctp_assoc_t assoc_id);
-void rrc_add_nsa_user_resp(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const f1ap_ue_context_setup_resp_t *resp);
+void rrc_add_nsa_user_resp(gNB_RRC_UE_t *UE, const f1ap_ue_context_setup_resp_t *resp);
 void rrc_release_nsa_user(gNB_RRC_INST *rrc, rrc_gNB_ue_context_t *ue_context);
 void rrc_remove_nsa_user_context(gNB_RRC_INST *rrc, rrc_gNB_ue_context_t *ue_context);
 
@@ -43,18 +43,18 @@ void rrc_gNB_generate_RRCRelease(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE);
    \param args_p Pointer on arguments to start the task. */
 void *rrc_gnb_task(void *args_p);
 
-int nr_rrc_reconfiguration_req(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue_p, const int dl_bwp_id, const int ul_bwp_id);
+int nr_rrc_reconfiguration_req(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue_p);
 
 NR_MeasConfig_t *nr_rrc_get_measconfig(const gNB_RRC_INST *rrc, uint64_t nr_cellid);
 
-bool ue_associated_to_cuup(const gNB_RRC_INST *rrc, const gNB_RRC_UE_t *ue);
-sctp_assoc_t get_existing_cuup_for_ue(const gNB_RRC_INST *rrc, const gNB_RRC_UE_t *ue);
+bool ue_associated_to_cuup(const gNB_RRC_UE_t *ue);
+sctp_assoc_t get_existing_cuup_for_ue(const gNB_RRC_UE_t *ue);
 sctp_assoc_t get_new_cuup_for_ue(const gNB_RRC_INST *rrc, const gNB_RRC_UE_t *ue, int sst, int sd);
 int rrc_gNB_process_e1_setup_req(sctp_assoc_t assoc_id, const e1ap_setup_req_t *req);
 bool is_cuup_associated(gNB_RRC_INST *rrc);
 
 /* Process indication of E1 connection loss on CU-CP */
-void rrc_gNB_process_e1_lost_connection(gNB_RRC_INST *rrc, e1ap_lost_connection_t *lc, sctp_assoc_t assoc_id);
+void rrc_gNB_process_e1_lost_connection(gNB_RRC_INST *rrc, sctp_assoc_t assoc_id);
 
 void bearer_context_setup_direct(e1ap_bearer_setup_req_t *req,
                                  instance_t instance);
@@ -91,7 +91,7 @@ void rrc_gNB_generate_UeContextModificationRequest(const gNB_RRC_INST *rrc,
 
 void free_RRCReconfiguration_params(nr_rrc_reconfig_param_t params);
 
-byte_array_t rrc_gNB_encode_RRCReconfiguration(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, nr_rrc_reconfig_param_t params);
+byte_array_t rrc_gNB_encode_RRCReconfiguration(gNB_RRC_UE_t *UE, nr_rrc_reconfig_param_t params);
 
 nr_rrc_reconfig_param_t get_RRCReconfiguration_params(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, uint8_t srb_reest_bitmap, bool drb_reestablish);
 

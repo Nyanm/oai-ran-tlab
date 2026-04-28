@@ -10,7 +10,7 @@
 #include "executables/lte-softmodem.h"
 #include "PHY/phy_extern_ue.h"
 //#include "prach.h"
-#include "PHY/LTE_TRANSPORT/if4_tools.h"
+#include "PHY/if4_tools.h"
 
 #include "SCHED_UE/sched_UE.h"
 #include "SCHED/sched_common_extern.h"

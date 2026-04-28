@@ -174,15 +174,8 @@ int lte_dl_cell_spec(PHY_VARS_eNB *eNB,
   return(0);
 }
 
-int lte_dl_cell_spec_rx(PHY_VARS_UE *ue,
-                        uint8_t eNB_offset,
-                        int *output,
-                        unsigned char Ns,
-                        unsigned char l,
-                        unsigned char p)
+int lte_dl_cell_spec_rx(PHY_VARS_UE *ue, uint8_t eNB_offset, int *output, unsigned char Ns, unsigned char l)
 {
-
-
   unsigned char mprime,mprime_dword,mprime_qpsk_symb,m;
   unsigned short k=0;
   unsigned int qpsk[4];

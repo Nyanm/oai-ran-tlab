@@ -9,7 +9,6 @@
 
 #include "nr_rlc_pdu.h"
 #include "common/utils/time_stat.h"
-
 #include "LOG/log.h"
 
 /*************************************************************************/
@@ -78,9 +77,9 @@ static int generate_tx_pdu(nr_rlc_entity_tm_t *entity, char *buffer, int size)
   return ret;
 }
 
-nr_rlc_entity_buffer_status_t nr_rlc_entity_tm_buffer_status(
-    nr_rlc_entity_t *_entity, int maxsize)
+nr_rlc_entity_buffer_status_t nr_rlc_entity_tm_buffer_status(nr_rlc_entity_t *_entity, int maxsize)
 {
+  UNUSED(maxsize);
   nr_rlc_entity_tm_t *entity = (nr_rlc_entity_tm_t *)_entity;
   nr_rlc_entity_buffer_status_t ret;
 
@@ -166,7 +165,8 @@ void nr_rlc_entity_tm_set_time(nr_rlc_entity_t *_entity, uint64_t now)
 
 void nr_rlc_entity_tm_discard_sdu(nr_rlc_entity_t *_entity, int sdu_id)
 {
-  /* nothing to do */
+  UNUSED(_entity);
+  UNUSED(sdu_id);
 }
 
 static void clear_entity(nr_rlc_entity_tm_t *entity)

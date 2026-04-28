@@ -5,6 +5,8 @@
 #include "nr-ue-ru.h"
 #include "nr-uesoftmodem.h"
 #include "PHY/NR_UE_TRANSPORT/nr_transport_proto_ue.h"
+#include "common/config/config_paramdesc.h"
+#include "common/config/config_userapi.h"
 
 /* NR UE RU configuration section name */
 #define CONFIG_STRING_NRUE_RU_LIST "RUs"
@@ -347,6 +349,14 @@ void nrue_ru_start(void)
     AssertFatal(tmp2 == 0, "Could not start the device %d\n", ru_id);
     if (usrp_tx_thread == 1)
       dev0->trx_write_init(dev0);
+  }
+}
+
+void nrue_ru_stop(void)
+{
+  for (int ru_id = 0; ru_id < nrue_ru_count; ru_id++) {
+    if (openair0_dev[ru_id].trx_stop_func)
+      openair0_dev[ru_id].trx_stop_func(&openair0_dev[ru_id]);
   }
 }
 

@@ -189,7 +189,9 @@ static int PCAP_WritePDU(const uint8_t *PDU,
   return length;
 }
 
-static void *opt_listener_thread(void *arg) {
+static void *opt_listener_thread(void *arg)
+{
+  UNUSED(arg);
   ssize_t ret;
   struct sockaddr_in from_address;
   socklen_t socklen = sizeof(from_address);
@@ -466,6 +468,7 @@ static void SendFrameNR(guint8 radioType, ws_trace_t *t)
 #include <common/ran_context.h>
 extern RAN_CONTEXT_t RC;
 #include <openair1/PHY/phy_extern_ue.h>
+#include "openair1/PHY/defs_eNB.h"
 /* Remote serveraddress (where Wireshark is running) */
 
 void trace_pdu_implementation(ws_trace_t *t)

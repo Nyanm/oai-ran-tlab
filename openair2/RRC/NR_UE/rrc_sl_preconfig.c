@@ -421,9 +421,7 @@ int configure_NR_SL_Preconfig(NR_UE_RRC_INST_t *rrc,int sync_source)
 }
 
 /*decode SL-BCH (SL-MIB) message*/
-static int8_t nr_sl_rrc_ue_decode_SL_MIB(const uint8_t gNB_index,
-                                         uint8_t *const bufferP,
-                                         const uint8_t buffer_len)
+static int8_t nr_sl_rrc_ue_decode_SL_MIB(uint8_t *const bufferP, const uint8_t buffer_len)
 {
   NR_MasterInformationBlockSidelink_t *sl_mib = NULL;
 
@@ -456,15 +454,12 @@ static int8_t nr_sl_rrc_ue_decode_SL_MIB(const uint8_t gNB_index,
 
 
 void nr_rrc_ue_decode_NR_SBCCH_SL_BCH_Message(NR_UE_RRC_INST_t *rrc,
-                                              const uint8_t gNB_index,
-                                              const frame_t frame,
-                                              const int slot,
                                               uint8_t* pduP,
                                               const sdu_size_t pdu_len,
                                               const uint16_t rx_slss_id)
 {
 
-  nr_sl_rrc_ue_decode_SL_MIB(gNB_index, (uint8_t*)pduP, pdu_len);
+  nr_sl_rrc_ue_decode_SL_MIB((uint8_t*)pduP, pdu_len);
 
   DevAssert(rrc->sl_preconfig);
 

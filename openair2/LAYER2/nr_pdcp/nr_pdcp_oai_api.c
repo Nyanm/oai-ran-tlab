@@ -398,7 +398,7 @@ static void deliver_sdu_drb(void *_ue, nr_pdcp_entity_t *entity,
     LOG_D(PDCP, "IP packet received with size %d, to be sent to SDAP interface, UE ID/RNTI: %ld\n", size, ue->ue_id);
     // in NoS1 mode: the SDAP should write() packets to an FD (TUN interface),
     // so below, set is_gnb == 0 to do that
-    sdap_data_ind(entity->rb_id, 0, entity->has_sdap_rx, entity->pdusession_id, ue->ue_id, buf, size);
+    sdap_data_ind(entity->rb_id, 0, entity->pdusession_id, ue->ue_id, buf, size);
   }
   else{
     for (i = 0; i < MAX_DRBS_PER_UE; i++) {
@@ -414,13 +414,7 @@ static void deliver_sdu_drb(void *_ue, nr_pdcp_entity_t *entity,
     rb_found:
     {
       LOG_D(PDCP, "%s() (drb %d) sending message to SDAP size %d\n", __func__, rb_id, size);
-      sdap_data_ind(rb_id,
-                    ue->drb[rb_id - 1]->is_gnb,
-                    ue->drb[rb_id - 1]->has_sdap_rx,
-                    ue->drb[rb_id - 1]->pdusession_id,
-                    ue->ue_id,
-                    buf,
-                    size);
+      sdap_data_ind(rb_id, ue->drb[rb_id - 1]->is_gnb, ue->drb[rb_id - 1]->pdusession_id, ue->ue_id, buf, size);
     }
   }
 }

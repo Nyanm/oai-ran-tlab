@@ -12,6 +12,7 @@
 #include "nr_transport_proto_ue.h"
 #include "PHY/sse_intrin.h"
 #include "T.h"
+#include "bits.h"
 #include "openair1/PHY/NR_UE_ESTIMATION/nr_estimation.h"
 #include "PHY/NR_REFSIG/nr_refsig.h"
 #include "PHY/NR_REFSIG/dmrs_nr.h"
@@ -123,8 +124,7 @@ static void nr_dlsch_channel_compensation(uint32_t rx_size_symbol,
                                           int length,
                                           unsigned char mod_order,
                                           unsigned short nb_rb,
-                                          unsigned char output_shift,
-                                          PHY_NR_MEASUREMENTS *measurements)
+                                          unsigned char output_shift)
 {
   simde__m128i *dl_ch128, *dl_ch128_2, *dl_ch_mag128, *dl_ch_mag128b, *dl_ch_mag128r, *rxdataF128, *rxdataF_comp128, *rho128;
   simde__m128i QAM_amp128 = {0}, QAM_amp128b = {0}, QAM_amp128r = {0};
@@ -277,21 +277,26 @@ static void nr_dlsch_extract_rbs(uint32_t rxdataF_sz,
                                  int32_t dl_ch_estimates_ext[][rx_size_symbol],
                                  unsigned char symbol,
                                  uint8_t pilots,
-                                 uint8_t config_type,
-                                 int startBWP,
+                                 const fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_config,
                                  const freq_alloc_bitmap_t *freq_alloc,
-                                 uint8_t n_dmrs_cdm_groups,
                                  uint8_t Nl,
                                  NR_DL_FRAME_PARMS *fp,
-                                 uint16_t dlDmrsSymbPos,
                                  uint32_t csi_res_bitmap,
                                  int chest_time_type)
 {
+  int config_type = dlsch_config->dmrsConfigType;
+  int n_dmrs_cdm_groups = dlsch_config->n_dmrs_cdm_groups;
   if (config_type == NFAPI_NR_DMRS_TYPE1)
-    AssertFatal(n_dmrs_cdm_groups == 1 || n_dmrs_cdm_groups == 2, "n_dmrs_cdm_groups %d is illegal\n", n_dmrs_cdm_groups);
+    AssertFatal(n_dmrs_cdm_groups == 1
+                || n_dmrs_cdm_groups == 2,
+                "n_dmrs_cdm_groups %d is illegal\n",
+                n_dmrs_cdm_groups);
   else
-    AssertFatal(n_dmrs_cdm_groups == 1 || n_dmrs_cdm_groups == 2 || n_dmrs_cdm_groups == 3,
-                "n_dmrs_cdm_groups %d is illegal\n",n_dmrs_cdm_groups);
+    AssertFatal(n_dmrs_cdm_groups == 1
+                || n_dmrs_cdm_groups == 2 
+                || n_dmrs_cdm_groups == 3,
+                "n_dmrs_cdm_groups %d is illegal\n",
+                n_dmrs_cdm_groups);
 
   uint32_t dmrs_rb_bitmap = 0;
   if (pilots) {
@@ -313,13 +318,15 @@ static void nr_dlsch_extract_rbs(uint32_t rxdataF_sz,
   uint32_t dmrs_csi_overlap_odd = csi_res_odd + dmrs_rb_bitmap;
   int8_t validDmrsEst;
   if (chest_time_type == 0)
-    validDmrsEst = get_valid_dmrs_idx_for_channel_est(dlDmrsSymbPos, symbol);
+    validDmrsEst = get_valid_dmrs_idx_for_channel_est(dlsch_config->dlDmrsSymbPos, symbol);
   else
-    validDmrsEst = get_next_dmrs_symbol_in_slot(dlDmrsSymbPos, 0, 14); // get first dmrs symbol index
+    validDmrsEst = get_next_dmrs_symbol_in_slot(dlsch_config->dlDmrsSymbPos, 0, 14); // get first dmrs symbol index
 
-  for (int b = 0; b < freq_alloc->num_blocks; b++) {
-    int start_rb = freq_alloc->start[b] + startBWP;
-    int nb_rb = freq_alloc->end[b] - freq_alloc->start[b] + 1;
+  int pos = 0;
+  int block_start, block_end;
+  while (find_next_rb_block(freq_alloc->bitmap, dlsch_config->BWPSize, &pos, &block_start, &block_end)) {
+    int start_rb = block_start + dlsch_config->BWPStart;
+    int nb_rb = block_end - block_start + 1;
     const int start_re = (fp->first_carrier_offset + start_rb * NR_NB_SC_PER_RB) % fp->ofdm_symbol_size;
     for (int aarx = 0; aarx < fp->nb_antennas_rx; aarx++) {
       c16_t *rxF_ext = rxdataF_ext[aarx];
@@ -967,7 +974,6 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
   memset(dl_ch_estimates_ext, 0, sizeof(dl_ch_estimates_ext));
 
   NR_UE_COMMON *common_vars  = &ue->common_vars;
-  PHY_NR_MEASUREMENTS *measurements = &ue->measurements;
   const int frame = proc->frame_rx;
   const int nr_slot_rx = proc->nr_slot_rx;
   const int gNB_id = proc->gNB_id;
@@ -994,7 +1000,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
           dlsch0_harq->status,
           dlsch1_harq->status);
 
-    if ((dlsch0_harq->status == ACTIVE) && (dlsch1_harq->status == ACTIVE)){
+    if ((dlsch0_harq->status == NR_ACTIVE) && (dlsch1_harq->status == NR_ACTIVE)){
       codeword_TB0 = dlsch0_harq->codeword; // SV: where is this set? revisit for DL MIMO.
       codeword_TB1 = dlsch1_harq->codeword;
       dlsch0_harq = &ue->dl_harq_processes[codeword_TB0][harq_pid];
@@ -1002,14 +1008,14 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
 
       DEBUG_HARQ("[DEMOD] I am assuming both TBs are active, in cw0 %d and cw1 %d \n", codeword_TB0, codeword_TB1);
 
-    } else if ((dlsch0_harq->status == ACTIVE) && (dlsch1_harq->status != ACTIVE) ) {
+    } else if ((dlsch0_harq->status == NR_ACTIVE) && (dlsch1_harq->status != NR_ACTIVE) ) {
       codeword_TB0 = dlsch0_harq->codeword;
       dlsch0_harq = &ue->dl_harq_processes[codeword_TB0][harq_pid];
       dlsch1_harq = NULL;
 
       DEBUG_HARQ("[DEMOD] I am assuming only TB0 is active, in cw %d \n", codeword_TB0);
 
-    } else if ((dlsch0_harq->status != ACTIVE) && (dlsch1_harq->status == ACTIVE)){
+    } else if ((dlsch0_harq->status != NR_ACTIVE) && (dlsch1_harq->status == NR_ACTIVE)){
       codeword_TB1 = dlsch1_harq->codeword;
       dlsch0_harq  = NULL;
       dlsch1_harq  = &ue->dl_harq_processes[codeword_TB1][harq_pid];
@@ -1023,7 +1029,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
       return (-1);
     }
   } else if (dlsch0_harq) {
-    if (dlsch0_harq->status == ACTIVE) {
+    if (dlsch0_harq->status == NR_ACTIVE) {
       codeword_TB0 = dlsch0_harq->codeword;
       dlsch0_harq = &ue->dl_harq_processes[0][harq_pid];
       DEBUG_HARQ("[DEMOD] I am assuming only TB0 is active\n");
@@ -1078,13 +1084,10 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                          dl_ch_estimates_ext,
                          symbol,
                          pilots,
-                         config_type,
-                         dlsch_config->BWPStart,
+                         dlsch_config,
                          freq_alloc,
-                         dlsch_config->n_dmrs_cdm_groups,
                          nl,
                          fp,
-                         dlsch_config->dlDmrsSymbPos,
                          csi_res_bitmap,
                          ue->chest_time);
     stop_meas_nr_ue_phy(ue, DLSCH_EXTRACT_RBS_STATS);
@@ -1114,13 +1117,13 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
       uint32_t csi_re_count = 0;
       uint32_t csi_res_even = csi_res_bitmap & 0xfff;
       uint32_t csi_res_odd = (csi_res_bitmap >> 16) & 0xfff;
-      int start = freq_alloc->start[0] + dlsch_config->BWPStart;
-      int end = freq_alloc->end[freq_alloc->num_blocks - 1] + 1;
+      uint32_t count_even = count_bits(&csi_res_even, 1);
+      uint32_t count_odd  = count_bits(&csi_res_odd, 1);
+      int start = freq_alloc->first_rb + dlsch_config->BWPStart;
+      int end = freq_alloc->last_rb + 1;
       for (int rb = start; rb < end; rb++) {
-        if ((freq_alloc->bitmap[rb / 8] >> (rb % 8)) & 0x01) {
-          uint32_t rb_csi_pattern = (rb % 2 == 0) ? csi_res_even : csi_res_odd;
-          csi_re_count += __builtin_popcount(rb_csi_pattern);
-        }
+        if ((freq_alloc->bitmap[rb / 32] >> (rb % 32)) & 0x01)
+          csi_re_count += (rb % 2 == 0) ? count_even : count_odd;
       }
       nb_re_pdsch = (nb_re_pdsch > csi_re_count) ? (nb_re_pdsch - csi_re_count) : 0;
       if (csi_re_count > 0) {
@@ -1228,8 +1231,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                                   nb_re_pdsch,
                                   dlsch_config->qamModOrder,
                                   nb_rb_pdsch,
-                                  *log2_maxh,
-                                  measurements); // log2_maxh+I0_shift
+                                  *log2_maxh); // log2_maxh+I0_shift
     stop_meas_nr_ue_phy(ue, DLSCH_CHANNEL_COMPENSATION_STATS);
     if (meas_enabled) {
       LOG_D(PHY,
@@ -1310,7 +1312,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
   int nbSymb = 0;
   int pduBitmap = 0;
 
-  if(dlsch0_harq->status == ACTIVE) {
+  if(dlsch0_harq->status == NR_ACTIVE) {
     startSymbIdx = dlsch_config->start_symbol;
     nbSymb = dlsch_config->number_symbols;
     pduBitmap = dlsch_config->pduBitmap;
@@ -1329,6 +1331,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                              dlsch1_harq,
                              nr_slot_rx,
                              symbol,
+                             freq_alloc->num_rbs,
                              dlsch[0].rnti,
                              dlsch);
     dl_valid_re[symbol] -= ptrs_re_per_slot[0][symbol];

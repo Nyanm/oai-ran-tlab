@@ -89,6 +89,7 @@ static int get_message(int s)
 
 static void *T_receive_thread(void *_)
 {
+  UNUSED(_);
   int err = 0;
   while (!err) err = get_message(T_socket);
 

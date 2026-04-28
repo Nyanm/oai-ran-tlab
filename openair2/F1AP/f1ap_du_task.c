@@ -90,7 +90,9 @@ void du_task_handle_sctp_data_ind(instance_t instance, sctp_data_ind_t *sctp_dat
   AssertFatal (result == EXIT_SUCCESS, "Failed to free memory (%d)!\n", result);
 }
 
-void *F1AP_DU_task(void *arg) {
+void *F1AP_DU_task(void *arg)
+{
+  UNUSED(arg);
   //sctp_cu_init();
   LOG_I(F1AP, "Starting F1AP at DU\n");
   itti_mark_task_ready(TASK_DU_F1);

@@ -23,7 +23,7 @@ int decode_registration_request(registration_request_msg *registration_request, 
 
   /* Decoding mandatory fields */
   if ((decoded_result =
-           decode_5gs_registration_type(&registration_request->fgsregistrationtype, 0, *(buffer + decoded) & 0x0f, len - decoded))
+           decode_5gs_registration_type(&registration_request->fgsregistrationtype, 0, *(buffer + decoded) & 0x0f))
       < 0) {
     LOG_FUNC_RETURN(decoded_result);
   }
@@ -76,8 +76,7 @@ int encode_registration_request(const registration_request_msg *registration_req
       == REGISTRATION_REQUEST_UE_SECURITY_CAPABILITY_PRESENT) {
     if ((encode_result = encode_nrue_security_capability(&registration_request->nruesecuritycapability,
                                                          REGISTRATION_REQUEST_UE_SECURITY_CAPABILITY_IEI,
-                                                         buffer + encoded,
-                                                         len - encoded))
+                                                         buffer + encoded))
         < 0)
       // Return in case of error
       return encode_result;

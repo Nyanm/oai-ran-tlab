@@ -22,7 +22,7 @@ import constants as CONST
 #-----------------------------------------------------------
 
 
-def ArgsParse(argvs,CiTestObj,RAN,HTML,CONTAINERS,HELP,SCA,CLUSTER):
+def ArgsParse(argvs,CiTestObj,RAN,HTML,CONTAINERS,HELP,CLUSTER):
 
     force_local = False
     date_fmt = None
@@ -53,7 +53,6 @@ def ArgsParse(argvs,CiTestObj,RAN,HTML,CONTAINERS,HELP,SCA,CLUSTER):
             RAN.ranRepository=matchReg.group(1)
             HTML.ranRepository=matchReg.group(1)
             CONTAINERS.ranRepository=matchReg.group(1)
-            SCA.ranRepository=matchReg.group(1)
             CLUSTER.ranRepository=matchReg.group(1)
         elif re.match(r'^\-\-eNB_AllowMerge=(.+)$|^\-\-ranAllowMerge=(.+)$', myArgv, re.IGNORECASE):
             if re.match(r'^\-\-eNB_AllowMerge=(.+)$', myArgv, re.IGNORECASE):
@@ -66,7 +65,6 @@ def ArgsParse(argvs,CiTestObj,RAN,HTML,CONTAINERS,HELP,SCA,CLUSTER):
                 RAN.ranAllowMerge=True
                 HTML.ranAllowMerge=True
                 CONTAINERS.ranAllowMerge=True
-                SCA.ranAllowMerge=True
                 CLUSTER.ranAllowMerge=True
         elif re.match(r'^\-\-eNBBranch=(.+)$|^\-\-ranBranch=(.+)$', myArgv, re.IGNORECASE):
             if re.match(r'^\-\-eNBBranch=(.+)$', myArgv, re.IGNORECASE):
@@ -77,7 +75,6 @@ def ArgsParse(argvs,CiTestObj,RAN,HTML,CONTAINERS,HELP,SCA,CLUSTER):
             RAN.ranBranch=matchReg.group(1)
             HTML.ranBranch=matchReg.group(1)
             CONTAINERS.ranBranch=matchReg.group(1)
-            SCA.ranBranch=matchReg.group(1)
             CLUSTER.ranBranch=matchReg.group(1)
         elif re.match(r'^\-\-eNBCommitID=(.*)$|^\-\-ranCommitID=(.*)$', myArgv, re.IGNORECASE):
             if re.match(r'^\-\-eNBCommitID=(.*)$', myArgv, re.IGNORECASE):
@@ -88,7 +85,6 @@ def ArgsParse(argvs,CiTestObj,RAN,HTML,CONTAINERS,HELP,SCA,CLUSTER):
             RAN.ranCommitID=matchReg.group(1)
             HTML.ranCommitID=matchReg.group(1)
             CONTAINERS.ranCommitID=matchReg.group(1)
-            SCA.ranCommitID=matchReg.group(1)
             CLUSTER.ranCommitID=matchReg.group(1)
         elif re.match(r'^\-\-eNBTargetBranch=(.*)$|^\-\-ranTargetBranch=(.*)$', myArgv, re.IGNORECASE):
             if re.match(r'^\-\-eNBTargetBranch=(.*)$', myArgv, re.IGNORECASE):
@@ -99,7 +95,6 @@ def ArgsParse(argvs,CiTestObj,RAN,HTML,CONTAINERS,HELP,SCA,CLUSTER):
             RAN.ranTargetBranch=matchReg.group(1)
             HTML.ranTargetBranch=matchReg.group(1)
             CONTAINERS.ranTargetBranch=matchReg.group(1)
-            SCA.ranTargetBranch=matchReg.group(1)
             CLUSTER.ranTargetBranch=matchReg.group(1)
         elif re.match(r'^\-\-eNBIPAddress=(.+)$|^\-\-eNB[1-2]IPAddress=(.+)$', myArgv, re.IGNORECASE):
             print("parameters --eNB*IPAddress ignored")
@@ -112,7 +107,6 @@ def ArgsParse(argvs,CiTestObj,RAN,HTML,CONTAINERS,HELP,SCA,CLUSTER):
                 matchReg = re.match(r'^\-\-eNBSourceCodePath=(.+)$', myArgv, re.IGNORECASE)
                 RAN.eNBSourceCodePath=matchReg.group(1)
                 CONTAINERS.eNBSourceCodePath=matchReg.group(1)
-                SCA.eNBSourceCodePath=matchReg.group(1)
                 CLUSTER.eNBSourceCodePath=matchReg.group(1)
             elif re.match(r'^\-\-eNB1SourceCodePath=(.+)$', myArgv, re.IGNORECASE):
                 print("parameter --eNB1SourceCodePath ignored")

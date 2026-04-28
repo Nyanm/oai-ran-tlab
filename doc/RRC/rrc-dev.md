@@ -633,6 +633,98 @@ sequenceDiagram
   Note over TargetCU: Then: encode Handover Command, send NGAP HANDOVER REQUEST ACKNOWLEDGE
 ```
 
+### Neighbour cells
+
+#### SIB3/SIB4 and measurement-gap implementation
+
+The following section documents the implementation-level control flow
+for SIB3/SIB4 and measurement-gap handling in current OAI, using the configured
+neighbor cell list as a shared input model.
+
+Briefly, the three procedures are:
+- SIB3: CU derives and provides intra-frequency neighbour SI, which DU broadcasts
+  and UE uses for autonomous idle/inactive intra-frequency reselection.
+- SIB4: CU derives and provides inter-frequency carrier/neighbour SI, which DU
+  broadcasts and UE uses for autonomous idle/inactive inter-frequency reselection.
+- MeasGap: CU/DU coordinate dedicated `MeasGapConfig` in UE `MeasConfig`, DU
+  scheduler interrupts transmission (`nr_measgap_scheduling()`) for the UE to
+  apply the MeasGap configuration in connected mode for gap-based measurements that
+  are sent as `MeasurementReport` and processed at CU-CP (`rrc_gNB_process_MeasurementReport()`).
+  Event-driven reports (for example A3) are used by CU-side mobility logic and can
+  trigger handover procedures.
+
+### MeasGap
+
+```mermaid
+sequenceDiagram
+  participant DM as Data model (neighbour_cell_configuration)
+  participant CU as CU-CP (RRC)
+  participant DU as DU (MAC/RRC)
+  participant UE as UE
+
+  CU-->>DM: Read serving + neighbour frequency/PCI/band data
+  DM-->>CU: Provide neighbour/frequency inputs for MeasConfig
+  CU->>CU: nr_rrc_get_measconfig
+  Note over CU: Build UE MeasConfig
+  CU->>CU: get_meas_timing_config (cell.mtc, ue.measConfig)
+  Note over CU: Check distinct ssbFrequency
+  alt one frequency only
+    Note over CU: returns NULL, no meas_timing_config sent to DU
+  else multiple frequencies
+    CU->>DU: F1AP UE Context Setup Request
+    Note over CU,DU: Includes cu_to_du_rrc_info.meas_timing_config
+    DU->>DU: create_measgap_config
+    DU->>DU: encode_measgap_config
+    DU-->>CU: F1AP UE Context Setup Response
+    Note over DU,CU: Includes du_to_cu_rrc_info.meas_gap_config
+    CU->>CU: get_meas_gap_config
+    Note over CU: Decode/store gap in UE MeasConfig (UE.measConfig.measGapConfig)
+    CU->>UE: RRCReconfiguration
+    Note over CU,UE: Includes MeasConfig.measGapConfig
+    rect rgba(210, 235, 255, 0.35)
+      Note over DU,UE: Measurement-gap window
+      DU->>DU: nr_measgap_scheduling
+      Note over DU: Interrupt transmission for meas gap
+      UE->>UE: nr_rrc_handle_meas_indication
+      Note over UE: Perform gap-based neighbour/inter-frequency measurements
+      UE-->>CU: MeasurementReport
+    end
+    Note over UE,CU: UL-DCCH MeasurementReport for configured events (e.g. A3)
+    CU->>CU: rrc_gNB_process_MeasurementReport
+    Note over CU: Run mobility decision logic (may trigger handover)
+  end
+```
+
+### SIB3/SIB4
+
+```mermaid
+sequenceDiagram
+  participant DM as Data model (neighbour_cell_configuration)
+  participant CU as CU-CP (RRC)
+  participant DU as DU
+  participant UE as UE
+
+  CU->>CU: cp_f1_served_cell_info_to_cell
+  CU->>DM: get_cell_neighbour_list
+  DM-->>CU: neighbour_cell_configuration for serving cell
+  CU->>CU: get_ssb_arfcn
+  Note over CU: Derive serving_ssb_arfcn from cell MTC
+  loop for each configured neighbour
+    Note over CU: Compare neighbour.absoluteFrequencySSB vs serving_ssb_arfcn
+    alt equal
+      CU->>CU: get_sib3_intra_freq_neighbors
+    else different
+      CU->>CU: get_sib4_inter_freq_neighbors
+    end
+  end
+  CU-->>DU: F1AP F1 Setup Response
+  DU-->>UE: BCCH-DL-SCH-Message
+  Note over DU,UE: Broadcast SystemInformation including configured SIB3/SIB4
+  UE->>UE: nr_rrc_ue_decode_NR_BCCH_DL_SCH_Message
+  Note over UE: Evaluate idle/inactive reselection criteria and timers
+  Note over UE,DU: After reselection, access/registration continues on selected cell DU as needed
+```
+
 ## UE Context
 
 UE context information is stored in `gNB_RRC_UE_t`, which includes:

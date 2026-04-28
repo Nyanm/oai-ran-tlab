@@ -5,8 +5,10 @@
 #include "../nrLDPC_coding_interface.h"
 #include "nrLDPC_coding_aal.h"
 #include "PHY/sse_intrin.h"
-#include "reverse_bits.h"
+#include "bits.h"
 #include <common/utils/LOG/log.h>
+#include "common/config/config_paramdesc.h"
+#include "common/config/config_userapi.h"
 #define NR_LDPC_ENABLE_PARITY_CHECK
 
 #include "PHY/CODING/nrLDPC_decoder/nrLDPCdecoder_defs.h"

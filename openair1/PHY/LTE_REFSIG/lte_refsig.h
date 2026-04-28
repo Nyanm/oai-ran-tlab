@@ -10,7 +10,7 @@
 #define __LTE_REFSIG_DEFS__H__
 #include "PHY/defs_eNB.h"
 #include "PHY/defs_UE.h"
-
+#include "PHY/gold.h"
 /** @ingroup _PHY_REF_SIG
  * @{
 */
@@ -108,14 +108,8 @@ int lte_dl_mbsfn_khz_1dot25(PHY_VARS_eNB *phy_vars_eNB, int32_t *output,
 @param output Output vector for OFDM symbol (Frequency Domain)
 @param Ns Slot number (0..19)
 @param l symbol (0,1) - Note 1 means 3!
-@param p antenna intex
 */
-int lte_dl_cell_spec_rx(PHY_VARS_UE *phy_vars_ue,
-                        uint8_t eNB_offset,
-                        int *output,
-                        unsigned char Ns,
-                        unsigned char l,
-                        unsigned char p);
+int lte_dl_cell_spec_rx(PHY_VARS_UE *ue, uint8_t eNB_offset, int *output, unsigned char Ns, unsigned char l);
 
 /*!\brief This function generates the ue-specific reference signal
  * sequence (36-211, Sec 6.10.3.1) for beamforming channel estimation upon reception

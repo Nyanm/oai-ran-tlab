@@ -313,9 +313,9 @@ static void test_f1ap_setup_response(void)
     int SI_container_length = strlen(s) + 1;
     orig.cells_to_activate[0].num_SI = 1;
     f1ap_sib_msg_t *SI_msg = &orig.cells_to_activate[0].SI_msg[0];
-    SI_msg->SI_container = malloc_or_fail(SI_container_length);
-    memcpy(SI_msg->SI_container, (uint8_t *)s, SI_container_length);
-    SI_msg->SI_container_length = SI_container_length;
+    SI_msg->SI_container.buf = malloc_or_fail(SI_container_length);
+    memcpy(SI_msg->SI_container.buf, s, SI_container_length);
+    SI_msg->SI_container.len = SI_container_length;
     SI_msg->SI_type = 7;
   }
   F1AP_F1AP_PDU_t *f1enc = encode_f1ap_setup_response(&orig);
@@ -609,10 +609,10 @@ static void test_f1ap_du_configuration_update_acknowledge(void)
   orig.cells_to_activate[0].plmn.mnc_digit_length = 2;
   orig.cells_to_activate[0].num_SI = 1;
   orig.cells_to_activate[0].SI_msg[0].SI_type = 7;
-  orig.cells_to_activate[0].SI_msg[0].SI_container_length = 10;
-  orig.cells_to_activate[0].SI_msg[0].SI_container = malloc(sizeof(uint8_t) * 10);
-  for (int i = 0; i < orig.cells_to_activate[0].SI_msg[0].SI_container_length; i++) {
-    orig.cells_to_activate[0].SI_msg[0].SI_container[i] = i;
+  orig.cells_to_activate[0].SI_msg[0].SI_container.len = 10;
+  orig.cells_to_activate[0].SI_msg[0].SI_container.buf = malloc(sizeof(uint8_t) * 10);
+  for (int i = 0; i < (int)orig.cells_to_activate[0].SI_msg[0].SI_container.len; i++) {
+    orig.cells_to_activate[0].SI_msg[0].SI_container.buf[i] = i;
   }
   // ASN.1 enc/dec
   F1AP_F1AP_PDU_t *f1enc = encode_f1ap_du_configuration_update_acknowledge(&orig);
@@ -655,8 +655,8 @@ static void test_f1ap_cu_configuration_update(void)
   orig.cells_to_activate[0].plmn.mnc_digit_length = 2;
   orig.cells_to_activate[0].num_SI = 1;
   orig.cells_to_activate[0].SI_msg[0].SI_type = 7;
-  orig.cells_to_activate[0].SI_msg[0].SI_container_length = 10;
-  orig.cells_to_activate[0].SI_msg[0].SI_container = malloc(sizeof(uint8_t) * 10);
+  orig.cells_to_activate[0].SI_msg[0].SI_container.len = 10;
+  orig.cells_to_activate[0].SI_msg[0].SI_container.buf = malloc(sizeof(uint8_t) * 10);
   F1AP_F1AP_PDU_t *f1enc = encode_f1ap_cu_configuration_update(&orig);
   F1AP_F1AP_PDU_t *f1dec = f1ap_encode_decode(f1enc);
   f1ap_msg_free(f1enc);

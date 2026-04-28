@@ -24,6 +24,7 @@ void nrppa_gNB_init(void)
 
 void *nrppa_gNB_process_itti_msg(void *notUsed)
 {
+  UNUSED(notUsed);
   MessageDef *received_msg = NULL;
   int result;
   itti_receive_msg(TASK_NRPPA, &received_msg);
@@ -65,6 +66,7 @@ void *nrppa_gNB_process_itti_msg(void *notUsed)
 
 void *nrppa_gNB_task(void *arg)
 {
+  UNUSED(arg);
   nrppa_gNB_init();
 
   while (1) {

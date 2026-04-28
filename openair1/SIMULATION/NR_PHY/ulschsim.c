@@ -31,6 +31,7 @@
 #include "openair2/LAYER2/NR_MAC_COMMON/nr_mac_common.h"
 #include "executables/nr-uesoftmodem.h"
 #include "nfapi/oai_integration/vendor_ext.h"
+#include "bits.h"
 
 //#define DEBUG_NR_ULSCHSIM
 
@@ -406,7 +407,7 @@ int main(int argc, char **argv)
     exit(-1);
   }
 
-  nr_init_ul_harq_processes(UE->ul_harq_processes, NR_MAX_ULSCH_HARQ_PROCESSES, UE->frame_parms.N_RB_UL, UE->frame_parms.nb_antennas_tx);
+  nr_init_ul_harq_processes(UE->ul_harq_processes, NR_MAX_HARQ_PROCESSES, UE->frame_parms.N_RB_UL, UE->frame_parms.nb_antennas_tx);
 
   initFloatingCoresTpool(1, &nrUE_params.Tpool, false, "UE-tpool");
 
@@ -414,12 +415,12 @@ int main(int argc, char **argv)
   unsigned int TBS = 8424;
   unsigned int available_bits;
   uint8_t nb_re_dmrs = 6;
-  uint8_t length_dmrs = 1;
+  uint8_t length_dmrs = 2;
   uint8_t N_PRB_oh;
   uint16_t N_RE_prime,code_rate;
   unsigned char mod_order;  
   uint8_t rvidx = 0;
-  uint8_t UE_id = 0;
+  int UE_id = 0;
 
   NR_gNB_ULSCH_t *ulsch_gNB = &gNB->ulsch[UE_id];
   NR_UL_gNB_HARQ_t *harq_process_gNB = ulsch_gNB->harq_process;
@@ -428,9 +429,6 @@ int main(int argc, char **argv)
 
   nr_phy_data_tx_t phy_data = {0};
   NR_UE_ULSCH_t *ulsch_ue = &phy_data.ulsch;
-
-  if ((Nl==4)||(Nl==3))
-    nb_re_dmrs = nb_re_dmrs*2;
 
   mod_order = nr_get_Qm_ul(Imcs, mcs_table);
   code_rate = nr_get_code_rate_ul(Imcs, mcs_table);
@@ -445,10 +443,15 @@ int main(int argc, char **argv)
   rel15_ul->qam_mod_order       = mod_order;
   rel15_ul->mcs_index           = Imcs;
   rel15_ul->pusch_data.rv_index = rvidx;
+  rel15_ul->ul_dmrs_symb_pos    = nb_re_dmrs;
+  rel15_ul->dmrs_config_type = pusch_dmrs_type1;
+  rel15_ul->num_dmrs_cdm_grps_no_data = 1;
   rel15_ul->nrOfLayers          = Nl;
   rel15_ul->target_code_rate    = code_rate;
   rel15_ul->pusch_data.tb_size  = TBS>>3;
   rel15_ul->maintenance_parms_v3.ldpcBaseGraph = get_BG(TBS, code_rate);
+  int bits = count_bits64_with_mask(rel15_ul->ul_dmrs_symb_pos, rel15_ul->start_symbol_index, rel15_ul->nr_of_symbols);
+  AssertFatal(length_dmrs == bits, "length_dmrs %d bits %d\n", length_dmrs, bits);
   ///////////////////////////////////////////////////
 
   double modulated_input[16 * 68 * 384]; // [hna] 16 segments, 68*Zc
@@ -558,9 +561,9 @@ int main(int argc, char **argv)
       printf("\n");
       exit(-1);
 #endif
-      nr_ulsch_decoding(gNB, frame_parms, frame, subframe, &G, &UE_id, 1);
+      nr_ulsch_decoding(gNB, frame_parms, frame, subframe, &UE_id, 1);
       if (harq_process_gNB->processedSegments == harq_process_gNB->C) {
-        bool crc_valid = check_crc(harq_process_gNB->b, lenWithCrc(1, (harq_process_gNB->TBS) << 3), crcType(1, (harq_process_gNB->TBS) << 3));
+        bool crc_valid = check_crc(harq_process_gNB->b, lenWithCrc(1, TBS << 3), crcType(1, TBS << 3));
         if (!crc_valid) {
           n_false_positive++;
         }
@@ -585,7 +588,7 @@ int main(int argc, char **argv)
     printf("\n");
   }
 
-  free_nr_ue_ul_harq(UE->ul_harq_processes, NR_MAX_ULSCH_HARQ_PROCESSES, UE->frame_parms.N_RB_UL, UE->frame_parms.nb_antennas_tx);
+  free_nr_ue_ul_harq(UE->ul_harq_processes, NR_MAX_HARQ_PROCESSES, UE->frame_parms.N_RB_UL, UE->frame_parms.nb_antennas_tx);
 
   int nb_slots_to_set = (1 << mu) * NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
   for (int i = 0; i < nb_slots_to_set; ++i)

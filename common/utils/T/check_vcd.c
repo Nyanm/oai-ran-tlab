@@ -27,6 +27,10 @@
  */
 void exit_function(const char *file, const char *function, const int line, const char *s, const int assert)
 {
+  UNUSED(file);
+  UNUSED(function);
+  UNUSED(line);
+  UNUSED(s);
   if (assert) {
     abort();
   } else {

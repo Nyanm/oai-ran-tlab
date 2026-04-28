@@ -3,7 +3,6 @@
  */
 
 #include "PHY/phy_extern.h"
-#include "SCHED/sched_common.h"
 #include "assertions.h"
 #include <math.h>
 #include "openair1/PHY/defs_RU.h"

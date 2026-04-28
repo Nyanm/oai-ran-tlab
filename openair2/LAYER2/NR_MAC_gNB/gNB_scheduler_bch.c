@@ -328,7 +328,6 @@ static void nr_fill_nfapi_dl_SIB_pdu(gNB_MAC_INST *gNB_mac,
                                      int cce_index,
                                      nfapi_nr_dl_tti_request_body_t *dl_req,
                                      int pdu_index,
-                                     NR_Type0_PDCCH_CSS_config_t *type0_PDCCH_CSS_config,
                                      bool is_sib1,
                                      int beam_index)
 {
@@ -574,7 +573,6 @@ void schedule_nr_sib1(module_id_t module_idP,
                                cce_index,
                                dl_req,
                                pdu_index,
-                               type0_PDCCH_CSS_config,
                                true,
                                beam_index);
 
@@ -710,7 +708,6 @@ static void other_sib_sched_control(module_id_t module_idP,
                            cce_index,
                            dl_req,
                            pdu_index,
-                           type0_PDCCH_CSS_config,
                            false,
                            beam_index);
 

@@ -25,7 +25,7 @@ int encode_authentication_response_parameter(const AuthenticationResponseParamet
 
 int decode_authentication_response_parameter(AuthenticationResponseParameter *authenticationresponseparameter, uint8_t iei, uint8_t *buffer, uint32_t len);
 
-void dump_authentication_response_parameter_xml(AuthenticationResponseParameter *authenticationresponseparameter, uint8_t iei);
+void dump_authentication_response_parameter_xml(AuthenticationResponseParameter *authenticationresponseparameter);
 
 #endif /* AUTHENTICATION RESPONSE PARAMETER_H_ */
 

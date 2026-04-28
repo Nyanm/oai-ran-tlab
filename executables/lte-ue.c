@@ -300,8 +300,6 @@ void init_UE(int nb_inst,
                                     UE_thread,
                                     (void *)UE), "");
   }
-
-  printf("UE threads created by %ld\n", gettid());
 }
 
 // Initiating all UEs within a single set of threads for PHY_STUB. Future extensions -> multiple
@@ -881,7 +879,7 @@ static void *UE_phy_stub_standalone_pnf_task(void *arg) {
     }
   }
 #else
-  thread_top_init("UE_phy_stub_thread_rxn_txnp4", 1, 870000L, 1000000L, 1000000L);
+  thread_top_init("UE_phy_stub_thread_rxn_txnp4");
 #endif
   // for multipule UE's L2-emulator
   //module_id_t Mod_id = 0;
@@ -1235,7 +1233,7 @@ static void *UE_phy_stub_standalone_pnf_task(void *arg) {
 
 static void *UE_phy_stub_single_thread_rxn_txnp4(void *arg) {
 #if 0 // TODO: doesn't currently compile, obviated by multi-ue proxy
-  thread_top_init("UE_phy_stub_thread_rxn_txnp4",1,870000L,1000000L,1000000L);
+  thread_top_init("UE_phy_stub_thread_rxn_txnp4");
   // for multipule UE's L2-emulator
   //module_id_t Mod_id = 0;
   //int init_ra_UE = -1; // This counter is used to initiate the RA of each UE in different SFrames
@@ -2227,7 +2225,7 @@ int setup_ue_buffers(PHY_VARS_UE **phy_vars_ue,
 
 //02/02/2018
 static void *timer_thread( void *param ) {
-  thread_top_init("timer_thread",1,870000L,1000000L,1000000L);
+  thread_top_init("timer_thread");
   timer_subframe =9;
   timer_frame    =1023;
   //phy_stub_ticking = (SF_ticking*)malloc(sizeof(SF_ticking));

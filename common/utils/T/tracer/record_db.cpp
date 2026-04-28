@@ -249,7 +249,7 @@ static int socket_fd = -1;
 
 void force_stop(int x)
 {
-  logi("gently quit...");
+  logi("gently quit %d", x);
   close(socket_fd);
   socket_fd = -1;
   run = 0;
@@ -785,12 +785,7 @@ uint8_t should_insert(EventBuffer &buf)
   return 0;
 }
 
-int insert_event(clickhouse_config_t *ch,
-                 void *database,
-                 int event_id,
-                 const char *event_data,
-                 int data_length,
-                 std::chrono::high_resolution_clock::time_point t_start)
+int insert_event(clickhouse_config_t *ch, int event_id, const char *event_data, int data_length)
 {
   auto t_fn_start = std::chrono::high_resolution_clock::now();
 
@@ -1270,14 +1265,12 @@ int main(int n, char **v)
     if (fullread(socket_fd, v + vpos, length) == -1)
       goto read_error;
 
-    auto t_start = std::chrono::high_resolution_clock::now();
-
     if (type == -1) {
       append_received_config_chunk(v + vpos, length);
     } else if (type == -2) {
       verify_config();
     } else if (type >= 0 && type < number_of_events && is_on[type]) {
-      if (insert_event(&ch_config, database, type, v + vpos, length, t_start) != 0) {
+      if (insert_event(&ch_config, type, v + vpos, length) != 0) {
         loge("Failed to insert event type {}", type);
       }
     }

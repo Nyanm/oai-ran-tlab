@@ -158,6 +158,7 @@ extern "C" int config_yaml_init(configmodule_interface_t *cfg)
 
 extern "C" void config_yaml_end(configmodule_interface_t *cfg)
 {
+  UNUSED(cfg);
   delete config_yaml::config;
 }
 

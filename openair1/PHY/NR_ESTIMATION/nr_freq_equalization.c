@@ -2,7 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-#include "PHY/defs_eNB.h"
 #include "PHY/sse_intrin.h"
 #include "PHY/NR_ESTIMATION/nr_ul_estimation.h"
 

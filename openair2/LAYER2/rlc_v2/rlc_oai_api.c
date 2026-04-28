@@ -398,7 +398,7 @@ rb_found:
     exit(1);
   }
   memcpy(memblock, buf, size);
-  if (!pdcp_data_ind(&ctx, is_srb, is_mbms, rb_id, size, memblock, NULL, NULL)) {
+  if (!pdcp_data_ind(&ctx, is_srb, is_mbms, rb_id, size, memblock)) {
     LOG_E(RLC, "ERROR: pdcp_data_ind failed (is_srb %d rb_id %d rnti %x)\n", is_srb, rb_id, ue->rnti);
     /* what to do in case of failure? for the moment: nothing */
   }

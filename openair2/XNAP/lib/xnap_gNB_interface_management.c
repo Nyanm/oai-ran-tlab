@@ -451,4 +451,5 @@ bool eq_xnap_setup_failure(const xnap_setup_failure_t *a, const xnap_setup_failu
 void free_xnap_setup_failure(xnap_setup_failure_t *msg)
 {
   // nothing to free
+  UNUSED(msg);
 }

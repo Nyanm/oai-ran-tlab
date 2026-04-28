@@ -37,7 +37,6 @@
 #include "openair2/LAYER2/NR_MAC_gNB/nr_mac_gNB.h"
 #include "executables/lte-softmodem.h"
 #include "openair1/PHY/defs_gNB.h"
-
 #include "common/ran_context.h"
 #include "openair2/PHY_INTERFACE/queue_t.h"
 #include "gnb_ind_vars.h"
@@ -916,7 +915,7 @@ int phy_nr_slot_indication(nfapi_nr_slot_indication_scf_t *ind)
       send_slt_resp = true;
     }
     if (send_slt_resp) {
-      oai_fapi_send_end_request(0, ind->sfn, ind->slot);
+      oai_fapi_send_end_request(ind->sfn, ind->slot);
     }
 #else
   if (sched_response.DL_req.dl_tti_request_body.nPDUs > 0)
@@ -1710,6 +1709,7 @@ void configure_nr_nfapi_vnf(eth_params_t params)
   vnf->p7_vnfs[0].aperiodic_timing_enabled = 0;
   vnf->p7_vnfs[0].periodic_timing_period = 1;
   vnf->p7_vnfs[0].config = nfapi_vnf_p7_config_create();
+  AssertFatal(params.remote_portc == 0 && params.remote_portd == 0, "remote ports not used, use 0\n");
 #ifndef ENABLE_AERIAL
   NFAPI_TRACE(NFAPI_TRACE_INFO,
               "[VNF] %s() vnf->p7_vnfs[0].config:%p VNF ADDRESS:%s:%d\n",

@@ -19,6 +19,7 @@
 #include "PHY/NR_TRANSPORT/nr_dlsch.h"
 #include "SCHED_NR/sched_nr.h"
 #include "defs.h"
+#include "bits.h"
 #include "common/utils/LOG/log.h"
 #include <syscall.h>
 // #define DEBUG_ULSCH_DECODING
@@ -93,8 +94,7 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
                       NR_DL_FRAME_PARMS *frame_parms,
                       uint32_t frame,
                       uint8_t nr_tti_rx,
-                      uint32_t *G,
-                      uint8_t *ULSCH_ids,
+                      int *ULSCH_ids,
                       int nb_pusch)
 {
   nrLDPC_TB_decoding_parameters_t TBs[nb_pusch];
@@ -112,16 +112,28 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
     NR_gNB_ULSCH_t *ulsch = &phy_vars_gNB->ulsch[ULSCH_id];
     NR_gNB_PUSCH *pusch = &phy_vars_gNB->pusch_vars[ULSCH_id];
     NR_UL_gNB_HARQ_t *harq_process = ulsch->harq_process;
-    nfapi_nr_pusch_pdu_t *pusch_pdu = &harq_process->ulsch_pdu;
+    const nfapi_nr_pusch_pdu_t *pusch_pdu = &harq_process->ulsch_pdu;
 
     nrLDPC_TB_decoding_parameters_t *TB_parameters = &TBs[pusch_id];
-
-    TB_parameters->G = G[pusch_id];
 
     if (!harq_process) {
       LOG_E(PHY, "ulsch_decoding.c: NULL harq_process pointer\n");
       return -1;
     }
+
+    uint8_t number_dmrs_symbols = count_bits64_with_mask(pusch_pdu->ul_dmrs_symb_pos, pusch_pdu->start_symbol_index, pusch_pdu->nr_of_symbols);
+    int factor = pusch_pdu->dmrs_config_type == pusch_dmrs_type1 ? 6 : 4;
+    int nb_re_dmrs = factor * pusch_pdu->num_dmrs_cdm_grps_no_data;
+    uint32_t G = nr_get_G(pusch_pdu->rb_size,
+                          pusch_pdu->nr_of_symbols,
+                          nb_re_dmrs,
+                          number_dmrs_symbols, // number of dmrs symbols irrespective of single or double symbol dmrs
+                          ulsch->unav_res,
+                          pusch_pdu->qam_mod_order,
+                          pusch_pdu->nrOfLayers);
+    DevAssert(G > 0);
+    TB_parameters->G = G;
+
 
     // The harq_pid is not unique among the active HARQ processes in the instance so we use ULSCH_id instead
     TB_parameters->harq_unique_pid = ULSCH_id;
@@ -134,10 +146,9 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
     // ------------------------------------------------------------------
 
     TB_parameters->processedSegments = &harq_process->processedSegments;
-    harq_process->TBS = pusch_pdu->pusch_data.tb_size;
 
     TB_parameters->BG = pusch_pdu->maintenance_parms_v3.ldpcBaseGraph;
-    TB_parameters->A = (harq_process->TBS) << 3;
+    TB_parameters->A = pusch_pdu->pusch_data.tb_size << 3;
     NR_gNB_PHY_STATS_t *stats = get_phy_stats(phy_vars_gNB, ulsch->rnti);
     if (stats) {
       stats->frame = frame;
@@ -149,7 +160,7 @@ int nr_ulsch_decoding(PHY_VARS_gNB *phy_vars_gNB,
       if (!harq_process->harq_to_be_cleared) {
         stats->ulsch_stats.current_Qm = TB_parameters->Qm;
         stats->ulsch_stats.current_RI = TB_parameters->nb_layers;
-        stats->ulsch_stats.total_bytes_tx += harq_process->TBS;
+        stats->ulsch_stats.total_bytes_tx += pusch_pdu->pusch_data.tb_size;
       }
     }
 

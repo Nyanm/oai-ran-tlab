@@ -8,6 +8,7 @@
 #ifndef __LTE_TRANSPORT_PROTO_UE__H__
 #define __LTE_TRANSPORT_PROTO_UE__H__
 #include "PHY/defs_UE.h"
+#include "PHY/defs_eNB.h"
 #include "PHY/LTE_TRANSPORT/transport_common_proto.h"
 #include <math.h>
 #include "nfapi_interface.h"
@@ -943,13 +944,6 @@ uint32_t get_TBS_DL(uint8_t mcs, uint16_t nb_rb);
     @param nb_rb
     @return Transport block size */
 uint32_t get_TBS_UL(uint8_t mcs, uint16_t nb_rb);
-
-/* \brief Return prb for a given vrb index
-   @param vrb_type VRB type (0=localized,1=distributed)
-   @param rb_alloc_dci rballoc field from DCI
-*/
-uint32_t get_rballoc(vrb_t vrb_type,uint16_t rb_alloc_dci);
-
 
 /* \brief Return bit-map of resource allocation for a given DCI rballoc (RIV format) and vrb type
    @returns Transmission mode (1-7)

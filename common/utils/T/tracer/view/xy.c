@@ -42,6 +42,7 @@ static void *xy_thread(void *_this)
 static void clear(view *this)
 {
   /* TODO */
+  UNUSED(this);
 }
 
 static void append_loop(view *_this, float *x, float *y, int length)

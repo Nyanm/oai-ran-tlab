@@ -31,19 +31,28 @@ uint16_t set_snssai_config(nssai_t *nssai, const int max_num_ssi, uint8_t k, uin
   return num_ssi;
 }
 
+/** @brief Extract PLMN from parameter array
+ * @param[in] params Parameter array containing PLMN fields
+ * @return plmn_id_t structure filled from parameters */
+plmn_id_t extract_plmn_from_params(const paramdef_t *params, int n_params)
+{
+  plmn_id_t plmn = {.mcc = *gpd(params, n_params, GNB_CONFIG_STRING_MOBILE_COUNTRY_CODE)->uptr,
+                    .mnc = *gpd(params, n_params, GNB_CONFIG_STRING_MOBILE_NETWORK_CODE)->uptr,
+                    .mnc_digit_length = *gpd(params, n_params, GNB_CONFIG_STRING_MNC_DIGIT_LENGTH)->uptr};
+  AssertFatal((plmn.mnc_digit_length == 2) || (plmn.mnc_digit_length == 3), "BAD MNC DIGIT LENGTH %d", plmn.mnc_digit_length);
+  return plmn;
+}
+
 uint8_t set_plmn_config(plmn_id_t *p, uint8_t idx)
 {
   char gnbpath[MAX_OPTNAME_SIZE * 2 + 8];
   snprintf(gnbpath, sizeof(gnbpath), "%s.[%i]", GNB_CONFIG_STRING_GNB_LIST, idx);
   GET_PARAMS_LIST(PLMNParamList, PLMNParams, GNBPLMNPARAMS_DESC, GNB_CONFIG_STRING_PLMN_LIST, gnbpath, PLMNPARAMS_CHECK);
   uint8_t num_plmn = PLMNParamList.numelt;
+  const int n_plmn_params = sizeofArray(PLMNParams);
   AssertFatal(num_plmn >= 1 && num_plmn <= 6, "The number of PLMN IDs must be in [1,6], but is %d\n", num_plmn);
   for (int l = 0; l < num_plmn; ++l) {
-    plmn_id_t *plmn = &p[l];
-    plmn->mcc = *PLMNParamList.paramarray[l][GNB_MOBILE_COUNTRY_CODE_IDX].uptr;
-    plmn->mnc = *PLMNParamList.paramarray[l][GNB_MOBILE_NETWORK_CODE_IDX].uptr;
-    plmn->mnc_digit_length = *PLMNParamList.paramarray[l][GNB_MNC_DIGIT_LENGTH].u8ptr;
-    AssertFatal((plmn->mnc_digit_length == 2) || (plmn->mnc_digit_length == 3), "BAD MNC DIGIT LENGTH %d", plmn->mnc_digit_length);
+    p[l] = extract_plmn_from_params(PLMNParamList.paramarray[l], n_plmn_params);
   }
   return num_plmn;
 }

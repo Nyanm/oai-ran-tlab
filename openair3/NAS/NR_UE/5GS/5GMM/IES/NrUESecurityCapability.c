@@ -10,10 +10,7 @@
 #include "TLVDecoder.h"
 #include "NrUESecurityCapability.h"
 
-int encode_nrue_security_capability(const NrUESecurityCapability *nruesecuritycapability,
-                                    uint8_t iei,
-                                    uint8_t *buffer,
-                                    uint32_t len)
+int encode_nrue_security_capability(const NrUESecurityCapability *nruesecuritycapability, uint8_t iei, uint8_t *buffer)
 {
   int encoded = 0;
   if (iei) {

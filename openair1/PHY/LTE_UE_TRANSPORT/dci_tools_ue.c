@@ -4255,7 +4255,7 @@ int generate_ue_ulsch_params_from_dci(void *dci_pdu,
     LOG_D(PHY,"Format 0 DCI :ulsch (ue): cshift        %d\n",ulsch->harq_processes[harq_pid]->n_DMRS2);
     LOG_D(PHY,"Format 0 DCI :ulsch (ue): phich status  %d\n",ulsch->harq_processes[harq_pid]->status);
 #else
-    UNUSED_VARIABLE(dai);
+    UNUSED(dai);
 #endif
     return(0);
   } else {
@@ -4889,7 +4889,7 @@ int generate_eNB_ulsch_params_from_dci(PHY_VARS_eNB *eNB,
     printf("ulsch (eNB): Nsymb_pusch   %d\n",ulsch->harq_processes[harq_pid]->Nsymb_pusch);
     printf("ulsch (eNB): cshift        %d\n",ulsch->harq_processes[harq_pid]->n_DMRS2);
 #else
-    UNUSED_VARIABLE(dai);
+    UNUSED(dai);
 #endif
     return(0);
   } else {

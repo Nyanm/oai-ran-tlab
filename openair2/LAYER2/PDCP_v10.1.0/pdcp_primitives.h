@@ -129,8 +129,11 @@ bool pdcp_serialize_control_pdu_for_pdcp_status_report(unsigned char* pdu_buffer
 int pdcp_netlink_dequeue_element(const protocol_ctxt_t* const  ctxt_pP,
                                  struct pdcp_netlink_element_s **data_ppP);
 
-void pdcp_config_set_security(const protocol_ctxt_t* const  ctxt_pP, pdcp_t *pdcp_pP, rb_id_t rb_idP,
-                              uint16_t lc_idP, uint8_t security_modeP, uint8_t *kRRCenc_pP, uint8_t *kRRCint_pP, uint8_t *kUPenc_pP);
+void pdcp_config_set_security(const protocol_ctxt_t* const ctxt_pP,
+                              pdcp_t *pdcp_pP,uint8_t security_modeP,
+                              uint8_t *kRRCenc_pP,
+                              uint8_t *kRRCint_pP,
+                              uint8_t *kUPenc_pP);
 
 int pdcp_apply_security(const protocol_ctxt_t* const  ctxt_pP,
                         pdcp_t     *pdcp_entity,

@@ -12,7 +12,7 @@
 int CU_handle_RESET_ACKNOWLEDGE(instance_t instance, sctp_assoc_t assoc_id, uint32_t stream, F1AP_F1AP_PDU_t *pdu)
 {
   DevAssert(pdu != NULL);
-
+  UNUSED(stream);
   f1ap_reset_ack_t ack = {0};
   /* Decode */
   if (!decode_f1ap_reset_ack(pdu, &ack)) {
@@ -30,6 +30,8 @@ int CU_handle_RESET_ACKNOWLEDGE(instance_t instance, sctp_assoc_t assoc_id, uint
 
 int CU_send_RESET_ACKNOWLEDGE(sctp_assoc_t assoc_id, const f1ap_reset_ack_t *ack)
 {
+  UNUSED(assoc_id);
+  UNUSED(ack);
   AssertFatal(1 == 0, "Not implemented yet\n");
 }
 

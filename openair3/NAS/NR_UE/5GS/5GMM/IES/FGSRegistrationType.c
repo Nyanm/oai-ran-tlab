@@ -17,7 +17,7 @@
 #define NO_FOLLOW_ON_REQUEST 0x0
 #define FOLLOW_ON_REQUEST 0x08
 
-int decode_5gs_registration_type(FGSRegistrationType *fgsregistrationtype, uint8_t iei, uint8_t value, uint32_t len)
+int decode_5gs_registration_type(FGSRegistrationType *fgsregistrationtype, uint8_t iei, uint8_t value)
 {
   int decoded = 0;
   uint8_t *buffer = &value;

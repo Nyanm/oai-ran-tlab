@@ -74,6 +74,10 @@ bool DURecvCb(protocol_ctxt_t *ctxt_pP,
               const uint32_t *sourceL2Id,
               const uint32_t *destinationL2Id)
 {
+  UNUSED(confirmP);
+  UNUSED(modeP);
+  UNUSED(sourceL2Id);
+  UNUSED(destinationL2Id);
   // The buffer comes from the stack in gtp-u thread, we have a make a separate buffer to enqueue in a inter-thread message queue
   uint8_t *sdu = malloc16(sdu_buffer_sizeP);
   memcpy(sdu, sdu_buffer_pP, sdu_buffer_sizeP);
@@ -196,6 +200,7 @@ void f1_setup_response(const f1ap_setup_resp_t *resp)
 
 void f1_setup_failure(const f1ap_setup_failure_t *failure)
 {
+  UNUSED(failure);
   LOG_E(MAC, "the CU reported F1AP Setup Failure, is there a configuration mismatch?\n");
   exit(1);
 }
@@ -577,7 +582,7 @@ static NR_UE_info_t *create_new_UE(gNB_MAC_INST *mac, uint32_t cu_id, const NR_C
     DevAssert(res);
   } else {
     if (!add_new_UE_RA(mac, UE)) {
-      delete_nr_ue_data(UE, /*not used*/ NULL, &mac->UE_info.uid_allocator);
+      delete_nr_ue_data(UE, &mac->UE_info.uid_allocator);
       LOG_E(NR_MAC, "UE list full while creating new UE\n");
       return NULL;
     }

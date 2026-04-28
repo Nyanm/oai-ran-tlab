@@ -435,7 +435,7 @@ static NR_CG_Config_t *generate_CG_Config(const NR_RRCReconfiguration_t *reconfi
   return cg_Config;
 }
 
-void rrc_add_nsa_user_resp(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, const f1ap_ue_context_setup_resp_t *resp)
+void rrc_add_nsa_user_resp(gNB_RRC_UE_t *UE, const f1ap_ue_context_setup_resp_t *resp)
 {
   DevAssert(resp->crnti != NULL);
   /* we did not fill any DU-related ID info in rrc_add_nsa_user() */

@@ -39,9 +39,10 @@ function(add_physim_test test_name test_description test_exec)
     # pass test description also through environment variable: for cmake < 3.30,
     # in JSON export, we cannot recover the description otherwise
     # see also https://gitlab.kitware.com/cmake/cmake/-/issues/21490
-    ENVIRONMENT "LD_LIBRARY_PATH=.;TEST_DESCRIPTION=${test_description}"
+    ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR};TEST_DESCRIPTION=${test_description}"
   )
   set_tests_properties(${test_name} PROPERTIES CHECK_COUNT 0)
+  add_dependencies(tests ${test_exec})
 endfunction()
 
 function(check_threshold testname threshold condition)
@@ -443,8 +444,6 @@ endif()
 ####################################################################################
 
 if (CUDA_ENABLE)
-add_physim_test(cuda.5g.channelsim.test_multipath  "unitary test designed specifically to validate the multipath_channel_cuda" test_multipath)
-add_physim_test(cuda.5g.channelsim.test_noise "unitary test that focuses on a single component: the add_noise_cuda function" test_noise)
 
 # --- Test Suite 1: 61440 samples, 2/4/8/32 TX - 2/4/8/32 RX  ---
 add_physim_test(cuda.5g.channelsim.test_channel_scalability.test1  "16 channels 61440 samples 2T2R Batch"  test_channel_scalability -c 16 -t 2 -r 2 -s 61440 -l 32 -m batch  -n 12)

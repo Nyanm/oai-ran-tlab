@@ -9,7 +9,7 @@
 #include <stdint.h>
 
 #ifndef LITE_COMPILATION
-#include "PHY/LTE_TRANSPORT/if4_tools.h"
+#include "PHY/if4_tools.h"
 #endif
 
 // ETH transport preference modes

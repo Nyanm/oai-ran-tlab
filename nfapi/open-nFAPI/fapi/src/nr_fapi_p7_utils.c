@@ -862,11 +862,13 @@ void free_ul_tti_request(nfapi_nr_ul_tti_request_t *msg)
 void free_slot_indication(nfapi_nr_slot_indication_scf_t *msg)
 {
   // Nothing to free
+  UNUSED(msg);
 }
 
 void free_ul_dci_request(nfapi_nr_ul_dci_request_t *msg)
 {
   // Nothing to free
+  UNUSED(msg);
 }
 
 void free_tx_data_request(nfapi_nr_tx_data_request_t *msg)

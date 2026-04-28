@@ -25,4 +25,4 @@ RUN /bin/sh oaienv && \
     CFLAGS="-Werror" CXXFLAGS="-Werror -Wno-vla-cxx-extension" \
       ./build_oai --phy_simulators --gNB --eNB --nrUE --UE \
       --ninja --build-tool-opt -k10 \
-      --noavx512 --disable-T-Tracer -c
+      --noavx512 -c

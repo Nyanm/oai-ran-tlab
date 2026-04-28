@@ -5,7 +5,6 @@
 /*!
  * \brief Routines for initial UE synchronization procedure (PSS,SSS,PBCH and frame format detection)
  */
-#include "PHY/types.h"
 #include "PHY/defs_nr_UE.h"
 #include "PHY/MODULATION/modulation_UE.h"
 #include "nr_transport_proto_ue.h"
@@ -59,7 +58,6 @@ static bool nr_pbch_detection(const UE_nr_rxtx_proc_t *proc,
       cd_t cumul = {0};
       for (int i = pbch_initial_symbol; i < pbch_initial_symbol + 3; i++) {
         c32_t meas = nr_pbch_dmrs_correlation(frame_parms,
-                                              proc,
                                               i,
                                               i - pbch_initial_symbol,
                                               Nid_cell,

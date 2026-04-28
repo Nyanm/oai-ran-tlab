@@ -28,6 +28,6 @@ typedef uint8_t FGSRegistrationType;
 
 int encode_5gs_registration_type(const FGSRegistrationType *fgsregistrationtype, bool follow_on_request);
 
-int decode_5gs_registration_type(FGSRegistrationType *fgsregistrationtype, uint8_t iei, uint8_t value, uint32_t len);
+int decode_5gs_registration_type(FGSRegistrationType *fgsregistrationtype, uint8_t iei, uint8_t value);
 
 #endif /* FGS_REGISTRATION_TYPE_H_*/

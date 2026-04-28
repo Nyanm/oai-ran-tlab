@@ -260,7 +260,7 @@ static void trx_usrp_start_interdigital_gpio(openair0_device_t *device, usrp_sta
   s->usrp->set_gpio_attr(s->gpio_bank, "OUT", (1 << 4), 0x1c);
 }
 
-static void trx_usrp_start_generic_gpio(openair0_device_t *device, usrp_state_t *s)
+static void trx_usrp_start_generic_gpio(usrp_state_t *s)
 {
   // setup GPIO for TDD, GPIO(4) = ATR_RX
   // set data direction register (DDR) to output
@@ -298,7 +298,7 @@ static int trx_usrp_start(openair0_device_t *device)
     case RU_GPIO_CONTROL_NONE:
       break;
     case RU_GPIO_CONTROL_GENERIC:
-      trx_usrp_start_generic_gpio(device, s);
+      trx_usrp_start_generic_gpio(s);
       break;
     case RU_GPIO_CONTROL_INTERDIGITAL:
       trx_usrp_start_interdigital_gpio(device, s);
@@ -881,6 +881,7 @@ int trx_usrp_set_gains(openair0_device_t *device,
  */
 int trx_usrp_stop(openair0_device_t *device)
 {
+  UNUSED(device);
   return(0);
 }
 
@@ -1002,6 +1003,7 @@ void set_rx_gain_offset(openair0_config_t *openair0_cfg, int chain_index,int bw_
 */
 int trx_usrp_get_stats(openair0_device_t *device)
 {
+  UNUSED(device);
   return(0);
 }
 
@@ -1011,6 +1013,7 @@ int trx_usrp_get_stats(openair0_device_t *device)
  */
 int trx_usrp_reset_stats(openair0_device_t *device)
 {
+  UNUSED(device);
   return(0);
 }
 

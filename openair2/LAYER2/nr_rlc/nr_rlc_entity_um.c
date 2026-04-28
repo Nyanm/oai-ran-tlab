@@ -139,6 +139,12 @@ static void reassemble_and_deliver(nr_rlc_entity_um_t *entity, int sn)
 
   /* reassemble - free 'data' of each segment after processing */
   while (pdu != NULL && pdu->sn == sn) {
+    if (pdu->so > so && !bad_sdu) {
+      /* pdu->so > so is possible when the other end sends bogus data */
+      LOG_E(RLC, "%s:%d:%s: inconsistent SDU, discarding\n",
+            __FILE__, __LINE__, __FUNCTION__);
+      bad_sdu = 1;
+    }
     int len = pdu->size - (so - pdu->so);
     if (so + len > NR_SDU_MAX && !bad_sdu) {
       LOG_E(RLC, "%s:%d:%s: bad SDU, too big, discarding\n",
@@ -517,9 +523,9 @@ static int generate_tx_pdu(nr_rlc_entity_um_t *entity, char *buffer, int size)
   return ret;
 }
 
-nr_rlc_entity_buffer_status_t nr_rlc_entity_um_buffer_status(
-    nr_rlc_entity_t *_entity, int maxsize)
+nr_rlc_entity_buffer_status_t nr_rlc_entity_um_buffer_status(nr_rlc_entity_t *_entity, int maxsize)
 {
+  UNUSED(maxsize);
   nr_rlc_entity_um_t *entity = (nr_rlc_entity_um_t *)_entity;
   nr_rlc_entity_buffer_status_t ret;
 

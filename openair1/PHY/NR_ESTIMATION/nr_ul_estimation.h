@@ -17,7 +17,7 @@
 \param Ns slot number (0..19)
 \param p
 \param symbol symbol within slot
-\param ul_id
+\param pusch_vars lower-phy PUSCH info
 \param bwp_start_subcarrier first allocated subcarrier
 \param pusch_pdu
 \param max_ch maximum value of estimated channel
@@ -29,10 +29,10 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
                                 int nl,
                                 unsigned short p,
                                 unsigned char symbol,
-                                int ul_id,
+                                NR_gNB_PUSCH *pusch_vars,
                                 int beam_nb,
                                 unsigned short bwp_start_subcarrier,
-                                nfapi_nr_pusch_pdu_t *pusch_pdu,
+                                const nfapi_nr_pusch_pdu_t *pusch_pdu,
                                 int *max_ch,
                                 uint32_t *nvar,
                                 c16_t *pusch_dmrs_slot_mem,
@@ -40,7 +40,7 @@ int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
 
 void dump_nr_I0_stats(FILE *fd,PHY_VARS_gNB *gNB);
 
-void gNB_I0_measurements(PHY_VARS_gNB *gNB, int slot, int first_symb, int num_symb, uint32_t rb_mask_ul[14][9]);
+void gNB_I0_measurements(PHY_VARS_gNB *gNB, int slot, int first_symb, int num_symb, uint32_t rb_mask_ul[14][MAX_BWP_SIZE]);
 
 void nr_est_srs_timing_advance_offset(uint16_t ofdm_symbol_size,
                                       const c16_t srs_estimated_channel_time[][NR_SRS_IDFT_OVERSAMP_FACTOR * ofdm_symbol_size],
@@ -52,8 +52,8 @@ void nr_est_srs_timing_advance_offset(uint16_t ofdm_symbol_size,
 
 void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
                               NR_DL_FRAME_PARMS *frame_parms,
-                              nfapi_nr_pusch_pdu_t *rel15_ul,
-                              uint8_t ulsch_id,
+                              const nfapi_nr_pusch_pdu_t *rel15_ul,
+                              NR_gNB_PUSCH *pusch_vars,
                               uint8_t nr_tti_rx,
                               unsigned char symbol,
                               uint32_t nb_re_pusch);

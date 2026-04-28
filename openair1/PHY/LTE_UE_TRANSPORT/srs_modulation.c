@@ -135,13 +135,6 @@ int32_t generate_srs(LTE_DL_FRAME_PARMS *frame_parms,
   return(0);
 }
 
-int generate_srs_tx_emul(PHY_VARS_UE *phy_vars_ue,uint8_t subframe)
-{
-
-  LOG_D(PHY,"[UE] generate_srs_tx_emul for subframe %d\n",subframe);
-  return(0);
-}
-
 #ifdef MAIN
 main()
 {

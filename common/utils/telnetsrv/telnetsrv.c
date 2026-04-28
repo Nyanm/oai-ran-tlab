@@ -81,7 +81,6 @@ int get_phybsize(void) {
 };
 int add_telnetcmd(char *modulename,telnetshell_vardef_t *var, telnetshell_cmddef_t *cmd );
 int setoutput(char *buff, int debug, telnet_printfunc_t prnt);
-int wsetoutput(char *buff, int debug, telnet_printfunc_t prnt, ...);
 int setparam(char *buff, int debug, telnet_printfunc_t prnt);
 int wsetparam(char *buff, int debug, telnet_printfunc_t prnt, ...);
 int history_cmd(char *buff, int debug, telnet_printfunc_t prnt);
@@ -245,12 +244,9 @@ void redirstd(char *newfname,telnet_printfunc_t prnt ) {
   }
 }
 
-int wsetoutput(char *buffer, int debug, telnet_printfunc_t prnt, ...)
+int setoutput(char *buff, int debug, telnet_printfunc_t prnt)
 {
-  return 0;
-}
-
-int setoutput(char *buff, int debug, telnet_printfunc_t prnt) {
+  UNUSED(debug);
   char cmds[TELNET_MAX_MSGLENGTH/TELNET_CMD_MAXSIZE][TELNET_CMD_MAXSIZE];
   char *logfname;
   char stdout_str[64];
@@ -288,10 +284,16 @@ int setoutput(char *buff, int debug, telnet_printfunc_t prnt) {
 
 int wsetparam(char *buff, int debug, telnet_printfunc_t prnt, ...)
 {
+  UNUSED(buff);
+  UNUSED(debug);
+  UNUSED(prnt);
   return 0;
 }
 
-int setparam(char *buff, int debug, telnet_printfunc_t prnt) {
+int setparam(char *buff, int debug, telnet_printfunc_t prnt)
+{
+  UNUSED(debug);
+  UNUSED(prnt);
   char cmds[TELNET_MAX_MSGLENGTH/TELNET_CMD_MAXSIZE][TELNET_CMD_MAXSIZE];
   memset(cmds,0,sizeof(cmds));
   sscanf(buff,"%9s %9s %9s %9s %9s", cmds[0],cmds[1],cmds[2],cmds[3],cmds[4]  );
@@ -322,7 +324,9 @@ int setparam(char *buff, int debug, telnet_printfunc_t prnt) {
   return CMDSTATUS_NOTFOUND;
 } /* setparam */
 
-int history_cmd(char *buff, int debug, telnet_printfunc_t prnt) {
+int history_cmd(char *buff, int debug, telnet_printfunc_t prnt)
+{
+  UNUSED(debug);
   char cmds[TELNET_MAX_MSGLENGTH/TELNET_CMD_MAXSIZE][TELNET_CMD_MAXSIZE];
   memset(cmds,0,sizeof(cmds));
   sscanf(buff,"%9s %9s %9s %9s %9s", cmds[0],cmds[1],cmds[2],cmds[3],cmds[4]  );
@@ -502,7 +506,7 @@ void telnet_pushcmd(telnetshell_cmddef_t *cmd, char *cmdbuff, telnet_printfunc_t
   pushNotifiedFIFO(cmd->qptr, msg);
 }
 
-int process_command(char *buf, int iteration)
+int process_command(char *buf)
 {
   int i,j,k;
   char modulename[TELNET_CMD_MAXSIZE];
@@ -581,7 +585,7 @@ int process_command(char *buf, int iteration)
         char tbuff[64];
         client_printf(CSI "1J" CSI "1;10H         " STDFMT "%s %i/%i\n",
                       get_time(tbuff,sizeof(tbuff)),lc,telnetparams.loopcount );
-        process_command(buf + strlen("loop") + 1, lc);
+        process_command(buf + strlen("loop") + 1);
         errno=0;
         int rs = read(telnetparams.new_socket,dummybuff,sizeof(dummybuff));
 
@@ -710,7 +714,7 @@ void run_telnetsrv(void) {
       }
 
       if (strlen(buf) > 2 ) {
-        status = process_command(buf, 0);
+        status = process_command(buf);
       } else
         status=CMDSTATUS_NOCMD;
 

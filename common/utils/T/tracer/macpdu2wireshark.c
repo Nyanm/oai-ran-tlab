@@ -406,7 +406,7 @@ void sr(void *_d, event e)
 
 void trace_nr(struct timespec sending_time, ev_data *d, int direction,
         int rnti_type, int rnti, int frame, int slot, int harq_pid, void *buf,
-        int bufsize, int preamble)
+        int bufsize)
 {
   ssize_t ret;
   int i;
@@ -475,7 +475,7 @@ void nr_ul(void *_d, event e)
            NR_C_RNTI, e.e[d->nr_ul_rnti].i,
            e.e[d->nr_ul_frame].i, e.e[d->nr_ul_slot].i,
            e.e[d->nr_ul_harq_pid].i, e.e[d->nr_ul_data].b,
-           e.e[d->nr_ul_data].bsize, NO_PREAMBLE);
+           e.e[d->nr_ul_data].bsize);
 }
 
 void nr_dl(void *_d, event e)
@@ -494,7 +494,7 @@ void nr_dl(void *_d, event e)
            e.e[d->nr_dl_rnti].i != 0xffff ? NR_C_RNTI : NR_SI_RNTI,
            e.e[d->nr_dl_rnti].i, e.e[d->nr_dl_frame].i, e.e[d->nr_dl_slot].i,
            e.e[d->nr_dl_harq_pid].i, e.e[d->nr_dl_data].b,
-           e.e[d->nr_dl_data].bsize, NO_PREAMBLE);
+           e.e[d->nr_dl_data].bsize);
 }
 
 void nr_dl_retx(void *_d, event e)
@@ -505,7 +505,7 @@ void nr_dl_retx(void *_d, event e)
            NR_C_RNTI, e.e[d->nr_dl_retx_rnti].i,
            e.e[d->nr_dl_retx_frame].i, e.e[d->nr_dl_retx_slot].i,
            e.e[d->nr_dl_retx_harq_pid].i, e.e[d->nr_dl_retx_data].b,
-           e.e[d->nr_dl_retx_data].bsize, NO_PREAMBLE);
+           e.e[d->nr_dl_retx_data].bsize);
 }
 
 void nr_mib(void *_d, event e)
@@ -520,7 +520,7 @@ void nr_mib(void *_d, event e)
 
   trace_nr(e.sending_time, d, NR_DIRECTION_DOWNLINK, NR_NO_RNTI, 0,
            e.e[d->nr_mib_frame].i, e.e[d->nr_mib_slot].i, 0 /* harq pid */,
-           e.e[d->nr_mib_data].b, e.e[d->nr_mib_data].bsize, NO_PREAMBLE);
+           e.e[d->nr_mib_data].b, e.e[d->nr_mib_data].bsize);
 }
 
 void nr_ue_mib(void *_d, event e)
@@ -535,7 +535,7 @@ void nr_ue_mib(void *_d, event e)
 
   trace_nr(e.sending_time, d, NR_DIRECTION_DOWNLINK, NR_NO_RNTI, 0,
            e.e[d->nr_ue_mib_frame].i, e.e[d->nr_ue_mib_slot].i, 0 /* harq pid */,
-           e.e[d->nr_ue_mib_data].b, e.e[d->nr_ue_mib_data].bsize, NO_PREAMBLE);
+           e.e[d->nr_ue_mib_data].b, e.e[d->nr_ue_mib_data].bsize);
 }
 
 void nr_rar(void *_d, event e)
@@ -545,7 +545,7 @@ void nr_rar(void *_d, event e)
   trace_nr(e.sending_time, d, NR_DIRECTION_DOWNLINK,
            NR_RA_RNTI, e.e[d->nr_rar_rnti].i,
            e.e[d->nr_rar_frame].i, e.e[d->nr_rar_slot].i, 0 /* harq pid */,
-           e.e[d->nr_rar_data].b, e.e[d->nr_rar_data].bsize, NO_PREAMBLE);
+           e.e[d->nr_rar_data].b, e.e[d->nr_rar_data].bsize);
 }
 
 void nr_ue_ul(void *_d, event e)
@@ -556,7 +556,7 @@ void nr_ue_ul(void *_d, event e)
            NR_C_RNTI, e.e[d->nr_ue_ul_rnti].i,
            e.e[d->nr_ue_ul_frame].i, e.e[d->nr_ue_ul_slot].i,
            e.e[d->nr_ue_ul_harq_pid].i, e.e[d->nr_ue_ul_data].b,
-           e.e[d->nr_ue_ul_data].bsize, NO_PREAMBLE);
+           e.e[d->nr_ue_ul_data].bsize);
 }
 
 void nr_ue_dl(void *_d, event e)
@@ -575,7 +575,7 @@ void nr_ue_dl(void *_d, event e)
            e.e[d->nr_ue_dl_rnti].i != 0xffff ? NR_C_RNTI : NR_SI_RNTI,
            e.e[d->nr_ue_dl_rnti].i, e.e[d->nr_ue_dl_frame].i,
            e.e[d->nr_ue_dl_slot].i, e.e[d->nr_ue_dl_harq_pid].i,
-           e.e[d->nr_ue_dl_data].b, e.e[d->nr_ue_dl_data].bsize, NO_PREAMBLE);
+           e.e[d->nr_ue_dl_data].b, e.e[d->nr_ue_dl_data].bsize);
 }
 
 void nr_ue_rar(void *_d, event e)
@@ -584,8 +584,7 @@ void nr_ue_rar(void *_d, event e)
   trace_nr(e.sending_time, d, DIRECTION_DOWNLINK,
            RA_RNTI, e.e[d->nr_ue_rar_rnti].i,
            e.e[d->nr_ue_rar_frame].i, e.e[d->nr_ue_rar_slot].i, 0,
-           e.e[d->nr_ue_rar_data].b, e.e[d->nr_ue_rar_data].bsize,
-           NO_PREAMBLE);
+           e.e[d->nr_ue_rar_data].b, e.e[d->nr_ue_rar_data].bsize);
 }
 
 /****************************************************************************/
@@ -961,7 +960,7 @@ static int sock = -1;
 
 void force_stop(int x)
 {
-  printf("\ngently quit...\n");
+  printf("\ngently quit(%d)...\n", x);
   close(sock);
   sock = -1;
   run = 0;

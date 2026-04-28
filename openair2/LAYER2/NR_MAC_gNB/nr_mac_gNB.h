@@ -16,6 +16,7 @@
 #include <string.h>
 #include <complex.h>
 #include <pthread.h>
+#include "fsn.h"
 #include "common/utils/ds/seq_arr.h"
 #include "common/utils/nr/nr_common.h"
 #include "common/utils/ds/byte_array.h"
@@ -878,14 +879,6 @@ typedef struct {
   NR_ControlResourceSet_t coreset;
 } NR_sched_ctrl_sib1_t;
 
-/// helper type to encapsulate a frame/slot combination in a single type.
-/// Currently only used in the UL preprocessor. Note: if you use this type
-/// further, please refactor it into a common type first.
-typedef struct fsn {
-  frame_t f;
-  slot_t s;
-} fsn_t;
-
 typedef struct NR_du_stats {
   /// cell-wide wide-band CQI distribution, see 28.552 5.1.1.11.1;
   /// 0-15 CQI, 1-8 RI, 1-3 CQI table
@@ -906,8 +899,6 @@ typedef struct gNB_MAC_INST_s {
   eth_params_t                    eth_params_n;
   /// address for F1U to bind, ports in eth_params_n
   char *f1u_addr;
-  /// Ethernet parameters for fronthaul interface
-  eth_params_t                    eth_params_s;
   /// Nvipc parameters for FAPI interface with Aerial
   nvipc_params_t nvipc_params_s;
   /// Module

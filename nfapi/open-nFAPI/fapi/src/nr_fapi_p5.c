@@ -66,6 +66,7 @@ int fapi_nr_p5_message_pack(void *pMessageBuf,
                             const uint32_t packedBufLen,
                             nfapi_p4_p5_codec_config_t *config)
 {
+  UNUSED(messageBufLen);
   nfapi_nr_p4_p5_message_header_t *pMessageHeader = pMessageBuf;
   uint8_t *pWritePackedMessage = pPackedBuf;
   AssertFatal(isFAPIMessageIDValid(pMessageHeader->message_id),
@@ -1141,6 +1142,7 @@ uint8_t pack_nr_config_request(void *msg, uint8_t **ppWritePackedMsg, uint8_t *e
   // END Digital Beam Table (DBT) PDU
 
 #ifdef ENABLE_AERIAL
+  UNUSED(config);
   retval &= pack_nr_tlv(NFAPI_NR_CONFIG_NUM_TX_PORT_TAG,
                         &(pNfapiMsg->carrier_config.num_tx_port),
                         ppWritePackedMsg,

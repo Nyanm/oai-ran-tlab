@@ -180,7 +180,6 @@ int32_t lte_ul_channel_estimation(LTE_DL_FRAME_PARMS *frame_parms,
                                   c16_t **ul_ch_estimates,
                                   c16_t **ul_ch_estimates_time,
                                   c16_t **rxdataF_ext,
-                                  module_id_t UE_id,
                                   uint8_t l,
                                   uint8_t Ns);
 

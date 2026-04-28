@@ -28,6 +28,7 @@ static int get_single_ue_rnti(void)
 
 int get_single_rnti(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   if (buf)
     ERROR_MSG_RET("no parameter allowed\n");
 
@@ -42,6 +43,7 @@ int get_single_rnti(char *buf, int debug, telnet_printfunc_t prnt)
 //void rrc_gNB_trigger_new_bearer(int rnti);
 int add_bearer(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   int rnti = -1;
   if (!buf) {
     rnti = get_single_ue_rnti();
@@ -67,6 +69,7 @@ int add_bearer(char *buf, int debug, telnet_printfunc_t prnt)
 //void rrc_gNB_trigger_release_bearer(int rnti);
 int release_bearer(char *buf, int debug, telnet_printfunc_t prnt)
 {
+  UNUSED(debug);
   int rnti = -1;
   if (!buf) {
     rnti = get_single_ue_rnti();

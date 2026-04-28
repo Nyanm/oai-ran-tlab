@@ -3,6 +3,7 @@
  */
 
 #include "view.h"
+#include "../utils.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <pthread.h>
@@ -15,6 +16,7 @@ struct stdout {
 static void clear(view *this)
 {
   /* do nothing */
+  UNUSED(this);
 }
 
 static void append(view *_this, char *s)

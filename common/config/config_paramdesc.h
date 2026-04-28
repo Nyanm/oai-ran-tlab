@@ -48,8 +48,8 @@ typedef union checkedparam {
     int num_okintval;                                            /* number of valid values in the checkingval array */
   } s1a;
   struct {
-    int (*f2)(configmodule_interface_t *cfg,
-              paramdef_t *param); /* check an integer against an authorized range, defined by its min and max value */
+    int (*f2)(const configmodule_interface_t *cfg,
+              const paramdef_t *param); /* check an integer against an authorized range, defined by its min and max value */
     int okintrange[CONFIG_MAX_NUMCHECKVAL];  /* integer array, store  min and max values  */
 
   } s2;
@@ -180,6 +180,11 @@ typedef struct paramdef {
 #define UINT64PARAM(name, help, flags, ptr, defval)                                                                          \
   {                                                                                                                          \
     OPTNAME(name), HELPSTR(help), PARAMFLAG(flags), .u64ptr = ptr, .defuintval = defval, PARAMTYPE(TYPE_UINT64), .numelt = 0 \
+  }
+#define STRINGLISTPARAM(name, help, flags, ptr, defval)                                                                 \
+  {                                                                                                                     \
+    OPTNAME(name), HELPSTR(help), PARAMFLAG(flags), .strptr = ptr, .defstrlistval = defval, PARAMTYPE(TYPE_STRINGLIST), \
+        .numelt = 0                                                                                                     \
   }
 
 typedef struct paramlist_def {

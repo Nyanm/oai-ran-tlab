@@ -5,7 +5,7 @@
 #ifndef __NR_ESTIMATION_DEFS__H__
 #define __NR_ESTIMATION_DEFS__H__
 
-
+#include "PHY/nr_phy_common/inc/nr_phy_common.h"
 #include "PHY/defs_nr_UE.h"
 
 /** @addtogroup _PHY_PARAMETER_ESTIMATION_BLOCKS_
@@ -39,7 +39,6 @@ void nr_pdcch_channel_estimation(const PHY_VARS_NR_UE *ue,
                                  c16_t *pilot);
 
 c32_t nr_pbch_dmrs_correlation(const NR_DL_FRAME_PARMS *fp,
-                               const UE_nr_rxtx_proc_t *proc,
                                const int symbol,
                                const int dmrss,
                                const int Nid_cell,
@@ -131,6 +130,7 @@ void nr_pdsch_ptrs_processing(int nbRx,
                               NR_DL_UE_HARQ_t *dlsch1_harq,
                               uint8_t nr_slot_rx,
                               unsigned char symbol,
+                              int nb_rb,
                               uint16_t rnti,
                               NR_UE_DLSCH_t dlsch[2]);
 

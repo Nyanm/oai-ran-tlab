@@ -284,12 +284,8 @@ void threadCreate(pthread_t* t, void * (*func)(void*), void * param, char* name,
 
 // Legacy, pthread_create + thread_top_init() should be replaced by threadCreate
 // threadCreate encapsulates the posix pthread api
-void thread_top_init(char *thread_name,
-		     int affinity,
-		     uint64_t runtime,
-		     uint64_t deadline,
-		     uint64_t period) {
-  
+void thread_top_init(char *thread_name)
+{
   int policy, s, j;
   struct sched_param sparam;
   char cpu_affinity[1024];
