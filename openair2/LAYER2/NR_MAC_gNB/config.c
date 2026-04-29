@@ -732,14 +732,15 @@ static void config_common(gNB_MAC_INST *nrmac, const nr_mac_config_t *config, NR
   cfg->carrier_config.num_rx_ant.tl.tag = NFAPI_NR_CONFIG_NUM_RX_ANT_TAG;
   cfg->num_tlv++;
   cfg->num_tlv++;
-  cfg->carrier_config.num_tx_ant.value = 64;
-  cfg->carrier_config.num_rx_ant.value = 64;
-  cfg->carrier_config.num_rx_port.value = pusch_AntennaPorts;
-  cfg->carrier_config.num_rx_port.tl.tag = NFAPI_NR_CONFIG_NUM_RX_PORT_TAG;
-  cfg->carrier_config.num_tx_port.value = num_pdsch_antenna_ports;
-  cfg->carrier_config.num_tx_port.tl.tag = NFAPI_NR_CONFIG_NUM_TX_PORT_TAG;
-  cfg->num_tlv++;
-  cfg->num_tlv++;
+//  cfg->carrier_config.num_tx_ant.value = 64;
+//  cfg->carrier_config.num_rx_ant.value = 64;
+cfg->carrier_config.num_rx_port.value = pusch_AntennaPorts;
+cfg->carrier_config.num_rx_port.tl.tag = NFAPI_NR_CONFIG_NUM_RX_PORT_TAG;
+cfg->carrier_config.num_tx_port.value = num_pdsch_antenna_ports;
+cfg->carrier_config.num_tx_port.tl.tag = NFAPI_NR_CONFIG_NUM_TX_PORT_TAG;
+//cfg->num_tlv++;
+//cfg->num_tlv++;
+
 // #ifdef ENABLE_AERIAL
 //   if (nrmac->beam_info.beam_mode == LOPHY_BEAM_IDX) {
 //     // if we are doing BF in Aerial we need these Custom TLV
