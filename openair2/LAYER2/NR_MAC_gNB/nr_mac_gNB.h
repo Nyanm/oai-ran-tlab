@@ -996,6 +996,10 @@ typedef struct gNB_MAC_INST_s {
 
   pthread_mutex_t sched_lock;
 
+  pthread_t L2_tx_thread;     ///< MAC DL scheduling thread
+  /// Core affinity for L2 TX (MAC scheduling) thread, -1 = floating
+  int L2_tx_thread_core;
+
   dlul_mac_stats_t mac_stats;
   uint64_t num_scheduled_prach_rx;
 
