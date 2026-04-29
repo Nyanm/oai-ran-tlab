@@ -1291,7 +1291,7 @@ void nr_decode_pucch2_3(PHY_VARS_gNB *gNB,
 
   c16_t rdmrs_ext[Prx][nb_re_dmrs * ((fmt==2)?nb_symbols : ndmrs)] __attribute__((aligned(32)));
   c16_t pil_dmrs[2][nb_re_dmrs] __attribute__((aligned(32)));
-  c16_t r_u_v_alpha_delta_dmrs[ndmrs*nb_re_dmrs] __attribute__((aligned(32)));
+  c16_t r_u_v_alpha_delta_dmrs[(fmt==2? 1 : ndmrs)*nb_re_dmrs] __attribute__((aligned(32)));
   c16_t *r_u_v_alpha_delta_dmrs_p = r_u_v_alpha_delta_dmrs; 
   for (int d = 0; d < (fmt==2?nb_symbols : ndmrs); d++) {
 
