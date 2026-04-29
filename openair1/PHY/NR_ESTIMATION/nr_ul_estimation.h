@@ -25,12 +25,12 @@
 */
 
 int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
+                                c16_t **rxdataF,
                                 unsigned char Ns,
                                 int nl,
                                 unsigned short p,
                                 unsigned char symbol,
                                 NR_gNB_PUSCH *pusch_vars,
-                                uint16_t ant_port_start,
                                 unsigned short bwp_start_subcarrier,
                                 const nfapi_nr_pusch_pdu_t *pusch_pdu,
                                 int *max_ch,
