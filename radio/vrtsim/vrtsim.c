@@ -138,6 +138,7 @@ typedef struct {
   int rx_num_channels;
   channel_desc_t *channel_desc[MAX_NUM_UES];
   char *taps_socket;
+  void *taps_client;
   int client_num_rx_antennas;
   struct timespec start_ts;
   /* CIR DB state */
@@ -467,11 +468,7 @@ static int vrtsim_connect(openair0_device_t *device)
   // Handle channel modelling after number of RX antennas are known
   if (vrtsim_state->chanmod || vrtsim_state->taps_socket || vrtsim_state->use_cirdb) {
     if (vrtsim_state->taps_socket) {
-      taps_client_connect(0,
-                          vrtsim_state->taps_socket,
-                          device->openair0_cfg[0].tx_num_channels,
-                          vrtsim_state->peer_info.num_rx_antennas,
-                          &vrtsim_state->channel_desc[0]);
+      vrtsim_state->taps_client = taps_client_connect(vrtsim_state->taps_socket);
     } else if (vrtsim_state->use_cirdb) {
       const char *yaml_path = NULL;
       const char *bin_path = NULL;
@@ -604,11 +601,6 @@ static int vrtsim_write_with_chanmod(vrtsim_state_t *vrtsim_state,
     cirdb_update(elapsed_ns);
   }
 
-  if (!vrtsim_state->channel_desc[0]) {
-    LOG_E(HW, "No channel_desc found\n");
-    return nsamps;
-  }
-
   int noise_power_dBFS = get_noise_power_dBFS();
   int16_t noise_power = noise_power_dBFS == INVALID_DBFS_VALUE ? 0 : (int16_t)(32767.0 / powf(10.0, .05 * -noise_power_dBFS));
 
@@ -619,7 +611,15 @@ static int vrtsim_write_with_chanmod(vrtsim_state_t *vrtsim_state,
   int rx_antenna_offset = 0;
   int nb_tx = nbAnt;
   for (int i = 0; i < num_chan_desc; i++) {
-    channel_desc_t *chan_desc = vrtsim_state->channel_desc[i];
+    channel_desc_t *chan_desc = NULL;
+    if (vrtsim_state->taps_client) {
+      chan_desc = taps_client_get_model(vrtsim_state->taps_client, i);
+    } else {
+      chan_desc = vrtsim_state->channel_desc[i];
+    }
+    if (!chan_desc) {
+      continue;
+    }
     AssertFatal(chan_desc, "Channel not provided\n");
     int nb_rx = chan_desc->nb_rx;
     size_t channel_length = chan_desc->channel_length;
@@ -880,8 +880,8 @@ static void vrtsim_end(openair0_device_t *device)
 #endif
     if (vrtsim_state->use_cirdb) {
       cirdb_stop();
-    } else if (vrtsim_state->taps_socket) {
-      taps_client_stop();
+    } else if (vrtsim_state->taps_client) {
+      taps_client_stop(vrtsim_state->taps_client);
     }
   }
   shm_td_iq_channel_abort(vrtsim_state->channel);
