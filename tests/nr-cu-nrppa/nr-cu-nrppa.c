@@ -522,6 +522,9 @@ void init_ue_nas_context(void)
   static const uint8_t TEST_OPC[16] =
       {0xc4, 0x24, 0x49, 0x36, 0x3b, 0xba, 0xd0, 0x2b, 0x66, 0xd1, 0x6b, 0xc9, 0x75, 0xd7, 0x7c, 0xc1};
   memcpy(simulated_ue_nas->uicc->opc, TEST_OPC, 16);
+  // routing indicator
+  simulated_ue_nas->uicc->routing_indicatorStr = calloc_or_fail(1, 5 * sizeof(char));
+  strcpy(simulated_ue_nas->uicc->routing_indicatorStr, "0000");
   simulated_ue_nas->security.nas_count_ul = 0;
   simulated_ue_nas->security.nas_count_dl = 0;
   simulated_ue_nas->fiveGMM_state = FGS_DEREGISTERED;
