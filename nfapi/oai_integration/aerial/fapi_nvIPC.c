@@ -61,6 +61,7 @@ void nvIPC_send_stop_request()
 
 static uint16_t old_sfn[NFAPI_PHY_MAX];
 static uint16_t old_slot[NFAPI_PHY_MAX];
+static nvipc_params_t aerial_params;
 ////////////////////////////////////////////////////////////////////////
 // Handle an RX message
 static int ipc_handle_rx_msg(nv_ipc_msg_t *msg)
@@ -88,7 +89,7 @@ static int ipc_handle_rx_msg(nv_ipc_msg_t *msg)
    vnf_p7_t *vnf_p7_config = (vnf_p7_t *)((vnf_info *)vnf_config->user_data)->p7_vnfs->config;
     switch (fapi_msg.message_id) {
       case NFAPI_NR_PHY_MSG_TYPE_PARAM_RESPONSE ... NFAPI_NR_PHY_MSG_TYPE_ERROR_INDICATION:
-        vnf_nr_handle_p4_p5_message(msg->msg_buf, msg->msg_len, 0, vnf_config);
+        vnf_nr_handle_p4_p5_message(msg->msg_buf, msg->msg_len, msg->cell_id, vnf_config);
         break;
       // P7 Messages
       case NFAPI_NR_PHY_MSG_TYPE_RX_DATA_INDICATION: {
@@ -335,11 +336,12 @@ void *epoll_recv_task(void *arg)
   if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, ev.data.fd, &ev) == -1) {
     LOG_E(NFAPI_VNF, "%s epoll_ctl failed\n", __func__);
   }
-  // From here on out the thread is ready to receive data, simulate the reception
-  // of a PARAM.response to get the VNF to send a CONFIG.request
+  // Simulate one PARAM.response per configured PHY to trigger a CONFIG.request
+  // for each cell.  aerial_params is populated by nvIPC_Init before this thread starts.
   nfapi_nr_param_response_scf_t resp_msg = {.header.message_id = NFAPI_NR_PHY_MSG_TYPE_PARAM_RESPONSE};
-  nfapi_vnf_config_t * vnf_config = get_config();
-  vnf_config->nr_param_resp(vnf_config, 0, &resp_msg);
+  nfapi_vnf_config_t *vnf_config = get_config();
+  for (int i = 0; i < aerial_params.num_phys; i++)
+    vnf_config->nr_param_resp(vnf_config, i, &resp_msg);
   while (((vnf_t *)vnf_config)->terminate == false) {
     LOG_D(NFAPI_VNF, "%s: epoll_wait fd_rx=%d ...\n", __func__, ipc_rx_event_fd);
 
@@ -411,6 +413,7 @@ int nvIPC_Init(nvipc_params_t nvipc_params_s)
     return -1;
   }
   LOG_I(NFAPI_VNF, "%s: create IPC interface successful\n", __func__);
+  aerial_params = nvipc_params_s;
   sleep(1);
   create_recv_thread(nvipc_params_s.nvipc_poll_core);
   return 0;
