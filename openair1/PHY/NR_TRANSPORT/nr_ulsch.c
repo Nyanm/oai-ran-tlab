@@ -102,16 +102,6 @@ void nr_fill_ulsch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pusch_pdu_t 
         ulsch_pdu->pusch_data.new_data_indicator);
 
   NR_gNB_PUSCH_job_t pusch = {.frame = frame, .slot = slot, .pusch_pdu = *ulsch_pdu};
-  if (gNB->common_vars.beam_id) {
-    int fapi_beam_idx = ulsch_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx;
-    int bitmap = SL_to_bitmap(ulsch_pdu->start_symbol_index, ulsch_pdu->nr_of_symbols);
-    pusch.beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                           fapi_beam_idx,
-                                           &gNB->common_vars,
-                                           slot,
-                                           gNB->frame_parms.symbols_per_slot,
-                                           bitmap);
-  }
   bool done = spsc_q_put(&gNB->pusch_queue, &pusch, sizeof(pusch));
   if (!done)
     LOG_W(NR_PHY, "PUSCH queue is full: dropping PUSCH UE %04x\n", ulsch_pdu->rnti);

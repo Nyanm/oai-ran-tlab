@@ -97,8 +97,7 @@ int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
                    const nfapi_nr_pusch_pdu_t *rel15_ul,
                    uint32_t *ret_unav_res,
                    uint32_t frame,
-                   uint8_t slot,
-                   int beam_nb);
+                   uint8_t slot);
 
 /*!
 \brief This function implements the idft transform precoding in PUSCH

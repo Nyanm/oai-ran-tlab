@@ -21,6 +21,45 @@ int get_nr_prach_duration(uint8_t prach_format)
   return val[prach_format];
 }
 
+static void prach_occ_beamforming(const nfapi_nr_dbt_pdu_t *dbt,
+                                  const nfapi_nr_ul_beamforming_t *b,
+                                  int num_prach_occ,
+                                  int nb_rx,
+                                  int occ,
+                                  int prach_len,
+                                  c16_t prach_in[][NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX][NR_PRACH_SEQ_LEN_L])
+{
+  DevAssert(dbt);
+
+  c16_t wt[nb_rx];
+  const uint8_t num_beams = b->dig_bf_interface;
+  if (num_beams == 0) {
+    // We still combine signal from all physical antenna ports
+    for (int i = 0; i < nb_rx; i++)
+      wt[i] = (c16_t){.r = INT16_MAX, .i = 0};
+  } else {
+    /* L2 associates each PRACH occasion to a beam in schedule_nr_prach(). If
+    multiple beams in a FAPI PDU then nof occ must be same as nof beams. If single
+    beam then all occ is assigned to one beam. */
+    AssertFatal(num_beams == num_prach_occ || num_beams == 1, "Incompatible beam and PRACH occasion association\n");
+    const uint16_t cur_beam = (num_beams == 1) ? 0 : occ;
+    const uint16_t beam_id = b->prgs_list[0].dig_bf_interface_list[cur_beam].beam_idx & 0x7fff; // FAPI beam id is LSB 15 bits
+    AssertFatal(beam_id == dbt->dig_beam_list[beam_id].beam_idx, "Beam id is not consistent with DBT\n");
+    DevAssert(nb_rx == dbt->num_txrus);
+    for (int i = 0; i < nb_rx; i++)
+      wt[i] = dbt->dig_beam_list[beam_id].txru_list[i];
+  }
+
+  c16_t prach_bf[NR_PRACH_SEQ_LEN_L] __attribute__((aligned(32)));
+  memset(prach_bf, 0, sizeof(prach_bf));
+  DevAssert(nb_rx == dbt->num_txrus);
+  for (int b = 0; b < nb_rx; b++) {
+    nr_beamformer_simd(prach_in[b][occ], wt[b], prach_len, prach_bf);
+  }
+  // Copy back to input buffer
+  memcpy(prach_in[0][occ], prach_bf, sizeof(*prach_bf) * NR_PRACH_SEQ_LEN_L);
+}
+
 void L1_nr_prach_procedures(PHY_VARS_gNB *gNB, prach_item_t *prach_id, nfapi_nr_rach_indication_t *rach_ind)
 {
   const frame_t frame = prach_id->frame;
@@ -31,7 +70,21 @@ void L1_nr_prach_procedures(PHY_VARS_gNB *gNB, prach_item_t *prach_id, nfapi_nr_
   LOG_D(NR_PHY_RACH, "%d.%d, prachstart slot %d prach entry occas %d\n", frame, slot, prach_id->slot, prach_pdu->num_prach_ocas);
   int N_dur = get_nr_prach_duration(prach_pdu->prach_format);
 
+  nfapi_nr_ul_beamforming_t *b = &prach_pdu->beamforming;
+  const bool is_bf = (b->dig_bf_interface > 0) ? (!IS_BIT_SET(b->prgs_list[0].dig_bf_interface_list[0].beam_idx, 15)) : true;
+
   for (int prach_oc = 0; prach_oc < prach_pdu->num_prach_ocas; prach_oc++) {
+    // Beamforming
+    if (is_bf) {
+      const int prach_len = ((prach_pdu->prach_format & 0xff) < 4) ? NR_PRACH_SEQ_LEN_L : NR_PRACH_SEQ_LEN_S;
+      prach_occ_beamforming(&gNB->gNB_config.dbt_config,
+                            b,
+                            prach_pdu->num_prach_ocas,
+                            gNB->frame_parms.nb_antennas_rx,
+                            prach_oc,
+                            prach_len,
+                            prach_id->prach_buf);
+    }
     uint prachStartSymbol = prach_pdu->prach_start_symbol + prach_oc * N_dur;
     // comment FK: the standard 38.211 section 5.3.2 has one extra term +14*N_RA_slot. This is because there prachStartSymbol is
     // given wrt to start of the 15kHz slot or 60kHz slot. Here we work slot based, so this function is anyway only called in slots

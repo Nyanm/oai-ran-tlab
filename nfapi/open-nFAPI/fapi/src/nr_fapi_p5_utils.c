@@ -257,8 +257,8 @@ bool eq_config_request(const nfapi_nr_config_request_scf_t *unpacked_req, const 
     for (int k = 0; k < req->dbt_config.num_txrus; ++k) {
       const nfapi_nr_txru_t *unpacked_tx_ru = &unpacked_dig_beam->txru_list[k];
       const nfapi_nr_txru_t *req_tx_ru = &req_dig_beam->txru_list[k];
-      EQ(unpacked_tx_ru->dig_beam_weight_Re, req_tx_ru->dig_beam_weight_Re);
-      EQ(unpacked_tx_ru->dig_beam_weight_Im, req_tx_ru->dig_beam_weight_Im);
+      EQ(unpacked_tx_ru->r, req_tx_ru->r);
+      EQ(unpacked_tx_ru->i, req_tx_ru->i);
     }
   }
 
@@ -297,8 +297,6 @@ bool eq_config_request(const nfapi_nr_config_request_scf_t *unpacked_req, const 
   EQ_TLV(unpacked_req->nfapi_config.timing_info_mode, req->nfapi_config.timing_info_mode);
 
   EQ_TLV(unpacked_req->nfapi_config.timing_info_period, req->nfapi_config.timing_info_period);
-
-  EQ_TLV(unpacked_req->analog_beamforming_ve.num_beams_period_vendor_ext, req->analog_beamforming_ve.num_beams_period_vendor_ext);
 
   EQ_TLV(unpacked_req->analog_beamforming_ve.analog_bf_vendor_ext, req->analog_beamforming_ve.analog_bf_vendor_ext);
 
@@ -813,8 +811,8 @@ void copy_config_request(const nfapi_nr_config_request_scf_t *src, nfapi_nr_conf
     for (int k = 0; k < dst->dbt_config.num_txrus; ++k) {
       nfapi_nr_txru_t *dst_tx_ru = &dst_dig_beam->txru_list[k];
       const nfapi_nr_txru_t *src_tx_ru = &src_dig_beam->txru_list[k];
-      dst_tx_ru->dig_beam_weight_Re = src_tx_ru->dig_beam_weight_Re;
-      dst_tx_ru->dig_beam_weight_Im = src_tx_ru->dig_beam_weight_Im;
+      dst_tx_ru->r = src_tx_ru->r;
+      dst_tx_ru->i = src_tx_ru->i;
     }
   }
 
@@ -872,8 +870,6 @@ void copy_config_request(const nfapi_nr_config_request_scf_t *src, nfapi_nr_conf
   COPY_TLV(dst->nfapi_config.ul_dci_timing_offset, src->nfapi_config.ul_dci_timing_offset);
 
   COPY_TLV(dst->nfapi_config.tx_data_timing_offset, src->nfapi_config.tx_data_timing_offset);
-
-  COPY_TLV(dst->analog_beamforming_ve.num_beams_period_vendor_ext, src->analog_beamforming_ve.num_beams_period_vendor_ext);
 
   COPY_TLV(dst->analog_beamforming_ve.analog_bf_vendor_ext, src->analog_beamforming_ve.analog_bf_vendor_ext);
 }
@@ -1260,8 +1256,8 @@ void dump_config_request(const nfapi_nr_config_request_scf_t *msg)
     depth++;
     for (int k = 0; k < dbt_config->num_txrus; k++) {
       const nfapi_nr_txru_t *tx_ru = &dig_beam->txru_list[k];
-      INDENTED_GENERIC_PRINT("Dig Beam Weight Real", "0x%02x", tx_ru->dig_beam_weight_Re);
-      INDENTED_GENERIC_PRINT("Dig Beam Weight Imaginary", "0x%02x", tx_ru->dig_beam_weight_Im);
+      INDENTED_GENERIC_PRINT("Dig Beam Weight Real", "0x%02x", tx_ru->r);
+      INDENTED_GENERIC_PRINT("Dig Beam Weight Imaginary", "0x%02x", tx_ru->i);
     }
     depth--;
   }
@@ -1334,7 +1330,6 @@ void dump_config_request(const nfapi_nr_config_request_scf_t *msg)
   INDENTED_TLV_FORMAT_PRINT("TX_DATA Timing Offset", "%d", nfapi_config->tx_data_timing_offset);
   /* Beamforming VE */
   const nfapi_nr_analog_beamforming_ve_t *analog_beamforming_ve = &msg->analog_beamforming_ve;
-  INDENTED_TLV_FORMAT_PRINT("Num Beams per Period", "%d", analog_beamforming_ve->num_beams_period_vendor_ext);
   INDENTED_TLV_PRINT("Analog Beamforming VE", analog_beamforming_ve->analog_bf_vendor_ext);
   /* Vendor Extension */
   if (msg->vendor_extension) {

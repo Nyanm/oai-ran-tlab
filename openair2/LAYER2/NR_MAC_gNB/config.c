@@ -435,8 +435,7 @@ static void config_common(gNB_MAC_INST *nrmac, const nr_mac_config_t *config, NR
         AssertFatal(re >= -1.0f && re <= 1.0f, "DBT real weight out of range [-1,1]: %f\n", re);
         AssertFatal(im >= -1.0f && im <= 1.0f, "DBT imag weight out of range [-1,1]: %f\n", im);
         c16_t q15 = convert_precoder_weight(config->bt.beam_weights[b][w]);
-        beam->txru_list[w].dig_beam_weight_Re = (uint16_t)q15.r;
-        beam->txru_list[w].dig_beam_weight_Im = (uint16_t)q15.i;
+        beam->txru_list[w] = q15;
       }
     }
 
@@ -704,7 +703,7 @@ static void config_common(gNB_MAC_INST *nrmac, const nr_mac_config_t *config, NR
   // logical antenna ports
   nr_pdsch_AntennaPorts_t pdsch_AntennaPorts = config->pdsch_AntennaPorts;
   int num_pdsch_antenna_ports = pdsch_AntennaPorts.N1 * pdsch_AntennaPorts.N2 * pdsch_AntennaPorts.XP;
-  cfg->carrier_config.num_tx_ant.value = num_pdsch_antenna_ports;
+  cfg->carrier_config.num_tx_ant.value = num_pdsch_antenna_ports * nrmac->beam_info.beams_per_period;
   AssertFatal(num_pdsch_antenna_ports > 0 && num_pdsch_antenna_ports < 33, "pdsch_AntennaPorts in 1...32\n");
   cfg->carrier_config.num_tx_ant.tl.tag = NFAPI_NR_CONFIG_NUM_TX_ANT_TAG;
 
@@ -727,7 +726,7 @@ static void config_common(gNB_MAC_INST *nrmac, const nr_mac_config_t *config, NR
   }
 
   int pusch_AntennaPorts = config->pusch_AntennaPorts;
-  cfg->carrier_config.num_rx_ant.value = pusch_AntennaPorts;
+  cfg->carrier_config.num_rx_ant.value = pusch_AntennaPorts * nrmac->beam_info.beams_per_period;
   AssertFatal(pusch_AntennaPorts > 0 && pusch_AntennaPorts < 13, "pusch_AntennaPorts in 1...12\n");
   cfg->carrier_config.num_rx_ant.tl.tag = NFAPI_NR_CONFIG_NUM_RX_ANT_TAG;
   LOG_I(NR_MAC,
@@ -777,9 +776,6 @@ static void config_common(gNB_MAC_INST *nrmac, const nr_mac_config_t *config, NR
 
   if (nrmac->beam_info.beam_mode != NO_BEAM_MODE) {
     LOG_I(NR_MAC, "Configuring analog beamforming in config_request message\n");
-    cfg->analog_beamforming_ve.num_beams_period_vendor_ext.tl.tag = NFAPI_NR_FAPI_NUM_BEAMS_PERIOD_VENDOR_EXTENSION_TAG;
-    cfg->analog_beamforming_ve.num_beams_period_vendor_ext.value = nrmac->beam_info.beams_per_period;
-    cfg->num_tlv++;
     cfg->analog_beamforming_ve.analog_bf_vendor_ext.tl.tag = NFAPI_NR_FAPI_ANALOG_BF_VENDOR_EXTENSION_TAG;
     cfg->analog_beamforming_ve.analog_bf_vendor_ext.value = 1;  // analog BF enabled
     cfg->num_tlv++;

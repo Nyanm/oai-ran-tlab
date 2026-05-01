@@ -207,8 +207,8 @@ static void fill_config_request_tlv_tdd_rand(nfapi_nr_config_request_scf_t *nfap
       beam->txru_list = calloc(nb_tx , sizeof(*beam->txru_list));
       for (int j = 0; j < nb_tx; j++) {
         nfapi_nr_txru_t *txru = &beam->txru_list[j];
-        txru->dig_beam_weight_Re = rand16_range(1, 0xffff);
-        txru->dig_beam_weight_Im = rand16_range(1, 0xffff);
+        txru->r = rand16_range(1, 0xffff);
+        txru->i = rand16_range(1, 0xffff);
       }
     }
     nfapi_resp->num_tlv++;
@@ -276,13 +276,7 @@ static void fill_config_request_tlv_tdd_rand(nfapi_nr_config_request_scf_t *nfap
   nfapi_resp->num_tlv++;
   /*
   // TODO: Uncomment this block when ready to enable the pack of the following VE TLVs in nr_fapi_p5.c
-  // NFAPI_NR_FAPI_NUM_BEAMS_PERIOD_VENDOR_EXTENSION_TAG
   // NFAPI_NR_FAPI_ANALOG_BF_VENDOR_EXTENSION_TAG
-  FILL_TLV(nfapi_resp->analog_beamforming_ve.num_beams_period_vendor_ext,
-           NFAPI_NR_FAPI_NUM_BEAMS_PERIOD_VENDOR_EXTENSION_TAG,
-           rand8());
-  nfapi_resp->num_tlv++;
-
   FILL_TLV(nfapi_resp->analog_beamforming_ve.analog_bf_vendor_ext, NFAPI_NR_FAPI_ANALOG_BF_VENDOR_EXTENSION_TAG, rand8());
   nfapi_resp->num_tlv++;
   */

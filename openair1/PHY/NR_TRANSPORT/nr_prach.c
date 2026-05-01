@@ -66,6 +66,15 @@ void nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_nr_prach_p
   const NR_DL_FRAME_PARMS *fp = &gNB->frame_parms;
   const nfapi_nr_prach_config_t *cfg = &gNB->gNB_config.prach_config;
   const nfapi_nr_num_prach_fd_occasions_t *occ = &cfg->num_prach_fd_occasions_list[prach_pdu->num_ra];
+  /* FAPI says when dig_bf_interface == 0 there is no beamforming. But inorder
+  to retain the current coherent combining in L1 prach processing, we do hiphy
+  beamforming with beam ID 0 (unity weights) and process only one logical port
+  in prach function. */
+  const bool hiphy_bf = (prach_pdu->beamforming.dig_bf_interface > 0)
+                            ? !IS_BIT_SET(prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list[0].beam_idx, 15)
+                            : true;
+  // When hiphy beamforming, L1 needs signal from all baseband ports.
+  const int num_rx_port = (hiphy_bf) ? gNB->frame_parms.nb_antennas_rx : 1;
   prach_item_t prach = {
       .frame = SFN,
       .slot = Slot,
@@ -78,36 +87,18 @@ void nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_nr_prach_p
       .prach_sequence_length = cfg->prach_sequence_length.value,
       .restricted_set = cfg->restricted_set_config.value,
       .numerology_index = fp->numerology_index,
-      .nb_rx = gNB->gNB_config.carrier_config.num_rx_ant.value,
+      .nb_rx = num_rx_port,
       .Xu = gNB->X_u,
       .rx_prach = &gNB->rx_prach,
       // TODO can be made permanently allocated?
       .prach_buf = calloc_or_fail(1, sizeof(c16_t) * prach.nb_rx * NUMBER_OF_NR_RU_PRACH_OCCASIONS_MAX * NR_PRACH_SEQ_LEN_L),
   };
-  if (gNB->common_vars.beam_id) {
-    int n_symb = get_nr_prach_duration(prach_pdu->prach_format);
-    AssertFatal(prach_pdu->beamforming.dig_bf_interface < NFAPI_MAX_NUM_BG_IF,
-                "impossible beams size %d\n",
-                prach_pdu->beamforming.dig_bf_interface);
-    for (int i = 0; i < prach_pdu->beamforming.dig_bf_interface; i++) {
-      int fapi_beam_idx = prach_pdu->beamforming.prgs_list[0].dig_bf_interface_list[i].beam_idx;
-      int start_symb = prach_pdu->prach_start_symbol + i * n_symb;
-      int bitmap = SL_to_bitmap(start_symb, n_symb);
-      prach.beams[i] = beam_index_allocation(gNB->enable_analog_das,
-                                              fapi_beam_idx,
-                                              &gNB->common_vars,
-                                              Slot,
-                                              gNB->frame_parms.symbols_per_slot,
-                                              bitmap);
-    }
-  }
   bool found = spsc_q_put(&gNB->prach_ru_queue, &prach, sizeof(prach));
   if (!found)
     LOG_W(NR_PHY, "%4d.%2d PRACH occ queue is full: dropping PRACH request\n", SFN, Slot);
 }
 
 static void rx_nr_prach_ru_internal(prach_item_t *p,
-                                    int beam_id,
                                     int prachStartSymbol,
                                     int prachOccasion,
                                     int32_t **rxdata,
@@ -341,8 +332,7 @@ static void rx_nr_prach_ru_internal(prach_item_t *p,
   for (int aa = 0; aa < p->nb_rx; aa++) {
     // Fixme: slot or slot makes no sense ???
     int slot2 = p->prach_sequence_length ? p->slot : p->slot;
-    int idx = aa + beam_id * p->nb_rx;
-    c16_t *prach = (c16_t *)&rxdata[idx][get_samples_slot_timestamp(fp, slot2) + sample_offset_slot - N_TA_offset];
+    c16_t *prach = (c16_t *)&rxdata[aa][get_samples_slot_timestamp(fp, slot2) + sample_offset_slot - N_TA_offset];
 
     // do DFT
     c16_t *prach2 = prach + Ncp;
@@ -371,11 +361,10 @@ void rx_nr_prach_ru(prach_item_t *p, int32_t **rxdata, NR_DL_FRAME_PARMS *fp, in
   LOG_D(NR_PHY_RACH, "%d.%d try to decode %d occasions \n", p->frame, p->slot, p->pdu.num_prach_ocas);
   for (int prach_oc = 0; prach_oc < p->pdu.num_prach_ocas; prach_oc++) {
     int prachStartSymbol = p->pdu.prach_start_symbol + prach_oc * N_dur;
-    int beam_id = p->beams[prach_oc];
     // comment FK: the standard 38.211 section 5.3.2 has one extra term +14*N_RA_slot. This is because there prachStartSymbol is
     // given wrt to start of the 15kHz slot or 60kHz slot. Here we work slot based, so this function is anyway only called in slots
     // where there is PRACH. Its up to the MAC to schedule another PRACH PDU in the case there are there N_RA_slot \in {0,1}.
-    rx_nr_prach_ru_internal(p, beam_id, prachStartSymbol, prach_oc, rxdata, fp, N_TA_offset);
+    rx_nr_prach_ru_internal(p, prachStartSymbol, prach_oc, rxdata, fp, N_TA_offset);
   }
 }
 
@@ -388,7 +377,7 @@ rx_prach_out_t rx_nr_prach(const prach_item_t *in, int occasion)
   bool new_dft = false;
   int log2_ifft_size = 10;
 
-  const int nb_rx = in->nb_rx;
+  // After beamforming there is one log port
   const int NCS = in->pdu.num_cs;
   const int prach_fmt = in->pdu.prach_format;
   const int N_ZC = in->prach_sequence_length == 0 ? 839 : 139;
@@ -528,43 +517,36 @@ rx_prach_out_t rx_nr_prach(const prach_item_t *in, int occasion)
       c16_t *Xu = in->Xu[preamble_offset - first_nonzero_root_idx];
       LOG_D(PHY,"PRACH RX new dft preamble_offset-first_nonzero_root_idx %d\n",preamble_offset-first_nonzero_root_idx);
 
-      memset(prach_ifft, 0, sizeof(prach_ifft));
       if (LOG_DUMPFLAG(DEBUG_PRACH)) {
         LOG_M("prach_rxF0.m", "prach_rxF0", in->prach_buf[0][occasion], N_ZC, 1, 1);
-        LOG_M("prach_rxF1.m", "prach_rxF1", in->prach_buf[1][occasion], 6144, 1, 1);
       }
       c16_t prachF[dft_sz] __attribute__((aligned(32)));
-      for (int aa = 0; aa < nb_rx; aa++) {
-        // Do componentwise product with Xu* on each antenna
-        for (int offset = 0; offset < N_ZC; offset++) {
-          prachF[offset] = c16MulConjShift(Xu[offset], in->prach_buf[aa][occasion][offset], 15);
-        }
-        memset(prachF + N_ZC, 0, sizeof(*prachF) * (dft_sz - N_ZC));
-        // Now do IFFT of size 1024 (N_ZC=839) or 256 (N_ZC=139)
-        c16_t prach_ifft_tmp[dft_sz] __attribute__((aligned(32)));
-        idft(get_idft(dft_sz), (int16_t *)prachF, (int16_t *)prach_ifft_tmp, 1);
-        // compute energy and accumulate over receive antennas
-        for (int i = 0; i < dft_sz; i++)
-          prach_ifft[i] += squaredMod(prach_ifft_tmp[i]);
 
-        if (LOG_DUMPFLAG(DEBUG_PRACH)) {
-          if (aa == 0)
-            LOG_M("prach_rxF_comp0.m","prach_rxF_comp0", prachF, 1024, 1, 1);
-          if (aa == 1)
-            LOG_M("prach_rxF_comp1.m","prach_rxF_comp1", prachF, 1024, 1, 1);
-        }
+      // Do componentwise product with Xu* on each antenna
+      for (int offset = 0; offset < N_ZC; offset++) {
+        prachF[offset] = c16MulConjShift(Xu[offset], in->prach_buf[0][occasion][offset], 15);
+      }
+      memset(prachF + N_ZC, 0, sizeof(*prachF) * (dft_sz - N_ZC));
+      // Now do IFFT of size 1024 (N_ZC=839) or 256 (N_ZC=139)
+      c16_t prach_ifft_tmp[dft_sz] __attribute__((aligned(32)));
+      idft(get_idft(dft_sz), (int16_t *)prachF, (int16_t *)prach_ifft_tmp, 1);
 
-      } // antennas_rx
+      for (int i = 0; i < dft_sz; i++)
+        prach_ifft[i] = squaredMod(prach_ifft_tmp[i]);
+
+      if (LOG_DUMPFLAG(DEBUG_PRACH)) {
+        LOG_M("prach_rxF_comp0.m","prach_rxF_comp0", prachF, 1024, 1, 1);
+      }
 
       // Normalization of energy over ifft and receive antennas
       if (N_ZC == 839) {
         log2_ifft_size = 10;
         for (int i = 0; i < 1024; i++)
-          prach_ifft[i] = (prach_ifft[i]>>log2_ifft_size)/nb_rx;
+          prach_ifft[i] = (prach_ifft[i]>>log2_ifft_size);
       } else {
         log2_ifft_size = 8;
         for (int i = 0; i < 256; i++)
-          prach_ifft[i] = (prach_ifft[i]>>log2_ifft_size)/nb_rx;
+          prach_ifft[i] = (prach_ifft[i]>>log2_ifft_size);
       }
 
     } // new dft

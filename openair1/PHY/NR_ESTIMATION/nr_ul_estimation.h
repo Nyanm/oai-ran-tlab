@@ -25,12 +25,12 @@
 */
 
 int nr_pusch_channel_estimation(PHY_VARS_gNB *gNB,
+                                c16_t **rxdataF,
                                 unsigned char Ns,
                                 int nl,
                                 unsigned short p,
                                 unsigned char symbol,
                                 NR_gNB_PUSCH *pusch_vars,
-                                int beam_nb,
                                 unsigned short bwp_start_subcarrier,
                                 const nfapi_nr_pusch_pdu_t *pusch_pdu,
                                 int *max_ch,
@@ -56,6 +56,7 @@ void nr_pusch_ptrs_processing(PHY_VARS_gNB *gNB,
                               NR_gNB_PUSCH *pusch_vars,
                               uint8_t nr_tti_rx,
                               unsigned char symbol,
+                              int nb_rx_ant,
                               uint32_t nb_re_pusch);
 
 int nr_srs_ls_channel_estimation(int ant,

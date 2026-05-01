@@ -369,6 +369,8 @@ int xran_fh_rx_prach_read_slot(PHY_VARS_gNB *gNB, ru_info_t *ru, int *frame, int
                                                                                                              ); // `p.slot` = slot in which PRACH is scheduled
     if (is_prach_slot) {
       ru->prach_buf = p.prach_buf;
+      ru->nb_prach_rx = p.nb_rx;
+      ru->start_prach_rx = p.ant_start;
     } else {
       LOG_W(HW, "[%d.%d] Expected PRACH reception of scheduled slot %d\n", *frame, *slot, p.slot);
     }
@@ -408,7 +410,7 @@ int xran_fh_rx_prach_read_slot(PHY_VARS_gNB *gNB, ru_info_t *ru, int *frame, int
   int nb_rx_per_ru = ru->nb_rx / fh_init->xran_ports;
 
   for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) { // OAI does not support multiple CC yet.
-    for (int aa = 0; aa < ru->nb_rx; aa++) {
+    for (int aa = ru->start_prach_rx; aa < ru->nb_prach_rx; aa++) {
       for (sym_idx = prach_start_sym; sym_idx < prach_end_sym; sym_idx++) {
         int16_t *dst, *src;
         int idx = 0;
@@ -717,20 +719,11 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
                 printf("pRbElm->compMethod == %d is not supported\n", pRbElm->compMethod);
                 exit(-1);
               }
+              // The purpose of following if is not clear? So adding assert in else to detect missed reads.
               if ((startRB + numRB) == (start_totalRB + num_totalRB)) {
-                int pos_len = 0;
-                int neg_len = 0;
-
-                if (start_totalRB < (num_totalRB >> 1)) // there are PRBs left of DC
-                  neg_len = min((num_totalRB * 6) - (start_totalRB * 12), num_totalRB * N_SC_PER_PRB);
-                pos_len = (num_totalRB * N_SC_PER_PRB) - neg_len;
-                // Calculation of the pointer for the section in the buffer.
-                // positive half
-                uint8_t *dst1 = (uint8_t *)(pos + (neg_len == 0 ? ((start_totalRB * N_SC_PER_PRB) - (num_totalRB * 6)) : 0));
-                // negative half
-                uint8_t *dst2 = (uint8_t *)(pos + (start_totalRB * N_SC_PER_PRB) + fftsize - (num_totalRB * 6));
-                memcpy((void *)dst2, (void *)local_dst, neg_len * 4);
-                memcpy((void *)dst1, (void *)&local_dst[neg_len], pos_len * 4);
+                memcpy((void *)pos, (void *)local_dst, num_totalRB * N_SC_PER_PRB * 4);
+              } else {
+                DevAssert(0);
               }
             }
           } // idxDesc
@@ -742,33 +735,36 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
   return (0);
 }
 
-/** @details Write PDSCH IQ-data from OAI txdataF_BF buffer to xran buffers. If
- * I/Q compression (bitwidth < 16 bits) is configured, compresses the data
- * before writing. */
-int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
+/// @brief Get the beam id of a symbol from section information passed by L1
+/// @param g pointer to nr_grid structure for one antenna port
+/// @param symbol symbol index for which the beam ID should be retuned
+/// @return LSB 15 bits of beam id
+static uint16_t get_symbol_beam_from_section_info(const struct nr_grid *g, int symbol)
+{
+  for (int sec = 0; sec < g->num_sections; sec++) {
+    const struct grid_info *i = g->grid_info + sec;
+    if (symbol >= i->start_symbol && symbol < i->start_symbol + i->num_symbols)
+      return (i->beam_id & 0x7fff);
+    else
+      return 0;
+  }
+}
+
+/** @details Write to xran buffers the section information which includes
+ * PRB and symbol allocation and beam ID for UL slots. This function should
+ * be called at least T1a_max_cp_ul in advance. It OAI we could call it right
+ * after MAC scheduler returns as we have a slot ahead of 4 slots for mu 1
+ * which is adequate for most RUs and deployments.
+ */
+int xran_fh_rx_send_slot_cfg(ru_info_t *ru, int frame, int slot)
 {
   int tti = /*frame*SUBFRAMES_PER_SYSTEMFRAME*SLOTNUM_PER_SUBFRAME+*/ 20 * frame
             + slot; // commented out temporarily to check that compilation of oran 5g is working.
-
-  void *ptr = NULL;
-  int32_t *pos = NULL;
-  int idx = 0;
-
   const struct xran_fh_init *fh_init = get_xran_fh_init();
-  const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
-#if defined K_RELEASE
-  uint8_t mu_number = fh_cfg->mu_number[0];
-  int fftsize = 1 << fh_cfg->perMu[mu_number].nDLFftSize;
-#elif defined F_RELEASE
-  int fftsize = 1 << fh_cfg->nDLFftSize;
-#endif
-  int nb_tx_per_ru = ru->nb_tx / fh_init->xran_ports;
   int nb_rx_per_ru = ru->nb_rx / fh_init->xran_ports;
 
-  // Handle CP UL packet here instead of at xran_fh_rx_read_slot() as oran_fh_if4p5_south_in() lags behind
-  // oran_fh_if4p5_south_out() (which is invoked at the right time slot) by 4 slots.
-  // Need to use --continuous-tx so that this routine will be triggered in RX slot.
   for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) { // OAI does not support multiple CC yet.
+
     for (uint8_t ant_id = 0; ant_id < ru->nb_rx; ant_id++) {
       const struct xran_frame_config *frame_conf = &get_xran_fh_config(ant_id / nb_rx_per_ru)->frame_conf;
       // skip processing this slot is TX (no RX in this slot)
@@ -799,26 +795,38 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
 #endif
           LOG_D(HW, "pPrbMap[%d] : PRBstart %d nPRBs %d\n", idxElm, startRB, numRB);
           // For Liteon FR2 with RunSlotPrbMapBySymbolEnable xran_prb_map will have xran_prb_elm prbMap[14], each idxElm matches to sym_idx.
-          if (fh_cfg->RunSlotPrbMapBySymbolEnable) {
-            if (sym_idx >= pRbElm->nStartSymb && sym_idx < pRbElm->nStartSymb + pRbElm->numSymb) {
-              if (!p_sec_desc->pCtrl)
-                continue;
-              // ant_id / no of antenna per beam gives the beam_nb
-              pRbElm->nBeamIndex = ru->beam_id[ant_id / (ru->nb_rx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
-              // In phy-f-1.0/fhi_lib/lib/api/xran_pkt_cp.h, beamId:15 is of 15bit. -1 set extension bit ef:1 to 1 mistakenly.
-              if (pRbElm->nBeamIndex == -1)
-                pRbElm->nBeamIndex = 0;
-            }
-          } else {
-            // ant_id / no of antenna per beam gives the beam_nb
-            int16_t beam_id = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
-            if (beam_id != -1)
-              pRbElm->nBeamIndex = beam_id;
-          }
+          if (fh_cfg->RunSlotPrbMapBySymbolEnable && (sym_idx < pRbElm->nStartSymb || sym_idx >= pRbElm->nStartSymb + pRbElm->numSymb) && !p_sec_desc->pCtrl)
+            continue;
+
+          pRbElm->nBeamIndex = get_symbol_beam_from_section_info(&ru->rx_grid[ant_id], sym_idx);
         }
       }
     }
   }
+  return 0;
+}
+
+/** @details Write PDSCH IQ-data from OAI txdataF_BF buffer to xran buffers. If
+ * I/Q compression (bitwidth < 16 bits) is configured, compresses the data
+ * before writing. */
+int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
+{
+  int tti = /*frame*SUBFRAMES_PER_SYSTEMFRAME*SLOTNUM_PER_SUBFRAME+*/ 20 * frame
+            + slot; // commented out temporarily to check that compilation of oran 5g is working.
+
+  void *ptr = NULL;
+  int32_t *pos = NULL;
+  int idx = 0;
+
+  const struct xran_fh_init *fh_init = get_xran_fh_init();
+  const struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
+#if defined K_RELEASE
+  uint8_t mu_number = fh_cfg->mu_number[0];
+  int fftsize = 1 << fh_cfg->perMu[mu_number].nDLFftSize;
+#elif defined F_RELEASE
+  int fftsize = 1 << fh_cfg->nDLFftSize;
+#endif
+  int nb_tx_per_ru = ru->nb_tx / fh_init->xran_ports;
 
   for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) { // OAI does not support multiple CC yet.
     for (uint8_t ant_id = 0; ant_id < ru->nb_tx; ant_id++) {
@@ -829,31 +837,22 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
         continue;
       }
 
-      // For Liteon FR2 with RunSlotPrbMapBySymbolEnable. Set nPrbElm if beam_id = -1 for all downlink symbols
+      /* TODO: Remove this hack to set nPrbElm for mixed slot. This can be set statically during init based on TDD pattern. */
       if (fh_cfg->RunSlotPrbMapBySymbolEnable) {
-        bool beam_used = false;
         uint8_t *pPrbMapData = bufs->srccp[ant_id % nb_tx_per_ru][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
         struct xran_prb_map *pPrbMap = (struct xran_prb_map *)pPrbMapData;
         struct xran_prb_map *pRbMap = pPrbMap;
         int32_t dl_sym_end = 0;
         for (int32_t sym_idx = 0; sym_idx < XRAN_NUM_OF_SYMBOL_PER_SLOT; sym_idx++) {
-          if (is_tdd_dl_symbol(frame_conf, slot, sym_idx)) {
-            if (ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT+ sym_idx] != -1)
-              beam_used |= true;
-          }
-          else {
-              dl_sym_end = sym_idx;
-              break;
+          if (!is_tdd_dl_symbol(frame_conf, slot, sym_idx)) {
+            dl_sym_end = sym_idx;
+            break;
           }
         }
         if (is_tdd_guard_slot(frame_conf, slot))
           pRbMap->nPrbElm = dl_sym_end;
         else
           pRbMap->nPrbElm = XRAN_NUM_OF_SYMBOL_PER_SLOT;
-        if (!beam_used) {
-          pRbMap->nPrbElm = 0;
-          continue;
-        }
       }
 
       // This loop would better be more inner to avoid confusion and maybe also errors.
@@ -911,17 +910,10 @@ int xran_fh_tx_send_slot(ru_info_t *ru, int frame, int slot, uint64_t timestamp)
                   p_sec_desc->iq_buffer_len    = 0;
                   continue;
               }
-              // ant_id / no of antenna per beam gives the beam_nb
-              p_prbMapElm->nBeamIndex = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT+ sym_idx];
-              // In phy-f-1.0/fhi_lib/lib/api/xran_pkt_cp.h, beamId:15 is of 15bit. -1 set extension bit ef:1 to 1 mistakenly.
-              if (p_prbMapElm->nBeamIndex == -1)
-                p_prbMapElm->nBeamIndex = 0;
-            } else {
-              // ant_id / no of antenna per beam gives the beam_nb
-              int16_t beam_id = ru->beam_id[ant_id / (ru->nb_tx / ru->num_beams_period)][slot * XRAN_NUM_OF_SYMBOL_PER_SLOT + sym_idx];
-              if ( beam_id != -1)
-                p_prbMapElm->nBeamIndex = beam_id;
             }
+            /* For now we assume only one section so pass first section's beam id from grid info struct. */
+            // TODO: Check for matching symbol in sections and pick the beam id
+            p_prbMapElm->nBeamIndex = ru->tx_grid[ant_id].grid_info[0].beam_id & 0x7fff;
 
             dst = xran_add_hdr_offset(dst, p_prbMapElm->compMethod);
 

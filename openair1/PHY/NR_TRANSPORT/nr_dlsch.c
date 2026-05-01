@@ -425,68 +425,6 @@ static inline void do_onelayer(NR_DL_FRAME_PARMS *frame_parms,
   return;
 }
 
-static inline void do_txdataF(c16_t **txdataF,
-                              int symbol_sz,
-                              c16_t txdataF_precoding[][symbol_sz],
-                              PHY_VARS_gNB *gNB,
-                              const nfapi_nr_dl_tti_pdsch_pdu_rel15_t *rel15,
-                              int ant,
-                              int rb_start,
-                              int rb_size,
-                              int txdataF_offset_per_symbol)
-{
-  NR_DL_FRAME_PARMS *frame_parms = &gNB->frame_parms;
-  int rb = 0;
-  uint16_t subCarrier = get_block_start_sc(rb_start, rel15->BWPStart, symbol_sz);
-  const nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
-  while (rb < rb_size) {
-    // get pmi info
-    const int pmi = (pb->prg_size > 0) ? (pb->prgs_list[(int)rb / pb->prg_size].pm_idx) : 0;
-    const int pmi2 = (rb < (rb_size - 1) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 1) / pb->prg_size].pm_idx) : -1;
-    const int pmi3 = (rb < (rb_size - 2) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 2) / pb->prg_size].pm_idx) : -1;
-    const int pmi4 = (rb < (rb_size - 3) && pb->prg_size > 0) ? (pb->prgs_list[(int)(rb + 3) / pb->prg_size].pm_idx) : -1;
-
-    // If pmi of next RB and pmi of current RB are the same, we do 2 RB in a row
-    // if pmi differs, or current rb is the end (rb_size - 1), than we do 1 RB in a row
-    int rb_step0 = pmi == pmi2 ? 2 : 1;
-    const int rb_step = rb_step0 == 2 && pmi3 == pmi && pmi4 == pmi ? 4 : rb_step0;
-    const int re_cnt = NR_NB_SC_PER_RB * rb_step;
-    if (pmi == 0) { // unitary Precoding
-      if (ant < rel15->nrOfLayers)
-        memcpy(&txdataF[ant][txdataF_offset_per_symbol + subCarrier],
-               &txdataF_precoding[ant][subCarrier],
-               re_cnt * sizeof(**txdataF));
-      else
-        memset(&txdataF[ant][txdataF_offset_per_symbol + subCarrier], 0, re_cnt * sizeof(**txdataF));
-      subCarrier += re_cnt;
-    } else { // non-unitary Precoding
-      AssertFatal(frame_parms->nb_antennas_tx > 1, "No precoding can be done with a single antenna port\n");
-      // get the precoding matrix weights:
-      nfapi_nr_pm_pdu_t *pmi_pdu = &gNB->gNB_config.pmi_list.pmi_pdu[pmi - 1]; // pmi 0 is identity matrix
-      AssertFatal(pmi == pmi_pdu->pm_idx, "PMI %d doesn't match to the one in precoding matrix %d\n", pmi, pmi_pdu->pm_idx);
-      AssertFatal(ant < pmi_pdu->num_ant_ports,
-                  "Antenna port index %d exceeds precoding matrix AP size %d\n",
-                  ant,
-                  pmi_pdu->num_ant_ports);
-      AssertFatal(rel15->nrOfLayers == pmi_pdu->numLayers,
-                  "Number of layers %d doesn't match to the one in precoding matrix %d\n",
-                  rel15->nrOfLayers,
-                  pmi_pdu->numLayers);
-      nr_layer_precoder_simd(rel15->nrOfLayers,
-                             symbol_sz,
-                             txdataF_precoding,
-                             ant,
-                             pmi_pdu->weights,
-                             subCarrier,
-                             re_cnt,
-                             &txdataF[ant][txdataF_offset_per_symbol]);
-      subCarrier += re_cnt;
-    } // else { // non-unitary Precoding
-
-    rb += rb_step;
-  } // RB loop: while(rb < rb_size)
-}
-
 typedef struct pdschSymbolProc_s {
   PHY_VARS_gNB *gNB;
   NR_DL_FRAME_PARMS *frame_parms;
@@ -499,7 +437,6 @@ typedef struct pdschSymbolProc_s {
   unsigned int layerSz2;
   unsigned int dlPtrsSymPos;
   unsigned int n_ptrs;
-  unsigned int beam_nb;
   unsigned int re_beginning_of_symbol[14];
   c16_t *tx_layers[4];
   time_stats_t dlsch_resource_mapping_stats;
@@ -524,7 +461,7 @@ static void nr_pdsch_symbol_processing(void *arg)
   c16_t mod_dmrs[(n_dmrs + 63) & ~63] __attribute__((aligned(64)));
   const int symbol_sz = frame_parms->ofdm_symbol_size;
 
-  c16_t **txdataF = gNB->common_vars.txdataF[rdata->beam_nb];
+  c16_t **txdataF = gNB->common_vars.txdataF;
 
   for (int l_symbol = rdata->startSymbol; l_symbol < rdata->startSymbol + rdata->numSymbols; l_symbol++) {
     start_meas(&rdata->dlsch_resource_mapping_stats);
@@ -577,22 +514,26 @@ static void nr_pdsch_symbol_processing(void *arg)
     } // layer loop
     stop_meas(&rdata->dlsch_resource_mapping_stats);
 
+    AssertFatal(rel15->param_v4.numberCodewords > 0 && rel15->param_v4.spatialStreamsCw[0].numSpatialStreamIndices > 0,
+                "No spatial stream indexing provided\n");
+    const nfapi_nr_spatial_stream_index_t *ssi = &rel15->param_v4.spatialStreamsCw[0];
     start_meas(&rdata->dlsch_precoding_stats);
-    const size_t txdataF_offset_per_symbol = l_symbol * symbol_sz;
-    for (int ant = 0; ant < frame_parms->nb_antennas_tx; ant++) {
-      int pos = 0;
-      int block_start, block_end;
-      while (find_next_rb_block(freq_alloc->bitmap, rel15->BWPSize, &pos, &block_start, &block_end)) {
-        do_txdataF(txdataF,
-                   symbol_sz,
-                   txdataF_precoding,
-                   gNB,
-                   rel15,
-                   ant,
-                   block_start,
-                   block_end - block_start + 1,
-                   txdataF_offset_per_symbol);
-
+    int pos = 0;
+    int block_start, block_end;
+    while (find_next_rb_block(freq_alloc->bitmap, rel15->BWPSize, &pos, &block_start, &block_end)) {
+      const int start_sc = (block_start + rel15->BWPStart) * NR_NB_SC_PER_RB;
+      for (int layer = 0; layer < rel15->nrOfLayers; layer++) {
+        const size_t txdataF_offset = l_symbol * symbol_sz + start_sc;
+        nr_tx_precoder_and_beamformer(txdataF_precoding[layer] + start_sc,
+                                      layer,
+                                      txdataF,
+                                      txdataF_offset,
+                                      frame_parms->nb_antennas_tx,
+                                      ssi->spatialStreamIndices,
+                                      &rel15->precodingAndBeamforming,
+                                      gNB->gNB_config.pmi_list.pmi_pdu,
+                                      &gNB->gNB_config.dbt_config,
+                                      block_end - block_start + 1);
       }
     }
     stop_meas(&rdata->dlsch_precoding_stats);
@@ -695,6 +636,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   c16_t tx_layers[rel15->nrOfLayers][layerSz2] __attribute__((aligned(64)));
   memset(tx_layers, 0, sizeof(tx_layers));
   nr_layer_mapping(rel15->NrOfCodewords, encoded_length, mod_symbs, rel15->nrOfLayers, layerSz2, nb_re, tx_layers);
+  stop_meas(&gNB->dlsch_layer_mapping_stats);
 
   /// Layer Precoding and Antenna port mapping
   // tx_layers 1-8 are mapped on antenna ports 1000-1007
@@ -703,16 +645,21 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   //        pmi = prgs_list[rbidx/prg_size].pm_idx, rbidx =0,...,rbSize-1
   // The Precoding matrix:
   // The Codebook Type I
+
+  // Update grid info to send to oru for beamforming
   const nfapi_nr_tx_precoding_and_beamforming_t *pb = &rel15->precodingAndBeamforming;
-  // beam number in multi-beam scenario (concurrent beams)
-  int bitmap = SL_to_bitmap(rel15->StartSymbolIndex, rel15->NrOfSymbols);
-  int beam_nb = beam_index_allocation(gNB->enable_analog_das,
-                                      pb->prgs_list[0].dig_bf_interface_list[0].beam_idx,
-                                      &gNB->common_vars,
-                                      slot,
-                                      frame_parms->symbols_per_slot,
-                                      bitmap);
-  stop_meas(&gNB->dlsch_layer_mapping_stats);
+  AssertFatal(rel15->param_v4.numberCodewords > 0, "No spatial stream index provided\n");
+  const uint16_t num_log_ports = rel15->param_v4.spatialStreamsCw[0].numSpatialStreamIndices;
+  for (int ant = 0; ant < num_log_ports; ant++) {
+    const uint16_t beam_id = (pb->dig_bf_interfaces > 0) ? pb->prgs_list[0].dig_bf_interface_list[ant].beam_idx : 0;
+    update_grid_info(gNB->common_vars.tx_grid_info,
+                     rel15->param_v4.spatialStreamsCw[0].spatialStreamIndices[ant],
+                     beam_id,
+                     rel15->BWPStart + rel15->rbStart,
+                     rel15->rbSize,
+                     rel15->StartSymbolIndex,
+                     rel15->NrOfSymbols);
+  }
 
   // spawn symbol threads
 
@@ -751,7 +698,6 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     rdata->layerSz2 = layerSz2;
     rdata->dlPtrsSymPos = dlPtrsSymPos;
     rdata->n_ptrs = n_ptrs;
-    rdata->beam_nb = beam_nb;
     for (int s = l_symbol; s < l_symbol + rdata->numSymbols; s++) {
       rdata->re_beginning_of_symbol[s] = re_beginning_of_symbol;
       re_beginning_of_symbol += freq_alloc->num_rbs * NR_NB_SC_PER_RB;
@@ -778,6 +724,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     merge_meas(&gNB->dlsch_precoding_stats, &arr[i].dlsch_precoding_stats);
   }
   stop_meas(&gNB->dlsch_pdsch_generation_stats);
+
   /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)
    * should remain a multiple of 8 * 64 with enough offset to fit each dlsch
    */

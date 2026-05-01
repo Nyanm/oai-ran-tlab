@@ -65,8 +65,6 @@ static void tx_func(processingData_L1tx_t *info)
     reset_active_ulsch(gNB, frame_rx);
   }
 
-  clear_slot_beamid(gNB, slot_tx);
-
   nfapi_nr_slot_indication_scf_t ind = {.sfn = frame_tx, .slot = slot_tx};
   start_meas(&gNB->slot_indication_stats);
   // this variable is very big (multiple MB), so we put it into static storage
@@ -172,17 +170,15 @@ static void rx_func(processingData_L1_t *info)
     if (gNB->phase_comp) {
       //apply the rx signal rotation here
       int soffset = (slot_rx % RU_RX_SLOT_DEPTH) * gNB->frame_parms.symbols_per_slot * gNB->frame_parms.ofdm_symbol_size;
-      for (int bb = 0; bb < gNB->common_vars.num_beams_period; bb++) {
-        for (int aa = 0; aa < gNB->frame_parms.nb_antennas_rx; aa++) {
-          const uint max_symb = (gNB->frame_parms.Ncp == NR_EXTENDED) ? 12 : 14;
-          for (int sym = 0; sym < max_symb; sym++)
-            apply_nr_rotation_symbol_RX(&gNB->frame_parms,
-                                        gNB->common_vars.rxdataF[bb][aa] + soffset + sym * gNB->frame_parms.ofdm_symbol_size,
-                                        gNB->frame_parms.symbol_rotation[1],
-                                        gNB->frame_parms.N_RB_UL,
-                                        slot_rx,
-                                        sym);
-        }
+      for (int aa = 0; aa < gNB->frame_parms.nb_antennas_tx; aa++) {
+        const uint max_symb = (gNB->frame_parms.Ncp == NR_EXTENDED) ? 12 : 14;
+        for (int sym = 0; sym < max_symb; sym++)
+          apply_nr_rotation_symbol_RX(&gNB->frame_parms,
+                                      gNB->common_vars.rxdataF[aa] + soffset + sym * gNB->frame_parms.ofdm_symbol_size,
+                                      gNB->frame_parms.symbol_rotation[1],
+                                      gNB->frame_parms.N_RB_UL,
+                                      slot_rx,
+                                      sym);
       }
     }
     phy_procedures_gNB_uespec_RX(gNB, frame_rx, slot_rx, &UL_INFO);
@@ -215,6 +211,7 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
   output += print_meas_log(&gNB->dlsch_modulation_stats, "DLSCH modulation", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->dlsch_pdsch_generation_stats, "PDSCH generation", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->phy_proc_rx, "L1 Rx processing", NULL, NULL, output, end - output);
+  output += print_meas_log(&gNB->pusch_rx_beamforming, "PUSCH Rx Beamforming", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->ts_deinterleave, "UL segment deinterleaving", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->ts_rate_unmatch, "UL segment rate recovery", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->ts_ldpc_decode, "UL segments decoding", NULL, NULL, output, end - output);
@@ -228,7 +225,7 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
   bool full_slot = ru->half_slot_parallelization == 0;
   if (ru->feptx_prec) {
     output += print_meas_log(&ru->precoding_stats,
-                             full_slot ? "feptx_prec (per port)" : "feptx_prec (per port, half_slot)",
+                             "feptx_prec",
                              NULL,
                              NULL,
                              output,
@@ -281,6 +278,7 @@ void *nrL1_stats_thread(void *param) {
   reset_meas(&gNB->ts_ldpc_decode);
   reset_meas(&gNB->ul_indication_stats);
   reset_meas(&gNB->slot_indication_stats);
+  reset_meas(&gNB->pusch_rx_beamforming);
   reset_meas(&gNB->rx_pusch_stats);
   reset_meas(&gNB->dlsch_scrambling_stats);
   reset_meas(&gNB->dlsch_modulation_stats);
@@ -360,10 +358,7 @@ void init_eNB_afterRU(void)
       AssertFatal(gNB->RU_list[ru_id]->common.rxdataF != NULL, "RU %d : common.rxdataF is NULL\n", gNB->RU_list[ru_id]->idx);
       for (int i = 0; i < gNB->RU_list[ru_id]->nb_rx; aa++, i++) {
         LOG_I(PHY, "Attaching RU %d antenna %d to gNB antenna %d\n", gNB->RU_list[ru_id]->idx, i, aa);
-        for (int b = 0; b < gNB->RU_list[ru_id]->num_beams_period; b++) {
-          int idx = i + b * gNB->RU_list[ru_id]->nb_rx;
-          gNB->common_vars.rxdataF[b][aa] = (c16_t *)gNB->RU_list[ru_id]->common.rxdataF[idx];
-        }
+        gNB->common_vars.rxdataF[aa] = (c16_t *)gNB->RU_list[ru_id]->common.rxdataF[i];
       }
     }
     /* TODO: review this code, there is something wrong.
