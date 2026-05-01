@@ -424,11 +424,15 @@ void init_nr_transport(PHY_VARS_gNB *gNB)
   gNB->max_nb_pusch = buffer_ul_slots ? MAX_MOBILES_PER_GNB * buffer_ul_slots : 1;
 
   int max_nb_pucch = buffer_ul_slots ? MAX_MOBILES_PER_GNB * buffer_ul_slots : 1;
-  gNB->pucch_queue = spsc_q_alloc(max_nb_pucch, sizeof(NR_gNB_PUCCH_job_t));
-  gNB->pusch_queue = spsc_q_alloc(gNB->max_nb_pusch, sizeof(NR_gNB_PUSCH_job_t));
+  bool ret;
+  ret = spsc_q_alloc(&gNB->pucch_queue, max_nb_pucch, sizeof(NR_gNB_PUCCH_job_t));
+  DevAssert(ret);
+  ret = spsc_q_alloc(&gNB->pusch_queue, gNB->max_nb_pusch, sizeof(NR_gNB_PUSCH_job_t));
+  DevAssert(ret);
 
   int max_nb_srs = buffer_ul_slots ? buffer_ul_slots << 1 : 1; // assuming at most 2 SRS per slot
-  gNB->srs_queue = spsc_q_alloc(max_nb_srs, sizeof(NR_gNB_SRS_job_t));
+  ret = spsc_q_alloc(&gNB->srs_queue, max_nb_srs, sizeof(NR_gNB_SRS_job_t));
+  DevAssert(ret);
 
   gNB->ulsch = (NR_gNB_ULSCH_t *)malloc16(gNB->max_nb_pusch * sizeof(NR_gNB_ULSCH_t));
   for (int i = 0; i < gNB->max_nb_pusch; i++) {

@@ -617,9 +617,9 @@ jumboframe 1 # enable jumbo frame
 
 ###### FR2
 
-The OAI configuration file [`gnb.sa.band257.66prb.fhi72.2x2-liteon.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band257.66prb.fhi72.2x2-liteon.conf) corresponds to:
-- TDD pattern `DDDDDDDSUU`, 1.25ms
-- Bandwidth 100MHz
+The OAI configuration file [`gnb.sa.band257.132prb.fhi72.2x2-liteon.conf`](../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band257.132prb.fhi72.2x2-liteon.conf) corresponds to:
+- TDD pattern `DDDSU`, 0.625ms
+- Bandwidth 200MHz
 - FW v02.00.07
 - DL uses jumbo frame, UL uses standard MTU of 1500 bytes
 
