@@ -100,13 +100,6 @@ int chain_offset = 0;
 int numerology = 0;
 double cpuf;
 
-/* hack: pdcp_run() is required by 4G scheduler which is compiled into
- * nr-softmodem because of linker issues */
-void pdcp_run(const protocol_ctxt_t *const ctxt_pP)
-{
-  abort();
-}
-
 /*------------------------------------------------------------------------*/
 
 unsigned int build_rflocal(int txi, int txq, int rxi, int rxq) {
