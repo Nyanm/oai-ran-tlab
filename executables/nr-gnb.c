@@ -180,6 +180,44 @@ void *L1_tx_thread(void *arg) {
   return NULL;
 }
 
+/// L2 UL thread: pre-computes UL scheduling for the upcoming TDD period.
+/// Runs without sched_lock — safe because during TDD DL-only slots no L1 RX
+/// indications modify UE state, and per-slot resources (CCE, VRB, beam) are
+/// indexed by slot so no conflict with the DL thread processing a different slot.
+void *L2_UL_TDD_thread(void *arg) {
+  PHY_VARS_gNB *gNB = (PHY_VARS_gNB *)arg;
+  gNB_MAC_INST *mac = RC.nrmac[0];
+  const frame_structure_t *fs = &mac->frame_structure;
+  const int period_len = fs->numb_slots_period;
+  const int slots_frame = fs->numb_slots_frame;
+
+  // Bypass NR_SCHED_ENSURE_LOCKED asserts — this thread runs without sched_lock
+  nr_sched_lock_bypassed = true;
+
+  while (oai_exit == 0) {
+    // Wait for trigger from DL thread (first DL slot of TDD period)
+    pthread_mutex_lock(&mac->ul_precomp_mutex);
+    while (!mac->ul_precomp_start_req && oai_exit == 0)
+      pthread_cond_wait(&mac->ul_precomp_start_cond, &mac->ul_precomp_mutex);
+    if (oai_exit) { pthread_mutex_unlock(&mac->ul_precomp_mutex); break; }
+    mac->ul_precomp_start_req = false;
+    const int frame = mac->ul_precomp_frame;
+    const int slot0 = mac->ul_precomp_slot;
+    pthread_mutex_unlock(&mac->ul_precomp_mutex);
+
+    // Pre-compute UL scheduling for all DL slots in this TDD period
+    for (int i = 0; i < period_len; i++) {
+      mac->ul_precomp_dci[i].numPdus = 0;
+      const int f = (frame + (slot0 + i) / slots_frame) % 1024;
+      const int s = (slot0 + i) % slots_frame;
+      if (is_dl_slot(s, fs))
+        nr_schedule_ulsch(0, f, s, &mac->ul_precomp_dci[i]);
+      atomic_store_explicit(&mac->ul_precomp_slots_done, i + 1, memory_order_release);
+    }
+  }
+  return NULL;
+}
+
 /// L2 TX thread: runs MAC scheduling, dispatches PHY TX to L1_tx_thread
 void *L2_tx_thread(void *arg) {
   PHY_VARS_gNB *gNB = (PHY_VARS_gNB*)arg;
@@ -409,6 +447,17 @@ void init_gNB_Tpool(int inst)
   gNB_MAC_INST *mac = RC.nrmac[0];
   threadCreate(&mac->L2_tx_thread, L2_tx_thread, (void *)gNB, "L2_tx_thread", mac->L2_tx_thread_core, OAI_PRIORITY_RT_MAX);
 
+  // L2 UL thread: TDD UL pre-scheduling on dedicated core
+  if (fp->frame_type == TDD) {
+    int period_len = fp->slots_per_frame / get_nb_periods_per_frame(gNB->gNB_config.tdd_table.tdd_period.value);
+    mac->ul_precomp_dci = calloc(period_len, sizeof(*mac->ul_precomp_dci));
+    AssertFatal(mac->ul_precomp_dci, "ul_precomp_dci alloc failed\n");
+    mac->ul_precomp_period_len = period_len;
+    pthread_mutex_init(&mac->ul_precomp_mutex, NULL);
+    pthread_cond_init(&mac->ul_precomp_start_cond, NULL);
+    threadCreate(&mac->L2_UL_TDD_thread, L2_UL_TDD_thread, (void *)gNB, "L2_UL_TDD_thread", mac->L2_ul_tdd_thread_core, OAI_PRIORITY_RT_MAX);
+  }
+
   if (!IS_SOFTMODEM_NOSTATS)
     threadCreate(&proc->L1_stats_thread, nrL1_stats_thread, (void *)gNB, "L1_stats", -1, OAI_PRIORITY_RT_LOW);
 }
@@ -424,6 +473,18 @@ void term_gNB_Tpool(int inst) {
   pthread_join(mac->L2_tx_thread, NULL);
   abortNotifiedFIFO(&gNB->L1_tx_out);
   pthread_join(gNB->L1_tx_thread, NULL);
+
+  // Stop UL pre-scheduling thread (TDD only)
+  if (gNB->frame_parms.frame_type == TDD) {
+    pthread_mutex_lock(&mac->ul_precomp_mutex);
+    mac->ul_precomp_start_req = true; // wake up so it sees oai_exit
+    pthread_cond_signal(&mac->ul_precomp_start_cond);
+    pthread_mutex_unlock(&mac->ul_precomp_mutex);
+    pthread_join(mac->L2_UL_TDD_thread, NULL);
+    free(mac->ul_precomp_dci);
+    pthread_mutex_destroy(&mac->ul_precomp_mutex);
+    pthread_cond_destroy(&mac->ul_precomp_start_cond);
+  }
 
   // Free pool elements (malloced=false so abort didn't free them)
   for (int i = 0; i < gNB->sched_pool_size; i++)
