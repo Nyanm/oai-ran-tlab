@@ -727,6 +727,7 @@ typedef struct {
 
 typedef struct {
   int16_t target_Nid_cell;
+  uint32_t ssb_arfcn;
   bool ssb_bw_scan;
 } fapi_nr_synch_request_t;
 

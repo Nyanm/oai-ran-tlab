@@ -394,7 +394,7 @@ nr_initial_sync_t nr_initial_sync(UE_nr_rxtx_proc_t *proc,
       memset(ssbInfo->rxdata[ant] + fp->samples_per_frame * 2, 0, fp->ofdm_symbol_size * sizeof(c16_t));
     }
     LOG_I(NR_PHY,
-          "Scanning GSCN: %d, with SSB offset: %d, SSB Freq: %lf\n",
+          "Scanning GSCN: %d, with SSB offset: %d, SSB Freq: %u kHz\n",
           ssbInfo->gscnInfo.gscn,
           ssbInfo->gscnInfo.ssbFirstSC,
           ssbInfo->gscnInfo.ssRef);
@@ -410,7 +410,7 @@ nr_initial_sync_t nr_initial_sync(UE_nr_rxtx_proc_t *proc,
     nr_ue_ssb_scan_t *ssbInfo = &ssb_info[i];
     if (ssbInfo->syncRes.cell_detected) {
       LOG_I(NR_PHY,
-            "Cell Detected with GSCN: %d, SSB SC offset: %d, SSB Ref: %lf, PSS Corr peak: %d dB, PSS Corr Average: %d\n",
+            "Cell Detected with GSCN: %d, SSB SC offset: %d, SSB Ref: %u kHz, PSS Corr peak: %d dB, PSS Corr Average: %d\n",
             ssbInfo->gscnInfo.gscn,
             ssbInfo->gscnInfo.ssbFirstSC,
             ssbInfo->gscnInfo.ssRef,
@@ -459,12 +459,6 @@ nr_initial_sync_t nr_initial_sync(UE_nr_rxtx_proc_t *proc,
   LOG_D(PHY, "nr_initial sync ue RB_DL %d\n", fp->N_RB_DL);
 
   if (res) {
-    // digital compensation of FFO for SSB symbols
-    if (res->freqOffset && ue->UE_fo_compensation) {
-      // In SA we need to perform frequency offset correction until the end of buffer because we need to decode SIB1
-      // and we do not know yet in which slot it goes.
-      compensate_freq_offset(ue->common_vars.rxdata, fp, res->freqOffset, res->syncRes.frame_id);
-    }
     // sync at symbol ue->symbol_offset
     // computing the offset wrt the beginning of the frame
     int mu = fp->numerology_index;

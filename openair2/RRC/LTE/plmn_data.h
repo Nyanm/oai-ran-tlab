@@ -549,6 +549,7 @@ static const plmn_data_t plmn_data[] = {
   {208,   13,     "Vivendi",  "SFR FR"},
   {208,   14,     "Iliad",  "Free Mobile FR"},
   {208,   15,     "Iliad",  "Free Mobile FR"},
+  {208,   16,     "Iliad",  "Free Mobile FR"},
   {208,   20,     "Bouygues Telecom",   "Bouygues FR"},
   {208,   21,     "Bouygues Telecom",   "Bouygues FR"},
   {208,   88,     "Bouygues Telecom (Zones Blanches)",  "Bouygues FR"},
