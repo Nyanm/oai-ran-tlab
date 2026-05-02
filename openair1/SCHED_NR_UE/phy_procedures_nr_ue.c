@@ -977,7 +977,6 @@ int nr_process_pbch_symbol(
     PHY_VARS_NR_UE *ue,
     const UE_nr_rxtx_proc_t *proc,
     const int symbol,
-    const c16_t rxdataF[ue->frame_parms.nb_antennas_rx][ue->frame_parms.ofdm_symbol_size],
     const int ssbIndexIn,
     c16_t dl_ch_estimates_time[ue->frame_parms.nb_antennas_rx][ue->frame_parms.ofdm_symbol_size],
     c16_t *dl_ch_estimates_symbol,
@@ -998,6 +997,14 @@ int nr_process_pbch_symbol(
   const int startPbchSymbHf = startPbchSymb + (fp->slots_per_frame * NR_SYMBOLS_PER_SLOT / 2);
 
   // Found PBCH. Process it
+  __attribute__((aligned(32))) c16_t rxdataF[fp->nb_antennas_rx][fp->ofdm_symbol_size];
+  {
+    __attribute__((aligned(32))) c16_t tmp[fp->nb_antennas_rx][fp->samples_per_slot_wCP];
+    nr_slot_fep(ue, fp, proc->nr_slot_rx, symbol, tmp, link_type_dl, 0, ue->common_vars.rxdata);
+    for (int aarx = 0; aarx < fp->nb_antennas_rx; aarx++) {
+      memcpy(rxdataF[aarx], tmp[aarx] + symbol * fp->ofdm_symbol_size, sizeof(c16_t) * fp->ofdm_symbol_size);
+    }
+  }
   c16_t dl_ch_estimates[fp->nb_antennas_rx][fp->ofdm_symbol_size];
 
   const int relPbchSymb = (symbIdxInFrame > (fp->slots_per_frame * NR_SYMBOLS_PER_SLOT / 2)) ? (symbIdxInFrame - startPbchSymbHf)
@@ -1047,7 +1054,6 @@ int nr_process_pbch_symbol(
 static int pbch_process(PHY_VARS_NR_UE *UE,
                         const UE_nr_rxtx_proc_t *proc,
                         const int symbol,
-                        const c16_t rxdataF[UE->frame_parms.nb_antennas_rx][UE->frame_parms.ofdm_symbol_size],
                         int *ssbIndex,
                         c16_t pbch_ch_est_sym1[NR_PBCH_NUM_RB * NR_NB_SC_PER_RB],
                         c16_t pbch_ch_est_time[UE->frame_parms.nb_antennas_rx][UE->frame_parms.ofdm_symbol_size],
@@ -1065,7 +1071,7 @@ static int pbch_process(PHY_VARS_NR_UE *UE,
   else if (*pbchSymbCnt == 2)
     cur_pbch_est = pbch_ch_est_sym3;
 
-  *ssbIndex = nr_process_pbch_symbol(UE, proc, symbol, rxdataF, *ssbIndex, pbch_ch_est_time, cur_pbch_est, pbch_e_rx);
+  *ssbIndex = nr_process_pbch_symbol(UE, proc, symbol, *ssbIndex, pbch_ch_est_time, cur_pbch_est, pbch_e_rx);
   // If valid PBCH symbol, increment symbol count.
   if (*ssbIndex > -1)
     (*pbchSymbCnt)++;
@@ -1124,8 +1130,6 @@ int pbch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr_phy_da
   LOG_D(PHY," ****** start RX-Chain for Frame.Slot %d.%d ******  \n",
         frame_rx%1024, nr_slot_rx);
 
-  const uint32_t rxdataF_sz = ue->frame_parms.samples_per_slot_wCP;
-  __attribute__((aligned(32))) c16_t rxdataF[ue->frame_parms.nb_antennas_rx][rxdataF_sz];
   {
     int pbchSymbCnt = 0;
     __attribute__((aligned(32))) c16_t pbch_ch_est_time[ue->frame_parms.nb_antennas_rx][ue->frame_parms.ofdm_symbol_size];
@@ -1134,19 +1138,10 @@ int pbch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr_phy_da
     c16_t pbch_ch_est_sym1[NR_PBCH_NUM_RB * NR_NB_SC_PER_RB];
 
     int ssbIndex = -1;
-    // TODO: In later commit, the following OFDM demod and buffer restructuring will be removed because
-    // this OFDM demod is called elsewhere outside this function with the correct buffer structure.
+    // TODO: Remove loopover symbols when symbol based receiver is fully integrated.
     for (int symbol = 0; symbol < fp->symbols_per_slot; symbol++) {
-      nr_slot_fep(ue, fp, proc->nr_slot_rx, symbol, rxdataF, link_type_dl, 0, ue->common_vars.rxdata);
-      __attribute__((
-          aligned(32))) c16_t rxdataF_symb[ue->frame_parms.nb_antennas_rx][ue->frame_parms.ofdm_symbol_size];
-      // Buffer restructuring (to be removed later)
-      for (int ant = 0; ant < ue->frame_parms.nb_antennas_rx; ant++)
-        memcpy(rxdataF_symb[ant],
-               &rxdataF[ant][symbol * ue->frame_parms.ofdm_symbol_size],
-               sizeof(c16_t) * ue->frame_parms.ofdm_symbol_size);
       const int pbch_sampleShift =
-          pbch_process(ue, proc, symbol, rxdataF_symb, &ssbIndex, pbch_ch_est_sym1, pbch_ch_est_time, pbch_e_rx, &pbchSymbCnt);
+          pbch_process(ue, proc, symbol, &ssbIndex, pbch_ch_est_sym1, pbch_ch_est_time, pbch_e_rx, &pbchSymbCnt);
       // To prevent overwrite estimated shift by consecutive symbol calls
       sampleShift = (sampleShift == INT_MAX) ? pbch_sampleShift : sampleShift;
     }
@@ -1155,6 +1150,7 @@ int pbch_processing(PHY_VARS_NR_UE *ue, const UE_nr_rxtx_proc_t *proc, nr_phy_da
   // Check for PRS slot - section 7.4.1.7.4 in 3GPP rel16 38.211
   for(int gNB_id = 0; gNB_id < ue->prs_active_gNBs; gNB_id++)
   {
+    __attribute__((aligned(32))) c16_t rxdataF[ue->frame_parms.nb_antennas_rx][ue->frame_parms.samples_per_slot_wCP];
     for(int rsc_id = 0; rsc_id < ue->prs_vars[gNB_id]->NumPRSResources; rsc_id++)
     {
       prs_config_t *prs_config = &ue->prs_vars[gNB_id]->prs_resource[rsc_id].prs_cfg;
