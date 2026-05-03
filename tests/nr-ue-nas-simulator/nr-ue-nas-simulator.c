@@ -75,7 +75,7 @@ int nr_rlc_get_available_tx_space(const rnti_t rntiP, const logical_chan_id_t ch
 
 configmodule_interface_t *uniqCfg = NULL;
 
-// Emulate registration request to register UE in the AMF (required for positioning)
+// Emulate registration request to register UE in the AMF
 void send_initial_ue_message(instance_t instance)
 {
   MessageDef *msg_p = itti_alloc_new_message(TASK_RRC_GNB, 0, NGAP_NAS_FIRST_REQ);
