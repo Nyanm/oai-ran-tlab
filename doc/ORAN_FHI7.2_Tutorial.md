@@ -62,7 +62,9 @@ We tested the category A radio units listed below.
 |Vendor           |Software Version                             |
 |-----------------|---------------------------------------------|
 |VVDN LPRU        |03-v3.0.5                                    |
-|LiteON RU        |01.00.08/02.00.03/02.00.10                   |
+|LiteON RU FR1    |01.00.08/02.00.03/02.00.10                   |
+|LiteON RU FR2    |02.00.07                                     |
+|Metanoia RU FR1  |2.0.6                                        |
 |Benetel 650      |RAN650-1v2.1.0-M-0820797                     |
 |Benetel 550      |RAN550-1v2.1.0-M-0820797                     |
 |Foxconn RPQN     |v3.1.15q.551_rc10                            |
