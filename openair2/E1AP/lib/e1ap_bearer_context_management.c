@@ -1406,9 +1406,11 @@ static E1AP_PDU_Session_Resource_To_Modify_Item_t e1_encode_pdu_session_to_mod_i
 {
   E1AP_PDU_Session_Resource_To_Modify_Item_t out = {0};
   out.pDU_Session_ID = in->sessionId;
+  if (in->numDRB2Modify > 0) {
+    out.dRB_To_Modify_List_NG_RAN = calloc_or_fail(1, sizeof(*out.dRB_To_Modify_List_NG_RAN));
+  }
   for (const DRB_nGRAN_to_mod_t *j = in->DRBnGRanModList; j < in->DRBnGRanModList + in->numDRB2Modify; j++) {
-    asn1cCalloc(out.dRB_To_Modify_List_NG_RAN, drb2Mod_List);
-    asn1cSequenceAdd(drb2Mod_List->list, E1AP_DRB_To_Modify_Item_NG_RAN_t, drb2Mod);
+    asn1cSequenceAdd(out.dRB_To_Modify_List_NG_RAN->list, E1AP_DRB_To_Modify_Item_NG_RAN_t, drb2Mod);
     drb2Mod->dRB_ID = j->id;
     // PDCP Config (O)
     if (j->pdcp_config) {
