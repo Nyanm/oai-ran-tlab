@@ -98,7 +98,9 @@ pipeline {
             )
             def mrValidationMessage = readFile(mrValidationLog).trim()
             sh "rm -f ${mrValidationLog}"
-            addGitLabMRComment comment: "${mrValidationMessage}"
+            if (mrValidationExitCode >= 1) {
+              addGitLabMRComment comment: "${mrValidationMessage}"
+            }
             if (mrValidationExitCode >= 2) {
               error("${mrValidationMessage}")
             }
