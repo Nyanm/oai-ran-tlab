@@ -939,53 +939,61 @@ static void handle_pucch(PHY_VARS_gNB *gNB, c16_t **rxdataF, const NR_gNB_PUCCH_
   }
 }
 
-static void handle_pusch_rx_trigger(PHY_VARS_gNB *gNB, NR_gNB_PUSCH *pusch_vars, NR_gNB_ULSCH_t *ulsch)
+static void handle_pusch_rx_group_trigger(PHY_VARS_gNB *gNB,
+                                          NR_gNB_PUSCH **pusch_vars_group,
+                                          NR_gNB_ULSCH_t **ulsch_group,
+                                          int group_size)
 {
-  NR_UL_gNB_HARQ_t *ulsch_harq = ulsch->harq_process;
-  AssertFatal(ulsch_harq != NULL, "harq_pid %d is not allocated\n", ulsch->harq_pid);
-  const nfapi_nr_pusch_pdu_t *pdu = &ulsch_harq->ulsch_pdu;
+  for (int u = 0; u < group_size; u++) {
+    NR_gNB_PUSCH *pusch_vars = pusch_vars_group[u];
+    NR_gNB_ULSCH_t *ulsch = ulsch_group[u];
+    NR_UL_gNB_HARQ_t *ulsch_harq = ulsch->harq_process;
+    AssertFatal(ulsch_harq != NULL, "harq_pid %d is not allocated\n", ulsch->harq_pid);
+    const nfapi_nr_pusch_pdu_t *pdu = &ulsch_harq->ulsch_pdu;
 
 #ifdef DEBUG_RXDATA
-  RU_t *ru = gNB->RU_list[0];
-  int slot_offset = frame_parms->get_samples_slot_timestamp(ulsch->slot, frame_parms, 0);
-  slot_offset -= ru->N_TA_offset;
-  int32_t sample_offset = gNB->common_vars.debugBuff_sample_offset;
-  int16_t buf = (int16_t *)&gNB->common_vars.debugBuff[offset];
-  buf[0] = (int16_t)ulsch->rnti;
-  buf[1] = (int16_t)pdu->rb_size;
-  buf[2] = (int16_t)pdu->rb_start;
-  buf[3] = (int16_t)pdu->nr_of_symbols;
-  buf[4] = (int16_t)pdu->start_symbol_index;
-  buf[5] = (int16_t)pdu->mcs_index;
-  buf[6] = (int16_t)pdu->pusch_data.rv_index;
-  buf[7] = (int16_t)ulsch->harq_pid;
-  memcpy(&gNB->common_vars.debugBuff[gNB->common_vars.debugBuff_sample_offset + 4],
-         &ru->common.rxdata[0][slot_offset],
-         frame_parms->get_samples_per_slot(ulsch->slot, frame_parms) * sizeof(int32_t));
-  gNB->common_vars.debugBuff_sample_offset += (frame_parms->get_samples_per_slot(ulsch->slot, frame_parms) + 1000 + 4);
-  if (gNB->common_vars.debugBuff_sample_offset > ((frame_parms->get_samples_per_slot(ulsch->slot, frame_parms) + 1000 + 2) * 20)) {
-    FILE *f;
-    f = fopen("rxdata_buff.raw", "w");
-    if (f == NULL)
-      exit(1);
-    fwrite((int16_t *)gNB->common_vars.debugBuff,
-           2,
-           (frame_parms->get_samples_per_slot(ulsch->slot, frame_parms) + 1000 + 4) * 20 * 2,
-           f);
-    fclose(f);
-    exit(-1);
-  }
+    RU_t *ru = gNB->RU_list[0];
+    int slot_offset = frame_parms->get_samples_slot_timestamp(ulsch->slot, frame_parms, 0);
+    slot_offset -= ru->N_TA_offset;
+    int32_t sample_offset = gNB->common_vars.debugBuff_sample_offset;
+    int16_t buf = (int16_t *)&gNB->common_vars.debugBuff[offset];
+    buf[0] = (int16_t)ulsch->rnti;
+    buf[1] = (int16_t)pdu->rb_size;
+    buf[2] = (int16_t)pdu->rb_start;
+    buf[3] = (int16_t)pdu->nr_of_symbols;
+    buf[4] = (int16_t)pdu->start_symbol_index;
+    buf[5] = (int16_t)pdu->mcs_index;
+    buf[6] = (int16_t)pdu->pusch_data.rv_index;
+    buf[7] = (int16_t)ulsch->harq_pid;
+    memcpy(&gNB->common_vars.debugBuff[gNB->common_vars.debugBuff_sample_offset + 4],
+           &ru->common.rxdata[0][slot_offset],
+           frame_parms->get_samples_per_slot(ulsch->slot, frame_parms) * sizeof(int32_t));
+    gNB->common_vars.debugBuff_sample_offset += (frame_parms->get_samples_per_slot(ulsch->slot, frame_parms) + 1000 + 4);
+    if (gNB->common_vars.debugBuff_sample_offset
+        > ((frame_parms->get_samples_per_slot(ulsch->slot, frame_parms) + 1000 + 2) * 20)) {
+      FILE *f;
+      f = fopen("rxdata_buff.raw", "w");
+      if (f == NULL)
+        exit(1);
+      fwrite((int16_t *)gNB->common_vars.debugBuff,
+             2,
+             (frame_parms->get_samples_per_slot(ulsch->slot, frame_parms) + 1000 + 4) * 20 * 2,
+             f);
+      fclose(f);
+      exit(-1);
+    }
 #endif
 
-  start_meas(&gNB->rx_pusch_stats);
-  nr_rx_pusch_tp(gNB, pusch_vars, pdu, &ulsch->unav_res, ulsch->frame, ulsch->slot, ulsch->beam_nb);
-  pusch_vars->ulsch_power_tot = 0;
-  pusch_vars->ulsch_noise_power_tot = 0;
-  for (int aarx = 0; aarx < gNB->frame_parms.nb_antennas_rx; aarx++) {
-    pusch_vars->ulsch_power_tot += pusch_vars->ulsch_power[aarx];
-    pusch_vars->ulsch_noise_power_tot += pusch_vars->ulsch_noise_power[aarx];
+    start_meas(&gNB->rx_pusch_stats);
+    nr_rx_pusch_tp(gNB, pusch_vars, pdu, &ulsch->unav_res, ulsch->frame, ulsch->slot, ulsch->beam_nb);
+    pusch_vars->ulsch_power_tot = 0;
+    pusch_vars->ulsch_noise_power_tot = 0;
+    for (int aarx = 0; aarx < gNB->frame_parms.nb_antennas_rx; aarx++) {
+      pusch_vars->ulsch_power_tot += pusch_vars->ulsch_power[aarx];
+      pusch_vars->ulsch_noise_power_tot += pusch_vars->ulsch_noise_power[aarx];
+    }
+    stop_meas(&gNB->rx_pusch_stats);
   }
-  stop_meas(&gNB->rx_pusch_stats);
 }
 
 static bool handle_pusch_DTX(PHY_VARS_gNB *gNB,
@@ -1203,15 +1211,52 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
   UL_INFO->rx_ind.pdu_list = UL_INFO->rx_pdu_list;
   int ulsch_idx_to_decode[MAX_UL_PDUS_PER_SLOT];
   int num_pusch = 0;
+
+  // Group the jobs using group index
+  int group_jobs[MAX_UL_PDUS_PER_SLOT][MAX_UL_PDUS_PER_SLOT];
+  uint8_t group_size[MAX_UL_PDUS_PER_SLOT] = {0};
+  int16_t active_groups[MAX_UL_PDUS_PER_SLOT];
+  int n_active_groups = 0;
   for (int i = 0; i < n_pusch_jobs; ++i) {
     int ULSCH_id = handle_pusch_job_trigger(gNB, &pusch[i]);
     if (ULSCH_id < 0)
       continue;
-    NR_gNB_PUSCH *pusch_vars = &gNB->pusch_vars[ULSCH_id];
-    NR_gNB_ULSCH_t *ulsch = &gNB->ulsch[ULSCH_id];
-    handle_pusch_rx_trigger(gNB, pusch_vars, ulsch);
-    if (handle_pusch_DTX(gNB, pusch_vars, ulsch, UL_INFO, &pusch_DTX))
-      ulsch_idx_to_decode[num_pusch++] = ULSCH_id;
+    int g = pusch[i].mu_group_idx;
+    AssertFatal(g >= 0, "Ungrouped ULSCH_id %d\n", ULSCH_id);
+    if (group_size[g] == 0)
+      active_groups[n_active_groups++] = g;
+    group_jobs[g][group_size[g]++] = ULSCH_id;
+  }
+
+  for (int i = 0; i < n_active_groups; i++) {
+    int g = active_groups[i];
+    int gsz = group_size[g];
+    AssertFatal(gsz == 1, "Cannot handle group size > 1\n");
+
+    NR_gNB_PUSCH *pusch_vars_group[gsz];
+    NR_gNB_ULSCH_t *ulsch_pdu_group[gsz];
+    int beam_nb = -1;
+    for (int u = 0; u < gsz; u++) {
+      int ulsch_id = group_jobs[g][u];
+      pusch_vars_group[u] = &gNB->pusch_vars[ulsch_id];
+      ulsch_pdu_group[u] = &gNB->ulsch[ulsch_id];
+      int this_beam = gNB->ulsch[ulsch_id].beam_nb;
+      if (beam_nb < 0) {
+        beam_nb = this_beam;
+      } else {
+        AssertFatal(beam_nb == this_beam, "MU-MIMO group %d has inconsistent beam_nb : %d and %d\n", g, beam_nb, this_beam);
+      }
+    }
+
+    handle_pusch_rx_group_trigger(gNB, pusch_vars_group, ulsch_pdu_group, gsz);
+
+    for (int u = 0; u < gsz; u++) {
+      int ULSCH_id = group_jobs[g][u];
+      NR_gNB_PUSCH *pusch_vars = &gNB->pusch_vars[ULSCH_id];
+      NR_gNB_ULSCH_t *ulsch = &gNB->ulsch[ULSCH_id];
+      if (handle_pusch_DTX(gNB, pusch_vars, ulsch, UL_INFO, &pusch_DTX))
+        ulsch_idx_to_decode[num_pusch++] = ULSCH_id;
+    }
   }
 
   /* Do ULSCH decoding time measurement only when number of PUSCH is limited to 1
@@ -1265,6 +1310,19 @@ void nr_save_ul_tti_req(PHY_VARS_gNB *gNB, nfapi_nr_ul_tti_request_t *UL_tti_req
   int frame = UL_tti_req->SFN;
   int slot = UL_tti_req->Slot;
 
+  int16_t pdu_group_idx[MAX_UL_PDUS_PER_SLOT] = {[0 ... MAX_UL_PDUS_PER_SLOT - 1] = -1};
+  uint8_t pdu_group_size[MAX_UL_PDUS_PER_SLOT] = {0};
+  for (int g = 0; g < UL_tti_req->n_group; g++) {
+    const nfapi_nr_ul_tti_request_number_of_groups_t *grp = &UL_tti_req->groups_list[g];
+    for (int u = 0; u < grp->n_ue; u++) {
+      int pdu_idx = grp->ue_list[u].pdu_idx;
+      if (pdu_idx >= 0 && pdu_idx < UL_tti_req->n_pdus) {
+        pdu_group_idx[pdu_idx] = g;
+        pdu_group_size[pdu_idx] = grp->n_ue;
+      }
+    }
+  }
+
   for (int i = 0; i < UL_tti_req->n_pdus; i++) {
     int type = UL_tti_req->pdus_list[i].pdu_type;
     LOG_D(NR_PHY,
@@ -1276,7 +1334,12 @@ void nr_save_ul_tti_req(PHY_VARS_gNB *gNB, nfapi_nr_ul_tti_request_t *UL_tti_req
           UL_tti_req->Slot);
     switch (type) {
       case NFAPI_NR_UL_CONFIG_PUSCH_PDU_TYPE:
-        nr_fill_ulsch(gNB, UL_tti_req->SFN, UL_tti_req->Slot, &UL_tti_req->pdus_list[i].pusch_pdu);
+        nr_fill_ulsch(gNB,
+                      UL_tti_req->SFN,
+                      UL_tti_req->Slot,
+                      &UL_tti_req->pdus_list[i].pusch_pdu,
+                      pdu_group_idx[i],
+                      pdu_group_size[i]);
         break;
       case NFAPI_NR_UL_CONFIG_PUCCH_PDU_TYPE:
         nr_fill_pucch(gNB, UL_tti_req->SFN, UL_tti_req->Slot, &UL_tti_req->pdus_list[i].pucch_pdu);
