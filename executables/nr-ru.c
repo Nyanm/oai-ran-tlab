@@ -455,28 +455,74 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
   stop_meas(&ru->rx_fhaul);
 }
 
+typedef struct {
+  uint16_t port_id;
+  struct grid_info sec;
+} section_sort_t;
+
+static int cmp_start_symbol(const void *a, const void *b)
+{
+  const section_sort_t *ga = (const section_sort_t *)a;
+  const section_sort_t *gb = (const section_sort_t *)b;
+  return ga->sec.start_symbol - gb->sec.start_symbol;
+}
+
 void ctrl_rf(RU_t *ru, int frame, int slot, uint64_t timestamp, struct nr_grid *nrg)
 {
   const int num_ant_ports = ru->nb_tx;
-  uint16_t beam_id[num_ant_ports];
+  /* We group sections of all ports and sort them by start symbol. Then call the
+  beam API for every unique start symbol. This is done to call the API only when
+  the beam changes because calling UHD GPIO API on every slot/symbol had lead to
+  timing issues in the past. We should check this with latest UHD driver and
+  decide if we keep this logic or not. */
+  int num_sections = 0;
+  for (int a = 0; a < num_ant_ports; a++)
+    num_sections += nrg[a].num_sections;
 
-  for (int_fast16_t i = 0; i < num_ant_ports; i++) {
-    if (!IS_BIT_SET(nrg[i].grid_info->beam_id, 15))
-      beam_id[i] = 0; // MSB must be set to send beam to RU
-    else
-      beam_id[i] = nrg[i].grid_info->beam_id & 0x7fff; // FAPI beam_id is only 15 bits. MSB already handled
+  // Group all ports' sections together
+  section_sort_t to_sort[num_sections];
+  int_fast16_t i = 0;
+  for (int a = 0; a < num_ant_ports; a++) {
+    for (int s = 0; s < nrg[a].num_sections; s++) {
+      to_sort[i].port_id = a;
+      to_sort[i].sec = nrg[a].grid_info[s];
+      i++;
+    }
   }
+  DevAssert(i == num_sections);
 
-  const NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
-  uint64_t ts = timestamp + ru->ts_offset;
-  nfapi_nr_config_request_scf_t *cfg = &ru->config;
-  int slot_type = nr_slot_select(cfg, frame, slot % fp->slots_per_frame);
-  int prevslot_type = nr_slot_select(cfg, frame, (slot + (fp->slots_per_frame - 1)) % fp->slots_per_frame);
-  if (cfg->cell_config.frame_duplex_type.value == TDD && slot_type == NR_DOWNLINK_SLOT && prevslot_type == NR_UPLINK_SLOT
-      && !get_softmodem_params()->continuous_tx && !IS_SOFTMODEM_RFSIM)
-    ts -= ru->sf_extension;
+  // Sort the sections
+  qsort(to_sort, num_sections, sizeof(to_sort[0]), cmp_start_symbol);
 
-  ru->rfdevice.trx_set_beams(&ru->rfdevice, beam_id, num_ant_ports, ts);
+  // Send beam ID to RU
+  uint16_t beam_id[num_ant_ports];
+  memset(beam_id, 0, sizeof(beam_id));
+  for (i = 0; i < num_sections; i++) {
+    // FAPI beam_id is only 15 bits. MSB already handled
+    beam_id[to_sort[i].port_id] = to_sort[i].sec.beam_id & 0x7fff;
+    // Consequtive sections with same start symbol so multiple ports' beam id has changed.
+    if (i < num_sections - 1)
+      if (to_sort[i].sec.start_symbol == to_sort[i + 1].sec.start_symbol)
+        continue;
+
+    // Next section has different start symbol. So send the current beam_id to RU.
+    const NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
+    uint64_t ts = timestamp + ru->ts_offset;
+    nfapi_nr_config_request_scf_t *cfg = &ru->config;
+    int slot_type = nr_slot_select(cfg, frame, slot % fp->slots_per_frame);
+    int prevslot_type = nr_slot_select(cfg, frame, (slot + (fp->slots_per_frame - 1)) % fp->slots_per_frame);
+    if (cfg->cell_config.frame_duplex_type.value == TDD && slot_type == NR_DOWNLINK_SLOT && prevslot_type == NR_UPLINK_SLOT
+        && !get_softmodem_params()->continuous_tx && !IS_SOFTMODEM_RFSIM)
+      ts -= ru->sf_extension;
+
+    uint16_t cur_symbol = to_sort[i].sec.start_symbol;
+    int symb_offset = cur_symbol > 0 ? get_samples_symbol_duration(fp, slot, 0, cur_symbol) : 0;
+    ts += symb_offset;
+    ru->rfdevice.trx_set_beams(&ru->rfdevice, beam_id, num_ant_ports, ts);
+
+    // Reset beam_id for next change event
+    memset(beam_id, 0, sizeof(beam_id));
+  }
 }
 
 void tx_rf(RU_t *ru, int frame,int slot, uint64_t timestamp)
