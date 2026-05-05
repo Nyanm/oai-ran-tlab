@@ -886,16 +886,24 @@ __attribute__((always_inline)) static inline void dft16_simd256(int16_t *x, int1
 
   const simde__m256i x02t = simde_mm256_adds_epi16(ztmp[0], xtmp2);
   const simde__m256i x13t = simde_mm256_adds_epi16(xtmp1, xtmp3);
-  const simde__m256i ytmp0 = simde_mm256_srai_epi16(simde_mm256_adds_epi16(x02t, x13t), scale);
-  const simde__m256i ytmp2 = simde_mm256_srai_epi16(simde_mm256_subs_epi16(x02t, x13t), scale);
   const simde__m256i x1_flip = simde_mm256_sign_epi16(xtmp1, *conjugatedft256);
   const simde__m256i x1_flip2 = simde_mm256_shuffle_epi8(x1_flip, *complex_shuffle256);
   const simde__m256i x3_flip = simde_mm256_sign_epi16(xtmp3, *conjugatedft256);
   const simde__m256i x3_flip2 = simde_mm256_shuffle_epi8(x3_flip, *complex_shuffle256);
   const simde__m256i x02t2 = simde_mm256_subs_epi16(ztmp[0], xtmp2);
   const simde__m256i x13t2 = simde_mm256_subs_epi16(x1_flip2, x3_flip2);
-  const simde__m256i ytmp1 = simde_mm256_srai_epi16(simde_mm256_adds_epi16(x02t2, x13t2), scale); // x0 + x1f - x2 - x3f
-  const simde__m256i ytmp3 = simde_mm256_srai_epi16(simde_mm256_subs_epi16(x02t2, x13t2), scale); // x0 - x1f - x2 + x3f
+  simde__m256i ytmp0, ytmp1, ytmp2, ytmp3;
+  if (scale > 0) {
+    ytmp0 = simde_mm256_srai_epi16(simde_mm256_adds_epi16(x02t, x13t), scale);
+    ytmp2 = simde_mm256_srai_epi16(simde_mm256_subs_epi16(x02t, x13t), scale);
+    ytmp1 = simde_mm256_srai_epi16(simde_mm256_adds_epi16(x02t2, x13t2), scale); // x0 + x1f - x2 - x3f
+    ytmp3 = simde_mm256_srai_epi16(simde_mm256_subs_epi16(x02t2, x13t2), scale); // x0 - x1f - x2 + x3f
+  } else {
+    ytmp0 = simde_mm256_adds_epi16(x02t, x13t);
+    ytmp2 = simde_mm256_subs_epi16(x02t, x13t);
+    ytmp1 = simde_mm256_adds_epi16(x02t2, x13t2); // x0 + x1f - x2 - x3f
+    ytmp3 = simde_mm256_subs_epi16(x02t2, x13t2); // x0 - x1f - x2 + x3f
+  }
 
   // [y0  y1  y2  y3  y16 y17 y18 y19]
   // [y4  y5  y6  y7  y20 y21 y22 y23]
@@ -7494,8 +7502,9 @@ int config_get(configmodule_interface_t *cfg, paramdef_t *params, int numparams,
   return (0);
 }
 
+
 // #define LOG_M write_output
-int write_file_matlab(const char *fname, const char *vname, const void *data, int length, int dec, unsigned int format, int dummy)
+int32_t write_file_matlab(const char *fname, const char *vname, const void *data, int length, int dec, unsigned int format, int dummy)
 {
 
   FILE *fp=NULL;
@@ -7649,6 +7658,7 @@ int write_file_matlab(const char *fname, const char *vname, const void *data, in
 
   return 0;
 }
+
 double compute_error(int16_t *x, int16_t *y, int N, int *bitrev, int idft)
 {
   int i;
