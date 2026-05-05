@@ -36,6 +36,10 @@
 
 #include "tools_defs.h"
 
+#if defined(__AVX512F__) && defined(__AVX512VL__)
+#define OAI_DFT_AVX512VL_PERMUTE 1
+#endif
+
 #define print_shorts(s,x) printf("%s %d,%d,%d,%d,%d,%d,%d,%d\n",s,(x)[0],(x)[1],(x)[2],(x)[3],(x)[4],(x)[5],(x)[6],(x)[7])
 #define print_shorts256(s,x) printf("%s %d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",s,(x)[0],(x)[1],(x)[2],(x)[3],(x)[4],(x)[5],(x)[6],(x)[7],(x)[8],(x)[9],(x)[10],(x)[11],(x)[12],(x)[13],(x)[14],(x)[15])
 
@@ -751,7 +755,7 @@ __attribute__((always_inline)) static inline void transpose16_ooff_simd256(simde
   // y[off] = [x1 x5 x9 x13 x17 x21 x25 x29]
   // y[2*off] = [x2 x6 x10 x14 x18 x22 x26 x30]
   // y[3*off] = [x3 x7 x11 x15 x19 x23 x27 x31]
-#ifndef __AVX512VBMI__
+#ifndef OAI_DFT_AVX512VL_PERMUTE
   register simde__m256i ytmp0, ytmp1, ytmp2, ytmp3, ytmp4, ytmp5, ytmp6, ytmp7;
   simde__m256i const perm_mask = simde_mm256_set_epi32(7, 3, 5, 1, 6, 2, 4, 0);
 
@@ -800,7 +804,7 @@ __attribute__((always_inline)) static inline void transpose4_ooff_simd256(simde_
   // x[1] = [x8 x9 x10 x11 x12 x13 x14]
   // y[0] = [x0 x2 x4 x6 x8 x10 x12 x14]
   // y[off] = [x1 x3 x5 x7 x9 x11 x13 x15]
-#ifndef __AVX512VBMI__
+#ifndef OAI_DFT_AVX512VL_PERMUTE
   simde__m256i const perm_mask = simde_mm256_set_epi32(7, 5, 3, 1, 6, 4, 2, 0);
   simde__m256i perm_tmp0, perm_tmp1;
 
@@ -903,7 +907,7 @@ __attribute__((always_inline)) static inline void dft16_simd256(int16_t *x, int1
   // [y4  y5  y6  y7  y20 y21 y22 y23]
   // [y8  y9  y10 y11 y24 y25 y26 y27]
   // [y12 y13 y14 y15 y28 y29 y30 y31]
-#ifndef USE_SKYLAKE_PERMUTE
+#ifndef OAI_DFT_AVX512VL_PERMUTE
   y256[0] = simde_mm256_insertf128_si256(ytmp0,simde_mm256_extracti128_si256(ytmp1,0),1);
   y256[1] = simde_mm256_insertf128_si256(ytmp2,simde_mm256_extracti128_si256(ytmp3,0),1);
   y256[2] = simde_mm256_insertf128_si256(ytmp1,simde_mm256_extracti128_si256(ytmp0,1),0);
@@ -931,7 +935,7 @@ __attribute__((always_inline)) static inline void idft16_simd256(int16_t *x, int
   register simde__m256i x1_flip, x3_flip, x02t, x13t;
   register simde__m256i ytmp0, ytmp1, ytmp2, ytmp3, xtmp0, xtmp1, xtmp2, xtmp3;
 
-#ifdef __AVX512VBMI__
+#ifdef OAI_DFT_AVX512VL_PERMUTE
   const __m256i outputshufa = _mm256_set_epi64x(5, 4, 1, 0);
   const __m256i outputshufb = _mm256_set_epi64x(7, 6, 3, 2);
 #endif
@@ -982,7 +986,7 @@ __attribute__((always_inline)) static inline void idft16_simd256(int16_t *x, int
   // [y8  y9  y10 y11 y24 y25 y26 y27]
   // [y12 y13 y14 y15 y28 y29 y30 y31]
 
-#ifndef __AVX512VBMI__
+#ifndef OAI_DFT_AVX512VL_PERMUTE
   y256[0] = simde_mm256_insertf128_si256(ytmp0,simde_mm256_extracti128_si256(ytmp1,0),1);
   y256[1] = simde_mm256_insertf128_si256(ytmp2,simde_mm256_extracti128_si256(ytmp3,0),1);
   y256[2] = simde_mm256_insertf128_si256(ytmp1,simde_mm256_extracti128_si256(ytmp0,1),0);
@@ -1079,7 +1083,7 @@ void dft64(int16_t *x, int16_t *y, unsigned int *scale)
   stop_meas(&ts_t);
   start_meas(&ts_d);
 #endif
-#ifndef __AVX512VBMI__
+#ifndef OAI_DFT_AVX512VL_PERMUTE
   simd256_q15_t xintl0, xintl1, xintl2, xintl3, xintl4, xintl5, xintl6, xintl7;
   simd256_q15_t const perm_mask = simde_mm256_set_epi32(7, 3, 5, 1, 6, 2, 4, 0);
   xintl0 = simde_mm256_permutevar8x32_epi32(x256[0], perm_mask); // x0  x4  x2  x6  x1  x5  x3  x7
@@ -1203,7 +1207,7 @@ void idft64(int16_t *x, int16_t *y, unsigned int *scale)
   start_meas(&ts_d);
 #endif
 
-#ifndef __AVX512VBMI__
+#ifndef OAI_DFT_AVX512VL_PERMUTE
   simd256_q15_t xintl0, xintl1, xintl2, xintl3, xintl4, xintl5, xintl6, xintl7;
   simd256_q15_t const perm_mask = simde_mm256_set_epi32(7, 3, 5, 1, 6, 2, 4, 0);
   xintl0 = simde_mm256_permutevar8x32_epi32(x256[0], perm_mask); // x0  x4  x2  x6  x1  x5  x3  x7
