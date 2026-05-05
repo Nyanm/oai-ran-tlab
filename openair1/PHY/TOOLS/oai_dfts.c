@@ -7495,7 +7495,7 @@ int config_get(configmodule_interface_t *cfg, paramdef_t *params, int numparams,
 }
 
 // #define LOG_M write_output
-int write_file_matlab(const char *fname, const char *vname, void *data, int length, int dec, unsigned int format, int dummy)
+int write_file_matlab(const char *fname, const char *vname, const void *data, int length, int dec, unsigned int format, int dummy)
 {
 
   FILE *fp=NULL;
