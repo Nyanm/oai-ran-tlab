@@ -7664,6 +7664,7 @@ int32_t write_file_matlab(const char *fname, const char *vname, const void *data
 
   return 0;
 }
+
 double compute_error(int16_t *x, int16_t *y, int N, int *bitrev, int idft)
 {
   int i;
