@@ -179,7 +179,8 @@ int nr_ulsch_encoding(PHY_VARS_NR_UE *ue,
                                                        .tprep = NULL,
                                                        .tparity = NULL,
                                                        .toutput = NULL,
-                                                       .TBs = TBs};
+                                                       .TBs = TBs,
+                                                       .use_gpu = ue->use_gpu};
 
   int max_num_segments = 0;
   for (uint_fast8_t pusch_id = 0; pusch_id < nb_ulsch; pusch_id++) {
