@@ -50,96 +50,80 @@ const static int16_t reflip[32]  __attribute__((aligned(32))) = {1,-1,1,-1,1,-1,
 static inline void cmac(int16x8_t a,int16x8_t b, int32x4_t *re32, int32x4_t *im32) __attribute__((always_inline));
 static inline void cmac(int16x8_t a,int16x8_t b, int32x4_t *re32, int32x4_t *im32)
 {
-
-  
-  int32x4_t ab_re0,ab_re1,ab_im0,ab_im1;
-  int16x8_t bflip = vrev32q_s16(b);
-  int16x8_t bconj = vmulq_s16(b,*(int16x8_t *)reflip);
-
-  ab_re0 = vmull_s16(((int16x4_t*)&a)[0],((int16x4_t*)&bconj)[0]);
-  ab_re1 = vmull_s16(((int16x4_t*)&a)[1],((int16x4_t*)&bconj)[1]);
-  ab_im0 = vmull_s16(((int16x4_t*)&a)[0],((int16x4_t*)&bflip)[0]);
-  ab_im1 = vmull_s16(((int16x4_t*)&a)[1],((int16x4_t*)&bflip)[1]);
-  *re32 = vqaddq_s32(*re32,vcombine_s32(vpadd_s32(((int32x2_t*)&ab_re0)[0],((int32x2_t*)&ab_re0)[1]),
-					vpadd_s32(((int32x2_t*)&ab_re1)[0],((int32x2_t*)&ab_re1)[1])));
-  *im32 = vqaddq_s32(*im32,vcombine_s32(vpadd_s32(((int32x2_t*)&ab_im0)[0],((int32x2_t*)&ab_im0)[1]),
-					vpadd_s32(((int32x2_t*)&ab_im1)[0],((int32x2_t*)&ab_im1)[1])));
+  const int16x8_t bconj = vmulq_s16(b, *(int16x8_t *)reflip);
+  const int16x8_t bflip = vrev32q_s16(b);
+#ifdef __aarch64__
+  *re32 = vqaddq_s32(*re32, vpaddq_s32(vmull_s16(vget_low_s16(a), vget_low_s16(bconj)), vmull_high_s16(a, bconj)));
+  *im32 = vqaddq_s32(*im32, vpaddq_s32(vmull_s16(vget_low_s16(a), vget_low_s16(bflip)), vmull_high_s16(a, bflip)));
+#else
+  const int32x4_t ab_re0 = vmull_s16(vget_low_s16(a), vget_low_s16(bconj));
+  const int32x4_t ab_re1 = vmull_s16(vget_high_s16(a), vget_high_s16(bconj));
+  const int32x4_t ab_im0 = vmull_s16(vget_low_s16(a), vget_low_s16(bflip));
+  const int32x4_t ab_im1 = vmull_s16(vget_high_s16(a), vget_high_s16(bflip));
+  *re32 = vqaddq_s32(*re32, vcombine_s32(vpadd_s32(vget_low_s32(ab_re0), vget_high_s32(ab_re0)),
+                                          vpadd_s32(vget_low_s32(ab_re1), vget_high_s32(ab_re1))));
+  *im32 = vqaddq_s32(*im32, vcombine_s32(vpadd_s32(vget_low_s32(ab_im0), vget_high_s32(ab_im0)),
+                                          vpadd_s32(vget_low_s32(ab_im1), vget_high_s32(ab_im1))));
+#endif
 }
 
 static inline void cmacc(int16x8_t a,int16x8_t b, int32x4_t *re32, int32x4_t *im32) __attribute__((always_inline));
 static inline void cmacc(int16x8_t a,int16x8_t b, int32x4_t *re32, int32x4_t *im32)
 {
-  int32x4_t ab_re0,ab_re1,ab_im0,ab_im1;
-  int16x8_t bconj = vmulq_s16(b,*(int16x8_t *)reflip);
-  int16x8_t bflip = vrev32q_s16(bconj);
-
-  ab_re0 = vmull_s16(((int16x4_t*)&a)[0],((int16x4_t*)&b)[0]);
-  ab_re1 = vmull_s16(((int16x4_t*)&a)[1],((int16x4_t*)&b)[1]);
-  ab_im0 = vmull_s16(((int16x4_t*)&a)[0],((int16x4_t*)&bflip)[0]);
-  ab_im1 = vmull_s16(((int16x4_t*)&a)[1],((int16x4_t*)&bflip)[1]);
-  *re32 = vqaddq_s32(*re32,vcombine_s32(vpadd_s32(((int32x2_t*)&ab_re0)[0],((int32x2_t*)&ab_re0)[1]),
-					vpadd_s32(((int32x2_t*)&ab_re1)[0],((int32x2_t*)&ab_re1)[1])));
-  *im32 = vqaddq_s32(*im32,vcombine_s32(vpadd_s32(((int32x2_t*)&ab_im0)[0],((int32x2_t*)&ab_im0)[1]),
-					vpadd_s32(((int32x2_t*)&ab_im1)[0],((int32x2_t*)&ab_im1)[1])));
-
+  const int16x8_t bflip = vrev32q_s16(vmulq_s16(b, *(int16x8_t *)reflip));
+#ifdef __aarch64__
+  *re32 = vqaddq_s32(*re32, vpaddq_s32(vmull_s16(vget_low_s16(a), vget_low_s16(b)), vmull_high_s16(a, b)));
+  *im32 = vqaddq_s32(*im32, vpaddq_s32(vmull_s16(vget_low_s16(a), vget_low_s16(bflip)), vmull_high_s16(a, bflip)));
+#else
+  const int32x4_t ab_re0 = vmull_s16(vget_low_s16(a), vget_low_s16(b));
+  const int32x4_t ab_re1 = vmull_s16(vget_high_s16(a), vget_high_s16(b));
+  const int32x4_t ab_im0 = vmull_s16(vget_low_s16(a), vget_low_s16(bflip));
+  const int32x4_t ab_im1 = vmull_s16(vget_high_s16(a), vget_high_s16(bflip));
+  *re32 = vqaddq_s32(*re32, vcombine_s32(vpadd_s32(vget_low_s32(ab_re0), vget_high_s32(ab_re0)),
+                                          vpadd_s32(vget_low_s32(ab_re1), vget_high_s32(ab_re1))));
+  *im32 = vqaddq_s32(*im32, vcombine_s32(vpadd_s32(vget_low_s32(ab_im0), vget_high_s32(ab_im0)),
+                                          vpadd_s32(vget_low_s32(ab_im1), vget_high_s32(ab_im1))));
+#endif
 }
 
 static inline void cmult(int16x8_t a,int16x8_t b, int32x4_t *re32, int32x4_t *im32) __attribute__((always_inline));
 static inline void cmult(int16x8_t a,int16x8_t b, int32x4_t *re32, int32x4_t *im32)
 {
-  int32x4_t ab_re0,ab_re1,ab_im0,ab_im1;
-  int16x8_t bflip = vrev32q_s16(b);
-  int16x8_t bconj = vmulq_s16(b,*(int16x8_t *)reflip);
-  int16x4_t al,ah,bcl,bch,bfl,bfh;
-  int32x2_t abr0l,abr0h,abr1l,abr1h,abi0l,abi0h,abi1l,abi1h;
-
-  al  = vget_low_s16(a);      ah = vget_high_s16(a);
-  bcl = vget_low_s16(bconj);  bch = vget_high_s16(bconj);
-  bfl = vget_low_s16(bflip);  bfh = vget_high_s16(bflip);
-
-  ab_re0 = vmull_s16(al,bcl);
-  ab_re1 = vmull_s16(ah,bch);
-  ab_im0 = vmull_s16(al,bfl);
-  ab_im1 = vmull_s16(ah,bfh);
-  abr0l = vget_low_s32(ab_re0); abr0h = vget_high_s32(ab_re0);
-  abr1l = vget_low_s32(ab_re1); abr1h = vget_high_s32(ab_re1);
-  abi0l = vget_low_s32(ab_im0); abi0h = vget_high_s32(ab_im0);
-  abi1l = vget_low_s32(ab_im1); abi1h = vget_high_s32(ab_im1);
-
-  *re32 = vcombine_s32(vpadd_s32(abr0l,abr0h),
-                       vpadd_s32(abr1l,abr1h));
-  *im32 = vcombine_s32(vpadd_s32(abi0l,abi0h),
-                       vpadd_s32(abi1l,abi1h));
+  const int16x8_t bconj = vmulq_s16(b, *(int16x8_t *)reflip);
+  const int16x8_t bflip = vrev32q_s16(b);
+#ifdef __aarch64__
+  *re32 = vpaddq_s32(vmull_s16(vget_low_s16(a), vget_low_s16(bconj)), vmull_high_s16(a, bconj));
+  *im32 = vpaddq_s32(vmull_s16(vget_low_s16(a), vget_low_s16(bflip)), vmull_high_s16(a, bflip));
+#else
+  const int32x4_t ab_re0 = vmull_s16(vget_low_s16(a), vget_low_s16(bconj));
+  const int32x4_t ab_re1 = vmull_s16(vget_high_s16(a), vget_high_s16(bconj));
+  const int32x4_t ab_im0 = vmull_s16(vget_low_s16(a), vget_low_s16(bflip));
+  const int32x4_t ab_im1 = vmull_s16(vget_high_s16(a), vget_high_s16(bflip));
+  *re32 = vcombine_s32(vpadd_s32(vget_low_s32(ab_re0), vget_high_s32(ab_re0)),
+                       vpadd_s32(vget_low_s32(ab_re1), vget_high_s32(ab_re1)));
+  *im32 = vcombine_s32(vpadd_s32(vget_low_s32(ab_im0), vget_high_s32(ab_im0)),
+                       vpadd_s32(vget_low_s32(ab_im1), vget_high_s32(ab_im1)));
+#endif
 }
 
 static inline void cmultc(int16x8_t a,int16x8_t b, int32x4_t *re32, int32x4_t *im32) __attribute__((always_inline));
 
 static inline void cmultc(int16x8_t a,int16x8_t b, int32x4_t *re32, int32x4_t *im32)
 {
-  int32x4_t ab_re0,ab_re1,ab_im0,ab_im1;
-  int16x8_t bconj = vmulq_s16(b,*(int16x8_t *)reflip);
-  int16x8_t bflip = vrev32q_s16(bconj);
-  int16x4_t al,ah,bl,bh,bfl,bfh; 
-  int32x2_t abr0l,abr0h,abr1l,abr1h,abi0l,abi0h,abi1l,abi1h;
-  al  = vget_low_s16(a);     ah = vget_high_s16(a);
-  bl  = vget_low_s16(b);     bh = vget_high_s16(b);
-  bfl = vget_low_s16(bflip); bfh = vget_high_s16(bflip);
-
-  ab_re0 = vmull_s16(al,bl);
-  ab_re1 = vmull_s16(ah,bh);
-  ab_im0 = vmull_s16(al,bfl);
-  ab_im1 = vmull_s16(ah,bfh);
-
-  abr0l = vget_low_s32(ab_re0); abr0h = vget_high_s32(ab_re0);
-  abr1l = vget_low_s32(ab_re1); abr1h = vget_high_s32(ab_re1);
-  abi0l = vget_low_s32(ab_im0); abi0h = vget_high_s32(ab_im0);
-  abi1l = vget_low_s32(ab_im1); abi1h = vget_high_s32(ab_im1);
-
-  *re32 = vcombine_s32(vpadd_s32(abr0l,abr0h),
-		       vpadd_s32(abr1l,abr1h));
-  *im32 = vcombine_s32(vpadd_s32(abi0l,abi0h),
-		       vpadd_s32(abi1l,abi1h));
-
+  const int16x8_t bflip = vrev32q_s16(vmulq_s16(b, *(int16x8_t *)reflip));
+#ifdef __aarch64__
+  *re32 = vpaddq_s32(vmull_s16(vget_low_s16(a), vget_low_s16(b)), vmull_high_s16(a, b));
+  *im32 = vpaddq_s32(vmull_s16(vget_low_s16(a), vget_low_s16(bflip)), vmull_high_s16(a, bflip));
+#else
+  const int32x4_t ab_re0 = vmull_s16(vget_low_s16(a), vget_low_s16(b));
+  const int32x4_t ab_re1 = vmull_s16(vget_high_s16(a), vget_high_s16(b));
+  const int32x4_t ab_im0 = vmull_s16(vget_low_s16(a), vget_low_s16(bflip));
+  const int32x4_t ab_im1 = vmull_s16(vget_high_s16(a), vget_high_s16(bflip));
+  *re32 = vcombine_s32(vpadd_s32(vget_low_s32(ab_re0), vget_high_s32(ab_re0)),
+                       vpadd_s32(vget_low_s32(ab_re1), vget_high_s32(ab_re1)));
+  *im32 = vcombine_s32(vpadd_s32(vget_low_s32(ab_im0), vget_high_s32(ab_im0)),
+                       vpadd_s32(vget_low_s32(ab_im1), vget_high_s32(ab_im1)));
+#endif
 }
 
 
@@ -147,11 +131,13 @@ static inline int16x8_t cpack(int32x4_t xre,int32x4_t xim) __attribute__((always
 
 static inline int16x8_t cpack(int32x4_t xre,int32x4_t xim)
 {
-  int32x4x2_t xtmp;
-
-  xtmp = vzipq_s32(xre,xim);
-  return(vcombine_s16(vqshrn_n_s32(xtmp.val[0],15),vqshrn_n_s32(xtmp.val[1],15)));
-
+#ifdef __aarch64__
+  return vcombine_s16(vqshrn_n_s32(vzip1q_s32(xre, xim), 15),
+                      vqshrn_n_s32(vzip2q_s32(xre, xim), 15));
+#else
+  const int32x4x2_t xtmp = vzipq_s32(xre, xim);
+  return vcombine_s16(vqshrn_n_s32(xtmp.val[0], 15), vqshrn_n_s32(xtmp.val[1], 15));
+#endif
 }
 
 
@@ -183,21 +169,20 @@ static inline int16x8_t packed_cmult2(int16x8_t a,int16x8_t b,  int16x8_t b2) __
 
 static inline int16x8_t packed_cmult2(int16x8_t a,int16x8_t b,  int16x8_t b2)
 {
-
-  
-
-  int32x4_t ab_re0,ab_re1,ab_im0,ab_im1,cre,cim;
-  
-  ab_re0 = vmull_s16(((int16x4_t*)&a)[0],((int16x4_t*)&b)[0]);
-  ab_re1 = vmull_s16(((int16x4_t*)&a)[1],((int16x4_t*)&b)[1]);
-  ab_im0 = vmull_s16(((int16x4_t*)&a)[0],((int16x4_t*)&b2)[0]);
-  ab_im1 = vmull_s16(((int16x4_t*)&a)[1],((int16x4_t*)&b2)[1]);
-  cre = vcombine_s32(vpadd_s32(((int32x2_t*)&ab_re0)[0],((int32x2_t*)&ab_re0)[1]),
-		     vpadd_s32(((int32x2_t*)&ab_re1)[0],((int32x2_t*)&ab_re1)[1]));
-  cim = vcombine_s32(vpadd_s32(((int32x2_t*)&ab_im0)[0],((int32x2_t*)&ab_im0)[1]),
-		     vpadd_s32(((int32x2_t*)&ab_im1)[0],((int32x2_t*)&ab_im1)[1]));
-  return(cpack(cre,cim));
-
+#ifdef __aarch64__
+  return cpack(vpaddq_s32(vmull_s16(vget_low_s16(a), vget_low_s16(b)), vmull_high_s16(a, b)),
+               vpaddq_s32(vmull_s16(vget_low_s16(a), vget_low_s16(b2)), vmull_high_s16(a, b2)));
+#else
+  const int32x4_t ab_re0 = vmull_s16(vget_low_s16(a), vget_low_s16(b));
+  const int32x4_t ab_re1 = vmull_s16(vget_high_s16(a), vget_high_s16(b));
+  const int32x4_t ab_im0 = vmull_s16(vget_low_s16(a), vget_low_s16(b2));
+  const int32x4_t ab_im1 = vmull_s16(vget_high_s16(a), vget_high_s16(b2));
+  const int32x4_t cre = vcombine_s32(vpadd_s32(vget_low_s32(ab_re0), vget_high_s32(ab_re0)),
+                                      vpadd_s32(vget_low_s32(ab_re1), vget_high_s32(ab_re1)));
+  const int32x4_t cim = vcombine_s32(vpadd_s32(vget_low_s32(ab_im0), vget_high_s32(ab_im0)),
+                                      vpadd_s32(vget_low_s32(ab_im1), vget_high_s32(ab_im1)));
+  return cpack(cre, cim);
+#endif
 }
 
 const static int16_t W0s[16]__attribute__((aligned(32))) = {32767,0,32767,0,32767,0,32767,0,32767,0,32767,0,32767,0,32767,0};
@@ -7339,7 +7324,7 @@ int config_get(paramdef_t *params, int numparams, char *prefix)
 }
 
 // #define LOG_M write_output
-int write_file_matlab(const char *fname, const char *vname, void *data, int length, int dec, unsigned int format, int dummy)
+int write_file_matlab(const char *fname, const char *vname, const void *data, int length, int dec, unsigned int format, int dummy)
 {
 
   FILE *fp=NULL;
