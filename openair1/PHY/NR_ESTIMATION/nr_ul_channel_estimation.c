@@ -805,6 +805,7 @@ int nr_srs_ls_channel_estimation(int ant,
         srs_ls_estimated_channel[srs_symbol_offset + subcarrier + ktc] = ls_estimated;
       }
 
+
 #ifdef SRS_DEBUG
       int subcarrier_log = subcarrier - subcarrier_offset;
       if (subcarrier_log < 0) {
@@ -834,6 +835,16 @@ int nr_srs_ls_channel_estimation(int ant,
       c16_t ch_estimates_time[ofdm_symbol_size] __attribute__((aligned(32)));
       nr_est_delay(ofdm_symbol_size, srs_ls_estimated_channel, ch_estimates_time, delay);
     }
+    #if T_TRACER
+      if (T_ACTIVE(T_GNB_PHY_SRS_LS_CH_ESTIMATE)) {
+        T(T_GNB_PHY_SRS_LS_CH_ESTIMATE,
+        T_INT(ant),
+        T_INT(p_index),
+        T_INT(srs_symb),
+        T_BUFFER(&srs_ls_estimated_channel[srs_symb * ofdm_symbol_size],
+        ofdm_symbol_size * sizeof(c16_t)));
+      }
+      #endif
   } // for (int srs_symb = 0; srs_symb < N_symb_SRS; srs_symb++)
 
   return 0;
@@ -1081,6 +1092,7 @@ int nr_srs_channel_interpolation(int ant,
     LOG_W(NR_PHY, "Received SRS signal power is 0\n");
     return -1;
   }
-
   return 0;
 }
+
+

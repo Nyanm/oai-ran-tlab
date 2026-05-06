@@ -138,11 +138,16 @@ ID = GNB_PHY_UL_PAYLOAD_RX_BITS
 ID = GNB_PHY_UL_FREQ_CHANNEL_ESTIMATE
     DESC = gNodeB channel estimation in the frequency domain
     GROUP = ALL:PHY:GRAPHIC:HEAVY:GNB
-    FORMAT = int,gNB_ID : int,rnti : int,frame : int,subframe : int,antenna : int,port : buffer,chest_f
+    FORMAT = int,gNB_ID : int,rnti : int,frame : int,zero : int,ant : int,p_ind : buffer,chest_f
 ID = GNB_PHY_UL_TIME_CHANNEL_ESTIMATE
     DESC = gNodeB channel estimation in the time domain
     GROUP = ALL:PHY:GRAPHIC:HEAVY:GNB
     FORMAT = int,gNB_ID : int,rnti : int,frame : int,subframe : int,antenna : int,port : buffer,chest_t
+ID = GNB_PHY_SRS_LS_CH_ESTIMATE
+    DESC = gNB SRS LS channel estimation (frequency domain)
+    GROUP = ALL:PHY:GRAPHIC:HEAVY:GNB
+    FORMAT = int,ant : int,port : int,symbol : buffer,srs_ch
+
 ID = GNB_PHY_UL_SNR_ESTIMATE
     DESC = gNodeB SNR estimation based on SRS
     GROUP = ALL:PHY:GRAPHIC:HEAVY:GNB

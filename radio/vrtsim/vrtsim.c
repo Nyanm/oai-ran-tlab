@@ -41,7 +41,7 @@
 // Simulator role
 typedef enum { ROLE_SERVER = 1, ROLE_CLIENT } role;
 
-#define MAX_NUM_ANTENNAS_TX 4
+#define MAX_NUM_ANTENNAS_TX 8
 #define SAVED_SAMPLES_LEN 256
 #define MAX_NUM_UES MAX_MOBILES_PER_GNB
 
@@ -397,11 +397,12 @@ static int vrtsim_connect(openair0_device_t *device)
   if (vrtsim_state->role == ROLE_SERVER) {
     parse_ue_config(vrtsim_state);
     compute_ue_antenna_offsets(vrtsim_state);
-    int num_tx_streams = 0;
+    /////////////////////////// next line changed from = 0
+    int num_tx_streams = device->openair0_cfg[0].rx_num_channels;
     int num_rx_streams = vrtsim_state->num_ues * device->openair0_cfg[0].rx_num_channels;
-    for (int i = 0; i < vrtsim_state->num_ues; i++) {
-      num_tx_streams += vrtsim_state->ue_conf[i].rx_ant;
-    }
+    //for (int i = 0; i < vrtsim_state->num_ues; i++) {
+      //num_tx_streams += vrtsim_state->ue_conf[i].rx_ant;
+    //}
     vrtsim_state->channel =
         shm_td_iq_channel_create(DEFAULT_CHANNEL_NAME, num_tx_streams, num_rx_streams);
     LOG_A(HW, "vrtsim created a shm_td_iq_channel with config tx: %d rx: %d\n", num_tx_streams, num_rx_streams);
@@ -833,15 +834,27 @@ static int vrtsim_read(openair0_device_t *device, openair0_timestamp_t *ptimesta
       }
     } else {
       /* Single-UE server UL read */
-      int ret = shm_td_iq_channel_rx(vrtsim_state->channel, vrtsim_state->last_received_sample, nsamps, 0, samplesVoid[0]);
-      if (ret == CHANNEL_ERROR_TOO_LATE) {
-        vrtsim_state->rx_samples_late += nsamps;
-      } else if (ret == CHANNEL_ERROR_TOO_EARLY) {
-        vrtsim_state->rx_early += 1;
-      }
-      for (int aarx = 1; aarx < nbAnt; aarx++) {
-        if (samplesVoid[aarx] != NULL)
-          memcpy(samplesVoid[aarx], samplesVoid[0], nsamps * sizeof(sample_t));
+      //int ret = shm_td_iq_channel_rx(vrtsim_state->channel, vrtsim_state->last_received_sample, nsamps, 0, samplesVoid[0]);
+      //if (ret == CHANNEL_ERROR_TOO_LATE) {
+        //vrtsim_state->rx_samples_late += nsamps;
+      //} else if (ret == CHANNEL_ERROR_TOO_EARLY) {
+        //vrtsim_state->rx_early += 1;
+      //}
+      //for (int aarx = 1; aarx < nbAnt; aarx++) {
+      //  if (samplesVoid[aarx] != NULL)
+      //    memcpy(samplesVoid[aarx], samplesVoid[0], nsamps * sizeof(sample_t));
+      //}
+      /////added by nima
+      for (int aarx = 0; aarx < nbAnt; aarx++) {
+        int ret = shm_td_iq_channel_rx(vrtsim_state->channel,
+                                        vrtsim_state->last_received_sample,
+                                        nsamps,
+                                        aarx,           // stream per antenna, not always 0
+                                        samplesVoid[aarx]);
+        if (ret == CHANNEL_ERROR_TOO_LATE)
+            vrtsim_state->rx_samples_late += nsamps;
+        else if (ret == CHANNEL_ERROR_TOO_EARLY)
+            vrtsim_state->rx_early += 1;
       }
     }
   } else {

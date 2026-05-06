@@ -1,0 +1,14 @@
+// This file defines the structure of the Taps table used in the PHY layer.
+namespace Phy;
+
+// Taps form the discrete complex baseband-equivalent channel impulse response and can be used
+// to model the channel characteristics in link layer simulations.
+table Taps {
+    id:uint;
+    num_tx_antennas:uint;
+    num_rx_antennas:uint;
+    taps_len:uint;
+    taps:[float];
+}
+
+root_type Taps;
