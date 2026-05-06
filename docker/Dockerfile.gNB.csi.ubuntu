@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-CSSL-1.0
 #
 # Dockerfile for OAI gNB with CSI per-RB logging
-# Multi-stage build following OAI pattern
+# Based on Dockerfile.gNB.ubuntu with CSI logging addition
 #
 
 ARG UBUNTU_IMAGE=ubuntu:noble
 FROM ran-base:latest AS gnb-base
+
 FROM ran-build:latest AS gnb-build
 
 # Build CSI logging library in builder
@@ -18,9 +19,9 @@ RUN cd /tmp && \
     make install && \
     ldconfig
 
-# Start from scratch for final image
+# Start from scratch for target executable
 FROM ${UBUNTU_IMAGE} AS oai-gnb-csi
-
+ARG BUILD_OPTION
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Paris
 
@@ -53,8 +54,10 @@ RUN apt-get update && \
         libusb-1.0-0 \
         libyaml-cpp-dev \
         libnanomsg5 \
-        libzmq5 \
-        libpthread-stubs0-dev && \
+        libzmq5 && \
+    /bin/bash -c 'if [[ "$BUILD_OPTION" = "--sanitize" ]]; then DEBIAN_FRONTEND=noninteractive apt-get install --yes \
+        libasan8 \
+        libubsan1; fi' && \
     apt-get clean -y && \
     rm -rf /var/lib/apt/lists/*
 
@@ -84,22 +87,40 @@ COPY --from=gnb-build \
     /oai-ran/cmake_targets/ran_build/build/liboai_zmqdevif.so \
     /usr/local/lib/
 
-# Copy CSI logging library
+# Copy CSI logging library (NEW)
 COPY --from=gnb-build /usr/local/lib/libcsi_logging.so /usr/local/lib/
 
-# Copy UHD and other dependencies from gnb-base
+# Now we are copying from builder-image the UHD files.
 COPY --from=gnb-base /usr/local/bin/uhd_find_devices /usr/local/bin
 COPY --from=gnb-base /usr/local/lib/libuhd.so.4.8.0 /usr/local/lib
 COPY --from=gnb-base /usr/local/lib/uhd/utils/uhd_images_downloader.py /opt/oai-gnb/bin
+## Copy E2 SM models
 COPY --from=gnb-build /usr/local/lib/flexric /usr/local/lib/flexric
+
+# Copy BladeRF runtime from base image
 COPY --from=gnb-base /usr/local/lib/libbladeRF* /usr/local/lib/
 
 RUN /bin/bash -c "ln -s /usr/local/lib/liboai_usrpdevif.so /usr/local/lib/liboai_device.so" && \
-    ldconfig
+    ldconfig && \
+    echo "---- ldd on nr-softmodem ----" && \
+    ldd /opt/oai-gnb/bin/nr-softmodem && \
+    echo "---- ldd on shared libraries ----" && \
+    ldd /usr/local/lib/liboai_eth_transpro.so \
+        /usr/local/lib/librfsimulator.so \
+        /usr/local/lib/liboai_usrpdevif.so \
+        /usr/local/lib/liboai_bladerfdevif.so \
+        /usr/local/lib/libcoding.so \
+        /usr/local/lib/libparams_libconfig.so \
+        /usr/local/lib/libdfts.so \
+        /usr/local/lib/libldpc*.so \
+        /usr/local/lib/libtelnetsrv.so \
+        /usr/local/lib/libtelnetsrv_ci.so \
+        /usr/local/lib/libuhd.so.4.8.0 \
+        /usr/local/lib/liboai_zmqdevif.so
 
 WORKDIR /opt/oai-gnb
+
 COPY --from=gnb-base /usr/local/bin/yq /usr/local/bin/yq
 COPY --from=gnb-base /tini /tini
-
 ENTRYPOINT ["/tini", "-v", "--", "/opt/oai-gnb/bin/entrypoint.sh"]
 CMD ["/opt/oai-gnb/bin/nr-softmodem"]
