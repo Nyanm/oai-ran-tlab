@@ -5,8 +5,8 @@
 #
 
 ARG UBUNTU_IMAGE=ubuntu:noble
-FROM ran-base:latest AS gnb-csi-base
-FROM ran-build:latest AS gnb-csi-build
+FROM ran-base:latest AS gnb-base
+FROM ran-build:latest AS gnb-build
 
 # Build CSI logging library in builder
 RUN cd /tmp && \
@@ -59,12 +59,12 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/oai-gnb/bin
-COPY --from=gnb-csi-build \
+COPY --from=gnb-build \
     /oai-ran/cmake_targets/ran_build/build/nr-softmodem ./
 COPY ./docker/scripts/gnb_entrypoint.sh ./entrypoint.sh
 COPY ./docker/scripts/check-prach-io.sh ./check-prach-io.sh
 
-COPY --from=gnb-csi-build \
+COPY --from=gnb-build \
     /oai-ran/cmake_targets/ran_build/build/liboai_eth_transpro.so \
     /oai-ran/cmake_targets/ran_build/build/librfsimulator.so \
     /oai-ran/cmake_targets/ran_build/build/liboai_usrpdevif.so \
@@ -85,21 +85,21 @@ COPY --from=gnb-csi-build \
     /usr/local/lib/
 
 # Copy CSI logging library
-COPY --from=gnb-csi-build /usr/local/lib/libcsi_logging.so /usr/local/lib/
+COPY --from=gnb-build /usr/local/lib/libcsi_logging.so /usr/local/lib/
 
-# Copy UHD and other dependencies
-COPY --from=gnb-csi-base /usr/local/bin/uhd_find_devices /usr/local/bin
-COPY --from=gnb-csi-base /usr/local/lib/libuhd.so.4.8.0 /usr/local/lib
-COPY --from=gnb-csi-base /usr/local/lib/uhd/utils/uhd_images_downloader.py /opt/oai-gnb/bin
-COPY --from=gnb-csi-build /usr/local/lib/flexric /usr/local/lib/flexric
-COPY --from=gnb-csi-base /usr/local/lib/libbladeRF* /usr/local/lib/
+# Copy UHD and other dependencies from gnb-base
+COPY --from=gnb-base /usr/local/bin/uhd_find_devices /usr/local/bin
+COPY --from=gnb-base /usr/local/lib/libuhd.so.4.8.0 /usr/local/lib
+COPY --from=gnb-base /usr/local/lib/uhd/utils/uhd_images_downloader.py /opt/oai-gnb/bin
+COPY --from=gnb-build /usr/local/lib/flexric /usr/local/lib/flexric
+COPY --from=gnb-base /usr/local/lib/libbladeRF* /usr/local/lib/
 
 RUN /bin/bash -c "ln -s /usr/local/lib/liboai_usrpdevif.so /usr/local/lib/liboai_device.so" && \
     ldconfig
 
 WORKDIR /opt/oai-gnb
-COPY --from=gnb-csi-base /usr/local/bin/yq /usr/local/bin/yq
-COPY --from=gnb-csi-base /tini /tini
+COPY --from=gnb-base /usr/local/bin/yq /usr/local/bin/yq
+COPY --from=gnb-base /tini /tini
 
 ENTRYPOINT ["/tini", "-v", "--", "/opt/oai-gnb/bin/entrypoint.sh"]
 CMD ["/opt/oai-gnb/bin/nr-softmodem"]
