@@ -1,0 +1,27 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    libfftw3-dev \
+    libconfig-dev \
+    libusb-1.0-0-dev \
+    liblapack-dev \
+    libatlas-base-dev \
+    libpthread-stubs0-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /oai
+
+COPY . .
+
+RUN git clone https://github.com/your-user/oai-csi-logging.git csi-logging && \
+    cd csi-logging && mkdir -p build && cd build && \
+    cmake .. && make && make install
+
+WORKDIR /oai/build_oai
+
+RUN cmake .. && make -j4
+
+CMD ["/bin/bash"]
