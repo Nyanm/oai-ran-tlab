@@ -1810,6 +1810,8 @@ add_executable(nr-oru
   ${OPENAIR_DIR}/openair1/SCHED_NR/nr_prach_procedures.c
   ${OPENAIR_DIR}/openair1/SCHED/phy_procedures_lte_common.c
   ${OPENAIR_DIR}/executables/main_nr_ru.c
+  ${OPENAIR_DIR}/openair2/LAYER2/NR_MAC_COMMON/nr_mac_common.c
+  ${OPENAIR_DIR}/openair2/LAYER2/NR_MAC_COMMON/nr_mac_common_tdd.c
 )
 
 target_compile_definitions(nr-oru PRIVATE NR_ORU)
