@@ -868,7 +868,7 @@ static inline const uint32_t *get_idft_scaling(int ofdm_symbol_size, unsigned in
   static const uint32_t IDFT_SCALING_1536[2][4] = {{1, 1, 1, 3}, {1, 1, 1, 3}};
   static const uint32_t IDFT_SCALING_2048[2][4] = {{3, 2, 1, 0}, {1, 1, 1, 3}};
   static const uint32_t IDFT_SCALING_3072[2][4] = {{1, 1, 1, 3}, {1, 1, 1, 3}};
-  static const uint32_t IDFT_SCALING_4096[2][4] = {{3, 2, 1, 0}, {1, 1, 1, 3}};
+  static const uint32_t IDFT_SCALING_4096[2][4] = {{1, 1, 1, 3}, {1, 1, 1, 3}};
   static const uint32_t IDFT_SCALING_6144[2][5] = {{1, 1, 0, 3, 2}, {1, 1, 1, 1, 3}};
   static const uint32_t IDFT_SCALING_8192[2][5] = {{1, 0, 0, 3, 3}, {1, 1, 1, 1, 3}};
   static const uint32_t IDFT_SCALING_9216[2][5] = {{1, 0, 0, 3, 3}, {1, 1, 1, 1, 3}};
