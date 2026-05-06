@@ -2335,7 +2335,7 @@ void dft8192(int16_t *x, int16_t *y, unsigned int *scale)
     ytmpp++;
   }
 
-  if (scale && scale > 0) {
+  if (scale && *scale > 0) {
     y128p = y128;
 
     if (*scale > 1) {
@@ -2446,7 +2446,7 @@ void idft8192(int16_t *x, int16_t *y, unsigned int *scale)
     ytmpp++;
   }
 
-  if (scale && scale > 0) {
+  if (scale && *scale > 0) {
     y128p = y128;
 
     if (*scale > 1) {
