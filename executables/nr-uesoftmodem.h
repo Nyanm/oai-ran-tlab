@@ -70,6 +70,7 @@ typedef struct ueinfo {
   {"ue-timing-correction-disable", CONFIG_HLP_DISABLETIMECORR, PARAMFLAG_BOOL,  .iptr=&(nrUE_params.no_timing_correction),   .defintval=0,      TYPE_INT,      0}, \
   {"SLC",                          CONFIG_HLP_SLF,             0,               .u64ptr=&(sidelink_frequency[0][0]),         .defuintval=2600000000,TYPE_UINT64,0}, \
   {"sync-ref",                     CONFIG_HLP_SL_SYNCSOURCEUE, PARAMFLAG_BOOL,  .uptr=&(nrUE_params.sync_ref),               .defuintval=0,     TYPE_UINT32,   0}, \
+  {"sl-nas",     "Enable SL-NAS PC5 controller socket\n", PARAMFLAG_BOOL, .iptr=&sl_nas_enabled, .defintval=0, TYPE_INT, 0}, \  
   {"mcs",                          CONFIG_HLP_SL_MAX_MCS,      0,               .u8ptr=&(nrUE_params.mcs),                   .defintval=9,      TYPE_UINT8,    0}, \
   {"snr",                          CONFIG_HLP_SL_SNR,          0,               .dblptr=&(nrUE_params.snr),                  .defdblval=0.0,                TYPE_DOUBLE,   0}, \
 }
@@ -113,4 +114,6 @@ extern void start_oai_nrue_threads(void);
 void *UE_thread(void *arg);
 void init_nr_ue_vars(PHY_VARS_NR_UE *ue, uint8_t UE_id, uint8_t abstraction_flag);
 void init_nrUE_standalone_thread(int ue_idx);
+
+extern int sl_nas_enabled; //SLC Flag
 #endif

@@ -118,6 +118,8 @@ static int      tx_max_power[MAX_NUM_CCs] = {0};
 int      single_thread_flag = 1;
 int                 tddflag = 0;
 int                 vcdflag = 0;
+int          sl_nas_enabled = 0; //SLC Flag
+
 
 double          rx_gain_off = 0.0;
 char             *usrp_args = NULL;
@@ -449,7 +451,6 @@ int main( int argc, char **argv ) {
   // get options and fill parameters from configuration file
 
   get_options (); //Command-line options specific for NRUE
-
   get_common_options(SOFTMODEM_5GUE_BIT);
   CONFIG_CLEARRTFLAG(CONFIG_NOEXITONHELP);
 #if T_TRACER
@@ -550,7 +551,13 @@ int main( int argc, char **argv ) {
       if (UE[CC_id]->sl_mode) {
         AssertFatal(UE[CC_id]->sl_mode == 2, "Only Sidelink mode 2 supported. Mode 1 not yet supported\n");
 		// starting the sockets between the PC5 Controller and the RRC and the PDCP
-		nr_rrc_pc5_control_socket_init();
+		//nr_rrc_pc5_control_socket_init();
+    if (sl_nas_enabled) {
+        nr_rrc_pc5_control_socket_init();
+        LOG_I(RRC, "[SL-NAS] PC5 controller socket started\n");
+    } else {
+        LOG_I(RRC, "[SL-NAS] PC5 controller socket not started\n");
+    }
 		nr_pdcp_pc5_signaling_socket_init();
         //
 		nr_UE_configure_Sidelink(0, get_nrUE_params()->sync_ref, &ueinfo);

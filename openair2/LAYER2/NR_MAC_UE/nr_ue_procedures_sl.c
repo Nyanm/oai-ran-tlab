@@ -1127,7 +1127,6 @@ void nr_ue_process_mac_sl_pdu(int module_idP,
   }
 
   // Scan offsets 0..15: where does the parser "see" LCID=4?
-  // This matches your existing parsing: rx_lcid = ((NR_MAC_SUBHEADER_FIXED *)(pduP))->LCID;
   int max_scan = pdu_len < 256 ? pdu_len : 256;
   for (int off = 0; off < max_scan; off++) {
     uint8_t lcid = ((NR_MAC_SUBHEADER_FIXED *)(pduP + off))->LCID;

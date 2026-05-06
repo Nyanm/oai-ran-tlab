@@ -2989,7 +2989,7 @@ uint8_t nr_ue_get_sdu(module_id_t module_idP,
   //mac_ce_p->phr_ce_len = 0;
   //mac_ce_p->phr_header_len = 0;
 
-  uint8_t lcid = 0;
+  uint8_t lcid = 0;  
   uint16_t sdu_length = 0;
   uint16_t num_sdus = 0;
   mac_ce_p->sdu_length_total = 0;

@@ -78,7 +78,9 @@
 #include "openair2/SDAP/nr_sdap/nr_sdap.h"
 #include "openair2/SDAP/nr_sdap/nr_sdap_entity.h"
 
-
+//Gate SLC Flag here
+#include "executables/nr-uesoftmodem.h"
+extern int sl_nas_enabled;
 
 // for NR_PC5 Controller
 int ctrl_sock_fd;
