@@ -35,6 +35,6 @@ RUN git clone https://github.com/turletti/oai-csi-logging.git csi-logging && \
 
 WORKDIR /oai/build_oai
 
-RUN cmake -DENABLE_ORAN=OFF -DENABLE_NFAPI=OFF .. && make -j4
+RUN cmake -DAUTO_DOWNLOAD_ASN1C=ON -DENABLE_ORAN=OFF -DENABLE_NFAPI=OFF .. && make -j4
 
 CMD ["/bin/bash"]
