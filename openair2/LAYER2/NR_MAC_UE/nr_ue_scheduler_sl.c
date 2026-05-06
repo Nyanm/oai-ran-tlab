@@ -1623,52 +1623,26 @@ void nr_ue_sidelink_scheduler(nr_sidelink_indication_t *sl_ind, NR_UE_MAC_INST_t
   frame_slot.frame = frame;
   frame_slot.slot = slot;
 
-  sl_resource_info_t *resource = NULL;
-  if (mac->sl_candidate_resources && mac->sl_candidate_resources->size > 0 && sl_ind->slot_type == SIDELINK_SLOT_TYPE_TX) {
-    LOG_D(NR_MAC, "%4d.%2d sl_candidate_resources %p size %ld, capacity %ld slot_type %d\n", frame, slot, mac->sl_candidate_resources, mac->sl_candidate_resources->size, mac->sl_candidate_resources->capacity, sl_ind->slot_type);
-    resource = get_resource_element(mac->sl_candidate_resources, frame_slot);
-    if (resource) {
-      LOG_D(NR_MAC, "SELECTED_RESOURCE %4d.%2d slot_type %d, num_sl_pscch_rbs %d, sl_max_num_per_reserve %d, sl_min_time_gap_psfch %d, sl_pscch_sym_start %d, \
-            sl_pscch_sym_len %d, sl_psfch_period %d, sl_pssch_sym_start %d, sl_pssch_sym_len %d, sl_subchan_len %d, sl_subchan_size %d\n",
-            resource->sfn.frame, resource->sfn.slot, sl_ind->slot_type,
-            resource->num_sl_pscch_rbs,
-            resource->sl_max_num_per_reserve,
-            resource->sl_min_time_gap_psfch,
-            resource->sl_pscch_sym_start,
-            resource->sl_pscch_sym_len,
-            resource->sl_psfch_period,
-            resource->sl_pssch_sym_start,
-            resource->sl_pssch_sym_len,
-            resource->sl_subchan_len,
-            resource->sl_subchan_size);
-    }
-  }
-
-  nr_sl_transmission_params_t *sl_tx_params = &sl_mac->mac_tx_params;
-  uint16_t p_prime_rsvp_tx = time_to_slots(mu, sl_tx_params->resel_counter);
-  static int8_t is_rsrc_selected = false;
-
-  if (mac->rsc_selection_method == c1 ||
-      mac->rsc_selection_method == c4 ||
-      mac->rsc_selection_method == c5 ||
-      mac->rsc_selection_method == c7) {
-    LOG_D(NR_MAC, "%4d.%2d is_rsrc_selected %d, reselection_timer %d, p_prime_rsvp_tx %d, slot_type %d\n",
-          frame, slot, is_rsrc_selected, mac->reselection_timer, p_prime_rsvp_tx, sl_ind->slot_type);
-    if(is_rsrc_selected && (sl_ind->slot_type == 2) && (mac->reselection_timer < p_prime_rsvp_tx)) {
-      mac->reselection_timer++;
-    } else if (sl_ind->slot_type == 2) {
-      if (mac->reselection_timer < p_prime_rsvp_tx) {
-        mac->sl_candidate_resources = get_candidate_resources(&frame_slot, mac, &mac->sl_sensing_data, &mac->sl_transmit_history);
-        if (mac->sl_candidate_resources) {
-          LOG_D(NR_MAC, "%4d.%2d Returned resources %p\n", frame, slot, mac->sl_candidate_resources);
-          print_candidate_list(mac->sl_candidate_resources, __LINE__);
-        }
-        is_rsrc_selected = true;
-      } else {
-        mac->reselection_timer = 0;
-        is_rsrc_selected = false;
-      }
-    }
+  sl_resource_info_t *resource = nr_ue_sl_v2x_select_resource(mac, &frame_slot, sl_ind->slot_type);
+  if (resource != NULL) {
+    LOG_D(NR_MAC,
+          "SL-V2X selected resource %4d.%2d slot_type %d, num_sl_pscch_rbs %d, sl_max_num_per_reserve %d, "
+          "sl_min_time_gap_psfch %d, sl_pscch_sym_start %d, sl_pscch_sym_len %d, sl_psfch_period %d, "
+          "sl_pssch_sym_start %d, sl_pssch_sym_len %d, sl_subchan_start %d, sl_subchan_len %d, sl_subchan_size %d\n",
+          resource->sfn.frame,
+          resource->sfn.slot,
+          sl_ind->slot_type,
+          resource->num_sl_pscch_rbs,
+          resource->sl_max_num_per_reserve,
+          resource->sl_min_time_gap_psfch,
+          resource->sl_pscch_sym_start,
+          resource->sl_pscch_sym_len,
+          resource->sl_psfch_period,
+          resource->sl_pssch_sym_start,
+          resource->sl_pssch_sym_len,
+          resource->sl_subchan_start,
+          resource->sl_subchan_len,
+          resource->sl_subchan_size);
   }
 
   if (mac->sl_rx_res_pool && mac->sl_rx_res_pool->ext1 && mac->sl_rx_res_pool->ext1->sl_TimeResource_r16) {
@@ -1698,7 +1672,8 @@ void nr_ue_sidelink_scheduler(nr_sidelink_indication_t *sl_ind, NR_UE_MAC_INST_t
       prev_slot = slot;
   }
 
-  if (resource && mac->is_synced && !is_psbch_slot && tx_allowed && sl_ind->slot_type == SIDELINK_SLOT_TYPE_TX) {
+  if (resource && mac->is_synced && !is_psbch_slot && tx_allowed && sl_ind->slot_type == SIDELINK_SLOT_TYPE_TX
+      && nr_ue_sl_v2x_lbt_allows_tx(mac, resource, &frame_slot)) {
     //Check if reserved slot or a sidelink resource configured in Rx/Tx resource pool timeresource bitmap
     bool is_resource_allocated = nr_ue_sl_pssch_scheduler(mac, sl_ind, mac->sl_bwp, mac->sl_tx_res_pool, &tx_config, resource, &tti_action);
     if (is_resource_allocated && mac->sci2_pdu.csi_req) {
@@ -1712,6 +1687,7 @@ void nr_ue_sidelink_scheduler(nr_sidelink_indication_t *sl_ind, NR_UE_MAC_INST_t
         reset_sched_psfch(mac, frame, slot);
       }
     }
+    nr_ue_sl_v2x_notify_tx_result(mac, resource, &frame_slot, is_resource_allocated);
   }
 
   if (((slot % 20) == 6) && ((frame % 100) == 0)) {
@@ -2164,8 +2140,16 @@ uint8_t get_random_reselection_counter(uint16_t rri) {
         break;
     }
 
-    LOG_D(NR_MAC, "Range to choose random reselection counter. min: %d max: %d\n", min_res_cntr, max_res_cntr);
-    return min_res_cntr;
+    uint8_t counter = min_res_cntr;
+    if (max_res_cntr > min_res_cntr)
+      counter += lrand48() % (max_res_cntr - min_res_cntr + 1);
+
+    LOG_D(NR_MAC,
+          "Range to choose random reselection counter. min: %d max: %d selected: %d\n",
+          min_res_cntr,
+          max_res_cntr,
+          counter);
+    return counter;
 }
 
 List_t* get_candidate_resources(frameslot_t *frame_slot, NR_UE_MAC_INST_t *mac, List_t *sensing_data, List_t *transmit_history) {
@@ -2435,4 +2419,3 @@ List_t* get_candidate_resources(frameslot_t *frame_slot, NR_UE_MAC_INST_t *mac, 
   LOG_D(NR_MAC, "%ld resources selected after sensing resource selection from %ld slots\n", remaining_candidates->size, m_total);
   return remaining_candidates;
 }
-

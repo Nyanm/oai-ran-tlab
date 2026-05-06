@@ -419,6 +419,21 @@ int nr_ue_process_sci1_indication_pdu(NR_UE_MAC_INST_t *mac,module_id_t mod_id,i
 
 void nr_ue_sidelink_scheduler(nr_sidelink_indication_t *sl_ind, NR_UE_MAC_INST_t *mac);
 
+void nr_ue_sl_v2x_init_scheduler(NR_UE_MAC_INST_t *mac);
+
+sl_resource_info_t *nr_ue_sl_v2x_select_resource(NR_UE_MAC_INST_t *mac,
+                                                 const frameslot_t *frame_slot,
+                                                 sl_sidelink_slot_type_t slot_type);
+
+bool nr_ue_sl_v2x_lbt_allows_tx(NR_UE_MAC_INST_t *mac,
+                                const sl_resource_info_t *resource,
+                                const frameslot_t *frame_slot);
+
+void nr_ue_sl_v2x_notify_tx_result(NR_UE_MAC_INST_t *mac,
+                                   const sl_resource_info_t *resource,
+                                   const frameslot_t *frame_slot,
+                                   bool transmitted);
+
 NR_SearchSpace_t *get_common_search_space(const NR_UE_MAC_INST_t *mac, const NR_SearchSpaceId_t ss_id);
 
 void nr_schedule_slsch(NR_UE_MAC_INST_t *mac, int frameP, int slotP, nr_sci_pdu_t *sci_pdu,
