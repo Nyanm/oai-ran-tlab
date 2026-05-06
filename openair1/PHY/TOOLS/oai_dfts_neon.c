@@ -2173,7 +2173,7 @@ void dft4096(int16_t *x, int16_t *y, unsigned int *scale)
   for (i=0,j=0; i<1024; i+=4,j++) {
     transpose16_ooff(x128+i,xtmp+j,256);
   }
-
+//  for (int i=0;i<6;i++) printf("scale[%d] %d\n",i,scale[i]);
   unsigned int *scale1024 = NULL;
   if (scale)
     scale1024 = scale + 1;
@@ -2336,7 +2336,7 @@ void dft8192(int16_t *x, int16_t *y, unsigned int *scale)
     ytmpp++;
   }
 
-  if (scale && scale > 0) {
+  if (scale && *scale > 0) {
     y128p = y128;
 
     if (*scale > 1) {
@@ -2447,7 +2447,7 @@ void idft8192(int16_t *x, int16_t *y, unsigned int *scale)
     ytmpp++;
   }
 
-  if (scale && scale > 0) {
+  if (scale && *scale > 0) {
     y128p = y128;
 
     if (*scale > 1) {
