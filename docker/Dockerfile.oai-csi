@@ -10,6 +10,19 @@ RUN apt-get update && apt-get install -y \
     liblapack-dev \
     libatlas-base-dev \
     libpthread-stubs0-dev \
+    asn1c \
+    bison \
+    flex \
+    libsctp-dev \
+    lksctp-tools \
+    libdouble-conversion-dev \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libssl-dev \
+    pkg-config \
+    autoconf \
+    automake \
+    libtool \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /oai
@@ -18,10 +31,10 @@ COPY . .
 
 RUN git clone https://github.com/turletti/oai-csi-logging.git csi-logging && \
     cd csi-logging && mkdir -p build && cd build && \
-    cmake .. && make && make install
+    cmake .. && make && make install && ldconfig
 
 WORKDIR /oai/build_oai
 
-RUN cmake .. && make -j4
+RUN cmake -DENABLE_ORAN=OFF -DENABLE_NFAPI=OFF .. && make -j4
 
 CMD ["/bin/bash"]
