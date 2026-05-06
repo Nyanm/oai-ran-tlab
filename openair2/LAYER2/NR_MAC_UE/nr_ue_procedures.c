@@ -175,6 +175,7 @@ void nr_ue_init_mac(module_id_t module_idP, ueinfo_t* ueinfo)
   init_list(&mac->sl_transmit_history, sizeof(frameslot_t), 1);
   mac->sl_candidate_resources = (List_t*)malloc16_clear(sizeof(List_t*));
   init_list(mac->sl_candidate_resources, sizeof(sl_resource_info_t), 1);
+  nr_ue_sl_v2x_init_scheduler(mac);
   mac->reselection_timer = 0;
 
   if (ueinfo != NULL)  {

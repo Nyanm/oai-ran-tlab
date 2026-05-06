@@ -508,6 +508,21 @@ int nr_ue_process_sci1_indication_pdu(NR_UE_MAC_INST_t *mac,module_id_t mod_id,f
 
 void nr_ue_sidelink_scheduler(nr_sidelink_indication_t *sl_ind);
 
+void nr_ue_sl_v2x_init_scheduler(NR_UE_MAC_INST_t *mac);
+
+sl_resource_info_t *nr_ue_sl_v2x_select_resource(NR_UE_MAC_INST_t *mac,
+                                                 const frameslot_t *frame_slot,
+                                                 sl_sidelink_slot_type_t slot_type);
+
+bool nr_ue_sl_v2x_lbt_allows_tx(NR_UE_MAC_INST_t *mac,
+                                const sl_resource_info_t *resource,
+                                const frameslot_t *frame_slot);
+
+void nr_ue_sl_v2x_notify_tx_result(NR_UE_MAC_INST_t *mac,
+                                   const sl_resource_info_t *resource,
+                                   const frameslot_t *frame_slot,
+                                   bool transmitted);
+
 void nr_mac_rrc_sl_mib_ind(const module_id_t module_id,
                               const int CC_id,
                               const uint8_t gNB_index,

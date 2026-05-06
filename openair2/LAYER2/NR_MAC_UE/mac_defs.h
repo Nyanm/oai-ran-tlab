@@ -611,6 +611,44 @@ typedef struct {
   bool slot_busy;
 } sl_resource_info_t;
 
+typedef enum {
+  NR_SL_V2X_LBT_DISABLED = 0,
+  NR_SL_V2X_LBT_TYPE2,
+  NR_SL_V2X_LBT_TYPE1,
+} nr_sl_v2x_lbt_mode_t;
+
+typedef struct {
+  bool enabled;
+  nr_sl_v2x_lbt_mode_t mode;
+  int16_t energy_detection_threshold_dbm;
+  uint8_t max_consecutive_failures;
+  uint8_t consecutive_failures;
+  uint32_t attempts;
+  uint32_t failures;
+  uint32_t successes;
+  frameslot_t last_failure;
+} nr_sl_v2x_lbt_state_t;
+
+typedef struct {
+  bool active;
+  uint16_t pool_id;
+  uint16_t c_resel;
+  uint16_t c_resel_initial;
+  uint16_t p_rsvp_slots;
+  int64_t next_abs_slot;
+  sl_resource_info_t resource;
+  sl_resource_info_t current_resource;
+  uint32_t reselections;
+  uint32_t kept;
+  uint32_t released;
+} nr_sl_v2x_sps_state_t;
+
+typedef struct {
+  bool enabled;
+  nr_sl_v2x_lbt_state_t lbt;
+  nr_sl_v2x_sps_state_t sps;
+} nr_sl_v2x_scheduler_t;
+
 /**
  * \brief Structure to denote a future resource reserved by another UE
  *
@@ -781,6 +819,7 @@ typedef struct {
   uint8_t sl_resel_counter;  // The resource selection counter
   uint16_t sl_c_resel;       // The C_resel counter
   List_t sl_transmit_history; // History of slots used for transmission
+  nr_sl_v2x_scheduler_t sl_v2x_scheduler;
 
   /// bitmap of ULSCH slots, can hold up to 160 slots
   uint64_t ulsch_slot_bitmap[3];
