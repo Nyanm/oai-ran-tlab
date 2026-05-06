@@ -671,23 +671,23 @@ static inline const uint32_t *get_dft_scaling(int ofdm_symbol_size, uint32_t lev
                                                   {1, 1, 2, 2, 0},
                                                   {1, 1, 2, 2, 0}};
   static const uint32_t DFT_SCALING_2048_THRES[10] = {47, 49, 53, 55, 59, 61, 65, 67, 69, 100};
-  static const uint32_t DFT_SCALING_2048[10][5] = {{1, 1, 1, 1, 2},
-                                                   {1, 1, 1, 1, 2},
-                                                   {1, 1, 1, 1, 2},
-                                                   {1, 1, 1, 1, 2},
-                                                   {1, 1, 1, 1, 2},
-                                                   {1, 1, 1, 1, 2},
-                                                   {1, 1, 1, 1, 2},
-                                                   {1, 1, 1, 1, 2},
-                                                   {1, 1, 1, 1, 2},
-                                                   {1, 1, 1, 1, 2}};
+  static const uint32_t DFT_SCALING_2048[10][5] = {{6, 0, 0, 0, 0},
+                                                   {5, 1, 0, 0, 0},
+                                                   {4, 1, 1, 0, 0},
+                                                   {3, 1, 1, 1, 0},
+                                                   {1, 1, 2, 2, 0},
+                                                   {1, 1, 2, 2, 0},
+                                                   {1, 1, 2, 2, 0},
+                                                   {1, 1, 2, 2, 0},
+                                                   {1, 1, 2, 2, 0},
+                                                   {1, 1, 2, 2, 0}};
   static const uint32_t DFT_SCALING_3072[5][5] = {{1, 4, 1, 0, 0},
                                                   {1, 0, 3, 2, 0},
                                                   {1, 0, 3, 2, 0},
                                                   {1, 0, 3, 2, 0},
                                                   {1, 0, 3, 2, 0}};
   static const uint32_t DFT_SCALING_4096_THRES[8] = {43, 49, 57, 61, 63, 65, 69, 100};
-  /*
+  
   static const uint32_t DFT_SCALING_4096[8][5] = {{6, 0, 0, 0, 0},
                                      {5, 1, 0, 0, 0},
                                      {4, 1, 1, 0, 0},
@@ -696,7 +696,7 @@ static inline const uint32_t *get_dft_scaling(int ofdm_symbol_size, uint32_t lev
                                      {2, 1, 1, 1, 1},
                                      {1, 1, 2, 1, 1},
                                      {0, 0, 3, 0, 3}};
-  */
+  
   static const uint32_t DFT_SCALING_6144[5][6] = {{1, 1, 0, 3, 2, 0},
                                                   {1, 1, 0, 3, 2, 0},
                                                   {1, 1, 0, 3, 2, 0},
@@ -717,13 +717,13 @@ static inline const uint32_t *get_dft_scaling(int ofdm_symbol_size, uint32_t lev
                                                    {1, 0, 0, 3, 3, 0},
                                                    {1, 0, 0, 3, 3, 0},
                                                    {1, 0, 0, 3, 3, 0}};
-  /*
+  
   static const uint32_t DFT_SCALING_16384[5][6] = {{0, 0, 1, 3, 3, 0},
                                       {0, 0, 1, 3, 3, 0},
                                       {0, 0, 1, 3, 3, 0},
                                       {0, 0, 1, 3, 3, 0},
                                       {0, 0, 1, 3, 3, 0}};
-  */
+  
   static const uint32_t DFT_SCALING_18432[5][7] = {{1, 1, 0, 0, 3, 3, 0},
                                                    {1, 1, 0, 0, 3, 3, 0},
                                                    {1, 1, 0, 0, 3, 3, 0},
@@ -734,13 +734,13 @@ static inline const uint32_t *get_dft_scaling(int ofdm_symbol_size, uint32_t lev
                                                    {1, 1, 0, 0, 3, 3, 0},
                                                    {1, 1, 0, 0, 3, 3, 0},
                                                    {1, 1, 0, 0, 3, 3, 0}};
-  /*
+  
   static const uint32_t DFT_SCALING_32768[5][7] = {{1, 0, 0, 1, 3, 3, 0},
                                       {1, 0, 0, 1, 3, 3, 0},
                                       {1, 0, 0, 1, 3, 3, 0},
                                       {1, 0, 0, 1, 3, 3, 0},
                                       {1, 0, 0, 1, 3, 3, 0}};
-  */
+  
   static const uint32_t DFT_SCALING_36864[5][7] = {{1, 1, 0, 0, 3, 3, 0},
                                                    {1, 1, 0, 0, 3, 3, 0},
                                                    {1, 1, 0, 0, 3, 3, 0},
@@ -751,12 +751,12 @@ static inline const uint32_t *get_dft_scaling(int ofdm_symbol_size, uint32_t lev
                                                    {1, 0, 0, 1, 3, 3, 0},
                                                    {1, 0, 0, 1, 3, 3, 0},
                                                    {1, 0, 0, 1, 3, 3, 0}};
-  /*static const uint32_t DFT_SCALING_65536[5][7] = {{0, 0, 0, 2, 3, 3, 0},
+  static const uint32_t DFT_SCALING_65536[5][7] = {{0, 0, 0, 2, 3, 3, 0},
                                       {0, 0, 0, 2, 3, 3, 0},
                                       {0, 0, 0, 2, 3, 3, 0},
                                       {0, 0, 0, 2, 3, 3, 0},
                                       {0, 0, 0, 2, 3, 3, 0}};
-  */
+  
   static const uint32_t DFT_SCALING_73728[5][8] = {{1, 1, 1, 0, 0, 3, 3, 0},
                                                    {1, 1, 1, 0, 0, 3, 3, 0},
                                                    {1, 1, 1, 0, 0, 3, 3, 0},
@@ -810,7 +810,7 @@ static inline const uint32_t *get_dft_scaling(int ofdm_symbol_size, uint32_t lev
           break;
         i++;
       }
-      return DFT_SCALING_2048[i];
+      return DFT_SCALING_4096[i];
     case 6144:
       return DFT_SCALING_6144[0];
     case 8192:
@@ -819,14 +819,20 @@ static inline const uint32_t *get_dft_scaling(int ofdm_symbol_size, uint32_t lev
       return DFT_SCALING_9216[0];
     case 12288:
       return DFT_SCALING_12288[0];
+    case 16384:
+      return DFT_SCALING_16384[0];
     case 18432:
       return DFT_SCALING_18432[0];
     case 24576:
       return DFT_SCALING_24576[0];
+    case 32768:
+      return DFT_SCALING_32768[0];
     case 36864:
       return DFT_SCALING_36864[0];
     case 49152:
       return DFT_SCALING_49152[0];
+    case 65536:
+      return DFT_SCALING_65536[0];
     case 73728:
       return DFT_SCALING_73728[0];
     case 98304:
