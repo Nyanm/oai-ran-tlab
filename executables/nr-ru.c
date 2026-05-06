@@ -446,11 +446,6 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
   metadata mt = {.slot = *slot, .frame = *frame};
   gNBscopeCopyWithMetadata(ru, gNbTimeDomainSamples, rxp[0], sizeof(c16_t), 1, samples_per_slot, 0, &mt);
 
-  if (rxs != samples_per_slot) {
-    //exit_fun( "problem receiving samples" );
-    LOG_E(PHY, "problem receiving samples\n");
-  }
-
   stop_meas(&ru->rx_fhaul);
 }
 

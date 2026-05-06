@@ -89,6 +89,19 @@ pipeline {
             echo "GitLab Usermail is ${gitCommitAuthorEmailAddr}"
             // GitLab-Jenkins plugin integration is lacking to perform the merge by itself
             // Doing it manually --> it may have merge conflicts
+
+            // Validate MR commits: checks for missing Signed-off-by and merge commits
+            def mrValidationLog = "signedCommit_${env.BUILD_NUMBER}.log"
+            def mrValidationExitCode = sh(
+                script: "bash ./ci-scripts/pre-ci-check.sh -s origin/${env.gitlabSourceBranch} -t origin/${env.gitlabTargetBranch} > ${mrValidationLog} 2>&1",
+                returnStatus: true
+            )
+            def mrValidationMessage = readFile(mrValidationLog).trim()
+            sh "rm -f ${mrValidationLog}"
+            addGitLabMRComment comment: "${mrValidationMessage}"
+            if (mrValidationExitCode >= 2) {
+              error("${mrValidationMessage}")
+            }
             sh "./ci-scripts/doGitLabMerge.sh --src-branch ${env.gitlabSourceBranch} --src-commit ${env.gitlabMergeRequestLastCommit} --target-branch ${env.gitlabTargetBranch} --target-commit ${GIT_COMMIT}"
           } else {
             echo "Git Branch    is ${GIT_BRANCH}"

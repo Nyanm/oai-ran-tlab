@@ -81,6 +81,8 @@
 #include "alg/find.h"
 #include "NR_HandoverCommand.h"
 #include "openair2/SDAP/nr_sdap/nr_sdap_configuration.h"
+#include "rrc_gNB_NRPPA.h"
+#include "openair2/F1AP/lib/f1ap_positioning.h"
 
 #ifdef E2_AGENT
 #include "openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_rc_extern.h"
@@ -3522,6 +3524,42 @@ void *rrc_gnb_task(void *args_p)
       case NGAP_HANDOVER_COMMAND:
         rrc_gNB_process_HandoverCommand(RC.nrrrc[instance], &NGAP_HANDOVER_COMMAND(msg_p));
         rrc_gNB_free_Handover_Command(&NGAP_HANDOVER_COMMAND(msg_p)); // Free transfered NG message
+        break;
+
+      case NRPPA_TRP_INFORMATION_REQ:
+        rrc_gNB_process_trp_information_request(RC.nrrrc[instance], &NRPPA_TRP_INFORMATION_REQ(msg_p));
+        break;
+
+      case F1AP_TRP_INFORMATION_RESP:
+        rrc_CU_process_trp_information_response(msg_p, instance);
+        free_trp_information_resp(&F1AP_TRP_INFORMATION_RESP(msg_p));
+        break;
+
+      case NRPPA_POSITIONING_INFORMATION_REQ:
+        rrc_gNB_process_positioning_information_request(RC.nrrrc[instance], &NRPPA_POSITIONING_INFORMATION_REQ(msg_p));
+        break;
+
+      case F1AP_POSITIONING_INFORMATION_RESP:
+        rrc_CU_process_positioning_information_response(msg_p, instance);
+        free_positioning_information_resp(&F1AP_POSITIONING_INFORMATION_RESP(msg_p));
+        break;
+
+      case NRPPA_POSITIONING_ACTIVATION_REQ:
+        rrc_gNB_process_positioning_activation_request(RC.nrrrc[instance], &NRPPA_POSITIONING_ACTIVATION_REQ(msg_p));
+        break;
+
+      case F1AP_POSITIONING_ACTIVATION_RESP:
+        rrc_CU_process_positioning_activation_response(msg_p, instance);
+        free_positioning_activation_resp(&F1AP_POSITIONING_ACTIVATION_RESP(msg_p));
+        break;
+
+      case NRPPA_MEASUREMENT_REQ:
+        rrc_gNB_process_positioning_measurement_request(RC.nrrrc[instance], &NRPPA_MEASUREMENT_REQ(msg_p));
+        break;
+
+      case F1AP_POSITIONING_MEASUREMENT_RESP:
+        rrc_CU_process_positioning_measurement_response(msg_p, instance);
+        free_positioning_measurement_resp(&F1AP_POSITIONING_MEASUREMENT_RESP(msg_p));
         break;
 
       default:

@@ -272,6 +272,12 @@ void nr_rrc_trigger_f1_ho(gNB_RRC_INST *rrc,
   DevAssert(rrc != NULL);
   DevAssert(ue != NULL);
 
+  /* 3GPP TS 38.473, clause 8.3.1.2: The gNB-CU shall only initiate UeContextSetupRequest
+   * for handover when at least one DRB is setup for the UE. */
+  if (!seq_arr_size(&ue->drbs)) {
+    LOG_W(NR_RRC, "UE %u: no DRB configured, cannot trigger handover\n", ue->rrc_ue_id);
+    return;
+  }
   uint8_t buf[NR_RRC_BUF_SIZE];
   int size = do_NR_HandoverPreparationInformation(ue->ue_cap_buffer.buf, ue->ue_cap_buffer.len, buf, sizeof buf);
 
