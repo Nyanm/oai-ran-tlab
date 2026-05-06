@@ -21,6 +21,7 @@
 #include "PHY/NR_REFSIG/nr_refsig.h"
 #include "common/utils/nr/nr_common.h"
 #include "PHY/NR_UE_ESTIMATION/filt16a_32.h"
+#include "csi_rb_logging.h"
 
 //#define NR_CSIRS_DEBUG
 //#define NR_CSIIM_DEBUG
@@ -962,5 +963,8 @@ void nr_ue_csi_rs_procedures(PHY_VARS_NR_UE *ue,
   fapi_nr_rx_indication_t rx_ind = {0};
   nr_fill_dl_indication(&dl_indication, NULL, &rx_ind, proc, ue, NULL);
   nr_fill_rx_indication(&rx_ind, FAPI_NR_MEAS_IND, ue, NULL, NULL, 1, proc, (void *)&l1_measurements, NULL);
+
+  if (csi_rb_logging_enabled && csi_rb_logging_callback)
+    csi_rb_logging_callback(ue, proc, csi_rs_estimated_channel_freq, csirs_config_pdu);
   ue->if_inst->dl_indication(&dl_indication);
 }
