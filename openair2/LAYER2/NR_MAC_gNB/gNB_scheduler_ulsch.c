@@ -1716,6 +1716,35 @@ void handle_nr_srs_toa_vendor_ext_measurements(const module_id_t module_id,
           uint64_t T_inv = Tc_inv / (1 << mu);
           uint64_t T_ns_inv = 1000000000;
           int32_t k_value = (int32_t)(((int64_t)ta_offset_nsec[i] * (int64_t)T_inv) / T_ns_inv) + 492512;
+          //int32_t k_value = (int32_t)(((int64_t)ta_offset_nsec[i] * (int64_t)T_inv) / T_ns_inv) + 492512;
+          int32_t k_value;
+
+          if (ta_offset_nsec[i] != (int16_t) 0x8000) {
+              int64_t toa = (int64_t)ta_offset_nsec[i];
+              int64_t num = toa * (int64_t)T_inv;
+
+              if (num >= 0)
+                  k_value = (int32_t)((num + T_ns_inv / 2) / T_ns_inv) + 492512;
+              else
+                  k_value = (int32_t)((num - T_ns_inv / 2) / T_ns_inv) + 492512;
+
+              if (k_value < 0)
+                  k_value = 0;
+
+              if (k_value > 985025)
+                  k_value = 985025;
+
+              LOG_I(NR_MAC,
+                    "Extracting uL_RTOA info of MeasurementResponse, k1=%d \n",
+                    k_value);
+
+              } else {
+                      LOG_I(MAC,
+                            "ul_RTOA invalid, MeasurementResponse set to '-32768'\n");
+
+                      k_value = 985025;
+              }
+
           switch (mu) {
             case 0:
               ul_rtoa->present = F1AP_ULRTOAMEAS_PR_K0;
