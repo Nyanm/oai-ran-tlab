@@ -1292,7 +1292,7 @@ to create one or multiple virtual functions (VFs) through which Control plane (C
 plane) and User plane (U plane) traffic will flow. The following commands are
 not persistant, and have to be repeated after reboot.
 
-In the following, we will use these short hands:
+In the following, we will use the follwing shorthand notation:
 
 - `IF_NAME`: Physical network interface through which you can access the RU
 - `VLAN`: the VLAN tag as recommended by the RU vendor
