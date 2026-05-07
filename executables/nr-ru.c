@@ -103,7 +103,7 @@ void fh_if4p5_south_out_dma_host(RU_t *ru, int frame, int slot, uint64_t timesta
 
 void fh_if4p5_south_out_dma_device(RU_t *ru, int frame, int slot, uint64_t timestamp)
 {
-  printf("We are now in fh_if4p5_south_out_dma! DEVICEEEEEEEE\n");
+  printf("************************\nWe are now in fh_if4p5_south_out_dma! DEVICEEEEEEEE\n************************\n");
   LOG_D(PHY,"Sending IF4p5 for frame %d subframe %d\n",ru->proc.frame_tx,ru->proc.tti_tx);
 
   if ((nr_slot_select(&ru->config, ru->proc.frame_tx, ru->proc.tti_tx) & NR_DOWNLINK_SLOT) > 0)
@@ -327,7 +327,7 @@ void fh_if4p5_south_in_dma_device(RU_t *ru,
                        int *frame,
                        int *slot) {
 
-  printf("We are now in fh_if4p5_south_in_dma! DEVICEEEEEEEE\n");
+  printf("************************\nWe are now in fh_if4p5_south_in_dma! DEVICEEEEEEEE\n************************\n");
 
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
   RU_proc_t *proc = &ru->proc;
@@ -352,7 +352,7 @@ void fh_if4p5_south_in_dma_device(RU_t *ru,
       // nothing in RU for RAU
     }
 
-    LOG_D(PHY,"rx_fh_if4p5: subframe %d symbol mask %x\n",*slot,proc->symbol_mask[sl]);
+    LOG_D(PHY,"rx_fh_if4p5_dma_device: subframe %d symbol mask %x\n",*slot,proc->symbol_mask[sl]);
   } while(proc->symbol_mask[sl] != symbol_mask_full);
 
   //caculate timestamp_rx, timestamp_tx based on frame and subframe
@@ -980,23 +980,45 @@ void *ru_thread(void *param)
   if (ru->nr_start_if) {
     LOG_I(PHY, "starting transport\n");
     ret = openair0_transport_load(&ru->ifdevice, &ru->openair0_cfg, &ru->eth_params);
+    LOG_I(PHY, "testing1\n");
     AssertFatal(ret == 0, "RU %u: openair0_transport_init() ret %d: cannot initialize transport protocol\n", ru->idx, ret);
 
     if (ru->ifdevice.get_internal_parameter != NULL) {
-      /* it seems the device can "overwrite" (request?) to set the callbacks
-       * for fh_south_in()/fh_south_out() differently */
-      void *t = ru->ifdevice.get_internal_parameter("fh_if4p5_south_in");
-      if (t != NULL)
-        ru->fh_south_in = t;
-      t = ru->ifdevice.get_internal_parameter("fh_if4p5_south_out");
-      if (t != NULL)
-        ru->fh_south_out = t;
+      LOG_I(PHY, "testing2\n");
+      void *t = NULL;
+
+      // --- DMA_DEVICE mode ---
+      if (ru->if_south == REMOTE_IF4p5_DMA_DEVICE) {
+        t = ru->ifdevice.get_internal_parameter("fh_if4p5_south_in_dma_device");
+        if (t != NULL) { ru->fh_south_in = t; LOG_I(PHY, "testing2.1 (DMA DEVICE IN)\n"); }
+
+        t = ru->ifdevice.get_internal_parameter("fh_if4p5_south_out_dma_device");
+        if (t != NULL) { ru->fh_south_out = t; LOG_I(PHY, "testing2.2 (DMA DEVICE OUT)\n"); }
+      } 
+      // --- DMA_HOST ---
+      else if (ru->if_south == REMOTE_IF4p5_DMA_HOST) {
+        t = ru->ifdevice.get_internal_parameter("fh_if4p5_south_in_dma_host");
+        if (t != NULL) { ru->fh_south_in = t; LOG_I(PHY, "testing2.1 (DMA HOST IN)\n"); }
+
+        t = ru->ifdevice.get_internal_parameter("fh_if4p5_south_out_dma_host");
+        if (t != NULL) { ru->fh_south_out = t; LOG_I(PHY, "testing2.2 (DMA HOST OUT)\n"); }
+      } 
+      // --- REMOTE_IF4p5 ---
+      else {
+        t = ru->ifdevice.get_internal_parameter("fh_if4p5_south_in");
+        if (t != NULL) { ru->fh_south_in = t; LOG_I(PHY, "testing2.1 (STANDARD IN)\n"); }
+
+        t = ru->ifdevice.get_internal_parameter("fh_if4p5_south_out");
+        if (t != NULL) { ru->fh_south_out = t; LOG_I(PHY, "testing2.2 (STANDARD OUT)\n"); }
+      }
+
     } else {
       malloc_IF4p5_buffer(ru);
     }
 
     int cpu = sched_getcpu();
     if (ru->ru_thread_core > -1 && cpu != ru->ru_thread_core) {
+      LOG_I(PHY, "testing3\n");
       /* we start the ru_thread using threadCreate(), which already sets CPU
        * affinity; let's force it here again as per feature request #732 */
       cpu_set_t cpuset;

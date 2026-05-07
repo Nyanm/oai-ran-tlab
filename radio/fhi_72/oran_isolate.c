@@ -287,15 +287,222 @@ void oran_fh_if4p5_south_out(RU_t *ru, int frame, int slot, uint64_t timestamp)
   stop_meas(&ru->tx_fhaul);
 }
 
+void oran_fh_if4p5_south_in_dma_device(RU_t *ru, int *frame, int *slot)
+{
+  printf("Let's see if we are in oran_fh_if4p5_south_in_dma_device rn???\n ");
+  ru_info_t ru_info = {
+      .nb_rx = ru->nb_rx * ru->num_beams_period,
+      .nb_tx = ru->nb_tx * ru->num_beams_period,
+      .rxdataF = ru->common.rxdataF,
+      .beam_id = ru->common.beam_id,
+      .num_beams_period = ru->num_beams_period,
+      .prach_buf = NULL,
+  };
+
+  prach_item_t *prach_id = find_nr_prach(&ru->gNB_list[0]->prach_list, *frame, *slot, ru->nr_frame_parms->nb_antennas_rx, SEARCH_EXIST);
+  if (prach_id) {
+    struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
+    int slots_per_subframe = 1 << fh_cfg->frame_conf.nNumerology;
+    uint32_t subframe = *slot / slots_per_subframe; // `slot` = slot in which PRACH is received
+    // PRACH occasion in a frame if and only if SFN % x == y, TS 38.211 Table 6.3.3.2-2/3/4
+    nr_prach_info_t prach_info = get_prach_info(0);
+    bool is_prach_frame = (*frame % prach_info.x == prach_info.y);
+    bool is_prach_slot = is_prach_frame && xran_is_prach_slot(0, subframe, (prach_id->slot % slots_per_subframe)); // `prach_id->slot` = slot in which PRACH is scheduled
+    if (is_prach_slot) {
+      ru_info.prach_buf = prach_id->prach_buf;
+    } else {
+      LOG_W(HW, "[%d.%d] Expected PRACH reception of scheduled slot %d\n", *frame, *slot, prach_id->slot);
+    }
+  }
+
+  RU_proc_t *proc = &ru->proc;
+  int f, sl;
+  LOG_D(HW, "Read rxdataF %p,%p\n", ru_info.rxdataF[0], ru_info.rxdataF[1]);
+  start_meas(&ru->rx_fhaul);
+  int ret = xran_fh_rx_read_slot(&ru_info, &f, &sl);
+  stop_meas(&ru->rx_fhaul);
+  LOG_D(HW, "Read %d.%d rxdataF %p,%p\n", f, sl, ru_info.rxdataF[0], ru_info.rxdataF[1]);
+  if (ret != 0) {
+    printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX function \n", f, sl);
+  }
+
+  int slots_per_frame = 10 << (ru->openair0_cfg.nr_scs_for_raster);
+  proc->tti_rx = sl;
+  proc->frame_rx = f;
+  proc->tti_tx = (sl + ru->sl_ahead) % slots_per_frame;
+  proc->frame_tx = (sl > (slots_per_frame - 1 - ru->sl_ahead)) ? (f + 1) & 1023 : f;
+
+  if (proc->first_rx == 0) {
+    if (proc->tti_rx != *slot) {
+      LOG_E(HW,
+            "Received Time doesn't correspond to the time we think it is (slot mismatch, received %d.%d, expected %d.%d)\n",
+            proc->frame_rx,
+            proc->tti_rx,
+            *frame,
+            *slot);
+      *slot = proc->tti_rx;
+    }
+
+    if (proc->frame_rx != *frame) {
+      LOG_E(HW,
+            "Received Time doesn't correspond to the time we think it is (frame mismatch, %d.%d , expected %d.%d)\n",
+            proc->frame_rx,
+            proc->tti_rx,
+            *frame,
+            *slot);
+      *frame = proc->frame_rx;
+    }
+  } else {
+    proc->first_rx = 0;
+    LOG_I(HW, "before adjusting, OAI: frame=%d slot=%d, XRAN: frame=%d slot=%d\n", *frame, *slot, proc->frame_rx, proc->tti_rx);
+    *frame = proc->frame_rx;
+    *slot = proc->tti_rx;
+    LOG_I(HW, "After adjusting, OAI: frame=%d slot=%d, XRAN: frame=%d slot=%d\n", *frame, *slot, proc->frame_rx, proc->tti_rx);
+  }
+}
+
+void oran_fh_if4p5_south_out_dma_device(RU_t *ru, int frame, int slot, uint64_t timestamp)
+{
+  printf("Let's see if we are in oran_fh_if4p5_south_out_dma_device rn???\n ");
+  start_meas(&ru->tx_fhaul);
+  ru_info_t ru_info = {
+      .nb_rx = ru->nb_rx * ru->num_beams_period,
+      .nb_tx = ru->nb_tx * ru->num_beams_period,
+      .txdataF_BF = ru->common.txdataF_BF,
+      .beam_id = ru->common.beam_id,
+      .num_beams_period = ru->num_beams_period,
+  };
+
+  // printf("south_out:\tframe=%d\tslot=%d\ttimestamp=%ld\n",frame,slot,timestamp);
+
+  int ret = xran_fh_tx_send_slot(&ru_info, frame, slot, timestamp);
+  if (ret != 0) {
+    printf("ORAN: ORAN_fh_if4p5_south_out ERROR in TX function \n");
+  }
+  stop_meas(&ru->tx_fhaul);
+}
+
+void oran_fh_if4p5_south_in_dma_host(RU_t *ru, int *frame, int *slot)
+{
+  printf("Let's see if we are in oran_fh_if4p5_south_in_dma_host rn???\n ");
+  ru_info_t ru_info = {
+      .nb_rx = ru->nb_rx * ru->num_beams_period,
+      .nb_tx = ru->nb_tx * ru->num_beams_period,
+      .rxdataF = ru->common.rxdataF,
+      .beam_id = ru->common.beam_id,
+      .num_beams_period = ru->num_beams_period,
+      .prach_buf = NULL,
+  };
+
+  prach_item_t *prach_id = find_nr_prach(&ru->gNB_list[0]->prach_list, *frame, *slot, ru->nr_frame_parms->nb_antennas_rx, SEARCH_EXIST);
+  if (prach_id) {
+    struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
+    int slots_per_subframe = 1 << fh_cfg->frame_conf.nNumerology;
+    uint32_t subframe = *slot / slots_per_subframe; // `slot` = slot in which PRACH is received
+    // PRACH occasion in a frame if and only if SFN % x == y, TS 38.211 Table 6.3.3.2-2/3/4
+    nr_prach_info_t prach_info = get_prach_info(0);
+    bool is_prach_frame = (*frame % prach_info.x == prach_info.y);
+    bool is_prach_slot = is_prach_frame && xran_is_prach_slot(0, subframe, (prach_id->slot % slots_per_subframe)); // `prach_id->slot` = slot in which PRACH is scheduled
+    if (is_prach_slot) {
+      ru_info.prach_buf = prach_id->prach_buf;
+    } else {
+      LOG_W(HW, "[%d.%d] Expected PRACH reception of scheduled slot %d\n", *frame, *slot, prach_id->slot);
+    }
+  }
+
+  RU_proc_t *proc = &ru->proc;
+  int f, sl;
+  LOG_D(HW, "Read rxdataF %p,%p\n", ru_info.rxdataF[0], ru_info.rxdataF[1]);
+  start_meas(&ru->rx_fhaul);
+  int ret = xran_fh_rx_read_slot(&ru_info, &f, &sl);
+  stop_meas(&ru->rx_fhaul);
+  LOG_D(HW, "Read %d.%d rxdataF %p,%p\n", f, sl, ru_info.rxdataF[0], ru_info.rxdataF[1]);
+  if (ret != 0) {
+    printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX function \n", f, sl);
+  }
+
+  int slots_per_frame = 10 << (ru->openair0_cfg.nr_scs_for_raster);
+  proc->tti_rx = sl;
+  proc->frame_rx = f;
+  proc->tti_tx = (sl + ru->sl_ahead) % slots_per_frame;
+  proc->frame_tx = (sl > (slots_per_frame - 1 - ru->sl_ahead)) ? (f + 1) & 1023 : f;
+
+  if (proc->first_rx == 0) {
+    if (proc->tti_rx != *slot) {
+      LOG_E(HW,
+            "Received Time doesn't correspond to the time we think it is (slot mismatch, received %d.%d, expected %d.%d)\n",
+            proc->frame_rx,
+            proc->tti_rx,
+            *frame,
+            *slot);
+      *slot = proc->tti_rx;
+    }
+
+    if (proc->frame_rx != *frame) {
+      LOG_E(HW,
+            "Received Time doesn't correspond to the time we think it is (frame mismatch, %d.%d , expected %d.%d)\n",
+            proc->frame_rx,
+            proc->tti_rx,
+            *frame,
+            *slot);
+      *frame = proc->frame_rx;
+    }
+  } else {
+    proc->first_rx = 0;
+    LOG_I(HW, "before adjusting, OAI: frame=%d slot=%d, XRAN: frame=%d slot=%d\n", *frame, *slot, proc->frame_rx, proc->tti_rx);
+    *frame = proc->frame_rx;
+    *slot = proc->tti_rx;
+    LOG_I(HW, "After adjusting, OAI: frame=%d slot=%d, XRAN: frame=%d slot=%d\n", *frame, *slot, proc->frame_rx, proc->tti_rx);
+  }
+}
+
+void oran_fh_if4p5_south_out_dma_host(RU_t *ru, int frame, int slot, uint64_t timestamp)
+{
+  printf("Let's see if we are in oran_fh_if4p5_south_out_dma_host rn???\n ");
+  start_meas(&ru->tx_fhaul);
+  ru_info_t ru_info = {
+      .nb_rx = ru->nb_rx * ru->num_beams_period,
+      .nb_tx = ru->nb_tx * ru->num_beams_period,
+      .txdataF_BF = ru->common.txdataF_BF,
+      .beam_id = ru->common.beam_id,
+      .num_beams_period = ru->num_beams_period,
+  };
+
+  // printf("south_out:\tframe=%d\tslot=%d\ttimestamp=%ld\n",frame,slot,timestamp);
+
+  int ret = xran_fh_tx_send_slot(&ru_info, frame, slot, timestamp);
+  if (ret != 0) {
+    printf("ORAN: ORAN_fh_if4p5_south_out ERROR in TX function \n");
+  }
+  stop_meas(&ru->tx_fhaul);
+}
+
 void *get_internal_parameter(char *name)
 {
-  printf("ORAN: %s\n", __FUNCTION__);
+  // 保持你原有的调试打印，这对于确认 Key 是否匹配至关重要
+  printf("ORAN: %s (requesting: %s)\n", __FUNCTION__, name);
 
+  // 1. 标准 IF4p5 接口
   if (!strcmp(name, "fh_if4p5_south_in"))
     return (void *)oran_fh_if4p5_south_in;
   if (!strcmp(name, "fh_if4p5_south_out"))
     return (void *)oran_fh_if4p5_south_out;
 
+  // 2. DMA DEVICE 模式接口 (DPU 侧)
+  // 这些函数名假设你已经在该文件或头文件中定义好了对应的实现
+  if (!strcmp(name, "fh_if4p5_south_in_dma_device"))
+    return (void *)oran_fh_if4p5_south_in_dma_device;
+  if (!strcmp(name, "fh_if4p5_south_out_dma_device"))
+    return (void *)oran_fh_if4p5_south_out_dma_device;
+
+  // 3. DMA HOST 模式接口 (主机侧)
+  if (!strcmp(name, "fh_if4p5_south_in_dma_host"))
+    return (void *)oran_fh_if4p5_south_in_dma_host;
+  if (!strcmp(name, "fh_if4p5_south_out_dma_host"))
+    return (void *)oran_fh_if4p5_south_out_dma_host;
+
+  // 如果 Key 不匹配，打印警告有助于快速定位初始化配置错误
+  printf("ORAN: %s - Warning: Unknown parameter name [%s]\n", __FUNCTION__, name);
   return NULL;
 }
 
