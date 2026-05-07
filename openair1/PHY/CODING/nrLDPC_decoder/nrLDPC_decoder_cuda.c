@@ -34,6 +34,7 @@
 #include "nrLDPCdecoder_defs.h"
 #include "nrLDPC_types.h"
 #include "nrLDPC_init.h"
+#include "common/utils/LOG/log.h"
 #include "nrLDPC_mPass.h"
 #include "nrLDPC_cnProc.h"
 #include "nrLDPC_bnProc.h"
