@@ -2856,7 +2856,7 @@ void idft768(int16_t *input, int16_t *output, unsigned int *scale)
           (simd_q15_t*)(twa768+i),(simd_q15_t*)(twb768+i));
   }
 
-  if (scale && *scale > 1) {
+  if (scale && *scale > 0) {
     for (i=0; i<12; i++) {
       y128p[0]  = mulhi_int16(y128p[0],ONE_OVER_SQRT3_Q15_128);
       y128p[1]  = mulhi_int16(y128p[1],ONE_OVER_SQRT3_Q15_128);
