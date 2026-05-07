@@ -251,8 +251,6 @@ int init_nr_ue_signal(PHY_VARS_NR_UE *ue, int nb_connected_gNB)
       ue->nr_csi_info->csi_rs_generated_signal[i] =
           malloc16_clear(fp->samples_per_slot_wCP * sizeof(**ue->nr_csi_info->csi_rs_generated_signal));
     }
-
-    ue->nr_srs_info = malloc16_clear(sizeof(nr_srs_info_t));
   }
 
   ue->init_averaging = 1;
@@ -300,8 +298,6 @@ void term_nr_ue_signal(PHY_VARS_NR_UE *ue)
     }
     free_and_zero(ue->nr_csi_info->csi_rs_generated_signal);
     free_and_zero(ue->nr_csi_info);
-
-    free_and_zero(ue->nr_srs_info);
 
     free_and_zero(ue->prach_vars[gNB_id]);
   }

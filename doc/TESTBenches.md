@@ -96,10 +96,6 @@ information on how the images are built.
   - orion: Cross-compilation from Intel to ARM
   - base image from `Dockerfile.base.ubuntu.cross-arm64`
   - build image from `Dockerfile.build.ubuntu.cross-arm64` (no target images)
-- [RAN-cppcheck](https://jenkins-oai.eurecom.fr/job/RAN-cppcheck/)
-  ~BUILD-ONLY ~4G-LTE ~5G-NR ~nrUE
-  - bellatrix
-  - performs static code analysis, currently not actively enforced
 - [RAN-RHEL8-Cluster-Image-Builder](https://jenkins-oai.eurecom.fr/job/RAN-RHEL8-Cluster-Image-Builder/)
   ~BUILD-ONLY ~4G-LTE ~5G-NR ~nrUE
   - cluster (`Asterix-OC-oaicicd-session` resource): RHEL image build using the OpenShift Cluster (using gcc/clang)

@@ -21,12 +21,13 @@
 #include "common/utils/nr/nr_common.h"
 #include "common/utils/assertions.h"
 #include "common/utils/system.h"
+#include "common/utils/fsn.h"
 #include "common/ran_context.h"
 
 #include "radio/COMMON/common_lib.h"
 #include "radio/ETHERNET/ethernet_lib.h"
 
-#include "PHY/LTE_TRANSPORT/if4_tools.h"
+#include "PHY/if4_tools.h"
 
 #include "PHY/defs_nr_common.h"
 #include "PHY/phy_extern.h"
@@ -590,11 +591,6 @@ static void rx_rf(RU_t *ru, int *frame, int *slot)
   metadata mt = {.slot = *slot, .frame = *frame};
   gNBscopeCopyWithMetadata(ru, gNbTimeDomainSamples, rxp[0], sizeof(c16_t), 1, samples_per_slot, 0, &mt);
 
-  if (rxs != samples_per_slot) {
-    //exit_fun( "problem receiving samples" );
-    LOG_E(PHY, "problem receiving samples\n");
-  }
-
   stop_meas(&ru->rx_fhaul);
 }
 
@@ -1147,11 +1143,16 @@ void *ru_thread(void *param)
                      proc->tti_rx * gNB->frame_parms.samples_per_slot_wCP);
 
         // Do PRACH RU processing
-        prach_item_t *p =
-            find_nr_prach(&gNB->prach_list, proc->frame_rx, proc->tti_rx, gNB->frame_parms.nb_antennas_rx, NR_SEARCH_EXIST);
-        if (p) {
+        fsn_t now = {.f = proc->frame_rx, .s = proc->tti_rx, .mu = fp->numerology_index};
+        prach_item_t p;
+        while (get_next_nr_prach(&gNB->prach_ru_queue, &now, &p)) {
           // need to extract RACH data for later processing by rx_nr_prach()
-          rx_nr_prach_ru(p, ru->common.rxdata, ru->nr_frame_parms, ru->N_TA_offset);
+          rx_nr_prach_ru(&p, ru->common.rxdata, ru->nr_frame_parms, ru->N_TA_offset);
+          bool success = spsc_q_put(&gNB->prach_l1rx_queue, &p, sizeof(p));
+          // assume prach_l1rx_queue never full: prach_ru_queue filled at
+          // constant pace, but prach_l1rx_queue emptied as fast as possible,
+          // see rx_func()
+          DevAssert(success);
         } // end if (prach_id >= 0)
       } // end if (ru->feprx)
     } // end if (slot_type == NR_UPLINK_SLOT || slot_type == NR_MIXED_SLOT) {

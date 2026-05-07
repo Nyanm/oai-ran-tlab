@@ -209,7 +209,8 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
     }
 #endif
 
-    TB_parameters->nb_rb = rel15->rbSize;
+    int rbsize = dlsch->freq_alloc.num_rbs;
+    TB_parameters->nb_rb = rbsize;
     TB_parameters->Qm = rel15->qamModOrder[0];
     TB_parameters->mcs = rel15->mcsIndex[0];
     TB_parameters->nb_layers = rel15->nrOfLayers;
@@ -217,7 +218,7 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
 
     int nb_re_dmrs =
         (rel15->dmrsConfigType == NFAPI_NR_DMRS_TYPE1) ? (6 * rel15->numDmrsCdmGrpsNoData) : (4 * rel15->numDmrsCdmGrpsNoData);
-    TB_parameters->G = nr_get_G(rel15->rbSize,
+    TB_parameters->G = nr_get_G(rbsize,
                                 rel15->NrOfSymbols,
                                 nb_re_dmrs,
                                 get_num_dmrs(rel15->dlDmrsSymbPos),
@@ -226,7 +227,6 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
                                 rel15->nrOfLayers);
 
     TB_parameters->tbslbrm = rel15->maintenance_parms_v3.tbSizeLbrmBytes;
-
     TB_parameters->output = &output[dlsch_offset >> 3];
     TB_parameters->segments = &segments[segments_offset];
 
@@ -245,7 +245,7 @@ int nr_dlsch_encoding(PHY_VARS_gNB *gNB,
     /* output and its parts for each dlsch should be aligned on 64 bytes (or 8 * 64 bits)
      * => dlsch_offset should remain a multiple of 8 * 64 with enough offset to fit each dlsch
      */
-    const size_t dlsch_size = rel15->rbSize * gNB->frame_parms.symbols_per_slot * NR_NB_SC_PER_RB * rel15->qamModOrder[0] * rel15->nrOfLayers;
+    const size_t dlsch_size = rbsize * gNB->frame_parms.symbols_per_slot * NR_NB_SC_PER_RB * rel15->qamModOrder[0] * rel15->nrOfLayers;
     dlsch_offset += ceil_mod(dlsch_size, 8 * 64);
   }
 

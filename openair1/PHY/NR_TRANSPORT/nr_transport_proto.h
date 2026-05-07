@@ -11,6 +11,7 @@
 
 #include "PHY/defs_nr_common.h"
 #include "PHY/defs_gNB.h"
+#include "common/utils/fsn.h"
 
 #define NR_PBCH_PDU_BITS 24
 
@@ -85,11 +86,19 @@ void free_gNB_dlsch(NR_gNB_DLSCH_t *dlsch, uint16_t N_RB, const NR_DL_FRAME_PARM
     - LLR computation
     This function supports TM1, 2, 3, 5, and 6.
     @param ue Pointer to PHY variables
-    @param UE_id id of current UE
+    @param pusch_vars ULSCH PUSCH data
+    @param rel15_ul FAPI message to process
+    @param unav_res unav_res result
     @param frame Frame number
     @param slot Slot number
 */
-int nr_rx_pusch_tp(PHY_VARS_gNB *gNB, uint8_t ulsch_id, uint32_t frame, uint8_t slot, int beam_nb);
+int nr_rx_pusch_tp(PHY_VARS_gNB *gNB,
+                   NR_gNB_PUSCH *pusch_vars,
+                   const nfapi_nr_pusch_pdu_t *rel15_ul,
+                   uint32_t *ret_unav_res,
+                   uint32_t frame,
+                   uint8_t slot,
+                   int beam_nb);
 
 /*!
 \brief This function implements the idft transform precoding in PUSCH
@@ -159,7 +168,7 @@ void nr_fill_ulsch(PHY_VARS_gNB *gNB,
                    int slot,
                    nfapi_nr_pusch_pdu_t *ulsch_pdu);
 
-prach_item_t *nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_nr_prach_pdu_t *prach_pdu);
+void nr_schedule_rx_prach(PHY_VARS_gNB *gNB, int SFN, int Slot, nfapi_nr_prach_pdu_t *prach_pdu);
 
 typedef struct rx_prach_out {
   uint16_t max_preamble;
@@ -170,12 +179,6 @@ rx_prach_out_t rx_nr_prach(const prach_item_t *, int occasion);
 
 void rx_nr_prach_ru(prach_item_t *, int32_t **, NR_DL_FRAME_PARMS *frame_parms, int N_TA_offset);
 
-typedef enum {
-  NR_SEARCH_EXIST = 0,
-  NR_SEARCH_EXIST_OR_FREE
-} nr_find_type_t;
-
-prach_item_t *find_nr_prach(prach_list_t *, int frame, int slot, int nb_rx, nr_find_type_t type);
 void nr_fill_pucch(PHY_VARS_gNB *gNB,
                    int frame,
                    int slot,
@@ -189,30 +192,32 @@ void nr_fill_srs(PHY_VARS_gNB *gNB,
 int nr_get_srs_signal(PHY_VARS_gNB *gNB,
                       c16_t **rxdataF,
                       slot_t slot,
-                      nfapi_nr_srs_pdu_t *srs_pdu,
+                      const nfapi_nr_srs_pdu_t *srs_pdu,
                       nr_srs_info_t *nr_srs_info,
                       c16_t srs_received_signal[][gNB->frame_parms.ofdm_symbol_size * (1 << srs_pdu->num_symbols)],
                       c16_t srs_received_noise[][gNB->frame_parms.ofdm_symbol_size * (1 << srs_pdu->num_symbols)]);
 
-void nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
+nr_srs_info_t nr_srs_rx_procedures(PHY_VARS_gNB *gNB,
                           int frame_rx,
                           int slot_rx,
                           uint8_t nb_antennas_rx,
                           uint8_t N_ap,
                           uint8_t N_symb_SRS,
                           uint16_t ofdm_symbol_size,
-                          NR_gNB_SRS_t *srs,
-                          nr_srs_info_t *nr_srs_info,
+                          const NR_gNB_SRS_job_t *srs,
                           int *srs_est,
+                          int8_t *snr,
                           c16_t srs_estimated_channel_freq[][N_ap][ofdm_symbol_size * N_symb_SRS],
-                          c16_t srs_estimated_channel_time[][N_ap][NR_SRS_IDFT_OVERSAMP_FACTOR * ofdm_symbol_size],
                           int16_t *snr_per_rb,
                           uint16_t *timing_advance_offset,
                           int16_t *timing_advance_offset_nsec);
 
 int get_nr_prach_duration(uint8_t prach_format);
 
-void free_nr_prach_entry(prach_list_t *, prach_item_t *);
+void init_nr_prach(PHY_VARS_gNB *gNB);
+void reset_nr_prach(PHY_VARS_gNB *gNB);
+void free_nr_prach_entry(prach_item_t *);
+bool get_next_nr_prach(spsc_q_t *q, const fsn_t *now, prach_item_t *p);
 
 void nr_decode_pucch1(PHY_VARS_gNB *gNB,
                       c16_t **rxdataF,
@@ -227,14 +232,14 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
                       int frame,
                       int slot,
                       nfapi_nr_uci_pucch_pdu_format_2_3_4_t* uci_pdu,
-                      nfapi_nr_pucch_pdu_t* pucch_pdu);
+                      const nfapi_nr_pucch_pdu_t* pucch_pdu);
 
 void nr_decode_pucch0(PHY_VARS_gNB *gNB,
                       c16_t **rxdataF,
                       int frame,
                       int slot,
                       nfapi_nr_uci_pucch_pdu_format_0_1_t* uci_pdu,
-                      nfapi_nr_pucch_pdu_t* pucch_pdu);
+                      const nfapi_nr_pucch_pdu_t* pucch_pdu);
 
 
 #endif /*__NR_TRANSPORT__H__*/

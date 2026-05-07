@@ -203,7 +203,7 @@ bool generate_srs_nr(const NR_DL_FRAME_PARMS *frame_parms,
     nr_srs_info->srs_generated_signal_bits = log2_approx(amp);
   }
   uint64_t subcarrier_offset = frame_parms->first_carrier_offset + bwp_start * NR_NB_SC_PER_RB;
-  double sqrt_N_ap = sqrt(N_ap);
+  float amp_sqrt_N_ap = amp / sqrt(N_ap);
   int n_b[nr_srs_info->B_SRS + 1];
 
   // Find index of table which is for this SRS length
@@ -298,14 +298,16 @@ bool generate_srs_nr(const NR_DL_FRAME_PARMS *frame_parms,
       uint16_t l_line_offset = l_line * frame_parms->ofdm_symbol_size;
       // For each port, and for each OFDM symbol, here it is computed and mapped an SRS sequence with M_sc_b_SRS symbols
       for (int k = 0; k < M_sc_b_SRS; k++) {
-        cd_t shift = {cos(alpha_i * k), sin(alpha_i * k)};
-        const c16_t tmp = rv_ul_ref_sig[u][v][M_sc_b_SRS_index][k];
-        cd_t r_overbar = {tmp.r, tmp.i};
+        cf_t shift = {cosf(alpha_i * k), sinf(alpha_i * k)};
+        const c16_t r_overbar = rv_ul_ref_sig[u][v][M_sc_b_SRS_index][k];
 
         // cos(x+y) = cos(x)cos(y) - sin(x)sin(y)
-        cd_t r = cdMul(shift, r_overbar);
-        c16_t r_amp = {(((int32_t)round((double)amp * r.r / sqrt_N_ap)) >> 15),
-                       (((int32_t)round((double)amp * r.i / sqrt_N_ap)) >> 15)};
+        cf_t r = (cf_t) {
+          .r = shift.r * r_overbar.r - shift.i * r_overbar.i,
+          .i = shift.r * r_overbar.i + shift.i * r_overbar.r,
+        };
+        c16_t r_amp = {(((int32_t)(amp_sqrt_N_ap * r.r)) >> 15),
+                       (((int32_t)(amp_sqrt_N_ap * r.i)) >> 15)};
 
 #ifdef SRS_DEBUG
         int subcarrier_log = subcarrier-subcarrier_offset;

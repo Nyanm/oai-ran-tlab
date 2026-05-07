@@ -161,7 +161,12 @@ static void rx_func(processingData_L1_t *info)
     NR_UL_IND_t UL_INFO = {.frame = frame_rx, .slot = slot_rx, .module_id = gNB->Mod_id, .CC_id = gNB->CC_id};
     // Do PRACH RU processing
     UL_INFO.rach_ind.pdu_list = UL_INFO.prach_pdu_indication_list;
-    L1_nr_prach_procedures(gNB, frame_rx, slot_rx, &UL_INFO.rach_ind);
+    UL_INFO.rach_ind.number_of_pdus = 0;
+    // even if processing is late, we might collect all PRACH
+    // the last PRACH's frame/slot is when all UE's appear to have accessed
+    prach_item_t p;
+    while (spsc_q_get(&gNB->prach_l1rx_queue, &p, sizeof(p)))
+      L1_nr_prach_procedures(gNB, &p, &UL_INFO.rach_ind);
 
     //WA: comment rotation in tx/rx
     if (gNB->phase_comp) {

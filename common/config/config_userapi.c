@@ -183,14 +183,35 @@ int config_check_intval(configmodule_interface_t *cfg, paramdef_t *param)
     return -1;
   }
 
-  for ( int i=0; i<param->chkPptr->s1.num_okintval ; i++) {
-    if( *(param->uptr) == param->chkPptr->s1.okintval[i] ) {
-      return 0;
+  if (param->type == TYPE_INT32 || param->type == TYPE_INT) {
+    if (param->iptr == NULL) {
+      fprintf(stderr, "[CONFIG] config_check_intval: %s: NULL iptr\n", param->optname);
+      return -1;
     }
+    const int v = *param->iptr;
+    for (int i = 0; i < param->chkPptr->s1.num_okintval; i++) {
+      if (v == param->chkPptr->s1.okintval[i])
+        return 0;
+    }
+    fprintf(stderr, "[CONFIG] config_check_intval: %s: %i invalid value, authorized values:\n       ", param->optname, v);
+    for (int i = 0; i < param->chkPptr->s1.num_okintval; i++) {
+      fprintf(stderr, " %i", param->chkPptr->s1.okintval[i]);
+    }
+    fprintf(stderr, " \n");
+    return -1;
+  } else {
+    if (param->uptr == NULL) {
+      fprintf(stderr, "[CONFIG] config_check_intval: %s: NULL uptr\n", param->optname);
+      return -1;
+    }
+    for (int i = 0; i < param->chkPptr->s1.num_okintval; i++) {
+      if (*(param->uptr) == (uint32_t)param->chkPptr->s1.okintval[i]) {
+        return 0;
+      }
+    }
+    print_intvalueerror(param, "config_check_intval", param->chkPptr->s1.okintval, param->chkPptr->s1.num_okintval);
+    return -1;
   }
-
-  print_intvalueerror(param,"config_check_intval", param->chkPptr->s1.okintval,param->chkPptr->s1.num_okintval);
-  return -1;
 }
 
 int config_check_modify_integer(configmodule_interface_t *cfg, paramdef_t *param)
@@ -211,15 +232,38 @@ int config_check_modify_integer(configmodule_interface_t *cfg, paramdef_t *param
   return -1;
 }
 
-int config_check_intrange(configmodule_interface_t *cfg, paramdef_t *param)
+int config_check_intrange(const configmodule_interface_t *cfg, const paramdef_t *param)
 {
   UNUSED(cfg);
   if( *(param->iptr) >= param->chkPptr->s2.okintrange[0]  && *(param->iptr) <= param->chkPptr->s2.okintrange[1]  ) {
     return 0;
   }
 
-  fprintf(stderr,"[CONFIG] config_check_intrange: %s: %i invalid value, authorized range: %i %i\n",
-          param->optname, (int)*(param->uptr), param->chkPptr->s2.okintrange[0], param->chkPptr->s2.okintrange[1]);
+  fprintf(stderr,
+          "[CONFIG] config_check_intrange: %s: %i invalid value, authorized range: %i %i\n",
+          param->optname,
+          (int)*(param->iptr),
+          param->chkPptr->s2.okintrange[0],
+          param->chkPptr->s2.okintrange[1]);
+  return -1;
+}
+
+int config_check_uintrange(const configmodule_interface_t *cfg, const paramdef_t *param)
+{
+  (void)cfg;
+  const uint32_t *v = param->uptr;
+  const int *range = param->chkPptr->s2.okintrange;
+
+  if (*v >= (uint32_t)range[0] && *v <= (uint32_t)range[1]) {
+    return 0;
+  }
+
+  fprintf(stderr,
+          "[CONFIG] config_check_uintrange: %s: %u invalid, authorized range: %i %i\n",
+          param->optname,
+          *v,
+          range[0],
+          range[1]);
   return -1;
 }
 

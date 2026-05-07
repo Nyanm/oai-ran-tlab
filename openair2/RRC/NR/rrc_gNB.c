@@ -263,10 +263,8 @@ static bool eq_pci(const void *vval, const void *vit)
 
 const nr_neighbour_cell_t *get_neighbour_cell_by_pci(const neighbour_cell_configuration_t *cell, int pci)
 {
-  seq_arr_t *head = cell->neighbour_cells;
-  DevAssert(head != NULL);
-  LOG_D(NR_RRC, "Number of neighbour cells: %ld\n", head->size);
-  elm_arr_t e = find_if(head, &pci, eq_pci);
+  DevAssert(cell);
+  elm_arr_t e = find_if((seq_arr_t *)&cell->neighbour_cells, &pci, eq_pci);
   if (e.found) {
     const nr_neighbour_cell_t *neighbour = (const nr_neighbour_cell_t *)e.it;
     LOG_D(NR_RRC, "Found matching neighbour cell with PCI %d and Cell ID %ld\n", neighbour->physicalCellId, neighbour->nrcell_id);
@@ -772,23 +770,23 @@ NR_MeasConfig_t *nr_rrc_get_measconfig(const gNB_RRC_INST *rrc, uint64_t nr_cell
     const NR_MeasTimingList_t *mtlist = cell->mtc->criticalExtensions.choice.c1->choice.measTimingConf->measTiming;
     const NR_MeasTiming_t *mt = mtlist->list.array[0];
     const neighbour_cell_configuration_t *neighbour_config = get_neighbour_cell_config(rrc, cell->info.cell_id);
-    seq_arr_t *neighbour_cells = NULL;
-    if (neighbour_config)
-      neighbour_cells = neighbour_config->neighbour_cells;
+    const seq_arr_t *neighbour_cells = neighbour_config ? &neighbour_config->neighbour_cells : NULL;
 
     int *neigh_a3_id = NULL;
     if (neighbour_cells && neighbour_cells->size)
       neigh_a3_id = calloc_or_fail(neighbour_cells->size, sizeof(int));
 
-    if (neighbour_cells && rrc->measurementConfiguration.a3_event_list && rrc->measurementConfiguration.a3_event_list->size > 0) {
+    const nr_measurement_configuration_t *meas_cfg = &rrc->measurementConfiguration;
+    const seq_arr_t *a3_event_list = meas_cfg->a3_event_list;
+    if (neighbour_cells && a3_event_list && a3_event_list->size > 0) {
       /* Loop through neighbours and find related A3 configuration
          If no related A3 but there is default add the default one.
          If default one added once as a report, no need to add it again && duplication.
       */
       LOG_D(NR_RRC, "Preparing A3 Event Measurement Configuration!\n");
       bool default_a3_added = false; // To ensure that the default configuration is only added once
-      for (int i = 0; i < neighbour_cells->size; i++) {
-        nr_neighbour_cell_t *neighbourCell = (nr_neighbour_cell_t *)seq_arr_at(neighbour_cells, i);
+      int i = 0;
+      FOR_EACH_SEQ_ARR(nr_neighbour_cell_t *, neighbourCell, neighbour_cells) {
         seq_arr_push_back(&neigh_seq, neighbourCell, sizeof(nr_neighbour_cell_t));
         const nr_a3_event_t *a3Event = get_a3_configuration((gNB_RRC_INST *)rrc, neighbourCell->physicalCellId);
         if (!a3Event) {
@@ -814,12 +812,13 @@ NR_MeasConfig_t *nr_rrc_get_measconfig(const gNB_RRC_INST *rrc, uint64_t nr_cell
         }
         NR_ReportConfigId_t reportConfigId = neigh_a3_id[i];
         seq_arr_push_back(&rc_A3_seq, prepare_a3_event_report(a3Event, reportConfigId), sizeof(NR_ReportConfigToAddMod_t));
+        i++;
       }
     }
-    if (rrc->measurementConfiguration.per_event)
-      rc_PER = prepare_periodic_event_report(rrc->measurementConfiguration.per_event);
-    if (rrc->measurementConfiguration.a2_event)
-      rc_A2 = prepare_a2_event_report(rrc->measurementConfiguration.a2_event);
+    if (meas_cfg->per_event)
+      rc_PER = prepare_periodic_event_report(meas_cfg->per_event);
+    if (meas_cfg->a2_event)
+      rc_A2 = prepare_a2_event_report(meas_cfg->a2_event);
 
     NR_MeasConfig_t *result = get_MeasConfig(mt, band, cell->info.pci, rc_PER, rc_A2, &rc_A3_seq, &neigh_seq, neigh_a3_id);
 

@@ -272,6 +272,12 @@ void nr_rrc_trigger_f1_ho(gNB_RRC_INST *rrc,
   DevAssert(rrc != NULL);
   DevAssert(ue != NULL);
 
+  /* 3GPP TS 38.473, clause 8.3.1.2: The gNB-CU shall only initiate UeContextSetupRequest
+   * for handover when at least one DRB is setup for the UE. */
+  if (!seq_arr_size(&ue->drbs)) {
+    LOG_W(NR_RRC, "UE %u: no DRB configured, cannot trigger handover\n", ue->rrc_ue_id);
+    return;
+  }
   uint8_t buf[NR_RRC_BUF_SIZE];
   int size = do_NR_HandoverPreparationInformation(ue->ue_cap_buffer.buf, ue->ue_cap_buffer.len, buf, sizeof buf);
 
@@ -552,6 +558,21 @@ void nr_rrc_trigger_n2_ho_target(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue)
  *         2) send NGAP Handover Required message */
 void nr_rrc_trigger_n2_ho(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, const nr_neighbour_cell_t *neighbour_config)
 {
+  bool has_active_pdu_session = false;
+  FOR_EACH_SEQ_ARR (rrc_pdu_session_param_t *, pduSession, &ue->pduSessions) {
+    if (pduSession->status == PDU_SESSION_STATUS_DONE || pduSession->status == PDU_SESSION_STATUS_ESTABLISHED) {
+      has_active_pdu_session = true;
+      break;
+    }
+  }
+  /* If there are no active PDU sessions, we can't send the Handover Preparation information
+   * message to the source gNB (3GPP TS 38.413 §9.2.3.1): Handover Required must carry a PDU
+   * Session Resource List with at least one PDU Session Resource Item */
+  if (!has_active_pdu_session) {
+    LOG_W(NR_RRC, "N2 HO not triggered for UE %u: no active PDU sessions\n", ue->rrc_ue_id);
+    return;
+  }
+
   byte_array_t hoPrepInfo = rrc_gNB_generate_HandoverPreparationInformation(rrc, ue);
   if (hoPrepInfo.len < 0) {
     free_byte_array(hoPrepInfo);
@@ -607,7 +628,6 @@ void nr_HO_N2_trigger_telnet(gNB_RRC_INST *rrc, uint32_t neighbour_pci, uint32_t
   if (neighbour_pci == scell_pci) {
     LOG_I(NR_RRC, "UE %d: trigger handover on the same cell PCI=%d\n", rrc_ue_id, neighbour_pci);
     nr_neighbour_cell_t neighbourConfig = {
-        .isIntraFrequencyNeighbour = true,
         .gNB_ID = du->gNB_DU_id,
         .nrcell_id = pcell->info.cell_id,
         .physicalCellId = pcell->info.pci,

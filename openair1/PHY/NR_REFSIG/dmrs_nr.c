@@ -17,6 +17,7 @@
 #include "PHY/NR_REFSIG/dmrs_nr.h"
 #include "log.h"
 #include "nfapi/open-nFAPI/nfapi/public_inc/nfapi_nr_interface.h"
+#include "bits.h"
 
 uint8_t allowed_xlsch_re_in_dmrs_symbol(uint16_t k,
                                         uint16_t start_sc,

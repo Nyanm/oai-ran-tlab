@@ -155,6 +155,13 @@ void process_msg_rcc_to_mac(nr_mac_rrc_message_t *msg, int instance_id)
   }
 }
 
+void nr_mac_rrc_verification_failed(const module_id_t mod_id)
+{
+  MessageDef *message_p = itti_alloc_new_message(TASK_MAC_UE, 0, NR_RRC_MAC_VERIFY);
+  NR_RRC_MAC_VERIFY (message_p).L2_RRC_verification_failed = true;
+  itti_send_msg_to_task(TASK_RRC_NRUE, GNB_MODULE_ID_TO_INSTANCE(mod_id), message_p);
+}
+
 void nr_mac_rrc_inactivity_timer_ind(const module_id_t mod_id)
 {
   MessageDef *message_p = itti_alloc_new_message(TASK_MAC_UE, 0, NR_RRC_MAC_INAC_IND);

@@ -512,8 +512,16 @@ configuration, e.g. [neighbour-config-rfsim.conf](../../ci-scripts/conf_files/ne
 This configuration can also be present in a different file and included in the
 gNB configuration file with `@include "neighbour-config-rfsim.conf"`.
 
-For each gNB there is a `neighbour_cell_configuration` linked to its serving
-cell ID.
+The neighbor configuration is nested:
+
+- `neighbour_list` outer entries are keyed by serving `nr_cellid`
+- each outer entry contains `neighbour_cell_configuration`, i.e., the list of neighbor cells for that serving cell
+
+In this model:
+
+- outer `nr_cellid` entries should be unique
+- neighbor `physical_cellId` values are defined in inner neighbor entries
+- the same serving-cell keyed neighbor mapping is used for both F1 and N2 handover logic
 
 See the example above for `neighbour-config-ho.conf`. The same configuration
 is for both F1 and N2 handover.

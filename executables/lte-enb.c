@@ -20,7 +20,7 @@
 #include "nfapi/oai_integration/vendor_ext.h"
 #include "radio/COMMON/common_lib.h"
 
-#include "PHY/LTE_TRANSPORT/if4_tools.h"
+#include "PHY/if4_tools.h"
 #include "PHY/LTE_ESTIMATION/lte_estimation.h"
 
 #include "PHY/phy_extern.h"

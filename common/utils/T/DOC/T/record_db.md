@@ -44,6 +44,7 @@ Or, from an existing build directory using cmake:
 ```shell
 cd cmake_targets/ran_build/build
 cmake -DT_RECORD_DB=ON .
+# use make or ninja
 make T_tools
 ```
 
@@ -52,6 +53,9 @@ The binary is then available in:
 ```shell
 cmake_targets/ran_build/build/common/utils/T/tracer/record_db
 ```
+
+**NOTE*: Unlike other docs on T Tracer for `record_db` we are building in cmake 
+directory rather than in the directory of T.
 
 ## Prerequisites
 
@@ -84,8 +88,8 @@ To enable all events except the most verbose groups and write them to
 ClickHouse:
 
 ```shell
-cd cmake_targets/ran_build/build/common/utils/T/tracer
-./record_db -d ../T_messages.txt \
+cd cmake_targets/ran_build/build/
+./common/utils/T/tracer/record_db -d ../../../common/utils/T/T_messages.txt \
   -ON \
   -off VCD \
   -off HEAVY \
@@ -108,7 +112,7 @@ The event selection rules are the same as for [`record`](./record.md):
 These options are processed in order. For example:
 
 ```shell
-./record_db -d ../T_messages.txt -OFF -on GNB_PHY_UL_FD_PUSCH_IQ -on GNB_PHY_UL_PAYLOAD_RX_BITS
+./common/utils/T/tracer/record_db -d ../../../common/utils/T/T_messages.txt -OFF -on GNB_PHY_UL_FD_PUSCH_IQ -on GNB_PHY_UL_PAYLOAD_RX_BITS
 ```
 
 This starts from everything disabled and enables only the two listed

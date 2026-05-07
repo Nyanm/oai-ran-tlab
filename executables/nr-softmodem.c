@@ -131,13 +131,18 @@ void exit_function(const char *file, const char *function, const int line, const
     printf("%s:%d %s() Exiting OAI softmodem: %s\n",file,line, function, s);
   }
 
-  oai_exit = 1;
-
   if (RC.ru == NULL)
     exit(-1); // likely init not completed, prevent crash or hang, exit now...
 
   for (ru_id=0; ru_id<RC.nb_RU; ru_id++) {
-    if (RC.ru[ru_id] && RC.ru[ru_id]->rfdevice.trx_end_func) {
+    if (RC.ru[ru_id] == NULL) {
+      continue;
+    }
+    if (RC.ru[ru_id]->ifdevice.trx_stop_func) {
+      RC.ru[ru_id]->ifdevice.trx_stop_func(&RC.ru[ru_id]->ifdevice);
+      RC.ru[ru_id]->ifdevice.trx_stop_func = NULL;
+    }
+    if (RC.ru[ru_id]->rfdevice.trx_end_func) {
       if (RC.ru[ru_id]->rfdevice.trx_get_stats_func) {
         RC.ru[ru_id]->rfdevice.trx_get_stats_func(&RC.ru[ru_id]->rfdevice);
         RC.ru[ru_id]->rfdevice.trx_get_stats_func = NULL;
@@ -146,6 +151,10 @@ void exit_function(const char *file, const char *function, const int line, const
       RC.ru[ru_id]->rfdevice.trx_end_func = NULL;
     }
 
+    if (RC.ru[ru_id]->ifdevice.trx_stop_func) {
+      RC.ru[ru_id]->ifdevice.trx_stop_func(&RC.ru[ru_id]->ifdevice);
+      RC.ru[ru_id]->ifdevice.trx_stop_func = NULL;
+    }
     if (RC.ru[ru_id] && RC.ru[ru_id]->ifdevice.trx_end_func) {
       if (RC.ru[ru_id]->ifdevice.trx_get_stats_func) {
         RC.ru[ru_id]->ifdevice.trx_get_stats_func(&RC.ru[ru_id]->ifdevice);
@@ -155,6 +164,8 @@ void exit_function(const char *file, const char *function, const int line, const
       RC.ru[ru_id]->ifdevice.trx_end_func = NULL;
     }
   }
+
+  oai_exit = 1;
 
   if (assert) {
     abort();
@@ -358,9 +369,6 @@ int stop_L1(module_id_t gnb_id)
   if (RC.nb_nr_L1_inst > 0)
     stop_gNB(RC.nb_nr_L1_inst);
 
-  if (RC.nb_RU > 0)
-    stop_RU(RC.nb_RU);
-
   /* stop trx devices, multiple carrier currently not supported by RU */
   if (ru->rfdevice.trx_get_stats_func) {
     ru->rfdevice.trx_get_stats_func(&ru->rfdevice);
@@ -377,6 +385,9 @@ int stop_L1(module_id_t gnb_id)
     ru->ifdevice.trx_stop_func(&ru->ifdevice);
     LOG_I(GNB_APP, "turned off RU ifdevice\n");
   }
+
+  if (RC.nb_RU > 0)
+    stop_RU(RC.nb_RU);
 
   /* release memory used by the RU/gNB threads (incomplete), after all
    * threads have been stopped (they partially use the same memory) */

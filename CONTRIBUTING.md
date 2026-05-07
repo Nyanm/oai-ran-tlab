@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 
-# Contributing to OpenAirInterface #
+# Contributing to OpenAirInterface
 
 We want to make contributing to this project as easy and transparent as possible.
 
@@ -11,10 +11,10 @@ Please refer to the steps described on our website: [How to contribute to OAI](h
    if you do not have any.
    - We recommend that you register with a professional or student email address.
    - If your email domain (`@domain.com`) is not whitelisted, please contact us
-     (mailto:contact@openairinterface.org).
+     (mailto:oaicicdteam@openairinterface.org).
    - Eurecom GitLab does NOT accept public email domains.
 3. Provide the OAI team with the **username** of this account to
-   (mailto:contact@openairinterface.org) ; we will give you the developer
+   (mailto:oaicicdteam@openairinterface.org) ; we will give you the developer
    rights on this repository.
 4. The contributing policies are described in the [corresponding documentation
    page](doc/code-style-contrib.md).
@@ -24,8 +24,43 @@ Please refer to the steps described on our website: [How to contribute to OAI](h
      request from a forked repository.
       * This decision was made for the license reasons.
       * The Continuous Integration will reject your merge request.
+5. Mandatory signing of all the commits using the email address used for CLA.
 
-# License #
+## Commit Guidelines
+
+### Signing Commits
+
+To sign commits:
+
+You can also get the verified label
+on your commits via using [SSH KEYS or GPG KEYS](https://docs.gitlab.com/user/project/repository/signed_commits/)
+
+```
+# Edit .git/config in the git repository you are working on
+# Add the user section
+[user]
+    name = YOUR NAME
+    email = YOUR EMAIL ADDRESS
+
+# If you use a signing key, use the below configuration instead
+[user]
+    name = YOUR NAME
+    email = YOUR EMAIL ADDRESS
+    signingkey = LOCATION OF SSH KEYS or GPG KEY
+
+[gpg]
+    format = ssh
+
+[commit]
+    gpgsign = true
+```
+
+> **NOTE:** If your commits are not signed the CI framework will not accept the MR.
+
+For more information regarding contribution guidelines
+please check [this document](doc/code-style-contrib.md)
+
+## License
 
 By contributing to OpenAirInterface, you agree that your contributions will be
 licensed under

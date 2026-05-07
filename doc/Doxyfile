@@ -1967,7 +1967,7 @@ INPUT                  = \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/LTE_TRANSPORT/dlsch_modulation.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/LTE_TRANSPORT/dci_NB_IoT.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/LTE_TRANSPORT/group_hopping.c \
-@CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/LTE_TRANSPORT/if4_tools.h \
+@CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/if4_tools.h \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/LTE_TRANSPORT/uci_tools.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/LTE_TRANSPORT/prach.c \
 @CMAKE_CURRENT_SOURCE_DIR@/../openair1/PHY/LTE_TRANSPORT/edci.c \

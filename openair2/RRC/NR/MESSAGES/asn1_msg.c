@@ -223,39 +223,67 @@ NR_UE_NR_Capability_t *decode_nr_ue_capability(int rnti, const NR_UE_CapabilityR
   return NULL;
 }
 
-//------------------------------------------------------------------------------
-
-int do_SIB2_NR(uint8_t **msg_SIB2, NR_SSB_MTC_t *ssbmtc)
+byte_array_t do_SIB2_NR(const NR_SIB2_t *sib2)
 {
-  NR_SIB2_t *sib2 = calloc(1, sizeof(*sib2));
-  sib2->cellReselectionInfoCommon.q_Hyst = NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB0;
-  struct NR_SIB2__cellReselectionInfoCommon__speedStateReselectionPars *speed = calloc(1, sizeof(*speed));
-  NR_MobilityStateParameters_t mobilityStateParameters = {0};
-  mobilityStateParameters.t_Evaluation = NR_MobilityStateParameters__t_Evaluation_s30;
-  mobilityStateParameters.t_HystNormal = NR_MobilityStateParameters__t_HystNormal_s30;
-  mobilityStateParameters.n_CellChangeMedium = 1;
-  mobilityStateParameters.n_CellChangeHigh = 2;
-  speed->mobilityStateParameters = mobilityStateParameters;
-  struct NR_SIB2__cellReselectionInfoCommon__speedStateReselectionPars__q_HystSF qhyst = {0};
-  qhyst.sf_Medium = NR_SIB2__cellReselectionInfoCommon__speedStateReselectionPars__q_HystSF__sf_Medium_dB_4;
-  qhyst.sf_High = NR_SIB2__cellReselectionInfoCommon__speedStateReselectionPars__q_HystSF__sf_High_dB_6;
-  speed->q_HystSF = qhyst;
-  sib2->cellReselectionInfoCommon.speedStateReselectionPars = speed;
-  sib2->cellReselectionServingFreqInfo.cellReselectionPriority = 0; // INTEGER (0..7)
-  sib2->cellReselectionServingFreqInfo.threshServingLowP = 0;
-  NR_ReselectionThresholdQ_t *threshServingLowQ = calloc(1, sizeof(*threshServingLowQ));
-  *threshServingLowQ = 0;
-  sib2->cellReselectionServingFreqInfo.threshServingLowQ = threshServingLowQ;
-  sib2->intraFreqCellReselectionInfo.q_RxLevMin = -56; // INTEGER (-70..-22)
-  sib2->intraFreqCellReselectionInfo.s_IntraSearchP = 22; // INTEGER (0..31)
-  sib2->intraFreqCellReselectionInfo.t_ReselectionNR = 1; // INTEGER (0..7)
-  sib2->intraFreqCellReselectionInfo.deriveSSB_IndexFromCell = true;
-  sib2->intraFreqCellReselectionInfo.smtc = ssbmtc;
+  byte_array_t msg = {.buf = NULL, .len = 0};
+  char errbuf[256] = {0};
+  size_t errlen = sizeof(errbuf);
+  int ret = asn_check_constraints(&asn_DEF_NR_SIB2, sib2, errbuf, &errlen);
+  if (ret != 0) {
+    LOG_E(NR_RRC, "SIB2 constraint check failed: %s\n", errbuf);
+    return msg;
+  }
 
-  ssize_t size = uper_encode_to_new_buffer(&asn_DEF_NR_SIB2, NULL, (void *)sib2, (void **)msg_SIB2);
-  AssertFatal (size > 0, "ASN1 message encoding failed (encoded %lu bytes)!\n", size);
-  ASN_STRUCT_FREE(asn_DEF_NR_SIB2, sib2);
-  return size;
+  int val = uper_encode_to_new_buffer(&asn_DEF_NR_SIB2, NULL, (void *)sib2, (void **)&msg.buf);
+  if (val <= 0) {
+    LOG_E(NR_RRC, "Failed to encode SIB2\n");
+    return msg;
+  }
+
+  msg.len = val;
+  return msg;
+}
+
+byte_array_t do_SIB3_NR(const NR_SIB3_t *sib3)
+{
+  byte_array_t msg = {.buf = NULL, .len = 0};
+  char errbuf[256] = {0};
+  size_t errlen = sizeof(errbuf);
+  int ret = asn_check_constraints(&asn_DEF_NR_SIB3, sib3, errbuf, &errlen);
+  if (ret != 0) {
+    LOG_E(NR_RRC, "SIB3 constraint check failed: %s\n", errbuf);
+    return msg;
+  }
+
+  int val = uper_encode_to_new_buffer(&asn_DEF_NR_SIB3, NULL, (void *)sib3, (void **)&msg.buf);
+  if (val <= 0) {
+    LOG_E(NR_RRC, "Failed to encode SIB3\n");
+    return msg;
+  }
+
+  msg.len = val;
+  return msg;
+}
+
+byte_array_t do_SIB4_NR(NR_SIB4_t *sib4)
+{
+  byte_array_t msg = {.buf = NULL, .len = 0};
+  char errbuf[256] = {0};
+  size_t errlen = sizeof(errbuf);
+  int ret = asn_check_constraints(&asn_DEF_NR_SIB4, sib4, errbuf, &errlen);
+  if (ret != 0) {
+    LOG_E(NR_RRC, "SIB4 constraint check failed: %s\n", errbuf);
+    return msg;
+  }
+
+  int val = uper_encode_to_new_buffer(&asn_DEF_NR_SIB4, NULL, (void *)sib4, (void **)&msg.buf);
+  if (val <= 0) {
+    LOG_E(NR_RRC, "Failed to encode SIB4\n");
+    return msg;
+  }
+
+  msg.len = val;
+  return msg;
 }
 
 int do_RRCReject(uint8_t *const buffer)

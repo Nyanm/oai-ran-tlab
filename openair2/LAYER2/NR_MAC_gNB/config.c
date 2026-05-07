@@ -988,24 +988,53 @@ bool nr_mac_configure_other_sib(gNB_MAC_INST *nrmac, int num_cu_sib, const f1ap_
   NR_SystemInformation_IEs_t *sysInfov17 = calloc(1, sizeof(*sysInfov17)); // for othersibs
   for (int i = 0; i < num_cu_sib; i++) {
     config_sibs[i] = cu_sib[i].SI_type;
+    const byte_array_t *container = &cu_sib[i].SI_container;
+    if (!container->buf || container->len == 0) {
+      LOG_W(NR_MAC, "SIB%d container is invalid (ptr=%p len=%zu), skipping\n", config_sibs[i], container->buf, container->len);
+      continue;
+    }
     switch (config_sibs[i]) {
-      case 2: {
+      case NR_SIB_2: {
         struct NR_SystemInformation_IEs__sib_TypeAndInfo__Member *type = calloc(1, sizeof(*type));
         type->present = NR_SystemInformation_IEs__sib_TypeAndInfo__Member_PR_sib2;
         // SIB2 coming from CU need to decode it
         NR_SIB2_t *sib2 = NULL;
-        asn_dec_rval_t dec_rval = uper_decode(NULL,
-                                              &asn_DEF_NR_SIB2,
-                                              (void **)&sib2,
-                                              cu_sib[i].SI_container,
-                                              cu_sib[i].SI_container_length,
-                                              0,
-                                              0);
+        asn_dec_rval_t dec_rval = uper_decode(NULL, &asn_DEF_NR_SIB2, (void **)&sib2, container->buf, container->len, 0, 0);
         if (dec_rval.code != RC_OK) {
           LOG_E(NR_MAC, "cannot decode SIB%d from CU\n", config_sibs[i]);
-          ASN_STRUCT_FREE(asn_DEF_NR_SIB2, cu_sib[i].SI_container);
+          ASN_STRUCT_FREE(asn_DEF_NR_SIB2, sib2);
         }
         type->choice.sib2 = sib2;
+        add_sib_to_systeminformation(sysInfo, type);
+        break;
+      }
+      case NR_SIB_3: {
+        struct NR_SystemInformation_IEs__sib_TypeAndInfo__Member *type = calloc_or_fail(1, sizeof(*type));
+        type->present = NR_SystemInformation_IEs__sib_TypeAndInfo__Member_PR_sib3;
+        NR_SIB3_t *sib3 = NULL;
+        asn_dec_rval_t dec_rval = uper_decode(NULL, &asn_DEF_NR_SIB3, (void **)&sib3, container->buf, container->len, 0, 0);
+        if (dec_rval.code != RC_OK) {
+          LOG_E(NR_MAC, "cannot decode SIB%d from CU\n", config_sibs[i]);
+          ASN_STRUCT_FREE(asn_DEF_NR_SIB3, sib3);
+          free(type);
+          break;
+        }
+        type->choice.sib3 = sib3;
+        add_sib_to_systeminformation(sysInfo, type);
+        break;
+      }
+      case NR_SIB_4: {
+        struct NR_SystemInformation_IEs__sib_TypeAndInfo__Member *type = calloc_or_fail(1, sizeof(*type));
+        type->present = NR_SystemInformation_IEs__sib_TypeAndInfo__Member_PR_sib4;
+        NR_SIB4_t *sib4 = NULL;
+        asn_dec_rval_t dec_rval = uper_decode(NULL, &asn_DEF_NR_SIB4, (void **)&sib4, container->buf, container->len, 0, 0);
+        if (dec_rval.code != RC_OK) {
+          LOG_E(NR_MAC, "cannot decode SIB%d from CU\n", config_sibs[i]);
+          ASN_STRUCT_FREE(asn_DEF_NR_SIB4, sib4);
+          free(type);
+          break;
+        }
+        type->choice.sib4 = sib4;
         add_sib_to_systeminformation(sysInfo, type);
         break;
       }
@@ -1019,7 +1048,7 @@ bool nr_mac_configure_other_sib(gNB_MAC_INST *nrmac, int num_cu_sib, const f1ap_
     int sib_idx = i + num_cu_sib;
     config_sibs[sib_idx] = si->SIB_type;
     switch (config_sibs[sib_idx]) {
-      case 19: {
+      case NR_SIB_19: {
         struct NR_SystemInformation_IEs__sib_TypeAndInfo__Member *type_du = calloc(1, sizeof(*type_du));
         type_du->present = NR_SystemInformation_IEs__sib_TypeAndInfo__Member_PR_sib19_v1700;
         NR_SIB19_r17_t *sib19 = get_SIB19_NR(cc->ServingCellConfigCommon);

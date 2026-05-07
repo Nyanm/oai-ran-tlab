@@ -23,6 +23,11 @@
 #include "f1ap_messages_types.h"
 #include "ngap_messages_types.h"
 #include "nr_rrc_defs.h"
+#include "NR_SIB2.h"
+#include "NR_SIB3.h"
+#include "NR_SIB4.h"
+#include "NR_Q-OffsetRange.h"
+#include "openair2/RRC/NR/MESSAGES/asn1_msg.h"
 #include "rrc_gNB_mobility.h"
 #include "openair2/F1AP/f1ap_common.h"
 #include "openair2/F1AP/f1ap_ids.h"
@@ -33,6 +38,7 @@
 #include "s1ap_messages_types.h"
 #include "tree.h"
 #include "uper_decoder.h"
+#include "common/utils/oai_asn1.h"
 #include "utils.h"
 #include "xer_encoder.h"
 
@@ -53,6 +59,375 @@ static NR_SSB_MTC_t *get_ssb_mtc(const NR_MeasurementTimingConfiguration_t *mtc)
   NR_SSB_MTC_t *ssb_mtc = calloc(1, sizeof(*ssb_mtc));
   *ssb_mtc = mtlist->list.array[0]->frequencyAndTiming->ssb_MeasurementTimingConfiguration;
   return ssb_mtc;
+}
+
+/** @brief Map config q_Hyst (dB: 0,1,2,3,4,5,6,8,10..24) to ASN.1 q-Hyst enum index (0..15).
+ *  ASN.1 NR_SIB2 cellReselectionInfoCommon.q-Hyst is encoded with 16 values. */
+static long get_q_hyst_asn1(int q_hyst_db)
+{
+  switch (q_hyst_db) {
+    case 0:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB0;
+    case 1:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB1;
+    case 2:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB2;
+    case 3:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB3;
+    case 4:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB4;
+    case 5:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB5;
+    case 6:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB6;
+    case 8:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB8;
+    case 10:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB10;
+    case 12:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB12;
+    case 14:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB14;
+    case 16:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB16;
+    case 18:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB18;
+    case 20:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB20;
+    case 22:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB22;
+    case 24:
+      return NR_SIB2__cellReselectionInfoCommon__q_Hyst_dB24;
+    default:
+      AssertFatal(false, "unexpected q-Hyst value %d (configuration should have been validated)\n", q_hyst_db);
+  }
+}
+
+/** @brief Build NR_SIB2 from validated SIB2 configuration.
+ *  @param cfg    Validated SIB2 configuration from config file
+ *  @param ssbmtc SSB-MTC instance to attach to intraFreqCellReselectionInfo.smtc. */
+static NR_SIB2_t *get_sib2_from_cfg(const sib2_config_t *cfg, NR_SSB_MTC_t *ssbmtc)
+{
+  NR_SIB2_t *sib2 = calloc_or_fail(1, sizeof(*sib2));
+  typeof(sib2->cellReselectionInfoCommon) *common = &sib2->cellReselectionInfoCommon;
+  const cell_reselection_info_common_t *cfg_common = &cfg->cell_reselection_info_common;
+
+  /* q-Hyst: ASN.1 enum (0..15) converted from config dB (0,1,2,3,4,5,6,8,10..24). */
+  common->q_Hyst = get_q_hyst_asn1(cfg_common->q_Hyst);
+
+  /* speedStateReselectionPars */
+  if (cfg_common->speedStateReselectionPars != NULL) {
+    struct NR_SIB2__cellReselectionInfoCommon__speedStateReselectionPars *speed = calloc_or_fail(1, sizeof(*speed));
+    NR_MobilityStateParameters_t mobilityStateParameters = {0};
+    const sib2_speed_state_reselection_pars_t *pars = cfg_common->speedStateReselectionPars;
+    /* t-Evaluation / t-HystNormal: (0..7) */
+    mobilityStateParameters.t_Evaluation = pars->t_Evaluation;
+    mobilityStateParameters.t_HystNormal = pars->t_HystNormal;
+    /* n-CellChangeMedium / n-CellChangeHigh: (1..16) */
+    mobilityStateParameters.n_CellChangeMedium = pars->n_CellChangeMedium;
+    mobilityStateParameters.n_CellChangeHigh = pars->n_CellChangeHigh;
+    speed->mobilityStateParameters = mobilityStateParameters;
+
+    /* q-HystSF: sf-Medium/sf-High (0..3) */
+    struct NR_SIB2__cellReselectionInfoCommon__speedStateReselectionPars__q_HystSF qhyst = {0};
+    qhyst.sf_Medium = pars->sf_Medium;
+    qhyst.sf_High = pars->sf_High;
+    speed->q_HystSF = qhyst;
+
+    common->speedStateReselectionPars = speed;
+  }
+
+  /* cellReselectionServingFreqInfo */
+  typeof(sib2->cellReselectionServingFreqInfo) *serv = &sib2->cellReselectionServingFreqInfo;
+  const cell_reselection_serving_freq_info_t *cfg_serv = &cfg->cell_reselection_serving_freq_info;
+  /* cellReselectionPriority: CellReselectionPriority (0..7) */
+  serv->cellReselectionPriority = cfg_serv->cellReselectionPriority;
+  /* threshServingLowP: ReselectionThreshold (0..31) */
+  serv->threshServingLowP = cfg_serv->threshServingLowP;
+  /* threshServingLowQ: ReselectionThresholdQ (0..31) */
+  if (cfg_serv->threshServingLowQ != -1)
+    asn1cCallocOne(serv->threshServingLowQ, cfg_serv->threshServingLowQ);
+  /* s-NonIntraSearchP/Q: ReselectionThreshold/ReselectionThresholdQ (0..31) */
+  if (cfg_serv->s_NonIntraSearchP != -1)
+    asn1cCallocOne(serv->s_NonIntraSearchP, cfg_serv->s_NonIntraSearchP);
+  if (cfg_serv->s_NonIntraSearchQ != -1)
+    asn1cCallocOne(serv->s_NonIntraSearchQ, cfg_serv->s_NonIntraSearchQ);
+
+  /* intraFreqCellReselectionInfo */
+  typeof(sib2->intraFreqCellReselectionInfo) *intra = &sib2->intraFreqCellReselectionInfo;
+  const intra_freq_cell_reselection_info_t *cfg_intra = &cfg->intra_freq_cell_reselection_info;
+  /* q-RxLevMin: Q-RxLevMin (-70..-22) */
+  intra->q_RxLevMin = cfg_intra->q_RxLevMin;
+  /* q-QualMin: Q-QualMin (-43..-12) */
+  if (cfg_intra->q_QualMin != -1)
+    asn1cCallocOne(intra->q_QualMin, cfg_intra->q_QualMin);
+  /* s-IntraSearchP: ReselectionThreshold (0..31) */
+  intra->s_IntraSearchP = cfg_intra->s_IntraSearchP;
+  /* s-IntraSearchQ: ReselectionThresholdQ (0..31) */
+  if (cfg_intra->s_IntraSearchQ != -1)
+    asn1cCallocOne(intra->s_IntraSearchQ, cfg_intra->s_IntraSearchQ);
+  /* t-ReselectionNR: (0..7) */
+  intra->t_ReselectionNR = cfg_intra->t_ReselectionNR;
+  /* deriveSSB-IndexFromCell (bool) */
+  intra->deriveSSB_IndexFromCell = cfg->deriveSSB_IndexFromCell;
+  /* smtc */
+  intra->smtc = ssbmtc;
+
+  return sib2;
+}
+
+/** @brief Map internal int enum to ASN.1 Q-OffsetRange value. */
+static long get_q_offset_asn1(int q_offset_db)
+{
+  switch (q_offset_db) {
+    case -24:
+      return NR_Q_OffsetRange_dB_24;
+    case -22:
+      return NR_Q_OffsetRange_dB_22;
+    case -20:
+      return NR_Q_OffsetRange_dB_20;
+    case -18:
+      return NR_Q_OffsetRange_dB_18;
+    case -16:
+      return NR_Q_OffsetRange_dB_16;
+    case -14:
+      return NR_Q_OffsetRange_dB_14;
+    case -12:
+      return NR_Q_OffsetRange_dB_12;
+    case -10:
+      return NR_Q_OffsetRange_dB_10;
+    case -8:
+      return NR_Q_OffsetRange_dB_8;
+    case -6:
+      return NR_Q_OffsetRange_dB_6;
+    case -5:
+      return NR_Q_OffsetRange_dB_5;
+    case -4:
+      return NR_Q_OffsetRange_dB_4;
+    case -3:
+      return NR_Q_OffsetRange_dB_3;
+    case -2:
+      return NR_Q_OffsetRange_dB_2;
+    case -1:
+      return NR_Q_OffsetRange_dB_1;
+    case 0:
+      return NR_Q_OffsetRange_dB0;
+    case 1:
+      return NR_Q_OffsetRange_dB1;
+    case 2:
+      return NR_Q_OffsetRange_dB2;
+    case 3:
+      return NR_Q_OffsetRange_dB3;
+    case 4:
+      return NR_Q_OffsetRange_dB4;
+    case 5:
+      return NR_Q_OffsetRange_dB5;
+    case 6:
+      return NR_Q_OffsetRange_dB6;
+    case 8:
+      return NR_Q_OffsetRange_dB8;
+    case 10:
+      return NR_Q_OffsetRange_dB10;
+    case 12:
+      return NR_Q_OffsetRange_dB12;
+    case 14:
+      return NR_Q_OffsetRange_dB14;
+    case 16:
+      return NR_Q_OffsetRange_dB16;
+    case 18:
+      return NR_Q_OffsetRange_dB18;
+    case 20:
+      return NR_Q_OffsetRange_dB20;
+    case 22:
+      return NR_Q_OffsetRange_dB22;
+    case 24:
+      return NR_Q_OffsetRange_dB24;
+    default:
+      AssertFatal(false, "Invalid q_offset_db value %d\n", q_offset_db);
+  }
+}
+
+/** @brief Build a SIB3 (intra-frequency neighbour cell list) from the configured neighbour cells.
+ * Only neighbours whose SSB ARFCN matches @param serving_ssb_arfcn are included.
+ * @param neighbours list of configured neighbour cells
+ * @param serving_ssb_arfcn SSB ARFCN of the serving cell, used to filter intra-frequency neighbours
+ * @returns allocated NR_SIB3_t on success, NULL if no matching neighbours were found */
+static NR_SIB3_t *get_sib3_intra_freq_neighbors(const seq_arr_t *neighbours, uint32_t serving_ssb_arfcn)
+{
+  DevAssert(neighbours);
+
+  NR_SIB3_t *sib3 = calloc_or_fail(1, sizeof(*sib3));
+  sib3->intraFreqNeighCellList = calloc_or_fail(1, sizeof(*sib3->intraFreqNeighCellList));
+
+  int intra_count = 0;
+  FOR_EACH_SEQ_ARR (const nr_neighbour_cell_t *, neigh, neighbours) {
+    if (neigh->absoluteFrequencySSB != serving_ssb_arfcn)
+      continue;
+
+    LOG_D(NR_RRC,
+          "SIB3: intra-frequency neighbour candidate: cell ID %lu, PCI %d (SSB ARFCN %d)\n",
+          neigh->nrcell_id,
+          neigh->physicalCellId,
+          neigh->absoluteFrequencySSB);
+
+    NR_IntraFreqNeighCellInfo_t *cell = calloc_or_fail(1, sizeof(*cell));
+    cell->physCellId = neigh->physicalCellId;
+
+    const nr_neighbour_cell_neighbor_offset_t *off = &neigh->sib3.offset;
+    /* q-OffsetCell: NR_Q-OffsetRange (-24..24 dB), 0 dB default */
+    cell->q_OffsetCell = get_q_offset_asn1(off->q_OffsetCell);
+
+    /* q-RxLevMinOffsetCell / q-QualMinOffsetCell: (1..8) */
+    if (off->q_RxLevMinOffsetCell != -1)
+      asn1cCallocOne(cell->q_RxLevMinOffsetCell, off->q_RxLevMinOffsetCell);
+    if (off->q_QualMinOffsetCell != -1)
+      asn1cCallocOne(cell->q_QualMinOffsetCell, off->q_QualMinOffsetCell);
+
+    /* Add to SIB3 intra-frequency neighbour list */
+    if (sib3->intraFreqNeighCellList->list.count >= NR_maxCellIntra) {
+      LOG_W(NR_RRC, "SIB3: too many intra-frequency neighbors (max %d), skipping cell %ld\n", NR_maxCellIntra, neigh->nrcell_id);
+      asn1cFreeStruc(asn_DEF_NR_IntraFreqNeighCellInfo, cell);
+      break;
+    }
+    asn1cSeqAdd(&sib3->intraFreqNeighCellList->list, cell);
+    ++intra_count;
+  }
+
+  if (intra_count == 0) {
+    LOG_W(NR_RRC,
+          "SIB3: no intra-frequency neighbours found for serving SSB ARFCN %u "
+          "(configured neighbours %u), not building SIB3\n",
+          serving_ssb_arfcn,
+          (unsigned)seq_arr_size(neighbours));
+    asn1cFreeStruc(asn_DEF_NR_SIB3, sib3);
+    return NULL;
+  }
+
+  return sib3;
+}
+
+/** @brief Build an NR_InterFreqCarrierFreqInfo structure from a nr_inter_freq_cfg_t configuration.
+ * @param cfg Configuration to build the carrier from
+ * @return Allocated NR_InterFreqCarrierFreqInfo_t on success, NULL if the configuration is invalid */
+static NR_InterFreqCarrierFreqInfo_t *build_inter_freq_carrier_from_cfg(const nr_inter_freq_cfg_t *cfg)
+{
+  DevAssert(cfg);
+
+  const nr_neighbour_cell_sib4_freq_t *f = &cfg->freq_cfg;
+
+  NR_InterFreqCarrierFreqInfo_t *carrier = calloc_or_fail(1, sizeof(*carrier));
+  /* dl_CarrierFreq (ARFCN) */
+  carrier->dl_CarrierFreq = cfg->arfcn;
+  /* ssbSubcarrierSpacing: (15/30/60/120 kHz) */
+  carrier->ssbSubcarrierSpacing = cfg->scs;
+  carrier->deriveSSB_IndexFromCell = true;
+  /* Q-RxLevMin (-70..-22 dBm) */
+  carrier->q_RxLevMin = cfg->q_RxLevMin;
+  /* T-Reselection (0..7) */
+  carrier->t_ReselectionNR = cfg->t_ReselectionNR;
+  /* threshX_HighP/LowP: Reselection threshold (0..31) */
+  carrier->threshX_HighP = f->threshX_HighP;
+  carrier->threshX_LowP = f->threshX_LowP;
+  /* threshX-Q: Optional RSRQ thresholds; emit only when both are provided. */
+  if (f->threshX_HighQ != -1 && f->threshX_LowQ != -1) {
+    carrier->threshX_Q = calloc_or_fail(1, sizeof(*carrier->threshX_Q));
+    carrier->threshX_Q->threshX_HighQ = f->threshX_HighQ;
+    carrier->threshX_Q->threshX_LowQ = f->threshX_LowQ;
+  } else if (f->threshX_HighQ != -1 || f->threshX_LowQ != -1) {
+    LOG_W(NR_RRC,
+          "SIB4: partial threshX-Q for ARFCN %d (HighQ=%d LowQ=%d), omitting threshX-Q\n",
+          cfg->arfcn,
+          f->threshX_HighQ,
+          f->threshX_LowQ);
+  }
+  /* CellReselectionPriority (0..7) */
+  if (f->cellReselectionPriority != -1)
+    asn1cCallocOne(carrier->cellReselectionPriority, f->cellReselectionPriority);
+  /* q-OffsetFreq (-24..24 dB), 0 dB default */
+  asn1cCallocOne(carrier->q_OffsetFreq, get_q_offset_asn1(f->q_OffsetFreq));
+  /* InterFreqNeighCellList */
+  carrier->interFreqNeighCellList = calloc_or_fail(1, sizeof(*carrier->interFreqNeighCellList));
+  return carrier;
+}
+
+/**
+ * @brief Build an NR_SIB4 structure populated with inter-frequency neighbour cell entries.
+ *
+ * Iterates over all configured inter-frequency carriers (excluding the serving cell ARFCN)
+ * and, for each carrier, adds the matching neighbour cells from @p neighbour_config.
+ * Carriers with no matching neighbours are discarded. If no valid carrier is found,
+ * the function returns NULL.
+ *
+ * @param neighbour_config  Neighbour cell configuration (cells only).
+ * @param inter_freqs       gNB-level inter-frequency configuration.
+ * @param serving_ssb_arfcn SSB ARFCN of the serving cell, used to skip the serving carrier.
+ * @return Allocated NR_SIB4_t on success, NULL if no inter-frequency neighbours are available.
+ */
+static NR_SIB4_t *get_sib4_inter_freq_neighbors(const neighbour_cell_configuration_t *neighbour_config,
+                                                const seq_arr_t *inter_freqs,
+                                                uint32_t serving_ssb_arfcn)
+{
+  DevAssert(neighbour_config);
+
+  NR_SIB4_t *sib4 = calloc_or_fail(1, sizeof(*sib4));
+
+  const seq_arr_t *neigh = &neighbour_config->neighbour_cells;
+
+  FOR_EACH_SEQ_ARR (nr_inter_freq_cfg_t *, cfg, inter_freqs) {
+    if (cfg->arfcn == serving_ssb_arfcn)
+      continue;
+
+    NR_InterFreqCarrierFreqInfo_t *carrier = build_inter_freq_carrier_from_cfg(cfg);
+    if (!carrier)
+      continue;
+
+    NR_InterFreqNeighCellList_t *neigh_list = carrier->interFreqNeighCellList;
+
+    FOR_EACH_SEQ_ARR (nr_neighbour_cell_t *, nc, neigh) {
+      if (nc->absoluteFrequencySSB != cfg->arfcn || nc->subcarrierSpacing != cfg->scs)
+        continue;
+
+      if (neigh_list->list.count >= NR_maxCellInter) {
+        LOG_W(NR_RRC,
+              "SIB4: too many inter-frequency neighbors for ARFCN %ld (max %d), skipping neighbour\n",
+              carrier->dl_CarrierFreq,
+              NR_maxCellInter);
+        continue;
+      }
+
+      const nr_neighbour_cell_neighbor_offset_t *offset = &nc->sib4.offset;
+      LOG_I(NR_RRC,
+            "SIB4: added inter-frequency neighbour cell: cellId %ld (PCI %d), ARFCN %d, SCS %d\n",
+            nc->nrcell_id,
+            nc->physicalCellId,
+            cfg->arfcn,
+            cfg->scs);
+      asn1cSequenceAdd(neigh_list->list, NR_InterFreqNeighCellInfo_t, cell);
+      cell->physCellId = nc->physicalCellId;
+
+      /* q_OffsetCell: 0 dB is default */
+      cell->q_OffsetCell = get_q_offset_asn1(offset->q_OffsetCell);
+
+      /* q_RxLevMinOffsetCell / q_QualMinOffsetCell: range 1..8 */
+      if (offset->q_RxLevMinOffsetCell != -1)
+        asn1cCallocOne(cell->q_RxLevMinOffsetCell, offset->q_RxLevMinOffsetCell);
+      if (offset->q_QualMinOffsetCell != -1)
+        asn1cCallocOne(cell->q_QualMinOffsetCell, offset->q_QualMinOffsetCell);
+    }
+
+    if (neigh_list->list.count > 0) {
+      asn1cSeqAdd(&sib4->interFreqCarrierFreqList.list, carrier);
+    } else {
+      ASN_STRUCT_FREE(asn_DEF_NR_InterFreqCarrierFreqInfo, carrier);
+    }
+  }
+
+  if (sib4->interFreqCarrierFreqList.list.count == 0) {
+    ASN_STRUCT_FREE(asn_DEF_NR_SIB4, sib4);
+    return NULL;
+  }
+
+  return sib4;
 }
 
 /** @brief Return the frequency of the SS block of the cell for which this message is included,
@@ -152,7 +527,7 @@ static int nr_cell_id_match(const void *key, const void *element)
   return 1;
 }
 
-static neighbour_cell_configuration_t *get_cell_neighbour_list(const gNB_RRC_INST *rrc, const nr_rrc_cell_container_t *cell)
+static const neighbour_cell_configuration_t *get_cell_neighbour_list(const gNB_RRC_INST *rrc, const nr_rrc_cell_container_t *cell)
 {
   void *base = seq_arr_front(rrc->neighbour_cell_configuration);
   size_t nmemb = seq_arr_size(rrc->neighbour_cell_configuration);
@@ -160,42 +535,7 @@ static neighbour_cell_configuration_t *get_cell_neighbour_list(const gNB_RRC_INS
 
   void *it = bsearch((void *)&cell->info.cell_id, base, nmemb, size, nr_cell_id_match);
 
-  return (neighbour_cell_configuration_t *)it;
-}
-
-static void is_intra_frequency_neighbour(void *ssb_arfcn, void *neighbour_cell)
-{
-  uint32_t *ssb_arfcn_ptr = (uint32_t *)ssb_arfcn;
-  nr_neighbour_cell_t *neighbour_cell_ptr = (nr_neighbour_cell_t *)neighbour_cell;
-
-  if (*ssb_arfcn_ptr == neighbour_cell_ptr->absoluteFrequencySSB) {
-    LOG_D(NR_RRC, "HO LOG: found intra frequency neighbour %lu!\n", neighbour_cell_ptr->nrcell_id);
-    neighbour_cell_ptr->isIntraFrequencyNeighbour = true;
-  }
-}
-/**
- * @brief Labels neighbour cells if they are intra frequency to prepare meas config only for intra frequency ho
- * @param[in] rrc     Pointer to RRC instance
- * @param[in] cell    Pointer to cell container
- */
-static void label_intra_frequency_neighbours(gNB_RRC_INST *rrc, const nr_rrc_cell_container_t *cell)
-{
-  if (!rrc->neighbour_cell_configuration)
-    return;
-
-  neighbour_cell_configuration_t *neighbour_cell_config = get_cell_neighbour_list(rrc, cell);
-  if (!neighbour_cell_config)
-    return;
-
-  uint32_t ssb_arfcn = get_ssb_arfcn(cell);
-  LOG_D(NR_RRC,
-        "Cell %lu (PCI %d, SSB ARFCN %u) has neighbour cell configuration, labeling intra-frequency neighbours\n",
-        cell->info.cell_id,
-        cell->info.pci,
-        ssb_arfcn);
-
-  seq_arr_t *cell_neighbour_list = neighbour_cell_config->neighbour_cells;
-  for_each(cell_neighbour_list, (void *)&ssb_arfcn, is_intra_frequency_neighbour);
+  return (const neighbour_cell_configuration_t *)it;
 }
 
 static bool valid_du_in_neighbour_configs(const seq_arr_t *neighbour_cell_configuration, const f1ap_served_cell_info_t *cell)
@@ -206,10 +546,8 @@ static bool valid_du_in_neighbour_configs(const seq_arr_t *neighbour_cell_config
   int ssb_arfcn = ssb_arfcn_mtc(mtc);
   ASN_STRUCT_FREE(asn_DEF_NR_MeasurementTimingConfiguration, mtc);
 
-  for (int c = 0; c < neighbour_cell_configuration->size; c++) {
-    const neighbour_cell_configuration_t *neighbour_config = seq_arr_at(neighbour_cell_configuration, c);
-    for (int ni = 0; ni < neighbour_config->neighbour_cells->size; ni++) {
-      const nr_neighbour_cell_t *nc = seq_arr_at(neighbour_config->neighbour_cells, ni);
+  FOR_EACH_SEQ_ARR(const neighbour_cell_configuration_t *, neighbour_config, neighbour_cell_configuration) {
+    FOR_EACH_SEQ_ARR(const nr_neighbour_cell_t *, nc, &neighbour_config->neighbour_cells) {
       if (nc->nrcell_id != cell->nr_cellid)
         continue;
       // current cell is in the nc config, check that config matches
@@ -297,6 +635,17 @@ static void cp_f1_served_cell_info_to_cell(nr_rrc_cell_container_t *dst, const f
   if (src->measurement_timing_config_len > 0) {
     dst->mtc = extract_mtc(src->measurement_timing_config, src->measurement_timing_config_len);
   }
+}
+
+static void add_si_msg(served_cells_to_activate_t *cell, int sib_type, const byte_array_t *enc)
+{
+  AssertFatal(cell->num_SI < F1AP_MAX_NO_SIB_TYPES,
+              "Too many SI messages (%u), max supported is %u\n",
+              cell->num_SI,
+              F1AP_MAX_NO_SIB_TYPES);
+  cell->SI_msg[cell->num_SI].SI_container = copy_byte_array(*enc);
+  cell->SI_msg[cell->num_SI].SI_type = sib_type;
+  cell->num_SI++;
 }
 
 void rrc_gNB_process_f1_setup_req(f1ap_setup_req_t *req, sctp_assoc_t assoc_id)
@@ -427,25 +776,74 @@ void rrc_gNB_process_f1_setup_req(f1ap_setup_req_t *req, sctp_assoc_t assoc_id)
     // Encode CU SIBs and configure setup response with sysinfo
     seq_arr_t *sibs = rrc->SIBs;
     if (sibs) {
-      for (int i = 0; i < sibs->size; i++) {
-        nr_SIBs_t *sib = (nr_SIBs_t *)seq_arr_at(sibs, i);
+      FOR_EACH_SEQ_ARR (nr_SIBs_t *, sib, sibs) {
         switch (sib->SIB_type) {
-          case 2: {
+          case NR_SIB_2: {
             NR_SSB_MTC_t *ssbmtc = get_ssb_mtc(new->mtc);
-            sib->SIB_size = do_SIB2_NR(&sib->SIB_buffer, ssbmtc);
-            cell.SI_msg[cell.num_SI].SI_container = sib->SIB_buffer;
-            cell.SI_msg[cell.num_SI].SI_container_length = sib->SIB_size;
-            cell.SI_msg[cell.num_SI].SI_type = sib->SIB_type;
-            cell.num_SI++;
+            NR_SIB2_t *sib2 = get_sib2_from_cfg(&rrc->sib2_config, ssbmtc);
+            byte_array_t enc = do_SIB2_NR(sib2);
+            ASN_STRUCT_FREE(asn_DEF_NR_SIB2, sib2);
+            if (!enc.buf || enc.len == 0) {
+              free_byte_array(enc);
+              LOG_E(NR_RRC, "SIB2 encoding failed\n");
+              break;
+            }
+            add_si_msg(&cell, sib->SIB_type, &enc);
+            free_byte_array(enc);
+            LOG_I(NR_RRC, "DU %ld: added SIB2 to F1 Setup Response (cell %ld)\n", du->gNB_DU_id, new->info.cell_id);
+          } break;
+          case NR_SIB_3: {
+            if (!rrc->neighbour_cell_configuration)
+              break;
+            const neighbour_cell_configuration_t *neighbour_config = get_cell_neighbour_list(rrc, new);
+            if (!neighbour_config)
+              break;
+            const seq_arr_t *neigh_cells = &neighbour_config->neighbour_cells;
+
+            NR_SIB3_t *sib3 = get_sib3_intra_freq_neighbors(neigh_cells, get_ssb_arfcn(new));
+            if (!sib3)
+              break;
+
+            byte_array_t enc = do_SIB3_NR(sib3);
+            ASN_STRUCT_FREE(asn_DEF_NR_SIB3, sib3);
+            if (!enc.buf || enc.len == 0) {
+              free_byte_array(enc);
+              LOG_E(NR_RRC, "SIB3 encoding failed\n");
+              break;
+            }
+            add_si_msg(&cell, sib->SIB_type, &enc);
+            free_byte_array(enc);
+            LOG_I(NR_RRC, "DU %ld: added SIB3 to F1 Setup Response (cell %ld)\n", du->gNB_DU_id, new->info.cell_id);
+          } break;
+          case NR_SIB_4: {
+            if (!rrc->neighbour_cell_configuration)
+              break;
+            const neighbour_cell_configuration_t *neighbour_cfg = get_cell_neighbour_list(rrc, new);
+            if (!neighbour_cfg)
+              break;
+
+            NR_SIB4_t *sib4 = get_sib4_inter_freq_neighbors(neighbour_cfg, &rrc->inter_freqs, get_ssb_arfcn(new));
+            if (!sib4) {
+              LOG_W(NR_RRC, "SIB4: could not build from neighbours, skipping\n");
+              break;
+            }
+
+            byte_array_t enc = do_SIB4_NR(sib4);
+            ASN_STRUCT_FREE(asn_DEF_NR_SIB4, sib4);
+            if (!enc.buf || enc.len == 0) {
+              free_byte_array(enc);
+              LOG_E(NR_RRC, "SIB4 encoding failed\n");
+              break;
+            }
+            add_si_msg(&cell, sib->SIB_type, &enc);
+            free_byte_array(enc);
+            LOG_I(NR_RRC, "DU %ld: added SIB4 to F1 Setup Response (cell %ld)\n", du->gNB_DU_id, new->info.cell_id);
           } break;
           default:
             AssertFatal(false, "SIB%d not handled yet\n", sib->SIB_type);
         }
       }
     }
-
-    if (new->mib != NULL &&new->sib1 != NULL)
-      label_intra_frequency_neighbours(rrc, new);
 
     resp.cells_to_activate[i] = cell;
   }
@@ -661,10 +1059,6 @@ void rrc_gNB_process_f1_du_configuration_update(f1ap_gnb_du_configuration_update
         cell->mib = mib;
         LOG_I(NR_RRC, "update system information of DU %ld\n", du->gNB_DU_id);
       }
-    }
-
-    if (cell && cell->mib != NULL && cell->sib1 != NULL && cell->assoc_id == du->assoc_id) {
-      label_intra_frequency_neighbours(rrc, cell);
     }
   }
 

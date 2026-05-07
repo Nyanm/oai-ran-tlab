@@ -352,6 +352,14 @@ void nrue_ru_start(void)
   }
 }
 
+void nrue_ru_stop(void)
+{
+  for (int ru_id = 0; ru_id < nrue_ru_count; ru_id++) {
+    if (openair0_dev[ru_id].trx_stop_func)
+      openair0_dev[ru_id].trx_stop_func(&openair0_dev[ru_id]);
+  }
+}
+
 void nrue_ru_end(void)
 {
   for (int ru_id = 0; ru_id < nrue_ru_count; ru_id++) {

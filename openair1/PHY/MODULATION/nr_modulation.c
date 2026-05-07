@@ -3,6 +3,7 @@
  */
 
 #include "nr_modulation.h"
+#include "openair1/PHY/TOOLS/tools_defs.h"
 #include "PHY/NR_REFSIG/nr_mod_table.h"
 #include "executables/softmodem-common.h"
 #include <simde/x86/avx512.h>
@@ -688,12 +689,12 @@ c16_t nr_layer_precoder_cm(int n_layers,
                            int symSz,
                            c16_t datatx_F_precoding[n_layers][symSz],
                            int ap,
-                           nfapi_nr_pm_pdu_t *pmi_pdu,
+                           c16_t weights[NR_MAX_NB_LAYERS][NR_MAX_CSI_PORTS],
                            int offset)
 {
   c16_t precodatatx_F = {0};
   for (int al = 0; al < n_layers; al++) {
-    c16_t prec_weight = pmi_pdu->weights[al][ap];
+    c16_t prec_weight = weights[al][ap];
     precodatatx_F = c16maddShift(datatx_F_precoding[al][offset], prec_weight, precodatatx_F, 15);
   }
   return precodatatx_F;
@@ -803,15 +804,15 @@ static inline __attribute__((always_inline)) __m128i cmac_prec128(__m128i y, __m
 #endif
 
 #define load_consts(Type, Instruct, Rank)                                          \
-  const Type w_c##Rank = Instruct(c16toI32(c16conj(pmi_pdu->weights[Rank][ant]))); \
-  const Type w_s##Rank = Instruct(c16toI32(c16swap(pmi_pdu->weights[Rank][ant]))); \
+  const Type w_c##Rank = Instruct(c16toI32(c16conj(weights[Rank][ant]))); \
+  const Type w_s##Rank = Instruct(c16toI32(c16swap(weights[Rank][ant]))); \
   const Type *in##Rank = (Type *)(txdataF_res_mapped[Rank] + sc_offset + (out-beginning));
 
 void nr_layer_precoder_simd(const int n_layers,
                             const int symSz,
                             const c16_t txdataF_res_mapped[n_layers][symSz],
                             const int ant,
-                            const nfapi_nr_pm_pdu_t *pmi_pdu,
+                            c16_t weights[NR_MAX_NB_LAYERS][NR_MAX_CSI_PORTS],
                             const int sc_offset,
                             const int re_cnt,
                             c16_t *txdataF_precoded)

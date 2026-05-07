@@ -28,8 +28,8 @@
 #include "common_lib.h"
 #include "fapi_nr_ue_interface.h"
 #include "assertions.h"
-#include "barrier.h"
-#include "actor.h"
+#include "common/utils/barrier/barrier.h"
+#include "common/utils/actor/actor.h"
 //#include "openair1/SCHED_NR_UE/defs.h"
 
 #define msg(aRGS...) LOG_D(PHY, ##aRGS)
@@ -401,9 +401,6 @@ typedef struct PHY_VARS_NR_UE_s {
   /// NR LDPC coding related
   nrLDPC_coding_interface_t nrLDPC_coding_interface;
   uint8_t max_ldpc_iterations;
-
-  /// SRS variables
-  nr_srs_info_t *nr_srs_info;
 
   /// CSI variables
   nr_csi_info_t *nr_csi_info;

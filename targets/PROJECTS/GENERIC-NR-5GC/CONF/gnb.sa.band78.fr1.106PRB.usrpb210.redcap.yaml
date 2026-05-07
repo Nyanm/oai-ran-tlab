@@ -21,7 +21,7 @@ gNBs:
     # Physical parameters:
     do_CSIRS: 1
     do_SRS: 1
-    first_active_bwp: 1;
+    first_active_bwp: 1
     bwp_list:
       -
         scs: 1

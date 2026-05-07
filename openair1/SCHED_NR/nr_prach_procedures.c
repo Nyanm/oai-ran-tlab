@@ -21,20 +21,14 @@ int get_nr_prach_duration(uint8_t prach_format)
   return val[prach_format];
 }
 
-void L1_nr_prach_procedures(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_rach_indication_t *rach_ind)
+void L1_nr_prach_procedures(PHY_VARS_gNB *gNB, prach_item_t *prach_id, nfapi_nr_rach_indication_t *rach_ind)
 {
+  const frame_t frame = prach_id->frame;
+  const slot_t slot = prach_id->slot;
   rach_ind->sfn = frame;
   rach_ind->slot = slot;
-  rach_ind->number_of_pdus = 0;
-
-  prach_item_t *prach_id = find_nr_prach(&gNB->prach_list, frame, slot, gNB->frame_parms.nb_antennas_rx, NR_SEARCH_EXIST);
-  if (!prach_id) {
-    return;
-  }
-
   nfapi_nr_prach_pdu_t *prach_pdu = &prach_id->pdu;
   LOG_D(NR_PHY_RACH, "%d.%d, prachstart slot %d prach entry occas %d\n", frame, slot, prach_id->slot, prach_pdu->num_prach_ocas);
-  const int prach_start_slot = prach_id->slot;
   int N_dur = get_nr_prach_duration(prach_pdu->prach_format);
 
   for (int prach_oc = 0; prach_oc < prach_pdu->num_prach_ocas; prach_oc++) {
@@ -63,7 +57,7 @@ void L1_nr_prach_procedures(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_rac
             "[RAPROC] %d.%d Initiating RA procedure with preamble %d, energy %d.%d dB (I0 %d, thres %d), delay %d start symbol "
             "%u freq index %u\n",
             frame,
-            prach_start_slot,
+            slot,
             res.max_preamble,
             res.max_preamble_energy / 10,
             res.max_preamble_energy % 10,
@@ -100,7 +94,6 @@ void L1_nr_prach_procedures(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_rac
     if (gNB->prach_energy_counter < NUM_PRACH_RX_FOR_NOISE_ESTIMATE)
       gNB->prach_energy_counter++;
   } // if prach_id>0
-  rach_ind->slot = prach_start_slot;
   LOG_D(NR_PHY_RACH, "Freeing PRACH entry\n");
-  free_nr_prach_entry(&gNB->prach_list, prach_id);
+  free_nr_prach_entry(prach_id);
 }

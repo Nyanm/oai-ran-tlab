@@ -184,11 +184,6 @@ class Containerize():
 		self.services = ''
 		self.deploymentTag = ''
 
-		self.cli = ''
-		self.cliBuildOptions = ''
-		self.dockerfileprefix = ''
-		self.host = ''
-
 		self.num_attempts = 1
 
 		self.flexricTag = ''
@@ -203,18 +198,7 @@ class Containerize():
 		cmd = cls_cmd.getConnection(node)
 		log_files = []
 	
-		# Checking the hostname to get adapted on cli and dockerfileprefixes
-		cmd.run('hostnamectl')
-		result = re.search('Ubuntu|Red Hat', cmd.getBefore())
-		self.host = result.group(0)
-		if self.host == 'Ubuntu':
-			self.cli = 'docker'
-			self.dockerfileprefix = '.ubuntu'
-			self.cliBuildOptions = ''
-		elif self.host == 'Red Hat':
-			self.cli = 'sudo podman'
-			self.dockerfileprefix = '.rhel9'
-			self.cliBuildOptions = '--disable-compression'
+		dockerfileprefix = '.ubuntu'
 
 		# we always build the ran-build image with all targets
 		# Creating a tupple with the imageName, the DockerFile prefix pattern, targetName and sanitized option
@@ -232,23 +216,20 @@ class Containerize():
 			imageNames.append(('oai-nr-cuup', 'nr-cuup', 'oai-nr-cuup', ''))
 			imageNames.append(('oai-lte-ue', 'lteUE', 'oai-lte-ue', ''))
 			imageNames.append(('oai-nr-ue', 'nrUE', 'oai-nr-ue', ''))
-			if self.host == 'Red Hat':
-				imageNames.append(('oai-physim', 'phySim', 'oai-physim', ''))
-			if self.host == 'Ubuntu':
-				imageNames.append(('oai-lte-ru', 'lteRU', 'oai-lte-ru', ''))
-				# Building again the 5G images with Address Sanitizer
-				imageNames.append(('ran-build', 'build', 'ran-build-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
-				imageNames.append(('oai-enb', 'eNB', 'oai-enb-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
-				imageNames.append(('oai-gnb', 'gNB', 'oai-gnb-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
-				imageNames.append(('oai-lte-ue', 'lteUE', 'oai-lte-ue-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
-				imageNames.append(('oai-nr-ue', 'nrUE', 'oai-nr-ue-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
-				imageNames.append(('oai-nr-cuup', 'nr-cuup', 'oai-nr-cuup-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
-				imageNames.append(('ran-build-fhi72', 'build.fhi72', 'ran-build-fhi72', ''))
-				imageNames.append(('oai-gnb', 'gNB.fhi72', 'oai-gnb-fhi72', ''))
-				imageNames.append(('oai-nr-oru', 'nrORU.fhi72', 'oai-nr-oru', ''))
+			imageNames.append(('oai-lte-ru', 'lteRU', 'oai-lte-ru', ''))
+			# Building again the 5G images with Address Sanitizer
+			imageNames.append(('ran-build', 'build', 'ran-build-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
+			imageNames.append(('oai-enb', 'eNB', 'oai-enb-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
+			imageNames.append(('oai-gnb', 'gNB', 'oai-gnb-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
+			imageNames.append(('oai-lte-ue', 'lteUE', 'oai-lte-ue-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
+			imageNames.append(('oai-nr-ue', 'nrUE', 'oai-nr-ue-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
+			imageNames.append(('oai-nr-cuup', 'nr-cuup', 'oai-nr-cuup-asan', '--build-arg "BUILD_OPTION=--sanitize"'))
+			imageNames.append(('ran-build-fhi72', 'build.fhi72', 'ran-build-fhi72', ''))
+			imageNames.append(('oai-gnb', 'gNB.fhi72', 'oai-gnb-fhi72', ''))
+			imageNames.append(('oai-nr-oru', 'nrORU.fhi72', 'oai-nr-oru', ''))
 		result = re.search('build_cross_arm64', self.imageKind)
 		if result is not None:
-			self.dockerfileprefix = '.ubuntu.cross-arm64'
+			dockerfileprefix = '.ubuntu.cross-arm64'
 		result = re.search('native_armv9', self.imageKind)
 		if result is not None:
 			imageNames.append(('oai-gnb', 'gNB', 'oai-gnb', ''))
@@ -263,10 +244,6 @@ class Containerize():
 			imageNames.append(('oai-nr-ue', 'nrUE', 'oai-nr-ue', ''))
 		
 		cmd.cd(lSourcePath)
-		# if asterix, copy the entitlement and subscription manager configurations
-		if self.host == 'Red Hat':
-			cmd.run('mkdir -p ./etc-pki-entitlement')
-			cmd.run('cp /etc/pki/entitlement/*.pem ./etc-pki-entitlement/')
 
 		baseImage = 'ran-base'
 		baseTag = 'develop'
@@ -275,7 +252,7 @@ class Containerize():
 		if (self.ranAllowMerge):
 			imageTag = 'ci-temp'
 			if self.ranTargetBranch == 'develop':
-				cmd.run(f'git diff HEAD..origin/develop -- cmake_targets/build_oai cmake_targets/tools/build_helper docker/Dockerfile.base{self.dockerfileprefix} | grep --colour=never -i INDEX')
+				cmd.run(f'git diff HEAD..origin/develop -- cmake_targets/build_oai cmake_targets/tools/build_helper docker/Dockerfile.base{dockerfileprefix} | grep --colour=never -i INDEX')
 				result = re.search('index', cmd.getBefore())
 				if result is not None:
 					forceBaseImageBuild = True
@@ -289,31 +266,30 @@ class Containerize():
 			forceBaseImageBuild = True
 
 		# Let's remove any previous run artifacts if still there
-		cmd.run(f"{self.cli} image prune --force")
+		cmd.run(f"docker image prune --force")
 		for image,pattern,name,option in imageNames:
-			cmd.run(f"{self.cli} image rm {name}:{imageTag}", reportNonZero=False)
+			cmd.run(f"docker image rm {name}:{imageTag}", reportNonZero=False)
 
 		cmd.run(f'docker login -u oaicicd -p oaicicd {DEFAULT_REGISTRY}')
 		ubuntuImage = "ubuntu:noble"
 		# Build the base image only on Push Events (not on Merge Requests)
 		# On when the base image docker file is being modified.
 		if forceBaseImageBuild:
-			cmd.run(f"{self.cli} image rm {baseImage}:{baseTag}")
+			cmd.run(f"docker image rm {baseImage}:{baseTag}")
 			logfile = f'{lSourcePath}/cmake_targets/log/ran-base.docker.log'
-			if self.host == 'Ubuntu':
-				option = f" --build-arg UBUNTU_IMAGE={DEFAULT_REGISTRY}/{ubuntuImage}"
-			cmd.run(f"{self.cli} build {self.cliBuildOptions} --target {baseImage} --tag {baseImage}:{baseTag} --file docker/Dockerfile.base{self.dockerfileprefix} {option} . &> {logfile}", timeout=1600)
+			option = f" --build-arg UBUNTU_IMAGE={DEFAULT_REGISTRY}/{ubuntuImage}"
+			cmd.run(f"docker build --target {baseImage} --tag {baseImage}:{baseTag} --file docker/Dockerfile.base{dockerfileprefix} {option} . &> {logfile}", timeout=1600)
 			t = ("ran-base", archiveArtifact(cmd, ctx, logfile))
 			log_files.append(t)
 
 		# First verify if the base image was properly created.
-		ret = cmd.run(f"{self.cli} image inspect --format=\'Size = {{{{.Size}}}} bytes\' {baseImage}:{baseTag}")
+		ret = cmd.run(f"docker image inspect --format=\'Size = {{{{.Size}}}} bytes\' {baseImage}:{baseTag}")
 		allImagesSize = {}
 		if ret.returncode != 0:
 			logging.error('\u001B[1m Could not build properly ran-base\u001B[0m')
 			# Recover the name of the failed container?
-			cmd.run(f"{self.cli} ps --quiet --filter \"status=exited\" -n1 | xargs --no-run-if-empty {self.cli} rm -f")
-			cmd.run(f"{self.cli} image prune --force")
+			cmd.run(f"docker ps --quiet --filter \"status=exited\" -n1 | xargs --no-run-if-empty docker rm -f")
+			cmd.run(f"docker image prune --force")
 			cmd.close()
 			logging.error('\u001B[1m Building OAI Images Failed\u001B[0m')
 			HTML.CreateHtmlTestRow(self.imageKind, 'KO', CONST.ALL_PROCESSES_OK)
@@ -333,32 +309,31 @@ class Containerize():
 		for image,pattern,name,option in imageNames:
 			# the archived Dockerfiles have "ran-base:latest" as base image
 			# we need to update them with proper tag
-			cmd.run(f'git checkout -- docker/Dockerfile.{pattern}{self.dockerfileprefix}')
-			cmd.run(f'sed -i -e "s#{baseImage}:latest#{baseImage}:{baseTag}#" docker/Dockerfile.{pattern}{self.dockerfileprefix}')
+			cmd.run(f'git checkout -- docker/Dockerfile.{pattern}{dockerfileprefix}')
+			cmd.run(f'sed -i -e "s#{baseImage}:latest#{baseImage}:{baseTag}#" docker/Dockerfile.{pattern}{dockerfileprefix}')
 			# target images should use the proper ran-build image
 			if image != 'ran-build' and "-asan" in name:
-				cmd.run(f'sed -i -e "s#ran-build:latest#ran-build-asan:{imageTag}#" docker/Dockerfile.{pattern}{self.dockerfileprefix}')
+				cmd.run(f'sed -i -e "s#ran-build:latest#ran-build-asan:{imageTag}#" docker/Dockerfile.{pattern}{dockerfileprefix}')
 			elif "fhi72" in name or name == "oai-nr-oru":
-				cmd.run(f'sed -i -e "s#ran-build-fhi72:latest#ran-build-fhi72:{imageTag}#" docker/Dockerfile.{pattern}{self.dockerfileprefix}')
+				cmd.run(f'sed -i -e "s#ran-build-fhi72:latest#ran-build-fhi72:{imageTag}#" docker/Dockerfile.{pattern}{dockerfileprefix}')
 			elif image != 'ran-build':
-				cmd.run(f'sed -i -e "s#ran-build:latest#ran-build:{imageTag}#" docker/Dockerfile.{pattern}{self.dockerfileprefix}')
+				cmd.run(f'sed -i -e "s#ran-build:latest#ran-build:{imageTag}#" docker/Dockerfile.{pattern}{dockerfileprefix}')
 			if image == 'oai-gnb-aerial':
 				cmd.run('cp -f /opt/nvidia-ipc/nvipc_src.2026.01.07.tar.gz .')
 			logfile = f'{lSourcePath}/cmake_targets/log/{name}.docker.log'
-			if self.host == 'Ubuntu':
-				option = option + f" --build-arg UBUNTU_IMAGE={DEFAULT_REGISTRY}/{ubuntuImage}"
-			ret = cmd.run(f'{self.cli} build {self.cliBuildOptions} --target {image} --tag {name}:{imageTag} --file docker/Dockerfile.{pattern}{self.dockerfileprefix} {option} . > {logfile} 2>&1', timeout=1200)
+			option = option + f" --build-arg UBUNTU_IMAGE={DEFAULT_REGISTRY}/{ubuntuImage}"
+			ret = cmd.run(f'docker build --target {image} --tag {name}:{imageTag} --file docker/Dockerfile.{pattern}{dockerfileprefix} {option} . > {logfile} 2>&1', timeout=1200)
 			t = (name, archiveArtifact(cmd, ctx, logfile))
 			log_files.append(t)
 			if image == 'oai-gnb-aerial':
 				cmd.run('rm -f nvipc_src.2026.01.07.tar.gz')
 			# check the status of the build
-			ret = cmd.run(f"{self.cli} image inspect --format=\'Size = {{{{.Size}}}} bytes\' {name}:{imageTag}")
+			ret = cmd.run(f"docker image inspect --format=\'Size = {{{{.Size}}}} bytes\' {name}:{imageTag}")
 			if ret.returncode != 0:
 				logging.error('\u001B[1m Could not build properly ' + name + '\u001B[0m')
 				status = False
 				# Here we should check if the last container corresponds to a failed command and destroy it
-				cmd.run(f"{self.cli} ps --quiet --filter \"status=exited\" -n1 | xargs --no-run-if-empty {self.cli} rm -f")
+				cmd.run(f"docker ps --quiet --filter \"status=exited\" -n1 | xargs --no-run-if-empty docker rm -f")
 				allImagesSize[name] = 'N/A -- Build Failed'
 				break
 			else:
@@ -372,16 +347,16 @@ class Containerize():
 					logging.debug(f'{name} size is unknown')
 					allImagesSize[name] = 'unknown'
 			# Now pruning dangling images in between target builds
-			cmd.run(f"{self.cli} image prune --force")
+			cmd.run(f"docker image prune --force")
 		cmd.run(f'docker logout {DEFAULT_REGISTRY}')
 		# Remove all intermediate build images and clean up
-		cmd.run(f"{self.cli} image rm ran-build:{imageTag} ran-build-asan:{imageTag} ran-build-fhi72:{imageTag} || true")
-		cmd.run(f"{self.cli} volume prune --force")
+		cmd.run(f"docker image rm ran-build:{imageTag} ran-build-asan:{imageTag} ran-build-fhi72:{imageTag} || true")
+		cmd.run(f"docker volume prune --force")
 
 		# Remove some cached artifacts to prevent out of diskspace problem
 		logging.debug(cmd.run("df -h").stdout)
 		logging.debug(cmd.run("docker system df").stdout)
-		cmd.run(f"{self.cli} buildx prune --filter until=1h --force")
+		cmd.run(f"docker buildx prune --filter until=1h --force")
 		logging.debug(cmd.run("df -h").stdout)
 		logging.debug(cmd.run("docker system df").stdout)
 
@@ -489,20 +464,12 @@ class Containerize():
 		cmd = cls_cmd.getConnection(node)
 		cmd.cd(lSourcePath)
 
-		ret = cmd.run('hostnamectl')
-		result = re.search('Ubuntu', ret.stdout)
-		host = result.group(0)
-		if host != 'Ubuntu':
-			cmd.close()
-			raise Exception("Can build unit tests only on Ubuntu server")
-		logging.debug('running on Ubuntu as expected')
-
 		# check that ran-base image exists as we expect it
 		baseImage = 'ran-base'
 		baseTag = 'develop'
 		if self.ranAllowMerge:
 			if self.ranTargetBranch == 'develop':
-				cmd.run(f'git diff HEAD..origin/develop -- cmake_targets/build_oai cmake_targets/tools/build_helper docker/Dockerfile.base{self.dockerfileprefix} | grep --colour=never -i INDEX')
+				cmd.run(f'git diff HEAD..origin/develop -- cmake_targets/build_oai cmake_targets/tools/build_helper docker/Dockerfile.base.ubuntu | grep --colour=never -i INDEX')
 				result = re.search('index', cmd.getBefore())
 				if result is not None:
 					baseTag = 'ci-temp'

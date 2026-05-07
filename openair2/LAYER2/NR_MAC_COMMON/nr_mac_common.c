@@ -5,7 +5,7 @@
 #include <math.h>
 #include "nr_mac.h"
 #include "nr_mac_common.h"
-#include "common/utils/nr/nr_common.h"
+#include "common/utils/bits.h"
 #include <limits.h>
 #include <executables/softmodem-common.h>
 

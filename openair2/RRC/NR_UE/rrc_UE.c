@@ -24,6 +24,7 @@
 
 #include "rrc_defs.h"
 #include "rrc_proto.h"
+#include "verify_RRC.h"
 #include "L2_interface_ue.h"
 #include "LAYER2/NR_MAC_UE/mac_proto.h"
 
@@ -3113,6 +3114,11 @@ void *rrc_nrue(void *notUsed)
       rrc->target_ntncfg = NULL;
       rrc->process_target_ntncfg = false;
     }
+    break;
+
+  case NR_RRC_MAC_VERIFY:
+    LOG_W(NR_RRC, "L2 verification of RRC consistency failed\n");
+    handle_rlf_detection(rrc);
     break;
 
   case NR_RRC_MAC_INAC_IND:

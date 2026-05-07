@@ -77,8 +77,6 @@ typedef enum{
 typedef struct {
   uint8_t k_0_p[MAX_NUM_NR_SRS_AP][MAX_NUM_NR_SRS_SYMBOLS];
   uint8_t srs_generated_signal_bits;
-  c16_t **srs_generated_signal;
-  bool is_signal_generated;
   int B_SRS;
   int C_SRS;
   int b_hop;

@@ -10,36 +10,6 @@
 #include "assertions.h"
 
 
-//-------------------------------------------------------------------------------------------------------------------------------
-char *hashtable_rc_code2string(hashtable_rc_t rcP)
-//-------------------------------------------------------------------------------------------------------------------------------
-{
-  switch (rcP) {
-    case HASH_TABLE_OK:
-      return "HASH_TABLE_OK";
-      break;
-
-    case HASH_TABLE_INSERT_OVERWRITTEN_DATA:
-      return "HASH_TABLE_INSERT_OVERWRITTEN_DATA";
-      break;
-
-    case HASH_TABLE_KEY_NOT_EXISTS:
-      return "HASH_TABLE_KEY_NOT_EXISTS";
-      break;
-
-    case HASH_TABLE_KEY_ALREADY_EXISTS:
-      return "HASH_TABLE_KEY_ALREADY_EXISTS";
-      break;
-
-    case HASH_TABLE_BAD_PARAMETER_HASHTABLE:
-      return "HASH_TABLE_BAD_PARAMETER_HASHTABLE";
-      break;
-
-    default:
-      return "UNKNOWN hashtable_rc_t";
-  }
-}
-//-------------------------------------------------------------------------------------------------------------------------------
 /*
  * free int function
  * hash_free_int_func() is used when this hashtable is used to store int values as data (pointer = value).
@@ -146,41 +116,6 @@ hashtable_rc_t hashtable_is_key_exists (const hash_table_t *const hashtblP, cons
   }
 
   return HASH_TABLE_KEY_NOT_EXISTS;
-}
-//-------------------------------------------------------------------------------------------------------------------------------
-hashtable_rc_t hashtable_dump_content (const hash_table_t *const hashtblP, char *const buffer_pP, int *const remaining_bytes_in_buffer_pP )
-//-------------------------------------------------------------------------------------------------------------------------------
-{
-  hash_node_t  *node         = NULL;
-  unsigned int  i            = 0;
-
-  if (hashtblP == NULL) {
-    *remaining_bytes_in_buffer_pP = snprintf(
-                                      buffer_pP,
-                                      *remaining_bytes_in_buffer_pP,
-                                      "HASH_TABLE_BAD_PARAMETER_HASHTABLE");
-    return HASH_TABLE_BAD_PARAMETER_HASHTABLE;
-  }
-
-  while ((i < hashtblP->size) && (*remaining_bytes_in_buffer_pP > 0)) {
-    if (hashtblP->nodes[i] != NULL) {
-      node=hashtblP->nodes[i];
-
-      while(node) {
-        *remaining_bytes_in_buffer_pP = snprintf(
-                                          buffer_pP,
-                                          *remaining_bytes_in_buffer_pP,
-                                          "Key 0x%"PRIx64" Element %p\n",
-                                          node->key,
-                                          node->data);
-        node=node->next;
-      }
-    }
-
-    i += 1;
-  }
-
-  return HASH_TABLE_OK;
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------

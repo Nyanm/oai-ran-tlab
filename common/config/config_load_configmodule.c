@@ -282,12 +282,9 @@ configmodule_interface_t *load_configmodule(int argc,
       cfgmode = strdup(CONFIG_LIBCONFIGFILE);
     }
   }
-  static configmodule_interface_t *cfgptr = NULL;
-  if (cfgptr)
-    fprintf(stderr, "ERROR: Call load_configmodule more than one time\n");
 
   // The macros are not thread safe print_params and similar
-  cfgptr = calloc(sizeof(configmodule_interface_t), 1);
+  configmodule_interface_t *cfgptr = calloc(sizeof(configmodule_interface_t), 1);
   if (!cfgptr) {
     fprintf(stderr, "ERROR: cannot allocate a memory for configuration\n");
     return NULL;

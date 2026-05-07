@@ -527,7 +527,9 @@ int ngap_gNB_handle_ul_ran_status_transfer(instance_t instance, const ngap_ran_s
   return 0;
 }
 
-void *ngap_gNB_process_itti_msg(void *notUsed) {
+void *ngap_gNB_process_itti_msg(void *notUsed)
+{
+  UNUSED(notUsed);
   MessageDef *received_msg = NULL;
   int         result;
   itti_receive_msg(TASK_NGAP, &received_msg);
@@ -657,12 +659,13 @@ void *ngap_gNB_process_itti_msg(void *notUsed) {
   return NULL;
 }
 
-
-void *ngap_gNB_task(void *arg) {
+void *ngap_gNB_task(void *arg)
+{
+  UNUSED(arg);
   ngap_gNB_init();
 
   while (1) {
-    (void) ngap_gNB_process_itti_msg(NULL);
+    ngap_gNB_process_itti_msg(NULL);
   }
 
   return NULL;
@@ -685,7 +688,6 @@ static int ngap_gNB_generate_ng_setup_request(
   NGAP_SliceSupportItem_t    *ssi = NULL;
   uint8_t  *buffer = NULL;
   uint32_t  len = 0;
-  int       ret = 0;
   DevAssert(instance_p != NULL);
   DevAssert(ngap_amf_data_p != NULL);
   ngap_amf_data_p->state = NGAP_GNB_STATE_WAITING;
@@ -787,7 +789,7 @@ static int ngap_gNB_generate_ng_setup_request(
   /* Non UE-Associated signalling -> stream = 0 */
   ngap_gNB_itti_send_sctp_data_req(instance_p->instance, ngap_amf_data_p->assoc_id, buffer, len, 0);
   ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_NGAP_NGAP_PDU, &pdu);
-  return ret;
+  return 0;
 }
 
 

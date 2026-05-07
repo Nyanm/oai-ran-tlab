@@ -24,6 +24,7 @@ RUN /bin/sh oaienv && \
         -DAVX512=OFF -DCMAKE_C_FLAGS=-Werror -DCMAKE_CXX_FLAGS=-Werror \
         -DENABLE_PHYSIM_TESTS=ON \
         -DSANITIZE_ADDRESS=ON -DSANITIZE_UNDEFINED=ON \
+        -DT_TRACER=OFF \
         -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/opt/oai-physim/bin && \
     ninja -k10 -j36
 

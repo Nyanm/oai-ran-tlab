@@ -410,7 +410,7 @@ int wls_fapi_nr_vnf_start(nfapi_vnf_config_t *cfg)
 
 bool wls_vnf_nr_send_p5_message(vnf_t *vnf, uint16_t p5_idx, nfapi_nr_p4_p5_message_header_t *msg, uint32_t msg_len)
 {
-  UNUSED_VARIABLE(p5_idx);
+  UNUSED(p5_idx);
   int packed_len =
       vnf->_public.pack_func(msg, msg_len, vnf->tx_message_buffer, sizeof(vnf->tx_message_buffer), &vnf->_public.codec_config);
 

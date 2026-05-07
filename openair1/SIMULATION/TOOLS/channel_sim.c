@@ -256,9 +256,9 @@ void do_DL_sig(sim_t *sim,
       LOG_D(OCM,"[SIM][DL] UE %d : rx_pwr (ADC out) %f dB/RE (%d) for subframe %d, writing to %p, length %d\n",UE_id, 10*log10((double)rx_pwr2),rx_pwr2,subframe,rxdata,length<length_meas?length:length_meas);
       LOG_D(OCM,"[SIM][DL] UE %d : rx_pwr (ADC out) %f dB for subframe %d\n",UE_id,10*log10((double)rx_pwr2*12*frame_parms->N_RB_DL) ,subframe);
 #else
-      UNUSED_VARIABLE(rx_pwr2);
-      UNUSED_VARIABLE(tx_pwr);
-      UNUSED_VARIABLE(rx_pwr);
+      UNUSED(rx_pwr2);
+      UNUSED(tx_pwr);
+      UNUSED(rx_pwr);
 #endif
 	
     } // RU_output_mask
@@ -434,8 +434,8 @@ void do_UL_sig(sim_t *sim, uint16_t subframe, uint8_t abstraction_flag, LTE_DL_F
   rx_pwr2 = signal_energy(rxdata[0]+sf_offset_tdd,frame_parms->samples_per_tti)*(double)frame_parms->ofdm_symbol_size/(12.0*frame_parms->N_RB_DL);
   LOG_D(OCM,"[SIM][UL] RU %d rx_pwr (ADC out) %f dB (%d) for subframe %d (offset %d) = %p\n",ru_id,10*log10((double)rx_pwr2),rx_pwr2,subframe,sf_offset,rxdata[0]+sf_offset_tdd);
 #else
-  UNUSED_VARIABLE(tx_pwr);
-  UNUSED_VARIABLE(rx_pwr);
-  UNUSED_VARIABLE(rx_pwr2);
+  UNUSED(tx_pwr);
+  UNUSED(rx_pwr);
+  UNUSED(rx_pwr2);
 #endif
 }

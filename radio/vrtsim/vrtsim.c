@@ -76,6 +76,7 @@ typedef enum { ROLE_SERVER = 1, ROLE_CLIENT } role;
      {"cirdb_model_id",         "Preferred TDL model id 0..4", 0, .iptr  = &vrtsim_state->cirdb_model_id,  .defintval = 0,    TYPE_INT,    0}, \
      {"cirdb_ds_ns",            "Desired RMS delay spread in ns", 0, .dblptr = &vrtsim_state->cirdb_ds_ns, .defdblval = 10.0, TYPE_DOUBLE, 0}, \
      {"cirdb_speed_mps",        "Desired speed in m/s", 0, .dblptr = &vrtsim_state->cirdb_speed_mps, .defdblval = 1.5, TYPE_DOUBLE, 0}, \
+     {"cirdb_aoa_deg",          "Desired AoA in degrees (TDL-D/E only)", 0, .dblptr = &vrtsim_state->cirdb_aoa_deg, .defdblval = 0.0, TYPE_DOUBLE, 0}, \
      {"num_ues",                "Number of UE slots (server only)\n", 0, .iptr = &vrtsim_state->num_ues,        .defintval = 1,                  TYPE_INT,    0}, \
      {"ue_id",                  "UE slot index 0..num_ues-1 (client only)\n", 0, .iptr = &vrtsim_state->ue_id, .defintval = 0,                  TYPE_INT,    0}, \
      {"thread-pool",            TPOOL_HLP, .strptr = &vrtsim_state->thread_pool_cores, .defstrval = "-1,-1,-1,-1", TYPE_STRING, 0} \
@@ -106,6 +107,7 @@ typedef struct {
   int model_id;
   double ds_ns;
   double speed_mps;
+  double aoa_deg;
 } cirdb_conf_t;
 
 typedef struct {
@@ -148,6 +150,7 @@ typedef struct {
   int cirdb_model_id;
   double cirdb_ds_ns;
   double cirdb_speed_mps;
+  double cirdb_aoa_deg;
   // Multi-UE support
   int num_ues;
   int ue_id;
@@ -323,13 +326,16 @@ static void parse_ue_config(vrtsim_state_t *vrtsim_state)
     int model_id = vrtsim_state->cirdb_model_id;
     double ds_ns = vrtsim_state->cirdb_ds_ns;
     double speed_mps = vrtsim_state->cirdb_speed_mps;
+    double aoa_deg = vrtsim_state->cirdb_aoa_deg;
 
     paramdef_t ue_params[] = {
       {"antennas",  "Antenna config e.g. \"1x2\"", 0, .strptr = &antennas,  .defstrval = NULL,                           TYPE_STRING, 0},
       {"model_id",  "TDL model id 0..4",           0, .iptr   = &model_id,  .defintval = vrtsim_state->cirdb_model_id,   TYPE_INT,    0},
       {"ds_ns",     "Delay spread in ns",           0, .dblptr = &ds_ns,     .defdblval = vrtsim_state->cirdb_ds_ns,      TYPE_DOUBLE, 0},
       {"speed_mps", "Speed in m/s",                 0, .dblptr = &speed_mps, .defdblval = vrtsim_state->cirdb_speed_mps,  TYPE_DOUBLE, 0},
+      {"aoa_deg",   "LOS AoA in degrees (TDL-D/E only)", 0, .dblptr = &aoa_deg, .defdblval = vrtsim_state->cirdb_aoa_deg, TYPE_DOUBLE, 0},
     };
+
     config_get(config_get_if(), ue_params, sizeofArray(ue_params), prefix);
 
     if (antennas != NULL) {
@@ -357,12 +363,13 @@ static void parse_ue_config(vrtsim_state_t *vrtsim_state)
     vrtsim_state->ue_conf[i].cir_conf.model_id  = model_id;
     vrtsim_state->ue_conf[i].cir_conf.ds_ns     = ds_ns;
     vrtsim_state->ue_conf[i].cir_conf.speed_mps = speed_mps;
+    vrtsim_state->ue_conf[i].cir_conf.aoa_deg   = aoa_deg;
 
-    LOG_I(HW, "VRTSIM: UE %d - %dx%d antennas, Model %d (TDL-%c), DS %.1fns, Speed %.1fm/s\n",
+    LOG_I(HW, "VRTSIM: UE %d - %dx%d antennas, Model %d (TDL-%c), DS %.1fns, Speed %.1fm/s, AoA %.1fdeg\n",
           i,
           vrtsim_state->ue_conf[i].tx_ant,
           vrtsim_state->ue_conf[i].rx_ant,
-          model_id, 'A' + model_id, ds_ns, speed_mps);
+          model_id, 'A' + model_id, ds_ns, speed_mps, aoa_deg);
   }
 }
 
@@ -450,14 +457,17 @@ static int vrtsim_connect(openair0_device_t *device)
       vrtsim_state->cirdb_model_id = vrtsim_state->ue.cir_conf.model_id;
       vrtsim_state->cirdb_ds_ns = vrtsim_state->ue.cir_conf.ds_ns;
       vrtsim_state->cirdb_speed_mps = vrtsim_state->ue.cir_conf.speed_mps;
+      vrtsim_state->cirdb_aoa_deg = vrtsim_state->ue.cir_conf.aoa_deg;
+
 
       LOG_I(HW,
-            "VRTSIM: UE %d channel - Model %d (TDL-%c), DS %.1fns, Speed %.1fm/s\n",
+            "VRTSIM: UE %d channel - Model %d (TDL-%c), DS %.1fns, Speed %.1fm/s, AoA %.1fdeg\n",
             vrtsim_state->ue_id,
             vrtsim_state->cirdb_model_id,
             'A' + vrtsim_state->cirdb_model_id,
             vrtsim_state->cirdb_ds_ns,
-            vrtsim_state->cirdb_speed_mps);
+            vrtsim_state->cirdb_speed_mps,
+            vrtsim_state->cirdb_aoa_deg);
     }
     vrtsim_state->channel = shm_td_iq_channel_connect(DEFAULT_CHANNEL_NAME, 10);
     vrtsim_state->peer_info.num_rx_antennas = client_info.gnb_num_rx_ant;
@@ -507,6 +517,7 @@ static int vrtsim_connect(openair0_device_t *device)
       sel.want_model_id = vrtsim_state->cirdb_model_id;
       sel.want_ds_ns = (float)(vrtsim_state->cirdb_ds_ns > 0.0 ? vrtsim_state->cirdb_ds_ns : -1.0);
       sel.want_speed_mps = (float)(vrtsim_state->cirdb_speed_mps > 0.0 ? vrtsim_state->cirdb_speed_mps : -1.0);
+      sel.want_aoa_deg = (float)vrtsim_state->cirdb_aoa_deg;
 
       LOG_A(HW,
             "VRTSIM: CIR DB select yaml='%s' bin='%s'\n",
@@ -520,6 +531,7 @@ static int vrtsim_connect(openair0_device_t *device)
           ue_sel.want_model_id = vrtsim_state->ue_conf[u].cir_conf.model_id;
           ue_sel.want_ds_ns = vrtsim_state->ue_conf[u].cir_conf.ds_ns;
           ue_sel.want_speed_mps = vrtsim_state->ue_conf[u].cir_conf.speed_mps;
+          ue_sel.want_aoa_deg = (float)vrtsim_state->ue_conf[u].cir_conf.aoa_deg;
 
           AssertFatal(ue_sel.want_model_id >= 0 && ue_sel.want_model_id <= 4,
                       "Invalid CIRDB model_id=%d for UE %d\n",

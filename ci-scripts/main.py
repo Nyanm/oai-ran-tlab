@@ -22,7 +22,7 @@ import constants as CONST
 
 import cls_oaicitest		 #main class for OAI CI test framework
 import cls_containerize	 #class Containerize for all container-based operations on RAN/UE objects
-import cls_static_code_analysis  #class for static code analysis
+import cls_static_code_analysis as SCA
 import cls_cluster		 # class for building/deploying on cluster
 import cls_native        # class for all native/source-based operations
 from cls_ci_helper import TestCaseCtx
@@ -64,7 +64,6 @@ def ExecuteActionWithParam(action, ctx, node):
 	global RAN
 	global HTML
 	global CONTAINERS
-	global SCA
 	global CLUSTER
 	if action == 'Build_eNB' or action == 'Build_Image' or action == 'Build_Proxy' or action == "Build_Cluster_Image" or action == "Build_Run_Tests":
 		RAN.Build_eNB_args=test.findtext('Build_eNB_args')
@@ -196,10 +195,7 @@ def ExecuteActionWithParam(action, ctx, node):
 			success = CONTAINERS.Create_Workspace(node, HTML)
 
 	elif action == 'LicenceAndFormattingCheck':
-		success = SCA.LicenceAndFormattingCheck(ctx, node, HTML)
-
-	elif action == 'Cppcheck_Analysis':
-		success = SCA.CppCheckAnalysis(ctx, node, HTML)
+		success = SCA.StaticCodeAnalysis.LicenceAndFormattingCheck(ctx, node, HTML, RAN.eNBSourceCodePath, RAN.ranBranch, RAN.ranAllowMerge, RAN.ranTargetBranch)
 
 	elif action == 'Push_Local_Registry':
 		tag_prefix = test.findtext('tag_prefix') or ""
@@ -297,7 +293,6 @@ CiTestObj = cls_oaicitest.OaiCiTest()
 RAN = ran.RANManagement()
 HTML = cls_oai_html.HTMLManagement()
 CONTAINERS = cls_containerize.Containerize()
-SCA = cls_static_code_analysis.StaticCodeAnalysis()
 CLUSTER = cls_cluster.Cluster()
 
 #-----------------------------------------------------------
@@ -307,7 +302,7 @@ CLUSTER = cls_cluster.Cluster()
 import args_parse
 # Force local execution, move all execution targets to localhost
 force_local = False
-mode, force_local, date_fmt = args_parse.ArgsParse(sys.argv,CiTestObj,RAN,HTML,CONTAINERS,HELP,SCA,CLUSTER)
+mode, force_local, date_fmt = args_parse.ArgsParse(sys.argv,CiTestObj,RAN,HTML,CONTAINERS,HELP,CLUSTER)
 fmt = "%(levelname)8s: %(message)s"
 if date_fmt:
     fmt = "[%(asctime)s] %(levelname)s %(message)s"
