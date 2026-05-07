@@ -3678,4 +3678,5 @@ Your email should contain below information:
 - RU Vendor and Version.
 - In case your question is related to performance, include a small description of the machine (CPU, RAM and networking card) and diagram of your testing environment. 
 - If you have any issues related to PTP or synchronization, then first check the section "Debugging PTP issues". Then share your problem with PTP version you are using, switch details and master clock.
-- Known/open issues are present on [GitLab](https://gitlab.eurecom.fr/oai/openairinterface5g/-/issues), so keep checking.
+- Known/open issues are present on [GitLab](https://gitlab.eurecom.fr/oai/openairinterface5g/-/issues), so keep checking. 
+
