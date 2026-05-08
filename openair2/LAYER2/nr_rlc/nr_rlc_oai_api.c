@@ -43,6 +43,13 @@
 #include "openair3/ocp-gtpu/gtp_itf.h"
 #include <stdint.h>
 
+static logical_chan_id_t get_sl_lcid_from_drb(int drb_id)
+{
+  logical_chan_id_t lcid = 4 + drb_id - 1;
+  AssertFatal(lcid >= 4 && lcid <= 19, "Invalid SL DRB ID %d for LCID %d\n", drb_id, lcid);
+  return lcid;
+}
+
 #include <executables/softmodem-common.h>
 
 static nr_rlc_ue_manager_t *nr_rlc_ue_manager;
@@ -845,6 +852,9 @@ static void add_drb_am_sl(int src_id, int drb_id, const NR_SL_RLC_BearerConfig_r
 
   nr_rlc_manager_lock(nr_rlc_ue_manager);
   ue = nr_rlc_manager_get_ue(nr_rlc_ue_manager, src_id);
+  logical_chan_id_t lcid = get_sl_lcid_from_drb(drb_id);
+  ue->lcid2rb[lcid - 1].type = NR_LCID_DRB;
+  ue->lcid2rb[lcid - 1].choice.drb_id = drb_id;
   if (ue->drb[drb_id-1] != NULL) {
     LOG_W(RLC, "%s:%d:%s: DRB %d already exists for SL UE with src_id %04x, do nothing\n", __FILE__, __LINE__, __FUNCTION__, drb_id, src_id);
   } else {
@@ -948,6 +958,9 @@ static void add_drb_um_sl(int src_id, int drb_id, const NR_SL_RLC_BearerConfig_r
 
   nr_rlc_manager_lock(nr_rlc_ue_manager);
   ue = nr_rlc_manager_get_ue(nr_rlc_ue_manager, src_id);
+  logical_chan_id_t lcid = get_sl_lcid_from_drb(drb_id);
+  ue->lcid2rb[lcid - 1].type = NR_LCID_DRB;
+  ue->lcid2rb[lcid - 1].choice.drb_id = drb_id;
   if (ue->drb[drb_id-1] != NULL) {
     LOG_W(RLC, "DEBUG add_drb_um %s:%d:%s: warning DRB %d already exist for SL ue %d, do nothing\n", __FILE__, __LINE__, __FUNCTION__, drb_id, src_id);
   } else {

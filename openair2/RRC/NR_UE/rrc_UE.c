@@ -2681,6 +2681,8 @@ void *rrc_nrue(void *notUsed)
 
     nr_rrc_ue_decode_NR_SBCCH_SL_BCH_Message(rrc, sbcch->gnb_index,sbcch->frame, sbcch->slot, sbcch->sdu,
                                              sbcch->sdu_size, sbcch->rx_slss_id);
+    break;
+
   case NR_RRC_MAC_MEAS_DATA_IND:
 
     LOG_D(NR_RRC, "[%s][Nid_cell %i] Received %s measurements: RSRP = %i (dBm)\n",
