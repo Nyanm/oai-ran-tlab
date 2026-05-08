@@ -34,6 +34,8 @@
 #include "executables/nr-uesoftmodem.h"
 #include "LAYER2/nr_rlc/nr_rlc_oai_api.h"
 #include "LAYER2/nr_pdcp/nr_pdcp_oai_api.h"
+#include "openair2/SDAP/nr_sdap/nr_sdap.h"
+#include "openair2/SDAP/nr_sdap/nr_sdap_entity.h"
 
 #define GNSS_SUPPORT 0
 
@@ -603,6 +605,23 @@ int configure_NR_SL_Preconfig(uint8_t id,int sync_source)
   return 0;
 }
 
+static uint8_t get_sl_tun_qfi(NR_SL_PreconfigurationNR_r16_t *sl_preconfig)
+{
+  NR_SL_RadioBearerConfig_r16_t *slrb =
+      sl_preconfig->sidelinkPreconfigNR_r16.sl_RadioBearerPreConfigList_r16->list.array[0];
+  DevAssert(slrb != NULL);
+  struct NR_SL_SDAP_Config_r16 *sdap = slrb->sl_SDAP_Config_r16;
+  DevAssert(sdap != NULL && sdap->sl_MappedQoS_Flows_r16 != NULL);
+  struct NR_SL_SDAP_Config_r16__sl_MappedQoS_Flows_r16__sl_MappedQoS_FlowsList_r16 *flows =
+      sdap->sl_MappedQoS_Flows_r16->choice.sl_MappedQoS_FlowsList_r16;
+  DevAssert(flows != NULL && flows->list.count > 0);
+  NR_SL_QoS_Profile_r16_t *profile = flows->list.array[0];
+  DevAssert(profile != NULL && profile->sl_PQI_r16 != NULL);
+  const long standardized_PQI = profile->sl_PQI_r16->choice.sl_StandardizedPQI_r16;
+  DevAssert(standardized_PQI >= 0 && standardized_PQI < SDAP_MAX_QFI);
+  return standardized_PQI;
+}
+
 /*
 * This functions configures SIdelink operation in the UE.
 * RRC configures MAC with sidelink parameters
@@ -628,11 +647,12 @@ void nr_UE_configure_Sidelink(uint8_t id, uint8_t is_sync_source, ueinfo_t *uein
   nas_config(1 + ueinfo->srcid, ueinfo->thirdOctet, ueinfo->fourthOctet, "oai_sl_tun");
   nr_rrc_mac_config_req_sl_preconfig(id, sl_preconfig, sync_source);
 
-
   // SL RadioBearers
   for (int i=0; i<sl_preconfig->sidelinkPreconfigNR_r16.sl_RadioBearerPreConfigList_r16->list.count; i++) {
     add_drb_sl(ueinfo->srcid, (NR_SL_RadioBearerConfig_r16_t *)sl_preconfig->sidelinkPreconfigNR_r16.sl_RadioBearerPreConfigList_r16->list.array[i], 0, 0, NULL, NULL);
   }
+  set_qfi_pduid(get_sl_tun_qfi(sl_preconfig), 0);
+
   // configure RLC
   for (int i=0; i<sl_preconfig->sidelinkPreconfigNR_r16.sl_RLC_BearerPreConfigList_r16->list.count; i++) {
     nr_rlc_add_drb_sl(ueinfo->srcid, 1, (NR_SL_RLC_BearerConfig_r16_t *)sl_preconfig->sidelinkPreconfigNR_r16.sl_RLC_BearerPreConfigList_r16->list.array[i]);

@@ -179,4 +179,3 @@ void nr_UE_configure_Sidelink(uint8_t id, uint8_t is_sync_source, ueinfo_t *uein
 
 /** @}*/
 #endif
-

@@ -4285,34 +4285,28 @@ bool slot_has_psfch(NR_UE_MAC_INST_t *mac, BIT_STRING_t *phy_sl_bitmap, uint64_t
   return has_psfch;
 }
 
-void validate_selected_sl_slot(bool tx, bool rx, NR_TDD_UL_DL_ConfigCommon_t *conf, frameslot_t frame_slot) {
-  AssertFatal(conf->pattern1.nrofUplinkSlots == 4 && conf->pattern1.nrofDownlinkSlots == 6,
-              "Invalid configuration set. Please update the nrofUplinkSlots to 4 and nrofDownlinkSlots to 6.\n");
-  if (get_nrUE_params()->sync_ref) {
-    if (tx) {
-      AssertFatal((frame_slot.slot == 6 || frame_slot.slot == 7 || frame_slot.slot == 8 || frame_slot.slot == 9),
-                  "As a transmitting syncref UE, based on the current configuration of uplink slots = %ld and downlink = %ld, "
-                  "you should be selecting resources with slot 6, 7, 8, or 9 only.\n",
-                  conf->pattern1.nrofUplinkSlots, conf->pattern1.nrofDownlinkSlots);
-    } else if (rx) {
-      AssertFatal((frame_slot.slot == 16 || frame_slot.slot == 17 || frame_slot.slot == 18 || frame_slot.slot == 19),
-                  "As a receiving syncref UE, based on the current configuration of uplink slots = %ld and downlink = %ld, "
-                  "you should be selecting resources with slot 16, 17, 18, or 19 only.\n",
-                  conf->pattern1.nrofUplinkSlots, conf->pattern1.nrofDownlinkSlots);
-    }
-  } else if (!get_nrUE_params()->sync_ref) {
-    if (tx) {
-      AssertFatal((frame_slot.slot == 16 || frame_slot.slot == 17 || frame_slot.slot == 18 || frame_slot.slot == 19),
-                  "As a transmitting nearby UE, based on the current configuration of uplink slots = %ld and downlink = %ld, "
-                  "you should be selecting resources with slot 16, 17,1 8, or 19 only.\n",
-                  conf->pattern1.nrofUplinkSlots, conf->pattern1.nrofDownlinkSlots);
-    } else if (rx) {
-      AssertFatal((frame_slot.slot == 6 || frame_slot.slot == 7 || frame_slot.slot == 8 || frame_slot.slot == 9),
-                  "As a receiving nearby UE, based on the current configuration of uplink slots = %ld and downlink = %ld, "
-                  "you should be selecting resources with slot 6, 7, 8, or 9 only.\n",
-                  conf->pattern1.nrofUplinkSlots, conf->pattern1.nrofDownlinkSlots);
-    }
-  }
+void validate_selected_sl_slot(NR_UE_MAC_INST_t *mac, bool tx, bool rx, NR_TDD_UL_DL_ConfigCommon_t *conf, frameslot_t frame_slot) {
+  AssertFatal(mac != NULL, "mac cannot be NULL\n");
+  AssertFatal(conf != NULL, "TDD configuration cannot be NULL\n");
+  const int scs = get_softmodem_params()->numerology;
+  const int nr_slots_frame = nr_slots_per_frame[scs];
+  AssertFatal(frame_slot.slot >= 0 && frame_slot.slot < nr_slots_frame,
+              "Selected sidelink slot %d.%d is outside the frame slot range 0..%d\n",
+              frame_slot.frame,
+              frame_slot.slot,
+              nr_slots_frame - 1);
+
+  const bool is_ul_slot = (mac->ulsch_slot_bitmap[frame_slot.slot / 64] & ((uint64_t)1 << (frame_slot.slot % 64))) != 0;
+  const char *direction = tx ? "TX" : rx ? "RX" : "unknown";
+  AssertFatal(is_ul_slot,
+              "Selected sidelink %s slot %d.%d is not an UL/sidelink slot for current TDD pattern "
+              "(DL slots %ld, UL slots %ld, periodicity %ld)\n",
+              direction,
+              frame_slot.frame,
+              frame_slot.slot,
+              conf->pattern1.nrofDownlinkSlots,
+              conf->pattern1.nrofUplinkSlots,
+              conf->pattern1.dl_UL_TransmissionPeriodicity);
 }
 
 bool is_sl_slot(NR_UE_MAC_INST_t *mac, BIT_STRING_t *phy_sl_bitmap, uint16_t phy_map_sz, uint64_t abs_slot) {
@@ -4420,7 +4414,7 @@ List_t get_nr_sl_comm_opportunities(NR_UE_MAC_INST_t *mac,
                                .sl_has_psfch           = sl_has_psfch};
       de_normalize(slot_info.abs_slot_index, mu, &frame_slot);
       LOG_D(NR_MAC, "Pushing %4d.%2d\n", frame_slot.frame, frame_slot.slot);
-      validate_selected_sl_slot(true , false, mac->SL_MAC_PARAMS->sl_TDD_config, frame_slot);
+      validate_selected_sl_slot(mac, true, false, mac->SL_MAC_PARAMS->sl_TDD_config, frame_slot);
       push_back(&slot_info_list, &slot_info);
     }
     abs_pool_index = (abs_pool_index + 1) % phy_map_sz;

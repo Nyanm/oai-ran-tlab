@@ -911,10 +911,11 @@ void add_drb_sl(ue_id_t srcid, NR_SL_RadioBearerConfig_r16_t *s, int ciphering_a
   NR_QFI_t *mappedQFIs2Add = calloc(mappedQFIs2AddCount, sizeof(*mappedQFIs2Add));
   LOG_D(SDAP, "Captured mappedQoS_FlowsToAdd from RRC: count %d\n", mappedQFIs2AddCount);
 
+  DevAssert(mappedQFIs2AddCount <= SDAP_MAX_QFI);
   long standardized_PQI = 0;
   for (int i = 0; i < mappedQFIs2AddCount; i++) {
       standardized_PQI = s->sl_SDAP_Config_r16->sl_MappedQoS_Flows_r16->choice.sl_MappedQoS_FlowsList_r16->list.array[i]->sl_PQI_r16->choice.sl_StandardizedPQI_r16;
-      if (standardized_PQI < 64)
+      if (standardized_PQI < SDAP_MAX_QFI)
         mappedQFIs2Add[i] = standardized_PQI;
   }
 

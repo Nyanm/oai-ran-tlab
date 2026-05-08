@@ -527,7 +527,16 @@ int nr_rrc_mac_config_req_sl_preconfig(module_id_t module_id,
 
     sl_mac->sl_TDD_config = sl_preconfig->sl_PreconfigGeneral_r16->sl_TDD_Configuration_r16;
 
-    //Sync source is identified, timing needs to be adjusted.
+    int return_tdd = sl_set_tdd_config_nr_ue(&sl_mac->sl_phy_config.sl_config_req,
+                                             get_softmodem_params()->numerology,
+                                             &sl_mac->sl_TDD_config->pattern1.nrofDownlinkSlots,
+                                             &sl_mac->sl_TDD_config->pattern1.nrofDownlinkSymbols,
+                                             sl_mac->sl_TDD_config->pattern1.nrofUplinkSlots,
+                                             sl_mac->sl_TDD_config->pattern1.nrofUplinkSymbols);
+    if (return_tdd != 0)
+      LOG_E(PHY, "TDD configuration can not be done\n");
+
+    // Sync source is identified, timing needs to be adjusted.
     sl_mac->adjust_timing = 1;
   }
 
@@ -554,6 +563,7 @@ int nr_rrc_mac_config_req_sl_preconfig(module_id_t module_id,
       nr_slots_period /= get_nb_periods_per_frame(tdd->dl_UL_TransmissionPeriodicity);
     }
 
+    memset(mac->ulsch_slot_bitmap, 0, sizeof(mac->ulsch_slot_bitmap));
     for (int slot = 0; slot < nr_slots_frame; ++slot) {
       mac->ulsch_slot_bitmap[slot / 64] |= (uint64_t)((slot % nr_slots_period) >= nr_ulstart_slot) << (slot % 64);
       LOG_D(NR_MAC,
@@ -775,6 +785,7 @@ void nr_rrc_mac_config_req_sl_mib(module_id_t module_id,
       nr_slots_period /= get_nb_periods_per_frame(tdd->dl_UL_TransmissionPeriodicity);
     }
 
+    memset(mac->ulsch_slot_bitmap, 0, sizeof(mac->ulsch_slot_bitmap));
     for (int slot = 0; slot < nr_slots_frame; ++slot) {
       mac->ulsch_slot_bitmap[slot / 64] |= (uint64_t)((slot % nr_slots_period) >= nr_ulstart_slot) << (slot % 64);
       LOG_D(NR_MAC,
