@@ -455,8 +455,6 @@ int main(int argc, char **argv)
 
       if (UE[CC_id]->sl_mode) {
         AssertFatal(UE[CC_id]->sl_mode == 2, "Only Sidelink mode 2 supported. Mode 1 not yet supported\n");
-        nr_pdcp_entity_security_keys_and_algos_t security_up_parameters = {0};
-        rrc_ue_process_sidelink_Preconfiguration(0, get_nrUE_params()->sync_ref, &ueinfo, &security_up_parameters);
         DevAssert(mac->if_module != NULL && mac->if_module->sl_phy_config_request != NULL);
         nr_sl_phy_config_t *phycfg = &mac->SL_MAC_PARAMS->sl_phy_config;
         phycfg->sl_config_req.sl_carrier_config.sl_num_rx_ant = get_nrUE_params()->nb_antennas_rx;
@@ -542,4 +540,3 @@ int main(int argc, char **argv)
   free(pckg);
   return 0;
 }
-

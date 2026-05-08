@@ -324,6 +324,12 @@ uint8_t sl_decode_sl_TDD_Config(NR_TDD_UL_DL_ConfigCommon_t *TDD_UL_DL_Config,
     //a5,a6..a11 bits from the 7th to 1st LSB of num SL slots
     num_SL_slots = ((bits_0_to_7 & 0x07) << 4 ) | ((bits_8_to_11 & 0xF0) >> 4);
 
+    const int nr_slots_period = nr_slots_per_frame[mu] / get_nb_periods_per_frame(TDD_UL_DL_Config->pattern1.dl_UL_TransmissionPeriodicity);
+    AssertFatal(num_SL_slots <= nr_slots_period,
+                "Decoded sidelink slots %d exceed TDD period slots %d\n",
+                num_SL_slots,
+                nr_slots_period);
+    TDD_UL_DL_Config->pattern1.nrofDownlinkSlots = nr_slots_period - num_SL_slots;
     TDD_UL_DL_Config->pattern1.nrofUplinkSlots = num_SL_slots;
     TDD_UL_DL_Config->pattern1.nrofUplinkSymbols = mixed_slot_numsym;
 
@@ -1123,7 +1129,7 @@ void nr_ue_process_mac_sl_pdu(int module_idP,
                          NULL);
         #endif
 
-        nr_mac_rlc_data_ind(mac->ue_id, mac->ue_id, false, rx_lcid, (char *)(pduP + mac_subheader_len), mac_len);
+        nr_mac_rlc_data_ind(mac->ue_id, mac->src_id, false, rx_lcid, (char *)(pduP + mac_subheader_len), mac_len);
 
 	      break;
       case SL_SCH_LCID_SL_CSI_REPORT:

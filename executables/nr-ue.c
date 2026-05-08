@@ -985,7 +985,7 @@ void *UE_thread(void *arg)
           frameslot_t frame_slot_tx;
           frame_slot_tx.frame = curMsg.proc.frame_tx;
           frame_slot_tx.slot = curMsg.proc.nr_slot_tx;
-          validate_selected_sl_slot(true , false, mac->SL_MAC_PARAMS->sl_TDD_config, frame_slot_tx);
+          validate_selected_sl_slot(mac, true, false, mac->SL_MAC_PARAMS->sl_TDD_config, frame_slot_tx);
           curMsg.proc.tx_slot_type = NR_SIDELINK_SLOT;
         }
 
@@ -996,7 +996,7 @@ void *UE_thread(void *arg)
           frameslot_t frame_slot_rx;
           frame_slot_rx.frame = curMsg.proc.frame_rx;
           frame_slot_rx.slot = curMsg.proc.nr_slot_rx;
-          validate_selected_sl_slot(false , true, mac->SL_MAC_PARAMS->sl_TDD_config, frame_slot_rx);
+          validate_selected_sl_slot(mac, false, true, mac->SL_MAC_PARAMS->sl_TDD_config, frame_slot_rx);
           curMsg.proc.rx_slot_type = NR_SIDELINK_SLOT;      
         }    
       } else {
@@ -1136,7 +1136,7 @@ void init_NR_UE(int nb_inst, char *uecap_file, char *reconfig_file, char *rbconf
       nr_rlc_activate_srb0(mac->crnti, NULL, send_srb0_rrc);
     }
     //TODO: Move this call to RRC
-    start_sidelink(instance_id);
+    start_sidelink(instance_id, ueinfo);
   }
 }
 

@@ -472,6 +472,16 @@ int nr_rrc_mac_config_req_sl_preconfig(module_id_t module_id,
 
     sl_mac->sl_TDD_config = sl_preconfig->sl_PreconfigGeneral_r16->sl_TDD_Configuration_r16;
 
+    config_frame_structure(get_softmodem_params()->numerology,
+                           sl_mac->sl_TDD_config,
+                           get_tdd_period_idx(sl_mac->sl_TDD_config),
+                           TDD,
+                           &mac->frame_structure);
+
+    sl_set_tdd_config_nr_ue(&sl_mac->sl_phy_config.sl_config_req.tdd_table,
+                            get_softmodem_params()->numerology,
+                            &sl_mac->sl_TDD_config->pattern1);
+
     // Sync source is identified, timing needs to be adjusted.
     sl_mac->timing_acquired = true;
   }
@@ -499,6 +509,7 @@ int nr_rrc_mac_config_req_sl_preconfig(module_id_t module_id,
       nr_slots_period /= get_nb_periods_per_frame(tdd->dl_UL_TransmissionPeriodicity);
     }
 
+    memset(mac->ulsch_slot_bitmap, 0, sizeof(mac->ulsch_slot_bitmap));
     for (int slot = 0; slot < nr_slots_frame; ++slot) {
       mac->ulsch_slot_bitmap[slot / 64] |= (uint64_t)((slot % nr_slots_period) >= nr_ulstart_slot) << (slot % 64);
       LOG_D(NR_MAC,
@@ -679,6 +690,12 @@ void nr_rrc_mac_config_req_sl_mib(module_id_t module_id,
                         NR_NUMBER_OF_SUBFRAMES_PER_FRAME*(1<<cfg->sl_bwp_config.sl_scs);
     }
 
+    config_frame_structure(get_softmodem_params()->numerology,
+                           sl_mac->sl_TDD_config,
+                           get_tdd_period_idx(sl_mac->sl_TDD_config),
+                           TDD,
+                           &mac->frame_structure);
+
     sl_set_tdd_config_nr_ue(&cfg->tdd_table,
                             cfg->sl_bwp_config.sl_scs,
                             &sl_mac->sl_TDD_config->pattern1);
@@ -706,6 +723,7 @@ void nr_rrc_mac_config_req_sl_mib(module_id_t module_id,
       nr_slots_period /= get_nb_periods_per_frame(tdd->dl_UL_TransmissionPeriodicity);
     }
 
+    memset(mac->ulsch_slot_bitmap, 0, sizeof(mac->ulsch_slot_bitmap));
     for (int slot = 0; slot < nr_slots_frame; ++slot) {
       mac->ulsch_slot_bitmap[slot / 64] |= (uint64_t)((slot % nr_slots_period) >= nr_ulstart_slot) << (slot % 64);
       LOG_D(NR_MAC,

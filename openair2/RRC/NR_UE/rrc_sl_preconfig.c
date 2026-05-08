@@ -33,6 +33,8 @@
 #include "tun_if.h"
 #include "LAYER2/nr_rlc/nr_rlc_oai_api.h"
 #include "LAYER2/nr_pdcp/nr_pdcp_oai_api.h"
+#include "openair2/SDAP/nr_sdap/nr_sdap.h"
+#include "openair2/SDAP/nr_sdap/nr_sdap_entity.h"
 
 #define GNSS_SUPPORT 0
 
@@ -678,6 +680,23 @@ void nr_rrc_ue_decode_NR_SBCCH_SL_BCH_Message(NR_UE_RRC_INST_t *rrc,
   return;
 }
 
+static uint8_t get_sl_tun_qfi(NR_SL_PreconfigurationNR_r16_t *sl_preconfig)
+{
+  NR_SL_RadioBearerConfig_r16_t *slrb =
+      sl_preconfig->sidelinkPreconfigNR_r16.sl_RadioBearerPreConfigList_r16->list.array[0];
+  DevAssert(slrb != NULL);
+  struct NR_SL_SDAP_Config_r16 *sdap = slrb->sl_SDAP_Config_r16;
+  DevAssert(sdap != NULL && sdap->sl_MappedQoS_Flows_r16 != NULL);
+  struct NR_SL_SDAP_Config_r16__sl_MappedQoS_Flows_r16__sl_MappedQoS_FlowsList_r16 *flows =
+      sdap->sl_MappedQoS_Flows_r16->choice.sl_MappedQoS_FlowsList_r16;
+  DevAssert(flows != NULL && flows->list.count > 0);
+  NR_SL_QoS_Profile_r16_t *profile = flows->list.array[0];
+  DevAssert(profile != NULL && profile->sl_PQI_r16 != NULL);
+  const long standardized_PQI = profile->sl_PQI_r16->choice.sl_StandardizedPQI_r16;
+  DevAssert(standardized_PQI >= 0 && standardized_PQI < SDAP_MAX_QFI);
+  return standardized_PQI;
+}
+
 void rrc_ue_process_sidelink_Preconfiguration(NR_UE_RRC_INST_t *rrc_inst,
                                               sl_sync_source_enum_t sync_source,
                                               ueinfo_t *ueinfo,
@@ -704,8 +723,8 @@ void rrc_ue_process_sidelink_Preconfiguration(NR_UE_RRC_INST_t *rrc_inst,
            
   char ifname[IFNAMSIZ];
   tun_generate_ifname(ifname, "oai_sl_tun", ueinfo->srcid);
-  tun_config(ifname, ip, NULL);
-  if (ip)
+  int sl_tun_sock = tun_alloc(ifname);
+  if (sl_tun_sock >= 0 && tun_config(ifname, ip, NULL))
   {
     setup_ue_ipv4_route(ifname, ueinfo->srcid, ip);
   }
@@ -715,6 +734,10 @@ void rrc_ue_process_sidelink_Preconfiguration(NR_UE_RRC_INST_t *rrc_inst,
   // SL RadioBearers
   for (int i=0; i<sl_preconfig->sidelinkPreconfigNR_r16.sl_RadioBearerPreConfigList_r16->list.count; i++) {
     add_drb_sl(ueinfo->srcid, (NR_SL_RadioBearerConfig_r16_t *)sl_preconfig->sidelinkPreconfigNR_r16.sl_RadioBearerPreConfigList_r16->list.array[i], security_up_parameters);
+  }
+  if (sl_tun_sock >= 0) {
+    set_qfi(get_sl_tun_qfi(sl_preconfig), 0, ueinfo->srcid);
+    start_sdap_tun_ue(ueinfo->srcid, 0, sl_tun_sock);
   }
   // configure RLC
   for (int i=0; i<sl_preconfig->sidelinkPreconfigNR_r16.sl_RLC_BearerPreConfigList_r16->list.count; i++) {

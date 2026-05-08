@@ -92,7 +92,7 @@ int configure_NR_SL_Preconfig(NR_UE_RRC_INST_t *rrc,int sync_source);
 //void nr_UE_configure_Sidelink(uint8_t id, uint8_t is_sync_source, ueinfo_t *ueinfo);
 
 void init_sidelink(NR_UE_RRC_INST_t *rrc);
-void start_sidelink(int instance);
+void start_sidelink(int instance, ueinfo_t *ueinfo);
 
 void rrc_ue_process_sidelink_Preconfiguration(NR_UE_RRC_INST_t *rrc_inst, int sync_ref, ueinfo_t *ueinfo, nr_pdcp_entity_security_keys_and_algos_t *security_up_parameters);
 
@@ -108,4 +108,3 @@ void nr_rrc_set_mac_queue(instance_t instance, notifiedFIFO_t *mac_input_nf);
 
 /** @}*/
 #endif
-

@@ -3057,7 +3057,7 @@ void handle_t430_expiry(NR_UE_RRC_INST_t *rrc)
 }
 
 //This calls the sidelink preconf message after RRC, MAC instances are created.
-void start_sidelink(int instance)
+void start_sidelink(int instance, ueinfo_t *ueinfo)
 {
 
   NR_UE_RRC_INST_t *rrc = get_NR_UE_rrc_inst(instance);
@@ -3072,11 +3072,10 @@ void start_sidelink(int instance)
   security_up_parameters.integrity_algorithm = has_integrity ? rrc->integrityProtAlgorithm : 0;
 
   if (get_softmodem_params()->sl_mode == 2) {
-
-    ueinfo_t ueinfo;
+    AssertFatal(ueinfo != NULL, "Sidelink UE info not configured\n");
     
     //Process the Sidelink Preconfiguration
-    rrc_ue_process_sidelink_Preconfiguration(rrc, get_softmodem_params()->sync_ref, &ueinfo, &security_up_parameters);
+    rrc_ue_process_sidelink_Preconfiguration(rrc, get_softmodem_params()->sync_ref, ueinfo, &security_up_parameters);
 
   }
 }
