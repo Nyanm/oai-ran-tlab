@@ -404,12 +404,12 @@ static int vrtsim_connect(openair0_device_t *device)
   if (vrtsim_state->role == ROLE_SERVER) {
     parse_ue_config(vrtsim_state);
     compute_ue_antenna_offsets(vrtsim_state);
-    /////////////////////////// next line changed from = 0
-    int num_tx_streams = device->openair0_cfg[0].rx_num_channels;
+    /////////////////////////// 
+    int num_tx_streams = 0;
     int num_rx_streams = vrtsim_state->num_ues * device->openair0_cfg[0].rx_num_channels;
-    //for (int i = 0; i < vrtsim_state->num_ues; i++) {
-      //num_tx_streams += vrtsim_state->ue_conf[i].rx_ant;
-    //}
+    for (int i = 0; i < vrtsim_state->num_ues; i++) {
+      num_tx_streams += vrtsim_state->ue_conf[i].rx_ant;
+    }
     vrtsim_state->channel =
         shm_td_iq_channel_create(DEFAULT_CHANNEL_NAME, num_tx_streams, num_rx_streams);
     LOG_A(HW, "vrtsim created a shm_td_iq_channel with config tx: %d rx: %d\n", num_tx_streams, num_rx_streams);

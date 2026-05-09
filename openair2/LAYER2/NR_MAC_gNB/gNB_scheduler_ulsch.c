@@ -1714,8 +1714,8 @@ void handle_nr_srs_toa_vendor_ext_measurements(const module_id_t module_id,
           f1ap_ul_rtoa_measurement_item_t *ul_rtoa = &m_res_value->choice.ul_rtoa.ul_rtoa_measurement_item;
           uint32_t Tc_inv = 4096 * 480000;
           uint64_t T_inv = Tc_inv / (1 << mu);
-          uint64_t T_ns_inv = 1000000000;
-          int32_t k_value = (int32_t)(((int64_t)ta_offset_nsec[i] * (int64_t)T_inv) / T_ns_inv) + 492512;
+          int64_t T_ns_inv = 1000000000;
+          //int32_t k_value = (int32_t)(((int64_t)ta_offset_nsec[i] * (int64_t)T_inv) / T_ns_inv) + 492512;
           //int32_t k_value = (int32_t)(((int64_t)ta_offset_nsec[i] * (int64_t)T_inv) / T_ns_inv) + 492512;
           int32_t k_value;
 
