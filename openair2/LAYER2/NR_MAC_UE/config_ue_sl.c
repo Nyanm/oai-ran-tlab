@@ -484,6 +484,7 @@ int nr_rrc_mac_config_req_sl_preconfig(module_id_t module_id,
 
     // Sync source is identified, timing needs to be adjusted.
     sl_mac->timing_acquired = true;
+    mac->is_synced = true;
   }
 
   //Do not copy TDD config yet as SYNC source is not yet found
@@ -654,6 +655,7 @@ void nr_rrc_mac_config_req_sl_mib(module_id_t module_id,
     sl_config->sl_sync_source.rx_slss_id = rx_slss_id;
 
     sl_mac->timing_acquired = true;
+    mac->is_synced = true;
 
     sl_mac->rx_sl_bch.status = 1;
     sl_mac->rx_sl_bch.slss_id = rx_slss_id;

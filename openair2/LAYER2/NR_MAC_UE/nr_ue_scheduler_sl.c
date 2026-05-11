@@ -1539,8 +1539,8 @@ void nr_ue_sidelink_scheduler(nr_sidelink_indication_t *sl_ind, NR_UE_MAC_INST_t
   //uint8_t slots_per_frame = nr_slots_per_frame[mu];
 
   int ue_id = mac->ue_id;
-  frame_t frame     = sl_ind->frame_rx;
-  slot_t slot       = sl_ind->slot_rx;
+  frame_t frame = sl_ind->slot_type == SIDELINK_SLOT_TYPE_TX ? sl_ind->frame_tx : sl_ind->frame_rx;
+  slot_t slot = sl_ind->slot_type == SIDELINK_SLOT_TYPE_TX ? sl_ind->slot_tx : sl_ind->slot_rx;
 
   sl_nr_rx_config_request_t rx_config;
   sl_nr_tx_config_request_t tx_config;
@@ -1600,17 +1600,17 @@ void nr_ue_sidelink_scheduler(nr_sidelink_indication_t *sl_ind, NR_UE_MAC_INST_t
   if (sl_ind->slot_type == SIDELINK_SLOT_TYPE_RX || sl_ind->slot_type == SIDELINK_SLOT_TYPE_BOTH)
     sl_schedule_rx_actions(sl_ind, mac);
 
-  //Commented the code as part of refactoring done on develop
-  #if 0  // Check if PSBCH slot and PSBCH should be transmitted or Received
-  is_psbch_slot = nr_ue_sl_psbch_scheduler(sl_ind, sl_mac, &rx_config, &tx_config, &tti_action);
-  #endif
+  uint8_t psbch_action = sl_mac->future_ttis[slot].sl_action;
+  is_psbch_slot = psbch_action == SL_NR_CONFIG_TYPE_RX_PSBCH || psbch_action == SL_NR_CONFIG_TYPE_TX_PSBCH;
 
   bool tx_allowed=true,rx_allowed=true;
   if (mac->sl_tx_res_pool && mac->sl_tx_res_pool->ext1 && mac->sl_tx_res_pool->ext1->sl_TimeResource_r16) {
-     int sl_tx_period = 8*mac->sl_tx_res_pool->ext1->sl_TimeResource_r16->size - mac->sl_tx_res_pool->ext1->sl_TimeResource_r16->bits_unused;
-     int slot_mod_period = sl_ind->slot_tx%sl_tx_period;
-     uint8_t mask = mac->sl_tx_res_pool->ext1->sl_TimeResource_r16->buf[slot_mod_period>>3];
-     if (((1<<slot_mod_period) % mask) == 0) tx_allowed=0;
+    BIT_STRING_t *sl_tx_time_rsrc = mac->sl_tx_res_pool->ext1->sl_TimeResource_r16;
+    int sl_tx_period = (sl_tx_time_rsrc->size << 3) - sl_tx_time_rsrc->bits_unused;
+    if (sl_tx_period > 0) {
+      int slot_mod_period = sl_ind->slot_tx % sl_tx_period;
+      tx_allowed = get_bit_from_map(sl_tx_time_rsrc->buf, slot_mod_period);
+    }
   }
 
   frameslot_t frame_slot;
@@ -1640,10 +1640,12 @@ void nr_ue_sidelink_scheduler(nr_sidelink_indication_t *sl_ind, NR_UE_MAC_INST_t
   }
 
   if (mac->sl_rx_res_pool && mac->sl_rx_res_pool->ext1 && mac->sl_rx_res_pool->ext1->sl_TimeResource_r16) {
-     int sl_rx_period = 8*mac->sl_rx_res_pool->ext1->sl_TimeResource_r16->size - mac->sl_rx_res_pool->ext1->sl_TimeResource_r16->bits_unused;
-     int slot_mod_period = sl_ind->slot_rx%sl_rx_period;
-     uint8_t mask = mac->sl_rx_res_pool->ext1->sl_TimeResource_r16->buf[slot_mod_period>>3];
-     if (((1<<slot_mod_period) % mask) == 0) rx_allowed=false;
+    BIT_STRING_t *sl_rx_time_rsrc = mac->sl_rx_res_pool->ext1->sl_TimeResource_r16;
+    int sl_rx_period = (sl_rx_time_rsrc->size << 3) - sl_rx_time_rsrc->bits_unused;
+    if (sl_rx_period > 0) {
+      int slot_mod_period = sl_ind->slot_rx % sl_rx_period;
+      rx_allowed = get_bit_from_map(sl_rx_time_rsrc->buf, slot_mod_period);
+    }
   }
   if (sl_ind->slot_type==SIDELINK_SLOT_TYPE_TX || sl_ind->phy_data==NULL) rx_allowed=false;
   static uint16_t prev_slot = 0;
