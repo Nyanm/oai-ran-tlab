@@ -464,6 +464,78 @@ static OCTET_STRING_t *extract_nr_capabilities(const NR_UECapabilityInformation_
   return NULL;
 }
 
+static bool band_combination_supported_by_ue(OCTET_STRING_t *nr_uecap, int mcg_band, int scg_band)
+{
+  /* decode the NR UE capabilities container */
+  NR_UE_NR_Capability_t *cap = NULL;
+  asn_dec_rval_t rval = uper_decode(NULL, &asn_DEF_NR_UE_NR_Capability, (void **)&cap, nr_uecap->buf, nr_uecap->size, 0, 0);
+
+  if (rval.code != RC_OK) {
+    LOG_W(NR_RRC, "NR-DC: failed to decode UE capabilities, ignoring\n");
+    return false;
+  }
+
+  if (cap == NULL)
+    return false;
+
+  struct NR_BandCombinationList *comblist = cap->rf_Parameters.supportedBandCombinationList;
+  if (comblist == NULL) {
+    ASN_STRUCT_FREE(asn_DEF_NR_UE_NR_Capability, cap);
+    return false;
+  }
+
+  /* check all supported combinations */
+  for (int i = 0; i < comblist->list.count; i++) {
+    bool mcg_found = false;
+    bool scg_found = false;
+
+    /* check all bands of the combination.
+     * We accept that there are more bands in the combination.
+     * As long as both MCG and SCG are present with DL and UL
+     * bandwidth classes both not NULL, then we're happy.
+     */
+    /* todo: validate bandwidth classes */
+    struct NR_BandCombination *comb = comblist->list.array[i];
+    if (comb == NULL)
+      continue;
+    for (int i = 0; i < comb->bandList.list.count; i++) {
+      struct NR_BandParameters *p = comb->bandList.list.array[i];
+      if (p == NULL)
+        continue;
+      /* check MCG */
+      if (mcg_found == false) {
+        if (p->present == NR_BandParameters_PR_nr
+            && p->choice.nr != NULL
+            && p->choice.nr->bandNR == mcg_band
+            && p->choice.nr->ca_BandwidthClassDL_NR != NULL
+            && p->choice.nr->ca_BandwidthClassUL_NR != NULL) {
+          mcg_found = true;
+          /* in case mcg band == scg band, skip scg check */
+          continue;
+        }
+      }
+      /* check SCG */
+      if (scg_found == false) {
+        if (p->present == NR_BandParameters_PR_nr
+            && p->choice.nr != NULL
+            && p->choice.nr->bandNR == scg_band
+            && p->choice.nr->ca_BandwidthClassDL_NR != NULL
+            && p->choice.nr->ca_BandwidthClassUL_NR != NULL)
+          scg_found = true;
+      }
+    }
+
+    if (mcg_found && scg_found) {
+      ASN_STRUCT_FREE(asn_DEF_NR_UE_NR_Capability, cap);
+      return true;
+    }
+  }
+
+  ASN_STRUCT_FREE(asn_DEF_NR_UE_NR_Capability, cap);
+
+  return false;
+}
+
 void rrc_gnb_nrdc_ue_capabilities_received(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue,  const NR_UECapabilityInformation_t *ue_cap)
 {
   LOG_D(NR_RRC, "rrc_gnb_nrdc_ue_capabilities_received called!!\n");
@@ -501,7 +573,12 @@ void rrc_gnb_nrdc_ue_capabilities_received(gNB_RRC_INST *rrc, gNB_RRC_UE_t *ue, 
   nrdc->uecap.size = nr_uecap->size;
 
   /* check capabilities */
-  /* todo */
+  if (!band_combination_supported_by_ue(nr_uecap, nrdc->mcg_band, nrdc->scg_band)) {
+    LOG_W(NR_RRC, "NR-DC: UE %d does not support MCG band %d and SCG band %d, do not activate NR-DC\n",
+          ue->rrc_ue_id, nrdc->mcg_band, nrdc->scg_band);
+    rrc_gnb_free_nrdc(ue);
+    return;
+  }
 
   /* capabilities accept the configured NR-DC combination */
   nrdc->state = ACTIVATE_NRDC_WAIT_FOR_A4_RECONFIGURATION_COMPLETE;
