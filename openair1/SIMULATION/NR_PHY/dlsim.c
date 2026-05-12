@@ -1030,6 +1030,8 @@ printf("%d\n", slot);
     exit(1);
   }
 
+  init_sorted_list_meas(&gNB->phy_proc_tx, 4 * n_trials);
+
   for (SNR = snr0; SNR < snr1 && !stop; SNR += .2) {
 
     varArray_t *table_tx=initVarArray(1000,sizeof(double));
@@ -1486,6 +1488,7 @@ printf("%d\n", slot);
 
   } // NSR
 
+  free_sorted_list_meas(&gNB->phy_proc_tx);
   free(Sched_INFO);
 
   free_channel_desc_scm(gNB2UE);
