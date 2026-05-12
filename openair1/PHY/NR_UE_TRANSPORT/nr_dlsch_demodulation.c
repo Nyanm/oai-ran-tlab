@@ -785,7 +785,8 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                 c16_t ptrs_phase_per_slot[][NR_SYMBOLS_PER_SLOT],
                 int32_t ptrs_re_per_slot[][NR_SYMBOLS_PER_SLOT],
                 uint32_t nvar,
-                pdsch_scope_req_t *scope_req)
+                pdsch_scope_req_t *scope_req,
+                c16_t rho_dl[][dlsch->Nl * dlsch->Nl][rx_size_symbol])
 {
   NR_DL_FRAME_PARMS *fp = &ue->frame_parms;
   const int nl = dlsch[0].Nl;
@@ -905,7 +906,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
   uint8_t pilots = (dlsch_config->dlDmrsSymbPos >> symbol) & 1;
   uint8_t config_type = dlsch_config->dmrsConfigType;
 
-  const bool need_rho __attribute__((unused)) = do_ml ? (nl == 2 && dlsch_config->qamModOrder <= 6) : false;
+  const bool need_rho = do_ml ? (nl == 2 && dlsch_config->qamModOrder <= 6) : false;
 
   //----------------------------------------------------------
   //--------------------- RBs extraction ---------------------
@@ -1074,7 +1075,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                             p_ch_magb,
                             p_ch_magr,
                             p_rxComp,
-                            NULL,
+                            need_rho ? (c16_t(*)[nl][rx_size_symbol])rho_dl[symbol] : NULL,
                             dlsch_config->qamModOrder,
                             0, // symbol already baked into p_rxComp
                             *log2_maxh);
@@ -1112,20 +1113,40 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
 
   // MRC is performed inline by nr_channel_compensation; apply MMSE for multi-layer
   start_meas_nr_ue_phy(ue, DLSCH_MRC_MMSE_STATS);
-  if (nl >= 2 && nb_re_pdsch)
-    nr_dlsch_mmse(rx_size_symbol,
-                  nbRx,
-                  nl,
-                  rxdataF_comp,
-                  dl_ch_mag[symbol],
-                  dl_ch_magb[symbol],
-                  dl_ch_magr[symbol],
-                  dl_ch_estimates_ext,
-                  dlsch_config->qamModOrder,
-                  *log2_maxh,
-                  symbol,
-                  nb_re_pdsch,
-                  nvar);
+  if (nb_re_pdsch) {
+    const uint8_t qamModOrder = dlsch_config->qamModOrder;
+
+    if ((nl > 2) || (nl == 2 && !do_ml))
+    {
+      nr_dlsch_mmse(rx_size_symbol,
+                    nbRx,
+                    nl,
+                    rxdataF_comp,
+                    dl_ch_mag[symbol],
+                    dl_ch_magb[symbol],
+                    dl_ch_magr[symbol],
+                    dl_ch_estimates_ext,
+                    qamModOrder,
+                    *log2_maxh,
+                    symbol,
+                    nb_re_pdsch,
+                    nvar);
+    } else if ((nl == 2) && (qamModOrder > 6) && do_ml) {
+      nr_mmse_2layers(p_rxComp,
+                      rx_size_symbol,
+                      nbRx,
+                      p_ch_mag,
+                      p_ch_magb,
+                      p_ch_magr,
+                      chFext,
+                      freq_alloc->num_rbs,
+                      qamModOrder,
+                      *log2_maxh,
+                      0,
+                      nb_re_pdsch,
+                      nvar);
+    }
+  }
   stop_meas_nr_ue_phy(ue, DLSCH_MRC_MMSE_STATS);
 
   if (meas_enabled) {
@@ -1178,18 +1199,35 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
     __attribute__((aligned(32))) int16_t layer_llr[NR_SYMBOLS_PER_SLOT][nl][llr_per_symbol];
 
     // Generate LLR from PTRS compensated signal
+    const uint8_t qamModOrder = dlsch->dlsch_config.qamModOrder;
     start_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
     for (int llr_sym = startSymbIdx; llr_sym < startSymbIdx + nbSymb; llr_sym++) {
-      nr_dlsch_llr(dlsch,
-                   dl_valid_re[llr_sym],
-                   rx_size_symbol,
-                   dl_ch_mag[llr_sym][0],
-                   dl_ch_magb[llr_sym][0],
-                   dl_ch_magr[llr_sym][0],
-                   nbRx,
-                   rxdataF_comp[llr_sym],
-                   llr_per_symbol,
-                   layer_llr[llr_sym]);
+      if (nl == 2 && qamModOrder <= 6 && do_ml) {
+        // 2-layer QPSK/16QAM/64QAM: joint ML-LLR using inter-layer Tx correlation
+        // rho_dl[llr_sym] is laid out as [nl*nl][rx_size_symbol]:
+        // index 1 = rho[0][1], index nl (=2) = rho[1][0]
+        nr_compute_ML_llr(rxdataF_comp[llr_sym][0 * nbRx],
+                          rxdataF_comp[llr_sym][1 * nbRx],
+                          dl_ch_mag[llr_sym][0 * nbRx],
+                          dl_ch_mag[llr_sym][1 * nbRx],
+                          layer_llr[llr_sym][0],
+                          layer_llr[llr_sym][1],
+                          rho_dl[llr_sym][1],
+                          rho_dl[llr_sym][nl],
+                          dl_valid_re[llr_sym],
+                          qamModOrder);
+      } else {
+        nr_dlsch_llr(dlsch,
+                     dl_valid_re[llr_sym],
+                     rx_size_symbol,
+                     dl_ch_mag[llr_sym][0],
+                     dl_ch_magb[llr_sym][0],
+                     dl_ch_magr[llr_sym][0],
+                     nbRx,
+                     rxdataF_comp[llr_sym],
+                     llr_per_symbol,
+                     layer_llr[llr_sym]);
+      }
     }
     stop_meas_nr_ue_phy(ue, DLSCH_LLR_STATS);
     start_meas_nr_ue_phy(ue, DLSCH_LAYER_DEMAPPING);
