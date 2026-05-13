@@ -73,6 +73,7 @@
 #include "time_meas.h"
 #include "utils.h"
 
+#undef ENABLE_CUDA
 #ifdef ENABLE_CUDA
 #include <cuda_runtime.h>
 #include "SIMULATION/TOOLS/oai_cuda.h"

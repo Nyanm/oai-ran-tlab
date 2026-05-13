@@ -73,6 +73,7 @@
 #define inMicroS(a) (((double)(a))/(get_cpu_freq_GHz()*1000.0))
 #include "SIMULATION/LTE_PHY/common_sim.h"
 
+#undef ENABLE_CUDA
 #ifdef ENABLE_CUDA
 #include <cuda_runtime.h>
 #include "SIMULATION/TOOLS/oai_cuda.h"
