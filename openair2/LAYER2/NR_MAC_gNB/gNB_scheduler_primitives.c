@@ -1993,27 +1993,33 @@ void fill_dci_pdu_rel15(const NR_UE_ServingCell_Info_t *servingCellInfo,
         break;
 
       case TYPE_P_RNTI_:
-        // Short Messages Indicator – 2 bits
-        for (int i = 0; i < 2; i++)
-          *dci_pdu |= (((uint64_t)dci_pdu_rel15->short_messages_indicator >> (1 - i)) & 1) << (dci_size - pos++);
-        // Short Messages – 8 bits
-        for (int i = 0; i < 8; i++)
-          *dci_pdu |= (((uint64_t)dci_pdu_rel15->short_messages >> (7 - i)) & 1) << (dci_size - pos++);
-        // Freq domain assignment 0-16 bit
+        /* TS 38.212 §7.3.1.2.1: pack MSB-first field groups. Per-bit placement shifts every
+         * field after SMI/short messages by one bit. */
+        *dci_pdu |= (dci_pdu_rel15->short_messages_indicator & 0x3) * (1ULL << (dci_size - pos - 2));
+        pos += 2;
+        *dci_pdu |= (dci_pdu_rel15->short_messages & 0xff) * (1ULL << (dci_size - pos - 8));
+        pos += 8;
         fsize = (int)ceil(log2((N_RB * (N_RB + 1)) >> 1));
-        for (int i = 0; i < fsize; i++)
-          *dci_pdu |= (((uint64_t)dci_pdu_rel15->frequency_domain_assignment.val >> (fsize - i - 1)) & 1) << (dci_size - pos++);
-        // Time domain assignment 4 bit
-        for (int i = 0; i < 4; i++)
-          *dci_pdu |= (((uint64_t)dci_pdu_rel15->time_domain_assignment.val >> (3 - i)) & 1) << (dci_size - pos++);
-        // VRB to PRB mapping 1 bit
-        *dci_pdu |= ((uint64_t)dci_pdu_rel15->vrb_to_prb_mapping.val & 1) << (dci_size - pos++);
-        // MCS 5 bit
-        for (int i = 0; i < 5; i++)
-          *dci_pdu |= (((uint64_t)dci_pdu_rel15->mcs >> (4 - i)) & 1) << (dci_size - pos++);
-        // TB scaling 2 bit
-        for (int i = 0; i < 2; i++)
-          *dci_pdu |= (((uint64_t)dci_pdu_rel15->tb_scaling >> (1 - i)) & 1) << (dci_size - pos++);
+        *dci_pdu |= (dci_pdu_rel15->frequency_domain_assignment.val & ((1U << fsize) - 1)) * (1ULL << (dci_size - pos - fsize));
+        pos += fsize;
+        *dci_pdu |= (dci_pdu_rel15->time_domain_assignment.val & 0xf) * (1ULL << (dci_size - pos - 4));
+        pos += 4;
+        *dci_pdu |= (dci_pdu_rel15->vrb_to_prb_mapping.val & 1) * (1ULL << (dci_size - pos - 1));
+        pos += 1;
+        *dci_pdu |= (dci_pdu_rel15->mcs & 0x1f) * (1ULL << (dci_size - pos - 5));
+        pos += 5;
+        *dci_pdu |= (dci_pdu_rel15->tb_scaling & 0x3) * (1ULL << (dci_size - pos - 2));
+        pos += 2;
+        LOG_I(NR_MAC,
+              "P-RNTI DCI TX packed: dci_size=%d payload=0x%lx SMI=%u short_msg=0x%02x FDA=%u TDA=%u mcs=%u tb_scaling=%u\n",
+              dci_size,
+              *dci_pdu,
+              dci_pdu_rel15->short_messages_indicator,
+              dci_pdu_rel15->short_messages,
+              dci_pdu_rel15->frequency_domain_assignment.val,
+              dci_pdu_rel15->time_domain_assignment.val,
+              dci_pdu_rel15->mcs,
+              dci_pdu_rel15->tb_scaling);
         break;
 
       case TYPE_SI_RNTI_:

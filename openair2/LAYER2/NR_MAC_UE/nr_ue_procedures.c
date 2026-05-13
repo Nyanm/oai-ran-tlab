@@ -706,14 +706,16 @@ static bool get_cw_info(NR_UE_DL_HARQ_STATUS_t *current_harq,
   /* RV for transport block */
   cw_info->rv = rv;
   /* NDI for transport block*/
-  if (pdu_type == FAPI_NR_DL_CONFIG_TYPE_SI_DLSCH || pdu_type == FAPI_NR_DL_CONFIG_TYPE_RA_DLSCH || ndi != current_harq->last_ndi) {
+  if (pdu_type == FAPI_NR_DL_CONFIG_TYPE_SI_DLSCH || pdu_type == FAPI_NR_DL_CONFIG_TYPE_RA_DLSCH
+      || pdu_type == FAPI_NR_DL_CONFIG_TYPE_P_DLSCH || ndi != current_harq->last_ndi) {
     // new data
     cw_info->new_data_indicator = true;
     current_harq->R = 0;
     current_harq->TBS = 0;
   } else
     cw_info->new_data_indicator = false;
-  if (pdu_type != FAPI_NR_DL_CONFIG_TYPE_SI_DLSCH && pdu_type != FAPI_NR_DL_CONFIG_TYPE_RA_DLSCH) {
+  if (pdu_type != FAPI_NR_DL_CONFIG_TYPE_SI_DLSCH && pdu_type != FAPI_NR_DL_CONFIG_TYPE_RA_DLSCH
+      && pdu_type != FAPI_NR_DL_CONFIG_TYPE_P_DLSCH) {
     current_harq->last_ndi = ndi;
     if (cw_info->new_data_indicator)
       current_harq->round = 0;
@@ -761,6 +763,56 @@ static bool get_cw_info(NR_UE_DL_HARQ_STATUS_t *current_harq,
   cw_info->ldpcBaseGraph = get_BG(cw_info->TBS, cw_info->targetCodeRate);
 
   return true;
+}
+
+static int nr_ue_process_dci_dl_10_p_rnti(NR_UE_MAC_INST_t *mac,
+                                          frame_t frame,
+                                          int slot,
+                                          const dci_pdu_rel15_t *dci,
+                                          fapi_nr_dl_config_dlsch_pdu_rel15_t *dlsch_pdu,
+                                          const NR_UE_DL_BWP_t *current_DL_BWP)
+{
+  static NR_UE_DL_HARQ_STATUS_t prnti_harq;
+
+  const int nb_rb_oh = mac->sc_info.xOverhead_PDSCH ? 6 * (1 + *mac->sc_info.xOverhead_PDSCH) : 0;
+  const int nb_re_dmrs = ((dlsch_pdu->dmrsConfigType == NFAPI_NR_DMRS_TYPE1) ? 6 : 4) * dlsch_pdu->n_dmrs_cdm_groups;
+  if (!get_cw_info(&prnti_harq,
+                   dlsch_pdu,
+                   FAPI_NR_DL_CONFIG_TYPE_P_DLSCH,
+                   &dlsch_pdu->cw_info[0],
+                   dlsch_pdu->number_rbs,
+                   nb_re_dmrs,
+                   nb_rb_oh,
+                   0,
+                   dci->mcs,
+                   1,
+                   0)) {
+    LOG_W(NR_MAC_DCI,
+          "[%04d.%02d] Reject P-RNTI DCI: invalid CW (mcs=%d table=%d rb_len=%d symbols=%d)\n",
+          frame,
+          slot,
+          dci->mcs,
+          dlsch_pdu->mcs_table,
+          dlsch_pdu->number_rbs,
+          dlsch_pdu->number_symbols);
+    return -1;
+  }
+
+  const int bw_tbslbrm = current_DL_BWP ? mac->sc_info.dl_bw_tbslbrm : dlsch_pdu->BWPSize;
+  dlsch_pdu->tbslbrm = nr_compute_tbslbrm(dlsch_pdu->mcs_table, bw_tbslbrm, 1);
+  dlsch_pdu->n_codewords = 1;
+  dlsch_pdu->harq_process_nbr = 0;
+
+  /* TB scaling field for DCI 1_0 with CRC scrambled by P-RNTI/RA-RNTI/MsgB-RNTI
+   * (TS 38.214 §5.1.3.2, Table 5.1.3.2-2). */
+  if (dci->tb_scaling > 3) {
+    LOG_W(NR_MAC_DCI, "[%04d.%02d] Reject P-RNTI DCI: invalid tb_scaling=%d\n", frame, slot, dci->tb_scaling);
+    return -1;
+  }
+  const float factor[] = {1, 0.5, 0.25, 0};
+  dlsch_pdu->scaling_factor_S = factor[dci->tb_scaling];
+  dlsch_pdu->k1_feedback = 0;
+  return 0;
 }
 
 static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
@@ -828,7 +880,10 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
 
   dlsch_pdu->pduBitmap = 0;
   NR_UE_DL_BWP_t *current_DL_BWP = mac->current_DL_BWP;
-  NR_PDSCH_Config_t *pdsch_config = (current_DL_BWP && !mac->get_sib1) ? current_DL_BWP->pdsch_Config : NULL;
+  nr_rnti_type_t rnti_type = get_rnti_type(mac, dci_ind->rnti);
+  /* Dedicated PDSCH-Config does not apply to P-RNTI PCCH or SIB1 acquisition: use common defaults. */
+  NR_PDSCH_Config_t *pdsch_config =
+      (rnti_type == TYPE_P_RNTI_ || !current_DL_BWP || mac->get_sib1) ? NULL : current_DL_BWP->pdsch_Config;
   if (dci_ind->ss_type == NR_SearchSpace__searchSpaceType_PR_common) {
     dlsch_pdu->BWPSize =
         mac->type0_PDCCH_CSS_config.num_rbs ? mac->type0_PDCCH_CSS_config.num_rbs : mac->sc_info.initial_dl_BWPSize;
@@ -838,7 +893,24 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
     dlsch_pdu->BWPStart = current_DL_BWP->BWPStart;
   }
 
-  nr_rnti_type_t rnti_type = get_rnti_type(mac, dci_ind->rnti);
+  if (rnti_type == TYPE_P_RNTI_) {
+    /* DCI 1_0 P-RNTI: SMI per TS 38.212 clause 7.3.1.2.1: 00 reserved, 01 paging grant, 10 short
+     * message only, 11 paging + short message */
+    if (dci->short_messages_indicator == NR_DCI_PRNTI_SMI_RESERVED) {
+      LOG_W(NR_MAC_DCI, "[%04d.%02d] P-RNTI DCI ignored: reserved SMI (short_messages_indicator=0)\n", frame, slot);
+      return -1;
+    }
+    if (dci->short_messages_indicator == NR_DCI_PRNTI_SMI_SHORT_MSG_ONLY) {
+      LOG_D(NR_MAC_DCI, "[%04d.%02d] P-RNTI DCI: short-message only (no paging PDSCH)\n", frame, slot);
+      return -1;
+    }
+    LOG_I(NR_MAC_DCI,
+          "[%d.%d] Detected P-RNTI DCI: SMI=%d short_msg=0x%02x, attempting PDSCH scheduling\n",
+          frame,
+          slot,
+          dci->short_messages_indicator,
+          dci->short_messages);
+  }
 
   int mux_pattern = 1;
   if (rnti_type == TYPE_SI_RNTI_) {
@@ -971,6 +1043,25 @@ static int nr_ue_process_dci_dl_10(NR_UE_MAC_INST_t *mac,
                                              NULL, // SPS not implemented,
                                              false, // as above
                                              NULL); // MCS-C-RNTI not implemented
+
+  if (rnti_type == TYPE_P_RNTI_) {
+    const int ret = nr_ue_process_dci_dl_10_p_rnti(mac, frame, slot, dci, dlsch_pdu, current_DL_BWP);
+    if (ret >= 0) {
+      LOG_D(NR_MAC,
+            "[%04d.%02d][UE %d] P-RNTI DCI accepted: rb=%d+%d sym=%d+%d mcs=%d tbs=%d\n",
+            frame,
+            slot,
+            mac->ue_id,
+            dlsch_pdu->start_rb,
+            dlsch_pdu->number_rbs,
+            dlsch_pdu->start_symbol,
+            dlsch_pdu->number_symbols,
+            dlsch_pdu->cw_info[0].mcs,
+            dlsch_pdu->cw_info[0].TBS);
+      dl_config->number_pdus++;
+    }
+    return ret;
+  }
 
   int nb_re_dmrs = ((dlsch_pdu->dmrsConfigType == NFAPI_NR_DMRS_TYPE1) ? 6 : 4) * dlsch_pdu->n_dmrs_cdm_groups;
   int nb_rb_oh = mac->sc_info.xOverhead_PDSCH ? nb_rb_oh = 6 * (1 + *mac->sc_info.xOverhead_PDSCH) : 0;
@@ -3405,6 +3496,25 @@ static uint8_t extract_10_si_rnti(dci_pdu_rel15_t *dci_pdu_rel15, const uint8_t 
   return dci_pdu_rel15->system_info_indicator;
 }
 
+static void extract_10_p_rnti(dci_pdu_rel15_t *dci_pdu_rel15, const uint8_t *dci_pdu, int pos, const int N_RB)
+{
+  LOG_D(NR_MAC_DCI, "Received dci 1_0 P-RNTI\n");
+  // Short Messages Indicator
+  EXTRACT_DCI_ITEM(dci_pdu_rel15->short_messages_indicator, 2);
+  // Short Messages
+  EXTRACT_DCI_ITEM(dci_pdu_rel15->short_messages, 8);
+  // Freq domain assignment
+  EXTRACT_DCI_ITEM(dci_pdu_rel15->frequency_domain_assignment.val, ceil(log2((N_RB * (N_RB + 1)) >> 1)));
+  // Time domain assignment
+  EXTRACT_DCI_ITEM(dci_pdu_rel15->time_domain_assignment.val, 4);
+  // VRB to PRB mapping
+  EXTRACT_DCI_ITEM(dci_pdu_rel15->vrb_to_prb_mapping.val, 1);
+  // MCS
+  EXTRACT_DCI_ITEM(dci_pdu_rel15->mcs, 5);
+  // TB scaling
+  EXTRACT_DCI_ITEM(dci_pdu_rel15->tb_scaling, 2);
+}
+
 static bool extract_10_c_rnti(NR_UE_MAC_INST_t *mac,
                               dci_pdu_rel15_t *dci_pdu_rel15,
                               const uint8_t *dci_pdu,
@@ -3698,7 +3808,14 @@ static nr_dci_format_t nr_extract_dci_00_10(NR_UE_MAC_INST_t *mac,
       extract_10_ra_rnti(dci_pdu_rel15, dci_pdu, pos, n_RB);
       break;
     case TYPE_P_RNTI_ :
-      AssertFatal(false, "DCI for P-RNTI not handled yet\n");
+      format = NR_DL_DCI_FORMAT_1_0;
+      dci_pdu_rel15 = &mac->def_dci_pdu_rel15[slot][format];
+      n_RB = get_nrb_for_dci(mac, format, ss_type);
+      if (n_RB == 0) {
+        LOG_W(NR_MAC_DCI, "[%d] P-RNTI DCI extraction aborted: n_RB=0 (ss_type=%d)\n", slot, ss_type);
+        return NR_DCI_NONE;
+      }
+      extract_10_p_rnti(dci_pdu_rel15, dci_pdu, pos, n_RB);
       break;
     case TYPE_SI_RNTI_ :
       format = NR_DL_DCI_FORMAT_1_0;
@@ -3807,9 +3924,11 @@ static nr_dci_format_t nr_extract_dci_info(NR_UE_MAC_INST_t *mac,
 
 nr_dci_format_t nr_ue_process_dci_indication_pdu(NR_UE_MAC_INST_t *mac, frame_t frame, int slot, fapi_nr_dci_indication_pdu_t *dci)
 {
+  const nr_rnti_type_t rnti_type = get_rnti_type(mac, dci->rnti);
   LOG_D(NR_MAC,
-        "Received dci indication (rnti %x, dci format %d, n_CCE %d, payloadSize %d, payload %llx)\n",
+        "Received dci indication (rnti %x, rnti_type %d, dci format %d, n_CCE %d, payloadSize %d, payload %llx)\n",
         dci->rnti,
+        rnti_type,
         dci->dci_format,
         dci->n_CCE,
         dci->payloadSize,
