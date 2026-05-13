@@ -1496,6 +1496,8 @@ printf("%d\n", slot);
       printStatIndent3(&gNB->tparity,"DLSCH LDPC parity generation time");
       gNB->toutput.trials = gNB->dlsch_encoding_stats.trials;
       printStatIndent3(&gNB->toutput,"DLSCH LDPC output generation time");
+      gNB->tconcat.trials = gNB->dlsch_encoding_stats.trials;
+      printStatIndent3(&gNB->tconcat,"DLSCH LDPC concat generation time");
       gNB->dlsch_rate_matching_stats.trials = gNB->dlsch_encoding_stats.trials;
       printStatIndent3(&gNB->dlsch_rate_matching_stats,"DLSCH Rate Matching time");
       gNB->dlsch_interleaving_stats.trials = gNB->dlsch_encoding_stats.trials;
