@@ -11,3 +11,14 @@ set_target_properties(rfsimulator PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BI
 
 add_executable(replay_node stored_node.c)
 target_link_libraries (replay_node minimal_lib)
+
+add_library(rfsimulator_static STATIC
+            simulator.cpp
+            apply_channelmod.c
+            ../../openair1/PHY/TOOLS/signal_energy.c
+)
+target_link_libraries(rfsimulator_static PUBLIC SIMU log_headers)
+
+if (ENABLE_TESTS)
+  add_subdirectory(tests)
+endif()

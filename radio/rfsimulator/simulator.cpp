@@ -528,6 +528,7 @@ static void rfsimulator_readconfig(rfsimulator_state_t *rfsimulator)
       exit(-1);
     }
   }
+  free(saveF);
 
   int beam_gains_param_index = config_paramidx_fromname(rfsimuParams, sizeofArray(rfsimuParams), RFSIMU_BEAM_GAINS);
   if (rfsimuParam[beam_gains_param_index].strptr) {
@@ -1443,6 +1444,7 @@ static void rfsimulator_end(openair0_device_t *device)
   clear_beam_queue(&s->beam_ctrl->rx, INT64_MAX);
   delete s->beam_ctrl;
   close(s->epollfd);
+  free(s->ip);
   free(s);
 }
 
