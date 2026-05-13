@@ -471,7 +471,6 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
 
   // Write output
   time_stats_t *tconcat = nrLDPC_slot_encoding_parameters->tconcat;
-  if(tconcat != NULL) start_meas(tconcat);
   nbTasks = 0;
   for (int dlsch_id = 0; dlsch_id < nrLDPC_slot_encoding_parameters->nb_TBs; dlsch_id++) {
     nrLDPC_TB_encoding_parameters_t *nrLDPC_TB_encoding_parameters = &nrLDPC_slot_encoding_parameters->TBs[dlsch_id];
@@ -480,6 +479,7 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
     if (nrLDPC_slot_encoding_parameters->use_gpu && C > 8 && nrLDPC_TB_encoding_parameters->Z == 384) 
       continue;
 #endif
+    if(tconcat != NULL) start_meas(tconcat);
     size_t n_seg = (C / 8 + ((C & 7) == 0 ? 0 : 1));
 
 
@@ -518,8 +518,8 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *nrLDPC_slot_encodin
 
     }
     nbTasks += n_seg;
+    if(tconcat != NULL) stop_meas(tconcat);
   }
-  if(tconcat != NULL) stop_meas(tconcat);
 
   return 0;
 }
