@@ -490,7 +490,8 @@ int main( int argc, char **argv ) {
   ue_id_g = (node_number == 0) ? 0 : node_number - 2;
   AssertFatal(ue_id_g >= 0, "UE id is expected to be nonnegative.\n");
 
-  if(IS_SOFTMODEM_NOS1 || get_softmodem_params()->sa || get_softmodem_params()->nsa) {
+  if(IS_SOFTMODEM_NOS1 || get_softmodem_params()->sa || get_softmodem_params()->nsa ||
+     get_softmodem_params()->sl_mode == 2) {
     if(node_number == 0 && get_softmodem_params()->sl_mode == 0) {
       init_pdcp(0);
     } else if (get_softmodem_params()->sl_mode == 2) {
@@ -556,6 +557,7 @@ int main( int argc, char **argv ) {
         nr_init_frame_parms_ue_sl(&sl_phy->sl_frame_params,&sl_phy->sl_config,
                                   get_nrUE_params()->threequarter_fs,
                                   get_nrUE_params()->ofdm_offset_divisor);
+        UE[CC_id]->frame_parms = sl_phy->sl_frame_params;
       }
       init_nr_ue_vars(UE[CC_id], 0, abstraction_flag);
     }

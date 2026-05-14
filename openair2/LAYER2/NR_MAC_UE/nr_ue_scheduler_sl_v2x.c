@@ -35,6 +35,8 @@
 #define NR_SL_V2X_DEFAULT_MAX_LBT_FAILURES 4
 #define NR_SL_V2X_SLSCH_LCID 4
 
+static bool nr_sl_v2x_has_pending_tx(NR_UE_MAC_INST_t *mac, const frameslot_t *frame_slot);
+
 static bool nr_sl_v2x_is_configured(const NR_UE_MAC_INST_t *mac)
 {
   return mac != NULL && mac->SL_MAC_PARAMS != NULL && mac->sl_tx_res_pool != NULL && mac->SL_MAC_PARAMS->sl_TxPool[0] != NULL;
@@ -204,6 +206,9 @@ sl_resource_info_t *nr_ue_sl_v2x_select_resource(NR_UE_MAC_INST_t *mac,
   nr_sl_v2x_sps_state_t *sps = &mac->sl_v2x_scheduler.sps;
   int64_t current_abs_slot = normalize((frameslot_t *)frame_slot, mu);
 
+  if (!nr_sl_v2x_has_pending_tx(mac, frame_slot))
+    return NULL;
+
   if (!sps->active && !nr_sl_v2x_activate_sps_resource(mac, frame_slot))
     return NULL;
 
@@ -235,7 +240,16 @@ static bool nr_sl_v2x_has_pending_tx(NR_UE_MAC_INST_t *mac, const frameslot_t *f
       return true;
   }
 
-  mac_rlc_status_resp_t rlc_status = nr_mac_rlc_status_ind(mac->ue_id, frame_slot->frame, NR_SL_V2X_SLSCH_LCID);
+  mac_rlc_status_resp_t rlc_status = mac_rlc_status_ind(0,
+                                                        mac->src_id,
+                                                        0,
+                                                        frame_slot->frame,
+                                                        frame_slot->slot,
+                                                        ENB_FLAG_NO,
+                                                        MBMS_FLAG_NO,
+                                                        NR_SL_V2X_SLSCH_LCID,
+                                                        0,
+                                                        0);
   return rlc_status.bytes_in_buffer > 0;
 }
 

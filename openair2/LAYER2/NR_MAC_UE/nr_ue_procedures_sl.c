@@ -1035,21 +1035,36 @@ void nr_ue_process_mac_sl_pdu(int module_idP,
   }
 
   NR_SLSCH_MAC_SUBHEADER_FIXED *sl_sch_subheader = (NR_SLSCH_MAC_SUBHEADER_FIXED *) pduP;
+  uint16_t sl_src_id = sl_sch_subheader->SRC;
   uint8_t psfch_period = 0;
   if (mac->sl_tx_res_pool->sl_PSFCH_Config_r16 &&
       mac->sl_tx_res_pool->sl_PSFCH_Config_r16->choice.setup->sl_PSFCH_Period_r16)
     psfch_period = *mac->sl_tx_res_pool->sl_PSFCH_Config_r16->choice.setup->sl_PSFCH_Period_r16;
-  if (psfch_period && mac->sci_pdu_rx.harq_feedback) {
+
+  NR_SL_UE_info_t *UE = find_UE(mac, sl_src_id);
+  if (UE == NULL && mac->sci_pdu_rx.source_id != sl_src_id) {
+    LOG_W(NR_MAC,
+          "%4d.%2d SLSCH MAC source %u not configured, trying SCI2 source %u\n",
+          frame,
+          slot,
+          sl_src_id,
+          mac->sci_pdu_rx.source_id);
+    sl_src_id = mac->sci_pdu_rx.source_id;
+    UE = find_UE(mac, sl_src_id);
+  }
+
+  if (UE == NULL) {
+    LOG_W(NR_MAC,
+          "%4d.%2d SLSCH source %u has no UE scheduler state; delivering data SDUs only\n",
+          frame,
+          slot,
+          sl_src_id);
+  } else if (psfch_period && mac->sci_pdu_rx.harq_feedback) {
     configure_psfch_params_tx(module_idP, mac, rx_ind, pdu_id);
   }
 
-  NR_SL_UE_info_t *UE = find_UE(mac, sl_sch_subheader->SRC);
-
-  if (UE == NULL)
-    return;
-
-  if (pdu_type == SL_NR_RX_PDU_TYPE_SLSCH_PSFCH) {
-    handle_nr_ue_sl_harq(module_idP, frame, slot, rx_slsch_pdu, sl_sch_subheader->SRC);
+  if (UE != NULL && pdu_type == SL_NR_RX_PDU_TYPE_SLSCH_PSFCH) {
+    handle_nr_ue_sl_harq(module_idP, frame, slot, rx_slsch_pdu, sl_src_id);
     int r0 = UE->mac_sl_stats.cumul_round[0];
     int r1 = UE->mac_sl_stats.cumul_round[1];
     int r2 = UE->mac_sl_stats.cumul_round[2];
@@ -1076,8 +1091,8 @@ void nr_ue_process_mac_sl_pdu(int module_idP,
   if (rx_slsch_pdu->ack_nack == 0)
     return;
 
-  NR_SL_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
-  if (mac->sci_pdu_rx.csi_req) {
+  NR_SL_UE_sched_ctrl_t *sched_ctrl = UE != NULL ? &UE->UE_sched_ctrl : NULL;
+  if (sched_ctrl != NULL && mac->sci_pdu_rx.csi_req) {
     LOG_D(NR_MAC, "%4d.%2d Configuring sl_csi_report parameters\n", frame, slot);
     int scs = get_softmodem_params()->numerology;
     uint16_t tx_slot = (rx_ind->slot + DURATION_RX_TO_TX) % nr_slots_per_frame[scs];
@@ -1105,9 +1120,18 @@ void nr_ue_process_mac_sl_pdu(int module_idP,
       case SL_SCH_LCID_4_19:
         if (!get_mac_len(pduP, pdu_len, &mac_len, &mac_subheader_len))
           return;
+        if (mac_subheader_len + mac_len > pdu_len) {
+          LOG_E(NR_MAC,
+                "%4d.%2d Invalid SLSCH MAC SDU length %u with subheader %u for remaining PDU %d\n",
+                frame,
+                slot,
+                mac_len,
+                mac_subheader_len,
+                pdu_len);
+          return;
+        }
         LOG_D(NR_MAC, "%4d.%2d : SLSCH -> LCID %d %d bytes with subheader %d\n", frame, slot, rx_lcid, mac_len, mac_subheader_len);
 
-        #if 0
         mac_rlc_data_ind(module_idP,
                          mac->src_id,
                          0,
@@ -1119,9 +1143,6 @@ void nr_ue_process_mac_sl_pdu(int module_idP,
                          mac_len,
                          1,
                          NULL);
-        #endif
-
-        nr_mac_rlc_data_ind(mac->ue_id, mac->src_id, false, rx_lcid, (char *)(pduP + mac_subheader_len), mac_len);
 
 	      break;
       case SL_SCH_LCID_SL_CSI_REPORT:
@@ -1130,13 +1151,25 @@ void nr_ue_process_mac_sl_pdu(int module_idP,
           if (frame % 20 == 0)
             LOG_D(NR_MAC, "\tLCID: %i, R: %i\n", sub_pdu_header->LCID, sub_pdu_header->R);
           mac_subheader_len = sizeof(*sub_pdu_header);
-          nr_sl_csi_report_t* nr_sl_csi_report = (nr_sl_csi_report_t *) (pduP + mac_len);
-          mac_len = sizeof(*nr_sl_csi_report);
+          mac_len = sizeof(nr_sl_csi_report_t);
+          if (mac_subheader_len + mac_len > pdu_len) {
+            LOG_E(NR_MAC,
+                  "%4d.%2d Invalid SLSCH CSI report length %u with subheader %u for remaining PDU %d\n",
+                  frame,
+                  slot,
+                  mac_len,
+                  mac_subheader_len,
+                  pdu_len);
+            return;
+          }
+          nr_sl_csi_report_t* nr_sl_csi_report = (nr_sl_csi_report_t *) (pduP + mac_subheader_len);
           if (frame % 20 == 0)
             LOG_D(NR_MAC, "\tCQI: %i RI: %i\n", nr_sl_csi_report->CQI, nr_sl_csi_report->RI);
-          sched_ctrl->rx_csi_report.CQI = nr_sl_csi_report->CQI;
-          sched_ctrl->rx_csi_report.RI = nr_sl_csi_report->RI;
-          LOG_D(NR_MAC, "Setting to CQI %i\n", sched_ctrl->rx_csi_report.CQI);
+          if (sched_ctrl != NULL) {
+            sched_ctrl->rx_csi_report.CQI = nr_sl_csi_report->CQI;
+            sched_ctrl->rx_csi_report.RI = nr_sl_csi_report->RI;
+            LOG_D(NR_MAC, "Setting to CQI %i\n", sched_ctrl->rx_csi_report.CQI);
+          }
           break;
         }
       case SL_SCH_LCID_SL_PADDING:

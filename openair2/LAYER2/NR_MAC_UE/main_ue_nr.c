@@ -90,7 +90,7 @@ NR_UE_MAC_INST_t* nr_l2_init_ue(NR_UE_RRC_INST_t* rrc_inst, ueinfo_t* ueinfo) {
     }
     else {
       LOG_I(MAC,"Running without CellGroupConfig\n");
-      if(get_softmodem_params()->sa == 1) {
+      if(get_softmodem_params()->sa == 1 || get_softmodem_params()->sl_mode == 2) {
         AssertFatal(rlc_module_init(0) == 0, "%s: Could not initialize RLC layer\n", __FUNCTION__);
       }
     }

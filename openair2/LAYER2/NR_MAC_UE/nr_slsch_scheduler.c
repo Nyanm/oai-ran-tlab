@@ -91,15 +91,28 @@ void handle_nr_ue_sl_harq(module_id_t mod_id,
 {
   NR_UE_MAC_INST_t *mac = get_mac_inst(mod_id);
   NR_UE_SL_SCHED_LOCK(&mac->sl_sched_lock);
-  NR_SL_UE_info_t **UE_SL_temp = (NR_SL_UE_info_t **)&mac->sl_info.list, *UE;
-  // TODO: update for multiple UEs
-  UE=*(UE_SL_temp);
+  NR_SL_UE_info_t *UE = find_UE(mac, src_id);
+  if (UE == NULL) {
+    LOG_W(NR_MAC, "No SL UE state found for HARQ feedback from source id %u\n", src_id);
+    NR_UE_SL_SCHED_UNLOCK(&mac->sl_sched_lock);
+    return;
+  }
   uint8_t num_ack_rcvd = rx_slsch_pdu->num_acks_rcvd;
 
   NR_SL_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
   NR_UE_sl_harq_t **matched_harqs = (NR_UE_sl_harq_t **) calloc(sched_ctrl->feedback_sl_harq.len, sizeof(NR_UE_sl_harq_t *));
   int k = find_current_slot_harqs(frame, slot, sched_ctrl, matched_harqs);
   LOG_D(NR_MAC, "Found %d matching HARQ processes vs. num. of received acks %d\n", k, num_ack_rcvd);
+  if (k < num_ack_rcvd) {
+    LOG_W(NR_MAC,
+          "Received %u SL HARQ ACKs from source id %u, but only %d feedback processes match %4u.%2u\n",
+          num_ack_rcvd,
+          src_id,
+          k,
+          frame,
+          slot);
+    num_ack_rcvd = k;
+  }
   for (int i = 0; i < num_ack_rcvd; i++) {
     uint8_t ack_nack = rx_slsch_pdu->ack_nack_rcvd[i];
     uint8_t rx_harq_id = matched_harqs[i]->sl_harq_pid;
@@ -113,6 +126,7 @@ void handle_nr_ue_sl_harq(module_id_t mod_id,
             harq_pid,
             src_id);
       if (harq_pid < 0) {
+        free(matched_harqs);
         NR_UE_SL_SCHED_UNLOCK(&mac->sl_sched_lock);
         return;
       }

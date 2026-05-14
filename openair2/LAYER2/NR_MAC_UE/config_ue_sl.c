@@ -124,26 +124,30 @@ void sl_ue_mac_free(uint8_t module_id)
 
 
 //Prepares the TDD config to be passed to PHY
-static int sl_set_tdd_config_nr_ue(sl_nr_phy_config_request_t *cfg,
+static int sl_set_tdd_config_nr_ue(fapi_nr_tdd_table_t *tdd_table,
                                   int mu,
-                                  long *pNumDownlinkSlots, long *pNumDownlinkSymbols,
-                                  int nrofUplinkSlots,   int nrofUplinkSymbols)
+                                  NR_TDD_UL_DL_Pattern_t *pattern)
 {
 
 
   int slot_number = 0;
-  int nb_periods_per_frame = get_nb_periods_per_frame(cfg->tdd_table.tdd_period);
+  int nb_periods_per_frame = get_nb_periods_per_frame(pattern->dl_UL_TransmissionPeriodicity);
   int nb_slots_to_set = TDD_CONFIG_NB_FRAMES*(1<<mu)*NR_NUMBER_OF_SUBFRAMES_PER_FRAME;
 
   int nb_slots_per_period = ((1<<mu) * NR_NUMBER_OF_SUBFRAMES_PER_FRAME)/nb_periods_per_frame;
-  cfg->tdd_table.tdd_period_in_slots = nb_slots_per_period;
+  tdd_table->tdd_period = pattern->dl_UL_TransmissionPeriodicity;
+  tdd_table->tdd_period_in_slots = nb_slots_per_period;
 
-  if ((*pNumDownlinkSlots == 0) && (*pNumDownlinkSymbols == 0)) {
-    *pNumDownlinkSymbols = (nrofUplinkSymbols) ? 14 - nrofUplinkSymbols : 0;
-    *pNumDownlinkSlots = nb_slots_per_period - nrofUplinkSlots;
-    if (*pNumDownlinkSymbols) *pNumDownlinkSlots -= 1;
+  if ((pattern->nrofDownlinkSlots == 0) && (pattern->nrofDownlinkSymbols == 0)) {
+    pattern->nrofDownlinkSymbols = (pattern->nrofUplinkSymbols) ? 14 - pattern->nrofUplinkSymbols : 0;
+    pattern->nrofDownlinkSlots = nb_slots_per_period - pattern->nrofUplinkSlots;
+    if (pattern->nrofDownlinkSymbols)
+      pattern->nrofDownlinkSlots -= 1;
   }
-  int nrofDownlinkSlots = *pNumDownlinkSlots, nrofDownlinkSymbols = *pNumDownlinkSymbols;
+  int nrofDownlinkSlots = pattern->nrofDownlinkSlots;
+  int nrofDownlinkSymbols = pattern->nrofDownlinkSymbols;
+  int nrofUplinkSlots = pattern->nrofUplinkSlots;
+  int nrofUplinkSymbols = pattern->nrofUplinkSymbols;
 
   LOG_D(NR_MAC,"Set Phy Sidelink TDD Config: scs:%d,dl:%d-%d, ul:%d-%d, nb_periods_per_frame:%d, nb_slots_per_period:%d\n",
                               mu, nrofDownlinkSlots, nrofDownlinkSymbols, nrofUplinkSlots, nrofUplinkSymbols, nb_periods_per_frame, nb_slots_per_period);
@@ -159,16 +163,16 @@ static int sl_set_tdd_config_nr_ue(sl_nr_phy_config_request_t *cfg,
                 nrofDownlinkSlots,nrofUplinkSlots,nb_slots_per_period);
   }
 
-  cfg->tdd_table.max_tdd_periodicity_list = (fapi_nr_max_tdd_periodicity_t *) malloc(nb_slots_to_set*sizeof(fapi_nr_max_tdd_periodicity_t));
+  tdd_table->max_tdd_periodicity_list = (fapi_nr_max_tdd_periodicity_t *) malloc(nb_slots_to_set*sizeof(fapi_nr_max_tdd_periodicity_t));
 
   for(int memory_alloc =0 ; memory_alloc<nb_slots_to_set; memory_alloc++)
-    cfg->tdd_table.max_tdd_periodicity_list[memory_alloc].max_num_of_symbol_per_slot_list = (fapi_nr_max_num_of_symbol_per_slot_t *) malloc(NR_NUMBER_OF_SYMBOLS_PER_SLOT*sizeof(
+    tdd_table->max_tdd_periodicity_list[memory_alloc].max_num_of_symbol_per_slot_list = (fapi_nr_max_num_of_symbol_per_slot_t *) malloc(NR_NUMBER_OF_SYMBOLS_PER_SLOT*sizeof(
           fapi_nr_max_num_of_symbol_per_slot_t));
 
-  while(slot_number != nb_slots_to_set) {
+  while(slot_number < nb_slots_to_set) {
     if(nrofDownlinkSlots != 0) {
       for (int number_of_symbol = 0; number_of_symbol < nrofDownlinkSlots*NR_NUMBER_OF_SYMBOLS_PER_SLOT; number_of_symbol++) {
-        cfg->tdd_table.max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol%NR_NUMBER_OF_SYMBOLS_PER_SLOT].slot_config= 0;
+        tdd_table->max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol%NR_NUMBER_OF_SYMBOLS_PER_SLOT].slot_config= 0;
 
         if((number_of_symbol+1)%NR_NUMBER_OF_SYMBOLS_PER_SLOT == 0)
           slot_number++;
@@ -177,15 +181,15 @@ static int sl_set_tdd_config_nr_ue(sl_nr_phy_config_request_t *cfg,
 
     if (nrofDownlinkSymbols != 0 || nrofUplinkSymbols != 0) {
       for(int number_of_symbol =0; number_of_symbol < nrofDownlinkSymbols; number_of_symbol++) {
-        cfg->tdd_table.max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol].slot_config= 0;
+        tdd_table->max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol].slot_config= 0;
       }
 
       for(int number_of_symbol = nrofDownlinkSymbols; number_of_symbol < NR_NUMBER_OF_SYMBOLS_PER_SLOT-nrofUplinkSymbols; number_of_symbol++) {
-        cfg->tdd_table.max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol].slot_config= 2;
+        tdd_table->max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol].slot_config= 2;
       }
 
       for(int number_of_symbol = NR_NUMBER_OF_SYMBOLS_PER_SLOT-nrofUplinkSymbols; number_of_symbol < NR_NUMBER_OF_SYMBOLS_PER_SLOT; number_of_symbol++) {
-        cfg->tdd_table.max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol].slot_config= 1;
+        tdd_table->max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol].slot_config= 1;
       }
 
       slot_number++;
@@ -193,7 +197,7 @@ static int sl_set_tdd_config_nr_ue(sl_nr_phy_config_request_t *cfg,
 
     if(nrofUplinkSlots != 0) {
       for (int number_of_symbol = 0; number_of_symbol < nrofUplinkSlots*NR_NUMBER_OF_SYMBOLS_PER_SLOT; number_of_symbol++) {
-        cfg->tdd_table.max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol%NR_NUMBER_OF_SYMBOLS_PER_SLOT].slot_config= 1;
+        tdd_table->max_tdd_periodicity_list[slot_number].max_num_of_symbol_per_slot_list[number_of_symbol%NR_NUMBER_OF_SYMBOLS_PER_SLOT].slot_config= 1;
 
         if((number_of_symbol+1)%NR_NUMBER_OF_SYMBOLS_PER_SLOT == 0)
           slot_number++;
@@ -322,20 +326,9 @@ static void  sl_prepare_phy_config(int module_id,
     phycfg->config_mask = 0xF;//Total config is sent
     phycfg->sl_sync_source.gnss_dfn_offset = sl_OffsetDFN;
 
-    // TDD Table Configuration
-    if (sl_TDD_config->pattern1.ext1 == NULL)
-      phycfg->tdd_table.tdd_period = sl_TDD_config->pattern1.dl_UL_TransmissionPeriodicity;
-    else {
-      if (sl_TDD_config->pattern1.ext1->dl_UL_TransmissionPeriodicity_v1530 != NULL)
-        phycfg->tdd_table.tdd_period += (1 + *sl_TDD_config->pattern1.ext1->dl_UL_TransmissionPeriodicity_v1530);
-    }
-
-    int return_tdd = sl_set_tdd_config_nr_ue(phycfg,
+    int return_tdd = sl_set_tdd_config_nr_ue(&phycfg->tdd_table,
                                              sl_TDD_config->referenceSubcarrierSpacing,
-                                             &sl_TDD_config->pattern1.nrofDownlinkSlots,
-                                             &sl_TDD_config->pattern1.nrofDownlinkSymbols,
-                                             sl_TDD_config->pattern1.nrofUplinkSlots,
-                                             sl_TDD_config->pattern1.nrofUplinkSymbols);
+                                             &sl_TDD_config->pattern1);
 
     if (return_tdd !=0)
       LOG_E(PHY,"TDD configuration can not be done\n");
@@ -527,12 +520,9 @@ int nr_rrc_mac_config_req_sl_preconfig(module_id_t module_id,
 
     sl_mac->sl_TDD_config = sl_preconfig->sl_PreconfigGeneral_r16->sl_TDD_Configuration_r16;
 
-    int return_tdd = sl_set_tdd_config_nr_ue(&sl_mac->sl_phy_config.sl_config_req,
-                                             get_softmodem_params()->numerology,
-                                             &sl_mac->sl_TDD_config->pattern1.nrofDownlinkSlots,
-                                             &sl_mac->sl_TDD_config->pattern1.nrofDownlinkSymbols,
-                                             sl_mac->sl_TDD_config->pattern1.nrofUplinkSlots,
-                                             sl_mac->sl_TDD_config->pattern1.nrofUplinkSymbols);
+    int return_tdd = sl_set_tdd_config_nr_ue(&sl_mac->sl_phy_config.sl_config_req.tdd_table,
+                                             sl_mac->sl_TDD_config->referenceSubcarrierSpacing,
+                                             &sl_mac->sl_TDD_config->pattern1);
     if (return_tdd != 0)
       LOG_E(PHY, "TDD configuration can not be done\n");
 
@@ -547,7 +537,7 @@ int nr_rrc_mac_config_req_sl_preconfig(module_id_t module_id,
     sl_mac->sl_TDD_config = NULL;
   }
   if (get_nrUE_params()->sync_ref) {
-    int scs = get_softmodem_params()->numerology;
+    int scs = sl_mac->sl_TDD_config->referenceSubcarrierSpacing;
     const int nr_slots_frame = nr_slots_per_frame[scs];
     NR_TDD_UL_DL_Pattern_t *tdd = &sl_mac->sl_TDD_config->pattern1;
     const int n_ul_slots_period = tdd ? tdd->nrofUplinkSlots + (tdd->nrofUplinkSymbols > 0 ? 1 : 0) : nr_slots_frame;
@@ -740,30 +730,20 @@ void nr_rrc_mac_config_req_sl_mib(module_id_t module_id,
     if (ret == 0) {
       //sl_tdd_config bytes are all 1's - no TDD config present use all slots for sidelink.
       //Spec not clear -- TBD...
-      sl_config->tdd_table.tdd_period = 7;// set it to frame period
+      sl_mac->sl_TDD_config->pattern1.dl_UL_TransmissionPeriodicity = 7; // set it to frame period
       sl_mac->sl_TDD_config->pattern1.nrofUplinkSlots =
                         NR_NUMBER_OF_SUBFRAMES_PER_FRAME*(1<<cfg->sl_bwp_config.sl_scs);
-    } else {
-      if (sl_mac->sl_TDD_config->pattern1.ext1 == NULL)
-        sl_config->tdd_table.tdd_period = sl_mac->sl_TDD_config->pattern1.dl_UL_TransmissionPeriodicity;
-      else {
-        if (sl_mac->sl_TDD_config->pattern1.ext1->dl_UL_TransmissionPeriodicity_v1530 != NULL)
-          sl_config->tdd_table.tdd_period += (1 + *sl_mac->sl_TDD_config->pattern1.ext1->dl_UL_TransmissionPeriodicity_v1530);
-      }
     }
 
     uint8_t return_tdd = 0;
-    return_tdd = sl_set_tdd_config_nr_ue(cfg,
+    return_tdd = sl_set_tdd_config_nr_ue(&cfg->tdd_table,
                                         cfg->sl_bwp_config.sl_scs,
-                                        &sl_mac->sl_TDD_config->pattern1.nrofDownlinkSlots,
-                                        &sl_mac->sl_TDD_config->pattern1.nrofDownlinkSymbols,
-                                        sl_mac->sl_TDD_config->pattern1.nrofUplinkSlots,
-                                        sl_mac->sl_TDD_config->pattern1.nrofUplinkSymbols);
+                                        &sl_mac->sl_TDD_config->pattern1);
     if (return_tdd !=0)
       LOG_E(PHY,"TDD configuration can not be done\n");
 
     AssertFatal(get_nrUE_params()->sync_ref == 0, "Expecting Nearby UE\n");
-    int scs = get_softmodem_params()->numerology;
+    int scs = cfg->sl_bwp_config.sl_scs;
     const int nr_slots_frame = nr_slots_per_frame[scs];
     NR_TDD_UL_DL_Pattern_t *tdd = &sl_mac->sl_TDD_config->pattern1;
 

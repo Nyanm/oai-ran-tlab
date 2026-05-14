@@ -3360,6 +3360,8 @@ void preprocess(NR_UE_MAC_INST_t *mac,
     UE->mac_sl_stats.sl.current_bytes = 0;
     UE->mac_sl_stats.sl.current_rbs = 0;
     NR_sched_pssch_t *sched_pssch = &sched_ctrl->sched_pssch;
+    sched_pssch->rbSize = 0;
+    sched_pssch->tb_size = 0;
     sched_pssch->sl_harq_pid = configured_PSFCH ? sched_ctrl->retrans_sl_harq.head : -1;
 
     /* retransmission */
