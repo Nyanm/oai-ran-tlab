@@ -693,13 +693,8 @@ static void pf_dl(gNB_MAC_INST *mac,
       const NR_bler_options_t *bo = &mac->dl_bler;
       const int max_mcs_table = current_BWP->mcsTableIdx == 1 ? 27 : 28;
       const int max_mcs = min(sched_ctrl->dl_max_mcs, max_mcs_table);
-      int selected_mcs;
-      if (bo->harq_round_max == 1) {
-        int new_mcs = min(bo->max_mcs, max_mcs);
-        selected_mcs = max(bo->min_mcs, new_mcs);
-        sched_ctrl->dl_bler_stats.mcs = selected_mcs;
-      } else
-        selected_mcs = get_mcs_from_bler(bo, stats, &sched_ctrl->dl_bler_stats, max_mcs, frame);
+      // Always run the BLER-driven OLLA
+      int selected_mcs = get_mcs_from_bler(bo, stats, &sched_ctrl->dl_bler_stats, max_mcs, frame);
       int l = get_dl_nrOfLayers(sched_ctrl, current_BWP->dci_format);
       const uint8_t Qm = nr_get_Qm_dl(selected_mcs, current_BWP->mcsTableIdx);
       const uint16_t R = nr_get_code_rate_dl(selected_mcs, current_BWP->mcsTableIdx);

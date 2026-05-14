@@ -828,8 +828,12 @@ int get_mcs_from_bler(const NR_bler_options_t *bler_options,
 
   // last update is longer than x frames ago
   const int num_dl_sched = (int)(stats->rounds[0] - bler_stats->rounds[0]);
-  const int num_dl_retx = (int)(stats->rounds[1] - bler_stats->rounds[1]);
-  const float bler_window = num_dl_sched > 0 ? (float) num_dl_retx / num_dl_sched : bler_stats->bler;
+  // Use abort/error count rather than rounds[1]: with harq_round_max == 1 (no
+  // retransmissions), rounds[1] is never incremented and BLER stays at 0,
+  // which silently disables AMC. stats->errors is bumped in abort_nr_*_harq()
+  // on every transport block failure regardless of how many rounds occurred.
+  const int num_dl_errors = (int)(stats->errors - bler_stats->errors);
+  const float bler_window = num_dl_sched > 0 ? (float) num_dl_errors / num_dl_sched : bler_stats->bler;
   bler_stats->bler = BLER_FILTER * bler_stats->bler + (1 - BLER_FILTER) * bler_window;
 
   int new_mcs = old_mcs;
@@ -843,8 +847,9 @@ int get_mcs_from_bler(const NR_bler_options_t *bler_options,
   bler_stats->last_frame = frame;
   bler_stats->mcs = new_mcs;
   memcpy(bler_stats->rounds, stats->rounds, sizeof(stats->rounds));
-  LOG_D(MAC, "frame %4d MCS %d -> %d (num_dl_sched %d, num_dl_retx %d, BLER wnd %.3f avg %.6f)\n",
-        frame, old_mcs, new_mcs, num_dl_sched, num_dl_retx, bler_window, bler_stats->bler);
+  bler_stats->errors = stats->errors;
+  LOG_D(MAC, "frame %4d MCS %d -> %d (num_dl_sched %d, num_dl_errors %d, BLER wnd %.3f avg %.6f)\n",
+        frame, old_mcs, new_mcs, num_dl_sched, num_dl_errors, bler_window, bler_stats->bler);
   return new_mcs;
 }
 
@@ -2979,6 +2984,7 @@ static void init_bler_stats(const NR_bler_options_t *bler_options, NR_bler_stats
   bler_stats->last_frame = frame;
   bler_stats->mcs = bler_options->min_mcs;
   bler_stats->bler = (float)(bler_options->lower + bler_options->upper) / 2.0f;
+  bler_stats->errors = 0;
 }
 
 /* @brief returns a new UE allocated instance.

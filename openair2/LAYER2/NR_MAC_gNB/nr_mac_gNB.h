@@ -523,6 +523,7 @@ typedef struct NR_bler_stats {
   float bler;
   uint8_t mcs;
   uint64_t rounds[8];
+  uint64_t errors;
 } NR_bler_stats_t;
 
 //
