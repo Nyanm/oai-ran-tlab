@@ -196,8 +196,15 @@ static void nr_fill_nfapi_dl_PCCH_pdu(gNB_MAC_INST *mac,
   nfapi_nr_dl_tti_pdsch_pdu_rel15_t *pdsch_pdu_rel15 =
       prepare_pdsch_pdu(dl_tti_pdsch_pdu, mac, NULL, pdsch, NULL, false, 0, P_RNTI, fapi_beam, 1, pdu_index);
 
-  nfapi_nr_dl_dci_pdu_t *dci_pdu =
-      prepare_dci_pdu(pdcch_pdu_rel15, scc, search_space, coreset, aggregation_level, cce_index, fapi_beam, P_RNTI);
+  nfapi_nr_dl_dci_pdu_t *dci_pdu = prepare_dci_pdu(pdcch_pdu_rel15,
+                                                   scc,
+                                                   search_space,
+                                                   coreset,
+                                                   pdsch->ant_port_idx.spatialStreamIndices,
+                                                   aggregation_level,
+                                                   cce_index,
+                                                   fapi_beam,
+                                                   P_RNTI);
   pdcch_pdu_rel15->numDlDci++;
 
   const nr_dci_format_t dci_format = NR_DL_DCI_FORMAT_1_0;
@@ -217,7 +224,18 @@ static void nr_fill_nfapi_dl_PCCH_pdu(gNB_MAC_INST *mac,
    * P-RNTI DCI must use SMI=01 (NR_DCI_PRNTI_SMI_PAGING_SCHED_ONLY). */
   dci_payload.short_messages_indicator = NR_DCI_PRNTI_SMI_PAGING_SCHED_ONLY;
 
-  fill_dci_pdu_rel15(NULL, NULL, NULL, dci_pdu, &dci_payload, dci_format, rnti_type, search_space, coreset, 0, mac->cset0_bwp_size);
+  fill_dci_pdu_rel15(NULL,
+                     NULL,
+                     NULL,
+                     dci_pdu,
+                     &dci_payload,
+                     dci_format,
+                     rnti_type,
+                     0,
+                     search_space,
+                     coreset,
+                     0,
+                     mac->cset0_bwp_size);
 }
 
 /** @brief Returns true if (frame, slot) is a paging occasion (PO) for a given UE.

@@ -2419,8 +2419,8 @@ void *nas_nrue(void *args_p)
         const char *ip = "10.0.1.2";
         const int qfi = 7;
         const bool is_default = true;
-        create_ue_ip_if(ip, NULL, nas->UE_id, pdu_session_id, is_default);
         set_qfi(qfi, pdu_session_id, nas->UE_id);
+        create_ue_ip_if(ip, NULL, nas->UE_id, pdu_session_id, is_default);
         break;
       }
 
