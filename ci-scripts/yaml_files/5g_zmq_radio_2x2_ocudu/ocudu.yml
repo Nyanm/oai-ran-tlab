@@ -38,10 +38,9 @@ cell_cfg:
     nof_ul_slots: 1
     nof_ul_symbols: 2
   csi:
-    csi_rs_enabled: false
+    csi_rs_enabled: true
   pucch:
     formats: f1_and_f3
-    nof_cell_csi_res: 0
 
 log:
   filename: gnb.log

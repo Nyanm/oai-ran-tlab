@@ -551,13 +551,16 @@ static int nr_csi_rs_pmi_estimation(const PHY_VARS_NR_UE *ue,
                                     const fapi_nr_dl_config_csirs_pdu_rel15_t *csirs_config_pdu,
                                     const uint8_t N_ports,
                                     const c16_t csi_rs_estimated_channel_freq[][N_ports][ue->frame_parms.ofdm_symbol_size],
-                                    const uint32_t interference_plus_noise_power,
+                                    uint32_t interference_plus_noise_power,
                                     const uint8_t rank_indicator,
                                     const int16_t log2_re,
                                     uint8_t *i2,
                                     int32_t *precoded_sinr_dB)
 {
   const NR_DL_FRAME_PARMS *frame_parms = &ue->frame_parms;
+  if (interference_plus_noise_power == 0){
+    interference_plus_noise_power = 1;
+  }
 
   // i1 is a three-element vector in the form of [i11 i12 i13], when CodebookType is specified as 'Type1SinglePanel'.
   // Note that i13 is not applicable when the number of transmission layers is one of {1, 5, 6, 7, 8}.
