@@ -1885,6 +1885,8 @@ static int  pf_ul(gNB_MAC_INST *nrmac,
   const int CC_id = 0;
   int frame = pp_pusch->frame;
   int slot = pp_pusch->slot;
+  bool used_pusch_dmrs_ports[4] = {0};
+  int mu_mimo_users_scheduled = 0;
   NR_ServingCellConfigCommon_t *scc = nrmac->common_channels[CC_id].ServingCellConfigCommon;
   int slots_per_frame = nrmac->frame_structure.numb_slots_frame;
   DevAssert(tda_info->valid_tda);
@@ -2182,6 +2184,58 @@ static int  pf_ul(gNB_MAC_INST *nrmac,
                       >> 3;
     }
 
+    // MU-MIMO HACK
+    // ------------
+    bool is_user_data = false;
+    for (int lcid = 4; lcid <= 32; lcid++) {
+      if (iterator->UE->mac_stats.ul.lc_bytes[lcid] > 0) {
+        is_user_data = true;
+        break;
+      }
+    }
+
+    if (is_user_data) {
+      for (int rb = 16; rb < 16 + 90; rb++) {
+        if (nrmac->ulprbbl[rb] != 0) {
+          LOG_D(NR_MAC, "MU-MIMO region blocked by PUCCH/SRS at PRB %d. Falling back to SU-MIMO.\n", rb);
+          is_user_data = false; // Cancel MU-MIMO for this UE, use default OAI scheduling
+          break;
+        }
+      }
+    }
+
+    if (is_user_data) {
+      sched.rbStart = 16;
+      sched.rbSize = 90;
+
+      int assigned_port = -1;
+      for (int p = 0; p < 2; p++) {
+        if (used_pusch_dmrs_ports[p] == 0) {
+          assigned_port = p;
+          used_pusch_dmrs_ports[p] = 1;
+          break;
+        }
+      }
+
+      if (assigned_port == -1) {
+        LOG_W(NR_MAC, "MU-MIMO limit reached in this slot. Deferring UE %04x to next slot.\n", iterator->UE->rnti);
+        continue; // Skip scheduling this UE until the next slot
+      }
+
+      sched.dmrs_info.dmrs_ports = (assigned_port == 0) ? 1 : 2;
+
+      sched.tb_size = nr_compute_tbs(sched.Qm,
+                                     sched.R,
+                                     sched.rbSize,
+                                     sched.tda_info.nrOfSymbols,
+                                     sched.dmrs_info.N_PRB_DMRS * sched.dmrs_info.num_dmrs_symb,
+                                     0, // nb_rb_oh
+                                     0,
+                                     sched.nrOfLayers)
+                      >> 3;
+    }
+    // --------------
+
     LOG_D(NR_MAC,
           "rbSize %d (available_rb %d), TBS %d, est buf %d, sched_ul %d, B %d, CCE %d, num_dmrs_symb %d, N_PRB_DMRS %d\n",
           sched.rbSize,
@@ -2202,9 +2256,25 @@ static int  pf_ul(gNB_MAC_INST *nrmac,
     /* save allocation to FAPI structures */
     post_process_ulsch(nrmac, pp_pusch, iterator->UE, &sched);
 
-    n_rb_sched[beam.idx] -= sched.rbSize;
-    for (int rb = bi.bwpStart + sched.rbStart; rb < bi.bwpStart + sched.rbStart + sched.rbSize; rb++)
-      rballoc_mask[rb] |= slbitmap;
+    if (is_user_data) {
+      mu_mimo_users_scheduled++;
+
+      // If we have successfully scheduled 2 UEs, the MU-MIMO group is full.
+      // We MUST lock the PRB mask now so a 3rd UE doesn't overwrite them.
+      if (mu_mimo_users_scheduled == 2) {
+        n_rb_sched[beam.idx] -= sched.rbSize;
+        for (int rb = bi.bwpStart + sched.rbStart; rb < bi.bwpStart + sched.rbStart + sched.rbSize; rb++) {
+          rballoc_mask[rb] |= slbitmap;
+        }
+      }
+    } else {
+      // Standard SU-MIMO / Control Traffic: Lock the PRB mask immediately
+      n_rb_sched[beam.idx] -= sched.rbSize;
+      for (int rb = bi.bwpStart + sched.rbStart; rb < bi.bwpStart + sched.rbStart + sched.rbSize; rb++) {
+        rballoc_mask[rb] |= slbitmap;
+      }
+    }
+    // ==========================================================
 
     /* reduce max_num_ue once we are sure UE can be allocated, i.e., has CCE */
     remainUEs[beam.idx]--;
@@ -2252,7 +2322,16 @@ nfapi_nr_pusch_pdu_t *prepare_pusch_pdu(nfapi_nr_ul_tti_request_t *future_ul_tti
   pusch_pdu->nrOfLayers = sched_pusch->nrOfLayers;
   // DMRS
   pusch_pdu->num_dmrs_cdm_grps_no_data = sched_pusch->dmrs_info.num_dmrs_cdm_grps_no_data;
-  pusch_pdu->dmrs_ports = ((1 << sched_pusch->nrOfLayers) - 1);
+
+  // MU-MIMO HACK
+  if (sched_pusch->rbSize == 90) {
+    pusch_pdu->dmrs_ports = sched_pusch->dmrs_info.dmrs_ports;
+  } else {
+    // Normal SU-MIMO behavior for RRC Signaling
+    pusch_pdu->dmrs_ports = ((1 << sched_pusch->nrOfLayers) - 1);
+  }
+
+  // pusch_pdu->dmrs_ports = ((1 << sched_pusch->nrOfLayers) - 1);
   pusch_pdu->ul_dmrs_symb_pos = sched_pusch->dmrs_info.ul_dmrs_symb_pos;
   pusch_pdu->dmrs_config_type = sched_pusch->dmrs_info.dmrs_config_type;
   pusch_pdu->scid = sched_pusch->dmrs_info.scid; // DMRS sequence initialization [TS38.211, sec 6.4.1.1.1]
