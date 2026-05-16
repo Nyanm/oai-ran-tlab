@@ -35,9 +35,9 @@
 #define POSITIONING_PARAMS_DESC { \
   {CONFIG_STRING_POSITIONING_NUM_TRPS,             HELP_STRING_POSITIONING_NUM_TRPS,            0,  .uptr=NULL,         .defuintval=0,              TYPE_UINT,       0},  \
   {CONFIG_STRING_POSITIONING_TRP_IDS_LIST,         HELP_STRING_POSITIONING_TRP_IDS_LIST,        0,  .uptr=NULL,         .defintarrayval=0,          TYPE_UINTARRAY,  0},  \
-  {CONFIG_STRING_POSITIONING_TRP_X_AXIS_LIST,      HELP_STRING_POSITIONING_TRP_X_AXIS_LIST,     0,  .uptr=NULL,         .defintarrayval=0,          TYPE_UINTARRAY,  0},  \
-  {CONFIG_STRING_POSITIONING_TRP_Y_AXIS_LIST,      HELP_STRING_POSITIONING_TRP_Y_AXIS_LIST,     0,  .uptr=NULL,         .defintarrayval=0,          TYPE_UINTARRAY,  0},  \
-  {CONFIG_STRING_POSITIONING_TRP_Z_AXIS_LIST,      HELP_STRING_POSITIONING_TRP_Z_AXIS_LIST,     0,  .uptr=NULL,         .defintarrayval=0,          TYPE_UINTARRAY,  0},  \
+  {CONFIG_STRING_POSITIONING_TRP_X_AXIS_LIST,      HELP_STRING_POSITIONING_TRP_X_AXIS_LIST,     0,  .uptr=NULL,         .defintarrayval=0,          TYPE_INTARRAY ,  0},  \
+  {CONFIG_STRING_POSITIONING_TRP_Y_AXIS_LIST,      HELP_STRING_POSITIONING_TRP_Y_AXIS_LIST,     0,  .uptr=NULL,         .defintarrayval=0,          TYPE_INTARRAY,  0},  \
+  {CONFIG_STRING_POSITIONING_TRP_Z_AXIS_LIST,      HELP_STRING_POSITIONING_TRP_Z_AXIS_LIST,     0,  .uptr=NULL,         .defintarrayval=0,          TYPE_INTARRAY,  0},  \
   {CONFIG_STRING_POSITIONING_TRP_UNIT_LIST,        HELP_STRING_POSITIONING_TRP_UNIT_LIST,       0,  .uptr=NULL,         .defintarrayval=0,          TYPE_UINTARRAY,  0},  \
 }
 // clang-format on

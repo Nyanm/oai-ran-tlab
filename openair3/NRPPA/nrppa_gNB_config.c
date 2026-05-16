@@ -41,9 +41,9 @@ positioning_config_t RCconfig_nr_positioning(void)
     positioning_config.num_trp = num_trp;
     for (int l = 0; l < num_trp; l++) {
       positioning_config.trps[l].id = gpd(params, num_params, CONFIG_STRING_POSITIONING_TRP_IDS_LIST)->uptr[l];
-      positioning_config.trps[l].x_axis = gpd(params, num_params, CONFIG_STRING_POSITIONING_TRP_X_AXIS_LIST)->uptr[l];
-      positioning_config.trps[l].y_axis = gpd(params, num_params, CONFIG_STRING_POSITIONING_TRP_Y_AXIS_LIST)->uptr[l];
-      positioning_config.trps[l].z_axis = gpd(params, num_params, CONFIG_STRING_POSITIONING_TRP_Z_AXIS_LIST)->uptr[l];
+      positioning_config.trps[l].x_axis = gpd(params, num_params, CONFIG_STRING_POSITIONING_TRP_X_AXIS_LIST)->iptr[l];
+      positioning_config.trps[l].y_axis = gpd(params, num_params, CONFIG_STRING_POSITIONING_TRP_Y_AXIS_LIST)->iptr[l];
+      positioning_config.trps[l].z_axis = gpd(params, num_params, CONFIG_STRING_POSITIONING_TRP_Z_AXIS_LIST)->iptr[l];
       positioning_config.trps[l].unit = gpd(params, num_params, CONFIG_STRING_POSITIONING_TRP_UNIT_LIST)->uptr[l];
       }
   } else {
