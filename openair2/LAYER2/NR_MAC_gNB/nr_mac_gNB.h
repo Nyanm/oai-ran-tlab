@@ -820,6 +820,8 @@ typedef struct {
   int beams_per_period;
   int beam_allocation_size;
   nr_beam_mode_t beam_mode;
+  /// beamID offset for dual polarization (0=disabled, typical value is 1)
+  int beam_id_polarization_offset;
 } NR_beam_info_t;
 
 #define UE_iterator(BaSe, VaR) for (NR_UE_info_t **VaR##pptr=BaSe, *VaR=*VaR##pptr; VaR; VaR=*(++VaR##pptr))

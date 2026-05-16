@@ -118,7 +118,12 @@ size_t dump_mac_stats(gNB_MAC_INST *gNB, char *output, size_t strlen, bool reset
     const int avg_rsrp = stats->num_rsrp_meas > 0 ? stats->cumul_rsrp / stats->num_rsrp_meas : 0;
     const int avg_sinrx10 = stats->num_sinr_meas > 0 ? stats->cumul_sinrx10 / stats->num_sinr_meas : 0;
 
-    output = st_append(output, end, "UE RNTI %04x CU-UE-ID ", UE->rnti);
+    //Display beam information when beamforming is active
+    if (gNB->beam_info.beam_mode != NO_BEAM_MODE) {
+      output = st_append(output, end, "UE RNTI %04x BeamId %d CU-UE-ID ", UE->rnti, UE->UE_beam_index);
+    } else {
+      output = st_append(output, end, "UE RNTI %04x CU-UE-ID ", UE->rnti);
+    }
     if (du_exists_f1_ue_data(UE->rnti)) {
       f1_ue_data_t ued = du_get_f1_ue_data(UE->rnti);
       output = st_append(output, end, "%d", ued.secondary_ue);
