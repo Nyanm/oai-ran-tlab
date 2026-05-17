@@ -535,13 +535,13 @@ int nr_rate_matching_ldpc(uint32_t Tbslbrm,
          Tbslbrm);
 #endif
 
-  if (Foffset > E) {
+  if (ind < Foffset && Foffset > E) {
     LOG_E(PHY,
-          "nr_rate_matching: invalid parameters (Foffset %d > E %d) F %d, k0 %d, Ncb %d, rvidx %d, Tbslbrm %d\n",
+          "nr_rate_matching: invalid parameters (ind %d < Foffset %d > E %d) F %d, Ncb %d, rvidx %d, Tbslbrm %d\n",
+          ind,
           Foffset,
           E,
           F,
-          ind,
           Ncb,
           rvidx,
           Tbslbrm);
@@ -625,8 +625,8 @@ int nr_rate_matching_ldpc_rx(uint32_t Tbslbrm,
   }
 
   uint32_t ind = (index_k0[BG - 1][rvidx] * Ncb / N) * Z;
-  if (Foffset > E) {
-    LOG_E(PHY, "nr_rate_matching: invalid parameters (Foffset %d > E %d)\n", Foffset, E);
+  if (ind < Foffset && Foffset > E) {
+    LOG_E(PHY, "nr_rate_matching_rx: invalid parameters (ind %d < Foffset %d > E %d)\n", ind, Foffset, E);
     return -1;
   }
   if (Foffset > Ncb) {
