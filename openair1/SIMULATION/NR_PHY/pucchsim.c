@@ -482,6 +482,7 @@ int main(int argc, char **argv)
   }
 
   fapi_nr_ul_config_pucch_pdu pucch_tx_pdu = {0};
+  UE->polar_interface = gNB->polar_interface;
   if (format == 0) {
     pucch_tx_pdu.format_type = 0;
     pucch_tx_pdu.nr_of_symbols = nrofSymbols;
@@ -495,8 +496,7 @@ int main(int argc, char **argv)
     pucch_tx_pdu.mcs = mcs;
     pucch_tx_pdu.initial_cyclic_shift = 0;
     pucch_tx_pdu.second_hop_prb = startingPRB_intraSlotHopping;
-  }
-  else if (format == 1) {
+  } else if (format == 1) {
     pucch_tx_pdu.format_type = 0;
     pucch_tx_pdu.n_bit = nr_bit;
     pucch_tx_pdu.payload = actual_payload;
@@ -546,7 +546,7 @@ int main(int argc, char **argv)
       } else if (format == 1 && do_DTX == 0) {
         nr_generate_pucch1(txdataF, frame_parms, amp, nr_slot_tx, &pucch_tx_pdu);
       } else if (do_DTX == 0) {
-        nr_generate_pucch2(txdataF, frame_parms, amp, nr_slot_tx, &pucch_tx_pdu);
+        nr_generate_pucch2(&UE->polar_interface, txdataF, frame_parms, amp, nr_slot_tx, &pucch_tx_pdu);
       }
 
       // SNR Computation
@@ -736,7 +736,7 @@ int main(int argc, char **argv)
         pucch_pdu.second_hop_prb = N_RB_DL - 2;
         pucch_pdu.time_domain_occ_idx = timeDomainOCC;
 
-        nr_decode_pucch1(gNB, rxdataF, nr_frame_tx, nr_slot_tx, &uci_pdu, &pucch_pdu);      
+        nr_decode_pucch1(gNB, rxdataF, nr_frame_tx, nr_slot_tx, &uci_pdu, &pucch_pdu);
         // harq value 0 -> pass
         nfapi_nr_harq_t *harq_list = uci_pdu.harq.harq_list;
         // confidence value 0 -> good confidence

@@ -27,10 +27,11 @@
 #include "SCHED_NR/sched_nr.h"
 #include "bits.h"
 
+#include "PHY/CODING/nrPolar_tools/polar_interface.h"
 #include "T.h"
 #include "nr_phy_common.h"
 
-//#define DEBUG_NR_PUCCH_RX 1
+// #define DEBUG_NR_PUCCH_RX 1
 void nr_fill_pucch(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_pucch_pdu_t *pucch_pdu)
 {
   LOG_D(PHY,
@@ -532,7 +533,7 @@ void nr_decode_pucch1(PHY_VARS_gNB *gNB,
    * Implementing TS 38.211 Subclause 6.3.2.4.2 Mapping to physical resources
    */
 // This value has to be calculated from mprime*12*table_6_3_2_4_1_1_N_SF_mprime_PUCCH_1_noHop[pucch_symbol_length]+m*12+n
-#define MAX_SIZE_Z 168 
+#define MAX_SIZE_Z 168
   c16_t z_rx[16][MAX_SIZE_Z] = {0};
   c16_t z_dmrs_rx[16][MAX_SIZE_Z] = {0};
   c16_t z[16][12] = {0};
@@ -702,7 +703,7 @@ void nr_decode_pucch1(PHY_VARS_gNB *gNB,
       // only if intra-slot hopping not enabled (PUCCH)
       int N_SF_mprime_PUCCH_1 = table_6_3_2_4_1_1_N_SF_mprime_PUCCH_1_noHop[pucch_pdu->nr_of_symbols - 1];
       // only if intra-slot hopping not enabled (DM-RS)
-      int N_SF_mprime_PUCCH_DMRS_1 = table_6_4_1_3_1_1_1_N_SF_mprime_PUCCH_1_noHop[pucch_pdu->nr_of_symbols - 1]; 
+      int N_SF_mprime_PUCCH_DMRS_1 = table_6_4_1_3_1_1_1_N_SF_mprime_PUCCH_1_noHop[pucch_pdu->nr_of_symbols - 1];
       if (l % 2 == 1) {
         for (int m = 0; m < N_SF_mprime_PUCCH_1; m++) {
           c16_t table = {table_6_3_2_4_1_2_Wi_Re[N_SF_mprime_PUCCH_1][w_index][m],
@@ -758,13 +759,13 @@ void nr_decode_pucch1(PHY_VARS_gNB *gNB,
       // hopping
 
       // only if intra-slot hopping enabled mprime = 0 (PUCCH)
-      int N_SF_mprime_PUCCH_1 = table_6_3_2_4_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols - 1]; 
+      int N_SF_mprime_PUCCH_1 = table_6_3_2_4_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols - 1];
       // only if intra-slot hopping enabled mprime = 0 (DM-RS)
-      int N_SF_mprime_PUCCH_DMRS_1 = table_6_4_1_3_1_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols - 1]; 
+      int N_SF_mprime_PUCCH_DMRS_1 = table_6_4_1_3_1_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols - 1];
       // only if intra-slot hopping enabled mprime = 0 (PUCCH)
       int N_SF_mprime0_PUCCH_1 = table_6_3_2_4_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols - 1];
       // only if intra-slot hopping enabled mprime = 0 (DM-RS)
-      int N_SF_mprime0_PUCCH_DMRS_1 = table_6_4_1_3_1_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols - 1]; 
+      int N_SF_mprime0_PUCCH_DMRS_1 = table_6_4_1_3_1_1_1_N_SF_mprime_PUCCH_1_m0Hop[pucch_pdu->nr_of_symbols - 1];
 #ifdef DEBUG_NR_PUCCH_RX
       printf(
           "\t [nr_decode_pucch1] w_index = %d, N_SF_mprime_PUCCH_1 = %d, N_SF_mprime_PUCCH_DMRS_1 = %d, N_SF_mprime0_PUCCH_1 = %d, "
@@ -1313,7 +1314,7 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
       for (int aa = 0; aa < Prx; aa++)
         mult_complex_vectors(rp[aa][symb], delay_table, rp[aa][symb], nb_re_pucch, 8);
     }
-    
+
     // extract again DMRS, and signal, after delay compensation
     for (int aa = 0; aa < Prx; aa++) {
       c16_t *r_ext_p = r_ext[aa][symb];
@@ -1495,7 +1496,7 @@ void nr_decode_pucch2(PHY_VARS_gNB *gNB,
 
     // run polar decoder on llrs
     decoderState =
-        polar_decoder_int16((int16_t *)llrs, decodedPayload, 0, NR_POLAR_UCI_PUCCH_MESSAGE_TYPE, nb_bit, pucch_pdu->prb_size);
+        gNB->polar_interface.polar_decoder((int16_t *)llrs, decodedPayload, NR_POLAR_UCI_MESSAGE_TYPE, nb_bit, pucch_pdu->prb_size);
 
     // Decoder reversal
     decodedPayload[0] = reverse_bits(decodedPayload[0], nb_bit);
