@@ -472,16 +472,6 @@ nr_initial_sync_t nr_initial_sync(UE_nr_rxtx_proc_t *proc,
   LOG_D(PHY, "nr_initial sync ue RB_DL %d\n", fp->N_RB_DL);
 
   if (res) {
-    // digital compensation of FFO for SSB symbols
-    if (res->freqOffset && ue->UE_fo_compensation) {
-      // In SA we need to perform frequency offset correction until the end of buffer because we need to decode SIB1
-      // and we do not know yet in which slot it goes.
-      compensate_freq_offset(ue->common_vars.rxdata,
-                             fp->nb_antennas_rx,
-                             fp->samples_per_frame,
-                             res->freqOffset,
-                             fp->samples_per_subframe * 1000);
-    }
     // sync at symbol ue->symbol_offset
     // computing the offset wrt the beginning of the frame
     int mu = fp->numerology_index;
@@ -498,24 +488,24 @@ nr_initial_sync_t nr_initial_sync(UE_nr_rxtx_proc_t *proc,
     if (res->ssbOffset < sync_pos_frame) {
       res->syncRes.rx_offset = fp->samples_per_frame - sync_pos_frame + res->ssbOffset;
       ue->init_sync_frame += 1;
-    } else
+    } else {
       res->syncRes.rx_offset = res->ssbOffset - sync_pos_frame;
-  }
+    }
 
-  if (res) {
     LOG_I(PHY, "[UE%d] In synch, rx_offset %d samples\n", ue->Mod_id, res->syncRes.rx_offset);
     LOG_I(PHY, "[UE %d] Measured Carrier Frequency offset %d Hz\n", ue->Mod_id, res->freqOffset);
+    LOG_A(PHY, "Initial sync successful, PCI: %d\n", fp->Nid_cell);
+    return res->syncRes;
   } else {
 #ifdef DEBUG_INITIAL_SYNC
     LOG_I(PHY,"[UE%d] Initial sync : PBCH not ok\n",ue->Mod_id);
     LOG_I(PHY, "[UE%d] Initial sync : Estimated PSS position %d, Nid2 %d\n", ue->Mod_id, sync_pos, ue->common_vars.nid2);
     LOG_I(PHY,"[UE%d] Initial sync : Estimated Nid_cell %d, Frame_type %d\n",ue->Mod_id,
           fp->Nid_cell,fp->frame_type);
+    LOG_I(PHY, "[UE%d] Initial sync failed : Estimated power: %d dB\n", ue->Mod_id, ue->measurements.rx_power_avg_dB[0]);
 #endif
-  }
-
-  // gain control
-  if (!res) { // we are not synched, so we cannot use rssi measurement (which is based on channel estimates)
+    // gain control
+    // we are not synched, so we cannot use rssi measurement (which is based on channel estimates)
     int rx_power = 0;
 
     // do a measurement on the best guess of the PSS
@@ -532,18 +522,7 @@ nr_initial_sync_t nr_initial_sync(UE_nr_rxtx_proc_t *proc,
 
     // we might add a low-pass filter here later
     ue->measurements.rx_power_avg[0] = rx_power / fp->nb_antennas_rx;
-
     ue->measurements.rx_power_avg_dB[0] = dB_fixed(ue->measurements.rx_power_avg[0]);
-
-#ifdef DEBUG_INITIAL_SYNCH
-    LOG_I(PHY, "[UE%d] Initial sync failed : Estimated power: %d dB\n", ue->Mod_id, ue->measurements.rx_power_avg_dB[0]);
-#endif
-  } else {
-    LOG_A(PHY, "Initial sync successful, PCI: %d\n", fp->Nid_cell);
-  }
-  //  exit_fun("debug exit");
-  if (res)
-    return res->syncRes;
-  else
     return (nr_initial_sync_t){.cell_detected = false};
+  }
 }
