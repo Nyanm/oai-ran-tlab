@@ -267,6 +267,24 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
   output += print_meas_log(&gNB->dlsch_scrambling_stats, "DLSCH scrambling", NULL, NULL, output, end-output);
   output += print_meas_log(&gNB->dlsch_modulation_stats, "DLSCH modulation", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->dlsch_pdsch_generation_stats, "PDSCH generation", NULL, NULL, output,end-output);
+  output += print_meas_log(&gNB->dlsch_layer_mapping_stats,
+                           "DLSCH Layer Mapping",
+                           NULL,
+                           NULL,
+                           output,
+                           end - output);
+  output += print_meas_log(&gNB->dlsch_resource_mapping_stats,
+                           "DLSCH Resource Mapping",
+                           NULL,
+                           NULL,
+                           output,
+                           end - output);
+  output += print_meas_log(&gNB->dlsch_precoding_stats,
+                           "DLSCH Precoding",
+                           NULL,
+                           NULL,
+                           output,
+                           end - output);
   output += print_meas_log(&gNB->phy_proc_rx, "L1 Rx processing", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->ulsch_decoding_stats, "ULSCH decoding", NULL, NULL, output, end - output);
   output += print_meas_log(&gNB->ts_deinterleave, "UL segment deinterleaving", NULL, NULL, output, end - output);
@@ -328,6 +346,8 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
     reset_meas(&gNB->dlsch_interleaving_stats);
     reset_meas(&gNB->dlsch_scrambling_stats);
     reset_meas(&gNB->dlsch_modulation_stats);
+    reset_meas(&gNB->dlsch_layer_mapping_stats);
+    reset_meas(&gNB->dlsch_precoding_stats);
     reset_meas(&gNB->dlsch_resource_mapping_stats);
     reset_meas(&gNB->dlsch_pdsch_generation_stats);
     reset_meas(&gNB->phy_proc_rx);
