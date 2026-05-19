@@ -821,6 +821,11 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     if ((rel15->NrOfSymbols % num_pdsch_symbols_per_task) > 0)
       nb_tasks++;
   }
+
+  if (slot_type == NR_DOWNLINK_SLOT) {
+    start_meas(&gNB->dlsch_pdsch_task_prep_stats);
+  }
+
   pdschSymbolProc_t arr[nb_tasks];
   task_ans_t ans;
   init_task_ans(&ans, nb_tasks);
@@ -869,11 +874,28 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
       nr_pdsch_symbol_processing(rdata);
     }
   }
+
+  if (slot_type == NR_DOWNLINK_SLOT) {
+    stop_meas(&gNB->dlsch_pdsch_task_prep_stats);
+    start_meas(&gNB->dlsch_pdsch_task_wait_stats);
+  }
+
   join_task_ans(&ans);
+
+  if (slot_type == NR_DOWNLINK_SLOT) {
+    stop_meas(&gNB->dlsch_pdsch_task_wait_stats);
+    start_meas(&gNB->dlsch_pdsch_task_merge_stats);
+  }
+
   for (int i = 0; i < nb_tasks; i++) {
     merge_meas(&gNB->dlsch_resource_mapping_stats, &arr[i].dlsch_resource_mapping_stats);
     merge_meas(&gNB->dlsch_precoding_stats, &arr[i].dlsch_precoding_stats);
   }
+  
+  if (slot_type == NR_DOWNLINK_SLOT) {
+    stop_meas(&gNB->dlsch_pdsch_task_merge_stats);
+  }
+
   if (slot_type == NR_DOWNLINK_SLOT) {
     stop_meas(&gNB->dlsch_pdsch_generation_stats);
   }
