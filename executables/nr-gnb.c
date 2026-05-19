@@ -122,8 +122,8 @@ static void tx_func(processingData_L1tx_t *info)
       || IS_SOFTMODEM_RFSIM || cfg->analog_beamforming_ve.analog_bf_vendor_ext.value) {
     if (tx_slot_type == NR_DOWNLINK_SLOT) {
       start_meas(&info->gNB->phy_proc_tx);
+      start_meas(&info->gNB->gnb_tx_procedures_stats);
     }
-    start_meas(&info->gNB->gnb_tx_procedures_stats);
     phy_procedures_gNB_TX(info->gNB,
                           &sched_response.DL_req,
                           &sched_response.TX_req,
@@ -131,8 +131,13 @@ static void tx_func(processingData_L1tx_t *info)
                           frame_tx,
                           slot_tx,
                           1);
-    stop_meas(&info->gNB->gnb_tx_procedures_stats);   
+ 
+    if (tx_slot_type == NR_DOWNLINK_SLOT) {
+       stop_meas(&info->gNB->gnb_tx_procedures_stats);
+     }
+  
 
+ 
     PHY_VARS_gNB *gNB = info->gNB;
     processingData_RU_t syncMsgRU;
     syncMsgRU.frame_tx = frame_tx;
@@ -140,12 +145,16 @@ static void tx_func(processingData_L1tx_t *info)
     syncMsgRU.ru = gNB->RU_list[0];
     syncMsgRU.timestamp_tx = info->timestamp_tx;
     LOG_D(PHY, "gNB: %d.%d : calling RU TX function\n", syncMsgRU.frame_tx, syncMsgRU.slot_tx);
-    start_meas(&info->gNB->ru_tx_func_stats);
-    ru_tx_func((void *)&syncMsgRU);
-    stop_meas(&info->gNB->ru_tx_func_stats);
+
     if (tx_slot_type == NR_DOWNLINK_SLOT) {
-      stop_meas(&info->gNB->phy_proc_tx);
+      start_meas(&info->gNB->ru_tx_func_stats);
     }
+
+    ru_tx_func((void *)&syncMsgRU);
+    if (tx_slot_type == NR_DOWNLINK_SLOT) {
+       stop_meas(&info->gNB->ru_tx_func_stats);
+       stop_meas(&info->gNB->phy_proc_tx);
+     }
   }
 }
 
