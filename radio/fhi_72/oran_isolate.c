@@ -359,7 +359,11 @@ void oran_fh_if4p5_south_out(RU_t *ru, int frame, int slot, uint64_t timestamp)
 
 void oran_fh_if4p5_south_in_dma_device(RU_t *ru, int *frame, int *slot)
 {
-  printf("Let's see if we are in oran_fh_if4p5_south_in_dma_device rn???\n ");
+  //printf("Let's see if we are in oran_fh_if4p5_south_in_dma_device rn???\n ");
+
+  
+  int ret = 0; // return code for PUSCH/PRACH processing
+
   ru_info_t ru_info = {
       .nb_rx = ru->nb_rx * ru->num_beams_period,
       .nb_tx = ru->nb_tx * ru->num_beams_period,
@@ -369,31 +373,28 @@ void oran_fh_if4p5_south_in_dma_device(RU_t *ru, int *frame, int *slot)
       .prach_buf = NULL,
   };
 
-  prach_item_t *prach_id = find_nr_prach(&ru->gNB_list[0]->prach_list, *frame, *slot, ru->nr_frame_parms->nb_antennas_rx, SEARCH_EXIST);
-  if (prach_id) {
-    struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
-    int slots_per_subframe = 1 << fh_cfg->frame_conf.nNumerology;
-    uint32_t subframe = *slot / slots_per_subframe; // `slot` = slot in which PRACH is received
-    // PRACH occasion in a frame if and only if SFN % x == y, TS 38.211 Table 6.3.3.2-2/3/4
-    nr_prach_info_t prach_info = get_prach_info(0);
-    bool is_prach_frame = (*frame % prach_info.x == prach_info.y);
-    bool is_prach_slot = is_prach_frame && xran_is_prach_slot(0, subframe, (prach_id->slot % slots_per_subframe)); // `prach_id->slot` = slot in which PRACH is scheduled
-    if (is_prach_slot) {
-      ru_info.prach_buf = prach_id->prach_buf;
-    } else {
-      LOG_W(HW, "[%d.%d] Expected PRACH reception of scheduled slot %d\n", *frame, *slot, prach_id->slot);
-    }
-  }
-
-  RU_proc_t *proc = &ru->proc;
+  /* Firstly, process PUSCH packets */
+  RU_proc_t *proc = &ru->proc; // to check if (frame,slot) combination corresponds to the expected PUSCH one
   int f, sl;
   LOG_D(HW, "Read rxdataF %p,%p\n", ru_info.rxdataF[0], ru_info.rxdataF[1]);
   start_meas(&ru->rx_fhaul);
-  int ret = xran_fh_rx_read_slot(&ru_info, &f, &sl);
+  ret = xran_fh_rx_read_slot(&ru_info, &f, &sl);
   stop_meas(&ru->rx_fhaul);
   LOG_D(HW, "Read %d.%d rxdataF %p,%p\n", f, sl, ru_info.rxdataF[0], ru_info.rxdataF[1]);
   if (ret != 0) {
     printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX function \n", f, sl);
+  }
+
+  /* Secondly, process PRACH packets */
+  int f_prach, sl_prach;
+#if defined F_RELEASE
+  // no PRACH callback (no queue) in F release so use the expected combination
+  f_prach = *frame;
+  sl_prach = *slot;
+#endif
+  ret = xran_fh_rx_prach_read_slot(ru->gNB_list[0], &ru_info, &f_prach, &sl_prach);
+  if (ret != 0) {
+    printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX PRACH function \n", f_prach, sl_prach);
   }
 
   int slots_per_frame = 10 << (ru->openair0_cfg.nr_scs_for_raster);
@@ -403,6 +404,7 @@ void oran_fh_if4p5_south_in_dma_device(RU_t *ru, int *frame, int *slot)
   proc->frame_tx = (sl > (slots_per_frame - 1 - ru->sl_ahead)) ? (f + 1) & 1023 : f;
 
   if (proc->first_rx == 0) {
+    print_fhi_counters(&ru_info, proc->frame_rx, proc->tti_rx);
     if (proc->tti_rx != *slot) {
       LOG_E(HW,
             "Received Time doesn't correspond to the time we think it is (slot mismatch, received %d.%d, expected %d.%d)\n",
@@ -455,6 +457,8 @@ void oran_fh_if4p5_south_out_dma_device(RU_t *ru, int frame, int slot, uint64_t 
 void oran_fh_if4p5_south_in_dma_host(RU_t *ru, int *frame, int *slot)
 {
   printf("Let's see if we are in oran_fh_if4p5_south_in_dma_host rn???\n ");
+  int ret = 0; // return code for PUSCH/PRACH processing
+
   ru_info_t ru_info = {
       .nb_rx = ru->nb_rx * ru->num_beams_period,
       .nb_tx = ru->nb_tx * ru->num_beams_period,
@@ -464,31 +468,28 @@ void oran_fh_if4p5_south_in_dma_host(RU_t *ru, int *frame, int *slot)
       .prach_buf = NULL,
   };
 
-  prach_item_t *prach_id = find_nr_prach(&ru->gNB_list[0]->prach_list, *frame, *slot, ru->nr_frame_parms->nb_antennas_rx, SEARCH_EXIST);
-  if (prach_id) {
-    struct xran_fh_config *fh_cfg = get_xran_fh_config(0);
-    int slots_per_subframe = 1 << fh_cfg->frame_conf.nNumerology;
-    uint32_t subframe = *slot / slots_per_subframe; // `slot` = slot in which PRACH is received
-    // PRACH occasion in a frame if and only if SFN % x == y, TS 38.211 Table 6.3.3.2-2/3/4
-    nr_prach_info_t prach_info = get_prach_info(0);
-    bool is_prach_frame = (*frame % prach_info.x == prach_info.y);
-    bool is_prach_slot = is_prach_frame && xran_is_prach_slot(0, subframe, (prach_id->slot % slots_per_subframe)); // `prach_id->slot` = slot in which PRACH is scheduled
-    if (is_prach_slot) {
-      ru_info.prach_buf = prach_id->prach_buf;
-    } else {
-      LOG_W(HW, "[%d.%d] Expected PRACH reception of scheduled slot %d\n", *frame, *slot, prach_id->slot);
-    }
-  }
-
-  RU_proc_t *proc = &ru->proc;
+  /* Firstly, process PUSCH packets */
+  RU_proc_t *proc = &ru->proc; // to check if (frame,slot) combination corresponds to the expected PUSCH one
   int f, sl;
   LOG_D(HW, "Read rxdataF %p,%p\n", ru_info.rxdataF[0], ru_info.rxdataF[1]);
   start_meas(&ru->rx_fhaul);
-  int ret = xran_fh_rx_read_slot(&ru_info, &f, &sl);
+  ret = xran_fh_rx_read_slot(&ru_info, &f, &sl);
   stop_meas(&ru->rx_fhaul);
   LOG_D(HW, "Read %d.%d rxdataF %p,%p\n", f, sl, ru_info.rxdataF[0], ru_info.rxdataF[1]);
   if (ret != 0) {
     printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX function \n", f, sl);
+  }
+
+  /* Secondly, process PRACH packets */
+  int f_prach, sl_prach;
+#if defined F_RELEASE
+  // no PRACH callback (no queue) in F release so use the expected combination
+  f_prach = *frame;
+  sl_prach = *slot;
+#endif
+  ret = xran_fh_rx_prach_read_slot(ru->gNB_list[0], &ru_info, &f_prach, &sl_prach);
+  if (ret != 0) {
+    printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX PRACH function \n", f_prach, sl_prach);
   }
 
   int slots_per_frame = 10 << (ru->openair0_cfg.nr_scs_for_raster);
@@ -498,6 +499,7 @@ void oran_fh_if4p5_south_in_dma_host(RU_t *ru, int *frame, int *slot)
   proc->frame_tx = (sl > (slots_per_frame - 1 - ru->sl_ahead)) ? (f + 1) & 1023 : f;
 
   if (proc->first_rx == 0) {
+    print_fhi_counters(&ru_info, proc->frame_rx, proc->tti_rx);
     if (proc->tti_rx != *slot) {
       LOG_E(HW,
             "Received Time doesn't correspond to the time we think it is (slot mismatch, received %d.%d, expected %d.%d)\n",

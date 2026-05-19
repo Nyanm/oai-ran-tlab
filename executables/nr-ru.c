@@ -60,6 +60,7 @@ static void NRRCconfig_RU(configmodule_interface_t *cfg);
 
 void print_shadow_gnb_config(nfapi_nr_config_request_scf_t *cfg);
 
+void nroru_init_nr_transport(PHY_VARS_gNB *gNB);
 /*************************************************************/
 /* Southbound Fronthaul functions, RCC/RAU                   */
 
@@ -1127,8 +1128,14 @@ void *ru_thread(void *param)
     // do RX front-end processing (frequency-shift, dft) if needed
     int slot_type = nr_slot_select(&ru->config, proc->frame_rx, proc->tti_rx);
     if (slot_type == NR_UPLINK_SLOT || slot_type == NR_MIXED_SLOT) {
-      if (!wait_free_rx_tti(&gNB->L1_rx_out, rx_tti_busy, proc->frame_rx, proc->tti_rx))
-        break; // nothing to wait for: we have to stop
+      
+      if (ru->if_south == REMOTE_IF4p5_DMA_DEVICE) {
+        LOG_D(PHY, "Standalone O-RU mode: bypass wait_free_rx_tti for frame %d, slot %d\n", 
+              proc->frame_rx, proc->tti_rx);
+      } else {
+        if (!wait_free_rx_tti(&gNB->L1_rx_out, rx_tti_busy, proc->frame_rx, proc->tti_rx))
+          break; // nothing to wait for: we have to stop
+      }
       if (ru->feprx) {
         ru->feprx(ru,proc->tti_rx);
         LOG_D(NR_PHY, "Setting %d.%d (%d) to busy\n", proc->frame_rx, proc->tti_rx, proc->tti_rx % RU_RX_SLOT_DEPTH);
@@ -1401,6 +1408,10 @@ void init_NR_RU(configmodule_interface_t *cfg, char *rf_config_file)
     // NOTE: multiple CC_id are not handled here yet!
     
     if (ru->if_south == REMOTE_IF4p5_DMA_DEVICE) {
+      if(RC.nb_nr_L1_inst == 0){
+        LOG_I(PHY, "No local L1 instance in nr-oru. Setting sync_var to 0\n");
+        sync_var = 0;
+      }
     LOG_I(PHY, "DMA [Device]: Initializing Control Plane handshake with Host at %s:%d\n", 
           ru->dma_ctrl_ip, ru->dma_ctrl_port);
 
@@ -1541,6 +1552,7 @@ if (total_read == expected_size && sync_cfg.magic == 0x0A1D3A00) {
         AssertFatal(0, "❌ DMA: Handshake Failed! \n [Detail]: Read: %d bytes, Expected: %d bytes\n[Magic]:  Received: 0x%08X, Expected: 0x0A1D3A00\n", total_read, sizeof(dma_sync_config_t), sync_cfg.magic);
     }
 
+
     close(sock);
     LOG_I(PHY, "DMA: Control Plane handshake completed. Shadow gNB is ready.\n");
 }
@@ -1574,6 +1586,16 @@ if (total_read == expected_size && sync_cfg.magic == 0x0A1D3A00) {
         for (int i = 0; i < ru->num_gNB; i++) {
           gNB0 = ru->gNB_list[i];
           gNB0->RU_list[gNB0->num_RU++] = ru;
+        }
+      }
+    }
+    
+    if(ru->gNB_list[0]){
+      if (ru->if_south == REMOTE_IF4p5_DMA_DEVICE) {
+        for (int i = 0; i < ru->num_gNB; i++) {
+          gNB0 = ru->gNB_list[i];
+          init_nr_prach(gNB0);
+          nroru_init_nr_transport(gNB0);
         }
       }
     }
@@ -2036,4 +2058,33 @@ void print_shadow_gnb_config(nfapi_nr_config_request_scf_t *cfg) {
         LOG_E(PHY, "[TDD] Error: max_tdd_periodicity_list is NULL!\n");
     }
     LOG_I(PHY, "========================================================\n");
+}
+
+void nroru_init_nr_transport(PHY_VARS_gNB *gNB)
+{
+  // 针对独立前传联调，指定一个安全的固定的队列深度（16 或 32，必须是 2 的幂次方）
+  int max_nb_jobs = 16; 
+  bool ret;
+
+  // 1. 初始化 PUCCH 队列，写入正确的元素尺寸，防止 spsc_q_get_if 断言失败
+  ret = spsc_q_alloc(&gNB->pucch_queue, max_nb_jobs, sizeof(NR_gNB_PUCCH_job_t));
+  DevAssert(ret);
+
+  // 2. 初始化 PUSCH 队列
+  ret = spsc_q_alloc(&gNB->pusch_queue, max_nb_jobs, sizeof(NR_gNB_PUSCH_job_t));
+  DevAssert(ret);
+
+  // 3. 初始化 SRS 队列
+  ret = spsc_q_alloc(&gNB->srs_queue, max_nb_jobs, sizeof(NR_gNB_SRS_job_t));
+  DevAssert(ret);
+
+  // 4. 为防止前传底层逻辑通过指针索引 gNB->ulsch，分配一个干净的空指针数组（不调用依赖 LDPC 的 new_gNB_ulsch）
+  gNB->max_nb_pusch = max_nb_jobs;
+  gNB->ulsch = (NR_gNB_ULSCH_t *)malloc16(gNB->max_nb_pusch * sizeof(NR_gNB_ULSCH_t));
+  if (gNB->ulsch) {
+    memset(gNB->ulsch, 0, gNB->max_nb_pusch * sizeof(NR_gNB_ULSCH_t));
+  }
+
+  gNB->rx_total_gain_dB = 130;
+  LOG_I(PHY, "Standalone ORU mode: PUCCH, PUSCH, and SRS queues successfully mock-initialized.\n");
 }

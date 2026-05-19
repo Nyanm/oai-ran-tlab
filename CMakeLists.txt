@@ -1838,6 +1838,7 @@ add_executable(nr-oru
   ${OPENAIR_DIR}/executables/main_nr_ru.c
   ${OPENAIR_DIR}/openair2/LAYER2/NR_MAC_COMMON/nr_mac_common.c
   ${OPENAIR_DIR}/openair2/LAYER2/NR_MAC_COMMON/nr_mac_common_tdd.c
+  ${OPENAIR_DIR}/openair1/PHY/NR_TRANSPORT/nr_prach.c
 )
 
 target_compile_definitions(nr-oru PRIVATE NR_ORU)
@@ -1950,6 +1951,55 @@ target_link_libraries(nr-uesoftmodem PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
 # force the generation of ASN.1 so that we don't need to wait during the build
 target_link_libraries(nr-uesoftmodem PRIVATE
                       asn1_lte_rrc asn1_nr_rrc asn1_s1ap asn1_ngap asn1_m2ap asn1_m3ap asn1_x2ap asn1_f1ap asn1_lpp)
+
+# ======================================================================
+# 🚀 HACK: DOCA DMA ACCELERATION FOR FRONTHAUL (nr-oru & nr-softmodem)
+# ======================================================================
+
+option(ENABLE_DOCA_DMA "Activate DOCA DMA driver for Fronthaul 7.2" OFF)
+
+if (ENABLE_DOCA_DMA)
+    message(STATUS "🚀 [HACK] Integrating DOCA from /opt/mellanox/doca")
+    
+    add_definitions(-DENABLE_DOCA_DMA)
+    
+   # 1. 定义基础路径
+    set(DOCA_BASE "/opt/mellanox/doca")
+    set(DOCA_LIB_PATH "${DOCA_BASE}/lib/aarch64-linux-gnu")
+
+    # 2. 直接指定库文件的绝对路径（不再用 -l 参数，而是直接用文件路径）
+    # 这样链接器就没有任何借口说找不到文件了
+    set(DOCA_LIBS
+        "${DOCA_LIB_PATH}/libdoca_common.so"
+        "${DOCA_LIB_PATH}/libdoca_dma.so"
+        "${DOCA_LIB_PATH}/libdoca_argp.so"
+    )
+
+    # 3. 头文件路径还是要有的
+    include_directories(
+        "${DOCA_BASE}/include"
+        "${DOCA_BASE}/samples"
+        "${DOCA_BASE}/samples/doca_dma"
+    )
+
+    # 4. 辅助源码
+    set(DOCA_HELPER_SRCS
+        "${DOCA_BASE}/samples/common.c"
+        "${DOCA_BASE}/samples/doca_dma/dma_common.c"
+    )
+
+    # 5. 链接到目标
+    target_sources(nr-oru PRIVATE ${DOCA_HELPER_SRCS})
+    target_sources(nr-softmodem PRIVATE ${DOCA_HELPER_SRCS})
+
+    target_link_libraries(nr-oru PRIVATE ${DOCA_LIBS})
+    target_link_libraries(nr-softmodem PRIVATE ${DOCA_LIBS})
+
+    # 如果有这个子库，也强行挂载
+    if (TARGET oai_xrandev)
+        target_link_libraries(oai_xrandev PRIVATE ${DOCA_LIBS})
+    endif()
+endif()
 
 ###################################"
 # Addexecutables for tests

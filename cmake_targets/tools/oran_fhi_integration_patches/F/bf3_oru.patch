@@ -13,3 +13,132 @@ index 8fb0ec2..96ed232 100644
          }
      }
  
+diff --git a/fhi_lib/lib/ethernet/ethernet.c b/fhi_lib/lib/ethernet/ethernet.c
+index edda598..f6808a3 100644
+--- a/fhi_lib/lib/ethernet/ethernet.c
++++ b/fhi_lib/lib/ethernet/ethernet.c
+@@ -37,7 +37,10 @@
+ #include <sys/types.h>
+ #include <stdlib.h>
+ #include <math.h>
++#if defined(__arm__) || defined(__aarch64__)
++#else
+ #include <immintrin.h>
++#endif
+ #include <rte_config.h>
+ #include <rte_common.h>
+ #include <rte_log.h>
+@@ -80,11 +83,11 @@ struct rte_mempool *_eth_mbuf_pool_vf_small[16]    = {NULL};
+ void
+ xran_init_mbuf_pool(uint32_t mtu)
+ {
+-    uint16_t data_room_size = MBUF_POOL_ELEMENT;
++    uint16_t data_room_size = MBUF_POOL_ELEMENT + DPU_COMPLIANT;
+     printf("%s: socket %d\n",__FUNCTION__, rte_socket_id());
+ 
+     if (mtu <= 1500) {
+-        data_room_size = MBUF_POOL_ELM_SMALL;
++        data_room_size = MBUF_POOL_ELM_SMALL + DPU_COMPLIANT;
+ }
+ 
+     /* Init the buffer pool */
+@@ -149,13 +152,22 @@ void xran_init_port(int p_id, uint16_t num_rxq, uint32_t mtu)
+     static uint16_t nb_txd = BURST_SIZE;
+     struct rte_ether_addr addr;
+     struct rte_eth_rxmode rxmode = {
++#if (RTE_VER_YEAR >= 21)
++            .mtu = MAX_RX_LEN,
++#else
+             .split_hdr_size = 0,
+               .max_rx_pkt_len = MAX_RX_LEN,
+             .offloads       = DEV_RX_OFFLOAD_JUMBO_FRAME
++#endif
+             };
+     struct rte_eth_txmode txmode = {
++#if (RTE_VER_YEAR >= 21)
++            .mq_mode        = RTE_ETH_MQ_TX_NONE,
++            .offloads       = RTE_ETH_TX_OFFLOAD_MULTI_SEGS
++#else
+             .mq_mode        = ETH_MQ_TX_NONE,
+             .offloads       = DEV_TX_OFFLOAD_MULTI_SEGS
++#endif
+             };
+     struct rte_eth_conf port_conf = {
+             .rxmode = rxmode,
+@@ -169,14 +181,19 @@ void xran_init_port(int p_id, uint16_t num_rxq, uint32_t mtu)
+     const char *drv_name = "";
+     int sock_id = rte_eth_dev_socket_id(p_id);
+     char rx_pool_name[32]    = "";
+-    uint16_t data_room_size = MBUF_POOL_ELEMENT;
++    uint16_t data_room_size = MBUF_POOL_ELEMENT + DPU_COMPLIANT;
+     uint16_t qi = 0;
+     uint32_t num_mbufs = 0;
+ 
+     if (mtu <= 1500) {
++#if (RTE_VER_YEAR >= 21)
++        rxmode.offloads &= ~RTE_ETH_TX_OFFLOAD_IPIP_TNL_TSO;
++        rxmode.mtu = RTE_ETHER_MAX_LEN;
++#else
+         rxmode.offloads &= ~DEV_RX_OFFLOAD_JUMBO_FRAME;
+         rxmode.max_rx_pkt_len = RTE_ETHER_MAX_LEN;
+-        data_room_size = MBUF_POOL_ELM_SMALL;
++#endif
++        data_room_size = MBUF_POOL_ELM_SMALL + DPU_COMPLIANT;
+     }
+ 
+     rte_eth_dev_info_get(p_id, &dev_info);
+@@ -184,10 +201,19 @@ void xran_init_port(int p_id, uint16_t num_rxq, uint32_t mtu)
+         drv_name = dev_info.driver_name;
+     printf("initializing port %d for TX, drv=%s\n", p_id, drv_name);
+ 
+-    if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE){
++#if (RTE_VER_YEAR >= 21)
++    if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE)
++#else
++    if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE)
++#endif
++    {
+         printf("set DEV_TX_OFFLOAD_MBUF_FAST_FREE\n");
+         port_conf.txmode.offloads |=
++#if (RTE_VER_YEAR >= 21)
++            RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE;
++#else
+             DEV_TX_OFFLOAD_MBUF_FAST_FREE;
++#endif
+     }
+ 
+     rte_eth_macaddr_get(p_id, &addr);
+@@ -277,7 +303,7 @@ void xran_init_port_mempool(int p_id, uint32_t mtu)
+     snprintf(rx_pool_name, RTE_DIM(rx_pool_name), "%s_%d", "mempool_small_", p_id);
+     printf("[%d] %s\n", p_id, rx_pool_name);
+     _eth_mbuf_pool_vf_small[p_id] = rte_pktmbuf_pool_create(rx_pool_name, NUM_MBUFS_VF,
+-                MBUF_CACHE, 0, MBUF_POOL_ELM_SMALL, rte_socket_id());
++                MBUF_CACHE, 0, MBUF_POOL_ELM_SMALL + DPU_COMPLIANT, rte_socket_id());
+ 
+     if (_eth_mbuf_pool_vf_small[p_id] == NULL)
+         rte_panic("Cannot create mbuf pool: %s\n", rte_strerror(rte_errno));
+@@ -293,8 +319,13 @@ void xran_add_eth_hdr_vlan(struct rte_ether_addr *dst, uint16_t ethertype, struc
+     PANIC_ON(h == NULL, "mbuf prepend of ether_hdr failed");
+ 
+     /* Fill in the ethernet header. */
++#if (RTE_VER_YEAR >= 21)
++    rte_eth_macaddr_get(mb->port, &h->src_addr);          /* set source addr */
++    h->dst_addr = *dst;                                   /* set dst addr */
++#else
+     rte_eth_macaddr_get(mb->port, &h->s_addr);          /* set source addr */
+     h->d_addr = *dst;                                   /* set dst addr */
++#endif
+     h->ether_type = rte_cpu_to_be_16(ethertype);        /* ethertype too */
+ #if 0
+     struct rte_ether_addr *s = &h->s_addr;
+diff --git a/fhi_lib/lib/ethernet/ethernet.h b/fhi_lib/lib/ethernet/ethernet.h
+index f6b1b21..8c2798a 100644
+--- a/fhi_lib/lib/ethernet/ethernet.h
++++ b/fhi_lib/lib/ethernet/ethernet.h
+@@ -34,6 +34,7 @@ extern "C" {
+ #include <rte_ether.h>
+ #include <rte_mbuf.h>
+ 
++#define DPU_COMPLIANT 64
+ 
+ #define BURST_SIZE 4096 /** IAVF_MAX_RING_DESC        4096  */

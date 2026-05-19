@@ -434,7 +434,7 @@ static void oran_allocate_buffers(void *handle,
 void *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_config *xran_fh_config)
 {
   int32_t xret = 0;
-
+printf("We are initialing the oran!!!!!!!\n");
 #if defined K_RELEASE
   xran_mem_mgr_leak_detector_init();
 #endif
@@ -462,6 +462,7 @@ void *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_conf
 #endif
 
   /** process all the O-RU|O-DU for use case */
+  printf("testing3.1\n");
   for (int32_t o_xu_id = 0; o_xu_id < xran_fh_init->xran_ports; o_xu_id++) {
     print_fh_config(&xran_fh_config[o_xu_id]);
 #if defined F_RELEASE
@@ -480,7 +481,7 @@ void *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_conf
     struct xran_cb_tag tag = {.cellId = sector, .oXuId = o_xu_id};
     pi->prach_tag = tag;
     pi->pusch_tag = tag;
-
+printf("testing3.2\n");
 #if defined K_RELEASE
     oran_allocate_buffers(gxran_handle[0], o_xu_id, 1, pi, xran_fh_init->mtu, &xran_fh_config[o_xu_id]);
     if ((xret = xran_timingsource_reg_tticb(NULL, oai_physide_dl_tti_call_back, NULL, 10, XRAN_CB_TTI)) != XRAN_STATUS_SUCCESS) {
@@ -490,10 +491,12 @@ void *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_conf
 #elif defined F_RELEASE
     LOG_W(HW, "Please be aware that F release support will be removed in the future. Consider switching to K release.\n");
     oran_allocate_buffers(gxran_handle, o_xu_id, 1, pi, xran_fh_init->mtu, &xran_fh_config[o_xu_id]);
+    printf("testing3.2\n");
     if ((xret = xran_reg_physide_cb(gxran_handle, oai_physide_dl_tti_call_back, NULL, 10, XRAN_CB_TTI)) != XRAN_STATUS_SUCCESS) {
       printf("xran_reg_physide_cb failed %d\n", xret);
       exit(-1);
     }
+    printf("testing3.3\n");
 #endif
 
     // retrieve and store prach duration
@@ -502,6 +505,7 @@ void *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_conf
     uint8_t idx = xran_fh_config[o_xu_id].perMu[mu].prach_conf.nPrachConfIdx;
 #elif defined F_RELEASE
     uint8_t idx = xran_fh_config[o_xu_id].prach_conf.nPrachConfIdx;
+    printf("testing3.4\n");
 #endif
     const struct xran_frame_config *fc = &xran_fh_config[o_xu_id].frame_conf;
     g_prach_info[o_xu_id] = get_nr_prach_occasion_info_from_index(idx,
@@ -512,12 +516,12 @@ void *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_conf
 #endif
                                                                   fc->nFrameDuplexType == XRAN_FDD ? duplex_mode_FDD : duplex_mode_TDD);
   }
-
+printf("testing3.5\n");
   // store config after xran initialization -- xran makes modifications to
   // these structs during initialization
   memcpy(&g_fh_init, xran_fh_init, sizeof(*xran_fh_init));
   memcpy(&g_fh_config, xran_fh_config, sizeof(*xran_fh_config) * xran_fh_init->xran_ports);
-
+printf("testing3.6\n");
   return gxran_handle;
 }
 
