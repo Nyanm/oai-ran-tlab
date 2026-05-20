@@ -525,10 +525,10 @@ int main(int argc, char **argv)
       print_perf=1;
       cpu_meas_enabled = 1;
       break;
-     
+
     case 'Q':
       use_gpu=1;
-      break; 
+      break;
     case 'I':
       max_ldpc_iterations = atoi(optarg);
       break;
@@ -785,8 +785,8 @@ printf("%d\n", slot);
 						  &asn_DEF_NR_RRCReconfiguration,
 						  (void **)&NR_RRCReconfiguration,
 						  (uint8_t *)buffer,
-						  msg_len); 
-  
+						  msg_len);
+
   if ((dec_rval.code != RC_OK) && (dec_rval.consumed == 0)) {
     AssertFatal(1==0,"NR_RRCReConfiguration decode error\n");
     // free the memory
@@ -803,15 +803,15 @@ printf("%d\n", slot);
 				   &asn_DEF_NR_CellGroupConfig,
 				   (void **)&secondaryCellGroup,
 				   (uint8_t *)reconfig_ies->secondaryCellGroup->buf,
-				   reconfig_ies->secondaryCellGroup->size); 
-  
+				   reconfig_ies->secondaryCellGroup->size);
+
   if ((dec_rval.code != RC_OK) && (dec_rval.consumed == 0)) {
     AssertFatal(1==0,"NR_CellGroupConfig decode error\n");
     // free the memory
     SEQUENCE_free( &asn_DEF_NR_CellGroupConfig, secondaryCellGroup, 1 );
     exit(-1);
   }
-  
+
   NR_ServingCellConfigCommon_t *scc = secondaryCellGroup->spCellConfig->reconfigurationWithSync->spCellConfigCommon;
   */
 
@@ -1040,10 +1040,18 @@ printf("%d\n", slot);
     reset_meas(&gNB->dlsch_rate_matching_stats);
     reset_meas(&gNB->dlsch_segmentation_stats);
     reset_meas(&gNB->dlsch_modulation_stats);
+
     reset_meas(&gNB->dlsch_pdsch_generation_stats);
+    reset_meas(&gNB->dlsch_pdsch_task_prep_stats);
+    reset_meas(&gNB->dlsch_pdsch_task_setup_stats);
+    reset_meas(&gNB->dlsch_pdsch_task_push_stats);
+    reset_meas(&gNB->dlsch_pdsch_direct_proc_stats);
+    reset_meas(&gNB->dlsch_pdsch_task_wait_stats);
+    reset_meas(&gNB->dlsch_pdsch_task_merge_stats);
     reset_meas(&gNB->dlsch_precoding_stats);
     reset_meas(&gNB->dlsch_layer_mapping_stats);
     reset_meas(&gNB->dlsch_resource_mapping_stats);
+
     reset_meas(&gNB->dlsch_encoding_stats);
     reset_meas(&gNB->dci_generation_stats);
     reset_meas(&gNB->tinput);
@@ -1276,13 +1284,13 @@ printf("%d\n", slot);
 
 	estimated_output_bit[i] = (UE->phy_sim_dlsch_b[i/8] & (1 << (i & 7))) >> (i & 7);
 	test_input_bit[i]       = (gNB_dlsch->b[i / 8] & (1 << (i & 7))) >> (i & 7); // Further correct for multiple segments
-	
+
 	if (estimated_output_bit[i] != test_input_bit[i]) {
 	  if(errors_bit == 0)
 	    LOG_D(PHY,"First bit in error in decoding = %d\n",i);
 	  errors_bit++;
 	}
-	
+
       }
       ////////////////////////////////////////////////////////////
 
@@ -1338,6 +1346,7 @@ printf("%d\n", slot);
              8 * pdsch_pdu_rel15->TBSize[0]);
       printDistribution(&gNB->phy_proc_tx,table_tx,"PHY proc tx");
       printStatIndent2(&gNB->dci_generation_stats, "DCI encoding time");
+
       printStatIndent2(&gNB->dlsch_encoding_stats,"DLSCH encoding time");
       printStatIndent3(&gNB->dlsch_segmentation_stats,"DLSCH segmentation time");
       printStatIndent3(&gNB->tinput,"DLSCH LDPC input processing time");
@@ -1348,12 +1357,20 @@ printf("%d\n", slot);
       printStatIndent3(&gNB->dlsch_interleaving_stats,  "DLSCH Interleaving time");
       printStatIndent2(&gNB->dlsch_modulation_stats,"DLSCH modulation time");
       printStatIndent2(&gNB->dlsch_scrambling_stats, "DLSCH scrambling time");
+
       printStatIndent2(&gNB->dlsch_pdsch_generation_stats,"DLSCH PDSCH Generation time");
+      printStatIndent3(&gNB->dlsch_pdsch_task_prep_stats, "PDSCH task preparation time");
+      printStatIndent3(&gNB->dlsch_pdsch_task_setup_stats, "PDSCH task setup time");
+      printStatIndent3(&gNB->dlsch_pdsch_task_push_stats, "PDSCH task push time");
+      printStatIndent3(&gNB->dlsch_pdsch_direct_proc_stats, "PDSCH direct processing time");
+      printStatIndent3(&gNB->dlsch_pdsch_task_wait_stats, "PDSCH task wait time");
+      printStatIndent3(&gNB->dlsch_pdsch_task_merge_stats, "PDSCH task merge time");
       printStatIndent3(&gNB->dlsch_layer_mapping_stats,"DLSCH Layer Mapping time");
       gNB->dlsch_resource_mapping_stats.trials = gNB->dlsch_layer_mapping_stats.trials;
       printStatIndent3(&gNB->dlsch_resource_mapping_stats,"DLSCH Resource Mapping time");
       gNB->dlsch_precoding_stats.trials = gNB->dlsch_layer_mapping_stats.trials;
       printStatIndent3(&gNB->dlsch_precoding_stats,"DLSCH Precoding time");
+
       if (gNB->phase_comp)
         printStatIndent2(&gNB->phase_comp_stats, "Phase Compensation");
 
