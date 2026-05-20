@@ -271,7 +271,7 @@ typedef struct {
   int16_t *llr;
 #ifdef ENABLE_CUDA
   /// \brief llr values link to device memory
-  int16_t* llr_dev; 
+  int16_t* llr_dev;
 #endif
   // PTRS symbol index, to be updated every PTRS symbol within a slot.
   uint8_t ptrs_symbol_index;
@@ -467,15 +467,19 @@ typedef struct PHY_VARS_gNB_s {
   time_stats_t dlsch_resource_mapping_stats;
   time_stats_t dlsch_precoding_stats;
   time_stats_t dlsch_pdsch_task_prep_stats;
-  time_stats_t dlsch_pdsch_task_wait_stats; 
+  time_stats_t dlsch_pdsch_task_wait_stats;
   time_stats_t dlsch_pdsch_task_merge_stats;
+  time_stats_t dlsch_pdsch_task_setup_stats;
+  time_stats_t dlsch_pdsch_task_push_stats;
+  time_stats_t dlsch_pdsch_direct_proc_stats;
+
   time_stats_t tinput;
   time_stats_t tinput_memcpy;
   time_stats_t tprep;
   time_stats_t tparity;
   time_stats_t toutput;
   time_stats_t tconcat;
-  
+
   time_stats_t dlsch_rate_matching_stats;
   time_stats_t dlsch_interleaving_stats;
   time_stats_t dlsch_segmentation_stats;
@@ -551,7 +555,7 @@ typedef struct LDPCDecode_s {
   NR_UL_gNB_HARQ_t *ulsch_harq;
   t_nrLDPC_dec_params decoderParms;
   NR_gNB_ULSCH_t *ulsch;
-  int16_t* ulsch_llr; 
+  int16_t* ulsch_llr;
   int ulsch_id;
   int harq_pid;
   int rv_index;

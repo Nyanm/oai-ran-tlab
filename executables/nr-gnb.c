@@ -131,13 +131,13 @@ static void tx_func(processingData_L1tx_t *info)
                           frame_tx,
                           slot_tx,
                           1);
- 
+
     if (tx_slot_type == NR_DOWNLINK_SLOT) {
        stop_meas(&info->gNB->gnb_tx_procedures_stats);
      }
-  
 
- 
+
+
     PHY_VARS_gNB *gNB = info->gNB;
     processingData_RU_t syncMsgRU;
     syncMsgRU.frame_tx = frame_tx;
@@ -158,7 +158,7 @@ static void tx_func(processingData_L1tx_t *info)
   }
 }
 
-void *L1_rx_thread(void *arg) 
+void *L1_rx_thread(void *arg)
 {
   PHY_VARS_gNB *gNB = (PHY_VARS_gNB*)arg;
 
@@ -274,6 +274,7 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
                            NULL,
                            output,
                            end - output);
+
   output += print_meas_log(&gNB->ru_tx_func_stats,
                            "L1 RU TX function",
                            NULL,
@@ -294,6 +295,24 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
   output += print_meas_log(&gNB->dlsch_pdsch_generation_stats, "PDSCH generation", NULL, NULL, output,end-output);
   output += print_meas_log(&gNB->dlsch_pdsch_task_prep_stats,
                            "PDSCH task preparation",
+                           NULL,
+                           NULL,
+                           output,
+                           end - output);
+  output += print_meas_log(&gNB->dlsch_pdsch_task_setup_stats,
+                           "PDSCH task setup",
+                           NULL,
+                           NULL,
+                           output,
+                           end - output);
+  output += print_meas_log(&gNB->dlsch_pdsch_task_push_stats,
+                           "PDSCH task push",
+                           NULL,
+                           NULL,
+                           output,
+                           end - output);
+  output += print_meas_log(&gNB->dlsch_pdsch_direct_proc_stats,
+                           "PDSCH direct processing",
                            NULL,
                            NULL,
                            output,
@@ -378,7 +397,7 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
     reset_meas(&gNB->l1_tx_proc);
     reset_meas(&gNB->l1_rx_proc);
     reset_meas(&gNB->phy_proc_tx);
-   
+
     reset_meas(&gNB->gnb_tx_procedures_stats);
     reset_meas(&gNB->ru_tx_func_stats);
 
@@ -398,8 +417,12 @@ static size_t dump_L1_meas_stats(PHY_VARS_gNB *gNB, RU_t *ru, char *output, size
     reset_meas(&gNB->dlsch_resource_mapping_stats);
     reset_meas(&gNB->dlsch_pdsch_generation_stats);
     reset_meas(&gNB->dlsch_pdsch_task_prep_stats);
+    reset_meas(&gNB->dlsch_pdsch_task_setup_stats);
+    reset_meas(&gNB->dlsch_pdsch_task_push_stats);
+    reset_meas(&gNB->dlsch_pdsch_direct_proc_stats);
     reset_meas(&gNB->dlsch_pdsch_task_wait_stats);
     reset_meas(&gNB->dlsch_pdsch_task_merge_stats);
+
     reset_meas(&gNB->phy_proc_rx);
     reset_meas(&gNB->ulsch_decoding_stats);
     reset_meas(&gNB->ts_deinterleave);
@@ -467,9 +490,14 @@ void *nrL1_stats_thread(void *param) {
     init_sorted_list_meas(&gNB->dlsch_scrambling_stats, SORTED_LIST_SIZE);
     init_sorted_list_meas(&gNB->dlsch_modulation_stats, SORTED_LIST_SIZE);
     init_sorted_list_meas(&gNB->dlsch_pdsch_generation_stats, SORTED_LIST_SIZE);
+
     init_sorted_list_meas(&gNB->dlsch_pdsch_task_prep_stats, SORTED_LIST_SIZE);
+    init_sorted_list_meas(&gNB->dlsch_pdsch_task_setup_stats, SORTED_LIST_SIZE);
+    init_sorted_list_meas(&gNB->dlsch_pdsch_task_push_stats, SORTED_LIST_SIZE);
+    init_sorted_list_meas(&gNB->dlsch_pdsch_direct_proc_stats, SORTED_LIST_SIZE);
     init_sorted_list_meas(&gNB->dlsch_pdsch_task_wait_stats, SORTED_LIST_SIZE);
     init_sorted_list_meas(&gNB->dlsch_pdsch_task_merge_stats, SORTED_LIST_SIZE);
+
     init_sorted_list_meas(&gNB->phy_proc_rx, SORTED_LIST_SIZE);
     init_sorted_list_meas(&gNB->ulsch_decoding_stats, SORTED_LIST_SIZE);
     init_sorted_list_meas(&gNB->ts_deinterleave, SORTED_LIST_SIZE);
@@ -515,9 +543,14 @@ void *nrL1_stats_thread(void *param) {
   reset_meas(&gNB->dlsch_scrambling_stats);
   reset_meas(&gNB->dlsch_modulation_stats);
   reset_meas(&gNB->dlsch_pdsch_generation_stats);
+
   reset_meas(&gNB->dlsch_pdsch_task_prep_stats);
+  reset_meas(&gNB->dlsch_pdsch_task_setup_stats);
+  reset_meas(&gNB->dlsch_pdsch_task_push_stats);
+  reset_meas(&gNB->dlsch_pdsch_direct_proc_stats);
   reset_meas(&gNB->dlsch_pdsch_task_wait_stats);
   reset_meas(&gNB->dlsch_pdsch_task_merge_stats);
+
   reset_meas(&gNB->phy_proc_rx);
   reset_meas(&gNB->ulsch_decoding_stats);
   reset_meas(&gNB->ts_deinterleave);
@@ -578,9 +611,14 @@ void *nrL1_stats_thread(void *param) {
     free_sorted_list_meas(&gNB->dlsch_scrambling_stats);
     free_sorted_list_meas(&gNB->dlsch_modulation_stats);
     free_sorted_list_meas(&gNB->dlsch_pdsch_generation_stats);
+
     free_sorted_list_meas(&gNB->dlsch_pdsch_task_prep_stats);
+    free_sorted_list_meas(&gNB->dlsch_pdsch_task_setup_stats);
+    free_sorted_list_meas(&gNB->dlsch_pdsch_task_push_stats);
+    free_sorted_list_meas(&gNB->dlsch_pdsch_direct_proc_stats);
     free_sorted_list_meas(&gNB->dlsch_pdsch_task_wait_stats);
     free_sorted_list_meas(&gNB->dlsch_pdsch_task_merge_stats);
+
     free_sorted_list_meas(&gNB->phy_proc_rx);
     free_sorted_list_meas(&gNB->ulsch_decoding_stats);
     free_sorted_list_meas(&gNB->ts_deinterleave);

@@ -832,9 +832,14 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
   int sz_arr = 0;
   unsigned int re_beginning_of_symbol = 0;
   int res = 0;
-  for (int l_symbol = rel15->StartSymbolIndex; l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols;
-       l_symbol += num_pdsch_symbols_per_task) {
+
+  for (int l_symbol = rel15->StartSymbolIndex; l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols; l_symbol += num_pdsch_symbols_per_task) {
     pdschSymbolProc_t *rdata = &arr[sz_arr];
+
+    if (slot_type == NR_DOWNLINK_SLOT) {
+      start_meas(&gNB->dlsch_pdsch_task_setup_stats);
+    }
+
     rdata->ans = &ans;
     ++sz_arr;
 
@@ -867,11 +872,33 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     reset_meas(&rdata->dlsch_precoding_stats);
     for (int l = 0; l < rel15->nrOfLayers; l++)
       rdata->tx_layers[l] = tx_layers[l];
+
+    if (slot_type == NR_DOWNLINK_SLOT) {
+      stop_meas(&gNB->dlsch_pdsch_task_setup_stats);
+    }
+
     if (l_symbol < rel15->StartSymbolIndex + rel15->NrOfSymbols - num_pdsch_symbols_per_task) {
       task_t t = {.func = &nr_pdsch_symbol_processing, .args = rdata};
+
+      if (slot_type == NR_DOWNLINK_SLOT) {
+        start_meas(&gNB->dlsch_pdsch_task_push_stats);
+      }
+
       pushTpool(&gNB->threadPool, t);
+
+      if (slot_type == NR_DOWNLINK_SLOT) {
+        stop_meas(&gNB->dlsch_pdsch_task_push_stats);
+      }
     } else {
+      if (slot_type == NR_DOWNLINK_SLOT) {
+        start_meas(&gNB->dlsch_pdsch_direct_proc_stats);
+      }
+
       nr_pdsch_symbol_processing(rdata);
+
+      if (slot_type == NR_DOWNLINK_SLOT) {
+        stop_meas(&gNB->dlsch_pdsch_direct_proc_stats);
+      }
     }
   }
 
@@ -891,7 +918,7 @@ static int do_one_dlsch(unsigned char *input_ptr, PHY_VARS_gNB *gNB, NR_gNB_DLSC
     merge_meas(&gNB->dlsch_resource_mapping_stats, &arr[i].dlsch_resource_mapping_stats);
     merge_meas(&gNB->dlsch_precoding_stats, &arr[i].dlsch_precoding_stats);
   }
-  
+
   if (slot_type == NR_DOWNLINK_SLOT) {
     stop_meas(&gNB->dlsch_pdsch_task_merge_stats);
   }
