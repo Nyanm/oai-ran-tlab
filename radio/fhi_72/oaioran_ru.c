@@ -109,6 +109,7 @@ typedef struct {
   _Atomic(uint64_t) up_late;
   _Atomic(uint64_t) up_early;
   _Atomic(uint64_t) up_malformed;
+  _Atomic(uint64_t) up_arrival_histogram[128];
 } packet_processor_context_t;
 
 static packet_processor_context_t packet_processor_context;
@@ -245,6 +246,19 @@ static void print_statistics(packet_processor_context_t *context)
   LOG_I(HW, "RU: packets received %lu\n", context->up_received);
   LOG_I(HW, "RU: packets processed %lu\n", context->up_processed);
   LOG_I(HW, "RU: packets dropped %lu\n", context->up_dropped);
+
+  bool printed_header = false;
+  for (int i = 0; i < 128; i++) {
+    uint64_t count = context->up_arrival_histogram[i];
+    if (count > 0) {
+      if (!printed_header) {
+        LOG_I(HW, "RU: packet arrival histogram (diff in symbols):\n");
+        printed_header = true;
+      }
+      LOG_I(HW, "  %3d symbols early: %lu\n", i, count);
+      context->up_arrival_histogram[i] = 0;
+    }
+  }
 }
 
 typedef struct {
@@ -488,7 +502,11 @@ int process_ru_uplane(struct rte_mbuf *pkt,
   int max_sym = NR_SYMBOLS_PER_SLOT * NR_NUMBER_OF_SUBFRAMES_PER_FRAME * slots_per_subframe;
   if (diff < -max_sym / 2) {
     diff += max_sym;
+  } else if (diff > max_sym / 2) {
+    diff -= max_sym;
   }
+
+  packet_processor_context.up_arrival_histogram[min(max(diff, 0), 127)]++;
 
   int slot_duration_uS = 1000 / (1 << mu);
   int symbol_duration_uS = slot_duration_uS / NR_SYMBOLS_PER_SLOT;
