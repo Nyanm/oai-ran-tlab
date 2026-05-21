@@ -90,6 +90,9 @@ void print_fhi_counters(ru_info_t *ru, const int frame, const int slot)
   }
 }
 
+static int32_t last_frame[XRAN_PORTS_NUM] = {-1};
+static int32_t last_slot[XRAN_PORTS_NUM] = {-1};
+
 /** @details xran-specific callback, called when all packets for given CC and
  * 1/4, 1/2, 3/4, all symbols of a slot arrived. Currently, only used to get
  * timing information and unblock another thread in xran_fh_rx_read_slot()
@@ -100,68 +103,58 @@ void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status, uint8_t m
     return;
   struct xran_cb_tag *callback_tag = (struct xran_cb_tag *)pCallbackTag;
 
-  static int32_t last_slot = -1;
-  static int32_t last_frame = -1;
-
-  const struct xran_fh_init *fh_init = get_xran_fh_init();
-  int num_ports = fh_init->xran_ports;
+  uint32_t port_id = callback_tag->oXuId;
+  struct xran_fh_init *fh_init = get_xran_fh_init();
+  struct xran_fh_config *fh_cfg = get_xran_fh_config(port_id);
+  int num_rx_ant = fh_cfg->neAxc;
 
   const int slots_in_sf = 1 << mu;
   const int sf_in_frame = 10;
 
-  static int rx_RU[XRAN_PORTS_NUM][160] = {0};
   uint32_t tti = callback_tag->slotiId;
   uint32_t frame = XranGetFrameNum(tti, 0, sf_in_frame, slots_in_sf);
-  uint32_t subframe = XranGetSubFrameNum(tti, slots_in_sf, sf_in_frame);
-  uint32_t slot = XranGetSlotNum(tti, slots_in_sf);
+  uint32_t slot = XranGetSlotNum(tti, slots_in_sf * sf_in_frame); // slot within a frame, not a subframe
+  uint32_t rx_sym = callback_tag->symbol & 0xFF; // rx_sym = 0, 3, 7, 12
 
-  uint32_t rx_sym = callback_tag->symbol & 0xFF;
-  uint32_t ru_id = callback_tag->oXuId;
-
-  LOG_D(HW, "rx_callback at %4d.%3d (subframe %d), rx_sym %d ru_id %d\n", frame, slot, subframe, rx_sym, ru_id);
+  LOG_D(HW, "[%d.%d] %s, tti %d rx_sym %d ru_id %d\n", frame, slot, __FUNCTION__, tti, rx_sym, port_id);
 
   if (rx_sym == 7) { // in F release this value is defined as XRAN_FULL_CB_SYM (full slot (offset + 7))
-    uint32_t slot2 = slot + (subframe * slots_in_sf);
-    rx_RU[ru_id][slot2] = 1;
-    if (last_frame > 0 && frame > 0
-        && ((slot2 > 0 && last_frame != frame) || (slot2 == 0 && last_frame != ((1024 + frame - 1) & 1023))))
-      LOG_E(HW, "Jump in frame counter last_frame %d => %d, slot %d\n", last_frame, frame, slot2);
-    for (int i = 0; i < num_ports; i++) {
-      if (rx_RU[i][slot2] == 0)
-        return;
-    }
-    for (int i = 0; i < num_ports; i++)
-      rx_RU[i][slot2] = 0;
+    if (last_frame[port_id] > 0 && frame > 0
+        && ((slot > 0 && last_frame[port_id] != frame) || (slot == 0 && last_frame[port_id] != ((1024 + frame - 1) & 1023))))
+      LOG_E(HW, "Jump in frame counter last_frame[%d] %d => frame %d, slot %d\n", port_id, last_frame[port_id], frame, slot);
 
-    if (last_slot == -1 || slot2 != last_slot) {
+    if (last_slot[port_id] == -1 || slot != last_slot[port_id]) {
       notifiedFIFO_elt_t *req = newNotifiedFIFO_elt(sizeof(oran_sync_info_t), 0, &oran_sync_fifo, NULL);
       oran_sync_info_t *info = NotifiedFifoData(req);
       info->tti = tti;
-      info->sl = slot2;
+      info->sl = slot;
       info->f = frame;
       info->mu = mu;
 
-      for (int ru_idx = 0; ru_idx < num_ports; ru_idx++) {
-        oran_buf_list_t *bufs = get_xran_buffers(ru_idx);
-        struct xran_fh_config *fh_config = get_xran_fh_config(ru_idx);
-        for (uint16_t cc_id = 0; cc_id < 1 /* fh_config->nCC */; cc_id++) { // OAI does not support multiple CC yet.
-          for(uint32_t ant_id = 0; ant_id < fh_config->neAxc; ant_id++) {
-            struct xran_prb_map *pRbMap = (struct xran_prb_map *)bufs->dstcp[ant_id][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
-            AssertFatal(pRbMap != NULL, "(%d:%d:%d)pRbMap == NULL. Aborting.\n", cc_id, tti % XRAN_N_FE_BUF_LEN, ant_id);
-            for (uint32_t sym_id = 0; sym_id < XRAN_NUM_OF_SYMBOL_PER_SLOT; sym_id++) {
-              info->nRxPkt[cc_id][ant_id][sym_id] = pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt;
-              pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt = 0;
-            }
+      for (uint16_t cc_id = 0; cc_id < 1 /* fh_config->nCC */; cc_id++) { // OAI does not support multiple CC yet.
+        oran_buf_list_t *bufs = get_xran_buffers(port_id);
+        for(uint32_t ant_id = 0; ant_id < num_rx_ant; ant_id++) {
+          struct xran_prb_map *pRbMap = (struct xran_prb_map *)bufs->dstcp[ant_id][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
+          AssertFatal(pRbMap != NULL, "(%d:%d:%d)pRbMap == NULL. Aborting.\n", cc_id, tti % XRAN_N_FE_BUF_LEN, ant_id);
+          for (uint32_t sym_id = 0; sym_id < XRAN_NUM_OF_SYMBOL_PER_SLOT; sym_id++) {
+            // this shall be changed to info->nRxPkt[cc_id][ant_id + (num_rx_ant * port_id)][sym_id]
+            // before the cleanup, it didn't even go through all (num_rx_ant * port_id) antennas which is wrong
+            // so I left the same here. But once, the 7.2 API is implemented, this shall be correctly implemented
+            info->nRxPkt[cc_id][ant_id][sym_id] = pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt;
+            pRbMap->sFrontHaulRxPacketCtrl[sym_id].nRxPkt = 0;
           }
         }
       }
-      LOG_D(HW, "Push %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, info->sl, slot, ru_id, subframe, last_slot);
-      atomic_fetch_add(&xran_queue_length, 1);
-      pushNotifiedFIFO(&oran_sync_fifo, req);
+      // once the last RU is processed, add in the queue
+      if (fh_init->xran_ports == (port_id + 1)) {
+        LOG_D(HW, "Push [%d.%d] tti %d last_slot[%d] %d\n", frame, slot, tti, port_id, last_slot[port_id]);
+        atomic_fetch_add(&xran_queue_length, 1);
+        pushNotifiedFIFO(&oran_sync_fifo, req);
+      }
     } else
-      LOG_E(HW, "Cannot Push %d.%d.%d (slot %d, subframe %d,last_slot %d)\n", frame, slot2, ru_id, slot, subframe, last_slot);
-    last_slot = slot2;
-    last_frame = frame;
+      LOG_E(HW, "Cannot Push [%d.%d] tti %d last_slot[%d] %d\n", frame, slot, tti, port_id, last_slot[port_id]);
+    last_slot[port_id] = slot;
+    last_frame[port_id] = frame;
   } // rx_sym == 7
 }
 
