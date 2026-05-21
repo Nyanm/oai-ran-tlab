@@ -96,6 +96,8 @@ void print_fhi_counters(ru_info_t *ru, const int frame, const int slot)
  * through a message queue on a full slot boundary. */
 void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status, uint8_t mu)
 {
+  if (!first_call_set)
+    return;
   struct xran_cb_tag *callback_tag = (struct xran_cb_tag *)pCallbackTag;
 
   static int32_t last_slot = -1;
@@ -119,11 +121,6 @@ void oai_xran_fh_rx_callback(void *pCallbackTag, xran_status_t status, uint8_t m
   LOG_D(HW, "rx_callback at %4d.%3d (subframe %d), rx_sym %d ru_id %d\n", frame, slot, subframe, rx_sym, ru_id);
 
   if (rx_sym == 7) { // in F release this value is defined as XRAN_FULL_CB_SYM (full slot (offset + 7))
-    // if xran did not call xran_physide_dl_tti callback, it's not ready yet.
-    // wait till first callback to advance counters, because otherwise users
-    // would see periodic output with only "0" in stats counters
-    if (!first_call_set)
-      return;
     uint32_t slot2 = slot + (subframe * slots_in_sf);
     rx_RU[ru_id][slot2] = 1;
     if (last_frame > 0 && frame > 0
