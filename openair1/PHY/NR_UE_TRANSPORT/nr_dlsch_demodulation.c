@@ -429,17 +429,14 @@ static void nr_dlsch_detection_mrc(uint32_t rx_size_symbol,
   }
 }
 
-/* Zero Forcing Rx function: nr_a_sum_b()
- * Compute the complex addition x=x+y
- *
- * */
+/*
+ * nr_a_sum_b(): Compute the complex addition x=x+y
+ */
 void nr_a_sum_b(c16_t *input_x, c16_t *input_y, unsigned short nb_rb)
 {
-  unsigned short rb;
   simde__m128i *x = (simde__m128i *)input_x;
   simde__m128i *y = (simde__m128i *)input_y;
-
-  for (rb=0; rb<nb_rb; rb++) {
+  for (int rb = 0; rb < nb_rb; rb++) {
     x[0] = simde_mm_adds_epi16(x[0], y[0]);
     x[1] = simde_mm_adds_epi16(x[1], y[1]);
     x[2] = simde_mm_adds_epi16(x[2], y[2]);
@@ -686,17 +683,6 @@ uint8_t nr_matrix_inverse(int32_t size,
   return(0);
 }
 
-/* Zero Forcing Rx function: nr_conjch0_mult_ch1()
- *
- *
- * */
-// TODO: This function is just a wrapper, can be removed.
-void nr_conjch0_mult_ch1(c16_t *ch0, c16_t *ch1, c16_t *ch0conj_ch1, unsigned short nb_rb, unsigned char output_shift0)
-{
-  //This function is used to compute multiplications in H_hermitian * H matrix
-  mult_cpx_conj_vector(ch0, ch1, ch0conj_ch1, 12 * nb_rb, output_shift0);
-}
-
 /*
  * MMSE Rx function: up to 4 layers
  */
@@ -732,11 +718,11 @@ static void nr_dlsch_mmse(uint32_t rx_size_symbol,
       for (int aarx = 0; aarx < n_rx; aarx++)  {
         c16_t *ch0r = (c16_t *)dl_ch_estimates_ext[rtx * n_rx + aarx];
         c16_t *ch0c = (c16_t *)dl_ch_estimates_ext[ctx * n_rx + aarx];
-        nr_conjch0_mult_ch1(ch0r,
-                            ch0c,
-                            conjH_H_elements[aarx][ctx][rtx], // sic
-                            nb_rb_0,
-                            shift);
+        mult_cpx_conj_vector(ch0r,
+                             ch0c,
+                             conjH_H_elements[aarx][ctx][rtx], // sic
+                             nb_rb_0 * NR_NB_SC_PER_RB,
+                             shift);
         if (aarx != 0)
           nr_a_sum_b(conjH_H_elements[0][ctx][rtx], conjH_H_elements[aarx][ctx][rtx], nb_rb_0);
       }

@@ -27,76 +27,79 @@
 
 extern openair0_config_t openair0_cfg[MAX_CARDS];
 
-void nr_det_A_MF_2x2(int32_t *a_mf_00,
-                     int32_t *a_mf_01,
-                     int32_t *a_mf_10,
-                     int32_t *a_mf_11,
-                     int32_t *det_fin,
-                     const unsigned short nb_rb) {
-
-  simde__m128i ad_re_128, bc_re_128, det_re_128;
-
+static void nr_det_A_2x2(c16_t *a_mf_00,
+                         c16_t *a_mf_01,
+                         c16_t *a_mf_10,
+                         c16_t *a_mf_11,
+                         int32_t *det_fin,
+                         const unsigned short nb_rb)
+{
   simde__m128i *a_mf_00_128 = (simde__m128i *)a_mf_00;
   simde__m128i *a_mf_01_128 = (simde__m128i *)a_mf_01;
   simde__m128i *a_mf_10_128 = (simde__m128i *)a_mf_10;
   simde__m128i *a_mf_11_128 = (simde__m128i *)a_mf_11;
   simde__m128i *det_fin_128 = (simde__m128i *)det_fin;
 
-  for (int rb = 0; rb<3*nb_rb; rb++) {
+  for (int rb = 0; rb < 3 * nb_rb; rb++) {
+    // complex multiplication (I_a+jQ_a)(I_d+jQ_d) = (I_aI_d - Q_aQ_d) + j(Q_aI_d + I_aQ_d)
+    // The imag part is often zero, we compute only the real part
+    simde__m128i ad_re_128 = simde_mm_madd_epi16(oai_mm_conj(a_mf_00_128[0]), a_mf_11_128[0]); // Re: I_a0*I_d0 - Q_a1*Q_d1
 
-    //complex multiplication (I_a+jQ_a)(I_d+jQ_d) = (I_aI_d - Q_aQ_d) + j(Q_aI_d + I_aQ_d)
-    //The imag part is often zero, we compute only the real part
-    ad_re_128 = simde_mm_madd_epi16(oai_mm_conj(a_mf_00_128[0]), a_mf_11_128[0]); //Re: I_a0*I_d0 - Q_a1*Q_d1
+    // complex multiplication (I_b+jQ_b)(I_c+jQ_c) = (I_bI_c - Q_bQ_c) + j(Q_bI_c + I_bQ_c)
+    // The imag part is often zero, we compute only the real part
+    simde__m128i bc_re_128 = simde_mm_madd_epi16(oai_mm_conj(a_mf_01_128[0]), a_mf_10_128[0]); // Re: I_b0*I_c0 - Q_b1*Q_c1
 
-    //complex multiplication (I_b+jQ_b)(I_c+jQ_c) = (I_bI_c - Q_bQ_c) + j(Q_bI_c + I_bQ_c)
-    //The imag part is often zero, we compute only the real part
-    bc_re_128 = simde_mm_madd_epi16(oai_mm_conj(a_mf_01_128[0]), a_mf_10_128[0]); //Re: I_b0*I_c0 - Q_b1*Q_c1
+    simde__m128i det_re_128 = simde_mm_sub_epi32(ad_re_128, bc_re_128);
 
-    det_re_128 = simde_mm_sub_epi32(ad_re_128, bc_re_128);
-
-    //det in Q30 format
+    // det in Q30 format
     det_fin_128[0] = simde_mm_abs_epi32(det_re_128);
 
-    det_fin_128+=1;
-    a_mf_00_128+=1;
-    a_mf_01_128+=1;
-    a_mf_10_128+=1;
-    a_mf_11_128+=1;
+    det_fin_128 += 1;
+    a_mf_00_128 += 1;
+    a_mf_01_128 += 1;
+    a_mf_10_128 += 1;
+    a_mf_11_128 += 1;
   }
 }
 
-void nr_squared_matrix_element(int32_t *a,
-                               int32_t *a_sq,
-                               const unsigned short nb_rb) {
+/*
+ * nr_sq_matrix_elem(): Calculate the squares of the elements of a matrix
+ */
+static void nr_sq_matrix_elem(c16_t *a, int32_t *a_sq, const unsigned short nb_rb)
+{
   simde__m128i *a_128 = (simde__m128i *)a;
   simde__m128i *a_sq_128 = (simde__m128i *)a_sq;
-  for (int rb=0; rb<3*nb_rb; rb++) {
+  for (int rb = 0; rb < 3 * nb_rb; rb++) {
     a_sq_128[0] = simde_mm_madd_epi16(a_128[0], a_128[0]);
-    a_sq_128+=1;
-    a_128+=1;
+    a_sq_128 += 1;
+    a_128 += 1;
   }
 }
 
-void nr_numer_2x2(int32_t *a_00_sq,
-                  int32_t *a_01_sq,
-                  int32_t *a_10_sq,
-                  int32_t *a_11_sq,
-                  int32_t *num_fin,
-                  const unsigned short nb_rb) {
+/*
+ * Frobenius norm^2 of A
+ */
+static void nr_frob_norm_2x2(int32_t *a_00_sq,
+                             int32_t *a_01_sq,
+                             int32_t *a_10_sq,
+                             int32_t *a_11_sq,
+                             int32_t *num_fin,
+                             const unsigned short nb_rb)
+{
   simde__m128i *a_00_sq_128 = (simde__m128i *)a_00_sq;
   simde__m128i *a_01_sq_128 = (simde__m128i *)a_01_sq;
   simde__m128i *a_10_sq_128 = (simde__m128i *)a_10_sq;
   simde__m128i *a_11_sq_128 = (simde__m128i *)a_11_sq;
   simde__m128i *num_fin_128 = (simde__m128i *)num_fin;
-  for (int rb=0; rb<3*nb_rb; rb++) {
+  for (int rb = 0; rb < 3 * nb_rb; rb++) {
     simde__m128i sq_a_plus_sq_d_128 = simde_mm_add_epi32(a_00_sq_128[0], a_11_sq_128[0]);
     simde__m128i sq_b_plus_sq_c_128 = simde_mm_add_epi32(a_01_sq_128[0], a_10_sq_128[0]);
     num_fin_128[0] = simde_mm_add_epi32(sq_a_plus_sq_d_128, sq_b_plus_sq_c_128);
-    num_fin_128+=1;
-    a_00_sq_128+=1;
-    a_01_sq_128+=1;
-    a_10_sq_128+=1;
-    a_11_sq_128+=1;
+    num_fin_128 += 1;
+    a_00_sq_128 += 1;
+    a_01_sq_128 += 1;
+    a_10_sq_128 += 1;
+    a_11_sq_128 += 1;
   }
 }
 
@@ -416,135 +419,171 @@ static int nr_csi_rs_channel_estimation(
   return 0;
 }
 
-static int nr_csi_rs_ri_estimation(const PHY_VARS_NR_UE *ue,
-                                   const fapi_nr_dl_config_csirs_pdu_rel15_t *csirs_config_pdu,
-                                   const uint8_t N_ports,
-                                   c16_t csi_rs_estimated_channel_freq[][N_ports][ue->frame_parms.ofdm_symbol_size],
-                                   const int16_t log2_maxh,
-                                   uint8_t *rank_indicator)
+/*
+ * Rank Indicator (RI) estimation based on the condition number of the CSI-RS channel correlation matrix.
+ *
+ * For the estimated MIMO channel H (rows -> UE receive antenna, columns -> transmit layers), the algorithm computes either:
+ *      A = H^H x H
+ * or equivalently:
+ *      A = H x H^H
+ * depending on which dimension is smaller, such that A remains 2x2.
+ *
+ * In the 2x2 case:
+ *      A = | a b |
+ *          | c d |
+ *
+ * The condition metric is approximated as:
+ *                           ||A||²_F
+ *      cond_dB = 10log10( ------------ )
+ *                            det(A)
+ * where:
+ *      ||A||²_F = |a|² + |b|² + |c|² + |d|²
+ * and
+ *      det(A) = ad - bc
+ *
+ * This metric is related to the matrix condition number:
+ *      lambda_max / lambda_min
+ * where lambda_max and lambda_min are the largest and smallest eigenvalues of A.
+ *
+ * Similar eigenvalues indicate low spatial correlation and good layer separability (RI = 2), while highly unbalanced eigenvalues
+ * indicate an ill-conditioned channel and rank-1 preference.
+ *
+ * The condition metric is evaluated for each CSI-RS RE and compared against a fixed threshold (5 dB).
+ */
+static int nr_csi_rs_ri_estimation_2(int nb_antennas_rx,
+                                     int N_ports,
+                                     int ofdm_sz,
+                                     const c16_t ch_freq[][N_ports][ofdm_sz],
+                                     int start_rb,
+                                     int nr_of_rbs,
+                                     int freq_density,
+                                     int16_t log2_maxh)
 {
-  const NR_DL_FRAME_PARMS *frame_parms = &ue->frame_parms;
-  const int16_t cond_dB_threshold = 5;
+  // Choose between H^H*H (sum over RX antennas) and H*H^H (sum over TX ports)
+  // so that the resulting A matrix stays 2x2 regardless of the asymmetric dimension.
+  const bool is_HhxH = (N_ports <= nb_antennas_rx);
+  const int A_dim = 2; // min(nb_antennas_rx, N_ports), always 2 here
+  const int outer_dim = is_HhxH ? nb_antennas_rx : N_ports; // dimension being summed over
+
+  // A 12 dB threshold was chosen to allow rank-2 operation also in moderately correlated channels.
+  // A fairly conservative value for many real-world scenarios would be 5. While 18 would almost always give RI = 2.
+  // Add 3 dB since ||A||^2_F / det(A) has a theoretical 3 dB floor for an ideal 2x2 channel, i.e., 12 + 3 = 15.
+  const int cond_dB_threshold = 15;
   int count = 0;
-  *rank_indicator = 0;
 
-  if (ue->frame_parms.nb_antennas_rx == 1 || N_ports == 1) {
-    return 0;
-  } else if( !(ue->frame_parms.nb_antennas_rx == 2 && N_ports == 2) ) {
-    LOG_W(NR_PHY, "Rank indicator computation is not implemented for %i x %i system\n",
-          ue->frame_parms.nb_antennas_rx, N_ports);
-    return -1;
-  }
+  // 2x2 correlation matrix A and per-subcarrier intermediates.
+  c16_t A[A_dim][A_dim][ofdm_sz] __attribute__((aligned(32)));
+  memset(A, 0, sizeof(A));
+  int32_t A_sq[A_dim][A_dim][ofdm_sz] __attribute__((aligned(32)));
+  int32_t det_A[ofdm_sz] __attribute__((aligned(32)));
+  int32_t A_frob_norm_sq[ofdm_sz] __attribute__((aligned(32)));
 
-  /* Example 2x2: Hh x H =
-  *            | conjch00 conjch10 | x | ch00 ch01 | = | conjch00*ch00+conjch10*ch10 conjch00*ch01+conjch10*ch11 |
-  *            | conjch01 conjch11 |   | ch10 ch11 |   | conjch01*ch00+conjch11*ch10 conjch01*ch01+conjch11*ch11 |
-  */
+  // Scratch buffer for one conj-product, reused across the (i, j, outer) triple loop.
+  c16_t conjch_ch[ofdm_sz] __attribute__((aligned(32)));
 
-  c16_t csi_rs_estimated_conjch_ch[frame_parms->nb_antennas_rx][N_ports][frame_parms->nb_antennas_rx][N_ports]
-                                  [frame_parms->ofdm_symbol_size] __attribute__((aligned(32)));
-  int32_t csi_rs_estimated_A_MF[N_ports][N_ports][frame_parms->ofdm_symbol_size] __attribute__((aligned(32)));
-  int32_t csi_rs_estimated_A_MF_sq[N_ports][N_ports][frame_parms->ofdm_symbol_size] __attribute__((aligned(32)));
-  int32_t csi_rs_estimated_determ_fin[frame_parms->ofdm_symbol_size] __attribute__((aligned(32)));
-  int32_t csi_rs_estimated_numer_fin[frame_parms->ofdm_symbol_size] __attribute__((aligned(32)));
-  const uint8_t sum_shift = 1; // log2(2x2) = 2, which is a shift of 1 bit
-  
-  for (int rb = csirs_config_pdu->start_rb; rb < (csirs_config_pdu->start_rb+csirs_config_pdu->nr_of_rbs); rb++) {
-
-    if (csirs_config_pdu->freq_density <= 1 && csirs_config_pdu->freq_density != (rb % 2)) {
+  for (int rb = start_rb; rb < start_rb + nr_of_rbs; rb++) {
+    if (freq_density <= 1 && freq_density != (rb % 2))
       continue;
-    }
-    uint16_t k = rb * NR_NB_SC_PER_RB;
+    const int k = rb * NR_NB_SC_PER_RB;
 
-    for (int ant_rx_conjch = 0; ant_rx_conjch < frame_parms->nb_antennas_rx; ant_rx_conjch++) {
-      for(uint16_t port_tx_conjch = 0; port_tx_conjch < N_ports; port_tx_conjch++) {
-        for (int ant_rx_ch = 0; ant_rx_ch < frame_parms->nb_antennas_rx; ant_rx_ch++) {
-          for(uint16_t port_tx_ch = 0; port_tx_ch < N_ports; port_tx_ch++) {
-
-            // conjch x ch computation
-            nr_conjch0_mult_ch1(&csi_rs_estimated_channel_freq[ant_rx_conjch][port_tx_conjch][k],
-                                &csi_rs_estimated_channel_freq[ant_rx_ch][port_tx_ch][k],
-                                &csi_rs_estimated_conjch_ch[ant_rx_conjch][port_tx_conjch][ant_rx_ch][port_tx_ch][k],
-                                1,
-                                log2_maxh);
-
-            // construct Hh x H elements
-            if(ant_rx_conjch == ant_rx_ch) {
-              nr_a_sum_b((c16_t *)&csi_rs_estimated_A_MF[port_tx_conjch][port_tx_ch][k],
-                         (c16_t *)&csi_rs_estimated_conjch_ch[ant_rx_conjch][port_tx_conjch][ant_rx_ch][port_tx_ch][k],
-                         1);
-            }
-          }
+    // Accumulate A[i][j] over the outer dimension:
+    //   is_HhxH : A[i][j] = sum_{m} conj(ch[m][i]) * ch[m][j]      (m = RX antenna)
+    //   !is_HhxH: A[i][j] = sum_{m} conj(ch[i][m]) * ch[j][m]      (m = TX port; gives (H*H^H)^T)
+    for (int idx_outer = 0; idx_outer < outer_dim; idx_outer++) {
+      for (int i = 0; i < A_dim; i++) {
+        for (int j = 0; j < A_dim; j++) {
+          const c16_t *ch_for_conj = is_HhxH ? &ch_freq[idx_outer][i][k] : &ch_freq[i][idx_outer][k];
+          const c16_t *ch_plain = is_HhxH ? &ch_freq[idx_outer][j][k] : &ch_freq[j][idx_outer][k];
+          // conjch_ch = conj(ch_for_conj) * ch_plain over 1 RB (12 subcarriers)
+          mult_cpx_conj_vector((c16_t *)ch_for_conj, (c16_t *)ch_plain, &conjch_ch[k], NR_NB_SC_PER_RB, log2_maxh);
+          // A[i][j] += conjch_ch
+          nr_a_sum_b(&A[i][j][k], &conjch_ch[k], 1);
         }
       }
     }
 
-    // compute the determinant of A_MF (denominator)
-    nr_det_A_MF_2x2(&csi_rs_estimated_A_MF[0][0][k],
-                    &csi_rs_estimated_A_MF[0][1][k],
-                    &csi_rs_estimated_A_MF[1][0][k],
-                    &csi_rs_estimated_A_MF[1][1][k],
-                    &csi_rs_estimated_determ_fin[k],
-                    1);
+    // Determinant of A (denominator of the condition metric).
+    nr_det_A_2x2(&A[0][0][k], &A[0][1][k], &A[1][0][k], &A[1][1][k], &det_A[k], 1);
 
-    // compute the square of A_MF (numerator)
-    nr_squared_matrix_element(&csi_rs_estimated_A_MF[0][0][k], &csi_rs_estimated_A_MF_sq[0][0][k], 1);
-    nr_squared_matrix_element(&csi_rs_estimated_A_MF[0][1][k], &csi_rs_estimated_A_MF_sq[0][1][k], 1);
-    nr_squared_matrix_element(&csi_rs_estimated_A_MF[1][0][k], &csi_rs_estimated_A_MF_sq[1][0][k], 1);
-    nr_squared_matrix_element(&csi_rs_estimated_A_MF[1][1][k], &csi_rs_estimated_A_MF_sq[1][1][k], 1);
-    nr_numer_2x2(&csi_rs_estimated_A_MF_sq[0][0][k],
-                 &csi_rs_estimated_A_MF_sq[0][1][k],
-                 &csi_rs_estimated_A_MF_sq[1][0][k],
-                 &csi_rs_estimated_A_MF_sq[1][1][k],
-                 &csi_rs_estimated_numer_fin[k],
-                 1);
+    // Per-element |A_ij|^2 and their sum -> Frobenius norm^2 of A (numerator).
+    nr_sq_matrix_elem(&A[0][0][k], &A_sq[0][0][k], 1);
+    nr_sq_matrix_elem(&A[0][1][k], &A_sq[0][1][k], 1);
+    nr_sq_matrix_elem(&A[1][0][k], &A_sq[1][0][k], 1);
+    nr_sq_matrix_elem(&A[1][1][k], &A_sq[1][1][k], 1);
+    nr_frob_norm_2x2(&A_sq[0][0][k], &A_sq[0][1][k], &A_sq[1][0][k], &A_sq[1][1][k], &A_frob_norm_sq[k], 1);
 
 #ifdef NR_CSIRS_DEBUG
-    for(uint16_t port_tx_conjch = 0; port_tx_conjch < N_ports; port_tx_conjch++) {
-      for(uint16_t port_tx_ch = 0; port_tx_ch < N_ports; port_tx_ch++) {
-        c16_t *csi_rs_estimated_A_MF_k = (c16_t *)&csi_rs_estimated_A_MF[port_tx_conjch][port_tx_ch][k];
-        LOG_I(NR_PHY, "(%i) csi_rs_estimated_A_MF[%i][%i] = (%i, %i)\n",
-              k, port_tx_conjch, port_tx_ch, csi_rs_estimated_A_MF_k->r, csi_rs_estimated_A_MF_k->i);
-        c16_t *csi_rs_estimated_A_MF_sq_k = (c16_t *)&csi_rs_estimated_A_MF_sq[port_tx_conjch][port_tx_ch][k];
-        LOG_I(NR_PHY, "(%i) csi_rs_estimated_A_MF_sq[%i][%i] = (%i, %i)\n",
-              k, port_tx_conjch, port_tx_ch, csi_rs_estimated_A_MF_sq_k->r, csi_rs_estimated_A_MF_sq_k->i);
+    for (int i = 0; i < A_dim; i++) {
+      for (int j = 0; j < A_dim; j++) {
+        c16_t *a_k = &A[i][j][k];
+        int32_t *a_sq_k = &A_sq[i][j][k];
+        LOG_I(NR_PHY, "A[%i][%i][%i] = (%i, %i)\n", i, j, k, a_k->r, a_k->i);
+        LOG_I(NR_PHY, "A_sq[%i][%i][%i] = %i\n", i, j, k, *a_sq_k);
       }
     }
-    LOG_I(NR_PHY, "(%i) csi_rs_estimated_determ_fin = %i\n", k, csi_rs_estimated_determ_fin[k]);
-    LOG_I(NR_PHY, "(%i) csi_rs_estimated_numer_fin = %i\n", k, csi_rs_estimated_numer_fin[k] >> sum_shift);
+    LOG_I(NR_PHY, "(%i) det_A = %i\n", k, det_A[k]);
+    LOG_I(NR_PHY, "(%i) A_frob_norm_sq = %i\n", k, A_frob_norm_sq[k]);
 #endif
 
-    // compute the conditional number
-    for (int sc_idx=0; sc_idx < NR_NB_SC_PER_RB; sc_idx++) {
-      int8_t csi_rs_estimated_denum_db = dB_fixed(csi_rs_estimated_determ_fin[k + sc_idx]);
-      int8_t csi_rs_estimated_numer_db = dB_fixed(csi_rs_estimated_numer_fin[k + sc_idx] >> sum_shift);
-      int8_t cond_db = csi_rs_estimated_numer_db - csi_rs_estimated_denum_db;
+    // Evaluate the condition metric per RE and run a majority vote.
+    for (int sc_idx = 0; sc_idx < NR_NB_SC_PER_RB; sc_idx++) {
+      int8_t denum_db = dB_fixed(det_A[k + sc_idx]);
+      int8_t numer_db = dB_fixed(A_frob_norm_sq[k + sc_idx]);
+      int cond_db = numer_db - denum_db;
 
 #ifdef NR_CSIRS_DEBUG
-      LOG_I(NR_PHY, "csi_rs_estimated_denum_db = %i\n", csi_rs_estimated_denum_db);
-      LOG_I(NR_PHY, "csi_rs_estimated_numer_db = %i\n", csi_rs_estimated_numer_db);
-      LOG_I(NR_PHY, "cond_db = %i\n", cond_db);
+      LOG_I(NR_PHY, "denum_db = %i, numer_db = %i, cond_db = %i\n", denum_db, numer_db, cond_db);
 #endif
 
-      if (cond_db < cond_dB_threshold) {
+      if (cond_db < cond_dB_threshold)
         count++;
-      } else {
+      else
         count--;
-      }
     }
-  }
-
-  // conditional number is lower than cond_dB_threshold in half on more REs
-  if (count > 0) {
-    *rank_indicator = 1;
   }
 
 #ifdef NR_CSIRS_DEBUG
   LOG_I(NR_PHY, "count = %i\n", count);
-  LOG_I(NR_PHY, "rank = %i\n", (*rank_indicator)+1);
 #endif
 
-  return 0;
+  // Rank 2 if the channel is well-conditioned in the majority of REs, rank 1 otherwise.
+  if (count > 0) {
+#ifdef NR_CSIRS_DEBUG
+    LOG_I(NR_PHY, "rank = 2\n");
+#endif
+    return 1;
+  } else {
+#ifdef NR_CSIRS_DEBUG
+    LOG_I(NR_PHY, "rank = 1\n");
+#endif
+    return 0;
+  }
+}
+
+static int nr_csi_rs_ri_estimation(const PHY_VARS_NR_UE *ue,
+                                   const fapi_nr_dl_config_csirs_pdu_rel15_t *csirs_config_pdu,
+                                   const uint8_t N_ports,
+                                   const c16_t csi_rs_estimated_channel_freq[][N_ports][ue->frame_parms.ofdm_symbol_size],
+                                   const int16_t log2_maxh)
+{
+  const NR_DL_FRAME_PARMS *fp = &ue->frame_parms;
+  const int max_rank = min(fp->nb_antennas_rx, N_ports);
+  switch (max_rank) {
+    case 1:
+      return 0;
+    case 2:
+      return nr_csi_rs_ri_estimation_2(fp->nb_antennas_rx,
+                                       N_ports,
+                                       fp->ofdm_symbol_size,
+                                       csi_rs_estimated_channel_freq,
+                                       csirs_config_pdu->start_rb,
+                                       csirs_config_pdu->nr_of_rbs,
+                                       csirs_config_pdu->freq_density,
+                                       log2_maxh);
+    default:
+      LOG_W(NR_PHY, "Rank indicator computation is not implemented for %i x %i system\n", fp->nb_antennas_rx, N_ports);
+      return 0;
+  }
 }
 
 static int nr_csi_rs_pmi_estimation(const PHY_VARS_NR_UE *ue,
@@ -894,15 +933,10 @@ void nr_ue_csi_rs_procedures(PHY_VARS_NR_UE *ue,
                                  &log2_maxh,
                                  &noise_power);
 
+  // bit 1 in bitmap to indicate RI measurement
   uint8_t rank_indicator = 0;
-  // bit 1 in bitmap to indicate RI measurment
   if (csirs_config_pdu->measurement_bitmap & 2) {
-    nr_csi_rs_ri_estimation(ue,
-                            csirs_config_pdu,
-                            mapping_parms.ports,
-                            csi_rs_estimated_channel_freq,
-                            log2_maxh,
-                            &rank_indicator);
+    rank_indicator = nr_csi_rs_ri_estimation(ue, csirs_config_pdu, mapping_parms.ports, csi_rs_estimated_channel_freq, log2_maxh);
   }
 
   uint8_t i1[3] = {0};
