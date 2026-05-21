@@ -76,6 +76,26 @@ static void get_cu_stats(telnet_printfunc_t prnt, uint32_t node_id, char *node_n
   prnt("OK\n");
 }
 
+static inline int gnb_id_bit_length(uint32_t gnb_id) {
+  if (gnb_id == 0) return 1;
+  return 32 - __builtin_clz(gnb_id);
+}
+
+
+uint32_t extract_cell_id(uint64_t nci, const cell_config_t *cfg) {
+  for (int gnb_bits = 22; gnb_bits <= 32; gnb_bits++) {
+    int cell_bits = NR_NCI_BITS - gnb_bits;
+
+    uint32_t candidate_gnb_id = (uint32_t)(nci >> cell_bits);
+
+    if (candidate_gnb_id == cfg->gnb_id) {
+      return (uint32_t)(nci & ((1ULL << cell_bits) - 1));
+    }
+  }
+
+  return UINT32_MAX;
+}
+
 static void get_du_stats(telnet_printfunc_t prnt, gNB_MAC_INST *mac)
 {
   NR_SCHED_LOCK(&mac->sched_lock);
@@ -159,6 +179,15 @@ static void get_du_stats(telnet_printfunc_t prnt, gNB_MAC_INST *mac)
   int RlcPacketDropRateDl = sum_rlcpacketdl == 0 ? 1 : 1000000*(sum_rlcpacketdropratedl/sum_rlcpacketdl);
   double unres_ul = sum_thpunresvolul+sum_thpvolul > 0 ? 100*sum_thpunresvolul/(sum_thpunresvolul+sum_thpvolul) : 0;
   double unres_dl = sum_thpunresvoldl+sum_thpvoldl > 0 ? 100*sum_thpunresvoldl/(sum_thpunresvoldl+sum_thpvoldl) : 0;
+
+  cell_config_t *cfg = malloc(sizeof(cell_config_t));
+    cfg->mcc = cell_info->plmn.mcc;
+    cfg->mnc = cell_info->plmn.mnc;
+    cfg->mnc_digit_length = cell_info->plmn.mnc_digit_length;
+    cfg->gnb_id = mac->f1_config.gnb_id;
+
+  uint32_t local_cell_id = extract_cell_id(cell_info->nr_cellid, cfg);
+
   prnt("{\n");
     prnt("  \"o1-config\": {\n");
 
@@ -187,8 +216,9 @@ static void get_du_stats(telnet_printfunc_t prnt, gNB_MAC_INST *mac)
     prnt("      \"" BWUL "\": %ld,\n", bw_mhz);
     prnt("      \"" PCI "\": %ld,\n", *scc->physCellId);
     prnt("      \"" TAC "\": %ld,\n", *cell_info->tac);
-    prnt("      \"" MCC "\": \"%03d\",\n", cell_info->plmn.mcc);
-    prnt("      \"" MNC "\": \"%0*d\",\n", cell_info->plmn.mnc_digit_length, cell_info->plmn.mnc);
+    prnt("      \"" MCC "\": \"%03d\",\n", cfg->mcc);
+    prnt("      \"" MNC "\": \"%0*d\",\n", cfg->mnc_digit_length, cfg->mnc);
+    prnt("      \"" CLI "\": \"%d\",\n", local_cell_id);
     prnt("      \"" SD  "\": %d,\n", cell_info->nssai[0].sd);
     prnt("      \"" SST "\": %d,\n", cell_info->nssai[0].sst);
     prnt("      \"" SSBSCS "\": %d,\n", 30);

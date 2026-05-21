@@ -49,6 +49,9 @@
 #define CU_MNC "nrcellcu3gpp:mnc"
 #define CU_SST "nrcellcu3gpp:sst"
 #define CU_SD  "nrcellcu3gpp:sd"
+#define CLI     "nrcelldu3gpp:cellLocalId"
+
+#define NR_NCI_BITS 36
 
 #define PRINTLIST_i(len, fmt, ...) \
   { \
@@ -69,3 +72,10 @@ typedef struct ue_stat {
   rnti_t rnti;
   b_t thr;
 } ue_stat_t;
+
+typedef struct {
+    uint32_t mcc;
+    uint32_t mnc;
+    int      mnc_digit_length;
+    uint32_t gnb_id;
+} cell_config_t;
