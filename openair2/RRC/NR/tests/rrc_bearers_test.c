@@ -14,6 +14,7 @@
 #include "ds/seq_arr.h"
 #include "common/utils/LOG/log.h"
 #include "common/5g_platform_types.h"
+#include "softmodem-common.h"
 
 int nr_rlc_get_available_tx_space(int module_id, int rnti, int drb_id) { return 0; }
 softmodem_params_t *get_softmodem_params(void) { return NULL; }
