@@ -103,7 +103,7 @@ void read_mac_setup_sm(void* data)
   assert(0 !=0 && "Not supported");
 }
 
-extern void enable_dlsch_energy_saving_feature(int enable, int *cell_ids, int cell_ids_len);
+extern void enable_dlsch_energy_saving_feature(int enable, const int cell_ids[MAX_CELL_IDS], int cell_ids_len);
 sm_ag_if_ans_t write_ctrl_mac_sm(void const* data)
 {
 

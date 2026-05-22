@@ -607,12 +607,39 @@ static bool is_skippable(const NR_UE_sched_ctrl_t *sched_ctrl, NR_UE_DL_BWP_t *c
   return true;
 }
 
+static bool is_valid_combination(uint64_t nci,
+                  uint64_t gnb_id,
+                  uint64_t cell_id)
+{
+    //gnb_id use 22...32 bits, try all possibilities, if one find then true
+    for (int gnb_bits = 22; gnb_bits <= 32; gnb_bits++)
+    {
+        int ci_bits = 36 - gnb_bits;
+
+        if (gnb_id >= (1ULL << gnb_bits))
+            continue;
+
+        if (cell_id >= (1ULL << ci_bits))
+            continue;
+
+        uint64_t calculated_nci =
+            (gnb_id << ci_bits) | cell_id;
+
+        if (calculated_nci == nci)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static bool dlsch_to_schedule(const NR_UE_sched_ctrl_t *sched_ctrl, int frame, NR_UE_DL_BWP_t *current_BWP, gNB_MAC_INST *mac)
 {
   // Check ES is activated, and right cell is being considered
   if(dlsch_es){
     for(int i=0; i<cell_ids_len; i++){
-      if(mac->f1_config.setup_req[0].cell->info.nr_cellid == cell_ids[0] && is_skippable(sched_ctrl, current_BWP)){
+      if(is_valid_combination(mac->f1_config.setup_req[0].cell->info.nr_cellid, mac->f1_config.gnb_id, cell_ids[0]) && is_skippable(sched_ctrl, current_BWP)){
         return false;
       }
     }
