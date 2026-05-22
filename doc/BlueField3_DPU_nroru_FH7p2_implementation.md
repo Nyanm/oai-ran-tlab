@@ -864,6 +864,7 @@ ninja nr-softmodem
 
 
 Then run
+
 On DPU:
 ```
 sudo  ./nr-oru -O ../../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.4x4-benetel650.nr-oru.device.conf
@@ -873,7 +874,7 @@ On Host:
 sudo ./nr-softmodem   -O ../../../targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb-du.sa.band77.273prb.fhi72.4x4-benetel650.nr-oru.host.conf   --thread-pool 4,5,6,7 
 ```
 
-Then you should see DPU and host do the handshake, `nr-oru` on DPU will continue the libxran initialization, DPDK binding, and ru_thread start ticking and recieved pakages from the RU. `nr-softmodem` will soon have `segment fault` or `error` in current stage(we don't care about it right now. We will care about later)
+Then you should see DPU and host do the handshake, `nr-oru` on DPU will continue the libxran initialization, DPDK binding, and ru_thread start ticking and recieved pakages from the RU. `nr-softmodem` will soon have `segment fault` or `error` in current stage(we don't care about it right now. We will care about it later)
 
 Expected DPU log:   
 <details>
