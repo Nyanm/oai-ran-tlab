@@ -729,8 +729,8 @@ int xran_fh_rx_read_slot(ru_info_t *ru, int *frame, int *slot)
                 uint8_t *dst1 = (uint8_t *)(pos + (neg_len == 0 ? ((start_totalRB * N_SC_PER_PRB) - (num_totalRB * 6)) : 0));
                 // negative half
                 uint8_t *dst2 = (uint8_t *)(pos + (start_totalRB * N_SC_PER_PRB) + fftsize - (num_totalRB * 6));
-                memcpy((void *)dst2, (void *)local_dst, neg_len * 4);
-                memcpy((void *)dst1, (void *)&local_dst[neg_len], pos_len * 4);
+                memcpy((void *)dst2, (void *)local_dst, neg_len * 4);//<----------------------------------- need to get rid of this
+                memcpy((void *)dst1, (void *)&local_dst[neg_len], pos_len * 4);//<------------------------- need to get rid of this
               }
             }
           } // idxDesc

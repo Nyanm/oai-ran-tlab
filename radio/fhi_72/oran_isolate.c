@@ -551,29 +551,26 @@ void oran_fh_if4p5_south_out_dma_host(RU_t *ru, int frame, int slot, uint64_t ti
 
 void *get_internal_parameter(char *name)
 {
-  // 保持你原有的调试打印，这对于确认 Key 是否匹配至关重要
   printf("ORAN: %s (requesting: %s)\n", __FUNCTION__, name);
 
-  // 1. 标准 IF4p5 接口
+  // 1. standard IF4p5 
   if (!strcmp(name, "fh_if4p5_south_in"))
     return (void *)oran_fh_if4p5_south_in;
   if (!strcmp(name, "fh_if4p5_south_out"))
     return (void *)oran_fh_if4p5_south_out;
 
-  // 2. DMA DEVICE 模式接口 (DPU 侧)
-  // 这些函数名假设你已经在该文件或头文件中定义好了对应的实现
+  // 2. DMA DEVICE  (DPU side)
   if (!strcmp(name, "fh_if4p5_south_in_dma_device"))
     return (void *)oran_fh_if4p5_south_in_dma_device;
   if (!strcmp(name, "fh_if4p5_south_out_dma_device"))
     return (void *)oran_fh_if4p5_south_out_dma_device;
 
-  // 3. DMA HOST 模式接口 (主机侧)
+  // 3. DMA HOST interface (host side)
   if (!strcmp(name, "fh_if4p5_south_in_dma_host"))
     return (void *)oran_fh_if4p5_south_in_dma_host;
   if (!strcmp(name, "fh_if4p5_south_out_dma_host"))
     return (void *)oran_fh_if4p5_south_out_dma_host;
 
-  // 如果 Key 不匹配，打印警告有助于快速定位初始化配置错误
   printf("ORAN: %s - Warning: Unknown parameter name [%s]\n", __FUNCTION__, name);
   return NULL;
 }

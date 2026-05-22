@@ -1419,7 +1419,7 @@ void init_NR_RU(configmodule_interface_t *cfg, char *rf_config_file)
     struct sockaddr_in serv_addr;
     dma_sync_config_t sync_cfg;
 
-    // 1. 创建 Socket
+    // 1. create Socket
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         AssertFatal(0, "DMA: Socket creation error \n");
     }
@@ -1427,26 +1427,25 @@ void init_NR_RU(configmodule_interface_t *cfg, char *rf_config_file)
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(ru->dma_ctrl_port);
 
-    // 2. 转换 IP 地址
+    // 2. shift IP address
     if (inet_pton(AF_INET, ru->dma_ctrl_ip, &serv_addr.sin_addr) <= 0) {
         AssertFatal(0, "DMA: Invalid address/ Address not supported \n");
     }
 
-    // 3. 阻塞式连接 Host (等待 Master 就绪)
+    // 3. connect to Host 
     LOG_I(PHY, "DMA: Waiting for Host to come online...\n");
     while (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         LOG_D(PHY, "DMA: Connection failed, retrying in 1s...\n");
         sleep(1); 
     }
 
-    // 4. 接收同步配置包
+    // 4. receive package
 int expected_size = sizeof(dma_sync_config_t);
 int total_read = 0;
 char *ptr = (char *)&sync_cfg;
 
 LOG_I(PHY, "DMA: Waiting for config from Host (Expected: %d bytes)...\n", expected_size);
 
-// 2. 循环读取，直到读满 2336 字节
 while (total_read < expected_size) {
     int n = read(sock, ptr + total_read, expected_size - total_read);
     if (n <= 0) {
@@ -1457,49 +1456,46 @@ while (total_read < expected_size) {
     LOG_I(PHY, "DMA: Received %d bytes chunk (Total: %d/%d)\n", n, total_read, expected_size);
 }
 
-// 3. 校验最终结果
 if (total_read == expected_size && sync_cfg.magic == 0x0A1D3A00) {
     LOG_I(PHY, "✅ DMA: Handshake SUCCESS! All %d bytes received.\n", total_read);
 
-        // --- 核心步骤：重建影子 gNB 内存树 ---
+        // rebuild shadow gNB
         
-        // A. 确保全局容器 RC.gNB 已初始化
+        // A. make sure RC.gNB is initialized
         if (RC.gNB == NULL) {
             RC.gNB = (PHY_VARS_gNB **)malloc(sizeof(PHY_VARS_gNB *));
             RC.gNB[0] = (PHY_VARS_gNB *)calloc(1, sizeof(PHY_VARS_gNB));
         }
         
-        // B. 建立 RU 与影子 gNB 的逻辑关联
+        // B. match RU and shadow gNB
         ru->gNB_list[0] = RC.gNB[0];
         ru->num_gNB = 1;
-        // C. 开始反向映射参数到影子 gNB
         nfapi_nr_config_request_scf_t *gNB_cfg_dma_d = &RC.gNB[0]->gNB_config;
 
-        // --- 1. 基础配置映射 ---
+        // --- 1. basic setting
         gNB_cfg_dma_d->cell_config.frame_duplex_type.value = sync_cfg.config__cell_config__frame_duplex_type__value;
         gNB_cfg_dma_d->cell_config.frame_duplex_type.tl.tag = 0x100D;
 
-        // --- 2. SSB 配置 ---
+        // --- 2. SSB config ---
         gNB_cfg_dma_d->ssb_table.ssb_mask_list[0].ssb_mask.value = sync_cfg.config__ssb_table__ssb_mask_list_0__ssb_mask__value;
         gNB_cfg_dma_d->ssb_table.ssb_mask_list[1].ssb_mask.value = sync_cfg.config__ssb_table__ssb_mask_list_1__ssb_mask__value;
         gNB_cfg_dma_d->ssb_table.case_v3.value = sync_cfg.config__ssb_table__case_v3__value;
         gNB_cfg_dma_d->ssb_config.scs_common.value = sync_cfg.config__ssb_config__scs_common__value;
 
-        // --- 3. PRACH 配置 ---
+        // --- 3. PRACH config ---
         gNB_cfg_dma_d->prach_config.prach_ConfigurationIndex.value = sync_cfg.config__prach_config__prach_ConfigurationIndex__value;
         gNB_cfg_dma_d->prach_config.num_prach_fd_occasions.value = sync_cfg.config__prach_config__num_prach_fd_occasions__value;
         gNB_cfg_dma_d->prach_config.prach_sequence_length.value = sync_cfg.config__prach_config__prach_sequence_length__value;
-        gNB_cfg_dma_d->prach_config.prach_ConfigurationIndex.tl.tag = 0x1029; // 或者使用宏 NFAPI_NR_CONFIG_PRACH_CONFIGURATION_INDEX_TAG
+        gNB_cfg_dma_d->prach_config.prach_ConfigurationIndex.tl.tag = 0x1029; // or using MACRO NFAPI_NR_CONFIG_PRACH_CONFIGURATION_INDEX_TAG
         gNB_cfg_dma_d->prach_config.num_prach_fd_occasions.tl.tag = 0x102C;
         gNB_cfg_dma_d->prach_config.prach_sequence_length.tl.tag = 0x102E;
         
-        // ⚠️ 危险警告：OAI 中 num_prach_fd_occasions_list 通常是一个指针/动态数组，需要先分配内存！
         gNB_cfg_dma_d->prach_config.num_prach_fd_occasions_list = 
             (nfapi_nr_num_prach_fd_occasions_t *)calloc(1, sizeof(nfapi_nr_num_prach_fd_occasions_t));
         gNB_cfg_dma_d->prach_config.num_prach_fd_occasions_list[0].k1.value = sync_cfg.config__prach_config__num_prach_fd_occasions_list_0__k1__value;
 
-        // --- 4. Carrier 配置 ---
-        int scs = gNB_cfg_dma_d->ssb_config.scs_common.value; // 用于数组索引
+        // --- 4. Carrier config ---
+        int scs = gNB_cfg_dma_d->ssb_config.scs_common.value; 
         gNB_cfg_dma_d->carrier_config.dl_grid_size[scs].value = sync_cfg.config__carrier_config__dl_grid_size__value;
         gNB_cfg_dma_d->carrier_config.ul_grid_size[scs].value = sync_cfg.config__carrier_config__ul_grid_size__value;
         gNB_cfg_dma_d->carrier_config.num_rx_ant.value = sync_cfg.config__carrier_config__num_rx_ant__value;
@@ -1514,7 +1510,7 @@ if (total_read == expected_size && sync_cfg.magic == 0x0A1D3A00) {
             gNB_cfg_dma_d->carrier_config.ul_k0[i].value = sync_cfg.config__carrier_config__ul_k0__value[i];
         }
 
-        // --- 5. TDD Table (核心反序列化：重建套娃指针) ---
+        // --- 5. TDD Table
         gNB_cfg_dma_d->tdd_table.tdd_period.value = sync_cfg.config__tdd_table__tdd_period__value;
         gNB_cfg_dma_d->tdd_table.tdd_period.tl.tag = sync_cfg.config__tdd_table__tdd_period__tl__tag;
 
@@ -1522,12 +1518,12 @@ if (total_read == expected_size && sync_cfg.magic == 0x0A1D3A00) {
         //RC.gNB[0]->ofdm_offset_divisor = sync_cfg.ofdm_offset_divisor;
 
         int max_slots_to_map = 10 * (1 << gNB_cfg_dma_d->ssb_config.scs_common.value);
-        // 第一层：分配 Slot 列表
+        // allocate Slot 
         gNB_cfg_dma_d->tdd_table.max_tdd_periodicity_list = 
             (nfapi_nr_max_tdd_periodicity_t *)calloc(max_slots_to_map, sizeof(nfapi_nr_max_tdd_periodicity_t));
 
         for (int slot = 0; slot < max_slots_to_map; slot++) {
-            // 第二层：为每个 Slot 分配 14 个 Symbol 的列表
+            // allocate symbols
             gNB_cfg_dma_d->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list = 
                 (nfapi_nr_max_num_of_symbol_per_slot_t *)calloc(14, sizeof(nfapi_nr_max_num_of_symbol_per_slot_t));
 
@@ -1536,7 +1532,6 @@ if (total_read == expected_size && sync_cfg.magic == 0x0A1D3A00) {
                 gNB_cfg_dma_d->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list[sym].slot_config.value = 
                     sync_cfg.config__tdd_table__max_tdd_periodicity_list__max_num_of_symbol_per_slot_list__slot_config__value[flat_idx];
                 
-                // 建议把 Tag 也补上，防止 OAI 内部的其他断言 (DevAssert) 失败
                 gNB_cfg_dma_d->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list[sym].slot_config.tl.tag = 
                     NFAPI_NR_CONFIG_SLOT_CONFIG_TAG; 
             }
@@ -1611,12 +1606,12 @@ if (total_read == expected_size && sync_cfg.magic == 0x0A1D3A00) {
     int opt = 1;
     int addrlen = sizeof(address);
 
-    // 1. 创建 Socket
+    // 1. create Socket
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         AssertFatal(0, "Host: Socket failed\n");
     }
 
-    // 2. 端口复用 (防止频繁重启导致 Address already in use)
+    // 2. select port
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
         AssertFatal(0, "Host: setsockopt failed\n");
     }
@@ -1624,9 +1619,9 @@ if (total_read == expected_size && sync_cfg.magic == 0x0A1D3A00) {
     address.sin_family = AF_INET;
     address.sin_port = htons(ru->dma_ctrl_port);
     
-    // 绑定到配置的 IP
+    // bind IP
     if (inet_pton(AF_INET, ru->dma_ctrl_ip, &address.sin_addr) <= 0) {
-        address.sin_addr.s_addr = INADDR_ANY; // 备选方案
+        address.sin_addr.s_addr = INADDR_ANY; 
     }
 
     // 3. Bind & Listen
@@ -1639,29 +1634,27 @@ if (total_read == expected_size && sync_cfg.magic == 0x0A1D3A00) {
 
     LOG_I(PHY, "Host: Waiting for DPU (Device) to connect...\n");
 
-    // 4. Accept (阻塞直到 DPU 连上来)
+    // 4. Accept 
     if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
         AssertFatal(0, "Host: Accept failed\n");
     }
 
     LOG_I(PHY, "✅ Host: DPU Connected! Synchronizing physical layer parameters...\n");
-// 5. 准备并发送参数
+// 5. prepare and send config package
     LOG_I(PHY, "Host: Packing configuration for DPU...\n");
 
     dma_sync_config_t sync_pkt;
-    // 务必清零，防止 padding 区域产生随机垃圾数据
+
     memset(&sync_pkt, 0, sizeof(dma_sync_config_t)); 
 
-    sync_pkt.magic = 0x0A1D3A00; // 魔法字符 (OAI_DMA)，DPU 收到后先校验这个
+    sync_pkt.magic = 0x0A1D3A00; // magic token (OAI_DMA)，DPU need to match it
 
-    // 为了代码简洁，定义一个指针指向 RU 的高层配置
     nfapi_nr_config_request_scf_t *gNB_cfg_dma_h = &RC.gNB[0]->gNB_config;//
 
     // --- 1. config->ssb_table ---
     sync_pkt.config__ssb_table__ssb_mask_list_0__ssb_mask__value = gNB_cfg_dma_h->ssb_table.ssb_mask_list[0].ssb_mask.value;
     sync_pkt.config__ssb_table__ssb_mask_list_1__ssb_mask__value = gNB_cfg_dma_h->ssb_table.ssb_mask_list[1].ssb_mask.value;
     sync_pkt.config__ssb_table__case_v3__value = gNB_cfg_dma_h->ssb_table.case_v3.value;
-    // 注意：如果有 case_v3 的配置，也填进来
 
     // --- 2. config->ssb_config ---
     sync_pkt.config__ssb_config__scs_common__value = gNB_cfg_dma_h->ssb_config.scs_common.value;
@@ -1690,17 +1683,13 @@ if (total_read == expected_size && sync_cfg.magic == 0x0A1D3A00) {
     }
     // --- 8.ofdm_offset_divisor
     sync_pkt.ofdm_offset_divisor = RC.gNB[0]->ofdm_offset_divisor;
-    // --- 5. config->tdd_table 【核心：拍扁多级指针】 ---
+    // --- 5. config->tdd_table 
     sync_pkt.config__tdd_table__tdd_period__value = gNB_cfg_dma_h->tdd_table.tdd_period.value;
     sync_pkt.config__tdd_table__tdd_period__tl__tag = gNB_cfg_dma_h->tdd_table.tdd_period.tl.tag;
     
     if (gNB_cfg_dma_h->tdd_table.max_tdd_periodicity_list != NULL) {
-        // 计算当前帧的实际 slots 数量 (安全边界保护)
-        // 根据 OAI 规范，这里最大不会超过 160 (对应 240kHz SCS)
         int max_slots_to_map = 10 * (1 << gNB_cfg_dma_h->ssb_config.scs_common.value);
-        
         for (int slot = 0; slot < max_slots_to_map; slot++) {
-            // 安全检查：防止 OAI 没有分配满 160 个 Slot 的内存
             if (gNB_cfg_dma_h->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list != NULL) {
                 for (int sym = 0; sym < 14; sym++) {
                     int flat_idx = slot * 14 + sym;
@@ -1708,14 +1697,12 @@ if (total_read == expected_size && sync_cfg.magic == 0x0A1D3A00) {
                         gNB_cfg_dma_h->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list[sym].slot_config.value;
                 }
             } else {
-                // 如果指针为空，提前退出循环，防止段错误
                 break; 
             }
         }
     }
 
-    // --- 发送给 DPU ---
-    // 注意：这里我们直接发 sizeof(sync_pkt)，不再用字符串 magic_token
+    // --- send to DPU ---
     LOG_I(PHY, "Host: Sending %lu bytes of sync configuration to DPU...\n", sizeof(dma_sync_config_t));
     
     ssize_t sent_bytes = send(new_socket, &sync_pkt, sizeof(dma_sync_config_t), 0);
@@ -1724,11 +1711,6 @@ if (total_read == expected_size && sync_cfg.magic == 0x0A1D3A00) {
     } else {
         LOG_I(PHY, "Host: Configuration successfully sent to DPU.\n");
     }
-
-    // 可选：等待 DPU 发回一个简单的 ACK
-    // char ack_buf[4];
-    // recv(new_socket, ack_buf, sizeof(ack_buf), 0);
-    // LOG_I(PHY, "Host: Received ACK from DPU.\n");
 
     close(new_socket);
     close(server_fd);
@@ -2001,24 +1983,20 @@ void print_shadow_gnb_config(nfapi_nr_config_request_scf_t *cfg) {
     LOG_I(PHY, "          [DMA Device] SHADOW gNB CONFIG DUMP           \n");
     LOG_I(PHY, "========================================================\n");
 
-    // 1. 基础与小区配置
     LOG_I(PHY, "[Cell] PCI: %d, Duplex Type: %d (0:FDD, 1:TDD)\n", 
           cfg->cell_config.phy_cell_id.value, 
           cfg->cell_config.frame_duplex_type.value);
 
-    // 2. SSB 配置
     LOG_I(PHY, "[SSB] SCS Common: %d, Mask0: 0x%08x, Mask1: 0x%08x\n", 
           cfg->ssb_config.scs_common.value,
           cfg->ssb_table.ssb_mask_list[0].ssb_mask.value,
           cfg->ssb_table.ssb_mask_list[1].ssb_mask.value);
 
-    // 3. PRACH 配置
     LOG_I(PHY, "[PRACH] Config Index: %d, FD Occasions: %d, Seq Length: %d\n",
           cfg->prach_config.prach_ConfigurationIndex.value,
           cfg->prach_config.num_prach_fd_occasions.value,
           cfg->prach_config.prach_sequence_length.value);
 
-    // 4. 载波/频域配置
     int scs = cfg->ssb_config.scs_common.value;
     LOG_I(PHY, "[Carrier] DL Grid Size (PRBs): %d, UL Grid Size: %d\n", 
           cfg->carrier_config.dl_grid_size[scs].value,
@@ -2027,25 +2005,22 @@ void print_shadow_gnb_config(nfapi_nr_config_request_scf_t *cfg) {
           cfg->carrier_config.num_rx_ant.value,
           cfg->carrier_config.num_tx_ant.value);
 
-    // 5. TDD 周期表 (最核心部分)
     LOG_I(PHY, "[TDD] Periodicity: %d\n", cfg->tdd_table.tdd_period.value);
     
     if (cfg->tdd_table.max_tdd_periodicity_list != NULL) {
-        // 根据 SCS 计算当前 numerology 下的一帧有多少个 slot
         int slots_per_frame = 10 * (1 << scs); 
         LOG_I(PHY, "[TDD] Frame layout for SCS=%d (Printing first %d slots):\n", scs, slots_per_frame);
 
         for (int slot = 0; slot < slots_per_frame && slot < 160; slot++) {
             if (cfg->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list != NULL) {
-                char slot_pattern[15]; // 14 个符号 + 1 个字符串结束符 \0
+                char slot_pattern[15]; 
                 
                 for (int sym = 0; sym < 14; sym++) {
                     uint8_t val = cfg->tdd_table.max_tdd_periodicity_list[slot].max_num_of_symbol_per_slot_list[sym].slot_config.value;
-                    // 将 0, 1, 2 转换为直观的字符
                     if (val == 0) slot_pattern[sym] = 'D';
                     else if (val == 1) slot_pattern[sym] = 'U';
                     else if (val == 2) slot_pattern[sym] = 'F';
-                    else slot_pattern[sym] = '?'; // 未知或异常值
+                    else slot_pattern[sym] = '?'; 
                 }
                 slot_pattern[14] = '\0';
                 
@@ -2060,25 +2035,21 @@ void print_shadow_gnb_config(nfapi_nr_config_request_scf_t *cfg) {
     LOG_I(PHY, "========================================================\n");
 }
 
+//helper function for nr-oru
 void nroru_init_nr_transport(PHY_VARS_gNB *gNB)
 {
-  // 针对独立前传联调，指定一个安全的固定的队列深度（16 或 32，必须是 2 的幂次方）
   int max_nb_jobs = 16; 
   bool ret;
 
-  // 1. 初始化 PUCCH 队列，写入正确的元素尺寸，防止 spsc_q_get_if 断言失败
   ret = spsc_q_alloc(&gNB->pucch_queue, max_nb_jobs, sizeof(NR_gNB_PUCCH_job_t));
   DevAssert(ret);
 
-  // 2. 初始化 PUSCH 队列
   ret = spsc_q_alloc(&gNB->pusch_queue, max_nb_jobs, sizeof(NR_gNB_PUSCH_job_t));
   DevAssert(ret);
 
-  // 3. 初始化 SRS 队列
   ret = spsc_q_alloc(&gNB->srs_queue, max_nb_jobs, sizeof(NR_gNB_SRS_job_t));
   DevAssert(ret);
 
-  // 4. 为防止前传底层逻辑通过指针索引 gNB->ulsch，分配一个干净的空指针数组（不调用依赖 LDPC 的 new_gNB_ulsch）
   gNB->max_nb_pusch = max_nb_jobs;
   gNB->ulsch = (NR_gNB_ULSCH_t *)malloc16(gNB->max_nb_pusch * sizeof(NR_gNB_ULSCH_t));
   if (gNB->ulsch) {
