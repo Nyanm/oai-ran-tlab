@@ -284,6 +284,10 @@ wget http://fast.dpdk.org/rel/dpdk-24.11.4.tar.xz   # K release
 tar xf dpdk-24.11.4.tar.xz
 cd dpdk-stable-24.11.4
 
+# Always wipe the build directory — meson caches pkg-config results and will
+# silently reuse x86 libelf paths if the previous setup run was bad.
+rm -rf build-dragonwing
+
 PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig \
 meson setup build-dragonwing \
     --cross-file ~/aarch64-dragonwing.ini \
@@ -297,8 +301,9 @@ ninja -C build-dragonwing install
 
 > **Note:** `PKG_CONFIG_LIBDIR` replaces (not appends) the pkg-config search
 > path, ensuring meson finds arm64 `.pc` files rather than x86 ones.
-> `-Ddisable_libs=bpf` drops the libelf dependency, which is not needed for
-> fronthaul use.  The `-Ddisable_drivers` list trims x86-only NIC drivers;
+> `-Ddisable_libs=bpf` drops the libelf dependency (only needed for eBPF
+> packet filtering, not for fronthaul use), avoiding the x86/arm64 libelf
+> mismatch.  The `-Ddisable_drivers` list trims x86-only NIC drivers;
 > add DragonWing-specific PMDs with `-Denable_drivers=...` if needed.
 
 Verify pkg-config can see it:
