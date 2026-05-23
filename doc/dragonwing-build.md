@@ -177,7 +177,205 @@ causes CMake to use `-mcpu=cortex-a78` instead of the generic `-march=armv8.2-a`
 
 ---
 
-## 3 Deploy via adb
+## 3 Building for O-RAN FHI 7.2 (DPDK + libxran + armral)
+
+This section covers cross-compiling the three additional libraries needed for
+the O-RAN 7.2 fronthaul interface (`-DOAI_FHI72=ON`).  They must be built in
+order: DPDK → libxran → armral → OAI.
+
+All libraries are installed into a common staging directory (`~/dw-sysroot`)
+so they stay isolated from the host system and can be pushed to the device
+together with the OAI binaries.
+
+```shell
+export DW_TC=/opt/Hexagon_SDK/6.4.0.2/tools/gcc_tools_64/bin/aarch64-none-linux-gnu
+export DW_SYSROOT=$HOME/dw-sysroot
+mkdir -p $DW_SYSROOT
+```
+
+### 3.1 DPDK
+
+OAI supports two xran release tracks:
+
+| xran release | xran version | DPDK version |
+|---|---|---|
+| F | 6.1.9  | 20.11.9 |
+| K | 11.1.1 | 24.11.4 (minimum 22) |
+
+The K release is recommended for new deployments.  The commands below show
+the K release; swap version strings for F where noted.
+
+#### 3.1.1 Build tools
+
+```shell
+sudo apt-get install -y meson ninja-build python3-pyelftools
+```
+
+#### 3.1.2 Create a meson cross-file
+
+```shell
+cat > ~/aarch64-dragonwing.ini <<EOF
+[binaries]
+c       = '${DW_TC}-gcc'
+cpp     = '${DW_TC}-g++'
+ar      = '${DW_TC}-ar'
+strip   = '${DW_TC}-strip'
+pkgconfig = 'pkg-config'
+
+[host_machine]
+system     = 'linux'
+cpu_family = 'aarch64'
+cpu        = 'cortex-a78'
+endian     = 'little'
+
+[properties]
+c_args   = ['-I/usr/include/aarch64-linux-gnu', '-I/usr/include']
+cpp_args = ['-I/usr/include/aarch64-linux-gnu', '-I/usr/include']
+c_link_args   = ['-L/usr/lib/aarch64-linux-gnu']
+cpp_link_args = ['-L/usr/lib/aarch64-linux-gnu']
+EOF
+```
+
+#### 3.1.3 Download, build and install
+
+```shell
+cd ~
+wget http://fast.dpdk.org/rel/dpdk-24.11.4.tar.xz   # K release
+# wget http://fast.dpdk.org/rel/dpdk-20.11.9.tar.xz # F release
+tar xf dpdk-24.11.4.tar.xz
+cd dpdk-stable-24.11.4
+
+meson setup build-dragonwing \
+    --cross-file ~/aarch64-dragonwing.ini \
+    --prefix=$DW_SYSROOT \
+    -Dplatform=generic \
+    -Ddisable_drivers=net/ice,net/i40e,net/iavf,net/ixgbe   # trim x86 NICs
+ninja -C build-dragonwing
+ninja -C build-dragonwing install
+```
+
+> **Note:** `--prefix=$DW_SYSROOT` keeps the ARM DPDK entirely separate from
+> any x86 DPDK you may have installed system-wide.  The `-Ddisable_drivers`
+> list is optional; remove it if you need those PMDs or if the build fails.
+> DragonWing-specific DPDK PMDs (e.g. `net/nfp` or vendor-provided ones) can
+> be added with `-Denable_drivers=...`.
+
+Verify pkg-config can see it:
+
+```shell
+PKG_CONFIG_PATH=$DW_SYSROOT/lib/pkgconfig \
+    pkg-config --modversion libdpdk
+```
+
+### 3.2 libxran
+
+#### 3.2.1 Clone and patch
+
+```shell
+git clone https://github.com/openairinterface/o-du-phy.git ~/phy
+cd ~/phy
+
+# K release — tag must match K_VERSION in radio/fhi_72/CMakeLists.txt
+git checkout oran_k_release_v1.1
+# F release alternative:
+# git checkout oran_f_release_v1.9
+# git apply ~/openairinterface5g/cmake_targets/tools/oran_fhi_integration_patches/F/oaioran_F.patch
+```
+
+#### 3.2.2 Cross-compile
+
+```shell
+cd ~/phy/fhi_lib/lib
+make clean
+
+CC=${DW_TC}-gcc \
+CXX=${DW_TC}-g++ \
+AR=${DW_TC}-ar \
+WIRELESS_SDK_TOOLCHAIN=gcc \
+TARGET=armv8 \
+RTE_SDK=~/dpdk-stable-24.11.4 \
+XRAN_DIR=~/phy/fhi_lib \
+make -j$(nproc) XRAN_LIB_SO=1
+```
+
+The output is `~/phy/fhi_lib/lib/build/libxran.so`.
+
+> **Note:** `TARGET=armv8` tells the xran Makefile to apply ARM-specific
+> optimisation flags.  `RTE_SDK` points at the DPDK *source tree*, not the
+> installed prefix; xran reads DPDK headers directly from the source.
+
+### 3.3 armral (Arm RAN Acceleration Library)
+
+armral is required by OAI on aarch64 for BFP compression.
+
+```shell
+git clone https://git.gitlab.arm.com/networking/ral.git ~/ral
+cd ~/ral
+git checkout armral-25.01
+mkdir build && cd build
+
+cmake .. -GNinja \
+    -DCMAKE_TOOLCHAIN_FILE=~/openairinterface5g/cmake_targets/cross-arm-dragonwing.cmake \
+    -DBUILD_SHARED_LIBS=ON \
+    -DCMAKE_INSTALL_PREFIX=$DW_SYSROOT
+
+ninja
+ninja install
+```
+
+### 3.4 OAI gNB with FHI 7.2
+
+```shell
+cd ~/openairinterface5g
+
+# Step 1 — native host tools (skip if already done)
+mkdir -p build && cd build && cmake .. && make -j$(nproc) ldpc_generators generate_T && cd ..
+
+# Step 2 — DragonWing cross-compile with FHI 7.2
+rm -rf dragonwing_build && mkdir dragonwing_build && cd dragonwing_build
+
+PKG_CONFIG_PATH=$DW_SYSROOT/lib/pkgconfig \
+cmake .. \
+    -DCMAKE_TOOLCHAIN_FILE=../cmake_targets/cross-arm-dragonwing.cmake \
+    -DNATIVE_DIR=../build \
+    -DOAI_FHI72=ON \
+    -Dxran_LOCATION=$HOME/phy/fhi_lib/lib \
+    -Darmral_LOCATION=$DW_SYSROOT
+
+make -j$(nproc) nr-softmodem nr-cuup params_libconfig coding oran_fhlib_5g
+```
+
+> **Note:** `PKG_CONFIG_PATH` (not `PKG_CONFIG_LIBDIR`) is used here so that
+> the ARM DPDK `.pc` file is found *in addition to* the existing system arm64
+> packages, rather than replacing them.
+
+### 3.5 Deploy FHI 7.2 binaries via adb
+
+```shell
+adb shell mkdir -p /data/oai/lib
+
+# OAI executables
+adb push dragonwing_build/nr-softmodem         /data/oai/
+adb push dragonwing_build/liboran_fhlib_5g.so  /data/oai/lib/
+adb push dragonwing_build/libparams_libconfig.so /data/oai/lib/
+adb push dragonwing_build/libcoding.so         /data/oai/lib/
+
+# DPDK shared libraries
+find $DW_SYSROOT/lib -name "librte_*.so*" -exec adb push {} /data/oai/lib/ \;
+
+# xran
+adb push ~/phy/fhi_lib/lib/build/libxran.so    /data/oai/lib/
+
+# armral
+adb push $DW_SYSROOT/lib/libarmral.so          /data/oai/lib/
+
+# Run with combined LD_LIBRARY_PATH
+adb shell "export LD_LIBRARY_PATH=/data/oai/lib && /data/oai/nr-softmodem --help"
+```
+
+---
+
+## 5 Deploy via adb (basic, no FHI 7.2)
 
 ```shell
 # Verify the device is reachable
@@ -213,7 +411,7 @@ done
 
 ---
 
-## 4 Alternative: sysroot from device
+## 6 Alternative: sysroot from device
 
 If the Ubuntu multiarch packages are not available on the build host, you can
 extract the device's root filesystem and use it as a sysroot instead.
@@ -241,7 +439,7 @@ export PKG_CONFIG_LIBDIR=$(pwd)/dragonwing-sysroot/usr/lib/pkgconfig:$(pwd)/drag
 
 ---
 
-## 5 Troubleshooting
+## 7 Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
