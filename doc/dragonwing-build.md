@@ -401,19 +401,25 @@ make -j$(nproc) nr-softmodem nr-cuup params_libconfig coding oran_fhlib_5g
 adb shell mkdir -p /data/oai/lib
 
 # OAI executables
-adb push dragonwing_build/nr-softmodem         /data/oai/
-adb push dragonwing_build/liboran_fhlib_5g.so  /data/oai/lib/
+adb push dragonwing_build/nr-softmodem           /data/oai/
+adb push dragonwing_build/liboran_fhlib_5g.so    /data/oai/lib/
 adb push dragonwing_build/libparams_libconfig.so /data/oai/lib/
-adb push dragonwing_build/libcoding.so         /data/oai/lib/
+adb push dragonwing_build/libcoding.so           /data/oai/lib/
 
 # DPDK shared libraries
 find $DW_SYSROOT/lib -name "librte_*.so*" -exec adb push {} /data/oai/lib/ \;
 
+# dpdk-devbind.py — needed to bind VFs to vfio-pci before starting the gNB.
+# Install to /usr/local/bin to match the path used in ORAN_FHI7.2_Tutorial.md.
+# Python 3 is already present on the device.
+adb push $DW_SYSROOT/bin/dpdk-devbind.py /data/oai/
+adb shell "cp /data/oai/dpdk-devbind.py /usr/local/bin/dpdk-devbind.py && chmod +x /usr/local/bin/dpdk-devbind.py"
+
 # xran
-adb push ~/phy/fhi_lib/lib/build/libxran.so    /data/oai/lib/
+adb push ~/phy/fhi_lib/lib/build/libxran.so      /data/oai/lib/
 
 # armral
-adb push $DW_SYSROOT/lib/libarmral.so          /data/oai/lib/
+adb push $DW_SYSROOT/lib/libarmral.so            /data/oai/lib/
 
 # Run with combined LD_LIBRARY_PATH
 adb shell "export LD_LIBRARY_PATH=/data/oai/lib && /data/oai/nr-softmodem --help"
