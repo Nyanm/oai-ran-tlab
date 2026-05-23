@@ -127,6 +127,12 @@ sudo apt-get install --yes \
 
 ## 2 Build
 
+Both build directories live directly under the OAI repository root.
+**Each directory must be created fresh** — `CMAKE_TOOLCHAIN_FILE` is only
+honoured on the very first cmake run in a directory.  If a `CMakeCache.txt`
+already exists, cmake ignores the toolchain file and silently produces a
+native x86 build.
+
 ### 2.1 Step 1 — native host tools
 
 These are x86 binaries that cmake runs during the cross-compile step to
@@ -134,26 +140,30 @@ generate LDPC processing code and the T-tracer event IDs.
 
 ```shell
 cd <oai-root>
-rm -rf ran_build
-mkdir -p ran_build/build ran_build/build-dragonwing
 
-cd ran_build/build
-cmake ../../..
+mkdir build        # must not contain a prior CMakeCache.txt
+cd build
+cmake ..
 make -j$(nproc) ldpc_generators generate_T
+cd ..
 ```
 
 ### 2.2 Step 2 — cross-compile for DragonWing
 
 ```shell
-cd ../build-dragonwing
+# Remove any previous attempt first — a stale CMakeCache.txt will cause
+# CMAKE_TOOLCHAIN_FILE to be ignored with a warning but no error.
+rm -rf dragonwing_build
+mkdir dragonwing_build
+cd dragonwing_build
 
-cmake ../../.. -GNinja \
-    -DCMAKE_TOOLCHAIN_FILE=../../../cmake_targets/cross-arm-dragonwing.cmake \
+cmake .. \
+    -DCMAKE_TOOLCHAIN_FILE=../cmake_targets/cross-arm-dragonwing.cmake \
     -DNATIVE_DIR=../build
 
 # Example targets — add or remove as needed
-ninja nr-softmodem nr-cuup nr-uesoftmodem \
-      params_libconfig coding rfsimulator
+make -j$(nproc) nr-softmodem nr-cuup nr-uesoftmodem \
+                params_libconfig coding rfsimulator
 ```
 
 If the Hexagon SDK is not at the default path, add:
@@ -214,12 +224,13 @@ adb pull /usr/lib       dragonwing-sysroot/usr/lib
 adb pull /usr/include   dragonwing-sysroot/usr/include
 adb pull /lib           dragonwing-sysroot/lib
 
-# Then configure cmake with an explicit sysroot
-cmake ../../.. -GNinja \
-    -DCMAKE_TOOLCHAIN_FILE=../../../cmake_targets/cross-arm-dragonwing.cmake \
+# Then configure cmake with an explicit sysroot (from the repo root)
+rm -rf dragonwing_build && mkdir dragonwing_build && cd dragonwing_build
+cmake .. \
+    -DCMAKE_TOOLCHAIN_FILE=../cmake_targets/cross-arm-dragonwing.cmake \
     -DNATIVE_DIR=../build \
-    -DCMAKE_SYSROOT=$(pwd)/dragonwing-sysroot \
-    -DCMAKE_FIND_ROOT_PATH=$(pwd)/dragonwing-sysroot
+    -DCMAKE_SYSROOT=$(pwd)/../dragonwing-sysroot \
+    -DCMAKE_FIND_ROOT_PATH=$(pwd)/../dragonwing-sysroot
 ```
 
 You will also need to regenerate the pkg-config search path:
