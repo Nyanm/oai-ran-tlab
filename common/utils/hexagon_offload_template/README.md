@@ -3,7 +3,7 @@
 # Hexagon DSP Offload Template
 
 This directory is a starting point for offloading computation from the OAI ARM
-cores to the Qualcomm Hexagon DSP on the DragonWing IQ-9/X (SA9000P).
+cores to the Qualcomm Hexagon DSP on the DragonWing IQ-9075.
 
 The pattern is the same as `libldpc.so` or `libdfts.so`: OAI loads a shared
 library at runtime via `dlopen`, calls functions through typed function
