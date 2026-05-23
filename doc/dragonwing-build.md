@@ -331,24 +331,37 @@ git checkout oran_k_release_v1.1
 #### 3.2.2 Cross-compile
 
 ```shell
+sudo apt-get install -y libnuma-dev:arm64
+
 cd ~/phy/fhi_lib/lib
 make clean
 
-CC=${DW_TC}-gcc \
-CXX=${DW_TC}-g++ \
-AR=${DW_TC}-ar \
-WIRELESS_SDK_TOOLCHAIN=gcc \
-TARGET=armv8 \
-RTE_SDK=~/dpdk-stable-24.11.4 \
-XRAN_DIR=~/phy/fhi_lib \
-make -j$(nproc) XRAN_LIB_SO=1
+CPATH=/usr/include/aarch64-linux-gnu:/usr/include \
+PKG_CONFIG_PATH=$DW_SYSROOT/lib/pkgconfig \
+make -j$(nproc) XRAN_LIB_SO=1 \
+    CC=${DW_TC}-gcc \
+    CPP=${DW_TC}-g++ \
+    AR=${DW_TC}-ar \
+    AS=${DW_TC}-as \
+    LD=${DW_TC}-gcc \
+    WIRELESS_SDK_TOOLCHAIN=gcc \
+    TARGET=armv8 \
+    RTE_SDK=$DW_SYSROOT \
+    XRAN_DIR=~/phy/fhi_lib
 ```
 
 The output is `~/phy/fhi_lib/lib/build/libxran.so`.
 
-> **Note:** `TARGET=armv8` tells the xran Makefile to apply ARM-specific
-> optimisation flags.  `RTE_SDK` points at the DPDK *source tree*, not the
-> installed prefix; xran reads DPDK headers directly from the source.
+> **Note:** The xran Makefile for `TARGET=armv8` hardcodes `CC := gcc`,
+> `CPP := g++` etc., so the cross-compiler must be passed as **make
+> command-line arguments** (after `make`) — not as shell environment variables
+> — so they override the Makefile assignments.  `PKG_CONFIG_PATH` and `CPATH`
+> must remain shell environment variables: the Makefile invokes pkg-config via
+> `$(shell ...)` which inherits the shell environment, and GCC reads `CPATH`
+> independently to prepend extra include directories (bridging the gap between
+> the SDK GCC's minimal built-in sysroot and the Ubuntu arm64 system headers).
+> `RTE_SDK` must point at the **installed** DPDK prefix so pkg-config finds
+> `libdpdk.pc` and resolves the correct arm64 include paths.
 
 ### 3.3 armral (Arm RAN Acceleration Library)
 
