@@ -376,7 +376,9 @@ mkdir build && cd build
 cmake .. -GNinja \
     -DCMAKE_TOOLCHAIN_FILE=~/openairinterface5g/cmake_targets/cross-arm-dragonwing.cmake \
     -DBUILD_SHARED_LIBS=ON \
-    -DCMAKE_INSTALL_PREFIX=$DW_SYSROOT
+    -DCMAKE_INSTALL_PREFIX=$DW_SYSROOT \
+    -DCMAKE_C_FLAGS="-mcpu=cortex-a78+crypto" \
+    -DCMAKE_CXX_FLAGS="-mcpu=cortex-a78+crypto"
 
 ninja
 ninja install
