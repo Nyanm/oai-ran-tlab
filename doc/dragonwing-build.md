@@ -262,6 +262,11 @@ cpu_family = 'aarch64'
 cpu        = 'armv8.2-a'
 endian     = 'little'
 
+[properties]
+# DPDK reads this via meson.get_external_property() when cross-compiling;
+# -Dplatform=generic on the command line is ignored in that path.
+platform = 'generic'
+
 [built-in options]
 c_args        = ['-I/usr/include/aarch64-linux-gnu', '-I/usr/include']
 cpp_args      = ['-I/usr/include/aarch64-linux-gnu', '-I/usr/include']
