@@ -259,7 +259,7 @@ pkg-config = 'pkg-config'
 [host_machine]
 system     = 'linux'
 cpu_family = 'aarch64'
-cpu        = 'cortex-a78'
+cpu        = 'armv8.2-a'
 endian     = 'little'
 
 [built-in options]
