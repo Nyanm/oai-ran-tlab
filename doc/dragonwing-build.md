@@ -250,11 +250,11 @@ sudo apt-get install -y meson ninja-build python3-pyelftools
 ```shell
 cat > ~/aarch64-dragonwing.ini <<EOF
 [binaries]
-c       = '${DW_TC}-gcc'
-cpp     = '${DW_TC}-g++'
-ar      = '${DW_TC}-ar'
-strip   = '${DW_TC}-strip'
-pkgconfig = 'pkg-config'
+c          = '${DW_TC}-gcc'
+cpp        = '${DW_TC}-g++'
+ar         = '${DW_TC}-ar'
+strip      = '${DW_TC}-strip'
+pkg-config = 'pkg-config'
 
 [host_machine]
 system     = 'linux'
@@ -262,13 +262,17 @@ cpu_family = 'aarch64'
 cpu        = 'cortex-a78'
 endian     = 'little'
 
-[properties]
-c_args   = ['-I/usr/include/aarch64-linux-gnu', '-I/usr/include']
-cpp_args = ['-I/usr/include/aarch64-linux-gnu', '-I/usr/include']
+[built-in options]
+c_args        = ['-I/usr/include/aarch64-linux-gnu', '-I/usr/include']
+cpp_args      = ['-I/usr/include/aarch64-linux-gnu', '-I/usr/include']
 c_link_args   = ['-L/usr/lib/aarch64-linux-gnu']
 cpp_link_args = ['-L/usr/lib/aarch64-linux-gnu']
 EOF
 ```
+
+> **Important:** the `export DW_TC=...` and `export DW_SYSROOT=...` lines at the
+> top of this section must be run in the same shell before any of the commands
+> below.  `$DW_SYSROOT` must be a non-empty absolute path or meson will error.
 
 #### 3.1.3 Download, build and install
 
