@@ -175,6 +175,40 @@ If the Hexagon SDK is not at the default path, add:
 The `QUALCOMM_DRAGONWING=1` flag is set automatically by the toolchain file and
 causes CMake to use `-mcpu=cortex-a78` instead of the generic `-march=armv8.2-a`.
 
+### 2.3 Deploy via adb
+
+```shell
+# Verify the device is reachable
+adb devices
+
+# Create a destination directory on the device
+adb shell mkdir -p /data/oai
+
+# Push the binaries
+adb push dragonwing_build/nr-softmodem          /data/oai/
+adb push dragonwing_build/nr-cuup               /data/oai/
+adb push dragonwing_build/nr-uesoftmodem        /data/oai/
+
+# Push shared libraries that OAI loads at runtime
+adb push dragonwing_build/libparams_libconfig.so /data/oai/
+adb push dragonwing_build/libcoding.so           /data/oai/
+adb push dragonwing_build/librfsimulator.so      /data/oai/
+
+# On the device, set LD_LIBRARY_PATH before running
+adb shell "export LD_LIBRARY_PATH=/data/oai && /data/oai/nr-softmodem --help"
+```
+
+If the standard system libraries (libgnutls, libssl, libconfig, …) are not
+present on the device, they must be pushed alongside the OAI binaries:
+
+```shell
+# Example: find and push the arm64 shared libs from the build host
+for lib in libgnutls libssl libcrypto libconfig libsctp; do
+    find /usr/lib/aarch64-linux-gnu -name "${lib}.so*" -exec \
+        adb push {} /data/oai/ \;
+done
+```
+
 ---
 
 ## 3 Building for O-RAN FHI 7.2 (DPDK + libxran + armral)
@@ -375,43 +409,7 @@ adb shell "export LD_LIBRARY_PATH=/data/oai/lib && /data/oai/nr-softmodem --help
 
 ---
 
-## 5 Deploy via adb (basic, no FHI 7.2)
-
-```shell
-# Verify the device is reachable
-adb devices
-
-# Create a destination directory on the device
-adb shell mkdir -p /data/oai
-
-# Push the binaries
-adb push ran_build/build-dragonwing/nr-softmodem   /data/oai/
-adb push ran_build/build-dragonwing/nr-cuup         /data/oai/
-adb push ran_build/build-dragonwing/nr-uesoftmodem  /data/oai/
-
-# Push shared libraries that OAI loads at runtime
-adb push ran_build/build-dragonwing/libparams_libconfig.so /data/oai/
-adb push ran_build/build-dragonwing/libcoding.so           /data/oai/
-adb push ran_build/build-dragonwing/librfsimulator.so      /data/oai/
-
-# On the device, set LD_LIBRARY_PATH before running
-adb shell "export LD_LIBRARY_PATH=/data/oai && /data/oai/nr-softmodem --help"
-```
-
-If the standard system libraries (libgnutls, libssl, libconfig, …) are not
-present on the device, they must be pushed alongside the OAI binaries:
-
-```shell
-# Example: find and push the arm64 shared libs from the build host
-for lib in libgnutls libssl libcrypto libconfig libsctp; do
-    find /usr/lib/aarch64-linux-gnu -name "${lib}.so*" -exec \
-        adb push {} /data/oai/ \;
-done
-```
-
----
-
-## 6 Alternative: sysroot from device
+## 4 Alternative: sysroot from device
 
 If the Ubuntu multiarch packages are not available on the build host, you can
 extract the device's root filesystem and use it as a sysroot instead.
@@ -439,7 +437,7 @@ export PKG_CONFIG_LIBDIR=$(pwd)/dragonwing-sysroot/usr/lib/pkgconfig:$(pwd)/drag
 
 ---
 
-## 7 Troubleshooting
+## 5 Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
