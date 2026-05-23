@@ -248,12 +248,12 @@ sudo apt-get install -y meson ninja-build python3-pyelftools
 #### 3.1.2 Create a meson cross-file
 
 ```shell
-cat > ~/aarch64-dragonwing.ini <<EOF
+cat > ~/aarch64-dragonwing.ini <<'EOF'
 [binaries]
-c          = '${DW_TC}-gcc'
-cpp        = '${DW_TC}-g++'
-ar         = '${DW_TC}-ar'
-strip      = '${DW_TC}-strip'
+c          = '/opt/Hexagon_SDK/6.4.0.2/tools/gcc_tools_64/bin/aarch64-none-linux-gnu-gcc'
+cpp        = '/opt/Hexagon_SDK/6.4.0.2/tools/gcc_tools_64/bin/aarch64-none-linux-gnu-g++'
+ar         = '/opt/Hexagon_SDK/6.4.0.2/tools/gcc_tools_64/bin/aarch64-none-linux-gnu-ar'
+strip      = '/opt/Hexagon_SDK/6.4.0.2/tools/gcc_tools_64/bin/aarch64-none-linux-gnu-strip'
 pkg-config = 'pkg-config'
 
 [host_machine]
@@ -270,10 +270,6 @@ cpp_link_args = ['-L/usr/lib/aarch64-linux-gnu']
 EOF
 ```
 
-> **Important:** the `export DW_TC=...` and `export DW_SYSROOT=...` lines at the
-> top of this section must be run in the same shell before any of the commands
-> below.  `$DW_SYSROOT` must be a non-empty absolute path or meson will error.
-
 #### 3.1.3 Download, build and install
 
 ```shell
@@ -285,7 +281,7 @@ cd dpdk-stable-24.11.4
 
 meson setup build-dragonwing \
     --cross-file ~/aarch64-dragonwing.ini \
-    --prefix=$DW_SYSROOT \
+    --prefix=$HOME/dw-sysroot \
     -Dplatform=generic \
     -Ddisable_drivers=net/ice,net/i40e,net/iavf,net/ixgbe   # trim x86 NICs
 ninja -C build-dragonwing
