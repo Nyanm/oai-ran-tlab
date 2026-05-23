@@ -284,20 +284,22 @@ wget http://fast.dpdk.org/rel/dpdk-24.11.4.tar.xz   # K release
 tar xf dpdk-24.11.4.tar.xz
 cd dpdk-stable-24.11.4
 
+PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig \
 meson setup build-dragonwing \
     --cross-file ~/aarch64-dragonwing.ini \
     --prefix=$HOME/dw-sysroot \
     -Dplatform=generic \
-    -Ddisable_drivers=net/ice,net/i40e,net/iavf,net/ixgbe   # trim x86 NICs
+    -Ddisable_libs=bpf \
+    -Ddisable_drivers=net/ice,net/i40e,net/iavf,net/ixgbe
 ninja -C build-dragonwing
 ninja -C build-dragonwing install
 ```
 
-> **Note:** `--prefix=$DW_SYSROOT` keeps the ARM DPDK entirely separate from
-> any x86 DPDK you may have installed system-wide.  The `-Ddisable_drivers`
-> list is optional; remove it if you need those PMDs or if the build fails.
-> DragonWing-specific DPDK PMDs (e.g. `net/nfp` or vendor-provided ones) can
-> be added with `-Denable_drivers=...`.
+> **Note:** `PKG_CONFIG_LIBDIR` replaces (not appends) the pkg-config search
+> path, ensuring meson finds arm64 `.pc` files rather than x86 ones.
+> `-Ddisable_libs=bpf` drops the libelf dependency, which is not needed for
+> fronthaul use.  The `-Ddisable_drivers` list trims x86-only NIC drivers;
+> add DragonWing-specific PMDs with `-Denable_drivers=...` if needed.
 
 Verify pkg-config can see it:
 
