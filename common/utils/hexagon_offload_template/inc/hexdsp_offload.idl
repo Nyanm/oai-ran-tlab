@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: LicenseRef-CSSL-1.0
+//
+// hexdsp_offload.idl — FastRPC interface between ARM host and Hexagon DSP.
+//
+// qaic compiles this into:
+//   hexdsp_offload_stub.c   (linked into the ARM .so)
+//   hexdsp_offload_skel.c   (linked into the DSP .so)
+//   hexdsp_offload.h        (shared header, included by both sides)
+//
+// Naming rule: every function below becomes hexdsp_offload_<name>() in C.
+
+#include "AEEStdDef.idl"
+#include "remote.idl"
+
+// IDL_VERSION is checked at runtime when stub and skel versions are mismatched.
+const string IDL_VERSION = "1.0.0";
+
+interface hexdsp_offload : remote_handle64 {
+
+    // Process one block of data on the DSP.
+    //
+    // in_buf  — input data,  must be allocated with rpcmem_alloc().
+    // out_buf — output data, must be allocated with rpcmem_alloc().
+    //
+    // The DSP receives physically-contiguous ION buffers; no extra copy
+    // is needed inside the DSP skel as long as the ARM side uses rpcmem.
+    //
+    // Returns 0 on success, negative errno on failure.
+    long process(in  sequence<uint8> in_buf,
+                 rout sequence<uint8> out_buf);
+};
