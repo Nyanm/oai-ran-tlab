@@ -410,7 +410,34 @@ make -j$(nproc) nr-softmodem nr-cuup params_libconfig coding oran_fhlib_5g
 > the ARM DPDK `.pc` file is found *in addition to* the existing system arm64
 > packages, rather than replacing them.
 
-### 3.5 Deploy FHI 7.2 binaries via adb
+### 3.5 linuxptp (ptp4l / phc2sys)
+
+S-plane synchronization requires `ptp4l` and `phc2sys` from linuxptp 3.1.1.
+They are not present on the DragonWing by default and must be cross-compiled.
+
+```shell
+git clone https://git.code.sf.net/p/linuxptp/code ~/linuxptp
+cd ~/linuxptp
+git checkout v3.1.1
+
+CPATH=/usr/include/aarch64-linux-gnu:/usr/include \
+make -j$(nproc) \
+    CC=${DW_TC}-gcc \
+    CFLAGS="-mcpu=cortex-a78"
+```
+
+Deploy:
+
+```shell
+adb push ~/linuxptp/ptp4l   /usr/sbin/ptp4l
+adb push ~/linuxptp/phc2sys /usr/sbin/phc2sys
+adb shell chmod +x /usr/sbin/ptp4l /usr/sbin/phc2sys
+```
+
+Follow the ptp4l / phc2sys configuration in `doc/ORAN_FHI7.2_Tutorial.md`
+(§ "PTP configuration") once the RTL 10G NIC is available.
+
+### 3.6 Deploy FHI 7.2 binaries via adb
 
 ```shell
 adb shell mkdir -p /data/oai/lib
