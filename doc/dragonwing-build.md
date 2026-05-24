@@ -143,10 +143,16 @@ cd <oai-root>
 
 mkdir build        # must not contain a prior CMakeCache.txt
 cd build
-cmake ..
+cmake .. -DAVOID_SIGN=ON
 make -j$(nproc) ldpc_generators generate_T
 cd ..
 ```
+
+> **Note:** `-DAVOID_SIGN=ON` tells the LDPC code generator to emit
+> `simde_mm_xor_si128` instead of `simde_mm_sign_epi8` for sign extraction.
+> SIMDe's translation of `mm_sign_epi8` is incorrect for the MSB-only pattern
+> used in the CN processing kernel; `mm_xor_si128` is equivalent and
+> translates correctly on aarch64.  This flag has no effect on Step 2.
 
 ### 2.2 Step 2 — cross-compile for DragonWing
 
@@ -390,7 +396,7 @@ ninja install
 cd ~/openairinterface5g
 
 # Step 1 — native host tools (skip if already done)
-mkdir -p build && cd build && cmake .. && make -j$(nproc) ldpc_generators generate_T && cd ..
+mkdir -p build && cd build && cmake .. -DAVOID_SIGN=ON && make -j$(nproc) ldpc_generators generate_T && cd ..
 
 # Step 2 — DragonWing cross-compile with FHI 7.2
 rm -rf dragonwing_build && mkdir dragonwing_build && cd dragonwing_build

@@ -14,6 +14,9 @@ else()
                  main128.c)
   target_compile_options(cnProc_gen_avx2 PRIVATE -W -Wall )
   target_compile_options(cnProc_gen_128 PRIVATE -W -Wall )
+  if(AVOID_SIGN)
+    target_compile_definitions(cnProc_gen_128 PRIVATE AVOID_SIGN=1)
+  endif()
   export(TARGETS cnProc_gen_avx2 FILE
           "${CMAKE_BINARY_DIR}/cnProc_gen_avx2Config.cmake")
   export(TARGETS cnProc_gen_128 FILE

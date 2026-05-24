@@ -153,6 +153,15 @@ endif()
 eval_boolean(AUTODETECT_AVX512 DEFINED CPUFLAGS AND CPUFLAGS MATCHES "avx512")
 add_boolean_option(AVX512 ${AUTODETECT_AVX512} "Whether AVX512 intrinsics is available on the host processor" ON)
 
+# When the native-tools build (Step 1) is preparing generators for a
+# cross-compile targeting aarch64, pass -DAVOID_SIGN=ON so that the LDPC
+# code generators emit mm_xor_si128 instead of mm_sign_epi8.  SIMDe's
+# translation of mm_sign_epi8 is incorrect for the sign-extraction pattern
+# used in cnProc; mm_xor_si128 is equivalent for the MSB-only use case and
+# translates correctly.  Has no effect when CROSS_COMPILE is set (Step 2
+# does not build the generators).
+add_boolean_option(AVOID_SIGN OFF "Use mm_xor_si128 instead of mm_sign_epi8 in LDPC generators (required when cross-compiling for aarch64)" OFF)
+
 eval_boolean(AUTODETECT_AVX2 DEFINED CPUFLAGS AND CPUFLAGS MATCHES "avx2")
 add_boolean_option(AVX2 ${AUTODETECT_AVX2} "Whether AVX2 intrinsics is available on the host processor" ON)
 
@@ -228,6 +237,7 @@ else ()
   if (QUALCOMM_DRAGONWING)
     # DragonWing IQ-9/X: Kryo 780 Gold = Cortex-A78 (ARMv8.2-A + fp16 + dotprod)
     set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -mcpu=cortex-a78")
+    #set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -march=armv8.2-a")
   else()
     set(C_FLAGS_PROCESSOR "${C_FLAGS_PROCESSOR} -march=armv8.2-a")
   endif()
