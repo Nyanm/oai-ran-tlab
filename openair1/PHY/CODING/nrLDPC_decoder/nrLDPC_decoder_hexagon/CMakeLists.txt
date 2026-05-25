@@ -88,6 +88,10 @@ if(${OS_TYPE} MATCHES "HLOS")
     add_library(ldpc_hexagon SHARED
         ${CMAKE_CURRENT_BINARY_DIR}/ldpc_hexagon_stub
         ${CMAKE_CURRENT_SOURCE_DIR}/src/ldpc_hexagon_arm
+        # Encoder runs on the ARM side (not offloaded); included so that
+        # ldpctest and the segmentation layer can call LDPCencoder() from
+        # this .so exactly as they would from libldpc.so.
+        ${OAI_SRC_ROOT}/openair1/PHY/CODING/nrLDPC_encoder/ldpc_encoder_optim8segmulti
     )
 
     build_idl(inc/ldpc_hexagon.idl ldpc_hexagon)
@@ -97,6 +101,14 @@ if(${OS_TYPE} MATCHES "HLOS")
     choose_dsprpc(cdsp dsprpc)
     link_custom_library(ldpc_hexagon ${dsprpc})
     link_custom_library(ldpc_hexagon rpcmem)
+
+    # OAI encoder dependencies (present when built as an OAI subdirectory)
+    if(TARGET ldpc_segment)
+        target_link_libraries(ldpc_hexagon PRIVATE ldpc_segment)
+    endif()
+    if(TARGET ldpc_gen_HEADERS)
+        target_link_libraries(ldpc_hexagon PRIVATE ldpc_gen_HEADERS)
+    endif()
 
     set_common_compile_and_link_options(ldpc_hexagon)
 

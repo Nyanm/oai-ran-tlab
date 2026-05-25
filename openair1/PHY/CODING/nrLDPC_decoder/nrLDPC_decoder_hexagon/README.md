@@ -41,15 +41,21 @@ The DSP always returns posterior LLRs in `llr_out`. The ARM stub converts to the
 requested `outMode` (bit-packed / int8 / LLR pass-through) locally, and the
 `check_crc` function pointer never crosses the FastRPC boundary.
 
-## ARM stub (`ldpc_hexagon_arm.c`)
+## ARM stub (`ldpc_hexagon_arm.c` + `ldpc_encoder_optim8segmulti.c`)
 
-Exports the three symbols expected by OAI's LDPC loader:
+`libldpc_hexagon.so` exports the same four symbols as `libldpc.so` so it is a
+drop-in replacement for testing with `ldpctest` and the segmentation layer:
 
-| Symbol         | Description                                          |
-|----------------|------------------------------------------------------|
-| `LDPCinit()`   | Opens FastRPC session to cDSP, initialises rpcmem    |
-| `LDPCshutdown()` | Closes session, releases rpcmem                   |
-| `LDPCdecoder()` | Marshals one code-block decode call to the DSP      |
+| Symbol         | Source                               | Description                       |
+|----------------|--------------------------------------|-----------------------------------|
+| `LDPCinit()`   | ldpc_hexagon_arm.c                   | Opens FastRPC session, rpcmem init |
+| `LDPCshutdown()` | ldpc_hexagon_arm.c                 | Closes session, releases rpcmem   |
+| `LDPCdecoder()` | ldpc_hexagon_arm.c                  | Offloads decode to cDSP            |
+| `LDPCencoder()` | ldpc_encoder_optim8segmulti.c       | Runs on ARM (not offloaded)        |
+
+The encoder is included unchanged from the standard `libldpc.so` build and
+links against `ldpc_segment` and `ldpc_gen_HEADERS` exactly as it does there.
+Offloading the encoder to the DSP may be evaluated separately.
 
 `LDPCdecoder` flow:
 1. Calls `nrLDPC_init` to derive `numLLR` from BG/Z/R.
