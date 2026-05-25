@@ -146,7 +146,24 @@ cDSP thread stack limit (~64 KB):
 
 ## Build
 
-### ARM stub (HLOS)
+### ARM stub — integrated OAI build (recommended)
+
+Add `-DHEXAGON_LDPC=ON` to the normal DragonWing top-level cmake invocation:
+
+```sh
+cd openairinterface5g
+cmake -B build-dragonwing \
+    -DCMAKE_TOOLCHAIN_FILE=cmake_targets/cross-arm-dragonwing.cmake \
+    -DHEXAGON_SDK_ROOT=/opt/Hexagon_SDK/6.4.0.2 \
+    -DHEXAGON_LDPC=ON \
+    .
+cmake --build build-dragonwing --target ldpc_hexagon
+```
+
+`libldpc_hexagon.so` is placed alongside the other OAI loadable modules in
+`build-dragonwing/`.
+
+### ARM stub — standalone build
 
 ```sh
 cmake -B build-arm \
@@ -158,7 +175,7 @@ cmake -B build-arm \
 cmake --build build-arm
 ```
 
-### DSP skel
+### DSP skel (always built separately with hexagon-clang)
 
 ```sh
 cmake -B build-dsp \
@@ -178,14 +195,9 @@ adb shell cat /sys/devices/soc0/soc_id
 ### Deploy
 
 ```sh
-adb push build-arm/libldpc_hexagon.so      /data/oai/lib/
-adb push build-dsp/libldpc_hexagon_skel.so /vendor/lib/rfsa/adsp/
+adb push build-dragonwing/libldpc_hexagon.so   /data/oai/lib/
+adb push build-dsp/libldpc_hexagon_skel.so     /vendor/lib/rfsa/adsp/
 ```
-
-### OAI integrated build
-
-`CODING/CMakeLists.txt` adds this subdirectory automatically when both
-`QUALCOMM_DRAGONWING` and `HEXAGON_SDK_ROOT` are set and `OS_TYPE=HLOS`.
 
 ## HVX upgrade path
 
