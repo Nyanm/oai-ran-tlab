@@ -18,6 +18,7 @@
 // FastRPC / rpcmem docs: Hexagon SDK → ipc/fastrpc/
 
 #include "ldpc_hexagon.h"   // qaic-generated from ldpc_hexagon.idl
+#include "remote.h"         // DSPRPC_CONTROL_UNSIGNED_MODULE, remote_session_control
 #include "rpcmem.h"
 
 #include <stdint.h>
@@ -35,14 +36,15 @@
 // Bit conversion (scalar — avoids pulling in the SIMD bnProc headers here)
 // ---------------------------------------------------------------------------
 
-// Output: byte b bit i = 1 iff llr[b*8+i] < 0  (LSB = first LLR in group of 8)
+// Output matches nrLDPC_llr2bitPacked: bit (7-i) of byte b = sign(llr[b*8+i])
+// i.e. MSB-first within each byte — bit 7 = first LLR in group, bit 0 = eighth.
 static inline void arm_llr2bitPacked(uint8_t *out, const int8_t *llr, uint32_t numLLR)
 {
     uint32_t nbytes = (numLLR + 7) >> 3;
     for (uint32_t b = 0; b < nbytes; b++) {
         uint8_t byte = 0;
         for (int i = 0; i < 8 && b * 8u + i < numLLR; i++)
-            if (llr[b * 8 + i] < 0) byte |= (uint8_t)(1u << i);
+            if (llr[b * 8 + i] < 0) byte |= (uint8_t)(1u << (7 - i));
         out[b] = byte;
     }
 }
@@ -54,14 +56,12 @@ static inline void arm_llr2bit(uint8_t *out, const int8_t *llr, uint32_t numLLR)
         out[i] = llr[i] < 0 ? 1u : 0u;
 }
 
-#define LDPC_HEX_DOMAIN  3   // cDSP domain index on SA9000P
-
 // Wire parameter struct (8 bytes packed, must match ldpc_hexagon_imp.c)
 typedef struct __attribute__((packed)) {
     uint8_t  BG;
     uint8_t  R;
     uint8_t  numMaxIter;
-    uint8_t  pad0;
+    uint8_t  diag;      // 0=memcpy passthrough, 1=scatter/gather roundtrip, 2+=normal BP
     uint16_t Z;
     uint16_t pad1;
 } ldpc_hex_params_t;
@@ -69,21 +69,81 @@ typedef struct __attribute__((packed)) {
 static remote_handle64 dsp_hdl  = (remote_handle64)-1;
 static int             rpcmem_up = 0;
 
+// Pre-allocated ION-backed rpcmem buffers (allocated once in LDPCinit,
+// freed in LDPCshutdown).  Reusing avoids per-call alloc/free cycles that
+// exhaust the rpcmem pool after a few hundred codewords.
+#define LDPC_HEX_MAX_LLR 27648  // NR_LDPC_MAX_NUM_LLR rounded up to 64-byte boundary
+static ldpc_hex_params_t *g_rpc_params = NULL;
+static int8_t            *g_rpc_llr    = NULL;
+static int8_t            *g_rpc_llrout = NULL;
+static uint8_t           *g_rpc_meta   = NULL;
+
 // ---------------------------------------------------------------------------
-// LDPCinit — open FastRPC session to cDSP.
+// LDPCinit — open FastRPC session to cDSP and pre-allocate ION buffers.
 // ---------------------------------------------------------------------------
 int32_t LDPCinit(void)
 {
-    char uri[256];
-    snprintf(uri, sizeof(uri), "%s&_dom=%d", ldpc_hexagon_URI, LDPC_HEX_DOMAIN);
+    // ldpctest calls LDPCinit() before every codeword to reset the decoder.
+    // Re-opening the FastRPC session and re-allocating ION buffers on every
+    // call would exhaust the rpcmem pool within a few codewords.  Return
+    // immediately if the session is already open.
+    if (dsp_hdl != (remote_handle64)-1)
+        return 0;
+
+    // On Linux HLOS with fastrpc ≥ 1.0.4 the secure cDSP device is used by
+    // default, which requires signed skels.  Enable unsigned-PD mode so that
+    // our custom skel can be loaded without a hardware signature.
+    // This must be called before the first remote_handle64_open() call.
+    struct remote_rpc_control_unsigned_module um = { .domain = 3, .enable = 1 };
+    int rc = remote_session_control(DSPRPC_CONTROL_UNSIGNED_MODULE, &um, sizeof(um));
+    if (rc)
+        fprintf(stderr, "ldpc_hexagon: remote_session_control(UNSIGNED_MODULE) returned %d (continuing)\n", rc);
+
+    // rpcmem_init() opens /dev/dma_heap/system so libcdsprpc.so can DMA-transfer
+    // fastrpc_shell_unsigned_3 (~1.26 MB) during remote_handle64_open() below.
+    // Must be called before ldpc_hexagon_open().
+    // NOTE: rpcmem.a is NOT linked (see CMakeLists.txt); this calls the device's
+    // real rpcmem_init from libcdsprpc.so, not the SDK's deprecated stub.
+    rpcmem_init();
+    rpcmem_up = 1;
+
+    // fastrpc ≥ 1.0.4 on Linux HLOS requires "&_dom=cdsp" in the URI to identify
+    // the target domain.  The qaic-generated ldpc_hexagon_URI does not include it,
+    // so we append it here.
+    const char *uri = ldpc_hexagon_URI "&_dom=cdsp";
 
     int err = ldpc_hexagon_open(uri, &dsp_hdl);
     if (err) {
         fprintf(stderr, "ldpc_hexagon_open failed: %d\n", err);
+        rpcmem_deinit();
+        rpcmem_up = 0;
         return err;
     }
-    rpcmem_init();
-    rpcmem_up = 1;
+
+    // Pre-allocate ION buffers for the maximum possible LLR count.
+    // This avoids per-codeword alloc/free cycles that exhaust the rpcmem pool.
+    g_rpc_params = rpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS,
+                                 sizeof(ldpc_hex_params_t));
+    g_rpc_llr    = rpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS,
+                                 LDPC_HEX_MAX_LLR);
+    g_rpc_llrout = rpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS,
+                                 LDPC_HEX_MAX_LLR);
+    g_rpc_meta   = rpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS, 4);
+
+    if (!g_rpc_params || !g_rpc_llr || !g_rpc_llrout || !g_rpc_meta) {
+        fprintf(stderr, "ldpc_hexagon: rpcmem_alloc for pre-allocated buffers failed\n");
+        ldpc_hexagon_close(dsp_hdl);
+        dsp_hdl = (remote_handle64)-1;
+        if (g_rpc_params) { rpcmem_free(g_rpc_params); g_rpc_params = NULL; }
+        if (g_rpc_llr)    { rpcmem_free(g_rpc_llr);    g_rpc_llr    = NULL; }
+        if (g_rpc_llrout) { rpcmem_free(g_rpc_llrout); g_rpc_llrout = NULL; }
+        if (g_rpc_meta)   { rpcmem_free(g_rpc_meta);   g_rpc_meta   = NULL; }
+        rpcmem_deinit();
+        rpcmem_up = 0;
+        return -1;
+    }
+    fprintf(stderr, "ldpc_hexagon: pre-allocated %d-byte ION buffers (params+llr+llrout+meta)\n",
+            (int)(sizeof(ldpc_hex_params_t) + 2 * LDPC_HEX_MAX_LLR + 4));
     return 0;
 }
 
@@ -96,6 +156,10 @@ int32_t LDPCshutdown(void)
         ldpc_hexagon_close(dsp_hdl);
         dsp_hdl = (remote_handle64)-1;
     }
+    if (g_rpc_params) { rpcmem_free(g_rpc_params); g_rpc_params = NULL; }
+    if (g_rpc_llr)    { rpcmem_free(g_rpc_llr);    g_rpc_llr    = NULL; }
+    if (g_rpc_llrout) { rpcmem_free(g_rpc_llrout); g_rpc_llrout = NULL; }
+    if (g_rpc_meta)   { rpcmem_free(g_rpc_meta);   g_rpc_meta   = NULL; }
     if (rpcmem_up) {
         rpcmem_deinit();
         rpcmem_up = 0;
@@ -124,27 +188,27 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params *p_decParams,
         return -1;
     }
 
-    // Allocate ION-backed rpcmem for zero-copy DMA to DSP.
-    ldpc_hex_params_t *rpc_params =
-        rpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS,
-                     sizeof(ldpc_hex_params_t));
-    int8_t  *rpc_llr     =
-        rpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS, numLLR);
-    int8_t  *rpc_llrout  =
-        rpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS, numLLR);
-    uint8_t *rpc_meta    =
-        rpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS, 4);
+    // Use pre-allocated ION-backed rpcmem buffers (avoids per-call alloc/free).
+    ldpc_hex_params_t *rpc_params = g_rpc_params;
+    int8_t  *rpc_llr    = g_rpc_llr;
+    int8_t  *rpc_llrout = g_rpc_llrout;
+    uint8_t *rpc_meta   = g_rpc_meta;
 
     int32_t ret = -1;
     if (!rpc_params || !rpc_llr || !rpc_llrout || !rpc_meta) {
-        fprintf(stderr, "ldpc_hexagon: rpcmem_alloc failed (numLLR=%u)\n", numLLR);
-        goto cleanup;
+        fprintf(stderr, "ldpc_hexagon: pre-allocated buffers not ready (numLLR=%u)\n", numLLR);
+        return -1;
+    }
+    if (numLLR > LDPC_HEX_MAX_LLR) {
+        fprintf(stderr, "ldpc_hexagon: numLLR=%u exceeds pre-alloc limit %d\n",
+                numLLR, LDPC_HEX_MAX_LLR);
+        return -1;
     }
 
     rpc_params->BG         = p_decParams->BG;
     rpc_params->R          = p_decParams->R;
     rpc_params->numMaxIter = p_decParams->numMaxIter;
-    rpc_params->pad0       = 0;
+    rpc_params->diag       = 2;
     rpc_params->Z          = p_decParams->Z;
     rpc_params->pad1       = 0;
     memcpy(rpc_llr, p_llr, numLLR);
@@ -156,7 +220,7 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params *p_decParams,
                                   rpc_meta, 4);
     if (err) {
         fprintf(stderr, "ldpc_hexagon_decode RPC call failed: %d\n", err);
-        goto cleanup;
+        return -1;
     }
 
     // Extract iteration count from metadata.
@@ -181,10 +245,5 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params *p_decParams,
         break;
     }
 
-cleanup:
-    if (rpc_params) rpcmem_free(rpc_params);
-    if (rpc_llr)    rpcmem_free(rpc_llr);
-    if (rpc_llrout) rpcmem_free(rpc_llrout);
-    if (rpc_meta)   rpcmem_free(rpc_meta);
     return ret;
 }

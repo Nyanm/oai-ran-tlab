@@ -24,8 +24,12 @@
 // Suppress OAI framework headers (time_meas.h etc.) inside nrLDPC_types.h
 #define CODEGEN 1
 
-// nrLDPC_mPass.h needs sizeofArray; provide it without pulling common/utils/utils.h
-#ifndef sizeofArray
+// nrLDPC_mPass.h unconditionally includes common/utils/utils.h, which pulls in
+// <malloc.h> — not available in the Hexagon DSP toolchain.  Block it by setting
+// its include guard before nrLDPC_mPass.h is seen, and provide the one macro
+// from utils.h that mPass.h actually uses.
+#ifndef _UTILS_H
+#define _UTILS_H
 #define sizeofArray(a) ((int)(sizeof(a) / sizeof((a)[0])))
 #endif
 
@@ -49,7 +53,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  BG;
     uint8_t  R;
     uint8_t  numMaxIter;
-    uint8_t  pad0;
+    uint8_t  diag;      // 0=memcpy passthrough, 1=scatter/gather roundtrip, 2+=normal BP
     uint16_t Z;
     uint16_t pad1;
 } ldpc_hex_params_t;
@@ -404,9 +408,36 @@ int ldpc_hexagon_decode(remote_handle64 handle,
         return -1;
     }
 
+    // diag=0: raw memcpy passthrough; diag=1: scatter/gather roundtrip; diag>=2: full BP
+    if (p.diag == 0) {
+        memcpy(llr_out, llr, numLLR);
+        if (metaLen >= 4) { uint32_t z = 0; memcpy(meta, &z, 4); }
+        return 0;
+    }
+    if (p.diag == 1) {
+        int8_t *llrProcBuf = calloc(NR_LDPC_MAX_NUM_LLR, 1);
+        int8_t *llrRes     = calloc(NR_LDPC_MAX_NUM_LLR, 1);
+        if (llrProcBuf && llrRes) {
+            nrLDPC_llr2llrProcBuf(&lut, (int8_t *)llr, llrProcBuf, p.Z, p.BG);
+            memcpy(llrRes, llrProcBuf, NR_LDPC_MAX_NUM_LLR);
+            nrLDPC_llrRes2llrOut(&lut, (int8_t *)llr_out, llrRes, p.Z, p.BG);
+        }
+        free(llrProcBuf);
+        free(llrRes);
+        if (metaLen >= 4) { uint32_t z = 0; memcpy(meta, &z, 4); }
+        return 0;
+    }
+    // diag >= 2: fall through to full BP below
+
     int32_t numIter = ldpc_scalar_core(
         (const int8_t *)llr, llr_out, numLLR,
         &lut, p.BG, p.Z, p.numMaxIter);
+
+    FARF(RUNTIME_HIGH, "ldpc_hexagon: out[0..3]=%d %d %d %d  out[2Z..2Z+3]=%d %d %d %d",
+         (int)((int8_t *)llr_out)[0], (int)((int8_t *)llr_out)[1],
+         (int)((int8_t *)llr_out)[2], (int)((int8_t *)llr_out)[3],
+         (int)((int8_t *)llr_out)[2*p.Z],   (int)((int8_t *)llr_out)[2*p.Z+1],
+         (int)((int8_t *)llr_out)[2*p.Z+2], (int)((int8_t *)llr_out)[2*p.Z+3]);
 
     if (metaLen >= 4) {
         uint32_t n = (uint32_t)numIter;

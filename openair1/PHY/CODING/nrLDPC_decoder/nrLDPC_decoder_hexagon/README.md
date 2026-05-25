@@ -157,11 +157,12 @@ cmake -B build-dragonwing \
     -DHEXAGON_SDK_ROOT=/opt/Hexagon_SDK/6.4.0.2 \
     -DHEXAGON_LDPC=ON \
     .
-cmake --build build-dragonwing --target ldpc_hexagon
+cmake --build build-dragonwing
 ```
 
 `libldpc_hexagon.so` is placed alongside the other OAI loadable modules in
-`build-dragonwing/`.
+`build-dragonwing/`. The integrated path uses standard CMake directly (no
+`hexagon_fun.cmake`) so it works correctly within the OAI parent project.
 
 ### ARM stub — standalone build
 
