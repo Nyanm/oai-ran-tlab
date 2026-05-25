@@ -68,7 +68,7 @@ int get_reestab_count(char *buf, int debug, telnet_printfunc_t prnt)
   itti_receive_msg(TASK_TELNET, &msg_p);
   Rrc_get_single_ue_rnti ue = msg_p->ittiMsg.rrc_get_single_ue_rnti;
   if (!buf) {
-    if (!ue.rnti || !ue.ue_reconfiguration_counter || !ue.ue_reestablishment_counter) {
+    if (ue.no_ue) {
       ERROR_MSG_RET("no single UE in RRC present\n");
     }
   } else
@@ -79,7 +79,7 @@ int get_reestab_count(char *buf, int debug, telnet_printfunc_t prnt)
     itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_p);
     itti_receive_msg(TASK_TELNET, &msg_p);
     ue = msg_p->ittiMsg.rrc_get_ue_context_by_ue_id;
-    if (!ue.rnti || !ue.ue_reconfiguration_counter || !ue.ue_reestablishment_counter){
+    if (ue.no_ue){
       ERROR_MSG_RET("could not find UE with ue_id %d in RRC\n");
     }
   }
@@ -135,7 +135,7 @@ int fetch_du_by_ue_id(char *buf, int debug, telnet_printfunc_t prnt)
     itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_p);
     itti_receive_msg(TASK_TELNET, &msg_p);
     Rrc_get_single_ue_rnti ue = msg_p->ittiMsg.rrc_get_single_ue_rnti;
-    if (!ue.rnti)
+    if (ue.no_ue)
       ERROR_MSG_RET("no single UE in RRC present\n");
     ue_id = ue.rnti;
   }
@@ -144,15 +144,13 @@ int fetch_du_by_ue_id(char *buf, int debug, telnet_printfunc_t prnt)
   msg_p->ittiMsg.rrc_get_du_id_by_rnti.rnti = ue_id;
   itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_p);
   itti_receive_msg(TASK_TELNET, &msg_p);
-  int du_id = msg_p->ittiMsg.rrc_get_du_id_by_rnti.du_id;
-
-  if (du_id) {
-    prnt("gNB_DU_id %ld is connected to ue_id %ld\n", du_id, ue_id);
-    return 0;
-  } else {
+  if(msg_p->ittiMsg.rrc_get_du_id_by_rnti.no_du){
     ERROR_MSG_RET("No DU connected\n");
     return -1;
   }
+  int du_id = msg_p->ittiMsg.rrc_get_du_id_by_rnti.du_id;
+  prnt("gNB_DU_id %ld is connected to ue_id %ld\n", du_id, ue_id);
+  return 0;
 }
 
 extern void nr_HO_F1_trigger_telnet(gNB_RRC_INST *rrc, uint32_t rrc_ue_id);

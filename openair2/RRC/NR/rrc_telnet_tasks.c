@@ -4,6 +4,9 @@ void rrc_get_single_ue_rnti(MessageDef *msg_p, instance_t instance)
 {
   if(RC.nrrrc[instance] != NULL ){
     rrc_gNB_ue_context_t *ue = NULL;
+    if(RC.nrrrc[instance] != NULL && RC.nrrrc[instance]->rrc_ue_head.rbh_root != NULL){
+      msg_p->ittiMsg.rrc_get_single_ue_rnti.no_ue = false;
+    }
     RB_FOREACH (ue, rrc_nr_ue_tree_s, &RC.nrrrc[instance]->rrc_ue_head) {
       msg_p->ittiMsg.rrc_get_single_ue_rnti.rnti = ue->ue_context.rnti;
       msg_p->ittiMsg.rrc_get_single_ue_rnti.id = ue->ue_context.rrc_ue_id;
@@ -43,8 +46,13 @@ void rrc_get_ue_context_by_ue_id(MessageDef *msg_p, instance_t instance)
 
 void rrc_get_du_id_by_rnti(MessageDef *msg_p, instance_t instance)
 {
-  nr_rrc_du_container_t *du = get_du_for_ue(RC.nrrrc[instance], msg_p->ittiMsg.rrc_get_du_id_by_rnti.rnti);
-  msg_p->ittiMsg.rrc_get_du_id_by_rnti.du_id = du->gNB_DU_id;
+  int rnti = msg_p->ittiMsg.rrc_get_du_id_by_rnti.rnti;
+  nr_rrc_du_container_t *du = get_du_for_ue(RC.nrrrc[instance], rnti);
+  if (du != NULL && du->gNB_DU_id != 0) {
+      msg_p->ittiMsg.rrc_get_du_id_by_rnti.du_id = du->gNB_DU_id;
+  } else {
+    msg_p->ittiMsg.rrc_get_du_id_by_rnti.no_du = true;
+  }
   itti_send_msg_to_task(TASK_TELNET, 0, msg_p);
 }
 
