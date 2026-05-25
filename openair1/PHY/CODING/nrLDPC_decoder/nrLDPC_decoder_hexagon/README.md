@@ -33,7 +33,7 @@ long decode(in   sequence<uint8> params,    // 8-byte packed t_nrLDPC_dec_params
 | 0      | BG         | uint8   | Base graph 1 or 2                      |
 | 1      | R          | uint8   | Rate: 13, 23, 89 (BG1); 15, 13, 23 (BG2) |
 | 2      | numMaxIter | uint8   | Maximum BP iterations                  |
-| 3      | —          | uint8   | Reserved                               |
+| 3      | diag       | uint8   | 0=memcpy passthrough, 1=scatter/gather roundtrip, 2+=full BP |
 | 4–5    | Z          | uint16  | Lifting size (2–384), little-endian    |
 | 6–7    | —          | uint16  | Reserved                               |
 
@@ -59,7 +59,7 @@ Offloading the encoder to the DSP may be evaluated separately.
 
 `LDPCdecoder` flow:
 1. Calls `nrLDPC_init` to derive `numLLR` from BG/Z/R.
-2. Allocates four ION-backed rpcmem buffers (params, LLR in, LLR out, meta).
+2. Uses four ION-backed rpcmem buffers pre-allocated in `LDPCinit` (params, LLR in, LLR out, meta).
 3. Copies input LLRs, calls `ldpc_hexagon_decode` via FastRPC.
 4. Reads `numIter` from meta; sets abort flag if `numIter >= numMaxIter`.
 5. Converts `llr_out` to the requested output format with a scalar loop.
@@ -221,8 +221,6 @@ Compile the skel with `-mhvx -mhvx-length=128B` and replace the body of
 
 - `check_crc` (function pointer) cannot cross FastRPC. Convergence is currently
   determined solely by the min-sum parity check on the DSP.
-- `rpcmem_alloc` is called on every `LDPCdecoder` invocation; for production,
-  allocate persistent rpcmem buffers at `LDPCinit` time and reuse them.
 - The scalar baseline has not yet been benchmarked on hardware; expected
   throughput on the cDSP scalar pipeline is comparable to A78 NEON before HVX
   vectorisation.
