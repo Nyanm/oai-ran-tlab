@@ -39,3 +39,7 @@ add_subdirectory(nrLDPC_coding)
 add_subdirectory(nrLDPC_decoder)
 add_subdirectory(nrPolar_tools)
 add_subdirectory(nrSmallBlock)
+
+if(QUALCOMM_DRAGONWING AND HEXAGON_SDK_ROOT AND OS_TYPE MATCHES "HLOS")
+    add_subdirectory(nrLDPC_decoder/nrLDPC_decoder_hexagon)
+endif()
