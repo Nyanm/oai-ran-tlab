@@ -285,6 +285,18 @@ static inline HVX_Vector hvx_sat8_sub(HVX_Vector va, HVX_Vector vb,
     return Q6_Vb_vpacke_VhVh(hi, lo);
 }
 
+// 2D L2 prefetch: `height` rows of `width` bytes, rows spaced `stride` bytes apart.
+// Descriptor format (Hexagon ISA): [stride:16 | width:16 | height:16] in bits [47:0].
+// Useful for strided access patterns that the hardware prefetcher cannot track.
+static inline void hvx_l2fetch_2d(const void *base,
+                                   uint32_t stride, uint32_t width, uint32_t height)
+{
+    uint64_t desc = ((uint64_t)(stride & 0xFFFFu) << 32)
+                  | ((uint64_t)(width  & 0xFFFFu) << 16)
+                  |  (uint64_t)(height & 0xFFFFu);
+    Q6_l2fetch_AP((void *)(uintptr_t)base, desc);
+}
+
 // =============================================================================
 // BN Processing — parity-check variant (HVX bnProcPc)
 // =============================================================================
@@ -342,6 +354,12 @@ static void hvx_bnProcPc(t_nrLDPC_lut *p_lut,
         uint32_t full  = (total / HVX_VLEN) * HVX_VLEN;
 
         for (uint32_t b = 0; b < full; b += HVX_VLEN) {
+            // Prefetch next b-chunk across all k-layers: stride=cnOff, width=128, height=cnidx+1.
+            // Covers the strided bnProcBuf accesses the hardware prefetcher cannot detect.
+            if (b + HVX_VLEN < full)
+                hvx_l2fetch_2d(bnProcBuf + sa + b + HVX_VLEN,
+                               cnOff, HVX_VLEN, (uint32_t)cnidx + 1);
+
             // Init accumulator with channel LLR (widened to int16)
             HVX_VectorPair wsum = Q6_Wh_vsxt_Vb(*(HVX_UVector *)(llrProcBuf + sl + b));
             HVX_Vector sum_lo = Q6_V_lo_W(wsum);
@@ -402,6 +420,14 @@ static void hvx_bnProc(t_nrLDPC_lut *p_lut,
 
         for (int k = 0; k <= cnidx; k++) {
             uint32_t off = (uint32_t)k * cnOff;
+            // Prefetch first 128 bytes of the next k-layer to hide inter-layer stride latency.
+            if (k < cnidx) {
+                const int8_t *nxt = bnProcBuf + sa + (uint32_t)(k + 1) * cnOff;
+                Q6_dcfetch_A((void *)(uintptr_t)nxt);
+                Q6_dcfetch_A((void *)(uintptr_t)(nxt + 32));
+                Q6_dcfetch_A((void *)(uintptr_t)(nxt + 64));
+                Q6_dcfetch_A((void *)(uintptr_t)(nxt + 96));
+            }
             for (uint32_t b = 0; b < full; b += HVX_VLEN)
                 *(HVX_UVector *)(bnProcBufRes + sa + off + b) = hvx_sat8_sub(
                     *(HVX_UVector *)(llrRes    + sl      + b),
