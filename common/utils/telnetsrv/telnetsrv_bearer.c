@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include "intertask_interface.h"
 
 #include "openair2/RRC/NR/rrc_gNB_UE_context.h"
 
@@ -19,11 +20,10 @@
 
 static int get_single_ue_rnti(void)
 {
-  rrc_gNB_ue_context_t *ue_context_p = NULL;
-  RB_FOREACH(ue_context_p, rrc_nr_ue_tree_s, &(RC.nrrrc[0]->rrc_ue_head)) {
-    return ue_context_p->ue_context.rnti;
-  }
-  return -1;
+  MessageDef *msg_p = itti_alloc_new_message (TASK_RRC_GNB, 0, RRC_GET_SINGLE_UE_RNTI);
+  itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_p);
+  itti_receive_msg(TASK_TELNET, &msg_p);
+  return msg_p->ittiMsg.rrc_get_single_ue_rnti.rnti ? msg_p->ittiMsg.rrc_get_single_ue_rnti.rnti : -1;
 }
 
 int get_single_rnti(char *buf, int debug, telnet_printfunc_t prnt)
@@ -56,8 +56,17 @@ int add_bearer(char *buf, int debug, telnet_printfunc_t prnt)
   }
 
   // verify it exists in RRC as well
-  rrc_gNB_ue_context_t *rrcue = rrc_gNB_get_ue_context_by_rnti_any_du(RC.nrrrc[0], rnti);
-  if (!rrcue)
+  MessageDef *msg_p = itti_alloc_new_message (TASK_RRC_GNB, 0, RRC_GET_SINGLE_UE_RNTI);
+  itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_p);
+  itti_receive_msg(TASK_TELNET, &msg_p);
+  Rrc_get_single_ue_rnti ue;
+  ue.id = msg_p->ittiMsg.rrc_get_single_ue_rnti.id;
+  ue.no_ue = msg_p->ittiMsg.rrc_get_single_ue_rnti.no_ue;
+  ue.rnti = msg_p->ittiMsg.rrc_get_single_ue_rnti.rnti;
+  ue.rrc_ue_id = msg_p->ittiMsg.rrc_get_single_ue_rnti.rrc_ue_id;
+  ue.ue_reconfiguration_counter = msg_p->ittiMsg.rrc_get_single_ue_rnti.ue_reconfiguration_counter;
+  ue.ue_reestablishment_counter = msg_p->ittiMsg.rrc_get_single_ue_rnti.ue_reestablishment_counter;
+  if (!ue.id)
     ERROR_MSG_RET("could not find UE with RNTI %04x\n", rnti);
 
   AssertFatal(false, "not implemented\n");
@@ -82,8 +91,17 @@ int release_bearer(char *buf, int debug, telnet_printfunc_t prnt)
   }
 
   // verify it exists in RRC as well
-  rrc_gNB_ue_context_t *rrcue = rrc_gNB_get_ue_context_by_rnti_any_du(RC.nrrrc[0], rnti);
-  if (!rrcue)
+  MessageDef *msg_p = itti_alloc_new_message (TASK_RRC_GNB, 0, RRC_GET_SINGLE_UE_RNTI);
+  itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_p);
+  itti_receive_msg(TASK_TELNET, &msg_p);
+  Rrc_get_single_ue_rnti ue;
+  ue.id = msg_p->ittiMsg.rrc_get_single_ue_rnti.id;
+  ue.no_ue = msg_p->ittiMsg.rrc_get_single_ue_rnti.no_ue;
+  ue.rnti = msg_p->ittiMsg.rrc_get_single_ue_rnti.rnti;
+  ue.rrc_ue_id = msg_p->ittiMsg.rrc_get_single_ue_rnti.rrc_ue_id;
+  ue.ue_reconfiguration_counter = msg_p->ittiMsg.rrc_get_single_ue_rnti.ue_reconfiguration_counter;
+  ue.ue_reestablishment_counter = msg_p->ittiMsg.rrc_get_single_ue_rnti.ue_reestablishment_counter;
+  if (!ue.id)
     ERROR_MSG_RET("could not find UE with RNTI %04x\n", rnti);
 
   AssertFatal(false, "not implemented\n");
