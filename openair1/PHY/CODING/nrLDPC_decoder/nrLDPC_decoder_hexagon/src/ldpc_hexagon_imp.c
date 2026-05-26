@@ -32,8 +32,16 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
-#include "HAP_farf.h"
-#include "HAP_power.h"
+
+#ifdef LDPC_SIM_STANDALONE
+// Standalone Hexagon simulator build — no FastRPC / HAP framework.
+#  include <stdio.h>
+#  define FARF(level, fmt, ...) printf(fmt "\n", ##__VA_ARGS__)
+#else
+#  include "HAP_farf.h"
+#  include "HAP_power.h"
+#endif
+
 #include <hexagon_types.h>
 #include <hvx_hexagon_protos.h>
 
@@ -46,8 +54,10 @@
 #include "nrLDPC_init.h"
 #include "nrLDPC_mPass.h"
 
-// qaic-generated dispatch header
+#ifndef LDPC_SIM_STANDALONE
+// qaic-generated dispatch header (not present in standalone sim build)
 #include "ldpc_hexagon.h"
+#endif
 
 // Wire parameter struct — must match ldpc_hexagon_arm.c
 typedef struct __attribute__((packed)) {
@@ -419,8 +429,10 @@ static int32_t ldpc_scalar_core(
 }
 
 // =============================================================================
-// FastRPC session lifecycle (called by the skel dispatcher on open/close)
+// FastRPC session lifecycle and RPC entry point
+// Not compiled in standalone simulator builds.
 // =============================================================================
+#ifndef LDPC_SIM_STANDALONE
 
 int ldpc_hexagon_open(const char *uri, remote_handle64 *handle)
 {
@@ -558,3 +570,5 @@ int ldpc_hexagon_decode(remote_handle64 handle,
 
     return 0;
 }
+
+#endif // !LDPC_SIM_STANDALONE
