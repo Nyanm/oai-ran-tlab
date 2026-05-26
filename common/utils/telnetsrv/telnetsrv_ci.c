@@ -315,11 +315,16 @@ static int trigger_ngap_pdu_session_release(char *buf, int debug, telnet_printfu
     gNB_ue_ngap_id = atoi(tokens[0] + 6);
     pdu_start_index = 1;
   } else {
-    MessageDef *msg_p = itti_alloc_new_message (TASK_RRC_GNB, 0, RRC_GET_SINGLE_UE_RNTI);
-    itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_p);
-    itti_receive_msg(TASK_TELNET, &msg_p);
-    ue_id_t ue_id = msg_p->ittiMsg.rrc_get_single_ue_rnti.id;
-    if (!ue_id)
+    MessageDef *msg_ue_id_p = itti_alloc_new_message (TASK_RRC_GNB, 0, RRC_GET_SINGLE_UE_RNTI);
+    itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_ue_id_p);
+    itti_receive_msg(TASK_TELNET, &msg_ue_id_p);
+    int ue_id = msg_ue_id_p->ittiMsg.rrc_get_single_ue_rnti.id;
+    MessageDef *msg_ue_context_p = itti_alloc_new_message (TASK_RRC_GNB, 0, RRC_GET_UE_CONTEXT_BY_UE_ID);
+    msg_ue_context_p->ittiMsg.rrc_get_ue_context_by_ue_id.id = ue_id;
+    itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_ue_context_p);
+    itti_receive_msg(TASK_TELNET, &msg_ue_context_p);
+    gNB_ue_ngap_id = msg_ue_context_p->ittiMsg.rrc_get_ue_context_by_ue_id.rrc_ue_id;
+    if (!gNB_ue_ngap_id)
       ERROR_MSG_RET("No single UE in RRC present\n");
   }
 
@@ -328,6 +333,7 @@ static int trigger_ngap_pdu_session_release(char *buf, int debug, telnet_printfu
   }
 
   MessageDef *msg_p = itti_alloc_new_message (TASK_RRC_GNB, 0, RRC_GET_NGAP_UE_ID);
+  msg_p->ittiMsg.rrc_get_ngap_ue_id.gNB_ue_ngap_id = gNB_ue_ngap_id;
   itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_p);
   itti_receive_msg(TASK_TELNET, &msg_p);
   int amf_ue_ngap_id = msg_p->ittiMsg.rrc_get_ngap_ue_id.amf_ue_ngap_id;

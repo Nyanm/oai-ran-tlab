@@ -39,6 +39,7 @@ void rrc_get_ue_context_by_ue_id(MessageDef *msg_p, instance_t instance)
       msg_p->ittiMsg.rrc_get_ue_context_by_ue_id.rnti = ue->ue_context.rnti;
       msg_p->ittiMsg.rrc_get_ue_context_by_ue_id.ue_reestablishment_counter = ue->ue_context.ue_reestablishment_counter;
       msg_p->ittiMsg.rrc_get_ue_context_by_ue_id.ue_reconfiguration_counter = ue->ue_context.ue_reconfiguration_counter;
+      msg_p->ittiMsg.rrc_get_ue_context_by_ue_id.rrc_ue_id = ue->ue_context.rrc_ue_id;
     }
   }
   itti_send_msg_to_task(TASK_TELNET, 0, msg_p);

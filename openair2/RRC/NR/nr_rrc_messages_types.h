@@ -7,6 +7,7 @@ typedef struct Rrc_get_single_ue_rnti_s{
   int32_t ue_reestablishment_counter;
   int32_t ue_reconfiguration_counter;
   bool no_ue;
+  int32_t rrc_ue_id;
 } Rrc_get_single_ue_rnti;
 #define RRC_GET_SINGLE_UE_RNTI(mSGpTR)   (mSGpTR)->ittiMsg.rrc_get_single_ue_rnti;
 #define RRC_GET_UE_CONTEXT_BY_UE_ID(mSGpTR)   (mSGpTR)->ittiMsg.rrc_get_ue_context_by_ue_id;
