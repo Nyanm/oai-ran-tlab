@@ -37,6 +37,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "HAP_farf.h"
+#include "HAP_power.h"
 
 // Portable LDPC decoder headers — no SIMD, no OAI framework dependencies
 #include "nrLDPCdecoder_defs.h"
@@ -272,27 +273,44 @@ static void scalar_bnProc(t_nrLDPC_lut *p_lut,
 }
 
 // =============================================================================
-// Main decoder core (heap-allocated buffers)
+// DSP session context — forward declaration (full definition before open/close)
+// =============================================================================
+typedef struct {
+    int8_t *cnProcBuf;
+    int8_t *cnProcBufRes;
+    int8_t *bnProcBuf;
+    int8_t *bnProcBufRes;
+    int8_t *llrRes;
+    int8_t *llrProcBuf;
+} ldpc_dsp_ctx_t;
+
+// =============================================================================
+// Main decoder core — uses pre-allocated buffers from session context
 // =============================================================================
 // Returns number of BP iterations completed.
 
 static int32_t ldpc_scalar_core(
     const int8_t *p_llr, uint8_t *llr_out, uint32_t numLLR,
-    t_nrLDPC_lut *p_lut, uint8_t BG, uint16_t Z, uint8_t numMaxIter)
+    t_nrLDPC_lut *p_lut, uint8_t BG, uint16_t Z, uint8_t numMaxIter,
+    ldpc_dsp_ctx_t *ctx)
 {
-    int8_t *cnProcBuf    = calloc(NR_LDPC_SIZE_CN_PROC_BUF, 1);
-    int8_t *cnProcBufRes = calloc(NR_LDPC_SIZE_CN_PROC_BUF, 1);
-    int8_t *bnProcBuf    = calloc(NR_LDPC_SIZE_BN_PROC_BUF, 1);
-    int8_t *bnProcBufRes = calloc(NR_LDPC_SIZE_BN_PROC_BUF, 1);
-    int8_t *llrRes       = calloc(NR_LDPC_MAX_NUM_LLR, 1);
-    int8_t *llrProcBuf   = calloc(NR_LDPC_MAX_NUM_LLR, 1);
+    // Use pre-allocated buffers from the session context.
+    // cnProcBuf and bnProcBuf must be zeroed before each decode (the BP
+    // algorithm initialises CN messages to channel LLRs by scattering into
+    // them, but the zero-initialised regions between active symbols matter).
+    // llrProcBuf and llrRes are fully written before first read — no zeroing.
+    int8_t *cnProcBuf    = ctx->cnProcBuf;
+    int8_t *cnProcBufRes = ctx->cnProcBufRes;
+    int8_t *bnProcBuf    = ctx->bnProcBuf;
+    int8_t *bnProcBufRes = ctx->bnProcBufRes;
+    int8_t *llrRes       = ctx->llrRes;
+    int8_t *llrProcBuf   = ctx->llrProcBuf;
     int32_t numIter = 0;
 
-    if (!cnProcBuf || !cnProcBufRes || !bnProcBuf ||
-        !bnProcBufRes || !llrRes || !llrProcBuf) {
-        FARF(ERROR, "ldpc_hexagon: working buffer allocation failed");
-        goto cleanup;
-    }
+    memset(cnProcBuf,    0, NR_LDPC_SIZE_CN_PROC_BUF);
+    memset(cnProcBufRes, 0, NR_LDPC_SIZE_CN_PROC_BUF);
+    memset(bnProcBuf,    0, NR_LDPC_SIZE_BN_PROC_BUF);
+    memset(bnProcBufRes, 0, NR_LDPC_SIZE_BN_PROC_BUF);
 
     // Scatter input LLRs into the two processing buffers (llrProcBuf and cnProcBuf).
     nrLDPC_llr2llrProcBuf(p_lut, (int8_t *)p_llr, llrProcBuf, Z, BG);
@@ -343,10 +361,6 @@ static int32_t ldpc_scalar_core(
     // Gather posterior LLRs from llrRes into the external output order.
     nrLDPC_llrRes2llrOut(p_lut, (int8_t *)llr_out, llrRes, Z, BG);
 
-cleanup:
-    free(cnProcBuf);    free(cnProcBufRes);
-    free(bnProcBuf);    free(bnProcBufRes);
-    free(llrRes);       free(llrProcBuf);
     return numIter;
 }
 
@@ -356,16 +370,62 @@ cleanup:
 
 int ldpc_hexagon_open(const char *uri, remote_handle64 *handle)
 {
-    void *ctx = malloc(sizeof(int));
+    ldpc_dsp_ctx_t *ctx = calloc(1, sizeof(ldpc_dsp_ctx_t));
     if (!ctx) return -1;
+
+    ctx->cnProcBuf    = malloc(NR_LDPC_SIZE_CN_PROC_BUF);
+    ctx->cnProcBufRes = malloc(NR_LDPC_SIZE_CN_PROC_BUF);
+    ctx->bnProcBuf    = malloc(NR_LDPC_SIZE_BN_PROC_BUF);
+    ctx->bnProcBufRes = malloc(NR_LDPC_SIZE_BN_PROC_BUF);
+    ctx->llrRes       = malloc(NR_LDPC_MAX_NUM_LLR);
+    ctx->llrProcBuf   = malloc(NR_LDPC_MAX_NUM_LLR);
+
+    if (!ctx->cnProcBuf || !ctx->cnProcBufRes || !ctx->bnProcBuf ||
+        !ctx->bnProcBufRes || !ctx->llrRes || !ctx->llrProcBuf) {
+        FARF(ERROR, "ldpc_hexagon: working buffer allocation failed");
+        free(ctx->cnProcBuf);    free(ctx->cnProcBufRes);
+        free(ctx->bnProcBuf);    free(ctx->bnProcBufRes);
+        free(ctx->llrRes);       free(ctx->llrProcBuf);
+        free(ctx);
+        return -1;
+    }
+
+    // Vote for turbo core clock and maximum bus bandwidth.
+    // Without this the cDSP runs at a low-power DCVS corner (~700 MHz).
+    // The vote persists for the lifetime of this handle.
+    HAP_power_request_t req;
+    memset(&req, 0, sizeof(req));
+    req.type = HAP_power_set_DCVS_v3;
+    req.dcvs_v3.set_dcvs_enable   = TRUE;
+    req.dcvs_v3.dcvs_enable       = FALSE;   // fix clock, disable DCVS scaling
+    req.dcvs_v3.set_latency        = TRUE;
+    req.dcvs_v3.latency            = 1;       // 1 µs: disable DSP sleep between calls
+    req.dcvs_v3.set_core_params    = TRUE;
+    req.dcvs_v3.core_params.min_corner    = HAP_DCVS_VCORNER_TURBO;
+    req.dcvs_v3.core_params.max_corner    = HAP_DCVS_VCORNER_TURBO;
+    req.dcvs_v3.core_params.target_corner = HAP_DCVS_VCORNER_TURBO;
+    req.dcvs_v3.set_bus_params     = TRUE;
+    req.dcvs_v3.bus_params.min_corner    = HAP_DCVS_VCORNER_TURBO;
+    req.dcvs_v3.bus_params.max_corner    = HAP_DCVS_VCORNER_TURBO;
+    req.dcvs_v3.bus_params.target_corner = HAP_DCVS_VCORNER_TURBO;
+    int rc = HAP_power_set(NULL, &req);
+    if (rc)
+        FARF(HIGH, "ldpc_hexagon: HAP_power_set(DCVS_v3/TURBO) returned %d", rc);
+
     *handle = (remote_handle64)(uintptr_t)ctx;
-    FARF(RUNTIME_HIGH, "ldpc_hexagon: session opened");
+    FARF(RUNTIME_HIGH, "ldpc_hexagon: session opened, working buffers pre-allocated");
     return 0;
 }
 
 int ldpc_hexagon_close(remote_handle64 handle)
 {
-    free((void *)(uintptr_t)handle);
+    ldpc_dsp_ctx_t *ctx = (ldpc_dsp_ctx_t *)(uintptr_t)handle;
+    if (ctx) {
+        free(ctx->cnProcBuf);    free(ctx->cnProcBufRes);
+        free(ctx->bnProcBuf);    free(ctx->bnProcBufRes);
+        free(ctx->llrRes);       free(ctx->llrProcBuf);
+        free(ctx);
+    }
     FARF(RUNTIME_HIGH, "ldpc_hexagon: session closed");
     return 0;
 }
@@ -429,9 +489,11 @@ int ldpc_hexagon_decode(remote_handle64 handle,
     }
     // diag >= 2: fall through to full BP below
 
+    ldpc_dsp_ctx_t *ctx = (ldpc_dsp_ctx_t *)(uintptr_t)handle;
+
     int32_t numIter = ldpc_scalar_core(
         (const int8_t *)llr, llr_out, numLLR,
-        &lut, p.BG, p.Z, p.numMaxIter);
+        &lut, p.BG, p.Z, p.numMaxIter, ctx);
 
     FARF(RUNTIME_HIGH, "ldpc_hexagon: out[0..3]=%d %d %d %d  out[2Z..2Z+3]=%d %d %d %d",
          (int)((int8_t *)llr_out)[0], (int)((int8_t *)llr_out)[1],
