@@ -63,10 +63,16 @@ int get_single_rnti(char *buf, int debug, telnet_printfunc_t prnt)
 int get_reestab_count(char *buf, int debug, telnet_printfunc_t prnt)
 {
   UNUSED(debug);
-  MessageDef *msg_p = itti_alloc_new_message (TASK_RRC_GNB, 0, RRC_GET_SINGLE_UE_RNTI);
-  itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_p);
-  itti_receive_msg(TASK_TELNET, &msg_p);
-  Rrc_get_single_ue_rnti ue = msg_p->ittiMsg.rrc_get_single_ue_rnti;
+  MessageDef *msg_ue_rnti_p = itti_alloc_new_message (TASK_RRC_GNB, 0, RRC_GET_SINGLE_UE_RNTI);
+  itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_ue_rnti_p);
+  itti_receive_msg(TASK_TELNET, &msg_ue_rnti_p);
+  Rrc_get_single_ue_rnti ue;
+  ue.id = msg_ue_rnti_p->ittiMsg.rrc_get_single_ue_rnti.id;
+  ue.no_ue = msg_ue_rnti_p->ittiMsg.rrc_get_single_ue_rnti.no_ue;
+  ue.rnti = msg_ue_rnti_p->ittiMsg.rrc_get_single_ue_rnti.rnti;
+  ue.rrc_ue_id = msg_ue_rnti_p->ittiMsg.rrc_get_single_ue_rnti.rrc_ue_id;
+  ue.ue_reconfiguration_counter = msg_ue_rnti_p->ittiMsg.rrc_get_single_ue_rnti.ue_reconfiguration_counter;
+  ue.ue_reestablishment_counter = msg_ue_rnti_p->ittiMsg.rrc_get_single_ue_rnti.ue_reestablishment_counter;
   if (!buf) {
     if (ue.no_ue) {
       ERROR_MSG_RET("no single UE in RRC present\n");
@@ -74,11 +80,11 @@ int get_reestab_count(char *buf, int debug, telnet_printfunc_t prnt)
   } else
   {
     ue_id_t ue_id = strtol(buf, NULL, 10);
-    MessageDef *msg_p = itti_alloc_new_message (TASK_RRC_GNB, 0, RRC_GET_UE_CONTEXT_BY_UE_ID);
-    msg_p->ittiMsg.rrc_get_ue_context_by_ue_id.rnti = ue_id;
-    itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_p);
-    itti_receive_msg(TASK_TELNET, &msg_p);
-    ue = msg_p->ittiMsg.rrc_get_ue_context_by_ue_id;
+    MessageDef *msg_ue_context_p = itti_alloc_new_message (TASK_RRC_GNB, 0, RRC_GET_UE_CONTEXT_BY_UE_ID);
+    msg_ue_context_p->ittiMsg.rrc_get_ue_context_by_ue_id.rnti = ue_id;
+    itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_ue_context_p);
+    itti_receive_msg(TASK_TELNET, &msg_ue_context_p);
+    ue = msg_ue_context_p->ittiMsg.rrc_get_ue_context_by_ue_id;
     if (ue.no_ue){
       ERROR_MSG_RET("could not find UE with ue_id %d in RRC\n");
     }
@@ -134,7 +140,13 @@ int fetch_du_by_ue_id(char *buf, int debug, telnet_printfunc_t prnt)
     MessageDef *msg_p = itti_alloc_new_message (TASK_RRC_GNB, 0, RRC_GET_SINGLE_UE_RNTI);
     itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_p);
     itti_receive_msg(TASK_TELNET, &msg_p);
-    Rrc_get_single_ue_rnti ue = msg_p->ittiMsg.rrc_get_single_ue_rnti;
+    Rrc_get_single_ue_rnti ue;
+    ue.id = msg_p->ittiMsg.rrc_get_single_ue_rnti.id;
+    ue.no_ue = msg_p->ittiMsg.rrc_get_single_ue_rnti.no_ue;
+    ue.rnti = msg_p->ittiMsg.rrc_get_single_ue_rnti.rnti;
+    ue.rrc_ue_id = msg_p->ittiMsg.rrc_get_single_ue_rnti.rrc_ue_id;
+    ue.ue_reconfiguration_counter = msg_p->ittiMsg.rrc_get_single_ue_rnti.ue_reconfiguration_counter;
+    ue.ue_reestablishment_counter = msg_p->ittiMsg.rrc_get_single_ue_rnti.ue_reestablishment_counter;
     if (ue.no_ue)
       ERROR_MSG_RET("no single UE in RRC present\n");
     ue_id = ue.rnti;

@@ -75,7 +75,13 @@ int rrc_gNB_trigger_release(char *buf, int debug, telnet_printfunc_t prnt)
   MessageDef *msg_p = itti_alloc_new_message (TASK_RRC_GNB, 0, RRC_GET_UE_CONTEXT_BY_UE_ID);
   itti_send_msg_to_task(TASK_RRC_GNB, 0, msg_p);
   itti_receive_msg(TASK_TELNET, &msg_p);
-  Rrc_get_single_ue_rnti ue = msg_p->ittiMsg.rrc_get_single_ue_rnti;
+  Rrc_get_single_ue_rnti ue;
+  ue.id = msg_p->ittiMsg.rrc_get_single_ue_rnti.id;
+  ue.no_ue = msg_p->ittiMsg.rrc_get_single_ue_rnti.no_ue;
+  ue.rnti = msg_p->ittiMsg.rrc_get_single_ue_rnti.rnti;
+  ue.rrc_ue_id = msg_p->ittiMsg.rrc_get_single_ue_rnti.rrc_ue_id;
+  ue.ue_reconfiguration_counter = msg_p->ittiMsg.rrc_get_single_ue_rnti.ue_reconfiguration_counter;
+  ue.ue_reestablishment_counter = msg_p->ittiMsg.rrc_get_single_ue_rnti.ue_reestablishment_counter;
   if (ue.no_ue) {
     prnt("Could not find UE context associated with UE ID %lu\n", ue_id);
     LOG_E(RRC, "Could not find UE context associated with UE ID %lu\n", ue_id);

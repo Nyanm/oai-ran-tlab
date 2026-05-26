@@ -2,6 +2,8 @@
 
 void rrc_get_single_ue_rnti(MessageDef *msg_p, instance_t instance)
 {
+  MessageDef *resp_p = itti_alloc_new_message(TASK_RRC_GNB, 0, RRC_GET_SINGLE_UE_RNTI);
+  resp_p->ittiMsg.rrc_get_single_ue_rnti.no_ue = true;
   if(RC.nrrrc[instance] != NULL ){
     rrc_gNB_ue_context_t *ue = NULL;
     if(RC.nrrrc[instance] != NULL && RC.nrrrc[instance]->rrc_ue_head.rbh_root != NULL){
@@ -14,7 +16,7 @@ void rrc_get_single_ue_rnti(MessageDef *msg_p, instance_t instance)
       msg_p->ittiMsg.rrc_get_single_ue_rnti.ue_reconfiguration_counter = ue->ue_context.ue_reconfiguration_counter;
     }
   }
-  itti_send_msg_to_task(TASK_TELNET, 0, msg_p);
+  itti_send_msg_to_task(TASK_TELNET, 0, resp_p);
 }
 
 void rrc_check_ue_context(MessageDef *msg_p, instance_t instance)
