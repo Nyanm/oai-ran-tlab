@@ -892,7 +892,8 @@ def triggerSlaveJob (jobName, gitlabStatusName) {
       booleanParam(name: 'eNB_mergeRequest', value: "MERGE".equals(env.gitlabActionType)),
       booleanParam(name: 'mergeWithTarget', value: "MERGE".equals(env.gitlabActionType)),
       string(name: 'eNB_TargetBranch', value: String.valueOf(env.gitlabTargetBranch)),
-      string(name: 'targetBranch', value: String.valueOf(env.gitlabTargetBranch))
+      string(name: 'targetBranch', value: String.valueOf(env.gitlabTargetBranch)),
+      string(name: 'testBranch', value: "${env.gitlabSourceBranch.replace('/', '-')}-${env.gitlabMergeRequestLastCommit}")
     ], propagate: false
   def localResult = localStatus.getResult()
   echo "${jobName} Slave Job status is ${localResult}"
@@ -907,13 +908,9 @@ def triggerSlaveJob (jobName, gitlabStatusName) {
 
 def triggerCN5GSlaveJob (jobName, gitlabStatusName) {
   if ("MERGE".equals(env.gitlabActionType)) {
-    shaOne = sh returnStdout: true, script: 'git log -1 --pretty=format:"%H" ' + env.gitlabMergeRequestLastCommit
-    shaOne = shaOne.trim()
-    fullRanTag = OAI_Registry + '/oai-gnb:' + env.gitlabSourceBranch + '-' + shaOne
+    fullRanTag = OAI_Registry + '/oai-gnb:' + "${env.gitlabSourceBranch.replace('/', '-')}-${env.gitlabMergeRequestLastCommit}"
   } else {
-    shaOne = sh returnStdout: true, script: 'git log -1 --pretty=format:"%H" ' + env.GIT_COMMIT
-    shaOne = shaOne.trim()
-    fullRanTag = OAI_Registry + '/oai-gnb:develop-' + shaOne
+    fullRanTag = OAI_Registry + '/oai-gnb:develop-' + env.GIT_COMMIT
   }
   // Workaround for the "cancelled" GitLab pipeline notification
   // The slave job is triggered with the propagate false so the following commands are executed
