@@ -78,8 +78,8 @@ int main(void)
     for (int w = 0; w < N_WARMUP; w++) {
         cnProc(&lut, cnProcBuf, cnProcBufRes, 384, 1);
         nrLDPC_cn2bnProcBuf_BG1(&lut, cnProcBufRes, bnProcBuf, 384);
-        scalar_bnProcPc(&lut, bnProcBuf, bnProcBufRes, llrProcBuf, llrRes, 384);
-        scalar_bnProc(&lut, bnProcBuf, bnProcBufRes, llrRes, 384);
+        hvx_bnProcPc(&lut, bnProcBuf, bnProcBufRes, llrProcBuf, llrRes, 384);
+        hvx_bnProc(&lut, bnProcBuf, bnProcBufRes, llrRes, 384);
         nrLDPC_bn2cnProcBuf_BG1(&lut, bnProcBufRes, cnProcBuf, 384);
     }
 
@@ -100,12 +100,12 @@ int main(void)
         cyc_cn2bn += t1 - t0;
 
         t0 = hexagon_sim_read_pcycles();
-        scalar_bnProcPc(&lut, bnProcBuf, bnProcBufRes, llrProcBuf, llrRes, 384);
+        hvx_bnProcPc(&lut, bnProcBuf, bnProcBufRes, llrProcBuf, llrRes, 384);
         t1 = hexagon_sim_read_pcycles();
         cyc_bnProcPc += t1 - t0;
 
         t0 = hexagon_sim_read_pcycles();
-        scalar_bnProc(&lut, bnProcBuf, bnProcBufRes, llrRes, 384);
+        hvx_bnProc(&lut, bnProcBuf, bnProcBufRes, llrRes, 384);
         t1 = hexagon_sim_read_pcycles();
         cyc_bnProc += t1 - t0;
 

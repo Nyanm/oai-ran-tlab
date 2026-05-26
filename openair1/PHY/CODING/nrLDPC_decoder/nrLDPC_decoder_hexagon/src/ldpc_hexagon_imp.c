@@ -253,7 +253,40 @@ static int32_t scalar_cnProcPc(const int8_t *cnProcBuf, t_nrLDPC_lut *p_lut,
 }
 
 // =============================================================================
-// BN Processing — parity-check variant (scalar bnProcPc)
+// HVX helpers — saturating int8 arithmetic via int16 widening
+// =============================================================================
+// HVX has no single-instruction signed-byte saturating add/sub.
+// Strategy: widen to int16 (Q6_Wh_vsxt_Vb), add/sub in 16-bit, clamp to
+// [-128,127] with vmin/vmax, pack low bytes back (Q6_Vb_vpacke_VhVh).
+//
+// vpacke(Vu.h, Vv.h): output[0..63]  = low bytes of Vv halfwords,
+//                      output[64..127] = low bytes of Vu halfwords.
+// After clamping, the low byte of each int16 is the correct int8 value.
+
+static inline HVX_Vector hvx_sat8_add(HVX_Vector va, HVX_Vector vb,
+                                       HVX_Vector v127, HVX_Vector vn128)
+{
+    HVX_VectorPair wa = Q6_Wh_vsxt_Vb(va), wb = Q6_Wh_vsxt_Vb(vb);
+    HVX_Vector lo = Q6_Vh_vadd_VhVh(Q6_V_lo_W(wa), Q6_V_lo_W(wb));
+    HVX_Vector hi = Q6_Vh_vadd_VhVh(Q6_V_hi_W(wa), Q6_V_hi_W(wb));
+    lo = Q6_Vh_vmax_VhVh(Q6_Vh_vmin_VhVh(lo, v127), vn128);
+    hi = Q6_Vh_vmax_VhVh(Q6_Vh_vmin_VhVh(hi, v127), vn128);
+    return Q6_Vb_vpacke_VhVh(hi, lo);
+}
+
+static inline HVX_Vector hvx_sat8_sub(HVX_Vector va, HVX_Vector vb,
+                                       HVX_Vector v127, HVX_Vector vn128)
+{
+    HVX_VectorPair wa = Q6_Wh_vsxt_Vb(va), wb = Q6_Wh_vsxt_Vb(vb);
+    HVX_Vector lo = Q6_Vh_vsub_VhVh(Q6_V_lo_W(wa), Q6_V_lo_W(wb));
+    HVX_Vector hi = Q6_Vh_vsub_VhVh(Q6_V_hi_W(wa), Q6_V_hi_W(wb));
+    lo = Q6_Vh_vmax_VhVh(Q6_Vh_vmin_VhVh(lo, v127), vn128);
+    hi = Q6_Vh_vmax_VhVh(Q6_Vh_vmin_VhVh(hi, v127), vn128);
+    return Q6_Vb_vpacke_VhVh(hi, lo);
+}
+
+// =============================================================================
+// BN Processing — parity-check variant (HVX bnProcPc)
 // =============================================================================
 // For each BN b in group g (cnidx+1 connected CNs):
 //   llrRes[b]         = sat8( llrProcBuf[b] + Σ_k bnProcBuf[k, b] )
@@ -263,67 +296,97 @@ static int32_t scalar_cnProcPc(const int8_t *cnProcBuf, t_nrLDPC_lut *p_lut,
 //   CN layer k: byte range [startBn + k * numBn * ZMAX  ..  + numBn * ZMAX - 1]
 //   BN b within layer k: bytes [k*cnOff + b]  (b in 0..numBn*Z-1)
 //
-// Groups iterate by connectivity degree (cnidx = CNs-per-BN minus 1).
-// lut_numBnInBnGroups has NR_LDPC_NUM_BN_GROUPS_BG1_R13=30 entries; many are
-// zero for lower rates and for BG2 — the loop naturally skips them.
+// HVX path: outer loop steps 128 bytes at a time; inner k-loop accumulates
+// int16 sums in two register-pair halves, then saturates and packs to int8.
+// All accesses within a group are sequential — no cache-miss-latency issue.
 
-static void scalar_bnProcPc(t_nrLDPC_lut *p_lut,
-                             const int8_t *bnProcBuf, int8_t *bnProcBufRes,
-                             const int8_t *llrProcBuf, int8_t *llrRes,
-                             uint16_t Z)
+static void hvx_bnProcPc(t_nrLDPC_lut *p_lut,
+                          const int8_t *bnProcBuf, int8_t *bnProcBufRes,
+                          const int8_t *llrProcBuf, int8_t *llrRes,
+                          uint16_t Z)
 {
     const uint8_t  *numBn = p_lut->numBnInBnGroups;
     const uint32_t *sBn   = p_lut->startAddrBnGroups;
     const uint16_t *sLlr  = p_lut->startAddrBnGroupsLlr;
 
-    // Group 0: BNs connected to exactly 1 CN (no accumulation loop needed)
+    HVX_Vector v127  = Q6_Vh_vsplat_R(127);
+    HVX_Vector vn128 = Q6_Vh_vsplat_R(-128);
+
+    // Group 0: BNs connected to exactly 1 CN
     {
         uint32_t nb    = (uint32_t)numBn[0];
         uint32_t total = nb * (uint32_t)Z;
         uint32_t sa    = sBn[0];
         uint32_t sl    = sLlr[0];
-        // Store channel LLR for later bnProc subtraction (extrinsic = channel for 1-CN BN)
         memcpy(&bnProcBufRes[sa], &llrProcBuf[sl], total);
-        for (uint32_t b = 0; b < total; b++)
+        uint32_t full = (total / HVX_VLEN) * HVX_VLEN;
+        for (uint32_t b = 0; b < full; b += HVX_VLEN)
+            *(HVX_UVector *)(llrRes + sl + b) = hvx_sat8_add(
+                *(HVX_UVector *)(llrProcBuf + sl + b),
+                *(HVX_UVector *)(bnProcBuf  + sa + b), v127, vn128);
+        for (uint32_t b = full; b < total; b++)
             llrRes[sl + b] = sat8_add(llrProcBuf[sl + b], bnProcBuf[sa + b]);
     }
 
-    // Groups 1+: cnidx = number of connected CNs minus 1
+    // Groups 1+: accumulate cnidx+1 CN messages per BN
     uint8_t idxBnGroup = 0;
     for (int cnidx = 1; cnidx < NR_LDPC_NUM_BN_GROUPS_BG1_R13; cnidx++) {
         if (numBn[cnidx] == 0) continue;
         idxBnGroup++;
 
         uint32_t nb    = (uint32_t)numBn[cnidx];
-        uint32_t cnOff = nb * NR_LDPC_ZMAX;    // byte stride between CN layers
+        uint32_t cnOff = nb * NR_LDPC_ZMAX;
         uint32_t total = nb * (uint32_t)Z;
         uint32_t sa    = sBn[idxBnGroup];
         uint32_t sl    = sLlr[idxBnGroup];
+        uint32_t full  = (total / HVX_VLEN) * HVX_VLEN;
 
-        for (uint32_t b = 0; b < total; b++) {
+        for (uint32_t b = 0; b < full; b += HVX_VLEN) {
+            // Init accumulator with channel LLR (widened to int16)
+            HVX_VectorPair wsum = Q6_Wh_vsxt_Vb(*(HVX_UVector *)(llrProcBuf + sl + b));
+            HVX_Vector sum_lo = Q6_V_lo_W(wsum);
+            HVX_Vector sum_hi = Q6_V_hi_W(wsum);
+
+            for (int k = 0; k <= cnidx; k++) {
+                HVX_VectorPair wbn = Q6_Wh_vsxt_Vb(
+                    *(HVX_UVector *)(bnProcBuf + sa + (uint32_t)k * cnOff + b));
+                sum_lo = Q6_Vh_vadd_VhVh(sum_lo, Q6_V_lo_W(wbn));
+                sum_hi = Q6_Vh_vadd_VhVh(sum_hi, Q6_V_hi_W(wbn));
+            }
+
+            sum_lo = Q6_Vh_vmax_VhVh(Q6_Vh_vmin_VhVh(sum_lo, v127), vn128);
+            sum_hi = Q6_Vh_vmax_VhVh(Q6_Vh_vmin_VhVh(sum_hi, v127), vn128);
+            *(HVX_UVector *)(llrRes + sl + b) = Q6_Vb_vpacke_VhVh(sum_hi, sum_lo);
+        }
+
+        for (uint32_t b = full; b < total; b++) {
             int16_t s = (int16_t)llrProcBuf[sl + b];
             for (int k = 0; k <= cnidx; k++)
                 s += (int16_t)bnProcBuf[sa + (uint32_t)k * cnOff + b];
-            llrRes[sl + b] = s >  127 ?  127 :
-                             s < -128 ? -128 : (int8_t)s;
+            llrRes[sl + b] = s > 127 ? 127 : s < -128 ? -128 : (int8_t)s;
         }
     }
 }
 
 // =============================================================================
-// BN Processing — extrinsic message (scalar bnProc)
+// BN Processing — extrinsic message (HVX bnProc)
 // =============================================================================
 // For each BN-to-CN edge (group g, CN layer k, BN b):
 //   bnProcBufRes[k, b] = sat8( llrRes[b] - bnProcBuf[k, b] )
 // Group 0 was already handled by bnProcPc (1-CN BNs: extrinsic = channel LLR).
+//
+// Inner loop over b is sequential in all buffers — ideal for HVX.
 
-static void scalar_bnProc(t_nrLDPC_lut *p_lut,
-                           const int8_t *bnProcBuf, int8_t *bnProcBufRes,
-                           const int8_t *llrRes, uint16_t Z)
+static void hvx_bnProc(t_nrLDPC_lut *p_lut,
+                        const int8_t *bnProcBuf, int8_t *bnProcBufRes,
+                        const int8_t *llrRes, uint16_t Z)
 {
     const uint8_t  *numBn = p_lut->numBnInBnGroups;
     const uint32_t *sBn   = p_lut->startAddrBnGroups;
     const uint16_t *sLlr  = p_lut->startAddrBnGroupsLlr;
+
+    HVX_Vector v127  = Q6_Vh_vsplat_R(127);
+    HVX_Vector vn128 = Q6_Vh_vsplat_R(-128);
 
     uint8_t idxBnGroup = 0;
     for (int cnidx = 1; cnidx < NR_LDPC_NUM_BN_GROUPS_BG1_R13; cnidx++) {
@@ -335,10 +398,15 @@ static void scalar_bnProc(t_nrLDPC_lut *p_lut,
         uint32_t total = nb * (uint32_t)Z;
         uint32_t sa    = sBn[idxBnGroup];
         uint32_t sl    = sLlr[idxBnGroup];
+        uint32_t full  = (total / HVX_VLEN) * HVX_VLEN;
 
         for (int k = 0; k <= cnidx; k++) {
             uint32_t off = (uint32_t)k * cnOff;
-            for (uint32_t b = 0; b < total; b++)
+            for (uint32_t b = 0; b < full; b += HVX_VLEN)
+                *(HVX_UVector *)(bnProcBufRes + sa + off + b) = hvx_sat8_sub(
+                    *(HVX_UVector *)(llrRes    + sl      + b),
+                    *(HVX_UVector *)(bnProcBuf + sa + off + b), v127, vn128);
+            for (uint32_t b = full; b < total; b++)
                 bnProcBufRes[sa + off + b] =
                     sat8_sub(llrRes[sl + b], bnProcBuf[sa + off + b]);
         }
@@ -394,8 +462,8 @@ static int32_t ldpc_scalar_core(
     else
         nrLDPC_cn2bnProcBuf_BG2(p_lut, cnProcBufRes, bnProcBuf, Z);
 
-    scalar_bnProcPc(p_lut, bnProcBuf, bnProcBufRes, llrProcBuf, llrRes, Z);
-    scalar_bnProc  (p_lut, bnProcBuf, bnProcBufRes, llrRes, Z);
+    hvx_bnProcPc(p_lut, bnProcBuf, bnProcBufRes, llrProcBuf, llrRes, Z);
+    hvx_bnProc  (p_lut, bnProcBuf, bnProcBufRes, llrRes, Z);
 
     if (BG == 1)
         nrLDPC_bn2cnProcBuf_BG1(p_lut, bnProcBufRes, cnProcBuf, Z);
@@ -412,8 +480,8 @@ static int32_t ldpc_scalar_core(
         else
             nrLDPC_cn2bnProcBuf_BG2(p_lut, cnProcBufRes, bnProcBuf, Z);
 
-        scalar_bnProcPc(p_lut, bnProcBuf, bnProcBufRes, llrProcBuf, llrRes, Z);
-        scalar_bnProc  (p_lut, bnProcBuf, bnProcBufRes, llrRes, Z);
+        hvx_bnProcPc(p_lut, bnProcBuf, bnProcBufRes, llrProcBuf, llrRes, Z);
+        hvx_bnProc  (p_lut, bnProcBuf, bnProcBufRes, llrRes, Z);
 
         if (BG == 1)
             nrLDPC_bn2cnProcBuf_BG1(p_lut, bnProcBufRes, cnProcBuf, Z);
