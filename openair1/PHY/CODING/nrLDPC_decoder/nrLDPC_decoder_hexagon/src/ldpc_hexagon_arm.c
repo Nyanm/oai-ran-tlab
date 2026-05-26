@@ -128,7 +128,7 @@ int32_t LDPCinit(void)
                                  LDPC_HEX_MAX_LLR);
     g_rpc_llrout = rpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS,
                                  LDPC_HEX_MAX_LLR);
-    g_rpc_meta   = rpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS, 4);
+    g_rpc_meta   = rpcmem_alloc(RPCMEM_HEAP_ID_SYSTEM, RPCMEM_DEFAULT_FLAGS, 8);
 
     if (!g_rpc_params || !g_rpc_llr || !g_rpc_llrout || !g_rpc_meta) {
         fprintf(stderr, "ldpc_hexagon: rpcmem_alloc for pre-allocated buffers failed\n");
@@ -143,7 +143,7 @@ int32_t LDPCinit(void)
         return -1;
     }
     fprintf(stderr, "ldpc_hexagon: pre-allocated %d-byte ION buffers (params+llr+llrout+meta)\n",
-            (int)(sizeof(ldpc_hex_params_t) + 2 * LDPC_HEX_MAX_LLR + 4));
+            (int)(sizeof(ldpc_hex_params_t) + 2 * LDPC_HEX_MAX_LLR + 8));
     return 0;
 }
 
@@ -228,7 +228,7 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params *p_decParams,
             (uint8_t *)rpc_params, sizeof(*rpc_params),
             (uint8_t *)rpc_llr, (int)numLLR,
             (uint8_t *)rpc_llrout, (int)numLLR,
-            rpc_meta, 4);
+            rpc_meta, 8);
         clock_gettime(CLOCK_MONOTONIC, &tb);
         uint64_t rpc_us = ((uint64_t)(tb.tv_sec - ta.tv_sec) * 1000000ULL +
                            (tb.tv_nsec - ta.tv_nsec) / 1000);
@@ -239,7 +239,7 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params *p_decParams,
             (uint8_t *)rpc_params, sizeof(*rpc_params),
             (uint8_t *)rpc_llr, (int)numLLR,
             (uint8_t *)rpc_llrout, (int)numLLR,
-            rpc_meta, 4);
+            rpc_meta, 8);
         clock_gettime(CLOCK_MONOTONIC, &tb);
         uint64_t sg_us = ((uint64_t)(tb.tv_sec - ta.tv_sec) * 1000000ULL +
                           (tb.tv_nsec - ta.tv_nsec) / 1000);
@@ -258,7 +258,7 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params *p_decParams,
                                   (uint8_t *)rpc_params, sizeof(*rpc_params),
                                   (uint8_t *)rpc_llr,    (int)numLLR,
                                   (uint8_t *)rpc_llrout, (int)numLLR,
-                                  rpc_meta, 4);
+                                  rpc_meta, 8);
     if (err) {
         fprintf(stderr, "ldpc_hexagon_decode RPC call failed: %d\n", err);
         return -1;
@@ -267,6 +267,16 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params *p_decParams,
     uint32_t numIter;
     memcpy(&numIter, rpc_meta, 4);
     ret = (int32_t)numIter;
+
+    // Print DSP clock on first decode (bytes 4-7 of meta, set during ldpc_hexagon_open).
+    static int dsp_clk_printed = 0;
+    if (!dsp_clk_printed) {
+        dsp_clk_printed = 1;
+        uint32_t clk_hz = 0;
+        memcpy(&clk_hz, rpc_meta + 4, 4);
+        fprintf(stderr, "ldpc_hexagon: DSP core clock = %u Hz (%u MHz)\n",
+                clk_hz, clk_hz / 1000000u);
+    }
 
     if (ret >= (int32_t)p_decParams->numMaxIter)
         set_abort(ab, true);

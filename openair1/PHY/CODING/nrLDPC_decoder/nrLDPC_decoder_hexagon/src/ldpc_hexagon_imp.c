@@ -449,6 +449,7 @@ typedef struct {
     int8_t *bnProcBufRes;
     int8_t *llrRes;
     int8_t *llrProcBuf;
+    uint32_t dsp_clk_hz;   // actual DSP core clock after power vote
 } ldpc_dsp_ctx_t;
 
 // =============================================================================
@@ -550,27 +551,68 @@ int ldpc_hexagon_open(const char *uri, remote_handle64 *handle)
         return -1;
     }
 
-    // Vote for turbo core clock and maximum bus bandwidth.
-    // Without this the cDSP runs at a low-power DCVS corner (~700 MHz).
-    // The vote persists for the lifetime of this handle.
+    // Step 1: declare this a compute-class client so the system knows we need
+    // full performance (not audio/voice power profile).
+    {
+        HAP_power_request_t areq;
+        memset(&areq, 0, sizeof(areq));
+        areq.type = HAP_power_set_apptype;
+        areq.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
+        int arc = HAP_power_set(NULL, &areq);
+        FARF(ALWAYS, "ldpc_hexagon: set_apptype(COMPUTE) rc=%d", arc);
+    }
+
+    // Step 2: explicitly power up HVX so the HVX units are active.
+    {
+        HAP_power_request_t hreq;
+        memset(&hreq, 0, sizeof(hreq));
+        hreq.type = HAP_power_set_HVX;
+        hreq.hvx.power_up = TRUE;
+        int hrc = HAP_power_set(NULL, &hreq);
+        FARF(ALWAYS, "ldpc_hexagon: set_HVX(power_up) rc=%d", hrc);
+    }
+
+    // Step 3: vote for TURBO corner on core + bus, disable DCVS scaling and
+    // all DSP low-power sleep modes.  The vote persists for the session lifetime.
     HAP_power_request_t req;
     memset(&req, 0, sizeof(req));
     req.type = HAP_power_set_DCVS_v3;
-    req.dcvs_v3.set_dcvs_enable   = TRUE;
-    req.dcvs_v3.dcvs_enable       = FALSE;   // fix clock, disable DCVS scaling
-    req.dcvs_v3.set_latency        = TRUE;
-    req.dcvs_v3.latency            = 1;       // 1 µs: disable DSP sleep between calls
-    req.dcvs_v3.set_core_params    = TRUE;
+    req.dcvs_v3.set_dcvs_enable        = TRUE;
+    req.dcvs_v3.dcvs_enable            = FALSE;   // pin clock, disable DCVS scaling
+    req.dcvs_v3.set_latency            = TRUE;
+    req.dcvs_v3.latency                = 1;        // 1 µs: tightest wakeup latency
+    req.dcvs_v3.set_core_params        = TRUE;
     req.dcvs_v3.core_params.min_corner    = HAP_DCVS_VCORNER_TURBO;
     req.dcvs_v3.core_params.max_corner    = HAP_DCVS_VCORNER_TURBO;
     req.dcvs_v3.core_params.target_corner = HAP_DCVS_VCORNER_TURBO;
-    req.dcvs_v3.set_bus_params     = TRUE;
+    req.dcvs_v3.set_bus_params         = TRUE;
     req.dcvs_v3.bus_params.min_corner    = HAP_DCVS_VCORNER_TURBO;
     req.dcvs_v3.bus_params.max_corner    = HAP_DCVS_VCORNER_TURBO;
     req.dcvs_v3.bus_params.target_corner = HAP_DCVS_VCORNER_TURBO;
+    req.dcvs_v3.set_sleep_disable      = TRUE;
+    req.dcvs_v3.sleep_disable          = HAP_DCVS_LPM_LEVEL1;  // disable all sleep modes
     int rc = HAP_power_set(NULL, &req);
-    if (rc)
-        FARF(HIGH, "ldpc_hexagon: HAP_power_set(DCVS_v3/TURBO) returned %d", rc);
+    FARF(ALWAYS, "ldpc_hexagon: HAP_power_set(DCVS_v3/TURBO) rc=%d", rc);
+
+    // Step 4: fallback via the older (deprecated but different code path)
+    // HAP_power_request_abs API.  Pass 100% clock/bus so it selects max corner.
+    // On unsigned-PD where DCVS_v3 votes may be silently capped, this second
+    // request via a different RPC path may be honoured.
+    {
+        int arc = HAP_power_request_abs(1000, 1000, 1);
+        FARF(ALWAYS, "ldpc_hexagon: HAP_power_request_abs(1000MHz) rc=%d", arc);
+    }
+
+    // Read back the actual granted clock frequency.
+    // NOTE: HAP_power_get returns 0 in unsigned-PD on some targets (same
+    // restriction as hardware cycle counters).  Store whatever we get.
+    HAP_power_response_t resp;
+    memset(&resp, 0, sizeof(resp));
+    resp.type = HAP_power_get_clk_Freq;
+    HAP_power_get(NULL, &resp);
+    ctx->dsp_clk_hz = resp.clkFreqHz;
+    FARF(ALWAYS, "ldpc_hexagon: DSP core clock after vote = %u Hz (%u MHz)",
+         ctx->dsp_clk_hz, ctx->dsp_clk_hz / 1000000u);
 
     *handle = (remote_handle64)(uintptr_t)ctx;
     FARF(RUNTIME_HIGH, "ldpc_hexagon: session opened, working buffers pre-allocated");
@@ -660,6 +702,10 @@ int ldpc_hexagon_decode(remote_handle64 handle,
     if (metaLen >= 4) {
         uint32_t n = (uint32_t)numIter;
         memcpy(meta, &n, 4);
+    }
+    if (metaLen >= 8) {
+        uint32_t clk = ctx->dsp_clk_hz;
+        memcpy(meta + 4, &clk, 4);
     }
 
     return 0;
