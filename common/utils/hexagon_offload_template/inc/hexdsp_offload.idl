@@ -8,6 +8,11 @@
 //   hexdsp_offload.h        (shared header, included by both sides)
 //
 // Naming rule: every function below becomes hexdsp_offload_<name>() in C.
+//
+// The method is named "run" (not "process") to avoid a name collision with
+// the public ARM API function hexdsp_offload_process() that OAI resolves via
+// dlsym.  Both live in the same .so; identical names would cause the ARM glue
+// to call itself recursively instead of dispatching to the DSP.
 
 #include "AEEStdDef.idl"
 #include "remote.idl"
@@ -17,15 +22,15 @@ const string IDL_VERSION = "1.0.0";
 
 interface hexdsp_offload : remote_handle64 {
 
-    // Process one block of data on the DSP.
+    // Run one block of computation on the DSP.
     //
-    // in_buf  — input data,  must be allocated with rpcmem_alloc().
-    // out_buf — output data, must be allocated with rpcmem_alloc().
+    // in_buf  — input data,  must be allocated with rpcmem_alloc() on ARM.
+    // out_buf — output data, must be allocated with rpcmem_alloc() on ARM.
     //
-    // The DSP receives physically-contiguous ION buffers; no extra copy
-    // is needed inside the DSP skel as long as the ARM side uses rpcmem.
+    // The DSP receives physically-contiguous ION buffers via DMA mapping;
+    // they arrive as ordinary pointers in hexdsp_offload_imp.c.
     //
     // Returns 0 on success, negative errno on failure.
-    long process(in  sequence<uint8> in_buf,
-                 rout sequence<uint8> out_buf);
+    long run(in  sequence<uint8> in_buf,
+             rout sequence<uint8> out_buf);
 };

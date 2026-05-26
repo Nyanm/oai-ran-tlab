@@ -213,6 +213,47 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params *p_decParams,
     rpc_params->pad1       = 0;
     memcpy(rpc_llr, p_llr, numLLR);
 
+    // On first call only: run diag=0 (passthrough) and diag=1 (scatter/gather)
+    // to isolate phase costs from the ARM side using wall-clock time.
+    // DSP hardware cycle counters are inaccessible from user mode on this device.
+    static int arm_perf_done = 0;
+    if (!arm_perf_done) {
+        arm_perf_done = 1;
+        struct timespec ta, tb;
+        uint8_t orig_diag = rpc_params->diag;
+
+        rpc_params->diag = 0;  // raw memcpy passthrough
+        clock_gettime(CLOCK_MONOTONIC, &ta);
+        ldpc_hexagon_decode(dsp_hdl,
+            (uint8_t *)rpc_params, sizeof(*rpc_params),
+            (uint8_t *)rpc_llr, (int)numLLR,
+            (uint8_t *)rpc_llrout, (int)numLLR,
+            rpc_meta, 4);
+        clock_gettime(CLOCK_MONOTONIC, &tb);
+        uint64_t rpc_us = ((uint64_t)(tb.tv_sec - ta.tv_sec) * 1000000ULL +
+                           (tb.tv_nsec - ta.tv_nsec) / 1000);
+
+        rpc_params->diag = 1;  // scatter + gather roundtrip
+        clock_gettime(CLOCK_MONOTONIC, &ta);
+        ldpc_hexagon_decode(dsp_hdl,
+            (uint8_t *)rpc_params, sizeof(*rpc_params),
+            (uint8_t *)rpc_llr, (int)numLLR,
+            (uint8_t *)rpc_llrout, (int)numLLR,
+            rpc_meta, 4);
+        clock_gettime(CLOCK_MONOTONIC, &tb);
+        uint64_t sg_us = ((uint64_t)(tb.tv_sec - ta.tv_sec) * 1000000ULL +
+                          (tb.tv_nsec - ta.tv_nsec) / 1000);
+
+        fprintf(stderr, "DSP phase breakdown (ARM wall-clock):\n");
+        fprintf(stderr, "  RPC overhead (diag=0):  %6llu us\n", (unsigned long long)rpc_us);
+        fprintf(stderr, "  scatter+gather (diag=1):%6llu us  compute=%llu us\n",
+                (unsigned long long)sg_us,
+                (unsigned long long)(sg_us > rpc_us ? sg_us - rpc_us : 0));
+        fprintf(stderr, "  full decode (diag=2):    (see ldpctest Decoding time)\n");
+
+        rpc_params->diag = orig_diag;
+    }
+
     int err = ldpc_hexagon_decode(dsp_hdl,
                                   (uint8_t *)rpc_params, sizeof(*rpc_params),
                                   (uint8_t *)rpc_llr,    (int)numLLR,
@@ -223,7 +264,6 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params *p_decParams,
         return -1;
     }
 
-    // Extract iteration count from metadata.
     uint32_t numIter;
     memcpy(&numIter, rpc_meta, 4);
     ret = (int32_t)numIter;

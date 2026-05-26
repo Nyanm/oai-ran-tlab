@@ -169,8 +169,7 @@ if(LDPC_HEX_STANDALONE)
         build_idl(inc/ldpc_hexagon.idl ldpc_hexagon_skel)
         include_directories(${common_incs})
 
-        # scalar-only baseline: no HVX flags needed
-        # To add HVX: target_compile_options(ldpc_hexagon_skel PRIVATE -mhvx -mhvx-length=128B)
+        target_compile_options(ldpc_hexagon_skel PRIVATE -mhvx -mhvx-length=128B)
 
         copy_binaries(ldpc_hexagon_skel)
 

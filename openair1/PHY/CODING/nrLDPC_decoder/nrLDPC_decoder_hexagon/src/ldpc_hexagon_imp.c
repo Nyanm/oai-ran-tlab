@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-CSSL-1.0
 //
-// ldpc_hexagon_imp.c — Hexagon DSP LDPC decoder, scalar min-sum.
+// ldpc_hexagon_imp.c — Hexagon DSP LDPC decoder, HVX-accelerated min-sum.
 //
-// Compiled with hexagon-clang -O3 and loaded into the cDSP protected domain
-// via FastRPC.  All working buffers are heap-allocated (total ~540 KB) to
-// stay within the DSP's limited thread stack.
+// Compiled with hexagon-clang -O3 -mhvx -mhvx-length=128B and loaded into
+// the cDSP protected domain via FastRPC.
 //
 // Algorithm:
 //   Standard min-sum belief propagation:
@@ -13,13 +12,10 @@
 //              extrinsic = posterior − self CN message
 //   Convergence: XOR of sign bits across all connected BNs at each CN = 0
 //
-// Performance path: replace cnProc_group() with HVX intrinsics
-//   (Q6_V_vmux_QVV / Q6_V_vmin_VV etc.) after this scalar baseline is
-//   validated.  The mPass and bnProc functions are already memory-bandwidth
-//   bound and benefit less from HVX.
-//
-// To enable HVX when building the skel:
-//   add_compile_options(-mhvx -mhvx-length=128B)
+// cnProc_group() vectorises the CN step with 128B HVX intrinsics, processing
+// Z samples (one per lifting symbol) in parallel.  Full 128-byte HVX vectors
+// are used for floor(Z/128) chunks; the remaining tail bytes are handled by
+// a scalar fallback.  For Z=384 (= 3×128) there is no tail — pure HVX path.
 
 // Suppress OAI framework headers (time_meas.h etc.) inside nrLDPC_types.h
 #define CODEGEN 1
@@ -38,6 +34,10 @@
 #include <stdlib.h>
 #include "HAP_farf.h"
 #include "HAP_power.h"
+#include <hexagon_types.h>
+#include <hvx_hexagon_protos.h>
+
+#define HVX_VLEN 128   // HVX vector width in bytes (-mhvx-length=128B)
 
 // Portable LDPC decoder headers — no SIMD, no OAI framework dependencies
 #include "nrLDPCdecoder_defs.h"
@@ -88,41 +88,104 @@ static const int8_t numBN_BG1[NR_LDPC_NUM_CN_GROUPS_BG1] = {3, 4, 5, 6, 7, 8, 9,
 static const int8_t numBN_BG2[NR_LDPC_NUM_CN_GROUPS_BG2] = {3, 4, 5, 6, 8, 10};
 
 // =============================================================================
-// CN Processing — scalar min-sum
+// CN Processing — HVX-vectorised min-sum
 // =============================================================================
 // For every (CN i, lifting symbol z) in a group:
 //   Pass 1 over all BN positions k: track first/second minimum |v|, XOR signs.
 //   Pass 2: write extrinsic message for each position j:
-//     mag_j  = min1 if j != min1_k, else min2
-//     sign_j = XOR of all signs excluding j  (= sgn_all ^ v_j)
+//     mag_j  = (|v_j| == min1) ? min2 : min1   (excludes j's contribution)
+//     sign_j = sgn_all XOR v_j                   (removes j's sign from product)
 //     result = sign_j < 0 ? -mag_j : mag_j
+//
+// The Z lifting symbols are processed in parallel with 128B HVX vectors.
+// floor(Z/128) full vectors are handled by HVX; the residual tail (Z % 128)
+// falls back to scalar.  For Z = 384 = 3×128 there is no tail.
+//
+// Min-sum tie handling: the "mag = (|v_j|==min1)?min2:min1" rule approximates
+// the correct "exclude-self" minimum when only one BN achieves min1.  For ties
+// (multiple BNs with equal minimum) both positions return min2 rather than min1;
+// this is a standard approximation used in all vectorised implementations and
+// has negligible effect on convergence.
 
 static void cnProc_group(
     const int8_t *cnProcBuf, int8_t *cnProcBufRes,
     uint32_t startAddr, int numBN, int numCN, uint16_t Z)
 {
-    uint32_t bitOff = (uint32_t)numCN * NR_LDPC_ZMAX;
+    int32_t bitOff = (int32_t)numCN * NR_LDPC_ZMAX;
+    int32_t full   = (Z / HVX_VLEN) * HVX_VLEN;  // bytes covered by full HVX vectors
+    int32_t tail   = Z - full;
+
+    // Constants: initialise once, reuse across all (i, v) iterations.
+    HVX_Vector vzero   = Q6_V_vzero();
+    HVX_Vector vmax_ub = Q6_Vb_vsplat_R(0x7f);  // 127 in every byte lane
 
     for (int i = 0; i < numCN; i++) {
-        for (int z = 0; z < (int)Z; z++) {
-            int samp = i * (int)Z + z;
+        int32_t row = i * Z;  // byte offset of this CN's Z samples within each k-layer
 
+        // ── HVX path: one 128-byte vector per iteration ──────────────────────
+        for (int32_t voff = 0; voff < full; voff += HVX_VLEN) {
+
+            // Pass 1: accumulate min1, min2, sgn_all across all numBN messages.
+            HVX_Vector vmin1    = vmax_ub;
+            HVX_Vector vmin2    = vmax_ub;
+            HVX_Vector vsgn_all = vzero;
+
+            for (int k = 0; k < numBN; k++) {
+                HVX_Vector vk = *(HVX_UVector *)(cnProcBuf + startAddr
+                                                 + (int32_t)k * bitOff + row + voff);
+                HVX_Vector vabs = Q6_Vb_vabs_Vb(vk);       // saturates: |-128| → 127
+                vsgn_all = Q6_V_vxor_VV(vsgn_all, vk);
+
+                // Update min1 and min2:
+                //   where vabs < vmin1: demote old vmin1 to min2 candidate, update min1
+                //   where vabs >= vmin1: vabs itself is min2 candidate
+                HVX_VectorPred new_min  = Q6_Q_vcmp_gt_VubVub(vmin1, vabs);
+                HVX_Vector     old_min1 = vmin1;
+                vmin1 = Q6_Vub_vmin_VubVub(vmin1, vabs);
+                HVX_Vector min2_cand = Q6_V_vmux_QVV(new_min, old_min1, vabs);
+                vmin2 = Q6_Vub_vmin_VubVub(vmin2, min2_cand);
+            }
+
+            // Pass 2: compute and store extrinsic for each BN position.
+            for (int k = 0; k < numBN; k++) {
+                const int8_t *in  = cnProcBuf    + startAddr + (int32_t)k * bitOff + row + voff;
+                int8_t       *out = cnProcBufRes + startAddr + (int32_t)k * bitOff + row + voff;
+                HVX_Vector vk   = *(HVX_UVector *)in;
+                HVX_Vector vabs = Q6_Vb_vabs_Vb(vk);
+
+                // mag: use vmin2 where this position held the overall minimum,
+                //      vmin1 everywhere else.
+                HVX_VectorPred is_min1 = Q6_Q_vcmp_eq_VbVb(vabs, vmin1);
+                HVX_Vector vmag = Q6_V_vmux_QVV(is_min1, vmin2, vmin1);
+
+                // sign_j = sgn_all XOR vk  (removes vk's sign from the product)
+                HVX_Vector vsign_j = Q6_V_vxor_VV(vsgn_all, vk);
+
+                // result = (sign_j < 0) ? -vmag : +vmag
+                HVX_VectorPred is_neg = Q6_Q_vcmp_gt_VbVb(vzero, vsign_j);
+                HVX_Vector vneg       = Q6_Vb_vsub_VbVb(vzero, vmag);
+                *(HVX_UVector *)out   = Q6_V_vmux_QVV(is_neg, vneg, vmag);
+            }
+        }
+
+        // ── Scalar fallback: residual tail bytes (Z % 128 != 0) ─────────────
+        for (int32_t z = full; z < Z; z++) {
+            int32_t samp = row + z;
             int8_t  sgn_all = 0;
             uint8_t min1 = 127, min2 = 127;
             int     min1_k = 0;
 
             for (int k = 0; k < numBN; k++) {
-                int8_t v = cnProcBuf[startAddr + (uint32_t)k * bitOff + samp];
-                sgn_all ^= v;
+                int8_t  v  = cnProcBuf[startAddr + (uint32_t)k * bitOff + samp];
+                sgn_all   ^= v;
                 uint8_t av = abs8(v);
-                if (av <= min1) { min2 = min1; min1 = av; min1_k = k; }
+                if (av < min1) { min2 = min1; min1 = av; min1_k = k; }
                 else if (av < min2) { min2 = av; }
             }
-
             for (int j = 0; j < numBN; j++) {
-                int8_t v_j  = cnProcBuf[startAddr + (uint32_t)j * bitOff + samp];
-                int8_t sgn_j = sgn_all ^ v_j;   // product of signs excluding j
-                uint8_t mag  = (j == min1_k) ? min2 : min1;
+                int8_t  v_j   = cnProcBuf[startAddr + (uint32_t)j * bitOff + samp];
+                int8_t  sgn_j = sgn_all ^ v_j;
+                uint8_t mag   = (j == min1_k) ? min2 : min1;
                 cnProcBufRes[startAddr + (uint32_t)j * bitOff + samp] =
                     (sgn_j & 0x80) ? -(int8_t)mag : (int8_t)mag;
             }
@@ -130,9 +193,9 @@ static void cnProc_group(
     }
 }
 
-static void scalar_cnProc(t_nrLDPC_lut *p_lut,
-                           const int8_t *cnProcBuf, int8_t *cnProcBufRes,
-                           uint16_t Z, uint8_t BG)
+static void cnProc(t_nrLDPC_lut *p_lut,
+                   const int8_t *cnProcBuf, int8_t *cnProcBufRes,
+                   uint16_t Z, uint8_t BG)
 {
     const int8_t *tbl  = (BG == 1) ? numBN_BG1 : numBN_BG2;
     int           ngrp = (BG == 1) ? NR_LDPC_NUM_CN_GROUPS_BG1
@@ -294,11 +357,6 @@ static int32_t ldpc_scalar_core(
     t_nrLDPC_lut *p_lut, uint8_t BG, uint16_t Z, uint8_t numMaxIter,
     ldpc_dsp_ctx_t *ctx)
 {
-    // Use pre-allocated buffers from the session context.
-    // cnProcBuf and bnProcBuf must be zeroed before each decode (the BP
-    // algorithm initialises CN messages to channel LLRs by scattering into
-    // them, but the zero-initialised regions between active symbols matter).
-    // llrProcBuf and llrRes are fully written before first read — no zeroing.
     int8_t *cnProcBuf    = ctx->cnProcBuf;
     int8_t *cnProcBufRes = ctx->cnProcBufRes;
     int8_t *bnProcBuf    = ctx->bnProcBuf;
@@ -312,16 +370,14 @@ static int32_t ldpc_scalar_core(
     memset(bnProcBuf,    0, NR_LDPC_SIZE_BN_PROC_BUF);
     memset(bnProcBufRes, 0, NR_LDPC_SIZE_BN_PROC_BUF);
 
-    // Scatter input LLRs into the two processing buffers (llrProcBuf and cnProcBuf).
     nrLDPC_llr2llrProcBuf(p_lut, (int8_t *)p_llr, llrProcBuf, Z, BG);
     if (BG == 1)
         nrLDPC_llr2CnProcBuf_BG1(p_lut, (int8_t *)p_llr, cnProcBuf, Z);
     else
         nrLDPC_llr2CnProcBuf_BG2(p_lut, (int8_t *)p_llr, cnProcBuf, Z);
 
-    // First iteration without parity check: the two punctured BN columns are
-    // not yet estimable from a single pass, so convergence cannot be declared.
-    scalar_cnProc(p_lut, cnProcBuf, cnProcBufRes, Z, BG);
+    // First iteration without parity check
+    cnProc(p_lut, cnProcBuf, cnProcBufRes, Z, BG);
 
     if (BG == 1)
         nrLDPC_cn2bnProcBuf_BG1(p_lut, cnProcBufRes, bnProcBuf, Z);
@@ -339,7 +395,7 @@ static int32_t ldpc_scalar_core(
     // BP iteration loop with parity check
     int32_t pcRes = 1;
     while (numIter < (int32_t)numMaxIter && pcRes != 0) {
-        scalar_cnProc(p_lut, cnProcBuf, cnProcBufRes, Z, BG);
+        cnProc(p_lut, cnProcBuf, cnProcBufRes, Z, BG);
 
         if (BG == 1)
             nrLDPC_cn2bnProcBuf_BG1(p_lut, cnProcBufRes, bnProcBuf, Z);
@@ -358,9 +414,7 @@ static int32_t ldpc_scalar_core(
         numIter++;
     }
 
-    // Gather posterior LLRs from llrRes into the external output order.
     nrLDPC_llrRes2llrOut(p_lut, (int8_t *)llr_out, llrRes, Z, BG);
-
     return numIter;
 }
 
@@ -495,17 +549,12 @@ int ldpc_hexagon_decode(remote_handle64 handle,
         (const int8_t *)llr, llr_out, numLLR,
         &lut, p.BG, p.Z, p.numMaxIter, ctx);
 
-    FARF(RUNTIME_HIGH, "ldpc_hexagon: out[0..3]=%d %d %d %d  out[2Z..2Z+3]=%d %d %d %d",
-         (int)((int8_t *)llr_out)[0], (int)((int8_t *)llr_out)[1],
-         (int)((int8_t *)llr_out)[2], (int)((int8_t *)llr_out)[3],
-         (int)((int8_t *)llr_out)[2*p.Z],   (int)((int8_t *)llr_out)[2*p.Z+1],
-         (int)((int8_t *)llr_out)[2*p.Z+2], (int)((int8_t *)llr_out)[2*p.Z+3]);
+    FARF(RUNTIME_HIGH, "ldpc_hexagon: done in %d iter", numIter);
 
     if (metaLen >= 4) {
         uint32_t n = (uint32_t)numIter;
         memcpy(meta, &n, 4);
     }
 
-    FARF(RUNTIME_HIGH, "ldpc_hexagon: done in %d iter", numIter);
     return 0;
 }

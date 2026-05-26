@@ -89,7 +89,13 @@ if(${OS_TYPE} MATCHES "HLOS")
     # Pick the right cdsprpc library for the target OS (Android vs Ubuntu ARM).
     choose_dsprpc(cdsp dsprpc)
     link_custom_library(hexdsp_offload ${dsprpc})
-    link_custom_library(hexdsp_offload rpcmem)
+
+    # Do NOT link rpcmem.a here.
+    # The SDK's rpcmem.a contains only deprecated no-op stubs for
+    # rpcmem_init / rpcmem_deinit.  If linked, they shadow the real
+    # implementations in the device's libcdsprpc.so, leaving the DMA heap
+    # uninitialised so rpcmem_alloc() silently fails (error -104 on open).
+    # All rpcmem symbols are satisfied at runtime by libcdsprpc.so.
 
     # Applies SDK-standard compile flags (PIC, warnings, …).
     set_common_compile_and_link_options(hexdsp_offload)
