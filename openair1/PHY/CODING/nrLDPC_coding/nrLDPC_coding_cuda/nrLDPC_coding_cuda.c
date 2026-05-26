@@ -32,37 +32,10 @@ extern int32_t LDPCdecoder_cuda(t_nrLDPC_dec_params* p_decParams,
                          uint8_t* p_out,
                          t_nrLDPC_time_stats* p_profiler,
                          decode_abort_t* ab);
-int32_t LDPCdecoder(t_nrLDPC_dec_params* p_decParams,
-                         int8_t* p_llr,
-                         uint8_t* p_out,
-                         t_nrLDPC_time_stats* p_profiler,
-                         decode_abort_t* ab)
-{
-  return LDPCdecoder_cuda(p_decParams, p_llr, p_out, p_profiler, ab);
-}
 
 
 // LDPCencoder <= (LDPCencoder32)
 extern uint32_t **LDPCencoder32(uint8_t **input, encoder_implemparams_t *impp);
-uint32_t LDPCencoder(uint8_t **input, uint8_t *output, encoder_implemparams_t *impp)
-{
-  uint32_t **output32 = LDPCencoder32(input, impp);
-  AssertFatal(impp->n_segments < 8, "LDPC CUDA segment interface does not copy more than 8 segs\n");
-  // the following copied from ldpc_encoder_optim8segmulti.c
-  int nrows = 46; // assumption BG1
-  int rate = 3; // assumption BG1
-  int no_punctured_columns = (int)((nrows-2)*impp->Zc+impp->K-impp->K*rate)/impp->Zc;
-  int removed_bit = (nrows - no_punctured_columns - 2) * impp->Zc + impp->K - (int)(impp->K * rate);
-  int len = impp->K + impp->Zc * (nrows - no_punctured_columns) - removed_bit;
-  // copy to output format
-  for (int i = 0; i < len; ++i) {
-    // condition from ldpctest: (channel_input_optim[i] >> j) == (output32[j>>5][i] >> (j&31))
-    // for more than 8 segments, need to spread output32 into output
-    uint8_t segs = output32[0][i] & 0xff;
-    output[i] = segs;
-  }
-  return 0;
-}
 
 
 /* slot interface */
@@ -95,6 +68,7 @@ int nrLDPC_coding_encoder(nrLDPC_slot_encoding_parameters_t *slot_params)
   }
   if (cpu.nb_TBs > 0) {
     ldpc_cpu.nrLDPC_coding_encoder(&cpu);
+    slot_params->TBs[0] = cpu.TBs[0];
   }
   return 0;
 }
@@ -121,6 +95,7 @@ int32_t nrLDPC_coding_decoder(nrLDPC_slot_decoding_parameters_t *slot_params)
   }
   if (cpu.nb_TBs > 0) {
     ldpc_cpu.nrLDPC_coding_decoder(&cpu);
+    slot_params->TBs[0] = cpu.TBs[0];
   }
   return 0;
 }
