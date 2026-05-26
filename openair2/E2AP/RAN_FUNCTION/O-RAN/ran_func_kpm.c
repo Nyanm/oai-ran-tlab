@@ -440,11 +440,21 @@ bool read_kpm_sm(void* data)
 
 static const char* kpm_node_meas_du[] = {
   "CARR.PDSCHMCSDist",
+  "CARR.PUSCHMCSDist",
+  NULL,
+};
+
+static const char* kpm_node_meas_cu[] = {
+  "L1M.SS-RSRP",
+  "MR.NRScSSSINR",
   NULL,
 };
 
 static const char* kpm_node_meas_gnb[] = {
   "CARR.PDSCHMCSDist",
+  "CARR.PUSCHMCSDist",
+  "L1M.SS-RSRP",
+  "MR.NRScSSSINR",
   NULL,
 };
 
@@ -477,17 +487,17 @@ static const char* kpm_meas_cuup[] = {
 typedef const char** meas_list;
 
 static const meas_list ran_def_kpm[END_NGRAN_NODE_TYPE][END_RIC_SERVICE_REPORT] = {
-  {NULL, NULL, NULL, NULL, NULL},
-  {NULL, NULL, NULL, NULL, NULL},
-  {kpm_node_meas_gnb, NULL, NULL, kpm_meas_gnb, NULL},
-  {NULL, NULL, NULL, NULL, NULL},
-  {NULL, NULL, NULL, NULL, NULL},
-  {NULL, NULL, NULL, kpm_meas_cuup, NULL}, // at the moment, for CU, we use the same function as for CU-UP
-  {NULL, NULL, NULL, NULL, NULL},
-  {kpm_node_meas_du, NULL, NULL, kpm_meas_du, NULL},
-  {NULL, NULL, NULL, NULL, NULL},
-  {NULL, NULL, NULL, NULL, NULL}, // at the moment, no measurement is implemented in CU-CP
-  {NULL, NULL, NULL, kpm_meas_cuup, NULL}
+  {NULL, NULL, NULL, NULL, NULL},                                            
+  {NULL, NULL, NULL, NULL, NULL},                                            
+  {kpm_node_meas_gnb, NULL, NULL, kpm_meas_gnb, NULL},                       
+  {NULL, NULL, NULL, NULL, NULL},                                            
+  {NULL, NULL, NULL, NULL, NULL},                                            
+  {kpm_node_meas_cu, NULL, NULL, kpm_meas_cuup, NULL},                       
+  {NULL, NULL, NULL, NULL, NULL},                                            
+  {kpm_node_meas_du, NULL, NULL, kpm_meas_du, NULL},                         
+  {NULL, NULL, NULL, NULL, NULL},                                            
+  {kpm_node_meas_cu, NULL, NULL, NULL, NULL},                               
+  {NULL, NULL, NULL, kpm_meas_cuup, NULL}                                    
 };
 
 static meas_info_for_action_lst_t* fill_meas_info_list_for_act(const ngran_node_t node_type, const ric_service_report_e report_style, size_t *sz)
@@ -589,6 +599,7 @@ void read_kpm_setup_sm(void* e2ap)
   // [1, 65535]
   // 3GPP TS 28.552
   const ngran_node_t node_type = get_e2_node_type();
+  LOG_I(NR_RRC, "[KPM] read_kpm_setup_sm: resolved node_type=%d\n", (int)node_type);
   size_t num_styles = 0;
   for (size_t i = 0; i < END_RIC_SERVICE_REPORT; i++) {
     ric_report_style_item_t report_item = report_style[i](node_type);
