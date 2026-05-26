@@ -180,7 +180,10 @@ int config_getlist(configmodule_interface_t *cfg, paramlist_def_t *ParamList, pa
       sprintf(cfgpath, "%s.[%i]", newprefix, new_idx);
       paramdef_t **old = ParamList->paramarray;
       ParamList->paramarray = config_allocate_new(cfg, (new_idx + 1) * sizeof(paramdef_t *), true);
-      memcpy(ParamList->paramarray, old, new_idx * sizeof(paramdef_t *));
+      if (new_idx > 0 && old != NULL) {
+        memcpy(ParamList->paramarray, old, new_idx * sizeof(paramdef_t *));
+      }
+      
       ParamList->paramarray[new_idx] = config_allocate_new(cfg, numparams * sizeof(paramdef_t), true);
       memcpy(ParamList->paramarray[new_idx], params, sizeof(paramdef_t) * numparams);
 
