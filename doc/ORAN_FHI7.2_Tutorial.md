@@ -394,8 +394,9 @@ git apply ~/openairinterface5g/cmake_targets/tools/oran_fhi_integration_patches/
 ```bash
 git clone https://github.com/openairinterface/o-du-phy.git ~/phy
 cd ~/phy
-git checkout <desired-tag> # shall match a variable `K_VERSION`
+git checkout 11.1.1 # the tag points to the `main` branch which has all patches applied that are relevant for OAI integration; the tag matches the value of cmake variable `K_VERSION`
 ```
+or use `xran_DOWNLOAD` option when compiling OAI gNB.
 
 Compile the fronthaul interface library by calling `make` and the option
 `XRAN_LIB_SO=1` to have it build a shared object. Note that we provide two
