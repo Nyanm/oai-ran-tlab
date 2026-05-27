@@ -46,7 +46,7 @@ void unlock_nr_rlc_current_time(void)
     AssertFatal(0, "error locking mutex");
 }
 
-static uint64_t get_nr_rlc_current_time(void)
+uint64_t get_nr_rlc_current_time(void)
 {
   lock_nr_rlc_current_time();
 
@@ -266,10 +266,12 @@ static mac_rlc_status_resp_t _nr_rlc_status_ind(nr_rlc_ue_t *ue, frame_t frame, 
     // Fix me: temproary reduction meanwhile cpu cost of this computation is optimized
     buf_stat = rb->buffer_status(rb, 1000 * 1000);
     ret.bytes_in_buffer = buf_stat.status_size + buf_stat.retx_size + buf_stat.tx_size;
+    ret.oldest_sdu_arrival_ms = buf_stat.oldest_sdu_arrival_ms;
   } else {
     if (!(frame % 128) || channel_idP == 0) //to suppress this warning message
       LOG_W(RLC, "Radio Bearer (channel ID %d) is NULL for UE %d\n", channel_idP, ue->ue_id);
     ret.bytes_in_buffer = 0;
+    ret.oldest_sdu_arrival_ms = 0;
   }
 
   ret.pdus_in_buffer = 0;

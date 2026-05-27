@@ -87,6 +87,10 @@ nr_rlc_entity_buffer_status_t nr_rlc_entity_tm_buffer_status(nr_rlc_entity_t *_e
   ret.tx_size = entity->common.bstatus.tx_size;
   ret.retx_size = 0;
 
+  ret.oldest_sdu_arrival_ms = 0;
+  if (entity->tx_list && entity->tx_list->sdu)
+    ret.oldest_sdu_arrival_ms = entity->tx_list->sdu->arrival_ms;
+
   return ret;
 }
 
@@ -146,6 +150,8 @@ void nr_rlc_entity_tm_recv_sdu(nr_rlc_entity_t *_entity,
 
   if (entity->common.avg_time_is_on)
     sdu->sdu->time_of_arrival = time_average_now();
+
+  sdu->sdu->arrival_ms = entity->t_current;
 }
 
 /*************************************************************************/

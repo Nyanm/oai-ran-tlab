@@ -25,6 +25,11 @@ typedef struct nr_rlc_sdu_t {
    * transmission is used for statistics
    */
   uint64_t time_of_arrival;  /* unit microsecond */
+
+  /* RLC time when the SDU was first received .Used for the HOL-delay
+   * in MAC. TODO: unify with time_of_arrival (feed E2AP/KPM in us) 
+   */
+  uint64_t arrival_ms;
 } nr_rlc_sdu_t;
 
 typedef struct nr_rlc_sdu_segment_t {

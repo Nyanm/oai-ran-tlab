@@ -889,6 +889,7 @@ struct nr_dl_candidate {
   int retx_rbSize; ///< RBs needed for retx, 0 for new tx
   uint32_t pending_bytes; ///< total bytes waiting in RLC buffers
   uint32_t pending_bytes_per_lcid[NR_MAX_NUM_LCID]; ///< per-LCID bytes waiting in RLC buffers
+  uint64_t hol_delay_ms[NR_MAX_NUM_LCID]; ///< per-LCID head-of-line delay in milliseconds (age of oldest SDU)
   float avg_throughput; ///< EWMA goodput in bps (dl_thr_ue)
   float bler; ///< current BLER estimate
   int current_mcs; ///< current MCS state (retx: from HARQ, new tx: from BLER tracker)
