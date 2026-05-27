@@ -854,20 +854,30 @@ static inline void nrLDPC_cnProc_BG1(t_nrLDPC_lut* p_lut, int8_t* cnProcBuf, int
 
 }
 
+#endif /* !__AVX512BW__ — end of generic BG1/BG2 256-bit block */
+
 // =============================================================================
 // Two-pass min1/min2 CN processing
 //
-// Replaces the LUT-exclude-self approach above with a two-pass algorithm:
+// Available on ALL targets (AVX512, AVX2, aarch64/NEON, SSE2 fallback).
+// On AVX2 / AVX512: uses 256-bit vectors (32 CNs per iteration).
+// On aarch64 / SSE2: uses 128-bit vectors (16 CNs per iteration) so that
+//   each SIMD operation maps to a single NEON or SSE instruction rather than
+//   an emulated pair.
+//
+// Replaces the LUT-exclude-self approach with a two-pass algorithm:
 //
 //   Pass 1: read all numBN inputs once to collect:
-//             vmin1    — minimum |vk| across all k (SIMD, 32 CNs in parallel)
+//             vmin1    — minimum |vk| across all k
 //             vmin2    — second minimum |vk|
-//             vsgn_all — XOR-product of all signs (accumulated via sign_epi8)
+//             vsgn_xor — XOR of all input bytes; bit 7 = sign parity
+//                        (XOR with 0 is identity, so zero-LLR inputs are safe)
 //
 //   Pass 2: read all numBN inputs a second time; for each k:
-//             out_mag = (|vk| == vmin1) ? vmin2 : vmin1  (tie case: use min2)
-//             out_sgn = sign_epi8(vsgn_all, vk)           (removes self sign)
-//             result  = sign_epi8(out_mag, out_sgn)
+//             other_xor = vsgn_xor XOR vk  (removes self via XOR self-inverse)
+//             sign_mask = 0xFF where bit 7 of other_xor = 1, else 0x00
+//             out_mag   = (|vk| == vmin1) ? vmin2 : vmin1
+//             result    = (out_mag XOR sign_mask) - sign_mask  (±out_mag)
 //
 // Memory reads per CN group: 2 × numBN  vs  numBN × (numBN-1) for LUT approach:
 //
@@ -881,13 +891,19 @@ static inline void nrLDPC_cnProc_BG1(t_nrLDPC_lut* p_lut, int8_t* cnProcBuf, int
 // This is the standard min-sum tie approximation; effect on convergence is negligible.
 // =============================================================================
 
+/* -------------------------------------------------------------------------
+ * 256-bit two-pass group kernel — AVX2 and AVX512 (32 CNs per iteration).
+ * Not compiled on pure 128-bit targets (aarch64 NEON, SSE2-only x86) where
+ * simde__m256i would silently expand to a pair of 128-bit ops.
+ * ------------------------------------------------------------------------- */
+#if defined(__AVX2__) || defined(__AVX512BW__)
 /**
- * \brief Generic two-pass min-sum CN processor — one degree group.
+ * \brief Two-pass min-sum CN processor, 256-bit — one degree group.
  *
  * \param cnProcBuf    Start of this group in the CN proc buffer (256-bit aligned).
  * \param cnProcBufRes Start of this group in the CN proc result buffer.
  * \param numBN        Number of BNs per CN in this degree group.
- * \param M            Number of 32-CN SIMD chunks: ceil(numCN × Z / 32).
+ * \param M            Number of 32-CN chunks: ceil(numCN × Z / 32).
  * \param off          BN-to-BN stride in units of sizeof(simde__m256i) = 32 bytes.
  */
 static inline void nrLDPC_cnProc_group_2pass(simde__m256i *cnProcBuf,
@@ -896,80 +912,103 @@ static inline void nrLDPC_cnProc_group_2pass(simde__m256i *cnProcBuf,
                                              uint32_t      M,
                                              uint32_t      off)
 {
-    const simde__m256i maxLLR = *(const simde__m256i *)maxLLR256_epi8;
-    const simde__m256i zeros  = simde_mm256_setzero_si256();
+    const simde__m256i maxLLR  = *(const simde__m256i *)maxLLR256_epi8;
+    const simde__m256i zeros   = simde_mm256_setzero_si256();
 
     for (uint32_t i = 0; i < M; i++) {
-
-        // ------------------------------------------------------------------
-        // Pass 1: accumulate vmin1, vmin2 (unsigned) and sign parity via XOR
-        //
-        // Sign is tracked by XOR-ing raw input bytes; only bit 7 (the sign bit)
-        // matters. XOR with 0 is identity, so zero-valued inputs do NOT corrupt
-        // the sign accumulator — unlike sign_epi8() which zeroes its output when
-        // its second argument is 0.
-        // ------------------------------------------------------------------
-        simde__m256i vmin1   = maxLLR;
-        simde__m256i vmin2   = maxLLR;
-        simde__m256i vsgn_xor = zeros;   // XOR of all input bytes; bit 7 = sign parity
+        simde__m256i vmin1    = maxLLR;
+        simde__m256i vmin2    = maxLLR;
+        simde__m256i vsgn_xor = zeros;
 
         for (uint32_t k = 0; k < numBN; k++) {
             simde__m256i vk  = cnProcBuf[k * off + i];
             simde__m256i vak = simde_mm256_abs_epi8(vk);
-
-            vsgn_xor = simde_mm256_xor_si256(vsgn_xor, vk);  // XOR accumulates sign parity
-
-            // Rolling min1 / min2 update (unsigned comparison)
+            vsgn_xor = simde_mm256_xor_si256(vsgn_xor, vk);
             simde__m256i new_min1 = simde_mm256_min_epu8(vmin1, vak);
             simde__m256i new_min2 = simde_mm256_min_epu8(vmin2,
                                         simde_mm256_max_epu8(vmin1, vak));
             vmin1 = new_min1;
             vmin2 = new_min2;
         }
-
-        // ------------------------------------------------------------------
-        // Pass 2: compute and store output for each BN k
-        // ------------------------------------------------------------------
         for (uint32_t k = 0; k < numBN; k++) {
-            simde__m256i vk  = cnProcBuf[k * off + i];
-            simde__m256i vak = simde_mm256_abs_epi8(vk);
-
-            // Magnitude: min2 where self equals min1, min1 everywhere else
+            simde__m256i vk      = cnProcBuf[k * off + i];
+            simde__m256i vak     = simde_mm256_abs_epi8(vk);
             simde__m256i mask    = simde_mm256_cmpeq_epi8(vak, vmin1);
-            simde__m256i out_mag = simde_mm256_blendv_epi8(vmin1, vmin2, mask);
-            out_mag = simde_mm256_min_epu8(out_mag, maxLLR);
-
-            // Sign: remove self via XOR (XOR is self-inverse; zero inputs are safe)
-            // other_xor bit 7 = XOR of sign bits of all OTHER inputs
+            simde__m256i out_mag = simde_mm256_min_epu8(
+                                       simde_mm256_blendv_epi8(vmin1, vmin2, mask),
+                                       maxLLR);
             simde__m256i other_xor = simde_mm256_xor_si256(vsgn_xor, vk);
-
-            // Convert sign parity (bit 7) to ±out_mag using mask trick:
-            //   sign_mask = 0xFF where bit 7 = 1 (odd # of negatives → negative output)
-            //              = 0x00 where bit 7 = 0 (even # of negatives → positive output)
-            //   result = (out_mag XOR sign_mask) - sign_mask
-            //          = out_mag   when sign_mask = 0x00
-            //          = -out_mag  when sign_mask = 0xFF  (2's-complement, exact for [0,127])
             simde__m256i sign_mask = simde_mm256_cmpgt_epi8(zeros, other_xor);
-            simde__m256i result    = simde_mm256_sub_epi8(
-                                         simde_mm256_xor_si256(out_mag, sign_mask),
-                                         sign_mask);
+            cnProcBufRes[k * off + i] = simde_mm256_sub_epi8(
+                                            simde_mm256_xor_si256(out_mag, sign_mask),
+                                            sign_mask);
+        }
+    }
+}
+#endif /* __AVX2__ || __AVX512BW__ */
 
-            cnProcBufRes[k * off + i] = result;
+/* -------------------------------------------------------------------------
+ * 128-bit two-pass group kernel — aarch64 NEON and SSE2/SSSE3 fallback
+ * (16 CNs per iteration; each simde__m128i op = one NEON or SSE instruction).
+ * Always compiled so it is available on every target.
+ * ------------------------------------------------------------------------- */
+/**
+ * \brief Two-pass min-sum CN processor, 128-bit — one degree group.
+ *
+ * \param cnProcBuf    Start of this group in the CN proc buffer (128-bit aligned).
+ * \param cnProcBufRes Start of this group in the CN proc result buffer.
+ * \param numBN        Number of BNs per CN in this degree group.
+ * \param M            Number of 16-CN chunks: ceil(numCN × Z / 16).
+ * \param off          BN-to-BN stride in units of sizeof(simde__m128i) = 16 bytes.
+ */
+static inline void nrLDPC_cnProc_group_2pass_128(simde__m128i *cnProcBuf,
+                                                 simde__m128i *cnProcBufRes,
+                                                 uint32_t      numBN,
+                                                 uint32_t      M,
+                                                 uint32_t      off)
+{
+    const simde__m128i maxLLR  = *(const simde__m128i *)maxLLR256_epi8;
+    const simde__m128i zeros   = simde_mm_setzero_si128();
+
+    for (uint32_t i = 0; i < M; i++) {
+        simde__m128i vmin1    = maxLLR;
+        simde__m128i vmin2    = maxLLR;
+        simde__m128i vsgn_xor = zeros;
+
+        for (uint32_t k = 0; k < numBN; k++) {
+            simde__m128i vk  = cnProcBuf[k * off + i];
+            simde__m128i vak = simde_mm_abs_epi8(vk);
+            vsgn_xor = simde_mm_xor_si128(vsgn_xor, vk);
+            simde__m128i new_min1 = simde_mm_min_epu8(vmin1, vak);
+            simde__m128i new_min2 = simde_mm_min_epu8(vmin2,
+                                        simde_mm_max_epu8(vmin1, vak));
+            vmin1 = new_min1;
+            vmin2 = new_min2;
+        }
+        for (uint32_t k = 0; k < numBN; k++) {
+            simde__m128i vk      = cnProcBuf[k * off + i];
+            simde__m128i vak     = simde_mm_abs_epi8(vk);
+            simde__m128i mask    = simde_mm_cmpeq_epi8(vak, vmin1);
+            simde__m128i out_mag = simde_mm_min_epu8(
+                                       simde_mm_blendv_epi8(vmin1, vmin2, mask),
+                                       maxLLR);
+            simde__m128i other_xor = simde_mm_xor_si128(vsgn_xor, vk);
+            simde__m128i sign_mask = simde_mm_cmpgt_epi8(zeros, other_xor);
+            cnProcBufRes[k * off + i] = simde_mm_sub_epi8(
+                                            simde_mm_xor_si128(out_mag, sign_mask),
+                                            sign_mask);
         }
     }
 }
 
+/* -------------------------------------------------------------------------
+ * BG1 / BG2 two-pass wrappers — dispatch to 256-bit (AVX2/AVX512) or
+ * 128-bit (aarch64/SSE2) based on compile-time target.
+ * ------------------------------------------------------------------------- */
+
 /**
- * \brief Two-pass min-sum CN processing for BG1 — drop-in for nrLDPC_cnProc_BG1.
- *
- * Handles all 9 degree groups (3,4,5,6,7,8,9,10,19) with 2×numBN memory reads
- * per group instead of numBN² for the LUT-exclude-self reference. No per-output
- * LUT tables are needed.
- *
- * \param p_lut        Pointer to decoder LUTs
- * \param cnProcBuf    CN processing buffer
- * \param cnProcBufRes CN processing result buffer
- * \param Z            Lifting size
+ * \brief Two-pass min-sum CN processing for BG1.
+ * Drop-in replacement for nrLDPC_cnProc_BG1; no rate-specific LUT needed.
  */
 static inline void nrLDPC_cnProc_BG1_2pass(t_nrLDPC_lut *p_lut,
                                             int8_t       *cnProcBuf,
@@ -978,33 +1017,32 @@ static inline void nrLDPC_cnProc_BG1_2pass(t_nrLDPC_lut *p_lut,
 {
     const uint8_t  *lut_numCnInCnGroups   = p_lut->numCnInCnGroups;
     const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
-
-    // BG1 degree groups in LUT index order
     static const uint8_t numBN_per_group[9] = {3, 4, 5, 6, 7, 8, 9, 10, 19};
 
     for (int grp = 0; grp < 9; grp++) {
         if (lut_numCnInCnGroups[grp] == 0)
             continue;
-
+#if defined(__AVX2__) || defined(__AVX512BW__)
         uint32_t M   = ((uint32_t)lut_numCnInCnGroups[grp] * Z + 31) >> 5;
         uint32_t off = (lut_numCnInCnGroups_BG1_R13[grp] * NR_LDPC_ZMAX) >> 5;
-
         nrLDPC_cnProc_group_2pass(
             (simde__m256i *)&cnProcBuf   [lut_startAddrCnGroups[grp]],
             (simde__m256i *)&cnProcBufRes[lut_startAddrCnGroups[grp]],
             numBN_per_group[grp], M, off);
+#else
+        uint32_t M   = ((uint32_t)lut_numCnInCnGroups[grp] * Z + 15) >> 4;
+        uint32_t off = (lut_numCnInCnGroups_BG1_R13[grp] * NR_LDPC_ZMAX) >> 4;
+        nrLDPC_cnProc_group_2pass_128(
+            (simde__m128i *)&cnProcBuf   [lut_startAddrCnGroups[grp]],
+            (simde__m128i *)&cnProcBufRes[lut_startAddrCnGroups[grp]],
+            numBN_per_group[grp], M, off);
+#endif
     }
 }
 
 /**
- * \brief Two-pass min-sum CN processing for BG2 — drop-in for nrLDPC_cnProc_BG2.
- *
- * Handles all 6 degree groups (3,4,5,6,8,10).
- *
- * \param p_lut        Pointer to decoder LUTs
- * \param cnProcBuf    CN processing buffer
- * \param cnProcBufRes CN processing result buffer
- * \param Z            Lifting size
+ * \brief Two-pass min-sum CN processing for BG2.
+ * Drop-in replacement for nrLDPC_cnProc_BG2; no rate-specific LUT needed.
  */
 static inline void nrLDPC_cnProc_BG2_2pass(t_nrLDPC_lut *p_lut,
                                             int8_t       *cnProcBuf,
@@ -1013,25 +1051,28 @@ static inline void nrLDPC_cnProc_BG2_2pass(t_nrLDPC_lut *p_lut,
 {
     const uint8_t  *lut_numCnInCnGroups   = p_lut->numCnInCnGroups;
     const uint32_t *lut_startAddrCnGroups = p_lut->startAddrCnGroups;
-
-    // BG2 degree groups in LUT index order
     static const uint8_t numBN_per_group[6] = {3, 4, 5, 6, 8, 10};
 
     for (int grp = 0; grp < 6; grp++) {
         if (lut_numCnInCnGroups[grp] == 0)
             continue;
-
+#if defined(__AVX2__) || defined(__AVX512BW__)
         uint32_t M   = ((uint32_t)lut_numCnInCnGroups[grp] * Z + 31) >> 5;
         uint32_t off = (lut_numCnInCnGroups_BG2_R15[grp] * NR_LDPC_ZMAX) >> 5;
-
         nrLDPC_cnProc_group_2pass(
             (simde__m256i *)&cnProcBuf   [lut_startAddrCnGroups[grp]],
             (simde__m256i *)&cnProcBufRes[lut_startAddrCnGroups[grp]],
             numBN_per_group[grp], M, off);
+#else
+        uint32_t M   = ((uint32_t)lut_numCnInCnGroups[grp] * Z + 15) >> 4;
+        uint32_t off = (lut_numCnInCnGroups_BG2_R15[grp] * NR_LDPC_ZMAX) >> 4;
+        nrLDPC_cnProc_group_2pass_128(
+            (simde__m128i *)&cnProcBuf   [lut_startAddrCnGroups[grp]],
+            (simde__m128i *)&cnProcBufRes[lut_startAddrCnGroups[grp]],
+            numBN_per_group[grp], M, off);
+#endif
     }
 }
-
-#endif
 
 /**
    \brief Performs parity check for BG1 on the CN processing buffer. Stops as soon as error is detected.
