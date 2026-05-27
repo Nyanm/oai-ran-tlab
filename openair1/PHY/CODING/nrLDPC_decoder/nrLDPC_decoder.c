@@ -18,8 +18,7 @@
 #include "nrLDPC_bnProc.h"
 #include "openair1/PHY/CODING/coding_defs.h"
 #include "log.h"
-#define UNROLL_CN_PROC 1
-//#define TWOPASS_CN_PROC   // comment UNROLL_CN_PROC and uncomment to use two-pass min-sum cnProc
+// #define UNROLL_CN_PROC 1  /* rate-specific unrolled path; AVX2/AVX512/128 only; kept for benchmarking */
 #define UNROLL_BN_PROC 1
 #define UNROLL_BN_PROC_PC 1
 #define UNROLL_BN2CN_PROC 1
@@ -238,11 +237,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
     NR_LDPC_PROFILER_DETAIL(start_meas(&p_profiler->cnProc));
     if (BG==1) {
 #ifndef UNROLL_CN_PROC
-  #ifdef TWOPASS_CN_PROC
       nrLDPC_cnProc_BG1_2pass(p_lut, cnProcBuf, cnProcBufRes, Z);
-  #else
-      nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
-  #endif
 #else
         switch (R)
         {
@@ -286,11 +281,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #endif        
     } else {
 #ifndef UNROLL_CN_PROC
-  #ifdef TWOPASS_CN_PROC
         nrLDPC_cnProc_BG2_2pass(p_lut, cnProcBuf, cnProcBufRes, Z);
-  #else
-        nrLDPC_cnProc_BG2(p_lut, cnProcBuf, cnProcBufRes, Z);
-  #endif
 #else
         switch (R) {
             case 15:
@@ -552,11 +543,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #endif
         if (BG==1) {
 #ifndef UNROLL_CN_PROC
-  #ifdef TWOPASS_CN_PROC
            nrLDPC_cnProc_BG1_2pass(p_lut, cnProcBuf, cnProcBufRes, Z);
-  #else
-           nrLDPC_cnProc_BG1(p_lut, cnProcBuf, cnProcBufRes, Z);
-  #endif
 #else
            switch (R) {
             case 13:
@@ -596,11 +583,7 @@ static inline uint32_t nrLDPC_decoder_core(int8_t* p_llr,
 #endif        
         } else {
 #ifndef UNROLL_CN_PROC
-  #ifdef TWOPASS_CN_PROC
            nrLDPC_cnProc_BG2_2pass(p_lut, cnProcBuf, cnProcBufRes, Z);
-  #else
-           nrLDPC_cnProc_BG2(p_lut, cnProcBuf, cnProcBufRes, Z);
-  #endif
 #else
            switch (R) {
             case 15:
