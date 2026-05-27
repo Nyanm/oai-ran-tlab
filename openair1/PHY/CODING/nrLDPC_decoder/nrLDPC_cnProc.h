@@ -896,24 +896,28 @@ static inline void nrLDPC_cnProc_group_2pass(simde__m256i *cnProcBuf,
                                              uint32_t      M,
                                              uint32_t      off)
 {
-    const simde__m256i ones   = simde_mm256_set1_epi8(1);
     const simde__m256i maxLLR = *(const simde__m256i *)maxLLR256_epi8;
+    const simde__m256i zeros  = simde_mm256_setzero_si256();
 
     for (uint32_t i = 0; i < M; i++) {
 
         // ------------------------------------------------------------------
-        // Pass 1: accumulate vmin1, vmin2 (unsigned) and full sign product
+        // Pass 1: accumulate vmin1, vmin2 (unsigned) and sign parity via XOR
+        //
+        // Sign is tracked by XOR-ing raw input bytes; only bit 7 (the sign bit)
+        // matters. XOR with 0 is identity, so zero-valued inputs do NOT corrupt
+        // the sign accumulator — unlike sign_epi8() which zeroes its output when
+        // its second argument is 0.
         // ------------------------------------------------------------------
-        simde__m256i vmin1 = maxLLR;
-        simde__m256i vmin2 = maxLLR;
-        simde__m256i vsgn  = ones;
+        simde__m256i vmin1   = maxLLR;
+        simde__m256i vmin2   = maxLLR;
+        simde__m256i vsgn_xor = zeros;   // XOR of all input bytes; bit 7 = sign parity
 
         for (uint32_t k = 0; k < numBN; k++) {
             simde__m256i vk  = cnProcBuf[k * off + i];
             simde__m256i vak = simde_mm256_abs_epi8(vk);
 
-            // sign_epi8(a, b): a if b>0, -a if b<0, 0 if b==0
-            vsgn = simde_mm256_sign_epi8(vsgn, vk);
+            vsgn_xor = simde_mm256_xor_si256(vsgn_xor, vk);  // XOR accumulates sign parity
 
             // Rolling min1 / min2 update (unsigned comparison)
             simde__m256i new_min1 = simde_mm256_min_epu8(vmin1, vak);
@@ -935,10 +939,22 @@ static inline void nrLDPC_cnProc_group_2pass(simde__m256i *cnProcBuf,
             simde__m256i out_mag = simde_mm256_blendv_epi8(vmin1, vmin2, mask);
             out_mag = simde_mm256_min_epu8(out_mag, maxLLR);
 
-            // Sign: remove self contribution from the accumulated product
-            simde__m256i out_sgn = simde_mm256_sign_epi8(vsgn, vk);
+            // Sign: remove self via XOR (XOR is self-inverse; zero inputs are safe)
+            // other_xor bit 7 = XOR of sign bits of all OTHER inputs
+            simde__m256i other_xor = simde_mm256_xor_si256(vsgn_xor, vk);
 
-            cnProcBufRes[k * off + i] = simde_mm256_sign_epi8(out_mag, out_sgn);
+            // Convert sign parity (bit 7) to ±out_mag using mask trick:
+            //   sign_mask = 0xFF where bit 7 = 1 (odd # of negatives → negative output)
+            //              = 0x00 where bit 7 = 0 (even # of negatives → positive output)
+            //   result = (out_mag XOR sign_mask) - sign_mask
+            //          = out_mag   when sign_mask = 0x00
+            //          = -out_mag  when sign_mask = 0xFF  (2's-complement, exact for [0,127])
+            simde__m256i sign_mask = simde_mm256_cmpgt_epi8(zeros, other_xor);
+            simde__m256i result    = simde_mm256_sub_epi8(
+                                         simde_mm256_xor_si256(out_mag, sign_mask),
+                                         sign_mask);
+
+            cnProcBufRes[k * off + i] = result;
         }
     }
 }
