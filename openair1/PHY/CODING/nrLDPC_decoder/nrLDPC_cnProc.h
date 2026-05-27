@@ -892,15 +892,69 @@ static inline void nrLDPC_cnProc_BG1(t_nrLDPC_lut* p_lut, int8_t* cnProcBuf, int
 // =============================================================================
 
 /* -------------------------------------------------------------------------
- * 256-bit two-pass group kernel — AVX2 and AVX512 (32 CNs per iteration).
- * Not compiled on pure 128-bit targets (aarch64 NEON, SSE2-only x86) where
- * simde__m256i would silently expand to a pair of 128-bit ops.
+ * 512-bit two-pass group kernel — AVX512BW (64 CNs per iteration).
+ * Uses mask-register comparisons and predicated blend for single-cycle
+ * select. Only compiled when __AVX512BW__ is defined.
  * ------------------------------------------------------------------------- */
-#if defined(__AVX2__) || defined(__AVX512BW__)
+#if defined(__AVX512BW__)
+/**
+ * \brief Two-pass min-sum CN processor, 512-bit — one degree group.
+ *
+ * \param cnProcBuf    Start of this group in the CN proc buffer (64-byte aligned).
+ * \param cnProcBufRes Start of this group in the CN proc result buffer.
+ * \param numBN        Number of BNs per CN in this degree group.
+ * \param M            Number of 64-CN chunks: ceil(numCN × Z / 64).
+ * \param off          BN-to-BN stride in units of sizeof(simde__m512i) = 64 bytes.
+ */
+static inline void nrLDPC_cnProc_group_2pass_512(simde__m512i *cnProcBuf,
+                                                  simde__m512i *cnProcBufRes,
+                                                  uint32_t      numBN,
+                                                  uint32_t      M,
+                                                  uint32_t      off)
+{
+    const simde__m512i maxLLR = simde_mm512_set1_epi8(127);
+    const simde__m512i zeros  = simde_mm512_setzero_si512();
+
+    for (uint32_t i = 0; i < M; i++) {
+        simde__m512i vmin1    = maxLLR;
+        simde__m512i vmin2    = maxLLR;
+        simde__m512i vsgn_xor = zeros;
+
+        for (uint32_t k = 0; k < numBN; k++) {
+            simde__m512i vk  = cnProcBuf[k * off + i];
+            simde__m512i vak = simde_mm512_abs_epi8(vk);
+            vsgn_xor = simde_mm512_xor_si512(vsgn_xor, vk);
+            simde__m512i new_min1 = simde_mm512_min_epu8(vmin1, vak);
+            simde__m512i new_min2 = simde_mm512_min_epu8(vmin2,
+                                        simde_mm512_max_epu8(vmin1, vak));
+            vmin1 = new_min1;
+            vmin2 = new_min2;
+        }
+        for (uint32_t k = 0; k < numBN; k++) {
+            simde__m512i   vk        = cnProcBuf[k * off + i];
+            simde__m512i   vak       = simde_mm512_abs_epi8(vk);
+            simde__mmask64 eq_mask   = simde_mm512_cmpeq_epi8_mask(vak, vmin1);
+            simde__m512i   out_mag   = simde_mm512_min_epu8(
+                                           simde_mm512_mask_blend_epi8(eq_mask, vmin1, vmin2),
+                                           maxLLR);
+            simde__m512i   other_xor = simde_mm512_xor_si512(vsgn_xor, vk);
+            simde__mmask64 neg_mask  = simde_mm512_cmpgt_epi8_mask(zeros, other_xor);
+            simde__m512i   neg_out   = simde_mm512_sub_epi8(zeros, out_mag);
+            cnProcBufRes[k * off + i] = simde_mm512_mask_blend_epi8(neg_mask, out_mag, neg_out);
+        }
+    }
+}
+
+/* -------------------------------------------------------------------------
+ * 256-bit two-pass group kernel — AVX2 only (32 CNs per iteration).
+ * Not compiled on AVX512 targets (512-bit kernel above is used instead)
+ * or on pure 128-bit targets (aarch64 NEON, SSE2-only x86).
+ * ------------------------------------------------------------------------- */
+#elif defined(__AVX2__)
 /**
  * \brief Two-pass min-sum CN processor, 256-bit — one degree group.
  *
- * \param cnProcBuf    Start of this group in the CN proc buffer (256-bit aligned).
+ * \param cnProcBuf    Start of this group in the CN proc buffer (32-byte aligned).
  * \param cnProcBufRes Start of this group in the CN proc result buffer.
  * \param numBN        Number of BNs per CN in this degree group.
  * \param M            Number of 32-CN chunks: ceil(numCN × Z / 32).
@@ -945,7 +999,7 @@ static inline void nrLDPC_cnProc_group_2pass(simde__m256i *cnProcBuf,
         }
     }
 }
-#endif /* __AVX2__ || __AVX512BW__ */
+#endif /* __AVX512BW__ / __AVX2__ */
 
 /* -------------------------------------------------------------------------
  * 128-bit two-pass group kernel — aarch64 NEON and SSE2/SSSE3 fallback
@@ -1002,8 +1056,8 @@ static inline void nrLDPC_cnProc_group_2pass_128(simde__m128i *cnProcBuf,
 }
 
 /* -------------------------------------------------------------------------
- * BG1 / BG2 two-pass wrappers — dispatch to 256-bit (AVX2/AVX512) or
- * 128-bit (aarch64/SSE2) based on compile-time target.
+ * BG1 / BG2 two-pass wrappers — dispatch to 512-bit (AVX512BW), 256-bit
+ * (AVX2), or 128-bit (aarch64/SSE2) based on compile-time target.
  * ------------------------------------------------------------------------- */
 
 /**
@@ -1022,7 +1076,14 @@ static inline void nrLDPC_cnProc_BG1_2pass(t_nrLDPC_lut *p_lut,
     for (int grp = 0; grp < 9; grp++) {
         if (lut_numCnInCnGroups[grp] == 0)
             continue;
-#if defined(__AVX2__) || defined(__AVX512BW__)
+#if defined(__AVX512BW__)
+        uint32_t M   = ((uint32_t)lut_numCnInCnGroups[grp] * Z + 63) >> 6;
+        uint32_t off = (lut_numCnInCnGroups_BG1_R13[grp] * NR_LDPC_ZMAX) >> 6;
+        nrLDPC_cnProc_group_2pass_512(
+            (simde__m512i *)&cnProcBuf   [lut_startAddrCnGroups[grp]],
+            (simde__m512i *)&cnProcBufRes[lut_startAddrCnGroups[grp]],
+            numBN_per_group[grp], M, off);
+#elif defined(__AVX2__)
         uint32_t M   = ((uint32_t)lut_numCnInCnGroups[grp] * Z + 31) >> 5;
         uint32_t off = (lut_numCnInCnGroups_BG1_R13[grp] * NR_LDPC_ZMAX) >> 5;
         nrLDPC_cnProc_group_2pass(
@@ -1056,7 +1117,14 @@ static inline void nrLDPC_cnProc_BG2_2pass(t_nrLDPC_lut *p_lut,
     for (int grp = 0; grp < 6; grp++) {
         if (lut_numCnInCnGroups[grp] == 0)
             continue;
-#if defined(__AVX2__) || defined(__AVX512BW__)
+#if defined(__AVX512BW__)
+        uint32_t M   = ((uint32_t)lut_numCnInCnGroups[grp] * Z + 63) >> 6;
+        uint32_t off = (lut_numCnInCnGroups_BG2_R15[grp] * NR_LDPC_ZMAX) >> 6;
+        nrLDPC_cnProc_group_2pass_512(
+            (simde__m512i *)&cnProcBuf   [lut_startAddrCnGroups[grp]],
+            (simde__m512i *)&cnProcBufRes[lut_startAddrCnGroups[grp]],
+            numBN_per_group[grp], M, off);
+#elif defined(__AVX2__)
         uint32_t M   = ((uint32_t)lut_numCnInCnGroups[grp] * Z + 31) >> 5;
         uint32_t off = (lut_numCnInCnGroups_BG2_R15[grp] * NR_LDPC_ZMAX) >> 5;
         nrLDPC_cnProc_group_2pass(
