@@ -626,6 +626,96 @@ sequenceDiagram
   Note over ue,tdu: UE active on target DU
 ```
 
+### Paging and Network Triggered Service Request (CM-IDLE to CM-CONNECTED)
+
+The following flow documents the current OAI stack path for paging-triggered
+service resumption in SA: context release to idle, NGAP/F1AP/PCCH paging, then
+RRC setup with NAS Service Request.
+
+In summary:
+- UE transitions to `RRC_IDLE` and AMF transitions UE to `CM-IDLE`
+- CN-triggered paging is performed with `5G-S-TMSI` (NGAP Paging -> RRC Paging)
+- UE resumes via NAS Service Request and `RRCSetup`/`RRCSetupComplete`
+
+```mermaid
+sequenceDiagram
+  participant dn as DN
+  participant cn as 5GC
+  participant cu as gNB-CU
+  participant du as gNB-DU
+  participant ue as UE
+
+    cu->>cn: NGAP UE Context Release Request
+    Note over cu: example trigger: telnet `rrc ctx_rel_req`
+    cu->>cu: rrc_gNB_trigger_ue_context_release_req()
+    cu->>cu: rrc_gNB_send_NGAP_UE_CONTEXT_RELEASE_REQ()
+    cn->>cu: NGAP UE Context Release Command
+    cu->>cu: rrc_gNB_process_NGAP_UE_CONTEXT_RELEASE_COMMAND()
+    cu->>cu: rrc_gNB_generate_RRCRelease()
+    cu->>du: F1AP DL RRC Message Transfer (RRCRelease)
+    du->>ue: RRCRelease
+    ue->>ue: handle_RRCRelease()
+    ue->>ue: nr_rrc_going_to_IDLE()
+    Note over ue: RRC_IDLE, NAS remains REGISTERED and can request service
+    du->>cu: F1AP UE Context Release Complete
+    cu->>cn: NGAP UE Context Release Complete
+
+    Note over dn,ue: Trigger Paging
+    dn->>cn: DL user data
+    Note over cn: AMF paging decision [23.502 §4.2.3.3]
+    cn->>cu: NGAP Paging (5G-S-TMSI)
+    cu->>cu: ngap_gNB_handle_paging()
+    cu->>cu: decode_ng_paging()
+    cu->>cu: rrc_gNB_process_PAGING_IND()
+    cu->>du: F1AP Paging
+    du->>du: DU_handle_Paging()
+    du->>du: f1_paging()
+    du->>du: nr_mac_pcch_enqueue()
+    du->>ue: RRC Paging (ng-5G-S-TMSI)
+    ue->>ue: nr_rrc_ue_decode_pcch()
+    ue->>ue: NAS_PAGING_IND
+    ue->>ue: generateServiceRequest()
+    ue->>ue: send_nas_initial_ul_transfer_req()
+    Note over ue: paging match triggers Service Request [24.501 §5.6.2]
+
+    Note over ue,cn: Resume
+    ue->>du: RRCSetupRequest
+    du->>cu: F1AP Initial UL RRC Message Transfer (RRCSetupRequest)
+    ue->>ue: nr_rrc_ue_prepare_RRCSetupRequest()
+    cu->>cu: rrc_handle_RRCSetupRequest()
+    cu->>du: F1AP DL RRC Message Transfer (RRCSetup)
+    du->>ue: RRCSetup
+    ue->>ue: do_RRCSetupComplete()
+    Note over ue: uses dedicatedNAS when no SRB exists
+    ue->>du: RRCSetupComplete + NAS SERVICE REQUEST
+    du->>cu: F1AP UL RRC Message Transfer (RRCSetupComplete + NAS)
+    cu->>cu: rrc_handle_RRCSetupComplete()
+    cu->>cn: NGAP Initial UE Message
+    cn->>cu: NGAP Initial Context Setup Request
+    cu->>cu: rrc_gNB_process_NGAP_INITIAL_CONTEXT_SETUP_REQ()
+    cu->>du: F1AP DL RRC Message Transfer (RRCReconfiguration)
+    du->>ue: RRCReconfiguration
+    ue->>du: RRCReconfigurationComplete
+    du->>cu: F1AP UL RRC Message Transfer (RRCReconfigurationComplete)
+    cu->>cu: handle_rrcReconfigurationComplete()
+    cu->>cn: NGAP Initial Context Setup Response
+    cn->>ue: DL user data
+```
+
+In OAI RFsim lab runs, a practical trigger sequence is:
+1. `rrc ctx_rel_req <ue-id>` at gNB telnet
+2. wait until AMF reports UE in IDLE state
+3. send host-side traffic to UE IP
+
+Relevant specs:
+- TS 23.502 §4.2.3.3: Network Triggered Service Request
+- TS 24.501 §5.6.2.2: Paging for 5G services
+- TS 24.501 §5.6.1: Service Request procedure
+- TS 38.331 §5.3.2: Paging
+- TS 38.331 §5.3.11: UE actions upon going to RRC_IDLE
+- TS 38.413 §8.5: Paging procedures (NGAP Paging)
+- TS 38.473 §8.7: Paging procedures (F1AP CU-to-DU paging)
+
 ## Structures
 
 ### DUs and Cells
