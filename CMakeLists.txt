@@ -59,8 +59,16 @@ include(FindPkgConfig)
 # Check if asn1c is installed, and check if it supports all options we need
 # a user can provide ASN1C_EXEC to override an asn1c to use (e.g., parallel
 # installation)
+find_program(ASN1C_WRAPPER_EXEC oai_asn1c_wrapper.sh
+  HINTS ${OPENAIR_DIR}/cmake_targets
+  NO_DEFAULT_PATH)
 find_program(ASN1C_EXEC_PATH asn1c HINTS /opt/asn1c/bin)
-set(ASN1C_EXEC ${ASN1C_EXEC_PATH} CACHE FILEPATH "path to asn1c executable")
+if(ASN1C_WRAPPER_EXEC)
+  set(ASN1C_EXEC_DEFAULT ${ASN1C_WRAPPER_EXEC})
+else()
+  set(ASN1C_EXEC_DEFAULT ${ASN1C_EXEC_PATH})
+endif()
+set(ASN1C_EXEC ${ASN1C_EXEC_DEFAULT} CACHE FILEPATH "path to asn1c executable")
 if(NOT ASN1C_EXEC)
     message(FATAL_ERROR "No asn1c found!
 You might want to re-run ./build_oai -I
