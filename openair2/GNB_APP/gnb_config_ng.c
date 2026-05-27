@@ -131,10 +131,12 @@ int RCconfig_NR_NG(MessageDef *msg_p, uint32_t i)
               char *address = strtok_r(cidr, "/", &save);
               strcpy(NGAP_REGISTER_GNB_REQ(msg_p).gnb_ip_address.ipv4_address, address);
               LOG_I(GNB_APP, "Parsed IPv4 address for NG AMF: %s\n", address);
+              NGAP_REGISTER_GNB_REQ(msg_p).gnb_ip_address.ipv4 = 1;
+            } else {
+              LOG_I(GNB_APP, "No IPv4 address for NG AMF provided in config file, using default\n");
+              NGAP_REGISTER_GNB_REQ(msg_p).gnb_ip_address.ipv4 = 0;
             }
-
             NGAP_REGISTER_GNB_REQ(msg_p).gnb_ip_address.ipv6 = 0;
-            NGAP_REGISTER_GNB_REQ(msg_p).gnb_ip_address.ipv4 = 1;
 
             break;
           }
