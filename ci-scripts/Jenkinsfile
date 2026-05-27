@@ -41,11 +41,16 @@ pipeline {
     timestamps()
     ansiColor('xterm')
     lock(extra: lockResources)
+    skipDefaultCheckout()
   }
 
   stages {
     stage("Build Init") {
       steps {
+        checkout(
+          scmGit(branches: [[name: "${branch}"]],
+                 userRemoteConfigs: [[url: "${repository}"]])
+        )
         script {
           echo '\u2705 \u001B[94mBuild Init\u001B[0m'
           JOB_TIMESTAMP = sh(returnStdout: true, script: 'date --utc --rfc-3339=seconds | sed -e "s#+00:00##"').trim()
