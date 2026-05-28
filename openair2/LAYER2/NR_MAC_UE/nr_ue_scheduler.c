@@ -3498,7 +3498,7 @@ bool nr_ue_sl_pssch_scheduler(NR_UE_MAC_INST_t *mac,
   */
   /* ---------------- end Jin TDMA ---------------- */
   /* ---------------- Jin TDMA: round-robin, N-UE generalised ---------------- */
-  /*
+ 
   uint16_t chosen_uid = 0;
   const int num_peers = CUR_SL_UE_CONNECTIONS; // peers per UE = total_UEs - 1 
 
@@ -3517,9 +3517,10 @@ bool nr_ue_sl_pssch_scheduler(NR_UE_MAC_INST_t *mac,
 
   LOG_D(NR_MAC, "[SL-TDMA-20] me=%u frame=%u slot=%u chosen_uid=%u num_peers=%d\n",
         mac->src_id, frame, slot, chosen_uid, num_peers);
-  */
+  
   /* ---------------- end Jin TDMA ---------------- */
   /* ---------------- Jin TDMA Hardcoded : parameters push from SLC---------------- */
+   /*
     uint16_t chosen_uid = 0;
     const int num_peers = CUR_SL_UE_CONNECTIONS;
 
@@ -3548,6 +3549,7 @@ bool nr_ue_sl_pssch_scheduler(NR_UE_MAC_INST_t *mac,
             return false;
         chosen_uid = 0;
     }
+    */
 /* ---------------- end Jin TDMA push from SLC---------------- */
 
 
