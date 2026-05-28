@@ -792,8 +792,9 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
   memset(dl_ch_estimates_ext, 0, sizeof(dl_ch_estimates_ext));
 
   // Use ML-based LLR for 2-layer MIMO with QPSK/16QAM/64QAM (nl==2, qamModOrder<=6).
+  // Controlled by ue->do_ml (set via -E flag in dlsim, or ue->do_ml in the UE struct).
   // When false (default), MMSE equalization is used for all configurations.
-  bool do_ml = false;
+  bool do_ml = ue->do_ml;
 
   // Reinterpret flat dl_ch_estimates_ext as [nl][nbRx][rx_size_symbol]
   c16_t(*chFext)[nbRx][rx_size_symbol] = (void *)dl_ch_estimates_ext;

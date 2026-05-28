@@ -570,7 +570,18 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
   allocCast3D(dl_ch_magb, c16_t, toFree4, NR_SYMBOLS_PER_SLOT, dlsch->cw_info.Nl, rx_size_symbol, false);
   fourDimArray_t *toFree5 = NULL;
   allocCast3D(dl_ch_magr, c16_t, toFree5, NR_SYMBOLS_PER_SLOT, dlsch->cw_info.Nl, rx_size_symbol, false);
-  allocCast3D(rho_dl, c16_t, ue->rho_dl_buf, NR_SYMBOLS_PER_SLOT, dlsch->cw_info.Nl * dlsch->cw_info.Nl, rx_size_symbol, true);
+  const bool need_rho = ue->do_ml && dlsch->cw_info.Nl == 2 && dlsch->cw_info.qamModOrder <= 6;
+  c16_t(*rho_dl)[dlsch->cw_info.Nl * dlsch->cw_info.Nl][rx_size_symbol] = NULL;
+  if (need_rho) {
+    allocCast3D(rho_dl_buf,
+                c16_t,
+                ue->rho_dl_buf,
+                NR_SYMBOLS_PER_SLOT,
+                dlsch->cw_info.Nl * dlsch->cw_info.Nl,
+                rx_size_symbol,
+                true);
+    rho_dl = rho_dl_buf;
+  }
 
   for (int m = dlschCfg->start_symbol; m < (dlschCfg->number_symbols + dlschCfg->start_symbol); m++) {
     bool first_symbol_flag = false;

@@ -412,8 +412,13 @@ typedef struct PHY_VARS_NR_UE_s {
   /// Phase precompensation flag
   bool no_phase_pre_comp;
 
+  /// Enable ML-based LLR computation for 2-layer MIMO (QPSK/16QAM/64QAM).
+  /// When false (default), MMSE equalization is used for all configurations.
+  bool do_ml;
+
   /// Persistent buffer for rho_dl [NR_SYMBOLS_PER_SLOT][Nl*Nl][rx_size_symbol].
-  /// Allocated once on first ML-path use via allocCast3D; freed at UE teardown.
+  /// Allocated once on first ML-path use (do_ml=true, Nl=2, qamModOrder<=6) via allocCast3D;
+  /// reused across slots and freed at UE teardown.
   fourDimArray_t *rho_dl_buf;
 
   void* scopeData;
