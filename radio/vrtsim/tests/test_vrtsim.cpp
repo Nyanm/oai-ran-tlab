@@ -8,6 +8,7 @@
 #include <thread>
 #include <vector>
 #include <string>
+#include <unistd.h>
 
 configmodule_interface_t *uniqCfg = NULL;
 
@@ -44,16 +45,25 @@ class VRTSIMTest : public ::testing::TestWithParam<VRTSIMTestCase> {
   openair0_device_t client_device = {0};
   openair0_config_t server_config = {0};
   openair0_config_t client_config = {0};
+  std::string shm_name;
+  std::string descriptor_path;
 
   void SetUp() override
   {
     const auto &param = GetParam();
+
+    shm_name = "shm_vrtsim_" + std::to_string(getpid()) + "_" + std::to_string(param.server_tx) + "_" + param.ue_antennas;
+    descriptor_path = "/tmp/vrtsim_connection_" + std::to_string(getpid()) + "_" + std::to_string(param.server_tx) + "_" + param.ue_antennas;
 
     // Setup server
     std::vector<const char *> server_argv = {"--vrtsim.role",
                                              "server",
                                              "--vrtsim.disable-timing-thread",
                                              "1",
+                                             "--vrtsim.shm_channel_name",
+                                             shm_name.c_str(),
+                                             "--vrtsim.connection_descriptor",
+                                             descriptor_path.c_str(),
                                              "--vrtsim.ue_config.[0].antennas",
                                              param.ue_antennas.c_str()};
     cfg1 = load_configmodule(server_argv.size(), (char **)server_argv.data(), CONFIG_ENABLECMDLINEONLY);
@@ -65,7 +75,12 @@ class VRTSIMTest : public ::testing::TestWithParam<VRTSIMTestCase> {
     ASSERT_EQ(server_device.trx_start_func(&server_device), 0);
 
     // Setup client
-    std::vector<const char *> client_argv = {"--vrtsim.role", "client"};
+    std::vector<const char *> client_argv = {"--vrtsim.role",
+                                             "client",
+                                             "--vrtsim.shm_channel_name",
+                                             shm_name.c_str(),
+                                             "--vrtsim.connection_descriptor",
+                                             descriptor_path.c_str()};
     cfg2 = load_configmodule(client_argv.size(), (char **)client_argv.data(), CONFIG_ENABLECMDLINEONLY);
     uniqCfg = cfg2;
     client_config.tx_num_channels = param.client_tx;
@@ -85,6 +100,7 @@ class VRTSIMTest : public ::testing::TestWithParam<VRTSIMTestCase> {
       end_configmodule(cfg1);
     if (cfg2)
       end_configmodule(cfg2);
+    uniqCfg = nullptr;
   }
 };
 

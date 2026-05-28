@@ -11,6 +11,7 @@
 #include <mutex>
 #include <string>
 #include <algorithm>
+#include <unistd.h>
 
 configmodule_interface_t *uniqCfg = NULL;
 
@@ -162,7 +163,7 @@ class VRTSTapsTest : public ::testing::TestWithParam<TapsAntParams> {
   void SetUp() override
   {
     auto p = GetParam();
-    std::string tag = std::to_string(p.gnb_tx) + "_" + p.ue_ant_str;
+    std::string tag = std::to_string(getpid()) + "_" + std::to_string(p.gnb_tx) + "_" + p.ue_ant_str;
     server_taps_url = "ipc:///tmp/server_taps_" + tag + ".ipc";
     client_taps_url = "ipc:///tmp/client_taps_" + tag + ".ipc";
     descriptor_path = "/tmp/vrtsim_connection_" + tag;
@@ -217,6 +218,7 @@ class VRTSTapsTest : public ::testing::TestWithParam<TapsAntParams> {
       end_configmodule(cfg1);
     if (cfg2)
       end_configmodule(cfg2);
+    uniqCfg = nullptr;
   }
 };
 

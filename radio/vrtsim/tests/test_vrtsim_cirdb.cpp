@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <tuple>
+#include <unistd.h>
 
 #include "common_lib.h"
 #include "common/config/config_userapi.h"
@@ -102,13 +103,14 @@ class VRTSTapsCIRDBTest : public ::testing::TestWithParam<CIRDBAntParams> {
   openair0_config_t client_config = {0};
   fs::path tmp_dir;
   std::string shm_name;
+  std::string descriptor_path;
   configmodule_interface_t *cfg1 = nullptr;
   configmodule_interface_t *cfg2 = nullptr;
 
   void SetUp() override
   {
     const CIRDBAntParams &p = GetParam();
-    tmp_dir = fs::temp_directory_path() / ("vrtsim_cirdb_test_" + std::to_string(p.gnb_tx) + "_" + p.ue_ant_str);
+    tmp_dir = fs::temp_directory_path() / ("vrtsim_cirdb_test_" + std::to_string(getpid()) + "_" + std::to_string(p.gnb_tx) + "_" + p.ue_ant_str);
     CIRDBProducer producer(tmp_dir);
     // Add entries for both directions to both model IDs to ensure test robustness against unintended configuration state leakage
     producer.add_entry(0, p.gnb_tx, p.ue_rx, 8, 1, 30.72e6, 0.5, 10.0, 1.5);
@@ -116,7 +118,8 @@ class VRTSTapsCIRDBTest : public ::testing::TestWithParam<CIRDBAntParams> {
     producer.add_entry(0, p.ue_tx, p.gnb_rx, 8, 1, 30.72e6, 0.5, 10.0, 1.5);
     producer.add_entry(1, p.ue_tx, p.gnb_rx, 8, 1, 30.72e6, 0.5, 10.0, 1.5);
     producer.write_files();
-    shm_name = "shm_cirdb_" + std::to_string(p.gnb_tx) + "_" + p.ue_ant_str;
+    shm_name = "shm_cirdb_" + std::to_string(getpid()) + "_" + std::to_string(p.gnb_tx) + "_" + p.ue_ant_str;
+    descriptor_path = "/tmp/vrtsim_connection_cirdb_" + std::to_string(getpid()) + "_" + std::to_string(p.gnb_tx) + "_" + p.ue_ant_str;
   }
 
   void TearDown() override
@@ -158,7 +161,9 @@ TEST_P(VRTSTapsCIRDBTest, CIRDBDelayDL)
                             "--vrtsim.cirdb_model_id",
                             "0",
                             "--vrtsim.ue_config.[0].antennas",
-                            p.ue_ant_str.c_str()};
+                            p.ue_ant_str.c_str(),
+                            "--vrtsim.connection_descriptor",
+                            descriptor_path.c_str()};
     cfg1 = load_configmodule(sizeof(s_argv) / sizeof(char *), (char **)s_argv, CONFIG_ENABLECMDLINEONLY);
     uniqCfg = cfg1;
     server_config.tx_num_channels = p.gnb_tx;
@@ -178,7 +183,9 @@ TEST_P(VRTSTapsCIRDBTest, CIRDBDelayDL)
                             "--vrtsim.cirdb",
                             "0",
                             "--vrtsim.ue_config.[0].antennas",
-                            p.ue_ant_str.c_str()};
+                            p.ue_ant_str.c_str(),
+                            "--vrtsim.connection_descriptor",
+                            descriptor_path.c_str()};
     cfg2 = load_configmodule(sizeof(c_argv) / sizeof(char *), (char **)c_argv, CONFIG_ENABLECMDLINEONLY);
     uniqCfg = cfg2;
     client_config.tx_num_channels = p.ue_tx;
@@ -232,7 +239,9 @@ TEST_P(VRTSTapsCIRDBTest, CIRDBDelayUL)
                             "--vrtsim.cirdb",
                             "0",
                             "--vrtsim.ue_config.[0].antennas",
-                            p.ue_ant_str.c_str()};
+                            p.ue_ant_str.c_str(),
+                            "--vrtsim.connection_descriptor",
+                            descriptor_path.c_str()};
     cfg1 = load_configmodule(sizeof(s_argv) / sizeof(char *), (char **)s_argv, CONFIG_ENABLECMDLINEONLY);
     uniqCfg = cfg1;
     server_config.tx_num_channels = p.gnb_tx;
@@ -256,7 +265,9 @@ TEST_P(VRTSTapsCIRDBTest, CIRDBDelayUL)
                             "--vrtsim.cirdb_model_id",
                             "1",
                             "--vrtsim.ue_config.[0].antennas",
-                            p.ue_ant_str.c_str()};
+                            p.ue_ant_str.c_str(),
+                            "--vrtsim.connection_descriptor",
+                            descriptor_path.c_str()};
     cfg2 = load_configmodule(sizeof(c_argv) / sizeof(char *), (char **)c_argv, CONFIG_ENABLECMDLINEONLY);
     uniqCfg = cfg2;
     client_config.tx_num_channels = p.ue_tx;
