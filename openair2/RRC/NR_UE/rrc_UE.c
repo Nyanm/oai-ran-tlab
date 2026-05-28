@@ -3510,12 +3510,12 @@ void nr_rrc_going_to_IDLE(NR_UE_RRC_INST_t *rrc,
                           NR_RRCRelease_t *RRCRelease)
 {
   NR_UE_Timers_Constants_t *tac = &rrc->timers_and_constants;
+  struct NR_RRCRelease_IEs *rrcReleaseIEs = RRCRelease ? RRCRelease->criticalExtensions.choice.rrcRelease : NULL;
 
   // if going to RRC_IDLE was triggered by reception
   // of the RRCRelease message including a waitTime
   NR_RejectWaitTime_t *waitTime = NULL;
   if (RRCRelease) {
-    struct NR_RRCRelease_IEs *rrcReleaseIEs = RRCRelease->criticalExtensions.choice.rrcRelease;
     if(rrcReleaseIEs) {
       waitTime = rrcReleaseIEs->nonCriticalExtension ?
                  rrcReleaseIEs->nonCriticalExtension->waitTime : NULL;
@@ -3590,12 +3590,17 @@ void nr_rrc_going_to_IDLE(NR_UE_RRC_INST_t *rrc,
     nr_rrc_release_rlc_entity(rrc, i);
   }
 
+  /* TS 38.331 §5.3.11 enters RRC_IDLE with cell selection per TS 38.304 §5.2.6.
+   * With a normal no-redirection RRCRelease, preserve the already-acquired camped-cell context for paging. */
+  const bool preserve_camped_context = rrc->nrRrcState != RRC_STATE_DETACH_NR && release_cause == OTHER && RRCRelease
+                                       && (!rrcReleaseIEs || !rrcReleaseIEs->redirectedCarrierInfo);
   for (int i = 0; i < NB_CNX_UE; i++) {
     rrcPerNB_t *nb = &rrc->perNB[i];
     NR_UE_RRC_SI_INFO *SI_info = &nb->SInfo;
     init_SI_timers(SI_info);
     SI_info->sib_pending = false;
-    SI_info->sib1_validity = false;
+    if (!preserve_camped_context)
+      SI_info->sib1_validity = false;
     SI_info->sib2_validity = false;
     SI_info->sib3_validity = false;
     SI_info->sib4_validity = false;
@@ -3631,7 +3636,11 @@ void nr_rrc_going_to_IDLE(NR_UE_RRC_INST_t *rrc,
   }
 
   // reset MAC
-  NR_UE_MAC_reset_cause_t cause = (rrc->nrRrcState == RRC_STATE_DETACH_NR) ? DETACH : GO_TO_IDLE;
+  NR_UE_MAC_reset_cause_t cause = GO_TO_IDLE;
+  if (rrc->nrRrcState == RRC_STATE_DETACH_NR)
+    cause = DETACH;
+  else if (preserve_camped_context)
+    cause = GO_TO_IDLE_KEEP_CAMPED;
   nr_mac_rrc_message_t rrc_msg = {0};
   rrc_msg.payload_type = NR_MAC_RRC_CONFIG_RESET;
   rrc_msg.payload.config_reset.cause = cause;

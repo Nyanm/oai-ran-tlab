@@ -1864,12 +1864,28 @@ void nr_rrc_mac_config_req_reset(module_id_t module_id, NR_UE_MAC_reset_cause_t 
   fapi_nr_synch_request_t sync_req = {.target_Nid_cell = -1, .ssb_bw_scan = true};
   switch (cause) {
     case GO_TO_IDLE:
+      /* TS 38.331 §5.3.11: enter RRC_IDLE and perform cell selection per TS 38.304. */
       reset_ra(mac, true);
       nr_ue_init_mac(mac);
       release_mac_configuration(mac, cause);
       nr_ue_mac_default_configs(mac);
       // new sync but no target cell id -> -1
       nr_ue_send_synch_request(mac, module_id, 0, &sync_req);
+      break;
+    case GO_TO_IDLE_KEEP_CAMPED:
+      /* Normal no-redirection RRCRelease: keep the selected camped cell context for TS 38.304 §5.2.5/§7.1
+       * paging, while releasing connected-mode MAC state. RA stays idle until paging/NAS triggers access. */
+      // Stop any in-progress RA and discard PRACH resources
+      reset_ra(mac, true);
+      // Apply TS 38.321 §5.12 MAC reset (no PHY sync reinit)
+      reset_mac_inst(mac);
+      // Release dedicated MAC config (keep SIB1/common BWP0/paging PDCCH for the camped cell)
+      release_mac_configuration(mac, cause);
+      // Restore default MAC Cell Group timers/config (after the reset)
+      nr_ue_mac_default_configs(mac);
+      mac->ra.ra_state = nrRA_UE_IDLE;
+      mac->ra.RA_active = false;
+      mac->state = UE_IDLE;
       break;
     case DETACH:
       LOG_A(NR_MAC, "Received detach indication\n");
