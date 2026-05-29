@@ -8,7 +8,7 @@
   <testCase>
     <class>Pull_Local_Registry</class>
     <desc>Pull Images from Local Registry</desc>
-    <node>gracehopper1-oai</node>
+    <node>dgx3-oai</node>
     <images>oai-gnb-aerial</images>
     <tag_prefix>arm_</tag_prefix>
   </testCase>
@@ -18,8 +18,8 @@
     <always_exec>true</always_exec>
     <desc>Configure 100 MHz bandwidth on WNC RU</desc>
     <node>gracehopper1-oai</node>
-    <script>scripts/set-wnc-bandwidth.sh</script>
-    <args>100</args>
+    <script>scripts/set-wnc-params.sh</script>
+    <args>100 4c:bb:47:7e:58:aa</args>
   </testCase>
 
   <testCase>
@@ -32,22 +32,22 @@
   <testCase>
     <class>Create_Workspace</class>
     <desc>Create new Workspace</desc>
-    <node>gracehopper1-oai</node>
+    <node>dgx3-oai</node>
   </testCase>
 
   <testCase>
     <class>Deploy_Object</class>
     <desc>Deploy PNF/Nvidia CUBB in a container</desc>
-    <node>gracehopper1-oai</node>
-    <yaml_path>ci-scripts/yaml_files/sa_gnb_aerial_ul</yaml_path>
+    <node>dgx3-oai</node>
+    <yaml_path>ci-scripts/yaml_files/sa_gnb_aerial_dgx_ul</yaml_path>
     <services>nv-cubb</services>
   </testCase>
 
   <testCase>
     <class>Deploy_Object</class>
     <desc>Deploy VNF in a container</desc>
-    <node>gracehopper1-oai</node>
-    <yaml_path>ci-scripts/yaml_files/sa_gnb_aerial_ul</yaml_path>
+    <node>dgx3-oai</node>
+    <yaml_path>ci-scripts/yaml_files/sa_gnb_aerial_dgx_ul</yaml_path>
     <services>oai-gnb-aerial</services>
   </testCase>
 
@@ -108,8 +108,8 @@
     <class>Undeploy_Object</class>
     <always_exec>true</always_exec>
     <desc>Undeploy gNB</desc>
-    <node>gracehopper1-oai</node>
-    <yaml_path>ci-scripts/yaml_files/sa_gnb_aerial_ul</yaml_path>
+    <node>dgx3-oai</node>
+    <yaml_path>ci-scripts/yaml_files/sa_gnb_aerial_dgx_ul</yaml_path>
     <analysis>
       <services>oai-gnb-aerial=EndsWithBye</services>
     </analysis>
@@ -119,7 +119,7 @@
     <class>Clean_Test_Server_Images</class>
     <always_exec>true</always_exec>
     <desc>Clean Test Images on Test Server</desc>
-    <node>gracehopper1-oai</node>
+    <node>dgx3-oai</node>
     <images>oai-gnb-aerial</images>
   </testCase>
 

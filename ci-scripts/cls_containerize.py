@@ -297,7 +297,7 @@ class Containerize():
 			elif image != 'ran-build':
 				cmd.run(f'sed -i -e "s#ran-build:latest#ran-build:{imageTag}#" docker/Dockerfile.{pattern}{dockerfileprefix}')
 			if image == 'oai-gnb-aerial':
-				cmd.run('cp -f /opt/nvidia-ipc/nvipc_src.2026.01.07.tar.gz .')
+				cmd.run('cp -f /opt/nvidia-ipc/nvipc_src.2026.03.04.tar.gz .')
 			logfile = f'{lSourcePath}/cmake_targets/log/{name}.docker.log'
 			option = option + f" --build-arg UBUNTU_IMAGE={DEFAULT_REGISTRY}/{ubuntuImage}"
 			ret = cmd.run(f'docker build --target {image} --tag {name}:{imageTag} --file docker/Dockerfile.{pattern}{dockerfileprefix} {option} . > {logfile} 2>&1', timeout=1200)
