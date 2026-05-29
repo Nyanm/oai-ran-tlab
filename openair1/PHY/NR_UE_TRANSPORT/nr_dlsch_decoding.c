@@ -56,7 +56,7 @@ void nr_dlsch_decoding(PHY_VARS_NR_UE *phy_vars_ue,
     .slot = proc->nr_slot_rx,
     .nb_TBs = 1,
     .threadPool = &get_nrUE_params()->Tpool,
-    .TBs = &TB_parameters
+    .TBs = &TB_parameters,
   };
 
   uint8_t dmrs_Type = dlsch_config->dmrsConfigType;
