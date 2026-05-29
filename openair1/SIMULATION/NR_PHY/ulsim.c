@@ -1057,7 +1057,6 @@ int main(int argc, char *argv[])
   for (i = 1; i < TBS/8; i++) {
     ulsch_input_buffer[i] = (uint8_t)rand();
   }
-
   uint8_t ptrs_time_density = get_L_ptrs(ptrs_mcs1, ptrs_mcs2, ptrs_mcs3, Imcs, mcs_table);
   uint8_t ptrs_freq_density = get_K_ptrs(n_rb0, n_rb1, nb_rb);
 
