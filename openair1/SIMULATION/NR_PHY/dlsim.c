@@ -1056,11 +1056,9 @@ int main(int argc, char **argv)
     reset_meas(&gNB->dlsch_encoding_stats);
     reset_meas(&gNB->dci_generation_stats);
     reset_meas(&gNB->tinput);
-    reset_meas(&gNB->tinput_memcpy);
     reset_meas(&gNB->tprep);
     reset_meas(&gNB->tparity);
     reset_meas(&gNB->toutput);
-    reset_meas(&gNB->tconcat);
     reset_meas(&gNB->phase_comp_stats);
 
     uint32_t errors_scrambling[16] = {0};
@@ -1083,7 +1081,7 @@ int main(int argc, char **argv)
     nfapi_nr_dl_tti_request_pdu_t  *dl_tti_pdsch_pdu = &dl_req->dl_tti_pdu_list[1];
     nfapi_nr_dl_tti_pdsch_pdu_rel15_t *pdsch_pdu_rel15 = &dl_tti_pdsch_pdu->pdsch_pdu.pdsch_pdu_rel15;
 
-    for (trial = 0; trial < n_trials /*&& !stop)*/; trial++) {
+    for (trial = 0; trial < n_trials && !stop; trial++) {
 
       errors_bit = 0;
       //multipath channel
@@ -1103,7 +1101,7 @@ int main(int argc, char **argv)
       UE_harq_process->DLround = round;
       UE_harq_process->first_rx = 1;
 
-      while (round < num_rounds && !UE_harq_process->decodeResult /*&& !stop*/) {
+      while (round < num_rounds && !UE_harq_process->decodeResult && !stop) {
         reset_sched_response(Sched_INFO, frame, slot, 0, 0);
         clear_nr_nfapi_information(RC.nrmac[0], 0, frame, slot);
         UE_info->UE_sched_ctrl.harq_processes[harq_pid].ndi = !(trial&1);
@@ -1433,14 +1431,11 @@ int main(int argc, char **argv)
       fprintf(csv_file,"%.2f,%.4f,%.2f,%u\n", roundStats, effRate, effRate / (8 * pdsch_pdu_rel15->TBSize[0]) * 100, 8 * pdsch_pdu_rel15->TBSize[0]);
     }
     if (print_perf==1) {
-      printf("\ngNB TX function statistics (per %d us slot, NPRB %d, mcs %d, C %d, Z %d, F %d, K %d, block %d)\n",
+      printf("\ngNB TX function statistics (per %d us slot, NPRB %d, mcs %d, C %d, block %d)\n",
              1000 >> *scc->ssbSubcarrierSpacing,
              g_rbSize,
              g_mcsIndex,
              UE->dl_harq_processes[0][slot].C,
-             UE->dl_harq_processes[0][slot].Z,
-             UE->dl_harq_processes[0][slot].F,
-             UE->dl_harq_processes[0][slot].K,
              8 * pdsch_pdu_rel15->TBSize[0]);
       printDistribution(&gNB->phy_proc_tx,table_tx,"PHY proc tx");
       printStatIndent2(&gNB->dci_generation_stats, "DCI encoding time");
