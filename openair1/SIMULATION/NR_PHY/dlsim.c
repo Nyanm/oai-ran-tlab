@@ -1083,7 +1083,7 @@ int main(int argc, char **argv)
     nfapi_nr_dl_tti_request_pdu_t  *dl_tti_pdsch_pdu = &dl_req->dl_tti_pdu_list[1];
     nfapi_nr_dl_tti_pdsch_pdu_rel15_t *pdsch_pdu_rel15 = &dl_tti_pdsch_pdu->pdsch_pdu.pdsch_pdu_rel15;
 
-    for (trial = 0; trial < n_trials /*&& !stop)*/; trial++) {
+    for (trial = 0; trial < n_trials && !stop; trial++) {
 
       errors_bit = 0;
       //multipath channel
@@ -1103,7 +1103,7 @@ int main(int argc, char **argv)
       UE_harq_process->DLround = round;
       UE_harq_process->first_rx = 1;
 
-      while (round < num_rounds && !UE_harq_process->decodeResult /*&& !stop*/) {
+      while (round < num_rounds && !UE_harq_process->decodeResult && !stop) {
         reset_sched_response(Sched_INFO, frame, slot, 0, 0);
         clear_nr_nfapi_information(RC.nrmac[0], 0, frame, slot);
         UE_info->UE_sched_ctrl.harq_processes[harq_pid].ndi = !(trial&1);
