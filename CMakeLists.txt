@@ -1744,7 +1744,7 @@ include_directories("${NFAPI_DIR}/pnf_sim/inc")
 
 add_library(oai_iqplayer MODULE ${OPENAIR_DIR}/radio/iqplayer/iqplayer_lib.c)
 target_link_libraries(oai_iqplayer PRIVATE log_headers)
-
+ 
 #################################
 # add executables for operation
 #################################
