@@ -107,8 +107,6 @@ one_measurement_t test_ldpc(short max_iterations,
   sigma = 1.0 / sqrt(2 * SNR);
   cpu_meas_enabled = 1;
   uint8_t *test_input[n_segments * NR_MAX_NB_LAYERS];
-  uint8_t estimated_output[MAX_NUM_DLSCH_SEGMENTS][Kprime];
-  memset(estimated_output, 0, sizeof(estimated_output));
   uint8_t *channel_input[n_segments];
   uint8_t *channel_input_optim;
 
@@ -348,17 +346,17 @@ one_measurement_t test_ldpc(short max_iterations,
       set_abort(&dec_abort, false);
       n_iter = ldpc_toCompare.LDPCdecoder(&decParams[j],
                                           (int8_t *)channel_output_fixed[j],
-                                          estimated_output[j],
+                                          &estimated_output[j*Kprime],
                                           &decoder_profiler,
                                           &dec_abort);
       stop_meas(&ret.time_decoder);
 
       // count errors
-      if (memcmp(estimated_output[j], test_input[j], ((Kprime + 7) & ~7) / 8) != 0) {
+      if (memcmp(&estimated_output[j*Kprime], test_input[j], ((Kprime + 7) & ~7) / 8) != 0) {
         segment_bler++;
       }
       for (int i = 0; i < Kprime; i++) {
-        unsigned char estoutputbit = (estimated_output[j][i / 8] & (1 << (i & 7))) >> (i & 7);
+        unsigned char estoutputbit = (estimated_output[j*Kprime + (i / 8)] & (1 << (i & 7))) >> (i & 7);
         unsigned char inputbit = (test_input[j][i / 8] & (1 << (i & 7))) >> (i & 7); // Further correct for multiple segments
         if (estoutputbit != inputbit)
           ret.errors_bit++;
@@ -536,6 +534,7 @@ int main(int argc, char *argv[])
 
   // find minimum value in all sets of lifting size
   Zc = 0;
+  estimated_output = malloc(n_segments * Kprime);
 
   char fname[200];
   sprintf(fname, "ldpctest_BG_%d_Zc_%d_rate_%d-%d_Kprime_%d_maxit_%d.txt", BG, Zc, nom_rate, denom_rate, Kprime, max_iterations);
