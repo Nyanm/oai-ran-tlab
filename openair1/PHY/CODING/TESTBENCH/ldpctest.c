@@ -16,9 +16,6 @@
 #include "openair1/PHY/defs_nr_common.h"
 #include "coding_unitary_defs.h"
 #include "common/utils/LOG/log.h"
-#ifdef LDPC_CUDA
-#include <cuda_runtime.h>
-#endif
 
 #define MAX_BLOCK_LENGTH 8448
 
@@ -111,11 +108,7 @@ one_measurement_t test_ldpc(short max_iterations,
   double sigma;
   sigma = 1.0 / sqrt(2 * SNR);
   cpu_meas_enabled = 1;
-#ifdef LDPC_CUDA
-  uint8_t **test_input,*test_input_p;
-#else
   uint8_t *test_input[n_segments * NR_MAX_NB_LAYERS];
-#endif
   uint8_t *channel_input[n_segments];
   uint8_t *channel_input_optim;
 
@@ -257,17 +250,9 @@ one_measurement_t test_ldpc(short max_iterations,
   printf("number of undecoded bits: %d\n", (Kb + nrows - no_punctured_columns - 2) * Zc - removed_bit);
 
   // generate input block
-#ifdef LDPC_CUDA
-  cudaHostAlloc((void**)&test_input_p,n_segments*sizeof(uint8_t*),cudaHostAllocMapped);
-  test_input=(uint8_t **)test_input_p;
-#endif
   for (int j = 0; j < n_segments; j++) {
-#ifdef LDPC_CUDA
-    cudaHostAlloc((void**)&test_input[j],((K + 7) & ~7) / 8,cudaHostAllocMapped); 
-#else
     test_input[j] = malloc16(((K + 7) & ~7) / 8);
     memset(test_input[j], 0, ((K + 7) & ~7) / 8);
-#endif
     channel_input[j] = malloc16(68 * 384);
     memset(channel_input[j], 0, 68 * 384);
   }
@@ -401,16 +386,9 @@ one_measurement_t test_ldpc(short max_iterations,
   ret.errors_bit_uncoded = ret.errors_bit_uncoded / (double)((Kb + nrows - no_punctured_columns - 2) * Zc - removed_bit);
 
   for (int j = 0; j < n_segments; j++) {
-#ifdef LDPC_CUDA
-    cudaFreeHost(test_input[j]);
-#else
     free(test_input[j]);
-#endif
     free(channel_input[j]);
   }
-#ifdef LDPC_CUDA
-  cudaFreeHost(test_input);
-#endif
   free(channel_input_optim);
 
   print_meas(&time, "ldpc_encoder", NULL, NULL);
@@ -561,18 +539,8 @@ int main(int argc, char *argv[])
 
   // find minimum value in all sets of lifting size
   Zc = 0;
-#ifdef LDPC_CUDA
-  cudaError_t err = cudaHostAlloc((void**)&estimated_output,sizeof(uint8_t)* n_segments * Kprime,cudaHostAllocMapped);
-  if (err != cudaSuccess) {
-    printf("[DEBUG] CUDA Error String: %s\n", cudaGetErrorString(err));
-}
-  AssertFatal(err==cudaSuccess,"estimated_output n_segments %d Kprime %d\n",n_segments,Kprime);
-  err = cudaHostAlloc((void**)&channel_output_fixed,sizeof(int8_t)* n_segments * 68 * 384,cudaHostAllocMapped);
-  AssertFatal(err==cudaSuccess,"channel_output_fixed n_segments %d\n",n_segments);
-#else
   estimated_output = malloc(n_segments * Kprime);
   channel_output_fixed=malloc(n_segments * 68 * 384);
-#endif
 
   char fname[200];
   sprintf(fname, "ldpctest_BG_%d_Zc_%d_rate_%d-%d_Kprime_%d_maxit_%d.txt", BG, Zc, nom_rate, denom_rate, Kprime, max_iterations);
