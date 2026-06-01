@@ -24,7 +24,9 @@
 #endif
 
 #define NR_LDPC_PROFILER_DETAIL
+
 ldpc_interface_t ldpc_orig, ldpc_toCompare;
+static double modulated_input[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4][68 * 384];
 
 // 4-bit quantizer
 int8_t quantize4bit(double D, double x)
@@ -78,6 +80,9 @@ typedef struct {
   n_iter_stats_t dec_iter;
 } one_measurement_t;
 
+uint8_t *estimated_output;
+int8_t *channel_output_fixed;
+
 one_measurement_t test_ldpc(short max_iterations,
                             int nom_rate,
                             int denom_rate,
@@ -101,14 +106,16 @@ one_measurement_t test_ldpc(short max_iterations,
   double sigma;
   sigma = 1.0 / sqrt(2 * SNR);
   cpu_meas_enabled = 1;
-  uint8_t *test_input[MAX_NUM_NR_DLSCH_SEGMENTS];
+  uint8_t *test_input[n_segments * NR_MAX_NB_LAYERS];
   uint8_t estimated_output[MAX_NUM_DLSCH_SEGMENTS][Kprime];
   memset(estimated_output, 0, sizeof(estimated_output));
-  uint8_t *channel_input[MAX_NUM_DLSCH_SEGMENTS];
+  uint8_t *channel_input[n_segments];
   uint8_t *channel_input_optim;
+
   // double channel_output[68 * 384];
-  double modulated_input[MAX_NUM_DLSCH_SEGMENTS][68 * 384] = {0};
+  memset(modulated_input,0,sizeof(modulated_input));
   int8_t channel_output_fixed[MAX_NUM_DLSCH_SEGMENTS][68 * 384] = {0};
+
   short BG = 0, nrows = 0; //,ncols;
   int i1, Kb = 0;
   int R_ind = 0;
@@ -116,7 +123,8 @@ one_measurement_t test_ldpc(short max_iterations,
   int code_rate_vec[8] = {15, 13, 25, 12, 23, 34, 56, 89};
   // double code_rate_actual_vec[8] = {0.2, 0.33333, 0.4, 0.5, 0.66667, 0.73333, 0.81481, 0.88};
 
-  t_nrLDPC_dec_params decParams[MAX_NUM_DLSCH_SEGMENTS] = {0};
+  t_nrLDPC_dec_params decParams[n_segments];
+  memset(decParams,0,sizeof(decParams));
 
   t_nrLDPC_time_stats decoder_profiler = {0};
 
@@ -249,8 +257,7 @@ one_measurement_t test_ldpc(short max_iterations,
     channel_input[j] = malloc16(68 * 384);
     memset(channel_input[j], 0, 68 * 384);
   }
-  channel_input_optim = malloc16(68 * 384);
-  memset(channel_input_optim, 0, 68 * 384);
+  channel_input_optim = malloc16(68 * 384 * sizeof(uint32_t));
 
   // Fill input segments with random values
   for (int j = 0; j < n_segments; j++) {
