@@ -32,46 +32,45 @@ const char *get_devname(int devtype) {
   return "none";
 }
 
-int set_device(openair0_device_t *device)
+static int set_device(openair0_device_t *device)
 {
+  char *dev_type = device->host_type == RAU_HOST ? "RAU" : "RRU";
   const char *devname = get_devname(device->type);
-    if (strcmp(devname,"none") != 0) {
-      LOG_I(HW,"[%s] has loaded %s device.\n",((device->host_type == RAU_HOST) ? "RAU": "RRU"),devname);
-    } else {
-      LOG_E(HW,"[%s] invalid HW device.\n",((device->host_type == RAU_HOST) ? "RAU": "RRU"));
-      return -1;
-    }
-  return 0;
+  if (strcmp(devname, "none") != 0) {
+    LOG_I(HW, "[%s] has loaded %s device.\n", dev_type, devname);
+    return 0;
+  }
+  LOG_E(HW, "[%s] invalid HW device.\n", dev_type);
+  return -1;
 }
 
-int set_transport(openair0_device_t *device)
+static int set_transport(openair0_device_t *device)
 {
+  char *dev_type = device->host_type == RAU_HOST ? "RAU" : "RRU";
   switch (device->transp_type) {
     case ETHERNET_TP:
-      LOG_I(HW,"[%s] has loaded ETHERNET trasport protocol.\n",((device->host_type == RAU_HOST) ? "RAU": "RRU"));
+      LOG_I(HW, "[%s] has loaded ETHERNET trasport protocol.\n", dev_type);
       return 0;
       break;
 
     case NONE_TP:
-      LOG_I(HW,"[%s] has not loaded a transport protocol.\n",((device->host_type == RAU_HOST) ? "RAU": "RRU"));
+      LOG_I(HW, "[%s] has not loaded a transport protocol.\n", dev_type);
       return 0;
       break;
 
     default:
-      LOG_E(HW,"[%s] invalid transport protocol.\n",((device->host_type == RAU_HOST) ? "RAU": "RRU"));
+      LOG_E(HW, "[%s] invalid transport protocol.\n", dev_type);
       return -1;
       break;
   }
 }
 
-typedef int (*devfunc_t)(openair0_device_t *, openair0_config_t *, eth_params_t *);
-
 /* look for the interface library and load it */
-int load_lib(openair0_device_t *device, openair0_config_t *openair0_cfg, eth_params_t *cfg, uint8_t flag)
+int load_lib(openair0_device_t *device, openair0_config_t *openair0_cfg, eth_params_t *eth_cfg, rau_type_t rau_type)
 {
   openair0_cfg->command_line_sample_advance = get_softmodem_params()->command_line_sample_advance;
-  openair0_cfg->recplay_mode = read_recplayconfig(&(openair0_cfg->recplay_conf),&(device->recplay_state));
 
+  openair0_cfg->recplay_mode = read_recplayconfig(&openair0_cfg->recplay_conf, &device->recplay_state);
   // softmodem has to know we use the iqrecorder to workaround randomized algorithms
   IS_SOFTMODEM_IQRECORDER = openair0_cfg->recplay_mode == RECPLAY_RECORDMODE;
 
@@ -81,7 +80,7 @@ int load_lib(openair0_device_t *device, openair0_config_t *openair0_cfg, eth_par
     deflibname=OAI_IQPLAYER_LIBNAME;
     IS_SOFTMODEM_IQPLAYER = true; // softmodem has to know we use the iqplayer to workaround randomized algorithms
   } else {
-    switch (flag) {
+    switch (rau_type) {
       case RAU_LOCAL_RADIO_HEAD:
         if (IS_SOFTMODEM_RFSIM)
           deflibname = OAI_RFSIM_LIBNAME;
@@ -90,9 +89,12 @@ int load_lib(openair0_device_t *device, openair0_config_t *openair0_cfg, eth_par
         deflibname = OAI_THIRDPARTY_TP_LIBNAME;
         shlib_fdesc.fname = "transport_init";
         break;
-      default:
+      case RAU_REMOTE_RADIO_HEAD:
         deflibname = OAI_TP_LIBNAME;
         shlib_fdesc.fname = "transport_init";
+        break;
+      default:
+        AssertFatal(false, "impossible radio head\n");
     }
   }
 
@@ -101,10 +103,9 @@ int load_lib(openair0_device_t *device, openair0_config_t *openair0_cfg, eth_par
   config_get(config_get_if(), &device_params, 1, DEVICE_SECTION);
 
   int ret = load_module_shlib(devname, &shlib_fdesc, 1, NULL);
-  AssertFatal( (ret >= 0),
-               "Library %s couldn't be loaded\n",devname);
-  
-  return ((devfunc_t)shlib_fdesc.fptr)(device,openair0_cfg,cfg);
+  AssertFatal(ret >= 0, "Library %s couldn't be loaded\n", devname);
+  typedef int (*devfunc_t)(openair0_device_t *, openair0_config_t *, eth_params_t *);
+  return ((devfunc_t)shlib_fdesc.fptr)(device, openair0_cfg, eth_cfg);
 }
 
 int openair0_device_load(openair0_device_t *device, openair0_config_t *openair0_cfg)
@@ -116,10 +117,10 @@ int openair0_device_load(openair0_device_t *device, openair0_config_t *openair0_
     if ( set_device(device) < 0) {
       LOG_E(HW, "%s %d:Unsupported radio head\n", __FILE__, __LINE__);
       return -1;
-	}
-  } else
+    }
+  } else {
     AssertFatal(false, "can't open the radio device: %s\n", get_devname(device->type));
-
+  }
   pthread_mutex_init(&device->reOrder.mutex_store, NULL);
   pthread_mutex_init(&device->reOrder.mutex_write, NULL);
   return rc;
@@ -127,8 +128,7 @@ int openair0_device_load(openair0_device_t *device, openair0_config_t *openair0_
 
 int openair0_transport_load(openair0_device_t *device, openair0_config_t *openair0_cfg, eth_params_t *eth_params)
 {
-  int rc;
-  rc=load_lib(device, openair0_cfg, eth_params, RAU_REMOTE_RADIO_HEAD);
+  int rc = load_lib(device, openair0_cfg, eth_params, RAU_REMOTE_RADIO_HEAD);
 
   if ( rc >= 0) {
     if ( set_transport(device) < 0) {
@@ -160,9 +160,6 @@ static void writerEnqueue(re_order_t *ctx, openair0_timestamp_t timestamp, void 
   AssertFatal(i < WRITE_QUEUE_SZ, "Write queue full\n");
   pthread_mutex_unlock(&ctx->mutex_store);
 }
-
-typedef struct PHY_VARS_NR_UE_s PHY_VARS_NR_UE;
-typedef int (*nrue_ru_write_t)(PHY_VARS_NR_UE *UE, openair0_timestamp_t timestamp, void **txp, int nsamps, int nbAnt, int flags);
 
 static void writerProcessWaitingQueue(nrue_ru_write_t nrue_ru_write, PHY_VARS_NR_UE *UE, openair0_device_t *device)
 {
