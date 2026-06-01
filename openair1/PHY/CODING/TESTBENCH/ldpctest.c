@@ -27,8 +27,6 @@
 
 ldpc_interface_t ldpc_orig, ldpc_toCompare;
 static double modulated_input[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4][68 * 384];
-#define MAX_TRIALS 20000
-static int8_t Failure_Mask[MAX_TRIALS][(MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4)] = {0};
 
 // 4-bit quantizer
 int8_t quantize4bit(double D, double x)
@@ -355,9 +353,6 @@ one_measurement_t test_ldpc(short max_iterations,
       // count errors
       if (memcmp(&estimated_output[j*Kprime], test_input[j], ((Kprime + 7) & ~7) / 8) != 0) {
         segment_bler++;
-        if (trial < 200) {
-          Failure_Mask[trial][j] = 1;
-        }
       }
       for (int i = 0; i < Kprime; i++) {
         unsigned char estoutputbit = (estimated_output[j*Kprime + (i / 8)] & (1 << (i & 7))) >> (i & 7);
@@ -474,7 +469,6 @@ int main(int argc, char *argv[])
 
       case 'n':
         n_trials = atoi(optarg);
-        AssertFatal(n_trials < MAX_TRIALS, "max trials %d, please increase MAX_TRIALS\n", MAX_TRIALS);
         break;
 
       case 's':
@@ -573,23 +567,6 @@ int main(int argc, char *argv[])
     dec_iter[i].snr = SNR;
     dec_iter[i].ber = (float)res.errors_bit / (float)n_trials / (float)Kprime / (double)n_segments;
     dec_iter[i].bler = (float)decoded_errors[i] / (float)n_trials;
-    printf("Failure Mask = ");
-    for(int i=0; i<n_trials;i++){
-      int flag = 0;
-      for(int j = 0; j < n_segments; j++){
-          if(Failure_Mask[i][j] == 1){
-            if(flag == 0){
-              printf(" %d: ", i);
-              flag = 1;
-            }
-            printf(" %d ", j);
-            Failure_Mask[i][j] = 0;
-      }
-      }
-      if(flag == 1) printf(",");
-    }
-    printf("\n");
-
     printf("SNR %f, BLER %f (%u/%d)\n", SNR, dec_iter[i].bler, decoded_errors[i], n_trials);
     printf("SNR %f, BER %f (%u/%d)\n", SNR, dec_iter[i].ber, decoded_errors[i], n_trials);
     printf("SNR %f, Uncoded BER %f (%u/%d)\n",
@@ -609,8 +586,6 @@ int main(int argc, char *argv[])
            sqrt((double)t_optim->diff_square / t_optim->trials / pow(1000, 2) / pow(cpu_freq, 2)
                 - pow((double)t_optim->diff / t_optim->trials / 1000.0 / cpu_freq, 2)));
     printf("Encoding time max: %15.3f us\n", (double)t_optim->max / 1000.0 / cpu_freq);
-    printf("\n");
-
     time_stats_t *t_decoder = &res.time_decoder;
     printf("Decoding time mean (per segment): %15.3f us\n", (double)t_decoder->diff / t_decoder->trials / 1000.0 / cpu_freq);
     printf("Decoding time std: %15.3f us\n",
