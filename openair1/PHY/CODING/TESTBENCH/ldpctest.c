@@ -33,8 +33,6 @@ static double modulated_input[MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4][68 * 384]
 #define MAX_TRIALS 20000
 static int8_t Failure_Mask[MAX_TRIALS][(MAX_NUM_NR_DLSCH_SEGMENTS_PER_LAYER * 4)] = {0};
 
-int PARALLEL_PATH = 0;//control decoder path
-
 // 4-bit quantizer
 int8_t quantize4bit(double D, double x)
 {
@@ -87,8 +85,8 @@ typedef struct {
   n_iter_stats_t dec_iter;
 } one_measurement_t;
 
-uint8_t *estimated_output_dev,*estimated_output;
-int8_t *channel_output_fixed_dev,*channel_output_fixed;
+uint8_t *estimated_output;
+int8_t *channel_output_fixed;
 
 one_measurement_t test_ldpc(short max_iterations,
                             int nom_rate,
@@ -571,11 +569,6 @@ int main(int argc, char *argv[])
   AssertFatal(err==cudaSuccess,"estimated_output n_segments %d Kprime %d\n",n_segments,Kprime);
   err = cudaHostAlloc((void**)&channel_output_fixed,sizeof(int8_t)* n_segments * 68 * 384,cudaHostAllocMapped);
   AssertFatal(err==cudaSuccess,"channel_output_fixed n_segments %d\n",n_segments);
-     err = cudaHostGetDevicePointer((void**)&estimated_output_dev,estimated_output,0);
-     AssertFatal(err==cudaSuccess,"estimated_output_dev\n");
-     err = cudaHostGetDevicePointer((void**)&channel_output_fixed_dev,channel_output_fixed,0);
-     AssertFatal(err==cudaSuccess,"channel_output_fixed_dev\n");
-     printf("estimated_output_dev %p, channel_output_fixed_dev %p\n",estimated_output_dev,channel_output_fixed_dev);
 #else
   estimated_output = malloc(n_segments * Kprime);
   channel_output_fixed=malloc(n_segments * 68 * 384);
