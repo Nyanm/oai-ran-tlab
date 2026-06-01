@@ -69,49 +69,42 @@ typedef int (*devfunc_t)(openair0_device_t *, openair0_config_t *, eth_params_t 
 /* look for the interface library and load it */
 int load_lib(openair0_device_t *device, openair0_config_t *openair0_cfg, eth_params_t *cfg, uint8_t flag)
 {
-  loader_shlibfunc_t shlib_fdesc[1];
-  int ret=0;
-  char *deflibname=OAI_RF_LIBNAME;
   openair0_cfg->command_line_sample_advance = get_softmodem_params()->command_line_sample_advance;
   openair0_cfg->recplay_mode = read_recplayconfig(&(openair0_cfg->recplay_conf),&(device->recplay_state));
 
-  if (openair0_cfg->recplay_mode == RECPLAY_RECORDMODE) {
-    IS_SOFTMODEM_IQRECORDER = true; // softmodem has to know we use the iqrecorder to workaround randomized algorithms
-  }
+  // softmodem has to know we use the iqrecorder to workaround randomized algorithms
+  IS_SOFTMODEM_IQRECORDER = openair0_cfg->recplay_mode == RECPLAY_RECORDMODE;
+
+  char *deflibname = OAI_RF_LIBNAME;
+  loader_shlibfunc_t shlib_fdesc = {.fname = "device_init"};
   if (openair0_cfg->recplay_mode == RECPLAY_REPLAYMODE) {
-  	  deflibname=OAI_IQPLAYER_LIBNAME;
-  	  shlib_fdesc[0].fname="device_init";
-      IS_SOFTMODEM_IQPLAYER = true; // softmodem has to know we use the iqplayer to workaround randomized algorithms
-  } else if (IS_SOFTMODEM_RFSIM && flag == RAU_LOCAL_RADIO_HEAD) {
-	  deflibname=OAI_RFSIM_LIBNAME;
-	  shlib_fdesc[0].fname="device_init";
-  } else if (flag == RAU_LOCAL_RADIO_HEAD) {
-	  if (IS_SOFTMODEM_RFSIM)
-		  deflibname="rfsimulator";
-	  else
-          deflibname=OAI_RF_LIBNAME;
-      shlib_fdesc[0].fname="device_init";
-  } else if (flag == RAU_REMOTE_THIRDPARTY_RADIO_HEAD) {
-    deflibname=OAI_THIRDPARTY_TP_LIBNAME;
-    shlib_fdesc[0].fname="transport_init";
+    deflibname=OAI_IQPLAYER_LIBNAME;
+    IS_SOFTMODEM_IQPLAYER = true; // softmodem has to know we use the iqplayer to workaround randomized algorithms
   } else {
-	  deflibname=OAI_TP_LIBNAME;
-	  shlib_fdesc[0].fname="transport_init";
+    switch (flag) {
+      case RAU_LOCAL_RADIO_HEAD:
+        if (IS_SOFTMODEM_RFSIM)
+          deflibname = OAI_RFSIM_LIBNAME;
+        break;
+      case RAU_REMOTE_THIRDPARTY_RADIO_HEAD:
+        deflibname = OAI_THIRDPARTY_TP_LIBNAME;
+        shlib_fdesc.fname = "transport_init";
+        break;
+      default:
+        deflibname = OAI_TP_LIBNAME;
+        shlib_fdesc.fname = "transport_init";
+    }
   }
-  
+
   char *devname=NULL;
-  paramdef_t device_params[]=DEVICE_PARAMS_DESC ;
-  int numparams = sizeofArray(device_params);
-  int devname_pidx = config_paramidx_fromname(device_params,numparams, CONFIG_DEVICEOPT_NAME);
-  device_params[devname_pidx].defstrval=deflibname;
+  paramdef_t device_params = {"name", CONFIG_HLP_DEVICE, 0, .strptr = &devname, .defstrval = deflibname, TYPE_STRING, 0};
+  config_get(config_get_if(), &device_params, 1, DEVICE_SECTION);
 
-  config_get(config_get_if(), device_params, numparams, DEVICE_SECTION);
-
-  ret=load_module_shlib(devname,shlib_fdesc,1,NULL);
+  int ret = load_module_shlib(devname, &shlib_fdesc, 1, NULL);
   AssertFatal( (ret >= 0),
-  	           "Library %s couldn't be loaded\n",devname);
-
-  return ((devfunc_t)shlib_fdesc[0].fptr)(device,openair0_cfg,cfg);
+               "Library %s couldn't be loaded\n",devname);
+  
+  return ((devfunc_t)shlib_fdesc.fptr)(device,openair0_cfg,cfg);
 }
 
 int openair0_device_load(openair0_device_t *device, openair0_config_t *openair0_cfg)
