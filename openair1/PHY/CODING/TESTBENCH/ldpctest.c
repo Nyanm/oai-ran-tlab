@@ -112,7 +112,6 @@ one_measurement_t test_ldpc(short max_iterations,
 
   // double channel_output[68 * 384];
   memset(modulated_input,0,sizeof(modulated_input));
-  int8_t channel_output_fixed[MAX_NUM_DLSCH_SEGMENTS][68 * 384] = {0};
 
   short BG = 0, nrows = 0; //,ncols;
   int i1, Kb = 0;
@@ -317,11 +316,11 @@ one_measurement_t test_ldpc(short max_iterations,
         else
           modulated_input[j][i] = -1.0; /// sqrt(2);
 
-        channel_output_fixed[j][i] =
+        channel_output_fixed[j*(384*68) + i] =
             (int8_t)quantize(sigma / 4.0 / 4.0, modulated_input[j][i] + sigma * gaussdouble(0.0, 1.0), qbits);
 
         // Uncoded BER
-        uint8_t channel_output_uncoded = channel_output_fixed[j][i] < 0 ? 1 /* QPSK demod */ : 0;
+        uint8_t channel_output_uncoded = channel_output_fixed[(j*384*68)+i] < 0 ? 1 /* QPSK demod */ : 0;
         if (channel_output_uncoded != ((channel_input_optim[i - 2 * Zc] >> j) & 0x1))
           ret.errors_bit_uncoded++;
       }
@@ -345,7 +344,7 @@ one_measurement_t test_ldpc(short max_iterations,
       start_meas(&ret.time_decoder);
       set_abort(&dec_abort, false);
       n_iter = ldpc_toCompare.LDPCdecoder(&decParams[j],
-                                          (int8_t *)channel_output_fixed[j],
+                                          &channel_output_fixed[j*384*68],
                                           &estimated_output[j*Kprime],
                                           &decoder_profiler,
                                           &dec_abort);
@@ -535,6 +534,7 @@ int main(int argc, char *argv[])
   // find minimum value in all sets of lifting size
   Zc = 0;
   estimated_output = malloc(n_segments * Kprime);
+  channel_output_fixed=malloc(n_segments * 68 * 384);
 
   char fname[200];
   sprintf(fname, "ldpctest_BG_%d_Zc_%d_rate_%d-%d_Kprime_%d_maxit_%d.txt", BG, Zc, nom_rate, denom_rate, Kprime, max_iterations);
