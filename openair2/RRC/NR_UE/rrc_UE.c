@@ -128,6 +128,17 @@ static void nr_rrc_send_msg_to_mac(NR_UE_RRC_INST_t *rrc, nr_mac_rrc_message_t *
   pushNotifiedFIFO(rrc->mac_input_nf, nf_msg);
 }
 
+/** @brief Ask MAC to start or restart random access
+ * @param rrc   UE RRC instance
+ * @param cause Why RA is started (setup, T300, post-SIB, re-establishment) */
+static void nr_rrc_trigger_mac_ra(NR_UE_RRC_INST_t *rrc, nr_mac_ra_start_cause_t cause)
+{
+  nr_mac_rrc_message_t rrc_msg = {0};
+  rrc_msg.payload_type = NR_MAC_RRC_START_RA;
+  rrc_msg.payload.start_ra.cause = cause;
+  nr_rrc_send_msg_to_mac(rrc, &rrc_msg);
+}
+
 NR_UE_RRC_INST_t *get_NR_UE_rrc_inst(int instance)
 {
   AssertFatal(instance >= 0 && instance < MAX_NUM_NR_UE_INST, "RRC instance %d out of bounds\n", instance);
@@ -3356,10 +3367,7 @@ static void nr_rrc_initiate_rrcReestablishment(NR_UE_RRC_INST_t *rrc, NR_Reestab
   // reset MAC
   // release spCellConfig, if configured
   // perform cell selection in accordance with the cell selection process
-  nr_mac_rrc_message_t rrc_msg = {0};
-  rrc_msg.payload_type = NR_MAC_RRC_CONFIG_RESET;
-  rrc_msg.payload.config_reset.cause = RE_ESTABLISHMENT;
-  nr_rrc_send_msg_to_mac(rrc, &rrc_msg);
+  nr_rrc_trigger_mac_ra(rrc, NR_MAC_RA_START_REESTABLISHMENT);
 }
 
 void handle_RRCRelease(NR_UE_RRC_INST_t *rrc)
@@ -3579,12 +3587,7 @@ void handle_t300_expiry(NR_UE_RRC_INST_t *rrc)
   rrc->ra_trigger = RRC_CONNECTION_SETUP;
   nr_rrc_ue_prepare_RRCSetupRequest(rrc);
 
-  // reset MAC, release the MAC configuration
-  NR_UE_MAC_reset_cause_t cause = T300_EXPIRY;
-  nr_mac_rrc_message_t rrc_msg = {0};
-  rrc_msg.payload_type = NR_MAC_RRC_CONFIG_RESET;
-  rrc_msg.payload.config_reset.cause = cause;
-  nr_rrc_send_msg_to_mac(rrc, &rrc_msg);
+  nr_rrc_trigger_mac_ra(rrc, NR_MAC_RA_START_T300);
 
   // TODO handle connEstFailureControl
   // TODO inform upper layers about the failure to establish the RRC connection

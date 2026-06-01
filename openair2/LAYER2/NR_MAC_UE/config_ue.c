@@ -1879,34 +1879,10 @@ void nr_rrc_mac_config_req_reset(module_id_t module_id, NR_UE_MAC_reset_cause_t 
       release_mac_configuration(mac, cause);
       mac->state = UE_DETACHING;
       break;
-    case T300_EXPIRY:
-      reset_ra(mac, false);
-      reset_mac_inst(mac);
-      mac->state = UE_PERFORMING_RA; // still in sync but need to restart RA
-      break;
     case REJECT:
       reset_ra(mac, false);
       reset_mac_inst(mac);
       mac->state = UE_BARRED;
-      break;
-    case RE_ESTABLISHMENT:
-      reset_mac_inst(mac);
-      nr_ue_mac_default_configs(mac);
-      nr_ue_reset_sync_state(mac, true);
-      release_mac_configuration(mac, cause);
-      // suspend all RBs except SRB0
-      for (int j = 0; j < mac->lc_ordered_list.count; j++) {
-        nr_lcordered_info_t *lc = mac->lc_ordered_list.array[j];
-        if (lc->rb.type == NR_LCID_SRB && lc->rb.choice.srb_id == 0)
-          continue;
-        lc->rb_suspended = true;
-      }
-      // apply the timeAlignmentTimerCommon included in SIB1
-      configure_timeAlignmentTimer(&mac->time_alignment_timer, mac->timeAlignmentTimerCommon, mac->current_UL_BWP->scs);
-      // new sync with old cell ID (re-establishment on the same cell)
-      sync_req.target_Nid_cell = mac->physCellId;
-      sync_req.ssb_bw_scan = false;
-      nr_ue_send_synch_request(mac, module_id, 0, &sync_req);
       break;
     case RRC_SETUP_REESTAB_RESUME:
       release_mac_configuration(mac, cause);
@@ -2040,6 +2016,50 @@ void nr_rrc_mac_config_req_paging_ue_id(module_id_t module_id, uint64_t fiveG_S_
   mac->paging_cfg.ue_id = (fiveG_S_TMSI == UINT64_MAX) ? 0 : fiveG_S_TMSI % 1024;
   LOG_I(NR_MAC, "[UE %d] paging UE_ID=%u\n", mac->ue_id, mac->paging_cfg.ue_id);
   pthread_mutex_unlock(&mac->if_mutex);
+}
+
+static void nr_mac_start_ra(NR_UE_MAC_INST_t *mac, module_id_t module_id, nr_mac_ra_start_cause_t cause)
+{
+  switch (cause) {
+    case NR_MAC_RA_START_SETUP:
+    case NR_MAC_RA_START_T300:
+      reset_ra(mac, false);
+      reset_mac_inst(mac);
+      mac->msg3_C_RNTI = false;
+      mac->state = UE_PERFORMING_RA;
+      break;
+    case NR_MAC_RA_START_REESTABLISHMENT: {
+      fapi_nr_synch_request_t sync_req = {.target_Nid_cell = mac->physCellId, .ssb_bw_scan = false};
+      reset_mac_inst(mac);
+      nr_ue_mac_default_configs(mac);
+      nr_ue_reset_sync_state(mac, true);
+      release_mac_configuration(mac, RE_ESTABLISHMENT);
+      for (int j = 0; j < mac->lc_ordered_list.count; j++) {
+        nr_lcordered_info_t *lc = mac->lc_ordered_list.array[j];
+        if (lc->rb.type == NR_LCID_SRB && lc->rb.choice.srb_id == 0)
+          continue;
+        lc->rb_suspended = true;
+      }
+      configure_timeAlignmentTimer(&mac->time_alignment_timer, mac->timeAlignmentTimerCommon, mac->current_UL_BWP->scs);
+      nr_ue_send_synch_request(mac, module_id, 0, &sync_req);
+      break;
+    }
+    default:
+      AssertFatal(false, "unknown nr_mac_ra_start_cause_t %d\n", cause);
+  }
+}
+
+/** @brief All RRC-initiated RA entry points */
+void nr_rrc_mac_start_ra(module_id_t module_id, nr_mac_ra_start_cause_t cause)
+{
+  NR_UE_MAC_INST_t *mac = get_mac_inst(module_id);
+  int ret = pthread_mutex_lock(&mac->if_mutex);
+  AssertFatal(!ret, "mutex failed %d\n", ret);
+
+  nr_mac_start_ra(mac, module_id, cause);
+
+  ret = pthread_mutex_unlock(&mac->if_mutex);
+  AssertFatal(!ret, "mutex failed %d\n", ret);
 }
 
 void nr_rrc_mac_config_req_sib1(module_id_t module_id, int cc_idP, NR_SIB1_t *sib1, bool can_start_ra)

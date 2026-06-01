@@ -40,6 +40,7 @@
 #include "as_message.h"
 #include "common/utils/nr/nr_common.h"
 #include "notified_fifo.h"
+#include "RRC/NR_UE/nr_mac_rrc_types.h"
 
 #define NB_CNX_UE 2//MAX_MANAGED_RG_PER_MOBILE
 #define MAX_MEAS_OBJ 64

@@ -30,6 +30,7 @@
 #include "NR_BCCH-BCH-Message.h"
 #include "NR_ReestablishmentCause.h"
 #include "NR_UE-NR-Capability.h"
+#include "RRC/NR_UE/nr_mac_rrc_types.h"
 
 //-------------------------------------------------------------------------------------------//
 // Messages for RRC logging
@@ -460,6 +461,9 @@ typedef struct {
   int get_sib;
 } nr_mac_rrc_sched_sib_t;
 
+typedef struct {
+  nr_mac_ra_start_cause_t cause;
+} nr_mac_rrc_start_ra_t;
 
 enum payload_type {
   NR_MAC_RRC_CONFIG_RESET,
@@ -480,6 +484,7 @@ typedef struct {
     nr_mac_rrc_config_sib1_t config_sib1;
     nr_mac_rrc_sched_sib_t sched_sib;
     nr_mac_rrc_config_other_sib_t config_other_sib;
+    nr_mac_rrc_start_ra_t start_ra;
     nr_mac_rrc_resume_rb_t resume_rb;
   } payload;
 } nr_mac_rrc_message_t;
