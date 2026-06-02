@@ -89,7 +89,7 @@ typedef struct ueinfo {
   {"num-ul-actors",                CONFIG_HLP_NUM_UL_ACTORS,   0,               .iptr=&nrUE_params.num_ul_actors,            .defintval=2,      TYPE_INT,      0}, \
   {"num-dl-actors",                CONFIG_HLP_NUM_DL_ACTORS,  0,                .iptr=&nrUE_params.num_dl_actors,            .defintval=4,      TYPE_INT,      0}, \
   {"extra-pdu-id",                 CONFIG_HLP_EXTRA_PDU_ID,   0,                .iptr=&nrUE_params.extra_pdu_id,             .defintval=-1,     TYPE_INT,      0}, \
-  {"sync-ref",                     CONFIG_HLP_SL_SYNCSOURCEUE, PARAMFLAG_BOOL,  .uptr=&(nrUE_params.sync_ref),               .defuintval=0,     TYPE_UINT32,   0}, \
+  {"sync-ref",                     CONFIG_HLP_SL_SYNCSOURCEUE, 0,               .uptr=&(nrUE_params.sync_ref),               .defuintval=0,     TYPE_UINT32,   0}, \
   {"mcs",                          CONFIG_HLP_SL_MAX_MCS,      0,               .u8ptr=&(nrUE_params.mcs),                   .defintval=9,      TYPE_UINT8,    0}, \
   {"snr",                          CONFIG_HLP_SL_SNR,          0,               .dblptr=&(nrUE_params.snr),                  .defdblval=0.0,                TYPE_DOUBLE,   0}, \
 }
