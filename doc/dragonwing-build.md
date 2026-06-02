@@ -426,11 +426,24 @@ git clone https://git.code.sf.net/p/linuxptp/code ~/linuxptp
 cd ~/linuxptp
 git checkout v3.1.1
 
-CPATH=/usr/include/aarch64-linux-gnu:/usr/include \
-make -j$(nproc) \
-    CC=${DW_TC}-gcc \
-    CFLAGS="-mcpu=cortex-a78"
+KBUILD_OUTPUT=/opt/Hexagon_SDK/6.4.0.2/tools/gcc_tools_64/aarch64-none-linux-gnu/libc \
+CROSS_COMPILE=${DW_TC}- \
+make -j$(nproc) EXTRA_CFLAGS="-mcpu=cortex-a78"
 ```
+
+> **Note — two common pitfalls when cross-compiling linuxptp:**
+>
+> 1. Use `EXTRA_CFLAGS`, **not** `CFLAGS`, to add compiler flags.
+>    The linuxptp `makefile` defines `CFLAGS = -Wall $(VER) $(incdefs) $(EXTRA_CFLAGS)`.
+>    Passing `CFLAGS=...` on the make command line replaces that entire definition,
+>    discarding `$(incdefs)` — which contains `-DHAVE_ONESTEP_SYNC` and `-D_GNU_SOURCE`.
+>    Without `-DHAVE_ONESTEP_SYNC`, `missing.h` redeclares the enum that the system
+>    `net_tstamp.h` already defines, causing a compile error.
+>
+> 2. Set `KBUILD_OUTPUT` to the cross-compiler sysroot so `incdefs.sh` picks up the
+>    ARM `linux/net_tstamp.h` instead of the host x86 one.  `CROSS_COMPILE` must be
+>    an environment variable (not a `make CC=` argument) because `incdefs.sh` calls
+>    `${CROSS_COMPILE}cpp` in a subshell to discover include paths.
 
 Deploy:
 
@@ -443,7 +456,192 @@ adb shell chmod +x /usr/sbin/ptp4l /usr/sbin/phc2sys
 Follow the ptp4l / phc2sys configuration in `doc/ORAN_FHI7.2_Tutorial.md`
 (§ "PTP configuration") once the RTL 10G NIC is available.
 
-### 3.6 Deploy FHI 7.2 binaries via adb
+### 3.6 RTL8127 kernel module
+
+The IQ-9075 EVK uses a Realtek RTL8127A (10 GbE) NIC for the fronthaul connection.
+The vendor kernel (`6.18.12-g06f8ab99cf04-dirty`) does not include any RTL8127 driver.
+Two options are available, depending on whether hardware timestamping is needed:
+
+| Option | Module | Hardware timestamping | Notes |
+|--------|--------|-----------------------|-------|
+| A (§ 3.6.1–3.6.5) | mainline `r8169` | **No** — software only | Simpler build |
+| B (§ 3.6.6) | Realtek out-of-tree `r8127` | **Yes** — PHC registered | Required for ptp4l hardware mode |
+
+For S-plane synchronisation with `ptp4l`, **use option B**.  Option A is adequate if
+only basic connectivity is needed (e.g. rfsimulator, debug access).
+
+Because the vendor kernel has `CONFIG_MODVERSIONS=n` and `CONFIG_MODULE_SIG=n`, the only
+requirement for any module to load is that its **version magic string matches exactly**:
+`6.18.12-g06f8ab99cf04-dirty SMP preempt mod_unload aarch64`
+
+> **Note:** If QCOM provides a kernel SDK or `kernel-devsrc` package for the IQ-9075
+> build, use that instead — it will produce a better-matched module.  The procedure
+> below is a best-effort workaround using the mainline source.
+
+#### 3.6.1 Download and configure the kernel source
+
+```shell
+cd ~
+# Download mainline stable 6.18.12
+wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.18.12.tar.xz
+tar xf linux-6.18.12.tar.xz
+cd linux-6.18.12
+
+# Seed config from the running device kernel
+adb pull /proc/config.gz /tmp/kernel-config.gz
+gunzip -f /tmp/kernel-config.gz
+cp /tmp/kernel-config .config
+
+# Enable r8169 and its Realtek PHY driver as loadable modules
+scripts/config --module CONFIG_R8169
+scripts/config --module CONFIG_REALTEK_PHY
+
+# Set LOCALVERSION so vermagic matches the device exactly
+scripts/config --set-str CONFIG_LOCALVERSION "-g06f8ab99cf04-dirty"
+scripts/config --disable CONFIG_LOCALVERSION_AUTO
+
+# Resolve any new Kconfig options introduced since the device config was made.
+# CROSS_COMPILE must be set here so compiler/assembler capability checks (MTE,
+# shadow call stack, etc.) are evaluated against the ARM toolchain, not the host.
+# Omitting CROSS_COMPILE causes interactive questions during modules_prepare.
+make ARCH=arm64 CROSS_COMPILE=${DW_TC}- olddefconfig
+```
+
+> **Note:** `olddefconfig` may set `CONFIG_HAVE_RUST=y` if the build host has `rustc`
+> installed.  This does not affect the r8169 module build, but if `modules_prepare`
+> fails with a Rust-related error, disable it and re-run olddefconfig:
+> ```shell
+> scripts/config --disable CONFIG_HAVE_RUST
+> make ARCH=arm64 CROSS_COMPILE=${DW_TC}- olddefconfig
+> ```
+
+#### 3.6.2 Prepare the kernel build tree
+
+```shell
+# Builds host scripts (modpost etc.) and generates arch headers.
+# Does NOT compile the full kernel.
+make ARCH=arm64 CROSS_COMPILE=${DW_TC}- modules_prepare
+```
+
+#### 3.6.3 Build r8169.ko and realtek.ko
+
+Two modules are needed: the MAC driver (`r8169`) and the Realtek PHY driver (`realtek`).
+The r8169 probe fails with "no dedicated PHY driver found for PHY ID 0x001cc890" if
+`realtek.ko` is not loaded first.
+
+```shell
+make ARCH=arm64 CROSS_COMPILE=${DW_TC}- M=drivers/net/ethernet/realtek KBUILD_MODPOST_WARN=1 modules
+make ARCH=arm64 CROSS_COMPILE=${DW_TC}- M=drivers/net/phy/realtek      KBUILD_MODPOST_WARN=1 modules
+```
+
+Outputs: `drivers/net/ethernet/realtek/r8169.ko` and `drivers/net/phy/realtek/realtek.ko`.
+
+> **Note:** `KBUILD_MODPOST_WARN=1` is required because `Module.symvers` does not exist
+> (only generated by a full kernel build).  Without it, `modpost` errors on unresolved
+> symbols such as `napi_alloc_skb`, `free_irq`, etc.  These are all standard kernel
+> exports that are present in the running kernel; since `CONFIG_MODVERSIONS=n` on the
+> device there is no CRC check at load time, so the warnings are safe to ignore.
+
+#### 3.6.4 Prepare the firmware
+
+The RTL8127A requires firmware `rtl_nic/rtl8127a-1.fw`.  The build host has it in
+compressed form (`linux-firmware` package); decompress before pushing because the vendor
+kernel does not support `CONFIG_FW_LOADER_COMPRESS`.
+
+```shell
+zstd -d /lib/firmware/rtl_nic/rtl8127a-1.fw.zst -o ~/rtl8127a-1.fw
+```
+
+#### 3.6.5 Deploy and load
+
+The modules depend on `libphy.ko` and `mdio-bus.ko`, which are already present in the
+device's module tree.  Load order matters: `libphy` → `realtek` → `r8169`.
+
+```shell
+# Push modules and firmware
+adb push ~/linux-6.18.12/drivers/net/ethernet/realtek/r8169.ko /data/local/tmp/
+adb push ~/linux-6.18.12/drivers/net/phy/realtek/realtek.ko    /data/local/tmp/
+adb shell mkdir -p /lib/firmware/rtl_nic
+adb push ~/rtl8127a-1.fw /lib/firmware/rtl_nic/
+
+# Load in dependency order
+adb shell "modprobe libphy && insmod /data/local/tmp/realtek.ko && insmod /data/local/tmp/r8169.ko"
+
+# Verify
+adb shell "dmesg | grep -i r8169"
+adb shell "ip link show"
+```
+
+If the NIC is detected, assign an IP and verify link before proceeding to the DPDK /
+ptp4l configuration.  To make the modules persistent across reboots, copy them into the
+device module tree:
+
+```shell
+adb shell mkdir -p /lib/modules/6.18.12-g06f8ab99cf04-dirty/kernel/drivers/net/ethernet/realtek
+adb shell mkdir -p /lib/modules/6.18.12-g06f8ab99cf04-dirty/kernel/drivers/net/phy/realtek
+adb push ~/linux-6.18.12/drivers/net/ethernet/realtek/r8169.ko \
+    /lib/modules/6.18.12-g06f8ab99cf04-dirty/kernel/drivers/net/ethernet/realtek/
+adb push ~/linux-6.18.12/drivers/net/phy/realtek/realtek.ko \
+    /lib/modules/6.18.12-g06f8ab99cf04-dirty/kernel/drivers/net/phy/realtek/
+adb shell depmod -a
+```
+
+#### 3.6.6 Option B — Realtek out-of-tree r8127 driver (hardware timestamping)
+
+Realtek publishes a standalone driver with full PTP/PHC support
+(`ptp_clock_info`, hardware timestamp registers).  It replaces both `r8169.ko` and
+`realtek.ko` from option A with a single `r8127.ko`.
+
+```shell
+cd ~
+git clone https://github.com/openwrt/rtl8127.git
+cd rtl8127
+
+make KERNELDIR=~/linux-6.18.12 \
+     ARCH=arm64 \
+     CROSS_COMPILE=${DW_TC}- \
+     KBUILD_MODPOST_WARN=1 \
+     ENABLE_PTP_SUPPORT=y \
+     modules
+```
+
+> **Kernel 6.18 patch required:** The Realtek driver uses the removed `hrtimer_init` API.
+> Before building, edit `r8127_ptp.c` around line 754:
+> ```diff
+> -        hrtimer_init(&tp->pps_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+> -        tp->pps_timer.function = rtl8127_hrtimer_for_pps;
+> +        hrtimer_setup(&tp->pps_timer, rtl8127_hrtimer_for_pps, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+> ```
+> `hrtimer_init` + separate `.function` assignment was replaced by `hrtimer_setup` in
+> kernel 6.18.
+
+If option A modules are already loaded, unload them first:
+
+```shell
+adb shell "rmmod r8169; rmmod realtek"
+```
+
+Deploy and load:
+
+```shell
+adb push ~/rtl8127/r8127.ko /data/local/tmp/
+adb shell "modprobe libphy && insmod /data/local/tmp/r8127.ko"
+
+# Verify hardware timestamping is now available
+adb shell "ethtool -T enP1p1s0"
+```
+
+Expected output should include `PTP Hardware Clock: 0` and hardware transmit/receive
+timestamp modes.  To make persistent across reboots:
+
+```shell
+adb shell mkdir -p /lib/modules/6.18.12-g06f8ab99cf04-dirty/kernel/drivers/net/ethernet/realtek
+adb push ~/rtl8127/r8127.ko \
+    /lib/modules/6.18.12-g06f8ab99cf04-dirty/kernel/drivers/net/ethernet/realtek/
+adb shell depmod -a
+```
+
+#### 3.7 Deploy FHI 7.2 binaries via adb
 
 ```shell
 adb shell mkdir -p /data/oai/lib
