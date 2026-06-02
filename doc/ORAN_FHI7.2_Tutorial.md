@@ -73,11 +73,9 @@ Supported libxran releases:
 
 | Vendor                                  |
 |-----------------------------------------|
-| `oran_f_release_v1.0`                   |
 | `oran_k_release_v1.0`                   |
 
-**Note**: The libxran driver of OAI identifies the above F release version as
-"6.1.0" (F is the sixth letter, then 1.0), and the above K release as "11.1.0".
+**Note**: The libxran driver of OAI identifies the above K release as "11.1.0".
 
 ### Configure your server
 
@@ -307,7 +305,7 @@ timedatectl set-ntp false
 
 ### DPDK (Data Plane Development Kit)
 
-Download DPDK version 20.11.9 (F release) or 24.11.4 (K release).
+Download DPDK version 24.11.4 (K release).
 
 ```bash
 # on debian
@@ -315,14 +313,12 @@ sudo apt install wget xz-utils libnuma-dev libibverbs-dev rdma-core python3-pyel
 # on Fedora/RHEL
 sudo dnf install wget xz numactl-devel rdma-core-devel libibverbs-devel python3-pyelftools meson
 cd
-wget http://fast.dpdk.org/rel/dpdk-20.11.9.tar.xz # F release
 wget http://fast.dpdk.org/rel/dpdk-24.11.4.tar.xz # K release
 ```
 
 #### DPDK Compilation and Installation
 
 ```bash
-tar xvf dpdk-20.11.9.tar.xz && cd dpdk-stable-20.11.9 # F release
 tar xvf dpdk-24.11.4.tar.xz && cd dpdk-stable-24.11.4 # K release
 
 meson build
@@ -390,7 +386,6 @@ pkg-config --libs libdpdk --static
 Go back to the version folder you used to build and install
 
 ```
-cd ~/dpdk-stable-20.11.9 # F release
 cd ~/dpdk-stable-24.11.4 # K release
 sudo ninja deinstall -C build
 ```
@@ -405,17 +400,6 @@ cd ~/openairinterface5g/
 ```
 
 ### Build ORAN Fronthaul Interface Library
-
-Download ORAN FHI DU library, checkout the correct version, and apply the correct patch (available in `oai_folder/cmake_targets/tools/oran_fhi_integration_patches`).
-
-#### F release
-
-```bash
-git clone https://github.com/openairinterface/o-du-phy.git ~/phy
-cd ~/phy
-git checkout oran_f_release_v1.0
-git apply ~/openairinterface5g/cmake_targets/tools/oran_fhi_integration_patches/F/oaioran_F.patch
-```
 
 #### K release
 ```bash
@@ -435,7 +419,6 @@ target, set as well the environment variable `TARGET=armv8`.
 ```bash
 cd ~/phy/fhi_lib/lib
 make clean
-WIRELESS_SDK_TOOLCHAIN=gcc RTE_SDK=~/dpdk-stable-20.11.9/ XRAN_DIR=~/phy/fhi_lib make XRAN_LIB_SO=1 # F release
 WIRELESS_SDK_TOOLCHAIN=gcc RTE_SDK=~/dpdk-stable-24.11.4/ XRAN_DIR=~/phy/fhi_lib make XRAN_LIB_SO=1 # K release
 ...
 [AR] build/libxran.so
@@ -522,7 +505,7 @@ Note that you might also call cmake directly instead of using `build_oai`:
 ```
 cd ~/openairinterface5g
 mkdir build && cd build
-# build RAN after manually building xran F or K release
+# build RAN after manually building xran K release
 cmake .. -GNinja -DOAI_FHI72=ON -Dxran_LOCATION=$HOME/phy/fhi_lib/lib
 # build RAN and xran K release automatically
 cmake .. -GNinja -DOAI_FHI72=ON -Dxran_DOWNLOAD=ON
