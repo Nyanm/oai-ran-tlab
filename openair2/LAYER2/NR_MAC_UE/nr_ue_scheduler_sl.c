@@ -1677,6 +1677,10 @@ void nr_ue_sidelink_scheduler(nr_sidelink_indication_t *sl_ind, NR_UE_MAC_INST_t
       uint64_t rx_abs_slot = normalize(&fs, mu);
       uint8_t pool_id = 0;
       SL_ResourcePool_params_t *sl_rx_rsrc_pool = sl_mac->sl_RxPool[pool_id];
+      if (!sl_rx_rsrc_pool) {
+        LOG_D(NR_MAC, "%4d.%2d RX RSRC pool not set up\n", frame, slot);
+        return;
+      }
       uint16_t phy_map_sz = ((sl_rx_rsrc_pool->phy_sl_bitmap.size << 3) - sl_rx_rsrc_pool->phy_sl_bitmap.bits_unused);
       bool sl_has_psfch = slot_has_psfch(mac, &sl_rx_rsrc_pool->phy_sl_bitmap, rx_abs_slot, psfch_period, phy_map_sz, mac->SL_MAC_PARAMS->sl_TDD_config);
       LOG_D(NR_MAC, "%4d.%2d RX sl_has_psfch %d, psfch_period %ld\n", frame, slot, sl_has_psfch, psfch_period);
@@ -1761,19 +1765,22 @@ List_t get_nr_sl_comm_opportunities(NR_UE_MAC_INST_t *mac,
                                     uint16_t t2,
                                     uint8_t psfch_period) {
   frameslot_t frame_slot;
-  List_t slot_info_list;
-  init_list(&slot_info_list, sizeof(slot_info_t), 1);
+  frameslot_t fs0;
+  de_normalize(abs_idx_cur_slot, mu, &fs0);
+  List_t slot_info_list = {0};
   SL_ResourcePool_params_t *sl_tx_rsrc_pool = mac->SL_MAC_PARAMS->sl_TxPool[pool_id];
+  if (sl_tx_rsrc_pool->phy_sl_bitmap.size == 0) {
+    LOG_D(NR_MAC, "%4d.%2d phy_sl_bitmap not set\n", fs0.frame, fs0.slot);
+    return slot_info_list;
+  }
   uint16_t phy_map_sz = (sl_tx_rsrc_pool->phy_sl_bitmap.size << 3) - sl_tx_rsrc_pool->phy_sl_bitmap.bits_unused;
   LOG_D(NR_MAC, "phy_map_sz %d\n", phy_map_sz);
   NR_SL_ResourcePool_r16_t* resource_pool = get_resource_pool(mac, pool_id);
+  init_list(&slot_info_list, sizeof(slot_info_t), 1);
 
   uint64_t first_abs_slot_ind = abs_idx_cur_slot + t1;
   uint64_t last_abs_slot_ind = abs_idx_cur_slot + t2;
   uint16_t abs_pool_index = first_abs_slot_ind % phy_map_sz;
-
-  frameslot_t fs0;
-  de_normalize(abs_idx_cur_slot, mu, &fs0);
 
   frameslot_t fs1;
   de_normalize(first_abs_slot_ind, mu, &fs1);

@@ -666,6 +666,10 @@ void nr_rrc_mac_config_req_sl_mib(module_id_t module_id,
     NR_TDD_UL_DL_Pattern_t *tdd = &sl_mac->sl_TDD_config->pattern1;
 
     const int n_ul_slots_period = tdd ? tdd->nrofUplinkSlots + (tdd->nrofUplinkSymbols > 0 ? 1 : 0) : nr_slots_frame;
+    if (!mac->sl_tx_res_pool) {
+      LOG_W(NR_MAC, "no sl_tx_res_pool\n");
+      return;
+    }
     uint16_t num_subch = sl_get_num_subch(mac->sl_tx_res_pool);
     mac->sl_info.list[0]->UE_sched_ctrl.sched_psfch = calloc(n_ul_slots_period * num_subch, sizeof(SL_sched_feedback_t));
     mac->sl_info.list[0]->UE_sched_ctrl.sched_psfch->feedback_frame = -1;
@@ -703,6 +707,7 @@ void nr_rrc_mac_config_req_sl_mib(module_id_t module_id,
 
     sl_tx_rsrc_pool->phy_sl_bitmap.buf = (uint8_t*)malloc16_clear(byte_capacity);
     sl_rx_rsrc_pool->phy_sl_bitmap.buf = (uint8_t*)malloc16_clear(byte_capacity);
+    // set here
     sl_tx_rsrc_pool->phy_sl_bitmap.size = (phy_sl_size + 7) >> 3;
     sl_tx_rsrc_pool->phy_sl_bitmap.bits_unused = ((sl_tx_rsrc_pool->phy_sl_bitmap.size << 3) - phy_sl_size) % 8;
 

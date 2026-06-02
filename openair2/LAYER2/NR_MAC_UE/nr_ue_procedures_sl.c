@@ -765,6 +765,10 @@ int nr_ue_sl_acknack_scheduling(NR_UE_MAC_INST_t *mac, sl_nr_rx_indication_t *rx
   uint8_t pool_id = 0;
   uint64_t tx_abs_slot = normalize(&fs, get_softmodem_params()->numerology);
   SL_ResourcePool_params_t *sl_tx_rsrc_pool = sl_mac->sl_TxPool[pool_id];
+  if (sl_tx_rsrc_pool->phy_sl_bitmap.size == 0) {
+    LOG_W(NR_MAC, "%4d.%2d phy_sl_bitmap not set\n", psfch_frame, psfch_slot);
+    return -1;
+  }
   size_t phy_map_sz = (sl_tx_rsrc_pool->phy_sl_bitmap.size << 3) - sl_tx_rsrc_pool->phy_sl_bitmap.bits_unused;
   bool sl_has_psfch = slot_has_psfch(mac, &sl_tx_rsrc_pool->phy_sl_bitmap, tx_abs_slot, psfch_period, phy_map_sz, mac->SL_MAC_PARAMS->sl_TDD_config);
   LOG_D(NR_MAC, "%s %4d.%2d sl_has_psfch %d\n", __FUNCTION__, psfch_frame, psfch_slot, sl_has_psfch);
