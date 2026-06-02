@@ -20,6 +20,7 @@ int get_NTN_Koffset(const NR_ServingCellConfigCommon_t *scc);
 bool is_ssb_configured(const NR_ServingCellConfigCommon_t *scc, int ssb_index);
 int get_max_ssbs(const NR_ServingCellConfigCommon_t *scc);
 int get_first_ul_slot(const frame_structure_t *fs, bool mixed);
+
 int get_ul_slots_per_period(const frame_structure_t *fs);
 int get_ul_slots_per_frame(const frame_structure_t *fs);
 int get_dl_slots_per_period(const frame_structure_t *fs);
@@ -371,7 +372,6 @@ uint16_t get_pm_index(const gNB_MAC_INST *nrmac,
                       int xp_pdsch_antenna_ports);
 
 int get_mcs_from_SINRx10(int mcs_table, int SINRx10, int Nl);
-uint8_t get_mcs_from_cqi(int mcs_table, int cqi_table, int cqi_idx);
 
 uint8_t get_dl_nrOfLayers(const NR_UE_sched_ctrl_t *sched_ctrl, const nr_dci_format_t dci_format);
 int get_ul_nrOfLayers(const NR_UE_sched_ctrl_t *sched_ctrl, const nr_dci_format_t dci_format);
@@ -433,12 +433,6 @@ bool get_rb_alloc(int rbSize_min,
                   uint16_t sym_mask,
                   int *rbStart_ptr,
                   int *rbSize_ptr);
-
-int get_mcs_from_bler(const NR_bler_options_t *bler_options,
-                      const NR_mac_dir_stats_t *stats,
-                      NR_bler_stats_t *bler_stats,
-                      int max_mcs,
-                      frame_t frame);
 
 int ul_buffer_index(int frame, int slot, int slots_per_frame, int size);
 void UL_tti_req_ahead_initialization(gNB_MAC_INST *gNB, int n, int CCid, frame_t frameP, int slotP);

@@ -70,6 +70,36 @@ typedef enum {
   pusch_len2 = 2
 } pusch_maxLength_t;
 
+typedef struct NR_mac_dir_stats {
+  uint64_t lc_bytes[64];
+  uint64_t rounds[8];
+  uint64_t errors;
+  uint64_t total_bytes;
+  uint32_t current_bytes;
+  uint64_t total_sdu_bytes;
+  uint32_t total_rbs;
+  uint32_t total_rbs_retx;
+  uint32_t num_mac_sdu;
+  uint32_t current_rbs;
+} NR_mac_dir_stats_t;
+
+typedef struct NR_UE_sl_mac_stats {
+  NR_mac_dir_stats_t sl;
+  uint32_t slsch_DTX;
+  uint64_t slsch_total_bytes_scheduled;
+  int cumul_rsrp;
+  uint8_t num_rsrp_meas;
+  uint32_t cumul_round[5];
+} NR_UE_sl_mac_stats_t;
+
+typedef struct NR_bler_options {
+  double upper;
+  double lower;
+  uint8_t min_mcs;
+  uint8_t max_mcs;
+  uint8_t harq_round_max;
+} NR_bler_options_t;
+
 typedef struct {
   uint16_t bwpStart;
   uint16_t bwpSize;
@@ -98,6 +128,7 @@ void config_frame_structure(int mu,
                             uint8_t tdd_period,
                             uint8_t frame_type,
                             frame_structure_t *fs);
+int get_first_ul_slot(const frame_structure_t *fs, bool mixed);
 
 NR_PDSCH_TimeDomainResourceAllocationList_t *get_dl_tdalist(const NR_UE_DL_BWP_t *DL_BWP,
                                                             int controlResourceSetId,
@@ -169,6 +200,14 @@ uint8_t compute_nr_root_seq(NR_RACH_ConfigCommon_t *rach_config,
                             uint8_t unpaired,
                             frequency_range_t);
 
+uint8_t get_mcs_from_cqi(int mcs_table, int cqi_table, int cqi_idx);
+
+int get_mcs_from_bler(const NR_bler_options_t *bler_options,
+                      const NR_mac_dir_stats_t *stats,
+                      NR_bler_stats_t *bler_stats,
+                      int max_mcs,
+                      frame_t frame);
+
 int ul_ant_bits(NR_DMRS_UplinkConfig_t *NR_DMRS_UplinkConfig, long transformPrecoder);
 
 uint8_t get_pdsch_mcs_table(long *mcs_Table, int dci_format, int rnti_type, int ss_type);
@@ -189,6 +228,12 @@ uint32_t nr_compute_tbs(uint16_t Qm,
                         uint16_t nb_rb_oh,
                         uint8_t tb_scaling,
 			uint8_t Nl);
+
+// TODO only UE
+uint32_t nr_compute_tbs_sl(uint16_t Qm,
+                           uint16_t R,
+                           uint16_t nb_re,
+                           uint8_t Nl);
 
 int srs_binomial_sum(int count, int Lmax);
 int srs_codebook_nb_res(NR_SRS_Config_t *srs_config);
@@ -299,5 +344,16 @@ int nr_get_prach_or_ul_mu(const NR_MsgA_ConfigCommon_r16_t *msgacc, const NR_RAC
 int get_delta_for_k2(int mu);
 
 int get_j_for_k2(int mu);
+
+
+/* Functions to manage an NR_list_t */
+void create_nr_list(NR_list_t *listP, int len);
+void resize_nr_list(NR_list_t *list, int new_len);
+void destroy_nr_list(NR_list_t *list);
+void add_nr_list(NR_list_t *listP, int id);
+void remove_nr_list(NR_list_t *listP, int id);
+void add_tail_nr_list(NR_list_t *listP, int id);
+void add_front_nr_list(NR_list_t *listP, int id);
+void remove_front_nr_list(NR_list_t *listP);
 
 #endif
