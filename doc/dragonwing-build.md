@@ -605,15 +605,27 @@ make KERNELDIR=~/linux-6.18.12 \
      modules
 ```
 
-> **Kernel 6.18 patch required:** The Realtek driver uses the removed `hrtimer_init` API.
-> Before building, edit `r8127_ptp.c` around line 754:
+> **Two patches to `r8127_ptp.c` required before building:**
+>
+> **Patch 1 — kernel 6.18 API change (`hrtimer_init` removed).**
+> Around line 754, replace the two-line old API with `hrtimer_setup`:
 > ```diff
 > -        hrtimer_init(&tp->pps_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 > -        tp->pps_timer.function = rtl8127_hrtimer_for_pps;
 > +        hrtimer_setup(&tp->pps_timer, rtl8127_hrtimer_for_pps, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 > ```
-> `hrtimer_init` + separate `.function` assignment was replaced by `hrtimer_setup` in
-> kernel 6.18.
+>
+> **Patch 2 — PHC initialisation (`rtl8127_set_local_time` commented out).**
+> Without this, the PHC starts at 0 after driver reset while the PTP master uses
+> Unix time, causing the delay/offset formulas to produce garbage values (~1.8 s rms).
+> Around line 642, uncomment the call:
+> ```diff
+>  		//enable ptp
+>  		rtl8127_ptp_enable_config(tp);
+>
+> -		//rtl8127_set_local_time(tp);
+> +		rtl8127_set_local_time(tp);
+> ```
 
 If option A modules are already loaded, unload them first:
 
