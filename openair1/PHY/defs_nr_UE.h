@@ -412,6 +412,10 @@ typedef struct PHY_VARS_NR_UE_s {
   /// Phase precompensation flag
   bool no_phase_pre_comp;
 
+  /// Persistent buffer for rho_dl [NR_SYMBOLS_PER_SLOT][Nl*Nl][rx_size_symbol].
+  /// Allocated once on first ML-path use via allocCast3D; freed at UE teardown.
+  fourDimArray_t *rho_dl_buf;
+
   void* scopeData;
   // Pointers to hold PDSCH data only for phy simulators
   void *phy_sim_rxdataF;

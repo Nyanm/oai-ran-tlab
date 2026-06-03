@@ -277,6 +277,7 @@ void term_nr_ue_signal(PHY_VARS_NR_UE *ue)
 {
   const NR_DL_FRAME_PARMS* fp = &ue->frame_parms;
   phy_term_nr_top();
+  free(ue->rho_dl_buf);
 
   NR_UE_COMMON* common_vars = &ue->common_vars;
 
