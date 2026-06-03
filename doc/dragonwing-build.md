@@ -592,9 +592,14 @@ Realtek publishes a standalone driver with full PTP/PHC support
 (`ptp_clock_info`, hardware timestamp registers).  It replaces both `r8169.ko` and
 `realtek.ko` from option A with a single `r8127.ko`.
 
+The upstream Realtek source (`openwrt/rtl8127`) requires several fixes before the
+driver works correctly on the DragonWing.  Use the patched fork below instead of
+the upstream repo; it already contains all fixes described in the repo's `README.md`:
+
 ```shell
 cd ~
-git clone https://github.com/openwrt/rtl8127.git
+# TODO: update URL once the fork is published
+git clone https://github.com/rtknopp/rtl8127.git
 cd rtl8127
 
 make KERNELDIR=~/linux-6.18.12 \
@@ -605,49 +610,16 @@ make KERNELDIR=~/linux-6.18.12 \
      modules
 ```
 
-> **Two patches to `r8127_ptp.c` required before building:**
->
-> **Patch 1 — kernel 6.18 API change (`hrtimer_init` removed).**
-> Around line 754, replace the two-line old API with `hrtimer_setup`:
-> ```diff
-> -        hrtimer_init(&tp->pps_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-> -        tp->pps_timer.function = rtl8127_hrtimer_for_pps;
-> +        hrtimer_setup(&tp->pps_timer, rtl8127_hrtimer_for_pps, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-> ```
->
-> **Patch 2 — PHC initialisation (`rtl8127_set_local_time` called inside spinlock).**
-> Without initialising the PHC, it starts at 0 after driver reset while the PTP
-> master uses Unix time, causing delay/offset formulas to produce garbage (~1.8 s rms).
-> The vendor source has the call commented out; uncommenting it naively causes an RCU
-> stall / spinlock deadlock because `_rtl8127_phc_settime` tries to re-acquire
-> `phy_lock`, which is already held by `rtl8127_hwtstamp_enable`.
-> The fix is to remove the call from inside the locked section and re-add it after
-> the spinlock is released.  In `rtl8127_hwtstamp_enable` (around line 629):
-> ```diff
->  	if (enable) {
->  		//trx timestamp interrupt enable
->  		rtl8127_set_eth_phy_ocp_bit(tp, PTP_INER, BIT_2 | BIT_3);
->  		//set isr clear mode
->  		rtl8127_set_eth_phy_ocp_bit(tp, PTP_GEN_CFG, BIT_0);
->  		//clear ptp isr
->  		rtl8127_mdio_direct_write_phy_ocp(tp, PTP_INSR, 0xFFFF);
->  		//enable ptp
->  		rtl8127_ptp_enable_config(tp);
->
-> -		//rtl8127_set_local_time(tp);
->  	} else {
-> ```
-> and add the call after `r8127_spin_unlock`:
-> ```diff
->  	r8127_spin_unlock(&tp->phy_lock, flags);
->
-> +	/* _rtl8127_phc_settime() acquires phy_lock internally; call after unlock */
-> +	if (enable)
-> +		rtl8127_set_local_time(tp);
-> +
->  	return 0;
->  }
-> ```
+The fork contains the following fixes relative to `openwrt/rtl8127` v11.015.00
+(see `README.md` in the fork for full technical details):
+
+| Fix | Symptom without it |
+|-----|--------------------|
+| **Kernel 6.15+ API** — `hrtimer_init()` + manual `.function` assignment replaced by `hrtimer_setup()` | Build fails on kernels ≥ 6.15 with "implicit declaration" error |
+| **PHC clock initialisation outside spinlock** — `rtl8127_set_local_time()` moved to after `r8127_spin_unlock()` in `rtl8127_hwtstamp_enable()` | `_rtl8127_phc_settime()` re-acquires `phy_lock` while it is already held, causing an RCU stall / spinlock deadlock; PHC stays at 0 while the PTP master uses Unix time, producing ~1.8 s rms offset |
+| **Capture engine arm sequence** — `rtl8127_ptp_enable_config()` (PTP_CTL = 0x103F) called *before* writing `0xA640 BIT_15` at probe time; `0xA640` removed from the `hwtstamp_enable()` path entirely | The PHY timestamp pipeline activates only when `0xA640 BIT_15` is written while `PTP_CTL != 0`; writing it with `PTP_CTL = 0` (the upstream sequence) is silently accepted but `PTP_INSR` never signals `TX_TX_INTR` or `RX_TS_INTR` — all timestamps read as zero.  Writing `0xA640` from the `hwtstamp_enable()` path (called on every `SIOCSHWTSTAMP`) causes an infinite link-drop loop: the autoneg restart drops the link, which ptp4l answers with another `SIOCSHWTSTAMP`, which drops the link again |
+| **Disable path writes `PTP_CTL = 0x0000`** instead of clearing only `BIT_0` | Clearing `BIT_0` alone leaves the PHY in a partial PTP mode that causes the link partner to time out and drop the link on disable |
+| **`rtl8127_ptp_link_up_init()`** — new function called from `rtl8127_link_on_patch` to re-write `PTP_CTL` and `PTP_INER` after any link recovery while hwtstamp is enabled | After a cable pull / reinsert, `PTP_CTL` was not restored; upstream only called `rtl8127_set_local_time()` on link-up, which does not restore PTP capture configuration |
 
 If option A modules are already loaded, unload them first:
 
