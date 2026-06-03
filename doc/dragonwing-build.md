@@ -615,16 +615,38 @@ make KERNELDIR=~/linux-6.18.12 \
 > +        hrtimer_setup(&tp->pps_timer, rtl8127_hrtimer_for_pps, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 > ```
 >
-> **Patch 2 — PHC initialisation (`rtl8127_set_local_time` commented out).**
-> Without this, the PHC starts at 0 after driver reset while the PTP master uses
-> Unix time, causing the delay/offset formulas to produce garbage values (~1.8 s rms).
-> Around line 642, uncomment the call:
+> **Patch 2 — PHC initialisation (`rtl8127_set_local_time` called inside spinlock).**
+> Without initialising the PHC, it starts at 0 after driver reset while the PTP
+> master uses Unix time, causing delay/offset formulas to produce garbage (~1.8 s rms).
+> The vendor source has the call commented out; uncommenting it naively causes an RCU
+> stall / spinlock deadlock because `_rtl8127_phc_settime` tries to re-acquire
+> `phy_lock`, which is already held by `rtl8127_hwtstamp_enable`.
+> The fix is to remove the call from inside the locked section and re-add it after
+> the spinlock is released.  In `rtl8127_hwtstamp_enable` (around line 629):
 > ```diff
+>  	if (enable) {
+>  		//trx timestamp interrupt enable
+>  		rtl8127_set_eth_phy_ocp_bit(tp, PTP_INER, BIT_2 | BIT_3);
+>  		//set isr clear mode
+>  		rtl8127_set_eth_phy_ocp_bit(tp, PTP_GEN_CFG, BIT_0);
+>  		//clear ptp isr
+>  		rtl8127_mdio_direct_write_phy_ocp(tp, PTP_INSR, 0xFFFF);
 >  		//enable ptp
 >  		rtl8127_ptp_enable_config(tp);
 >
 > -		//rtl8127_set_local_time(tp);
+>  	} else {
+> ```
+> and add the call after `r8127_spin_unlock`:
+> ```diff
+>  	r8127_spin_unlock(&tp->phy_lock, flags);
+>
+> +	/* _rtl8127_phc_settime() acquires phy_lock internally; call after unlock */
+> +	if (enable)
 > +		rtl8127_set_local_time(tp);
+> +
+>  	return 0;
+>  }
 > ```
 
 If option A modules are already loaded, unload them first:
