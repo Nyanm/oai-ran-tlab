@@ -264,6 +264,7 @@ static void oran_allocate_buffers(void *handle,
   oran_port_instance_t *pi = &portInstances[0];
   AssertFatal(handle != NULL, "no handle provided\n");
   uint32_t xran_max_antenna_nr = RTE_MAX(fh_config->neAxc, fh_config->neAxcUl);
+  uint32_t xran_max_ant_array_elm_nr =  RTE_MAX(fh_config->nAntElmTRx, xran_max_antenna_nr);
   uint32_t xran_max_sections_per_slot = RTE_MAX(fh_config->max_sections_per_slot, XRAN_MIN_SECTIONS_PER_SLOT);
 
 #if defined(__arm__) || defined(__aarch64__)
@@ -363,12 +364,32 @@ static void oran_allocate_buffers(void *handle,
                                size_of_prb_map_prach,
                                &prachConf);
 
+  // SRS
+  oran_cplane_prb_config srsConf = {
+      .nTddPeriod = fh_config->frame_conf.nTddPeriod,
+      .mixed_slot_index = idx,
+      .slotMap = ulPm,
+      .mixedSlotMap = ulPmMixed,
+  };
+  oran_allocate_uplane_buffers(pi->instanceHandle, bl->srsdst, bl->bufs.srs, xran_max_ant_array_elm_nr, rxBufSize);
+  oran_allocate_cplane_buffers(pi->instanceHandle,
+                               bl->srsdstdecomp,
+                               bl->bufs.srsdecomp,
+                               xran_max_ant_array_elm_nr,
+                               xran_max_sections_per_slot,
+                               mtu,
+                               fh_config,
+                               size_of_prb_map,
+                               &srsConf);
+
   struct xran_buffer_list *src[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
   struct xran_buffer_list *srccp[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
   struct xran_buffer_list *dst[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
   struct xran_buffer_list *dstcp[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
   struct xran_buffer_list *prachdst[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
   struct xran_buffer_list *prachdstdecomp[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
+  struct xran_buffer_list *srsdst[XRAN_MAX_ANT_ARRAY_ELM_NR][XRAN_N_FE_BUF_LEN];
+  struct xran_buffer_list *srsdstdecomp[XRAN_MAX_ANT_ARRAY_ELM_NR][XRAN_N_FE_BUF_LEN];
   for (uint32_t a = 0; a < XRAN_MAX_ANTENNA_NR; ++a) {
     for (uint32_t j = 0; j < XRAN_N_FE_BUF_LEN; ++j) {
       src[a][j] = &bl->src[a][j];
@@ -380,8 +401,15 @@ static void oran_allocate_buffers(void *handle,
     }
   }
 
+  for (uint32_t a = 0; a < XRAN_MAX_ANT_ARRAY_ELM_NR && xran_max_ant_array_elm_nr; ++a) {
+    for (uint32_t j = 0; j < XRAN_N_FE_BUF_LEN; ++j) {
+      srsdst[a][j] = &bl->srsdst[a][j];
+      srsdstdecomp[a][j] = &bl->srsdstdecomp[a][j];
+    }
+  }
   xran_5g_fronthault_config(pi->instanceHandle, src, srccp, dst, dstcp, oai_xran_fh_rx_callback, &portInstances->pusch_tag, fh_config->nNumerology[0]);
   xran_5g_prach_req(pi->instanceHandle, prachdst, prachdstdecomp, oai_xran_fh_rx_prach_callback, &portInstances->prach_tag, fh_config->nNumerology[0]);
+  xran_5g_srs_req(pi->instanceHandle, srsdst, srsdstdecomp, oai_xran_fh_rx_srs_callback, &portInstances->prach_tag, fh_config->nNumerology[0]);
 }
 
 void *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_config *xran_fh_config)
@@ -421,6 +449,7 @@ void *oai_oran_initialize(struct xran_fh_init *xran_fh_init, struct xran_fh_conf
     struct xran_cb_tag tag = {.cellId = sector, .oXuId = o_xu_id};
     pi->prach_tag = tag;
     pi->pusch_tag = tag;
+    pi->srs_tag = tag;
 
     oran_allocate_buffers(gxran_handle[0], o_xu_id, 1, pi, xran_fh_init->mtu, &xran_fh_config[o_xu_id]);
     if ((xret = xran_timingsource_reg_tticb(NULL, oai_physide_dl_tti_call_back, NULL, 10, XRAN_CB_TTI)) != XRAN_STATUS_SUCCESS) {

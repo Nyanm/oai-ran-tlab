@@ -140,4 +140,16 @@
 }
 // clang-format on
 
+#define CONFIG_STRING_ORAN_SRS "srs_config"
+
+#define ORAN_SRS_CONFIG_NUM_ANT_ELEM "num_ant_elem"
+#define ORAN_SRS_CONFIG_EAXC_OFFSET "srs_eAxC_offset"
+
+// clang-format off
+#define ORAN_SRS_DESC {\
+  {ORAN_SRS_CONFIG_NUM_ANT_ELEM, "Number of antenna elements\n",   0,                   .uptr=NULL,  .defuintval=0, TYPE_UINT32, 0}, \
+  {ORAN_SRS_CONFIG_EAXC_OFFSET,  "RU's eAxC offset for SRS\n",     0,                   .u8ptr=NULL, .defuintval=0, TYPE_UINT8,  0}, \
+}
+// clang-format on
+
 #endif /* ORAN_PARAMS_H */

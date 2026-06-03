@@ -1582,6 +1582,9 @@ Edit the sample OAI gNB configuration file and check following parameters:
     * `prach_config`: PRACH-specific configuration
       * `eAxC_offset`:  PRACH antenna offset; if not set, default value of `N = max(Nrx,Ntx)` is used
       * `kbar`: the PRACH guard interval, provided in RU
+    * `srs_config`: SRS-specific configuration
+      * `num_ant_elem`: number of Tx/Rx antenna elements; default is 0
+      * `srs_eAxC_offset`: SRS antenna offset; if not set, default value of `N = max(Nrx,Ntx) + Nrx` is used
   * `app_id`: `DU` or `RU`. Sets the application `id` value in xRAN. Use the default value: `DU`.
 
 Layer mapping (eAxC offsets) happens as follows:

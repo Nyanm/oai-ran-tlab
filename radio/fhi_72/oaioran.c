@@ -168,6 +168,44 @@ int oai_physide_dl_tti_call_back(void *param, uint8_t mu)
   return 0;
 }
 
+/** @details Read SRS data from xran buffers for each RU (for each `port_id`).
+ * If I/Q compression (bitwidth < 16 bits) is configured, decompresses the data
+ * before writing. */
+void oai_xran_fh_rx_srs_callback(void *pCallbackTag, xran_status_t status, uint8_t mu)
+{
+  if (!first_call_set)
+    return;
+  struct xran_cb_tag *callback_tag = (struct xran_cb_tag *)pCallbackTag;
+
+  uint32_t port_id = callback_tag->oXuId;
+  struct xran_fh_config *fh_cfg = get_xran_fh_config(port_id);
+  uint32_t num_ant_elem = fh_cfg->nAntElmTRx;
+
+  const int slots_in_sf = 1 << mu;
+  const int sf_in_frame = 10;
+
+  uint32_t tti = callback_tag->slotiId;
+  uint32_t frame = XranGetFrameNum(tti, 0, sf_in_frame, slots_in_sf);
+  //uint32_t subframe = XranGetSubFrameNum(tti, slots_in_sf, sf_in_frame);
+  uint32_t slot = XranGetSlotNum(tti, slots_in_sf * sf_in_frame); // slot within a frame, not a subframe
+  uint32_t rx_sym = callback_tag->symbol & 0xFF; // rx_sym = 7 => cb full slot
+
+  LOG_D(HW, "[%d.%d] %s, tti %d rx_sym %d ru_id %d\n", frame, slot, __FUNCTION__, tti, rx_sym, port_id);
+
+  // TODO: reset the number of received packets for non SRS slots
+  for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) {
+    oran_buf_list_t *bufs = get_xran_buffers(port_id);
+    for (int ant_id = 0; ant_id < num_ant_elem; ant_id++) {
+      for (int sym_idx = 0; sym_idx < XRAN_NUM_OF_SYMBOL_PER_SLOT; sym_idx++) {
+        struct xran_prb_map *pPrbMap = (struct xran_prb_map *)bufs->srsdstdecomp[ant_id][tti % XRAN_N_FE_BUF_LEN].pBuffers->pData;
+        pPrbMap->sFrontHaulRxPacketCtrl[sym_idx].nRxPkt = 0;
+      }
+    }
+  }
+
+  // TODO: map SRS IQ data into OAI (new buffer or reuse rxdataF ?)
+}
+
 /** @details Read PRACH data from xran buffers for each RU (for each `port_id`).
  * If I/Q compression (bitwidth < 16 bits) is configured, decompresses the data
  * before writing. */

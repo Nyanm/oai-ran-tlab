@@ -834,6 +834,36 @@ static bool set_fh_prach_config(void *mplane_api,
   return true;
 }
 
+static bool set_fh_srs_config(void *mplane_api,
+                              const openair0_config_t *oai0,
+                              const uint32_t max_num_ant,
+                              const paramdef_t *srsp,
+                              int nsrs,
+                              struct xran_srs_config *srs_config)
+{
+  //const split7_config_t *s7cfg = &oai0->split7;
+
+  /* deprecated */
+  srs_config->symbMask = 0;
+  /**< SRS slot within TDD period (special slot), for O-RU emulation */
+  srs_config->slot = 0;
+  /**< tti offset to delay the transmission of NDM SRS UP, for O-RU emulation */
+  srs_config->ndm_offset = 0;
+  /**< symbol duration for NDM SRS UP transmisson, for O-RU emulation */
+  srs_config->ndm_txduration = 0;
+
+  /**< starting value of eAxC for SRS packets for this numerology (Absolute value). Should be unique across all numerologies for the RU */
+#ifdef OAI_MPLANE
+  xran_mplane_t *xran_mplane = (xran_mplane_t *)mplane_api;
+  // TODO
+#else
+  const paramdef_t *pd = gpd(srsp, nsrs, ORAN_SRS_CONFIG_EAXC_OFFSET);
+  srs_config->srsEaxcOffset = pd->paramflags & PARAMFLAG_PARAMSET ? *pd->u8ptr : max_num_ant;
+#endif
+
+  return true;
+}
+
 static bool set_fh_frame_config(const openair0_config_t *oai0, struct xran_frame_config *frame_config)
 {
   const split7_config_t *s7cfg = &oai0->split7;
@@ -1006,6 +1036,15 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
     return false;
   }
 
+  paramdef_t srsp[] = ORAN_SRS_DESC;
+  int nsrs = sizeofArray(srsp);
+  sprintf(aprefix, "%s.%s.[%d].%s", CONFIG_STRING_ORAN, CONFIG_STRING_ORAN_FH, ru_idx, CONFIG_STRING_ORAN_SRS);
+  ret = config_get(config_get_if(), srsp, nsrs, aprefix);
+  if (ret < 0) {
+    printf("No configuration section \"%s\": cannot initialize fhi_lib!\n", aprefix);
+    return false;
+  }
+
   memset(fh_config, 0, sizeof(*fh_config));
 
   fh_config->dpdk_port = ru_idx; // DPDK port number used for FH
@@ -1013,7 +1052,7 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
   fh_config->nCC = 1; // number of Component carriers supported on FH; M-plane info
   fh_config->neAxc = RTE_MAX(oai0->tx_num_channels / num_rus, oai0->rx_num_channels / num_rus); // number of eAxc supported on one CC = max(PDSCH, PUSCH)
   fh_config->neAxcUl = oai0->rx_num_channels / num_rus; // number of eAxc supported on one CC for UL direction = PUSCH
-  fh_config->nAntElmTRx = 0; // number of antenna elements for TX and RX = SRS; used only if XRAN_CATEGORY_B
+  fh_config->nAntElmTRx = *gpd(srsp, nsrs, ORAN_SRS_CONFIG_NUM_ANT_ELEM)->uptr; // number of antenna elements for TX and RX = SRS; one tx/rx-array can have one or more antenna elements; XRAN_MAX_ANT_ARRAY_ELM_NR
   fh_config->nDLAbsFrePointA = 0; // Abs Freq Point A of the Carrier Center Frequency for in KHz Value; not used in xran
   fh_config->nULAbsFrePointA = 0; // Abs Freq Point A of the Carrier Center Frequency for in KHz Value; not used in xran
   fh_config->nDLCenterFreqARFCN = 0; // center frequency for DL in NR-ARFCN; not used in xran
@@ -1026,7 +1065,9 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
     return false;
 
   fh_config->enableCP = 1; // enable C-plane
-  fh_config->srsEnable = 0; // enable SRS; used only if XRAN_CATEGORY_B
+  fh_config->srsEnable = srsp->paramflags & PARAMFLAG_PARAMSET ? 1 : 0; // enable SRS; can be used for XRAN_CATEGORY_A and XRAN_CATEGORY_B
+  fh_config->srsEnableCp = srsp->paramflags & PARAMFLAG_PARAMSET ? 1 : 0; // enable SRS C-plane
+  fh_config->SrsDelaySym = 0; // enable static SRS configuration (when srsEnableCp = 0)
   fh_config->puschMaskEnable = 0; // enable PUSCH mask; only used if id = O_RU
   fh_config->puschMaskSlot = 0; // specific which slot PUSCH channel masked; only used if id = O_RU
   fh_config->csirsEnable = 0; // enable CSI-RS (Cat B specific)
@@ -1039,9 +1080,10 @@ static bool set_fh_config(void *mplane_api, int ru_idx, int num_rus, enum xran_c
   fh_config->mu_number[0] = mu_number; /* 0 -> 15kHz,  1 -> 30kHz,  2 -> 60kHz, 3 -> 120kHz, 4 -> 240kHz */
   fh_config->nNumerology[0] = mu_number; /* 0 -> 15kHz,  1 -> 30kHz,  2 -> 60kHz, 3 -> 120kHz, 4 -> 240kHz */
 
-  /* SRS only used if XRAN_CATEGORY_B
+  /* SRS configuration
     Note: srs_config->eAxC_offset >= prach_config->eAxC_offset + PRACH */
-  // fh_config->srs_conf = {0};
+  if (!set_fh_srs_config(mplane_api, oai0, RTE_MAX(oai0->tx_num_channels / num_rus, oai0->rx_num_channels / num_rus) + oai0->rx_num_channels / num_rus, srsp, nsrs, &fh_config->srs_conf))
+    return false;
   if (!set_fh_frame_config(oai0, &fh_config->frame_conf))
     return false;
   if (!set_fh_ru_config(mplane_api, rup, oai0->split7.prach_fftSize, nru, xran_cat, mu_number, &fh_config->ru_conf))

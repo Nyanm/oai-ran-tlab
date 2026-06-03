@@ -28,6 +28,8 @@ It calls various helper function in the same file to set up DPDK memory buffer
 - `oai_xran_fh_rx_prach_callback()` through `xran_5g_prach_req()`: callback for
   PRACH data. For each TTI, OAI checks if PRACH is scheduled through `prach_ru_queue`.
   If yes, then reads and stores IQ samples into the `prach_buf`.
+- `oai_xran_fh_rx_srs_callback()` through `xran_5g_srs_req()`: callback for
+  SRS data if SRS configured on eAxC IDs other than for PUSCH. TODO later text
 - `oai_physide_dl_tti_call_back()` through `xran_reg_physide_cb()`: only used
   to unblock timing in `oai_xran_fh_rx_callback()` and `oai_xran_fh_rx_prach_callback()`
   upon first xran call.

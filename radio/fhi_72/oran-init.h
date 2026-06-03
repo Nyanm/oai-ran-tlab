@@ -16,6 +16,9 @@ typedef struct oran_bufs {
 
   struct xran_flat_buffer prach[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN][XRAN_NUM_OF_SYMBOL_PER_SLOT];
   struct xran_flat_buffer prachdecomp[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
+
+  struct xran_flat_buffer srs[XRAN_MAX_ANT_ARRAY_ELM_NR][XRAN_N_FE_BUF_LEN][XRAN_NUM_OF_SYMBOL_PER_SLOT];
+  struct xran_flat_buffer srsdecomp[XRAN_MAX_ANT_ARRAY_ELM_NR][XRAN_N_FE_BUF_LEN];
 } oran_bufs_t;
 
 typedef struct oran_buf_list {
@@ -28,6 +31,9 @@ typedef struct oran_buf_list {
   struct xran_buffer_list prachdst[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
   struct xran_buffer_list prachdstdecomp[XRAN_MAX_ANTENNA_NR][XRAN_N_FE_BUF_LEN];
 
+  struct xran_buffer_list srsdst[XRAN_MAX_ANT_ARRAY_ELM_NR][XRAN_N_FE_BUF_LEN];
+  struct xran_buffer_list srsdstdecomp[XRAN_MAX_ANT_ARRAY_ELM_NR][XRAN_N_FE_BUF_LEN];
+
   oran_bufs_t bufs;
 } oran_buf_list_t;
 
@@ -38,6 +44,7 @@ typedef struct oran_port_instance_t {
 
   struct xran_cb_tag prach_tag;
   struct xran_cb_tag pusch_tag;
+  struct xran_cb_tag srs_tag;
 } oran_port_instance_t;
 
 extern struct xran_fh_config gxran_fh_config[XRAN_PORTS_NUM];
