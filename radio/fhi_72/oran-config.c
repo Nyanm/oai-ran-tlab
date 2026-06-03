@@ -58,7 +58,18 @@ static void print_fh_init_io_cfg(const struct xran_io_cfg *io_cfg)
     bbdev_dev %s\n\
     bbdev_mode %d\n\
     dpdkIoVaMode %d\n\
-    dpdkMemorySize %d\n",
+    dpdkMemorySize %d\n\
+    core %d\n\
+    system_core %d\n\
+    pkt_proc_core %016lx\n\
+    pkt_proc_core_64_127 %016lx\n\
+    pkt_aux_core %d\n\
+    timing_core %d\n\
+    port (filled within xran library)\n\
+    io_sleep %d\n\
+    nEthLinePerPort %d\n\
+    nEthLineSpeed %d\n\
+    one_vf_cu_plane %d\n",
       io_cfg->id,
       io_cfg->id == 0 ? "O-DU" : "O-RU",
       io_cfg->num_vfs,
@@ -82,20 +93,7 @@ static void print_fh_init_io_cfg(const struct xran_io_cfg *io_cfg)
       io_cfg->bbdev_dev[0],
       io_cfg->bbdev_mode,
       io_cfg->dpdkIoVaMode,
-      io_cfg->dpdkMemorySize);
-
-  printf("\
-    core %d\n\
-    system_core %d\n\
-    pkt_proc_core %016lx\n\
-    pkt_proc_core_64_127 %016lx\n\
-    pkt_aux_core %d\n\
-    timing_core %d\n\
-    port (filled within xran library)\n\
-    io_sleep %d\n\
-    nEthLinePerPort %d\n\
-    nEthLineSpeed %d\n\
-    one_vf_cu_plane %d\n",
+      io_cfg->dpdkMemorySize,
       io_cfg->core,
       io_cfg->system_core,
       io_cfg->pkt_proc_core,
@@ -106,6 +104,7 @@ static void print_fh_init_io_cfg(const struct xran_io_cfg *io_cfg)
       io_cfg->nEthLinePerPort,
       io_cfg->nEthLineSpeed,
       io_cfg->one_vf_cu_plane);
+
   print_fh_eowd_cmn(io_cfg->id, &io_cfg->eowd_cmn[io_cfg->id]);
   printf("eowd_port (filled within xran library)\n");
   printf("\
@@ -171,11 +170,10 @@ void print_fh_init(const struct xran_fh_init *fh_init)
   if (fh_init->p_o_ru_addr) print_ether_addr("  p_o_ru_addr", fh_init->xran_ports * fh_init->io_cfg.num_vfs, (struct rte_ether_addr *)fh_init->p_o_ru_addr);
   else if (fh_init->p_o_du_addr) print_ether_addr("  p_o_du_addr", fh_init->xran_ports * fh_init->io_cfg.num_vfs, (struct rte_ether_addr *)fh_init->p_o_du_addr);
   printf("\
-  totalBfWeights %d\n",
-      fh_init->totalBfWeights);
-  printf("\
+  totalBfWeights %d\n\
   mlogxranenable %d\n\
   dlCpProcBurst %d\n",
+      fh_init->totalBfWeights,
       fh_init->mlogxranenable,
       fh_init->dlCpProcBurst);
 }
@@ -199,6 +197,7 @@ static void print_prach_config(const struct xran_prach_config *prach_conf)
        timeOffset %d\n\
        freqOffset %d\n\
        prachEaxcOffset %d\n\
+       nPrachConfIdxLTE %d\n\
        nprachformat %d\n\
        periodicity %d\n\
        startTime %d\n\
@@ -220,16 +219,13 @@ static void print_prach_config(const struct xran_prach_config *prach_conf)
       prach_conf->timeOffset,
       prach_conf->freqOffset,
       prach_conf->prachEaxcOffset,
+      prach_conf->nPrachConfIdxLTE,
       prach_conf->nprachformat,
       prach_conf->periodicity,
       prach_conf->startTime,
       prach_conf->suboffset,
       prach_conf->numSubCarriers,
-      prach_conf->nRep
-      );
-  printf("\
-    nPrachConfIdxLTE %d\n",
-      prach_conf->nPrachConfIdxLTE);
+      prach_conf->nRep);
 }
 
 static void print_srs_config(const struct xran_srs_config *srs_conf)
@@ -393,6 +389,8 @@ void print_fh_config(const struct xran_fh_config *fh_config)
   printf("\
   enableCP %d\n\
   srsEnable %d\n\
+  srsEnableCp %d\n\
+  SrsDelaySym %d\n\
   puschMaskEnable %d\n\
   puschMaskSlot %d\n\
   debugStop %d\n\
@@ -402,6 +400,8 @@ void print_fh_config(const struct xran_fh_config *fh_config)
   GPS_Beta %d\n",
       fh_config->enableCP,
       fh_config->srsEnable,
+      fh_config->srsEnableCp,
+      fh_config->SrsDelaySym,
       fh_config->puschMaskEnable,
       fh_config->puschMaskSlot,
       fh_config->debugStop,
@@ -409,12 +409,6 @@ void print_fh_config(const struct xran_fh_config *fh_config)
       fh_config->DynamicSectionEna,
       fh_config->GPS_Alpha,
       fh_config->GPS_Beta);
-
-  printf("\
-  srsEnableCp %d\n\
-  SrsDelaySym %d\n",
-      fh_config->srsEnableCp,
-      fh_config->SrsDelaySym);
 
   print_srs_config(&fh_config->srs_conf);
   print_frame_config(&fh_config->frame_conf);
@@ -429,7 +423,14 @@ void print_fh_config(const struct xran_fh_config *fh_config)
   rx_up_eAxC2Vf %p\n\
   log_level %d\n\
   max_sections_per_slot %d\n\
-  max_sections_per_symbol %d\n",
+  max_sections_per_symbol %d\n\
+  RunSlotPrbMapBySymbolEnable %d\n\
+  dssEnable %d\n\
+  dssPeriod %d\n\
+  technology[XRAN_MAX_DSS_PERIODICITY] (not filled as DSS disabled)\n\
+  numMUs %d\n\
+  mu_number[0] %d\n\
+  nNumerology[0] %d\n",
       fh_config->bbdev_enc,
       fh_config->bbdev_dec,
       fh_config->tx_cp_eAxC2Vf,
@@ -438,21 +439,10 @@ void print_fh_config(const struct xran_fh_config *fh_config)
       fh_config->rx_up_eAxC2Vf,
       fh_config->log_level,
       fh_config->max_sections_per_slot,
-      fh_config->max_sections_per_symbol);
-
-  printf("\
-  RunSlotPrbMapBySymbolEnable %d\n\
-  dssEnable %d\n\
-  dssPeriod %d\n\
-  technology[XRAN_MAX_DSS_PERIODICITY] (not filled as DSS disabled)\n",
+      fh_config->max_sections_per_symbol,
       fh_config->RunSlotPrbMapBySymbolEnable,
       fh_config->dssEnable,
-      fh_config->dssPeriod);
-
-  printf("\
-  numMUs %d\n\
-  mu_number[0] %d\n\
-  nNumerology[0] %d\n",
+      fh_config->dssPeriod,
       fh_config->numMUs,
       fh_config->mu_number[0],
       fh_config->nNumerology[0]);
