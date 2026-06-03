@@ -565,29 +565,11 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
                                                          &mt);
   }
   fourDimArray_t *toFree3 = NULL;
-  allocCast3D(dl_ch_mag,
-              c16_t,
-              toFree3,
-              NR_SYMBOLS_PER_SLOT,
-              dlsch->cw_info.Nl * ue->frame_parms.nb_antennas_rx,
-              rx_size_symbol,
-              false);
+  allocCast3D(dl_ch_mag, c16_t, toFree3, NR_SYMBOLS_PER_SLOT, dlsch->cw_info.Nl, rx_size_symbol, false);
   fourDimArray_t *toFree4 = NULL;
-  allocCast3D(dl_ch_magb,
-              c16_t,
-              toFree4,
-              NR_SYMBOLS_PER_SLOT,
-              dlsch->cw_info.Nl * ue->frame_parms.nb_antennas_rx,
-              rx_size_symbol,
-              false);
+  allocCast3D(dl_ch_magb, c16_t, toFree4, NR_SYMBOLS_PER_SLOT, dlsch->cw_info.Nl, rx_size_symbol, false);
   fourDimArray_t *toFree5 = NULL;
-  allocCast3D(dl_ch_magr,
-              c16_t,
-              toFree5,
-              NR_SYMBOLS_PER_SLOT,
-              dlsch->cw_info.Nl * ue->frame_parms.nb_antennas_rx,
-              rx_size_symbol,
-              false);
+  allocCast3D(dl_ch_magr, c16_t, toFree5, NR_SYMBOLS_PER_SLOT, dlsch->cw_info.Nl, rx_size_symbol, false);
   for (int m = dlschCfg->start_symbol; m < (dlschCfg->number_symbols + dlschCfg->start_symbol); m++) {
     bool first_symbol_flag = false;
     if (m == first_symbol_with_data)

@@ -109,127 +109,6 @@ static uint32_t build_csi_overlap_bitmap(fapi_nr_dl_config_dlsch_pdu_rel15_t *dl
 // Pre-processing for LLR computation
 //==============================================================================================
 
-static void nr_dlsch_channel_compensation(uint32_t rx_size_symbol,
-                                          int nbRx,
-                                          uint8_t n_layers,
-                                          c16_t rxdataF_ext[][rx_size_symbol],
-                                          int32_t dl_ch_estimates_ext[][rx_size_symbol],
-                                          c16_t dl_ch_mag[][rx_size_symbol],
-                                          c16_t dl_ch_magb[][rx_size_symbol],
-                                          c16_t dl_ch_magr[][rx_size_symbol],
-                                          c16_t rxdataF_comp[][n_layers * nbRx][rx_size_symbol],
-                                          int ***rho,
-                                          NR_DL_FRAME_PARMS *frame_parms,
-                                          unsigned char symbol,
-                                          int length,
-                                          unsigned char mod_order,
-                                          unsigned short nb_rb,
-                                          unsigned char output_shift)
-{
-  simde__m128i *dl_ch128, *dl_ch128_2, *dl_ch_mag128, *dl_ch_mag128b, *dl_ch_mag128r, *rxdataF128, *rxdataF_comp128, *rho128;
-  simde__m128i QAM_amp128 = {0}, QAM_amp128b = {0}, QAM_amp128r = {0};
-
-  uint32_t nb_rb_0 = length / 12 + ((length % 12) ? 1 : 0);
-
-  for (int l = 0; l < n_layers; l++) {
-    if (mod_order == 4) {
-      QAM_amp128 = simde_mm_set1_epi16(QAM16_n1); // 2/sqrt(10)
-      QAM_amp128b = simde_mm_setzero_si128();
-      QAM_amp128r = simde_mm_setzero_si128();
-    } else if (mod_order == 6) {
-      QAM_amp128 = simde_mm_set1_epi16(QAM64_n1); //
-      QAM_amp128b = simde_mm_set1_epi16(QAM64_n2);
-      QAM_amp128r = simde_mm_setzero_si128();
-    } else if (mod_order == 8) {
-      QAM_amp128 = simde_mm_set1_epi16(QAM256_n1);
-      QAM_amp128b = simde_mm_set1_epi16(QAM256_n2);
-      QAM_amp128r = simde_mm_set1_epi16(QAM256_n3);
-    }
-
-    for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) {
-      dl_ch128 = (simde__m128i *)dl_ch_estimates_ext[(l * frame_parms->nb_antennas_rx) + aarx];
-      dl_ch_mag128 = (simde__m128i *)dl_ch_mag[l * frame_parms->nb_antennas_rx + aarx];
-      dl_ch_mag128b = (simde__m128i *)dl_ch_magb[l * frame_parms->nb_antennas_rx + aarx];
-      dl_ch_mag128r = (simde__m128i *)dl_ch_magr[l * frame_parms->nb_antennas_rx + aarx];
-      rxdataF128 = (simde__m128i *)rxdataF_ext[aarx];
-      rxdataF_comp128 = (simde__m128i *)(rxdataF_comp[symbol][l * nbRx + aarx]);
-
-      for (int rb = 0; rb < nb_rb_0; rb++) {
-        if (mod_order > 2) {
-          // get channel amplitude if not QPSK
-
-          simde__m128i mmtmpD0 = simde_mm_madd_epi16(dl_ch128[0], dl_ch128[0]);
-          mmtmpD0 = simde_mm_srai_epi32(mmtmpD0, output_shift);
-
-          simde__m128i mmtmpD1 = simde_mm_madd_epi16(dl_ch128[1], dl_ch128[1]);
-          mmtmpD1 = simde_mm_srai_epi32(mmtmpD1, output_shift);
-
-          mmtmpD0 = simde_mm_packs_epi32(mmtmpD0, mmtmpD1); //|H[0]|^2 |H[1]|^2 |H[2]|^2 |H[3]|^2 |H[4]|^2 |H[5]|^2 |H[6]|^2 |H[7]|^2
-
-          // store channel magnitude here in a new field of dlsch
-
-          dl_ch_mag128[0] = simde_mm_unpacklo_epi16(mmtmpD0, mmtmpD0);
-          dl_ch_mag128b[0] = dl_ch_mag128[0];
-          dl_ch_mag128r[0] = dl_ch_mag128[0];
-          dl_ch_mag128[0] = simde_mm_mulhrs_epi16(dl_ch_mag128[0], QAM_amp128);
-          dl_ch_mag128b[0] = simde_mm_mulhrs_epi16(dl_ch_mag128b[0], QAM_amp128b);
-          dl_ch_mag128r[0] = simde_mm_mulhrs_epi16(dl_ch_mag128r[0], QAM_amp128r);
-
-          dl_ch_mag128[1] = simde_mm_unpackhi_epi16(mmtmpD0, mmtmpD0);
-          dl_ch_mag128b[1] = dl_ch_mag128[1];
-          dl_ch_mag128r[1] = dl_ch_mag128[1];
-          dl_ch_mag128[1] = simde_mm_mulhrs_epi16(dl_ch_mag128[1], QAM_amp128);
-          dl_ch_mag128b[1] = simde_mm_mulhrs_epi16(dl_ch_mag128b[1], QAM_amp128b);
-          dl_ch_mag128r[1] = simde_mm_mulhrs_epi16(dl_ch_mag128r[1], QAM_amp128r);
-
-          mmtmpD0 = simde_mm_madd_epi16(dl_ch128[2], dl_ch128[2]);
-          mmtmpD0 = simde_mm_srai_epi32(mmtmpD0, output_shift);
-          mmtmpD1 = simde_mm_packs_epi32(mmtmpD0, mmtmpD0);
-
-          dl_ch_mag128[2] = simde_mm_unpacklo_epi16(mmtmpD1, mmtmpD1);
-          dl_ch_mag128b[2] = dl_ch_mag128[2];
-          dl_ch_mag128r[2] = dl_ch_mag128[2];
-
-          dl_ch_mag128[2] = simde_mm_mulhrs_epi16(dl_ch_mag128[2], QAM_amp128);
-          dl_ch_mag128b[2] = simde_mm_mulhrs_epi16(dl_ch_mag128b[2], QAM_amp128b);
-          dl_ch_mag128r[2] = simde_mm_mulhrs_epi16(dl_ch_mag128r[2], QAM_amp128r);
-        }
-
-        // Multiply received data by conjugated channel
-        rxdataF_comp128[0] = oai_mm_cpx_mult_conj(dl_ch128[0], rxdataF128[0], output_shift);
-        rxdataF_comp128[1] = oai_mm_cpx_mult_conj(dl_ch128[1], rxdataF128[1], output_shift);
-        rxdataF_comp128[2] = oai_mm_cpx_mult_conj(dl_ch128[2], rxdataF128[2], output_shift);
-
-        dl_ch128 += 3;
-        dl_ch_mag128 += 3;
-        dl_ch_mag128b += 3;
-        dl_ch_mag128r += 3;
-        rxdataF128 += 3;
-        rxdataF_comp128 += 3;
-      }
-    }
-  }
-
-  if (rho) {
-    // we compute the Tx correlation matrix for each Rx antenna
-    // As an example the 2x2 MIMO case requires
-    // rho[aarx][nl*nl] = [cov(H_aarx_0,H_aarx_0) cov(H_aarx_0,H_aarx_1)
-    //                               cov(H_aarx_1,H_aarx_0) cov(H_aarx_1,H_aarx_1)], aarx=0,...,nb_antennas_rx-1
-
-    for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) {
-      for (int l = 0; l < n_layers; l++) {
-        for (int atx = 0; atx < n_layers; atx++) {
-          rho128 = (simde__m128i *)&rho[aarx][l * n_layers + atx][symbol * nb_rb * 12];
-          dl_ch128 = (simde__m128i *)dl_ch_estimates_ext[l * frame_parms->nb_antennas_rx + aarx];
-          dl_ch128_2 = (simde__m128i *)dl_ch_estimates_ext[atx * frame_parms->nb_antennas_rx + aarx];
-          // multiply by conjugated channel
-          mult_cpx_conj_vector((c16_t *)dl_ch128, (c16_t *)dl_ch128_2, (c16_t *)rho128, 12 * nb_rb_0, output_shift);
-        }
-      }
-    }
-  }
-}
-
 static void nr_dlsch_channel_level_median(uint32_t rx_size_symbol,
                                           int32_t dl_ch_estimates_ext[][rx_size_symbol],
                                           int32_t median[MAX_ANT][MAX_ANT],
@@ -368,64 +247,6 @@ static void nr_dlsch_extract_rbs(uint32_t rxdataF_sz,
         }
       }
     }
-  }
-}
-
-static void nr_dlsch_detection_mrc(uint32_t rx_size_symbol,
-                                   short nl,
-                                   short n_rx,
-                                   c16_t rxdataF_comp[][nl * n_rx][rx_size_symbol],
-                                   int ***rho,
-                                   c16_t dl_ch_mag[][rx_size_symbol],
-                                   c16_t dl_ch_magb[][rx_size_symbol],
-                                   c16_t dl_ch_magr[][rx_size_symbol],
-                                   unsigned char symbol,
-                                   int length)
-{
-  simde__m128i *rxdataF_comp128_0,*rxdataF_comp128_1,*dl_ch_mag128_0,*dl_ch_mag128_1,*dl_ch_mag128_0b,*dl_ch_mag128_1b,*dl_ch_mag128_0r,*dl_ch_mag128_1r;
-  uint32_t nb_rb_0 = length / 12 + ((length % 12) ? 1 : 0);
-
-  if (n_rx > 1) {
-    for (int l = 0; l < nl; l++) {
-      rxdataF_comp128_0 = (simde__m128i *)(rxdataF_comp[symbol][l * n_rx]);
-      dl_ch_mag128_0 = (simde__m128i *)dl_ch_mag[l * n_rx];
-      dl_ch_mag128_0b = (simde__m128i *)dl_ch_magb[l * n_rx];
-      dl_ch_mag128_0r = (simde__m128i *)dl_ch_magr[l * n_rx];
-      for (int aarx = 1; aarx < n_rx; aarx++) {
-        rxdataF_comp128_1 = (simde__m128i *)(rxdataF_comp[symbol][l * n_rx + aarx]);
-        dl_ch_mag128_1 = (simde__m128i *)dl_ch_mag[l * n_rx + aarx];
-        dl_ch_mag128_1b = (simde__m128i *)dl_ch_magb[l * n_rx + aarx];
-        dl_ch_mag128_1r = (simde__m128i *)dl_ch_magr[l * n_rx + aarx];
-
-        // MRC on each re of rb, both on MF output and magnitude (for 16QAM/64QAM/256 llr computation)
-        for (int i = 0; i < nb_rb_0 * 3; i++) {
-          rxdataF_comp128_0[i] = simde_mm_adds_epi16(rxdataF_comp128_0[i],rxdataF_comp128_1[i]);
-          dl_ch_mag128_0[i]    = simde_mm_adds_epi16(dl_ch_mag128_0[i],dl_ch_mag128_1[i]);
-          dl_ch_mag128_0b[i]   = simde_mm_adds_epi16(dl_ch_mag128_0b[i],dl_ch_mag128_1b[i]);
-          dl_ch_mag128_0r[i]   = simde_mm_adds_epi16(dl_ch_mag128_0r[i],dl_ch_mag128_1r[i]);
-        }
-      }
-    }
-#ifdef DEBUG_DLSCH_DEMOD
-    for (int i = 0; i < nb_rb_0 * 3; i++) {
-      printf("symbol%d RB %d\n", symbol, i / 3);
-      rxdataF_comp128_0 = (simde__m128i *)(rxdataF_comp[symbol][0]);
-      rxdataF_comp128_1 = (simde__m128i *)(rxdataF_comp[symbol][n_rx]);
-      print_shorts("tx 1 mrc_re/mrc_Im:",(int16_t*)&rxdataF_comp128_0[i]);
-      print_shorts("tx 2 mrc_re/mrc_Im:",(int16_t*)&rxdataF_comp128_1[i]);
-      // printf("mrc mag0 = %d = %d \n",((int16_t*)&dl_ch_mag128_0[0])[0],((int16_t*)&dl_ch_mag128_0[0])[1]);
-      // printf("mrc mag0b = %d = %d \n",((int16_t*)&dl_ch_mag128_0b[0])[0],((int16_t*)&dl_ch_mag128_0b[0])[1]);
-    }
-#endif
-    if (rho) {
-      /*rho128_0 = (simde__m128i *) &rho[0][symbol*frame_parms->N_RB_DL*12];
-      rho128_1 = (simde__m128i *) &rho[1][symbol*frame_parms->N_RB_DL*12];
-      for (i=0; i<nb_rb_0*3; i++) {
-        //      print_shorts("mrc rho0:",&rho128_0[i]);
-        //      print_shorts("mrc rho1:",&rho128_1[i]);
-        rho128_0[i] = simde_mm_adds_epi16(simde_mm_srai_epi16(rho128_0[i],1),simde_mm_srai_epi16(rho128_1[i],1));
-      }*/
-      }
   }
 }
 
@@ -936,6 +757,7 @@ static int nr_dlsch_llr(const NR_UE_DLSCH_t *dlsch,
 //==============================================================================================
 
 /* Main Function */
+
 int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                 const UE_nr_rxtx_proc_t *proc,
                 NR_UE_DLSCH_t *dlsch,
@@ -954,9 +776,9 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                 int rx_size_symbol,
                 int nbRx,
                 c16_t rxdataF_comp[][dlsch->cw_info.Nl * nbRx][rx_size_symbol],
-                c16_t dl_ch_mag[][dlsch->cw_info.Nl * nbRx][rx_size_symbol],
-                c16_t dl_ch_magb[][dlsch->cw_info.Nl * nbRx][rx_size_symbol],
-                c16_t dl_ch_magr[][dlsch->cw_info.Nl * nbRx][rx_size_symbol],
+                c16_t dl_ch_mag[][dlsch->cw_info.Nl][rx_size_symbol],
+                c16_t dl_ch_magb[][dlsch->cw_info.Nl][rx_size_symbol],
+                c16_t dl_ch_magr[][dlsch->cw_info.Nl][rx_size_symbol],
                 c16_t ptrs_phase_per_slot[][NR_SYMBOLS_PER_SLOT],
                 int32_t ptrs_re_per_slot[][NR_SYMBOLS_PER_SLOT],
                 uint32_t nvar,
@@ -964,10 +786,24 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
 {
   NR_DL_FRAME_PARMS *fp = &ue->frame_parms;
   const int nl = dlsch->cw_info.Nl;
-  const int n_rx = fp->nb_antennas_rx;
-  const int matrixSz = n_rx * nl;
+  const int matrixSz = nbRx * nl;
   __attribute__((aligned(32))) int32_t dl_ch_estimates_ext[matrixSz][rx_size_symbol];
   memset(dl_ch_estimates_ext, 0, sizeof(dl_ch_estimates_ext));
+
+  // Use ML-based LLR for 2-layer MIMO with QPSK/16QAM/64QAM (nl==2, qamModOrder<=6).
+  // When false (default), MMSE equalization is used for all configurations.
+  bool do_ml = false;
+
+  // Reinterpret flat dl_ch_estimates_ext as [nl][nbRx][rx_size_symbol]
+  c16_t(*chFext)[nbRx][rx_size_symbol] = (void *)dl_ch_estimates_ext;
+
+  // nr_channel_compensation reads rxComp[l * nb_rx_ant], so size nl * nbRx is required;
+  // MRC output is written per layer at row l * nbRx, the rest are unused.
+  // TODO: reduce to nl indices by changing rxComp indexing to rxComp[l] in nr_channel_compensation,
+  //       with matching gNB UL changes in a future MR.
+  c16_t *p_rxComp[nl * nbRx];
+  for (int l = 0; l < nl; l++)
+    p_rxComp[l * nbRx] = rxdataF_comp[symbol][l * nbRx];
 
   NR_UE_COMMON *common_vars  = &ue->common_vars;
   const int frame = proc->frame_rx;
@@ -993,6 +829,9 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
 
   uint8_t pilots = (dlsch_config->dlDmrsSymbPos >> symbol) & 1;
   uint8_t config_type = dlsch_config->dmrsConfigType;
+
+  const bool need_rho __attribute__((unused)) = do_ml ? (nl == 2 && dlsch_config->cw_info->qamModOrder <= 6) : false;
+
   //----------------------------------------------------------
   //--------------------- RBs extraction ---------------------
   //----------------------------------------------------------
@@ -1079,7 +918,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
     //--------------------- Channel Scaling --------------------
     //----------------------------------------------------------
     start_meas_nr_ue_phy(ue, DLSCH_CHANNEL_SCALE_STATS);
-    nr_scale_channel(rx_size_symbol, dl_ch_estimates_ext, 0, nb_re_pdsch, nl, n_rx, 0);
+    nr_scale_channel(rx_size_symbol, dl_ch_estimates_ext, 0, nb_re_pdsch, nl, nbRx, 0);
     stop_meas_nr_ue_phy(ue, DLSCH_CHANNEL_SCALE_STATS);
     if (meas_enabled) {
       LOG_D(PHY,
@@ -1096,29 +935,35 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
     //----------------------------------------------------------
     start_meas_nr_ue_phy(ue, DLSCH_CHANNEL_LEVEL_STATS);
     if (first_symbol_flag) {
-      int32_t avg[nl * n_rx];
+      int32_t avg[nl * nbRx];
       if (nb_re_pdsch)
-        nr_channel_level(0, rx_size_symbol, (c16_t (*)[rx_size_symbol])dl_ch_estimates_ext, n_rx, nl, avg, nb_re_pdsch);
+        nr_channel_level(0, rx_size_symbol, (c16_t(*)[rx_size_symbol])dl_ch_estimates_ext, nbRx, nl, avg, nb_re_pdsch);
       else
         LOG_E(NR_PHY, "Average channel level is 0: nb_rb_pdsch = %d, nb_re_pdsch = %d\n", nb_rb_pdsch, nb_re_pdsch);
       int avgs = 0;
       int32_t median[MAX_ANT][MAX_ANT];
       for (int l = 0; l < nl; l++)
-        for (int aarx = 0; aarx < n_rx; aarx++) {
-          avgs = cmax(avgs, avg[l * n_rx + aarx]);
-          LOG_D(PHY, "nb_rb %d avg_%d_%d Power per SC is %d\n", nb_rb_pdsch, aarx, l, avg[l * n_rx + aarx]);
+        for (int aarx = 0; aarx < nbRx; aarx++) {
+          avgs = cmax(avgs, avg[l * nbRx + aarx]);
+          LOG_D(PHY, "nb_rb %d avg_%d_%d Power per SC is %d\n", nb_rb_pdsch, aarx, l, avg[l * nbRx + aarx]);
           LOG_D(PHY, "avgs Power per SC is %d\n", avgs);
-          median[l][aarx] = avg[l * n_rx + aarx];
+          median[l][aarx] = avg[l * nbRx + aarx];
         }
       if (nl > 1) {
-        nr_dlsch_channel_level_median(rx_size_symbol, dl_ch_estimates_ext, median, nl, n_rx, nb_re_pdsch);
+        nr_dlsch_channel_level_median(rx_size_symbol, dl_ch_estimates_ext, median, nl, nbRx, nb_re_pdsch);
         for (int l = 0; l < nl; l++) {
-          for (int aarx = 0; aarx < n_rx; aarx++) {
+          for (int aarx = 0; aarx < nbRx; aarx++) {
             avgs = cmax(avgs, median[l][aarx]);
           }
         }
       }
-      *log2_maxh = (log2_approx(avgs) / 2) + 1;
+      // Output shift: half channel energy (log2|h|^2/2) + MRC antenna gain.
+      // Single-layer adds +1 guard bit (raw peak); multi-layer uses median so no guard needed.
+      if (nl == 1)
+        *log2_maxh = (log2_approx(avgs) >> 1) + 1 + log2_approx(nbRx >> 1);
+      else
+        *log2_maxh = (log2_approx(avgs) >> 1) + log2_approx(nbRx >> 1);
+
       LOG_D(PHY, "[DLSCH] AbsSubframe %d.%d log2_maxh = %d (%d)\n", frame % 1024, nr_slot_rx, *log2_maxh, avgs);
 #if T_TRACER
       T(T_UE_PHY_PDSCH_ENERGY,
@@ -1126,9 +971,9 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
         T_INT(frame % 1024),
         T_INT(nr_slot_rx),
         T_INT(avg[0]), // layer 0, antenna 0
-        T_INT(n_rx > 1 ? avg[1] : 0), // layer 0, antenna 1
-        T_INT(nl > 1 ? avg[n_rx] : 0), // layer 1, antenna 0
-        T_INT(nl > 1 && n_rx > 1 ? avg[n_rx + 1] : 0)); // layer 1, antenna 1
+        T_INT(nbRx > 1 ? avg[1] : 0), // layer 0, antenna 1
+        T_INT(nl > 1 ? avg[nbRx] : 0), // layer 1, antenna 0
+        T_INT(nl > 1 && nbRx > 1 ? avg[nbRx + 1] : 0)); // layer 1, antenna 1
 #endif
     }
     stop_meas_nr_ue_phy(ue, DLSCH_CHANNEL_LEVEL_STATS);
@@ -1146,24 +991,20 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
     //----------------------------------------------------------
     //--------------------- channel compensation ---------------
     //----------------------------------------------------------
-    // Disable correlation measurement for optimizing UE
     start_meas_nr_ue_phy(ue, DLSCH_CHANNEL_COMPENSATION_STATS);
-    nr_dlsch_channel_compensation(rx_size_symbol,
-                                  nbRx,
-                                  nl,
-                                  rxdataF_ext,
-                                  dl_ch_estimates_ext,
-                                  dl_ch_mag[symbol],
-                                  dl_ch_magb[symbol],
-                                  dl_ch_magr[symbol],
-                                  rxdataF_comp,
-                                  NULL,
-                                  fp,
-                                  symbol,
-                                  nb_re_pdsch,
-                                  dlsch->cw_info.qamModOrder,
-                                  nb_rb_pdsch,
-                                  *log2_maxh); // log2_maxh+I0_shift
+    nr_channel_compensation(rx_size_symbol,
+                            nbRx,
+                            nl,
+                            rxdataF_ext,
+                            chFext,
+                            dl_ch_mag[symbol],
+                            dl_ch_magb[symbol],
+                            dl_ch_magr[symbol],
+                            p_rxComp,
+                            NULL,
+                            dlsch->cw_info.qamModOrder,
+                            0, // symbol already baked into p_rxComp
+                            *log2_maxh);
     stop_meas_nr_ue_phy(ue, DLSCH_CHANNEL_COMPENSATION_STATS);
     if (meas_enabled) {
       LOG_D(PHY,
@@ -1196,34 +1037,22 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
 #endif
   }
 
+  // MRC is performed inline by nr_channel_compensation; apply MMSE for multi-layer
   start_meas_nr_ue_phy(ue, DLSCH_MRC_MMSE_STATS);
-  if (n_rx > 1) {
-    nr_dlsch_detection_mrc(rx_size_symbol,
-                           nl,
-                           n_rx,
-                           rxdataF_comp,
-                           NULL,
-                           dl_ch_mag[symbol],
-                           dl_ch_magb[symbol],
-                           dl_ch_magr[symbol],
-                           symbol,
-                           nb_re_pdsch);
-    if (nl >= 2) // Apply MMSE for 2, 3, and 4 Tx layers
-      if (nb_re_pdsch)
-        nr_dlsch_mmse(rx_size_symbol,
-                      n_rx,
-                      nl,
-                      rxdataF_comp,
-                      dl_ch_mag[symbol],
-                      dl_ch_magb[symbol],
-                      dl_ch_magr[symbol],
-                      dl_ch_estimates_ext,
-                      dlsch->cw_info.qamModOrder,
-                      *log2_maxh,
-                      symbol,
-                      nb_re_pdsch,
-                      nvar);
-  }
+  if (nl >= 2 && nb_re_pdsch)
+    nr_dlsch_mmse(rx_size_symbol,
+                  nbRx,
+                  nl,
+                  rxdataF_comp,
+                  dl_ch_mag[symbol],
+                  dl_ch_magb[symbol],
+                  dl_ch_magr[symbol],
+                  dl_ch_estimates_ext,
+                  dlsch->cw_info.qamModOrder,
+                  *log2_maxh,
+                  symbol,
+                  nb_re_pdsch,
+                  nvar);
   stop_meas_nr_ue_phy(ue, DLSCH_MRC_MMSE_STATS);
 
   if (meas_enabled) {
@@ -1235,8 +1064,6 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
           symbol,
           ue->phy_cpu_stats.cpu_time_stats[DLSCH_MRC_MMSE_STATS].p_time / (cpuf * 1000.0));
   }
-
-
 
   /* Store the valid DL RE's */
   dl_valid_re[symbol] = nb_re_pdsch;
@@ -1268,6 +1095,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                              &dlsch->ptrs_symbol_index);
     dl_valid_re[symbol] -= ptrs_re_per_slot[0][symbol];
   }
+
   /* at last symbol in a slot calculate LLR's for whole slot */
   if (symbol == (startSymbIdx + nbSymb - 1)) {
     /* create LLR layer buffer */
@@ -1285,7 +1113,7 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
                    dl_ch_mag[llr_sym][0],
                    dl_ch_magb[llr_sym][0],
                    dl_ch_magr[llr_sym][0],
-                   n_rx,
+                   nbRx,
                    rxdataF_comp[llr_sym],
                    llr_per_symbol,
                    layer_llr[llr_sym]);
