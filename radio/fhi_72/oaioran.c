@@ -229,24 +229,13 @@ void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status, uin
     return;
   }
 
-  uint16_t N_ZC, num_prbu;
-  if ((prach_info.format & 0xff) < 4) {
-    N_ZC = 839;
-    num_prbu = 70;
-    prach_info.N_dur = 1;
-  } else {
-    N_ZC = 139;
-    num_prbu = 12;
-  }
-
-  int prach_start_sym = prach_info.start_symbol;
-  int prach_end_sym = prach_info.N_dur + prach_start_sym;
   struct xran_ru_config *ru_conf = &fh_cfg->ru_conf;
+  struct xran_prach_config *prach_conf = &fh_cfg->perMu[mu].prach_conf;
 
   for (uint16_t cc_id = 0; cc_id < 1 /*nSectorNum*/; cc_id++) { // OAI does not support multiple CC yet.
     oran_buf_list_t *bufs = get_xran_buffers(port_id);
     for (int ant_id = p.ant_start; ant_id < p.ant_start + num_prach_ant; ant_id++) {
-      for (int sym_idx = prach_start_sym; sym_idx < prach_end_sym; sym_idx++) {
+      for (int sym_idx = prach_conf->startSymId; sym_idx <= prach_conf->lastSymId; sym_idx++) {
         int16_t *dst, *src;
         int idx = 0;
         // hardcoded to use only first prach occasion
@@ -268,10 +257,11 @@ void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status, uin
           LOG_E(HW, "[%d.%d] tti %d port_id %d ant_id %d sym_idx %d src = NULL\n", frame, slot, tti, port_id, ant_id, sym_idx);
           continue;
         }
-        num_prbu = p_rx_packet_ctl->nRBSize[0];
+        uint16_t num_prbu = p_rx_packet_ctl->nRBSize[0];
+        uint16_t N_ZC = ((prach_info.format & 0xff) < 4) ? 839 : 139;
         /* convert Network order to host order */
         if (ru_conf->compMeth_PRACH == XRAN_COMPMETHOD_NONE) {
-          if (sym_idx == prach_start_sym) {
+          if (sym_idx == prach_conf->startSymId) {
             for (idx = 0; idx < N_ZC * 2; idx++) {
               dst[idx] = ((int16_t)ntohs(src[idx + g_kbar]));
             }
@@ -303,7 +293,7 @@ void oai_xran_fh_rx_prach_callback(void *pCallbackTag, xran_status_t status, uin
 #else
           AssertFatal(1 == 0, "BFP decompression not supported on this architecture");
 #endif
-          if (sym_idx == prach_start_sym)
+          if (sym_idx == prach_conf->startSymId)
             for (idx = 0; idx < (N_ZC * 2); idx++)
               dst[idx] = local_dst[idx + g_kbar];
           else
