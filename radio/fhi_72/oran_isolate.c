@@ -300,6 +300,7 @@ void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
 
 void oran_fh_if4p5_south_out(RU_t *ru, int frame, int slot, uint64_t timestamp)
 {
+  int ret;
   start_meas(&ru->tx_fhaul);
   ru_info_t ru_info = {
       .nb_rx = ru->nb_rx,
@@ -310,7 +311,12 @@ void oran_fh_if4p5_south_out(RU_t *ru, int frame, int slot, uint64_t timestamp)
 
   // printf("south_out:\tframe=%d\tslot=%d\ttimestamp=%ld\n",frame,slot,timestamp);
 
-  int ret = xran_fh_tx_send_slot(&ru_info, frame, slot, timestamp);
+  ret = xran_send_cp_ul_slot(&ru_info, frame, slot);
+  if (ret != 0) {
+    LOG_W(HW, "[%d.%d] Failed to send CP UL slot.\n", frame, slot);
+  }
+
+  ret = xran_fh_tx_send_slot(&ru_info, frame, slot, timestamp);
   if (ret != 0) {
     printf("ORAN: ORAN_fh_if4p5_south_out ERROR in TX function \n");
   }
