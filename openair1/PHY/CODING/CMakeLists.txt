@@ -36,6 +36,5 @@ add_dependencies(nr_dlschsim ldpc ldpc_orig)
 add_library(crc_byte OBJECT crc_byte.c)
 
 add_subdirectory(nrLDPC_coding)
-add_subdirectory(nrLDPC_decoder)
 add_subdirectory(nrPolar_tools)
 add_subdirectory(nrSmallBlock)
