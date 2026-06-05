@@ -364,7 +364,7 @@ static void nr_pusch_symbol_processing(void *arg)
       continue;
     int soffset = (slot % RU_RX_SLOT_DEPTH) * frame_parms->symbols_per_slot * frame_parms->ofdm_symbol_size;
     int buffer_length = ceil_mod(pusch_vars->ul_valid_re_per_slot[symbol] * NR_NB_SC_PER_RB, 16);
-    int16_t llrs[rel15_ul->nrOfLayers][ceil_mod(buffer_length * rel15_ul->qam_mod_order, 64)];
+    int16_t llrs[rel15_ul->nrOfLayers][ceil_mod(buffer_length * rel15_ul->qam_mod_order, 64)] __attribute__((aligned(32)));
     int16_t *llrss[rel15_ul->nrOfLayers];
     for (int l = 0; l < rel15_ul->nrOfLayers; l++)
       llrss[l] = llrs[l];
