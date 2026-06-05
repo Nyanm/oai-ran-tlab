@@ -478,13 +478,7 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
   memset(ptrs_re_per_slot, 0, sizeof(ptrs_re_per_slot));
 
   const uint32_t rx_size_symbol = (freq_alloc->num_rbs * NR_NB_SC_PER_RB + 15) & ~15;
-  allocCast3D(rxdataF_comp,
-              c16_t,
-              ue->rxdataF_comp_buf,
-              ue->frame_parms.symbols_per_slot,
-              dlsch->cw_info.Nl * ue->frame_parms.nb_antennas_rx,
-              rx_size_symbol,
-              true);
+  allocCast3D(rxdataF_comp, c16_t, ue->rxdataF_comp_buf, ue->frame_parms.symbols_per_slot, dlsch->cw_info.Nl, rx_size_symbol, true);
 
   uint32_t nvar = 0;
 

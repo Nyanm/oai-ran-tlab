@@ -244,7 +244,7 @@ static void inner_rx(PHY_VARS_gNB *gNB,
 
   memset(rho, 0, sizeof(rho));
   for (int i = 0; i < nb_layer; i++)
-    memset(&pusch_vars->rxdataF_comp[i*nb_rx_ant][symbol * buffer_length], 0, sizeof(int32_t) * buffer_length);
+    memset(&pusch_vars->rxdataF_comp[i][symbol * buffer_length], 0, sizeof(int32_t) * buffer_length);
 
   nr_channel_compensation(buffer_length,
                           nb_rx_ant,
@@ -286,7 +286,7 @@ static void inner_rx(PHY_VARS_gNB *gNB,
   if (nb_layer == 2) {
     if (rel15_ul->qam_mod_order <= 6) {
       nr_compute_ML_llr((c16_t *)&pusch_vars->rxdataF_comp[0][symbol * buffer_length],
-                        (c16_t *)&pusch_vars->rxdataF_comp[nb_rx_ant][symbol * buffer_length],
+                        (c16_t *)&pusch_vars->rxdataF_comp[1][symbol * buffer_length],
                         rxF_ch_maga[0],
                         rxF_ch_maga[1],
                         llr[0],
@@ -315,7 +315,7 @@ static void inner_rx(PHY_VARS_gNB *gNB,
   }
   if (nb_layer != 2 || rel15_ul->qam_mod_order > 6)
     for (int aatx = 0; aatx < nb_layer; aatx++)
-      nr_compute_llr(&pusch_vars->rxdataF_comp[aatx * nb_rx_ant][symbol * buffer_length],
+      nr_compute_llr(&pusch_vars->rxdataF_comp[aatx][symbol * buffer_length],
                      rxF_ch_maga[aatx],
                      rxF_ch_magb[aatx],
                      rxF_ch_magc[aatx],

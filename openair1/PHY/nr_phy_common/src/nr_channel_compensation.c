@@ -41,7 +41,7 @@ void nr_channel_compensation(uint32_t buffer_length,
   }
 
   for (int aatx = 0; aatx < nb_layers; aatx++) {
-    simde__m256i *rxComp_256 = (simde__m256i *)&rxComp[aatx * nb_rx_ant][symbol * buffer_length];
+    simde__m256i *rxComp_256 = (simde__m256i *)&rxComp[aatx][symbol * buffer_length];
     simde__m256i *ch_maga_256 = (simde__m256i *)ch_maga[aatx];
     simde__m256i *ch_magb_256 = (simde__m256i *)ch_magb[aatx];
     simde__m256i *ch_magc_256 = (simde__m256i *)ch_magc[aatx];

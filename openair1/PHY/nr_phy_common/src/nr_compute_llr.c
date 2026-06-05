@@ -2968,7 +2968,7 @@ uint8_t nr_mmse_2layers(c16_t **rxdataF_comp,
   simde__m128i *after_mf_d_128 = (simde__m128i *)af_mf_11;
 
   simde__m128i *rxdataF_comp128_0 = (simde__m128i *)&rxdataF_comp[0][symbol * buffer_length];
-  simde__m128i *rxdataF_comp128_1 = (simde__m128i *)&rxdataF_comp[nb_rx_ant][symbol * buffer_length];
+  simde__m128i *rxdataF_comp128_1 = (simde__m128i *)&rxdataF_comp[1][symbol * buffer_length];
 
   if (mod_order > 2) {
     if (mod_order == 4) {
