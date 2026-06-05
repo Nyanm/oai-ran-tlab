@@ -1369,7 +1369,7 @@ void nr_pdsch_ptrs_processing(int nbRx,
   int nscid = dlsch_config->nscid;
 
   /* loop over antennas */
-  for (int aarx = 0; aarx < frame_parms->nb_antennas_rx; aarx++) {
+  for (int aarx = 0; aarx < nbRx; aarx++) {
     c16_t *phase_per_symbol = (c16_t*)ptrs_phase_per_slot[aarx];
     ptrs_re_symbol = (int32_t*)ptrs_re_per_slot[aarx];
     ptrs_re_symbol[symbol] = 0;
@@ -1440,5 +1440,5 @@ void nr_pdsch_ptrs_processing(int nbRx,
         }// if not DMRS Symbol
       }// symbol loop
     }// last symbol check
-  }//Antenna loop
+  } // Antenna loop
 }//main function

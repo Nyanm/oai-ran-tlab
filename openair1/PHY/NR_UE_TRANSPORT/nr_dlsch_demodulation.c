@@ -1099,9 +1099,14 @@ int nr_rx_pdsch(PHY_VARS_NR_UE *ue,
     pduBitmap = dlsch_config->pduBitmap;
   }
 
+  /* PTRS processing for multiple antenna ports is broken because the following
+  function estimates phase offset from and applies compensation to rxdataF_comp
+  for each antenna port but rxdataF_comp has MRCed data. */
+  /* TODO: Move PTRS phase estimation before immediately after DMRS channels
+  estimation and apply PTRS phase compensation in nr_channel_compensationi() */
   /* Check for PTRS bitmap and process it respectively */
   if((pduBitmap & 0x1) && (dlsch->rnti_type == TYPE_C_RNTI_)) {
-    nr_pdsch_ptrs_processing(nbRx,
+    nr_pdsch_ptrs_processing(1, // rxdataF_comp is MRCed so no point in processing all antenna ports. Fixme.
                              ptrs_phase_per_slot,
                              ptrs_re_per_slot,
                              rx_size_symbol,

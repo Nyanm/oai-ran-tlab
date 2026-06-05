@@ -272,15 +272,14 @@ static void inner_rx(PHY_VARS_gNB *gNB,
                            rel15_ul->qam_mod_order);
     nr_idft((int32_t *)&pusch_vars->rxdataF_comp[0][symbol * buffer_length], pusch_vars->ul_valid_re_per_slot[symbol]);
   }
+  /* PTRS processing for multiple antenna ports is broken because the following
+  function estimates phase offset from and applies compensation to rxdataF_comp
+  for each antenna port but rxdataF_comp has MRCed data. */
+  /* TODO: Move PTRS phase estimation before immediately after DMRS channels
+  estimation and apply PTRS phase compensation in nr_channel_compensationi() */
   if (rel15_ul->pdu_bit_map & PUSCH_PDU_BITMAP_PUSCH_PTRS) {
-    nr_pusch_ptrs_processing(gNB,
-                             frame_parms,
-                             rel15_ul,
-                             pusch_vars,
-                             slot,
-                             symbol,
-                             nb_rx_ant,
-                             buffer_length);
+    // rxdataF_comp is MRCed so no point in processing all antenna ports. Fixme.
+    nr_pusch_ptrs_processing(gNB, frame_parms, rel15_ul, pusch_vars, slot, symbol, 1, buffer_length);
     pusch_vars->ul_valid_re_per_slot[symbol] -= pusch_vars->ptrs_re_per_slot;
   }
   start_meas(ulsch_llr);
