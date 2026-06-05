@@ -967,6 +967,7 @@ void *ru_thread(void *param)
         LOG_D(NR_PHY, "Setting %d.%d (%d) to busy\n", proc->frame_rx, proc->tti_rx, proc->tti_rx % RU_RX_SLOT_DEPTH);
         //LOG_M("rxdata.m","rxs",ru->common.rxdata[0],1228800,1,1);
         LOG_D(PHY,"RU proc: frame_rx = %d, tti_rx = %d\n", proc->frame_rx, proc->tti_rx);
+        gNB->puxch_received = true;
         gNBscopeCopy(gNB,
                      gNBRxdataF,
                      ru->common.rxdataF[0],

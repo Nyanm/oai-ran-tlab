@@ -17,6 +17,9 @@ void phy_procedures_gNB_TX(PHY_VARS_gNB *gNB,
                            int frame,
                            int slot);
 void nr_save_ul_tti_req(PHY_VARS_gNB *gNB, nfapi_nr_ul_tti_request_t *UL_tti_req);
+bool get_current_pucch(const void *data, void *user);
+bool get_current_pusch(const void *data, void *user);
+bool get_current_srs(const void *data, void *user);
 int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, NR_UL_IND_t *UL_INFO);
 void L1_nr_prach_procedures(PHY_VARS_gNB *gNB, prach_item_t *prach_id, nfapi_nr_rach_indication_t *rach_ind);
 void nr_common_signal_procedures (PHY_VARS_gNB *gNB,int frame,int slot, const nfapi_nr_dl_tti_ssb_pdu *ssb_pdu);

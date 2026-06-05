@@ -241,60 +241,18 @@ int trx_oran_ctlrecv(openair0_device_t *device, void *msg, ssize_t msg_len)
   return 0;
 }
 
+// this function shall be deleted; therefore, this code is just temporary
 void oran_fh_if4p5_south_in(RU_t *ru, int *frame, int *slot)
 {
   ru_info_t ru_info = {
       .nb_rx = ru->nb_rx,
       .nb_tx = ru->nb_tx,
-      .rxdataF = ru->common.rxdataF,
       .beam_id = ru->common.beam_id,
   };
 
-  /* Process PUSCH packets */
-  RU_proc_t *proc = &ru->proc; // to check if (frame,slot) combination corresponds to the expected PUSCH one
-  int f, sl;
-  LOG_D(HW, "Read rxdataF %p,%p\n", ru_info.rxdataF[0], ru_info.rxdataF[1]);
-  start_meas(&ru->rx_fhaul);
-  int ret = xran_fh_rx_read_slot(&ru_info, &f, &sl);
-  stop_meas(&ru->rx_fhaul);
-  LOG_D(HW, "Read %d.%d rxdataF %p,%p\n", f, sl, ru_info.rxdataF[0], ru_info.rxdataF[1]);
-  if (ret != 0) {
-    printf("ORAN: %d.%d ORAN_fh_if4p5_south_in ERROR in RX function \n", f, sl);
-  }
-
-  int slots_per_frame = 10 << (ru->openair0_cfg.nr_scs_for_raster);
-  proc->tti_rx = sl;
-  proc->frame_rx = f;
-  proc->tti_tx = (sl + ru->sl_ahead) % slots_per_frame;
-  proc->frame_tx = (sl > (slots_per_frame - 1 - ru->sl_ahead)) ? (f + 1) & 1023 : f;
-
+  RU_proc_t *proc = &ru->proc;
   if (proc->first_rx == 0) {
     print_fhi_counters(&ru_info, proc->frame_rx, proc->tti_rx);
-    if (proc->tti_rx != *slot) {
-      LOG_E(HW,
-            "Received Time doesn't correspond to the time we think it is (slot mismatch, received %d.%d, expected %d.%d)\n",
-            proc->frame_rx,
-            proc->tti_rx,
-            *frame,
-            *slot);
-      *slot = proc->tti_rx;
-    }
-
-    if (proc->frame_rx != *frame) {
-      LOG_E(HW,
-            "Received Time doesn't correspond to the time we think it is (frame mismatch, %d.%d , expected %d.%d)\n",
-            proc->frame_rx,
-            proc->tti_rx,
-            *frame,
-            *slot);
-      *frame = proc->frame_rx;
-    }
-  } else {
-    proc->first_rx = 0;
-    LOG_I(HW, "before adjusting, OAI: frame=%d slot=%d, XRAN: frame=%d slot=%d\n", *frame, *slot, proc->frame_rx, proc->tti_rx);
-    *frame = proc->frame_rx;
-    *slot = proc->tti_rx;
-    LOG_I(HW, "After adjusting, OAI: frame=%d slot=%d, XRAN: frame=%d slot=%d\n", *frame, *slot, proc->frame_rx, proc->tti_rx);
   }
 }
 

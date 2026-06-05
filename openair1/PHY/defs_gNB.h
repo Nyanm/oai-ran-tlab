@@ -368,6 +368,7 @@ typedef struct PHY_VARS_gNB_s {
   NR_gNB_PUSCH *pusch_vars;
   spsc_q_t pucch_queue;
   spsc_q_t pusch_queue;
+  bool puxch_received;
   spsc_q_t srs_queue;
   NR_gNB_ULSCH_t *ulsch;
   NR_gNB_PHY_STATS_t phy_stats[MAX_MOBILES_PER_GNB];

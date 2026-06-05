@@ -183,7 +183,8 @@ static void rx_func(processingData_L1_t *info)
                                       sym);
       }
     }
-    phy_procedures_gNB_uespec_RX(gNB, frame_rx, slot_rx, &UL_INFO);
+    if (gNB->puxch_received)
+      phy_procedures_gNB_uespec_RX(gNB, frame_rx, slot_rx, &UL_INFO);
 
     // Call the scheduler
     start_meas(&gNB->ul_indication_stats);

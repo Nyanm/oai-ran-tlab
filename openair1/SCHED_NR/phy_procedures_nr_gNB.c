@@ -1049,7 +1049,7 @@ static bool drop_old_pucch(const void *data, void *user)
   return drop;
 }
 
-static bool get_current_pucch(const void *data, void *user)
+bool get_current_pucch(const void *data, void *user)
 {
   const NR_gNB_PUCCH_job_t *pucch = data;
   const fsn_t *now = user;
@@ -1068,7 +1068,7 @@ static bool drop_old_pusch(const void *data, void *user)
   return drop;
 }
 
-static bool get_current_pusch(const void *data, void *user)
+bool get_current_pusch(const void *data, void *user)
 {
   const NR_gNB_PUSCH_job_t *pusch = data;
   const fsn_t *now = user;
@@ -1087,7 +1087,7 @@ static bool drop_old_srs(const void *data, void *user)
   return drop;
 }
 
-static bool get_current_srs(const void *data, void *user)
+bool get_current_srs(const void *data, void *user)
 {
   const NR_gNB_SRS_job_t *srs = data;
   const fsn_t *now = user;

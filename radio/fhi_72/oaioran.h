@@ -13,8 +13,6 @@ typedef struct {
   uint32_t sl;
   uint32_t f;
   uint8_t mu;
-  // the first column can expand to XRAN_MAX_SECTOR_NR for the support of multiple CCs
-  int32_t nRxPkt[1][XRAN_MAX_ANTENNA_NR][XRAN_NUM_OF_SYMBOL_PER_SLOT];
 } oran_sync_info_t;
 
 /** @brief xran callback for fronthaul RX, see xran_5g_fronthault_config(). */
