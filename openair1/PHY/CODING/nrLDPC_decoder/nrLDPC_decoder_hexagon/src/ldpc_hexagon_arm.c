@@ -232,6 +232,17 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params *p_decParams,
         clock_gettime(CLOCK_MONOTONIC, &tb);
         uint64_t rpc_us = ((uint64_t)(tb.tv_sec - ta.tv_sec) * 1000000ULL +
                            (tb.tv_nsec - ta.tv_nsec) / 1000);
+        // Verify diag=0: output must equal input exactly.
+        {
+            uint32_t mismatches = 0;
+            for (uint32_t i = 0; i < numLLR; i++)
+                if (rpc_llrout[i] != rpc_llr[i]) mismatches++;
+            if (mismatches)
+                fprintf(stderr, "  diag=0 MISMATCH: %u/%u bytes differ (data transfer broken!)\n",
+                        mismatches, numLLR);
+            else
+                fprintf(stderr, "  diag=0 OK: output == input (%u bytes match)\n", numLLR);
+        }
 
         rpc_params->diag = 1;  // scatter + gather roundtrip
         clock_gettime(CLOCK_MONOTONIC, &ta);
@@ -243,6 +254,79 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params *p_decParams,
         clock_gettime(CLOCK_MONOTONIC, &tb);
         uint64_t sg_us = ((uint64_t)(tb.tv_sec - ta.tv_sec) * 1000000ULL +
                           (tb.tv_nsec - ta.tv_nsec) / 1000);
+        // Verify diag=1: scatter+gather should be identity transformation.
+        {
+            uint32_t mismatches = 0;
+            for (uint32_t i = 0; i < numLLR; i++)
+                if (rpc_llrout[i] != rpc_llr[i]) mismatches++;
+            if (mismatches)
+                fprintf(stderr, "  diag=1 MISMATCH: %u/%u bytes differ (scatter/gather not identity!)\n",
+                        mismatches, numLLR);
+            else
+                fprintf(stderr, "  diag=1 OK: scatter+gather is identity\n");
+        }
+
+        // diag=4: llr2CnProcBuf + LUT header.
+        // llr_out[0..63] = 16 × uint32_t diagnostic header from DSP.
+        // llr_out[64..]  = cnProcBuf[0..numLLR-65].
+        rpc_params->diag = 4;
+        ldpc_hexagon_decode(dsp_hdl,
+            (uint8_t *)rpc_params, sizeof(*rpc_params),
+            (uint8_t *)rpc_llr, (int)numLLR,
+            (uint8_t *)rpc_llrout, (int)numLLR,
+            rpc_meta, 8);
+        {
+            uint32_t hdr[16];
+            memcpy(hdr, rpc_llrout, 64);
+            fprintf(stderr, "  diag=4 LUT header from DSP:\n");
+            fprintf(stderr, "    circShift[0].d=0x%08x  .d[0]=%u  dim1=%u  dim2=%u\n",
+                    hdr[0], hdr[1], hdr[2], hdr[3]);
+            fprintf(stderr, "    numCnInCn[0]=%u  startAddrCn[0]=%u\n",
+                    hdr[4], hdr[5]);
+            fprintf(stderr, "    numBnInBn[0]=%u  startAddrBn[0]=%u\n",
+                    hdr[6], hdr[7]);
+            fprintf(stderr, "    cnProcBuf[0] before scatter=%u  after scatter=%u %u\n",
+                    hdr[8], hdr[12], hdr[13]);
+            fprintf(stderr, "    cnProcBuf[384]=%u  cnProcBuf[768]=%u\n",
+                    hdr[14], hdr[15]);
+            // Count pos/neg in the body (bytes 64..)
+            int llr_pos = 0, llr_neg = 0, llr_zer = 0;
+            int cn_pos  = 0, cn_neg  = 0, cn_zer  = 0;
+            for (uint32_t i = 0; i < numLLR; i++) {
+                int8_t v = rpc_llr[i];
+                if (v > 0) llr_pos++; else if (v < 0) llr_neg++; else llr_zer++;
+            }
+            for (uint32_t i = 64; i < numLLR; i++) {
+                int8_t v = rpc_llrout[i];
+                if (v > 0) cn_pos++; else if (v < 0) cn_neg++; else cn_zer++;
+            }
+            fprintf(stderr, "    llr(pos=%d neg=%d zer=%d) cnBuf[64..](pos=%d neg=%d zer=%d)\n",
+                    llr_pos, llr_neg, llr_zer, cn_pos, cn_neg, cn_zer);
+            // expected: llr[332] for cnBuf[0] with cshift=332
+            fprintf(stderr, "    llr[332]=%d (expected at cnBuf[0])\n",
+                    (int)(int8_t)rpc_llr[332]);
+        }
+
+        // diag=3: full BP but return raw llrRes (before gather) to check if posteriors are sane.
+        rpc_params->diag = 3;
+        ldpc_hexagon_decode(dsp_hdl,
+            (uint8_t *)rpc_params, sizeof(*rpc_params),
+            (uint8_t *)rpc_llr, (int)numLLR,
+            (uint8_t *)rpc_llrout, (int)numLLR,
+            rpc_meta, 8);
+        {
+            int pos = 0, neg = 0, zer = 0;
+            for (uint32_t i = 0; i < numLLR; i++) {
+                int8_t v = rpc_llrout[i];
+                if (v > 0) pos++; else if (v < 0) neg++; else zer++;
+            }
+            fprintf(stderr, "  diag=3 raw llrRes: pos=%d neg=%d zero=%d [0..7]: %d %d %d %d %d %d %d %d\n",
+                    pos, neg, zer,
+                    (int)(int8_t)rpc_llrout[0], (int)(int8_t)rpc_llrout[1],
+                    (int)(int8_t)rpc_llrout[2], (int)(int8_t)rpc_llrout[3],
+                    (int)(int8_t)rpc_llrout[4], (int)(int8_t)rpc_llrout[5],
+                    (int)(int8_t)rpc_llrout[6], (int)(int8_t)rpc_llrout[7]);
+        }
 
         fprintf(stderr, "DSP phase breakdown (ARM wall-clock):\n");
         fprintf(stderr, "  RPC overhead (diag=0):  %6llu us\n", (unsigned long long)rpc_us);
@@ -276,6 +360,21 @@ int32_t LDPCdecoder(t_nrLDPC_dec_params *p_decParams,
         memcpy(&clk_hz, rpc_meta + 4, 4);
         fprintf(stderr, "ldpc_hexagon: DSP core clock = %u Hz (%u MHz)\n",
                 clk_hz, clk_hz / 1000000u);
+    }
+
+    // One-shot diagnostic: count pos/neg in first decode to check DSP output quality.
+    static int arm_diag_done = 0;
+    if (!arm_diag_done) {
+        arm_diag_done = 1;
+        int pos = 0, neg = 0, zer = 0;
+        for (uint32_t i = 0; i < numLLR; i++) {
+            int8_t v = rpc_llrout[i];
+            if (v > 0) pos++; else if (v < 0) neg++; else zer++;
+        }
+        fprintf(stderr, "ldpc_hexagon diag: numIter=%u numLLR=%u pos=%d neg=%d zero=%d llrout[0..7]: %d %d %d %d %d %d %d %d\n",
+                numIter, numLLR, pos, neg, zer,
+                (int)rpc_llrout[0], (int)rpc_llrout[1], (int)rpc_llrout[2], (int)rpc_llrout[3],
+                (int)rpc_llrout[4], (int)rpc_llrout[5], (int)rpc_llrout[6], (int)rpc_llrout[7]);
     }
 
     if (ret >= (int32_t)p_decParams->numMaxIter)

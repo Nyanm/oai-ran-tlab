@@ -38,6 +38,7 @@
 #  include <stdio.h>
 #  define FARF(level, fmt, ...) printf(fmt "\n", ##__VA_ARGS__)
 #else
+#  include <stdio.h>
 #  include "HAP_farf.h"
 #  include "HAP_power.h"
 #endif
@@ -117,7 +118,37 @@ static const int8_t numBN_BG2[NR_LDPC_NUM_CN_GROUPS_BG2] = {3, 4, 5, 6, 8, 10};
 // this is a standard approximation used in all vectorised implementations and
 // has negligible effect on convergence.
 
-static void cnProc_group(
+static void scalar_cnProc_group(
+    const int8_t *cnProcBuf, int8_t *cnProcBufRes,
+    uint32_t startAddr, int numBN, int numCN, uint16_t Z)
+{
+    int32_t bitOff = (int32_t)numCN * NR_LDPC_ZMAX;
+    for (int i = 0; i < numCN; i++) {
+        int32_t row = i * Z;
+        for (int z = 0; z < (int)Z; z++) {
+            int32_t samp = row + z;
+            int8_t  sgn_all = 0;
+            uint8_t min1 = 127, min2 = 127;
+            int     min1_k = 0;
+            for (int k = 0; k < numBN; k++) {
+                int8_t  v  = cnProcBuf[startAddr + (uint32_t)k * bitOff + samp];
+                sgn_all   ^= v;
+                uint8_t av = abs8(v);
+                if (av < min1) { min2 = min1; min1 = av; min1_k = k; }
+                else if (av < min2) { min2 = av; }
+            }
+            for (int j = 0; j < numBN; j++) {
+                int8_t  v_j   = cnProcBuf[startAddr + (uint32_t)j * bitOff + samp];
+                int8_t  sgn_j = sgn_all ^ v_j;
+                uint8_t mag   = (j == min1_k) ? min2 : min1;
+                cnProcBufRes[startAddr + (uint32_t)j * bitOff + samp] =
+                    (sgn_j & 0x80) ? -(int8_t)mag : (int8_t)mag;
+            }
+        }
+    }
+}
+
+static void hvx_cnProc_group(
     const int8_t *cnProcBuf, int8_t *cnProcBufRes,
     uint32_t startAddr, int numBN, int numCN, uint16_t Z)
 {
@@ -213,9 +244,9 @@ static void cnProc(t_nrLDPC_lut *p_lut,
     for (int g = 0; g < ngrp; g++) {
         int numCN = (int)p_lut->numCnInCnGroups[g];
         if (numCN == 0) continue;
-        cnProc_group(cnProcBuf, cnProcBufRes,
-                     p_lut->startAddrCnGroups[g],
-                     (int)tbl[g], numCN, Z);
+        hvx_cnProc_group(cnProcBuf, cnProcBufRes,
+                         p_lut->startAddrCnGroups[g],
+                         (int)tbl[g], numCN, Z);
     }
 }
 
@@ -257,11 +288,14 @@ static int32_t scalar_cnProcPc(const int8_t *cnProcBuf, t_nrLDPC_lut *p_lut,
 // =============================================================================
 // HVX has no single-instruction signed-byte saturating add/sub.
 // Strategy: widen to int16 (Q6_Wh_vsxt_Vb), add/sub in 16-bit, clamp to
-// [-128,127] with vmin/vmax, pack low bytes back (Q6_Vb_vpacke_VhVh).
+// [-128,127] with vmin/vmax, pack low bytes back.
 //
-// vpacke(Vu.h, Vv.h): output[0..63]  = low bytes of Vv halfwords,
-//                      output[64..127] = low bytes of Vu halfwords.
-// After clamping, the low byte of each int16 is the correct int8 value.
+// Q6_Wh_vsxt_Vb DEINTERLEAVES: even-indexed bytes → lo halfwords,
+// odd-indexed bytes → hi halfwords.  After accumulation, vpacke(hi, lo)
+// therefore gives [even_results | odd_results], not the correct linear
+// order.  Q6_Vb_vshuff_Vb re-interleaves the two halves:
+//   vshuff([e0..e63 | o0..o63]) → [e0,o0, e1,o1, ..., e63,o63]
+// This must be applied after every vpacke to restore linear byte order.
 
 static inline HVX_Vector hvx_sat8_add(HVX_Vector va, HVX_Vector vb,
                                        HVX_Vector v127, HVX_Vector vn128)
@@ -271,7 +305,7 @@ static inline HVX_Vector hvx_sat8_add(HVX_Vector va, HVX_Vector vb,
     HVX_Vector hi = Q6_Vh_vadd_VhVh(Q6_V_hi_W(wa), Q6_V_hi_W(wb));
     lo = Q6_Vh_vmax_VhVh(Q6_Vh_vmin_VhVh(lo, v127), vn128);
     hi = Q6_Vh_vmax_VhVh(Q6_Vh_vmin_VhVh(hi, v127), vn128);
-    return Q6_Vb_vpacke_VhVh(hi, lo);
+    return Q6_Vb_vshuff_Vb(Q6_Vb_vpacke_VhVh(hi, lo));
 }
 
 static inline HVX_Vector hvx_sat8_sub(HVX_Vector va, HVX_Vector vb,
@@ -282,7 +316,7 @@ static inline HVX_Vector hvx_sat8_sub(HVX_Vector va, HVX_Vector vb,
     HVX_Vector hi = Q6_Vh_vsub_VhVh(Q6_V_hi_W(wa), Q6_V_hi_W(wb));
     lo = Q6_Vh_vmax_VhVh(Q6_Vh_vmin_VhVh(lo, v127), vn128);
     hi = Q6_Vh_vmax_VhVh(Q6_Vh_vmin_VhVh(hi, v127), vn128);
-    return Q6_Vb_vpacke_VhVh(hi, lo);
+    return Q6_Vb_vshuff_Vb(Q6_Vb_vpacke_VhVh(hi, lo));
 }
 
 // 2D L2 prefetch: `height` rows of `width` bytes, rows spaced `stride` bytes apart.
@@ -374,7 +408,7 @@ static void hvx_bnProcPc(t_nrLDPC_lut *p_lut,
 
             sum_lo = Q6_Vh_vmax_VhVh(Q6_Vh_vmin_VhVh(sum_lo, v127), vn128);
             sum_hi = Q6_Vh_vmax_VhVh(Q6_Vh_vmin_VhVh(sum_hi, v127), vn128);
-            *(HVX_UVector *)(llrRes + sl + b) = Q6_Vb_vpacke_VhVh(sum_hi, sum_lo);
+            *(HVX_UVector *)(llrRes + sl + b) = Q6_Vb_vshuff_Vb(Q6_Vb_vpacke_VhVh(sum_hi, sum_lo));
         }
 
         for (uint32_t b = full; b < total; b++) {
@@ -457,10 +491,82 @@ typedef struct {
 // =============================================================================
 // Returns number of BP iterations completed.
 
+// =============================================================================
+// Scalar reference BN functions — used to isolate HVX correctness issues.
+// These produce the same results as hvx_bnProcPc / hvx_bnProc but with no
+// HVX code, so they run correctly on any Hexagon v73 core.
+// =============================================================================
+
+static void scalar_ref_bnProcPc(t_nrLDPC_lut *p_lut,
+                                 const int8_t *bnProcBuf, int8_t *bnProcBufRes,
+                                 const int8_t *llrProcBuf, int8_t *llrRes,
+                                 uint16_t Z)
+{
+    const uint8_t  *numBn = p_lut->numBnInBnGroups;
+    const uint32_t *sBn   = p_lut->startAddrBnGroups;
+    const uint16_t *sLlr  = p_lut->startAddrBnGroupsLlr;
+
+    // Group 0: degree-1 BNs
+    {
+        uint32_t nb    = (uint32_t)numBn[0];
+        uint32_t total = nb * (uint32_t)Z;
+        uint32_t sa    = sBn[0];
+        uint32_t sl    = sLlr[0];
+        for (uint32_t b = 0; b < total; b++) {
+            bnProcBufRes[sa + b] = llrProcBuf[sl + b];  // extrinsic = channel LLR
+            llrRes[sl + b] = sat8_add(llrProcBuf[sl + b], bnProcBuf[sa + b]);
+        }
+    }
+
+    // Groups 1+
+    uint8_t idxBnGroup = 0;
+    for (int cnidx = 1; cnidx < NR_LDPC_NUM_BN_GROUPS_BG1_R13; cnidx++) {
+        if (numBn[cnidx] == 0) continue;
+        idxBnGroup++;
+        uint32_t nb    = (uint32_t)numBn[cnidx];
+        uint32_t cnOff = nb * NR_LDPC_ZMAX;
+        uint32_t total = nb * (uint32_t)Z;
+        uint32_t sa    = sBn[idxBnGroup];
+        uint32_t sl    = sLlr[idxBnGroup];
+        for (uint32_t b = 0; b < total; b++) {
+            int16_t s = (int16_t)llrProcBuf[sl + b];
+            for (int k = 0; k <= cnidx; k++)
+                s += (int16_t)bnProcBuf[sa + (uint32_t)k * cnOff + b];
+            llrRes[sl + b] = s > 127 ? 127 : (s < -128 ? -128 : (int8_t)s);
+        }
+    }
+}
+
+static void scalar_ref_bnProc(t_nrLDPC_lut *p_lut,
+                               const int8_t *bnProcBuf, int8_t *bnProcBufRes,
+                               const int8_t *llrRes, uint16_t Z)
+{
+    const uint8_t  *numBn = p_lut->numBnInBnGroups;
+    const uint32_t *sBn   = p_lut->startAddrBnGroups;
+    const uint16_t *sLlr  = p_lut->startAddrBnGroupsLlr;
+
+    uint8_t idxBnGroup = 0;
+    for (int cnidx = 1; cnidx < NR_LDPC_NUM_BN_GROUPS_BG1_R13; cnidx++) {
+        if (numBn[cnidx] == 0) continue;
+        idxBnGroup++;
+        uint32_t nb    = (uint32_t)numBn[cnidx];
+        uint32_t cnOff = nb * NR_LDPC_ZMAX;
+        uint32_t total = nb * (uint32_t)Z;
+        uint32_t sa    = sBn[idxBnGroup];
+        uint32_t sl    = sLlr[idxBnGroup];
+        for (int k = 0; k <= cnidx; k++) {
+            uint32_t off = (uint32_t)k * cnOff;
+            for (uint32_t b = 0; b < total; b++)
+                bnProcBufRes[sa + off + b] =
+                    sat8_sub(llrRes[sl + b], bnProcBuf[sa + off + b]);
+        }
+    }
+}
+
 static int32_t ldpc_scalar_core(
     const int8_t *p_llr, uint8_t *llr_out, uint32_t numLLR,
     t_nrLDPC_lut *p_lut, uint8_t BG, uint16_t Z, uint8_t numMaxIter,
-    ldpc_dsp_ctx_t *ctx)
+    ldpc_dsp_ctx_t *ctx, int skip_gather)
 {
     int8_t *cnProcBuf    = ctx->cnProcBuf;
     int8_t *cnProcBufRes = ctx->cnProcBufRes;
@@ -474,8 +580,13 @@ static int32_t ldpc_scalar_core(
     memset(cnProcBufRes, 0, NR_LDPC_SIZE_CN_PROC_BUF);
     memset(bnProcBuf,    0, NR_LDPC_SIZE_BN_PROC_BUF);
     memset(bnProcBufRes, 0, NR_LDPC_SIZE_BN_PROC_BUF);
+    // nrLDPC_llr2llrProcBuf does not write every position (the 4 higher-degree
+    // parity BNs in BG1 whose LLRs it skips).  The reference decoder zero-
+    // initialises llrProcBuf on the stack; replicate that here.
+    memset(llrProcBuf, 0, NR_LDPC_MAX_NUM_LLR);
 
     nrLDPC_llr2llrProcBuf(p_lut, (int8_t *)p_llr, llrProcBuf, Z, BG);
+
     if (BG == 1)
         nrLDPC_llr2CnProcBuf_BG1(p_lut, (int8_t *)p_llr, cnProcBuf, Z);
     else
@@ -519,7 +630,10 @@ static int32_t ldpc_scalar_core(
         numIter++;
     }
 
-    nrLDPC_llrRes2llrOut(p_lut, (int8_t *)llr_out, llrRes, Z, BG);
+    if (skip_gather)
+        memcpy(llr_out, llrRes, numLLR);
+    else
+        nrLDPC_llrRes2llrOut(p_lut, (int8_t *)llr_out, llrRes, Z, BG);
     return numIter;
 }
 
@@ -670,7 +784,9 @@ int ldpc_hexagon_decode(remote_handle64 handle,
         return -1;
     }
 
-    // diag=0: raw memcpy passthrough; diag=1: scatter/gather roundtrip; diag>=2: full BP
+    // diag=0: raw memcpy passthrough; diag=1: scatter/gather roundtrip
+    // diag=2: full BP with gather; diag=3: full BP, return raw llrRes (skip gather)
+    // diag=4: llr2CnProcBuf only, return first numLLR bytes of cnProcBuf
     if (p.diag == 0) {
         memcpy(llr_out, llr, numLLR);
         if (metaLen >= 4) { uint32_t z = 0; memcpy(meta, &z, 4); }
@@ -689,13 +805,62 @@ int ldpc_hexagon_decode(remote_handle64 handle,
         if (metaLen >= 4) { uint32_t z = 0; memcpy(meta, &z, 4); }
         return 0;
     }
-    // diag >= 2: fall through to full BP below
+    if (p.diag == 4) {
+        // Scatter LLRs into cnProcBuf, then return:
+        //   llr_out[0..63]  = LUT diagnostic header (uint32_t fields)
+        //   llr_out[64..]   = cnProcBuf[0..numLLR-65]
+        // Header layout (16 × uint32_t):
+        //   [0] circShift[0].d as uint32_t pointer
+        //   [1] circShift[0].d[0] (first shift value, or 0xDEAD if d==NULL)
+        //   [2] circShift[0].dim1
+        //   [3] circShift[0].dim2
+        //   [4] numCnInCnGroups[0]
+        //   [5] startAddrCnGroups[0]
+        //   [6] numBnInBnGroups[0]
+        //   [7] startAddrBnGroups[0]
+        //   [8..11] cnProcBuf[0..3] before scatter (should be 0)
+        //   [12..15] cnProcBuf[0..3] after scatter (should be non-zero)
+        ldpc_dsp_ctx_t *ctx4 = (ldpc_dsp_ctx_t *)(uintptr_t)handle;
+        int8_t *cnProcBuf4 = ctx4->cnProcBuf;
+        memset(cnProcBuf4, 0, NR_LDPC_SIZE_CN_PROC_BUF);
+
+        uint32_t hdr[16];
+        hdr[0]  = (uint32_t)(uintptr_t)lut.circShift[0].d;
+        hdr[1]  = lut.circShift[0].d ? (uint32_t)lut.circShift[0].d[0] : 0xDEADu;
+        hdr[2]  = (uint32_t)lut.circShift[0].dim1;
+        hdr[3]  = (uint32_t)lut.circShift[0].dim2;
+        hdr[4]  = (uint32_t)lut.numCnInCnGroups[0];
+        hdr[5]  = (uint32_t)lut.startAddrCnGroups[0];
+        hdr[6]  = (uint32_t)lut.numBnInBnGroups[0];
+        hdr[7]  = (uint32_t)lut.startAddrBnGroups[0];
+        hdr[8]  = (uint32_t)(uint8_t)cnProcBuf4[0]; // before scatter (should be 0)
+        hdr[9]  = hdr[10] = hdr[11] = 0;
+
+        if (p.BG == 1)
+            nrLDPC_llr2CnProcBuf_BG1(&lut, (int8_t *)llr, cnProcBuf4, p.Z);
+        else
+            nrLDPC_llr2CnProcBuf_BG2(&lut, (int8_t *)llr, cnProcBuf4, p.Z);
+
+        hdr[12] = (uint32_t)(uint8_t)cnProcBuf4[0]; // after scatter (should be llr[332])
+        hdr[13] = (uint32_t)(uint8_t)cnProcBuf4[1];
+        hdr[14] = (uint32_t)(uint8_t)cnProcBuf4[384]; // start of BN j=1 slot
+        hdr[15] = (uint32_t)(uint8_t)cnProcBuf4[768]; // start of BN j=2 slot
+
+        memcpy(llr_out, hdr, 64);
+        if ((int)numLLR > 64)
+            memcpy(llr_out + 64, cnProcBuf4, numLLR - 64);
+
+        if (metaLen >= 4) { uint32_t z = 0; memcpy(meta, &z, 4); }
+        return 0;
+    }
+    // diag=2, diag=3: full BP below
 
     ldpc_dsp_ctx_t *ctx = (ldpc_dsp_ctx_t *)(uintptr_t)handle;
 
+    int skip_gather = (p.diag == 3) ? 1 : 0;
     int32_t numIter = ldpc_scalar_core(
         (const int8_t *)llr, llr_out, numLLR,
-        &lut, p.BG, p.Z, p.numMaxIter, ctx);
+        &lut, p.BG, p.Z, p.numMaxIter, ctx, skip_gather);
 
     FARF(RUNTIME_HIGH, "ldpc_hexagon: done in %d iter", numIter);
 
