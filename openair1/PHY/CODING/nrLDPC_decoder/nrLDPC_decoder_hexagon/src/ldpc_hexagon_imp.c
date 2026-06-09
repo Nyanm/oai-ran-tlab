@@ -251,39 +251,6 @@ static void cnProc(t_nrLDPC_lut *p_lut,
 }
 
 // =============================================================================
-// Parity Check — cnProcPc (scalar)
-// =============================================================================
-// After bn2cnProcBuf, cnProcBuf holds BN→CN extrinsic messages.
-// XOR of sign bits across all BN positions at each CN = 0 ↔ parity satisfied.
-// Returns 0 if all CNs pass, 1 otherwise.
-
-static int32_t scalar_cnProcPc(const int8_t *cnProcBuf, t_nrLDPC_lut *p_lut,
-                                uint16_t Z, uint8_t BG)
-{
-    const int8_t *tbl  = (BG == 1) ? numBN_BG1 : numBN_BG2;
-    int           ngrp = (BG == 1) ? NR_LDPC_NUM_CN_GROUPS_BG1
-                                   : NR_LDPC_NUM_CN_GROUPS_BG2;
-    for (int g = 0; g < ngrp; g++) {
-        int numCN = (int)p_lut->numCnInCnGroups[g];
-        if (numCN == 0) continue;
-        int      numBN = (int)tbl[g];
-        uint32_t bitOff = (uint32_t)numCN * NR_LDPC_ZMAX;
-        uint32_t sa     = p_lut->startAddrCnGroups[g];
-
-        for (int i = 0; i < numCN; i++) {
-            for (int z = 0; z < (int)Z; z++) {
-                int samp = i * (int)Z + z;
-                int8_t sgn = 0;
-                for (int k = 0; k < numBN; k++)
-                    sgn ^= cnProcBuf[sa + (uint32_t)k * bitOff + samp];
-                if (sgn & 0x80) return 1;
-            }
-        }
-    }
-    return 0;
-}
-
-// =============================================================================
 // HVX helpers — saturating int8 arithmetic via int16 widening
 // =============================================================================
 // HVX has no single-instruction signed-byte saturating add/sub.
@@ -329,6 +296,88 @@ static inline void hvx_l2fetch_2d(const void *base,
                   | ((uint64_t)(width  & 0xFFFFu) << 16)
                   |  (uint64_t)(height & 0xFFFFu);
     Q6_l2fetch_AP((void *)(uintptr_t)base, desc);
+}
+
+// =============================================================================
+// Parity Check — cnProcPc (HVX, k-outer sequential access)
+// =============================================================================
+// After bn2cnProcBuf, cnProcBuf holds BN→CN extrinsic messages.
+// XOR of sign bits across all BN positions at each CN = 0 ↔ parity satisfied.
+// Returns 0 if all CNs pass, 1 otherwise.
+
+// Parity check: OAI computes sat8(cnProcBuf + cnProcBufRes) at each CN edge.
+// cnProcBuf = BN→CN extrinsic = llrRes[b] - bnProcBuf[k,b]
+// cnProcBufRes = CN→BN message = bnProcBuf[k,b] (in CN-indexed layout)
+// sum = llrRes[b]: posterior LLR; its sign is the hard decision for parity.
+//
+// Same b-outer / k-inner access pattern as hvx_cnProc_group: the l2fetch
+// before each b-chunk prefetches all numBN k-layers into L2, so the k-loop
+// reads from L2 rather than DRAM.  No parity accumulator buffer needed —
+// we XOR sat8(p+q) across k layers directly into a single HVX register.
+static int32_t cnProcPc(const int8_t *cnProcBuf, const int8_t *cnProcBufRes,
+                        t_nrLDPC_lut *p_lut, uint16_t Z, uint8_t BG)
+{
+    const int8_t *tbl  = (BG == 1) ? numBN_BG1 : numBN_BG2;
+    int           ngrp = (BG == 1) ? NR_LDPC_NUM_CN_GROUPS_BG1
+                                   : NR_LDPC_NUM_CN_GROUPS_BG2;
+
+    HVX_Vector v127  = Q6_Vh_vsplat_R(127);
+    HVX_Vector vn128 = Q6_Vh_vsplat_R(-128);
+    HVX_Vector vzero = Q6_V_vzero();
+    // Aligned spill buffer for sign extraction: vmem requires 128-byte alignment.
+    // memcpy(unaligned_dst, &hvx_vec, 128) gets inlined as vmem → crash if dst is
+    // only 8-byte aligned.  Declare aligned(128) so the compiler emits a safe store.
+    int8_t parbuf[HVX_VLEN] __attribute__((aligned(128)));
+
+    for (int g = 0; g < ngrp; g++) {
+        int numCN = (int)p_lut->numCnInCnGroups[g];
+        if (numCN == 0) continue;
+        int      numBN  = (int)tbl[g];
+        uint32_t bitOff = (uint32_t)numCN * NR_LDPC_ZMAX;
+        uint32_t sa     = p_lut->startAddrCnGroups[g];
+        uint32_t total  = (uint32_t)numCN * (uint32_t)Z;
+        uint32_t full   = (total / HVX_VLEN) * HVX_VLEN;
+
+        // B-outer, k-inner: mirrors hvx_cnProc_group's access pattern.
+        // l2fetch before each b-chunk fetches all numBN layers for the NEXT
+        // chunk, hiding the bitOff-strided inter-layer latency.
+        for (uint32_t b = 0; b < full; b += HVX_VLEN) {
+            if (b + HVX_VLEN < full) {
+                hvx_l2fetch_2d(cnProcBuf    + sa + b + HVX_VLEN,
+                               bitOff, HVX_VLEN, (uint32_t)numBN);
+                hvx_l2fetch_2d(cnProcBufRes + sa + b + HVX_VLEN,
+                               bitOff, HVX_VLEN, (uint32_t)numBN);
+            }
+
+            HVX_Vector vpar = vzero;
+            for (int k = 0; k < numBN; k++) {
+                HVX_Vector vp = *(HVX_UVector *)(cnProcBuf    + sa + (uint32_t)k * bitOff + b);
+                HVX_Vector vq = *(HVX_UVector *)(cnProcBufRes + sa + (uint32_t)k * bitOff + b);
+                vpar = Q6_V_vxor_VV(vpar, hvx_sat8_add(vp, vq, v127, vn128));
+            }
+
+            // Check sign bits: any byte of vpar negative → parity failed.
+            // Write via aligned pointer (vmem aligned store) then OR-scan 64-bit words.
+            *(HVX_Vector *)parbuf = vpar;
+            const uint64_t *w = (const uint64_t *)parbuf;
+            uint64_t any = 0;
+            for (int i = 0; i < HVX_VLEN / 8; i++) any |= w[i];
+            if (any & 0x8080808080808080ULL) return 1;
+        }
+
+        // Scalar tail (Z not a multiple of 128).
+        for (uint32_t samp = full; samp < total; samp++) {
+            int8_t sgn = 0;
+            for (int k = 0; k < numBN; k++) {
+                uint32_t idx = sa + (uint32_t)k * bitOff + samp;
+                int16_t  s   = (int16_t)cnProcBuf[idx] + (int16_t)cnProcBufRes[idx];
+                int8_t   v   = s > 127 ? 127 : (s < -128 ? -128 : (int8_t)s);
+                sgn ^= v;
+            }
+            if (sgn & 0x80) return 1;
+        }
+    }
+    return 0;
 }
 
 // =============================================================================
@@ -626,7 +675,7 @@ static int32_t ldpc_scalar_core(
         else
             nrLDPC_bn2cnProcBuf_BG2(p_lut, bnProcBufRes, cnProcBuf, Z);
 
-        pcRes = scalar_cnProcPc(cnProcBuf, p_lut, Z, BG);
+        pcRes = cnProcPc(cnProcBuf, cnProcBufRes, p_lut, Z, BG);
         numIter++;
     }
 
