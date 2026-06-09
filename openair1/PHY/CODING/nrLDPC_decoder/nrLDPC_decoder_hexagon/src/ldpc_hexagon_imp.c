@@ -41,7 +41,6 @@
 #  include <stdio.h>
 #  include "HAP_farf.h"
 #  include "HAP_power.h"
-#  include "HAP_compute_res.h"
 #endif
 
 #include <hexagon_types.h>
@@ -533,17 +532,8 @@ typedef struct {
     int8_t *bnProcBufRes;
     int8_t *llrRes;
     int8_t *llrProcBuf;
-    uint32_t     dsp_clk_hz;   // actual DSP core clock after power vote
-    void        *vtcm_base;    // NULL → malloc fallback, non-NULL → VTCM slab
-    unsigned int vtcm_ctx;     // CRM context ID; 0 → malloc fallback
+    uint32_t dsp_clk_hz;   // actual DSP core clock after power vote
 } ldpc_dsp_ctx_t;
-
-#ifndef LDPC_SIM_STANDALONE
-// VTCM layout: 4 × 121,344 B (cnProc/bnProc) + 2 × 27,008 B (llr, rounded to 128 B)
-// Total 539,392 B < 8 MB VTCM per HTP.  All offsets are 128-byte aligned.
-#define VTCM_LLR_BUF_SIZE   27008u
-#define VTCM_TOTAL_SIZE     539392u
-#endif
 
 // =============================================================================
 // Main decoder core — uses pre-allocated buffers from session context
@@ -707,46 +697,21 @@ int ldpc_hexagon_open(const char *uri, remote_handle64 *handle)
     ldpc_dsp_ctx_t *ctx = calloc(1, sizeof(ldpc_dsp_ctx_t));
     if (!ctx) return -1;
 
-    // Try to place the 539 KB LDPC working set in VTCM (near-register latency,
-    // no DRAM misses).  Falls back to malloc if VTCM is unavailable (unsigned-PD).
-    {
-        compute_res_attr_t attr;
-        HAP_compute_res_attr_init(&attr);
-        HAP_compute_res_attr_set_vtcm_param(&attr, VTCM_TOTAL_SIZE, 1 /* single_page */);
-        ctx->vtcm_ctx = HAP_compute_res_acquire(&attr, 0 /* no timeout */);
-        if (ctx->vtcm_ctx != 0) {
-            ctx->vtcm_base = HAP_compute_res_attr_get_vtcm_ptr(&attr);
-            uint8_t *p = (uint8_t *)ctx->vtcm_base;
-            ctx->cnProcBuf    = (int8_t *)p; p += NR_LDPC_SIZE_CN_PROC_BUF;
-            ctx->cnProcBufRes = (int8_t *)p; p += NR_LDPC_SIZE_CN_PROC_BUF;
-            ctx->bnProcBuf    = (int8_t *)p; p += NR_LDPC_SIZE_BN_PROC_BUF;
-            ctx->bnProcBufRes = (int8_t *)p; p += NR_LDPC_SIZE_BN_PROC_BUF;
-            ctx->llrRes       = (int8_t *)p; p += VTCM_LLR_BUF_SIZE;
-            ctx->llrProcBuf   = (int8_t *)p;
-            FARF(ALWAYS, "ldpc_hexagon: VTCM %u bytes at 0x%x (ctx=%u)",
-                 VTCM_TOTAL_SIZE, (uint32_t)(uintptr_t)ctx->vtcm_base, ctx->vtcm_ctx);
-        } else {
-            FARF(ALWAYS, "ldpc_hexagon: VTCM unavailable (rc=0), falling back to malloc");
-        }
-    }
+    ctx->cnProcBuf    = malloc(NR_LDPC_SIZE_CN_PROC_BUF);
+    ctx->cnProcBufRes = malloc(NR_LDPC_SIZE_CN_PROC_BUF);
+    ctx->bnProcBuf    = malloc(NR_LDPC_SIZE_BN_PROC_BUF);
+    ctx->bnProcBufRes = malloc(NR_LDPC_SIZE_BN_PROC_BUF);
+    ctx->llrRes       = malloc(NR_LDPC_MAX_NUM_LLR);
+    ctx->llrProcBuf   = malloc(NR_LDPC_MAX_NUM_LLR);
 
-    if (!ctx->vtcm_base) {
-        ctx->cnProcBuf    = malloc(NR_LDPC_SIZE_CN_PROC_BUF);
-        ctx->cnProcBufRes = malloc(NR_LDPC_SIZE_CN_PROC_BUF);
-        ctx->bnProcBuf    = malloc(NR_LDPC_SIZE_BN_PROC_BUF);
-        ctx->bnProcBufRes = malloc(NR_LDPC_SIZE_BN_PROC_BUF);
-        ctx->llrRes       = malloc(NR_LDPC_MAX_NUM_LLR);
-        ctx->llrProcBuf   = malloc(NR_LDPC_MAX_NUM_LLR);
-
-        if (!ctx->cnProcBuf || !ctx->cnProcBufRes || !ctx->bnProcBuf ||
-            !ctx->bnProcBufRes || !ctx->llrRes || !ctx->llrProcBuf) {
-            FARF(ERROR, "ldpc_hexagon: working buffer allocation failed");
-            free(ctx->cnProcBuf);    free(ctx->cnProcBufRes);
-            free(ctx->bnProcBuf);    free(ctx->bnProcBufRes);
-            free(ctx->llrRes);       free(ctx->llrProcBuf);
-            free(ctx);
-            return -1;
-        }
+    if (!ctx->cnProcBuf || !ctx->cnProcBufRes || !ctx->bnProcBuf ||
+        !ctx->bnProcBufRes || !ctx->llrRes || !ctx->llrProcBuf) {
+        FARF(ERROR, "ldpc_hexagon: working buffer allocation failed");
+        free(ctx->cnProcBuf);    free(ctx->cnProcBufRes);
+        free(ctx->bnProcBuf);    free(ctx->bnProcBufRes);
+        free(ctx->llrRes);       free(ctx->llrProcBuf);
+        free(ctx);
+        return -1;
     }
 
     // Step 1: declare this a compute-class client so the system knows we need
@@ -821,13 +786,9 @@ int ldpc_hexagon_close(remote_handle64 handle)
 {
     ldpc_dsp_ctx_t *ctx = (ldpc_dsp_ctx_t *)(uintptr_t)handle;
     if (ctx) {
-        if (ctx->vtcm_ctx != 0)
-            HAP_compute_res_release(ctx->vtcm_ctx);
-        else {
-            free(ctx->cnProcBuf);    free(ctx->cnProcBufRes);
-            free(ctx->bnProcBuf);    free(ctx->bnProcBufRes);
-            free(ctx->llrRes);       free(ctx->llrProcBuf);
-        }
+        free(ctx->cnProcBuf);    free(ctx->cnProcBufRes);
+        free(ctx->bnProcBuf);    free(ctx->bnProcBufRes);
+        free(ctx->llrRes);       free(ctx->llrProcBuf);
         free(ctx);
     }
     FARF(RUNTIME_HIGH, "ldpc_hexagon: session closed");
