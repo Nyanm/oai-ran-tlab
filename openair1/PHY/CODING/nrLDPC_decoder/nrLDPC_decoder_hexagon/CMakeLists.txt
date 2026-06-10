@@ -171,6 +171,22 @@ if(LDPC_HEX_STANDALONE)
 
         target_compile_options(ldpc_hexagon_skel PRIVATE -mhvx -mhvx-length=128B)
 
+        # VTCM allocation via HAP_compute_res_acquire (CRM API).
+        # OFF by default: including HAP_compute_res.h adds weak undefined
+        # compute_resource_* symbols to the skel's dynsym.  The SA9000P RTLD
+        # rejects these at dlopen time in unsigned-PD (AEE_EUNABLETOLOAD).
+        # Enable only when running signed-PD or on a device whose DSP runtime
+        # exports compute_resource_acquire.
+        option(LDPC_HEX_VTCM
+            "Allocate LDPC working set in VTCM via CRM API (requires signed-PD; breaks unsigned-PD on SA9000P)"
+            OFF)
+        if(LDPC_HEX_VTCM)
+            target_compile_definitions(ldpc_hexagon_skel PRIVATE LDPC_HEX_VTCM)
+            message(STATUS "ldpc_hexagon_skel: VTCM enabled (signed-PD / CRM API)")
+        else()
+            message(STATUS "ldpc_hexagon_skel: VTCM disabled (default; unsigned-PD safe)")
+        endif()
+
         copy_binaries(ldpc_hexagon_skel)
 
     endif()
