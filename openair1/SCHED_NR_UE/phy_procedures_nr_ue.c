@@ -464,8 +464,12 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
         dlsch->cw_info.Nl);
 
   const uint32_t pdsch_est_size = ((ue->frame_parms.symbols_per_slot * ue->frame_parms.ofdm_symbol_size + 15) / 16) * 16;
-  fourDimArray_t *toFree = NULL;
-  allocCast2D(pdsch_dl_ch_estimates, int32_t, toFree, ue->frame_parms.nb_antennas_rx * dlsch->cw_info.Nl, pdsch_est_size, false);
+  allocCast2D(pdsch_dl_ch_estimates,
+              int32_t,
+              ue->pdsch_dl_ch_estimates_buf,
+              ue->frame_parms.nb_antennas_rx * dlsch->cw_info.Nl,
+              pdsch_est_size,
+              true);
 
   c16_t ptrs_phase_per_slot[ue->frame_parms.nb_antennas_rx][NR_SYMBOLS_PER_SLOT];
   memset(ptrs_phase_per_slot, 0, sizeof(ptrs_phase_per_slot));
@@ -474,15 +478,7 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
   memset(ptrs_re_per_slot, 0, sizeof(ptrs_re_per_slot));
 
   const uint32_t rx_size_symbol = (freq_alloc->num_rbs * NR_NB_SC_PER_RB + 15) & ~15;
-  fourDimArray_t *toFree2 = NULL;
-  allocCast4D(rxdataF_comp,
-              c16_t,
-              toFree2,
-              ue->frame_parms.symbols_per_slot,
-              dlsch->cw_info.Nl,
-              ue->frame_parms.nb_antennas_rx,
-              rx_size_symbol,
-              false);
+  allocCast3D(rxdataF_comp, c16_t, ue->rxdataF_comp_buf, ue->frame_parms.symbols_per_slot, dlsch->cw_info.Nl, rx_size_symbol, true);
 
   uint32_t nvar = 0;
 
@@ -565,33 +561,22 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
                                                          freq_alloc->num_rbs * NR_NB_SC_PER_RB * dlschCfg->number_symbols,
                                                          &mt);
   }
-  fourDimArray_t *toFree3 = NULL;
-  allocCast4D(dl_ch_mag,
-              c16_t,
-              toFree3,
-              NR_SYMBOLS_PER_SLOT,
-              dlsch->cw_info.Nl,
-              ue->frame_parms.nb_antennas_rx,
-              rx_size_symbol,
-              false);
-  fourDimArray_t *toFree4 = NULL;
-  allocCast4D(dl_ch_magb,
-              c16_t,
-              toFree4,
-              NR_SYMBOLS_PER_SLOT,
-              dlsch->cw_info.Nl,
-              ue->frame_parms.nb_antennas_rx,
-              rx_size_symbol,
-              false);
-  fourDimArray_t *toFree5 = NULL;
-  allocCast4D(dl_ch_magr,
-              c16_t,
-              toFree5,
-              NR_SYMBOLS_PER_SLOT,
-              dlsch->cw_info.Nl,
-              ue->frame_parms.nb_antennas_rx,
-              rx_size_symbol,
-              false);
+  allocCast3D(dl_ch_mag, c16_t, ue->dl_ch_mag_buf, NR_SYMBOLS_PER_SLOT, dlsch->cw_info.Nl, rx_size_symbol, true);
+  allocCast3D(dl_ch_magb, c16_t, ue->dl_ch_magb_buf, NR_SYMBOLS_PER_SLOT, dlsch->cw_info.Nl, rx_size_symbol, true);
+  allocCast3D(dl_ch_magr, c16_t, ue->dl_ch_magr_buf, NR_SYMBOLS_PER_SLOT, dlsch->cw_info.Nl, rx_size_symbol, true);
+  const bool need_rho = ue->do_ml && dlsch->cw_info.Nl == 2 && dlsch->cw_info.qamModOrder <= 6;
+  c16_t(*rho_dl)[dlsch->cw_info.Nl * dlsch->cw_info.Nl][rx_size_symbol] = NULL;
+  if (need_rho) {
+    allocCast3D(rho_dl_buf,
+                c16_t,
+                ue->rho_dl_buf,
+                NR_SYMBOLS_PER_SLOT,
+                dlsch->cw_info.Nl * dlsch->cw_info.Nl,
+                rx_size_symbol,
+                true);
+    rho_dl = rho_dl_buf;
+  }
+
   for (int m = dlschCfg->start_symbol; m < (dlschCfg->number_symbols + dlschCfg->start_symbol); m++) {
     bool first_symbol_flag = false;
     if (m == first_symbol_with_data)
@@ -623,7 +608,8 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
                     ptrs_phase_per_slot,
                     ptrs_re_per_slot,
                     nvar,
-                    &scope_req)
+                    &scope_req,
+                    rho_dl)
         < 0) {
       if (scope_req.copy_chanest_to_scope) {
         UEunlockScopeData(ue, pdschChanEstimates);
@@ -641,11 +627,6 @@ static int nr_ue_pdsch_procedures(PHY_VARS_NR_UE *ue,
   if (scope_req.copy_rxdataF_to_scope) {
     UEunlockScopeData(ue, pdschRxdataF);
   }
-  free(toFree);
-  free(toFree2);
-  free(toFree3);
-  free(toFree4);
-  free(toFree5);
   return 0;
 }
 
