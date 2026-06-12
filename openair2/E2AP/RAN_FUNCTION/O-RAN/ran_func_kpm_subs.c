@@ -6,6 +6,8 @@
 
 #include <search.h>
 
+#include "openair2/RRC/NR/rrc_gNB_UE_context.h"
+
 e2_node_level_stats_t cp_node_level_stats(const e2_node_level_stats_t *src)
 {
   e2_node_level_stats_t dst = {
@@ -81,6 +83,163 @@ static meas_record_lst_t fill_DRB_PdcpSduVolumeUL(__attribute__((unused)) const 
   // Get UL data volume delivered from PDCP layer
   meas_record.int_val = (pdcp.txsdu_bytes - last_pdcp_sdu_total_bytes[ue_idx].ul)*8/1000000;   // [Mb]
   last_pdcp_sdu_total_bytes[ue_idx].ul = pdcp.txsdu_bytes;
+
+  return meas_record;
+}
+
+static long last_known_ss_rsrp_encoded = 0;
+
+static meas_record_lst_t fill_L1M_SS_RSRP(__attribute__((unused)) const label_info_lst_t label,
+                                           __attribute__((unused)) uint32_t gran_period_ms,
+                                           __attribute__((unused)) cudu_ue_info_pair_t ue_info,
+                                           __attribute__((unused)) const size_t ue_idx,
+                                           __attribute__((unused)) e2_node_level_stats_t* node_stats)
+{
+  meas_record_lst_t meas_record = {0};
+  meas_record.value = INTEGER_MEAS_VALUE;
+
+  if (RC.nrrrc == NULL || RC.nrrrc[0] == NULL) {
+    LOG_W(NR_RRC, "[KPM] L1M.SS-RSRP: RRC not initialised, returning last-known\n");
+    goto emit;
+  }
+  if (RC.nrrrc[0]->rrc_ue_head.rbh_root == NULL) {
+    LOG_D(NR_RRC, "[KPM] L1M.SS-RSRP: no RRC-connected UEs, returning last-known\n");
+    goto emit;
+  }
+
+  uint64_t sum_encoded = 0;
+  uint32_t reporting_ues = 0;
+  struct rrc_gNB_ue_context_s *ue_ctx = NULL;
+  RB_FOREACH(ue_ctx, rrc_nr_ue_tree_s, &RC.nrrrc[0]->rrc_ue_head) {
+    if (ue_ctx == NULL)
+      continue;
+    const NR_MeasResults_t *mr = ue_ctx->ue_context.measResults;
+    if (mr == NULL)
+      continue;
+    if (mr->measResultServingMOList.list.count == 0)
+      continue;
+    if (mr->measResultServingMOList.list.array == NULL)
+      continue;
+    const NR_MeasResultServMO_t *serv_mo = mr->measResultServingMOList.list.array[0];
+    if (serv_mo == NULL)
+      continue;
+    const struct NR_MeasResultNR__measResult__cellResults *cr =
+        &serv_mo->measResultServingCell.measResult.cellResults;
+    if (cr == NULL)
+      continue;
+    long encoded = 0;
+    if (cr->resultsSSB_Cell != NULL && cr->resultsSSB_Cell->rsrp != NULL) {
+      encoded = *(cr->resultsSSB_Cell->rsrp);
+    } else if (cr->resultsCSI_RS_Cell != NULL && cr->resultsCSI_RS_Cell->rsrp != NULL) {
+      encoded = *(cr->resultsCSI_RS_Cell->rsrp);
+    } else {
+      continue;
+    }
+    sum_encoded += (uint64_t)encoded;
+    reporting_ues++;
+  }
+
+  if (reporting_ues > 0) {
+    last_known_ss_rsrp_encoded = (long)((sum_encoded + reporting_ues / 2) / reporting_ues);
+    LOG_D(NR_RRC, "[KPM] L1M.SS-RSRP: cell-level mean over %u UE(s), encoded=%ld\n",
+          reporting_ues, last_known_ss_rsrp_encoded);
+  }
+
+emit:;
+
+  if (last_known_ss_rsrp_encoded == 0) {
+    LOG_W(NR_RRC, "[KPM] L1M.SS-RSRP: no MeasurementReport received yet, returning 0\n");
+    meas_record.int_val = 0;
+  } else {
+    meas_record.int_val = last_known_ss_rsrp_encoded - 157;
+  }
+
+  return meas_record;
+}
+
+static bool last_known_ss_sinr_valid = false;
+static long last_known_ss_sinr_encoded = 0;
+
+static meas_record_lst_t fill_MR_NRScSSSINR(__attribute__((unused)) const label_info_lst_t label,
+                                            __attribute__((unused)) uint32_t gran_period_ms,
+                                            __attribute__((unused)) cudu_ue_info_pair_t ue_info,
+                                            __attribute__((unused)) const size_t ue_idx,
+                                            __attribute__((unused)) e2_node_level_stats_t* node_stats)
+{
+  meas_record_lst_t meas_record = {0};
+  meas_record.value = INTEGER_MEAS_VALUE;
+
+  if (RC.nrrrc == NULL || RC.nrrrc[0] == NULL)
+    goto emit_sinr;
+  if (RC.nrrrc[0]->rrc_ue_head.rbh_root == NULL)
+    goto emit_sinr;
+
+  uint64_t sum_encoded = 0;
+  uint32_t reporting_ues = 0;
+  struct rrc_gNB_ue_context_s *ue_ctx = NULL;
+  RB_FOREACH(ue_ctx, rrc_nr_ue_tree_s, &RC.nrrrc[0]->rrc_ue_head) {
+    if (ue_ctx == NULL)
+      continue;
+    const NR_MeasResults_t *mr = ue_ctx->ue_context.measResults;
+    if (mr == NULL)
+      continue;
+    if (mr->measResultServingMOList.list.count == 0)
+      continue;
+    if (mr->measResultServingMOList.list.array == NULL)
+      continue;
+    const NR_MeasResultServMO_t *serv_mo = mr->measResultServingMOList.list.array[0];
+    if (serv_mo == NULL)
+      continue;
+    const struct NR_MeasResultNR__measResult__cellResults *cr =
+        &serv_mo->measResultServingCell.measResult.cellResults;
+    if (cr == NULL)
+      continue;
+    long encoded = 0;
+    if (cr->resultsSSB_Cell != NULL && cr->resultsSSB_Cell->sinr != NULL) {
+      encoded = *(cr->resultsSSB_Cell->sinr);
+    } else if (cr->resultsCSI_RS_Cell != NULL && cr->resultsCSI_RS_Cell->sinr != NULL) {
+      encoded = *(cr->resultsCSI_RS_Cell->sinr);
+    } else {
+      continue;
+    }
+    sum_encoded += (uint64_t)encoded;
+    reporting_ues++;
+  }
+
+  if (reporting_ues > 0) {
+    last_known_ss_sinr_encoded = (long)((sum_encoded + reporting_ues / 2) / reporting_ues);
+    last_known_ss_sinr_valid = true;
+    LOG_D(NR_RRC, "[KPM] MR.NRScSSSINR: cell-level mean over %u UE(s), encoded=%ld\n",
+          reporting_ues, last_known_ss_sinr_encoded);
+  }
+
+emit_sinr:;
+
+  if (!last_known_ss_sinr_valid) {
+    LOG_W(NR_RRC, "[KPM] MR.NRScSSSINR: no MeasurementReport received yet, returning -127\n");
+    meas_record.int_val = -127;
+  } else {
+    meas_record.int_val = (last_known_ss_sinr_encoded - 46) / 2;
+  }
+
+  return meas_record;
+}
+
+static meas_record_lst_t fill_RRC_ConnMean(__attribute__((unused)) const label_info_lst_t label,
+                                           __attribute__((unused)) uint32_t gran_period_ms,
+                                           __attribute__((unused)) cudu_ue_info_pair_t ue_info,
+                                           __attribute__((unused)) const size_t ue_idx,
+                                           __attribute__((unused)) e2_node_level_stats_t* node_stats)
+{
+  meas_record_lst_t meas_record = {0};
+  meas_record.value = INTEGER_MEAS_VALUE;
+
+  int count = 0;
+  struct rrc_gNB_ue_context_s *ue_context_p = NULL;
+  RB_FOREACH(ue_context_p, rrc_nr_ue_tree_s, &RC.nrrrc[0]->rrc_ue_head) {
+    count++;
+  }
+  meas_record.int_val = count;
 
   return meas_record;
 }
@@ -221,24 +380,86 @@ static meas_record_lst_t fill_CARR_PDSCHMCSDist(const label_info_lst_t label,
 {
   meas_record_lst_t meas_record = {.value = INTEGER_MEAS_VALUE};
 
-  uint32_t bin_x = *label.distBinX, bin_y = *label.distBinY, bin_z = *label.distBinZ;
-
+  if (RC.nrmac == NULL || RC.nrmac[0] == NULL) {
+    meas_record.int_val = 0;
+    return meas_record;
+  }
   NR_du_stats_t* du_stats = &RC.nrmac[0]->du_stats;
 
-  if (bin_x <= 8 && bin_y <= 3 && bin_z <= 31) {
-    meas_record.int_val = du_stats->pdsch_mcs_dist[bin_x - 1][bin_y - 1][bin_z];
-  } else {
-    printf("[E2 AGENT] Unknown binX %d, binY %d, binZ %d for \"CARR.PDSCHMCSDist\" measurement\n", bin_x, bin_y, bin_z);
-    meas_record.int_val = 0;
+  if (label.distBinX != NULL && label.distBinY != NULL && label.distBinZ != NULL) {
+    uint32_t bin_x = *label.distBinX, bin_y = *label.distBinY, bin_z = *label.distBinZ;
+    if (bin_x >= 1 && bin_x <= 8 && bin_y >= 1 && bin_y <= 3 && bin_z <= 31) {
+      meas_record.int_val = du_stats->pdsch_mcs_dist[bin_x - 1][bin_y - 1][bin_z];
+    } else {
+      printf("[E2 AGENT] Unknown binX %d, binY %d, binZ %d for \"CARR.PDSCHMCSDist\" measurement\n", bin_x, bin_y, bin_z);
+      meas_record.int_val = 0;
+    }
+    return meas_record;
   }
 
+  uint64_t weighted_sum = 0;
+  uint64_t total_count  = 0;
+  for (int x = 0; x < 8; x++) {
+    for (int y = 0; y < 3; y++) {
+      for (int z = 0; z < 28; z++) {
+        uint64_t c = du_stats->pdsch_mcs_dist[x][y][z];
+        weighted_sum += (uint64_t)z * c;
+        total_count  += c;
+      }
+    }
+  }
+  meas_record.int_val = (total_count > 0) ? (long)(weighted_sum / total_count) : 0;
+  return meas_record;
+}
+
+static meas_record_lst_t fill_CARR_PUSCHMCSDist(const label_info_lst_t label,
+                                                __attribute__((unused)) uint32_t gran_period_ms,
+                                                __attribute__((unused)) cudu_ue_info_pair_t ue_info,
+                                                __attribute__((unused)) const size_t ue_idx,
+                                                __attribute__((unused)) e2_node_level_stats_t* node_stats)
+{
+  meas_record_lst_t meas_record = {.value = INTEGER_MEAS_VALUE};
+
+  if (RC.nrmac == NULL || RC.nrmac[0] == NULL) {
+    meas_record.int_val = 0;
+    return meas_record;
+  }
+  NR_du_stats_t* du_stats = &RC.nrmac[0]->du_stats;
+
+  if (label.distBinX != NULL && label.distBinY != NULL && label.distBinZ != NULL) {
+    uint32_t bin_x = *label.distBinX, bin_y = *label.distBinY, bin_z = *label.distBinZ;
+    
+    if (bin_x >= 1 && bin_x <= 8 && bin_y >= 1 && bin_y <= 2 && bin_z <= 31) {
+      meas_record.int_val = du_stats->pusch_mcs_dist[bin_x - 1][bin_y - 1][bin_z];
+    } else {
+      printf("[E2 AGENT] Unknown binX %d, binY %d, binZ %d for \"CARR.PUSCHMCSDist\" measurement\n", bin_x, bin_y, bin_z);
+      meas_record.int_val = 0;
+    }
+    return meas_record;
+  }
+
+  uint64_t weighted_sum = 0;
+  uint64_t total_count  = 0;
+  for (int x = 0; x < 8; x++) {
+    for (int y = 0; y < 2; y++) {        
+      for (int z = 0; z < 28; z++) {     /* exclude MCS 28..31 (retx) */
+        uint64_t c = du_stats->pusch_mcs_dist[x][y][z];
+        weighted_sum += (uint64_t)z * c;
+        total_count  += c;
+      }
+    }
+  }
+  meas_record.int_val = (total_count > 0) ? (long)(weighted_sum / total_count) : 0;
   return meas_record;
 }
 #endif
 
 static kv_measure_t lst_measure[] = {
-  {.key = "DRB.PdcpSduVolumeDL", .value = fill_DRB_PdcpSduVolumeDL }, 
+  {.key = "DRB.PdcpSduVolumeDL", .value = fill_DRB_PdcpSduVolumeDL },
   {.key = "DRB.PdcpSduVolumeUL", .value = fill_DRB_PdcpSduVolumeUL },
+  {.key = "L1M.SS-RSRP",         .value = fill_L1M_SS_RSRP },
+  {.key = "MR.NRScSSSINR",       .value = fill_MR_NRScSSSINR },
+  {.key = "RRC.ConnMean",         .value = fill_RRC_ConnMean },
 #if defined (NGRAN_GNB_DU)
   {.key = "DRB.RlcSduDelayDl", .value =  fill_DRB_RlcSduDelayDl }, 
   {.key = "DRB.UEThpDl", .value =  fill_DRB_UEThpDl }, 
@@ -246,8 +467,9 @@ static kv_measure_t lst_measure[] = {
   {.key = "RRU.PrbTotDl", .value =  fill_RRU_PrbTotDl }, 
   {.key = "RRU.PrbTotUl", .value =  fill_RRU_PrbTotUl }, 
   {.key = "CARR.PDSCHMCSDist", .value = fill_CARR_PDSCHMCSDist },
+  {.key = "CARR.PUSCHMCSDist", .value = fill_CARR_PUSCHMCSDist },
 #endif
-}; 
+};
 
 void init_kpm_subs_data(void)
 {
