@@ -2367,6 +2367,7 @@ static int collect_ul_candidates(gNB_MAC_INST *mac,
                                  int sched_slot)
 {
   int numUE = 0;
+  bool aperiodic_srs = false;
 
   UE_iterator (UE_list, UE) {
     if (numUE >= max_candidates)
@@ -2456,7 +2457,9 @@ static int collect_ul_candidates(gNB_MAC_INST *mac,
     bool bler_updated = update_bler_stats(&mac->ul_bler, stats, &sched_ctrl->ul_bler_stats, frame);
 
     cand.is_retx = false;
-    cand.sched_srs = verify_aperiodic_srs(mac, sched_slot, k2, &sched_ctrl->aperiodic_srs_trigger, current_BWP);
+    if (!aperiodic_srs)
+      aperiodic_srs = verify_aperiodic_srs(mac, sched_slot, k2, &sched_ctrl->aperiodic_srs_trigger, current_BWP);
+    cand.sched_srs = aperiodic_srs;
     cand.retx_harq_pid = -1;
     cand.sched_inactive = (B == 0 && do_sched);
     cand.pending_bytes = B;
