@@ -78,6 +78,7 @@ typedef struct {
   int status_size;
   int tx_size;
   int retx_size;
+  uint64_t oldest_sdu_arrival_ms; /* timestamp (ms, from sdu->arrival_ms) of oldest SDU in tx/retx queue, 0 if empty */
 } nr_rlc_entity_buffer_status_t;
 
 typedef struct nr_rlc_entity_s {

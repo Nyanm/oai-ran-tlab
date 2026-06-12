@@ -108,6 +108,7 @@ typedef struct {
   sdu_size_t head_sdu_remaining_size_to_send; /*!< \brief remaining size of sdu: could be the total size or the remaining size of
                                                  already segmented sdu */
   bool head_sdu_is_segmented; /*!< \brief 0 if head SDU has not been segmented, 1 if already segmented */
+  uint64_t oldest_sdu_arrival_ms; /*!< \brief Timestamp (ms, RLC time) of oldest SDU in tx/retx queue, 0 if empty */
 } mac_rlc_status_resp_t;
 
 #define SDU_CONFIRM_NO false

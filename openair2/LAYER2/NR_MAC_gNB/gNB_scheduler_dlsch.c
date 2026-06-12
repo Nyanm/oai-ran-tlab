@@ -442,6 +442,7 @@ static int collect_dl_candidates(gNB_MAC_INST *mac,
   int n = 0;
   const frame_structure_t *fs = &mac->frame_structure;
   const float dl_slots_per_s = (float)get_dl_slots_per_period(fs) / fs->numb_slots_period * fs->numb_slots_frame * 100;
+  const uint64_t now_ms = get_nr_rlc_current_time();
 
   UE_iterator (UE_list, UE) {
     if (n >= max_candidates)
@@ -527,6 +528,11 @@ static int collect_dl_candidates(gNB_MAC_INST *mac,
           .alloc_beam_idx = 0,
           .alloc_new_beam = false,
       };
+      nr_dl_candidate_t *c = &candidates[n - 1];
+      FOR_EACH_SEQ_ARR(const nr_lc_config_t *, lc, &sched_ctrl->lc_config) {
+        const uint64_t ts = sched_ctrl->rlc_status[lc->lcid].oldest_sdu_arrival_ms;
+        c->hol_delay_ms[lc->lcid] = (ts > 0 && ts <= now_ms) ? (now_ms - ts) : 0;
+      }
     } else {
       /* new transmission candidate */
       if (sched_ctrl->available_dl_harq.head < 0)
@@ -572,8 +578,11 @@ static int collect_dl_candidates(gNB_MAC_INST *mac,
           .alloc_new_beam = false,
       };
       nr_dl_candidate_t *c = &candidates[n - 1];
-      for (int lcid = 0; lcid < NR_MAX_NUM_LCID; lcid++)
-        c->pending_bytes_per_lcid[lcid] = sched_ctrl->rlc_status[lcid].bytes_in_buffer;
+      FOR_EACH_SEQ_ARR(const nr_lc_config_t *, lc, &sched_ctrl->lc_config) {
+        c->pending_bytes_per_lcid[lc->lcid] = sched_ctrl->rlc_status[lc->lcid].bytes_in_buffer;
+        const uint64_t ts = sched_ctrl->rlc_status[lc->lcid].oldest_sdu_arrival_ms;
+        c->hol_delay_ms[lc->lcid] = (ts > 0 && ts <= now_ms) ? (now_ms - ts) : 0;
+      }
     }
   }
 
