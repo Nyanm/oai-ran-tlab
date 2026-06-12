@@ -358,28 +358,28 @@ static void sctp_handle_new_association_req(const instance_t instance,
 {
   enum sctp_connection_type_e connection_type = SCTP_TYPE_CLIENT;
 
-  /* local address: IPv4 has priority, but can also handle IPv6 */
-  const char *local = NULL;
-  if (req->local_address.ipv6) {
-    local = req->local_address.ipv6_address;
+  /* remote address: IPv4 has priority, but can also handle IPv6 */
+  const char *remote = NULL;
+  if (req->remote_address.ipv6) {
+    remote = req->remote_address.ipv6_address;
     SCTP_WARN("please specify IPv6 addresses in the IPv4 field, IPv4 handles both\n");
   }
-  if (req->local_address.ipv4)
-    local = req->local_address.ipv4_address;
+  if (req->remote_address.ipv4)
+    remote = req->remote_address.ipv4_address;
 
   /* Prepare a new SCTP association as requested by upper layer and try to connect
-   * to remote host.
-   */
+   * to remote host, if remote is defined. If not, just bind on socket.  */
   DevAssert(req != NULL);
   struct addrinfo hints = {.ai_family = AF_UNSPEC, .ai_socktype = SOCK_STREAM, .ai_protocol = IPPROTO_SCTP};
-  if (local == NULL)
-    hints.ai_flags = AI_PASSIVE;
   struct addrinfo *serv;
+  char port[12];
+  snprintf(port, sizeof(port), "%d", req->port);
 
-  int status = getaddrinfo(local, NULL, &hints, &serv);
-  AssertFatal(status == 0, "getaddrinfo(%s) failed: %s\n", local, gai_strerror(status));
+  int status = getaddrinfo(remote, port, &hints, &serv);
+  AssertFatal(status == 0, "getaddrinfo(node %s service %s) failed: %s\n", remote, port, gai_strerror(status));
 
-  int sd;
+  int sd = 0;
+  sctp_assoc_t assoc_id = 0;
   struct addrinfo *p = NULL;
   for (p = serv; p != NULL; p = p->ai_next) {
     char buf[512];
@@ -410,91 +410,21 @@ static void sctp_handle_new_association_req(const instance_t instance,
     ret = setsockopt(sd, serv->ai_protocol, SCTP_EVENTS, &events, 8);
     AssertFatal(ret == 0, "setsockopt() IPPROTO_SCTP_EVENTS failed: %s\n", strerror(errno));
 
-    /* if that fails, we will try the next address */
-    ret = sctp_bindx(sd, p->ai_addr, 1, SCTP_BINDX_ADD_ADDR);
-    if (ret != 0) {
-      SCTP_WARN("sctp_bindx() SCTP_BINDX_ADD_ADDR failed: errno %d %s\n", errno, strerror(errno));
-      close(sd);
-      continue;
+    ret = sctp_connectx(sd, p->ai_addr, 1, &assoc_id);
+    if (ret == 0) {
+      SCTP_DEBUG("sctp_connectx() SUCCESS: used assoc_id %d\n", assoc_id);
+      break;
     }
 
-    SCTP_DEBUG("sctp_bindx() SCTP_BINDX_ADD_ADDR: socket bound to %s/%s\n", local, ip);
-    break;
+    close(sd);
   }
 
   freeaddrinfo(serv);
 
   if (p == NULL) {
     SCTP_ERROR("could not open socket, no SCTP connection established\n");
+    sctp_itti_send_association_resp(requestor, instance, -1, req->ulp_cnx_id, SCTP_STATE_UNREACHABLE, 0, 0);
     return;
-  }
-
-  /* SOCK_STREAM socket type requires an explicit connect to the remote host
-   * address and port. */
-  /* remote address: IPv4 has priority, but can also handle IPv6 */
-  const char *remote = NULL;
-  if (req->remote_address.ipv6) {
-    remote = req->remote_address.ipv6_address;
-    SCTP_WARN("please specify IPv6 addresses in the IPv4 field, IPv4 handles both\n");
-  }
-  if (req->remote_address.ipv4)
-    remote = req->remote_address.ipv4_address;
-  sctp_assoc_t assoc_id = 0;
-  if (remote != NULL) {
-    struct addrinfo hints = {.ai_family = AF_UNSPEC, .ai_socktype = SOCK_STREAM, .ai_protocol = IPPROTO_SCTP};
-    struct addrinfo *serv;
-
-    char port[12];
-    snprintf(port, sizeof(port), "%d", req->port);
-    int status = getaddrinfo(remote, port, &hints, &serv);
-    AssertFatal(status == 0, "getaddrinfo(node %s service %s) failed: %s\n", remote, port, gai_strerror(status));
-
-    struct addrinfo *p = NULL;
-    for (p = serv; p != NULL; p = p->ai_next) {
-      char buf[512];
-      const char *ip = print_ip(p, buf, sizeof(buf));
-      SCTP_DEBUG("Trying to connect to %s for remote end %s\n", ip, remote);
-
-      if (sctp_connectx(sd, p->ai_addr, 1, &assoc_id) < 0) {
-        /* sctp_connectx on non-blocking socket return EINPROGRESS */
-        if (errno != EINPROGRESS) {
-          SCTP_ERROR("Connect failed: %s\n", strerror(errno));
-          sctp_itti_send_association_resp(requestor, instance, -1, req->ulp_cnx_id, SCTP_STATE_UNREACHABLE, 0, 0);
-          freeaddrinfo(serv);
-          close(sd);
-          return;
-        } else {
-          SCTP_DEBUG("sctp_connectx(): assoc_id %d in progress...\n", assoc_id);
-        }
-      } else {
-        SCTP_DEBUG("sctp_connectx() SUCCESS: used assoc_id %d\n", assoc_id);
-      }
-      break;
-    }
-
-    freeaddrinfo(serv);
-  } else {
-    /* I am not sure that this is relevant; we already did sctp_bindx() above */
-    connection_type = SCTP_TYPE_SERVER;
-
-    /* No remote address provided -> only bind the socket for now.
-     * Connection will be accepted in the main event loop
-     */
-    /*
-    struct sockaddr_in6 addr6;
-
-
-    addr6.sin6_family = AF_INET6;
-    addr6.sin6_addr = in6addr_any;
-    addr6.sin6_port = htons(req->port);
-    addr6.sin6_flowinfo = 0;
-
-    if (bind(sd, (struct sockaddr *)&addr6, sizeof(addr6)) < 0) {
-      SCTP_ERROR("Failed to bind the socket to address any (v4/v6): %s\n", strerror(errno));
-      close(sd);
-      return;
-    }
-    */
   }
 
   struct sctp_cnx_list_elm_s *sctp_cnx = calloc(1, sizeof(*sctp_cnx));

@@ -70,7 +70,6 @@ void ngap_handle_ng_setup_message(ngap_gNB_amf_data_t *amf_desc_p, int sctp_shut
     if (amf_desc_p->t_reconnect != -1 && amf_desc_p->ngap_gNB_instance->ngap_amf_associated_nb > 0) {
       timer_remove(amf_desc_p->t_reconnect);
       amf_desc_p->t_reconnect = -1;
-      NGAP_INFO("reconnected to AMF\n");
     }
 
     /* Check that at least one setup message is pending */
