@@ -44,11 +44,13 @@
 #define ZMQ_SECTION "zmq"
 #define ZMQ_TX_CHANNELS "tx_channels"
 #define ZMQ_RX_CHANNELS "rx_channels"
+#define ZMQ_CTRL_CHANNELS "ctrl_channels"
 
 #define ZMQ_PARAMS_DESC                                                                                                           \
   {                                                                                                                               \
       STRINGLISTPARAM(ZMQ_TX_CHANNELS, "list of zmq addresses represeting tx channels_\n", PARAMFLAG_MANDATORY, nullptr, nullptr), \
       STRINGLISTPARAM(ZMQ_RX_CHANNELS, "list of zmq addresses represeting rx channels_\n", PARAMFLAG_MANDATORY, nullptr, nullptr), \
+      STRINGLISTPARAM(ZMQ_CTRL_CHANNELS, "list of zmq addresses represeting control channels_\n", PARAMFLAG_MANDATORY, nullptr, nullptr), \
   };
 
 const size_t sample_size = sizeof(cf_t);
@@ -56,6 +58,8 @@ const size_t rx_buffer_size = sample_size * 300000;
 
 typedef struct {
   void *context;
+  void *ctrl_context;
+  void *ctrl_socket;
   zmq_tx_stream tx_stream;
   zmq_rx_stream rx_stream;
   std::thread poll_thread;
@@ -224,6 +228,10 @@ static void zmq_end(openair0_device_t *device)
 
     if (s->context)
       zmq_ctx_destroy(s->context);
+    if (s->ctrl_socket)
+      zmq_close(s->ctrl_socket);
+    if (s->ctrl_context)
+      zmq_ctx_destroy(s->ctrl_context);
     delete s;
   }
 }
@@ -255,8 +263,18 @@ static int zmq_stop(openair0_device_t *device)
 
 static int zmq_set_freq(openair0_device_t *device, openair0_config_t *openair0_cfg)
 {
-  return 0;
+  /* Send raw 8-byte little-endian double - matches struct.unpack('d') in Python */
+  double freq = openair0_cfg[0].rx_freq[0];
+  zmq_state_t *s = static_cast<zmq_state_t *>(device->priv);
+  int rc = zmq_send(s->ctrl_socket, &freq, sizeof(double), 0);
+  if (rc != sizeof(double)) {
+    LOG_E(HW, "[ZMQ] send failed: %s\n", zmq_strerror(zmq_errno()));
+  } else {
+    LOG_I(HW, "[ZMQ] sent rx freq = %.4f Hz\n", freq);
+  }
+  return (rc == sizeof(double)) ? 0 : -1;
 }
+
 static int zmq_set_gains(openair0_device_t *device, openair0_config_t *openair0_cfg)
 {
   return 0;
@@ -323,6 +341,21 @@ extern "C" __attribute__((__visibility__("default"))) int device_init(openair0_d
       zmq_state->rx_stream.channels_[i] = channel;
     }
     zmq_state->rx_stream.tx_stream_ = &zmq_state->tx_stream;
+  }
+
+  // Setup control channel
+  int num_ctrl_channels = gpd(param_desc, sizeofArray(param_desc), ZMQ_CTRL_CHANNELS)->numelt;
+  if (num_ctrl_channels > 0) {
+    AssertFatal(num_ctrl_channels == 1, "Only one ZMQ control channel is supported at the moment.\n");
+    char **ctrl_channels = gpd(param_desc, sizeofArray(param_desc), ZMQ_CTRL_CHANNELS)->strlistptr;
+    zmq_state->ctrl_context = zmq_ctx_new();
+    zmq_state->ctrl_socket = zmq_socket(zmq_state->ctrl_context, ZMQ_PUSH);
+    AssertFatal(zmq_state->ctrl_socket != NULL, "zmq_socket(ZMQ_PUSH) for control channel failed");
+    int linger = 0;
+    zmq_setsockopt(zmq_state->ctrl_socket, ZMQ_LINGER, &linger, sizeof(linger));
+    AssertFatal(zmq_connect(zmq_state->ctrl_socket, ctrl_channels[0]) == 0,
+                "zmq_bind for control channel failed on %s",
+                ctrl_channels[0]);
   }
 
   device->trx_start_func = zmq_start;
