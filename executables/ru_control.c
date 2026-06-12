@@ -562,12 +562,15 @@ void* ru_thread_control( void* param )
 					 
 		//if (ru->is_slave == 1) lte_sync_time_init(&ru->frame_parms);
 
-		if (ru->rfdevice.is_init != 1) openair0_device_load(&ru->rfdevice,&ru->openair0_cfg);
-		
-		if (ru->rfdevice.trx_config_func) AssertFatal((ru->rfdevice.trx_config_func(&ru->rfdevice,&ru->openair0_cfg)==0), 
-							      "Failed to configure RF device for RU %d\n",ru->idx);
+    if (ru->rfdevice.is_init != 1)
+      openair0_device_load(&ru->rfdevice, &ru->openair0_cfg);
 
-		if (setup_RU_buffers(ru)!=0) {
+    if (ru->rfdevice.trx_config_func)
+      AssertFatal((ru->rfdevice.trx_config_func(&ru->rfdevice, &ru->openair0_cfg) == 0),
+                  "Failed to configure RF device for RU %d\n",
+                  ru->idx);
+
+    if (setup_RU_buffers(ru)!=0) {
 		  printf("Exiting, cannot initialize RU Buffers\n");
 		  exit(-1);
 		}
