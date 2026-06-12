@@ -1122,6 +1122,7 @@ typedef struct f1_config_t {
 typedef struct {
   char *nvipc_shm_prefix;
   int8_t nvipc_poll_core;
+  uint8_t num_phys;
 } nvipc_params_t;
 
 typedef struct {
