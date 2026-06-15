@@ -16,6 +16,8 @@
 #include "openair1/PHY/NR_REFSIG/nr_refsig.h"
 #include "bits.h"
 #include "instrumentation.h"
+#include "PHY/CODING/nrPolar_tools/polar_interface.h"
+
 //#define DEBUG_PBCH
 //#define DEBUG_PBCH_ENCODING
 
@@ -389,13 +391,25 @@ int nr_pbch_decode(PHY_VARS_NR_UE *ue,
   int nushift = (Lmax == 4) ? i_ssb & 3 : i_ssb & 7;
   nr_pbch_unscrambling(pbch_e_rx, Nid_cell, nushift, M, NR_POLAR_PBCH_E, 0, 0, pbch_a_prime, &pbch_a_interleaved);
   //polar decoding de-rate matching
-  uint64_t tmp = 0;
-  const int decoderState = polar_decoder_int16(pbch_e_rx,
-                                               (uint64_t *)&tmp,
-                                               0,
-                                               NR_POLAR_PBCH_MESSAGE_TYPE,
-                                               NR_POLAR_PBCH_PAYLOAD_BITS,
-                                               NR_POLAR_PBCH_AGGREGATION_LEVEL);
+  uint64_t tmp=0;
+  static polar_interface_t po;
+  static bool loaded=false;
+
+  if (ue) {
+    po = ue->polar_interface;
+  } else {
+    if (!loaded) {
+    int ret = load_polar_interface(NULL, &po);
+    AssertFatal(ret == 0, "Failed to load Polar interface\n");
+    loaded = true;
+    }
+    }
+
+  const uint32_t decoderState = po.polar_decoder(pbch_e_rx,
+                                   (uint64_t *)&tmp,
+                                   NR_POLAR_PBCH_MESSAGE_TYPE,
+                                   NR_POLAR_PBCH_PAYLOAD_BITS,
+                                   NR_POLAR_PBCH_AGGREGATION_LEVEL);
   pbch_a_prime = tmp;
 
   nr_downlink_indication_t dl_indication;

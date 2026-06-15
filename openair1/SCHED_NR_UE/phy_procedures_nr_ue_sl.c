@@ -13,7 +13,6 @@
 #include "PHY/MODULATION/modulation_UE.h"
 #include "PHY/NR_UE_ESTIMATION/nr_estimation.h"
 #include "PHY/NR_UE_TRANSPORT/nr_transport_proto_ue.h"
-#include "PHY/CODING/nrPolar_tools/nr_polar_psbch_defs.h"
 #include "openair1/PHY/nr_phy_common/inc/nr_phy_common.h"
 
 void nr_fill_sl_indication(nr_sidelink_indication_t *sl_ind,
