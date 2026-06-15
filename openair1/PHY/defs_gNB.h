@@ -181,9 +181,16 @@ typedef struct {
   uint32_t slot;
   /// ULSCH PDU
   nfapi_nr_pusch_pdu_t pusch_pdu;
+  // Multi-User (MU) group index
+  // -1 : unallocated
+  int16_t mu_group_idx;
+  // 1 for Single-User (SU) and > 1 is MU
+  uint8_t mu_group_size;
 } NR_gNB_PUSCH_job_t;
 
 typedef struct {
+  // identifier for concurrent beams
+  int beam_nb;
   /// Frame where current PUCCH pdu was sent
   uint32_t frame;
   /// Slot where current PUCCH pdu was sent
@@ -454,8 +461,7 @@ typedef struct PHY_VARS_gNB_s {
   time_stats_t ulsch_channel_estimation_stats;
   time_stats_t pusch_channel_estimation_antenna_processing_stats;
   time_stats_t ulsch_llr_stats;
-  time_stats_t ulsch_layer_demapping_stats;
-  time_stats_t ulsch_unscrambling_stats;
+  time_stats_t ulsch_layer_demapping_and_unscrambling_stats;
   time_stats_t pusch_extraction_stats;
   time_stats_t pusch_channel_compensation_stats;
   time_stats_t rx_srs_stats;
