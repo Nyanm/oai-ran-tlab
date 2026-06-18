@@ -59,6 +59,10 @@ history:
 3. OAI Public License v1.0: starting tag v.04 till v1.0
 4. GPL 3: starting tag v.0 till v.04 (only initial implementation of 4G)
 
+## TLAB Modification
+
+该仓库为 [TsukadaLab](https://tlab.hongo.wide.ad.jp/ja/) 用于科研目的再开发仓库。该项目继承Duranta的 [**CSSL v1.0**](LICENSE) 协议。
+
 ## Where to Start
 
  *  [General overview of documentation](./doc/README.md)
