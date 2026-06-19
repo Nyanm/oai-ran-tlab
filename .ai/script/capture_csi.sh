@@ -19,7 +19,7 @@ repo_root=$(cd "$script_dir/../.." && pwd)
 
 csv_bin="$repo_root/cmake_targets/ran_build/build/common/utils/T/tracer/csv"
 t_database="$repo_root/common/utils/T/T_messages.txt"
-data_dir="$repo_root/data"
+data_dir="$repo_root/.data"
 
 if [[ ! -x "$csv_bin" ]]; then
   echo "错误：找不到 csv 工具 $csv_bin" >&2

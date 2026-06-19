@@ -34,6 +34,7 @@ tools/packages/liboai-usrp/conffiles
 # others
 .data
 nfapi_nr_interface_scf
+*.pyc
 *.log
 *.out
 *.pyc
