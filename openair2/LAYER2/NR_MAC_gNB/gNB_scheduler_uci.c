@@ -753,6 +753,7 @@ static void extract_pucch_csi_report(NR_CSI_MeasConfig_t *csi_MeasConfig,
     uint8_t ri_bitlen = 0;
     uint8_t li_bitlen = 0;
     uint8_t pmi_bitlen = 0;
+    bool is_cqi_report = false;  // set in cri_RI_*_CQI branches, gates the CSI trace emit below
     NR_CSI_ReportConfig_t *csirep = csi_MeasConfig->csi_ReportConfigToAddModList->list.array[csi_report_id];
     uint8_t cqi_table = (dl_bwp->dci_format == NR_DL_DCI_FORMAT_1_1 && csirep->cqi_Table) ? *csirep->cqi_Table : NR_CSI_ReportConfig__cqi_Table_table1;
     const NR_PUCCH_CSI_Resource_t *pucchcsires = csirep->reportConfigType.choice.periodic->pucch_CSI_ResourceList.list.array[0];
@@ -786,6 +787,7 @@ static void extract_pucch_csi_report(NR_CSI_MeasConfig_t *csi_MeasConfig,
             break;
           case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_CQI:
             sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.print_report = true;
+            is_cqi_report = true;
             cri_bitlen = csi_report->csi_meas_bitlen.cri_bitlen;
             if (cri_bitlen)
               evaluate_cri_report(payload, cri_bitlen, cumul_bits, sched_ctrl);
@@ -800,6 +802,7 @@ static void extract_pucch_csi_report(NR_CSI_MeasConfig_t *csi_MeasConfig,
             break;
           case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_PMI_CQI:
             sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.print_report = true;
+            is_cqi_report = true;
             cri_bitlen = csi_report->csi_meas_bitlen.cri_bitlen;
             if (cri_bitlen)
               evaluate_cri_report(payload, cri_bitlen, cumul_bits, sched_ctrl);
@@ -818,6 +821,7 @@ static void extract_pucch_csi_report(NR_CSI_MeasConfig_t *csi_MeasConfig,
             break;
           case NR_CSI_ReportConfig__reportQuantity_PR_cri_RI_LI_PMI_CQI:
             sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report.print_report = true;
+            is_cqi_report = true;
             cri_bitlen = csi_report->csi_meas_bitlen.cri_bitlen;
             if (cri_bitlen)
               evaluate_cri_report(payload, cri_bitlen, cumul_bits, sched_ctrl);
@@ -838,6 +842,26 @@ static void extract_pucch_csi_report(NR_CSI_MeasConfig_t *csi_MeasConfig,
             break;
           default:
             AssertFatal(1 == 0, "Invalid or not supported CSI measurement report\n");
+        }
+        /* one trace per decoded CQI-type report; report_quantity lets offline tooling
+           mask fields that this report type does not carry (eg. PMI in cri_RI_CQI) */
+        if (is_cqi_report) {
+          const struct CRI_RI_LI_PMI_CQI *csi = &sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report;
+          T(T_GNB_MAC_CSI_REPORT,
+            T_INT(0),
+            T_INT(UE->rnti),
+            T_INT(frame),
+            T_INT(slot),
+            T_INT(csi_report_id),
+            T_INT(reportQuantity_type),
+            T_INT(csi->cqi_table),
+            T_INT(csi->wb_cqi_1tb),
+            T_INT(csi->wb_cqi_2tb),
+            T_INT(csi->ri),
+            T_INT(csi->pmi_x1),
+            T_INT(csi->pmi_x2),
+            T_INT(csi->cri),
+            T_INT(csi->li));
         }
       }
     }
