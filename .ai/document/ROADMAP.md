@@ -72,9 +72,15 @@ ID = GNB_MAC_CSI_REPORT
 ## 第二步：采集到 CSV（复用 csv 工具 + 封装脚本）
 
 ### 目标
-- [ ] 确认 `csv` 工具路径（`cmake_targets/ran_build/build/csv`）
-- [ ] 编写 `.ai/script/capture_csi.sh`：连 gNB 把 `GNB_MAC_CSI_REPORT` 导出为带时间戳 CSV
-- [ ] 冒烟测试：gNB（`--T_stdout 2 --T_nowait`）+ 1 个 UE，跑出非空 CSV
+- [x] 确认 `csv` 工具路径（`cmake_targets/ran_build/build/common/utils/T/tracer/csv`）
+- [x] 编写 `.ai/script/capture_csi.sh`：连 gNB 把 `GNB_MAC_CSI_REPORT` 导出为带时间戳 CSV
+- [x] 离线冒烟：无 gNB 时校验通过、进入连接重试（事件+14 字段被 csv 正确识别）
+- [x] **运行时冒烟**：gNB（`--T_stdout 2 --T_nowait`）+ 1 UE，跑出 396 行真实数据，字段对齐、取值合理
+
+### 运行时验证记录（2026-06-19）
+- 实采样例：`rnti=14776, frame +8/报（80ms 周期）, report_quantity=2 (cri_RI_PMI_CQI), cqi=15, ri=0(rank1), pmi=0(1x1)`。
+- enum 确认：`reportQuantity_PR` 0-indexed → 0 NOTHING / 1 none / 2 cri_RI_PMI_CQI / 5 cri_RI_CQI / 6 cri_RSRP / 7 ssb_Index_RSRP / 8 cri_RI_LI_PMI_CQI。
+- **数据集隐患**：静态近距离下 CQI 恒 15、RI 恒 rank1，目标无方差→需在采集时制造信道变化（移动/衰减/功率），属实验设计。
 
 ### 采集命令（拟）
 ```bash
@@ -90,7 +96,12 @@ csv -d common/utils/T/T_messages.txt -t time \
 
 ### 决策 / 坑
 - gNB 默认 `T_stdout=1` **不开端口**（`T.c:209`），必须 `--T_stdout 0|2` 才监听；`--T_nowait` 避免启动阻塞等 tracer。
-- `--T_stdout 0`（纯二进制、阻塞等 tracer）可保证不丢启动期事件；`--T_stdout 2` 保留正常日志便于调试。二选一按需。
+- 采集方式已定：`--T_stdout 2 --T_nowait`，**先起 gNB 再接 UE，再跑采集脚本**。
+- 输出落地：项目根 `data/`，命名 `csi-rs-yymmdd-hhmm.csv`（脚本自动建目录、按启动时刻命名）。
+- **坑（已记入脚本头）**：csv 工具按 `T_messages.txt` 事件顺序算 ID，必须与 gNB 编译时同一份；改过 `T_messages.txt` 必须重编 gNB，否则 ID 错位会解析出乱码。
+- **CSV 列**：`timestamp`（伪字段，`-t` 取 `sending_time`）+ `gNB_ID, rnti, frame, slot, csi_report_id, report_quantity, cqi_table, wb_cqi_1tb, wb_cqi_2tb, ri, pmi_x1, pmi_x2, cri, li`。原始 CSV 全量保留（含恒为 0 的 gNB_ID），常量列留给第三步 Python 清洗。
+- **坑（严重，已修）**：T tracer 是**一次性 accept** 模型——`local_tracer.c:get_connection()` 里 `accept` 到一个连接后立刻 `close` 监听 socket。脚本里任何「真发起连接」的端口预探测（如 `/dev/tcp`）都会吃掉这唯一名额，导致随后 csv 连接被拒。已把预检改为只读内核监听表的 `ss -ltn`（不建立连接）。
+- **配套坑**：`do_SRS` 等配置项从整数改成字符串枚举（`none/periodic/aperiodic`）。旧 conf 的 `do_SRS = 1` 需改为 `"periodic"`。这是合并带来的配置 schema 变更，非本功能引入。
 
 ---
 
