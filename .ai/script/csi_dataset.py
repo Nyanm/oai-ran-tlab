@@ -92,7 +92,7 @@ def clean(raw, base_date, slots_per_frame):
     out.loc[rank < SECOND_TB_MIN_RANK, "cqi2"] = pd.NA
 
     out = out.drop_duplicates(subset=["rnti", "abs_slot", "csi_report_id"], keep="first")
-    return out
+    return out[OUT_COLUMNS]  # 显式锁定输出列顺序，不依赖上面字典的插入顺序
 
 
 def process_clean(path, slots_per_frame):

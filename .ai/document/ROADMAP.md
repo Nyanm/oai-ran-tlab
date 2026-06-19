@@ -146,5 +146,15 @@ csv -d common/utils/T/T_messages.txt -t time \
 ## 第五步：测试与评估
 
 ### 目标
-- [ ] 端到端回归脚本：采集 → 整理 → 分析 一键跑通
-- [ ] `/simplify` 审查 C 埋点与 Python 工具链，修正不良设计
+- [x] 离线端到端回归脚本 `.ai/script/csi_selftest.py`：合成数据 → clean → analyze，12 项断言全过
+- [x] 代码审查 C 埋点与 Python 工具链，3 处 findings 经用户决策后修正
+
+### 审查 findings（已修）
+1. `csi_dataset.py`：`OUT_COLUMNS` 原为死代码 → `clean()` 末尾 `return out[OUT_COLUMNS]` 显式锁定列序。
+2. `capture_csi.sh:5`：用法注释路径过期 `data/` → `.data/`、命名补 `hhmmss`。
+3. `capture_csi.sh`：文件名按分钟易撞名 → `date +%y%m%d-%H%M%S`（加秒）。`csi_dataset.py` 文件名解析正则只取前 6 位日期，向后兼容含秒名。
+- C 埋点、`csi_selftest.py` 无问题。`/simplify` 因工作区无 diff、分支混无关合并而改为手动聚焦审查。
+
+### 决策
+- 回归测试只覆盖离线三段（合成 CSV→clean→analyze），不依赖硬件，可重复跑；C 埋点的运行时验证保留为手动（已实跑通过一次）。
+- 自测自带夹具（不外置文件），用 tempfile 隔离，失败退出码非 0，便于将来接 CI。

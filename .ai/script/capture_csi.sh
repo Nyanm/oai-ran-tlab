@@ -2,7 +2,7 @@
 # 连接运行中的 gNB，把 GNB_MAC_CSI_REPORT 事件导出为带时间戳的 CSV。
 #
 # 前置条件：gNB 已用 `--T_stdout 2 --T_nowait` 启动（开放 T 端口、不阻塞等待 tracer）。
-# 用法：  ./capture_csi.sh            # 连默认 127.0.0.1:2021，输出到 <repo>/data/csi-rs-yymmdd-hhmm.csv
+# 用法：  ./capture_csi.sh            # 连默认 127.0.0.1:2021，输出到 <repo>/.data/csi-rs-yymmdd-hhmmss.csv
 #        CSI_IP=x CSI_PORT=y ./capture_csi.sh   # 覆盖远端地址/端口
 # 停止：  Ctrl-C（csv 工具带 -f 实时 flush，已采集的数据不会丢）。
 #
@@ -41,7 +41,7 @@ if command -v ss >/dev/null 2>&1; then
 fi
 
 mkdir -p "$data_dir"
-out_file="$data_dir/csi-rs-$(date +%y%m%d-%H%M).csv"
+out_file="$data_dir/csi-rs-$(date +%y%m%d-%H%M%S).csv"
 
 # 字段顺序即 CSV 列顺序；timestamp 为伪字段，由 -t 指定、取 csv 工具的 e.sending_time（wall-clock，µs）
 echo "采集中 -> $out_file   (Ctrl-C 停止)"
