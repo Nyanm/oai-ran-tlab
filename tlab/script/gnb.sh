@@ -1,0 +1,1 @@
+sudo ~/openairinterface5g/cmake_targets/ran_build/build/nr-softmodem ~/openairinterface5g/targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.fr1.106PRB.usrpx310.conf     --gNBs.[0].min_rxtxtime 6 --usrp-tx-thread-config 1 -E --continuous-tx

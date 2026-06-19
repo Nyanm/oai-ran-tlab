@@ -1,0 +1,1 @@
+sudo ~/openairinterface5g/cmake_targets/ran_build/build/nr-uesoftmodem   -O ~/6g/ue.conf   -r 106 --numerology 1 --band 78 -C 3619200000   --ue-fo-compensation -E   --clock-source 2 --time-source 2   --usrp-args "addr=192.168.40.2"
