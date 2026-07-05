@@ -8,6 +8,7 @@ cmake_targets/ran_build/
 log/
 lte_build_oai/
 build*
+.data/
 
 # IDE files
 .vscode
@@ -34,4 +35,5 @@ tools/packages/liboai-usrp/conffiles
 nfapi_nr_interface_scf
 *.log
 *.out
+*.pyc
 CMakeUserPresets.json
