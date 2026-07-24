@@ -9,14 +9,23 @@
 解码成 nFAPI 结构 → MAC `extract_pucch_csi_report()`（`openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_uci.c:730`）拆字段填入
 `sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report`（`struct CRI_RI_LI_PMI_CQI`，定义于 `nr_mac_gNB.h:556`）。
 
-**整体技术选型（已确认）**
+**整体技术选型（已重构，见下方「重构记录」）**
 | 环节 | 选型 | 未采用 / 理由 |
 |---|---|---|
-| 抓取 | 新增 T tracer 事件 `GNB_MAC_CSI_REPORT`，MAC 层单点埋发 | 不用 Wireshark：CSI 是 L1/UCI 控制信息，不走 MAC PDU 封装，无 dissector，抓不到 |
-| 采集 | 复用 OAI 自带 `csv` tracer 工具 + 封装脚本 | 不自写采集器：`csv.c` 已能连 gNB 导出带时间戳 CSV |
-| 时间戳 | `csv` 工具的 `e.sending_time`（wall-clock，µs） | 不在 C 内嵌 `gettimeofday`：精度够用，精度不足再说 |
+| 抓取 | MAC 层单点埋发**一行文本** `LOG_I(NR_MAC, "CSI_REPORT key=val ...")` | 不用 Wireshark：CSI 是 L1/UCI 控制信息，无 dissector；不用二进制 T 事件：运行时抓取别扭 |
+| 采集 | **运行后洗日志**：`csi_dataset.py wash` grep gNB 日志的 CSI_REPORT 行 → 原始 CSV | 不用运行时 `csv` tracer：一次性 accept、需 --T_stdout、无限重试等别扭点 |
+| 时间戳 | gNB 日志 `wall_clock` 选项的**墙钟纪元秒**（行首 `SEC.US`） | 不用 `time`(单调、无绝对日期)/`utc_time`(HH:MM:SS 跨零点)：纪元秒绝对+单调+简化 clean |
 | 落地格式 | CSV | 暂不用 Parquet：量小、便于肉眼核对，分析端用 pandas |
-| 整理/分析/可视化 | Python（pandas + matplotlib） | 系统 Python 无 pip，pandas 经 `apt install python3-pandas` 安装 |
+| 整理/分析/可视化 | Python（pandas，纯文字+ASCII，无图形） | 系统 Python 无 pip，pandas 经 `apt install python3-pandas` 安装 |
+
+**重构记录（运行时 T-tracer 抓取 → 运行后洗日志）**
+用户反馈 `capture_csi.sh`（连 gNB 的 `csv` tracer）设计别扭，改为纯离线洗日志。三点决策：①彻底替换二进制 T 路径 ②开 gNB `wall_clock` 日志 ③洗日志作 `csi_dataset.py wash` 子命令。改动：
+- C 埋点 `T(T_GNB_MAC_CSI_REPORT,...)` → `LOG_I(NR_MAC, "CSI_REPORT rnti=%04x frame=.. slot=.. report_id=.. rq=.. cqi_table=.. cqi1=.. cqi2=.. ri=.. pmi_x1=.. pmi_x2=.. cri=.. li=..")`（`gNB_scheduler_uci.c`，info 级、~12 行/秒/UE）。
+- 删除 `T_messages.txt` 的 `GNB_MAC_CSI_REPORT` 事件、删除 `.ai/script/capture_csi.sh`。
+- 5 个 tlab 启动脚本统一 tee 到 `.data/log/`，并加 `--log_config.global_log_options level,nocolor,wall_clock`（nocolor 保证日志无 ANSI 便于 grep）。
+- 新数据流：`gNB 日志 → wash → 原始 CSV → clean → *.clean.csv → analyze`。三者均为 `csi_dataset.py` 子命令，省略输入时扫 `.data/log/`。
+- `clean` 简化：时间戳为纪元秒 → `t_sec=相对起点`、`datetime=UTC`，删掉原「文件名补日期 + 跨零点」逻辑（`parse_file_date` 移除）。
+- 回归自测扩展为 wash→clean→analyze 全链 **18 项**，全过。
 
 **环境（已核实）**
 - `T_TRACER` 默认 `ON`（`CMakeLists.txt:348`），当前编译命令未禁用，已具备埋点能力。

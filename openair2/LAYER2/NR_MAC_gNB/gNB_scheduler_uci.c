@@ -843,25 +843,16 @@ static void extract_pucch_csi_report(NR_CSI_MeasConfig_t *csi_MeasConfig,
           default:
             AssertFatal(1 == 0, "Invalid or not supported CSI measurement report\n");
         }
-        /* one trace per decoded CQI-type report; report_quantity lets offline tooling
-           mask fields that this report type does not carry (eg. PMI in cri_RI_CQI) */
+        /* one greppable line per decoded CQI-type report; offline tooling (csi_dataset.py wash)
+           parses "CSI_REPORT key=val ...". rq lets it mask fields a type doesn't carry (eg. PMI in
+           cri_RI_CQI). rnti in hex as is conventional; the log's wall_clock prefix supplies the timestamp. */
         if (is_cqi_report) {
           const struct CRI_RI_LI_PMI_CQI *csi = &sched_ctrl->CSI_report.cri_ri_li_pmi_cqi_report;
-          T(T_GNB_MAC_CSI_REPORT,
-            T_INT(0),
-            T_INT(UE->rnti),
-            T_INT(frame),
-            T_INT(slot),
-            T_INT(csi_report_id),
-            T_INT(reportQuantity_type),
-            T_INT(csi->cqi_table),
-            T_INT(csi->wb_cqi_1tb),
-            T_INT(csi->wb_cqi_2tb),
-            T_INT(csi->ri),
-            T_INT(csi->pmi_x1),
-            T_INT(csi->pmi_x2),
-            T_INT(csi->cri),
-            T_INT(csi->li));
+          LOG_I(NR_MAC,
+                "CSI_REPORT rnti=%04x frame=%d slot=%d report_id=%d rq=%d cqi_table=%d cqi1=%d cqi2=%d "
+                "ri=%d pmi_x1=%d pmi_x2=%d cri=%d li=%d\n",
+                UE->rnti, frame, slot, csi_report_id, reportQuantity_type, csi->cqi_table,
+                csi->wb_cqi_1tb, csi->wb_cqi_2tb, csi->ri, csi->pmi_x1, csi->pmi_x2, csi->cri, csi->li);
         }
       }
     }

@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """
-CSI 数据集工具：清洗 + 终端文字统计/可视化（无图形输出）。两个子命令：
+CSI 数据集工具：洗日志 + 清洗 + 终端文字统计/可视化（无图形输出）。三个子命令：
 
-  clean   [raw.csv...]    原始 CSI CSV(capture_csi.sh 产出) -> 训练用 tidy 数据集 *.clean.csv
+  wash    [gnb.log...]    gNB 日志里的 "CSI_REPORT ..." 行 -> 原始 CSV
+  clean   [raw.csv...]    原始 CSV -> 训练用 tidy 数据集 *.clean.csv
   analyze [clean.csv...]  读 *.clean.csv，终端打印文字统计与 ASCII 可视化
 
-clean 处理：
-  - 时间戳：csv 工具只给当天时分秒，用文件名里的 YYMMDD 补全日期，并处理跨零点（时间回退即 +1 天）
-  - 报告类型：report_quantity(int) -> 字符串标签，并据其把该类型不携带的字段置为 NaN
-  - 派生：rank = ri + 1；frame 每 1024 回绕，解回绕后算单调递增的 abs_slot
-  - 去重：同一 (rnti, abs_slot, csi_report_id) 只保留一条
-省略输入时：clean 扫 .data/csi-rs-*.csv，analyze 扫 .data/*.clean.csv。依赖 pandas。
+数据流：gNB(带 --log_config ...,wall_clock) tee 到 .data/log/gnb-*.log
+        -> wash  -> .data/log/gnb-*.csv
+        -> clean -> .data/log/gnb-*.clean.csv
+        -> analyze
+
+wash：每行日志形如 `<纪元秒>.<us> [NR_MAC][I] CSI_REPORT rnti=<hex> frame=.. slot=.. ...`，
+      抽出时间戳(墙钟纪元秒)与各字段，rnti 由十六进制转十进制。需 gNB 开 wall_clock 日志选项。
+clean：时间戳为纪元秒 -> t_sec(相对起点)、datetime(UTC)；report_quantity 决定字段有效性并置 NaN；
+      rank=ri+1；frame 每 1024 回绕，解回绕算单调 abs_slot；同 (rnti,abs_slot,csi_report_id) 去重。
+省略输入时各子命令扫 .data/log/ 下对应文件。依赖 pandas。
 """
 
 import argparse
@@ -35,6 +40,18 @@ NULLABLE_INT_COLS = ["cqi2", "pmi_x1", "pmi_x2", "li"]  # 可能被置 NaN，用
 OUT_COLUMNS = ["datetime", "t_sec", "rnti", "frame", "slot", "abs_slot", "csi_report_id", "report_type",
                "cqi_table", "cqi1", "cqi2", "rank", "pmi_x1", "pmi_x2", "cri", "li"]
 
+# ---- wash 相关 ----
+# gNB 日志 "CSI_REPORT key=val ..." 行的 key -> 原始 CSV 列名
+LOG_KEY_TO_COL = {"rnti": "rnti", "frame": "frame", "slot": "slot", "report_id": "csi_report_id",
+                  "rq": "report_quantity", "cqi_table": "cqi_table", "cqi1": "wb_cqi_1tb",
+                  "cqi2": "wb_cqi_2tb", "ri": "ri", "pmi_x1": "pmi_x1", "pmi_x2": "pmi_x2",
+                  "cri": "cri", "li": "li"}
+RAW_COLUMNS = ["timestamp", "rnti", "frame", "slot", "csi_report_id", "report_quantity",
+               "cqi_table", "wb_cqi_1tb", "wb_cqi_2tb", "ri", "pmi_x1", "pmi_x2", "cri", "li"]
+CSI_LINE_RE = re.compile(r"CSI_REPORT\s+(.*)")   # 捕获 CSI_REPORT 之后的字段串
+TS_RE = re.compile(r"(\d+\.\d{6})")              # 墙钟纪元秒 SEC.US（日志头，唯一带小数的数）
+KV_RE = re.compile(r"(\w+)=([0-9a-fA-F]+)")      # key=val（val 为十进制或 rnti 的十六进制）
+
 # ---- analyze 相关 ----
 BAR_WIDTH = 40                  # 直方图条最大字符宽度
 SPARK_WIDTH = 72                # 火花线列数
@@ -42,21 +59,41 @@ SPARK_CHARS = "▁▂▃▄▅▆▇█"        # 8 级高度字符
 OPTIONAL_METRICS = ["cqi2", "pmi_x1", "pmi_x2", "cri", "li"]  # 仅在含非空值时才展开
 
 
-def parse_file_date(path):  # 从文件名 csi-rs-YYMMDD-HHMM.csv 取出采集日期
-    match = re.search(r"(\d{6})-(\d{4})", os.path.basename(path))
-    if not match:
-        raise ValueError(f"文件名不含 YYMMDD-HHMM：{os.path.basename(path)}")
-    yymmdd = match.group(1)
-    return pd.Timestamp(2000 + int(yymmdd[0:2]), int(yymmdd[2:4]), int(yymmdd[4:6]))
+def wash_line(line):
+    # 解析一行日志，若是 CSI_REPORT 行返回原始 CSV 行 dict，否则 None
+    m = CSI_LINE_RE.search(line)
+    if not m:
+        return None
+    row = {col: "" for col in RAW_COLUMNS}
+    ts = TS_RE.search(line[:m.start()])  # 时间戳在 CSI_REPORT 之前的日志头里
+    row["timestamp"] = ts.group(1) if ts else ""
+    for key, val in KV_RE.findall(m.group(1)):
+        col = LOG_KEY_TO_COL.get(key)
+        if col:
+            row[col] = int(val, 16) if key == "rnti" else int(val)
+    return row
 
 
-def clean(raw, base_date, slots_per_frame):
+def process_wash(path):
+    rows = []
+    with open(path) as fh:
+        rows = [r for r in (wash_line(line) for line in fh) if r]
+    if not rows:
+        print(f"  [跳过] {os.path.basename(path)}：无 CSI_REPORT 行")
+        return
+    no_ts = sum(1 for r in rows if r["timestamp"] == "")
+    out_path = os.path.splitext(path)[0] + ".csv"
+    pd.DataFrame(rows, columns=RAW_COLUMNS).to_csv(out_path, index=False)
+    warn = f"，其中 {no_ts} 行无时间戳(gNB 是否开了 wall_clock 日志选项?)" if no_ts else ""
+    print(f"  {os.path.basename(path)}: {len(rows)} 条 CSI_REPORT{warn} -> {out_path}")
+
+
+def clean(raw, slots_per_frame):
     df = raw.copy()
 
-    # 时间：当天时分秒 -> 补日期；当天时分秒相对上一行回退即跨零点 +1 天
-    tod = pd.to_timedelta(df["timestamp"])
-    day_offset = (tod.diff() < pd.Timedelta(0)).cumsum()  # 首行 diff 为 NaT，比较得 False
-    full_dt = base_date + pd.to_timedelta(day_offset, unit="D") + tod
+    # 时间戳为墙钟纪元秒：t_sec 相对起点，datetime 取 UTC 绝对时间
+    epoch = df["timestamp"].astype(float)
+    full_dt = pd.to_datetime(epoch, unit="s", utc=True)
 
     # frame 解回绕 -> 单调递增的绝对槽号
     frame_cycle = (df["frame"] < df["frame"].shift() - WRAP_THRESHOLD).cumsum()
@@ -68,7 +105,7 @@ def clean(raw, base_date, slots_per_frame):
 
     out = pd.DataFrame({
         "datetime": full_dt.dt.strftime("%Y-%m-%d %H:%M:%S.%f"),
-        "t_sec": (full_dt - full_dt.iloc[0]).dt.total_seconds().round(6),
+        "t_sec": (epoch - epoch.iloc[0]).round(6),
         "rnti": df["rnti"],
         "frame": df["frame"],
         "slot": df["slot"],
@@ -103,7 +140,7 @@ def process_clean(path, slots_per_frame):
     if raw.empty:
         print(f"  [跳过] {os.path.basename(path)}：无数据行")
         return
-    out = clean(raw, parse_file_date(path), slots_per_frame)
+    out = clean(raw, slots_per_frame)
     out_path = re.sub(r"\.csv$", "", path) + ".clean.csv"
     out.to_csv(out_path, index=False)  # NaN/NA 默认写为空字段
     print(f"  {os.path.basename(path)}: {len(out)} 行, 时长 {out['t_sec'].iloc[-1]:.1f}s -> {out_path}")
@@ -180,44 +217,51 @@ def analyze(path):
         print("\n  [警告] cqi1 与 rank 全程恒定，目标无方差，需在采集时制造信道变化才有训练价值")
 
 
-def resolve_inputs(inputs, pattern):  # 省略输入时按 pattern 扫 .data/
+def resolve_inputs(inputs, pattern, exclude_clean=False):  # 省略输入时按 pattern 扫 .data/log/
     if inputs:
         return inputs
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    found = sorted(glob.glob(os.path.join(repo_root, ".data", pattern)))
-    if pattern == "csi-rs-*.csv":  # clean 的输入不含已清洗结果
+    found = sorted(glob.glob(os.path.join(repo_root, ".data", "log", pattern)))
+    if exclude_clean:
         found = [p for p in found if not p.endswith(".clean.csv")]
     return found
 
 
 def main():
-    parser = argparse.ArgumentParser(description="CSI 数据集：清洗 + 终端文字统计/可视化")
+    parser = argparse.ArgumentParser(description="CSI 数据集：洗日志 + 清洗 + 终端文字统计/可视化")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
+    p_wash = sub.add_parser("wash", help="gNB 日志的 CSI_REPORT 行 -> 原始 CSV")
+    p_wash.add_argument("inputs", nargs="*", help="gNB 日志；省略则处理 .data/log/gnb-*.log")
+
     p_clean = sub.add_parser("clean", help="原始 CSV -> tidy 数据集 *.clean.csv")
-    p_clean.add_argument("inputs", nargs="*", help="原始 CSV；省略则处理 .data/csi-rs-*.csv")
+    p_clean.add_argument("inputs", nargs="*", help="原始 CSV；省略则处理 .data/log/gnb-*.csv")
     p_clean.add_argument("--slots-per-frame", type=int, default=DEFAULT_SLOTS_PER_FRAME,
                          help=f"每帧槽数，默认 {DEFAULT_SLOTS_PER_FRAME}（band78 30kHz）")
 
     p_an = sub.add_parser("analyze", help="读 *.clean.csv，终端文字统计 + ASCII 可视化")
-    p_an.add_argument("inputs", nargs="*", help="*.clean.csv；省略则处理 .data/*.clean.csv")
+    p_an.add_argument("inputs", nargs="*", help="*.clean.csv；省略则处理 .data/log/*.clean.csv")
 
     args = parser.parse_args()
 
-    if args.cmd == "clean":
-        inputs = resolve_inputs(args.inputs, "csi-rs-*.csv")
+    if args.cmd == "wash":
+        inputs = resolve_inputs(args.inputs, "gnb-*.log")
+        for path in inputs or []:
+            process_wash(path)
         if not inputs:
-            print("没有找到输入文件（.data/csi-rs-*.csv）")
-            return
-        for path in inputs:
+            print("没有找到输入文件（.data/log/gnb-*.log）")
+    elif args.cmd == "clean":
+        inputs = resolve_inputs(args.inputs, "gnb-*.csv", exclude_clean=True)
+        for path in inputs or []:
             process_clean(path, args.slots_per_frame)
+        if not inputs:
+            print("没有找到输入文件（.data/log/gnb-*.csv）")
     elif args.cmd == "analyze":
         inputs = resolve_inputs(args.inputs, "*.clean.csv")
-        if not inputs:
-            print("没有找到输入文件（.data/*.clean.csv）")
-            return
-        for path in inputs:
+        for path in inputs or []:
             analyze(path)
+        if not inputs:
+            print("没有找到输入文件（.data/log/*.clean.csv）")
 
 
 if __name__ == "__main__":
